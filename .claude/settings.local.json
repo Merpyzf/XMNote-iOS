@@ -1,0 +1,21 @@
+{
+  "permissions": {
+    "allow": [
+      "WebSearch",
+      "Bash(xcodebuild:*)",
+      "Bash(mdfind:*)",
+      "Bash(sudo xcode-select:*)",
+      "Bash(grep:*)",
+      "Bash(xargs cat:*)",
+      "Bash(find:*)",
+      "Bash(for f in xmnote/Database/Records/*.swift)",
+      "Bash(do if grep -q \"^struct.*: BaseRecord\" \"$f\")",
+      "Bash(then sed -i '' 's/^struct \\\\\\(.*\\\\\\): BaseRecord/nonisolated struct \\\\1: BaseRecord/' \"$f\")",
+      "Bash(fi)",
+      "Bash(done)"
+    ],
+    "additionalDirectories": [
+      "/Users/wangke/WorkSpace/OpenSource/Mine/Merpyzf/XMNote"
+    ]
+  }
+}

@@ -1,0 +1,32 @@
+import Foundation
+import GRDB
+
+// MARK: - v38 完整 Schema
+// 精确复刻 Android Room 数据库的表结构（version 38）
+// 建表顺序：先建无外键依赖的表，再建有外键依赖的表
+
+extension AppDatabase {
+
+    static var migrator: DatabaseMigrator {
+        var migrator = DatabaseMigrator()
+
+        // iOS 从零开始，直接创建 v38 的完整 Schema
+        migrator.registerMigration("v38-schema") { db in
+            try createCoreTables(db)
+            try createRelationTables(db)
+            try createContentTables(db)
+            try createReadingTables(db)
+            try createConfigTables(db)
+
+            // 同步 Android 的数据库版本号，备份恢复时通过此值校验兼容性
+            try db.execute(sql: "PRAGMA user_version = 38")
+        }
+
+        // 初始数据填充（独立迁移，便于维护）
+        migrator.registerMigration("v38-seed") { db in
+            try seedInitialData(db)
+        }
+
+        return migrator
+    }
+}
