@@ -7,8 +7,8 @@ import GRDB
 nonisolated struct ReadStatusRecord: BaseRecord {
     static let databaseTableName = "read_status"
 
-    var id: Int64  // 手动赋值，不自增
-    var name: String
+    var id: Int64 = 0  // 手动赋值，不自增
+    var name: String = ""
     var readStatusOrder: Int64 = 0
 
     // MARK: - BaseRecord

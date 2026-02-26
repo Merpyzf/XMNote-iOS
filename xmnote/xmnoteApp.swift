@@ -10,13 +10,11 @@ import SwiftUI
 @main
 struct xmnoteApp: App {
     @State private var appState = AppState()
-
-    /// 数据库实例，App 生命周期内保持单例
-    let database: AppDatabase
+    @State private var databaseManager: DatabaseManager
 
     init() {
         do {
-            database = try AppDatabase()
+            _databaseManager = State(initialValue: try DatabaseManager())
         } catch {
             fatalError("数据库初始化失败: \(error)")
         }
@@ -26,7 +24,7 @@ struct xmnoteApp: App {
         WindowGroup {
             ContentView()
                 .environment(appState)
-                .environment(\.appDatabase, database)
+                .environment(databaseManager)
         }
     }
 }

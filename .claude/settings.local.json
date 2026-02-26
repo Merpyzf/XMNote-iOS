@@ -12,10 +12,16 @@
       "Bash(do if grep -q \"^struct.*: BaseRecord\" \"$f\")",
       "Bash(then sed -i '' 's/^struct \\\\\\(.*\\\\\\): BaseRecord/nonisolated struct \\\\1: BaseRecord/' \"$f\")",
       "Bash(fi)",
-      "Bash(done)"
+      "Bash(done)",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:datatracker.ietf.org)",
+      "WebFetch(domain:help.jianguoyun.com)",
+      "WebFetch(domain:fatbobman.com)"
     ],
     "additionalDirectories": [
-      "/Users/wangke/WorkSpace/OpenSource/Mine/Merpyzf/XMNote"
+      "/Users/wangke/WorkSpace/OpenSource/Mine/Merpyzf/XMNote",
+      "/Users/wangke/Workspace/AndroidProjects/XMNote"
     ]
   }
 }

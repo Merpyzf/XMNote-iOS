@@ -72,5 +72,5 @@ struct NoteCollectionView: View {
 }
 
 #Preview {
-    NoteCollectionView(viewModel: NoteViewModel())
+    NoteCollectionView(viewModel: NoteViewModel(database: try! .empty()))
 }

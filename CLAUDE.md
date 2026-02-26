@@ -26,6 +26,7 @@
 原生体验：使用 SwiftUI 原生动画系统，追求流畅自然的交互质感。
 连续性原则：所有 UI 结构变化必须配套过渡动画。严禁生硬跳变。
 动画曲线：优先使用 `.snappy`、`.smooth`、`.spring` 曲线。动效应服务于引导和反馈，而非炫技。
+及时响应原则：所有异步操作（网络请求、数据库写入）必须在触发瞬间提供加载反馈（ProgressView、按钮状态切换、遮罩等）。严禁出现用户点击后界面无任何响应的"假死"状态。操作期间必须禁用相关交互控件，防止重复触发。
 
 五、 代码与架构卓越 (Engineering Excellence)
 深度解析：在修改前必须彻底解析现有代码逻辑，尊重既有的 MVVM 架构。
@@ -66,7 +67,7 @@
 
 **核心原则：功能对等，而非代码翻译。** iOS 版本应保持相同的业务逻辑和用户体验，但 UI 和架构必须遵循 iOS 原生规范。
 
-Android 参考项目路径：`/Users/wangke/WorkSpace/OpenSource/Mine/Merpyzf/XMNote`
+Android 参考工程路径：`/Users/wangke/Workspace/AndroidProjects/XMNote`
 
 ## 四大功能模块
 
@@ -123,6 +124,8 @@ Android 参考项目路径：`/Users/wangke/WorkSpace/OpenSource/Mine/Merpyzf/XM
 | 导航 | NavigationStack | 程序化导航 |
 | 图片加载 | AsyncImage | 内置，无需第三方 |
 | 本地存储 | @AppStorage | 替代 SharedPreferences |
+| 网络请求 | Alamofire | URLSession 封装，WebDAV 操作 |
+| 压缩解压 | ZIPFoundation | 备份文件打包 |
 
 ---
 
@@ -142,7 +145,7 @@ Android 参考项目路径：`/Users/wangke/WorkSpace/OpenSource/Mine/Merpyzf/XM
 | `LaunchedEffect` | `.task { }` / `.onChange` | SwiftUI 生命周期修饰符 |
 | Navigation Component | `NavigationStack` + `NavigationPath` | 类型安全导航 |
 | Intent extras | 初始化参数 / NavigationPath | 直接值传递 |
-| Retrofit / OkHttp | URLSession | 原生网络层 |
+| Retrofit / OkHttp | Alamofire | URLSession 封装，支持 WebDAV 操作 |
 | Glide / Coil | AsyncImage | 内置图片加载 |
 | SharedPreferences | `@AppStorage` / UserDefaults | 简单键值存储 |
 | Gson | Codable | 原生序列化协议 |
@@ -189,6 +192,11 @@ xmnote/
 │   ├── Statistics/
 │   └── Personal/
 ├── Services/                          # 网络与业务服务
+│   ├── NetworkClient.swift            # Alamofire 基础网络客户端
+│   ├── WebDAVClient.swift             # WebDAV 协议操作（PROPFIND/MKCOL/PUT/GET/DELETE）
+│   └── BackupService.swift            # 数据备份与恢复业务逻辑
+├── Networking/                        # 网络层基础设施
+│   └── NetworkError.swift             # 网络错误类型定义
 ├── Utilities/                         # 工具类与扩展
 └── Resources/                         # 资源文件
 ```
@@ -208,22 +216,50 @@ xmnote/
 
 ## 1. View 层规范
 
-### 1.1 ViewModel 持有方式
+### 1.1 ViewModel 持有方式（外壳 + 内容子视图）
+
+ViewModel 依赖 `@Environment` 注入的数据库，而 `@Environment` 在 `init` 中不可用。
+采用「外壳延迟创建 + 内容子视图 `@Bindable` 持有」模式，确保 `$viewModel.xxx` 绑定指向 SwiftUI 管理的存储属性，而非 `if let` 解包的栈上临时值。
+
+**`.task` 触发机制（关键）：** `.task` 的执行依赖视图 `onAppear` 语义——视图必须在布局中占据实际空间才算"出现"。当 `Group` 内 `if let` 不成立且无 `else` 分支时，`Group` 子视图集合为空、零尺寸，SwiftUI 不触发 `.task`，导致 ViewModel 永远无法创建，页面空白（死锁）。因此 `else { Color.clear }` 是必须的：`Color.clear` 视觉透明但参与布局、占据空间，确保 `.task` 正常触发。
 
 ```swift
-// 容器 View 使用 @State 持有 ViewModel
-struct NoteContainerView: View {
-    @State private var viewModel = NoteViewModel()
+// 外壳：@State 持有可选 ViewModel，.task 中构造器注入依赖
+struct DataBackupView: View {
+    @Environment(DatabaseManager.self) private var databaseManager
+    @State private var viewModel: DataBackupViewModel?
+
     var body: some View {
-        NoteCollectionView(viewModel: viewModel)
+        Group {
+            if let viewModel {
+                DataBackupContentView(viewModel: viewModel)
+            } else {
+                Color.clear  // 必须：确保 Group 非零尺寸，.task 才能触发
+            }
+        }
+        .task {
+            guard viewModel == nil else { return }
+            let vm = DataBackupViewModel(databaseManager: databaseManager)
+            viewModel = vm
+            await vm.loadPageData()
+        }
     }
 }
 
-// 子 View 使用 @Bindable 接收（需要双向绑定时）
-struct NoteCollectionView: View {
-    @Bindable var viewModel: NoteViewModel
+// 内容子视图：@Bindable 作为存储属性，$viewModel.xxx 绑定正确
+private struct DataBackupContentView: View {
+    @Bindable var viewModel: DataBackupViewModel
+
+    var body: some View {
+        // $viewModel.showError、$viewModel.isShowingForm 等绑定均有效
+    }
 }
 ```
+
+**禁止事项：**
+- ❌ 在 `if let viewModel` 内使用 `Bindable(viewModel).xxx` — 绑定指向栈上临时值，SwiftUI 无法追踪
+- ❌ 使用 `Binding(get: { viewModel?.xxx }, set: { viewModel?.xxx = $0 })` 手动桥接 — 脆弱且冗余
+- ❌ `Group { if let viewModel { ... } }` 省略 `else` 分支 — 空 `Group` 零尺寸，`.task` 不触发，ViewModel 永远无法创建，页面空白死锁
 
 ### 1.2 代码组织
 
@@ -262,7 +298,7 @@ struct NoteTagsView: View {
 
 ## 2. ViewModel 层规范
 
-### 2.1 基础结构
+### 2.1 基础结构（构造器注入）
 
 ```swift
 @Observable
@@ -271,6 +307,13 @@ class NoteViewModel {
     var selectedCategory: NoteCategory = .excerpts
     var searchText: String = ""
     var tagSections: [TagSection] = []
+
+    private let database: AppDatabase
+
+    init(database: AppDatabase) {
+        self.database = database
+        startObservation()
+    }
 
     // 计算属性用于派生状态
     var filteredSections: [TagSection] {
@@ -284,8 +327,7 @@ class NoteViewModel {
         }
     }
 
-    // 私有方法用于内部逻辑
-    private func loadMockData() { ... }
+    private func startObservation() { ... }
 }
 ```
 
@@ -486,11 +528,27 @@ ViewModel:       app/src/main/java/com/merpyzf/xmnote/viewmodel/
 
 ```bash
 # 构建项目
-xcodebuild -project xmnote.xcodeproj -scheme xmnote -sdk iphonesimulator build
+xcodebuild -project xmnote.xcodeproj -scheme xmnote -sdk iphonesimulator \
+  -destination 'platform=iOS Simulator,name=iPhone 17 Pro' build
 
 # 运行测试
-xcodebuild -project xmnote.xcodeproj -scheme xmnote -sdk iphonesimulator test
+xcodebuild -project xmnote.xcodeproj -scheme xmnote -sdk iphonesimulator \
+  -destination 'platform=iOS Simulator,name=iPhone 17 Pro' test
 
 # 清理构建
 xcodebuild -project xmnote.xcodeproj -scheme xmnote clean
 ```
+
+## 可用模拟器（Xcode 26.1）
+
+默认使用 `iPhone 17 Pro`。真机：`keke's iPhone`。
+
+| 设备 | OS |
+|------|-----|
+| iPhone 17 Pro Max | 26.1 |
+| iPhone 17 Pro | 26.1 |
+| iPhone 17 | 26.1 |
+| iPhone Air | 26.1 |
+| iPhone 16e | 26.1 |
+| iPad Pro 13-inch (M5) | 26.1 |
+| iPad Air 11-inch (M3) | 26.1 |

@@ -90,6 +90,7 @@ struct NoteTagsView: View {
             RoundedRectangle(cornerRadius: CornerRadius.item)
                 .stroke(Color.cardBorder, lineWidth: CardStyle.borderWidth)
         )
+        .contentShape(Rectangle())
     }
 
     // MARK: - Search Highlight
@@ -103,10 +104,10 @@ struct NoteTagsView: View {
         let before = name[name.startIndex..<range.lowerBound]
         let match = name[range]
         let after = name[range.upperBound..<name.endIndex]
-        return Text(before) + Text(match).foregroundColor(.accentColor) + Text(after)
+        return Text(before) + Text(match).foregroundStyle(Color.accentColor) + Text(after)
     }
 }
 
 #Preview {
-    NoteTagsView(viewModel: NoteViewModel())
+    NoteTagsView(viewModel: NoteViewModel(database: try! .empty()))
 }

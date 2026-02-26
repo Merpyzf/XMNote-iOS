@@ -6,6 +6,12 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		891118422F3C543600D99384 /* GRDB in Frameworks */ = {isa = PBXBuildFile; productRef = 89GRDB0012F3A000000000002 /* GRDB */; };
+		89AF00012F3D000000000002 /* Alamofire in Frameworks */ = {isa = PBXBuildFile; productRef = 89AF00012F3D000000000004 /* Alamofire */; };
+		89ZIP0012F3D000000000002 /* ZIPFoundation in Frameworks */ = {isa = PBXBuildFile; productRef = 89ZIP0012F3D000000000004 /* ZIPFoundation */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXContainerItemProxy section */
 		891114AA2F39AC3200D99384 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
@@ -45,6 +51,11 @@
 			path = xmnoteUITests;
 			sourceTree = "<group>";
 		};
+		891D78242F5030D600EE8067 /* AppState */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = AppState;
+			sourceTree = "<group>";
+		};
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -52,6 +63,9 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				891118422F3C543600D99384 /* GRDB in Frameworks */,
+				89AF00012F3D000000000002 /* Alamofire in Frameworks */,
+				89ZIP0012F3D000000000002 /* ZIPFoundation in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -75,6 +89,7 @@
 		891114932F39AC2F00D99384 = {
 			isa = PBXGroup;
 			children = (
+				891D78242F5030D600EE8067 /* AppState */,
 				8911149E2F39AC2F00D99384 /* xmnote */,
 				891114AC2F39AC3200D99384 /* xmnoteTests */,
 				891114B62F39AC3200D99384 /* xmnoteUITests */,
@@ -109,10 +124,13 @@
 			);
 			fileSystemSynchronizedGroups = (
 				8911149E2F39AC2F00D99384 /* xmnote */,
+				891D78242F5030D600EE8067 /* AppState */,
 			);
 			name = xmnote;
 			packageProductDependencies = (
 				89GRDB0012F3A000000000002 /* GRDB */,
+				89AF00012F3D000000000004 /* Alamofire */,
+				89ZIP0012F3D000000000004 /* ZIPFoundation */,
 			);
 			productName = xmnote;
 			productReference = 8911149C2F39AC2F00D99384 /* xmnote.app */;
@@ -196,10 +214,12 @@
 			);
 			mainGroup = 891114932F39AC2F00D99384;
 			minimizedProjectReferenceProxies = 1;
-			preferredProjectObjectVersion = 77;
 			packageReferences = (
 				89GRDB0012F3A000000000001 /* XCRemoteSwiftPackageReference "GRDB.swift" */,
+				89AF00012F3D000000000001 /* XCRemoteSwiftPackageReference "Alamofire" */,
+				89ZIP0012F3D000000000001 /* XCRemoteSwiftPackageReference "ZIPFoundation" */,
 			);
+			preferredProjectObjectVersion = 77;
 			productRefGroup = 8911149D2F39AC2F00D99384 /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
@@ -582,7 +602,16 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
 /* Begin XCRemoteSwiftPackageReference section */
+		89AF00012F3D000000000001 /* XCRemoteSwiftPackageReference "Alamofire" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/Alamofire/Alamofire.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 5.10.0;
+			};
+		};
 		89GRDB0012F3A000000000001 /* XCRemoteSwiftPackageReference "GRDB.swift" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/groue/GRDB.swift.git";
@@ -591,13 +620,31 @@
 				minimumVersion = 7.0.0;
 			};
 		};
+		89ZIP0012F3D000000000001 /* XCRemoteSwiftPackageReference "ZIPFoundation" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/weichsel/ZIPFoundation.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 0.9.0;
+			};
+		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
+		89AF00012F3D000000000004 /* Alamofire */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 89AF00012F3D000000000001 /* XCRemoteSwiftPackageReference "Alamofire" */;
+			productName = Alamofire;
+		};
 		89GRDB0012F3A000000000002 /* GRDB */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = 89GRDB0012F3A000000000001 /* XCRemoteSwiftPackageReference "GRDB.swift" */;
 			productName = GRDB;
+		};
+		89ZIP0012F3D000000000004 /* ZIPFoundation */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 89ZIP0012F3D000000000001 /* XCRemoteSwiftPackageReference "ZIPFoundation" */;
+			productName = ZIPFoundation;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

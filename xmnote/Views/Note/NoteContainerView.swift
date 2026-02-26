@@ -23,18 +23,58 @@ enum NoteSubTab: CaseIterable, Hashable {
 // MARK: - Container
 
 struct NoteContainerView: View {
+    @Environment(DatabaseManager.self) private var databaseManager
+    @State private var viewModel: NoteViewModel?
+    let onAddBook: () -> Void
+    let onAddNote: () -> Void
+
+    init(
+        onAddBook: @escaping () -> Void = {},
+        onAddNote: @escaping () -> Void = {}
+    ) {
+        self.onAddBook = onAddBook
+        self.onAddNote = onAddNote
+    }
+
+    var body: some View {
+        Group {
+            if let viewModel {
+                NoteContentView(
+                    viewModel: viewModel,
+                    onAddBook: onAddBook,
+                    onAddNote: onAddNote
+                )
+            } else {
+                Color.clear
+            }
+        }
+        .task {
+            guard viewModel == nil else { return }
+            viewModel = NoteViewModel(database: databaseManager.database)
+        }
+    }
+}
+
+// MARK: - Content View
+
+private struct NoteContentView: View {
+    @Bindable var viewModel: NoteViewModel
+    let onAddBook: () -> Void
+    let onAddNote: () -> Void
     @State private var selectedSubTab: NoteSubTab = .notes
-    @State private var viewModel = NoteViewModel()
 
     var body: some View {
         VStack(spacing: 0) {
             segmentedContent
         }
-        .navigationTitle("")
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            toolbarContent
+        .safeAreaInset(edge: .top, spacing: 0) {
+            NoteTopSwitcher(
+                selection: $selectedSubTab,
+                onAddBook: onAddBook,
+                onAddNote: onAddNote
+            )
         }
+        .toolbar(.hidden, for: .navigationBar)
     }
 
     // MARK: - Segmented Content
@@ -43,29 +83,78 @@ struct NoteContainerView: View {
     private var segmentedContent: some View {
         switch selectedSubTab {
         case .notes:
-            ScrollView {
-                NoteCollectionView(viewModel: viewModel)
+            VStack(spacing: 0) {
+                noteSearchBar
+                ScrollView {
+                    NoteCollectionView(viewModel: viewModel)
+                }
             }
-            .searchable(text: $viewModel.searchText, prompt: "搜索标签")
         case .review:
             NoteReviewPlaceholderView()
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
     }
+    
+    private var noteSearchBar: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "magnifyingglass")
+                .font(.system(size: 14, weight: .medium))
+                .foregroundStyle(.secondary)
 
-    // MARK: - Toolbar
+            TextField("搜索标签", text: $viewModel.searchText)
+                .font(.subheadline)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
 
-    @ToolbarContentBuilder
-    private var toolbarContent: some ToolbarContent {
-        ToolbarItem(placement: .topBarLeading) {
-            InlineTabBar(selection: $selectedSubTab) { $0.title }
+            if !viewModel.searchText.isEmpty {
+                Button {
+                    viewModel.searchText = ""
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .foregroundStyle(.tertiary)
+                }
+                .buttonStyle(.plain)
+            }
         }
-        ToolbarItem(placement: .topBarTrailing) {
+        .padding(.horizontal, 12)
+        .frame(height: 36)
+        .background(Color.contentBackground, in: RoundedRectangle(cornerRadius: 10))
+        .overlay(
+            RoundedRectangle(cornerRadius: 10)
+                .stroke(Color.cardBorder, lineWidth: CardStyle.borderWidth)
+        )
+        .padding(.horizontal, Spacing.screenEdge)
+        .padding(.bottom, Spacing.half)
+    }
+}
+
+private struct NoteTopSwitcher: View {
+    @Binding var selection: NoteSubTab
+    let onAddBook: () -> Void
+    let onAddNote: () -> Void
+
+    var body: some View {
+        PrimaryTopBar {
+            InlineTabBar(selection: $selection) { $0.title }
+        } trailing: {
             Button {
                 // TODO: sort/settings action
             } label: {
-                Image(systemName: selectedSubTab == .notes ? "arrow.up.arrow.down" : "gearshape")
+                Image(systemName: selection == .notes ? "arrow.up.arrow.down" : "gearshape")
+                    .font(.system(size: 16, weight: .medium))
+                    .foregroundStyle(.secondary)
+                    .frame(width: 36, height: 36)
+                    .background(Color.contentBackground, in: Circle())
+                    .overlay(
+                        Circle()
+                            .stroke(Color.cardBorder, lineWidth: CardStyle.borderWidth)
+                    )
+                    .frame(width: 44, height: 44)
+                    .contentShape(Rectangle())
             }
+            .buttonStyle(.plain)
+
+            AddMenuCircleButton(onAddBook: onAddBook, onAddNote: onAddNote)
         }
     }
 }

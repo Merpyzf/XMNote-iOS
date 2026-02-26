@@ -9,6 +9,16 @@ import SwiftUI
 
 struct PersonalView: View {
     @Environment(AppState.self) private var appState
+    let onAddBook: () -> Void
+    let onAddNote: () -> Void
+
+    init(
+        onAddBook: @escaping () -> Void = {},
+        onAddNote: @escaping () -> Void = {}
+    ) {
+        self.onAddBook = onAddBook
+        self.onAddNote = onAddNote
+    }
 
     var body: some View {
         ScrollView {
@@ -24,19 +34,30 @@ struct PersonalView: View {
             .padding(.vertical, Spacing.base)
         }
         .background { Color.windowBackground.ignoresSafeArea() }
-        .navigationTitle("")
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            ToolbarItem(placement: .topBarLeading) {
+        .safeAreaInset(edge: .top, spacing: 0) {
+            PrimaryTopBar {
                 Text("我的")
                     .font(.system(size: 17, weight: .semibold))
-            }
-            ToolbarItem(placement: .topBarTrailing) {
+            } trailing: {
                 NavigationLink(value: PersonalRoute.settings) {
                     Image(systemName: "gearshape")
+                        .font(.system(size: 16, weight: .medium))
+                        .foregroundStyle(.secondary)
+                        .frame(width: 36, height: 36)
+                        .background(Color.contentBackground, in: Circle())
+                        .overlay(
+                            Circle()
+                                .stroke(Color.cardBorder, lineWidth: CardStyle.borderWidth)
+                        )
+                        .frame(width: 44, height: 44)
+                        .contentShape(Rectangle())
                 }
+                .buttonStyle(.plain)
+
+                AddMenuCircleButton(onAddBook: onAddBook, onAddNote: onAddNote)
             }
         }
+        .toolbar(.hidden, for: .navigationBar)
     }
 }
 
@@ -67,6 +88,7 @@ extension PersonalView {
                         .foregroundStyle(.tertiary)
                 }
                 .padding(Spacing.contentEdge)
+                .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             .background(Color.contentBackground)
@@ -147,6 +169,7 @@ extension PersonalView {
                 }
                 .padding(.horizontal, Spacing.contentEdge)
                 .padding(.vertical, 14)
+                .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
         }
@@ -202,6 +225,7 @@ extension PersonalView {
                 }
                 .padding(.horizontal, Spacing.contentEdge)
                 .padding(.vertical, 14)
+                .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
 
@@ -234,6 +258,7 @@ extension PersonalView {
                 }
                 .padding(.horizontal, Spacing.contentEdge)
                 .padding(.vertical, 14)
+                .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
 

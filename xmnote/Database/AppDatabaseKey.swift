@@ -1,16 +1,25 @@
 import SwiftUI
 import GRDB
 
-// MARK: - SwiftUI Environment Key
-// 通过 Environment 将 AppDatabase 注入到整个视图树
+// MARK: - DatabaseManager
+// 可观察的数据库管理器，支持热重载（备份恢复后重新打开数据库）
 
-private struct AppDatabaseKey: EnvironmentKey {
-    static let defaultValue: AppDatabase? = nil
-}
+@Observable
+class DatabaseManager {
+    private(set) var database: AppDatabase
 
-extension EnvironmentValues {
-    var appDatabase: AppDatabase? {
-        get { self[AppDatabaseKey.self] }
-        set { self[AppDatabaseKey.self] = newValue }
+    init() throws {
+        database = try AppDatabase()
+    }
+
+    /// Preview/测试用初始化器
+    init(database: AppDatabase) {
+        self.database = database
+    }
+
+    /// 热重载数据库（备份恢复后调用）
+    func reopen() throws {
+        let path = database.databasePath
+        database = try AppDatabase(path: path)
     }
 }

@@ -14,6 +14,7 @@ enum PersonalRoute: Hashable {
     case readReminder
     case dataImport
     case dataBackup
+    case webdavServers
     case batchExport
     case apiIntegration
     case aiConfiguration

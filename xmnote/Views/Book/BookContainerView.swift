@@ -23,37 +23,85 @@ enum BookSubTab: CaseIterable, Hashable {
 // MARK: - Container
 
 struct BookContainerView: View {
-    @State private var selectedSubTab: BookSubTab = .books
+    @Environment(DatabaseManager.self) private var databaseManager
+    @State private var viewModel: BookViewModel?
+    let onAddBook: () -> Void
+    let onAddNote: () -> Void
+
+    init(
+        onAddBook: @escaping () -> Void = {},
+        onAddNote: @escaping () -> Void = {}
+    ) {
+        self.onAddBook = onAddBook
+        self.onAddNote = onAddNote
+    }
 
     var body: some View {
         Group {
-            switch selectedSubTab {
-            case .books:
-                BookPlaceholderView()
-            case .collections:
-                CollectionListPlaceholderView()
+            if let viewModel {
+                BookContentView(
+                    viewModel: viewModel,
+                    onAddBook: onAddBook,
+                    onAddNote: onAddNote
+                )
+            } else {
+                Color.clear
             }
         }
-        .navigationTitle("")
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            toolbarContent
+        .task {
+            guard viewModel == nil else { return }
+            viewModel = BookViewModel(database: databaseManager.database)
+        }
+    }
+}
+
+// MARK: - Content View
+
+private struct BookContentView: View {
+    @Bindable var viewModel: BookViewModel
+    let onAddBook: () -> Void
+    let onAddNote: () -> Void
+    @State private var selectedSubTab: BookSubTab = .books
+
+    var body: some View {
+        VStack(spacing: 0) {
+            segmentedContent
+        }
+        .safeAreaInset(edge: .top, spacing: 0) {
+            BookTopSwitcher(
+                selection: $selectedSubTab,
+                onAddBook: onAddBook,
+                onAddNote: onAddNote
+            )
+        }
+        .toolbar(.hidden, for: .navigationBar)
+    }
+
+    // MARK: - Segmented Content
+
+    @ViewBuilder
+    private var segmentedContent: some View {
+        switch selectedSubTab {
+        case .books:
+            BookGridView(viewModel: viewModel)
+        case .collections:
+            CollectionListPlaceholderView()
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
     }
 
-    // MARK: - Toolbar
+}
 
-    @ToolbarContentBuilder
-    private var toolbarContent: some ToolbarContent {
-        ToolbarItem(placement: .topBarLeading) {
-            InlineTabBar(selection: $selectedSubTab) { $0.title }
-        }
-        ToolbarItem(placement: .topBarTrailing) {
-            Button {
-                // TODO: 添加书籍/书单
-            } label: {
-                Image(systemName: "plus")
-            }
+private struct BookTopSwitcher: View {
+    @Binding var selection: BookSubTab
+    let onAddBook: () -> Void
+    let onAddNote: () -> Void
+
+    var body: some View {
+        PrimaryTopBar {
+            InlineTabBar(selection: $selection) { $0.title }
+        } trailing: {
+            AddMenuCircleButton(onAddBook: onAddBook, onAddNote: onAddNote)
         }
     }
 }

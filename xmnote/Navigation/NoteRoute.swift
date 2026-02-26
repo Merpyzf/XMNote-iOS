@@ -8,8 +8,8 @@
 import Foundation
 
 enum NoteRoute: Hashable {
-    case detail(noteId: UUID)
-    case edit(noteId: UUID)
-    case create(bookId: UUID?)
-    case notesByTag(tagId: UUID)
+    case detail(noteId: Int64)
+    case edit(noteId: Int64)
+    case create(bookId: Int64?)
+    case notesByTag(tagId: Int64)
 }

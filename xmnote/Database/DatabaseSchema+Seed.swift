@@ -17,17 +17,18 @@ extension AppDatabase {
     }
 
     // MARK: - 阅读状态（5 种）
-    // read_status 表使用自增 ID，插入顺序决定 ID 值
+    // read_status 表为手动主键，必须显式指定 id
     // ID 1=想读, 2=在读, 3=读完, 4=弃读, 5=搁置
     private static func seedReadStatus(_ db: Database) throws {
         let statuses = ["想读", "在读", "读完", "弃读", "搁置"]
         for (index, name) in statuses.enumerated() {
+            let id = index + 1
             try db.execute(
                 sql: """
-                    INSERT INTO read_status (name, read_status_order, created_date, updated_date, last_sync_date, is_deleted)
-                    VALUES (?, ?, 0, 0, 0, 0)
+                    INSERT INTO read_status (id, name, read_status_order, created_date, updated_date, last_sync_date, is_deleted)
+                    VALUES (?, ?, ?, 0, 0, 0, 0)
                     """,
-                arguments: [name, index + 1]
+                arguments: [id, name, id]
             )
         }
     }

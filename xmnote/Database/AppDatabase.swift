@@ -7,7 +7,8 @@ import GRDB
 
 struct AppDatabase {
     /// 数据库连接池（支持并发读取）
-    let dbPool: DatabasePool
+    /// 使用 private(set) 以支持热重载场景（备份恢复后重新打开数据库）
+    private(set) var dbPool: DatabasePool
 
     /// 数据库文件名，与 Android 保持一致
     static let databaseName = "xm_note.db"
@@ -48,6 +49,25 @@ extension AppDatabase {
 
         let dbPool = try DatabasePool(path: path, configuration: config)
 
+        // 兼容 Android Room：如果 user_version 已达标但缺少 grdb_migrations 表，
+        // 手动标记迁移为已完成，避免对已有 schema 重复建表
+        try dbPool.write { db in
+            let userVersion = try Int.fetchOne(db, sql: "PRAGMA user_version") ?? 0
+            let hasGRDBTable = try db.tableExists("grdb_migrations")
+
+            if userVersion >= databaseVersion && !hasGRDBTable {
+                try db.execute(sql: """
+                    CREATE TABLE grdb_migrations (identifier TEXT NOT NULL PRIMARY KEY)
+                """)
+                try db.execute(sql: """
+                    INSERT INTO grdb_migrations (identifier) VALUES ('v38-schema')
+                """)
+                try db.execute(sql: """
+                    INSERT INTO grdb_migrations (identifier) VALUES ('v38-seed')
+                """)
+            }
+        }
+
         // 执行迁移
         try migrator.migrate(dbPool)
 
@@ -74,6 +94,18 @@ extension AppDatabase {
     var databaseFiles: [String] {
         let base = databasePath
         return [base, "\(base)-wal", "\(base)-shm"]
+    }
+}
+
+// MARK: - Preview
+
+extension AppDatabase {
+
+    /// 内存数据库，仅用于 #Preview 和测试
+    static func empty() throws -> AppDatabase {
+        let tempDir = NSTemporaryDirectory()
+        let path = (tempDir as NSString).appendingPathComponent("preview_\(UUID().uuidString).db")
+        return try AppDatabase(path: path)
     }
 }
 

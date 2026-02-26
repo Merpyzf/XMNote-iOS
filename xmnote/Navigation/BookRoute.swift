@@ -8,7 +8,7 @@
 import Foundation
 
 enum BookRoute: Hashable {
-    case detail(bookId: UUID)
-    case edit(bookId: UUID)
+    case detail(bookId: Int64)
+    case edit(bookId: Int64)
     case add
 }

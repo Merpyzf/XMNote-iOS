@@ -49,6 +49,72 @@ struct EmptyStateView: View {
     }
 }
 
+// MARK: - Primary Top Bar
+
+/// 主 Tab 顶部容器：左侧内容 + 右侧操作区，统一高度与边距。
+struct PrimaryTopBar<Leading: View, Trailing: View>: View {
+    let leading: Leading
+    let trailing: Trailing
+
+    init(
+        @ViewBuilder leading: () -> Leading,
+        @ViewBuilder trailing: () -> Trailing
+    ) {
+        self.leading = leading()
+        self.trailing = trailing()
+    }
+
+    var body: some View {
+        HStack(spacing: 0) {
+            leading
+            Spacer(minLength: 0)
+            HStack(spacing: 8) {
+                trailing
+            }
+        }
+        .padding(.horizontal, Spacing.screenEdge)
+        .frame(height: 52)
+        .background(Color.clear)
+    }
+}
+
+// MARK: - Add Menu Button
+
+/// 统一 `+` 菜单按钮：36pt 圆形视觉 + 44pt 最小可点击区域。
+struct AddMenuCircleButton: View {
+    let onAddBook: () -> Void
+    let onAddNote: () -> Void
+
+    init(
+        onAddBook: @escaping () -> Void,
+        onAddNote: @escaping () -> Void
+    ) {
+        self.onAddBook = onAddBook
+        self.onAddNote = onAddNote
+    }
+
+    var body: some View {
+        Menu {
+            Button("添加书籍", systemImage: "book.badge.plus", action: onAddBook)
+            Button("添加书摘", systemImage: "square.and.pencil", action: onAddNote)
+        } label: {
+            Image(systemName: "plus")
+                .font(.system(size: 18, weight: .medium))
+                .foregroundStyle(Color.brand)
+                .frame(width: 36, height: 36)
+                .background(Color.contentBackground, in: Circle())
+                .overlay(
+                    Circle()
+                        .stroke(Color.cardBorder, lineWidth: CardStyle.borderWidth)
+                )
+                .frame(width: 44, height: 44)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("添加")
+    }
+}
+
 // MARK: - Inline Tab Bar
 
 /// 通用内嵌标签栏，左对齐、内容自适应宽度、品牌绿下划线指示器
@@ -78,19 +144,98 @@ struct InlineTabBar<Tab: Hashable & CaseIterable>: View
                     .font(.system(size: 17, weight: isSelected ? .semibold : .regular))
                     .foregroundStyle(isSelected ? .primary : .secondary)
                     .fixedSize()
-                RoundedRectangle(cornerRadius: 1.5)
-                    .fill(isSelected ? Color.brand : .clear)
-                    .frame(height: 3)
-                    .matchedGeometryEffect(
-                        id: isSelected ? "indicator" : "idle_\(String(describing: tab))",
-                        in: namespace
-                    )
+                if isSelected {
+                    RoundedRectangle(cornerRadius: 1.5)
+                        .fill(Color.brand)
+                        .frame(height: 3)
+                        .matchedGeometryEffect(id: "indicator", in: namespace)
+                } else {
+                    Color.clear.frame(height: 3)
+                }
             }
             .padding(.horizontal, 8)
         }
         .buttonStyle(.plain)
     }
 }
+
+#if canImport(SwiftUI)
+// MARK: - Quote Inline Tab Bar
+
+/// 顶部引号样式标签栏，用于阅读页的轻量导航表达。
+/// 选中态强化文字与引号，避免液态玻璃风格造成层级混乱。
+struct QuoteInlineTabBar<Tab: Hashable & CaseIterable>: View
+    where Tab.AllCases: RandomAccessCollection {
+
+    @Environment(\.colorScheme) private var colorScheme
+    @Binding var selection: Tab
+    let titleProvider: (Tab) -> String
+    let quote: String
+
+    init(
+        selection: Binding<Tab>,
+        quote: String = "“",
+        titleProvider: @escaping (Tab) -> String
+    ) {
+        self._selection = selection
+        self.quote = quote
+        self.titleProvider = titleProvider
+    }
+
+    var body: some View {
+        let quoteFontSize: CGFloat = 50
+        let quoteOffsetX: CGFloat = -10
+        let quoteOffsetY: CGFloat = -18
+
+        HStack(spacing: 22) {
+            ForEach(Array(Tab.allCases), id: \.self, content: tabItem)
+        }
+        .backgroundPreferenceValue(QuoteTabAnchorKey.self, alignment: .topLeading) { anchors in
+            GeometryReader { proxy in
+                if let anchor = anchors[selection] {
+                    let rect = proxy[anchor]
+                    Text(quote)
+                        .font(.system(size: quoteFontSize, weight: .bold))
+                        .foregroundStyle(colorScheme == .dark
+                            ? Color.brand.opacity(0.28)
+                            : Color.brand.opacity(0.22))
+                        .offset(x: rect.minX + quoteOffsetX, y: rect.minY + quoteOffsetY)
+                        .allowsHitTesting(false)
+                        .accessibilityHidden(true)
+                        .animation(.snappy(duration: 0.25, extraBounce: 0.06), value: selection)
+                }
+            }
+        }
+    }
+
+    private struct QuoteTabAnchorKey: PreferenceKey {
+        static var defaultValue: [Tab: Anchor<CGRect>] { [:] }
+
+        static func reduce(value: inout [Tab: Anchor<CGRect>], nextValue: () -> [Tab: Anchor<CGRect>]) {
+            value.merge(nextValue(), uniquingKeysWith: { _, new in new })
+        }
+    }
+
+    private func tabItem(_ tab: Tab) -> some View {
+        let isSelected = selection == tab
+
+        return Button {
+            withAnimation(.snappy(duration: 0.25, extraBounce: 0.06)) {
+                selection = tab
+            }
+        } label: {
+            Text(titleProvider(tab))
+                .font(.system(size: 17, weight: isSelected ? .semibold : .regular))
+                .foregroundStyle(isSelected ? .primary : .secondary)
+                .anchorPreference(key: QuoteTabAnchorKey.self, value: .bounds) { [tab: $0] }
+                .padding(.vertical, 4)
+                .frame(minHeight: 32)
+                .fixedSize()
+        }
+        .buttonStyle(.plain)
+    }
+}
+#endif
 
 #Preview("InlineTabBar") {
     @Previewable @State var selection: PreviewTab = .first
@@ -104,6 +249,23 @@ struct InlineTabBar<Tab: Hashable & CaseIterable>: View
                 }
             }
     }
+}
+
+#Preview("QuoteInlineTabBar") {
+    @Previewable @State var selection: PreviewTab = .second
+    VStack(alignment: .leading, spacing: 0) {
+        QuoteInlineTabBar(selection: $selection) { $0.title }
+        Spacer()
+    }
+    .padding(.horizontal, 16)
+    .padding(.top, 20)
+    .background(
+        LinearGradient(
+            colors: [Color(hex: 0xEAF4F0), Color.windowBackground],
+            startPoint: .top,
+            endPoint: .bottom
+        )
+    )
 }
 
 private enum PreviewTab: CaseIterable, Hashable {
