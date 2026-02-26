@@ -12,7 +12,7 @@
 第一性原理：拒绝平庸堆砌，从底层逻辑寻找最小复杂度下的最优解。
 建设性对抗：对用户的原始需求进行"压力测试"，评估其真实性与合理性。
 迁移交叉验证：这是一个 Android → iOS 迁移项目，在提出 iOS 方案前，必须先阅读 Android 端的对应实现，理解其业务意图，再用 iOS 原生方式重新表达。
-确认后执行：必须等待用户确认方案方向后，才进入具体的工程落地阶段。
+澄清后执行：当需求存在高影响歧义时先澄清；若需求明确，则直接落地实现并给出可验证结果。
 
 三、 UI 与视觉一致性 (UI Consistency)
 品牌基因继承：深度扫描并理解《纸间书摘》的 UI 逻辑。
@@ -44,6 +44,12 @@
 命名规则：文档与目录均使用中文命名，命名需体现功能边界与意图。
 文档组成（强制）：每个功能目录必须包含需求文档和设计文档。
 维护原则：文档是决策记录，不是说明书。当实现偏离文档时，优先更新文档，再改代码。
+
+八、执行与交付策略（Execution Policy）
+默认交付验证：实现完成后默认执行 `build` 以确保编译通过。
+测试执行边界：未被明确要求时，不单独执行 UI Test，不主动编写 UI 测试用例。
+测试优先级：如需补测试，优先补单元测试（ViewModel、数据库迁移、服务层异常路径）。
+提交规范：提交信息统一使用中文，格式为 `fix(功能模块): 提交信息`。
 
 ---
 
@@ -488,7 +494,7 @@ withAnimation(.snappy) {
 
 # 关键参考路径
 
-Android 项目根目录：`/Users/wangke/WorkSpace/OpenSource/Mine/Merpyzf/XMNote`
+Android 项目根目录：`/Users/wangke/Workspace/AndroidProjects/XMNote`
 
 以下路径均相对于 Android 项目根目录。
 
@@ -528,15 +534,15 @@ ViewModel:       app/src/main/java/com/merpyzf/xmnote/viewmodel/
 
 ```bash
 # 构建项目
-xcodebuild -project xmnote.xcodeproj -scheme xmnote -sdk iphonesimulator \
+xcodebuild -project XMNote.xcodeproj -scheme xmnote -sdk iphonesimulator \
   -destination 'platform=iOS Simulator,name=iPhone 17 Pro' build
 
-# 运行测试
-xcodebuild -project xmnote.xcodeproj -scheme xmnote -sdk iphonesimulator \
+# 按需运行测试（仅在任务明确要求时）
+xcodebuild -project XMNote.xcodeproj -scheme xmnote -sdk iphonesimulator \
   -destination 'platform=iOS Simulator,name=iPhone 17 Pro' test
 
 # 清理构建
-xcodebuild -project xmnote.xcodeproj -scheme xmnote clean
+xcodebuild -project XMNote.xcodeproj -scheme xmnote clean
 ```
 
 ## 可用模拟器（Xcode 26.1）
