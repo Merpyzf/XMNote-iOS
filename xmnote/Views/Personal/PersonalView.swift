@@ -21,37 +21,37 @@ struct PersonalView: View {
     }
 
     var body: some View {
-        ScrollView {
-            VStack(spacing: Spacing.base) {
-                premiumSection
-                readingSection
-                dataSection
-                managementSection
-                supportSection
-                aboutSection
+        ZStack(alignment: .top) {
+            Color.windowBackground.ignoresSafeArea()
+
+            ScrollView {
+                VStack(spacing: Spacing.base) {
+                    premiumSection
+                    readingSection
+                    dataSection
+                    managementSection
+                    supportSection
+                    aboutSection
+                }
+                .padding(.horizontal, Spacing.screenEdge)
+                .padding(.vertical, Spacing.base)
             }
-            .padding(.horizontal, Spacing.screenEdge)
-            .padding(.vertical, Spacing.base)
+
+            HomeTopHeaderGradient()
+                .allowsHitTesting(false)
         }
-        .background { Color.windowBackground.ignoresSafeArea() }
         .safeAreaInset(edge: .top, spacing: 0) {
             TopSwitcher(title: "我的") {
                 NavigationLink(value: PersonalRoute.settings) {
-                    Image(systemName: "gearshape")
-                        .font(.system(size: 16, weight: .medium))
-                        .foregroundStyle(.secondary)
-                        .frame(width: 36, height: 36)
-                        .background(Color.contentBackground, in: Circle())
-                        .overlay(
-                            Circle()
-                                .stroke(Color.cardBorder, lineWidth: CardStyle.borderWidth)
-                        )
-                        .frame(width: 44, height: 44)
-                        .contentShape(Rectangle())
+                    TopBarActionIcon(systemName: "gearshape")
                 }
-                .buttonStyle(.plain)
+                .topBarGlassButtonStyle(true)
 
-                AddMenuCircleButton(onAddBook: onAddBook, onAddNote: onAddNote)
+                AddMenuCircleButton(
+                    onAddBook: onAddBook,
+                    onAddNote: onAddNote,
+                    usesGlassStyle: true
+                )
             }
         }
         .toolbar(.hidden, for: .navigationBar)

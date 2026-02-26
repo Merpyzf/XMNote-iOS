@@ -39,7 +39,6 @@ struct ReadingContainerView: View {
     var body: some View {
         ZStack(alignment: .top) {
             Color.windowBackground.ignoresSafeArea()
-            ReadingHeaderGradient()
 
             TabView(selection: $selectedSubTab) {
                 ReadingListPlaceholderView()
@@ -50,6 +49,9 @@ struct ReadingContainerView: View {
                     .tag(ReadingSubTab.statistics)
             }
             .tabViewStyle(.page(indexDisplayMode: .never))
+
+            HomeTopHeaderGradient()
+                .allowsHitTesting(false)
         }
         .safeAreaInset(edge: .top, spacing: 0) {
             TopSwitcher(
@@ -57,25 +59,14 @@ struct ReadingContainerView: View {
                 tabs: ReadingSubTab.allCases,
                 titleProvider: \.title
             ) {
-                AddMenuCircleButton(onAddBook: onAddBook, onAddNote: onAddNote)
+                AddMenuCircleButton(
+                    onAddBook: onAddBook,
+                    onAddNote: onAddNote,
+                    usesGlassStyle: true
+                )
             }
         }
         .toolbar(.hidden, for: .navigationBar)
-    }
-}
-
-private struct ReadingHeaderGradient: View {
-    var body: some View {
-        LinearGradient(
-            colors: [
-                Color(light: Color(hex: 0x2ECF77).opacity(0.2), dark: Color(hex: 0x1E2A25)),
-                Color.windowBackground.opacity(0)
-            ],
-            startPoint: .top,
-            endPoint: .bottom
-        )
-        .frame(height: 150)
-        .ignoresSafeArea(edges: .top)
     }
 }
 

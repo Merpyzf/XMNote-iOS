@@ -64,8 +64,15 @@ private struct NoteContentView: View {
     @State private var selectedSubTab: NoteSubTab = .notes
 
     var body: some View {
-        VStack(spacing: 0) {
-            segmentedContent
+        ZStack(alignment: .top) {
+            Color.windowBackground.ignoresSafeArea()
+
+            VStack(spacing: 0) {
+                segmentedContent
+            }
+
+            HomeTopHeaderGradient()
+                .allowsHitTesting(false)
         }
         .safeAreaInset(edge: .top, spacing: 0) {
             TopSwitcher(
@@ -74,7 +81,11 @@ private struct NoteContentView: View {
                 titleProvider: \.title
             ) {
                 noteActionButton
-                AddMenuCircleButton(onAddBook: onAddBook, onAddNote: onAddNote)
+                AddMenuCircleButton(
+                    onAddBook: onAddBook,
+                    onAddNote: onAddNote,
+                    usesGlassStyle: true
+                )
             }
         }
         .toolbar(.hidden, for: .navigationBar)
@@ -134,19 +145,11 @@ private struct NoteContentView: View {
         Button {
             // TODO: sort/settings action
         } label: {
-            Image(systemName: selectedSubTab == .notes ? "arrow.up.arrow.down" : "gearshape")
-                .font(.system(size: 16, weight: .medium))
-                .foregroundStyle(.secondary)
-                .frame(width: 36, height: 36)
-                .background(Color.contentBackground, in: Circle())
-                .overlay(
-                    Circle()
-                        .stroke(Color.cardBorder, lineWidth: CardStyle.borderWidth)
-                )
-                .frame(width: 44, height: 44)
-                .contentShape(Rectangle())
+            TopBarActionIcon(
+                systemName: selectedSubTab == .notes ? "arrow.up.arrow.down" : "gearshape"
+            )
         }
-        .buttonStyle(.plain)
+        .topBarGlassButtonStyle(true)
     }
 }
 

@@ -120,7 +120,7 @@ private struct TopSwitcherTabBar<Tab: Hashable>: View {
             }
         } label: {
             Text(title)
-                .font(.system(size: 17, weight: isSelected ? .semibold : .regular))
+                .font(.system(size: 20, weight: isSelected ? .semibold : .regular))
                 .foregroundStyle(isSelected ? .primary : .secondary)
                 .anchorPreference(key: TopSwitcherTabAnchorKey.self, value: .bounds) { [tab: $0] }
                 .padding(.vertical, 4)
@@ -139,7 +139,7 @@ private struct TopSwitcherTitleLabel: View {
 
     var body: some View {
         Text(text)
-            .font(.system(size: 17, weight: .semibold))
+            .font(.system(size: 20, weight: .semibold))
             .foregroundStyle(.primary)
             .padding(.vertical, 4)
             .frame(minHeight: 32, alignment: .leading)

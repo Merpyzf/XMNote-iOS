@@ -7,6 +7,8 @@
 - 本仓库是 Android → iOS 迁移项目，优先做“业务意图对齐”，禁止机械翻译实现。
 - Android 参考工程路径：`/Users/wangke/Workspace/AndroidProjects/XMNote`。
 - 规范分层：本文件是执行摘要；完整背景与细则以 `CLAUDE.md` 为准。
+- 学习输出约定：每完成一个功能开发，必须补充本次涉及的 iOS 知识点总结，并给出面向 Android Compose 开发者的学习示例（含对照思路与可运行代码片段）；学习文档统一存放在 `docs/learning/`。
+- iOS26 参考入口：涉及液态玻璃与 iOS26 新特性时，优先查阅 `docs/learning/iOS26液态玻璃与高相关新特性开发参考.md`，并据此执行“Android 业务意图对齐 + iOS 原生表达”。
 
 ## 执行优先级（与 CLAUDE.md 融合）
 - 优先级顺序：用户当次明确要求 > `AGENTS.md` > `CLAUDE.md`。

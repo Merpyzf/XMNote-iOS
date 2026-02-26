@@ -49,6 +49,23 @@ struct EmptyStateView: View {
     }
 }
 
+// MARK: - Home Header Gradient
+
+struct HomeTopHeaderGradient: View {
+    var body: some View {
+        LinearGradient(
+            colors: [
+                Color(light: Color(hex: 0x2ECF77).opacity(0.2), dark: Color(hex: 0x1E2A25)),
+                Color.windowBackground.opacity(0)
+            ],
+            startPoint: .top,
+            endPoint: .bottom
+        )
+        .frame(height: 150)
+        .ignoresSafeArea(edges: .top)
+    }
+}
+
 // MARK: - Primary Top Bar
 
 /// 主 Tab 顶部容器：左侧内容 + 右侧操作区，统一高度与边距。
@@ -78,19 +95,53 @@ struct PrimaryTopBar<Leading: View, Trailing: View>: View {
     }
 }
 
+// MARK: - Top Bar Action Icon
+
+struct TopBarActionIcon: View {
+    let systemName: String
+    var iconSize: CGFloat = 15
+    var weight: Font.Weight = .medium
+    var foregroundColor: Color = .secondary
+
+    var body: some View {
+        Image(systemName: systemName)
+            .font(.system(size: iconSize, weight: weight))
+            .foregroundStyle(foregroundColor)
+            .frame(width: 36, height: 36)
+            .contentShape(Circle())
+    }
+}
+
+// MARK: - Glass Button Style
+
+extension View {
+    @ViewBuilder
+    func topBarGlassButtonStyle(_ enabled: Bool) -> some View {
+        if enabled {
+            self.buttonStyle(.plain)
+                .glassEffect(.regular.interactive(), in: .circle)
+        } else {
+            self.buttonStyle(.plain)
+        }
+    }
+}
+
 // MARK: - Add Menu Button
 
-/// 统一 `+` 菜单按钮：36pt 圆形视觉 + 44pt 最小可点击区域。
+/// 统一 `+` 菜单按钮。glass 模式下通过 `.glassEffect(.regular.interactive())` 实现液态玻璃与按压反馈。
 struct AddMenuCircleButton: View {
     let onAddBook: () -> Void
     let onAddNote: () -> Void
+    let usesGlassStyle: Bool
 
     init(
         onAddBook: @escaping () -> Void,
-        onAddNote: @escaping () -> Void
+        onAddNote: @escaping () -> Void,
+        usesGlassStyle: Bool = false
     ) {
         self.onAddBook = onAddBook
         self.onAddNote = onAddNote
+        self.usesGlassStyle = usesGlassStyle
     }
 
     var body: some View {
@@ -98,19 +149,24 @@ struct AddMenuCircleButton: View {
             Button("添加书籍", systemImage: "book.badge.plus", action: onAddBook)
             Button("添加书摘", systemImage: "square.and.pencil", action: onAddNote)
         } label: {
-            Image(systemName: "plus")
-                .font(.system(size: 18, weight: .medium))
-                .foregroundStyle(Color.brand)
-                .frame(width: 36, height: 36)
-                .background(Color.contentBackground, in: Circle())
-                .overlay(
-                    Circle()
-                        .stroke(Color.cardBorder, lineWidth: CardStyle.borderWidth)
-                )
-                .frame(width: 44, height: 44)
-                .contentShape(Rectangle())
+            if usesGlassStyle {
+                Image(systemName: "plus")
+                    .font(.system(size: 15, weight: .medium))
+                    .foregroundStyle(Color.brand)
+                    .frame(width: 36, height: 36)
+                    .contentShape(Circle())
+            } else {
+                Image(systemName: "plus")
+                    .font(.system(size: 18, weight: .medium))
+                    .foregroundStyle(Color.brand)
+                    .frame(width: 36, height: 36)
+                    .background(Color.contentBackground, in: Circle())
+                    .overlay(Circle().stroke(Color.cardBorder, lineWidth: CardStyle.borderWidth))
+                    .frame(width: 44, height: 44)
+                    .contentShape(Circle())
+            }
         }
-        .buttonStyle(.plain)
+        .topBarGlassButtonStyle(usesGlassStyle)
         .accessibilityLabel("添加")
     }
 }

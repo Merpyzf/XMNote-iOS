@@ -64,8 +64,15 @@ private struct BookContentView: View {
     @State private var selectedSubTab: BookSubTab = .books
 
     var body: some View {
-        VStack(spacing: 0) {
-            segmentedContent
+        ZStack(alignment: .top) {
+            Color.windowBackground.ignoresSafeArea()
+
+            VStack(spacing: 0) {
+                segmentedContent
+            }
+
+            HomeTopHeaderGradient()
+                .allowsHitTesting(false)
         }
         .safeAreaInset(edge: .top, spacing: 0) {
             TopSwitcher(
@@ -73,7 +80,11 @@ private struct BookContentView: View {
                 tabs: BookSubTab.allCases,
                 titleProvider: \.title
             ) {
-                AddMenuCircleButton(onAddBook: onAddBook, onAddNote: onAddNote)
+                AddMenuCircleButton(
+                    onAddBook: onAddBook,
+                    onAddNote: onAddNote,
+                    usesGlassStyle: true
+                )
             }
         }
         .toolbar(.hidden, for: .navigationBar)

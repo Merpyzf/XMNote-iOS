@@ -18,6 +18,7 @@ struct MainTabView: View {
     @State private var notesPath = NavigationPath()
     @State private var profilePath = NavigationPath()
     @State private var searchPath = NavigationPath()
+    @State private var searchQuery = ""
 
     var body: some View {
         TabView(selection: $selectedTab) {
@@ -101,6 +102,7 @@ struct MainTabView: View {
             Tab("搜索", systemImage: "magnifyingglass", value: .search, role: .search) {
                 NavigationStack(path: $searchPath) {
                     SearchView(
+                        query: $searchQuery,
                         onAddBook: { append(BookRoute.add, to: .search) },
                         onAddNote: { append(NoteRoute.create(bookId: nil), to: .search) }
                     )
@@ -116,6 +118,8 @@ struct MainTabView: View {
             }
         }
         .tabBarMinimizeBehavior(.onScrollDown)
+        .tabViewSearchActivation(.searchTabSelection)
+        .searchable(text: $searchQuery, prompt: "搜索书籍或书摘")
     }
 
     // MARK: - Reading Destinations
@@ -232,71 +236,46 @@ struct MainTabView: View {
 }
 
 private struct SearchView: View {
+    @Binding var query: String
     let onAddBook: () -> Void
     let onAddNote: () -> Void
-    @State private var query = ""
 
     init(
+        query: Binding<String>,
         onAddBook: @escaping () -> Void = {},
         onAddNote: @escaping () -> Void = {}
     ) {
+        self._query = query
         self.onAddBook = onAddBook
         self.onAddNote = onAddNote
     }
 
     var body: some View {
-        VStack(spacing: Spacing.base) {
-            searchField
+        ZStack(alignment: .top) {
+            Color.windowBackground.ignoresSafeArea()
+            HomeTopHeaderGradient()
 
-            VStack(spacing: 12) {
-                Image(systemName: "magnifyingglass")
-                    .font(.system(size: 28, weight: .semibold))
-                    .foregroundStyle(.secondary)
-                Text(query.isEmpty ? "搜索书籍与书摘" : "暂无匹配结果")
-                    .font(.body)
-                    .foregroundStyle(.secondary)
+            VStack(spacing: Spacing.base) {
+                HStack {
+                    Spacer(minLength: 0)
+                    AddMenuCircleButton(onAddBook: onAddBook, onAddNote: onAddNote)
+                }
+                .padding(.horizontal, Spacing.screenEdge)
+                .padding(.top, Spacing.half)
+
+                VStack(spacing: 12) {
+                    Image(systemName: "magnifyingglass")
+                        .font(.system(size: 28, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                    Text(query.isEmpty ? "输入关键词开始搜索" : "暂无匹配结果")
+                        .font(.body)
+                        .foregroundStyle(.secondary)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-        }
-        .padding(.horizontal, Spacing.screenEdge)
-        .padding(.top, Spacing.half)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .background { Color.windowBackground.ignoresSafeArea() }
-        .safeAreaInset(edge: .top, spacing: 0) {
-            TopSwitcher(title: "搜索") {
-                AddMenuCircleButton(onAddBook: onAddBook, onAddNote: onAddNote)
-            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         }
         .toolbar(.hidden, for: .navigationBar)
-    }
-
-    private var searchField: some View {
-        HStack(spacing: 8) {
-            Image(systemName: "magnifyingglass")
-                .font(.system(size: 14, weight: .medium))
-                .foregroundStyle(.secondary)
-
-            TextField("搜索书籍或书摘", text: $query)
-                .textInputAutocapitalization(.never)
-                .autocorrectionDisabled()
-
-            if !query.isEmpty {
-                Button {
-                    query = ""
-                } label: {
-                    Image(systemName: "xmark.circle.fill")
-                        .foregroundStyle(.tertiary)
-                }
-                .buttonStyle(.plain)
-            }
-        }
-        .padding(.horizontal, 12)
-        .frame(height: 36)
-        .background(Color.contentBackground, in: RoundedRectangle(cornerRadius: 10))
-        .overlay(
-            RoundedRectangle(cornerRadius: 10)
-                .stroke(Color.cardBorder, lineWidth: CardStyle.borderWidth)
-        )
     }
 }
 
