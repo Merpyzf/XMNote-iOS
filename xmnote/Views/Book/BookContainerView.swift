@@ -68,11 +68,13 @@ private struct BookContentView: View {
             segmentedContent
         }
         .safeAreaInset(edge: .top, spacing: 0) {
-            BookTopSwitcher(
+            TopSwitcher(
                 selection: $selectedSubTab,
-                onAddBook: onAddBook,
-                onAddNote: onAddNote
-            )
+                tabs: BookSubTab.allCases,
+                titleProvider: \.title
+            ) {
+                AddMenuCircleButton(onAddBook: onAddBook, onAddNote: onAddNote)
+            }
         }
         .toolbar(.hidden, for: .navigationBar)
     }
@@ -90,20 +92,6 @@ private struct BookContentView: View {
         }
     }
 
-}
-
-private struct BookTopSwitcher: View {
-    @Binding var selection: BookSubTab
-    let onAddBook: () -> Void
-    let onAddNote: () -> Void
-
-    var body: some View {
-        PrimaryTopBar {
-            InlineTabBar(selection: $selection) { $0.title }
-        } trailing: {
-            AddMenuCircleButton(onAddBook: onAddBook, onAddNote: onAddNote)
-        }
-    }
 }
 
 #Preview {

@@ -68,11 +68,14 @@ private struct NoteContentView: View {
             segmentedContent
         }
         .safeAreaInset(edge: .top, spacing: 0) {
-            NoteTopSwitcher(
+            TopSwitcher(
                 selection: $selectedSubTab,
-                onAddBook: onAddBook,
-                onAddNote: onAddNote
-            )
+                tabs: NoteSubTab.allCases,
+                titleProvider: \.title
+            ) {
+                noteActionButton
+                AddMenuCircleButton(onAddBook: onAddBook, onAddNote: onAddNote)
+            }
         }
         .toolbar(.hidden, for: .navigationBar)
     }
@@ -126,36 +129,24 @@ private struct NoteContentView: View {
         .padding(.horizontal, Spacing.screenEdge)
         .padding(.bottom, Spacing.half)
     }
-}
 
-private struct NoteTopSwitcher: View {
-    @Binding var selection: NoteSubTab
-    let onAddBook: () -> Void
-    let onAddNote: () -> Void
-
-    var body: some View {
-        PrimaryTopBar {
-            InlineTabBar(selection: $selection) { $0.title }
-        } trailing: {
-            Button {
-                // TODO: sort/settings action
-            } label: {
-                Image(systemName: selection == .notes ? "arrow.up.arrow.down" : "gearshape")
-                    .font(.system(size: 16, weight: .medium))
-                    .foregroundStyle(.secondary)
-                    .frame(width: 36, height: 36)
-                    .background(Color.contentBackground, in: Circle())
-                    .overlay(
-                        Circle()
-                            .stroke(Color.cardBorder, lineWidth: CardStyle.borderWidth)
-                    )
-                    .frame(width: 44, height: 44)
-                    .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-
-            AddMenuCircleButton(onAddBook: onAddBook, onAddNote: onAddNote)
+    private var noteActionButton: some View {
+        Button {
+            // TODO: sort/settings action
+        } label: {
+            Image(systemName: selectedSubTab == .notes ? "arrow.up.arrow.down" : "gearshape")
+                .font(.system(size: 16, weight: .medium))
+                .foregroundStyle(.secondary)
+                .frame(width: 36, height: 36)
+                .background(Color.contentBackground, in: Circle())
+                .overlay(
+                    Circle()
+                        .stroke(Color.cardBorder, lineWidth: CardStyle.borderWidth)
+                )
+                .frame(width: 44, height: 44)
+                .contentShape(Rectangle())
         }
+        .buttonStyle(.plain)
     }
 }
 

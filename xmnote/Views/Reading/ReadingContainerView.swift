@@ -52,11 +52,13 @@ struct ReadingContainerView: View {
             .tabViewStyle(.page(indexDisplayMode: .never))
         }
         .safeAreaInset(edge: .top, spacing: 0) {
-            ReadingTopSwitcher(
+            TopSwitcher(
                 selection: $selectedSubTab,
-                onAddBook: onAddBook,
-                onAddNote: onAddNote
-            )
+                tabs: ReadingSubTab.allCases,
+                titleProvider: \.title
+            ) {
+                AddMenuCircleButton(onAddBook: onAddBook, onAddNote: onAddNote)
+            }
         }
         .toolbar(.hidden, for: .navigationBar)
     }
@@ -74,20 +76,6 @@ private struct ReadingHeaderGradient: View {
         )
         .frame(height: 150)
         .ignoresSafeArea(edges: .top)
-    }
-}
-
-private struct ReadingTopSwitcher: View {
-    @Binding var selection: ReadingSubTab
-    let onAddBook: () -> Void
-    let onAddNote: () -> Void
-
-    var body: some View {
-        PrimaryTopBar {
-            QuoteInlineTabBar(selection: $selection) { $0.title }
-        } trailing: {
-            AddMenuCircleButton(onAddBook: onAddBook, onAddNote: onAddNote)
-        }
     }
 }
 

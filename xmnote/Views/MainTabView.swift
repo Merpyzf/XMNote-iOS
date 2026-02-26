@@ -263,10 +263,7 @@ private struct SearchView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .background { Color.windowBackground.ignoresSafeArea() }
         .safeAreaInset(edge: .top, spacing: 0) {
-            PrimaryTopBar {
-                Text("搜索")
-                    .font(.system(size: 17, weight: .semibold))
-            } trailing: {
+            TopSwitcher(title: "搜索") {
                 AddMenuCircleButton(onAddBook: onAddBook, onAddNote: onAddNote)
             }
         }

@@ -35,10 +35,7 @@ struct PersonalView: View {
         }
         .background { Color.windowBackground.ignoresSafeArea() }
         .safeAreaInset(edge: .top, spacing: 0) {
-            PrimaryTopBar {
-                Text("我的")
-                    .font(.system(size: 17, weight: .semibold))
-            } trailing: {
+            TopSwitcher(title: "我的") {
                 NavigationLink(value: PersonalRoute.settings) {
                     Image(systemName: "gearshape")
                         .font(.system(size: 16, weight: .medium))
