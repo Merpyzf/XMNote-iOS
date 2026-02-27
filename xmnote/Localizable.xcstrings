@@ -51,9 +51,6 @@
         }
       }
     },
-    "%lld年" : {
-
-    },
     "AI 配置" : {
       "localizations" : {
         "en" : {
@@ -75,6 +72,7 @@
       }
     },
     "HTML 往返一致" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -85,6 +83,7 @@
       }
     },
     "HTML 往返不一致" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -164,9 +163,6 @@
         }
       }
     },
-    "全部年份" : {
-
-    },
     "关于应用" : {
       "localizations" : {
         "en" : {
@@ -228,6 +224,7 @@
       }
     },
     "加载到编辑器" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -322,6 +319,7 @@
       }
     },
     "富文本编辑器测试" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -334,10 +332,8 @@
     "少" : {
 
     },
-    "年份" : {
-
-    },
     "序列化想法" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -348,6 +344,7 @@
       }
     },
     "序列化摘录" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -368,6 +365,7 @@
       }
     },
     "往返测试" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -498,6 +496,7 @@
       }
     },
     "无" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -560,12 +559,6 @@
         }
       }
     },
-    "测试中心" : {
-
-    },
-    "测试场景" : {
-
-    },
     "测试连接" : {
       "localizations" : {
         "en" : {
@@ -627,6 +620,7 @@
       }
     },
     "激活格式:" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -636,19 +630,7 @@
         }
       }
     },
-    "点击反馈" : {
-
-    },
-    "热力图" : {
-
-    },
-    "热力图测试" : {
-
-    },
     "热力图说明" : {
-
-    },
-    "真实数据集成测试" : {
 
     },
     "确定" : {
@@ -700,9 +682,6 @@
           }
         }
       }
-    },
-    "统计类型" : {
-
     },
     "编辑" : {
       "localizations" : {
@@ -785,6 +764,7 @@
       }
     },
     "选择示例" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -793,9 +773,6 @@
           }
         }
       }
-    },
-    "重新加载真实数据" : {
-
     },
     "重试" : {
 
@@ -839,9 +816,6 @@
           }
         }
       }
-    },
-    "颜色图例" : {
-
     }
   },
   "version" : "1.0"

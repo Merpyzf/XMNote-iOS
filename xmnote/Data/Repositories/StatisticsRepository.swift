@@ -31,6 +31,17 @@ struct StatisticsRepository: StatisticsRepositoryProtocol {
     }
 }
 
+// MARK: - 共享格式化器
+
+private extension StatisticsRepository {
+    static let dayFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.dateFormat = "yyyy-MM-dd"
+        f.timeZone = .current
+        return f
+    }()
+}
+
 // MARK: - 聚合查询
 
 private struct CheckInSummary {
@@ -248,10 +259,6 @@ private extension StatisticsRepository {
               AND changed_date BETWEEN ? AND ?
             ORDER BY changed_date ASC
             """
-        let formatter = DateFormatter()
-        formatter.dateFormat = "yyyy-MM-dd"
-        formatter.timeZone = .current
-
         guard let rows = try? Row.fetchAll(
             db,
             sql: sql,
@@ -262,7 +269,7 @@ private extension StatisticsRepository {
         for row in rows {
             guard let dayStr: String = row["day"],
                   let statusId: Int64 = row["read_status_id"],
-                  let date = formatter.date(from: dayStr),
+                  let date = Self.dayFormatter.date(from: dayStr),
                   let state = HeatmapBookState(rawValue: Int(statusId)) else { continue }
             let day = calendar.startOfDay(for: date)
             result[day, default: []].insert(state)
@@ -278,17 +285,13 @@ private extension StatisticsRepository {
         sql: String,
         arguments: StatementArguments = StatementArguments()
     ) -> [Date: Int] {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "yyyy-MM-dd"
-        formatter.timeZone = .current
-
         guard let rows = try? Row.fetchAll(db, sql: sql, arguments: arguments) else { return [:] }
 
         var result: [Date: Int] = [:]
         for row in rows {
             guard let dayStr: String = row["day"],
                   let total: Int = row["total"],
-                  let date = formatter.date(from: dayStr) else { continue }
+                  let date = Self.dayFormatter.date(from: dayStr) else { continue }
             result[calendar.startOfDay(for: date)] = total
         }
         return result
@@ -300,10 +303,6 @@ private extension StatisticsRepository {
         sql: String,
         arguments: StatementArguments = StatementArguments()
     ) -> [Date: CheckInSummary] {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "yyyy-MM-dd"
-        formatter.timeZone = .current
-
         guard let rows = try? Row.fetchAll(db, sql: sql, arguments: arguments) else { return [:] }
 
         var result: [Date: CheckInSummary] = [:]
@@ -311,7 +310,7 @@ private extension StatisticsRepository {
             guard let dayStr: String = row["day"],
                   let count: Int = row["checkin_count"],
                   let seconds: Int = row["checkin_seconds"],
-                  let date = formatter.date(from: dayStr) else { continue }
+                  let date = Self.dayFormatter.date(from: dayStr) else { continue }
             result[calendar.startOfDay(for: date)] = CheckInSummary(
                 count: count,
                 seconds: seconds

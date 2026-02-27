@@ -93,9 +93,10 @@
 
 七、文档维护（Documentation Discipline）
 语言规范：全部使用中文，表述追求精确而非修辞。
-存放结构：统一存放于 `docs/feature/`，每一个功能一个独立目录。
+存放结构：功能决策文档统一存放于 `docs/feature/`；重要 UI 组件使用文档统一存放于 `docs/component-guides/`。
 命名规则：文档与目录均使用中文命名，命名需体现功能边界与意图。
 文档组成（强制）：每个功能目录必须包含需求文档和设计文档。
+组件文档机制（强制）：重要 UI 组件（`docs/architecture/UI核心组件白名单.md` 白名单组件 + `xmnote/UIComponents` 下新增/重大重构组件）开发完成后，必须新增或更新使用文档，并同步维护 `docs/architecture/UI组件文档清单.md`。
 维护原则：文档是决策记录，不是说明书。当实现偏离文档时，优先更新文档，再改代码。
 
 八、执行与交付策略（Execution Policy）
@@ -105,6 +106,7 @@
 提交规范：提交信息统一使用中文，格式为 `fix(功能模块): 提交信息`。
 术语对照闸门：提交前必须执行 `bash scripts/verify_glossary.sh && bash scripts/verify_ui_glossary_scope.sh`。
 架构文档闸门：提交前必须执行 `bash scripts/verify_arch_docs_sync.sh`，确保 `AGENTS.md` 与 `CLAUDE.md` 的模块清单和目录同构。
+组件文档闸门：提交前必须执行 `bash scripts/verify_component_guides.sh`，确保重要 UI 组件使用文档与清单完整且结构合规。
 术语对照表：`docs/architecture/术语对照表.md`（新增/重命名核心类、可复用 UI、白名单核心页面组件时必须同步更新）。
 UI 核心白名单：`docs/architecture/UI核心组件白名单.md`（白名单变更必须与术语表保持同构）。
 组件归位闸门：新增可复用 UI 组件必须放置在 `xmnote/UIComponents`；若出现放错目录，必须先整改后再继续开发与提交。
@@ -234,6 +236,7 @@ L3 文件头部契约模板：
 - `xmnote/UIComponents` 是可复用 UI 组件唯一归属目录，禁止在 `xmnote/Utilities`、`xmnote/Views`、`xmnote/ViewModels`、`xmnote/Services` 新增可复用 UI 组件。
 - `xmnote/UIComponents` 的可复用 UI 组件必须在术语表中标记为 `UI-复用`。
 - `docs/architecture/UI核心组件白名单.md` 中的组件必须在术语表中标记为 `UI-核心页面`。
+- 重要 UI 组件必须在 `docs/architecture/UI组件文档清单.md` 有登记，且对应使用文档位于 `docs/component-guides/`。
 - `xmnote/RichTextEditor` 作为功能模块保留；仅纯展示且跨页面复用的子组件允许抽到 `xmnote/UIComponents`。
 - `AGENTS.md` 与 `CLAUDE.md` 的自动同步模块清单必须与 `xmnote/` 顶层目录一致，不一致即视为未完成。
 - `CLAUDE.md` 与 `AGENTS.md` 的项目结构描述、全局配置条目、工具链说明必须保持同构；任一文件的手工维护区域发生变更时，必须同步检查并更新另一文件的对应区域。

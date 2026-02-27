@@ -153,7 +153,8 @@ private extension HeatmapTestContentView {
                 days: viewModel.days,
                 earliestDate: viewModel.earliestDate,
                 latestDate: viewModel.latestDate,
-                statisticsDataType: viewModel.statisticsDataType
+                statisticsDataType: viewModel.statisticsDataType,
+                style: .readingCard
             ) { day in
                 withAnimation(.snappy) {
                     viewModel.selectedDay = day

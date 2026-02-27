@@ -8,6 +8,7 @@
 - Android 参考工程路径：`/Users/wangke/Workspace/AndroidProjects/XMNote`。
 - 规范分层：本文件是执行摘要；完整背景与细则以 `CLAUDE.md` 为准。
 - 学习输出约定：每完成一个功能开发，必须补充本次涉及的 iOS 知识点总结，并给出面向 Android Compose 开发者的学习示例（含对照思路与可运行代码片段）；学习文档统一存放在 `docs/learning/`。
+- 组件文档机制：重要 UI 组件（`docs/architecture/UI核心组件白名单.md` 白名单组件 + `xmnote/UIComponents` 下新增/重大重构组件）开发完成后，必须新增或更新组件使用文档（`docs/component-guides/`），并登记到 `docs/architecture/UI组件文档清单.md`。
 - iOS26 参考入口：涉及液态玻璃与 iOS26 新特性时，优先查阅 `docs/learning/iOS26液态玻璃与高相关新特性开发参考.md`，并据此执行“Android 业务意图对齐 + iOS 原生表达”。
 
 ## 执行优先级（与 CLAUDE.md 融合）
@@ -27,6 +28,7 @@
   - `bash scripts/verify_glossary.sh`
   - `bash scripts/verify_ui_glossary_scope.sh`
   - `bash scripts/verify_arch_docs_sync.sh`
+  - `bash scripts/verify_component_guides.sh`
 
 ## UI组件归位规则（阻塞级）
 - 可复用 UI 组件唯一归属目录：`xmnote/UIComponents`。
@@ -65,6 +67,7 @@
 - `xmnote/Utilities`：设计令牌与非 UI 工具（禁止新增可复用 UI 组件）。
 - `scripts/`：架构术语与 UI 组件范围校验脚本。
 - `docs/feature/`：功能文档（需求 + 设计）。
+- `docs/component-guides/`：重要 UI 组件使用文档（参数说明 + 接入示例 + 常见问题）。
 
 ## 自动同步模块清单（脚本生成）
 <!-- AUTO_SYNC_MODULES_START -->
@@ -111,5 +114,6 @@
 
 ## 文档与安全规范
 - 新功能文档统一放在 `docs/feature/功能名/`，至少包含《需求文档》《设计文档》。
+- 重要 UI 组件使用文档统一放在 `docs/component-guides/`，并同步维护 `docs/architecture/UI组件文档清单.md`。
 - 代码实现与文档冲突时，先更新文档再改代码。
 - 严禁提交真实账号、密码、Token、服务器地址；示例配置必须脱敏。

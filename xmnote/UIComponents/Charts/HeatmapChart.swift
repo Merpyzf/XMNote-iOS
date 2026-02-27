@@ -5,8 +5,8 @@ import os
 #endif
 
 /**
- * [INPUT]: 依赖 HeatmapDay/HeatmapLevel/HeatmapStatisticsDataType 领域模型，依赖 DesignTokens 颜色令牌，依赖 ScrollViewReader 程序化滚动，DEBUG 下依赖 os.Logger 输出布局诊断日志
- * [OUTPUT]: 对外提供 HeatmapChart（支持样式参数配置的 GitHub 风格阅读热力图组件）与 HeatmapChartStyle（方格尺寸/间距/圆角等视觉配置）
+ * [INPUT]: 依赖 HeatmapDay/HeatmapLevel/HeatmapStatisticsDataType 领域模型，依赖 DesignTokens 颜色令牌，依赖 ScrollViewReader 程序化滚动，依赖 displayScale 做像素对齐，DEBUG 下依赖 os.Logger 输出布局诊断日志
+ * [OUTPUT]: 对外提供 HeatmapChart（支持样式参数配置的 GitHub 风格阅读热力图组件）与 HeatmapChartStyle（方格尺寸/间距/圆角/自适应防裁切等视觉配置）
  * [POS]: UIComponents/Charts 的热力图组件，供在读页/统计页消费
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -28,6 +28,10 @@ struct HeatmapChartStyle: Equatable, Sendable {
     var axisGap: CGFloat
     var outerInset: CGFloat
     var headerFontSize: CGFloat
+    var fitsViewportWithoutClipping: Bool
+    var preferredVisibleWeekCount: Int?
+    var minSquareSize: CGFloat
+    var maxSquareSize: CGFloat
 
     init(
         squareSize: CGFloat = 13,
@@ -35,7 +39,11 @@ struct HeatmapChartStyle: Equatable, Sendable {
         squareRadius: CGFloat = 2.5,
         axisGap: CGFloat = 8,
         outerInset: CGFloat = 0,
-        headerFontSize: CGFloat = 9
+        headerFontSize: CGFloat = 9,
+        fitsViewportWithoutClipping: Bool = false,
+        preferredVisibleWeekCount: Int? = nil,
+        minSquareSize: CGFloat = 11,
+        maxSquareSize: CGFloat = 20
     ) {
         self.squareSize = squareSize
         self.squareSpacing = squareSpacing
@@ -43,6 +51,10 @@ struct HeatmapChartStyle: Equatable, Sendable {
         self.axisGap = axisGap
         self.outerInset = outerInset
         self.headerFontSize = headerFontSize
+        self.fitsViewportWithoutClipping = fitsViewportWithoutClipping
+        self.preferredVisibleWeekCount = preferredVisibleWeekCount
+        self.minSquareSize = minSquareSize
+        self.maxSquareSize = maxSquareSize
     }
 
     static let `default` = HeatmapChartStyle()
@@ -51,7 +63,10 @@ struct HeatmapChartStyle: Equatable, Sendable {
     static let readingCard = HeatmapChartStyle(
         squareSize: 16,
         squareSpacing: 3,
-        squareRadius: 3
+        squareRadius: 3,
+        fitsViewportWithoutClipping: true,
+        minSquareSize: 14,
+        maxSquareSize: 18.5
     )
 }
 
@@ -65,6 +80,12 @@ private struct HeatmapHeaderToken: Identifiable {
     let id: String
     let text: String
     let x: CGFloat
+}
+
+private struct HeatmapResolvedLayout {
+    let rawSquareSize: CGFloat
+    let squareSize: CGFloat
+    let minimumVisibleWeekCount: Int
 }
 
 #if DEBUG
@@ -88,14 +109,18 @@ struct HeatmapChart: View {
     @State private var headerRowWidth: CGFloat = 0
     @State private var gridRowWidth: CGFloat = 0
 
+    @Environment(\.displayScale) private var displayScale
+
     private let calendar = Calendar.current
 
-    private var squareSize: CGFloat { style.squareSize }
+    private var baseSquareSize: CGFloat { style.squareSize }
     private var squareSpacing: CGFloat { style.squareSpacing }
     private var squareRadius: CGFloat { style.squareRadius }
     private var axisGap: CGFloat { style.axisGap }
     private var outerInset: CGFloat { style.outerInset }
     private var headerFontSize: CGFloat { style.headerFontSize }
+    private var resolvedLayout: HeatmapResolvedLayout { resolveLayout(for: gridViewportWidth) }
+    private var squareSize: CGFloat { resolvedLayout.squareSize }
     private var headerTextLineHeight: CGFloat {
         ceil(UIFont.systemFont(ofSize: headerFontSize).lineHeight)
     }
@@ -113,9 +138,10 @@ struct HeatmapChart: View {
                 .onGeometryChange(for: CGFloat.self) { geo in
                     geo.size.width
                 } action: { width in
-                    guard abs(width - gridViewportWidth) > 0.5 else { return }
-                    gridViewportWidth = width
-                    debugLogViewport(width: width)
+                    let snappedWidth = snapDownToPixel(width)
+                    guard abs(snappedWidth - gridViewportWidth) > 0.5 else { return }
+                    gridViewportWidth = snappedWidth
+                    debugLogViewport(width: snappedWidth)
                 }
                 .onChange(of: scrollToMonth) { _, target in
                     guard let target else { return }
@@ -134,11 +160,14 @@ struct HeatmapChart: View {
 
     func debugLogViewport(width: CGFloat) {
 #if DEBUG
-        let minCount = minimumVisibleWeekCount(for: width)
+        let layout = resolveLayout(for: width)
+        let minCount = layout.minimumVisibleWeekCount
         let realCount = weekColumns.count
         let paddingCount = max(0, minCount - realCount)
+        let minVisibleRowWidth = rowWidth(columnCount: minCount, squareSizeValue: layout.squareSize)
+        let rowMinusViewport = minVisibleRowWidth - width
         HeatmapDebug.logger.debug(
-            "viewportWidth=\(Double(width), privacy: .public) weekdayLabelWidth=\(Double(weekdayLabelColumnWidth), privacy: .public) axisGap=\(Double(axisGap), privacy: .public) minVisibleWeekCount=\(minCount, privacy: .public) realWeekCount=\(realCount, privacy: .public) paddingWeekCount=\(paddingCount, privacy: .public)"
+            "viewportWidth=\(Double(width), privacy: .public) weekdayLabelWidth=\(Double(weekdayLabelColumnWidth), privacy: .public) axisGap=\(Double(axisGap), privacy: .public) minVisibleWeekCount=\(minCount, privacy: .public) rawSquareSize=\(Double(layout.rawSquareSize), privacy: .public) resolvedSquareSize=\(Double(layout.squareSize), privacy: .public) minVisibleRowMinusViewport=\(Double(rowMinusViewport), privacy: .public) realWeekCount=\(realCount, privacy: .public) paddingWeekCount=\(paddingCount, privacy: .public)"
         )
 #endif
     }
@@ -240,16 +269,100 @@ private extension HeatmapChart {
 
 private extension HeatmapChart {
 
-    func minimumVisibleWeekCount(for viewportWidth: CGFloat) -> Int {
+    func minimumVisibleWeekCount(
+        for viewportWidth: CGFloat,
+        squareSize: CGFloat,
+        roundsUp: Bool
+    ) -> Int {
         guard viewportWidth > 0 else { return 0 }
         let columnUnit = squareSize + squareSpacing
+        guard columnUnit > 0 else { return 1 }
         let rawCount = (viewportWidth + squareSpacing) / columnUnit
-        return max(Int(ceil(rawCount)), 1)
+        let rounded = roundsUp ? ceil(rawCount) : floor(rawCount)
+        return max(Int(rounded), 1)
+    }
+
+    func resolveLayout(for viewportWidth: CGFloat) -> HeatmapResolvedLayout {
+        guard viewportWidth > 0 else {
+            return HeatmapResolvedLayout(
+                rawSquareSize: baseSquareSize,
+                squareSize: baseSquareSize,
+                minimumVisibleWeekCount: 0
+            )
+        }
+
+        guard style.fitsViewportWithoutClipping else {
+            return HeatmapResolvedLayout(
+                rawSquareSize: baseSquareSize,
+                squareSize: baseSquareSize,
+                minimumVisibleWeekCount: minimumVisibleWeekCount(
+                    for: viewportWidth,
+                    squareSize: baseSquareSize,
+                    roundsUp: true
+                )
+            )
+        }
+
+        let minAllowedSize = min(style.minSquareSize, style.maxSquareSize)
+        let maxAllowedSize = max(style.minSquareSize, style.maxSquareSize)
+
+        var weekCount = max(
+            style.preferredVisibleWeekCount
+                ?? minimumVisibleWeekCount(
+                    for: viewportWidth,
+                    squareSize: baseSquareSize,
+                    roundsUp: false
+                ),
+            1
+        )
+        var rawSquareSize = exactSquareSize(for: viewportWidth, weekCount: weekCount)
+        var resolvedSquareSize = snapDownToPixel(rawSquareSize)
+
+        if resolvedSquareSize < minAllowedSize {
+            weekCount = max(
+                minimumVisibleWeekCount(
+                    for: viewportWidth,
+                    squareSize: minAllowedSize,
+                    roundsUp: false
+                ),
+                1
+            )
+            rawSquareSize = exactSquareSize(for: viewportWidth, weekCount: weekCount)
+            resolvedSquareSize = snapDownToPixel(rawSquareSize)
+        }
+
+        if resolvedSquareSize > maxAllowedSize {
+            let denominator = maxAllowedSize + squareSpacing
+            if denominator > 0 {
+                weekCount = max(Int(ceil((viewportWidth + squareSpacing) / denominator)), 1)
+                rawSquareSize = exactSquareSize(for: viewportWidth, weekCount: weekCount)
+                resolvedSquareSize = snapDownToPixel(rawSquareSize)
+            }
+        }
+
+        return HeatmapResolvedLayout(
+            rawSquareSize: rawSquareSize,
+            squareSize: resolvedSquareSize,
+            minimumVisibleWeekCount: weekCount
+        )
+    }
+
+    func exactSquareSize(for viewportWidth: CGFloat, weekCount: Int) -> CGFloat {
+        guard weekCount > 0 else { return baseSquareSize }
+        let spacingTotal = CGFloat(max(weekCount - 1, 0)) * squareSpacing
+        let availableWidth = max(viewportWidth - spacingTotal, 1)
+        return max(availableWidth / CGFloat(weekCount), 1)
+    }
+
+    func snapDownToPixel(_ value: CGFloat) -> CGFloat {
+        guard displayScale > 0 else { return value }
+        let snapped = floor(value * displayScale) / displayScale
+        return max(snapped, 1 / displayScale)
     }
 
     func displayedWeekColumns() -> [HeatmapWeekColumn] {
         let baseColumns = weekColumns
-        let minCount = minimumVisibleWeekCount(for: gridViewportWidth)
+        let minCount = resolvedLayout.minimumVisibleWeekCount
         let syntheticWeekCount = max(0, minCount - baseColumns.count)
 
         let effectiveStartDate = calendar.date(
@@ -285,11 +398,12 @@ private extension HeatmapChart {
                 .onGeometryChange(for: CGFloat.self) { geo in
                     geo.size.width
                 } action: { width in
-                    guard abs(width - headerRowWidth) > 0.5 else { return }
-                    headerRowWidth = width
+                    let snappedWidth = snapDownToPixel(width)
+                    guard abs(snappedWidth - headerRowWidth) > 0.5 else { return }
+                    headerRowWidth = snappedWidth
                     debugLogWidthGapIfNeeded()
                 }
-            HStack(spacing: squareSpacing) {
+            LazyHStack(spacing: squareSpacing) {
                 ForEach(columns) { column in
                     let anchorId = monthId(week: column.week, previousWeek: column.previousWeek)
                     if let anchorId {
@@ -302,8 +416,9 @@ private extension HeatmapChart {
             .onGeometryChange(for: CGFloat.self) { geo in
                 geo.size.width
             } action: { width in
-                guard abs(width - gridRowWidth) > 0.5 else { return }
-                gridRowWidth = width
+                let snappedWidth = snapDownToPixel(width)
+                guard abs(snappedWidth - gridRowWidth) > 0.5 else { return }
+                gridRowWidth = snappedWidth
                 debugLogWidthGapIfNeeded()
             }
         }
@@ -427,10 +542,11 @@ private extension HeatmapChart {
         return tokens
     }
 
-    func rowWidth(columnCount: Int) -> CGFloat {
+    func rowWidth(columnCount: Int, squareSizeValue: CGFloat? = nil) -> CGFloat {
         guard columnCount > 0 else { return 0 }
         let spacingCount = max(columnCount - 1, 0)
-        return CGFloat(columnCount) * squareSize + CGFloat(spacingCount) * squareSpacing
+        let value = squareSizeValue ?? squareSize
+        return CGFloat(columnCount) * value + CGFloat(spacingCount) * squareSpacing
     }
 
     func headerTextWidth(_ text: String, font: UIFont) -> CGFloat {
@@ -493,17 +609,19 @@ private extension HeatmapChart {
 
     @ViewBuilder
     func segmentedFill(colors: [Color]) -> some View {
-        GeometryReader { geo in
-            let count = max(colors.count, 1)
-            VStack(spacing: 0) {
-                ForEach(Array(colors.enumerated()), id: \.offset) { _, color in
-                    color
-                        .frame(height: geo.size.height / CGFloat(count))
-                        .frame(maxWidth: .infinity)
-                }
+        let count = max(colors.count, 1)
+        let segmentHeight = squareSize / CGFloat(count)
+        VStack(spacing: 0) {
+            ForEach(Array(colors.enumerated()), id: \.offset) { index, color in
+                let rowHeight = index == count - 1
+                    ? max(squareSize - segmentHeight * CGFloat(max(count - 1, 0)), 0)
+                    : segmentHeight
+                color
+                    .frame(height: rowHeight)
+                    .frame(maxWidth: .infinity)
             }
-            .frame(width: geo.size.width, height: geo.size.height, alignment: .top)
         }
+        .frame(width: squareSize, height: squareSize, alignment: .top)
     }
 
     func accessibilityText(date: Date, day: HeatmapDay) -> String {
