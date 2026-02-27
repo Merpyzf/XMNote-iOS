@@ -1,6 +1,12 @@
 import Foundation
-import GRDB
 import UIKit
+
+/**
+ * [INPUT]: 依赖 NoteRepositoryProtocol 读写笔记详情，依赖 RichTextBridge 做 HTML <-> 富文本转换
+ * [OUTPUT]: 对外提供 NoteDetailViewModel 与 Metadata，驱动详情页加载/编辑/保存状态
+ * [POS]: Presentation 层笔记详情状态编排器，被 NoteDetailView 消费
+ * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
+ */
 
 @MainActor
 @Observable
@@ -48,11 +54,11 @@ class NoteDetailViewModel {
     var isSaving = false
     var errorMessage: String?
 
-    private let database: AppDatabase
+    private let repository: any NoteRepositoryProtocol
 
-    init(noteId: Int64, database: AppDatabase) {
+    init(noteId: Int64, repository: any NoteRepositoryProtocol) {
         self.noteId = noteId
-        self.database = database
+        self.repository = repository
     }
 
     func load() async {
@@ -61,9 +67,7 @@ class NoteDetailViewModel {
         defer { isLoading = false }
 
         do {
-            let payload = try await database.dbPool.read { db in
-                try Self.fetchNotePayload(db: db, noteId: noteId)
-            }
+            let payload = try await repository.fetchNoteDetail(noteId: noteId)
             guard let payload else {
                 errorMessage = "笔记不存在或已删除"
                 return
@@ -89,55 +93,17 @@ class NoteDetailViewModel {
 
         let contentHTML = RichTextBridge.attributedToHtml(contentText)
         let ideaHTML = RichTextBridge.attributedToHtml(ideaText)
-        let now = Int64(Date().timeIntervalSince1970 * 1000)
 
         do {
-            try await database.dbPool.write { db in
-                try db.execute(
-                    sql: """
-                        UPDATE note
-                        SET content = ?, idea = ?, updated_date = ?
-                        WHERE id = ? AND is_deleted = 0
-                    """,
-                    arguments: [contentHTML, ideaHTML, now, noteId]
-                )
-            }
+            try await repository.saveNoteDetail(
+                noteId: noteId,
+                contentHTML: contentHTML,
+                ideaHTML: ideaHTML
+            )
             return true
         } catch {
             errorMessage = "保存失败：\(error.localizedDescription)"
             return false
         }
-    }
-}
-
-private extension NoteDetailViewModel {
-    struct Payload {
-        let contentHTML: String
-        let ideaHTML: String
-        let position: String
-        let positionUnit: Int64
-        let includeTime: Bool
-        let createdDate: Int64
-    }
-
-    nonisolated static func fetchNotePayload(db: Database, noteId: Int64) throws -> Payload? {
-        let sql = """
-            SELECT content, idea, position, position_unit, include_time, created_date
-            FROM note
-            WHERE id = ? AND is_deleted = 0
-            LIMIT 1
-            """
-        guard let row = try Row.fetchOne(db, sql: sql, arguments: [noteId]) else {
-            return nil
-        }
-
-        return Payload(
-            contentHTML: row["content"] ?? "",
-            ideaHTML: row["idea"] ?? "",
-            position: row["position"] ?? "",
-            positionUnit: row["position_unit"] ?? 0,
-            includeTime: (row["include_time"] as Int64? ?? 1) != 0,
-            createdDate: row["created_date"] ?? 0
-        )
     }
 }

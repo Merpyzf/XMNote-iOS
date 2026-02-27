@@ -48,7 +48,7 @@ struct BookGridItemView: View {
             .overlay {
                 Image(systemName: "book.closed")
                     .font(.title2)
-                    .foregroundStyle(.secondary.opacity(0.5))
+                    .foregroundStyle(Color.textHint)
             }
     }
 

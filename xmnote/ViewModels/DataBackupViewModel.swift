@@ -1,5 +1,11 @@
 import Foundation
-import GRDB
+
+/**
+ * [INPUT]: 依赖 BackupRepositoryProtocol 执行备份/恢复，依赖 BackupServerRepositoryProtocol 读取当前服务器
+ * [OUTPUT]: 对外提供 DataBackupViewModel 与 BackupOperationState，驱动备份页面状态
+ * [POS]: Presentation 层数据备份状态编排器，被 DataBackupView/BackupHistorySheet 消费
+ * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
+ */
 
 // MARK: - 操作状态
 
@@ -24,12 +30,15 @@ class DataBackupViewModel {
     var errorMessage: String?
     var showError = false
 
-    private let databaseManager: DatabaseManager
-    private let database: AppDatabase
+    private let backupRepository: any BackupRepositoryProtocol
+    private let serverRepository: any BackupServerRepositoryProtocol
 
-    init(databaseManager: DatabaseManager) {
-        self.databaseManager = databaseManager
-        self.database = databaseManager.database
+    init(
+        backupRepository: any BackupRepositoryProtocol,
+        serverRepository: any BackupServerRepositoryProtocol
+    ) {
+        self.backupRepository = backupRepository
+        self.serverRepository = serverRepository
     }
 }
 
@@ -47,13 +56,13 @@ extension DataBackupViewModel {
 extension DataBackupViewModel {
 
     func performBackup() async {
-        guard let service = makeBackupService() else {
+        guard currentServer != nil else {
             showErrorMessage("未配置备份服务器")
             return
         }
 
         do {
-            try await service.backup { progress in
+            try await backupRepository.backup { progress in
                 Task { @MainActor [weak self] in
                     self?.operationState = .backingUp(progress)
                 }
@@ -71,13 +80,13 @@ extension DataBackupViewModel {
 extension DataBackupViewModel {
 
     func fetchBackupHistory() async {
-        guard let service = makeBackupService() else {
+        guard currentServer != nil else {
             showErrorMessage("未配置备份服务器")
             return
         }
 
         do {
-            backupList = try await service.fetchBackupList()
+            backupList = try await backupRepository.fetchBackupHistory()
         } catch {
             showErrorMessage(error.localizedDescription)
         }
@@ -92,13 +101,14 @@ extension DataBackupViewModel {
         #if DEBUG
         print("[ViewModel] performRestore 开始: \(backup.name)")
         #endif
-        guard let service = makeBackupService() else {
+
+        guard currentServer != nil else {
             showErrorMessage("未配置备份服务器")
             return
         }
 
         do {
-            try await service.restore(backup, databaseManager: databaseManager) { progress in
+            try await backupRepository.restore(backup) { progress in
                 Task { @MainActor [weak self] in
                     self?.operationState = .restoring(progress)
                 }
@@ -108,6 +118,7 @@ extension DataBackupViewModel {
             #endif
             operationState = .idle
             showRestoreSuccess = true
+            await loadCurrentServer()
         } catch {
             #if DEBUG
             print("[ViewModel] restore 失败: \(error)")
@@ -124,25 +135,10 @@ private extension DataBackupViewModel {
 
     func loadCurrentServer() async {
         do {
-            currentServer = try await database.dbPool.read { db in
-                try BackupServerRecord
-                    .filter(Column("is_deleted") == 0)
-                    .filter(Column("is_using") == 1)
-                    .fetchOne(db)
-            }
+            currentServer = try await serverRepository.fetchCurrentServer()
         } catch {
             currentServer = nil
         }
-    }
-
-    func makeBackupService() -> BackupService? {
-        guard let server = currentServer else { return nil }
-        let client = WebDAVClient(
-            baseURL: server.serverAddress,
-            username: server.account,
-            password: server.password
-        )
-        return BackupService(database: database, client: client)
     }
 
     func showErrorMessage(_ message: String) {

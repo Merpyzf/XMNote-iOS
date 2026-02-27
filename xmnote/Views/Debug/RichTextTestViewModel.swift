@@ -1,10 +1,4 @@
-//
-//  RichTextTestViewModel.swift
-//  xmnote
-//
-//  Created by 王珂 on 2026/2/12.
-//
-
+#if DEBUG
 import Foundation
 import UIKit
 
@@ -111,3 +105,4 @@ class RichTextTestViewModel {
         }
     }
 }
+#endif

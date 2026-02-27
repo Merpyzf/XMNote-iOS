@@ -84,7 +84,8 @@ struct BookGridView: View {
 }
 
 #Preview {
+    let repositories = RepositoryContainer(databaseManager: DatabaseManager(database: try! .empty()))
     NavigationStack {
-        BookGridView(viewModel: BookViewModel(database: try! .empty()))
+        BookGridView(viewModel: BookViewModel(repository: repositories.bookRepository))
     }
 }

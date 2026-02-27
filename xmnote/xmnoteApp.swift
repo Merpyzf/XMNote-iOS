@@ -11,10 +11,13 @@ import SwiftUI
 struct xmnoteApp: App {
     @State private var appState = AppState()
     @State private var databaseManager: DatabaseManager
+    @State private var repositories: RepositoryContainer
 
     init() {
         do {
-            _databaseManager = State(initialValue: try DatabaseManager())
+            let manager = try DatabaseManager()
+            _databaseManager = State(initialValue: manager)
+            _repositories = State(initialValue: RepositoryContainer(databaseManager: manager))
         } catch {
             fatalError("数据库初始化失败: \(error)")
         }
@@ -25,6 +28,7 @@ struct xmnoteApp: App {
             ContentView()
                 .environment(appState)
                 .environment(databaseManager)
+                .environment(repositories)
         }
     }
 }

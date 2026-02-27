@@ -6,19 +6,13 @@
 //
 
 import Foundation
-import GRDB
 
-// MARK: - BookItem
-
-struct BookItem: Identifiable {
-    let id: Int64
-    let name: String
-    let author: String
-    let cover: String
-    let readStatusId: Int64
-    let noteCount: Int
-    let pinned: Bool
-}
+/**
+ * [INPUT]: 依赖 BookRepositoryProtocol 提供书籍数据流，依赖 BookItem/ReadStatusFilter 进行状态表达
+ * [OUTPUT]: 对外提供 BookViewModel，驱动书籍页过滤与展示状态
+ * [POS]: Presentation 层书籍列表状态编排器，被 BookContainerView/BookGridView 消费
+ * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
+ */
 
 // MARK: - ReadStatusFilter
 
@@ -56,11 +50,11 @@ class BookViewModel {
     var books: [BookItem] = []
     var selectedFilter: ReadStatusFilter = .all
 
-    private let database: AppDatabase
+    private let repository: any BookRepositoryProtocol
     private var observationTask: Task<Void, Never>?
 
-    init(database: AppDatabase) {
-        self.database = database
+    init(repository: any BookRepositoryProtocol) {
+        self.repository = repository
         startObservation()
     }
 
@@ -77,45 +71,14 @@ class BookViewModel {
 
     private func startObservation() {
         observationTask = Task {
-            let observation = ValueObservation.tracking { db in
-                try Self.fetchBooks(db)
-            }
             do {
-                for try await items in observation.values(in: database.dbPool) {
+                for try await items in repository.observeBooks() {
                     guard !Task.isCancelled else { return }
                     await MainActor.run { self.books = items }
                 }
             } catch {
                 print("BookViewModel observation error: \(error)")
             }
-        }
-    }
-
-    // MARK: - Query
-
-    private static func fetchBooks(_ db: Database) throws -> [BookItem] {
-        let sql = """
-            SELECT b.id, b.name, b.author, b.cover,
-                   b.read_status_id, b.pinned, b.pin_order, b.book_order,
-                   COUNT(n.id) AS note_count
-            FROM book b
-            LEFT JOIN note n ON b.id = n.book_id AND n.is_deleted = 0
-            WHERE b.is_deleted = 0
-            GROUP BY b.id
-            ORDER BY b.pinned DESC, b.pin_order ASC, b.book_order ASC
-            """
-        let rows = try Row.fetchAll(db, sql: sql)
-
-        return rows.map { row in
-            BookItem(
-                id: row["id"],
-                name: row["name"] ?? "",
-                author: row["author"] ?? "",
-                cover: row["cover"] ?? "",
-                readStatusId: row["read_status_id"] ?? 0,
-                noteCount: row["note_count"] ?? 0,
-                pinned: (row["pinned"] as Int64? ?? 0) != 0
-            )
         }
     }
 }

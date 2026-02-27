@@ -81,5 +81,6 @@ private extension WebDAVServerFormView {
 }
 
 #Preview {
-    WebDAVServerFormView(viewModel: WebDAVServerViewModel(database: try! .empty()))
+    let repositories = RepositoryContainer(databaseManager: DatabaseManager(database: try! .empty()))
+    WebDAVServerFormView(viewModel: WebDAVServerViewModel(repository: repositories.backupServerRepository))
 }

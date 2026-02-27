@@ -1,3 +1,10 @@
+/**
+ * [INPUT]: 依赖 Alamofire、NetworkClient、NetworkError、HTTPMethod+WebDAV
+ * [OUTPUT]: 对外提供 WebDAVClient 与 WebDAVResource，封装 WebDAV 协议操作
+ * [POS]: Services 模块的 WebDAV 协议客户端，被 BackupRepository 消费
+ * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
+ */
+
 import Foundation
 import Alamofire
 

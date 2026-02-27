@@ -1,3 +1,10 @@
+/**
+ * [INPUT]: 依赖 SwiftUI Environment 与 GRDB，依赖 AppDatabase
+ * [OUTPUT]: 对外提供 DatabaseManager 可观察管理器与 SwiftUI Environment Key
+ * [POS]: Database 模块的 SwiftUI 注入桥梁，被 xmnoteApp 初始化并注入全局
+ * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
+ */
+
 import SwiftUI
 import GRDB
 

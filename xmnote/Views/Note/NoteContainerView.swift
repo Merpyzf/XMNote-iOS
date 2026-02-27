@@ -23,7 +23,7 @@ enum NoteSubTab: CaseIterable, Hashable {
 // MARK: - Container
 
 struct NoteContainerView: View {
-    @Environment(DatabaseManager.self) private var databaseManager
+    @Environment(RepositoryContainer.self) private var repositories
     @State private var viewModel: NoteViewModel?
     let onAddBook: () -> Void
     let onAddNote: () -> Void
@@ -50,7 +50,7 @@ struct NoteContainerView: View {
         }
         .task {
             guard viewModel == nil else { return }
-            viewModel = NoteViewModel(database: databaseManager.database)
+            viewModel = NoteViewModel(repository: repositories.noteRepository)
         }
     }
 }
@@ -154,7 +154,9 @@ private struct NoteContentView: View {
 }
 
 #Preview {
+    let repositories = RepositoryContainer(databaseManager: DatabaseManager(database: try! .empty()))
     NavigationStack {
         NoteContainerView()
     }
+    .environment(repositories)
 }

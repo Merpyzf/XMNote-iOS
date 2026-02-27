@@ -35,9 +35,32 @@
 		891114B32F39AC3200D99384 /* xmnoteUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = xmnoteUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		89CLAUDE012F60000000000001 /* Exceptions for "xmnote" folder in "xmnote" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Data/CLAUDE.md,
+				Database/CLAUDE.md,
+				Domain/CLAUDE.md,
+				Infra/CLAUDE.md,
+				Navigation/CLAUDE.md,
+				RichTextEditor/CLAUDE.md,
+				Services/CLAUDE.md,
+				UIComponents/CLAUDE.md,
+				Utilities/CLAUDE.md,
+				ViewModels/CLAUDE.md,
+				Views/CLAUDE.md,
+			);
+			target = 8911149B2F39AC2F00D99384 /* xmnote */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		8911149E2F39AC2F00D99384 /* xmnote */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				89CLAUDE012F60000000000001 /* Exceptions for "xmnote" folder in "xmnote" target */,
+			);
 			path = xmnote;
 			sourceTree = "<group>";
 		};
@@ -205,10 +228,11 @@
 					};
 				};
 			};
-			buildConfigurationList = 891114972F39AC2F00D99384 /* Build configuration list for PBXProject "XMNote" */;
-			developmentRegion = en;
+			buildConfigurationList = 891114972F39AC2F00D99384 /* Build configuration list for PBXProject "xmnote" */;
+			developmentRegion = "zh-Hans";
 			hasScannedForEncodings = 0;
 			knownRegions = (
+				"zh-Hans",
 				en,
 				Base,
 			);
@@ -565,7 +589,7 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
-		891114972F39AC2F00D99384 /* Build configuration list for PBXProject "XMNote" */ = {
+		891114972F39AC2F00D99384 /* Build configuration list for PBXProject "xmnote" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				891114BB2F39AC3200D99384 /* Debug */,

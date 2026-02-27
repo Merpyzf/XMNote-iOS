@@ -1,10 +1,4 @@
-//
-//  RichTextTestView.swift
-//  xmnote
-//
-//  Created by 王珂 on 2026/2/12.
-//
-
+#if DEBUG
 import SwiftUI
 
 // MARK: - 外壳
@@ -268,3 +262,4 @@ private struct RichTextTestContentView: View {
     RichTextTestView()
         .tint(Color.brand)
 }
+#endif

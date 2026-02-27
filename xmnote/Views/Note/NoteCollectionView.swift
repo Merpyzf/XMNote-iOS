@@ -72,5 +72,6 @@ struct NoteCollectionView: View {
 }
 
 #Preview {
-    NoteCollectionView(viewModel: NoteViewModel(database: try! .empty()))
+    let repositories = RepositoryContainer(databaseManager: DatabaseManager(database: try! .empty()))
+    NoteCollectionView(viewModel: NoteViewModel(repository: repositories.noteRepository))
 }

@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct WebDAVServerListView: View {
-    @Environment(DatabaseManager.self) private var databaseManager
+    @Environment(RepositoryContainer.self) private var repositories
     @State private var viewModel: WebDAVServerViewModel?
 
     var body: some View {
@@ -17,7 +17,7 @@ struct WebDAVServerListView: View {
         .navigationBarTitleDisplayMode(.inline)
         .task {
             guard viewModel == nil else { return }
-            let vm = WebDAVServerViewModel(database: databaseManager.database)
+            let vm = WebDAVServerViewModel(repository: repositories.backupServerRepository)
             viewModel = vm
             await vm.loadServers()
         }
@@ -97,7 +97,9 @@ private extension WebDAVServerListContentView {
 }
 
 #Preview {
+    let repositories = RepositoryContainer(databaseManager: DatabaseManager(database: try! .empty()))
     NavigationStack {
         WebDAVServerListView()
     }
+    .environment(repositories)
 }

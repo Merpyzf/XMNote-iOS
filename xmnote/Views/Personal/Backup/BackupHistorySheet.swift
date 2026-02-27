@@ -76,5 +76,11 @@ private extension BackupHistorySheet {
 }
 
 #Preview {
-    BackupHistorySheet(viewModel: DataBackupViewModel(databaseManager: DatabaseManager(database: try! .empty())))
+    let repositories = RepositoryContainer(databaseManager: DatabaseManager(database: try! .empty()))
+    BackupHistorySheet(
+        viewModel: DataBackupViewModel(
+            backupRepository: repositories.backupRepository,
+            serverRepository: repositories.backupServerRepository
+        )
+    )
 }

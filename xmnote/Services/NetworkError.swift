@@ -1,3 +1,10 @@
+/**
+ * [INPUT]: 依赖 Foundation
+ * [OUTPUT]: 对外提供 NetworkError 枚举，统一网络与 WebDAV 错误语义
+ * [POS]: Services 模块的错误类型定义，被 WebDAVClient 与 BackupService 消费
+ * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
+ */
+
 import Foundation
 
 enum NetworkError: LocalizedError {

@@ -1,5 +1,11 @@
 import Foundation
-import GRDB
+
+/**
+ * [INPUT]: 依赖 BackupServerRepositoryProtocol 提供服务器列表、CRUD 与连接测试
+ * [OUTPUT]: 对外提供 WebDAVServerViewModel，驱动服务器管理页状态与表单行为
+ * [POS]: Presentation 层备份服务器状态编排器，被 WebDAVServerListView/WebDAVServerFormView 消费
+ * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
+ */
 
 @Observable
 class WebDAVServerViewModel {
@@ -23,10 +29,11 @@ class WebDAVServerViewModel {
     // 通知外部数据变更
     var serverDidChange = false
 
-    private let database: AppDatabase
+    private let repository: any BackupServerRepositoryProtocol
+    private var lastValidatedInput: BackupServerFormInput?
 
-    init(database: AppDatabase) {
-        self.database = database
+    init(repository: any BackupServerRepositoryProtocol) {
+        self.repository = repository
     }
 }
 
@@ -36,12 +43,7 @@ extension WebDAVServerViewModel {
 
     func loadServers() async {
         do {
-            servers = try await database.dbPool.read { db in
-                try BackupServerRecord
-                    .filter(Column("is_deleted") == 0)
-                    .order(Column("is_using").desc)
-                    .fetchAll(db)
-            }
+            servers = try await repository.fetchServers()
         } catch {
             servers = []
         }
@@ -55,6 +57,7 @@ extension WebDAVServerViewModel {
     func beginAdd() {
         editingServer = nil
         testResultMessage = nil
+        lastValidatedInput = nil
         isShowingForm = true
     }
 
@@ -65,6 +68,7 @@ extension WebDAVServerViewModel {
         formAccount = server.account
         formPassword = server.password
         testResultMessage = nil
+        lastValidatedInput = nil
         isShowingForm = true
     }
 
@@ -83,54 +87,29 @@ extension WebDAVServerViewModel {
     func save() async -> Bool {
         guard isFormValid else { return false }
 
-        // 保存前先测试连接
+        let input = formInput
         isTesting = true
         testResultMessage = nil
-        let address = formAddress.trimmingCharacters(in: .whitespaces)
-        let account = formAccount.trimmingCharacters(in: .whitespaces)
-        let password = formPassword
-        let title = formTitle.trimmingCharacters(in: .whitespaces)
-        let editing = editingServer
-
-        let client = WebDAVClient(baseURL: address, username: account, password: password)
-        do {
-            try await client.testConnection()
-        } catch {
-            isTesting = false
-            testResultMessage = "连接失败: \(error.localizedDescription)"
-            return false
-        }
-        isTesting = false
 
         do {
-            try await database.dbPool.write { db in
-                if var existing = editing {
-                    existing.title = title
-                    existing.serverAddress = address
-                    existing.account = account
-                    existing.password = password
-                    existing.touchUpdatedDate()
-                    try existing.update(db)
-                } else {
-                    var record = BackupServerRecord()
-                    record.title = title
-                    record.serverAddress = address
-                    record.account = account
-                    record.password = password
-                    let count = try BackupServerRecord
-                        .filter(Column("is_deleted") == 0)
-                        .fetchCount(db)
-                    record.isUsing = count == 0 ? 1 : 0
-                    record.touchCreatedDate()
-                    try record.insert(db)
-                }
+            if lastValidatedInput != input {
+                try await repository.testConnection(input)
+                lastValidatedInput = input
             }
+
+            try await repository.saveServer(input, editingServer: editingServer)
+            isTesting = false
             serverDidChange = true
             isShowingForm = false
             await loadServers()
             return true
         } catch {
-            testResultMessage = "保存失败: \(error.localizedDescription)"
+            isTesting = false
+            if error is NetworkError {
+                testResultMessage = "连接失败: \(error.localizedDescription)"
+            } else {
+                testResultMessage = "保存失败: \(error.localizedDescription)"
+            }
             return false
         }
     }
@@ -138,13 +117,9 @@ extension WebDAVServerViewModel {
     func delete(_ server: BackupServerRecord) async {
         isProcessing = true
         defer { isProcessing = false }
-        let serverCopy = server
+
         do {
-            try await database.dbPool.write { db in
-                var record = serverCopy
-                record.markAsDeleted()
-                try record.update(db)
-            }
+            try await repository.delete(server)
             serverDidChange = true
             await loadServers()
         } catch {
@@ -155,15 +130,9 @@ extension WebDAVServerViewModel {
     func select(_ server: BackupServerRecord) async {
         isProcessing = true
         defer { isProcessing = false }
-        let serverCopy = server
+
         do {
-            try await database.dbPool.write { db in
-                try db.execute(sql: "UPDATE backup_server SET is_using = 0")
-                var record = serverCopy
-                record.isUsing = 1
-                record.touchUpdatedDate()
-                try record.update(db)
-            }
+            try await repository.select(server)
             serverDidChange = true
             await loadServers()
         } catch {
@@ -178,20 +147,29 @@ extension WebDAVServerViewModel {
 
     func testConnection() async {
         guard isFormValid else { return }
+        let input = formInput
         isTesting = true
         testResultMessage = nil
 
-        let client = WebDAVClient(
-            baseURL: formAddress.trimmingCharacters(in: .whitespaces),
-            username: formAccount.trimmingCharacters(in: .whitespaces),
-            password: formPassword
-        )
         do {
-            try await client.testConnection()
+            try await repository.testConnection(input)
+            lastValidatedInput = input
             testResultMessage = "连接成功"
         } catch {
+            lastValidatedInput = nil
             testResultMessage = "连接失败: \(error.localizedDescription)"
         }
         isTesting = false
+    }
+}
+
+private extension WebDAVServerViewModel {
+    var formInput: BackupServerFormInput {
+        BackupServerFormInput(
+            title: formTitle.trimmingCharacters(in: .whitespaces),
+            address: formAddress.trimmingCharacters(in: .whitespaces),
+            account: formAccount.trimmingCharacters(in: .whitespaces),
+            password: formPassword
+        )
     }
 }

@@ -1,3 +1,10 @@
+/**
+ * [INPUT]: 依赖 GRDB 的 DatabasePool/DatabaseMigrator 提供持久化能力
+ * [OUTPUT]: 对外提供 AppDatabase 结构体，封装数据库连接池与迁移
+ * [POS]: Database 模块入口，被 AppDatabaseKey 通过 Environment 注入全局
+ * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
+ */
+
 import Foundation
 import GRDB
 

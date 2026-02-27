@@ -1,3 +1,10 @@
+/**
+ * [INPUT]: 依赖 GRDB DatabaseMigrator，依赖 DatabaseSchema+*.swift 各分片
+ * [OUTPUT]: 对外提供 AppDatabase.migrator 静态属性，v38 全量迁移
+ * [POS]: Database 模块的迁移入口，被 AppDatabase.init 调用执行 Schema 创建
+ * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
+ */
+
 import Foundation
 import GRDB
 

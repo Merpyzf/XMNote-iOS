@@ -1,3 +1,10 @@
+/**
+ * [INPUT]: 依赖 Alamofire Session 提供 HTTP 请求能力
+ * [OUTPUT]: 对外提供 NetworkClient，封装 Basic Auth 与无认证两种 Session
+ * [POS]: Services 模块的网络基础设施，被 WebDAVClient 依赖
+ * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
+ */
+
 import Foundation
 import Alamofire
 

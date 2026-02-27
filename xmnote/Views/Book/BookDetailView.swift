@@ -9,7 +9,7 @@ import SwiftUI
 
 struct BookDetailView: View {
     let bookId: Int64
-    @Environment(DatabaseManager.self) private var databaseManager
+    @Environment(RepositoryContainer.self) private var repositories
     @State private var viewModel: BookDetailViewModel?
 
     var body: some View {
@@ -27,7 +27,7 @@ struct BookDetailView: View {
             guard viewModel == nil else { return }
             let vm = BookDetailViewModel(
                 bookId: bookId,
-                database: databaseManager.database
+                repository: repositories.bookRepository
             )
             viewModel = vm
             vm.startObservation()
@@ -97,7 +97,7 @@ private struct BookDetailContentView: View {
                     .overlay {
                         Image(systemName: "book.closed")
                             .font(.title3)
-                            .foregroundStyle(.secondary.opacity(0.5))
+                            .foregroundStyle(Color.textHint)
                     }
             }
         }
@@ -170,7 +170,7 @@ private struct BookDetailContentView: View {
                 if !note.idea.isEmpty {
                     HStack(alignment: .top, spacing: Spacing.base) {
                         RoundedRectangle(cornerRadius: 1.5)
-                            .fill(Color.secondary.opacity(0.3))
+                            .fill(Color.textHint.opacity(0.6))
                             .frame(width: 3)
 
                         Text(plainTextPreview(from: note.idea))
@@ -204,5 +204,5 @@ private struct BookDetailContentView: View {
     NavigationStack {
         BookDetailView(bookId: 1)
     }
-    .environment(try! DatabaseManager(database: .empty()))
+    .environment(RepositoryContainer(databaseManager: DatabaseManager(database: try! .empty())))
 }

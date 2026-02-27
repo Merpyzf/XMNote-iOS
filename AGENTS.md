@@ -14,15 +14,75 @@
 - 优先级顺序：用户当次明确要求 > `AGENTS.md` > `CLAUDE.md`。
 - 默认执行策略：实现完成后先做编译校验；未被明确要求时，不单独执行 UI Test，不主动编写 UI 测试用例。
 - 需要测试时：优先单元测试（ViewModel、迁移、服务异常路径）；UI 测试仅在需求明确且收益大于耗时时执行。
+- 数据访问铁律：所有本地/网络数据获取必须经 Repository，`ViewModel` 禁止直接访问 `AppDatabase`、`WebDAVClient`、`NetworkClient`。
+
+## 术语对照机制（强制）
+- 术语总表：`docs/architecture/术语对照表.md`。
+- UI 核心组件白名单：`docs/architecture/UI核心组件白名单.md`。
+- 触发更新：
+  - 新增/重命名核心类（如 `*Repository`、`*ViewModel`、`*Service`、`*Client`、`*Manager`、`*Container`、`*Payload`、`*Input`）必须更新术语表。
+  - `xmnote/UIComponents` 下新增可复用 UI 组件必须更新术语表（类别：`UI-复用`）。
+  - 白名单内新增/调整核心页面组件必须同步更新白名单与术语表（类别：`UI-核心页面`）。
+- 提交前强制执行：
+  - `bash scripts/verify_glossary.sh`
+  - `bash scripts/verify_ui_glossary_scope.sh`
+  - `bash scripts/verify_arch_docs_sync.sh`
+
+## UI组件归位规则（阻塞级）
+- 可复用 UI 组件唯一归属目录：`xmnote/UIComponents`。
+- `UIComponents` 只允许放置无业务状态、无数据访问、副作用可控的可复用 UI 组件。
+- 禁止在 `xmnote/Utilities`、`xmnote/Views`、`xmnote/ViewModels`、`xmnote/Services` 中新增可复用 UI 组件。
+- `xmnote/RichTextEditor` 属于功能模块，不整体迁入 `UIComponents`；仅纯展示且跨页面复用的子组件允许抽取到 `UIComponents`。
+- 违反本规则视为阻塞级问题：必须先完成组件归位整改，再继续开发与提交流程。
+
+## 分形文档系统执行约束（GEB）
+- The map IS the terrain. The terrain IS the map.
+- 代码与文档必须同构：任何一相变化，另一相必须同步更新，否则视为未完成。
+- 三层分形映射：
+  - L1：`/CLAUDE.md`，负责项目宪法与全局地图（触发：顶级模块/架构变化）。
+  - L2：`/{module}/CLAUDE.md`，负责模块地图与成员清单（触发：文件增删、重命名、接口变更）。
+  - L3：文件头部注释，负责 INPUT/OUTPUT/POS 契约（触发：依赖、导出、职责变化）。
+- 强制回环（代码→文档）：代码改动完成后必须依次检查 `L3 -> L2 -> L1`。
+- 进入新目录前置检查：先读目标目录 `CLAUDE.md`，再读目标文件 L3 头部契约。
+- 固定协议语句（L2/L3 必须保留原文）：`[PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md`。
+- 发现业务文件缺少 L3 头部注释时，必须先补齐后继续，属于阻塞级优先事项。
+- 禁止孤立变更：改代码不检查文档、删文件不更新 L2、新模块不创建 L2 均视为严重违规。
+- 双文档同构约束：`CLAUDE.md` 与 `AGENTS.md` 的项目结构、全局配置、工具链描述必须保持一致。变更任一文件的手工维护区域时，必须同步检查并更新另一文件对应内容，否则视为 SEVERE-005 违规。
+- 本节为执行摘要；模板、禁令与完整回环流程以根目录 `CLAUDE.md` 的 GEB 完整版为准。
 
 ## 项目结构与模块组织
 - `XMNote.xcodeproj`：工程入口（scheme: `xmnote`）。
+- `xmnote/Localizable.xcstrings`：String Catalog，统一字符串管理（sourceLanguage: zh-Hans，含 en 占位）。
 - `xmnote/Views`、`xmnote/Navigation`：SwiftUI 页面与路由。
-- `xmnote/ViewModels`：`@Observable` 状态与业务编排。
-- `xmnote/Database`、`xmnote/Database/Records`：GRDB schema、迁移、Record 映射。
-- `xmnote/Services`、`xmnote/Networking`：网络、WebDAV、备份恢复。
+- `xmnote/ViewModels`：`@Observable` 状态与业务编排（不直连数据源）。
+- `xmnote/Domain`：Repository 协议与跨层模型。
+- `xmnote/Data`：Repository 实现与依赖组装。
+- `xmnote/Infra`：底层桥接与技术实现支持。
+- `xmnote/Database`、`xmnote/Database/Records`：GRDB schema、迁移、Record 映射（仅 Repository 访问）。
+- `xmnote/Services`、`xmnote/Networking`：网络、WebDAV、备份恢复（仅 Repository 访问）。
 - `xmnote/RichTextEditor`：富文本编辑模块。
+- `xmnote/UIComponents`：可复用 UI 组件唯一归属模块（按 Foundation/TopBar/Tabs 分层）。
+- `xmnote/Utilities`：设计令牌与非 UI 工具（禁止新增可复用 UI 组件）。
+- `scripts/`：架构术语与 UI 组件范围校验脚本。
 - `docs/feature/`：功能文档（需求 + 设计）。
+
+## 自动同步模块清单（脚本生成）
+<!-- AUTO_SYNC_MODULES_START -->
+- 由 `scripts/sync_arch_docs.sh` 自动维护，请勿手工修改。
+- `xmnote/Data`
+- `xmnote/Database`
+- `xmnote/Domain`
+- `xmnote/Infra`
+- `xmnote/Navigation`
+- `xmnote/RichTextEditor`
+- `xmnote/Services`
+- `xmnote/UIComponents`
+- `xmnote/Utilities`
+- `xmnote/ViewModels`
+- `xmnote/Views`
+<!-- AUTO_SYNC_MODULES_END -->
+- 同步命令：`bash scripts/sync_arch_docs.sh`
+- 校验命令：`bash scripts/verify_arch_docs_sync.sh`
 
 ## 构建与验证命令
 - `open XMNote.xcodeproj`：用 Xcode 打开工程。

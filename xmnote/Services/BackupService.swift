@@ -1,3 +1,10 @@
+/**
+ * [INPUT]: 依赖 Foundation、UIKit、ZIPFoundation，依赖 AppDatabase 进行数据库操作
+ * [OUTPUT]: 对外提供 BackupService 与 BackupFileInfo，封装备份打包与恢复逻辑
+ * [POS]: Services 模块的备份业务服务，被 BackupRepository 消费
+ * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
+ */
+
 import Foundation
 import UIKit
 import ZIPFoundation

@@ -1,9 +1,9 @@
-//
-//  Tag.swift
-//  xmnote
-//
-//  Created by 王珂 on 2026/2/9.
-//
+/**
+ * [INPUT]: 依赖 Foundation
+ * [OUTPUT]: 对外提供 Tag、TagSection 两个标签域展示模型
+ * [POS]: Domain/Models 的标签聚合模型定义，被 NoteViewModel 与标签视图消费
+ * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
+ */
 
 import Foundation
 

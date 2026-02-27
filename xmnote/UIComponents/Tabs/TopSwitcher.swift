@@ -1,9 +1,9 @@
-//
-//  TopSwitcher.swift
-//  xmnote
-//
-//  Created by 王珂 on 2026/2/26.
-//
+/**
+ * [INPUT]: 依赖 UIComponents/TopBar 的 PrimaryTopBar 与 AddMenuCircleButton，依赖 SwiftUI 动画与无障碍能力
+ * [OUTPUT]: 对外提供 TopSwitcher 组件（支持标签模式与标题模式）
+ * [POS]: UIComponents/Tabs 的顶部切换入口，被 Book/Note/Reading/Personal 页面复用
+ * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
+ */
 
 import SwiftUI
 

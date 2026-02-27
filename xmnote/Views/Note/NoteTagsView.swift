@@ -109,5 +109,6 @@ struct NoteTagsView: View {
 }
 
 #Preview {
-    NoteTagsView(viewModel: NoteViewModel(database: try! .empty()))
+    let repositories = RepositoryContainer(databaseManager: DatabaseManager(database: try! .empty()))
+    NoteTagsView(viewModel: NoteViewModel(repository: repositories.noteRepository))
 }

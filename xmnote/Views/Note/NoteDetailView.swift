@@ -4,7 +4,7 @@ struct NoteDetailView: View {
     let noteId: Int64
     var startInEditing: Bool = false
 
-    @Environment(DatabaseManager.self) private var databaseManager
+    @Environment(RepositoryContainer.self) private var repositories
     @State private var viewModel: NoteDetailViewModel?
     @State private var isEditing = false
 
@@ -25,7 +25,7 @@ struct NoteDetailView: View {
         .toolbar { toolbarContent }
         .task {
             guard viewModel == nil else { return }
-            let vm = NoteDetailViewModel(noteId: noteId, database: databaseManager.database)
+            let vm = NoteDetailViewModel(noteId: noteId, repository: repositories.noteRepository)
             viewModel = vm
             isEditing = startInEditing
             await vm.load()
@@ -153,5 +153,5 @@ private struct NoteDetailContentView: View {
     NavigationStack {
         NoteDetailView(noteId: 1)
     }
-    .environment(DatabaseManager(database: try! .empty()))
+    .environment(RepositoryContainer(databaseManager: DatabaseManager(database: try! .empty())))
 }

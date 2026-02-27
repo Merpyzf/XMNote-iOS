@@ -1,14 +1,13 @@
-//
-//  HighlightColorPicker.swift
-//  xmnote
-//
-//  Created by 王珂 on 2026/2/12.
-//
+/**
+ * [INPUT]: 依赖 SwiftUI、UIComponents/Foundation/HighlightColors 色值映射
+ * [OUTPUT]: 对外提供 HighlightColorPicker 高亮色板选择组件
+ * [POS]: UIComponents/Foundation 的可复用色板选择器，被 NoteDetailView 与调试页消费
+ * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
+ */
 
 import SwiftUI
 
 /// 高亮色板组件，展示 13 个 ARGB 色值供选择
-/// 可复用于正式书摘编辑页
 struct HighlightColorPicker: View {
 
     @Binding var selectedARGB: UInt32

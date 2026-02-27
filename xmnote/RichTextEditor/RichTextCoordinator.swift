@@ -1,3 +1,9 @@
+/**
+ * [INPUT]: 依赖 RichTextEditor（父视图引用）、RichTextEditorView（UITextView 子类）、RichTextToolbar（工具栏）、Foundation（String(localized:) 本地化）
+ * [OUTPUT]: 对外提供 UITextViewDelegate 实现、格式状态追踪、工具栏回调处理
+ * [POS]: RichTextEditor 模块的事件协调器，桥接 UIKit delegate 事件与 SwiftUI 状态
+ * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
+ */
 import UIKit
 import SwiftUI
 
@@ -233,7 +239,7 @@ final class RichTextCoordinator: NSObject, UITextViewDelegate {
         guard let presenter = topViewController(from: editorView.window?.rootViewController) else { return }
         guard !(presenter.presentedViewController is UIAlertController) else { return }
 
-        let alert = UIAlertController(title: "添加链接", message: nil, preferredStyle: .alert)
+        let alert = UIAlertController(title: String(localized: "添加链接"), message: nil, preferredStyle: .alert)
         alert.addTextField { textField in
             textField.placeholder = "https://example.com"
             textField.keyboardType = .URL
@@ -242,8 +248,8 @@ final class RichTextCoordinator: NSObject, UITextViewDelegate {
             textField.text = self.currentLinkString(in: range, editorView: editorView)
         }
 
-        alert.addAction(UIAlertAction(title: "取消", style: .cancel))
-        alert.addAction(UIAlertAction(title: "确定", style: .default) { [weak self, weak editorView, weak alert] _ in
+        alert.addAction(UIAlertAction(title: String(localized: "取消"), style: .cancel))
+        alert.addAction(UIAlertAction(title: String(localized: "确定"), style: .default) { [weak self, weak editorView, weak alert] _ in
             guard let self, let editorView, let urlText = alert?.textFields?.first?.text else { return }
             let trimmed = urlText.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !trimmed.isEmpty else { return }

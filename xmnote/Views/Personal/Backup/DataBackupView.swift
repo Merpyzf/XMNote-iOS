@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct DataBackupView: View {
-    @Environment(DatabaseManager.self) private var databaseManager
+    @Environment(RepositoryContainer.self) private var repositories
     @State private var viewModel: DataBackupViewModel?
 
     var body: some View {
@@ -17,7 +17,10 @@ struct DataBackupView: View {
         .navigationBarTitleDisplayMode(.inline)
         .task {
             guard viewModel == nil else { return }
-            let vm = DataBackupViewModel(databaseManager: databaseManager)
+            let vm = DataBackupViewModel(
+                backupRepository: repositories.backupRepository,
+                serverRepository: repositories.backupServerRepository
+            )
             viewModel = vm
             await vm.loadPageData()
         }
@@ -72,7 +75,7 @@ private extension DataBackupContentView {
                         } else {
                             Text("未配置")
                                 .font(.caption)
-                                .foregroundStyle(.red.opacity(0.87))
+                                .foregroundStyle(Color.feedbackError)
                         }
                     }
                     Spacer()
@@ -159,7 +162,7 @@ private extension DataBackupContentView {
     var operationOverlay: some View {
         if viewModel.operationState != .idle {
             ZStack {
-                Color.black.opacity(0.4).ignoresSafeArea()
+                Color.overlay.ignoresSafeArea()
                 VStack(spacing: Spacing.base) {
                     ProgressView()
                         .controlSize(.large)
@@ -201,5 +204,5 @@ private extension DataBackupContentView {
     NavigationStack {
         DataBackupView()
     }
-    .environment(try! DatabaseManager(database: .empty()))
+    .environment(RepositoryContainer(databaseManager: DatabaseManager(database: try! .empty())))
 }
