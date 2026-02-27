@@ -14,7 +14,7 @@ SwiftUI 视图层，按功能模块分子目录。纯 UI 渲染，不包含业�
 - `Personal/`: 个人设置与备份视图（2 个文件 + Backup/ 子目录）
 - `Reading/`: 在读追踪视图（3 个文件）
 - `Statistics/`: 统计视图（占位）
-- `Debug/`: 调试测试视图（#if DEBUG 编译隔离，2 个文件）
+- `Debug/`: 调试测试视图（#if DEBUG 编译隔离，5 个文件）
 
 ## Book/
 
@@ -50,7 +50,10 @@ SwiftUI 视图层，按功能模块分子目录。纯 UI 渲染，不包含业�
 
 ## Debug/
 
+- `DebugCenterView.swift`: 测试中心入口列表页（#if DEBUG，集中展示所有控件测试项）
 - `RichTextTestView.swift`: 富文本编辑器测试页（#if DEBUG）
 - `RichTextTestViewModel.swift`: 测试页状态编排（#if DEBUG）
+- `HeatmapTestView.swift`: 热力图测试页（#if DEBUG，8 个场景验证）
+- `HeatmapTestViewModel.swift`: 热力图测试数据生成与状态管理（#if DEBUG）
 
 [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md

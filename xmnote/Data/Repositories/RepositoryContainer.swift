@@ -14,6 +14,7 @@ final class RepositoryContainer {
     let noteRepository: any NoteRepositoryProtocol
     let backupServerRepository: any BackupServerRepositoryProtocol
     let backupRepository: any BackupRepositoryProtocol
+    let statisticsRepository: any StatisticsRepositoryProtocol
 
     init(databaseManager: DatabaseManager) {
         let backupServerRepository = BackupServerRepository(databaseManager: databaseManager)
@@ -25,5 +26,6 @@ final class RepositoryContainer {
             databaseManager: databaseManager,
             serverRepository: backupServerRepository
         )
+        self.statisticsRepository = StatisticsRepository(databaseManager: databaseManager)
     }
 }

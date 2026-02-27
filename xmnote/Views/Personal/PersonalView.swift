@@ -32,6 +32,9 @@ struct PersonalView: View {
                     managementSection
                     supportSection
                     aboutSection
+                    #if DEBUG
+                    debugSection
+                    #endif
                 }
                 .padding(.horizontal, Spacing.screenEdge)
                 .padding(.vertical, Spacing.base)
@@ -171,6 +174,32 @@ extension PersonalView {
             .buttonStyle(.plain)
         }
     }
+
+    // MARK: - 开发者
+
+    #if DEBUG
+    private var debugSection: some View {
+        cardGroup("开发者") {
+            NavigationLink(destination: DebugCenterView()) {
+                HStack {
+                    Image(systemName: "hammer")
+                        .font(.body)
+                        .foregroundStyle(Color.brand)
+                        .frame(width: 24)
+                    Text("测试中心")
+                    Spacer()
+                    Image(systemName: "chevron.right")
+                        .font(.caption)
+                        .foregroundStyle(.tertiary)
+                }
+                .padding(.horizontal, Spacing.contentEdge)
+                .padding(.vertical, 14)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+        }
+    }
+    #endif
 
     private var appVersion: String {
         let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0"

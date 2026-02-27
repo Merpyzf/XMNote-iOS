@@ -21,4 +21,8 @@
 - `QuoteInlineTabBar.swift`: 带引号动效的标签组件
 - `TopSwitcher.swift`: 顶部标题/标签切换组件
 
+## Charts/
+
+- `HeatmapChart.swift`: GitHub 风格阅读热力图组件（右侧固定星期标签 + 顶部月切换标签/跨年显示 yyyy-M + 右侧空列补齐避免少数据居中 + scrollToMonth 程序化滚动 + 今日高亮 + 打卡读屏文案）
+
 [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md

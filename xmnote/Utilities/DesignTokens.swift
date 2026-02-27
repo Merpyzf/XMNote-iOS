@@ -5,7 +5,7 @@
 //  Created by 王珂 on 2026/2/10.
 //
 //  [INPUT]: 无外部依赖，仅依赖 SwiftUI 框架
-//  [OUTPUT]: Color 语义扩展（28 个）、Spacing / CornerRadius / CardStyle 常量、Color(hex:) / Color(light:dark:) 构造器
+//  [OUTPUT]: Color 语义扩展（29 个）、Spacing / CornerRadius / CardStyle 常量、Color(hex:) / Color(light:dark:) 构造器
 //  [POS]: Utilities 模块的设计令牌中枢，全局 UI 一致性的单一真相源
 //  [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
 
@@ -23,6 +23,9 @@ extension Color {
     static let brandDeep = Color(hex: 0x2DA44F)
     /// 品牌最深绿（热力图高级）
     static let brandDarkest = Color(hex: 0x11632A)
+    /// 热力图无活动底色
+    static let heatmapNone = Color(light: Color(hex: 0xEFF0F4),
+                                    dark: Color(hex: 0x2A2A2C))
 }
 
 // MARK: - Background

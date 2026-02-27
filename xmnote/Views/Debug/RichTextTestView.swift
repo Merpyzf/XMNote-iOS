@@ -20,24 +20,22 @@ private struct RichTextTestContentView: View {
     @Bindable var viewModel: RichTextTestViewModel
 
     var body: some View {
-        NavigationStack {
-            ScrollView {
-                VStack(spacing: Spacing.double) {
-                    sampleLoaderSection
-                    contentEditorSection
-                    highlightColorSection
-                    ideaEditorSection
-                    htmlOutputSection
-                    roundTripSection
-                }
-                .padding(.horizontal, Spacing.screenEdge)
-                .padding(.vertical, Spacing.base)
-                .safeAreaPadding(.bottom)
+        ScrollView {
+            VStack(spacing: Spacing.double) {
+                sampleLoaderSection
+                contentEditorSection
+                highlightColorSection
+                ideaEditorSection
+                htmlOutputSection
+                roundTripSection
             }
-            .background(Color.windowBackground)
-            .navigationTitle("富文本编辑器测试")
-            .navigationBarTitleDisplayMode(.inline)
+            .padding(.horizontal, Spacing.screenEdge)
+            .padding(.vertical, Spacing.base)
+            .safeAreaPadding(.bottom)
         }
+        .background(Color.windowBackground)
+        .navigationTitle("富文本编辑器测试")
+        .navigationBarTitleDisplayMode(.inline)
     }
 
     // MARK: - 示例加载器
@@ -259,7 +257,9 @@ private struct RichTextTestContentView: View {
 }
 
 #Preview {
-    RichTextTestView()
-        .tint(Color.brand)
+    NavigationStack {
+        RichTextTestView()
+    }
+    .tint(Color.brand)
 }
 #endif
