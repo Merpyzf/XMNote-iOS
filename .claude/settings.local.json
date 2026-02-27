@@ -36,7 +36,19 @@
       "Bash(STRINGSDATA_DIR=\"/Users/wangke/Library/Developer/Xcode/DerivedData/xmnote-fxgwscatmxnsatenafdkkeniqyih/Build/Intermediates.noindex/xmnote.build/Debug-iphonesimulator/xmnote.build/Objects-normal/arm64\":*)",
       "Bash(XCSTRINGS=\"/Users/wangke/WorkSpace/Xcode/XMNote-iOS/xmnote/Localizable.xcstrings\")",
       "Bash(__NEW_LINE_0de266131af66c55__ xcrun xcstringstool sync \"$XCSTRINGS\" --stringsdata \"$STRINGSDATA_DIR\"/*.stringsdata)",
-      "Bash(wc:*)"
+      "Bash(wc:*)",
+      "Bash(xcrun simctl:*)",
+      "Bash(xargs -I {} basename {})",
+      "Bash(do:*)",
+      "Bash(read f:*)",
+      "WebFetch(domain:nilcoalescing.com)",
+      "WebFetch(domain:www.donnywals.com)",
+      "WebFetch(domain:bleepingswift.com)",
+      "WebFetch(domain:www.iphonedevelopers.co.uk)",
+      "WebFetch(domain:www.techswill.com)",
+      "WebFetch(domain:www.nngroup.com)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)"
     ],
     "additionalDirectories": [
       "/Users/wangke/WorkSpace/OpenSource/Mine/Merpyzf/XMNote",
