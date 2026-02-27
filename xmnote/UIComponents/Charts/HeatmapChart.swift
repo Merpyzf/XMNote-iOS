@@ -6,7 +6,7 @@ import os
 
 /**
  * [INPUT]: 依赖 HeatmapDay/HeatmapLevel/HeatmapStatisticsDataType 领域模型，依赖 DesignTokens 颜色令牌，依赖 ScrollViewReader 程序化滚动，DEBUG 下依赖 os.Logger 输出布局诊断日志
- * [OUTPUT]: 对外提供 HeatmapChart（GitHub 风格阅读热力图组件，右侧固定星期标签 + 顶部月/年标签 + 程序化滚动 + 分段方格）
+ * [OUTPUT]: 对外提供 HeatmapChart（支持样式参数配置的 GitHub 风格阅读热力图组件）与 HeatmapChartStyle（方格尺寸/间距/圆角等视觉配置）
  * [POS]: UIComponents/Charts 的热力图组件，供在读页/统计页消费
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -14,17 +14,45 @@ import os
 // MARK: - 常量
 
 private enum HeatmapConst {
-    static let squareSize: CGFloat = 13
-    static let squareSpacing: CGFloat = 3
-    static let squareRadius: CGFloat = 2.5
     static let rowCount = 7
     static let defaultWeeks = 20
-    static let axisGap: CGFloat = 8
-    static let outerInset: CGFloat = 8
-    static let headerFontSize: CGFloat = 9
-    static let headerTextLineHeight: CGFloat = ceil(UIFont.systemFont(ofSize: headerFontSize).lineHeight)
-    static let monthLabelHeight: CGFloat = headerTextLineHeight + axisGap
     static let headerExtraSpacingFactor: CGFloat = 0.2
+}
+
+// MARK: - 样式配置
+
+struct HeatmapChartStyle: Equatable, Sendable {
+    var squareSize: CGFloat
+    var squareSpacing: CGFloat
+    var squareRadius: CGFloat
+    var axisGap: CGFloat
+    var outerInset: CGFloat
+    var headerFontSize: CGFloat
+
+    init(
+        squareSize: CGFloat = 13,
+        squareSpacing: CGFloat = 3,
+        squareRadius: CGFloat = 2.5,
+        axisGap: CGFloat = 8,
+        outerInset: CGFloat = 0,
+        headerFontSize: CGFloat = 9
+    ) {
+        self.squareSize = squareSize
+        self.squareSpacing = squareSpacing
+        self.squareRadius = squareRadius
+        self.axisGap = axisGap
+        self.outerInset = outerInset
+        self.headerFontSize = headerFontSize
+    }
+
+    static let `default` = HeatmapChartStyle()
+
+    /// 在读页推荐样式：方格更大，保持间距克制，接近 Android 体量感。
+    static let readingCard = HeatmapChartStyle(
+        squareSize: 16,
+        squareSpacing: 3,
+        squareRadius: 3
+    )
 }
 
 private struct HeatmapWeekColumn: Identifiable {
@@ -52,6 +80,7 @@ struct HeatmapChart: View {
     let earliestDate: Date?
     var latestDate: Date? = nil
     var statisticsDataType: HeatmapStatisticsDataType = .all
+    var style: HeatmapChartStyle = .default
     var scrollToMonth: String?
     var onDayTap: ((HeatmapDay) -> Void)?
 
@@ -61,8 +90,21 @@ struct HeatmapChart: View {
 
     private let calendar = Calendar.current
 
+    private var squareSize: CGFloat { style.squareSize }
+    private var squareSpacing: CGFloat { style.squareSpacing }
+    private var squareRadius: CGFloat { style.squareRadius }
+    private var axisGap: CGFloat { style.axisGap }
+    private var outerInset: CGFloat { style.outerInset }
+    private var headerFontSize: CGFloat { style.headerFontSize }
+    private var headerTextLineHeight: CGFloat {
+        ceil(UIFont.systemFont(ofSize: headerFontSize).lineHeight)
+    }
+    private var monthLabelHeight: CGFloat {
+        headerTextLineHeight + axisGap
+    }
+
     var body: some View {
-        HStack(alignment: .top, spacing: HeatmapConst.axisGap) {
+        HStack(alignment: .top, spacing: axisGap) {
             ScrollViewReader { proxy in
                 ScrollView(.horizontal, showsIndicators: false) {
                     gridContent
@@ -86,7 +128,7 @@ struct HeatmapChart: View {
             weekdayLabels
                 .fixedSize(horizontal: true, vertical: false)
         }
-        .padding(HeatmapConst.outerInset)
+        .padding(outerInset)
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
@@ -96,7 +138,7 @@ struct HeatmapChart: View {
         let realCount = weekColumns.count
         let paddingCount = max(0, minCount - realCount)
         HeatmapDebug.logger.debug(
-            "viewportWidth=\(Double(width), privacy: .public) weekdayLabelWidth=\(Double(weekdayLabelColumnWidth), privacy: .public) axisGap=\(Double(HeatmapConst.axisGap), privacy: .public) minVisibleWeekCount=\(minCount, privacy: .public) realWeekCount=\(realCount, privacy: .public) paddingWeekCount=\(paddingCount, privacy: .public)"
+            "viewportWidth=\(Double(width), privacy: .public) weekdayLabelWidth=\(Double(weekdayLabelColumnWidth), privacy: .public) axisGap=\(Double(axisGap), privacy: .public) minVisibleWeekCount=\(minCount, privacy: .public) realWeekCount=\(realCount, privacy: .public) paddingWeekCount=\(paddingCount, privacy: .public)"
         )
 #endif
     }
@@ -162,7 +204,7 @@ private extension HeatmapChart {
 private extension HeatmapChart {
 
     var weekdayLabelColumnWidth: CGFloat {
-        let font = UIFont.systemFont(ofSize: 9)
+        let font = UIFont.systemFont(ofSize: headerFontSize)
         let labels = [0, 2, 4, 6].map(shortWeekday)
         let maxTextWidth = labels
             .map { ($0 as NSString).size(withAttributes: [.font: font]).width }
@@ -172,17 +214,17 @@ private extension HeatmapChart {
 
     var weekdayLabels: some View {
         VStack(spacing: 0) {
-            Color.clear.frame(height: HeatmapConst.monthLabelHeight)
-            VStack(spacing: HeatmapConst.squareSpacing) {
+            Color.clear.frame(height: monthLabelHeight)
+            VStack(spacing: squareSpacing) {
                 ForEach(0..<7, id: \.self) { row in
                     ZStack {
                         if row % 2 == 0 {
                             Text(shortWeekday(row))
-                                .font(.system(size: 9))
+                                .font(.system(size: headerFontSize))
                                 .foregroundStyle(Color.textHint)
                         }
                     }
-                    .frame(width: weekdayLabelColumnWidth, height: HeatmapConst.squareSize)
+                    .frame(width: weekdayLabelColumnWidth, height: squareSize)
                 }
             }
         }
@@ -200,8 +242,8 @@ private extension HeatmapChart {
 
     func minimumVisibleWeekCount(for viewportWidth: CGFloat) -> Int {
         guard viewportWidth > 0 else { return 0 }
-        let columnUnit = HeatmapConst.squareSize + HeatmapConst.squareSpacing
-        let rawCount = (viewportWidth + HeatmapConst.squareSpacing) / columnUnit
+        let columnUnit = squareSize + squareSpacing
+        let rawCount = (viewportWidth + squareSpacing) / columnUnit
         return max(Int(ceil(rawCount)), 1)
     }
 
@@ -247,7 +289,7 @@ private extension HeatmapChart {
                     headerRowWidth = width
                     debugLogWidthGapIfNeeded()
                 }
-            HStack(spacing: HeatmapConst.squareSpacing) {
+            HStack(spacing: squareSpacing) {
                 ForEach(columns) { column in
                     let anchorId = monthId(week: column.week, previousWeek: column.previousWeek)
                     if let anchorId {
@@ -269,7 +311,7 @@ private extension HeatmapChart {
     }
 
     func weekColumn(_ week: [Date], today: Date) -> some View {
-        VStack(spacing: HeatmapConst.squareSpacing) {
+        VStack(spacing: squareSpacing) {
             ForEach(week, id: \.self) { date in
                 squareView(date: date, isToday: date == today, isFuture: date > today)
             }
@@ -312,19 +354,19 @@ private extension HeatmapChart {
         return VStack(spacing: 0) {
             ZStack(alignment: .topLeading) {
                 Color.clear
-                    .frame(width: totalRowWidth, height: HeatmapConst.headerTextLineHeight)
+                    .frame(width: totalRowWidth, height: headerTextLineHeight)
                 ForEach(tokens) { token in
                     Text(token.text)
-                        .font(.system(size: HeatmapConst.headerFontSize))
+                        .font(.system(size: headerFontSize))
                         .foregroundStyle(Color.textHint)
                         .lineLimit(1)
                         .fixedSize(horizontal: true, vertical: false)
                         .offset(x: token.x, y: 0)
                 }
             }
-            Color.clear.frame(width: totalRowWidth, height: HeatmapConst.axisGap)
+            Color.clear.frame(width: totalRowWidth, height: axisGap)
         }
-        .frame(height: HeatmapConst.monthLabelHeight)
+        .frame(height: monthLabelHeight)
     }
 
     /// 月份变化时返回 "yyyy-M" ID，否则 nil（仅用于滚动锚点，不等于显示文本）
@@ -342,8 +384,8 @@ private extension HeatmapChart {
         var previousMonth = ""
         var previousYear = ""
         var headerOverflow: CGFloat = 0
-        let columnAdvance = HeatmapConst.squareSize + HeatmapConst.squareSpacing
-        let font = UIFont.systemFont(ofSize: HeatmapConst.headerFontSize)
+        let columnAdvance = squareSize + squareSpacing
+        let font = UIFont.systemFont(ofSize: headerFontSize)
 
         for (index, column) in columns.enumerated() {
             let firstDay = column.week[0]
@@ -388,7 +430,7 @@ private extension HeatmapChart {
     func rowWidth(columnCount: Int) -> CGFloat {
         guard columnCount > 0 else { return 0 }
         let spacingCount = max(columnCount - 1, 0)
-        return CGFloat(columnCount) * HeatmapConst.squareSize + CGFloat(spacingCount) * HeatmapConst.squareSpacing
+        return CGFloat(columnCount) * squareSize + CGFloat(spacingCount) * squareSpacing
     }
 
     func headerTextWidth(_ text: String, font: UIFont) -> CGFloat {
@@ -426,18 +468,18 @@ private extension HeatmapChart {
         let day = days[date] ?? .empty(for: date)
         let segmentColors = day.segmentColors(for: statisticsDataType)
 
-        return RoundedRectangle(cornerRadius: HeatmapConst.squareRadius)
+        return RoundedRectangle(cornerRadius: squareRadius)
             .fill(Color.clear)
-            .frame(width: HeatmapConst.squareSize, height: HeatmapConst.squareSize)
+            .frame(width: squareSize, height: squareSize)
             .overlay {
                 if !isFuture {
                     segmentedFill(colors: segmentColors)
-                        .clipShape(RoundedRectangle(cornerRadius: HeatmapConst.squareRadius))
+                        .clipShape(RoundedRectangle(cornerRadius: squareRadius))
                 }
             }
             .overlay {
                 if isToday {
-                    RoundedRectangle(cornerRadius: HeatmapConst.squareRadius)
+                    RoundedRectangle(cornerRadius: squareRadius)
                         .strokeBorder(Color.brand, lineWidth: 1.5)
                 }
             }
@@ -479,17 +521,38 @@ extension HeatmapChart {
 
     /// 颜色图例条（少 → 多），可在外部组合使用
     static var legend: some View {
+        legend(style: .default)
+    }
+
+    static func legend(style: HeatmapChartStyle) -> some View {
         HStack(spacing: 4) {
             Text("少")
                 .font(.system(size: 9))
                 .foregroundStyle(Color.textHint)
             ForEach(HeatmapLevel.allCases.filter { $0 != .none }, id: \.rawValue) { level in
-                RoundedRectangle(cornerRadius: HeatmapConst.squareRadius)
+                RoundedRectangle(cornerRadius: style.squareRadius)
                     .fill(level.color)
                     .frame(width: 10, height: 10)
             }
             Text("多")
                 .font(.system(size: 9))
+                .foregroundStyle(Color.textHint)
+        }
+    }
+
+    /// 参数化图例：供说明弹层等需要放大尺寸的场景使用
+    static func legend(squareSize: CGFloat, fontSize: CGFloat) -> some View {
+        HStack(spacing: 4) {
+            Text("少")
+                .font(.system(size: fontSize))
+                .foregroundStyle(Color.textHint)
+            ForEach(HeatmapLevel.allCases.filter { $0 != .none }, id: \.rawValue) { level in
+                RoundedRectangle(cornerRadius: 2.5)
+                    .fill(level.color)
+                    .frame(width: squareSize, height: squareSize)
+            }
+            Text("多")
+                .font(.system(size: fontSize))
                 .foregroundStyle(Color.textHint)
         }
     }

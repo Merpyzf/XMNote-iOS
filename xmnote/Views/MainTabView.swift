@@ -7,6 +7,13 @@
 
 import SwiftUI
 
+/**
+ * [INPUT]: 依赖 Reading/Book/Note/Personal 各模块容器视图与对应路由枚举
+ * [OUTPUT]: 对外提供 MainTabView（四大主 Tab 的 NavigationStack 组织与目的地分发）
+ * [POS]: 应用根导航入口，负责跨模块路由承接（含在读页热力图点击进入阅读日历）
+ * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
+ */
+
 enum AppTab: String, CaseIterable {
     case reading, books, notes, profile, search
 }
@@ -26,7 +33,10 @@ struct MainTabView: View {
                 NavigationStack(path: $readingPath) {
                     ReadingContainerView(
                         onAddBook: { append(BookRoute.add, to: .reading) },
-                        onAddNote: { append(NoteRoute.create(bookId: nil), to: .reading) }
+                        onAddNote: { append(NoteRoute.create(bookId: nil), to: .reading) },
+                        onOpenReadCalendar: { date in
+                            readingPath.append(ReadingRoute.readCalendar(date: date))
+                        }
                     )
                         .toolbar(.hidden, for: .navigationBar)
                         .navigationDestination(for: ReadingRoute.self) { route in
@@ -131,6 +141,8 @@ struct MainTabView: View {
             Text("书籍详情")
         case .readingSession:
             Text("阅读计时")
+        case .readCalendar(let date):
+            ReadCalendarPlaceholderView(date: date)
         }
     }
 

@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 xmnote/Utilities/DesignTokens.swift 的颜色、间距、圆角设计令牌
- * [OUTPUT]: 对外提供 CardContainer、EmptyStateView、HomeTopHeaderGradient 三个通用表层组件
+ * [OUTPUT]: 对外提供 CardContainer（支持圆角/描边可配置）、EmptyStateView、HomeTopHeaderGradient 三个通用表层组件
  * [POS]: UIComponents/Foundation 的基础表层组件集合，被各业务页面直接复用
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -12,20 +12,30 @@ import SwiftUI
 /// 内容卡片容器，对应 Android 端的 ContentBox
 /// 极细边框定义边界，白色背景浮于窗口背景之上
 struct CardContainer<Content: View>: View {
+    let cornerRadius: CGFloat
+    let showsBorder: Bool
     let content: Content
 
-    init(@ViewBuilder content: () -> Content) {
+    init(
+        cornerRadius: CGFloat = CornerRadius.card,
+        showsBorder: Bool = true,
+        @ViewBuilder content: () -> Content
+    ) {
+        self.cornerRadius = cornerRadius
+        self.showsBorder = showsBorder
         self.content = content()
     }
 
     var body: some View {
         content
             .background(Color.contentBackground)
-            .clipShape(RoundedRectangle(cornerRadius: CornerRadius.card))
-            .overlay(
-                RoundedRectangle(cornerRadius: CornerRadius.card)
-                    .stroke(Color.cardBorder, lineWidth: CardStyle.borderWidth)
-            )
+            .clipShape(RoundedRectangle(cornerRadius: cornerRadius))
+            .overlay {
+                if showsBorder {
+                    RoundedRectangle(cornerRadius: cornerRadius)
+                        .stroke(Color.cardBorder, lineWidth: CardStyle.borderWidth)
+                }
+            }
     }
 }
 

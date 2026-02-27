@@ -23,6 +23,7 @@
 - xmnote/Views/Personal/Backup/WebDAVServerFormView.swift
 - xmnote/Views/Personal/Backup/BackupHistorySheet.swift
 - xmnote/Views/Reading/ReadingContainerView.swift
+- xmnote/Views/Reading/ReadingHeatmapWidgetView.swift
 - xmnote/Views/Personal/PersonalView.swift
 
 [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md

@@ -11,5 +11,6 @@
 - `NoteDetailViewModel.swift`: 笔记详情加载保存编排，含 Metadata 内嵌结构
 - `DataBackupViewModel.swift`: 备份恢复状态编排，含 BackupOperationState 枚举
 - `WebDAVServerViewModel.swift`: 服务器配置管理状态编排
+- `ReadingHeatmapWidgetViewModel.swift`: 在读页热力图小组件状态编排（加载、跨天刷新、统计类型切换）
 
 [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md

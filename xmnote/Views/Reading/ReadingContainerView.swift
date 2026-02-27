@@ -1,11 +1,11 @@
-//
-//  ReadingContainerView.swift
-//  xmnote
-//
-//  Created by 王珂 on 2026/2/10.
-//
-
 import SwiftUI
+
+/**
+ * [INPUT]: 依赖 TopSwitcher/AddMenuCircleButton 顶部交互组件，依赖 Reading 子页面与路由回调
+ * [OUTPUT]: 对外提供 ReadingContainerView（在读 Tab 容器，管理子页切换与事件上抛）
+ * [POS]: 在读模块根容器，负责“在读/时间线/统计”切换和热力图点击导航事件传递
+ * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
+ */
 
 // MARK: - Sub Tab
 
@@ -27,13 +27,16 @@ struct ReadingContainerView: View {
     @State private var selectedSubTab: ReadingSubTab = .reading
     let onAddBook: () -> Void
     let onAddNote: () -> Void
+    let onOpenReadCalendar: (Date) -> Void
 
     init(
         onAddBook: @escaping () -> Void = {},
-        onAddNote: @escaping () -> Void = {}
+        onAddNote: @escaping () -> Void = {},
+        onOpenReadCalendar: @escaping (Date) -> Void = { _ in }
     ) {
         self.onAddBook = onAddBook
         self.onAddNote = onAddNote
+        self.onOpenReadCalendar = onOpenReadCalendar
     }
 
     var body: some View {
@@ -41,7 +44,7 @@ struct ReadingContainerView: View {
             Color.windowBackground.ignoresSafeArea()
 
             TabView(selection: $selectedSubTab) {
-                ReadingListPlaceholderView()
+                ReadingListPlaceholderView(onOpenReadCalendar: onOpenReadCalendar)
                     .tag(ReadingSubTab.reading)
                 TimelinePlaceholderView()
                     .tag(ReadingSubTab.timeline)

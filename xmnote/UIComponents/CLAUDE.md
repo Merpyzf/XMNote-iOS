@@ -5,7 +5,7 @@
 
 ## Foundation/
 
-- `SurfaceComponents.swift`: CardContainer、EmptyStateView、HomeTopHeaderGradient 通用容器组件
+- `SurfaceComponents.swift`: CardContainer（圆角/描边可配置）、EmptyStateView、HomeTopHeaderGradient 通用容器组件
 - `HighlightColorPicker.swift`: 高亮 ARGB 色值网格选择组件
 
 ## TopBar/
@@ -23,6 +23,6 @@
 
 ## Charts/
 
-- `HeatmapChart.swift`: GitHub 风格阅读热力图组件（右侧固定中文星期标签，日/二/四/六显示 + 顶部月/年交接标签，采用 Android 同步的 overflow 防重叠绘制策略 + 分段方格渲染（阅读状态色+阅读量色）+ 统一 8pt 轴距与四周外边距 + 左侧真实日期列补齐 + scrollToMonth 程序化滚动 + 今日高亮 + maxWidth 铺满父容器）
+- `HeatmapChart.swift`: GitHub 风格阅读热力图组件（支持 `HeatmapChartStyle` 配置方格尺寸/间距/圆角，右侧固定中文星期标签 + 顶部月/年交接标签 + Android 同步 overflow 防重叠绘制 + 分段方格渲染 + 程序化滚动 + 今日高亮）
 
 [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
