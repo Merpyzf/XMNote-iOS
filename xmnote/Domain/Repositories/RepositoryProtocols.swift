@@ -37,7 +37,26 @@ protocol BackupRepositoryProtocol {
 /// 统计数据仓储（热力图、阅读统计）
 /// 对齐 Android StatisticsRepository.getChartData(year=0)
 protocol StatisticsRepositoryProtocol {
+    /// 按统计类型与年份获取热力图数据
+    /// - Parameters:
+    ///   - year: 0 表示全部年份；>0 表示指定自然年
+    ///   - dataType: 统计维度（书摘/阅读/全部/打卡）
+    /// - Returns: (数据字典, 起始日期, 结束日期)
+    ///   - 起始日期为 nil 表示无可用数据
+    ///   - 结束日期用于控制图表显示范围（例如指定年份时为该年 12/31）
+    func fetchHeatmapData(
+        year: Int,
+        dataType: HeatmapStatisticsDataType
+    ) async throws -> (days: [Date: HeatmapDay], earliestDate: Date?, latestDate: Date?)
+
     /// 获取热力图全量数据（从最早记录到今天）
     /// 返回值：(数据字典, 最早记录日期)；最早日期为 nil 表示无任何阅读记录
     func fetchAllHeatmapData() async throws -> (days: [Date: HeatmapDay], earliestDate: Date?)
+}
+
+extension StatisticsRepositoryProtocol {
+    func fetchAllHeatmapData() async throws -> (days: [Date: HeatmapDay], earliestDate: Date?) {
+        let result = try await fetchHeatmapData(year: 0, dataType: .all)
+        return (result.days, result.earliestDate)
+    }
 }

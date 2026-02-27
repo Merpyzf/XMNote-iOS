@@ -2,9 +2,9 @@
 import SwiftUI
 
 /**
- * [INPUT]: 依赖 HeatmapTestViewModel 提供测试数据，依赖 HeatmapChart 组件
+ * [INPUT]: 依赖 HeatmapTestViewModel 提供测试数据，依赖 HeatmapChart 组件，依赖 RepositoryContainer 提供真实仓储数据
  * [OUTPUT]: 对外提供 HeatmapTestView（热力图测试页面）
- * [POS]: Debug 测试页，验证热力图 8 个场景的渲染、交互与颜色适配
+ * [POS]: Debug 测试页，验证热力图 9 个场景的渲染、交互与颜色适配，并支持真实数据集成测试
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
@@ -22,11 +22,13 @@ struct HeatmapTestView: View {
 
 private struct HeatmapTestContentView: View {
     @Bindable var viewModel: HeatmapTestViewModel
+    @Environment(RepositoryContainer.self) private var repositories
 
     var body: some View {
         ScrollView {
             VStack(spacing: Spacing.double) {
                 scenarioPickerSection
+                realDataControlSection
                 heatmapSection
                 selectedDaySection
                 colorLegendSection
@@ -54,8 +56,14 @@ private extension HeatmapTestContentView {
                 HStack(spacing: Spacing.half) {
                     ForEach(HeatmapTestScenario.allCases) { scenario in
                         Button(scenario.rawValue) {
-                            withAnimation(.snappy) {
-                                viewModel.loadScenario(scenario)
+                            if scenario == .realData {
+                                Task {
+                                    await viewModel.loadRealData(using: repositories.statisticsRepository)
+                                }
+                            } else {
+                                withAnimation(.snappy) {
+                                    viewModel.loadScenario(scenario)
+                                }
                             }
                         }
                         .font(.caption)
@@ -77,6 +85,61 @@ private extension HeatmapTestContentView {
     }
 }
 
+// MARK: - 真实数据控制
+
+private extension HeatmapTestContentView {
+
+    @ViewBuilder
+    var realDataControlSection: some View {
+        if viewModel.currentScenario == .realData {
+            VStack(alignment: .leading, spacing: Spacing.half) {
+                Text("真实数据集成测试")
+                    .font(.headline)
+                    .foregroundStyle(Color.textPrimary)
+                HStack(spacing: Spacing.half) {
+                    Picker("统计类型", selection: $viewModel.realDataType) {
+                        ForEach(HeatmapStatisticsDataType.allCases) { type in
+                            Text(type.title).tag(type)
+                        }
+                    }
+                    .pickerStyle(.menu)
+
+                    Picker("年份", selection: $viewModel.realDataYear) {
+                        ForEach(viewModel.candidateYears, id: \.self) { year in
+                            Text(year == 0 ? "全部年份" : "\(year)年").tag(year)
+                        }
+                    }
+                    .pickerStyle(.menu)
+                }
+
+                HStack(spacing: Spacing.half) {
+                    Button("重新加载真实数据") {
+                        Task {
+                            await viewModel.loadRealData(using: repositories.statisticsRepository)
+                        }
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(viewModel.isLoadingRealData)
+
+                    if viewModel.isLoadingRealData {
+                        ProgressView()
+                            .controlSize(.small)
+                    }
+                }
+
+                if let error = viewModel.realDataError {
+                    Text(error)
+                        .font(.caption)
+                        .foregroundStyle(Color.feedbackWarning)
+                }
+            }
+            .padding(Spacing.base)
+            .background(Color.contentBackground)
+            .clipShape(RoundedRectangle(cornerRadius: CornerRadius.card))
+        }
+    }
+}
+
 // MARK: - 热力图展示
 
 private extension HeatmapTestContentView {
@@ -88,7 +151,9 @@ private extension HeatmapTestContentView {
                 .foregroundStyle(Color.textPrimary)
             HeatmapChart(
                 days: viewModel.days,
-                earliestDate: viewModel.earliestDate
+                earliestDate: viewModel.earliestDate,
+                latestDate: viewModel.latestDate,
+                statisticsDataType: viewModel.statisticsDataType
             ) { day in
                 withAnimation(.snappy) {
                     viewModel.selectedDay = day
@@ -118,6 +183,7 @@ private extension HeatmapTestContentView {
                     infoRow("笔记", value: "\(day.noteCount)条")
                     infoRow("打卡", value: "\(day.checkInCount)次")
                     infoRow("打卡时长", value: "\(day.checkInSeconds)秒（\(day.checkInSeconds / 60)分钟）")
+                    infoRow("状态", value: day.bookStateTitles)
                     infoRow("等级", value: "\(day.level)")
                 }
                 .padding(Spacing.base)

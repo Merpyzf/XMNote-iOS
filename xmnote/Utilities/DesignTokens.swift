@@ -107,7 +107,7 @@ extension Color {
     static let statusReading = Color(hex: 0x42A5F5)
     static let statusDone = Color(hex: 0xFFB600)
     static let statusWish = Color(hex: 0xEF5350)
-    static let statusOnHold = Color(hex: 0xC552BD)
+    static let statusOnHold = Color(hex: 0xAB47BC)
     static let statusAbandoned = Color(hex: 0x9E9E9E)
 }
 

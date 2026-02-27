@@ -23,6 +23,6 @@
 
 ## Charts/
 
-- `HeatmapChart.swift`: GitHub 风格阅读热力图组件（右侧固定星期标签 + 顶部月切换标签/跨年显示 yyyy-M + 右侧空列补齐避免少数据居中 + scrollToMonth 程序化滚动 + 今日高亮 + 打卡读屏文案）
+- `HeatmapChart.swift`: GitHub 风格阅读热力图组件（右侧固定中文星期标签，日/二/四/六显示 + 顶部月/年交接标签，采用 Android 同步的 overflow 防重叠绘制策略 + 分段方格渲染（阅读状态色+阅读量色）+ 统一 8pt 轴距与四周外边距 + 左侧真实日期列补齐 + scrollToMonth 程序化滚动 + 今日高亮 + maxWidth 铺满父容器）
 
 [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md

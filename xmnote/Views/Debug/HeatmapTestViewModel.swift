@@ -4,7 +4,7 @@ import Foundation
 /**
  * [INPUT]: 依赖 HeatmapDay/HeatmapLevel 领域模型
  * [OUTPUT]: 对外提供 HeatmapTestViewModel（测试数据生成与场景切换）
- * [POS]: Debug 测试页状态编排，供 HeatmapTestView 消费
+ * [POS]: Debug 测试页状态编排，供 HeatmapTestView 消费；支持真实仓储数据集成测试
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
@@ -20,18 +20,26 @@ enum HeatmapTestScenario: String, CaseIterable, Identifiable {
     case allLevels    = "全等级"
     case todayOnly    = "仅今天"
     case edgeBoundary = "边界值"
+    case realData     = "真实数据（仓储）"
 
     var id: String { rawValue }
 }
 
 // MARK: - ViewModel
 
+@MainActor
 @Observable
 class HeatmapTestViewModel {
     var days: [Date: HeatmapDay] = [:]
     var earliestDate: Date? = nil
+    var latestDate: Date? = nil
+    var statisticsDataType: HeatmapStatisticsDataType = .all
     var selectedDay: HeatmapDay? = nil
     var currentScenario: HeatmapTestScenario = .empty
+    var realDataType: HeatmapStatisticsDataType = .all
+    var realDataYear: Int = 0
+    var isLoadingRealData = false
+    var realDataError: String? = nil
 
     private let calendar = Calendar.current
     private var today: Date { calendar.startOfDay(for: Date()) }
@@ -39,6 +47,8 @@ class HeatmapTestViewModel {
     func loadScenario(_ scenario: HeatmapTestScenario) {
         currentScenario = scenario
         selectedDay = nil
+        latestDate = nil
+        realDataError = nil
 
         switch scenario {
         case .empty:        loadEmpty()
@@ -50,7 +60,41 @@ class HeatmapTestViewModel {
         case .allLevels:    loadAllLevels()
         case .todayOnly:    loadTodayOnly()
         case .edgeBoundary: loadEdgeBoundary()
+        case .realData:     break
         }
+    }
+
+    func loadRealData(using repository: any StatisticsRepositoryProtocol) async {
+        currentScenario = .realData
+        selectedDay = nil
+        isLoadingRealData = true
+        realDataError = nil
+
+        do {
+            let result = try await repository.fetchHeatmapData(
+                year: realDataYear,
+                dataType: realDataType
+            )
+            days = result.days
+            earliestDate = result.earliestDate
+            latestDate = result.latestDate
+            statisticsDataType = realDataType
+            if result.earliestDate == nil {
+                realDataError = "当前仓储没有可用热力图数据。"
+            }
+        } catch {
+            days = [:]
+            earliestDate = nil
+            latestDate = nil
+            realDataError = "真实数据加载失败：\(error.localizedDescription)"
+        }
+
+        isLoadingRealData = false
+    }
+
+    var candidateYears: [Int] {
+        let currentYear = calendar.component(.year, from: Date())
+        return [0, currentYear, currentYear - 1, currentYear - 2]
     }
 }
 
@@ -59,11 +103,13 @@ class HeatmapTestViewModel {
 private extension HeatmapTestViewModel {
 
     func loadEmpty() {
+        statisticsDataType = .all
         days = [:]
         earliestDate = nil
     }
 
     func loadSparse() {
+        statisticsDataType = .all
         let start = calendar.date(byAdding: .month, value: -3, to: today)!
         var result: [Date: HeatmapDay] = [:]
         for _ in 0..<20 {
@@ -83,6 +129,7 @@ private extension HeatmapTestViewModel {
     }
 
     func loadDense() {
+        statisticsDataType = .all
         let start = calendar.date(byAdding: .month, value: -6, to: today)!
         var result: [Date: HeatmapDay] = [:]
         var current = calendar.startOfDay(for: start)
@@ -105,6 +152,7 @@ private extension HeatmapTestViewModel {
     }
 
     func loadCheckInOnly() {
+        statisticsDataType = .checkIn
         let start = calendar.date(byAdding: .day, value: -29, to: today)!
         var result: [Date: HeatmapDay] = [:]
         var current = calendar.startOfDay(for: start)
@@ -126,6 +174,7 @@ private extension HeatmapTestViewModel {
     }
 
     func loadFullYear() {
+        statisticsDataType = .all
         let start = calendar.date(byAdding: .day, value: -364, to: today)!
         var result: [Date: HeatmapDay] = [:]
         var current = calendar.startOfDay(for: start)
@@ -154,6 +203,7 @@ private extension HeatmapTestViewModel {
 private extension HeatmapTestViewModel {
 
     func loadMultiYear() {
+        statisticsDataType = .all
         let start = calendar.date(byAdding: .year, value: -2, to: today)!
         var result: [Date: HeatmapDay] = [:]
         var current = calendar.startOfDay(for: start)
@@ -175,6 +225,7 @@ private extension HeatmapTestViewModel {
     }
 
     func loadAllLevels() {
+        statisticsDataType = .readingTime
         let values = [0, 600, 1800, 3000, 5000]
         var result: [Date: HeatmapDay] = [:]
         for (i, seconds) in values.enumerated() {
@@ -192,6 +243,7 @@ private extension HeatmapTestViewModel {
     }
 
     func loadTodayOnly() {
+        statisticsDataType = .all
         days = [
             today: HeatmapDay(
                 id: today,
@@ -205,6 +257,7 @@ private extension HeatmapTestViewModel {
     }
 
     func loadEdgeBoundary() {
+        statisticsDataType = .readingTime
         let thresholds = [1200, 1201, 2400, 2401, 3600, 3601]
         var result: [Date: HeatmapDay] = [:]
         for (i, seconds) in thresholds.enumerated() {
