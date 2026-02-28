@@ -3,7 +3,7 @@ import Observation
 
 /**
  * [INPUT]: 依赖 DatabaseManager 提供数据库实例，依赖各 Repository 实现完成组装
- * [OUTPUT]: 对外提供 RepositoryContainer，集中暴露业务可用的仓储入口
+ * [OUTPUT]: 对外提供 RepositoryContainer，集中暴露业务可用的仓储入口（含阅读日历封面取色仓储）
  * [POS]: App 级依赖注入容器，被视图层通过 Environment 获取并创建 ViewModel
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -15,6 +15,7 @@ final class RepositoryContainer {
     let backupServerRepository: any BackupServerRepositoryProtocol
     let backupRepository: any BackupRepositoryProtocol
     let statisticsRepository: any StatisticsRepositoryProtocol
+    let readCalendarColorRepository: any ReadCalendarColorRepositoryProtocol
 
     init(databaseManager: DatabaseManager) {
         let backupServerRepository = BackupServerRepository(databaseManager: databaseManager)
@@ -27,5 +28,6 @@ final class RepositoryContainer {
             serverRepository: backupServerRepository
         )
         self.statisticsRepository = StatisticsRepository(databaseManager: databaseManager)
+        self.readCalendarColorRepository = ReadCalendarColorRepository()
     }
 }

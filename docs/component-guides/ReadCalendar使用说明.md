@@ -6,7 +6,7 @@
 - 持有 `ReadCalendarViewModel` 并加载数据。
 - 将页面状态映射到 `ReadCalendarPanel` 公共组件。
 
-源码路径：`xmnote/Views/Reading/ReadCalendarView.swift`
+源码路径：`xmnote/Views/Reading/ReadCalendar/ReadCalendarView.swift`
 
 ## 快速接入
 ```swift
@@ -67,8 +67,12 @@ ReadingHeatmapWidgetView(
 ### 3) 为什么同一天看不到全部书籍？
 页面默认每日显示上限为 4 条，超出使用 `+N` 提示，属于可读性优先策略。
 
-### 4) 封面取色怎么接入？
-当前颜色基于 `bookId` 映射。若要接入封面取色，建议在 ViewModel 层引入取色缓存并输出稳定色值，View 不直接做异步图片分析。
+### 4) 事件条颜色现在怎么计算？
+当前已接入封面取色仓储：`ReadCalendarColorRepository`。策略为：
+- `pending`：事件条使用低存在感骨架色 + shimmer，表达“正在取色”。
+- `resolved`：使用封面 dominant 色（按像素占比最大色）。
+- `failed`：仅在取色失败时回退哈希色。
+- 文本色由仓储动态计算，保证在背景色上的可读性。
 
 ### 5) 为什么去掉了大部分分割线？
 这次重构将分周结构从“线框分隔”改为“留白分隔”，能让事件条更突出，视觉更接近阅读记录本而不是工具表格。

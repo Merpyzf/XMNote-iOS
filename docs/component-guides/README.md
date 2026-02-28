@@ -6,7 +6,7 @@
 | CalendarMonthStepperBar | `xmnote/UIComponents/Foundation/CalendarMonthStepperBar.swift` | `docs/component-guides/CalendarMonthStepperBar使用说明.md` | 已完成 |
 | ReadCalendarPanel | `xmnote/UIComponents/Foundation/ReadCalendarPanel.swift` | `docs/component-guides/ReadCalendarPanel使用说明.md` | 已完成 |
 | ReadCalendarMonthGrid | `xmnote/UIComponents/Foundation/ReadCalendarMonthGrid.swift` | `docs/component-guides/ReadCalendarMonthGrid使用说明.md` | 已完成 |
-| ReadCalendarView | `xmnote/Views/Reading/ReadCalendarView.swift` | `docs/component-guides/ReadCalendar使用说明.md` | 已完成 |
+| ReadCalendarView | `xmnote/Views/Reading/ReadCalendar/ReadCalendarView.swift` | `docs/component-guides/ReadCalendar使用说明.md` | 已完成 |
 
 维护规则
 - 重要 UI 组件完成开发后，必须在本索引新增或更新条目。

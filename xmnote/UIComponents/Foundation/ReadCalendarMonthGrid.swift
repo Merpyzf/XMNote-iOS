@@ -1,6 +1,6 @@
 /**
- * [INPUT]: 依赖 DesignTokens 视觉令牌与周网格输入（WeekData/EventSegment/DayPayload）
- * [OUTPUT]: 对外提供 ReadCalendarMonthGrid（月视图周网格与事件条渲染组件）
+ * [INPUT]: 依赖 DesignTokens 视觉令牌与周网格输入（WeekData/EventSegment/DayPayload，含事件条颜色三态）
+ * [OUTPUT]: 对外提供 ReadCalendarMonthGrid（月视图周网格与事件条渲染组件，支持 pending 骨架/取色成功/失败回退）
  * [POS]: UIComponents/Foundation 的阅读日历可复用网格组件，承载日期格展示、选中态与事件条渲染
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -8,6 +8,24 @@
 import SwiftUI
 
 struct ReadCalendarMonthGrid: View {
+    enum EventColorState: Hashable {
+        case pending
+        case resolved
+        case failed
+    }
+
+    struct EventColor: Hashable {
+        let state: EventColorState
+        let backgroundRGBAHex: UInt32
+        let textRGBAHex: UInt32
+
+        static let pending = EventColor(
+            state: .pending,
+            backgroundRGBAHex: 0,
+            textRGBAHex: 0
+        )
+    }
+
     struct EventSegment: Identifiable, Hashable {
         let bookId: Int64
         let bookName: String
@@ -17,6 +35,7 @@ struct ReadCalendarMonthGrid: View {
         let laneIndex: Int
         let continuesFromPrevWeek: Bool
         let continuesToNextWeek: Bool
+        let color: EventColor
 
         var id: String {
             "\(bookId)-\(weekStart.timeIntervalSince1970)-\(segmentStartDate.timeIntervalSince1970)-\(laneIndex)"
@@ -217,8 +236,10 @@ private struct ReadCalendarMonthGridWeekRow: View {
         let x = CGFloat(startOffset) * cellWidth + segmentHorizontalInset
         let y = dayHeaderHeight + laneTopInset + CGFloat(segment.laneIndex) * (laneBarHeight + laneSpacing)
 
-        let fillColor = color(for: segment.bookId)
+        let fillColor = fillColor(for: segment.color)
+        let textColor = textColor(for: segment.color)
         let showText = segmentWidth >= 42
+        let isPending = segment.color.state == .pending
 
         let leftRadius: CGFloat = segment.continuesFromPrevWeek ? 2.5 : CornerRadius.calendarEvent
         let rightRadius: CGFloat = segment.continuesToNextWeek ? 2.5 : CornerRadius.calendarEvent
@@ -234,6 +255,11 @@ private struct ReadCalendarMonthGridWeekRow: View {
                 .fill(fillColor.opacity(0.92))
             segmentShape
                 .stroke(fillColor.opacity(0.58), lineWidth: 0.5)
+
+            if isPending {
+                ReadCalendarSegmentPendingShimmer()
+                    .clipShape(segmentShape)
+            }
 
             if segment.continuesFromPrevWeek {
                 LinearGradient(
@@ -258,7 +284,7 @@ private struct ReadCalendarMonthGridWeekRow: View {
             if showText {
                 Text(segment.bookName)
                     .font(.system(size: 9, weight: .semibold, design: .rounded))
-                    .foregroundStyle(Color.readCalendarEventText.opacity(0.88))
+                    .foregroundStyle(textColor.opacity(isPending ? 0.86 : 0.92))
                     .lineLimit(1)
                     .padding(.horizontal, 4)
             }
@@ -276,7 +302,50 @@ private struct ReadCalendarMonthGridWeekRow: View {
         return min(6, max(0, offset))
     }
 
-    private func color(for bookId: Int64) -> Color {
-        Color.readCalendarEventPalette[abs(Int(bookId)) % Color.readCalendarEventPalette.count]
+    private func fillColor(for color: ReadCalendarMonthGrid.EventColor) -> Color {
+        switch color.state {
+        case .pending:
+            return Color.readCalendarEventPendingBase
+        case .resolved, .failed:
+            return Color(rgbaHex: color.backgroundRGBAHex)
+        }
+    }
+
+    private func textColor(for color: ReadCalendarMonthGrid.EventColor) -> Color {
+        switch color.state {
+        case .pending:
+            return Color.readCalendarEventPendingText
+        case .resolved, .failed:
+            return Color(rgbaHex: color.textRGBAHex)
+        }
+    }
+}
+
+private struct ReadCalendarSegmentPendingShimmer: View {
+    var body: some View {
+        GeometryReader { proxy in
+            let width = max(24, proxy.size.width * 0.62)
+
+            TimelineView(.animation(minimumInterval: 0.06)) { timeline in
+                let seconds = timeline.date.timeIntervalSinceReferenceDate
+                let progress = seconds.truncatingRemainder(dividingBy: 1.25) / 1.25
+                let startX = -width
+                let endX = proxy.size.width + width
+                let x = startX + (endX - startX) * progress
+
+                LinearGradient(
+                    colors: [
+                        Color.clear,
+                        Color.readCalendarEventPendingHighlight.opacity(0.75),
+                        Color.clear
+                    ],
+                    startPoint: .leading,
+                    endPoint: .trailing
+                )
+                .frame(width: width, height: proxy.size.height)
+                .offset(x: x)
+            }
+        }
+        .allowsHitTesting(false)
     }
 }

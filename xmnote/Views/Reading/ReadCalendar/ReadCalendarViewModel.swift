@@ -1,15 +1,21 @@
 import Foundation
 
 /**
- * [INPUT]: 依赖 StatisticsRepositoryProtocol 提供月历聚合数据，依赖 ReadCalendarEventLayoutEngine 生成事件条布局
- * [OUTPUT]: 对外提供 ReadCalendarViewModel（阅读日历页面状态、分页切月、跨周事件条布局）
- * [POS]: ReadCalendar 子功能状态中枢，负责数据加载、分页状态、选中态与周布局构建
+ * [INPUT]: 依赖 StatisticsRepositoryProtocol 提供月历聚合数据，依赖 ReadCalendarColorRepositoryProtocol 提供封面取色，依赖 ReadCalendarEventLayoutEngine 生成事件条布局
+ * [OUTPUT]: 对外提供 ReadCalendarViewModel（阅读日历页面状态、分页切月、跨周事件条布局、事件条颜色异步回填）
+ * [POS]: ReadCalendar 子功能状态中枢，负责数据加载、分页状态、选中态、周布局构建与封面取色任务编排
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
 @MainActor
 @Observable
 final class ReadCalendarViewModel {
+    private struct ReadCalendarColorRequest: Hashable {
+        let bookId: Int64
+        let bookName: String
+        let coverURL: String
+    }
+
     struct WeekRowData: Identifiable, Hashable {
         let weekStart: Date
         let days: [Date?]
@@ -61,7 +67,10 @@ final class ReadCalendarViewModel {
     private var pageStates: [String: MonthPageState] = [:]
     private var monthIndexByKey: [String: Int] = [:]
     private var latestRequestTicketByMonthKey: [String: Int] = [:]
+    private var latestColorTicketByMonthKey: [String: Int] = [:]
+    private var monthColorTasks: [String: Task<Void, Never>] = [:]
     private var requestTicketSeed = 0
+    private var colorTicketSeed = 0
     private var calendar: Calendar
 
     init(
@@ -109,12 +118,18 @@ final class ReadCalendarViewModel {
         return .content
     }
 
-    func loadIfNeeded(using repository: any StatisticsRepositoryProtocol) async {
+    func loadIfNeeded(
+        using repository: any StatisticsRepositoryProtocol,
+        colorRepository: any ReadCalendarColorRepositoryProtocol
+    ) async {
         guard !hasLoaded else { return }
-        await reload(using: repository)
+        await reload(using: repository, colorRepository: colorRepository)
     }
 
-    func reload(using repository: any StatisticsRepositoryProtocol) async {
+    func reload(
+        using repository: any StatisticsRepositoryProtocol,
+        colorRepository: any ReadCalendarColorRepositoryProtocol
+    ) async {
         guard !isLoading else { return }
         isLoading = true
         errorMessage = nil
@@ -141,15 +156,23 @@ final class ReadCalendarViewModel {
             monthCache = [:]
             pageStates = [:]
             latestRequestTicketByMonthKey = [:]
+            latestColorTicketByMonthKey = [:]
+            cancelAllColorTasks()
 
             await ensureMonthLoaded(
                 for: defaultMonth,
                 using: repository,
+                colorRepository: colorRepository,
                 showLoading: true,
                 forceRefresh: false,
                 reportError: true
             )
-            await prefetchAdjacentMonths(around: defaultMonth, using: repository)
+            await prefetchAdjacentMonths(
+                around: defaultMonth,
+                using: repository,
+                colorRepository: colorRepository
+            )
+            cancelOutOfScopeColorTasks(around: defaultMonth)
             syncDisplayedMonthError()
             hasLoaded = true
         } catch {
@@ -157,6 +180,7 @@ final class ReadCalendarViewModel {
             availableMonths = []
             monthIndexByKey = [:]
             pageStates = [:]
+            cancelAllColorTasks()
             hasLoaded = false
         }
 
@@ -170,7 +194,8 @@ final class ReadCalendarViewModel {
 
     func handlePagerSelectionChange(
         to monthStart: Date,
-        using repository: any StatisticsRepositoryProtocol
+        using repository: any StatisticsRepositoryProtocol,
+        colorRepository: any ReadCalendarColorRepositoryProtocol
     ) async {
         guard hasLoaded else { return }
         let normalized = Self.monthStart(of: monthStart, using: calendar)
@@ -188,24 +213,43 @@ final class ReadCalendarViewModel {
         await ensureMonthLoaded(
             for: normalized,
             using: repository,
+            colorRepository: colorRepository,
             showLoading: true,
             forceRefresh: false,
             reportError: true
         )
-        await prefetchAdjacentMonths(around: normalized, using: repository)
+        await prefetchAdjacentMonths(
+            around: normalized,
+            using: repository,
+            colorRepository: colorRepository
+        )
+        cancelOutOfScopeColorTasks(around: normalized)
         syncDisplayedMonthError()
     }
 
-    func retryDisplayedMonth(using repository: any StatisticsRepositoryProtocol) async {
+    func retryDisplayedMonth(
+        using repository: any StatisticsRepositoryProtocol,
+        colorRepository: any ReadCalendarColorRepositoryProtocol
+    ) async {
         await ensureMonthLoaded(
             for: displayedMonthStart,
             using: repository,
+            colorRepository: colorRepository,
             showLoading: true,
             forceRefresh: true,
             reportError: true
         )
-        await prefetchAdjacentMonths(around: displayedMonthStart, using: repository)
+        await prefetchAdjacentMonths(
+            around: displayedMonthStart,
+            using: repository,
+            colorRepository: colorRepository
+        )
+        cancelOutOfScopeColorTasks(around: displayedMonthStart)
         syncDisplayedMonthError()
+    }
+
+    func cancelAsyncTasks() {
+        cancelAllColorTasks()
     }
 
     func monthState(for monthStart: Date) -> MonthPageState {
@@ -250,6 +294,7 @@ private extension ReadCalendarViewModel {
     func ensureMonthLoaded(
         for monthStart: Date,
         using repository: any StatisticsRepositoryProtocol,
+        colorRepository: any ReadCalendarColorRepositoryProtocol,
         showLoading: Bool,
         forceRefresh: Bool,
         reportError: Bool
@@ -257,6 +302,12 @@ private extension ReadCalendarViewModel {
         let normalized = Self.monthStart(of: monthStart, using: calendar)
         let key = Self.monthKey(for: normalized, using: calendar)
         if !forceRefresh, let existing = pageStates[key], existing.loadState == .loaded {
+            if hasPendingSegmentColor(existing) {
+                scheduleColorResolutionIfNeeded(
+                    for: normalized,
+                    using: colorRepository
+                )
+            }
             return
         }
 
@@ -287,11 +338,17 @@ private extension ReadCalendarViewModel {
             guard latestRequestTicketByMonthKey[key] == ticket else { return }
             let loaded = buildLoadedState(monthStart: normalized, data: data)
             pageStates[key] = loaded
+            scheduleColorResolutionIfNeeded(
+                for: normalized,
+                using: colorRepository
+            )
             if normalized == displayedMonthStart {
                 errorMessage = nil
             }
         } catch {
             guard latestRequestTicketByMonthKey[key] == ticket else { return }
+            monthColorTasks[key]?.cancel()
+            monthColorTasks[key] = nil
             let failed = MonthPageState(
                 monthStart: normalized,
                 weeks: makeDisplayWeeks(for: normalized),
@@ -308,7 +365,8 @@ private extension ReadCalendarViewModel {
 
     func prefetchAdjacentMonths(
         around monthStart: Date,
-        using repository: any StatisticsRepositoryProtocol
+        using repository: any StatisticsRepositoryProtocol,
+        colorRepository: any ReadCalendarColorRepositoryProtocol
     ) async {
         let neighbors = [
             monthAtOffset(-1, from: monthStart),
@@ -319,11 +377,146 @@ private extension ReadCalendarViewModel {
             await ensureMonthLoaded(
                 for: month,
                 using: repository,
+                colorRepository: colorRepository,
                 showLoading: false,
                 forceRefresh: false,
                 reportError: false
             )
         }
+    }
+
+    func scheduleColorResolutionIfNeeded(
+        for monthStart: Date,
+        using colorRepository: any ReadCalendarColorRepositoryProtocol
+    ) {
+        let normalized = Self.monthStart(of: monthStart, using: calendar)
+        let monthKey = Self.monthKey(for: normalized, using: calendar)
+        guard let state = pageStates[monthKey], state.loadState == .loaded else { return }
+
+        let requests = buildColorRequests(from: state)
+        guard !requests.isEmpty else { return }
+
+        monthColorTasks[monthKey]?.cancel()
+        colorTicketSeed += 1
+        let ticket = colorTicketSeed
+        latestColorTicketByMonthKey[monthKey] = ticket
+
+        monthColorTasks[monthKey] = Task { [weak self] in
+            guard let self else { return }
+            await self.resolveSegmentColors(
+                monthKey: monthKey,
+                requests: requests,
+                ticket: ticket,
+                using: colorRepository
+            )
+        }
+    }
+
+    private func resolveSegmentColors(
+        monthKey: String,
+        requests: [ReadCalendarColorRequest],
+        ticket: Int,
+        using colorRepository: any ReadCalendarColorRepositoryProtocol
+    ) async {
+        for request in requests {
+            if Task.isCancelled {
+                return
+            }
+
+            let color = await colorRepository.resolveEventColor(
+                bookId: request.bookId,
+                bookName: request.bookName,
+                coverURL: request.coverURL
+            )
+            if Task.isCancelled {
+                return
+            }
+            applyColor(color, for: request.bookId, monthKey: monthKey, ticket: ticket)
+        }
+
+        if latestColorTicketByMonthKey[monthKey] == ticket {
+            monthColorTasks[monthKey] = nil
+        }
+    }
+
+    func applyColor(
+        _ color: ReadCalendarSegmentColor,
+        for bookId: Int64,
+        monthKey: String,
+        ticket: Int
+    ) {
+        guard latestColorTicketByMonthKey[monthKey] == ticket else { return }
+        guard let state = pageStates[monthKey], state.loadState == .loaded else { return }
+
+        var hasChange = false
+        let updatedWeeks = state.weeks.map { week in
+            let updatedSegments = week.segments.map { segment in
+                guard segment.bookId == bookId else { return segment }
+                guard segment.color != color else { return segment }
+                hasChange = true
+                return segment.withColor(color)
+            }
+            return WeekRowData(
+                weekStart: week.weekStart,
+                days: week.days,
+                segments: updatedSegments
+            )
+        }
+
+        guard hasChange else { return }
+        pageStates[monthKey] = MonthPageState(
+            monthStart: state.monthStart,
+            weeks: updatedWeeks,
+            dayMap: state.dayMap,
+            loadState: state.loadState,
+            errorMessage: state.errorMessage
+        )
+    }
+
+    private func buildColorRequests(from state: MonthPageState) -> [ReadCalendarColorRequest] {
+        var requestMap: [Int64: ReadCalendarColorRequest] = [:]
+        for week in state.weeks {
+            for segment in week.segments where segment.color.state == .pending {
+                requestMap[segment.bookId] = ReadCalendarColorRequest(
+                    bookId: segment.bookId,
+                    bookName: segment.bookName,
+                    coverURL: segment.bookCoverURL
+                )
+            }
+        }
+        return requestMap.values.sorted { lhs, rhs in
+            lhs.bookId < rhs.bookId
+        }
+    }
+
+    func hasPendingSegmentColor(_ state: MonthPageState) -> Bool {
+        state.weeks.contains { week in
+            week.segments.contains { $0.color.state == .pending }
+        }
+    }
+
+    func cancelOutOfScopeColorTasks(around monthStart: Date) {
+        let validMonths: [Date] = [
+            monthStart,
+            monthAtOffset(-1, from: monthStart),
+            monthAtOffset(1, from: monthStart)
+        ].compactMap { $0 }
+        let keepKeys = Set(validMonths.map { Self.monthKey(for: $0, using: calendar) })
+
+        let keysToCancel = monthColorTasks.keys.filter { !keepKeys.contains($0) }
+        for key in keysToCancel {
+            monthColorTasks[key]?.cancel()
+            monthColorTasks.removeValue(forKey: key)
+            latestColorTicketByMonthKey.removeValue(forKey: key)
+        }
+    }
+
+    func cancelAllColorTasks() {
+        for task in monthColorTasks.values {
+            task.cancel()
+        }
+        monthColorTasks = [:]
+        latestColorTicketByMonthKey = [:]
     }
 
     func fetchMonthData(
@@ -477,5 +670,23 @@ private extension ReadCalendarViewModel {
 
     static func currentMonthStart(using calendar: Calendar) -> Date {
         monthStart(of: Date(), using: calendar)
+    }
+}
+
+private extension ReadCalendarEventSegment {
+    func withColor(_ color: ReadCalendarSegmentColor) -> ReadCalendarEventSegment {
+        ReadCalendarEventSegment(
+            bookId: bookId,
+            bookName: bookName,
+            bookCoverURL: bookCoverURL,
+            firstEventTime: firstEventTime,
+            weekStart: weekStart,
+            segmentStartDate: segmentStartDate,
+            segmentEndDate: segmentEndDate,
+            laneIndex: laneIndex,
+            continuesFromPrevWeek: continuesFromPrevWeek,
+            continuesToNextWeek: continuesToNextWeek,
+            color: color
+        )
     }
 }

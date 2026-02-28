@@ -1,9 +1,9 @@
 import SwiftUI
 
 /**
- * [INPUT]: 依赖 RepositoryContainer 注入统计仓储，依赖 ReadCalendarViewModel 提供月历状态与事件布局数据
+ * [INPUT]: 依赖 RepositoryContainer 注入统计与取色仓储，依赖 ReadCalendarViewModel 提供月历状态与事件布局数据
  * [OUTPUT]: 对外提供 ReadCalendarView（阅读日历页面壳层，负责挂载可复用 ReadCalendarPanel）
- * [POS]: Reading 模块核心页面入口，承接导航与数据加载，具体日历 UI 由 UIComponents 组件负责
+ * [POS]: Reading 模块核心页面入口，承接导航与数据加载，具体日历 UI 由 UIComponents 组件负责（含事件条颜色状态映射）
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
@@ -41,20 +41,25 @@ struct ReadCalendarView: View {
         .navigationTitle("阅读日历")
         .navigationBarTitleDisplayMode(.inline)
         .task {
-            await viewModel.loadIfNeeded(using: repositories.statisticsRepository)
+            await viewModel.loadIfNeeded(
+                using: repositories.statisticsRepository,
+                colorRepository: repositories.readCalendarColorRepository
+            )
         }
         .onChange(of: viewModel.pagerSelection) { _, monthStart in
             pagerSelectionTask?.cancel()
             pagerSelectionTask = Task {
                 await viewModel.handlePagerSelectionChange(
                     to: monthStart,
-                    using: repositories.statisticsRepository
+                    using: repositories.statisticsRepository,
+                    colorRepository: repositories.readCalendarColorRepository
                 )
             }
         }
         .onDisappear {
             pagerSelectionTask?.cancel()
             pagerSelectionTask = nil
+            viewModel.cancelAsyncTasks()
         }
     }
 }
@@ -123,7 +128,26 @@ private extension ReadCalendarView {
             segmentEndDate: segment.segmentEndDate,
             laneIndex: segment.laneIndex,
             continuesFromPrevWeek: segment.continuesFromPrevWeek,
-            continuesToNextWeek: segment.continuesToNextWeek
+            continuesToNextWeek: segment.continuesToNextWeek,
+            color: mapSegmentColor(segment.color)
+        )
+    }
+
+    func mapSegmentColor(_ color: ReadCalendarSegmentColor) -> ReadCalendarMonthGrid.EventColor {
+        let state: ReadCalendarMonthGrid.EventColorState
+        switch color.state {
+        case .pending:
+            state = .pending
+        case .resolved:
+            state = .resolved
+        case .failed:
+            state = .failed
+        }
+
+        return ReadCalendarMonthGrid.EventColor(
+            state: state,
+            backgroundRGBAHex: color.backgroundRGBAHex,
+            textRGBAHex: color.textRGBAHex
         )
     }
 
@@ -154,9 +178,15 @@ private extension ReadCalendarView {
     func retryCurrentContext() {
         Task {
             if viewModel.availableMonths.isEmpty {
-                await viewModel.reload(using: repositories.statisticsRepository)
+                await viewModel.reload(
+                    using: repositories.statisticsRepository,
+                    colorRepository: repositories.readCalendarColorRepository
+                )
             } else {
-                await viewModel.retryDisplayedMonth(using: repositories.statisticsRepository)
+                await viewModel.retryDisplayedMonth(
+                    using: repositories.statisticsRepository,
+                    colorRepository: repositories.readCalendarColorRepository
+                )
             }
         }
     }

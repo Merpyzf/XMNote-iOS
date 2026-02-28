@@ -5,7 +5,7 @@
 //  Created by 王珂 on 2026/2/10.
 //
 //  [INPUT]: 无外部依赖，仅依赖 SwiftUI 框架
-//  [OUTPUT]: Color 语义扩展（含阅读日历纸感主题）、Spacing / CornerRadius / CardStyle 常量、Color(hex:) / Color(light:dark:) 构造器
+//  [OUTPUT]: Color 语义扩展（含阅读日历纸感主题与事件条 pending 态）、Spacing / CornerRadius / CardStyle 常量、Color(hex:) / Color(light:dark:) / Color(rgbaHex:) 构造器
 //  [POS]: Utilities 模块的设计令牌中枢，全局 UI 一致性的单一真相源
 //  [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
 
@@ -179,6 +179,24 @@ extension Color {
         dark: Color(hex: 0xE6EDF7)
     )
 
+    /// 阅读日历事件条取色中的骨架底色
+    static let readCalendarEventPendingBase = Color(
+        light: Color(hex: 0xD6DEE8),
+        dark: Color(hex: 0x465566)
+    )
+
+    /// 阅读日历事件条取色中的骨架高光
+    static let readCalendarEventPendingHighlight = Color(
+        light: Color(hex: 0xF2F6FB),
+        dark: Color(hex: 0x8CA0B7)
+    )
+
+    /// 阅读日历事件条取色中的文本色
+    static let readCalendarEventPendingText = Color(
+        light: Color(hex: 0x5A6778),
+        dark: Color(hex: 0xD3DEEA)
+    )
+
     /// 阅读日历低饱和事件色板
     static let readCalendarEventPalette: [Color] = [
         Color(light: Color(hex: 0xB4C6D8), dark: Color(hex: 0x5A7187)), // 雾蓝
@@ -239,5 +257,13 @@ extension Color {
                 ? UIColor(dark)
                 : UIColor(light)
         })
+    }
+
+    init(rgbaHex: UInt32) {
+        let red = Double((rgbaHex >> 24) & 0xFF) / 255.0
+        let green = Double((rgbaHex >> 16) & 0xFF) / 255.0
+        let blue = Double((rgbaHex >> 8) & 0xFF) / 255.0
+        let alpha = Double(rgbaHex & 0xFF) / 255.0
+        self.init(.sRGB, red: red, green: green, blue: blue, opacity: alpha)
     }
 }

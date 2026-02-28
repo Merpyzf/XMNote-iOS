@@ -2,7 +2,7 @@ import Foundation
 
 /**
  * [INPUT]: 依赖 Models 与 Services 层的数据类型定义
- * [OUTPUT]: 对外提供 Book/Note/BackupServer/Backup/Statistics 五类 Repository 协议
+ * [OUTPUT]: 对外提供 Book/Note/BackupServer/Backup/Statistics/ReadCalendarColor 六类 Repository 协议
  * [POS]: Domain 层仓储契约，定义 Presentation 获取本地/网络数据的唯一入口
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -32,6 +32,18 @@ protocol BackupRepositoryProtocol {
     func backup(progress: (@Sendable (BackupProgress) -> Void)?) async throws
     func fetchBackupHistory() async throws -> [BackupFileInfo]
     func restore(_ backup: BackupFileInfo, progress: (@Sendable (RestoreProgress) -> Void)?) async throws
+}
+
+/// 阅读日历事件条封面取色仓储
+protocol ReadCalendarColorRepositoryProtocol {
+    /// 返回最终可渲染颜色：
+    /// - resolved: 封面主色提取成功
+    /// - failed: 提取失败，已回退哈希色
+    func resolveEventColor(
+        bookId: Int64,
+        bookName: String,
+        coverURL: String
+    ) async -> ReadCalendarSegmentColor
 }
 
 /// 统计数据仓储（热力图、阅读统计）

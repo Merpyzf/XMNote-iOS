@@ -5,6 +5,7 @@
 - 顶部月份切换胶囊（左右按钮 + 标题）。
 - weekday 标题与月分页容器。
 - 月网格渲染（通过 `ReadCalendarMonthGrid`）。
+- 事件条颜色三态透传（pending 骨架、resolved 主色、failed 回退色）。
 - 加载/空态/内容态与内联错误重试。
 
 源码路径：`xmnote/UIComponents/Foundation/ReadCalendarPanel.swift`

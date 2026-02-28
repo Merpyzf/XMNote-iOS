@@ -156,7 +156,8 @@ private extension ReadCalendarEventLayoutEngine {
                     segmentEndDate: segmentEnd,
                     laneIndex: run.laneIndex,
                     continuesFromPrevWeek: segmentStart > run.startDate,
-                    continuesToNextWeek: segmentEnd < run.endDate
+                    continuesToNextWeek: segmentEnd < run.endDate,
+                    color: .pending
                 ))
                 guard let next = calendar.date(byAdding: .day, value: 1, to: segmentEnd) else { break }
                 segmentStart = next
@@ -208,7 +209,8 @@ private extension ReadCalendarEventLayoutEngine {
                     segmentEndDate: segment.segmentEndDate,
                     laneIndex: lane,
                     continuesFromPrevWeek: false,
-                    continuesToNextWeek: false
+                    continuesToNextWeek: false,
+                    color: segment.color
                 ))
             }
 

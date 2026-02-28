@@ -5,6 +5,7 @@
 - 按周渲染日期格与事件条分段。
 - 渲染今天、选中、未来日期状态。
 - 处理跨周连续事件条端点形态与文本。
+- 支持事件条颜色三态（取色中骨架/取色成功/取色失败回退）。
 
 源码路径：`xmnote/UIComponents/Foundation/ReadCalendarMonthGrid.swift`
 
@@ -30,6 +31,11 @@ ReadCalendarMonthGrid(
 | `dayPayloadProvider` | `(Date) -> DayPayload` | 无 | 返回某天的 UI 状态（读完/选中/未来/溢出等）。 |
 | `onSelectDay` | `(Date) -> Void` | 无 | 点击日期回调（未来日期可在 payload 中禁用）。 |
 
+`EventSegment.color` 字段说明：
+- `state`: `pending / resolved / failed`
+- `backgroundRGBAHex`: 事件条背景 RGBA（`0xRRGGBBAA`）
+- `textRGBAHex`: 事件条文本 RGBA（`0xRRGGBBAA`）
+
 ## 示例
 
 ### 示例 1：在 ReadCalendarPanel 中使用
@@ -52,7 +58,12 @@ ReadCalendarMonthGrid.EventSegment(
     segmentEndDate: segment.segmentEndDate,
     laneIndex: segment.laneIndex,
     continuesFromPrevWeek: segment.continuesFromPrevWeek,
-    continuesToNextWeek: segment.continuesToNextWeek
+    continuesToNextWeek: segment.continuesToNextWeek,
+    color: ReadCalendarMonthGrid.EventColor(
+        state: .resolved,
+        backgroundRGBAHex: segment.color.backgroundRGBAHex,
+        textRGBAHex: segment.color.textRGBAHex
+    )
 )
 ```
 
@@ -69,5 +80,8 @@ ReadCalendarMonthGrid.EventSegment(
 
 ### 4) `ReadCalendarMonthGrid` 和 `ReadCalendarPanel` 的边界？
 `ReadCalendarMonthGrid` 只管“月内网格绘制”；`ReadCalendarPanel` 负责切月、状态机和整体容器布局。
+
+### 5) 取色中的视觉语义如何表达？
+`EventColor.state == .pending` 时，组件会渲染骨架底色 + shimmer；只有失败时才使用回退色，不会在取色前就展示哈希色。
 
 [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
