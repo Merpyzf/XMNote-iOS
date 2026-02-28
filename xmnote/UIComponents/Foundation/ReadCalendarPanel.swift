@@ -1,6 +1,6 @@
 /**
- * [INPUT]: 依赖 CalendarMonthStepperBar/ReadCalendarMonthGrid/CardContainer 复用组件与 DesignTokens 视觉令牌
- * [OUTPUT]: 对外提供 ReadCalendarPanel（完整阅读日历控件：月份切换 + weekday + 分页月网格 + 状态反馈）
+ * [INPUT]: 依赖 CalendarMonthStepperBar/ReadCalendarMonthGrid/CardContainer 复用组件与 DesignTokens 视觉令牌（不含卡片装饰令牌）
+ * [OUTPUT]: 对外提供 ReadCalendarPanel（完整阅读日历控件：模式切换 + 月份点击切换 + weekday + 分页月网格 + 状态反馈）
  * [POS]: UIComponents/Foundation 的阅读日历完整控件，供业务页面以纯展示驱动方式复用
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -8,6 +8,34 @@
 import SwiftUI
 
 struct ReadCalendarPanel: View {
+    enum DisplayMode: String, CaseIterable, Hashable {
+        case heatmap
+        case activityEvent
+        case bookCover
+
+        var title: String {
+            switch self {
+            case .heatmap:
+                return "热力图"
+            case .activityEvent:
+                return "活动事件"
+            case .bookCover:
+                return "书籍封面"
+            }
+        }
+
+        var iconName: String {
+            switch self {
+            case .heatmap:
+                return "square.grid.3x3.fill"
+            case .activityEvent:
+                return "calendar.badge.clock"
+            case .bookCover:
+                return "books.vertical.fill"
+            }
+        }
+    }
+
     enum RootContentState: Hashable {
         case loading
         case empty
@@ -22,6 +50,7 @@ struct ReadCalendarPanel: View {
     }
 
     struct DayPayload: Hashable {
+        let bookCount: Int
         let isReadDoneDay: Bool
         let overflowCount: Int
         let isToday: Bool
@@ -30,6 +59,7 @@ struct ReadCalendarPanel: View {
 
         func asGridPayload() -> ReadCalendarMonthGrid.DayPayload {
             ReadCalendarMonthGrid.DayPayload(
+                bookCount: bookCount,
                 isReadDoneDay: isReadDoneDay,
                 overflowCount: overflowCount,
                 isToday: isToday,
@@ -61,6 +91,7 @@ struct ReadCalendarPanel: View {
 
             let isFuture = normalized > Calendar.current.startOfDay(for: Date())
             return ReadCalendarMonthGrid.DayPayload(
+                bookCount: 0,
                 isReadDoneDay: false,
                 overflowCount: 0,
                 isToday: false,
@@ -74,37 +105,37 @@ struct ReadCalendarPanel: View {
         let monthTitle: String
         let availableMonths: [Date]
         let pagerSelection: Date
+        let displayMode: DisplayMode
         let laneLimit: Int
         let rootContentState: RootContentState
         let errorMessage: String?
         let monthPages: [MonthPage]
-        let canGoPrevMonth: Bool
-        let canGoNextMonth: Bool
     }
 
     private enum Layout {
-        static let weekdayHeaderHeight: CGFloat = 34
-        static let switcherTopPadding: CGFloat = 8
-        static let switcherBottomPadding: CGFloat = 12
+        static let topControlTopPadding: CGFloat = 10
+        static let topControlBottomPadding: CGFloat = 14
+        static let topControlSpacing: CGFloat = Spacing.cozy
+        static let modeSwitcherWidth: CGFloat = 116
+        static let weekdayHeaderHeight: CGFloat = 32
         static let pageMinHeight: CGFloat = 252
-        static let calendarInnerHorizontalPadding: CGFloat = 12
-        static let calendarInnerTopPadding: CGFloat = 10
-        static let calendarInnerBottomPadding: CGFloat = 12
-        static let headerToGridSpacing: CGFloat = 7
-        static let gridTopInset: CGFloat = 3
+        static let calendarInnerTopPadding: CGFloat = Spacing.cozy
+        static let calendarInnerBottomPadding: CGFloat = 10
+        static let headerToGridSpacing: CGFloat = Spacing.half
+        static let gridTopInset: CGFloat = 2
     }
 
     let props: Props
-    let onStepMonth: (Int) -> Void
+    let onDisplayModeChanged: (DisplayMode) -> Void
     let onPagerSelectionChanged: (Date) -> Void
     let onSelectDate: (Date) -> Void
     let onRetry: () -> Void
 
     var body: some View {
         VStack(spacing: 0) {
-            monthSwitcher
-                .padding(.top, Layout.switcherTopPadding)
-                .padding(.bottom, Layout.switcherBottomPadding)
+            topControlRow
+                .padding(.top, Layout.topControlTopPadding)
+                .padding(.bottom, Layout.topControlBottomPadding)
 
             integratedCalendarContainer
 
@@ -114,7 +145,6 @@ struct ReadCalendarPanel: View {
                     .transition(.move(edge: .top).combined(with: .opacity))
             }
         }
-        .animation(.smooth(duration: 0.3), value: props.rootContentState)
         .animation(.spring(response: 0.38, dampingFraction: 0.86), value: props.errorMessage)
     }
 }
@@ -122,6 +152,18 @@ struct ReadCalendarPanel: View {
 // MARK: - Subviews
 
 private extension ReadCalendarPanel {
+    var displayModeBinding: Binding<DisplayMode> {
+        Binding(
+            get: { props.displayMode },
+            set: { newValue in
+                guard newValue != props.displayMode else { return }
+                withAnimation(.snappy(duration: 0.26)) {
+                    onDisplayModeChanged(newValue)
+                }
+            }
+        )
+    }
+
     var pagerSelectionBinding: Binding<Date> {
         Binding(
             get: { props.pagerSelection },
@@ -141,17 +183,8 @@ private extension ReadCalendarPanel {
             contentContainer
                 .zIndex(0)
         }
-        .padding(.horizontal, Layout.calendarInnerHorizontalPadding)
         .padding(.top, Layout.calendarInnerTopPadding)
         .padding(.bottom, Layout.calendarInnerBottomPadding)
-        .background(Color.readCalendarCardBackground)
-        .clipShape(RoundedRectangle(cornerRadius: CornerRadius.containerMedium, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: CornerRadius.containerMedium, style: .continuous)
-                .stroke(Color.readCalendarCardStroke.opacity(0.72), lineWidth: CardStyle.borderWidth)
-        }
-        .shadow(color: Color.black.opacity(0.06), radius: 16, x: 0, y: 7)
-        .shadow(color: Color.black.opacity(0.025), radius: 3, x: 0, y: 1)
     }
 
     var contentContainer: some View {
@@ -171,25 +204,46 @@ private extension ReadCalendarPanel {
         }
         .padding(.top, Layout.gridTopInset)
         .frame(maxWidth: .infinity, alignment: .top)
-        .clipped()
+    }
+
+    var modeSwitcher: some View {
+        Picker("阅读日历显示模式", selection: displayModeBinding) {
+            ForEach(DisplayMode.allCases, id: \.self) { mode in
+                Label(mode.title, systemImage: mode.iconName)
+                    .labelStyle(.iconOnly)
+                    .tag(mode)
+                    .accessibilityLabel(mode.title)
+            }
+        }
+        .pickerStyle(.segmented)
+        .labelsHidden()
+        .accessibilityLabel("阅读日历显示模式")
+        .accessibilityValue(props.displayMode.title)
     }
 
     var monthSwitcher: some View {
         CalendarMonthStepperBar(
             title: props.monthTitle,
-            canGoPrev: props.canGoPrevMonth,
-            canGoNext: props.canGoNextMonth,
-            onPrev: {
+            availableMonths: props.availableMonths,
+            selectedMonth: props.pagerSelection,
+            onSelectMonth: { monthStart in
                 withAnimation(.snappy(duration: 0.3)) {
-                    onStepMonth(-1)
-                }
-            },
-            onNext: {
-                withAnimation(.snappy(duration: 0.3)) {
-                    onStepMonth(1)
+                    onPagerSelectionChanged(monthStart)
                 }
             }
         )
+    }
+
+    var topControlRow: some View {
+        HStack(alignment: .center, spacing: Layout.topControlSpacing) {
+            monthSwitcher
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .layoutPriority(1)
+
+            modeSwitcher
+                .frame(width: Layout.modeSwitcherWidth)
+        }
+        .padding(.horizontal, Spacing.screenEdge)
     }
 
     var weekdayHeader: some View {
@@ -212,25 +266,28 @@ private extension ReadCalendarPanel {
         }
         .tabViewStyle(.page(indexDisplayMode: .never))
         .contentMargins(.top, 0, for: .scrollContent)
-        .frame(maxWidth: .infinity, minHeight: Layout.pageMinHeight, alignment: .top)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .animation(.snappy(duration: 0.32), value: props.pagerSelection)
     }
 
     func monthPage(for monthStart: Date) -> some View {
         let pageState = monthPageState(for: monthStart)
 
-        return ZStack(alignment: .top) {
-            if pageState.isLoading && pageState.isDayMapEmpty {
-                ProgressView()
-                    .frame(maxWidth: .infinity, minHeight: Layout.pageMinHeight, alignment: .center)
-                    .transition(.opacity)
-            } else {
-                calendarWeeks(for: pageState)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-                    .transition(.opacity.combined(with: .scale(scale: 0.99)))
+        return ScrollView(.vertical, showsIndicators: false) {
+            ZStack(alignment: .top) {
+                if pageState.isLoading && pageState.isDayMapEmpty {
+                    ProgressView()
+                        .frame(maxWidth: .infinity, minHeight: Layout.pageMinHeight, alignment: .center)
+                        .transition(.opacity)
+                } else {
+                    calendarWeeks(for: pageState)
+                        .frame(maxWidth: .infinity, alignment: .top)
+                        .transition(.opacity.combined(with: .scale(scale: 0.99)))
+                }
             }
+            .frame(maxWidth: .infinity, alignment: .top)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .scrollBounceBehavior(.basedOnSize)
         .animation(.smooth(duration: 0.24), value: pageState.loadState)
     }
 
@@ -238,6 +295,7 @@ private extension ReadCalendarPanel {
         ReadCalendarMonthGrid(
             weeks: page.weeks,
             laneLimit: props.laneLimit,
+            displayMode: mapGridDisplayMode(props.displayMode),
             dayPayloadProvider: { date in
                 page.payload(for: date)
             },
@@ -250,31 +308,28 @@ private extension ReadCalendarPanel {
     }
 
     var emptyState: some View {
-        CardContainer {
-            VStack(spacing: Spacing.base) {
-                Image(systemName: "calendar.badge.clock")
-                    .font(.system(size: 26, weight: .semibold))
-                    .foregroundStyle(Color.brand.opacity(0.8))
+        VStack(spacing: Spacing.base) {
+            Image(systemName: "calendar.badge.clock")
+                .font(.system(size: 26, weight: .semibold))
+                .foregroundStyle(Color.brand.opacity(0.8))
 
-                if let errorMessage = props.errorMessage {
-                    Text(errorMessage)
-                        .font(.subheadline)
-                        .foregroundStyle(Color.feedbackWarning)
-                        .multilineTextAlignment(.center)
+            if let errorMessage = props.errorMessage {
+                Text(errorMessage)
+                    .font(.subheadline)
+                    .foregroundStyle(Color.feedbackWarning)
+                    .multilineTextAlignment(.center)
 
-                    Button("重试", action: onRetry)
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(Color.brand)
-                } else {
-                    Text("暂无可展示的阅读月份")
-                        .font(.subheadline)
-                        .foregroundStyle(Color.textSecondary)
-                        .multilineTextAlignment(.center)
-                }
+                Button("重试", action: onRetry)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(Color.brand)
+            } else {
+                Text("暂无可展示的阅读月份")
+                    .font(.subheadline)
+                    .foregroundStyle(Color.textSecondary)
+                    .multilineTextAlignment(.center)
             }
-            .frame(maxWidth: .infinity, minHeight: 220)
-            .padding(.horizontal, Spacing.double)
         }
+        .frame(maxWidth: .infinity, minHeight: Layout.pageMinHeight)
     }
 
     func inlineError(_ message: String) -> some View {
@@ -291,7 +346,7 @@ private extension ReadCalendarPanel {
                 .foregroundStyle(Color.brand)
         }
         .padding(.horizontal, Spacing.base)
-        .padding(.vertical, 8)
+        .padding(.vertical, Spacing.cozy)
         .background(
             RoundedRectangle(cornerRadius: CornerRadius.blockLarge, style: .continuous)
                 .fill(Color.readCalendarSelectionFill.opacity(0.62))
@@ -317,6 +372,17 @@ private extension ReadCalendarPanel {
             errorMessage: nil
         )
     }
+
+    func mapGridDisplayMode(_ mode: DisplayMode) -> ReadCalendarMonthGrid.DisplayMode {
+        switch mode {
+        case .heatmap:
+            return .heatmap
+        case .activityEvent:
+            return .activityEvent
+        case .bookCover:
+            return .bookCover
+        }
+    }
 }
 
 #Preview {
@@ -325,14 +391,13 @@ private extension ReadCalendarPanel {
             monthTitle: "2026年2月",
             availableMonths: [Calendar.current.startOfDay(for: Date())],
             pagerSelection: Calendar.current.startOfDay(for: Date()),
+            displayMode: .activityEvent,
             laneLimit: 4,
             rootContentState: .loading,
             errorMessage: nil,
-            monthPages: [],
-            canGoPrevMonth: true,
-            canGoNextMonth: false
+            monthPages: []
         ),
-        onStepMonth: { _ in },
+        onDisplayModeChanged: { _ in },
         onPagerSelectionChanged: { _ in },
         onSelectDate: { _ in },
         onRetry: {}

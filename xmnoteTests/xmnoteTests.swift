@@ -183,6 +183,57 @@ struct xmnoteTests {
         #expect(segments.count == 2)
         #expect(Set(segments.map(\.laneIndex)).count == 1)
     }
+
+    @MainActor
+    @Test func readCalendarReloadSelectsInitialDateFromEntry() async {
+        let calendar = Self.mondayCalendar
+        let initialDate = Self.date(2026, 2, 12, calendar: calendar)
+        let earliestDate = Self.date(2025, 11, 8, calendar: calendar)
+        let viewModel = ReadCalendarViewModel(initialDate: initialDate)
+
+        await viewModel.reload(
+            using: StubStatisticsRepository(earliestDate: earliestDate),
+            colorRepository: StubReadCalendarColorRepository()
+        )
+
+        #expect(calendar.isDate(viewModel.selectedDate, inSameDayAs: initialDate))
+        #expect(calendar.isDate(viewModel.pagerSelection, equalTo: initialDate, toGranularity: .month))
+    }
+
+    @MainActor
+    @Test func readCalendarReloadClampsFutureInitialDateToToday() async {
+        let calendar = Self.mondayCalendar
+        let futureDate = calendar.date(byAdding: .day, value: 21, to: Date())!
+        let earliestDate = Self.date(2024, 1, 2, calendar: calendar)
+        let viewModel = ReadCalendarViewModel(initialDate: futureDate)
+
+        await viewModel.reload(
+            using: StubStatisticsRepository(earliestDate: earliestDate),
+            colorRepository: StubReadCalendarColorRepository()
+        )
+
+        let today = calendar.startOfDay(for: Date())
+        #expect(calendar.isDate(viewModel.selectedDate, inSameDayAs: today))
+        #expect(calendar.isDate(viewModel.pagerSelection, equalTo: today, toGranularity: .month))
+    }
+
+    @MainActor
+    @Test func readCalendarJumpToTodayUpdatesSelectionAndMonth() async {
+        let calendar = Self.mondayCalendar
+        let initialDate = Self.date(2025, 10, 3, calendar: calendar)
+        let earliestDate = Self.date(2024, 2, 1, calendar: calendar)
+        let viewModel = ReadCalendarViewModel(initialDate: initialDate)
+
+        await viewModel.reload(
+            using: StubStatisticsRepository(earliestDate: earliestDate),
+            colorRepository: StubReadCalendarColorRepository()
+        )
+        viewModel.jumpToToday()
+
+        let today = calendar.startOfDay(for: Date())
+        #expect(calendar.isDate(viewModel.selectedDate, inSameDayAs: today))
+        #expect(calendar.isDate(viewModel.pagerSelection, equalTo: today, toGranularity: .month))
+    }
 }
 
 private extension xmnoteTests {
@@ -195,5 +246,33 @@ private extension xmnoteTests {
 
     static func date(_ year: Int, _ month: Int, _ day: Int, calendar: Calendar) -> Date {
         calendar.date(from: DateComponents(year: year, month: month, day: day))!
+    }
+}
+
+private struct StubStatisticsRepository: StatisticsRepositoryProtocol {
+    let earliestDate: Date?
+
+    func fetchHeatmapData(
+        year: Int,
+        dataType: HeatmapStatisticsDataType
+    ) async throws -> (days: [Date: HeatmapDay], earliestDate: Date?, latestDate: Date?) {
+        ([:], nil, nil)
+    }
+
+    func fetchReadCalendarEarliestDate() async throws -> Date? {
+        earliestDate
+    }
+
+    func fetchReadCalendarMonthData(monthStart: Date) async throws -> ReadCalendarMonthData {
+        let calendar = Calendar.current
+        let components = calendar.dateComponents([.year, .month], from: monthStart)
+        let normalized = calendar.date(from: DateComponents(year: components.year, month: components.month, day: 1)) ?? monthStart
+        return .empty(for: calendar.startOfDay(for: normalized))
+    }
+}
+
+private struct StubReadCalendarColorRepository: ReadCalendarColorRepositoryProtocol {
+    func resolveEventColor(bookId: Int64, bookName: String, coverURL: String) async -> ReadCalendarSegmentColor {
+        .pending
     }
 }

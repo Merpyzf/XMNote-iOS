@@ -128,3 +128,15 @@ struct ReadCalendarWeekLayout: Identifiable, Hashable {
 
     var id: Date { weekStart }
 }
+
+// MARK: - 事件类型过滤
+
+/// 阅读日历事件源类型（与 SQL 子查询一一对应）
+enum ReadCalendarEventType: CaseIterable, Hashable {
+    case readTiming   // read_time_record
+    case note         // note（书摘）
+    case relevant     // category_content（相关笔记）
+    case review       // review（书评）
+    case readDone     // book_read_status_record
+    case checkIn      // check_in_record
+}

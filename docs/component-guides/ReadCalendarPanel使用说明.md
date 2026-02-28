@@ -2,10 +2,11 @@
 
 ## 组件定位
 `ReadCalendarPanel` 是阅读日历的完整公共控件，包含：
-- 顶部月份切换胶囊（左右按钮 + 标题）。
+- 顶部单行控制区：左侧月份标题菜单（点击快速跳月，移除日历图标）。
+- 顶部单行控制区：右侧图标分段切换（热力图/活动事件/书籍封面）。
+- 顶部控件去容器化，减少“控件层”对内容层的压制。
 - weekday 标题与月分页容器。
 - 月网格渲染（通过 `ReadCalendarMonthGrid`）。
-- 事件条颜色三态透传（pending 骨架、resolved 主色、failed 回退色）。
 - 加载/空态/内容态与内联错误重试。
 
 源码路径：`xmnote/UIComponents/Foundation/ReadCalendarPanel.swift`
@@ -14,8 +15,8 @@
 ```swift
 ReadCalendarPanel(
     props: panelProps,
-    onStepMonth: { offset in
-        viewModel.stepPager(offset: offset)
+    onDisplayModeChanged: { mode in
+        displayMode = mode
     },
     onPagerSelectionChanged: { month in
         viewModel.pagerSelection = month
@@ -32,48 +33,51 @@ ReadCalendarPanel(
 ## 参数说明
 | 参数 | 类型 | 默认值 | 说明 |
 | --- | --- | --- | --- |
-| `props` | `ReadCalendarPanel.Props` | 无 | 组件完整展示状态（标题、分页、页面数据、错误态）。 |
-| `onStepMonth` | `(Int) -> Void` | 无 | 顶部箭头点击回调，`-1` 上月，`1` 下月。 |
-| `onPagerSelectionChanged` | `(Date) -> Void` | 无 | 分页滑动切月后的选择回调。 |
-| `onSelectDate` | `(Date) -> Void` | 无 | 点击某天日期的回调。 |
+| `props` | `ReadCalendarPanel.Props` | 无 | 组件完整展示状态（标题、模式、分页、页面数据、错误态）。 |
+| `onDisplayModeChanged` | `(DisplayMode) -> Void` | 无 | 顶部模式切换回调。 |
+| `onPagerSelectionChanged` | `(Date) -> Void` | 无 | 月份切换回调（菜单/分页统一）。 |
+| `onSelectDate` | `(Date) -> Void` | 无 | 点击某天日期回调。 |
 | `onRetry` | `() -> Void` | 无 | 空态/错误态重试回调。 |
 
 ### `Props` 字段说明
 | 字段 | 类型 | 说明 |
 | --- | --- | --- |
 | `monthTitle` | `String` | 顶部月份标题（建议 `yyyy年M月`）。 |
-| `availableMonths` | `[Date]` | 可滑动月份序列（按时间升序）。 |
+| `availableMonths` | `[Date]` | 可展示月份序列（按时间升序）。 |
 | `pagerSelection` | `Date` | 当前分页选中月份起始日。 |
+| `displayMode` | `DisplayMode` | 当前展示模式（热力图/活动事件/书籍封面）。 |
 | `laneLimit` | `Int` | 每日事件条显示上限。 |
 | `rootContentState` | `RootContentState` | 根内容态（loading/empty/content）。 |
-| `errorMessage` | `String?` | 顶层错误文案（内容态展示 inline error，空态展示重试信息）。 |
+| `errorMessage` | `String?` | 顶层错误文案。 |
 | `monthPages` | `[MonthPage]` | 每个月的周网格与日状态数据。 |
-| `canGoPrevMonth` | `Bool` | 是否允许切到上月。 |
-| `canGoNextMonth` | `Bool` | 是否允许切到下月。 |
 
 ## 示例
 
-### 示例 1：`ReadCalendarView` 壳层接入
+### 示例 1：页面壳层接入
 ```swift
 ReadCalendarPanel(
     props: panelProps,
-    onStepMonth: { viewModel.stepPager(offset: $0) },
+    onDisplayModeChanged: { displayMode = $0 },
     onPagerSelectionChanged: { viewModel.pagerSelection = $0 },
     onSelectDate: { viewModel.selectDate($0) },
     onRetry: { retryCurrentContext() }
 )
 ```
 
-### 示例 2：页面级重试策略
+### 示例 2：模式变化带动画
 ```swift
-func retryCurrentContext() {
-    Task {
-        if viewModel.availableMonths.isEmpty {
-            await viewModel.reload(using: repositories.statisticsRepository)
-        } else {
-            await viewModel.retryDisplayedMonth(using: repositories.statisticsRepository)
-        }
+onDisplayModeChanged: { mode in
+    withAnimation(.snappy(duration: 0.26)) {
+        displayMode = mode
     }
+}
+```
+
+### 示例 3：单行顶部布局（组件内部）
+```swift
+HStack {
+    monthSwitcher   // 左侧月份菜单
+    modeSwitcher    // 右侧图标 segmented
 }
 ```
 
@@ -82,13 +86,16 @@ func retryCurrentContext() {
 ### 1) 这个组件是否允许直接访问 Repository？
 不允许。组件是纯展示驱动，数据加载由外层页面或 ViewModel 负责。
 
-### 2) 切月后是否会自动选中同日号？
-不会。当前策略是“仅用户点击才更新选中日”，切月只影响当前展示月份。
+### 2) 切换模式会影响数据加载吗？
+不会。模式切换仅改变展示形态，不改变月数据请求策略。
 
-### 3) 如何保证和 Android 交互一致？
-将 `availableMonths + pagerSelection` 作为单一切月状态源，按钮与左右滑动都只改这个状态。
+### 3) 为什么模式切换改为图标而不是文字？
+顶部空间有限，图标分段能在单行里保留 3 模式切换能力，同时不压缩左侧月份可读性。
 
-### 4) 为什么还保留 `ReadCalendarView`？
-`ReadCalendarView` 是兼容壳层，用于导航与依赖注入；真实 UI 能力已经沉淀到 `ReadCalendarPanel`。
+### 4) 为什么不再暴露 `onStepMonth`？
+切月行为已统一为“菜单选择 + 分页滑动”写回 `pagerSelection`，避免重复入口。
+
+### 5) 如何保证和 Android 业务意图一致？
+模式切换只影响可视表达，不改变日级聚合、跨周分段和 lane 分配逻辑。
 
 [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md

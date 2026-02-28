@@ -30,15 +30,20 @@ struct StatisticsRepository: StatisticsRepositoryProtocol {
         return (result.days, result.earliestDate)
     }
 
-    func fetchReadCalendarEarliestDate() async throws -> Date? {
+    func fetchReadCalendarEarliestDate(
+        excludedEventTypes: Set<ReadCalendarEventType>
+    ) async throws -> Date? {
         try await databaseManager.database.dbPool.read { db in
-            findReadCalendarEarliestDate(db)
+            findReadCalendarEarliestDate(db, excludedEventTypes: excludedEventTypes)
         }
     }
 
-    func fetchReadCalendarMonthData(monthStart: Date) async throws -> ReadCalendarMonthData {
+    func fetchReadCalendarMonthData(
+        monthStart: Date,
+        excludedEventTypes: Set<ReadCalendarEventType>
+    ) async throws -> ReadCalendarMonthData {
         try await databaseManager.database.dbPool.read { db in
-            buildReadCalendarMonthData(db, monthStart: monthStart)
+            buildReadCalendarMonthData(db, monthStart: monthStart, excludedEventTypes: excludedEventTypes)
         }
     }
 }
@@ -348,7 +353,11 @@ private extension StatisticsRepository {
 
     // MARK: - 阅读日历
 
-    func buildReadCalendarMonthData(_ db: Database, monthStart: Date) -> ReadCalendarMonthData {
+    func buildReadCalendarMonthData(
+        _ db: Database,
+        monthStart: Date,
+        excludedEventTypes: Set<ReadCalendarEventType>
+    ) -> ReadCalendarMonthData {
         let normalizedMonthStart = normalizeToMonthStart(monthStart)
         guard let nextMonthStart = calendar.date(byAdding: .month, value: 1, to: normalizedMonthStart),
               let monthEnd = calendar.date(byAdding: .day, value: -1, to: nextMonthStart) else {
@@ -356,7 +365,7 @@ private extension StatisticsRepository {
         }
 
         let queryRange = millisRangeForQuery(HeatmapDateRange(start: normalizedMonthStart, end: monthEnd))
-        let dayBookRows = fetchReadCalendarDayBookRows(db, millisRange: queryRange)
+        let dayBookRows = fetchReadCalendarDayBookRows(db, millisRange: queryRange, excludedEventTypes: excludedEventTypes)
         let readDoneMap = fetchReadDoneCountByDay(db, millisRange: queryRange)
 
         var dayBookMap: [Date: [ReadCalendarDayBook]] = [:]
@@ -398,78 +407,18 @@ private extension StatisticsRepository {
         return calendar.startOfDay(for: monthStart)
     }
 
-    func fetchReadCalendarDayBookRows(_ db: Database, millisRange: ClosedRange<Int64>) -> [ReadCalendarDayBookRow] {
+    func fetchReadCalendarDayBookRows(
+        _ db: Database,
+        millisRange: ClosedRange<Int64>,
+        excludedEventTypes: Set<ReadCalendarEventType>
+    ) -> [ReadCalendarDayBookRow] {
+        let fragments = buildEventFragments(excludedEventTypes: excludedEventTypes)
+        guard !fragments.isEmpty else { return [] }
+
+        let unionAll = fragments.map(\.sql).joined(separator: "\n\n                UNION ALL\n\n")
         let sql = """
             WITH raw_events AS (
-                SELECT DATE(
-                    CASE WHEN fuzzy_read_date != 0 THEN fuzzy_read_date / 1000 ELSE start_time / 1000 END,
-                    'unixepoch', 'localtime'
-                ) AS day,
-                book_id AS book_id,
-                MIN(CASE WHEN fuzzy_read_date != 0 THEN fuzzy_read_date ELSE start_time END) AS first_event_time
-                FROM read_time_record
-                WHERE is_deleted = 0
-                  AND book_id != 0
-                  AND (CASE WHEN fuzzy_read_date != 0 THEN fuzzy_read_date ELSE start_time END) BETWEEN ? AND ?
-                GROUP BY day, book_id
-
-                UNION ALL
-
-                SELECT DATE(created_date / 1000, 'unixepoch', 'localtime') AS day,
-                       book_id AS book_id,
-                       MIN(created_date) AS first_event_time
-                FROM note
-                WHERE is_deleted = 0
-                  AND book_id != 0
-                  AND created_date BETWEEN ? AND ?
-                GROUP BY day, book_id
-
-                UNION ALL
-
-                SELECT DATE(created_date / 1000, 'unixepoch', 'localtime') AS day,
-                       book_id AS book_id,
-                       MIN(created_date) AS first_event_time
-                FROM category_content
-                WHERE is_deleted = 0
-                  AND book_id != 0
-                  AND created_date BETWEEN ? AND ?
-                GROUP BY day, book_id
-
-                UNION ALL
-
-                SELECT DATE(created_date / 1000, 'unixepoch', 'localtime') AS day,
-                       book_id AS book_id,
-                       MIN(created_date) AS first_event_time
-                FROM review
-                WHERE is_deleted = 0
-                  AND book_id != 0
-                  AND created_date BETWEEN ? AND ?
-                GROUP BY day, book_id
-
-                UNION ALL
-
-                SELECT DATE(checkin_date / 1000, 'unixepoch', 'localtime') AS day,
-                       book_id AS book_id,
-                       MIN(checkin_date) AS first_event_time
-                FROM check_in_record
-                WHERE is_deleted = 0
-                  AND checkin_date != 0
-                  AND book_id != 0
-                  AND checkin_date BETWEEN ? AND ?
-                GROUP BY day, book_id
-
-                UNION ALL
-
-                SELECT DATE(changed_date / 1000, 'unixepoch', 'localtime') AS day,
-                       book_id AS book_id,
-                       MIN(changed_date) AS first_event_time
-                FROM book_read_status_record
-                WHERE is_deleted = 0
-                  AND changed_date != 0
-                  AND read_status_id = 3
-                  AND book_id != 0
-                  AND changed_date BETWEEN ? AND ?
-                GROUP BY day, book_id
+                \(unionAll)
             ),
             merged AS (
                 SELECT day, book_id, MIN(first_event_time) AS first_event_time
@@ -486,14 +435,10 @@ private extension StatisticsRepository {
             ORDER BY merged.day ASC, merged.first_event_time ASC, merged.book_id ASC
             """
 
-        let args: [Int64] = [
-            millisRange.lowerBound, millisRange.upperBound,
-            millisRange.lowerBound, millisRange.upperBound,
-            millisRange.lowerBound, millisRange.upperBound,
-            millisRange.lowerBound, millisRange.upperBound,
-            millisRange.lowerBound, millisRange.upperBound,
-            millisRange.lowerBound, millisRange.upperBound
-        ]
+        var args: [Int64] = []
+        for fragment in fragments {
+            args.append(contentsOf: fragment.args(millisRange))
+        }
 
         guard let rows = try? Row.fetchAll(db, sql: sql, arguments: StatementArguments(args)) else {
             return []
@@ -538,25 +483,34 @@ private extension StatisticsRepository {
         )
     }
 
-    func findReadCalendarEarliestDate(_ db: Database) -> Date? {
-        let queries: [String] = [
-            """
-            SELECT MIN(CASE WHEN fuzzy_read_date != 0 THEN fuzzy_read_date ELSE start_time END)
-            FROM read_time_record
-            WHERE is_deleted = 0
-            """,
-            "SELECT MIN(created_date) FROM note WHERE is_deleted = 0",
-            "SELECT MIN(created_date) FROM category_content WHERE is_deleted = 0",
-            "SELECT MIN(created_date) FROM review WHERE is_deleted = 0",
-            "SELECT MIN(checkin_date) FROM check_in_record WHERE is_deleted = 0 AND checkin_date != 0",
-            """
-            SELECT MIN(changed_date)
-            FROM book_read_status_record
-            WHERE is_deleted = 0
-              AND changed_date != 0
-              AND read_status_id = 3
-            """
+    func findReadCalendarEarliestDate(
+        _ db: Database,
+        excludedEventTypes: Set<ReadCalendarEventType>
+    ) -> Date? {
+        let typeQueryMap: [(ReadCalendarEventType, String)] = [
+            (.readTiming, """
+                SELECT MIN(CASE WHEN fuzzy_read_date != 0 THEN fuzzy_read_date ELSE start_time END)
+                FROM read_time_record
+                WHERE is_deleted = 0
+                """),
+            (.note, "SELECT MIN(created_date) FROM note WHERE is_deleted = 0"),
+            (.relevant, "SELECT MIN(created_date) FROM category_content WHERE is_deleted = 0"),
+            (.review, "SELECT MIN(created_date) FROM review WHERE is_deleted = 0"),
+            (.checkIn, "SELECT MIN(checkin_date) FROM check_in_record WHERE is_deleted = 0 AND checkin_date != 0"),
+            (.readDone, """
+                SELECT MIN(changed_date)
+                FROM book_read_status_record
+                WHERE is_deleted = 0
+                  AND changed_date != 0
+                  AND read_status_id = 3
+                """)
         ]
+
+        let queries = typeQueryMap
+            .filter { !excludedEventTypes.contains($0.0) }
+            .map(\.1)
+
+        guard !queries.isEmpty else { return nil }
 
         let timestamps = queries.compactMap { sql -> Int64? in
             guard let value = try? Int64.fetchOne(db, sql: sql), value > 0 else { return nil }
@@ -564,5 +518,112 @@ private extension StatisticsRepository {
         }
         guard let earliest = timestamps.min() else { return nil }
         return calendar.startOfDay(for: Date(timeIntervalSince1970: Double(earliest) / 1000))
+    }
+
+    // MARK: - SQL 事件片段动态组装
+
+    struct EventSQLFragment {
+        let eventType: ReadCalendarEventType
+        let sql: String
+        let args: (ClosedRange<Int64>) -> [Int64]
+    }
+
+    static let allEventFragments: [EventSQLFragment] = [
+        EventSQLFragment(
+            eventType: .readTiming,
+            sql: """
+                SELECT DATE(
+                    CASE WHEN fuzzy_read_date != 0 THEN fuzzy_read_date / 1000 ELSE start_time / 1000 END,
+                    'unixepoch', 'localtime'
+                ) AS day,
+                book_id AS book_id,
+                MIN(CASE WHEN fuzzy_read_date != 0 THEN fuzzy_read_date ELSE start_time END) AS first_event_time
+                FROM read_time_record
+                WHERE is_deleted = 0
+                  AND book_id != 0
+                  AND (CASE WHEN fuzzy_read_date != 0 THEN fuzzy_read_date ELSE start_time END) BETWEEN ? AND ?
+                GROUP BY day, book_id
+                """,
+            args: { [$0.lowerBound, $0.upperBound] }
+        ),
+        EventSQLFragment(
+            eventType: .note,
+            sql: """
+                SELECT DATE(created_date / 1000, 'unixepoch', 'localtime') AS day,
+                       book_id AS book_id,
+                       MIN(created_date) AS first_event_time
+                FROM note
+                WHERE is_deleted = 0
+                  AND book_id != 0
+                  AND created_date BETWEEN ? AND ?
+                GROUP BY day, book_id
+                """,
+            args: { [$0.lowerBound, $0.upperBound] }
+        ),
+        EventSQLFragment(
+            eventType: .relevant,
+            sql: """
+                SELECT DATE(created_date / 1000, 'unixepoch', 'localtime') AS day,
+                       book_id AS book_id,
+                       MIN(created_date) AS first_event_time
+                FROM category_content
+                WHERE is_deleted = 0
+                  AND book_id != 0
+                  AND created_date BETWEEN ? AND ?
+                GROUP BY day, book_id
+                """,
+            args: { [$0.lowerBound, $0.upperBound] }
+        ),
+        EventSQLFragment(
+            eventType: .review,
+            sql: """
+                SELECT DATE(created_date / 1000, 'unixepoch', 'localtime') AS day,
+                       book_id AS book_id,
+                       MIN(created_date) AS first_event_time
+                FROM review
+                WHERE is_deleted = 0
+                  AND book_id != 0
+                  AND created_date BETWEEN ? AND ?
+                GROUP BY day, book_id
+                """,
+            args: { [$0.lowerBound, $0.upperBound] }
+        ),
+        EventSQLFragment(
+            eventType: .checkIn,
+            sql: """
+                SELECT DATE(checkin_date / 1000, 'unixepoch', 'localtime') AS day,
+                       book_id AS book_id,
+                       MIN(checkin_date) AS first_event_time
+                FROM check_in_record
+                WHERE is_deleted = 0
+                  AND checkin_date != 0
+                  AND book_id != 0
+                  AND checkin_date BETWEEN ? AND ?
+                GROUP BY day, book_id
+                """,
+            args: { [$0.lowerBound, $0.upperBound] }
+        ),
+        EventSQLFragment(
+            eventType: .readDone,
+            sql: """
+                SELECT DATE(changed_date / 1000, 'unixepoch', 'localtime') AS day,
+                       book_id AS book_id,
+                       MIN(changed_date) AS first_event_time
+                FROM book_read_status_record
+                WHERE is_deleted = 0
+                  AND changed_date != 0
+                  AND read_status_id = 3
+                  AND book_id != 0
+                  AND changed_date BETWEEN ? AND ?
+                GROUP BY day, book_id
+                """,
+            args: { [$0.lowerBound, $0.upperBound] }
+        )
+    ]
+
+    func buildEventFragments(
+        excludedEventTypes: Set<ReadCalendarEventType>
+    ) -> [EventSQLFragment] {
+        Self.allEventFragments.filter { !excludedEventTypes.contains($0.eventType) }
     }
 }

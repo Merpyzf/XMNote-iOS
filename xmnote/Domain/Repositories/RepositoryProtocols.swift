@@ -66,18 +66,34 @@ protocol StatisticsRepositoryProtocol {
     func fetchAllHeatmapData() async throws -> (days: [Date: HeatmapDay], earliestDate: Date?)
 
     /// 获取阅读日历最早可展示日期
+    /// - Parameter excludedEventTypes: 需排除的事件类型集合
     /// - Returns: 最早存在阅读行为的日期（startOfDay），无数据则返回 nil
-    func fetchReadCalendarEarliestDate() async throws -> Date?
+    func fetchReadCalendarEarliestDate(
+        excludedEventTypes: Set<ReadCalendarEventType>
+    ) async throws -> Date?
 
     /// 按月获取阅读日历数据（书籍事件 + 读完标记）
-    /// - Parameter monthStart: 目标月份任意日期（实现内会归一到该月 1 日）
+    /// - Parameters:
+    ///   - monthStart: 目标月份任意日期（实现内会归一到该月 1 日）
+    ///   - excludedEventTypes: 需排除的事件类型集合
     /// - Returns: 月数据（仅包含有活动或读完记录的日期键）
-    func fetchReadCalendarMonthData(monthStart: Date) async throws -> ReadCalendarMonthData
+    func fetchReadCalendarMonthData(
+        monthStart: Date,
+        excludedEventTypes: Set<ReadCalendarEventType>
+    ) async throws -> ReadCalendarMonthData
 }
 
 extension StatisticsRepositoryProtocol {
     func fetchAllHeatmapData() async throws -> (days: [Date: HeatmapDay], earliestDate: Date?) {
         let result = try await fetchHeatmapData(year: 0, dataType: .all)
         return (result.days, result.earliestDate)
+    }
+
+    func fetchReadCalendarEarliestDate() async throws -> Date? {
+        try await fetchReadCalendarEarliestDate(excludedEventTypes: [])
+    }
+
+    func fetchReadCalendarMonthData(monthStart: Date) async throws -> ReadCalendarMonthData {
+        try await fetchReadCalendarMonthData(monthStart: monthStart, excludedEventTypes: [])
     }
 }

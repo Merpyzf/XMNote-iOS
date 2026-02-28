@@ -5,7 +5,7 @@
 //  Created by 王珂 on 2026/2/10.
 //
 //  [INPUT]: 无外部依赖，仅依赖 SwiftUI 框架
-//  [OUTPUT]: Color 语义扩展（含阅读日历纸感主题与事件条 pending 态）、Spacing / CornerRadius / CardStyle 常量、Color(hex:) / Color(light:dark:) / Color(rgbaHex:) 构造器
+//  [OUTPUT]: Color 语义扩展（含阅读日历主题与事件条 pending 态，已移除卡片装饰令牌）、Spacing / CornerRadius / CardStyle 常量、Color(hex:) / Color(light:dark:) / Color(rgbaHex:) 构造器
 //  [POS]: Utilities 模块的设计令牌中枢，全局 UI 一致性的单一真相源
 //  [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
 
@@ -125,30 +125,6 @@ extension Color {
 // MARK: - Reading Calendar Theme
 
 extension Color {
-    /// 阅读日历画布背景（顶部）
-    static let readCalendarCanvasTop = Color(
-        light: Color(hex: 0xF2F4F8),
-        dark: Color(hex: 0x161A20)
-    )
-
-    /// 阅读日历画布背景（底部）
-    static let readCalendarCanvasBottom = Color(
-        light: Color(hex: 0xECEFF4),
-        dark: Color(hex: 0x12161C)
-    )
-
-    /// 阅读日历主卡背景
-    static let readCalendarCardBackground = Color(
-        light: Color(hex: 0xFAFCFF),
-        dark: Color(hex: 0x1E242C)
-    )
-
-    /// 阅读日历主卡描边
-    static let readCalendarCardStroke = Color(
-        light: Color(hex: 0xD8DEE8),
-        dark: Color(hex: 0x36404E)
-    )
-
     /// 阅读日历次级文本
     static let readCalendarSubtleText = Color(
         light: Color(hex: 0x647388),
@@ -211,9 +187,30 @@ extension Color {
 }
 
 // MARK: - Spacing
+//
+// 选择指南（两步决策）：
+//
+// 第一步：判断间距场景
+//   内部间距 → 元素内部的紧凑留白（图标与文字、标签内 padding）
+//   元素间距 → 同级元素之间的呼吸空间（按钮组、控件行间、列表项间）
+//   容器间距 → 容器与内容的边距（卡片 padding、屏幕边距）
+//
+// 第二步：按密度选 token
+//   compact(4) < half(6) < cozy(8) < base(12) < screenEdge(16) < contentEdge(18) < double(24)
+//
+// 示例：
+//   HStack 图标与文字间距   → 内部间距 → 最紧凑 → compact
+//   月份选择器内 padding    → 内部间距 → 稍松   → half
+//   工具栏按钮组 spacing    → 元素间距 → 舒适   → cozy
+//   VStack 段落间距         → 元素间距 → 标准   → base
+//   卡片内容到边缘          → 容器间距 → 屏幕级 → screenEdge
+//   面板内容边距            → 容器间距 → 宽松   → contentEdge
+//   区块之间大留白          → 容器间距 → 最大   → double
 
 enum Spacing {
+    static let compact: CGFloat = 4
     static let half: CGFloat = 6
+    static let cozy: CGFloat = 8
     static let base: CGFloat = 12
     static let double: CGFloat = 24
     static let screenEdge: CGFloat = 16

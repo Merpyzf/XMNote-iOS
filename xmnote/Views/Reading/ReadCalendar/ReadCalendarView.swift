@@ -3,7 +3,7 @@ import SwiftUI
 /**
  * [INPUT]: 依赖 RepositoryContainer 注入统计与取色仓储，依赖 ReadCalendarViewModel 提供月历状态与事件布局数据
  * [OUTPUT]: 对外提供 ReadCalendarView（阅读日历页面壳层，负责挂载可复用 ReadCalendarPanel）
- * [POS]: Reading 模块核心页面入口，承接导航与数据加载，具体日历 UI 由 UIComponents 组件负责（含事件条颜色状态映射）
+ * [POS]: Reading 模块核心页面入口，承接导航与数据加载，具体日历 UI 由 UIComponents 组件负责（含设置入口与显示模式切换）
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
@@ -11,9 +11,16 @@ struct ReadCalendarView: View {
     @Environment(RepositoryContainer.self) private var repositories
     @State private var viewModel: ReadCalendarViewModel
     @State private var pagerSelectionTask: Task<Void, Never>?
+    @State private var displayMode: ReadCalendarPanel.DisplayMode = .activityEvent
+    @State private var settings: ReadCalendarSettings
+    @State private var settingsRefreshTask: Task<Void, Never>?
+    @State private var isSettingsPresented = false
+    @State private var settingsSheetHeight: CGFloat = 0
 
     init(date: Date?) {
-        _viewModel = State(initialValue: ReadCalendarViewModel(initialDate: date))
+        let s = ReadCalendarSettings()
+        _settings = State(initialValue: s)
+        _viewModel = State(initialValue: ReadCalendarViewModel(initialDate: date, settings: s))
     }
 
     var body: some View {
@@ -22,8 +29,8 @@ struct ReadCalendarView: View {
 
             ReadCalendarPanel(
                 props: panelProps,
-                onStepMonth: { offset in
-                    viewModel.stepPager(offset: offset)
+                onDisplayModeChanged: { mode in
+                    displayMode = mode
                 },
                 onPagerSelectionChanged: { monthStart in
                     viewModel.pagerSelection = monthStart
@@ -35,11 +42,31 @@ struct ReadCalendarView: View {
                     retryCurrentContext()
                 }
             )
-            .padding(.horizontal, Spacing.screenEdge)
             .padding(.bottom, Spacing.base)
         }
         .navigationTitle("阅读日历")
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button { isSettingsPresented = true } label: {
+                    Image(systemName: "gearshape")
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(Color.readCalendarSubtleText)
+                }
+                .accessibilityLabel("阅读日历设置")
+            }
+        }
+        .sheet(isPresented: $isSettingsPresented) {
+            ReadCalendarSettingsSheet(settings: settings)
+                .onPreferenceChange(SheetHeightKey.self) { settingsSheetHeight = $0 }
+                .presentationDetents([.height(settingsSheetHeight)])
+        }
+        .onChange(of: settings.excludedEventTypes) { _, _ in
+            scheduleSettingsRefresh()
+        }
+        .onChange(of: settings.dayEventCount) { _, _ in
+            viewModel.applyLaneLimitChange()
+        }
         .task {
             await viewModel.loadIfNeeded(
                 using: repositories.statisticsRepository,
@@ -59,7 +86,148 @@ struct ReadCalendarView: View {
         .onDisappear {
             pagerSelectionTask?.cancel()
             pagerSelectionTask = nil
+            settingsRefreshTask?.cancel()
+            settingsRefreshTask = nil
             viewModel.cancelAsyncTasks()
+        }
+    }
+}
+
+// MARK: - Settings Sheet
+
+private struct ReadCalendarSettingsSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    @Bindable var settings: ReadCalendarSettings
+    @State private var showInvalidCloseAlert = false
+
+    var body: some View {
+        ZStack(alignment: .topTrailing) {
+            VStack(alignment: .leading, spacing: Spacing.double) {
+                titleSection
+                    .padding(.trailing, 44)
+                eventTogglesSection
+                dayEventCountSection
+            }
+            .padding(Spacing.double)
+            .background(
+                GeometryReader { proxy in
+                    Color.clear.preference(key: SheetHeightKey.self, value: proxy.size.height)
+                }
+            )
+
+            closeButton
+        }
+        .interactiveDismissDisabled(!settings.isReadBehaviorRuleValid)
+        .alert("无法关闭设置", isPresented: $showInvalidCloseAlert) {
+            Button("我知道了", role: .cancel) {}
+        } message: {
+            Text("判定阅读行为的规则至少要选一个")
+        }
+    }
+
+    // MARK: - Close
+
+    private var closeButton: some View {
+        Button {
+            guard settings.isReadBehaviorRuleValid else {
+                showInvalidCloseAlert = true
+                return
+            }
+            dismiss()
+        } label: {
+            Image(systemName: "xmark")
+                .font(.system(size: 13, weight: .bold))
+                .foregroundStyle(.secondary)
+                .frame(width: 28, height: 28)
+        }
+        .buttonStyle(.plain)
+        .glassEffect(.regular.interactive(), in: .circle)
+        .padding(.top, Spacing.double)
+        .padding(.trailing, Spacing.double)
+    }
+
+    // MARK: - Title
+
+    private var titleSection: some View {
+        Text("阅读日历设置")
+            .font(.title3.weight(.semibold))
+    }
+
+    // MARK: - Event Toggles
+
+    private var eventTogglesSection: some View {
+        VStack(alignment: .leading, spacing: Spacing.base) {
+            Text("阅读事件")
+                .font(.subheadline.weight(.medium))
+                .foregroundStyle(Color.textSecondary)
+
+            Toggle("阅读计时（含补录）", isOn: Binding(
+                get: { !settings.excludeReadTiming },
+                set: { settings.excludeReadTiming = !$0 }
+            ))
+
+            Toggle("笔记记录", isOn: Binding(
+                get: { !settings.excludeNoteRecord },
+                set: { settings.excludeNoteRecord = !$0 }
+            ))
+
+            Toggle("阅读打卡", isOn: Binding(
+                get: { !settings.excludeCheckIn },
+                set: { settings.excludeCheckIn = !$0 }
+            ))
+
+            if !settings.isReadBehaviorRuleValid {
+                Text("判定阅读行为的规则至少要选一个")
+                    .font(.footnote)
+                    .foregroundStyle(Color.feedbackError)
+            }
+        }
+        .tint(.brand)
+    }
+
+    // MARK: - Day Event Count
+
+    private var dayEventCountSection: some View {
+        VStack(alignment: .leading, spacing: Spacing.base) {
+            Text("每日展示书籍数量")
+                .font(.subheadline.weight(.medium))
+                .foregroundStyle(Color.textSecondary)
+
+            HStack(spacing: Spacing.half) {
+                ForEach(Array(ReadCalendarSettings.dayEventCountRange), id: \.self) { count in
+                    dayCountChip(count, isSelected: count == settings.dayEventCount)
+                }
+            }
+        }
+    }
+
+    private func dayCountChip(_ count: Int, isSelected: Bool) -> some View {
+        Button {
+            withAnimation(.snappy) { settings.dayEventCount = count }
+        } label: {
+            Text("\(count)")
+                .font(.subheadline.weight(isSelected ? .semibold : .regular))
+                .foregroundStyle(isSelected ? .white : Color.textPrimary)
+                .frame(width: 36, height: 36)
+                .background(isSelected ? Color.brand : Color.bgSecondary, in: Circle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("\(count) 本")
+    }
+}
+
+// MARK: - Settings Refresh
+
+private extension ReadCalendarView {
+    func scheduleSettingsRefresh() {
+        settingsRefreshTask?.cancel()
+        settingsRefreshTask = Task {
+            try? await Task.sleep(for: .milliseconds(300))
+            guard !Task.isCancelled else { return }
+            await viewModel.applySettingsChange(
+                using: repositories.statisticsRepository,
+                colorRepository: repositories.readCalendarColorRepository
+            )
         }
     }
 }
@@ -72,12 +240,11 @@ private extension ReadCalendarView {
             monthTitle: viewModel.monthTitle,
             availableMonths: viewModel.availableMonths,
             pagerSelection: viewModel.pagerSelection,
+            displayMode: displayMode,
             laneLimit: viewModel.laneLimit,
             rootContentState: mapRootContentState(viewModel.rootContentState),
             errorMessage: viewModel.errorMessage,
-            monthPages: viewModel.availableMonths.map(makePanelMonthPage),
-            canGoPrevMonth: viewModel.canGoPrevMonth,
-            canGoNextMonth: viewModel.canGoNextMonth
+            monthPages: viewModel.availableMonths.map(makePanelMonthPage)
         )
     }
 
@@ -101,6 +268,7 @@ private extension ReadCalendarView {
             let bookCount = dayData?.books.count ?? 0
 
             dayPayloads[normalized] = ReadCalendarPanel.DayPayload(
+                bookCount: bookCount,
                 isReadDoneDay: dayData?.isReadDoneDay == true,
                 overflowCount: max(0, bookCount - viewModel.laneLimit),
                 isToday: viewModel.isToday(normalized),

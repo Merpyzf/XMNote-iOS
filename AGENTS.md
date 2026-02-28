@@ -7,13 +7,16 @@
 - 本仓库是 Android → iOS 迁移项目，优先做“业务意图对齐”，禁止机械翻译实现。
 - Android 参考工程路径：`/Users/wangke/Workspace/AndroidProjects/XMNote`。
 - 规范分层：本文件是执行摘要；完整背景与细则以 `CLAUDE.md` 为准。
-- 学习输出约定：每完成一个功能开发，必须补充本次涉及的 iOS 知识点总结，并给出面向 Android Compose 开发者的学习示例（含对照思路与可运行代码片段）；学习文档统一存放在 `docs/learning/`。
-- 组件文档机制：重要 UI 组件（`docs/architecture/UI核心组件白名单.md` 白名单组件 + `xmnote/UIComponents` 下新增/重大重构组件）开发完成后，必须新增或更新组件使用文档（`docs/component-guides/`），并登记到 `docs/architecture/UI组件文档清单.md`。
+- 学习输出约定：每完成一个功能开发并收到用户“任务已完成”信号后，必须补充本次涉及的 iOS 知识点总结，并给出面向 Android Compose 开发者的学习示例（含对照思路与可运行代码片段）；学习文档统一存放在 `docs/learning/`。
+- 组件文档机制：重要 UI 组件（`docs/architecture/UI核心组件白名单.md` 白名单组件 + `xmnote/UIComponents` 下新增/重大重构组件）在收到用户“任务已完成”信号后，必须新增或更新组件使用文档（`docs/component-guides/`），并登记到 `docs/architecture/UI组件文档清单.md`。
 - iOS26 参考入口：涉及液态玻璃与 iOS26 新特性时，优先查阅 `docs/learning/iOS26液态玻璃与高相关新特性开发参考.md`，并据此执行“Android 业务意图对齐 + iOS 原生表达”。
 
 ## 执行优先级（与 CLAUDE.md 融合）
 - 优先级顺序：用户当次明确要求 > `AGENTS.md` > `CLAUDE.md`。
 - 默认执行策略：实现完成后先做编译校验；未被明确要求时，不单独执行 UI Test，不主动编写 UI 测试用例。
+- 文档触发策略（强制）：仅当用户明确发出“任务已完成”后，才允许生成或更新文档（含 `docs/feature/`、`docs/component-guides/`、`docs/learning/`、L1/L2/L3 同构文档）。
+- 在“任务已完成”前：允许代码实现、编译校验与必要测试；禁止文档写入与文档校验脚本执行。
+- 在“任务已完成”后：必须一次性补齐文档，并执行文档相关闸门脚本。
 - 需要测试时：优先单元测试（ViewModel、迁移、服务异常路径）；UI 测试仅在需求明确且收益大于耗时时执行。
 - 数据访问铁律：所有本地/网络数据获取必须经 Repository，`ViewModel` 禁止直接访问 `AppDatabase`、`WebDAVClient`、`NetworkClient`。
 
@@ -39,16 +42,17 @@
 
 ## 分形文档系统执行约束（GEB）
 - The map IS the terrain. The terrain IS the map.
-- 代码与文档必须同构：任何一相变化，另一相必须同步更新，否则视为未完成。
+- 代码与文档必须同构：在用户明确“任务已完成”后，任何一相变化，另一相必须同步更新，否则视为未完成。
 - 三层分形映射：
   - L1：`/CLAUDE.md`，负责项目宪法与全局地图（触发：顶级模块/架构变化）。
   - L2：`/{module}/CLAUDE.md`，负责模块地图与成员清单（触发：文件增删、重命名、接口变更）。
   - L3：文件头部注释，负责 INPUT/OUTPUT/POS 契约（触发：依赖、导出、职责变化）。
-- 强制回环（代码→文档）：代码改动完成后必须依次检查 `L3 -> L2 -> L1`。
+- 强制回环（代码→文档）：仅在用户明确“任务已完成”后启动，按 `L3 -> L2 -> L1` 依次检查。
 - 进入新目录前置检查：先读目标目录 `CLAUDE.md`，再读目标文件 L3 头部契约。
 - 固定协议语句（L2/L3 必须保留原文）：`[PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md`。
 - 发现业务文件缺少 L3 头部注释时，必须先补齐后继续，属于阻塞级优先事项。
 - 禁止孤立变更：改代码不检查文档、删文件不更新 L2、新模块不创建 L2 均视为严重违规。
+- 文档回环触发门槛：收到“任务已完成”信号前不执行文档落盘；收到后必须完整回环并通过文档闸门。
 - 双文档同构约束：`CLAUDE.md` 与 `AGENTS.md` 的项目结构、全局配置、工具链描述必须保持一致。变更任一文件的手工维护区域时，必须同步检查并更新另一文件对应内容，否则视为 SEVERE-005 违规。
 - 本节为执行摘要；模板、禁令与完整回环流程以根目录 `CLAUDE.md` 的 GEB 完整版为准。
 
@@ -104,6 +108,10 @@
 - 约定后缀：View 用 `View`，ViewModel 用 `ViewModel`，数据实体用 `Record`。
 - 大文件用 `// MARK:` 与 `extension` 分组。
 - GRDB `Record` 必须通过 `CodingKeys` 做 camelCase → snake_case 映射，并与表结构保持一致。
+- 设计令牌使用规范（详见 `CLAUDE.md` §6）：
+  - Spacing 梯度：`compact(4) < half(6) < cozy(8) < base(12) < screenEdge(16) < contentEdge(18) < double(24)`，按「场景→密度」两步选择。
+  - CornerRadius 二维命名：`inlay`（嵌入零件）/ `block`（独立单元）/ `container`（外壳）× `tiny~large`，按「角色→体量」两步选择。
+  - 全局 token 定义在 `DesignTokens.swift`，组件语义别名必须引用全局 token，禁止硬编码魔法数字。
 
 ## 提交与 PR 规范
 - 提交信息必须使用中文，且统一格式：`fix(功能模块): 提交信息`。
@@ -111,7 +119,8 @@
 - PR 必须包含：变更摘要、影响模块、测试证据（命令与结果）、关联任务/Issue。
 
 ## 文档与安全规范
+- 以下文档规范仅在用户明确“任务已完成”后触发执行；此前允许准备草案，但禁止写入仓库文档文件。
 - 新功能文档统一放在 `docs/feature/功能名/`，至少包含《需求文档》《设计文档》。
 - 重要 UI 组件使用文档统一放在 `docs/component-guides/`，并同步维护 `docs/architecture/UI组件文档清单.md`。
-- 代码实现与文档冲突时，先更新文档再改代码。
+- 在文档收口阶段，代码实现与文档冲突时，先更新文档再改代码。
 - 严禁提交真实账号、密码、Token、服务器地址；示例配置必须脱敏。

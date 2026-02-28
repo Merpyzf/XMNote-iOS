@@ -1,0 +1,74 @@
+import Foundation
+
+/**
+ * [INPUT]: 依赖 ReadCalendarEventType 提供事件类型枚举
+ * [OUTPUT]: 对外提供 ReadCalendarSettings（阅读日历设置模型，UserDefaults 持久化）
+ * [POS]: ReadCalendar 子功能设置状态，供 ViewModel 消费过滤参数与事件条数量上限
+ * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
+ */
+
+// MARK: - 阅读日历设置
+
+@MainActor
+@Observable
+final class ReadCalendarSettings {
+    var excludeReadTiming: Bool {
+        didSet { save(excludeReadTiming, forKey: Self.keyReadTiming) }
+    }
+    var excludeNoteRecord: Bool {
+        didSet { save(excludeNoteRecord, forKey: Self.keyNoteRecord) }
+    }
+    var excludeCheckIn: Bool {
+        didSet { save(excludeCheckIn, forKey: Self.keyCheckIn) }
+    }
+    var dayEventCount: Int {
+        didSet { save(dayEventCount, forKey: Self.keyDayEventCount) }
+    }
+
+    init() {
+        let defaults = UserDefaults.standard
+        self.excludeReadTiming = defaults.bool(forKey: Self.keyReadTiming)
+        self.excludeNoteRecord = defaults.bool(forKey: Self.keyNoteRecord)
+        self.excludeCheckIn = defaults.bool(forKey: Self.keyCheckIn)
+
+        let stored = defaults.integer(forKey: Self.keyDayEventCount)
+        self.dayEventCount = Self.dayEventCountRange.contains(stored) ? stored : Self.defaultDayEventCount
+    }
+
+    // MARK: - 排除集合
+
+    var excludedEventTypes: Set<ReadCalendarEventType> {
+        var result = Set<ReadCalendarEventType>()
+        if excludeReadTiming { result.insert(.readTiming) }
+        if excludeNoteRecord {
+            result.insert(.note)
+            result.insert(.relevant)
+            result.insert(.review)
+        }
+        if excludeCheckIn { result.insert(.checkIn) }
+        return result
+    }
+
+    /// 阅读行为判定规则：阅读计时和笔记记录至少保留一个
+    var isReadBehaviorRuleValid: Bool {
+        !(excludeReadTiming && excludeNoteRecord)
+    }
+
+    // MARK: - 常量
+
+    static let dayEventCountRange = 4...10
+    static let defaultDayEventCount = 6
+
+    private static let keyReadTiming = "rcExcludeReadTiming"
+    private static let keyNoteRecord = "rcExcludeNoteRecord"
+    private static let keyCheckIn = "rcExcludeCheckIn"
+    private static let keyDayEventCount = "rcDayEventCount"
+
+    private func save(_ value: Bool, forKey key: String) {
+        UserDefaults.standard.set(value, forKey: key)
+    }
+
+    private func save(_ value: Int, forKey key: String) {
+        UserDefaults.standard.set(value, forKey: key)
+    }
+}

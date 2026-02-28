@@ -2,10 +2,10 @@
 
 ## 组件定位
 `ReadCalendarMonthGrid` 是阅读日历的底层周网格组件，负责：
-- 按周渲染日期格与事件条分段。
+- 按周渲染日期格。
+- 支持三种内容模式：`heatmap` / `activityEvent` / `bookCover`。
 - 渲染今天、选中、未来日期状态。
-- 处理跨周连续事件条端点形态与文本。
-- 支持事件条颜色三态（取色中骨架/取色成功/取色失败回退）。
+- 在 `activityEvent` 模式渲染跨周事件条分段与颜色状态。
 
 源码路径：`xmnote/UIComponents/Foundation/ReadCalendarMonthGrid.swift`
 
@@ -14,6 +14,7 @@
 ReadCalendarMonthGrid(
     weeks: page.weeks,
     laneLimit: 4,
+    displayMode: .activityEvent,
     dayPayloadProvider: { date in
         page.payload(for: date)
     },
@@ -27,61 +28,59 @@ ReadCalendarMonthGrid(
 | 参数 | 类型 | 默认值 | 说明 |
 | --- | --- | --- | --- |
 | `weeks` | `[ReadCalendarMonthGrid.WeekData]` | 无 | 周网格数据（每周 7 列 + 事件条段）。 |
-| `laneLimit` | `Int` | 无 | 每周最多显示 lane 数，决定行高。 |
-| `dayPayloadProvider` | `(Date) -> DayPayload` | 无 | 返回某天的 UI 状态（读完/选中/未来/溢出等）。 |
-| `onSelectDay` | `(Date) -> Void` | 无 | 点击日期回调（未来日期可在 payload 中禁用）。 |
+| `laneLimit` | `Int` | 无 | 事件模式下每日最多展示 lane 数。 |
+| `displayMode` | `ReadCalendarMonthGrid.DisplayMode` | 无 | 当前渲染模式（热力图/活动事件/封面）。 |
+| `dayPayloadProvider` | `(Date) -> DayPayload` | 无 | 返回某天 UI 状态。 |
+| `onSelectDay` | `(Date) -> Void` | 无 | 点击日期回调。 |
 
-`EventSegment.color` 字段说明：
-- `state`: `pending / resolved / failed`
-- `backgroundRGBAHex`: 事件条背景 RGBA（`0xRRGGBBAA`）
-- `textRGBAHex`: 事件条文本 RGBA（`0xRRGGBBAA`）
+### `DayPayload` 字段说明
+| 字段 | 类型 | 说明 |
+| --- | --- | --- |
+| `bookCount` | `Int` | 当日书籍数；热力图强度和封面数量依据该值。 |
+| `isReadDoneDay` | `Bool` | 当日是否读完。 |
+| `overflowCount` | `Int` | 活动事件模式下的超出数量。 |
+| `isToday` | `Bool` | 是否今天。 |
+| `isSelected` | `Bool` | 是否选中。 |
+| `isFuture` | `Bool` | 是否未来日期。 |
+
+## 模式行为
+- `heatmap`：显示热力色块，不渲染事件条。
+- `activityEvent`：显示事件条、跨周连接语义和 `+N`。
+- `bookCover`：显示最多 3 个封面占位色块，超出显示 `+N`。
 
 ## 示例
 
-### 示例 1：在 ReadCalendarPanel 中使用
+### 示例 1：活动事件模式
 ```swift
 ReadCalendarMonthGrid(
     weeks: page.weeks,
     laneLimit: props.laneLimit,
+    displayMode: .activityEvent,
     dayPayloadProvider: { page.payload(for: $0) },
     onSelectDay: onSelectDate
 )
 ```
 
-### 示例 2：事件段映射
+### 示例 2：封面模式
 ```swift
-ReadCalendarMonthGrid.EventSegment(
-    bookId: segment.bookId,
-    bookName: segment.bookName,
-    weekStart: segment.weekStart,
-    segmentStartDate: segment.segmentStartDate,
-    segmentEndDate: segment.segmentEndDate,
-    laneIndex: segment.laneIndex,
-    continuesFromPrevWeek: segment.continuesFromPrevWeek,
-    continuesToNextWeek: segment.continuesToNextWeek,
-    color: ReadCalendarMonthGrid.EventColor(
-        state: .resolved,
-        backgroundRGBAHex: segment.color.backgroundRGBAHex,
-        textRGBAHex: segment.color.textRGBAHex
-    )
+ReadCalendarMonthGrid(
+    weeks: page.weeks,
+    laneLimit: props.laneLimit,
+    displayMode: .bookCover,
+    dayPayloadProvider: { page.payload(for: $0) },
+    onSelectDay: onSelectDate
 )
 ```
 
 ## 常见问题
 
-### 1) 为什么周内空白格也要渲染？
-为了保证月份网格 7 列对齐，前后补位格必须存在，但它们不会参与点击与事件条渲染。
+### 1) 为什么 `heatmap` 模式不显示 `+N`？
+热力图强调强度，不强调明细数量，避免视觉噪音。
 
-### 2) 如何避免事件条绘制到非当月格？
-`weeks.days` 里非当月日期使用 `nil`，组件仅在有日期的格子上渲染日状态与点击。
+### 2) `bookCover` 的封面颜色来自真实封面吗？
+当前为占位视觉方案，后续可切换为真实封面缩略图或取色结果。
 
-### 3) 跨周为什么不是一整条连续矩形？
-视觉上是连续语义，渲染上按周切段；两端通过渐隐与小半径表达“连接关系”。
-
-### 4) `ReadCalendarMonthGrid` 和 `ReadCalendarPanel` 的边界？
-`ReadCalendarMonthGrid` 只管“月内网格绘制”；`ReadCalendarPanel` 负责切月、状态机和整体容器布局。
-
-### 5) 取色中的视觉语义如何表达？
-`EventColor.state == .pending` 时，组件会渲染骨架底色 + shimmer；只有失败时才使用回退色，不会在取色前就展示哈希色。
+### 3) 跨周连续为什么只在 `activityEvent` 有意义？
+跨周连接是事件条语义，热力图/封面模式不展示 segment 层信息。
 
 [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md

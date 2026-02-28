@@ -1,13 +1,19 @@
 /**
- * [INPUT]: 依赖 DesignTokens 视觉令牌与周网格输入（WeekData/EventSegment/DayPayload，含事件条颜色三态）
- * [OUTPUT]: 对外提供 ReadCalendarMonthGrid（月视图周网格与事件条渲染组件，支持 pending 骨架/取色成功/失败回退）
- * [POS]: UIComponents/Foundation 的阅读日历可复用网格组件，承载日期格展示、选中态与事件条渲染
+ * [INPUT]: 依赖 DesignTokens 视觉令牌与周网格输入（WeekData/EventSegment/DayPayload，含显示模式与事件条颜色三态）
+ * [OUTPUT]: 对外提供 ReadCalendarMonthGrid（月视图周网格组件，支持热力图/活动事件/书籍封面三种展示模式）
+ * [POS]: UIComponents/Foundation 的阅读日历可复用网格组件，承载日期格展示、选中态与多模式内容渲染
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
 import SwiftUI
 
 struct ReadCalendarMonthGrid: View {
+    enum DisplayMode: Hashable {
+        case heatmap
+        case activityEvent
+        case bookCover
+    }
+
     enum EventColorState: Hashable {
         case pending
         case resolved
@@ -51,6 +57,7 @@ struct ReadCalendarMonthGrid: View {
     }
 
     struct DayPayload: Hashable {
+        let bookCount: Int
         let isReadDoneDay: Bool
         let overflowCount: Int
         let isToday: Bool
@@ -58,6 +65,7 @@ struct ReadCalendarMonthGrid: View {
         let isFuture: Bool
 
         static let empty = DayPayload(
+            bookCount: 0,
             isReadDoneDay: false,
             overflowCount: 0,
             isToday: false,
@@ -71,13 +79,15 @@ struct ReadCalendarMonthGrid: View {
         static let laneTopInset: CGFloat = 7
         static let laneBottomInset: CGFloat = 8
         static let laneBarHeight: CGFloat = 15
-        static let laneSpacing: CGFloat = 4
+        static let laneSpacing: CGFloat = Spacing.compact
         static let segmentHorizontalInset: CGFloat = 2
-        static let weekSpacing: CGFloat = 8
+        static let weekSpacing: CGFloat = Spacing.cozy
+        static let gridBottomPadding: CGFloat = 2
     }
 
     let weeks: [WeekData]
     let laneLimit: Int
+    let displayMode: DisplayMode
     let dayPayloadProvider: (Date) -> DayPayload
     let onSelectDay: (Date) -> Void
 
@@ -87,6 +97,7 @@ struct ReadCalendarMonthGrid: View {
                 ReadCalendarMonthGridWeekRow(
                     week: week,
                     laneLimit: laneLimit,
+                    displayMode: displayMode,
                     dayHeaderHeight: Layout.dayHeaderHeight,
                     laneTopInset: Layout.laneTopInset,
                     laneBottomInset: Layout.laneBottomInset,
@@ -98,17 +109,26 @@ struct ReadCalendarMonthGrid: View {
                 )
                 .background(
                     RoundedRectangle(cornerRadius: CornerRadius.blockMedium, style: .continuous)
-                        .fill(Color.readCalendarSelectionFill.opacity(0.22))
+                        .fill(Color.readCalendarSelectionFill.opacity(0.14))
                 )
             }
         }
-        .padding(.bottom, 2)
+        .padding(.bottom, Layout.gridBottomPadding)
     }
 }
 
 private struct ReadCalendarMonthGridWeekRow: View {
+    private enum Layout {
+        static let modeContentHPadding: CGFloat = Spacing.cozy
+        static let modeContentTopPadding: CGFloat = Spacing.half
+        static let overflowBadgeHPadding: CGFloat = 3
+        static let overflowBadgeBottomPadding: CGFloat = 2
+        static let overflowBadgeLeading: CGFloat = 3
+    }
+
     let week: ReadCalendarMonthGrid.WeekData
     let laneLimit: Int
+    let displayMode: ReadCalendarMonthGrid.DisplayMode
     let dayHeaderHeight: CGFloat
     let laneTopInset: CGFloat
     let laneBottomInset: CGFloat
@@ -118,12 +138,27 @@ private struct ReadCalendarMonthGridWeekRow: View {
     let dayPayloadProvider: (Date) -> ReadCalendarMonthGrid.DayPayload
     let onSelectDay: (Date) -> Void
 
+    private var activityEventHeight: CGFloat {
+        CGFloat(laneLimit) * laneBarHeight
+            + CGFloat(max(0, laneLimit - 1)) * laneSpacing
+    }
+
+    private var modeContentHeight: CGFloat {
+        switch displayMode {
+        case .activityEvent:
+            return activityEventHeight
+        case .heatmap:
+            return 34
+        case .bookCover:
+            return 40
+        }
+    }
+
     private var rowHeight: CGFloat {
         dayHeaderHeight
             + laneTopInset
             + laneBottomInset
-            + CGFloat(laneLimit) * laneBarHeight
-            + CGFloat(max(0, laneLimit - 1)) * laneSpacing
+            + modeContentHeight
     }
 
     var body: some View {
@@ -139,9 +174,11 @@ private struct ReadCalendarMonthGridWeekRow: View {
                     }
                 }
 
-                ForEach(week.segments) { segment in
-                    segmentView(segment, cellWidth: cellWidth)
-                        .allowsHitTesting(false)
+                if displayMode == .activityEvent {
+                    ForEach(week.segments) { segment in
+                        segmentView(segment, cellWidth: cellWidth)
+                            .allowsHitTesting(false)
+                    }
                 }
             }
         }
@@ -151,7 +188,7 @@ private struct ReadCalendarMonthGridWeekRow: View {
     private func dayCell(_ day: Date?) -> some View {
         let hasDate = day != nil
         let payload = day.map(dayPayloadProvider) ?? .empty
-        let overflowCount = hasDate ? payload.overflowCount : 0
+        let overflowCount = hasDate ? overflowCount(for: payload) : 0
         let readDone = payload.isReadDoneDay
 
         return ZStack(alignment: .topLeading) {
@@ -163,35 +200,33 @@ private struct ReadCalendarMonthGridWeekRow: View {
                 let dayNum = Calendar.current.component(.day, from: day)
 
                 VStack(spacing: 1) {
-                    HStack(spacing: 2) {
-                        ZStack {
-                            if selected {
-                                Circle()
-                                    .fill(Color.accentColor.opacity(0.18))
-                                    .overlay {
-                                        Circle()
-                                            .stroke(Color.accentColor.opacity(0.62), lineWidth: 0.95)
-                                    }
-                                    .frame(width: 22, height: 22)
-                            }
-                            Text("\(dayNum)")
-                                .font(.system(size: 12, weight: selected ? .bold : .medium, design: .rounded))
-                                .foregroundStyle(
-                                    payload.isFuture ? Color.textHint :
-                                    selected ? Color.accentColor : Color.textPrimary
-                                )
+                    ZStack {
+                        if selected {
+                            Circle()
+                                .fill(Color.accentColor.opacity(0.18))
+                                .overlay {
+                                    Circle()
+                                        .stroke(Color.accentColor.opacity(0.62), lineWidth: 0.95)
+                                }
+                                .frame(width: 22, height: 22)
                         }
-
+                        Text("\(dayNum)")
+                            .font(.system(size: 12, weight: selected ? .bold : .medium, design: .rounded))
+                            .foregroundStyle(
+                                payload.isFuture ? Color.textHint :
+                                selected ? Color.accentColor : Color.textPrimary
+                            )
+                    }
+                    .frame(height: dayHeaderHeight)
+                    .frame(maxWidth: .infinity, alignment: .center)
+                    .overlay(alignment: .topTrailing) {
                         if readDone {
                             Image(systemName: "checkmark.circle.fill")
                                 .font(.system(size: 8))
                                 .foregroundStyle(Color.readCalendarTodayMark)
+                                .offset(x: -2, y: 4)
                         }
-
-                        Spacer(minLength: 0)
                     }
-                    .padding(.horizontal, 4)
-                    .frame(height: dayHeaderHeight, alignment: .center)
 
                     if today && !selected {
                         Capsule(style: .continuous)
@@ -200,23 +235,12 @@ private struct ReadCalendarMonthGridWeekRow: View {
                             .offset(y: -2)
                     }
 
+                    modeContent(for: day, payload: payload)
+
                     Spacer(minLength: 0)
 
                     if overflowCount > 0 {
-                        Text("+\(overflowCount)")
-                            .font(.system(size: 9, weight: .semibold, design: .rounded))
-                            .foregroundStyle(Color.readCalendarSubtleText)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(.horizontal, 3)
-                            .padding(.bottom, 2)
-                            .padding(.leading, 3)
-                            .background(alignment: .bottomLeading) {
-                                RoundedRectangle(cornerRadius: CornerRadius.inlayMedium, style: .continuous)
-                                    .fill(Color.readCalendarSelectionFill.opacity(0.72))
-                                    .frame(width: 24, height: 12)
-                                    .padding(.leading, 4)
-                                    .padding(.bottom, 1.5)
-                            }
+                        overflowBadge(overflowCount)
                     }
                 }
             }
@@ -227,6 +251,101 @@ private struct ReadCalendarMonthGridWeekRow: View {
             onSelectDay(day)
         }
         .opacity(payload.isFuture ? 0.55 : 1)
+    }
+
+    @ViewBuilder
+    private func modeContent(for day: Date, payload: ReadCalendarMonthGrid.DayPayload) -> some View {
+        switch displayMode {
+        case .activityEvent:
+            EmptyView()
+        case .heatmap:
+            RoundedRectangle(cornerRadius: CornerRadius.inlayMedium, style: .continuous)
+                .fill(heatmapColor(for: payload))
+                .frame(maxWidth: .infinity, minHeight: 30, maxHeight: 34)
+                .padding(.horizontal, Layout.modeContentHPadding)
+                .padding(.top, Layout.modeContentTopPadding)
+        case .bookCover:
+            HStack(spacing: 3) {
+                let coverCount = min(3, payload.bookCount)
+                if coverCount == 0 {
+                    RoundedRectangle(cornerRadius: 4, style: .continuous)
+                        .fill(Color.readCalendarSelectionFill.opacity(0.5))
+                        .frame(width: 14, height: 20)
+                } else {
+                    ForEach(0..<coverCount, id: \.self) { index in
+                        RoundedRectangle(cornerRadius: 4, style: .continuous)
+                            .fill(coverColor(for: day, index: index))
+                            .frame(width: 14, height: 20)
+                            .overlay {
+                                RoundedRectangle(cornerRadius: 4, style: .continuous)
+                                    .stroke(Color.white.opacity(0.48), lineWidth: 0.45)
+                            }
+                    }
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, Spacing.half)
+            .padding(.top, Layout.modeContentTopPadding)
+        }
+    }
+
+    private func overflowCount(for payload: ReadCalendarMonthGrid.DayPayload) -> Int {
+        switch displayMode {
+        case .heatmap:
+            return 0
+        case .activityEvent:
+            return payload.overflowCount
+        case .bookCover:
+            return max(0, payload.bookCount - 3)
+        }
+    }
+
+    private func overflowBadge(_ count: Int) -> some View {
+        Text("+\(count)")
+            .font(.system(size: 9, weight: .semibold, design: .rounded))
+            .foregroundStyle(Color.readCalendarSubtleText)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, Layout.overflowBadgeHPadding)
+            .padding(.bottom, Layout.overflowBadgeBottomPadding)
+            .padding(.leading, Layout.overflowBadgeLeading)
+            .background(alignment: .bottomLeading) {
+                RoundedRectangle(cornerRadius: CornerRadius.inlayMedium, style: .continuous)
+                    .fill(Color.readCalendarSelectionFill.opacity(0.72))
+                    .frame(width: 24, height: 12)
+                    .padding(.leading, 4)
+                    .padding(.bottom, 1.5)
+            }
+    }
+
+    private func heatmapColor(for payload: ReadCalendarMonthGrid.DayPayload) -> Color {
+        let rawLevel = payload.bookCount + (payload.isReadDoneDay ? 1 : 0)
+        let level = payload.bookCount == 0 ? 0 : min(4, max(1, rawLevel))
+        switch level {
+        case 0:
+            return Color.readCalendarSelectionFill.opacity(0.35)
+        case 1:
+            return Color.brand.opacity(0.24)
+        case 2:
+            return Color.brand.opacity(0.36)
+        case 3:
+            return Color.brand.opacity(0.5)
+        default:
+            return Color.brand.opacity(0.64)
+        }
+    }
+
+    private func coverColor(for day: Date, index: Int) -> Color {
+        let daySeed = Int(Calendar.current.startOfDay(for: day).timeIntervalSince1970 / 86_400)
+        let seed = abs(daySeed &+ index * 37)
+        let palette: [Color] = [
+            Color(red: 0.69, green: 0.78, blue: 0.89),
+            Color(red: 0.84, green: 0.74, blue: 0.61),
+            Color(red: 0.74, green: 0.83, blue: 0.72),
+            Color(red: 0.78, green: 0.7, blue: 0.86),
+            Color(red: 0.71, green: 0.78, blue: 0.68),
+            Color(red: 0.86, green: 0.7, blue: 0.72)
+        ]
+        return palette[seed % palette.count]
     }
 
     private func segmentView(_ segment: ReadCalendarMonthGrid.EventSegment, cellWidth: CGFloat) -> some View {

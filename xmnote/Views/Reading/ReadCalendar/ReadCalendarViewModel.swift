@@ -2,8 +2,8 @@ import Foundation
 
 /**
  * [INPUT]: 依赖 StatisticsRepositoryProtocol 提供月历聚合数据，依赖 ReadCalendarColorRepositoryProtocol 提供封面取色，依赖 ReadCalendarEventLayoutEngine 生成事件条布局
- * [OUTPUT]: 对外提供 ReadCalendarViewModel（阅读日历页面状态、分页切月、跨周事件条布局、事件条颜色异步回填）
- * [POS]: ReadCalendar 子功能状态中枢，负责数据加载、分页状态、选中态、周布局构建与封面取色任务编排
+ * [OUTPUT]: 对外提供 ReadCalendarViewModel（阅读日历页面状态、分页切月/快速跳转、跨周事件条布局、事件条颜色异步回填）
+ * [POS]: ReadCalendar 子功能状态中枢，负责数据加载、分页状态、选中态、周布局构建、快速跳月与封面取色任务编排
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
@@ -58,9 +58,10 @@ final class ReadCalendarViewModel {
     var isLoading = false
     var errorMessage: String?
 
-    let laneLimit = 4
+    var laneLimit: Int { settings.dayEventCount }
     let renderMode: ReadCalendarRenderMode
 
+    private let settings: ReadCalendarSettings
     private let initialDate: Date?
     private var hasLoaded = false
     private var monthCache: [String: ReadCalendarMonthData] = [:]
@@ -75,9 +76,11 @@ final class ReadCalendarViewModel {
 
     init(
         initialDate: Date?,
+        settings: ReadCalendarSettings,
         renderMode: ReadCalendarRenderMode = .crossWeekContinuous
     ) {
         self.initialDate = initialDate
+        self.settings = settings
         self.renderMode = renderMode
 
         var cal = Calendar.current
@@ -99,6 +102,14 @@ final class ReadCalendarViewModel {
     var canGoNextMonth: Bool {
         guard let index = monthIndex(for: pagerSelection) else { return false }
         return index < (availableMonths.count - 1)
+    }
+
+    var todayMonthStart: Date {
+        Self.currentMonthStart(using: calendar)
+    }
+
+    var canJumpToToday: Bool {
+        isMonthInAvailableRange(todayMonthStart) && pagerSelection != todayMonthStart
     }
 
     var monthTitle: String {
@@ -135,20 +146,25 @@ final class ReadCalendarViewModel {
         errorMessage = nil
 
         let today = calendar.startOfDay(for: Date())
-        selectedDate = today
 
         do {
-            let earliestDate = try await repository.fetchReadCalendarEarliestDate()
+            let earliestDate = try await repository.fetchReadCalendarEarliestDate(
+                excludedEventTypes: settings.excludedEventTypes
+            )
             let earliest = Self.monthStart(of: earliestDate ?? today, using: calendar)
             let current = Self.currentMonthStart(using: calendar)
             earliestMonthStart = earliest
 
             rebuildMonthRange(from: earliest, to: current)
 
-            let preferredMonth = Self.monthStart(
-                of: calendar.startOfDay(for: initialDate ?? today),
-                using: calendar
+            let preferredSelectedDate = clampSelectedDate(
+                calendar.startOfDay(for: initialDate ?? today),
+                earliestMonthStart: earliest,
+                latestDate: today
             )
+            selectedDate = preferredSelectedDate
+
+            let preferredMonth = Self.monthStart(of: preferredSelectedDate, using: calendar)
             let defaultMonth = clampMonthStart(preferredMonth, earliest: earliest, latest: current)
             displayedMonthStart = defaultMonth
             pagerSelection = defaultMonth
@@ -190,6 +206,14 @@ final class ReadCalendarViewModel {
     func stepPager(offset: Int) {
         guard let target = monthAtOffset(offset, from: pagerSelection) else { return }
         pagerSelection = target
+    }
+
+    func jumpToToday() {
+        let today = calendar.startOfDay(for: Date())
+        let todayMonth = Self.monthStart(of: today, using: calendar)
+        guard isMonthInAvailableRange(todayMonth) else { return }
+        selectedDate = today
+        pagerSelection = todayMonth
     }
 
     func handlePagerSelectionChange(
@@ -250,6 +274,53 @@ final class ReadCalendarViewModel {
 
     func cancelAsyncTasks() {
         cancelAllColorTasks()
+    }
+
+    /// dayEventCount 变更：从 cache 重建全量 layout 再按新 laneLimit 过滤，回填已解析颜色
+    func applyLaneLimitChange() {
+        for (key, state) in pageStates where state.loadState == .loaded {
+            guard let data = monthCache[key] else { continue }
+            // 收集已解析的封面颜色
+            var colorMap: [Int64: ReadCalendarSegmentColor] = [:]
+            for week in state.weeks {
+                for seg in week.segments where seg.color.state != .pending {
+                    colorMap[seg.bookId] = seg.color
+                }
+            }
+            // 重建 weeks（全量 lane → 按新阈值过滤）
+            let newWeeks = buildWeeks(monthStart: state.monthStart, dayMap: data.days)
+            // 回填已有颜色
+            let coloredWeeks = newWeeks.map { week in
+                WeekRowData(
+                    weekStart: week.weekStart,
+                    days: week.days,
+                    segments: week.segments.map { seg in
+                        guard let resolved = colorMap[seg.bookId] else { return seg }
+                        return seg.withColor(resolved)
+                    }
+                )
+            }
+            pageStates[key] = MonthPageState(
+                monthStart: state.monthStart,
+                weeks: coloredWeeks,
+                dayMap: state.dayMap,
+                loadState: .loaded,
+                errorMessage: nil
+            )
+        }
+    }
+
+    /// 设置变更后清缓存并重新加载
+    func applySettingsChange(
+        using repository: any StatisticsRepositoryProtocol,
+        colorRepository: any ReadCalendarColorRepositoryProtocol
+    ) async {
+        hasLoaded = false
+        monthCache = [:]
+        pageStates = [:]
+        latestRequestTicketByMonthKey = [:]
+        cancelAllColorTasks()
+        await reload(using: repository, colorRepository: colorRepository)
     }
 
     func monthState(for monthStart: Date) -> MonthPageState {
@@ -532,7 +603,10 @@ private extension ReadCalendarViewModel {
             return cached
         }
 
-        let fetched = try await repository.fetchReadCalendarMonthData(monthStart: monthStart)
+        let fetched = try await repository.fetchReadCalendarMonthData(
+            monthStart: monthStart,
+            excludedEventTypes: settings.excludedEventTypes
+        )
         monthCache[key] = fetched
         return fetched
     }
@@ -642,6 +716,14 @@ private extension ReadCalendarViewModel {
         if monthStart < earliest { return earliest }
         if monthStart > latest { return latest }
         return monthStart
+    }
+
+    func clampSelectedDate(_ date: Date, earliestMonthStart: Date, latestDate: Date) -> Date {
+        let normalized = calendar.startOfDay(for: date)
+        let upper = calendar.startOfDay(for: latestDate)
+        if normalized < earliestMonthStart { return earliestMonthStart }
+        if normalized > upper { return upper }
+        return normalized
     }
 
     func isMonthInAvailableRange(_ monthStart: Date) -> Bool {

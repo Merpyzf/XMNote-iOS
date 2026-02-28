@@ -87,10 +87,23 @@ private extension ReadCalendarColorRepository {
         return url
     }
 
+    // 防盗链 UA，与 Android 端 GlideImageLoader 保持一致
+    nonisolated static let browserUserAgent =
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15"
+
+    /// 按 host 动态注入防盗链请求头（豆瓣额外加 Referer）
+    nonisolated static func applyAntiHotlinkHeaders(to request: inout URLRequest) {
+        request.setValue(browserUserAgent, forHTTPHeaderField: "User-Agent")
+        if let host = request.url?.host?.lowercased(), host.contains("douban") {
+            request.setValue("https://douban.com/", forHTTPHeaderField: "Referer")
+        }
+    }
+
     func fetchCoverData(url: URL) async throws -> Data {
         var request = URLRequest(url: url)
         request.timeoutInterval = 12
         request.cachePolicy = .returnCacheDataElseLoad
+        Self.applyAntiHotlinkHeaders(to: &request)
 
         let (data, response) = try await session.data(for: request)
         guard let httpResponse = response as? HTTPURLResponse,

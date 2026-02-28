@@ -1,10 +1,11 @@
 # CalendarMonthStepperBar 使用说明
 
 ## 组件定位
-`CalendarMonthStepperBar` 是月视图顶部的月份切换胶囊组件，提供：
-- 左右月份切换按钮（含禁用态）
-- 中间月份标题展示
-- 轻玻璃浮层胶囊与柔和阴影层级（避免系统默认控件感）
+`CalendarMonthStepperBar` 是月视图顶部的月份切换触发组件，提供：
+- 中间月份标题展示。
+- 点击标题打开月份菜单并快速跳月。
+- 标题区仅保留文字与下拉箭头，不展示日历图标。
+- 去容器化触发样式（无液态玻璃背景），减少顶部视觉噪音。
 
 源码路径：`xmnote/UIComponents/Foundation/CalendarMonthStepperBar.swift`
 
@@ -12,16 +13,11 @@
 ```swift
 CalendarMonthStepperBar(
     title: viewModel.monthTitle,
-    canGoPrev: viewModel.canGoPrevMonth,
-    canGoNext: viewModel.canGoNextMonth,
-    onPrev: {
+    availableMonths: viewModel.availableMonths,
+    selectedMonth: viewModel.pagerSelection,
+    onSelectMonth: { month in
         withAnimation(.snappy(duration: 0.3)) {
-            viewModel.stepPager(offset: -1)
-        }
-    },
-    onNext: {
-        withAnimation(.snappy(duration: 0.3)) {
-            viewModel.stepPager(offset: 1)
+            viewModel.pagerSelection = month
         }
     }
 )
@@ -30,48 +26,48 @@ CalendarMonthStepperBar(
 ## 参数说明
 | 参数 | 类型 | 默认值 | 说明 |
 | --- | --- | --- | --- |
-| `title` | `String` | 无 | 中央月份标题（建议 `yyyy年M月`） |
-| `canGoPrev` | `Bool` | 无 | 是否允许切到上月 |
-| `canGoNext` | `Bool` | 无 | 是否允许切到下月 |
-| `onPrev` | `() -> Void` | 无 | 点击左箭头回调 |
-| `onNext` | `() -> Void` | 无 | 点击右箭头回调 |
+| `title` | `String` | 无 | 中央月份标题（建议 `yyyy年M月`）。 |
+| `availableMonths` | `[Date]` | 无 | 可选择的月份列表（建议升序）。 |
+| `selectedMonth` | `Date` | 无 | 当前选中月份（用于菜单勾选）。 |
+| `onSelectMonth` | `(Date) -> Void` | 无 | 选择某个月份后的回调。 |
 
 ## 示例
 
 ### 示例 1：阅读日历页接入
 ```swift
 CalendarMonthStepperBar(
-    title: viewModel.monthTitle,
-    canGoPrev: viewModel.canGoPrevMonth,
-    canGoNext: viewModel.canGoNextMonth,
-    onPrev: {
-        withAnimation(.snappy(duration: 0.3)) {
-            viewModel.stepPager(offset: -1)
-        }
-    },
-    onNext: {
-        withAnimation(.snappy(duration: 0.3)) {
-            viewModel.stepPager(offset: 1)
-        }
-    }
+    title: panelProps.monthTitle,
+    availableMonths: panelProps.availableMonths,
+    selectedMonth: panelProps.pagerSelection,
+    onSelectMonth: onPagerSelectionChanged
+)
+```
+
+### 示例 2：仅允许历史月份
+```swift
+CalendarMonthStepperBar(
+    title: monthTitle,
+    availableMonths: historyMonths,
+    selectedMonth: pagerSelection,
+    onSelectMonth: onSelectMonth
 )
 ```
 
 ## 设计建议
-- 推荐将切月行为放在 `withAnimation(.snappy)` 中调用，保持手感统一。
-- 建议放在日历容器上方使用，形成“顶部浮层 + 主卡片”两级空间关系。
-- 当页面有系统返回按钮时，保持月份箭头低对比、轻量化，避免与系统导航箭头争抢注意力。
-- 液态玻璃只建议用于顶部轻量控件，不应覆盖正文区域。
+- 将菜单触发区收敛到标题本身，减少顶部控制噪音。
+- 跳月写回单一状态 `pagerSelection`，避免多入口状态分叉。
+- 标题文案建议使用 `.contentTransition(.numericText())` 保持数字切换质感。
+- 在顶部双控件布局中建议放在左侧并保持较高 `layoutPriority`，避免被右侧模式控件挤压。
 
 ## 常见问题
 
-### 1) 为什么禁用态箭头仍可见？
-这是有意设计。禁用态保留可见图标可以表达“方向存在但当前不可达”，避免布局跳动。
+### 1) 为什么不再保留左右箭头？
+本组件目标是“快速跳月”，在有菜单直达的前提下，箭头会增加视觉负担且与分页滑动功能重叠。
 
-### 2) 标题切换时如何数字平滑过渡？
-组件内部已使用 `.contentTransition(.numericText())`，调用方只需保证状态更新在动画上下文中。
+### 2) 菜单顺序为什么是从新到旧？
+组件内部默认逆序展示（最近月份在上方），降低常用月份的点击成本。
 
-### 3) 为什么月切换胶囊需要玻璃感？
-阅读日历主体是“纸感卡片”，顶部切换控件采用轻玻璃浮层可以提供层级分离，帮助用户快速识别“控制区”和“内容区”。
+### 3) 快速跳月会不会影响左右滑动分页？
+不会。两种交互最终都只更新同一个 `pagerSelection`。
 
 [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
