@@ -12,5 +12,7 @@
 - `DataBackupViewModel.swift`: 备份恢复状态编排，含 BackupOperationState 枚举
 - `WebDAVServerViewModel.swift`: 服务器配置管理状态编排
 - `ReadingHeatmapWidgetViewModel.swift`: 在读页热力图小组件状态编排（加载、跨天刷新、统计类型切换）
+- `ReadCalendarViewModel.swift`: 阅读日历页面状态编排（月切换、选中态、周布局聚合）
+- `ReadCalendarEventLayoutEngine.swift`: 阅读日历事件条布局算法（自然日连续 Run + 周分段 + lane 分配）
 
 [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md

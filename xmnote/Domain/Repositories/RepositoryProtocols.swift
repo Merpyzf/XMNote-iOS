@@ -52,6 +52,15 @@ protocol StatisticsRepositoryProtocol {
     /// 获取热力图全量数据（从最早记录到今天）
     /// 返回值：(数据字典, 最早记录日期)；最早日期为 nil 表示无任何阅读记录
     func fetchAllHeatmapData() async throws -> (days: [Date: HeatmapDay], earliestDate: Date?)
+
+    /// 获取阅读日历最早可展示日期
+    /// - Returns: 最早存在阅读行为的日期（startOfDay），无数据则返回 nil
+    func fetchReadCalendarEarliestDate() async throws -> Date?
+
+    /// 按月获取阅读日历数据（书籍事件 + 读完标记）
+    /// - Parameter monthStart: 目标月份任意日期（实现内会归一到该月 1 日）
+    /// - Returns: 月数据（仅包含有活动或读完记录的日期键）
+    func fetchReadCalendarMonthData(monthStart: Date) async throws -> ReadCalendarMonthData
 }
 
 extension StatisticsRepositoryProtocol {

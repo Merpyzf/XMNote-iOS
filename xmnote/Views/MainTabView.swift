@@ -142,7 +142,7 @@ struct MainTabView: View {
         case .readingSession:
             Text("阅读计时")
         case .readCalendar(let date):
-            ReadCalendarPlaceholderView(date: date)
+            ReadCalendarView(date: date)
         }
     }
 
@@ -186,7 +186,7 @@ struct MainTabView: View {
         case .premium:
             Text("会员")
         case .readCalendar:
-            Text("阅读日历")
+            ReadCalendarView(date: nil)
         case .readReminder:
             Text("阅读提醒")
         case .dataImport:

@@ -7,5 +7,7 @@
 | 组件名 | 重要级别 | 源码路径 | 使用文档路径 | 触发条件 |
 | --- | --- | --- | --- | --- |
 | HeatmapChart | UI-复用关键 | xmnote/UIComponents/Charts/HeatmapChart.swift | docs/component-guides/HeatmapChart使用说明.md | 新增/重大重构 |
+| CalendarMonthStepperBar | UI-复用关键 | xmnote/UIComponents/Foundation/CalendarMonthStepperBar.swift | docs/component-guides/CalendarMonthStepperBar使用说明.md | 新增/重大重构 |
+| ReadCalendarView | UI-核心页面关键 | xmnote/Views/Reading/ReadCalendarView.swift | docs/component-guides/ReadCalendar使用说明.md | 新增/重大重构 |
 
 [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md

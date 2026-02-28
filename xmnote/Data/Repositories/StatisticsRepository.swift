@@ -2,9 +2,9 @@ import Foundation
 import GRDB
 
 /**
- * [INPUT]: 依赖 DatabaseManager 提供数据库连接，依赖 HeatmapDay/HeatmapLevel 领域模型
+ * [INPUT]: 依赖 DatabaseManager 提供数据库连接，依赖 Heatmap 与阅读日历领域模型
  * [OUTPUT]: 对外提供 StatisticsRepository（StatisticsRepositoryProtocol 的 GRDB 实现）
- * [POS]: Data 层统计仓储实现，聚合阅读时长/笔记数/打卡次数+时长+阅读状态为热力图数据，并支持统计类型/年份过滤
+ * [POS]: Data 层统计仓储实现，聚合热力图与阅读日历月视图数据
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
@@ -29,6 +29,18 @@ struct StatisticsRepository: StatisticsRepositoryProtocol {
         let result = try await fetchHeatmapData(year: 0, dataType: .all)
         return (result.days, result.earliestDate)
     }
+
+    func fetchReadCalendarEarliestDate() async throws -> Date? {
+        try await databaseManager.database.dbPool.read { db in
+            findReadCalendarEarliestDate(db)
+        }
+    }
+
+    func fetchReadCalendarMonthData(monthStart: Date) async throws -> ReadCalendarMonthData {
+        try await databaseManager.database.dbPool.read { db in
+            buildReadCalendarMonthData(db, monthStart: monthStart)
+        }
+    }
 }
 
 // MARK: - 共享格式化器
@@ -37,6 +49,13 @@ private extension StatisticsRepository {
     static let dayFormatter: DateFormatter = {
         let f = DateFormatter()
         f.dateFormat = "yyyy-MM-dd"
+        f.timeZone = .current
+        return f
+    }()
+
+    static let monthFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.dateFormat = "yyyy-MM"
         f.timeZone = .current
         return f
     }()
@@ -52,6 +71,14 @@ private struct CheckInSummary {
 private struct HeatmapDateRange {
     let start: Date
     let end: Date
+}
+
+private struct ReadCalendarDayBookRow {
+    let day: Date
+    let bookId: Int64
+    let bookName: String
+    let bookCover: String
+    let firstEventTime: Int64
 }
 
 private extension StatisticsRepository {
@@ -317,5 +344,225 @@ private extension StatisticsRepository {
             )
         }
         return result
+    }
+
+    // MARK: - 阅读日历
+
+    func buildReadCalendarMonthData(_ db: Database, monthStart: Date) -> ReadCalendarMonthData {
+        let normalizedMonthStart = normalizeToMonthStart(monthStart)
+        guard let nextMonthStart = calendar.date(byAdding: .month, value: 1, to: normalizedMonthStart),
+              let monthEnd = calendar.date(byAdding: .day, value: -1, to: nextMonthStart) else {
+            return .empty(for: normalizedMonthStart)
+        }
+
+        let queryRange = millisRangeForQuery(HeatmapDateRange(start: normalizedMonthStart, end: monthEnd))
+        let dayBookRows = fetchReadCalendarDayBookRows(db, millisRange: queryRange)
+        let readDoneMap = fetchReadDoneCountByDay(db, millisRange: queryRange)
+
+        var dayBookMap: [Date: [ReadCalendarDayBook]] = [:]
+        for row in dayBookRows {
+            let book = ReadCalendarDayBook(
+                id: row.bookId,
+                name: row.bookName,
+                coverURL: row.bookCover,
+                firstEventTime: row.firstEventTime
+            )
+            dayBookMap[row.day, default: []].append(book)
+        }
+
+        var days: [Date: ReadCalendarDay] = [:]
+        let dayKeys = Set(dayBookMap.keys).union(readDoneMap.keys)
+        for day in dayKeys {
+            let books = (dayBookMap[day] ?? []).sorted {
+                if $0.firstEventTime != $1.firstEventTime {
+                    return $0.firstEventTime < $1.firstEventTime
+                }
+                return $0.id < $1.id
+            }
+            days[day] = ReadCalendarDay(
+                date: day,
+                books: books,
+                readDoneCount: readDoneMap[day] ?? 0
+            )
+        }
+
+        return ReadCalendarMonthData(monthStart: normalizedMonthStart, days: days)
+    }
+
+    func normalizeToMonthStart(_ date: Date) -> Date {
+        let base = calendar.startOfDay(for: date)
+        let components = calendar.dateComponents([.year, .month], from: base)
+        guard let monthStart = calendar.date(from: DateComponents(year: components.year, month: components.month, day: 1)) else {
+            return base
+        }
+        return calendar.startOfDay(for: monthStart)
+    }
+
+    func fetchReadCalendarDayBookRows(_ db: Database, millisRange: ClosedRange<Int64>) -> [ReadCalendarDayBookRow] {
+        let sql = """
+            WITH raw_events AS (
+                SELECT DATE(
+                    CASE WHEN fuzzy_read_date != 0 THEN fuzzy_read_date / 1000 ELSE start_time / 1000 END,
+                    'unixepoch', 'localtime'
+                ) AS day,
+                book_id AS book_id,
+                MIN(CASE WHEN fuzzy_read_date != 0 THEN fuzzy_read_date ELSE start_time END) AS first_event_time
+                FROM read_time_record
+                WHERE is_deleted = 0
+                  AND book_id != 0
+                  AND (CASE WHEN fuzzy_read_date != 0 THEN fuzzy_read_date ELSE start_time END) BETWEEN ? AND ?
+                GROUP BY day, book_id
+
+                UNION ALL
+
+                SELECT DATE(created_date / 1000, 'unixepoch', 'localtime') AS day,
+                       book_id AS book_id,
+                       MIN(created_date) AS first_event_time
+                FROM note
+                WHERE is_deleted = 0
+                  AND book_id != 0
+                  AND created_date BETWEEN ? AND ?
+                GROUP BY day, book_id
+
+                UNION ALL
+
+                SELECT DATE(created_date / 1000, 'unixepoch', 'localtime') AS day,
+                       book_id AS book_id,
+                       MIN(created_date) AS first_event_time
+                FROM category_content
+                WHERE is_deleted = 0
+                  AND book_id != 0
+                  AND created_date BETWEEN ? AND ?
+                GROUP BY day, book_id
+
+                UNION ALL
+
+                SELECT DATE(created_date / 1000, 'unixepoch', 'localtime') AS day,
+                       book_id AS book_id,
+                       MIN(created_date) AS first_event_time
+                FROM review
+                WHERE is_deleted = 0
+                  AND book_id != 0
+                  AND created_date BETWEEN ? AND ?
+                GROUP BY day, book_id
+
+                UNION ALL
+
+                SELECT DATE(checkin_date / 1000, 'unixepoch', 'localtime') AS day,
+                       book_id AS book_id,
+                       MIN(checkin_date) AS first_event_time
+                FROM check_in_record
+                WHERE is_deleted = 0
+                  AND checkin_date != 0
+                  AND book_id != 0
+                  AND checkin_date BETWEEN ? AND ?
+                GROUP BY day, book_id
+
+                UNION ALL
+
+                SELECT DATE(changed_date / 1000, 'unixepoch', 'localtime') AS day,
+                       book_id AS book_id,
+                       MIN(changed_date) AS first_event_time
+                FROM book_read_status_record
+                WHERE is_deleted = 0
+                  AND changed_date != 0
+                  AND read_status_id = 3
+                  AND book_id != 0
+                  AND changed_date BETWEEN ? AND ?
+                GROUP BY day, book_id
+            ),
+            merged AS (
+                SELECT day, book_id, MIN(first_event_time) AS first_event_time
+                FROM raw_events
+                GROUP BY day, book_id
+            )
+            SELECT merged.day AS day,
+                   merged.book_id AS book_id,
+                   merged.first_event_time AS first_event_time,
+                   b.name AS book_name,
+                   b.cover AS book_cover
+            FROM merged
+            JOIN book b ON b.id = merged.book_id AND b.is_deleted = 0
+            ORDER BY merged.day ASC, merged.first_event_time ASC, merged.book_id ASC
+            """
+
+        let args: [Int64] = [
+            millisRange.lowerBound, millisRange.upperBound,
+            millisRange.lowerBound, millisRange.upperBound,
+            millisRange.lowerBound, millisRange.upperBound,
+            millisRange.lowerBound, millisRange.upperBound,
+            millisRange.lowerBound, millisRange.upperBound,
+            millisRange.lowerBound, millisRange.upperBound
+        ]
+
+        guard let rows = try? Row.fetchAll(db, sql: sql, arguments: StatementArguments(args)) else {
+            return []
+        }
+
+        var result: [ReadCalendarDayBookRow] = []
+        result.reserveCapacity(rows.count)
+        for row in rows {
+            guard let dayStr: String = row["day"],
+                  let bookId: Int64 = row["book_id"],
+                  let firstEventTime: Int64 = row["first_event_time"],
+                  let bookName: String = row["book_name"],
+                  let date = Self.dayFormatter.date(from: dayStr) else { continue }
+            let day = calendar.startOfDay(for: date)
+            let bookCover: String = row["book_cover"] ?? ""
+            result.append(ReadCalendarDayBookRow(
+                day: day,
+                bookId: bookId,
+                bookName: bookName,
+                bookCover: bookCover,
+                firstEventTime: firstEventTime
+            ))
+        }
+        return result
+    }
+
+    func fetchReadDoneCountByDay(_ db: Database, millisRange: ClosedRange<Int64>) -> [Date: Int] {
+        let sql = """
+            SELECT DATE(changed_date / 1000, 'unixepoch', 'localtime') AS day,
+                   COUNT(*) AS total
+            FROM book_read_status_record
+            WHERE is_deleted = 0
+              AND read_status_id = 3
+              AND changed_date != 0
+              AND changed_date BETWEEN ? AND ?
+            GROUP BY day
+            """
+        return queryDayAggregation(
+            db,
+            sql: sql,
+            arguments: StatementArguments([millisRange.lowerBound, millisRange.upperBound])
+        )
+    }
+
+    func findReadCalendarEarliestDate(_ db: Database) -> Date? {
+        let queries: [String] = [
+            """
+            SELECT MIN(CASE WHEN fuzzy_read_date != 0 THEN fuzzy_read_date ELSE start_time END)
+            FROM read_time_record
+            WHERE is_deleted = 0
+            """,
+            "SELECT MIN(created_date) FROM note WHERE is_deleted = 0",
+            "SELECT MIN(created_date) FROM category_content WHERE is_deleted = 0",
+            "SELECT MIN(created_date) FROM review WHERE is_deleted = 0",
+            "SELECT MIN(checkin_date) FROM check_in_record WHERE is_deleted = 0 AND checkin_date != 0",
+            """
+            SELECT MIN(changed_date)
+            FROM book_read_status_record
+            WHERE is_deleted = 0
+              AND changed_date != 0
+              AND read_status_id = 3
+            """
+        ]
+
+        let timestamps = queries.compactMap { sql -> Int64? in
+            guard let value = try? Int64.fetchOne(db, sql: sql), value > 0 else { return nil }
+            return value
+        }
+        guard let earliest = timestamps.min() else { return nil }
+        return calendar.startOfDay(for: Date(timeIntervalSince1970: Double(earliest) / 1000))
     }
 }

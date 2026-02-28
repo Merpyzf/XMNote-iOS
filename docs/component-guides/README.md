@@ -3,6 +3,8 @@
 | 组件名 | 源码路径 | 使用文档 | 状态 |
 | --- | --- | --- | --- |
 | HeatmapChart | `xmnote/UIComponents/Charts/HeatmapChart.swift` | `docs/component-guides/HeatmapChart使用说明.md` | 已完成 |
+| CalendarMonthStepperBar | `xmnote/UIComponents/Foundation/CalendarMonthStepperBar.swift` | `docs/component-guides/CalendarMonthStepperBar使用说明.md` | 已完成 |
+| ReadCalendarView | `xmnote/Views/Reading/ReadCalendarView.swift` | `docs/component-guides/ReadCalendar使用说明.md` | 已完成 |
 
 维护规则
 - 重要 UI 组件完成开发后，必须在本索引新增或更新条目。

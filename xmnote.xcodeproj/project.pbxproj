@@ -205,7 +205,7 @@
 					};
 				};
 			};
-			buildConfigurationList = 891114972F39AC2F00D99384 /* Build configuration list for PBXProject "XMNote" */;
+			buildConfigurationList = 891114972F39AC2F00D99384 /* Build configuration list for PBXProject "xmnote" */;
 			developmentRegion = en;
 			hasScannedForEncodings = 0;
 			knownRegions = (
@@ -573,7 +573,7 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
-		891114972F39AC2F00D99384 /* Build configuration list for PBXProject "XMNote" */ = {
+		891114972F39AC2F00D99384 /* Build configuration list for PBXProject "xmnote" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				891114BB2F39AC3200D99384 /* Debug */,

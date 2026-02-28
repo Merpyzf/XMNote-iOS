@@ -4,6 +4,8 @@
 成员清单
 - `README.md`: 组件使用文档索引（组件名、源码路径、文档路径、状态）。
 - `HeatmapChart使用说明.md`: HeatmapChart 组件接入指南与参数说明。
+- `CalendarMonthStepperBar使用说明.md`: CalendarMonthStepperBar 月份切换胶囊组件接入指南与参数说明。
+- `ReadCalendar使用说明.md`: ReadCalendarView 页面组件接入指南与参数说明。
 
 执行约束
 - 重要 UI 组件（UI 核心白名单组件 + `xmnote/UIComponents` 下新增/重大重构组件）开发完成后，必须新增或更新本目录使用说明文档。
