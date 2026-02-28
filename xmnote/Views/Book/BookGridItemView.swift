@@ -40,9 +40,9 @@ struct BookGridItemView: View {
         .frame(minWidth: 0, maxWidth: .infinity)
         .aspectRatio(0.68, contentMode: .fit)
         .clipped()
-        .clipShape(RoundedRectangle(cornerRadius: CornerRadius.book))
+        .clipShape(RoundedRectangle(cornerRadius: CornerRadius.inlaySmall))
         .overlay(
-            RoundedRectangle(cornerRadius: CornerRadius.book)
+            RoundedRectangle(cornerRadius: CornerRadius.inlaySmall)
                 .stroke(Color.cardBorder, lineWidth: CardStyle.borderWidth)
         )
         .overlay(alignment: .topTrailing) {

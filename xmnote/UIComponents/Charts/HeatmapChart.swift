@@ -36,7 +36,7 @@ struct HeatmapChartStyle: Equatable, Sendable {
     init(
         squareSize: CGFloat = 13,
         squareSpacing: CGFloat = 3,
-        squareRadius: CGFloat = 2.5,
+        squareRadius: CGFloat = CornerRadius.inlayTiny,
         axisGap: CGFloat = 8,
         outerInset: CGFloat = 0,
         headerFontSize: CGFloat = 9,
@@ -63,7 +63,7 @@ struct HeatmapChartStyle: Equatable, Sendable {
     static let readingCard = HeatmapChartStyle(
         squareSize: 16,
         squareSpacing: 3,
-        squareRadius: 3,
+        squareRadius: CornerRadius.inlayTiny,
         fitsViewportWithoutClipping: true,
         minSquareSize: 14,
         maxSquareSize: 18.5
@@ -665,7 +665,7 @@ extension HeatmapChart {
                 .font(.system(size: fontSize))
                 .foregroundStyle(Color.textHint)
             ForEach(HeatmapLevel.allCases.filter { $0 != .none }, id: \.rawValue) { level in
-                RoundedRectangle(cornerRadius: 2.5)
+                RoundedRectangle(cornerRadius: CornerRadius.inlayTiny)
                     .fill(level.color)
                     .frame(width: squareSize, height: squareSize)
             }

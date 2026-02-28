@@ -93,9 +93,9 @@ private struct RichTextTestContentView: View {
                     highlightARGB: viewModel.selectedHighlightARGB
                 )
                 .frame(height: 200)
-                .clipShape(RoundedRectangle(cornerRadius: CornerRadius.item))
+                .clipShape(RoundedRectangle(cornerRadius: CornerRadius.blockMedium))
                 .overlay(
-                    RoundedRectangle(cornerRadius: CornerRadius.item)
+                    RoundedRectangle(cornerRadius: CornerRadius.blockMedium)
                         .stroke(Color.cardBorder, lineWidth: CardStyle.borderWidth)
                 )
 
@@ -130,9 +130,9 @@ private struct RichTextTestContentView: View {
                     highlightARGB: viewModel.selectedHighlightARGB
                 )
                 .frame(height: 150)
-                .clipShape(RoundedRectangle(cornerRadius: CornerRadius.item))
+                .clipShape(RoundedRectangle(cornerRadius: CornerRadius.blockMedium))
                 .overlay(
-                    RoundedRectangle(cornerRadius: CornerRadius.item)
+                    RoundedRectangle(cornerRadius: CornerRadius.blockMedium)
                         .stroke(Color.cardBorder, lineWidth: CardStyle.borderWidth)
                 )
 
@@ -245,7 +245,7 @@ private struct RichTextTestContentView: View {
                 .padding(Spacing.base)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .background(Color.windowBackground)
-                .clipShape(RoundedRectangle(cornerRadius: CornerRadius.item))
+                .clipShape(RoundedRectangle(cornerRadius: CornerRadius.blockMedium))
         }
     }
 

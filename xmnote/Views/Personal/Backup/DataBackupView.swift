@@ -178,7 +178,7 @@ private extension DataBackupContentView {
                         .foregroundStyle(.white)
                 }
                 .padding(Spacing.double)
-                .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: CornerRadius.card))
+                .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: CornerRadius.blockLarge))
             }
         }
     }

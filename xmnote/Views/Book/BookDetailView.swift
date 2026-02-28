@@ -111,9 +111,9 @@ private struct BookDetailContentView: View {
         .aspectRatio(0.68, contentMode: .fit)
         .frame(width: 80)
         .clipped()
-        .clipShape(RoundedRectangle(cornerRadius: CornerRadius.book))
+        .clipShape(RoundedRectangle(cornerRadius: CornerRadius.inlaySmall))
         .overlay(
-            RoundedRectangle(cornerRadius: CornerRadius.book)
+            RoundedRectangle(cornerRadius: CornerRadius.inlaySmall)
                 .stroke(Color.cardBorder, lineWidth: CardStyle.borderWidth)
         )
     }

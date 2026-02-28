@@ -97,7 +97,7 @@ struct ReadCalendarMonthGrid: View {
                     onSelectDay: onSelectDay
                 )
                 .background(
-                    RoundedRectangle(cornerRadius: CornerRadius.item, style: .continuous)
+                    RoundedRectangle(cornerRadius: CornerRadius.blockMedium, style: .continuous)
                         .fill(Color.readCalendarSelectionFill.opacity(0.22))
                 )
             }
@@ -211,7 +211,7 @@ private struct ReadCalendarMonthGridWeekRow: View {
                             .padding(.bottom, 2)
                             .padding(.leading, 3)
                             .background(alignment: .bottomLeading) {
-                                RoundedRectangle(cornerRadius: CornerRadius.calendarTag, style: .continuous)
+                                RoundedRectangle(cornerRadius: CornerRadius.inlayMedium, style: .continuous)
                                     .fill(Color.readCalendarSelectionFill.opacity(0.72))
                                     .frame(width: 24, height: 12)
                                     .padding(.leading, 4)
@@ -241,8 +241,8 @@ private struct ReadCalendarMonthGridWeekRow: View {
         let showText = segmentWidth >= 42
         let isPending = segment.color.state == .pending
 
-        let leftRadius: CGFloat = segment.continuesFromPrevWeek ? 2.5 : CornerRadius.calendarEvent
-        let rightRadius: CGFloat = segment.continuesToNextWeek ? 2.5 : CornerRadius.calendarEvent
+        let leftRadius: CGFloat = segment.continuesFromPrevWeek ? 2.5 : CornerRadius.blockSmall
+        let rightRadius: CGFloat = segment.continuesToNextWeek ? 2.5 : CornerRadius.blockSmall
         let segmentShape = UnevenRoundedRectangle(
             topLeadingRadius: leftRadius,
             bottomLeadingRadius: leftRadius,

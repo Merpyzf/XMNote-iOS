@@ -145,9 +145,9 @@ private extension ReadCalendarPanel {
         .padding(.top, Layout.calendarInnerTopPadding)
         .padding(.bottom, Layout.calendarInnerBottomPadding)
         .background(Color.readCalendarCardBackground)
-        .clipShape(RoundedRectangle(cornerRadius: CornerRadius.calendarCard, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: CornerRadius.containerMedium, style: .continuous))
         .overlay {
-            RoundedRectangle(cornerRadius: CornerRadius.calendarCard, style: .continuous)
+            RoundedRectangle(cornerRadius: CornerRadius.containerMedium, style: .continuous)
                 .stroke(Color.readCalendarCardStroke.opacity(0.72), lineWidth: CardStyle.borderWidth)
         }
         .shadow(color: Color.black.opacity(0.06), radius: 16, x: 0, y: 7)
@@ -293,11 +293,11 @@ private extension ReadCalendarPanel {
         .padding(.horizontal, Spacing.base)
         .padding(.vertical, 8)
         .background(
-            RoundedRectangle(cornerRadius: CornerRadius.card, style: .continuous)
+            RoundedRectangle(cornerRadius: CornerRadius.blockLarge, style: .continuous)
                 .fill(Color.readCalendarSelectionFill.opacity(0.62))
         )
         .overlay {
-            RoundedRectangle(cornerRadius: CornerRadius.card, style: .continuous)
+            RoundedRectangle(cornerRadius: CornerRadius.blockLarge, style: .continuous)
                 .stroke(Color.readCalendarSelectionStroke.opacity(0.62), lineWidth: CardStyle.borderWidth)
         }
         .padding(.top, Spacing.base)

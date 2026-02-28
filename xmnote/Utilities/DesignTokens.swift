@@ -221,15 +221,38 @@ enum Spacing {
 }
 
 // MARK: - Corner Radius
+//
+// 选择指南（两步决策）：
+//
+// 第一步：判断元素角色
+//   inlay     → 嵌在卡片/容器内的小型视觉零件（色块、封面、标签、徽章）
+//   block     → 独立可识别的内容单元（事件条、列表项、标准卡片）
+//   container → 承载内容块的外壳（面板、弹层、突出容器）
+//
+// 第二步：按视觉体量选尺寸
+//   tiny(2.5) < small(4) < medium(6~8) < large(10~12) < xl(16) < xxl(18)
+//
+// 示例：
+//   热力图方格 → 嵌在卡片里的小零件 → inlay → 最小的 → inlayTiny
+//   书籍封面   → 嵌在网格里的小零件 → inlay → 稍大   → inlaySmall
+//   事件条     → 独立内容单元       → block → 紧凑   → blockSmall
+//   标准卡片   → 独立内容单元       → block → 标准   → blockLarge
+//   日历面板   → 包裹内容的容器     → container → 标准 → containerMedium
 
 enum CornerRadius {
-    static let book: CGFloat = 4
-    static let item: CGFloat = 10
-    static let card: CGFloat = 12
-    static let sheet: CGFloat = 16
-    static let calendarCard: CGFloat = 16
-    static let calendarEvent: CGFloat = 8
-    static let calendarTag: CGFloat = 6
+    // --- inlay: 嵌在卡片/容器内的小型视觉零件 ---
+    static let inlayTiny: CGFloat = 2.5    // 热力图方格、图例色块
+    static let inlaySmall: CGFloat = 4     // 书籍封面缩略图
+    static let inlayMedium: CGFloat = 6    // 标签、徽章
+
+    // --- block: 独立可识别的内容单元 ---
+    static let blockSmall: CGFloat = 8     // 事件条、紧凑卡片
+    static let blockMedium: CGFloat = 10   // 列表项、输入框
+    static let blockLarge: CGFloat = 12    // 标准卡片、内容区域
+
+    // --- container: 承载内容块的外壳 ---
+    static let containerMedium: CGFloat = 16  // 面板、弹层
+    static let containerLarge: CGFloat = 18   // 突出容器（热力图 widget）
 }
 
 // MARK: - Card Style

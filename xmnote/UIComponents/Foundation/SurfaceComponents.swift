@@ -17,7 +17,7 @@ struct CardContainer<Content: View>: View {
     let content: Content
 
     init(
-        cornerRadius: CGFloat = CornerRadius.card,
+        cornerRadius: CGFloat = CornerRadius.blockLarge,
         showsBorder: Bool = true,
         @ViewBuilder content: () -> Content
     ) {
