@@ -5,7 +5,7 @@
 //  Created by 王珂 on 2026/2/10.
 //
 //  [INPUT]: 无外部依赖，仅依赖 SwiftUI 框架
-//  [OUTPUT]: Color 语义扩展（29 个）、Spacing / CornerRadius / CardStyle 常量、Color(hex:) / Color(light:dark:) 构造器
+//  [OUTPUT]: Color 语义扩展（含阅读日历纸感主题）、Spacing / CornerRadius / CardStyle 常量、Color(hex:) / Color(light:dark:) 构造器
 //  [POS]: Utilities 模块的设计令牌中枢，全局 UI 一致性的单一真相源
 //  [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
 
@@ -122,6 +122,76 @@ extension Color {
     static let feedbackSuccess = brand
 }
 
+// MARK: - Reading Calendar Theme
+
+extension Color {
+    /// 阅读日历画布背景（顶部）
+    static let readCalendarCanvasTop = Color(
+        light: Color(hex: 0xF2F4F8),
+        dark: Color(hex: 0x161A20)
+    )
+
+    /// 阅读日历画布背景（底部）
+    static let readCalendarCanvasBottom = Color(
+        light: Color(hex: 0xECEFF4),
+        dark: Color(hex: 0x12161C)
+    )
+
+    /// 阅读日历主卡背景
+    static let readCalendarCardBackground = Color(
+        light: Color(hex: 0xFAFCFF),
+        dark: Color(hex: 0x1E242C)
+    )
+
+    /// 阅读日历主卡描边
+    static let readCalendarCardStroke = Color(
+        light: Color(hex: 0xD8DEE8),
+        dark: Color(hex: 0x36404E)
+    )
+
+    /// 阅读日历次级文本
+    static let readCalendarSubtleText = Color(
+        light: Color(hex: 0x647388),
+        dark: Color(hex: 0xA6B3C2)
+    )
+
+    /// 阅读日历选中日背景
+    static let readCalendarSelectionFill = Color(
+        light: Color(hex: 0xE7EDF7),
+        dark: Color(hex: 0x2B3645)
+    )
+
+    /// 阅读日历选中日描边
+    static let readCalendarSelectionStroke = Color(
+        light: Color(hex: 0xBCCBDF),
+        dark: Color(hex: 0x4C617A)
+    )
+
+    /// 阅读日历“今天”标记色
+    static let readCalendarTodayMark = Color(
+        light: Color(hex: 0x4FAF82),
+        dark: Color(hex: 0x77D6A9)
+    )
+
+    /// 阅读日历事件条文本色
+    static let readCalendarEventText = Color(
+        light: Color(hex: 0x2F3945),
+        dark: Color(hex: 0xE6EDF7)
+    )
+
+    /// 阅读日历低饱和事件色板
+    static let readCalendarEventPalette: [Color] = [
+        Color(light: Color(hex: 0xB4C6D8), dark: Color(hex: 0x5A7187)), // 雾蓝
+        Color(light: Color(hex: 0xA9B8C9), dark: Color(hex: 0x53667B)), // 蓝灰
+        Color(light: Color(hex: 0xAFC2B8), dark: Color(hex: 0x5B7268)), // 灰绿
+        Color(light: Color(hex: 0xB8B2C8), dark: Color(hex: 0x665F7A)), // 灰紫
+        Color(light: Color(hex: 0x9EB1C4), dark: Color(hex: 0x51667B)), // 岩青
+        Color(light: Color(hex: 0xB2C0CF), dark: Color(hex: 0x5E7085)), // 青灰蓝
+        Color(light: Color(hex: 0xA7B9B2), dark: Color(hex: 0x556B64)), // 鼠尾草灰
+        Color(light: Color(hex: 0xAEB8C2), dark: Color(hex: 0x5C6774))  // 石墨蓝灰
+    ]
+}
+
 // MARK: - Spacing
 
 enum Spacing {
@@ -139,6 +209,9 @@ enum CornerRadius {
     static let item: CGFloat = 10
     static let card: CGFloat = 12
     static let sheet: CGFloat = 16
+    static let calendarCard: CGFloat = 16
+    static let calendarEvent: CGFloat = 8
+    static let calendarTag: CGFloat = 6
 }
 
 // MARK: - Card Style

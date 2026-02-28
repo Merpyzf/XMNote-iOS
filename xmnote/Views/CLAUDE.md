@@ -48,7 +48,7 @@ SwiftUI 视图层，按功能模块分子目录。纯 UI 渲染，不包含业�
 - `ReadingListPlaceholderView.swift`: 在读页内容容器（热力图小组件 + 列表占位）
 - `ReadingHeatmapWidgetView.swift`: 在读页热力图小组件（帮助弹层、日期点击回调）
 - `HeatmapHelpSheetView.swift`: 热力图说明弹层（ZStack + 液态玻璃关闭按钮，纯展示：文案 + 图例，零回调信息卡片）
-- `ReadCalendarView.swift`: 阅读日历核心页面（月份切换、周网格、跨周连续事件条）
+- `ReadCalendarView.swift`: 阅读日历页面壳层（仓储注入 + 状态映射，挂载 ReadCalendarPanel 公共组件）
 - `TimelinePlaceholderView.swift`: 时间线占位
 
 ## Debug/

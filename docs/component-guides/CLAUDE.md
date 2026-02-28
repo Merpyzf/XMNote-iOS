@@ -5,6 +5,8 @@
 - `README.md`: 组件使用文档索引（组件名、源码路径、文档路径、状态）。
 - `HeatmapChart使用说明.md`: HeatmapChart 组件接入指南与参数说明。
 - `CalendarMonthStepperBar使用说明.md`: CalendarMonthStepperBar 月份切换胶囊组件接入指南与参数说明。
+- `ReadCalendarPanel使用说明.md`: ReadCalendarPanel 完整阅读日历组件接入指南与参数说明。
+- `ReadCalendarMonthGrid使用说明.md`: ReadCalendarMonthGrid 月网格组件接入指南与参数说明。
 - `ReadCalendar使用说明.md`: ReadCalendarView 页面组件接入指南与参数说明。
 
 执行约束

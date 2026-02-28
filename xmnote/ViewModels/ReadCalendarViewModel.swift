@@ -120,8 +120,7 @@ final class ReadCalendarViewModel {
         errorMessage = nil
 
         let today = calendar.startOfDay(for: Date())
-        let preferredDate = calendar.startOfDay(for: initialDate ?? today)
-        selectedDate = preferredDate > today ? today : preferredDate
+        selectedDate = today
 
         do {
             let earliestDate = try await repository.fetchReadCalendarEarliestDate()
@@ -131,14 +130,13 @@ final class ReadCalendarViewModel {
 
             rebuildMonthRange(from: earliest, to: current)
 
-            let preferredMonth = Self.monthStart(of: selectedDate, using: calendar)
+            let preferredMonth = Self.monthStart(
+                of: calendar.startOfDay(for: initialDate ?? today),
+                using: calendar
+            )
             let defaultMonth = clampMonthStart(preferredMonth, earliest: earliest, latest: current)
             displayedMonthStart = defaultMonth
             pagerSelection = defaultMonth
-            selectedDate = clampSelectedDate(
-                dayOfMonth: calendar.component(.day, from: selectedDate),
-                monthStart: defaultMonth
-            )
 
             monthCache = [:]
             pageStates = [:]
@@ -184,10 +182,6 @@ final class ReadCalendarViewModel {
         pagerSelection = normalized
         if normalized != displayedMonthStart {
             displayedMonthStart = normalized
-            selectedDate = clampSelectedDate(
-                dayOfMonth: calendar.component(.day, from: selectedDate),
-                monthStart: normalized
-            )
             errorMessage = nil
         }
 
@@ -449,20 +443,6 @@ private extension ReadCalendarViewModel {
         }
         let start = calendar.dateInterval(of: .weekOfYear, for: fallback)?.start ?? fallback
         return calendar.startOfDay(for: start)
-    }
-
-    func clampSelectedDate(dayOfMonth: Int, monthStart: Date) -> Date {
-        guard let range = calendar.range(of: .day, in: .month, for: monthStart) else {
-            return monthStart
-        }
-        let safeDay = max(1, min(dayOfMonth, range.count))
-        let components = calendar.dateComponents([.year, .month], from: monthStart)
-        let date = calendar.date(from: DateComponents(
-            year: components.year,
-            month: components.month,
-            day: safeDay
-        )) ?? monthStart
-        return calendar.startOfDay(for: date)
     }
 
     func clampMonthStart(_ monthStart: Date, earliest: Date, latest: Date) -> Date {

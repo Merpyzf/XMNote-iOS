@@ -8,6 +8,8 @@
 | --- | --- | --- | --- | --- |
 | HeatmapChart | UI-复用关键 | xmnote/UIComponents/Charts/HeatmapChart.swift | docs/component-guides/HeatmapChart使用说明.md | 新增/重大重构 |
 | CalendarMonthStepperBar | UI-复用关键 | xmnote/UIComponents/Foundation/CalendarMonthStepperBar.swift | docs/component-guides/CalendarMonthStepperBar使用说明.md | 新增/重大重构 |
+| ReadCalendarPanel | UI-复用关键 | xmnote/UIComponents/Foundation/ReadCalendarPanel.swift | docs/component-guides/ReadCalendarPanel使用说明.md | 新增/重大重构 |
+| ReadCalendarMonthGrid | UI-复用关键 | xmnote/UIComponents/Foundation/ReadCalendarMonthGrid.swift | docs/component-guides/ReadCalendarMonthGrid使用说明.md | 新增/重大重构 |
 | ReadCalendarView | UI-核心页面关键 | xmnote/Views/Reading/ReadCalendarView.swift | docs/component-guides/ReadCalendar使用说明.md | 新增/重大重构 |
 
 [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md

@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 xmnote/Utilities/DesignTokens.swift 的颜色、圆角、边框与间距令牌
- * [OUTPUT]: 对外提供 CalendarMonthStepperBar（月视图顶部月份切换胶囊组件）
+ * [OUTPUT]: 对外提供 CalendarMonthStepperBar（月视图顶部月份切换胶囊组件，支持轻玻璃浮层视觉）
  * [POS]: UIComponents/Foundation 的可复用月份切换组件，服务阅读日历与后续月视图页面
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -8,6 +8,11 @@
 import SwiftUI
 
 struct CalendarMonthStepperBar: View {
+    private enum Layout {
+        static let sideButtonOuterSize: CGFloat = 40
+        static let sideButtonInnerSize: CGFloat = 30
+    }
+
     let title: String
     let canGoPrev: Bool
     let canGoNext: Bool
@@ -25,10 +30,11 @@ struct CalendarMonthStepperBar: View {
             Spacer(minLength: Spacing.half)
 
             Text(title)
-                .font(.system(size: 18, weight: .semibold))
+                .font(.system(size: 18, weight: .semibold, design: .rounded))
                 .foregroundStyle(Color.textPrimary)
                 .lineLimit(1)
                 .contentTransition(.numericText())
+                .animation(.easeInOut, value: title)
 
             Spacer(minLength: Spacing.half)
 
@@ -38,17 +44,19 @@ struct CalendarMonthStepperBar: View {
                 action: onNext
             )
         }
-        .padding(.horizontal, Spacing.half)
-        .padding(.vertical, 5)
+        .padding(.horizontal, 8)
+        .padding(.vertical, 6)
         .background(
-            RoundedRectangle(cornerRadius: CornerRadius.card, style: .continuous)
-                .fill(Color.contentBackground)
+            Capsule(style: .continuous)
+                .fill(Color.readCalendarCardBackground.opacity(0.68))
+                .glassEffect(.regular.interactive(), in: .capsule)
         )
-        .overlay {
-            RoundedRectangle(cornerRadius: CornerRadius.card, style: .continuous)
-                .stroke(Color.cardBorder, lineWidth: CardStyle.borderWidth)
-        }
-        .shadow(color: Color.black.opacity(0.03), radius: 8, x: 0, y: 2)
+//        .overlay {
+//            Capsule(style: .continuous)
+//                .stroke(Color.readCalendarCardStroke.opacity(0.85), lineWidth: CardStyle.borderWidth)
+//        }
+        .shadow(color: Color.black.opacity(0.06), radius: 12, x: 0, y: 5)
+        .shadow(color: Color.white.opacity(0.45), radius: 0.2, x: 0, y: -0.2)
     }
 
     private func arrowButton(
@@ -60,22 +68,22 @@ struct CalendarMonthStepperBar: View {
             action()
         } label: {
             Image(systemName: systemName)
-                .font(.system(size: 14, weight: .semibold))
-                .foregroundStyle(isEnabled ? Color.textSecondary : Color.textHint)
-                .frame(width: 30, height: 30)
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(isEnabled ? Color.readCalendarSubtleText : Color.textHint)
+                .frame(width: Layout.sideButtonInnerSize, height: Layout.sideButtonInnerSize)
                 .background(
                     Circle()
-                        .fill(Color.bgSecondary.opacity(isEnabled ? 1 : 0.68))
+                        .fill(Color.readCalendarCardBackground.opacity(isEnabled ? 0.84 : 0.55))
                 )
                 .overlay {
                     Circle()
-                        .stroke(Color.cardBorder.opacity(isEnabled ? 1 : 0.65), lineWidth: CardStyle.borderWidth)
+                        .stroke(Color.readCalendarCardStroke.opacity(isEnabled ? 0.88 : 0.58), lineWidth: CardStyle.borderWidth)
                 }
         }
-        .buttonStyle(.plain)
+        .topBarGlassButtonStyle(isEnabled)
         .disabled(!isEnabled)
-        .opacity(isEnabled ? 1 : 0.58)
-        .frame(width: 40, height: 40)
+        .opacity(isEnabled ? 1 : 0.56)
+        .frame(width: Layout.sideButtonOuterSize, height: Layout.sideButtonOuterSize)
         .contentShape(Circle())
     }
 }

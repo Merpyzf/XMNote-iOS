@@ -90,3 +90,128 @@ val lanes = assignLane(runs) // 稳定 lane
   - Android 一致性（可切兼容模式）
   - iOS 连续可读性（跨周连接）
   - 后续扩展性（筛选、点击、详情、埋点）
+
+## 6. 新增：纸感卡片系统 UI 重构（Compose -> SwiftUI）
+
+### 6.1 关键 iOS 知识点
+- 二级页面背景优先与首页体系一致（`windowBackground`），不要额外叠加首页顶部渐变层。
+- 通过 `card shadow + 留白分隔` 构建“空间层级”，比大量分割线更自然。
+- 视觉调色优先使用冷中性低饱和系（雾蓝/灰青），避免暖色在灰底场景下发脏。
+- `glassEffect` 只用于轻量控制层（如月份切换），正文仍保持清晰可读。
+- 选中态优先用 `fill + stroke + fontWeight` 建层级，避免高饱和色块造成视觉噪音。
+- 跨周事件条可通过 `continuesFromPrevWeek/continuesToNextWeek` 做端点渐隐，表达“时间流”。
+
+### 6.2 Compose 思维对照
+| 设计意图 | Android Compose | SwiftUI |
+|---|---|---|
+| 卡片浮层感 | `Card(elevation)` + 主题色面板 | `windowBackground + RoundedRectangle + soft shadow` |
+| 顶部轻控件层 | `Surface + IconButton` | `Capsule + glassEffect + snappy` |
+| 跨周连续条视觉 | `RoundedCornerShape + alpha` | `UnevenRoundedRectangle + edge gradient` |
+| 选中日期轻强调 | `border + low-alpha bg` | `Circle(fill+stroke) + font weight` |
+
+### 6.3 可运行 SwiftUI 片段
+```swift
+ZStack {
+    Color.windowBackground.ignoresSafeArea()
+
+    RoundedRectangle(cornerRadius: CornerRadius.calendarCard, style: .continuous)
+        .fill(Color.readCalendarCardBackground)
+        .overlay {
+            RoundedRectangle(cornerRadius: CornerRadius.calendarCard, style: .continuous)
+                .stroke(Color.readCalendarCardStroke, lineWidth: CardStyle.borderWidth)
+        }
+        .shadow(color: .black.opacity(0.07), radius: 18, x: 0, y: 8)
+}
+```
+
+### 6.4 Compose 对照片段
+```kotlin
+Box(
+    Modifier
+        .fillMaxSize()
+        .background(MaterialTheme.colorScheme.background)
+) {
+    Card(
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFFFAFCFF)),
+        elevation = CardDefaults.cardElevation(defaultElevation = 6.dp)
+    ) {
+        // calendar content
+    }
+}
+```
+
+## 7. 新增：完整控件组件化（ReadCalendarPanel + ReadCalendarMonthGrid）
+
+### 7.1 iOS 侧抽象方式
+- `ReadCalendarView`：只做导航与数据装配（壳层）。
+- `ReadCalendarPanel`：完整日历控件（月份切换、weekday、分页、错误态）。
+- `ReadCalendarMonthGrid`：底层月网格渲染（周行/日期/事件条）。
+
+### 7.2 对 Compose 开发者的映射
+| Android Compose | SwiftUI |
+|---|---|
+| `Screen + ViewModel + HorizontalPager` 全写在一个页面 | 页面壳层 `ReadCalendarView` + 可复用控件 `ReadCalendarPanel` |
+| `LazyVerticalGrid` / 自定义 Row 直接画日历格 | `ReadCalendarMonthGrid` 独立成基础渲染组件 |
+| 页面直接读状态并处理细节 | 壳层只做状态映射，细节交给 UIComponents |
+
+### 7.3 可运行 SwiftUI 片段
+```swift
+ReadCalendarPanel(
+    props: panelProps,
+    onStepMonth: { viewModel.stepPager(offset: $0) },
+    onPagerSelectionChanged: { viewModel.pagerSelection = $0 },
+    onSelectDate: { viewModel.selectDate($0) },
+    onRetry: { retryCurrentContext() }
+)
+```
+
+### 7.4 对应 Compose 抽象片段
+```kotlin
+@Composable
+fun ReadCalendarScreen(
+    state: CalendarUiState,
+    onStepMonth: (Int) -> Unit,
+    onPagerMonthChange: (LocalDate) -> Unit,
+    onSelectDate: (LocalDate) -> Unit
+) {
+    ReadCalendarPanel(
+        state = state,
+        onStepMonth = onStepMonth,
+        onPagerMonthChange = onPagerMonthChange,
+        onSelectDate = onSelectDate
+    )
+}
+```
+
+## 7. 新增：完整公共组件抽取（ReadCalendarPanel）
+
+### 7.1 iOS 知识点
+- “页面壳层”和“可复用控件”必须分层：页面只做依赖注入与任务调度，控件只做展示与交互。
+- 复用组件优先采用 `Props + Callback` 设计，避免组件内部直接依赖 Repository。
+- 底层渲染组件应避免直接依赖业务领域模型，使用 UI 专用输入结构（`DayPayload`、`EventSegment`）降低耦合。
+
+### 7.2 Compose 对照思路
+| 目标 | Compose 常见方式 | SwiftUI 本次方式 |
+|---|---|---|
+| 页面壳层 | `Screen + ViewModel.collectAsState()` | `ReadCalendarView + @State ViewModel` |
+| 完整控件 | `CalendarPanel(state, actions)` | `ReadCalendarPanel(props, callbacks)` |
+| 底层网格 | `MonthGrid(weeks, dayUiState)` | `ReadCalendarMonthGrid(weeks, dayPayloadProvider)` |
+
+### 7.3 可运行 SwiftUI 片段
+```swift
+ReadCalendarPanel(
+    props: panelProps,
+    onStepMonth: { viewModel.stepPager(offset: $0) },
+    onPagerSelectionChanged: { viewModel.pagerSelection = $0 },
+    onSelectDate: { viewModel.selectDate($0) },
+    onRetry: { retryCurrentContext() }
+)
+```
+
+### 7.4 迁移结论
+- Android 语义对齐不等于页面结构照搬。
+- 正确抽象应是：
+  1) 页面处理数据生命周期；
+  2) 公共控件处理视觉与交互；
+  3) 低层网格处理绘制细节。
