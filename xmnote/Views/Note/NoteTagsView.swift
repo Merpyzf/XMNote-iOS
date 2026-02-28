@@ -5,6 +5,13 @@
 //  Created by 王珂 on 2026/2/9.
 //
 
+/**
+ * [INPUT]: 依赖 NoteViewModel 提供标签分组数据
+ * [OUTPUT]: 对外提供 NoteTagsView，标签分组网格展示
+ * [POS]: Note 模块标签展示层，被 NoteCollectionView 在标签分类下嵌入
+ * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
+ */
+
 import SwiftUI
 
 struct NoteTagsView: View {

@@ -5,6 +5,13 @@
 //  Created by 王珂 on 2026/2/9.
 //
 
+/**
+ * [INPUT]: 依赖 NoteViewModel 提供分类与笔记列表状态
+ * [OUTPUT]: 对外提供 NoteCollectionView，分类切换与内容分发
+ * [POS]: Note 模块分类展示层，被 NoteContainerView 嵌入
+ * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
+ */
+
 import SwiftUI
 
 struct NoteCollectionView: View {

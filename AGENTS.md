@@ -33,7 +33,7 @@
 ## UI组件归位规则（阻塞级）
 - 可复用 UI 组件唯一归属目录：`xmnote/UIComponents`。
 - `UIComponents` 只允许放置无业务状态、无数据访问、副作用可控的可复用 UI 组件。
-- 禁止在 `xmnote/Utilities`、`xmnote/Views`、`xmnote/ViewModels`、`xmnote/Services` 中新增可复用 UI 组件。
+- 禁止在 `xmnote/Utilities`、`xmnote/Views`、`xmnote/Services` 中新增可复用 UI 组件。
 - `xmnote/RichTextEditor` 属于功能模块，不整体迁入 `UIComponents`；仅纯展示且跨页面复用的子组件允许抽取到 `UIComponents`。
 - 违反本规则视为阻塞级问题：必须先完成组件归位整改，再继续开发与提交流程。
 
@@ -55,8 +55,7 @@
 ## 项目结构与模块组织
 - `XMNote.xcodeproj`：工程入口（scheme: `xmnote`）。
 - `xmnote/Localizable.xcstrings`：String Catalog，统一字符串管理（sourceLanguage: zh-Hans，含 en 占位）。
-- `xmnote/Views`、`xmnote/Navigation`：SwiftUI 页面与路由。
-- `xmnote/ViewModels`：`@Observable` 状态与业务编排（不直连数据源）。
+- `xmnote/Views`、`xmnote/Navigation`：SwiftUI 页面、ViewModel 与路由（View + ViewModel 按功能模块共置）。
 - `xmnote/Domain`：Repository 协议与跨层模型。
 - `xmnote/Data`：Repository 实现与依赖组装。
 - `xmnote/Infra`：底层桥接与技术实现支持。
@@ -81,7 +80,6 @@
 - `xmnote/Services`
 - `xmnote/UIComponents`
 - `xmnote/Utilities`
-- `xmnote/ViewModels`
 - `xmnote/Views`
 <!-- AUTO_SYNC_MODULES_END -->
 - 同步命令：`bash scripts/sync_arch_docs.sh`

@@ -3,7 +3,7 @@ import Foundation
 /**
  * [INPUT]: 依赖 BackupServerRepositoryProtocol 提供服务器列表、CRUD 与连接测试
  * [OUTPUT]: 对外提供 WebDAVServerViewModel，驱动服务器管理页状态与表单行为
- * [POS]: Presentation 层备份服务器状态编排器，被 WebDAVServerListView/WebDAVServerFormView 消费
+ * [POS]: Backup 模块服务器状态编排器，被 WebDAVServerListView/WebDAVServerFormView 消费
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 

@@ -3,7 +3,7 @@ import Foundation
 /**
  * [INPUT]: 依赖 BackupRepositoryProtocol 执行备份/恢复，依赖 BackupServerRepositoryProtocol 读取当前服务器
  * [OUTPUT]: 对外提供 DataBackupViewModel 与 BackupOperationState，驱动备份页面状态
- * [POS]: Presentation 层数据备份状态编排器，被 DataBackupView/BackupHistorySheet 消费
+ * [POS]: Backup 模块数据备份状态编排器，被 DataBackupView/BackupHistorySheetView 消费
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 

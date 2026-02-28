@@ -1,4 +1,11 @@
 #if DEBUG
+/**
+ * [INPUT]: 依赖 RichTextBridge 做 HTML <-> 富文本转换
+ * [OUTPUT]: 对外提供 RichTextTestViewModel 与 HTMLSample 测试数据
+ * [POS]: Debug 模块富文本测试状态编排，#if DEBUG 编译隔离
+ * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
+ */
+
 import Foundation
 import UIKit
 

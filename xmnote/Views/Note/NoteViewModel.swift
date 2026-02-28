@@ -10,7 +10,7 @@ import Foundation
 /**
  * [INPUT]: 依赖 NoteRepositoryProtocol 提供标签分组数据流，依赖 NoteCategory/TagSection 进行筛选
  * [OUTPUT]: 对外提供 NoteViewModel，输出标签分类、搜索结果与选中状态
- * [POS]: Presentation 层笔记首页状态编排器，被 NoteContainerView/NoteCollectionView 消费
+ * [POS]: Note 模块笔记首页状态编排器，被 NoteContainerView/NoteCollectionView 消费
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 

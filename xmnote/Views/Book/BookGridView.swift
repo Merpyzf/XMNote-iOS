@@ -5,6 +5,13 @@
 //  Created by 王珂 on 2026/2/11.
 //
 
+/**
+ * [INPUT]: 依赖 BookViewModel 提供书籍列表与过滤状态
+ * [OUTPUT]: 对外提供 BookGridView，三列网格展示与筛选交互
+ * [POS]: Book 模块网格展示层，被 BookContainerView 嵌入
+ * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
+ */
+
 import SwiftUI
 
 struct BookGridView: View {

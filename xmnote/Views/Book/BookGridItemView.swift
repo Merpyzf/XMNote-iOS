@@ -5,6 +5,13 @@
 //  Created by 王珂 on 2026/2/11.
 //
 
+/**
+ * [INPUT]: 依赖 BookItem 展示模型
+ * [OUTPUT]: 对外提供 BookGridItemView，单本书籍卡片渲染
+ * [POS]: Book 模块最小展示单元，被 BookGridView 复用
+ * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
+ */
+
 import SwiftUI
 
 struct BookGridItemView: View {

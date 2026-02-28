@@ -10,7 +10,7 @@ import Foundation
 /**
  * [INPUT]: 依赖 BookRepositoryProtocol 提供书籍详情与书摘观察流
  * [OUTPUT]: 对外提供 BookDetailViewModel，输出 book/notes/hasNotes 状态
- * [POS]: Presentation 层书籍详情状态编排器，被 BookDetailView 消费
+ * [POS]: Book 模块书籍详情状态编排器，被 BookDetailView 消费
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 

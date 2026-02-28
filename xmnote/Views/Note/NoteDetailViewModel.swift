@@ -4,7 +4,7 @@ import UIKit
 /**
  * [INPUT]: 依赖 NoteRepositoryProtocol 读写笔记详情，依赖 RichTextBridge 做 HTML <-> 富文本转换
  * [OUTPUT]: 对外提供 NoteDetailViewModel 与 Metadata，驱动详情页加载/编辑/保存状态
- * [POS]: Presentation 层笔记详情状态编排器，被 NoteDetailView 消费
+ * [POS]: Note 模块笔记详情状态编排器，被 NoteDetailView 消费
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 

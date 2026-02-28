@@ -5,6 +5,13 @@
 //  Created by 王珂 on 2026/2/10.
 //
 
+/**
+ * [INPUT]: 依赖 AppState 环境状态，依赖 PersonalRoute 导航路由
+ * [OUTPUT]: 对外提供 PersonalView，我的 Tab 核心入口
+ * [POS]: Personal 模块容器壳层，承载设置列表与备份入口
+ * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
+ */
+
 import SwiftUI
 
 struct PersonalView: View {

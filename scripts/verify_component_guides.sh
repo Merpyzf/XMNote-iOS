@@ -78,7 +78,7 @@ while IFS=$'\t' read -r component source guide; do
     fi
 
     for required in "快速接入" "参数说明" "示例" "常见问题"; do
-        if ! rg -q "^[#]{2,3}[[:space:]].*${required}" "$guide_file"; then
+        if ! grep -qE "^[#]{2,3}[[:space:]].*${required}" "$guide_file"; then
             echo "GUIDE_MISSING_SECTION: $component ($guide) missing=${required}"
             missing=1
         fi

@@ -1,3 +1,10 @@
+/**
+ * [INPUT]: 依赖 RepositoryContainer 注入仓储，依赖 NoteDetailViewModel 驱动状态
+ * [OUTPUT]: 对外提供 NoteDetailView，笔记详情阅读与编辑页面
+ * [POS]: Note 模块详情壳层，通过导航接收 noteId 参数
+ * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
+ */
+
 import SwiftUI
 
 struct NoteDetailView: View {

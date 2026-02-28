@@ -1,4 +1,11 @@
 #if DEBUG
+/**
+ * [INPUT]: 依赖 RichTextTestViewModel 提供测试数据与状态
+ * [OUTPUT]: 对外提供 RichTextTestView，富文本编辑器测试页
+ * [POS]: Debug 模块富文本测试入口，#if DEBUG 编译隔离
+ * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
+ */
+
 import SwiftUI
 
 // MARK: - 外壳

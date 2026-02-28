@@ -48,7 +48,14 @@
       "WebFetch(domain:www.techswill.com)",
       "WebFetch(domain:www.nngroup.com)",
       "Bash(git add:*)",
-      "Bash(git commit:*)"
+      "Bash(git commit:*)",
+      "Bash(for f in /Users/wangke/WorkSpace/Xcode/XMNote-iOS/xmnote/UIComponents/**/*.swift)",
+      "Bash(for file in /Users/wangke/WorkSpace/Xcode/XMNote-iOS/xmnote/Views/**/*.swift)",
+      "Bash(if head -10 \"$file\")",
+      "Bash(then)",
+      "Bash(echo:*)",
+      "Bash(else)",
+      "Bash(git status:*)"
     ],
     "additionalDirectories": [
       "/Users/wangke/WorkSpace/OpenSource/Mine/Merpyzf/XMNote",

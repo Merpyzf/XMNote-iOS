@@ -5,6 +5,13 @@
 //  Created by 王珂 on 2026/2/12.
 //
 
+/**
+ * [INPUT]: 依赖 RepositoryContainer 注入仓储，依赖 BookDetailViewModel 驱动状态
+ * [OUTPUT]: 对外提供 BookDetailView，书籍详情与书摘列表页面
+ * [POS]: Book 模块详情壳层，通过导航接收 bookId 参数
+ * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
+ */
+
 import SwiftUI
 
 struct BookDetailView: View {

@@ -3,7 +3,7 @@ import Foundation
 /**
  * [INPUT]: 依赖 StatisticsRepositoryProtocol 提供热力图查询能力，依赖 HeatmapDay/HeatmapStatisticsDataType 领域模型
  * [OUTPUT]: 对外提供 ReadingHeatmapWidgetViewModel（在读页热力图小组件状态与交互编排）
- * [POS]: ViewModels 层在读页热力图状态中枢，负责加载、跨天刷新与统计类型切换
+ * [POS]: Reading 模块热力图状态中枢，负责加载、跨天刷新与统计类型切换
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 

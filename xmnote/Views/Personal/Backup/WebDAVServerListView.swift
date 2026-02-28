@@ -1,3 +1,10 @@
+/**
+ * [INPUT]: 依赖 RepositoryContainer 注入仓储，依赖 WebDAVServerViewModel 驱动状态
+ * [OUTPUT]: 对外提供 WebDAVServerListView，备份服务器列表管理
+ * [POS]: Backup 模块服务器列表页，通过导航从 DataBackupView 进入
+ * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
+ */
+
 import SwiftUI
 
 struct WebDAVServerListView: View {

@@ -3,7 +3,7 @@ import Foundation
 /**
  * [INPUT]: 依赖 ReadCalendarDay/ReadCalendarEventRun/ReadCalendarEventSegment 领域模型与 Calendar 日期计算
  * [OUTPUT]: 对外提供 ReadCalendarEventLayoutEngine（按日聚合数据构建 Run/Segment/WeekLayout）
- * [POS]: ViewModels 层阅读日历布局算法引擎，负责跨周连续事件条的数据计算，不涉及 UI 渲染
+ * [POS]: ReadCalendar 子功能布局算法引擎，负责跨周连续事件条的数据计算，不涉及 UI 渲染
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 

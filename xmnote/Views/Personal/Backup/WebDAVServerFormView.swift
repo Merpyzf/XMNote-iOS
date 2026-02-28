@@ -1,3 +1,10 @@
+/**
+ * [INPUT]: 依赖 WebDAVServerViewModel 提供表单状态与连通性测试
+ * [OUTPUT]: 对外提供 WebDAVServerFormView，服务器新增编辑表单
+ * [POS]: Backup 模块服务器表单弹层，被 WebDAVServerListView 以 sheet 呈现
+ * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
+ */
+
 import SwiftUI
 
 struct WebDAVServerFormView: View {

@@ -233,7 +233,7 @@ L3 文件头部契约模板：
   `[PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md`
 - 任何目录级架构变更后，必须重新核对 L1/L2/L3 的一致性。
 - 新增/重命名核心类必须在 `docs/architecture/术语对照表.md` 有对应项。
-- `xmnote/UIComponents` 是可复用 UI 组件唯一归属目录，禁止在 `xmnote/Utilities`、`xmnote/Views`、`xmnote/ViewModels`、`xmnote/Services` 新增可复用 UI 组件。
+- `xmnote/UIComponents` 是可复用 UI 组件唯一归属目录，禁止在 `xmnote/Utilities`、`xmnote/Views`、`xmnote/Services` 新增可复用 UI 组件。
 - `xmnote/UIComponents` 的可复用 UI 组件必须在术语表中标记为 `UI-复用`。
 - `docs/architecture/UI核心组件白名单.md` 中的组件必须在术语表中标记为 `UI-核心页面`。
 - 重要 UI 组件必须在 `docs/architecture/UI组件文档清单.md` 有登记，且对应使用文档位于 `docs/component-guides/`。
@@ -394,7 +394,6 @@ View (SwiftUI)
 - `xmnote/Services`
 - `xmnote/UIComponents`
 - `xmnote/Utilities`
-- `xmnote/ViewModels`
 - `xmnote/Views`
 <!-- AUTO_SYNC_MODULES_END -->
 同步命令：`bash scripts/sync_arch_docs.sh`
@@ -423,13 +422,12 @@ xmnote/
 │   └── Repositories/
 ├── Infra/                             # 底层桥接与仓储支持
 │   └── RepositorySupport/
-├── ViewModels/                        # @Observable 视图模型（6 个）
-├── Views/                             # SwiftUI 视图（按功能分目录）
+├── Views/                             # SwiftUI 视图与 ViewModel（按功能模块共置）
 │   ├── MainTabView.swift
-│   ├── Book/                          # 书籍管理视图
-│   ├── Note/                          # 笔记管理视图
-│   ├── Personal/                      # 个人设置与备份
-│   ├── Reading/                       # 在读追踪
+│   ├── Book/                          # 书籍管理（View + ViewModel）
+│   ├── Note/                          # 笔记管理（View + ViewModel）
+│   ├── Personal/                      # 个人设置与备份（含 Backup/ 子目录）
+│   ├── Reading/                       # 在读追踪（含 ReadCalendar/ 子功能）
 │   ├── Statistics/                    # 统计（占位）
 │   └── Debug/                         # 调试测试视图（#if DEBUG）
 ├── Services/                          # 网络基础设施 + 业务服务
@@ -544,6 +542,8 @@ struct NoteTagsView: View {
 - ❌ 强制解包 `!`（`#Preview` 中除外）
 
 ## 2. ViewModel 层规范
+
+ViewModel 文件与对应 View 共置于同一功能目录（如 `Views/Book/BookViewModel.swift`），不再使用独立的 `ViewModels/` 顶层目录。
 
 ### 2.1 基础结构（构造器注入）
 

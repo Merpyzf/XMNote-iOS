@@ -10,7 +10,7 @@ import Foundation
 /**
  * [INPUT]: 依赖 BookRepositoryProtocol 提供书籍数据流，依赖 BookItem/ReadStatusFilter 进行状态表达
  * [OUTPUT]: 对外提供 BookViewModel，驱动书籍页过滤与展示状态
- * [POS]: Presentation 层书籍列表状态编排器，被 BookContainerView/BookGridView 消费
+ * [POS]: Book 模块书籍列表状态编排器，被 BookContainerView/BookGridView 消费
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 

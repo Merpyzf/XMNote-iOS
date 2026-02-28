@@ -1,3 +1,10 @@
+/**
+ * [INPUT]: 依赖 RepositoryContainer 注入仓储，依赖 DataBackupViewModel 驱动状态
+ * [OUTPUT]: 对外提供 DataBackupView，备份与恢复入口页面
+ * [POS]: Backup 模块入口壳层，承载服务器配置、备份/恢复操作
+ * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
+ */
+
 import SwiftUI
 
 struct DataBackupView: View {
@@ -52,7 +59,7 @@ private struct DataBackupContentView: View {
             Text("数据已恢复到备份时的状态")
         }
         .sheet(isPresented: $viewModel.isShowingBackupHistory) {
-            BackupHistorySheet(viewModel: viewModel)
+            BackupHistorySheetView(viewModel: viewModel)
         }
     }
 }

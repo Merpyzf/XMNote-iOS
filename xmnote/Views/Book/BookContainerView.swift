@@ -5,6 +5,13 @@
 //  Created by 王珂 on 2026/2/10.
 //
 
+/**
+ * [INPUT]: 依赖 RepositoryContainer 注入仓储，依赖 BookViewModel 驱动状态
+ * [OUTPUT]: 对外提供 BookContainerView 与 BookSubTab 枚举
+ * [POS]: Book 模块容器壳层，承载书籍/书单二级切换
+ * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
+ */
+
 import SwiftUI
 
 // MARK: - Sub Tab

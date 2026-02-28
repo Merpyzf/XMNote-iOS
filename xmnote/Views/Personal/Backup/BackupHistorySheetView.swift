@@ -1,6 +1,13 @@
+/**
+ * [INPUT]: 依赖 DataBackupViewModel 提供备份列表与恢复操作
+ * [OUTPUT]: 对外提供 BackupHistorySheetView，备份历史展示与恢复确认弹层
+ * [POS]: Backup 模块历史弹层，被 DataBackupView 以 sheet 方式呈现
+ * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
+ */
+
 import SwiftUI
 
-struct BackupHistorySheet: View {
+struct BackupHistorySheetView: View {
     @Bindable var viewModel: DataBackupViewModel
     @Environment(\.dismiss) private var dismiss
 
@@ -36,7 +43,7 @@ struct BackupHistorySheet: View {
 
 // MARK: - Backup List
 
-private extension BackupHistorySheet {
+private extension BackupHistorySheetView {
 
     var backupListView: some View {
         List(viewModel.backupList) { backup in
@@ -77,7 +84,7 @@ private extension BackupHistorySheet {
 
 #Preview {
     let repositories = RepositoryContainer(databaseManager: DatabaseManager(database: try! .empty()))
-    BackupHistorySheet(
+    BackupHistorySheetView(
         viewModel: DataBackupViewModel(
             backupRepository: repositories.backupRepository,
             serverRepository: repositories.backupServerRepository

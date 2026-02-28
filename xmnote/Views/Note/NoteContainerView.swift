@@ -5,6 +5,13 @@
 //  Created by 王珂 on 2026/2/9.
 //
 
+/**
+ * [INPUT]: 依赖 RepositoryContainer 注入仓储，依赖 NoteViewModel 驱动状态
+ * [OUTPUT]: 对外提供 NoteContainerView 与 NoteSubTab 枚举
+ * [POS]: Note 模块容器壳层，承载笔记/回顾二级切换
+ * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
+ */
+
 import SwiftUI
 
 // MARK: - Sub Tab

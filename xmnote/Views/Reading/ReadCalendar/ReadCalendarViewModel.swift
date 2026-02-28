@@ -3,7 +3,7 @@ import Foundation
 /**
  * [INPUT]: 依赖 StatisticsRepositoryProtocol 提供月历聚合数据，依赖 ReadCalendarEventLayoutEngine 生成事件条布局
  * [OUTPUT]: 对外提供 ReadCalendarViewModel（阅读日历页面状态、分页切月、跨周事件条布局）
- * [POS]: ViewModels 层阅读日历状态中枢，负责数据加载、分页状态、选中态与周布局构建
+ * [POS]: ReadCalendar 子功能状态中枢，负责数据加载、分页状态、选中态与周布局构建
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
