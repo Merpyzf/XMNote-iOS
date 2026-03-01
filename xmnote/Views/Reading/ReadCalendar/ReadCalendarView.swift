@@ -2,8 +2,8 @@ import SwiftUI
 
 /**
  * [INPUT]: 依赖 RepositoryContainer 注入统计与取色仓储，依赖 ReadCalendarViewModel 提供月历状态与事件布局数据
- * [OUTPUT]: 对外提供 ReadCalendarView（阅读日历页面壳层，负责挂载可复用 ReadCalendarPanel）
- * [POS]: Reading 模块核心页面入口，承接导航与数据加载，具体日历 UI 由 UIComponents 组件负责（含设置入口与显示模式切换）
+ * [OUTPUT]: 对外提供 ReadCalendarView（阅读日历页面壳层，负责挂载 ReadCalendarContentView）
+ * [POS]: Reading 模块核心页面入口，承接导航与数据加载，具体日历 UI 由业务内壳层组件负责（含设置入口与显示模式切换）
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
@@ -11,7 +11,7 @@ struct ReadCalendarView: View {
     @Environment(RepositoryContainer.self) private var repositories
     @State private var viewModel: ReadCalendarViewModel
     @State private var pagerSelectionTask: Task<Void, Never>?
-    @State private var displayMode: ReadCalendarPanel.DisplayMode = .activityEvent
+    @State private var displayMode: ReadCalendarContentView.DisplayMode = .activityEvent
     @State private var settings: ReadCalendarSettings
     @State private var settingsRefreshTask: Task<Void, Never>?
     @State private var isSettingsPresented = false
@@ -27,8 +27,8 @@ struct ReadCalendarView: View {
         ZStack {
             Color.windowBackground.ignoresSafeArea()
 
-            ReadCalendarPanel(
-                props: panelProps,
+            ReadCalendarContentView(
+                props: contentProps,
                 onDisplayModeChanged: { mode in
                     displayMode = mode
                 },
@@ -93,143 +93,6 @@ struct ReadCalendarView: View {
     }
 }
 
-// MARK: - Settings Sheet
-
-private struct ReadCalendarSettingsSheet: View {
-    @Environment(\.dismiss) private var dismiss
-    @Bindable var settings: ReadCalendarSettings
-    @State private var showInvalidCloseAlert = false
-
-    var body: some View {
-        ZStack(alignment: .topTrailing) {
-            VStack(alignment: .leading, spacing: Spacing.double) {
-                titleSection
-                    .padding(.trailing, 44)
-                eventTogglesSection
-                feedbackSection
-                dayEventCountSection
-            }
-            .padding(Spacing.double)
-            .background(
-                GeometryReader { proxy in
-                    Color.clear.preference(key: SheetHeightKey.self, value: proxy.size.height)
-                }
-            )
-
-            closeButton
-        }
-        .interactiveDismissDisabled(!settings.isReadBehaviorRuleValid)
-        .alert("无法关闭设置", isPresented: $showInvalidCloseAlert) {
-            Button("我知道了", role: .cancel) {}
-        } message: {
-            Text("判定阅读行为的规则至少要选一个")
-        }
-    }
-
-    // MARK: - Close
-
-    private var closeButton: some View {
-        Button {
-            guard settings.isReadBehaviorRuleValid else {
-                showInvalidCloseAlert = true
-                return
-            }
-            dismiss()
-        } label: {
-            Image(systemName: "xmark")
-                .font(.system(size: 13, weight: .bold))
-                .foregroundStyle(.secondary)
-                .frame(width: 28, height: 28)
-        }
-        .buttonStyle(.plain)
-        .glassEffect(.regular.interactive(), in: .circle)
-        .padding(.top, Spacing.double)
-        .padding(.trailing, Spacing.double)
-    }
-
-    // MARK: - Title
-
-    private var titleSection: some View {
-        Text("阅读日历设置")
-            .font(.title3.weight(.semibold))
-    }
-
-    // MARK: - Event Toggles
-
-    private var eventTogglesSection: some View {
-        VStack(alignment: .leading, spacing: Spacing.base) {
-            Text("阅读事件")
-                .font(.subheadline.weight(.medium))
-                .foregroundStyle(Color.textSecondary)
-
-            Toggle("阅读计时（含补录）", isOn: Binding(
-                get: { !settings.excludeReadTiming },
-                set: { settings.excludeReadTiming = !$0 }
-            ))
-
-            Toggle("笔记记录", isOn: Binding(
-                get: { !settings.excludeNoteRecord },
-                set: { settings.excludeNoteRecord = !$0 }
-            ))
-
-            Toggle("阅读打卡", isOn: Binding(
-                get: { !settings.excludeCheckIn },
-                set: { settings.excludeCheckIn = !$0 }
-            ))
-
-            if !settings.isReadBehaviorRuleValid {
-                Text("判定阅读行为的规则至少要选一个")
-                    .font(.footnote)
-                    .foregroundStyle(Color.feedbackError)
-            }
-        }
-        .tint(.brand)
-    }
-
-    // MARK: - Day Event Count
-
-    private var feedbackSection: some View {
-        VStack(alignment: .leading, spacing: Spacing.base) {
-            Text("交互反馈")
-                .font(.subheadline.weight(.medium))
-                .foregroundStyle(Color.textSecondary)
-
-            Toggle("触感反馈", isOn: $settings.isHapticsEnabled)
-
-            Toggle("连续阅读提示", isOn: $settings.isStreakHintEnabled)
-        }
-        .tint(.brand)
-    }
-
-    private var dayEventCountSection: some View {
-        VStack(alignment: .leading, spacing: Spacing.base) {
-            Text("每日展示书籍数量")
-                .font(.subheadline.weight(.medium))
-                .foregroundStyle(Color.textSecondary)
-
-            HStack(spacing: Spacing.half) {
-                ForEach(Array(ReadCalendarSettings.dayEventCountRange), id: \.self) { count in
-                    dayCountChip(count, isSelected: count == settings.dayEventCount)
-                }
-            }
-        }
-    }
-
-    private func dayCountChip(_ count: Int, isSelected: Bool) -> some View {
-        Button {
-            withAnimation(.snappy) { settings.dayEventCount = count }
-        } label: {
-            Text("\(count)")
-                .font(.subheadline.weight(isSelected ? .semibold : .regular))
-                .foregroundStyle(isSelected ? .white : Color.textPrimary)
-                .frame(width: 36, height: 36)
-                .background(isSelected ? Color.brand : Color.bgSecondary, in: Circle())
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel("\(count) 本")
-    }
-}
-
 // MARK: - Settings Refresh
 
 private extension ReadCalendarView {
@@ -249,9 +112,9 @@ private extension ReadCalendarView {
 // MARK: - Props Mapping
 
 private extension ReadCalendarView {
-    var panelProps: ReadCalendarPanel.Props {
+    var contentProps: ReadCalendarContentView.Props {
         let todayStart = Calendar.current.startOfDay(for: Date())
-        return ReadCalendarPanel.Props(
+        return ReadCalendarContentView.Props(
             monthTitle: viewModel.monthTitle,
             availableMonths: viewModel.availableMonths,
             pagerSelection: viewModel.pagerSelection,
@@ -262,7 +125,7 @@ private extension ReadCalendarView {
             rootContentState: mapRootContentState(viewModel.rootContentState),
             errorMessage: viewModel.errorMessage,
             monthPages: visibleMonthWindow.map { monthStart in
-                makePanelMonthPage(for: monthStart, todayStart: todayStart)
+                makeContentMonthPage(for: monthStart, todayStart: todayStart)
             }
         )
     }
@@ -282,7 +145,7 @@ private extension ReadCalendarView {
         return Array(months[lower...upper])
     }
 
-    func makePanelMonthPage(for monthStart: Date, todayStart: Date) -> ReadCalendarPanel.MonthPage {
+    func makeContentMonthPage(for monthStart: Date, todayStart: Date) -> ReadCalendarContentView.MonthPage {
         let state = viewModel.monthState(for: monthStart)
 
         let weeks = state.weeks.map { week in
@@ -293,10 +156,13 @@ private extension ReadCalendarView {
             )
         }
 
-        return ReadCalendarPanel.MonthPage(
+        return ReadCalendarContentView.MonthPage(
             monthStart: state.monthStart,
             weeks: weeks,
             dayMap: state.dayMap,
+            readingDurationTopBooks: state.readingDurationTopBooks,
+            summary: state.summary,
+            rankingBarColorsByBookId: state.rankingBarColorsByBookId,
             selectedDate: viewModel.selectedDate,
             todayStart: todayStart,
             laneLimit: viewModel.laneLimit,
@@ -339,7 +205,7 @@ private extension ReadCalendarView {
         )
     }
 
-    func mapRootContentState(_ state: ReadCalendarViewModel.RootContentState) -> ReadCalendarPanel.RootContentState {
+    func mapRootContentState(_ state: ReadCalendarViewModel.RootContentState) -> ReadCalendarContentView.RootContentState {
         switch state {
         case .loading:
             return .loading
@@ -350,7 +216,7 @@ private extension ReadCalendarView {
         }
     }
 
-    func mapMonthLoadState(_ state: ReadCalendarViewModel.MonthLoadState) -> ReadCalendarPanel.MonthLoadState {
+    func mapMonthLoadState(_ state: ReadCalendarViewModel.MonthLoadState) -> ReadCalendarContentView.MonthLoadState {
         switch state {
         case .idle:
             return .idle

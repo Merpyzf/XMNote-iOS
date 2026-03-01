@@ -141,25 +141,26 @@ Box(
 }
 ```
 
-## 7. 新增：完整控件组件化（ReadCalendarPanel + ReadCalendarMonthGrid）
+## 7. 新增：页面壳层与业务内容壳层拆分（ReadCalendarContentView + ReadCalendarMonthGrid）
 
 ### 7.1 iOS 侧抽象方式
 - `ReadCalendarView`：只做导航与数据装配（壳层）。
-- `ReadCalendarPanel`：完整日历控件（月份切换、weekday、分页、错误态）。
-- `ReadCalendarMonthGrid`：底层月网格渲染（周行/日期/事件条）。
+- `ReadCalendarContentView`：业务内容壳层（顶部控制、weekday、分页、错误态、月总结触发）。
+- `ReadCalendarMonthGrid`：跨模块复用的底层月网格渲染（周行/日期/事件条）。
+- `Views/Reading/ReadCalendar/Components/*`：页面私有子视图（不进入 `UIComponents`）。
 
 ### 7.2 对 Compose 开发者的映射
 | Android Compose | SwiftUI |
 |---|---|
-| `Screen + ViewModel + HorizontalPager` 全写在一个页面 | 页面壳层 `ReadCalendarView` + 可复用控件 `ReadCalendarPanel` |
+| `Screen + ViewModel + HorizontalPager` 全写在一个页面 | 页面壳层 `ReadCalendarView` + 业务内容壳层 `ReadCalendarContentView` |
 | `LazyVerticalGrid` / 自定义 Row 直接画日历格 | `ReadCalendarMonthGrid` 独立成基础渲染组件 |
-| 页面直接读状态并处理细节 | 壳层只做状态映射，细节交给 UIComponents |
+| 页面直接读状态并处理细节 | 页面壳层只做状态映射，细节交给业务内 `Components` 与复用 `UIComponents` |
 
 ### 7.3 可运行 SwiftUI 片段
 ```swift
-ReadCalendarPanel(
-    props: panelProps,
-    onStepMonth: { viewModel.stepPager(offset: $0) },
+ReadCalendarContentView(
+    props: contentProps,
+    onDisplayModeChanged: { displayMode = $0 },
     onPagerSelectionChanged: { viewModel.pagerSelection = $0 },
     onSelectDate: { viewModel.selectDate($0) },
     onRetry: { retryCurrentContext() }
@@ -171,47 +172,48 @@ ReadCalendarPanel(
 @Composable
 fun ReadCalendarScreen(
     state: CalendarUiState,
-    onStepMonth: (Int) -> Unit,
+    onDisplayModeChanged: (CalendarDisplayMode) -> Unit,
     onPagerMonthChange: (LocalDate) -> Unit,
     onSelectDate: (LocalDate) -> Unit
 ) {
-    ReadCalendarPanel(
+    ReadCalendarContentView(
         state = state,
-        onStepMonth = onStepMonth,
+        onDisplayModeChanged = onDisplayModeChanged,
         onPagerMonthChange = onPagerMonthChange,
         onSelectDate = onSelectDate
     )
 }
 ```
 
-## 7. 新增：完整公共组件抽取（ReadCalendarPanel）
+## 8. 新增：目录边界规范（页面壳层 / 页面私有子视图 / 跨模块复用组件）
 
-### 7.1 iOS 知识点
-- “页面壳层”和“可复用控件”必须分层：页面只做依赖注入与任务调度，控件只做展示与交互。
-- 复用组件优先采用 `Props + Callback` 设计，避免组件内部直接依赖 Repository。
-- 底层渲染组件应避免直接依赖业务领域模型，使用 UI 专用输入结构（`DayPayload`、`EventSegment`）降低耦合。
+### 8.1 iOS 知识点
+- 页面壳层必须放在 `Views/<Feature>/`，不放到 `UIComponents`。
+- `Views/<Feature>/Components` 仅承载页面私有子视图，服务当前 Feature。
+- `UIComponents` 仅承载跨模块复用组件，且保持无业务状态、无数据访问耦合。
+- 复用组件优先采用 `Props + Callback`，页面壳层负责依赖注入与任务调度。
 
-### 7.2 Compose 对照思路
+### 8.2 Compose 对照思路
 | 目标 | Compose 常见方式 | SwiftUI 本次方式 |
 |---|---|---|
 | 页面壳层 | `Screen + ViewModel.collectAsState()` | `ReadCalendarView + @State ViewModel` |
-| 完整控件 | `CalendarPanel(state, actions)` | `ReadCalendarPanel(props, callbacks)` |
+| 业务内容壳层 | `CalendarPanel(state, actions)` | `ReadCalendarContentView(props, callbacks)` |
 | 底层网格 | `MonthGrid(weeks, dayUiState)` | `ReadCalendarMonthGrid(weeks, dayPayloadProvider)` |
 
-### 7.3 可运行 SwiftUI 片段
+### 8.3 可运行 SwiftUI 片段
 ```swift
-ReadCalendarPanel(
-    props: panelProps,
-    onStepMonth: { viewModel.stepPager(offset: $0) },
+ReadCalendarContentView(
+    props: contentProps,
+    onDisplayModeChanged: { displayMode = $0 },
     onPagerSelectionChanged: { viewModel.pagerSelection = $0 },
     onSelectDate: { viewModel.selectDate($0) },
     onRetry: { retryCurrentContext() }
 )
 ```
 
-### 7.4 迁移结论
+### 8.4 迁移结论
 - Android 语义对齐不等于页面结构照搬。
 - 正确抽象应是：
   1) 页面处理数据生命周期；
-  2) 公共控件处理视觉与交互；
-  3) 低层网格处理绘制细节。
+  2) 业务内容壳层和页面私有子视图处理当前功能编排；
+  3) 跨模块复用组件处理通用渲染细节。

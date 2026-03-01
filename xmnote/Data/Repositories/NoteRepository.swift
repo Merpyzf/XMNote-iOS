@@ -23,7 +23,23 @@ struct NoteRepository: NoteRepositoryProtocol {
 
     func fetchNoteDetail(noteId: Int64) async throws -> NoteDetailPayload? {
         try await databaseManager.database.dbPool.read { db in
-            try fetchNotePayload(db: db, noteId: noteId)
+            let sql = """
+                SELECT content, idea, position, position_unit, include_time, created_date
+                FROM note
+                WHERE id = ? AND is_deleted = 0
+                LIMIT 1
+                """
+            guard let row = try Row.fetchOne(db, sql: sql, arguments: [noteId]) else {
+                return nil
+            }
+            return NoteDetailPayload(
+                contentHTML: row["content"] ?? "",
+                ideaHTML: row["idea"] ?? "",
+                position: row["position"] ?? "",
+                positionUnit: row["position_unit"] ?? 0,
+                includeTime: (row["include_time"] as Int64? ?? 1) != 0,
+                createdDate: row["created_date"] ?? 0
+            )
         }
     }
 
@@ -82,24 +98,4 @@ private extension NoteRepository {
         return sections
     }
 
-    func fetchNotePayload(db: Database, noteId: Int64) throws -> NoteDetailPayload? {
-        let sql = """
-            SELECT content, idea, position, position_unit, include_time, created_date
-            FROM note
-            WHERE id = ? AND is_deleted = 0
-            LIMIT 1
-            """
-        guard let row = try Row.fetchOne(db, sql: sql, arguments: [noteId]) else {
-            return nil
-        }
-
-        return NoteDetailPayload(
-            contentHTML: row["content"] ?? "",
-            ideaHTML: row["idea"] ?? "",
-            position: row["position"] ?? "",
-            positionUnit: row["position_unit"] ?? 0,
-            includeTime: (row["include_time"] as Int64? ?? 1) != 0,
-            createdDate: row["created_date"] ?? 0
-        )
-    }
 }

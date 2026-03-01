@@ -41,9 +41,12 @@ struct CalendarMonthStepperBar: View {
                 Text(title)
                     .font(.system(size: 17, weight: .semibold, design: .rounded))
                     .foregroundStyle(Color.textPrimary)
+                    .monospacedDigit()
+                    .contentTransition(.numericText())
+                    .animation(.snappy(duration: 0.24), value: selectedMonth)
                     .lineLimit(1)
                     .minimumScaleFactor(0.9)
-                    .contentTransition(.numericText())
+    
                 Image(systemName: "chevron.down")
                     .font(.system(size: 10, weight: .semibold))
                     .foregroundStyle(Color.readCalendarSubtleText)

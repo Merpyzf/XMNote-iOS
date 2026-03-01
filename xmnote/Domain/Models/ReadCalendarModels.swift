@@ -2,13 +2,13 @@ import Foundation
 
 /**
  * [INPUT]: 依赖 Foundation 提供 Date 与集合类型
- * [OUTPUT]: 对外提供阅读日历领域模型（ReadCalendarDayBook/ReadCalendarDay/ReadCalendarMonthData/ReadCalendarEventRun/ReadCalendarEventSegment/ReadCalendarWeekLayout/ReadCalendarRenderMode/ReadCalendarSegmentColor）
+ * [OUTPUT]: 对外提供阅读日历领域模型（ReadCalendarDayBook/ReadCalendarDay/ReadCalendarMonthData/ReadCalendarMonthSummary/ReadCalendarTimeSlot/ReadCalendarMonthlyDurationBook/ReadCalendarEventRun/ReadCalendarEventSegment/ReadCalendarWeekLayout/ReadCalendarRenderMode/ReadCalendarSegmentColor）
  * [POS]: Domain 层阅读日历数据结构定义，供 StatisticsRepository 产出、ReadCalendarViewModel 与视图层消费
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
 /// 日历单日中的书籍事件条基础信息
-struct ReadCalendarDayBook: Identifiable, Hashable {
+nonisolated struct ReadCalendarDayBook: Identifiable, Hashable {
     let id: Int64
     let name: String
     let coverURL: String
@@ -31,7 +31,7 @@ struct ReadCalendarDayBook: Identifiable, Hashable {
 }
 
 /// 日历单日聚合数据（日期 + 书籍 + 读完标记）
-struct ReadCalendarDay: Hashable {
+nonisolated struct ReadCalendarDay: Hashable {
     let date: Date
     let books: [ReadCalendarDayBook]
     let readDoneCount: Int
@@ -42,23 +42,69 @@ struct ReadCalendarDay: Hashable {
 }
 
 /// 阅读日历月维度数据
-struct ReadCalendarMonthData: Hashable {
+nonisolated struct ReadCalendarMonthData: Hashable {
     let monthStart: Date
     let days: [Date: ReadCalendarDay]
+    let readingDurationTopBooks: [ReadCalendarMonthlyDurationBook]
+    let summary: ReadCalendarMonthSummary
 
     static func empty(for monthStart: Date) -> ReadCalendarMonthData {
-        ReadCalendarMonthData(monthStart: monthStart, days: [:])
+        ReadCalendarMonthData(
+            monthStart: monthStart,
+            days: [:],
+            readingDurationTopBooks: [],
+            summary: .empty
+        )
+    }
+}
+
+/// 阅读日历月度阅读时长排行项（按本月阅读秒数降序）
+nonisolated struct ReadCalendarMonthlyDurationBook: Identifiable, Hashable {
+    let bookId: Int64
+    let name: String
+    let coverURL: String
+    let readSeconds: Int
+
+    var id: Int64 { bookId }
+}
+
+/// 月度阅读时段（按本地时间小时段）
+nonisolated enum ReadCalendarTimeSlot: String, CaseIterable, Hashable {
+    case morning
+    case afternoon
+    case evening
+    case lateNight
+}
+
+/// 阅读日历月度摘要（供总结 Sheet 展示）
+nonisolated struct ReadCalendarMonthSummary: Hashable {
+    let uniqueReadBookCount: Int
+    let finishedBookCount: Int
+    let noteCount: Int
+    let totalReadSeconds: Int
+    let timeSlotReadSeconds: [ReadCalendarTimeSlot: Int]
+
+    static let empty = ReadCalendarMonthSummary(
+        uniqueReadBookCount: 0,
+        finishedBookCount: 0,
+        noteCount: 0,
+        totalReadSeconds: 0,
+        timeSlotReadSeconds: [:]
+    )
+
+    func readSeconds(in slot: ReadCalendarTimeSlot) -> Int {
+        timeSlotReadSeconds[slot] ?? 0
     }
 }
 
 /// 阅读日历事件条渲染模式
-enum ReadCalendarRenderMode: Hashable {
+nonisolated enum ReadCalendarRenderMode: Hashable {
     case androidCompatible
     case crossWeekContinuous
 }
 
 /// 阅读日历事件条颜色状态
-enum ReadCalendarSegmentColorState: String, Hashable, Codable {
+nonisolated enum ReadCalendarSegmentColorState: String, Hashable, Codable {
     /// 封面取色进行中（UI 使用骨架样式）
     case pending
     /// 封面主色取色成功
@@ -68,7 +114,7 @@ enum ReadCalendarSegmentColorState: String, Hashable, Codable {
 }
 
 /// 阅读日历事件条颜色（RGBA Hex: 0xRRGGBBAA）
-struct ReadCalendarSegmentColor: Hashable, Codable {
+nonisolated struct ReadCalendarSegmentColor: Hashable, Codable {
     let state: ReadCalendarSegmentColorState
     let backgroundRGBAHex: UInt32
     let textRGBAHex: UInt32
@@ -103,7 +149,7 @@ struct ReadCalendarSegmentColor: Hashable, Codable {
 }
 
 /// 自然日连续区间（跨周不断）
-struct ReadCalendarEventRun: Identifiable, Hashable {
+nonisolated struct ReadCalendarEventRun: Identifiable, Hashable {
     let bookId: Int64
     let bookName: String
     let bookCoverURL: String
@@ -139,7 +185,7 @@ struct ReadCalendarEventRun: Identifiable, Hashable {
 }
 
 /// 周内事件条分段（渲染实体）
-struct ReadCalendarEventSegment: Identifiable, Hashable {
+nonisolated struct ReadCalendarEventSegment: Identifiable, Hashable {
     let bookId: Int64
     let bookName: String
     let bookCoverURL: String
@@ -187,7 +233,7 @@ struct ReadCalendarEventSegment: Identifiable, Hashable {
 }
 
 /// 每周渲染布局（周起始 + 该周事件段）
-struct ReadCalendarWeekLayout: Identifiable, Hashable {
+nonisolated struct ReadCalendarWeekLayout: Identifiable, Hashable {
     let weekStart: Date
     let segments: [ReadCalendarEventSegment]
 
@@ -197,7 +243,7 @@ struct ReadCalendarWeekLayout: Identifiable, Hashable {
 // MARK: - 事件类型过滤
 
 /// 阅读日历事件源类型（与 SQL 子查询一一对应）
-enum ReadCalendarEventType: CaseIterable, Hashable {
+nonisolated enum ReadCalendarEventType: CaseIterable, Hashable {
     case readTiming   // read_time_record
     case note         // note（书摘）
     case relevant     // category_content（相关笔记）

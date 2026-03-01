@@ -8,7 +8,6 @@
 - `SurfaceComponents.swift`: CardContainer（圆角/描边可配置）、EmptyStateView、HomeTopHeaderGradient 通用容器组件
 - `HighlightColorPicker.swift`: 高亮 ARGB 色值网格选择组件
 - `CalendarMonthStepperBar.swift`: 月视图顶部月份切换触发器（点击标题菜单快速跳月，不含左侧日历图标与液态玻璃背景）
-- `ReadCalendarPanel.swift`: 阅读日历完整控件（单行顶部控制：左月份菜单 + 右图标模式切换 + weekday + 分页网格 + 状态反馈）
 - `ReadCalendarMonthGrid.swift`: 阅读日历月网格组件（支持热力图/活动事件/书籍封面三模式渲染）
 
 ## TopBar/

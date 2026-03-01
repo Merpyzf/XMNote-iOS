@@ -11,7 +11,7 @@ import SwiftUI
 // MARK: - 统计类型
 
 /// 对齐 Android AppConstant.HeatChartStatisticsDataType
-enum HeatmapStatisticsDataType: Int, CaseIterable, Identifiable {
+nonisolated enum HeatmapStatisticsDataType: Int, CaseIterable, Identifiable {
     case noteCount = 1
     case readingTime = 2
     case all = 3
@@ -65,7 +65,7 @@ enum HeatmapBookState: Int, CaseIterable, Hashable {
 
 // MARK: - 单日热力数据
 
-struct HeatmapDay: Identifiable {
+nonisolated struct HeatmapDay: Identifiable {
     let id: Date          // 日历日期（零时零分零秒）
     let readSeconds: Int  // 阅读秒数
     let noteCount: Int    // 书摘数量
@@ -90,7 +90,7 @@ struct HeatmapDay: Identifiable {
     }
 
     /// 综合等级取阅读时长/笔记数/打卡时长三者最大值
-    var level: HeatmapLevel {
+    @MainActor var level: HeatmapLevel {
         let readLevel = HeatmapLevel.from(readSeconds: readSeconds)
         let noteLevel = HeatmapLevel.from(noteCount: noteCount)
         let checkInLevel = HeatmapLevel.from(checkInSeconds: checkInSeconds)
@@ -111,7 +111,7 @@ struct HeatmapDay: Identifiable {
     }
 
     /// 当前统计类型对应的强度等级（用于“阅读/书摘/打卡/全部”切换）
-    func amountLevel(for dataType: HeatmapStatisticsDataType) -> HeatmapLevel {
+    @MainActor func amountLevel(for dataType: HeatmapStatisticsDataType) -> HeatmapLevel {
         switch dataType {
         case .noteCount:
             HeatmapLevel.from(noteCount: noteCount)
@@ -126,7 +126,7 @@ struct HeatmapDay: Identifiable {
     }
 
     /// 对齐 Android Mark.getColors：先绘制状态色，再按统计类型补充阅读量色。
-    func segmentColors(for dataType: HeatmapStatisticsDataType) -> [Color] {
+    @MainActor func segmentColors(for dataType: HeatmapStatisticsDataType) -> [Color] {
         let stateColors = HeatmapBookState.renderOrder.compactMap { state in
             bookStates.contains(state) ? state.color : nil
         }
@@ -150,7 +150,7 @@ struct HeatmapDay: Identifiable {
         }
     }
 
-    var bookStateTitles: String {
+    @MainActor var bookStateTitles: String {
         let titles = HeatmapBookState.renderOrder.compactMap { state in
             bookStates.contains(state) ? state.title : nil
         }

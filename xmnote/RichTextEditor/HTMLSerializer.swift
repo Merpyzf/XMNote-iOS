@@ -1,3 +1,10 @@
+/**
+ * [INPUT]: 依赖 RichTextEditor 模块格式定义与 UIKit/TextKit 能力，承接富文本解析/渲染/编辑链路
+ * [OUTPUT]: 对外提供 HTMLSerializer 能力，用于富文本编辑器的序列化、交互或样式支持
+ * [POS]: RichTextEditor 功能模块内部构件，服务 Note 编辑场景的 Android 业务意图对齐
+ * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
+ */
+
 import Foundation
 import UIKit
 
@@ -29,7 +36,6 @@ enum HTMLSerializer {
 
     /// 对标 KnifeParser.withinHtml
     private static func withinHtml(_ out: inout String, _ text: NSAttributedString) {
-        let fullRange = NSRange(location: 0, length: text.length)
         let string = text.string as NSString
 
         // 按行处理，检测段落级格式

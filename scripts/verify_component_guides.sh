@@ -3,15 +3,23 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 REGISTRY_FILE="$ROOT_DIR/docs/architecture/UI组件文档清单.md"
+WHITELIST_FILE="$ROOT_DIR/docs/architecture/UI核心组件白名单.md"
 
 if [[ ! -f "$REGISTRY_FILE" ]]; then
     echo "ERROR: 未找到 UI 组件文档清单: $REGISTRY_FILE"
     exit 1
 fi
 
+if [[ ! -f "$WHITELIST_FILE" ]]; then
+    echo "ERROR: 未找到 UI 核心组件白名单: $WHITELIST_FILE"
+    exit 1
+fi
+
 tmp_entries="$(mktemp)"
+tmp_whitelist="$(mktemp)"
+tmp_registry_sources="$(mktemp)"
 cleanup() {
-    rm -f "$tmp_entries"
+    rm -f "$tmp_entries" "$tmp_whitelist" "$tmp_registry_sources"
 }
 trap cleanup EXIT
 
@@ -43,6 +51,13 @@ if [[ ! -s "$tmp_entries" ]]; then
     exit 1
 fi
 
+sed -n 's/^- \(xmnote\/[^[:space:]]*\.swift\)$/\1/p' "$WHITELIST_FILE" | sort -u > "$tmp_whitelist"
+
+if [[ ! -s "$tmp_whitelist" ]]; then
+    echo "ERROR: UI 核心组件白名单为空或格式不正确: $WHITELIST_FILE"
+    exit 1
+fi
+
 missing=0
 entry_count=0
 
@@ -61,6 +76,7 @@ while IFS=$'\t' read -r component source guide; do
 
     source_file="$ROOT_DIR/$source"
     guide_file="$ROOT_DIR/$guide"
+    echo "$source" >> "$tmp_registry_sources"
 
     if [[ ! -f "$source_file" ]]; then
         echo "MISSING_COMPONENT_SOURCE: $component ($source)"
@@ -86,6 +102,24 @@ while IFS=$'\t' read -r component source guide; do
 
     checked_docs[$guide]=1
 done < "$tmp_entries"
+
+sort -u -o "$tmp_registry_sources" "$tmp_registry_sources"
+
+while IFS= read -r source_path; do
+    [[ -z "${source_path:-}" ]] && continue
+    if ! grep -Fxq "$source_path" "$tmp_registry_sources"; then
+        echo "MISSING_WHITELIST_COMPONENT_GUIDE: $source_path"
+        missing=1
+    fi
+done < "$tmp_whitelist"
+
+while IFS= read -r source_path; do
+    [[ -z "${source_path:-}" ]] && continue
+    if [[ "$source_path" == xmnote/Views/* ]] && ! grep -Fxq "$source_path" "$tmp_whitelist"; then
+        echo "UNREGISTERED_VIEW_CORE_COMPONENT: $source_path"
+        missing=1
+    fi
+done < "$tmp_registry_sources"
 
 if [[ "$missing" -ne 0 ]]; then
     echo "FAIL: UI 组件使用文档校验失败，请补齐清单与组件使用说明。"

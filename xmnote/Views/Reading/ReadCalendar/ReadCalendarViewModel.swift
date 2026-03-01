@@ -3,7 +3,7 @@ import SwiftUI
 
 /**
  * [INPUT]: 依赖 StatisticsRepositoryProtocol 提供月历聚合数据，依赖 ReadCalendarColorRepositoryProtocol 提供封面取色，依赖 ReadCalendarEventLayoutEngine 生成事件条布局
- * [OUTPUT]: 对外提供 ReadCalendarViewModel（阅读日历页面状态、分页切月/快速跳转、跨周事件条布局、事件条颜色异步回填）
+ * [OUTPUT]: 对外提供 ReadCalendarViewModel（阅读日历页面状态、分页切月/快速跳转、跨周事件条布局、事件条颜色异步回填、月度阅读时长排行与月度摘要透传）
  * [POS]: ReadCalendar 子功能状态中枢，负责数据加载、分页状态、选中态、周布局构建、快速跳月与封面取色任务编排
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -53,6 +53,9 @@ final class ReadCalendarViewModel {
         let monthStart: Date
         let weeks: [WeekRowData]
         let dayMap: [Date: ReadCalendarDay]
+        let readingDurationTopBooks: [ReadCalendarMonthlyDurationBook]
+        let summary: ReadCalendarMonthSummary
+        let rankingBarColorsByBookId: [Int64: ReadCalendarSegmentColor]
         let loadState: MonthLoadState
         let errorMessage: String?
 
@@ -296,7 +299,7 @@ final class ReadCalendarViewModel {
         for (key, state) in pageStates where state.loadState == .loaded {
             guard let data = monthCache[key] else { continue }
             // 收集已解析的封面颜色
-            var colorMap: [Int64: ReadCalendarSegmentColor] = [:]
+            var colorMap = state.rankingBarColorsByBookId
             for week in state.weeks {
                 for seg in week.segments where seg.color.state != .pending {
                     colorMap[seg.bookId] = seg.color
@@ -319,6 +322,9 @@ final class ReadCalendarViewModel {
                 monthStart: state.monthStart,
                 weeks: coloredWeeks,
                 dayMap: state.dayMap,
+                readingDurationTopBooks: state.readingDurationTopBooks,
+                summary: state.summary,
+                rankingBarColorsByBookId: state.rankingBarColorsByBookId,
                 loadState: .loaded,
                 errorMessage: nil
             )
@@ -411,6 +417,9 @@ private extension ReadCalendarViewModel {
                 monthStart: current.monthStart,
                 weeks: current.weeks,
                 dayMap: current.dayMap,
+                readingDurationTopBooks: current.readingDurationTopBooks,
+                summary: current.summary,
+                rankingBarColorsByBookId: current.rankingBarColorsByBookId,
                 loadState: .loading,
                 errorMessage: nil
             )
@@ -447,6 +456,9 @@ private extension ReadCalendarViewModel {
                 monthStart: normalized,
                 weeks: makeDisplayWeeks(for: normalized),
                 dayMap: [:],
+                readingDurationTopBooks: [],
+                summary: .empty,
+                rankingBarColorsByBookId: [:],
                 loadState: .failed,
                 errorMessage: "月份切换失败：\(error.localizedDescription)"
             )
@@ -560,7 +572,7 @@ private extension ReadCalendarViewModel {
         guard latestColorTicketByMonthKey[monthKey] == ticket else { return }
         guard let state = pageStates[monthKey], state.loadState == .loaded else { return }
 
-        var hasChange = false
+        var hasWeekChange = false
         let targetBookIds = Set(colorsByBookId.keys)
         let updatedWeeks = state.weeks.map { week in
             let updatedSegments = week.segments.map { segment in
@@ -569,7 +581,7 @@ private extension ReadCalendarViewModel {
                     return segment
                 }
                 guard segment.color != color else { return segment }
-                hasChange = true
+                hasWeekChange = true
                 return segment.withColor(color)
             }
             return WeekRowData(
@@ -579,7 +591,16 @@ private extension ReadCalendarViewModel {
             )
         }
 
-        guard hasChange else { return }
+        var hasRankingColorChange = false
+        var updatedRankingBarColorsByBookId = state.rankingBarColorsByBookId
+        let topBookIds = Set(state.readingDurationTopBooks.map(\.bookId))
+        for (bookId, color) in colorsByBookId where topBookIds.contains(bookId) {
+            guard updatedRankingBarColorsByBookId[bookId] != color else { continue }
+            updatedRankingBarColorsByBookId[bookId] = color
+            hasRankingColorChange = true
+        }
+
+        guard hasWeekChange || hasRankingColorChange else { return }
         var transaction = Transaction()
         transaction.animation = nil
         withTransaction(transaction) {
@@ -587,6 +608,9 @@ private extension ReadCalendarViewModel {
                 monthStart: state.monthStart,
                 weeks: updatedWeeks,
                 dayMap: state.dayMap,
+                readingDurationTopBooks: state.readingDurationTopBooks,
+                summary: state.summary,
+                rankingBarColorsByBookId: updatedRankingBarColorsByBookId,
                 loadState: state.loadState,
                 errorMessage: state.errorMessage
             )
@@ -604,14 +628,31 @@ private extension ReadCalendarViewModel {
                 )
             }
         }
+        for book in state.readingDurationTopBooks {
+            if let color = state.rankingBarColorsByBookId[book.bookId], color.state != .pending {
+                continue
+            }
+            requestMap[book.bookId] = ReadCalendarColorRequest(
+                bookId: book.bookId,
+                bookName: book.name,
+                coverURL: book.coverURL
+            )
+        }
         return requestMap.values.sorted { lhs, rhs in
             lhs.bookId < rhs.bookId
         }
     }
 
     func hasPendingSegmentColor(_ state: MonthPageState) -> Bool {
-        state.weeks.contains { week in
+        let hasPendingSegment = state.weeks.contains { week in
             week.segments.contains { $0.color.state == .pending }
+        }
+        if hasPendingSegment {
+            return true
+        }
+        return state.readingDurationTopBooks.contains { book in
+            guard let color = state.rankingBarColorsByBookId[book.bookId] else { return true }
+            return color.state == .pending
         }
     }
 
@@ -661,10 +702,17 @@ private extension ReadCalendarViewModel {
     }
 
     func buildLoadedState(monthStart: Date, data: ReadCalendarMonthData) -> MonthPageState {
-        MonthPageState(
+        let weeks = buildWeeks(monthStart: monthStart, dayMap: data.days)
+        return MonthPageState(
             monthStart: monthStart,
-            weeks: buildWeeks(monthStart: monthStart, dayMap: data.days),
+            weeks: weeks,
             dayMap: data.days,
+            readingDurationTopBooks: data.readingDurationTopBooks,
+            summary: data.summary,
+            rankingBarColorsByBookId: buildInitialRankingBarColorMap(
+                weeks: weeks,
+                topBooks: data.readingDurationTopBooks
+            ),
             loadState: .loaded,
             errorMessage: nil
         )
@@ -675,9 +723,31 @@ private extension ReadCalendarViewModel {
             monthStart: monthStart,
             weeks: makeDisplayWeeks(for: monthStart),
             dayMap: [:],
+            readingDurationTopBooks: [],
+            summary: .empty,
+            rankingBarColorsByBookId: [:],
             loadState: .idle,
             errorMessage: nil
         )
+    }
+
+    func buildInitialRankingBarColorMap(
+        weeks: [WeekRowData],
+        topBooks: [ReadCalendarMonthlyDurationBook]
+    ) -> [Int64: ReadCalendarSegmentColor] {
+        var colorsByBookId: [Int64: ReadCalendarSegmentColor] = [:]
+        for week in weeks {
+            for segment in week.segments where segment.color.state != .pending {
+                colorsByBookId[segment.bookId] = segment.color
+            }
+        }
+
+        var rankingColorsByBookId: [Int64: ReadCalendarSegmentColor] = [:]
+        for book in topBooks {
+            guard let color = colorsByBookId[book.bookId] else { continue }
+            rankingColorsByBookId[book.bookId] = color
+        }
+        return rankingColorsByBookId
     }
 
     func buildWeeks(monthStart: Date, dayMap: [Date: ReadCalendarDay]) -> [WeekRowData] {

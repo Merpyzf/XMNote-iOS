@@ -1,3 +1,10 @@
+/**
+ * [INPUT]: 依赖 GRDB DatabaseMigrator 与 DatabaseSchema 命名空间，承接分段表结构/索引/种子迁移声明
+ * [OUTPUT]: 对外提供 DatabaseSchema 扩展迁移步骤（DatabaseSchema+Config）供数据库初始化流程编排
+ * [POS]: Database 层 Schema 分片定义文件，保证迁移职责可拆分且与仓储读写契约一致
+ * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
+ */
+
 import Foundation
 import GRDB
 
@@ -7,7 +14,7 @@ import GRDB
 
 extension AppDatabase {
 
-    static func createConfigTables(_ db: Database) throws {
+    nonisolated static func createConfigTables(_ db: Database) throws {
 
         // ── setting ──
         // 键值对设置

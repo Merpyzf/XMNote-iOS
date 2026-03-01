@@ -68,7 +68,7 @@ private extension BackupHistorySheetView {
                     .foregroundStyle(.secondary)
             }
             if let date = backup.backupDate {
-                Text(date, style: .date) + Text(" ") + Text(date, style: .time)
+                Text("\(date, style: .date) \(date, style: .time)")
             }
         }
         .font(.caption)

@@ -94,7 +94,7 @@ extension BackupService {
 
         // 2. 打包 ZIP
         progress?(.packaging)
-        let deviceName = await UIDevice.current.name
+        let deviceName = UIDevice.current.name
             .replacingOccurrences(of: " ", with: "_")
         let dateStr = Self.fileNameDateFormatter.string(from: Date())
         let backupName = "\(dateStr)-\(deviceName)-v3"
@@ -199,7 +199,9 @@ extension BackupService {
             throw BackupError.webdavError(error as? NetworkError ?? .unknown(underlying: error))
         }
         #if DEBUG
-        print("[Restore] Step 1 完成: 文件大小 \(try? fm.attributesOfItem(atPath: zipURL.path)[.size] ?? 0)")
+        let fileAttributes = try? fm.attributesOfItem(atPath: zipURL.path)
+        let fileSize = (fileAttributes?[.size] as? NSNumber)?.int64Value ?? 0
+        print("[Restore] Step 1 完成: 文件大小 \(fileSize)")
         #endif
 
         // 2. 校验 ZIP

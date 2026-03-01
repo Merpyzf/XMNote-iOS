@@ -5,15 +5,15 @@
 - 导航入口承接与仓储注入。
 - 持有 `ReadCalendarViewModel` 并加载数据。
 - 承接页面级 UI 状态（显示模式切换、设置页弹层）。
-- 将数据状态映射到 `ReadCalendarPanel` 公共组件。
+- 将数据状态映射到 `ReadCalendarContentView` 业务内容壳层。
 
 源码路径：`xmnote/Views/Reading/ReadCalendar/ReadCalendarView.swift`
 
 ## 本次更新（2026-03-01）
-- 页面映射 `monthPages` 改为窗口化（当前月前后各 1 页），减少 `TabView` 重内容页面数。
-- 日 payload 改为按需计算，不再预构建全月 `dayPayloads`。
-- 保留 `TabView` 翻月；修复手势冲突后不再在月页叠加竞争性拖拽手势。
-- ViewModel 颜色回填改为批量提交，减少高频状态写入抖动。
+- 页面壳层从 `UIComponents/Foundation/ReadCalendarPanel.swift` 迁移到业务目录 `Views/Reading/ReadCalendar/ReadCalendarContentView.swift`。
+- 顶部控制区、星期标题、连续阅读提示、内联错误提示拆分到 `Views/Reading/ReadCalendar/Components/`。
+- 设置与月总结弹层拆分到 `Views/Reading/ReadCalendar/Sheets/`，避免业务弹层与壳层混文件。
+- 月份分页继续采用 `TabView(.page)`，并保持“可见窗口页”映射策略（当前月前后各 1 页）。
 
 ## 快速接入
 ```swift
@@ -35,7 +35,7 @@
 ## 关键交互
 - 顶部单行控制区：左侧月份标题菜单快速切月。
 - 顶部单行控制区：右侧图标分段切换（热力图/活动事件/书籍封面）。
-- 顶部右侧：设置按钮（`gearshape`）打开设置页。
+- 顶部右侧：统计入口（顶部控制区）与设置按钮（导航栏）分别打开月总结与设置页。
 - 月页支持纵向滚动，月份支持横向分页切换。
 
 ## 数据流要点
@@ -68,7 +68,7 @@ ReadingHeatmapWidgetView(
 ```
 
 ## 交互约束
-- 不要在 `ReadCalendarPanel` 月页 `ScrollView` 上叠加会抢占横向拖拽的手势（会导致左右翻月失效）。
+- 不要在 `ReadCalendarContentView` 月页 `ScrollView` 上叠加会抢占横向拖拽的手势（会导致左右翻月失效）。
 - 需要控制 shimmer 时，优先通过 `ReadCalendarMonthGrid.isShimmerEnabled` 输入控制，而不是靠手势拦截推断滚动状态。
 
 ## 常见问题
@@ -76,8 +76,8 @@ ReadingHeatmapWidgetView(
 ### 1) 热力图入口传入日期是否仍然生效？
 生效。`ReadCalendarViewModel` 会按入口日期定位当月并保持选中态。
 
-### 2) 为什么要拆 `ReadCalendarView` 和 `ReadCalendarPanel`？
-页面层负责导航与依赖，组件层负责复用 UI，便于后续在其他入口复用日历面板。
+### 2) 为什么要拆 `ReadCalendarView` 和 `ReadCalendarContentView`？
+页面层负责导航与依赖注入，业务内容壳层负责日历 UI 编排；可以降低页面入口复杂度并保持目录职责清晰。
 
 ### 3) 为什么 `availableMonths` 仍是全量？
 它负责分页边界与选择合法性；性能优化在于只映射窗口 `monthPages`。

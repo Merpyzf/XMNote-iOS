@@ -5,11 +5,24 @@
 //  Created by 王珂 on 2026/2/10.
 //
 //  [INPUT]: 无外部依赖，仅依赖 SwiftUI 框架
-//  [OUTPUT]: Color 语义扩展（含阅读日历主题与事件条 pending 态，已移除卡片装饰令牌）、Spacing / CornerRadius / CardStyle 常量、Color(hex:) / Color(light:dark:) / Color(rgbaHex:) 构造器
+//  [OUTPUT]: Color 语义扩展（含阅读日历主题/事件条 pending 态/月总结图标渐变语义）、Spacing / CornerRadius / CardStyle 常量、Color(hex:) / Color(light:dark:) / Color(rgbaHex:) 构造器
 //  [POS]: Utilities 模块的设计令牌中枢，全局 UI 一致性的单一真相源
 //  [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
 
 import SwiftUI
+
+enum ReadCalendarSummaryGradientRole {
+    case activity
+    case completion
+    case momentum
+    case trend
+}
+
+struct ReadCalendarSummaryGradientSpec {
+    let start: Color
+    let mid: Color
+    let end: Color
+}
 
 // MARK: - Brand
 
@@ -184,6 +197,36 @@ extension Color {
         Color(light: Color(hex: 0xA7B9B2), dark: Color(hex: 0x556B64)), // 鼠尾草灰
         Color(light: Color(hex: 0xAEB8C2), dark: Color(hex: 0x5C6774))  // 石墨蓝灰
     ]
+
+    /// 阅读日历月总结图标渐变（统一亮度轨迹 + 按角色分色相）
+    static func readCalendarSummaryGradientSpec(for role: ReadCalendarSummaryGradientRole) -> ReadCalendarSummaryGradientSpec {
+        switch role {
+        case .activity:
+            return ReadCalendarSummaryGradientSpec(
+                start: Color(light: Color(hex: 0x4CC9B0), dark: Color(hex: 0x6EDFC9)),
+                mid: Color(light: Color(hex: 0x27B89B), dark: Color(hex: 0x48CDB1)),
+                end: Color(light: Color(hex: 0x14907D), dark: Color(hex: 0x2EA792))
+            )
+        case .completion:
+            return ReadCalendarSummaryGradientSpec(
+                start: Color(light: Color(hex: 0xF5BE61), dark: Color(hex: 0xFFD28A)),
+                mid: Color(light: Color(hex: 0xECA145), dark: Color(hex: 0xF1B960)),
+                end: Color(light: Color(hex: 0xD98323), dark: Color(hex: 0xD6983E))
+            )
+        case .momentum:
+            return ReadCalendarSummaryGradientSpec(
+                start: Color(light: Color(hex: 0xF18A5C), dark: Color(hex: 0xFFAA80)),
+                mid: Color(light: Color(hex: 0xE36E44), dark: Color(hex: 0xF28B63)),
+                end: Color(light: Color(hex: 0xCB4F2F), dark: Color(hex: 0xD56B4A))
+            )
+        case .trend:
+            return ReadCalendarSummaryGradientSpec(
+                start: Color(light: Color(hex: 0x74A7FF), dark: Color(hex: 0x94BDFF)),
+                mid: Color(light: Color(hex: 0x558CE8), dark: Color(hex: 0x76A5F4)),
+                end: Color(light: Color(hex: 0x376DCC), dark: Color(hex: 0x5483DC))
+            )
+        }
+    }
 }
 
 // MARK: - Spacing

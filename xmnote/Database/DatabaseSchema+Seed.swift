@@ -1,3 +1,10 @@
+/**
+ * [INPUT]: 依赖 GRDB DatabaseMigrator 与 DatabaseSchema 命名空间，承接分段表结构/索引/种子迁移声明
+ * [OUTPUT]: 对外提供 DatabaseSchema 扩展迁移步骤（DatabaseSchema+Seed）供数据库初始化流程编排
+ * [POS]: Database 层 Schema 分片定义文件，保证迁移职责可拆分且与仓储读写契约一致
+ * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
+ */
+
 import Foundation
 import GRDB
 
@@ -7,7 +14,7 @@ import GRDB
 
 extension AppDatabase {
 
-    static func seedInitialData(_ db: Database) throws {
+    nonisolated static func seedInitialData(_ db: Database) throws {
         try seedReadStatus(db)
         try seedSource(db)
         try seedDefaultChapter(db)
@@ -19,7 +26,7 @@ extension AppDatabase {
     // MARK: - 阅读状态（5 种）
     // read_status 表为手动主键，必须显式指定 id
     // ID 1=想读, 2=在读, 3=读完, 4=弃读, 5=搁置
-    private static func seedReadStatus(_ db: Database) throws {
+    private nonisolated static func seedReadStatus(_ db: Database) throws {
         let statuses = ["想读", "在读", "读完", "弃读", "搁置"]
         for (index, name) in statuses.enumerated() {
             let id = index + 1
@@ -34,7 +41,7 @@ extension AppDatabase {
     }
 
     // MARK: - 书籍来源（27 种）
-    private static func seedSource(_ db: Database) throws {
+    private nonisolated static func seedSource(_ db: Database) throws {
         let sources = [
             "未知", "Kindle阅读器", "Kindle App", "微信读书", "Apple Books",
             "静读天下", "多看阅读", "掌阅", "豆瓣阅读", "掌阅精选",
@@ -56,7 +63,7 @@ extension AppDatabase {
     }
 
     // MARK: - 默认章节（占位记录，id=1）
-    private static func seedDefaultChapter(_ db: Database) throws {
+    private nonisolated static func seedDefaultChapter(_ db: Database) throws {
         try db.execute(
             sql: """
                 INSERT INTO chapter (book_id, parent_id, title, remark, chapter_order, is_import, created_date, updated_date, last_sync_date, is_deleted)
@@ -66,7 +73,7 @@ extension AppDatabase {
     }
 
     // MARK: - 默认笔记分类（6 种，绑定到 book_id=0 作为模板）
-    private static func seedDefaultCategory(_ db: Database) throws {
+    private nonisolated static func seedDefaultCategory(_ db: Database) throws {
         let categories = ["书籍", "电影", "音乐", "地点", "人物", "事件"]
         for (index, title) in categories.enumerated() {
             try db.execute(
@@ -80,7 +87,7 @@ extension AppDatabase {
     }
 
     // MARK: - 默认书籍（占位记录，id=1，用于未归属书籍的笔记）
-    private static func seedDefaultBook(_ db: Database) throws {
+    private nonisolated static func seedDefaultBook(_ db: Database) throws {
         try db.execute(
             sql: """
                 INSERT INTO book (user_id, douban_id, name, raw_name, cover, author, author_intro, translator, isbn, pub_date, press, summary, read_position, total_position, total_pagination, type, current_position_unit, position_unit, source_id, purchase_date, price, book_order, score, catalog, book_mark_modified_time, read_status_id, read_status_changed_date, pinned, pin_order, created_date, updated_date, last_sync_date, is_deleted)
@@ -90,7 +97,7 @@ extension AppDatabase {
     }
 
     // MARK: - 默认 COS 配置
-    private static func seedCosConfig(_ db: Database) throws {
+    private nonisolated static func seedCosConfig(_ db: Database) throws {
         let now = Int64(Date().timeIntervalSince1970 * 1000)
         try db.execute(
             sql: """

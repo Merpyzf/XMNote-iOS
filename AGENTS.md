@@ -8,7 +8,7 @@
 - Android 参考工程路径：`/Users/wangke/Workspace/AndroidProjects/XMNote`。
 - 规范分层：本文件是执行摘要；完整背景与细则以 `CLAUDE.md` 为准。
 - 学习输出约定：每完成一个功能开发并收到用户“任务已完成”信号后，必须补充本次涉及的 iOS 知识点总结，并给出面向 Android Compose 开发者的学习示例（含对照思路与可运行代码片段）；学习文档统一存放在 `docs/learning/`。
-- 组件文档机制：重要 UI 组件（`docs/architecture/UI核心组件白名单.md` 白名单组件 + `xmnote/UIComponents` 下新增/重大重构组件）在收到用户“任务已完成”信号后，必须新增或更新组件使用文档（`docs/component-guides/`），并登记到 `docs/architecture/UI组件文档清单.md`。
+- 组件文档机制：重要 UI 组件（`docs/architecture/UI核心组件白名单.md` 白名单组件 + `xmnote/UIComponents` 下新增/重大重构组件）在收到用户“任务已完成”信号后，必须新增或更新组件使用文档（`docs/component-guides/`），并登记到 `docs/architecture/UI组件文档清单.md`；白名单组件必须被清单全量覆盖。
 - 对齐情况文档机制（强制）：对 Android → iOS 迁移功能，在收到用户“任务已完成”信号后，必须在 `docs/feature/功能名/对齐情况.md` 生成或更新对齐情况文档；该文档属于高优先级决策输入，不得省略。
 - iOS26 参考入口：涉及液态玻璃与 iOS26 新特性时，优先查阅 `docs/learning/iOS26液态玻璃与高相关新特性开发参考.md`，并据此执行“Android 业务意图对齐 + iOS 原生表达”。
 
@@ -27,18 +27,24 @@
 - UI 核心组件白名单：`docs/architecture/UI核心组件白名单.md`。
 - 触发更新：
   - 新增/重命名核心类（如 `*Repository`、`*ViewModel`、`*Service`、`*Client`、`*Manager`、`*Container`、`*Payload`、`*Input`）必须更新术语表。
-  - `xmnote/UIComponents` 下新增可复用 UI 组件必须更新术语表（类别：`UI-复用`）。
+  - `xmnote/UIComponents` 下新增跨模块复用 UI 组件必须更新术语表（类别：`UI-复用`）。
+  - `xmnote/Views/<Feature>/Components` 下页面私有子视图必须更新术语表（类别：`UI-页面私有`）。
   - 白名单内新增/调整核心页面组件必须同步更新白名单与术语表（类别：`UI-核心页面`）。
 - 提交前强制执行：
   - `bash scripts/verify_glossary.sh`
   - `bash scripts/verify_ui_glossary_scope.sh`
+  - `bash scripts/verify_view_component_boundaries.sh`
+  - `bash scripts/verify_l3_protocol_headers.sh`
   - `bash scripts/verify_arch_docs_sync.sh`
   - `bash scripts/verify_component_guides.sh`
 
 ## UI组件归位规则（阻塞级）
-- 可复用 UI 组件唯一归属目录：`xmnote/UIComponents`。
-- `UIComponents` 只允许放置无业务状态、无数据访问、副作用可控的可复用 UI 组件。
-- 禁止在 `xmnote/Utilities`、`xmnote/Views`、`xmnote/Services` 中新增可复用 UI 组件。
+- 页面壳层（`*View` 页面入口/容器）唯一归属目录：`xmnote/Views/<Feature>/`。
+- 跨模块复用 UI 组件唯一归属目录：`xmnote/UIComponents`。
+- `xmnote/Views/<Feature>/Components` 仅允许页面私有子视图（服务当前 Feature），不得作为跨模块公共组件。
+- 业务 Sheet 必须放在 `xmnote/Views/<Feature>/Sheets/`，禁止与页面壳层混在同一文件。
+- `UIComponents` 只允许放置无业务状态、无数据访问、副作用可控的跨模块复用组件。
+- 禁止在 `xmnote/Utilities`、`xmnote/Services` 中新增跨模块公共组件。
 - `xmnote/RichTextEditor` 属于功能模块，不整体迁入 `UIComponents`；仅纯展示且跨页面复用的子组件允许抽取到 `UIComponents`。
 - 违反本规则视为阻塞级问题：必须先完成组件归位整改，再继续开发与提交流程。
 
@@ -68,8 +74,10 @@
 - `xmnote/Database`、`xmnote/Database/Records`：GRDB schema、迁移、Record 映射（仅 Repository 访问）。
 - `xmnote/Services`、`xmnote/Networking`：网络、WebDAV、备份恢复（仅 Repository 访问）。
 - `xmnote/RichTextEditor`：富文本编辑模块。
-- `xmnote/UIComponents`：可复用 UI 组件唯一归属模块（按 Foundation/TopBar/Tabs 分层）。
-- `xmnote/Utilities`：设计令牌与非 UI 工具（禁止新增可复用 UI 组件）。
+- `xmnote/Views/<Feature>/Components`：页面私有子视图目录（仅当前 Feature 内复用）。
+- `xmnote/Views/<Feature>/Sheets`：业务弹层目录（按功能模块组织）。
+- `xmnote/UIComponents`：跨模块复用 UI 组件唯一归属模块（按 Foundation/TopBar/Tabs/Charts 分层）。
+- `xmnote/Utilities`：设计令牌与非 UI 工具（禁止新增跨模块公共组件）。
 - `scripts/`：架构术语与 UI 组件范围校验脚本。
 - `docs/feature/`：功能文档（需求 + 设计）。
 - `docs/component-guides/`：重要 UI 组件使用文档（参数说明 + 接入示例 + 常见问题）。

@@ -1,3 +1,10 @@
+/**
+ * [INPUT]: 依赖 MainTabView 与根级路由/环境注入状态，承接应用首屏容器装配
+ * [OUTPUT]: 对外提供 ContentView（应用根视图壳层）供 App 入口加载
+ * [POS]: Views 顶层页面容器，负责把导航主骨架挂接到应用生命周期
+ * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
+ */
+
 //
 //  ContentView.swift
 //  xmnote

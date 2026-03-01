@@ -55,7 +55,8 @@
       "Bash(then)",
       "Bash(echo:*)",
       "Bash(else)",
-      "Bash(git status:*)"
+      "Bash(git status:*)",
+      "WebFetch(domain:betterprogramming.pub)"
     ],
     "additionalDirectories": [
       "/Users/wangke/WorkSpace/OpenSource/Mine/Merpyzf/XMNote",

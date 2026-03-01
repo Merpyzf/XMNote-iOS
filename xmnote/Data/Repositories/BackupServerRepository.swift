@@ -8,7 +8,7 @@ import GRDB
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
-struct BackupServerRepository: BackupServerRepositoryProtocol {
+nonisolated struct BackupServerRepository: BackupServerRepositoryProtocol {
     private let databaseManager: DatabaseManager
 
     init(databaseManager: DatabaseManager) {

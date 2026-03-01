@@ -103,15 +103,15 @@ struct NoteTagsView: View {
     // MARK: - Search Highlight
 
     private func highlightedName(_ name: String) -> Text {
-        guard !viewModel.searchText.isEmpty,
-              let range = name.range(of: viewModel.searchText, options: .caseInsensitive)
-        else {
+        guard !viewModel.searchText.isEmpty else {
             return Text(name)
         }
-        let before = name[name.startIndex..<range.lowerBound]
-        let match = name[range]
-        let after = name[range.upperBound..<name.endIndex]
-        return Text(before) + Text(match).foregroundStyle(Color.accentColor) + Text(after)
+        var attributed = AttributedString(name)
+        guard let range = attributed.range(of: viewModel.searchText, options: .caseInsensitive) else {
+            return Text(name)
+        }
+        attributed[range].foregroundColor = .accentColor
+        return Text(attributed)
     }
 }
 

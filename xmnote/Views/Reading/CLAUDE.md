@@ -14,6 +14,6 @@
 
 ## 子目录
 
-- `ReadCalendar/`: 阅读日历子功能（3 个文件）
+- `ReadCalendar/`: 阅读日历子功能（11 个业务文件，含 Components/ 与 Sheets/）
 
 [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md

@@ -12,7 +12,7 @@ import GRDB
 // 数据库核心管理类，负责 DatabasePool 的初始化、迁移和生命周期管理
 // 使用 WAL 模式，与 Android Room 的默认行为一致
 
-struct AppDatabase {
+nonisolated struct AppDatabase {
     /// 数据库连接池（支持并发读取）
     /// 使用 private(set) 以支持热重载场景（备份恢复后重新打开数据库）
     private(set) var dbPool: DatabasePool

@@ -1,3 +1,10 @@
+/**
+ * [INPUT]: 依赖 RichTextEditor 模块格式定义与 UIKit/TextKit 能力，承接富文本解析/渲染/编辑链路
+ * [OUTPUT]: 对外提供 RichTextToolbar 能力，用于富文本编辑器的序列化、交互或样式支持
+ * [POS]: RichTextEditor 功能模块内部构件，服务 Note 编辑场景的 Android 业务意图对齐
+ * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
+ */
+
 import UIKit
 
 /// 格式工具栏，挂载为 UITextView.inputAccessoryView
@@ -31,7 +38,7 @@ final class RichTextToolbar: UIView {
         self.onFormatAction = onFormatAction
         self.onClearFormats = onClearFormats
         self.onDismissKeyboard = onDismissKeyboard
-        super.init(frame: CGRect(x: 0, y: 0, width: UIScreen.main.bounds.width, height: 44))
+        super.init(frame: CGRect(x: 0, y: 0, width: 0, height: 44))
         autoresizingMask = .flexibleWidth
         setupUI()
     }
@@ -45,6 +52,7 @@ final class RichTextToolbar: UIView {
 
     private func setupUI() {
         backgroundColor = .secondarySystemBackground
+        let separatorHeight = 1.0 / max(traitCollection.displayScale, 1)
 
         // 顶部分隔线
         let topBorder = UIView()
@@ -69,7 +77,7 @@ final class RichTextToolbar: UIView {
             topBorder.topAnchor.constraint(equalTo: topAnchor),
             topBorder.leadingAnchor.constraint(equalTo: leadingAnchor),
             topBorder.trailingAnchor.constraint(equalTo: trailingAnchor),
-            topBorder.heightAnchor.constraint(equalToConstant: 1.0 / UIScreen.main.scale),
+            topBorder.heightAnchor.constraint(equalToConstant: separatorHeight),
 
             scrollView.topAnchor.constraint(equalTo: topBorder.bottomAnchor),
             scrollView.leadingAnchor.constraint(equalTo: leadingAnchor),

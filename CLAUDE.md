@@ -112,11 +112,13 @@
 测试优先级：如需补测试，优先补单元测试（ViewModel、数据库迁移、服务层异常路径）。
 提交规范：提交信息统一使用中文，格式为 `fix(功能模块): 提交信息`。
 术语对照闸门：提交前必须执行 `bash scripts/verify_glossary.sh && bash scripts/verify_ui_glossary_scope.sh`。
+组件边界闸门：提交前必须执行 `bash scripts/verify_view_component_boundaries.sh`，校验页面壳层/页面私有子视图/跨模块复用组件的目录边界。
+L3 头部闸门：提交前必须执行 `bash scripts/verify_l3_protocol_headers.sh`，确保业务 Swift 文件具备协议头部契约。
 架构文档闸门：提交前必须执行 `bash scripts/verify_arch_docs_sync.sh`，确保 `AGENTS.md` 与 `CLAUDE.md` 的模块清单和目录同构。
-组件文档闸门：提交前必须执行 `bash scripts/verify_component_guides.sh`，确保重要 UI 组件使用文档与清单完整且结构合规。
-术语对照表：`docs/architecture/术语对照表.md`（新增/重命名核心类、可复用 UI、白名单核心页面组件时必须同步更新）。
+组件文档闸门：提交前必须执行 `bash scripts/verify_component_guides.sh`，确保重要 UI 组件使用文档清单与白名单覆盖完整且结构合规。
+术语对照表：`docs/architecture/术语对照表.md`（新增/重命名核心类、跨模块复用 UI、页面私有子视图、白名单核心页面组件时必须同步更新）。
 UI 核心白名单：`docs/architecture/UI核心组件白名单.md`（白名单变更必须与术语表保持同构）。
-组件归位闸门：新增可复用 UI 组件必须放置在 `xmnote/UIComponents`；若出现放错目录，必须先整改后再继续开发与提交。
+组件归位闸门：页面壳层必须位于 `xmnote/Views/<Feature>/`；跨模块复用 UI 组件必须位于 `xmnote/UIComponents`；`xmnote/Views/<Feature>/Components` 仅允许页面私有子视图。
 功能模块边界：`xmnote/RichTextEditor` 保持功能模块定位，不整体迁入 `UIComponents`；仅纯展示且跨页面复用的子组件允许抽取。
 学习输出要求：每完成一个功能开发并收到用户“任务已完成”信号后，必须输出本次涉及的 iOS 知识点总结，并提供面向 Android Compose 开发者的学习示例（包含 Android → iOS 思维映射与可运行示例代码）；学习文档统一存放在 `docs/learning/`。
 iOS26 参考基线：涉及液态玻璃与 iOS26 新特性实现时，必须优先对照 `docs/learning/iOS26液态玻璃与高相关新特性开发参考.md`；规范优先级为 Apple 官方文档 > 本地参考文档 > 具体实现细节。
@@ -206,9 +208,10 @@ L3 文件头部契约模板：
 4. L1 检查：模块增删？技术栈变？是则更新。
 5. 术语校验：执行 `scripts/verify_glossary.sh` 与 `scripts/verify_ui_glossary_scope.sh`，确保术语表与 UI 范围一致。
 6. 对齐情况文档检查：若本次为 Android → iOS 迁移功能，必须新增或更新 `docs/feature/功能名/对齐情况.md`，并确保按列表逐项记录功能点；未对齐项包含“功能优化/设计倒退”评估及 Android 端反向优化建议。
-7. 组件归位校验：确认新增可复用 UI 组件仅位于 `xmnote/UIComponents`，功能模块组件未越界放置。
+7. 组件归位校验：执行 `scripts/verify_view_component_boundaries.sh`，确认页面壳层、页面私有子视图、业务 Sheet 与跨模块复用组件目录边界正确。
 8. 架构文档校验：执行 `scripts/verify_arch_docs_sync.sh`，确保 `AGENTS.md` 与 `CLAUDE.md` 自动同步模块清单与实际目录一致。
-9. 双文档同构检查：若本次变更涉及 `CLAUDE.md` 或 `AGENTS.md` 的项目结构、全局配置、工具链描述等手工维护区域，必须同步检查另一文件的对应区域是否需要更新。
+9. L3 脚本校验：执行 `scripts/verify_l3_protocol_headers.sh`，确保业务 Swift 文件协议头部完整。
+10. 双文档同构检查：若本次变更涉及 `CLAUDE.md` 或 `AGENTS.md` 的项目结构、全局配置、工具链描述等手工维护区域，必须同步检查另一文件的对应区域是否需要更新。
 
 逆向流（进入目录）：
 1. 读取目标目录 CLAUDE.md：存在则加载，不存在则标记待创建。
@@ -242,10 +245,14 @@ L3 文件头部契约模板：
   `[PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md`
 - 任何目录级架构变更后，必须重新核对 L1/L2/L3 的一致性。
 - 新增/重命名核心类必须在 `docs/architecture/术语对照表.md` 有对应项。
-- `xmnote/UIComponents` 是可复用 UI 组件唯一归属目录，禁止在 `xmnote/Utilities`、`xmnote/Views`、`xmnote/Services` 新增可复用 UI 组件。
-- `xmnote/UIComponents` 的可复用 UI 组件必须在术语表中标记为 `UI-复用`。
+- 页面壳层（`*View` 页面入口/容器）必须位于 `xmnote/Views/<Feature>/`，不得放入 `xmnote/UIComponents`。
+- `xmnote/Views/<Feature>/Components` 仅允许页面私有子视图，术语类别必须为 `UI-页面私有`。
+- 业务 Sheet 必须位于 `xmnote/Views/<Feature>/Sheets/`。
+- `xmnote/UIComponents` 是跨模块复用 UI 组件唯一归属目录，禁止在 `xmnote/Utilities`、`xmnote/Services` 新增跨模块复用组件。
+- `xmnote/UIComponents` 的跨模块复用 UI 组件必须在术语表中标记为 `UI-复用`。
 - `docs/architecture/UI核心组件白名单.md` 中的组件必须在术语表中标记为 `UI-核心页面`。
 - 重要 UI 组件必须在 `docs/architecture/UI组件文档清单.md` 有登记，且对应使用文档位于 `docs/component-guides/`。
+- `docs/architecture/UI核心组件白名单.md` 中组件必须在 `docs/architecture/UI组件文档清单.md` 全量覆盖。
 - `xmnote/RichTextEditor` 作为功能模块保留；仅纯展示且跨页面复用的子组件允许抽到 `xmnote/UIComponents`。
 - `AGENTS.md` 与 `CLAUDE.md` 的自动同步模块清单必须与 `xmnote/` 顶层目录一致，不一致即视为未完成。
 - `CLAUDE.md` 与 `AGENTS.md` 的项目结构描述、全局配置条目、工具链说明必须保持同构；任一文件的手工维护区域发生变更时，必须同步检查并更新另一文件的对应区域。
@@ -445,10 +452,10 @@ xmnote/
 │   ├── HTTPMethod+WebDAV.swift        # WebDAV HTTP 方法扩展
 │   ├── WebDAVClient.swift             # WebDAV 协议操作
 │   └── BackupService.swift            # 数据备份与恢复业务逻辑
-├── UIComponents/                      # 可复用 UI 组件唯一归属目录（Foundation/TopBar/Tabs）
+├── UIComponents/                      # 跨模块复用 UI 组件唯一归属目录（Foundation/TopBar/Tabs/Charts）
 ├── RichTextEditor/                    # 富文本编辑器功能模块（10 个文件）
 ├── Navigation/                        # 路由定义（4 个 Tab 路由）
-├── Utilities/                         # 设计令牌与非 UI 工具（禁止新增可复用 UI 组件）
+├── Utilities/                         # 设计令牌与非 UI 工具（禁止新增跨模块复用 UI 组件）
 └── Resources/                         # 资源文件
 ```
 
