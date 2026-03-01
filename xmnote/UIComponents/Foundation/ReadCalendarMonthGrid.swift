@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 DesignTokens 视觉令牌与周网格输入（WeekData/EventSegment/DayPayload，含显示模式与事件条颜色三态）
- * [OUTPUT]: 对外提供 ReadCalendarMonthGrid（月视图周网格组件，支持热力图/活动事件/书籍封面三种展示模式与 shimmer 降载）
+ * [OUTPUT]: 对外提供 ReadCalendarMonthGrid（月视图周网格组件，支持热力图/活动事件/书籍封面三种展示模式）
  * [POS]: UIComponents/Foundation 的阅读日历可复用网格组件，承载日期格展示、选中态与多模式内容渲染
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -41,6 +41,7 @@ struct ReadCalendarMonthGrid: View {
         let laneIndex: Int
         let continuesFromPrevWeek: Bool
         let continuesToNextWeek: Bool
+        let showsReadDoneBadge: Bool
         let color: EventColor
 
         var id: String {
@@ -88,7 +89,6 @@ struct ReadCalendarMonthGrid: View {
     let weeks: [WeekData]
     let laneLimit: Int
     let displayMode: DisplayMode
-    let isShimmerEnabled: Bool
     let dayPayloadProvider: (Date) -> DayPayload
     let onSelectDay: (Date) -> Void
 
@@ -105,7 +105,6 @@ struct ReadCalendarMonthGrid: View {
                     laneBarHeight: Layout.laneBarHeight,
                     laneSpacing: Layout.laneSpacing,
                     segmentHorizontalInset: Layout.segmentHorizontalInset,
-                    isShimmerEnabled: isShimmerEnabled,
                     dayPayloadProvider: dayPayloadProvider,
                     onSelectDay: onSelectDay
                 )
@@ -137,7 +136,6 @@ private struct ReadCalendarMonthGridWeekRow: View {
     let laneBarHeight: CGFloat
     let laneSpacing: CGFloat
     let segmentHorizontalInset: CGFloat
-    let isShimmerEnabled: Bool
     let dayPayloadProvider: (Date) -> ReadCalendarMonthGrid.DayPayload
     let onSelectDay: (Date) -> Void
 
@@ -223,7 +221,7 @@ private struct ReadCalendarMonthGridWeekRow: View {
                     .frame(height: dayHeaderHeight)
                     .frame(maxWidth: .infinity, alignment: .center)
                     .overlay(alignment: .topTrailing) {
-                        if readDone {
+                        if readDone && displayMode != .activityEvent {
                             Image(systemName: "checkmark.circle.fill")
                                 .font(.system(size: 8))
                                 .foregroundStyle(Color.readCalendarTodayMark)
@@ -360,8 +358,9 @@ private struct ReadCalendarMonthGridWeekRow: View {
 
         let fillColor = fillColor(for: segment.color)
         let textColor = textColor(for: segment.color)
-        let showText = segmentWidth >= 42
         let isPending = segment.color.state == .pending
+        let showBadge = !isPending && segment.showsReadDoneBadge && segmentWidth >= 20
+        let showText = !isPending && segmentWidth >= 42
 
         let leftRadius: CGFloat = segment.continuesFromPrevWeek ? 2.5 : CornerRadius.blockSmall
         let rightRadius: CGFloat = segment.continuesToNextWeek ? 2.5 : CornerRadius.blockSmall
@@ -373,39 +372,36 @@ private struct ReadCalendarMonthGridWeekRow: View {
         )
 
         return ZStack(alignment: .leading) {
-            segmentShape
-                .fill(fillColor.opacity(0.92))
-            segmentShape
-                .stroke(fillColor.opacity(0.58), lineWidth: 0.5)
-
             if isPending {
-                if isShimmerEnabled {
-                    ReadCalendarSegmentPendingShimmer()
-                        .clipShape(segmentShape)
-                } else {
-                    segmentShape
-                        .fill(Color.readCalendarEventPendingHighlight.opacity(0.34))
+                segmentShape
+                    .fill(Color.clear)
+                segmentShape
+                    .stroke(Color.readCalendarSelectionStroke.opacity(0.55), lineWidth: 0.7)
+            } else {
+                segmentShape
+                    .fill(fillColor.opacity(0.92))
+                segmentShape
+                    .stroke(fillColor.opacity(0.58), lineWidth: 0.5)
+
+                if segment.continuesFromPrevWeek {
+                    LinearGradient(
+                        colors: [fillColor.opacity(0.0), fillColor.opacity(0.55)],
+                        startPoint: .leading,
+                        endPoint: .trailing
+                    )
+                    .frame(width: 9)
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 }
-            }
 
-            if segment.continuesFromPrevWeek {
-                LinearGradient(
-                    colors: [fillColor.opacity(0.0), fillColor.opacity(0.55)],
-                    startPoint: .leading,
-                    endPoint: .trailing
-                )
-                .frame(width: 9)
-                .frame(maxWidth: .infinity, alignment: .leading)
-            }
-
-            if segment.continuesToNextWeek {
-                LinearGradient(
-                    colors: [fillColor.opacity(0.55), fillColor.opacity(0.0)],
-                    startPoint: .leading,
-                    endPoint: .trailing
-                )
-                .frame(width: 9)
-                .frame(maxWidth: .infinity, alignment: .trailing)
+                if segment.continuesToNextWeek {
+                    LinearGradient(
+                        colors: [fillColor.opacity(0.55), fillColor.opacity(0.0)],
+                        startPoint: .leading,
+                        endPoint: .trailing
+                    )
+                    .frame(width: 9)
+                    .frame(maxWidth: .infinity, alignment: .trailing)
+                }
             }
 
             if showText {
@@ -413,13 +409,28 @@ private struct ReadCalendarMonthGridWeekRow: View {
                     .font(.system(size: 9, weight: .semibold, design: .rounded))
                     .foregroundStyle(textColor.opacity(isPending ? 0.86 : 0.92))
                     .lineLimit(1)
-                    .padding(.horizontal, 4)
+                    .padding(.leading, 4)
+                    .padding(.trailing, showBadge ? 14 : 4)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+
+            if showBadge {
+                let style = readDoneBadgeStyle(for: segment.color)
+                Circle()
+                    .fill(style.background)
+                    .frame(width: 11, height: 11)
+                    .overlay {
+                        Image(systemName: "checkmark")
+                            .font(.system(size: 6, weight: .bold))
+                            .foregroundStyle(style.foreground)
+                    }
+                    .padding(.trailing, 3)
+                    .frame(maxWidth: .infinity, alignment: .trailing)
             }
         }
         .clipShape(segmentShape)
         .frame(width: max(0, segmentWidth), height: laneBarHeight)
         .offset(x: x, y: y)
-        .shadow(color: Color.black.opacity(0.08), radius: 1.2, x: 0, y: 0.8)
     }
 
     private func dayOffset(for date: Date, weekStart: Date) -> Int {
@@ -446,33 +457,34 @@ private struct ReadCalendarMonthGridWeekRow: View {
             return Color(rgbaHex: color.textRGBAHex)
         }
     }
-}
 
-private struct ReadCalendarSegmentPendingShimmer: View {
-    var body: some View {
-        GeometryReader { proxy in
-            let width = max(24, proxy.size.width * 0.62)
-
-            TimelineView(.animation(minimumInterval: 0.13)) { timeline in
-                let seconds = timeline.date.timeIntervalSinceReferenceDate
-                let progress = seconds.truncatingRemainder(dividingBy: 1.25) / 1.25
-                let startX = -width
-                let endX = proxy.size.width + width
-                let x = startX + (endX - startX) * progress
-
-                LinearGradient(
-                    colors: [
-                        Color.clear,
-                        Color.readCalendarEventPendingHighlight.opacity(0.75),
-                        Color.clear
-                    ],
-                    startPoint: .leading,
-                    endPoint: .trailing
-                )
-                .frame(width: width, height: proxy.size.height)
-                .offset(x: x)
-            }
+    private func readDoneBadgeStyle(for color: ReadCalendarMonthGrid.EventColor) -> (background: Color, foreground: Color) {
+        let isDark = isDarkBackground(color)
+        if isDark {
+            return (
+                background: Color.white.opacity(0.9),
+                foreground: Color.black.opacity(0.76)
+            )
         }
-        .allowsHitTesting(false)
+        return (
+            background: Color.black.opacity(0.34),
+            foreground: Color.white.opacity(0.96)
+        )
+    }
+
+    private func isDarkBackground(_ color: ReadCalendarMonthGrid.EventColor) -> Bool {
+        let hex: UInt32
+        switch color.state {
+        case .pending:
+            return false
+        case .resolved, .failed:
+            hex = color.backgroundRGBAHex
+        }
+
+        let red = Double((hex >> 24) & 0xFF) / 255.0
+        let green = Double((hex >> 16) & 0xFF) / 255.0
+        let blue = Double((hex >> 8) & 0xFF) / 255.0
+        let luminance = 0.299 * red + 0.587 * green + 0.114 * blue
+        return luminance < 0.55
     }
 }

@@ -13,6 +13,21 @@ struct ReadCalendarDayBook: Identifiable, Hashable {
     let name: String
     let coverURL: String
     let firstEventTime: Int64
+    let isReadDoneOnThisDay: Bool
+
+    init(
+        id: Int64,
+        name: String,
+        coverURL: String,
+        firstEventTime: Int64,
+        isReadDoneOnThisDay: Bool = false
+    ) {
+        self.id = id
+        self.name = name
+        self.coverURL = coverURL
+        self.firstEventTime = firstEventTime
+        self.isReadDoneOnThisDay = isReadDoneOnThisDay
+    }
 }
 
 /// 日历单日聚合数据（日期 + 书籍 + 读完标记）
@@ -96,6 +111,27 @@ struct ReadCalendarEventRun: Identifiable, Hashable {
     let startDate: Date
     let endDate: Date
     let laneIndex: Int
+    let readDoneDates: Set<Date>
+
+    init(
+        bookId: Int64,
+        bookName: String,
+        bookCoverURL: String,
+        firstEventTime: Int64,
+        startDate: Date,
+        endDate: Date,
+        laneIndex: Int,
+        readDoneDates: Set<Date> = []
+    ) {
+        self.bookId = bookId
+        self.bookName = bookName
+        self.bookCoverURL = bookCoverURL
+        self.firstEventTime = firstEventTime
+        self.startDate = startDate
+        self.endDate = endDate
+        self.laneIndex = laneIndex
+        self.readDoneDates = readDoneDates
+    }
 
     var id: String {
         "\(bookId)-\(startDate.timeIntervalSince1970)-\(endDate.timeIntervalSince1970)-\(laneIndex)"
@@ -114,7 +150,36 @@ struct ReadCalendarEventSegment: Identifiable, Hashable {
     let laneIndex: Int
     let continuesFromPrevWeek: Bool
     let continuesToNextWeek: Bool
+    let showsReadDoneBadge: Bool
     let color: ReadCalendarSegmentColor
+
+    init(
+        bookId: Int64,
+        bookName: String,
+        bookCoverURL: String,
+        firstEventTime: Int64,
+        weekStart: Date,
+        segmentStartDate: Date,
+        segmentEndDate: Date,
+        laneIndex: Int,
+        continuesFromPrevWeek: Bool,
+        continuesToNextWeek: Bool,
+        showsReadDoneBadge: Bool = false,
+        color: ReadCalendarSegmentColor
+    ) {
+        self.bookId = bookId
+        self.bookName = bookName
+        self.bookCoverURL = bookCoverURL
+        self.firstEventTime = firstEventTime
+        self.weekStart = weekStart
+        self.segmentStartDate = segmentStartDate
+        self.segmentEndDate = segmentEndDate
+        self.laneIndex = laneIndex
+        self.continuesFromPrevWeek = continuesFromPrevWeek
+        self.continuesToNextWeek = continuesToNextWeek
+        self.showsReadDoneBadge = showsReadDoneBadge
+        self.color = color
+    }
 
     var id: String {
         "\(bookId)-\(weekStart.timeIntervalSince1970)-\(segmentStartDate.timeIntervalSince1970)-\(laneIndex)"

@@ -1,4 +1,5 @@
 import Foundation
+import SwiftUI
 
 /**
  * [INPUT]: 依赖 StatisticsRepositoryProtocol 提供月历聚合数据，依赖 ReadCalendarColorRepositoryProtocol 提供封面取色，依赖 ReadCalendarEventLayoutEngine 生成事件条布局
@@ -571,13 +572,17 @@ private extension ReadCalendarViewModel {
         }
 
         guard hasChange else { return }
-        pageStates[monthKey] = MonthPageState(
-            monthStart: state.monthStart,
-            weeks: updatedWeeks,
-            dayMap: state.dayMap,
-            loadState: state.loadState,
-            errorMessage: state.errorMessage
-        )
+        var transaction = Transaction()
+        transaction.animation = nil
+        withTransaction(transaction) {
+            pageStates[monthKey] = MonthPageState(
+                monthStart: state.monthStart,
+                weeks: updatedWeeks,
+                dayMap: state.dayMap,
+                loadState: state.loadState,
+                errorMessage: state.errorMessage
+            )
+        }
     }
 
     private func buildColorRequests(from state: MonthPageState) -> [ReadCalendarColorRequest] {
@@ -801,6 +806,7 @@ private extension ReadCalendarEventSegment {
             laneIndex: laneIndex,
             continuesFromPrevWeek: continuesFromPrevWeek,
             continuesToNextWeek: continuesToNextWeek,
+            showsReadDoneBadge: showsReadDoneBadge,
             color: color
         )
     }

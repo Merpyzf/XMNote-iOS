@@ -278,7 +278,6 @@ private extension ReadCalendarPanel {
             weeks: page.weeks,
             laneLimit: props.laneLimit,
             displayMode: mapGridDisplayMode(props.displayMode),
-            isShimmerEnabled: props.displayMode == .activityEvent,
             dayPayloadProvider: { date in
                 page.payload(for: date)
             },

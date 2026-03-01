@@ -367,6 +367,7 @@ private extension StatisticsRepository {
         let queryRange = millisRangeForQuery(HeatmapDateRange(start: normalizedMonthStart, end: monthEnd))
         let dayBookRows = fetchReadCalendarDayBookRows(db, millisRange: queryRange, excludedEventTypes: excludedEventTypes)
         let readDoneMap = fetchReadDoneCountByDay(db, millisRange: queryRange)
+        let readDoneBookIdsByDay = fetchReadDoneBookIdsByDay(db, millisRange: queryRange)
 
         var dayBookMap: [Date: [ReadCalendarDayBook]] = [:]
         for row in dayBookRows {
@@ -374,7 +375,8 @@ private extension StatisticsRepository {
                 id: row.bookId,
                 name: row.bookName,
                 coverURL: row.bookCover,
-                firstEventTime: row.firstEventTime
+                firstEventTime: row.firstEventTime,
+                isReadDoneOnThisDay: readDoneBookIdsByDay[row.day]?.contains(row.bookId) == true
             )
             dayBookMap[row.day, default: []].append(book)
         }
@@ -481,6 +483,37 @@ private extension StatisticsRepository {
             sql: sql,
             arguments: StatementArguments([millisRange.lowerBound, millisRange.upperBound])
         )
+    }
+
+    func fetchReadDoneBookIdsByDay(_ db: Database, millisRange: ClosedRange<Int64>) -> [Date: Set<Int64>] {
+        let sql = """
+            SELECT DATE(changed_date / 1000, 'unixepoch', 'localtime') AS day,
+                   book_id AS book_id
+            FROM book_read_status_record
+            WHERE is_deleted = 0
+              AND read_status_id = 3
+              AND changed_date != 0
+              AND book_id != 0
+              AND changed_date BETWEEN ? AND ?
+            GROUP BY day, book_id
+            """
+        guard let rows = try? Row.fetchAll(
+            db,
+            sql: sql,
+            arguments: StatementArguments([millisRange.lowerBound, millisRange.upperBound])
+        ) else {
+            return [:]
+        }
+
+        var result: [Date: Set<Int64>] = [:]
+        for row in rows {
+            guard let dayStr: String = row["day"],
+                  let bookId: Int64 = row["book_id"],
+                  let date = Self.dayFormatter.date(from: dayStr) else { continue }
+            let day = calendar.startOfDay(for: date)
+            result[day, default: []].insert(bookId)
+        }
+        return result
     }
 
     func findReadCalendarEarliestDate(

@@ -7,11 +7,15 @@
 
 import Testing
 import Foundation
+import UIKit
 @testable import xmnote
 
 struct xmnoteTests {
 
     @Test func serializerCombinedParagraphWithBulletThenQuote() {
+        Self.serializerStrategyLock.lock()
+        defer { Self.serializerStrategyLock.unlock() }
+
         let original = HTMLSerializer.comboParagraphOrderStrategy
         defer { HTMLSerializer.comboParagraphOrderStrategy = original }
 
@@ -22,6 +26,9 @@ struct xmnoteTests {
     }
 
     @Test func serializerCombinedParagraphWithQuoteThenBullet() {
+        Self.serializerStrategyLock.lock()
+        defer { Self.serializerStrategyLock.unlock() }
+
         let original = HTMLSerializer.comboParagraphOrderStrategy
         defer { HTMLSerializer.comboParagraphOrderStrategy = original }
 
@@ -184,12 +191,71 @@ struct xmnoteTests {
         #expect(Set(segments.map(\.laneIndex)).count == 1)
     }
 
+#if DEBUG
+    @Test func readCalendarColorRejectsNearWhiteDominantAndSelectsVisualPriorityColor() {
+        let imageData = Self.makeColorImageData { _, y in
+            if y < 45 {
+                return (255, 255, 255, 255)
+            }
+            return (24, 66, 228, 255)
+        }
+
+        let hex = ReadCalendarColorRepository.testingExtractPreferredEventBarColorHex(from: imageData)
+        #expect(hex != nil)
+
+        guard let hex else { return }
+        let rgba = Self.rgbaComponents(hex)
+        #expect(rgba.red < 64)
+        #expect(rgba.green < 96)
+        #expect(rgba.blue > 180)
+    }
+
+    @Test func readCalendarColorRejectsLightGrayDominantAndSelectsSaturatedCandidate() {
+        let imageData = Self.makeColorImageData { _, y in
+            if y < 42 {
+                return (236, 236, 236, 255)
+            }
+            return (18, 190, 92, 255)
+        }
+
+        let hex = ReadCalendarColorRepository.testingExtractPreferredEventBarColorHex(from: imageData)
+        #expect(hex != nil)
+
+        guard let hex else { return }
+        let rgba = Self.rgbaComponents(hex)
+        #expect(rgba.red < 90)
+        #expect(rgba.green > 150)
+        #expect(rgba.blue < 140)
+    }
+
+    @Test func readCalendarColorReturnsNilWhenNoVisualPriorityCandidate() {
+        let imageData = Self.makeColorImageData { _, y in
+            if y < 34 {
+                return (255, 255, 255, 255)
+            }
+            return (223, 223, 223, 255)
+        }
+
+        let hex = ReadCalendarColorRepository.testingExtractPreferredEventBarColorHex(from: imageData)
+        #expect(hex == nil)
+    }
+
+    @Test func readCalendarColorCacheKeyIncludesAlgorithmVersion() {
+        let key = ReadCalendarColorRepository.testingCacheKey(
+            bookId: 7,
+            bookName: "缓存测试",
+            coverURL: "https://example.com/cover.png"
+        )
+        #expect(key.contains("|algo:v2"))
+    }
+#endif
+
     @MainActor
     @Test func readCalendarReloadSelectsInitialDateFromEntry() async {
         let calendar = Self.mondayCalendar
         let initialDate = Self.date(2026, 2, 12, calendar: calendar)
         let earliestDate = Self.date(2025, 11, 8, calendar: calendar)
-        let viewModel = ReadCalendarViewModel(initialDate: initialDate)
+        let viewModel = ReadCalendarViewModel(initialDate: initialDate, settings: ReadCalendarSettings())
 
         await viewModel.reload(
             using: StubStatisticsRepository(earliestDate: earliestDate),
@@ -205,7 +271,7 @@ struct xmnoteTests {
         let calendar = Self.mondayCalendar
         let futureDate = calendar.date(byAdding: .day, value: 21, to: Date())!
         let earliestDate = Self.date(2024, 1, 2, calendar: calendar)
-        let viewModel = ReadCalendarViewModel(initialDate: futureDate)
+        let viewModel = ReadCalendarViewModel(initialDate: futureDate, settings: ReadCalendarSettings())
 
         await viewModel.reload(
             using: StubStatisticsRepository(earliestDate: earliestDate),
@@ -222,7 +288,7 @@ struct xmnoteTests {
         let calendar = Self.mondayCalendar
         let initialDate = Self.date(2025, 10, 3, calendar: calendar)
         let earliestDate = Self.date(2024, 2, 1, calendar: calendar)
-        let viewModel = ReadCalendarViewModel(initialDate: initialDate)
+        let viewModel = ReadCalendarViewModel(initialDate: initialDate, settings: ReadCalendarSettings())
 
         await viewModel.reload(
             using: StubStatisticsRepository(earliestDate: earliestDate),
@@ -237,6 +303,8 @@ struct xmnoteTests {
 }
 
 private extension xmnoteTests {
+    static let serializerStrategyLock = NSLock()
+
     static var mondayCalendar: Calendar {
         var calendar = Calendar(identifier: .gregorian)
         calendar.firstWeekday = 2
@@ -246,6 +314,61 @@ private extension xmnoteTests {
 
     static func date(_ year: Int, _ month: Int, _ day: Int, calendar: Calendar) -> Date {
         calendar.date(from: DateComponents(year: year, month: month, day: day))!
+    }
+
+    static func makeColorImageData(
+        width: Int = 40,
+        height: Int = 56,
+        pixelProvider: (Int, Int) -> (UInt8, UInt8, UInt8, UInt8)
+    ) -> Data {
+        var bytes = [UInt8](repeating: 0, count: width * height * 4)
+
+        for y in 0..<height {
+            for x in 0..<width {
+                let offset = (y * width + x) * 4
+                let (r, g, b, a) = pixelProvider(x, y)
+                bytes[offset] = r
+                bytes[offset + 1] = g
+                bytes[offset + 2] = b
+                bytes[offset + 3] = a
+            }
+        }
+
+        let data = Data(bytes)
+        guard let provider = CGDataProvider(data: data as CFData) else {
+            fatalError("Failed to create CGDataProvider")
+        }
+
+        let bitmapInfo = CGBitmapInfo(rawValue: CGImageAlphaInfo.premultipliedLast.rawValue | CGBitmapInfo.byteOrder32Big.rawValue)
+        guard let cgImage = CGImage(
+            width: width,
+            height: height,
+            bitsPerComponent: 8,
+            bitsPerPixel: 32,
+            bytesPerRow: width * 4,
+            space: CGColorSpaceCreateDeviceRGB(),
+            bitmapInfo: bitmapInfo,
+            provider: provider,
+            decode: nil,
+            shouldInterpolate: false,
+            intent: .defaultIntent
+        ) else {
+            fatalError("Failed to create CGImage")
+        }
+
+        let image = UIImage(cgImage: cgImage)
+        guard let pngData = image.pngData() else {
+            fatalError("Failed to encode PNG data")
+        }
+        return pngData
+    }
+
+    static func rgbaComponents(_ hex: UInt32) -> (red: UInt8, green: UInt8, blue: UInt8, alpha: UInt8) {
+        let red = UInt8((hex >> 24) & 0xFF)
+        let green = UInt8((hex >> 16) & 0xFF)
+        let blue = UInt8((hex >> 8) & 0xFF)
+        let alpha = UInt8(hex & 0xFF)
+        return (red: red, green: green, blue: blue, alpha: alpha)
     }
 }
 
@@ -259,11 +382,16 @@ private struct StubStatisticsRepository: StatisticsRepositoryProtocol {
         ([:], nil, nil)
     }
 
-    func fetchReadCalendarEarliestDate() async throws -> Date? {
+    func fetchReadCalendarEarliestDate(
+        excludedEventTypes: Set<ReadCalendarEventType>
+    ) async throws -> Date? {
         earliestDate
     }
 
-    func fetchReadCalendarMonthData(monthStart: Date) async throws -> ReadCalendarMonthData {
+    func fetchReadCalendarMonthData(
+        monthStart: Date,
+        excludedEventTypes: Set<ReadCalendarEventType>
+    ) async throws -> ReadCalendarMonthData {
         let calendar = Calendar.current
         let components = calendar.dateComponents([.year, .month], from: monthStart)
         let normalized = calendar.date(from: DateComponents(year: components.year, month: components.month, day: 1)) ?? monthStart

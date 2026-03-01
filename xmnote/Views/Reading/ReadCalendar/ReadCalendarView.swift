@@ -300,6 +300,7 @@ private extension ReadCalendarView {
             laneIndex: segment.laneIndex,
             continuesFromPrevWeek: segment.continuesFromPrevWeek,
             continuesToNextWeek: segment.continuesToNextWeek,
+            showsReadDoneBadge: segment.showsReadDoneBadge,
             color: mapSegmentColor(segment.color)
         )
     }

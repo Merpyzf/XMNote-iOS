@@ -15,6 +15,7 @@ struct ReadCalendarEventLayoutEngine {
         let firstEventTime: Int64
         let startDate: Date
         let endDate: Date
+        let readDoneDates: Set<Date>
     }
 
     let calendar: Calendar
@@ -37,7 +38,7 @@ struct ReadCalendarEventLayoutEngine {
     }
 
     func buildRuns(days: [Date: ReadCalendarDay]) -> [ReadCalendarEventRun] {
-        var dateBookMap: [Int64: (name: String, cover: String, firstEventTime: Int64, dates: Set<Date>)] = [:]
+        var dateBookMap: [Int64: (name: String, cover: String, firstEventTime: Int64, dates: Set<Date>, readDoneDates: Set<Date>)] = [:]
 
         for (day, payload) in days {
             let normalizedDay = calendar.startOfDay(for: day)
@@ -45,13 +46,17 @@ struct ReadCalendarEventLayoutEngine {
                 if var item = dateBookMap[book.id] {
                     item.dates.insert(normalizedDay)
                     item.firstEventTime = min(item.firstEventTime, book.firstEventTime)
+                    if book.isReadDoneOnThisDay {
+                        item.readDoneDates.insert(normalizedDay)
+                    }
                     dateBookMap[book.id] = item
                 } else {
                     dateBookMap[book.id] = (
                         name: book.name,
                         cover: book.coverURL,
                         firstEventTime: book.firstEventTime,
-                        dates: [normalizedDay]
+                        dates: [normalizedDay],
+                        readDoneDates: book.isReadDoneOnThisDay ? [normalizedDay] : []
                     )
                 }
             }
@@ -65,7 +70,9 @@ struct ReadCalendarEventLayoutEngine {
 
             for date in sortedDates.dropFirst() {
                 guard let nextExpected = calendar.date(byAdding: .day, value: 1, to: runEnd) else { continue }
-                if calendar.isDate(date, inSameDayAs: nextExpected) {
+                let isContinuousDate = calendar.isDate(date, inSameDayAs: nextExpected)
+                let shouldBreakAfterReadDoneDay = item.readDoneDates.contains(runEnd)
+                if isContinuousDate && !shouldBreakAfterReadDoneDay {
                     runEnd = date
                 } else {
                     draftRuns.append(DraftRun(
@@ -74,7 +81,8 @@ struct ReadCalendarEventLayoutEngine {
                         bookCoverURL: item.cover,
                         firstEventTime: item.firstEventTime,
                         startDate: runStart,
-                        endDate: runEnd
+                        endDate: runEnd,
+                        readDoneDates: readDoneDates(in: item.readDoneDates, from: runStart, to: runEnd)
                     ))
                     runStart = date
                     runEnd = date
@@ -86,7 +94,8 @@ struct ReadCalendarEventLayoutEngine {
                 bookCoverURL: item.cover,
                 firstEventTime: item.firstEventTime,
                 startDate: runStart,
-                endDate: runEnd
+                endDate: runEnd,
+                readDoneDates: readDoneDates(in: item.readDoneDates, from: runStart, to: runEnd)
             ))
         }
 
@@ -117,7 +126,8 @@ struct ReadCalendarEventLayoutEngine {
                 firstEventTime: run.firstEventTime,
                 startDate: run.startDate,
                 endDate: run.endDate,
-                laneIndex: lane
+                laneIndex: lane,
+                readDoneDates: run.readDoneDates
             ))
         }
         return runs
@@ -157,6 +167,11 @@ private extension ReadCalendarEventLayoutEngine {
                     laneIndex: run.laneIndex,
                     continuesFromPrevWeek: segmentStart > run.startDate,
                     continuesToNextWeek: segmentEnd < run.endDate,
+                    showsReadDoneBadge: segmentContainsReadDone(
+                        readDoneDates: run.readDoneDates,
+                        from: segmentStart,
+                        to: segmentEnd
+                    ),
                     color: .pending
                 ))
                 guard let next = calendar.date(byAdding: .day, value: 1, to: segmentEnd) else { break }
@@ -210,6 +225,7 @@ private extension ReadCalendarEventLayoutEngine {
                     laneIndex: lane,
                     continuesFromPrevWeek: false,
                     continuesToNextWeek: false,
+                    showsReadDoneBadge: segment.showsReadDoneBadge,
                     color: segment.color
                 ))
             }
@@ -257,6 +273,24 @@ private extension ReadCalendarEventLayoutEngine {
         let toDay = calendar.startOfDay(for: to)
         let distance = calendar.dateComponents([.day], from: fromDay, to: toDay).day ?? 0
         return max(1, distance + 1)
+    }
+
+    private func readDoneDates(in source: Set<Date>, from start: Date, to end: Date) -> Set<Date> {
+        let startDay = calendar.startOfDay(for: start)
+        let endDay = calendar.startOfDay(for: end)
+        return Set(source.filter { date in
+            let normalized = calendar.startOfDay(for: date)
+            return normalized >= startDay && normalized <= endDay
+        })
+    }
+
+    private func segmentContainsReadDone(readDoneDates: Set<Date>, from start: Date, to end: Date) -> Bool {
+        let startDay = calendar.startOfDay(for: start)
+        let endDay = calendar.startOfDay(for: end)
+        return readDoneDates.contains { date in
+            let normalized = calendar.startOfDay(for: date)
+            return normalized >= startDay && normalized <= endDay
+        }
     }
 
     private func compareSegment(_ lhs: ReadCalendarEventSegment, _ rhs: ReadCalendarEventSegment) -> Bool {

@@ -3,8 +3,8 @@ import UIKit
 
 /**
  * [INPUT]: 依赖 URLSession 获取封面图，依赖 ReadCalendarSegmentColor 领域模型表达事件条颜色结果
- * [OUTPUT]: 对外提供 ReadCalendarColorRepository（ReadCalendarColorRepositoryProtocol 实现，封面主色提取 + 文本可读性计算 + 失败回退）
- * [POS]: Data 层阅读日历颜色仓储，负责封面取色策略与持久缓存，不让 ViewModel 直接依赖网络/图像分析细节
+ * [OUTPUT]: 对外提供 ReadCalendarColorRepository（ReadCalendarColorRepositoryProtocol 实现，封面颜色提取 + 视觉优先回退 + 文本可读性计算 + 失败哈希回退）
+ * [POS]: Data 层阅读日历颜色仓储，负责封面取色策略（近白过滤 + 视觉优先色）与持久缓存，不让 ViewModel 直接依赖网络/图像分析细节
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
@@ -47,14 +47,14 @@ struct ReadCalendarColorRepository: ReadCalendarColorRepositoryProtocol {
                 return .pending
             }
 
-            guard let dominant = await Self.extractDominantColorAsync(from: data) else {
+            guard let preferredBackground = await Self.extractPreferredEventBarColorAsync(from: data) else {
                 await cacheStore.save(fallback, for: cacheKey)
                 return fallback
             }
 
-            let textColor = bestTextColor(for: dominant)
+            let textColor = bestTextColor(for: preferredBackground)
             let resolved = ReadCalendarSegmentColor.resolved(
-                backgroundRGBAHex: dominant.rgbaHex,
+                backgroundRGBAHex: preferredBackground.rgbaHex,
                 textRGBAHex: textColor.rgbaHex
             )
             await cacheStore.save(resolved, for: cacheKey)
@@ -115,19 +115,35 @@ private extension ReadCalendarColorRepository {
     }
 }
 
-// MARK: - Dominant Color
+// MARK: - Cover Color Policy
 
 private extension ReadCalendarColorRepository {
-    nonisolated static func extractDominantColorAsync(from data: Data) async -> RGBAColor? {
+    nonisolated static func extractPreferredEventBarColorAsync(from data: Data) async -> RGBAColor? {
         await Task.detached(priority: .utility) {
-            extractDominantColor(from: data)
+            extractPreferredEventBarColor(from: data)
         }.value
     }
 
-    nonisolated static func extractDominantColor(from data: Data) -> RGBAColor? {
+    nonisolated static func extractPreferredEventBarColor(from data: Data) -> RGBAColor? {
+        let swatches = extractColorSwatches(from: data)
+        guard !swatches.isEmpty else { return nil }
+
+        if let dominant = findDominantColor(from: swatches),
+           !isInvalidEventBarColor(dominant) {
+            return dominant
+        }
+
+        if let visualPriority = findVisualPriorityColor(from: swatches) {
+            return visualPriority
+        }
+
+        return nil
+    }
+
+    nonisolated static func extractColorSwatches(from data: Data) -> [ColorSwatch] {
         guard let uiImage = UIImage(data: data),
               let cgImage = uiImage.cgImage else {
-            return nil
+            return []
         }
 
         let targetWidth = 40
@@ -146,13 +162,13 @@ private extension ReadCalendarColorRepository {
             space: CGColorSpaceCreateDeviceRGB(),
             bitmapInfo: bitmapInfo
         ) else {
-            return nil
+            return []
         }
 
         context.interpolationQuality = .low
         context.draw(cgImage, in: CGRect(x: 0, y: 0, width: targetWidth, height: targetHeight))
 
-        guard let rawBuffer = context.data else { return nil }
+        guard let rawBuffer = context.data else { return [] }
         let count = targetWidth * targetHeight * bytesPerPixel
         let pixels = rawBuffer.bindMemory(to: UInt8.self, capacity: count)
 
@@ -172,16 +188,70 @@ private extension ReadCalendarColorRepository {
             histogram[key, default: 0] += 1
         }
 
-        guard let best = histogram.max(by: { lhs, rhs in
-            if lhs.value != rhs.value {
-                return lhs.value < rhs.value
+        return histogram.map { key, population in
+            ColorSwatch(color: color(from: key), population: population)
+        }
+    }
+
+    nonisolated static func findDominantColor(from swatches: [ColorSwatch]) -> RGBAColor? {
+        guard let dominant = swatches.max(by: { lhs, rhs in
+            if lhs.population != rhs.population {
+                return lhs.population < rhs.population
             }
-            return lhs.key < rhs.key
+            return lhs.color.rgbaHex < rhs.color.rgbaHex
+        }) else {
+            return nil
+        }
+        return dominant.color
+    }
+
+    nonisolated static func isInvalidEventBarColor(_ color: RGBAColor) -> Bool {
+        let hsv = color.hsv
+        let isNearWhite = hsv.value >= 0.92 && hsv.saturation <= 0.20
+        let isLowSaturationLightTone = hsv.saturation < 0.16 && hsv.value > 0.70
+        let isTooDark = hsv.value < 0.18
+        return isNearWhite || isLowSaturationLightTone || isTooDark
+    }
+
+    nonisolated static func findVisualPriorityColor(from swatches: [ColorSwatch]) -> RGBAColor? {
+        let candidates = swatches.filter {
+            let hsv = $0.color.hsv
+            let alpha = Double($0.color.alpha) / 255.0
+            return alpha > 0.8
+            && hsv.saturation >= 0.35
+            && hsv.value >= 0.35
+            && hsv.value <= 0.90
+        }
+
+        guard let maxPopulation = candidates.map(\.population).max(),
+              maxPopulation > 0 else {
+            return nil
+        }
+
+        guard let best = candidates.max(by: { lhs, rhs in
+            let lhsScore = scoreVisualPrioritySwatch(lhs, maxPopulation: maxPopulation)
+            let rhsScore = scoreVisualPrioritySwatch(rhs, maxPopulation: maxPopulation)
+            if lhsScore != rhsScore {
+                return lhsScore < rhsScore
+            }
+            if lhs.population != rhs.population {
+                return lhs.population < rhs.population
+            }
+            return lhs.color.rgbaHex < rhs.color.rgbaHex
         }) else {
             return nil
         }
 
-        return color(from: best.key)
+        return best.color
+    }
+
+    nonisolated static func scoreVisualPrioritySwatch(_ swatch: ColorSwatch, maxPopulation: Int) -> Double {
+        let hsv = swatch.color.hsv
+        let normalizedPopulation = Double(swatch.population) / Double(maxPopulation)
+        let brightnessPreference = 1.0 - abs(hsv.value - 0.62)
+        return 0.45 * normalizedPopulation
+            + 0.35 * hsv.saturation
+            + 0.20 * brightnessPreference
     }
 
     nonisolated static func quantizedKey(red: UInt8, green: UInt8, blue: UInt8) -> UInt32 {
@@ -198,6 +268,28 @@ private extension ReadCalendarColorRepository {
         return RGBAColor(red: r, green: g, blue: b, alpha: 255)
     }
 }
+
+// MARK: - Cache Key
+
+private extension ReadCalendarColorRepository {
+    nonisolated static let colorAlgorithmVersion = "v2"
+
+    nonisolated static func cacheKey(bookId: Int64, bookName: String, coverURL: String) -> String {
+        "\(bookId)|\(bookName)|\(coverURL)|algo:\(colorAlgorithmVersion)"
+    }
+}
+
+#if DEBUG
+extension ReadCalendarColorRepository {
+    nonisolated static func testingExtractPreferredEventBarColorHex(from data: Data) -> UInt32? {
+        extractPreferredEventBarColor(from: data)?.rgbaHex
+    }
+
+    nonisolated static func testingCacheKey(bookId: Int64, bookName: String, coverURL: String) -> String {
+        cacheKey(bookId: bookId, bookName: bookName, coverURL: coverURL)
+    }
+}
+#endif
 
 // MARK: - Text Contrast
 
@@ -271,16 +363,23 @@ private extension ReadCalendarColorRepository {
         }
         return hash
     }
-
-    nonisolated static func cacheKey(bookId: Int64, bookName: String, coverURL: String) -> String {
-        "\(bookId)|\(bookName)|\(coverURL)"
-    }
 }
 
 // MARK: - Internal Types
 
 private enum ReadCalendarCoverColorError: Error {
     case invalidResponse
+}
+
+private struct ColorSwatch {
+    let color: RGBAColor
+    let population: Int
+}
+
+private struct HSVColor {
+    let hue: Double
+    let saturation: Double
+    let value: Double
 }
 
 private struct RGBAColor {
@@ -315,6 +414,31 @@ private struct RGBAColor {
         | UInt32(alpha)
     }
 
+    nonisolated var hsv: HSVColor {
+        let red = Double(self.red) / 255.0
+        let green = Double(self.green) / 255.0
+        let blue = Double(self.blue) / 255.0
+
+        let maxValue = max(red, green, blue)
+        let minValue = min(red, green, blue)
+        let delta = maxValue - minValue
+
+        let hue: Double
+        if delta == 0 {
+            hue = 0
+        } else if maxValue == red {
+            hue = ((green - blue) / delta).truncatingRemainder(dividingBy: 6)
+        } else if maxValue == green {
+            hue = ((blue - red) / delta) + 2
+        } else {
+            hue = ((red - green) / delta) + 4
+        }
+
+        let normalizedHue = ((hue / 6).truncatingRemainder(dividingBy: 1) + 1).truncatingRemainder(dividingBy: 1)
+        let saturation = maxValue == 0 ? 0 : delta / maxValue
+        return HSVColor(hue: normalizedHue, saturation: saturation, value: maxValue)
+    }
+
     nonisolated var relativeLuminance: Double {
         let red = linearize(Double(self.red) / 255.0)
         let green = linearize(Double(self.green) / 255.0)
@@ -347,7 +471,7 @@ private actor ReadCalendarColorCacheStore {
     init(fileManager: FileManager = .default) {
         let directory = fileManager.urls(for: .cachesDirectory, in: .userDomainMask).first
             ?? URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)
-        self.fileURL = directory.appendingPathComponent("read_calendar_event_color_cache_v1.json")
+        self.fileURL = directory.appendingPathComponent("read_calendar_event_color_cache_v2.json")
 
         guard let data = try? Data(contentsOf: fileURL),
               let decoded = try? JSONDecoder().decode([String: CacheRecord].self, from: data) else {

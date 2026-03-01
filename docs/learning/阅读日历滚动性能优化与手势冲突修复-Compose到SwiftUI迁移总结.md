@@ -16,7 +16,97 @@
 | 日格状态计算 | `derivedStateOf`/按项计算 | `payload(for:)` 按需计算 | 让计算跟渲染同粒度 |
 | 异步增量回填 | `snapshotFlow/debounce/buffer` | 批量 `applyColors`（计数/时间阈值） | 降低状态写放大 |
 
-## 3. 可运行 SwiftUI 示例（窗口化 + 手势不抢占）
+## 3. TabView 可见窗口优化：实现原理（详细版）
+
+### 3.1 问题本质：TabView 性能瓶颈到底在哪里
+`TabView(.page)` 本身不是性能问题根源，真正的瓶颈来自“每个页面都挂着重内容”。
+在阅读日历场景中，重内容包括：
+- 周网格 `weeks` 的结构映射与 diff。
+- 日状态计算（today/selected/future/overflow）。
+- 活动事件条、颜色状态、pending 动效层。
+
+如果把所有月份都作为“重页面”传给 `TabView`，任何状态变化（选中日期、颜色回填、模式切换）都可能触发大量页面重算。
+
+核心结论：
+- `TabView` 可以全量保留页面标签（保持交互完整）。
+- 但“重数据页面”必须窗口化，只保留当前页附近。
+
+### 3.2 架构拆分：容器全集 vs 内容窗口
+本次优化的关键不是换容器，而是把“交互边界”和“计算边界”拆开。
+
+1. 容器全集（交互边界）
+- `availableMonths` 仍是全量。
+- `TabView` 仍按全量月份 `ForEach` + `.tag(month)` 构建。
+- 作用：保证分页索引连续、左右滑动行为稳定、快速切月合法性完整。
+
+2. 内容窗口（计算边界）
+- `monthPages` 只传可见窗口（当前月前后各 1 页，最多 3 页）。
+- 非窗口月份在面板内返回轻量占位状态。
+- 作用：把重计算从 `O(M)` 收敛到 `O(W)`，其中 `W=3`。
+
+这是一种典型的“UI 容器全量，内容渲染窗口化”模型。
+
+### 3.3 窗口更新算法：selection 驱动的前后页切换
+当前实现采用 `pagerSelection` 作为窗口锚点：
+
+```swift
+let anchorIndex = months.firstIndex(of: pagerSelection) ?? ...
+let lower = max(0, anchorIndex - 1)
+let upper = min(months.count - 1, anchorIndex + 1)
+let visible = Array(months[lower...upper])
+```
+
+设计点：
+- 锚点优先使用 `pagerSelection`，回退到 `displayedMonthStart`。
+- 边界月份自动收缩窗口（首月只有右邻，末月只有左邻）。
+- 每次选中月份变化时，窗口同步滑动到新锚点。
+
+### 3.4 渲染降载链路：从月级预计算改为格级按需计算
+只做窗口化还不够，本次同时把页面内部计算粒度做了下沉：
+
+1. 旧模型
+- 先遍历整月所有日期，预构建 `dayPayloads` 字典。
+- 再把整个月 payload 交给网格渲染。
+
+2. 新模型
+- `MonthPage` 持有 `dayMap + selectedDate + todayStart + laneLimit`。
+- 网格真正绘制某一天时才调用 `payload(for:)`。
+- “算多少格子、做多少计算”，与渲染粒度一致。
+
+效果：
+- 避免每次状态变化重建整月 payload。
+- 对窗口页也进一步削减 CPU 峰值。
+
+### 3.5 手势不冲突原则：为什么不能在月页再加 DragGesture
+优化期间常见误区是：
+- 为了感知滚动状态去暂停 shimmer，给 `ScrollView` 叠加 `DragGesture`。
+
+问题在于：
+- 这会与 `TabView(.page)` 横向手势发生竞争。
+- 直接表现为“左右翻月失效/不稳定”。
+
+正确策略：
+- 让 `TabView` 主导横向分页手势。
+- 性能控制通过“窗口化 + 按需计算 + 批量回填 + 动效降频”完成。
+- 不依赖抢手势来做性能控制。
+
+### 3.6 复杂度与收益：O(M) 到 O(W) 的窗口模型
+定义：
+- `M`: 全量月份数（例如 24、36）。
+- `W`: 可见窗口页数（本次固定 3）。
+- `C_page`: 单个月页面重内容构建成本。
+
+近似成本：
+- 全量重建：`Cost_full ≈ M * C_page`
+- 窗口重建：`Cost_window ≈ W * C_page`，且 `W << M`
+
+在 `M=24, W=3` 时，理论上页面级重建开销可降到约 `1/8`。
+实际体验上会表现为：
+- 滑动更跟手。
+- 翻页时掉帧显著减少。
+- 颜色回填期间的抖动降低。
+
+## 4. 可运行 SwiftUI 示例（窗口化 + 手势不抢占）
 ```swift
 import SwiftUI
 
@@ -51,16 +141,16 @@ struct PagerWindowDemoView: View {
     var body: some View {
         TabView(selection: $selection) {
             ForEach(months, id: \.self) { month in
-                ScrollView {
+                ScrollView 
                     if let page = visibleWindow.first(where: { $0.monthStart == month }) {
-                        // 仅窗口页构建重内容
+                        // 仅窗口页构建重内容，降低大规模页面重算
                         MonthHeavyContentView(monthStart: page.monthStart)
                     } else {
-                        // 非窗口页轻量占位
+                        // 非窗口页保留轻量占位，避免直接空视图导致跳变
                         ProgressView().frame(maxWidth: .infinity, minHeight: 280)
                     }
                 }
-                // 不要叠加 DragGesture 抢占横向翻页
+                // 不要在这里叠加 DragGesture 抢占 TabView 横向翻页
                 .tag(month)
             }
         }
@@ -87,7 +177,20 @@ private struct MonthHeavyContentView: View {
 }
 ```
 
-## 4. Compose 对照示例（可运行核心意图）
+### 4.1 反例（不要这样做）
+```swift
+// 反例：看似要感知滚动，实际会和 TabView 分页手势竞争
+ScrollView {
+    content
+}
+.simultaneousGesture(
+    DragGesture().onChanged { _ in
+        // do something
+    }
+)
+```
+
+## 5. Compose 对照示例（可运行核心意图）
 ```kotlin
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -115,7 +218,7 @@ fun PagerWindowDemo() {
 }
 ```
 
-## 5. 迁移中的踩坑与结论
+## 6. 迁移中的踩坑与结论
 - 卡顿优化和手势优化可能相互影响：
   - 用 `DragGesture` 感知滚动暂停 shimmer，可能直接破坏翻页。
 - 正确顺序应是：
