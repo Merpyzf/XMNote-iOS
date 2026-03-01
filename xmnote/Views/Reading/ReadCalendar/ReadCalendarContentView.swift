@@ -24,14 +24,14 @@ struct ReadCalendarContentView: View {
             }
         }
 
-        var iconName: String {
+        func iconName(isSelected: Bool) -> String {
             switch self {
             case .heatmap:
-                return "square.grid.3x3.fill"
+                return isSelected ? "square.grid.3x3.fill" : "square.grid.3x3"
             case .activityEvent:
-                return "calendar.badge.clock"
+                return isSelected ? "list.bullet.rectangle.fill" : "list.bullet.rectangle"
             case .bookCover:
-                return "books.vertical.fill"
+                return isSelected ? "books.vertical.fill" : "books.vertical"
             }
         }
     }
@@ -162,6 +162,9 @@ struct ReadCalendarContentView: View {
         static let gridTopInset: CGFloat = 2
         static let streakHintBottomPadding: CGFloat = Spacing.cozy
         static let summarySheetCompactRatio: CGFloat = 0.48
+        static let summaryFloatingButtonTrailing: CGFloat = Spacing.screenEdge
+        static let summaryFloatingButtonBottom: CGFloat = Spacing.double
+        static let summaryFloatingButtonTransitionDuration: CGFloat = 0.22
     }
 
     let props: Props
@@ -182,10 +185,8 @@ struct ReadCalendarContentView: View {
                 availableMonths: props.availableMonths,
                 pagerSelection: props.pagerSelection,
                 displayMode: props.displayMode,
-                rootContentState: props.rootContentState,
                 onDisplayModeChanged: onDisplayModeChanged,
-                onPagerSelectionChanged: onPagerSelectionChanged,
-                onOpenSummary: openMonthSummaryManually
+                onPagerSelectionChanged: onPagerSelectionChanged
             )
                 .padding(.top, Layout.topControlTopPadding)
                 .padding(.bottom, Layout.topControlBottomPadding)
@@ -209,6 +210,7 @@ struct ReadCalendarContentView: View {
             }
         }
         .animation(.spring(response: 0.38, dampingFraction: 0.86), value: props.errorMessage)
+        .animation(.snappy(duration: Layout.summaryFloatingButtonTransitionDuration), value: shouldShowSummaryFloatingButton)
         .onAppear {
             evaluateStreakHintIfNeeded()
         }
@@ -265,6 +267,10 @@ struct ReadCalendarContentView: View {
 // MARK: - Subviews
 
 private extension ReadCalendarContentView {
+    var shouldShowSummaryFloatingButton: Bool {
+        props.rootContentState == .content && !isSummarySheetPresented
+    }
+
     var activeMonthPage: MonthPage? {
         monthPageStateIfLoaded(for: props.pagerSelection)
     }
@@ -475,6 +481,14 @@ private extension ReadCalendarContentView {
         }
         .padding(.top, Layout.gridTopInset)
         .frame(maxWidth: .infinity, alignment: .top)
+        .overlay(alignment: .bottomTrailing) {
+            if shouldShowSummaryFloatingButton {
+                ReadCalendarSummaryFloatingButton(action: openMonthSummaryManually)
+                    .padding(.trailing, Layout.summaryFloatingButtonTrailing)
+                    .padding(.bottom, Layout.summaryFloatingButtonBottom)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
+        }
     }
 
     var calendarPager: some View {

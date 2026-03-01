@@ -46,12 +46,13 @@ struct ReadCalendarView: View {
         }
         .navigationTitle("阅读日历")
         .navigationBarTitleDisplayMode(.inline)
+        .tint(Color.readCalendarTopAction)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Button { isSettingsPresented = true } label: {
                     Image(systemName: "gearshape")
                         .font(.system(size: 15, weight: .semibold))
-                        .foregroundStyle(Color.readCalendarSubtleText)
+                        .foregroundStyle(Color.readCalendarTopAction)
                 }
                 .accessibilityLabel("阅读日历设置")
             }

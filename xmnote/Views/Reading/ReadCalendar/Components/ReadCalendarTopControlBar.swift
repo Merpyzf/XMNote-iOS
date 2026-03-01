@@ -3,7 +3,7 @@ import SwiftUI
 /**
  * [INPUT]: 依赖月份与显示模式状态，依赖回调驱动页面壳层进行状态更新
  * [OUTPUT]: 对外提供 ReadCalendarTopControlBar（阅读日历顶部控制区）
- * [POS]: ReadCalendar 业务内复用组件，承载月份切换、月总结入口与显示模式切换
+ * [POS]: ReadCalendar 业务内复用组件，承载月份切换与显示模式切换
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
@@ -17,18 +17,14 @@ struct ReadCalendarTopControlBar: View {
     let availableMonths: [Date]
     let pagerSelection: Date
     let displayMode: ReadCalendarContentView.DisplayMode
-    let rootContentState: ReadCalendarContentView.RootContentState
     let onDisplayModeChanged: (ReadCalendarContentView.DisplayMode) -> Void
     let onPagerSelectionChanged: (Date) -> Void
-    let onOpenSummary: () -> Void
 
     var body: some View {
         HStack(alignment: .center, spacing: Layout.topControlSpacing) {
             monthSwitcher
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .layoutPriority(1)
-
-            summaryEntryButton
 
             modeSwitcher
                 .frame(width: Layout.modeSwitcherWidth)
@@ -51,31 +47,17 @@ private extension ReadCalendarTopControlBar {
         )
     }
 
-    var summaryEntryButton: some View {
-        Button(action: onOpenSummary) {
-            TopBarActionIcon(
-                systemName: "chart.bar.doc.horizontal",
-                iconSize: 14,
-                weight: .semibold,
-                foregroundColor: Color.readCalendarSubtleText
-            )
-        }
-        .topBarGlassButtonStyle(true)
-        .accessibilityLabel("月度阅读总结")
-        .disabled(rootContentState == .empty)
-        .opacity(rootContentState == .empty ? 0.45 : 1)
-    }
-
     var modeSwitcher: some View {
         Picker("阅读日历显示模式", selection: displayModeBinding) {
             ForEach(ReadCalendarContentView.DisplayMode.allCases, id: \.self) { mode in
-                Label(mode.title, systemImage: mode.iconName)
-                    .labelStyle(.iconOnly)
+                Image(systemName: mode.iconName(isSelected: mode == displayMode))
+                    .font(.system(size: 14, weight: .medium))
                     .tag(mode)
                     .accessibilityLabel(mode.title)
             }
         }
         .pickerStyle(.segmented)
+        .tint(Color.brand)
         .labelsHidden()
         .accessibilityLabel("阅读日历显示模式")
         .accessibilityValue(displayMode.title)

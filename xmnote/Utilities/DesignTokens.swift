@@ -138,6 +138,12 @@ extension Color {
 // MARK: - Reading Calendar Theme
 
 extension Color {
+    /// 阅读日历顶部动作图标（返回/设置/总结入口）
+    static let readCalendarTopAction = Color(
+        light: Color(hex: 0x111111),
+        dark: Color(hex: 0xF2F2F7)
+    )
+
     /// 阅读日历次级文本
     static let readCalendarSubtleText = Color(
         light: Color(hex: 0x647388),
