@@ -24,12 +24,20 @@ final class ReadCalendarSettings {
     var dayEventCount: Int {
         didSet { save(dayEventCount, forKey: Self.keyDayEventCount) }
     }
+    var isHapticsEnabled: Bool {
+        didSet { save(isHapticsEnabled, forKey: Self.keyHapticsEnabled) }
+    }
+    var isStreakHintEnabled: Bool {
+        didSet { save(isStreakHintEnabled, forKey: Self.keyStreakHintEnabled) }
+    }
 
     init() {
         let defaults = UserDefaults.standard
         self.excludeReadTiming = defaults.bool(forKey: Self.keyReadTiming)
         self.excludeNoteRecord = defaults.bool(forKey: Self.keyNoteRecord)
         self.excludeCheckIn = defaults.bool(forKey: Self.keyCheckIn)
+        self.isHapticsEnabled = defaults.object(forKey: Self.keyHapticsEnabled) as? Bool ?? true
+        self.isStreakHintEnabled = defaults.object(forKey: Self.keyStreakHintEnabled) as? Bool ?? true
 
         let stored = defaults.integer(forKey: Self.keyDayEventCount)
         self.dayEventCount = Self.dayEventCountRange.contains(stored) ? stored : Self.defaultDayEventCount
@@ -63,6 +71,8 @@ final class ReadCalendarSettings {
     private static let keyNoteRecord = "rcExcludeNoteRecord"
     private static let keyCheckIn = "rcExcludeCheckIn"
     private static let keyDayEventCount = "rcDayEventCount"
+    private static let keyHapticsEnabled = "rcHapticsEnabled"
+    private static let keyStreakHintEnabled = "rcStreakHintEnabled"
 
     private func save(_ value: Bool, forKey key: String) {
         UserDefaults.standard.set(value, forKey: key)

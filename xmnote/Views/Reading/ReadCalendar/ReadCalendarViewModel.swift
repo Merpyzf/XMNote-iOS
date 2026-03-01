@@ -69,7 +69,7 @@ final class ReadCalendarViewModel {
 
     var displayedMonthStart: Date
     var pagerSelection: Date
-    var selectedDate: Date
+    var selectedDate: Date?
     var earliestMonthStart: Date?
     var availableMonths: [Date] = []
 
@@ -345,9 +345,16 @@ final class ReadCalendarViewModel {
     }
 
     func selectDate(_ date: Date?) {
-        guard let date else { return }
+        guard let date else {
+            selectedDate = nil
+            return
+        }
         let normalized = calendar.startOfDay(for: date)
         guard !isFutureDate(normalized) else { return }
+        if let selectedDate, calendar.isDate(selectedDate, inSameDayAs: normalized) {
+            self.selectedDate = nil
+            return
+        }
         selectedDate = normalized
     }
 
@@ -362,7 +369,8 @@ final class ReadCalendarViewModel {
     }
 
     func isSelected(_ date: Date) -> Bool {
-        calendar.isDate(date, inSameDayAs: selectedDate)
+        guard let selectedDate else { return false }
+        return calendar.isDate(date, inSameDayAs: selectedDate)
     }
 
     func isToday(_ date: Date) -> Bool {

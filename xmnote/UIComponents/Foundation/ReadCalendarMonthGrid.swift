@@ -6,6 +6,9 @@
  */
 
 import SwiftUI
+#if canImport(UIKit)
+import UIKit
+#endif
 
 struct ReadCalendarMonthGrid: View {
     enum DisplayMode: Hashable {
@@ -61,6 +64,7 @@ struct ReadCalendarMonthGrid: View {
         let bookCount: Int
         let isReadDoneDay: Bool
         let overflowCount: Int
+        let isStreakDay: Bool
         let isToday: Bool
         let isSelected: Bool
         let isFuture: Bool
@@ -69,6 +73,7 @@ struct ReadCalendarMonthGrid: View {
             bookCount: 0,
             isReadDoneDay: false,
             overflowCount: 0,
+            isStreakDay: false,
             isToday: false,
             isSelected: false,
             isFuture: false
@@ -89,6 +94,8 @@ struct ReadCalendarMonthGrid: View {
     let weeks: [WeekData]
     let laneLimit: Int
     let displayMode: DisplayMode
+    let selectedDate: Date?
+    let isHapticsEnabled: Bool
     let dayPayloadProvider: (Date) -> DayPayload
     let onSelectDay: (Date) -> Void
 
@@ -105,6 +112,8 @@ struct ReadCalendarMonthGrid: View {
                     laneBarHeight: Layout.laneBarHeight,
                     laneSpacing: Layout.laneSpacing,
                     segmentHorizontalInset: Layout.segmentHorizontalInset,
+                    selectedDate: selectedDate,
+                    isHapticsEnabled: isHapticsEnabled,
                     dayPayloadProvider: dayPayloadProvider,
                     onSelectDay: onSelectDay
                 )
@@ -136,8 +145,13 @@ private struct ReadCalendarMonthGridWeekRow: View {
     let laneBarHeight: CGFloat
     let laneSpacing: CGFloat
     let segmentHorizontalInset: CGFloat
+    let selectedDate: Date?
+    let isHapticsEnabled: Bool
     let dayPayloadProvider: (Date) -> ReadCalendarMonthGrid.DayPayload
     let onSelectDay: (Date) -> Void
+    @State private var flowPhase: CGFloat = 0
+    @State private var badgePulseIDs: Set<String> = []
+    @State private var badgePulseToken = 0
 
     private var activityEventHeight: CGFloat {
         CGFloat(laneLimit) * laneBarHeight
@@ -184,6 +198,12 @@ private struct ReadCalendarMonthGridWeekRow: View {
             }
         }
         .frame(height: rowHeight)
+        .onAppear {
+            startFlowAnimationIfNeeded()
+        }
+        .onChange(of: selectedDate) { _, newValue in
+            triggerBadgePulseIfNeeded(for: newValue)
+        }
     }
 
     private func dayCell(_ day: Date?) -> some View {
@@ -229,6 +249,17 @@ private struct ReadCalendarMonthGridWeekRow: View {
                         }
                     }
 
+                    if payload.isStreakDay && displayMode == .activityEvent {
+                        Capsule(style: .continuous)
+                            .fill(
+                                selected
+                                ? Color.accentColor.opacity(0.82)
+                                : Color.brand.opacity(0.56)
+                            )
+                            .frame(width: selected ? 12 : 10, height: 2)
+                            .offset(y: -1)
+                    }
+
                     if today && !selected {
                         Capsule(style: .continuous)
                             .fill(Color.readCalendarTodayMark)
@@ -249,6 +280,9 @@ private struct ReadCalendarMonthGridWeekRow: View {
         .contentShape(Rectangle())
         .onTapGesture {
             guard let day, !payload.isFuture else { return }
+            if !payload.isSelected, isHapticsEnabled {
+                ReadCalendarHaptics.selection()
+            }
             onSelectDay(day)
         }
         .opacity(payload.isFuture ? 0.55 : 1)
@@ -361,6 +395,9 @@ private struct ReadCalendarMonthGridWeekRow: View {
         let isPending = segment.color.state == .pending
         let showBadge = !isPending && segment.showsReadDoneBadge && segmentWidth >= 20
         let showText = !isPending && segmentWidth >= 42
+        let isFocused = isSegmentFocused(segment)
+        let shouldDefocus = shouldDefocusSegment(segment)
+        let segmentOpacity: CGFloat = shouldDefocus ? 0.5 : 1
 
         let leftRadius: CGFloat = segment.continuesFromPrevWeek ? 2.5 : CornerRadius.blockSmall
         let rightRadius: CGFloat = segment.continuesToNextWeek ? 2.5 : CornerRadius.blockSmall
@@ -379,9 +416,11 @@ private struct ReadCalendarMonthGridWeekRow: View {
                     .stroke(Color.readCalendarSelectionStroke.opacity(0.55), lineWidth: 0.7)
             } else {
                 segmentShape
-                    .fill(fillColor.opacity(0.92))
+                    .fill(fillColor.opacity(isFocused ? 0.97 : 0.92))
+                    .saturation(isFocused ? 1.06 : 0.92)
+                    .brightness(isFocused ? 0.025 : -0.01)
                 segmentShape
-                    .stroke(fillColor.opacity(0.58), lineWidth: 0.5)
+                    .stroke(fillColor.opacity(isFocused ? 0.74 : 0.44), lineWidth: isFocused ? 0.62 : 0.45)
 
                 if segment.continuesFromPrevWeek {
                     LinearGradient(
@@ -402,6 +441,21 @@ private struct ReadCalendarMonthGridWeekRow: View {
                     .frame(width: 9)
                     .frame(maxWidth: .infinity, alignment: .trailing)
                 }
+
+                if isFocused && (segment.continuesFromPrevWeek || segment.continuesToNextWeek) {
+                    LinearGradient(
+                        colors: [
+                            Color.white.opacity(0.0),
+                            Color.white.opacity(0.14),
+                            Color.white.opacity(0.0)
+                        ],
+                        startPoint: .leading,
+                        endPoint: .trailing
+                    )
+                    .frame(width: 12, height: laneBarHeight)
+                    .offset(x: flowingHighlightOffset(segmentWidth: segmentWidth))
+                    .blendMode(.plusLighter)
+                }
             }
 
             if showText {
@@ -419,6 +473,7 @@ private struct ReadCalendarMonthGridWeekRow: View {
                 Circle()
                     .fill(style.background)
                     .frame(width: 11, height: 11)
+                    .scaleEffect(badgePulseIDs.contains(segment.id) ? 1.15 : 1)
                     .overlay {
                         Image(systemName: "checkmark")
                             .font(.system(size: 6, weight: .bold))
@@ -431,6 +486,10 @@ private struct ReadCalendarMonthGridWeekRow: View {
         .clipShape(segmentShape)
         .frame(width: max(0, segmentWidth), height: laneBarHeight)
         .offset(x: x, y: y)
+        .opacity(segmentOpacity)
+        .animation(.snappy(duration: 0.22), value: isFocused)
+        .animation(.easeInOut(duration: 0.18), value: isPending)
+        .animation(.spring(response: 0.2, dampingFraction: 0.62), value: badgePulseIDs.contains(segment.id))
     }
 
     private func dayOffset(for date: Date, weekStart: Date) -> Int {
@@ -486,5 +545,85 @@ private struct ReadCalendarMonthGridWeekRow: View {
         let blue = Double((hex >> 8) & 0xFF) / 255.0
         let luminance = 0.299 * red + 0.587 * green + 0.114 * blue
         return luminance < 0.55
+    }
+
+    private func shouldDefocusSegment(_ segment: ReadCalendarMonthGrid.EventSegment) -> Bool {
+        guard hasFocusedSegment else { return false }
+        return !isSegmentFocused(segment)
+    }
+
+    private var hasFocusedSegment: Bool {
+        week.segments.contains { isSegmentFocused($0) }
+    }
+
+    private func isSegmentFocused(_ segment: ReadCalendarMonthGrid.EventSegment) -> Bool {
+        guard let selected = selectedDate else { return false }
+        let normalized = Calendar.current.startOfDay(for: selected)
+        let start = Calendar.current.startOfDay(for: segment.segmentStartDate)
+        let end = Calendar.current.startOfDay(for: segment.segmentEndDate)
+        return normalized >= start && normalized <= end
+    }
+
+    private func flowingHighlightOffset(segmentWidth: CGFloat) -> CGFloat {
+        let distance = max(12, segmentWidth + 16)
+        return -12 + distance * flowPhase
+    }
+
+    private func startFlowAnimationIfNeeded() {
+        guard displayMode == .activityEvent else { return }
+        guard flowPhase == 0 else { return }
+        withAnimation(.linear(duration: 2.2).repeatForever(autoreverses: false)) {
+            flowPhase = 1
+        }
+    }
+
+    private func triggerBadgePulseIfNeeded(for selected: Date?) {
+        guard displayMode == .activityEvent else { return }
+        guard let selected else {
+            badgePulseIDs.removeAll()
+            return
+        }
+
+        let normalized = Calendar.current.startOfDay(for: selected)
+        let focusedWithBadge = week.segments.filter { segment in
+            guard segment.showsReadDoneBadge else { return false }
+            let start = Calendar.current.startOfDay(for: segment.segmentStartDate)
+            let end = Calendar.current.startOfDay(for: segment.segmentEndDate)
+            return normalized >= start && normalized <= end
+        }
+        let ids = Set(focusedWithBadge.map(\.id))
+        guard !ids.isEmpty else {
+            badgePulseIDs.removeAll()
+            return
+        }
+
+        badgePulseToken += 1
+        let token = badgePulseToken
+        badgePulseIDs = ids
+        if isHapticsEnabled {
+            ReadCalendarHaptics.rigid()
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+            guard token == badgePulseToken else { return }
+            badgePulseIDs.removeAll()
+        }
+    }
+}
+
+private enum ReadCalendarHaptics {
+    static func selection() {
+#if canImport(UIKit)
+        let generator = UISelectionFeedbackGenerator()
+        generator.prepare()
+        generator.selectionChanged()
+#endif
+    }
+
+    static func rigid() {
+#if canImport(UIKit)
+        let generator = UIImpactFeedbackGenerator(style: .rigid)
+        generator.prepare()
+        generator.impactOccurred(intensity: 0.88)
+#endif
     }
 }

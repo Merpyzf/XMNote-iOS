@@ -106,6 +106,7 @@ private struct ReadCalendarSettingsSheet: View {
                 titleSection
                     .padding(.trailing, 44)
                 eventTogglesSection
+                feedbackSection
                 dayEventCountSection
             }
             .padding(Spacing.double)
@@ -187,6 +188,19 @@ private struct ReadCalendarSettingsSheet: View {
 
     // MARK: - Day Event Count
 
+    private var feedbackSection: some View {
+        VStack(alignment: .leading, spacing: Spacing.base) {
+            Text("交互反馈")
+                .font(.subheadline.weight(.medium))
+                .foregroundStyle(Color.textSecondary)
+
+            Toggle("触感反馈", isOn: $settings.isHapticsEnabled)
+
+            Toggle("连续阅读提示", isOn: $settings.isStreakHintEnabled)
+        }
+        .tint(.brand)
+    }
+
     private var dayEventCountSection: some View {
         VStack(alignment: .leading, spacing: Spacing.base) {
             Text("每日展示书籍数量")
@@ -243,6 +257,8 @@ private extension ReadCalendarView {
             pagerSelection: viewModel.pagerSelection,
             displayMode: displayMode,
             laneLimit: viewModel.laneLimit,
+            isHapticsEnabled: settings.isHapticsEnabled,
+            isStreakHintEnabled: settings.isStreakHintEnabled,
             rootContentState: mapRootContentState(viewModel.rootContentState),
             errorMessage: viewModel.errorMessage,
             monthPages: visibleMonthWindow.map { monthStart in
