@@ -1,5 +1,5 @@
 /**
- * [INPUT]: 依赖 CalendarMonthStepperBar/ReadCalendarMonthGrid/CardContainer 复用组件与 DesignTokens 视觉令牌（不含卡片装饰令牌）
+ * [INPUT]: 依赖 CalendarMonthStepperBar/ReadCalendarMonthGrid 复用组件、ReadCalendarDay 领域模型与 DesignTokens 视觉令牌（不含卡片装饰令牌）
  * [OUTPUT]: 对外提供 ReadCalendarPanel（完整阅读日历控件：模式切换 + 月份点击切换 + weekday + 分页月网格 + 状态反馈）
  * [POS]: UIComponents/Foundation 的阅读日历完整控件，供业务页面以纯展示驱动方式复用
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -49,30 +49,13 @@ struct ReadCalendarPanel: View {
         case failed
     }
 
-    struct DayPayload: Hashable {
-        let bookCount: Int
-        let isReadDoneDay: Bool
-        let overflowCount: Int
-        let isToday: Bool
-        let isSelected: Bool
-        let isFuture: Bool
-
-        func asGridPayload() -> ReadCalendarMonthGrid.DayPayload {
-            ReadCalendarMonthGrid.DayPayload(
-                bookCount: bookCount,
-                isReadDoneDay: isReadDoneDay,
-                overflowCount: overflowCount,
-                isToday: isToday,
-                isSelected: isSelected,
-                isFuture: isFuture
-            )
-        }
-    }
-
     struct MonthPage: Identifiable, Hashable {
         let monthStart: Date
         let weeks: [ReadCalendarMonthGrid.WeekData]
-        let dayPayloads: [Date: DayPayload]
+        let dayMap: [Date: ReadCalendarDay]
+        let selectedDate: Date
+        let todayStart: Date
+        let laneLimit: Int
         let isDayMapEmpty: Bool
         let loadState: MonthLoadState
         let errorMessage: String?
@@ -84,19 +67,18 @@ struct ReadCalendarPanel: View {
         }
 
         func payload(for date: Date) -> ReadCalendarMonthGrid.DayPayload {
-            let normalized = Calendar.current.startOfDay(for: date)
-            if let payload = dayPayloads[normalized] {
-                return payload.asGridPayload()
-            }
+            let cal = Calendar.current
+            let normalized = cal.startOfDay(for: date)
+            let dayData = dayMap[normalized]
+            let bookCount = dayData?.books.count ?? 0
 
-            let isFuture = normalized > Calendar.current.startOfDay(for: Date())
             return ReadCalendarMonthGrid.DayPayload(
-                bookCount: 0,
-                isReadDoneDay: false,
-                overflowCount: 0,
-                isToday: false,
-                isSelected: false,
-                isFuture: isFuture
+                bookCount: bookCount,
+                isReadDoneDay: dayData?.isReadDoneDay == true,
+                overflowCount: max(0, bookCount - laneLimit),
+                isToday: cal.isDate(normalized, inSameDayAs: todayStart),
+                isSelected: cal.isDate(normalized, inSameDayAs: selectedDate),
+                isFuture: normalized > todayStart
             )
         }
     }
@@ -296,6 +278,7 @@ private extension ReadCalendarPanel {
             weeks: page.weeks,
             laneLimit: props.laneLimit,
             displayMode: mapGridDisplayMode(props.displayMode),
+            isShimmerEnabled: props.displayMode == .activityEvent,
             dayPayloadProvider: { date in
                 page.payload(for: date)
             },
@@ -366,9 +349,12 @@ private extension ReadCalendarPanel {
         return MonthPage(
             monthStart: monthStart,
             weeks: [],
-            dayPayloads: [:],
+            dayMap: [:],
+            selectedDate: props.pagerSelection,
+            todayStart: Calendar.current.startOfDay(for: Date()),
+            laneLimit: props.laneLimit,
             isDayMapEmpty: true,
-            loadState: .idle,
+            loadState: .loading,
             errorMessage: nil
         )
     }

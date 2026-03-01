@@ -13,8 +13,9 @@
 ```swift
 ReadCalendarMonthGrid(
     weeks: page.weeks,
-    laneLimit: 4,
+    laneLimit: 6,
     displayMode: .activityEvent,
+    isShimmerEnabled: true,
     dayPayloadProvider: { date in
         page.payload(for: date)
     },
@@ -30,6 +31,7 @@ ReadCalendarMonthGrid(
 | `weeks` | `[ReadCalendarMonthGrid.WeekData]` | 无 | 周网格数据（每周 7 列 + 事件条段）。 |
 | `laneLimit` | `Int` | 无 | 事件模式下每日最多展示 lane 数。 |
 | `displayMode` | `ReadCalendarMonthGrid.DisplayMode` | 无 | 当前渲染模式（热力图/活动事件/封面）。 |
+| `isShimmerEnabled` | `Bool` | 无 | 是否启用 pending 事件条的 shimmer 动效。 |
 | `dayPayloadProvider` | `(Date) -> DayPayload` | 无 | 返回某天 UI 状态。 |
 | `onSelectDay` | `(Date) -> Void` | 无 | 点击日期回调。 |
 
@@ -48,29 +50,40 @@ ReadCalendarMonthGrid(
 - `activityEvent`：显示事件条、跨周连接语义和 `+N`。
 - `bookCover`：显示最多 3 个封面占位色块，超出显示 `+N`。
 
+### Pending 事件条
+- `isShimmerEnabled = true`：使用 `TimelineView` shimmer（当前频率已降载）。
+- `isShimmerEnabled = false`：使用静态高亮填充，降低滚动期重绘压力。
+
 ## 示例
 
-### 示例 1：活动事件模式
+### 示例 1：活动事件模式（默认启用 shimmer）
 ```swift
 ReadCalendarMonthGrid(
     weeks: page.weeks,
     laneLimit: props.laneLimit,
     displayMode: .activityEvent,
+    isShimmerEnabled: true,
     dayPayloadProvider: { page.payload(for: $0) },
     onSelectDay: onSelectDate
 )
 ```
 
-### 示例 2：封面模式
+### 示例 2：高压滚动场景关闭 shimmer
 ```swift
 ReadCalendarMonthGrid(
     weeks: page.weeks,
     laneLimit: props.laneLimit,
-    displayMode: .bookCover,
+    displayMode: .activityEvent,
+    isShimmerEnabled: false,
     dayPayloadProvider: { page.payload(for: $0) },
     onSelectDay: onSelectDate
 )
 ```
+
+## 性能建议
+- `dayPayloadProvider` 保持 O(1) 查询（建议字典查找 + 轻量计算）。
+- 避免在 `weeks` 中放入未使用 lane（应在 ViewModel 层先按 `laneLimit` 过滤）。
+- 如果外层页面包含横向分页容器，优先保持网格层无额外手势拦截。
 
 ## 常见问题
 
@@ -78,7 +91,7 @@ ReadCalendarMonthGrid(
 热力图强调强度，不强调明细数量，避免视觉噪音。
 
 ### 2) `bookCover` 的封面颜色来自真实封面吗？
-当前为占位视觉方案，后续可切换为真实封面缩略图或取色结果。
+当前为占位视觉方案；真实封面/取色在事件条层由上游数据控制。
 
 ### 3) 跨周连续为什么只在 `activityEvent` 有意义？
 跨周连接是事件条语义，热力图/封面模式不展示 segment 层信息。

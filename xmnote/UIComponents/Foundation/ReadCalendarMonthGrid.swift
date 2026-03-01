@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 DesignTokens 视觉令牌与周网格输入（WeekData/EventSegment/DayPayload，含显示模式与事件条颜色三态）
- * [OUTPUT]: 对外提供 ReadCalendarMonthGrid（月视图周网格组件，支持热力图/活动事件/书籍封面三种展示模式）
+ * [OUTPUT]: 对外提供 ReadCalendarMonthGrid（月视图周网格组件，支持热力图/活动事件/书籍封面三种展示模式与 shimmer 降载）
  * [POS]: UIComponents/Foundation 的阅读日历可复用网格组件，承载日期格展示、选中态与多模式内容渲染
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -88,6 +88,7 @@ struct ReadCalendarMonthGrid: View {
     let weeks: [WeekData]
     let laneLimit: Int
     let displayMode: DisplayMode
+    let isShimmerEnabled: Bool
     let dayPayloadProvider: (Date) -> DayPayload
     let onSelectDay: (Date) -> Void
 
@@ -104,6 +105,7 @@ struct ReadCalendarMonthGrid: View {
                     laneBarHeight: Layout.laneBarHeight,
                     laneSpacing: Layout.laneSpacing,
                     segmentHorizontalInset: Layout.segmentHorizontalInset,
+                    isShimmerEnabled: isShimmerEnabled,
                     dayPayloadProvider: dayPayloadProvider,
                     onSelectDay: onSelectDay
                 )
@@ -135,6 +137,7 @@ private struct ReadCalendarMonthGridWeekRow: View {
     let laneBarHeight: CGFloat
     let laneSpacing: CGFloat
     let segmentHorizontalInset: CGFloat
+    let isShimmerEnabled: Bool
     let dayPayloadProvider: (Date) -> ReadCalendarMonthGrid.DayPayload
     let onSelectDay: (Date) -> Void
 
@@ -376,8 +379,13 @@ private struct ReadCalendarMonthGridWeekRow: View {
                 .stroke(fillColor.opacity(0.58), lineWidth: 0.5)
 
             if isPending {
-                ReadCalendarSegmentPendingShimmer()
-                    .clipShape(segmentShape)
+                if isShimmerEnabled {
+                    ReadCalendarSegmentPendingShimmer()
+                        .clipShape(segmentShape)
+                } else {
+                    segmentShape
+                        .fill(Color.readCalendarEventPendingHighlight.opacity(0.34))
+                }
             }
 
             if segment.continuesFromPrevWeek {
@@ -445,7 +453,7 @@ private struct ReadCalendarSegmentPendingShimmer: View {
         GeometryReader { proxy in
             let width = max(24, proxy.size.width * 0.62)
 
-            TimelineView(.animation(minimumInterval: 0.06)) { timeline in
+            TimelineView(.animation(minimumInterval: 0.13)) { timeline in
                 let seconds = timeline.date.timeIntervalSinceReferenceDate
                 let progress = seconds.truncatingRemainder(dividingBy: 1.25) / 1.25
                 let startX = -width

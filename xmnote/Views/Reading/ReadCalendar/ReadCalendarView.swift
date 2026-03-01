@@ -236,7 +236,8 @@ private extension ReadCalendarView {
 
 private extension ReadCalendarView {
     var panelProps: ReadCalendarPanel.Props {
-        ReadCalendarPanel.Props(
+        let todayStart = Calendar.current.startOfDay(for: Date())
+        return ReadCalendarPanel.Props(
             monthTitle: viewModel.monthTitle,
             availableMonths: viewModel.availableMonths,
             pagerSelection: viewModel.pagerSelection,
@@ -244,11 +245,28 @@ private extension ReadCalendarView {
             laneLimit: viewModel.laneLimit,
             rootContentState: mapRootContentState(viewModel.rootContentState),
             errorMessage: viewModel.errorMessage,
-            monthPages: viewModel.availableMonths.map(makePanelMonthPage)
+            monthPages: visibleMonthWindow.map { monthStart in
+                makePanelMonthPage(for: monthStart, todayStart: todayStart)
+            }
         )
     }
 
-    func makePanelMonthPage(for monthStart: Date) -> ReadCalendarPanel.MonthPage {
+    var visibleMonthWindow: [Date] {
+        let months = viewModel.availableMonths
+        guard !months.isEmpty else { return [] }
+
+        let anchorIndex: Int = {
+            if let idx = months.firstIndex(of: viewModel.pagerSelection) { return idx }
+            if let idx = months.firstIndex(of: viewModel.displayedMonthStart) { return idx }
+            assertionFailure("visibleMonthWindow: pagerSelection 与 displayedMonthStart 均不在 availableMonths 中")
+            return 0
+        }()
+        let lower = max(0, anchorIndex - 1)
+        let upper = min(months.count - 1, anchorIndex + 1)
+        return Array(months[lower...upper])
+    }
+
+    func makePanelMonthPage(for monthStart: Date, todayStart: Date) -> ReadCalendarPanel.MonthPage {
         let state = viewModel.monthState(for: monthStart)
 
         let weeks = state.weeks.map { week in
@@ -259,28 +277,13 @@ private extension ReadCalendarView {
             )
         }
 
-        var dayPayloads: [Date: ReadCalendarPanel.DayPayload] = [:]
-        dayPayloads.reserveCapacity(state.weeks.count * 7)
-
-        for day in state.weeks.flatMap(\.days).compactMap({ $0 }) {
-            let normalized = Calendar.current.startOfDay(for: day)
-            let dayData = state.dayMap[normalized]
-            let bookCount = dayData?.books.count ?? 0
-
-            dayPayloads[normalized] = ReadCalendarPanel.DayPayload(
-                bookCount: bookCount,
-                isReadDoneDay: dayData?.isReadDoneDay == true,
-                overflowCount: max(0, bookCount - viewModel.laneLimit),
-                isToday: viewModel.isToday(normalized),
-                isSelected: viewModel.isSelected(normalized),
-                isFuture: viewModel.isFutureDate(normalized)
-            )
-        }
-
         return ReadCalendarPanel.MonthPage(
             monthStart: state.monthStart,
             weeks: weeks,
-            dayPayloads: dayPayloads,
+            dayMap: state.dayMap,
+            selectedDate: viewModel.selectedDate,
+            todayStart: todayStart,
+            laneLimit: viewModel.laneLimit,
             isDayMapEmpty: state.dayMap.isEmpty,
             loadState: mapMonthLoadState(state.loadState),
             errorMessage: state.errorMessage

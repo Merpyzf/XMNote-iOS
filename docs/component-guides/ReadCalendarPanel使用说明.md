@@ -2,31 +2,27 @@
 
 ## 组件定位
 `ReadCalendarPanel` 是阅读日历的完整公共控件，包含：
-- 顶部单行控制区：左侧月份标题菜单（点击快速跳月，移除日历图标）。
+- 顶部单行控制区：左侧月份标题菜单（点击快速跳月）。
 - 顶部单行控制区：右侧图标分段切换（热力图/活动事件/书籍封面）。
-- 顶部控件去容器化，减少“控件层”对内容层的压制。
-- weekday 标题与月分页容器。
-- 月网格渲染（通过 `ReadCalendarMonthGrid`）。
+- `TabView(.page)` 月份容器（横向翻月）。
+- weekday 标题与月网格渲染（通过 `ReadCalendarMonthGrid`）。
 - 加载/空态/内容态与内联错误重试。
 
 源码路径：`xmnote/UIComponents/Foundation/ReadCalendarPanel.swift`
+
+## 本次更新（2026-03-01）
+- 保留 `TabView` 作为月份容器，但业务侧仅提供“当前月前后窗口页”重数据，降低重建成本。
+- 移除页内 `DragGesture` 抢占，恢复左右翻月手势。
+- `MonthPage` 从“预构建 dayPayloads”改为按需 `payload(for:)` 计算，减少全量映射。
 
 ## 快速接入
 ```swift
 ReadCalendarPanel(
     props: panelProps,
-    onDisplayModeChanged: { mode in
-        displayMode = mode
-    },
-    onPagerSelectionChanged: { month in
-        viewModel.pagerSelection = month
-    },
-    onSelectDate: { date in
-        viewModel.selectDate(date)
-    },
-    onRetry: {
-        Task { await viewModel.retryDisplayedMonth(using: repositories.statisticsRepository) }
-    }
+    onDisplayModeChanged: { displayMode = $0 },
+    onPagerSelectionChanged: { viewModel.pagerSelection = $0 },
+    onSelectDate: { viewModel.selectDate($0) },
+    onRetry: { retryCurrentContext() }
 )
 ```
 
@@ -49,22 +45,40 @@ ReadCalendarPanel(
 | `laneLimit` | `Int` | 每日事件条显示上限。 |
 | `rootContentState` | `RootContentState` | 根内容态（loading/empty/content）。 |
 | `errorMessage` | `String?` | 顶层错误文案。 |
-| `monthPages` | `[MonthPage]` | 每个月的周网格与日状态数据。 |
+| `monthPages` | `[MonthPage]` | 建议传“窗口化月份页”（如当前月前后各 1 页）。 |
+
+### `MonthPage` 关键字段（性能相关）
+| 字段 | 类型 | 说明 |
+| --- | --- | --- |
+| `weeks` | `[ReadCalendarMonthGrid.WeekData]` | 周网格结构与事件段。 |
+| `dayMap` | `[Date: ReadCalendarDay]` | 原始日聚合数据。 |
+| `selectedDate` | `Date` | 选中日（用于按需 payload 计算）。 |
+| `todayStart` | `Date` | 当天零点（用于 today/future 判断）。 |
+| `laneLimit` | `Int` | overflow 计算基线。 |
 
 ## 示例
 
-### 示例 1：页面壳层接入
+### 示例 1：页面壳层窗口化传参
 ```swift
-ReadCalendarPanel(
-    props: panelProps,
-    onDisplayModeChanged: { displayMode = $0 },
-    onPagerSelectionChanged: { viewModel.pagerSelection = $0 },
-    onSelectDate: { viewModel.selectDate($0) },
-    onRetry: { retryCurrentContext() }
+let months = viewModel.availableMonths
+let index = months.firstIndex(of: viewModel.pagerSelection) ?? 0
+let lower = max(0, index - 1)
+let upper = min(months.count - 1, index + 1)
+let visible = Array(months[lower...upper])
+
+let panelProps = ReadCalendarPanel.Props(
+    monthTitle: viewModel.monthTitle,
+    availableMonths: months,
+    pagerSelection: viewModel.pagerSelection,
+    displayMode: displayMode,
+    laneLimit: viewModel.laneLimit,
+    rootContentState: .content,
+    errorMessage: nil,
+    monthPages: visible.map(makeMonthPage)
 )
 ```
 
-### 示例 2：模式变化带动画
+### 示例 2：模式变化动画
 ```swift
 onDisplayModeChanged: { mode in
     withAnimation(.snappy(duration: 0.26)) {
@@ -73,29 +87,23 @@ onDisplayModeChanged: { mode in
 }
 ```
 
-### 示例 3：单行顶部布局（组件内部）
-```swift
-HStack {
-    monthSwitcher   // 左侧月份菜单
-    modeSwitcher    // 右侧图标 segmented
-}
-```
+## 性能与交互约束
+- 保持 `TabView(.page)` 横向手势完整，不在月页 `ScrollView` 上叠加横向竞争手势。
+- `monthPages` 使用窗口化数据，避免每次状态变更都重建全量月份页面。
+- 日状态按需计算，不要在页面层预构建完整 `dayPayloads` 字典。
 
 ## 常见问题
 
-### 1) 这个组件是否允许直接访问 Repository？
+### 1) 为什么左右翻月会突然失效？
+通常是页内额外 `DragGesture` 抢占了手势。应移除冲突手势，保留 `TabView` 原生分页手势。
+
+### 2) 为什么 `availableMonths` 是全量，但 `monthPages` 建议窗口化？
+`availableMonths` 用于分页范围与 tag 对齐；`monthPages` 控制重内容渲染范围，二者职责不同。
+
+### 3) 这个组件是否允许直接访问 Repository？
 不允许。组件是纯展示驱动，数据加载由外层页面或 ViewModel 负责。
 
-### 2) 切换模式会影响数据加载吗？
+### 4) 切换模式会影响数据加载吗？
 不会。模式切换仅改变展示形态，不改变月数据请求策略。
-
-### 3) 为什么模式切换改为图标而不是文字？
-顶部空间有限，图标分段能在单行里保留 3 模式切换能力，同时不压缩左侧月份可读性。
-
-### 4) 为什么不再暴露 `onStepMonth`？
-切月行为已统一为“菜单选择 + 分页滑动”写回 `pagerSelection`，避免重复入口。
-
-### 5) 如何保证和 Android 业务意图一致？
-模式切换只影响可视表达，不改变日级聚合、跨周分段和 lane 分配逻辑。
 
 [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md

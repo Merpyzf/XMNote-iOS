@@ -16,6 +16,23 @@ final class ReadCalendarViewModel {
         let coverURL: String
     }
 
+    private static let monthTitleFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy年M月"
+        formatter.timeZone = .current
+        return formatter
+    }()
+
+    private static let monthKeyFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM"
+        formatter.timeZone = .current
+        return formatter
+    }()
+
+    private static let colorBatchCount = 8
+    private static let colorBatchInterval: TimeInterval = 0.12
+
     struct WeekRowData: Identifiable, Hashable {
         let weekStart: Date
         let days: [Date?]
@@ -113,10 +130,7 @@ final class ReadCalendarViewModel {
     }
 
     var monthTitle: String {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "yyyy年M月"
-        formatter.timeZone = .current
-        return formatter.string(from: pagerSelection)
+        Self.monthTitleFormatter.string(from: pagerSelection)
     }
 
     var rootContentState: RootContentState {
@@ -489,6 +503,10 @@ private extension ReadCalendarViewModel {
         ticket: Int,
         using colorRepository: any ReadCalendarColorRepositoryProtocol
     ) async {
+        var stagedColors: [Int64: ReadCalendarSegmentColor] = [:]
+        stagedColors.reserveCapacity(Self.colorBatchCount)
+        var lastFlushAt = Date()
+
         for request in requests {
             if Task.isCancelled {
                 return
@@ -502,7 +520,21 @@ private extension ReadCalendarViewModel {
             if Task.isCancelled {
                 return
             }
-            applyColor(color, for: request.bookId, monthKey: monthKey, ticket: ticket)
+
+            stagedColors[request.bookId] = color
+
+            let now = Date()
+            let shouldFlushByCount = stagedColors.count >= Self.colorBatchCount
+            let shouldFlushByTime = now.timeIntervalSince(lastFlushAt) >= Self.colorBatchInterval
+            if shouldFlushByCount || shouldFlushByTime {
+                applyColors(stagedColors, monthKey: monthKey, ticket: ticket)
+                stagedColors.removeAll(keepingCapacity: true)
+                lastFlushAt = now
+            }
+        }
+
+        if !stagedColors.isEmpty {
+            applyColors(stagedColors, monthKey: monthKey, ticket: ticket)
         }
 
         if latestColorTicketByMonthKey[monthKey] == ticket {
@@ -510,19 +542,23 @@ private extension ReadCalendarViewModel {
         }
     }
 
-    func applyColor(
-        _ color: ReadCalendarSegmentColor,
-        for bookId: Int64,
+    private func applyColors(
+        _ colorsByBookId: [Int64: ReadCalendarSegmentColor],
         monthKey: String,
         ticket: Int
     ) {
+        guard !colorsByBookId.isEmpty else { return }
         guard latestColorTicketByMonthKey[monthKey] == ticket else { return }
         guard let state = pageStates[monthKey], state.loadState == .loaded else { return }
 
         var hasChange = false
+        let targetBookIds = Set(colorsByBookId.keys)
         let updatedWeeks = state.weeks.map { week in
             let updatedSegments = week.segments.map { segment in
-                guard segment.bookId == bookId else { return segment }
+                guard targetBookIds.contains(segment.bookId),
+                      let color = colorsByBookId[segment.bookId] else {
+                    return segment
+                }
                 guard segment.color != color else { return segment }
                 hasChange = true
                 return segment.withColor(color)
@@ -744,10 +780,7 @@ private extension ReadCalendarViewModel {
 
     static func monthKey(for date: Date, using calendar: Calendar) -> String {
         let monthStart = monthStart(of: date, using: calendar)
-        let formatter = DateFormatter()
-        formatter.dateFormat = "yyyy-MM"
-        formatter.timeZone = .current
-        return formatter.string(from: monthStart)
+        return Self.monthKeyFormatter.string(from: monthStart)
     }
 
     static func currentMonthStart(using calendar: Calendar) -> Date {
