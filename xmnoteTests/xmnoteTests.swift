@@ -248,7 +248,57 @@ struct xmnoteTests {
         )
         #expect(key.contains("|algo:v2"))
     }
+
+    @Test func readCalendarColorCancellationFallsBackToFailedColor() async {
+        let imageData = Self.makeColorImageData { _, _ in
+            (12, 78, 210, 255)
+        }
+        let image = UIImage(data: imageData)!
+        let repository = ReadCalendarColorRepository(
+            imageLoader: SlowCoverImageLoader(image: image, delayNanoseconds: 80_000_000)
+        )
+
+        let task = Task {
+            await repository.resolveEventColor(
+                bookId: 9_999_001,
+                bookName: "取消测试",
+                coverURL: "https://example.com/cancel-cover.jpg"
+            )
+        }
+        task.cancel()
+
+        let color = await task.value
+        #expect(color.state == .failed)
+        #expect(color != .pending)
+    }
 #endif
+
+    @Test func imageRequestBuilderDetectsGIFByResponseMimeType() {
+        let response = URLResponse(
+            url: URL(string: "https://example.com/cover")!,
+            mimeType: "image/gif",
+            expectedContentLength: 0,
+            textEncodingName: nil
+        )
+        #expect(XMImageRequestBuilder.isGIFResponse(response))
+    }
+
+    @Test func imageRequestBuilderDetectsGIFByDataSignature() {
+        let gifData = Data([0x47, 0x49, 0x46, 0x38, 0x39, 0x61, 0x00, 0x00])
+        let pngData = Data([0x89, 0x50, 0x4E, 0x47, 0x00, 0x00, 0x00, 0x00])
+        #expect(XMImageRequestBuilder.isGIFData(gifData))
+        #expect(!XMImageRequestBuilder.isGIFData(pngData))
+    }
+
+    @Test func imageRequestBuilderProbesOnlyAmbiguousExtensionsForGIFData() {
+        let noExtensionURL = URL(string: "https://example.com/cover")!
+        let jpegURL = URL(string: "https://example.com/cover.jpg")!
+        let customExtensionURL = URL(string: "https://example.com/cover.image")!
+
+        #expect(XMImageRequestBuilder.shouldProbeGIFData(for: noExtensionURL))
+        #expect(!XMImageRequestBuilder.shouldProbeGIFData(for: jpegURL))
+        #expect(XMImageRequestBuilder.shouldProbeGIFData(for: customExtensionURL))
+    }
 
     @MainActor
     @Test func readCalendarReloadSelectsInitialDateFromEntry() async {
@@ -402,5 +452,19 @@ private struct StubStatisticsRepository: StatisticsRepositoryProtocol {
 private struct StubReadCalendarColorRepository: ReadCalendarColorRepositoryProtocol {
     func resolveEventColor(bookId: Int64, bookName: String, coverURL: String) async -> ReadCalendarSegmentColor {
         .pending
+    }
+}
+
+private struct SlowCoverImageLoader: XMCoverImageLoading {
+    let image: UIImage
+    let delayNanoseconds: UInt64
+
+    func loadImage(for request: XMImageLoadRequest) async throws -> UIImage {
+        try await Task.sleep(nanoseconds: delayNanoseconds)
+        return image
+    }
+
+    func loadData(for request: XMImageLoadRequest) async throws -> Data {
+        Data()
     }
 }

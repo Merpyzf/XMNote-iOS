@@ -143,6 +143,7 @@ struct ReadCalendarContentView: View {
         let peakTimeSlotRatio: Int?
         let durationTopBooks: [ReadCalendarMonthlyDurationBook]
         let rankingBarColorsByBookId: [Int64: ReadCalendarSegmentColor]
+        let hasDurationRankingFallback: Bool
 
         var id: Date { monthStart }
 
@@ -328,6 +329,9 @@ private extension ReadCalendarContentView {
         let readSecondsDelta = previous.map { page.summary.totalReadSeconds - $0.summary.totalReadSeconds }
         let noteCountDelta = previous.map { page.summary.noteCount - $0.summary.noteCount }
         let peakSlot = peakTimeSlot(in: page.summary)
+        let hasDurationRankingFallback = page.readingDurationTopBooks.contains { book in
+            page.rankingBarColorsByBookId[book.bookId]?.state == .failed
+        }
 
         return MonthSummarySheetData(
             monthStart: monthStart,
@@ -341,7 +345,8 @@ private extension ReadCalendarContentView {
             peakTimeSlot: peakSlot?.slot,
             peakTimeSlotRatio: peakSlot?.ratio,
             durationTopBooks: page.readingDurationTopBooks,
-            rankingBarColorsByBookId: page.rankingBarColorsByBookId
+            rankingBarColorsByBookId: page.rankingBarColorsByBookId,
+            hasDurationRankingFallback: hasDurationRankingFallback
         )
     }
 

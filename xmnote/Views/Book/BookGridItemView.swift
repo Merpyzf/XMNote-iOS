@@ -27,15 +27,8 @@ struct BookGridItemView: View {
     // MARK: - Cover
 
     private var coverImage: some View {
-        AsyncImage(url: URL(string: book.cover)) { phase in
-            switch phase {
-            case .success(let image):
-                image
-                    .resizable()
-                    .aspectRatio(contentMode: .fill)
-            default:
-                coverPlaceholder
-            }
+        XMRemoteImage(urlString: book.cover) {
+            coverPlaceholder
         }
         .frame(minWidth: 0, maxWidth: .infinity)
         .aspectRatio(0.68, contentMode: .fit)

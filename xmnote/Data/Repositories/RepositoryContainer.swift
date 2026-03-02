@@ -15,6 +15,7 @@ final class RepositoryContainer {
     let backupServerRepository: any BackupServerRepositoryProtocol
     let backupRepository: any BackupRepositoryProtocol
     let statisticsRepository: any StatisticsRepositoryProtocol
+    let coverImageLoader: any XMCoverImageLoading
     let readCalendarColorRepository: any ReadCalendarColorRepositoryProtocol
 
     init(databaseManager: DatabaseManager) {
@@ -28,6 +29,7 @@ final class RepositoryContainer {
             serverRepository: backupServerRepository
         )
         self.statisticsRepository = StatisticsRepository(databaseManager: databaseManager)
-        self.readCalendarColorRepository = ReadCalendarColorRepository()
+        self.coverImageLoader = NukeCoverImageLoader()
+        self.readCalendarColorRepository = ReadCalendarColorRepository(imageLoader: coverImageLoader)
     }
 }

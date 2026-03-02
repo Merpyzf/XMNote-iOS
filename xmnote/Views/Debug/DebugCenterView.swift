@@ -2,7 +2,7 @@
 import SwiftUI
 
 /**
- * [INPUT]: 依赖 RichTextTestView、HeatmapTestView 作为导航目的地
+ * [INPUT]: 依赖 RichTextTestView、HeatmapTestView、ImageLoadingTestView 作为导航目的地
  * [OUTPUT]: 对外提供 DebugCenterView（测试中心列表页）
  * [POS]: Debug 测试入口页，集中展示所有控件测试项，由 PersonalView 跳转进入
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -32,6 +32,12 @@ struct DebugCenterView: View {
             title: "阅读热力图",
             subtitle: "8 个场景的渲染、交互与颜色适配",
             destination: AnyView(HeatmapTestView())
+        ),
+        DebugItem(
+            icon: "photo.stack",
+            title: "图片加载",
+            subtitle: "静态图/GIF/失败链路与缓存来源观测",
+            destination: AnyView(ImageLoadingTestView())
         ),
     ]
 

@@ -19,6 +19,42 @@ struct ReadCalendarMonthSummarySheet: View {
         static let summaryMetricsGridSpacing: CGFloat = 14
         static let summaryMetricCardHeight: CGFloat = 62
         static let summaryDurationBarSoftenRatio: CGFloat = 0.50
+        static let summaryDurationRankingLoadingFallbackMinHeight: CGFloat = 136
+        static let summaryDurationRankingTransitionDuration: CGFloat = 0.22
+        static let summaryDurationRankingLoadingDelay: Duration = .milliseconds(180)
+        static let summaryDurationSkeletonDefaultRows: [CGFloat] = [1, 0.74, 0.52]
+        static let summaryDurationSkeletonMinimumRowCount: Int = 3
+        static let summaryDurationSkeletonSectionSpacing: CGFloat = 16
+        static let summaryDurationSkeletonHeaderHeight: CGFloat = 30
+        static let summaryDurationSkeletonHeaderTitleWidthRatio: CGFloat = 0.26
+        static let summaryDurationSkeletonHeaderInsightWidthRatio: CGFloat = 0.72
+        static let summaryDurationSkeletonHeaderTitleMinWidth: CGFloat = 74
+        static let summaryDurationSkeletonHeaderInsightMinWidth: CGFloat = 144
+        static let summaryDurationSkeletonHeaderTitleMaxWidth: CGFloat = 96
+        static let summaryDurationSkeletonHeaderInsightMaxWidth: CGFloat = 260
+        static let summaryDurationSkeletonRowHeight: CGFloat = 56
+        static let summaryDurationSkeletonBarHeight: CGFloat = 48
+        static let summaryDurationSkeletonBarCornerRadius: CGFloat = CornerRadius.inlaySmall
+        static let summaryDurationSkeletonBarLabelSpacing: CGFloat = 0
+        static let summaryDurationSkeletonRowSpacing: CGFloat = Spacing.cozy
+        static let summaryDurationSkeletonCoverHeight: CGFloat = summaryDurationSkeletonBarHeight
+        static let summaryDurationSkeletonCoverWidth: CGFloat = summaryDurationSkeletonCoverHeight * 24 / 34
+        static let summaryDurationSkeletonCoverLeadingCompensation: CGFloat = summaryDurationSkeletonBarCornerRadius * 0.55
+        static let summaryDurationSkeletonInfoBaseRatio: CGFloat = 0.40
+        static let summaryDurationSkeletonInfoAdaptiveBonusRatio: CGFloat = 0.38
+        static let summaryDurationSkeletonInfoMaxWidth: CGFloat = 320
+        static let summaryDurationSkeletonInfoMinReadableWidth: CGFloat = 118
+        static let summaryDurationSkeletonTitleLineHeight: CGFloat = 14
+        static let summaryDurationSkeletonSubtitleLineHeight: CGFloat = 10
+        static let summaryDurationSkeletonBookTitleHeight: CGFloat = 11
+        static let summaryDurationSkeletonDurationHeight: CGFloat = 8
+        static let summaryDurationSkeletonLineSpacing: CGFloat = 4
+        static let summaryDurationSkeletonMinBarRatio: CGFloat = 0.16
+        static let summaryDurationFallbackHintTopSpacing: CGFloat = 2
+        static let summaryDurationShimmerDuration: CGFloat = 1.05
+        static let summaryDurationShimmerRotation: CGFloat = 16
+        static let summaryDurationShimmerBandWidthRatio: CGFloat = 0.56
+        static let summaryDurationShimmerMinBandWidth: CGFloat = 100
     }
 
     struct SummaryMetricSpec: Identifiable {
@@ -65,6 +101,10 @@ struct ReadCalendarMonthSummarySheet: View {
     let onSwitchMonth: (Date) -> Void
 
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.accessibilityReduceMotion) private var accessibilityReduceMotion
+    @State private var isRankingLoadingVisible = false
+    @State private var rankingLoadingVisibilityTask: Task<Void, Never>?
+    @State private var loadingShimmerPhase: CGFloat = -1
 
     var body: some View {
         ScrollView(.vertical, showsIndicators: false) {
@@ -93,6 +133,27 @@ struct ReadCalendarMonthSummarySheet: View {
             .ignoresSafeArea()
         )
         .animation(.snappy(duration: 0.24), value: sheet)
+        .onAppear {
+            syncRankingLoadingVisibility(isReady: isDurationRankingReady)
+        }
+        .onChange(of: isDurationRankingReady) { _, isReady in
+            syncRankingLoadingVisibility(isReady: isReady)
+        }
+        .onChange(of: isRankingLoadingVisible) { _, isVisible in
+            if isVisible {
+                startLoadingShimmerIfNeeded()
+            } else {
+                stopLoadingShimmer()
+            }
+        }
+        .onChange(of: accessibilityReduceMotion) { _, _ in
+            startLoadingShimmerIfNeeded()
+        }
+        .onDisappear {
+            rankingLoadingVisibilityTask?.cancel()
+            rankingLoadingVisibilityTask = nil
+            stopLoadingShimmer()
+        }
     }
 }
 
@@ -363,14 +424,41 @@ private extension ReadCalendarMonthSummarySheet {
     }
 
     var summaryDurationRanking: some View {
-        ReadingDurationRankingChart(
-            title: "阅读时长",
-            insightText: summaryDurationInsightText(summaryDurationInsight),
-            emptyText: "这个月还没有阅读时长。",
-            items: readingDurationRankingItems,
-            onBookTap: nil
-        )
+        Group {
+            if isDurationRankingReady {
+                summaryDurationRankingContent
+                    .transition(.opacity.combined(with: .offset(y: 6)))
+            } else if isRankingLoadingVisible {
+                summaryDurationRankingLoading
+                    .transition(.opacity)
+            } else {
+                Color.clear
+                    .frame(maxWidth: .infinity, minHeight: summaryDurationRankingLoadingPlaceholderHeight)
+            }
+        }
+        .animation(.smooth(duration: Layout.summaryDurationRankingTransitionDuration), value: isDurationRankingReady)
+        .animation(.smooth(duration: Layout.summaryDurationRankingTransitionDuration), value: isRankingLoadingVisible)
         .padding(.horizontal, Layout.summarySheetHorizontalInset)
+    }
+
+    var summaryDurationRankingContent: some View {
+        VStack(alignment: .leading, spacing: Spacing.compact) {
+            ReadingDurationRankingChart(
+                title: "阅读时长",
+                insightText: summaryDurationInsightText(summaryDurationInsight),
+                emptyText: "这个月还没有阅读时长。",
+                items: readingDurationRankingItems,
+                animationIdentity: summaryDurationRankingAnimationIdentity,
+                onBookTap: nil
+            )
+
+            if sheet.hasDurationRankingFallback {
+                Text("网络不稳定，已使用默认配色")
+                    .font(.caption2)
+                    .foregroundStyle(Color.textHint)
+                    .padding(.top, Layout.summaryDurationFallbackHintTopSpacing)
+            }
+        }
     }
 
     var readingDurationRankingItems: [ReadingDurationRankingChart.Item] {
@@ -384,6 +472,259 @@ private extension ReadCalendarMonthSummarySheet {
                 barTint: bar.color,
                 barState: bar.state
             )
+        }
+    }
+
+    var isDurationRankingReady: Bool {
+        guard !sheet.durationTopBooks.isEmpty else { return true }
+        return !sheet.durationTopBooks.contains { book in
+            guard let color = sheet.rankingBarColorsByBookId[book.bookId] else { return true }
+            return color.state == .pending
+        }
+    }
+
+    var summaryDurationRankingAnimationIdentity: String {
+        let monthStamp = Int64(sheet.monthStart.timeIntervalSince1970)
+        let bookIDs = sheet.durationTopBooks.map { String($0.bookId) }.joined(separator: ",")
+        return "\(monthStamp)|\(bookIDs)"
+    }
+
+    var summaryDurationRankingLoading: some View {
+        ZStack(alignment: .topLeading) {
+            summaryDurationSkeletonContent(fillColor: summaryDurationSkeletonBaseColor)
+            summaryDurationSkeletonContent(fillColor: summaryDurationSkeletonHighlightColor)
+                .mask(summaryDurationShimmerOverlay)
+                .opacity(accessibilityReduceMotion ? 0 : 1)
+        }
+        .frame(maxWidth: .infinity, minHeight: summaryDurationRankingLoadingPlaceholderHeight, alignment: .leading)
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
+    }
+
+    @ViewBuilder
+    func summaryDurationSkeletonContent(fillColor: Color) -> some View {
+        VStack(alignment: .leading, spacing: Layout.summaryDurationSkeletonSectionSpacing) {
+            summaryDurationSkeletonHeader(fillColor: fillColor)
+
+            LazyVStack(spacing: Layout.summaryDurationSkeletonRowSpacing) {
+                ForEach(Array(summaryDurationSkeletonRowRatios.enumerated()), id: \.offset) { _, ratio in
+                    summaryDurationSkeletonRow(widthRatio: ratio, fillColor: fillColor)
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    func summaryDurationSkeletonHeader(fillColor: Color) -> some View {
+        GeometryReader { proxy in
+            let width = max(0, proxy.size.width)
+            let titleWidth = max(
+                Layout.summaryDurationSkeletonHeaderTitleMinWidth,
+                min(width * Layout.summaryDurationSkeletonHeaderTitleWidthRatio, Layout.summaryDurationSkeletonHeaderTitleMaxWidth)
+            )
+            let subtitleWidth = max(
+                Layout.summaryDurationSkeletonHeaderInsightMinWidth,
+                min(width * Layout.summaryDurationSkeletonHeaderInsightWidthRatio, Layout.summaryDurationSkeletonHeaderInsightMaxWidth)
+            )
+
+            VStack(alignment: .leading, spacing: Spacing.half) {
+                RoundedRectangle(cornerRadius: 5, style: .continuous)
+                    .fill(fillColor)
+                    .frame(width: titleWidth, height: Layout.summaryDurationSkeletonTitleLineHeight)
+
+                RoundedRectangle(cornerRadius: 4, style: .continuous)
+                    .fill(fillColor.opacity(0.90))
+                    .frame(width: subtitleWidth, height: Layout.summaryDurationSkeletonSubtitleLineHeight)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .frame(height: Layout.summaryDurationSkeletonHeaderHeight)
+    }
+
+    @ViewBuilder
+    func summaryDurationSkeletonRow(widthRatio: CGFloat, fillColor: Color) -> some View {
+        let normalizedRatio = min(1, max(Layout.summaryDurationSkeletonMinBarRatio, widthRatio))
+        GeometryReader { proxy in
+            let rowWidth = max(0, proxy.size.width)
+            let infoWidth = summaryDurationSkeletonInfoWidth(rowWidth: rowWidth, displayedRatio: normalizedRatio)
+            let barAvailableWidth = max(0, rowWidth - infoWidth - Layout.summaryDurationSkeletonBarLabelSpacing)
+            let barWidth = max(0, min(barAvailableWidth, barAvailableWidth * normalizedRatio))
+            let infoOffsetX = min(
+                max(0, barWidth + Layout.summaryDurationSkeletonBarLabelSpacing - Layout.summaryDurationSkeletonCoverLeadingCompensation),
+                max(0, rowWidth - infoWidth)
+            )
+
+            ZStack(alignment: .leading) {
+                UnevenRoundedRectangle(
+                    cornerRadii: .init(
+                        topLeading: Layout.summaryDurationSkeletonBarCornerRadius,
+                        bottomLeading: Layout.summaryDurationSkeletonBarCornerRadius,
+                        bottomTrailing: 0,
+                        topTrailing: 0
+                    ),
+                    style: .continuous
+                )
+                .fill(fillColor)
+                .frame(width: barWidth, height: Layout.summaryDurationSkeletonBarHeight)
+
+                summaryDurationSkeletonInfo(width: infoWidth, fillColor: fillColor)
+                    .offset(x: infoOffsetX)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .frame(height: Layout.summaryDurationSkeletonRowHeight)
+    }
+
+    func summaryDurationSkeletonInfo(width: CGFloat, fillColor: Color) -> some View {
+        let textAreaWidth = max(0, width - Layout.summaryDurationSkeletonCoverWidth - Spacing.half)
+        let titleWidth = max(42, textAreaWidth * 0.58)
+        let durationWidth = max(32, titleWidth * 0.42)
+
+        return HStack(spacing: Spacing.half) {
+            RoundedRectangle(cornerRadius: CornerRadius.inlaySmall, style: .continuous)
+                .fill(fillColor)
+                .frame(
+                    width: Layout.summaryDurationSkeletonCoverWidth,
+                    height: Layout.summaryDurationSkeletonCoverHeight
+                )
+
+            VStack(alignment: .leading, spacing: Layout.summaryDurationSkeletonLineSpacing) {
+                RoundedRectangle(cornerRadius: 4, style: .continuous)
+                    .fill(fillColor)
+                    .frame(width: titleWidth, height: Layout.summaryDurationSkeletonBookTitleHeight)
+
+                RoundedRectangle(cornerRadius: 4, style: .continuous)
+                    .fill(fillColor.opacity(0.90))
+                    .frame(width: durationWidth, height: Layout.summaryDurationSkeletonDurationHeight)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .frame(width: width, alignment: .leading)
+    }
+
+    func summaryDurationSkeletonInfoWidth(rowWidth: CGFloat, displayedRatio: CGFloat) -> CGFloat {
+        let normalizedRatio = min(1, max(0, displayedRatio))
+        let adaptiveRatio = Layout.summaryDurationSkeletonInfoBaseRatio
+            + (1 - normalizedRatio) * Layout.summaryDurationSkeletonInfoAdaptiveBonusRatio
+        let adaptiveWidth = rowWidth * adaptiveRatio
+        let cappedWidth = min(Layout.summaryDurationSkeletonInfoMaxWidth, adaptiveWidth)
+        let readableFloor = min(Layout.summaryDurationSkeletonInfoMinReadableWidth, rowWidth)
+        return min(rowWidth, max(readableFloor, cappedWidth))
+    }
+
+    var summaryDurationSkeletonBaseColor: Color {
+        let opacity: CGFloat = colorScheme == .dark ? 0.48 : 0.34
+        return Color.readCalendarEventPendingBase.opacity(opacity)
+    }
+
+    var summaryDurationSkeletonHighlightColor: Color {
+        let opacity: CGFloat = colorScheme == .dark ? 0.34 : 0.58
+        return Color.white.opacity(opacity)
+    }
+
+    var summaryDurationSkeletonRowRatios: [CGFloat] {
+        let minCount = Layout.summaryDurationSkeletonMinimumRowCount
+        guard !sheet.durationTopBooks.isEmpty else {
+            return Array(Layout.summaryDurationSkeletonDefaultRows.prefix(minCount))
+        }
+
+        let maxReadSeconds = max(1, sheet.durationTopBooks.map(\.readSeconds).max() ?? 1)
+        var ratios = sheet.durationTopBooks.map { book in
+            let raw = CGFloat(book.readSeconds) / CGFloat(maxReadSeconds)
+            return min(1, max(Layout.summaryDurationSkeletonMinBarRatio, raw))
+        }
+
+        if ratios.count < minCount {
+            var fallbackIndex = 0
+            while ratios.count < minCount {
+                let fallback = Layout.summaryDurationSkeletonDefaultRows[
+                    min(fallbackIndex, Layout.summaryDurationSkeletonDefaultRows.count - 1)
+                ]
+                ratios.append(fallback)
+                fallbackIndex += 1
+            }
+        }
+        return ratios
+    }
+
+    var summaryDurationRankingLoadingPlaceholderHeight: CGFloat {
+        let rowCount = summaryDurationSkeletonRowRatios.count
+        let rowsHeight = CGFloat(rowCount) * Layout.summaryDurationSkeletonRowHeight
+        let rowsSpacing = CGFloat(max(0, rowCount - 1)) * Layout.summaryDurationSkeletonRowSpacing
+        let skeletonHeight = Layout.summaryDurationSkeletonHeaderHeight
+            + Layout.summaryDurationSkeletonSectionSpacing
+            + rowsHeight
+            + rowsSpacing
+        return max(Layout.summaryDurationRankingLoadingFallbackMinHeight, skeletonHeight)
+    }
+
+    var summaryDurationShimmerOverlay: some View {
+        GeometryReader { proxy in
+            let width = max(0, proxy.size.width)
+            let shimmerWidth = max(width * Layout.summaryDurationShimmerBandWidthRatio, Layout.summaryDurationShimmerMinBandWidth)
+            LinearGradient(
+                gradient: Gradient(stops: [
+                    .init(color: .clear, location: 0),
+                    .init(color: .white, location: 0.5),
+                    .init(color: .clear, location: 1)
+                ]),
+                startPoint: .top,
+                endPoint: .bottom
+            )
+            .frame(width: shimmerWidth)
+            .rotationEffect(.degrees(Layout.summaryDurationShimmerRotation))
+            .offset(x: loadingShimmerPhase * (width + shimmerWidth))
+        }
+        .opacity(accessibilityReduceMotion ? 0 : 1)
+        .allowsHitTesting(false)
+    }
+
+    func syncRankingLoadingVisibility(isReady: Bool) {
+        rankingLoadingVisibilityTask?.cancel()
+        rankingLoadingVisibilityTask = nil
+
+        guard !isReady else {
+            withAnimation(.smooth(duration: 0.16)) {
+                isRankingLoadingVisible = false
+            }
+            return
+        }
+
+        isRankingLoadingVisible = false
+        stopLoadingShimmer()
+
+        rankingLoadingVisibilityTask = Task {
+            try? await Task.sleep(for: Layout.summaryDurationRankingLoadingDelay)
+            guard !Task.isCancelled else { return }
+            await MainActor.run {
+                guard !isDurationRankingReady else { return }
+                withAnimation(.smooth(duration: 0.16)) {
+                    isRankingLoadingVisible = true
+                }
+            }
+        }
+    }
+
+    func startLoadingShimmerIfNeeded() {
+        guard isRankingLoadingVisible else {
+            stopLoadingShimmer()
+            return
+        }
+        guard !accessibilityReduceMotion else {
+            stopLoadingShimmer()
+            return
+        }
+        loadingShimmerPhase = -1
+        withAnimation(.linear(duration: Layout.summaryDurationShimmerDuration).repeatForever(autoreverses: false)) {
+            loadingShimmerPhase = 1
+        }
+    }
+
+    func stopLoadingShimmer() {
+        var transaction = Transaction()
+        transaction.animation = nil
+        withTransaction(transaction) {
+            loadingShimmerPhase = -1
         }
     }
 

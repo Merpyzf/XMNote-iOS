@@ -93,20 +93,13 @@ private struct BookDetailContentView: View {
     }
 
     private func coverImage(_ url: String) -> some View {
-        AsyncImage(url: URL(string: url)) { phase in
-            switch phase {
-            case .success(let image):
-                image
-                    .resizable()
-                    .aspectRatio(contentMode: .fill)
-            default:
-                Color.tagBackground
-                    .overlay {
-                        Image(systemName: "book.closed")
-                            .font(.title3)
-                            .foregroundStyle(Color.textHint)
-                    }
-            }
+        XMRemoteImage(urlString: url) {
+            Color.tagBackground
+                .overlay {
+                    Image(systemName: "book.closed")
+                        .font(.title3)
+                        .foregroundStyle(Color.textHint)
+                }
         }
         .aspectRatio(0.68, contentMode: .fit)
         .frame(width: 80)

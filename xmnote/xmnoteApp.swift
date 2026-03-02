@@ -13,6 +13,7 @@
 //
 
 import SwiftUI
+import Nuke
 
 @main
 struct xmnoteApp: App {
@@ -22,6 +23,7 @@ struct xmnoteApp: App {
 
     init() {
         do {
+            ImagePipeline.shared = XMImagePipelineFactory.makeDefault()
             let manager = try DatabaseManager()
             _databaseManager = State(initialValue: manager)
             _repositories = State(initialValue: RepositoryContainer(databaseManager: manager))

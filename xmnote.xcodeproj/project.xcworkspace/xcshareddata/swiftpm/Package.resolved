@@ -1,5 +1,5 @@
 {
-  "originHash" : "930bba8965ace730793003cdc7e048c80693ece3e38d483d685b62038d4d4af5",
+  "originHash" : "7f52eb26f2d2e6f2184d9764f92c5bf0cbf92fcfd2fabcf0d0d04fdb0638505e",
   "pins" : [
     {
       "identity" : "alamofire",
@@ -11,12 +11,30 @@
       }
     },
     {
+      "identity" : "gifu",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/kaishin/Gifu.git",
+      "state" : {
+        "revision" : "f19726eaf0dfa4dbce4d3f80293c9d38c2acba53",
+        "version" : "4.0.1"
+      }
+    },
+    {
       "identity" : "grdb.swift",
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/groue/GRDB.swift.git",
       "state" : {
         "revision" : "aa0079aeb82a4bf00324561a40bffe68c6fe1c26",
         "version" : "7.9.0"
+      }
+    },
+    {
+      "identity" : "nuke",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/kean/Nuke.git",
+      "state" : {
+        "revision" : "83e19143355b02e9261edb2323b3e1e93287ebb9",
+        "version" : "12.9.0"
       }
     },
     {

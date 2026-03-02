@@ -2,18 +2,18 @@ import Foundation
 import UIKit
 
 /**
- * [INPUT]: 依赖 URLSession 获取封面图，依赖 ReadCalendarSegmentColor 领域模型表达事件条颜色结果
+ * [INPUT]: 依赖 XMCoverImageLoading 统一下载封面，依赖 ReadCalendarSegmentColor 领域模型表达事件条颜色结果
  * [OUTPUT]: 对外提供 ReadCalendarColorRepository（ReadCalendarColorRepositoryProtocol 实现，封面颜色提取 + 视觉优先回退 + 文本可读性计算 + 失败哈希回退）
  * [POS]: Data 层阅读日历颜色仓储，负责封面取色策略（近白过滤 + 视觉优先色）与持久缓存，不让 ViewModel 直接依赖网络/图像分析细节
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
 struct ReadCalendarColorRepository: ReadCalendarColorRepositoryProtocol {
-    private let session: URLSession
+    private let imageLoader: any XMCoverImageLoading
     private let cacheStore: ReadCalendarColorCacheStore
 
-    init(session: URLSession = ReadCalendarColorRepository.makeSession()) {
-        self.session = session
+    init(imageLoader: any XMCoverImageLoading = NukeCoverImageLoader()) {
+        self.imageLoader = imageLoader
         self.cacheStore = .shared
     }
 
@@ -23,11 +23,11 @@ struct ReadCalendarColorRepository: ReadCalendarColorRepositoryProtocol {
         coverURL: String
     ) async -> ReadCalendarSegmentColor {
         let normalizedName = bookName.trimmingCharacters(in: .whitespacesAndNewlines)
-        let normalizedCover = coverURL.trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalizedCoverURL = coverURL.trimmingCharacters(in: .whitespacesAndNewlines)
         let cacheKey = Self.cacheKey(
             bookId: bookId,
             bookName: normalizedName,
-            coverURL: normalizedCover
+            coverURL: normalizedCoverURL
         )
 
         if let cached = await cacheStore.color(for: cacheKey) {
@@ -36,18 +36,23 @@ struct ReadCalendarColorRepository: ReadCalendarColorRepositoryProtocol {
 
         let fallback = fallbackHashedColor(bookId: bookId, bookName: normalizedName)
 
-        guard let url = Self.validCoverURL(from: normalizedCover) else {
+        guard let url = XMImageRequestBuilder.normalizedURL(from: normalizedCoverURL) else {
             await cacheStore.save(fallback, for: cacheKey)
             return fallback
         }
 
         do {
-            let data = try await fetchCoverData(url: url)
+            let image = try await imageLoader.loadImage(for: XMImageLoadRequest(url: url))
             if Task.isCancelled {
-                return .pending
+                await cacheStore.save(fallback, for: cacheKey)
+                return fallback
             }
 
-            guard let preferredBackground = await Self.extractPreferredEventBarColorAsync(from: data) else {
+            guard let preferredBackground = await Self.extractPreferredEventBarColorAsync(from: image) else {
+                await cacheStore.save(fallback, for: cacheKey)
+                return fallback
+            }
+            if Task.isCancelled {
                 await cacheStore.save(fallback, for: cacheKey)
                 return fallback
             }
@@ -66,66 +71,17 @@ struct ReadCalendarColorRepository: ReadCalendarColorRepositoryProtocol {
     }
 }
 
-// MARK: - Network
-
-private extension ReadCalendarColorRepository {
-    nonisolated static func makeSession() -> URLSession {
-        let config = URLSessionConfiguration.default
-        config.timeoutIntervalForRequest = 12
-        config.timeoutIntervalForResource = 16
-        config.requestCachePolicy = .returnCacheDataElseLoad
-        config.urlCache = URLCache.shared
-        return URLSession(configuration: config)
-    }
-
-    nonisolated static func validCoverURL(from coverURL: String) -> URL? {
-        guard let url = URL(string: coverURL),
-              let scheme = url.scheme?.lowercased(),
-              scheme == "http" || scheme == "https" else {
-            return nil
-        }
-        return url
-    }
-
-    // 防盗链 UA，与 Android 端 GlideImageLoader 保持一致
-    nonisolated static let browserUserAgent =
-        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15"
-
-    /// 按 host 动态注入防盗链请求头（豆瓣额外加 Referer）
-    nonisolated static func applyAntiHotlinkHeaders(to request: inout URLRequest) {
-        request.setValue(browserUserAgent, forHTTPHeaderField: "User-Agent")
-        if let host = request.url?.host?.lowercased(), host.contains("douban") {
-            request.setValue("https://douban.com/", forHTTPHeaderField: "Referer")
-        }
-    }
-
-    func fetchCoverData(url: URL) async throws -> Data {
-        var request = URLRequest(url: url)
-        request.timeoutInterval = 12
-        request.cachePolicy = .returnCacheDataElseLoad
-        Self.applyAntiHotlinkHeaders(to: &request)
-
-        let (data, response) = try await session.data(for: request)
-        guard let httpResponse = response as? HTTPURLResponse,
-              (200...299).contains(httpResponse.statusCode),
-              !data.isEmpty else {
-            throw ReadCalendarCoverColorError.invalidResponse
-        }
-        return data
-    }
-}
-
 // MARK: - Cover Color Policy
 
 private extension ReadCalendarColorRepository {
-    nonisolated static func extractPreferredEventBarColorAsync(from data: Data) async -> RGBAColor? {
+    nonisolated static func extractPreferredEventBarColorAsync(from image: UIImage) async -> RGBAColor? {
         await Task.detached(priority: .utility) {
-            extractPreferredEventBarColor(from: data)
+            extractPreferredEventBarColor(from: image)
         }.value
     }
 
-    nonisolated static func extractPreferredEventBarColor(from data: Data) -> RGBAColor? {
-        let swatches = extractColorSwatches(from: data)
+    nonisolated static func extractPreferredEventBarColor(from image: UIImage) -> RGBAColor? {
+        let swatches = extractColorSwatches(from: image)
         guard !swatches.isEmpty else { return nil }
 
         if let dominant = findDominantColor(from: swatches),
@@ -140,9 +96,13 @@ private extension ReadCalendarColorRepository {
         return nil
     }
 
-    nonisolated static func extractColorSwatches(from data: Data) -> [ColorSwatch] {
-        guard let uiImage = UIImage(data: data),
-              let cgImage = uiImage.cgImage else {
+    nonisolated static func extractPreferredEventBarColor(from data: Data) -> RGBAColor? {
+        guard let image = UIImage(data: data) else { return nil }
+        return extractPreferredEventBarColor(from: image)
+    }
+
+    nonisolated static func extractColorSwatches(from image: UIImage) -> [ColorSwatch] {
+        guard let cgImage = image.cgImage else {
             return []
         }
 
@@ -363,12 +323,6 @@ private extension ReadCalendarColorRepository {
         }
         return hash
     }
-}
-
-// MARK: - Internal Types
-
-private enum ReadCalendarCoverColorError: Error {
-    case invalidResponse
 }
 
 private struct ColorSwatch {

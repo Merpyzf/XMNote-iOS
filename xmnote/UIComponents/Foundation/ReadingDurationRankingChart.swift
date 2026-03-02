@@ -50,6 +50,7 @@ struct ReadingDurationRankingChart: View {
     let insightText: Text?
     let emptyText: String
     let items: [Item]
+    let animationIdentity: String
     let onBookTap: ((Int64) -> Void)?
 
     @Environment(\.accessibilityReduceMotion) private var accessibilityReduceMotion
@@ -86,8 +87,8 @@ struct ReadingDurationRankingChart: View {
         .onAppear {
             animateBars(for: items)
         }
-        .onChange(of: items) { _, newItems in
-            animateBars(for: newItems)
+        .onChange(of: animationIdentity) { _, _ in
+            animateBars(for: items)
         }
         .onDisappear {
             barAnimationTask?.cancel()
@@ -184,21 +185,14 @@ private extension ReadingDurationRankingChart {
 
     @ViewBuilder
     func rankingCover(urlString: String) -> some View {
-        AsyncImage(url: URL(string: urlString)) { phase in
-            switch phase {
-            case .success(let image):
-                image
-                    .resizable()
-                    .aspectRatio(contentMode: .fill)
-            default:
-                RoundedRectangle(cornerRadius: CornerRadius.inlaySmall, style: .continuous)
-                    .fill(Color.tagBackground)
-                    .overlay {
-                        Image(systemName: "book.closed")
-                            .font(.system(size: 11, weight: .medium))
-                            .foregroundStyle(Color.textHint)
-                    }
-            }
+        XMRemoteImage(urlString: urlString, showsGIFBadge: true) {
+            RoundedRectangle(cornerRadius: CornerRadius.inlaySmall, style: .continuous)
+                .fill(Color.tagBackground)
+                .overlay {
+                    Image(systemName: "book.closed")
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(Color.textHint)
+                }
         }
         .frame(width: Layout.coverWidth, height: Layout.coverHeight)
         .clipShape(RoundedRectangle(cornerRadius: Layout.coverCornerRadius, style: .continuous))

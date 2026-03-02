@@ -90,6 +90,7 @@ final class ReadCalendarViewModel {
     private var monthIndexByKey: [String: Int] = [:]
     private var latestRequestTicketByMonthKey: [String: Int] = [:]
     private var latestColorTicketByMonthKey: [String: Int] = [:]
+    private var inFlightColorRequestBookIDsByMonthKey: [String: Set<Int64>] = [:]
     private var monthColorTasks: [String: Task<Void, Never>] = [:]
     private var requestTicketSeed = 0
     private var colorTicketSeed = 0
@@ -191,6 +192,7 @@ final class ReadCalendarViewModel {
             pageStates = [:]
             latestRequestTicketByMonthKey = [:]
             latestColorTicketByMonthKey = [:]
+            inFlightColorRequestBookIDsByMonthKey = [:]
             cancelAllColorTasks()
 
             await ensureMonthLoaded(
@@ -340,6 +342,7 @@ final class ReadCalendarViewModel {
         monthCache = [:]
         pageStates = [:]
         latestRequestTicketByMonthKey = [:]
+        inFlightColorRequestBookIDsByMonthKey = [:]
         cancelAllColorTasks()
         await reload(using: repository, colorRepository: colorRepository)
     }
@@ -463,6 +466,7 @@ private extension ReadCalendarViewModel {
                 errorMessage: "月份切换失败：\(error.localizedDescription)"
             )
             pageStates[key] = failed
+            inFlightColorRequestBookIDsByMonthKey[key] = nil
             if reportError && normalized == displayedMonthStart {
                 errorMessage = failed.errorMessage
             }
@@ -500,12 +504,23 @@ private extension ReadCalendarViewModel {
         guard let state = pageStates[monthKey], state.loadState == .loaded else { return }
 
         let requests = buildColorRequests(from: state)
-        guard !requests.isEmpty else { return }
+        guard !requests.isEmpty else {
+            inFlightColorRequestBookIDsByMonthKey[monthKey] = nil
+            return
+        }
+
+        let requestBookIDs = Set(requests.map(\.bookId))
+        if let inFlightBookIDs = inFlightColorRequestBookIDsByMonthKey[monthKey],
+           monthColorTasks[monthKey] != nil,
+           requestBookIDs.isSubset(of: inFlightBookIDs) {
+            return
+        }
 
         monthColorTasks[monthKey]?.cancel()
         colorTicketSeed += 1
         let ticket = colorTicketSeed
         latestColorTicketByMonthKey[monthKey] = ticket
+        inFlightColorRequestBookIDsByMonthKey[monthKey] = requestBookIDs
 
         monthColorTasks[monthKey] = Task { [weak self] in
             guard let self else { return }
@@ -558,9 +573,53 @@ private extension ReadCalendarViewModel {
             applyColors(stagedColors, monthKey: monthKey, ticket: ticket)
         }
 
+        await fillPendingRankingFallbackColorsIfNeeded(
+            monthKey: monthKey,
+            ticket: ticket,
+            using: colorRepository
+        )
+
         if latestColorTicketByMonthKey[monthKey] == ticket {
             monthColorTasks[monthKey] = nil
+            inFlightColorRequestBookIDsByMonthKey[monthKey] = nil
         }
+    }
+
+    private func fillPendingRankingFallbackColorsIfNeeded(
+        monthKey: String,
+        ticket: Int,
+        using colorRepository: any ReadCalendarColorRepositoryProtocol
+    ) async {
+        guard latestColorTicketByMonthKey[monthKey] == ticket else { return }
+        guard let state = pageStates[monthKey], state.loadState == .loaded else { return }
+
+        let pendingTopBooks = state.readingDurationTopBooks.filter { book in
+            guard let color = state.rankingBarColorsByBookId[book.bookId] else { return true }
+            return color.state == .pending
+        }
+        guard !pendingTopBooks.isEmpty else { return }
+
+        var fallbackColors: [Int64: ReadCalendarSegmentColor] = [:]
+        fallbackColors.reserveCapacity(pendingTopBooks.count)
+
+        for book in pendingTopBooks {
+            if Task.isCancelled {
+                return
+            }
+
+            // 通过空 URL 直接走仓储失败回退路径，确保 pending 不会长期悬挂。
+            let fallbackColor = await colorRepository.resolveEventColor(
+                bookId: book.bookId,
+                bookName: book.name,
+                coverURL: ""
+            )
+            if Task.isCancelled {
+                return
+            }
+            fallbackColors[book.bookId] = fallbackColor
+        }
+
+        applyColors(fallbackColors, monthKey: monthKey, ticket: ticket)
     }
 
     private func applyColors(
@@ -672,6 +731,7 @@ private extension ReadCalendarViewModel {
             monthColorTasks[key]?.cancel()
             monthColorTasks.removeValue(forKey: key)
             latestColorTicketByMonthKey.removeValue(forKey: key)
+            inFlightColorRequestBookIDsByMonthKey.removeValue(forKey: key)
         }
     }
 
@@ -681,6 +741,7 @@ private extension ReadCalendarViewModel {
         }
         monthColorTasks = [:]
         latestColorTicketByMonthKey = [:]
+        inFlightColorRequestBookIDsByMonthKey = [:]
     }
 
     func fetchMonthData(
