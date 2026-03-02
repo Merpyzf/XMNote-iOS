@@ -224,10 +224,10 @@ private struct ReadCalendarMonthGridWeekRow: View {
                     ZStack {
                         if selected {
                             Circle()
-                                .fill(Color.accentColor.opacity(0.18))
+                                .fill(Color.brand.opacity(0.18))
                                 .overlay {
                                     Circle()
-                                        .stroke(Color.accentColor.opacity(0.62), lineWidth: 0.95)
+                                        .stroke(Color.brand.opacity(0.62), lineWidth: 0.95)
                                 }
                                 .frame(width: 22, height: 22)
                         }
@@ -235,7 +235,7 @@ private struct ReadCalendarMonthGridWeekRow: View {
                             .font(.system(size: 12, weight: selected ? .bold : .medium, design: .rounded))
                             .foregroundStyle(
                                 payload.isFuture ? Color.textHint :
-                                selected ? Color.accentColor : Color.textPrimary
+                                selected ? Color.brand : Color.textPrimary
                             )
                     }
                     .frame(height: dayHeaderHeight)
@@ -253,7 +253,7 @@ private struct ReadCalendarMonthGridWeekRow: View {
                         Capsule(style: .continuous)
                             .fill(
                                 selected
-                                ? Color.accentColor.opacity(0.82)
+                                ? Color.brand.opacity(0.82)
                                 : Color.brand.opacity(0.56)
                             )
                             .frame(width: selected ? 12 : 10, height: 2)

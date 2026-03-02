@@ -165,7 +165,19 @@ struct ReadCalendarContentView: View {
         static let summarySheetCompactRatio: CGFloat = 0.48
         static let summaryFloatingButtonTrailing: CGFloat = Spacing.screenEdge
         static let summaryFloatingButtonBottom: CGFloat = Spacing.double
-        static let summaryFloatingButtonTransitionDuration: CGFloat = 0.22
+        static let summaryFloatingButtonShowResponse: CGFloat = 0.34
+        static let summaryFloatingButtonShowDamping: CGFloat = 0.82
+        static let summaryFloatingButtonHideDuration: CGFloat = 0.18
+        static let summaryFloatingButtonShowScaleFrom: CGFloat = 0.92
+        static let summaryFloatingButtonHideScaleTo: CGFloat = 0.96
+        static let summaryFloatingButtonShowOffsetY: CGFloat = 10
+        static let summaryFloatingButtonHideOffsetY: CGFloat = 6
+        static let summaryFloatingButtonIdleHideDelay: TimeInterval = 7
+        static let summaryFloatingButtonInitialVisibleProtection: TimeInterval = 5
+        static let summaryFloatingButtonPostDismissProtection: TimeInterval = 3
+        static let summaryFloatingButtonPostInteractionProtection: TimeInterval = 1.5
+        static let summaryFloatingButtonScrollInteractionProtection: TimeInterval = 2
+        static let summaryFloatingButtonInteractionThrottle: TimeInterval = 0.25
     }
 
     let props: Props
@@ -178,6 +190,14 @@ struct ReadCalendarContentView: View {
     @State private var shownStreakMilestonesByMonth: [Date: Set<Int>] = [:]
     @State private var isSummarySheetPresented = false
     @State private var summarySheetMonthStart: Date?
+    @State private var isSummaryFloatingButtonVisible = false
+    @State private var summaryFloatingButtonAutoHideTask: Task<Void, Never>?
+    @State private var summaryFloatingButtonInteractionToken: UInt64 = 0
+    @State private var summaryFloatingButtonHideNotBefore: Date = .distantPast
+    @State private var summaryFloatingButtonLastInteractionAt: Date = .distantPast
+    @State private var hasAppliedSummaryFloatingButtonInitialPolicy = false
+    @State private var summaryFloatingButtonHiddenScale: CGFloat = Layout.summaryFloatingButtonShowScaleFrom
+    @State private var summaryFloatingButtonHiddenOffsetY: CGFloat = Layout.summaryFloatingButtonShowOffsetY
 
     var body: some View {
         VStack(spacing: 0) {
@@ -211,18 +231,33 @@ struct ReadCalendarContentView: View {
             }
         }
         .animation(.spring(response: 0.38, dampingFraction: 0.86), value: props.errorMessage)
-        .animation(.snappy(duration: Layout.summaryFloatingButtonTransitionDuration), value: shouldShowSummaryFloatingButton)
         .onAppear {
             evaluateStreakHintIfNeeded()
+            if props.rootContentState == .content {
+                applySummaryFloatingButtonInitialPolicyIfNeeded()
+            }
+        }
+        .onChange(of: props.rootContentState) { _, state in
+            switch state {
+            case .content:
+                applySummaryFloatingButtonInitialPolicyIfNeeded()
+            case .loading, .empty:
+                hideSummaryFloatingButtonImmediately()
+            }
         }
         .onChange(of: props.pagerSelection) { _, monthStart in
             evaluateStreakHintIfNeeded()
             syncSummarySheetMonthIfNeeded(monthStart: monthStart)
+            markSummaryFloatingButtonInteraction(
+                protectedFor: Layout.summaryFloatingButtonScrollInteractionProtection
+            )
         }
         .onChange(of: activeSelectedDate) { _, _ in
             evaluateStreakHintIfNeeded()
+            markSummaryFloatingButtonInteraction()
         }
         .onChange(of: props.displayMode) { _, mode in
+            markSummaryFloatingButtonInteraction()
             guard mode == .activityEvent else {
                 streakHintTask?.cancel()
                 streakHintTask = nil
@@ -247,9 +282,15 @@ struct ReadCalendarContentView: View {
         .onDisappear {
             streakHintTask?.cancel()
             streakHintTask = nil
+            summaryFloatingButtonAutoHideTask?.cancel()
+            summaryFloatingButtonAutoHideTask = nil
         }
         .sheet(isPresented: $isSummarySheetPresented, onDismiss: {
             summarySheetMonthStart = nil
+            markSummaryFloatingButtonInteraction(
+                protectedFor: Layout.summaryFloatingButtonPostDismissProtection,
+                force: true
+            )
         }) {
             ReadCalendarMonthSummarySheet(
                 sheet: presentedSummarySheetData,
@@ -268,8 +309,14 @@ struct ReadCalendarContentView: View {
 // MARK: - Subviews
 
 private extension ReadCalendarContentView {
+    var shouldMountSummaryFloatingButton: Bool {
+        props.rootContentState == .content
+            && !isSummarySheetPresented
+    }
+
     var shouldShowSummaryFloatingButton: Bool {
-        props.rootContentState == .content && !isSummarySheetPresented
+        shouldMountSummaryFloatingButton
+            && isSummaryFloatingButtonVisible
     }
 
     var activeMonthPage: MonthPage? {
@@ -292,7 +339,93 @@ private extension ReadCalendarContentView {
     func openMonthSummaryManually() {
         let normalizedMonthStart = Calendar.current.startOfDay(for: props.pagerSelection)
         summarySheetMonthStart = normalizedMonthStart
+        isSummaryFloatingButtonVisible = false
         isSummarySheetPresented = true
+        summaryFloatingButtonAutoHideTask?.cancel()
+        summaryFloatingButtonAutoHideTask = nil
+    }
+
+    func applySummaryFloatingButtonInitialPolicyIfNeeded() {
+        if !hasAppliedSummaryFloatingButtonInitialPolicy {
+            hasAppliedSummaryFloatingButtonInitialPolicy = true
+            markSummaryFloatingButtonInteraction(
+                protectedFor: Layout.summaryFloatingButtonInitialVisibleProtection,
+                force: true
+            )
+            return
+        }
+        markSummaryFloatingButtonInteraction(force: true)
+    }
+
+    func hideSummaryFloatingButtonImmediately() {
+        summaryFloatingButtonAutoHideTask?.cancel()
+        summaryFloatingButtonAutoHideTask = nil
+        guard isSummaryFloatingButtonVisible else { return }
+        summaryFloatingButtonHiddenScale = Layout.summaryFloatingButtonHideScaleTo
+        summaryFloatingButtonHiddenOffsetY = Layout.summaryFloatingButtonHideOffsetY
+        withAnimation(.easeOut(duration: Layout.summaryFloatingButtonHideDuration)) {
+            isSummaryFloatingButtonVisible = false
+        }
+    }
+
+    func markSummaryFloatingButtonInteraction(
+        protectedFor: TimeInterval = Layout.summaryFloatingButtonPostInteractionProtection,
+        force: Bool = false
+    ) {
+        guard props.rootContentState == .content, !isSummarySheetPresented else { return }
+
+        let now = Date()
+        if !force,
+           isSummaryFloatingButtonVisible,
+           now.timeIntervalSince(summaryFloatingButtonLastInteractionAt) < Layout.summaryFloatingButtonInteractionThrottle {
+            return
+        }
+
+        summaryFloatingButtonLastInteractionAt = now
+        summaryFloatingButtonHideNotBefore = now.addingTimeInterval(protectedFor)
+        summaryFloatingButtonInteractionToken &+= 1
+
+        if !isSummaryFloatingButtonVisible {
+            summaryFloatingButtonHiddenScale = Layout.summaryFloatingButtonShowScaleFrom
+            summaryFloatingButtonHiddenOffsetY = Layout.summaryFloatingButtonShowOffsetY
+            withAnimation(.spring(
+                response: Layout.summaryFloatingButtonShowResponse,
+                dampingFraction: Layout.summaryFloatingButtonShowDamping
+            )) {
+                isSummaryFloatingButtonVisible = true
+            }
+        }
+
+        scheduleSummaryFloatingButtonAutoHide(for: summaryFloatingButtonInteractionToken)
+    }
+
+    func scheduleSummaryFloatingButtonAutoHide(for token: UInt64) {
+        summaryFloatingButtonAutoHideTask?.cancel()
+        let fireDate = max(
+            summaryFloatingButtonHideNotBefore,
+            Date().addingTimeInterval(Layout.summaryFloatingButtonIdleHideDelay)
+        )
+        let sleepSeconds = max(0, fireDate.timeIntervalSinceNow)
+
+        summaryFloatingButtonAutoHideTask = Task {
+            try? await Task.sleep(for: .seconds(sleepSeconds))
+            guard !Task.isCancelled else { return }
+
+            await MainActor.run {
+                guard token == summaryFloatingButtonInteractionToken else { return }
+                guard props.rootContentState == .content,
+                      !isSummarySheetPresented,
+                      isSummaryFloatingButtonVisible else {
+                    return
+                }
+
+                summaryFloatingButtonHiddenScale = Layout.summaryFloatingButtonHideScaleTo
+                summaryFloatingButtonHiddenOffsetY = Layout.summaryFloatingButtonHideOffsetY
+                withAnimation(.easeOut(duration: Layout.summaryFloatingButtonHideDuration)) {
+                    isSummaryFloatingButtonVisible = false
+                }
+            }
+        }
     }
 
     func syncSummarySheetMonthIfNeeded(monthStart: Date) {
@@ -487,11 +620,15 @@ private extension ReadCalendarContentView {
         .padding(.top, Layout.gridTopInset)
         .frame(maxWidth: .infinity, alignment: .top)
         .overlay(alignment: .bottomTrailing) {
-            if shouldShowSummaryFloatingButton {
+            if shouldMountSummaryFloatingButton {
                 ReadCalendarSummaryFloatingButton(action: openMonthSummaryManually)
                     .padding(.trailing, Layout.summaryFloatingButtonTrailing)
                     .padding(.bottom, Layout.summaryFloatingButtonBottom)
-                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                    .opacity(shouldShowSummaryFloatingButton ? 1 : 0)
+                    .scaleEffect(shouldShowSummaryFloatingButton ? 1 : summaryFloatingButtonHiddenScale)
+                    .offset(y: shouldShowSummaryFloatingButton ? 0 : summaryFloatingButtonHiddenOffsetY)
+                    .allowsHitTesting(shouldShowSummaryFloatingButton)
+                    .accessibilityHidden(!shouldShowSummaryFloatingButton)
             }
         }
     }
@@ -526,6 +663,12 @@ private extension ReadCalendarContentView {
             }
             .frame(maxWidth: .infinity, alignment: .top)
         }
+        .onScrollPhaseChange { _, phase in
+            guard phase.isScrolling else { return }
+            markSummaryFloatingButtonInteraction(
+                protectedFor: Layout.summaryFloatingButtonScrollInteractionProtection
+            )
+        }
         .scrollBounceBehavior(.basedOnSize)
         .animation(.smooth(duration: 0.24), value: pageState.loadState)
     }
@@ -541,6 +684,7 @@ private extension ReadCalendarContentView {
                 page.payload(for: date)
             },
             onSelectDay: { date in
+                markSummaryFloatingButtonInteraction()
                 withAnimation(.smooth(duration: 0.22)) {
                     if let selectedDate = page.selectedDate,
                        Calendar.current.isDate(selectedDate, inSameDayAs: date) {
