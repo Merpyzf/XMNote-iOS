@@ -18,26 +18,7 @@ struct ReadCalendarMonthSummarySheet: View {
         static let summaryMonthSwitcherButtonSize: CGFloat = 32
         static let summaryMetricsGridSpacing: CGFloat = 14
         static let summaryMetricCardHeight: CGFloat = 62
-        static let summaryDurationBarLabelSpacing: CGFloat = 0
-        static let summaryDurationRowHeight: CGFloat = 56
-        static let summaryDurationBarHeight: CGFloat = 48
-        static let summaryDurationCoverCornerRadius: CGFloat = CornerRadius.inlaySmall
-        static let summaryDurationBarCornerRadius: CGFloat = summaryDurationCoverCornerRadius
-        static let summaryDurationInfoBaseRatio: CGFloat = 0.40
-        static let summaryDurationInfoAdaptiveBonusRatio: CGFloat = 0.38
-        static let summaryDurationInfoMaxWidth: CGFloat = 320
-        static let summaryDurationInfoMinReadableWidth: CGFloat = 118
-        static let summaryDurationShortRangeUpperBound: CGFloat = 0.18
-        static let summaryDurationShortRangeGamma: CGFloat = 0.78
-        static let summaryDurationShortRangeMinRatioFactor: CGFloat = 0.65
-        static let summaryDurationMinVisualBarWidth: CGFloat = 14
         static let summaryDurationBarSoftenRatio: CGFloat = 0.50
-        static let summaryDurationCoverLeadingCompensation: CGFloat = summaryDurationCoverCornerRadius * 0.55
-        static let summaryDurationCoverShadowOpacity: CGFloat = 0.10
-        static let summaryDurationCoverShadowRadius: CGFloat = 1.8
-        static let summaryDurationCoverShadowYOffset: CGFloat = 0.9
-        static let summaryDurationCoverHeight: CGFloat = summaryDurationBarHeight
-        static let summaryDurationCoverWidth: CGFloat = summaryDurationCoverHeight * 24 / 34
     }
 
     struct SummaryMetricSpec: Identifiable {
@@ -84,9 +65,6 @@ struct ReadCalendarMonthSummarySheet: View {
     let onSwitchMonth: (Date) -> Void
 
     @Environment(\.colorScheme) private var colorScheme
-    @Environment(\.accessibilityReduceMotion) private var accessibilityReduceMotion
-    @State private var durationBarRatiosByBookId: [Int64: CGFloat] = [:]
-    @State private var durationBarAnimationTask: Task<Void, Never>?
 
     var body: some View {
         ScrollView(.vertical, showsIndicators: false) {
@@ -115,17 +93,6 @@ struct ReadCalendarMonthSummarySheet: View {
             .ignoresSafeArea()
         )
         .animation(.snappy(duration: 0.24), value: sheet)
-        .onAppear {
-            animateDurationBars(for: sheet.durationTopBooks)
-        }
-        .onChange(of: sheet.durationTopBooks) { _, books in
-            animateDurationBars(for: books)
-        }
-        .onDisappear {
-            durationBarAnimationTask?.cancel()
-            durationBarAnimationTask = nil
-            durationBarRatiosByBookId = [:]
-        }
     }
 }
 
@@ -396,36 +363,28 @@ private extension ReadCalendarMonthSummarySheet {
     }
 
     var summaryDurationRanking: some View {
-        let maxReadSeconds = sheet.durationTopBooks.map(\.readSeconds).max() ?? 0
-        let insight = summaryDurationInsight
-
-        return VStack(alignment: .leading, spacing: Layout.summarySheetSectionSpacing) {
-            VStack(alignment: .leading, spacing: Spacing.half) {
-                Text("阅读时长")
-                    .font(.headline.weight(.semibold))
-                    .foregroundStyle(Color.textPrimary)
-                summaryDurationInsightText(insight)
-                    .font(.footnote)
-                    .monospacedDigit()
-                    .contentTransition(.numericText())
-            }
-
-            if sheet.durationTopBooks.isEmpty {
-                Text("这个月还没有阅读时长。")
-                    .font(.footnote)
-                    .foregroundStyle(Color.textHint)
-            } else {
-                LazyVStack(spacing: Spacing.cozy) {
-                    ForEach(sheet.durationTopBooks) { book in
-                        summaryDurationRow(
-                            book: book,
-                            maxReadSeconds: maxReadSeconds
-                        )
-                    }
-                }
-            }
-        }
+        ReadingDurationRankingChart(
+            title: "阅读时长",
+            insightText: summaryDurationInsightText(summaryDurationInsight),
+            emptyText: "这个月还没有阅读时长。",
+            items: readingDurationRankingItems,
+            onBookTap: nil
+        )
         .padding(.horizontal, Layout.summarySheetHorizontalInset)
+    }
+
+    var readingDurationRankingItems: [ReadingDurationRankingChart.Item] {
+        sheet.durationTopBooks.map { book in
+            let bar = summaryDurationBarPresentation(bookId: book.bookId)
+            return ReadingDurationRankingChart.Item(
+                id: book.bookId,
+                title: book.name,
+                coverURL: book.coverURL,
+                durationSeconds: book.readSeconds,
+                barTint: bar.color,
+                barState: bar.state
+            )
+        }
     }
 
     var summaryDurationInsight: SummaryDurationInsight {
@@ -490,140 +449,28 @@ private extension ReadCalendarMonthSummarySheet {
         }
     }
 
-    func summaryDurationRow(
-        book: ReadCalendarMonthlyDurationBook,
-        maxReadSeconds: Int
-    ) -> some View {
-        let fallbackRawRatio = summaryDurationRatio(readSeconds: book.readSeconds, maxReadSeconds: maxReadSeconds)
-        let rawRatio = durationBarRatiosByBookId[book.bookId] ?? fallbackRawRatio
-        let barColor = summaryDurationBarColor(bookId: book.bookId)
-
-        return GeometryReader { proxy in
-            let rowWidth = max(0, proxy.size.width)
-            let infoWidth = summaryDurationInfoWidth(rowWidth: rowWidth, displayedRatio: rawRatio)
-            let barAvailableWidth = max(0, rowWidth - infoWidth - Layout.summaryDurationBarLabelSpacing)
-            let visualRatio = summaryDurationVisualRatio(rawRatio: rawRatio, barAvailableWidth: barAvailableWidth)
-            let displayedBarWidth = max(0, min(barAvailableWidth, barAvailableWidth * visualRatio))
-            let infoOffsetX = min(
-                max(0, displayedBarWidth + Layout.summaryDurationBarLabelSpacing - Layout.summaryDurationCoverLeadingCompensation),
-                max(0, rowWidth - infoWidth)
-            )
-
-            ZStack(alignment: .leading) {
-                if let barColor {
-                    UnevenRoundedRectangle(
-                        cornerRadii: .init(
-                            topLeading: Layout.summaryDurationBarCornerRadius,
-                            bottomLeading: Layout.summaryDurationBarCornerRadius,
-                            bottomTrailing: 0,
-                            topTrailing: 0
-                        ),
-                        style: .continuous
-                    )
-                    .fill(barColor)
-                    .frame(width: displayedBarWidth, height: Layout.summaryDurationBarHeight)
-                }
-
-                summaryDurationInfoView(book, width: infoWidth)
-                    .offset(x: infoOffsetX)
-            }
+    func summaryDurationBarPresentation(bookId: Int64) -> (
+        color: Color,
+        state: ReadingDurationRankingChart.Item.BarState
+    ) {
+        guard let color = sheet.rankingBarColorsByBookId[bookId] else {
+            return (summaryDurationPendingBarColor, .placeholder)
         }
-        .frame(height: Layout.summaryDurationRowHeight)
-    }
-
-    func summaryDurationInfoView(_ book: ReadCalendarMonthlyDurationBook, width: CGFloat) -> some View {
-        HStack(spacing: Spacing.half) {
-            summaryDurationCover(urlString: book.coverURL)
-
-            VStack(alignment: .leading, spacing: 1) {
-                Text(book.name)
-                    .font(.caption.weight(.medium))
-                    .foregroundStyle(Color.textPrimary)
-                    .lineLimit(1)
-                    .truncationMode(.tail)
-                    .layoutPriority(1)
-                    .allowsTightening(true)
-                Text(summaryDurationText(book.readSeconds))
-                    .font(.caption2)
-                    .foregroundStyle(Color.textSecondary)
-                    .monospacedDigit()
-                    .contentTransition(.numericText())
-                    .lineLimit(1)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
+        switch color.state {
+        case .pending:
+            return (summaryDurationPendingBarColor, .placeholder)
+        case .resolved:
+            return (softenedSummaryBarColor(from: color), .resolved)
+        case .failed:
+            return (softenedSummaryBarColor(from: color), .fallback)
         }
-        .frame(width: width, alignment: .leading)
     }
 
-    @ViewBuilder
-    func summaryDurationCover(urlString: String) -> some View {
-        AsyncImage(url: URL(string: urlString)) { phase in
-            switch phase {
-            case .success(let image):
-                image
-                    .resizable()
-                    .aspectRatio(contentMode: .fill)
-            default:
-                RoundedRectangle(cornerRadius: CornerRadius.inlaySmall, style: .continuous)
-                    .fill(Color.tagBackground)
-                    .overlay {
-                        Image(systemName: "book.closed")
-                            .font(.system(size: 11, weight: .medium))
-                            .foregroundStyle(Color.textHint)
-                    }
-            }
-        }
-        .frame(width: Layout.summaryDurationCoverWidth, height: Layout.summaryDurationCoverHeight)
-        .clipShape(RoundedRectangle(cornerRadius: Layout.summaryDurationCoverCornerRadius, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: Layout.summaryDurationCoverCornerRadius, style: .continuous)
-                .stroke(Color.white.opacity(0.14), lineWidth: 0.5)
-        }
-        .shadow(
-            color: Color.black.opacity(Layout.summaryDurationCoverShadowOpacity),
-            radius: Layout.summaryDurationCoverShadowRadius,
-            x: 0,
-            y: Layout.summaryDurationCoverShadowYOffset
-        )
+    var summaryDurationPendingBarColor: Color {
+        Color.readCalendarEventPendingBase
     }
 
-    func summaryDurationInfoWidth(rowWidth: CGFloat, displayedRatio: CGFloat) -> CGFloat {
-        let normalizedRatio = min(1, max(0, displayedRatio))
-        let adaptiveRatio = Layout.summaryDurationInfoBaseRatio
-            + (1 - normalizedRatio) * Layout.summaryDurationInfoAdaptiveBonusRatio
-        let adaptiveWidth = rowWidth * adaptiveRatio
-        let cappedWidth = min(Layout.summaryDurationInfoMaxWidth, adaptiveWidth)
-        let readableFloor = min(Layout.summaryDurationInfoMinReadableWidth, rowWidth)
-        return min(rowWidth, max(readableFloor, cappedWidth))
-    }
-
-    func summaryDurationVisualRatio(rawRatio: CGFloat, barAvailableWidth: CGFloat) -> CGFloat {
-        let normalizedRaw = min(1, max(0, rawRatio))
-        guard normalizedRaw > 0 else { return 0 }
-
-        let upperBound = Layout.summaryDurationShortRangeUpperBound
-        guard normalizedRaw < upperBound else { return normalizedRaw }
-
-        let minVisualRatio = summaryDurationMinVisualRatio(barAvailableWidth: barAvailableWidth)
-        guard minVisualRatio < upperBound else { return upperBound }
-
-        let t = normalizedRaw / upperBound
-        let eased = CGFloat(pow(Double(t), Double(Layout.summaryDurationShortRangeGamma)))
-        let mapped = minVisualRatio + (upperBound - minVisualRatio) * eased
-        return min(upperBound, max(minVisualRatio, mapped))
-    }
-
-    func summaryDurationMinVisualRatio(barAvailableWidth: CGFloat) -> CGFloat {
-        guard barAvailableWidth > 0 else { return 0 }
-        let widthRatio = Layout.summaryDurationMinVisualBarWidth / barAvailableWidth
-        let cap = Layout.summaryDurationShortRangeUpperBound * Layout.summaryDurationShortRangeMinRatioFactor
-        return min(cap, max(0, widthRatio))
-    }
-
-    func summaryDurationBarColor(bookId: Int64) -> Color? {
-        guard let color = sheet.rankingBarColorsByBookId[bookId], color.state != .pending else {
-            return nil
-        }
+    func softenedSummaryBarColor(from color: ReadCalendarSegmentColor) -> Color {
         let red = CGFloat((color.backgroundRGBAHex >> 24) & 0xFF) / 255
         let green = CGFloat((color.backgroundRGBAHex >> 16) & 0xFF) / 255
         let blue = CGFloat((color.backgroundRGBAHex >> 8) & 0xFF) / 255
@@ -635,11 +482,6 @@ private extension ReadCalendarMonthSummarySheet {
             blue: blue + (1 - blue) * soften,
             opacity: alpha
         )
-    }
-
-    func summaryDurationRatio(readSeconds: Int, maxReadSeconds: Int) -> CGFloat {
-        guard readSeconds > 0, maxReadSeconds > 0 else { return 0 }
-        return min(1, max(0, CGFloat(readSeconds) / CGFloat(maxReadSeconds)))
     }
 
     func summaryDurationText(_ readSeconds: Int) -> String {
@@ -665,39 +507,6 @@ private extension ReadCalendarMonthSummarySheet {
             return "\(minutes)分"
         }
         return "\(readSeconds)秒"
-    }
-
-    func animateDurationBars(for books: [ReadCalendarMonthlyDurationBook]) {
-        durationBarAnimationTask?.cancel()
-        durationBarAnimationTask = nil
-        guard !books.isEmpty else {
-            durationBarRatiosByBookId = [:]
-            return
-        }
-
-        let maxReadSeconds = books.map(\.readSeconds).max() ?? 0
-        let targets = Dictionary(uniqueKeysWithValues: books.map { book in
-            (book.bookId, summaryDurationRatio(readSeconds: book.readSeconds, maxReadSeconds: maxReadSeconds))
-        })
-
-        durationBarRatiosByBookId = Dictionary(uniqueKeysWithValues: books.map { ($0.bookId, CGFloat.zero) })
-        if accessibilityReduceMotion {
-            durationBarRatiosByBookId = targets
-            return
-        }
-
-        durationBarAnimationTask = Task {
-            try? await Task.sleep(for: .milliseconds(60))
-            guard !Task.isCancelled else { return }
-            await MainActor.run {
-                for (index, book) in books.enumerated() {
-                    let target = targets[book.bookId] ?? 0
-                    withAnimation(.snappy(duration: 0.42, extraBounce: 0.04).delay(Double(index) * 0.05)) {
-                        durationBarRatiosByBookId[book.bookId] = target
-                    }
-                }
-            }
-        }
     }
 
     var monthFeedbackState: MonthFeedbackState {

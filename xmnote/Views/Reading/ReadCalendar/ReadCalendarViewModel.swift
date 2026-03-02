@@ -618,29 +618,32 @@ private extension ReadCalendarViewModel {
     }
 
     private func buildColorRequests(from state: MonthPageState) -> [ReadCalendarColorRequest] {
-        var requestMap: [Int64: ReadCalendarColorRequest] = [:]
-        for week in state.weeks {
-            for segment in week.segments where segment.color.state == .pending {
-                requestMap[segment.bookId] = ReadCalendarColorRequest(
-                    bookId: segment.bookId,
-                    bookName: segment.bookName,
-                    coverURL: segment.bookCoverURL
-                )
-            }
-        }
+        var seenBookIds = Set<Int64>()
+        var requests: [ReadCalendarColorRequest] = []
+
         for book in state.readingDurationTopBooks {
             if let color = state.rankingBarColorsByBookId[book.bookId], color.state != .pending {
                 continue
             }
-            requestMap[book.bookId] = ReadCalendarColorRequest(
+            guard seenBookIds.insert(book.bookId).inserted else { continue }
+            requests.append(ReadCalendarColorRequest(
                 bookId: book.bookId,
                 bookName: book.name,
                 coverURL: book.coverURL
-            )
+            ))
         }
-        return requestMap.values.sorted { lhs, rhs in
-            lhs.bookId < rhs.bookId
+
+        for week in state.weeks {
+            for segment in week.segments where segment.color.state == .pending {
+                guard seenBookIds.insert(segment.bookId).inserted else { continue }
+                requests.append(ReadCalendarColorRequest(
+                    bookId: segment.bookId,
+                    bookName: segment.bookName,
+                    coverURL: segment.bookCoverURL
+                ))
+            }
         }
+        return requests
     }
 
     func hasPendingSegmentColor(_ state: MonthPageState) -> Bool {
@@ -744,8 +747,7 @@ private extension ReadCalendarViewModel {
 
         var rankingColorsByBookId: [Int64: ReadCalendarSegmentColor] = [:]
         for book in topBooks {
-            guard let color = colorsByBookId[book.bookId] else { continue }
-            rankingColorsByBookId[book.bookId] = color
+            rankingColorsByBookId[book.bookId] = colorsByBookId[book.bookId] ?? .pending
         }
         return rankingColorsByBookId
     }
