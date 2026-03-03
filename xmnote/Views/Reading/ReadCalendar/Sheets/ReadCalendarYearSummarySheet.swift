@@ -1,9 +1,9 @@
 import SwiftUI
 
 /**
- * [INPUT]: 依赖 ReadCalendarContentView.YearSummarySheetData 提供年度汇总数据，依赖 ReadingDurationRankingChart 渲染年度时长排行
+ * [INPUT]: 依赖 ReadCalendarContentView.YearSummarySheetData 提供年度汇总数据，依赖 ReadingDurationRankingChart 渲染年度时长排行，依赖可选年份集合与切换回调实现年度切换
  * [OUTPUT]: 对外提供 ReadCalendarYearSummarySheet（年度阅读总结弹层）
- * [POS]: ReadCalendar 业务模块 Sheet，负责年度核心指标、年度 Top 榜单与月份贡献下钻入口
+ * [POS]: ReadCalendar 业务模块 Sheet，负责年度切换、核心指标同比、年度 Top 榜单与月度分布下钻入口
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
@@ -13,81 +13,171 @@ struct ReadCalendarYearSummarySheet: View {
         static let containerBottomInset: CGFloat = 28
         static let containerHorizontalInset: CGFloat = 22
         static let sectionSpacing: CGFloat = 16
-        static let metricsGridSpacing: CGFloat = 12
-        static let metricCardHeight: CGFloat = 78
+        static let contentTopInset: CGFloat = Spacing.base
+        static let stickyHeaderBottomSpacing: CGFloat = sectionSpacing
+        static let yearSwitcherBottomSpacing: CGFloat = 10
+        static let headerBottomSpacing: CGFloat = 14
+        static let yearSwitcherButtonSize: CGFloat = 32
+        static let metricsGridSpacing: CGFloat = 14
+        static let metricCardHeight: CGFloat = 62
         static let monthContributionBarHeight: CGFloat = 8
         static let monthContributionBarMinWidthRatio: CGFloat = 0.06
         static let monthContributionSectionTopPadding: CGFloat = 2
         static let monthContributionItemSpacing: CGFloat = Spacing.cozy
         static let monthContributionRowTrailingSpacing: CGFloat = Spacing.half
+        static let summaryDurationBarSoftenRatio: CGFloat = 0.50
     }
 
     struct YearMetricSpec: Identifiable {
+        enum DeltaTrend {
+            case up
+            case down
+            case flat
+        }
+
+        struct DeltaPresentation {
+            let text: String
+            let trend: DeltaTrend
+        }
+
         let id: String
         let title: String
         let value: String
+        let secondaryValue: DeltaPresentation?
         let iconName: String
         let gradientRole: ReadCalendarSummaryGradientRole
     }
 
     let sheet: ReadCalendarContentView.YearSummarySheetData
+    let availableYears: [Int]
+    let onSwitchYear: (Int) -> Void
     let onSelectMonth: (Date) -> Void
     let onRetry: () -> Void
+
+    @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
         ScrollView(.vertical, showsIndicators: false) {
             VStack(alignment: .leading, spacing: Layout.sectionSpacing) {
-                summaryHeader
-                summaryMetricGrid
+                VStack(alignment: .leading, spacing: Layout.sectionSpacing) {
+                    summaryHeader
+                    summaryMetricGrid
+                }
+
                 summaryTopRanking
                 summaryMonthContribution
             }
-            .padding(.top, Layout.containerTopInset)
+            .padding(.top, Layout.contentTopInset)
             .padding(.bottom, Layout.containerBottomInset)
             .padding(.horizontal, Layout.containerHorizontalInset)
         }
-        .background(
-            LinearGradient(
-                colors: [
-                    Color.readCalendarSelectionFill.opacity(0.34),
-                    Color.bgSheet
-                ],
-                startPoint: .top,
-                endPoint: .bottom
-            )
-            .ignoresSafeArea()
-        )
+        // 使用系统 safeAreaBar 承载顶部切换区，滚动时由系统提供备忘录式边缘模糊过渡。
+        .safeAreaBar(edge: .top, spacing: 0) {
+            summaryStickyHeader
+        }
+        .scrollEdgeEffectStyle(.soft, for: .top)
+        .animation(.snappy(duration: 0.24), value: sheet)
     }
 }
 
 private extension ReadCalendarYearSummarySheet {
-    var summaryHeader: some View {
-        VStack(alignment: .leading, spacing: Spacing.compact) {
-            Text("\(sheet.year) 年阅读总结")
-                .font(.title3.weight(.semibold))
-                .foregroundStyle(Color.textPrimary)
-                .monospacedDigit()
-
-            Text(summarySubtitle)
-                .font(.footnote)
-                .foregroundStyle(Color.textSecondary)
-                .lineLimit(2)
-                .lineSpacing(1)
-                .contentTransition(.numericText())
+    var summaryStickyHeader: some View {
+        VStack(spacing: 0) {
+            summaryYearSwitcher
+                .padding(.horizontal, Layout.containerHorizontalInset)
+                .padding(.top, Layout.containerTopInset)
+                .padding(.bottom, Layout.stickyHeaderBottomSpacing)
         }
     }
 
-    var summarySubtitle: String {
+    var summaryYearSwitcher: some View {
+        let previousYear = adjacentYear(offset: -1)
+        let nextYear = adjacentYear(offset: 1)
+
+        return HStack(spacing: Spacing.base) {
+            summaryYearSwitchButton(systemName: "chevron.left", isEnabled: previousYear != nil) {
+                guard let previousYear else { return }
+                onSwitchYear(previousYear)
+            }
+
+            Spacer(minLength: 0)
+
+            Text(String(sheet.year))
+                .font(.title3.weight(.semibold))
+                .foregroundStyle(Color.textPrimary)
+                .monospacedDigit()
+                .contentTransition(.numericText())
+                .animation(.snappy(duration: 0.24), value: sheet.year)
+
+            Spacer(minLength: 0)
+
+            summaryYearSwitchButton(systemName: "chevron.right", isEnabled: nextYear != nil) {
+                guard let nextYear else { return }
+                onSwitchYear(nextYear)
+            }
+        }
+        .padding(.bottom, Layout.yearSwitcherBottomSpacing)
+    }
+
+    func summaryYearSwitchButton(
+        systemName: String,
+        isEnabled: Bool,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            Image(systemName: systemName)
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(isEnabled ? Color.textPrimary : Color.textHint.opacity(0.85))
+                .frame(width: Layout.yearSwitcherButtonSize, height: Layout.yearSwitcherButtonSize)
+                .background(
+                    Circle()
+                        .fill(Color.contentBackground.opacity(isEnabled ? 0.96 : 0.72))
+                )
+                .overlay {
+                    Circle()
+                        .stroke(Color.cardBorder.opacity(0.8), lineWidth: CardStyle.borderWidth)
+                }
+        }
+        .buttonStyle(.plain)
+        .disabled(!isEnabled)
+    }
+
+    var summaryHeader: some View {
+        VStack(alignment: .leading, spacing: Spacing.compact) {
+            Text("阅读总结")
+                .font(.headline.weight(.semibold))
+                .foregroundStyle(Color.textPrimary)
+            summarySubtitleText
+                .font(.footnote)
+                .contentTransition(.numericText())
+                .lineLimit(2)
+                .lineSpacing(1)
+        }
+        .padding(.bottom, Layout.headerBottomSpacing)
+    }
+
+    var summarySubtitleText: Text {
+        let secondaryColor = Color.textSecondary.opacity(0.9)
         if sheet.isLoading {
-            return "正在聚合年度数据..."
+            return Text("正在聚合年度数据...").foregroundStyle(secondaryColor)
         }
         if let errorMessage = sheet.errorMessage {
-            return errorMessage
+            return Text(errorMessage).foregroundStyle(Color.feedbackWarning)
         }
         if sheet.activeDays == 0 && sheet.totalReadSeconds == 0 {
-            return "这一年还没有产生阅读记录。"
+            return Text("这一年还没有产生阅读记录。").foregroundStyle(secondaryColor)
         }
-        return "共阅读 \(durationTextAllowZero(sheet.totalReadSeconds))，活跃 \(sheet.activeDays) 天。"
+
+        guard let activeDaysDelta = sheet.activeDaysDelta,
+              let readSecondsDelta = sheet.readSecondsDelta,
+              let noteCountDelta = sheet.noteCountDelta else {
+            return Text("这是第一段年度记录，慢慢来就好。").foregroundStyle(secondaryColor)
+        }
+
+        let activeDelta = deltaPresentation(activeDaysDelta, unit: "天")
+        let durationDelta = durationDeltaPresentation(readSecondsDelta)
+        let noteDelta = deltaPresentation(noteCountDelta, unit: "条")
+        return Text("\(Text("比上年度：").foregroundStyle(secondaryColor))\(Text("阅读天数 ").foregroundStyle(secondaryColor))\(Text(activeDelta.text).foregroundStyle(deltaColor(activeDelta.trend)))\(Text("，时长 ").foregroundStyle(secondaryColor))\(Text(durationDelta.text).foregroundStyle(deltaColor(durationDelta.trend)))\(Text("，书摘 ").foregroundStyle(secondaryColor))\(Text(noteDelta.text).foregroundStyle(deltaColor(noteDelta.trend)))\(Text("。").foregroundStyle(secondaryColor))")
     }
 
     var summaryMetricGrid: some View {
@@ -107,29 +197,42 @@ private extension ReadCalendarYearSummarySheet {
         [
             YearMetricSpec(
                 id: "activeDays",
-                title: "活跃天数",
-                value: "\(sheet.activeDays) 天",
-                iconName: "calendar.badge.clock",
+                title: "阅读天数",
+                value: "\(sheet.activeDays)天",
+                secondaryValue: sheet.activeDaysDelta.map { delta in
+                    let deltaDisplay = deltaPresentation(delta, unit: "天")
+                    return .init(text: "比上年度 \(deltaDisplay.text)", trend: deltaDisplay.trend)
+                },
+                iconName: "calendar",
                 gradientRole: .activity
             ),
             YearMetricSpec(
                 id: "readDuration",
                 title: "阅读时长",
                 value: durationTextAllowZero(sheet.totalReadSeconds),
+                secondaryValue: sheet.readSecondsDelta.map { delta in
+                    let deltaDisplay = durationDeltaPresentation(delta)
+                    return .init(text: "比上年度 \(deltaDisplay.text)", trend: deltaDisplay.trend)
+                },
                 iconName: "hourglass",
                 gradientRole: .momentum
             ),
             YearMetricSpec(
                 id: "notes",
                 title: "书摘数量",
-                value: "\(sheet.noteCount) 条",
-                iconName: "note.text",
+                value: "\(sheet.noteCount)条",
+                secondaryValue: sheet.noteCountDelta.map { delta in
+                    let deltaDisplay = deltaPresentation(delta, unit: "条")
+                    return .init(text: "比上年度 \(deltaDisplay.text)", trend: deltaDisplay.trend)
+                },
+                iconName: "text.quote",
                 gradientRole: .trend
             ),
             YearMetricSpec(
                 id: "finishedBooks",
                 title: "完读书籍",
-                value: "\(sheet.finishedBookCount) 本",
+                value: "\(sheet.finishedBookCount)本",
+                secondaryValue: nil,
                 iconName: "checkmark.seal",
                 gradientRole: .completion
             )
@@ -137,55 +240,89 @@ private extension ReadCalendarYearSummarySheet {
     }
 
     func summaryMetricCard(_ metric: YearMetricSpec) -> some View {
-        let gradient = Color.readCalendarSummaryGradientSpec(for: metric.gradientRole)
-        return HStack(alignment: .center, spacing: Spacing.cozy) {
-            Image(systemName: metric.iconName)
-                .font(.system(size: 16, weight: .medium))
-                .foregroundStyle(
-                    LinearGradient(
-                        colors: [gradient.start, gradient.end],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                )
-                .frame(width: 30, height: 30)
-                .background(
-                    Circle()
-                        .fill(
-                            LinearGradient(
-                                colors: [
-                                    gradient.start.opacity(0.24),
-                                    gradient.end.opacity(0.12)
-                                ],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            )
-                        )
-                )
+        HStack(alignment: .center, spacing: Spacing.base) {
+            summaryMetricIcon(systemName: metric.iconName, role: metric.gradientRole)
 
             VStack(alignment: .leading, spacing: 1) {
                 Text(metric.title)
-                    .font(.caption)
-                    .foregroundStyle(Color.textSecondary)
+                    .font(.caption2)
+                    .foregroundStyle(Color.readCalendarSubtleText)
                 Text(metric.value)
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(Color.textPrimary)
                     .monospacedDigit()
+                    .contentTransition(.numericText())
                     .lineLimit(1)
-                    .minimumScaleFactor(0.9)
+                if let secondaryValue = metric.secondaryValue {
+                    Text(secondaryValue.text)
+                        .font(.caption2)
+                        .foregroundStyle(deltaColor(secondaryValue.trend))
+                        .monospacedDigit()
+                        .contentTransition(.numericText())
+                        .lineLimit(1)
+                }
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
+
+            Spacer(minLength: 0)
         }
         .padding(.horizontal, Spacing.base)
+        .padding(.vertical, 7)
         .frame(maxWidth: .infinity, minHeight: Layout.metricCardHeight, alignment: .leading)
         .background(
-            RoundedRectangle(cornerRadius: CornerRadius.blockMedium, style: .continuous)
+            RoundedRectangle(cornerRadius: CornerRadius.blockLarge, style: .continuous)
                 .fill(Color.contentBackground.opacity(0.97))
         )
         .overlay {
-            RoundedRectangle(cornerRadius: CornerRadius.blockMedium, style: .continuous)
-                .stroke(Color.cardBorder.opacity(0.82), lineWidth: CardStyle.borderWidth)
+            RoundedRectangle(cornerRadius: CornerRadius.blockLarge, style: .continuous)
+                // 二级指标卡降低描边存在感，保留层级同时不压过数据本身。
+                .stroke(Color.surfaceBorderDefault.opacity(0.84), lineWidth: CardStyle.borderWidth)
         }
+    }
+
+    func summaryGradientStops(for role: ReadCalendarSummaryGradientRole) -> [Gradient.Stop] {
+        let spec = Color.readCalendarSummaryGradientSpec(for: role)
+        let opacity: CGFloat = colorScheme == .dark ? 0.96 : 1.0
+        return [
+            .init(color: spec.start.opacity(opacity), location: 0),
+            .init(color: spec.mid.opacity(opacity), location: 0.52),
+            .init(color: spec.end.opacity(opacity), location: 1)
+        ]
+    }
+
+    func summaryMetricIcon(systemName: String, role: ReadCalendarSummaryGradientRole) -> some View {
+        RoundedRectangle(cornerRadius: CornerRadius.inlayMedium, style: .continuous)
+            .fill(
+                LinearGradient(
+                    gradient: Gradient(stops: summaryGradientStops(for: role)),
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+            )
+            .frame(width: 24, height: 24)
+            .overlay {
+                Image(systemName: systemName)
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(Color.white.opacity(0.96))
+            }
+            .overlay {
+                RoundedRectangle(cornerRadius: CornerRadius.inlayMedium, style: .continuous)
+                    .stroke(Color.white.opacity(0.24), lineWidth: 0.6)
+            }
+            .overlay {
+                RoundedRectangle(cornerRadius: CornerRadius.inlayMedium, style: .continuous)
+                    .stroke(
+                        LinearGradient(
+                            colors: [
+                                Color.white.opacity(0.18),
+                                Color.white.opacity(0.02)
+                            ],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        ),
+                        lineWidth: 0.5
+                    )
+            }
+            .shadow(color: Color.black.opacity(0.10), radius: 1.2, x: 0, y: 0.8)
     }
 
     var summaryTopRanking: some View {
@@ -197,7 +334,7 @@ private extension ReadCalendarYearSummarySheet {
             ReadingDurationRankingChart(
                 title: "年度阅读时长 Top",
                 insightText: Text(topRankingInsightText).foregroundStyle(Color.textSecondary),
-                emptyText: "暂无阅读时长排行",
+                emptyText: "这一年还没有阅读时长排行",
                 items: topRankingItems,
                 animationIdentity: topRankingAnimationIdentity,
                 onBookTap: nil
@@ -207,30 +344,37 @@ private extension ReadCalendarYearSummarySheet {
                 HStack(spacing: Spacing.half) {
                     ProgressView()
                         .controlSize(.small)
-                    Text("正在计算年度 Top...")
+                    Text("正在整理年度 Top...")
                         .font(.footnote)
                         .foregroundStyle(Color.textHint)
                 }
             }
         }
+        // 年度 Top 区域同样裁切过渡帧，保证月/年排行动画边界表现一致。
+        .clipped()
     }
 
     var topRankingInsightText: String {
-        if sheet.topBooks.isEmpty {
-            return "按自然年聚合阅读时长"
+        if sheet.isLoading {
+            return "正在汇总年度阅读排行..."
         }
-        return "按自然年精确聚合，共 \(sheet.topBooks.count) 本"
+        if sheet.topBooks.isEmpty {
+            return "这一年还没有形成阅读时长排行"
+        }
+        return "这一年读得最久的 \(sheet.topBooks.count) 本书"
     }
 
     var topRankingItems: [ReadingDurationRankingChart.Item] {
         sheet.topBooks.map { book in
-            ReadingDurationRankingChart.Item(
+            // 年度 TOP 与月度总结统一：优先使用封面取色，pending 态显示占位，失败态使用仓储回退色。
+            let bar = summaryDurationBarPresentation(bookId: book.bookId)
+            return ReadingDurationRankingChart.Item(
                 id: book.bookId,
                 title: book.name,
                 coverURL: book.coverURL,
                 durationSeconds: book.readSeconds,
-                barTint: softenedTopBarTint(for: book.bookId),
-                barState: .fallback
+                barTint: bar.color,
+                barState: bar.state
             )
         }
     }
@@ -242,21 +386,49 @@ private extension ReadCalendarYearSummarySheet {
         return "year-\(sheet.year)-\(signature)-\(sheet.totalReadSeconds)"
     }
 
-    func softenedTopBarTint(for bookId: Int64) -> Color {
-        let palette = Color.readCalendarEventPalette
-        guard !palette.isEmpty else { return Color.readCalendarEventPendingBase.opacity(0.9) }
-        let index = Int(UInt64(bitPattern: bookId) % UInt64(palette.count))
-        return palette[index].opacity(0.92)
+    func summaryDurationBarPresentation(bookId: Int64) -> (
+        color: Color,
+        state: ReadingDurationRankingChart.Item.BarState
+    ) {
+        guard let color = sheet.rankingBarColorsByBookId[bookId] else {
+            return (summaryDurationPendingBarColor, .placeholder)
+        }
+        switch color.state {
+        case .pending:
+            return (summaryDurationPendingBarColor, .placeholder)
+        case .resolved:
+            return (softenedSummaryBarColor(from: color), .resolved)
+        case .failed:
+            return (softenedSummaryBarColor(from: color), .fallback)
+        }
+    }
+
+    var summaryDurationPendingBarColor: Color {
+        Color.readCalendarEventPendingBase
+    }
+
+    func softenedSummaryBarColor(from color: ReadCalendarSegmentColor) -> Color {
+        let red = CGFloat((color.backgroundRGBAHex >> 24) & 0xFF) / 255
+        let green = CGFloat((color.backgroundRGBAHex >> 16) & 0xFF) / 255
+        let blue = CGFloat((color.backgroundRGBAHex >> 8) & 0xFF) / 255
+        let alpha = CGFloat(color.backgroundRGBAHex & 0xFF) / 255
+        let soften = Layout.summaryDurationBarSoftenRatio
+        return Color(
+            red: red + (1 - red) * soften,
+            green: green + (1 - green) * soften,
+            blue: blue + (1 - blue) * soften,
+            opacity: alpha
+        )
     }
 
     var summaryMonthContribution: some View {
         VStack(alignment: .leading, spacing: Layout.monthContributionItemSpacing) {
-            Text("12 个月贡献")
+            Text("月度阅读分布")
                 .font(.headline.weight(.semibold))
                 .foregroundStyle(Color.textPrimary)
 
             if sheet.monthContributions.isEmpty {
-                Text("暂无月份贡献数据")
+                Text("暂无月度阅读分布数据")
                     .font(.footnote)
                     .foregroundStyle(Color.textHint)
             } else {
@@ -287,7 +459,7 @@ private extension ReadCalendarYearSummarySheet {
                     .frame(width: 34, alignment: .leading)
                     .monospacedDigit()
 
-                Text("活跃 \(month.activeDays) 天")
+                Text("阅读 \(month.activeDays) 天")
                     .font(.caption)
                     .foregroundStyle(Color.textSecondary)
                     .lineLimit(1)
@@ -330,6 +502,34 @@ private extension ReadCalendarYearSummarySheet {
         }
         .padding(.vertical, Spacing.compact)
         .contentShape(Rectangle())
+    }
+
+    func adjacentYear(offset: Int) -> Int? {
+        let targetYear = sheet.year + offset
+        return availableYears.contains(targetYear) ? targetYear : nil
+    }
+
+    func deltaPresentation(_ delta: Int, unit: String) -> YearMetricSpec.DeltaPresentation {
+        if delta > 0 { return .init(text: "+\(delta)\(unit)", trend: .up) }
+        if delta < 0 { return .init(text: "-\(abs(delta))\(unit)", trend: .down) }
+        return .init(text: "持平", trend: .flat)
+    }
+
+    func durationDeltaPresentation(_ delta: Int) -> YearMetricSpec.DeltaPresentation {
+        if delta > 0 { return .init(text: "+\(durationTextAllowZero(delta))", trend: .up) }
+        if delta < 0 { return .init(text: "-\(durationTextAllowZero(abs(delta)))", trend: .down) }
+        return .init(text: "持平", trend: .flat)
+    }
+
+    func deltaColor(_ trend: YearMetricSpec.DeltaTrend) -> Color {
+        switch trend {
+        case .up:
+            return Color.feedbackSuccess
+        case .down:
+            return Color.feedbackWarning
+        case .flat:
+            return Color.textSecondary
+        }
     }
 
     func monthContributionRatio(_ value: Int, maxReadSeconds: Int) -> CGFloat {

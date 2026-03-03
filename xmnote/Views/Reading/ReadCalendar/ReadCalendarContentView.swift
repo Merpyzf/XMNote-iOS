@@ -181,7 +181,12 @@ struct ReadCalendarContentView: View {
         let totalReadSeconds: Int
         let noteCount: Int
         let finishedBookCount: Int
+        let activeDaysDelta: Int?
+        let readSecondsDelta: Int?
+        let noteCountDelta: Int?
         let topBooks: [ReadCalendarMonthlyDurationBook]
+        // 年度 TOP 条颜色，按 bookId 透传给 Sheet，保持与月度总结一致的封面取色体验。
+        let rankingBarColorsByBookId: [Int64: ReadCalendarSegmentColor]
         let monthContributions: [YearSummaryMonthContribution]
         let isLoading: Bool
         let errorMessage: String?
@@ -192,16 +197,22 @@ struct ReadCalendarContentView: View {
     private enum Layout {
         static let topControlTopPadding: CGFloat = 10
         static let topControlBottomPadding: CGFloat = 14
+        static let topControlBackgroundOpacity: CGFloat = 1
+        static let topControlLayerZIndex: Double = 12
+        static let streakHintLayerZIndex: Double = 11
+        static let contentLayerZIndex: Double = 0
         static let weekdayHeaderHeight: CGFloat = 32
         static let pageMinHeight: CGFloat = 252
         static let calendarInnerTopPadding: CGFloat = Spacing.cozy
-        static let calendarInnerBottomPadding: CGFloat = 10
+        static let calendarInnerBottomPadding: CGFloat = 0
+        static let contentBleedBottomInset: CGFloat = Spacing.cozy
+        static let interactiveBottomInset: CGFloat = Spacing.half
         static let headerToGridSpacing: CGFloat = Spacing.half
         static let gridTopInset: CGFloat = 2
         static let streakHintBottomPadding: CGFloat = Spacing.cozy
         static let summarySheetCompactRatio: CGFloat = 0.48
         static let summaryFloatingButtonTrailing: CGFloat = Spacing.screenEdge
-        static let summaryFloatingButtonBottom: CGFloat = Spacing.double
+        static let summaryFloatingButtonBottomBase: CGFloat = Spacing.base
         static let summaryFloatingButtonShowResponse: CGFloat = 0.34
         static let summaryFloatingButtonShowDamping: CGFloat = 0.82
         static let summaryFloatingButtonHideDuration: CGFloat = 0.18
@@ -217,18 +228,11 @@ struct ReadCalendarContentView: View {
         static let summaryFloatingButtonInteractionThrottle: TimeInterval = 0.25
         static let yearHeatmapGridSpacing: CGFloat = Spacing.base
         static let yearHeatmapMonthCardSpacing: CGFloat = Spacing.half
-        static let yearHeatmapMonthCardPadding: CGFloat = Spacing.cozy
+        static let yearHeatmapMonthCardPadding: CGFloat = Spacing.contentEdge
         static let yearHeatmapMonthCardTitleHeight: CGFloat = 20
-        static let yearHeatmapMonthGridHeight: CGFloat = 92
-        /// 按“标题 + 网格 + 上下内边距”计算卡高，避免固定值导致底部冗余空白。
-        static var yearHeatmapMonthCardHeight: CGFloat {
-            yearHeatmapMonthCardPadding * 2
-                + yearHeatmapMonthCardTitleHeight
-                + yearHeatmapMonthCardSpacing
-                + yearHeatmapMonthGridHeight
-        }
         static let yearHeatmapCompactWeekCount = 6
         static let yearHeatmapLegendSquare: CGFloat = 10
+        static let yearHeatmapLoadingCellSpacing: CGFloat = 3
         static let yearHeatmapLegendTopPadding: CGFloat = Spacing.half
         static let yearHeatmapMonthCardCornerRadius: CGFloat = CornerRadius.containerMedium
         static let yearHeatmapErrorBannerHorizontalInset: CGFloat = Spacing.screenEdge
@@ -273,6 +277,11 @@ struct ReadCalendarContentView: View {
             )
                 .padding(.top, Layout.topControlTopPadding)
                 .padding(.bottom, Layout.topControlBottomPadding)
+                .background {
+                    Color.windowBackground.opacity(Layout.topControlBackgroundOpacity)
+                }
+                // 保证底部沉浸滚动时，顶部控制区始终位于最上层。
+                .zIndex(Layout.topControlLayerZIndex)
 
             if let streakHintMessage,
                props.rootContentState == .content,
@@ -282,9 +291,12 @@ struct ReadCalendarContentView: View {
                     .padding(.horizontal, Spacing.screenEdge)
                     .padding(.bottom, Layout.streakHintBottomPadding)
                     .transition(.move(edge: .top).combined(with: .opacity))
+                    .zIndex(Layout.streakHintLayerZIndex)
             }
 
             integratedCalendarContainer
+                .ignoresSafeArea(.container, edges: .bottom)
+                .zIndex(Layout.contentLayerZIndex)
 
             if let errorMessage = props.errorMessage,
                props.rootContentState == .content {
@@ -372,7 +384,8 @@ struct ReadCalendarContentView: View {
             )
                 .presentationDetents([.fraction(Layout.summarySheetCompactRatio), .large])
                 .presentationDragIndicator(.visible)
-                .presentationBackground(Color.bgSheet)
+                // 宿主层使用中等强度系统材质，保证玻璃效果可感知且半/全展开一致。
+                .presentationBackground(.regularMaterial)
         }
         .sheet(isPresented: $isYearSummarySheetPresented, onDismiss: {
             markSummaryFloatingButtonInteraction(
@@ -382,6 +395,12 @@ struct ReadCalendarContentView: View {
         }) {
             ReadCalendarYearSummarySheet(
                 sheet: props.yearSummary,
+                availableYears: props.availableYears,
+                onSwitchYear: { year in
+                    withAnimation(.snappy(duration: 0.3)) {
+                        onYearSelectionChanged(year)
+                    }
+                },
                 onSelectMonth: { monthStart in
                     withAnimation(.snappy(duration: 0.3)) {
                         onPagerSelectionChanged(monthStart)
@@ -392,7 +411,8 @@ struct ReadCalendarContentView: View {
             )
             .presentationDetents([.fraction(Layout.yearSummarySheetCompactRatio), .large])
             .presentationDragIndicator(.visible)
-            .presentationBackground(Color.bgSheet)
+            // 宿主层使用中等强度系统材质，保证玻璃效果可感知且半/全展开一致。
+            .presentationBackground(.regularMaterial)
         }
     }
 }
@@ -434,7 +454,7 @@ private extension ReadCalendarContentView {
     }
 
     var summaryFloatingButtonIconName: String {
-        isHeatmapMode ? "calendar.badge.clock" : "chart.bar.xaxis"
+        "chart.bar.xaxis"
     }
 
     var summaryFloatingButtonAccessibilityLabel: String {
@@ -573,6 +593,7 @@ private extension ReadCalendarContentView {
 
     func switchSummarySheetMonth(to monthStart: Date) {
         let normalizedMonthStart = Calendar.current.startOfDay(for: monthStart)
+        guard normalizedMonthStart != props.pagerSelection else { return }
         withAnimation(.snappy(duration: 0.3)) {
             onPagerSelectionChanged(normalizedMonthStart)
             summarySheetMonthStart = normalizedMonthStart
@@ -726,14 +747,16 @@ private extension ReadCalendarContentView {
     }
 
     var integratedCalendarContainer: some View {
-        VStack(spacing: Layout.headerToGridSpacing) {
-            ReadCalendarWeekdayHeader(minHeight: Layout.weekdayHeaderHeight)
-                .zIndex(1)
+        VStack(spacing: shouldShowWeekdayHeader ? Layout.headerToGridSpacing : 0) {
+            if shouldShowWeekdayHeader {
+                ReadCalendarWeekdayHeader(minHeight: Layout.weekdayHeaderHeight)
+                    .zIndex(1)
+            }
             contentContainer
                 .zIndex(0)
         }
         .padding(.top, Layout.calendarInnerTopPadding)
-        .padding(.bottom, Layout.calendarInnerBottomPadding)
+        .padding(.bottom, Layout.calendarInnerBottomPadding + interactiveBottomInset)
     }
 
     var contentContainer: some View {
@@ -751,22 +774,25 @@ private extension ReadCalendarContentView {
                     .transition(.opacity.combined(with: .scale(scale: 0.98)))
             }
         }
-        .padding(.top, Layout.gridTopInset)
+        .padding(.top, shouldShowWeekdayHeader ? Layout.gridTopInset : 0)
         .frame(maxWidth: .infinity, alignment: .top)
-        .overlay(alignment: .bottomTrailing) {
-            if shouldMountSummaryFloatingButton {
-                ReadCalendarSummaryFloatingButton(
-                    iconSystemName: summaryFloatingButtonIconName,
-                    accessibilityLabel: summaryFloatingButtonAccessibilityLabel,
-                    action: openSummaryManually
-                )
+        .overlay {
+            GeometryReader { proxy in
+                if shouldMountSummaryFloatingButton {
+                    ReadCalendarSummaryFloatingButton(
+                        iconSystemName: summaryFloatingButtonIconName,
+                        accessibilityLabel: summaryFloatingButtonAccessibilityLabel,
+                        action: openSummaryManually
+                    )
                     .padding(.trailing, Layout.summaryFloatingButtonTrailing)
-                    .padding(.bottom, Layout.summaryFloatingButtonBottom)
+                    .padding(.bottom, floatingButtonBottomPadding(safeAreaBottom: proxy.safeAreaInsets.bottom))
                     .opacity(shouldShowSummaryFloatingButton ? 1 : 0)
                     .scaleEffect(shouldShowSummaryFloatingButton ? 1 : summaryFloatingButtonHiddenScale)
                     .offset(y: shouldShowSummaryFloatingButton ? 0 : summaryFloatingButtonHiddenOffsetY)
                     .allowsHitTesting(shouldShowSummaryFloatingButton)
                     .accessibilityHidden(!shouldShowSummaryFloatingButton)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
+                }
             }
         }
     }
@@ -778,6 +804,23 @@ private extension ReadCalendarContentView {
         } else {
             calendarPager
         }
+    }
+
+    var shouldShowWeekdayHeader: Bool {
+        props.displayMode != .heatmap
+    }
+
+    var interactiveBottomInset: CGFloat {
+        Layout.interactiveBottomInset
+    }
+
+    var immersiveScrollTailInset: CGFloat {
+        Layout.contentBleedBottomInset
+    }
+
+    func floatingButtonBottomPadding(safeAreaBottom: CGFloat) -> CGFloat {
+        let resolvedSafeAreaBottom = max(safeAreaBottom, Spacing.contentEdge)
+        return Layout.summaryFloatingButtonBottomBase + resolvedSafeAreaBottom
     }
 
     var calendarPager: some View {
@@ -826,6 +869,7 @@ private extension ReadCalendarContentView {
                         .padding(.horizontal, Spacing.screenEdge)
                         .padding(.top, Layout.yearHeatmapLegendTopPadding)
                 }
+                .padding(.bottom, immersiveScrollTailInset)
                 .frame(maxWidth: .infinity, alignment: .top)
             }
             .onScrollPhaseChange { _, phase in
@@ -835,6 +879,7 @@ private extension ReadCalendarContentView {
                 )
             }
             .scrollBounceBehavior(.basedOnSize)
+            .ignoresSafeArea(.container, edges: .bottom)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
             .animation(.snappy(duration: 0.24), value: props.selectedYear)
         }
@@ -867,21 +912,11 @@ private extension ReadCalendarContentView {
                         },
                         onSelectDay: { _ in }
                     )
-                    .frame(
-                        maxWidth: .infinity,
-                        minHeight: Layout.yearHeatmapMonthGridHeight,
-                        maxHeight: Layout.yearHeatmapMonthGridHeight,
-                        alignment: .top
-                    )
+                    .frame(maxWidth: .infinity, alignment: .top)
                 }
             }
             .padding(Layout.yearHeatmapMonthCardPadding)
-            .frame(
-                maxWidth: .infinity,
-                minHeight: Layout.yearHeatmapMonthCardHeight,
-                maxHeight: Layout.yearHeatmapMonthCardHeight,
-                alignment: .topLeading
-            )
+            .frame(maxWidth: .infinity, alignment: .topLeading)
             .background(
                 RoundedRectangle(
                     cornerRadius: Layout.yearHeatmapMonthCardCornerRadius,
@@ -894,7 +929,8 @@ private extension ReadCalendarContentView {
                     cornerRadius: Layout.yearHeatmapMonthCardCornerRadius,
                     style: .continuous
                 )
-                .stroke(Color.cardBorder.opacity(0.72), lineWidth: CardStyle.borderWidth)
+                // 年热力图月卡使用弱边框，避免与内容色块争夺视觉焦点。
+                .stroke(Color.surfaceBorderSubtle, lineWidth: CardStyle.borderWidth)
             }
         }
         .buttonStyle(.plain)
@@ -915,6 +951,7 @@ private extension ReadCalendarContentView {
                         .transition(.opacity.combined(with: .scale(scale: 0.99)))
                 }
             }
+            .padding(.bottom, immersiveScrollTailInset)
             .frame(maxWidth: .infinity, alignment: .top)
         }
         .onScrollPhaseChange { _, phase in
@@ -924,6 +961,7 @@ private extension ReadCalendarContentView {
             )
         }
         .scrollBounceBehavior(.basedOnSize)
+        .ignoresSafeArea(.container, edges: .bottom)
         .animation(.smooth(duration: 0.24), value: pageState.loadState)
     }
 
@@ -1068,22 +1106,17 @@ private extension ReadCalendarContentView {
     var yearHeatmapLoadingGrid: some View {
         VStack(spacing: 4) {
             ForEach(0..<Layout.yearHeatmapCompactWeekCount, id: \.self) { _ in
-                HStack(spacing: 0) {
+                HStack(spacing: Layout.yearHeatmapLoadingCellSpacing) {
                     ForEach(0..<7, id: \.self) { _ in
                         RoundedRectangle(cornerRadius: CornerRadius.inlayTiny, style: .continuous)
                             .fill(Color.readCalendarSelectionFill.opacity(0.42))
-                            .frame(width: Layout.yearHeatmapLegendSquare, height: Layout.yearHeatmapLegendSquare)
                             .frame(maxWidth: .infinity)
+                            .aspectRatio(1, contentMode: .fit)
                     }
                 }
             }
         }
-        .frame(
-            maxWidth: .infinity,
-            minHeight: Layout.yearHeatmapMonthGridHeight,
-            maxHeight: Layout.yearHeatmapMonthGridHeight,
-            alignment: .top
-        )
+        .frame(maxWidth: .infinity, alignment: .top)
     }
 
     var yearHeatmapLegend: some View {
@@ -1092,9 +1125,9 @@ private extension ReadCalendarContentView {
                 .font(.caption)
                 .foregroundStyle(Color.textSecondary)
 
-            ForEach(0...4, id: \.self) { level in
+            ForEach(HeatmapLevel.allCases.filter { $0 != .none }, id: \.rawValue) { level in
                 RoundedRectangle(cornerRadius: CornerRadius.inlayTiny, style: .continuous)
-                    .fill(yearHeatmapLegendColor(level: level))
+                    .fill(level.color)
                     .frame(width: Layout.yearHeatmapLegendSquare, height: Layout.yearHeatmapLegendSquare)
             }
 
@@ -1102,11 +1135,7 @@ private extension ReadCalendarContentView {
                 .font(.caption)
                 .foregroundStyle(Color.textSecondary)
         }
-        .frame(maxWidth: .infinity, alignment: .trailing)
-    }
-
-    func yearHeatmapLegendColor(level: Int) -> Color {
-        HeatmapLevel(rawValue: max(0, min(4, level)))?.color ?? .heatmapNone
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 
@@ -1135,7 +1164,11 @@ private extension ReadCalendarContentView {
                 totalReadSeconds: 0,
                 noteCount: 0,
                 finishedBookCount: 0,
+                activeDaysDelta: nil,
+                readSecondsDelta: nil,
+                noteCountDelta: nil,
                 topBooks: [],
+                rankingBarColorsByBookId: [:],
                 monthContributions: [],
                 isLoading: false,
                 errorMessage: nil

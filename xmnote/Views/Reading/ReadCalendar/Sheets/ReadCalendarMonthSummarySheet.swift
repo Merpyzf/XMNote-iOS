@@ -13,6 +13,8 @@ struct ReadCalendarMonthSummarySheet: View {
         static let summarySheetBottomInset: CGFloat = 28
         static let summarySheetHorizontalInset: CGFloat = 22
         static let summarySheetSectionSpacing: CGFloat = 16
+        static let summaryContentTopInset: CGFloat = Spacing.base
+        static let summaryStickyHeaderBottomSpacing: CGFloat = summarySheetSectionSpacing
         static let summarySheetMonthSwitcherBottomSpacing: CGFloat = 10
         static let summarySheetHeaderBottomSpacing: CGFloat = 14
         static let summaryMonthSwitcherButtonSize: CGFloat = 32
@@ -110,7 +112,6 @@ struct ReadCalendarMonthSummarySheet: View {
         ScrollView(.vertical, showsIndicators: false) {
             VStack(alignment: .leading, spacing: Layout.summarySheetSectionSpacing) {
                 VStack(alignment: .leading, spacing: Layout.summarySheetSectionSpacing) {
-                    summaryMonthSwitcher
                     summaryHeader
                     summaryMetricsGrid
                 }
@@ -118,20 +119,14 @@ struct ReadCalendarMonthSummarySheet: View {
 
                 summaryDurationRanking
             }
-            .padding(.top, Layout.summarySheetTopInset)
+            .padding(.top, Layout.summaryContentTopInset)
             .padding(.bottom, Layout.summarySheetBottomInset)
         }
-        .background(
-            LinearGradient(
-                colors: [
-                    Color.readCalendarSelectionFill.opacity(0.32),
-                    Color.bgSheet
-                ],
-                startPoint: .top,
-                endPoint: .bottom
-            )
-            .ignoresSafeArea()
-        )
+        // 使用系统 safeAreaBar 承载顶部切换区，滚动时由系统提供备忘录式边缘模糊过渡。
+        .safeAreaBar(edge: .top, spacing: 0) {
+            summaryStickyHeader
+        }
+        .scrollEdgeEffectStyle(.soft, for: .top)
         .animation(.snappy(duration: 0.24), value: sheet)
         .onAppear {
             syncRankingLoadingVisibility(isReady: isDurationRankingReady)
@@ -158,6 +153,15 @@ struct ReadCalendarMonthSummarySheet: View {
 }
 
 private extension ReadCalendarMonthSummarySheet {
+    var summaryStickyHeader: some View {
+        VStack(spacing: 0) {
+            summaryMonthSwitcher
+                .padding(.horizontal, Layout.summarySheetHorizontalInset)
+                .padding(.top, Layout.summarySheetTopInset)
+                .padding(.bottom, Layout.summaryStickyHeaderBottomSpacing)
+        }
+    }
+
     var summaryMonthSwitcher: some View {
         let previousMonth = adjacentMonth(offset: -1)
         let nextMonth = adjacentMonth(offset: 1)
@@ -169,7 +173,7 @@ private extension ReadCalendarMonthSummarySheet {
             }
 
             Spacer(minLength: 0)
-
+            
             Text(summaryMonthTitle(sheet.monthStart))
                 .font(.title3.weight(.semibold))
                 .foregroundStyle(Color.textPrimary)
@@ -373,7 +377,8 @@ private extension ReadCalendarMonthSummarySheet {
         )
         .overlay {
             RoundedRectangle(cornerRadius: CornerRadius.blockLarge, style: .continuous)
-                .stroke(Color.cardBorder, lineWidth: CardStyle.borderWidth)
+                // 二级指标卡降低描边存在感，保留层级同时不压过数据本身。
+                .stroke(Color.surfaceBorderDefault.opacity(0.84), lineWidth: CardStyle.borderWidth)
         }
     }
 
@@ -438,6 +443,8 @@ private extension ReadCalendarMonthSummarySheet {
         }
         .animation(.smooth(duration: Layout.summaryDurationRankingTransitionDuration), value: isDurationRankingReady)
         .animation(.smooth(duration: Layout.summaryDurationRankingTransitionDuration), value: isRankingLoadingVisible)
+        // 约束月份总结排行区的过渡位移范围，避免 transition 帧外溢到组件外。
+        .clipped()
         .padding(.horizontal, Layout.summarySheetHorizontalInset)
     }
 
