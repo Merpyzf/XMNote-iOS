@@ -9,11 +9,12 @@
 - `ReadingListPlaceholderView.swift`: 在读页内容容器（热力图小组件 + 列表占位）
 - `ReadingHeatmapWidgetView.swift`: 在读页热力图小组件（帮助弹层、日期点击回调）
 - `ReadingHeatmapWidgetViewModel.swift`: 热力图加载、跨天刷新与统计类型切换状态编排
-- `HeatmapHelpSheetView.swift`: 热力图说明弹层（纯展示）
+- `Sheets/HeatmapHelpSheetView.swift`: 热力图说明弹层（纯展示）
 - `TimelinePlaceholderView.swift`: 时间线占位
 
 ## 子目录
 
-- `ReadCalendar/`: 阅读日历子功能（11 个业务文件，含 Components/ 与 Sheets/）
+- `ReadCalendar/`: 阅读日历子功能（14 个业务文件，含 Components/ 与 Sheets/）
+- `Sheets/`: 在读模块业务弹层目录
 
 [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md

@@ -1,7 +1,7 @@
 /**
  * [INPUT]: 依赖 DesignTokens 视觉令牌与周网格输入（WeekData/EventSegment/DayPayload，含显示模式与事件条颜色三态）
  * [OUTPUT]: 对外提供 ReadCalendarMonthGrid（月视图周网格组件，支持热力图/活动事件/书籍封面三种展示模式）
- * [POS]: UIComponents/Foundation 的阅读日历可复用网格组件，承载日期格展示、选中态与多模式内容渲染
+ * [POS]: ReadCalendar 页面私有月网格组件，承载日期格展示、选中态与多模式内容渲染
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 

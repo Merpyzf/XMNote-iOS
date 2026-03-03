@@ -21,7 +21,7 @@
 - xmnote/Views/Personal/Backup/DataBackupView.swift
 - xmnote/Views/Personal/Backup/WebDAVServerListView.swift
 - xmnote/Views/Personal/Backup/WebDAVServerFormView.swift
-- xmnote/Views/Personal/Backup/BackupHistorySheetView.swift
+- xmnote/Views/Personal/Backup/Sheets/BackupHistorySheetView.swift
 - xmnote/Views/Reading/ReadingContainerView.swift
 - xmnote/Views/Reading/ReadingHeatmapWidgetView.swift
 - xmnote/Views/Reading/ReadCalendar/ReadCalendarView.swift

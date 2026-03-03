@@ -41,6 +41,7 @@
 ## UI组件归位规则（阻塞级）
 - 页面壳层（`*View` 页面入口/容器）唯一归属目录：`xmnote/Views/<Feature>/`。
 - 跨模块复用 UI 组件唯一归属目录：`xmnote/UIComponents`。
+- 新增组件前必须先扫描现有实现可复用性；若已有可复用组件，优先复用，仅在跨模块复用成立时才迁入 `xmnote/UIComponents`。
 - `xmnote/Views/<Feature>/Components` 仅允许页面私有子视图（服务当前 Feature），不得作为跨模块公共组件。
 - 业务 Sheet 必须放在 `xmnote/Views/<Feature>/Sheets/`，禁止与页面壳层混在同一文件。
 - `UIComponents` 只允许放置无业务状态、无数据访问、副作用可控的跨模块复用组件。
@@ -67,6 +68,7 @@
 ## 项目结构与模块组织
 - `XMNote.xcodeproj`：工程入口（scheme: `xmnote`）。
 - `xmnote/Localizable.xcstrings`：String Catalog，统一字符串管理（sourceLanguage: zh-Hans，含 en 占位）。
+- `xmnote/AppState`：应用级全局状态目录（SwiftUI Environment 注入）。
 - `xmnote/Views`、`xmnote/Navigation`：SwiftUI 页面、ViewModel 与路由（View + ViewModel 按功能模块共置）。
 - `xmnote/Domain`：Repository 协议与跨层模型。
 - `xmnote/Data`：Repository 实现与依赖组装。
@@ -85,6 +87,7 @@
 ## 自动同步模块清单（脚本生成）
 <!-- AUTO_SYNC_MODULES_START -->
 - 由 `scripts/sync_arch_docs.sh` 自动维护，请勿手工修改。
+- `xmnote/AppState`
 - `xmnote/Data`
 - `xmnote/Database`
 - `xmnote/Domain`

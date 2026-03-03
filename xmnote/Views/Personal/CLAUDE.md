@@ -6,7 +6,6 @@
 ## 成员清单
 
 - `PersonalView.swift`: 我的 Tab 核心入口
-- `PersonalPlaceholderView.swift`: 个人页占位
 
 ## 子目录
 

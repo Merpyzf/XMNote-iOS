@@ -3,7 +3,7 @@ import SwiftUI
 /**
  * [INPUT]: 依赖 SwiftUI 视图系统与 DesignTokens（Spacing/CornerRadius/Color）提供时长排行视觉语义
  * [OUTPUT]: 对外提供 ReadingDurationRankingChart（阅读时长排行图表）与 Item 数据输入模型
- * [POS]: UIComponents/Foundation 跨模块复用组件，承载月度/年度阅读时长排行展示
+ * [POS]: UIComponents/Charts 跨模块复用组件，承载月度/年度阅读时长排行展示
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 

@@ -6,6 +6,9 @@
 - `HeatmapChart使用说明.md`: HeatmapChart 组件接入指南与参数说明。
 - `CalendarMonthStepperBar使用说明.md`: CalendarMonthStepperBar 月份切换胶囊组件接入指南与参数说明。
 - `ReadCalendarMonthGrid使用说明.md`: ReadCalendarMonthGrid 月网格组件接入指南与参数说明。
+- `ReadingDurationRankingChart使用说明.md`: ReadingDurationRankingChart 阅读时长排行组件接入指南与参数说明。
+- `XMRemoteImage使用说明.md`: XMRemoteImage 统一远程图片组件接入指南与参数说明。
+- `XMGIFImageView使用说明.md`: XMGIFImageView GIF 动画承载组件接入指南与参数说明。
 - `BookContainerView使用说明.md`: BookContainerView 页面组件接入指南与参数说明。
 - `BookGridView使用说明.md`: BookGridView 页面组件接入指南与参数说明。
 - `BookGridItemView使用说明.md`: BookGridItemView 页面组件接入指南与参数说明。

@@ -119,6 +119,7 @@ L3 头部闸门：提交前必须执行 `bash scripts/verify_l3_protocol_headers
 术语对照表：`docs/architecture/术语对照表.md`（新增/重命名核心类、跨模块复用 UI、页面私有子视图、白名单核心页面组件时必须同步更新）。
 UI 核心白名单：`docs/architecture/UI核心组件白名单.md`（白名单变更必须与术语表保持同构）。
 组件归位闸门：页面壳层必须位于 `xmnote/Views/<Feature>/`；跨模块复用 UI 组件必须位于 `xmnote/UIComponents`；`xmnote/Views/<Feature>/Components` 仅允许页面私有子视图。
+组件新增准入：新增组件前必须先扫描现有实现可复用性；若已有可复用组件，优先复用，仅在跨模块复用成立时才迁入 `xmnote/UIComponents`。
 功能模块边界：`xmnote/RichTextEditor` 保持功能模块定位，不整体迁入 `UIComponents`；仅纯展示且跨页面复用的子组件允许抽取。
 学习输出要求：每完成一个功能开发并收到用户“任务已完成”信号后，必须输出本次涉及的 iOS 知识点总结，并提供面向 Android Compose 开发者的学习示例（包含 Android → iOS 思维映射与可运行示例代码）；学习文档统一存放在 `docs/learning/`。
 iOS26 参考基线：涉及液态玻璃与 iOS26 新特性实现时，必须优先对照 `docs/learning/iOS26液态玻璃与高相关新特性开发参考.md`；规范优先级为 Apple 官方文档 > 本地参考文档 > 具体实现细节。
@@ -250,6 +251,7 @@ L3 文件头部契约模板：
 - 业务 Sheet 必须位于 `xmnote/Views/<Feature>/Sheets/`。
 - `xmnote/UIComponents` 是跨模块复用 UI 组件唯一归属目录，禁止在 `xmnote/Utilities`、`xmnote/Services` 新增跨模块复用组件。
 - `xmnote/UIComponents` 的跨模块复用 UI 组件必须在术语表中标记为 `UI-复用`。
+- 新增组件前必须先扫描现有实现可复用性；若已有可复用组件，优先复用，仅在跨模块复用成立时才迁入 `xmnote/UIComponents`。
 - `docs/architecture/UI核心组件白名单.md` 中的组件必须在术语表中标记为 `UI-核心页面`。
 - 重要 UI 组件必须在 `docs/architecture/UI组件文档清单.md` 有登记，且对应使用文档位于 `docs/component-guides/`。
 - `docs/architecture/UI核心组件白名单.md` 中组件必须在 `docs/architecture/UI组件文档清单.md` 全量覆盖。
@@ -401,6 +403,7 @@ View (SwiftUI)
 自动同步模块清单（脚本生成）
 <!-- AUTO_SYNC_MODULES_START -->
 - 由 `scripts/sync_arch_docs.sh` 自动维护，请勿手工修改。
+- `xmnote/AppState`
 - `xmnote/Data`
 - `xmnote/Database`
 - `xmnote/Domain`
@@ -420,6 +423,7 @@ xmnote/
 ├── xmnoteApp.swift                    # App 入口，初始化 AppDatabase
 ├── ContentView.swift                  # 根视图
 ├── Localizable.xcstrings              # String Catalog，统一字符串管理（sourceLanguage: zh-Hans，含 en 占位）
+├── AppState/                          # 应用级全局状态目录（SwiftUI Environment 注入）
 ├── Database/                          # GRDB 数据层（9 + 37 Records）
 │   ├── AppDatabase.swift              # DatabasePool 初始化、迁移、生命周期
 │   ├── AppDatabaseKey.swift           # SwiftUI Environment 注入
@@ -462,7 +466,7 @@ xmnote/
 ## 文件命名规则
 
 - 文件名与主类型名一致：`NoteTagsView.swift` 包含 `struct NoteTagsView`
-- View 以 `View` 结尾：`NoteContainerView`、`BookPlaceholderView`
+- View 以 `View` 结尾：`NoteContainerView`、`CollectionListPlaceholderView`
 - ViewModel 以 `ViewModel` 结尾：`NoteViewModel`
 - Model 使用 `Record` 后缀：`BookRecord`、`NoteRecord`、`TagRecord`（GRDB Record 类型）
 - 占位视图使用 `{Feature}PlaceholderView` 模式

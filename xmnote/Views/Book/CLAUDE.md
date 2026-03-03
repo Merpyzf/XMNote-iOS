@@ -9,7 +9,6 @@
 - `BookGridView.swift`: 书籍网格展示与筛选
 - `BookGridItemView.swift`: 单本书籍卡片渲染
 - `BookDetailView.swift`: 书籍详情与书摘列表
-- `BookPlaceholderView.swift`: 书籍空态占位
 - `CollectionListPlaceholderView.swift`: 书单空态占位
 - `BookViewModel.swift`: 书籍页状态与过滤编排，含 ReadStatusFilter 枚举
 - `BookDetailViewModel.swift`: 书籍详情与书摘观察编排

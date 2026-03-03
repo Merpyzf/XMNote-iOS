@@ -15,6 +15,12 @@
 - 设置与月总结弹层拆分到 `Views/Reading/ReadCalendar/Sheets/`，避免业务弹层与壳层混文件。
 - 月份分页继续采用 `TabView(.page)`，并保持“可见窗口页”映射策略（当前月前后各 1 页）。
 
+## 本次更新（2026-03-03）
+- 月总结弹层“阅读时长排行”改为阻塞式颜色准备：颜色未就绪时只显示骨架，准备完成后再进入条形动画。
+- 排行动画触发改为 `animationIdentity` 驱动，避免颜色回填导致二次重播。
+- 取色失败路径补齐默认色回填，防止首次快速切月时 loading 长时间悬挂。
+- 骨架屏改为与真实排行同构结构，并修复 shimmer 生效路径（作用在骨架元素本体）。
+
 ## 快速接入
 ```swift
 .navigationDestination(for: ReadingRoute.self) { route in

@@ -1,7 +1,7 @@
 /**
  * [INPUT]: 依赖 SwiftUI PreferenceKey、GeometryReader 与动画能力，依赖 DesignTokens 品牌色扩展
- * [OUTPUT]: 对外提供 QuoteInlineTabBar 引号样式标签组件
- * [POS]: UIComponents/Tabs 的强调型标签组件，用于顶部主导航的视觉锚定场景
+ * [OUTPUT]: 对外提供 QuoteInlineTabBar 调试原型组件（仅 Debug/Prototypes 演示）
+ * [POS]: Debug 原型目录实验组件，用于导航标签视觉方案探索，不作为跨模块公共组件
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 

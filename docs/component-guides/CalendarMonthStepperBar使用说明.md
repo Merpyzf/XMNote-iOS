@@ -7,7 +7,7 @@
 - 标题区仅保留文字与下拉箭头，不展示日历图标。
 - 去容器化触发样式（无液态玻璃背景），减少顶部视觉噪音。
 
-源码路径：`xmnote/UIComponents/Foundation/CalendarMonthStepperBar.swift`
+源码路径：`xmnote/Views/Reading/ReadCalendar/Components/CalendarMonthStepperBar.swift`
 
 ## 快速接入
 ```swift

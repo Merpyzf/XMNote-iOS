@@ -1,7 +1,7 @@
 /**
  * [INPUT]: 依赖 SwiftUI 状态绑定与 matchedGeometryEffect 动画能力
- * [OUTPUT]: 对外提供 InlineTabBar 行内标签组件
- * [POS]: UIComponents/Tabs 的基础页内标签组件，用于常规二级切换场景
+ * [OUTPUT]: 对外提供 InlineTabBar 调试原型组件（仅 Debug/Prototypes 演示）
+ * [POS]: Debug 原型目录实验组件，用于标签样式方案探索，不作为跨模块公共组件
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 

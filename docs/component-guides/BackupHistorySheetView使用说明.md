@@ -1,7 +1,7 @@
 # BackupHistorySheetView 使用说明
 
 ## 组件定位
-- 源码路径：xmnote/Views/Personal/Backup/BackupHistorySheetView.swift
+- 源码路径：xmnote/Views/Personal/Backup/Sheets/BackupHistorySheetView.swift
 - 角色：BackupHistorySheetView 页面核心组件，承载对应功能主流程与关键交互。
 
 ## 快速接入
@@ -10,7 +10,7 @@ BackupHistorySheetView(entries: entries, onRestore: onRestore)
 ~~~
 
 ## 参数说明
-- 该组件对外参数以源码声明为准：xmnote/Views/Personal/Backup/BackupHistorySheetView.swift
+- 该组件对外参数以源码声明为准：xmnote/Views/Personal/Backup/Sheets/BackupHistorySheetView.swift
 - 接入时优先保持“容器层负责状态、组件层负责渲染”的边界。
 
 ## 示例

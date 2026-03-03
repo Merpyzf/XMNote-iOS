@@ -1,7 +1,7 @@
 /**
  * [INPUT]: 依赖 xmnote/Utilities/DesignTokens.swift 的颜色、圆角、边框与间距令牌
  * [OUTPUT]: 对外提供 CalendarMonthStepperBar（月视图顶部月份切换触发器，支持点击月份快速切换）
- * [POS]: UIComponents/Foundation 的可复用月份切换组件，服务阅读日历与后续月视图页面
+ * [POS]: ReadCalendar 页面私有子视图，服务阅读日历顶部月份切换交互
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 

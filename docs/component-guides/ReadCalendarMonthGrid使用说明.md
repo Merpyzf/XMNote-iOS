@@ -7,7 +7,7 @@
 - 渲染今天、选中、未来日期状态。
 - 在 `activityEvent` 模式渲染跨周事件条分段与颜色状态。
 
-源码路径：`xmnote/UIComponents/Foundation/ReadCalendarMonthGrid.swift`
+源码路径：`xmnote/Views/Reading/ReadCalendar/Components/ReadCalendarMonthGrid.swift`
 
 ## 快速接入
 ```swift

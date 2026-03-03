@@ -1,5 +1,5 @@
 /**
- * [INPUT]: 依赖 CalendarMonthStepperBar/ReadCalendarMonthGrid 复用组件、ReadCalendarDay/ReadCalendarMonthlyDurationBook 领域模型与 DesignTokens 视觉令牌（不含卡片装饰令牌）
+ * [INPUT]: 依赖 CalendarMonthStepperBar/ReadCalendarMonthGrid 页面私有组件、ReadCalendarDay/ReadCalendarMonthlyDurationBook 领域模型与 DesignTokens 视觉令牌（不含卡片装饰令牌）
  * [OUTPUT]: 对外提供 ReadCalendarContentView（完整阅读日历控件：模式切换 + 月份点击切换 + weekday + 分页月网格 + 状态反馈 + 月总结排行与上月对比）
  * [POS]: ReadCalendar 业务页面壳层组件，负责日历主内容组合与业务内弹层触发
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
