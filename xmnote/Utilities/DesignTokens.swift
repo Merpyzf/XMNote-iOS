@@ -92,9 +92,17 @@ extension Color {
 // MARK: - Border & Divider
 
 extension Color {
-    /// 卡片边框色
-    static let cardBorder = Color(light: Color(hex: 0xCCCCCC).opacity(0.5),
-                                   dark: Color.white.opacity(0.1))
+    /// 一级容器边框（页面主卡/分组壳层）
+    static let surfaceBorderStrong = Color(light: Color(hex: 0xC7CCD3).opacity(0.58),
+                                           dark: Color.white.opacity(0.14))
+    /// 二级内容边框（指标卡/列表卡）
+    static let surfaceBorderDefault = Color(light: Color(hex: 0xCCCCCC).opacity(0.5),
+                                            dark: Color.white.opacity(0.1))
+    /// 三级弱边框（弱化层级、避免与主信息竞争）
+    static let surfaceBorderSubtle = Color(light: Color(hex: 0xC7CCD3).opacity(0.34),
+                                           dark: Color.white.opacity(0.08))
+    /// 兼容历史命名，默认等价于二级内容边框。
+    static let cardBorder = surfaceBorderDefault
     /// 分割线
     static let divider = Color(light: Color(hex: 0xEEEEEE),
                                 dark: Color(hex: 0x333333))

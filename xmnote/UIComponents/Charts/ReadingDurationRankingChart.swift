@@ -28,6 +28,7 @@ struct ReadingDurationRankingChart: View {
         static let barLabelSpacing: CGFloat = 0
         static let rowHeight: CGFloat = 56
         static let barHeight: CGFloat = 48
+        static let rowClipTrailingInset: CGFloat = 1.5
         static let coverCornerRadius: CGFloat = CornerRadius.inlaySmall
         static let barCornerRadius: CGFloat = coverCornerRadius
         static let infoBaseRatio: CGFloat = 0.40
@@ -134,9 +135,10 @@ private extension ReadingDurationRankingChart {
             let barAvailableWidth = max(0, rowWidth - infoWidth - Layout.barLabelSpacing)
             let visualRatio = visualRatio(rawRatio: rawRatio, barAvailableWidth: barAvailableWidth)
             let displayedBarWidth = max(0, min(barAvailableWidth, barAvailableWidth * visualRatio))
+            let infoOffsetMax = max(0, rowWidth - infoWidth - Layout.rowClipTrailingInset)
             let infoOffsetX = min(
                 max(0, displayedBarWidth + Layout.barLabelSpacing - Layout.coverLeadingCompensation),
-                max(0, rowWidth - infoWidth)
+                infoOffsetMax
             )
 
             ZStack(alignment: .leading) {
@@ -155,6 +157,9 @@ private extension ReadingDurationRankingChart {
                 rankingInfoView(item: item, width: infoWidth)
                     .offset(x: infoOffsetX)
             }
+            .frame(width: rowWidth, height: Layout.rowHeight, alignment: .leading)
+            // 约束排行行内容只在本行区域内绘制，避免切换与增长动画在边缘帧越界。
+            .clipped()
         }
         .frame(height: Layout.rowHeight)
     }

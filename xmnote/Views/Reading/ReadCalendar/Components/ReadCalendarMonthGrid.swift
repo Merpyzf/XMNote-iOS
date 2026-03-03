@@ -153,9 +153,8 @@ private struct ReadCalendarMonthGridWeekRow: View {
         static let overflowBadgeHPadding: CGFloat = 3
         static let overflowBadgeBottomPadding: CGFloat = 2
         static let overflowBadgeLeading: CGFloat = 3
-        static let yearCompactCellMaxSize: CGFloat = 12
+        static let yearCompactCellSpacing: CGFloat = 3
         static let yearCompactCellCornerRadius: CGFloat = 2.5
-        static let yearCompactCellHorizontalInset: CGFloat = 2
     }
 
     let week: ReadCalendarMonthGrid.WeekData
@@ -191,16 +190,13 @@ private struct ReadCalendarMonthGridWeekRow: View {
         case .heatmap:
             return 34
         case .heatmapYearCompact:
-            return Layout.yearCompactCellMaxSize
+            return 0
         case .bookCover:
             return 40
         }
     }
 
     private var rowHeight: CGFloat {
-        if isYearCompactMode {
-            return modeContentHeight
-        }
         return dayHeaderHeight
             + laneTopInset
             + laneBottomInset
@@ -208,27 +204,38 @@ private struct ReadCalendarMonthGridWeekRow: View {
     }
 
     var body: some View {
-        GeometryReader { proxy in
-            let totalWidth = proxy.size.width
-            let cellWidth = totalWidth / 7
-
-            ZStack(alignment: .topLeading) {
-                HStack(spacing: 0) {
+        Group {
+            if isYearCompactMode {
+                HStack(spacing: Layout.yearCompactCellSpacing) {
                     ForEach(Array(week.days.enumerated()), id: \.offset) { _, day in
-                        dayCell(day, cellWidth: cellWidth)
-                            .frame(width: cellWidth, height: rowHeight)
+                        yearCompactDayCell(day)
                     }
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            } else {
+                GeometryReader { proxy in
+                    let totalWidth = proxy.size.width
+                    let cellWidth = totalWidth / 7
 
-                if displayMode == .activityEvent {
-                    ForEach(week.segments) { segment in
-                        segmentView(segment, cellWidth: cellWidth)
-                            .allowsHitTesting(false)
+                    ZStack(alignment: .topLeading) {
+                        HStack(spacing: 0) {
+                            ForEach(Array(week.days.enumerated()), id: \.offset) { _, day in
+                                dayCell(day)
+                                    .frame(width: cellWidth, height: rowHeight)
+                            }
+                        }
+
+                        if displayMode == .activityEvent {
+                            ForEach(week.segments) { segment in
+                                segmentView(segment, cellWidth: cellWidth)
+                                    .allowsHitTesting(false)
+                            }
+                        }
                     }
                 }
             }
         }
-        .frame(height: rowHeight)
+        .frame(height: isYearCompactMode ? nil : rowHeight)
         .onAppear {
             startFlowAnimationIfNeeded()
         }
@@ -238,108 +245,102 @@ private struct ReadCalendarMonthGridWeekRow: View {
     }
 
     @ViewBuilder
-    private func dayCell(_ day: Date?, cellWidth: CGFloat) -> some View {
+    private func yearCompactDayCell(_ day: Date?) -> some View {
+        let payload = day.map(dayPayloadProvider) ?? .empty
+        let fillColor = day == nil
+            ? HeatmapLevel.none.color.opacity(0.42)
+            : yearCompactHeatmapColor(for: payload)
+
+        RoundedRectangle(
+            cornerRadius: Layout.yearCompactCellCornerRadius,
+            style: .continuous
+        )
+        .fill(fillColor)
+        .frame(maxWidth: .infinity)
+        .aspectRatio(1, contentMode: .fit)
+    }
+
+    @ViewBuilder
+    private func dayCell(_ day: Date?) -> some View {
         let hasDate = day != nil
         let payload = day.map(dayPayloadProvider) ?? .empty
         let overflowCount = hasDate ? overflowCount(for: payload) : 0
         let readDone = payload.isReadDoneDay
 
-        if isYearCompactMode {
-            let cellSize = max(
-                8,
-                min(
-                    Layout.yearCompactCellMaxSize,
-                    cellWidth - Layout.yearCompactCellHorizontalInset * 2
-                )
-            )
-            let fillColor = day == nil
-                ? HeatmapLevel.none.color.opacity(0.42)
-                : yearCompactHeatmapColor(for: payload)
-            ZStack {
-                Color.clear
-                RoundedRectangle(
-                    cornerRadius: Layout.yearCompactCellCornerRadius,
-                    style: .continuous
-                )
-                .fill(fillColor)
-                .frame(width: cellSize, height: cellSize)
-            }
-        } else {
-            ZStack(alignment: .topLeading) {
-                Color.clear
+        ZStack(alignment: .topLeading) {
+            Color.clear
 
-                if let day {
-                    let today = payload.isToday
-                    let selected = payload.isSelected
-                    let dayNum = Calendar.current.component(.day, from: day)
+            if let day {
+                let today = payload.isToday
+                let selected = payload.isSelected
+                let dayNum = Calendar.current.component(.day, from: day)
 
-                    VStack(spacing: 1) {
-                        ZStack {
-                            if selected {
-                                Circle()
-                                    .fill(Color.brand.opacity(0.18))
-                                    .overlay {
-                                        Circle()
-                                            .stroke(Color.brand.opacity(0.62), lineWidth: 0.95)
-                                    }
-                                    .frame(width: 22, height: 22)
-                            }
-                            Text("\(dayNum)")
-                                .font(.system(size: 12, weight: selected ? .bold : .medium, design: .rounded))
-                                .foregroundStyle(
-                                    payload.isFuture ? Color.textHint :
-                                    selected ? Color.brand : Color.textPrimary
-                                )
+                VStack(spacing: 1) {
+                    ZStack {
+                        if selected {
+                            Circle()
+                                .fill(Color.brand.opacity(0.18))
+                                .overlay {
+                                    Circle()
+                                        .stroke(Color.brand.opacity(0.62), lineWidth: 0.95)
+                                }
+                                .frame(width: 22, height: 22)
                         }
-                        .frame(height: dayHeaderHeight)
-                        .frame(maxWidth: .infinity, alignment: .center)
-                        .overlay(alignment: .topTrailing) {
-                            if readDone && displayMode != .activityEvent {
-                                Image(systemName: "checkmark.circle.fill")
-                                    .font(.system(size: 8))
-                                    .foregroundStyle(Color.readCalendarTodayMark)
-                                    .offset(x: -2, y: 4)
-                            }
+                        Text("\(dayNum)")
+                            .font(.system(size: 12, weight: selected ? .bold : .medium, design: .rounded))
+                            .foregroundStyle(
+                                payload.isFuture ? Color.textHint :
+                                selected ? Color.brand : Color.textPrimary
+                            )
+                    }
+                    .frame(height: dayHeaderHeight)
+                    .frame(maxWidth: .infinity, alignment: .center)
+                    .overlay(alignment: .topTrailing) {
+                        if readDone && displayMode != .activityEvent {
+                            Image(systemName: "checkmark.circle.fill")
+                                .font(.system(size: 8))
+                                .foregroundStyle(Color.readCalendarTodayMark)
+                                .offset(x: -2, y: 4)
                         }
+                    }
 
-                        if payload.isStreakDay && displayMode == .activityEvent {
-                            Capsule(style: .continuous)
-                                .fill(
-                                    selected
-                                    ? Color.brand.opacity(0.82)
-                                    : Color.brand.opacity(0.56)
-                                )
-                                .frame(width: selected ? 12 : 10, height: 2)
-                                .offset(y: -1)
-                        }
+                    if payload.isStreakDay && displayMode == .activityEvent {
+                        Capsule(style: .continuous)
+                            .fill(
+                                selected
+                                ? Color.brand.opacity(0.82)
+                                : Color.brand.opacity(0.56)
+                            )
+                            .frame(width: selected ? 12 : 10, height: 2)
+                            .offset(y: -1)
+                    }
 
-                        if today && !selected {
-                            Capsule(style: .continuous)
-                                .fill(Color.readCalendarTodayMark)
-                                .frame(width: 6, height: 4)
-                                .offset(y: -2)
-                        }
+                    if today && !selected {
+                        Capsule(style: .continuous)
+                            .fill(Color.readCalendarTodayMark)
+                            .frame(width: 6, height: 4)
+                            .offset(y: -2)
+                    }
 
-                        modeContent(for: day, payload: payload)
+                    modeContent(for: day, payload: payload)
 
-                        Spacer(minLength: 0)
+                    Spacer(minLength: 0)
 
-                        if overflowCount > 0 {
-                            overflowBadge(overflowCount)
-                        }
+                    if overflowCount > 0 {
+                        overflowBadge(overflowCount)
                     }
                 }
             }
-            .contentShape(Rectangle())
-            .onTapGesture {
-                guard let day, !payload.isFuture else { return }
-                if !payload.isSelected, isHapticsEnabled {
-                    ReadCalendarHaptics.selection()
-                }
-                onSelectDay(day)
-            }
-            .opacity(payload.isFuture ? 0.55 : 1)
         }
+        .contentShape(Rectangle())
+        .onTapGesture {
+            guard let day, !payload.isFuture else { return }
+            if !payload.isSelected, isHapticsEnabled {
+                ReadCalendarHaptics.selection()
+            }
+            onSelectDay(day)
+        }
+        .opacity(payload.isFuture ? 0.55 : 1)
     }
 
     @ViewBuilder

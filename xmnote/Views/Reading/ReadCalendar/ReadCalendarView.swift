@@ -61,10 +61,11 @@ struct ReadCalendarView: View {
                     retryCurrentContext()
                 }
             )
-            .padding(.bottom, Spacing.base)
         }
         .navigationTitle("阅读日历")
         .navigationBarTitleDisplayMode(.inline)
+        .toolbarBackground(.visible, for: .navigationBar)
+        .toolbarBackground(Color.windowBackground, for: .navigationBar)
         .tint(Color.readCalendarTopAction)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
@@ -98,6 +99,14 @@ struct ReadCalendarView: View {
             pagerSelectionTask = Task {
                 await viewModel.handlePagerSelectionChange(
                     to: monthStart,
+                    using: repositories.statisticsRepository,
+                    colorRepository: repositories.readCalendarColorRepository
+                )
+
+                guard !Task.isCancelled else { return }
+                guard displayMode == .heatmap else { return }
+
+                await viewModel.prepareHeatmapYearIfNeeded(
                     using: repositories.statisticsRepository,
                     colorRepository: repositories.readCalendarColorRepository
                 )
@@ -278,13 +287,24 @@ private extension ReadCalendarView {
     }
 
     func mapYearSummary(_ state: ReadCalendarViewModel.YearSummaryState) -> ReadCalendarContentView.YearSummarySheetData {
-        ReadCalendarContentView.YearSummarySheetData(
+        let previousYear = state.year - 1
+        let previousSummary: ReadCalendarViewModel.YearSummaryState? = {
+            guard viewModel.availableYears.contains(previousYear) else { return nil }
+            guard viewModel.yearLoadState(for: previousYear) == .loaded else { return nil }
+            return viewModel.yearSummaryState(for: previousYear)
+        }()
+
+        return ReadCalendarContentView.YearSummarySheetData(
             year: state.year,
             activeDays: state.activeDays,
             totalReadSeconds: state.totalReadSeconds,
             noteCount: state.noteCount,
             finishedBookCount: state.finishedBookCount,
+            activeDaysDelta: previousSummary.map { state.activeDays - $0.activeDays },
+            readSecondsDelta: previousSummary.map { state.totalReadSeconds - $0.totalReadSeconds },
+            noteCountDelta: previousSummary.map { state.noteCount - $0.noteCount },
             topBooks: state.topBooks,
+            rankingBarColorsByBookId: state.rankingBarColorsByBookId,
             monthContributions: state.monthContributions.map { item in
                 ReadCalendarContentView.YearSummaryMonthContribution(
                     monthStart: item.monthStart,

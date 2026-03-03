@@ -56,11 +56,6 @@
 			path = xmnoteUITests;
 			sourceTree = "<group>";
 		};
-		891D78242F5030D600EE8067 /* AppState */ = {
-			isa = PBXFileSystemSynchronizedRootGroup;
-			path = AppState;
-			sourceTree = "<group>";
-		};
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -97,7 +92,6 @@
 		891114932F39AC2F00D99384 = {
 			isa = PBXGroup;
 			children = (
-				891D78242F5030D600EE8067 /* AppState */,
 				8911149E2F39AC2F00D99384 /* xmnote */,
 				891114AC2F39AC3200D99384 /* xmnoteTests */,
 				891114B62F39AC3200D99384 /* xmnoteUITests */,
@@ -133,7 +127,6 @@
 			);
 			fileSystemSynchronizedGroups = (
 				8911149E2F39AC2F00D99384 /* xmnote */,
-				891D78242F5030D600EE8067 /* AppState */,
 			);
 			name = xmnote;
 			packageProductDependencies = (
@@ -217,7 +210,7 @@
 					};
 				};
 			};
-			buildConfigurationList = 891114972F39AC2F00D99384 /* Build configuration list for PBXProject "xmnote" */;
+			buildConfigurationList = 891114972F39AC2F00D99384 /* Build configuration list for PBXProject "XMNote" */;
 			developmentRegion = en;
 			hasScannedForEncodings = 0;
 			knownRegions = (
@@ -590,7 +583,7 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
-		891114972F39AC2F00D99384 /* Build configuration list for PBXProject "xmnote" */ = {
+		891114972F39AC2F00D99384 /* Build configuration list for PBXProject "XMNote" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				891114BB2F39AC3200D99384 /* Debug */,

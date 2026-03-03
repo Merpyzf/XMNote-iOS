@@ -95,6 +95,7 @@ final class ReadCalendarViewModel {
         let finishedBookCount: Int
         let monthContributions: [YearMonthContribution]
         let topBooks: [ReadCalendarMonthlyDurationBook]
+        let rankingBarColorsByBookId: [Int64: ReadCalendarSegmentColor]
         let isLoading: Bool
         let errorMessage: String?
     }
@@ -126,16 +127,21 @@ final class ReadCalendarViewModel {
     private var pageStates: [String: MonthPageState] = [:]
     private var monthIndexByKey: [String: Int] = [:]
     private var yearTopBooksByYear: [Int: [ReadCalendarMonthlyDurationBook]] = [:]
+    private var yearRankingBarColorsByYear: [Int: [Int64: ReadCalendarSegmentColor]] = [:]
     private var yearLoadStateByYear: [Int: YearLoadState] = [:]
     private var yearErrorMessageByYear: [Int: String] = [:]
     private var latestYearRequestTicketByYear: [Int: Int] = [:]
+    private var latestYearColorTicketByYear: [Int: Int] = [:]
     private var latestRequestTicketByMonthKey: [String: Int] = [:]
     private var latestColorTicketByMonthKey: [String: Int] = [:]
     private var inFlightColorRequestBookIDsByMonthKey: [String: Set<Int64>] = [:]
+    private var inFlightYearColorRequestBookIDsByYear: [Int: Set<Int64>] = [:]
     private var monthColorTasks: [String: Task<Void, Never>] = [:]
+    private var yearColorTasks: [Int: Task<Void, Never>] = [:]
     private var requestTicketSeed = 0
     private var yearRequestTicketSeed = 0
     private var colorTicketSeed = 0
+    private var yearColorTicketSeed = 0
     private var calendar: Calendar
 
     init(
@@ -244,12 +250,15 @@ final class ReadCalendarViewModel {
             monthCache = [:]
             pageStates = [:]
             yearTopBooksByYear = [:]
+            yearRankingBarColorsByYear = [:]
             yearLoadStateByYear = [:]
             yearErrorMessageByYear = [:]
             latestYearRequestTicketByYear = [:]
+            latestYearColorTicketByYear = [:]
             latestRequestTicketByMonthKey = [:]
             latestColorTicketByMonthKey = [:]
             inFlightColorRequestBookIDsByMonthKey = [:]
+            inFlightYearColorRequestBookIDsByYear = [:]
             cancelAllColorTasks()
 
             await ensureMonthLoaded(
@@ -275,9 +284,11 @@ final class ReadCalendarViewModel {
             monthIndexByKey = [:]
             pageStates = [:]
             yearTopBooksByYear = [:]
+            yearRankingBarColorsByYear = [:]
             yearLoadStateByYear = [:]
             yearErrorMessageByYear = [:]
             latestYearRequestTicketByYear = [:]
+            latestYearColorTicketByYear = [:]
             cancelAllColorTasks()
             hasLoaded = false
         }
@@ -343,7 +354,6 @@ final class ReadCalendarViewModel {
         guard hasLoaded else { return }
         let clampedYear = clampYear(year)
         let hasLoadedYearData = yearLoadState(for: clampedYear) == .loaded
-        let hasLoadedTopBooks = yearTopBooksByYear[clampedYear] != nil
         let hasYearError = yearErrorMessageByYear[clampedYear] != nil
         selectedYear = clampedYear
 
@@ -355,12 +365,16 @@ final class ReadCalendarViewModel {
                 reportError: false
             )
         }
-        if !hasLoadedTopBooks || hasYearError {
-            await ensureYearTopBooksLoaded(
-                for: clampedYear,
-                using: repository
-            )
-        }
+        await ensureYearTopBooksLoaded(
+            for: clampedYear,
+            using: repository,
+            colorRepository: colorRepository
+        )
+        await preloadComparisonYearIfNeeded(
+            for: clampedYear,
+            using: repository,
+            colorRepository: colorRepository
+        )
     }
 
     func prepareHeatmapYearIfNeeded(
@@ -377,7 +391,13 @@ final class ReadCalendarViewModel {
         )
         await ensureYearTopBooksLoaded(
             for: selectedYear,
-            using: repository
+            using: repository,
+            colorRepository: colorRepository
+        )
+        await preloadComparisonYearIfNeeded(
+            for: selectedYear,
+            using: repository,
+            colorRepository: colorRepository
         )
     }
 
@@ -404,6 +424,32 @@ final class ReadCalendarViewModel {
 
     func cancelAsyncTasks() {
         cancelAllColorTasks()
+    }
+
+    func preloadComparisonYearIfNeeded(
+        for year: Int,
+        using repository: any StatisticsRepositoryProtocol,
+        colorRepository: any ReadCalendarColorRepositoryProtocol
+    ) async {
+        let previousYear = year - 1
+        guard availableYears.contains(previousYear) else { return }
+
+        let hasLoadedYearData = yearLoadState(for: previousYear) == .loaded
+        let hasYearError = yearErrorMessageByYear[previousYear] != nil
+
+        if !hasLoadedYearData || hasYearError {
+            await ensureYearLoaded(
+                for: previousYear,
+                using: repository,
+                colorRepository: colorRepository,
+                reportError: false
+            )
+        }
+        await ensureYearTopBooksLoaded(
+            for: previousYear,
+            using: repository,
+            colorRepository: colorRepository
+        )
     }
 
     /// dayEventCount 变更：从 cache 重建全量 layout 再按新 laneLimit 过滤，回填已解析颜色
@@ -452,11 +498,14 @@ final class ReadCalendarViewModel {
         monthCache = [:]
         pageStates = [:]
         yearTopBooksByYear = [:]
+        yearRankingBarColorsByYear = [:]
         yearLoadStateByYear = [:]
         yearErrorMessageByYear = [:]
         latestYearRequestTicketByYear = [:]
+        latestYearColorTicketByYear = [:]
         latestRequestTicketByMonthKey = [:]
         inFlightColorRequestBookIDsByMonthKey = [:]
+        inFlightYearColorRequestBookIDsByYear = [:]
         cancelAllColorTasks()
         await reload(using: repository, colorRepository: colorRepository)
     }
@@ -500,6 +549,7 @@ final class ReadCalendarViewModel {
             )
         }
 
+        let topBooks = yearTopBooksByYear[clampedYear] ?? []
         return YearSummaryState(
             year: clampedYear,
             activeDays: activeDays,
@@ -507,7 +557,11 @@ final class ReadCalendarViewModel {
             noteCount: noteCount,
             finishedBookCount: finishedBookCount,
             monthContributions: contributions.sorted { $0.monthStart < $1.monthStart },
-            topBooks: yearTopBooksByYear[clampedYear] ?? [],
+            topBooks: topBooks,
+            rankingBarColorsByBookId: buildInitialYearRankingBarColorMap(
+                topBooks: topBooks,
+                existingMap: yearRankingBarColorsByYear[clampedYear]
+            ),
             isLoading: yearLoadState(for: clampedYear) == .loading,
             errorMessage: yearErrorMessageByYear[clampedYear]
         )
@@ -564,6 +618,7 @@ private extension ReadCalendarViewModel {
     ) async {
         let normalized = Self.monthStart(of: monthStart, using: calendar)
         let key = Self.monthKey(for: normalized, using: calendar)
+        let previousState = pageStates[key]
         if !forceRefresh, let existing = pageStates[key], existing.loadState == .loaded {
             if hasPendingSegmentColor(existing) {
                 scheduleColorResolutionIfNeeded(
@@ -613,6 +668,20 @@ private extension ReadCalendarViewModel {
             }
         } catch {
             guard latestRequestTicketByMonthKey[key] == ticket else { return }
+
+            if error is CancellationError || Task.isCancelled {
+                monthColorTasks[key]?.cancel()
+                monthColorTasks[key] = nil
+                inFlightColorRequestBookIDsByMonthKey[key] = nil
+
+                if let previousState {
+                    pageStates[key] = previousState
+                } else if showLoading {
+                    pageStates[key] = placeholderState(for: normalized)
+                }
+                return
+            }
+
             monthColorTasks[key]?.cancel()
             monthColorTasks[key] = nil
             let failed = MonthPageState(
@@ -710,26 +779,160 @@ private extension ReadCalendarViewModel {
 
     func ensureYearTopBooksLoaded(
         for year: Int,
-        using repository: any StatisticsRepositoryProtocol
+        using repository: any StatisticsRepositoryProtocol,
+        colorRepository: any ReadCalendarColorRepositoryProtocol
     ) async {
         let clampedYear = clampYear(year)
-        if yearTopBooksByYear[clampedYear] != nil {
+        if yearTopBooksByYear[clampedYear] == nil {
+            do {
+                let topBooks = try await repository.fetchReadCalendarYearTopBooks(
+                    year: clampedYear,
+                    excludedEventTypes: settings.excludedEventTypes,
+                    limit: Self.yearTopBookLimit
+                )
+                yearTopBooksByYear[clampedYear] = topBooks
+                yearRankingBarColorsByYear[clampedYear] = buildInitialYearRankingBarColorMap(
+                    topBooks: topBooks,
+                    existingMap: yearRankingBarColorsByYear[clampedYear]
+                )
+                if yearLoadStateByYear[clampedYear] != .failed {
+                    yearErrorMessageByYear[clampedYear] = nil
+                }
+            } catch {
+                if yearErrorMessageByYear[clampedYear] == nil {
+                    yearErrorMessageByYear[clampedYear] = "年度排行加载失败：\(error.localizedDescription)"
+                }
+                return
+            }
+        }
+
+        guard let topBooks = yearTopBooksByYear[clampedYear] else { return }
+        yearRankingBarColorsByYear[clampedYear] = buildInitialYearRankingBarColorMap(
+            topBooks: topBooks,
+            existingMap: yearRankingBarColorsByYear[clampedYear]
+        )
+        // 年度榜单颜色采用与月度一致的封面取色链路，避免出现“有封面但颜色固定”的割裂感。
+        scheduleYearTopBookColorResolutionIfNeeded(
+            for: clampedYear,
+            topBooks: topBooks,
+            using: colorRepository
+        )
+    }
+
+    func scheduleYearTopBookColorResolutionIfNeeded(
+        for year: Int,
+        topBooks: [ReadCalendarMonthlyDurationBook],
+        using colorRepository: any ReadCalendarColorRepositoryProtocol
+    ) {
+        let colorMap = yearRankingBarColorsByYear[year] ?? [:]
+        let requests = buildYearTopBookColorRequests(
+            topBooks: topBooks,
+            colorsByBookId: colorMap
+        )
+        guard !requests.isEmpty else {
+            yearColorTasks[year]?.cancel()
+            yearColorTasks[year] = nil
+            inFlightYearColorRequestBookIDsByYear[year] = nil
             return
         }
-        do {
-            let topBooks = try await repository.fetchReadCalendarYearTopBooks(
-                year: clampedYear,
-                excludedEventTypes: settings.excludedEventTypes,
-                limit: Self.yearTopBookLimit
+
+        let requestBookIDs = Set(requests.map(\.bookId))
+        if let inFlightBookIDs = inFlightYearColorRequestBookIDsByYear[year],
+           yearColorTasks[year] != nil,
+           requestBookIDs.isSubset(of: inFlightBookIDs) {
+            return
+        }
+
+        yearColorTasks[year]?.cancel()
+        yearColorTicketSeed += 1
+        let ticket = yearColorTicketSeed
+        latestYearColorTicketByYear[year] = ticket
+        inFlightYearColorRequestBookIDsByYear[year] = requestBookIDs
+
+        yearColorTasks[year] = Task { [weak self] in
+            guard let self else { return }
+            await self.resolveYearTopBookColors(
+                year: year,
+                requests: requests,
+                ticket: ticket,
+                using: colorRepository
             )
-            yearTopBooksByYear[clampedYear] = topBooks
-            if yearLoadStateByYear[clampedYear] != .failed {
-                yearErrorMessageByYear[clampedYear] = nil
+        }
+    }
+
+    private func resolveYearTopBookColors(
+        year: Int,
+        requests: [ReadCalendarColorRequest],
+        ticket: Int,
+        using colorRepository: any ReadCalendarColorRepositoryProtocol
+    ) async {
+        var stagedColors: [Int64: ReadCalendarSegmentColor] = [:]
+        stagedColors.reserveCapacity(Self.colorBatchCount)
+        var lastFlushAt = Date()
+
+        for request in requests {
+            if Task.isCancelled {
+                return
             }
-        } catch {
-            if yearErrorMessageByYear[clampedYear] == nil {
-                yearErrorMessageByYear[clampedYear] = "年度排行加载失败：\(error.localizedDescription)"
+
+            let color = await colorRepository.resolveEventColor(
+                bookId: request.bookId,
+                bookName: request.bookName,
+                coverURL: request.coverURL
+            )
+            if Task.isCancelled {
+                return
             }
+
+            stagedColors[request.bookId] = color
+
+            let now = Date()
+            let shouldFlushByCount = stagedColors.count >= Self.colorBatchCount
+            let shouldFlushByTime = now.timeIntervalSince(lastFlushAt) >= Self.colorBatchInterval
+            if shouldFlushByCount || shouldFlushByTime {
+                applyYearTopBookColors(stagedColors, year: year, ticket: ticket)
+                stagedColors.removeAll(keepingCapacity: true)
+                lastFlushAt = now
+            }
+        }
+
+        if !stagedColors.isEmpty {
+            applyYearTopBookColors(stagedColors, year: year, ticket: ticket)
+        }
+
+        if latestYearColorTicketByYear[year] == ticket {
+            yearColorTasks[year] = nil
+            inFlightYearColorRequestBookIDsByYear[year] = nil
+        }
+    }
+
+    private func applyYearTopBookColors(
+        _ colorsByBookId: [Int64: ReadCalendarSegmentColor],
+        year: Int,
+        ticket: Int
+    ) {
+        guard !colorsByBookId.isEmpty else { return }
+        guard latestYearColorTicketByYear[year] == ticket else { return }
+        guard let topBooks = yearTopBooksByYear[year] else { return }
+
+        let topBookIds = Set(topBooks.map(\.bookId))
+        var updatedColorsByBookId = buildInitialYearRankingBarColorMap(
+            topBooks: topBooks,
+            existingMap: yearRankingBarColorsByYear[year]
+        )
+        var hasChange = false
+
+        for (bookId, color) in colorsByBookId where topBookIds.contains(bookId) {
+            guard updatedColorsByBookId[bookId] != color else { continue }
+            updatedColorsByBookId[bookId] = color
+            hasChange = true
+        }
+
+        guard hasChange else { return }
+        var transaction = Transaction()
+        transaction.animation = nil
+        withTransaction(transaction) {
+            yearRankingBarColorsByYear[year] = updatedColorsByBookId
         }
     }
 
@@ -943,6 +1146,28 @@ private extension ReadCalendarViewModel {
         return requests
     }
 
+    private func buildYearTopBookColorRequests(
+        topBooks: [ReadCalendarMonthlyDurationBook],
+        colorsByBookId: [Int64: ReadCalendarSegmentColor]
+    ) -> [ReadCalendarColorRequest] {
+        var seenBookIds = Set<Int64>()
+        var requests: [ReadCalendarColorRequest] = []
+        requests.reserveCapacity(topBooks.count)
+
+        for book in topBooks {
+            if let color = colorsByBookId[book.bookId], color.state != .pending {
+                continue
+            }
+            guard seenBookIds.insert(book.bookId).inserted else { continue }
+            requests.append(ReadCalendarColorRequest(
+                bookId: book.bookId,
+                bookName: book.name,
+                coverURL: book.coverURL
+            ))
+        }
+        return requests
+    }
+
     func hasPendingSegmentColor(_ state: MonthPageState) -> Bool {
         let hasPendingSegment = state.weeks.contains { week in
             week.segments.contains { $0.color.state == .pending }
@@ -977,9 +1202,15 @@ private extension ReadCalendarViewModel {
         for task in monthColorTasks.values {
             task.cancel()
         }
+        for task in yearColorTasks.values {
+            task.cancel()
+        }
         monthColorTasks = [:]
+        yearColorTasks = [:]
         latestColorTicketByMonthKey = [:]
+        latestYearColorTicketByYear = [:]
         inFlightColorRequestBookIDsByMonthKey = [:]
+        inFlightYearColorRequestBookIDsByYear = [:]
     }
 
     func fetchMonthData(
@@ -1049,6 +1280,19 @@ private extension ReadCalendarViewModel {
             rankingColorsByBookId[book.bookId] = colorsByBookId[book.bookId] ?? .pending
         }
         return rankingColorsByBookId
+    }
+
+    func buildInitialYearRankingBarColorMap(
+        topBooks: [ReadCalendarMonthlyDurationBook],
+        existingMap: [Int64: ReadCalendarSegmentColor]?
+    ) -> [Int64: ReadCalendarSegmentColor] {
+        let existingMap = existingMap ?? [:]
+        var colorsByBookId: [Int64: ReadCalendarSegmentColor] = [:]
+        colorsByBookId.reserveCapacity(topBooks.count)
+        for book in topBooks {
+            colorsByBookId[book.bookId] = existingMap[book.bookId] ?? .pending
+        }
+        return colorsByBookId
     }
 
     func buildWeeks(monthStart: Date, dayMap: [Date: ReadCalendarDay]) -> [WeekRowData] {

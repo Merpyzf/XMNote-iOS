@@ -33,7 +33,7 @@ struct CardContainer<Content: View>: View {
             .overlay {
                 if showsBorder {
                     RoundedRectangle(cornerRadius: cornerRadius)
-                        .stroke(Color.cardBorder, lineWidth: CardStyle.borderWidth)
+                        .stroke(Color.surfaceBorderStrong, lineWidth: CardStyle.borderWidth)
                 }
             }
     }
