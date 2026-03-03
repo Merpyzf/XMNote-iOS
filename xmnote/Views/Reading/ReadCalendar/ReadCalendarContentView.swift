@@ -1,6 +1,6 @@
 /**
- * [INPUT]: 依赖 CalendarMonthStepperBar/ReadCalendarMonthGrid 页面私有组件、ReadCalendarDay/ReadCalendarMonthlyDurationBook 领域模型与 DesignTokens 视觉令牌（不含卡片装饰令牌）
- * [OUTPUT]: 对外提供 ReadCalendarContentView（完整阅读日历控件：模式切换 + 月份点击切换 + weekday + 分页月网格 + 状态反馈 + 月总结排行与上月对比）
+ * [INPUT]: 依赖 CalendarMonthStepperBar/ReadCalendarMonthGrid 页面私有组件、ReadCalendarDay/ReadCalendarMonthlyDurationBook 领域模型与 DesignTokens 视觉令牌
+ * [OUTPUT]: 对外提供 ReadCalendarContentView（完整阅读日历控件：模式切换 + 月份/年份切换 + 月分页/年度热力图 + 月/年总结弹层）
  * [POS]: ReadCalendar 业务页面壳层组件，负责日历主内容组合与业务内弹层触发
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -49,6 +49,13 @@ struct ReadCalendarContentView: View {
         case failed
     }
 
+    enum YearLoadState: Hashable {
+        case idle
+        case loading
+        case loaded
+        case failed
+    }
+
     struct MonthPage: Identifiable, Hashable {
         let monthStart: Date
         let weeks: [ReadCalendarMonthGrid.WeekData]
@@ -78,6 +85,7 @@ struct ReadCalendarContentView: View {
             return ReadCalendarMonthGrid.DayPayload(
                 bookCount: bookCount,
                 isReadDoneDay: dayData?.isReadDoneDay == true,
+                heatmapLevel: dayData?.heatmapLevel ?? .none,
                 overflowCount: max(0, bookCount - laneLimit),
                 isStreakDay: isStreakDay(on: normalized),
                 isToday: cal.isDate(normalized, inSameDayAs: todayStart),
@@ -119,8 +127,11 @@ struct ReadCalendarContentView: View {
 
     struct Props: Hashable {
         let monthTitle: String
+        let yearTitle: String
         let availableMonths: [Date]
+        let availableYears: [Int]
         let pagerSelection: Date
+        let selectedYear: Int
         let displayMode: DisplayMode
         let laneLimit: Int
         let isHapticsEnabled: Bool
@@ -128,6 +139,10 @@ struct ReadCalendarContentView: View {
         let rootContentState: RootContentState
         let errorMessage: String?
         let monthPages: [MonthPage]
+        let heatmapYearMonthPages: [MonthPage]
+        let selectedYearLoadState: YearLoadState
+        let selectedYearErrorMessage: String?
+        let yearSummary: YearSummarySheetData
     }
 
     struct MonthSummarySheetData: Identifiable, Hashable {
@@ -150,6 +165,28 @@ struct ReadCalendarContentView: View {
         var hasActivity: Bool {
             activeDays > 0
         }
+    }
+
+    struct YearSummaryMonthContribution: Identifiable, Hashable {
+        let monthStart: Date
+        let activeDays: Int
+        let totalReadSeconds: Int
+
+        var id: Date { monthStart }
+    }
+
+    struct YearSummarySheetData: Identifiable, Hashable {
+        let year: Int
+        let activeDays: Int
+        let totalReadSeconds: Int
+        let noteCount: Int
+        let finishedBookCount: Int
+        let topBooks: [ReadCalendarMonthlyDurationBook]
+        let monthContributions: [YearSummaryMonthContribution]
+        let isLoading: Bool
+        let errorMessage: String?
+
+        var id: Int { year }
     }
 
     private enum Layout {
@@ -178,11 +215,31 @@ struct ReadCalendarContentView: View {
         static let summaryFloatingButtonPostInteractionProtection: TimeInterval = 1.5
         static let summaryFloatingButtonScrollInteractionProtection: TimeInterval = 2
         static let summaryFloatingButtonInteractionThrottle: TimeInterval = 0.25
+        static let yearHeatmapGridSpacing: CGFloat = Spacing.base
+        static let yearHeatmapMonthCardSpacing: CGFloat = Spacing.half
+        static let yearHeatmapMonthCardPadding: CGFloat = Spacing.cozy
+        static let yearHeatmapMonthCardTitleHeight: CGFloat = 20
+        static let yearHeatmapMonthGridHeight: CGFloat = 92
+        /// 按“标题 + 网格 + 上下内边距”计算卡高，避免固定值导致底部冗余空白。
+        static var yearHeatmapMonthCardHeight: CGFloat {
+            yearHeatmapMonthCardPadding * 2
+                + yearHeatmapMonthCardTitleHeight
+                + yearHeatmapMonthCardSpacing
+                + yearHeatmapMonthGridHeight
+        }
+        static let yearHeatmapCompactWeekCount = 6
+        static let yearHeatmapLegendSquare: CGFloat = 10
+        static let yearHeatmapLegendTopPadding: CGFloat = Spacing.half
+        static let yearHeatmapMonthCardCornerRadius: CGFloat = CornerRadius.containerMedium
+        static let yearHeatmapErrorBannerHorizontalInset: CGFloat = Spacing.screenEdge
+        static let yearHeatmapErrorBannerBottomInset: CGFloat = Spacing.base
+        static let yearSummarySheetCompactRatio: CGFloat = 0.54
     }
 
     let props: Props
     let onDisplayModeChanged: (DisplayMode) -> Void
     let onPagerSelectionChanged: (Date) -> Void
+    let onYearSelectionChanged: (Int) -> Void
     let onSelectDate: (Date?) -> Void
     let onRetry: () -> Void
     @State private var streakHintMessage: String?
@@ -190,6 +247,7 @@ struct ReadCalendarContentView: View {
     @State private var shownStreakMilestonesByMonth: [Date: Set<Int>] = [:]
     @State private var isSummarySheetPresented = false
     @State private var summarySheetMonthStart: Date?
+    @State private var isYearSummarySheetPresented = false
     @State private var isSummaryFloatingButtonVisible = false
     @State private var summaryFloatingButtonAutoHideTask: Task<Void, Never>?
     @State private var summaryFloatingButtonInteractionToken: UInt64 = 0
@@ -203,11 +261,15 @@ struct ReadCalendarContentView: View {
         VStack(spacing: 0) {
             ReadCalendarTopControlBar(
                 monthTitle: props.monthTitle,
+                yearTitle: props.yearTitle,
                 availableMonths: props.availableMonths,
+                availableYears: props.availableYears,
                 pagerSelection: props.pagerSelection,
+                selectedYear: props.selectedYear,
                 displayMode: props.displayMode,
                 onDisplayModeChanged: onDisplayModeChanged,
-                onPagerSelectionChanged: onPagerSelectionChanged
+                onPagerSelectionChanged: onPagerSelectionChanged,
+                onYearSelectionChanged: onYearSelectionChanged
             )
                 .padding(.top, Layout.topControlTopPadding)
                 .padding(.bottom, Layout.topControlBottomPadding)
@@ -258,6 +320,9 @@ struct ReadCalendarContentView: View {
         }
         .onChange(of: props.displayMode) { _, mode in
             markSummaryFloatingButtonInteraction()
+            if mode != .heatmap {
+                isYearSummarySheetPresented = false
+            }
             guard mode == .activityEvent else {
                 streakHintTask?.cancel()
                 streakHintTask = nil
@@ -267,6 +332,12 @@ struct ReadCalendarContentView: View {
                 return
             }
             evaluateStreakHintIfNeeded()
+        }
+        .onChange(of: props.selectedYear) { _, _ in
+            guard props.displayMode == .heatmap else { return }
+            markSummaryFloatingButtonInteraction(
+                protectedFor: Layout.summaryFloatingButtonScrollInteractionProtection
+            )
         }
         .onChange(of: props.isStreakHintEnabled) { _, isEnabled in
             guard isEnabled else {
@@ -303,15 +374,40 @@ struct ReadCalendarContentView: View {
                 .presentationDragIndicator(.visible)
                 .presentationBackground(Color.bgSheet)
         }
+        .sheet(isPresented: $isYearSummarySheetPresented, onDismiss: {
+            markSummaryFloatingButtonInteraction(
+                protectedFor: Layout.summaryFloatingButtonPostDismissProtection,
+                force: true
+            )
+        }) {
+            ReadCalendarYearSummarySheet(
+                sheet: props.yearSummary,
+                onSelectMonth: { monthStart in
+                    withAnimation(.snappy(duration: 0.3)) {
+                        onPagerSelectionChanged(monthStart)
+                    }
+                    openMonthSummaryAfterAuxSheetDismiss(monthStart: monthStart)
+                },
+                onRetry: onRetry
+            )
+            .presentationDetents([.fraction(Layout.yearSummarySheetCompactRatio), .large])
+            .presentationDragIndicator(.visible)
+            .presentationBackground(Color.bgSheet)
+        }
     }
 }
 
 // MARK: - Subviews
 
 private extension ReadCalendarContentView {
+    var isHeatmapMode: Bool {
+        props.displayMode == .heatmap
+    }
+
     var shouldMountSummaryFloatingButton: Bool {
         props.rootContentState == .content
             && !isSummarySheetPresented
+            && !isYearSummarySheetPresented
     }
 
     var shouldShowSummaryFloatingButton: Bool {
@@ -327,6 +423,24 @@ private extension ReadCalendarContentView {
         activeMonthPage?.selectedDate
     }
 
+    var heatmapYearMonthPages: [MonthPage] {
+        props.heatmapYearMonthPages
+            .sorted(by: { $0.monthStart < $1.monthStart })
+    }
+
+    var isCurrentYearHeatmapLoading: Bool {
+        let hasLoadedMonth = heatmapYearMonthPages.contains { $0.loadState == .loaded }
+        return props.selectedYearLoadState == .loading && !hasLoadedMonth
+    }
+
+    var summaryFloatingButtonIconName: String {
+        isHeatmapMode ? "calendar.badge.clock" : "chart.bar.xaxis"
+    }
+
+    var summaryFloatingButtonAccessibilityLabel: String {
+        isHeatmapMode ? "打开年度阅读总结" : "打开月度阅读总结"
+    }
+
     var presentedSummarySheetData: MonthSummarySheetData {
         let monthStart = summarySheetMonthStart ?? props.pagerSelection
         return summarySheetData(for: monthStart)
@@ -336,11 +450,26 @@ private extension ReadCalendarContentView {
         props.monthPages.first(where: { $0.monthStart == monthStart })
     }
 
+    func openSummaryManually() {
+        if isHeatmapMode {
+            openYearSummaryManually()
+            return
+        }
+        openMonthSummaryManually()
+    }
+
     func openMonthSummaryManually() {
         let normalizedMonthStart = Calendar.current.startOfDay(for: props.pagerSelection)
         summarySheetMonthStart = normalizedMonthStart
         isSummaryFloatingButtonVisible = false
         isSummarySheetPresented = true
+        summaryFloatingButtonAutoHideTask?.cancel()
+        summaryFloatingButtonAutoHideTask = nil
+    }
+
+    func openYearSummaryManually() {
+        isSummaryFloatingButtonVisible = false
+        isYearSummarySheetPresented = true
         summaryFloatingButtonAutoHideTask?.cancel()
         summaryFloatingButtonAutoHideTask = nil
     }
@@ -372,7 +501,11 @@ private extension ReadCalendarContentView {
         protectedFor: TimeInterval = Layout.summaryFloatingButtonPostInteractionProtection,
         force: Bool = false
     ) {
-        guard props.rootContentState == .content, !isSummarySheetPresented else { return }
+        guard props.rootContentState == .content,
+              !isSummarySheetPresented,
+              !isYearSummarySheetPresented else {
+            return
+        }
 
         let now = Date()
         if !force,
@@ -415,6 +548,7 @@ private extension ReadCalendarContentView {
                 guard token == summaryFloatingButtonInteractionToken else { return }
                 guard props.rootContentState == .content,
                       !isSummarySheetPresented,
+                      !isYearSummarySheetPresented,
                       isSummaryFloatingButtonVisible else {
                     return
                 }
@@ -613,7 +747,7 @@ private extension ReadCalendarContentView {
                 emptyState
                     .transition(.opacity.combined(with: .scale(scale: 0.98)))
             case .content:
-                calendarPager
+                activeContent
                     .transition(.opacity.combined(with: .scale(scale: 0.98)))
             }
         }
@@ -621,7 +755,11 @@ private extension ReadCalendarContentView {
         .frame(maxWidth: .infinity, alignment: .top)
         .overlay(alignment: .bottomTrailing) {
             if shouldMountSummaryFloatingButton {
-                ReadCalendarSummaryFloatingButton(action: openMonthSummaryManually)
+                ReadCalendarSummaryFloatingButton(
+                    iconSystemName: summaryFloatingButtonIconName,
+                    accessibilityLabel: summaryFloatingButtonAccessibilityLabel,
+                    action: openSummaryManually
+                )
                     .padding(.trailing, Layout.summaryFloatingButtonTrailing)
                     .padding(.bottom, Layout.summaryFloatingButtonBottom)
                     .opacity(shouldShowSummaryFloatingButton ? 1 : 0)
@@ -630,6 +768,15 @@ private extension ReadCalendarContentView {
                     .allowsHitTesting(shouldShowSummaryFloatingButton)
                     .accessibilityHidden(!shouldShowSummaryFloatingButton)
             }
+        }
+    }
+
+    @ViewBuilder
+    var activeContent: some View {
+        if isHeatmapMode {
+            heatmapYearContent
+        } else {
+            calendarPager
         }
     }
 
@@ -646,6 +793,113 @@ private extension ReadCalendarContentView {
         .animation(.snappy(duration: 0.32), value: props.pagerSelection)
     }
 
+    @ViewBuilder
+    var heatmapYearContent: some View {
+        if isCurrentYearHeatmapLoading {
+            ProgressView()
+                .frame(maxWidth: .infinity, minHeight: Layout.pageMinHeight, alignment: .center)
+        } else {
+            ScrollView(.vertical, showsIndicators: false) {
+                VStack(spacing: Layout.yearHeatmapGridSpacing) {
+                    if let selectedYearErrorMessage = props.selectedYearErrorMessage,
+                       props.selectedYearLoadState == .failed {
+                        ReadCalendarInlineErrorBanner(
+                            message: selectedYearErrorMessage,
+                            onRetry: onRetry
+                        )
+                        .padding(.horizontal, Layout.yearHeatmapErrorBannerHorizontalInset)
+                        .padding(.bottom, Layout.yearHeatmapErrorBannerBottomInset)
+                    }
+
+                    let columns = [
+                        GridItem(.flexible(), spacing: Layout.yearHeatmapGridSpacing),
+                        GridItem(.flexible(), spacing: Layout.yearHeatmapGridSpacing)
+                    ]
+                    LazyVGrid(columns: columns, spacing: Layout.yearHeatmapGridSpacing) {
+                        ForEach(heatmapYearMonthPages) { page in
+                            yearHeatmapMonthCard(for: page)
+                        }
+                    }
+                    .padding(.horizontal, Spacing.screenEdge)
+
+                    yearHeatmapLegend
+                        .padding(.horizontal, Spacing.screenEdge)
+                        .padding(.top, Layout.yearHeatmapLegendTopPadding)
+                }
+                .frame(maxWidth: .infinity, alignment: .top)
+            }
+            .onScrollPhaseChange { _, phase in
+                guard phase.isScrolling else { return }
+                markSummaryFloatingButtonInteraction(
+                    protectedFor: Layout.summaryFloatingButtonScrollInteractionProtection
+                )
+            }
+            .scrollBounceBehavior(.basedOnSize)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+            .animation(.snappy(duration: 0.24), value: props.selectedYear)
+        }
+    }
+
+    func yearHeatmapMonthCard(for page: MonthPage) -> some View {
+        let monthTitle = yearHeatmapMonthTitle(page.monthStart)
+        return Button {
+            openMonthSummaryFromYearCard(for: page.monthStart)
+        } label: {
+            VStack(alignment: .leading, spacing: Layout.yearHeatmapMonthCardSpacing) {
+                Text(monthTitle)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(Color.textPrimary)
+                    .monospacedDigit()
+                    .contentTransition(.numericText())
+                    .frame(height: Layout.yearHeatmapMonthCardTitleHeight, alignment: .topLeading)
+
+                if page.isLoading && page.isDayMapEmpty {
+                    yearHeatmapLoadingGrid
+                } else {
+                    ReadCalendarMonthGrid(
+                        weeks: yearCompactWeeks(for: page),
+                        laneLimit: props.laneLimit,
+                        displayMode: .heatmapYearCompact,
+                        selectedDate: nil,
+                        isHapticsEnabled: false,
+                        dayPayloadProvider: { date in
+                            page.payload(for: date)
+                        },
+                        onSelectDay: { _ in }
+                    )
+                    .frame(
+                        maxWidth: .infinity,
+                        minHeight: Layout.yearHeatmapMonthGridHeight,
+                        maxHeight: Layout.yearHeatmapMonthGridHeight,
+                        alignment: .top
+                    )
+                }
+            }
+            .padding(Layout.yearHeatmapMonthCardPadding)
+            .frame(
+                maxWidth: .infinity,
+                minHeight: Layout.yearHeatmapMonthCardHeight,
+                maxHeight: Layout.yearHeatmapMonthCardHeight,
+                alignment: .topLeading
+            )
+            .background(
+                RoundedRectangle(
+                    cornerRadius: Layout.yearHeatmapMonthCardCornerRadius,
+                    style: .continuous
+                )
+                .fill(Color.contentBackground.opacity(0.96))
+            )
+            .overlay {
+                RoundedRectangle(
+                    cornerRadius: Layout.yearHeatmapMonthCardCornerRadius,
+                    style: .continuous
+                )
+                .stroke(Color.cardBorder.opacity(0.72), lineWidth: CardStyle.borderWidth)
+            }
+        }
+        .buttonStyle(.plain)
+    }
+
     func monthPage(for monthStart: Date) -> some View {
         let pageState = monthPageState(for: monthStart)
 
@@ -656,7 +910,7 @@ private extension ReadCalendarContentView {
                         .frame(maxWidth: .infinity, minHeight: Layout.pageMinHeight, alignment: .center)
                         .transition(.opacity)
                 } else {
-                    calendarWeeks(for: pageState)
+                    calendarWeeks(for: pageState, allowsDateSelection: true)
                         .frame(maxWidth: .infinity, alignment: .top)
                         .transition(.opacity.combined(with: .scale(scale: 0.99)))
                 }
@@ -673,17 +927,18 @@ private extension ReadCalendarContentView {
         .animation(.smooth(duration: 0.24), value: pageState.loadState)
     }
 
-    func calendarWeeks(for page: MonthPage) -> some View {
+    func calendarWeeks(for page: MonthPage, allowsDateSelection: Bool) -> some View {
         ReadCalendarMonthGrid(
             weeks: page.weeks,
             laneLimit: props.laneLimit,
-            displayMode: mapGridDisplayMode(props.displayMode),
-            selectedDate: page.selectedDate,
-            isHapticsEnabled: props.isHapticsEnabled,
+            displayMode: allowsDateSelection ? mapGridDisplayMode(props.displayMode) : .heatmap,
+            selectedDate: allowsDateSelection ? page.selectedDate : nil,
+            isHapticsEnabled: allowsDateSelection ? props.isHapticsEnabled : false,
             dayPayloadProvider: { date in
                 page.payload(for: date)
             },
             onSelectDay: { date in
+                guard allowsDateSelection else { return }
                 markSummaryFloatingButtonInteraction()
                 withAnimation(.smooth(duration: 0.22)) {
                     if let selectedDate = page.selectedDate,
@@ -713,7 +968,7 @@ private extension ReadCalendarContentView {
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(Color.brand)
             } else {
-                Text("暂无可展示的阅读月份")
+                Text(isHeatmapMode ? "暂无可展示的年度数据" : "暂无可展示的阅读月份")
                     .font(.subheadline)
                     .foregroundStyle(Color.textSecondary)
                     .multilineTextAlignment(.center)
@@ -753,24 +1008,142 @@ private extension ReadCalendarContentView {
             return .bookCover
         }
     }
+
+    func openMonthSummaryFromYearCard(for monthStart: Date) {
+        let normalized = Calendar.current.startOfDay(for: monthStart)
+        withAnimation(.snappy(duration: 0.28)) {
+            onPagerSelectionChanged(normalized)
+        }
+        summarySheetMonthStart = normalized
+        isSummaryFloatingButtonVisible = false
+        isSummarySheetPresented = true
+        summaryFloatingButtonAutoHideTask?.cancel()
+        summaryFloatingButtonAutoHideTask = nil
+    }
+
+    func openMonthSummaryAfterAuxSheetDismiss(monthStart: Date) {
+        let normalized = Calendar.current.startOfDay(for: monthStart)
+        summarySheetMonthStart = normalized
+        isYearSummarySheetPresented = false
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
+            guard !isYearSummarySheetPresented else { return }
+            isSummarySheetPresented = true
+        }
+    }
+
+    func yearHeatmapMonthTitle(_ monthStart: Date) -> String {
+        let month = Calendar.current.component(.month, from: monthStart)
+        return "\(month)月"
+    }
+
+    func yearCompactWeeks(for page: MonthPage) -> [ReadCalendarMonthGrid.WeekData] {
+        var weeks = Array(page.weeks.prefix(Layout.yearHeatmapCompactWeekCount))
+        let emptyDays = Array<Date?>(repeating: nil, count: 7)
+        let cal = Calendar.current
+        if weeks.isEmpty {
+            weeks.append(
+                ReadCalendarMonthGrid.WeekData(
+                    weekStart: cal.startOfDay(for: page.monthStart),
+                    days: emptyDays,
+                    segments: []
+                )
+            )
+        }
+        var cursor = weeks.last?.weekStart ?? cal.startOfDay(for: page.monthStart)
+
+        while weeks.count < Layout.yearHeatmapCompactWeekCount {
+            cursor = cal.date(byAdding: .day, value: 7, to: cursor).map { cal.startOfDay(for: $0) } ?? cursor
+            weeks.append(
+                ReadCalendarMonthGrid.WeekData(
+                    weekStart: cursor,
+                    days: emptyDays,
+                    segments: []
+                )
+            )
+        }
+
+        return weeks
+    }
+
+    var yearHeatmapLoadingGrid: some View {
+        VStack(spacing: 4) {
+            ForEach(0..<Layout.yearHeatmapCompactWeekCount, id: \.self) { _ in
+                HStack(spacing: 0) {
+                    ForEach(0..<7, id: \.self) { _ in
+                        RoundedRectangle(cornerRadius: CornerRadius.inlayTiny, style: .continuous)
+                            .fill(Color.readCalendarSelectionFill.opacity(0.42))
+                            .frame(width: Layout.yearHeatmapLegendSquare, height: Layout.yearHeatmapLegendSquare)
+                            .frame(maxWidth: .infinity)
+                    }
+                }
+            }
+        }
+        .frame(
+            maxWidth: .infinity,
+            minHeight: Layout.yearHeatmapMonthGridHeight,
+            maxHeight: Layout.yearHeatmapMonthGridHeight,
+            alignment: .top
+        )
+    }
+
+    var yearHeatmapLegend: some View {
+        HStack(spacing: Spacing.half) {
+            Text("少")
+                .font(.caption)
+                .foregroundStyle(Color.textSecondary)
+
+            ForEach(0...4, id: \.self) { level in
+                RoundedRectangle(cornerRadius: CornerRadius.inlayTiny, style: .continuous)
+                    .fill(yearHeatmapLegendColor(level: level))
+                    .frame(width: Layout.yearHeatmapLegendSquare, height: Layout.yearHeatmapLegendSquare)
+            }
+
+            Text("多")
+                .font(.caption)
+                .foregroundStyle(Color.textSecondary)
+        }
+        .frame(maxWidth: .infinity, alignment: .trailing)
+    }
+
+    func yearHeatmapLegendColor(level: Int) -> Color {
+        HeatmapLevel(rawValue: max(0, min(4, level)))?.color ?? .heatmapNone
+    }
 }
 
 #Preview {
     ReadCalendarContentView(
         props: .init(
             monthTitle: "2026年2月",
+            yearTitle: "2026年",
             availableMonths: [Calendar.current.startOfDay(for: Date())],
+            availableYears: [2026],
             pagerSelection: Calendar.current.startOfDay(for: Date()),
+            selectedYear: 2026,
             displayMode: .activityEvent,
             laneLimit: 4,
             isHapticsEnabled: true,
             isStreakHintEnabled: true,
             rootContentState: .loading,
             errorMessage: nil,
-            monthPages: []
+            monthPages: [],
+            heatmapYearMonthPages: [],
+            selectedYearLoadState: .idle,
+            selectedYearErrorMessage: nil,
+            yearSummary: .init(
+                year: 2026,
+                activeDays: 0,
+                totalReadSeconds: 0,
+                noteCount: 0,
+                finishedBookCount: 0,
+                topBooks: [],
+                monthContributions: [],
+                isLoading: false,
+                errorMessage: nil
+            )
         ),
         onDisplayModeChanged: { _ in },
         onPagerSelectionChanged: { _ in },
+        onYearSelectionChanged: { _ in },
         onSelectDate: { _ in },
         onRetry: {}
     )

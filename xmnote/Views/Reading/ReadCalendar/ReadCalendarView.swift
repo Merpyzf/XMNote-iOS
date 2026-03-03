@@ -11,6 +11,7 @@ struct ReadCalendarView: View {
     @Environment(RepositoryContainer.self) private var repositories
     @State private var viewModel: ReadCalendarViewModel
     @State private var pagerSelectionTask: Task<Void, Never>?
+    @State private var yearSelectionTask: Task<Void, Never>?
     @State private var displayMode: ReadCalendarContentView.DisplayMode = .activityEvent
     @State private var settings: ReadCalendarSettings
     @State private var settingsRefreshTask: Task<Void, Never>?
@@ -31,9 +32,27 @@ struct ReadCalendarView: View {
                 props: contentProps,
                 onDisplayModeChanged: { mode in
                     displayMode = mode
+                    guard mode == .heatmap else { return }
+                    yearSelectionTask?.cancel()
+                    yearSelectionTask = Task {
+                        await viewModel.prepareHeatmapYearIfNeeded(
+                            using: repositories.statisticsRepository,
+                            colorRepository: repositories.readCalendarColorRepository
+                        )
+                    }
                 },
                 onPagerSelectionChanged: { monthStart in
                     viewModel.pagerSelection = monthStart
+                },
+                onYearSelectionChanged: { year in
+                    yearSelectionTask?.cancel()
+                    yearSelectionTask = Task {
+                        await viewModel.handleYearSelectionChange(
+                            to: year,
+                            using: repositories.statisticsRepository,
+                            colorRepository: repositories.readCalendarColorRepository
+                        )
+                    }
                 },
                 onSelectDate: { date in
                     viewModel.selectDate(date)
@@ -87,6 +106,8 @@ struct ReadCalendarView: View {
         .onDisappear {
             pagerSelectionTask?.cancel()
             pagerSelectionTask = nil
+            yearSelectionTask?.cancel()
+            yearSelectionTask = nil
             settingsRefreshTask?.cancel()
             settingsRefreshTask = nil
             viewModel.cancelAsyncTasks()
@@ -117,8 +138,11 @@ private extension ReadCalendarView {
         let todayStart = Calendar.current.startOfDay(for: Date())
         return ReadCalendarContentView.Props(
             monthTitle: viewModel.monthTitle,
+            yearTitle: viewModel.yearTitle,
             availableMonths: viewModel.availableMonths,
+            availableYears: viewModel.availableYears,
             pagerSelection: viewModel.pagerSelection,
+            selectedYear: viewModel.selectedYear,
             displayMode: displayMode,
             laneLimit: viewModel.laneLimit,
             isHapticsEnabled: settings.isHapticsEnabled,
@@ -127,7 +151,13 @@ private extension ReadCalendarView {
             errorMessage: viewModel.errorMessage,
             monthPages: visibleMonthWindow.map { monthStart in
                 makeContentMonthPage(for: monthStart, todayStart: todayStart)
-            }
+            },
+            heatmapYearMonthPages: heatmapYearMonths.map { monthStart in
+                makeContentMonthPage(for: monthStart, todayStart: todayStart)
+            },
+            selectedYearLoadState: mapYearLoadState(viewModel.yearLoadState(for: viewModel.selectedYear)),
+            selectedYearErrorMessage: viewModel.yearSummaryState(for: viewModel.selectedYear).errorMessage,
+            yearSummary: mapYearSummary(viewModel.yearSummaryState(for: viewModel.selectedYear))
         )
     }
 
@@ -144,6 +174,10 @@ private extension ReadCalendarView {
         let lower = max(0, anchorIndex - 1)
         let upper = min(months.count - 1, anchorIndex + 1)
         return Array(months[lower...upper])
+    }
+
+    var heatmapYearMonths: [Date] {
+        viewModel.monthStartsForYear(viewModel.selectedYear)
     }
 
     func makeContentMonthPage(for monthStart: Date, todayStart: Date) -> ReadCalendarContentView.MonthPage {
@@ -230,10 +264,49 @@ private extension ReadCalendarView {
         }
     }
 
+    func mapYearLoadState(_ state: ReadCalendarViewModel.YearLoadState) -> ReadCalendarContentView.YearLoadState {
+        switch state {
+        case .idle:
+            return .idle
+        case .loading:
+            return .loading
+        case .loaded:
+            return .loaded
+        case .failed:
+            return .failed
+        }
+    }
+
+    func mapYearSummary(_ state: ReadCalendarViewModel.YearSummaryState) -> ReadCalendarContentView.YearSummarySheetData {
+        ReadCalendarContentView.YearSummarySheetData(
+            year: state.year,
+            activeDays: state.activeDays,
+            totalReadSeconds: state.totalReadSeconds,
+            noteCount: state.noteCount,
+            finishedBookCount: state.finishedBookCount,
+            topBooks: state.topBooks,
+            monthContributions: state.monthContributions.map { item in
+                ReadCalendarContentView.YearSummaryMonthContribution(
+                    monthStart: item.monthStart,
+                    activeDays: item.activeDays,
+                    totalReadSeconds: item.totalReadSeconds
+                )
+            },
+            isLoading: state.isLoading,
+            errorMessage: state.errorMessage
+        )
+    }
+
     func retryCurrentContext() {
         Task {
             if viewModel.availableMonths.isEmpty {
                 await viewModel.reload(
+                    using: repositories.statisticsRepository,
+                    colorRepository: repositories.readCalendarColorRepository
+                )
+            } else if displayMode == .heatmap {
+                await viewModel.handleYearSelectionChange(
+                    to: viewModel.selectedYear,
                     using: repositories.statisticsRepository,
                     colorRepository: repositories.readCalendarColorRepository
                 )

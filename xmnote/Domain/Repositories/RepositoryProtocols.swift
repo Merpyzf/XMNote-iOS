@@ -81,6 +81,18 @@ protocol StatisticsRepositoryProtocol {
         monthStart: Date,
         excludedEventTypes: Set<ReadCalendarEventType>
     ) async throws -> ReadCalendarMonthData
+
+    /// 按自然年获取阅读时长 Top 书籍（精确聚合）
+    /// - Parameters:
+    ///   - year: 自然年（如 2026）
+    ///   - excludedEventTypes: 需排除的事件类型集合
+    ///   - limit: 返回条数上限
+    /// - Returns: 年度阅读时长 Top 书籍（按 readSeconds 降序）
+    func fetchReadCalendarYearTopBooks(
+        year: Int,
+        excludedEventTypes: Set<ReadCalendarEventType>,
+        limit: Int
+    ) async throws -> [ReadCalendarMonthlyDurationBook]
 }
 
 extension StatisticsRepositoryProtocol {
@@ -95,5 +107,13 @@ extension StatisticsRepositoryProtocol {
 
     func fetchReadCalendarMonthData(monthStart: Date) async throws -> ReadCalendarMonthData {
         try await fetchReadCalendarMonthData(monthStart: monthStart, excludedEventTypes: [])
+    }
+
+    func fetchReadCalendarYearTopBooks(year: Int, limit: Int = 10) async throws -> [ReadCalendarMonthlyDurationBook] {
+        try await fetchReadCalendarYearTopBooks(
+            year: year,
+            excludedEventTypes: [],
+            limit: limit
+        )
     }
 }

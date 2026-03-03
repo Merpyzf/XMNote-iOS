@@ -46,6 +46,18 @@ nonisolated struct StatisticsRepository: StatisticsRepositoryProtocol {
             buildReadCalendarMonthData(db, monthStart: monthStart, excludedEventTypes: excludedEventTypes)
         }
     }
+
+    nonisolated func fetchReadCalendarYearTopBooks(
+        year: Int,
+        excludedEventTypes: Set<ReadCalendarEventType>,
+        limit: Int
+    ) async throws -> [ReadCalendarMonthlyDurationBook] {
+        guard !excludedEventTypes.contains(.readTiming) else { return [] }
+        guard limit > 0 else { return [] }
+        return try await databaseManager.database.dbPool.read { db in
+            buildReadCalendarYearTopBooks(db, year: year, limit: limit)
+        }
+    }
 }
 
 // MARK: - 共享格式化器
@@ -386,6 +398,15 @@ private extension StatisticsRepository {
         let readDoneMap = fetchReadDoneCountByDay(db, millisRange: queryRange)
         let readDoneBookIdsByDay = fetchReadDoneBookIdsByDay(db, millisRange: queryRange)
         let monthMillisRange = queryRange
+        let dayReadSecondsMap = excludedEventTypes.contains(.readTiming)
+            ? [:]
+            : aggregateReadSeconds(db, millisRange: monthMillisRange)
+        let dayNoteCountMap = excludedEventTypes.contains(.note)
+            ? [:]
+            : aggregateNoteCounts(db, millisRange: monthMillisRange)
+        let dayCheckInMap = excludedEventTypes.contains(.checkIn)
+            ? [:]
+            : aggregateCheckInSummary(db, millisRange: monthMillisRange)
         let durationRecords = excludedEventTypes.contains(.readTiming)
             ? []
             : fetchReadCalendarDurationRecords(
@@ -411,7 +432,11 @@ private extension StatisticsRepository {
         }
 
         var days: [Date: ReadCalendarDay] = [:]
-        let dayKeys = Set(dayBookMap.keys).union(readDoneMap.keys)
+        let dayKeys = Set(dayBookMap.keys)
+            .union(readDoneMap.keys)
+            .union(dayReadSecondsMap.keys)
+            .union(dayNoteCountMap.keys)
+            .union(dayCheckInMap.keys)
         for day in dayKeys {
             let books = (dayBookMap[day] ?? []).sorted {
                 if $0.firstEventTime != $1.firstEventTime {
@@ -422,7 +447,11 @@ private extension StatisticsRepository {
             days[day] = ReadCalendarDay(
                 date: day,
                 books: books,
-                readDoneCount: readDoneMap[day] ?? 0
+                readDoneCount: readDoneMap[day] ?? 0,
+                readSeconds: dayReadSecondsMap[day] ?? 0,
+                noteCount: dayNoteCountMap[day] ?? 0,
+                checkInCount: dayCheckInMap[day]?.count ?? 0,
+                checkInSeconds: dayCheckInMap[day]?.seconds ?? 0
             )
         }
 
@@ -624,6 +653,108 @@ private extension StatisticsRepository {
             )
         }
         return records
+    }
+
+    nonisolated func fetchReadCalendarDurationRecords(
+        _ db: Database,
+        millisRange: ClosedRange<Int64>
+    ) -> [ReadCalendarDurationRecordRow] {
+        let sql = """
+            SELECT r.book_id AS book_id,
+                   b.name AS book_name,
+                   b.cover AS book_cover,
+                   r.start_time AS start_time,
+                   r.end_time AS end_time,
+                   r.elapsed_seconds AS elapsed_seconds,
+                   r.fuzzy_read_date AS fuzzy_read_date
+            FROM read_time_record r
+            JOIN book b ON b.id = r.book_id AND b.is_deleted = 0
+            WHERE r.is_deleted = 0
+              AND r.status = 3
+              AND r.book_id != 0
+              AND r.elapsed_seconds > 0
+              AND (
+                (r.fuzzy_read_date != 0 AND r.fuzzy_read_date BETWEEN ? AND ?)
+                OR
+                (r.fuzzy_read_date = 0 AND r.end_time >= ? AND r.start_time <= ?)
+              )
+            """
+
+        guard let rows = try? Row.fetchAll(
+            db,
+            sql: sql,
+            arguments: StatementArguments([
+                millisRange.lowerBound,
+                millisRange.upperBound,
+                millisRange.lowerBound,
+                millisRange.upperBound
+            ])
+        ) else {
+            return []
+        }
+
+        var records: [ReadCalendarDurationRecordRow] = []
+        records.reserveCapacity(rows.count)
+        for row in rows {
+            guard let bookId: Int64 = row["book_id"],
+                  let bookName: String = row["book_name"],
+                  let startTime: Int64 = row["start_time"],
+                  let endTime: Int64 = row["end_time"],
+                  let elapsedSeconds: Int64 = row["elapsed_seconds"],
+                  let fuzzyReadDate: Int64 = row["fuzzy_read_date"] else {
+                continue
+            }
+            let bookCover: String = row["book_cover"] ?? ""
+            records.append(
+                ReadCalendarDurationRecordRow(
+                    bookId: bookId,
+                    bookName: bookName,
+                    bookCover: bookCover,
+                    startTime: startTime,
+                    endTime: endTime,
+                    elapsedSeconds: elapsedSeconds,
+                    fuzzyReadDate: fuzzyReadDate
+                )
+            )
+        }
+        return records
+    }
+
+    nonisolated func buildReadCalendarYearTopBooks(
+        _ db: Database,
+        year: Int,
+        limit: Int
+    ) -> [ReadCalendarMonthlyDurationBook] {
+        guard let dateRange = yearDateRange(year) else { return [] }
+        let yearMillisRange = millisRangeForQuery(dateRange)
+        let records = fetchReadCalendarDurationRecords(db, millisRange: yearMillisRange)
+        guard !records.isEmpty else { return [] }
+
+        var readSecondsByBookId: [Int64: Int64] = [:]
+        var bookMetaById: [Int64: (name: String, coverURL: String)] = [:]
+
+        for record in records {
+            bookMetaById[record.bookId] = (record.bookName, record.bookCover)
+            let dayBuckets = splitReadDurationByDay(
+                startTime: record.startTime,
+                endTime: record.endTime,
+                elapsedSeconds: record.elapsedSeconds,
+                fuzzyReadDate: record.fuzzyReadDate
+            )
+            for (day, seconds) in dayBuckets {
+                let dayMs = Int64(day.timeIntervalSince1970 * 1000)
+                guard yearMillisRange.contains(dayMs) else { continue }
+                readSecondsByBookId[record.bookId, default: 0] += seconds
+            }
+        }
+
+        let aggregation = ReadCalendarDurationAggregation(
+            readSecondsByBookId: readSecondsByBookId,
+            bookMetaById: bookMetaById,
+            totalReadSeconds: 0,
+            timeSlotReadSeconds: [:]
+        )
+        return buildReadCalendarMonthlyDurationTopBooks(aggregation: aggregation, limit: limit)
     }
 
     nonisolated func aggregateReadCalendarDuration(

@@ -13,6 +13,7 @@ import UIKit
 struct ReadCalendarMonthGrid: View {
     enum DisplayMode: Hashable {
         case heatmap
+        case heatmapYearCompact
         case activityEvent
         case bookCover
     }
@@ -63,6 +64,7 @@ struct ReadCalendarMonthGrid: View {
     struct DayPayload: Hashable {
         let bookCount: Int
         let isReadDoneDay: Bool
+        let heatmapLevel: HeatmapLevel
         let overflowCount: Int
         let isStreakDay: Bool
         let isToday: Bool
@@ -72,6 +74,7 @@ struct ReadCalendarMonthGrid: View {
         static let empty = DayPayload(
             bookCount: 0,
             isReadDoneDay: false,
+            heatmapLevel: .none,
             overflowCount: 0,
             isStreakDay: false,
             isToday: false,
@@ -89,6 +92,8 @@ struct ReadCalendarMonthGrid: View {
         static let segmentHorizontalInset: CGFloat = 2
         static let weekSpacing: CGFloat = Spacing.cozy
         static let gridBottomPadding: CGFloat = 2
+        static let yearCompactWeekSpacing: CGFloat = 4
+        static let yearCompactGridBottomPadding: CGFloat = 0
     }
 
     let weeks: [WeekData]
@@ -100,15 +105,15 @@ struct ReadCalendarMonthGrid: View {
     let onSelectDay: (Date) -> Void
 
     var body: some View {
-        VStack(spacing: Layout.weekSpacing) {
+        VStack(spacing: weekSpacing) {
             ForEach(weeks) { week in
                 ReadCalendarMonthGridWeekRow(
                     week: week,
                     laneLimit: laneLimit,
                     displayMode: displayMode,
-                    dayHeaderHeight: Layout.dayHeaderHeight,
-                    laneTopInset: Layout.laneTopInset,
-                    laneBottomInset: Layout.laneBottomInset,
+                    dayHeaderHeight: displayMode == .heatmapYearCompact ? 0 : Layout.dayHeaderHeight,
+                    laneTopInset: displayMode == .heatmapYearCompact ? 0 : Layout.laneTopInset,
+                    laneBottomInset: displayMode == .heatmapYearCompact ? 0 : Layout.laneBottomInset,
                     laneBarHeight: Layout.laneBarHeight,
                     laneSpacing: Layout.laneSpacing,
                     segmentHorizontalInset: Layout.segmentHorizontalInset,
@@ -117,13 +122,27 @@ struct ReadCalendarMonthGrid: View {
                     dayPayloadProvider: dayPayloadProvider,
                     onSelectDay: onSelectDay
                 )
-                .background(
-                    RoundedRectangle(cornerRadius: CornerRadius.blockMedium, style: .continuous)
-                        .fill(Color.readCalendarSelectionFill.opacity(0.14))
-                )
+                .background {
+                    if displayMode != .heatmapYearCompact {
+                        RoundedRectangle(cornerRadius: CornerRadius.blockMedium, style: .continuous)
+                            .fill(Color.readCalendarSelectionFill.opacity(0.14))
+                    }
+                }
             }
         }
-        .padding(.bottom, Layout.gridBottomPadding)
+        .padding(.bottom, gridBottomPadding)
+    }
+
+    private var weekSpacing: CGFloat {
+        displayMode == .heatmapYearCompact
+            ? Layout.yearCompactWeekSpacing
+            : Layout.weekSpacing
+    }
+
+    private var gridBottomPadding: CGFloat {
+        displayMode == .heatmapYearCompact
+            ? Layout.yearCompactGridBottomPadding
+            : Layout.gridBottomPadding
     }
 }
 
@@ -134,6 +153,9 @@ private struct ReadCalendarMonthGridWeekRow: View {
         static let overflowBadgeHPadding: CGFloat = 3
         static let overflowBadgeBottomPadding: CGFloat = 2
         static let overflowBadgeLeading: CGFloat = 3
+        static let yearCompactCellMaxSize: CGFloat = 12
+        static let yearCompactCellCornerRadius: CGFloat = 2.5
+        static let yearCompactCellHorizontalInset: CGFloat = 2
     }
 
     let week: ReadCalendarMonthGrid.WeekData
@@ -153,6 +175,10 @@ private struct ReadCalendarMonthGridWeekRow: View {
     @State private var badgePulseIDs: Set<String> = []
     @State private var badgePulseToken = 0
 
+    private var isYearCompactMode: Bool {
+        displayMode == .heatmapYearCompact
+    }
+
     private var activityEventHeight: CGFloat {
         CGFloat(laneLimit) * laneBarHeight
             + CGFloat(max(0, laneLimit - 1)) * laneSpacing
@@ -164,13 +190,18 @@ private struct ReadCalendarMonthGridWeekRow: View {
             return activityEventHeight
         case .heatmap:
             return 34
+        case .heatmapYearCompact:
+            return Layout.yearCompactCellMaxSize
         case .bookCover:
             return 40
         }
     }
 
     private var rowHeight: CGFloat {
-        dayHeaderHeight
+        if isYearCompactMode {
+            return modeContentHeight
+        }
+        return dayHeaderHeight
             + laneTopInset
             + laneBottomInset
             + modeContentHeight
@@ -184,7 +215,7 @@ private struct ReadCalendarMonthGridWeekRow: View {
             ZStack(alignment: .topLeading) {
                 HStack(spacing: 0) {
                     ForEach(Array(week.days.enumerated()), id: \.offset) { _, day in
-                        dayCell(day)
+                        dayCell(day, cellWidth: cellWidth)
                             .frame(width: cellWidth, height: rowHeight)
                     }
                 }
@@ -206,86 +237,109 @@ private struct ReadCalendarMonthGridWeekRow: View {
         }
     }
 
-    private func dayCell(_ day: Date?) -> some View {
+    @ViewBuilder
+    private func dayCell(_ day: Date?, cellWidth: CGFloat) -> some View {
         let hasDate = day != nil
         let payload = day.map(dayPayloadProvider) ?? .empty
         let overflowCount = hasDate ? overflowCount(for: payload) : 0
         let readDone = payload.isReadDoneDay
 
-        return ZStack(alignment: .topLeading) {
-            Color.clear
+        if isYearCompactMode {
+            let cellSize = max(
+                8,
+                min(
+                    Layout.yearCompactCellMaxSize,
+                    cellWidth - Layout.yearCompactCellHorizontalInset * 2
+                )
+            )
+            let fillColor = day == nil
+                ? HeatmapLevel.none.color.opacity(0.42)
+                : yearCompactHeatmapColor(for: payload)
+            ZStack {
+                Color.clear
+                RoundedRectangle(
+                    cornerRadius: Layout.yearCompactCellCornerRadius,
+                    style: .continuous
+                )
+                .fill(fillColor)
+                .frame(width: cellSize, height: cellSize)
+            }
+        } else {
+            ZStack(alignment: .topLeading) {
+                Color.clear
 
-            if let day {
-                let today = payload.isToday
-                let selected = payload.isSelected
-                let dayNum = Calendar.current.component(.day, from: day)
+                if let day {
+                    let today = payload.isToday
+                    let selected = payload.isSelected
+                    let dayNum = Calendar.current.component(.day, from: day)
 
-                VStack(spacing: 1) {
-                    ZStack {
-                        if selected {
-                            Circle()
-                                .fill(Color.brand.opacity(0.18))
-                                .overlay {
-                                    Circle()
-                                        .stroke(Color.brand.opacity(0.62), lineWidth: 0.95)
-                                }
-                                .frame(width: 22, height: 22)
+                    VStack(spacing: 1) {
+                        ZStack {
+                            if selected {
+                                Circle()
+                                    .fill(Color.brand.opacity(0.18))
+                                    .overlay {
+                                        Circle()
+                                            .stroke(Color.brand.opacity(0.62), lineWidth: 0.95)
+                                    }
+                                    .frame(width: 22, height: 22)
+                            }
+                            Text("\(dayNum)")
+                                .font(.system(size: 12, weight: selected ? .bold : .medium, design: .rounded))
+                                .foregroundStyle(
+                                    payload.isFuture ? Color.textHint :
+                                    selected ? Color.brand : Color.textPrimary
+                                )
                         }
-                        Text("\(dayNum)")
-                            .font(.system(size: 12, weight: selected ? .bold : .medium, design: .rounded))
-                            .foregroundStyle(
-                                payload.isFuture ? Color.textHint :
-                                selected ? Color.brand : Color.textPrimary
-                            )
-                    }
-                    .frame(height: dayHeaderHeight)
-                    .frame(maxWidth: .infinity, alignment: .center)
-                    .overlay(alignment: .topTrailing) {
-                        if readDone && displayMode != .activityEvent {
-                            Image(systemName: "checkmark.circle.fill")
-                                .font(.system(size: 8))
-                                .foregroundStyle(Color.readCalendarTodayMark)
-                                .offset(x: -2, y: 4)
+                        .frame(height: dayHeaderHeight)
+                        .frame(maxWidth: .infinity, alignment: .center)
+                        .overlay(alignment: .topTrailing) {
+                            if readDone && displayMode != .activityEvent {
+                                Image(systemName: "checkmark.circle.fill")
+                                    .font(.system(size: 8))
+                                    .foregroundStyle(Color.readCalendarTodayMark)
+                                    .offset(x: -2, y: 4)
+                            }
                         }
-                    }
 
-                    if payload.isStreakDay && displayMode == .activityEvent {
-                        Capsule(style: .continuous)
-                            .fill(
-                                selected
-                                ? Color.brand.opacity(0.82)
-                                : Color.brand.opacity(0.56)
-                            )
-                            .frame(width: selected ? 12 : 10, height: 2)
-                            .offset(y: -1)
-                    }
+                        if payload.isStreakDay && displayMode == .activityEvent {
+                            Capsule(style: .continuous)
+                                .fill(
+                                    selected
+                                    ? Color.brand.opacity(0.82)
+                                    : Color.brand.opacity(0.56)
+                                )
+                                .frame(width: selected ? 12 : 10, height: 2)
+                                .offset(y: -1)
+                        }
 
-                    if today && !selected {
-                        Capsule(style: .continuous)
-                            .fill(Color.readCalendarTodayMark)
-                            .frame(width: 6, height: 4)
-                            .offset(y: -2)
-                    }
+                        if today && !selected {
+                            Capsule(style: .continuous)
+                                .fill(Color.readCalendarTodayMark)
+                                .frame(width: 6, height: 4)
+                                .offset(y: -2)
+                        }
 
-                    modeContent(for: day, payload: payload)
+                        modeContent(for: day, payload: payload)
 
-                    Spacer(minLength: 0)
+                        Spacer(minLength: 0)
 
-                    if overflowCount > 0 {
-                        overflowBadge(overflowCount)
+                        if overflowCount > 0 {
+                            overflowBadge(overflowCount)
+                        }
                     }
                 }
             }
-        }
-        .contentShape(Rectangle())
-        .onTapGesture {
-            guard let day, !payload.isFuture else { return }
-            if !payload.isSelected, isHapticsEnabled {
-                ReadCalendarHaptics.selection()
+            .contentShape(Rectangle())
+            .onTapGesture {
+                guard let day, !payload.isFuture else { return }
+                if !payload.isSelected, isHapticsEnabled {
+                    ReadCalendarHaptics.selection()
+                }
+                onSelectDay(day)
             }
-            onSelectDay(day)
+            .opacity(payload.isFuture ? 0.55 : 1)
         }
-        .opacity(payload.isFuture ? 0.55 : 1)
     }
 
     @ViewBuilder
@@ -299,6 +353,8 @@ private struct ReadCalendarMonthGridWeekRow: View {
                 .frame(maxWidth: .infinity, minHeight: 30, maxHeight: 34)
                 .padding(.horizontal, Layout.modeContentHPadding)
                 .padding(.top, Layout.modeContentTopPadding)
+        case .heatmapYearCompact:
+            EmptyView()
         case .bookCover:
             HStack(spacing: 3) {
                 let coverCount = min(3, payload.bookCount)
@@ -326,7 +382,7 @@ private struct ReadCalendarMonthGridWeekRow: View {
 
     private func overflowCount(for payload: ReadCalendarMonthGrid.DayPayload) -> Int {
         switch displayMode {
-        case .heatmap:
+        case .heatmap, .heatmapYearCompact:
             return 0
         case .activityEvent:
             return payload.overflowCount
@@ -353,20 +409,11 @@ private struct ReadCalendarMonthGridWeekRow: View {
     }
 
     private func heatmapColor(for payload: ReadCalendarMonthGrid.DayPayload) -> Color {
-        let rawLevel = payload.bookCount + (payload.isReadDoneDay ? 1 : 0)
-        let level = payload.bookCount == 0 ? 0 : min(4, max(1, rawLevel))
-        switch level {
-        case 0:
-            return Color.readCalendarSelectionFill.opacity(0.35)
-        case 1:
-            return Color.brand.opacity(0.24)
-        case 2:
-            return Color.brand.opacity(0.36)
-        case 3:
-            return Color.brand.opacity(0.5)
-        default:
-            return Color.brand.opacity(0.64)
-        }
+        payload.heatmapLevel.color
+    }
+
+    private func yearCompactHeatmapColor(for payload: ReadCalendarMonthGrid.DayPayload) -> Color {
+        payload.heatmapLevel.color
     }
 
     private func coverColor(for day: Date, index: Int) -> Color {

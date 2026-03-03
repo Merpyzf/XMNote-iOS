@@ -24,6 +24,13 @@ final class ReadCalendarViewModel {
         return formatter
     }()
 
+    private static let yearTitleFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy年"
+        formatter.timeZone = .current
+        return formatter
+    }()
+
     private static let monthKeyFormatter: DateFormatter = {
         let formatter = DateFormatter()
         formatter.dateFormat = "yyyy-MM"
@@ -33,6 +40,7 @@ final class ReadCalendarViewModel {
 
     private static let colorBatchCount = 8
     private static let colorBatchInterval: TimeInterval = 0.12
+    private static let yearTopBookLimit = 10
 
     struct WeekRowData: Identifiable, Hashable {
         let weekStart: Date
@@ -64,6 +72,33 @@ final class ReadCalendarViewModel {
         }
     }
 
+    enum YearLoadState: Equatable {
+        case idle
+        case loading
+        case loaded
+        case failed
+    }
+
+    struct YearMonthContribution: Identifiable, Hashable {
+        let monthStart: Date
+        let activeDays: Int
+        let totalReadSeconds: Int
+
+        var id: Date { monthStart }
+    }
+
+    struct YearSummaryState: Hashable {
+        let year: Int
+        let activeDays: Int
+        let totalReadSeconds: Int
+        let noteCount: Int
+        let finishedBookCount: Int
+        let monthContributions: [YearMonthContribution]
+        let topBooks: [ReadCalendarMonthlyDurationBook]
+        let isLoading: Bool
+        let errorMessage: String?
+    }
+
     enum RootContentState: Equatable {
         case loading
         case empty
@@ -75,6 +110,8 @@ final class ReadCalendarViewModel {
     var selectedDate: Date?
     var earliestMonthStart: Date?
     var availableMonths: [Date] = []
+    var selectedYear: Int
+    var availableYears: [Int] = []
 
     var isLoading = false
     var errorMessage: String?
@@ -88,11 +125,16 @@ final class ReadCalendarViewModel {
     private var monthCache: [String: ReadCalendarMonthData] = [:]
     private var pageStates: [String: MonthPageState] = [:]
     private var monthIndexByKey: [String: Int] = [:]
+    private var yearTopBooksByYear: [Int: [ReadCalendarMonthlyDurationBook]] = [:]
+    private var yearLoadStateByYear: [Int: YearLoadState] = [:]
+    private var yearErrorMessageByYear: [Int: String] = [:]
+    private var latestYearRequestTicketByYear: [Int: Int] = [:]
     private var latestRequestTicketByMonthKey: [String: Int] = [:]
     private var latestColorTicketByMonthKey: [String: Int] = [:]
     private var inFlightColorRequestBookIDsByMonthKey: [String: Set<Int64>] = [:]
     private var monthColorTasks: [String: Task<Void, Never>] = [:]
     private var requestTicketSeed = 0
+    private var yearRequestTicketSeed = 0
     private var colorTicketSeed = 0
     private var calendar: Calendar
 
@@ -111,9 +153,11 @@ final class ReadCalendarViewModel {
 
         let today = cal.startOfDay(for: Date())
         let monthStart = Self.monthStart(of: today, using: cal)
+        let defaultYear = cal.component(.year, from: initialDate ?? today)
         self.displayedMonthStart = monthStart
         self.pagerSelection = monthStart
         self.selectedDate = today
+        self.selectedYear = defaultYear
     }
 
     var canGoPrevMonth: Bool {
@@ -136,6 +180,13 @@ final class ReadCalendarViewModel {
 
     var monthTitle: String {
         Self.monthTitleFormatter.string(from: pagerSelection)
+    }
+
+    var yearTitle: String {
+        guard let date = calendar.date(from: DateComponents(year: selectedYear, month: 1, day: 1)) else {
+            return "\(selectedYear)年"
+        }
+        return Self.yearTitleFormatter.string(from: date)
     }
 
     var rootContentState: RootContentState {
@@ -175,6 +226,7 @@ final class ReadCalendarViewModel {
             earliestMonthStart = earliest
 
             rebuildMonthRange(from: earliest, to: current)
+            rebuildYearRange(from: earliest, to: current)
 
             let preferredSelectedDate = clampSelectedDate(
                 calendar.startOfDay(for: initialDate ?? today),
@@ -187,9 +239,14 @@ final class ReadCalendarViewModel {
             let defaultMonth = clampMonthStart(preferredMonth, earliest: earliest, latest: current)
             displayedMonthStart = defaultMonth
             pagerSelection = defaultMonth
+            selectedYear = clampYear(calendar.component(.year, from: preferredSelectedDate))
 
             monthCache = [:]
             pageStates = [:]
+            yearTopBooksByYear = [:]
+            yearLoadStateByYear = [:]
+            yearErrorMessageByYear = [:]
+            latestYearRequestTicketByYear = [:]
             latestRequestTicketByMonthKey = [:]
             latestColorTicketByMonthKey = [:]
             inFlightColorRequestBookIDsByMonthKey = [:]
@@ -214,8 +271,13 @@ final class ReadCalendarViewModel {
         } catch {
             errorMessage = "阅读日历加载失败：\(error.localizedDescription)"
             availableMonths = []
+            availableYears = []
             monthIndexByKey = [:]
             pageStates = [:]
+            yearTopBooksByYear = [:]
+            yearLoadStateByYear = [:]
+            yearErrorMessageByYear = [:]
+            latestYearRequestTicketByYear = [:]
             cancelAllColorTasks()
             hasLoaded = false
         }
@@ -234,6 +296,7 @@ final class ReadCalendarViewModel {
         guard isMonthInAvailableRange(todayMonth) else { return }
         selectedDate = today
         pagerSelection = todayMonth
+        selectedYear = clampYear(calendar.component(.year, from: todayMonth))
     }
 
     func handlePagerSelectionChange(
@@ -249,6 +312,7 @@ final class ReadCalendarViewModel {
         }
 
         pagerSelection = normalized
+        selectedYear = clampYear(calendar.component(.year, from: normalized))
         if normalized != displayedMonthStart {
             displayedMonthStart = normalized
             errorMessage = nil
@@ -269,6 +333,52 @@ final class ReadCalendarViewModel {
         )
         cancelOutOfScopeColorTasks(around: normalized)
         syncDisplayedMonthError()
+    }
+
+    func handleYearSelectionChange(
+        to year: Int,
+        using repository: any StatisticsRepositoryProtocol,
+        colorRepository: any ReadCalendarColorRepositoryProtocol
+    ) async {
+        guard hasLoaded else { return }
+        let clampedYear = clampYear(year)
+        let hasLoadedYearData = yearLoadState(for: clampedYear) == .loaded
+        let hasLoadedTopBooks = yearTopBooksByYear[clampedYear] != nil
+        let hasYearError = yearErrorMessageByYear[clampedYear] != nil
+        selectedYear = clampedYear
+
+        if !hasLoadedYearData || hasYearError {
+            await ensureYearLoaded(
+                for: clampedYear,
+                using: repository,
+                colorRepository: colorRepository,
+                reportError: false
+            )
+        }
+        if !hasLoadedTopBooks || hasYearError {
+            await ensureYearTopBooksLoaded(
+                for: clampedYear,
+                using: repository
+            )
+        }
+    }
+
+    func prepareHeatmapYearIfNeeded(
+        using repository: any StatisticsRepositoryProtocol,
+        colorRepository: any ReadCalendarColorRepositoryProtocol
+    ) async {
+        guard hasLoaded else { return }
+        selectedYear = clampYear(selectedYear)
+        await ensureYearLoaded(
+            for: selectedYear,
+            using: repository,
+            colorRepository: colorRepository,
+            reportError: false
+        )
+        await ensureYearTopBooksLoaded(
+            for: selectedYear,
+            using: repository
+        )
     }
 
     func retryDisplayedMonth(
@@ -341,6 +451,10 @@ final class ReadCalendarViewModel {
         hasLoaded = false
         monthCache = [:]
         pageStates = [:]
+        yearTopBooksByYear = [:]
+        yearLoadStateByYear = [:]
+        yearErrorMessageByYear = [:]
+        latestYearRequestTicketByYear = [:]
         latestRequestTicketByMonthKey = [:]
         inFlightColorRequestBookIDsByMonthKey = [:]
         cancelAllColorTasks()
@@ -351,6 +465,52 @@ final class ReadCalendarViewModel {
         let normalized = Self.monthStart(of: monthStart, using: calendar)
         let key = Self.monthKey(for: normalized, using: calendar)
         return pageStates[key] ?? placeholderState(for: normalized)
+    }
+
+    func monthStartsForYear(_ year: Int) -> [Date] {
+        Self.monthStarts(of: clampYear(year), using: calendar)
+    }
+
+    func yearLoadState(for year: Int) -> YearLoadState {
+        yearLoadStateByYear[year] ?? .idle
+    }
+
+    func yearSummaryState(for year: Int) -> YearSummaryState {
+        let clampedYear = clampYear(year)
+        let monthStarts = monthStartsForYear(clampedYear)
+        var activeDays = 0
+        var totalReadSeconds = 0
+        var noteCount = 0
+        var finishedBookCount = 0
+        var contributions: [YearMonthContribution] = []
+
+        for monthStart in monthStarts {
+            let state = monthState(for: monthStart)
+            let monthActiveDays = activeDayCount(in: state.dayMap)
+            activeDays += monthActiveDays
+            totalReadSeconds += state.summary.totalReadSeconds
+            noteCount += state.summary.noteCount
+            finishedBookCount += state.summary.finishedBookCount
+            contributions.append(
+                YearMonthContribution(
+                    monthStart: monthStart,
+                    activeDays: monthActiveDays,
+                    totalReadSeconds: state.summary.totalReadSeconds
+                )
+            )
+        }
+
+        return YearSummaryState(
+            year: clampedYear,
+            activeDays: activeDays,
+            totalReadSeconds: totalReadSeconds,
+            noteCount: noteCount,
+            finishedBookCount: finishedBookCount,
+            monthContributions: contributions.sorted { $0.monthStart < $1.monthStart },
+            topBooks: yearTopBooksByYear[clampedYear] ?? [],
+            isLoading: yearLoadState(for: clampedYear) == .loading,
+            errorMessage: yearErrorMessageByYear[clampedYear]
+        )
     }
 
     func selectDate(_ date: Date?) {
@@ -492,6 +652,84 @@ private extension ReadCalendarViewModel {
                 forceRefresh: false,
                 reportError: false
             )
+        }
+    }
+
+    func ensureYearLoaded(
+        for year: Int,
+        using repository: any StatisticsRepositoryProtocol,
+        colorRepository: any ReadCalendarColorRepositoryProtocol,
+        reportError: Bool
+    ) async {
+        guard hasLoaded else { return }
+        let clampedYear = clampYear(year)
+        let months = monthStartsForYear(clampedYear).filter { isMonthInAvailableRange($0) }
+        guard !months.isEmpty else {
+            yearLoadStateByYear[clampedYear] = .failed
+            yearErrorMessageByYear[clampedYear] = "该年份暂无可展示数据"
+            return
+        }
+
+        if yearLoadStateByYear[clampedYear] == .loaded {
+            return
+        }
+
+        yearRequestTicketSeed += 1
+        let ticket = yearRequestTicketSeed
+        latestYearRequestTicketByYear[clampedYear] = ticket
+        yearLoadStateByYear[clampedYear] = .loading
+        yearErrorMessageByYear[clampedYear] = nil
+
+        for monthStart in months {
+            await ensureMonthLoaded(
+                for: monthStart,
+                using: repository,
+                colorRepository: colorRepository,
+                showLoading: false,
+                forceRefresh: false,
+                reportError: false
+            )
+        }
+
+        guard latestYearRequestTicketByYear[clampedYear] == ticket else { return }
+
+        let hasFailedMonth = months.contains { monthStart in
+            monthState(for: monthStart).loadState == .failed
+        }
+        if hasFailedMonth {
+            yearLoadStateByYear[clampedYear] = .failed
+            yearErrorMessageByYear[clampedYear] = "该年份部分月份加载失败"
+            if reportError {
+                errorMessage = yearErrorMessageByYear[clampedYear]
+            }
+        } else {
+            yearLoadStateByYear[clampedYear] = .loaded
+            yearErrorMessageByYear[clampedYear] = nil
+        }
+    }
+
+    func ensureYearTopBooksLoaded(
+        for year: Int,
+        using repository: any StatisticsRepositoryProtocol
+    ) async {
+        let clampedYear = clampYear(year)
+        if yearTopBooksByYear[clampedYear] != nil {
+            return
+        }
+        do {
+            let topBooks = try await repository.fetchReadCalendarYearTopBooks(
+                year: clampedYear,
+                excludedEventTypes: settings.excludedEventTypes,
+                limit: Self.yearTopBookLimit
+            )
+            yearTopBooksByYear[clampedYear] = topBooks
+            if yearLoadStateByYear[clampedYear] != .failed {
+                yearErrorMessageByYear[clampedYear] = nil
+            }
+        } catch {
+            if yearErrorMessageByYear[clampedYear] == nil {
+                yearErrorMessageByYear[clampedYear] = "年度排行加载失败：\(error.localizedDescription)"
+            }
         }
     }
 
@@ -870,6 +1108,16 @@ private extension ReadCalendarViewModel {
         })
     }
 
+    func rebuildYearRange(from earliest: Date, to latest: Date) {
+        let earliestYear = calendar.component(.year, from: earliest)
+        let latestYear = calendar.component(.year, from: latest)
+        guard earliestYear <= latestYear else {
+            availableYears = []
+            return
+        }
+        availableYears = Array(earliestYear...latestYear).sorted(by: >)
+    }
+
     func monthIndex(for monthStart: Date) -> Int? {
         let key = Self.monthKey(for: monthStart, using: calendar)
         return monthIndexByKey[key]
@@ -900,6 +1148,16 @@ private extension ReadCalendarViewModel {
         return monthStart
     }
 
+    func clampYear(_ year: Int) -> Int {
+        guard let minYear = availableYears.min(),
+              let maxYear = availableYears.max() else {
+            return year
+        }
+        if year < minYear { return minYear }
+        if year > maxYear { return maxYear }
+        return year
+    }
+
     func clampSelectedDate(_ date: Date, earliestMonthStart: Date, latestDate: Date) -> Date {
         let normalized = calendar.startOfDay(for: date)
         let upper = calendar.startOfDay(for: latestDate)
@@ -917,6 +1175,10 @@ private extension ReadCalendarViewModel {
         errorMessage = pageStates[key]?.errorMessage
     }
 
+    func activeDayCount(in dayMap: [Date: ReadCalendarDay]) -> Int {
+        dayMap.values.filter { !$0.books.isEmpty || $0.isReadDoneDay }.count
+    }
+
     static func monthStart(of date: Date, using calendar: Calendar) -> Date {
         let normalized = calendar.startOfDay(for: date)
         let components = calendar.dateComponents([.year, .month], from: normalized)
@@ -931,6 +1193,15 @@ private extension ReadCalendarViewModel {
 
     static func currentMonthStart(using calendar: Calendar) -> Date {
         monthStart(of: Date(), using: calendar)
+    }
+
+    static func monthStarts(of year: Int, using calendar: Calendar) -> [Date] {
+        (1...12).compactMap { month -> Date? in
+            guard let date = calendar.date(from: DateComponents(year: year, month: month, day: 1)) else {
+                return nil
+            }
+            return monthStart(of: date, using: calendar)
+        }
     }
 }
 

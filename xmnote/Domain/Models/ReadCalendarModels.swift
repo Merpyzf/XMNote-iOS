@@ -35,9 +35,22 @@ nonisolated struct ReadCalendarDay: Hashable {
     let date: Date
     let books: [ReadCalendarDayBook]
     let readDoneCount: Int
+    let readSeconds: Int
+    let noteCount: Int
+    let checkInCount: Int
+    let checkInSeconds: Int
 
     var isReadDoneDay: Bool {
         readDoneCount > 0
+    }
+
+    /// 对齐在读页热力图：阅读时长/书摘数/打卡时长三者取最大档位
+    var heatmapLevel: HeatmapLevel {
+        let readLevel = HeatmapLevel.from(readSeconds: readSeconds)
+        let noteLevel = HeatmapLevel.from(noteCount: noteCount)
+        let checkInLevel = HeatmapLevel.from(checkInSeconds: checkInSeconds)
+        let maxRaw = max(max(readLevel.rawValue, noteLevel.rawValue), checkInLevel.rawValue)
+        return HeatmapLevel(rawValue: maxRaw) ?? .none
     }
 }
 
