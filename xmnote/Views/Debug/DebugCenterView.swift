@@ -2,7 +2,7 @@
 import SwiftUI
 
 /**
- * [INPUT]: 依赖 RichTextTestView、HeatmapTestView、ImageLoadingTestView 作为导航目的地
+ * [INPUT]: 依赖 RichTextTestView、HeatmapTestView、ImageLoadingTestView、ReadCalendarCoverStackTestView、SystemColorsTestView 作为导航目的地
  * [OUTPUT]: 对外提供 DebugCenterView（测试中心列表页）
  * [POS]: Debug 测试入口页，集中展示所有控件测试项，由 PersonalView 跳转进入
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -38,6 +38,18 @@ struct DebugCenterView: View {
             title: "图片加载",
             subtitle: "静态图/GIF/失败链路与缓存来源观测",
             destination: AnyView(ImageLoadingTestView())
+        ),
+        DebugItem(
+            icon: "books.vertical",
+            title: "阅读日历封面堆叠",
+            subtitle: "扇形层级、阴影分离与网格溢出效果验证",
+            destination: AnyView(ReadCalendarCoverStackTestView())
+        ),
+        DebugItem(
+            icon: "paintpalette",
+            title: "系统颜色语义",
+            subtitle: "按语义分组查看 iOS 系统颜色与真实案例用法",
+            destination: AnyView(SystemColorsTestView())
         ),
     ]
 

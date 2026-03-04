@@ -9,6 +9,7 @@ import GRDB
  */
 
 enum ObservationStream {
+    /// 创建数据库观察流并桥接为 AsyncThrowingStream，失败时抛出错误。
     static func make<Value: Sendable>(
         in dbPool: DatabasePool,
         tracking: @escaping @Sendable (Database) throws -> Value

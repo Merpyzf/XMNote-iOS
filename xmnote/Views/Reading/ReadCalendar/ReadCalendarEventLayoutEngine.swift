@@ -21,11 +21,13 @@ struct ReadCalendarEventLayoutEngine {
     let calendar: Calendar
     let mode: ReadCalendarRenderMode
 
+    /// 初始化事件布局引擎，注入日历规则与布局模式。
     init(calendar: Calendar, mode: ReadCalendarRenderMode) {
         self.calendar = calendar
         self.mode = mode
     }
 
+    /// 构建按周分组的事件布局结果。
     func buildWeekLayouts(days: [Date: ReadCalendarDay]) -> [ReadCalendarWeekLayout] {
         let runs = buildRuns(days: days)
         guard !runs.isEmpty else { return [] }
@@ -37,6 +39,7 @@ struct ReadCalendarEventLayoutEngine {
         }
     }
 
+    /// 将日事件序列切分为连续 run，供后续车道排布。
     func buildRuns(days: [Date: ReadCalendarDay]) -> [ReadCalendarEventRun] {
         var dateBookMap: [Int64: (name: String, cover: String, firstEventTime: Int64, dates: Set<Date>, readDoneDates: Set<Date>)] = [:]
 
@@ -137,6 +140,7 @@ struct ReadCalendarEventLayoutEngine {
 // MARK: - 连续模式
 
 private extension ReadCalendarEventLayoutEngine {
+    /// 按跨周连续策略生成周布局，保持事件条连贯。
     func buildContinuousWeekLayouts(runs: [ReadCalendarEventRun]) -> [ReadCalendarWeekLayout] {
         let segments = splitRunsIntoSegments(runs: runs)
         let grouped = Dictionary(grouping: segments, by: \.weekStart)
@@ -148,6 +152,7 @@ private extension ReadCalendarEventLayoutEngine {
         }
     }
 
+    /// 将跨周连续区间切分为“按周落地”的渲染段。
     func splitRunsIntoSegments(runs: [ReadCalendarEventRun]) -> [ReadCalendarEventSegment] {
         var result: [ReadCalendarEventSegment] = []
         for run in runs {
@@ -185,6 +190,7 @@ private extension ReadCalendarEventLayoutEngine {
 // MARK: - Android 兼容模式
 
 private extension ReadCalendarEventLayoutEngine {
+    /// 按 Android 兼容策略生成周布局，保证双端展示一致。
     func buildAndroidCompatibleWeekLayouts(runs: [ReadCalendarEventRun]) -> [ReadCalendarWeekLayout] {
         let segments = splitRunsIntoSegments(runs: runs)
         let grouped = Dictionary(grouping: segments, by: \.weekStart)

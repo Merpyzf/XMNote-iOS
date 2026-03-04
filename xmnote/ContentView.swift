@@ -14,6 +14,7 @@
 
 import SwiftUI
 
+/// 应用根视图，挂载主 Tab 导航骨架并统一品牌色 tint。
 struct ContentView: View {
     var body: some View {
         MainTabView()

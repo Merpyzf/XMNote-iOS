@@ -14,6 +14,7 @@
 
 import SwiftUI
 
+/// 阅读时间线空态占位，提示暂无阅读记录。
 struct TimelinePlaceholderView: View {
     var body: some View {
         EmptyStateView(icon: "clock.arrow.circlepath", message: "暂无阅读记录")

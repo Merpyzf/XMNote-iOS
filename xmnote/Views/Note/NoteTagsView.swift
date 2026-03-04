@@ -14,6 +14,7 @@
 
 import SwiftUI
 
+/// 笔记标签分组视图，负责渲染标签分区网格与空搜索态。
 struct NoteTagsView: View {
     @Bindable var viewModel: NoteViewModel
 

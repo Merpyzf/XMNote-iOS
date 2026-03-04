@@ -7,6 +7,7 @@
 
 import Foundation
 
+/// NoteRoute 定义主导航的导航目标与路由参数。
 enum NoteRoute: Hashable {
     case detail(noteId: Int64)
     case edit(noteId: Int64)

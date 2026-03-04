@@ -21,6 +21,7 @@ final class ReadingHeatmapWidgetViewModel {
     private let calendar = Calendar.current
     private var lastRefreshDay: Date? = nil
 
+    /// 按当前统计维度加载热力图数据，并记录最后刷新日期。
     func loadHeatmap(using repository: any StatisticsRepositoryProtocol) async {
         guard !isLoading else { return }
         isLoading = true
@@ -46,6 +47,7 @@ final class ReadingHeatmapWidgetViewModel {
         }
     }
 
+    /// 切换统计维度并触发热力图重载。
     func changeDataType(
         _ dataType: HeatmapStatisticsDataType,
         using repository: any StatisticsRepositoryProtocol
@@ -55,6 +57,7 @@ final class ReadingHeatmapWidgetViewModel {
         await loadHeatmap(using: repository)
     }
 
+    /// 跨天后自动刷新热力图，保证当日数据及时可见。
     func refreshIfDayChanged(using repository: any StatisticsRepositoryProtocol) async {
         let today = calendar.startOfDay(for: Date())
         guard lastRefreshDay != today else { return }

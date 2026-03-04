@@ -24,6 +24,7 @@ nonisolated struct ReadStatusRecord: BaseRecord {
     var lastSyncDate: Int64 = 0
     var isDeleted: Int64 = 0
 
+    /// 映射 Swift 属性名与数据库字段名，保证 Record 与表结构一致。
     enum CodingKeys: String, CodingKey {
         case id, name
         case readStatusOrder = "read_status_order"

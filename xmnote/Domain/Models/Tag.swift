@@ -13,6 +13,7 @@ struct Tag: Identifiable {
     let name: String
     let noteCount: Int
 
+    /// 创建标签模型，写入标签 ID、名称与关联笔记数。
     init(id: Int64, name: String, noteCount: Int) {
         self.id = id
         self.name = name
@@ -26,6 +27,7 @@ struct TagSection: Identifiable {
     let title: String
     let tags: [Tag]
 
+    /// 创建标签分组模型，写入分组标题与其下标签列表。
     init(id: Int64, title: String, tags: [Tag]) {
         self.id = id
         self.title = title

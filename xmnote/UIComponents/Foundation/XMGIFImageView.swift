@@ -14,14 +14,17 @@ struct XMGIFImageView: UIViewRepresentable {
     let contentMode: ContentMode
     let autoplay: Bool
 
+    /// 记录上次播放的数据快照，避免同一 GIF 被重复重建动画帧。
     final class Coordinator {
         var lastData: Data?
     }
 
+    /// 创建协调器并缓存上次 GIF 数据，避免重复重建动画帧。
     func makeCoordinator() -> Coordinator {
         Coordinator()
     }
 
+    /// 创建 GIF 承载视图并绑定协调器。
     func makeUIView(context: Context) -> GIFImageView {
         let imageView = GIFImageView()
         imageView.clipsToBounds = true
@@ -29,6 +32,7 @@ struct XMGIFImageView: UIViewRepresentable {
         return imageView
     }
 
+    /// 同步播放模式并在 GIF 数据变化时重建动画帧缓存。
     func updateUIView(_ imageView: GIFImageView, context: Context) {
         imageView.contentMode = mappedContentMode
 
@@ -45,6 +49,7 @@ struct XMGIFImageView: UIViewRepresentable {
         }
     }
 
+    /// 销毁视图时释放 GIF 播放资源与任务。
     static func dismantleUIView(_ imageView: GIFImageView, coordinator: Coordinator) {
         imageView.prepareForReuse()
         coordinator.lastData = nil

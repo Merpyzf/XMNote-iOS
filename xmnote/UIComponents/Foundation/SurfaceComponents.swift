@@ -16,6 +16,7 @@ struct CardContainer<Content: View>: View {
     let showsBorder: Bool
     let content: Content
 
+    /// 注入圆角、边框与内容闭包，组装基础容器外观。
     init(
         cornerRadius: CGFloat = CornerRadius.blockLarge,
         showsBorder: Bool = true,
@@ -61,6 +62,7 @@ struct EmptyStateView: View {
 
 // MARK: - Home Header Gradient
 
+/// 首页顶部氛围渐变背景，用于衬托顶部切换栏与首屏内容层次。
 struct HomeTopHeaderGradient: View {
     var body: some View {
         LinearGradient(

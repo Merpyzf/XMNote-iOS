@@ -73,6 +73,7 @@ nonisolated struct HeatmapDay: Identifiable {
     let checkInSeconds: Int // 打卡时长（秒）
     let bookStates: Set<HeatmapBookState> // 书籍阅读状态（可多状态叠加）
 
+    /// 创建单日热力图数据，写入阅读时长、书摘数、打卡数据与阅读状态集合。
     init(
         id: Date,
         readSeconds: Int,

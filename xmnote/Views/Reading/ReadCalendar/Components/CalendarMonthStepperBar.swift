@@ -7,6 +7,7 @@
 
 import SwiftUI
 
+/// 阅读日历顶部月份切换条，支持菜单快速跳转到任意可用月份。
 struct CalendarMonthStepperBar: View {
     private enum Layout {
         static let barMinHeight: CGFloat = 36

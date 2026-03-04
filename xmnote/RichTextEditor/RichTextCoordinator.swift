@@ -22,18 +22,21 @@ final class RichTextCoordinator: NSObject, UITextViewDelegate {
     /// 防止重复调度 typingAttributes 边界清理
     private var hasPendingBoundaryCleanup = false
 
+    /// 绑定富文本编辑器桥接对象，负责 UIKit 与 SwiftUI 状态同步。
     init(_ parent: RichTextEditor) {
         self.parent = parent
     }
 
     // MARK: - UITextViewDelegate
 
+    /// 监听输入变更并同步富文本内容与格式状态。
     func textViewDidChange(_ textView: UITextView) {
         guard let editorView = textView as? RichTextEditorView else { return }
         parent.attributedText = editorView.attributedText
         parent.onTextChange?()
     }
 
+    /// 监听选区变化并刷新工具栏格式状态。
     func textViewDidChangeSelection(_ textView: UITextView) {
         guard let editorView = textView as? RichTextEditorView else { return }
         updateActiveFormats(editorView)

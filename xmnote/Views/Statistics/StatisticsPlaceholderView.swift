@@ -14,6 +14,7 @@
 
 import SwiftUI
 
+/// 统计页空态占位，提示尚无可展示统计数据。
 struct StatisticsPlaceholderView: View {
     var body: some View {
         EmptyStateView(icon: "chart.bar", message: "暂无统计数据")

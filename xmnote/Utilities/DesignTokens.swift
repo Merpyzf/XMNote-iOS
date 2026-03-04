@@ -11,6 +11,7 @@
 
 import SwiftUI
 
+/// 阅读日历月总结图标的渐变角色枚举，不同角色对应不同色相方案。
 enum ReadCalendarSummaryGradientRole {
     case activity
     case completion
@@ -18,6 +19,7 @@ enum ReadCalendarSummaryGradientRole {
     case trend
 }
 
+/// 三段式渐变配置，供月总结图标统一渲染。
 struct ReadCalendarSummaryGradientSpec {
     let start: Color
     let mid: Color
@@ -264,6 +266,7 @@ extension Color {
 //   面板内容边距            → 容器间距 → 宽松   → contentEdge
 //   区块之间大留白          → 容器间距 → 最大   → double
 
+/// 全局间距设计令牌，统一页面内边距与组件间距。
 enum Spacing {
     static let compact: CGFloat = 4
     static let half: CGFloat = 6
@@ -293,6 +296,7 @@ enum Spacing {
 //   标准卡片   → 独立内容单元       → block → 标准   → blockLarge
 //   日历面板   → 包裹内容的容器     → container → 标准 → containerMedium
 
+/// 全局圆角设计令牌，按 inlay/block/container 三类角色复用。
 enum CornerRadius {
     // --- inlay: 嵌在卡片/容器内的小型视觉零件 ---
     static let inlayTiny: CGFloat = 2.5    // 热力图方格、图例色块
@@ -311,6 +315,7 @@ enum CornerRadius {
 
 // MARK: - Card Style
 
+/// 卡片样式基础常量，集中维护边框宽度等参数。
 enum CardStyle {
     static let borderWidth: CGFloat = 0.5
 }
@@ -318,6 +323,7 @@ enum CardStyle {
 // MARK: - Color Helpers
 
 extension Color {
+    /// 通过十六进制 RGB 值构建颜色，便于与设计稿色值对齐。
     init(hex: UInt, alpha: Double = 1.0) {
         self.init(
             .sRGB,
@@ -328,6 +334,7 @@ extension Color {
         )
     }
 
+    /// 定义浅色/深色双主题颜色，运行时按系统外观自动切换。
     init(light: Color, dark: Color) {
         self.init(uiColor: UIColor { traits in
             traits.userInterfaceStyle == .dark
@@ -336,6 +343,7 @@ extension Color {
         })
     }
 
+    /// 通过 RGBA 32 位整数构建颜色（高 8 位为红色，低 8 位为透明度）。
     init(rgbaHex: UInt32) {
         let red = Double((rgbaHex >> 24) & 0xFF) / 255.0
         let green = Double((rgbaHex >> 16) & 0xFF) / 255.0

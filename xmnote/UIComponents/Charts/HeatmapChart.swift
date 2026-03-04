@@ -21,6 +21,7 @@ private enum HeatmapConst {
 
 // MARK: - 样式配置
 
+/// HeatmapChartStyle 定义热力图尺寸、间距和自适应规则，统一不同页面的绘制风格。
 struct HeatmapChartStyle: Equatable, Sendable {
     var squareSize: CGFloat
     var squareSpacing: CGFloat
@@ -33,6 +34,7 @@ struct HeatmapChartStyle: Equatable, Sendable {
     var minSquareSize: CGFloat
     var maxSquareSize: CGFloat
 
+    /// 初始化热力图样式参数，控制方格尺寸、间距、圆角与视口适配策略。
     init(
         squareSize: CGFloat = 13,
         squareSpacing: CGFloat = 3,
@@ -96,6 +98,7 @@ private enum HeatmapDebug {
 
 // MARK: - 公开接口
 
+/// HeatmapChart 负责按周列渲染阅读热力图，并支持滚动锚点与日期点击。
 struct HeatmapChart: View {
     let days: [Date: HeatmapDay]
     let earliestDate: Date?
@@ -158,6 +161,7 @@ struct HeatmapChart: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
+    /// 输出视口与方格布局诊断信息，便于排查裁切与对齐问题。
     func debugLogViewport(width: CGFloat) {
 #if DEBUG
         let layout = resolveLayout(for: width)
@@ -172,6 +176,7 @@ struct HeatmapChart: View {
 #endif
     }
 
+    /// 当标题行与网格行宽度不一致时输出诊断日志。
     func debugLogWidthGapIfNeeded() {
 #if DEBUG
         guard headerRowWidth > 0, gridRowWidth > 0 else { return }
@@ -259,6 +264,7 @@ private extension HeatmapChart {
         }
     }
 
+    /// 返回周轴单字标签（日一二三四五六）。
     func shortWeekday(_ row: Int) -> String {
         let symbols = ["日", "一", "二", "三", "四", "五", "六"]
         return symbols[row % 7]
@@ -269,6 +275,7 @@ private extension HeatmapChart {
 
 private extension HeatmapChart {
 
+    /// 按当前方格尺寸估算视口可容纳的最少周列数。
     func minimumVisibleWeekCount(
         for viewportWidth: CGFloat,
         squareSize: CGFloat,
@@ -282,6 +289,7 @@ private extension HeatmapChart {
         return max(Int(rounded), 1)
     }
 
+    /// 根据视口宽度解析最终布局参数，平衡可见周数与方格尺寸。
     func resolveLayout(for viewportWidth: CGFloat) -> HeatmapResolvedLayout {
         guard viewportWidth > 0 else {
             return HeatmapResolvedLayout(
@@ -347,6 +355,7 @@ private extension HeatmapChart {
         )
     }
 
+    /// 按可用宽度与周列数计算方格理论边长。
     func exactSquareSize(for viewportWidth: CGFloat, weekCount: Int) -> CGFloat {
         guard weekCount > 0 else { return baseSquareSize }
         let spacingTotal = CGFloat(max(weekCount - 1, 0)) * squareSpacing
@@ -354,12 +363,14 @@ private extension HeatmapChart {
         return max(availableWidth / CGFloat(weekCount), 1)
     }
 
+    /// 将尺寸向下贴齐像素网格，减少滚动时的边缘抖动。
     func snapDownToPixel(_ value: CGFloat) -> CGFloat {
         guard displayScale > 0 else { return value }
         let snapped = floor(value * displayScale) / displayScale
         return max(snapped, 1 / displayScale)
     }
 
+    /// 生成最终展示周列（含前置补齐列），确保首屏填满。
     func displayedWeekColumns() -> [HeatmapWeekColumn] {
         let baseColumns = weekColumns
         let minCount = resolvedLayout.minimumVisibleWeekCount
@@ -425,6 +436,7 @@ private extension HeatmapChart {
         .frame(minWidth: gridViewportWidth, alignment: .trailing)
     }
 
+    /// 渲染单周 7 天方格列。
     func weekColumn(_ week: [Date], today: Date) -> some View {
         VStack(spacing: squareSpacing) {
             ForEach(week, id: \.self) { date in
@@ -433,6 +445,7 @@ private extension HeatmapChart {
         }
     }
 
+    /// 按起止日期构建连续周列数据源，供网格与标题共同消费。
     func buildWeekColumns(start: Date, end: Date) -> [[Date]] {
         var columns: [[Date]] = []
         var current = start
@@ -448,6 +461,7 @@ private extension HeatmapChart {
         return columns
     }
 
+    /// 输出补齐周列数量诊断日志，帮助定位首列空白问题。
     func debugLogSyntheticWeeks(syntheticWeekCount: Int, effectiveWeekCount: Int, effectiveStartDate: Date) {
 #if DEBUG
         guard syntheticWeekCount > 0 else { return }
@@ -462,6 +476,7 @@ private extension HeatmapChart {
 
 private extension HeatmapChart {
 
+    /// 渲染月份标题行并按列偏移放置标签。
     func monthLabelsRow(_ columns: [HeatmapWeekColumn]) -> some View {
         let tokens = monthHeaderTokens(columns)
         let totalRowWidth = rowWidth(columnCount: columns.count)
@@ -542,6 +557,7 @@ private extension HeatmapChart {
         return tokens
     }
 
+    /// 计算指定列数下网格总宽度。
     func rowWidth(columnCount: Int, squareSizeValue: CGFloat? = nil) -> CGFloat {
         guard columnCount > 0 else { return 0 }
         let spacingCount = max(columnCount - 1, 0)
@@ -549,18 +565,22 @@ private extension HeatmapChart {
         return CGFloat(columnCount) * value + CGFloat(spacingCount) * squareSpacing
     }
 
+    /// 计算月份/年份标题文本宽度。
     func headerTextWidth(_ text: String, font: UIFont) -> CGFloat {
         ceil((text as NSString).size(withAttributes: [.font: font]).width)
     }
 
+    /// 格式化标题中的年份文本。
     func yearText(_ date: Date) -> String {
         String(calendar.component(.year, from: date))
     }
 
+    /// 格式化标题中的月份文本。
     func monthText(_ date: Date) -> String {
         "\(calendar.component(.month, from: date))月"
     }
 
+    /// 输出月份标题 token 定位日志，便于定位标题错位。
     func debugLogHeaderToken(index: Int, text: String, drawX: CGFloat, overflowBeforeDecay: CGFloat, textWidth: CGFloat) {
 #if DEBUG
         HeatmapDebug.logger.debug(
@@ -569,6 +589,7 @@ private extension HeatmapChart {
 #endif
     }
 
+    /// 生成月份滚动锚点键（yyyy-M）。
     func monthKey(_ date: Date) -> String {
         let y = calendar.component(.year, from: date)
         let m = calendar.component(.month, from: date)
@@ -580,6 +601,7 @@ private extension HeatmapChart {
 
 private extension HeatmapChart {
 
+    /// 渲染单日方格并处理今天描边、未来禁用与点击事件。
     func squareView(date: Date, isToday: Bool, isFuture: Bool) -> some View {
         let day = days[date] ?? .empty(for: date)
         let segmentColors = day.segmentColors(for: statisticsDataType)
@@ -607,6 +629,7 @@ private extension HeatmapChart {
             .accessibilityLabel(accessibilityText(date: date, day: day))
     }
 
+    /// 按事件分段颜色填充单个方格。
     @ViewBuilder
     func segmentedFill(colors: [Color]) -> some View {
         let count = max(colors.count, 1)
@@ -624,6 +647,7 @@ private extension HeatmapChart {
         .frame(width: squareSize, height: squareSize, alignment: .top)
     }
 
+    /// 生成热力方格无障碍描述（日期、时长、打卡与热度级别）。
     func accessibilityText(date: Date, day: HeatmapDay) -> String {
         let formatter = DateFormatter()
         formatter.dateFormat = "M月d日"
@@ -642,6 +666,7 @@ extension HeatmapChart {
         legend(style: .default)
     }
 
+    /// 渲染热力图图例（少到多）。
     static func legend(style: HeatmapChartStyle) -> some View {
         HStack(spacing: 4) {
             Text("少")

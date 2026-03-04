@@ -11,10 +11,12 @@ import GRDB
 // MARK: - DatabaseManager
 // 可观察的数据库管理器，支持热重载（备份恢复后重新打开数据库）
 
+/// 数据库管理器，负责持有 AppDatabase 并在恢复后重建连接。
 @Observable
 class DatabaseManager {
     private(set) var database: AppDatabase
 
+    /// 创建数据库管理器并打开默认数据库文件。
     init() throws {
         database = try AppDatabase()
     }

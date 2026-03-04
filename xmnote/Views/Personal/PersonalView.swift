@@ -14,11 +14,13 @@
 
 import SwiftUI
 
+/// 个人中心首页，汇总设置、备份、阅读偏好与支持入口。
 struct PersonalView: View {
     @Environment(AppState.self) private var appState
     let onAddBook: () -> Void
     let onAddNote: () -> Void
 
+    /// 注入新增书籍回调，连接个人页快捷操作入口。
     init(
         onAddBook: @escaping () -> Void = {},
         onAddNote: @escaping () -> Void = {}

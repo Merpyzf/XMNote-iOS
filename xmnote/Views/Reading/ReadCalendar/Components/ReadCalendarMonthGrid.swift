@@ -1,5 +1,5 @@
 /**
- * [INPUT]: 依赖 DesignTokens 视觉令牌与周网格输入（WeekData/EventSegment/DayPayload，含显示模式与事件条颜色三态）
+ * [INPUT]: 依赖 DesignTokens 视觉令牌、ReadCalendarCoverFanStack 与周网格输入（WeekData/EventSegment/DayPayload，含显示模式与事件条颜色三态），可选依赖全屏封面展开回调
  * [OUTPUT]: 对外提供 ReadCalendarMonthGrid（月视图周网格组件，支持热力图/活动事件/书籍封面三种展示模式）
  * [POS]: ReadCalendar 页面私有月网格组件，承载日期格展示、选中态与多模式内容渲染
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -10,7 +10,9 @@ import SwiftUI
 import UIKit
 #endif
 
+/// 阅读日历月网格组件，负责渲染热力图、事件条与封面堆叠三种日格内容。
 struct ReadCalendarMonthGrid: View {
+    /// 月网格展示模式：普通热力图、年度紧凑热力图、事件条、封面堆叠。
     enum DisplayMode: Hashable {
         case heatmap
         case heatmapYearCompact
@@ -18,12 +20,14 @@ struct ReadCalendarMonthGrid: View {
         case bookCover
     }
 
+    /// 事件条颜色解析状态：待解析、解析成功、解析失败回退。
     enum EventColorState: Hashable {
         case pending
         case resolved
         case failed
     }
 
+    /// 事件条颜色载荷，包含状态以及背景/文字色的 RGBA 值。
     struct EventColor: Hashable {
         let state: EventColorState
         let backgroundRGBAHex: UInt32
@@ -36,6 +40,7 @@ struct ReadCalendarMonthGrid: View {
         )
     }
 
+    /// 单周内的事件条切片，描述某本书在该周的连续区间与所在泳道。
     struct EventSegment: Identifiable, Hashable {
         let bookId: Int64
         let bookName: String
@@ -53,6 +58,7 @@ struct ReadCalendarMonthGrid: View {
         }
     }
 
+    /// 单周渲染数据，包含 7 天占位与该周所有事件条切片。
     struct WeekData: Identifiable, Hashable {
         let weekStart: Date
         let days: [Date?]
@@ -61,6 +67,7 @@ struct ReadCalendarMonthGrid: View {
         var id: Date { weekStart }
     }
 
+    /// 单日渲染数据，聚合热力图等级、书籍数、连读状态与选中状态。
     struct DayPayload: Hashable {
         let bookCount: Int
         let isReadDoneDay: Bool
@@ -102,7 +109,44 @@ struct ReadCalendarMonthGrid: View {
     let selectedDate: Date?
     let isHapticsEnabled: Bool
     let dayPayloadProvider: (Date) -> DayPayload
+    let coverItemsProvider: ((Date) -> [ReadCalendarCoverFanStack.Item])?
+    let bookCoverStyleProvider: ((Date) -> ReadCalendarCoverFanStack.Style)?
+    let coverTransitionNamespace: Namespace.ID?
+    let activeCoverTransitionDate: Date?
+    let coverTransitionIDProvider: ((Date) -> String)?
+    let onOpenBookCoverFullscreen: ((Date) -> Void)?
     let onSelectDay: (Date) -> Void
+
+    /// 注入周数据与回调，构建阅读日历月网格（支持可选封面条目与样式覆写）。
+    init(
+        weeks: [WeekData],
+        laneLimit: Int,
+        displayMode: DisplayMode,
+        selectedDate: Date?,
+        isHapticsEnabled: Bool,
+        dayPayloadProvider: @escaping (Date) -> DayPayload,
+        coverItemsProvider: ((Date) -> [ReadCalendarCoverFanStack.Item])? = nil,
+        bookCoverStyleProvider: ((Date) -> ReadCalendarCoverFanStack.Style)? = nil,
+        coverTransitionNamespace: Namespace.ID? = nil,
+        activeCoverTransitionDate: Date? = nil,
+        coverTransitionIDProvider: ((Date) -> String)? = nil,
+        onOpenBookCoverFullscreen: ((Date) -> Void)? = nil,
+        onSelectDay: @escaping (Date) -> Void
+    ) {
+        self.weeks = weeks
+        self.laneLimit = laneLimit
+        self.displayMode = displayMode
+        self.selectedDate = selectedDate
+        self.isHapticsEnabled = isHapticsEnabled
+        self.dayPayloadProvider = dayPayloadProvider
+        self.coverItemsProvider = coverItemsProvider
+        self.bookCoverStyleProvider = bookCoverStyleProvider
+        self.coverTransitionNamespace = coverTransitionNamespace
+        self.activeCoverTransitionDate = activeCoverTransitionDate
+        self.coverTransitionIDProvider = coverTransitionIDProvider
+        self.onOpenBookCoverFullscreen = onOpenBookCoverFullscreen
+        self.onSelectDay = onSelectDay
+    }
 
     var body: some View {
         VStack(spacing: weekSpacing) {
@@ -120,6 +164,12 @@ struct ReadCalendarMonthGrid: View {
                     selectedDate: selectedDate,
                     isHapticsEnabled: isHapticsEnabled,
                     dayPayloadProvider: dayPayloadProvider,
+                    coverItemsProvider: coverItemsProvider,
+                    bookCoverStyleProvider: bookCoverStyleProvider,
+                    coverTransitionNamespace: coverTransitionNamespace,
+                    activeCoverTransitionDate: activeCoverTransitionDate,
+                    coverTransitionIDProvider: coverTransitionIDProvider,
+                    onOpenBookCoverFullscreen: onOpenBookCoverFullscreen,
                     onSelectDay: onSelectDay
                 )
                 .background {
@@ -150,6 +200,7 @@ private struct ReadCalendarMonthGridWeekRow: View {
     private enum Layout {
         static let modeContentHPadding: CGFloat = Spacing.cozy
         static let modeContentTopPadding: CGFloat = Spacing.half
+        static let bookCoverSize = CGSize(width: 14, height: 20)
         static let overflowBadgeHPadding: CGFloat = 3
         static let overflowBadgeBottomPadding: CGFloat = 2
         static let overflowBadgeLeading: CGFloat = 3
@@ -169,6 +220,12 @@ private struct ReadCalendarMonthGridWeekRow: View {
     let selectedDate: Date?
     let isHapticsEnabled: Bool
     let dayPayloadProvider: (Date) -> ReadCalendarMonthGrid.DayPayload
+    let coverItemsProvider: ((Date) -> [ReadCalendarCoverFanStack.Item])?
+    let bookCoverStyleProvider: ((Date) -> ReadCalendarCoverFanStack.Style)?
+    let coverTransitionNamespace: Namespace.ID?
+    let activeCoverTransitionDate: Date?
+    let coverTransitionIDProvider: ((Date) -> String)?
+    let onOpenBookCoverFullscreen: ((Date) -> Void)?
     let onSelectDay: (Date) -> Void
     @State private var flowPhase: CGFloat = 0
     @State private var badgePulseIDs: Set<String> = []
@@ -262,9 +319,8 @@ private struct ReadCalendarMonthGridWeekRow: View {
 
     @ViewBuilder
     private func dayCell(_ day: Date?) -> some View {
-        let hasDate = day != nil
         let payload = day.map(dayPayloadProvider) ?? .empty
-        let overflowCount = hasDate ? overflowCount(for: payload) : 0
+        let dayOverflowCount = day.map { overflowCount(for: payload, day: $0) } ?? 0
         let readDone = payload.isReadDoneDay
 
         ZStack(alignment: .topLeading) {
@@ -326,8 +382,8 @@ private struct ReadCalendarMonthGridWeekRow: View {
 
                     Spacer(minLength: 0)
 
-                    if overflowCount > 0 {
-                        overflowBadge(overflowCount)
+                    if dayOverflowCount > 0 {
+                        overflowBadge(dayOverflowCount)
                     }
                 }
             }
@@ -335,6 +391,15 @@ private struct ReadCalendarMonthGridWeekRow: View {
         .contentShape(Rectangle())
         .onTapGesture {
             guard let day, !payload.isFuture else { return }
+            if displayMode == .bookCover,
+               overflowCount(for: payload, day: day) > 0,
+               let onOpenBookCoverFullscreen {
+                if isHapticsEnabled {
+                    ReadCalendarHaptics.selection()
+                }
+                onOpenBookCoverFullscreen(day)
+                return
+            }
             if !payload.isSelected, isHapticsEnabled {
                 ReadCalendarHaptics.selection()
             }
@@ -357,38 +422,60 @@ private struct ReadCalendarMonthGridWeekRow: View {
         case .heatmapYearCompact:
             EmptyView()
         case .bookCover:
-            HStack(spacing: 3) {
-                let coverCount = min(3, payload.bookCount)
-                if coverCount == 0 {
-                    RoundedRectangle(cornerRadius: 4, style: .continuous)
-                        .fill(Color.readCalendarSelectionFill.opacity(0.5))
-                        .frame(width: 14, height: 20)
-                } else {
-                    ForEach(0..<coverCount, id: \.self) { index in
-                        RoundedRectangle(cornerRadius: 4, style: .continuous)
-                            .fill(coverColor(for: day, index: index))
-                            .frame(width: 14, height: 20)
-                            .overlay {
-                                RoundedRectangle(cornerRadius: 4, style: .continuous)
-                                    .stroke(Color.white.opacity(0.48), lineWidth: 0.45)
-                            }
-                    }
-                }
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, Spacing.half)
+            coverStackContent(for: day, payload: payload)
+        }
+    }
+
+    @ViewBuilder
+    private func coverStackContent(for day: Date, payload: ReadCalendarMonthGrid.DayPayload) -> some View {
+        let coverItems = resolvedCoverStackItems(for: day, payload: payload)
+        let requestedCount = max(payload.bookCount, coverItems.count)
+        let presentationMode: ReadCalendarCoverFanStack.PresentationMode = .collapsed
+        let isTransitionDay = isActiveCoverTransitionDay(day)
+
+        if let coverTransitionNamespace, let transitionID = coverTransitionID(for: day) {
+            ReadCalendarCoverFanStack(
+                items: coverItems,
+                maxVisibleCount: coverStackVisibleCount(requestedCount: requestedCount),
+                coverSize: Layout.bookCoverSize,
+                isAnimated: requestedCount > 0,
+                style: coverStackStyle(for: day),
+                presentationMode: presentationMode,
+                layoutSeed: coverStackSeed(for: day, items: coverItems, mode: presentationMode)
+            )
+            .matchedGeometryEffect(
+                id: transitionID,
+                in: coverTransitionNamespace,
+                properties: .frame,
+                anchor: .center
+            )
+            .opacity(isTransitionDay ? 0.001 : 1)
+            .frame(maxWidth: .infinity, alignment: .center)
+            .padding(.top, Layout.modeContentTopPadding)
+        } else {
+            ReadCalendarCoverFanStack(
+                items: coverItems,
+                maxVisibleCount: coverStackVisibleCount(requestedCount: requestedCount),
+                coverSize: Layout.bookCoverSize,
+                isAnimated: requestedCount > 0,
+                style: coverStackStyle(for: day),
+                presentationMode: presentationMode,
+                layoutSeed: coverStackSeed(for: day, items: coverItems, mode: presentationMode)
+            )
+            .frame(maxWidth: .infinity, alignment: .center)
             .padding(.top, Layout.modeContentTopPadding)
         }
     }
 
-    private func overflowCount(for payload: ReadCalendarMonthGrid.DayPayload) -> Int {
+    private func overflowCount(for payload: ReadCalendarMonthGrid.DayPayload, day: Date?) -> Int {
         switch displayMode {
         case .heatmap, .heatmapYearCompact:
             return 0
         case .activityEvent:
             return payload.overflowCount
         case .bookCover:
-            return max(0, payload.bookCount - 3)
+            guard let day else { return max(0, payload.bookCount - 3) }
+            return max(0, payload.bookCount - coverStackVisibleLimit(for: day))
         }
     }
 
@@ -417,18 +504,67 @@ private struct ReadCalendarMonthGridWeekRow: View {
         payload.heatmapLevel.color
     }
 
-    private func coverColor(for day: Date, index: Int) -> Color {
+    /// 返回封面堆叠数据：优先使用外部注入，未注入时回落到内置占位生成逻辑。
+    private func resolvedCoverStackItems(
+        for day: Date,
+        payload: ReadCalendarMonthGrid.DayPayload
+    ) -> [ReadCalendarCoverFanStack.Item] {
+        if let provided = coverItemsProvider?(day), !provided.isEmpty {
+            return provided
+        }
+        return fallbackCoverStackItems(for: day, payload: payload)
+    }
+
+    /// 基于日期和当日读书数量生成封面堆叠数据，确保占位态与真实态都具备稳定标识。
+    private func fallbackCoverStackItems(
+        for day: Date,
+        payload: ReadCalendarMonthGrid.DayPayload
+    ) -> [ReadCalendarCoverFanStack.Item] {
         let daySeed = Int(Calendar.current.startOfDay(for: day).timeIntervalSince1970 / 86_400)
-        let seed = abs(daySeed &+ index * 37)
-        let palette: [Color] = [
-            Color(red: 0.69, green: 0.78, blue: 0.89),
-            Color(red: 0.84, green: 0.74, blue: 0.61),
-            Color(red: 0.74, green: 0.83, blue: 0.72),
-            Color(red: 0.78, green: 0.7, blue: 0.86),
-            Color(red: 0.71, green: 0.78, blue: 0.68),
-            Color(red: 0.86, green: 0.7, blue: 0.72)
-        ]
-        return palette[seed % palette.count]
+        guard payload.bookCount > 0 else {
+            return [ReadCalendarCoverFanStack.Item(id: "cover-placeholder-\(daySeed)")]
+        }
+        return (0..<payload.bookCount).map { index in
+            ReadCalendarCoverFanStack.Item(id: "cover-\(daySeed)-\(index)")
+        }
+    }
+
+    /// 计算封面堆叠可见张数：请求有数据时保持原值，具体折叠上限交给组件 style 控制。
+    private func coverStackVisibleCount(requestedCount: Int) -> Int {
+        max(1, requestedCount)
+    }
+
+    /// 计算封面折叠态可见上限，默认沿用标准样式上限兜底。
+    private func coverStackVisibleLimit(for day: Date) -> Int {
+        if let style = bookCoverStyleProvider?(day) {
+            return max(1, style.collapsedVisibleCount)
+        }
+        return max(1, ReadCalendarCoverFanStack.Style.standard.collapsedVisibleCount)
+    }
+
+    /// 返回封面堆叠样式：优先使用外部注入，默认回退到标准样式。
+    private func coverStackStyle(for day: Date) -> ReadCalendarCoverFanStack.Style {
+        bookCoverStyleProvider?(day) ?? .standard
+    }
+
+    /// 返回共享元素过渡 ID；未注入时返回 nil，组件自动退化为普通封面渲染。
+    private func coverTransitionID(for day: Date) -> String? {
+        coverTransitionIDProvider?(day)
+    }
+
+    /// 判断当前日期是否处于全屏共享元素过渡中，用于源位保留占位避免重影。
+    private func isActiveCoverTransitionDay(_ day: Date) -> Bool {
+        guard let activeCoverTransitionDate else { return false }
+        return Calendar.current.isDate(activeCoverTransitionDate, inSameDayAs: day)
+    }
+
+    /// 返回封面堆叠稳定随机种子，保证同日布局可复现。
+    private func coverStackSeed(
+        for day: Date,
+        items: [ReadCalendarCoverFanStack.Item],
+        mode: ReadCalendarCoverFanStack.PresentationMode
+    ) -> ReadCalendarCoverFanStack.LayoutSeed {
+        ReadCalendarCoverFanStack.makeLayoutSeed(date: day, items: items, mode: mode)
     }
 
     private func segmentView(_ segment: ReadCalendarMonthGrid.EventSegment, cellWidth: CGFloat) -> some View {
@@ -659,6 +795,7 @@ private struct ReadCalendarMonthGridWeekRow: View {
 }
 
 private enum ReadCalendarHaptics {
+    /// 触发轻量选择触感，用于日期切换反馈。
     static func selection() {
 #if canImport(UIKit)
         let generator = UISelectionFeedbackGenerator()
@@ -667,6 +804,7 @@ private enum ReadCalendarHaptics {
 #endif
     }
 
+    /// 触发强反馈触感，用于事件条脉冲提示。
     static func rigid() {
 #if canImport(UIKit)
         let generator = UIImpactFeedbackGenerator(style: .rigid)

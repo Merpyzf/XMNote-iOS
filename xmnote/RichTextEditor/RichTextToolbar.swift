@@ -30,6 +30,7 @@ final class RichTextToolbar: UIView {
 
     // MARK: - 初始化
 
+    /// 注入格式操作回调，组装富文本工具栏行为。
     init(
         onFormatAction: @escaping (RichTextFormat) -> Void,
         onClearFormats: @escaping () -> Void,
@@ -43,6 +44,7 @@ final class RichTextToolbar: UIView {
         setupUI()
     }
 
+    /// 禁用 `init(coder:)`，避免通过 storyboard/xib 初始化导致回调依赖缺失。
     @available(*, unavailable)
     required init?(coder: NSCoder) {
         fatalError("Use init(onFormatAction:onClearFormats:onDismissKeyboard:)")

@@ -15,6 +15,7 @@ nonisolated struct ReadCalendarDayBook: Identifiable, Hashable {
     let firstEventTime: Int64
     let isReadDoneOnThisDay: Bool
 
+    /// 创建单日书籍事件模型，写入书籍基础信息、首个事件时间与读完标记。
     init(
         id: Int64,
         name: String,
@@ -61,6 +62,7 @@ nonisolated struct ReadCalendarMonthData: Hashable {
     let readingDurationTopBooks: [ReadCalendarMonthlyDurationBook]
     let summary: ReadCalendarMonthSummary
 
+    /// 构造空月份默认数据，保证无记录月份也可稳定渲染。
     static func empty(for monthStart: Date) -> ReadCalendarMonthData {
         ReadCalendarMonthData(
             monthStart: monthStart,
@@ -105,6 +107,7 @@ nonisolated struct ReadCalendarMonthSummary: Hashable {
         timeSlotReadSeconds: [:]
     )
 
+    /// 读取指定时段的阅读秒数；缺省时返回 0。
     func readSeconds(in slot: ReadCalendarTimeSlot) -> Int {
         timeSlotReadSeconds[slot] ?? 0
     }
@@ -138,6 +141,7 @@ nonisolated struct ReadCalendarSegmentColor: Hashable, Codable {
         textRGBAHex: 0
     )
 
+    /// 构造取色成功态，用于事件条渲染真实封面主色。
     static func resolved(
         backgroundRGBAHex: UInt32,
         textRGBAHex: UInt32
@@ -149,6 +153,7 @@ nonisolated struct ReadCalendarSegmentColor: Hashable, Codable {
         )
     }
 
+    /// 构造取色失败态，使用回退色继续完成事件条渲染。
     static func failed(
         backgroundRGBAHex: UInt32,
         textRGBAHex: UInt32
@@ -172,6 +177,7 @@ nonisolated struct ReadCalendarEventRun: Identifiable, Hashable {
     let laneIndex: Int
     let readDoneDates: Set<Date>
 
+    /// 创建跨天连续事件区间，写入书籍信息、日期范围与泳道位置。
     init(
         bookId: Int64,
         bookName: String,
@@ -212,6 +218,7 @@ nonisolated struct ReadCalendarEventSegment: Identifiable, Hashable {
     let showsReadDoneBadge: Bool
     let color: ReadCalendarSegmentColor
 
+    /// 创建周内事件段模型，写入切片区间、跨周标记、读完徽章与颜色信息。
     init(
         bookId: Int64,
         bookName: String,

@@ -13,6 +13,7 @@ import GRDB
 
 extension AppDatabase {
 
+    /// 创建内容类数据表结构，失败时向上抛出错误。
     nonisolated static func createContentTables(_ db: Database) throws {
 
         // ── review ──

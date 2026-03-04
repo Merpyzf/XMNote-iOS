@@ -7,6 +7,7 @@
 
 import SwiftUI
 
+/// 笔记详情页入口，支持查看与编辑模式切换。
 struct NoteDetailView: View {
     let noteId: Int64
     var startInEditing: Bool = false

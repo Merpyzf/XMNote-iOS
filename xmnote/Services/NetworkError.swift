@@ -7,6 +7,7 @@
 
 import Foundation
 
+/// 网络请求错误枚举，统一 WebDAV/HTTP 失败分类与可展示文案。
 enum NetworkError: LocalizedError {
     case unauthorized
     case notFound

@@ -10,6 +10,7 @@ import Alamofire
 
 // MARK: - WebDAV Resource
 
+/// WebDAV 目录项模型，承载 PROPFIND 返回的路径、显示名、大小、修改时间与目录标记。
 struct WebDAVResource: Sendable {
     let href: String
     let displayName: String
@@ -20,10 +21,12 @@ struct WebDAVResource: Sendable {
 
 // MARK: - WebDAVClient
 
+/// WebDAV 客户端，封装目录查询、文件上传下载、创建目录与删除资源等远端文件操作。
 struct WebDAVClient: Sendable {
     private let networkClient: NetworkClient
     let baseURL: String
 
+    /// 初始化 WebDAV 客户端地址与凭据，用于备份链路通信。
     init(baseURL: String, username: String, password: String) {
         // 确保 baseURL 以 / 结尾
         self.baseURL = baseURL.hasSuffix("/") ? baseURL : baseURL + "/"
@@ -156,11 +159,13 @@ extension WebDAVClient {
 
 private extension WebDAVClient {
 
+    /// 将相对 WebDAV 路径拼接为完整 URL，并进行路径编码。
     func resolveURL(_ path: String) -> String {
         let trimmed = path.hasPrefix("/") ? String(path.dropFirst()) : path
         return baseURL + (trimmed.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? trimmed)
     }
 
+    /// 按 HTTP 状态码映射网络错误，统一 WebDAV 响应校验逻辑。
     func validateResponse(_ response: HTTPURLResponse?) throws {
         guard let statusCode = response?.statusCode else {
             throw NetworkError.invalidResponse
@@ -203,6 +208,7 @@ private class WebDAVXMLParser: NSObject, XMLParserDelegate {
         return f
     }()
 
+    /// 解析 PROPFIND 的 XML 响应并提取资源列表。
     func parse(_ data: Data) throws -> [WebDAVResource] {
         resources = []
         let parser = XMLParser(data: data)
@@ -215,6 +221,7 @@ private class WebDAVXMLParser: NSObject, XMLParserDelegate {
 
     // MARK: - XMLParserDelegate
 
+    /// 处理 XML 开始标签，并在进入 `response` 节点时重置本条资源的临时解析状态。
     func parser(_ parser: XMLParser, didStartElement elementName: String,
                 namespaceURI: String?, qualifiedName: String?,
                 attributes: [String: String] = [:]) {
@@ -235,10 +242,12 @@ private class WebDAVXMLParser: NSObject, XMLParserDelegate {
         }
     }
 
+    /// 累积当前 XML 节点的文本内容。
     func parser(_ parser: XMLParser, foundCharacters string: String) {
         currentText += string
     }
 
+    /// 处理 XML 结束标签，并在 `response` 结束时组装一条资源记录。
     func parser(_ parser: XMLParser, didEndElement elementName: String,
                 namespaceURI: String?, qualifiedName: String?) {
         let local = elementName.components(separatedBy: ":").last ?? elementName

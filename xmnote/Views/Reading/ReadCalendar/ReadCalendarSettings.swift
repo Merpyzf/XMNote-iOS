@@ -31,6 +31,7 @@ final class ReadCalendarSettings {
         didSet { save(isStreakHintEnabled, forKey: Self.keyStreakHintEnabled) }
     }
 
+    /// 从 UserDefaults 恢复阅读日历筛选与交互配置，并应用默认值兜底。
     init() {
         let defaults = UserDefaults.standard
         self.excludeReadTiming = defaults.bool(forKey: Self.keyReadTiming)

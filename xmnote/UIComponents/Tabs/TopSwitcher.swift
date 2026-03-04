@@ -22,6 +22,7 @@ struct TopSwitcher<Tab: Hashable, Trailing: View>: View {
     private let mode: Mode
     private let trailing: Trailing
 
+    /// 注入分段数据与标题文案，构建顶部切换器交互。
     init(
         selection: Binding<Tab>,
         tabs: [Tab],
@@ -59,6 +60,7 @@ struct TopSwitcher<Tab: Hashable, Trailing: View>: View {
 }
 
 extension TopSwitcher where Tab == Never {
+    /// 注入分段数据与标题文案，构建顶部切换器交互。
     init(
         title: String,
         quote: String = "“",
@@ -105,6 +107,7 @@ private struct TopSwitcherTabBar<Tab: Hashable>: View {
     private struct TopSwitcherTabAnchorKey: PreferenceKey {
         static var defaultValue: [Tab: Anchor<CGRect>] { [:] }
 
+        /// 合并每个 Tab 的锚点信息，供背景引号定位动画使用。
         static func reduce(value: inout [Tab: Anchor<CGRect>], nextValue: () -> [Tab: Anchor<CGRect>]) {
             value.merge(nextValue(), uniquingKeysWith: { _, new in new })
         }

@@ -14,6 +14,7 @@
 
 import SwiftUI
 
+/// NoteCollectionView 负责笔记页“分类切换 + 内容区分发”，根据当前分类展示标签列表或占位内容。
 struct NoteCollectionView: View {
     @Bindable var viewModel: NoteViewModel
 

@@ -16,6 +16,7 @@ struct NoteDetailPayload {
     let createdDate: Int64
 }
 
+/// WebDAV 服务器表单输入模型，用于新增/编辑时提交地址与凭据。
 struct BackupServerFormInput: Equatable {
     let title: String
     let address: String

@@ -17,6 +17,7 @@ struct BookItem: Identifiable {
     let pinned: Bool
 }
 
+/// 书籍详情页模型，聚合书名、作者、出版社、书摘数量与阅读状态。
 struct BookDetail: Identifiable {
     let id: Int64
     let name: String
@@ -27,6 +28,7 @@ struct BookDetail: Identifiable {
     let readStatusName: String
 }
 
+/// 书籍详情中的书摘条目，包含正文、感想、位置与时间信息。
 struct NoteExcerpt: Identifiable {
     let id: Int64
     let content: String

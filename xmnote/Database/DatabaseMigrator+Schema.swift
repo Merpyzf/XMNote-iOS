@@ -26,6 +26,7 @@ extension AppDatabase {
             try createConfigTables(db)
 
             // 同步 Android 的数据库版本号，备份恢复时通过此值校验兼容性
+            // SQL 目的：显式写入 SQLite user_version，确保跨端版本检查一致。
             try db.execute(sql: "PRAGMA user_version = 38")
         }
 

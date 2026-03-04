@@ -18,6 +18,7 @@ enum AppTab: String, CaseIterable {
     case reading, books, notes, profile, search
 }
 
+/// 应用主导航容器，组织四个主 Tab 及跨模块路由跳转。
 struct MainTabView: View {
     @State private var selectedTab: AppTab = .reading
     @State private var readingPath = NavigationPath()
@@ -252,6 +253,7 @@ private struct SearchView: View {
     let onAddBook: () -> Void
     let onAddNote: () -> Void
 
+    /// 注入搜索与新增回调，组装主 Tab 页面上下文。
     init(
         query: Binding<String>,
         onAddBook: @escaping () -> Void = {},

@@ -7,6 +7,7 @@
 
 import SwiftUI
 
+/// 备份服务器编辑表单，负责输入校验、连通性测试与保存提交。
 struct WebDAVServerFormView: View {
     @Bindable var viewModel: WebDAVServerViewModel
     @Environment(\.dismiss) private var dismiss

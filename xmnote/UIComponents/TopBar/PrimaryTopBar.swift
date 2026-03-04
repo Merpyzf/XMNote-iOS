@@ -12,6 +12,7 @@ struct PrimaryTopBar<Leading: View, Trailing: View>: View {
     let leading: Leading
     let trailing: Trailing
 
+    /// 注入左右操作区内容，组装统一顶部栏布局。
     init(
         @ViewBuilder leading: () -> Leading,
         @ViewBuilder trailing: () -> Trailing

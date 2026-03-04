@@ -14,6 +14,7 @@ import GRDB
 
 extension AppDatabase {
 
+    /// 创建配置类数据表结构，失败时向上抛出错误。
     nonisolated static func createConfigTables(_ db: Database) throws {
 
         // ── setting ──

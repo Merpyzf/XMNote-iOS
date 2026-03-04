@@ -12,10 +12,13 @@ nonisolated struct StatisticsRepository: StatisticsRepositoryProtocol {
     private let databaseManager: DatabaseManager
     private let calendar = Calendar.current
 
+    /// 注入数据库管理器，为热力图与阅读日历统计查询提供数据源。
     init(databaseManager: DatabaseManager) {
         self.databaseManager = databaseManager
     }
 
+    /// 拉取指定年份和统计维度的热力图数据，供阅读统计页渲染年视图。
+    /// - Throws: 数据库查询失败时抛出错误。
     nonisolated func fetchHeatmapData(
         year: Int,
         dataType: HeatmapStatisticsDataType
@@ -25,11 +28,15 @@ nonisolated struct StatisticsRepository: StatisticsRepositoryProtocol {
         }
     }
 
+    /// 拉取全量时间范围的热力图数据，供需要跨年统计的入口使用。
+    /// - Throws: 数据库查询失败时抛出错误。
     nonisolated func fetchAllHeatmapData() async throws -> (days: [Date: HeatmapDay], earliestDate: Date?) {
         let result = try await fetchHeatmapData(year: 0, dataType: .all)
         return (result.days, result.earliestDate)
     }
 
+    /// 读取阅读日历可展示的最早业务日期，供月份步进器计算下界。
+    /// - Throws: 数据库查询失败时抛出错误。
     nonisolated func fetchReadCalendarEarliestDate(
         excludedEventTypes: Set<ReadCalendarEventType>
     ) async throws -> Date? {
@@ -38,6 +45,8 @@ nonisolated struct StatisticsRepository: StatisticsRepositoryProtocol {
         }
     }
 
+    /// 聚合单月阅读日历数据（每天书目、完成数、时长与摘要），供月视图页面渲染。
+    /// - Throws: 数据库查询失败时抛出错误。
     nonisolated func fetchReadCalendarMonthData(
         monthStart: Date,
         excludedEventTypes: Set<ReadCalendarEventType>
@@ -47,6 +56,8 @@ nonisolated struct StatisticsRepository: StatisticsRepositoryProtocol {
         }
     }
 
+    /// 聚合年度阅读时长排行，供阅读统计页“年度 Top 书籍”模块展示。
+    /// - Throws: 数据库查询失败时抛出错误。
     nonisolated func fetchReadCalendarYearTopBooks(
         year: Int,
         excludedEventTypes: Set<ReadCalendarEventType>,
@@ -155,6 +166,7 @@ private extension StatisticsRepository {
         return (days, dateRange.start, dateRange.end)
     }
 
+    /// 计算热力图查询时间边界：指定年份走自然年，未指定年份取业务最早日期到今天。
     nonisolated func resolveDateRange(
         _ db: Database,
         year: Int,
@@ -168,6 +180,7 @@ private extension StatisticsRepository {
         return HeatmapDateRange(start: earliest, end: latest)
     }
 
+    /// 生成指定年份的自然年日期范围（本地时区起止日）。
     nonisolated func yearDateRange(_ year: Int) -> HeatmapDateRange? {
         guard let start = calendar.date(from: DateComponents(year: year, month: 1, day: 1)),
               let end = calendar.date(from: DateComponents(year: year, month: 12, day: 31)) else {
@@ -179,6 +192,7 @@ private extension StatisticsRepository {
         )
     }
 
+    /// 把按天的日期区间转换为数据库查询使用的毫秒闭区间。
     nonisolated func millisRangeForQuery(_ dateRange: HeatmapDateRange) -> ClosedRange<Int64> {
         let startMs = Int64(calendar.startOfDay(for: dateRange.start).timeIntervalSince1970 * 1000)
         let endDay = calendar.date(byAdding: .day, value: 1, to: calendar.startOfDay(for: dateRange.end))!
@@ -186,18 +200,22 @@ private extension StatisticsRepository {
         return startMs...endMs
     }
 
+    /// 判断当前维度是否需要查询阅读时长数据。
     nonisolated func shouldQueryReadMap(_ dataType: HeatmapStatisticsDataType) -> Bool {
         dataType == .readingTime || dataType == .all
     }
 
+    /// 判断当前维度是否需要查询笔记计数数据。
     nonisolated func shouldQueryNoteMap(_ dataType: HeatmapStatisticsDataType) -> Bool {
         dataType == .noteCount || dataType == .all
     }
 
+    /// 判断当前维度是否需要查询打卡数据。
     nonisolated func shouldQueryCheckInMap(_ dataType: HeatmapStatisticsDataType) -> Bool {
         dataType == .checkIn || dataType == .all
     }
 
+    /// 判断某一天是否应出现在热力图结果中，避免输出空白日期节点。
     nonisolated func shouldInclude(day: HeatmapDay, dataType: HeatmapStatisticsDataType) -> Bool {
         if !day.bookStates.isEmpty { return true }
         switch dataType {
@@ -214,13 +232,19 @@ private extension StatisticsRepository {
 
     // MARK: - 最早记录日期
 
+    /// 按统计维度查询最早业务日期，作为“全部数据”模式的起始边界。
     nonisolated func findEarliestDate(_ db: Database, dataType: HeatmapStatisticsDataType) -> Date? {
+        // SQL 目的：读取阅读时长最早事件时间；fuzzy_read_date 优先，其次 start_time。
+        // 过滤条件：排除 read_time_record 软删除记录。
         let readSql = """
             SELECT MIN(CASE WHEN fuzzy_read_date != 0 THEN fuzzy_read_date ELSE start_time END)
             FROM read_time_record WHERE is_deleted = 0
             """
+        // SQL 目的：读取 note 表最早创建时间（毫秒时间戳）。
         let noteSql = "SELECT MIN(created_date) FROM note WHERE is_deleted = 0"
+        // SQL 目的：读取 check_in_record 最早打卡时间（忽略 0 值）。
         let checkInSql = "SELECT MIN(checkin_date) FROM check_in_record WHERE is_deleted = 0 AND checkin_date != 0"
+        // SQL 目的：读取 book_read_status_record 最早状态变更时间，覆盖“仅状态变化”场景。
         let statusSql = "SELECT MIN(changed_date) FROM book_read_status_record WHERE is_deleted = 0 AND changed_date != 0"
 
         let queries: [String]
@@ -248,6 +272,9 @@ private extension StatisticsRepository {
 
     /// 按天 SUM(elapsed_seconds)，处理 fuzzyReadDate 双时间源
     nonisolated func aggregateReadSeconds(_ db: Database, millisRange: ClosedRange<Int64>) -> [Date: Int] {
+        // SQL 目的：按“本地日”汇总阅读秒数，用于热力图阅读时长维度。
+        // 时间语义：fuzzy_read_date 非 0 时按补录日期归属，否则按 start_time；均以 localtime 分桶。
+        // 过滤条件：排除软删除，并限制在输入毫秒区间内。
         let sql = """
             SELECT DATE(
                 CASE WHEN fuzzy_read_date != 0
@@ -273,6 +300,8 @@ private extension StatisticsRepository {
 
     /// 按天 COUNT(note)
     nonisolated func aggregateNoteCounts(_ db: Database, millisRange: ClosedRange<Int64>) -> [Date: Int] {
+        // SQL 目的：按“本地日”统计有效笔记条数。
+        // 过滤条件：仅统计 note.is_deleted = 0 且 created_date 位于目标区间的记录。
         let sql = """
             SELECT DATE(created_date / 1000, 'unixepoch', 'localtime') AS day,
                    COUNT(*) AS total
@@ -292,6 +321,8 @@ private extension StatisticsRepository {
 
     /// 按天聚合打卡次数与时长（amount * 20 分钟）
     nonisolated func aggregateCheckInSummary(_ db: Database, millisRange: ClosedRange<Int64>) -> [Date: CheckInSummary] {
+        // SQL 目的：按“本地日”统计打卡次数与打卡时长（amount * 1200 秒）。
+        // 过滤条件：排除软删除与 checkin_date=0 的无效记录。
         let sql = """
             SELECT DATE(checkin_date / 1000, 'unixepoch', 'localtime') AS day,
                    COUNT(*) AS checkin_count,
@@ -310,7 +341,10 @@ private extension StatisticsRepository {
 
     // MARK: - 阅读状态聚合
 
+    /// 聚合每日阅读状态变更集合，支持热力图展示“想读/在读/读完”等状态轨迹。
     nonisolated func aggregateBookStates(_ db: Database, millisRange: ClosedRange<Int64>) -> [Date: Set<HeatmapBookState>] {
+        // SQL 目的：按天收集阅读状态变更（read_status_id），用于“状态热力图”展示。
+        // 输出字段：day + read_status_id；后续在 Swift 侧转为 Set<HeatmapBookState> 去重。
         let sql = """
             SELECT DATE(changed_date / 1000, 'unixepoch', 'localtime') AS day,
                    read_status_id
@@ -382,6 +416,7 @@ private extension StatisticsRepository {
 
     // MARK: - 阅读日历
 
+    /// 构建阅读日历单月聚合结果，包含每日事件、阅读时长排行与月度摘要。
     nonisolated func buildReadCalendarMonthData(
         _ db: Database,
         monthStart: Date,
@@ -474,6 +509,7 @@ private extension StatisticsRepository {
         )
     }
 
+    /// 把任意日期归一化到该月第一天 00:00，保证月度查询边界稳定。
     nonisolated func normalizeToMonthStart(_ date: Date) -> Date {
         let base = calendar.startOfDay(for: date)
         let components = calendar.dateComponents([.year, .month], from: base)
@@ -483,6 +519,7 @@ private extension StatisticsRepository {
         return calendar.startOfDay(for: monthStart)
     }
 
+    /// 读取“天-书籍”维度的事件行，供阅读日历单元格渲染当日触发过行为的书目。
     nonisolated func fetchReadCalendarDayBookRows(
         _ db: Database,
         millisRange: ClosedRange<Int64>,
@@ -492,6 +529,11 @@ private extension StatisticsRepository {
         guard !fragments.isEmpty else { return [] }
 
         let unionAll = fragments.map(\.sql).joined(separator: "\n\n                UNION ALL\n\n")
+        // SQL 目的：合并多事件来源（阅读时长/笔记/关联/书评/打卡/读完）为“按天-按书”事件视图。
+        // CTE 说明：
+        // - raw_events：拼接启用的事件片段（已按事件类型过滤）。
+        // - merged：对 day + book_id 聚合取最早 first_event_time，供日历条排序。
+        // 关联关系：JOIN book 过滤已删除书籍并补全名称/封面。
         let sql = """
             WITH raw_events AS (
                 \(unionAll)
@@ -541,7 +583,10 @@ private extension StatisticsRepository {
         return result
     }
 
+    /// 统计每天“读完”事件数量，供阅读日历显示当日读完本数。
     nonisolated func fetchReadDoneCountByDay(_ db: Database, millisRange: ClosedRange<Int64>) -> [Date: Int] {
+        // SQL 目的：统计每天“读完”事件次数（read_status_id = 3）。
+        // 过滤条件：排除软删除、changed_date=0、区间外记录。
         let sql = """
             SELECT DATE(changed_date / 1000, 'unixepoch', 'localtime') AS day,
                    COUNT(*) AS total
@@ -559,7 +604,10 @@ private extension StatisticsRepository {
         )
     }
 
+    /// 统计每天进入“读完”状态的书籍集合，用于给当日书目打“已读完”标记。
     nonisolated func fetchReadDoneBookIdsByDay(_ db: Database, millisRange: ClosedRange<Int64>) -> [Date: Set<Int64>] {
+        // SQL 目的：统计每天进入“读完”状态的书籍集合（day + book_id 去重）。
+        // 用途：在日历单元中标记 isReadDoneOnThisDay。
         let sql = """
             SELECT DATE(changed_date / 1000, 'unixepoch', 'localtime') AS day,
                    book_id AS book_id
@@ -590,6 +638,7 @@ private extension StatisticsRepository {
         return result
     }
 
+    /// 读取月份范围内的阅读时长原始记录，供月度时长排行与摘要计算。
     nonisolated func fetchReadCalendarDurationRecords(
         _ db: Database,
         monthStart: Date,
@@ -599,6 +648,10 @@ private extension StatisticsRepository {
         let nextMonthStartMs = Int64(calendar.startOfDay(for: nextMonthStart).timeIntervalSince1970 * 1000)
         let monthEndMs = nextMonthStartMs - 1
 
+        // SQL 目的：读取某月份参与阅读时长排行/总结的原始阅读记录。
+        // 关联关系：JOIN book 补全书名与封面，同时排除已删除书籍。
+        // 时间语义：fuzzy 记录按 fuzzy_read_date 判定；非 fuzzy 记录按 [start_time, end_time] 与月份区间重叠判定。
+        // 过滤条件：status=3、book_id!=0、elapsed_seconds>0，且记录未软删除。
         let sql = """
             SELECT r.book_id AS book_id,
                    b.name AS book_name,
@@ -655,10 +708,13 @@ private extension StatisticsRepository {
         return records
     }
 
+    /// 读取任意毫秒区间内的阅读时长原始记录，供年度排行等跨月统计复用。
     nonisolated func fetchReadCalendarDurationRecords(
         _ db: Database,
         millisRange: ClosedRange<Int64>
     ) -> [ReadCalendarDurationRecordRow] {
+        // SQL 目的：按任意毫秒区间读取阅读时长原始记录（年度统计复用）。
+        // 判定逻辑：fuzzy 与非 fuzzy 记录采用同一套“优先 fuzzy_read_date，否则区间重叠”的规则。
         let sql = """
             SELECT r.book_id AS book_id,
                    b.name AS book_name,
@@ -720,6 +776,7 @@ private extension StatisticsRepository {
         return records
     }
 
+    /// 基于全年阅读时长聚合年度 Top 书籍列表。
     nonisolated func buildReadCalendarYearTopBooks(
         _ db: Database,
         year: Int,
@@ -757,6 +814,7 @@ private extension StatisticsRepository {
         return buildReadCalendarMonthlyDurationTopBooks(aggregation: aggregation, limit: limit)
     }
 
+    /// 把阅读记录拆分并汇总到月份维度，输出总时长、时段分布和书籍时长映射。
     nonisolated func aggregateReadCalendarDuration(
         records: [ReadCalendarDurationRecordRow],
         monthMillisRange: ClosedRange<Int64>
@@ -803,6 +861,7 @@ private extension StatisticsRepository {
         )
     }
 
+    /// 基于聚合后的时长数据构建排行榜模型，按时长降序输出。
     nonisolated func buildReadCalendarMonthlyDurationTopBooks(
         aggregation: ReadCalendarDurationAggregation,
         limit: Int = 10
@@ -825,6 +884,7 @@ private extension StatisticsRepository {
         .map { $0 }
     }
 
+    /// 构建阅读日历月度摘要，包括读书覆盖、读完本数、笔记数与阅读时段分布。
     nonisolated func buildReadCalendarMonthSummary(
         excludedEventTypes: Set<ReadCalendarEventType>,
         dayBookRows: [ReadCalendarDayBookRow],
@@ -851,7 +911,9 @@ private extension StatisticsRepository {
         )
     }
 
+    /// 统计区间内读完状态的去重书籍数，供月度摘要展示完成规模。
     nonisolated func fetchReadDoneDistinctBookCount(_ db: Database, millisRange: ClosedRange<Int64>) -> Int {
+        // SQL 目的：统计区间内进入“读完”状态的去重书籍数，用于月度 summary.finishedBookCount。
         let sql = """
             SELECT COUNT(DISTINCT book_id)
             FROM book_read_status_record
@@ -868,7 +930,9 @@ private extension StatisticsRepository {
         )) ?? 0
     }
 
+    /// 统计区间内有效笔记总数，供月度摘要展示笔记产出。
     nonisolated func fetchMonthlyNoteCount(_ db: Database, millisRange: ClosedRange<Int64>) -> Int {
+        // SQL 目的：统计区间内有效笔记总数，用于月度 summary.noteCount。
         let sql = """
             SELECT COUNT(*)
             FROM note
@@ -882,6 +946,7 @@ private extension StatisticsRepository {
         )) ?? 0
     }
 
+    /// 把小时映射到阅读日历的时间段标签，用于月度时段分布统计。
     nonisolated func readCalendarTimeSlot(forHour hour: Int) -> ReadCalendarTimeSlot {
         switch hour {
         case 5..<12:
@@ -957,10 +1022,13 @@ private extension StatisticsRepository {
         return result
     }
 
+    /// 按启用事件类型计算阅读日历最早日期，决定日历可回溯起点。
     nonisolated func findReadCalendarEarliestDate(
         _ db: Database,
         excludedEventTypes: Set<ReadCalendarEventType>
     ) -> Date? {
+        // SQL 目的：按事件类型分别计算“最早业务时间”，后续取最小值作为阅读日历起始边界。
+        // 时间语义：所有字段均为毫秒时间戳；readDone 仅统计 read_status_id = 3。
         let typeQueryMap: [(ReadCalendarEventType, String)] = [
             (.readTiming, """
                 SELECT MIN(CASE WHEN fuzzy_read_date != 0 THEN fuzzy_read_date ELSE start_time END)
@@ -1005,6 +1073,8 @@ private extension StatisticsRepository {
     nonisolated static let allEventFragments: [EventSQLFragment] = [
         EventSQLFragment(
             eventType: .readTiming,
+            // SQL 目的：抽取阅读计时事件，按 day + book_id 聚合最早发生时间。
+            // 时间语义：优先 fuzzy_read_date（补录），否则 start_time；均按 localtime 折算日期。
             sql: """
                 SELECT DATE(
                     CASE WHEN fuzzy_read_date != 0 THEN fuzzy_read_date / 1000 ELSE start_time / 1000 END,
@@ -1022,6 +1092,7 @@ private extension StatisticsRepository {
         ),
         EventSQLFragment(
             eventType: .note,
+            // SQL 目的：抽取笔记创建事件，形成 day + book_id 级别事件流。
             sql: """
                 SELECT DATE(created_date / 1000, 'unixepoch', 'localtime') AS day,
                        book_id AS book_id,
@@ -1036,6 +1107,7 @@ private extension StatisticsRepository {
         ),
         EventSQLFragment(
             eventType: .relevant,
+            // SQL 目的：抽取“相关内容”创建事件，纳入阅读日历行为判定。
             sql: """
                 SELECT DATE(created_date / 1000, 'unixepoch', 'localtime') AS day,
                        book_id AS book_id,
@@ -1050,6 +1122,7 @@ private extension StatisticsRepository {
         ),
         EventSQLFragment(
             eventType: .review,
+            // SQL 目的：抽取书评创建事件，纳入阅读日历行为判定。
             sql: """
                 SELECT DATE(created_date / 1000, 'unixepoch', 'localtime') AS day,
                        book_id AS book_id,
@@ -1064,6 +1137,7 @@ private extension StatisticsRepository {
         ),
         EventSQLFragment(
             eventType: .checkIn,
+            // SQL 目的：抽取打卡事件（book_id 维度），统一并入日历事件流。
             sql: """
                 SELECT DATE(checkin_date / 1000, 'unixepoch', 'localtime') AS day,
                        book_id AS book_id,
@@ -1079,6 +1153,7 @@ private extension StatisticsRepository {
         ),
         EventSQLFragment(
             eventType: .readDone,
+            // SQL 目的：抽取“读完”状态事件（read_status_id = 3），用于行为流和完成标记。
             sql: """
                 SELECT DATE(changed_date / 1000, 'unixepoch', 'localtime') AS day,
                        book_id AS book_id,
@@ -1095,6 +1170,7 @@ private extension StatisticsRepository {
         )
     ]
 
+    /// 按事件筛选配置动态拼装 SQL 片段，避免禁用事件参与日历查询。
     nonisolated func buildEventFragments(
         excludedEventTypes: Set<ReadCalendarEventType>
     ) -> [EventSQLFragment] {

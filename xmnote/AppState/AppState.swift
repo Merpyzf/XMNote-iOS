@@ -15,6 +15,7 @@ class AppState {
     var isAIEnabled: Bool = false
 }
 
+/// 应用主题偏好设置，决定界面跟随系统或强制浅色/深色。
 enum AppColorScheme: String, CaseIterable {
     case system
     case light

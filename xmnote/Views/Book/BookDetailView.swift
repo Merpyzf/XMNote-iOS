@@ -14,6 +14,7 @@
 
 import SwiftUI
 
+/// 书籍详情页入口，负责加载书籍信息并展示关联书摘列表。
 struct BookDetailView: View {
     let bookId: Int64
     @Environment(RepositoryContainer.self) private var repositories

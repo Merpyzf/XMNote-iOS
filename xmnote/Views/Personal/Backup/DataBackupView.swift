@@ -7,6 +7,7 @@
 
 import SwiftUI
 
+/// 数据备份入口页，聚合服务器状态、手动备份与恢复入口。
 struct DataBackupView: View {
     @Environment(RepositoryContainer.self) private var repositories
     @State private var viewModel: DataBackupViewModel?

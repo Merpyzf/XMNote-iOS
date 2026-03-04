@@ -14,6 +14,7 @@
 
 import SwiftUI
 
+/// 书单页空态占位，提示当前暂无书单数据。
 struct CollectionListPlaceholderView: View {
     var body: some View {
         EmptyStateView(icon: "rectangle.stack", message: "暂无书单")

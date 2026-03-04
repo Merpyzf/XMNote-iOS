@@ -165,6 +165,7 @@ final class HTMLParser: NSObject {
 
 extension HTMLParser: XMLParserDelegate {
 
+    /// 处理开始标签：写入上下文栈，并在 `li` 起始前补齐换行。
     func parser(_ parser: XMLParser, didStartElement elementName: String, namespaceURI: String?, qualifiedName: String?, attributes attributeDict: [String: String] = [:]) {
         // 先 flush 当前文本
         flushText()
@@ -184,6 +185,7 @@ extension HTMLParser: XMLParserDelegate {
         }
     }
 
+    /// 处理结束标签：将当前上下文范围应用为字符级或段落级样式。
     func parser(_ parser: XMLParser, didEndElement elementName: String, namespaceURI: String?, qualifiedName: String?) {
         flushText()
 
@@ -228,6 +230,7 @@ extension HTMLParser: XMLParserDelegate {
         }
     }
 
+    /// 累积文本节点内容，等待在标签边界统一落盘。
     func parser(_ parser: XMLParser, foundCharacters string: String) {
         currentText += string
     }

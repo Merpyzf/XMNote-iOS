@@ -42,6 +42,7 @@ final class ReadCalendarViewModel {
     private static let colorBatchInterval: TimeInterval = 0.12
     private static let yearTopBookLimit = 10
 
+    /// WeekRowData 表示单周渲染数据，包含日期槽位与事件条布局结果。
     struct WeekRowData: Identifiable, Hashable {
         let weekStart: Date
         let days: [Date?]
@@ -50,6 +51,7 @@ final class ReadCalendarViewModel {
         var id: Date { weekStart }
     }
 
+    /// MonthLoadState 表示单月数据加载阶段（idle/loading/loaded/failed）。
     enum MonthLoadState: Equatable {
         case idle
         case loading
@@ -57,6 +59,7 @@ final class ReadCalendarViewModel {
         case failed
     }
 
+    /// MonthPageState 是单月页面状态快照，聚合网格、摘要、排行与错误信息。
     struct MonthPageState: Hashable {
         let monthStart: Date
         let weeks: [WeekRowData]
@@ -72,6 +75,7 @@ final class ReadCalendarViewModel {
         }
     }
 
+    /// YearLoadState 表示年度视图聚合阶段状态。
     enum YearLoadState: Equatable {
         case idle
         case loading
@@ -79,6 +83,7 @@ final class ReadCalendarViewModel {
         case failed
     }
 
+    /// YearMonthContribution 描述某月对年度阅读的贡献。
     struct YearMonthContribution: Identifiable, Hashable {
         let monthStart: Date
         let activeDays: Int
@@ -87,6 +92,7 @@ final class ReadCalendarViewModel {
         var id: Date { monthStart }
     }
 
+    /// YearSummaryState 表示年度总结页面所需状态快照。
     struct YearSummaryState: Hashable {
         let year: Int
         let activeDays: Int
@@ -100,6 +106,7 @@ final class ReadCalendarViewModel {
         let errorMessage: String?
     }
 
+    /// RootContentState 表示阅读日历入口页面根状态。
     enum RootContentState: Equatable {
         case loading
         case empty
@@ -144,6 +151,7 @@ final class ReadCalendarViewModel {
     private var yearColorTicketSeed = 0
     private var calendar: Calendar
 
+    /// 初始化阅读日历状态机，注入初始日期、筛选设置与布局模式作为后续加载基准。
     init(
         initialDate: Date?,
         settings: ReadCalendarSettings,
@@ -205,6 +213,7 @@ final class ReadCalendarViewModel {
         return .content
     }
 
+    /// 在首次进入页面时加载阅读日历基础数据。
     func loadIfNeeded(
         using repository: any StatisticsRepositoryProtocol,
         colorRepository: any ReadCalendarColorRepositoryProtocol
@@ -213,6 +222,7 @@ final class ReadCalendarViewModel {
         await reload(using: repository, colorRepository: colorRepository)
     }
 
+    /// 重新加载阅读日历基础数据并重建月份/年份缓存。
     func reload(
         using repository: any StatisticsRepositoryProtocol,
         colorRepository: any ReadCalendarColorRepositoryProtocol
@@ -296,11 +306,13 @@ final class ReadCalendarViewModel {
         isLoading = false
     }
 
+    /// 按偏移量切换月份分页（上一月/下一月）。
     func stepPager(offset: Int) {
         guard let target = monthAtOffset(offset, from: pagerSelection) else { return }
         pagerSelection = target
     }
 
+    /// 快速跳转到今天所在月份并选中今天。
     func jumpToToday() {
         let today = calendar.startOfDay(for: Date())
         let todayMonth = Self.monthStart(of: today, using: calendar)
@@ -310,6 +322,7 @@ final class ReadCalendarViewModel {
         selectedYear = clampYear(calendar.component(.year, from: todayMonth))
     }
 
+    /// 处理月份分页切换并串联加载、预取与错误同步。
     func handlePagerSelectionChange(
         to monthStart: Date,
         using repository: any StatisticsRepositoryProtocol,
@@ -346,6 +359,7 @@ final class ReadCalendarViewModel {
         syncDisplayedMonthError()
     }
 
+    /// 处理年份切换并确保年度数据、排行与对比年份已准备。
     func handleYearSelectionChange(
         to year: Int,
         using repository: any StatisticsRepositoryProtocol,
@@ -377,6 +391,7 @@ final class ReadCalendarViewModel {
         )
     }
 
+    /// 确保年度热力图页已就绪：补齐当前年份数据、榜单与对比年份缓存。
     func prepareHeatmapYearIfNeeded(
         using repository: any StatisticsRepositoryProtocol,
         colorRepository: any ReadCalendarColorRepositoryProtocol
@@ -401,6 +416,7 @@ final class ReadCalendarViewModel {
         )
     }
 
+    /// 重试当前展示月份加载，并补齐相邻月份预取。
     func retryDisplayedMonth(
         using repository: any StatisticsRepositoryProtocol,
         colorRepository: any ReadCalendarColorRepositoryProtocol
@@ -422,10 +438,12 @@ final class ReadCalendarViewModel {
         syncDisplayedMonthError()
     }
 
+    /// 取消并清理不再需要的异步任务，避免陈旧结果回写状态。
     func cancelAsyncTasks() {
         cancelAllColorTasks()
     }
 
+    /// 若存在上一年数据则预加载上一年，用于年度对比展示。
     func preloadComparisonYearIfNeeded(
         for year: Int,
         using repository: any StatisticsRepositoryProtocol,
@@ -510,20 +528,24 @@ final class ReadCalendarViewModel {
         await reload(using: repository, colorRepository: colorRepository)
     }
 
+    /// 读取指定月份页面状态，缺省时返回占位状态。
     func monthState(for monthStart: Date) -> MonthPageState {
         let normalized = Self.monthStart(of: monthStart, using: calendar)
         let key = Self.monthKey(for: normalized, using: calendar)
         return pageStates[key] ?? placeholderState(for: normalized)
     }
 
+    /// 生成指定年份的月份起始列表。
     func monthStartsForYear(_ year: Int) -> [Date] {
         Self.monthStarts(of: clampYear(year), using: calendar)
     }
 
+    /// 读取某年份年度数据加载状态。
     func yearLoadState(for year: Int) -> YearLoadState {
         yearLoadStateByYear[year] ?? .idle
     }
 
+    /// 汇总年度指标、月贡献与年度排行数据。
     func yearSummaryState(for year: Int) -> YearSummaryState {
         let clampedYear = clampYear(year)
         let monthStarts = monthStartsForYear(clampedYear)
@@ -567,6 +589,7 @@ final class ReadCalendarViewModel {
         )
     }
 
+    /// 更新选中日期状态，并处理取消选中与未来日期保护。
     func selectDate(_ date: Date?) {
         guard let date else {
             selectedDate = nil
@@ -581,25 +604,30 @@ final class ReadCalendarViewModel {
         selectedDate = normalized
     }
 
+    /// 读取指定日期在某月中的业务数据载荷。
     func dayPayload(for date: Date, in monthStart: Date) -> ReadCalendarDay? {
         let normalized = calendar.startOfDay(for: date)
         return monthState(for: monthStart).dayMap[normalized]
     }
 
+    /// 计算某日超出可展示车道数的事件数量。
     func overflowCount(for date: Date, in monthStart: Date) -> Int {
         let count = dayPayload(for: date, in: monthStart)?.books.count ?? 0
         return max(0, count - laneLimit)
     }
 
+    /// 判断给定日期是否为当前选中日期。
     func isSelected(_ date: Date) -> Bool {
         guard let selectedDate else { return false }
         return calendar.isDate(date, inSameDayAs: selectedDate)
     }
 
+    /// 判断给定日期是否为今天。
     func isToday(_ date: Date) -> Bool {
         calendar.isDateInToday(date)
     }
 
+    /// 判断给定日期是否晚于今天（用于禁用未来日期交互）。
     func isFutureDate(_ date: Date) -> Bool {
         calendar.startOfDay(for: date) > calendar.startOfDay(for: Date())
     }
@@ -608,6 +636,7 @@ final class ReadCalendarViewModel {
 // MARK: - Private
 
 private extension ReadCalendarViewModel {
+    /// 确保目标月份数据可用，并处理加载态、失败态与并发竞态。
     func ensureMonthLoaded(
         for monthStart: Date,
         using repository: any StatisticsRepositoryProtocol,
@@ -702,6 +731,7 @@ private extension ReadCalendarViewModel {
         }
     }
 
+    /// 预取当前月份前后相邻月份，减少翻页等待。
     func prefetchAdjacentMonths(
         around monthStart: Date,
         using repository: any StatisticsRepositoryProtocol,
@@ -724,6 +754,7 @@ private extension ReadCalendarViewModel {
         }
     }
 
+    /// 确保目标年份所有月份已加载并汇总年度加载结果。
     func ensureYearLoaded(
         for year: Int,
         using repository: any StatisticsRepositoryProtocol,
@@ -777,6 +808,7 @@ private extension ReadCalendarViewModel {
         }
     }
 
+    /// 加载年度阅读时长 Top 并初始化排行条颜色映射。
     func ensureYearTopBooksLoaded(
         for year: Int,
         using repository: any StatisticsRepositoryProtocol,
@@ -819,6 +851,7 @@ private extension ReadCalendarViewModel {
         )
     }
 
+    /// 为年度榜单异步解析封面主色并更新排行条颜色。
     func scheduleYearTopBookColorResolutionIfNeeded(
         for year: Int,
         topBooks: [ReadCalendarMonthlyDurationBook],
@@ -936,6 +969,7 @@ private extension ReadCalendarViewModel {
         }
     }
 
+    /// 为当前月份事件条异步解析封面主色并回写颜色映射。
     func scheduleColorResolutionIfNeeded(
         for monthStart: Date,
         using colorRepository: any ReadCalendarColorRepositoryProtocol
@@ -1168,6 +1202,7 @@ private extension ReadCalendarViewModel {
         return requests
     }
 
+    /// 判断月份状态中是否仍有待解析颜色的事件段或排行书籍。
     func hasPendingSegmentColor(_ state: MonthPageState) -> Bool {
         let hasPendingSegment = state.weeks.contains { week in
             week.segments.contains { $0.color.state == .pending }
@@ -1181,6 +1216,7 @@ private extension ReadCalendarViewModel {
         }
     }
 
+    /// 取消并清理不再需要的异步任务，避免陈旧结果回写状态。
     func cancelOutOfScopeColorTasks(around monthStart: Date) {
         let validMonths: [Date] = [
             monthStart,
@@ -1198,6 +1234,7 @@ private extension ReadCalendarViewModel {
         }
     }
 
+    /// 取消并清理不再需要的异步任务，避免陈旧结果回写状态。
     func cancelAllColorTasks() {
         for task in monthColorTasks.values {
             task.cancel()
@@ -1213,6 +1250,7 @@ private extension ReadCalendarViewModel {
         inFlightYearColorRequestBookIDsByYear = [:]
     }
 
+    /// 获取指定月份数据，优先走缓存并在需要时回源仓储。
     func fetchMonthData(
         monthStart: Date,
         using repository: any StatisticsRepositoryProtocol,
@@ -1234,6 +1272,7 @@ private extension ReadCalendarViewModel {
         return fetched
     }
 
+    /// 将月度领域数据组装为页面可直接渲染的已加载状态。
     func buildLoadedState(monthStart: Date, data: ReadCalendarMonthData) -> MonthPageState {
         let weeks = buildWeeks(monthStart: monthStart, dayMap: data.days)
         return MonthPageState(
@@ -1251,6 +1290,7 @@ private extension ReadCalendarViewModel {
         )
     }
 
+    /// 构建月份占位状态，供加载前或失败回退使用。
     func placeholderState(for monthStart: Date) -> MonthPageState {
         MonthPageState(
             monthStart: monthStart,
@@ -1264,6 +1304,7 @@ private extension ReadCalendarViewModel {
         )
     }
 
+    /// 用周事件颜色初始化月榜条形图颜色映射；未命中时标记为 pending。
     func buildInitialRankingBarColorMap(
         weeks: [WeekRowData],
         topBooks: [ReadCalendarMonthlyDurationBook]
@@ -1282,6 +1323,7 @@ private extension ReadCalendarViewModel {
         return rankingColorsByBookId
     }
 
+    /// 基于已有颜色缓存初始化年度榜单颜色映射，缺失项默认为 pending。
     func buildInitialYearRankingBarColorMap(
         topBooks: [ReadCalendarMonthlyDurationBook],
         existingMap: [Int64: ReadCalendarSegmentColor]?
@@ -1295,6 +1337,7 @@ private extension ReadCalendarViewModel {
         return colorsByBookId
     }
 
+    /// 将月度 dayMap 结合布局引擎结果，生成网格周数据与事件段。
     func buildWeeks(monthStart: Date, dayMap: [Date: ReadCalendarDay]) -> [WeekRowData] {
         let displayWeeks = makeDisplayWeeks(for: monthStart)
         let engine = ReadCalendarEventLayoutEngine(calendar: calendar, mode: renderMode)
@@ -1311,6 +1354,7 @@ private extension ReadCalendarViewModel {
         }
     }
 
+    /// 生成指定月份的可展示周槽位（含月前/月后补齐空槽）。
     func makeDisplayWeeks(for monthStart: Date) -> [WeekRowData] {
         guard let dayRange = calendar.range(of: .day, in: .month, for: monthStart) else { return [] }
 
@@ -1338,6 +1382,7 @@ private extension ReadCalendarViewModel {
         return result
     }
 
+    /// 根据最早/最晚月份重建可切换月份列表与索引映射。
     func rebuildMonthRange(from earliest: Date, to latest: Date) {
         var months: [Date] = []
         var cursor = earliest
@@ -1352,6 +1397,7 @@ private extension ReadCalendarViewModel {
         })
     }
 
+    /// 根据最早/最晚月份重建可切换年份列表（倒序）。
     func rebuildYearRange(from earliest: Date, to latest: Date) {
         let earliestYear = calendar.component(.year, from: earliest)
         let latestYear = calendar.component(.year, from: latest)
@@ -1362,11 +1408,13 @@ private extension ReadCalendarViewModel {
         availableYears = Array(earliestYear...latestYear).sorted(by: >)
     }
 
+    /// 查询月份在可用范围中的索引位置。
     func monthIndex(for monthStart: Date) -> Int? {
         let key = Self.monthKey(for: monthStart, using: calendar)
         return monthIndexByKey[key]
     }
 
+    /// 根据当前月份和偏移量返回目标月份。
     func monthAtOffset(_ offset: Int, from monthStart: Date) -> Date? {
         guard let index = monthIndex(for: monthStart) else { return nil }
         let target = index + offset
@@ -1374,6 +1422,7 @@ private extension ReadCalendarViewModel {
         return availableMonths[target]
     }
 
+    /// 计算周块起始日，保证事件布局按周对齐。
     func weekStartDate(for chunk: [Date?], monthStart: Date, weekOffset: Int) -> Date {
         if let date = chunk.compactMap({ $0 }).first {
             let start = calendar.dateInterval(of: .weekOfYear, for: date)?.start ?? date
@@ -1386,12 +1435,14 @@ private extension ReadCalendarViewModel {
         return calendar.startOfDay(for: start)
     }
 
+    /// 将月份限制在可用范围内，避免分页越界。
     func clampMonthStart(_ monthStart: Date, earliest: Date, latest: Date) -> Date {
         if monthStart < earliest { return earliest }
         if monthStart > latest { return latest }
         return monthStart
     }
 
+    /// 将年份限制在可选年份范围内。
     func clampYear(_ year: Int) -> Int {
         guard let minYear = availableYears.min(),
               let maxYear = availableYears.max() else {
@@ -1402,6 +1453,7 @@ private extension ReadCalendarViewModel {
         return year
     }
 
+    /// 将选中日期限制在可展示区间（最早月份首日到今天）。
     func clampSelectedDate(_ date: Date, earliestMonthStart: Date, latestDate: Date) -> Date {
         let normalized = calendar.startOfDay(for: date)
         let upper = calendar.startOfDay(for: latestDate)
@@ -1410,19 +1462,23 @@ private extension ReadCalendarViewModel {
         return normalized
     }
 
+    /// 判断给定月份是否在当前可展示范围内。
     func isMonthInAvailableRange(_ monthStart: Date) -> Bool {
         monthIndex(for: monthStart) != nil
     }
 
+    /// 将当前展示月份的错误信息同步到页面提示文案。
     func syncDisplayedMonthError() {
         let key = Self.monthKey(for: displayedMonthStart, using: calendar)
         errorMessage = pageStates[key]?.errorMessage
     }
 
+    /// 统计存在阅读行为的活跃天数。
     func activeDayCount(in dayMap: [Date: ReadCalendarDay]) -> Int {
         dayMap.values.filter { !$0.books.isEmpty || $0.isReadDoneDay }.count
     }
 
+    /// 把任意日期归一化为当月首日。
     static func monthStart(of date: Date, using calendar: Calendar) -> Date {
         let normalized = calendar.startOfDay(for: date)
         let components = calendar.dateComponents([.year, .month], from: normalized)
@@ -1430,15 +1486,18 @@ private extension ReadCalendarViewModel {
         return calendar.startOfDay(for: monthStart)
     }
 
+    /// 生成月份键用于缓存与状态索引。
     static func monthKey(for date: Date, using calendar: Calendar) -> String {
         let monthStart = monthStart(of: date, using: calendar)
         return Self.monthKeyFormatter.string(from: monthStart)
     }
 
+    /// 获取当前自然月首日。
     static func currentMonthStart(using calendar: Calendar) -> Date {
         monthStart(of: Date(), using: calendar)
     }
 
+    /// 生成指定年份 1-12 月的月份首日数组。
     static func monthStarts(of year: Int, using calendar: Calendar) -> [Date] {
         (1...12).compactMap { month -> Date? in
             guard let date = calendar.date(from: DateComponents(year: year, month: month, day: 1)) else {
@@ -1450,6 +1509,7 @@ private extension ReadCalendarViewModel {
 }
 
 private extension ReadCalendarEventSegment {
+    /// 返回替换颜色后的事件条副本，避免原值被就地修改。
     func withColor(_ color: ReadCalendarSegmentColor) -> ReadCalendarEventSegment {
         ReadCalendarEventSegment(
             bookId: bookId,

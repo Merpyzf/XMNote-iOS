@@ -51,6 +51,7 @@ extension AppDatabase {
         // WAL 模式：与 Android Room 默认行为一致，支持并发读写
         // 备份时需要先 checkpoint 确保数据完整
         config.prepareDatabase { db in
+            // SQL 目的：启用 WAL journal_mode，提升并发读写能力并与 Android 端行为对齐。
             try db.execute(sql: "PRAGMA journal_mode = WAL")
         }
 
@@ -59,16 +60,20 @@ extension AppDatabase {
         // 兼容 Android Room：如果 user_version 已达标但缺少 grdb_migrations 表，
         // 手动标记迁移为已完成，避免对已有 schema 重复建表
         try dbPool.write { db in
+            // SQL 目的：读取 SQLite user_version，用于判断是否需要兼容性补丁。
             let userVersion = try Int.fetchOne(db, sql: "PRAGMA user_version") ?? 0
             let hasGRDBTable = try db.tableExists("grdb_migrations")
 
             if userVersion >= databaseVersion && !hasGRDBTable {
+                // SQL 目的：补建 GRDB 迁移记录表，避免旧库重复执行全量建表迁移。
                 try db.execute(sql: """
                     CREATE TABLE grdb_migrations (identifier TEXT NOT NULL PRIMARY KEY)
                 """)
+                // SQL 目的：声明 schema 迁移已完成，和 Android 现有数据库版本语义保持一致。
                 try db.execute(sql: """
                     INSERT INTO grdb_migrations (identifier) VALUES ('v38-schema')
                 """)
+                // SQL 目的：声明 seed 迁移已完成，防止重复写入初始化数据。
                 try db.execute(sql: """
                     INSERT INTO grdb_migrations (identifier) VALUES ('v38-seed')
                 """)
@@ -124,6 +129,7 @@ extension AppDatabase {
     /// 备份前必须调用，确保主数据库文件包含所有最新数据
     func checkpoint() throws {
         try dbPool.write { db in
+            // SQL 目的：触发 WAL checkpoint(TRUNCATE)，将 WAL 合并回主库并截断 WAL 文件，便于备份一致性。
             try db.execute(sql: "PRAGMA wal_checkpoint(TRUNCATE)")
         }
     }

@@ -11,22 +11,26 @@ import GRDB
 struct BookRepository: BookRepositoryProtocol {
     private let databaseManager: DatabaseManager
 
+    /// 注入数据库管理器，供书架、详情和书摘查询复用同一数据源。
     init(databaseManager: DatabaseManager) {
         self.databaseManager = databaseManager
     }
 
+    /// 为书架页提供可持续订阅的数据流，任意书籍或笔记变更后会自动刷新列表。
     func observeBooks() -> AsyncThrowingStream<[BookItem], Error> {
         ObservationStream.make(in: databaseManager.database.dbPool) { db in
             try fetchBooks(db)
         }
     }
 
+    /// 为书籍详情页提供单书订阅流，用于展示基础信息、阅读状态和笔记统计。
     func observeBookDetail(bookId: Int64) -> AsyncThrowingStream<BookDetail?, Error> {
         ObservationStream.make(in: databaseManager.database.dbPool) { db in
             try fetchBook(db, bookId: bookId)
         }
     }
 
+    /// 为书籍详情页提供书摘订阅流，保障新增/删除书摘后列表实时更新。
     func observeBookNotes(bookId: Int64) -> AsyncThrowingStream<[NoteExcerpt], Error> {
         ObservationStream.make(in: databaseManager.database.dbPool) { db in
             try fetchNotes(db, bookId: bookId)
@@ -35,7 +39,12 @@ struct BookRepository: BookRepositoryProtocol {
 }
 
 private extension BookRepository {
+    /// 查询书架页需要的书籍卡片数据，并补齐每本书的有效笔记数量。
+    /// - Throws: 数据库查询失败时抛出错误。
     func fetchBooks(_ db: Database) throws -> [BookItem] {
+        // SQL 目的：读取书架列表并附带每本书的有效笔记数。
+        // 表关系：book b LEFT JOIN note n（仅统计 n.is_deleted = 0）。
+        // 过滤与排序：仅保留未删除书籍，按置顶状态与排序字段输出用于书架展示。
         let sql = """
             SELECT b.id, b.name, b.author, b.cover,
                    b.read_status_id, b.pinned, b.pin_order, b.book_order,
@@ -61,7 +70,12 @@ private extension BookRepository {
         }
     }
 
+    /// 查询指定书籍详情数据，供详情页头部信息区与统计区渲染。
+    /// - Throws: 数据库查询失败时抛出错误。
     func fetchBook(_ db: Database, bookId: Int64) throws -> BookDetail? {
+        // SQL 目的：读取单本书详情，并补充阅读状态名称与笔记总数。
+        // 表关系：book b LEFT JOIN read_status rs；子查询统计 note 表有效记录。
+        // 过滤条件：按 bookId 精确命中且排除软删除书籍。
         let sql = """
             SELECT b.id, b.name, b.author, b.cover, b.press,
                    COALESCE(rs.name, '') AS read_status_name,
@@ -86,7 +100,12 @@ private extension BookRepository {
         )
     }
 
+    /// 查询书籍下的书摘列表，供详情页“书摘时间线”模块展示。
+    /// - Throws: 数据库查询失败时抛出错误。
     func fetchNotes(_ db: Database, bookId: Int64) throws -> [NoteExcerpt] {
+        // SQL 目的：拉取书籍下的书摘列表（详情页时间倒序）。
+        // 过滤条件：限定 book_id 且排除软删除 note。
+        // 返回字段：保留富文本内容、位置与 include_time，供详情页渲染。
         let sql = """
             SELECT id, content, idea, position, position_unit,
                    include_time, created_date

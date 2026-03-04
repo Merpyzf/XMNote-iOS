@@ -7,9 +7,10 @@
 
 import UIKit
 
-/// 业务层富文本桥接：统一 HTML ↔ NSAttributedString 转换入口。
+/// 富文本桥接器，负责笔记详情在 HTML 存储格式与 NSAttributedString 编辑格式之间转换。
 enum RichTextBridge {
 
+    /// 将 HTML 转换为富文本，供编辑器直接渲染。
     static func htmlToAttributed(
         _ html: String,
         baseFont: UIFont = .systemFont(ofSize: 16),
@@ -22,6 +23,7 @@ enum RichTextBridge {
         )
     }
 
+    /// 将富文本序列化为 HTML，供存储与同步使用。
     static func attributedToHtml(_ attributedText: NSAttributedString) -> String {
         HTMLSerializer.serialize(attributedText)
     }

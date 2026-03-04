@@ -14,6 +14,7 @@
 
 import SwiftUI
 
+/// 笔记回顾空态占位，提示暂无可回顾内容。
 struct NoteReviewPlaceholderView: View {
     var body: some View {
         EmptyStateView(icon: "arrow.clockwise", message: "暂无回顾内容")

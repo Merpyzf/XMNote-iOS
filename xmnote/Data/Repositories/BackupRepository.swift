@@ -11,21 +11,25 @@ struct BackupRepository: BackupRepositoryProtocol {
     private let databaseManager: DatabaseManager
     private let serverRepository: any BackupServerRepositoryProtocol
 
+    /// 注入数据库与服务器仓储，组装备份仓储执行上下文。
     init(databaseManager: DatabaseManager, serverRepository: any BackupServerRepositoryProtocol) {
         self.databaseManager = databaseManager
         self.serverRepository = serverRepository
     }
 
+    /// 触发一次完整备份流程，并通过 progress 回传阶段进度。
     func backup(progress: (@Sendable (BackupProgress) -> Void)?) async throws {
         let service = try await makeService()
         try await service.backup(progress: progress)
     }
 
+    /// 拉取远端备份历史列表，供恢复入口展示。
     func fetchBackupHistory() async throws -> [BackupFileInfo] {
         let service = try await makeService()
         return try await service.fetchBackupList()
     }
 
+    /// 使用指定备份执行恢复流程，并通过 progress 回传阶段进度。
     func restore(_ backup: BackupFileInfo, progress: (@Sendable (RestoreProgress) -> Void)?) async throws {
         let service = try await makeService()
         try await service.restore(backup, databaseManager: databaseManager, progress: progress)
@@ -33,6 +37,7 @@ struct BackupRepository: BackupRepositoryProtocol {
 }
 
 private extension BackupRepository {
+    /// 根据当前选中服务器组装 BackupService；未配置服务器时抛出 noServerConfigured。
     func makeService() async throws -> BackupService {
         guard let server = try await serverRepository.fetchCurrentServer() else {
             throw BackupError.noServerConfigured

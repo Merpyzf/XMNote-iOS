@@ -12,10 +12,12 @@ enum XMImagePipelineFactory {
     private static let diskCacheName = "com.merpyzf.xmnote.image.datacache.v1"
     private static let diskCacheSizeLimit = 220 * 1024 * 1024
 
+    /// 构建默认图片加载管线实例。
     static func makeDefault() -> ImagePipeline {
         ImagePipeline(configuration: makeConfiguration())
     }
 
+    /// 构建图片加载管线配置（缓存、解码、并发策略）。
     static func makeConfiguration() -> ImagePipeline.Configuration {
         let sessionConfiguration = URLSessionConfiguration.default
         sessionConfiguration.timeoutIntervalForRequest = 12

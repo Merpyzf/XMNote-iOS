@@ -45,6 +45,7 @@ enum ReadStatusFilter: CaseIterable, Identifiable {
 
 // MARK: - BookViewModel
 
+/// BookViewModel 负责书籍模块的状态管理与业务动作编排，向界面提供可渲染数据。
 @Observable
 class BookViewModel {
     var books: [BookItem] = []
@@ -53,6 +54,7 @@ class BookViewModel {
     private let repository: any BookRepositoryProtocol
     private var observationTask: Task<Void, Never>?
 
+    /// 注入书籍仓储并启动列表数据观察。
     init(repository: any BookRepositoryProtocol) {
         self.repository = repository
         startObservation()
@@ -63,6 +65,7 @@ class BookViewModel {
         return books.filter { $0.readStatusId == statusId }
     }
 
+    /// 释放书籍模块运行过程持有的资源与观察任务。
     deinit {
         observationTask?.cancel()
     }

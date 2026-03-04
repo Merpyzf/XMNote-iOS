@@ -13,6 +13,7 @@ import GRDB
 
 extension AppDatabase {
 
+    /// 创建关联关系表结构，失败时向上抛出错误。
     nonisolated static func createRelationTables(_ db: Database) throws {
 
         // ── tag_note ──

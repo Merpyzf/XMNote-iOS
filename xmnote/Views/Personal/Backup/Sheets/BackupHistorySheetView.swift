@@ -7,6 +7,7 @@
 
 import SwiftUI
 
+/// 备份历史弹层，展示远端备份列表并触发恢复确认流程。
 struct BackupHistorySheetView: View {
     @Bindable var viewModel: DataBackupViewModel
     @Environment(\.dismiss) private var dismiss
@@ -57,6 +58,7 @@ private extension BackupHistorySheetView {
         }
     }
 
+    /// 渲染单条备份历史记录行。
     func backupRow(_ backup: BackupFileInfo) -> some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack {
@@ -75,6 +77,7 @@ private extension BackupHistorySheetView {
         .foregroundStyle(.secondary)
     }
 
+    /// 将备份文件大小格式化为易读文本。
     func formattedSize(_ bytes: Int64) -> String {
         let formatter = ByteCountFormatter()
         formatter.countStyle = .file

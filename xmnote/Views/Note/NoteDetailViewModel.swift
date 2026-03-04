@@ -11,6 +11,7 @@ import UIKit
 @MainActor
 @Observable
 class NoteDetailViewModel {
+    /// 笔记元信息，供详情页底部展示位置与创建时间。
     struct Metadata {
         let position: String
         let positionUnit: Int64
@@ -56,11 +57,13 @@ class NoteDetailViewModel {
 
     private let repository: any NoteRepositoryProtocol
 
+    /// 注入笔记 ID 与仓储，初始化详情编辑数据。
     init(noteId: Int64, repository: any NoteRepositoryProtocol) {
         self.noteId = noteId
         self.repository = repository
     }
 
+    /// 加载笔记详情并转换为富文本编辑器可消费的数据结构。
     func load() async {
         isLoading = true
         errorMessage = nil
@@ -86,6 +89,7 @@ class NoteDetailViewModel {
         }
     }
 
+    /// 将当前编辑内容序列化为 HTML 并提交保存。
     func save() async -> Bool {
         isSaving = true
         errorMessage = nil

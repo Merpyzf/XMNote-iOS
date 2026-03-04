@@ -59,13 +59,16 @@ struct ReadCalendarMonthSummarySheet: View {
         static let summaryDurationShimmerMinBandWidth: CGFloat = 100
     }
 
+    /// SummaryMetricSpec 定义月总结指标卡的数据结构。
     struct SummaryMetricSpec: Identifiable {
+        /// DeltaTrend 表示环比趋势方向（上升/下降/持平）。
         enum DeltaTrend {
             case up
             case down
             case flat
         }
 
+        /// DeltaPresentation 定义环比文案和趋势。
         struct DeltaPresentation {
             let text: String
             let trend: DeltaTrend
@@ -79,18 +82,21 @@ struct ReadCalendarMonthSummarySheet: View {
         let gradientRole: ReadCalendarSummaryGradientRole
     }
 
+    /// SummaryDurationInsight 定义阅读时长洞察文案结构。
     struct SummaryDurationInsight {
         let prefix: String
         let delta: SummaryMetricSpec.DeltaPresentation?
         let suffix: String
     }
 
+    /// MonthFeedbackState 表示月度反馈状态（空/部分/活跃）。
     enum MonthFeedbackState {
         case empty
         case partial
         case active
     }
 
+    /// MonthPhase 表示当前月份所处阶段（前期/中期/后期/历史）。
     enum MonthPhase {
         case early
         case middle
@@ -191,6 +197,7 @@ private extension ReadCalendarMonthSummarySheet {
         .padding(.bottom, Layout.summarySheetMonthSwitcherBottomSpacing)
     }
 
+    /// 渲染月份切换按钮并处理可点击态样式。
     func summaryMonthSwitchButton(
         systemName: String,
         isEnabled: Bool,
@@ -329,6 +336,7 @@ private extension ReadCalendarMonthSummarySheet {
         return "\(timeSlotTitle(slot)) · \(ratio)%"
     }
 
+    /// 将阅读时段枚举转换为中文标题。
     func timeSlotTitle(_ slot: ReadCalendarTimeSlot) -> String {
         switch slot {
         case .morning:
@@ -342,6 +350,7 @@ private extension ReadCalendarMonthSummarySheet {
         }
     }
 
+    /// 渲染月总结指标卡（图标、主值与环比副文案）。
     func summaryMetricCard(_ metric: SummaryMetricSpec) -> some View {
         HStack(alignment: .center, spacing: Spacing.base) {
             summaryMetricIcon(systemName: metric.icon, role: metric.gradientRole)
@@ -382,6 +391,7 @@ private extension ReadCalendarMonthSummarySheet {
         }
     }
 
+    /// 根据指标角色返回图标底板渐变色阶。
     func summaryGradientStops(for role: ReadCalendarSummaryGradientRole) -> [Gradient.Stop] {
         let spec = Color.readCalendarSummaryGradientSpec(for: role)
         let opacity: CGFloat = colorScheme == .dark ? 0.96 : 1.0
@@ -392,6 +402,7 @@ private extension ReadCalendarMonthSummarySheet {
         ]
     }
 
+    /// 渲染指标卡左侧图标底板与符号。
     func summaryMetricIcon(systemName: String, role: ReadCalendarSummaryGradientRole) -> some View {
         RoundedRectangle(cornerRadius: CornerRadius.inlayMedium, style: .continuous)
             .fill(
@@ -508,6 +519,7 @@ private extension ReadCalendarMonthSummarySheet {
         .accessibilityHidden(true)
     }
 
+    /// 渲染时长排行骨架屏整体结构。
     @ViewBuilder
     func summaryDurationSkeletonContent(fillColor: Color) -> some View {
         VStack(alignment: .leading, spacing: Layout.summaryDurationSkeletonSectionSpacing) {
@@ -521,6 +533,7 @@ private extension ReadCalendarMonthSummarySheet {
         }
     }
 
+    /// 渲染排行骨架屏头部占位。
     @ViewBuilder
     func summaryDurationSkeletonHeader(fillColor: Color) -> some View {
         GeometryReader { proxy in
@@ -548,6 +561,7 @@ private extension ReadCalendarMonthSummarySheet {
         .frame(height: Layout.summaryDurationSkeletonHeaderHeight)
     }
 
+    /// 渲染排行骨架屏单行占位条。
     @ViewBuilder
     func summaryDurationSkeletonRow(widthRatio: CGFloat, fillColor: Color) -> some View {
         let normalizedRatio = min(1, max(Layout.summaryDurationSkeletonMinBarRatio, widthRatio))
@@ -582,6 +596,7 @@ private extension ReadCalendarMonthSummarySheet {
         .frame(height: Layout.summaryDurationSkeletonRowHeight)
     }
 
+    /// 渲染骨架行内封面与文本占位区。
     func summaryDurationSkeletonInfo(width: CGFloat, fillColor: Color) -> some View {
         let textAreaWidth = max(0, width - Layout.summaryDurationSkeletonCoverWidth - Spacing.half)
         let titleWidth = max(42, textAreaWidth * 0.58)
@@ -609,6 +624,7 @@ private extension ReadCalendarMonthSummarySheet {
         .frame(width: width, alignment: .leading)
     }
 
+    /// 按行宽和条形比例计算骨架信息区宽度。
     func summaryDurationSkeletonInfoWidth(rowWidth: CGFloat, displayedRatio: CGFloat) -> CGFloat {
         let normalizedRatio = min(1, max(0, displayedRatio))
         let adaptiveRatio = Layout.summaryDurationSkeletonInfoBaseRatio
@@ -686,6 +702,7 @@ private extension ReadCalendarMonthSummarySheet {
         .allowsHitTesting(false)
     }
 
+    /// 根据排行数据是否就绪，控制骨架加载态的显隐时机。
     func syncRankingLoadingVisibility(isReady: Bool) {
         rankingLoadingVisibilityTask?.cancel()
         rankingLoadingVisibilityTask = nil
@@ -712,6 +729,7 @@ private extension ReadCalendarMonthSummarySheet {
         }
     }
 
+    /// 当骨架可见且允许动画时，启动排行骨架 shimmer 动效。
     func startLoadingShimmerIfNeeded() {
         guard isRankingLoadingVisible else {
             stopLoadingShimmer()
@@ -727,6 +745,7 @@ private extension ReadCalendarMonthSummarySheet {
         }
     }
 
+    /// 停止排行骨架 shimmer 动效并重置相位。
     func stopLoadingShimmer() {
         var transaction = Transaction()
         transaction.animation = nil
@@ -765,6 +784,7 @@ private extension ReadCalendarMonthSummarySheet {
         return .init(prefix: "\(prefix)，比上个月 ", delta: delta, suffix: "。")
     }
 
+    /// 将时长洞察结构拼装为带趋势着色的 Text。
     func summaryDurationInsightText(_ insight: SummaryDurationInsight) -> Text {
         let baseStyle = Text(insight.prefix)
             .foregroundStyle(Color.textSecondary)
@@ -774,18 +794,21 @@ private extension ReadCalendarMonthSummarySheet {
         return Text("\(baseStyle)\(Text(delta.text).foregroundStyle(deltaColor(delta.trend)))\(Text(insight.suffix).foregroundStyle(Color.textSecondary))")
     }
 
+    /// 把整数环比转换为“增减/持平”展示文案。
     func deltaPresentation(_ delta: Int, unit: String) -> SummaryMetricSpec.DeltaPresentation {
         if delta > 0 { return .init(text: "+\(delta)\(unit)", trend: .up) }
         if delta < 0 { return .init(text: "-\(abs(delta))\(unit)", trend: .down) }
         return .init(text: "持平", trend: .flat)
     }
 
+    /// 把时长环比秒数转换为展示文案与趋势。
     func durationDeltaPresentation(_ delta: Int) -> SummaryMetricSpec.DeltaPresentation {
         if delta > 0 { return .init(text: "+\(summaryDurationTextAllowZero(delta))", trend: .up) }
         if delta < 0 { return .init(text: "-\(summaryDurationTextAllowZero(abs(delta)))", trend: .down) }
         return .init(text: "持平", trend: .flat)
     }
 
+    /// 根据趋势返回环比文案颜色。
     func deltaColor(_ trend: SummaryMetricSpec.DeltaTrend) -> Color {
         switch trend {
         case .up:
@@ -797,6 +820,7 @@ private extension ReadCalendarMonthSummarySheet {
         }
     }
 
+    /// 返回排行条颜色与状态（占位/已解析/回退）。
     func summaryDurationBarPresentation(bookId: Int64) -> (
         color: Color,
         state: ReadingDurationRankingChart.Item.BarState
@@ -818,6 +842,7 @@ private extension ReadCalendarMonthSummarySheet {
         Color.readCalendarEventPendingBase
     }
 
+    /// 对封面提取色做柔化处理，避免条形色过于刺眼。
     func softenedSummaryBarColor(from color: ReadCalendarSegmentColor) -> Color {
         let red = CGFloat((color.backgroundRGBAHex >> 24) & 0xFF) / 255
         let green = CGFloat((color.backgroundRGBAHex >> 16) & 0xFF) / 255
@@ -832,6 +857,7 @@ private extension ReadCalendarMonthSummarySheet {
         )
     }
 
+    /// 把阅读秒数格式化为“小时/分钟/秒”文案。
     func summaryDurationText(_ readSeconds: Int) -> String {
         let hours = readSeconds / 3600
         let minutes = (readSeconds % 3600) / 60
@@ -844,6 +870,7 @@ private extension ReadCalendarMonthSummarySheet {
         return "\(max(1, readSeconds))秒"
     }
 
+    /// 把秒数格式化为可显示 0 的时长文案。
     func summaryDurationTextAllowZero(_ readSeconds: Int) -> String {
         guard readSeconds > 0 else { return "0分" }
         let hours = readSeconds / 3600
@@ -918,6 +945,7 @@ private extension ReadCalendarMonthSummarySheet {
         }
     }
 
+    /// 根据偏移量返回可切换的相邻月份。
     func adjacentMonth(offset: Int) -> Date? {
         guard let index = availableMonths.firstIndex(of: sheet.monthStart) else { return nil }
         let target = index + offset
@@ -925,6 +953,7 @@ private extension ReadCalendarMonthSummarySheet {
         return availableMonths[target]
     }
 
+    /// 格式化月总结标题文本。
     func summaryMonthTitle(_ date: Date) -> String {
         SummaryFormatter.monthTitle.string(from: date)
     }

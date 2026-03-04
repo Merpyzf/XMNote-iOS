@@ -16,6 +16,7 @@ import SwiftUI
 
 // MARK: - Sub Tab
 
+/// 笔记页二级分栏：笔记列表与回顾入口。
 enum NoteSubTab: CaseIterable, Hashable {
     case notes, review
 
@@ -29,12 +30,14 @@ enum NoteSubTab: CaseIterable, Hashable {
 
 // MARK: - Container
 
+/// NoteContainerView 作为笔记模块入口容器，负责搭建二级 Tab 与顶栏操作，并托管 NoteViewModel 生命周期。
 struct NoteContainerView: View {
     @Environment(RepositoryContainer.self) private var repositories
     @State private var viewModel: NoteViewModel?
     let onAddBook: () -> Void
     let onAddNote: () -> Void
 
+    /// 注入新增书籍/笔记回调，让顶部快捷入口把用户操作上抛到外层页面。
     init(
         onAddBook: @escaping () -> Void = {},
         onAddNote: @escaping () -> Void = {}

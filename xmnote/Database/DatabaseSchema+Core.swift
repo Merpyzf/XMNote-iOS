@@ -13,6 +13,7 @@ import GRDB
 
 extension AppDatabase {
 
+    /// 创建核心业务表结构，失败时向上抛出错误。
     nonisolated static func createCoreTables(_ db: Database) throws {
 
         // ── user ──

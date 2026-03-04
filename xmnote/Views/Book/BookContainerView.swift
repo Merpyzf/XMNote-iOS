@@ -16,6 +16,7 @@ import SwiftUI
 
 // MARK: - Sub Tab
 
+/// 书籍页二级分栏：书籍列表与书单列表。
 enum BookSubTab: CaseIterable, Hashable {
     case books, collections
 
@@ -29,12 +30,14 @@ enum BookSubTab: CaseIterable, Hashable {
 
 // MARK: - Container
 
+/// 书籍模块入口容器，负责书籍/书单二级切换与顶部新增操作。
 struct BookContainerView: View {
     @Environment(RepositoryContainer.self) private var repositories
     @State private var viewModel: BookViewModel?
     let onAddBook: () -> Void
     let onAddNote: () -> Void
 
+    /// 注入新增书籍回调，连接书籍页与外层操作入口。
     init(
         onAddBook: @escaping () -> Void = {},
         onAddNote: @escaping () -> Void = {}

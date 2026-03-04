@@ -13,6 +13,7 @@ struct AddMenuCircleButton: View {
     let onAddNote: () -> Void
     let usesGlassStyle: Bool
 
+    /// 注入新增书籍/笔记操作回调，配置顶部加号入口行为。
     init(
         onAddBook: @escaping () -> Void,
         onAddNote: @escaping () -> Void,

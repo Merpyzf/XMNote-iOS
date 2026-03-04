@@ -23,6 +23,7 @@ struct XMRemoteImage<Placeholder: View>: View {
     @State private var shouldForceGIFMode = false
     @State private var didProbeGIFData = false
 
+    /// 初始化远程图片组件参数（地址、模式、优先级等）。
     init(
         urlString: String,
         contentMode: ContentMode = .fill,
@@ -62,6 +63,7 @@ struct XMRemoteImage<Placeholder: View>: View {
 }
 
 private extension XMRemoteImage {
+    /// 渲染静态图片内容并处理占位/失败状态。
     func staticImage(
         for url: URL,
         shouldProbeGIFData: Bool
@@ -88,6 +90,7 @@ private extension XMRemoteImage {
         }
     }
 
+    /// 渲染 GIF 内容层并处理加载状态。
     @ViewBuilder
     func gifContent(for url: URL) -> some View {
         ZStack(alignment: .topTrailing) {
@@ -117,6 +120,7 @@ private extension XMRemoteImage {
         }
     }
 
+    /// 下载 GIF 原始数据并更新组件状态（成功进入 GIF 渲染，失败回退静态图）。
     @MainActor
     func loadGIFData(from url: URL) async {
         gifLoadFailed = false
@@ -137,6 +141,7 @@ private extension XMRemoteImage {
         }
     }
 
+    /// 重置 GIF 相关状态，避免 URL 切换后沿用旧加载结果。
     @MainActor
     func resetGIFState() {
         gifData = nil
@@ -145,6 +150,7 @@ private extension XMRemoteImage {
         didProbeGIFData = false
     }
 
+    /// 处理静态图加载回调并同步组件状态。
     @MainActor
     func handleStaticImageCompletion(
         result: Result<ImageResponse, Error>,
@@ -170,6 +176,7 @@ private extension XMRemoteImage {
         }
     }
 
+    /// 按需探测资源是否为 GIF，避免错误渲染路径。
     @MainActor
     func probeGIFDataIfNeeded(from url: URL) async {
         let request = XMImageLoadRequest(url: url, priority: priority)

@@ -3,6 +3,7 @@
 - 术语表：`docs/architecture/术语对照表.md`
 - UI 核心组件白名单：`docs/architecture/UI核心组件白名单.md`
 - UI 组件文档清单：`docs/architecture/UI组件文档清单.md`
+- 颜色系统优化规范：`docs/architecture/颜色系统优化规范.md`
 
 提交前校验
 - `bash scripts/verify_glossary.sh`

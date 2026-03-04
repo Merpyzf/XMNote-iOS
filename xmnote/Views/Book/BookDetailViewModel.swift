@@ -26,6 +26,7 @@ class BookDetailViewModel {
     private var detailTask: Task<Void, Never>?
     private var notesTask: Task<Void, Never>?
 
+    /// 注入目标书籍 ID 与仓储，初始化详情页数据观察。
     init(bookId: Int64, repository: any BookRepositoryProtocol) {
         self.bookId = bookId
         self.repository = repository
@@ -33,6 +34,7 @@ class BookDetailViewModel {
 
     var hasNotes: Bool { !notes.isEmpty }
 
+    /// 建立详情与书摘双通道观察任务，驱动页面实时刷新。
     func startObservation() {
         detailTask = Task {
             do {
@@ -57,6 +59,7 @@ class BookDetailViewModel {
         }
     }
 
+    /// 释放书籍模块运行过程持有的资源与观察任务。
     deinit {
         detailTask?.cancel()
         notesTask?.cancel()

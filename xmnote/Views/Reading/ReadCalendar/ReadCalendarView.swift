@@ -18,6 +18,7 @@ struct ReadCalendarView: View {
     @State private var isSettingsPresented = false
     @State private var settingsSheetHeight: CGFloat = 0
 
+    /// 注入初始日期并创建阅读日历页面入口。
     init(date: Date?) {
         let s = ReadCalendarSettings()
         _settings = State(initialValue: s)
@@ -127,6 +128,7 @@ struct ReadCalendarView: View {
 // MARK: - Settings Refresh
 
 private extension ReadCalendarView {
+    /// 防抖触发设置变更刷新，避免频繁切换开关导致重复重载。
     func scheduleSettingsRefresh() {
         settingsRefreshTask?.cancel()
         settingsRefreshTask = Task {
@@ -189,6 +191,7 @@ private extension ReadCalendarView {
         viewModel.monthStartsForYear(viewModel.selectedYear)
     }
 
+    /// 把 ViewModel 月状态转换为 ContentView 可渲染的页面模型。
     func makeContentMonthPage(for monthStart: Date, todayStart: Date) -> ReadCalendarContentView.MonthPage {
         let state = viewModel.monthState(for: monthStart)
 
@@ -216,6 +219,7 @@ private extension ReadCalendarView {
         )
     }
 
+    /// 将领域层事件段模型转换为月网格组件可渲染的事件段数据。
     func mapEventSegment(_ segment: ReadCalendarEventSegment) -> ReadCalendarMonthGrid.EventSegment {
         ReadCalendarMonthGrid.EventSegment(
             bookId: segment.bookId,
@@ -231,6 +235,7 @@ private extension ReadCalendarView {
         )
     }
 
+    /// 将领域层颜色模型转换为月网格颜色模型。
     func mapSegmentColor(_ color: ReadCalendarSegmentColor) -> ReadCalendarMonthGrid.EventColor {
         let state: ReadCalendarMonthGrid.EventColorState
         switch color.state {
@@ -249,6 +254,7 @@ private extension ReadCalendarView {
         )
     }
 
+    /// 将 ViewModel 根状态映射为内容组件根状态。
     func mapRootContentState(_ state: ReadCalendarViewModel.RootContentState) -> ReadCalendarContentView.RootContentState {
         switch state {
         case .loading:
@@ -260,6 +266,7 @@ private extension ReadCalendarView {
         }
     }
 
+    /// 将 ViewModel 月份加载状态映射为内容组件加载状态。
     func mapMonthLoadState(_ state: ReadCalendarViewModel.MonthLoadState) -> ReadCalendarContentView.MonthLoadState {
         switch state {
         case .idle:
@@ -273,6 +280,7 @@ private extension ReadCalendarView {
         }
     }
 
+    /// 将 ViewModel 年度加载状态映射为内容组件加载状态。
     func mapYearLoadState(_ state: ReadCalendarViewModel.YearLoadState) -> ReadCalendarContentView.YearLoadState {
         switch state {
         case .idle:
@@ -286,6 +294,7 @@ private extension ReadCalendarView {
         }
     }
 
+    /// 组装年度总结弹层数据，并补齐与上一年的同比指标。
     func mapYearSummary(_ state: ReadCalendarViewModel.YearSummaryState) -> ReadCalendarContentView.YearSummarySheetData {
         let previousYear = state.year - 1
         let previousSummary: ReadCalendarViewModel.YearSummaryState? = {
@@ -317,6 +326,7 @@ private extension ReadCalendarView {
         )
     }
 
+    /// 按当前上下文执行重试：空态全量重载，年度模式重试年度数据，月模式重试当前月份。
     func retryCurrentContext() {
         Task {
             if viewModel.availableMonths.isEmpty {

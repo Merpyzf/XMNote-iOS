@@ -8,6 +8,7 @@
 import Foundation
 import Alamofire
 
+/// NetworkClient 负责应用入口外部通信，封装请求构建与响应校验。
 final class NetworkClient: Sendable {
     let session: Session
 
@@ -56,11 +57,13 @@ final class NetworkClient: Sendable {
 private struct BasicAuthInterceptor: RequestInterceptor, Sendable {
     let credential: String
 
+    /// 生成 Basic Auth 认证头，供后续请求自动附带 Authorization。
     init(username: String, password: String) {
         let data = Data("\(username):\(password)".utf8)
         credential = "Basic \(data.base64EncodedString())"
     }
 
+    /// 为请求追加 Authorization 头。
     func adapt(_ urlRequest: URLRequest,
                for session: Session,
                completion: @escaping (Result<URLRequest, Error>) -> Void) {
@@ -69,6 +72,7 @@ private struct BasicAuthInterceptor: RequestInterceptor, Sendable {
         completion(.success(request))
     }
 
+    /// 仅对可恢复网络错误重试，鉴权失败等不可恢复错误不重试。
     func retry(_ request: Request,
                for session: Session,
                dueTo error: Error,
@@ -94,12 +98,14 @@ private struct BasicAuthInterceptor: RequestInterceptor, Sendable {
 
 #if DEBUG
 private final class NetworkLogger: EventMonitor, @unchecked Sendable {
+    /// DEBUG 日志：记录请求发起事件。
     func requestDidResume(_ request: Request) {
         let method = request.request?.httpMethod ?? "?"
         let url = request.request?.url?.absoluteString ?? "?"
         print("[Network] \(method) \(url)")
     }
 
+    /// DEBUG 日志：记录响应状态码、响应体预览与错误信息。
     func request(_ request: DataRequest, didParseResponse response: DataResponse<Data?, AFError>) {
         let code = response.response?.statusCode ?? 0
         let method = request.request?.httpMethod ?? "?"

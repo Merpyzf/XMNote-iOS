@@ -47,6 +47,7 @@ final class RichTextEditorView: UITextView {
 
     // MARK: - 初始化
 
+    /// 创建编辑器并配置 TextKit 管线与默认输入行为。
     init() {
         let textStorage = NSTextStorage()
         let richLayoutManager = RichTextLayoutManager()
@@ -60,6 +61,7 @@ final class RichTextEditorView: UITextView {
         commonInit()
     }
 
+    /// 禁用 `init(coder:)`，强制使用代码初始化以确保编辑器内部依赖完整。
     @available(*, unavailable)
     required init?(coder: NSCoder) {
         fatalError("Use init() instead")
@@ -112,6 +114,7 @@ final class RichTextEditorView: UITextView {
 
     // MARK: - Apply Format
 
+    /// 在选区应用指定格式（粗体/斜体/下划线/段落样式等）。
     func applyFormat(_ format: RichTextFormat, in range: NSRange, highlightARGB: UInt32 = HighlightColors.defaultHighlightColor) {
         switch format {
         case .bold:
@@ -135,6 +138,7 @@ final class RichTextEditorView: UITextView {
 
     // MARK: - Remove Format
 
+    /// 在选区移除指定格式，并保留其它样式不受影响。
     func removeFormat(_ format: RichTextFormat, in range: NSRange, highlightARGB: UInt32 = HighlightColors.defaultHighlightColor) {
         switch format {
         case .bold:
@@ -158,6 +162,7 @@ final class RichTextEditorView: UITextView {
 
     // MARK: - Contains Format
 
+    /// 检查选区是否已包含指定格式，供工具栏高亮态判断。
     func containsFormat(_ format: RichTextFormat, in range: NSRange) -> Bool {
         switch format {
         case .bold:
@@ -181,6 +186,7 @@ final class RichTextEditorView: UITextView {
 
     // MARK: - 清除所有格式
 
+    /// 清除选区内全部格式，仅保留纯文本内容。
     func clearFormats(in range: NSRange) {
         guard range.length > 0 else { return }
         let plainText = textStorage.attributedSubstring(from: range).string
@@ -205,6 +211,7 @@ final class RichTextEditorView: UITextView {
 
     // MARK: - 链接
 
+    /// 将选区文本设置为超链接。
     func applyLink(_ url: String, in range: NSRange) {
         guard range.length > 0, let linkURL = URL(string: url) else { return }
         mutateTextStorage {
@@ -238,6 +245,7 @@ private extension RichTextEditorView {
         }
     }
 
+    /// 在选区内应用粗体或斜体字体特征。
     func applyStyle(_ style: FontStyle, in range: NSRange) {
         guard range.length > 0 else { return }
         mutateTextStorage {
@@ -354,6 +362,7 @@ private extension RichTextEditorView {
 /// 对标 KnifeText 的 underline/strikethrough/highlight 系列方法
 private extension RichTextEditorView {
 
+    /// 在选区内写入字符级属性（如下划线、删除线）。
     func applyCharacterAttribute(_ key: NSAttributedString.Key, value: Any, in range: NSRange) {
         guard range.length > 0 else { return }
         mutateTextStorage {
@@ -394,6 +403,7 @@ private extension RichTextEditorView {
 
     // MARK: - 高亮特殊处理
 
+    /// 在选区应用高亮背景并写入浅色 ARGB 元数据。
     func applyHighlight(lightARGB: UInt32, in range: NSRange) {
         guard range.length > 0 else { return }
         let displayColor = HighlightColors.adaptedColor(lightARGB: lightARGB, for: traitCollection)
@@ -403,6 +413,7 @@ private extension RichTextEditorView {
         }
     }
 
+    /// 移除选区高亮背景及其高亮元数据。
     func removeHighlight(in range: NSRange) {
         guard range.length > 0 else { return }
         mutateTextStorage {
@@ -443,6 +454,7 @@ private extension RichTextEditorView {
         return ranges
     }
 
+    /// 读取当前段落缩进值，用于格式按钮状态判断。
     func paragraphIndent() -> NSMutableParagraphStyle {
         let style = NSMutableParagraphStyle()
         let indent = (bulletRadius * 2) + bulletGapWidth + Self.defaultIndentPadding
@@ -451,6 +463,7 @@ private extension RichTextEditorView {
         return style
     }
 
+    /// 在选区覆盖段落上应用列表/引用样式并同步缩进。
     func applyParagraphFormat(_ key: NSAttributedString.Key, in range: NSRange) {
         mutateTextStorage {
             for lineRange in lineRanges(for: range) {
@@ -462,6 +475,7 @@ private extension RichTextEditorView {
         }
     }
 
+    /// 移除选区段落样式；若无其它段落样式则恢复默认段落格式。
     func removeParagraphFormat(_ key: NSAttributedString.Key, in range: NSRange) {
         mutateTextStorage {
             for lineRange in lineRanges(for: range) {
@@ -476,6 +490,7 @@ private extension RichTextEditorView {
         }
     }
 
+    /// 检查选区覆盖的每一行是否都包含指定段落样式。
     func containsParagraphFormat(_ key: NSAttributedString.Key, in range: NSRange) -> Bool {
         let lines = lineRanges(for: range)
         guard !lines.isEmpty else { return false }

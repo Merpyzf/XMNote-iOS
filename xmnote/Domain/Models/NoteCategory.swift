@@ -7,6 +7,7 @@
 
 import Foundation
 
+/// 笔记列表一级分类，对应书摘、相关与书评三种分组。
 enum NoteCategory: String, CaseIterable, Identifiable {
     case excerpts
     case related

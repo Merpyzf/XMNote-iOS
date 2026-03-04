@@ -8,29 +8,47 @@ import Foundation
  */
 
 protocol BookRepositoryProtocol {
+    /// 持续监听书架列表变化，供书籍首页实时刷新。
     func observeBooks() -> AsyncThrowingStream<[BookItem], Error>
+    /// 持续监听指定书籍详情变化，供详情页实时更新。
     func observeBookDetail(bookId: Int64) -> AsyncThrowingStream<BookDetail?, Error>
+    /// 持续监听指定书籍下的书摘列表变化。
     func observeBookNotes(bookId: Int64) -> AsyncThrowingStream<[NoteExcerpt], Error>
 }
 
+/// 笔记模块数据访问契约，覆盖标签分组订阅与笔记详情读写。
 protocol NoteRepositoryProtocol {
+    /// 持续监听标签分组及其笔记摘要，供笔记页分区渲染。
     func observeTagSections() -> AsyncThrowingStream<[TagSection], Error>
+    /// 按笔记 ID 拉取可编辑详情（正文/想法 HTML 与元信息）。
     func fetchNoteDetail(noteId: Int64) async throws -> NoteDetailPayload?
+    /// 保存笔记正文与想法 HTML，提交后触发下游观察流更新。
     func saveNoteDetail(noteId: Int64, contentHTML: String, ideaHTML: String) async throws
 }
 
+/// 备份服务器配置契约，覆盖服务器列表、当前选择、增删改与连通性校验。
 protocol BackupServerRepositoryProtocol {
+    /// 拉取全部备份服务器配置，供列表页展示。
     func fetchServers() async throws -> [BackupServerRecord]
+    /// 读取当前选中的备份服务器；未选择时返回 nil。
     func fetchCurrentServer() async throws -> BackupServerRecord?
+    /// 新增或更新备份服务器配置（地址、账号、密码等）。
     func saveServer(_ input: BackupServerFormInput, editingServer: BackupServerRecord?) async throws
+    /// 删除指定备份服务器配置。
     func delete(_ server: BackupServerRecord) async throws
+    /// 将指定服务器设为当前备份目标。
     func select(_ server: BackupServerRecord) async throws
+    /// 校验 WebDAV 连接可用性，失败时抛出网络或认证错误。
     func testConnection(_ input: BackupServerFormInput) async throws
 }
 
+/// 数据备份契约，覆盖备份执行、历史读取与恢复流程。
 protocol BackupRepositoryProtocol {
+    /// 执行一次完整备份流程，并通过回调上报阶段进度。
     func backup(progress: (@Sendable (BackupProgress) -> Void)?) async throws
+    /// 获取远端备份历史列表，供恢复入口展示可选备份。
     func fetchBackupHistory() async throws -> [BackupFileInfo]
+    /// 使用指定备份执行恢复流程，并通过回调上报阶段进度。
     func restore(_ backup: BackupFileInfo, progress: (@Sendable (RestoreProgress) -> Void)?) async throws
 }
 
@@ -96,19 +114,23 @@ protocol StatisticsRepositoryProtocol {
 }
 
 extension StatisticsRepositoryProtocol {
+    /// 便捷方法：按“全部年份 + 全部统计维度”返回热力图数据。
     func fetchAllHeatmapData() async throws -> (days: [Date: HeatmapDay], earliestDate: Date?) {
         let result = try await fetchHeatmapData(year: 0, dataType: .all)
         return (result.days, result.earliestDate)
     }
 
+    /// 便捷方法：不排除事件类型时读取阅读日历最早可展示日期。
     func fetchReadCalendarEarliestDate() async throws -> Date? {
         try await fetchReadCalendarEarliestDate(excludedEventTypes: [])
     }
 
+    /// 便捷方法：不排除事件类型时读取指定月份阅读日历数据。
     func fetchReadCalendarMonthData(monthStart: Date) async throws -> ReadCalendarMonthData {
         try await fetchReadCalendarMonthData(monthStart: monthStart, excludedEventTypes: [])
     }
 
+    /// 便捷方法：不排除事件类型时读取年度阅读时长榜。
     func fetchReadCalendarYearTopBooks(year: Int, limit: Int = 10) async throws -> [ReadCalendarMonthlyDurationBook] {
         try await fetchReadCalendarYearTopBooks(
             year: year,

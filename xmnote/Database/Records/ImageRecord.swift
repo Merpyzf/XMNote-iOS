@@ -24,6 +24,7 @@ nonisolated struct ImageRecord: BaseRecord {
     var lastSyncDate: Int64 = 0
     var isDeleted: Int64 = 0
 
+    /// 映射 Swift 属性名与数据库字段名，保证 Record 与表结构一致。
     enum CodingKeys: String, CodingKey {
         case id, url, type, pro
         case createdDate = "created_date"
@@ -32,6 +33,7 @@ nonisolated struct ImageRecord: BaseRecord {
         case isDeleted = "is_deleted"
     }
 
+    /// 在数据库插入后回填自增主键，保证内存对象与持久化记录一致。
     mutating func didInsert(_ inserted: InsertionSuccess) {
         id = inserted.rowID
     }

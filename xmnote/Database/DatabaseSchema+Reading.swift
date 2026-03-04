@@ -14,6 +14,7 @@ import GRDB
 
 extension AppDatabase {
 
+    /// 创建阅读行为相关表结构，失败时向上抛出错误。
     nonisolated static func createReadingTables(_ db: Database) throws {
 
         // ── read_time_record ──

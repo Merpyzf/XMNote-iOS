@@ -18,6 +18,7 @@ final class RepositoryContainer {
     let coverImageLoader: any XMCoverImageLoading
     let readCalendarColorRepository: any ReadCalendarColorRepositoryProtocol
 
+    /// 在应用启动阶段一次性组装所有仓储依赖，并注入共享数据库管理器。
     init(databaseManager: DatabaseManager) {
         let backupServerRepository = BackupServerRepository(databaseManager: databaseManager)
 

@@ -17,6 +17,7 @@ enum BackupOperationState: Equatable {
 
 // MARK: - DataBackupViewModel
 
+/// DataBackupViewModel 负责备份模块的状态管理与业务动作编排，向界面提供可渲染数据。
 @Observable
 class DataBackupViewModel {
     var operationState: BackupOperationState = .idle
@@ -33,6 +34,7 @@ class DataBackupViewModel {
     private let backupRepository: any BackupRepositoryProtocol
     private let serverRepository: any BackupServerRepositoryProtocol
 
+    /// 注入备份与服务器仓储，初始化备份页面状态。
     init(
         backupRepository: any BackupRepositoryProtocol,
         serverRepository: any BackupServerRepositoryProtocol
@@ -46,6 +48,7 @@ class DataBackupViewModel {
 
 extension DataBackupViewModel {
 
+    /// 进入页面时加载当前选中的备份服务器信息。
     func loadPageData() async {
         await loadCurrentServer()
     }
@@ -55,6 +58,7 @@ extension DataBackupViewModel {
 
 extension DataBackupViewModel {
 
+    /// 触发手动备份流程并更新执行结果状态。
     func performBackup() async {
         guard currentServer != nil else {
             showErrorMessage("未配置备份服务器")
@@ -79,6 +83,7 @@ extension DataBackupViewModel {
 
 extension DataBackupViewModel {
 
+    /// 拉取远端备份历史列表，供恢复弹层展示。
     func fetchBackupHistory() async {
         guard currentServer != nil else {
             showErrorMessage("未配置备份服务器")
@@ -97,6 +102,7 @@ extension DataBackupViewModel {
 
 extension DataBackupViewModel {
 
+    /// 触发手动恢复流程并更新执行结果状态。
     func performRestore(_ backup: BackupFileInfo) async {
         #if DEBUG
         print("[ViewModel] performRestore 开始: \(backup.name)")
@@ -133,6 +139,7 @@ extension DataBackupViewModel {
 
 private extension DataBackupViewModel {
 
+    /// 刷新当前选中的备份服务器状态。
     func loadCurrentServer() async {
         do {
             currentServer = try await serverRepository.fetchCurrentServer()
@@ -141,6 +148,7 @@ private extension DataBackupViewModel {
         }
     }
 
+    /// 根据当前状态决定备份模块界面应展示的内容分支。
     func showErrorMessage(_ message: String) {
         errorMessage = message
         showError = true

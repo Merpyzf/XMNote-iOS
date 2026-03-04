@@ -12,11 +12,13 @@ struct ReadCalendarColorRepository: ReadCalendarColorRepositoryProtocol {
     private let imageLoader: any XMCoverImageLoading
     private let cacheStore: ReadCalendarColorCacheStore
 
+    /// 注入封面加载器并初始化本地颜色缓存，用于后续事件条取色。
     init(imageLoader: any XMCoverImageLoading = NukeCoverImageLoader()) {
         self.imageLoader = imageLoader
         self.cacheStore = .shared
     }
 
+    /// 解析封面颜色并返回事件条颜色；失败时走稳定哈希回退。
     func resolveEventColor(
         bookId: Int64,
         bookName: String,
@@ -74,12 +76,14 @@ struct ReadCalendarColorRepository: ReadCalendarColorRepositoryProtocol {
 // MARK: - Cover Color Policy
 
 private extension ReadCalendarColorRepository {
+    /// 在后台线程提取封面优先色，避免阻塞主线程。
     nonisolated static func extractPreferredEventBarColorAsync(from image: UIImage) async -> RGBAColor? {
         await Task.detached(priority: .utility) {
             extractPreferredEventBarColor(from: image)
         }.value
     }
 
+    /// 从封面图像中选择事件条优先色（主色优先，其次视觉优先色）。
     nonisolated static func extractPreferredEventBarColor(from image: UIImage) -> RGBAColor? {
         let swatches = extractColorSwatches(from: image)
         guard !swatches.isEmpty else { return nil }
@@ -96,11 +100,13 @@ private extension ReadCalendarColorRepository {
         return nil
     }
 
+    /// 从原始图片数据解码后提取事件条优先色。
     nonisolated static func extractPreferredEventBarColor(from data: Data) -> RGBAColor? {
         guard let image = UIImage(data: data) else { return nil }
         return extractPreferredEventBarColor(from: image)
     }
 
+    /// 对封面缩采样并提取颜色样本集，供主色筛选算法使用。
     nonisolated static func extractColorSwatches(from image: UIImage) -> [ColorSwatch] {
         guard let cgImage = image.cgImage else {
             return []
@@ -153,6 +159,7 @@ private extension ReadCalendarColorRepository {
         }
     }
 
+    /// 从候选色样中读取目标结果。
     nonisolated static func findDominantColor(from swatches: [ColorSwatch]) -> RGBAColor? {
         guard let dominant = swatches.max(by: { lhs, rhs in
             if lhs.population != rhs.population {
@@ -165,6 +172,7 @@ private extension ReadCalendarColorRepository {
         return dominant.color
     }
 
+    /// 判断颜色是否不适合事件条展示（过白/过暗/低饱和）。
     nonisolated static func isInvalidEventBarColor(_ color: RGBAColor) -> Bool {
         let hsv = color.hsv
         let isNearWhite = hsv.value >= 0.92 && hsv.saturation <= 0.20
@@ -173,6 +181,7 @@ private extension ReadCalendarColorRepository {
         return isNearWhite || isLowSaturationLightTone || isTooDark
     }
 
+    /// 从候选色样中读取目标结果。
     nonisolated static func findVisualPriorityColor(from swatches: [ColorSwatch]) -> RGBAColor? {
         let candidates = swatches.filter {
             let hsv = $0.color.hsv
@@ -205,6 +214,7 @@ private extension ReadCalendarColorRepository {
         return best.color
     }
 
+    /// 按饱和度、亮度与像素占比为候选色样打分，筛出更适合事件条展示的颜色。
     nonisolated static func scoreVisualPrioritySwatch(_ swatch: ColorSwatch, maxPopulation: Int) -> Double {
         let hsv = swatch.color.hsv
         let normalizedPopulation = Double(swatch.population) / Double(maxPopulation)
@@ -214,6 +224,7 @@ private extension ReadCalendarColorRepository {
             + 0.20 * brightnessPreference
     }
 
+    /// 把 RGB 量化为 5bit 键，用于颜色分桶统计。
     nonisolated static func quantizedKey(red: UInt8, green: UInt8, blue: UInt8) -> UInt32 {
         let r = UInt32(red >> 3)
         let g = UInt32(green >> 3)
@@ -221,6 +232,7 @@ private extension ReadCalendarColorRepository {
         return (r << 10) | (g << 5) | b
     }
 
+    /// 读取缓存项并还原为业务颜色模型。
     nonisolated static func color(from key: UInt32) -> RGBAColor {
         let r = UInt8(((key >> 10) & 0x1F) << 3 | 0x04)
         let g = UInt8(((key >> 5) & 0x1F) << 3 | 0x04)
@@ -234,6 +246,7 @@ private extension ReadCalendarColorRepository {
 private extension ReadCalendarColorRepository {
     nonisolated static let colorAlgorithmVersion = "v2"
 
+    /// 生成颜色缓存键（bookId+书名+封面 URL+算法版本）。
     nonisolated static func cacheKey(bookId: Int64, bookName: String, coverURL: String) -> String {
         "\(bookId)|\(bookName)|\(coverURL)|algo:\(colorAlgorithmVersion)"
     }
@@ -241,10 +254,12 @@ private extension ReadCalendarColorRepository {
 
 #if DEBUG
 extension ReadCalendarColorRepository {
+    /// 测试辅助：返回封面提取色的 RGBA Hex。
     nonisolated static func testingExtractPreferredEventBarColorHex(from data: Data) -> UInt32? {
         extractPreferredEventBarColor(from: data)?.rgbaHex
     }
 
+    /// 测试辅助：返回缓存键生成结果。
     nonisolated static func testingCacheKey(bookId: Int64, bookName: String, coverURL: String) -> String {
         cacheKey(bookId: bookId, bookName: bookName, coverURL: coverURL)
     }
@@ -254,6 +269,7 @@ extension ReadCalendarColorRepository {
 // MARK: - Text Contrast
 
 private extension ReadCalendarColorRepository {
+    /// 为背景色选择对比度更高的文本颜色。
     func bestTextColor(for background: RGBAColor) -> RGBAColor {
         let lightText = RGBAColor(red: 248, green: 251, blue: 255, alpha: 236)
         let darkText = RGBAColor(red: 34, green: 43, blue: 55, alpha: 234)
@@ -279,6 +295,7 @@ private extension ReadCalendarColorRepository {
         return darkRatio >= lightRatio ? darkText : lightText
     }
 
+    /// 计算前景与背景颜色对比度。
     func contrastRatio(foreground: RGBAColor, background: RGBAColor) -> Double {
         let fg = foreground.relativeLuminance
         let bg = background.relativeLuminance
@@ -291,6 +308,7 @@ private extension ReadCalendarColorRepository {
 // MARK: - Fallback Hash Color
 
 private extension ReadCalendarColorRepository {
+    /// 基于书籍信息生成稳定回退色，保证失败场景也有一致配色。
     func fallbackHashedColor(bookId: Int64, bookName: String) -> ReadCalendarSegmentColor {
         let seedString = "\(bookId)|\(bookName)"
         let hash = Self.fnv1a64(seedString)
@@ -315,6 +333,7 @@ private extension ReadCalendarColorRepository {
         )
     }
 
+    /// 计算 FNV-1a 哈希，作为回退配色种子。
     nonisolated static func fnv1a64(_ value: String) -> UInt64 {
         var hash: UInt64 = 1469598103934665603
         for byte in value.utf8 {
@@ -409,6 +428,7 @@ private struct RGBAColor {
 }
 
 private actor ReadCalendarColorCacheStore {
+    /// CacheRecord 是颜色缓存落盘模型，记录状态、前景/背景色和更新时间。
     struct CacheRecord: Codable {
         let state: ReadCalendarSegmentColorState
         let backgroundRGBAHex: UInt32
@@ -422,6 +442,7 @@ private actor ReadCalendarColorCacheStore {
     private let maxEntries = 1200
     private var memory: [String: CacheRecord] = [:]
 
+    /// 初始化缓存文件路径并恢复本地颜色缓存。
     init(fileManager: FileManager = .default) {
         let directory = fileManager.urls(for: .cachesDirectory, in: .userDomainMask).first
             ?? URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)
@@ -434,6 +455,7 @@ private actor ReadCalendarColorCacheStore {
         self.memory = decoded
     }
 
+    /// 读取缓存项并还原为业务颜色模型。
     func color(for key: String) -> ReadCalendarSegmentColor? {
         guard let record = memory[key] else { return nil }
         return ReadCalendarSegmentColor(
@@ -443,6 +465,7 @@ private actor ReadCalendarColorCacheStore {
         )
     }
 
+    /// 写入颜色缓存并触发容量裁剪与持久化。
     func save(_ color: ReadCalendarSegmentColor, for key: String) {
         guard color.state != .pending else { return }
         memory[key] = CacheRecord(

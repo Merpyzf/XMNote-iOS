@@ -7,6 +7,7 @@
 
 import SwiftUI
 
+/// 备份服务器管理列表页，支持新增、编辑、删除与切换当前服务器。
 struct WebDAVServerListView: View {
     @Environment(RepositoryContainer.self) private var repositories
     @State private var viewModel: WebDAVServerViewModel?
@@ -79,6 +80,7 @@ private struct WebDAVServerListContentView: View {
 
 private extension WebDAVServerListContentView {
 
+    /// 渲染单条 WebDAV 服务器配置行。
     func serverRow(_ server: BackupServerRecord) -> some View {
         Button {
             Task { await viewModel.select(server) }

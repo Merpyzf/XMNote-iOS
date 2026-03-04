@@ -23,6 +23,7 @@ class NoteViewModel {
     private let repository: any NoteRepositoryProtocol
     private var observationTask: Task<Void, Never>?
 
+    /// 注入笔记仓储并立即启动标签订阅，保证页面首次进入即可拿到最新分组数据。
     init(repository: any NoteRepositoryProtocol) {
         self.repository = repository
         startObservation()
@@ -39,6 +40,7 @@ class NoteViewModel {
         }
     }
 
+    /// 释放笔记模块运行过程持有的资源与观察任务。
     deinit {
         observationTask?.cancel()
     }

@@ -103,8 +103,10 @@ struct HeatmapHelpSheetView: View {
 
 // MARK: - Sheet 高度测量
 
+/// 热力图说明弹层高度偏好键，用于把内容高度回传给外层 Sheet。
 struct SheetHeightKey: PreferenceKey {
     static var defaultValue: CGFloat = 0
+    /// 合并多次高度上报，取最大值避免内容被截断。
     static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
         value = max(value, nextValue())
     }

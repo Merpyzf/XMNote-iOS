@@ -20,6 +20,7 @@ struct RichTextEditor: UIViewRepresentable {
     var isLinkUnderline: Bool = true
     var onTextChange: (() -> Void)?
 
+    /// 创建底层 UITextView 容器并注入配置。
     func makeUIView(context: Context) -> RichTextEditorView {
         let editorView = RichTextEditorView()
         editorView.delegate = context.coordinator
@@ -48,6 +49,7 @@ struct RichTextEditor: UIViewRepresentable {
         return editorView
     }
 
+    /// 同步 SwiftUI 侧可编辑状态、文本内容与工具栏高亮态到 UIKit 编辑器。
     func updateUIView(_ editorView: RichTextEditorView, context: Context) {
         editorView.isEditable = isEditable
         editorView.linkColor = linkColor
@@ -73,6 +75,7 @@ struct RichTextEditor: UIViewRepresentable {
         }
     }
 
+    /// 创建协调器用于处理编辑事件回调。
     func makeCoordinator() -> RichTextCoordinator {
         RichTextCoordinator(self)
     }

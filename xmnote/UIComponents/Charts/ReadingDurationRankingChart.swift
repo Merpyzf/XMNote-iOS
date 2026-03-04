@@ -8,7 +8,9 @@ import SwiftUI
  */
 
 struct ReadingDurationRankingChart: View {
+    /// Item 定义阅读时长排行单行数据模型。
     struct Item: Identifiable, Hashable {
+        /// BarState 表示排行条颜色状态（占位/解析成功/回退色）。
         enum BarState: Hashable {
             case placeholder
             case resolved
@@ -104,6 +106,7 @@ private extension ReadingDurationRankingChart {
         items.map(\.durationSeconds).max() ?? 0
     }
 
+    /// 按是否提供点击回调包装排行行容器。
     @ViewBuilder
     func rankingRowContainer(
         item: Item,
@@ -122,6 +125,7 @@ private extension ReadingDurationRankingChart {
         }
     }
 
+    /// 渲染单条排行项并计算条宽与信息区位置。
     func rankingRow(
         item: Item,
         maxDurationSeconds: Int
@@ -164,6 +168,7 @@ private extension ReadingDurationRankingChart {
         .frame(height: Layout.rowHeight)
     }
 
+    /// 渲染排行项封面右侧的书名与时长信息。
     func rankingInfoView(item: Item, width: CGFloat) -> some View {
         HStack(spacing: Spacing.half) {
             rankingCover(urlString: item.coverURL)
@@ -188,6 +193,7 @@ private extension ReadingDurationRankingChart {
         .frame(width: width, alignment: .leading)
     }
 
+    /// 渲染排行项封面（含占位图与边框阴影）。
     @ViewBuilder
     func rankingCover(urlString: String) -> some View {
         XMRemoteImage(urlString: urlString, showsGIFBadge: true) {
@@ -213,6 +219,7 @@ private extension ReadingDurationRankingChart {
         )
     }
 
+    /// 按行宽和条形比例计算信息区宽度。
     func infoWidth(rowWidth: CGFloat, displayedRatio: CGFloat) -> CGFloat {
         let normalizedRatio = min(1, max(0, displayedRatio))
         let adaptiveRatio = Layout.infoBaseRatio
@@ -223,6 +230,7 @@ private extension ReadingDurationRankingChart {
         return min(rowWidth, max(readableFloor, cappedWidth))
     }
 
+    /// 将原始比例映射到视觉比例，提升短条可见性。
     func visualRatio(rawRatio: CGFloat, barAvailableWidth: CGFloat) -> CGFloat {
         let normalizedRaw = min(1, max(0, rawRatio))
         guard normalizedRaw > 0 else { return 0 }
@@ -239,6 +247,7 @@ private extension ReadingDurationRankingChart {
         return min(upperBound, max(minVisualRatio, mapped))
     }
 
+    /// 计算短条最小可见比例，防止小数据条消失。
     func minVisualRatio(barAvailableWidth: CGFloat) -> CGFloat {
         guard barAvailableWidth > 0 else { return 0 }
         let widthRatio = Layout.minVisualBarWidth / barAvailableWidth
@@ -246,11 +255,13 @@ private extension ReadingDurationRankingChart {
         return min(cap, max(0, widthRatio))
     }
 
+    /// 按最大时长归一化单项时长比例。
     func durationRatio(durationSeconds: Int, maxDurationSeconds: Int) -> CGFloat {
         guard durationSeconds > 0, maxDurationSeconds > 0 else { return 0 }
         return min(1, max(0, CGFloat(durationSeconds) / CGFloat(maxDurationSeconds)))
     }
 
+    /// 把阅读秒数格式化为时长文案。
     func durationText(_ durationSeconds: Int) -> String {
         let hours = durationSeconds / 3600
         let minutes = (durationSeconds % 3600) / 60
@@ -263,6 +274,7 @@ private extension ReadingDurationRankingChart {
         return "\(max(1, durationSeconds))秒"
     }
 
+    /// 根据条形状态返回最终渲染颜色。
     func barTint(for item: Item) -> Color {
         switch item.barState {
         case .placeholder:
@@ -274,6 +286,7 @@ private extension ReadingDurationRankingChart {
         }
     }
 
+    /// 触发排行条从 0 到目标比例的分批动画。
     func animateBars(for items: [Item]) {
         barAnimationTask?.cancel()
         barAnimationTask = nil

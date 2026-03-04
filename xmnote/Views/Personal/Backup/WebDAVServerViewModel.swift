@@ -32,6 +32,7 @@ class WebDAVServerViewModel {
     private let repository: any BackupServerRepositoryProtocol
     private var lastValidatedInput: BackupServerFormInput?
 
+    /// 注入服务器仓储，初始化 WebDAV 配置页状态。
     init(repository: any BackupServerRepositoryProtocol) {
         self.repository = repository
     }
@@ -41,6 +42,7 @@ class WebDAVServerViewModel {
 
 extension WebDAVServerViewModel {
 
+    /// 加载已保存的服务器配置列表。
     func loadServers() async {
         do {
             servers = try await repository.fetchServers()
@@ -54,6 +56,7 @@ extension WebDAVServerViewModel {
 
 extension WebDAVServerViewModel {
 
+    /// 进入新增服务器流程，重置编辑上下文与校验缓存。
     func beginAdd() {
         editingServer = nil
         testResultMessage = nil
@@ -61,6 +64,7 @@ extension WebDAVServerViewModel {
         isShowingForm = true
     }
 
+    /// 进入编辑流程并回填表单字段。
     func beginEdit(_ server: BackupServerRecord) {
         editingServer = server
         formTitle = server.title
@@ -84,6 +88,7 @@ extension WebDAVServerViewModel {
 
 extension WebDAVServerViewModel {
 
+    /// 先校验连通性再保存服务器配置，成功后刷新列表。
     func save() async -> Bool {
         guard isFormValid else { return false }
 
@@ -114,6 +119,7 @@ extension WebDAVServerViewModel {
         }
     }
 
+    /// 删除指定服务器并刷新列表。
     func delete(_ server: BackupServerRecord) async {
         isProcessing = true
         defer { isProcessing = false }
@@ -127,6 +133,7 @@ extension WebDAVServerViewModel {
         }
     }
 
+    /// 将指定服务器设为当前备份目标并刷新列表状态。
     func select(_ server: BackupServerRecord) async {
         isProcessing = true
         defer { isProcessing = false }
@@ -145,6 +152,7 @@ extension WebDAVServerViewModel {
 
 extension WebDAVServerViewModel {
 
+    /// 使用当前表单参数测试 WebDAV 连接并回写测试结果文案。
     func testConnection() async {
         guard isFormValid else { return }
         let input = formInput

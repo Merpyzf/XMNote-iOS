@@ -12,6 +12,7 @@ import UIKit
 /// 输出格式与 Android Knife 完全兼容
 enum HTMLSerializer {
 
+    /// 同一段落同时包含 bullet + quote 时的 HTML 输出顺序策略。
     enum ComboParagraphOrderStrategy {
         case bulletThenQuote
         case quoteThenBullet

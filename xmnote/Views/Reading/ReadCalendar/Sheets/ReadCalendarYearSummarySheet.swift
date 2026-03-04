@@ -28,13 +28,16 @@ struct ReadCalendarYearSummarySheet: View {
         static let summaryDurationBarSoftenRatio: CGFloat = 0.50
     }
 
+    /// YearMetricSpec 定义年度总结指标卡的数据结构。
     struct YearMetricSpec: Identifiable {
+        /// DeltaTrend 表示年度环比趋势方向。
         enum DeltaTrend {
             case up
             case down
             case flat
         }
 
+        /// DeltaPresentation 定义年度环比展示文案。
         struct DeltaPresentation {
             let text: String
             let trend: DeltaTrend
@@ -119,6 +122,7 @@ private extension ReadCalendarYearSummarySheet {
         .padding(.bottom, Layout.yearSwitcherBottomSpacing)
     }
 
+    /// 渲染年份切换按钮并处理可点击态样式。
     func summaryYearSwitchButton(
         systemName: String,
         isEnabled: Bool,
@@ -239,6 +243,7 @@ private extension ReadCalendarYearSummarySheet {
         ]
     }
 
+    /// 渲染年度指标卡（图标、主值与环比副文案）。
     func summaryMetricCard(_ metric: YearMetricSpec) -> some View {
         HStack(alignment: .center, spacing: Spacing.base) {
             summaryMetricIcon(systemName: metric.iconName, role: metric.gradientRole)
@@ -279,6 +284,7 @@ private extension ReadCalendarYearSummarySheet {
         }
     }
 
+    /// 返回年度指标图标渐变色阶。
     func summaryGradientStops(for role: ReadCalendarSummaryGradientRole) -> [Gradient.Stop] {
         let spec = Color.readCalendarSummaryGradientSpec(for: role)
         let opacity: CGFloat = colorScheme == .dark ? 0.96 : 1.0
@@ -289,6 +295,7 @@ private extension ReadCalendarYearSummarySheet {
         ]
     }
 
+    /// 渲染年度指标图标底板与符号。
     func summaryMetricIcon(systemName: String, role: ReadCalendarSummaryGradientRole) -> some View {
         RoundedRectangle(cornerRadius: CornerRadius.inlayMedium, style: .continuous)
             .fill(
@@ -386,6 +393,7 @@ private extension ReadCalendarYearSummarySheet {
         return "year-\(sheet.year)-\(signature)-\(sheet.totalReadSeconds)"
     }
 
+    /// 返回年度排行条颜色与状态（占位/已解析/回退）。
     func summaryDurationBarPresentation(bookId: Int64) -> (
         color: Color,
         state: ReadingDurationRankingChart.Item.BarState
@@ -407,6 +415,7 @@ private extension ReadCalendarYearSummarySheet {
         Color.readCalendarEventPendingBase
     }
 
+    /// 对年度排行条色做柔化，提升长列表可读性。
     func softenedSummaryBarColor(from color: ReadCalendarSegmentColor) -> Color {
         let red = CGFloat((color.backgroundRGBAHex >> 24) & 0xFF) / 255
         let green = CGFloat((color.backgroundRGBAHex >> 16) & 0xFF) / 255
@@ -446,6 +455,7 @@ private extension ReadCalendarYearSummarySheet {
         .padding(.top, Layout.monthContributionSectionTopPadding)
     }
 
+    /// 渲染年度月贡献行，展示活跃天数与时长占比。
     func monthContributionRow(
         _ month: ReadCalendarContentView.YearSummaryMonthContribution,
         maxReadSeconds: Int
@@ -504,23 +514,27 @@ private extension ReadCalendarYearSummarySheet {
         .contentShape(Rectangle())
     }
 
+    /// 根据偏移量返回可切换的相邻年份。
     func adjacentYear(offset: Int) -> Int? {
         let targetYear = sheet.year + offset
         return availableYears.contains(targetYear) ? targetYear : nil
     }
 
+    /// 把年度环比整数转换为展示文案与趋势。
     func deltaPresentation(_ delta: Int, unit: String) -> YearMetricSpec.DeltaPresentation {
         if delta > 0 { return .init(text: "+\(delta)\(unit)", trend: .up) }
         if delta < 0 { return .init(text: "-\(abs(delta))\(unit)", trend: .down) }
         return .init(text: "持平", trend: .flat)
     }
 
+    /// 把年度时长环比秒数转换为展示文案与趋势。
     func durationDeltaPresentation(_ delta: Int) -> YearMetricSpec.DeltaPresentation {
         if delta > 0 { return .init(text: "+\(durationTextAllowZero(delta))", trend: .up) }
         if delta < 0 { return .init(text: "-\(durationTextAllowZero(abs(delta)))", trend: .down) }
         return .init(text: "持平", trend: .flat)
     }
 
+    /// 根据趋势返回年度环比文案颜色。
     func deltaColor(_ trend: YearMetricSpec.DeltaTrend) -> Color {
         switch trend {
         case .up:
@@ -532,16 +546,19 @@ private extension ReadCalendarYearSummarySheet {
         }
     }
 
+    /// 计算单月时长在年度峰值中的占比。
     func monthContributionRatio(_ value: Int, maxReadSeconds: Int) -> CGFloat {
         guard maxReadSeconds > 0, value > 0 else { return 0 }
         return min(1, max(0, CGFloat(value) / CGFloat(maxReadSeconds)))
     }
 
+    /// 格式化月贡献列表中的月份标签。
     func monthLabel(_ date: Date) -> String {
         let month = Calendar.current.component(.month, from: date)
         return "\(month)月"
     }
 
+    /// 把秒数格式化为允许 0 值的时长文案。
     func durationTextAllowZero(_ readSeconds: Int) -> String {
         guard readSeconds > 0 else { return "0分" }
         let hours = readSeconds / 3600

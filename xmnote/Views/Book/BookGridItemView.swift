@@ -14,6 +14,7 @@
 
 import SwiftUI
 
+/// 书籍网格中的单卡片视图，展示封面、标题、作者与书摘数量。
 struct BookGridItemView: View {
     let book: BookItem
 

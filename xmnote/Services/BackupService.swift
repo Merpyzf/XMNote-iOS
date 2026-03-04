@@ -11,6 +11,7 @@ import ZIPFoundation
 
 // MARK: - Data Models
 
+/// 备份历史列表项模型，供界面展示文件名、大小、设备来源与远端恢复路径。
 struct BackupFileInfo: Identifiable, Sendable {
     let id: String
     let name: String
@@ -21,14 +22,17 @@ struct BackupFileInfo: Identifiable, Sendable {
     let backupDate: Date?
 }
 
+/// 手动备份流程阶段，用于驱动备份按钮文案与进度提示。
 enum BackupProgress: Equatable, Sendable {
     case preparing, packaging, uploading(Double), cleaning, completed
 }
 
+/// 恢复流程阶段，用于驱动恢复进度条和阶段文案。
 enum RestoreProgress: Equatable, Sendable {
     case downloading(Double), verifying, extracting, replacing, completed
 }
 
+/// 备份与恢复链路的业务错误类型，统一映射给 UI 层展示。
 enum BackupError: LocalizedError {
     case noServerConfigured
     case databaseCheckpointFailed
@@ -60,6 +64,7 @@ enum BackupError: LocalizedError {
 
 // MARK: - BackupService
 
+/// 备份业务服务，负责数据库打包上传、远端列表读取与备份恢复流程。
 struct BackupService: Sendable {
     let database: AppDatabase
     let client: WebDAVClient
@@ -78,6 +83,7 @@ struct BackupService: Sendable {
 
 extension BackupService {
 
+    /// 执行备份服务流程（压缩、上传与记录写入），失败时向上抛出错误。
     func backup(progress: (@Sendable (BackupProgress) -> Void)?) async throws {
         let fm = FileManager.default
         let tmpDir = fm.temporaryDirectory.appendingPathComponent(UUID().uuidString)
@@ -139,6 +145,7 @@ extension BackupService {
 
 extension BackupService {
 
+    /// 读取远端备份目录并转换为历史列表，按备份时间倒序返回。
     func fetchBackupList() async throws -> [BackupFileInfo] {
         let resources: [WebDAVResource]
         do {
@@ -171,6 +178,7 @@ extension BackupService {
 
 extension BackupService {
 
+    /// 执行恢复服务流程（下载、解压与数据回写），失败时向上抛出错误。
     func restore(_ backup: BackupFileInfo,
                  databaseManager: DatabaseManager,
                  progress: (@Sendable (RestoreProgress) -> Void)?) async throws {

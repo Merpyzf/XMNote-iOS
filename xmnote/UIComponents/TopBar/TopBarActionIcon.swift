@@ -7,6 +7,7 @@
 
 import SwiftUI
 
+/// 顶部栏操作图标原子组件，统一尺寸、字重与点击热区。
 struct TopBarActionIcon: View {
     let systemName: String
     var iconSize: CGFloat = 15

@@ -14,6 +14,7 @@
 
 import SwiftUI
 
+/// 书籍页三列网格视图，负责筛选切换与书籍卡片列表渲染。
 struct BookGridView: View {
     @Bindable var viewModel: BookViewModel
 

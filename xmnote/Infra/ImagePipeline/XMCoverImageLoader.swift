@@ -15,6 +15,7 @@ struct XMImageLoadRequest {
     let timeout: TimeInterval
     let cachePolicy: URLRequest.CachePolicy
 
+    /// 组装封面加载请求参数，统一超时、优先级与缓存策略。
     init(
         url: URL,
         priority: XMImageRequestBuilder.Priority = .normal,
@@ -37,22 +38,29 @@ struct XMImageLoadRequest {
     }
 }
 
+/// XMCoverImageLoading 约束图片加载链路下的协作契约，明确调用方与实现方边界。
 protocol XMCoverImageLoading {
+    /// 下载并解码图片，供取色与封面渲染等场景直接消费 UIImage。
     func loadImage(for request: XMImageLoadRequest) async throws -> UIImage
+    /// 下载原始二进制数据，供 GIF 探测或自定义解析链路使用。
     func loadData(for request: XMImageLoadRequest) async throws -> Data
 }
 
+/// 默认图片加载实现，复用 Nuke 管线统一处理缓存与并发请求。
 struct NukeCoverImageLoader: XMCoverImageLoading {
     private let pipeline: ImagePipeline
 
+    /// 注入图片管线，允许在测试或特定模块替换 pipeline。
     init(pipeline: ImagePipeline = .shared) {
         self.pipeline = pipeline
     }
 
+    /// 通过 Nuke 加载并返回解码后的 UIImage。
     func loadImage(for request: XMImageLoadRequest) async throws -> UIImage {
         try await pipeline.image(for: request.imageRequest)
     }
 
+    /// 通过 Nuke 下载原始二进制数据。
     func loadData(for request: XMImageLoadRequest) async throws -> Data {
         let (data, _) = try await pipeline.data(for: request.imageRequest)
         return data

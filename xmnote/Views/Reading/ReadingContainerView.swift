@@ -23,12 +23,14 @@ enum ReadingSubTab: String, CaseIterable {
 
 // MARK: - Container
 
+/// 在读 Tab 容器，负责子页切换并上抛新增与阅读日历跳转事件。
 struct ReadingContainerView: View {
     @State private var selectedSubTab: ReadingSubTab = .reading
     let onAddBook: () -> Void
     let onAddNote: () -> Void
     let onOpenReadCalendar: (Date) -> Void
 
+    /// 注入新增书籍回调，连接阅读页顶栏操作入口。
     init(
         onAddBook: @escaping () -> Void = {},
         onAddNote: @escaping () -> Void = {},
