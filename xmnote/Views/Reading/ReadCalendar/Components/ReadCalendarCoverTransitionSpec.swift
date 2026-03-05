@@ -51,7 +51,7 @@ struct ReadCalendarCoverTransitionSpec: Hashable {
     /// immersiveElegant 提供沉浸优雅档时长配置。
     static let immersiveElegant = ReadCalendarCoverTransitionSpec(
         openDuration: 0.34,
-        closeDuration: 0.24,
+        closeDuration: 0.30,
         entryBackdropDuration: 0.19,
         entryDeckDelay: 0.06,
         entryDeckDuration: 0.14,
@@ -59,16 +59,16 @@ struct ReadCalendarCoverTransitionSpec: Hashable {
         entryGhostFadeDuration: 0.13,
         entryChromeDelay: 0.12,
         entryChromeDuration: 0.11,
-        exitBackdropDuration: 0.18,
-        exitDeckFadeDuration: 0.12,
-        exitGhostFadeInDelay: 0.02,
-        exitGhostFadeInDuration: 0.08,
-        exitGhostFadeOutDelay: 0.16,
-        exitGhostFadeOutDuration: 0.11,
+        exitBackdropDuration: 0.24,
+        exitDeckFadeDuration: 0.22,
+        exitGhostFadeInDelay: 0.03,
+        exitGhostFadeInDuration: 0.10,
+        exitGhostFadeOutDelay: 0.19,
+        exitGhostFadeOutDuration: 0.10,
         panelEntryOffsetY: 34,
-        panelExitOffsetY: 28,
+        panelExitOffsetY: 20,
         panelEntryScaleFrom: 0.97,
-        panelExitScaleTo: 0.98
+        panelExitScaleTo: 0.93
     )
 
     /// reduceMotion 提供减少动态效果场景下的降级配置。
@@ -176,7 +176,8 @@ enum ReadCalendarCoverTransitionRuntime {
         case .steady:
             return 1
         case .exiting:
-            return lerp(spec.panelExitScaleTo, 1, p)
+            let exitProgress = smoothStep(from: 0, to: 1, value: 1 - p)
+            return lerp(1, spec.panelExitScaleTo, exitProgress)
         }
     }
 

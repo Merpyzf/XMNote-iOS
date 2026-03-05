@@ -279,6 +279,7 @@ struct ReadCalendarContentView: View {
     let onYearSelectionChanged: (Int) -> Void
     let onSelectDate: (Date?) -> Void
     let onRetry: () -> Void
+    let onBookCoverFullscreenPresentationChanged: (Bool) -> Void
     @State private var streakHintMessage: String?
     @State private var streakHintTask: Task<Void, Never>?
     @State private var shownStreakMilestonesByMonth: [Date: Set<Int>] = [:]
@@ -298,23 +299,44 @@ struct ReadCalendarContentView: View {
     @State private var coverEntryCueDate: Date?
     @State private var coverEntryCueProgress: CGFloat = 0
     @State private var coverEntryCueTask: Task<Void, Never>?
+    @State private var topControlBarFrameInGlobal: CGRect = .zero
+    @State private var lastLoggedTopControlBarFrameForDebug: CGRect = .zero
 
     var body: some View {
         bodyContainer
     }
 }
 
+/// ReadCalendarTopControlBarFramePreferenceKey 回传顶部控制栏在全局坐标系中的 frame。
+private struct ReadCalendarTopControlBarFramePreferenceKey: PreferenceKey {
+    static var defaultValue: CGRect = .zero
+
+    static func reduce(value: inout CGRect, nextValue: () -> CGRect) {
+        let next = nextValue()
+        guard next != .zero else { return }
+        value = next
+    }
+}
+
 // MARK: - Subviews
 
 private extension ReadCalendarContentView {
+    var isBookCoverFullscreenPresented: Bool {
+        bookCoverFullscreenPayload != nil
+    }
+
     var bodyContainer: some View {
         baseCalendarStack
             .animation(.spring(response: 0.38, dampingFraction: 0.86), value: props.errorMessage)
             .onAppear {
+                onBookCoverFullscreenPresentationChanged(isBookCoverFullscreenPresented)
                 evaluateStreakHintIfNeeded()
                 if props.rootContentState == .content {
                     applySummaryFloatingButtonInitialPolicyIfNeeded()
                 }
+            }
+            .onChange(of: isBookCoverFullscreenPresented) { _, isPresented in
+                onBookCoverFullscreenPresentationChanged(isPresented)
             }
             .onChange(of: props.rootContentState) { _, state in
                 switch state {
@@ -382,6 +404,11 @@ private extension ReadCalendarContentView {
                 bookCoverStackFramesByDate = [:]
                 closeBookCoverFullscreen(animated: false)
                 cancelCoverEntryCue()
+                onBookCoverFullscreenPresentationChanged(false)
+            }
+            .onPreferenceChange(ReadCalendarTopControlBarFramePreferenceKey.self) { frame in
+                topControlBarFrameInGlobal = frame
+                logTopControlBarFrameIfNeeded(frame)
             }
             .overlay {
                 bookCoverFullscreenOverlay
@@ -405,6 +432,22 @@ private extension ReadCalendarContentView {
             }
     }
 
+    func logTopControlBarFrameIfNeeded(_ frame: CGRect) {
+#if DEBUG
+        let normalized = CGRect(
+            x: frame.origin.x.rounded(),
+            y: frame.origin.y.rounded(),
+            width: frame.size.width.rounded(),
+            height: frame.size.height.rounded()
+        )
+        guard normalized != lastLoggedTopControlBarFrameForDebug else { return }
+        lastLoggedTopControlBarFrameForDebug = normalized
+        print(
+            "[ReadCalendar][TopControlBarFrame] x=\(Int(normalized.minX)) y=\(Int(normalized.minY)) w=\(Int(normalized.width)) h=\(Int(normalized.height)) maxY=\(Int(normalized.maxY))"
+        )
+#endif
+    }
+
     var baseCalendarStack: some View {
         VStack(spacing: 0) {
             ReadCalendarTopControlBar(
@@ -423,6 +466,15 @@ private extension ReadCalendarContentView {
             .padding(.bottom, Layout.topControlBottomPadding)
             .background {
                 Color.windowBackground.opacity(Layout.topControlBackgroundOpacity)
+            }
+            .background {
+                GeometryReader { proxy in
+                    Color.clear
+                        .preference(
+                            key: ReadCalendarTopControlBarFramePreferenceKey.self,
+                            value: proxy.frame(in: .global)
+                        )
+                }
             }
             // 保证底部沉浸滚动时，顶部控制区始终位于最上层。
             .zIndex(Layout.topControlLayerZIndex)
@@ -456,9 +508,11 @@ private extension ReadCalendarContentView {
             ReadCalendarBookCoverFullscreenOverlay(
                 payload: payload,
                 isHapticsEnabled: props.isHapticsEnabled,
+                topControlBarFrameInGlobal: topControlBarFrameInGlobal,
                 onClose: { closeBookCoverFullscreen() }
             )
             .zIndex(Layout.bookCoverFullscreenOverlayZIndex)
+            .transition(.opacity)
         }
     }
 
@@ -572,25 +626,23 @@ private extension ReadCalendarContentView {
         return coverItemsByDate[normalized] ?? []
     }
 
-    /// 返回书籍封面模式样式：业务折叠上限固定 10，并在高密度时收敛抖动提升可见性。
-    func bookCoverStyle(for coverCount: Int) -> ReadCalendarCoverFanStack.Style {
-        let base = ReadCalendarCoverFanStack.Style.editorial
-        let isDense = coverCount >= 8
+    /// 返回书籍封面模式样式：与封面堆叠测试页保持一致的参数基线。
+    func bookCoverStyle(for _: Int) -> ReadCalendarCoverFanStack.Style {
         return ReadCalendarCoverFanStack.Style(
-            secondaryRotation: base.secondaryRotation,
-            tertiaryRotation: base.tertiaryRotation,
-            secondaryOffsetXRatio: base.secondaryOffsetXRatio,
-            tertiaryOffsetXRatio: base.tertiaryOffsetXRatio,
-            secondaryOffsetYRatio: base.secondaryOffsetYRatio,
-            tertiaryOffsetYRatio: base.tertiaryOffsetYRatio,
-            shadowOpacity: base.shadowOpacity,
-            shadowRadius: base.shadowRadius,
-            shadowX: base.shadowX,
-            shadowY: base.shadowY,
+            secondaryRotation: -12,
+            tertiaryRotation: -24,
+            secondaryOffsetXRatio: -0.24,
+            tertiaryOffsetXRatio: -0.48,
+            secondaryOffsetYRatio: -0.08,
+            tertiaryOffsetYRatio: 0.06,
+            shadowOpacity: 0.22,
+            shadowRadius: 5,
+            shadowX: 2,
+            shadowY: 3,
             collapsedVisibleCount: Layout.coverBusinessCollapsedLimit,
-            jitterDegree: isDense ? 2.8 : base.jitterDegree,
-            jitterOffsetRatio: isDense ? 0.07 : base.jitterOffsetRatio,
-            fullscreenMaxRotation: base.fullscreenMaxRotation
+            jitterDegree: 3.2,
+            jitterOffsetRatio: 0.09,
+            fullscreenMaxRotation: 14
         )
     }
 
@@ -607,7 +659,7 @@ private extension ReadCalendarContentView {
         let sourceFrame = bookCoverStackFramesByDate[normalized]
         let stackedVisibleCount = min(
             max(1, items.count),
-            Layout.coverBusinessCollapsedLimit
+            max(1, min(style.collapsedVisibleCount, 14))
         )
         let payload = BookCoverFullscreenPayload(
             date: normalized,
@@ -1409,49 +1461,141 @@ private struct ReadCalendarBookCoverFullscreenOverlay: View {
         case manual
     }
 
+    private enum PhaseTransitionDirection {
+        case toGrid
+    }
+
+    private enum DismissSource {
+        case dragGesture
+        case backdropTap
+        case closeButton
+    }
+
+    private struct LayoutDebugSnapshot: Equatable {
+        let overlayMinY: Int
+        let screenHeight: Int
+        let safeTop: Int
+        let relativeSafeTop: Int
+        let safeBottom: Int
+        let topControlMaxY: Int
+        let headerTopInset: Int
+        let topChromeHeight: Int
+        let rawBottomChromeHeight: Int
+        let stageBottomChromeHeight: Int
+        let availableStageHeight: Int
+        let panelHeight: Int
+        let fittedPanelHeight: Int
+        let phase: String
+        let stackedBaselineState: String
+        let showHint: Bool
+        let showToggle: Bool
+    }
+
+    private struct StackedLayoutBaselineSignature: Equatable {
+        let overlayWidth: Int
+        let overlayHeight: Int
+        let overlayMinY: Int
+        let safeTop: Int
+        let safeBottom: Int
+        let topControlMaxY: Int
+    }
+
+    private struct StackedLayoutBaseline: Equatable {
+        let signature: StackedLayoutBaselineSignature
+        let panelHeight: CGFloat
+        let fittedPanelHeight: CGFloat
+        let panelInnerSize: CGSize
+        let coverSize: CGSize
+        let stageBottomChromeHeight: CGFloat
+    }
+
+    private struct StagePanelLayoutMetrics {
+        let panelHeight: CGFloat
+        let fittedPanelHeight: CGFloat
+        let panelInnerSize: CGSize
+        let coverSize: CGSize
+        let usesStackedBaseline: Bool
+    }
+
+    private struct StackedBaselineCaptureSnapshot: Equatable {
+        let signature: StackedLayoutBaselineSignature
+        let phase: ReadCalendarCoverFullscreenDeckStage.Phase
+        let panelHeight: Int
+        let fittedPanelHeight: Int
+        let panelInnerWidth: Int
+        let panelInnerHeight: Int
+        let coverWidth: Int
+        let coverHeight: Int
+        let stageBottomChromeHeight: Int
+    }
+
     private enum Layout {
-        static let backdropMaxOpacity: CGFloat = 0.26
-        static let backdropMaterialOpacity: CGFloat = 0.32
-        static let chromeAutoHideDelayNanoseconds: UInt64 = 1_000_000_000
-        static let chromeFadeDuration: CGFloat = 0.18
-        static let chromeRestoreDuration: CGFloat = 0.12
-        static let chromeIdleOpacity: CGFloat = 0.34
-        static let panelCornerRadius: CGFloat = CornerRadius.containerLarge
-        static let panelVerticalPadding: CGFloat = Spacing.double
-        static let dismissDragThreshold: CGFloat = 110
+        static let backdropMaxOpacity: CGFloat = 0.46
+        static let backdropMaterialOpacity: CGFloat = 0.42
+        static let dismissDragThreshold: CGFloat = 108
         static let closeButtonSymbolSize: CGFloat = 24
-        static let panelShadowBaseOpacity: CGFloat = 0.14
-        static let panelShadowExtraOpacity: CGFloat = 0.12
+        static let closeButtonOpacity: CGFloat = 0.74
+        static let autoGridDelayNanoseconds: UInt64 = 520_000_000
+        static let switchToGridResponse: CGFloat = 0.36
+        static let switchToGridDamping: CGFloat = 0.84
+        static let switchToStackResponse: CGFloat = 0.30
+        static let switchToStackDamping: CGFloat = 0.86
+        static let panelShadowBaseOpacity: CGFloat = 0.028
+        static let panelShadowExtraOpacity: CGFloat = 0.022
         static let panelShadowBaseRadius: CGFloat = 10
-        static let panelShadowExtraRadius: CGFloat = 8
-        static let previewLimit = 10
-        static let autoGridDelayNanoseconds: UInt64 = 900_000_000
-        static let phaseSwitchResponse: CGFloat = 0.4
-        static let phaseSwitchDamping: CGFloat = 0.86
-        static let closeReturnToStackDelayNanoseconds: UInt64 = 180_000_000
+        static let panelShadowExtraRadius: CGFloat = 4
+        static let panelShadowYOffset: CGFloat = 3
+        static let hintShadowOpacity: CGFloat = 0.45
+        static let hintShadowRadius: CGFloat = 2
+        static let hintShadowYOffset: CGFloat = 1
+        static let previewLimit = 12
+        static let switchSettleNanoseconds: UInt64 = 430_000_000
         static let toggleButtonHorizontalPadding: CGFloat = 16
         static let toggleButtonVerticalPadding: CGFloat = 10
+        static let toggleButtonBottomInsetExtra: CGFloat = 6
+        static let toggleButtonBackgroundOpacity: CGFloat = 0.26
+        static let toggleButtonStrokeOpacity: CGFloat = 0.18
+        static let toggleButtonShadowOpacity: CGFloat = 0.14
+        static let toggleButtonShadowRadius: CGFloat = 14
+        static let toggleButtonEstimatedHeight: CGFloat = 42
+        static let headerTopSafeAreaInset: CGFloat = 8
+        static let headerTopMaxInset: CGFloat = 132
+        static let headerToTopControlGap: CGFloat = 6
+        static let headerHorizontalInset: CGFloat = Spacing.screenEdge
+        static let headerEstimatedHeight: CGFloat = 30
+        static let headerBottomGap: CGFloat = 14
+        static let stageBottomInsetExtra: CGFloat = 12
+        static let countHintEstimatedHeight: CGFloat = 20
+        static let bottomChromeSpacing: CGFloat = Spacing.half
+        static let stageMinHeight: CGFloat = 240
     }
 
     let payload: ReadCalendarContentView.BookCoverFullscreenPayload
     let isHapticsEnabled: Bool
+    let topControlBarFrameInGlobal: CGRect
     let onClose: () -> Void
 
     @Environment(\.accessibilityReduceMotion) private var accessibilityReduceMotion
     @State private var dragOffsetY: CGFloat = 0
-    @State private var transitionPhase: ReadCalendarCoverTransitionPhase = .idle
-    @State private var transitionProgress: CGFloat = 0
-    @State private var chromeProgress: CGFloat = 1
-    @State private var transitionTask: Task<Void, Never>?
-    @State private var chromeAutoHideTask: Task<Void, Never>?
     @State private var layoutPhase: ReadCalendarCoverFullscreenDeckStage.Phase = .stacked
     @State private var phaseToken = 0
     @State private var hasAutoTransitioned = false
-    @State private var hasAutoExpandedToGrid = false
+    @State private var hasCollapsedBackToStack = false
     @State private var autoGridTask: Task<Void, Never>?
+    @State private var transitionPhase: ReadCalendarCoverTransitionPhase = .idle
+    @State private var transitionProgress: CGFloat = 0
+    @State private var transitionTask: Task<Void, Never>?
     @State private var closeTask: Task<Void, Never>?
     @State private var isClosing = false
+    @State private var phaseTransitionDirection: PhaseTransitionDirection?
+    @State private var phaseTransitionTask: Task<Void, Never>?
+    @State private var isDeferringGridConstraint = false
     @State private var stageFrameInGlobal: CGRect = .zero
+    @State private var lastLayoutDebugSnapshot: LayoutDebugSnapshot?
+    @State private var stackedLayoutBaseline: StackedLayoutBaseline?
+    @State private var lastReusedStackedBaselineSignature: StackedLayoutBaselineSignature?
+
+    var isAnimated: Bool { true }
 
     var motionSpec: ReadCalendarCoverTransitionSpec {
         accessibilityReduceMotion ? .reduceMotion : .immersiveElegant
@@ -1463,10 +1607,6 @@ private struct ReadCalendarBookCoverFullscreenOverlay: View {
             progress: transitionProgress,
             spec: motionSpec
         )
-    }
-
-    var stageOpacity: CGFloat {
-        transitionChannels.deckOpacity
     }
 
     var stageScale: CGFloat {
@@ -1485,12 +1625,30 @@ private struct ReadCalendarBookCoverFullscreenOverlay: View {
         ) + dragOffsetY
     }
 
-    var chromeOpacity: CGFloat {
-        max(Layout.chromeIdleOpacity, chromeProgress) * transitionChannels.chromeOpacity
-    }
-
     var shouldEnableGridPhase: Bool {
         payload.items.count > 1
+    }
+
+    var shouldAutoExpandToGridPhase: Bool {
+        shouldEnableGridPhase
+    }
+
+    var shouldShowCountHint: Bool {
+        shouldEnableGridPhase && layoutPhase == .grid
+    }
+
+    var shouldShowToggleButton: Bool {
+        guard shouldEnableGridPhase else { return false }
+        if layoutPhase == .grid {
+            return true
+        }
+        return hasCollapsedBackToStack
+    }
+
+    var shouldConstrainStagePanel: Bool {
+        layoutPhase == .grid
+            && !isDeferringGridConstraint
+            && phaseTransitionDirection != .toGrid
     }
 
     var sourceCoverAspectRatio: CGFloat {
@@ -1503,21 +1661,75 @@ private struct ReadCalendarBookCoverFullscreenOverlay: View {
 
     var body: some View {
         GeometryReader { proxy in
-            let coverSize = resolvedCoverSize(in: proxy.size)
-            let panelHeight = resolvedPanelHeight(
+            let overlayFrameInGlobal = proxy.frame(in: .global)
+            let baselineSignature = makeStackedLayoutBaselineSignature(
+                overlayFrameInGlobal: overlayFrameInGlobal,
+                size: proxy.size,
+                safeAreaInsets: proxy.safeAreaInsets
+            )
+            let stackedBaseline = stackedLayoutBaselineIfValid(for: baselineSignature)
+            let livePanelHeight = resolvedPanelHeight(
                 in: proxy.size,
-                coverSize: coverSize,
                 canScrollGrid: shouldEnableGridPhase
             )
-            let panelInnerSize = CGSize(
+            let headerTopInset = resolvedHeaderTopInset(
+                safeAreaTop: proxy.safeAreaInsets.top,
+                overlayFrameInGlobal: overlayFrameInGlobal
+            )
+            let toggleBottomInset = max(
+                Spacing.base,
+                proxy.safeAreaInsets.bottom + Layout.toggleButtonBottomInsetExtra + Layout.stageBottomInsetExtra
+            )
+            let topChromeHeight = headerTopInset + Layout.headerEstimatedHeight + Layout.headerBottomGap
+            let countHintHeight = shouldShowCountHint ? Layout.countHintEstimatedHeight : 0
+            let toggleButtonHeight = shouldShowToggleButton ? Layout.toggleButtonEstimatedHeight : 0
+            let bottomChromeSpacing = (shouldShowCountHint && shouldShowToggleButton)
+                ? Layout.bottomChromeSpacing
+                : 0
+            let rawBottomChromeHeight = toggleBottomInset + countHintHeight + toggleButtonHeight + bottomChromeSpacing
+            let stageBottomChromeHeight = resolvedStageBottomChromeHeight(
+                rawBottomChromeHeight: rawBottomChromeHeight,
+                stackedBaseline: stackedBaseline
+            )
+            let availableStageHeight = max(
+                Layout.stageMinHeight,
+                proxy.size.height - topChromeHeight - stageBottomChromeHeight
+            )
+            let liveFittedPanelHeight = min(livePanelHeight, availableStageHeight)
+            let livePanelInnerSize = CGSize(
                 width: max(0, proxy.size.width - Spacing.screenEdge * 2 - Spacing.double * 2),
-                height: max(0, panelHeight - Spacing.base * 2)
+                height: max(0, liveFittedPanelHeight - Spacing.base * 2)
             )
-            let panelShape = RoundedRectangle(
-                cornerRadius: Layout.panelCornerRadius,
-                style: .continuous
+            let liveCoverSize = resolvedCoverSize(in: livePanelInnerSize)
+            let stageLayout = resolvedStagePanelLayoutMetrics(
+                stackedBaseline: stackedBaseline,
+                livePanelHeight: livePanelHeight,
+                liveFittedPanelHeight: liveFittedPanelHeight,
+                livePanelInnerSize: livePanelInnerSize,
+                liveCoverSize: liveCoverSize
             )
-            let bottomInset = max(Spacing.base, proxy.safeAreaInsets.bottom)
+            let baselineCaptureSnapshot = makeStackedBaselineCaptureSnapshot(
+                signature: baselineSignature,
+                phase: layoutPhase,
+                panelHeight: livePanelHeight,
+                fittedPanelHeight: liveFittedPanelHeight,
+                panelInnerSize: livePanelInnerSize,
+                coverSize: liveCoverSize,
+                stageBottomChromeHeight: stageBottomChromeHeight
+            )
+            let debugSnapshot = makeLayoutDebugSnapshot(
+                overlayFrameInGlobal: overlayFrameInGlobal,
+                size: proxy.size,
+                safeAreaInsets: proxy.safeAreaInsets,
+                headerTopInset: headerTopInset,
+                topChromeHeight: topChromeHeight,
+                rawBottomChromeHeight: rawBottomChromeHeight,
+                stageBottomChromeHeight: stageBottomChromeHeight,
+                availableStageHeight: availableStageHeight,
+                panelHeight: stageLayout.panelHeight,
+                fittedPanelHeight: stageLayout.fittedPanelHeight,
+                usesStackedBaseline: stageLayout.usesStackedBaseline
+            )
 
             ZStack(alignment: .top) {
                 ZStack {
@@ -1528,85 +1740,102 @@ private struct ReadCalendarBookCoverFullscreenOverlay: View {
                 }
                 .ignoresSafeArea()
                 .onTapGesture {
-                    markChromeInteraction(forceVisible: true)
-                    dismiss()
+                    dismiss(source: .backdropTap)
                 }
 
                 heroGhostLayer(
-                    coverSize: coverSize,
-                    overlayGlobalFrame: proxy.frame(in: .global)
+                    coverSize: stageLayout.coverSize,
+                    overlayGlobalFrame: overlayFrameInGlobal
                 )
                 .opacity(Double(transitionChannels.ghostOpacity))
 
-                VStack(spacing: Spacing.base) {
-                    header
-                        .padding(.horizontal, Spacing.screenEdge)
-                        .padding(.top, Layout.panelVerticalPadding)
-                        .opacity(Double(chromeOpacity))
-
-                    Spacer(minLength: 0)
-
-                    ZStack {
-                        panelShape
-                            .fill(Color.contentBackground.opacity(0.78))
-
-                        fullscreenDeckStage(
-                            coverSize: coverSize,
-                            panelInnerSize: panelInnerSize
-                        )
+                stageDeckPanel(
+                    coverSize: stageLayout.coverSize,
+                    panelInnerSize: stageLayout.panelInnerSize
+                )
+                .frame(height: stageLayout.fittedPanelHeight)
+                .padding(.horizontal, Spacing.screenEdge)
+                .background {
+                    GeometryReader { stageProxy in
+                        let frame = stageProxy.frame(in: .global)
+                        Color.clear
+                            .onAppear {
+                                stageFrameInGlobal = frame
+                            }
+                            .onChange(of: frame) { _, newValue in
+                                stageFrameInGlobal = newValue
+                            }
                     }
-                    .clipShape(panelShape)
-                    .overlay {
-                        panelShape
-                            .stroke(
-                                Color.white.opacity(0.22 + 0.1 * transitionChannels.deckOpacity),
-                                lineWidth: CardStyle.borderWidth
-                            )
-                    }
-                    .frame(height: panelHeight)
-                    .padding(.horizontal, Spacing.screenEdge)
-                    .background {
-                        GeometryReader { stageProxy in
-                            let frame = stageProxy.frame(in: .global)
-                            Color.clear
-                                .onAppear {
-                                    stageFrameInGlobal = frame
-                                }
-                                .onChange(of: frame) { _, newValue in
-                                    stageFrameInGlobal = newValue
-                                }
-                        }
-                    }
-                    .shadow(
-                        color: Color.black.opacity(
-                            Layout.panelShadowBaseOpacity
-                            + Layout.panelShadowExtraOpacity * transitionChannels.deckOpacity
-                        ),
-                        radius: Layout.panelShadowBaseRadius + Layout.panelShadowExtraRadius * transitionChannels.deckOpacity,
-                        x: 0,
-                        y: 8
-                    )
-                    .opacity(Double(stageOpacity))
-
-                    Text(phaseHintText)
-                        .font(.footnote.weight(.semibold))
-                        .foregroundStyle(Color.white.opacity(0.92))
-                        .opacity(Double(chromeOpacity))
-
-                    if shouldEnableGridPhase, hasAutoExpandedToGrid {
-                        toggleButton
-                            .opacity(Double(chromeOpacity))
-                    }
-
-                    Text("下滑或轻点空白处收起")
-                        .font(.caption2)
-                        .foregroundStyle(Color.white.opacity(0.64))
-                        .opacity(Double(chromeOpacity))
-
-                    Spacer(minLength: bottomInset)
                 }
+                .shadow(
+                    color: Color.black.opacity(
+                        shouldConstrainStagePanel
+                            ? (
+                                Layout.panelShadowBaseOpacity
+                                + Layout.panelShadowExtraOpacity * transitionChannels.deckOpacity
+                            )
+                            : 0
+                    ),
+                    radius: shouldConstrainStagePanel
+                        ? (Layout.panelShadowBaseRadius + Layout.panelShadowExtraRadius * transitionChannels.deckOpacity)
+                        : 0,
+                    x: 0,
+                    y: Layout.panelShadowYOffset
+                )
+                .opacity(Double(transitionChannels.deckOpacity))
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+                .padding(.top, topChromeHeight)
+                .padding(.bottom, stageBottomChromeHeight)
                 .offset(y: stageOffsetY)
                 .scaleEffect(stageScale)
+
+                header
+                    .padding(.horizontal, Layout.headerHorizontalInset)
+                    .padding(.top, headerTopInset)
+                    .opacity(Double(transitionChannels.chromeOpacity))
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+
+                VStack(spacing: Layout.bottomChromeSpacing) {
+                    if shouldShowCountHint {
+                        Text("当日共 \(payload.items.count) 本")
+                            .font(.footnote.weight(.semibold))
+                            .foregroundStyle(Color.white.opacity(0.9))
+                            .opacity(Double(transitionChannels.chromeOpacity))
+                            .shadow(
+                                color: Color.black.opacity(Layout.hintShadowOpacity),
+                                radius: Layout.hintShadowRadius,
+                                x: 0,
+                                y: Layout.hintShadowYOffset
+                            )
+                    }
+
+                    if shouldShowToggleButton {
+                        toggleButton
+                            .opacity(Double(transitionChannels.chromeOpacity))
+                    }
+                }
+                .padding(.bottom, toggleBottomInset)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+
+                Color.clear
+                    .onAppear {
+                        syncStackedLayoutBaselineIfNeeded(using: baselineCaptureSnapshot)
+                        logStackedBaselineReuseIfNeeded(
+                            signature: baselineSignature,
+                            usesStackedBaseline: stageLayout.usesStackedBaseline
+                        )
+                        logLayoutSnapshotIfNeeded(debugSnapshot)
+                    }
+                    .onChange(of: baselineCaptureSnapshot) { _, newValue in
+                        syncStackedLayoutBaselineIfNeeded(using: newValue)
+                    }
+                    .onChange(of: debugSnapshot) { _, newValue in
+                        logStackedBaselineReuseIfNeeded(
+                            signature: baselineSignature,
+                            usesStackedBaseline: newValue.stackedBaselineState == "reused"
+                        )
+                        logLayoutSnapshotIfNeeded(newValue)
+                    }
             }
             .contentShape(Rectangle())
             .gesture(dismissDragGesture)
@@ -1616,52 +1845,43 @@ private struct ReadCalendarBookCoverFullscreenOverlay: View {
             .onDisappear {
                 cancelAutoGridTransition()
                 cancelCloseTask()
+                cancelPhaseTransitionTask()
                 cancelTransitionTask()
-                cancelChromeAutoHideTask()
                 isClosing = false
             }
         }
     }
 
     var phaseHintText: String {
-        if !shouldEnableGridPhase {
-            return "当日共 \(payload.items.count) 本"
-        }
-        switch layoutPhase {
-        case .stacked:
-            if hasAutoExpandedToGrid {
-                return "当日共 \(payload.items.count) 本，可切换为列表查看全部"
-            }
-            return "当日共 \(payload.items.count) 本，约 1 秒后自动切换列表"
-        case .grid:
-            return "当日共 \(payload.items.count) 本，向上滑动浏览全部"
-        }
+        "当日共 \(payload.items.count) 本"
     }
 
     var toggleButton: some View {
         let isStacked = layoutPhase == .stacked
         return Button {
-            markChromeInteraction(forceVisible: true)
             toggleLayoutPhase()
         } label: {
             HStack(spacing: Spacing.half) {
                 Image(systemName: isStacked ? "list.bullet.rectangle.portrait.fill" : "square.stack.3d.down.right.fill")
                     .font(.system(size: 13, weight: .semibold))
-                Text(isStacked ? "查看列表" : "返回堆叠")
+                Text(isStacked ? "展开" : "收起")
                     .font(.subheadline.weight(.semibold))
             }
             .foregroundStyle(Color.white.opacity(0.95))
             .padding(.horizontal, Layout.toggleButtonHorizontalPadding)
             .padding(.vertical, Layout.toggleButtonVerticalPadding)
-            .background(.ultraThinMaterial, in: Capsule())
+            .background(
+                Color.black.opacity(Layout.toggleButtonBackgroundOpacity),
+                in: Capsule()
+            )
             .overlay {
                 Capsule()
-                    .stroke(Color.white.opacity(0.28), lineWidth: CardStyle.borderWidth)
+                    .stroke(Color.white.opacity(Layout.toggleButtonStrokeOpacity), lineWidth: CardStyle.borderWidth)
             }
-            .shadow(color: Color.black.opacity(0.2), radius: 10, x: 0, y: 4)
+            .shadow(color: Color.black.opacity(Layout.toggleButtonShadowOpacity), radius: Layout.toggleButtonShadowRadius, x: 0, y: 4)
         }
         .buttonStyle(.plain)
-        .accessibilityLabel(isStacked ? "切换为纵向书籍列表" : "切换为封面堆叠")
+        .accessibilityLabel(isStacked ? "展开封面列表" : "收起封面列表")
     }
 
     var header: some View {
@@ -1673,57 +1893,271 @@ private struct ReadCalendarBookCoverFullscreenOverlay: View {
             Spacer(minLength: 0)
 
             Button {
-                dismiss()
+                dismiss(source: .closeButton)
             } label: {
                 Image(systemName: "xmark.circle.fill")
                     .font(.system(size: Layout.closeButtonSymbolSize, weight: .semibold))
-                    .foregroundStyle(Color.white.opacity(0.86))
+                    .foregroundStyle(Color.white.opacity(Layout.closeButtonOpacity))
             }
             .accessibilityLabel("关闭当日书籍封面全屏浮层")
         }
+    }
+
+    @ViewBuilder
+    func stageDeckPanel(
+        coverSize: CGSize,
+        panelInnerSize: CGSize
+    ) -> some View {
+        fullscreenDeckStage(
+            coverSize: coverSize,
+            panelInnerSize: panelInnerSize
+        )
     }
 
     var dismissDragGesture: some Gesture {
         DragGesture(minimumDistance: 12)
             .onChanged { value in
                 guard value.translation.height > 0 else { return }
-                markChromeInteraction(forceVisible: true)
-                dragOffsetY = value.translation.height * 0.58
+                dragOffsetY = value.translation.height * 0.6
             }
             .onEnded { value in
-                markChromeInteraction(forceVisible: true)
                 if value.translation.height > Layout.dismissDragThreshold {
-                    dismiss()
+                    dismiss(source: .dragGesture)
                     return
                 }
-                withAnimation(.spring(response: 0.28, dampingFraction: 0.8)) {
+                withAnimation(.spring(response: 0.26, dampingFraction: 0.82)) {
                     dragOffsetY = 0
                 }
             }
     }
 
-    /// 处理浮层首次出现：初始化阶段、触发触感并启动自动切换任务。
-    func handleAppear() {
-        triggerOpenHapticIfNeeded()
-        dragOffsetY = 0
-        layoutPhase = .stacked
-        phaseToken &+= 1
-        hasAutoTransitioned = false
-        hasAutoExpandedToGrid = false
-        isClosing = false
-        startEnterTransition()
+    private func makeLayoutDebugSnapshot(
+        overlayFrameInGlobal: CGRect,
+        size: CGSize,
+        safeAreaInsets: EdgeInsets,
+        headerTopInset: CGFloat,
+        topChromeHeight: CGFloat,
+        rawBottomChromeHeight: CGFloat,
+        stageBottomChromeHeight: CGFloat,
+        availableStageHeight: CGFloat,
+        panelHeight: CGFloat,
+        fittedPanelHeight: CGFloat,
+        usesStackedBaseline: Bool
+    ) -> LayoutDebugSnapshot {
+        let relativeSafeTop = max(0, safeAreaInsets.top - overlayFrameInGlobal.minY)
+        return LayoutDebugSnapshot(
+            overlayMinY: Int(overlayFrameInGlobal.minY.rounded()),
+            screenHeight: Int(size.height.rounded()),
+            safeTop: Int(safeAreaInsets.top.rounded()),
+            relativeSafeTop: Int(relativeSafeTop.rounded()),
+            safeBottom: Int(safeAreaInsets.bottom.rounded()),
+            topControlMaxY: Int(topControlBarFrameInGlobal.maxY.rounded()),
+            headerTopInset: Int(headerTopInset.rounded()),
+            topChromeHeight: Int(topChromeHeight.rounded()),
+            rawBottomChromeHeight: Int(rawBottomChromeHeight.rounded()),
+            stageBottomChromeHeight: Int(stageBottomChromeHeight.rounded()),
+            availableStageHeight: Int(availableStageHeight.rounded()),
+            panelHeight: Int(panelHeight.rounded()),
+            fittedPanelHeight: Int(fittedPanelHeight.rounded()),
+            phase: layoutPhase == .stacked ? "stacked" : "grid",
+            stackedBaselineState: usesStackedBaseline ? "reused" : "live",
+            showHint: shouldShowCountHint,
+            showToggle: shouldShowToggleButton
+        )
     }
 
-    func resolvedCoverSize(in size: CGSize) -> CGSize {
-        let width = max(52, min(92, size.width / 6.2))
-        return CGSize(width: width, height: width * 1.46)
+    private func logLayoutSnapshotIfNeeded(_ snapshot: LayoutDebugSnapshot) {
+#if DEBUG
+        guard snapshot != lastLayoutDebugSnapshot else { return }
+        lastLayoutDebugSnapshot = snapshot
+        print(
+            "[ReadCalendar][OverlayLayout] phase=\(snapshot.phase) overlayMinY=\(snapshot.overlayMinY) screenH=\(snapshot.screenHeight) safeTop=\(snapshot.safeTop) relativeSafeTop=\(snapshot.relativeSafeTop) safeBottom=\(snapshot.safeBottom) topControlMaxY=\(snapshot.topControlMaxY) headerTop=\(snapshot.headerTopInset) topChrome=\(snapshot.topChromeHeight) rawBottomChrome=\(snapshot.rawBottomChromeHeight) stageBottomChrome=\(snapshot.stageBottomChromeHeight) availableStage=\(snapshot.availableStageHeight) panel=\(snapshot.panelHeight) fittedPanel=\(snapshot.fittedPanelHeight) stackedBaseline=\(snapshot.stackedBaselineState) hint=\(snapshot.showHint) toggle=\(snapshot.showToggle)"
+        )
+#endif
     }
 
-    /// 根据屏幕与封面尺寸计算浮层面板高度，并在列表阶段预留足够滚动区域。
-    func resolvedPanelHeight(in size: CGSize, coverSize: CGSize, canScrollGrid: Bool) -> CGFloat {
-        let byCover = coverSize.height * (canScrollGrid ? 5.25 : 4.9)
-        let byScreen = size.height * (canScrollGrid ? 0.72 : 0.62)
-        return min(max(340, byCover), max(380, byScreen))
+    /// 依据顶部控制栏底边锚点计算日期/关闭栏顶部 inset，确保其贴近模式切换控件下方。
+    func resolvedHeaderTopInset(
+        safeAreaTop: CGFloat,
+        overlayFrameInGlobal: CGRect
+    ) -> CGFloat {
+        let relativeSafeTop = max(0, safeAreaTop - overlayFrameInGlobal.minY)
+        let minInset = max(
+            Spacing.base,
+            relativeSafeTop + Layout.headerTopSafeAreaInset
+        )
+        guard topControlBarFrameInGlobal != .zero else {
+            return minInset
+        }
+        let anchoredInset = topControlBarFrameInGlobal.maxY
+            - overlayFrameInGlobal.minY
+            + Layout.headerToTopControlGap
+        return min(
+            Layout.headerTopMaxInset,
+            max(minInset, anchoredInset)
+        )
+    }
+
+    func resolvedCoverSize(in panelInnerSize: CGSize) -> CGSize {
+        let aspect = min(1.55, max(1.35, sourceCoverAspectRatio))
+        return ReadCalendarCoverFullscreenDeckStage.resolveAdaptiveCoverSize(
+            containerSize: panelInnerSize,
+            visibleCount: payload.stackedVisibleCount,
+            sourceAspectRatio: aspect
+        )
+    }
+
+    func resolvedPanelHeight(in size: CGSize, canScrollGrid: Bool) -> CGFloat {
+        let lowerBound: CGFloat = canScrollGrid ? 360 : 340
+        let upperBound = max(lowerBound, size.height * (canScrollGrid ? 0.82 : 0.78))
+        let preferred = size.height * (canScrollGrid ? 0.74 : 0.66)
+        return min(max(preferred, lowerBound), upperBound)
+    }
+
+    private func makeStackedLayoutBaselineSignature(
+        overlayFrameInGlobal: CGRect,
+        size: CGSize,
+        safeAreaInsets: EdgeInsets
+    ) -> StackedLayoutBaselineSignature {
+        StackedLayoutBaselineSignature(
+            overlayWidth: Int(size.width.rounded()),
+            overlayHeight: Int(size.height.rounded()),
+            overlayMinY: Int(overlayFrameInGlobal.minY.rounded()),
+            safeTop: Int(safeAreaInsets.top.rounded()),
+            safeBottom: Int(safeAreaInsets.bottom.rounded()),
+            topControlMaxY: Int(topControlBarFrameInGlobal.maxY.rounded())
+        )
+    }
+
+    private func stackedLayoutBaselineIfValid(
+        for signature: StackedLayoutBaselineSignature
+    ) -> StackedLayoutBaseline? {
+        guard let baseline = stackedLayoutBaseline else { return nil }
+        guard baseline.signature == signature else { return nil }
+        return baseline
+    }
+
+    private func resolvedStageBottomChromeHeight(
+        rawBottomChromeHeight: CGFloat,
+        stackedBaseline: StackedLayoutBaseline?
+    ) -> CGFloat {
+        guard layoutPhase == .stacked, let stackedBaseline else {
+            return rawBottomChromeHeight
+        }
+        return stackedBaseline.stageBottomChromeHeight
+    }
+
+    private func resolvedStagePanelLayoutMetrics(
+        stackedBaseline: StackedLayoutBaseline?,
+        livePanelHeight: CGFloat,
+        liveFittedPanelHeight: CGFloat,
+        livePanelInnerSize: CGSize,
+        liveCoverSize: CGSize
+    ) -> StagePanelLayoutMetrics {
+        guard layoutPhase == .stacked, let stackedBaseline else {
+            return StagePanelLayoutMetrics(
+                panelHeight: livePanelHeight,
+                fittedPanelHeight: liveFittedPanelHeight,
+                panelInnerSize: livePanelInnerSize,
+                coverSize: liveCoverSize,
+                usesStackedBaseline: false
+            )
+        }
+        return StagePanelLayoutMetrics(
+            panelHeight: stackedBaseline.panelHeight,
+            fittedPanelHeight: stackedBaseline.fittedPanelHeight,
+            panelInnerSize: stackedBaseline.panelInnerSize,
+            coverSize: stackedBaseline.coverSize,
+            usesStackedBaseline: true
+        )
+    }
+
+    private func makeStackedBaselineCaptureSnapshot(
+        signature: StackedLayoutBaselineSignature,
+        phase: ReadCalendarCoverFullscreenDeckStage.Phase,
+        panelHeight: CGFloat,
+        fittedPanelHeight: CGFloat,
+        panelInnerSize: CGSize,
+        coverSize: CGSize,
+        stageBottomChromeHeight: CGFloat
+    ) -> StackedBaselineCaptureSnapshot {
+        StackedBaselineCaptureSnapshot(
+            signature: signature,
+            phase: phase,
+            panelHeight: Int(panelHeight.rounded()),
+            fittedPanelHeight: Int(fittedPanelHeight.rounded()),
+            panelInnerWidth: Int(panelInnerSize.width.rounded()),
+            panelInnerHeight: Int(panelInnerSize.height.rounded()),
+            coverWidth: Int(coverSize.width.rounded()),
+            coverHeight: Int(coverSize.height.rounded()),
+            stageBottomChromeHeight: Int(stageBottomChromeHeight.rounded())
+        )
+    }
+
+    private func syncStackedLayoutBaselineIfNeeded(
+        using snapshot: StackedBaselineCaptureSnapshot
+    ) {
+#if DEBUG
+        if let currentBaseline = stackedLayoutBaseline,
+           currentBaseline.signature != snapshot.signature {
+            print(
+                "[ReadCalendar][StackedBaseline] reset from=\(describeStackedLayoutBaselineSignature(currentBaseline.signature)) to=\(describeStackedLayoutBaselineSignature(snapshot.signature))"
+            )
+            stackedLayoutBaseline = nil
+            lastReusedStackedBaselineSignature = nil
+        }
+#else
+        if let currentBaseline = stackedLayoutBaseline,
+           currentBaseline.signature != snapshot.signature {
+            stackedLayoutBaseline = nil
+            lastReusedStackedBaselineSignature = nil
+        }
+#endif
+
+        guard snapshot.phase == .stacked else { return }
+        guard stackedLayoutBaseline == nil else { return }
+
+        let captured = StackedLayoutBaseline(
+            signature: snapshot.signature,
+            panelHeight: CGFloat(snapshot.panelHeight),
+            fittedPanelHeight: CGFloat(snapshot.fittedPanelHeight),
+            panelInnerSize: CGSize(
+                width: CGFloat(snapshot.panelInnerWidth),
+                height: CGFloat(snapshot.panelInnerHeight)
+            ),
+            coverSize: CGSize(
+                width: CGFloat(snapshot.coverWidth),
+                height: CGFloat(snapshot.coverHeight)
+            ),
+            stageBottomChromeHeight: CGFloat(snapshot.stageBottomChromeHeight)
+        )
+        stackedLayoutBaseline = captured
+        lastReusedStackedBaselineSignature = nil
+#if DEBUG
+        print(
+            "[ReadCalendar][StackedBaseline] captured signature=\(describeStackedLayoutBaselineSignature(snapshot.signature)) fittedPanel=\(snapshot.fittedPanelHeight) coverW=\(snapshot.coverWidth)"
+        )
+#endif
+    }
+
+    private func logStackedBaselineReuseIfNeeded(
+        signature: StackedLayoutBaselineSignature,
+        usesStackedBaseline: Bool
+    ) {
+#if DEBUG
+        guard usesStackedBaseline else { return }
+        guard lastReusedStackedBaselineSignature != signature else { return }
+        lastReusedStackedBaselineSignature = signature
+        print(
+            "[ReadCalendar][StackedBaseline] reused signature=\(describeStackedLayoutBaselineSignature(signature))"
+        )
+#endif
+    }
+
+    private func describeStackedLayoutBaselineSignature(
+        _ signature: StackedLayoutBaselineSignature
+    ) -> String {
+        "w\(signature.overlayWidth)-h\(signature.overlayHeight)-minY\(signature.overlayMinY)-safeTop\(signature.safeTop)-safeBottom\(signature.safeBottom)-topMaxY\(signature.topControlMaxY)"
     }
 
     @ViewBuilder
@@ -1738,10 +2172,11 @@ private struct ReadCalendarBookCoverFullscreenOverlay: View {
             containerSize: panelInnerSize,
             phase: layoutPhase,
             phaseToken: phaseToken,
-            isAnimated: true,
+            isAnimated: isAnimated,
             layoutSeed: payload.stackedSeed,
             stackedVisibleCount: payload.stackedVisibleCount,
             previewLimit: Layout.previewLimit,
+            shouldClipGrid: shouldConstrainStagePanel,
             matchedTransitionStyle: .staggered,
             stackedLayoutAlgorithm: .editorialDeskScatter,
             coverSizingMode: .panelAwareBalanced,
@@ -1752,6 +2187,132 @@ private struct ReadCalendarBookCoverFullscreenOverlay: View {
         .padding(.horizontal, Spacing.double)
         .padding(.vertical, Spacing.base)
         deckContainer
+    }
+
+    /// 处理浮层首次出现：初始化阶段、触发触感并启动自动切换任务。
+    func handleAppear() {
+        triggerOpenHapticIfNeeded()
+        layoutPhase = .stacked
+        hasAutoTransitioned = false
+        hasCollapsedBackToStack = false
+        isClosing = false
+        cancelPhaseTransitionTask()
+        startEnterTransition()
+    }
+
+    /// 在书籍数量超过阈值时，延迟自动切到列表态，提升可浏览性。
+    func scheduleAutoGridTransitionIfNeeded() {
+        cancelAutoGridTransition()
+        guard transitionPhase == .steady else { return }
+        guard shouldAutoExpandToGridPhase else { return }
+        autoGridTask = Task {
+            do {
+                try await Task.sleep(nanoseconds: Layout.autoGridDelayNanoseconds)
+            } catch {
+                return
+            }
+            guard !Task.isCancelled else { return }
+            await MainActor.run {
+                guard !isClosing else { return }
+                guard !hasAutoTransitioned else { return }
+                switchLayoutPhase(to: .grid, source: .automatic)
+            }
+        }
+    }
+
+    /// 取消自动切换任务，避免浮层关闭后任务回调污染当前状态。
+    func cancelAutoGridTransition() {
+        autoGridTask?.cancel()
+        autoGridTask = nil
+    }
+
+    /// 取消关闭延迟任务，避免重复触发 onClose 导致状态竞争。
+    func cancelCloseTask() {
+        closeTask?.cancel()
+        closeTask = nil
+    }
+
+    /// 手动切换堆叠态与列表态，用于过渡评估与对比观察。
+    func toggleLayoutPhase() {
+        let target: ReadCalendarCoverFullscreenDeckStage.Phase = layoutPhase == .stacked ? .grid : .stacked
+        switchLayoutPhase(to: target, source: .manual)
+    }
+
+    /// 执行阶段切换动画，自动与手动切换统一走同一条状态机路径。
+    private func switchLayoutPhase(
+        to target: ReadCalendarCoverFullscreenDeckStage.Phase,
+        source: LayoutPhaseSource
+    ) {
+        guard layoutPhase != target else { return }
+        if source == .manual {
+            cancelAutoGridTransition()
+        }
+        hasAutoTransitioned = true
+        cancelPhaseTransitionTask(resetState: false)
+        if target == .grid {
+            if source == .automatic {
+                triggerAutoGridHapticIfNeeded()
+            }
+            hasCollapsedBackToStack = false
+            if isAnimated {
+                phaseTransitionDirection = .toGrid
+                isDeferringGridConstraint = true
+            } else {
+                phaseTransitionDirection = nil
+                isDeferringGridConstraint = false
+            }
+        } else {
+            hasCollapsedBackToStack = true
+            phaseTransitionDirection = nil
+            isDeferringGridConstraint = false
+        }
+        guard isAnimated else {
+            layoutPhase = target
+            phaseToken += 1
+            return
+        }
+        let animationResponse = target == .grid
+            ? Layout.switchToGridResponse
+            : Layout.switchToStackResponse
+        let animationDamping = target == .grid
+            ? Layout.switchToGridDamping
+            : Layout.switchToStackDamping
+        withAnimation(
+            .spring(
+                response: animationResponse,
+                dampingFraction: animationDamping
+            )
+        ) {
+            layoutPhase = target
+            phaseToken += 1
+        }
+        if target == .grid {
+            schedulePhaseTransitionSettle()
+        }
+    }
+
+    func schedulePhaseTransitionSettle() {
+        phaseTransitionTask = Task {
+            do {
+                try await Task.sleep(nanoseconds: Layout.switchSettleNanoseconds)
+            } catch {
+                return
+            }
+            guard !Task.isCancelled else { return }
+            await MainActor.run {
+                phaseTransitionDirection = nil
+                isDeferringGridConstraint = false
+                phaseTransitionTask = nil
+            }
+        }
+    }
+
+    func cancelPhaseTransitionTask(resetState: Bool = true) {
+        phaseTransitionTask?.cancel()
+        phaseTransitionTask = nil
+        guard resetState else { return }
+        phaseTransitionDirection = nil
+        isDeferringGridConstraint = false
     }
 
     @ViewBuilder
@@ -1810,91 +2371,21 @@ private struct ReadCalendarBookCoverFullscreenOverlay: View {
         return formatter.string(from: date)
     }
 
-    /// 手动切换堆叠态与列表态，用于过渡评估与对比观察。
-    func toggleLayoutPhase() {
-        let target: ReadCalendarCoverFullscreenDeckStage.Phase = layoutPhase == .stacked ? .grid : .stacked
-        switchLayoutPhase(to: target, source: .manual)
-    }
-
-    /// 在书籍数量超过阈值时，延迟自动切到列表态，提升可浏览性。
-    func scheduleAutoGridTransitionIfNeeded() {
-        cancelAutoGridTransition()
-        guard transitionPhase == .steady else { return }
-        guard shouldEnableGridPhase else { return }
-        autoGridTask = Task {
-            do {
-                try await Task.sleep(nanoseconds: Layout.autoGridDelayNanoseconds)
-            } catch {
-                return
-            }
-            guard !Task.isCancelled else { return }
-            await MainActor.run {
-                guard !isClosing else { return }
-                markChromeInteraction(forceVisible: true)
-                switchLayoutPhase(to: .grid, source: .automatic)
-            }
-        }
-    }
-
-    /// 执行阶段切换动画，自动与手动切换统一走同一条状态机路径。
-    private func switchLayoutPhase(
-        to target: ReadCalendarCoverFullscreenDeckStage.Phase,
-        source: LayoutPhaseSource
-    ) {
-        guard layoutPhase != target else { return }
-        if source == .manual {
-            cancelAutoGridTransition()
-        }
-        hasAutoTransitioned = true
-        if source == .automatic, target == .grid {
-            hasAutoExpandedToGrid = true
-            triggerAutoGridHapticIfNeeded()
-        }
-        withAnimation(.spring(response: Layout.phaseSwitchResponse, dampingFraction: Layout.phaseSwitchDamping)) {
-            layoutPhase = target
-            phaseToken &+= 1
-        }
-    }
-
-    /// 取消自动切换任务，避免浮层关闭后任务回调污染当前状态。
-    func cancelAutoGridTransition() {
-        autoGridTask?.cancel()
-        autoGridTask = nil
-    }
-
-    /// 取消关闭延迟任务，避免重复触发 onClose 导致状态竞争。
-    func cancelCloseTask() {
-        closeTask?.cancel()
-        closeTask = nil
-    }
-
-    /// 关闭浮层：若当前在列表态先回切堆叠态，再执行整体淡出下沉，避免跳态关闭。
-    func dismiss() {
+    private func dismiss(source: DismissSource) {
         guard !isClosing else { return }
         cancelAutoGridTransition()
         cancelTransitionTask()
         cancelCloseTask()
-        cancelChromeAutoHideTask()
-        withAnimation(.smooth(duration: 0.22)) {
-            dragOffsetY = 0
+        cancelPhaseTransitionTask()
+        if source == .dragGesture {
+            dragOffsetY = max(0, dragOffsetY)
+        } else {
+            withAnimation(.smooth(duration: 0.2)) {
+                dragOffsetY = 0
+            }
         }
         isClosing = true
-        if shouldEnableGridPhase, layoutPhase == .grid {
-            switchLayoutPhase(to: .stacked, source: .manual)
-            closeTask = Task {
-                do {
-                    try await Task.sleep(nanoseconds: Layout.closeReturnToStackDelayNanoseconds)
-                } catch {
-                    return
-                }
-                guard !Task.isCancelled else { return }
-                await MainActor.run {
-                    runDismissTransition()
-                }
-            }
-            return
-        }
-        runDismissTransition()
+        runDismissTransition(source: source)
     }
 
     func triggerOpenHapticIfNeeded() {
@@ -1915,38 +2406,13 @@ private struct ReadCalendarBookCoverFullscreenOverlay: View {
 #endif
     }
 
-    func markChromeInteraction(forceVisible: Bool = false) {
-        guard !isClosing else { return }
-        cancelChromeAutoHideTask()
-        if forceVisible || chromeProgress < 1 {
-            withAnimation(.easeOut(duration: Layout.chromeRestoreDuration)) {
-                chromeProgress = 1
-            }
-        }
-        chromeAutoHideTask = Task {
-            do {
-                try await Task.sleep(nanoseconds: Layout.chromeAutoHideDelayNanoseconds)
-            } catch {
-                return
-            }
-            guard !Task.isCancelled else { return }
-            await MainActor.run {
-                guard !isClosing else { return }
-                withAnimation(.easeOut(duration: Layout.chromeFadeDuration)) {
-                    chromeProgress = Layout.chromeIdleOpacity
-                }
-            }
-        }
-    }
-
-    func cancelChromeAutoHideTask() {
-        chromeAutoHideTask?.cancel()
-        chromeAutoHideTask = nil
-    }
-
-    func runDismissTransition() {
+    private func runDismissTransition(source _: DismissSource) {
         transitionPhase = .exiting
-        chromeProgress = 1
+        guard isAnimated else {
+            isClosing = false
+            onClose()
+            return
+        }
         withAnimation(.linear(duration: motionSpec.closeDuration)) {
             transitionProgress = 0
         }
@@ -1966,10 +2432,14 @@ private struct ReadCalendarBookCoverFullscreenOverlay: View {
 
     func startEnterTransition() {
         cancelTransitionTask()
-        cancelChromeAutoHideTask()
         transitionPhase = .entering
         transitionProgress = 0
-        chromeProgress = 1
+        guard isAnimated else {
+            transitionProgress = 1
+            transitionPhase = .steady
+            scheduleAutoGridTransitionIfNeeded()
+            return
+        }
         withAnimation(.linear(duration: motionSpec.openDuration)) {
             transitionProgress = 1
         }
@@ -1983,7 +2453,6 @@ private struct ReadCalendarBookCoverFullscreenOverlay: View {
             await MainActor.run {
                 transitionPhase = .steady
                 transitionTask = nil
-                markChromeInteraction()
                 scheduleAutoGridTransitionIfNeeded()
             }
         }
@@ -2042,7 +2511,8 @@ private struct ReadCalendarBookCoverFullscreenOverlay: View {
         onPagerSelectionChanged: { _ in },
         onYearSelectionChanged: { _ in },
         onSelectDate: { _ in },
-        onRetry: {}
+        onRetry: {},
+        onBookCoverFullscreenPresentationChanged: { _ in }
     )
     .padding(.horizontal, Spacing.screenEdge)
     .padding(.bottom, Spacing.base)

@@ -17,6 +17,7 @@ struct ReadCalendarView: View {
     @State private var settingsRefreshTask: Task<Void, Never>?
     @State private var isSettingsPresented = false
     @State private var settingsSheetHeight: CGFloat = 0
+    @State private var isBookCoverFullscreenPresented = false
 
     /// 注入初始日期并创建阅读日历页面入口。
     init(date: Date?) {
@@ -60,12 +61,15 @@ struct ReadCalendarView: View {
                 },
                 onRetry: {
                     retryCurrentContext()
+                },
+                onBookCoverFullscreenPresentationChanged: { isPresented in
+                    isBookCoverFullscreenPresented = isPresented
                 }
             )
         }
         .navigationTitle("阅读日历")
         .navigationBarTitleDisplayMode(.inline)
-        .toolbarBackground(.visible, for: .navigationBar)
+        .toolbarBackground(isBookCoverFullscreenPresented ? .hidden : .visible, for: .navigationBar)
         .toolbarBackground(Color.windowBackground, for: .navigationBar)
         .tint(Color.readCalendarTopAction)
         .toolbar {
