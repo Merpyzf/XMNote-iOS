@@ -491,7 +491,6 @@ private extension ReadCalendarContentView {
             }
 
             integratedCalendarContainer
-                .ignoresSafeArea(.container, edges: .bottom)
                 .zIndex(Layout.contentLayerZIndex)
 
             if let errorMessage = props.errorMessage,
@@ -1026,13 +1025,24 @@ private extension ReadCalendarContentView {
     }
 
     var integratedCalendarContainer: some View {
-        VStack(spacing: shouldShowWeekdayHeader ? Layout.headerToGridSpacing : 0) {
-            if shouldShowWeekdayHeader {
-                ReadCalendarWeekdayHeader(minHeight: Layout.weekdayHeaderHeight)
-                    .zIndex(1)
+        GeometryReader { proxy in
+            let headerHeight = shouldShowWeekdayHeader ? Layout.weekdayHeaderHeight : 0
+            let spacing = shouldShowWeekdayHeader ? Layout.headerToGridSpacing : 0
+            let contentHeight = max(0, proxy.size.height - headerHeight - spacing)
+
+            VStack(spacing: spacing) {
+                if shouldShowWeekdayHeader {
+                    ReadCalendarWeekdayHeader(minHeight: Layout.weekdayHeaderHeight)
+                        .frame(height: Layout.weekdayHeaderHeight)
+                        .background(Color.windowBackground)
+                        .zIndex(1)
+                }
+
+                contentContainer
+                    .frame(height: contentHeight, alignment: .top)
+                    .clipped()
             }
-            contentContainer
-                .zIndex(0)
+            .frame(width: proxy.size.width, height: proxy.size.height, alignment: .top)
         }
         .padding(.top, Layout.calendarInnerTopPadding)
         .padding(.bottom, Layout.calendarInnerBottomPadding + interactiveBottomInset)
@@ -1112,6 +1122,7 @@ private extension ReadCalendarContentView {
         }
         .tabViewStyle(.page(indexDisplayMode: .never))
         .contentMargins(.top, 0, for: .scrollContent)
+        .clipped()
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .animation(.snappy(duration: 0.32), value: props.pagerSelection)
     }
@@ -1236,6 +1247,7 @@ private extension ReadCalendarContentView {
             .padding(.bottom, immersiveScrollTailInset)
             .frame(maxWidth: .infinity, alignment: .top)
         }
+        .scrollClipDisabled(false)
         .onScrollPhaseChange { _, phase in
             guard phase.isScrolling else { return }
             markSummaryFloatingButtonInteraction(
@@ -1243,7 +1255,6 @@ private extension ReadCalendarContentView {
             )
         }
         .scrollBounceBehavior(.basedOnSize)
-        .ignoresSafeArea(.container, edges: .bottom)
         .animation(.smooth(duration: 0.24), value: pageState.loadState)
     }
 
