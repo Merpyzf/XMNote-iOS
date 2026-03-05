@@ -135,6 +135,7 @@ struct ReadCalendarCoverFanStack: View {
     let style: Style
     let presentationMode: PresentationMode
     let layoutSeed: LayoutSeed?
+    let showsOverflowTailCue: Bool
 
     /// 注入封面集合与展示参数，配置日历格子内的扇形封面堆叠效果。
     init(
@@ -144,7 +145,8 @@ struct ReadCalendarCoverFanStack: View {
         isAnimated: Bool = true,
         style: Style = .standard,
         presentationMode: PresentationMode = .collapsed,
-        layoutSeed: LayoutSeed? = nil
+        layoutSeed: LayoutSeed? = nil,
+        showsOverflowTailCue: Bool = false
     ) {
         self.items = items
         self.maxVisibleCount = maxVisibleCount
@@ -153,10 +155,14 @@ struct ReadCalendarCoverFanStack: View {
         self.style = style
         self.presentationMode = presentationMode
         self.layoutSeed = layoutSeed
+        self.showsOverflowTailCue = showsOverflowTailCue
     }
 
     var body: some View {
         ZStack {
+            if isOverflowTailCueVisible {
+                overflowTailCue
+            }
             ForEach(Array(visibleItems.enumerated()), id: \.element.id) { index, item in
                 let transform = transform(for: index, total: visibleItems.count)
                 coverCard(for: item)
@@ -183,6 +189,13 @@ struct ReadCalendarCoverFanStack: View {
 }
 
 private extension ReadCalendarCoverFanStack {
+    var isOverflowTailCueVisible: Bool {
+        showsOverflowTailCue
+            && presentationMode == .collapsed
+            && items.count > visibleItems.count
+            && !visibleItems.isEmpty
+    }
+
     var visibleItems: [Item] {
         Array(items.prefix(cappedVisibleCount))
     }
@@ -235,6 +248,60 @@ private extension ReadCalendarCoverFanStack {
                 RoundedRectangle(cornerRadius: CornerRadius.inlaySmall, style: .continuous)
                     .stroke(Color.white.opacity(Layout.borderOpacity), lineWidth: Layout.borderWidth)
             }
+    }
+
+    var overflowTailCue: some View {
+        ZStack {
+            overflowTailCueCard(
+                scale: 0.9,
+                rotation: -11,
+                offsetX: -coverSize.width * 0.58,
+                offsetY: coverSize.height * 0.18,
+                opacity: 0.34,
+                zIndex: 88
+            )
+            overflowTailCueCard(
+                scale: 0.84,
+                rotation: -18,
+                offsetX: -coverSize.width * 0.86,
+                offsetY: coverSize.height * 0.28,
+                opacity: 0.24,
+                zIndex: 87
+            )
+        }
+        .transition(.opacity.combined(with: .scale(scale: Layout.transitionScale)))
+    }
+
+    func overflowTailCueCard(
+        scale: CGFloat,
+        rotation: Double,
+        offsetX: CGFloat,
+        offsetY: CGFloat,
+        opacity: CGFloat,
+        zIndex: Double
+    ) -> some View {
+        RoundedRectangle(cornerRadius: CornerRadius.inlaySmall, style: .continuous)
+            .fill(
+                LinearGradient(
+                    colors: [
+                        Color.white.opacity(0.26),
+                        Color.readCalendarSelectionFill.opacity(0.38)
+                    ],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+            )
+            .overlay {
+                RoundedRectangle(cornerRadius: CornerRadius.inlaySmall, style: .continuous)
+                    .stroke(Color.white.opacity(0.24), lineWidth: Layout.borderWidth)
+            }
+            .frame(width: coverSize.width, height: coverSize.height)
+            .scaleEffect(scale)
+            .rotationEffect(.degrees(rotation))
+            .offset(x: offsetX, y: offsetY)
+            .opacity(opacity)
+            .zIndex(zIndex)
+            .shadow(color: Color.black.opacity(style.shadowOpacity * 0.58), radius: style.shadowRadius * 0.82, x: style.shadowX, y: style.shadowY)
     }
 
     /// 归一化封面地址，过滤空白字符串，避免将无效 URL 传给图片加载组件。

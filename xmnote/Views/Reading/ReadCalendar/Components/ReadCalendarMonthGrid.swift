@@ -103,7 +103,7 @@ struct ReadCalendarMonthGrid: View {
         static let yearCompactGridBottomPadding: CGFloat = 0
     }
 
-    static let sourceCoverSize = CGSize(width: 14, height: 20)
+    static let sourceCoverSize = CGSize(width: 22, height: 32)
 
     let weeks: [WeekData]
     let laneLimit: Int
@@ -221,6 +221,7 @@ private struct ReadCalendarMonthGridWeekRow: View {
     private enum Layout {
         static let modeContentHPadding: CGFloat = Spacing.cozy
         static let modeContentTopPadding: CGFloat = Spacing.half
+        static let bookCoverContentTopPadding: CGFloat = 2
         static let overflowBadgeHPadding: CGFloat = 3
         static let overflowBadgeBottomPadding: CGFloat = 2
         static let overflowBadgeLeading: CGFloat = 3
@@ -271,7 +272,7 @@ private struct ReadCalendarMonthGridWeekRow: View {
         case .heatmapYearCompact:
             return 0
         case .bookCover:
-            return 40
+            return 54
         }
     }
 
@@ -404,7 +405,7 @@ private struct ReadCalendarMonthGridWeekRow: View {
 
                     Spacer(minLength: 0)
 
-                    if dayOverflowCount > 0 {
+                    if displayMode == .activityEvent, dayOverflowCount > 0 {
                         overflowBadge(dayOverflowCount)
                     }
                 }
@@ -467,10 +468,26 @@ private struct ReadCalendarMonthGridWeekRow: View {
             isAnimated: requestedCount > 0,
             style: coverStackStyle(for: day),
             presentationMode: presentationMode,
-            layoutSeed: coverStackSeed(for: day, items: coverItems, mode: presentationMode)
+            layoutSeed: coverStackSeed(for: day, items: coverItems, mode: presentationMode),
+            showsOverflowTailCue: true
         )
-        .frame(maxWidth: .infinity, alignment: .center)
-        .padding(.top, Layout.modeContentTopPadding)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+        .padding(.top, Layout.bookCoverContentTopPadding)
+        .frame(height: modeContentHeight, alignment: .center)
+        .background {
+            RoundedRectangle(cornerRadius: CornerRadius.inlayMedium, style: .continuous)
+                .fill(
+                    LinearGradient(
+                        colors: [
+                            Color.readCalendarSelectionFill.opacity(0.18),
+                            Color.readCalendarSelectionFill.opacity(0.06)
+                        ],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                )
+                .padding(.horizontal, Layout.modeContentHPadding)
+        }
         .background {
             if requestedCount > 0 {
                 GeometryReader { proxy in
@@ -490,9 +507,7 @@ private struct ReadCalendarMonthGridWeekRow: View {
         case .activityEvent:
             return payload.overflowCount
         case .bookCover:
-            let fallbackLimit = max(1, coverBusinessVisibleLimit ?? 3)
-            guard let day else { return max(0, payload.bookCount - fallbackLimit) }
-            return max(0, payload.bookCount - coverStackVisibleLimit(for: day))
+            return 0
         }
     }
 

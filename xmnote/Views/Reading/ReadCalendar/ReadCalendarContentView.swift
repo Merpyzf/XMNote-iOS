@@ -269,8 +269,8 @@ struct ReadCalendarContentView: View {
         static let coverEntryCueHoldNanoseconds: UInt64 = 220_000_000
         static let coverEntryCueCleanupNanoseconds: UInt64 = 280_000_000
         static let bookCoverGridCoordinateSpaceName = "read-calendar-book-cover-grid-space"
-        static let coverComponentVisibleLimit = 10
-        static let coverBusinessCollapsedLimit = 10
+        static let coverComponentVisibleLimit = 5
+        static let coverBusinessCollapsedLimit = 5
     }
 
     let props: Props
@@ -628,19 +628,19 @@ private extension ReadCalendarContentView {
     /// 返回书籍封面模式样式：与封面堆叠测试页保持一致的参数基线。
     func bookCoverStyle(for _: Int) -> ReadCalendarCoverFanStack.Style {
         return ReadCalendarCoverFanStack.Style(
-            secondaryRotation: -12,
-            tertiaryRotation: -24,
-            secondaryOffsetXRatio: -0.24,
-            tertiaryOffsetXRatio: -0.48,
-            secondaryOffsetYRatio: -0.08,
-            tertiaryOffsetYRatio: 0.06,
-            shadowOpacity: 0.22,
-            shadowRadius: 5,
-            shadowX: 2,
-            shadowY: 3,
+            secondaryRotation: -8,
+            tertiaryRotation: -15,
+            secondaryOffsetXRatio: -0.34,
+            tertiaryOffsetXRatio: -0.66,
+            secondaryOffsetYRatio: -0.03,
+            tertiaryOffsetYRatio: 0.14,
+            shadowOpacity: 0.28,
+            shadowRadius: 7,
+            shadowX: 0.5,
+            shadowY: 5,
             collapsedVisibleCount: Layout.coverBusinessCollapsedLimit,
-            jitterDegree: 3.2,
-            jitterOffsetRatio: 0.09,
+            jitterDegree: 1.8,
+            jitterOffsetRatio: 0.05,
             fullscreenMaxRotation: 14
         )
     }
