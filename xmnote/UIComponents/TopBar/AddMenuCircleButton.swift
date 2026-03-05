@@ -11,16 +11,19 @@ import SwiftUI
 struct AddMenuCircleButton: View {
     let onAddBook: () -> Void
     let onAddNote: () -> Void
+    let onOpenDebugCenter: (() -> Void)?
     let usesGlassStyle: Bool
 
     /// 注入新增书籍/笔记操作回调，配置顶部加号入口行为。
     init(
         onAddBook: @escaping () -> Void,
         onAddNote: @escaping () -> Void,
+        onOpenDebugCenter: (() -> Void)? = nil,
         usesGlassStyle: Bool = false
     ) {
         self.onAddBook = onAddBook
         self.onAddNote = onAddNote
+        self.onOpenDebugCenter = onOpenDebugCenter
         self.usesGlassStyle = usesGlassStyle
     }
 
@@ -28,6 +31,14 @@ struct AddMenuCircleButton: View {
         Menu {
             Button("添加书籍", systemImage: "book.badge.plus", action: onAddBook)
             Button("添加书摘", systemImage: "square.and.pencil", action: onAddNote)
+            #if DEBUG
+            if let onOpenDebugCenter {
+                Divider()
+                Button("测试中心", systemImage: "hammer") {
+                    onOpenDebugCenter()
+                }
+            }
+            #endif
         } label: {
             if usesGlassStyle {
                 Image(systemName: "plus")

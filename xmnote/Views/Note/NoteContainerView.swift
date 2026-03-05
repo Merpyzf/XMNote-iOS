@@ -36,14 +36,17 @@ struct NoteContainerView: View {
     @State private var viewModel: NoteViewModel?
     let onAddBook: () -> Void
     let onAddNote: () -> Void
+    let onOpenDebugCenter: (() -> Void)?
 
     /// 注入新增书籍/笔记回调，让顶部快捷入口把用户操作上抛到外层页面。
     init(
         onAddBook: @escaping () -> Void = {},
-        onAddNote: @escaping () -> Void = {}
+        onAddNote: @escaping () -> Void = {},
+        onOpenDebugCenter: (() -> Void)? = nil
     ) {
         self.onAddBook = onAddBook
         self.onAddNote = onAddNote
+        self.onOpenDebugCenter = onOpenDebugCenter
     }
 
     var body: some View {
@@ -52,7 +55,8 @@ struct NoteContainerView: View {
                 NoteContentView(
                     viewModel: viewModel,
                     onAddBook: onAddBook,
-                    onAddNote: onAddNote
+                    onAddNote: onAddNote,
+                    onOpenDebugCenter: onOpenDebugCenter
                 )
             } else {
                 Color.clear
@@ -71,6 +75,7 @@ private struct NoteContentView: View {
     @Bindable var viewModel: NoteViewModel
     let onAddBook: () -> Void
     let onAddNote: () -> Void
+    let onOpenDebugCenter: (() -> Void)?
     @State private var selectedSubTab: NoteSubTab = .notes
 
     var body: some View {
@@ -94,6 +99,7 @@ private struct NoteContentView: View {
                 AddMenuCircleButton(
                     onAddBook: onAddBook,
                     onAddNote: onAddNote,
+                    onOpenDebugCenter: onOpenDebugCenter,
                     usesGlassStyle: true
                 )
             }

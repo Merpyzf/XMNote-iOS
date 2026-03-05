@@ -19,14 +19,17 @@ struct PersonalView: View {
     @Environment(AppState.self) private var appState
     let onAddBook: () -> Void
     let onAddNote: () -> Void
+    let onOpenDebugCenter: (() -> Void)?
 
     /// 注入新增书籍回调，连接个人页快捷操作入口。
     init(
         onAddBook: @escaping () -> Void = {},
-        onAddNote: @escaping () -> Void = {}
+        onAddNote: @escaping () -> Void = {},
+        onOpenDebugCenter: (() -> Void)? = nil
     ) {
         self.onAddBook = onAddBook
         self.onAddNote = onAddNote
+        self.onOpenDebugCenter = onOpenDebugCenter
     }
 
     var body: some View {
@@ -62,6 +65,7 @@ struct PersonalView: View {
                 AddMenuCircleButton(
                     onAddBook: onAddBook,
                     onAddNote: onAddNote,
+                    onOpenDebugCenter: onOpenDebugCenter,
                     usesGlassStyle: true
                 )
             }

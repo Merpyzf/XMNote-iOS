@@ -72,6 +72,8 @@ final class ReadCalendarCoverStackTestViewModel {
     var maxVisibleCount: Int = Layout.defaultCollapsedVisibleCount
     var collapsedVisibleCount: Int = Layout.defaultCollapsedVisibleCount
     var isAnimated = true
+    var isAutoExpandToListEnabled = true
+    var isPanelAwareSizingEnabled = true
     var coverWidth: CGFloat = Layout.defaultCoverWidth
     var coverHeight: CGFloat = Layout.defaultCoverHeight
     var secondaryRotation: Double = -12
@@ -181,6 +183,7 @@ final class ReadCalendarCoverStackTestViewModel {
         maxVisibleCount = Layout.defaultCollapsedVisibleCount
         collapsedVisibleCount = style.collapsedVisibleCount
         isAnimated = true
+        isPanelAwareSizingEnabled = true
         secondaryRotation = style.secondaryRotation
         tertiaryRotation = style.tertiaryRotation
         secondaryOffsetXRatio = style.secondaryOffsetXRatio

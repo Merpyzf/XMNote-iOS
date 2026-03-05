@@ -22,6 +22,30 @@
 - 需要测试时：优先单元测试（ViewModel、迁移、服务异常路径）；UI 测试仅在需求明确且收益大于耗时时执行。
 - 数据访问铁律：所有本地/网络数据获取必须经 Repository，`ViewModel` 禁止直接访问 `AppDatabase`、`WebDAVClient`、`NetworkClient`。
 
+## Apple 开发文档 MCP（分级强制，性能优先）
+- MCP 标识：`apple-doc-mcp`；固定版本：`apple-doc-mcp-server@1.9.1`（项目内 wrapper 启动）。
+- 触发规则（混合）：
+  - 显式强制触发：用户明确要求“请使用 apple-doc-mcp / 使用 MCP 查询官方文档”时，必须调用。
+  - 自动触发：涉及 Apple API/框架行为判定、可用性/弃用、参数语义、平台差异、Apple 官方推荐实现路径时，必须调用。
+  - 可跳过：纯文案调整、纯样式微调、与 Apple API 无关的重构。
+- 调用路径（按最小成本优先）：
+  - 已知符号或文档路径：`choose_technology` → `get_documentation`（禁止先全量搜索）。
+  - 未知符号但技术栈明确：`choose_technology` → `search_symbols` → `get_documentation`。
+  - 技术栈不明确或跨框架：`discover_technologies` → `choose_technology` → `search_symbols` → `get_documentation`。
+- 性能约束：
+  - 默认软预算：单任务先以 2 次调用完成首轮结论（直达优先）；证据不足或高风险结论再扩展调用。
+  - 会话内锁定 technology，禁止重复 discover。
+- 输出要求：
+  - 关键结论必须给出：技术栈 + 符号/文档路径 + 该证据支持的实现决策。
+  - MCP 无结果或失败时，必须明确原因，并降级到 Apple 官方文档直链检索后再下结论。
+- 禁止事项：
+  - 未查证时凭记忆断言 Apple API 细节。
+  - 为了流程合规机械执行完整链路，造成无效慢查询。
+- 触发提示词模板（优先使用）：
+  - `请使用 apple-doc-mcp 查询 <技术栈> 的 <符号/能力>，输出文档路径和结论。`
+  - `请仅使用 apple-doc-mcp，按 choose -> search -> get 流程查 <问题>，未命中要说明原因。`
+  - `请使用 apple-doc-mcp，先锁定 <SwiftUI/UIKit>，再查 <符号> 的可用性与平台差异。`
+
 ## 术语对照机制（强制）
 - 术语总表：`docs/architecture/术语对照表.md`。
 - UI 核心组件白名单：`docs/architecture/UI核心组件白名单.md`。

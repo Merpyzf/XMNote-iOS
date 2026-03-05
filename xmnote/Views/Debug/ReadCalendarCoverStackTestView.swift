@@ -20,9 +20,8 @@ private struct ReadCalendarCoverStackTestContentView: View {
     @Bindable var viewModel: ReadCalendarCoverStackTestViewModel
     @State private var isConfigSheetPresented = false
     @State private var fullscreenPayload: ReadCalendarCoverStackFullscreenPayload?
-    @State private var sharedTransitionPhase: ReadCalendarCoverSharedTransitionPhase = .idle
+    @State private var coverStackFramesByDate: [Date: CGRect] = [:]
     @Environment(RepositoryContainer.self) private var repositories
-    @Namespace private var coverTransitionNamespace
 
     var body: some View {
         ScrollView {
@@ -67,10 +66,9 @@ private struct ReadCalendarCoverStackTestContentView: View {
             if let fullscreenPayload {
                 ReadCalendarCoverStackTestFullscreenOverlay(
                     payload: fullscreenPayload,
-                    coverTransitionNamespace: coverTransitionNamespace,
-                    isSharedTransitionActive: isSharedTransitionActive,
-                    style: viewModel.fanStyle,
                     isAnimated: viewModel.isAnimated,
+                    isAutoExpandToListEnabled: viewModel.isAutoExpandToListEnabled,
+                    isPanelAwareSizingEnabled: viewModel.isPanelAwareSizingEnabled,
                     onClose: closeFullscreenOverlay
                 )
                 .zIndex(30)
@@ -100,14 +98,6 @@ private struct ReadCalendarCoverStackTestContentView: View {
         )
     }
 
-    var isSharedTransitionActive: Bool {
-        switch sharedTransitionPhase {
-        case .opening, .closing:
-            return true
-        case .idle, .opened:
-            return false
-        }
-    }
 }
 
 private struct ClampInput: Equatable {
@@ -213,10 +203,13 @@ private extension ReadCalendarCoverStackTestContentView {
                     bookCoverStyleProvider: { _ in
                         viewModel.fanStyle
                     },
-                    coverTransitionNamespace: coverTransitionNamespace,
-                    activeCoverTransitionDate: fullscreenPayload?.date,
-                    coverTransitionIDProvider: { date in
-                        coverTransitionID(for: date)
+                    frameCoordinateSpaceName: "debug-cover-grid-space",
+                    onBookCoverStackFramesChange: { frames in
+                        let normalizedFrames = frames.reduce(into: [Date: CGRect]()) { partialResult, pair in
+                            let normalizedDate = Calendar.current.startOfDay(for: pair.key)
+                            partialResult[normalizedDate] = pair.value
+                        }
+                        coverStackFramesByDate = normalizedFrames
                     },
                     onOpenBookCoverFullscreen: { date in
                         openFullscreenOverlay(for: date)
@@ -227,12 +220,13 @@ private extension ReadCalendarCoverStackTestContentView {
                         }
                     }
                 )
+                .coordinateSpace(name: "debug-cover-grid-space")
                 .padding(.horizontal, Spacing.base)
                 .padding(.vertical, Spacing.base)
             }
             .frame(minHeight: 96)
 
-            Text("点击出现 +N 的日期可验证“全屏展开全部封面”效果。")
+            Text("点击任意有书日期可验证“全屏展开全部封面”效果。")
                 .font(.caption2)
                 .foregroundStyle(Color.textHint)
         }
@@ -250,6 +244,8 @@ private extension ReadCalendarCoverStackTestContentView {
                 infoRow("封面来源", value: viewModel.coverDataSourceTitle)
                 infoRow("组件上限", value: "\(viewModel.maxVisibleCount)")
                 infoRow("折叠上限", value: "\(viewModel.collapsedVisibleCount)")
+                infoRow("自动展开", value: viewModel.isAutoExpandToListEnabled ? "开启" : "关闭")
+                infoRow("空间反推", value: viewModel.isPanelAwareSizingEnabled ? "开启" : "关闭")
                 infoRow("最终可见", value: "\(viewModel.componentVisibleLimit)")
                 infoRow(
                     "基准尺寸",
@@ -294,41 +290,35 @@ private extension ReadCalendarCoverStackTestContentView {
         let items = viewModel.coverItems(for: date)
         guard !items.isEmpty else { return }
         let normalized = Calendar.current.startOfDay(for: date)
-        sharedTransitionPhase = .opening
-        withAnimation(
-            .spring(response: 0.46, dampingFraction: 0.86),
-            completionCriteria: .logicallyComplete
-        ) {
-            fullscreenPayload = ReadCalendarCoverStackFullscreenPayload(
+        let style = viewModel.fanStyle
+        let sourceFrame = coverStackFramesByDate[normalized]
+        let stackedVisibleCount = min(
+            max(1, items.count),
+            max(1, min(style.collapsedVisibleCount, 14))
+        )
+        fullscreenPayload = ReadCalendarCoverStackFullscreenPayload(
+            date: normalized,
+            items: items,
+            stackStyle: style,
+            stackedVisibleCount: stackedVisibleCount,
+            stackedSeed: ReadCalendarCoverFanStack.makeLayoutSeed(
                 date: normalized,
                 items: items,
-                transitionID: coverTransitionID(for: normalized)
+                mode: .collapsed
+            ),
+            transitionSession: ReadCalendarCoverTransitionSession(
+                sourceStackFrame: sourceFrame,
+                sourceCoverSize: ReadCalendarMonthGrid.sourceCoverSize
             )
-        } completion: {
-            sharedTransitionPhase = fullscreenPayload == nil ? .idle : .opened
-        }
+        )
     }
 
     func closeFullscreenOverlay() {
-        guard fullscreenPayload != nil else {
-            sharedTransitionPhase = .idle
-            return
-        }
-        sharedTransitionPhase = .closing
         withAnimation(
-            .spring(response: 0.34, dampingFraction: 0.9),
-            completionCriteria: .logicallyComplete
+            .easeOut(duration: 0.16)
         ) {
             fullscreenPayload = nil
-        } completion: {
-            sharedTransitionPhase = .idle
         }
-    }
-
-    func coverTransitionID(for date: Date) -> String {
-        let normalized = Calendar.current.startOfDay(for: date)
-        let dayStamp = Int(normalized.timeIntervalSince1970 / 86_400)
-        return "cover-fullscreen-\(dayStamp)"
     }
 }
 
@@ -434,6 +424,10 @@ private extension ReadCalendarCoverStackConfigSheet {
                 }
 
                 Toggle("启用动画", isOn: $viewModel.isAnimated)
+                    .font(.subheadline)
+                Toggle("自动展开列表", isOn: $viewModel.isAutoExpandToListEnabled)
+                    .font(.subheadline)
+                Toggle("空间反推尺寸", isOn: $viewModel.isPanelAwareSizingEnabled)
                     .font(.subheadline)
 
                 HStack(spacing: Spacing.half) {
@@ -586,16 +580,12 @@ private extension ReadCalendarCoverStackConfigSheet {
 private struct ReadCalendarCoverStackFullscreenPayload: Identifiable, Hashable {
     let date: Date
     let items: [ReadCalendarCoverFanStack.Item]
-    let transitionID: String
+    let stackStyle: ReadCalendarCoverFanStack.Style
+    let stackedVisibleCount: Int
+    let stackedSeed: ReadCalendarCoverFanStack.LayoutSeed
+    let transitionSession: ReadCalendarCoverTransitionSession
 
     var id: Date { date }
-}
-
-private enum ReadCalendarCoverSharedTransitionPhase: Hashable {
-    case idle
-    case opening
-    case opened
-    case closing
 }
 
 private enum ReadCalendarCoverLayoutPhase: Hashable {
@@ -608,144 +598,212 @@ private enum ReadCalendarCoverTransitionSource {
     case manual
 }
 
-private enum ReadCalendarCoverOverlayRevealPhase {
-    case sourceAligned
-    case settled
+private enum ReadCalendarCoverPhaseTransitionDirection {
+    case toGrid
 }
 
 private struct ReadCalendarCoverStackTestFullscreenOverlay: View {
     private enum Layout {
         static let backdropMaxOpacity: CGFloat = 0.24
-        static let backdropMaterialOpacity: CGFloat = 0.34
+        static let backdropMaterialOpacity: CGFloat = 0.28
         static let closeButtonSize: CGFloat = 24
-        static let panelCornerRadius: CGFloat = CornerRadius.containerLarge
+        static let closeButtonOpacity: CGFloat = 0.74
         static let dismissDragThreshold: CGFloat = 108
-        static let autoGridDelayNanoseconds: UInt64 = 920_000_000
+        static let autoGridDelayNanoseconds: UInt64 = 900_000_000
         static let toggleButtonHorizontalPadding: CGFloat = 16
         static let toggleButtonVerticalPadding: CGFloat = 10
         static let toggleButtonBottomInsetExtra: CGFloat = 6
-        static let switchAnimationResponse: CGFloat = 0.42
-        static let switchAnimationDamping: CGFloat = 0.86
-        static let revealDelayNanoseconds: UInt64 = 110_000_000
-        static let revealDuration: Double = 0.24
-        static let panelShadowBaseOpacity: CGFloat = 0.14
-        static let panelShadowExtraOpacity: CGFloat = 0.12
+        static let toggleButtonBackgroundOpacity: CGFloat = 0.26
+        static let toggleButtonStrokeOpacity: CGFloat = 0.18
+        static let toggleButtonShadowOpacity: CGFloat = 0.14
+        static let toggleButtonShadowRadius: CGFloat = 14
+        static let switchToGridResponse: CGFloat = 0.36
+        static let switchToGridDamping: CGFloat = 0.84
+        static let switchToStackResponse: CGFloat = 0.30
+        static let switchToStackDamping: CGFloat = 0.86
+        static let panelShadowBaseOpacity: CGFloat = 0.028
+        static let panelShadowExtraOpacity: CGFloat = 0.022
         static let panelShadowBaseRadius: CGFloat = 10
-        static let panelShadowExtraRadius: CGFloat = 8
+        static let panelShadowExtraRadius: CGFloat = 4
+        static let panelShadowYOffset: CGFloat = 3
+        static let hintShadowOpacity: CGFloat = 0.45
+        static let hintShadowRadius: CGFloat = 2
+        static let hintShadowYOffset: CGFloat = 1
         static let previewLimit = 12
+        static let closeReturnToStackDelayNanoseconds: UInt64 = 180_000_000
+        static let switchSettleNanoseconds: UInt64 = 430_000_000
     }
 
     let payload: ReadCalendarCoverStackFullscreenPayload
-    let coverTransitionNamespace: Namespace.ID
-    let isSharedTransitionActive: Bool
-    let style: ReadCalendarCoverFanStack.Style
     let isAnimated: Bool
+    let isAutoExpandToListEnabled: Bool
+    let isPanelAwareSizingEnabled: Bool
     let onClose: () -> Void
 
+    @Environment(\.accessibilityReduceMotion) private var accessibilityReduceMotion
     @State private var dragOffsetY: CGFloat = 0
     @State private var layoutPhase: ReadCalendarCoverLayoutPhase = .stacked
     @State private var phaseToken = 0
     @State private var hasAutoTransitioned = false
     @State private var autoGridTask: Task<Void, Never>?
-    @State private var revealPhase: ReadCalendarCoverOverlayRevealPhase = .sourceAligned
-    @State private var revealTask: Task<Void, Never>?
+    @State private var transitionPhase: ReadCalendarCoverTransitionPhase = .idle
+    @State private var transitionProgress: CGFloat = 0
+    @State private var transitionTask: Task<Void, Never>?
+    @State private var closeTask: Task<Void, Never>?
+    @State private var isClosing = false
+    @State private var phaseTransitionDirection: ReadCalendarCoverPhaseTransitionDirection?
+    @State private var phaseTransitionTask: Task<Void, Never>?
+    @State private var isDeferringGridConstraint = false
+    @State private var stageFrameInGlobal: CGRect = .zero
 
-    var revealProgress: CGFloat {
-        revealPhase == .settled ? 1 : 0
+    var motionSpec: ReadCalendarCoverTransitionSpec {
+        accessibilityReduceMotion ? .reduceMotion : .immersiveElegant
+    }
+
+    var transitionChannels: ReadCalendarCoverTransitionChannels {
+        ReadCalendarCoverTransitionRuntime.channels(
+            phase: transitionPhase,
+            progress: transitionProgress,
+            spec: motionSpec
+        )
+    }
+
+    var stageScale: CGFloat {
+        ReadCalendarCoverTransitionRuntime.panelScale(
+            phase: transitionPhase,
+            progress: transitionProgress,
+            spec: motionSpec
+        )
+    }
+
+    var stageOffsetY: CGFloat {
+        ReadCalendarCoverTransitionRuntime.panelOffsetY(
+            phase: transitionPhase,
+            progress: transitionProgress,
+            spec: motionSpec
+        ) + dragOffsetY
     }
 
     var shouldEnableGridPhase: Bool {
-        payload.items.count > Layout.previewLimit
+        payload.items.count > 1
+    }
+
+    var shouldAutoExpandToGridPhase: Bool {
+        shouldEnableGridPhase && isAutoExpandToListEnabled
+    }
+
+    var shouldConstrainStagePanel: Bool {
+        layoutPhase == .grid
+        && !isDeferringGridConstraint
+        && phaseTransitionDirection != .toGrid
+    }
+
+    var sourceCoverAspectRatio: CGFloat {
+        let sourceSize = payload.transitionSession.sourceCoverSize
+        guard sourceSize.width > 0, sourceSize.height > 0 else {
+            return 1.46
+        }
+        return sourceSize.height / sourceSize.width
     }
 
     var body: some View {
         GeometryReader { proxy in
-            let coverSize = resolvedCoverSize(in: proxy.size)
             let panelHeight = resolvedPanelHeight(
                 in: proxy.size,
-                coverSize: coverSize,
                 canScrollGrid: shouldEnableGridPhase
             )
             let panelInnerSize = CGSize(
                 width: max(0, proxy.size.width - Spacing.screenEdge * 2 - Spacing.double * 2),
                 height: max(0, panelHeight - Spacing.base * 2)
             )
+            let coverSize = resolvedCoverSize(in: panelInnerSize)
             let toggleBottomInset = max(
                 Spacing.base,
                 proxy.safeAreaInsets.bottom + Layout.toggleButtonBottomInsetExtra
             )
-            let seed = ReadCalendarCoverFanStack.makeLayoutSeed(
-                date: payload.date,
-                items: payload.items,
-                mode: .fullscreen
-            )
-            let panelShape = RoundedRectangle(
-                cornerRadius: Layout.panelCornerRadius,
-                style: .continuous
-            )
 
             ZStack(alignment: .top) {
                 ZStack {
-                    Color.black.opacity(Layout.backdropMaxOpacity * revealProgress)
+                    Color.black.opacity(Layout.backdropMaxOpacity * transitionChannels.backdropOpacity)
                     Rectangle()
                         .fill(.ultraThinMaterial)
-                        .opacity(Layout.backdropMaterialOpacity * revealProgress)
+                        .opacity(Layout.backdropMaterialOpacity * transitionChannels.backdropOpacity)
                 }
                 .ignoresSafeArea()
                 .onTapGesture {
                     dismiss()
                 }
 
+                heroGhostLayer(
+                    coverSize: coverSize,
+                    overlayGlobalFrame: proxy.frame(in: .global)
+                )
+                .opacity(Double(transitionChannels.ghostOpacity))
+
                 VStack(spacing: Spacing.base) {
                     header
                         .padding(.horizontal, Spacing.screenEdge)
                         .padding(.top, Spacing.double)
-                        .opacity(Double(revealProgress))
+                        .opacity(Double(transitionChannels.chromeOpacity))
 
                     Spacer(minLength: 0)
 
-                    ZStack {
-                        panelShape
-                            .fill(Color.contentBackground.opacity(0.78))
-
-                        fullscreenDeckStage(
-                            coverSize: coverSize,
-                            panelInnerSize: panelInnerSize,
-                            seed: seed
-                        )
-                    }
-                    .clipShape(panelShape)
-                    .overlay {
-                        panelShape
-                            .stroke(Color.white.opacity(0.22 + 0.1 * revealProgress), lineWidth: CardStyle.borderWidth)
-                    }
+                    stageDeckPanel(
+                        coverSize: coverSize,
+                        panelInnerSize: panelInnerSize
+                    )
                     .frame(height: panelHeight)
                     .padding(.horizontal, Spacing.screenEdge)
+                    .background {
+                        GeometryReader { stageProxy in
+                            let frame = stageProxy.frame(in: .global)
+                            Color.clear
+                                .onAppear {
+                                    stageFrameInGlobal = frame
+                                }
+                                .onChange(of: frame) { _, newValue in
+                                    stageFrameInGlobal = newValue
+                                }
+                        }
+                    }
                     .shadow(
                         color: Color.black.opacity(
-                            Layout.panelShadowBaseOpacity
-                            + Layout.panelShadowExtraOpacity * revealProgress
+                            shouldConstrainStagePanel
+                            ? (
+                                Layout.panelShadowBaseOpacity
+                                + Layout.panelShadowExtraOpacity * transitionChannels.deckOpacity
+                            )
+                            : 0
                         ),
-                        radius: Layout.panelShadowBaseRadius + Layout.panelShadowExtraRadius * revealProgress,
+                        radius: shouldConstrainStagePanel
+                        ? (Layout.panelShadowBaseRadius + Layout.panelShadowExtraRadius * transitionChannels.deckOpacity)
+                        : 0,
                         x: 0,
-                        y: 8
+                        y: Layout.panelShadowYOffset
                     )
-                    .opacity(Double(0.72 + 0.28 * revealProgress))
+                    .opacity(Double(transitionChannels.deckOpacity))
 
                     Text(phaseHintText)
                         .font(.footnote.weight(.semibold))
                         .foregroundStyle(Color.white.opacity(0.9))
-                        .opacity(Double(revealProgress))
+                        .opacity(Double(transitionChannels.chromeOpacity))
+                        .shadow(
+                            color: Color.black.opacity(Layout.hintShadowOpacity),
+                            radius: Layout.hintShadowRadius,
+                            x: 0,
+                            y: Layout.hintShadowYOffset
+                        )
 
                     if shouldEnableGridPhase {
                         toggleButton
                             .padding(.bottom, toggleBottomInset)
-                            .opacity(Double(revealProgress))
+                            .opacity(Double(transitionChannels.chromeOpacity))
                     } else {
                         Spacer(minLength: toggleBottomInset)
                     }
                 }
-                .offset(y: dragOffsetY)
+                .offset(y: stageOffsetY)
+                .scaleEffect(stageScale)
             }
             .contentShape(Rectangle())
             .gesture(dismissDragGesture)
@@ -754,7 +812,10 @@ private struct ReadCalendarCoverStackTestFullscreenOverlay: View {
             }
             .onDisappear {
                 cancelAutoGridTask()
-                cancelRevealAnimation()
+                cancelCloseTask()
+                cancelPhaseTransitionTask()
+                cancelTransitionTask()
+                isClosing = false
             }
         }
     }
@@ -765,6 +826,9 @@ private struct ReadCalendarCoverStackTestFullscreenOverlay: View {
         }
         switch layoutPhase {
         case .stacked:
+            if !isAutoExpandToListEnabled {
+                return "当日共 \(payload.items.count) 本，可手动切换列表"
+            }
             if hasAutoTransitioned {
                 return "当日共 \(payload.items.count) 本，已返回堆叠，可继续切换列表"
             }
@@ -788,12 +852,15 @@ private struct ReadCalendarCoverStackTestFullscreenOverlay: View {
             .foregroundStyle(Color.white.opacity(0.95))
             .padding(.horizontal, Layout.toggleButtonHorizontalPadding)
             .padding(.vertical, Layout.toggleButtonVerticalPadding)
-            .background(.ultraThinMaterial, in: Capsule())
+            .background(
+                Color.black.opacity(Layout.toggleButtonBackgroundOpacity),
+                in: Capsule()
+            )
             .overlay {
                 Capsule()
-                    .stroke(Color.white.opacity(0.28), lineWidth: CardStyle.borderWidth)
+                    .stroke(Color.white.opacity(Layout.toggleButtonStrokeOpacity), lineWidth: CardStyle.borderWidth)
             }
-            .shadow(color: Color.black.opacity(0.2), radius: 10, x: 0, y: 4)
+            .shadow(color: Color.black.opacity(Layout.toggleButtonShadowOpacity), radius: Layout.toggleButtonShadowRadius, x: 0, y: 4)
         }
         .buttonStyle(.plain)
         .accessibilityLabel(isStacked ? "切换为纵向书籍列表" : "切换为封面堆叠")
@@ -812,9 +879,70 @@ private struct ReadCalendarCoverStackTestFullscreenOverlay: View {
             } label: {
                 Image(systemName: "xmark.circle.fill")
                     .font(.system(size: Layout.closeButtonSize, weight: .semibold))
-                    .foregroundStyle(Color.white.opacity(0.86))
+                    .foregroundStyle(Color.white.opacity(Layout.closeButtonOpacity))
             }
             .accessibilityLabel("关闭封面展开测试浮层")
+        }
+    }
+
+    @ViewBuilder
+    func stageDeckPanel(
+        coverSize: CGSize,
+        panelInnerSize: CGSize
+    ) -> some View {
+        fullscreenDeckStage(
+            coverSize: coverSize,
+            panelInnerSize: panelInnerSize
+        )
+    }
+
+    @ViewBuilder
+    func heroGhostLayer(
+        coverSize: CGSize,
+        overlayGlobalFrame: CGRect
+    ) -> some View {
+        let sourceSize = payload.transitionSession.sourceCoverSize
+        let hasValidSize = sourceSize.width > 0 && sourceSize.height > 0
+        let hasValidStageFrame = stageFrameInGlobal.width > 0 && stageFrameInGlobal.height > 0
+        if hasValidSize,
+           hasValidStageFrame,
+           let sourceFrame = payload.transitionSession.sourceStackFrame,
+           sourceFrame.width > 0,
+           sourceFrame.height > 0 {
+            let travel = ReadCalendarCoverTransitionRuntime.ghostTravelProgress(
+                phase: transitionPhase,
+                progress: transitionProgress
+            )
+            let sourceCenterGlobal = CGPoint(x: sourceFrame.midX, y: sourceFrame.midY)
+            let targetCenterGlobal = CGPoint(x: stageFrameInGlobal.midX, y: stageFrameInGlobal.midY)
+            let currentCenterGlobal = CGPoint(
+                x: lerp(sourceCenterGlobal.x, targetCenterGlobal.x, travel),
+                y: lerp(sourceCenterGlobal.y, targetCenterGlobal.y, travel)
+            )
+            let localCenter = CGPoint(
+                x: currentCenterGlobal.x - overlayGlobalFrame.minX,
+                y: currentCenterGlobal.y - overlayGlobalFrame.minY
+            )
+            let targetScale = max(1, coverSize.width / max(1, sourceSize.width))
+            let scale = lerp(1, targetScale, travel)
+
+            ReadCalendarCoverFanStack(
+                items: payload.items,
+                maxVisibleCount: payload.stackedVisibleCount,
+                coverSize: sourceSize,
+                isAnimated: false,
+                style: payload.stackStyle,
+                presentationMode: .collapsed,
+                layoutSeed: payload.stackedSeed
+            )
+            .frame(
+                width: sourceSize.width * 4.2,
+                height: sourceSize.height * 4.2,
+                alignment: .center
+            )
+            .scaleEffect(scale)
+            .position(localCenter)
+            .allowsHitTesting(false)
         }
     }
 
@@ -835,62 +963,68 @@ private struct ReadCalendarCoverStackTestFullscreenOverlay: View {
             }
     }
 
-    func resolvedCoverSize(in size: CGSize) -> CGSize {
-        let width = max(54, min(92, size.width / 6))
-        return CGSize(width: width, height: width * 1.46)
+    func resolvedCoverSize(in panelInnerSize: CGSize) -> CGSize {
+        let aspect = min(1.55, max(1.35, sourceCoverAspectRatio))
+        guard isPanelAwareSizingEnabled else {
+            let width = max(54, min(92, panelInnerSize.width / 5.1))
+            return CGSize(width: width, height: width * aspect)
+        }
+        return ReadCalendarCoverFullscreenDeckStage.resolveAdaptiveCoverSize(
+            containerSize: panelInnerSize,
+            visibleCount: payload.stackedVisibleCount,
+            sourceAspectRatio: aspect
+        )
     }
 
-    func resolvedPanelHeight(in size: CGSize, coverSize: CGSize, canScrollGrid: Bool) -> CGFloat {
-        let byCover = coverSize.height * (canScrollGrid ? 5.25 : 4.8)
-        let byScreen = size.height * (canScrollGrid ? 0.72 : 0.6)
-        return min(max(340, byCover), max(380, byScreen))
+    func resolvedPanelHeight(in size: CGSize, canScrollGrid: Bool) -> CGFloat {
+        let lowerBound: CGFloat = canScrollGrid ? 360 : 340
+        let upperBound = max(lowerBound, size.height * (canScrollGrid ? 0.82 : 0.78))
+        let preferred = size.height * (canScrollGrid ? 0.74 : 0.66)
+        return min(max(preferred, lowerBound), upperBound)
     }
 
     @ViewBuilder
     func fullscreenDeckStage(
         coverSize: CGSize,
-        panelInnerSize: CGSize,
-        seed: ReadCalendarCoverFanStack.LayoutSeed
+        panelInnerSize: CGSize
     ) -> some View {
         let deckContainer = ReadCalendarCoverFullscreenDeckStage(
             items: payload.items,
-            style: style,
+            style: payload.stackStyle,
             coverSize: coverSize,
             containerSize: panelInnerSize,
             phase: layoutPhase == .stacked ? .stacked : .grid,
             phaseToken: phaseToken,
             isAnimated: isAnimated,
-            layoutSeed: seed,
-            previewLimit: Layout.previewLimit
+            layoutSeed: payload.stackedSeed,
+            stackedVisibleCount: payload.stackedVisibleCount,
+            previewLimit: Layout.previewLimit,
+            shouldClipGrid: shouldConstrainStagePanel,
+            matchedTransitionStyle: .staggered,
+            stackedLayoutAlgorithm: .editorialDeskScatter,
+            coverSizingMode: isPanelAwareSizingEnabled ? .panelAwareBalanced : .fixed,
+            sourceCoverAspectRatio: sourceCoverAspectRatio,
+            gridColumnLayoutMode: .fixed(count: 3, degradeForSmallItemCount: true)
         )
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .padding(.horizontal, Spacing.double)
         .padding(.vertical, Spacing.base)
-        if isSharedTransitionActive {
-            deckContainer
-                .matchedGeometryEffect(
-                    id: payload.transitionID,
-                    in: coverTransitionNamespace,
-                    properties: .frame,
-                    anchor: .center,
-                    isSource: false
-                )
-        } else {
-            deckContainer
-        }
+        deckContainer
     }
 
     func handleAppear() {
+        // 首帧保持 stacked 静止态，phaseToken 仅在 stacked<->grid 切换时递增，避免无相位变化回弹。
         layoutPhase = .stacked
-        phaseToken += 1
         hasAutoTransitioned = false
-        startRevealAnimation()
-        scheduleAutoGridTask()
+        isClosing = false
+        cancelPhaseTransitionTask()
+        startEnterTransition()
     }
 
     func scheduleAutoGridTask() {
         cancelAutoGridTask()
-        guard shouldEnableGridPhase else { return }
+        guard transitionPhase == .steady else { return }
+        guard shouldAutoExpandToGridPhase else { return }
         autoGridTask = Task {
             do {
                 try await Task.sleep(nanoseconds: Layout.autoGridDelayNanoseconds)
@@ -899,6 +1033,7 @@ private struct ReadCalendarCoverStackTestFullscreenOverlay: View {
             }
             guard !Task.isCancelled else { return }
             await MainActor.run {
+                guard !isClosing else { return }
                 guard !hasAutoTransitioned else { return }
                 switchPhase(to: .grid, source: .automatic)
             }
@@ -908,6 +1043,11 @@ private struct ReadCalendarCoverStackTestFullscreenOverlay: View {
     func cancelAutoGridTask() {
         autoGridTask?.cancel()
         autoGridTask = nil
+    }
+
+    func cancelCloseTask() {
+        closeTask?.cancel()
+        closeTask = nil
     }
 
     func toggleLayoutPhase() {
@@ -921,20 +1061,61 @@ private struct ReadCalendarCoverStackTestFullscreenOverlay: View {
             cancelAutoGridTask()
         }
         hasAutoTransitioned = true
+        cancelPhaseTransitionTask(resetState: false)
+        if target == .grid, isAnimated {
+            phaseTransitionDirection = .toGrid
+            isDeferringGridConstraint = true
+        } else {
+            phaseTransitionDirection = nil
+            isDeferringGridConstraint = false
+        }
         guard isAnimated else {
             layoutPhase = target
             phaseToken += 1
             return
         }
+        let animationResponse = target == .grid
+            ? Layout.switchToGridResponse
+            : Layout.switchToStackResponse
+        let animationDamping = target == .grid
+            ? Layout.switchToGridDamping
+            : Layout.switchToStackDamping
         withAnimation(
             .spring(
-                response: Layout.switchAnimationResponse,
-                dampingFraction: Layout.switchAnimationDamping
+                response: animationResponse,
+                dampingFraction: animationDamping
             )
         ) {
             layoutPhase = target
             phaseToken += 1
         }
+        if target == .grid {
+            schedulePhaseTransitionSettle()
+        }
+    }
+
+    func schedulePhaseTransitionSettle() {
+        phaseTransitionTask = Task {
+            do {
+                try await Task.sleep(nanoseconds: Layout.switchSettleNanoseconds)
+            } catch {
+                return
+            }
+            guard !Task.isCancelled else { return }
+            await MainActor.run {
+                phaseTransitionDirection = nil
+                isDeferringGridConstraint = false
+                phaseTransitionTask = nil
+            }
+        }
+    }
+
+    func cancelPhaseTransitionTask(resetState: Bool = true) {
+        phaseTransitionTask?.cancel()
+        phaseTransitionTask = nil
+        guard resetState else { return }
+        phaseTransitionDirection = nil
+        isDeferringGridConstraint = false
     }
 
     func formattedDate(_ date: Date) -> String {
@@ -944,35 +1125,97 @@ private struct ReadCalendarCoverStackTestFullscreenOverlay: View {
     }
 
     func dismiss() {
+        guard !isClosing else { return }
         cancelAutoGridTask()
-        cancelRevealAnimation()
+        cancelTransitionTask()
+        cancelCloseTask()
+        cancelPhaseTransitionTask()
         withAnimation(.smooth(duration: 0.2)) {
             dragOffsetY = 0
         }
-        onClose()
+        if shouldEnableGridPhase, layoutPhase == .grid {
+            isClosing = true
+            switchPhase(to: .stacked, source: .manual)
+            closeTask = Task {
+                do {
+                    try await Task.sleep(nanoseconds: Layout.closeReturnToStackDelayNanoseconds)
+                } catch {
+                    return
+                }
+                guard !Task.isCancelled else { return }
+                await MainActor.run {
+                    runDismissTransition()
+                }
+            }
+            return
+        }
+        isClosing = true
+        runDismissTransition()
     }
 
-    func startRevealAnimation() {
-        cancelRevealAnimation()
-        revealPhase = .sourceAligned
-        revealTask = Task {
+    func startEnterTransition() {
+        cancelTransitionTask()
+        transitionPhase = .entering
+        transitionProgress = 0
+        guard isAnimated else {
+            transitionProgress = 1
+            transitionPhase = .steady
+            scheduleAutoGridTask()
+            return
+        }
+        withAnimation(.linear(duration: motionSpec.openDuration)) {
+            transitionProgress = 1
+        }
+        transitionTask = Task {
             do {
-                try await Task.sleep(nanoseconds: Layout.revealDelayNanoseconds)
+                try await Task.sleep(nanoseconds: nanoseconds(from: motionSpec.openDuration))
             } catch {
                 return
             }
             guard !Task.isCancelled else { return }
             await MainActor.run {
-                withAnimation(.easeOut(duration: Layout.revealDuration)) {
-                    revealPhase = .settled
-                }
+                transitionPhase = .steady
+                transitionTask = nil
+                scheduleAutoGridTask()
             }
         }
     }
 
-    func cancelRevealAnimation() {
-        revealTask?.cancel()
-        revealTask = nil
+    func runDismissTransition() {
+        transitionPhase = .exiting
+        guard isAnimated else {
+            isClosing = false
+            onClose()
+            return
+        }
+        withAnimation(.linear(duration: motionSpec.closeDuration)) {
+            transitionProgress = 0
+        }
+        closeTask = Task {
+            do {
+                try await Task.sleep(nanoseconds: nanoseconds(from: motionSpec.closeDuration))
+            } catch {
+                return
+            }
+            guard !Task.isCancelled else { return }
+            await MainActor.run {
+                isClosing = false
+                onClose()
+            }
+        }
+    }
+
+    func cancelTransitionTask() {
+        transitionTask?.cancel()
+        transitionTask = nil
+    }
+
+    func nanoseconds(from seconds: Double) -> UInt64 {
+        UInt64(max(0, seconds) * 1_000_000_000)
+    }
+
+    func lerp(_ min: CGFloat, _ max: CGFloat, _ progress: CGFloat) -> CGFloat {
+        min + (max - min) * progress
     }
 }
 

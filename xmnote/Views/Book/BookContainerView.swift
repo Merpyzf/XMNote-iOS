@@ -36,14 +36,17 @@ struct BookContainerView: View {
     @State private var viewModel: BookViewModel?
     let onAddBook: () -> Void
     let onAddNote: () -> Void
+    let onOpenDebugCenter: (() -> Void)?
 
     /// 注入新增书籍回调，连接书籍页与外层操作入口。
     init(
         onAddBook: @escaping () -> Void = {},
-        onAddNote: @escaping () -> Void = {}
+        onAddNote: @escaping () -> Void = {},
+        onOpenDebugCenter: (() -> Void)? = nil
     ) {
         self.onAddBook = onAddBook
         self.onAddNote = onAddNote
+        self.onOpenDebugCenter = onOpenDebugCenter
     }
 
     var body: some View {
@@ -52,7 +55,8 @@ struct BookContainerView: View {
                 BookContentView(
                     viewModel: viewModel,
                     onAddBook: onAddBook,
-                    onAddNote: onAddNote
+                    onAddNote: onAddNote,
+                    onOpenDebugCenter: onOpenDebugCenter
                 )
             } else {
                 Color.clear
@@ -71,6 +75,7 @@ private struct BookContentView: View {
     @Bindable var viewModel: BookViewModel
     let onAddBook: () -> Void
     let onAddNote: () -> Void
+    let onOpenDebugCenter: (() -> Void)?
     @State private var selectedSubTab: BookSubTab = .books
 
     var body: some View {
@@ -93,6 +98,7 @@ private struct BookContentView: View {
                 AddMenuCircleButton(
                     onAddBook: onAddBook,
                     onAddNote: onAddNote,
+                    onOpenDebugCenter: onOpenDebugCenter,
                     usesGlassStyle: true
                 )
             }

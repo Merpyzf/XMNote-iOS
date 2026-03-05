@@ -8,7 +8,7 @@
 import SwiftUI
 
 /**
- * [INPUT]: 依赖 Reading/Book/Note/Personal 各模块容器视图与对应路由枚举
+ * [INPUT]: 依赖 Reading/Book/Note/Personal 各模块容器视图与对应路由枚举，依赖 DebugRoute 提供调试页面跳转
  * [OUTPUT]: 对外提供 MainTabView（四大主 Tab 的 NavigationStack 组织与目的地分发）
  * [POS]: 应用根导航入口，负责跨模块路由承接（含在读页热力图点击进入阅读日历）
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -35,11 +35,16 @@ struct MainTabView: View {
                     ReadingContainerView(
                         onAddBook: { append(BookRoute.add, to: .reading) },
                         onAddNote: { append(NoteRoute.create(bookId: nil), to: .reading) },
+                        onOpenDebugCenter: { append(DebugRoute.debugCenter, to: .reading) },
                         onOpenReadCalendar: { date in
                             readingPath.append(ReadingRoute.readCalendar(date: date))
                         }
                     )
                         .toolbar(.hidden, for: .navigationBar)
+                        .navigationDestination(for: DebugRoute.self) { route in
+                            debugDestination(for: route)
+                                .toolbar(.hidden, for: .tabBar)
+                        }
                         .navigationDestination(for: ReadingRoute.self) { route in
                             readingDestination(for: route)
                                 .toolbar(.hidden, for: .tabBar)
@@ -59,8 +64,13 @@ struct MainTabView: View {
                 NavigationStack(path: $booksPath) {
                     BookContainerView(
                         onAddBook: { append(BookRoute.add, to: .books) },
-                        onAddNote: { append(NoteRoute.create(bookId: nil), to: .books) }
+                        onAddNote: { append(NoteRoute.create(bookId: nil), to: .books) },
+                        onOpenDebugCenter: { append(DebugRoute.debugCenter, to: .books) }
                     )
+                        .navigationDestination(for: DebugRoute.self) { route in
+                            debugDestination(for: route)
+                                .toolbar(.hidden, for: .tabBar)
+                        }
                         .navigationDestination(for: BookRoute.self) { route in
                             bookDestination(for: route)
                                 .toolbar(.hidden, for: .tabBar)
@@ -76,8 +86,13 @@ struct MainTabView: View {
                 NavigationStack(path: $notesPath) {
                     NoteContainerView(
                         onAddBook: { append(BookRoute.add, to: .notes) },
-                        onAddNote: { append(NoteRoute.create(bookId: nil), to: .notes) }
+                        onAddNote: { append(NoteRoute.create(bookId: nil), to: .notes) },
+                        onOpenDebugCenter: { append(DebugRoute.debugCenter, to: .notes) }
                     )
+                        .navigationDestination(for: DebugRoute.self) { route in
+                            debugDestination(for: route)
+                                .toolbar(.hidden, for: .tabBar)
+                        }
                         .navigationDestination(for: BookRoute.self) { route in
                             bookDestination(for: route)
                                 .toolbar(.hidden, for: .tabBar)
@@ -93,8 +108,13 @@ struct MainTabView: View {
                 NavigationStack(path: $profilePath) {
                     PersonalView(
                         onAddBook: { append(BookRoute.add, to: .profile) },
-                        onAddNote: { append(NoteRoute.create(bookId: nil), to: .profile) }
+                        onAddNote: { append(NoteRoute.create(bookId: nil), to: .profile) },
+                        onOpenDebugCenter: { append(DebugRoute.debugCenter, to: .profile) }
                     )
+                        .navigationDestination(for: DebugRoute.self) { route in
+                            debugDestination(for: route)
+                                .toolbar(.hidden, for: .tabBar)
+                        }
                         .navigationDestination(for: BookRoute.self) { route in
                             bookDestination(for: route)
                                 .toolbar(.hidden, for: .tabBar)
@@ -115,8 +135,13 @@ struct MainTabView: View {
                     SearchView(
                         query: $searchQuery,
                         onAddBook: { append(BookRoute.add, to: .search) },
-                        onAddNote: { append(NoteRoute.create(bookId: nil), to: .search) }
+                        onAddNote: { append(NoteRoute.create(bookId: nil), to: .search) },
+                        onOpenDebugCenter: { append(DebugRoute.debugCenter, to: .search) }
                     )
+                        .navigationDestination(for: DebugRoute.self) { route in
+                            debugDestination(for: route)
+                                .toolbar(.hidden, for: .tabBar)
+                        }
                         .navigationDestination(for: BookRoute.self) { route in
                             bookDestination(for: route)
                                 .toolbar(.hidden, for: .tabBar)
@@ -217,6 +242,20 @@ struct MainTabView: View {
         }
     }
 
+    // MARK: - Debug Destinations
+
+    @ViewBuilder
+    private func debugDestination(for route: DebugRoute) -> some View {
+        switch route {
+        case .debugCenter:
+            #if DEBUG
+            DebugCenterView()
+            #else
+            Text("测试入口仅在 Debug 构建可用")
+            #endif
+        }
+    }
+
     private func append(_ route: BookRoute, to tab: AppTab) {
         switch tab {
         case .reading:
@@ -246,22 +285,40 @@ struct MainTabView: View {
             searchPath.append(route)
         }
     }
+
+    private func append(_ route: DebugRoute, to tab: AppTab) {
+        switch tab {
+        case .reading:
+            readingPath.append(route)
+        case .books:
+            booksPath.append(route)
+        case .notes:
+            notesPath.append(route)
+        case .profile:
+            profilePath.append(route)
+        case .search:
+            searchPath.append(route)
+        }
+    }
 }
 
 private struct SearchView: View {
     @Binding var query: String
     let onAddBook: () -> Void
     let onAddNote: () -> Void
+    let onOpenDebugCenter: (() -> Void)?
 
     /// 注入搜索与新增回调，组装主 Tab 页面上下文。
     init(
         query: Binding<String>,
         onAddBook: @escaping () -> Void = {},
-        onAddNote: @escaping () -> Void = {}
+        onAddNote: @escaping () -> Void = {},
+        onOpenDebugCenter: (() -> Void)? = nil
     ) {
         self._query = query
         self.onAddBook = onAddBook
         self.onAddNote = onAddNote
+        self.onOpenDebugCenter = onOpenDebugCenter
     }
 
     var body: some View {
@@ -272,7 +329,11 @@ private struct SearchView: View {
             VStack(spacing: Spacing.base) {
                 HStack {
                     Spacer(minLength: 0)
-                    AddMenuCircleButton(onAddBook: onAddBook, onAddNote: onAddNote)
+                    AddMenuCircleButton(
+                        onAddBook: onAddBook,
+                        onAddNote: onAddNote,
+                        onOpenDebugCenter: onOpenDebugCenter
+                    )
                 }
                 .padding(.horizontal, Spacing.screenEdge)
                 .padding(.top, Spacing.half)

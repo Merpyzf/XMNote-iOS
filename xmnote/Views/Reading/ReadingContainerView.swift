@@ -28,16 +28,19 @@ struct ReadingContainerView: View {
     @State private var selectedSubTab: ReadingSubTab = .reading
     let onAddBook: () -> Void
     let onAddNote: () -> Void
+    let onOpenDebugCenter: (() -> Void)?
     let onOpenReadCalendar: (Date) -> Void
 
     /// 注入新增书籍回调，连接阅读页顶栏操作入口。
     init(
         onAddBook: @escaping () -> Void = {},
         onAddNote: @escaping () -> Void = {},
+        onOpenDebugCenter: (() -> Void)? = nil,
         onOpenReadCalendar: @escaping (Date) -> Void = { _ in }
     ) {
         self.onAddBook = onAddBook
         self.onAddNote = onAddNote
+        self.onOpenDebugCenter = onOpenDebugCenter
         self.onOpenReadCalendar = onOpenReadCalendar
     }
 
@@ -67,6 +70,7 @@ struct ReadingContainerView: View {
                 AddMenuCircleButton(
                     onAddBook: onAddBook,
                     onAddNote: onAddNote,
+                    onOpenDebugCenter: onOpenDebugCenter,
                     usesGlassStyle: true
                 )
             }
