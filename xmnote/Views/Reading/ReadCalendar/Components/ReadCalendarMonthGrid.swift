@@ -113,6 +113,8 @@ struct ReadCalendarMonthGrid: View {
     let dayPayloadProvider: (Date) -> DayPayload
     let coverItemsProvider: ((Date) -> [ReadCalendarCoverFanStack.Item])?
     let bookCoverStyleProvider: ((Date) -> ReadCalendarCoverFanStack.Style)?
+    let coverComponentVisibleLimit: Int?
+    let coverBusinessVisibleLimit: Int?
     let coverEntryCueDate: Date?
     let coverEntryCueProgress: CGFloat
     let frameCoordinateSpaceName: String?
@@ -130,6 +132,8 @@ struct ReadCalendarMonthGrid: View {
         dayPayloadProvider: @escaping (Date) -> DayPayload,
         coverItemsProvider: ((Date) -> [ReadCalendarCoverFanStack.Item])? = nil,
         bookCoverStyleProvider: ((Date) -> ReadCalendarCoverFanStack.Style)? = nil,
+        coverComponentVisibleLimit: Int? = nil,
+        coverBusinessVisibleLimit: Int? = nil,
         coverEntryCueDate: Date? = nil,
         coverEntryCueProgress: CGFloat = 0,
         frameCoordinateSpaceName: String? = nil,
@@ -145,6 +149,8 @@ struct ReadCalendarMonthGrid: View {
         self.dayPayloadProvider = dayPayloadProvider
         self.coverItemsProvider = coverItemsProvider
         self.bookCoverStyleProvider = bookCoverStyleProvider
+        self.coverComponentVisibleLimit = coverComponentVisibleLimit
+        self.coverBusinessVisibleLimit = coverBusinessVisibleLimit
         self.coverEntryCueDate = coverEntryCueDate
         self.coverEntryCueProgress = max(0, min(1, coverEntryCueProgress))
         self.frameCoordinateSpaceName = frameCoordinateSpaceName
@@ -171,6 +177,8 @@ struct ReadCalendarMonthGrid: View {
                     dayPayloadProvider: dayPayloadProvider,
                     coverItemsProvider: coverItemsProvider,
                     bookCoverStyleProvider: bookCoverStyleProvider,
+                    coverComponentVisibleLimit: coverComponentVisibleLimit,
+                    coverBusinessVisibleLimit: coverBusinessVisibleLimit,
                     coverEntryCueDate: coverEntryCueDate,
                     coverEntryCueProgress: coverEntryCueProgress,
                     frameCoordinateSpaceName: frameCoordinateSpaceName,
@@ -234,6 +242,8 @@ private struct ReadCalendarMonthGridWeekRow: View {
     let dayPayloadProvider: (Date) -> ReadCalendarMonthGrid.DayPayload
     let coverItemsProvider: ((Date) -> [ReadCalendarCoverFanStack.Item])?
     let bookCoverStyleProvider: ((Date) -> ReadCalendarCoverFanStack.Style)?
+    let coverComponentVisibleLimit: Int?
+    let coverBusinessVisibleLimit: Int?
     let coverEntryCueDate: Date?
     let coverEntryCueProgress: CGFloat
     let frameCoordinateSpaceName: String?
@@ -480,7 +490,8 @@ private struct ReadCalendarMonthGridWeekRow: View {
         case .activityEvent:
             return payload.overflowCount
         case .bookCover:
-            guard let day else { return max(0, payload.bookCount - 3) }
+            let fallbackLimit = max(1, coverBusinessVisibleLimit ?? 3)
+            guard let day else { return max(0, payload.bookCount - fallbackLimit) }
             return max(0, payload.bookCount - coverStackVisibleLimit(for: day))
         }
     }
@@ -515,20 +526,20 @@ private struct ReadCalendarMonthGridWeekRow: View {
         for day: Date,
         payload: ReadCalendarMonthGrid.DayPayload
     ) -> [ReadCalendarCoverFanStack.Item] {
-        if let provided = coverItemsProvider?(day), !provided.isEmpty {
+        if let provided = coverItemsProvider?(day) {
             return provided
         }
         return fallbackCoverStackItems(for: day, payload: payload)
     }
 
-    /// 基于日期和当日读书数量生成封面堆叠数据，确保占位态与真实态都具备稳定标识。
+    /// 基于日期和当日读书数量生成封面堆叠数据；无书时返回空集合避免误导点击。
     private func fallbackCoverStackItems(
         for day: Date,
         payload: ReadCalendarMonthGrid.DayPayload
     ) -> [ReadCalendarCoverFanStack.Item] {
         let daySeed = Int(Calendar.current.startOfDay(for: day).timeIntervalSince1970 / 86_400)
         guard payload.bookCount > 0 else {
-            return [ReadCalendarCoverFanStack.Item(id: "cover-placeholder-\(daySeed)")]
+            return []
         }
         return (0..<payload.bookCount).map { index in
             ReadCalendarCoverFanStack.Item(id: "cover-\(daySeed)-\(index)")
@@ -537,20 +548,38 @@ private struct ReadCalendarMonthGridWeekRow: View {
 
     /// 计算封面堆叠可见张数：请求有数据时保持原值，具体折叠上限交给组件 style 控制。
     private func coverStackVisibleCount(requestedCount: Int) -> Int {
-        max(1, requestedCount)
+        let requested = max(1, requestedCount)
+        guard let coverComponentVisibleLimit else { return requested }
+        return min(requested, max(1, coverComponentVisibleLimit))
     }
 
     /// 计算封面折叠态可见上限，默认沿用标准样式上限兜底。
     private func coverStackVisibleLimit(for day: Date) -> Int {
-        if let style = bookCoverStyleProvider?(day) {
-            return max(1, style.collapsedVisibleCount)
-        }
-        return max(1, ReadCalendarCoverFanStack.Style.standard.collapsedVisibleCount)
+        max(1, coverStackStyle(for: day).collapsedVisibleCount)
     }
 
     /// 返回封面堆叠样式：优先使用外部注入，默认回退到标准样式。
     private func coverStackStyle(for day: Date) -> ReadCalendarCoverFanStack.Style {
-        bookCoverStyleProvider?(day) ?? .standard
+        let resolved = bookCoverStyleProvider?(day) ?? .standard
+        guard let coverBusinessVisibleLimit else { return resolved }
+        let businessCap = max(1, coverBusinessVisibleLimit)
+        guard resolved.collapsedVisibleCount > businessCap else { return resolved }
+        return ReadCalendarCoverFanStack.Style(
+            secondaryRotation: resolved.secondaryRotation,
+            tertiaryRotation: resolved.tertiaryRotation,
+            secondaryOffsetXRatio: resolved.secondaryOffsetXRatio,
+            tertiaryOffsetXRatio: resolved.tertiaryOffsetXRatio,
+            secondaryOffsetYRatio: resolved.secondaryOffsetYRatio,
+            tertiaryOffsetYRatio: resolved.tertiaryOffsetYRatio,
+            shadowOpacity: resolved.shadowOpacity,
+            shadowRadius: resolved.shadowRadius,
+            shadowX: resolved.shadowX,
+            shadowY: resolved.shadowY,
+            collapsedVisibleCount: businessCap,
+            jitterDegree: resolved.jitterDegree,
+            jitterOffsetRatio: resolved.jitterOffsetRatio,
+            fullscreenMaxRotation: resolved.fullscreenMaxRotation
+        )
     }
 
     /// 返回封面入口聚焦提示层，强调“从当前日期进入详情”。

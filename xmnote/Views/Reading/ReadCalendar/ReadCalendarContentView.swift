@@ -269,6 +269,8 @@ struct ReadCalendarContentView: View {
         static let coverEntryCueHoldNanoseconds: UInt64 = 220_000_000
         static let coverEntryCueCleanupNanoseconds: UInt64 = 280_000_000
         static let bookCoverGridCoordinateSpaceName = "read-calendar-book-cover-grid-space"
+        static let coverComponentVisibleLimit = 10
+        static let coverBusinessCollapsedLimit = 10
     }
 
     let props: Props
@@ -548,63 +550,64 @@ private extension ReadCalendarContentView {
         props.monthPages.first(where: { $0.monthStart == monthStart })
     }
 
-    /// 将单日业务书籍映射为封面堆叠输入，按首个事件时间倒序确保最近书籍置顶。
-    func coverItems(for date: Date, in page: MonthPage) -> [ReadCalendarCoverFanStack.Item] {
-        let normalized = Calendar.current.startOfDay(for: date)
-        guard let books = page.dayMap[normalized]?.books, !books.isEmpty else { return [] }
-
-        let sorted = books.sorted { lhs, rhs in
-            if lhs.firstEventTime == rhs.firstEventTime {
-                return lhs.id > rhs.id
+    /// 为单月预构建日期 -> 封面条目映射，避免日格渲染期间重复排序与对象创建。
+    func buildCoverItemsByDate(for page: MonthPage) -> [Date: [ReadCalendarCoverFanStack.Item]] {
+        var result: [Date: [ReadCalendarCoverFanStack.Item]] = [:]
+        result.reserveCapacity(page.dayMap.count)
+        for (date, dayData) in page.dayMap where !dayData.books.isEmpty {
+            // 与事件模式保持同源顺序：沿用仓储输出顺序（firstEventTime 升序）。
+            result[date] = dayData.books.enumerated().map { index, book in
+                ReadCalendarCoverFanStack.Item(
+                    id: "book-\(book.id)-\(book.firstEventTime)-\(index)",
+                    coverURL: book.coverURL
+                )
             }
-            return lhs.firstEventTime > rhs.firstEventTime
         }
-
-        return sorted.enumerated().map { index, book in
-            ReadCalendarCoverFanStack.Item(
-                id: "book-\(book.id)-\(book.firstEventTime)-\(index)",
-                coverURL: book.coverURL
-            )
-        }
+        return result
     }
 
-    /// 返回书籍封面模式样式：统一采用高级杂志感参数，并固定折叠上限 6。
-    func bookCoverStyle(for date: Date, in page: MonthPage) -> ReadCalendarCoverFanStack.Style {
+    /// 读取指定日期的封面条目，统一做 startOfDay 归一化避免 key 漂移。
+    func coverItems(for date: Date, in coverItemsByDate: [Date: [ReadCalendarCoverFanStack.Item]]) -> [ReadCalendarCoverFanStack.Item] {
         let normalized = Calendar.current.startOfDay(for: date)
-        let count = page.dayMap[normalized]?.books.count ?? 0
+        return coverItemsByDate[normalized] ?? []
+    }
+
+    /// 返回书籍封面模式样式：业务折叠上限固定 10，并在高密度时收敛抖动提升可见性。
+    func bookCoverStyle(for coverCount: Int) -> ReadCalendarCoverFanStack.Style {
         let base = ReadCalendarCoverFanStack.Style.editorial
-        if count >= 10 {
-            return ReadCalendarCoverFanStack.Style(
-                secondaryRotation: base.secondaryRotation,
-                tertiaryRotation: base.tertiaryRotation,
-                secondaryOffsetXRatio: base.secondaryOffsetXRatio,
-                tertiaryOffsetXRatio: base.tertiaryOffsetXRatio,
-                secondaryOffsetYRatio: base.secondaryOffsetYRatio,
-                tertiaryOffsetYRatio: base.tertiaryOffsetYRatio,
-                shadowOpacity: base.shadowOpacity,
-                shadowRadius: base.shadowRadius,
-                shadowX: base.shadowX,
-                shadowY: base.shadowY,
-                collapsedVisibleCount: 6,
-                jitterDegree: 3.8,
-                jitterOffsetRatio: 0.1,
-                fullscreenMaxRotation: base.fullscreenMaxRotation
-            )
-        }
-        return base
+        let isDense = coverCount >= 8
+        return ReadCalendarCoverFanStack.Style(
+            secondaryRotation: base.secondaryRotation,
+            tertiaryRotation: base.tertiaryRotation,
+            secondaryOffsetXRatio: base.secondaryOffsetXRatio,
+            tertiaryOffsetXRatio: base.tertiaryOffsetXRatio,
+            secondaryOffsetYRatio: base.secondaryOffsetYRatio,
+            tertiaryOffsetYRatio: base.tertiaryOffsetYRatio,
+            shadowOpacity: base.shadowOpacity,
+            shadowRadius: base.shadowRadius,
+            shadowX: base.shadowX,
+            shadowY: base.shadowY,
+            collapsedVisibleCount: Layout.coverBusinessCollapsedLimit,
+            jitterDegree: isDense ? 2.8 : base.jitterDegree,
+            jitterOffsetRatio: isDense ? 0.07 : base.jitterOffsetRatio,
+            fullscreenMaxRotation: base.fullscreenMaxRotation
+        )
     }
 
     /// 打开书籍封面全屏浮层。
-    func openBookCoverFullscreen(for date: Date, in page: MonthPage) {
-        let items = coverItems(for: date, in: page)
+    func openBookCoverFullscreen(
+        for date: Date,
+        coverItemsByDate: [Date: [ReadCalendarCoverFanStack.Item]]
+    ) {
+        let items = coverItems(for: date, in: coverItemsByDate)
         guard !items.isEmpty else { return }
         let normalized = Calendar.current.startOfDay(for: date)
         triggerCoverEntryCue(for: normalized)
-        let style = bookCoverStyle(for: normalized, in: page)
+        let style = bookCoverStyle(for: items.count)
         let sourceFrame = bookCoverStackFramesByDate[normalized]
         let stackedVisibleCount = min(
             max(1, items.count),
-            max(1, min(style.collapsedVisibleCount, 14))
+            Layout.coverBusinessCollapsedLimit
         )
         let payload = BookCoverFullscreenPayload(
             date: normalized,
@@ -1194,7 +1197,10 @@ private extension ReadCalendarContentView {
 
     /// 渲染单月周网格，并处理日期选中/取消选中交互。
     func calendarWeeks(for page: MonthPage, allowsDateSelection: Bool) -> some View {
-        ReadCalendarMonthGrid(
+        let coverItemsByDate = props.displayMode == .bookCover
+            ? buildCoverItemsByDate(for: page)
+            : [:]
+        return ReadCalendarMonthGrid(
             weeks: page.weeks,
             laneLimit: props.laneLimit,
             displayMode: allowsDateSelection ? mapGridDisplayMode(props.displayMode) : .heatmap,
@@ -1204,11 +1210,13 @@ private extension ReadCalendarContentView {
                 page.payload(for: date)
             },
             coverItemsProvider: { date in
-                coverItems(for: date, in: page)
+                coverItems(for: date, in: coverItemsByDate)
             },
             bookCoverStyleProvider: { date in
-                bookCoverStyle(for: date, in: page)
+                bookCoverStyle(for: coverItems(for: date, in: coverItemsByDate).count)
             },
+            coverComponentVisibleLimit: Layout.coverComponentVisibleLimit,
+            coverBusinessVisibleLimit: Layout.coverBusinessCollapsedLimit,
             coverEntryCueDate: coverEntryCueDate,
             coverEntryCueProgress: coverEntryCueProgress,
             frameCoordinateSpaceName: Layout.bookCoverGridCoordinateSpaceName,
@@ -1222,7 +1230,7 @@ private extension ReadCalendarContentView {
             },
             onOpenBookCoverFullscreen: { date in
                 guard allowsDateSelection else { return }
-                openBookCoverFullscreen(for: date, in: page)
+                openBookCoverFullscreen(for: date, coverItemsByDate: coverItemsByDate)
             },
             onSelectDay: { date in
                 guard allowsDateSelection else { return }
@@ -1416,7 +1424,7 @@ private struct ReadCalendarBookCoverFullscreenOverlay: View {
         static let panelShadowExtraOpacity: CGFloat = 0.12
         static let panelShadowBaseRadius: CGFloat = 10
         static let panelShadowExtraRadius: CGFloat = 8
-        static let previewLimit = 12
+        static let previewLimit = 10
         static let autoGridDelayNanoseconds: UInt64 = 900_000_000
         static let phaseSwitchResponse: CGFloat = 0.4
         static let phaseSwitchDamping: CGFloat = 0.86
@@ -1439,6 +1447,7 @@ private struct ReadCalendarBookCoverFullscreenOverlay: View {
     @State private var layoutPhase: ReadCalendarCoverFullscreenDeckStage.Phase = .stacked
     @State private var phaseToken = 0
     @State private var hasAutoTransitioned = false
+    @State private var hasAutoExpandedToGrid = false
     @State private var autoGridTask: Task<Void, Never>?
     @State private var closeTask: Task<Void, Never>?
     @State private var isClosing = false
@@ -1482,6 +1491,14 @@ private struct ReadCalendarBookCoverFullscreenOverlay: View {
 
     var shouldEnableGridPhase: Bool {
         payload.items.count > 1
+    }
+
+    var sourceCoverAspectRatio: CGFloat {
+        let sourceSize = payload.transitionSession.sourceCoverSize
+        guard sourceSize.width > 0, sourceSize.height > 0 else {
+            return 1.46
+        }
+        return sourceSize.height / sourceSize.width
     }
 
     var body: some View {
@@ -1576,7 +1593,7 @@ private struct ReadCalendarBookCoverFullscreenOverlay: View {
                         .foregroundStyle(Color.white.opacity(0.92))
                         .opacity(Double(chromeOpacity))
 
-                    if shouldEnableGridPhase {
+                    if shouldEnableGridPhase, hasAutoExpandedToGrid {
                         toggleButton
                             .opacity(Double(chromeOpacity))
                     }
@@ -1612,7 +1629,7 @@ private struct ReadCalendarBookCoverFullscreenOverlay: View {
         }
         switch layoutPhase {
         case .stacked:
-            if hasAutoTransitioned {
+            if hasAutoExpandedToGrid {
                 return "当日共 \(payload.items.count) 本，可切换为列表查看全部"
             }
             return "当日共 \(payload.items.count) 本，约 1 秒后自动切换列表"
@@ -1692,6 +1709,7 @@ private struct ReadCalendarBookCoverFullscreenOverlay: View {
         layoutPhase = .stacked
         phaseToken &+= 1
         hasAutoTransitioned = false
+        hasAutoExpandedToGrid = false
         isClosing = false
         startEnterTransition()
     }
@@ -1723,7 +1741,12 @@ private struct ReadCalendarBookCoverFullscreenOverlay: View {
             isAnimated: true,
             layoutSeed: payload.stackedSeed,
             stackedVisibleCount: payload.stackedVisibleCount,
-            previewLimit: Layout.previewLimit
+            previewLimit: Layout.previewLimit,
+            matchedTransitionStyle: .staggered,
+            stackedLayoutAlgorithm: .editorialDeskScatter,
+            coverSizingMode: .panelAwareBalanced,
+            sourceCoverAspectRatio: sourceCoverAspectRatio,
+            gridColumnLayoutMode: .fixed(count: 3, degradeForSmallItemCount: true)
         )
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .padding(.horizontal, Spacing.double)
@@ -1824,6 +1847,7 @@ private struct ReadCalendarBookCoverFullscreenOverlay: View {
         }
         hasAutoTransitioned = true
         if source == .automatic, target == .grid {
+            hasAutoExpandedToGrid = true
             triggerAutoGridHapticIfNeeded()
         }
         withAnimation(.spring(response: Layout.phaseSwitchResponse, dampingFraction: Layout.phaseSwitchDamping)) {
