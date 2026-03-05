@@ -51,7 +51,7 @@ struct ReadCalendarCoverTransitionSpec: Hashable {
     /// immersiveElegant 提供沉浸优雅档时长配置。
     static let immersiveElegant = ReadCalendarCoverTransitionSpec(
         openDuration: 0.34,
-        closeDuration: 0.28,
+        closeDuration: 0.24,
         entryBackdropDuration: 0.19,
         entryDeckDelay: 0.06,
         entryDeckDuration: 0.14,

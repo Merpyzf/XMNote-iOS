@@ -602,6 +602,12 @@ private enum ReadCalendarCoverPhaseTransitionDirection {
     case toGrid
 }
 
+private enum ReadCalendarCoverDismissSource {
+    case dragGesture
+    case backdropTap
+    case closeButton
+}
+
 private struct ReadCalendarCoverStackTestFullscreenOverlay: View {
     private enum Layout {
         static let backdropMaxOpacity: CGFloat = 0.24
@@ -630,7 +636,6 @@ private struct ReadCalendarCoverStackTestFullscreenOverlay: View {
         static let hintShadowRadius: CGFloat = 2
         static let hintShadowYOffset: CGFloat = 1
         static let previewLimit = 12
-        static let closeReturnToStackDelayNanoseconds: UInt64 = 180_000_000
         static let switchSettleNanoseconds: UInt64 = 430_000_000
     }
 
@@ -731,7 +736,7 @@ private struct ReadCalendarCoverStackTestFullscreenOverlay: View {
                 }
                 .ignoresSafeArea()
                 .onTapGesture {
-                    dismiss()
+                    dismiss(source: .backdropTap)
                 }
 
                 heroGhostLayer(
@@ -875,7 +880,7 @@ private struct ReadCalendarCoverStackTestFullscreenOverlay: View {
             Spacer(minLength: 0)
 
             Button {
-                dismiss()
+                dismiss(source: .closeButton)
             } label: {
                 Image(systemName: "xmark.circle.fill")
                     .font(.system(size: Layout.closeButtonSize, weight: .semibold))
@@ -954,7 +959,7 @@ private struct ReadCalendarCoverStackTestFullscreenOverlay: View {
             }
             .onEnded { value in
                 if value.translation.height > Layout.dismissDragThreshold {
-                    dismiss()
+                    dismiss(source: .dragGesture)
                     return
                 }
                 withAnimation(.spring(response: 0.26, dampingFraction: 0.82)) {
@@ -1124,33 +1129,21 @@ private struct ReadCalendarCoverStackTestFullscreenOverlay: View {
         return formatter.string(from: date)
     }
 
-    func dismiss() {
+    func dismiss(source: ReadCalendarCoverDismissSource) {
         guard !isClosing else { return }
         cancelAutoGridTask()
         cancelTransitionTask()
         cancelCloseTask()
         cancelPhaseTransitionTask()
-        withAnimation(.smooth(duration: 0.2)) {
-            dragOffsetY = 0
-        }
-        if shouldEnableGridPhase, layoutPhase == .grid {
-            isClosing = true
-            switchPhase(to: .stacked, source: .manual)
-            closeTask = Task {
-                do {
-                    try await Task.sleep(nanoseconds: Layout.closeReturnToStackDelayNanoseconds)
-                } catch {
-                    return
-                }
-                guard !Task.isCancelled else { return }
-                await MainActor.run {
-                    runDismissTransition()
-                }
+        if source == .dragGesture {
+            dragOffsetY = max(0, dragOffsetY)
+        } else {
+            withAnimation(.smooth(duration: 0.2)) {
+                dragOffsetY = 0
             }
-            return
         }
         isClosing = true
-        runDismissTransition()
+        runDismissTransition(source: source)
     }
 
     func startEnterTransition() {
@@ -1181,7 +1174,7 @@ private struct ReadCalendarCoverStackTestFullscreenOverlay: View {
         }
     }
 
-    func runDismissTransition() {
+    func runDismissTransition(source _: ReadCalendarCoverDismissSource) {
         transitionPhase = .exiting
         guard isAnimated else {
             isClosing = false
