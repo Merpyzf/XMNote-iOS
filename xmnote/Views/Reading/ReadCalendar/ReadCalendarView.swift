@@ -149,8 +149,16 @@ private extension ReadCalendarView {
 // MARK: - Props Mapping
 
 private extension ReadCalendarView {
+    var pagerWindowRadius: Int { 3 }
+
     var contentProps: ReadCalendarContentView.Props {
         let todayStart = Calendar.current.startOfDay(for: Date())
+        let selectedYearSummary = viewModel.yearSummaryState(for: viewModel.selectedYear)
+        let heatmapYearPages = displayMode == .heatmap
+            ? heatmapYearMonths.map { monthStart in
+                makeContentMonthPage(for: monthStart, todayStart: todayStart)
+            }
+            : []
         return ReadCalendarContentView.Props(
             monthTitle: viewModel.monthTitle,
             yearTitle: viewModel.yearTitle,
@@ -167,12 +175,10 @@ private extension ReadCalendarView {
             monthPages: visibleMonthWindow.map { monthStart in
                 makeContentMonthPage(for: monthStart, todayStart: todayStart)
             },
-            heatmapYearMonthPages: heatmapYearMonths.map { monthStart in
-                makeContentMonthPage(for: monthStart, todayStart: todayStart)
-            },
+            heatmapYearMonthPages: heatmapYearPages,
             selectedYearLoadState: mapYearLoadState(viewModel.yearLoadState(for: viewModel.selectedYear)),
-            selectedYearErrorMessage: viewModel.yearSummaryState(for: viewModel.selectedYear).errorMessage,
-            yearSummary: mapYearSummary(viewModel.yearSummaryState(for: viewModel.selectedYear))
+            selectedYearErrorMessage: selectedYearSummary.errorMessage,
+            yearSummary: mapYearSummary(selectedYearSummary)
         )
     }
 
@@ -186,8 +192,8 @@ private extension ReadCalendarView {
             assertionFailure("visibleMonthWindow: pagerSelection 与 displayedMonthStart 均不在 availableMonths 中")
             return 0
         }()
-        let lower = max(0, anchorIndex - 1)
-        let upper = min(months.count - 1, anchorIndex + 1)
+        let lower = max(0, anchorIndex - pagerWindowRadius)
+        let upper = min(months.count - 1, anchorIndex + pagerWindowRadius)
         return Array(months[lower...upper])
     }
 

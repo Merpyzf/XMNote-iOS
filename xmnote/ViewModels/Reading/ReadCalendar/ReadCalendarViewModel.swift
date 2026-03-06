@@ -1,4 +1,5 @@
 import Foundation
+import Observation
 import SwiftUI
 
 /**
@@ -41,6 +42,8 @@ final class ReadCalendarViewModel {
     private static let colorBatchCount = 8
     private static let colorBatchInterval: TimeInterval = 0.12
     private static let yearTopBookLimit = 10
+    private static let monthStateCacheLimit = 24
+    private static let pagerWindowRadius = 3
 
     /// WeekRowData 表示单周渲染数据，包含日期槽位与事件条布局结果。
     struct WeekRowData: Identifiable, Hashable {
@@ -132,6 +135,8 @@ final class ReadCalendarViewModel {
     private var hasLoaded = false
     private var monthCache: [String: ReadCalendarMonthData] = [:]
     private var pageStates: [String: MonthPageState] = [:]
+    @ObservationIgnored
+    private var monthAccessOrder: [String] = []
     private var monthIndexByKey: [String: Int] = [:]
     private var yearTopBooksByYear: [Int: [ReadCalendarMonthlyDurationBook]] = [:]
     private var yearRankingBarColorsByYear: [Int: [Int64: ReadCalendarSegmentColor]] = [:]
@@ -259,6 +264,7 @@ final class ReadCalendarViewModel {
 
             monthCache = [:]
             pageStates = [:]
+            monthAccessOrder = []
             yearTopBooksByYear = [:]
             yearRankingBarColorsByYear = [:]
             yearLoadStateByYear = [:]
@@ -286,13 +292,16 @@ final class ReadCalendarViewModel {
             )
             cancelOutOfScopeColorTasks(around: defaultMonth)
             syncDisplayedMonthError()
+            trimMonthCachesIfNeeded(around: defaultMonth)
             hasLoaded = true
         } catch {
             errorMessage = "阅读日历加载失败：\(error.localizedDescription)"
             availableMonths = []
             availableYears = []
             monthIndexByKey = [:]
+            monthCache = [:]
             pageStates = [:]
+            monthAccessOrder = []
             yearTopBooksByYear = [:]
             yearRankingBarColorsByYear = [:]
             yearLoadStateByYear = [:]
@@ -357,6 +366,7 @@ final class ReadCalendarViewModel {
         )
         cancelOutOfScopeColorTasks(around: normalized)
         syncDisplayedMonthError()
+        trimMonthCachesIfNeeded(around: normalized)
     }
 
     /// 处理年份切换并确保年度数据、排行与对比年份已准备。
@@ -389,6 +399,7 @@ final class ReadCalendarViewModel {
             using: repository,
             colorRepository: colorRepository
         )
+        trimMonthCachesIfNeeded(around: displayedMonthStart)
     }
 
     /// 确保年度热力图页已就绪：补齐当前年份数据、榜单与对比年份缓存。
@@ -414,6 +425,7 @@ final class ReadCalendarViewModel {
             using: repository,
             colorRepository: colorRepository
         )
+        trimMonthCachesIfNeeded(around: displayedMonthStart)
     }
 
     /// 重试当前展示月份加载，并补齐相邻月份预取。
@@ -436,6 +448,7 @@ final class ReadCalendarViewModel {
         )
         cancelOutOfScopeColorTasks(around: displayedMonthStart)
         syncDisplayedMonthError()
+        trimMonthCachesIfNeeded(around: displayedMonthStart)
     }
 
     /// 取消并清理不再需要的异步任务，避免陈旧结果回写状态。
@@ -515,6 +528,7 @@ final class ReadCalendarViewModel {
         hasLoaded = false
         monthCache = [:]
         pageStates = [:]
+        monthAccessOrder = []
         yearTopBooksByYear = [:]
         yearRankingBarColorsByYear = [:]
         yearLoadStateByYear = [:]
@@ -534,6 +548,13 @@ final class ReadCalendarViewModel {
         let key = Self.monthKey(for: normalized, using: calendar)
         return pageStates[key] ?? placeholderState(for: normalized)
     }
+
+#if DEBUG
+    /// 暴露月份缓存访问顺序快照，仅用于调试/测试验证读路径无副作用。
+    func testingMonthAccessOrderSnapshot() -> [String] {
+        monthAccessOrder
+    }
+#endif
 
     /// 生成指定年份的月份起始列表。
     func monthStartsForYear(_ year: Int) -> [Date] {
@@ -649,6 +670,7 @@ private extension ReadCalendarViewModel {
         let key = Self.monthKey(for: normalized, using: calendar)
         let previousState = pageStates[key]
         if !forceRefresh, let existing = pageStates[key], existing.loadState == .loaded {
+            markMonthAccessed(forKey: key)
             if hasPendingSegmentColor(existing) {
                 scheduleColorResolutionIfNeeded(
                     for: normalized,
@@ -688,6 +710,7 @@ private extension ReadCalendarViewModel {
             guard latestRequestTicketByMonthKey[key] == ticket else { return }
             let loaded = buildLoadedState(monthStart: normalized, data: data)
             pageStates[key] = loaded
+            markMonthAccessed(forKey: key)
             scheduleColorResolutionIfNeeded(
                 for: normalized,
                 using: colorRepository
@@ -724,6 +747,7 @@ private extension ReadCalendarViewModel {
                 errorMessage: "月份切换失败：\(error.localizedDescription)"
             )
             pageStates[key] = failed
+            markMonthAccessed(forKey: key)
             inFlightColorRequestBookIDsByMonthKey[key] = nil
             if reportError && normalized == displayedMonthStart {
                 errorMessage = failed.errorMessage
@@ -731,16 +755,14 @@ private extension ReadCalendarViewModel {
         }
     }
 
-    /// 预取当前月份前后相邻月份，减少翻页等待。
+    /// 预取当前月份窗口（当前月±3），减少连续翻页时的等待。
     func prefetchAdjacentMonths(
         around monthStart: Date,
         using repository: any StatisticsRepositoryProtocol,
         colorRepository: any ReadCalendarColorRepositoryProtocol
     ) async {
-        let neighbors = [
-            monthAtOffset(-1, from: monthStart),
-            monthAtOffset(1, from: monthStart)
-        ].compactMap { $0 }
+        let offsets = (-Self.pagerWindowRadius...Self.pagerWindowRadius).filter { $0 != 0 }
+        let neighbors = offsets.compactMap { monthAtOffset($0, from: monthStart) }
 
         for month in neighbors {
             await ensureMonthLoaded(
@@ -1218,11 +1240,8 @@ private extension ReadCalendarViewModel {
 
     /// 取消并清理不再需要的异步任务，避免陈旧结果回写状态。
     func cancelOutOfScopeColorTasks(around monthStart: Date) {
-        let validMonths: [Date] = [
-            monthStart,
-            monthAtOffset(-1, from: monthStart),
-            monthAtOffset(1, from: monthStart)
-        ].compactMap { $0 }
+        let validMonths = ((-Self.pagerWindowRadius)...Self.pagerWindowRadius)
+            .compactMap { monthAtOffset($0, from: monthStart) }
         let keepKeys = Set(validMonths.map { Self.monthKey(for: $0, using: calendar) })
 
         let keysToCancel = monthColorTasks.keys.filter { !keepKeys.contains($0) }
@@ -1250,6 +1269,94 @@ private extension ReadCalendarViewModel {
         inFlightYearColorRequestBookIDsByYear = [:]
     }
 
+    /// 标记月份缓存访问顺序，用于 LRU 裁剪。
+    func markMonthAccessed(forKey key: String) {
+        if monthAccessOrder.last == key {
+            return
+        }
+        monthAccessOrder.removeAll { $0 == key }
+        monthAccessOrder.append(key)
+    }
+
+    /// 按 LRU 裁剪月份缓存，保留当前窗口与年度汇总必需月份，限制长会话内存增长。
+    func trimMonthCachesIfNeeded(around monthStart: Date) {
+        let allKeys = Set(monthCache.keys).union(pageStates.keys)
+        guard !allKeys.isEmpty else {
+            monthAccessOrder = []
+            return
+        }
+
+        let protectedKeys = protectedMonthCacheKeys(around: monthStart)
+        let targetLimit = max(Self.monthStateCacheLimit, protectedKeys.count)
+        guard allKeys.count > targetLimit else {
+            pruneMonthAccessOrder(keeping: allKeys)
+            return
+        }
+
+        var removableKeys = monthAccessOrder.filter { key in
+            allKeys.contains(key) && !protectedKeys.contains(key)
+        }
+        if removableKeys.count < allKeys.count {
+            let fallback = allKeys
+                .filter { !protectedKeys.contains($0) && !removableKeys.contains($0) }
+                .sorted()
+            removableKeys.append(contentsOf: fallback)
+        }
+
+        let overflow = allKeys.count - targetLimit
+        for key in removableKeys.prefix(overflow) {
+            evictMonthCacheState(forKey: key)
+        }
+
+        let remaining = Set(monthCache.keys).union(pageStates.keys)
+        pruneMonthAccessOrder(keeping: remaining)
+    }
+
+    /// 计算缓存裁剪时的保护集合：当前窗口（当前月±3）与 selectedYear/上一年的整年月份。
+    func protectedMonthCacheKeys(around monthStart: Date) -> Set<String> {
+        var protectedMonths = Set<Date>()
+        for offset in (-Self.pagerWindowRadius)...Self.pagerWindowRadius {
+            if let month = monthAtOffset(offset, from: monthStart) {
+                protectedMonths.insert(month)
+            }
+        }
+        protectedMonths.insert(monthStart)
+
+        for month in monthStartsForYear(selectedYear) where isMonthInAvailableRange(month) {
+            protectedMonths.insert(month)
+        }
+
+        let comparisonYear = selectedYear - 1
+        if availableYears.contains(comparisonYear) {
+            for month in Self.monthStarts(of: comparisonYear, using: calendar) where isMonthInAvailableRange(month) {
+                protectedMonths.insert(month)
+            }
+        }
+
+        return Set(protectedMonths.map { Self.monthKey(for: $0, using: calendar) })
+    }
+
+    /// 从缓存与任务表中移除指定月份，防止被淘汰月份继续占用内存。
+    func evictMonthCacheState(forKey key: String) {
+        monthCache.removeValue(forKey: key)
+        pageStates.removeValue(forKey: key)
+        latestRequestTicketByMonthKey.removeValue(forKey: key)
+        latestColorTicketByMonthKey.removeValue(forKey: key)
+        inFlightColorRequestBookIDsByMonthKey.removeValue(forKey: key)
+        if let task = monthColorTasks.removeValue(forKey: key) {
+            task.cancel()
+        }
+    }
+
+    /// 清理访问顺序列表中的失效项，保持 LRU 队列稳定。
+    func pruneMonthAccessOrder(keeping validKeys: Set<String>) {
+        var seen = Set<String>()
+        monthAccessOrder = monthAccessOrder.filter { key in
+            guard validKeys.contains(key) else { return false }
+            return seen.insert(key).inserted
+        }
+    }
+
     /// 获取指定月份数据，优先走缓存并在需要时回源仓储。
     func fetchMonthData(
         monthStart: Date,
@@ -1261,6 +1368,7 @@ private extension ReadCalendarViewModel {
             monthCache.removeValue(forKey: key)
         }
         if let cached = monthCache[key] {
+            markMonthAccessed(forKey: key)
             return cached
         }
 
@@ -1269,6 +1377,7 @@ private extension ReadCalendarViewModel {
             excludedEventTypes: settings.excludedEventTypes
         )
         monthCache[key] = fetched
+        markMonthAccessed(forKey: key)
         return fetched
     }
 

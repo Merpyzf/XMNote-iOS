@@ -350,6 +350,29 @@ struct xmnoteTests {
         #expect(calendar.isDate(viewModel.selectedDate, inSameDayAs: today))
         #expect(calendar.isDate(viewModel.pagerSelection, equalTo: today, toGranularity: .month))
     }
+
+    @MainActor
+    @Test func readCalendarMonthStateReadKeepsLRUOrderStable() async {
+        let calendar = Self.mondayCalendar
+        let initialDate = Self.date(2025, 10, 3, calendar: calendar)
+        let earliestDate = Self.date(2024, 2, 1, calendar: calendar)
+        let viewModel = ReadCalendarViewModel(initialDate: initialDate, settings: ReadCalendarSettings())
+
+        await viewModel.reload(
+            using: StubStatisticsRepository(earliestDate: earliestDate),
+            colorRepository: StubReadCalendarColorRepository()
+        )
+
+        let before = viewModel.testingMonthAccessOrderSnapshot()
+        guard viewModel.availableMonths.count > 1 else {
+            #expect(!before.isEmpty)
+            return
+        }
+
+        _ = viewModel.monthState(for: viewModel.pagerSelection)
+        let after = viewModel.testingMonthAccessOrderSnapshot()
+        #expect(after == before)
+    }
 }
 
 private extension xmnoteTests {
@@ -446,6 +469,14 @@ private struct StubStatisticsRepository: StatisticsRepositoryProtocol {
         let components = calendar.dateComponents([.year, .month], from: monthStart)
         let normalized = calendar.date(from: DateComponents(year: components.year, month: components.month, day: 1)) ?? monthStart
         return .empty(for: calendar.startOfDay(for: normalized))
+    }
+
+    func fetchReadCalendarYearTopBooks(
+        year: Int,
+        excludedEventTypes: Set<ReadCalendarEventType>,
+        limit: Int
+    ) async throws -> [ReadCalendarMonthlyDurationBook] {
+        []
     }
 }
 

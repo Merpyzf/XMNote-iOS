@@ -226,12 +226,13 @@ struct ReadCalendarContentView: View {
         static let topControlLayerZIndex: Double = 12
         static let streakHintLayerZIndex: Double = 11
         static let contentLayerZIndex: Double = 0
+        static let horizontalPagerProgrammaticDuration: CGFloat = 0.24
         static let weekdayHeaderHeight: CGFloat = 32
         static let pageMinHeight: CGFloat = 252
         static let calendarInnerTopPadding: CGFloat = Spacing.cozy
         static let calendarInnerBottomPadding: CGFloat = 0
-        static let contentBleedBottomInset: CGFloat = Spacing.cozy
-        static let interactiveBottomInset: CGFloat = Spacing.half
+        static let contentBleedBottomInset: CGFloat = 0
+        static let interactiveBottomInset: CGFloat = 0
         static let headerToGridSpacing: CGFloat = Spacing.half
         static let gridTopInset: CGFloat = 2
         static let streakHintBottomPadding: CGFloat = Spacing.cozy
@@ -301,6 +302,10 @@ struct ReadCalendarContentView: View {
     @State private var coverEntryCueTask: Task<Void, Never>?
     @State private var topControlBarFrameInGlobal: CGRect = .zero
     @State private var lastLoggedTopControlBarFrameForDebug: CGRect = .zero
+    @State private var lastLoggedCalendarViewportSignatureForDebug = ""
+    @State private var horizontalPagerPosition: Date?
+    @State private var isHorizontalPagerInteractionActive = false
+    @State private var pendingPagerSelectionCommit: Date?
 
     var body: some View {
         bodyContainer
@@ -445,6 +450,15 @@ private extension ReadCalendarContentView {
         print(
             "[ReadCalendar][TopControlBarFrame] x=\(Int(normalized.minX)) y=\(Int(normalized.minY)) w=\(Int(normalized.width)) h=\(Int(normalized.height)) maxY=\(Int(normalized.maxY))"
         )
+#endif
+    }
+
+    func logCalendarViewportIfNeeded(contentHeight: CGFloat, viewportSafeBottom: CGFloat) {
+#if DEBUG
+        let signature = "contentH=\(Int(contentHeight.rounded())) safeBottom=\(Int(viewportSafeBottom.rounded()))"
+        guard signature != lastLoggedCalendarViewportSignatureForDebug else { return }
+        lastLoggedCalendarViewportSignatureForDebug = signature
+        print("[ReadCalendar][CalendarViewport] \(signature)")
 #endif
     }
 
@@ -1012,22 +1026,11 @@ private extension ReadCalendarContentView {
         }
     }
 
-    var pagerSelectionBinding: Binding<Date> {
-        Binding(
-            get: { props.pagerSelection },
-            set: { newValue in
-                guard newValue != props.pagerSelection else { return }
-                withAnimation(.snappy(duration: 0.32)) {
-                    onPagerSelectionChanged(newValue)
-                }
-            }
-        )
-    }
-
     var integratedCalendarContainer: some View {
         GeometryReader { proxy in
             let headerHeight = shouldShowWeekdayHeader ? Layout.weekdayHeaderHeight : 0
             let spacing = shouldShowWeekdayHeader ? Layout.headerToGridSpacing : 0
+            let viewportSafeBottom = max(0, proxy.safeAreaInsets.bottom)
             let contentHeight = max(0, proxy.size.height - headerHeight - spacing)
 
             VStack(spacing: spacing) {
@@ -1038,17 +1041,25 @@ private extension ReadCalendarContentView {
                         .zIndex(1)
                 }
 
-                contentContainer
+                contentContainer()
                     .frame(height: contentHeight, alignment: .top)
-                    .clipped()
             }
             .frame(width: proxy.size.width, height: proxy.size.height, alignment: .top)
+            .onAppear {
+                logCalendarViewportIfNeeded(contentHeight: contentHeight, viewportSafeBottom: viewportSafeBottom)
+            }
+            .onChange(of: contentHeight) { _, _ in
+                logCalendarViewportIfNeeded(contentHeight: contentHeight, viewportSafeBottom: viewportSafeBottom)
+            }
+            .onChange(of: viewportSafeBottom) { _, _ in
+                logCalendarViewportIfNeeded(contentHeight: contentHeight, viewportSafeBottom: viewportSafeBottom)
+            }
         }
         .padding(.top, Layout.calendarInnerTopPadding)
         .padding(.bottom, Layout.calendarInnerBottomPadding + interactiveBottomInset)
     }
 
-    var contentContainer: some View {
+    func contentContainer() -> some View {
         ZStack(alignment: .top) {
             switch props.rootContentState {
             case .loading:
@@ -1113,18 +1124,104 @@ private extension ReadCalendarContentView {
         return Layout.summaryFloatingButtonBottomBase + resolvedSafeAreaBottom
     }
 
+    var visibleMonthStarts: [Date] {
+        props.monthPages.map(\.monthStart)
+    }
+
     var calendarPager: some View {
-        TabView(selection: pagerSelectionBinding) {
-            ForEach(props.availableMonths, id: \.self) { monthStart in
-                monthPage(for: monthStart)
-                    .tag(monthStart)
+        GeometryReader { proxy in
+            let pageWidth = max(1, proxy.size.width)
+            let pageHeight = max(1, proxy.size.height)
+            ScrollView(.horizontal, showsIndicators: false) {
+                LazyHStack(spacing: 0) {
+                    ForEach(visibleMonthStarts, id: \.self) { monthStart in
+                        monthPage(for: monthStart)
+                            .frame(width: pageWidth, height: pageHeight, alignment: .top)
+                            .id(monthStart)
+                    }
+                }
+                .scrollTargetLayout()
+            }
+            .scrollTargetBehavior(.paging)
+            .scrollPosition(id: $horizontalPagerPosition, anchor: .topLeading)
+            .onAppear {
+                syncHorizontalPagerPositionIfNeeded(monthStart: props.pagerSelection, animated: false)
+            }
+            .onChange(of: props.pagerSelection) { _, monthStart in
+                guard !isHorizontalPagerInteractionActive else { return }
+                pendingPagerSelectionCommit = nil
+                syncHorizontalPagerPositionIfNeeded(monthStart: monthStart, animated: true)
+            }
+            .onChange(of: visibleMonthStarts) { _, window in
+                guard !window.isEmpty else {
+                    horizontalPagerPosition = nil
+                    pendingPagerSelectionCommit = nil
+                    return
+                }
+                if let pending = pendingPagerSelectionCommit, !window.contains(pending) {
+                    pendingPagerSelectionCommit = nil
+                }
+                guard let current = horizontalPagerPosition, window.contains(current) else {
+                    guard !isHorizontalPagerInteractionActive else { return }
+                    syncHorizontalPagerPositionIfNeeded(monthStart: props.pagerSelection, animated: false)
+                    return
+                }
+            }
+            .onChange(of: horizontalPagerPosition) { _, monthStart in
+                guard let monthStart else { return }
+                guard visibleMonthStarts.contains(monthStart) else { return }
+                if isHorizontalPagerInteractionActive {
+                    pendingPagerSelectionCommit = monthStart
+                    return
+                }
+                guard monthStart != props.pagerSelection else { return }
+                onPagerSelectionChanged(monthStart)
+            }
+            .onScrollPhaseChange { _, phase in
+                if phase.isScrolling {
+                    isHorizontalPagerInteractionActive = true
+                    return
+                }
+                guard isHorizontalPagerInteractionActive else { return }
+                isHorizontalPagerInteractionActive = false
+                commitPendingPagerSelectionIfNeeded()
             }
         }
-        .tabViewStyle(.page(indexDisplayMode: .never))
-        .contentMargins(.top, 0, for: .scrollContent)
-        .clipped()
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .animation(.snappy(duration: 0.32), value: props.pagerSelection)
+    }
+
+    /// 将横向分页位置与外部月份状态对齐，避免窗口重建后发生错页。
+    func syncHorizontalPagerPositionIfNeeded(monthStart: Date, animated: Bool) {
+        guard horizontalPagerPosition != monthStart else { return }
+        guard visibleMonthStarts.contains(monthStart) else { return }
+        if animated {
+            withAnimation(.snappy(duration: Layout.horizontalPagerProgrammaticDuration)) {
+                horizontalPagerPosition = monthStart
+            }
+            return
+        }
+        var transaction = Transaction()
+        transaction.animation = nil
+        withTransaction(transaction) {
+            horizontalPagerPosition = monthStart
+        }
+    }
+
+    /// 在横向滚动结束时提交待生效月份，避免滚动中频繁触发业务状态回写造成跳变。
+    func commitPendingPagerSelectionIfNeeded() {
+        defer { pendingPagerSelectionCommit = nil }
+
+        if let pending = pendingPagerSelectionCommit,
+           visibleMonthStarts.contains(pending),
+           pending != props.pagerSelection {
+            onPagerSelectionChanged(pending)
+            return
+        }
+
+        if let current = horizontalPagerPosition,
+           !visibleMonthStarts.contains(current) {
+            syncHorizontalPagerPositionIfNeeded(monthStart: props.pagerSelection, animated: false)
+        }
     }
 
     @ViewBuilder
@@ -1170,7 +1267,7 @@ private extension ReadCalendarContentView {
                 )
             }
             .scrollBounceBehavior(.basedOnSize)
-            .ignoresSafeArea(.container, edges: .bottom)
+            .readCalendarBottomImmersiveStyle()
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
             .animation(.snappy(duration: 0.24), value: props.selectedYear)
         }
@@ -1255,6 +1352,7 @@ private extension ReadCalendarContentView {
             )
         }
         .scrollBounceBehavior(.basedOnSize)
+        .readCalendarBottomImmersiveStyle()
         .animation(.smooth(duration: 0.24), value: pageState.loadState)
     }
 
@@ -2480,6 +2578,13 @@ private struct ReadCalendarBookCoverFullscreenOverlay: View {
 
     func lerp(_ min: CGFloat, _ max: CGFloat, _ progress: CGFloat) -> CGFloat {
         min + (max - min) * progress
+    }
+}
+
+private extension View {
+    /// 预留底部沉浸样式扩展点；当前不应用模糊与边缘特效。
+    func readCalendarBottomImmersiveStyle() -> some View {
+        self
     }
 }
 
