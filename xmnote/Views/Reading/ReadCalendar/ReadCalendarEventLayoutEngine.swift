@@ -249,6 +249,8 @@ private extension ReadCalendarEventLayoutEngine {
 private extension ReadCalendarEventLayoutEngine {
     private func resolveLane(for run: DraftRun, laneEndDates: inout [Date]) -> Int {
         for lane in laneEndDates.indices {
+            // endDate 是 inclusive 最后一天；startDate > endDate 表示无时间重叠。
+            // 不能用 >=：同日不同书的事件条在视觉上占据同一格，必须分 lane。
             if run.startDate > laneEndDates[lane] {
                 laneEndDates[lane] = run.endDate
                 return lane
@@ -260,6 +262,7 @@ private extension ReadCalendarEventLayoutEngine {
 
     private func resolveLane(startOffset: Int, endOffset: Int, laneEndOffsets: inout [Int]) -> Int {
         for lane in laneEndOffsets.indices {
+            // endOffset 是 inclusive 最后一天的 0-indexed 偏移；与 Date 版语义一致。
             if startOffset > laneEndOffsets[lane] {
                 laneEndOffsets[lane] = endOffset
                 return lane

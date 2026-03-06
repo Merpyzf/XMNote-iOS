@@ -99,6 +99,8 @@ struct ReadCalendarView: View {
                 colorRepository: repositories.readCalendarColorRepository
             )
         }
+        // pagerSelection 变更在 @MainActor 上串行执行，cancel → 新 Task 无竞态；
+        // ViewModel 内部 per-monthKey ticket 机制保证过期请求被丢弃。
         .onChange(of: viewModel.pagerSelection) { _, monthStart in
             pagerSelectionTask?.cancel()
             pagerSelectionTask = Task {
@@ -152,6 +154,8 @@ private extension ReadCalendarView {
     var pagerWindowRadius: Int { 3 }
 
     var contentProps: ReadCalendarContentView.Props {
+        // 每次 body 求值时重新计算 todayStart，确保跨午夜后"今天"标记实时更新。
+        // 代价是每次 body 求值多一次 Calendar.startOfDay 调用，但日历页刷新频率较低，可接受。
         let todayStart = Calendar.current.startOfDay(for: Date())
         let selectedYearSummary = viewModel.yearSummaryState(for: viewModel.selectedYear)
         let heatmapYearPages = displayMode == .heatmap
@@ -190,6 +194,9 @@ private extension ReadCalendarView {
             if let idx = months.firstIndex(of: viewModel.pagerSelection) { return idx }
             if let idx = months.firstIndex(of: viewModel.displayedMonthStart) { return idx }
             assertionFailure("visibleMonthWindow: pagerSelection 与 displayedMonthStart 均不在 availableMonths 中")
+            #if DEBUG
+            print("[ReadCalendar] visibleMonthWindow fallback: pagerSelection=\(viewModel.pagerSelection), displayedMonthStart=\(viewModel.displayedMonthStart), months.count=\(months.count)")
+            #endif
             return 0
         }()
         let lower = max(0, anchorIndex - pagerWindowRadius)

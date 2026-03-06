@@ -851,8 +851,9 @@ private struct ReadCalendarMonthGridWeekRow: View {
         if isHapticsEnabled {
             ReadCalendarHaptics.rigid()
         }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
-            guard token == badgePulseToken else { return }
+        Task {
+            try? await Task.sleep(for: .milliseconds(200))
+            guard !Task.isCancelled, token == badgePulseToken else { return }
             badgePulseIDs.removeAll()
         }
     }

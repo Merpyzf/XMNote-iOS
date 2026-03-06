@@ -270,7 +270,9 @@ private extension StatisticsRepository {
 
     // MARK: - 阅读时长聚合
 
-    /// 按天 SUM(elapsed_seconds)，处理 fuzzyReadDate 双时间源
+    /// 按天 SUM(elapsed_seconds)，处理 fuzzyReadDate 双时间源。
+    /// 时区约定：SQL 使用 SQLite 'localtime' 修饰符，与 Swift 侧 `Calendar.current.startOfDay` 保持一致——
+    /// 两端均依赖设备时区，确保日期边界对齐。若设备时区在运行期变更，已缓存数据可能出现偏移。
     nonisolated func aggregateReadSeconds(_ db: Database, millisRange: ClosedRange<Int64>) -> [Date: Int] {
         // SQL 目的：按“本地日”汇总阅读秒数，用于热力图阅读时长维度。
         // 时间语义：fuzzy_read_date 非 0 时按补录日期归属，否则按 start_time；均以 localtime 分桶。
@@ -651,6 +653,7 @@ private extension StatisticsRepository {
         // SQL 目的：读取某月份参与阅读时长排行/总结的原始阅读记录。
         // 关联关系：JOIN book 补全书名与封面，同时排除已删除书籍。
         // 时间语义：fuzzy 记录按 fuzzy_read_date 判定；非 fuzzy 记录按 [start_time, end_time] 与月份区间重叠判定。
+        // 跨月安全：区间重叠条件可能匹配跨月记录，但 splitReadDurationByDay 按天拆分后仅累计落在月份内的天数，不会双重计数。
         // 过滤条件：status=3、book_id!=0、elapsed_seconds>0，且记录未软删除。
         let sql = """
             SELECT r.book_id AS book_id,

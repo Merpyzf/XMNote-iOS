@@ -436,6 +436,8 @@ private actor ReadCalendarColorCacheStore {
         let updatedAt: Int64
     }
 
+    // static let 享有 dispatch_once 语义保证线程安全初始化；
+    // Actor isolation 确保初始化完成后所有 memory 访问序列化。
     static let shared = ReadCalendarColorCacheStore()
 
     private let fileURL: URL
@@ -448,11 +450,17 @@ private actor ReadCalendarColorCacheStore {
             ?? URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)
         self.fileURL = directory.appendingPathComponent("read_calendar_event_color_cache_v2.json")
 
-        guard let data = try? Data(contentsOf: fileURL),
-              let decoded = try? JSONDecoder().decode([String: CacheRecord].self, from: data) else {
-            return
+        do {
+            let data = try Data(contentsOf: fileURL)
+            self.memory = try JSONDecoder().decode([String: CacheRecord].self, from: data)
+        } catch {
+            #if DEBUG
+            if (error as NSError).domain != NSCocoaErrorDomain
+                || (error as NSError).code != NSFileReadNoSuchFileError {
+                print("[ReadCalendarColorCache] 缓存恢复失败: \(error)")
+            }
+            #endif
         }
-        self.memory = decoded
     }
 
     /// 读取缓存项并还原为业务颜色模型。

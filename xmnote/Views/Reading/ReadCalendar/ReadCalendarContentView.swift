@@ -287,6 +287,8 @@ struct ReadCalendarContentView: View {
     @State private var isSummarySheetPresented = false
     @State private var summarySheetMonthStart: Date?
     @State private var isYearSummarySheetPresented = false
+
+    // MARK: - Summary Floating Button State
     @State private var isSummaryFloatingButtonVisible = false
     @State private var summaryFloatingButtonAutoHideTask: Task<Void, Never>?
     @State private var summaryFloatingButtonInteractionToken: UInt64 = 0
@@ -461,7 +463,7 @@ private extension ReadCalendarContentView {
         print("[ReadCalendar][CalendarViewport] \(signature)")
 #endif
     }
-
+    
     var baseCalendarStack: some View {
         VStack(spacing: 0) {
             ReadCalendarTopControlBar(
@@ -590,8 +592,8 @@ private extension ReadCalendarContentView {
     }
 
     var heatmapYearMonthPages: [MonthPage] {
+        // 源数据由 monthStartsForYear 按自然月序构建，无需额外排序
         props.heatmapYearMonthPages
-            .sorted(by: { $0.monthStart < $1.monthStart })
     }
 
     var isCurrentYearHeatmapLoading: Bool {
@@ -995,6 +997,16 @@ private extension ReadCalendarContentView {
         guard !shown.contains(milestone) else { return }
         shown.insert(milestone)
         shownStreakMilestonesByMonth[activePage.monthStart] = shown
+
+        // 裁剪缓存：仅保留当前月 ±3 窗口，避免无限膨胀
+        if shownStreakMilestonesByMonth.count > 12 {
+            let current = activePage.monthStart
+            let cal = Calendar.current
+            shownStreakMilestonesByMonth = shownStreakMilestonesByMonth.filter { key, _ in
+                guard let distance = cal.dateComponents([.month], from: key, to: current).month else { return false }
+                return abs(distance) <= 3
+            }
+        }
 
         let message = streakMilestoneText(milestone)
         streakHintTask?.cancel()
@@ -1486,8 +1498,9 @@ private extension ReadCalendarContentView {
         let normalized = Calendar.current.startOfDay(for: monthStart)
         summarySheetMonthStart = normalized
         isYearSummarySheetPresented = false
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
-            guard !isYearSummarySheetPresented else { return }
+        Task {
+            try? await Task.sleep(for: .milliseconds(120))
+            guard !Task.isCancelled, !isYearSummarySheetPresented else { return }
             isSummarySheetPresented = true
         }
     }
@@ -1971,7 +1984,7 @@ private struct ReadCalendarBookCoverFullscreenOverlay: View {
             toggleLayoutPhase()
         } label: {
             HStack(spacing: Spacing.half) {
-                Image(systemName: isStacked ? "list.bullet.rectangle.portrait.fill" : "square.stack.3d.down.right.fill")
+                Image(systemName: isStacked ? "square.grid.2x2" : "square.stack.3d.down.right.fill")
                     .font(.system(size: 13, weight: .semibold))
                 Text(isStacked ? "展开" : "收起")
                     .font(.subheadline.weight(.semibold))

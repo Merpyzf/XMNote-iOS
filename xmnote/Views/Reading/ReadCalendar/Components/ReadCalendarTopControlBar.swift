@@ -119,6 +119,7 @@ private extension ReadCalendarTopControlBar {
         Binding(
             get: { displayMode },
             set: { newValue in
+                // 重入保护：Picker 在 SwiftUI 内部可能对同一值多次调用 setter
                 guard newValue != displayMode else { return }
                 withAnimation(.snappy(duration: 0.26)) {
                     onDisplayModeChanged(newValue)

@@ -722,8 +722,9 @@ private extension ReadCalendarViewModel {
             guard latestRequestTicketByMonthKey[key] == ticket else { return }
 
             if error is CancellationError || Task.isCancelled {
-                monthColorTasks[key]?.cancel()
-                monthColorTasks[key] = nil
+                if let task = monthColorTasks.removeValue(forKey: key) {
+                    task.cancel()
+                }
                 inFlightColorRequestBookIDsByMonthKey[key] = nil
 
                 if let previousState {
@@ -734,8 +735,10 @@ private extension ReadCalendarViewModel {
                 return
             }
 
-            monthColorTasks[key]?.cancel()
-            monthColorTasks[key] = nil
+            if let task = monthColorTasks.removeValue(forKey: key) {
+                task.cancel()
+            }
+            monthCache.removeValue(forKey: key)
             let failed = MonthPageState(
                 monthStart: normalized,
                 weeks: makeDisplayWeeks(for: normalized),
