@@ -371,22 +371,23 @@ private extension ReadCalendarCoverFanStack {
     }
 
     /// 折叠态模板：模拟杂志式随手叠放的非规则轨迹。
+    /// 第 4-13 层 xRatio 已优化为 60% 缩放，减少水平扩散以适配 iPhone 小屏。
     private func collapsedTemplate(depth: Int) -> FanTransform {
         let templates: [(rotation: Double, xRatio: CGFloat, yRatio: CGFloat, scale: CGFloat, opacity: CGFloat)] = [
             (0, 0, 0, 1, 1),
             (style.secondaryRotation, style.secondaryOffsetXRatio, style.secondaryOffsetYRatio, 0.98, 1),
             (style.tertiaryRotation, style.tertiaryOffsetXRatio, style.tertiaryOffsetYRatio, 0.95, 0.99),
             (9, 0.18, -0.16, 0.92, 0.98),
-            (-18, -0.62, 0.20, 0.9, 0.97),
-            (14, 0.34, -0.24, 0.88, 0.96),
-            (-26, -0.78, 0.28, 0.86, 0.95),
-            (19, 0.46, -0.32, 0.84, 0.94),
-            (-31, -0.9, 0.36, 0.82, 0.93),
-            (23, 0.58, -0.36, 0.8, 0.92),
-            (-35, -1.02, 0.42, 0.79, 0.91),
-            (27, 0.7, -0.4, 0.78, 0.9),
-            (-39, -1.1, 0.48, 0.77, 0.89),
-            (30, 0.8, -0.44, 0.76, 0.88)
+            (-18, -0.37, 0.20, 0.9, 0.97),    // xRatio: -0.62 → -0.37
+            (14, 0.20, -0.24, 0.88, 0.96),    // xRatio: 0.34 → 0.20
+            (-26, -0.47, 0.28, 0.86, 0.95),   // xRatio: -0.78 → -0.47
+            (19, 0.28, -0.32, 0.84, 0.94),    // xRatio: 0.46 → 0.28
+            (-31, -0.54, 0.36, 0.82, 0.93),   // xRatio: -0.9 → -0.54
+            (23, 0.35, -0.36, 0.8, 0.92),     // xRatio: 0.58 → 0.35
+            (-35, -0.61, 0.42, 0.79, 0.91),   // xRatio: -1.02 → -0.61
+            (27, 0.42, -0.4, 0.78, 0.9),      // xRatio: 0.7 → 0.42
+            (-39, -0.66, 0.48, 0.77, 0.89),   // xRatio: -1.1 → -0.66
+            (30, 0.48, -0.44, 0.76, 0.88)     // xRatio: 0.8 → 0.48
         ]
         let selected = templates[min(depth, templates.count - 1)]
         return FanTransform(
