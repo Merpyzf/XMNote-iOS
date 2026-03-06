@@ -46,7 +46,6 @@ struct ReadingDurationRankingChart: View {
         static let coverShadowRadius: CGFloat = 1.8
         static let coverShadowYOffset: CGFloat = 0.9
         static let coverHeight: CGFloat = barHeight
-        static let coverWidth: CGFloat = coverHeight * 24 / 34
     }
 
     let title: String
@@ -194,23 +193,13 @@ private extension ReadingDurationRankingChart {
     }
 
     /// 渲染排行项封面（含占位图与边框阴影）。
-    @ViewBuilder
     func rankingCover(urlString: String) -> some View {
-        XMRemoteImage(urlString: urlString, showsGIFBadge: true) {
-            RoundedRectangle(cornerRadius: CornerRadius.inlaySmall, style: .continuous)
-                .fill(Color.tagBackground)
-                .overlay {
-                    Image(systemName: "book.closed")
-                        .font(.system(size: 11, weight: .medium))
-                        .foregroundStyle(Color.textHint)
-                }
-        }
-        .frame(width: Layout.coverWidth, height: Layout.coverHeight)
-        .clipShape(RoundedRectangle(cornerRadius: Layout.coverCornerRadius, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: Layout.coverCornerRadius, style: .continuous)
-                .stroke(Color.white.opacity(0.14), lineWidth: 0.5)
-        }
+        XMBookCover.fixedHeight(
+            Layout.coverHeight,
+            urlString: urlString,
+            border: .init(color: .white.opacity(0.14), width: 0.5),
+            placeholderIconFont: .system(size: 11, weight: .medium)
+        )
         .shadow(
             color: Color.black.opacity(Layout.coverShadowOpacity),
             radius: Layout.coverShadowRadius,

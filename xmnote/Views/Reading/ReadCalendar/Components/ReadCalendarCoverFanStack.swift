@@ -166,7 +166,6 @@ struct ReadCalendarCoverFanStack: View {
             ForEach(Array(visibleItems.enumerated()), id: \.element.id) { index, item in
                 let transform = transform(for: index, total: visibleItems.count)
                 coverCard(for: item)
-                    .frame(width: coverSize.width, height: coverSize.height)
                     .rotationEffect(.degrees(transform.rotation))
                     .offset(x: transform.offsetX, y: transform.offsetY)
                     .zIndex(transform.zIndex)
@@ -224,30 +223,17 @@ private extension ReadCalendarCoverFanStack {
         return .snappy(duration: Layout.animationDuration)
     }
 
-    /// 为日历单元封面堆叠渲染单张卡片：有合法封面地址时显示远程图片，否则降级为占位卡片。
-    @ViewBuilder
+    /// 为日历单元封面堆叠渲染单张卡片，统一委托 XMBookCover 处理裁切与占位。
     func coverCard(for item: Item) -> some View {
-        if let coverURL = normalizedCoverURL(item.coverURL) {
-            XMRemoteImage(urlString: coverURL, contentMode: .fill, priority: .low) {
-                coverPlaceholder
-            }
-            .clipShape(RoundedRectangle(cornerRadius: CornerRadius.inlaySmall, style: .continuous))
-            .overlay {
-                RoundedRectangle(cornerRadius: CornerRadius.inlaySmall, style: .continuous)
-                    .stroke(Color.white.opacity(Layout.borderOpacity), lineWidth: Layout.borderWidth)
-            }
-        } else {
-            coverPlaceholder
-        }
-    }
-
-    var coverPlaceholder: some View {
-        RoundedRectangle(cornerRadius: CornerRadius.inlaySmall, style: .continuous)
-            .fill(Color.readCalendarSelectionFill.opacity(Layout.placeholderOpacity))
-            .overlay {
-                RoundedRectangle(cornerRadius: CornerRadius.inlaySmall, style: .continuous)
-                    .stroke(Color.white.opacity(Layout.borderOpacity), lineWidth: Layout.borderWidth)
-            }
+        XMBookCover.fixedSize(
+            width: coverSize.width,
+            height: coverSize.height,
+            urlString: item.coverURL ?? "",
+            border: .init(color: .white.opacity(Layout.borderOpacity), width: Layout.borderWidth),
+            placeholderBackground: Color.readCalendarSelectionFill.opacity(Layout.placeholderOpacity),
+            placeholderIconFont: nil,
+            priority: .low
+        )
     }
 
     var overflowTailCue: some View {
@@ -302,13 +288,6 @@ private extension ReadCalendarCoverFanStack {
             .opacity(opacity)
             .zIndex(zIndex)
             .shadow(color: Color.black.opacity(style.shadowOpacity * 0.58), radius: style.shadowRadius * 0.82, x: style.shadowX, y: style.shadowY)
-    }
-
-    /// 归一化封面地址，过滤空白字符串，避免将无效 URL 传给图片加载组件。
-    func normalizedCoverURL(_ rawValue: String?) -> String? {
-        guard let rawValue else { return nil }
-        let trimmed = rawValue.trimmingCharacters(in: .whitespacesAndNewlines)
-        return trimmed.isEmpty ? nil : trimmed
     }
 
     /// 根据展示模式与层级计算封面变换，形成稳定可复现的非规则堆叠视觉。

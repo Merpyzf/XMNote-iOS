@@ -135,6 +135,7 @@ L3 头部闸门：提交前必须执行 `bash scripts/verify_l3_protocol_headers
 UI 核心白名单：`docs/architecture/UI核心组件白名单.md`（白名单变更必须与术语表保持同构）。
 组件归位闸门：页面壳层必须位于 `xmnote/Views/<Feature>/`；跨模块复用 UI 组件必须位于 `xmnote/UIComponents`；`xmnote/Views/<Feature>/Components` 仅允许页面私有子视图。
 组件新增准入：新增组件前必须先扫描现有实现可复用性；若已有可复用组件，优先复用，仅在跨模块复用成立时才迁入 `xmnote/UIComponents`。
+书籍封面渲染约束（强制）：所有书籍封面渲染必须使用 `XMBookCover`（`xmnote/UIComponents/Foundation/XMBookCover.swift`），禁止手写 `XMRemoteImage` + `aspectRatio` + `clipped` + `clipShape` + `overlay(stroke)` 的重复组合；统一宽高比 `XMBookCover.aspectRatio = 0.7`，统一 `.fill` Crop 裁切行为。
 功能模块边界：`xmnote/RichTextEditor` 保持功能模块定位，不整体迁入 `UIComponents`；仅纯展示且跨页面复用的子组件允许抽取。
 学习输出要求：每完成一个功能开发并收到用户“任务已完成”信号后，必须输出本次涉及的 iOS 知识点总结，并提供面向 Android Compose 开发者的学习示例（包含 Android → iOS 思维映射与可运行示例代码）；学习文档统一存放在 `docs/learning/`。
 iOS26 参考基线：涉及液态玻璃与 iOS26 新特性实现时，必须优先对照 `docs/learning/iOS26液态玻璃与高相关新特性开发参考.md`；规范优先级为 Apple 官方文档 > 本地参考文档 > 具体实现细节。
@@ -267,6 +268,7 @@ L3 文件头部契约模板：
 - `xmnote/UIComponents` 是跨模块复用 UI 组件唯一归属目录，禁止在 `xmnote/Utilities`、`xmnote/Services` 新增跨模块复用组件。
 - `xmnote/UIComponents` 的跨模块复用 UI 组件必须在术语表中标记为 `UI-复用`。
 - 新增组件前必须先扫描现有实现可复用性；若已有可复用组件，优先复用，仅在跨模块复用成立时才迁入 `xmnote/UIComponents`。
+- 书籍封面渲染必须使用 `XMBookCover`（`xmnote/UIComponents/Foundation/XMBookCover.swift`），禁止手写封面渲染组合。
 - `docs/architecture/UI核心组件白名单.md` 中的组件必须在术语表中标记为 `UI-核心页面`。
 - 重要 UI 组件必须在 `docs/architecture/UI组件文档清单.md` 有登记，且对应使用文档位于 `docs/component-guides/`。
 - `docs/architecture/UI核心组件白名单.md` 中组件必须在 `docs/architecture/UI组件文档清单.md` 全量覆盖。

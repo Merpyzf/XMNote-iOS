@@ -94,21 +94,11 @@ private struct BookDetailContentView: View {
     }
 
     private func coverImage(_ url: String) -> some View {
-        XMRemoteImage(urlString: url) {
-            Color.tagBackground
-                .overlay {
-                    Image(systemName: "book.closed")
-                        .font(.title3)
-                        .foregroundStyle(Color.textHint)
-                }
-        }
-        .aspectRatio(0.68, contentMode: .fit)
-        .frame(width: 80)
-        .clipped()
-        .clipShape(RoundedRectangle(cornerRadius: CornerRadius.inlaySmall))
-        .overlay(
-            RoundedRectangle(cornerRadius: CornerRadius.inlaySmall)
-                .stroke(Color.cardBorder, lineWidth: CardStyle.borderWidth)
+        XMBookCover.fixedWidth(
+            80,
+            urlString: url,
+            border: .init(color: .cardBorder, width: CardStyle.borderWidth),
+            placeholderIconFont: .title3
         )
     }
 

@@ -28,29 +28,13 @@ struct BookGridItemView: View {
     // MARK: - Cover
 
     private var coverImage: some View {
-        XMRemoteImage(urlString: book.cover) {
-            coverPlaceholder
-        }
-        .frame(minWidth: 0, maxWidth: .infinity)
-        .aspectRatio(0.68, contentMode: .fit)
-        .clipped()
-        .clipShape(RoundedRectangle(cornerRadius: CornerRadius.inlaySmall))
-        .overlay(
-            RoundedRectangle(cornerRadius: CornerRadius.inlaySmall)
-                .stroke(Color.cardBorder, lineWidth: CardStyle.borderWidth)
+        XMBookCover.responsive(
+            urlString: book.cover,
+            border: .init(color: .cardBorder, width: CardStyle.borderWidth)
         )
         .overlay(alignment: .topTrailing) {
             noteBadge
         }
-    }
-
-    private var coverPlaceholder: some View {
-        Color.tagBackground
-            .overlay {
-                Image(systemName: "book.closed")
-                    .font(.title2)
-                    .foregroundStyle(Color.textHint)
-            }
     }
 
     // MARK: - Badge

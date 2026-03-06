@@ -66,6 +66,7 @@
 - 页面壳层（`*View` 页面入口/容器）唯一归属目录：`xmnote/Views/<Feature>/`。
 - 跨模块复用 UI 组件唯一归属目录：`xmnote/UIComponents`。
 - 新增组件前必须先扫描现有实现可复用性；若已有可复用组件，优先复用，仅在跨模块复用成立时才迁入 `xmnote/UIComponents`。
+- 书籍封面渲染约束（强制）：所有书籍封面渲染必须使用 `XMBookCover`（`xmnote/UIComponents/Foundation/XMBookCover.swift`），禁止手写 `XMRemoteImage` + `aspectRatio` + `clipped` + `clipShape` + `overlay(stroke)` 的重复组合；统一宽高比 `XMBookCover.aspectRatio = 0.7`，统一 `.fill` Crop 裁切行为。
 - `xmnote/Views/<Feature>/Components` 仅允许页面私有子视图（服务当前 Feature），不得作为跨模块公共组件。
 - 业务 Sheet 必须放在 `xmnote/Views/<Feature>/Sheets/`，禁止与页面壳层混在同一文件。
 - `UIComponents` 只允许放置无业务状态、无数据访问、副作用可控的跨模块复用组件。

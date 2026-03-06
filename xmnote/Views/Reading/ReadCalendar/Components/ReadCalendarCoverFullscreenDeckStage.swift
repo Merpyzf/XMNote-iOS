@@ -354,8 +354,7 @@ private extension ReadCalendarCoverFullscreenDeckStage {
         ZStack {
             ForEach(Array(stackedItems.enumerated()), id: \.element.id) { index, item in
                 let transform = collapsedTransform(for: index, total: stackedItems.count)
-                coverCard(for: item)
-                    .frame(width: resolvedCoverSize.width, height: resolvedCoverSize.height)
+                coverCard(for: item, size: resolvedCoverSize)
                     .matchedGeometryEffect(
                         id: itemTransitionID(for: item.id),
                         in: itemTransitionNamespace,
@@ -388,8 +387,7 @@ private extension ReadCalendarCoverFullscreenDeckStage {
             LazyVGrid(columns: columns, spacing: resolvedGridSpacing) {
                 ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
                     if stackedItemIDSet.contains(item.id) {
-                        coverCard(for: item)
-                            .frame(width: cardSize.width, height: cardSize.height)
+                        coverCard(for: item, size: cardSize)
                             .matchedGeometryEffect(
                                 id: itemTransitionID(for: item.id),
                                 in: itemTransitionNamespace,
@@ -406,8 +404,7 @@ private extension ReadCalendarCoverFullscreenDeckStage {
                             .opacity(phase == .grid ? 1 : Layout.hiddenStackAnchorOpacity)
                             .animation(matchedCardAnimation(for: index), value: phaseToken)
                     } else {
-                        coverCard(for: item)
-                            .frame(width: cardSize.width, height: cardSize.height)
+                        coverCard(for: item, size: cardSize)
                             .shadow(
                                 color: Color.black.opacity(style.shadowOpacity * 0.92),
                                 radius: style.shadowRadius,
@@ -943,37 +940,18 @@ private extension ReadCalendarCoverFullscreenDeckStage {
         "cover-deck-item-\(itemID)"
     }
 
-    /// 为全屏阶段渲染单张封面卡片；无封面地址时降级为占位样式。
-    @ViewBuilder
-    func coverCard(for item: ReadCalendarCoverFanStack.Item) -> some View {
-        if let coverURL = normalizedCoverURL(item.coverURL) {
-            XMRemoteImage(urlString: coverURL, contentMode: .fill, priority: .low) {
-                coverPlaceholder
-            }
-            .clipShape(RoundedRectangle(cornerRadius: CornerRadius.inlaySmall, style: .continuous))
-            .overlay {
-                RoundedRectangle(cornerRadius: CornerRadius.inlaySmall, style: .continuous)
-                    .stroke(Color.white.opacity(Layout.borderOpacity), lineWidth: Layout.borderWidth)
-            }
-        } else {
-            coverPlaceholder
-        }
+    /// 为全屏阶段渲染单张封面卡片，委托 XMBookCover 统一裁切与占位。
+    func coverCard(for item: ReadCalendarCoverFanStack.Item, size: CGSize) -> some View {
+        XMBookCover.fixedSize(
+            width: size.width,
+            height: size.height,
+            urlString: item.coverURL ?? "",
+            border: .init(color: .white.opacity(Layout.borderOpacity), width: Layout.borderWidth),
+            placeholderBackground: Color.readCalendarSelectionFill.opacity(Layout.placeholderOpacity),
+            placeholderIconFont: nil,
+            priority: .low
+        )
     }
 
-    /// 统一占位卡片视觉，保障无封面数据时层次感不丢失。
-    var coverPlaceholder: some View {
-        RoundedRectangle(cornerRadius: CornerRadius.inlaySmall, style: .continuous)
-            .fill(Color.readCalendarSelectionFill.opacity(Layout.placeholderOpacity))
-            .overlay {
-                RoundedRectangle(cornerRadius: CornerRadius.inlaySmall, style: .continuous)
-                    .stroke(Color.white.opacity(Layout.borderOpacity), lineWidth: Layout.borderWidth)
-            }
-    }
-
-    /// 归一化封面 URL，过滤空白值避免触发无效网络请求。
-    func normalizedCoverURL(_ rawValue: String?) -> String? {
-        guard let rawValue else { return nil }
-        let trimmed = rawValue.trimmingCharacters(in: .whitespacesAndNewlines)
-        return trimmed.isEmpty ? nil : trimmed
-    }
+    /// 归一化封面宽高比到安全范围，避免极端值导致布局异常。
 }
