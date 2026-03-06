@@ -2355,6 +2355,7 @@ private struct ReadCalendarBookCoverFullscreenOverlay: View {
         guard layoutPhase != target else { return }
         if source == .manual {
             cancelAutoGridTransition()
+            triggerManualToggleHaptic(target: target)
         }
         hasAutoTransitioned = true
         cancelPhaseTransitionTask(resetState: false)
@@ -2512,6 +2513,22 @@ private struct ReadCalendarBookCoverFullscreenOverlay: View {
         let generator = UIImpactFeedbackGenerator(style: .light)
         generator.prepare()
         generator.impactOccurred(intensity: 0.56)
+#endif
+    }
+
+    /// 手动切换布局阶段时提供差异化触感：展开偏轻快，收起偏干脆。
+    private func triggerManualToggleHaptic(
+        target: ReadCalendarCoverFullscreenDeckStage.Phase
+    ) {
+        guard isHapticsEnabled else { return }
+#if canImport(UIKit)
+        let generator = UIImpactFeedbackGenerator(
+            style: target == .grid ? .light : .medium
+        )
+        generator.prepare()
+        generator.impactOccurred(
+            intensity: target == .grid ? 0.62 : 0.72
+        )
 #endif
     }
 

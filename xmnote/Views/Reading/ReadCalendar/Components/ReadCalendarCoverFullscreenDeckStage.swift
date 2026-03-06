@@ -70,7 +70,8 @@ struct ReadCalendarCoverFullscreenDeckStage: View {
         static let hiddenExtraGridOpacity: CGFloat = 0
         static let cardAnimationDelayStep: Double = 0.024
         static let cardAnimationDelayCap: Double = 0.2
-        static let cardAnimationResponse: CGFloat = 0.42
+        static let cardAnimationResponseExpand: CGFloat = 0.38
+        static let cardAnimationResponseCollapse: CGFloat = 0.30
         static let cardAnimationDamping: CGFloat = 0.86
         static let extraGridFadeDuration: CGFloat = 0.18
         static let borderOpacity: CGFloat = 0.45
@@ -377,6 +378,15 @@ private extension ReadCalendarCoverFullscreenDeckStage {
             }
         }
         .frame(width: containerSize.width, height: containerSize.height, alignment: .center)
+        .offset(y: stackedVisualCenterOffset)
+    }
+
+    /// 少量封面上移修正量，将几何中心调整到人眼感知的视觉中心。
+    var stackedVisualCenterOffset: CGFloat {
+        let count = stackedItems.count
+        guard count <= 3, containerSize.height > 0 else { return 0 }
+        let baseRatio: CGFloat = count == 1 ? -0.05 : (count == 2 ? -0.045 : -0.035)
+        return containerSize.height * baseRatio
     }
 
     var gridLayer: some View {
@@ -395,6 +405,7 @@ private extension ReadCalendarCoverFullscreenDeckStage {
                                 anchor: .center,
                                 isSource: phase == .grid
                             )
+                            .rotationEffect(.degrees(0))
                             .shadow(
                                 color: Color.black.opacity(style.shadowOpacity * 0.92),
                                 radius: style.shadowRadius,
@@ -644,10 +655,12 @@ private extension ReadCalendarCoverFullscreenDeckStage {
         )
     }
 
+    /// 求解桌面散落布局位置，少量书籍时收缩搜索区域并做重心居中修正。
     private func editorialDeskPlacements(total: Int) -> [DeskPlacement] {
         guard total > 0 else { return [] }
         let metrics = resolvedMetrics
         let zone = metrics.deskZone
+        let searchZone = compactSearchZone(for: total, baseZone: zone)
         var placements: [DeskPlacement] = []
         placements.reserveCapacity(total)
 
@@ -658,7 +671,7 @@ private extension ReadCalendarCoverFullscreenDeckStage {
                 y: deskSymmetricRandom(depth: 0, attempt: 0, tier: 0, channel: 17)
                     * resolvedCoverSize.height * Layout.deskAnchorYJitterRatio
             ),
-            zone: zone
+            zone: searchZone
         )
         let anchorRotation = Double(deskSymmetricRandom(depth: 0, attempt: 0, tier: 0, channel: 23))
             * Layout.deskAnchorRotation
@@ -667,17 +680,51 @@ private extension ReadCalendarCoverFullscreenDeckStage {
         guard total > 1 else { return placements }
 
         for depth in 1..<total {
-            placements.append(bestDeskPlacement(for: depth, placed: placements, metrics: metrics))
+            placements.append(bestDeskPlacement(for: depth, placed: placements, total: total, metrics: metrics, searchZone: searchZone))
+        }
+
+        if total <= 3 {
+            placements = centroidCorrectedPlacements(placements, clampZone: zone)
         }
         return placements
+    }
+
+    /// 少量书籍时收缩搜索区域，使封面紧凑聚拢在中心。
+    private func compactSearchZone(for total: Int, baseZone: DeskZone) -> DeskZone {
+        switch total {
+        case ...2:
+            return DeskZone(halfX: baseZone.halfX * 0.40, halfY: baseZone.halfY * 0.36)
+        case 3:
+            return DeskZone(halfX: baseZone.halfX * 0.55, halfY: baseZone.halfY * 0.50)
+        default:
+            return baseZone
+        }
+    }
+
+    /// 将所有 placement 整体平移使重心归零，确保少量封面视觉居中。
+    private func centroidCorrectedPlacements(_ placements: [DeskPlacement], clampZone: DeskZone) -> [DeskPlacement] {
+        guard !placements.isEmpty else { return placements }
+        let count = CGFloat(placements.count)
+        let cx = placements.map(\.offset.x).reduce(0, +) / count
+        let cy = placements.map(\.offset.y).reduce(0, +) / count
+        return placements.map { p in
+            DeskPlacement(
+                offset: clampToDeskZone(
+                    CGPoint(x: p.offset.x - cx, y: p.offset.y - cy),
+                    zone: clampZone
+                ),
+                rotation: p.rotation
+            )
+        }
     }
 
     private func bestDeskPlacement(
         for depth: Int,
         placed: [DeskPlacement],
-        metrics: DeckAdaptiveMetrics
+        total: Int,
+        metrics: DeckAdaptiveMetrics,
+        searchZone: DeskZone
     ) -> DeskPlacement {
-        let zone = metrics.deskZone
         var bestOverall: DeskCandidate?
 
         for (tierIndex, tier) in metrics.deskTiers.enumerated() {
@@ -689,13 +736,14 @@ private extension ReadCalendarCoverFullscreenDeckStage {
                     for: depth,
                     attempt: attempt,
                     tier: tierIndex,
-                    zone: zone,
+                    zone: searchZone,
                     metrics: metrics
                 )
                 let evaluated = evaluateDeskCandidate(
                     candidateOffset,
                     placed: placed,
-                    zone: zone,
+                    zone: searchZone,
+                    total: total,
                     minDistance: minimumDistance,
                     overlapMin: tier.overlapMin,
                     overlapMax: tier.overlapMax
@@ -731,10 +779,10 @@ private extension ReadCalendarCoverFullscreenDeckStage {
 
         let fallbackOffset = bestOverall?.offset ?? clampToDeskZone(
             CGPoint(
-                x: deskSymmetricRandom(depth: depth, attempt: 0, tier: 99, channel: 31) * zone.halfX,
-                y: deskSymmetricRandom(depth: depth, attempt: 0, tier: 99, channel: 37) * zone.halfY
+                x: deskSymmetricRandom(depth: depth, attempt: 0, tier: 99, channel: 31) * searchZone.halfX,
+                y: deskSymmetricRandom(depth: depth, attempt: 0, tier: 99, channel: 37) * searchZone.halfY
             ),
-            zone: zone
+            zone: searchZone
         )
         return DeskPlacement(
             offset: fallbackOffset,
@@ -775,6 +823,7 @@ private extension ReadCalendarCoverFullscreenDeckStage {
         _ offset: CGPoint,
         placed: [DeskPlacement],
         zone: DeskZone,
+        total: Int,
         minDistance: CGFloat,
         overlapMin: CGFloat,
         overlapMax: CGFloat
@@ -803,14 +852,25 @@ private extension ReadCalendarCoverFullscreenDeckStage {
         let edgePenalty = edgeProximityPenalty(offset: offset, zone: zone)
         let crowdPenalty = max(0, maxOverlap - 0.62) * 1.5
         let collisionPenalty: CGFloat = hasCollision ? 3.5 : 0
+        let horizontalPreference = horizontalSpreadBonus(offset: offset, total: total)
         let score = overlapScore * 2
             + spacingScore * 1.1
             + quadrantScore * 0.65
+            + horizontalPreference
             - edgePenalty
             - crowdPenalty
             - collisionPenalty
         let qualified = !hasCollision && overlapInRange && maxOverlap <= 0.62
         return (score, qualified)
+    }
+
+    /// 少量书籍时奖励水平展开、惩罚纵向堆叠，使排布更像杂志随手搁置。
+    private func horizontalSpreadBonus(offset: CGPoint, total: Int) -> CGFloat {
+        guard total <= 3 else { return 0 }
+        let absX = abs(offset.x)
+        let absY = abs(offset.y)
+        let dominance = (absX - absY) / max(1, absX + absY)
+        return dominance * 0.6
     }
 
     private func overlapFitness(_ overlap: CGFloat, minOverlap: CGFloat, maxOverlap: CGFloat) -> CGFloat {
@@ -902,11 +962,14 @@ private extension ReadCalendarCoverFullscreenDeckStage {
         deskUnitRandom(depth: depth, attempt: attempt, tier: tier, channel: channel) * 2 - 1
     }
 
-    /// 生成单张卡片的过渡动画，阶段切换时形成轻微错峰感。
+    /// 生成单张卡片的过渡动画，展开偏从容、收起偏果断，阶段切换时形成轻微错峰感。
     func matchedCardAnimation(for index: Int) -> Animation? {
         guard isAnimated else { return nil }
+        let response = phase == .grid
+            ? Layout.cardAnimationResponseExpand
+            : Layout.cardAnimationResponseCollapse
         let baseAnimation = Animation.spring(
-            response: Layout.cardAnimationResponse,
+            response: response,
             dampingFraction: Layout.cardAnimationDamping
         )
         switch matchedTransitionStyle {
