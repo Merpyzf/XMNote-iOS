@@ -64,6 +64,7 @@
 
 ## UI组件归位规则（阻塞级）
 - 页面壳层（`*View` 页面入口/容器）唯一归属目录：`xmnote/Views/<Feature>/`。
+- ViewModel（`*ViewModel`）唯一归属目录：`xmnote/ViewModels/<Feature>/`；`xmnote/Views/**` 禁止放置 `*ViewModel.swift`。
 - 跨模块复用 UI 组件唯一归属目录：`xmnote/UIComponents`。
 - 新增组件前必须先扫描现有实现可复用性；若已有可复用组件，优先复用，仅在跨模块复用成立时才迁入 `xmnote/UIComponents`。
 - 书籍封面渲染约束（强制）：所有书籍封面渲染必须使用 `XMBookCover`（`xmnote/UIComponents/Foundation/XMBookCover.swift`），禁止手写 `XMRemoteImage` + `aspectRatio` + `clipped` + `clipShape` + `overlay(stroke)` 的重复组合；统一宽高比 `XMBookCover.aspectRatio = 0.7`，统一 `.fill` Crop 裁切行为。
@@ -94,7 +95,8 @@
 - `XMNote.xcodeproj`：工程入口（scheme: `xmnote`）。
 - `xmnote/Localizable.xcstrings`：String Catalog，统一字符串管理（sourceLanguage: zh-Hans，含 en 占位）。
 - `xmnote/AppState`：应用级全局状态目录（SwiftUI Environment 注入）。
-- `xmnote/Views`、`xmnote/Navigation`：SwiftUI 页面、ViewModel 与路由（View + ViewModel 按功能模块共置）。
+- `xmnote/Views`、`xmnote/Navigation`：SwiftUI 页面与路由（按功能模块组织）。
+- `xmnote/ViewModels`：页面状态与业务编排（按 Feature 镜像 `xmnote/Views/<Feature>/` 分层）。
 - `xmnote/Domain`：Repository 协议与跨层模型。
 - `xmnote/Data`：Repository 实现与依赖组装。
 - `xmnote/Infra`：底层桥接与技术实现支持。
@@ -122,6 +124,7 @@
 - `xmnote/Services`
 - `xmnote/UIComponents`
 - `xmnote/Utilities`
+- `xmnote/ViewModels`
 - `xmnote/Views`
 <!-- AUTO_SYNC_MODULES_END -->
 - 同步命令：`bash scripts/sync_arch_docs.sh`

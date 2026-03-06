@@ -13,9 +13,10 @@ tmp_path_category_map="$(mktemp)"
 tmp_view_components="$(mktemp)"
 tmp_view_sheets="$(mktemp)"
 tmp_sheet_named_files="$(mktemp)"
+tmp_viewmodels_in_views="$(mktemp)"
 
 cleanup() {
-    rm -f "$tmp_path_category_map" "$tmp_view_components" "$tmp_view_sheets" "$tmp_sheet_named_files"
+    rm -f "$tmp_path_category_map" "$tmp_view_components" "$tmp_view_sheets" "$tmp_sheet_named_files" "$tmp_viewmodels_in_views"
 }
 trap cleanup EXIT
 
@@ -50,6 +51,10 @@ find "$ROOT_DIR/xmnote/Views" -type f -name "*Sheet*.swift" \
     | sed "s#^$ROOT_DIR/##" \
     | sort -u > "$tmp_sheet_named_files"
 
+find "$ROOT_DIR/xmnote/Views" -type f -name "*ViewModel.swift" \
+    | sed "s#^$ROOT_DIR/##" \
+    | sort -u > "$tmp_viewmodels_in_views"
+
 missing=0
 
 # 校验页面私有子视图：必须在术语表中，且类别为 UI-页面私有
@@ -79,6 +84,14 @@ while IFS= read -r relative_path; do
         missing=1
     fi
 done < "$tmp_sheet_named_files"
+
+# 校验 ViewModel：必须放在 xmnote/ViewModels，禁止放在 xmnote/Views
+while IFS= read -r relative_path; do
+    [[ -z "${relative_path:-}" ]] && continue
+    feature_rel="${relative_path#xmnote/Views/}"
+    echo "MISPLACED_VIEWMODEL_IN_VIEWS: $relative_path expected_dir=xmnote/ViewModels/$feature_rel"
+    missing=1
+done < "$tmp_viewmodels_in_views"
 
 while IFS= read -r relative_path; do
     [[ -z "${relative_path:-}" ]] && continue
@@ -131,7 +144,7 @@ done < <(
 )
 
 if [[ "$missing" -ne 0 ]]; then
-    echo "FAIL: 页面组件目录边界校验失败，请修复页面壳层/页面私有子视图/业务 Sheet 的归位问题。"
+    echo "FAIL: 页面组件目录边界校验失败，请修复页面壳层/页面私有子视图/业务 Sheet/ViewModel 的归位问题。"
     exit 1
 fi
 

@@ -4,7 +4,7 @@
 成员清单
 - `verify_glossary.sh`: 校验核心类型（Repository/ViewModel/Service 等）是否已登记到 `docs/architecture/术语对照表.md`。
 - `verify_ui_glossary_scope.sh`: 校验 `xmnote/UIComponents` 可复用 UI 与白名单核心页面组件是否完整登记且类别正确。
-- `verify_view_component_boundaries.sh`: 校验页面壳层、页面私有子视图、业务 Sheet 与跨模块复用组件的目录边界。
+- `verify_view_component_boundaries.sh`: 校验页面壳层、页面私有子视图、业务 Sheet、ViewModel 与跨模块复用组件的目录边界。
 - `verify_component_guides.sh`: 校验重要 UI 组件使用文档清单、白名单覆盖、路径与文档必备章节是否完整。
 - `verify_l3_protocol_headers.sh`: 校验 `xmnote/**/*.swift` 是否具备 L3 头部协议语句。
 - `sync_arch_docs.sh`: 根据 `xmnote/` 顶层目录自动同步 `AGENTS.md` 与 `CLAUDE.md` 的模块清单块。

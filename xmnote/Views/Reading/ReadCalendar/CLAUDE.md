@@ -1,13 +1,12 @@
 # ReadCalendar/
 > L2 | 父级: Reading/CLAUDE.md
 
-阅读日历子功能，页面壳层 + 业务内容壳层 + 页面私有子视图 + 业务 Sheet + ViewModel + 布局引擎共置。
+阅读日历子功能视图层，页面壳层 + 业务内容壳层 + 页面私有子视图 + 业务 Sheet + 布局引擎共置。对应 ViewModel 位于 `xmnote/ViewModels/Reading/ReadCalendar/`。
 
 ## 成员清单
 
 - `ReadCalendarView.swift`: 阅读日历页面壳层（仓储注入 + 状态映射，挂载 ReadCalendarContentView，管理设置弹层）
 - `ReadCalendarContentView.swift`: 阅读日历业务内容壳层（顶部控制、周标题、分页网格、状态反馈与月总结触发）
-- `ReadCalendarViewModel.swift`: 阅读日历页面状态中枢（月份切换、选中态、周布局构建 + 封面取色任务编排与增量回填）
 - `ReadCalendarEventLayoutEngine.swift`: 连续区间构建与跨周分段、lane 分配算法引擎
 - `ReadCalendarSettings.swift`: 阅读日历页面配置状态（事件过滤、触感反馈、连续阅读提示、每日书籍数）
 - `Components/CalendarMonthStepperBar.swift`: 页面私有月份切换触发器组件（点击月份菜单快速跳月）

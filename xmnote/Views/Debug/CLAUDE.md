@@ -7,14 +7,16 @@
 
 - `DebugCenterView.swift`: 调试中心入口，聚合测试页面跳转
 - `HeatmapTestView.swift`: 热力图组件可视化调试页面
-- `HeatmapTestViewModel.swift`: 热力图测试数据与状态编排
 - `ImageLoadingTestView.swift`: 图片加载测试页面（静态图/GIF/失败链路与缓存来源观测）
-- `ImageLoadingTestViewModel.swift`: 图片加载测试状态编排（批量样例、手动 URL、缓存来源统计）
+- `ReadCalendarCoverStackTestView.swift`: 阅读日历封面堆栈可视化调试页面
 - `RichTextTestView.swift`: 富文本编辑器调试页面
-- `RichTextTestViewModel.swift`: 富文本测试数据与交互状态编排
+- `SystemColorsTestView.swift`: 系统语义色与自定义语义色调试页面
 
 ## 子目录
 
 - `Prototypes/`: 交互/视觉原型组件目录（仅调试演示，不进入业务路径）
+
+说明
+- Debug 相关 ViewModel 已统一迁移至 `xmnote/ViewModels/Debug/`。
 
 [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md

@@ -224,7 +224,7 @@ private struct ReadCalendarMonthGridWeekRow: View {
     private enum Layout {
         static let modeContentHPadding: CGFloat = Spacing.cozy
         static let modeContentTopPadding: CGFloat = Spacing.half
-        static let bookCoverContentTopPadding: CGFloat = 2
+        static let bookCoverContentTopPadding: CGFloat = 0
         static let overflowBadgeHPadding: CGFloat = 3
         static let overflowBadgeBottomPadding: CGFloat = 2
         static let overflowBadgeLeading: CGFloat = 3
@@ -280,10 +280,12 @@ private struct ReadCalendarMonthGridWeekRow: View {
     }
 
     private var rowHeight: CGFloat {
-        return dayHeaderHeight
-            + laneTopInset
-            + laneBottomInset
-            + modeContentHeight
+        switch displayMode {
+        case .bookCover:
+            return dayHeaderHeight + modeContentHeight
+        default:
+            return dayHeaderHeight + laneTopInset + laneBottomInset + modeContentHeight
+        }
     }
 
     var body: some View {
@@ -477,20 +479,6 @@ private struct ReadCalendarMonthGridWeekRow: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
         .padding(.top, Layout.bookCoverContentTopPadding)
         .frame(height: modeContentHeight, alignment: .center)
-        .background {
-            RoundedRectangle(cornerRadius: CornerRadius.inlayMedium, style: .continuous)
-                .fill(
-                    LinearGradient(
-                        colors: [
-                            Color.readCalendarSelectionFill.opacity(0.18),
-                            Color.readCalendarSelectionFill.opacity(0.06)
-                        ],
-                        startPoint: .top,
-                        endPoint: .bottom
-                    )
-                )
-                .padding(.horizontal, Layout.modeContentHPadding)
-        }
         .background {
             if requestedCount > 0 {
                 GeometryReader { proxy in

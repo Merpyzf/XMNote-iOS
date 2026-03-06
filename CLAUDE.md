@@ -127,13 +127,13 @@ SQL 变更同步（强制）：修改 SQL 时必须同步更新对应注释；SQ
 测试优先级：如需补测试，优先补单元测试（ViewModel、数据库迁移、服务层异常路径）。
 提交规范：提交信息统一使用中文，格式为 `fix(功能模块): 提交信息`。
 术语对照闸门：提交前必须执行 `bash scripts/verify_glossary.sh && bash scripts/verify_ui_glossary_scope.sh`。
-组件边界闸门：提交前必须执行 `bash scripts/verify_view_component_boundaries.sh`，校验页面壳层/页面私有子视图/跨模块复用组件的目录边界。
+组件边界闸门：提交前必须执行 `bash scripts/verify_view_component_boundaries.sh`，校验页面壳层/页面私有子视图/业务 Sheet/ViewModel/跨模块复用组件的目录边界。
 L3 头部闸门：提交前必须执行 `bash scripts/verify_l3_protocol_headers.sh`，确保业务 Swift 文件具备协议头部契约。
 架构文档闸门：提交前必须执行 `bash scripts/verify_arch_docs_sync.sh`，确保 `AGENTS.md` 与 `CLAUDE.md` 的模块清单和目录同构。
 组件文档闸门：提交前必须执行 `bash scripts/verify_component_guides.sh`，确保重要 UI 组件使用文档清单与白名单覆盖完整且结构合规。
 术语对照表：`docs/architecture/术语对照表.md`（新增/重命名核心类、跨模块复用 UI、页面私有子视图、白名单核心页面组件时必须同步更新）。
 UI 核心白名单：`docs/architecture/UI核心组件白名单.md`（白名单变更必须与术语表保持同构）。
-组件归位闸门：页面壳层必须位于 `xmnote/Views/<Feature>/`；跨模块复用 UI 组件必须位于 `xmnote/UIComponents`；`xmnote/Views/<Feature>/Components` 仅允许页面私有子视图。
+组件归位闸门：页面壳层必须位于 `xmnote/Views/<Feature>/`；ViewModel 必须位于 `xmnote/ViewModels/<Feature>/` 且 `xmnote/Views/**` 禁止 `*ViewModel.swift`；跨模块复用 UI 组件必须位于 `xmnote/UIComponents`；`xmnote/Views/<Feature>/Components` 仅允许页面私有子视图。
 组件新增准入：新增组件前必须先扫描现有实现可复用性；若已有可复用组件，优先复用，仅在跨模块复用成立时才迁入 `xmnote/UIComponents`。
 书籍封面渲染约束（强制）：所有书籍封面渲染必须使用 `XMBookCover`（`xmnote/UIComponents/Foundation/XMBookCover.swift`），禁止手写 `XMRemoteImage` + `aspectRatio` + `clipped` + `clipShape` + `overlay(stroke)` 的重复组合；统一宽高比 `XMBookCover.aspectRatio = 0.7`，统一 `.fill` Crop 裁切行为。
 功能模块边界：`xmnote/RichTextEditor` 保持功能模块定位，不整体迁入 `UIComponents`；仅纯展示且跨页面复用的子组件允许抽取。
@@ -263,6 +263,7 @@ L3 文件头部契约模板：
 - 任何目录级架构变更后，必须重新核对 L1/L2/L3 的一致性。
 - 新增/重命名核心类必须在 `docs/architecture/术语对照表.md` 有对应项。
 - 页面壳层（`*View` 页面入口/容器）必须位于 `xmnote/Views/<Feature>/`，不得放入 `xmnote/UIComponents`。
+- ViewModel（`*ViewModel`）必须位于 `xmnote/ViewModels/<Feature>/`，`xmnote/Views/**` 禁止放置 `*ViewModel.swift`。
 - `xmnote/Views/<Feature>/Components` 仅允许页面私有子视图，术语类别必须为 `UI-页面私有`。
 - 业务 Sheet 必须位于 `xmnote/Views/<Feature>/Sheets/`。
 - `xmnote/UIComponents` 是跨模块复用 UI 组件唯一归属目录，禁止在 `xmnote/Utilities`、`xmnote/Services` 新增跨模块复用组件。
@@ -430,6 +431,7 @@ View (SwiftUI)
 - `xmnote/Services`
 - `xmnote/UIComponents`
 - `xmnote/Utilities`
+- `xmnote/ViewModels`
 - `xmnote/Views`
 <!-- AUTO_SYNC_MODULES_END -->
 同步命令：`bash scripts/sync_arch_docs.sh`
@@ -459,14 +461,20 @@ xmnote/
 │   └── Repositories/
 ├── Infra/                             # 底层桥接与仓储支持
 │   └── RepositorySupport/
-├── Views/                             # SwiftUI 视图与 ViewModel（按功能模块共置）
+├── Views/                             # SwiftUI 视图层（页面壳层 + 页面私有组件 + 业务 Sheet）
 │   ├── MainTabView.swift
-│   ├── Book/                          # 书籍管理（View + ViewModel）
-│   ├── Note/                          # 笔记管理（View + ViewModel）
+│   ├── Book/                          # 书籍管理视图
+│   ├── Note/                          # 笔记管理视图
 │   ├── Personal/                      # 个人设置与备份（含 Backup/ 子目录）
 │   ├── Reading/                       # 在读追踪（含 ReadCalendar/ 子功能）
 │   ├── Statistics/                    # 统计（占位）
 │   └── Debug/                         # 调试测试视图（#if DEBUG）
+├── ViewModels/                        # ViewModel 层（按 Feature 镜像组织）
+│   ├── Book/
+│   ├── Note/
+│   ├── Personal/
+│   ├── Reading/
+│   └── Debug/
 ├── Services/                          # 网络基础设施 + 业务服务
 │   ├── NetworkClient.swift            # Alamofire 基础网络客户端
 │   ├── NetworkError.swift             # 网络错误类型定义
@@ -580,7 +588,7 @@ struct NoteTagsView: View {
 
 ## 2. ViewModel 层规范
 
-ViewModel 文件与对应 View 共置于同一功能目录（如 `Views/Book/BookViewModel.swift`），不再使用独立的 `ViewModels/` 顶层目录。
+ViewModel 文件统一放置在 `ViewModels` 模块并按 Feature 镜像组织（如 `ViewModels/Book/BookViewModel.swift`）。`Views` 目录禁止放置 `*ViewModel.swift` 文件。
 
 ### 2.1 基础结构（构造器注入）
 
