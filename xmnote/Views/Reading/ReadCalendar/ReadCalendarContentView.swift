@@ -1716,6 +1716,7 @@ private struct ReadCalendarBookCoverFullscreenOverlay: View {
     @State private var lastLayoutDebugSnapshot: LayoutDebugSnapshot?
     @State private var stackedLayoutBaseline: StackedLayoutBaseline?
     @State private var lastReusedStackedBaselineSignature: StackedLayoutBaselineSignature?
+    @State private var hapticPlayer: ReadCalendarOverlayHapticPlayer?
 
     var isAnimated: Bool { true }
 
@@ -1970,6 +1971,8 @@ private struct ReadCalendarBookCoverFullscreenOverlay: View {
                 cancelPhaseTransitionTask()
                 cancelTransitionTask()
                 isClosing = false
+                hapticPlayer?.shutdown()
+                hapticPlayer = nil
             }
         }
     }
@@ -2008,9 +2011,14 @@ private struct ReadCalendarBookCoverFullscreenOverlay: View {
 
     var header: some View {
         HStack(spacing: Spacing.base) {
-            Text(formattedDate(payload.date))
-                .font(.headline)
-                .foregroundStyle(Color.white.opacity(0.96))
+            VStack(alignment: .leading, spacing: 2) {
+                Text(formattedDate(payload.date))
+                    .font(.headline)
+                    .foregroundStyle(Color.white.opacity(0.96))
+                Text(formattedWeekday(payload.date))
+                    .font(.caption)
+                    .foregroundStyle(Color.white.opacity(0.52))
+            }
 
             Spacer(minLength: 0)
 
@@ -2313,7 +2321,9 @@ private struct ReadCalendarBookCoverFullscreenOverlay: View {
 
     /// 处理浮层首次出现：初始化阶段、触发触感并启动自动切换任务。
     func handleAppear() {
-        triggerOpenHapticIfNeeded()
+        let player = ReadCalendarOverlayHapticPlayer()
+        hapticPlayer = player
+        player.playOpenHaptic(isHapticsEnabled: isHapticsEnabled, reduceMotion: accessibilityReduceMotion)
         layoutPhase = .stacked
         hasAutoTransitioned = false
         hasCollapsedBackToStack = false
@@ -2368,14 +2378,11 @@ private struct ReadCalendarBookCoverFullscreenOverlay: View {
         guard layoutPhase != target else { return }
         if source == .manual {
             cancelAutoGridTransition()
-            triggerManualToggleHaptic(target: target)
         }
         hasAutoTransitioned = true
         cancelPhaseTransitionTask(resetState: false)
         if target == .grid {
-            if source == .automatic {
-                triggerAutoGridHapticIfNeeded()
-            }
+            hapticPlayer?.playExpandHaptic(isHapticsEnabled: isHapticsEnabled, reduceMotion: accessibilityReduceMotion)
             hasCollapsedBackToStack = false
             if isAnimated {
                 phaseTransitionDirection = .toGrid
@@ -2385,6 +2392,7 @@ private struct ReadCalendarBookCoverFullscreenOverlay: View {
                 isDeferringGridConstraint = false
             }
         } else {
+            hapticPlayer?.playCollapseHaptic(isHapticsEnabled: isHapticsEnabled, reduceMotion: accessibilityReduceMotion)
             hasCollapsedBackToStack = true
             phaseTransitionDirection = nil
             isDeferringGridConstraint = false
@@ -2494,6 +2502,13 @@ private struct ReadCalendarBookCoverFullscreenOverlay: View {
         return formatter.string(from: date)
     }
 
+    func formattedWeekday(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "zh_CN")
+        formatter.dateFormat = "EEEE"
+        return formatter.string(from: date)
+    }
+
     private func dismiss(source: DismissSource) {
         guard !isClosing else { return }
         cancelAutoGridTransition()
@@ -2509,40 +2524,6 @@ private struct ReadCalendarBookCoverFullscreenOverlay: View {
         }
         isClosing = true
         runDismissTransition(source: source)
-    }
-
-    func triggerOpenHapticIfNeeded() {
-        guard isHapticsEnabled else { return }
-#if canImport(UIKit)
-        let generator = UIImpactFeedbackGenerator(style: .soft)
-        generator.prepare()
-        generator.impactOccurred(intensity: 0.82)
-#endif
-    }
-
-    func triggerAutoGridHapticIfNeeded() {
-        guard isHapticsEnabled else { return }
-#if canImport(UIKit)
-        let generator = UIImpactFeedbackGenerator(style: .light)
-        generator.prepare()
-        generator.impactOccurred(intensity: 0.56)
-#endif
-    }
-
-    /// 手动切换布局阶段时提供差异化触感：展开偏轻快，收起偏干脆。
-    private func triggerManualToggleHaptic(
-        target: ReadCalendarCoverFullscreenDeckStage.Phase
-    ) {
-        guard isHapticsEnabled else { return }
-#if canImport(UIKit)
-        let generator = UIImpactFeedbackGenerator(
-            style: target == .grid ? .light : .medium
-        )
-        generator.prepare()
-        generator.impactOccurred(
-            intensity: target == .grid ? 0.62 : 0.72
-        )
-#endif
     }
 
     private func runDismissTransition(source _: DismissSource) {
