@@ -2,7 +2,7 @@
 import SwiftUI
 
 /**
- * [INPUT]: 依赖 RichTextTestView、HeatmapTestView、ImageLoadingTestView、ReadCalendarCoverStackTestView、SystemColorsTestView、TimelineCardsTestView 作为导航目的地
+ * [INPUT]: 依赖 RichTextTestView、HeatmapTestView、ImageLoadingTestView、JXPhotoBrowserTestView、ReadCalendarCoverStackTestView、SystemColorsTestView、TimelineCardsTestView 作为导航目的地
  * [OUTPUT]: 对外提供 DebugCenterView（测试中心列表页）
  * [POS]: Debug 测试入口页，集中展示所有控件测试项，由 PersonalView 跳转进入
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -38,6 +38,12 @@ struct DebugCenterView: View {
             title: "图片加载",
             subtitle: "静态图/GIF/失败链路与缓存来源观测",
             destination: AnyView(ImageLoadingTestView())
+        ),
+        DebugItem(
+            icon: "rectangle.3.group",
+            title: "JX 图片浏览器",
+            subtitle: "UIKit 核心浏览器 + SwiftUI 缩略图墙 Zoom 转场验证",
+            destination: AnyView(JXPhotoBrowserTestView())
         ),
         DebugItem(
             icon: "books.vertical",
