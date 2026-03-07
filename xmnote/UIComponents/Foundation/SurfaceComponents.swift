@@ -29,6 +29,7 @@ struct CardContainer<Content: View>: View {
 
     var body: some View {
         content
+            .frame(maxWidth: .infinity, alignment: .leading)
             .background(Color.contentBackground)
             .clipShape(RoundedRectangle(cornerRadius: cornerRadius))
             .overlay {

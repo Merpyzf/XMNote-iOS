@@ -2,7 +2,7 @@
 import SwiftUI
 
 /**
- * [INPUT]: 依赖 RichTextTestView、HeatmapTestView、ImageLoadingTestView、ReadCalendarCoverStackTestView、SystemColorsTestView 作为导航目的地
+ * [INPUT]: 依赖 RichTextTestView、HeatmapTestView、ImageLoadingTestView、ReadCalendarCoverStackTestView、SystemColorsTestView、TimelineCardsTestView 作为导航目的地
  * [OUTPUT]: 对外提供 DebugCenterView（测试中心列表页）
  * [POS]: Debug 测试入口页，集中展示所有控件测试项，由 PersonalView 跳转进入
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -50,6 +50,12 @@ struct DebugCenterView: View {
             title: "系统颜色语义",
             subtitle: "按语义分组查看 iOS 系统颜色与真实案例用法",
             destination: AnyView(SystemColorsTestView())
+        ),
+        DebugItem(
+            icon: "timeline.selection",
+            title: "时间线卡片",
+            subtitle: "7 种事件卡片样式与时间线装饰器",
+            destination: AnyView(TimelineCardsTestView())
         ),
     ]
 
