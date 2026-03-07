@@ -11,6 +11,7 @@
 		897196B52F54925300159B76 /* appicon.icon in Resources */ = {isa = PBXBuildFile; fileRef = 897196B42F54925300159B76 /* appicon.icon */; };
 		89AF00012F3D000000000002 /* Alamofire in Frameworks */ = {isa = PBXBuildFile; productRef = 89AF00012F3D000000000004 /* Alamofire */; };
 		89GIFU0012F3D000000000002 /* Gifu in Frameworks */ = {isa = PBXBuildFile; productRef = 89GIFU0012F3D000000000004 /* Gifu */; };
+		89JXPB0012F3D000000000002 /* JXPhotoBrowser in Frameworks */ = {isa = PBXBuildFile; productRef = 89JXPB0012F3D000000000004 /* JXPhotoBrowser */; };
 		89NUKE0012F3D000000000002 /* Nuke in Frameworks */ = {isa = PBXBuildFile; productRef = 89NUKE0012F3D000000000004 /* Nuke */; };
 		89NUKE0012F3D000000000003 /* NukeUI in Frameworks */ = {isa = PBXBuildFile; productRef = 89NUKE0012F3D000000000005 /* NukeUI */; };
 		89ZIP0012F3D000000000002 /* ZIPFoundation in Frameworks */ = {isa = PBXBuildFile; productRef = 89ZIP0012F3D000000000004 /* ZIPFoundation */; };
@@ -68,6 +69,7 @@
 				89NUKE0012F3D000000000002 /* Nuke in Frameworks */,
 				89NUKE0012F3D000000000003 /* NukeUI in Frameworks */,
 				89GIFU0012F3D000000000002 /* Gifu in Frameworks */,
+				89JXPB0012F3D000000000002 /* JXPhotoBrowser in Frameworks */,
 				89ZIP0012F3D000000000002 /* ZIPFoundation in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -135,6 +137,7 @@
 				89NUKE0012F3D000000000004 /* Nuke */,
 				89NUKE0012F3D000000000005 /* NukeUI */,
 				89GIFU0012F3D000000000004 /* Gifu */,
+				89JXPB0012F3D000000000004 /* JXPhotoBrowser */,
 				89ZIP0012F3D000000000004 /* ZIPFoundation */,
 			);
 			productName = xmnote;
@@ -224,6 +227,7 @@
 				89AF00012F3D000000000001 /* XCRemoteSwiftPackageReference "Alamofire" */,
 				89NUKE0012F3D000000000001 /* XCRemoteSwiftPackageReference "Nuke" */,
 				89GIFU0012F3D000000000001 /* XCRemoteSwiftPackageReference "Gifu" */,
+				89JXPB0012F3D000000000001 /* XCLocalSwiftPackageReference "Vendor/PhotoBrowser" */,
 				89ZIP0012F3D000000000001 /* XCRemoteSwiftPackageReference "ZIPFoundation" */,
 			);
 			preferredProjectObjectVersion = 77;
@@ -621,6 +625,13 @@
 		};
 /* End XCConfigurationList section */
 
+/* Begin XCLocalSwiftPackageReference section */
+		89JXPB0012F3D000000000001 /* XCLocalSwiftPackageReference "Vendor/PhotoBrowser" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = Vendor/PhotoBrowser;
+		};
+/* End XCLocalSwiftPackageReference section */
+
 /* Begin XCRemoteSwiftPackageReference section */
 		89AF00012F3D000000000001 /* XCRemoteSwiftPackageReference "Alamofire" */ = {
 			isa = XCRemoteSwiftPackageReference;
@@ -674,6 +685,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 89GIFU0012F3D000000000001 /* XCRemoteSwiftPackageReference "Gifu" */;
 			productName = Gifu;
+		};
+		89JXPB0012F3D000000000004 /* JXPhotoBrowser */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 89JXPB0012F3D000000000001 /* XCLocalSwiftPackageReference "Vendor/PhotoBrowser" */;
+			productName = JXPhotoBrowser;
 		};
 		89GRDB0012F3A000000000002 /* GRDB */ = {
 			isa = XCSwiftPackageProductDependency;
