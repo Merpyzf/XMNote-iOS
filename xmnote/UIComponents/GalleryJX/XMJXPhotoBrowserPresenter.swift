@@ -16,6 +16,7 @@ final class XMJXPhotoBrowserPresenter: NSObject, UIAdaptivePresentationControlle
     private let pipeline: ImagePipeline
     private var loadingTasks: [String: Task<Void, Never>] = [:]
     private weak var browser: JXPhotoBrowserViewController?
+    private let imageReplaceAnimationDuration: TimeInterval = 0.16
 
     /// 初始化浏览器桥接器，注入数据源与缩略图注册表。
     init(
@@ -71,10 +72,9 @@ final class XMJXPhotoBrowserPresenter: NSObject, UIAdaptivePresentationControlle
         )
 
         browser.present(from: viewController)
+        // 同步设置，避免异步延迟导致极快关闭时 presentationControllerDidDismiss 回调丢失
+        browser.presentationController?.delegate = self
         XMJXGalleryLogger.essential("present.called")
-        DispatchQueue.main.async { [weak browser, weak self] in
-            browser?.presentationController?.delegate = self
-        }
     }
 
     /// 统一清理浏览器资源并恢复缩略图可见状态。
@@ -134,8 +134,7 @@ extension XMJXPhotoBrowserPresenter: JXPhotoBrowserDelegate {
                 let image = try await self.pipeline.image(for: request.imageRequest)
                 guard !Task.isCancelled else { return }
                 guard let zoomCell else { return }
-                zoomCell.imageView.image = image
-                zoomCell.setNeedsLayout()
+                self.applyLoadedImage(image, to: zoomCell, itemID: item.id)
             } catch {
                 guard !Task.isCancelled else { return }
                 XMJXGalleryLogger.error("delegate.willDisplay.failed itemID=\(item.id) error=\(error.localizedDescription)")
@@ -184,6 +183,24 @@ extension XMJXPhotoBrowserPresenter {
 }
 
 private extension XMJXPhotoBrowserPresenter {
+    /// 以统一过渡方式替换大图，避免占位图切原图时出现闪烁。
+    func applyLoadedImage(_ image: UIImage, to zoomCell: JXZoomImageCell, itemID: String) {
+        if let currentImage = zoomCell.imageView.image, currentImage === image {
+            XMJXGalleryLogger.verbose("delegate.willDisplay.imageSwitch itemID=\(itemID) animated=false reason=sameImage")
+            return
+        }
+
+        UIView.transition(
+            with: zoomCell.imageView,
+            duration: imageReplaceAnimationDuration,
+            options: [.transitionCrossDissolve, .beginFromCurrentState, .allowUserInteraction]
+        ) {
+            zoomCell.imageView.image = image
+        }
+        zoomCell.setNeedsLayout()
+        XMJXGalleryLogger.verbose("delegate.willDisplay.imageSwitch itemID=\(itemID) animated=true duration=\(String(format: "%.2f", imageReplaceAnimationDuration))")
+    }
+
     /// 解析原图地址，不合法时回退缩略图地址。
     func normalizedOriginalURL(for item: XMJXGalleryItem) -> URL? {
         if let originalURL = XMImageRequestBuilder.normalizedURL(from: item.originalURL) {

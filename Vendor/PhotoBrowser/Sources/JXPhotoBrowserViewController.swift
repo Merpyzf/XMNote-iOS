@@ -135,9 +135,31 @@ open class JXPhotoBrowserViewController: UIViewController {
     
     /// 正在进行下拉交互的Cell
     private weak var interactiveDismissCell: JXPhotoBrowserCellProtocol?
+
+    /// 下拉关闭阈值：最小垂直位移。
+    private let minDismissTranslationY: CGFloat = 56
+
+    /// 下拉关闭阈值：关闭进度阈值（translationY / viewHeight）。
+    private let dismissProgressThreshold: CGFloat = 0.22
+
+    /// 下拉关闭阈值：垂直速度阈值。
+    private let dismissVelocityThreshold: CGFloat = 1100
+
+    /// 手势意图判定：|vy| 需大于 |vx| * ratio。
+    private let panVerticalIntentRatio: CGFloat = 1.15
+
+    /// 缩放判定容差。
+    private let zoomEpsilon: CGFloat = 0.01
+
+    /// dismiss 重入保护：防止单击与下拉在极短时间内重复触发 dismiss。
+    private var isDismissing: Bool = false
     
     // MARK: - Lifecycle Methods
-    
+
+    deinit {
+        stopAutoPlay()
+    }
+
     open override func viewDidLoad() {
         super.viewDidLoad()
         view.backgroundColor = .black
@@ -146,6 +168,8 @@ open class JXPhotoBrowserViewController: UIViewController {
         
         panGesture = UIPanGestureRecognizer(target: self, action: #selector(handlePanGesture(_:)))
         panGesture.delegate = self
+        panGesture.minimumNumberOfTouches = 1
+        panGesture.maximumNumberOfTouches = 1
         view.addGestureRecognizer(panGesture)
         
         // 安装在 viewDidLoad 之前通过 addOverlay 注册的组件
@@ -158,12 +182,18 @@ open class JXPhotoBrowserViewController: UIViewController {
     
     open override func viewDidAppear(_ animated: Bool) {
         super.viewDidAppear(animated)
-        
+
+        // 转场被取消后的兜底恢复：重置 dismiss 标志和交互状态
+        if isDismissing {
+            isDismissing = false
+            restoreInteractiveDismissState(animated: false)
+        }
+
         // 仅在 Zoom 转场动画时，初始显示时隐藏源视图
         if transitionType == .zoom {
             delegate?.photoBrowser(self, setThumbnailHidden: true, at: pageIndex)
         }
-        
+
         // 启动自动轮播
         startAutoPlayIfNeeded()
     }
@@ -251,20 +281,30 @@ open class JXPhotoBrowserViewController: UIViewController {
         
         switch gesture.state {
         case .began:
-            guard let cell = visibleCell() else { return }
+            guard gesture.numberOfTouches == 1 else {
+                logGesture("gesture.begin.reject reason=invalidTouches count=\(gesture.numberOfTouches)")
+                gesture.isEnabled = false
+                gesture.isEnabled = true
+                return
+            }
+            guard let cell = visibleZoomImageCell() else {
+                logGesture("gesture.begin.reject reason=visibleZoomCellMissing")
+                return
+            }
+            guard let imageView = cell.transitionImageView else {
+                logGesture("gesture.begin.reject reason=transitionImageViewMissing")
+                return
+            }
             interactiveDismissCell = cell
             collectionView.isScrollEnabled = false
-            // 如果是 JXZoomImageCell，禁用其内部 scrollView 滚动以避免手势冲突
-            if let photoCell = cell as? JXZoomImageCell {
-                photoCell.scrollView.isScrollEnabled = false
-            }
+            cell.scrollView.isScrollEnabled = false
             
             // 记录初始状态以计算跟随
-            let referenceView: UIView = (cell as? JXZoomImageCell)?.scrollView ?? collectionView
-            initialTouchPoint = gesture.location(in: referenceView)
-            if let imageView = cell.transitionImageView {
-                initialImageCenter = imageView.center
-            }
+            initialTouchPoint = gesture.location(in: view)
+            initialImageCenter = imageView.convert(
+                CGPoint(x: imageView.bounds.midX, y: imageView.bounds.midY),
+                to: view
+            )
             
             // 仅在 Zoom 转场动画时，确保源视图隐藏
             if transitionType == .zoom {
@@ -273,14 +313,22 @@ open class JXPhotoBrowserViewController: UIViewController {
             
             // 通知 Cell 进入下拉交互状态
             cell.photoBrowserDismissInteractionDidChange(isInteracting: true)
+            logGesture("gesture.begin.accept pageIndex=\(pageIndex)")
             
         case .changed:
+            guard gesture.numberOfTouches == 1 else {
+                logGesture("gesture.changed.cancel reason=touchesChanged count=\(gesture.numberOfTouches)")
+                restoreInteractiveDismissState(animated: true)
+                return
+            }
             guard let cell = interactiveDismissCell, let imageView = cell.transitionImageView else { return }
             let translation = gesture.translation(in: view)
-            
-            // 下拉时缩小；上拉时（负值）不放大，保持原大小但跟随位移
-            let progress = translation.y / view.bounds.height
-            let scale = translation.y > 0 ? max(0.5, 1 - abs(progress)) : 1.0
+            // 下拉（正值）时缩小 + 背景透明；上拉（负值）时仅平移不缩小
+            let downwardY = max(0, translation.y)
+
+            let height = max(1, view.bounds.height)
+            let progress = min(1, downwardY / height)
+            let scale = downwardY > 0 ? max(0.5, 1 - progress) : 1.0
             
             // 计算让图片跟随手指的偏移量
             // 触摸点相对于图片中心的向量
@@ -295,49 +343,96 @@ open class JXPhotoBrowserViewController: UIViewController {
             let transform = CGAffineTransform(translationX: translation.x + adjustX, y: translation.y + adjustY)
                 .scaledBy(x: scale, y: scale)
             imageView.transform = transform
-            
+
             // 背景透明度：只有下拉时才变透明
-            let alpha = translation.y > 0 ? max(0, 1 - abs(progress) * 1.5) : 1.0
+            let alpha = max(0, 1 - progress * 1.5)
             view.backgroundColor = UIColor.black.withAlphaComponent(alpha)
+            logGesture("gesture.changed progress=\(String(format: "%.3f", progress)) translationY=\(Int(translation.y.rounded()))")
             
         case .ended, .cancelled:
-            guard let cell = interactiveDismissCell, let imageView = cell.transitionImageView else {
-                collectionView.isScrollEnabled = true
+            guard let cell = interactiveDismissCell else {
+                restoreInteractiveDismissState(animated: false)
+                return
+            }
+            guard let imageView = cell.transitionImageView else {
+                restoreInteractiveDismissState(animated: false)
                 return
             }
             
             let velocity = gesture.velocity(in: view)
+            let translation = gesture.translation(in: view)
+            let translationY = max(0, translation.y)
+            let progress = min(1, translationY / max(1, view.bounds.height))
             
-            // 只要有向下的速度则关闭
-            let shouldDismiss = velocity.y > 10
+            // 位移 + 速度 + 方向联合判定：松手时仍在上拉（velocity.y < 0）表示用户意图取消。
+            let shouldDismiss = translationY > minDismissTranslationY &&
+                velocity.y >= 0 &&
+                (progress > dismissProgressThreshold || velocity.y > dismissVelocityThreshold)
+            logGesture(
+                "gesture.end decision=\(shouldDismiss ? "dismiss" : "cancel") translationY=\(Int(translationY.rounded())) velocityY=\(Int(velocity.y.rounded())) progress=\(String(format: "%.3f", progress))"
+            )
             
             if shouldDismiss {
                 dismissSelf()
                 // 不恢复 ScrollEnabled，直到页面消失
             } else {
                 // 恢复
-                UIView.animate(withDuration: 0.25, animations: {
-                    imageView.transform = .identity
-                    self.view.backgroundColor = .black
-                }) { _ in
-                    self.collectionView.isScrollEnabled = true
-                    if let photoCell = cell as? JXZoomImageCell {
-                        photoCell.scrollView.isScrollEnabled = true
+                UIView.animate(
+                    withDuration: 0.20,
+                    delay: 0,
+                    options: [.curveEaseOut, .beginFromCurrentState],
+                    animations: {
+                        imageView.transform = .identity
+                        self.view.backgroundColor = .black
                     }
-                    // 通知 Cell 下拉交互结束（回弹恢复）
-                    cell.photoBrowserDismissInteractionDidChange(isInteracting: false)
-                    self.interactiveDismissCell = nil
+                ) { _ in
+                    self.restoreInteractiveDismissState(animated: false)
                 }
             }
         default:
-            collectionView.isScrollEnabled = true
-            if let photoCell = interactiveDismissCell as? JXZoomImageCell {
-                photoCell.scrollView.isScrollEnabled = true
-            }
-            // 通知 Cell 下拉交互结束（异常取消）
-            interactiveDismissCell?.photoBrowserDismissInteractionDidChange(isInteracting: false)
-            interactiveDismissCell = nil
+            restoreInteractiveDismissState(animated: false)
         }
+    }
+
+    /// 统一恢复下拉交互状态，确保关闭失败或取消时不会残留禁用状态。
+    private func restoreInteractiveDismissState(animated: Bool) {
+        guard let cell = interactiveDismissCell else {
+            collectionView.isScrollEnabled = true
+            view.backgroundColor = .black
+            return
+        }
+
+        let completion: () -> Void = {
+            self.collectionView.isScrollEnabled = true
+            if let zoomCell = cell as? JXZoomImageCell {
+                zoomCell.scrollView.isScrollEnabled = true
+            }
+            cell.photoBrowserDismissInteractionDidChange(isInteracting: false)
+            self.interactiveDismissCell = nil
+            self.view.backgroundColor = .black
+        }
+
+        guard animated, let imageView = cell.transitionImageView else {
+            completion()
+            return
+        }
+
+        UIView.animate(
+            withDuration: 0.20,
+            delay: 0,
+            options: [.curveEaseOut, .beginFromCurrentState]
+        ) {
+            imageView.transform = .identity
+            self.view.backgroundColor = .black
+        } completion: { _ in
+            completion()
+        }
+    }
+
+    private func logGesture(_ message: String) {
+        #if DEBUG
+        print("[JXPhotoBrowser.gesture] \(message)")
+        #endif
     }
     
     /// 根据滚动偏移量更新当前页索引
@@ -447,6 +542,8 @@ open class JXPhotoBrowserViewController: UIViewController {
     
     /// 关闭浏览器
     @objc open func dismissSelf() {
+        guard !isDismissing else { return }
+        isDismissing = true
         dismiss(animated: transitionType != .none, completion: nil)
     }
     
@@ -738,15 +835,38 @@ extension JXPhotoBrowserViewController: UIGestureRecognizerDelegate {
     public func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
         if gestureRecognizer == panGesture {
             if scrollDirection == .vertical { return false }
+            if panGesture.numberOfTouches != 1 {
+                logGesture("gesture.begin.reject reason=touches count=\(panGesture.numberOfTouches)")
+                return false
+            }
             
             let velocity = panGesture.velocity(in: view)
             // 必须是垂直向下的手势
-            guard velocity.y > 0, abs(velocity.y) > abs(velocity.x) else { return false }
+            guard velocity.y > 0 else {
+                logGesture("gesture.begin.reject reason=velocityNotDown vy=\(Int(velocity.y.rounded()))")
+                return false
+            }
+            guard abs(velocity.y) > abs(velocity.x) * panVerticalIntentRatio else {
+                logGesture("gesture.begin.reject reason=horizontalIntent vx=\(Int(velocity.x.rounded())) vy=\(Int(velocity.y.rounded()))")
+                return false
+            }
             
             // 如果是 JXZoomImageCell，检查缩放和滚动状态
             if let photoCell = visibleZoomImageCell() {
-                let isZoomed = photoCell.scrollView.zoomScale > 1.0 + 0.01
-                let isAtTop = photoCell.scrollView.contentOffset.y <= 1.0
+                let isZoomed = photoCell.scrollView.zoomScale > photoCell.scrollView.minimumZoomScale + zoomEpsilon
+                let minOffsetY = -photoCell.scrollView.adjustedContentInset.top
+                let isAtTop = photoCell.scrollView.contentOffset.y <= minOffsetY + 1.0
+                let isDismissInteracting = photoCell.isDismissInteracting
+                if isDismissInteracting {
+                    logGesture("gesture.begin.reject reason=alreadyInteracting")
+                } else if isZoomed {
+                    logGesture("gesture.begin.reject reason=zoomed scale=\(String(format: "%.3f", photoCell.scrollView.zoomScale))")
+                } else if !isAtTop {
+                    logGesture("gesture.begin.reject reason=contentOffsetNotTop offsetY=\(String(format: "%.2f", photoCell.scrollView.contentOffset.y))")
+                }
+                if photoCell.isDismissInteracting {
+                    return false
+                }
                 return !isZoomed && isAtTop
             }
             
@@ -758,8 +878,10 @@ extension JXPhotoBrowserViewController: UIGestureRecognizerDelegate {
     }
     
     public func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer) -> Bool {
-        // 允许与 ScrollView 滚动共存
-        return true
+        if gestureRecognizer == panGesture || otherGestureRecognizer == panGesture {
+            return false
+        }
+        return false
     }
 }
 

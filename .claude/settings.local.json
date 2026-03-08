@@ -61,7 +61,8 @@
       "Bash(gh api:*)",
       "WebFetch(domain:www.hackingwithswift.com)",
       "WebFetch(domain:sarunw.com)",
-      "WebFetch(domain:www.avanderlee.com)"
+      "WebFetch(domain:www.avanderlee.com)",
+      "Bash(gh repo:*)"
     ],
     "additionalDirectories": [
       "/Users/wangke/WorkSpace/OpenSource/Mine/Merpyzf/XMNote",
