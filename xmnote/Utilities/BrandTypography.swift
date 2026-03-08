@@ -59,6 +59,14 @@ enum BrandTypography {
         #endif
     }
 
+    /// 返回 TopSwitcher 标题推荐字体：CJK 文本优先系统半粗体，非 CJK 文本优先品牌字体。
+    static func topSwitcherTitleFont(for text: String, size: CGFloat) -> Font {
+        if text.containsCJK {
+            return .system(size: size, weight: .semibold)
+        }
+        return .brandDisplay(size: size, relativeTo: .title2)
+    }
+
     #if DEBUG
     /// 记录 App 启动阶段是否触发品牌字体注册。
     static func debugLogAppInitRegistrationTriggered() {

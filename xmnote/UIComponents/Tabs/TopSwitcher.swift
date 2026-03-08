@@ -173,7 +173,7 @@ private struct TopSwitcherTitleLabel: View {
 
     var body: some View {
         Text(text)
-            .font(.brandDisplay(size: 20, relativeTo: .title2))
+            .font(BrandTypography.topSwitcherTitleFont(for: text, size: 20))
             .foregroundStyle(.primary)
             .padding(.vertical, 4)
             .frame(minHeight: 32, alignment: .leading)
