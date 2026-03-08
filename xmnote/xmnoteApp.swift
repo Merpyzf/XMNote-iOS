@@ -27,6 +27,10 @@ struct xmnoteApp: App {
     @State private var initError: Error?
 
     init() {
+        #if DEBUG
+        BrandTypography.debugLogAppInitRegistrationTriggered()
+        #endif
+        BrandTypography.registerBundledFontIfNeeded()
         ImagePipeline.shared = XMImagePipelineFactory.makeDefault()
     }
 

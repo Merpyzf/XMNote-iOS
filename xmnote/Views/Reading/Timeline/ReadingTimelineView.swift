@@ -103,12 +103,10 @@ private extension ReadingTimelineView {
                         }
                     } label: {
                         HStack(spacing: Spacing.compact) {
-                            Text(monthFormatter.string(from: displayedMonthStart))
-                                .font(monthTitleFont)
+                            displayedMonthTitleText
                                 .foregroundStyle(Color.textPrimary)
                                 .lineLimit(1)
                                 .minimumScaleFactor(0.9)
-                                .monospacedDigit()
 
                             Image(systemName: "chevron.down")
                                 .font(.system(size: 10, weight: .semibold))
@@ -270,6 +268,19 @@ private extension ReadingTimelineView {
                 }
             }
         }
+    }
+
+    var displayedMonthTitleText: Text {
+        let components = calendar.dateComponents([.year, .month], from: displayedMonthStart)
+        let year = components.year ?? calendar.component(.year, from: displayedMonthStart)
+        let month = components.month ?? calendar.component(.month, from: displayedMonthStart)
+        let brandNumberFont = Font.brandDisplay(size: 18, relativeTo: .title3)
+        let yearText = Text("\(year)").font(brandNumberFont)
+        let yearUnitText = Text(" 年 ").font(monthTitleFont)
+        let monthText = Text("\(month)").font(brandNumberFont)
+        let monthUnitText = Text(" 月").font(monthTitleFont)
+
+        return Text("\(yearText)\(yearUnitText)\(monthText)\(monthUnitText)")
     }
 }
 

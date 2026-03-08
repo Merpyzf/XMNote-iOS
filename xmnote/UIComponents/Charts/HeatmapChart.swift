@@ -144,7 +144,6 @@ struct HeatmapChart: View {
                     let snappedWidth = snapDownToPixel(width)
                     guard abs(snappedWidth - gridViewportWidth) > 0.5 else { return }
                     gridViewportWidth = snappedWidth
-                    debugLogViewport(width: snappedWidth)
                 }
                 .onChange(of: scrollToMonth) { _, target in
                     guard let target else { return }
@@ -159,32 +158,6 @@ struct HeatmapChart: View {
         }
         .padding(outerInset)
         .frame(maxWidth: .infinity, alignment: .leading)
-    }
-
-    /// 输出视口与方格布局诊断信息，便于排查裁切与对齐问题。
-    func debugLogViewport(width: CGFloat) {
-#if DEBUG
-        let layout = resolveLayout(for: width)
-        let minCount = layout.minimumVisibleWeekCount
-        let realCount = weekColumns.count
-        let paddingCount = max(0, minCount - realCount)
-        let minVisibleRowWidth = rowWidth(columnCount: minCount, squareSizeValue: layout.squareSize)
-        let rowMinusViewport = minVisibleRowWidth - width
-        HeatmapDebug.logger.debug(
-            "viewportWidth=\(Double(width), privacy: .public) weekdayLabelWidth=\(Double(weekdayLabelColumnWidth), privacy: .public) axisGap=\(Double(axisGap), privacy: .public) minVisibleWeekCount=\(minCount, privacy: .public) rawSquareSize=\(Double(layout.rawSquareSize), privacy: .public) resolvedSquareSize=\(Double(layout.squareSize), privacy: .public) minVisibleRowMinusViewport=\(Double(rowMinusViewport), privacy: .public) realWeekCount=\(realCount, privacy: .public) paddingWeekCount=\(paddingCount, privacy: .public)"
-        )
-#endif
-    }
-
-    /// 当标题行与网格行宽度不一致时输出诊断日志。
-    func debugLogWidthGapIfNeeded() {
-#if DEBUG
-        guard headerRowWidth > 0, gridRowWidth > 0 else { return }
-        let delta = headerRowWidth - gridRowWidth
-        HeatmapDebug.logger.debug(
-            "headerRowWidth=\(Double(headerRowWidth), privacy: .public) gridRowWidth=\(Double(gridRowWidth), privacy: .public) headerMinusGrid=\(Double(delta), privacy: .public)"
-        )
-#endif
     }
 }
 
@@ -412,7 +385,6 @@ private extension HeatmapChart {
                     let snappedWidth = snapDownToPixel(width)
                     guard abs(snappedWidth - headerRowWidth) > 0.5 else { return }
                     headerRowWidth = snappedWidth
-                    debugLogWidthGapIfNeeded()
                 }
             LazyHStack(spacing: squareSpacing) {
                 ForEach(columns) { column in
@@ -430,7 +402,6 @@ private extension HeatmapChart {
                 let snappedWidth = snapDownToPixel(width)
                 guard abs(snappedWidth - gridRowWidth) > 0.5 else { return }
                 gridRowWidth = snappedWidth
-                debugLogWidthGapIfNeeded()
             }
         }
         .frame(minWidth: gridViewportWidth, alignment: .trailing)
@@ -542,13 +513,6 @@ private extension HeatmapChart {
                         x: drawX
                     )
                 )
-                debugLogHeaderToken(
-                    index: index,
-                    text: text,
-                    drawX: drawX,
-                    overflowBeforeDecay: headerOverflow,
-                    textWidth: textWidth
-                )
                 headerOverflow += textWidth + columnAdvance * HeatmapConst.headerExtraSpacingFactor
             }
             headerOverflow = max(0, headerOverflow - columnAdvance)
@@ -578,15 +542,6 @@ private extension HeatmapChart {
     /// 格式化标题中的月份文本。
     func monthText(_ date: Date) -> String {
         "\(calendar.component(.month, from: date))月"
-    }
-
-    /// 输出月份标题 token 定位日志，便于定位标题错位。
-    func debugLogHeaderToken(index: Int, text: String, drawX: CGFloat, overflowBeforeDecay: CGFloat, textWidth: CGFloat) {
-#if DEBUG
-        HeatmapDebug.logger.debug(
-            "headerToken index=\(index, privacy: .public) text=\(text, privacy: .public) drawX=\(Double(drawX), privacy: .public) overflowBeforeDecay=\(Double(overflowBeforeDecay), privacy: .public) textWidth=\(Double(textWidth), privacy: .public)"
-        )
-#endif
     }
 
     /// 生成月份滚动锚点键（yyyy-M）。
