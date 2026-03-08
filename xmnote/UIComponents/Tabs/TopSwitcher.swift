@@ -49,8 +49,27 @@ struct TopSwitcher<Tab: Hashable, Trailing: View>: View {
                     quote: quote,
                     titleProvider: titleProvider
                 )
+                .onAppear {
+                    #if DEBUG
+                    let currentTitle = titleProvider(selection.wrappedValue)
+                    BrandTypography.debugLogTopSwitcherMode(
+                        "tabs",
+                        tabsCount: tabs.count,
+                        title: currentTitle
+                    )
+                    #endif
+                }
             case .title(let text, let quote):
                 TopSwitcherTitleLabel(text: text, quote: quote)
+                    .onAppear {
+                        #if DEBUG
+                        BrandTypography.debugLogTopSwitcherMode(
+                            "title",
+                            tabsCount: 0,
+                            title: text
+                        )
+                        #endif
+                    }
             }
         } trailing: {
             trailing
@@ -71,31 +90,44 @@ extension TopSwitcher where Tab == Never {
     }
 }
 
+private enum TopSwitcherQuoteDecorationMetrics {
+    static let assetName = "TopSwitcherQuote"
+    static let iconWidth: CGFloat = 23
+    static let iconHeight: CGFloat = 16
+    static let offsetX: CGFloat = -10
+    static let offsetY: CGFloat = -6
+}
+
 private struct TopSwitcherTabBar<Tab: Hashable>: View {
-    @Environment(\.colorScheme) private var colorScheme
     @Binding var selection: Tab
     let tabs: [Tab]
     let quote: String
     let titleProvider: (Tab) -> String
 
     var body: some View {
-        let quoteFontSize: CGFloat = 50
-        let quoteOffsetX: CGFloat = -10
-        let quoteOffsetY: CGFloat = -18
-
         HStack(spacing: 22) {
             ForEach(tabs, id: \.self, content: tabItem)
+        }
+        .onAppear {
+            #if DEBUG
+            BrandTypography.debugLogTopSwitcherTabsUsesQuoteIcon(tabs.count)
+            #endif
         }
         .backgroundPreferenceValue(TopSwitcherTabAnchorKey.self, alignment: .topLeading) { anchors in
             GeometryReader { proxy in
                 if let anchor = anchors[selection] {
                     let rect = proxy[anchor]
-                    Text(quote)
-                        .font(.system(size: quoteFontSize, weight: .bold))
-                        .foregroundStyle(colorScheme == .dark
-                            ? Color.brand.opacity(0.28)
-                            : Color.brand.opacity(0.22))
-                        .offset(x: rect.minX + quoteOffsetX, y: rect.minY + quoteOffsetY)
+                    Image(TopSwitcherQuoteDecorationMetrics.assetName)
+                        .resizable()
+                        .aspectRatio(contentMode: .fit)
+                        .frame(
+                            width: TopSwitcherQuoteDecorationMetrics.iconWidth,
+                            height: TopSwitcherQuoteDecorationMetrics.iconHeight
+                        )
+                        .offset(
+                            x: rect.minX + TopSwitcherQuoteDecorationMetrics.offsetX,
+                            y: rect.minY + TopSwitcherQuoteDecorationMetrics.offsetY
+                        )
                         .allowsHitTesting(false)
                         .accessibilityHidden(true)
                         .animation(.snappy(duration: 0.25, extraBounce: 0.06), value: selection)
@@ -136,27 +168,36 @@ private struct TopSwitcherTabBar<Tab: Hashable>: View {
 }
 
 private struct TopSwitcherTitleLabel: View {
-    @Environment(\.colorScheme) private var colorScheme
     let text: String
     let quote: String
 
     var body: some View {
         Text(text)
-            .font(.system(size: 20, weight: .semibold))
+            .font(.brandDisplay(size: 20, relativeTo: .title2))
             .foregroundStyle(.primary)
             .padding(.vertical, 4)
             .frame(minHeight: 32, alignment: .leading)
             .background(alignment: .topLeading) {
-                Text(quote)
-                    .font(.system(size: 50, weight: .bold))
-                    .foregroundStyle(colorScheme == .dark
-                        ? Color.brand.opacity(0.28)
-                        : Color.brand.opacity(0.22))
-                    .offset(x: -10, y: -18)
+                Image(TopSwitcherQuoteDecorationMetrics.assetName)
+                    .resizable()
+                    .aspectRatio(contentMode: .fit)
+                    .frame(
+                        width: TopSwitcherQuoteDecorationMetrics.iconWidth,
+                        height: TopSwitcherQuoteDecorationMetrics.iconHeight
+                    )
+                    .offset(
+                        x: TopSwitcherQuoteDecorationMetrics.offsetX,
+                        y: TopSwitcherQuoteDecorationMetrics.offsetY
+                    )
                     .allowsHitTesting(false)
                     .accessibilityHidden(true)
             }
             .accessibilityIdentifier("top_switcher_title_\(text)")
+            .onAppear {
+                #if DEBUG
+                BrandTypography.debugLogTopSwitcherTitle(text, size: 20)
+                #endif
+            }
     }
 }
 
