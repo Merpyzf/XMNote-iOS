@@ -32,11 +32,6 @@ struct ReadingTimelineView: View {
     private let monthDayInsets = NSDirectionalEdgeInsets.zero
     private let monthTransitionAnimation = Animation.easeInOut(duration: 0.22)
     private let longJumpMonthThreshold: Int = 2
-    private let monthTitleFont: Font = .system(size: 18, weight: .semibold, design: .rounded)
-    private let actionButtonFont: Font = .system(size: 13, weight: .semibold, design: .rounded)
-    private let weekdayFont: Font = .system(size: 11, weight: .medium, design: .rounded)
-    private let categoryChipFont: Font = .system(size: 12, weight: .medium, design: .rounded)
-    private let dayNumberFont: Font = .system(size: 13, weight: .semibold, design: .rounded).monospacedDigit()
 
     init() {
         var cal = Calendar.current
@@ -88,7 +83,7 @@ private extension ReadingTimelineView {
     var calendarPanelCard: some View {
         CardContainer {
             VStack(spacing: Spacing.base) {
-                HStack(spacing: Spacing.base) {
+                HStack(alignment: .lastTextBaseline, spacing: Spacing.base) {
                     Menu {
                         ForEach(availableMonthStarts.reversed(), id: \.self) { monthStart in
                             Button {
@@ -102,9 +97,8 @@ private extension ReadingTimelineView {
                             }
                         }
                     } label: {
-                        HStack(spacing: Spacing.compact) {
+                        HStack(alignment: .lastTextBaseline, spacing: Spacing.compact) {
                             displayedMonthTitleText
-                                .foregroundStyle(Color.textPrimary)
                                 .lineLimit(1)
                                 .minimumScaleFactor(0.9)
 
@@ -118,10 +112,14 @@ private extension ReadingTimelineView {
 
                     Spacer()
 
+                    selectedDateOffsetText
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.9)
+
                     Button("今") {
                         jumpToDate(calendar.startOfDay(for: Date()), animated: true)
                     }
-                    .font(actionButtonFont)
+                    .font(TimelineCalendarStyle.actionButtonFont)
                     .foregroundStyle(Color.brandDeep)
                     .padding(.horizontal, 10)
                     .padding(.vertical, 6)
@@ -165,8 +163,8 @@ private extension ReadingTimelineView {
                     }
                     .dayOfWeekHeaders { _, weekdayIndex in
                         Text(weekdaySymbol(for: weekdayIndex))
-                            .font(weekdayFont)
-                            .foregroundStyle(Color.textHint)
+                            .font(TimelineCalendarStyle.weekdayFont)
+                            .foregroundStyle(TimelineCalendarStyle.weekdayTextColor)
                             .frame(maxWidth: .infinity, maxHeight: .infinity)
                     }
                     .days { day in
@@ -177,7 +175,7 @@ private extension ReadingTimelineView {
                             dayNumber: day.day,
                             marker: marker,
                             isSelected: isSelected,
-                            dayNumberFont: dayNumberFont
+                            dayNumberFont: TimelineCalendarStyle.dayNumberFont
                         )
                     }
                     .onDaySelection { day in
@@ -234,7 +232,7 @@ private extension ReadingTimelineView {
                             selectedCategory = category
                         }
                     }
-                    .font(categoryChipFont)
+                    .font(TimelineCalendarStyle.categoryChipFont)
                     .padding(.horizontal, 10)
                     .padding(.vertical, 6)
                     .background(selectedCategory == category ? Color.brand : Color.bgSecondary)
@@ -270,17 +268,47 @@ private extension ReadingTimelineView {
         }
     }
 
-    var displayedMonthTitleText: Text {
+    var displayedMonthTitleText: some View {
         let components = calendar.dateComponents([.year, .month], from: displayedMonthStart)
         let year = components.year ?? calendar.component(.year, from: displayedMonthStart)
         let month = components.month ?? calendar.component(.month, from: displayedMonthStart)
-        let brandNumberFont = Font.brandDisplay(size: 18, relativeTo: .title3)
-        let yearText = Text("\(year)").font(brandNumberFont)
-        let yearUnitText = Text(" 年 ").font(monthTitleFont)
-        let monthText = Text("\(month)").font(brandNumberFont)
-        let monthUnitText = Text(" 月").font(monthTitleFont)
+        return HStack(alignment: .lastTextBaseline, spacing: 0) {
+            Text(verbatim: String(year))
+                .font(TimelineCalendarStyle.monthNumberFont)
+                .foregroundStyle(TimelineCalendarStyle.monthNumberColor)
+                .contentTransition(.numericText())
+            Text(" 年 ")
+                .font(TimelineCalendarStyle.monthUnitFont)
+                .foregroundStyle(TimelineCalendarStyle.monthUnitColor)
+            Text(verbatim: String(month))
+                .font(TimelineCalendarStyle.monthNumberFont)
+                .foregroundStyle(TimelineCalendarStyle.monthNumberColor)
+                .contentTransition(.numericText())
+            Text(" 月")
+                .font(TimelineCalendarStyle.monthUnitFont)
+                .foregroundStyle(TimelineCalendarStyle.monthUnitColor)
+        }
+    }
 
-        return Text("\(yearText)\(yearUnitText)\(monthText)\(monthUnitText)")
+    @ViewBuilder
+    var selectedDateOffsetText: some View {
+        let today = calendar.startOfDay(for: Date())
+        let dayOffset = calendar.dateComponents([.day], from: selectedDate, to: today).day ?? 0
+        if dayOffset == 0 {
+            Text("今天")
+                .font(TimelineCalendarStyle.relativeUnitFont)
+                .foregroundStyle(TimelineCalendarStyle.relativeUnitColor)
+        } else {
+            HStack(alignment: .lastTextBaseline, spacing: 0) {
+                Text(verbatim: String(abs(dayOffset)))
+                    .font(TimelineCalendarStyle.relativeNumberFont)
+                    .foregroundStyle(TimelineCalendarStyle.relativeNumberColor)
+                    .contentTransition(.numericText())
+                Text(dayOffset > 0 ? "天前" : "天后")
+                    .font(TimelineCalendarStyle.relativeUnitFont)
+                    .foregroundStyle(TimelineCalendarStyle.relativeUnitColor)
+            }
+        }
     }
 }
 
@@ -379,7 +407,6 @@ private extension ReadingTimelineView {
     func jumpToDate(_ date: Date, animated: Bool) {
         let normalized = calendar.startOfDay(for: date)
         let clamped = min(max(normalized, visibleDateRange.lowerBound), visibleDateRange.upperBound)
-        selectedDate = clamped
         let targetMonthStart = Self.monthStart(of: clamped, using: calendar)
         let monthDistance = Self.monthDistance(from: displayedMonthStart, to: targetMonthStart, using: calendar)
         let shouldUseLongJump = animated && abs(monthDistance) > longJumpMonthThreshold
@@ -387,7 +414,11 @@ private extension ReadingTimelineView {
         if shouldUseLongJump {
             isProgrammaticLongJump = true
             isUserPagingInFlight = false
-            applyDisplayedMonth(targetMonthStart, animated: true)
+            commitHeaderState(
+                selectedDay: clamped,
+                monthStart: targetMonthStart,
+                animated: true
+            )
             calendarProxy.scrollToMonth(
                 containing: targetMonthStart,
                 scrollPosition: .firstFullyVisiblePosition,
@@ -403,6 +434,11 @@ private extension ReadingTimelineView {
             preloadMarkers(around: displayedMonthStart)
             preloadMarkers(around: targetMonthStart)
             isUserPagingInFlight = true
+            commitHeaderState(
+                selectedDay: clamped,
+                monthStart: targetMonthStart,
+                animated: true
+            )
             calendarProxy.scrollToMonth(
                 containing: targetMonthStart,
                 scrollPosition: .firstFullyVisiblePosition,
@@ -411,11 +447,43 @@ private extension ReadingTimelineView {
             return
         }
 
-        applyDisplayedMonth(targetMonthStart, animated: false)
+        commitHeaderState(
+            selectedDay: clamped,
+            monthStart: targetMonthStart,
+            animated: false
+        )
         calendarProxy.scrollToMonth(
             containing: targetMonthStart,
             scrollPosition: .firstFullyVisiblePosition,
             animated: false
+        )
+    }
+
+    func commitHeaderState(selectedDay: Date, monthStart: Date, animated: Bool) {
+        let isMonthChanged = !calendar.isDate(monthStart, equalTo: displayedMonthStart, toGranularity: .month)
+
+        if animated {
+            withAnimation(monthTransitionAnimation) {
+                selectedDate = selectedDay
+                if isMonthChanged {
+                    displayedMonthStart = monthStart
+                }
+            }
+        } else {
+            selectedDate = selectedDay
+            if isMonthChanged {
+                displayedMonthStart = monthStart
+            }
+        }
+
+        if isMonthChanged {
+            preloadMarkers(around: monthStart)
+        }
+
+        updateCalendarHeight(
+            for: monthStart,
+            availableWidth: calendarViewportWidth,
+            animated: animated
         )
     }
 
@@ -542,26 +610,42 @@ private struct TimelineCalendarDayCell: View {
             if isSelected {
                 Circle()
                     .fill(Color.brand)
-                    .frame(width: 30, height: 30)
+                    .frame(
+                        width: TimelineCalendarStyle.selectedCircleSize,
+                        height: TimelineCalendarStyle.selectedCircleSize
+                    )
             } else if let marker {
                 if marker.readingProgress > 0 {
                     ZStack {
                         Circle()
-                            .stroke(Color.brand.opacity(0.18), lineWidth: 1.6)
+                            .stroke(
+                                TimelineCalendarStyle.progressTrackColor,
+                                lineWidth: TimelineCalendarStyle.progressRingLineWidth
+                            )
                         Circle()
                             .trim(from: 0, to: CGFloat(marker.progressRatio))
                             .stroke(
                                 Color.brand,
-                                style: StrokeStyle(lineWidth: 1.6, lineCap: .round, lineJoin: .round)
+                                style: StrokeStyle(
+                                    lineWidth: TimelineCalendarStyle.progressRingLineWidth,
+                                    lineCap: .round,
+                                    lineJoin: .round
+                                )
                             )
                             .rotationEffect(.degrees(-90))
                     }
-                    .frame(width: 28, height: 28)
+                    .frame(
+                        width: TimelineCalendarStyle.progressRingSize,
+                        height: TimelineCalendarStyle.progressRingSize
+                    )
                 } else if marker.isActive {
                     Circle()
                         .fill(Color.brand)
-                        .frame(width: 4, height: 4)
-                        .offset(y: 12)
+                        .frame(
+                            width: TimelineCalendarStyle.markerDotSize,
+                            height: TimelineCalendarStyle.markerDotSize
+                        )
+                        .offset(y: TimelineCalendarStyle.markerDotOffsetY)
                 }
             }
 
@@ -569,7 +653,7 @@ private struct TimelineCalendarDayCell: View {
                 .font(dayNumberFont)
                 .foregroundStyle(isSelected ? Color.white : Color.textPrimary)
         }
-        .frame(width: 32, height: 32)
+        .frame(width: TimelineCalendarStyle.dayCellSize, height: TimelineCalendarStyle.dayCellSize)
     }
 }
 

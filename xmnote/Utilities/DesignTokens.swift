@@ -324,6 +324,34 @@ enum CardStyle {
     static let borderWidth: CGFloat = 0.5
 }
 
+// MARK: - Timeline Calendar Style
+
+/// 时间线日历样式令牌，集中维护字体、尺寸与颜色语义，避免页面内硬编码。
+enum TimelineCalendarStyle {
+    static let monthNumberFont: Font = .brandDisplay(size: 20, relativeTo: .title3)
+    static let monthUnitFont: Font = .system(size: 10, weight: .medium, design: .rounded)
+    static let actionButtonFont: Font = .system(size: 13, weight: .semibold, design: .rounded)
+    static let relativeNumberFont: Font = .brandDisplay(size: 14, relativeTo: .body)
+    static let relativeUnitFont: Font = .system(size: 10, weight: .regular, design: .rounded)
+    static let weekdayFont: Font = .system(size: 11, weight: .medium, design: .rounded)
+    static let categoryChipFont: Font = .system(size: 12, weight: .medium, design: .rounded)
+    static let dayNumberFont: Font = .brandDisplay(size: 13, relativeTo: .body)
+
+    static let dayCellSize: CGFloat = 32
+    static let selectedCircleSize: CGFloat = 30
+    static let progressRingSize: CGFloat = 28
+    static let progressRingLineWidth: CGFloat = 1.6
+    static let markerDotSize: CGFloat = 4
+    static let markerDotOffsetY: CGFloat = 12
+
+    static let monthNumberColor: Color = .textPrimary
+    static let monthUnitColor: Color = .textSecondary
+    static let relativeNumberColor: Color = .textPrimary
+    static let relativeUnitColor: Color = .textSecondary
+    static let weekdayTextColor: Color = .textHint
+    static let progressTrackColor: Color = Color.brand.opacity(0.18)
+}
+
 // MARK: - Color Helpers
 
 extension Color {
