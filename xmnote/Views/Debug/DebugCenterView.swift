@@ -2,7 +2,7 @@
 import SwiftUI
 
 /**
- * [INPUT]: 依赖 RichTextTestView、HeatmapTestView、ImageLoadingTestView、JXPhotoBrowserTestView、ReadCalendarCoverStackTestView、SystemColorsTestView、TimelineCardsTestView 作为导航目的地
+ * [INPUT]: 依赖 RichTextTestView、HeatmapTestView、ImageLoadingTestView、JXPhotoBrowserTestView、ReadCalendarCoverStackTestView、SystemColorsTestView、TimelineCardsTestView、TimelineCalendarHorizonTestView 作为导航目的地
  * [OUTPUT]: 对外提供 DebugCenterView（测试中心列表页）
  * [POS]: Debug 测试入口页，集中展示所有控件测试项，由 PersonalView 跳转进入
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -62,6 +62,12 @@ struct DebugCenterView: View {
             title: "时间线卡片",
             subtitle: "7 种事件卡片样式与时间线装饰器",
             destination: AnyView(TimelineCardsTestView())
+        ),
+        DebugItem(
+            icon: "calendar.badge.clock",
+            title: "时间线日历-Horizon",
+            subtitle: "Vendor 源码集成 + 范围/选中/月切换/跳转/marker 渲染验证",
+            destination: AnyView(TimelineCalendarHorizonTestView())
         ),
     ]
 

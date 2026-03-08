@@ -10,6 +10,8 @@
 | ReadingDurationRankingChart | UI-复用关键 | xmnote/UIComponents/Charts/ReadingDurationRankingChart.swift | docs/component-guides/ReadingDurationRankingChart使用说明.md | 新增/重大重构 |
 | XMRemoteImage | UI-复用关键 | xmnote/UIComponents/Foundation/XMRemoteImage.swift | docs/component-guides/XMRemoteImage使用说明.md | 新增/重大重构 |
 | XMGIFImageView | UI-复用关键 | xmnote/UIComponents/Foundation/XMGIFImageView.swift | docs/component-guides/XMGIFImageView使用说明.md | 新增/重大重构 |
+| XMJXImageWall | UI-复用关键 | xmnote/UIComponents/GalleryJX/XMJXImageWall.swift | docs/component-guides/XMJXImageWall使用说明.md | 新增/重大重构 |
+| XMJXThumbnailView | UI-复用关键 | xmnote/UIComponents/GalleryJX/XMJXThumbnailView.swift | docs/component-guides/XMJXThumbnailView使用说明.md | 新增/重大重构 |
 | BookContainerView | UI-核心页面关键 | xmnote/Views/Book/BookContainerView.swift | docs/component-guides/BookContainerView使用说明.md | 新增/重大重构 |
 | BookGridView | UI-核心页面关键 | xmnote/Views/Book/BookGridView.swift | docs/component-guides/BookGridView使用说明.md | 新增/重大重构 |
 | BookGridItemView | UI-核心页面关键 | xmnote/Views/Book/BookGridItemView.swift | docs/component-guides/BookGridItemView使用说明.md | 新增/重大重构 |

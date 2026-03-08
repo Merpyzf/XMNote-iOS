@@ -15,31 +15,66 @@
 import SwiftUI
 import Nuke
 
-/// 应用入口，负责初始化图片管线、数据库与仓储容器并注入根视图环境。
+/// 应用入口，异步初始化数据库后注入环境并渲染主界面。
+///
+/// 数据库 I/O（DatabasePool 创建 + 迁移 + seed）通过 `Task.detached` 脱离主线程，
+/// 消除首次启动 300-1200ms 的主线程阻塞。复用项目 Optional State + `.task` 延迟初始化模式。
 @main
 struct xmnoteApp: App {
     @State private var appState = AppState()
-    @State private var databaseManager: DatabaseManager
-    @State private var repositories: RepositoryContainer
+    @State private var databaseManager: DatabaseManager?
+    @State private var repositories: RepositoryContainer?
+    @State private var initError: Error?
 
-    /// 启动时组装全局依赖；数据库初始化失败则直接终止应用启动。
     init() {
-        do {
-            ImagePipeline.shared = XMImagePipelineFactory.makeDefault()
-            let manager = try DatabaseManager()
-            _databaseManager = State(initialValue: manager)
-            _repositories = State(initialValue: RepositoryContainer(databaseManager: manager))
-        } catch {
-            fatalError("数据库初始化失败: \(error)")
-        }
+        ImagePipeline.shared = XMImagePipelineFactory.makeDefault()
     }
 
     var body: some Scene {
         WindowGroup {
-            ContentView()
-                .environment(appState)
-                .environment(databaseManager)
-                .environment(repositories)
+            Group {
+                if let databaseManager, let repositories {
+                    ContentView()
+                        .environment(appState)
+                        .environment(databaseManager)
+                        .environment(repositories)
+                        .transition(.opacity)
+                } else if let initError {
+                    databaseErrorView(initError)
+                } else {
+                    LaunchSplashView()
+                }
+            }
+            .animation(.smooth(duration: 0.35), value: repositories != nil)
+            .task {
+                guard databaseManager == nil, initError == nil else { return }
+                do {
+                    let manager = try await Task.detached(priority: .userInitiated) {
+                        try DatabaseManager()
+                    }.value
+                    databaseManager = manager
+                    repositories = RepositoryContainer(databaseManager: manager)
+                } catch {
+                    initError = error
+                }
+            }
+        }
+    }
+
+    // MARK: - Error View
+
+    private func databaseErrorView(_ error: Error) -> some View {
+        VStack(spacing: Spacing.base) {
+            Image(systemName: "exclamationmark.triangle")
+                .font(.largeTitle)
+                .foregroundStyle(Color.feedbackError)
+            Text("数据库初始化失败")
+                .font(.headline)
+            Text(error.localizedDescription)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, Spacing.double)
         }
     }
 }

@@ -6,6 +6,8 @@
 | ReadingDurationRankingChart | `xmnote/UIComponents/Charts/ReadingDurationRankingChart.swift` | `docs/component-guides/ReadingDurationRankingChart使用说明.md` | 已完成 |
 | XMRemoteImage | `xmnote/UIComponents/Foundation/XMRemoteImage.swift` | `docs/component-guides/XMRemoteImage使用说明.md` | 已完成 |
 | XMGIFImageView | `xmnote/UIComponents/Foundation/XMGIFImageView.swift` | `docs/component-guides/XMGIFImageView使用说明.md` | 已完成 |
+| XMJXImageWall | `xmnote/UIComponents/GalleryJX/XMJXImageWall.swift` | `docs/component-guides/XMJXImageWall使用说明.md` | 已完成 |
+| XMJXThumbnailView | `xmnote/UIComponents/GalleryJX/XMJXThumbnailView.swift` | `docs/component-guides/XMJXThumbnailView使用说明.md` | 已完成 |
 | BookContainerView | `xmnote/Views/Book/BookContainerView.swift` | `docs/component-guides/BookContainerView使用说明.md` | 已完成 |
 | BookGridView | `xmnote/Views/Book/BookGridView.swift` | `docs/component-guides/BookGridView使用说明.md` | 已完成 |
 | BookGridItemView | `xmnote/Views/Book/BookGridItemView.swift` | `docs/component-guides/BookGridItemView使用说明.md` | 已完成 |

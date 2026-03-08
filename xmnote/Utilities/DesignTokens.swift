@@ -311,6 +311,7 @@ enum CornerRadius {
     // --- container: 承载内容块的外壳 ---
     static let containerMedium: CGFloat = 16  // 面板、弹层
     static let containerLarge: CGFloat = 18   // 突出容器（热力图 widget）
+    static let containerXL: CGFloat = 22     // 闪屏图标容器、大型品牌展示
 }
 
 // MARK: - Card Style
