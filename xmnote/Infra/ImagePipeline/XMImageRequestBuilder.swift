@@ -30,12 +30,19 @@ enum XMImageRequestBuilder {
     static let browserUserAgent =
         "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15"
 
-    /// 规范化并校验图片 URL，过滤空串与非法地址。
+    /// 规范化并校验图片 URL，支持 http/https 网络地址与 file:// 本地路径；
+    /// 裸路径（`/` 开头）自动转换为 file:// URL，对齐 Android 端直接传文件路径的惯例。
     static func normalizedURL(from rawURL: String) -> URL? {
         let trimmed = rawURL.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+
+        if trimmed.hasPrefix("/") {
+            return URL(fileURLWithPath: trimmed)
+        }
+
         guard let url = URL(string: trimmed),
               let scheme = url.scheme?.lowercased(),
-              scheme == "http" || scheme == "https" else {
+              scheme == "http" || scheme == "https" || scheme == "file" else {
             return nil
         }
         return url
@@ -115,8 +122,9 @@ enum XMImageRequestBuilder {
         return !nonGIFExtensions.contains(ext)
     }
 
-    /// 为请求注入 UA/Referer，兼容豆瓣等站点的防盗链策略。
+    /// 为请求注入 UA/Referer，兼容豆瓣等站点的防盗链策略；file:// 本地请求跳过。
     static func applyAntiHotlinkHeaders(to request: inout URLRequest) {
+        guard request.url?.isFileURL != true else { return }
         request.setValue(browserUserAgent, forHTTPHeaderField: "User-Agent")
         if let host = request.url?.host?.lowercased(), host.contains("douban") {
             request.setValue("https://douban.com/", forHTTPHeaderField: "Referer")
