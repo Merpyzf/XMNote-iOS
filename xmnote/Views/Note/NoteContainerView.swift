@@ -110,9 +110,18 @@ private struct NoteContentView: View {
 
     // MARK: - Segmented Content
 
-    @ViewBuilder
     private var segmentedContent: some View {
-        switch selectedSubTab {
+        KeepAliveSwitcherHost(
+            selection: selectedSubTab,
+            tabs: NoteSubTab.allCases
+        ) { tab in
+            segmentedPage(for: tab)
+        }
+    }
+
+    @ViewBuilder
+    private func segmentedPage(for tab: NoteSubTab) -> some View {
+        switch tab {
         case .notes:
             VStack(spacing: 0) {
                 noteSearchBar

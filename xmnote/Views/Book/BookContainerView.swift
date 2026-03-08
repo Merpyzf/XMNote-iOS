@@ -109,9 +109,18 @@ private struct BookContentView: View {
 
     // MARK: - Segmented Content
 
-    @ViewBuilder
     private var segmentedContent: some View {
-        switch selectedSubTab {
+        KeepAliveSwitcherHost(
+            selection: selectedSubTab,
+            tabs: BookSubTab.allCases
+        ) { tab in
+            segmentedPage(for: tab)
+        }
+    }
+
+    @ViewBuilder
+    private func segmentedPage(for tab: BookSubTab) -> some View {
+        switch tab {
         case .books:
             BookGridView(viewModel: viewModel)
         case .collections:

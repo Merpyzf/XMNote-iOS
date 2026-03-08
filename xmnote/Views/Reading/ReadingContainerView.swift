@@ -73,9 +73,18 @@ struct ReadingContainerView: View {
         .toolbar(.hidden, for: .navigationBar)
     }
 
-    @ViewBuilder
     private var segmentedContent: some View {
-        switch selectedSubTab {
+        KeepAliveSwitcherHost(
+            selection: selectedSubTab,
+            tabs: ReadingSubTab.allCases
+        ) { tab in
+            segmentedPage(for: tab)
+        }
+    }
+
+    @ViewBuilder
+    private func segmentedPage(for tab: ReadingSubTab) -> some View {
+        switch tab {
         case .reading:
             ReadingListPlaceholderView(onOpenReadCalendar: onOpenReadCalendar)
         case .timeline:

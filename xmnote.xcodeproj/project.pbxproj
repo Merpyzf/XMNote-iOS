@@ -445,8 +445,8 @@
 				);
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = "纸间书摘";
-				INFOPLIST_KEY_UIAppFonts = RozhaOne-Regular.ttf;
-				INFOPLIST_KEY_UIAppFonts_0 = RozhaOne-Regular.ttf;
+				INFOPLIST_KEY_UIAppFonts = "RozhaOne-Regular.ttf";
+				INFOPLIST_KEY_UIAppFonts_0 = "RozhaOne-Regular.ttf";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -484,8 +484,8 @@
 				);
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = "纸间书摘";
-				INFOPLIST_KEY_UIAppFonts = RozhaOne-Regular.ttf;
-				INFOPLIST_KEY_UIAppFonts_0 = RozhaOne-Regular.ttf;
+				INFOPLIST_KEY_UIAppFonts = "RozhaOne-Regular.ttf";
+				INFOPLIST_KEY_UIAppFonts_0 = "RozhaOne-Regular.ttf";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
