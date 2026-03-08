@@ -73,6 +73,7 @@ struct NoteContainerView: View {
 
 private struct NoteContentView: View {
     @Bindable var viewModel: NoteViewModel
+    private let topBarHeight: CGFloat = 52
     let onAddBook: () -> Void
     let onAddNote: () -> Void
     let onOpenDebugCenter: (() -> Void)?
@@ -82,14 +83,13 @@ private struct NoteContentView: View {
         ZStack(alignment: .top) {
             Color.windowBackground.ignoresSafeArea()
 
-            VStack(spacing: 0) {
-                segmentedContent
-            }
+            segmentedContent
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                .padding(.top, topBarHeight)
 
             HomeTopHeaderGradient()
                 .allowsHitTesting(false)
-        }
-        .safeAreaInset(edge: .top, spacing: 0) {
+
             TopSwitcher(
                 selection: $selectedSubTab,
                 tabs: NoteSubTab.allCases,
@@ -103,6 +103,7 @@ private struct NoteContentView: View {
                     usesGlassStyle: true
                 )
             }
+            .zIndex(1)
         }
         .toolbar(.hidden, for: .navigationBar)
     }

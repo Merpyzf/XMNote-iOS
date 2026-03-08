@@ -31,9 +31,13 @@ struct TimelineSectionHeader: View {
 
             Spacer()
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.vertical, Spacing.cozy)
         .padding(.horizontal, Spacing.screenEdge)
-        .background(Color.windowBackground)
+        .background {
+            Rectangle()
+                .fill(Color.windowBackground)
+        }
     }
 
     private var monthDayString: String {

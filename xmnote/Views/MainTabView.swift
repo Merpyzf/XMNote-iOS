@@ -304,6 +304,7 @@ struct MainTabView: View {
 
 private struct SearchView: View {
     @Binding var query: String
+    private let topBarHeight: CGFloat = 52
     let onAddBook: () -> Void
     let onAddNote: () -> Void
     let onOpenDebugCenter: (() -> Void)?
@@ -324,20 +325,8 @@ private struct SearchView: View {
     var body: some View {
         ZStack(alignment: .top) {
             Color.windowBackground.ignoresSafeArea()
-            HomeTopHeaderGradient()
 
             VStack(spacing: Spacing.base) {
-                HStack {
-                    Spacer(minLength: 0)
-                    AddMenuCircleButton(
-                        onAddBook: onAddBook,
-                        onAddNote: onAddNote,
-                        onOpenDebugCenter: onOpenDebugCenter
-                    )
-                }
-                .padding(.horizontal, Spacing.screenEdge)
-                .padding(.top, Spacing.half)
-
                 VStack(spacing: 12) {
                     Image(systemName: "magnifyingglass")
                         .font(.system(size: 28, weight: .semibold))
@@ -349,6 +338,22 @@ private struct SearchView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+            .padding(.top, topBarHeight)
+
+            HomeTopHeaderGradient()
+                .allowsHitTesting(false)
+
+            HStack {
+                Spacer(minLength: 0)
+                AddMenuCircleButton(
+                    onAddBook: onAddBook,
+                    onAddNote: onAddNote,
+                    onOpenDebugCenter: onOpenDebugCenter
+                )
+            }
+            .padding(.horizontal, Spacing.screenEdge)
+            .frame(height: topBarHeight)
+            .zIndex(1)
         }
         .toolbar(.hidden, for: .navigationBar)
     }

@@ -73,6 +73,7 @@ struct BookContainerView: View {
 
 private struct BookContentView: View {
     @Bindable var viewModel: BookViewModel
+    private let topBarHeight: CGFloat = 52
     let onAddBook: () -> Void
     let onAddNote: () -> Void
     let onOpenDebugCenter: (() -> Void)?
@@ -82,14 +83,13 @@ private struct BookContentView: View {
         ZStack(alignment: .top) {
             Color.windowBackground.ignoresSafeArea()
 
-            VStack(spacing: 0) {
-                segmentedContent
-            }
+            segmentedContent
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                .padding(.top, topBarHeight)
 
             HomeTopHeaderGradient()
                 .allowsHitTesting(false)
-        }
-        .safeAreaInset(edge: .top, spacing: 0) {
+
             TopSwitcher(
                 selection: $selectedSubTab,
                 tabs: BookSubTab.allCases,
@@ -102,6 +102,7 @@ private struct BookContentView: View {
                     usesGlassStyle: true
                 )
             }
+            .zIndex(1)
         }
         .toolbar(.hidden, for: .navigationBar)
     }

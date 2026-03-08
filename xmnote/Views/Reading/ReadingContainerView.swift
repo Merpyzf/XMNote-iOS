@@ -26,6 +26,7 @@ enum ReadingSubTab: String, CaseIterable {
 /// 在读 Tab 容器，负责子页切换并上抛新增与阅读日历跳转事件。
 struct ReadingContainerView: View {
     @State private var selectedSubTab: ReadingSubTab = .reading
+    private let topBarHeight: CGFloat = 52
     let onAddBook: () -> Void
     let onAddNote: () -> Void
     let onOpenDebugCenter: (() -> Void)?
@@ -48,20 +49,13 @@ struct ReadingContainerView: View {
         ZStack(alignment: .top) {
             Color.windowBackground.ignoresSafeArea()
 
-            TabView(selection: $selectedSubTab) {
-                ReadingListPlaceholderView(onOpenReadCalendar: onOpenReadCalendar)
-                    .tag(ReadingSubTab.reading)
-                TimelinePlaceholderView()
-                    .tag(ReadingSubTab.timeline)
-                StatisticsPlaceholderView()
-                    .tag(ReadingSubTab.statistics)
-            }
-            .tabViewStyle(.page(indexDisplayMode: .never))
+            segmentedContent
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                .padding(.top, topBarHeight)
 
             HomeTopHeaderGradient()
                 .allowsHitTesting(false)
-        }
-        .safeAreaInset(edge: .top, spacing: 0) {
+
             TopSwitcher(
                 selection: $selectedSubTab,
                 tabs: ReadingSubTab.allCases,
@@ -74,8 +68,21 @@ struct ReadingContainerView: View {
                     usesGlassStyle: true
                 )
             }
+            .zIndex(1)
         }
         .toolbar(.hidden, for: .navigationBar)
+    }
+
+    @ViewBuilder
+    private var segmentedContent: some View {
+        switch selectedSubTab {
+        case .reading:
+            ReadingListPlaceholderView(onOpenReadCalendar: onOpenReadCalendar)
+        case .timeline:
+            ReadingTimelineView()
+        case .statistics:
+            StatisticsPlaceholderView()
+        }
     }
 }
 

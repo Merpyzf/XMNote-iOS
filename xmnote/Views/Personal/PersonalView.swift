@@ -17,6 +17,7 @@ import SwiftUI
 /// 个人中心首页，汇总设置、备份、阅读偏好与支持入口。
 struct PersonalView: View {
     @Environment(AppState.self) private var appState
+    private let topBarHeight: CGFloat = 52
     let onAddBook: () -> Void
     let onAddNote: () -> Void
     let onOpenDebugCenter: (() -> Void)?
@@ -51,11 +52,11 @@ struct PersonalView: View {
                 .padding(.horizontal, Spacing.screenEdge)
                 .padding(.vertical, Spacing.base)
             }
+            .padding(.top, topBarHeight)
 
             HomeTopHeaderGradient()
                 .allowsHitTesting(false)
-        }
-        .safeAreaInset(edge: .top, spacing: 0) {
+
             TopSwitcher(title: "我的") {
                 NavigationLink(value: PersonalRoute.settings) {
                     TopBarActionIcon(systemName: "gearshape")
@@ -69,6 +70,7 @@ struct PersonalView: View {
                     usesGlassStyle: true
                 )
             }
+            .zIndex(1)
         }
         .toolbar(.hidden, for: .navigationBar)
     }
