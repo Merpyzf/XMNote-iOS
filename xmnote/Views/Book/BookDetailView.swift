@@ -160,7 +160,7 @@ private struct BookDetailContentView: View {
                 // 想法
                 if !note.idea.isEmpty {
                     HStack(alignment: .top, spacing: Spacing.base) {
-                        RoundedRectangle(cornerRadius: 1.5)
+                        RoundedRectangle(cornerRadius: CornerRadius.inlayHairline, style: .continuous)
                             .fill(Color.textHint.opacity(0.6))
                             .frame(width: 3)
 

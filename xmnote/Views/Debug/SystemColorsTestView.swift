@@ -434,9 +434,9 @@ private extension SystemColorSpecCard {
         .padding(.horizontal, Spacing.half)
         .padding(.vertical, Spacing.half)
         .frame(maxWidth: .infinity, minHeight: 64, alignment: .topLeading)
-        .background(Color(uiColor: .secondarySystemBackground), in: RoundedRectangle(cornerRadius: CornerRadius.inlayMedium))
+        .background(Color(uiColor: .secondarySystemBackground), in: RoundedRectangle(cornerRadius: CornerRadius.inlayMedium, style: .continuous))
         .overlay {
-            RoundedRectangle(cornerRadius: CornerRadius.inlayMedium)
+            RoundedRectangle(cornerRadius: CornerRadius.inlayMedium, style: .continuous)
                 .stroke(Color(uiColor: .separator), lineWidth: 0.5)
         }
     }

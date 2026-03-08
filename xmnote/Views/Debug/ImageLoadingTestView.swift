@@ -88,7 +88,7 @@ private extension ImageLoadingTestContentView {
                     .padding(.horizontal, Spacing.base)
                     .padding(.vertical, Spacing.cozy)
                     .background(Color.contentBackground)
-                    .clipShape(RoundedRectangle(cornerRadius: CornerRadius.blockMedium))
+                    .clipShape(RoundedRectangle(cornerRadius: CornerRadius.blockMedium, style: .continuous))
 
                 HStack(spacing: Spacing.half) {
                     Button("测试 URL") {
@@ -127,9 +127,9 @@ private extension ImageLoadingTestContentView {
                 }
             }
             .frame(width: 52, height: 76)
-            .clipShape(RoundedRectangle(cornerRadius: CornerRadius.inlaySmall))
+            .clipShape(RoundedRectangle(cornerRadius: CornerRadius.inlaySmall, style: .continuous))
             .overlay(
-                RoundedRectangle(cornerRadius: CornerRadius.inlaySmall)
+                RoundedRectangle(cornerRadius: CornerRadius.inlaySmall, style: .continuous)
                     .stroke(Color.cardBorder, lineWidth: CardStyle.borderWidth)
             )
 
@@ -192,9 +192,9 @@ private extension ImageLoadingTestContentView {
                 }
             }
             .frame(width: 52, height: 76)
-            .clipShape(RoundedRectangle(cornerRadius: CornerRadius.inlaySmall))
+            .clipShape(RoundedRectangle(cornerRadius: CornerRadius.inlaySmall, style: .continuous))
             .overlay(
-                RoundedRectangle(cornerRadius: CornerRadius.inlaySmall)
+                RoundedRectangle(cornerRadius: CornerRadius.inlaySmall, style: .continuous)
                     .stroke(Color.cardBorder, lineWidth: CardStyle.borderWidth)
             )
 
@@ -245,7 +245,7 @@ private extension ImageLoadingTestContentView {
         }
         .padding(Spacing.base)
         .background(Color.contentBackground)
-        .clipShape(RoundedRectangle(cornerRadius: CornerRadius.blockMedium))
+        .clipShape(RoundedRectangle(cornerRadius: CornerRadius.blockMedium, style: .continuous))
     }
 
     var summarySection: some View {
@@ -328,7 +328,7 @@ private extension ImageLoadingTestContentView {
         }
         .padding(.horizontal, 8)
         .padding(.vertical, 6)
-        .background(Color.contentBackground, in: RoundedRectangle(cornerRadius: CornerRadius.blockSmall))
+        .background(Color.contentBackground, in: RoundedRectangle(cornerRadius: CornerRadius.blockSmall, style: .continuous))
     }
 
     func statusForeground(_ status: ImageLoadingTestViewModel.LoadStatus) -> Color {

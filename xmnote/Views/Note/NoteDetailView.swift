@@ -94,9 +94,9 @@ private struct NoteDetailContentView: View {
                         highlightARGB: viewModel.selectedHighlightARGB
                     )
                     .frame(height: 220)
-                    .clipShape(RoundedRectangle(cornerRadius: CornerRadius.blockMedium))
+                    .clipShape(RoundedRectangle(cornerRadius: CornerRadius.blockMedium, style: .continuous))
                     .overlay(
-                        RoundedRectangle(cornerRadius: CornerRadius.blockMedium)
+                        RoundedRectangle(cornerRadius: CornerRadius.blockMedium, style: .continuous)
                             .stroke(Color.cardBorder, lineWidth: CardStyle.borderWidth)
                     )
                 }
@@ -109,9 +109,9 @@ private struct NoteDetailContentView: View {
                         highlightARGB: viewModel.selectedHighlightARGB
                     )
                     .frame(height: 180)
-                    .clipShape(RoundedRectangle(cornerRadius: CornerRadius.blockMedium))
+                    .clipShape(RoundedRectangle(cornerRadius: CornerRadius.blockMedium, style: .continuous))
                     .overlay(
-                        RoundedRectangle(cornerRadius: CornerRadius.blockMedium)
+                        RoundedRectangle(cornerRadius: CornerRadius.blockMedium, style: .continuous)
                             .stroke(Color.cardBorder, lineWidth: CardStyle.borderWidth)
                     )
                 }

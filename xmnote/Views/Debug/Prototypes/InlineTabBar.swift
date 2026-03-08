@@ -34,7 +34,7 @@ struct InlineTabBar<Tab: Hashable & CaseIterable>: View where Tab.AllCases: Rand
                     .foregroundStyle(isSelected ? .primary : .secondary)
                     .fixedSize()
                 if isSelected {
-                    RoundedRectangle(cornerRadius: 1.5)
+                    RoundedRectangle(cornerRadius: CornerRadius.inlayHairline, style: .continuous)
                         .fill(Color.brand)
                         .frame(height: 3)
                         .matchedGeometryEffect(id: "indicator", in: namespace)

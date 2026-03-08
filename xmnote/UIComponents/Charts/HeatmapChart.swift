@@ -606,18 +606,18 @@ private extension HeatmapChart {
         let day = days[date] ?? .empty(for: date)
         let segmentColors = day.segmentColors(for: statisticsDataType)
 
-        return RoundedRectangle(cornerRadius: squareRadius)
+        return RoundedRectangle(cornerRadius: squareRadius, style: .continuous)
             .fill(Color.clear)
             .frame(width: squareSize, height: squareSize)
             .overlay {
                 if !isFuture {
                     segmentedFill(colors: segmentColors)
-                        .clipShape(RoundedRectangle(cornerRadius: squareRadius))
+                        .clipShape(RoundedRectangle(cornerRadius: squareRadius, style: .continuous))
                 }
             }
             .overlay {
                 if isToday {
-                    RoundedRectangle(cornerRadius: squareRadius)
+                    RoundedRectangle(cornerRadius: squareRadius, style: .continuous)
                         .strokeBorder(Color.brand, lineWidth: 1.5)
                 }
             }
@@ -673,7 +673,7 @@ extension HeatmapChart {
                 .font(.system(size: 9))
                 .foregroundStyle(Color.textHint)
             ForEach(HeatmapLevel.allCases.filter { $0 != .none }, id: \.rawValue) { level in
-                RoundedRectangle(cornerRadius: style.squareRadius)
+                RoundedRectangle(cornerRadius: style.squareRadius, style: .continuous)
                     .fill(level.color)
                     .frame(width: 10, height: 10)
             }
@@ -690,7 +690,7 @@ extension HeatmapChart {
                 .font(.system(size: fontSize))
                 .foregroundStyle(Color.textHint)
             ForEach(HeatmapLevel.allCases.filter { $0 != .none }, id: \.rawValue) { level in
-                RoundedRectangle(cornerRadius: CornerRadius.inlayTiny)
+                RoundedRectangle(cornerRadius: CornerRadius.inlayTiny, style: .continuous)
                     .fill(level.color)
                     .frame(width: squareSize, height: squareSize)
             }

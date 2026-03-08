@@ -287,7 +287,7 @@ enum Spacing {
 //   container → 承载内容块的外壳（面板、弹层、突出容器）
 //
 // 第二步：按视觉体量选尺寸
-//   tiny(2.5) < small(4) < medium(6~8) < large(10~12) < xl(16) < xxl(18)
+//   none(0) < hairline(2) < tiny(3) < small(4) < medium(6) < large(8~12) < xl(16) < xxl(18~22)
 //
 // 示例：
 //   热力图方格 → 嵌在卡片里的小零件 → inlay → 最小的 → inlayTiny
@@ -298,8 +298,11 @@ enum Spacing {
 
 /// 全局圆角设计令牌，按 inlay/block/container 三类角色复用。
 enum CornerRadius {
+    static let none: CGFloat = 0          // 关闭圆角（状态切换）
+
     // --- inlay: 嵌在卡片/容器内的小型视觉零件 ---
-    static let inlayTiny: CGFloat = 2.5    // 热力图方格、图例色块
+    static let inlayHairline: CGFloat = 2  // 装饰分隔条、极细引导条
+    static let inlayTiny: CGFloat = 3      // 热力图方格、图例色块
     static let inlaySmall: CGFloat = 4     // 书籍封面缩略图
     static let inlayMedium: CGFloat = 6    // 标签、徽章
 

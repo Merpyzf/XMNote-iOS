@@ -149,9 +149,9 @@ private struct NoteContentView: View {
         }
         .padding(.horizontal, 12)
         .frame(height: 36)
-        .background(Color.contentBackground, in: RoundedRectangle(cornerRadius: 10))
+        .background(Color.contentBackground, in: RoundedRectangle(cornerRadius: CornerRadius.blockMedium, style: .continuous))
         .overlay(
-            RoundedRectangle(cornerRadius: 10)
+            RoundedRectangle(cornerRadius: CornerRadius.blockMedium, style: .continuous)
                 .stroke(Color.cardBorder, lineWidth: CardStyle.borderWidth)
         )
         .padding(.horizontal, Spacing.screenEdge)

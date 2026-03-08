@@ -91,7 +91,7 @@ struct HeatmapHelpSheetView: View {
 
     private func statusLegendItem(_ title: String, color: Color) -> some View {
         HStack(spacing: 6) {
-            RoundedRectangle(cornerRadius: CornerRadius.inlayTiny)
+            RoundedRectangle(cornerRadius: CornerRadius.inlayTiny, style: .continuous)
                 .fill(color)
                 .frame(width: 12, height: 12)
             Text(title)

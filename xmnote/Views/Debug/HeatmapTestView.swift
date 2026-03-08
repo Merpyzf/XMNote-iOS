@@ -135,7 +135,7 @@ private extension HeatmapTestContentView {
             }
             .padding(Spacing.base)
             .background(Color.contentBackground)
-            .clipShape(RoundedRectangle(cornerRadius: CornerRadius.blockLarge))
+            .clipShape(RoundedRectangle(cornerRadius: CornerRadius.blockLarge, style: .continuous))
         }
     }
 }
@@ -162,7 +162,7 @@ private extension HeatmapTestContentView {
             }
             .padding(Spacing.base)
             .background(Color.contentBackground)
-            .clipShape(RoundedRectangle(cornerRadius: CornerRadius.blockLarge))
+            .clipShape(RoundedRectangle(cornerRadius: CornerRadius.blockLarge, style: .continuous))
         }
     }
 }
@@ -189,7 +189,7 @@ private extension HeatmapTestContentView {
                 }
                 .padding(Spacing.base)
                 .background(Color.contentBackground)
-                .clipShape(RoundedRectangle(cornerRadius: CornerRadius.blockLarge))
+                .clipShape(RoundedRectangle(cornerRadius: CornerRadius.blockLarge, style: .continuous))
             }
             .transition(.opacity.combined(with: .move(edge: .top)))
         }
@@ -229,7 +229,7 @@ private extension HeatmapTestContentView {
             }
             .padding(Spacing.base)
             .background(Color.contentBackground)
-            .clipShape(RoundedRectangle(cornerRadius: CornerRadius.blockLarge))
+            .clipShape(RoundedRectangle(cornerRadius: CornerRadius.blockLarge, style: .continuous))
         }
     }
 }

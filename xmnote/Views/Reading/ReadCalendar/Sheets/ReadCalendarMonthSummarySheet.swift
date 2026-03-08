@@ -548,11 +548,11 @@ private extension ReadCalendarMonthSummarySheet {
             )
 
             VStack(alignment: .leading, spacing: Spacing.half) {
-                RoundedRectangle(cornerRadius: 5, style: .continuous)
+                RoundedRectangle(cornerRadius: CornerRadius.inlayMedium, style: .continuous)
                     .fill(fillColor)
                     .frame(width: titleWidth, height: Layout.summaryDurationSkeletonTitleLineHeight)
 
-                RoundedRectangle(cornerRadius: 4, style: .continuous)
+                RoundedRectangle(cornerRadius: CornerRadius.inlaySmall, style: .continuous)
                     .fill(fillColor.opacity(0.90))
                     .frame(width: subtitleWidth, height: Layout.summaryDurationSkeletonSubtitleLineHeight)
             }
@@ -611,11 +611,11 @@ private extension ReadCalendarMonthSummarySheet {
                 )
 
             VStack(alignment: .leading, spacing: Layout.summaryDurationSkeletonLineSpacing) {
-                RoundedRectangle(cornerRadius: 4, style: .continuous)
+                RoundedRectangle(cornerRadius: CornerRadius.inlaySmall, style: .continuous)
                     .fill(fillColor)
                     .frame(width: titleWidth, height: Layout.summaryDurationSkeletonBookTitleHeight)
 
-                RoundedRectangle(cornerRadius: 4, style: .continuous)
+                RoundedRectangle(cornerRadius: CornerRadius.inlaySmall, style: .continuous)
                     .fill(fillColor.opacity(0.90))
                     .frame(width: durationWidth, height: Layout.summaryDurationSkeletonDurationHeight)
             }

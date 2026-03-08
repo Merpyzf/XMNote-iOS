@@ -229,7 +229,7 @@ private struct ReadCalendarMonthGridWeekRow: View {
         static let overflowBadgeBottomPadding: CGFloat = 2
         static let overflowBadgeLeading: CGFloat = 3
         static let yearCompactCellSpacing: CGFloat = 3
-        static let yearCompactCellCornerRadius: CGFloat = 2.5
+        static let yearCompactCellCornerRadius: CGFloat = CornerRadius.inlayTiny
     }
 
     let week: ReadCalendarMonthGrid.WeekData

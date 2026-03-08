@@ -241,7 +241,7 @@ final class RichTextToolbar: UIView {
             let isActive = formats.contains(format)
             button.tintColor = isActive ? activeColor : normalColor
             button.backgroundColor = isActive ? activeColor.withAlphaComponent(0.12) : .clear
-            button.layer.cornerRadius = isActive ? 6 : 0
+            button.layer.cornerRadius = isActive ? CornerRadius.inlayMedium : CornerRadius.none
         }
 
         // 撤销/重做状态
@@ -266,7 +266,7 @@ final class RichTextToolbar: UIView {
             } else {
                 button.tintColor = disabledColor
                 button.backgroundColor = .clear
-                button.layer.cornerRadius = 0
+                button.layer.cornerRadius = CornerRadius.none
             }
         }
 

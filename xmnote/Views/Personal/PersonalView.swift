@@ -107,9 +107,9 @@ extension PersonalView {
             }
             .buttonStyle(.plain)
             .background(Color.contentBackground)
-            .clipShape(RoundedRectangle(cornerRadius: CornerRadius.blockLarge))
+            .clipShape(RoundedRectangle(cornerRadius: CornerRadius.blockLarge, style: .continuous))
             .overlay(
-                RoundedRectangle(cornerRadius: CornerRadius.blockLarge)
+                RoundedRectangle(cornerRadius: CornerRadius.blockLarge, style: .continuous)
                     .stroke(Color.cardBorder, lineWidth: CardStyle.borderWidth)
             )
         }

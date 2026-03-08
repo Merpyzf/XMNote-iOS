@@ -36,7 +36,7 @@ struct TimelineNoteCard: View {
 
     private var ideaSection: some View {
         HStack(alignment: .top, spacing: Spacing.cozy) {
-            RoundedRectangle(cornerRadius: 1)
+            RoundedRectangle(cornerRadius: CornerRadius.inlayHairline, style: .continuous)
                 .fill(Color.brand.opacity(0.5))
                 .frame(width: 2.5)
 

@@ -31,10 +31,10 @@ struct CardContainer<Content: View>: View {
         content
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(Color.contentBackground)
-            .clipShape(RoundedRectangle(cornerRadius: cornerRadius))
+            .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
             .overlay {
                 if showsBorder {
-                    RoundedRectangle(cornerRadius: cornerRadius)
+                    RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
                         .stroke(Color.surfaceBorderStrong, lineWidth: CardStyle.borderWidth)
                 }
             }
