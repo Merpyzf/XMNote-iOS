@@ -26,7 +26,11 @@ struct TimelineReviewCard: View {
                 }
 
                 if !event.content.isEmpty {
-                    RichText(html: event.content)
+                    RichText(
+                        html: event.content,
+                        baseFont: TimelineTypography.eventRichTextBaseFont,
+                        lineSpacing: TimelineTypography.eventRichTextLineSpacing
+                    )
                 }
 
                 if !event.imageURLs.isEmpty {

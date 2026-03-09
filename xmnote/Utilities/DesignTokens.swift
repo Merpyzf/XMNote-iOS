@@ -10,6 +10,7 @@
 //  [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
 
 import SwiftUI
+import UIKit
 
 /// 阅读日历月总结图标的渐变角色枚举，不同角色对应不同色相方案。
 enum ReadCalendarSummaryGradientRole {
@@ -378,6 +379,15 @@ enum TimelineCalendarStyle {
     static let sectionDateFont: Font = .brandDisplay(size: 18, relativeTo: .subheadline)
     static let sectionYearFont: Font = .brandDisplay(size: 18, relativeTo: .subheadline)
     static let sectionFilterFont: Font = .system(size: 12, weight: .medium, design: .rounded)
+}
+
+// MARK: - Timeline Typography
+
+/// 时间线卡片正文字体令牌，确保富文本密度在不同卡片中保持一致。
+enum TimelineTypography {
+    static let eventRichTextBaseFont: UIFont = .preferredFont(forTextStyle: .callout)
+    static let eventRichTextLineSpacing: CGFloat = 4
+    static let eventFallbackTextFont: Font = .callout
 }
 
 // MARK: - Color Helpers

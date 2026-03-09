@@ -18,7 +18,11 @@ struct TimelineNoteCard: View {
             VStack(alignment: .leading, spacing: Spacing.base) {
                 TimelineCardMetaLine(timestamp: timestamp, bookName: bookName)
 
-                RichText(html: event.content)
+                RichText(
+                    html: event.content,
+                    baseFont: TimelineTypography.eventRichTextBaseFont,
+                    lineSpacing: TimelineTypography.eventRichTextLineSpacing
+                )
 
                 if !event.idea.isEmpty {
                     ideaSection
@@ -42,9 +46,9 @@ struct TimelineNoteCard: View {
 
             RichText(
                 html: event.idea,
-                baseFont: .preferredFont(forTextStyle: .callout),
+                baseFont: TimelineTypography.eventRichTextBaseFont,
                 textColor: .secondaryLabel,
-                lineSpacing: 3
+                lineSpacing: TimelineTypography.eventRichTextLineSpacing
             )
         }
     }

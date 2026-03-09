@@ -664,7 +664,7 @@ private enum TimelineFilterHostStyle {
     static let controlWidth: CGFloat = 76
 }
 
-/// 时间线分类筛选胶囊菜单，全页只创建一个实例并吸顶承载。
+/// 时间线分类筛选菜单，全页只创建一个实例并吸顶承载。
 private struct TimelineCategoryFilterMenu: View {
     let selectedCategory: TimelineEventCategory
     let onCategorySelected: (TimelineEventCategory) -> Void
@@ -696,8 +696,7 @@ private struct TimelineCategoryFilterMenu: View {
             .padding(.horizontal, Spacing.cozy)
             .padding(.vertical, Spacing.compact)
             .frame(minWidth: TimelineFilterHostStyle.controlWidth)
-            .background(Color.bgSecondary)
-            .clipShape(Capsule())
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
     }

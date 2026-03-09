@@ -70,12 +70,16 @@ struct TimelineRelevantCard: View {
     private var contentView: some View {
         if contentFallbackToURL {
             Text(event.url)
-                .font(.body)
+                .font(TimelineTypography.eventFallbackTextFont)
                 .foregroundStyle(Color.textPrimary)
-                .lineSpacing(4)
+                .lineSpacing(TimelineTypography.eventRichTextLineSpacing)
                 .fixedSize(horizontal: false, vertical: true)
         } else {
-            RichText(html: event.content)
+            RichText(
+                html: event.content,
+                baseFont: TimelineTypography.eventRichTextBaseFont,
+                lineSpacing: TimelineTypography.eventRichTextLineSpacing
+            )
         }
     }
 
