@@ -75,7 +75,7 @@ struct ReadCalendarYearSummarySheet: View {
             .padding(.horizontal, Layout.containerHorizontalInset)
         }
         // 使用系统 safeAreaBar 承载顶部切换区，滚动时由系统提供备忘录式边缘模糊过渡。
-        .safeAreaBar(edge: .top, spacing: 0) {
+        .safeAreaBar(edge: .top, spacing: Spacing.none) {
             summaryStickyHeader
         }
         .scrollEdgeEffectStyle(.soft, for: .top)
@@ -85,7 +85,7 @@ struct ReadCalendarYearSummarySheet: View {
 
 private extension ReadCalendarYearSummarySheet {
     var summaryStickyHeader: some View {
-        VStack(spacing: 0) {
+        VStack(spacing: Spacing.none) {
             summaryYearSwitcher
                 .padding(.horizontal, Layout.containerHorizontalInset)
                 .padding(.top, Layout.containerTopInset)
@@ -248,7 +248,7 @@ private extension ReadCalendarYearSummarySheet {
         HStack(alignment: .center, spacing: Spacing.base) {
             summaryMetricIcon(systemName: metric.iconName, role: metric.gradientRole)
 
-            VStack(alignment: .leading, spacing: 1) {
+            VStack(alignment: .leading, spacing: Spacing.hairline) {
                 Text(metric.title)
                     .font(.caption2)
                     .foregroundStyle(Color.readCalendarSubtleText)
@@ -271,7 +271,7 @@ private extension ReadCalendarYearSummarySheet {
             Spacer(minLength: 0)
         }
         .padding(.horizontal, Spacing.base)
-        .padding(.vertical, 7)
+        .padding(.vertical, Spacing.cozy)
         .frame(maxWidth: .infinity, minHeight: Layout.metricCardHeight, alignment: .leading)
         .background(
             RoundedRectangle(cornerRadius: CornerRadius.blockLarge, style: .continuous)

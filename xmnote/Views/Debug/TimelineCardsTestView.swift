@@ -127,9 +127,14 @@ enum TimelineCardsMockData {
                 TimelineEvent(
                     id: "note_1",
                     kind: .note(TimelineNoteEvent(
-                        content: "人生最大的幸运，就是在年富力强时发现了自己的使命。一个人知道自己为什么活着，就能忍受任何一种生活。",
+                        content: "人生最大的幸运，就是在年富力强时发现了自己的<b>使命</b>。一个人知道自己为什么活着，就能忍受任何一种生活。",
                         idea: "这句话让我想到了尼采的名言——知道为什么活的人，便能生存",
-                        bookTitle: "活法"
+                        bookTitle: "活法",
+                        imageURLs: [
+                            "https://picsum.photos/200/300",
+                            "https://picsum.photos/201/300",
+                            "https://picsum.photos/202/300",
+                        ]
                     )),
                     timestamp: base + 36000000,
                     bookName: "活法",
@@ -186,8 +191,12 @@ enum TimelineCardsMockData {
                     id: "review_1",
                     kind: .review(TimelineReviewEvent(
                         title: "一本改变思维方式的书",
-                        content: "作者用大量案例说明了系统思维的重要性。读完之后对复杂问题的分析能力有了显著提升，强烈推荐给所有想要提升认知能力的人。",
-                        bookScore: 40
+                        content: "作者用大量案例说明了<b>系统思维</b>的重要性。读完之后对复杂问题的分析能力有了显著提升，强烈推荐给所有想要提升认知能力的人。",
+                        bookScore: 40,
+                        imageURLs: [
+                            "https://picsum.photos/203/300",
+                            "https://picsum.photos/204/300",
+                        ]
                     )),
                     timestamp: base + 64800000,
                     bookName: "系统之美",
@@ -199,7 +208,8 @@ enum TimelineCardsMockData {
                     kind: .note(TimelineNoteEvent(
                         content: "简洁是最高形式的复杂。",
                         idea: "",
-                        bookTitle: "设计心理学"
+                        bookTitle: "设计心理学",
+                        imageURLs: []
                     )),
                     timestamp: base + 57600000,
                     bookName: "设计心理学",
@@ -225,7 +235,8 @@ enum TimelineCardsMockData {
                         title: "作者的 TED 演讲",
                         content: "关于创造力与约束之间关系的精彩演讲，与书中第三章的论述高度呼应。",
                         url: "https://example.com/ted-talk",
-                        categoryTitle: "延伸阅读"
+                        categoryTitle: "延伸阅读",
+                        imageURLs: ["https://picsum.photos/205/300"]
                     )),
                     timestamp: base + 50400000,
                     bookName: "创新者的窘境",

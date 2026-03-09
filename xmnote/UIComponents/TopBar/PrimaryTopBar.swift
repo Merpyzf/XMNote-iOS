@@ -22,10 +22,10 @@ struct PrimaryTopBar<Leading: View, Trailing: View>: View {
     }
 
     var body: some View {
-        HStack(spacing: 0) {
+        HStack(spacing: Spacing.none) {
             leading
             Spacer(minLength: 0)
-            HStack(spacing: 8) {
+            HStack(spacing: Spacing.cozy) {
                 trailing
             }
         }

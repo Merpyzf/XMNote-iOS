@@ -86,7 +86,7 @@ private extension WebDAVServerListContentView {
             Task { await viewModel.select(server) }
         } label: {
             HStack {
-                VStack(alignment: .leading, spacing: 4) {
+                VStack(alignment: .leading, spacing: Spacing.compact) {
                     Text(server.title)
                         .font(.body)
                     Text(server.serverAddress)

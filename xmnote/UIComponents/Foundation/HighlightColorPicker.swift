@@ -13,10 +13,10 @@ struct HighlightColorPicker: View {
     @Binding var selectedARGB: UInt32
 
     private let colors: [UInt32] = Array(HighlightColors.lightToDark.keys).sorted()
-    private let columns = Array(repeating: GridItem(.fixed(32), spacing: 10), count: 7)
+    private let columns = Array(repeating: GridItem(.fixed(32), spacing: Spacing.tight), count: 7)
 
     var body: some View {
-        LazyVGrid(columns: columns, spacing: 10) {
+        LazyVGrid(columns: columns, spacing: Spacing.tight) {
             ForEach(colors, id: \.self) { argb in
                 colorDot(argb)
             }
@@ -48,5 +48,5 @@ struct HighlightColorPicker: View {
 #Preview {
     @Previewable @State var selected: UInt32 = HighlightColors.defaultHighlightColor
     HighlightColorPicker(selectedARGB: $selected)
-        .padding()
+        .padding(Spacing.screenEdge)
 }

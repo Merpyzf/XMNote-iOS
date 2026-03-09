@@ -1,5 +1,5 @@
 /**
- * [INPUT]: 依赖 HorizonCalendar 的 CalendarViewRepresentable/CalendarViewProxy，依赖 TimelineEvent/TimelineSection 领域模型与时间线卡片组件
+ * [INPUT]: 依赖 HorizonCalendar 的 CalendarViewRepresentable/CalendarViewProxy，依赖 TimelineViewModel 提供事件与日历标记数据
  * [OUTPUT]: 对外提供 ReadingTimelineView（首页时间线模块：日历与事件列表联动）
  * [POS]: Reading 模块正式时间线页面，承载月份切换、日期选择、分类过滤与按日时间线渲染
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -8,14 +8,35 @@
 import HorizonCalendar
 import SwiftUI
 
-/// 首页在读模块的正式时间线页面。
+/// 首页在读模块的正式时间线页面（外壳）。
+/// 通过 .task 延迟创建 ViewModel，确保 @Environment 中的 RepositoryContainer 可用。
 struct ReadingTimelineView: View {
+    @Environment(RepositoryContainer.self) private var repositories
+    @State private var viewModel: TimelineViewModel?
+
+    var body: some View {
+        Group {
+            if let viewModel {
+                ReadingTimelineContentView(viewModel: viewModel)
+            } else {
+                Color.clear
+            }
+        }
+        .task {
+            guard viewModel == nil else { return }
+            let vm = TimelineViewModel(repository: repositories.timelineRepository)
+            viewModel = vm
+            await vm.loadInitialData()
+        }
+    }
+}
+
+// MARK: - Content View
+
+/// 时间线页面内容视图，持有 ViewModel 并管理日历物理状态。
+private struct ReadingTimelineContentView: View {
+    @Bindable var viewModel: TimelineViewModel
     @StateObject private var calendarProxy = CalendarViewProxy()
-    @State private var selectedCategory: TimelineEventCategory = .all
-    @State private var selectedDate: Date = Calendar.current.startOfDay(for: Date())
-    @State private var displayedMonthStart: Date = Calendar.current.startOfDay(for: Date())
-    @State private var markerCache: [String: [Date: TimelineDayMarkerMock]] = [:]
-    @State private var markerRevision: Int = 0
     @State private var calendarHeight: CGFloat = 320
     @State private var calendarViewportWidth: CGFloat = 0
     @State private var isUserPagingInFlight: Bool = false
@@ -33,7 +54,9 @@ struct ReadingTimelineView: View {
     private let monthTransitionAnimation = Animation.easeInOut(duration: 0.22)
     private let longJumpMonthThreshold: Int = 2
 
-    init() {
+    init(viewModel: TimelineViewModel) {
+        self.viewModel = viewModel
+
         var cal = Calendar.current
         cal.timeZone = .current
         cal.locale = Locale(identifier: "zh_Hans_CN")
@@ -50,7 +73,6 @@ struct ReadingTimelineView: View {
         formatter.locale = cal.locale
         formatter.dateFormat = "yyyy 年 M 月"
         self.monthFormatter = formatter
-        _displayedMonthStart = State(initialValue: Self.monthStart(of: today, using: cal))
     }
 
     var body: some View {
@@ -63,22 +85,16 @@ struct ReadingTimelineView: View {
             .padding(.vertical, Spacing.base)
         }
         .onAppear {
-            preloadMarkers(around: displayedMonthStart)
             DispatchQueue.main.async {
                 jumpToDate(calendar.startOfDay(for: Date()), animated: false)
             }
-        }
-        .onChange(of: selectedCategory) { _, _ in
-            markerCache.removeAll()
-            markerRevision &+= 1
-            preloadMarkers(around: displayedMonthStart)
         }
     }
 }
 
 // MARK: - UI
 
-private extension ReadingTimelineView {
+private extension ReadingTimelineContentView {
     var calendarPanelCard: some View {
         CardContainer(cornerRadius: TimelineCalendarStyle.panelCornerRadius) {
             VStack(spacing: Spacing.base) {
@@ -88,7 +104,7 @@ private extension ReadingTimelineView {
                             Button {
                                 jumpToDate(monthStart, animated: true)
                             } label: {
-                                if calendar.isDate(monthStart, equalTo: displayedMonthStart, toGranularity: .month) {
+                                if calendar.isDate(monthStart, equalTo: viewModel.displayedMonthStart, toGranularity: .month) {
                                     Label(monthFormatter.string(from: monthStart), systemImage: "checkmark")
                                 } else {
                                     Text(monthFormatter.string(from: monthStart))
@@ -139,9 +155,9 @@ private extension ReadingTimelineView {
                             ))
                         )),
                         dataDependency: CalendarDependencyToken(
-                            selectedDate: selectedDate,
-                            selectedCategory: selectedCategory,
-                            markerRevision: markerRevision
+                            selectedDate: viewModel.selectedDate,
+                            selectedCategory: viewModel.selectedCategory,
+                            markerRevision: viewModel.markerRevision
                         ),
                         proxy: calendarProxy
                     )
@@ -163,8 +179,8 @@ private extension ReadingTimelineView {
                     }
                     .days { day in
                         let dayDate = date(for: day)
-                        let isSelected = dayDate.map { calendar.isDate($0, inSameDayAs: selectedDate) } ?? false
-                        let marker = dayDate.flatMap(markerForDate)
+                        let isSelected = dayDate.map { calendar.isDate($0, inSameDayAs: viewModel.selectedDate) } ?? false
+                        let marker = dayDate.flatMap { viewModel.marker(for: $0) }
                         TimelineCalendarDayCell(
                             dayNumber: day.day,
                             marker: marker,
@@ -174,9 +190,9 @@ private extension ReadingTimelineView {
                     }
                     .onDaySelection { day in
                         guard let date = date(for: day) else { return }
-                        selectedDate = date
                         let monthStart = Self.monthStart(of: date, using: calendar)
                         applyDisplayedMonth(monthStart, animated: false)
+                        Task { await viewModel.selectDate(date) }
                     }
                     .onHorizontalMonthPagingProgress { progressContext in
                         handleMonthPagingProgress(progressContext)
@@ -197,14 +213,14 @@ private extension ReadingTimelineView {
                     }
                     .onAppear {
                         updateCalendarHeight(
-                            for: displayedMonthStart,
+                            for: viewModel.displayedMonthStart,
                             availableWidth: proxy.size.width,
                             animated: false
                         )
                     }
                     .onChange(of: proxy.size.width) { _, width in
                         updateCalendarHeight(
-                            for: displayedMonthStart,
+                            for: viewModel.displayedMonthStart,
                             availableWidth: width,
                             animated: false
                         )
@@ -218,28 +234,23 @@ private extension ReadingTimelineView {
     }
 
     var timelineList: some View {
-        let sections = TimelineCalendarMockData.sections(
-            for: selectedDate,
-            category: selectedCategory,
-            calendar: calendar
-        )
-
-        return Group {
-            if sections.isEmpty {
+        Group {
+            if viewModel.isLoading {
+                ProgressView()
+                    .padding(.vertical, Spacing.double)
+            } else if viewModel.sections.isEmpty {
                 EmptyStateView(icon: "clock.arrow.circlepath", message: "当日没有匹配事件")
                     .padding(.vertical, Spacing.double)
             } else {
                 LazyVStack(spacing: Spacing.none, pinnedViews: [.sectionHeaders]) {
-                    ForEach(Array(sections.enumerated()), id: \.element.id) { index, section in
+                    ForEach(Array(viewModel.sections.enumerated()), id: \.element.id) { index, section in
                         TimelineSectionView(
                             section: section,
                             isFirst: index == 0,
-                            isLast: index == sections.count - 1,
-                            selectedCategory: selectedCategory,
+                            isLast: index == viewModel.sections.count - 1,
+                            selectedCategory: viewModel.selectedCategory,
                             onCategorySelected: { category in
-                                withAnimation(monthTransitionAnimation) {
-                                    selectedCategory = category
-                                }
+                                Task { await viewModel.selectCategory(category) }
                             }
                         )
                     }
@@ -249,9 +260,9 @@ private extension ReadingTimelineView {
     }
 
     var displayedMonthTitleText: some View {
-        let components = calendar.dateComponents([.year, .month], from: displayedMonthStart)
-        let year = components.year ?? calendar.component(.year, from: displayedMonthStart)
-        let month = components.month ?? calendar.component(.month, from: displayedMonthStart)
+        let components = calendar.dateComponents([.year, .month], from: viewModel.displayedMonthStart)
+        let year = components.year ?? calendar.component(.year, from: viewModel.displayedMonthStart)
+        let month = components.month ?? calendar.component(.month, from: viewModel.displayedMonthStart)
         let yearText = Text(verbatim: String(year))
             .font(TimelineCalendarStyle.monthNumberFont)
             .foregroundStyle(TimelineCalendarStyle.monthNumberColor)
@@ -267,12 +278,12 @@ private extension ReadingTimelineView {
         return Text("\(yearText)\(yearUnit)\(monthText)\(monthUnit)")
             .monospacedDigit()
             .contentTransition(.numericText())
-            .animation(.snappy(duration: 0.24), value: displayedMonthStart)
+            .animation(.snappy(duration: 0.24), value: viewModel.displayedMonthStart)
     }
 
     var selectedDateOffsetText: some View {
         let today = calendar.startOfDay(for: Date())
-        let dayOffset = calendar.dateComponents([.day], from: selectedDate, to: today).day ?? 0
+        let dayOffset = calendar.dateComponents([.day], from: viewModel.selectedDate, to: today).day ?? 0
         return HStack(alignment: .lastTextBaseline, spacing: Spacing.none) {
             Text(verbatim: dayOffset == 0 ? "" : String(abs(dayOffset)))
                 .font(TimelineCalendarStyle.relativeNumberFont)
@@ -290,7 +301,7 @@ private extension ReadingTimelineView {
 
 // MARK: - Data / Marker
 
-private extension ReadingTimelineView {
+private extension ReadingTimelineContentView {
     var availableMonthStarts: [Date] {
         let lowerMonth = Self.monthStart(of: visibleDateRange.lowerBound, using: calendar)
         let upperMonth = Self.monthStart(of: visibleDateRange.upperBound, using: calendar)
@@ -302,35 +313,6 @@ private extension ReadingTimelineView {
             cursor = Self.monthStart(of: next, using: calendar)
         }
         return result
-    }
-
-    func markerForDate(_ date: Date) -> TimelineDayMarkerMock? {
-        let monthKey = Self.monthKey(for: date, using: calendar)
-        let normalized = calendar.startOfDay(for: date)
-        return markerCache[monthKey]?[normalized]
-    }
-
-    func preloadMarkers(around monthStart: Date) {
-        let anchor = Self.monthStart(of: monthStart, using: calendar)
-        let offsets = [-1, 0, 1]
-        var didUpdate = false
-
-        for offset in offsets {
-            guard let month = calendar.date(byAdding: .month, value: offset, to: anchor) else { continue }
-            let normalizedMonth = Self.monthStart(of: month, using: calendar)
-            let key = Self.monthKey(for: normalizedMonth, using: calendar)
-            guard markerCache[key] == nil else { continue }
-            markerCache[key] = TimelineCalendarMockData.markers(
-                for: normalizedMonth,
-                category: selectedCategory,
-                calendar: calendar
-            )
-            didUpdate = true
-        }
-
-        if didUpdate {
-            markerRevision &+= 1
-        }
     }
 
     func settleMonthAfterPaging(_ visibleRange: DayComponentsRange) {
@@ -350,8 +332,10 @@ private extension ReadingTimelineView {
             return
         }
 
-        preloadMarkers(around: fromMonthStart)
-        preloadMarkers(around: toMonthStart)
+        Task {
+            await viewModel.preloadMarkers(around: fromMonthStart)
+            await viewModel.preloadMarkers(around: toMonthStart)
+        }
 
         let fromHeight = monthContentHeight(for: fromMonthStart, availableWidth: calendarViewportWidth)
         let toHeight = monthContentHeight(for: toMonthStart, availableWidth: calendarViewportWidth)
@@ -369,9 +353,9 @@ private extension ReadingTimelineView {
     }
 
     func applyDisplayedMonth(_ monthStart: Date, animated: Bool) {
-        if !calendar.isDate(monthStart, equalTo: displayedMonthStart, toGranularity: .month) {
-            displayedMonthStart = monthStart
-            preloadMarkers(around: monthStart)
+        if !calendar.isDate(monthStart, equalTo: viewModel.displayedMonthStart, toGranularity: .month) {
+            viewModel.displayedMonthStart = monthStart
+            Task { await viewModel.preloadMarkers(around: monthStart) }
         }
         updateCalendarHeight(
             for: monthStart,
@@ -384,7 +368,7 @@ private extension ReadingTimelineView {
         let normalized = calendar.startOfDay(for: date)
         let clamped = min(max(normalized, visibleDateRange.lowerBound), visibleDateRange.upperBound)
         let targetMonthStart = Self.monthStart(of: clamped, using: calendar)
-        let monthDistance = Self.monthDistance(from: displayedMonthStart, to: targetMonthStart, using: calendar)
+        let monthDistance = Self.monthDistance(from: viewModel.displayedMonthStart, to: targetMonthStart, using: calendar)
         let shouldUseLongJump = animated && abs(monthDistance) > longJumpMonthThreshold
 
         if shouldUseLongJump {
@@ -407,8 +391,10 @@ private extension ReadingTimelineView {
         }
 
         if animated {
-            preloadMarkers(around: displayedMonthStart)
-            preloadMarkers(around: targetMonthStart)
+            Task {
+                await viewModel.preloadMarkers(around: viewModel.displayedMonthStart)
+                await viewModel.preloadMarkers(around: targetMonthStart)
+            }
             isUserPagingInFlight = true
             commitHeaderState(
                 selectedDay: clamped,
@@ -436,24 +422,26 @@ private extension ReadingTimelineView {
     }
 
     func commitHeaderState(selectedDay: Date, monthStart: Date, animated: Bool) {
-        let isMonthChanged = !calendar.isDate(monthStart, equalTo: displayedMonthStart, toGranularity: .month)
+        let isMonthChanged = !calendar.isDate(monthStart, equalTo: viewModel.displayedMonthStart, toGranularity: .month)
 
-        // displayedMonthStart 在事务外赋值，标题通过隐式动画驱动 numericText 过渡
         if isMonthChanged {
-            displayedMonthStart = monthStart
+            viewModel.displayedMonthStart = monthStart
         }
 
         if animated {
             withAnimation(monthTransitionAnimation) {
-                selectedDate = selectedDay
+                viewModel.selectedDate = selectedDay
             }
         } else {
-            selectedDate = selectedDay
+            viewModel.selectedDate = selectedDay
         }
 
         if isMonthChanged {
-            preloadMarkers(around: monthStart)
+            Task { await viewModel.preloadMarkers(around: monthStart) }
         }
+
+        // 日期变化后异步拉取事件
+        Task { await viewModel.loadEvents() }
 
         updateCalendarHeight(
             for: monthStart,
@@ -576,7 +564,7 @@ private extension ReadingTimelineView {
 
 private struct TimelineCalendarDayCell: View {
     let dayNumber: Int
-    let marker: TimelineDayMarkerMock?
+    let marker: TimelineDayMarker?
     let isSelected: Bool
     let dayNumberFont: Font
 
@@ -632,7 +620,7 @@ private struct TimelineCalendarDayCell: View {
     }
 }
 
-// MARK: - Mock Models
+// MARK: - Calendar Dependency
 
 private struct CalendarDependencyToken: Hashable {
     let selectedDate: Date
@@ -640,177 +628,9 @@ private struct CalendarDependencyToken: Hashable {
     let markerRevision: Int
 }
 
-private struct TimelineDayMarkerMock: Hashable {
-    let isActive: Bool
-    let readingProgress: Int
-
-    var progressRatio: Double {
-        let clamped = min(100, max(0, readingProgress))
-        return Double(clamped) / 100.0
-    }
-}
-
-private enum TimelineCalendarMockData {
-    static func markers(
-        for monthStart: Date,
-        category: TimelineEventCategory,
-        calendar: Calendar
-    ) -> [Date: TimelineDayMarkerMock] {
-        guard let dayRange = calendar.range(of: .day, in: .month, for: monthStart) else { return [:] }
-        let categorySeed = categorySeedValue(for: category)
-        var result: [Date: TimelineDayMarkerMock] = [:]
-
-        for day in dayRange {
-            guard let date = calendar.date(byAdding: .day, value: day - 1, to: monthStart) else { continue }
-            let normalized = calendar.startOfDay(for: date)
-            let activeFlag = ((day + categorySeed) % 3 == 0) || ((day + categorySeed) % 5 == 0)
-            guard activeFlag else { continue }
-
-            let rawProgress = ((day * 11) + categorySeed * 17) % 118
-            let progress = rawProgress >= 100 ? 100 : rawProgress
-            let adjustedProgress = progress == 0 ? 0 : max(1, progress)
-            result[normalized] = TimelineDayMarkerMock(isActive: true, readingProgress: adjustedProgress)
-        }
-
-        return result
-    }
-
-    static func sections(
-        for date: Date,
-        category: TimelineEventCategory,
-        calendar: Calendar
-    ) -> [TimelineSection] {
-        let start = calendar.startOfDay(for: date)
-        let daySeed = calendar.component(.day, from: start)
-        if daySeed % 4 == 0 {
-            return []
-        }
-
-        let baseTimestamp = Int64(start.timeIntervalSince1970 * 1000)
-        let allEvents: [TimelineEvent] = [
-            TimelineEvent(
-                id: "note-\(daySeed)",
-                kind: .note(TimelineNoteEvent(
-                    content: "通过迭代验证，时间线日历交互已覆盖核心使用场景。",
-                    idea: "先保证交互闭环，再逐步替换为真实数据源。",
-                    bookTitle: "架构演进实践"
-                )),
-                timestamp: baseTimestamp + 36_000_000,
-                bookName: "架构演进实践",
-                bookAuthor: "工程组",
-                bookCover: ""
-            ),
-            TimelineEvent(
-                id: "timing-\(daySeed)",
-                kind: .readTiming(TimelineReadTimingEvent(
-                    elapsedSeconds: Int64(1800 + daySeed * 45),
-                    startTime: baseTimestamp + 30_600_000,
-                    endTime: baseTimestamp + 34_200_000,
-                    fuzzyReadDate: 0
-                )),
-                timestamp: baseTimestamp + 30_600_000,
-                bookName: "可维护 iOS 体系",
-                bookAuthor: "Merpy",
-                bookCover: ""
-            ),
-            TimelineEvent(
-                id: "status-\(daySeed)",
-                kind: .readStatus(TimelineReadStatusEvent(
-                    statusId: Int64((daySeed % 5) + 1),
-                    readDoneCount: Int64((daySeed % 3) + 1),
-                    bookScore: 40
-                )),
-                timestamp: baseTimestamp + 27_000_000,
-                bookName: "阅读方法论",
-                bookAuthor: "产品组",
-                bookCover: ""
-            ),
-            TimelineEvent(
-                id: "checkin-\(daySeed)",
-                kind: .checkIn(TimelineCheckInEvent(amount: Int64((daySeed % 4) + 1))),
-                timestamp: baseTimestamp + 64_800_000,
-                bookName: "目标管理",
-                bookAuthor: "研发团队",
-                bookCover: ""
-            ),
-            TimelineEvent(
-                id: "review-\(daySeed)",
-                kind: .review(TimelineReviewEvent(
-                    title: "本次阅读复盘",
-                    content: "日期选择、月份切换与筛选联动均可用，后续可平滑切到真实数据。",
-                    bookScore: 45
-                )),
-                timestamp: baseTimestamp + 57_600_000,
-                bookName: "团队复盘",
-                bookAuthor: "团队",
-                bookCover: ""
-            ),
-            TimelineEvent(
-                id: "relevant-\(daySeed)",
-                kind: .relevant(TimelineRelevantEvent(
-                    title: "API 对照",
-                    content: "onDaySelection / onDragEnd / scrollToMonth",
-                    url: "https://github.com/airbnb/HorizonCalendar",
-                    categoryTitle: "技术对齐"
-                )),
-                timestamp: baseTimestamp + 54_000_000,
-                bookName: "技术选型",
-                bookAuthor: "平台组",
-                bookCover: ""
-            ),
-            TimelineEvent(
-                id: "relevant-book-\(daySeed)",
-                kind: .relevantBook(TimelineRelevantBookEvent(
-                    contentBookName: "iOS 架构实践",
-                    contentBookAuthor: "某作者",
-                    contentBookCover: "",
-                    categoryTitle: "延伸阅读"
-                )),
-                timestamp: baseTimestamp + 50_400_000,
-                bookName: "技术选型",
-                bookAuthor: "平台组",
-                bookCover: ""
-            ),
-        ]
-
-        let filtered = allEvents.filter { event in
-            switch (category, event.kind) {
-            case (.all, _): true
-            case (.note, .note): true
-            case (.readTiming, .readTiming): true
-            case (.readStatus, .readStatus): true
-            case (.checkIn, .checkIn): true
-            case (.review, .review): true
-            case (.relevant, .relevant), (.relevant, .relevantBook): true
-            default: false
-            }
-        }
-        .sorted(by: { $0.timestamp > $1.timestamp })
-
-        guard !filtered.isEmpty else { return [] }
-        return [TimelineSection(id: Self.dayID(start, calendar: calendar), date: start, events: filtered)]
-    }
-
-    private static func categorySeedValue(for category: TimelineEventCategory) -> Int {
-        switch category {
-        case .all: 1
-        case .note: 2
-        case .readStatus: 3
-        case .relevant: 4
-        case .review: 5
-        case .readTiming: 6
-        case .checkIn: 7
-        }
-    }
-
-    private static func dayID(_ date: Date, calendar: Calendar) -> String {
-        let comps = calendar.dateComponents([.year, .month, .day], from: date)
-        return String(format: "%04d-%02d-%02d", comps.year ?? 0, comps.month ?? 0, comps.day ?? 0)
-    }
-}
-
 #Preview {
     NavigationStack {
         ReadingTimelineView()
+            .environment(RepositoryContainer(databaseManager: try! DatabaseManager()))
     }
 }

@@ -106,10 +106,10 @@ private extension XMRemoteImage {
                 Text("GIF")
                     .font(.caption2.weight(.semibold))
                     .foregroundStyle(.white)
-                    .padding(.horizontal, 4)
-                    .padding(.vertical, 1)
+                    .padding(.horizontal, Spacing.compact)
+                    .padding(.vertical, Spacing.hairline)
                     .background(Color.black.opacity(0.55), in: Capsule())
-                    .padding(4)
+                    .padding(Spacing.compact)
             }
         }
         .task(id: url.absoluteString) {

@@ -16,6 +16,11 @@ import SwiftUI
 
 /// 个人中心首页，汇总设置、备份、阅读偏好与支持入口。
 struct PersonalView: View {
+    private enum Layout {
+        static let settingsRowIconWidth: CGFloat = 24
+        static let rowVerticalPadding: CGFloat = Spacing.comfortable
+    }
+
     @Environment(AppState.self) private var appState
     private let topBarHeight: CGFloat = 52
     let onAddBook: () -> Void
@@ -90,7 +95,7 @@ extension PersonalView {
                     Image(systemName: "crown.fill")
                         .font(.title2)
                         .foregroundStyle(.orange)
-                    VStack(alignment: .leading, spacing: 2) {
+                    VStack(alignment: .leading, spacing: Spacing.tiny) {
                         Text("开通会员")
                             .font(.headline)
                         Text("解锁全部高级功能")
@@ -173,7 +178,7 @@ extension PersonalView {
                     Image(systemName: "info.circle")
                         .font(.body)
                         .foregroundStyle(Color.brand)
-                        .frame(width: 24)
+                        .frame(width: Layout.settingsRowIconWidth)
                     Text("关于应用")
                     Spacer()
                     Text(appVersion)
@@ -183,7 +188,7 @@ extension PersonalView {
                         .foregroundStyle(.tertiary)
                 }
                 .padding(.horizontal, Spacing.contentEdge)
-                .padding(.vertical, 14)
+                .padding(.vertical, Layout.rowVerticalPadding)
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
@@ -200,7 +205,7 @@ extension PersonalView {
                     Image(systemName: "hammer")
                         .font(.body)
                         .foregroundStyle(Color.brand)
-                        .frame(width: 24)
+                        .frame(width: Layout.settingsRowIconWidth)
                     Text("测试中心")
                     Spacer()
                     Image(systemName: "chevron.right")
@@ -208,7 +213,7 @@ extension PersonalView {
                         .foregroundStyle(.tertiary)
                 }
                 .padding(.horizontal, Spacing.contentEdge)
-                .padding(.vertical, 14)
+                .padding(.vertical, Layout.rowVerticalPadding)
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
@@ -230,15 +235,15 @@ extension PersonalView {
         _ title: String,
         @ViewBuilder content: () -> Content
     ) -> some View {
-        VStack(alignment: .leading, spacing: 0) {
+        VStack(alignment: .leading, spacing: Spacing.none) {
             Text(title)
                 .font(.footnote)
                 .foregroundStyle(.secondary)
-                .padding(.horizontal, 4)
+                .padding(.horizontal, Spacing.compact)
                 .padding(.bottom, Spacing.half)
 
             CardContainer {
-                VStack(spacing: 0) {
+                VStack(spacing: Spacing.none) {
                     content()
                 }
             }
@@ -251,13 +256,13 @@ extension PersonalView {
         route: PersonalRoute,
         isLast: Bool = false
     ) -> some View {
-        VStack(spacing: 0) {
+        VStack(spacing: Spacing.none) {
             NavigationLink(value: route) {
                 HStack {
                     Image(systemName: icon)
                         .font(.body)
                         .foregroundStyle(Color.brand)
-                        .frame(width: 24)
+                        .frame(width: Layout.settingsRowIconWidth)
                     Text(title)
                     Spacer()
                     Image(systemName: "chevron.right")
@@ -265,14 +270,14 @@ extension PersonalView {
                         .foregroundStyle(.tertiary)
                 }
                 .padding(.horizontal, Spacing.contentEdge)
-                .padding(.vertical, 14)
+                .padding(.vertical, Layout.rowVerticalPadding)
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
 
             if !isLast {
                 Divider()
-                    .padding(.leading, Spacing.contentEdge + 24 + Spacing.base)
+                    .padding(.leading, Spacing.contentEdge + Layout.settingsRowIconWidth + Spacing.base)
             }
         }
     }
@@ -283,13 +288,13 @@ extension PersonalView {
         isLast: Bool = false,
         action: @escaping () -> Void
     ) -> some View {
-        VStack(spacing: 0) {
+        VStack(spacing: Spacing.none) {
             Button(action: action) {
                 HStack {
                     Image(systemName: icon)
                         .font(.body)
                         .foregroundStyle(Color.brand)
-                        .frame(width: 24)
+                        .frame(width: Layout.settingsRowIconWidth)
                     Text(title)
                         .foregroundStyle(.primary)
                     Spacer()
@@ -298,14 +303,14 @@ extension PersonalView {
                         .foregroundStyle(.tertiary)
                 }
                 .padding(.horizontal, Spacing.contentEdge)
-                .padding(.vertical, 14)
+                .padding(.vertical, Layout.rowVerticalPadding)
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
 
             if !isLast {
                 Divider()
-                    .padding(.leading, Spacing.contentEdge + 24 + Spacing.base)
+                    .padding(.leading, Spacing.contentEdge + Layout.settingsRowIconWidth + Spacing.base)
             }
         }
     }

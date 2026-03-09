@@ -73,7 +73,7 @@ private extension DataBackupContentView {
         CardContainer {
             NavigationLink(value: PersonalRoute.webdavServers) {
                 HStack {
-                    VStack(alignment: .leading, spacing: 4) {
+                    VStack(alignment: .leading, spacing: Spacing.compact) {
                         Text("备份服务器")
                             .font(.subheadline)
                         if let server = viewModel.currentServer {
@@ -105,7 +105,7 @@ private extension DataBackupContentView {
 
     var actionSection: some View {
         CardContainer {
-            VStack(spacing: 0) {
+            VStack(spacing: Spacing.none) {
                 backupButton
                 Divider().padding(.leading, Spacing.contentEdge)
                 restoreButton
@@ -131,7 +131,7 @@ private extension DataBackupContentView {
                 }
             }
             .padding(.horizontal, Spacing.contentEdge)
-            .padding(.vertical, 14)
+            .padding(.vertical, Spacing.comfortable)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -154,7 +154,7 @@ private extension DataBackupContentView {
                 Spacer()
             }
             .padding(.horizontal, Spacing.contentEdge)
-            .padding(.vertical, 14)
+            .padding(.vertical, Spacing.comfortable)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)

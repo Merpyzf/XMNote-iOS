@@ -2,7 +2,7 @@ import Foundation
 
 /**
  * [INPUT]: 依赖 Models 与 Services 层的数据类型定义
- * [OUTPUT]: 对外提供 Book/Note/BackupServer/Backup/Statistics/ReadCalendarColor 六类 Repository 协议
+ * [OUTPUT]: 对外提供 Book/Note/BackupServer/Backup/Statistics/ReadCalendarColor/Timeline 七类 Repository 协议
  * [POS]: Domain 层仓储契约，定义 Presentation 获取本地/网络数据的唯一入口
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -138,4 +138,27 @@ extension StatisticsRepositoryProtocol {
             limit: limit
         )
     }
+}
+
+/// 时间线事件仓储契约，覆盖按时间范围的事件列表查询与日历标记聚合。
+protocol TimelineRepositoryProtocol {
+    /// 查询指定毫秒时间戳范围内的事件列表，按时间降序排列并按日分组。
+    /// - Parameters:
+    ///   - startTimestamp: 起始毫秒时间戳（含）
+    ///   - endTimestamp: 结束毫秒时间戳（含）
+    ///   - category: 事件分类过滤（.all 查全部）
+    func fetchTimelineEvents(
+        startTimestamp: Int64,
+        endTimestamp: Int64,
+        category: TimelineEventCategory
+    ) async throws -> [TimelineSection]
+
+    /// 聚合指定月份的日历标记（每日活跃状态与阅读进度），供日历 cell 渲染。
+    /// - Parameters:
+    ///   - monthStart: 目标月份首日
+    ///   - category: 事件分类过滤（.all 查全部）
+    func fetchCalendarMarkers(
+        for monthStart: Date,
+        category: TimelineEventCategory
+    ) async throws -> [Date: TimelineDayMarker]
 }

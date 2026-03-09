@@ -123,7 +123,7 @@ private struct NoteContentView: View {
     private func segmentedPage(for tab: NoteSubTab) -> some View {
         switch tab {
         case .notes:
-            VStack(spacing: 0) {
+            VStack(spacing: Spacing.none) {
                 noteSearchBar
                 ScrollView {
                     NoteCollectionView(viewModel: viewModel)
@@ -136,7 +136,7 @@ private struct NoteContentView: View {
     }
     
     private var noteSearchBar: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: Spacing.cozy) {
             Image(systemName: "magnifyingglass")
                 .font(.system(size: 14, weight: .medium))
                 .foregroundStyle(.secondary)
@@ -156,7 +156,7 @@ private struct NoteContentView: View {
                 .buttonStyle(.plain)
             }
         }
-        .padding(.horizontal, 12)
+        .padding(.horizontal, Spacing.base)
         .frame(height: 36)
         .background(Color.contentBackground, in: RoundedRectangle(cornerRadius: CornerRadius.blockMedium, style: .continuous))
         .overlay(

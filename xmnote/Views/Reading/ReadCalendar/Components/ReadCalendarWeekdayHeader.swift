@@ -13,7 +13,7 @@ struct ReadCalendarWeekdayHeader: View {
     let minHeight: CGFloat
 
     var body: some View {
-        HStack(spacing: 0) {
+        HStack(spacing: Spacing.none) {
             ForEach(Self.weekdays, id: \.self) { weekday in
                 Text(weekday)
                     .font(.system(size: 12, weight: .medium, design: .rounded))

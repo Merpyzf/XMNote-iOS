@@ -14,7 +14,7 @@ struct HeatmapHelpSheetView: View {
         ZStack(alignment: .topTrailing) {
             VStack(alignment: .leading, spacing: Spacing.double) {
                 titleSection
-                    .padding(.trailing, 44)
+                    .padding(.trailing, Spacing.actionReserved)
                 descriptionSection
                 legendSection
             }
@@ -90,7 +90,7 @@ struct HeatmapHelpSheetView: View {
     }
 
     private func statusLegendItem(_ title: String, color: Color) -> some View {
-        HStack(spacing: 6) {
+        HStack(spacing: Spacing.half) {
             RoundedRectangle(cornerRadius: CornerRadius.inlayTiny, style: .continuous)
                 .fill(color)
                 .frame(width: 12, height: 12)

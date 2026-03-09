@@ -172,7 +172,7 @@ private extension ReadingDurationRankingChart {
         HStack(spacing: Spacing.half) {
             rankingCover(urlString: item.coverURL)
 
-            VStack(alignment: .leading, spacing: 1) {
+            VStack(alignment: .leading, spacing: Spacing.hairline) {
                 Text(item.title)
                     .font(.caption.weight(.medium))
                     .foregroundStyle(Color.textPrimary)

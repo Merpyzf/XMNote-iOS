@@ -105,7 +105,7 @@ private struct TopSwitcherTabBar<Tab: Hashable>: View {
     let titleProvider: (Tab) -> String
 
     var body: some View {
-        HStack(spacing: 22) {
+        HStack(spacing: Spacing.double) {
             ForEach(tabs, id: \.self, content: tabItem)
         }
         .onAppear {
@@ -158,7 +158,7 @@ private struct TopSwitcherTabBar<Tab: Hashable>: View {
                 .font(.system(size: 20, weight: isSelected ? .semibold : .regular))
                 .foregroundStyle(isSelected ? .primary : .secondary)
                 .anchorPreference(key: TopSwitcherTabAnchorKey.self, value: .bounds) { [tab: $0] }
-                .padding(.vertical, 4)
+                .padding(.vertical, Spacing.compact)
                 .frame(minHeight: 32)
                 .fixedSize()
         }
@@ -175,7 +175,7 @@ private struct TopSwitcherTitleLabel: View {
         Text(text)
             .font(BrandTypography.topSwitcherTitleFont(for: text, size: 20))
             .foregroundStyle(.primary)
-            .padding(.vertical, 4)
+            .padding(.vertical, Spacing.compact)
             .frame(minHeight: 32, alignment: .leading)
             .background(alignment: .topLeading) {
                 Image(TopSwitcherQuoteDecorationMetrics.assetName)

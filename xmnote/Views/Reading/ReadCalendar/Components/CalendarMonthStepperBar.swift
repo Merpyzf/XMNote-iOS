@@ -83,6 +83,6 @@ struct CalendarMonthStepperBar: View {
             selectedMonth: availableMonths.last ?? Date(),
             onSelectMonth: { _ in }
         )
-        .padding()
+        .padding(Spacing.screenEdge)
     }
 }

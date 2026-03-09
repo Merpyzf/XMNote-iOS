@@ -303,7 +303,7 @@ private struct ReadCalendarMonthGridWeekRow: View {
                     let cellWidth = totalWidth / 7
 
                     ZStack(alignment: .topLeading) {
-                        HStack(spacing: 0) {
+                        HStack(spacing: Spacing.none) {
                             ForEach(Array(week.days.enumerated()), id: \.offset) { _, day in
                                 dayCell(day)
                                     .frame(width: cellWidth, height: rowHeight)
@@ -359,7 +359,7 @@ private struct ReadCalendarMonthGridWeekRow: View {
                 let selected = payload.isSelected
                 let dayNum = Calendar.current.component(.day, from: day)
 
-                VStack(spacing: 1) {
+                VStack(spacing: Spacing.hairline) {
                     ZStack {
                         if selected {
                             Circle()
@@ -514,8 +514,8 @@ private struct ReadCalendarMonthGridWeekRow: View {
                 RoundedRectangle(cornerRadius: CornerRadius.inlayMedium, style: .continuous)
                     .fill(Color.readCalendarSelectionFill.opacity(0.72))
                     .frame(width: 24, height: 12)
-                    .padding(.leading, 4)
-                    .padding(.bottom, 1.5)
+                    .padding(.leading, Spacing.compact)
+                    .padding(.bottom, Spacing.tiny)
             }
     }
 
@@ -601,8 +601,8 @@ private struct ReadCalendarMonthGridWeekRow: View {
                 RoundedRectangle(cornerRadius: CornerRadius.blockSmall, style: .continuous)
                     .stroke(Color.brand.opacity(strokeOpacity), lineWidth: 1.05)
             }
-            .padding(.horizontal, 2)
-            .padding(.vertical, 2)
+            .padding(.horizontal, Spacing.tiny)
+            .padding(.vertical, Spacing.tiny)
             .scaleEffect(scale)
             .allowsHitTesting(false)
     }
@@ -711,8 +711,8 @@ private struct ReadCalendarMonthGridWeekRow: View {
                     .font(.system(size: 9, weight: .semibold, design: .rounded))
                     .foregroundStyle(textColor.opacity(isPending ? 0.86 : 0.92))
                     .lineLimit(1)
-                    .padding(.leading, 4)
-                    .padding(.trailing, showBadge ? 14 : 4)
+                    .padding(.leading, Spacing.compact)
+                    .padding(.trailing, showBadge ? Spacing.comfortable : Spacing.compact)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
 
@@ -727,7 +727,7 @@ private struct ReadCalendarMonthGridWeekRow: View {
                             .font(.system(size: 6, weight: .bold))
                             .foregroundStyle(style.foreground)
                     }
-                    .padding(.trailing, 3)
+                    .padding(.trailing, Spacing.micro)
                     .frame(maxWidth: .infinity, alignment: .trailing)
             }
         }

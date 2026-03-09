@@ -103,7 +103,7 @@ private struct BookDetailContentView: View {
     }
 
     private func bookInfo(_ book: BookDetail) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: Spacing.half) {
             Text(book.name)
                 .font(.body)
                 .fontWeight(.semibold)
@@ -126,13 +126,13 @@ private struct BookDetailContentView: View {
 
             Spacer(minLength: 0)
 
-            HStack(spacing: 8) {
+            HStack(spacing: Spacing.cozy) {
                 if !book.readStatusName.isEmpty {
                     Text(book.readStatusName)
                         .font(.caption)
                         .foregroundStyle(Color.brand)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 3)
+                        .padding(.horizontal, Spacing.cozy)
+                        .padding(.vertical, Spacing.micro)
                         .background(Color.brand.opacity(0.12), in: Capsule())
                 }
 
@@ -148,7 +148,7 @@ private struct BookDetailContentView: View {
 
     private func noteCard(_ note: NoteExcerpt) -> some View {
         CardContainer {
-            VStack(alignment: .leading, spacing: 0) {
+            VStack(alignment: .leading, spacing: Spacing.none) {
                 // 正文
                 if !note.content.isEmpty {
                     Text(plainTextPreview(from: note.content))

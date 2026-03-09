@@ -16,7 +16,7 @@ struct ReadCalendarSettingsSheet: View {
         ZStack(alignment: .topTrailing) {
             VStack(alignment: .leading, spacing: Spacing.double) {
                 titleSection
-                    .padding(.trailing, 44)
+                    .padding(.trailing, Spacing.actionReserved)
                 eventTogglesSection
                 feedbackSection
                 dayEventCountSection

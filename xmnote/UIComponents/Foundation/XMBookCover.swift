@@ -229,7 +229,7 @@ private extension XMBookCover {
         urlString: "",
         border: .init(color: .cardBorder, width: CardStyle.borderWidth)
     )
-    .padding()
+    .padding(Spacing.screenEdge)
 }
 
 #Preview("Responsive") {
@@ -238,5 +238,5 @@ private extension XMBookCover {
         border: .init(color: .cardBorder, width: CardStyle.borderWidth)
     )
     .frame(width: 110)
-    .padding()
+    .padding(Spacing.screenEdge)
 }

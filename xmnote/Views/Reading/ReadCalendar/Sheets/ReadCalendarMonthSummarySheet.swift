@@ -129,7 +129,7 @@ struct ReadCalendarMonthSummarySheet: View {
             .padding(.bottom, Layout.summarySheetBottomInset)
         }
         // 使用系统 safeAreaBar 承载顶部切换区，滚动时由系统提供备忘录式边缘模糊过渡。
-        .safeAreaBar(edge: .top, spacing: 0) {
+        .safeAreaBar(edge: .top, spacing: Spacing.none) {
             summaryStickyHeader
         }
         .scrollEdgeEffectStyle(.soft, for: .top)
@@ -160,7 +160,7 @@ struct ReadCalendarMonthSummarySheet: View {
 
 private extension ReadCalendarMonthSummarySheet {
     var summaryStickyHeader: some View {
-        VStack(spacing: 0) {
+        VStack(spacing: Spacing.none) {
             summaryMonthSwitcher
                 .padding(.horizontal, Layout.summarySheetHorizontalInset)
                 .padding(.top, Layout.summarySheetTopInset)
@@ -378,7 +378,7 @@ private extension ReadCalendarMonthSummarySheet {
             Spacer(minLength: 0)
         }
         .padding(.horizontal, Spacing.base)
-        .padding(.vertical, 7)
+        .padding(.vertical, Spacing.cozy)
         .frame(maxWidth: .infinity, minHeight: Layout.summaryMetricCardHeight, alignment: .leading)
         .background(
             RoundedRectangle(cornerRadius: CornerRadius.blockLarge, style: .continuous)

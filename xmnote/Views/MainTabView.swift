@@ -327,7 +327,7 @@ private struct SearchView: View {
             Color.windowBackground.ignoresSafeArea()
 
             VStack(spacing: Spacing.base) {
-                VStack(spacing: 12) {
+                VStack(spacing: Spacing.base) {
                     Image(systemName: "magnifyingglass")
                         .font(.system(size: 28, weight: .semibold))
                         .foregroundStyle(.secondary)

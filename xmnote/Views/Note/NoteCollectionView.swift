@@ -19,7 +19,7 @@ struct NoteCollectionView: View {
     @Bindable var viewModel: NoteViewModel
 
     var body: some View {
-        VStack(spacing: 0) {
+        VStack(spacing: Spacing.none) {
             categoryPills
             Divider()
             categoryContent
@@ -30,13 +30,13 @@ struct NoteCollectionView: View {
 
     private var categoryPills: some View {
         ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 10) {
+            HStack(spacing: Spacing.tight) {
                 ForEach(NoteCategory.allCases) { category in
                     categoryPill(category)
                 }
             }
-            .padding(.horizontal)
-            .padding(.vertical, 10)
+            .padding(.horizontal, Spacing.screenEdge)
+            .padding(.vertical, Spacing.tight)
         }
     }
 
@@ -49,8 +49,8 @@ struct NoteCollectionView: View {
         } label: {
             Text(category.title)
                 .font(.subheadline)
-                .padding(.horizontal, 16)
-                .padding(.vertical, 8)
+                .padding(.horizontal, Spacing.screenEdge)
+                .padding(.vertical, Spacing.cozy)
                 .background(
                     isSelected ? AnyShapeStyle(Color.brand) : AnyShapeStyle(Color.tagBackground),
                     in: Capsule()

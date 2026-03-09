@@ -31,7 +31,7 @@ struct ReadingHeatmapWidgetView: View {
             showsBorder: false
         ) {
             ZStack(alignment: .topTrailing) {
-                VStack(spacing: 0) {
+                VStack(spacing: Spacing.none) {
                     HeatmapChart(
                         days: viewModel.days,
                         earliestDate: viewModel.earliestDate,

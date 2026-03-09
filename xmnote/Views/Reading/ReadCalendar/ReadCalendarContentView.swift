@@ -465,7 +465,7 @@ private extension ReadCalendarContentView {
     }
     
     var baseCalendarStack: some View {
-        VStack(spacing: 0) {
+        VStack(spacing: Spacing.none) {
             ReadCalendarTopControlBar(
                 monthTitle: props.monthTitle,
                 yearTitle: props.yearTitle,
@@ -1086,7 +1086,7 @@ private extension ReadCalendarContentView {
                     .transition(.opacity.combined(with: .scale(scale: 0.98)))
             }
         }
-        .padding(.top, shouldShowWeekdayHeader ? Layout.gridTopInset : 0)
+        .padding(.top, shouldShowWeekdayHeader ? Layout.gridTopInset : Spacing.none)
         .frame(maxWidth: .infinity, alignment: .top)
         .overlay {
             GeometryReader { proxy in
@@ -1145,7 +1145,7 @@ private extension ReadCalendarContentView {
             let pageWidth = max(1, proxy.size.width)
             let pageHeight = max(1, proxy.size.height)
             ScrollView(.horizontal, showsIndicators: false) {
-                LazyHStack(spacing: 0) {
+                LazyHStack(spacing: Spacing.none) {
                     ForEach(visibleMonthStarts, id: \.self) { monthStart in
                         monthPage(for: monthStart)
                             .frame(width: pageWidth, height: pageHeight, alignment: .top)
@@ -1542,7 +1542,7 @@ private extension ReadCalendarContentView {
     }
 
     var yearHeatmapLoadingGrid: some View {
-        VStack(spacing: 4) {
+        VStack(spacing: Spacing.compact) {
             ForEach(0..<Layout.yearHeatmapCompactWeekCount, id: \.self) { _ in
                 HStack(spacing: Layout.yearHeatmapLoadingCellSpacing) {
                     ForEach(0..<7, id: \.self) { _ in
@@ -2011,7 +2011,7 @@ private struct ReadCalendarBookCoverFullscreenOverlay: View {
 
     var header: some View {
         HStack(spacing: Spacing.base) {
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: Spacing.tiny) {
                 Text(formattedDate(payload.date))
                     .font(.headline)
                     .foregroundStyle(Color.white.opacity(0.96))

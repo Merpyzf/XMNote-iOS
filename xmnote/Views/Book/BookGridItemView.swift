@@ -19,7 +19,7 @@ struct BookGridItemView: View {
     let book: BookItem
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: Spacing.half) {
             coverImage
             bookInfo
         }
@@ -46,17 +46,17 @@ struct BookGridItemView: View {
                 .font(.caption2)
                 .fontWeight(.medium)
                 .foregroundStyle(.white)
-                .padding(.horizontal, 6)
-                .padding(.vertical, 2)
+                .padding(.horizontal, Spacing.half)
+                .padding(.vertical, Spacing.tiny)
                 .background(Color.brand, in: Capsule())
-                .padding(4)
+                .padding(Spacing.compact)
         }
     }
 
     // MARK: - Info
 
     private var bookInfo: some View {
-        VStack(alignment: .leading, spacing: 2) {
+        VStack(alignment: .leading, spacing: Spacing.tiny) {
             Text(book.name)
                 .font(.caption)
                 .fontWeight(.medium)
@@ -78,5 +78,5 @@ struct BookGridItemView: View {
         cover: "", readStatusId: 2, noteCount: 5, pinned: false
     ))
     .frame(width: 110)
-    .padding()
+    .padding(Spacing.screenEdge)
 }

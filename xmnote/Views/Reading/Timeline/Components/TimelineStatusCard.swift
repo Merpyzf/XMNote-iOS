@@ -85,7 +85,7 @@ struct TimelineStatusCard: View {
 
     private var starRating: some View {
         let score = Double(event.bookScore) / 10.0
-        return HStack(spacing: 2) {
+        return HStack(spacing: Spacing.tiny) {
             ForEach(1...5, id: \.self) { index in
                 starImage(for: index, score: score)
                     .font(.caption2)

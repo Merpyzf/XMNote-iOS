@@ -83,12 +83,12 @@ struct HomeTopHeaderGradient: View {
     ZStack {
         Color.windowBackground.ignoresSafeArea()
         CardContainer {
-            VStack(spacing: 0) {
+            VStack(spacing: Spacing.none) {
                 Text("卡片内容示例")
-                    .padding()
+                    .padding(Spacing.screenEdge)
             }
         }
-        .padding()
+        .padding(Spacing.screenEdge)
     }
 }
 

@@ -19,8 +19,8 @@ struct NoteTagsView: View {
     @Bindable var viewModel: NoteViewModel
 
     private let columns = [
-        GridItem(.flexible(), spacing: 12),
-        GridItem(.flexible(), spacing: 12),
+        GridItem(.flexible(), spacing: Spacing.base),
+        GridItem(.flexible(), spacing: Spacing.base),
     ]
 
     var body: some View {
@@ -42,18 +42,18 @@ struct NoteTagsView: View {
     // MARK: - Sections
 
     private func tagSectionsView(_ sections: [TagSection]) -> some View {
-        LazyVStack(alignment: .leading, spacing: 20, pinnedViews: []) {
+        LazyVStack(alignment: .leading, spacing: Spacing.section, pinnedViews: []) {
             ForEach(sections) { section in
                 sectionView(section)
             }
         }
-        .padding(.horizontal)
+        .padding(.horizontal, Spacing.screenEdge)
     }
 
     private func sectionView(_ section: TagSection) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: Spacing.base) {
             sectionHeader(section.title)
-            LazyVGrid(columns: columns, spacing: 12) {
+            LazyVGrid(columns: columns, spacing: Spacing.base) {
                 ForEach(section.tags) { tag in
                     tagCell(tag)
                 }
@@ -79,7 +79,7 @@ struct NoteTagsView: View {
 
     private func tagCell(_ tag: Tag) -> some View {
         HStack {
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: Spacing.compact) {
                 highlightedName(tag.name)
                     .font(.subheadline)
                 Text("\(tag.noteCount) 条")
@@ -91,7 +91,7 @@ struct NoteTagsView: View {
                 .font(.caption)
                 .foregroundStyle(.tertiary)
         }
-        .padding(12)
+        .padding(Spacing.base)
         .background(Color.contentBackground)
         .clipShape(RoundedRectangle(cornerRadius: CornerRadius.blockMedium, style: .continuous))
         .overlay(

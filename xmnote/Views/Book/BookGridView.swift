@@ -19,12 +19,12 @@ struct BookGridView: View {
     @Bindable var viewModel: BookViewModel
 
     private let columns = Array(
-        repeating: GridItem(.flexible(), spacing: 16),
+        repeating: GridItem(.flexible(), spacing: Spacing.screenEdge),
         count: 3
     )
 
     var body: some View {
-        VStack(spacing: 0) {
+        VStack(spacing: Spacing.none) {
             filterPills
             Divider()
             gridContent
@@ -36,13 +36,13 @@ struct BookGridView: View {
 
     private var filterPills: some View {
         ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 10) {
+            HStack(spacing: Spacing.tight) {
                 ForEach(ReadStatusFilter.allCases) { filter in
                     filterPill(filter)
                 }
             }
-            .padding(.horizontal)
-            .padding(.vertical, 10)
+            .padding(.horizontal, Spacing.screenEdge)
+            .padding(.vertical, Spacing.tight)
         }
     }
 
@@ -55,8 +55,8 @@ struct BookGridView: View {
         } label: {
             Text(filter.title)
                 .font(.subheadline)
-                .padding(.horizontal, 16)
-                .padding(.vertical, 8)
+                .padding(.horizontal, Spacing.screenEdge)
+                .padding(.vertical, Spacing.cozy)
                 .background(
                     isSelected ? AnyShapeStyle(Color.brand) : AnyShapeStyle(Color.tagBackground),
                     in: Capsule()
@@ -76,7 +76,7 @@ struct BookGridView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else {
             ScrollView {
-                LazyVGrid(columns: columns, spacing: 20) {
+                LazyVGrid(columns: columns, spacing: Spacing.section) {
                     ForEach(items) { book in
                         NavigationLink(value: BookRoute.detail(bookId: book.id)) {
                             BookGridItemView(book: book)

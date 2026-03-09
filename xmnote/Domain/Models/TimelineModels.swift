@@ -9,11 +9,12 @@ import Foundation
 
 // MARK: - 事件子结构
 
-/// 书摘事件，携带划线正文与用户批注
+/// 书摘事件，携带划线正文、用户批注与附图地址
 struct TimelineNoteEvent {
     let content: String
     let idea: String
     let bookTitle: String
+    let imageURLs: [String]
 }
 
 /// 阅读计时事件，携带时长与时间范围
@@ -36,19 +37,21 @@ struct TimelineCheckInEvent {
     let amount: Int64
 }
 
-/// 书评事件，携带标题、正文与评分
+/// 书评事件，携带标题、正文、评分与图片地址
 struct TimelineReviewEvent {
     let title: String
     let content: String
     let bookScore: Int64
+    let imageURLs: [String]
 }
 
-/// 相关内容事件，携带标题、正文、链接与分类名
+/// 相关内容事件，携带标题、正文、链接、分类名与图片地址
 struct TimelineRelevantEvent {
     let title: String
     let content: String
     let url: String
     let categoryTitle: String
+    let imageURLs: [String]
 }
 
 /// 相关书籍事件，携带被关联书籍信息与分类标签
@@ -205,5 +208,20 @@ enum CheckInAmountLevel {
         case .more: "多"
         case .veryMore: "很多"
         }
+    }
+}
+
+// MARK: - 日历标记
+
+/// 日历单日标记，标识该日是否有事件活动及阅读进度，供日历 cell 渲染点标记与进度环。
+struct TimelineDayMarker: Hashable {
+    let isActive: Bool
+    /// 阅读进度百分比（0-100），0 表示无阅读计时记录
+    let readingProgress: Int
+
+    /// 归一化进度比例（0.0-1.0），供进度环弧长渲染
+    var progressRatio: Double {
+        let clamped = min(100, max(0, readingProgress))
+        return Double(clamped) / 100.0
     }
 }

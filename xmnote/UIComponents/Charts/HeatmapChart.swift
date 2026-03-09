@@ -220,7 +220,7 @@ private extension HeatmapChart {
     }
 
     var weekdayLabels: some View {
-        VStack(spacing: 0) {
+        VStack(spacing: Spacing.none) {
             Color.clear.frame(height: monthLabelHeight)
             VStack(spacing: squareSpacing) {
                 ForEach(0..<7, id: \.self) { row in
@@ -377,7 +377,7 @@ private extension HeatmapChart {
         let columns = displayedWeekColumns()
         let today = calendar.startOfDay(for: Date())
 
-        return VStack(alignment: .leading, spacing: 0) {
+        return VStack(alignment: .leading, spacing: Spacing.none) {
             monthLabelsRow(columns)
                 .onGeometryChange(for: CGFloat.self) { geo in
                     geo.size.width
@@ -452,7 +452,7 @@ private extension HeatmapChart {
         let tokens = monthHeaderTokens(columns)
         let totalRowWidth = rowWidth(columnCount: columns.count)
 
-        return VStack(spacing: 0) {
+        return VStack(spacing: Spacing.none) {
             ZStack(alignment: .topLeading) {
                 Color.clear
                     .frame(width: totalRowWidth, height: headerTextLineHeight)
@@ -589,7 +589,7 @@ private extension HeatmapChart {
     func segmentedFill(colors: [Color]) -> some View {
         let count = max(colors.count, 1)
         let segmentHeight = squareSize / CGFloat(count)
-        VStack(spacing: 0) {
+        VStack(spacing: Spacing.none) {
             ForEach(Array(colors.enumerated()), id: \.offset) { index, color in
                 let rowHeight = index == count - 1
                     ? max(squareSize - segmentHeight * CGFloat(max(count - 1, 0)), 0)
@@ -623,7 +623,7 @@ extension HeatmapChart {
 
     /// 渲染热力图图例（少到多）。
     static func legend(style: HeatmapChartStyle) -> some View {
-        HStack(spacing: 4) {
+        HStack(spacing: Spacing.compact) {
             Text("少")
                 .font(.system(size: 9))
                 .foregroundStyle(Color.textHint)
@@ -640,7 +640,7 @@ extension HeatmapChart {
 
     /// 参数化图例：供说明弹层等需要放大尺寸的场景使用
     static func legend(squareSize: CGFloat, fontSize: CGFloat) -> some View {
-        HStack(spacing: 4) {
+        HStack(spacing: Spacing.compact) {
             Text("少")
                 .font(.system(size: fontSize))
                 .foregroundStyle(Color.textHint)
@@ -660,7 +660,7 @@ extension HeatmapChart {
 
 #Preview("空数据") {
     HeatmapChart(days: [:], earliestDate: nil)
-        .padding()
+        .padding(Spacing.screenEdge)
 }
 
 #Preview("示例数据") {
@@ -681,5 +681,5 @@ extension HeatmapChart {
     }
     let earliest = cal.date(byAdding: .day, value: -89, to: today)!
     return HeatmapChart(days: days, earliestDate: earliest)
-        .padding()
+        .padding(Spacing.screenEdge)
 }

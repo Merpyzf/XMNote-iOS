@@ -60,7 +60,7 @@ private extension BackupHistorySheetView {
 
     /// 渲染单条备份历史记录行。
     func backupRow(_ backup: BackupFileInfo) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: Spacing.compact) {
             HStack {
                 Text(backup.deviceName)
                     .font(.body)
