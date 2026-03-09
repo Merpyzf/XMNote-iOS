@@ -41,7 +41,6 @@ struct TimelineSectionHeader: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.vertical, Spacing.cozy)
-        .padding(.horizontal, Spacing.screenEdge)
         .background {
             Rectangle()
                 .fill(Color.windowBackground)
@@ -140,10 +139,9 @@ struct TimelineEventRow: View {
 
             cardContent
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.leading, Spacing.compact)
+                .padding(.leading, Spacing.cozy)
                 .padding(.bottom, Spacing.screenEdge)
         }
-        .padding(.horizontal, Spacing.screenEdge)
     }
 
     // MARK: - Left Decorator
@@ -229,7 +227,7 @@ struct TimelineEventRow: View {
 private let dotSize: CGFloat = 8
 
 /// 左侧装饰列宽度
-private let decoratorWidth: CGFloat = 20
+private let decoratorWidth: CGFloat = 16
 
 // MARK: - Meta Line Helper
 
@@ -275,7 +273,8 @@ struct TimelineCardMetaLine: View {
                 kind: .note(TimelineNoteEvent(
                     content: "好的代码读起来像散文一样流畅。",
                     idea: "这就是为什么命名如此重要",
-                    bookTitle: "代码整洁之道"
+                    bookTitle: "代码整洁之道",
+                    imageURLs: []
                 )),
                 timestamp: Int64(Date().timeIntervalSince1970 * 1000),
                 bookName: "代码整洁之道",
