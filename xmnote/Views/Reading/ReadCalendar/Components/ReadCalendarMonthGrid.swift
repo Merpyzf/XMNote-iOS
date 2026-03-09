@@ -647,8 +647,8 @@ private struct ReadCalendarMonthGridWeekRow: View {
         let shouldDefocus = shouldDefocusSegment(segment)
         let segmentOpacity: CGFloat = shouldDefocus ? 0.5 : 1
 
-        let leftRadius: CGFloat = segment.continuesFromPrevWeek ? 2.5 : CornerRadius.blockSmall
-        let rightRadius: CGFloat = segment.continuesToNextWeek ? 2.5 : CornerRadius.blockSmall
+        let leftRadius: CGFloat = segment.continuesFromPrevWeek ? CornerRadius.inlayTiny : CornerRadius.blockSmall
+        let rightRadius: CGFloat = segment.continuesToNextWeek ? CornerRadius.inlayTiny : CornerRadius.blockSmall
         let segmentShape = UnevenRoundedRectangle(
             topLeadingRadius: leftRadius,
             bottomLeadingRadius: leftRadius,

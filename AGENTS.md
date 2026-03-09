@@ -168,6 +168,8 @@
   - Spacing 梯度：`compact(4) < half(6) < cozy(8) < base(12) < screenEdge(16) < contentEdge(18) < double(24)`，按「场景→密度」两步选择。
   - CornerRadius 二维命名：`inlay`（嵌入零件）/ `block`（独立单元）/ `container`（外壳）× `tiny~large`，按「角色→体量」两步选择。
   - 全局 token 定义在 `DesignTokens.swift`，组件语义别名必须引用全局 token，禁止硬编码魔法数字。
+  - 圆角角色映射（强制）：页面级主面板/核心背景卡使用 `container*`；内容主卡使用 `block*`；热力图/图例等密集小单元使用 `inlay*`。
+  - 形状边界（强制）：`Capsule` 仅用于胶囊标签与按钮；`Circle` 仅用于点状状态与环形进度，禁止用于页面/内容卡片外壳。
 
 ## 提交与 PR 规范
 - 提交信息必须使用中文，且统一格式：`type(功能模块): 动作 + 结果`（`type` 仅允许：`feat`/`fix`/`refactor`/`chore`/`docs`/`test`/`build`/`ci`/`revert`）。

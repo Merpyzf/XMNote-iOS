@@ -331,11 +331,15 @@ enum TimelineCalendarStyle {
     static let monthNumberFont: Font = .brandDisplay(size: 20, relativeTo: .title3)
     static let monthUnitFont: Font = .system(size: 10, weight: .medium, design: .rounded)
     static let actionButtonFont: Font = .system(size: 13, weight: .semibold, design: .rounded)
-    static let relativeNumberFont: Font = .brandDisplay(size: 14, relativeTo: .body)
+    static let relativeNumberFont: Font = .brandDisplay(size: 16, relativeTo: .body)
     static let relativeUnitFont: Font = .system(size: 10, weight: .regular, design: .rounded)
     static let weekdayFont: Font = .system(size: 11, weight: .medium, design: .rounded)
     static let categoryChipFont: Font = .system(size: 12, weight: .medium, design: .rounded)
     static let dayNumberFont: Font = .brandDisplay(size: 13, relativeTo: .body)
+
+    // 时间线圆角语义：顶部日历背景卡对齐热力图卡片，事件卡统一主内容卡角色。
+    static let panelCornerRadius: CGFloat = CornerRadius.containerLarge
+    static let eventCardCornerRadius: CGFloat = CornerRadius.blockLarge
 
     static let dayCellSize: CGFloat = 32
     static let selectedCircleSize: CGFloat = 30

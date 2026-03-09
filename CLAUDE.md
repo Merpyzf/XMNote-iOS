@@ -753,7 +753,7 @@ compact(4) < half(6) < cozy(8) < base(12) < screenEdge(16) < contentEdge(18) < d
 第二步 — 按视觉体量选尺寸：
 
 ```
-inlayTiny(2.5) < inlaySmall(4) < inlayMedium(6) < blockSmall(8) < blockMedium(10) < blockLarge(12) < containerMedium(16) < containerLarge(18)
+inlayTiny(3) < inlaySmall(4) < inlayMedium(6) < blockSmall(8) < blockMedium(10) < blockLarge(12) < containerMedium(16) < containerLarge(18)
 ```
 
 详见 `DesignTokens.swift` 中 `CornerRadius` 注释块。
@@ -763,6 +763,18 @@ inlayTiny(2.5) < inlaySmall(4) < inlayMedium(6) < blockSmall(8) < blockMedium(10
 - 全局 token（`Spacing` / `CornerRadius`）定义在 `DesignTokens.swift`，是唯一真相源。
 - 组件内部若需语义别名（如 `eventBarRadius`），应引用全局 token 而非重复定义数值。
 - 新增 token 必须先评估现有梯度是否已覆盖，避免梯度膨胀。
+
+### 圆角角色映射（强制）
+
+- 页面级主面板/核心背景卡：使用 `container*`（例如时间线顶部日历背景卡与热力图卡片保持同层级）。
+- 内容主卡（事件卡、列表主卡）：使用 `block*`。
+- 密集小单元（热力图方格、图例、微型色块）：使用 `inlay*`。
+
+### 形状边界（强制）
+
+- `Capsule` 仅用于胶囊标签与按钮。
+- `Circle` 仅用于点状状态与环形进度。
+- 页面或内容卡片外壳禁止使用 `Capsule`/`Circle` 代替 `RoundedRectangle + CornerRadius token`。
 
 ---
 

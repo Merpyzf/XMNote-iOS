@@ -15,7 +15,7 @@ struct TimelineRelevantBookCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: Spacing.half) {
-            CardContainer {
+            CardContainer(cornerRadius: TimelineCalendarStyle.eventCardCornerRadius) {
                 VStack(alignment: .leading, spacing: Spacing.base) {
                     TimelineCardMetaLine(timestamp: timestamp, bookName: bookName)
 

@@ -149,8 +149,8 @@ private extension ReadingDurationRankingChart {
                     cornerRadii: .init(
                         topLeading: Layout.barCornerRadius,
                         bottomLeading: Layout.barCornerRadius,
-                        bottomTrailing: 0,
-                        topTrailing: 0
+                        bottomTrailing: CornerRadius.none,
+                        topTrailing: CornerRadius.none
                     ),
                     style: .continuous
                 )

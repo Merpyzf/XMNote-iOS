@@ -580,8 +580,8 @@ private extension ReadCalendarMonthSummarySheet {
                     cornerRadii: .init(
                         topLeading: Layout.summaryDurationSkeletonBarCornerRadius,
                         bottomLeading: Layout.summaryDurationSkeletonBarCornerRadius,
-                        bottomTrailing: 0,
-                        topTrailing: 0
+                        bottomTrailing: CornerRadius.none,
+                        topTrailing: CornerRadius.none
                     ),
                     style: .continuous
                 )
