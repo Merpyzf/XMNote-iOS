@@ -239,14 +239,16 @@ private extension ReadingTimelineContentView {
                 ProgressView()
                     .padding(.vertical, Spacing.double)
             } else if viewModel.sections.isEmpty {
-                EmptyStateView(icon: "clock.arrow.circlepath", message: "当日没有匹配事件")
-                    .padding(.vertical, Spacing.double)
+                VStack(spacing: Spacing.base) {
+                    timelineEmptyFilterBar
+                    EmptyStateView(icon: "clock.arrow.circlepath", message: "当日没有匹配事件")
+                }
+                .padding(.vertical, Spacing.double)
             } else {
                 LazyVStack(spacing: Spacing.none, pinnedViews: [.sectionHeaders]) {
                     ForEach(Array(viewModel.sections.enumerated()), id: \.element.id) { index, section in
                         TimelineSectionView(
                             section: section,
-                            isFirst: index == 0,
                             isLast: index == viewModel.sections.count - 1,
                             selectedCategory: viewModel.selectedCategory,
                             onCategorySelected: { category in
@@ -256,6 +258,41 @@ private extension ReadingTimelineContentView {
                     }
                 }
             }
+        }
+    }
+
+    /// 空态筛选兜底行：右对齐胶囊 Menu，样式与 SectionHeader 内 Menu 一致。
+    /// 筛选后结果为空时保留筛选入口，避免用户无法切回"全部"。
+    private var timelineEmptyFilterBar: some View {
+        HStack {
+            Spacer()
+            Menu {
+                ForEach(TimelineEventCategory.allCases) { category in
+                    Button {
+                        Task { await viewModel.selectCategory(category) }
+                    } label: {
+                        if category == viewModel.selectedCategory {
+                            Label(category.rawValue, systemImage: "checkmark")
+                        } else {
+                            Text(category.rawValue)
+                        }
+                    }
+                }
+            } label: {
+                HStack(spacing: Spacing.compact) {
+                    Text(viewModel.selectedCategory.rawValue)
+                        .font(TimelineCalendarStyle.sectionFilterFont)
+                        .foregroundStyle(Color.textSecondary)
+                    Image(systemName: "chevron.down")
+                        .font(.system(size: 8, weight: .bold))
+                        .foregroundStyle(Color.textHint)
+                }
+                .padding(.horizontal, Spacing.cozy)
+                .padding(.vertical, Spacing.compact)
+                .background(Color.bgSecondary)
+                .clipShape(Capsule())
+            }
+            .buttonStyle(.plain)
         }
     }
 

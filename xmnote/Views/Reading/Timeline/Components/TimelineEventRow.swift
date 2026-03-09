@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 TimelineEvent/TimelineSection/TimelineEventCategory 领域模型、7 种 Card 组件、DesignTokens 设计令牌
- * [OUTPUT]: 对外提供 TimelineEventRow（时间线单事件行）、TimelineSectionHeader（粘性日期头，可选筛选 Menu）与 TimelineSectionView（按日分组渲染，首组嵌入分类筛选）
+ * [OUTPUT]: 对外提供 TimelineEventRow（时间线单事件行）、TimelineSectionHeader（粘性日期头 + 筛选 Menu）与 TimelineSectionView（按日分组渲染，每组均携带分类筛选）
  * [POS]: Reading/Timeline 页面私有子视图，整合左侧虚线装饰列与右侧事件卡片
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -9,11 +9,12 @@ import SwiftUI
 
 // MARK: - Timeline Section Header
 
-/// 粘性日期头部：绿点 + MM.dd yyyy + 可选筛选 Menu，用于 LazyVStack pinnedViews
+/// 粘性日期头部：绿点 + MM.dd yyyy + 筛选 Menu，用于 LazyVStack pinnedViews。
+/// 每个 SectionHeader 均携带筛选 Menu，吸顶切换时无缝接力、无闪烁。
 struct TimelineSectionHeader: View {
     let date: Date
-    var selectedCategory: TimelineEventCategory? = nil
-    var onCategorySelected: ((TimelineEventCategory) -> Void)? = nil
+    let selectedCategory: TimelineEventCategory
+    let onCategorySelected: (TimelineEventCategory) -> Void
 
     var body: some View {
         HStack(spacing: Spacing.cozy) {
@@ -35,9 +36,7 @@ struct TimelineSectionHeader: View {
 
             Spacer()
 
-            if let selected = selectedCategory, let action = onCategorySelected {
-                categoryFilterMenu(selected: selected, action: action)
-            }
+            categoryFilterMenu(selected: selectedCategory, action: onCategorySelected)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.vertical, Spacing.cozy)
@@ -99,10 +98,9 @@ struct TimelineSectionHeader: View {
 
 // MARK: - Timeline Section
 
-/// 一日内的事件分组，首组头部嵌入分类筛选 Menu。
+/// 一日内的事件分组，每个头部均携带分类筛选 Menu。
 struct TimelineSectionView: View {
     let section: TimelineSection
-    let isFirst: Bool
     let isLast: Bool
     let selectedCategory: TimelineEventCategory
     let onCategorySelected: (TimelineEventCategory) -> Void
@@ -118,8 +116,8 @@ struct TimelineSectionView: View {
         } header: {
             TimelineSectionHeader(
                 date: section.date,
-                selectedCategory: isFirst ? selectedCategory : nil,
-                onCategorySelected: isFirst ? onCategorySelected : nil
+                selectedCategory: selectedCategory,
+                onCategorySelected: onCategorySelected
             )
         }
     }
@@ -299,7 +297,6 @@ struct TimelineCardMetaLine: View {
         LazyVStack(spacing: Spacing.none, pinnedViews: [.sectionHeaders]) {
             TimelineSectionView(
                 section: section,
-                isFirst: true,
                 isLast: true,
                 selectedCategory: .all,
                 onCategorySelected: { _ in }
