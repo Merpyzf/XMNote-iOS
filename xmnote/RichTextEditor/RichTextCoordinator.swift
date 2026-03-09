@@ -43,6 +43,14 @@ final class RichTextCoordinator: NSObject, UITextViewDelegate {
         scheduleBoundaryCleanup(editorView)
     }
 
+    func textViewDidBeginEditing(_ textView: UITextView) {
+        parent.onFocusChange?(true)
+    }
+
+    func textViewDidEndEditing(_ textView: UITextView) {
+        parent.onFocusChange?(false)
+    }
+
     // MARK: - 格式状态检测
 
     /// 选区变化时，检查各格式是否激活，更新工具栏高亮状态
@@ -66,6 +74,11 @@ final class RichTextCoordinator: NSObject, UITextViewDelegate {
         if let toolbar = editorView.inputAccessoryView as? RichTextToolbar {
             toolbar.updateSelectionState(hasSelection: range.length > 0)
             toolbar.updateActiveFormats(formats)
+            toolbar.updateCameraTextCaptureState(
+                isEnabled: parent.allowsCameraTextCapture
+                    && editorView.isEditable
+                    && XMCameraTextCaptureSupport.canCapture(on: editorView)
+            )
         }
     }
 
@@ -224,6 +237,16 @@ final class RichTextCoordinator: NSObject, UITextViewDelegate {
         editorView.clearFormats(in: editorView.selectedRange)
         updateActiveFormats(editorView)
         syncAttributedText(from: editorView)
+    }
+
+    /// 触发系统相机取词，让识别文本直接写入当前编辑器光标位置。
+    func handleCameraTextCapture(editorView: RichTextEditorView) {
+        XMCameraTextCaptureSupport.trigger(on: editorView)
+        if let toolbar = editorView.inputAccessoryView as? RichTextToolbar {
+            toolbar.updateCameraTextCaptureState(
+                isEnabled: XMCameraTextCaptureSupport.canCapture(on: editorView)
+            )
+        }
     }
 
     // MARK: - Binding 同步

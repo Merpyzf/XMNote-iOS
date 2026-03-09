@@ -18,7 +18,9 @@ struct RichTextEditor: UIViewRepresentable {
     var highlightARGB: UInt32 = HighlightColors.defaultHighlightColor
     var linkColor: UIColor? = nil
     var isLinkUnderline: Bool = true
+    var allowsCameraTextCapture: Bool = false
     var onTextChange: (() -> Void)?
+    var onFocusChange: ((Bool) -> Void)?
 
     /// 创建底层 UITextView 容器并注入配置。
     func makeUIView(context: Context) -> RichTextEditorView {
@@ -31,13 +33,21 @@ struct RichTextEditor: UIViewRepresentable {
 
         // 设置 inputAccessoryView（工具栏）
         context.coordinator.currentHighlightARGB = highlightARGB
-        let toolbar = RichTextToolbar { action in
-            context.coordinator.handleToolbarAction(action, editorView: editorView)
-        } onClearFormats: {
-            context.coordinator.handleClearFormats(editorView: editorView)
-        } onDismissKeyboard: {
-            editorView.resignFirstResponder()
-        }
+        let toolbar = RichTextToolbar(
+            onFormatAction: { action in
+                context.coordinator.handleToolbarAction(action, editorView: editorView)
+            },
+            onClearFormats: {
+                context.coordinator.handleClearFormats(editorView: editorView)
+            },
+            onCameraTextCapture: {
+                context.coordinator.handleCameraTextCapture(editorView: editorView)
+            },
+            onDismissKeyboard: {
+                editorView.resignFirstResponder()
+            },
+            showsCameraTextCapture: allowsCameraTextCapture
+        )
         toolbar.textView = editorView
         editorView.inputAccessoryView = toolbar
 
@@ -72,6 +82,9 @@ struct RichTextEditor: UIViewRepresentable {
         // 同步工具栏激活状态
         if let toolbar = editorView.inputAccessoryView as? RichTextToolbar {
             toolbar.updateActiveFormats(activeFormats)
+            toolbar.updateCameraTextCaptureState(
+                isEnabled: allowsCameraTextCapture && isEditable && XMCameraTextCaptureSupport.canCapture(on: editorView)
+            )
         }
     }
 

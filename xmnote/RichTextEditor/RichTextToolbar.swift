@@ -15,7 +15,9 @@ final class RichTextToolbar: UIView {
 
     private let onFormatAction: (RichTextFormat) -> Void
     private let onClearFormats: () -> Void
+    private let onCameraTextCapture: () -> Void
     private let onDismissKeyboard: () -> Void
+    private let showsCameraTextCapture: Bool
 
     // MARK: - 按钮引用（用于更新激活状态）
 
@@ -23,6 +25,7 @@ final class RichTextToolbar: UIView {
     private var clearFormatsButton: UIButton!
     private var undoButton: UIButton!
     private var redoButton: UIButton!
+    private var cameraTextCaptureButton: UIButton?
 
     // MARK: - 关联的 textView（用于撤销/重做）
 
@@ -34,11 +37,15 @@ final class RichTextToolbar: UIView {
     init(
         onFormatAction: @escaping (RichTextFormat) -> Void,
         onClearFormats: @escaping () -> Void,
-        onDismissKeyboard: @escaping () -> Void
+        onCameraTextCapture: @escaping () -> Void,
+        onDismissKeyboard: @escaping () -> Void,
+        showsCameraTextCapture: Bool
     ) {
         self.onFormatAction = onFormatAction
         self.onClearFormats = onClearFormats
+        self.onCameraTextCapture = onCameraTextCapture
         self.onDismissKeyboard = onDismissKeyboard
+        self.showsCameraTextCapture = showsCameraTextCapture
         super.init(frame: CGRect(x: 0, y: 0, width: 0, height: 44))
         autoresizingMask = .flexibleWidth
         setupUI()
@@ -47,7 +54,7 @@ final class RichTextToolbar: UIView {
     /// 禁用 `init(coder:)`，避免通过 storyboard/xib 初始化导致回调依赖缺失。
     @available(*, unavailable)
     required init?(coder: NSCoder) {
-        fatalError("Use init(onFormatAction:onClearFormats:onDismissKeyboard:)")
+        fatalError("Use init(onFormatAction:onClearFormats:onCameraTextCapture:onDismissKeyboard:showsCameraTextCapture:)")
     }
 
     // MARK: - UI 构建
@@ -132,6 +139,13 @@ final class RichTextToolbar: UIView {
         clearBtn.setImage(UIImage(systemName: "textformat", withConfiguration: config), for: .normal)
         clearFormatsButton = clearBtn
         stackView.addArrangedSubview(clearBtn)
+
+        if showsCameraTextCapture {
+            stackView.addArrangedSubview(makeSeparator())
+            let captureBtn = makeButton(systemName: "text.viewfinder", action: #selector(cameraTextCaptureTapped))
+            cameraTextCaptureButton = captureBtn
+            stackView.addArrangedSubview(captureBtn)
+        }
 
         // 弹性空间
         let spacer = UIView()
@@ -229,6 +243,10 @@ final class RichTextToolbar: UIView {
         onDismissKeyboard()
     }
 
+    @objc private func cameraTextCaptureTapped() {
+        onCameraTextCapture()
+    }
+
     // MARK: - 状态更新
 
     /// 根据当前选区的格式集合更新按钮高亮
@@ -272,5 +290,12 @@ final class RichTextToolbar: UIView {
 
         clearFormatsButton.isEnabled = hasSelection
         clearFormatsButton.tintColor = hasSelection ? .label : disabledColor
+    }
+
+    /// 刷新系统取词按钮启用态，避免页面层关心 UIKit 可用性判断。
+    func updateCameraTextCaptureState(isEnabled: Bool) {
+        guard let cameraTextCaptureButton else { return }
+        cameraTextCaptureButton.isEnabled = isEnabled
+        cameraTextCaptureButton.tintColor = isEnabled ? .label : .tertiaryLabel
     }
 }

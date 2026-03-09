@@ -2,7 +2,7 @@
 import SwiftUI
 
 /**
- * [INPUT]: 依赖 RichTextTestView、HeatmapTestView、ImageLoadingTestView、JXPhotoBrowserTestView、ReadCalendarCoverStackTestView、SystemColorsTestView、TimelineCardsTestView、TimelineCalendarHorizonTestView 作为导航目的地
+ * [INPUT]: 依赖 RichTextTestView、HeatmapTestView、ImageLoadingTestView、CameraTextCaptureTestView、JXPhotoBrowserTestView、ReadCalendarCoverStackTestView、SystemColorsTestView、TimelineCardsTestView、TimelineCalendarHorizonTestView 作为导航目的地
  * [OUTPUT]: 对外提供 DebugCenterView（测试中心列表页）
  * [POS]: Debug 测试入口页，集中展示所有控件测试项，由 PersonalView 跳转进入
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -38,6 +38,12 @@ struct DebugCenterView: View {
             title: "图片加载",
             subtitle: "静态图/GIF/失败链路与缓存来源观测",
             destination: AnyView(ImageLoadingTestView())
+        ),
+        DebugItem(
+            icon: "text.viewfinder",
+            title: "文本识别",
+            subtitle: "系统相机取词 + 可用性/语言列表验证",
+            destination: AnyView(CameraTextCaptureTestView())
         ),
         DebugItem(
             icon: "rectangle.3.group",

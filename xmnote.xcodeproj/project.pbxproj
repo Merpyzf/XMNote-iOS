@@ -445,6 +445,7 @@
 				);
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = "纸间书摘";
+				INFOPLIST_KEY_NSCameraUsageDescription = "在使用文本识别、添加附图、扫描书籍等功能时会访问设备的相机。";
 				INFOPLIST_KEY_UIAppFonts = "RozhaOne-Regular.ttf";
 				INFOPLIST_KEY_UIAppFonts_0 = "RozhaOne-Regular.ttf";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
@@ -484,6 +485,7 @@
 				);
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = "纸间书摘";
+				INFOPLIST_KEY_NSCameraUsageDescription = "在使用文本识别、添加附图、扫描书籍等功能时会访问设备的相机。";
 				INFOPLIST_KEY_UIAppFonts = "RozhaOne-Regular.ttf";
 				INFOPLIST_KEY_UIAppFonts_0 = "RozhaOne-Regular.ttf";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
