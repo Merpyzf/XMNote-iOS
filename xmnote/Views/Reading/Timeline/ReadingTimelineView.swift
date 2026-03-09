@@ -81,7 +81,7 @@ struct ReadingTimelineView: View {
 
 private extension ReadingTimelineView {
     var calendarPanelCard: some View {
-        CardContainer {
+        CardContainer(cornerRadius: TimelineCalendarStyle.panelCornerRadius) {
             VStack(spacing: Spacing.base) {
                 HStack(alignment: .lastTextBaseline, spacing: Spacing.base) {
                     Menu {
@@ -101,11 +101,6 @@ private extension ReadingTimelineView {
                             displayedMonthTitleText
                                 .lineLimit(1)
                                 .minimumScaleFactor(0.9)
-
-                            Image(systemName: "chevron.down")
-                                .font(.system(size: 10, weight: .semibold))
-                                .foregroundStyle(Color.readCalendarSubtleText)
-                                .offset(y: 0.5)
                         }
                     }
                     .buttonStyle(.plain)
@@ -272,43 +267,39 @@ private extension ReadingTimelineView {
         let components = calendar.dateComponents([.year, .month], from: displayedMonthStart)
         let year = components.year ?? calendar.component(.year, from: displayedMonthStart)
         let month = components.month ?? calendar.component(.month, from: displayedMonthStart)
-        return HStack(alignment: .lastTextBaseline, spacing: 0) {
-            Text(verbatim: String(year))
-                .font(TimelineCalendarStyle.monthNumberFont)
-                .foregroundStyle(TimelineCalendarStyle.monthNumberColor)
-                .contentTransition(.numericText())
-            Text(" 年 ")
-                .font(TimelineCalendarStyle.monthUnitFont)
-                .foregroundStyle(TimelineCalendarStyle.monthUnitColor)
-            Text(verbatim: String(month))
-                .font(TimelineCalendarStyle.monthNumberFont)
-                .foregroundStyle(TimelineCalendarStyle.monthNumberColor)
-                .contentTransition(.numericText())
-            Text(" 月")
-                .font(TimelineCalendarStyle.monthUnitFont)
-                .foregroundStyle(TimelineCalendarStyle.monthUnitColor)
-        }
+        let yearText = Text(verbatim: String(year))
+            .font(TimelineCalendarStyle.monthNumberFont)
+            .foregroundStyle(TimelineCalendarStyle.monthNumberColor)
+        let yearUnit = Text(" 年 ")
+            .font(TimelineCalendarStyle.monthUnitFont)
+            .foregroundStyle(TimelineCalendarStyle.monthUnitColor)
+        let monthText = Text(verbatim: String(month))
+            .font(TimelineCalendarStyle.monthNumberFont)
+            .foregroundStyle(TimelineCalendarStyle.monthNumberColor)
+        let monthUnit = Text(" 月")
+            .font(TimelineCalendarStyle.monthUnitFont)
+            .foregroundStyle(TimelineCalendarStyle.monthUnitColor)
+        return Text("\(yearText)\(yearUnit)\(monthText)\(monthUnit)")
+            .monospacedDigit()
+            .contentTransition(.numericText())
+            .animation(.snappy(duration: 0.24), value: displayedMonthStart)
     }
 
-    @ViewBuilder
     var selectedDateOffsetText: some View {
         let today = calendar.startOfDay(for: Date())
         let dayOffset = calendar.dateComponents([.day], from: selectedDate, to: today).day ?? 0
-        if dayOffset == 0 {
-            Text("今天")
+        return HStack(alignment: .lastTextBaseline, spacing: 0) {
+            Text(verbatim: dayOffset == 0 ? "" : String(abs(dayOffset)))
+                .font(TimelineCalendarStyle.relativeNumberFont)
+                .foregroundStyle(TimelineCalendarStyle.relativeNumberColor)
+                .monospacedDigit()
+                .contentTransition(.numericText())
+            Text(dayOffset == 0 ? "今天" : (dayOffset > 0 ? "天前" : "天后"))
                 .font(TimelineCalendarStyle.relativeUnitFont)
                 .foregroundStyle(TimelineCalendarStyle.relativeUnitColor)
-        } else {
-            HStack(alignment: .lastTextBaseline, spacing: 0) {
-                Text(verbatim: String(abs(dayOffset)))
-                    .font(TimelineCalendarStyle.relativeNumberFont)
-                    .foregroundStyle(TimelineCalendarStyle.relativeNumberColor)
-                    .contentTransition(.numericText())
-                Text(dayOffset > 0 ? "天前" : "天后")
-                    .font(TimelineCalendarStyle.relativeUnitFont)
-                    .foregroundStyle(TimelineCalendarStyle.relativeUnitColor)
-            }
+                .contentTransition(.numericText())
         }
+        .animation(.snappy(duration: 0.24), value: dayOffset)
     }
 }
 
@@ -462,18 +453,17 @@ private extension ReadingTimelineView {
     func commitHeaderState(selectedDay: Date, monthStart: Date, animated: Bool) {
         let isMonthChanged = !calendar.isDate(monthStart, equalTo: displayedMonthStart, toGranularity: .month)
 
+        // displayedMonthStart 在事务外赋值，标题通过隐式动画驱动 numericText 过渡
+        if isMonthChanged {
+            displayedMonthStart = monthStart
+        }
+
         if animated {
             withAnimation(monthTransitionAnimation) {
                 selectedDate = selectedDay
-                if isMonthChanged {
-                    displayedMonthStart = monthStart
-                }
             }
         } else {
             selectedDate = selectedDay
-            if isMonthChanged {
-                displayedMonthStart = monthStart
-            }
         }
 
         if isMonthChanged {
