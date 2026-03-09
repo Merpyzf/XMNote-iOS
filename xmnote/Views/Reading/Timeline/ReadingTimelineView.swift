@@ -83,7 +83,8 @@ private struct ReadingTimelineContentView: View {
                 timelineList
             }
             .padding(.horizontal, Spacing.screenEdge)
-            .padding(.vertical, Spacing.base)
+            .padding(.top, Spacing.half)
+            .padding(.bottom, Spacing.base)
         }
         .coordinateSpace(name: Self.timelineScrollCoordinateSpaceName)
         .onAppear {
