@@ -96,8 +96,7 @@ private struct TimelineCardsTestContentView: View {
                 TimelineSectionView(
                     section: section,
                     isLast: index == filteredSections.count - 1,
-                    selectedCategory: .all,
-                    onCategorySelected: { _ in }
+                    trailingPlaceholderWidth: 0
                 )
             }
         }

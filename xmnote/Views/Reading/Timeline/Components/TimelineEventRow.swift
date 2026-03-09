@@ -1,6 +1,6 @@
 /**
- * [INPUT]: 依赖 TimelineEvent/TimelineSection/TimelineEventCategory 领域模型、7 种 Card 组件、DesignTokens 设计令牌
- * [OUTPUT]: 对外提供 TimelineEventRow（时间线单事件行）、TimelineSectionHeader（粘性日期头 + 筛选 Menu）与 TimelineSectionView（按日分组渲染，每组均携带分类筛选）
+ * [INPUT]: 依赖 TimelineEvent/TimelineSection 领域模型、7 种 Card 组件、DesignTokens 设计令牌
+ * [OUTPUT]: 对外提供 TimelineEventRow（时间线单事件行）、TimelineSectionHeader（粘性日期头 + 右侧筛选占位）与 TimelineSectionView（按日分组渲染）
  * [POS]: Reading/Timeline 页面私有子视图，整合左侧虚线装饰列与右侧事件卡片
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -9,12 +9,11 @@ import SwiftUI
 
 // MARK: - Timeline Section Header
 
-/// 粘性日期头部：绿点 + MM.dd yyyy + 筛选 Menu，用于 LazyVStack pinnedViews。
-/// 每个 SectionHeader 均携带筛选 Menu，吸顶切换时无缝接力、无闪烁。
+/// 粘性日期头部：绿点 + MM.dd yyyy + 右侧筛选入口占位，用于 LazyVStack pinnedViews。
+/// 实际筛选入口由页面层单实例承载，避免 section 切换时控件实例抖动。
 struct TimelineSectionHeader: View {
     let date: Date
-    let selectedCategory: TimelineEventCategory
-    let onCategorySelected: (TimelineEventCategory) -> Void
+    let trailingPlaceholderWidth: CGFloat
 
     var body: some View {
         HStack(spacing: Spacing.cozy) {
@@ -36,7 +35,11 @@ struct TimelineSectionHeader: View {
 
             Spacer()
 
-            categoryFilterMenu(selected: selectedCategory, action: onCategorySelected)
+            Color.clear
+                .frame(
+                    width: trailingPlaceholderWidth,
+                    height: sectionHeaderTrailingPlaceholderHeight
+                )
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.vertical, Spacing.cozy)
@@ -44,41 +47,6 @@ struct TimelineSectionHeader: View {
             Rectangle()
                 .fill(Color.windowBackground)
         }
-    }
-
-    // MARK: - Filter Menu
-
-    private func categoryFilterMenu(
-        selected: TimelineEventCategory,
-        action: @escaping (TimelineEventCategory) -> Void
-    ) -> some View {
-        Menu {
-            ForEach(TimelineEventCategory.allCases) { category in
-                Button {
-                    action(category)
-                } label: {
-                    if category == selected {
-                        Label(category.rawValue, systemImage: "checkmark")
-                    } else {
-                        Text(category.rawValue)
-                    }
-                }
-            }
-        } label: {
-            HStack(spacing: Spacing.compact) {
-                Text(selected.rawValue)
-                    .font(TimelineCalendarStyle.sectionFilterFont)
-                    .foregroundStyle(Color.textSecondary)
-                Image(systemName: "chevron.down")
-                    .font(.system(size: 8, weight: .bold))
-                    .foregroundStyle(Color.textHint)
-            }
-            .padding(.horizontal, Spacing.cozy)
-            .padding(.vertical, Spacing.compact)
-            .background(Color.bgSecondary)
-            .clipShape(Capsule())
-        }
-        .buttonStyle(.plain)
     }
 
     // MARK: - Date Formatting
@@ -98,12 +66,11 @@ struct TimelineSectionHeader: View {
 
 // MARK: - Timeline Section
 
-/// 一日内的事件分组，每个头部均携带分类筛选 Menu。
+/// 一日内的事件分组，头部仅负责日期展示与筛选占位。
 struct TimelineSectionView: View {
     let section: TimelineSection
     let isLast: Bool
-    let selectedCategory: TimelineEventCategory
-    let onCategorySelected: (TimelineEventCategory) -> Void
+    let trailingPlaceholderWidth: CGFloat
 
     var body: some View {
         Section {
@@ -116,8 +83,7 @@ struct TimelineSectionView: View {
         } header: {
             TimelineSectionHeader(
                 date: section.date,
-                selectedCategory: selectedCategory,
-                onCategorySelected: onCategorySelected
+                trailingPlaceholderWidth: trailingPlaceholderWidth
             )
         }
     }
@@ -224,6 +190,9 @@ struct TimelineEventRow: View {
 /// 绿色圆点直径，section header 与装饰列共用
 private let dotSize: CGFloat = 8
 
+/// SectionHeader 右侧筛选入口占位高度
+private let sectionHeaderTrailingPlaceholderHeight: CGFloat = 24
+
 /// 左侧装饰列宽度
 private let decoratorWidth: CGFloat = 16
 
@@ -298,8 +267,7 @@ struct TimelineCardMetaLine: View {
             TimelineSectionView(
                 section: section,
                 isLast: true,
-                selectedCategory: .all,
-                onCategorySelected: { _ in }
+                trailingPlaceholderWidth: 76
             )
         }
     }

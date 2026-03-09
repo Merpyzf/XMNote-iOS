@@ -39,6 +39,7 @@ private struct ReadingTimelineContentView: View {
     @StateObject private var calendarProxy = CalendarViewProxy()
     @State private var calendarHeight: CGFloat = 320
     @State private var calendarViewportWidth: CGFloat = 0
+    @State private var timelineListMinY: CGFloat = .zero
     @State private var isUserPagingInFlight: Bool = false
     @State private var isProgrammaticLongJump: Bool = false
 
@@ -84,6 +85,7 @@ private struct ReadingTimelineContentView: View {
             .padding(.horizontal, Spacing.screenEdge)
             .padding(.vertical, Spacing.base)
         }
+        .coordinateSpace(name: Self.timelineScrollCoordinateSpaceName)
         .onAppear {
             DispatchQueue.main.async {
                 jumpToDate(calendar.startOfDay(for: Date()), animated: false)
@@ -239,61 +241,48 @@ private extension ReadingTimelineContentView {
                 ProgressView()
                     .padding(.vertical, Spacing.double)
             } else if viewModel.sections.isEmpty {
-                VStack(spacing: Spacing.base) {
-                    timelineEmptyFilterBar
-                    EmptyStateView(icon: "clock.arrow.circlepath", message: "当日没有匹配事件")
-                }
-                .padding(.vertical, Spacing.double)
+                EmptyStateView(icon: "clock.arrow.circlepath", message: "当日没有匹配事件")
+                    .padding(.vertical, Spacing.double)
             } else {
                 LazyVStack(spacing: Spacing.none, pinnedViews: [.sectionHeaders]) {
                     ForEach(Array(viewModel.sections.enumerated()), id: \.element.id) { index, section in
                         TimelineSectionView(
                             section: section,
                             isLast: index == viewModel.sections.count - 1,
-                            selectedCategory: viewModel.selectedCategory,
-                            onCategorySelected: { category in
-                                Task { await viewModel.selectCategory(category) }
-                            }
+                            trailingPlaceholderWidth: TimelineFilterHostStyle.controlWidth
                         )
                     }
                 }
             }
         }
+        .overlay(alignment: .topTrailing) {
+            timelineFilterHost
+                .padding(.top, Spacing.cozy)
+                .offset(y: timelineFilterStickyOffsetY)
+                .zIndex(1)
+        }
+        .onGeometryChange(for: CGFloat.self) { geo in
+            geo.frame(in: .named(Self.timelineScrollCoordinateSpaceName)).minY
+        } action: { minY in
+            guard abs(minY - timelineListMinY) > 0.5 else { return }
+            timelineListMinY = minY
+        }
     }
 
-    /// 空态筛选兜底行：右对齐胶囊 Menu，样式与 SectionHeader 内 Menu 一致。
-    /// 筛选后结果为空时保留筛选入口，避免用户无法切回"全部"。
-    private var timelineEmptyFilterBar: some View {
-        HStack {
-            Spacer()
-            Menu {
-                ForEach(TimelineEventCategory.allCases) { category in
-                    Button {
-                        Task { await viewModel.selectCategory(category) }
-                    } label: {
-                        if category == viewModel.selectedCategory {
-                            Label(category.rawValue, systemImage: "checkmark")
-                        } else {
-                            Text(category.rawValue)
-                        }
-                    }
-                }
-            } label: {
-                HStack(spacing: Spacing.compact) {
-                    Text(viewModel.selectedCategory.rawValue)
-                        .font(TimelineCalendarStyle.sectionFilterFont)
-                        .foregroundStyle(Color.textSecondary)
-                    Image(systemName: "chevron.down")
-                        .font(.system(size: 8, weight: .bold))
-                        .foregroundStyle(Color.textHint)
-                }
-                .padding(.horizontal, Spacing.cozy)
-                .padding(.vertical, Spacing.compact)
-                .background(Color.bgSecondary)
-                .clipShape(Capsule())
+    /// 全局单实例筛选入口，固定承载在时间线顶部右侧，避免 SectionHeader 切换时控件实例抖动。
+    private var timelineFilterHost: some View {
+        TimelineCategoryFilterMenu(
+            selectedCategory: viewModel.selectedCategory,
+            onCategorySelected: { category in
+                Task { await viewModel.selectCategory(category) }
             }
-            .buttonStyle(.plain)
-        }
+        )
+        .disabled(viewModel.isLoading)
+    }
+
+    /// 当列表顶部滚出可视区域后，抵消滚动位移以保持筛选入口吸顶。
+    private var timelineFilterStickyOffsetY: CGFloat {
+        max(0, -timelineListMinY)
     }
 
     var displayedMonthTitleText: some View {
@@ -339,6 +328,10 @@ private extension ReadingTimelineContentView {
 // MARK: - Data / Marker
 
 private extension ReadingTimelineContentView {
+    static var timelineScrollCoordinateSpaceName: String {
+        "reading-timeline-scroll-space"
+    }
+
     var availableMonthStarts: [Date] {
         let lowerMonth = Self.monthStart(of: visibleDateRange.lowerBound, using: calendar)
         let upperMonth = Self.monthStart(of: visibleDateRange.upperBound, using: calendar)
@@ -663,6 +656,50 @@ private struct CalendarDependencyToken: Hashable {
     let selectedDate: Date
     let selectedCategory: TimelineEventCategory
     let markerRevision: Int
+}
+
+/// 时间线筛选入口样式常量，约束占位宽度与胶囊最小宽度保持一致。
+private enum TimelineFilterHostStyle {
+    static let controlWidth: CGFloat = 76
+}
+
+/// 时间线分类筛选胶囊菜单，全页只创建一个实例并吸顶承载。
+private struct TimelineCategoryFilterMenu: View {
+    let selectedCategory: TimelineEventCategory
+    let onCategorySelected: (TimelineEventCategory) -> Void
+
+    var body: some View {
+        Menu {
+            ForEach(TimelineEventCategory.allCases) { category in
+                Button {
+                    onCategorySelected(category)
+                } label: {
+                    if category == selectedCategory {
+                        Label(category.rawValue, systemImage: "checkmark")
+                    } else {
+                        Text(category.rawValue)
+                    }
+                }
+            }
+        } label: {
+            HStack(spacing: Spacing.compact) {
+                Text(selectedCategory.rawValue)
+                    .font(TimelineCalendarStyle.sectionFilterFont)
+                    .foregroundStyle(Color.textSecondary)
+                    .lineLimit(1)
+
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 8, weight: .bold))
+                    .foregroundStyle(Color.textHint)
+            }
+            .padding(.horizontal, Spacing.cozy)
+            .padding(.vertical, Spacing.compact)
+            .frame(minWidth: TimelineFilterHostStyle.controlWidth)
+            .background(Color.bgSecondary)
+            .clipShape(Capsule())
+        }
+        .buttonStyle(.plain)
+    }
 }
 
 #Preview {
