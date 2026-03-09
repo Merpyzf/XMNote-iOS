@@ -268,11 +268,19 @@ extension Color {
 
 /// 全局间距设计令牌，统一页面内边距与组件间距。
 enum Spacing {
+    static let none: CGFloat = 0
+    static let hairline: CGFloat = 1
+    static let tiny: CGFloat = 2
+    static let micro: CGFloat = 3
     static let compact: CGFloat = 4
     static let half: CGFloat = 6
     static let cozy: CGFloat = 8
+    static let tight: CGFloat = 10
     static let base: CGFloat = 12
+    static let comfortable: CGFloat = 14
+    static let section: CGFloat = 20
     static let double: CGFloat = 24
+    static let actionReserved: CGFloat = 44
     static let screenEdge: CGFloat = 16
     static let contentEdge: CGFloat = 18
 }
@@ -354,6 +362,11 @@ enum TimelineCalendarStyle {
     static let relativeUnitColor: Color = .textSecondary
     static let weekdayTextColor: Color = .textHint
     static let progressTrackColor: Color = Color.brand.opacity(0.18)
+
+    // 粘性日期头部：品牌衬线体提升分组锚点辨识度，与顶部日历标题建立字体家族呼应
+    static let sectionDateFont: Font = .brandDisplay(size: 18, relativeTo: .subheadline)
+    static let sectionYearFont: Font = .brandDisplay(size: 18, relativeTo: .subheadline)
+    static let sectionFilterFont: Font = .system(size: 12, weight: .medium, design: .rounded)
 }
 
 // MARK: - Color Helpers

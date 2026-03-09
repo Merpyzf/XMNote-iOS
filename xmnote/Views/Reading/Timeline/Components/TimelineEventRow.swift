@@ -1,6 +1,6 @@
 /**
- * [INPUT]: 依赖 TimelineEvent/TimelineSection 领域模型、7 种 Card 组件、DesignTokens 设计令牌
- * [OUTPUT]: 对外提供 TimelineEventRow（时间线单事件行）、TimelineSectionHeader（粘性日期头）与 TimelineSectionView（按日分组渲染）
+ * [INPUT]: 依赖 TimelineEvent/TimelineSection/TimelineEventCategory 领域模型、7 种 Card 组件、DesignTokens 设计令牌
+ * [OUTPUT]: 对外提供 TimelineEventRow（时间线单事件行）、TimelineSectionHeader（粘性日期头，可选筛选 Menu）与 TimelineSectionView（按日分组渲染，首组嵌入分类筛选）
  * [POS]: Reading/Timeline 页面私有子视图，整合左侧虚线装饰列与右侧事件卡片
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -9,9 +9,11 @@ import SwiftUI
 
 // MARK: - Timeline Section Header
 
-/// 粘性日期头部：绿点 + MM.dd yyyy，用于 LazyVStack pinnedViews
+/// 粘性日期头部：绿点 + MM.dd yyyy + 可选筛选 Menu，用于 LazyVStack pinnedViews
 struct TimelineSectionHeader: View {
     let date: Date
+    var selectedCategory: TimelineEventCategory? = nil
+    var onCategorySelected: ((TimelineEventCategory) -> Void)? = nil
 
     var body: some View {
         HStack(spacing: Spacing.cozy) {
@@ -19,17 +21,23 @@ struct TimelineSectionHeader: View {
                 .fill(Color.brand)
                 .frame(width: dotSize, height: dotSize)
 
-            HStack(spacing: Spacing.compact) {
+            HStack(alignment: .lastTextBaseline, spacing: Spacing.base) {
                 Text(monthDayString)
-                    .font(.footnote.weight(.semibold).monospacedDigit())
+                    .font(TimelineCalendarStyle.sectionDateFont)
+                    .monospacedDigit()
                     .foregroundStyle(Color.textPrimary)
 
                 Text(yearString)
-                    .font(.caption.monospacedDigit())
+                    .font(TimelineCalendarStyle.sectionYearFont)
+                    .monospacedDigit()
                     .foregroundStyle(Color.textHint)
             }
 
             Spacer()
+
+            if let selected = selectedCategory, let action = onCategorySelected {
+                categoryFilterMenu(selected: selected, action: action)
+            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.vertical, Spacing.cozy)
@@ -39,6 +47,43 @@ struct TimelineSectionHeader: View {
                 .fill(Color.windowBackground)
         }
     }
+
+    // MARK: - Filter Menu
+
+    private func categoryFilterMenu(
+        selected: TimelineEventCategory,
+        action: @escaping (TimelineEventCategory) -> Void
+    ) -> some View {
+        Menu {
+            ForEach(TimelineEventCategory.allCases) { category in
+                Button {
+                    action(category)
+                } label: {
+                    if category == selected {
+                        Label(category.rawValue, systemImage: "checkmark")
+                    } else {
+                        Text(category.rawValue)
+                    }
+                }
+            }
+        } label: {
+            HStack(spacing: Spacing.compact) {
+                Text(selected.rawValue)
+                    .font(TimelineCalendarStyle.sectionFilterFont)
+                    .foregroundStyle(Color.textSecondary)
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 8, weight: .bold))
+                    .foregroundStyle(Color.textHint)
+            }
+            .padding(.horizontal, Spacing.cozy)
+            .padding(.vertical, Spacing.compact)
+            .background(Color.bgSecondary)
+            .clipShape(Capsule())
+        }
+        .buttonStyle(.plain)
+    }
+
+    // MARK: - Date Formatting
 
     private var monthDayString: String {
         let f = DateFormatter()
@@ -55,10 +100,13 @@ struct TimelineSectionHeader: View {
 
 // MARK: - Timeline Section
 
-/// 一日内的事件分组，使用 Section(header:) 实现粘性日期头部。
+/// 一日内的事件分组，首组头部嵌入分类筛选 Menu。
 struct TimelineSectionView: View {
     let section: TimelineSection
+    let isFirst: Bool
     let isLast: Bool
+    let selectedCategory: TimelineEventCategory
+    let onCategorySelected: (TimelineEventCategory) -> Void
 
     var body: some View {
         Section {
@@ -69,7 +117,11 @@ struct TimelineSectionView: View {
                 )
             }
         } header: {
-            TimelineSectionHeader(date: section.date)
+            TimelineSectionHeader(
+                date: section.date,
+                selectedCategory: isFirst ? selectedCategory : nil,
+                onCategorySelected: isFirst ? onCategorySelected : nil
+            )
         }
     }
 }
@@ -82,7 +134,7 @@ struct TimelineEventRow: View {
     let isLastEvent: Bool
 
     var body: some View {
-        HStack(alignment: .top, spacing: 0) {
+        HStack(alignment: .top, spacing: Spacing.none) {
             dashedLine
                 .frame(width: decoratorWidth)
 
@@ -245,8 +297,14 @@ struct TimelineCardMetaLine: View {
     )
 
     ScrollView {
-        LazyVStack(spacing: 0, pinnedViews: [.sectionHeaders]) {
-            TimelineSectionView(section: section, isLast: true)
+        LazyVStack(spacing: Spacing.none, pinnedViews: [.sectionHeaders]) {
+            TimelineSectionView(
+                section: section,
+                isFirst: true,
+                isLast: true,
+                selectedCategory: .all,
+                onCategorySelected: { _ in }
+            )
         }
     }
     .background(Color.windowBackground)

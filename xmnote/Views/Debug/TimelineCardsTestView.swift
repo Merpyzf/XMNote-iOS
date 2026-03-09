@@ -95,7 +95,10 @@ private struct TimelineCardsTestContentView: View {
             ForEach(Array(filteredSections.enumerated()), id: \.element.id) { index, section in
                 TimelineSectionView(
                     section: section,
-                    isLast: index == filteredSections.count - 1
+                    isFirst: index == 0,
+                    isLast: index == filteredSections.count - 1,
+                    selectedCategory: .all,
+                    onCategorySelected: { _ in }
                 )
             }
         }

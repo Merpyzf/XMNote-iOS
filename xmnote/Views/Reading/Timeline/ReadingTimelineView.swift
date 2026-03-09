@@ -57,7 +57,6 @@ struct ReadingTimelineView: View {
         ScrollView {
             VStack(spacing: Spacing.base) {
                 calendarPanelCard
-                categoryPicker
                 timelineList
             }
             .padding(.horizontal, Spacing.screenEdge)
@@ -116,8 +115,8 @@ private extension ReadingTimelineView {
                     }
                     .font(TimelineCalendarStyle.actionButtonFont)
                     .foregroundStyle(Color.brandDeep)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 6)
+                    .padding(.horizontal, Spacing.tight)
+                    .padding(.vertical, Spacing.half)
                     .background(Color.brand.opacity(0.14))
                     .overlay(
                         Capsule()
@@ -218,27 +217,6 @@ private extension ReadingTimelineView {
         }
     }
 
-    var categoryPicker: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: Spacing.half) {
-                ForEach(TimelineEventCategory.allCases) { category in
-                    Button(category.rawValue) {
-                        withAnimation(monthTransitionAnimation) {
-                            selectedCategory = category
-                        }
-                    }
-                    .font(TimelineCalendarStyle.categoryChipFont)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 6)
-                    .background(selectedCategory == category ? Color.brand : Color.bgSecondary)
-                    .foregroundStyle(selectedCategory == category ? Color.white : Color.textPrimary)
-                    .clipShape(Capsule())
-                }
-            }
-            .padding(.horizontal, 2)
-        }
-    }
-
     var timelineList: some View {
         let sections = TimelineCalendarMockData.sections(
             for: selectedDate,
@@ -251,11 +229,18 @@ private extension ReadingTimelineView {
                 EmptyStateView(icon: "clock.arrow.circlepath", message: "当日没有匹配事件")
                     .padding(.vertical, Spacing.double)
             } else {
-                LazyVStack(spacing: 0, pinnedViews: [.sectionHeaders]) {
+                LazyVStack(spacing: Spacing.none, pinnedViews: [.sectionHeaders]) {
                     ForEach(Array(sections.enumerated()), id: \.element.id) { index, section in
                         TimelineSectionView(
                             section: section,
-                            isLast: index == sections.count - 1
+                            isFirst: index == 0,
+                            isLast: index == sections.count - 1,
+                            selectedCategory: selectedCategory,
+                            onCategorySelected: { category in
+                                withAnimation(monthTransitionAnimation) {
+                                    selectedCategory = category
+                                }
+                            }
                         )
                     }
                 }
@@ -288,7 +273,7 @@ private extension ReadingTimelineView {
     var selectedDateOffsetText: some View {
         let today = calendar.startOfDay(for: Date())
         let dayOffset = calendar.dateComponents([.day], from: selectedDate, to: today).day ?? 0
-        return HStack(alignment: .lastTextBaseline, spacing: 0) {
+        return HStack(alignment: .lastTextBaseline, spacing: Spacing.none) {
             Text(verbatim: dayOffset == 0 ? "" : String(abs(dayOffset)))
                 .font(TimelineCalendarStyle.relativeNumberFont)
                 .foregroundStyle(TimelineCalendarStyle.relativeNumberColor)
