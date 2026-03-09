@@ -371,7 +371,11 @@ private struct ReadCalendarMonthGridWeekRow: View {
                                 .frame(width: 22, height: 22)
                         }
                         Text("\(dayNum)")
-                            .font(.system(size: 12, weight: selected ? .bold : .medium, design: .rounded))
+                            .font(
+                                selected
+                                ? ReadCalendarTypography.monthGridDayNumberSelectedFont
+                                : ReadCalendarTypography.monthGridDayNumberFont
+                            )
                             .foregroundStyle(
                                 payload.isFuture ? Color.textHint :
                                 selected ? Color.brand : Color.textPrimary

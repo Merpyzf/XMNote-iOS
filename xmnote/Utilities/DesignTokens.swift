@@ -332,6 +332,17 @@ enum CardStyle {
     static let borderWidth: CGFloat = 0.5
 }
 
+// MARK: - Reading Calendar Typography
+
+/// 阅读日历字体令牌，集中维护日期相关文本层级。
+enum ReadCalendarTypography {
+    static let topControlTitleFont: Font = .system(size: 18, weight: .semibold, design: .rounded)
+    static let weekdayHeaderFont: Font = .system(size: 13, weight: .medium, design: .rounded)
+    static let monthGridDayNumberFont: Font = .system(size: 13, weight: .medium, design: .rounded)
+    static let monthGridDayNumberSelectedFont: Font = .system(size: 13, weight: .bold, design: .rounded)
+    static let yearHeatmapMonthTitleFont: Font = .callout.weight(.semibold)
+}
+
 // MARK: - Timeline Calendar Style
 
 /// 时间线日历样式令牌，集中维护字体、尺寸与颜色语义，避免页面内硬编码。

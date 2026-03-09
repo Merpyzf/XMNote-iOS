@@ -16,7 +16,7 @@ struct ReadCalendarWeekdayHeader: View {
         HStack(spacing: Spacing.none) {
             ForEach(Self.weekdays, id: \.self) { weekday in
                 Text(weekday)
-                    .font(.system(size: 12, weight: .medium, design: .rounded))
+                    .font(ReadCalendarTypography.weekdayHeaderFont)
                     .foregroundStyle(Color.readCalendarSubtleText)
                     .frame(maxWidth: .infinity, minHeight: minHeight)
             }

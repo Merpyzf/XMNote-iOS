@@ -1293,7 +1293,7 @@ private extension ReadCalendarContentView {
         } label: {
             VStack(alignment: .leading, spacing: Layout.yearHeatmapMonthCardSpacing) {
                 Text(monthTitle)
-                    .font(.subheadline.weight(.semibold))
+                    .font(ReadCalendarTypography.yearHeatmapMonthTitleFont)
                     .foregroundStyle(Color.textPrimary)
                     .monospacedDigit()
                     .contentTransition(.numericText())

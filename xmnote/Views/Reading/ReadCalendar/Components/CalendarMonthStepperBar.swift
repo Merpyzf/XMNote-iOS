@@ -40,7 +40,7 @@ struct CalendarMonthStepperBar: View {
         } label: {
             HStack(spacing: Spacing.compact) {
                 Text(title)
-                    .font(.system(size: 17, weight: .semibold, design: .rounded))
+                    .font(ReadCalendarTypography.topControlTitleFont)
                     .foregroundStyle(Color.textPrimary)
                     .monospacedDigit()
                     .contentTransition(.numericText())
