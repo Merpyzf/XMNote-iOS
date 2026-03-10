@@ -1,5 +1,5 @@
 /**
- * [INPUT]: 依赖 TimelineEvent/TimelineSection 领域模型、7 种 Card 组件、DesignTokens 设计令牌
+ * [INPUT]: 依赖 TimelineEvent/TimelineSection 领域模型、7 种 Card 组件、DesignTokens 设计令牌、TimelineViewModel
  * [OUTPUT]: 对外提供 TimelineEventRow（时间线单事件行）、TimelineSectionHeader（粘性日期头 + 右侧筛选占位）与 TimelineSectionView（按日分组渲染）
  * [POS]: Reading/Timeline 页面私有子视图，整合左侧虚线装饰列与右侧事件卡片
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -71,13 +71,15 @@ struct TimelineSectionView: View {
     let section: TimelineSection
     let isLast: Bool
     let trailingPlaceholderWidth: CGFloat
+    var viewModel: TimelineViewModel
 
     var body: some View {
         Section {
             ForEach(Array(section.events.enumerated()), id: \.element.id) { index, event in
                 TimelineEventRow(
                     event: event,
-                    isLastEvent: index == section.events.count - 1 && isLast
+                    isLastEvent: index == section.events.count - 1 && isLast,
+                    viewModel: viewModel
                 )
             }
         } header: {
@@ -95,6 +97,7 @@ struct TimelineSectionView: View {
 struct TimelineEventRow: View {
     let event: TimelineEvent
     let isLastEvent: Bool
+    var viewModel: TimelineViewModel
 
     var body: some View {
         HStack(alignment: .top, spacing: Spacing.none) {
@@ -262,14 +265,23 @@ struct TimelineCardMetaLine: View {
         ]
     )
 
+    let viewModel = TimelineViewModel(repository: _StubTimelineRepository())
+
     ScrollView {
         LazyVStack(spacing: Spacing.none, pinnedViews: [.sectionHeaders]) {
             TimelineSectionView(
                 section: section,
                 isLast: true,
-                trailingPlaceholderWidth: 76
+                trailingPlaceholderWidth: 76,
+                viewModel: viewModel
             )
         }
     }
     .background(Color.windowBackground)
+}
+
+/// Preview 专用空实现
+private struct _StubTimelineRepository: TimelineRepositoryProtocol {
+    func fetchTimelineEvents(startTimestamp: Int64, endTimestamp: Int64, category: TimelineEventCategory) async throws -> [TimelineSection] { [] }
+    func fetchCalendarMarkers(for monthStart: Date, category: TimelineEventCategory) async throws -> [Date: TimelineDayMarker] { [:] }
 }

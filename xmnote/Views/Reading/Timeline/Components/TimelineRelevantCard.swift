@@ -1,5 +1,5 @@
 /**
- * [INPUT]: 依赖 TimelineRelevantEvent 数据模型、TimelineCardMetaLine、CardContainer 容器、DesignTokens 设计令牌、RichText 富文本展示、XMJXImageWall/XMJXGalleryItem 图片墙
+ * [INPUT]: 依赖 TimelineRelevantEvent 数据模型、TimelineCardMetaLine、CardContainer 容器、DesignTokens 设计令牌、ExpandableRichText 可展开富文本、XMJXImageWall/XMJXGalleryItem 图片墙
  * [OUTPUT]: 对外提供 TimelineRelevantCard（时间线相关内容卡片）
  * [POS]: Reading/Timeline 页面私有子视图，渲染相关内容标题/HTML 正文/图片墙/链接/分类标签
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -65,7 +65,7 @@ struct TimelineRelevantCard: View {
 
     // MARK: - Content View
 
-    /// URL fallback 用纯文本，正常内容用 HTML 富文本
+    /// URL fallback 用纯文本，正常内容用可展开 HTML 富文本
     @ViewBuilder
     private var contentView: some View {
         if contentFallbackToURL {
@@ -75,7 +75,7 @@ struct TimelineRelevantCard: View {
                 .lineSpacing(TimelineTypography.eventRichTextLineSpacing)
                 .fixedSize(horizontal: false, vertical: true)
         } else {
-            RichText(
+            ExpandableRichText(
                 html: event.content,
                 baseFont: TimelineTypography.eventRichTextBaseFont,
                 lineSpacing: TimelineTypography.eventRichTextLineSpacing

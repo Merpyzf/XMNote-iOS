@@ -250,7 +250,8 @@ private extension ReadingTimelineContentView {
                         TimelineSectionView(
                             section: section,
                             isLast: index == viewModel.sections.count - 1,
-                            trailingPlaceholderWidth: TimelineFilterHostStyle.controlWidth
+                            trailingPlaceholderWidth: TimelineFilterHostStyle.controlWidth,
+                            viewModel: viewModel
                         )
                     }
                 }

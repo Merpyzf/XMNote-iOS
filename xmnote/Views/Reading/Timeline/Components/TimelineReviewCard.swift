@@ -1,5 +1,5 @@
 /**
- * [INPUT]: 依赖 TimelineReviewEvent 数据模型、TimelineCardMetaLine、CardContainer 容器、DesignTokens 设计令牌、RichText 富文本展示、XMJXImageWall/XMJXGalleryItem 图片墙
+ * [INPUT]: 依赖 TimelineReviewEvent 数据模型、TimelineCardMetaLine、CardContainer 容器、DesignTokens 设计令牌、ExpandableRichText 可展开富文本、XMJXImageWall/XMJXGalleryItem 图片墙
  * [OUTPUT]: 对外提供 TimelineReviewCard（时间线书评卡片）
  * [POS]: Reading/Timeline 页面私有子视图，渲染书评标题、HTML 正文、图片墙与星级评分
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -26,7 +26,7 @@ struct TimelineReviewCard: View {
                 }
 
                 if !event.content.isEmpty {
-                    RichText(
+                    ExpandableRichText(
                         html: event.content,
                         baseFont: TimelineTypography.eventRichTextBaseFont,
                         lineSpacing: TimelineTypography.eventRichTextLineSpacing

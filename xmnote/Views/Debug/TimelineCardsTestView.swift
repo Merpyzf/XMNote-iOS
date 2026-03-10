@@ -22,6 +22,7 @@ struct TimelineCardsTestView: View {
 
 private struct TimelineCardsTestContentView: View {
     @Binding var selectedCategory: TimelineEventCategory
+    @State private var viewModel = TimelineViewModel(repository: _DebugStubTimelineRepository())
 
     private var filteredSections: [TimelineSection] {
         guard selectedCategory != .all else {
@@ -96,7 +97,8 @@ private struct TimelineCardsTestContentView: View {
                 TimelineSectionView(
                     section: section,
                     isLast: index == filteredSections.count - 1,
-                    trailingPlaceholderWidth: 0
+                    trailingPlaceholderWidth: 0,
+                    viewModel: viewModel
                 )
             }
         }
@@ -285,6 +287,12 @@ enum TimelineCardsMockData {
         f.dateFormat = "yyyy-MM-dd"
         return f.string(from: date)
     }
+}
+
+/// Debug 专用空实现
+private struct _DebugStubTimelineRepository: TimelineRepositoryProtocol {
+    func fetchTimelineEvents(startTimestamp: Int64, endTimestamp: Int64, category: TimelineEventCategory) async throws -> [TimelineSection] { [] }
+    func fetchCalendarMarkers(for monthStart: Date, category: TimelineEventCategory) async throws -> [Date: TimelineDayMarker] { [:] }
 }
 
 #Preview {

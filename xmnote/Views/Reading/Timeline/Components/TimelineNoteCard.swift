@@ -1,5 +1,5 @@
 /**
- * [INPUT]: 依赖 TimelineNoteEvent 数据模型、TimelineCardMetaLine、CardContainer 容器、DesignTokens 设计令牌、RichText 富文本展示、XMJXImageWall/XMJXGalleryItem 图片墙
+ * [INPUT]: 依赖 TimelineNoteEvent 数据模型、TimelineCardMetaLine、CardContainer 容器、DesignTokens 设计令牌、ExpandableRichText 可展开富文本、XMJXImageWall/XMJXGalleryItem 图片墙
  * [OUTPUT]: 对外提供 TimelineNoteCard（时间线书摘卡片）
  * [POS]: Reading/Timeline 页面私有子视图，渲染书摘 HTML 正文、用户批注与附图墙
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -18,7 +18,7 @@ struct TimelineNoteCard: View {
             VStack(alignment: .leading, spacing: Spacing.base) {
                 TimelineCardMetaLine(timestamp: timestamp, bookName: bookName)
 
-                RichText(
+                ExpandableRichText(
                     html: event.content,
                     baseFont: TimelineTypography.eventRichTextBaseFont,
                     lineSpacing: TimelineTypography.eventRichTextLineSpacing
@@ -44,7 +44,7 @@ struct TimelineNoteCard: View {
                 .fill(Color.brand.opacity(0.5))
                 .frame(width: 2.5)
 
-            RichText(
+            ExpandableRichText(
                 html: event.idea,
                 baseFont: TimelineTypography.eventRichTextBaseFont,
                 textColor: .secondaryLabel,
