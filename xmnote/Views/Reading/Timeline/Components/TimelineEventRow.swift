@@ -11,7 +11,7 @@ import SwiftUI
 
 /// 粘性日期头部：绿点 + MM.dd yyyy + 右侧筛选入口占位，用于 LazyVStack pinnedViews。
 /// 实际筛选入口由页面层单实例承载，避免 section 切换时控件实例抖动。
-struct TimelineSectionHeader: View {
+struct TimelineSectionHeader: View, Equatable {
     let date: Date
     let trailingPlaceholderWidth: CGFloat
 
@@ -82,11 +82,12 @@ struct TimelineSectionView: View {
 
     var body: some View {
         Section {
-            ForEach(Array(section.events.enumerated()), id: \.element.id) { index, event in
+            ForEach(section.events) { event in
                 TimelineEventRow(
                     event: event,
-                    isLastEvent: index == section.events.count - 1 && isLast
+                    isLastEvent: isLast && event.id == section.events.last?.id
                 )
+                .equatable()
             }
         } header: {
             TimelineSectionHeader(
@@ -100,33 +101,21 @@ struct TimelineSectionView: View {
 // MARK: - Timeline Event Row
 
 /// 时间线单事件行：左侧虚线装饰 + 右侧卡片，时间与书名已移入卡片内部。
-struct TimelineEventRow: View {
+struct TimelineEventRow: View, Equatable {
     let event: TimelineEvent
     let isLastEvent: Bool
 
     var body: some View {
         HStack(alignment: .top, spacing: Spacing.none) {
-            dashedLine
+            TimelineConnectorShape(isLastEvent: isLastEvent)
+                .stroke(style: StrokeStyle(lineWidth: 1.5, dash: [4, 3]))
+                .foregroundStyle(Color.textHint.opacity(0.35))
                 .frame(width: decoratorWidth)
 
             cardContent
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.leading, Spacing.cozy)
                 .padding(.bottom, Spacing.screenEdge)
-        }
-    }
-
-    // MARK: - Left Decorator
-
-    private var dashedLine: some View {
-        GeometryReader { geo in
-            Path { path in
-                let x = dotSize / 2
-                path.move(to: CGPoint(x: x, y: 0))
-                path.addLine(to: CGPoint(x: x, y: isLastEvent ? geo.size.height * 0.5 : geo.size.height))
-            }
-            .stroke(style: StrokeStyle(lineWidth: 1.5, dash: [4, 3]))
-            .foregroundStyle(Color.textHint.opacity(0.35))
         }
     }
 
@@ -190,6 +179,19 @@ struct TimelineEventRow: View {
                 bookName: event.bookName
             )
         }
+    }
+}
+
+private struct TimelineConnectorShape: Shape {
+    let isLastEvent: Bool
+
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        let x = dotSize / 2
+        let endY = isLastEvent ? rect.height * 0.5 : rect.height
+        path.move(to: CGPoint(x: x, y: 0))
+        path.addLine(to: CGPoint(x: x, y: endY))
+        return path
     }
 }
 

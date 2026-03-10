@@ -7,6 +7,7 @@
 
 import HorizonCalendar
 import SwiftUI
+import UIKit
 
 /// 首页在读模块的正式时间线页面（外壳）。
 /// 通过 .task 延迟创建 ViewModel，确保 @Environment 中的 RepositoryContainer 可用。
@@ -33,14 +34,42 @@ struct ReadingTimelineView: View {
 
 // MARK: - Content View
 
-/// 时间线页面内容视图，持有 ViewModel 并管理日历物理状态。
+/// 时间线页面内容视图，只负责容器组合，避免列表与日历共享同一观察热区。
 private struct ReadingTimelineContentView: View {
+    @Bindable var viewModel: TimelineViewModel
+
+    var body: some View {
+        ScrollView {
+            VStack(spacing: Spacing.base) {
+                TimelineCalendarPanel(viewModel: viewModel)
+                TimelineListContainer(viewModel: viewModel)
+            }
+            .padding(.horizontal, Spacing.screenEdge)
+            .padding(.top, Spacing.half)
+            .padding(.bottom, Spacing.base)
+        }
+        .coordinateSpace(name: Self.timelineScrollCoordinateSpaceName)
+    }
+}
+
+private extension ReadingTimelineContentView {
+    static var timelineScrollCoordinateSpaceName: String {
+        "reading-timeline-scroll-space"
+    }
+}
+
+// MARK: - Calendar Panel
+
+/// 日历面板子树，隔离 sections/isLoading 变化对 HorizonCalendar 桥接层的影响。
+private struct TimelineCalendarPanel: View {
     @Bindable var viewModel: TimelineViewModel
     @StateObject private var calendarProxy = CalendarViewProxy()
     @State private var calendarHeight: CGFloat = 320
     @State private var calendarViewportWidth: CGFloat = 0
-    @State private var isUserPagingInFlight: Bool = false
-    @State private var isProgrammaticLongJump: Bool = false
+    @State private var isUserPagingInFlight = false
+    @State private var isProgrammaticLongJump = false
+    @State private var markerPreloadTask: Task<Void, Never>?
+    @State private var lastMarkerPreloadRequest: TimelineMarkerPreloadRequest?
 
     private let calendar: Calendar
     private let visibleDateRange: ClosedRange<Date>
@@ -76,28 +105,6 @@ private struct ReadingTimelineContentView: View {
     }
 
     var body: some View {
-        ScrollView {
-            VStack(spacing: Spacing.base) {
-                calendarPanelCard
-                timelineList
-            }
-            .padding(.horizontal, Spacing.screenEdge)
-            .padding(.top, Spacing.half)
-            .padding(.bottom, Spacing.base)
-        }
-        .coordinateSpace(name: Self.timelineScrollCoordinateSpaceName)
-        .onAppear {
-            DispatchQueue.main.async {
-                jumpToDate(calendar.startOfDay(for: Date()), animated: false)
-            }
-        }
-    }
-}
-
-// MARK: - UI
-
-private extension ReadingTimelineContentView {
-    var calendarPanelCard: some View {
         CardContainer(cornerRadius: TimelineCalendarStyle.panelCornerRadius) {
             VStack(spacing: Spacing.base) {
                 HStack(alignment: .lastTextBaseline, spacing: Spacing.base) {
@@ -193,24 +200,31 @@ private extension ReadingTimelineContentView {
                     .onDaySelection { day in
                         guard let date = date(for: day) else { return }
                         let monthStart = Self.monthStart(of: date, using: calendar)
-                        applyDisplayedMonth(monthStart, animated: false)
-                        Task { await viewModel.selectDate(date) }
+                        commitHeaderState(
+                            selectedDay: date,
+                            monthStart: monthStart,
+                            animated: false
+                        )
                     }
                     .onHorizontalMonthPagingProgress { progressContext in
                         handleMonthPagingProgress(progressContext)
                     }
                     .onScroll { _, isUserDragging in
-                        if isUserDragging {
+                        if isUserDragging, !isUserPagingInFlight {
                             isUserPagingInFlight = true
                         }
                     }
                     .onDragEnd { visibleRange, willDecelerate in
                         guard !willDecelerate else { return }
-                        isUserPagingInFlight = false
+                        if isUserPagingInFlight {
+                            isUserPagingInFlight = false
+                        }
                         settleMonthAfterPaging(visibleRange)
                     }
                     .onDeceleratingEnd { visibleRange in
-                        isUserPagingInFlight = false
+                        if isUserPagingInFlight {
+                            isUserPagingInFlight = false
+                        }
                         settleMonthAfterPaging(visibleRange)
                     }
                     .onAppear {
@@ -233,17 +247,31 @@ private extension ReadingTimelineContentView {
                 .padding(.bottom, Spacing.contentEdge)
             }
         }
-    }
-
-    var timelineList: some View {
-        TimelineListContainer(
-            sections: viewModel.sections,
-            isLoading: viewModel.isLoading,
-            selectedCategory: viewModel.selectedCategory,
-            onCategorySelected: { category in
-                Task { await viewModel.selectCategory(category) }
+        .onAppear {
+            DispatchQueue.main.async {
+                jumpToDate(calendar.startOfDay(for: Date()), animated: false)
             }
-        )
+        }
+        .onDisappear {
+            markerPreloadTask?.cancel()
+            markerPreloadTask = nil
+            lastMarkerPreloadRequest = nil
+        }
+    }
+}
+
+private extension TimelineCalendarPanel {
+    var availableMonthStarts: [Date] {
+        let lowerMonth = Self.monthStart(of: visibleDateRange.lowerBound, using: calendar)
+        let upperMonth = Self.monthStart(of: visibleDateRange.upperBound, using: calendar)
+        var result: [Date] = []
+        var cursor = lowerMonth
+        while cursor <= upperMonth {
+            result.append(cursor)
+            guard let next = calendar.date(byAdding: .month, value: 1, to: cursor) else { break }
+            cursor = Self.monthStart(of: next, using: calendar)
+        }
+        return result
     }
 
     var displayedMonthTitleText: some View {
@@ -284,86 +312,6 @@ private extension ReadingTimelineContentView {
         }
         .animation(.snappy(duration: 0.24), value: dayOffset)
     }
-}
-
-private struct TimelineListContainer: View {
-    let sections: [TimelineSection]
-    let isLoading: Bool
-    let selectedCategory: TimelineEventCategory
-    let onCategorySelected: (TimelineEventCategory) -> Void
-
-    @State private var timelineListMinY: CGFloat = .zero
-
-    var body: some View {
-        TimelineListContent(
-            sections: sections,
-            isLoading: isLoading
-        )
-        .overlay(alignment: .topTrailing) {
-            TimelineCategoryFilterMenu(
-                selectedCategory: selectedCategory,
-                onCategorySelected: onCategorySelected
-            )
-            .disabled(isLoading)
-            .padding(.top, Spacing.cozy)
-            .offset(y: max(0, -timelineListMinY))
-            .zIndex(1)
-        }
-        .onGeometryChange(for: CGFloat.self) { geometry in
-            geometry.frame(in: .named(ReadingTimelineContentView.timelineScrollCoordinateSpaceName)).minY
-        } action: { minY in
-            guard abs(minY - timelineListMinY) > 0.5 else { return }
-            timelineListMinY = minY
-        }
-    }
-}
-
-private struct TimelineListContent: View {
-    let sections: [TimelineSection]
-    let isLoading: Bool
-
-    var body: some View {
-        Group {
-            if isLoading {
-                ProgressView()
-                    .padding(.vertical, Spacing.double)
-            } else if sections.isEmpty {
-                EmptyStateView(icon: "clock.arrow.circlepath", message: "当日没有匹配事件")
-                    .padding(.vertical, Spacing.double)
-            } else {
-                LazyVStack(spacing: Spacing.none, pinnedViews: [.sectionHeaders]) {
-                    ForEach(Array(sections.enumerated()), id: \.element.id) { index, section in
-                        TimelineSectionView(
-                            section: section,
-                            isLast: index == sections.count - 1,
-                            trailingPlaceholderWidth: TimelineFilterHostStyle.controlWidth
-                        )
-                    }
-                }
-            }
-        }
-    }
-}
-
-// MARK: - Data / Marker
-
-private extension ReadingTimelineContentView {
-    static var timelineScrollCoordinateSpaceName: String {
-        "reading-timeline-scroll-space"
-    }
-
-    var availableMonthStarts: [Date] {
-        let lowerMonth = Self.monthStart(of: visibleDateRange.lowerBound, using: calendar)
-        let upperMonth = Self.monthStart(of: visibleDateRange.upperBound, using: calendar)
-        var result: [Date] = []
-        var cursor = lowerMonth
-        while cursor <= upperMonth {
-            result.append(cursor)
-            guard let next = calendar.date(byAdding: .month, value: 1, to: cursor) else { break }
-            cursor = Self.monthStart(of: next, using: calendar)
-        }
-        return result
-    }
 
     func settleMonthAfterPaging(_ visibleRange: DayComponentsRange) {
         guard let firstVisibleDate = date(for: visibleRange.lowerBound) else { return }
@@ -382,10 +330,7 @@ private extension ReadingTimelineContentView {
             return
         }
 
-        Task {
-            await viewModel.preloadMarkers(around: fromMonthStart)
-            await viewModel.preloadMarkers(around: toMonthStart)
-        }
+        scheduleMarkerPreload(for: [fromMonthStart, toMonthStart])
 
         let fromHeight = monthContentHeight(for: fromMonthStart, availableWidth: calendarViewportWidth)
         let toHeight = monthContentHeight(for: toMonthStart, availableWidth: calendarViewportWidth)
@@ -394,6 +339,7 @@ private extension ReadingTimelineContentView {
         let progress = min(1, max(0, context.progress))
         let interpolatedHeight = fromHeight + (toHeight - fromHeight) * progress
         guard interpolatedHeight > 0 else { return }
+        guard abs(calendarHeight - interpolatedHeight) > 0.5 else { return }
 
         var transaction = Transaction(animation: nil)
         transaction.disablesAnimations = true
@@ -403,12 +349,13 @@ private extension ReadingTimelineContentView {
     }
 
     func applyDisplayedMonth(_ monthStart: Date, animated: Bool) {
-        if !calendar.isDate(monthStart, equalTo: viewModel.displayedMonthStart, toGranularity: .month) {
-            viewModel.displayedMonthStart = monthStart
-            Task { await viewModel.preloadMarkers(around: monthStart) }
+        let normalizedMonth = Self.monthStart(of: monthStart, using: calendar)
+        if normalizedMonth != viewModel.displayedMonthStart {
+            viewModel.displayedMonthStart = normalizedMonth
+            scheduleMarkerPreload(for: [normalizedMonth])
         }
         updateCalendarHeight(
-            for: monthStart,
+            for: normalizedMonth,
             availableWidth: calendarViewportWidth,
             animated: animated
         )
@@ -423,7 +370,9 @@ private extension ReadingTimelineContentView {
 
         if shouldUseLongJump {
             isProgrammaticLongJump = true
-            isUserPagingInFlight = false
+            if isUserPagingInFlight {
+                isUserPagingInFlight = false
+            }
             commitHeaderState(
                 selectedDay: clamped,
                 monthStart: targetMonthStart,
@@ -441,11 +390,10 @@ private extension ReadingTimelineContentView {
         }
 
         if animated {
-            Task {
-                await viewModel.preloadMarkers(around: viewModel.displayedMonthStart)
-                await viewModel.preloadMarkers(around: targetMonthStart)
+            scheduleMarkerPreload(for: [viewModel.displayedMonthStart, targetMonthStart])
+            if !isUserPagingInFlight {
+                isUserPagingInFlight = true
             }
-            isUserPagingInFlight = true
             commitHeaderState(
                 selectedDay: clamped,
                 monthStart: targetMonthStart,
@@ -472,29 +420,32 @@ private extension ReadingTimelineContentView {
     }
 
     func commitHeaderState(selectedDay: Date, monthStart: Date, animated: Bool) {
-        let isMonthChanged = !calendar.isDate(monthStart, equalTo: viewModel.displayedMonthStart, toGranularity: .month)
+        let normalizedDay = calendar.startOfDay(for: selectedDay)
+        let normalizedMonth = Self.monthStart(of: monthStart, using: calendar)
+        let isMonthChanged = normalizedMonth != viewModel.displayedMonthStart
+        let isDayChanged = normalizedDay != viewModel.selectedDate
 
         if isMonthChanged {
-            viewModel.displayedMonthStart = monthStart
+            viewModel.displayedMonthStart = normalizedMonth
+            scheduleMarkerPreload(for: [normalizedMonth])
         }
 
-        if animated {
-            withAnimation(monthTransitionAnimation) {
-                viewModel.selectedDate = selectedDay
+        if isDayChanged {
+            if animated {
+                withAnimation(monthTransitionAnimation) {
+                    viewModel.selectedDate = normalizedDay
+                }
+            } else {
+                viewModel.selectedDate = normalizedDay
             }
-        } else {
-            viewModel.selectedDate = selectedDay
-        }
 
-        if isMonthChanged {
-            Task { await viewModel.preloadMarkers(around: monthStart) }
+            Task {
+                await viewModel.loadEvents()
+            }
         }
-
-        // 日期变化后异步拉取事件
-        Task { await viewModel.loadEvents() }
 
         updateCalendarHeight(
-            for: monthStart,
+            for: normalizedMonth,
             availableWidth: calendarViewportWidth,
             animated: animated
         )
@@ -537,6 +488,32 @@ private extension ReadingTimelineContentView {
         return ceil(totalHeight)
     }
 
+    func scheduleMarkerPreload(for months: [Date]) {
+        let normalizedMonths = months
+            .map { Self.monthStart(of: $0, using: calendar) }
+            .reduce(into: [Date]()) { result, month in
+                if !result.contains(month) {
+                    result.append(month)
+                }
+            }
+        guard !normalizedMonths.isEmpty else { return }
+
+        let request = TimelineMarkerPreloadRequest(
+            months: normalizedMonths,
+            category: viewModel.selectedCategory
+        )
+        guard request != lastMarkerPreloadRequest else { return }
+
+        lastMarkerPreloadRequest = request
+        markerPreloadTask?.cancel()
+        markerPreloadTask = Task {
+            for month in request.months {
+                guard !Task.isCancelled else { return }
+                await viewModel.preloadMarkers(around: month)
+            }
+        }
+    }
+
     func date(for day: DayComponents) -> Date? {
         guard let date = calendar.date(from: day.components) else { return nil }
         return calendar.startOfDay(for: date)
@@ -559,11 +536,6 @@ private extension ReadingTimelineContentView {
         let comps = calendar.dateComponents([.year, .month], from: normalized)
         let start = calendar.date(from: DateComponents(year: comps.year, month: comps.month, day: 1)) ?? normalized
         return calendar.startOfDay(for: start)
-    }
-
-    static func monthKey(for date: Date, using calendar: Calendar) -> String {
-        let comps = calendar.dateComponents([.year, .month], from: monthStart(of: date, using: calendar))
-        return String(format: "%04d-%02d", comps.year ?? 0, comps.month ?? 0)
     }
 
     static func monthDistance(from: Date, to: Date, using calendar: Calendar) -> Int {
@@ -607,6 +579,202 @@ private extension ReadingTimelineContentView {
         }
 
         return (preDiff + monthDays + endDiff) / 7
+    }
+}
+
+// MARK: - Timeline List
+
+/// 时间线列表子树，隔离日历月份和 markerRevision 变化对列表 diff 的影响。
+private struct TimelineListContainer: View {
+    @Bindable var viewModel: TimelineViewModel
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.displayScale) private var displayScale
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+    @State private var timelineListMinY: CGFloat = .zero
+    @State private var prewarmWidthBucket: Int = 0
+    @State private var prewarmTask: Task<Void, Never>?
+
+    var body: some View {
+        TimelineListContent(
+            sections: viewModel.sections,
+            sectionsRevision: viewModel.sectionsRevision,
+            isLoading: viewModel.isLoading
+        )
+        .equatable()
+        .overlay(alignment: .topTrailing) {
+            TimelineCategoryFilterMenu(
+                selectedCategory: viewModel.selectedCategory,
+                onCategorySelected: { category in
+                    Task { await viewModel.selectCategory(category) }
+                }
+            )
+            .disabled(viewModel.isLoading)
+            .padding(.top, Spacing.cozy)
+            .offset(y: max(0, -timelineListMinY))
+            .zIndex(1)
+        }
+        .onGeometryChange(for: CGFloat.self) { geometry in
+            geometry.frame(in: .named(ReadingTimelineContentView.timelineScrollCoordinateSpaceName)).minY
+        } action: { minY in
+            guard abs(minY - timelineListMinY) > 0.5 else { return }
+            timelineListMinY = minY
+        }
+        .onGeometryChange(for: Int.self) { geometry in
+            Int((geometry.size.width * max(displayScale, 1)).rounded())
+        } action: { widthBucket in
+            guard widthBucket != prewarmWidthBucket else { return }
+            prewarmWidthBucket = widthBucket
+        }
+        .onAppear {
+            schedulePrewarm(for: prewarmRequest)
+        }
+        .onChange(of: prewarmRequest) { _, request in
+            schedulePrewarm(for: request)
+        }
+        .onDisappear {
+            prewarmTask?.cancel()
+            prewarmTask = nil
+        }
+    }
+}
+
+private extension TimelineListContainer {
+    var prewarmEntries: [TimelineRichTextPrewarmEntry] {
+        var entries: [TimelineRichTextPrewarmEntry] = []
+        entries.reserveCapacity(8)
+
+        for section in viewModel.sections {
+            for event in section.events {
+                switch event.kind {
+                case .note(let note):
+                    appendPrewarmEntry(
+                        html: note.content,
+                        style: .primary,
+                        into: &entries
+                    )
+                    appendPrewarmEntry(
+                        html: note.idea,
+                        style: .secondary,
+                        into: &entries
+                    )
+                case .review(let review):
+                    appendPrewarmEntry(
+                        html: review.content,
+                        style: .primary,
+                        into: &entries
+                    )
+                case .relevant(let relevant):
+                    appendPrewarmEntry(
+                        html: relevant.content,
+                        style: .primary,
+                        into: &entries
+                    )
+                default:
+                    break
+                }
+
+                if entries.count >= 8 {
+                    return entries
+                }
+            }
+        }
+
+        return entries
+    }
+
+    var prewarmRequest: TimelineRichTextPrewarmRequest? {
+        guard !viewModel.isLoading else { return nil }
+        guard prewarmWidthBucket > 0 else { return nil }
+        guard !prewarmEntries.isEmpty else { return nil }
+
+        return TimelineRichTextPrewarmRequest(
+            entries: prewarmEntries,
+            widthBucket: prewarmWidthBucket,
+            displayScale: max(displayScale, 1),
+            userInterfaceStyle: colorScheme.userInterfaceStyle,
+            preferredContentSizeCategory: dynamicTypeSize.uiContentSizeCategory
+        )
+    }
+
+    func schedulePrewarm(for request: TimelineRichTextPrewarmRequest?) {
+        prewarmTask?.cancel()
+        guard let request else {
+            prewarmTask = nil
+            return
+        }
+
+        prewarmTask = Task {
+            try? await Task.sleep(nanoseconds: 50_000_000)
+            guard !Task.isCancelled else { return }
+
+            let traitCollection = UITraitCollection { mutableTraits in
+                mutableTraits.userInterfaceStyle = request.userInterfaceStyle
+                mutableTraits.preferredContentSizeCategory = request.preferredContentSizeCategory
+            }
+            let width = CGFloat(request.widthBucket) / request.displayScale
+
+            for entry in request.entries {
+                guard !Task.isCancelled else { return }
+                await MainActor.run {
+                    RichText.prewarmPreviewLayoutSnapshot(
+                        html: entry.html,
+                        baseFont: TimelineTypography.eventRichTextBaseFont,
+                        textColor: entry.style.textColor,
+                        lineSpacing: TimelineTypography.eventRichTextLineSpacing,
+                        maxLines: TimelineRichTextPrewarmRequest.defaultMaxLines,
+                        width: width,
+                        traitCollection: traitCollection,
+                        screenScale: request.displayScale
+                    )
+                }
+                await Task.yield()
+            }
+        }
+    }
+
+    func appendPrewarmEntry(
+        html: String,
+        style: TimelineRichTextPrewarmStyle,
+        into entries: inout [TimelineRichTextPrewarmEntry]
+    ) {
+        guard entries.count < 8 else { return }
+        let trimmed = html.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        entries.append(TimelineRichTextPrewarmEntry(html: trimmed, style: style))
+    }
+}
+
+private struct TimelineListContent: View, Equatable {
+    let sections: [TimelineSection]
+    let sectionsRevision: Int
+    let isLoading: Bool
+
+    static func == (lhs: TimelineListContent, rhs: TimelineListContent) -> Bool {
+        lhs.sectionsRevision == rhs.sectionsRevision &&
+        lhs.isLoading == rhs.isLoading
+    }
+
+    var body: some View {
+        Group {
+            if isLoading {
+                ProgressView()
+                    .padding(.vertical, Spacing.double)
+            } else if sections.isEmpty {
+                EmptyStateView(icon: "clock.arrow.circlepath", message: "当日没有匹配事件")
+                    .padding(.vertical, Spacing.double)
+            } else {
+                LazyVStack(spacing: Spacing.none, pinnedViews: [.sectionHeaders]) {
+                    ForEach(sections) { section in
+                        TimelineSectionView(
+                            section: section,
+                            isLast: section.id == sections.last?.id,
+                            trailingPlaceholderWidth: TimelineFilterHostStyle.controlWidth
+                        )
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -678,6 +846,40 @@ private struct CalendarDependencyToken: Hashable {
     let markerRevision: Int
 }
 
+private struct TimelineMarkerPreloadRequest: Equatable {
+    let months: [Date]
+    let category: TimelineEventCategory
+}
+
+private struct TimelineRichTextPrewarmEntry: Equatable {
+    let html: String
+    let style: TimelineRichTextPrewarmStyle
+}
+
+private struct TimelineRichTextPrewarmRequest: Equatable {
+    static let defaultMaxLines = 3
+
+    let entries: [TimelineRichTextPrewarmEntry]
+    let widthBucket: Int
+    let displayScale: CGFloat
+    let userInterfaceStyle: UIUserInterfaceStyle
+    let preferredContentSizeCategory: UIContentSizeCategory
+}
+
+private enum TimelineRichTextPrewarmStyle: Int, Equatable {
+    case primary
+    case secondary
+
+    var textColor: UIColor {
+        switch self {
+        case .primary:
+            return .label
+        case .secondary:
+            return .secondaryLabel
+        }
+    }
+}
+
 /// 时间线筛选入口样式常量，约束占位宽度与胶囊最小宽度保持一致。
 private enum TimelineFilterHostStyle {
     static let controlWidth: CGFloat = 76
@@ -718,6 +920,50 @@ private struct TimelineCategoryFilterMenu: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+    }
+}
+
+private extension ColorScheme {
+    var userInterfaceStyle: UIUserInterfaceStyle {
+        switch self {
+        case .dark:
+            return .dark
+        default:
+            return .light
+        }
+    }
+}
+
+private extension DynamicTypeSize {
+    var uiContentSizeCategory: UIContentSizeCategory {
+        switch self {
+        case .xSmall:
+            return .extraSmall
+        case .small:
+            return .small
+        case .medium:
+            return .medium
+        case .large:
+            return .large
+        case .xLarge:
+            return .extraLarge
+        case .xxLarge:
+            return .extraExtraLarge
+        case .xxxLarge:
+            return .extraExtraExtraLarge
+        case .accessibility1:
+            return .accessibilityMedium
+        case .accessibility2:
+            return .accessibilityLarge
+        case .accessibility3:
+            return .accessibilityExtraLarge
+        case .accessibility4:
+            return .accessibilityExtraExtraLarge
+        case .accessibility5:
+            return .accessibilityExtraExtraExtraLarge
+        @unknown default:
+            return .large
+        }
     }
 }
 

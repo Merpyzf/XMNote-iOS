@@ -10,7 +10,7 @@ import Foundation
 // MARK: - 事件子结构
 
 /// 书摘事件，携带划线正文、用户批注与附图地址
-struct TimelineNoteEvent {
+struct TimelineNoteEvent: Equatable {
     let content: String
     let idea: String
     let bookTitle: String
@@ -18,7 +18,7 @@ struct TimelineNoteEvent {
 }
 
 /// 阅读计时事件，携带时长与时间范围
-struct TimelineReadTimingEvent {
+struct TimelineReadTimingEvent: Equatable {
     let elapsedSeconds: Int64
     let startTime: Int64
     let endTime: Int64
@@ -26,19 +26,19 @@ struct TimelineReadTimingEvent {
 }
 
 /// 阅读状态变更事件，携带状态 ID、读完次数与评分
-struct TimelineReadStatusEvent {
+struct TimelineReadStatusEvent: Equatable {
     let statusId: Int64
     let readDoneCount: Int64
     let bookScore: Int64
 }
 
 /// 打卡事件，携带阅读量级别
-struct TimelineCheckInEvent {
+struct TimelineCheckInEvent: Equatable {
     let amount: Int64
 }
 
 /// 书评事件，携带标题、正文、评分与图片地址
-struct TimelineReviewEvent {
+struct TimelineReviewEvent: Equatable {
     let title: String
     let content: String
     let bookScore: Int64
@@ -46,7 +46,7 @@ struct TimelineReviewEvent {
 }
 
 /// 相关内容事件，携带标题、正文、链接、分类名与图片地址
-struct TimelineRelevantEvent {
+struct TimelineRelevantEvent: Equatable {
     let title: String
     let content: String
     let url: String
@@ -55,7 +55,7 @@ struct TimelineRelevantEvent {
 }
 
 /// 相关书籍事件，携带被关联书籍信息与分类标签
-struct TimelineRelevantBookEvent {
+struct TimelineRelevantBookEvent: Equatable {
     let contentBookName: String
     let contentBookAuthor: String
     let contentBookCover: String
@@ -65,7 +65,7 @@ struct TimelineRelevantBookEvent {
 // MARK: - 事件类型
 
 /// 7 种时间线事件的类型判别联合体
-enum TimelineEventKind {
+enum TimelineEventKind: Equatable {
     case note(TimelineNoteEvent)
     case readTiming(TimelineReadTimingEvent)
     case readStatus(TimelineReadStatusEvent)
@@ -78,7 +78,7 @@ enum TimelineEventKind {
 // MARK: - 统一事件
 
 /// 时间线单条事件，聚合事件类型与书籍信息，按 timestamp 排序
-struct TimelineEvent: Identifiable {
+struct TimelineEvent: Identifiable, Equatable {
     let id: String
     let kind: TimelineEventKind
     let timestamp: Int64
@@ -90,7 +90,7 @@ struct TimelineEvent: Identifiable {
 // MARK: - 按日分组
 
 /// 时间线按日分组，date 为当日零时，events 按时间降序排列
-struct TimelineSection: Identifiable {
+struct TimelineSection: Identifiable, Equatable {
     let id: String
     let date: Date
     let events: [TimelineEvent]
@@ -99,7 +99,7 @@ struct TimelineSection: Identifiable {
 // MARK: - 筛选类别
 
 /// 时间线事件筛选类别，对齐 Android 端 7 种 + 全部
-enum TimelineEventCategory: String, CaseIterable, Identifiable {
+enum TimelineEventCategory: String, CaseIterable, Identifiable, Equatable {
     case all = "全部"
     case note = "书摘"
     case readStatus = "状态"

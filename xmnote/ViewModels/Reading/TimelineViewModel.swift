@@ -16,6 +16,7 @@ import SwiftUI
 @Observable
 final class TimelineViewModel {
     var sections: [TimelineSection] = []
+    private(set) var sectionsRevision: Int = 0
     var selectedDate: Date
     var selectedCategory: TimelineEventCategory = .all
     var displayedMonthStart: Date
@@ -55,24 +56,28 @@ final class TimelineViewModel {
 
         let (start, end) = calculateTimeRange()
         do {
-            sections = try await repository.fetchTimelineEvents(
+            let fetchedSections = try await repository.fetchTimelineEvents(
                 startTimestamp: start,
                 endTimestamp: end,
                 category: selectedCategory
             )
+            applySections(fetchedSections)
         } catch {
-            sections = []
+            applySections([])
         }
     }
 
     /// 选中日期变更：更新 selectedDate 并重新拉取事件。
     func selectDate(_ date: Date) async {
-        selectedDate = calendar.startOfDay(for: date)
+        let normalized = calendar.startOfDay(for: date)
+        guard normalized != selectedDate else { return }
+        selectedDate = normalized
         await loadEvents()
     }
 
     /// 分类筛选变更：清空日历标记缓存，重新拉取事件与标记。
     func selectCategory(_ category: TimelineEventCategory) async {
+        guard category != selectedCategory else { return }
         selectedCategory = category
         markerCache.removeAll()
         markerRevision &+= 1
@@ -82,8 +87,10 @@ final class TimelineViewModel {
 
     /// 月份翻页后预加载前后月份日历标记。
     func updateDisplayedMonth(_ monthStart: Date) async {
-        displayedMonthStart = monthStart
-        await preloadMarkers(around: monthStart)
+        let normalized = Self.monthStart(of: monthStart, using: calendar)
+        guard normalized != displayedMonthStart else { return }
+        displayedMonthStart = normalized
+        await preloadMarkers(around: normalized)
     }
 
     /// 预加载目标月份 ± 1 的日历标记，已缓存月份跳过。
@@ -120,6 +127,13 @@ final class TimelineViewModel {
         let key = Self.monthKey(for: date, using: calendar)
         let normalized = calendar.startOfDay(for: date)
         return markerCache[key]?[normalized]
+    }
+
+    /// 仅在列表数据实际变化时递增 revision，避免滚动期为 Equatable 深比较整组 section。
+    func applySections(_ newSections: [TimelineSection]) {
+        guard newSections != sections else { return }
+        sections = newSections
+        sectionsRevision &+= 1
     }
 }
 

@@ -420,6 +420,50 @@ struct RichText: UIViewRepresentable {
         return cachedLayoutSnapshot(for: layoutKey)
     }
 
+    @MainActor
+    static func prewarmPreviewLayoutSnapshot(
+        html: String,
+        baseFont: UIFont,
+        textColor: UIColor,
+        lineSpacing: CGFloat,
+        maxLines: Int,
+        width: CGFloat,
+        traitCollection: UITraitCollection,
+        screenScale: CGFloat
+    ) {
+        guard width > 0, width.isFinite else { return }
+
+        let contentKey = previewContentKey(
+            html: html,
+            baseFont: baseFont,
+            textColor: textColor,
+            lineSpacing: lineSpacing,
+            traitCollection: traitCollection
+        )
+        let layoutKey = layoutCacheKey(
+            contentKey: contentKey,
+            maxLines: maxLines,
+            width: width,
+            screenScale: screenScale
+        )
+        guard cachedLayoutSnapshot(for: layoutKey) == nil else { return }
+
+        let attributed = resolvedPreviewAttributedString(
+            html: html,
+            baseFont: baseFont,
+            textColor: textColor,
+            lineSpacing: lineSpacing,
+            traitCollection: traitCollection
+        )
+        let measurementView = CollapsedRichTextPreviewView()
+        let snapshot = measurementView.measureLayoutSnapshot(
+            attributedText: attributed,
+            width: width,
+            maxLines: maxLines
+        )
+        storeLayoutSnapshot(snapshot, for: layoutKey)
+    }
+
     static func previewContentKey(
         html: String,
         baseFont: UIFont,
