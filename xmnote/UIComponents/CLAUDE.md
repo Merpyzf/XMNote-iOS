@@ -10,6 +10,9 @@
 - `XMBookCover.swift`: 统一书籍封面组件（固定宽高比 0.7 + `.fill` Crop 裁切 + 占位图 + 可配边框，支持 responsive/fixedWidth/fixedHeight/fixedSize 四种尺寸模式）
 - `XMRemoteImage.swift`: 统一远程图片组件（静态图 + GIF 探测/降级 + 占位）
 - `XMGIFImageView.swift`: GIF 动画承载桥接组件（基于 Gifu）
+- `RichText.swift`: 只读 HTML 富文本展示组件（`UITextView + RichTextLayoutManager`，支持截断状态回调与布局缓存）
+- `CollapsedRichTextPreview.swift`: ExpandableRichText 收起态轻量预览组件（`UILabel` + 原生省略号截断）
+- `ExpandableRichText.swift`: 可展开/收起 HTML 富文本组件（完整态 RichText + 收起态轻量预览双通道）
 
 ## TopBar/
 
@@ -20,6 +23,7 @@
 
 ## Tabs/
 
+- `KeepAliveSwitcherHost.swift`: 通用懒激活保活切换容器（已激活子页常驻，仅切换可见性）
 - `TopSwitcher.swift`: 顶部标题/标签切换组件
 
 ## Charts/

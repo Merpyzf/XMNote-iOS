@@ -6,6 +6,9 @@
 | ReadingDurationRankingChart | `xmnote/UIComponents/Charts/ReadingDurationRankingChart.swift` | `docs/component-guides/ReadingDurationRankingChart使用说明.md` | 已完成 |
 | XMRemoteImage | `xmnote/UIComponents/Foundation/XMRemoteImage.swift` | `docs/component-guides/XMRemoteImage使用说明.md` | 已完成 |
 | XMGIFImageView | `xmnote/UIComponents/Foundation/XMGIFImageView.swift` | `docs/component-guides/XMGIFImageView使用说明.md` | 已完成 |
+| ExpandableRichText | `xmnote/UIComponents/Foundation/ExpandableRichText.swift` | `docs/component-guides/ExpandableRichText使用说明.md` | 已完成 |
+| RichText | `xmnote/UIComponents/Foundation/RichText.swift` | `docs/component-guides/ExpandableRichText使用说明.md` | 已完成 |
+| CollapsedRichTextPreview | `xmnote/UIComponents/Foundation/CollapsedRichTextPreview.swift` | `docs/component-guides/ExpandableRichText使用说明.md` | 已完成 |
 | XMJXImageWall | `xmnote/UIComponents/GalleryJX/XMJXImageWall.swift` | `docs/component-guides/XMJXImageWall使用说明.md` | 已完成 |
 | XMJXThumbnailView | `xmnote/UIComponents/GalleryJX/XMJXThumbnailView.swift` | `docs/component-guides/XMJXThumbnailView使用说明.md` | 已完成 |
 | BookContainerView | `xmnote/Views/Book/BookContainerView.swift` | `docs/component-guides/BookContainerView使用说明.md` | 已完成 |
@@ -23,6 +26,7 @@
 | ReadingContainerView | `xmnote/Views/Reading/ReadingContainerView.swift` | `docs/component-guides/ReadingContainerView使用说明.md` | 已完成 |
 | ReadingHeatmapWidgetView | `xmnote/Views/Reading/ReadingHeatmapWidgetView.swift` | `docs/component-guides/ReadingHeatmapWidgetView使用说明.md` | 已完成 |
 | ReadCalendarView | `xmnote/Views/Reading/ReadCalendar/ReadCalendarView.swift` | `docs/component-guides/ReadCalendar使用说明.md` | 已完成 |
+| ReadingTimelineView | `xmnote/Views/Reading/Timeline/ReadingTimelineView.swift` | `docs/component-guides/ReadingTimelineView使用说明.md` | 已完成 |
 | PersonalView | `xmnote/Views/Personal/PersonalView.swift` | `docs/component-guides/PersonalView使用说明.md` | 已完成 |
 
 维护规则

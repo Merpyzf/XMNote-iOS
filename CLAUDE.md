@@ -433,6 +433,7 @@ View (SwiftUI)
 - `xmnote/Domain`
 - `xmnote/Infra`
 - `xmnote/Navigation`
+- `xmnote/Resources`
 - `xmnote/RichTextEditor`
 - `xmnote/Services`
 - `xmnote/UIComponents`

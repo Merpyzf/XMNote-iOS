@@ -9,6 +9,7 @@
 - `ReadingDurationRankingChart使用说明.md`: ReadingDurationRankingChart 阅读时长排行组件接入指南与参数说明。
 - `XMRemoteImage使用说明.md`: XMRemoteImage 统一远程图片组件接入指南与参数说明。
 - `XMGIFImageView使用说明.md`: XMGIFImageView GIF 动画承载组件接入指南与参数说明。
+- `ExpandableRichText使用说明.md`: ExpandableRichText / RichText 富文本展示组件接入指南与参数说明。
 - `BookContainerView使用说明.md`: BookContainerView 页面组件接入指南与参数说明。
 - `BookGridView使用说明.md`: BookGridView 页面组件接入指南与参数说明。
 - `BookGridItemView使用说明.md`: BookGridItemView 页面组件接入指南与参数说明。
@@ -24,6 +25,7 @@
 - `ReadingContainerView使用说明.md`: ReadingContainerView 页面组件接入指南与参数说明。
 - `ReadingHeatmapWidgetView使用说明.md`: ReadingHeatmapWidgetView 页面组件接入指南与参数说明。
 - `ReadCalendar使用说明.md`: ReadCalendarView 页面组件接入指南与参数说明。
+- `ReadingTimelineView使用说明.md`: ReadingTimelineView 页面组件接入指南与参数说明。
 - `PersonalView使用说明.md`: PersonalView 页面组件接入指南与参数说明。
 
 执行约束
