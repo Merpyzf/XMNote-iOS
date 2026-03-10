@@ -38,6 +38,9 @@ struct MainTabView: View {
                         onOpenDebugCenter: { append(DebugRoute.debugCenter, to: .reading) },
                         onOpenReadCalendar: { date in
                             readingPath.append(ReadingRoute.readCalendar(date: date))
+                        },
+                        onOpenBookDetail: { bookId in
+                            append(BookRoute.detail(bookId: bookId), to: .reading)
                         }
                     )
                         .toolbar(.hidden, for: .navigationBar)

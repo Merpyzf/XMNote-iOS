@@ -2,7 +2,7 @@ import Foundation
 
 /**
  * [INPUT]: 依赖 Models 与 Services 层的数据类型定义
- * [OUTPUT]: 对外提供 Book/Note/BackupServer/Backup/Statistics/ReadCalendarColor/Timeline 七类 Repository 协议
+ * [OUTPUT]: 对外提供 Book/Note/BackupServer/Backup/Statistics/ReadCalendarColor/Timeline/ReadingDashboard 八类 Repository 协议
  * [POS]: Domain 层仓储契约，定义 Presentation 获取本地/网络数据的唯一入口
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -161,4 +161,16 @@ protocol TimelineRepositoryProtocol {
         for monthStart: Date,
         category: TimelineEventCategory
     ) async throws -> [Date: TimelineDayMarker]
+}
+
+/// 在读首页仪表盘仓储契约，集中封装首页聚合读取与目标写入。
+protocol ReadingDashboardRepositoryProtocol {
+    /// 持续观察首页聚合快照；数据库变更或目标调整后会自动刷新。
+    func observeDashboard(referenceDate: Date) -> AsyncThrowingStream<ReadingDashboardSnapshot, Error>
+
+    /// 更新指定日期对应的每日阅读目标（秒）。
+    func updateDailyReadingGoal(seconds: Int, for date: Date) async throws
+
+    /// 更新指定年份对应的年度阅读目标（本）。
+    func updateYearlyReadGoal(count: Int, forYear year: Int) async throws
 }
