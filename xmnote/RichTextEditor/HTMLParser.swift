@@ -14,7 +14,7 @@ final class HTMLParser: NSObject {
 
     // MARK: - 公开接口
 
-    /// 将 HTML 字符串解析为 NSAttributedString
+    /// 将 HTML 字符串解析为 NSMutableAttributedString，调用方可直接追加属性无需拷贝
     /// - Parameters:
     ///   - html: HTML 字符串（来自 Android Knife 序列化）
     ///   - baseFont: 基础字体
@@ -23,7 +23,7 @@ final class HTMLParser: NSObject {
         _ html: String,
         baseFont: UIFont = .systemFont(ofSize: 16),
         traitCollection: UITraitCollection = .current
-    ) -> NSAttributedString {
+    ) -> NSMutableAttributedString {
         let parser = HTMLParser()
         parser.baseFont = baseFont
         parser.traitCollection = traitCollection
@@ -47,7 +47,7 @@ final class HTMLParser: NSObject {
 
     // MARK: - 解析入口
 
-    private func parseHTML(_ html: String) -> NSAttributedString {
+    private func parseHTML(_ html: String) -> NSMutableAttributedString {
         // 清理 Android Knife 的 &zwj; 前缀
         var cleaned = html
         if cleaned.hasPrefix("&zwj;") {
@@ -72,7 +72,7 @@ final class HTMLParser: NSObject {
         parser.shouldReportNamespacePrefixes = false
         parser.parse()
 
-        return NSAttributedString(attributedString: result)
+        return result
     }
 
     /// 预处理 HTML 实体：&nbsp; → 空格，&#xxx; 保留（XMLParser 能处理 &#）

@@ -53,6 +53,7 @@ struct RichText: UIViewRepresentable {
         if needsContentUpdate {
             context.coordinator.lastCacheKey = cacheKey
             context.coordinator.lastTruncationKey = ""
+            context.coordinator.lastSizeKey = ""
             let attributed = buildAttributedString()
             textView.textStorage.setAttributedString(attributed)
         }
@@ -69,6 +70,15 @@ struct RichText: UIViewRepresentable {
         let screenWidth = uiView.window?.screen.bounds.width ?? 390
         let width = proposal.width ?? screenWidth
         guard width > 0, width.isFinite else { return nil }
+
+        // SwiftUI 单次 pass 可能多次调用 sizeThatFits，缓存避免重复测量
+        let sizeKey = "\(context.coordinator.lastCacheKey)|\(Int(width))"
+        if context.coordinator.lastSizeKey == sizeKey {
+            if let callback = onTruncationChanged, maxLines > 0 {
+                detectTruncation(uiView, context: context, callback: callback)
+            }
+            return context.coordinator.lastSize
+        }
 
         // 手动同步 container width：sizeThatFits 持有确切 proposed width，
         // 但 textContainer.widthTracksTextView 依赖 frame 赋值（此时仍为 zero），
@@ -94,6 +104,8 @@ struct RichText: UIViewRepresentable {
         }
 
         let result = CGSize(width: width, height: size.height)
+        context.coordinator.lastSizeKey = sizeKey
+        context.coordinator.lastSize = result
         return result
     }
 
@@ -106,6 +118,9 @@ struct RichText: UIViewRepresentable {
         var lastTruncationResult: Bool = false
         /// 上次布局宽度，宽度变化时失效截断缓存
         var lastLayoutWidth: CGFloat = 0
+        /// sizeThatFits 结果缓存，SwiftUI 单次 pass 可能多次调用，避免重复测量
+        var lastSizeKey: String = ""
+        var lastSize: CGSize = .zero
     }
 
     // MARK: - Truncation Detection
@@ -171,8 +186,7 @@ struct RichText: UIViewRepresentable {
     // MARK: - Attributed String
 
     private func buildAttributedString() -> NSAttributedString {
-        let parsed = HTMLParser.parse(html, baseFont: baseFont)
-        let mutable = NSMutableAttributedString(attributedString: parsed)
+        let mutable = HTMLParser.parse(html, baseFont: baseFont)
         let fullRange = NSRange(location: 0, length: mutable.length)
 
         // 应用文本颜色（不覆盖 link 颜色）
