@@ -80,6 +80,7 @@ struct TimelineRelevantCard: View {
                 baseFont: TimelineTypography.eventRichTextBaseFont,
                 lineSpacing: TimelineTypography.eventRichTextLineSpacing
             )
+            .equatable()
         }
     }
 

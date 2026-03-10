@@ -1,5 +1,5 @@
 /**
- * [INPUT]: 依赖 TimelineEvent/TimelineSection 领域模型、7 种 Card 组件、DesignTokens 设计令牌、TimelineViewModel
+ * [INPUT]: 依赖 TimelineEvent/TimelineSection 领域模型、7 种 Card 组件、DesignTokens 设计令牌
  * [OUTPUT]: 对外提供 TimelineEventRow（时间线单事件行）、TimelineSectionHeader（粘性日期头 + 右侧筛选占位）与 TimelineSectionView（按日分组渲染）
  * [POS]: Reading/Timeline 页面私有子视图，整合左侧虚线装饰列与右侧事件卡片
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -52,16 +52,24 @@ struct TimelineSectionHeader: View {
     // MARK: - Date Formatting
 
     private var monthDayString: String {
-        let f = DateFormatter()
-        f.dateFormat = "MM.dd"
-        return f.string(from: date)
+        Self.monthDayFormatter.string(from: date)
     }
 
     private var yearString: String {
-        let f = DateFormatter()
-        f.dateFormat = "yyyy"
-        return f.string(from: date)
+        Self.yearFormatter.string(from: date)
     }
+
+    private static let monthDayFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "MM.dd"
+        return formatter
+    }()
+
+    private static let yearFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy"
+        return formatter
+    }()
 }
 
 // MARK: - Timeline Section
@@ -71,15 +79,13 @@ struct TimelineSectionView: View {
     let section: TimelineSection
     let isLast: Bool
     let trailingPlaceholderWidth: CGFloat
-    var viewModel: TimelineViewModel
 
     var body: some View {
         Section {
             ForEach(Array(section.events.enumerated()), id: \.element.id) { index, event in
                 TimelineEventRow(
                     event: event,
-                    isLastEvent: index == section.events.count - 1 && isLast,
-                    viewModel: viewModel
+                    isLastEvent: index == section.events.count - 1 && isLast
                 )
             }
         } header: {
@@ -97,7 +103,6 @@ struct TimelineSectionView: View {
 struct TimelineEventRow: View {
     let event: TimelineEvent
     let isLastEvent: Bool
-    var viewModel: TimelineViewModel
 
     var body: some View {
         HStack(alignment: .top, spacing: Spacing.none) {
@@ -227,10 +232,14 @@ struct TimelineCardMetaLine: View {
 
     private var timeString: String {
         let date = Date(timeIntervalSince1970: TimeInterval(timestamp) / 1000)
-        let f = DateFormatter()
-        f.dateFormat = "HH:mm"
-        return f.string(from: date)
+        return Self.timeFormatter.string(from: date)
     }
+
+    private static let timeFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "HH:mm"
+        return formatter
+    }()
 }
 
 #Preview {
@@ -265,15 +274,12 @@ struct TimelineCardMetaLine: View {
         ]
     )
 
-    let viewModel = TimelineViewModel(repository: _StubTimelineRepository())
-
     ScrollView {
         LazyVStack(spacing: Spacing.none, pinnedViews: [.sectionHeaders]) {
             TimelineSectionView(
                 section: section,
                 isLast: true,
-                trailingPlaceholderWidth: 76,
-                viewModel: viewModel
+                trailingPlaceholderWidth: 76
             )
         }
     }

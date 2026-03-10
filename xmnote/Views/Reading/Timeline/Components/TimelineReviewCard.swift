@@ -31,6 +31,7 @@ struct TimelineReviewCard: View {
                         baseFont: TimelineTypography.eventRichTextBaseFont,
                         lineSpacing: TimelineTypography.eventRichTextLineSpacing
                     )
+                    .equatable()
                 }
 
                 if !event.imageURLs.isEmpty {

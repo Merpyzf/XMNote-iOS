@@ -23,6 +23,7 @@ struct TimelineNoteCard: View {
                     baseFont: TimelineTypography.eventRichTextBaseFont,
                     lineSpacing: TimelineTypography.eventRichTextLineSpacing
                 )
+                .equatable()
 
                 if !event.idea.isEmpty {
                     ideaSection
@@ -50,6 +51,7 @@ struct TimelineNoteCard: View {
                 textColor: .secondaryLabel,
                 lineSpacing: TimelineTypography.eventRichTextLineSpacing
             )
+            .equatable()
         }
     }
 

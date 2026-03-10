@@ -39,7 +39,6 @@ private struct ReadingTimelineContentView: View {
     @StateObject private var calendarProxy = CalendarViewProxy()
     @State private var calendarHeight: CGFloat = 320
     @State private var calendarViewportWidth: CGFloat = 0
-    @State private var timelineListMinY: CGFloat = .zero
     @State private var isUserPagingInFlight: Bool = false
     @State private var isProgrammaticLongJump: Bool = false
 
@@ -237,54 +236,14 @@ private extension ReadingTimelineContentView {
     }
 
     var timelineList: some View {
-        Group {
-            if viewModel.isLoading {
-                ProgressView()
-                    .padding(.vertical, Spacing.double)
-            } else if viewModel.sections.isEmpty {
-                EmptyStateView(icon: "clock.arrow.circlepath", message: "当日没有匹配事件")
-                    .padding(.vertical, Spacing.double)
-            } else {
-                LazyVStack(spacing: Spacing.none, pinnedViews: [.sectionHeaders]) {
-                    ForEach(Array(viewModel.sections.enumerated()), id: \.element.id) { index, section in
-                        TimelineSectionView(
-                            section: section,
-                            isLast: index == viewModel.sections.count - 1,
-                            trailingPlaceholderWidth: TimelineFilterHostStyle.controlWidth,
-                            viewModel: viewModel
-                        )
-                    }
-                }
-            }
-        }
-        .overlay(alignment: .topTrailing) {
-            timelineFilterHost
-                .padding(.top, Spacing.cozy)
-                .offset(y: timelineFilterStickyOffsetY)
-                .zIndex(1)
-        }
-        .onGeometryChange(for: CGFloat.self) { geo in
-            geo.frame(in: .named(Self.timelineScrollCoordinateSpaceName)).minY
-        } action: { minY in
-            guard abs(minY - timelineListMinY) > 0.5 else { return }
-            timelineListMinY = minY
-        }
-    }
-
-    /// 全局单实例筛选入口，固定承载在时间线顶部右侧，避免 SectionHeader 切换时控件实例抖动。
-    private var timelineFilterHost: some View {
-        TimelineCategoryFilterMenu(
+        TimelineListContainer(
+            sections: viewModel.sections,
+            isLoading: viewModel.isLoading,
             selectedCategory: viewModel.selectedCategory,
             onCategorySelected: { category in
                 Task { await viewModel.selectCategory(category) }
             }
         )
-        .disabled(viewModel.isLoading)
-    }
-
-    /// 当列表顶部滚出可视区域后，抵消滚动位移以保持筛选入口吸顶。
-    private var timelineFilterStickyOffsetY: CGFloat {
-        max(0, -timelineListMinY)
     }
 
     var displayedMonthTitleText: some View {
@@ -324,6 +283,65 @@ private extension ReadingTimelineContentView {
                 .contentTransition(.numericText())
         }
         .animation(.snappy(duration: 0.24), value: dayOffset)
+    }
+}
+
+private struct TimelineListContainer: View {
+    let sections: [TimelineSection]
+    let isLoading: Bool
+    let selectedCategory: TimelineEventCategory
+    let onCategorySelected: (TimelineEventCategory) -> Void
+
+    @State private var timelineListMinY: CGFloat = .zero
+
+    var body: some View {
+        TimelineListContent(
+            sections: sections,
+            isLoading: isLoading
+        )
+        .overlay(alignment: .topTrailing) {
+            TimelineCategoryFilterMenu(
+                selectedCategory: selectedCategory,
+                onCategorySelected: onCategorySelected
+            )
+            .disabled(isLoading)
+            .padding(.top, Spacing.cozy)
+            .offset(y: max(0, -timelineListMinY))
+            .zIndex(1)
+        }
+        .onGeometryChange(for: CGFloat.self) { geometry in
+            geometry.frame(in: .named(ReadingTimelineContentView.timelineScrollCoordinateSpaceName)).minY
+        } action: { minY in
+            guard abs(minY - timelineListMinY) > 0.5 else { return }
+            timelineListMinY = minY
+        }
+    }
+}
+
+private struct TimelineListContent: View {
+    let sections: [TimelineSection]
+    let isLoading: Bool
+
+    var body: some View {
+        Group {
+            if isLoading {
+                ProgressView()
+                    .padding(.vertical, Spacing.double)
+            } else if sections.isEmpty {
+                EmptyStateView(icon: "clock.arrow.circlepath", message: "当日没有匹配事件")
+                    .padding(.vertical, Spacing.double)
+            } else {
+                LazyVStack(spacing: Spacing.none, pinnedViews: [.sectionHeaders]) {
+                    ForEach(Array(sections.enumerated()), id: \.element.id) { index, section in
+                        TimelineSectionView(
+                            section: section,
+                            isLast: index == sections.count - 1,
+                            trailingPlaceholderWidth: TimelineFilterHostStyle.controlWidth
+                        )
+                    }
+                }
+            }
+        }
     }
 }
 

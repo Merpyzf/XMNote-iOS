@@ -8,6 +8,59 @@
 import SwiftUI
 import UIKit
 
+struct RichTextLayoutSnapshot: Equatable {
+    let size: CGSize
+    let isTruncated: Bool
+}
+
+private final class RichTextLayoutSnapshotBox: NSObject {
+    let snapshot: RichTextLayoutSnapshot
+
+    init(snapshot: RichTextLayoutSnapshot) {
+        self.snapshot = snapshot
+    }
+}
+
+final class RichTextRenderCache {
+    static let shared = RichTextRenderCache()
+
+    private let attributedCache = NSCache<NSString, NSAttributedString>()
+    private let layoutCache = NSCache<NSString, RichTextLayoutSnapshotBox>()
+
+    private init() {
+        attributedCache.countLimit = 256
+        layoutCache.countLimit = 1024
+    }
+
+    func resolveAttributedString(
+        for key: String,
+        builder: () -> NSAttributedString
+    ) -> NSAttributedString {
+        let nsKey = key as NSString
+        if let cached = attributedCache.object(forKey: nsKey) {
+            return cached
+        }
+
+        let attributed = builder()
+        let cachedValue = attributed.copy() as? NSAttributedString ?? attributed
+        attributedCache.setObject(cachedValue, forKey: nsKey)
+        return cachedValue
+    }
+
+    func cachedLayoutSnapshot(for key: String) -> RichTextLayoutSnapshot? {
+        layoutCache.object(forKey: key as NSString)?.snapshot
+    }
+
+    func storeLayoutSnapshot(_ snapshot: RichTextLayoutSnapshot, for key: String) {
+        layoutCache.setObject(RichTextLayoutSnapshotBox(snapshot: snapshot), forKey: key as NSString)
+    }
+
+    func removeAll() {
+        attributedCache.removeAllObjects()
+        layoutCache.removeAllObjects()
+    }
+}
+
 /// 只读 HTML 富文本视图，桥接 UITextView + RichTextLayoutManager 渲染引用块色条与列表圆点。
 /// `maxLines > 0` 时通过 `textContainer.maximumNumberOfLines` 截断，零额外 HTML 解析成本。
 struct RichText: UIViewRepresentable {
@@ -47,23 +100,35 @@ struct RichText: UIViewRepresentable {
     }
 
     func updateUIView(_ textView: UITextView, context: Context) {
-        let cacheKey = "\(html)|\(baseFont.pointSize)|\(textColor.description)|\(lineSpacing)|\(maxLines)"
-        let needsContentUpdate = context.coordinator.lastCacheKey != cacheKey
+        let traitCollection = textView.traitCollection
+        let contentKey = Self.contentCacheKey(
+            html: html,
+            baseFont: baseFont,
+            textColor: textColor,
+            lineSpacing: lineSpacing,
+            traitCollection: traitCollection
+        )
+        let needsContentUpdate = context.coordinator.lastContentKey != contentKey
 
         if needsContentUpdate {
-            context.coordinator.lastCacheKey = cacheKey
-            context.coordinator.lastTruncationKey = ""
-            context.coordinator.lastSizeKey = ""
-            let attributed = buildAttributedString()
+            context.coordinator.lastContentKey = contentKey
+            context.coordinator.lastLayoutKey = ""
+            context.coordinator.lastLayoutSnapshot = nil
+            context.coordinator.lastReportedTruncation = nil
+
+            let attributed = Self.resolvedAttributedString(
+                html: html,
+                baseFont: baseFont,
+                textColor: textColor,
+                lineSpacing: lineSpacing,
+                traitCollection: traitCollection
+            )
             textView.textStorage.setAttributedString(attributed)
+            textView.invalidateIntrinsicContentSize()
         }
 
         textView.textContainer.maximumNumberOfLines = maxLines
-        textView.textContainer.lineBreakMode = maxLines > 0 ? .byTruncatingTail : .byWordWrapping
-
-        if needsContentUpdate {
-            textView.invalidateIntrinsicContentSize()
-        }
+        textView.textContainer.lineBreakMode = lineBreakMode
     }
 
     func sizeThatFits(_ proposal: ProposedViewSize, uiView: UITextView, context: Context) -> CGSize? {
@@ -71,132 +136,207 @@ struct RichText: UIViewRepresentable {
         let width = proposal.width ?? screenWidth
         guard width > 0, width.isFinite else { return nil }
 
-        // SwiftUI 单次 pass 可能多次调用 sizeThatFits，缓存避免重复测量
-        let sizeKey = "\(context.coordinator.lastCacheKey)|\(Int(width))"
-        if context.coordinator.lastSizeKey == sizeKey {
+        let traitCollection = uiView.traitCollection
+        let contentKey = Self.contentCacheKey(
+            html: html,
+            baseFont: baseFont,
+            textColor: textColor,
+            lineSpacing: lineSpacing,
+            traitCollection: traitCollection
+        )
+        let scale = uiView.window?.screen.scale ?? max(uiView.traitCollection.displayScale, 1)
+        let layoutKey = Self.layoutCacheKey(
+            contentKey: contentKey,
+            maxLines: maxLines,
+            width: width,
+            screenScale: scale
+        )
+
+        if context.coordinator.lastLayoutKey == layoutKey,
+           let snapshot = context.coordinator.lastLayoutSnapshot {
             if let callback = onTruncationChanged, maxLines > 0 {
-                detectTruncation(uiView, context: context, callback: callback)
+                notifyTruncationIfNeeded(
+                    isTruncated: snapshot.isTruncated,
+                    context: context,
+                    callback: callback
+                )
             }
-            return context.coordinator.lastSize
+            return snapshot.size
         }
 
-        // 手动同步 container width：sizeThatFits 持有确切 proposed width，
-        // 但 textContainer.widthTracksTextView 依赖 frame 赋值（此时仍为 zero），
-        // 必须显式注入，否则 detectTruncation 因零宽守卫永远跳过
-        uiView.textContainer.size.width = width
-
-        uiView.textContainer.maximumNumberOfLines = maxLines
-        uiView.textContainer.lineBreakMode = maxLines > 0 ? .byTruncatingTail : .byWordWrapping
-        let size = uiView.sizeThatFits(CGSize(width: width, height: CGFloat.greatestFiniteMagnitude))
-
-        // 宽度变化时失效截断缓存，确保新宽度下重新检测
-        if context.coordinator.lastLayoutWidth != width {
-            context.coordinator.lastLayoutWidth = width
-            context.coordinator.lastTruncationKey = ""
+        if let snapshot = Self.cachedLayoutSnapshot(for: layoutKey) {
+            context.coordinator.lastLayoutKey = layoutKey
+            context.coordinator.lastLayoutSnapshot = snapshot
+            if let callback = onTruncationChanged, maxLines > 0 {
+                notifyTruncationIfNeeded(
+                    isTruncated: snapshot.isTruncated,
+                    context: context,
+                    callback: callback
+                )
+            }
+            return snapshot.size
         }
 
-        // sizeThatFits 内部因 widthTracksTextView 会将 container width 重置为
-        // textView.frame.width（此时仍为 zero），必须在截断检测前重新注入
         uiView.textContainer.size.width = width
+        let snapshot = measureLayoutSnapshot(for: uiView, width: width)
+        Self.storeLayoutSnapshot(snapshot, for: layoutKey)
+        context.coordinator.lastLayoutKey = layoutKey
+        context.coordinator.lastLayoutSnapshot = snapshot
 
         if let callback = onTruncationChanged, maxLines > 0 {
-            detectTruncation(uiView, context: context, callback: callback)
+            notifyTruncationIfNeeded(
+                isTruncated: snapshot.isTruncated,
+                context: context,
+                callback: callback
+            )
         }
 
-        let result = CGSize(width: width, height: size.height)
-        context.coordinator.lastSizeKey = sizeKey
-        context.coordinator.lastSize = result
-        return result
+        return snapshot.size
     }
 
     func makeCoordinator() -> Coordinator { Coordinator() }
 
     final class Coordinator {
-        var lastCacheKey: String = ""
-        /// 缓存截断检测结果 (htmlKey → isTruncated)，避免视图复用时重复检测
-        var lastTruncationKey: String = ""
-        var lastTruncationResult: Bool = false
-        /// 上次布局宽度，宽度变化时失效截断缓存
-        var lastLayoutWidth: CGFloat = 0
-        /// sizeThatFits 结果缓存，SwiftUI 单次 pass 可能多次调用，避免重复测量
-        var lastSizeKey: String = ""
-        var lastSize: CGSize = .zero
+        var lastContentKey: String = ""
+        var lastLayoutKey: String = ""
+        var lastLayoutSnapshot: RichTextLayoutSnapshot?
+        var lastReportedTruncation: Bool?
     }
 
-    // MARK: - Truncation Detection
+    private var lineBreakMode: NSLineBreakMode {
+        maxLines > 0 ? .byTruncatingTail : .byWordWrapping
+    }
+
+    private func measureLayoutSnapshot(
+        for textView: UITextView,
+        width: CGFloat
+    ) -> RichTextLayoutSnapshot {
+        let isTruncated = maxLines > 0 ? detectTruncation(for: textView, width: width) : false
+
+        textView.textContainer.maximumNumberOfLines = maxLines
+        textView.textContainer.lineBreakMode = lineBreakMode
+        textView.textContainer.size.width = width
+        let size = textView.sizeThatFits(
+            CGSize(width: width, height: CGFloat.greatestFiniteMagnitude)
+        )
+
+        return RichTextLayoutSnapshot(
+            size: CGSize(width: width, height: size.height),
+            isTruncated: isTruncated
+        )
+    }
 
     /// 无限布局下枚举行片段计数实际行数，与 maxLines 直接比较判定截断。
-    /// `glyphRange(for:)` 按几何尺寸而非行数截断，短文本在无限高度下返回全量 glyph，
-    /// 导致截断检测失败——故改用 `enumerateLineFragments` 语义直接、零耦合。
-    private func detectTruncation(
-        _ textView: UITextView,
-        context: Context,
-        callback: @escaping (Bool) -> Void
-    ) {
-        guard maxLines > 0, let layoutManager = textView.layoutManager as? RichTextLayoutManager else {
-            let truncationKey = "\(html)|\(maxLines)|0"
-            context.coordinator.lastTruncationKey = truncationKey
-            context.coordinator.lastTruncationResult = false
-            DispatchQueue.main.async { callback(false) }
-            return
-        }
-
-        let containerWidth = textView.textContainer.size.width
-        guard containerWidth > 0, containerWidth.isFinite else { return }
-
-        // textStorage 为空时直接返回且不缓存，防止缓存中毒：
-        // sizeThatFits 可能先于 updateUIView 执行，此时 textStorage 空，
-        // 截断检测必然 false；若缓存此结果，内容填充后命中旧缓存将永久丢失展开按钮
-        guard textView.textStorage.length > 0 else { return }
-
-        let truncationKey = "\(html)|\(maxLines)|\(Int(containerWidth))"
-        if context.coordinator.lastTruncationKey == truncationKey {
-            DispatchQueue.main.async {
-                callback(context.coordinator.lastTruncationResult)
-            }
-            return
-        }
+    /// 这里先做一次无限行布局，再回到受限行布局做最终测量，避免展开/收起阶段重复解析 HTML。
+    private func detectTruncation(for textView: UITextView, width: CGFloat) -> Bool {
+        guard maxLines > 0 else { return false }
+        guard width > 0, width.isFinite else { return false }
+        guard textView.textStorage.length > 0 else { return false }
 
         let container = textView.textContainer
-        let fullRange = NSRange(location: 0, length: textView.textStorage.length)
+        let layoutManager = textView.layoutManager
 
-        // 无限行 + 无限高度 → 枚举行片段计数实际行数
+        container.size.width = width
         container.maximumNumberOfLines = 0
+        container.lineBreakMode = .byWordWrapping
         container.size.height = .greatestFiniteMagnitude
+
+        let fullRange = NSRange(location: 0, length: textView.textStorage.length)
         layoutManager.invalidateLayout(forCharacterRange: fullRange, actualCharacterRange: nil)
         layoutManager.ensureLayout(for: container)
 
         var lineCount = 0
         let glyphRange = NSRange(location: 0, length: layoutManager.numberOfGlyphs)
-        layoutManager.enumerateLineFragments(forGlyphRange: glyphRange) { _, _, _, _, _ in
+        layoutManager.enumerateLineFragments(forGlyphRange: glyphRange) { _, _, _, _, stop in
             lineCount += 1
+            if lineCount > maxLines {
+                stop.pointee = true
+            }
         }
-        let isTruncated = lineCount > maxLines
+        return lineCount > maxLines
+    }
 
-        // 恢复受限行数，确保后续渲染省略号正常
-        container.maximumNumberOfLines = maxLines
-
-        context.coordinator.lastTruncationKey = truncationKey
-        context.coordinator.lastTruncationResult = isTruncated
-
-        // callback 异步分发：layout pass 内不可直接修改 @State
+    private func notifyTruncationIfNeeded(
+        isTruncated: Bool,
+        context: Context,
+        callback: @escaping (Bool) -> Void
+    ) {
+        guard context.coordinator.lastReportedTruncation != isTruncated else {
+            return
+        }
+        context.coordinator.lastReportedTruncation = isTruncated
         DispatchQueue.main.async { callback(isTruncated) }
     }
 
-    // MARK: - Attributed String
+    static func resolvedAttributedString(
+        html: String,
+        baseFont: UIFont,
+        textColor: UIColor,
+        lineSpacing: CGFloat,
+        traitCollection: UITraitCollection
+    ) -> NSAttributedString {
+        let contentKey = contentCacheKey(
+            html: html,
+            baseFont: baseFont,
+            textColor: textColor,
+            lineSpacing: lineSpacing,
+            traitCollection: traitCollection
+        )
+        return resolveAttributedString(contentKey: contentKey) {
+            buildAttributedString(
+                html: html,
+                baseFont: baseFont,
+                textColor: textColor,
+                lineSpacing: lineSpacing,
+                traitCollection: traitCollection
+            )
+        }
+    }
 
-    private func buildAttributedString() -> NSAttributedString {
-        let mutable = HTMLParser.parse(html, baseFont: baseFont)
+    static func resolvedPreviewAttributedString(
+        html: String,
+        baseFont: UIFont,
+        textColor: UIColor,
+        lineSpacing: CGFloat,
+        traitCollection: UITraitCollection
+    ) -> NSAttributedString {
+        let previewKey = previewContentKey(
+            html: html,
+            baseFont: baseFont,
+            textColor: textColor,
+            lineSpacing: lineSpacing,
+            traitCollection: traitCollection
+        )
+        return resolveAttributedString(contentKey: previewKey) {
+            let baseAttributed = resolvedAttributedString(
+                html: html,
+                baseFont: baseFont,
+                textColor: textColor,
+                lineSpacing: lineSpacing,
+                traitCollection: traitCollection
+            )
+            let previewAttributed = NSMutableAttributedString(attributedString: baseAttributed)
+            sanitizePreviewAttributedString(previewAttributed, lineSpacing: lineSpacing)
+            return previewAttributed
+        }
+    }
+
+    private static func buildAttributedString(
+        html: String,
+        baseFont: UIFont,
+        textColor: UIColor,
+        lineSpacing: CGFloat,
+        traitCollection: UITraitCollection
+    ) -> NSAttributedString {
+        let mutable = HTMLParser.parse(html, baseFont: baseFont, traitCollection: traitCollection)
         let fullRange = NSRange(location: 0, length: mutable.length)
 
-        // 应用文本颜色（不覆盖 link 颜色）
         mutable.enumerateAttribute(.link, in: fullRange, options: []) { value, range, _ in
             if value == nil {
                 mutable.addAttribute(.foregroundColor, value: textColor, range: range)
             }
         }
 
-        // 应用行间距
         let style = NSMutableParagraphStyle()
         style.lineSpacing = lineSpacing
         mutable.enumerateAttribute(.paragraphStyle, in: fullRange, options: []) { value, range, _ in
@@ -211,7 +351,234 @@ struct RichText: UIViewRepresentable {
 
         return mutable
     }
+
+    private static func sanitizePreviewAttributedString(
+        _ attributed: NSMutableAttributedString,
+        lineSpacing: CGFloat
+    ) {
+        let fullRange = NSRange(location: 0, length: attributed.length)
+        guard fullRange.length > 0 else { return }
+
+        attributed.enumerateAttribute(.link, in: fullRange, options: []) { value, range, _ in
+            guard value != nil else { return }
+            attributed.addAttribute(.foregroundColor, value: UIColor.link, range: range)
+            attributed.addAttribute(.underlineStyle, value: NSUnderlineStyle.single.rawValue, range: range)
+            attributed.removeAttribute(.link, range: range)
+        }
+
+        attributed.removeAttribute(.bulletList, range: fullRange)
+        attributed.removeAttribute(.blockquote, range: fullRange)
+
+        attributed.enumerateAttribute(.paragraphStyle, in: fullRange, options: []) { value, range, _ in
+            let style = (value as? NSParagraphStyle)?.mutableCopy() as? NSMutableParagraphStyle ?? NSMutableParagraphStyle()
+            style.headIndent = 0
+            style.firstLineHeadIndent = 0
+            style.lineSpacing = lineSpacing
+            style.lineBreakMode = .byTruncatingTail
+            attributed.addAttribute(.paragraphStyle, value: style, range: range)
+        }
+
+        trimTrailingWhitespaceAndNewlines(in: attributed)
+    }
+
+    private static func trimTrailingWhitespaceAndNewlines(in attributed: NSMutableAttributedString) {
+        while attributed.length > 0 {
+            let lastIndex = attributed.length - 1
+            let lastCharacter = attributed.attributedSubstring(
+                from: NSRange(location: lastIndex, length: 1)
+            ).string
+            guard lastCharacter.rangeOfCharacter(from: .whitespacesAndNewlines) != nil else {
+                return
+            }
+            attributed.deleteCharacters(in: NSRange(location: lastIndex, length: 1))
+        }
+    }
+
+    static func cachedLayoutSnapshot(
+        html: String,
+        baseFont: UIFont,
+        textColor: UIColor,
+        lineSpacing: CGFloat,
+        maxLines: Int,
+        width: CGFloat,
+        traitCollection: UITraitCollection = .current,
+        screenScale: CGFloat? = nil
+    ) -> RichTextLayoutSnapshot? {
+        let contentKey = contentCacheKey(
+            html: html,
+            baseFont: baseFont,
+            textColor: textColor,
+            lineSpacing: lineSpacing,
+            traitCollection: traitCollection
+        )
+        let layoutKey = layoutCacheKey(
+            contentKey: contentKey,
+            maxLines: maxLines,
+            width: width,
+            screenScale: screenScale ?? max(traitCollection.displayScale, 1)
+        )
+        return cachedLayoutSnapshot(for: layoutKey)
+    }
+
+    static func previewContentKey(
+        html: String,
+        baseFont: UIFont,
+        textColor: UIColor,
+        lineSpacing: CGFloat,
+        traitCollection: UITraitCollection
+    ) -> String {
+        let baseKey = contentCacheKey(
+            html: html,
+            baseFont: baseFont,
+            textColor: textColor,
+            lineSpacing: lineSpacing,
+            traitCollection: traitCollection
+        )
+        return "preview|\(baseKey)"
+    }
+
+    static func resolveAttributedString(
+        contentKey: String,
+        builder: () -> NSAttributedString
+    ) -> NSAttributedString {
+        RichTextRenderCache.shared.resolveAttributedString(for: contentKey, builder: builder)
+    }
+
+    static func cachedLayoutSnapshot(for layoutKey: String) -> RichTextLayoutSnapshot? {
+        RichTextRenderCache.shared.cachedLayoutSnapshot(for: layoutKey)
+    }
+
+    static func storeLayoutSnapshot(
+        _ snapshot: RichTextLayoutSnapshot,
+        for layoutKey: String
+    ) {
+        RichTextRenderCache.shared.storeLayoutSnapshot(snapshot, for: layoutKey)
+    }
+
+    static func contentCacheKey(
+        html: String,
+        baseFont: UIFont,
+        textColor: UIColor,
+        lineSpacing: CGFloat,
+        traitCollection: UITraitCollection
+    ) -> String {
+        [
+            html,
+            baseFont.fontName,
+            Self.roundedToken(baseFont.pointSize),
+            Self.colorToken(textColor, traitCollection: traitCollection),
+            Self.roundedToken(lineSpacing),
+            String(traitCollection.userInterfaceStyle.rawValue),
+            traitCollection.preferredContentSizeCategory.rawValue,
+        ].joined(separator: "|")
+    }
+
+    static func layoutCacheKey(
+        contentKey: String,
+        maxLines: Int,
+        width: CGFloat,
+        screenScale: CGFloat
+    ) -> String {
+        let bucket = Int((width * max(screenScale, 1)).rounded())
+        return "\(contentKey)|lines:\(maxLines)|width:\(bucket)"
+    }
+
+    private static func roundedToken(_ value: CGFloat) -> String {
+        String(Int((value * 1000).rounded()))
+    }
+
+    private static func colorToken(
+        _ color: UIColor,
+        traitCollection: UITraitCollection
+    ) -> String {
+        let resolved = color.resolvedColor(with: traitCollection)
+        var red: CGFloat = 0
+        var green: CGFloat = 0
+        var blue: CGFloat = 0
+        var alpha: CGFloat = 0
+        guard resolved.getRed(&red, green: &green, blue: &blue, alpha: &alpha) else {
+            return resolved.description
+        }
+        return [
+            String(Int((red * 255).rounded())),
+            String(Int((green * 255).rounded())),
+            String(Int((blue * 255).rounded())),
+            String(Int((alpha * 255).rounded())),
+        ].joined(separator: ",")
+    }
 }
+
+#if DEBUG
+extension RichText {
+    static func testingResetCaches() {
+        RichTextRenderCache.shared.removeAll()
+    }
+
+    static func testingResolveAttributedString(
+        contentKey: String,
+        builder: () -> NSAttributedString
+    ) -> NSAttributedString {
+        resolveAttributedString(contentKey: contentKey, builder: builder)
+    }
+
+    static func testingResolvePreviewAttributedString(
+        html: String,
+        baseFont: UIFont,
+        textColor: UIColor,
+        lineSpacing: CGFloat,
+        traitCollection: UITraitCollection
+    ) -> NSAttributedString {
+        resolvedPreviewAttributedString(
+            html: html,
+            baseFont: baseFont,
+            textColor: textColor,
+            lineSpacing: lineSpacing,
+            traitCollection: traitCollection
+        )
+    }
+
+    static func testingCachedLayoutSnapshot(for layoutKey: String) -> RichTextLayoutSnapshot? {
+        cachedLayoutSnapshot(for: layoutKey)
+    }
+
+    static func testingStoreLayoutSnapshot(
+        _ snapshot: RichTextLayoutSnapshot,
+        for layoutKey: String
+    ) {
+        storeLayoutSnapshot(snapshot, for: layoutKey)
+    }
+
+    static func testingContentCacheKey(
+        html: String,
+        baseFont: UIFont,
+        textColor: UIColor,
+        lineSpacing: CGFloat,
+        traitCollection: UITraitCollection
+    ) -> String {
+        contentCacheKey(
+            html: html,
+            baseFont: baseFont,
+            textColor: textColor,
+            lineSpacing: lineSpacing,
+            traitCollection: traitCollection
+        )
+    }
+
+    static func testingLayoutCacheKey(
+        contentKey: String,
+        maxLines: Int,
+        width: CGFloat,
+        screenScale: CGFloat
+    ) -> String {
+        layoutCacheKey(
+            contentKey: contentKey,
+            maxLines: maxLines,
+            width: width,
+            screenScale: screenScale
+        )
+    }
+}
+#endif
 
 #Preview {
     VStack(alignment: .leading, spacing: 16) {

@@ -12,6 +12,101 @@ import UIKit
 
 struct xmnoteTests {
 
+    @Test func richTextAttributedCacheReusesParsedContentAcrossExpandStateChanges() {
+        RichText.testingResetCaches()
+
+        let contentKey = RichText.testingContentCacheKey(
+            html: "<b>缓存</b>命中",
+            baseFont: .systemFont(ofSize: 16),
+            textColor: .label,
+            lineSpacing: 4,
+            traitCollection: UITraitCollection(userInterfaceStyle: .light)
+        )
+
+        var buildCount = 0
+        _ = RichText.testingResolveAttributedString(contentKey: contentKey) {
+            buildCount += 1
+            return NSAttributedString(string: "缓存命中")
+        }
+        _ = RichText.testingResolveAttributedString(contentKey: contentKey) {
+            buildCount += 1
+            return NSAttributedString(string: "缓存命中")
+        }
+
+        #expect(buildCount == 1)
+    }
+
+    @Test func richTextLayoutCacheKeyBucketsEquivalentWidths() {
+        let contentKey = RichText.testingContentCacheKey(
+            html: "宽度桶",
+            baseFont: .systemFont(ofSize: 15),
+            textColor: .label,
+            lineSpacing: 4,
+            traitCollection: UITraitCollection(userInterfaceStyle: .light)
+        )
+
+        let first = RichText.testingLayoutCacheKey(
+            contentKey: contentKey,
+            maxLines: 3,
+            width: 123.24,
+            screenScale: 2
+        )
+        let second = RichText.testingLayoutCacheKey(
+            contentKey: contentKey,
+            maxLines: 3,
+            width: 123.249,
+            screenScale: 2
+        )
+        let third = RichText.testingLayoutCacheKey(
+            contentKey: contentKey,
+            maxLines: 3,
+            width: 123.76,
+            screenScale: 2
+        )
+
+        #expect(first == second)
+        #expect(first != third)
+    }
+
+    @Test func richTextLayoutCacheSeparatesCollapsedAndExpandedSnapshots() {
+        RichText.testingResetCaches()
+
+        let contentKey = RichText.testingContentCacheKey(
+            html: "布局快照",
+            baseFont: .systemFont(ofSize: 14),
+            textColor: .secondaryLabel,
+            lineSpacing: 6,
+            traitCollection: UITraitCollection(userInterfaceStyle: .dark)
+        )
+        let collapsedKey = RichText.testingLayoutCacheKey(
+            contentKey: contentKey,
+            maxLines: 3,
+            width: 180,
+            screenScale: 3
+        )
+        let expandedKey = RichText.testingLayoutCacheKey(
+            contentKey: contentKey,
+            maxLines: 0,
+            width: 180,
+            screenScale: 3
+        )
+
+        let collapsedSnapshot = RichTextLayoutSnapshot(
+            size: CGSize(width: 180, height: 68),
+            isTruncated: true
+        )
+        let expandedSnapshot = RichTextLayoutSnapshot(
+            size: CGSize(width: 180, height: 132),
+            isTruncated: false
+        )
+        RichText.testingStoreLayoutSnapshot(collapsedSnapshot, for: collapsedKey)
+        RichText.testingStoreLayoutSnapshot(expandedSnapshot, for: expandedKey)
+
+        #expect(RichText.testingCachedLayoutSnapshot(for: collapsedKey) == collapsedSnapshot)
+        #expect(RichText.testingCachedLayoutSnapshot(for: expandedKey) == expandedSnapshot)
+        #expect(collapsedKey != expandedKey)
+    }
+
     @Test func serializerCombinedParagraphWithBulletThenQuote() {
         Self.serializerStrategyLock.lock()
         defer { Self.serializerStrategyLock.unlock() }

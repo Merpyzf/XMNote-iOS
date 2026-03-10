@@ -1,7 +1,7 @@
 /**
- * [INPUT]: 依赖 RichText（maxLines 截断 + 截断回调）、DesignTokens 设计令牌
+ * [INPUT]: 依赖 RichText 完整富文本展示、CollapsedRichTextPreview 收起态轻量预览、DesignTokens 设计令牌
  * [OUTPUT]: 对外提供 ExpandableRichText（可展开/收起的 HTML 富文本组件）
- * [POS]: UIComponents/Foundation 的跨模块复用展示组件，包装 RichText 提供 3 行截断 + 品牌色切换按钮
+ * [POS]: UIComponents/Foundation 的跨模块复用展示组件，包装完整富文本与轻量预览提供 3 行截断 + 展开/收起切换
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
@@ -11,42 +11,85 @@ import SwiftUI
 /// 收起态截断到 maxLines 行 + 省略号，底部右对齐品牌色文字按钮切换展开/收起。
 /// 内容不足 maxLines 时不显示按钮。
 /// 展开状态为组件内部 @State，滚出屏幕回收后重置为收起态（与 Android 行为一致）。
-struct ExpandableRichText: View {
+struct ExpandableRichText: View, Equatable {
     let html: String
     var baseFont: UIFont = .preferredFont(forTextStyle: .body)
     var textColor: UIColor = .label
     var lineSpacing: CGFloat = 4
     var maxLines: Int = 3
 
+    static func == (lhs: ExpandableRichText, rhs: ExpandableRichText) -> Bool {
+        lhs.html == rhs.html &&
+        lhs.baseFont == rhs.baseFont &&
+        lhs.textColor == rhs.textColor &&
+        lhs.lineSpacing == rhs.lineSpacing &&
+        lhs.maxLines == rhs.maxLines
+    }
+
+    var body: some View {
+        ExpandableRichTextCore(
+            html: html,
+            baseFont: baseFont,
+            textColor: textColor,
+            lineSpacing: lineSpacing,
+            maxLines: maxLines
+        )
+    }
+}
+
+private struct ExpandableRichTextCore: View {
+    let html: String
+    let baseFont: UIFont
+    let textColor: UIColor
+    let lineSpacing: CGFloat
+    let maxLines: Int
+
     @State private var isExpanded = false
-    @State private var needsExpandButton = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: Spacing.half) {
-            RichText(
-                html: html,
-                baseFont: baseFont,
-                textColor: textColor,
-                lineSpacing: lineSpacing,
-                maxLines: isExpanded ? 0 : maxLines,
-                onTruncationChanged: { isTruncated in
-                    needsExpandButton = isTruncated
-                }
-            )
+            if isExpanded {
+                RichText(
+                    html: html,
+                    baseFont: baseFont,
+                    textColor: textColor,
+                    lineSpacing: lineSpacing,
+                    maxLines: 0
+                )
 
-            if needsExpandButton || isExpanded {
                 HStack {
                     Spacer()
                     Button {
-                        withAnimation(.snappy) { isExpanded.toggle() }
+                        collapse()
                     } label: {
-                        Text(isExpanded ? "收起" : "展开")
+                        Text("收起")
                             .font(.caption2.weight(.medium))
                             .foregroundStyle(Color.brand)
                     }
                     .buttonStyle(.plain)
                 }
+            } else {
+                CollapsedRichTextPreview(
+                    html: html,
+                    baseFont: baseFont,
+                    textColor: textColor,
+                    lineSpacing: lineSpacing,
+                    maxLines: maxLines,
+                    onExpand: expand
+                )
             }
+        }
+    }
+
+    private func expand() {
+        withAnimation(.snappy) {
+            isExpanded = true
+        }
+    }
+
+    private func collapse() {
+        withAnimation(.snappy) {
+            isExpanded = false
         }
     }
 }

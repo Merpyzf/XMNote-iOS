@@ -97,8 +97,7 @@ private struct TimelineCardsTestContentView: View {
                 TimelineSectionView(
                     section: section,
                     isLast: index == filteredSections.count - 1,
-                    trailingPlaceholderWidth: 0,
-                    viewModel: viewModel
+                    trailingPlaceholderWidth: 0
                 )
             }
         }
