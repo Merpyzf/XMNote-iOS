@@ -12,6 +12,14 @@ import os
 
 /// 品牌字体入口，集中维护字体注册名与回退策略。
 enum BrandTypography {
+    /// VerticalTrim 表示品牌字体在视觉上需要抵消的顶部/底部额外行盒空间。
+    struct VerticalTrim {
+        let top: CGFloat
+        let bottom: CGFloat
+
+        static let zero = VerticalTrim(top: 0, bottom: 0)
+    }
+
     /// 品牌字体 PostScript 名称，对应 RozhaOne-Regular.ttf。
     static let rozhaPostScriptName = "RozhaOne-Regular"
     private static let fontFileName = "RozhaOne-Regular"
@@ -65,6 +73,25 @@ enum BrandTypography {
             return .system(size: size, weight: .semibold)
         }
         return .brandDisplay(size: size, relativeTo: .title2)
+    }
+
+    /// 基于 UIKit 字体指标估算品牌字形的视觉 trim，供单行标题/数字位做光学收口。
+    static func verticalTrim(
+        size: CGFloat,
+        textStyle: UIFont.TextStyle = .title2
+    ) -> VerticalTrim {
+        guard isBrandFontAvailable() else { return .zero }
+
+        let font = UIFont.brandDisplay(size: size, textStyle: textStyle)
+        let top = roundToPixel(max(0, font.ascender - font.capHeight))
+        let bottom = roundToPixel(max(0, abs(font.descender)))
+        return VerticalTrim(top: top, bottom: bottom)
+    }
+
+    /// 将 trim 值吸附到像素网格，避免不同屏幕 scale 下出现半像素抖动。
+    private static func roundToPixel(_ value: CGFloat) -> CGFloat {
+        let screenScale = max(UIScreen.main.scale, 1)
+        return (value * screenScale).rounded() / screenScale
     }
 
     #if DEBUG
@@ -140,5 +167,26 @@ extension UIFont {
         let fallback = UIFont.systemFont(ofSize: size, weight: .semibold)
         let base = UIFont(name: BrandTypography.rozhaPostScriptName, size: size) ?? fallback
         return UIFontMetrics(forTextStyle: textStyle).scaledFont(for: base)
+    }
+}
+
+private struct BrandVerticalTrimModifier: ViewModifier {
+    let trim: BrandTypography.VerticalTrim
+    let edges: Edge.Set
+
+    func body(content: Content) -> some View {
+        content
+            .padding(.top, edges.contains(.top) ? -trim.top : 0)
+            .padding(.bottom, edges.contains(.bottom) ? -trim.bottom : 0)
+    }
+}
+
+extension View {
+    /// 以负向 padding 方式抵消品牌字体额外行盒，避免标题位被字形空气感压低。
+    func brandVerticalTrim(
+        _ trim: BrandTypography.VerticalTrim,
+        edges: Edge.Set = [.top]
+    ) -> some View {
+        modifier(BrandVerticalTrimModifier(trim: trim, edges: edges))
     }
 }

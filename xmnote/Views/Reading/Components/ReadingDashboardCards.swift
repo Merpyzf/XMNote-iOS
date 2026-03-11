@@ -6,10 +6,17 @@ import SwiftUI
  * [POS]: Reading/Components 页面私有子视图集合，负责在读首页各卡片区块的展示
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
-/// ReadingDashboardLayout 集中维护最近在读封面的固定尺寸，避免列表卡片散落重复常量。
-private enum ReadingDashboardLayout {
-    static let recentCoverWidth: CGFloat = 70
-    static let recentCoverHeight: CGFloat = 100
+/// ReadingRecentBooksCardLayout 统一最近在读卡片的标题节奏、书架间距与单本书展示尺寸。
+private enum ReadingRecentBooksCardLayout {
+    static let titleFontSize: CGFloat = 15
+    static let contentSpacing: CGFloat = Spacing.tight
+    static let itemSpacing: CGFloat = Spacing.comfortable
+    static let coverWidth: CGFloat = 76
+    static let coverToTextSpacing: CGFloat = Spacing.cozy
+    static let textGroupSpacing: CGFloat = Spacing.compact
+    static let textHorizontalInset: CGFloat = Spacing.micro
+    static let bookTitleFontSize: CGFloat = 13
+    static let progressFontSize: CGFloat = 10
 }
 
 /// ReadingDashboardInlineBanner 承接首页内联错误或提示文案，提供轻量动作出口而不打断滚动流。
@@ -19,7 +26,7 @@ struct ReadingDashboardInlineBanner: View {
     let onAction: () -> Void
 
     var body: some View {
-        CardContainer(cornerRadius: CornerRadius.blockLarge) {
+        CardContainer(cornerRadius: CornerRadius.blockLarge, showsBorder: false) {
             HStack(spacing: Spacing.base) {
                 Text(message)
                     .font(.footnote)
@@ -43,7 +50,7 @@ struct ReadingTrendMetricsSection: View {
 
     var body: some View {
         if !metrics.isEmpty {
-            CardContainer(cornerRadius: CornerRadius.blockLarge) {
+            CardContainer(cornerRadius: CornerRadius.blockLarge, showsBorder: false) {
                 GeometryReader { proxy in
                     let layout = ReadingTrendOverviewLayout(
                         containerSize: proxy.size,
@@ -73,7 +80,7 @@ struct ReadingTrendMetricsSection: View {
 
 /// ReadingTrendOverviewLayout 统一管理三栏总卡的比例布局，避免视图内部散落魔法数字。
 private struct ReadingTrendOverviewLayout {
-    static let columnAspectRatio: CGFloat = 0.98
+    static let columnAspectRatio: CGFloat = 1.06
 
     let containerSize: CGSize
     let columnCount: Int
@@ -84,7 +91,7 @@ private struct ReadingTrendOverviewLayout {
 
     var columnHeight: CGFloat { containerSize.height }
 
-    var verticalPadding: CGFloat { Spacing.screenEdge }
+    var verticalPadding: CGFloat { Spacing.base }
 
     var dividerVerticalInset: CGFloat { verticalPadding }
 
@@ -107,6 +114,11 @@ private struct ReadingTrendOverviewLayout {
     var chartSpacing: CGFloat { Spacing.cozy }
 }
 
+/// ReadingDashboardTypography 统一首页卡片副标题层的字重语义，避免各卡片独立漂移。
+private enum ReadingDashboardTypography {
+    static let subtitleWeight: Font.Weight = .regular
+}
+
 /// ReadingTrendOverviewColumn 渲染单个趋势栏位，承载主值、描述与最近窗口柱图。
 private struct ReadingTrendOverviewColumn: View {
     let metric: ReadingTrendMetric
@@ -123,7 +135,7 @@ private struct ReadingTrendOverviewColumn: View {
                 )
 
                 Text(metric.title)
-                    .font(.system(size: layout.descriptionFontSize, weight: .regular, design: .rounded))
+                    .font(.system(size: layout.descriptionFontSize, weight: ReadingDashboardTypography.subtitleWeight, design: .rounded))
                     .foregroundStyle(Color.textSecondary)
                     .lineLimit(1)
             }
@@ -181,6 +193,13 @@ private struct ReadingTrendMetricValueLabel: View {
 
 /// ReadingTrendMiniBarChart 渲染趋势栏位底部柱图，保留 Android 的零值占位语义。
 private struct ReadingTrendMiniBarChart: View {
+    private enum AxisStyle {
+        static let lineWidth: CGFloat = 1
+        static let dashPattern: [CGFloat] = [3, 3]
+        static let horizontalInset: CGFloat = Spacing.micro
+        static let color: Color = Color.textHint.opacity(0.24)
+    }
+
     let points: [ReadingTrendMetric.Point]
     let chartHeight: CGFloat
     let spacing: CGFloat
@@ -189,15 +208,27 @@ private struct ReadingTrendMiniBarChart: View {
         ReadingDashboardFormatting.displayedBarRatios(points: points, chartHeight: chartHeight)
     }
 
+    private var verticalBarShape: UnevenRoundedRectangle {
+        UnevenRoundedRectangle(
+            cornerRadii: .init(
+                topLeading: CornerRadius.inlaySmall,
+                bottomLeading: CornerRadius.none,
+                bottomTrailing: CornerRadius.none,
+                topTrailing: CornerRadius.inlaySmall
+            ),
+            style: .continuous
+        )
+    }
+
     var body: some View {
         HStack(alignment: .bottom, spacing: spacing) {
             ForEach(Array(points.enumerated()), id: \.offset) { index, point in
                 ZStack(alignment: .bottom) {
-                    RoundedRectangle(cornerRadius: CornerRadius.inlaySmall, style: .continuous)
+                    verticalBarShape
                         .fill(Color.chartBarTrack)
 
                     if displayedRatios[index] > 0 {
-                        RoundedRectangle(cornerRadius: CornerRadius.inlaySmall, style: .continuous)
+                        verticalBarShape
                             .fill(Color.brand)
                             .frame(height: chartHeight * displayedRatios[index])
                     }
@@ -208,7 +239,32 @@ private struct ReadingTrendMiniBarChart: View {
             }
         }
         .frame(height: chartHeight)
+        .overlay(alignment: .bottom) {
+            ReadingTrendMiniXAxis()
+                .stroke(
+                    AxisStyle.color,
+                    style: StrokeStyle(
+                        lineWidth: AxisStyle.lineWidth,
+                        lineCap: .round,
+                        lineJoin: .round,
+                        dash: AxisStyle.dashPattern
+                    )
+                )
+                .frame(height: AxisStyle.lineWidth)
+                .padding(.horizontal, AxisStyle.horizontalInset)
+        }
         .animation(.smooth(duration: 0.45), value: displayedRatios)
+    }
+}
+
+/// ReadingTrendMiniXAxis 仅负责底部水平轴线，让趋势柱图的基线更易感知。
+private struct ReadingTrendMiniXAxis: Shape {
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        let y = rect.midY
+        path.move(to: CGPoint(x: rect.minX, y: y))
+        path.addLine(to: CGPoint(x: rect.maxX, y: y))
+        return path
     }
 }
 
@@ -243,9 +299,18 @@ struct ReadingFeatureCardsSection: View {
 
 /// ReadingFeatureCardsStyle 统一收口双功能卡共享的外层比例与内边距语义。
 private enum ReadingFeatureCardsStyle {
-    static let cardAspectRatio: CGFloat = 0.82
-    static let contentInset: CGFloat = Spacing.section
+    static let cardAspectRatio: CGFloat = 0.88
+    static let contentInset: CGFloat = Spacing.base
     static let loadingPadding: CGFloat = Spacing.tight
+}
+
+/// ReadingFeatureCardHeaderMetrics 固定双功能卡顶部两行的字号与节奏，保证相邻卡片视觉对齐。
+private enum ReadingFeatureCardHeaderMetrics {
+    static let titleFontSize: CGFloat = 14
+    static let subtitleFontSize: CGFloat = 12
+    static let subtitleFontWeight: Font.Weight = ReadingDashboardTypography.subtitleWeight
+    static let titleSubtitleSpacing: CGFloat = Spacing.compact
+    static let headerToBodySpacing: CGFloat = Spacing.tight
 }
 
 /// ReadingDailyGoalCardLayout 约束今日阅读卡的标题、弧环与中心主值，避免横纵向同时超配。
@@ -265,13 +330,13 @@ private struct ReadingDailyGoalCardLayout {
 
     var contentHeight: CGFloat { max(1, cardHeight - contentInset * 2) }
 
-    var headerSpacing: CGFloat { Spacing.compact }
+    var headerSpacing: CGFloat { ReadingFeatureCardHeaderMetrics.titleSubtitleSpacing }
 
-    var headerToGaugeSpacing: CGFloat { Spacing.screenEdge }
+    var headerToGaugeSpacing: CGFloat { ReadingFeatureCardHeaderMetrics.headerToBodySpacing }
 
-    var statusFontSize: CGFloat { 14 }
+    var statusFontSize: CGFloat { ReadingFeatureCardHeaderMetrics.titleFontSize }
 
-    var subtitleFontSize: CGFloat { 12 }
+    var subtitleFontSize: CGFloat { ReadingFeatureCardHeaderMetrics.subtitleFontSize }
 
     private var headerGroupHeight: CGFloat {
         statusFontSize * 1.16 + subtitleFontSize * 1.10 + headerSpacing
@@ -298,7 +363,7 @@ private struct ReadingDailyGoalCardLayout {
     var loadingPadding: CGFloat { ReadingFeatureCardsStyle.loadingPadding }
 }
 
-/// ReadingResumeBookCardLayout 收口继续阅读卡内部尺寸，避免受今日阅读弧环策略连带影响。
+/// ReadingResumeBookCardLayout 统一继续阅读卡的标题节奏与封面剩余空间填充策略，保证与今日阅读卡并排时的对齐感。
 private struct ReadingResumeBookCardLayout {
     let cardSize: CGSize
 
@@ -306,21 +371,21 @@ private struct ReadingResumeBookCardLayout {
 
     var contentInset: CGFloat { ReadingFeatureCardsStyle.contentInset }
 
-    var headerSpacing: CGFloat { Spacing.half }
+    var headerSpacing: CGFloat { ReadingFeatureCardHeaderMetrics.titleSubtitleSpacing }
+
+    var headerToCoverSpacing: CGFloat { ReadingFeatureCardHeaderMetrics.headerToBodySpacing }
 
     var loadingPadding: CGFloat { ReadingFeatureCardsStyle.loadingPadding }
 
-    var continueTitleFontSize: CGFloat { min(18, max(15, cardHeight * 0.082)) }
+    var titleFontSize: CGFloat { ReadingFeatureCardHeaderMetrics.titleFontSize }
 
-    var continueMetaFontSize: CGFloat { min(13, max(11, cardHeight * 0.062)) }
+    var subtitleFontSize: CGFloat { ReadingFeatureCardHeaderMetrics.subtitleFontSize }
 
-    var continueHintFontSize: CGFloat { min(12, max(10, cardHeight * 0.056)) }
+    var coverHorizontalInset: CGFloat { contentInset + 6 }
 
-    var continueCoverWidth: CGFloat { min(56, max(42, cardHeight * 0.255)) }
+    var emptyIconSize: CGFloat { min(30, max(24, cardHeight * 0.145)) }
 
-    var continueContentSpacing: CGFloat { Spacing.tight }
-
-    var continueEmptyIconSize: CGFloat { min(30, max(24, cardHeight * 0.145)) }
+    var emptyStateSpacing: CGFloat { Spacing.tight }
 }
 
 /// ReadingDailyGoalCard 承接今日阅读目标的标题、状态和弧环进度，提供目标编辑入口。
@@ -335,7 +400,7 @@ private struct ReadingDailyGoalCard: View {
 
     var body: some View {
         Button(action: onTap) {
-            CardContainer(cornerRadius: CornerRadius.containerMedium) {
+            CardContainer(cornerRadius: CornerRadius.containerMedium, showsBorder: false) {
                 GeometryReader { proxy in
                     let layout = ReadingDailyGoalCardLayout(cardSize: proxy.size)
                     ZStack(alignment: .topTrailing) {
@@ -349,7 +414,7 @@ private struct ReadingDailyGoalCard: View {
                                     .multilineTextAlignment(.center)
 
                                 Text("今日阅读")
-                                    .font(.system(size: layout.subtitleFontSize, weight: .medium, design: .rounded))
+                                    .font(.system(size: layout.subtitleFontSize, weight: ReadingFeatureCardHeaderMetrics.subtitleFontWeight, design: .rounded))
                                     .foregroundStyle(Color.textSecondary)
                                     .lineLimit(1)
                             }
@@ -475,69 +540,19 @@ private struct ReadingResumeBookCard: View {
 
     var body: some View {
         Button(action: onTap) {
-            CardContainer(cornerRadius: CornerRadius.containerMedium) {
+            CardContainer(cornerRadius: CornerRadius.containerMedium, showsBorder: false) {
                 GeometryReader { proxy in
                     let layout = ReadingResumeBookCardLayout(cardSize: proxy.size)
                     ZStack(alignment: .topTrailing) {
-                        VStack(alignment: .leading, spacing: layout.continueContentSpacing) {
-                            Text("继续阅读")
-                                .font(.system(size: layout.continueMetaFontSize, weight: .medium, design: .rounded))
-                                .foregroundStyle(Color.textSecondary)
-
-                            Spacer(minLength: 0)
-
+                        Group {
                             if let book {
-                                VStack(alignment: .leading, spacing: layout.continueContentSpacing) {
-                                    HStack(alignment: .top, spacing: layout.continueContentSpacing) {
-                                        XMBookCover.fixedWidth(
-                                            layout.continueCoverWidth,
-                                            urlString: book.coverURL,
-                                            cornerRadius: CornerRadius.inlayHairline,
-                                            border: .init(color: .surfaceBorderSubtle, width: CardStyle.borderWidth),
-                                            surfaceStyle: .spine
-                                        )
-
-                                        VStack(alignment: .leading, spacing: layout.headerSpacing) {
-                                            Text(book.name)
-                                                .font(.system(size: layout.continueTitleFontSize, weight: .semibold, design: .rounded))
-                                                .foregroundStyle(Color.textPrimary)
-                                                .lineLimit(2)
-
-                                            Text(ReadingDashboardFormatting.percentText(book.progressPercent))
-                                                .font(.system(size: layout.continueMetaFontSize, weight: .medium, design: .rounded))
-                                                .foregroundStyle(Color.textSecondary)
-                                                .lineLimit(1)
-                                        }
-                                        .frame(maxWidth: .infinity, alignment: .topLeading)
-                                    }
-
-                                    Text("继续补全今天的阅读轨迹")
-                                        .font(.system(size: layout.continueHintFontSize, weight: .medium, design: .rounded))
-                                        .foregroundStyle(Color.textHint)
-                                        .lineLimit(2)
-                                }
+                                resumeBookContent(book: book, layout: layout)
                             } else {
-                                VStack(alignment: .leading, spacing: layout.continueContentSpacing) {
-                                    Image(systemName: "book.badge.plus")
-                                        .font(.system(size: layout.continueEmptyIconSize, weight: .medium))
-                                        .foregroundStyle(Color.brand)
-
-                                    Text("还没有可继续的书")
-                                        .font(.system(size: layout.continueTitleFontSize, weight: .semibold, design: .rounded))
-                                        .foregroundStyle(Color.textPrimary)
-
-                                    Text("先添加一本书，再从这里快速返回阅读")
-                                        .font(.system(size: layout.continueMetaFontSize, weight: .medium, design: .rounded))
-                                        .foregroundStyle(Color.textSecondary)
-                                        .lineLimit(3)
-                                }
-                                .frame(maxWidth: .infinity, alignment: .leading)
+                                emptyResumeContent(layout: layout)
+                                    .padding(layout.contentInset)
                             }
-
-                            Spacer(minLength: 0)
                         }
-                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-                        .padding(layout.contentInset)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
 
                         if isLoading {
                             ProgressView()
@@ -550,6 +565,125 @@ private struct ReadingResumeBookCard: View {
         }
         .buttonStyle(.plain)
     }
+
+    /// 生成继续阅读状态副标题；有进度时恢复百分比与动作语义，缺省时仅保留继续阅读提示。
+    private func resumeSubtitle(for book: ReadingResumeBook) -> String {
+        guard let progressPercent = book.progressPercent else { return "继续阅读" }
+        return "\(ReadingDashboardFormatting.percentText(progressPercent)) | 继续阅读"
+    }
+
+    private var resumeCoverCornerRadii: RectangleCornerRadii {
+        .init(
+            topLeading: CornerRadius.inlayHairline,
+            bottomLeading: CornerRadius.none,
+            bottomTrailing: CornerRadius.none,
+            topTrailing: CornerRadius.inlayHairline
+        )
+    }
+
+    /// 以与今日阅读一致的标题区节奏承载当前书名和继续阅读状态。
+    @ViewBuilder
+    private func resumeBookContent(book: ReadingResumeBook, layout: ReadingResumeBookCardLayout) -> some View {
+        VStack(spacing: layout.headerToCoverSpacing) {
+            resumeHeader(
+                title: book.name,
+                subtitle: resumeSubtitle(for: book),
+                layout: layout,
+                titleLineLimit: 1
+            )
+            .padding(.top, layout.contentInset)
+            .padding(.horizontal, layout.contentInset)
+
+            GeometryReader { proxy in
+                let coverViewportSize = proxy.size
+                let coverViewportWidth = max(1, coverViewportSize.width)
+                let coverViewportHeight = max(1, coverViewportSize.height)
+                let coverRenderWidth = max(
+                    coverViewportWidth,
+                    coverViewportHeight * XMBookCover.aspectRatio
+                )
+
+                XMBookCover.fixedWidth(
+                    coverRenderWidth,
+                    urlString: book.coverURL,
+                    cornerRadius: CornerRadius.inlayHairline,
+                    cornerRadii: resumeCoverCornerRadii,
+                    border: .init(color: .surfaceBorderSubtle, width: CardStyle.borderWidth),
+                    surfaceStyle: .spine
+                )
+                .accessibilityHidden(true)
+                .frame(
+                    width: coverViewportWidth,
+                    height: coverViewportHeight,
+                    alignment: .top
+                )
+                .clipped()
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+            }
+            .padding(.horizontal, layout.coverHorizontalInset)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+    }
+
+    /// 空态延续同一标题骨架，再以下方图标和提示承接添加书籍入口。
+    @ViewBuilder
+    private func emptyResumeContent(layout: ReadingResumeBookCardLayout) -> some View {
+        VStack(spacing: 0) {
+            resumeHeader(
+                title: "暂无在读书籍",
+                subtitle: "添加一本书后会显示在这里",
+                layout: layout,
+                titleLineLimit: 1
+            )
+
+            VStack(spacing: layout.emptyStateSpacing) {
+                Image("BookCoverPlaceholder")
+                    .renderingMode(.template)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: layout.emptyIconSize, height: layout.emptyIconSize)
+                    .foregroundStyle(Color.textHint)
+                    .accessibilityHidden(true)
+
+                Text("开始阅读后，可从这里快速返回")
+                    .font(.system(size: layout.subtitleFontSize, weight: ReadingFeatureCardHeaderMetrics.subtitleFontWeight, design: .rounded))
+                    .foregroundStyle(Color.textHint)
+                    .multilineTextAlignment(.center)
+                    .lineLimit(2)
+            }
+            .padding(.top, layout.headerToCoverSpacing)
+
+            Spacer(minLength: 0)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+    }
+
+    /// 统一继续阅读卡顶部两行文案排版，使其和今日阅读卡形成一组稳定的双列头部节奏。
+    @ViewBuilder
+    private func resumeHeader(
+        title: String,
+        subtitle: String,
+        layout: ReadingResumeBookCardLayout,
+        titleLineLimit: Int
+    ) -> some View {
+        VStack(spacing: layout.headerSpacing) {
+            Text(title)
+                .font(.system(size: layout.titleFontSize, weight: .semibold, design: .rounded))
+                .foregroundStyle(Color.textPrimary)
+                .lineLimit(titleLineLimit)
+                .minimumScaleFactor(0.9)
+                .multilineTextAlignment(.center)
+                .truncationMode(.tail)
+
+            Text(subtitle)
+                .font(.system(size: layout.subtitleFontSize, weight: ReadingFeatureCardHeaderMetrics.subtitleFontWeight, design: .rounded))
+                .foregroundStyle(Color.textSecondary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.9)
+                .multilineTextAlignment(.center)
+        }
+        .frame(maxWidth: .infinity)
+    }
 }
 
 /// ReadingRecentBooksCard 负责横向展示最近活跃书籍列表，承接从首页快速进入书籍详情的入口。
@@ -559,10 +693,10 @@ struct ReadingRecentBooksCard: View {
     let onBookTap: (Int64) -> Void
 
     var body: some View {
-        CardContainer(cornerRadius: CornerRadius.containerMedium) {
-            VStack(alignment: .leading, spacing: Spacing.base) {
+        CardContainer(cornerRadius: CornerRadius.containerMedium, showsBorder: false) {
+            VStack(alignment: .leading, spacing: ReadingRecentBooksCardLayout.contentSpacing) {
                 Text("最近在读")
-                    .font(.headline.weight(.semibold))
+                    .font(.system(size: ReadingRecentBooksCardLayout.titleFontSize, weight: .semibold, design: .rounded))
                     .foregroundStyle(Color.textPrimary)
 
                 if books.isEmpty {
@@ -570,34 +704,9 @@ struct ReadingRecentBooksCard: View {
                         .frame(height: 160)
                 } else {
                     ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(alignment: .top, spacing: Spacing.base) {
+                        HStack(alignment: .top, spacing: ReadingRecentBooksCardLayout.itemSpacing) {
                             ForEach(books) { book in
-                                Button {
-                                    onBookTap(book.id)
-                                } label: {
-                                    VStack(alignment: .leading, spacing: Spacing.half) {
-                                        XMBookCover.fixedSize(
-                                            width: ReadingDashboardLayout.recentCoverWidth,
-                                            height: ReadingDashboardLayout.recentCoverHeight,
-                                            urlString: book.coverURL,
-                                            cornerRadius: CornerRadius.inlayHairline,
-                                            border: .init(color: .surfaceBorderSubtle, width: CardStyle.borderWidth),
-                                            surfaceStyle: .spine
-                                        )
-
-                                        Text(book.name)
-                                            .font(.caption)
-                                            .foregroundStyle(Color.textPrimary)
-                                            .lineLimit(1)
-
-                                        Text(ReadingDashboardFormatting.percentText(book.progressPercent))
-                                            .font(.caption2)
-                                            .foregroundStyle(Color.textSecondary)
-                                            .lineLimit(1)
-                                    }
-                                    .frame(width: ReadingDashboardLayout.recentCoverWidth, alignment: .leading)
-                                }
-                                .buttonStyle(.plain)
+                                ReadingRecentBookItemView(book: book, onTap: onBookTap)
                             }
                         }
                     }
@@ -608,44 +717,274 @@ struct ReadingRecentBooksCard: View {
     }
 }
 
-/// ReadingYearSummaryCard 展示年度阅读目标完成情况，并作为年度已读列表弹层入口。
-struct ReadingYearSummaryCard: View {
-    let summary: ReadingYearSummary
-    let onTap: () -> Void
+/// ReadingRecentBookItemView 渲染最近在读书架中的单本书，保持封面主导、书名次之、进度最轻的层级。
+private struct ReadingRecentBookItemView: View {
+    let book: ReadingRecentBook
+    let onTap: (Int64) -> Void
 
     var body: some View {
-        Button(action: onTap) {
-            CardContainer(cornerRadius: CornerRadius.containerMedium) {
-                HStack(spacing: Spacing.base) {
-                    VStack(alignment: .leading, spacing: Spacing.half) {
-                        HStack(alignment: .firstTextBaseline, spacing: Spacing.half) {
-                            Text("今年已读")
-                                .font(.headline.weight(.semibold))
-                                .foregroundStyle(Color.textPrimary)
-                            Text("\(summary.readCount)")
-                                .font(.system(size: 30, weight: .bold, design: .rounded))
-                                .foregroundStyle(Color.brand)
-                                .monospacedDigit()
-                            Text("本")
-                                .font(.headline.weight(.semibold))
-                                .foregroundStyle(Color.textPrimary)
-                        }
+        Button {
+            onTap(book.id)
+        } label: {
+            VStack(alignment: .leading, spacing: ReadingRecentBooksCardLayout.coverToTextSpacing) {
+                XMBookCover.fixedWidth(
+                    ReadingRecentBooksCardLayout.coverWidth,
+                    urlString: book.coverURL,
+                    cornerRadius: CornerRadius.inlayHairline,
+                    border: .init(color: .surfaceBorderSubtle, width: CardStyle.borderWidth),
+                    surfaceStyle: .spine
+                )
+                .shadow(
+                    color: Color.bookCoverDropShadow.opacity(0.38),
+                    radius: 1.4,
+                    x: 0,
+                    y: 0.9
+                )
+                .accessibilityHidden(true)
 
-                        Text(ReadingDashboardFormatting.yearSummarySubtitle(summary: summary))
-                            .font(.caption)
-                            .foregroundStyle(Color.textSecondary)
-                            .lineLimit(2)
-                    }
+                VStack(alignment: .leading, spacing: ReadingRecentBooksCardLayout.textGroupSpacing) {
+                    Text(book.name)
+                        .font(.system(size: ReadingRecentBooksCardLayout.bookTitleFontSize, weight: .medium, design: .rounded))
+                        .foregroundStyle(Color.textPrimary)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.92)
 
-                    Spacer(minLength: 0)
-
-                    Image(systemName: "chevron.right")
-                        .font(.footnote.weight(.semibold))
-                        .foregroundStyle(Color.textHint)
+                    Text(ReadingDashboardFormatting.percentText(book.progressPercent))
+                        .font(.system(size: ReadingRecentBooksCardLayout.progressFontSize, weight: ReadingDashboardTypography.subtitleWeight, design: .rounded))
+                        .foregroundStyle(Color.textSecondary)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.92)
+                        .monospacedDigit()
                 }
-                .padding(Spacing.base)
+                .padding(.horizontal, ReadingRecentBooksCardLayout.textHorizontalInset)
             }
+            .frame(width: ReadingRecentBooksCardLayout.coverWidth, alignment: .leading)
         }
         .buttonStyle(.plain)
+    }
+}
+
+/// ReadingYearSummaryCardLayout 收口年度摘要卡的标题、状态说明与目标书架节奏。
+private enum ReadingYearSummaryCardLayout {
+    static let contentInset: CGFloat = Spacing.base
+    static let titleToSubtitleSpacing: CGFloat = Spacing.none
+    static let subtitleToGridSpacing: CGFloat = Spacing.contentEdge
+    static let headerTrailingSpacing: CGFloat = Spacing.base
+    static let gridSpacing: CGFloat = Spacing.base
+    static let gridColumnCount = 4
+
+    static let titleFontSize: CGFloat = 15
+    static let countFontSize: CGFloat = 30
+    static let countVerticalTrim = BrandTypography.verticalTrim(size: countFontSize, textStyle: .title2)
+    static let titleBottomCompensation: CGFloat = Spacing.tiny
+    static let subtitleFontSize: CGFloat = 12
+    static let subtitleNumberFontSize: CGFloat = 16
+    static let subtitleNumberVerticalTrim = BrandTypography.verticalTrim(size: subtitleNumberFontSize, textStyle: .body)
+    static let subtitleInlineSpacing: CGFloat = Spacing.compact
+    static let placeholderNumberFontSize: CGFloat = 28
+    static let placeholderNumberHorizontalInset: CGFloat = Spacing.cozy
+}
+
+/// ReadingYearSummaryGoalSlot 统一年度目标卡中真实已读书与未完成占位槽位的渲染输入。
+private enum ReadingYearSummaryGoalSlot: Identifiable {
+    case book(ReadingYearReadBook)
+    case placeholder(Int)
+
+    var id: String {
+        switch self {
+        case let .book(book):
+            return "book-\(book.id)"
+        case let .placeholder(index):
+            return "placeholder-\(index)"
+        }
+    }
+}
+
+/// ReadingYearSummaryCard 展示年度阅读目标完成情况、目标书架和操作入口。
+struct ReadingYearSummaryCard: View {
+    let summary: ReadingYearSummary
+    let onOpenSummary: () -> Void
+    let onEditGoal: () -> Void
+    let onBookTap: (Int64) -> Void
+
+    private var goalSlots: [ReadingYearSummaryGoalSlot] {
+        var slots = summary.books.map(ReadingYearSummaryGoalSlot.book)
+        guard summary.readCount < summary.targetCount else { return slots }
+
+        slots.append(
+            contentsOf: (summary.readCount + 1...summary.targetCount).map(ReadingYearSummaryGoalSlot.placeholder)
+        )
+        return slots
+    }
+
+    private var gridColumns: [GridItem] {
+        Array(
+            repeating: GridItem(.flexible(), spacing: ReadingYearSummaryCardLayout.gridSpacing, alignment: .top),
+            count: ReadingYearSummaryCardLayout.gridColumnCount
+        )
+    }
+
+    var body: some View {
+        CardContainer(cornerRadius: CornerRadius.containerMedium, showsBorder: false) {
+            VStack(alignment: .leading, spacing: ReadingYearSummaryCardLayout.subtitleToGridSpacing) {
+                headerSection
+
+                LazyVGrid(columns: gridColumns, alignment: .leading, spacing: ReadingYearSummaryCardLayout.gridSpacing) {
+                    ForEach(goalSlots) { slot in
+                        switch slot {
+                        case let .book(book):
+                            ReadingYearSummaryCompletedBookCover(book: book, onTap: onBookTap)
+                        case let .placeholder(index):
+                            ReadingYearSummaryPlaceholderCover(index: index)
+                        }
+                    }
+                }
+            }
+            .padding(ReadingYearSummaryCardLayout.contentInset)
+        }
+    }
+
+    private var headerSection: some View {
+        HStack(alignment: .center, spacing: ReadingYearSummaryCardLayout.headerTrailingSpacing) {
+            VStack(alignment: .leading, spacing: ReadingYearSummaryCardLayout.titleToSubtitleSpacing) {
+                HStack(alignment: .firstTextBaseline, spacing: Spacing.half) {
+                    Text("今年已读")
+                        .font(.system(size: ReadingYearSummaryCardLayout.titleFontSize, weight: .semibold, design: .rounded))
+                        .foregroundStyle(Color.textPrimary)
+
+                    Text("\(summary.readCount)")
+                        .font(.brandDisplay(size: ReadingYearSummaryCardLayout.countFontSize, relativeTo: .title2))
+                        .foregroundStyle(Color.brand)
+                        .minimumScaleFactor(0.72)
+                        .lineLimit(1)
+                        .brandVerticalTrim(ReadingYearSummaryCardLayout.countVerticalTrim)
+
+                    Text("本")
+                        .font(.system(size: ReadingYearSummaryCardLayout.titleFontSize, weight: .semibold, design: .rounded))
+                        .foregroundStyle(Color.textPrimary)
+                }
+                .padding(.bottom, -ReadingYearSummaryCardLayout.titleBottomCompensation)
+
+                HStack(alignment: .center, spacing: ReadingYearSummaryCardLayout.subtitleInlineSpacing) {
+                    statusContent
+                        .layoutPriority(1)
+
+                    Button(action: onEditGoal) {
+                        Image(systemName: "pencil.line")
+                            .font(.system(size: ReadingYearSummaryCardLayout.subtitleFontSize, weight: .regular))
+                            .foregroundStyle(Color.textSecondary)
+                            .frame(width: Spacing.tight, height: Spacing.tight)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("编辑年度阅读目标")
+                }
+            }
+
+            Spacer(minLength: 0)
+
+            Button(action: onOpenSummary) {
+                Image(systemName: "chevron.right")
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(Color.textHint)
+                    .frame(width: Spacing.base, height: Spacing.base)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("查看年度已读列表")
+        }
+    }
+
+    @ViewBuilder
+    private var statusContent: some View {
+        if summary.isTargetAchieved {
+            Text("已完成今年阅读目标")
+                .font(.system(
+                    size: ReadingYearSummaryCardLayout.subtitleFontSize,
+                    weight: ReadingDashboardTypography.subtitleWeight,
+                    design: .rounded
+                ))
+                .foregroundStyle(Color.textSecondary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.92)
+        } else {
+            HStack(alignment: .firstTextBaseline, spacing: Spacing.none) {
+                Text("再读 ")
+                    .font(.system(
+                        size: ReadingYearSummaryCardLayout.subtitleFontSize,
+                        weight: ReadingDashboardTypography.subtitleWeight,
+                        design: .rounded
+                    ))
+                    .foregroundStyle(Color.textSecondary)
+
+                Text("\(summary.remainingCount)")
+                    .font(.brandDisplay(
+                        size: ReadingYearSummaryCardLayout.subtitleNumberFontSize,
+                        relativeTo: .body
+                    ))
+                    .foregroundStyle(Color.textPrimary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.88)
+                    .brandVerticalTrim(
+                        ReadingYearSummaryCardLayout.subtitleNumberVerticalTrim,
+                        edges: [.top, .bottom]
+                    )
+
+                Text(" 本，即可完成今年目标")
+                    .font(.system(
+                        size: ReadingYearSummaryCardLayout.subtitleFontSize,
+                        weight: ReadingDashboardTypography.subtitleWeight,
+                        design: .rounded
+                    ))
+                    .foregroundStyle(Color.textSecondary)
+            }
+            .lineLimit(1)
+            .minimumScaleFactor(0.92)
+        }
+    }
+}
+
+/// ReadingYearSummaryCompletedBookCover 展示年度目标中已经读完的真实书籍封面。
+private struct ReadingYearSummaryCompletedBookCover: View {
+    let book: ReadingYearReadBook
+    let onTap: (Int64) -> Void
+
+    var body: some View {
+        Button {
+            onTap(book.id)
+        } label: {
+            XMBookCover.responsive(
+                urlString: book.coverURL,
+                cornerRadius: CornerRadius.inlayHairline,
+                border: .init(color: .surfaceBorderSubtle, width: CardStyle.borderWidth),
+                surfaceStyle: .spine
+            )
+            .accessibilityHidden(true)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("已读《\(book.name)》")
+    }
+}
+
+/// ReadingYearSummaryPlaceholderCover 展示年度目标中尚未完成的占位封面与序号。
+private struct ReadingYearSummaryPlaceholderCover: View {
+    let index: Int
+
+    var body: some View {
+        XMBookCover.responsive(
+            urlString: "",
+            cornerRadius: CornerRadius.inlayHairline,
+            border: .init(color: .surfaceBorderSubtle, width: CardStyle.borderWidth),
+            placeholderIconSize: .hidden,
+            surfaceStyle: .spine
+        )
+        .overlay {
+            Text("\(index)")
+                .font(.brandDisplay(size: ReadingYearSummaryCardLayout.placeholderNumberFontSize, relativeTo: .title3))
+                .foregroundStyle(Color.textSecondary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.42)
+                .padding(.horizontal, ReadingYearSummaryCardLayout.placeholderNumberHorizontalInset)
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("年度目标第 \(index) 本，尚未完成")
     }
 }

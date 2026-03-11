@@ -102,7 +102,9 @@ private struct ReadingDashboardContent: View {
                 if let yearSummary = viewModel.yearSummary {
                     ReadingYearSummaryCard(
                         summary: yearSummary,
-                        onTap: { isYearSummaryPresented = true }
+                        onOpenSummary: { isYearSummaryPresented = true },
+                        onEditGoal: { viewModel.presentYearlyGoalEditor() },
+                        onBookTap: onOpenBookDetail
                     )
                 }
             }
@@ -110,6 +112,7 @@ private struct ReadingDashboardContent: View {
             .padding(.top, Spacing.half)
             .padding(.bottom, Spacing.section)
         }
+        .scrollIndicators(.hidden)
         .sheet(isPresented: $isYearSummaryPresented) {
             if let yearSummary = viewModel.yearSummary {
                 ReadingYearSummarySheet(
