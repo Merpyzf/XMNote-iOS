@@ -107,6 +107,26 @@ extension Color {
     /// 图表背景轨道色（柱图零值占位 / 背景 bar），避免与容器边框争抢视觉语义。
     static let chartBarTrack = Color(light: Color(hex: 0xC7CCD3).opacity(0.22),
                                      dark: Color.white.opacity(0.06))
+    /// 书籍封面左侧厚度边的暗面，用于弱化但持续存在的体积感。
+    static let bookCoverSpineDark = Color(
+        light: Color.black.opacity(0.18),
+        dark: Color.black.opacity(0.32)
+    )
+    /// 书籍封面左侧厚度边的亮面，用于让边缘不至于读成纯黑竖条。
+    static let bookCoverSpineLight = Color(
+        light: Color.white.opacity(0.22),
+        dark: Color.white.opacity(0.10)
+    )
+    /// 书籍封面厚度边与正面的过渡阴影，用于形成短距离的边缘深度。
+    static let bookCoverFoldShadow = Color(
+        light: Color.black.opacity(0.10),
+        dark: Color.black.opacity(0.18)
+    )
+    /// 书籍封面外部轻阴影，用于模拟 Apple Books 式的轻量陈列悬浮感。
+    static let bookCoverDropShadow = Color(
+        light: Color.black.opacity(0.14),
+        dark: Color.black.opacity(0.22)
+    )
     /// 兼容历史命名，默认等价于二级内容边框。
     static let cardBorder = surfaceBorderDefault
     /// 分割线

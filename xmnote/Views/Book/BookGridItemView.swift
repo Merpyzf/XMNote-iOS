@@ -30,7 +30,9 @@ struct BookGridItemView: View {
     private var coverImage: some View {
         XMBookCover.responsive(
             urlString: book.cover,
-            border: .init(color: .cardBorder, width: CardStyle.borderWidth)
+            cornerRadius: CornerRadius.inlayHairline,
+            border: .init(color: .surfaceBorderSubtle, width: CardStyle.borderWidth),
+            surfaceStyle: .spine
         )
         .overlay(alignment: .topTrailing) {
             noteBadge

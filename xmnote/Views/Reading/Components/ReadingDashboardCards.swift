@@ -492,7 +492,9 @@ private struct ReadingResumeBookCard: View {
                                         XMBookCover.fixedWidth(
                                             layout.continueCoverWidth,
                                             urlString: book.coverURL,
-                                            border: .init(color: .surfaceBorderSubtle, width: CardStyle.borderWidth)
+                                            cornerRadius: CornerRadius.inlayHairline,
+                                            border: .init(color: .surfaceBorderSubtle, width: CardStyle.borderWidth),
+                                            surfaceStyle: .spine
                                         )
 
                                         VStack(alignment: .leading, spacing: layout.headerSpacing) {
@@ -578,7 +580,9 @@ struct ReadingRecentBooksCard: View {
                                             width: ReadingDashboardLayout.recentCoverWidth,
                                             height: ReadingDashboardLayout.recentCoverHeight,
                                             urlString: book.coverURL,
-                                            border: .init(color: .surfaceBorderSubtle, width: CardStyle.borderWidth)
+                                            cornerRadius: CornerRadius.inlayHairline,
+                                            border: .init(color: .surfaceBorderSubtle, width: CardStyle.borderWidth),
+                                            surfaceStyle: .spine
                                         )
 
                                         Text(book.name)

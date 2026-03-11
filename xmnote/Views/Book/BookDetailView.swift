@@ -97,8 +97,10 @@ private struct BookDetailContentView: View {
         XMBookCover.fixedWidth(
             80,
             urlString: url,
-            border: .init(color: .cardBorder, width: CardStyle.borderWidth),
-            placeholderIconFont: .title3
+            cornerRadius: CornerRadius.inlayHairline,
+            border: .init(color: .surfaceBorderSubtle, width: CardStyle.borderWidth),
+            placeholderIconFont: .title3,
+            surfaceStyle: .spine
         )
     }
 
