@@ -99,7 +99,7 @@ private struct BookDetailContentView: View {
             urlString: url,
             cornerRadius: CornerRadius.inlayHairline,
             border: .init(color: .surfaceBorderSubtle, width: CardStyle.borderWidth),
-            placeholderIconFont: .title3,
+            placeholderIconSize: .medium,
             surfaceStyle: .spine
         )
     }

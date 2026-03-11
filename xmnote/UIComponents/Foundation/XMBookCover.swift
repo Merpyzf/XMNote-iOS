@@ -9,7 +9,7 @@ import SwiftUI
 
 /// 统一书籍封面组件：固定宽高比容器 + `.fill` Crop 居中裁切 + 占位图 + 可配装饰。
 ///
-/// 三种尺寸模式：
+/// 四种尺寸模式：
 /// - `responsive`：宽度由父容器决定，高度按宽高比自动推算
 /// - `fixedWidth`：指定宽度，高度自动
 /// - `fixedHeight`：指定高度，宽度自动
@@ -51,26 +51,49 @@ struct XMBookCover: View {
         let width: CGFloat
     }
 
+    /// 占位图尺寸档位，统一资源图标在不同封面密度下的可读性。
+    enum PlaceholderIconSize: Hashable {
+        case large
+        case medium
+        case small
+        case hidden
+
+        var dimension: CGFloat? {
+            switch self {
+            case .large:
+                return 22
+            case .medium:
+                return 18
+            case .small:
+                return 12
+            case .hidden:
+                return nil
+            }
+        }
+    }
+
     let urlString: String
     let width: CGFloat?
     let height: CGFloat?
     let cornerRadius: CGFloat
+    let cornerRadii: RectangleCornerRadii?
     let border: Border?
     let placeholderBackground: Color
-    let placeholderIconFont: Font?
+    let placeholderIconSize: PlaceholderIconSize
     let priority: XMImageRequestBuilder.Priority
     let surfaceStyle: SurfaceStyle
 
     /// 初始化封面组件，组合尺寸、装饰与加载优先级参数。
-    /// `placeholderIconFont` 为 nil 时不显示 book.closed 图标（适用于小尺寸封面）。
+    /// `placeholderIconSize = .hidden` 时隐藏占位图标，仅保留封面底色。
     init(
         urlString: String,
         width: CGFloat? = nil,
         height: CGFloat? = nil,
         cornerRadius: CGFloat = CornerRadius.inlaySmall,
+        cornerRadii: RectangleCornerRadii? = nil,
         border: Border? = nil,
-        placeholderBackground: Color = .tagBackground,
-        placeholderIconFont: Font? = .title2,
+        placeholderBackground: Color = .bookCoverPlaceholderBackground,
+        placeholderIconSize: PlaceholderIconSize = .large,
         priority: XMImageRequestBuilder.Priority = .normal,
         surfaceStyle: SurfaceStyle = .plain
     ) {
@@ -78,16 +101,17 @@ struct XMBookCover: View {
         self.width = width
         self.height = height
         self.cornerRadius = cornerRadius
+        self.cornerRadii = cornerRadii
         self.border = border
         self.placeholderBackground = placeholderBackground
-        self.placeholderIconFont = placeholderIconFont
+        self.placeholderIconSize = placeholderIconSize
         self.priority = priority
         self.surfaceStyle = surfaceStyle
     }
 
     var body: some View {
         let resolved = resolvedSize
-        let clipShape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+        let clipShape = CoverShape(cornerRadius: cornerRadius, cornerRadii: cornerRadii)
         coverContent
             .modifier(SizeModifier(width: resolved.width, height: resolved.height))
             .overlay {
@@ -106,7 +130,7 @@ struct XMBookCover: View {
             }
             .background {
                 GeometryReader { proxy in
-                    surfaceShadow(for: proxy.size)
+                    surfaceShadow(for: proxy.size, shape: clipShape)
                 }
             }
     }
@@ -119,18 +143,20 @@ extension XMBookCover {
     static func responsive(
         urlString: String,
         cornerRadius: CGFloat = CornerRadius.inlaySmall,
+        cornerRadii: RectangleCornerRadii? = nil,
         border: Border? = nil,
-        placeholderBackground: Color = .tagBackground,
-        placeholderIconFont: Font? = .title2,
+        placeholderBackground: Color = .bookCoverPlaceholderBackground,
+        placeholderIconSize: PlaceholderIconSize = .large,
         priority: XMImageRequestBuilder.Priority = .normal,
         surfaceStyle: SurfaceStyle = .plain
     ) -> XMBookCover {
         XMBookCover(
             urlString: urlString,
             cornerRadius: cornerRadius,
+            cornerRadii: cornerRadii,
             border: border,
             placeholderBackground: placeholderBackground,
-            placeholderIconFont: placeholderIconFont,
+            placeholderIconSize: placeholderIconSize,
             priority: priority,
             surfaceStyle: surfaceStyle
         )
@@ -141,9 +167,10 @@ extension XMBookCover {
         _ width: CGFloat,
         urlString: String,
         cornerRadius: CGFloat = CornerRadius.inlaySmall,
+        cornerRadii: RectangleCornerRadii? = nil,
         border: Border? = nil,
-        placeholderBackground: Color = .tagBackground,
-        placeholderIconFont: Font? = .title2,
+        placeholderBackground: Color = .bookCoverPlaceholderBackground,
+        placeholderIconSize: PlaceholderIconSize = .large,
         priority: XMImageRequestBuilder.Priority = .normal,
         surfaceStyle: SurfaceStyle = .plain
     ) -> XMBookCover {
@@ -151,9 +178,10 @@ extension XMBookCover {
             urlString: urlString,
             width: width,
             cornerRadius: cornerRadius,
+            cornerRadii: cornerRadii,
             border: border,
             placeholderBackground: placeholderBackground,
-            placeholderIconFont: placeholderIconFont,
+            placeholderIconSize: placeholderIconSize,
             priority: priority,
             surfaceStyle: surfaceStyle
         )
@@ -164,9 +192,10 @@ extension XMBookCover {
         _ height: CGFloat,
         urlString: String,
         cornerRadius: CGFloat = CornerRadius.inlaySmall,
+        cornerRadii: RectangleCornerRadii? = nil,
         border: Border? = nil,
-        placeholderBackground: Color = .tagBackground,
-        placeholderIconFont: Font? = .title2,
+        placeholderBackground: Color = .bookCoverPlaceholderBackground,
+        placeholderIconSize: PlaceholderIconSize = .large,
         priority: XMImageRequestBuilder.Priority = .normal,
         surfaceStyle: SurfaceStyle = .plain
     ) -> XMBookCover {
@@ -174,9 +203,10 @@ extension XMBookCover {
             urlString: urlString,
             height: height,
             cornerRadius: cornerRadius,
+            cornerRadii: cornerRadii,
             border: border,
             placeholderBackground: placeholderBackground,
-            placeholderIconFont: placeholderIconFont,
+            placeholderIconSize: placeholderIconSize,
             priority: priority,
             surfaceStyle: surfaceStyle
         )
@@ -188,9 +218,10 @@ extension XMBookCover {
         height: CGFloat,
         urlString: String,
         cornerRadius: CGFloat = CornerRadius.inlaySmall,
+        cornerRadii: RectangleCornerRadii? = nil,
         border: Border? = nil,
-        placeholderBackground: Color = .tagBackground,
-        placeholderIconFont: Font? = .title2,
+        placeholderBackground: Color = .bookCoverPlaceholderBackground,
+        placeholderIconSize: PlaceholderIconSize = .large,
         priority: XMImageRequestBuilder.Priority = .normal,
         surfaceStyle: SurfaceStyle = .plain
     ) -> XMBookCover {
@@ -199,9 +230,10 @@ extension XMBookCover {
             width: width,
             height: height,
             cornerRadius: cornerRadius,
+            cornerRadii: cornerRadii,
             border: border,
             placeholderBackground: placeholderBackground,
-            placeholderIconFont: placeholderIconFont,
+            placeholderIconSize: placeholderIconSize,
             priority: priority,
             surfaceStyle: surfaceStyle
         )
@@ -224,19 +256,34 @@ extension XMBookCover {
 // MARK: - Internal
 
 private extension XMBookCover {
+    struct CoverShape: Shape {
+        let cornerRadius: CGFloat
+        let cornerRadii: RectangleCornerRadii?
+
+        func path(in rect: CGRect) -> Path {
+            if let cornerRadii {
+                return UnevenRoundedRectangle(cornerRadii: cornerRadii, style: .continuous).path(in: rect)
+            }
+            return RoundedRectangle(cornerRadius: cornerRadius, style: .continuous).path(in: rect)
+        }
+    }
+
     enum SurfaceLayout {
         static let minEdgeWidth: CGFloat = 56
         static let minEdgeHeight: CGFloat = 80
         static let depthEdgeWidthThreshold: CGFloat = 96
     }
 
-    /// 统一占位图：背景色 + 可选 book.closed 图标。
+    /// 统一占位图：背景色 + 可选 BookCoverPlaceholder 资源图标。
     var placeholder: some View {
         placeholderBackground
             .overlay {
-                if let placeholderIconFont {
-                    Image(systemName: "book.closed")
-                        .font(placeholderIconFont)
+                if let placeholderDimension = placeholderIconSize.dimension {
+                    Image("BookCoverPlaceholder")
+                        .renderingMode(.template)
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: placeholderDimension, height: placeholderDimension)
                         .foregroundStyle(Color.textHint)
                 }
             }
@@ -288,10 +335,10 @@ private extension XMBookCover {
 
     /// 仅为厚度边样式补一个极轻外投影，让空间感更多来自陈列阴影而不是内部高光。
     @ViewBuilder
-    func surfaceShadow(for size: CGSize) -> some View {
+    func surfaceShadow(for size: CGSize, shape: CoverShape) -> some View {
         let tier = Self.resolvedSurfaceTier(for: size, requestedStyle: surfaceStyle)
         if let shadowSpec = SurfaceShadowSpec(tier: tier, size: size) {
-            RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+            shape
                 .fill(Color.contentBackground.opacity(0.001))
                 .shadow(
                     color: Color.bookCoverDropShadow,

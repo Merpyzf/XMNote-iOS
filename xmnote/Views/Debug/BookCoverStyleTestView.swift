@@ -439,7 +439,7 @@ private extension BookCoverStyleTestContentView {
                 color: surfaceStyle == .spine ? .surfaceBorderSubtle : .surfaceBorderDefault,
                 width: CardStyle.borderWidth
             ),
-            placeholderIconFont: width >= 72 ? .title3 : .callout,
+            placeholderIconSize: .medium,
             surfaceStyle: surfaceStyle
         )
     }

@@ -1016,8 +1016,7 @@ private extension ReadCalendarCoverFullscreenDeckStage {
             height: size.height,
             urlString: item.coverURL ?? "",
             border: .init(color: .white.opacity(Layout.borderOpacity), width: Layout.borderWidth),
-            placeholderBackground: Color.readCalendarSelectionFill.opacity(Layout.placeholderOpacity),
-            placeholderIconFont: nil,
+            placeholderIconSize: .hidden,
             priority: .low
         )
     }

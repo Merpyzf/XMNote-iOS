@@ -56,6 +56,9 @@ extension Color {
     /// 标签背景色
     static let tagBackground = Color(light: Color(hex: 0xE8F0EC),
                                       dark: Color(hex: 0x343536))
+    /// 书籍空封面背景色，统一承接无图与加载失败回退态。
+    static let bookCoverPlaceholderBackground = Color(light: Color(hex: 0xEEEEEE),
+                                                      dark: Color(hex: 0x333333))
     /// Sheet 背景
     static let bgSheet = Color(light: Color(hex: 0xF2F2F6),
                                 dark: Color(hex: 0x1C1C1C))

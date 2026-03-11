@@ -199,7 +199,7 @@ private extension ReadingDurationRankingChart {
             Layout.coverHeight,
             urlString: urlString,
             border: .init(color: .white.opacity(0.14), width: 0.5),
-            placeholderIconFont: .system(size: 11, weight: .medium)
+            placeholderIconSize: .small
         )
         .shadow(
             color: Color.black.opacity(Layout.coverShadowOpacity),
