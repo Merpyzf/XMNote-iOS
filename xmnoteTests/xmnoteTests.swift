@@ -10,6 +10,7 @@ import Foundation
 import UIKit
 @testable import xmnote
 
+@MainActor
 struct xmnoteTests {
 
     @Test func richTextAttributedCacheReusesParsedContentAcrossExpandStateChanges() {
@@ -189,7 +190,11 @@ struct xmnoteTests {
                         firstEventTime: Int64(1000 + index)
                     )
                 ],
-                readDoneCount: 0
+                readDoneCount: 0,
+                readSeconds: 0,
+                noteCount: 0,
+                checkInCount: 0,
+                checkInSeconds: 0
             ))
         })
 
@@ -218,7 +223,11 @@ struct xmnoteTests {
                 books: [
                     ReadCalendarDayBook(id: 7, name: "iOS 架构", coverURL: "", firstEventTime: 1)
                 ],
-                readDoneCount: 0
+                readDoneCount: 0,
+                readSeconds: 0,
+                noteCount: 0,
+                checkInCount: 0,
+                checkInSeconds: 0
             ))
         })
 
@@ -239,17 +248,29 @@ struct xmnoteTests {
             calendar.startOfDay(for: d1): ReadCalendarDay(
                 date: d1,
                 books: [ReadCalendarDayBook(id: 2, name: "算法", coverURL: "", firstEventTime: 1)],
-                readDoneCount: 0
+                readDoneCount: 0,
+                readSeconds: 0,
+                noteCount: 0,
+                checkInCount: 0,
+                checkInSeconds: 0
             ),
             calendar.startOfDay(for: d2): ReadCalendarDay(
                 date: d2,
                 books: [ReadCalendarDayBook(id: 2, name: "算法", coverURL: "", firstEventTime: 2)],
-                readDoneCount: 0
+                readDoneCount: 0,
+                readSeconds: 0,
+                noteCount: 0,
+                checkInCount: 0,
+                checkInSeconds: 0
             ),
             calendar.startOfDay(for: d3): ReadCalendarDay(
                 date: d3,
                 books: [ReadCalendarDayBook(id: 2, name: "算法", coverURL: "", firstEventTime: 3)],
-                readDoneCount: 0
+                readDoneCount: 0,
+                readSeconds: 0,
+                noteCount: 0,
+                checkInCount: 0,
+                checkInSeconds: 0
             )
         ]
 
@@ -275,7 +296,11 @@ struct xmnoteTests {
             (calendar.startOfDay(for: date), ReadCalendarDay(
                 date: date,
                 books: [ReadCalendarDayBook(id: 10, name: "系统设计", coverURL: "", firstEventTime: Int64(index + 1))],
-                readDoneCount: 0
+                readDoneCount: 0,
+                readSeconds: 0,
+                noteCount: 0,
+                checkInCount: 0,
+                checkInSeconds: 0
             ))
         })
 
@@ -407,7 +432,8 @@ struct xmnoteTests {
             colorRepository: StubReadCalendarColorRepository()
         )
 
-        #expect(calendar.isDate(viewModel.selectedDate, inSameDayAs: initialDate))
+        #expect(viewModel.selectedDate != nil)
+        #expect(calendar.isDate(viewModel.selectedDate!, inSameDayAs: initialDate))
         #expect(calendar.isDate(viewModel.pagerSelection, equalTo: initialDate, toGranularity: .month))
     }
 
@@ -424,7 +450,8 @@ struct xmnoteTests {
         )
 
         let today = calendar.startOfDay(for: Date())
-        #expect(calendar.isDate(viewModel.selectedDate, inSameDayAs: today))
+        #expect(viewModel.selectedDate != nil)
+        #expect(calendar.isDate(viewModel.selectedDate!, inSameDayAs: today))
         #expect(calendar.isDate(viewModel.pagerSelection, equalTo: today, toGranularity: .month))
     }
 
@@ -442,7 +469,8 @@ struct xmnoteTests {
         viewModel.jumpToToday()
 
         let today = calendar.startOfDay(for: Date())
-        #expect(calendar.isDate(viewModel.selectedDate, inSameDayAs: today))
+        #expect(viewModel.selectedDate != nil)
+        #expect(calendar.isDate(viewModel.selectedDate!, inSameDayAs: today))
         #expect(calendar.isDate(viewModel.pagerSelection, equalTo: today, toGranularity: .month))
     }
 
