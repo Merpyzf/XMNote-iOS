@@ -42,23 +42,23 @@ struct ReadingDashboardRepositoryTests {
         let referenceDate = Self.date(2026, 3, 10, hour: 9)
 
         try await harness.write { db in
-            try Self.insertBook(db, id: 1, name: "第一本", readStatusId: BookReadingStatus.reading.rawValue)
-            try Self.insertBook(db, id: 2, name: "第二本", readStatusId: BookReadingStatus.reading.rawValue)
-            try Self.insertBook(db, id: 3, name: "第三本", readStatusId: BookReadingStatus.reading.rawValue, bookmarkModifiedTime: Self.millis(Self.date(2026, 3, 9, hour: 22)))
+            try Self.insertBook(db, id: 1_001, name: "第一本", readStatusId: BookReadingStatus.reading.rawValue)
+            try Self.insertBook(db, id: 1_002, name: "第二本", readStatusId: BookReadingStatus.reading.rawValue)
+            try Self.insertBook(db, id: 1_003, name: "第三本", readStatusId: BookReadingStatus.reading.rawValue, bookmarkModifiedTime: Self.millis(Self.date(2026, 3, 9, hour: 22)))
 
-            try Self.insertNote(db, bookId: 1, createdAt: Self.date(2026, 3, 8, hour: 9))
-            try Self.insertReview(db, bookId: 1, createdAt: Self.date(2026, 3, 9, hour: 12))
-            try Self.insertReadRecord(db, bookId: 1, at: Self.date(2026, 3, 9, hour: 14), elapsedSeconds: 600)
+            try Self.insertNote(db, bookId: 1_001, createdAt: Self.date(2026, 3, 8, hour: 9))
+            try Self.insertReview(db, bookId: 1_001, createdAt: Self.date(2026, 3, 9, hour: 12))
+            try Self.insertReadRecord(db, bookId: 1_001, at: Self.date(2026, 3, 9, hour: 14), elapsedSeconds: 600)
 
-            try Self.insertCategoryContent(db, bookId: 2, createdAt: Self.date(2026, 3, 9, hour: 11))
-            try Self.insertCheckInRecord(db, bookId: 2, checkInAt: Self.date(2026, 3, 10, hour: 8))
-            try Self.insertNote(db, bookId: 2, createdAt: Self.date(2026, 3, 8, hour: 8))
+            try Self.insertCategoryContent(db, bookId: 1_002, createdAt: Self.date(2026, 3, 9, hour: 11))
+            try Self.insertCheckInRecord(db, bookId: 1_002, checkInAt: Self.date(2026, 3, 10, hour: 8))
+            try Self.insertNote(db, bookId: 1_002, createdAt: Self.date(2026, 3, 8, hour: 8))
         }
 
         let snapshot = try await harness.firstSnapshot(referenceDate: referenceDate)
         let books = snapshot.recentBooks.prefix(3)
 
-        #expect(Array(books.map(\.id)) == [2, 3, 1])
+        #expect(Array(books.map(\.id)) == [1_002, 1_003, 1_001])
         #expect(Set(books.map(\.id)).count == 3)
         #expect(books[0].latestActivityAt == Self.millis(Self.date(2026, 3, 10, hour: 8)))
         #expect(books[2].latestActivityAt == Self.millis(Self.date(2026, 3, 9, hour: 14)))
@@ -70,17 +70,17 @@ struct ReadingDashboardRepositoryTests {
         let referenceDate = Self.date(2026, 3, 10, hour: 9)
 
         try await harness.write { db in
-            try Self.insertBook(db, id: 10, name: "已读书", readStatusId: BookReadingStatus.readDone.rawValue)
-            try Self.insertBook(db, id: 11, name: "弃读书", readStatusId: BookReadingStatus.abandon.rawValue)
-            try Self.insertBook(db, id: 12, name: "正在读", readStatusId: BookReadingStatus.reading.rawValue)
+            try Self.insertBook(db, id: 1_010, name: "已读书", readStatusId: BookReadingStatus.readDone.rawValue)
+            try Self.insertBook(db, id: 1_011, name: "弃读书", readStatusId: BookReadingStatus.abandon.rawValue)
+            try Self.insertBook(db, id: 1_012, name: "正在读", readStatusId: BookReadingStatus.reading.rawValue)
 
-            try Self.insertReadRecord(db, bookId: 10, at: Self.date(2026, 3, 10, hour: 12), elapsedSeconds: 300)
-            try Self.insertReadRecord(db, bookId: 11, at: Self.date(2026, 3, 10, hour: 11), elapsedSeconds: 300)
-            try Self.insertReadRecord(db, bookId: 12, at: Self.date(2026, 3, 10, hour: 10), elapsedSeconds: 300)
+            try Self.insertReadRecord(db, bookId: 1_010, at: Self.date(2026, 3, 10, hour: 12), elapsedSeconds: 300)
+            try Self.insertReadRecord(db, bookId: 1_011, at: Self.date(2026, 3, 10, hour: 11), elapsedSeconds: 300)
+            try Self.insertReadRecord(db, bookId: 1_012, at: Self.date(2026, 3, 10, hour: 10), elapsedSeconds: 300)
         }
 
         let snapshot = try await harness.firstSnapshot(referenceDate: referenceDate)
-        #expect(snapshot.resumeBook?.id == 12)
+        #expect(snapshot.resumeBook?.id == 1_012)
         #expect(snapshot.resumeBook?.name == "正在读")
     }
 
@@ -94,21 +94,21 @@ struct ReadingDashboardRepositoryTests {
 
             try Self.insertBook(
                 db,
-                id: 20,
+                id: 1_020,
                 name: "表内已读",
                 readStatusId: BookReadingStatus.readDone.rawValue,
                 readStatusChangedDate: Self.millis(Self.date(2026, 5, 10, hour: 9))
             )
             try Self.insertBook(
                 db,
-                id: 21,
+                id: 1_021,
                 name: "历史已读",
                 readStatusId: BookReadingStatus.reading.rawValue,
                 readStatusChangedDate: Self.millis(Self.date(2026, 1, 5, hour: 9))
             )
             try Self.insertBook(
                 db,
-                id: 22,
+                id: 1_022,
                 name: "去年已读",
                 readStatusId: BookReadingStatus.readDone.rawValue,
                 readStatusChangedDate: Self.millis(Self.date(2025, 12, 31, hour: 23))
@@ -116,20 +116,20 @@ struct ReadingDashboardRepositoryTests {
 
             try Self.insertReadStatusRecord(
                 db,
-                bookId: 21,
+                bookId: 1_021,
                 statusId: BookReadingStatus.readDone.rawValue,
                 changedAt: Self.date(2026, 10, 1, hour: 8)
             )
             try Self.insertReadStatusRecord(
                 db,
-                bookId: 21,
+                bookId: 1_021,
                 statusId: BookReadingStatus.readDone.rawValue,
                 changedAt: Self.date(2024, 10, 1, hour: 8)
             )
 
-            try Self.insertReadRecord(db, bookId: 20, at: Self.date(2026, 5, 1, hour: 20), elapsedSeconds: 1200)
-            try Self.insertReadRecord(db, bookId: 21, at: Self.date(2026, 10, 2, hour: 20), elapsedSeconds: 600)
-            try Self.insertReadRecord(db, bookId: 22, at: Self.date(2025, 12, 1, hour: 20), elapsedSeconds: 500)
+            try Self.insertReadRecord(db, bookId: 1_020, at: Self.date(2026, 5, 1, hour: 20), elapsedSeconds: 1200)
+            try Self.insertReadRecord(db, bookId: 1_021, at: Self.date(2026, 10, 2, hour: 20), elapsedSeconds: 600)
+            try Self.insertReadRecord(db, bookId: 1_022, at: Self.date(2025, 12, 1, hour: 20), elapsedSeconds: 500)
         }
 
         let snapshot = try await harness.firstSnapshot(referenceDate: referenceDate)
@@ -137,9 +137,53 @@ struct ReadingDashboardRepositoryTests {
 
         #expect(summary.targetCount == 15)
         #expect(summary.readCount == 2)
-        #expect(summary.books.map(\.id) == [21, 20])
+        #expect(summary.books.map(\.id) == [1_021, 1_020])
         #expect(summary.books.first?.totalReadSeconds == 600)
         #expect(summary.books.first?.readDoneCount == 2)
+    }
+
+    @Test
+    func trendMetricsKeepFixedWindowsAndFillMissingPeriodsWithZero() async throws {
+        let harness = try Self.makeHarness()
+        let referenceDate = Self.date(2026, 3, 10, hour: 9)
+
+        try await harness.write { db in
+            try Self.insertBook(
+                db,
+                id: 1_031,
+                name: "二月读完",
+                readStatusId: BookReadingStatus.readDone.rawValue,
+                readStatusChangedDate: Self.millis(Self.date(2026, 2, 5, hour: 10))
+            )
+
+            try Self.insertReadRecord(
+                db,
+                bookId: 1_031,
+                at: Self.date(2026, 3, 10, hour: 8),
+                elapsedSeconds: 600
+            )
+            try Self.insertNote(
+                db,
+                bookId: 1_031,
+                createdAt: Self.date(2026, 3, 9, hour: 7)
+            )
+        }
+
+        let snapshot = try await harness.firstSnapshot(referenceDate: referenceDate)
+        let metrics = Dictionary(uniqueKeysWithValues: snapshot.trends.map { ($0.kind, $0) })
+
+        let readingMetric = try #require(metrics[.readingDuration])
+        #expect(readingMetric.points.count == 7)
+        #expect(readingMetric.points.map(\.value) == [0, 0, 0, 0, 0, 0, 600])
+
+        let noteMetric = try #require(metrics[.noteCount])
+        #expect(noteMetric.points.count == 7)
+        #expect(noteMetric.points.map(\.value) == [0, 0, 0, 0, 0, 1, 0])
+
+        let readDoneMetric = try #require(metrics[.readDoneCount])
+        #expect(readDoneMetric.points.count == 7)
+        #expect(readDoneMetric.points.map(\.label) == ["9月", "10月", "11月", "12月", "1月", "2月", "3月"])
+        #expect(readDoneMetric.points.map(\.value) == [0, 0, 0, 0, 0, 1, 0])
     }
 }
 

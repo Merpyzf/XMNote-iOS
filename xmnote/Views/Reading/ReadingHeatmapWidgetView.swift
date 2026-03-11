@@ -10,7 +10,7 @@ import SwiftUI
 struct ReadingHeatmapWidgetView: View {
     private enum HeatmapWidgetLayout {
         static let cardCornerRadius = CornerRadius.containerLarge
-        static let contentInset: CGFloat = 12
+        static let contentInset: CGFloat = Spacing.base
         static let infoVisualSize: CGFloat = 24
         static let infoHitSize: CGFloat = 32
         static let infoInset: CGFloat = 3

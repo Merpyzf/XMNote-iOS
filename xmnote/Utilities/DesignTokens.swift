@@ -104,6 +104,9 @@ extension Color {
     /// 三级弱边框（弱化层级、避免与主信息竞争）
     static let surfaceBorderSubtle = Color(light: Color(hex: 0xC7CCD3).opacity(0.34),
                                            dark: Color.white.opacity(0.08))
+    /// 图表背景轨道色（柱图零值占位 / 背景 bar），避免与容器边框争抢视觉语义。
+    static let chartBarTrack = Color(light: Color(hex: 0xC7CCD3).opacity(0.22),
+                                     dark: Color.white.opacity(0.06))
     /// 兼容历史命名，默认等价于二级内容边框。
     static let cardBorder = surfaceBorderDefault
     /// 分割线
@@ -248,26 +251,46 @@ extension Color {
 
 // MARK: - Spacing
 //
-// 选择指南（两步决策）：
+// 选择指南（四步决策）：
 //
-// 第一步：判断间距场景
-//   内部间距 → 元素内部的紧凑留白（图标与文字、标签内 padding）
-//   元素间距 → 同级元素之间的呼吸空间（按钮组、控件行间、列表项间）
-//   容器间距 → 容器与内容的边距（卡片 padding、屏幕边距）
+// 第一步：先判断是不是“留白”问题
+//   只有在表达元素之间的距离、容器与内容的边距、或视觉呼吸空间时，才使用 spacing token。
+//   命中线宽、点击热区、组件尺寸约束时，不要把 spacing 当作通用尺寸常量。
 //
-// 第二步：按密度选 token
-//   compact(4) < half(6) < cozy(8) < base(12) < screenEdge(16) < contentEdge(18) < double(24)
+// 第二步：判断层级
+//   Inline    → 行内或紧密配对关系（图标与文字、主值与副标题、标签内边距）
+//   Block     → 同级内容块之间的常规留白（按钮组、图表标题到图表、段落间距）
+//   Container → 卡片或模块内部边距（内容到卡片边缘、局部分区）
+//   Page      → 页面级边距与大分区留白
 //
-// 示例：
-//   HStack 图标与文字间距   → 内部间距 → 最紧凑 → compact
-//   月份选择器内 padding    → 内部间距 → 稍松   → half
-//   工具栏按钮组 spacing    → 元素间距 → 舒适   → cozy
-//   VStack 段落间距         → 元素间距 → 标准   → base
-//   卡片内容到边缘          → 容器间距 → 屏幕级 → screenEdge
-//   面板内容边距            → 容器间距 → 宽松   → contentEdge
-//   区块之间大留白          → 容器间距 → 最大   → double
+// 第三步：优先选择默认档
+//   Inline    → half(6) / cozy(8)
+//   Block     → cozy(8) / base(12)
+//   Container → screenEdge(16) / contentEdge(18) / section(20)
+//   Page      → screenEdge(16) / section(20) / double(24)
+//
+// 第四步：默认档不成立时，才使用补位档
+//   微调档     → hairline(1) / tiny(2) / micro(3)，只用于视觉补偿、描边避让、极小留白
+//   紧密补位档 → compact(4)，用于比 half 更紧的成组关系
+//   中间补位档 → tight(10) / comfortable(14)，用于默认档之间的过渡密度
+//   特殊约束   → actionReserved(44) 用于最小点击热区或操作预留，不属于常规 spacing
+//
+// 默认选择示例：
+//   图标与短文本间距        → compact
+//   主值与副标题            → half
+//   图表标题到图表          → cozy
+//   常规内容块间距          → base
+//   页面横向安全边距        → screenEdge
+//   普通卡片内容边距        → contentEdge
+//   模块级强调分组          → section
+//   大段留白/强分区         → double
+//
+// 反例：
+//   不要用 actionReserved 表达普通 padding 或间距。
+//   不要用 hairline / tiny / micro 充当卡片主边距。
+//   不要默认从 tight / comfortable 开始试值，它们是补位档，不是首选档。
 
-/// 全局间距设计令牌，统一页面内边距与组件间距。
+/// 全局间距设计令牌，统一页面留白层级、容器边距与紧密关系间距。
 enum Spacing {
     static let none: CGFloat = 0
     static let hairline: CGFloat = 1

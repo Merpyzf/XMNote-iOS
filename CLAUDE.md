@@ -117,14 +117,14 @@ SQL 变更同步（强制）：修改 SQL 时必须同步更新对应注释；SQ
 文档触发门槛（强制）：仅当用户明确发出“任务已完成”后，才允许文档落盘与回环更新。
 
 八、执行与交付策略（Execution Policy）
-默认交付验证：实现完成后默认执行 `build` 以确保编译通过。
+默认交付验证：实现完成后默认仅执行 `build`，并以编译通过作为唯一默认验证动作。
 文档触发策略（强制）：文档生成/更新仅在用户明确发出“任务已完成”后执行；在该信号前禁止写入任何文档文件。
 治理文档触发策略（强制）：`AGENTS.md`、`CLAUDE.md` 等规范文档更新同样仅在用户明确发出“任务已完成”后落盘，收口阶段需统一同步，避免双文档失构。
-开发阶段约束：仅执行代码实现与编译/测试验证，不执行文档校验闸门。
+开发阶段约束：默认仅执行代码实现与编译验证；仅当用户明确要求测试时才执行测试；不执行文档校验闸门。
 收口阶段约束（收到“任务已完成”）：统一执行文档补齐与文档闸门校验。
 迁移对齐收口约束（强制）：若本次为 Android → iOS 迁移功能，收口阶段必须完成 `docs/feature/功能名/对齐情况.md` 的新增或更新，否则视为未完成交付。
-测试执行边界：未被明确要求时，不单独执行 UI Test，不主动编写 UI 测试用例。
-测试优先级：如需补测试，优先补单元测试（ViewModel、数据库迁移、服务层异常路径）。
+测试执行边界：未被明确要求时，不自动运行任何测试，不主动编写任何测试用例。
+测试优先级：仅当用户明确要求测试或补测试时生效；生效后优先单元测试（ViewModel、数据库迁移、服务层异常路径）。
 提交规范：提交信息必须使用中文，格式为 `type(功能模块): 动作 + 结果`（`type` 仅允许：`feat`/`fix`/`refactor`/`chore`/`docs`/`test`/`build`/`ci`/`revert`）。
 提交标题禁令：严禁 `提交本地全部改动`、`更新代码`、`修复问题` 等无信息标题。
 提交标题要求：必须明确三要素（变更对象、关键动作、结果/目的），禁止“只描述动作不描述结果”。
@@ -719,33 +719,62 @@ withAnimation(.snappy) {
 
 所有间距、圆角必须使用 `Spacing` / `CornerRadius` token，禁止硬编码魔法数字。
 
-### Spacing 选择指南（两步决策）
+### Spacing 选择指南（四步决策）
 
-第一步 — 判断间距场景：
+第一步 — 先判断是不是“留白”问题：
 
-| 场景 | 含义 | 典型位置 |
+- 只有在表达元素之间的距离、容器与内容的边距、视觉呼吸空间时，才使用 `Spacing`。
+- 命中线宽、控件尺寸、点击热区、品牌字形补偿以外的尺寸约束时，不要把 `Spacing` 当通用数字仓库。
+
+第二步 — 判断层级：
+
+| 层级 | 含义 | 典型位置 |
 |------|------|----------|
-| 内部间距 | 元素内部的紧凑留白 | 图标与文字、标签内 padding |
-| 元素间距 | 同级元素之间的呼吸空间 | 按钮组、控件行间、列表项间 |
-| 容器间距 | 容器与内容的边距 | 卡片 padding、屏幕边距 |
+| `Inline` | 行内或紧密配对关系 | 图标与文字、主值与副标题、标签内边距 |
+| `Block` | 同级内容块之间的常规留白 | 按钮组、图表标题到图表、段落间距 |
+| `Container` | 卡片或模块内部边距 | 卡片 padding、局部分区、内容到边缘 |
+| `Page` | 页面级边距与大分区留白 | 页面横向边距、模块间距 |
 
-第二步 — 按密度选 token：
+第三步 — 优先选默认档：
 
-```
-compact(4) < half(6) < cozy(8) < base(12) < screenEdge(16) < contentEdge(18) < double(24)
-```
+| 默认档 | 推荐用途 |
+|--------|----------|
+| `half(6)` | 主值与副标题、紧密信息组 |
+| `cozy(8)` | 紧凑图表、控件内小组距 |
+| `base(12)` | 常规内容块间距、标准组件留白 |
+| `screenEdge(16)` | 页面横向安全边距、基础容器边距 |
+| `contentEdge(18)` | 普通卡片内容边距 |
+| `section(20)` | 模块级强调分组、重点卡片内边距 |
+| `double(24)` | 大段留白、强分区 |
+
+第四步 — 默认档不成立时，才使用补位档：
+
+| 补位档 | 适用场景 | 约束 |
+|--------|----------|------|
+| `compact(4)` | 比 `half` 更紧的成组关系 | 仅用于非常亲密的 inline 关系 |
+| `tight(10)` | `cozy` 太挤、`base` 偏松的中间态 | 不是默认首选 |
+| `comfortable(14)` | `screenEdge` 偏紧、`section` 偏松的中间态 | 不是默认首选 |
+| `hairline(1)` / `tiny(2)` / `micro(3)` | 视觉补偿、描边避让、极小留白 | 不得作为卡片主间距 |
+| `actionReserved(44)` | 最小点击热区、操作预留 | 属于尺寸约束，不属于常规 spacing |
 
 常见映射：
 
 | 用途 | token |
 |------|-------|
-| HStack 图标与文字间距 | `compact` |
-| 月份选择器内 padding | `half` |
-| 工具栏按钮组 spacing | `cozy` |
-| VStack 段落间距 | `base` |
-| 卡片内容到边缘 | `screenEdge` |
-| 面板内容边距 | `contentEdge` |
-| 区块之间大留白 | `double` |
+| 图标与短文本间距 | `compact` |
+| 主值与副标题 | `half` |
+| 图表标题到图表 | `cozy` |
+| 常规内容块间距 | `base` |
+| 页面横向安全边距 | `screenEdge` |
+| 普通卡片内容边距 | `contentEdge` |
+| 模块级强调分组 | `section` |
+| 大段留白/强分区 | `double` |
+
+禁止事项：
+
+- 不要把 `actionReserved` 当普通 padding 或卡片间距使用。
+- 不要默认从 `tight` / `comfortable` 开始试值；先用默认档，再判断是否需要补位。
+- 不要用 `hairline` / `tiny` / `micro` 承担主布局职责，它们只服务视觉补偿。
 
 ### CornerRadius 选择指南（两步决策）
 
@@ -893,7 +922,7 @@ ViewModel:       app/src/main/java/com/merpyzf/xmnote/viewmodel/
 xcodebuild -project XMNote.xcodeproj -scheme xmnote -sdk iphonesimulator \
   -destination 'platform=iOS Simulator,name=iPhone 17 Pro' build
 
-# 按需运行测试（仅在任务明确要求时）
+# 按需运行测试（仅用户明确要求时执行，不属于默认交付流程）
 xcodebuild -project XMNote.xcodeproj -scheme xmnote -sdk iphonesimulator \
   -destination 'platform=iOS Simulator,name=iPhone 17 Pro' test
 

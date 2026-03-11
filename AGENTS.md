@@ -14,12 +14,12 @@
 
 ## 执行优先级（与 CLAUDE.md 融合）
 - 优先级顺序：用户当次明确要求 > `AGENTS.md` > `CLAUDE.md`。
-- 默认执行策略：实现完成后先做编译校验；未被明确要求时，不单独执行 UI Test，不主动编写 UI 测试用例。
+- 默认执行策略：实现完成后默认只做编译校验；未被明确要求时，不执行单元测试、不执行 UI Test，不主动编写任何测试用例。
 - 文档触发策略（强制）：仅当用户明确发出“任务已完成”后，才允许生成或更新文档（含 `docs/feature/`、`docs/component-guides/`、`docs/learning/`、L1/L2/L3 同构文档）。
 - 对齐情况文档触发策略（强制）：仅对 Android → iOS 迁移功能生效；在“任务已完成”前禁止写入 `docs/feature/功能名/对齐情况.md`，在“任务已完成”后必须与其他文档一次性补齐。
-- 在“任务已完成”前：允许代码实现、编译校验与必要测试；禁止文档写入与文档校验脚本执行。
+- 在“任务已完成”前：默认仅允许代码实现与编译校验；仅当用户明确要求测试时才执行测试；禁止文档写入与文档校验脚本执行。
 - 在“任务已完成”后：必须一次性补齐文档，并执行文档相关闸门脚本。
-- 需要测试时：优先单元测试（ViewModel、迁移、服务异常路径）；UI 测试仅在需求明确且收益大于耗时时执行。
+- 用户明确要求测试时：优先单元测试（ViewModel、迁移、服务异常路径）；UI 测试仅在需求明确且收益大于耗时时执行。
 - 数据访问铁律：所有本地/网络数据获取必须经 Repository，`ViewModel` 禁止直接访问 `AppDatabase`、`WebDAVClient`、`NetworkClient`。
 
 ## Apple 开发文档 MCP（分级强制，性能优先）
@@ -166,7 +166,8 @@
 - 双文档同构（强制）：`AGENTS.md` 与 `CLAUDE.md` 的注释约束条款必须保持语义一致。
 - GRDB `Record` 必须通过 `CodingKeys` 做 camelCase → snake_case 映射，并与表结构保持一致。
 - 设计令牌使用规范（详见 `CLAUDE.md` §6）：
-  - Spacing 梯度：`compact(4) < half(6) < cozy(8) < base(12) < screenEdge(16) < contentEdge(18) < double(24)`，按「场景→密度」两步选择。
+  - Spacing 先按「是不是留白问题 → Inline / Block / Container / Page 层级」选型，再优先使用默认档：`half / cozy / base / screenEdge / contentEdge / section / double`。
+  - `compact / tight / comfortable / hairline / tiny / micro` 仅作为补位档使用；`actionReserved(44)` 属于点击热区/操作预留，不属于常规 spacing。
   - CornerRadius 二维命名：`inlay`（嵌入零件）/ `block`（独立单元）/ `container`（外壳）× `tiny~large`，按「角色→体量」两步选择。
   - 全局 token 定义在 `DesignTokens.swift`，组件语义别名必须引用全局 token，禁止硬编码魔法数字。
   - 圆角角色映射（强制）：页面级主面板/核心背景卡使用 `container*`；内容主卡使用 `block*`；热力图/图例等密集小单元使用 `inlay*`。
@@ -180,7 +181,7 @@
 - 当用户要求“提交本地所有改动”时，允许合并提交，但必须在提交正文逐条写明改动点、影响范围与验证结果。
 - 当改动涉及多个文件，或包含配置/脚本/依赖变更时，提交正文必填，至少包含：`变更点`、`影响范围`、`验证命令与结果`。
 - 提交前必须先执行 `git status --short` 与 `git diff --stat` 自检；发现无关改动时需先和用户确认是否纳入本次提交。
-- PR 必须包含：变更摘要、影响模块、测试证据（命令与结果）、关联任务/Issue。
+- PR 必须包含：变更摘要、影响模块、验证证据（默认提供 build 命令与结果；如当次明确执行测试，再补充测试命令与结果）、关联任务/Issue。
 
 ## 文档与安全规范
 - 以下文档规范仅在用户明确“任务已完成”后触发执行；此前允许准备草案，但禁止写入仓库文档文件。
