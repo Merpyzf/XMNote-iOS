@@ -7,6 +7,7 @@ import SwiftUI
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
+/// 统计悬浮按钮组件，统一月度与年度总结入口的液态玻璃外观。
 struct ReadCalendarSummaryFloatingButton: View {
     private enum Layout {
         static let buttonSize: CGFloat = 48

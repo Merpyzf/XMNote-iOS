@@ -8,6 +8,7 @@ import UIKit
  */
 
 @MainActor
+/// 缩略图注册表，为浏览器缩放转场维护 item 到 UIImageView 的映射。
 final class XMJXThumbnailRegistry {
     private final class WeakImageViewBox {
         weak var view: UIImageView?

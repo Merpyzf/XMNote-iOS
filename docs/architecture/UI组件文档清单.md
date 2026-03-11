@@ -28,6 +28,7 @@
 | WebDAVServerFormView | UI-核心页面关键 | xmnote/Views/Personal/Backup/WebDAVServerFormView.swift | docs/component-guides/WebDAVServerFormView使用说明.md | 新增/重大重构 |
 | BackupHistorySheetView | UI-核心页面关键 | xmnote/Views/Personal/Backup/Sheets/BackupHistorySheetView.swift | docs/component-guides/BackupHistorySheetView使用说明.md | 新增/重大重构 |
 | ReadingContainerView | UI-核心页面关键 | xmnote/Views/Reading/ReadingContainerView.swift | docs/component-guides/ReadingContainerView使用说明.md | 新增/重大重构 |
+| ReadingDashboardView | UI-核心页面关键 | xmnote/Views/Reading/ReadingDashboardView.swift | docs/component-guides/ReadingDashboardView使用说明.md | 新增/重大重构 |
 | ReadingHeatmapWidgetView | UI-核心页面关键 | xmnote/Views/Reading/ReadingHeatmapWidgetView.swift | docs/component-guides/ReadingHeatmapWidgetView使用说明.md | 新增/重大重构 |
 | ReadCalendarView | UI-核心页面关键 | xmnote/Views/Reading/ReadCalendar/ReadCalendarView.swift | docs/component-guides/ReadCalendar使用说明.md | 新增/重大重构 |
 | ReadingTimelineView | UI-核心页面关键 | xmnote/Views/Reading/Timeline/ReadingTimelineView.swift | docs/component-guides/ReadingTimelineView使用说明.md | 新增/重大重构 |

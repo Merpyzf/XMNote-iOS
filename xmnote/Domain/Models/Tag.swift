@@ -8,7 +8,7 @@
 import Foundation
 
 /// 标签视图模型，从 TagRecord + tag_note COUNT 聚合而来
-struct Tag: Identifiable {
+nonisolated struct Tag: Identifiable {
     let id: Int64
     let name: String
     let noteCount: Int
@@ -22,7 +22,7 @@ struct Tag: Identifiable {
 }
 
 /// 标签分组，按 type 区分（笔记标签 / 书籍标签）
-struct TagSection: Identifiable {
+nonisolated struct TagSection: Identifiable {
     let id: Int64
     let title: String
     let tags: [Tag]

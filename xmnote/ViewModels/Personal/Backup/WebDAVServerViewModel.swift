@@ -8,6 +8,7 @@ import Foundation
  */
 
 @Observable
+/// WebDAV 服务器管理状态源，负责列表、表单与连接测试交互。
 class WebDAVServerViewModel {
     var servers: [BackupServerRecord] = []
     var isShowingForm = false

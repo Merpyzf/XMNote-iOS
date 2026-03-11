@@ -13,6 +13,7 @@ import GRDB
 
 /// 数据库管理器，负责持有 AppDatabase 并在恢复后重建连接。
 @Observable
+/// 全局数据库管理器，负责持有当前数据库实例并支持热重载。
 class DatabaseManager {
     private(set) var database: AppDatabase
 

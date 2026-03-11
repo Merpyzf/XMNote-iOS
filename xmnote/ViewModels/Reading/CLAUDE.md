@@ -5,6 +5,8 @@
 
 ## 成员清单
 
+- `ReadingDashboardViewModel.swift`: 在读首页状态中枢（首页 observation、目标编辑、错误态编排）
+- `ReadingDashboardFormatting.swift`: 在读首页展示格式化工具（主值拆段、进度文案、趋势柱图映射）
 - `ReadingHeatmapWidgetViewModel.swift`: 在读页热力图小组件状态编排
 - `TimelineViewModel.swift`: 时间线页面状态中枢（时间范围计算、列表加载、日历标记缓存）
 

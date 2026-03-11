@@ -16,6 +16,7 @@ import Foundation
 
 // MARK: - ReadStatusFilter
 
+/// ReadStatusFilter 定义书架页的阅读状态筛选器，统一顶部筛选文案与数据库状态映射。
 enum ReadStatusFilter: CaseIterable, Identifiable {
     case all, unread, reading, finished, onHold
 
@@ -47,6 +48,7 @@ enum ReadStatusFilter: CaseIterable, Identifiable {
 
 /// BookViewModel 负责书籍模块的状态管理与业务动作编排，向界面提供可渲染数据。
 @Observable
+/// BookViewModel 负责书架列表订阅与状态筛选，把原始书籍流映射成界面可消费的数据集。
 class BookViewModel {
     var books: [BookItem] = []
     var selectedFilter: ReadStatusFilter = .all

@@ -8,7 +8,7 @@ import NukeUI
  * [POS]: UIComponents/Foundation 跨模块复用组件，统一图片加载状态、GIF 播放与请求策略
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
-
+/// XMRemoteImage 统一封装静态图与 GIF 远程图片渲染路径，收口加载、探测和占位态语义。
 struct XMRemoteImage<Placeholder: View>: View {
     let urlString: String
     let contentMode: ContentMode
@@ -92,6 +92,7 @@ private extension XMRemoteImage {
 
     /// 渲染 GIF 内容层并处理加载状态。
     @ViewBuilder
+    /// 优先展示 GIF 动画数据，失败后回退静态图，保证远程图组件有稳定兜底。
     func gifContent(for url: URL) -> some View {
         ZStack(alignment: .topTrailing) {
             if let gifData {
@@ -122,6 +123,8 @@ private extension XMRemoteImage {
 
     /// 下载 GIF 原始数据并更新组件状态（成功进入 GIF 渲染，失败回退静态图）。
     @MainActor
+    /// 下载 GIF 原始数据并更新组件状态。
+    /// 并发语义：在主线程回写 `gifData/gifLoadFailed`，若任务取消则立即终止，避免旧 URL 结果串到新视图实例。
     func loadGIFData(from url: URL) async {
         gifLoadFailed = false
         gifData = nil
@@ -143,6 +146,7 @@ private extension XMRemoteImage {
 
     /// 重置 GIF 相关状态，避免 URL 切换后沿用旧加载结果。
     @MainActor
+    /// 重置 GIF 相关状态，避免 URL 切换后沿用旧加载结果。
     func resetGIFState() {
         gifData = nil
         gifLoadFailed = false
@@ -152,6 +156,7 @@ private extension XMRemoteImage {
 
     /// 处理静态图加载回调并同步组件状态。
     @MainActor
+    /// 根据静态图加载结果决定是否切换到 GIF 渲染分支。
     func handleStaticImageCompletion(
         result: Result<ImageResponse, Error>,
         url: URL,
@@ -178,6 +183,7 @@ private extension XMRemoteImage {
 
     /// 按需探测资源是否为 GIF，避免错误渲染路径。
     @MainActor
+    /// 在响应头不可靠时补做一次数据探测，避免 GIF 资源被误按静态图展示。
     func probeGIFDataIfNeeded(from url: URL) async {
         let request = XMImageLoadRequest(url: url, priority: priority)
         do {

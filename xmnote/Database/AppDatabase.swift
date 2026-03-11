@@ -12,6 +12,7 @@ import GRDB
 // 数据库核心管理类，负责 DatabasePool 的初始化、迁移和生命周期管理
 // 使用 WAL 模式，与 Android Room 的默认行为一致
 
+/// 数据库入口，负责创建连接池、执行迁移并维护数据库路径语义。
 nonisolated struct AppDatabase {
     /// 数据库连接池（支持并发读取）
     /// 使用 private(set) 以支持热重载场景（备份恢复后重新打开数据库）
@@ -29,7 +30,7 @@ nonisolated struct AppDatabase {
 extension AppDatabase {
 
     /// 创建生产环境数据库（存储在 App 的 Application Support 目录）
-    init() throws {
+    nonisolated init() throws {
         let fileManager = FileManager.default
         let appSupportURL = try fileManager.url(
             for: .applicationSupportDirectory,
@@ -42,11 +43,11 @@ extension AppDatabase {
     }
 
     /// 创建指定路径的数据库（用于测试或备份恢复）
-    init(path: String) throws {
+    nonisolated init(path: String) throws {
         dbPool = try Self.openDatabase(at: path)
     }
 
-    private static func openDatabase(at path: String) throws -> DatabasePool {
+    private nonisolated static func openDatabase(at path: String) throws -> DatabasePool {
         var config = Configuration()
         // WAL 模式：与 Android Room 默认行为一致，支持并发读写
         // 备份时需要先 checkpoint 确保数据完整
@@ -114,7 +115,7 @@ extension AppDatabase {
 extension AppDatabase {
 
     /// 内存数据库，仅用于 #Preview 和测试
-    static func empty() throws -> AppDatabase {
+    nonisolated static func empty() throws -> AppDatabase {
         let tempDir = NSTemporaryDirectory()
         let path = (tempDir as NSString).appendingPathComponent("preview_\(UUID().uuidString).db")
         return try AppDatabase(path: path)

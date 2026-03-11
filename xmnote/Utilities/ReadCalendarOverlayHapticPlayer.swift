@@ -18,6 +18,7 @@ import UIKit
 /// 降级策略：设备不支持 CoreHaptics 时回退到 UIImpactFeedbackGenerator 单次冲击；
 /// `accessibilityReduceMotion` 时仅保留极轻 transient 确认；触感关闭时全部跳过。
 @MainActor
+/// 阅读日历封面浮层触感播放器，统一管理展开、收起与降级路径。
 final class ReadCalendarOverlayHapticPlayer {
 
     private var engine: CHHapticEngine?

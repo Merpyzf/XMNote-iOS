@@ -7,12 +7,13 @@
 
 import SwiftUI
 import UIKit
-
+/// RichTextLayoutSnapshot 缓存单次富文本测量结果，避免滚动中重复做 UIKit 版面计算。
 struct RichTextLayoutSnapshot: Equatable {
     let size: CGSize
     let isTruncated: Bool
 }
 
+/// RichTextLayoutSnapshotBox 把值语义快照包成 NSCache 可存储的对象引用类型。
 private final class RichTextLayoutSnapshotBox: NSObject {
     let snapshot: RichTextLayoutSnapshot
 
@@ -21,6 +22,7 @@ private final class RichTextLayoutSnapshotBox: NSObject {
     }
 }
 
+/// RichTextRenderCache 统一缓存 HTML 解析结果和布局快照，服务列表滚动场景下的富文本性能优化。
 final class RichTextRenderCache {
     static let shared = RichTextRenderCache()
 
@@ -32,6 +34,7 @@ final class RichTextRenderCache {
         layoutCache.countLimit = 1024
     }
 
+    /// 命中缓存时直接复用已解析富文本，避免相同 HTML 在多个卡片里反复走解析链路。
     func resolveAttributedString(
         for key: String,
         builder: () -> NSAttributedString
@@ -47,14 +50,17 @@ final class RichTextRenderCache {
         return cachedValue
     }
 
+    /// 读取指定宽度与行数约束下的布局快照，供 `sizeThatFits` 直接复用。
     func cachedLayoutSnapshot(for key: String) -> RichTextLayoutSnapshot? {
         layoutCache.object(forKey: key as NSString)?.snapshot
     }
 
+    /// 写入布局快照，减少滚动过程中的重复测量。
     func storeLayoutSnapshot(_ snapshot: RichTextLayoutSnapshot, for key: String) {
         layoutCache.setObject(RichTextLayoutSnapshotBox(snapshot: snapshot), forKey: key as NSString)
     }
 
+    /// 清空解析与布局缓存，供调试或主题切换场景强制失效。
     func removeAll() {
         attributedCache.removeAllObjects()
         layoutCache.removeAllObjects()
@@ -73,6 +79,7 @@ struct RichText: UIViewRepresentable {
     /// 截断状态变更回调，仅在 maxLines > 0 时有意义
     var onTruncationChanged: ((Bool) -> Void)?
 
+    /// 创建只读 `UITextView` 和自定义 layout manager，承接完整富文本展示语义。
     func makeUIView(context: Context) -> UITextView {
         let layoutManager = RichTextLayoutManager()
         layoutManager.bulletColor = UIColor.label
@@ -99,6 +106,7 @@ struct RichText: UIViewRepresentable {
         return textView
     }
 
+    /// 仅在内容签名变化时回写富文本，避免列表滚动时每次刷新都重建 `NSAttributedString`。
     func updateUIView(_ textView: UITextView, context: Context) {
         let traitCollection = textView.traitCollection
         let contentKey = Self.contentCacheKey(
@@ -131,6 +139,7 @@ struct RichText: UIViewRepresentable {
         textView.textContainer.lineBreakMode = lineBreakMode
     }
 
+    /// 结合共享缓存和本地 coordinator 状态测量富文本尺寸，降低 SwiftUI 布局抖动成本。
     func sizeThatFits(_ proposal: ProposedViewSize, uiView: UITextView, context: Context) -> CGSize? {
         let screenWidth = uiView.window?.screen.bounds.width ?? 390
         let width = proposal.width ?? screenWidth
@@ -194,8 +203,10 @@ struct RichText: UIViewRepresentable {
         return snapshot.size
     }
 
+    /// 创建测量过程使用的本地缓存协调器，避免同一轮布局里重复命中共享缓存。
     func makeCoordinator() -> Coordinator { Coordinator() }
 
+    /// Coordinator 保存当前视图实例最近一次内容与布局命中结果，缩小单实例重复计算范围。
     final class Coordinator {
         var lastContentKey: String = ""
         var lastLayoutKey: String = ""
@@ -268,6 +279,7 @@ struct RichText: UIViewRepresentable {
         DispatchQueue.main.async { callback(isTruncated) }
     }
 
+    /// 解析并缓存完整富文本结果，供完整态展示和预览态衍生复用。
     static func resolvedAttributedString(
         html: String,
         baseFont: UIFont,
@@ -293,6 +305,7 @@ struct RichText: UIViewRepresentable {
         }
     }
 
+    /// 生成列表收起态使用的预览富文本，去掉重型装饰后继续复用完整解析结果。
     static func resolvedPreviewAttributedString(
         html: String,
         baseFont: UIFont,
@@ -394,6 +407,7 @@ struct RichText: UIViewRepresentable {
         }
     }
 
+    /// 通过完整内容签名直接查询缓存快照，供外部预热或测试读取当前测量结果。
     static func cachedLayoutSnapshot(
         html: String,
         baseFont: UIFont,
@@ -421,6 +435,7 @@ struct RichText: UIViewRepresentable {
     }
 
     @MainActor
+    /// 在后台空闲时提前测量收起态布局，降低首次进入长列表时的卡顿峰值。
     static func prewarmPreviewLayoutSnapshot(
         html: String,
         baseFont: UIFont,
@@ -464,6 +479,7 @@ struct RichText: UIViewRepresentable {
         storeLayoutSnapshot(snapshot, for: layoutKey)
     }
 
+    /// 生成预览态内容签名，避免和完整富文本缓存键相互污染。
     static func previewContentKey(
         html: String,
         baseFont: UIFont,
@@ -481,6 +497,7 @@ struct RichText: UIViewRepresentable {
         return "preview|\(baseKey)"
     }
 
+    /// 透传到共享缓存层，按给定内容签名解析并复用富文本对象。
     static func resolveAttributedString(
         contentKey: String,
         builder: () -> NSAttributedString
@@ -488,10 +505,12 @@ struct RichText: UIViewRepresentable {
         RichTextRenderCache.shared.resolveAttributedString(for: contentKey, builder: builder)
     }
 
+    /// 按最终布局 key 读取缓存快照，供 UIKit/SwiftUI 双通道共用。
     static func cachedLayoutSnapshot(for layoutKey: String) -> RichTextLayoutSnapshot? {
         RichTextRenderCache.shared.cachedLayoutSnapshot(for: layoutKey)
     }
 
+    /// 把测量结果写入共享缓存，减少相同宽度桶的重复计算。
     static func storeLayoutSnapshot(
         _ snapshot: RichTextLayoutSnapshot,
         for layoutKey: String
@@ -499,6 +518,7 @@ struct RichText: UIViewRepresentable {
         RichTextRenderCache.shared.storeLayoutSnapshot(snapshot, for: layoutKey)
     }
 
+    /// 把 HTML、字体、颜色、行距和系统环境折叠成稳定内容签名。
     static func contentCacheKey(
         html: String,
         baseFont: UIFont,
@@ -517,6 +537,7 @@ struct RichText: UIViewRepresentable {
         ].joined(separator: "|")
     }
 
+    /// 组合内容签名、行数和宽度桶，生成布局测量缓存键。
     static func layoutCacheKey(
         contentKey: String,
         maxLines: Int,
@@ -554,10 +575,12 @@ struct RichText: UIViewRepresentable {
 
 #if DEBUG
 extension RichText {
+    /// 清空共享缓存，供调试或测试隔离富文本测量状态。
     static func testingResetCaches() {
         RichTextRenderCache.shared.removeAll()
     }
 
+    /// 暴露完整富文本解析入口，便于测试验证缓存命中与 builder 执行次数。
     static func testingResolveAttributedString(
         contentKey: String,
         builder: () -> NSAttributedString
@@ -565,6 +588,7 @@ extension RichText {
         resolveAttributedString(contentKey: contentKey, builder: builder)
     }
 
+    /// 暴露预览态富文本解析入口，便于校验收起态缓存链路。
     static func testingResolvePreviewAttributedString(
         html: String,
         baseFont: UIFont,
@@ -581,10 +605,12 @@ extension RichText {
         )
     }
 
+    /// 按布局缓存键读取当前快照，供测试断言测量结果是否已落入缓存。
     static func testingCachedLayoutSnapshot(for layoutKey: String) -> RichTextLayoutSnapshot? {
         cachedLayoutSnapshot(for: layoutKey)
     }
 
+    /// 手动写入布局快照，便于测试构造命中缓存的前置环境。
     static func testingStoreLayoutSnapshot(
         _ snapshot: RichTextLayoutSnapshot,
         for layoutKey: String
@@ -592,6 +618,7 @@ extension RichText {
         storeLayoutSnapshot(snapshot, for: layoutKey)
     }
 
+    /// 生成完整内容缓存键，供测试直接对齐生产链路的 key 规则。
     static func testingContentCacheKey(
         html: String,
         baseFont: UIFont,
@@ -608,6 +635,7 @@ extension RichText {
         )
     }
 
+    /// 生成布局缓存键，供测试校验宽度桶与行数参与缓存命中的方式。
     static func testingLayoutCacheKey(
         contentKey: String,
         maxLines: Int,

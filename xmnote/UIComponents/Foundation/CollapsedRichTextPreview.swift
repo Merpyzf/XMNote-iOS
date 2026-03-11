@@ -18,12 +18,14 @@ struct CollapsedRichTextPreview: UIViewRepresentable {
     let maxLines: Int
     let onExpand: () -> Void
 
+    /// 创建收起态预览承载视图，列表阶段只保留轻量文本和“展开”按钮。
     func makeUIView(context: Context) -> CollapsedRichTextPreviewView {
         let view = CollapsedRichTextPreviewView()
         view.updateExpandAction(onExpand)
         return view
     }
 
+    /// 仅在 HTML 或主题签名变化时刷新预览内容，降低滚动中的 UILabel 重排成本。
     func updateUIView(_ uiView: CollapsedRichTextPreviewView, context: Context) {
         let traitCollection = uiView.traitCollection
         let contentKey = RichText.previewContentKey(
@@ -54,6 +56,7 @@ struct CollapsedRichTextPreview: UIViewRepresentable {
         )
     }
 
+    /// 结合共享缓存测量收起态高度，避免同一内容在列表里重复计算。
     func sizeThatFits(
         _ proposal: ProposedViewSize,
         uiView: CollapsedRichTextPreviewView,
@@ -111,8 +114,10 @@ struct CollapsedRichTextPreview: UIViewRepresentable {
         return snapshot.size
     }
 
+    /// 创建单实例协调器，保存当前内容与布局 key。
     func makeCoordinator() -> Coordinator { Coordinator() }
 
+    /// Coordinator 记录当前预览实例最近一次的内容与布局命中状态。
     final class Coordinator {
         var lastContentKey: String = ""
         var lastLayoutKey: String = ""
@@ -120,6 +125,7 @@ struct CollapsedRichTextPreview: UIViewRepresentable {
     }
 }
 
+/// CollapsedRichTextPreviewView 用 UILabel + 展开按钮承接富文本收起态，替代重型 UITextView。
 final class CollapsedRichTextPreviewView: UIView {
     private let label = UILabel()
     private let expandButton = UIButton(type: .system)
@@ -148,6 +154,7 @@ final class CollapsedRichTextPreviewView: UIView {
         snapshot.size
     }
 
+    /// 根据缓存快照把正文和“展开”按钮落到最终 frame，避免布局逻辑散落在测量阶段。
     override func layoutSubviews() {
         super.layoutSubviews()
 
@@ -193,10 +200,12 @@ final class CollapsedRichTextPreviewView: UIView {
         updateExpandAction(onExpand)
     }
 
+    /// 更新展开回调，保持 SwiftUI 闭包和 UIKit 按钮目标一致。
     func updateExpandAction(_ onExpand: @escaping () -> Void) {
         self.onExpand = onExpand
     }
 
+    /// 测量正文和“展开”按钮组合后的总高度，供列表收起态直接复用。
     func measureLayoutSnapshot(
         attributedText: NSAttributedString,
         width: CGFloat,
@@ -226,6 +235,7 @@ final class CollapsedRichTextPreviewView: UIView {
         )
     }
 
+    /// 应用缓存测量结果并触发重排，保证视图和布局系统使用同一快照。
     func applyLayoutSnapshot(_ snapshot: RichTextLayoutSnapshot, width: CGFloat) {
         self.snapshot = snapshot
         layoutWidth = width
@@ -290,6 +300,7 @@ final class CollapsedRichTextPreviewView: UIView {
 }
 
 private extension UIFont {
+    /// 在保留字号的前提下生成指定字重字体，供“展开”按钮轻量定制系统字体。
     func weight(_ weight: UIFont.Weight) -> UIFont {
         let descriptor = fontDescriptor.addingAttributes([
             .traits: [UIFontDescriptor.TraitKey.weight: weight],

@@ -20,6 +20,7 @@ import Nuke
 /// 数据库 I/O（DatabasePool 创建 + 迁移 + seed）通过 `Task.detached` 脱离主线程，
 /// 消除首次启动 300-1200ms 的主线程阻塞。复用项目 Optional State + `.task` 延迟初始化模式。
 @main
+/// 应用入口，负责初始化全局依赖并挂载根界面。
 struct xmnoteApp: App {
     @State private var appState = AppState()
     @State private var databaseManager: DatabaseManager?
@@ -53,9 +54,10 @@ struct xmnoteApp: App {
             .task {
                 guard databaseManager == nil, initError == nil else { return }
                 do {
-                    let manager = try await Task.detached(priority: .userInitiated) {
-                        try DatabaseManager()
+                    let database = try await Task.detached(priority: .userInitiated) {
+                        try AppDatabase()
                     }.value
+                    let manager = DatabaseManager(database: database)
                     databaseManager = manager
                     repositories = RepositoryContainer(databaseManager: manager)
                 } catch {

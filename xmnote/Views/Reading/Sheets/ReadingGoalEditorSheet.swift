@@ -6,8 +6,9 @@ import SwiftUI
  * [POS]: Reading/Sheets 业务弹层，负责今日目标与年度目标的统一输入表单
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
-
+/// ReadingGoalEditorSheet 统一承接首页的今日目标与年度目标编辑流程，避免页面内散落重复表单逻辑。
 struct ReadingGoalEditorSheet: View {
+    /// Item 让 sheet 能以 `Identifiable` 形式驱动展示，同时保留目标类型语义。
     struct Item: Identifiable {
         let mode: ReadingDashboardViewModel.GoalEditorMode
 

@@ -7,6 +7,7 @@ import SwiftUI
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
+/// 月度阅读记录占位弹层，当前用于承接未完成能力并提供月总结入口。
 struct ReadCalendarMonthRecordPlaceholderSheet: View {
     private enum Layout {
         static let containerPadding: CGFloat = Spacing.contentEdge

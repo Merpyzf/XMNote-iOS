@@ -7,6 +7,7 @@ import SwiftUI
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
+/// 日历内联错误横幅，负责在内容区提示失败原因并提供重试入口。
 struct ReadCalendarInlineErrorBanner: View {
     let message: String
     let onRetry: () -> Void

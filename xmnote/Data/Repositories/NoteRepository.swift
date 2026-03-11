@@ -8,6 +8,7 @@ import GRDB
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
+/// 笔记仓储实现，负责标签分组订阅与笔记详情读写。
 struct NoteRepository: NoteRepositoryProtocol {
     private let databaseManager: DatabaseManager
 
@@ -73,7 +74,7 @@ struct NoteRepository: NoteRepositoryProtocol {
 private extension NoteRepository {
     /// 查询标签分组和各标签笔记数，供标签入口页展示“笔记标签/书籍标签”两个分区。
     /// - Throws: 数据库查询失败时抛出错误。
-    func fetchTagSections(_ db: Database) throws -> [TagSection] {
+    nonisolated func fetchTagSections(_ db: Database) throws -> [TagSection] {
         // SQL 目的：读取标签列表并统计每个标签关联的有效笔记数。
         // 表关系：tag t LEFT JOIN tag_note tn（仅 tn.is_deleted = 0）。
         // 分组与排序：按标签 id 聚合计数，再按 type/tag_order 输出用于分组展示。

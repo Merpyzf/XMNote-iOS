@@ -7,6 +7,7 @@ import Foundation
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
+/// 书籍模块数据访问契约，定义书架、书籍详情与书摘的统一读取入口。
 protocol BookRepositoryProtocol {
     /// 持续监听书架列表变化，供书籍首页实时刷新。
     func observeBooks() -> AsyncThrowingStream<[BookItem], Error>

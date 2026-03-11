@@ -14,6 +14,7 @@ import SwiftUI
 /// - 取消行为: 视图销毁时 Task 自动取消
 @MainActor
 @Observable
+/// TimelineViewModel 负责时间线页的日期选择、分类过滤、事件加载和月份标记缓存。
 final class TimelineViewModel {
     var sections: [TimelineSection] = []
     private(set) var sectionsRevision: Int = 0
@@ -180,6 +181,7 @@ private extension TimelineViewModel {
 // MARK: - 工具方法
 
 private extension TimelineViewModel {
+    /// 把日期折叠到月份首日，供查询范围和 marker cache key 统一使用。
     static func monthStart(of date: Date, using calendar: Calendar) -> Date {
         let normalized = calendar.startOfDay(for: date)
         let comps = calendar.dateComponents([.year, .month], from: normalized)
@@ -187,6 +189,7 @@ private extension TimelineViewModel {
         return calendar.startOfDay(for: start)
     }
 
+    /// 生成月份缓存 key，避免 `Date` 时分秒差异导致同月重复缓存。
     static func monthKey(for date: Date, using calendar: Calendar) -> String {
         let comps = calendar.dateComponents([.year, .month], from: monthStart(of: date, using: calendar))
         return String(format: "%04d-%02d", comps.year ?? 0, comps.month ?? 0)

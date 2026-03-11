@@ -14,7 +14,7 @@ import GRDB
 
 extension AppDatabase {
 
-    static var migrator: DatabaseMigrator {
+    nonisolated static var migrator: DatabaseMigrator {
         var migrator = DatabaseMigrator()
 
         // iOS 从零开始，直接创建 v38 的完整 Schema

@@ -7,7 +7,7 @@ import OSLog
  * [POS]: UIComponents/GalleryJX 的数据契约，统一缩略图与原图地址输入，供 SwiftUI 墙面与 UIKit 浏览器桥接层共享
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
-
+/// XMJXGalleryItem 定义图片墙单张图片的稳定标识和双地址输入，供墙面与浏览器共享。
 struct XMJXGalleryItem: Identifiable, Hashable {
     let id: String
     let thumbnailURL: String
@@ -21,12 +21,14 @@ struct XMJXGalleryItem: Identifiable, Hashable {
     }
 }
 
+/// XMJXGalleryLogLevel 控制图片墙调试日志颗粒度，便于只在问题定位时放大输出。
 enum XMJXGalleryLogLevel: Int {
     case off = 0
     case essential = 1
     case verbose = 2
 }
 
+/// XMJXGalleryLogger 收口图片墙桥接链路的调试输出，避免散落 `print` 污染业务代码。
 enum XMJXGalleryLogger {
     private static let logger = Logger(
         subsystem: Bundle.main.bundleIdentifier ?? "com.merpyzf.xmnote",
@@ -35,14 +37,17 @@ enum XMJXGalleryLogger {
     private static let userDefaultsKey = "XMJXGalleryLogLevel"
     private static let environmentKey = "XMJX_GALLERY_LOG_LEVEL"
 
+    /// 输出默认级别的重要日志，覆盖关键加载与转场节点。
     static func essential(_ message: @autoclosure () -> String) {
         log({ message() }, level: .essential)
     }
 
+    /// 输出高颗粒度调试日志，供定位缩略图注册与布局问题。
     static func verbose(_ message: @autoclosure () -> String) {
         log({ message() }, level: .verbose)
     }
 
+    /// 输出错误日志，保留加载失败等需要排查的问题信号。
     static func error(_ message: @autoclosure () -> String) {
         #if DEBUG
         guard currentLevel != .off else { return }

@@ -8,6 +8,7 @@ import GRDB
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
+/// GRDB 观察流桥接器，把数据库观察转换为 AsyncThrowingStream。
 enum ObservationStream {
     /// 创建数据库观察流并桥接为 AsyncThrowingStream，失败时抛出错误。
     nonisolated static func make<Value: Sendable>(

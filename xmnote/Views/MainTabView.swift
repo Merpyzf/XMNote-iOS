@@ -14,6 +14,7 @@ import SwiftUI
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
+/// 应用主 Tab 枚举，统一根级导航页签身份。
 enum AppTab: String, CaseIterable {
     case reading, books, notes, profile, search
 }

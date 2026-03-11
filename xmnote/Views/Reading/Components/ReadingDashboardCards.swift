@@ -6,12 +6,13 @@ import SwiftUI
  * [POS]: Reading/Components 页面私有子视图集合，负责在读首页各卡片区块的展示
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
-
+/// ReadingDashboardLayout 集中维护最近在读封面的固定尺寸，避免列表卡片散落重复常量。
 private enum ReadingDashboardLayout {
     static let recentCoverWidth: CGFloat = 70
     static let recentCoverHeight: CGFloat = 100
 }
 
+/// ReadingDashboardInlineBanner 承接首页内联错误或提示文案，提供轻量动作出口而不打断滚动流。
 struct ReadingDashboardInlineBanner: View {
     let message: String
     let actionTitle: String
@@ -36,6 +37,7 @@ struct ReadingDashboardInlineBanner: View {
     }
 }
 
+/// ReadingTrendMetricsSection 把三项趋势指标收口为单张卡片，并统一处理分栏与分割线布局。
 struct ReadingTrendMetricsSection: View {
     let metrics: [ReadingTrendMetric]
 
@@ -210,6 +212,7 @@ private struct ReadingTrendMiniBarChart: View {
     }
 }
 
+/// ReadingFeatureCardsSection 并排展示今日阅读与继续阅读两张功能卡，统一控制二者比例和节奏。
 struct ReadingFeatureCardsSection: View {
     let dailyGoal: ReadingDailyGoal
     let resumeBook: ReadingResumeBook?
@@ -320,6 +323,7 @@ private struct ReadingResumeBookCardLayout {
     var continueEmptyIconSize: CGFloat { min(30, max(24, cardHeight * 0.145)) }
 }
 
+/// ReadingDailyGoalCard 承接今日阅读目标的标题、状态和弧环进度，提供目标编辑入口。
 private struct ReadingDailyGoalCard: View {
     let goal: ReadingDailyGoal
     let isLoading: Bool
@@ -440,6 +444,7 @@ private struct ReadingDailyGoalArcShape: Shape {
         set { progress = newValue }
     }
 
+    /// 按正方形画布生成 270 度弧环路径，保证轨道与进度条共享同一几何基准。
     func path(in rect: CGRect) -> Path {
         let clampedProgress = min(1, max(0, progress))
         guard clampedProgress > 0, rect.width > 0, rect.height > 0 else { return Path() }
@@ -462,6 +467,7 @@ private struct ReadingDailyGoalArcShape: Shape {
     }
 }
 
+/// ReadingResumeBookCard 展示最近可继续阅读的书籍与进度，缺省时回退到添加书籍引导。
 private struct ReadingResumeBookCard: View {
     let book: ReadingResumeBook?
     let isLoading: Bool
@@ -544,6 +550,7 @@ private struct ReadingResumeBookCard: View {
     }
 }
 
+/// ReadingRecentBooksCard 负责横向展示最近活跃书籍列表，承接从首页快速进入书籍详情的入口。
 struct ReadingRecentBooksCard: View {
     let books: [ReadingRecentBook]
     let isLoading: Bool
@@ -597,6 +604,7 @@ struct ReadingRecentBooksCard: View {
     }
 }
 
+/// ReadingYearSummaryCard 展示年度阅读目标完成情况，并作为年度已读列表弹层入口。
 struct ReadingYearSummaryCard: View {
     let summary: ReadingYearSummary
     let onTap: () -> Void

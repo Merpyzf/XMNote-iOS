@@ -38,12 +38,14 @@ struct ReadingDashboardSnapshot: Equatable {
 
 /// 趋势指标卡定义，统一收口标题、总值与近期折线/柱状数据。
 struct ReadingTrendMetric: Identifiable, Equatable {
+    /// Kind 约束首页趋势卡口径，确保仓储、格式化工具与视图层使用同一指标枚举。
     enum Kind: String, Equatable {
         case readingDuration
         case noteCount
         case readDoneCount
     }
 
+    /// Point 表示单个时间窗口的趋势值，供迷你柱图和辅助读屏共同消费。
     struct Point: Identifiable, Equatable {
         let id: String
         let label: String

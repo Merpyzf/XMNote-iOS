@@ -10,6 +10,7 @@ import UIKit
 
 @MainActor
 @Observable
+/// 笔记详情状态源，负责详情加载、富文本编辑态与保存流程。
 class NoteDetailViewModel {
     /// 笔记元信息，供详情页底部展示位置与创建时间。
     struct Metadata {

@@ -7,6 +7,7 @@ import SwiftUI
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
+/// 星期标题行组件，统一周视图顶部的文字顺序与样式。
 struct ReadCalendarWeekdayHeader: View {
     private static let weekdays = ["一", "二", "三", "四", "五", "六", "日"]
 

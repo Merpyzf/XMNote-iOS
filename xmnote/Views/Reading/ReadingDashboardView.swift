@@ -6,7 +6,7 @@ import SwiftUI
  * [POS]: Reading 模块首页入口，整合热力图、趋势卡、目标卡、继续阅读、最近在读与年度摘要
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
-
+/// ReadingDashboardView 是在读首页真实内容页，负责组装热力图、趋势卡、目标卡和年度摘要等主流程区块。
 struct ReadingDashboardView: View {
     @Environment(RepositoryContainer.self) private var repositories
     @Environment(\.scenePhase) private var scenePhase
@@ -18,6 +18,7 @@ struct ReadingDashboardView: View {
     let onOpenReadCalendar: (Date) -> Void
     let onOpenBookDetail: (Int64) -> Void
 
+    /// 注入首页对外回调，保证页面壳层不直接依赖具体导航实现。
     init(
         onAddBook: @escaping () -> Void = {},
         onOpenReadCalendar: @escaping (Date) -> Void = { _ in },
@@ -55,6 +56,7 @@ struct ReadingDashboardView: View {
     }
 }
 
+/// ReadingDashboardContent 承接首页滚动区的内容编排，隔离外层依赖注入与内部状态渲染。
 private struct ReadingDashboardContent: View {
     @Bindable var viewModel: ReadingDashboardViewModel
     let onAddBook: () -> Void

@@ -7,6 +7,7 @@ import SwiftUI
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
+/// 连续阅读提示横幅，负责展示阶段性激励与保持低干扰视觉提示。
 struct ReadCalendarStreakHintBanner: View {
     private enum Layout {
         static let horizontalPadding: CGFloat = Spacing.base

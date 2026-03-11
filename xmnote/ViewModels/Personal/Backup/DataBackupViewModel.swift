@@ -9,6 +9,7 @@ import Foundation
 
 // MARK: - 操作状态
 
+/// BackupOperationState 表示备份页当前处于空闲、备份中还是恢复中，供页面统一映射按钮和进度态。
 enum BackupOperationState: Equatable {
     case idle
     case backingUp(BackupProgress)
@@ -19,6 +20,7 @@ enum BackupOperationState: Equatable {
 
 /// DataBackupViewModel 负责备份模块的状态管理与业务动作编排，向界面提供可渲染数据。
 @Observable
+/// DataBackupViewModel 负责备份页的服务器状态、备份历史和手动备份/恢复动作编排。
 class DataBackupViewModel {
     var operationState: BackupOperationState = .idle
     var lastBackupDateText = ""

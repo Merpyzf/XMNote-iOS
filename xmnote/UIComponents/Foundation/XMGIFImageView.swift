@@ -9,6 +9,7 @@ import Gifu
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
+/// GIF 播放承载视图，把 Gifu 能力桥接到 SwiftUI。
 struct XMGIFImageView: UIViewRepresentable {
     let data: Data
     let contentMode: ContentMode

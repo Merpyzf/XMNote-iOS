@@ -6,9 +6,10 @@ import Foundation
  * [POS]: Reading 模块热力图状态中枢，负责加载、跨天刷新与统计类型切换
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
-
+/// ReadingHeatmapWidgetViewModel 管理首页热力图卡的数据加载、跨天刷新和错误态反馈。
 @MainActor
 @Observable
+/// 在读页热力图小组件状态源，负责加载、刷新与统计维度切换。
 final class ReadingHeatmapWidgetViewModel {
     var days: [Date: HeatmapDay] = [:]
     var earliestDate: Date? = nil

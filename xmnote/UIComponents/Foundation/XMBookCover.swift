@@ -211,6 +211,7 @@ private extension XMBookCover {
         let width: CGFloat?
         let height: CGFloat?
 
+        /// 根据是否给定固定尺寸选择直接定宽高或按封面比例自适应展开。
         func body(content: Content) -> some View {
             if let width, let height {
                 content.frame(width: width, height: height)

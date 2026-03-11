@@ -8,6 +8,7 @@ import UIKit
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
+/// 阅读日历颜色仓储，负责封面取色、缓存与稳定回退策略。
 struct ReadCalendarColorRepository: ReadCalendarColorRepositoryProtocol {
     private let imageLoader: any XMCoverImageLoading
     private let cacheStore: ReadCalendarColorCacheStore

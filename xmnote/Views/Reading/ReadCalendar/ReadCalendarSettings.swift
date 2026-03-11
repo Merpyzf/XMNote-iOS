@@ -9,8 +9,10 @@ import Foundation
 
 // MARK: - 阅读日历设置
 
+/// 阅读日历设置状态源，负责持久化事件过滤与交互偏好，不承担页面数据查询。
 @MainActor
 @Observable
+/// 阅读日历设置状态容器，负责本地持久化与业务规则校验。
 final class ReadCalendarSettings {
     var excludeReadTiming: Bool {
         didSet { save(excludeReadTiming, forKey: Self.keyReadTiming) }

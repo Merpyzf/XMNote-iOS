@@ -7,6 +7,7 @@ import SwiftUI
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
+/// 月度总结弹层，负责聚合月份切换、指标卡和阅读时长排行展示。
 struct ReadCalendarMonthSummarySheet: View {
     private enum Layout {
         static let summarySheetTopInset: CGFloat = 30
@@ -521,6 +522,7 @@ private extension ReadCalendarMonthSummarySheet {
 
     /// 渲染时长排行骨架屏整体结构。
     @ViewBuilder
+    /// 组合骨架屏头部与多行排行占位，复用到基础层与高光层。
     func summaryDurationSkeletonContent(fillColor: Color) -> some View {
         VStack(alignment: .leading, spacing: Layout.summaryDurationSkeletonSectionSpacing) {
             summaryDurationSkeletonHeader(fillColor: fillColor)
@@ -535,6 +537,7 @@ private extension ReadCalendarMonthSummarySheet {
 
     /// 渲染排行骨架屏头部占位。
     @ViewBuilder
+    /// 渲染排行骨架屏头部占位，模拟标题与洞察文案的版式比例。
     func summaryDurationSkeletonHeader(fillColor: Color) -> some View {
         GeometryReader { proxy in
             let width = max(0, proxy.size.width)
@@ -563,6 +566,7 @@ private extension ReadCalendarMonthSummarySheet {
 
     /// 渲染排行骨架屏单行占位条。
     @ViewBuilder
+    /// 渲染单行书籍排行骨架，根据宽度比例模拟条形图长度差异。
     func summaryDurationSkeletonRow(widthRatio: CGFloat, fillColor: Color) -> some View {
         let normalizedRatio = min(1, max(Layout.summaryDurationSkeletonMinBarRatio, widthRatio))
         GeometryReader { proxy in

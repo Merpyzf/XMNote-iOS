@@ -7,6 +7,7 @@ import SwiftUI
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
+/// 年度总结弹层，负责呈现年度指标、排行与月份分布洞察。
 struct ReadCalendarYearSummarySheet: View {
     private enum Layout {
         static let containerTopInset: CGFloat = 30

@@ -220,21 +220,25 @@ enum ReadCalendarCoverTransitionRuntime {
 }
 
 private extension ReadCalendarCoverTransitionRuntime {
+    /// 把当前时间归一化到 0...1，供封面转场曲线统一消费。
     static func normalizedTime(_ value: Double, total: Double) -> CGFloat {
         guard total > 0 else { return 1 }
         return clamped(CGFloat(value / total))
     }
 
+    /// 输出平滑进出曲线，避免封面转场线性推进时的生硬感。
     static func smoothStep(from: CGFloat, to: CGFloat, value: CGFloat) -> CGFloat {
         guard to > from else { return value >= to ? 1 : 0 }
         let t = clamped((value - from) / (to - from))
         return t * t * (3 - 2 * t)
     }
 
+    /// 在线性区间内插值，统一控制缩放、位移和透明度。
     static func lerp(_ min: CGFloat, _ max: CGFloat, _ t: CGFloat) -> CGFloat {
         min + (max - min) * clamped(t)
     }
 
+    /// 把输入限制在 0...1，作为各类转场比例的最终安全边界。
     static func clamped(_ value: CGFloat) -> CGFloat {
         max(0, min(1, value))
     }

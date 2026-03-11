@@ -7,6 +7,7 @@ import Foundation
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
+/// 笔记详情读取模型，承载编辑页所需正文、想法和位置信息。
 struct NoteDetailPayload {
     let contentHTML: String
     let ideaHTML: String

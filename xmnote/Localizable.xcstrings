@@ -11,17 +11,6 @@
         }
       }
     },
-    " " : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "needs_review",
-            "value" : ""
-          }
-        }
-      }
-    },
     " 年 " : {
 
     },
@@ -433,17 +422,6 @@
     },
     "单位：本" : {
 
-    },
-    "卡片内容示例" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "needs_review",
-            "value" : ""
-          }
-        }
-      }
     },
     "参数回显" : {
 

@@ -7,6 +7,7 @@ import Foundation
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
+/// 阅读日历事件布局引擎，负责把原始日数据转换为可跨周渲染的布局结果。
 struct ReadCalendarEventLayoutEngine {
     private struct DraftRun {
         let bookId: Int64

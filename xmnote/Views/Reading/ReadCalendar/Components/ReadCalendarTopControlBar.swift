@@ -7,6 +7,7 @@ import SwiftUI
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
+/// 日历顶部控制栏，负责月份或年份切换以及显示模式切换入口。
 struct ReadCalendarTopControlBar: View {
     private enum Layout {
         static let topControlSpacing: CGFloat = Spacing.cozy

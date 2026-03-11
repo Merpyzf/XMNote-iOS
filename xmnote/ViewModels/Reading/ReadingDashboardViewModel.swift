@@ -10,7 +10,9 @@ import Observation
 
 @MainActor
 @Observable
+/// 在读首页状态中枢，负责首页聚合订阅与目标编辑交互。
 final class ReadingDashboardViewModel {
+    /// GoalEditorMode 区分今日目标与年度目标编辑入口，避免弹层文案和保存逻辑分叉散落在视图层。
     enum GoalEditorMode: Equatable {
         case daily
         case yearly
@@ -97,6 +99,10 @@ final class ReadingDashboardViewModel {
     }
 
     /// 保存当前弹层对应的目标值。
+    /// 业务意图：把编辑弹层中的草稿值回写到首页真相源，并让 observation 自动刷新卡片。
+    /// 前置条件：goalEditorMode 已设置，且草稿值能解析成正整数。
+    /// 副作用：写入 `read_target` 对应记录，并在失败时更新错误文案。
+    /// 失败语义：仓储写入失败时保留弹层，向页面暴露可读错误信息。
     func saveGoal() async {
         guard let mode = goalEditorMode else { return }
         let trimmed = draftGoalValue.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -123,15 +129,17 @@ final class ReadingDashboardViewModel {
         }
     }
 
+    /// 建立首页观察任务，并在主线程回写最新快照。
+    /// 并发语义：仓储 observation 在后台持续消费，状态写入统一回到 MainActor；跨天刷新时由外层先取消旧任务再重建。
     private func startObservation(referenceDate: Date) {
         isLoading = snapshot == nil
         errorMessage = nil
 
-        observationTask = Task { [weak self] in
+        observationTask = Task { [weak self, repository = self.repository] in
             do {
                 for try await snapshot in repository.observeDashboard(referenceDate: referenceDate) {
                     guard !Task.isCancelled else { return }
-                    await MainActor.run {
+                    await MainActor.run { [weak self] in
                         guard let self else { return }
                         self.snapshot = snapshot
                         self.isLoading = false
@@ -140,7 +148,7 @@ final class ReadingDashboardViewModel {
                 }
             } catch {
                 guard !Task.isCancelled else { return }
-                await MainActor.run {
+                await MainActor.run { [weak self] in
                     guard let self else { return }
                     self.isLoading = false
                     self.errorMessage = "首页数据加载失败：\(error.localizedDescription)"

@@ -7,6 +7,7 @@ import SwiftUI
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
+/// JX 图片墙 SwiftUI 入口，负责宫格缩略图布局与全屏浏览器唤起。
 struct XMJXImageWall: View {
     let items: [XMJXGalleryItem]
     let columnCount: Int
@@ -158,10 +159,12 @@ private final class XMJXPhotoBrowserHost {
 }
 
 private extension XMJXImageWall {
+    /// 把尺寸转换为日志友好的紧凑文本，便于排查命中区域和布局异常。
     func describe(_ size: CGSize) -> String {
         "w=\(Int(size.width.rounded())) h=\(Int(size.height.rounded()))"
     }
 
+    /// 把点击坐标转换为日志文本，便于核对手势命中位置。
     func describe(_ point: CGPoint) -> String {
         "x=\(Int(point.x.rounded())) y=\(Int(point.y.rounded()))"
     }

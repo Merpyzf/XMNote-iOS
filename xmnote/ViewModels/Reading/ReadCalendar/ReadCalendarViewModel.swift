@@ -8,9 +8,10 @@ import SwiftUI
  * [POS]: ReadCalendar 子功能状态中枢，负责数据加载、分页状态、选中态、周布局构建、快速跳月与封面取色任务编排
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
-
+/// ReadCalendarViewModel 是阅读日历的状态中枢，统一处理月份分页、选中态、事件布局与异步取色回填。
 @MainActor
 @Observable
+/// 阅读日历状态中枢，负责月份数据加载、分页切换与颜色回填编排。
 final class ReadCalendarViewModel {
     private struct ReadCalendarColorRequest: Hashable {
         let bookId: Int64

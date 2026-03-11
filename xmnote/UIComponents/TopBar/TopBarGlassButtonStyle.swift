@@ -10,6 +10,7 @@ import SwiftUI
 extension View {
     /// 返回顶部按钮的液态玻璃样式配置。
     @ViewBuilder
+    /// 按可用态为顶部按钮附加统一玻璃按钮样式。
     func topBarGlassButtonStyle(_ enabled: Bool) -> some View {
         if enabled {
             self.buttonStyle(.plain)

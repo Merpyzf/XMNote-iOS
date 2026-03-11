@@ -586,6 +586,7 @@ private extension HeatmapChart {
 
     /// 按事件分段颜色填充单个方格。
     @ViewBuilder
+    /// 将多段状态颜色垂直切分填入单个热力格，用于表达多状态叠加。
     func segmentedFill(colors: [Color]) -> some View {
         let count = max(colors.count, 1)
         let segmentHeight = squareSize / CGFloat(count)

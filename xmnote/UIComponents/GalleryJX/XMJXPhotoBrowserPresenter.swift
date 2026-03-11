@@ -10,6 +10,7 @@ import JXPhotoBrowser
  */
 
 @MainActor
+/// 图片浏览器桥接器，负责 JXPhotoBrowser 的呈现、数据源与转场协同。
 final class XMJXPhotoBrowserPresenter: NSObject, UIAdaptivePresentationControllerDelegate {
     private var items: [XMJXGalleryItem]
     private let registry: XMJXThumbnailRegistry

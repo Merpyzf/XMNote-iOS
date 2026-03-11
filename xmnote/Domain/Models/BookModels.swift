@@ -7,6 +7,7 @@ import Foundation
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
+/// 书架条目模型，承载书籍列表页展示所需的核心字段。
 struct BookItem: Identifiable {
     let id: Int64
     let name: String

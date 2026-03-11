@@ -231,6 +231,7 @@ struct ReadCalendarCoverFullscreenDeckStage: View {
 }
 
 private extension ReadCalendarCoverFullscreenDeckStage {
+    /// 按可见封面数量切换铺满比例，避免封面过少时显得稀疏、过多时超出容器。
     static func adaptiveFillRatio(for visibleCount: Int) -> CGFloat {
         switch visibleCount {
         case ...2:
@@ -244,11 +245,13 @@ private extension ReadCalendarCoverFullscreenDeckStage {
         }
     }
 
+    /// 归一化封面宽高比，异常值时回退默认比例并限制在可接受范围内。
     static func normalizedAspectRatio(_ value: CGFloat) -> CGFloat {
         let resolved = value.isFinite && value > 0 ? value : Layout.defaultCoverAspectRatio
         return clamped(resolved, lower: Layout.minCoverAspectRatio, upper: Layout.maxCoverAspectRatio)
     }
 
+    /// 在给定上下界内钳制数值，复用到封面尺寸和拖拽边界计算。
     static func clamped(_ value: CGFloat, lower: CGFloat, upper: CGFloat) -> CGFloat {
         min(max(value, lower), upper)
     }
@@ -600,6 +603,7 @@ private extension ReadCalendarCoverFullscreenDeckStage {
         )
     }
 
+    /// 根据总张数返回全屏散列时的压缩因子，控制多封面时的堆叠密度。
     func adaptiveCompressionFactor(for total: Int) -> CGFloat {
         switch total {
         case ...1:
@@ -615,6 +619,7 @@ private extension ReadCalendarCoverFullscreenDeckStage {
         }
     }
 
+    /// 限制拖拽偏移不超出安全展示区，避免封面被拖出容器裁切边界。
     func adaptiveClamp(offset: CGPoint) -> CGPoint {
         let maxX = max(0, containerSize.width * 0.5 - resolvedCoverSize.width * Layout.adaptiveClampInsetXRatio)
         let maxY = max(0, containerSize.height * 0.5 - resolvedCoverSize.height * Layout.adaptiveClampInsetYRatio)
@@ -999,6 +1004,7 @@ private extension ReadCalendarCoverFullscreenDeckStage {
         return z ^ (z >> 31)
     }
 
+    /// 生成稳定的 matched transition 标识，保证封面从卡片到全屏的过渡可对位。
     func itemTransitionID(for itemID: String) -> String {
         "cover-deck-item-\(itemID)"
     }

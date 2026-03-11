@@ -7,7 +7,7 @@ import GRDB
  * [POS]: Data 层统计仓储实现，聚合热力图与阅读日历月视图数据
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
-
+/// StatisticsRepository 统一承接热力图、阅读日历和月度/年度统计聚合查询。
 nonisolated struct StatisticsRepository: StatisticsRepositoryProtocol {
     private let databaseManager: DatabaseManager
     private let calendar = Calendar.current
@@ -1067,6 +1067,7 @@ private extension StatisticsRepository {
 
     // MARK: - SQL 事件片段动态组装
 
+    /// EventSQLFragment 把单类事件查询封装成可组合片段，便于按排除类型动态拼接阅读日历统计 SQL。
     nonisolated struct EventSQLFragment {
         let eventType: ReadCalendarEventType
         let sql: String

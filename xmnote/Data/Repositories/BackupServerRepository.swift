@@ -8,6 +8,7 @@ import GRDB
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
+/// 备份服务器仓储实现，负责服务器配置 CRUD 与连通性校验。
 nonisolated struct BackupServerRepository: BackupServerRepositoryProtocol {
     private let databaseManager: DatabaseManager
 

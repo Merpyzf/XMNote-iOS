@@ -185,6 +185,7 @@ struct TimelineEventRow: View, Equatable {
 private struct TimelineConnectorShape: Shape {
     let isLastEvent: Bool
 
+    /// 按是否为最后一条事件绘制时间线装饰虚线，避免分组尾部继续向下延伸。
     func path(in rect: CGRect) -> Path {
         var path = Path()
         let x = dotSize / 2
@@ -290,6 +291,8 @@ struct TimelineCardMetaLine: View {
 
 /// Preview 专用空实现
 private struct _StubTimelineRepository: TimelineRepositoryProtocol {
+    /// 预览环境不依赖真实时间线数据，返回空分组即可满足页面挂载。
     func fetchTimelineEvents(startTimestamp: Int64, endTimestamp: Int64, category: TimelineEventCategory) async throws -> [TimelineSection] { [] }
+    /// 预览环境不渲染真实月标记，返回空字典避免额外数据库依赖。
     func fetchCalendarMarkers(for monthStart: Date, category: TimelineEventCategory) async throws -> [Date: TimelineDayMarker] { [:] }
 }

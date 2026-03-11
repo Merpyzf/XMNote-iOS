@@ -6,7 +6,7 @@ import SwiftUI
  * [POS]: UIComponents/Charts 跨模块复用组件，承载月度/年度阅读时长排行展示
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
-
+/// ReadingDurationRankingChart 以封面 + 横向条形宽度展示阅读时长排行，供月度和年度总结共用。
 struct ReadingDurationRankingChart: View {
     /// Item 定义阅读时长排行单行数据模型。
     struct Item: Identifiable, Hashable {
@@ -107,6 +107,7 @@ private extension ReadingDurationRankingChart {
 
     /// 按是否提供点击回调包装排行行容器。
     @ViewBuilder
+    /// 根据是否可点击选择按钮或纯展示容器，避免调用方重复包装交互层。
     func rankingRowContainer(
         item: Item,
         maxDurationSeconds: Int

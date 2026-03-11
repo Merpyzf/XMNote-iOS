@@ -8,6 +8,7 @@ import Nuke
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
+/// 应用级图片管线工厂，统一网络、缓存与解码配置。
 enum XMImagePipelineFactory {
     private static let diskCacheName = "com.merpyzf.xmnote.image.datacache.v1"
     private static let diskCacheSizeLimit = 220 * 1024 * 1024

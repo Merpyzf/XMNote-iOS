@@ -9,6 +9,7 @@ import UIKit
 
 /// 统一封装系统 Live Text 相机取词能力，供编辑器和测试页复用。
 @MainActor
+/// 系统相机取词能力桥接器，隔离 UIKit selector 与响应链细节。
 enum XMCameraTextCaptureSupport {
 
     /// 判断目标响应者当前是否支持系统相机取词。

@@ -6,7 +6,7 @@ import Foundation
  * [POS]: Data 层备份仓储，统一封装本地数据库与 WebDAV 远端协同流程
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
-
+/// BackupRepository 统一编排备份服务创建、备份历史读取和恢复流程。
 struct BackupRepository: BackupRepositoryProtocol {
     private let databaseManager: DatabaseManager
     private let serverRepository: any BackupServerRepositoryProtocol

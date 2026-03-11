@@ -7,6 +7,7 @@ import SwiftUI
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
+/// 阅读日历设置弹层，集中承接事件筛选与交互反馈开关。
 struct ReadCalendarSettingsSheet: View {
     @Environment(\.dismiss) private var dismiss
     @Bindable var settings: ReadCalendarSettings

@@ -17,6 +17,7 @@ import Foundation
 // MARK: - BookDetailViewModel
 
 @Observable
+/// 书籍详情状态源，负责书籍详情与书摘列表双通道订阅。
 class BookDetailViewModel {
     var book: BookDetail?
     var notes: [NoteExcerpt] = []

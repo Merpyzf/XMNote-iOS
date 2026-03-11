@@ -9,6 +9,7 @@ import Nuke
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
+/// 图片加载输入模型，统一 URL、优先级、超时和缓存策略。
 struct XMImageLoadRequest {
     let url: URL
     let priority: XMImageRequestBuilder.Priority

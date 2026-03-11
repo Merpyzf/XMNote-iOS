@@ -8,6 +8,7 @@ import Nuke
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
+/// 图片请求构造器，统一下载头、缓存策略与优先级映射。
 enum XMImageRequestBuilder {
     /// 图片加载优先级，映射到 Nuke 请求优先级。
     enum Priority {

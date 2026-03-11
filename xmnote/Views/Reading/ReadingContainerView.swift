@@ -8,7 +8,7 @@ import SwiftUI
  */
 
 // MARK: - Sub Tab
-
+/// ReadingSubTab 定义在读根容器的三段切换项，统一顶部切换标题和页面选择语义。
 enum ReadingSubTab: String, CaseIterable {
     case reading, timeline, statistics
 

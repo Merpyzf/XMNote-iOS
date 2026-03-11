@@ -12,6 +12,7 @@ import Foundation
 struct ReadingDashboardMetricValueDisplay: Equatable {
     /// Segment 标记单段文本及其角色，供视图按品牌数字/系统单位分别渲染。
     struct Segment: Equatable {
+        /// Role 区分品牌数字与单位文本，保证同一主值里能做差异化排版。
         enum Role: Equatable {
             case number
             case unit
@@ -24,6 +25,7 @@ struct ReadingDashboardMetricValueDisplay: Equatable {
     let segments: [Segment]
 }
 
+/// ReadingDashboardFormatting 统一承接首页仪表盘的文案压缩、趋势值拆段与柱图可视化映射。
 enum ReadingDashboardFormatting {
     private enum TrendBarScale {
         static let shortRangeUpperBound: CGFloat = 0.18

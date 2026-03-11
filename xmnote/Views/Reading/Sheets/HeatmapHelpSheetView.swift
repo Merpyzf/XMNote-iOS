@@ -6,7 +6,7 @@ import SwiftUI
  * [POS]: 在读页热力图小组件的帮助说明面板，纯展示职责（文案 + 图例），零回调信息卡片
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
-
+/// HeatmapHelpSheetView 展示热力图阅读规则和图例，承接首页热力图右上角说明入口。
 struct HeatmapHelpSheetView: View {
     @Environment(\.dismiss) private var dismiss
 

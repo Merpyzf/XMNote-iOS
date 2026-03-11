@@ -43,10 +43,12 @@ final class RichTextCoordinator: NSObject, UITextViewDelegate {
         scheduleBoundaryCleanup(editorView)
     }
 
+    /// 通知 SwiftUI 焦点已进入编辑器，驱动外层工具栏和占位态更新。
     func textViewDidBeginEditing(_ textView: UITextView) {
         parent.onFocusChange?(true)
     }
 
+    /// 通知 SwiftUI 焦点离开编辑器，供页面回收工具栏与提交草稿。
     func textViewDidEndEditing(_ textView: UITextView) {
         parent.onFocusChange?(false)
     }

@@ -9,6 +9,7 @@ import Observation
  */
 
 @Observable
+/// 仓储依赖容器，在应用启动时一次性组装各业务仓储。
 final class RepositoryContainer {
     let bookRepository: any BookRepositoryProtocol
     let noteRepository: any NoteRepositoryProtocol

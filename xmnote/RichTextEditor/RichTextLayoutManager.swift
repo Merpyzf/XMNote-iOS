@@ -21,6 +21,7 @@ final class RichTextLayoutManager: NSLayoutManager {
     /// Quote 色条颜色
     var quoteColor: UIColor = .systemGreen
 
+    /// 在文本背景绘制阶段补充列表圆点与引用色条，保持富文本编辑态和展示态一致。
     override func drawBackground(forGlyphRange glyphsToShow: NSRange, at origin: CGPoint) {
         super.drawBackground(forGlyphRange: glyphsToShow, at: origin)
 

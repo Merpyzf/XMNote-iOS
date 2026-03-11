@@ -866,6 +866,7 @@ private struct ReadCalendarMonthGridWeekRow: View {
 private struct ReadCalendarMonthGridCoverStackFramePreferenceKey: PreferenceKey {
     static var defaultValue: [Date: CGRect] = [:]
 
+    /// 合并各日期封面堆叠容器的 frame 映射，供后续全屏转场精确对位。
     static func reduce(value: inout [Date: CGRect], nextValue: () -> [Date: CGRect]) {
         value.merge(nextValue(), uniquingKeysWith: { _, newValue in newValue })
     }

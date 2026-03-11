@@ -154,6 +154,7 @@ extension TimelineEventKind {
 /// 阅读状态 ID → 显示名，对齐 Android READ_STATUS_NAMES
 enum ReadStatusHelper {
 
+    /// 把阅读状态 ID 和刷读次数转换成时间线可直接展示的状态文案。
     static func statusName(for statusId: Int64, readDoneCount: Int64 = 0) -> String {
         switch statusId {
         case 1: "想读"
@@ -171,6 +172,7 @@ enum ReadStatusHelper {
 /// 秒数 → 可读时长，对齐 Android LongExtensions.toReadableTimeDuration
 enum ReadDurationFormatter {
 
+    /// 把秒数压缩成时间线卡片可读时长，保持和 Android 可读时长文案一致。
     static func format(seconds: Int64) -> String {
         let h = seconds / 3600
         let m = (seconds % 3600) / 60

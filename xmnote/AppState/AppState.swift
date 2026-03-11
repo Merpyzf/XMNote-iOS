@@ -9,6 +9,7 @@ import Foundation
 
 /// 全局共享状态，通过 @Environment 注入到视图树。
 @Observable
+/// AppState 持有跨页面共享的主题和能力开关，作为 SwiftUI 根环境状态源。
 class AppState {
     var colorScheme: AppColorScheme = .system
     var isPremium: Bool = false

@@ -6,7 +6,7 @@ import SwiftUI
  * [POS]: Reading/Sheets 业务弹层，负责展示年度已读书籍列表与年度目标编辑入口
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
-
+/// ReadingYearSummarySheet 展示年度已读清单和目标完成度，并提供继续跳转书籍详情与调整目标的出口。
 struct ReadingYearSummarySheet: View {
     let summary: ReadingYearSummary
     let onBookTap: (Int64) -> Void
@@ -73,6 +73,7 @@ struct ReadingYearSummarySheet: View {
         }
     }
 
+    /// 生成单本年度已读书籍行，复用首页摘要后的明细展示语义。
     private func yearBookRow(_ book: ReadingYearReadBook) -> some View {
         CardContainer(cornerRadius: CornerRadius.blockLarge) {
             HStack(spacing: Spacing.base) {

@@ -318,6 +318,7 @@ struct ReadCalendarContentView: View {
 private struct ReadCalendarTopControlBarFramePreferenceKey: PreferenceKey {
     static var defaultValue: CGRect = .zero
 
+    /// 合并顶部控制栏最新 frame，忽略零值占位，保证后续沉浸偏移动画基于真实位置。
     static func reduce(value: inout CGRect, nextValue: () -> CGRect) {
         let next = nextValue()
         guard next != .zero else { return }
@@ -439,6 +440,7 @@ private extension ReadCalendarContentView {
             }
     }
 
+    /// 在调试模式下输出顶部控制栏 frame，辅助排查沉浸滚动与全屏浮层的锚点问题。
     func logTopControlBarFrameIfNeeded(_ frame: CGRect) {
 #if DEBUG
         let normalized = CGRect(
@@ -455,6 +457,7 @@ private extension ReadCalendarContentView {
 #endif
     }
 
+    /// 在调试模式下输出日历视口高度和安全区，辅助间距审计与布局压缩排查。
     func logCalendarViewportIfNeeded(contentHeight: CGFloat, viewportSafeBottom: CGFloat) {
 #if DEBUG
         let signature = "contentH=\(Int(contentHeight.rounded())) safeBottom=\(Int(viewportSafeBottom.rounded()))"
@@ -1071,6 +1074,7 @@ private extension ReadCalendarContentView {
         .padding(.bottom, Layout.calendarInnerBottomPadding + interactiveBottomInset)
     }
 
+    /// 根据根状态切换加载、空态和内容区，并承载悬浮总结按钮。
     func contentContainer() -> some View {
         ZStack(alignment: .top) {
             switch props.rootContentState {
@@ -2034,6 +2038,7 @@ private struct ReadCalendarBookCoverFullscreenOverlay: View {
     }
 
     @ViewBuilder
+    /// 把全屏封面舞台包装成独立面板层，供外层统一控制过渡和遮罩。
     func stageDeckPanel(
         coverSize: CGSize,
         panelInnerSize: CGSize
@@ -2128,6 +2133,7 @@ private struct ReadCalendarBookCoverFullscreenOverlay: View {
         )
     }
 
+    /// 根据当前舞台可用空间和源封面宽高比计算全屏封面尺寸。
     func resolvedCoverSize(in panelInnerSize: CGSize) -> CGSize {
         let aspect = min(1.55, max(1.35, sourceCoverAspectRatio))
         return ReadCalendarCoverFullscreenDeckStage.resolveAdaptiveCoverSize(
@@ -2137,6 +2143,7 @@ private struct ReadCalendarBookCoverFullscreenOverlay: View {
         )
     }
 
+    /// 依据屏幕高度和滚动能力计算全屏封面面板高度，避免堆叠态与网格态相互挤压。
     func resolvedPanelHeight(in size: CGSize, canScrollGrid: Bool) -> CGFloat {
         let lowerBound: CGFloat = canScrollGrid ? 360 : 340
         let upperBound = max(lowerBound, size.height * (canScrollGrid ? 0.82 : 0.78))
@@ -2291,6 +2298,7 @@ private struct ReadCalendarBookCoverFullscreenOverlay: View {
     }
 
     @ViewBuilder
+    /// 构建全屏封面舞台主体，并注入当前阶段、布局算法和栅格策略。
     func fullscreenDeckStage(
         coverSize: CGSize,
         panelInnerSize: CGSize
@@ -2422,6 +2430,7 @@ private struct ReadCalendarBookCoverFullscreenOverlay: View {
         }
     }
 
+    /// 在阶段切换后延迟收束过渡状态，避免动画尚未结束时过早恢复约束。
     func schedulePhaseTransitionSettle() {
         phaseTransitionTask = Task {
             do {
@@ -2438,6 +2447,7 @@ private struct ReadCalendarBookCoverFullscreenOverlay: View {
         }
     }
 
+    /// 取消阶段切换收束任务，并按需重置过渡方向和约束延迟状态。
     func cancelPhaseTransitionTask(resetState: Bool = true) {
         phaseTransitionTask?.cancel()
         phaseTransitionTask = nil
@@ -2447,6 +2457,7 @@ private struct ReadCalendarBookCoverFullscreenOverlay: View {
     }
 
     @ViewBuilder
+    /// 渲染封面从日历堆栈飞入全屏舞台的 ghost 图层，补齐真实源位和目标位之间的连续感。
     func heroGhostLayer(
         coverSize: CGSize,
         overlayGlobalFrame: CGRect
@@ -2496,12 +2507,14 @@ private struct ReadCalendarBookCoverFullscreenOverlay: View {
         }
     }
 
+    /// 将日期格式化为封面全屏详情使用的“月日”文案。
     func formattedDate(_ date: Date) -> String {
         let formatter = DateFormatter()
         formatter.dateFormat = "M月d日"
         return formatter.string(from: date)
     }
 
+    /// 将日期转换为中文星期文案，供全屏封面详情展示。
     func formattedWeekday(_ date: Date) -> String {
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "zh_CN")
@@ -2550,6 +2563,7 @@ private struct ReadCalendarBookCoverFullscreenOverlay: View {
         }
     }
 
+    /// 启动封面全屏入场过渡，并在动画结束后衔接自动回网格流程。
     func startEnterTransition() {
         cancelTransitionTask()
         transitionPhase = .entering
@@ -2578,15 +2592,18 @@ private struct ReadCalendarBookCoverFullscreenOverlay: View {
         }
     }
 
+    /// 取消当前入场过渡任务，避免重复切换时残留旧动画回调。
     func cancelTransitionTask() {
         transitionTask?.cancel()
         transitionTask = nil
     }
 
+    /// 将秒数转换为 `Task.sleep` 需要的纳秒值，并对负值做安全钳制。
     func nanoseconds(from seconds: Double) -> UInt64 {
         UInt64(max(0, seconds) * 1_000_000_000)
     }
 
+    /// 在两个标量之间做线性插值，统一封面过渡中的比例计算。
     func lerp(_ min: CGFloat, _ max: CGFloat, _ progress: CGFloat) -> CGFloat {
         min + (max - min) * progress
     }

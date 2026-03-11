@@ -8,7 +8,7 @@ import Nuke
  * [POS]: UIComponents/GalleryJX 的 SwiftUI->UIKit 桥接层，为 JXPhotoBrowser Zoom 转场提供可回溯的真实 UIView 缩略图来源
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
-
+/// XMJXThumbnailView 桥接可追踪的 `UIImageView` 缩略图，给 JX 浏览器的缩放转场提供真实来源视图。
 struct XMJXThumbnailView: UIViewRepresentable {
     let item: XMJXGalleryItem
     let registry: XMJXThumbnailRegistry
@@ -25,10 +25,12 @@ struct XMJXThumbnailView: UIViewRepresentable {
         self.priority = priority
     }
 
+    /// 创建缩略图加载协调器，统一维护注册表映射和图片请求任务。
     func makeCoordinator() -> Coordinator {
         Coordinator(registry: registry)
     }
 
+    /// 创建缩略图承载 `UIImageView`，并在首次挂载时建立 registry 绑定。
     func makeUIView(context: Context) -> UIImageView {
         let imageView = UIImageView()
         imageView.clipsToBounds = true
@@ -40,11 +42,13 @@ struct XMJXThumbnailView: UIViewRepresentable {
         return imageView
     }
 
+    /// 响应 SwiftUI 状态更新，刷新缩略图绑定关系和当前图片请求。
     func updateUIView(_ uiView: UIImageView, context: Context) {
         context.coordinator.bind(uiView)
         context.coordinator.update(item: item, priority: priority)
     }
 
+    /// 输出缩略图期望尺寸，确保转场源视图拥有稳定几何边界。
     func sizeThatFits(_ proposal: ProposedViewSize, uiView: UIImageView, context: Context) -> CGSize? {
         let resolved: CGSize?
         if let width = proposal.width, width > 0 {
@@ -67,6 +71,7 @@ struct XMJXThumbnailView: UIViewRepresentable {
         return resolved
     }
 
+    /// 解绑 UIKit 视图与 registry 映射，避免复用后残留旧引用。
     static func dismantleUIView(_ uiView: UIImageView, coordinator: Coordinator) {
         coordinator.unbind(uiView)
     }
@@ -74,6 +79,7 @@ struct XMJXThumbnailView: UIViewRepresentable {
 
 extension XMJXThumbnailView {
     @MainActor
+    /// Coordinator 负责缩略图注册、URL 去抖和异步图片加载。
     final class Coordinator {
         private let registry: XMJXThumbnailRegistry
         private weak var imageView: UIImageView?

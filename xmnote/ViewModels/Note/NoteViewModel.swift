@@ -15,6 +15,7 @@ import Foundation
  */
 
 @Observable
+/// 笔记首页状态源，负责标签分组订阅与搜索筛选。
 class NoteViewModel {
     var selectedCategory: NoteCategory = .excerpts
     var searchText: String = ""

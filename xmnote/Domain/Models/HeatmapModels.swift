@@ -65,6 +65,7 @@ enum HeatmapBookState: Int, CaseIterable, Hashable {
 
 // MARK: - 单日热力数据
 
+/// 单日热力图聚合结果，承载阅读、书摘、打卡和阅读状态分段数据。
 nonisolated struct HeatmapDay: Identifiable {
     let id: Date          // 日历日期（零时零分零秒）
     let readSeconds: Int  // 阅读秒数

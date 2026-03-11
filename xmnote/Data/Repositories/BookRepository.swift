@@ -8,6 +8,7 @@ import GRDB
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
+/// 书籍仓储实现，负责书架、详情与书摘订阅查询。
 struct BookRepository: BookRepositoryProtocol {
     private let databaseManager: DatabaseManager
 
@@ -41,7 +42,7 @@ struct BookRepository: BookRepositoryProtocol {
 private extension BookRepository {
     /// 查询书架页需要的书籍卡片数据，并补齐每本书的有效笔记数量。
     /// - Throws: 数据库查询失败时抛出错误。
-    func fetchBooks(_ db: Database) throws -> [BookItem] {
+    nonisolated func fetchBooks(_ db: Database) throws -> [BookItem] {
         // SQL 目的：读取书架列表并附带每本书的有效笔记数。
         // 表关系：book b LEFT JOIN note n（仅统计 n.is_deleted = 0）。
         // 过滤与排序：仅保留未删除书籍，按置顶状态与排序字段输出用于书架展示。
@@ -72,7 +73,7 @@ private extension BookRepository {
 
     /// 查询指定书籍详情数据，供详情页头部信息区与统计区渲染。
     /// - Throws: 数据库查询失败时抛出错误。
-    func fetchBook(_ db: Database, bookId: Int64) throws -> BookDetail? {
+    nonisolated func fetchBook(_ db: Database, bookId: Int64) throws -> BookDetail? {
         // SQL 目的：读取单本书详情，并补充阅读状态名称与笔记总数。
         // 表关系：book b LEFT JOIN read_status rs；子查询统计 note 表有效记录。
         // 过滤条件：按 bookId 精确命中且排除软删除书籍。
@@ -102,7 +103,7 @@ private extension BookRepository {
 
     /// 查询书籍下的书摘列表，供详情页“书摘时间线”模块展示。
     /// - Throws: 数据库查询失败时抛出错误。
-    func fetchNotes(_ db: Database, bookId: Int64) throws -> [NoteExcerpt] {
+    nonisolated func fetchNotes(_ db: Database, bookId: Int64) throws -> [NoteExcerpt] {
         // SQL 目的：拉取书籍下的书摘列表（详情页时间倒序）。
         // 过滤条件：限定 book_id 且排除软删除 note。
         // 返回字段：保留富文本内容、位置与 include_time，供详情页渲染。

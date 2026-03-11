@@ -258,6 +258,7 @@ private extension ReadCalendarCoverFanStack {
         .transition(.opacity.combined(with: .scale(scale: Layout.transitionScale)))
     }
 
+    /// 绘制溢出提示尾卡，在封面数量超出可见上限时提供层叠暗示。
     func overflowTailCueCard(
         scale: CGFloat,
         rotation: Double,
@@ -390,6 +391,7 @@ private extension ReadCalendarCoverFanStack {
         return CGFloat(unit * 2 - 1)
     }
 
+    /// 执行 splitMix64 变换，生成分布更均匀的伪随机序列用于堆叠抖动。
     func splitMix64(_ x: UInt64) -> UInt64 {
         var z = x &+ 0x9E37_79B9_7F4A_7C15
         z = (z ^ (z >> 30)) &* 0xBF58_476D_1CE4_E5B9
@@ -397,6 +399,7 @@ private extension ReadCalendarCoverFanStack {
         return z ^ (z >> 31)
     }
 
+    /// 根据层级计算全屏态缩放，前几张放大突出，其余逐渐回落。
     func fullscreenScale(for depth: Int, total: Int) -> CGFloat {
         if depth == 0 { return 1.14 }
         if depth == 1 { return 1.08 }
@@ -405,6 +408,7 @@ private extension ReadCalendarCoverFanStack {
         return max(0.72, 0.98 - ratio * 0.24)
     }
 
+    /// 为全屏态返回 zIndex，确保主封面与前几张辅助封面始终压在最上层。
     func fullscreenZIndex(for depth: Int, total: Int) -> Double {
         if depth < 3 {
             return Double(480 - depth)

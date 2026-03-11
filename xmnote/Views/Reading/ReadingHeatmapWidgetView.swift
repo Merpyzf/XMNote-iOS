@@ -6,7 +6,7 @@ import SwiftUI
  * [POS]: 在读页顶部核心组件，承载热力图展示、帮助说明与日期点击回调
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
-
+/// ReadingHeatmapWidgetView 是在读首页顶部热力图卡，负责展示最近阅读活跃度并承接进入阅读日历的入口。
 struct ReadingHeatmapWidgetView: View {
     private enum HeatmapWidgetLayout {
         static let cardCornerRadius = CornerRadius.containerLarge

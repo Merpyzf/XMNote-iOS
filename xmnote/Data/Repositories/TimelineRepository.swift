@@ -8,6 +8,7 @@ import GRDB
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
+/// 时间线仓储实现，负责事件查询与日历标记聚合。
 nonisolated struct TimelineRepository: TimelineRepositoryProtocol {
     private let databaseManager: DatabaseManager
 

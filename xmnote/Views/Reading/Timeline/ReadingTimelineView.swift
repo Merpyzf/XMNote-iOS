@@ -313,12 +313,14 @@ private extension TimelineCalendarPanel {
         .animation(.snappy(duration: 0.24), value: dayOffset)
     }
 
+    /// 分页结束后根据首个可见日期回写当前月份标题，避免头部与实际可见月份脱节。
     func settleMonthAfterPaging(_ visibleRange: DayComponentsRange) {
         guard let firstVisibleDate = date(for: visibleRange.lowerBound) else { return }
         let monthStart = Self.monthStart(of: firstVisibleDate, using: calendar)
         applyDisplayedMonth(monthStart, animated: false)
     }
 
+    /// 跟随用户横向翻月进度插值日历高度，并提前预热相邻月份标记。
     func handleMonthPagingProgress(_ context: HorizontalMonthPagingProgressContext) {
         guard calendarViewportWidth > 0 else { return }
         guard !isProgrammaticLongJump else { return }
@@ -348,6 +350,7 @@ private extension TimelineCalendarPanel {
         }
     }
 
+    /// 把新月份写回页面状态，并同步刷新日历容器高度。
     func applyDisplayedMonth(_ monthStart: Date, animated: Bool) {
         let normalizedMonth = Self.monthStart(of: monthStart, using: calendar)
         if normalizedMonth != viewModel.displayedMonthStart {
@@ -361,6 +364,7 @@ private extension TimelineCalendarPanel {
         )
     }
 
+    /// 跳转到指定日期所在月份，远距离跳月时改走无动画长跳，避免分页动画拖影。
     func jumpToDate(_ date: Date, animated: Bool) {
         let normalized = calendar.startOfDay(for: date)
         let clamped = min(max(normalized, visibleDateRange.lowerBound), visibleDateRange.upperBound)
@@ -419,6 +423,7 @@ private extension TimelineCalendarPanel {
         )
     }
 
+    /// 统一提交头部选中日与月份状态，保证标题、列表和日历指针在同一事务里更新。
     func commitHeaderState(selectedDay: Date, monthStart: Date, animated: Bool) {
         let normalizedDay = calendar.startOfDay(for: selectedDay)
         let normalizedMonth = Self.monthStart(of: monthStart, using: calendar)
@@ -451,6 +456,7 @@ private extension TimelineCalendarPanel {
         )
     }
 
+    /// 依据当前月份周数重算日历高度，避免横向翻月时容器跳变。
     func updateCalendarHeight(for monthStart: Date, availableWidth: CGFloat, animated: Bool) {
         guard availableWidth > 0 else { return }
         calendarViewportWidth = availableWidth
@@ -470,6 +476,7 @@ private extension TimelineCalendarPanel {
         }
     }
 
+    /// 计算指定月份在当前宽度下的完整内容高度，供分页插值和静态布局复用。
     func monthContentHeight(for monthStart: Date, availableWidth: CGFloat) -> CGFloat {
         let monthWidth = max(0, availableWidth - interMonthSpacing)
         let insetWidth = monthWidth - monthDayInsets.leading - monthDayInsets.trailing
@@ -488,6 +495,7 @@ private extension TimelineCalendarPanel {
         return ceil(totalHeight)
     }
 
+    /// 按月份去重后串行预加载日历标记，避免同一轮滚动里重复发起仓储请求。
     func scheduleMarkerPreload(for months: [Date]) {
         let normalizedMonths = months
             .map { Self.monthStart(of: $0, using: calendar) }
@@ -514,23 +522,27 @@ private extension TimelineCalendarPanel {
         }
     }
 
+    /// 将 HorizonCalendar 的 `DayComponents` 归一成自然日 `Date`。
     func date(for day: DayComponents) -> Date? {
         guard let date = calendar.date(from: day.components) else { return nil }
         return calendar.startOfDay(for: date)
     }
 
+    /// 将 HorizonCalendar 的 `MonthComponents` 转成对应月份首日。
     func monthStart(for month: MonthComponents) -> Date? {
         let components = DateComponents(era: month.era, year: month.year, month: month.month, day: 1)
         guard let date = calendar.date(from: components) else { return nil }
         return calendar.startOfDay(for: date)
     }
 
+    /// 读取本地化超短星期文案，供日历周标题展示。
     func weekdaySymbol(for index: Int) -> String {
         let symbols = calendar.veryShortStandaloneWeekdaySymbols
         guard symbols.indices.contains(index) else { return "" }
         return symbols[index]
     }
 
+    /// 把任意日期折叠到月份首日，作为分页和缓存 key 的统一基准。
     static func monthStart(of date: Date, using calendar: Calendar) -> Date {
         let normalized = calendar.startOfDay(for: date)
         let comps = calendar.dateComponents([.year, .month], from: normalized)
@@ -538,12 +550,14 @@ private extension TimelineCalendarPanel {
         return calendar.startOfDay(for: start)
     }
 
+    /// 计算两个日期所在月份的距离，供时间线分页与月份切换动画复用。
     static func monthDistance(from: Date, to: Date, using calendar: Calendar) -> Int {
         let fromMonth = monthStart(of: from, using: calendar)
         let toMonth = monthStart(of: to, using: calendar)
         return calendar.dateComponents([.month], from: fromMonth, to: toMonth).month ?? 0
     }
 
+    /// 估算指定月份需要展示的周行数，保证时间线月历占位高度稳定。
     static func monthWeekRowCount(for monthDate: Date, using calendar: Calendar) -> Int {
         let normalizedMonthStart = Self.monthStart(of: monthDate, using: calendar)
         guard
@@ -697,6 +711,7 @@ private extension TimelineListContainer {
         )
     }
 
+    /// 异步预热时间线富文本收起态布局，降低首次滚入笔记/书评卡时的排版抖动。
     func schedulePrewarm(for request: TimelineRichTextPrewarmRequest?) {
         prewarmTask?.cancel()
         guard let request else {
@@ -733,6 +748,7 @@ private extension TimelineListContainer {
         }
     }
 
+    /// 过滤空白 HTML 并追加到预热队列，控制单次预热数量避免抢占首屏资源。
     func appendPrewarmEntry(
         html: String,
         style: TimelineRichTextPrewarmStyle,

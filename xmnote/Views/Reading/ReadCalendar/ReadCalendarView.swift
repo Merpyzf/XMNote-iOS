@@ -7,6 +7,7 @@ import SwiftUI
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
+/// 阅读日历页面入口，负责创建 ViewModel、挂载设置态并衔接内容壳层。
 struct ReadCalendarView: View {
     @Environment(RepositoryContainer.self) private var repositories
     @State private var viewModel: ReadCalendarViewModel

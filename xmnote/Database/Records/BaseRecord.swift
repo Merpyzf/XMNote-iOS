@@ -14,6 +14,7 @@ import GRDB
 // last_sync_date: 最后同步时间戳
 // is_deleted: 软删除标记（0=正常, 1=已删除）
 
+/// 统一数据库基础字段契约，约束所有 Record 具备时间戳与软删除语义。
 nonisolated protocol BaseRecord: Codable, FetchableRecord, MutablePersistableRecord, Sendable {
     var createdDate: Int64 { get set }
     var updatedDate: Int64 { get set }
