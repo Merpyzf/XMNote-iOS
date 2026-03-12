@@ -122,10 +122,12 @@ struct HeatmapChart: View {
     private var axisGap: CGFloat { style.axisGap }
     private var outerInset: CGFloat { style.outerInset }
     private var headerFontSize: CGFloat { style.headerFontSize }
+    private var headerFont: Font { semanticFont(baseSize: headerFontSize) }
+    private var headerUIFont: UIFont { semanticUIFont(baseSize: headerFontSize) }
     private var resolvedLayout: HeatmapResolvedLayout { resolveLayout(for: gridViewportWidth) }
     private var squareSize: CGFloat { resolvedLayout.squareSize }
     private var headerTextLineHeight: CGFloat {
-        ceil(UIFont.systemFont(ofSize: headerFontSize).lineHeight)
+        ceil(headerUIFont.lineHeight)
     }
     private var monthLabelHeight: CGFloat {
         headerTextLineHeight + axisGap
@@ -211,10 +213,9 @@ private extension HeatmapChart {
 private extension HeatmapChart {
 
     var weekdayLabelColumnWidth: CGFloat {
-        let font = UIFont.systemFont(ofSize: headerFontSize)
         let labels = [0, 2, 4, 6].map(shortWeekday)
         let maxTextWidth = labels
-            .map { ($0 as NSString).size(withAttributes: [.font: font]).width }
+            .map { ($0 as NSString).size(withAttributes: [.font: headerUIFont]).width }
             .max() ?? 0
         return ceil(maxTextWidth + 2)
     }
@@ -227,7 +228,7 @@ private extension HeatmapChart {
                     ZStack {
                         if row % 2 == 0 {
                             Text(shortWeekday(row))
-                                .font(.system(size: headerFontSize))
+                                .font(headerFont)
                                 .foregroundStyle(Color.textHint)
                         }
                     }
@@ -458,7 +459,7 @@ private extension HeatmapChart {
                     .frame(width: totalRowWidth, height: headerTextLineHeight)
                 ForEach(tokens) { token in
                     Text(token.text)
-                        .font(.system(size: headerFontSize))
+                        .font(headerFont)
                         .foregroundStyle(Color.textHint)
                         .lineLimit(1)
                         .fixedSize(horizontal: true, vertical: false)
@@ -486,7 +487,6 @@ private extension HeatmapChart {
         var previousYear = ""
         var headerOverflow: CGFloat = 0
         let columnAdvance = squareSize + squareSpacing
-        let font = UIFont.systemFont(ofSize: headerFontSize)
 
         for (index, column) in columns.enumerated() {
             let firstDay = column.week[0]
@@ -505,7 +505,7 @@ private extension HeatmapChart {
 
             if let text {
                 let drawX = CGFloat(index) * columnAdvance + headerOverflow
-                let textWidth = headerTextWidth(text, font: font)
+                let textWidth = headerTextWidth(text, font: headerUIFont)
                 tokens.append(
                     HeatmapHeaderToken(
                         id: "header-\(index)-\(text)",
@@ -532,6 +532,24 @@ private extension HeatmapChart {
     /// 计算月份/年份标题文本宽度。
     func headerTextWidth(_ text: String, font: UIFont) -> CGFloat {
         ceil((text as NSString).size(withAttributes: [.font: font]).width)
+    }
+
+    /// 返回保留当前视觉基线的 caption2 语义字体，供热力图所有文本统一复用。
+    func semanticFont(baseSize: CGFloat) -> Font {
+        SemanticTypography.font(
+            baseSize: baseSize,
+            relativeTo: .caption2,
+            minimumPointSize: baseSize
+        )
+    }
+
+    /// 返回与渲染字体一致的 UIKit 语义字体，避免测量仍按旧固定字号进行。
+    func semanticUIFont(baseSize: CGFloat) -> UIFont {
+        SemanticTypography.uiFont(
+            baseSize: baseSize,
+            textStyle: .caption2,
+            minimumPointSize: baseSize
+        )
     }
 
     /// 格式化标题中的年份文本。
@@ -626,7 +644,7 @@ extension HeatmapChart {
     static func legend(style: HeatmapChartStyle) -> some View {
         HStack(spacing: Spacing.compact) {
             Text("少")
-                .font(.system(size: 9))
+                .font(legendFont(baseSize: 9))
                 .foregroundStyle(Color.textHint)
             ForEach(HeatmapLevel.allCases.filter { $0 != .none }, id: \.rawValue) { level in
                 RoundedRectangle(cornerRadius: style.squareRadius, style: .continuous)
@@ -634,7 +652,7 @@ extension HeatmapChart {
                     .frame(width: 10, height: 10)
             }
             Text("多")
-                .font(.system(size: 9))
+                .font(legendFont(baseSize: 9))
                 .foregroundStyle(Color.textHint)
         }
     }
@@ -643,7 +661,7 @@ extension HeatmapChart {
     static func legend(squareSize: CGFloat, fontSize: CGFloat) -> some View {
         HStack(spacing: Spacing.compact) {
             Text("少")
-                .font(.system(size: fontSize))
+                .font(legendFont(baseSize: fontSize))
                 .foregroundStyle(Color.textHint)
             ForEach(HeatmapLevel.allCases.filter { $0 != .none }, id: \.rawValue) { level in
                 RoundedRectangle(cornerRadius: CornerRadius.inlayTiny, style: .continuous)
@@ -651,9 +669,18 @@ extension HeatmapChart {
                     .frame(width: squareSize, height: squareSize)
             }
             Text("多")
-                .font(.system(size: fontSize))
+                .font(legendFont(baseSize: fontSize))
                 .foregroundStyle(Color.textHint)
         }
+    }
+
+    /// 图例文本统一走 caption2 语义字体，并固定默认态视觉字号不被抬高。
+    private static func legendFont(baseSize: CGFloat) -> Font {
+        SemanticTypography.font(
+            baseSize: baseSize,
+            relativeTo: .caption2,
+            minimumPointSize: baseSize
+        )
     }
 }
 

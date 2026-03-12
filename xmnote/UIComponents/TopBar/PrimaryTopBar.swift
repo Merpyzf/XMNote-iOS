@@ -12,6 +12,8 @@ struct PrimaryTopBar<Leading: View, Trailing: View>: View {
     let leading: Leading
     let trailing: Trailing
 
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
     /// 注入左右操作区内容，组装统一顶部栏布局。
     init(
         @ViewBuilder leading: () -> Leading,
@@ -30,7 +32,7 @@ struct PrimaryTopBar<Leading: View, Trailing: View>: View {
             }
         }
         .padding(.horizontal, Spacing.screenEdge)
-        .frame(height: 52)
+        .frame(minHeight: dynamicTypeSize >= .accessibility1 ? 56 : 52)
         .background(Color.clear)
     }
 }

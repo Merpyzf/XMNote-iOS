@@ -378,11 +378,35 @@ enum CardStyle {
 
 /// 阅读日历字体令牌，集中维护日期相关文本层级。
 enum ReadCalendarTypography {
-    static let topControlTitleFont: Font = .system(size: 18, weight: .semibold, design: .rounded)
-    static let weekdayHeaderFont: Font = .system(size: 13, weight: .medium, design: .rounded)
-    static let monthGridDayNumberFont: Font = .system(size: 13, weight: .medium, design: .rounded)
-    static let monthGridDayNumberSelectedFont: Font = .system(size: 13, weight: .bold, design: .rounded)
-    static let yearHeatmapMonthTitleFont: Font = .callout.weight(.semibold)
+    static let topControlTitleFont: Font = SemanticTypography.font(
+        baseSize: 18,
+        relativeTo: .headline,
+        weight: .semibold,
+        design: .rounded
+    )
+    static let weekdayHeaderFont: Font = SemanticTypography.font(
+        baseSize: 13,
+        relativeTo: .caption,
+        weight: .medium,
+        design: .rounded
+    )
+    static let monthGridDayNumberFont: Font = SemanticTypography.font(
+        baseSize: 13,
+        relativeTo: .caption,
+        weight: .medium,
+        design: .rounded
+    )
+    static let monthGridDayNumberSelectedFont: Font = SemanticTypography.font(
+        baseSize: 13,
+        relativeTo: .caption,
+        weight: .bold,
+        design: .rounded
+    )
+    static let yearHeatmapMonthTitleFont: Font = SemanticTypography.font(
+        baseSize: SemanticTypography.defaultPointSize(for: .callout),
+        relativeTo: .callout,
+        weight: .semibold
+    )
 }
 
 // MARK: - Timeline Calendar Style
@@ -391,13 +415,40 @@ enum ReadCalendarTypography {
 enum TimelineCalendarStyle {
     static let monthNumberFont: Font = .brandDisplay(size: 20, relativeTo: .title3)
     static let monthNumberVerticalTrim = BrandTypography.verticalTrim(size: 20, textStyle: .title3)
-    static let monthUnitFont: Font = .system(size: 10, weight: .medium, design: .rounded)
-    static let actionButtonFont: Font = .system(size: 13, weight: .semibold, design: .rounded)
+    static let monthUnitFont: Font = SemanticTypography.font(
+        baseSize: 10,
+        relativeTo: .caption2,
+        weight: .medium,
+        design: .rounded,
+        minimumPointSize: 10
+    )
+    static let actionButtonFont: Font = SemanticTypography.font(
+        baseSize: 13,
+        relativeTo: .caption,
+        weight: .semibold,
+        design: .rounded
+    )
     static let relativeNumberFont: Font = .brandDisplay(size: 16, relativeTo: .body)
     static let relativeNumberVerticalTrim = BrandTypography.verticalTrim(size: 16, textStyle: .body)
-    static let relativeUnitFont: Font = .system(size: 10, weight: .regular, design: .rounded)
-    static let weekdayFont: Font = .system(size: 11, weight: .medium, design: .rounded)
-    static let categoryChipFont: Font = .system(size: 12, weight: .medium, design: .rounded)
+    static let relativeUnitFont: Font = SemanticTypography.font(
+        baseSize: 10,
+        relativeTo: .caption2,
+        weight: .regular,
+        design: .rounded,
+        minimumPointSize: 10
+    )
+    static let weekdayFont: Font = SemanticTypography.font(
+        baseSize: 11,
+        relativeTo: .caption2,
+        weight: .medium,
+        design: .rounded
+    )
+    static let categoryChipFont: Font = SemanticTypography.font(
+        baseSize: 12,
+        relativeTo: .caption,
+        weight: .medium,
+        design: .rounded
+    )
     static let dayNumberFont: Font = .brandDisplay(size: 13, relativeTo: .body)
 
     // 时间线圆角语义：顶部日历背景卡对齐热力图卡片，事件卡统一主内容卡角色。
@@ -422,14 +473,22 @@ enum TimelineCalendarStyle {
     static let sectionDateFont: Font = .brandDisplay(size: 18, relativeTo: .subheadline)
     static let sectionYearFont: Font = .brandDisplay(size: 18, relativeTo: .subheadline)
     static let sectionDateVerticalTrim = BrandTypography.verticalTrim(size: 18, textStyle: .subheadline)
-    static let sectionFilterFont: Font = .system(size: 12, weight: .medium, design: .rounded)
+    static let sectionFilterFont: Font = SemanticTypography.font(
+        baseSize: 12,
+        relativeTo: .caption,
+        weight: .medium,
+        design: .rounded
+    )
 }
 
 // MARK: - Timeline Typography
 
 /// 时间线卡片正文字体令牌，确保富文本密度在不同卡片中保持一致。
 enum TimelineTypography {
-    static let eventRichTextBaseFont: UIFont = .preferredFont(forTextStyle: .callout)
+    static let eventRichTextBaseFont: UIFont = SemanticTypography.uiFont(
+        baseSize: SemanticTypography.defaultPointSize(for: .callout),
+        textStyle: .callout
+    )
     static let eventRichTextLineSpacing: CGFloat = 4
     static let eventFallbackTextFont: Font = .callout
 }

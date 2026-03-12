@@ -104,6 +104,8 @@ private struct TopSwitcherTabBar<Tab: Hashable>: View {
     let quote: String
     let titleProvider: (Tab) -> String
 
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
     var body: some View {
         HStack(spacing: Spacing.double) {
             ForEach(tabs, id: \.self, content: tabItem)
@@ -155,12 +157,20 @@ private struct TopSwitcherTabBar<Tab: Hashable>: View {
             }
         } label: {
             Text(title)
-                .font(.system(size: 20, weight: isSelected ? .semibold : .regular))
+                .font(
+                    SemanticTypography.font(
+                        baseSize: 20,
+                        relativeTo: .headline,
+                        weight: isSelected ? .semibold : .regular
+                    )
+                )
                 .foregroundStyle(isSelected ? .primary : .secondary)
                 .anchorPreference(key: TopSwitcherTabAnchorKey.self, value: .bounds) { [tab: $0] }
                 .padding(.vertical, Spacing.compact)
                 .frame(minHeight: 32)
-                .fixedSize()
+                .lineLimit(dynamicTypeSize >= .accessibility1 ? 2 : 1)
+                .multilineTextAlignment(.leading)
+                .modifier(TopSwitcherFixedSizeModifier(isEnabled: dynamicTypeSize < .accessibility1))
         }
         .buttonStyle(.plain)
         .accessibilityIdentifier("top_switcher_tab_\(title)")
@@ -170,6 +180,8 @@ private struct TopSwitcherTabBar<Tab: Hashable>: View {
 private struct TopSwitcherTitleLabel: View {
     let text: String
     let quote: String
+
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     private var titleTrim: BrandTypography.VerticalTrim {
         BrandTypography.topSwitcherTitleTrim(for: text, size: 20)
@@ -182,6 +194,7 @@ private struct TopSwitcherTitleLabel: View {
             .brandVerticalTrim(titleTrim, edges: [.top, .bottom])
             .padding(.vertical, Spacing.compact)
             .frame(minHeight: 32, alignment: .leading)
+            .lineLimit(dynamicTypeSize >= .accessibility1 ? 2 : 1)
             .background(alignment: .topLeading) {
                 Image(TopSwitcherQuoteDecorationMetrics.assetName)
                     .resizable()
@@ -203,6 +216,18 @@ private struct TopSwitcherTitleLabel: View {
                 BrandTypography.debugLogTopSwitcherTitle(text, size: 20)
                 #endif
             }
+    }
+}
+
+private struct TopSwitcherFixedSizeModifier: ViewModifier {
+    let isEnabled: Bool
+
+    func body(content: Content) -> some View {
+        if isEnabled {
+            content.fixedSize()
+        } else {
+            content
+        }
     }
 }
 

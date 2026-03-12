@@ -67,18 +67,22 @@ enum BrandTypography {
         #endif
     }
 
-    /// 返回 TopSwitcher 标题推荐字体：CJK 文本优先系统半粗体，非 CJK 文本优先品牌字体。
+    /// 返回 TopSwitcher 标题推荐字体：保留 20pt 默认视觉，只补 headline 语义缩放。
     static func topSwitcherTitleFont(for text: String, size: CGFloat) -> Font {
         if text.containsCJK {
-            return .system(size: size, weight: .semibold)
+            return SemanticTypography.font(
+                baseSize: size,
+                relativeTo: .headline,
+                weight: .semibold
+            )
         }
-        return .brandDisplay(size: size, relativeTo: .title2)
+        return .brandDisplay(size: size, relativeTo: .headline)
     }
 
     /// 返回 TopSwitcher 标题位对应的视觉 trim；中文走系统字体时不做收口。
     static func topSwitcherTitleTrim(for text: String, size: CGFloat) -> VerticalTrim {
         guard !text.containsCJK else { return .zero }
-        return verticalTrim(size: size, textStyle: .title2)
+        return verticalTrim(size: size, textStyle: .headline)
     }
 
     /// 基于 UIKit 字体指标估算品牌字形的视觉 trim，供单行标题/数字位做光学收口。
