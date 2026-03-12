@@ -278,20 +278,26 @@ private extension TimelineCalendarPanel {
         let components = calendar.dateComponents([.year, .month], from: viewModel.displayedMonthStart)
         let year = components.year ?? calendar.component(.year, from: viewModel.displayedMonthStart)
         let month = components.month ?? calendar.component(.month, from: viewModel.displayedMonthStart)
-        let yearText = Text(verbatim: String(year))
-            .font(TimelineCalendarStyle.monthNumberFont)
-            .foregroundStyle(TimelineCalendarStyle.monthNumberColor)
-        let yearUnit = Text(" 年 ")
-            .font(TimelineCalendarStyle.monthUnitFont)
-            .foregroundStyle(TimelineCalendarStyle.monthUnitColor)
-        let monthText = Text(verbatim: String(month))
-            .font(TimelineCalendarStyle.monthNumberFont)
-            .foregroundStyle(TimelineCalendarStyle.monthNumberColor)
-        let monthUnit = Text(" 月")
-            .font(TimelineCalendarStyle.monthUnitFont)
-            .foregroundStyle(TimelineCalendarStyle.monthUnitColor)
-        return Text("\(yearText)\(yearUnit)\(monthText)\(monthUnit)")
-            .monospacedDigit()
+        return HStack(alignment: .firstTextBaseline, spacing: Spacing.none) {
+            brandNumberText(
+                String(year),
+                font: TimelineCalendarStyle.monthNumberFont,
+                color: TimelineCalendarStyle.monthNumberColor,
+                trim: TimelineCalendarStyle.monthNumberVerticalTrim
+            )
+            Text(" 年 ")
+                .font(TimelineCalendarStyle.monthUnitFont)
+                .foregroundStyle(TimelineCalendarStyle.monthUnitColor)
+            brandNumberText(
+                String(month),
+                font: TimelineCalendarStyle.monthNumberFont,
+                color: TimelineCalendarStyle.monthNumberColor,
+                trim: TimelineCalendarStyle.monthNumberVerticalTrim
+            )
+            Text(" 月")
+                .font(TimelineCalendarStyle.monthUnitFont)
+                .foregroundStyle(TimelineCalendarStyle.monthUnitColor)
+        }
             .contentTransition(.numericText())
             .animation(.snappy(duration: 0.24), value: viewModel.displayedMonthStart)
     }
@@ -299,18 +305,36 @@ private extension TimelineCalendarPanel {
     var selectedDateOffsetText: some View {
         let today = calendar.startOfDay(for: Date())
         let dayOffset = calendar.dateComponents([.day], from: viewModel.selectedDate, to: today).day ?? 0
-        return HStack(alignment: .lastTextBaseline, spacing: Spacing.none) {
-            Text(verbatim: dayOffset == 0 ? "" : String(abs(dayOffset)))
-                .font(TimelineCalendarStyle.relativeNumberFont)
-                .foregroundStyle(TimelineCalendarStyle.relativeNumberColor)
-                .monospacedDigit()
+        return HStack(alignment: .firstTextBaseline, spacing: Spacing.none) {
+            if dayOffset != 0 {
+                brandNumberText(
+                    String(abs(dayOffset)),
+                    font: TimelineCalendarStyle.relativeNumberFont,
+                    color: TimelineCalendarStyle.relativeNumberColor,
+                    trim: TimelineCalendarStyle.relativeNumberVerticalTrim
+                )
                 .contentTransition(.numericText())
+            }
             Text(dayOffset == 0 ? "今天" : (dayOffset > 0 ? "天前" : "天后"))
                 .font(TimelineCalendarStyle.relativeUnitFont)
                 .foregroundStyle(TimelineCalendarStyle.relativeUnitColor)
                 .contentTransition(.numericText())
         }
         .animation(.snappy(duration: 0.24), value: dayOffset)
+    }
+
+    @ViewBuilder
+    private func brandNumberText(
+        _ value: String,
+        font: Font,
+        color: Color,
+        trim: BrandTypography.VerticalTrim
+    ) -> some View {
+        Text(verbatim: value)
+            .font(font)
+            .foregroundStyle(color)
+            .monospacedDigit()
+            .brandVerticalTrim(trim, edges: [.top, .bottom])
     }
 
     /// 分页结束后根据首个可见日期回写当前月份标题，避免头部与实际可见月份脱节。

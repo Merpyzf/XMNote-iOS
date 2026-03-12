@@ -390,9 +390,11 @@ enum ReadCalendarTypography {
 /// 时间线日历样式令牌，集中维护字体、尺寸与颜色语义，避免页面内硬编码。
 enum TimelineCalendarStyle {
     static let monthNumberFont: Font = .brandDisplay(size: 20, relativeTo: .title3)
+    static let monthNumberVerticalTrim = BrandTypography.verticalTrim(size: 20, textStyle: .title3)
     static let monthUnitFont: Font = .system(size: 10, weight: .medium, design: .rounded)
     static let actionButtonFont: Font = .system(size: 13, weight: .semibold, design: .rounded)
     static let relativeNumberFont: Font = .brandDisplay(size: 16, relativeTo: .body)
+    static let relativeNumberVerticalTrim = BrandTypography.verticalTrim(size: 16, textStyle: .body)
     static let relativeUnitFont: Font = .system(size: 10, weight: .regular, design: .rounded)
     static let weekdayFont: Font = .system(size: 11, weight: .medium, design: .rounded)
     static let categoryChipFont: Font = .system(size: 12, weight: .medium, design: .rounded)
@@ -419,6 +421,7 @@ enum TimelineCalendarStyle {
     // 粘性日期头部：品牌衬线体提升分组锚点辨识度，与顶部日历标题建立字体家族呼应
     static let sectionDateFont: Font = .brandDisplay(size: 18, relativeTo: .subheadline)
     static let sectionYearFont: Font = .brandDisplay(size: 18, relativeTo: .subheadline)
+    static let sectionDateVerticalTrim = BrandTypography.verticalTrim(size: 18, textStyle: .subheadline)
     static let sectionFilterFont: Font = .system(size: 12, weight: .medium, design: .rounded)
 }
 

@@ -15,6 +15,7 @@
 		89JXPB0012F3D000000000002 /* JXPhotoBrowser in Frameworks */ = {isa = PBXBuildFile; productRef = 89JXPB0012F3D000000000004 /* JXPhotoBrowser */; };
 		89NUKE0012F3D000000000002 /* Nuke in Frameworks */ = {isa = PBXBuildFile; productRef = 89NUKE0012F3D000000000004 /* Nuke */; };
 		89NUKE0012F3D000000000003 /* NukeUI in Frameworks */ = {isa = PBXBuildFile; productRef = 89NUKE0012F3D000000000005 /* NukeUI */; };
+		89SOUP0012F3D000000000002 /* SwiftSoup in Frameworks */ = {isa = PBXBuildFile; productRef = 89SOUP0012F3D000000000004 /* SwiftSoup */; };
 		89ZIP0012F3D000000000002 /* ZIPFoundation in Frameworks */ = {isa = PBXBuildFile; productRef = 89ZIP0012F3D000000000004 /* ZIPFoundation */; };
 /* End PBXBuildFile section */
 
@@ -72,6 +73,7 @@
 				89GIFU0012F3D000000000002 /* Gifu in Frameworks */,
 				89HZCAL12F3D000000000002 /* HorizonCalendar in Frameworks */,
 				89JXPB0012F3D000000000002 /* JXPhotoBrowser in Frameworks */,
+				89SOUP0012F3D000000000002 /* SwiftSoup in Frameworks */,
 				89ZIP0012F3D000000000002 /* ZIPFoundation in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -141,6 +143,7 @@
 				89GIFU0012F3D000000000004 /* Gifu */,
 				89HZCAL12F3D000000000004 /* HorizonCalendar */,
 				89JXPB0012F3D000000000004 /* JXPhotoBrowser */,
+				89SOUP0012F3D000000000004 /* SwiftSoup */,
 				89ZIP0012F3D000000000004 /* ZIPFoundation */,
 			);
 			productName = xmnote;
@@ -216,7 +219,7 @@
 					};
 				};
 			};
-			buildConfigurationList = 891114972F39AC2F00D99384 /* Build configuration list for PBXProject "XMNote" */;
+			buildConfigurationList = 891114972F39AC2F00D99384 /* Build configuration list for PBXProject "xmnote" */;
 			developmentRegion = en;
 			hasScannedForEncodings = 0;
 			knownRegions = (
@@ -232,6 +235,7 @@
 				89GIFU0012F3D000000000001 /* XCRemoteSwiftPackageReference "Gifu" */,
 				89HZCAL12F3D000000000001 /* XCLocalSwiftPackageReference "Vendor/HorizonCalendar" */,
 				89JXPB0012F3D000000000001 /* XCLocalSwiftPackageReference "Vendor/PhotoBrowser" */,
+				89SOUP0012F3D000000000001 /* XCRemoteSwiftPackageReference "SwiftSoup" */,
 				89ZIP0012F3D000000000001 /* XCRemoteSwiftPackageReference "ZIPFoundation" */,
 			);
 			preferredProjectObjectVersion = 77;
@@ -597,7 +601,7 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
-		891114972F39AC2F00D99384 /* Build configuration list for PBXProject "XMNote" */ = {
+		891114972F39AC2F00D99384 /* Build configuration list for PBXProject "xmnote" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				891114BB2F39AC3200D99384 /* Debug */,
@@ -679,6 +683,14 @@
 				minimumVersion = 12.9.0;
 			};
 		};
+		89SOUP0012F3D000000000001 /* XCRemoteSwiftPackageReference "SwiftSoup" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/scinfu/SwiftSoup.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 2.13.0;
+			};
+		};
 		89ZIP0012F3D000000000001 /* XCRemoteSwiftPackageReference "ZIPFoundation" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/weichsel/ZIPFoundation.git";
@@ -724,6 +736,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 89NUKE0012F3D000000000001 /* XCRemoteSwiftPackageReference "Nuke" */;
 			productName = NukeUI;
+		};
+		89SOUP0012F3D000000000004 /* SwiftSoup */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 89SOUP0012F3D000000000001 /* XCRemoteSwiftPackageReference "SwiftSoup" */;
+			productName = SwiftSoup;
 		};
 		89ZIP0012F3D000000000004 /* ZIPFoundation */ = {
 			isa = XCSwiftPackageProductDependency;

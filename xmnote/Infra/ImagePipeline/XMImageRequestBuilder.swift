@@ -123,12 +123,23 @@ enum XMImageRequestBuilder {
         return !nonGIFExtensions.contains(ext)
     }
 
+    /// 统一生成浏览器语义请求头，供图片与网页抓取共用站点策略。
+    static func browserHeaderFields(for url: URL?) -> [String: String] {
+        guard let url, url.isFileURL == false else { return [:] }
+
+        var headers = [
+            "User-Agent": browserUserAgent
+        ]
+        if let host = url.host?.lowercased(), host.contains("douban") {
+            headers["Referer"] = "https://douban.com/"
+        }
+        return headers
+    }
+
     /// 为请求注入 UA/Referer，兼容豆瓣等站点的防盗链策略；file:// 本地请求跳过。
     static func applyAntiHotlinkHeaders(to request: inout URLRequest) {
-        guard request.url?.isFileURL != true else { return }
-        request.setValue(browserUserAgent, forHTTPHeaderField: "User-Agent")
-        if let host = request.url?.host?.lowercased(), host.contains("douban") {
-            request.setValue("https://douban.com/", forHTTPHeaderField: "Referer")
+        browserHeaderFields(for: request.url).forEach { key, value in
+            request.setValue(value, forHTTPHeaderField: key)
         }
     }
 }

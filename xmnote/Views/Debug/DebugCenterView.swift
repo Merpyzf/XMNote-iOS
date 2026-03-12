@@ -2,7 +2,7 @@
 import SwiftUI
 
 /**
- * [INPUT]: 依赖 RichTextTestView、HeatmapTestView、ImageLoadingTestView、CameraTextCaptureTestView、JXPhotoBrowserTestView、ReadCalendarCoverStackTestView、BookCoverStyleTestView、BookCoverProgressBarTestView、SystemColorsTestView、TimelineCardsTestView、TimelineCalendarHorizonTestView 作为导航目的地
+ * [INPUT]: 依赖 RichTextTestView、HeatmapTestView、ImageLoadingTestView、WebHTMLFetchTestView、CameraTextCaptureTestView、JXPhotoBrowserTestView、ReadCalendarCoverStackTestView、BookCoverStyleTestView、BookCoverProgressBarTestView、SystemColorsTestView、TimelineCardsTestView、TimelineCalendarHorizonTestView 作为导航目的地
  * [OUTPUT]: 对外提供 DebugCenterView（测试中心列表页）
  * [POS]: Debug 测试入口页，集中展示所有控件测试项，由 PersonalView 跳转进入
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -38,6 +38,12 @@ struct DebugCenterView: View {
             title: "图片加载",
             subtitle: "静态图/GIF/失败链路与缓存来源观测",
             destination: AnyView(ImageLoadingTestView())
+        ),
+        DebugItem(
+            icon: "globe.asia.australia.fill",
+            title: "网页 HTML 抓取",
+            subtitle: "WebView/HTTP 双通道、Cookie 复用与 DOM 探针验证",
+            destination: AnyView(WebHTMLFetchTestView())
         ),
         DebugItem(
             icon: "text.viewfinder",

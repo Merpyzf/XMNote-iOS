@@ -171,10 +171,15 @@ private struct TopSwitcherTitleLabel: View {
     let text: String
     let quote: String
 
+    private var titleTrim: BrandTypography.VerticalTrim {
+        BrandTypography.topSwitcherTitleTrim(for: text, size: 20)
+    }
+
     var body: some View {
         Text(text)
             .font(BrandTypography.topSwitcherTitleFont(for: text, size: 20))
             .foregroundStyle(.primary)
+            .brandVerticalTrim(titleTrim, edges: [.top, .bottom])
             .padding(.vertical, Spacing.compact)
             .frame(minHeight: 32, alignment: .leading)
             .background(alignment: .topLeading) {

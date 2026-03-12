@@ -107,8 +107,6 @@ private struct ReadingTrendOverviewLayout {
 
     var unitFontSize: CGFloat { max(8, numberFontSize / 3) }
 
-    var metricValueBottomCompensation: CGFloat { min(3, max(2, numberFontSize * 0.10)) }
-
     var descriptionFontSize: CGFloat { min(12, max(10, columnHeight * 0.082)) }
 
     var chartSpacing: CGFloat { Spacing.cozy }
@@ -130,8 +128,7 @@ private struct ReadingTrendOverviewColumn: View {
                 ReadingTrendMetricValueLabel(
                     display: ReadingDashboardFormatting.metricValueDisplay(metric: metric),
                     numberFontSize: layout.numberFontSize,
-                    unitFontSize: layout.unitFontSize,
-                    bottomCompensation: layout.metricValueBottomCompensation
+                    unitFontSize: layout.unitFontSize
                 )
 
                 Text(metric.title)
@@ -159,35 +156,50 @@ private struct ReadingTrendMetricValueLabel: View {
     let display: ReadingDashboardMetricValueDisplay
     let numberFontSize: CGFloat
     let unitFontSize: CGFloat
-    let bottomCompensation: CGFloat
+
+    private var numberVerticalTrim: BrandTypography.VerticalTrim {
+        BrandTypography.verticalTrim(size: numberFontSize, textStyle: .title3)
+    }
 
     var body: some View {
-        Text(metricAttributedString())
-            .foregroundStyle(Color.textPrimary)
-            .lineLimit(1)
-            .minimumScaleFactor(0.72)
-            .contentTransition(.numericText())
-            // Tighten the brand font's deeper line box so the subtitle reads as part of the same group.
-            .padding(.bottom, -bottomCompensation)
-    }
-
-    /// 组合多段 AttributedString，确保数字和单位在同一基线上呈现且不使用废弃的 Text 拼接 API。
-    func metricAttributedString() -> AttributedString {
-        display.segments.reduce(into: AttributedString()) { partial, segment in
-            partial.append(styledText(for: segment))
+        HStack(alignment: .firstTextBaseline, spacing: Spacing.none) {
+            ForEach(Array(display.segments.enumerated()), id: \.offset) { _, segment in
+                ReadingTrendMetricSegmentText(
+                    segment: segment,
+                    numberFontSize: numberFontSize,
+                    unitFontSize: unitFontSize,
+                    numberVerticalTrim: numberVerticalTrim
+                )
+            }
         }
     }
+}
 
-    /// 按段角色切换品牌数字字体和单位字体。
-    func styledText(for segment: ReadingDashboardMetricValueDisplay.Segment) -> AttributedString {
-        var piece = AttributedString(segment.text)
+/// ReadingTrendMetricSegmentText 拆分趋势值段视图，降低 SwiftUI 泛型链复杂度并统一数字收口。
+private struct ReadingTrendMetricSegmentText: View {
+    let segment: ReadingDashboardMetricValueDisplay.Segment
+    let numberFontSize: CGFloat
+    let unitFontSize: CGFloat
+    let numberVerticalTrim: BrandTypography.VerticalTrim
+
+    var body: some View {
         switch segment.role {
         case .number:
-            piece.font = .brandDisplay(size: numberFontSize, relativeTo: .title3)
+            Text(segment.text)
+                .font(.brandDisplay(size: numberFontSize, relativeTo: .title3))
+                .foregroundStyle(Color.textPrimary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.72)
+                .monospacedDigit()
+                .contentTransition(.numericText())
+                .brandVerticalTrim(numberVerticalTrim, edges: [.top, .bottom])
         case .unit:
-            piece.font = .system(size: unitFontSize, weight: .medium, design: .rounded)
+            Text(segment.text)
+                .font(.system(size: unitFontSize, weight: .medium, design: .rounded))
+                .foregroundStyle(Color.textPrimary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.72)
         }
-        return piece
     }
 }
 

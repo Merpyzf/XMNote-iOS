@@ -13,7 +13,7 @@ import os
 /// 品牌字体入口，集中维护字体注册名与回退策略。
 enum BrandTypography {
     /// VerticalTrim 表示品牌字体在视觉上需要抵消的顶部/底部额外行盒空间。
-    struct VerticalTrim {
+    struct VerticalTrim: Equatable {
         let top: CGFloat
         let bottom: CGFloat
 
@@ -75,6 +75,12 @@ enum BrandTypography {
         return .brandDisplay(size: size, relativeTo: .title2)
     }
 
+    /// 返回 TopSwitcher 标题位对应的视觉 trim；中文走系统字体时不做收口。
+    static func topSwitcherTitleTrim(for text: String, size: CGFloat) -> VerticalTrim {
+        guard !text.containsCJK else { return .zero }
+        return verticalTrim(size: size, textStyle: .title2)
+    }
+
     /// 基于 UIKit 字体指标估算品牌字形的视觉 trim，供单行标题/数字位做光学收口。
     static func verticalTrim(
         size: CGFloat,
@@ -90,7 +96,7 @@ enum BrandTypography {
 
     /// 将 trim 值吸附到像素网格，避免不同屏幕 scale 下出现半像素抖动。
     private static func roundToPixel(_ value: CGFloat) -> CGFloat {
-        let screenScale = max(UIScreen.main.scale, 1)
+        let screenScale = max(UITraitCollection.current.displayScale, 1)
         return (value * screenScale).rounded() / screenScale
     }
 

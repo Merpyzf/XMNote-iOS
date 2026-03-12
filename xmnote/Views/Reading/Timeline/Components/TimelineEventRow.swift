@@ -26,11 +26,13 @@ struct TimelineSectionHeader: View, Equatable {
                     .font(TimelineCalendarStyle.sectionDateFont)
                     .monospacedDigit()
                     .foregroundStyle(Color.textPrimary)
+                    .brandVerticalTrim(TimelineCalendarStyle.sectionDateVerticalTrim, edges: [.top, .bottom])
 
                 Text(yearString)
                     .font(TimelineCalendarStyle.sectionYearFont)
                     .monospacedDigit()
                     .foregroundStyle(Color.textHint)
+                    .brandVerticalTrim(TimelineCalendarStyle.sectionDateVerticalTrim, edges: [.top, .bottom])
             }
 
             Spacer()
