@@ -271,7 +271,7 @@ private extension XMBookCover {
     enum SurfaceLayout {
         static let minEdgeWidth: CGFloat = 56
         static let minEdgeHeight: CGFloat = 80
-        static let depthEdgeWidthThreshold: CGFloat = 96
+        static let depthEdgeWidthThreshold: CGFloat = 84
     }
 
     /// 统一占位图：背景色 + 可选 BookCoverPlaceholder 资源图标。
@@ -383,9 +383,9 @@ private extension XMBookCover {
             case .plain:
                 return 0
             case .thinEdge:
-                return min(max(size.width * 0.022, 1.0), 1.8)
+                return min(max(size.width * 0.028, 1.8), 2.4)
             case .depthEdge:
-                return min(max(size.width * 0.030, 1.6), 2.8)
+                return min(max(size.width * 0.037, 2.8), 3.8)
             }
         }
 
@@ -394,9 +394,9 @@ private extension XMBookCover {
             case .plain:
                 return 0
             case .thinEdge:
-                return min(max(size.width * 0.030, 1.4), 3.0)
+                return min(max(size.width * 0.046, 2.8), 4.0)
             case .depthEdge:
-                return min(max(size.width * 0.050, 2.4), 5.0)
+                return min(max(size.width * 0.068, 4.8), 6.8)
             }
         }
 
@@ -404,8 +404,8 @@ private extension XMBookCover {
             HStack(spacing: 0) {
                 LinearGradient(
                     stops: [
-                        .init(color: .bookCoverSpineDark.opacity(tier == .depthEdge ? 0.92 : 0.76), location: 0),
-                        .init(color: .bookCoverSpineLight.opacity(tier == .depthEdge ? 0.74 : 0.52), location: 1)
+                        .init(color: .bookCoverSpineDark.opacity(tier == .depthEdge ? 0.96 : 0.86), location: 0),
+                        .init(color: .bookCoverSpineLight.opacity(tier == .depthEdge ? 0.82 : 0.62), location: 1)
                     ],
                     startPoint: .leading,
                     endPoint: .trailing
@@ -423,7 +423,7 @@ private extension XMBookCover {
 
                 LinearGradient(
                     stops: [
-                        .init(color: .bookCoverFoldShadow.opacity(tier == .depthEdge ? 0.58 : 0.38), location: 0),
+                        .init(color: .bookCoverFoldShadow.opacity(tier == .depthEdge ? 0.66 : 0.50), location: 0),
                         .init(color: .clear, location: 1)
                     ],
                     startPoint: .leading,
@@ -448,13 +448,13 @@ private extension XMBookCover {
             case .plain:
                 return nil
             case .thinEdge:
-                self.radius = min(max(size.width * 0.045, 1.6), 5.0)
-                self.x = 0.6
-                self.y = min(max(size.width * 0.022, 0.8), 2.4)
+                self.radius = min(max(size.width * 0.040, 2.0), 4.6)
+                self.x = 0.7
+                self.y = min(max(size.width * 0.020, 1.0), 2.2)
             case .depthEdge:
-                self.radius = min(max(size.width * 0.052, 2.2), 5.0)
-                self.x = 0.6
-                self.y = min(max(size.width * 0.025, 1.0), 2.4)
+                self.radius = min(max(size.width * 0.046, 2.6), 5.2)
+                self.x = 0.8
+                self.y = min(max(size.width * 0.023, 1.2), 2.4)
             }
         }
     }
