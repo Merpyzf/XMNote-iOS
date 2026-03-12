@@ -12,4 +12,5 @@ enum BookRoute: Hashable {
     case detail(bookId: Int64)
     case edit(bookId: Int64)
     case add
+    case create(seed: BookEditorSeed?)
 }

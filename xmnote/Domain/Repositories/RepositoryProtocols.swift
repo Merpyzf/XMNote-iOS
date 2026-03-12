@@ -2,7 +2,7 @@ import Foundation
 
 /**
  * [INPUT]: 依赖 Models 与 Services 层的数据类型定义
- * [OUTPUT]: 对外提供 Book/Note/BackupServer/Backup/Statistics/ReadCalendarColor/Timeline/ReadingDashboard 八类 Repository 协议
+ * [OUTPUT]: 对外提供 Book/Note/BackupServer/Backup/Statistics/ReadCalendarColor/Timeline/ReadingDashboard 及书籍搜索/录入共十类 Repository 协议
  * [POS]: Domain 层仓储契约，定义 Presentation 获取本地/网络数据的唯一入口
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -15,6 +15,32 @@ protocol BookRepositoryProtocol {
     func observeBookDetail(bookId: Int64) -> AsyncThrowingStream<BookDetail?, Error>
     /// 持续监听指定书籍下的书摘列表变化。
     func observeBookNotes(bookId: Int64) -> AsyncThrowingStream<[NoteExcerpt], Error>
+}
+
+/// 书籍搜索仓储契约，统一封装六书源搜索、豆瓣详情补抓与最近搜索持久化。
+protocol BookSearchRepositoryProtocol {
+    /// 按来源搜索远端书籍列表；空关键字视为业务错误。
+    func search(keyword: String, source: BookSearchSource) async throws -> [BookSearchResult]
+    /// 将搜索结果补齐为录入页种子；豆瓣等轻量结果需要在这里抓详情。
+    func prepareSeed(for result: BookSearchResult) async throws -> BookEditorSeed
+    /// 读取最近搜索词，供搜索页初始态展示。
+    func fetchRecentQueries() -> [String]
+    /// 写入最近搜索词，按最近使用顺序去重保留。
+    func saveRecentQuery(_ query: String)
+    /// 删除单条最近搜索词。
+    func removeRecentQuery(_ query: String)
+}
+
+/// 书籍录入仓储契约，统一封装录入选项、偏好读取与新增保存事务。
+protocol BookEditorRepositoryProtocol {
+    /// 拉取录入页所需的来源、分组、标签与偏好配置。
+    func fetchOptions() async throws -> BookEditorOptions
+    /// 基于搜索种子与录入偏好生成首屏草稿。
+    func makeDraft(from seed: BookEditorSeed?) -> BookEditorDraft
+    /// 保存录入偏好，用于下次手动创建或搜索结果补空。
+    func savePreference(_ preference: BookEntryPreference)
+    /// 按 Android 判重与事务规则保存新书。
+    func saveBook(_ draft: BookEditorDraft) async throws -> Int64
 }
 
 /// 笔记模块数据访问契约，覆盖标签分组订阅与笔记详情读写。

@@ -186,7 +186,9 @@ struct MainTabView: View {
         case .edit:
             Text("编辑书籍")
         case .add:
-            Text("添加书籍")
+            BookSearchView()
+        case .create(let seed):
+            BookEditorView(seed: seed)
         }
     }
 
