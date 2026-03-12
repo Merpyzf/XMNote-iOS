@@ -64,7 +64,24 @@ struct BookEditorView: View {
                     .background(Color.surfaceCard, in: RoundedRectangle(cornerRadius: CornerRadius.blockLarge, style: .continuous))
             }
         }
-        .toolbar(.hidden, for: .navigationBar)
+        .navigationTitle(navigationTitle)
+        .navigationBarTitleDisplayMode(.inline)
+        .navigationBarBackButtonHidden(true)
+        .navigationPopGuard(
+            canPop: !viewModel.hasUnsavedChanges && !viewModel.isSaving,
+            onBlockedAttempt: {
+                if !viewModel.isSaving {
+                    showsDiscardDialog = true
+                }
+            }
+        )
+        .toolbar {
+            ToolbarItem(placement: .topBarLeading) {
+                TopBarGlassBackButton {
+                    handleDismissAttempt(using: viewModel)
+                }
+            }
+        }
         .safeAreaInset(edge: .bottom) {
             if let draft = viewModel.draft {
                 bottomBar(viewModel, draft: draft)
@@ -80,70 +97,65 @@ struct BookEditorView: View {
 
     private func headerSection(_ draft: BookEditorDraft) -> some View {
         CardContainer(cornerRadius: CornerRadius.containerMedium, showsBorder: false) {
-            VStack(alignment: .leading, spacing: Spacing.base) {
-                HStack(alignment: .top) {
-                    Button {
-                        if let viewModel, viewModel.hasUnsavedChanges {
-                            showsDiscardDialog = true
-                        } else {
-                            dismiss()
-                        }
-                    } label: {
-                        Image(systemName: "chevron.left")
-                            .font(.system(size: 18, weight: .medium))
-                            .foregroundStyle(Color.iconPrimary)
-                            .frame(width: 36, height: 36)
-                            .background(Color.surfaceNested, in: Circle())
-                    }
-                    .buttonStyle(.plain)
+            HStack(alignment: .top, spacing: Spacing.base) {
+                XMBookCover.fixedWidth(
+                    92,
+                    urlString: draft.coverURL,
+                    cornerRadius: CornerRadius.inlayHairline,
+                    border: .init(color: .surfaceBorderSubtle, width: CardStyle.borderWidth),
+                    placeholderIconSize: .medium,
+                    surfaceStyle: .spine
+                )
 
-                    Spacer(minLength: 0)
-                }
+                VStack(alignment: .leading, spacing: Spacing.half) {
+                    Text(draft.title.isEmpty ? "新书录入" : draft.title)
+                        .font(.brandDisplay(size: 24, relativeTo: .title3))
+                        .foregroundStyle(Color.textPrimary)
+                        .lineLimit(2)
 
-                HStack(alignment: .top, spacing: Spacing.base) {
-                    XMBookCover.fixedWidth(
-                        92,
-                        urlString: draft.coverURL,
-                        cornerRadius: CornerRadius.inlayHairline,
-                        border: .init(color: .surfaceBorderSubtle, width: CardStyle.borderWidth),
-                        placeholderIconSize: .medium,
-                        surfaceStyle: .spine
-                    )
+                    Text(draft.author.isEmpty ? "请完善书籍核心信息后保存" : draft.author)
+                        .font(
+                            SemanticTypography.font(
+                                baseSize: SemanticTypography.defaultPointSize(for: .subheadline),
+                                relativeTo: .subheadline
+                            )
+                        )
+                        .foregroundStyle(Color.textSecondary)
+                        .lineLimit(2)
 
-                    VStack(alignment: .leading, spacing: Spacing.half) {
-                        Text(draft.title.isEmpty ? "新书录入" : draft.title)
-                            .font(.brandDisplay(size: 24, relativeTo: .title3))
-                            .foregroundStyle(Color.textPrimary)
-                            .lineLimit(2)
-
-                        Text(draft.author.isEmpty ? "请完善书籍核心信息后保存" : draft.author)
+                    if let searchSource = draft.searchSource {
+                        Text("搜索来源 · \(searchSource.title)")
                             .font(
                                 SemanticTypography.font(
-                                    baseSize: SemanticTypography.defaultPointSize(for: .subheadline),
-                                    relativeTo: .subheadline
+                                    baseSize: SemanticTypography.defaultPointSize(for: .footnote),
+                                    relativeTo: .footnote,
+                                    weight: .medium
                                 )
                             )
-                            .foregroundStyle(Color.textSecondary)
-                            .lineLimit(2)
-
-                        if let searchSource = draft.searchSource {
-                            Text("搜索来源 · \(searchSource.title)")
-                                .font(
-                                    SemanticTypography.font(
-                                        baseSize: SemanticTypography.defaultPointSize(for: .footnote),
-                                        relativeTo: .footnote,
-                                        weight: .medium
-                                    )
-                                )
-                                .foregroundStyle(Color.brand)
-                                .padding(.horizontal, Spacing.cozy)
-                                .padding(.vertical, Spacing.tiny)
-                                .background(Color.brand.opacity(0.12), in: Capsule())
-                        }
+                            .foregroundStyle(Color.brand)
+                            .padding(.horizontal, Spacing.cozy)
+                            .padding(.vertical, Spacing.tiny)
+                            .background(Color.brand.opacity(0.12), in: Capsule())
                     }
                 }
             }
             .padding(Spacing.contentEdge)
+        }
+    }
+
+    private var navigationTitle: String {
+        if seed?.searchSource == nil {
+            return "手动创建"
+        }
+        return "确认书籍信息"
+    }
+
+    private func handleDismissAttempt(using viewModel: BookEditorViewModel) {
+        guard !viewModel.isSaving else { return }
+        if viewModel.hasUnsavedChanges {
+            showsDiscardDialog = true
+        } else {
+            dismiss()
         }
     }
 

@@ -22,3 +22,21 @@ struct TopBarActionIcon: View {
             .contentShape(Circle())
     }
 }
+
+/// 顶部栏液态玻璃返回按钮，统一导航返回的图标尺寸、热区与玻璃按压反馈。
+struct TopBarGlassBackButton: View {
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            TopBarActionIcon(
+                systemName: "chevron.left",
+                iconSize: 16,
+                weight: .semibold,
+                foregroundColor: .primary
+            )
+        }
+        .topBarGlassButtonStyle(true)
+        .accessibilityLabel("返回")
+    }
+}
