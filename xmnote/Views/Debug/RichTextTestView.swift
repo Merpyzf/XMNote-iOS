@@ -40,7 +40,7 @@ private struct RichTextTestContentView: View {
             .padding(.vertical, Spacing.base)
             .safeAreaPadding(.bottom)
         }
-        .background(Color.windowBackground)
+        .background(Color.surfacePage)
         .navigationTitle("富文本编辑器测试")
         .navigationBarTitleDisplayMode(.inline)
     }
@@ -96,7 +96,7 @@ private struct RichTextTestContentView: View {
                 .clipShape(RoundedRectangle(cornerRadius: CornerRadius.blockMedium, style: .continuous))
                 .overlay(
                     RoundedRectangle(cornerRadius: CornerRadius.blockMedium, style: .continuous)
-                        .stroke(Color.cardBorder, lineWidth: CardStyle.borderWidth)
+                        .stroke(Color.surfaceBorderDefault, lineWidth: CardStyle.borderWidth)
                 )
 
                 activeFormatsDisplay(viewModel.contentFormats)
@@ -133,7 +133,7 @@ private struct RichTextTestContentView: View {
                 .clipShape(RoundedRectangle(cornerRadius: CornerRadius.blockMedium, style: .continuous))
                 .overlay(
                     RoundedRectangle(cornerRadius: CornerRadius.blockMedium, style: .continuous)
-                        .stroke(Color.cardBorder, lineWidth: CardStyle.borderWidth)
+                        .stroke(Color.surfaceBorderDefault, lineWidth: CardStyle.borderWidth)
                 )
 
                 activeFormatsDisplay(viewModel.ideaFormats)
@@ -244,7 +244,7 @@ private struct RichTextTestContentView: View {
                 .textSelection(.enabled)
                 .padding(Spacing.base)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .background(Color.windowBackground)
+                .background(Color.surfacePage)
                 .clipShape(RoundedRectangle(cornerRadius: CornerRadius.blockMedium, style: .continuous))
         }
     }

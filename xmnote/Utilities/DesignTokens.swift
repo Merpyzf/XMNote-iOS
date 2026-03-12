@@ -47,24 +47,22 @@ extension Color {
 // MARK: - Background
 
 extension Color {
-    /// 窗口背景色
-    static let windowBackground = Color(light: Color(hex: 0xF2F2F6),
-                                         dark: Color(hex: 0x000000))
-    /// 内容卡片背景色
-    static let contentBackground = Color(light: .white,
-                                          dark: Color(hex: 0x1C1C1C))
+    /// 页面级 grouped 背景，承接 Tab 根页、分组列表与卡片流页面的底板层。
+    static let surfacePage = Color(uiColor: .systemGroupedBackground)
+    /// 默认内容卡片背景，承接页面底板上的主要内容容器。
+    static let surfaceCard = Color(uiColor: .secondarySystemGroupedBackground)
+    /// 嵌套在主卡片上的次级表层，承接 Sheet 内局部模块或多层卡片结构。
+    static let surfaceNested = Color(uiColor: .tertiarySystemGroupedBackground)
     /// 标签背景色
     static let tagBackground = Color(light: Color(hex: 0xE8F0EC),
                                       dark: Color(hex: 0x343536))
     /// 书籍空封面背景色，统一承接无图与加载失败回退态。
     static let bookCoverPlaceholderBackground = Color(light: Color(hex: 0xEEEEEE),
                                                       dark: Color(hex: 0x333333))
-    /// Sheet 背景
-    static let bgSheet = Color(light: Color(hex: 0xF2F2F6),
-                                dark: Color(hex: 0x1C1C1C))
-    /// 次级背景（搜索栏、次级按钮等）
-    static let bgSecondary = Color(light: Color(hex: 0xF2F2F2),
-                                    dark: Color(hex: 0x262626))
+    /// Sheet 根背景，和页面底板保持同一 grouped 语义。
+    static let surfaceSheet = Color(uiColor: .systemGroupedBackground)
+    /// 次级弱填充，承接圆形选项、轻量按钮与弱控件底。
+    static let controlFillSecondary = Color(uiColor: .tertiarySystemFill)
 }
 
 // MARK: - Text
@@ -90,23 +88,19 @@ extension Color {
     /// 次要图标（= textSecondary）
     static let iconSecondary = Color(light: Color(hex: 0x666666),
                                       dark: Color(hex: 0x8C929B))
-    /// 图标容器背景（= bgSecondary）
-    static let iconBgShape = Color(light: Color(hex: 0xF2F2F2),
-                                    dark: Color(hex: 0x262626))
+    /// 图标容器背景，承接未选中图标按钮与弱强调控件。
+    static let iconBgShape = controlFillSecondary
 }
 
 // MARK: - Border & Divider
 
 extension Color {
     /// 一级容器边框（页面主卡/分组壳层）
-    static let surfaceBorderStrong = Color(light: Color(hex: 0xC7CCD3).opacity(0.58),
-                                           dark: Color.white.opacity(0.14))
+    static let surfaceBorderStrong = Color(uiColor: .opaqueSeparator)
     /// 二级内容边框（指标卡/列表卡）
-    static let surfaceBorderDefault = Color(light: Color(hex: 0xCCCCCC).opacity(0.5),
-                                            dark: Color.white.opacity(0.1))
+    static let surfaceBorderDefault = Color(uiColor: .separator)
     /// 三级弱边框（弱化层级、避免与主信息竞争）
-    static let surfaceBorderSubtle = Color(light: Color(hex: 0xC7CCD3).opacity(0.34),
-                                           dark: Color.white.opacity(0.08))
+    static let surfaceBorderSubtle = Color(uiColor: .separator).opacity(0.72)
     /// 图表背景轨道色（柱图零值占位 / 背景 bar），避免与容器边框争抢视觉语义。
     static let chartBarTrack = Color(light: Color(hex: 0xC7CCD3).opacity(0.22),
                                      dark: Color.white.opacity(0.06))
@@ -130,14 +124,9 @@ extension Color {
         light: Color.black.opacity(0.14),
         dark: Color.black.opacity(0.22)
     )
-    /// 兼容历史命名，默认等价于二级内容边框。
-    static let cardBorder = surfaceBorderDefault
     /// 分割线
     static let divider = Color(light: Color(hex: 0xEEEEEE),
                                 dark: Color(hex: 0x333333))
-    /// 内容边框
-    static let contentBorder = Color(light: Color(hex: 0xCCCCCC),
-                                      dark: Color(hex: 0x666666))
 }
 
 // MARK: - Button & Overlay

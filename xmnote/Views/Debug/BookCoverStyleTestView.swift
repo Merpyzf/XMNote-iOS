@@ -34,7 +34,7 @@ private struct BookCoverStyleTestContentView: View {
             .padding(.vertical, Spacing.base)
             .safeAreaPadding(.bottom)
         }
-        .background(Color.windowBackground)
+        .background(Color.surfacePage)
         .navigationTitle("书籍封面样式")
         .navigationBarTitleDisplayMode(.inline)
         .task {
@@ -420,7 +420,7 @@ private extension BookCoverStyleTestContentView {
             }
             .padding(Spacing.base)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Color.contentBackground, in: RoundedRectangle(cornerRadius: CornerRadius.blockLarge, style: .continuous))
+            .background(Color.surfaceCard, in: RoundedRectangle(cornerRadius: CornerRadius.blockLarge, style: .continuous))
             .environment(\.colorScheme, scheme)
         }
         .frame(maxWidth: .infinity, alignment: .leading)

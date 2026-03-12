@@ -34,7 +34,7 @@ private struct ReadCalendarCoverStackTestContentView: View {
             .padding(.vertical, Spacing.base)
             .safeAreaPadding(.bottom)
         }
-        .background(Color.windowBackground)
+        .background(Color.surfacePage)
         .navigationTitle("封面堆叠测试")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
@@ -143,7 +143,7 @@ private extension ReadCalendarCoverStackTestContentView {
 
             ZStack {
                 RoundedRectangle(cornerRadius: CornerRadius.blockLarge, style: .continuous)
-                    .fill(Color.contentBackground)
+                    .fill(Color.surfaceCard)
                     .overlay {
                         RoundedRectangle(cornerRadius: CornerRadius.blockLarge, style: .continuous)
                             .stroke(Color.surfaceBorderStrong, lineWidth: CardStyle.borderWidth)
@@ -182,7 +182,7 @@ private extension ReadCalendarCoverStackTestContentView {
             // 不做 clip，确保可观察封面跨格溢出效果。
             ZStack {
                 RoundedRectangle(cornerRadius: CornerRadius.blockLarge, style: .continuous)
-                    .fill(Color.contentBackground)
+                    .fill(Color.surfaceCard)
                     .overlay {
                         RoundedRectangle(cornerRadius: CornerRadius.blockLarge, style: .continuous)
                             .stroke(Color.surfaceBorderStrong, lineWidth: CardStyle.borderWidth)
@@ -360,7 +360,7 @@ private extension ReadCalendarCoverStackConfigSheet {
                         .padding(.vertical, 6)
                         .background(
                             viewModel.selectedScenario == scenario
-                            ? Color.brand : Color.bgSecondary
+                            ? Color.brand : Color.controlFillSecondary
                         )
                         .foregroundStyle(
                             viewModel.selectedScenario == scenario

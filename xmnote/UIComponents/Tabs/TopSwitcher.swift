@@ -204,7 +204,7 @@ private struct TopSwitcherTitleLabel: View {
 #Preview("TopSwitcher Tabs") {
     @Previewable @State var selection: TopSwitcherPreviewTab = .first
     ZStack(alignment: .top) {
-        Color.windowBackground.ignoresSafeArea()
+        Color.surfacePage.ignoresSafeArea()
         TopSwitcher(
             selection: $selection,
             tabs: TopSwitcherPreviewTab.allCases,
@@ -217,7 +217,7 @@ private struct TopSwitcherTitleLabel: View {
 
 #Preview("TopSwitcher Title") {
     ZStack(alignment: .top) {
-        Color.windowBackground.ignoresSafeArea()
+        Color.surfacePage.ignoresSafeArea()
         TopSwitcher(title: "我的") {
             AddMenuCircleButton(onAddBook: {}, onAddNote: {})
         }

@@ -51,8 +51,8 @@ struct AddMenuCircleButton: View {
                     .font(.system(size: 18, weight: .medium))
                     .foregroundStyle(Color.brand)
                     .frame(width: 36, height: 36)
-                    .background(Color.contentBackground, in: Circle())
-                    .overlay(Circle().stroke(Color.cardBorder, lineWidth: CardStyle.borderWidth))
+                    .background(Color.surfaceCard, in: Circle())
+                    .overlay(Circle().stroke(Color.surfaceBorderDefault, lineWidth: CardStyle.borderWidth))
                     .frame(width: 44, height: 44)
                     .contentShape(Circle())
             }

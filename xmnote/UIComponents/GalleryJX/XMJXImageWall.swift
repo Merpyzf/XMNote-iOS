@@ -53,7 +53,7 @@ struct XMJXImageWall: View {
                 .clipShape(RoundedRectangle(cornerRadius: CornerRadius.blockSmall, style: .continuous))
                 .overlay(
                     RoundedRectangle(cornerRadius: CornerRadius.blockSmall, style: .continuous)
-                        .stroke(Color.cardBorder, lineWidth: CardStyle.borderWidth)
+                        .stroke(Color.surfaceBorderDefault, lineWidth: CardStyle.borderWidth)
                 )
                 .overlay {
                     GeometryReader { proxy in

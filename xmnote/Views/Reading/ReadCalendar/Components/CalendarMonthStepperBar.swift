@@ -76,7 +76,7 @@ struct CalendarMonthStepperBar: View {
     }
 
     ZStack {
-        Color.windowBackground.ignoresSafeArea()
+        Color.surfacePage.ignoresSafeArea()
         CalendarMonthStepperBar(
             title: "2026年2月",
             availableMonths: availableMonths,

@@ -90,7 +90,7 @@ struct QuoteInlineTabBar<Tab: Hashable & CaseIterable>: View where Tab.AllCases:
     .padding(.top, 20)
     .background(
         LinearGradient(
-            colors: [Color.brand.opacity(0.12), Color.windowBackground],
+            colors: [Color.brand.opacity(0.12), Color.surfacePage],
             startPoint: .top,
             endPoint: .bottom
         )

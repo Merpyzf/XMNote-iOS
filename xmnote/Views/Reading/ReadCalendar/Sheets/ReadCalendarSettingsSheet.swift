@@ -127,7 +127,7 @@ struct ReadCalendarSettingsSheet: View {
                 .font(.subheadline.weight(isSelected ? .semibold : .regular))
                 .foregroundStyle(isSelected ? .white : Color.textPrimary)
                 .frame(width: 36, height: 36)
-                .background(isSelected ? Color.brand : Color.bgSecondary, in: Circle())
+                .background(isSelected ? Color.brand : Color.controlFillSecondary, in: Circle())
         }
         .buttonStyle(.plain)
         .accessibilityLabel("\(count) 本")

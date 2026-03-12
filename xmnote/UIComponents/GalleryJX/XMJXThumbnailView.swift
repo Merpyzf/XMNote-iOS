@@ -35,7 +35,7 @@ struct XMJXThumbnailView: UIViewRepresentable {
         let imageView = UIImageView()
         imageView.clipsToBounds = true
         imageView.contentMode = .scaleAspectFill
-        imageView.backgroundColor = UIColor(Color.contentBackground)
+        imageView.backgroundColor = UIColor(Color.surfaceCard)
 
         context.coordinator.bind(imageView)
         context.coordinator.update(item: item, priority: priority)

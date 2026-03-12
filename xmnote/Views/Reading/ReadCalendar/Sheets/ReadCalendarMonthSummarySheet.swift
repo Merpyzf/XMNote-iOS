@@ -211,11 +211,11 @@ private extension ReadCalendarMonthSummarySheet {
                 .frame(width: Layout.summaryMonthSwitcherButtonSize, height: Layout.summaryMonthSwitcherButtonSize)
                 .background(
                     Circle()
-                        .fill(Color.contentBackground.opacity(isEnabled ? 0.96 : 0.72))
+                        .fill(isEnabled ? Color.surfaceNested : Color.controlFillSecondary)
                 )
                 .overlay {
                     Circle()
-                        .stroke(Color.cardBorder.opacity(0.8), lineWidth: CardStyle.borderWidth)
+                        .stroke(Color.surfaceBorderDefault, lineWidth: CardStyle.borderWidth)
                 }
         }
         .buttonStyle(.plain)
@@ -383,12 +383,12 @@ private extension ReadCalendarMonthSummarySheet {
         .frame(maxWidth: .infinity, minHeight: Layout.summaryMetricCardHeight, alignment: .leading)
         .background(
             RoundedRectangle(cornerRadius: CornerRadius.blockLarge, style: .continuous)
-                .fill(Color.contentBackground.opacity(0.97))
+                .fill(Color.surfaceNested)
         )
         .overlay {
             RoundedRectangle(cornerRadius: CornerRadius.blockLarge, style: .continuous)
                 // 二级指标卡降低描边存在感，保留层级同时不压过数据本身。
-                .stroke(Color.surfaceBorderDefault.opacity(0.84), lineWidth: CardStyle.borderWidth)
+                .stroke(Color.surfaceBorderSubtle, lineWidth: CardStyle.borderWidth)
         }
     }
 

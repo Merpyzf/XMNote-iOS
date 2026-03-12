@@ -29,7 +29,7 @@ struct ReadCalendarView: View {
 
     var body: some View {
         ZStack {
-            Color.windowBackground.ignoresSafeArea()
+            Color.surfacePage.ignoresSafeArea()
 
             ReadCalendarContentView(
                 props: contentProps,
@@ -71,7 +71,7 @@ struct ReadCalendarView: View {
         .navigationTitle("阅读日历")
         .navigationBarTitleDisplayMode(.inline)
         .toolbarBackground(isBookCoverFullscreenPresented ? .hidden : .visible, for: .navigationBar)
-        .toolbarBackground(Color.windowBackground, for: .navigationBar)
+        .toolbarBackground(Color.surfacePage, for: .navigationBar)
         .tint(Color.readCalendarTopAction)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {

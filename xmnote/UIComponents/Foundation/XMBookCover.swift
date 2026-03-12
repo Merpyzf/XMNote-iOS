@@ -339,7 +339,7 @@ private extension XMBookCover {
         let tier = Self.resolvedSurfaceTier(for: size, requestedStyle: surfaceStyle)
         if let shadowSpec = SurfaceShadowSpec(tier: tier, size: size) {
             shape
-                .fill(Color.contentBackground.opacity(0.001))
+                .fill(Color.clear)
                 .shadow(
                     color: Color.bookCoverDropShadow,
                     radius: shadowSpec.radius,
@@ -465,13 +465,13 @@ private extension XMBookCover {
         XMBookCover.fixedWidth(
             80,
             urlString: "",
-            border: .init(color: .cardBorder, width: CardStyle.borderWidth)
+            border: .init(color: .surfaceBorderDefault, width: CardStyle.borderWidth)
         )
 
         XMBookCover.fixedWidth(
             80,
             urlString: "",
-            border: .init(color: .cardBorder, width: CardStyle.borderWidth),
+            border: .init(color: .surfaceBorderDefault, width: CardStyle.borderWidth),
             surfaceStyle: .spine
         )
     }
@@ -481,7 +481,7 @@ private extension XMBookCover {
 #Preview("Responsive") {
     XMBookCover.responsive(
         urlString: "",
-        border: .init(color: .cardBorder, width: CardStyle.borderWidth),
+        border: .init(color: .surfaceBorderDefault, width: CardStyle.borderWidth),
         surfaceStyle: .spine
     )
     .frame(width: 110)

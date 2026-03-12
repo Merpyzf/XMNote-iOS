@@ -45,7 +45,7 @@ struct TimelineSectionHeader: View, Equatable {
         .padding(.vertical, Spacing.cozy)
         .background {
             Rectangle()
-                .fill(Color.windowBackground)
+                .fill(Color.surfacePage)
         }
     }
 
@@ -286,7 +286,7 @@ struct TimelineCardMetaLine: View {
             )
         }
     }
-    .background(Color.windowBackground)
+    .background(Color.surfacePage)
 }
 
 /// Preview 专用空实现

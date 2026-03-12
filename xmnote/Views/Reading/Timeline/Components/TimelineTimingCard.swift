@@ -24,7 +24,7 @@ struct TimelineTimingCard: View {
                     XMBookCover.fixedWidth(
                         54,
                         urlString: bookCover,
-                        border: .init(color: .cardBorder, width: CardStyle.borderWidth)
+                        border: .init(color: .surfaceBorderDefault, width: CardStyle.borderWidth)
                     )
 
                     VStack(alignment: .leading, spacing: Spacing.compact) {
@@ -62,7 +62,7 @@ struct TimelineTimingCard: View {
 
 #Preview {
     ZStack {
-        Color.windowBackground.ignoresSafeArea()
+        Color.surfacePage.ignoresSafeArea()
         TimelineTimingCard(
             event: TimelineReadTimingEvent(
                 elapsedSeconds: 6300,

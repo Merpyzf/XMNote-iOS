@@ -40,7 +40,7 @@ struct ReadingYearSummarySheet: View {
                     }
                 }
             }
-            .background(Color.windowBackground)
+            .background(Color.surfacePage)
             .navigationTitle("\(summary.year) 年已读")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

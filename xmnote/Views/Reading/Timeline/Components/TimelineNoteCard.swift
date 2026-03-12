@@ -69,7 +69,7 @@ struct TimelineNoteCard: View {
 
 #Preview {
     ZStack {
-        Color.windowBackground.ignoresSafeArea()
+        Color.surfacePage.ignoresSafeArea()
         ScrollView {
             VStack(spacing: Spacing.base) {
                 TimelineNoteCard(

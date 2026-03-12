@@ -37,7 +37,7 @@ private struct HeatmapTestContentView: View {
             .padding(.vertical, Spacing.base)
             .safeAreaPadding(.bottom)
         }
-        .background(Color.windowBackground)
+        .background(Color.surfacePage)
         .navigationTitle("热力图测试")
         .navigationBarTitleDisplayMode(.inline)
     }
@@ -71,7 +71,7 @@ private extension HeatmapTestContentView {
                         .padding(.vertical, 6)
                         .background(
                             viewModel.currentScenario == scenario
-                                ? Color.brand : Color.bgSecondary
+                                ? Color.brand : Color.controlFillSecondary
                         )
                         .foregroundStyle(
                             viewModel.currentScenario == scenario
@@ -134,7 +134,7 @@ private extension HeatmapTestContentView {
                 }
             }
             .padding(Spacing.base)
-            .background(Color.contentBackground)
+            .background(Color.surfaceCard)
             .clipShape(RoundedRectangle(cornerRadius: CornerRadius.blockLarge, style: .continuous))
         }
     }
@@ -161,7 +161,7 @@ private extension HeatmapTestContentView {
                 }
             }
             .padding(Spacing.base)
-            .background(Color.contentBackground)
+            .background(Color.surfaceCard)
             .clipShape(RoundedRectangle(cornerRadius: CornerRadius.blockLarge, style: .continuous))
         }
     }
@@ -188,7 +188,7 @@ private extension HeatmapTestContentView {
                     infoRow("等级", value: "\(day.level)")
                 }
                 .padding(Spacing.base)
-                .background(Color.contentBackground)
+                .background(Color.surfaceCard)
                 .clipShape(RoundedRectangle(cornerRadius: CornerRadius.blockLarge, style: .continuous))
             }
             .transition(.opacity.combined(with: .move(edge: .top)))
@@ -228,7 +228,7 @@ private extension HeatmapTestContentView {
                 Spacer()
             }
             .padding(Spacing.base)
-            .background(Color.contentBackground)
+            .background(Color.surfaceCard)
             .clipShape(RoundedRectangle(cornerRadius: CornerRadius.blockLarge, style: .continuous))
         }
     }

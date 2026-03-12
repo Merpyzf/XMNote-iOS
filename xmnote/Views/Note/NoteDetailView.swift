@@ -27,7 +27,7 @@ struct NoteDetailView: View {
                 ProgressView()
             }
         }
-        .background(Color.windowBackground)
+        .background(Color.surfacePage)
         .navigationTitle(isEditing ? "编辑笔记" : "笔记详情")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar { toolbarContent }
@@ -97,7 +97,7 @@ private struct NoteDetailContentView: View {
                     .clipShape(RoundedRectangle(cornerRadius: CornerRadius.blockMedium, style: .continuous))
                     .overlay(
                         RoundedRectangle(cornerRadius: CornerRadius.blockMedium, style: .continuous)
-                            .stroke(Color.cardBorder, lineWidth: CardStyle.borderWidth)
+                            .stroke(Color.surfaceBorderDefault, lineWidth: CardStyle.borderWidth)
                     )
                 }
 
@@ -112,7 +112,7 @@ private struct NoteDetailContentView: View {
                     .clipShape(RoundedRectangle(cornerRadius: CornerRadius.blockMedium, style: .continuous))
                     .overlay(
                         RoundedRectangle(cornerRadius: CornerRadius.blockMedium, style: .continuous)
-                            .stroke(Color.cardBorder, lineWidth: CardStyle.borderWidth)
+                            .stroke(Color.surfaceBorderDefault, lineWidth: CardStyle.borderWidth)
                     )
                 }
 

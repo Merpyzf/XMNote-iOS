@@ -20,7 +20,7 @@ struct DataBackupView: View {
                 Color.clear
             }
         }
-        .background(Color.windowBackground)
+        .background(Color.surfacePage)
         .navigationTitle("数据备份")
         .navigationBarTitleDisplayMode(.inline)
         .task {

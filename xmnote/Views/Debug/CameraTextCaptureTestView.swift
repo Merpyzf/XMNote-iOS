@@ -31,7 +31,7 @@ private struct CameraTextCaptureTestContentView: View {
             .padding(.vertical, Spacing.base)
             .safeAreaPadding(.bottom)
         }
-        .background(Color.windowBackground)
+        .background(Color.surfacePage)
         .navigationTitle("文本识别")
         .navigationBarTitleDisplayMode(.inline)
     }
@@ -95,7 +95,7 @@ private extension CameraTextCaptureTestContentView {
                         .padding(.horizontal, 8)
                         .padding(.vertical, 8)
                         .background(
-                            Color.contentBackground,
+                            Color.surfaceCard,
                             in: RoundedRectangle(cornerRadius: CornerRadius.blockSmall, style: .continuous)
                         )
                     }
@@ -154,7 +154,7 @@ private extension CameraTextCaptureTestContentView {
                         .padding(.horizontal, 6)
                         .padding(.vertical, 3)
                         .background(
-                            (viewModel.focusedField == field ? Color.brand.opacity(0.12) : Color.windowBackground),
+                            (viewModel.focusedField == field ? Color.brand.opacity(0.12) : Color.surfacePage),
                             in: Capsule()
                         )
                 }
@@ -174,7 +174,7 @@ private extension CameraTextCaptureTestContentView {
                 .clipShape(RoundedRectangle(cornerRadius: CornerRadius.blockMedium, style: .continuous))
                 .overlay(
                     RoundedRectangle(cornerRadius: CornerRadius.blockMedium, style: .continuous)
-                        .stroke(Color.cardBorder, lineWidth: CardStyle.borderWidth)
+                        .stroke(Color.surfaceBorderDefault, lineWidth: CardStyle.borderWidth)
                 )
             }
             .padding(Spacing.contentEdge)
@@ -220,7 +220,7 @@ private extension CameraTextCaptureTestContentView {
         }
         .padding(.horizontal, 8)
         .padding(.vertical, 6)
-        .background(Color.contentBackground, in: RoundedRectangle(cornerRadius: CornerRadius.blockSmall, style: .continuous))
+        .background(Color.surfaceCard, in: RoundedRectangle(cornerRadius: CornerRadius.blockSmall, style: .continuous))
     }
 }
 

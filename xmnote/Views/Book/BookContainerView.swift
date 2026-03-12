@@ -81,7 +81,7 @@ private struct BookContentView: View {
 
     var body: some View {
         ZStack(alignment: .top) {
-            Color.windowBackground.ignoresSafeArea()
+            Color.surfacePage.ignoresSafeArea()
 
             segmentedContent
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)

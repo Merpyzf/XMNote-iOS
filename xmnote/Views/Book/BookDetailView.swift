@@ -28,7 +28,7 @@ struct BookDetailView: View {
                 Color.clear
             }
         }
-        .background(Color.windowBackground)
+        .background(Color.surfacePage)
         .navigationTitle("")
         .navigationBarTitleDisplayMode(.inline)
         .task {

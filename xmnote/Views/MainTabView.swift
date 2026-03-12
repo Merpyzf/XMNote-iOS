@@ -328,7 +328,7 @@ private struct SearchView: View {
 
     var body: some View {
         ZStack(alignment: .top) {
-            Color.windowBackground.ignoresSafeArea()
+            Color.surfacePage.ignoresSafeArea()
 
             VStack(spacing: Spacing.base) {
                 VStack(spacing: Spacing.base) {

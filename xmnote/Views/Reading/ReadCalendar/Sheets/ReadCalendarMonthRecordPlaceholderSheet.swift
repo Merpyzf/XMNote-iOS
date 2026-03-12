@@ -42,11 +42,11 @@ struct ReadCalendarMonthRecordPlaceholderSheet: View {
             .padding(Layout.cardPadding)
             .background(
                 RoundedRectangle(cornerRadius: Layout.cardCornerRadius, style: .continuous)
-                    .fill(Color.contentBackground.opacity(0.96))
+                    .fill(Color.surfaceNested)
             )
             .overlay {
                 RoundedRectangle(cornerRadius: Layout.cardCornerRadius, style: .continuous)
-                    .stroke(Color.cardBorder.opacity(0.72), lineWidth: CardStyle.borderWidth)
+                    .stroke(Color.surfaceBorderSubtle, lineWidth: CardStyle.borderWidth)
             }
 
             Button {
@@ -64,12 +64,12 @@ struct ReadCalendarMonthRecordPlaceholderSheet: View {
             )
             .overlay {
                 RoundedRectangle(cornerRadius: CornerRadius.blockMedium, style: .continuous)
-                    .stroke(Color.cardBorder.opacity(0.62), lineWidth: CardStyle.borderWidth)
+                    .stroke(Color.surfaceBorderSubtle, lineWidth: CardStyle.borderWidth)
             }
         }
         .padding(Layout.containerPadding)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .background(Color.bgSheet)
+        .background(Color.surfaceSheet)
     }
 }
 

@@ -240,7 +240,7 @@ struct SystemColorsTestView: View {
             .padding(.vertical, Spacing.base)
             .safeAreaPadding(.bottom)
         }
-        .background(Color.windowBackground)
+        .background(Color.surfacePage)
         .navigationTitle("系统颜色测试")
         .navigationBarTitleDisplayMode(.inline)
         .searchable(text: $searchText, prompt: "按颜色名或用途搜索")

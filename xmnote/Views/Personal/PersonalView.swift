@@ -40,7 +40,7 @@ struct PersonalView: View {
 
     var body: some View {
         ZStack(alignment: .top) {
-            Color.windowBackground.ignoresSafeArea()
+            Color.surfacePage.ignoresSafeArea()
 
             ScrollView {
                 VStack(spacing: Spacing.base) {
@@ -111,11 +111,11 @@ extension PersonalView {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .background(Color.contentBackground)
+            .background(Color.surfaceCard)
             .clipShape(RoundedRectangle(cornerRadius: CornerRadius.blockLarge, style: .continuous))
             .overlay(
                 RoundedRectangle(cornerRadius: CornerRadius.blockLarge, style: .continuous)
-                    .stroke(Color.cardBorder, lineWidth: CardStyle.borderWidth)
+                    .stroke(Color.surfaceBorderDefault, lineWidth: CardStyle.borderWidth)
             )
         }
     }

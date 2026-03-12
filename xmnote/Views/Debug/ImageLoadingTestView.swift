@@ -31,7 +31,7 @@ private struct ImageLoadingTestContentView: View {
             .padding(.vertical, Spacing.base)
             .safeAreaPadding(.bottom)
         }
-        .background(Color.windowBackground)
+        .background(Color.surfacePage)
         .navigationTitle("图片加载测试")
         .navigationBarTitleDisplayMode(.inline)
     }
@@ -87,7 +87,7 @@ private extension ImageLoadingTestContentView {
                     .autocorrectionDisabled()
                     .padding(.horizontal, Spacing.base)
                     .padding(.vertical, Spacing.cozy)
-                    .background(Color.contentBackground)
+                    .background(Color.surfaceCard)
                     .clipShape(RoundedRectangle(cornerRadius: CornerRadius.blockMedium, style: .continuous))
 
                 HStack(spacing: Spacing.half) {
@@ -130,7 +130,7 @@ private extension ImageLoadingTestContentView {
             .clipShape(RoundedRectangle(cornerRadius: CornerRadius.inlaySmall, style: .continuous))
             .overlay(
                 RoundedRectangle(cornerRadius: CornerRadius.inlaySmall, style: .continuous)
-                    .stroke(Color.cardBorder, lineWidth: CardStyle.borderWidth)
+                    .stroke(Color.surfaceBorderDefault, lineWidth: CardStyle.borderWidth)
             )
 
             VStack(alignment: .leading, spacing: 4) {
@@ -195,7 +195,7 @@ private extension ImageLoadingTestContentView {
             .clipShape(RoundedRectangle(cornerRadius: CornerRadius.inlaySmall, style: .continuous))
             .overlay(
                 RoundedRectangle(cornerRadius: CornerRadius.inlaySmall, style: .continuous)
-                    .stroke(Color.cardBorder, lineWidth: CardStyle.borderWidth)
+                    .stroke(Color.surfaceBorderDefault, lineWidth: CardStyle.borderWidth)
             )
 
             VStack(alignment: .leading, spacing: Spacing.half) {
@@ -244,7 +244,7 @@ private extension ImageLoadingTestContentView {
             }
         }
         .padding(Spacing.base)
-        .background(Color.contentBackground)
+        .background(Color.surfaceCard)
         .clipShape(RoundedRectangle(cornerRadius: CornerRadius.blockMedium, style: .continuous))
     }
 
@@ -306,14 +306,14 @@ private extension ImageLoadingTestContentView {
                 .foregroundStyle(Color.textSecondary)
                 .padding(.horizontal, 6)
                 .padding(.vertical, 2)
-                .background(Color.windowBackground, in: Capsule())
+                .background(Color.surfacePage, in: Capsule())
 
             Text("来源 \(cacheSource.title)")
                 .font(.caption2)
                 .foregroundStyle(Color.textSecondary)
                 .padding(.horizontal, 6)
                 .padding(.vertical, 2)
-                .background(Color.windowBackground, in: Capsule())
+                .background(Color.surfacePage, in: Capsule())
         }
     }
 
@@ -328,7 +328,7 @@ private extension ImageLoadingTestContentView {
         }
         .padding(.horizontal, 8)
         .padding(.vertical, 6)
-        .background(Color.contentBackground, in: RoundedRectangle(cornerRadius: CornerRadius.blockSmall, style: .continuous))
+        .background(Color.surfaceCard, in: RoundedRectangle(cornerRadius: CornerRadius.blockSmall, style: .continuous))
     }
 
     func statusForeground(_ status: ImageLoadingTestViewModel.LoadStatus) -> Color {
@@ -347,7 +347,7 @@ private extension ImageLoadingTestContentView {
     func statusBackground(_ status: ImageLoadingTestViewModel.LoadStatus) -> Color {
         switch status {
         case .idle:
-            return Color.contentBackground
+            return Color.surfaceCard
         case .loading:
             return Color.brand.opacity(0.15)
         case .success:

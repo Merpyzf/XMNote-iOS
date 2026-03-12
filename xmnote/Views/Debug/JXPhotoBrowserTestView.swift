@@ -43,7 +43,7 @@ struct JXPhotoBrowserTestView: View {
             .padding(.vertical, Spacing.base)
             .safeAreaPadding(.bottom)
         }
-        .background(Color.windowBackground)
+        .background(Color.surfacePage)
         .navigationTitle("JX 图片浏览器")
         .navigationBarTitleDisplayMode(.inline)
     }

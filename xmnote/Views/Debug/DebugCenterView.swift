@@ -97,7 +97,7 @@ struct DebugCenterView: View {
             .padding(.horizontal, Spacing.screenEdge)
             .padding(.vertical, Spacing.base)
         }
-        .background(Color.windowBackground)
+        .background(Color.surfacePage)
         .navigationTitle("测试中心")
         .navigationBarTitleDisplayMode(.inline)
     }

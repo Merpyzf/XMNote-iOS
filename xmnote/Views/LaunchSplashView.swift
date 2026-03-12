@@ -16,7 +16,7 @@ struct LaunchSplashView: View {
                 .aspectRatio(contentMode: .fit)
                 .frame(width: 80, height: 80)
                 .frame(width: 100, height: 100)
-                .background(Color.contentBackground)
+                .background(Color.surfaceCard)
                 .clipShape(RoundedRectangle(cornerRadius: CornerRadius.containerXL, style: .continuous))
                 .overlay(
                     RoundedRectangle(cornerRadius: CornerRadius.containerXL, style: .continuous)
@@ -28,7 +28,7 @@ struct LaunchSplashView: View {
                 .foregroundStyle(Color.textPrimary)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color.windowBackground)
+        .background(Color.surfacePage)
     }
 }
 

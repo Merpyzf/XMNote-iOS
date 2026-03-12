@@ -55,7 +55,7 @@ private struct TimelineCardsTestContentView: View {
             .safeAreaPadding(.bottom)
         }
         .clipped()
-        .background(Color.windowBackground)
+        .background(Color.surfacePage)
         .navigationTitle("时间线卡片")
         .navigationBarTitleDisplayMode(.inline)
     }
@@ -76,7 +76,7 @@ private struct TimelineCardsTestContentView: View {
                     .padding(.vertical, 6)
                     .background(
                         selectedCategory == category
-                            ? Color.brand : Color.bgSecondary
+                            ? Color.brand : Color.controlFillSecondary
                     )
                     .foregroundStyle(
                         selectedCategory == category

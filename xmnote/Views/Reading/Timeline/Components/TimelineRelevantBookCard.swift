@@ -23,7 +23,7 @@ struct TimelineRelevantBookCard: View {
                         XMBookCover.fixedWidth(
                             54,
                             urlString: event.contentBookCover,
-                            border: .init(color: .cardBorder, width: CardStyle.borderWidth)
+                            border: .init(color: .surfaceBorderDefault, width: CardStyle.borderWidth)
                         )
 
                         VStack(alignment: .leading, spacing: Spacing.compact) {
@@ -62,7 +62,7 @@ struct TimelineRelevantBookCard: View {
 
 #Preview {
     ZStack {
-        Color.windowBackground.ignoresSafeArea()
+        Color.surfacePage.ignoresSafeArea()
         TimelineRelevantBookCard(
             event: TimelineRelevantBookEvent(
                 contentBookName: "思考快与慢",

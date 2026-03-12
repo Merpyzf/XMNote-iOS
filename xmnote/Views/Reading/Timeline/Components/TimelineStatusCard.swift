@@ -24,7 +24,7 @@ struct TimelineStatusCard: View {
                     XMBookCover.fixedWidth(
                         54,
                         urlString: bookCover,
-                        border: .init(color: .cardBorder, width: CardStyle.borderWidth)
+                        border: .init(color: .surfaceBorderDefault, width: CardStyle.borderWidth)
                     )
 
                     VStack(alignment: .leading, spacing: Spacing.compact) {
@@ -107,7 +107,7 @@ struct TimelineStatusCard: View {
 
 #Preview {
     ZStack {
-        Color.windowBackground.ignoresSafeArea()
+        Color.surfacePage.ignoresSafeArea()
         VStack(spacing: Spacing.base) {
             TimelineStatusCard(
                 event: TimelineReadStatusEvent(statusId: 3, readDoneCount: 2, bookScore: 45),

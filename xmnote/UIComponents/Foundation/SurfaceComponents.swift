@@ -30,7 +30,7 @@ struct CardContainer<Content: View>: View {
     var body: some View {
         content
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Color.contentBackground)
+            .background(Color.surfaceCard)
             .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
             .overlay {
                 if showsBorder {
@@ -69,7 +69,7 @@ struct HomeTopHeaderGradient: View {
         LinearGradient(
             colors: [
                 Color(light: Color.brand.opacity(0.2), dark: Color(hex: 0x1E2A25)),
-                Color.windowBackground.opacity(0)
+                Color.surfacePage.opacity(0)
             ],
             startPoint: .top,
             endPoint: .bottom
@@ -81,7 +81,7 @@ struct HomeTopHeaderGradient: View {
 
 #Preview("CardContainer") {
     ZStack {
-        Color.windowBackground.ignoresSafeArea()
+        Color.surfacePage.ignoresSafeArea()
         CardContainer {
             VStack(spacing: Spacing.none) {
                 Text("卡片内容示例")

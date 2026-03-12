@@ -484,7 +484,7 @@ private extension ReadCalendarContentView {
             .padding(.top, Layout.topControlTopPadding)
             .padding(.bottom, Layout.topControlBottomPadding)
             .background {
-                Color.windowBackground.opacity(Layout.topControlBackgroundOpacity)
+                Color.surfacePage.opacity(Layout.topControlBackgroundOpacity)
             }
             .background {
                 GeometryReader { proxy in
@@ -1052,7 +1052,7 @@ private extension ReadCalendarContentView {
                 if shouldShowWeekdayHeader {
                     ReadCalendarWeekdayHeader(minHeight: Layout.weekdayHeaderHeight)
                         .frame(height: Layout.weekdayHeaderHeight)
-                        .background(Color.windowBackground)
+                        .background(Color.surfacePage)
                         .zIndex(1)
                 }
 
@@ -1327,7 +1327,7 @@ private extension ReadCalendarContentView {
                     cornerRadius: Layout.yearHeatmapMonthCardCornerRadius,
                     style: .continuous
                 )
-                .fill(Color.contentBackground.opacity(0.96))
+                .fill(Color.surfaceNested)
             )
             .overlay {
                 RoundedRectangle(
@@ -2660,5 +2660,5 @@ private extension View {
     )
     .padding(.horizontal, Spacing.screenEdge)
     .padding(.bottom, Spacing.base)
-    .background(Color.windowBackground)
+    .background(Color.surfacePage)
 }

@@ -92,11 +92,11 @@ struct NoteTagsView: View {
                 .foregroundStyle(.tertiary)
         }
         .padding(Spacing.base)
-        .background(Color.contentBackground)
+        .background(Color.surfaceCard)
         .clipShape(RoundedRectangle(cornerRadius: CornerRadius.blockMedium, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: CornerRadius.blockMedium, style: .continuous)
-                .stroke(Color.cardBorder, lineWidth: CardStyle.borderWidth)
+                .stroke(Color.surfaceBorderDefault, lineWidth: CardStyle.borderWidth)
         )
         .contentShape(Rectangle())
     }

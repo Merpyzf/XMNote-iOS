@@ -24,7 +24,7 @@ struct TimelineCheckInCard: View {
                     XMBookCover.fixedWidth(
                         54,
                         urlString: bookCover,
-                        border: .init(color: .cardBorder, width: CardStyle.borderWidth)
+                        border: .init(color: .surfaceBorderDefault, width: CardStyle.borderWidth)
                     )
 
                     VStack(alignment: .leading, spacing: Spacing.compact) {
@@ -76,7 +76,7 @@ struct TimelineCheckInCard: View {
 
 #Preview {
     ZStack {
-        Color.windowBackground.ignoresSafeArea()
+        Color.surfacePage.ignoresSafeArea()
         VStack(spacing: Spacing.base) {
             TimelineCheckInCard(
                 event: TimelineCheckInEvent(amount: 1),

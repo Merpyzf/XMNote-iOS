@@ -81,7 +81,7 @@ private struct NoteContentView: View {
 
     var body: some View {
         ZStack(alignment: .top) {
-            Color.windowBackground.ignoresSafeArea()
+            Color.surfacePage.ignoresSafeArea()
 
             segmentedContent
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
@@ -158,10 +158,10 @@ private struct NoteContentView: View {
         }
         .padding(.horizontal, Spacing.base)
         .frame(height: 36)
-        .background(Color.contentBackground, in: RoundedRectangle(cornerRadius: CornerRadius.blockMedium, style: .continuous))
+        .background(Color.surfaceCard, in: RoundedRectangle(cornerRadius: CornerRadius.blockMedium, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: CornerRadius.blockMedium, style: .continuous)
-                .stroke(Color.cardBorder, lineWidth: CardStyle.borderWidth)
+                .stroke(Color.surfaceBorderDefault, lineWidth: CardStyle.borderWidth)
         )
         .padding(.horizontal, Spacing.screenEdge)
         .padding(.bottom, Spacing.half)
