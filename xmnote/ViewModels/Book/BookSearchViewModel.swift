@@ -11,11 +11,17 @@ import Observation
 /// 书籍搜索状态源，负责组织六书源搜索、最近搜索和搜索结果选择流程。
 @Observable
 final class BookSearchViewModel {
+    struct SearchFailure {
+        let bookSearchError: BookSearchError?
+        let message: String
+    }
+
     var query: String = ""
     var selectedSource: BookSearchSource = .wenqu
     var recentQueries: [String] = []
     var results: [BookSearchResult] = []
     var errorMessage: String?
+    var latestSearchError: BookSearchError?
     var isSearching = false
     var hasSearched = false
 
@@ -51,15 +57,21 @@ final class BookSearchViewModel {
 
     /// 执行当前来源搜索，并在成功后刷新最近搜索列表。
     @MainActor
-    func search() async {
+    func search() async -> SearchFailure? {
         let keyword = trimmedQuery
         hasSearched = true
         results = []
         errorMessage = nil
+        latestSearchError = nil
 
         guard !keyword.isEmpty else {
-            errorMessage = BookSearchError.emptyKeyword.errorDescription
-            return
+            let failure = SearchFailure(
+                bookSearchError: .emptyKeyword,
+                message: BookSearchError.emptyKeyword.errorDescription ?? "请输入书名、作者或 ISBN"
+            )
+            errorMessage = failure.message
+            latestSearchError = failure.bookSearchError
+            return failure
         }
 
         isSearching = true
@@ -70,8 +82,16 @@ final class BookSearchViewModel {
             results = items
             repository.saveRecentQuery(keyword)
             reloadRecentQueries()
+            return nil
         } catch {
-            errorMessage = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+            let bookSearchError = error as? BookSearchError
+            let failure = SearchFailure(
+                bookSearchError: bookSearchError,
+                message: (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+            )
+            errorMessage = failure.message
+            latestSearchError = failure.bookSearchError
+            return failure
         }
     }
 
@@ -79,7 +99,7 @@ final class BookSearchViewModel {
     @MainActor
     func search(withRecentQuery query: String) async {
         self.query = query
-        await search()
+        _ = await search()
     }
 
     /// 删除一条最近搜索词。
