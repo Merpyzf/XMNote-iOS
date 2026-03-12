@@ -138,6 +138,13 @@
 
 ## UI 与交互约束
 - 遵循 iOS HIG，保持品牌与信息层级一致，避免无意义视觉修饰。
+- 文本字号治理（强制）：先区分 `生产文本 / 品牌数字与品牌标题 / 图标或装饰 glyph`；生产文本统一走系统语义字体或 `SemanticTypography`，品牌强调位使用 `brandDisplay(size:relativeTo:)`，图标尺寸不得伪装成文本字号规则。
+- 语义化目标（强制）：补齐 Dynamic Type 与语义层级，不得让页面默认态整体变大；需要保留现有视觉基线时，统一通过 `SemanticTypography.font(..., minimumPointSize: baseSize)` 或 `SemanticTypography.uiFont(..., minimumPointSize: baseSize)` 实现。
+- 文本硬编码禁令（强制）：生产文本禁止新增 `.font(.system(size: ...))`、`UIFont.systemFont(ofSize:)`、`UIFont.boldSystemFont(ofSize:)` 等固定字号写法；图标尺寸、装饰性 symbol、Debug/Prototype 不在此禁令内。
+- 文本测量同步（强制）：涉及文本宽度、行高、baseline、截断测量时，测量字体必须与渲染字体同源；系统语义文本统一使用 `SemanticTypography.uiFont(...)`，品牌文本统一使用 `UIFont.brandDisplay(...)`。
+- 品牌字体边界（强制）：品牌字体只用于品牌标题、关键数字、日期锚点等强调位；中文正文、密集说明、完整中文单位不得整段使用品牌字体，必要时以系统字体承接单位与说明。
+- 新增字体规则（强制）：跨组件重复出现的文本层级必须沉淀到 `DesignTokens.swift` 的语义字体 token；页面私有一次性层级允许局部 helper，但禁止把固定字号散落在页面实现中。
+- 语义化后的适配顺序（强制）：出现显示不下时，先修布局、容器高度、换行策略、测量链路与 token 归位，禁止为了适配字号缩写业务文案、压缩中文单位或回退到固定字号。
 - 结构性 UI 变化必须带过渡动画，优先 `.snappy`、`.smooth`、`.spring`。
 - 异步操作必须立即反馈（加载态/按钮禁用/错误提示），避免“点击无响应”。
 - 底部沉浸滚动约束（强制）：涉及 `ScrollView`、`safeArea` 与底部导航/手势区时，内容在底部圆角区域必须平滑过渡，禁止“生硬裁切”；允许底部沉浸延展，但不得破坏顶部工具栏的裁切边界与可读性。
@@ -166,6 +173,9 @@
 - 双文档同构（强制）：`AGENTS.md` 与 `CLAUDE.md` 的注释约束条款必须保持语义一致。
 - GRDB `Record` 必须通过 `CodingKeys` 做 camelCase → snake_case 映射，并与表结构保持一致。
 - 设计令牌使用规范（详见 `CLAUDE.md` §6）：
+  - 新增文本前先判定对象是 `生产文本 / 品牌强调 / 图标`；文本优先选系统语义样式，只有要保留视觉基线或需要 UIKit 测量同步时才使用 `SemanticTypography`。
+  - 生产文本若需保留现有默认点数，优先使用 `SemanticTypography.defaultPointSize(for:)` 获取系统基线，或显式传入 `minimumPointSize: baseSize`，禁止手抄系统默认字号。
+  - 品牌数字/品牌标题使用 `brandDisplay(size:relativeTo:)`，若存在光学行盒偏移再配合 `BrandTypography.verticalTrim` / `brandVerticalTrim(...)`，禁止把品牌字体铺到正文与密集说明。
   - Spacing 先按「是不是留白问题 → Inline / Block / Container / Page 层级」选型，再优先使用默认档：`half / cozy / base / screenEdge / contentEdge / section / double`。
   - `compact / tight / comfortable / hairline / tiny / micro` 仅作为补位档使用；`actionReserved(44)` 属于点击热区/操作预留，不属于常规 spacing。
   - CornerRadius 二维命名：`inlay`（嵌入零件）/ `block`（独立单元）/ `container`（外壳）× `tiny~large`，按「角色→体量」两步选择。

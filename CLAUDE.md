@@ -36,6 +36,7 @@
 主色调（#2ECF77）必须精准应用，保持品牌辨识度。
 严格遵循既有的间距、圆角与排版系统。
 排版哲学：通过字重、灰度与留白来构建信息层级，而非简单的尺寸堆叠。禁止引入任何无意义的修饰。
+文本字号语义：生产文本优先走系统语义字体与 `SemanticTypography`，品牌强调位才使用品牌字体；语义化的目标是补齐 Dynamic Type 与可访问性，不得以“整体放大默认视觉”为代价。
 平台适配：UI 必须遵循 iOS Human Interface Guidelines，不照搬 Material Design。
 
 四、 动效与触感原则 (Interaction & Motion)
@@ -717,7 +718,94 @@ withAnimation(.snappy) {
 
 ## 6. 设计令牌使用规范
 
-所有间距、圆角必须使用 `Spacing` / `CornerRadius` token，禁止硬编码魔法数字。
+所有字体、间距、圆角都必须先按语义选型，再决定是否需要 token；禁止把魔法数字直接散落到生产路径。
+
+### Typography 选择指南（五步决策）
+
+第一步 — 先判断对象类型：
+
+- `生产文本`：正文、标题、说明、标签、单位、表格/图表文字、按钮文字。
+- `品牌数字与品牌标题`：关键数字、品牌锚点标题、日期分组锚点等需要品牌识别的强调位。
+- `图标或装饰 glyph`：SF Symbol、装饰性字形、状态图标、纯 icon button。
+
+结论：
+
+- 只有 `生产文本` 和 `品牌数字与品牌标题` 进入文本字号规则。
+- `图标或装饰 glyph` 的 point size 属于图标尺寸治理，不得伪装成文本字号规则。
+
+第二步 — 生产文本优先选系统语义档位：
+
+- 能直接表达层级时，优先使用 `.largeTitle / .title / .title2 / .title3 / .headline / .subheadline / .body / .callout / .footnote / .caption / .caption2`。
+- 若只需要系统默认字重与 Dynamic Type，不要额外包装到 `SemanticTypography`。
+
+第三步 — 仅在以下场景进入 `SemanticTypography`：
+
+- 需要保留当前默认视觉点数，但又要补齐系统缩放。
+- 需要自定义 `weight`、`design` 或 UIKit 桥接。
+- 需要渲染字体与测量字体保持同源。
+
+固定规则：
+
+- 生产文本新增或改造时，禁止新增 `.font(.system(size: ...))`、`UIFont.systemFont(ofSize:)`、`UIFont.boldSystemFont(ofSize:)` 等固定字号写法。
+- 需要保留当前默认视觉基线时，统一使用 `SemanticTypography.font(..., minimumPointSize: baseSize)` 或 `SemanticTypography.uiFont(..., minimumPointSize: baseSize)`。
+- 若要对齐系统默认点数，优先使用 `SemanticTypography.defaultPointSize(for:)` 获取基线，禁止手抄系统字号。
+
+第四步 — 品牌字体只服务品牌强调位：
+
+- 品牌数字、品牌标题、日期锚点等使用 `.brandDisplay(size:relativeTo:)`。
+- 需要光学收口时，配合 `BrandTypography.verticalTrim` 或 `.brandVerticalTrim(...)`。
+- 中文正文、密集说明、完整中文单位不得整段铺品牌字体；必要时以系统字体承接单位、补充说明与长文案。
+
+第五步 — 决定沉淀层级：
+
+- 跨组件、跨页面重复出现的文本层级，必须沉淀到 `DesignTokens.swift` 的语义字体 token。
+- 页面私有且只出现一次的字号规则，允许做局部 helper，但 helper 内仍必须引用系统语义字体、`SemanticTypography` 或品牌字体入口。
+- 禁止把固定字号散落在页面 body 内部。
+
+推荐示例：
+
+```swift
+Text("说明文本")
+    .font(.body)
+
+Text("热力图月份")
+    .font(
+        SemanticTypography.font(
+            baseSize: 11,
+            relativeTo: .caption2,
+            minimumPointSize: 11
+        )
+    )
+
+Text("128")
+    .font(.brandDisplay(size: 20, relativeTo: .title3))
+
+let measuredFont = SemanticTypography.uiFont(
+    baseSize: 11,
+    textStyle: .caption2,
+    minimumPointSize: 11
+)
+```
+
+### 文本测量与布局同步（强制）
+
+- 涉及文本宽度、行高、baseline、折行、截断、几何测量时，测量字体必须与渲染字体同源。
+- 系统语义文本统一使用 `SemanticTypography.uiFont(...)` 做 UIKit 测量。
+- 品牌字体统一使用 `UIFont.brandDisplay(...)` 做测量，禁止“渲染走品牌字体、测量走系统字体”。
+- 若渲染侧保留视觉基线，测量侧必须传入同样的 `baseSize` 与 `minimumPointSize`，避免语义化后出现布局漂移。
+
+### 品牌字体边界（强制）
+
+- 品牌字体只负责强调，不负责承载大段信息密度。
+- 数字与单位混排时，数字可用品牌字体，单位默认降回系统语义字体，保持可读性与中文一致性。
+- 中文标题若品牌字体按字形回退不稳定，优先使用系统语义字体，不要强行维持品牌字体外观。
+
+### 语义迁移后的布局处理（强制）
+
+- 语义化后若出现显示不下，先排查容器高度、最小宽度、`lineLimit`、测量链路、布局优先级与 token 归位。
+- 标题、说明、按钮文案允许通过两行、最小高度、布局重排解决，不得优先回退到固定字号。
+- 禁止为了适配字号缩写业务文案、压缩“小时/分钟”等完整中文单位，或把生产文本改回硬编码 point size。
+- 语义迁移的验收标准是：默认态视觉密度基本不变、Dynamic Type 能正确放大、布局链路不漂移。
 
 ### Spacing 选择指南（四步决策）
 
