@@ -722,6 +722,12 @@ private struct ReadingRecentBookItemView: View {
     let book: ReadingRecentBook
     let onTap: (Int64) -> Void
 
+    private var progressRatio: Double? {
+        guard let progressPercent = book.progressPercent else { return nil }
+        let clampedPercent = min(100, max(0, progressPercent))
+        return clampedPercent / 100
+    }
+
     var body: some View {
         Button {
             onTap(book.id)
@@ -734,6 +740,11 @@ private struct ReadingRecentBookItemView: View {
                     border: .init(color: .surfaceBorderSubtle, width: CardStyle.borderWidth),
                     surfaceStyle: .spine
                 )
+                .overlay {
+                    if let progressRatio {
+                        BookCoverProgressBar(progress: progressRatio)
+                    }
+                }
                 .shadow(
                     color: Color.bookCoverDropShadow.opacity(0.38),
                     radius: 1.4,

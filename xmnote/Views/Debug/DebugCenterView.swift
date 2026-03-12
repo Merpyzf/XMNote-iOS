@@ -2,7 +2,7 @@
 import SwiftUI
 
 /**
- * [INPUT]: 依赖 RichTextTestView、HeatmapTestView、ImageLoadingTestView、CameraTextCaptureTestView、JXPhotoBrowserTestView、ReadCalendarCoverStackTestView、BookCoverStyleTestView、SystemColorsTestView、TimelineCardsTestView、TimelineCalendarHorizonTestView 作为导航目的地
+ * [INPUT]: 依赖 RichTextTestView、HeatmapTestView、ImageLoadingTestView、CameraTextCaptureTestView、JXPhotoBrowserTestView、ReadCalendarCoverStackTestView、BookCoverStyleTestView、BookCoverProgressBarTestView、SystemColorsTestView、TimelineCardsTestView、TimelineCalendarHorizonTestView 作为导航目的地
  * [OUTPUT]: 对外提供 DebugCenterView（测试中心列表页）
  * [POS]: Debug 测试入口页，集中展示所有控件测试项，由 PersonalView 跳转进入
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -62,6 +62,12 @@ struct DebugCenterView: View {
             title: "书籍封面样式",
             subtitle: "薄厚边样式、尺寸降级阈值与浅深色对照验证",
             destination: AnyView(BookCoverStyleTestView())
+        ),
+        DebugItem(
+            icon: "books.vertical.fill",
+            title: "封面阅读进度条",
+            subtitle: "玻璃轨道、尺寸适配与进度动画验证",
+            destination: AnyView(BookCoverProgressBarTestView())
         ),
         DebugItem(
             icon: "paintpalette",

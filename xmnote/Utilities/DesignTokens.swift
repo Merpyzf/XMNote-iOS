@@ -124,6 +124,12 @@ extension Color {
         light: Color.black.opacity(0.14),
         dark: Color.black.opacity(0.22)
     )
+    /// 书籍封面进度条轨道色，维持玻璃底上的弱对比白轨道。
+    static let bookCoverProgressTrack = Color.white.opacity(0.20)
+    /// 书籍封面进度条完成段颜色，保证玻璃层上的完成态比轨道更清晰。
+    static let bookCoverProgressFill = Color.white.opacity(0.84)
+    /// 书籍封面进度条描边，轻微勾出悬浮边界，避免深色封面上融掉。
+    static let bookCoverProgressStroke = Color.white.opacity(0.22)
     /// 分割线
     static let divider = Color(light: Color(hex: 0xEEEEEE),
                                 dark: Color(hex: 0x333333))
