@@ -9,7 +9,11 @@
 - `ReadingDurationRankingChart使用说明.md`: ReadingDurationRankingChart 阅读时长排行组件接入指南与参数说明。
 - `XMRemoteImage使用说明.md`: XMRemoteImage 统一远程图片组件接入指南与参数说明。
 - `XMGIFImageView使用说明.md`: XMGIFImageView GIF 动画承载组件接入指南与参数说明。
+- `XMBookCover使用说明.md`: XMBookCover 统一书籍封面组件接入指南与参数说明。
+- `BookCoverProgressBar使用说明.md`: BookCoverProgressBar 封面进度条组件接入指南与参数说明。
 - `ExpandableRichText使用说明.md`: ExpandableRichText / RichText 富文本展示组件接入指南与参数说明。
+- `XMJXImageWall使用说明.md`: XMJXImageWall 图片墙组件接入指南与参数说明。
+- `XMJXThumbnailView使用说明.md`: XMJXThumbnailView 缩略图桥接组件接入指南与参数说明。
 - `BookContainerView使用说明.md`: BookContainerView 页面组件接入指南与参数说明。
 - `BookGridView使用说明.md`: BookGridView 页面组件接入指南与参数说明。
 - `BookGridItemView使用说明.md`: BookGridItemView 页面组件接入指南与参数说明。
@@ -23,6 +27,7 @@
 - `WebDAVServerFormView使用说明.md`: WebDAVServerFormView 页面组件接入指南与参数说明。
 - `BackupHistorySheetView使用说明.md`: BackupHistorySheetView 页面组件接入指南与参数说明。
 - `ReadingContainerView使用说明.md`: ReadingContainerView 页面组件接入指南与参数说明。
+- `ReadingDashboardView使用说明.md`: ReadingDashboardView 页面组件接入指南与参数说明。
 - `ReadingHeatmapWidgetView使用说明.md`: ReadingHeatmapWidgetView 页面组件接入指南与参数说明。
 - `ReadCalendar使用说明.md`: ReadCalendarView 页面组件接入指南与参数说明。
 - `ReadingTimelineView使用说明.md`: ReadingTimelineView 页面组件接入指南与参数说明。

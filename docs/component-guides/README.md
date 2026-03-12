@@ -6,6 +6,8 @@
 | ReadingDurationRankingChart | `xmnote/UIComponents/Charts/ReadingDurationRankingChart.swift` | `docs/component-guides/ReadingDurationRankingChart使用说明.md` | 已完成 |
 | XMRemoteImage | `xmnote/UIComponents/Foundation/XMRemoteImage.swift` | `docs/component-guides/XMRemoteImage使用说明.md` | 已完成 |
 | XMGIFImageView | `xmnote/UIComponents/Foundation/XMGIFImageView.swift` | `docs/component-guides/XMGIFImageView使用说明.md` | 已完成 |
+| XMBookCover | `xmnote/UIComponents/Foundation/XMBookCover.swift` | `docs/component-guides/XMBookCover使用说明.md` | 已完成 |
+| BookCoverProgressBar | `xmnote/UIComponents/Foundation/BookCoverProgressBar.swift` | `docs/component-guides/BookCoverProgressBar使用说明.md` | 已完成 |
 | ExpandableRichText | `xmnote/UIComponents/Foundation/ExpandableRichText.swift` | `docs/component-guides/ExpandableRichText使用说明.md` | 已完成 |
 | RichText | `xmnote/UIComponents/Foundation/RichText.swift` | `docs/component-guides/ExpandableRichText使用说明.md` | 已完成 |
 | CollapsedRichTextPreview | `xmnote/UIComponents/Foundation/CollapsedRichTextPreview.swift` | `docs/component-guides/ExpandableRichText使用说明.md` | 已完成 |
@@ -24,6 +26,7 @@
 | WebDAVServerFormView | `xmnote/Views/Personal/Backup/WebDAVServerFormView.swift` | `docs/component-guides/WebDAVServerFormView使用说明.md` | 已完成 |
 | BackupHistorySheetView | `xmnote/Views/Personal/Backup/Sheets/BackupHistorySheetView.swift` | `docs/component-guides/BackupHistorySheetView使用说明.md` | 已完成 |
 | ReadingContainerView | `xmnote/Views/Reading/ReadingContainerView.swift` | `docs/component-guides/ReadingContainerView使用说明.md` | 已完成 |
+| ReadingDashboardView | `xmnote/Views/Reading/ReadingDashboardView.swift` | `docs/component-guides/ReadingDashboardView使用说明.md` | 已完成 |
 | ReadingHeatmapWidgetView | `xmnote/Views/Reading/ReadingHeatmapWidgetView.swift` | `docs/component-guides/ReadingHeatmapWidgetView使用说明.md` | 已完成 |
 | ReadCalendarView | `xmnote/Views/Reading/ReadCalendar/ReadCalendarView.swift` | `docs/component-guides/ReadCalendar使用说明.md` | 已完成 |
 | ReadingTimelineView | `xmnote/Views/Reading/Timeline/ReadingTimelineView.swift` | `docs/component-guides/ReadingTimelineView使用说明.md` | 已完成 |
