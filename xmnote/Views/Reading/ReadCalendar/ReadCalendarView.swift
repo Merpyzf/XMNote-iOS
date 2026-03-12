@@ -19,6 +19,7 @@ struct ReadCalendarView: View {
     @State private var isSettingsPresented = false
     @State private var settingsSheetHeight: CGFloat = 0
     @State private var isBookCoverFullscreenPresented = false
+    @ScaledMetric(relativeTo: .subheadline) private var settingsIconSize = 15
 
     /// 注入初始日期并创建阅读日历页面入口。
     init(date: Date?) {
@@ -77,7 +78,7 @@ struct ReadCalendarView: View {
             ToolbarItem(placement: .topBarTrailing) {
                 Button { isSettingsPresented = true } label: {
                     Image(systemName: "gearshape")
-                        .font(.system(size: 15, weight: .semibold))
+                        .font(.system(size: settingsIconSize, weight: .semibold))
                         .foregroundStyle(Color.readCalendarTopAction)
                 }
                 .accessibilityLabel("阅读日历设置")

@@ -63,6 +63,7 @@ private extension ReadingTimelineContentView {
 /// 日历面板子树，隔离 sections/isLoading 变化对 HorizonCalendar 桥接层的影响。
 private struct TimelineCalendarPanel: View {
     @Bindable var viewModel: TimelineViewModel
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @StateObject private var calendarProxy = CalendarViewProxy()
     @State private var calendarHeight: CGFloat = 320
     @State private var calendarViewportWidth: CGFloat = 0
@@ -107,48 +108,7 @@ private struct TimelineCalendarPanel: View {
     var body: some View {
         CardContainer(cornerRadius: TimelineCalendarStyle.panelCornerRadius) {
             VStack(spacing: Spacing.base) {
-                HStack(alignment: .lastTextBaseline, spacing: Spacing.base) {
-                    Menu {
-                        ForEach(availableMonthStarts.reversed(), id: \.self) { monthStart in
-                            Button {
-                                jumpToDate(monthStart, animated: true)
-                            } label: {
-                                if calendar.isDate(monthStart, equalTo: viewModel.displayedMonthStart, toGranularity: .month) {
-                                    Label(monthFormatter.string(from: monthStart), systemImage: "checkmark")
-                                } else {
-                                    Text(monthFormatter.string(from: monthStart))
-                                }
-                            }
-                        }
-                    } label: {
-                        HStack(alignment: .lastTextBaseline, spacing: Spacing.compact) {
-                            displayedMonthTitleText
-                                .lineLimit(1)
-                                .minimumScaleFactor(0.9)
-                        }
-                    }
-                    .buttonStyle(.plain)
-
-                    Spacer()
-
-                    selectedDateOffsetText
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.9)
-
-                    Button("今") {
-                        jumpToDate(calendar.startOfDay(for: Date()), animated: true)
-                    }
-                    .font(TimelineCalendarStyle.actionButtonFont)
-                    .foregroundStyle(Color.brandDeep)
-                    .padding(.horizontal, Spacing.tight)
-                    .padding(.vertical, Spacing.half)
-                    .background(Color.brand.opacity(0.14))
-                    .overlay(
-                        Capsule()
-                            .stroke(Color.brand.opacity(0.28), lineWidth: CardStyle.borderWidth)
-                    )
-                    .clipShape(Capsule())
-                }
+                calendarHeader
                 .padding(.horizontal, Spacing.contentEdge)
                 .padding(.top, Spacing.contentEdge)
 
@@ -261,6 +221,73 @@ private struct TimelineCalendarPanel: View {
 }
 
 private extension TimelineCalendarPanel {
+    @ViewBuilder
+    var calendarHeader: some View {
+        if usesExpandedHeaderLayout {
+            VStack(alignment: .leading, spacing: Spacing.cozy) {
+                HStack(alignment: .lastTextBaseline, spacing: Spacing.base) {
+                    monthPicker
+                    Spacer(minLength: 0)
+                    todayButton
+                }
+
+                selectedDateOffsetText
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        } else {
+            HStack(alignment: .lastTextBaseline, spacing: Spacing.base) {
+                monthPicker
+
+                Spacer()
+
+                selectedDateOffsetText
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.9)
+
+                todayButton
+            }
+        }
+    }
+
+    var monthPicker: some View {
+        Menu {
+            ForEach(availableMonthStarts.reversed(), id: \.self) { monthStart in
+                Button {
+                    jumpToDate(monthStart, animated: true)
+                } label: {
+                    if calendar.isDate(monthStart, equalTo: viewModel.displayedMonthStart, toGranularity: .month) {
+                        Label(monthFormatter.string(from: monthStart), systemImage: "checkmark")
+                    } else {
+                        Text(monthFormatter.string(from: monthStart))
+                    }
+                }
+            }
+        } label: {
+            HStack(alignment: .lastTextBaseline, spacing: Spacing.compact) {
+                displayedMonthTitleText
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.9)
+            }
+        }
+        .buttonStyle(.plain)
+    }
+
+    var todayButton: some View {
+        Button("今") {
+            jumpToDate(calendar.startOfDay(for: Date()), animated: true)
+        }
+        .font(TimelineCalendarStyle.actionButtonFont)
+        .foregroundStyle(Color.brandDeep)
+        .padding(.horizontal, Spacing.tight)
+        .padding(.vertical, Spacing.half)
+        .background(Color.brand.opacity(0.14))
+        .overlay(
+            Capsule()
+                .stroke(Color.brand.opacity(0.28), lineWidth: CardStyle.borderWidth)
+        )
+        .clipShape(Capsule())
+    }
+
     var availableMonthStarts: [Date] {
         let lowerMonth = Self.monthStart(of: visibleDateRange.lowerBound, using: calendar)
         let upperMonth = Self.monthStart(of: visibleDateRange.upperBound, using: calendar)
@@ -321,6 +348,8 @@ private extension TimelineCalendarPanel {
                 .contentTransition(.numericText())
         }
         .animation(.snappy(duration: 0.24), value: dayOffset)
+        .lineLimit(usesExpandedHeaderLayout ? 2 : 1)
+        .multilineTextAlignment(.leading)
     }
 
     @ViewBuilder
@@ -617,6 +646,10 @@ private extension TimelineCalendarPanel {
         }
 
         return (preDiff + monthDays + endDiff) / 7
+    }
+
+    var usesExpandedHeaderLayout: Bool {
+        dynamicTypeSize >= .accessibility1
     }
 }
 
@@ -930,6 +963,9 @@ private struct TimelineCategoryFilterMenu: View {
     let selectedCategory: TimelineEventCategory
     let onCategorySelected: (TimelineEventCategory) -> Void
 
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @ScaledMetric(relativeTo: .caption2) private var chevronSymbolSize = 8
+
     var body: some View {
         Menu {
             ForEach(TimelineEventCategory.allCases) { category in
@@ -948,10 +984,10 @@ private struct TimelineCategoryFilterMenu: View {
                 Text(selectedCategory.rawValue)
                     .font(TimelineCalendarStyle.sectionFilterFont)
                     .foregroundStyle(Color.textSecondary)
-                    .lineLimit(1)
+                    .lineLimit(dynamicTypeSize >= .accessibility1 ? 2 : 1)
 
                 Image(systemName: "chevron.down")
-                    .font(.system(size: 8, weight: .bold))
+                    .font(.system(size: chevronSymbolSize, weight: .bold))
                     .foregroundStyle(Color.textHint)
             }
             .padding(.horizontal, Spacing.cozy)

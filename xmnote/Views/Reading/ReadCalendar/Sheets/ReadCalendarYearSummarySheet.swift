@@ -59,6 +59,7 @@ struct ReadCalendarYearSummarySheet: View {
     let onRetry: () -> Void
 
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var body: some View {
         ScrollView(.vertical, showsIndicators: false) {
@@ -107,7 +108,13 @@ private extension ReadCalendarYearSummarySheet {
             Spacer(minLength: 0)
 
             Text(String(sheet.year))
-                .font(.title3.weight(.semibold))
+                .font(
+                    SemanticTypography.font(
+                        baseSize: SemanticTypography.defaultPointSize(for: .title3),
+                        relativeTo: .title3,
+                        weight: .semibold
+                    )
+                )
                 .foregroundStyle(Color.textPrimary)
                 .monospacedDigit()
                 .contentTransition(.numericText())
@@ -251,21 +258,37 @@ private extension ReadCalendarYearSummarySheet {
 
             VStack(alignment: .leading, spacing: Spacing.hairline) {
                 Text(metric.title)
-                    .font(.caption2)
+                    .font(
+                        SemanticTypography.font(
+                            baseSize: SemanticTypography.defaultPointSize(for: .caption2),
+                            relativeTo: .caption2
+                        )
+                    )
                     .foregroundStyle(Color.readCalendarSubtleText)
                 Text(metric.value)
-                    .font(.subheadline.weight(.semibold))
+                    .font(
+                        SemanticTypography.font(
+                            baseSize: SemanticTypography.defaultPointSize(for: .subheadline),
+                            relativeTo: .subheadline,
+                            weight: .semibold
+                        )
+                    )
                     .foregroundStyle(Color.textPrimary)
                     .monospacedDigit()
                     .contentTransition(.numericText())
                     .lineLimit(1)
                 if let secondaryValue = metric.secondaryValue {
                     Text(secondaryValue.text)
-                        .font(.caption2)
+                        .font(
+                            SemanticTypography.font(
+                                baseSize: SemanticTypography.defaultPointSize(for: .caption2),
+                                relativeTo: .caption2
+                            )
+                        )
                         .foregroundStyle(deltaColor(secondaryValue.trend))
                         .monospacedDigit()
                         .contentTransition(.numericText())
-                        .lineLimit(1)
+                        .lineLimit(dynamicTypeSize >= .accessibility1 ? 2 : 1)
                 }
             }
 

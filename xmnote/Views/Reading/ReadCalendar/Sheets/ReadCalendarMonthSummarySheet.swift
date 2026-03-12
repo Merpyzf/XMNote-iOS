@@ -111,6 +111,7 @@ struct ReadCalendarMonthSummarySheet: View {
 
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.accessibilityReduceMotion) private var accessibilityReduceMotion
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var isRankingLoadingVisible = false
     @State private var rankingLoadingVisibilityTask: Task<Void, Never>?
     @State private var loadingShimmerPhase: CGFloat = -1
@@ -182,7 +183,13 @@ private extension ReadCalendarMonthSummarySheet {
             Spacer(minLength: 0)
             
             Text(summaryMonthTitle(sheet.monthStart))
-                .font(.title3.weight(.semibold))
+                .font(
+                    SemanticTypography.font(
+                        baseSize: SemanticTypography.defaultPointSize(for: .title3),
+                        relativeTo: .title3,
+                        weight: .semibold
+                    )
+                )
                 .foregroundStyle(Color.textPrimary)
                 .monospacedDigit()
                 .contentTransition(.numericText())
@@ -358,21 +365,37 @@ private extension ReadCalendarMonthSummarySheet {
 
             VStack(alignment: .leading, spacing: 1) {
                 Text(metric.title)
-                    .font(.caption2)
+                    .font(
+                        SemanticTypography.font(
+                            baseSize: SemanticTypography.defaultPointSize(for: .caption2),
+                            relativeTo: .caption2
+                        )
+                    )
                     .foregroundStyle(Color.readCalendarSubtleText)
                 Text(metric.primaryValue)
-                    .font(.subheadline.weight(.semibold))
+                    .font(
+                        SemanticTypography.font(
+                            baseSize: SemanticTypography.defaultPointSize(for: .subheadline),
+                            relativeTo: .subheadline,
+                            weight: .semibold
+                        )
+                    )
                     .foregroundStyle(Color.textPrimary)
                     .monospacedDigit()
                     .contentTransition(.numericText())
                     .lineLimit(1)
                 if let secondaryValue = metric.secondaryValue {
                     Text(secondaryValue.text)
-                        .font(.caption2)
+                        .font(
+                            SemanticTypography.font(
+                                baseSize: SemanticTypography.defaultPointSize(for: .caption2),
+                                relativeTo: .caption2
+                            )
+                        )
                         .foregroundStyle(deltaColor(secondaryValue.trend))
                         .monospacedDigit()
                         .contentTransition(.numericText())
-                        .lineLimit(1)
+                        .lineLimit(dynamicTypeSize >= .accessibility1 ? 2 : 1)
                 }
             }
 

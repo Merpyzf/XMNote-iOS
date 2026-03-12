@@ -16,10 +16,12 @@ struct ReadCalendarStreakHintBanner: View {
 
     let text: String
 
+    @ScaledMetric(relativeTo: .caption2) private var sparkleSymbolSize = 11
+
     var body: some View {
         HStack(spacing: Spacing.half) {
             Image(systemName: "sparkles")
-                .font(.system(size: 11, weight: .semibold))
+                .font(.system(size: sparkleSymbolSize, weight: .semibold))
                 .foregroundStyle(Color.brand)
 
             Text(text)

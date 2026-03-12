@@ -11,6 +11,7 @@ import SwiftUI
 struct CalendarMonthStepperBar: View {
     private enum Layout {
         static let barMinHeight: CGFloat = 36
+        static let expandedBarMinHeight: CGFloat = 40
     }
 
     let title: String
@@ -18,9 +19,16 @@ struct CalendarMonthStepperBar: View {
     let selectedMonth: Date
     let onSelectMonth: (Date) -> Void
 
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @ScaledMetric(relativeTo: .caption2) private var chevronSymbolSize = 10
+
     var body: some View {
         monthQuickPicker
-            .frame(maxWidth: .infinity, minHeight: Layout.barMinHeight, alignment: .leading)
+            .frame(
+                maxWidth: .infinity,
+                minHeight: usesExpandedTextLayout ? Layout.expandedBarMinHeight : Layout.barMinHeight,
+                alignment: .leading
+            )
     }
 
     private var monthQuickPicker: some View {
@@ -45,11 +53,12 @@ struct CalendarMonthStepperBar: View {
                     .monospacedDigit()
                     .contentTransition(.numericText())
                     .animation(.snappy(duration: 0.24), value: selectedMonth)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.9)
+                    .lineLimit(usesExpandedTextLayout ? 2 : 1)
+                    .minimumScaleFactor(usesExpandedTextLayout ? 1 : 0.9)
+                    .multilineTextAlignment(.leading)
     
                 Image(systemName: "chevron.down")
-                    .font(.system(size: 10, weight: .semibold))
+                    .font(.system(size: chevronSymbolSize, weight: .semibold))
                     .foregroundStyle(Color.readCalendarSubtleText)
                     .offset(y: 0.5)
             }
@@ -65,6 +74,10 @@ struct CalendarMonthStepperBar: View {
         formatter.dateFormat = "yyyy年M月"
         formatter.timeZone = .current
         return formatter.string(from: monthStart)
+    }
+
+    var usesExpandedTextLayout: Bool {
+        dynamicTypeSize >= .accessibility1
     }
 }
 

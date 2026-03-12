@@ -12,12 +12,15 @@ struct ReadCalendarInlineErrorBanner: View {
     let message: String
     let onRetry: () -> Void
 
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
     var body: some View {
-        HStack(spacing: Spacing.base) {
+        HStack(alignment: usesExpandedTextLayout ? .top : .center, spacing: Spacing.base) {
             Text(message)
                 .font(.caption)
                 .foregroundStyle(Color.feedbackWarning)
-                .lineLimit(1)
+                .lineLimit(usesExpandedTextLayout ? 2 : 1)
+                .multilineTextAlignment(.leading)
 
             Spacer(minLength: 0)
 
@@ -36,5 +39,9 @@ struct ReadCalendarInlineErrorBanner: View {
                 .stroke(Color.readCalendarSelectionStroke.opacity(0.62), lineWidth: CardStyle.borderWidth)
         }
         .padding(.top, Spacing.base)
+    }
+
+    var usesExpandedTextLayout: Bool {
+        dynamicTypeSize >= .accessibility1
     }
 }

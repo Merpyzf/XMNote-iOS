@@ -22,7 +22,29 @@ struct ReadingDashboardMetricValueDisplay: Equatable {
         let role: Role
     }
 
+    /// Pair 表示一个完整的“数字 + 单位”组合，供趋势卡做整块测量与换行。
+    struct Pair: Equatable {
+        let number: Segment
+        let unit: Segment
+    }
+
     let segments: [Segment]
+
+    var pairs: [Pair] {
+        var result: [Pair] = []
+        var index = 0
+        while index + 1 < segments.count {
+            let number = segments[index]
+            let unit = segments[index + 1]
+            guard number.role == .number, unit.role == .unit else {
+                index += 1
+                continue
+            }
+            result.append(Pair(number: number, unit: unit))
+            index += 2
+        }
+        return result
+    }
 }
 
 /// ReadingDashboardFormatting 统一承接首页仪表盘的文案压缩、趋势值拆段与柱图可视化映射。
@@ -73,9 +95,9 @@ enum ReadingDashboardFormatting {
         case .readingDuration:
             return durationDisplay(seconds: metric.totalValue)
         case .noteCount:
-            return countDisplay(value: metric.totalValue, unit: " 条")
+            return countDisplay(value: metric.totalValue, unit: "条")
         case .readDoneCount:
-            return countDisplay(value: metric.totalValue, unit: " 本")
+            return countDisplay(value: metric.totalValue, unit: "本")
         }
     }
 
@@ -103,11 +125,11 @@ enum ReadingDashboardFormatting {
         if hours > 0 {
             var segments = [
                 ReadingDashboardMetricValueDisplay.Segment(text: "\(hours)", role: .number),
-                ReadingDashboardMetricValueDisplay.Segment(text: " 小时", role: .unit)
+                ReadingDashboardMetricValueDisplay.Segment(text: "小时", role: .unit)
             ]
             if minutes > 0 {
                 segments.append(.init(text: "\(minutes)", role: .number))
-                segments.append(.init(text: " 分钟", role: .unit))
+                segments.append(.init(text: "分钟", role: .unit))
             }
             return ReadingDashboardMetricValueDisplay(segments: segments)
         }
@@ -115,11 +137,11 @@ enum ReadingDashboardFormatting {
         if minutes > 0 {
             var segments = [
                 ReadingDashboardMetricValueDisplay.Segment(text: "\(minutes)", role: .number),
-                ReadingDashboardMetricValueDisplay.Segment(text: " 分钟", role: .unit)
+                ReadingDashboardMetricValueDisplay.Segment(text: "分钟", role: .unit)
             ]
             if secs > 0 {
                 segments.append(.init(text: "\(secs)", role: .number))
-                segments.append(.init(text: " 秒", role: .unit))
+                segments.append(.init(text: "秒", role: .unit))
             }
             return ReadingDashboardMetricValueDisplay(segments: segments)
         }
@@ -127,7 +149,7 @@ enum ReadingDashboardFormatting {
         return ReadingDashboardMetricValueDisplay(
             segments: [
                 .init(text: "\(secs)", role: .number),
-                .init(text: " 秒", role: .unit)
+                .init(text: "秒", role: .unit)
             ]
         )
     }

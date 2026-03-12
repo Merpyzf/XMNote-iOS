@@ -253,6 +253,12 @@ private struct ReadCalendarMonthGridWeekRow: View {
     let frameCoordinateSpaceName: String?
     let onOpenBookCoverFullscreen: ((Date) -> Void)?
     let onSelectDay: (Date) -> Void
+    @ScaledMetric(relativeTo: .caption) private var selectedDayCircleSize = 22
+    @ScaledMetric(relativeTo: .caption2) private var readDoneIndicatorSize = 8
+    @ScaledMetric(relativeTo: .caption2) private var overflowBadgeBackgroundWidth = 24
+    @ScaledMetric(relativeTo: .caption2) private var overflowBadgeBackgroundHeight = 12
+    @ScaledMetric(relativeTo: .caption2) private var readDoneBadgeCircleSize = 11
+    @ScaledMetric(relativeTo: .caption2) private var readDoneBadgeCheckmarkSize = 6
     @State private var flowPhase: CGFloat = 0
     @State private var badgePulseIDs: Set<String> = []
     @State private var badgePulseToken = 0
@@ -368,7 +374,7 @@ private struct ReadCalendarMonthGridWeekRow: View {
                                     Circle()
                                         .stroke(Color.brand.opacity(0.62), lineWidth: 0.95)
                                 }
-                                .frame(width: 22, height: 22)
+                                .frame(width: selectedDayCircleSize, height: selectedDayCircleSize)
                         }
                         Text("\(dayNum)")
                             .font(
@@ -386,7 +392,7 @@ private struct ReadCalendarMonthGridWeekRow: View {
                     .overlay(alignment: .topTrailing) {
                         if readDone && displayMode != .activityEvent {
                             Image(systemName: "checkmark.circle.fill")
-                                .font(.system(size: 8))
+                                .font(.system(size: readDoneIndicatorSize))
                                 .foregroundStyle(Color.readCalendarTodayMark)
                                 .offset(x: -2, y: 4)
                         }
@@ -508,7 +514,15 @@ private struct ReadCalendarMonthGridWeekRow: View {
 
     private func overflowBadge(_ count: Int) -> some View {
         Text("+\(count)")
-            .font(.system(size: 9, weight: .semibold, design: .rounded))
+            .font(
+                SemanticTypography.font(
+                    baseSize: 9,
+                    relativeTo: .caption2,
+                    weight: .semibold,
+                    design: .rounded,
+                    minimumPointSize: 9
+                )
+            )
             .foregroundStyle(Color.readCalendarSubtleText)
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, Layout.overflowBadgeHPadding)
@@ -517,7 +531,7 @@ private struct ReadCalendarMonthGridWeekRow: View {
             .background(alignment: .bottomLeading) {
                 RoundedRectangle(cornerRadius: CornerRadius.inlayMedium, style: .continuous)
                     .fill(Color.readCalendarSelectionFill.opacity(0.72))
-                    .frame(width: 24, height: 12)
+                    .frame(width: overflowBadgeBackgroundWidth, height: overflowBadgeBackgroundHeight)
                     .padding(.leading, Spacing.compact)
                     .padding(.bottom, Spacing.tiny)
             }
@@ -712,7 +726,15 @@ private struct ReadCalendarMonthGridWeekRow: View {
 
             if showText {
                 Text(segment.bookName)
-                    .font(.system(size: 9, weight: .semibold, design: .rounded))
+                    .font(
+                        SemanticTypography.font(
+                            baseSize: 9,
+                            relativeTo: .caption2,
+                            weight: .semibold,
+                            design: .rounded,
+                            minimumPointSize: 9
+                        )
+                    )
                     .foregroundStyle(textColor.opacity(isPending ? 0.86 : 0.92))
                     .lineLimit(1)
                     .padding(.leading, Spacing.compact)
@@ -724,11 +746,11 @@ private struct ReadCalendarMonthGridWeekRow: View {
                 let style = readDoneBadgeStyle(for: segment.color)
                 Circle()
                     .fill(style.background)
-                    .frame(width: 11, height: 11)
+                    .frame(width: readDoneBadgeCircleSize, height: readDoneBadgeCircleSize)
                     .scaleEffect(badgePulseIDs.contains(segment.id) ? 1.15 : 1)
                     .overlay {
                         Image(systemName: "checkmark")
-                            .font(.system(size: 6, weight: .bold))
+                            .font(.system(size: readDoneBadgeCheckmarkSize, weight: .bold))
                             .foregroundStyle(style.foreground)
                     }
                     .padding(.trailing, Spacing.micro)

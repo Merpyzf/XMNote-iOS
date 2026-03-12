@@ -12,6 +12,7 @@ struct ReadCalendarTopControlBar: View {
     private enum Layout {
         static let topControlSpacing: CGFloat = Spacing.cozy
         static let modeSwitcherWidth: CGFloat = 116
+        static let expandedModeSwitcherWidth: CGFloat = 128
     }
 
     let monthTitle: String
@@ -25,14 +26,18 @@ struct ReadCalendarTopControlBar: View {
     let onPagerSelectionChanged: (Date) -> Void
     let onYearSelectionChanged: (Int) -> Void
 
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @ScaledMetric(relativeTo: .caption2) private var chevronSymbolSize = 10
+    @ScaledMetric(relativeTo: .caption) private var modeSymbolSize = 14
+
     var body: some View {
-        HStack(alignment: .center, spacing: Layout.topControlSpacing) {
+        HStack(alignment: usesExpandedTextLayout ? .top : .center, spacing: Layout.topControlSpacing) {
             leadingSwitcher
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .layoutPriority(1)
 
             modeSwitcher
-                .frame(width: Layout.modeSwitcherWidth)
+                .frame(width: usesExpandedTextLayout ? Layout.expandedModeSwitcherWidth : Layout.modeSwitcherWidth)
         }
         .padding(.horizontal, Spacing.screenEdge)
     }
@@ -81,13 +86,14 @@ private extension ReadCalendarTopControlBar {
                     .font(ReadCalendarTypography.topControlTitleFont)
                     .foregroundStyle(Color.textPrimary)
                     .monospacedDigit()
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.9)
+                    .lineLimit(usesExpandedTextLayout ? 2 : 1)
+                    .minimumScaleFactor(usesExpandedTextLayout ? 1 : 0.9)
+                    .multilineTextAlignment(.leading)
                     .contentTransition(.numericText())
                     .animation(.snappy(duration: 0.24), value: selectedYear)
 
                 Image(systemName: "chevron.down")
-                    .font(.system(size: 10, weight: .semibold))
+                    .font(.system(size: chevronSymbolSize, weight: .semibold))
                     .foregroundStyle(Color.readCalendarSubtleText)
                     .offset(y: 0.5)
             }
@@ -104,7 +110,7 @@ private extension ReadCalendarTopControlBar {
         Picker("阅读日历显示模式", selection: displayModeBinding) {
             ForEach(ReadCalendarContentView.DisplayMode.allCases, id: \.self) { mode in
                 Image(systemName: mode.iconName(isSelected: mode == displayMode))
-                    .font(.system(size: 14, weight: .medium))
+                    .font(.system(size: modeSymbolSize, weight: .medium))
                     .tag(mode)
                     .accessibilityLabel(mode.title)
             }
@@ -127,5 +133,9 @@ private extension ReadCalendarTopControlBar {
                 }
             }
         )
+    }
+
+    var usesExpandedTextLayout: Bool {
+        dynamicTypeSize >= .accessibility1
     }
 }
