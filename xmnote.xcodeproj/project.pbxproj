@@ -7,9 +7,14 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		13EDBCA7EBD2A99FE721F9E9 /* CoreMedia.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = ECAC54637623350F05C29456 /* CoreMedia.framework */; };
+		28C2C736867CB404B4B4E64C /* CoreTelephony.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 9E9523619E4A0BF208F82F3E /* CoreTelephony.framework */; };
+		4C61B9167A0412B5D37618F9 /* Accelerate.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 2FE6C17E768CEE05904EA501 /* Accelerate.framework */; };
 		891118422F3C543600D99384 /* GRDB in Frameworks */ = {isa = PBXBuildFile; productRef = 89GRDB0012F3A000000000002 /* GRDB */; };
 		897196B52F54925300159B76 /* appicon.icon in Resources */ = {isa = PBXBuildFile; fileRef = 897196B42F54925300159B76 /* appicon.icon */; };
 		89AF00012F3D000000000002 /* Alamofire in Frameworks */ = {isa = PBXBuildFile; productRef = 89AF00012F3D000000000004 /* Alamofire */; };
+		89AWS0012F3D000000000002 /* AWSS3 in Frameworks */ = {isa = PBXBuildFile; productRef = 89AWS0012F3D000000000004 /* AWSS3 */; };
+		89AWSI012F3D000000000002 /* AWSSDKIdentity in Frameworks */ = {isa = PBXBuildFile; productRef = 89AWSI012F3D000000000004 /* AWSSDKIdentity */; };
 		89GIFU0012F3D000000000002 /* Gifu in Frameworks */ = {isa = PBXBuildFile; productRef = 89GIFU0012F3D000000000004 /* Gifu */; };
 		89HZCAL12F3D000000000002 /* HorizonCalendar in Frameworks */ = {isa = PBXBuildFile; productRef = 89HZCAL12F3D000000000004 /* HorizonCalendar */; };
 		89JXPB0012F3D000000000002 /* JXPhotoBrowser in Frameworks */ = {isa = PBXBuildFile; productRef = 89JXPB0012F3D000000000004 /* JXPhotoBrowser */; };
@@ -17,6 +22,11 @@
 		89NUKE0012F3D000000000003 /* NukeUI in Frameworks */ = {isa = PBXBuildFile; productRef = 89NUKE0012F3D000000000005 /* NukeUI */; };
 		89SOUP0012F3D000000000002 /* SwiftSoup in Frameworks */ = {isa = PBXBuildFile; productRef = 89SOUP0012F3D000000000004 /* SwiftSoup */; };
 		89ZIP0012F3D000000000002 /* ZIPFoundation in Frameworks */ = {isa = PBXBuildFile; productRef = 89ZIP0012F3D000000000004 /* ZIPFoundation */; };
+		8ACCED43ABCD66D13B6BD021 /* libresolv.tbd in Frameworks */ = {isa = PBXBuildFile; fileRef = 19696D8CA8AA0D3676516DC3 /* libresolv.tbd */; };
+		8F053895DF208544572BAAEE /* SystemConfiguration.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = E3BFCA3A45C9EFF4B56C97C7 /* SystemConfiguration.framework */; };
+		A1B7A856AE6656FD9BDC7995 /* libc++.tbd in Frameworks */ = {isa = PBXBuildFile; fileRef = A0D56AD63DA5E88B0A1E2AB4 /* libc++.tbd */; };
+		CD05E992341473F154FD6BBC /* libz.tbd in Frameworks */ = {isa = PBXBuildFile; fileRef = BF3A7869DE2C456031F4060C /* libz.tbd */; };
+		CD50D944953BA933E99C8134 /* WebKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 1B6C51CAFCFECD4301B5122C /* WebKit.framework */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -37,10 +47,18 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		19696D8CA8AA0D3676516DC3 /* libresolv.tbd */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = "sourcecode.text-based-dylib-definition"; name = libresolv.tbd; path = usr/lib/libresolv.tbd; sourceTree = SDKROOT; };
+		1B6C51CAFCFECD4301B5122C /* WebKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = WebKit.framework; path = System/Library/Frameworks/WebKit.framework; sourceTree = SDKROOT; };
+		2FE6C17E768CEE05904EA501 /* Accelerate.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Accelerate.framework; path = System/Library/Frameworks/Accelerate.framework; sourceTree = SDKROOT; };
 		8911149C2F39AC2F00D99384 /* xmnote.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = xmnote.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		891114A92F39AC3200D99384 /* xmnoteTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = xmnoteTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		891114B32F39AC3200D99384 /* xmnoteUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = xmnoteUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		897196B42F54925300159B76 /* appicon.icon */ = {isa = PBXFileReference; lastKnownFileType = folder.iconcomposer.icon; path = appicon.icon; sourceTree = "<group>"; };
+		9E9523619E4A0BF208F82F3E /* CoreTelephony.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = CoreTelephony.framework; path = System/Library/Frameworks/CoreTelephony.framework; sourceTree = SDKROOT; };
+		A0D56AD63DA5E88B0A1E2AB4 /* libc++.tbd */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = "sourcecode.text-based-dylib-definition"; name = "libc++.tbd"; path = "usr/lib/libc++.tbd"; sourceTree = SDKROOT; };
+		BF3A7869DE2C456031F4060C /* libz.tbd */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = "sourcecode.text-based-dylib-definition"; name = libz.tbd; path = usr/lib/libz.tbd; sourceTree = SDKROOT; };
+		E3BFCA3A45C9EFF4B56C97C7 /* SystemConfiguration.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SystemConfiguration.framework; path = System/Library/Frameworks/SystemConfiguration.framework; sourceTree = SDKROOT; };
+		ECAC54637623350F05C29456 /* CoreMedia.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = CoreMedia.framework; path = System/Library/Frameworks/CoreMedia.framework; sourceTree = SDKROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -71,10 +89,20 @@
 				89NUKE0012F3D000000000002 /* Nuke in Frameworks */,
 				89NUKE0012F3D000000000003 /* NukeUI in Frameworks */,
 				89GIFU0012F3D000000000002 /* Gifu in Frameworks */,
+				89AWS0012F3D000000000002 /* AWSS3 in Frameworks */,
+				89AWSI012F3D000000000002 /* AWSSDKIdentity in Frameworks */,
 				89HZCAL12F3D000000000002 /* HorizonCalendar in Frameworks */,
 				89JXPB0012F3D000000000002 /* JXPhotoBrowser in Frameworks */,
 				89SOUP0012F3D000000000002 /* SwiftSoup in Frameworks */,
 				89ZIP0012F3D000000000002 /* ZIPFoundation in Frameworks */,
+				13EDBCA7EBD2A99FE721F9E9 /* CoreMedia.framework in Frameworks */,
+				4C61B9167A0412B5D37618F9 /* Accelerate.framework in Frameworks */,
+				8F053895DF208544572BAAEE /* SystemConfiguration.framework in Frameworks */,
+				28C2C736867CB404B4B4E64C /* CoreTelephony.framework in Frameworks */,
+				CD50D944953BA933E99C8134 /* WebKit.framework in Frameworks */,
+				CD05E992341473F154FD6BBC /* libz.tbd in Frameworks */,
+				A1B7A856AE6656FD9BDC7995 /* libc++.tbd in Frameworks */,
+				8ACCED43ABCD66D13B6BD021 /* libresolv.tbd in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -103,6 +131,8 @@
 				891114B62F39AC3200D99384 /* xmnoteUITests */,
 				8911149D2F39AC2F00D99384 /* Products */,
 				897196B42F54925300159B76 /* appicon.icon */,
+				9E5B4BBB9EB371116354AC7A /* Vendor */,
+				EC6A9875CDDBEF76C4662F5D /* SystemDependencies */,
 			);
 			sourceTree = "<group>";
 		};
@@ -114,6 +144,44 @@
 				891114B32F39AC3200D99384 /* xmnoteUITests.xctest */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		9E5B4BBB9EB371116354AC7A /* Vendor */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			path = Vendor;
+			sourceTree = "<group>";
+		};
+		B2B7090FC2C4BA89C668EA21 /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				ECAC54637623350F05C29456 /* CoreMedia.framework */,
+				2FE6C17E768CEE05904EA501 /* Accelerate.framework */,
+				E3BFCA3A45C9EFF4B56C97C7 /* SystemConfiguration.framework */,
+				9E9523619E4A0BF208F82F3E /* CoreTelephony.framework */,
+				1B6C51CAFCFECD4301B5122C /* WebKit.framework */,
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
+		C5203CA200DB4157A2FDA91C /* Libraries */ = {
+			isa = PBXGroup;
+			children = (
+				BF3A7869DE2C456031F4060C /* libz.tbd */,
+				A0D56AD63DA5E88B0A1E2AB4 /* libc++.tbd */,
+				19696D8CA8AA0D3676516DC3 /* libresolv.tbd */,
+			);
+			name = Libraries;
+			sourceTree = "<group>";
+		};
+		EC6A9875CDDBEF76C4662F5D /* SystemDependencies */ = {
+			isa = PBXGroup;
+			children = (
+				B2B7090FC2C4BA89C668EA21 /* Frameworks */,
+				C5203CA200DB4157A2FDA91C /* Libraries */,
+			);
+			name = SystemDependencies;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -141,6 +209,8 @@
 				89NUKE0012F3D000000000004 /* Nuke */,
 				89NUKE0012F3D000000000005 /* NukeUI */,
 				89GIFU0012F3D000000000004 /* Gifu */,
+				89AWS0012F3D000000000004 /* AWSS3 */,
+				89AWSI012F3D000000000004 /* AWSSDKIdentity */,
 				89HZCAL12F3D000000000004 /* HorizonCalendar */,
 				89JXPB0012F3D000000000004 /* JXPhotoBrowser */,
 				89SOUP0012F3D000000000004 /* SwiftSoup */,
@@ -219,7 +289,7 @@
 					};
 				};
 			};
-			buildConfigurationList = 891114972F39AC2F00D99384 /* Build configuration list for PBXProject "XMNote" */;
+			buildConfigurationList = 891114972F39AC2F00D99384 /* Build configuration list for PBXProject "xmnote" */;
 			developmentRegion = en;
 			hasScannedForEncodings = 0;
 			knownRegions = (
@@ -233,6 +303,7 @@
 				89AF00012F3D000000000001 /* XCRemoteSwiftPackageReference "Alamofire" */,
 				89NUKE0012F3D000000000001 /* XCRemoteSwiftPackageReference "Nuke" */,
 				89GIFU0012F3D000000000001 /* XCRemoteSwiftPackageReference "Gifu" */,
+				89AWS0012F3D000000000001 /* XCRemoteSwiftPackageReference "aws-sdk-swift" */,
 				89HZCAL12F3D000000000001 /* XCLocalSwiftPackageReference "Vendor/HorizonCalendar" */,
 				89JXPB0012F3D000000000001 /* XCLocalSwiftPackageReference "Vendor/PhotoBrowser" */,
 				89SOUP0012F3D000000000001 /* XCRemoteSwiftPackageReference "SwiftSoup" */,
@@ -601,7 +672,7 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
-		891114972F39AC2F00D99384 /* Build configuration list for PBXProject "XMNote" */ = {
+		891114972F39AC2F00D99384 /* Build configuration list for PBXProject "xmnote" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				891114BB2F39AC3200D99384 /* Debug */,
@@ -659,6 +730,14 @@
 				minimumVersion = 5.10.0;
 			};
 		};
+		89AWS0012F3D000000000001 /* XCRemoteSwiftPackageReference "aws-sdk-swift" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/awslabs/aws-sdk-swift.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 1.6.0;
+			};
+		};
 		89GIFU0012F3D000000000001 /* XCRemoteSwiftPackageReference "Gifu" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/kaishin/Gifu.git";
@@ -706,6 +785,16 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 89AF00012F3D000000000001 /* XCRemoteSwiftPackageReference "Alamofire" */;
 			productName = Alamofire;
+		};
+		89AWS0012F3D000000000004 /* AWSS3 */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 89AWS0012F3D000000000001 /* XCRemoteSwiftPackageReference "aws-sdk-swift" */;
+			productName = AWSS3;
+		};
+		89AWSI012F3D000000000004 /* AWSSDKIdentity */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 89AWS0012F3D000000000001 /* XCRemoteSwiftPackageReference "aws-sdk-swift" */;
+			productName = AWSSDKIdentity;
 		};
 		89GIFU0012F3D000000000004 /* Gifu */ = {
 			isa = XCSwiftPackageProductDependency;

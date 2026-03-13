@@ -2,7 +2,7 @@ import Foundation
 
 /**
  * [INPUT]: 依赖 Models 与 Services 层的数据类型定义
- * [OUTPUT]: 对外提供 Book/Note/BackupServer/Backup/Statistics/ReadCalendarColor/Timeline/ReadingDashboard 及书籍搜索/录入共十类 Repository 协议
+ * [OUTPUT]: 对外提供 Book/Note/BackupServer/Backup/S3/Statistics/ReadCalendarColor/Timeline/ReadingDashboard 及书籍搜索/录入共十二类 Repository 协议
  * [POS]: Domain 层仓储契约，定义 Presentation 获取本地/网络数据的唯一入口
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -77,6 +77,34 @@ protocol BackupRepositoryProtocol {
     func fetchBackupHistory() async throws -> [BackupFileInfo]
     /// 使用指定备份执行恢复流程，并通过回调上报阶段进度。
     func restore(_ backup: BackupFileInfo, progress: (@Sendable (RestoreProgress) -> Void)?) async throws
+}
+
+/// S3 配置契约，覆盖默认配置映射、自定义配置 CRUD、启用切换与联通性校验。
+protocol S3ConfigRepositoryProtocol {
+    /// 拉取全部可用 S3 配置，供设置页或测试入口展示。
+    func fetchConfigs() async throws -> [S3Config]
+    /// 读取当前启用的 S3 配置；未配置时返回 nil。
+    func fetchCurrentConfig() async throws -> S3Config?
+    /// 新增或更新自定义 S3 配置。
+    func saveConfig(_ input: S3ConfigFormInput, editingConfig: S3Config?) async throws -> S3Config
+    /// 删除指定 S3 配置。
+    func delete(_ config: S3Config) async throws
+    /// 将指定 S3 配置设为当前启用配置。
+    func select(_ config: S3Config) async throws
+    /// 校验给定配置是否具备上传与删除测试对象的能力。
+    func testConnection(_ input: S3ConfigFormInput) async throws
+}
+
+/// S3 上传契约，覆盖当前配置下的文件上传、联通性校验、删除与取消。
+protocol S3UploadRepositoryProtocol: AnyObject {
+    /// 使用当前启用配置上传本地文件并返回对象键与远端地址。
+    func uploadFile(localURL: URL, prefix: String, progress: (@Sendable (Double) -> Void)?) async throws -> S3UploadResult
+    /// 校验当前启用配置是否可访问 S3 兼容网关。
+    func testCurrentConfiguration() async throws
+    /// 删除指定对象键或完整 URL 对应的远端对象。
+    func deleteObject(path: String) async throws
+    /// 取消当前正在执行的上传请求。
+    func cancelCurrentUpload()
 }
 
 /// 阅读日历事件条封面取色仓储
