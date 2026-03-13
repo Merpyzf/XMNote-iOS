@@ -1,5 +1,5 @@
 /**
- * [INPUT]: 依赖 RepositoryContainer 注入搜索仓储，依赖 BookSearchViewModel 驱动远端查询状态，依赖 XMBookCover 与豆瓣登录业务弹层承接搜索与回流
+ * [INPUT]: 依赖 RepositoryContainer 注入搜索仓储，依赖 BookSearchViewModel 驱动远端查询状态，依赖 BookSearchResultRow 与豆瓣登录业务弹层承接搜索与回流
  * [OUTPUT]: 对外提供 BookSearchView，承载首页加号进入的完整书籍搜索体验与豆瓣风控登录恢复流
  * [POS]: Book 模块搜索页壳层，负责六书源切换、豆瓣登录回流、最近搜索与结果进入录入页
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -300,16 +300,15 @@ struct BookSearchView: View {
 
             CardContainer(cornerRadius: CornerRadius.containerMedium, showsBorder: false) {
                 VStack(alignment: .leading, spacing: Spacing.none) {
-                    resultSectionHeader(
-                        title: viewModel.selectedSource.title,
-                        detail: "\(viewModel.results.count) 个结果"
-                    )
-                    .padding(.horizontal, Spacing.contentEdge)
-                    .padding(.top, Spacing.contentEdge)
-                    .padding(.bottom, Spacing.base)
-
                     ForEach(Array(viewModel.results.enumerated()), id: \.element.id) { index, result in
-                        searchResultRow(result, viewModel: viewModel)
+                        BookSearchResultRow(
+                            result: result,
+                            keyword: viewModel.trimmedQuery
+                        ) {
+                            Task {
+                                await prepareSeed(for: result, using: viewModel)
+                            }
+                        }
                         if index < viewModel.results.count - 1 {
                             Divider()
                                 .padding(.leading, Spacing.contentEdge + 68 + Spacing.base)
@@ -454,73 +453,6 @@ struct BookSearchView: View {
                 )
                 .foregroundStyle(Color.textSecondary)
         }
-    }
-
-    private func searchResultRow(_ result: BookSearchResult, viewModel: BookSearchViewModel) -> some View {
-        Button {
-            Task {
-                await prepareSeed(for: result, using: viewModel)
-            }
-        } label: {
-            HStack(alignment: .top, spacing: Spacing.base) {
-                XMBookCover.fixedWidth(
-                    68,
-                    urlString: result.coverURL,
-                    cornerRadius: CornerRadius.inlayHairline,
-                    border: .init(color: .surfaceBorderSubtle, width: CardStyle.borderWidth),
-                    placeholderIconSize: .medium,
-                    surfaceStyle: .spine
-                )
-
-                VStack(alignment: .leading, spacing: Spacing.half) {
-                    Text(result.title)
-                        .font(
-                            SemanticTypography.font(
-                                baseSize: SemanticTypography.defaultPointSize(for: .headline),
-                                relativeTo: .headline,
-                                weight: .semibold
-                            )
-                        )
-                        .foregroundStyle(Color.textPrimary)
-                        .multilineTextAlignment(.leading)
-                        .lineLimit(2)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-
-                    if result.isLightweightDoubanSearchCard {
-                        if !result.subtitle.isEmpty {
-                            Text(result.subtitle)
-                                .font(
-                                    SemanticTypography.font(
-                                        baseSize: SemanticTypography.defaultPointSize(for: .subheadline),
-                                        relativeTo: .subheadline
-                                    )
-                                )
-                                .foregroundStyle(Color.textSecondary)
-                                .lineLimit(2)
-                        }
-                    } else {
-                        ForEach(result.metadataLines) { line in
-                            Text("\(line.label)\(line.value)")
-                                .font(
-                                    SemanticTypography.font(
-                                        baseSize: SemanticTypography.defaultPointSize(for: .subheadline),
-                                        relativeTo: .subheadline
-                                    )
-                                )
-                                .foregroundStyle(Color.textSecondary)
-                                .lineLimit(1)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                        }
-                    }
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-            }
-            .padding(.horizontal, Spacing.contentEdge)
-            .padding(.vertical, Spacing.base)
-            .contentShape(Rectangle())
-            .frame(maxWidth: .infinity, alignment: .leading)
-        }
-        .buttonStyle(.plain)
     }
 
     private var searchResultSkeleton: some View {
@@ -698,33 +630,6 @@ struct BookSearchView: View {
         activeDoubanLoginPrompt = nil
         inlineFeedback = nil
         didDetectDoubanLogin = false
-    }
-}
-
-private struct SearchResultMetadataLine: Identifiable {
-    let id: String
-    let label: String
-    let value: String
-}
-
-private extension BookSearchResult {
-    var isLightweightDoubanSearchCard: Bool {
-        source == .douban &&
-            seed == nil &&
-            author.isEmpty &&
-            translator.isEmpty &&
-            press.isEmpty &&
-            pubDate.isEmpty
-    }
-
-    var metadataLines: [SearchResultMetadataLine] {
-        [
-            SearchResultMetadataLine(id: "author", label: "作者：", value: author),
-            SearchResultMetadataLine(id: "translator", label: "译者：", value: translator),
-            SearchResultMetadataLine(id: "press", label: "出版社：", value: press),
-            SearchResultMetadataLine(id: "pubDate", label: "出版日期：", value: pubDate)
-        ]
-        .filter { !$0.value.isEmpty }
     }
 }
 

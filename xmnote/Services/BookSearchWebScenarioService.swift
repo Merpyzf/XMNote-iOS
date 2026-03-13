@@ -522,7 +522,7 @@ private enum ScenarioProbeEngine {
 
         let cover = ((try? itemRoot.getElementsByClass("cover").first()?.attr("src")) ?? "")
             .trimmingCharacters(in: .whitespacesAndNewlines)
-        let info = ((try? itemRoot.getElementsByClass("meta abstract").first()?.text()) ?? "")
+        let info = ((try? itemRoot.select(".meta.abstract").first()?.text()) ?? "")
             .trimmingCharacters(in: .whitespacesAndNewlines)
 
         return DoubanSearchBookItem(
