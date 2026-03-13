@@ -6,6 +6,7 @@
  */
 
 import Foundation
+import OSLog
 import WebKit
 
 @MainActor
@@ -36,6 +37,7 @@ enum WebFetchChannel: String, CaseIterable, Identifiable, Sendable {
 enum WebSessionScope: String, CaseIterable, Identifiable, Sendable {
     case sharedDefault
     case sharedDouban
+    case sharedFanqie
     case ephemeral
 
     var id: String { rawValue }
@@ -46,6 +48,8 @@ enum WebSessionScope: String, CaseIterable, Identifiable, Sendable {
             return "共享默认"
         case .sharedDouban:
             return "共享豆瓣"
+        case .sharedFanqie:
+            return "共享番茄"
         case .ephemeral:
             return "临时会话"
         }
@@ -57,6 +61,8 @@ enum WebSessionScope: String, CaseIterable, Identifiable, Sendable {
             return UUID(uuidString: "D0D1C4F5-6C11-4A5A-95F8-9D3B7295AA01") ?? UUID()
         case .sharedDouban:
             return UUID(uuidString: "D0D1C4F5-6C11-4A5A-95F8-9D3B7295AA02") ?? UUID()
+        case .sharedFanqie:
+            return UUID(uuidString: "D0D1C4F5-6C11-4A5A-95F8-9D3B7295AA04") ?? UUID()
         case .ephemeral:
             return UUID(uuidString: "D0D1C4F5-6C11-4A5A-95F8-9D3B7295AA03") ?? UUID()
         }
@@ -149,6 +155,8 @@ enum WebHTMLFetchError: LocalizedError {
 @MainActor
 final class WebHTMLFetchService: WebHTMLFetchServiceProtocol {
     static let shared = WebHTMLFetchService()
+    private static let logger = Logger(subsystem: "xmnote", category: "WebHTMLFetch")
+    private static let desktopViewport = CGRect(x: 0, y: 0, width: 1440, height: 900)
 
     private struct SessionContext {
         let dataStore: WKWebsiteDataStore
@@ -250,13 +258,14 @@ private extension WebHTMLFetchService {
     func performWebViewLoad(_ request: WebHTMLFetchRequest) async throws -> WebHTMLFetchResult {
         let startedAt = ContinuousClock.now
         let context = sessionContext(for: request.sessionScope)
-        var urlRequest = URLRequest(url: request.url)
+        let normalizedURL = normalizedWebURL(for: request.url)
+        var urlRequest = URLRequest(url: normalizedURL)
         urlRequest.httpMethod = "GET"
         urlRequest.timeoutInterval = request.timeout
         urlRequest.cachePolicy = .reloadIgnoringLocalCacheData
         applyHeaders(to: &urlRequest, additionalHeaders: request.additionalHeaders)
 
-        let cookies = await cookieBridge.cookiesForRequest(url: request.url) {
+        let cookies = await cookieBridge.cookiesForRequest(url: normalizedURL) {
             self.cookieStore(for: request.sessionScope)
         }
         if !cookies.isEmpty {
@@ -264,11 +273,17 @@ private extension WebHTMLFetchService {
                 urlRequest.setValue($0.value, forHTTPHeaderField: $0.key)
             }
         }
+        if context.webView.frame != Self.desktopViewport {
+            context.webView.frame = Self.desktopViewport
+        }
 
         let loaderResult = try await WebViewHTMLLoader.loadHTML(
             with: context.webView,
             request: urlRequest,
             waitPolicy: request.waitPolicy
+        )
+        Self.logger.debug(
+            "[web.fetch.webview] requestURL=\(request.url.absoluteString, privacy: .public) normalizedURL=\(normalizedURL.absoluteString, privacy: .public) finalURL=\(loaderResult.finalURL.absoluteString, privacy: .public) htmlLength=\(loaderResult.html.count) mode=desktop viewport=1440x900"
         )
 
         return WebHTMLFetchResult(
@@ -292,7 +307,7 @@ private extension WebHTMLFetchService {
         switch scope {
         case .ephemeral:
             dataStore = .nonPersistent()
-        case .sharedDefault, .sharedDouban:
+        case .sharedDefault, .sharedDouban, .sharedFanqie:
             if #available(iOS 17.0, *) {
                 dataStore = WKWebsiteDataStore(forIdentifier: scope.webDataStoreIdentifier)
             } else {
@@ -302,8 +317,8 @@ private extension WebHTMLFetchService {
 
         let configuration = WKWebViewConfiguration()
         configuration.websiteDataStore = dataStore
-        configuration.defaultWebpagePreferences.preferredContentMode = .mobile
-        let webView = WKWebView(frame: .zero, configuration: configuration)
+        configuration.defaultWebpagePreferences.preferredContentMode = .desktop
+        let webView = WKWebView(frame: Self.desktopViewport, configuration: configuration)
         webView.customUserAgent = XMImageRequestBuilder.browserUserAgent
         if #available(iOS 16.4, *) {
             webView.isInspectable = true
@@ -344,6 +359,29 @@ private extension WebHTMLFetchService {
         configuration.httpShouldSetCookies = false
         configuration.requestCachePolicy = .reloadIgnoringLocalCacheData
         return URLSession(configuration: configuration)
+    }
+
+    func normalizedWebURL(for originalURL: URL) -> URL {
+        guard let host = originalURL.host?.lowercased(),
+              host.hasSuffix("fanqienovel.com"),
+              var components = URLComponents(url: originalURL, resolvingAgainstBaseURL: false),
+              let queryItems = components.queryItems,
+              !queryItems.isEmpty else {
+            return originalURL
+        }
+
+        let filteredItems = queryItems.filter { item in
+            item.name.caseInsensitiveCompare("force_mobile") != .orderedSame
+        }
+        guard filteredItems.count != queryItems.count else {
+            return originalURL
+        }
+        components.queryItems = filteredItems.isEmpty ? nil : filteredItems
+        let normalizedURL = components.url ?? originalURL
+        Self.logger.debug(
+            "[web.fetch.normalize-url] originalURL=\(originalURL.absoluteString, privacy: .public) normalizedURL=\(normalizedURL.absoluteString, privacy: .public)"
+        )
+        return normalizedURL
     }
 
     func elapsedMilliseconds(since start: ContinuousClock.Instant) -> Int {
@@ -477,7 +515,7 @@ private enum WebViewHTMLLoader {
         request: URLRequest,
         waitPolicy: WebWaitPolicy
     ) async throws -> Result {
-        let proxy = NavigationProxy(waitPolicy: waitPolicy)
+        let proxy = NavigationProxy(waitPolicy: waitPolicy, timeout: request.timeoutInterval)
         webView.stopLoading()
         webView.navigationDelegate = proxy
         defer {
@@ -488,18 +526,25 @@ private enum WebViewHTMLLoader {
         return try await proxy.load(webView: webView, request: request)
     }
 
+    @MainActor
     private final class NavigationProxy: NSObject, WKNavigationDelegate {
         private let waitPolicy: WebWaitPolicy
+        private let timeoutNanoseconds: UInt64
         private var continuation: CheckedContinuation<Result, Error>?
         private var hasCompleted = false
+        private var timeoutTask: Task<Void, Never>?
+        private var hasRecoverableCancellation = false
 
-        init(waitPolicy: WebWaitPolicy) {
+        init(waitPolicy: WebWaitPolicy, timeout: TimeInterval) {
             self.waitPolicy = waitPolicy
+            let timeoutSeconds = max(timeout + 2, 3)
+            self.timeoutNanoseconds = UInt64(timeoutSeconds * 1_000_000_000)
         }
 
         func load(webView: WKWebView, request: URLRequest) async throws -> Result {
             try await withCheckedThrowingContinuation { continuation in
                 self.continuation = continuation
+                startTimeoutWatchdog(on: webView)
                 webView.load(request)
             }
         }
@@ -526,10 +571,18 @@ private enum WebViewHTMLLoader {
         }
 
         func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
+            if isRecoverableCancellation(error) {
+                hasRecoverableCancellation = true
+                return
+            }
             finish(with: Swift.Result.failure(WebHTMLFetchError.webView(description: error.localizedDescription)))
         }
 
         func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
+            if isRecoverableCancellation(error) {
+                hasRecoverableCancellation = true
+                return
+            }
             finish(with: Swift.Result.failure(WebHTMLFetchError.webView(description: error.localizedDescription)))
         }
 
@@ -576,10 +629,50 @@ private enum WebViewHTMLLoader {
             }
         }
 
+        private func startTimeoutWatchdog(on webView: WKWebView) {
+            timeoutTask?.cancel()
+            timeoutTask = Task { @MainActor [weak webView] in
+                try? await Task.sleep(nanoseconds: self.timeoutNanoseconds)
+                guard !Task.isCancelled,
+                      let webView else {
+                    return
+                }
+                await self.handleTimeout(on: webView)
+            }
+        }
+
+        private func handleTimeout(on webView: WKWebView) async {
+            guard hasCompleted == false else { return }
+            do {
+                let html = try await evaluateString(webView, script: "document.documentElement.outerHTML")
+                let pageTitle = try? await evaluateString(webView, script: "document.title")
+                if let finalURL = webView.url ?? webView.backForwardList.currentItem?.url,
+                   !html.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    finish(with: .success(Result(html: html, finalURL: finalURL, pageTitle: pageTitle)))
+                    return
+                }
+            } catch {
+                // 超时兜底阶段仅尝试读取快照；无法读取时沿用下方错误返回。
+            }
+
+            if hasRecoverableCancellation {
+                finish(with: .failure(WebHTMLFetchError.webView(description: "网页导航被取消且未收敛到可解析页面。")))
+                return
+            }
+            finish(with: .failure(WebHTMLFetchError.webView(description: "网页加载超时。")))
+        }
+
+        private func isRecoverableCancellation(_ error: Error) -> Bool {
+            let nsError = error as NSError
+            return nsError.domain == NSURLErrorDomain && nsError.code == NSURLErrorCancelled
+        }
+
         private func finish(with result: Swift.Result<WebViewHTMLLoader.Result, Error>) {
             guard hasCompleted == false, let continuation else { return }
             hasCompleted = true
             self.continuation = nil
+            timeoutTask?.cancel()
+            timeoutTask = nil
             continuation.resume(with: result)
         }
     }

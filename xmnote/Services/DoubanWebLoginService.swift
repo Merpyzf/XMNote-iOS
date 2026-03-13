@@ -58,7 +58,7 @@ final class DoubanWebLoginService {
 private extension DoubanWebLoginService {
     func dataStore(for sessionScope: WebSessionScope) -> WKWebsiteDataStore {
         switch sessionScope {
-        case .sharedDefault, .sharedDouban:
+        case .sharedDefault, .sharedDouban, .sharedFanqie:
             return WKWebsiteDataStore(forIdentifier: sessionScope.webDataStoreIdentifier)
         case .ephemeral:
             return .nonPersistent()

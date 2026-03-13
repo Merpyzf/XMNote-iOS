@@ -76,6 +76,7 @@ enum BookSearchWebScenario: Identifiable, Sendable {
     case doubanDetail(doubanId: String)
     case doubanISBN(isbn: String)
     case doubanAuthor(urlString: String)
+    case fanqieSearch(keyword: String)
     case qidianSearch(keyword: String, page: Int)
     case manual(urlString: String)
 
@@ -89,6 +90,8 @@ enum BookSearchWebScenario: Identifiable, Sendable {
             return "douban-isbn-\(isbn)"
         case .doubanAuthor(let urlString):
             return "douban-author-\(urlString)"
+        case .fanqieSearch(let keyword):
+            return "fanqie-search-\(keyword)"
         case .qidianSearch(let keyword, let page):
             return "qidian-search-\(keyword)-\(page)"
         case .manual(let urlString):
@@ -106,6 +109,8 @@ enum BookSearchWebScenario: Identifiable, Sendable {
             return "豆瓣 ISBN 跳转页"
         case .doubanAuthor:
             return "豆瓣作者页"
+        case .fanqieSearch:
+            return "番茄搜索页"
         case .qidianSearch:
             return "起点移动搜索页"
         case .manual:
@@ -123,6 +128,8 @@ enum BookSearchWebScenario: Identifiable, Sendable {
             return "验证 ISBN 跳转后最终详情页 HTML"
         case .doubanAuthor:
             return "验证作者资料页 DOM 是否可解析"
+        case .fanqieSearch:
+            return "验证番茄搜索页结果链接与风控状态"
         case .qidianSearch:
             return "对齐 Android QiDianParser 依赖的列表结构"
         case .manual:
@@ -237,7 +244,7 @@ private extension BookSearchWebScenarioService {
                 sessionScope: resolvedScope,
                 timeout: 20,
                 additionalHeaders: [:],
-                waitPolicy: .default
+                waitPolicy: waitPolicy(for: scenario)
             )
         }
         return ScenarioPlan(requests: requests)
@@ -256,6 +263,11 @@ private extension BookSearchWebScenarioService {
             return try makeURL(string: "https://book.douban.com/isbn/\(isbn)/")
         case .doubanAuthor(let urlString):
             return try makeURL(string: urlString)
+        case .fanqieSearch(let keyword):
+            guard let url = FanqieVerificationHeuristics.makeSearchURL(keyword: keyword) else {
+                throw WebHTMLFetchError.network(description: "番茄搜索地址无效")
+            }
+            return url
         case .qidianSearch(let keyword, let page):
             return try makeURL(string: "https://m.qidian.com/soushu/\(keyword.urlPathEncoded).html?pageNum=\(max(page, 1))")
         case .manual(let urlString):
@@ -280,6 +292,8 @@ private extension BookSearchWebScenarioService {
             return [.webView]
         case .doubanDetail, .doubanISBN, .doubanAuthor:
             return [.http, .webView]
+        case .fanqieSearch:
+            return [.webView]
         case .qidianSearch:
             return [.webView]
         case .manual:
@@ -291,8 +305,19 @@ private extension BookSearchWebScenarioService {
         switch scenario {
         case .doubanSearch, .doubanDetail, .doubanISBN, .doubanAuthor:
             return .sharedDouban
+        case .fanqieSearch:
+            return .sharedFanqie
         case .qidianSearch, .manual:
             return .sharedDefault
+        }
+    }
+
+    func waitPolicy(for scenario: BookSearchWebScenario) -> WebWaitPolicy {
+        switch scenario {
+        case .fanqieSearch:
+            return .afterDidFinish(delayMilliseconds: 1_500)
+        case .doubanSearch, .doubanDetail, .doubanISBN, .doubanAuthor, .qidianSearch, .manual:
+            return .default
         }
     }
 
@@ -307,7 +332,7 @@ private extension BookSearchWebScenarioService {
         guard requestChannel == .http else { return nil }
 
         switch scenario {
-        case .manual:
+        case .manual, .fanqieSearch:
             return nil
         case .doubanDetail, .doubanISBN, .doubanAuthor:
             switch probe.status {
@@ -369,6 +394,8 @@ private enum ScenarioProbeEngine {
             return probeDoubanDetail(html: html, finalURL: finalURL)
         case .doubanAuthor:
             return probeDoubanAuthor(html: html, finalURL: finalURL)
+        case .fanqieSearch:
+            return probeFanqieSearch(html: html, finalURL: finalURL)
         case .qidianSearch:
             return probeQidianSearch(html: html)
         case .manual:
@@ -383,7 +410,7 @@ private enum ScenarioProbeEngine {
         switch scenario {
         case .doubanSearch:
             return .doubanBooks(parseDoubanSearchBooks(html: html))
-        case .doubanDetail, .doubanISBN, .doubanAuthor, .qidianSearch, .manual:
+        case .doubanDetail, .doubanISBN, .doubanAuthor, .fanqieSearch, .qidianSearch, .manual:
             return nil
         }
     }
@@ -457,6 +484,66 @@ private enum ScenarioProbeEngine {
                 )
             }
         )
+    }
+
+    private nonisolated static func probeFanqieSearch(html: String, finalURL: URL) -> ScenarioProbeResult {
+        if FanqieVerificationHeuristics.requiresVerification(html: html, finalURL: finalURL) {
+            return ScenarioProbeResult(
+                status: .antiBot,
+                summary: "番茄搜索命中站点验证。",
+                selectorHits: [],
+                title: nil,
+                matchedCount: 0
+            )
+        }
+
+        do {
+            let document = try SwiftSoup.parse(html)
+            let title = try document.title()
+            let inputHits = (try? document.select("input[placeholder]").isEmpty()) == false
+            let linkCount = (try? document.select("a[href*='/page/']").count) ?? 0
+            let selectorHits = [
+                inputHits ? "input[placeholder]" : nil,
+                linkCount > 0 ? "a[href*='/page/']" : nil
+            ]
+            .compactMap { $0 }
+
+            if linkCount > 0 {
+                return ScenarioProbeResult(
+                    status: .matched,
+                    summary: "命中 \(linkCount) 条番茄详情链接。",
+                    selectorHits: selectorHits,
+                    title: title,
+                    matchedCount: linkCount
+                )
+            }
+
+            if inputHits || FanqieVerificationHeuristics.isSearchPage(url: finalURL) {
+                return ScenarioProbeResult(
+                    status: .partial,
+                    summary: "番茄搜索页已打开，但未命中详情链接。",
+                    selectorHits: selectorHits,
+                    title: title,
+                    matchedCount: 0
+                )
+            }
+
+            return ScenarioProbeResult(
+                status: .selectorMiss,
+                summary: "番茄搜索页未命中可识别结构。",
+                selectorHits: selectorHits,
+                title: title,
+                matchedCount: 0
+            )
+        } catch {
+            return ScenarioProbeResult(
+                status: .parseFailed,
+                summary: error.localizedDescription,
+                selectorHits: [],
+                title: nil,
+                matchedCount: 0
+            )
+        }
     }
 
     private nonisolated static func probeQidianSearch(html: String) -> ScenarioProbeResult {

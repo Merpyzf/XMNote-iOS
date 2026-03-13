@@ -13,6 +13,7 @@ enum BookSearchSource: Int, CaseIterable, Identifiable, Hashable, Sendable {
     case qidian = 1
     case zongHeng = 2
     case jjwxc = 3
+    case fanqie = 4
     case cp = 5
     case douban = 6
 
@@ -30,6 +31,8 @@ enum BookSearchSource: Int, CaseIterable, Identifiable, Hashable, Sendable {
             return "纵横中文网"
         case .jjwxc:
             return "晋江文学城"
+        case .fanqie:
+            return "番茄小说"
         case .cp:
             return "长佩文学"
         }
@@ -49,6 +52,8 @@ enum BookSearchSource: Int, CaseIterable, Identifiable, Hashable, Sendable {
             return "纵横中文网"
         case .jjwxc:
             return "晋江文学城"
+        case .fanqie:
+            return "番茄小说"
         case .cp:
             return "长佩文学"
         case .wenqu, .douban:
@@ -81,6 +86,7 @@ struct BookSearchResult: Identifiable, Hashable, Sendable {
 enum BookSearchError: LocalizedError {
     case emptyKeyword
     case doubanLoginRequired
+    case fanqieVerificationRequired
     case sourceUnavailable(message: String)
     case remoteService(message: String)
 
@@ -90,6 +96,8 @@ enum BookSearchError: LocalizedError {
             return "请输入书名、作者或 ISBN"
         case .doubanLoginRequired:
             return "豆瓣需要先登录后再继续搜索"
+        case .fanqieVerificationRequired:
+            return "番茄搜索触发了站点验证"
         case .sourceUnavailable(let message), .remoteService(let message):
             return message
         }

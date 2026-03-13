@@ -1,7 +1,7 @@
 /**
- * [INPUT]: 依赖 RepositoryContainer 注入搜索仓储，依赖 BookSearchViewModel 驱动远端查询状态，依赖 BookSearchResultRow 与豆瓣登录业务弹层承接搜索与回流
- * [OUTPUT]: 对外提供 BookSearchView，承载首页加号进入的完整书籍搜索体验与豆瓣风控登录恢复流
- * [POS]: Book 模块搜索页壳层，负责六书源切换、豆瓣登录回流、最近搜索与结果进入录入页
+ * [INPUT]: 依赖 RepositoryContainer 注入搜索仓储，依赖 BookSearchViewModel 驱动远端查询状态，依赖 BookSearchResultRow、BookSearchStatusCard 与登录/验证弹层承接搜索与回流
+ * [OUTPUT]: 对外提供 BookSearchView，承载首页加号进入的完整书籍搜索体验、豆瓣登录恢复与番茄风控恢复
+ * [POS]: Book 模块搜索页壳层，负责六书源切换、最近搜索、豆瓣/番茄风控回流与结果进入录入页
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
@@ -14,13 +14,19 @@ struct BookSearchView: View {
 
     @State private var viewModel: BookSearchViewModel?
     @State private var navigationSeed: BookEditorSeed?
+    @State private var auxiliaryDestination: AuxiliaryDestination?
     @State private var isPreparingSeed = false
     @State private var didRequestSearchFocus = false
     @State private var pendingRecoveryAction: PendingRecoveryAction?
     @State private var activeDoubanLoginPrompt: DoubanLoginPromptPresentation?
     @State private var activeDoubanLoginPresentation: DoubanLoginPresentation?
+    @State private var pendingFanqieVerificationAction: FanqieVerificationRecoveryAction?
+    @State private var activeFanqieVerificationPrompt: FanqieVerificationPromptPresentation?
+    @State private var activeFanqieVerificationPresentation: FanqieVerificationPresentation?
     @State private var inlineFeedback: InlineFeedback?
     @State private var didDetectDoubanLogin = false
+    @State private var didCompleteFanqieVerification = false
+    @State private var isRecentQueriesExpanded = false
 
     var body: some View {
         Group {
@@ -39,6 +45,9 @@ struct BookSearchView: View {
         }
         .navigationDestination(item: $navigationSeed) { seed in
             BookEditorView(seed: seed)
+        }
+        .navigationDestination(item: $auxiliaryDestination) { destination in
+            auxiliaryDestinationView(destination)
         }
         .alert(
             activeDoubanLoginPrompt?.action.promptTitle ?? "",
@@ -65,6 +74,31 @@ struct BookSearchView: View {
         } message: { prompt in
             Text(prompt.action.promptMessage)
         }
+        .alert(
+            activeFanqieVerificationPrompt?.action.promptTitle ?? "",
+            isPresented: Binding(
+                get: { activeFanqieVerificationPrompt != nil },
+                set: { isPresented in
+                    if !isPresented {
+                        activeFanqieVerificationPrompt = nil
+                    }
+                }
+            ),
+            presenting: activeFanqieVerificationPrompt
+        ) { prompt in
+            Button("取消", role: .cancel) {
+                activeFanqieVerificationPrompt = nil
+            }
+
+            Button("去验证") {
+                activeFanqieVerificationPrompt = nil
+                Task {
+                    await openFanqieVerification(for: prompt.action)
+                }
+            }
+        } message: { prompt in
+            Text(prompt.action.promptMessage)
+        }
         .fullScreenCover(
             item: $activeDoubanLoginPresentation,
             onDismiss: {
@@ -84,6 +118,26 @@ struct BookSearchView: View {
                 }
             )
         }
+        .fullScreenCover(
+            item: $activeFanqieVerificationPresentation,
+            onDismiss: {
+                Task {
+                    await handleFanqieVerificationDismissed()
+                }
+            }
+        ) { presentation in
+            BookFanqieVerificationScreen(
+                title: presentation.title,
+                searchURL: presentation.searchURL,
+                onClose: {
+                    activeFanqieVerificationPresentation = nil
+                },
+                onVerificationCompleted: {
+                    didCompleteFanqieVerification = true
+                    activeFanqieVerificationPresentation = nil
+                }
+            )
+        }
     }
 
     private func content(_ viewModel: BookSearchViewModel) -> some View {
@@ -91,13 +145,15 @@ struct BookSearchView: View {
             Color.surfacePage.ignoresSafeArea()
 
             ScrollView {
-                VStack(alignment: .leading, spacing: Spacing.section) {
-                    sourcePills(viewModel)
-                    recentQueries(viewModel)
-                    resultsSection(viewModel)
+                VStack(alignment: .leading, spacing: mainSectionSpacing(for: viewModel)) {
+                    controlsSection(viewModel)
+
+                    if resultsDisplayState(viewModel) != .idle {
+                        resultsSection(viewModel)
+                            .padding(.horizontal, Spacing.screenEdge)
+                    }
                 }
-                .padding(.horizontal, Spacing.screenEdge)
-                .padding(.top, Spacing.base)
+                .padding(.top, SearchPageLayout.topContentPadding)
                 .padding(.bottom, Spacing.double)
             }
             .scrollIndicators(.hidden)
@@ -126,17 +182,7 @@ struct BookSearchView: View {
         }
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
-                Button("手动创建") {
-                    navigationSeed = .manual
-                }
-                .font(
-                    SemanticTypography.font(
-                        baseSize: SemanticTypography.defaultPointSize(for: .subheadline),
-                        relativeTo: .subheadline,
-                        weight: .semibold
-                    )
-                )
-                .foregroundStyle(Color.brand)
+                auxiliaryMenu
             }
         }
         .onAppear {
@@ -148,9 +194,17 @@ struct BookSearchView: View {
         }
     }
 
+    private func controlsSection(_ viewModel: BookSearchViewModel) -> some View {
+        VStack(alignment: .leading, spacing: SearchPageLayout.controlsVerticalSpacing) {
+            sourcePills(viewModel)
+            recentQueries(viewModel)
+        }
+        .padding(.horizontal, Spacing.screenEdge)
+    }
+
     private func sourcePills(_ viewModel: BookSearchViewModel) -> some View {
         ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: Spacing.cozy) {
+            HStack(spacing: SearchPageLayout.sourceChipSpacing) {
                 ForEach(BookSearchSource.allCases) { source in
                     let isSelected = source == viewModel.selectedSource
                     Button {
@@ -167,124 +221,126 @@ struct BookSearchView: View {
                         Text(source.title)
                             .font(
                                 SemanticTypography.font(
-                                    baseSize: SemanticTypography.defaultPointSize(for: .subheadline),
-                                    relativeTo: .subheadline,
-                                    weight: .medium
+                                    baseSize: SemanticTypography.defaultPointSize(for: .footnote),
+                                    relativeTo: .footnote,
+                                    weight: isSelected ? .semibold : .medium
                                 )
                             )
-                            .foregroundStyle(isSelected ? .white : Color.textPrimary)
-                            .padding(.horizontal, Spacing.base)
-                            .padding(.vertical, Spacing.cozy)
+                            .foregroundStyle(isSelected ? .white : Color.textSecondary)
+                            .padding(.horizontal, SearchPageLayout.sourceChipHorizontalPadding)
+                            .frame(height: SearchPageLayout.sourceChipVisualHeight)
                             .background(
-                                isSelected ? AnyShapeStyle(Color.brand) : AnyShapeStyle(Color.surfaceCard),
+                                isSelected ? AnyShapeStyle(Color.brand) : AnyShapeStyle(Color.controlFillSecondary),
                                 in: Capsule()
                             )
+                            .overlay {
+                                Capsule()
+                                    .stroke(
+                                        isSelected ? Color.clear : Color.surfaceBorderSubtle,
+                                        lineWidth: CardStyle.borderWidth
+                                    )
+                            }
+                            .frame(minHeight: SearchPageLayout.chipTapHeight)
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(SearchChipButtonStyle())
                 }
             }
+            .padding(.vertical, SearchPageLayout.sourceChipVerticalPadding)
         }
+        .scrollIndicators(.hidden)
     }
 
     @ViewBuilder
     private func recentQueries(_ viewModel: BookSearchViewModel) -> some View {
         if viewModel.shouldShowRecentQueries {
-            VStack(alignment: .leading, spacing: Spacing.cozy) {
-                Text("最近搜索")
-                    .font(
-                        SemanticTypography.font(
-                            baseSize: SemanticTypography.defaultPointSize(for: .headline),
-                            relativeTo: .headline,
-                            weight: .semibold
-                        )
-                    )
-                    .foregroundStyle(Color.textPrimary)
-
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: Spacing.cozy) {
-                        ForEach(viewModel.recentQueries, id: \.self) { query in
-                            Button(query) {
-                                clearTransientState()
-                                Task {
-                                    viewModel.query = query
-                                    await performSearch(using: viewModel)
-                                }
-                            }
-                            .buttonStyle(.plain)
-                            .font(
-                                SemanticTypography.font(
-                                    baseSize: SemanticTypography.defaultPointSize(for: .subheadline),
-                                    relativeTo: .subheadline
-                                )
-                            )
-                            .foregroundStyle(Color.textPrimary)
-                            .padding(.horizontal, Spacing.base)
-                            .padding(.vertical, Spacing.cozy)
-                            .background(Color.surfaceCard, in: Capsule())
-                            .contextMenu {
-                                Button(role: .destructive) {
-                                    viewModel.removeRecentQuery(query)
-                                } label: {
-                                    Label("删除搜索词", systemImage: "trash")
-                                }
-                            }
-                        }
+            BookSearchRecentQueriesSection(
+                queries: viewModel.recentQueries,
+                isExpanded: $isRecentQueriesExpanded,
+                onTap: { query in
+                    clearTransientState()
+                    Task {
+                        viewModel.query = query
+                        await performSearch(using: viewModel)
                     }
+                },
+                onRemove: { query in
+                    viewModel.removeRecentQuery(query)
                 }
-            }
+            )
         }
     }
 
     @ViewBuilder
     private func resultsSection(_ viewModel: BookSearchViewModel) -> some View {
-        if viewModel.isSearching {
-            loadingStateCard(viewModel)
-        } else if !viewModel.results.isEmpty {
-            resultsListSection(viewModel)
-        } else if let pendingRecoveryAction {
-            doubanRecoveryCard(pendingRecoveryAction)
-        } else if let errorMessage = viewModel.errorMessage {
-            genericErrorCard(errorMessage, viewModel: viewModel)
-        } else if viewModel.shouldShowEmptyState {
-            CardContainer(cornerRadius: CornerRadius.containerMedium, showsBorder: false) {
-                VStack(alignment: .leading, spacing: Spacing.base) {
-                    resultSectionHeader(
-                        title: "没有找到匹配结果",
-                        detail: viewModel.selectedSource.title
-                    )
-                    EmptyStateView(icon: "books.vertical", message: "换个关键词或切换搜索源再试试")
-                        .frame(minHeight: 180)
+        if resultsDisplayState(viewModel) != .idle {
+            ZStack {
+                switch resultsDisplayState(viewModel) {
+                case .loading:
+                    loadingStateCard(viewModel)
+                        .transition(.opacity)
+                case .results:
+                    resultsListSection(viewModel)
+                        .transition(.opacity)
+                case .recoveryOnly:
+                    if let pendingRecoveryAction {
+                        doubanRecoveryCard(pendingRecoveryAction)
+                            .transition(.opacity)
+                    } else if let pendingFanqieVerificationAction {
+                        fanqieRecoveryCard(pendingFanqieVerificationAction)
+                            .transition(.opacity)
+                    }
+                case .error:
+                    if let errorMessage = viewModel.errorMessage {
+                        genericErrorCard(errorMessage, viewModel: viewModel)
+                            .transition(.opacity)
+                    }
+                case .empty:
+                    emptyResultsCard(viewModel)
+                        .transition(.opacity)
+                case .idle:
+                    EmptyView()
                 }
-                .padding(Spacing.contentEdge)
             }
-        } else {
-            CardContainer(cornerRadius: CornerRadius.containerMedium, showsBorder: false) {
-                EmptyStateView(icon: "magnifyingglass", message: "输入书名、作者或 ISBN 开始搜索")
-                    .frame(minHeight: 180)
-                    .padding(Spacing.contentEdge)
-            }
+            .animation(.smooth(duration: 0.22), value: resultsDisplayState(viewModel))
         }
     }
 
     private func loadingStateCard(_ viewModel: BookSearchViewModel) -> some View {
-        CardContainer(cornerRadius: CornerRadius.containerMedium, showsBorder: false) {
-            VStack(alignment: .leading, spacing: Spacing.base) {
-                resultSectionHeader(
-                    title: "正在搜索",
-                    detail: viewModel.selectedSource.title
-                )
+        CardContainer(
+            cornerRadius: CornerRadius.containerMedium,
+            showsBorder: true,
+            borderColor: .surfaceBorderSubtle
+        ) {
+            VStack(alignment: .leading, spacing: Spacing.none) {
+                HStack(spacing: Spacing.cozy) {
+                    ProgressView()
+                        .controlSize(.small)
+
+                    Text("正在从 \(viewModel.selectedSource.title) 搜索")
+                        .font(
+                            SemanticTypography.font(
+                                baseSize: SemanticTypography.defaultPointSize(for: .footnote),
+                                relativeTo: .footnote,
+                                weight: .medium
+                            )
+                        )
+                        .foregroundStyle(Color.textSecondary)
+                }
+                .padding(.horizontal, Spacing.contentEdge)
+                .padding(.top, Spacing.contentEdge)
+                .padding(.bottom, Spacing.half)
 
                 VStack(spacing: Spacing.none) {
                     ForEach(0..<3, id: \.self) { index in
-                        searchResultSkeleton
+                        BookSearchResultSkeletonRow(source: viewModel.selectedSource)
                         if index < 2 {
                             Divider()
-                                .padding(.leading, Spacing.contentEdge + 68 + Spacing.base)
+                                .padding(.leading, rowDividerLeadingInset)
                         }
                     }
                 }
+                .padding(.bottom, Spacing.cozy)
             }
-            .padding(.vertical, Spacing.cozy)
         }
     }
 
@@ -292,13 +348,19 @@ struct BookSearchView: View {
         VStack(alignment: .leading, spacing: Spacing.base) {
             if let pendingRecoveryAction {
                 doubanRecoveryCard(pendingRecoveryAction)
+            } else if let pendingFanqieVerificationAction {
+                fanqieRecoveryCard(pendingFanqieVerificationAction)
             }
 
             if let inlineFeedback {
                 inlineFeedbackCard(inlineFeedback)
             }
 
-            CardContainer(cornerRadius: CornerRadius.containerMedium, showsBorder: false) {
+            CardContainer(
+                cornerRadius: CornerRadius.containerMedium,
+                showsBorder: true,
+                borderColor: .surfaceBorderSubtle
+            ) {
                 VStack(alignment: .leading, spacing: Spacing.none) {
                     ForEach(Array(viewModel.results.enumerated()), id: \.element.id) { index, result in
                         BookSearchResultRow(
@@ -311,171 +373,88 @@ struct BookSearchView: View {
                         }
                         if index < viewModel.results.count - 1 {
                             Divider()
-                                .padding(.leading, Spacing.contentEdge + 68 + Spacing.base)
+                                .padding(.leading, rowDividerLeadingInset)
                         }
                     }
                 }
-                .padding(.bottom, Spacing.cozy)
+                .padding(.vertical, Spacing.cozy)
             }
         }
     }
 
     private func genericErrorCard(_ errorMessage: String, viewModel: BookSearchViewModel) -> some View {
-        CardContainer(cornerRadius: CornerRadius.containerMedium, showsBorder: false) {
-            VStack(alignment: .leading, spacing: Spacing.cozy) {
-                resultSectionHeader(
-                    title: "搜索失败",
-                    detail: viewModel.selectedSource.title
-                )
-                Text(errorMessage)
-                    .font(
-                        SemanticTypography.font(
-                            baseSize: SemanticTypography.defaultPointSize(for: .subheadline),
-                            relativeTo: .subheadline
-                        )
-                    )
-                    .foregroundStyle(Color.textSecondary)
-
-                Button("重新搜索") {
-                    Task {
-                        await performSearch(using: viewModel)
-                    }
-                }
-                .font(
-                    SemanticTypography.font(
-                        baseSize: SemanticTypography.defaultPointSize(for: .subheadline),
-                        relativeTo: .subheadline,
-                        weight: .semibold
-                    )
-                )
-                .foregroundStyle(Color.brand)
+        BookSearchStatusCard(
+            systemImage: "wifi.exclamationmark",
+            tint: .feedbackError,
+            title: "搜索失败",
+            message: "\(viewModel.selectedSource.title) 暂时无法完成搜索。\(errorMessage)",
+            actionTitle: "重新搜索"
+        ) {
+            Task {
+                await performSearch(using: viewModel)
             }
-            .padding(Spacing.contentEdge)
         }
     }
 
     private func inlineFeedbackCard(_ feedback: InlineFeedback) -> some View {
-        CardContainer(cornerRadius: CornerRadius.containerMedium, showsBorder: false) {
-            VStack(alignment: .leading, spacing: Spacing.cozy) {
-                Text(feedback.title)
-                    .font(
-                        SemanticTypography.font(
-                            baseSize: SemanticTypography.defaultPointSize(for: .headline),
-                            relativeTo: .headline,
-                            weight: .semibold
-                        )
-                    )
-                    .foregroundStyle(Color.textPrimary)
+        BookSearchStatusCard(
+            systemImage: "exclamationmark.circle",
+            tint: .feedbackWarning,
+            title: feedback.title,
+            message: feedback.message
+        )
+    }
 
-                Text(feedback.message)
+    private func doubanRecoveryCard(_ action: PendingRecoveryAction) -> some View {
+        BookSearchStatusCard(
+            systemImage: "person.crop.circle.badge.exclamationmark",
+            tint: .brand,
+            title: action.recoveryTitle,
+            message: action.recoveryMessage,
+            actionTitle: action.recoveryButtonTitle
+        ) {
+            Task {
+                await openDoubanLogin(for: action)
+            }
+        }
+    }
+
+    private func fanqieRecoveryCard(_ action: FanqieVerificationRecoveryAction) -> some View {
+        BookSearchStatusCard(
+            systemImage: "checkmark.shield",
+            tint: .brand,
+            title: action.recoveryTitle,
+            message: action.recoveryMessage,
+            actionTitle: action.recoveryButtonTitle
+        ) {
+            Task {
+                await openFanqieVerification(for: action)
+            }
+        }
+    }
+
+    private func emptyResultsCard(_ viewModel: BookSearchViewModel) -> some View {
+        CardContainer(
+            cornerRadius: CornerRadius.containerMedium,
+            showsBorder: true,
+            borderColor: .surfaceBorderSubtle
+        ) {
+            VStack(spacing: Spacing.base) {
+                ContentUnavailableView.search(text: viewModel.trimmedQuery)
+
+                Text("当前搜索源：\(viewModel.selectedSource.title)")
                     .font(
                         SemanticTypography.font(
-                            baseSize: SemanticTypography.defaultPointSize(for: .subheadline),
-                            relativeTo: .subheadline
+                            baseSize: SemanticTypography.defaultPointSize(for: .footnote),
+                            relativeTo: .footnote,
+                            weight: .medium
                         )
                     )
                     .foregroundStyle(Color.textSecondary)
             }
+            .frame(maxWidth: .infinity, minHeight: 220)
             .padding(Spacing.contentEdge)
         }
-    }
-
-    private func doubanRecoveryCard(_ action: PendingRecoveryAction) -> some View {
-        CardContainer(cornerRadius: CornerRadius.containerMedium, showsBorder: false) {
-            VStack(alignment: .leading, spacing: Spacing.base) {
-                HStack(alignment: .top, spacing: Spacing.base) {
-                    Image(systemName: "person.crop.circle.badge.exclamationmark")
-                        .font(.system(size: 24, weight: .medium))
-                        .foregroundStyle(Color.brand)
-
-                    VStack(alignment: .leading, spacing: Spacing.half) {
-                        Text(action.recoveryTitle)
-                            .font(
-                                SemanticTypography.font(
-                                    baseSize: SemanticTypography.defaultPointSize(for: .headline),
-                                    relativeTo: .headline,
-                                    weight: .semibold
-                                )
-                            )
-                            .foregroundStyle(Color.textPrimary)
-
-                        Text(action.recoveryMessage)
-                            .font(
-                                SemanticTypography.font(
-                                    baseSize: SemanticTypography.defaultPointSize(for: .subheadline),
-                                    relativeTo: .subheadline
-                                )
-                            )
-                            .foregroundStyle(Color.textSecondary)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                }
-
-                Button(action.recoveryButtonTitle) {
-                    Task {
-                        await openDoubanLogin(for: action)
-                    }
-                }
-                .font(
-                    SemanticTypography.font(
-                        baseSize: SemanticTypography.defaultPointSize(for: .subheadline),
-                        relativeTo: .subheadline,
-                        weight: .semibold
-                    )
-                )
-                .foregroundStyle(Color.brand)
-            }
-            .padding(Spacing.contentEdge)
-        }
-    }
-
-    private func resultSectionHeader(title: String, detail: String) -> some View {
-        HStack(alignment: .firstTextBaseline) {
-            Text(title)
-                .font(
-                    SemanticTypography.font(
-                        baseSize: SemanticTypography.defaultPointSize(for: .headline),
-                        relativeTo: .headline,
-                        weight: .semibold
-                    )
-                )
-                .foregroundStyle(Color.textPrimary)
-
-            Spacer(minLength: Spacing.base)
-
-            Text(detail)
-                .font(
-                    SemanticTypography.font(
-                        baseSize: SemanticTypography.defaultPointSize(for: .footnote),
-                        relativeTo: .footnote,
-                        weight: .medium
-                    )
-                )
-                .foregroundStyle(Color.textSecondary)
-        }
-    }
-
-    private var searchResultSkeleton: some View {
-        HStack(spacing: Spacing.base) {
-            RoundedRectangle(cornerRadius: 6, style: .continuous)
-                .fill(Color.surfaceNested)
-                .frame(width: 68, height: 96)
-
-            VStack(alignment: .leading, spacing: Spacing.cozy) {
-                RoundedRectangle(cornerRadius: 4, style: .continuous)
-                    .fill(Color.surfaceNested)
-                    .frame(height: 16)
-                RoundedRectangle(cornerRadius: 4, style: .continuous)
-                    .fill(Color.surfaceNested)
-                    .frame(width: 120, height: 14)
-                RoundedRectangle(cornerRadius: 4, style: .continuous)
-                    .fill(Color.surfaceNested)
-                    .frame(height: 12)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-        }
-        .padding(.horizontal, Spacing.contentEdge)
-        .padding(.vertical, Spacing.base)
     }
 
     private func queryBinding(for viewModel: BookSearchViewModel) -> Binding<String> {
@@ -488,10 +467,44 @@ struct BookSearchView: View {
                     viewModel.errorMessage = nil
                     viewModel.latestSearchError = nil
                     viewModel.hasSearched = false
+                    isRecentQueriesExpanded = false
                     clearTransientState()
                 }
             }
         )
+    }
+
+    private var auxiliaryMenu: some View {
+        Menu {
+            Button("扫码录入", systemImage: "barcode.viewfinder") {
+                auxiliaryDestination = .scan
+            }
+
+            Button("手动添加", systemImage: "square.and.pencil") {
+                navigationSeed = .manual
+            }
+
+            Button("设置", systemImage: "slider.horizontal.3") {
+                auxiliaryDestination = .settings
+            }
+        } label: {
+            Image(systemName: "ellipsis")
+                .font(.system(size: 18, weight: .medium))
+                .foregroundStyle(Color.textPrimary)
+                .frame(width: 24, height: 24)
+                .contentShape(Rectangle())
+        }
+        .accessibilityLabel("更多操作")
+    }
+
+    @ViewBuilder
+    private func auxiliaryDestinationView(_ destination: AuxiliaryDestination) -> some View {
+        switch destination {
+        case .scan:
+            BookScanPlaceholderView()
+        case .settings:
+            BookSearchSettingsPlaceholderView()
+        }
     }
 
     @MainActor
@@ -510,26 +523,37 @@ struct BookSearchView: View {
 
         if recoveryAttempt == 0 {
             pendingRecoveryAction = nil
+            pendingFanqieVerificationAction = nil
         }
         inlineFeedback = nil
 
         let failure = await viewModel.search()
         guard let failure else {
             pendingRecoveryAction = nil
+            pendingFanqieVerificationAction = nil
             return
         }
 
-        guard case .doubanLoginRequired? = failure.bookSearchError else {
+        switch failure.bookSearchError {
+        case .doubanLoginRequired?:
+            pendingFanqieVerificationAction = nil
+            let action = PendingRecoveryAction.search(
+                keyword: viewModel.trimmedQuery,
+                source: viewModel.selectedSource,
+                recoveryAttempt: recoveryAttempt
+            )
+            presentDoubanRecovery(for: action, autoPrompt: recoveryAttempt == 0)
+        case .fanqieVerificationRequired?:
             pendingRecoveryAction = nil
-            return
+            let action = FanqieVerificationRecoveryAction.search(
+                keyword: viewModel.trimmedQuery,
+                recoveryAttempt: recoveryAttempt
+            )
+            presentFanqieVerificationRecovery(for: action, autoPrompt: recoveryAttempt == 0)
+        default:
+            pendingRecoveryAction = nil
+            pendingFanqieVerificationAction = nil
         }
-
-        let action = PendingRecoveryAction.search(
-            keyword: viewModel.trimmedQuery,
-            source: viewModel.selectedSource,
-            recoveryAttempt: recoveryAttempt
-        )
-        presentDoubanRecovery(for: action, autoPrompt: recoveryAttempt == 0)
     }
 
     @MainActor
@@ -576,6 +600,7 @@ struct BookSearchView: View {
     @MainActor
     private func presentDoubanRecovery(for action: PendingRecoveryAction, autoPrompt: Bool) {
         pendingRecoveryAction = action
+        pendingFanqieVerificationAction = nil
         inlineFeedback = nil
 
         guard autoPrompt else { return }
@@ -605,6 +630,55 @@ struct BookSearchView: View {
     }
 
     @MainActor
+    private func presentFanqieVerificationRecovery(for action: FanqieVerificationRecoveryAction, autoPrompt: Bool) {
+        pendingFanqieVerificationAction = action
+        pendingRecoveryAction = nil
+        inlineFeedback = nil
+
+        guard autoPrompt else { return }
+        activeFanqieVerificationPrompt = FanqieVerificationPromptPresentation(action: action)
+    }
+
+    @MainActor
+    private func openFanqieVerification(for action: FanqieVerificationRecoveryAction) async {
+        pendingFanqieVerificationAction = action
+        activeFanqieVerificationPrompt = nil
+
+        guard let searchURL = FanqieWebVerificationService.shared.makeSearchURL(keyword: action.keyword) else {
+            pendingFanqieVerificationAction = nil
+            inlineFeedback = InlineFeedback(
+                title: "暂时无法打开验证页",
+                message: "番茄搜索地址无效，请稍后再试。"
+            )
+            return
+        }
+
+        activeFanqieVerificationPresentation = FanqieVerificationPresentation(
+            title: action.verificationSheetTitle,
+            searchURL: searchURL
+        )
+    }
+
+    @MainActor
+    private func handleFanqieVerificationDismissed() async {
+        guard let action = pendingFanqieVerificationAction else {
+            didCompleteFanqieVerification = false
+            return
+        }
+
+        let completed = didCompleteFanqieVerification
+        didCompleteFanqieVerification = false
+        guard completed, let viewModel else { return }
+
+        await performSearch(
+            using: viewModel,
+            keyword: action.keyword,
+            source: .fanqie,
+            recoveryAttempt: action.recoveryAttempt + 1
+        )
+    }
+
+    @MainActor
     private func resumePendingRecoveryAction() async {
         guard let action = pendingRecoveryAction, let viewModel else { return }
 
@@ -628,12 +702,59 @@ struct BookSearchView: View {
     private func clearTransientState() {
         pendingRecoveryAction = nil
         activeDoubanLoginPrompt = nil
+        pendingFanqieVerificationAction = nil
+        activeFanqieVerificationPrompt = nil
+        activeFanqieVerificationPresentation = nil
         inlineFeedback = nil
         didDetectDoubanLogin = false
+        didCompleteFanqieVerification = false
+    }
+
+    private var rowDividerLeadingInset: CGFloat {
+        Spacing.contentEdge + BookSearchResultRow.coverWidth + Spacing.base
+    }
+
+    private func mainSectionSpacing(for viewModel: BookSearchViewModel) -> CGFloat {
+        viewModel.shouldShowRecentQueries ? SearchPageLayout.controlsToResultsSpacing : Spacing.base
+    }
+
+    private func resultsDisplayState(_ viewModel: BookSearchViewModel) -> ResultsDisplayState {
+        if viewModel.isSearching {
+            return .loading
+        }
+        if !viewModel.results.isEmpty {
+            return .results
+        }
+        if pendingRecoveryAction != nil || pendingFanqieVerificationAction != nil {
+            return .recoveryOnly
+        }
+        if viewModel.errorMessage != nil {
+            return .error
+        }
+        if viewModel.shouldShowEmptyState {
+            return .empty
+        }
+        return .idle
     }
 }
 
 private extension BookSearchView {
+    enum AuxiliaryDestination: String, Identifiable {
+        case scan
+        case settings
+
+        var id: String { rawValue }
+    }
+
+    enum ResultsDisplayState: Equatable {
+        case loading
+        case results
+        case recoveryOnly
+        case error
+        case empty
+        case idle
+    }
+
     struct InlineFeedback {
         let title: String
         let message: String
@@ -647,6 +768,17 @@ private extension BookSearchView {
     struct DoubanLoginPresentation: Identifiable {
         let id = UUID()
         let title: String
+    }
+
+    struct FanqieVerificationPromptPresentation: Identifiable {
+        let id = UUID()
+        let action: FanqieVerificationRecoveryAction
+    }
+
+    struct FanqieVerificationPresentation: Identifiable {
+        let id = UUID()
+        let title: String
+        let searchURL: URL
     }
 
     enum PendingRecoveryAction: Identifiable {
@@ -722,6 +854,71 @@ private extension BookSearchView {
             }
         }
     }
+
+    enum FanqieVerificationRecoveryAction: Identifiable {
+        case search(keyword: String, recoveryAttempt: Int)
+
+        var id: String {
+            switch self {
+            case .search(let keyword, let recoveryAttempt):
+                return "fanqie-search-\(keyword)-\(recoveryAttempt)"
+            }
+        }
+
+        var keyword: String {
+            switch self {
+            case .search(let keyword, _):
+                return keyword
+            }
+        }
+
+        var recoveryAttempt: Int {
+            switch self {
+            case .search(_, let recoveryAttempt):
+                return recoveryAttempt
+            }
+        }
+
+        var promptTitle: String {
+            "番茄需要完成验证后继续搜索"
+        }
+
+        var promptMessage: String {
+            "番茄搜索触发了站点验证。完成验证后会自动继续搜索“\(keyword)”。"
+        }
+
+        var recoveryTitle: String {
+            "完成验证后继续搜索"
+        }
+
+        var recoveryMessage: String {
+            if recoveryAttempt == 0 {
+                return "番茄搜索触发了站点验证。完成验证后会自动继续搜索“\(keyword)”。"
+            }
+            return "番茄仍然要求完成站点验证。你可以重新打开验证页，再继续搜索“\(keyword)”。"
+        }
+
+        var recoveryButtonTitle: String {
+            "打开验证页"
+        }
+
+        var verificationSheetTitle: String {
+            "验证完成后将自动继续搜索“\(keyword)”"
+        }
+    }
+}
+
+/// 搜索页局部布局常量，统一筛选胶囊的尺寸节奏。
+private enum SearchPageLayout {
+    static let topContentPadding: CGFloat = Spacing.compact
+    static let controlsVerticalSpacing: CGFloat = Spacing.base
+    static let controlsToResultsSpacing: CGFloat = 18
+    static let chipTapHeight: CGFloat = 44
+    static let chipVisualHeight: CGFloat = 32
+    static let sourceChipVisualHeight: CGFloat = 34
+    static let sourceChipHorizontalPadding: CGFloat = 14
+    static let sourceChipSpacing: CGFloat = Spacing.cozy
+    static let sourceChipVerticalPadding: CGFloat = Spacing.half
 }
 
 #Preview {

@@ -43,7 +43,7 @@ final class BookSearchViewModel {
     }
 
     var shouldShowRecentQueries: Bool {
-        !hasSearched && results.isEmpty && !recentQueries.isEmpty
+        !recentQueries.isEmpty
     }
 
     var shouldShowEmptyState: Bool {
@@ -55,7 +55,7 @@ final class BookSearchViewModel {
         recentQueries = repository.fetchRecentQueries()
     }
 
-    /// 执行当前来源搜索，并在成功后刷新最近搜索列表。
+    /// 执行当前来源搜索，并在发起有效搜索时立即刷新最近搜索列表。
     @MainActor
     func search() async -> SearchFailure? {
         let keyword = trimmedQuery
@@ -74,14 +74,15 @@ final class BookSearchViewModel {
             return failure
         }
 
+        repository.saveRecentQuery(keyword)
+        reloadRecentQueries()
+
         isSearching = true
         defer { isSearching = false }
 
         do {
             let items = try await repository.search(keyword: keyword, source: selectedSource)
             results = items
-            repository.saveRecentQuery(keyword)
-            reloadRecentQueries()
             return nil
         } catch {
             let bookSearchError = error as? BookSearchError

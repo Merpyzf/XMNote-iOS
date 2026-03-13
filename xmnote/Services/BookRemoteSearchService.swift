@@ -1,27 +1,32 @@
 /**
- * [INPUT]: 依赖 Foundation URLSession 执行 JSON 请求，依赖 BookSearchWebScenarioService 与 WebHTMLFetchService 处理网页抓取，依赖 SwiftSoup 解析站点 HTML
- * [OUTPUT]: 对外提供 BookRemoteSearchService，统一封装六书源搜索与豆瓣详情补抓
+ * [INPUT]: 依赖 Foundation URLSession 执行 JSON 请求，依赖 BookSearchWebScenarioService、FanqieDOMSearchService 与 WebHTMLFetchService 处理网页抓取，依赖 SwiftSoup 解析站点 HTML
+ * [OUTPUT]: 对外提供 BookRemoteSearchService，统一封装六书源搜索、番茄 DOM 抓取与豆瓣详情补抓
  * [POS]: Services 模块的书籍远端搜索业务层，负责把各站点协议差异翻译为统一搜索结果与录入预填种子
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
 import Foundation
+import OSLog
 import SwiftSoup
 
 /// 统一远端书籍搜索服务，对外屏蔽 JSON API、网页抓取和站点风控差异。
 final class BookRemoteSearchService {
+    private static let logger = Logger(subsystem: "xmnote", category: "BookRemoteSearch")
     private let urlSession: URLSession
     private let webScenarioService: BookSearchWebScenarioService
     private let fetchService: WebHTMLFetchServiceProtocol
+    private let fanqieDOMSearchService: FanqieDOMSearchService
 
     init(
         urlSession: URLSession = .shared,
         webScenarioService: BookSearchWebScenarioService = .init(),
-        fetchService: WebHTMLFetchServiceProtocol? = nil
+        fetchService: WebHTMLFetchServiceProtocol? = nil,
+        fanqieDOMSearchService: FanqieDOMSearchService = .init()
     ) {
         self.urlSession = urlSession
         self.webScenarioService = webScenarioService
         self.fetchService = fetchService ?? WebHTMLFetchService.shared
+        self.fanqieDOMSearchService = fanqieDOMSearchService
     }
 
     /// 搜索指定来源书籍；ISBN 输入遵循 Android 端“优先 Wenqu / 豆瓣”兜底逻辑。
@@ -56,6 +61,8 @@ final class BookRemoteSearchService {
             return try await searchZongHeng(keyword: trimmed)
         case .jjwxc:
             return try await searchJJWXC(keyword: trimmed)
+        case .fanqie:
+            return try await searchFanqie(keyword: trimmed)
         case .cp:
             return try await searchCP(keyword: trimmed)
         }
@@ -74,6 +81,15 @@ final class BookRemoteSearchService {
         }
         throw BookSearchError.remoteService(message: "当前结果缺少可补全的详情标识")
     }
+
+    /// 使用已提取的番茄详情链接直接解析书籍结果，供测试页复用正式详情解析链路。
+    func hydrateFanqieResults(from detailPageURLs: [URL]) async throws -> [BookSearchResult] {
+        guard !detailPageURLs.isEmpty else {
+            return []
+        }
+        return try await fetchFanqieDetailResults(detailPageURLs)
+    }
+
 }
 
 private extension BookRemoteSearchService {
@@ -81,6 +97,12 @@ private extension BookRemoteSearchService {
         case query(String)
         case isbn(String)
         case doubanId(Int)
+    }
+
+    enum FanqieDetailBatchItem {
+        case success(BookSearchResult)
+        case verificationRequired(URL)
+        case failed(URL)
     }
 
     func searchWenqu(by query: WenquQuery) async throws -> [BookSearchResult] {
@@ -194,12 +216,13 @@ private extension BookRemoteSearchService {
         return (response.data.datas.list ?? []).map { item in
             let title = item.name.htmlStripped
             let summary = (item.description ?? "").htmlStripped
+            let author = (item.authorName ?? "").htmlStripped.trimmingCharacters(in: .whitespacesAndNewlines)
             let cover = item.coverUrl.flatMap(Self.absoluteZongHengCoverURL) ?? ""
             let seed = BookEditorSeed(
                 searchSource: .zongHeng,
                 title: title,
                 rawTitle: title,
-                author: item.authorName ?? "",
+                author: author,
                 authorIntro: "",
                 translator: "",
                 press: "",
@@ -219,7 +242,7 @@ private extension BookRemoteSearchService {
                 id: "zongheng-\(item.bookId)",
                 source: .zongHeng,
                 title: seed.title,
-                author: seed.author,
+                author: author,
                 coverURL: seed.coverURL,
                 subtitle: item.keyword?.htmlStripped ?? "",
                 summary: seed.summary,
@@ -246,16 +269,24 @@ private extension BookRemoteSearchService {
         let request = WebHTMLFetchRequest(url: url, channel: .http, sessionScope: .sharedDefault)
         let fetchResult = try await fetchService.fetchHTML(request)
         let roughResults = try parseJJWXCSearchResults(html: fetchResult.html)
+        let logger = Self.logger
 
-        return try await withThrowingTaskGroup(of: BookSearchResult.self) { group in
+        return await withTaskGroup(of: BookSearchResult.self) { group in
             for result in roughResults {
                 group.addTask {
-                    try await self.enrichJJWXCCover(for: result)
+                    do {
+                        return try await self.enrichJJWXCCover(for: result)
+                    } catch {
+                        logger.error(
+                            "[jjwxc.cover.enrich.failed] detailURL=\(result.detailPageURL ?? "nil", privacy: .public) error=\(error.localizedDescription, privacy: .public)"
+                        )
+                        return result
+                    }
                 }
             }
 
             var finalResults: [BookSearchResult] = []
-            for try await item in group {
+            for await item in group {
                 finalResults.append(item)
             }
             return finalResults
@@ -309,6 +340,23 @@ private extension BookRemoteSearchService {
         }
     }
 
+    func searchFanqie(keyword: String) async throws -> [BookSearchResult] {
+        Self.logger.notice("[fanqie.detail-search.start] keyword=\(keyword, privacy: .public)")
+        let detailPageURLs = try await fanqieDOMSearchService.fetchDetailPageURLs(keyword: keyword)
+        guard !detailPageURLs.isEmpty else {
+            Self.logger.notice("[fanqie.detail-search.empty] keyword=\(keyword, privacy: .public)")
+            return []
+        }
+
+        let finalResults = try await fetchFanqieDetailResults(detailPageURLs)
+        guard !finalResults.isEmpty else {
+            Self.logger.error("[fanqie.detail-search.all-failed] keyword=\(keyword, privacy: .public) links=\(detailPageURLs.count)")
+            throw BookSearchError.sourceUnavailable(message: "番茄详情暂时不可用，请稍后重试")
+        }
+        Self.logger.notice("[fanqie.detail-search.success] keyword=\(keyword, privacy: .public) results=\(finalResults.count)")
+        return finalResults
+    }
+
     func fetchDoubanSeed(doubanId: Int) async throws -> BookEditorSeed {
         let result = try await webScenarioService.execute(.doubanDetail(doubanId: String(doubanId)))
         if result.probe.status == .antiBot {
@@ -327,12 +375,12 @@ private extension BookRemoteSearchService {
 
     func enrichJJWXCCover(for result: BookSearchResult) async throws -> BookSearchResult {
         guard let detailPageURL = result.detailPageURL,
-              let url = URL(string: detailPageURL) else {
+              let url = normalizeJJWXCURL(detailPageURL) else {
             return result
         }
         let request = WebHTMLFetchRequest(url: url, channel: .http, sessionScope: .sharedDefault)
         let fetchResult = try await fetchService.fetchHTML(request)
-        guard let coverURL = try parseJJWXCCover(html: fetchResult.html) else {
+        guard let coverURL = try parseJJWXCCover(html: fetchResult.html, detailPageURL: fetchResult.finalURL) else {
             return result
         }
         let seed = result.seed?.replacingCoverURL(coverURL)
@@ -352,7 +400,7 @@ private extension BookRemoteSearchService {
             totalPages: result.totalPages,
             totalWordCount: result.totalWordCount,
             seed: seed,
-            detailPageURL: result.detailPageURL
+            detailPageURL: url.absoluteString
         )
     }
 
@@ -453,8 +501,12 @@ private extension BookRemoteSearchService {
 
         return try divs.compactMap { div in
             let title = try div.getElementsByClass("title").select("a").first()?.text().trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-            let href = try div.getElementsByClass("title").select("a").first()?.attr("href").trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-            guard !title.isEmpty, !href.isEmpty else { return nil }
+            let rawHref = try div.getElementsByClass("title").select("a").first()?.attr("href").trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            guard !title.isEmpty, !rawHref.isEmpty else { return nil }
+            guard let detailURL = normalizeJJWXCURL(rawHref) else {
+                Self.logger.error("[jjwxc.parse.skip-invalid-url] rawHref=\(rawHref, privacy: .public)")
+                return nil
+            }
             let author = try div.getElementsByClass("info").select("a").first()?.text().trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
             let intro = try div.getElementsByClass("intro").first()?.text().trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
             let seed = BookEditorSeed(
@@ -478,7 +530,7 @@ private extension BookRemoteSearchService {
                 preferredProgressUnit: .position
             )
             return BookSearchResult(
-                id: "jjwxc-\(href)",
+                id: "jjwxc-\(detailURL.absoluteString)",
                 source: .jjwxc,
                 title: title,
                 author: author,
@@ -493,16 +545,17 @@ private extension BookRemoteSearchService {
                 totalPages: nil,
                 totalWordCount: nil,
                 seed: seed,
-                detailPageURL: href
+                detailPageURL: detailURL.absoluteString
             )
         }
     }
 
-    func parseJJWXCCover(html: String) throws -> String? {
+    func parseJJWXCCover(html: String, detailPageURL: URL) throws -> String? {
         let document = try SwiftSoup.parse(html)
-        let cover = try document.getElementsByClass("noveldefaultimage").first()?.attr("src")
-        let trimmed = cover?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        return trimmed.isEmpty ? nil : trimmed
+        let rawCover = try document.getElementsByClass("noveldefaultimage").first()?.attr("src")
+        let trimmed = rawCover?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard !trimmed.isEmpty else { return nil }
+        return normalizeJJWXCURL(trimmed, fallbackHost: detailPageURL.host ?? "www.jjwxc.net")?.absoluteString
     }
 
     func parseDoubanDetail(html: String) throws -> BookEditorSeed {
@@ -578,6 +631,216 @@ private extension BookRemoteSearchService {
             .max(by: { $0.count < $1.count }) ?? ""
     }
 
+    func parseFanqieDetailPageURLs(html: String) throws -> [URL] {
+        let document = try SwiftSoup.parse(html)
+        let links = try document.select("a[href*='/page/']").array()
+
+        var results: [URL] = []
+        var seenBookIDs = Set<String>()
+
+        for link in links {
+            let rawHref = try link.attr("href").trimmingCharacters(in: .whitespacesAndNewlines)
+            guard let detailURL = absoluteFanqieDetailURL(from: rawHref),
+                  let bookID = detailURL.lastPathComponent.nilIfEmpty,
+                  seenBookIDs.insert(bookID).inserted else {
+                continue
+            }
+            results.append(detailURL)
+            if results.count == 10 {
+                break
+            }
+        }
+
+        return results
+    }
+
+    func fetchFanqieDetailResults(_ detailPageURLs: [URL]) async throws -> [BookSearchResult] {
+        var results: [BookSearchResult] = []
+        let logger = Self.logger
+        var verificationHitCount = 0
+        var failedCount = 0
+        Self.logger.notice("[fanqie.detail.batch-start] links=\(detailPageURLs.count)")
+
+        for chunk in detailPageURLs.chunked(into: 2) {
+            let chunkItems = await withTaskGroup(of: FanqieDetailBatchItem.self) { group in
+                for detailPageURL in chunk {
+                    group.addTask {
+                        do {
+                            let result = try await self.fetchFanqieDetailResult(detailPageURL: detailPageURL)
+                            return .success(result)
+                        } catch let searchError as BookSearchError {
+                            if case .fanqieVerificationRequired = searchError {
+                                return .verificationRequired(detailPageURL)
+                            }
+                            logger.error(
+                                "[fanqie.detail.fetch.failed] url=\(detailPageURL.absoluteString, privacy: .public) error=\(searchError.localizedDescription, privacy: .public)"
+                            )
+                            return .failed(detailPageURL)
+                        } catch {
+                            logger.error("[fanqie.detail.fetch.failed] url=\(detailPageURL.absoluteString, privacy: .public) error=\(error.localizedDescription, privacy: .public)")
+                            return .failed(detailPageURL)
+                        }
+                    }
+                }
+
+                var items: [FanqieDetailBatchItem] = []
+                for await item in group {
+                    items.append(item)
+                }
+                return items
+            }
+
+            var chunkSuccess = 0
+            var chunkVerification = 0
+            var chunkFailed = 0
+            for item in chunkItems {
+                switch item {
+                case .success(let result):
+                    chunkSuccess += 1
+                    results.append(result)
+                case .verificationRequired(let url):
+                    chunkVerification += 1
+                    Self.logger.notice("[fanqie.detail.fetch.verification-required] url=\(url.absoluteString, privacy: .public)")
+                case .failed:
+                    chunkFailed += 1
+                }
+            }
+            verificationHitCount += chunkVerification
+            failedCount += chunkFailed
+            Self.logger.debug(
+                "[fanqie.detail.batch-finished] chunk=\(chunk.count) success=\(chunkSuccess) verification=\(chunkVerification) failed=\(chunkFailed)"
+            )
+        }
+
+        Self.logger.notice(
+            "[fanqie.detail.batch-summary] links=\(detailPageURLs.count) success=\(results.count) verification=\(verificationHitCount) failed=\(failedCount)"
+        )
+        if results.isEmpty, verificationHitCount > 0 {
+            throw BookSearchError.fanqieVerificationRequired
+        }
+        return results
+    }
+
+    func fetchFanqieDetailResult(detailPageURL: URL) async throws -> BookSearchResult {
+        Self.logger.debug("[fanqie.detail.fetch] url=\(detailPageURL.absoluteString, privacy: .public)")
+        let request = WebHTMLFetchRequest(
+            url: detailPageURL,
+            channel: .webView,
+            sessionScope: .sharedFanqie
+        )
+        let fetchResult = try await fetchService.fetchHTML(request)
+        if FanqieVerificationHeuristics.requiresVerification(html: fetchResult.html, finalURL: fetchResult.finalURL) {
+            Self.logger.notice(
+                "[fanqie.detail.fetch.verification-required] requestURL=\(detailPageURL.absoluteString, privacy: .public) finalURL=\(fetchResult.finalURL.absoluteString, privacy: .public)"
+            )
+            throw BookSearchError.fanqieVerificationRequired
+        }
+        let result = try parseFanqieDetail(html: fetchResult.html, detailPageURL: fetchResult.finalURL)
+        Self.logger.debug(
+            "[fanqie.detail.fetch.success] requestURL=\(detailPageURL.absoluteString, privacy: .public) finalURL=\(fetchResult.finalURL.absoluteString, privacy: .public) title=\(result.title, privacy: .public)"
+        )
+        return result
+    }
+
+    func parseFanqieDetail(html: String, detailPageURL: URL) throws -> BookSearchResult {
+        let document = try SwiftSoup.parse(html)
+        let initialStatePage = fanqieInitialStatePage(from: html)
+        let domTitle = try document.select(".info-name h1").first()?.text().trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let initialStateTitle = initialStatePage.flatMap { stringValue(in: $0, key: "bookName") }
+        let ogTitle = normalizeFanqieTitleCandidate(
+            try document.select("meta[property='og:title']").first()?.attr("content") ?? ""
+        )
+        let htmlTitle = normalizeFanqieTitleCandidate(
+            try document.select("title").first()?.text() ?? ""
+        )
+        let (title, titleSource) = resolveFanqieTitle(
+            domTitle: domTitle,
+            initialStateTitle: initialStateTitle,
+            ogTitle: ogTitle,
+            htmlTitle: htmlTitle
+        )
+        guard !title.isEmpty else {
+            throw BookSearchError.remoteService(message: "番茄详情页缺少书名")
+        }
+        Self.logger.debug(
+            "[fanqie.detail.parse] finalURL=\(detailPageURL.absoluteString, privacy: .public) titleSource=\(titleSource, privacy: .public) title=\(title, privacy: .public)"
+        )
+
+        let author = firstNonEmpty([
+            try document.select(".author-name-text").first()?.text().trimmingCharacters(in: .whitespacesAndNewlines),
+            initialStatePage.flatMap { stringValue(in: $0, key: "authorName") },
+            initialStatePage.flatMap { stringValue(in: $0, key: "author") }
+        ])
+        .map(normalizeFanqieAuthor)
+        ?? ""
+        let authorIntro = try document.select(".author-desc").first()?.text().trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let summary = firstNonEmpty([
+            try normalizeFanqieMultilineText(document.select(".page-abstract-content").text()),
+            initialStatePage.flatMap { stringValue(in: $0, key: "abstract") }.map(normalizeFanqieMultilineText)
+        ]) ?? ""
+        let domCoverURL = try normalizeFanqieCoverURL(document.select(".book-cover-img").first()?.attr("src") ?? "")
+        let stateCoverURL = initialStatePage.flatMap { page -> String? in
+            stringValue(in: page, key: "thumbUrl") ?? stringValue(in: page, key: "thumbUri")
+        }
+        .map(normalizeFanqieCoverURL)
+        let coverURL = firstNonEmpty([domCoverURL, stateCoverURL]) ?? ""
+        let status = try document.select(".info-label-yellow").first()?.text().trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let categories = try document.select(".info-label-grey").array().map {
+            try $0.text().trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        .filter { !$0.isEmpty }
+        let totalWordCount = try parseFanqieWordCount(
+            detail: document.select(".info-count-word .detail").text(),
+            unit: document.select(".info-count-word .text").text()
+        )
+        let subtitleParts = [
+            status.nilIfEmpty,
+            categories.isEmpty ? nil : categories.joined(separator: " / "),
+            fanqieWordCountSummary(totalWordCount)
+        ]
+        .compactMap { $0 }
+
+        let seed = BookEditorSeed(
+            searchSource: .fanqie,
+            title: title,
+            rawTitle: title,
+            author: author,
+            authorIntro: authorIntro,
+            translator: "",
+            press: "",
+            isbn: "",
+            pubDate: "",
+            summary: summary,
+            catalog: "",
+            coverURL: coverURL,
+            doubanId: nil,
+            totalPages: nil,
+            totalWordCount: totalWordCount,
+            preferredSourceName: BookSearchSource.fanqie.preferredDraftSourceName,
+            preferredBookType: .ebook,
+            preferredProgressUnit: .position
+        )
+
+        return BookSearchResult(
+            id: "fanqie-\(detailPageURL.lastPathComponent)",
+            source: .fanqie,
+            title: title,
+            author: author,
+            coverURL: coverURL,
+            subtitle: subtitleParts.joined(separator: " · "),
+            summary: summary,
+            translator: "",
+            press: "",
+            isbn: "",
+            pubDate: "",
+            doubanId: nil,
+            totalPages: nil,
+            totalWordCount: totalWordCount,
+            seed: seed,
+            detailPageURL: detailPageURL.absoluteString
+        )
+    }
+
     func dynamicClass(prefix: String, html: String) -> String {
         guard let range = html.range(of: prefix) else {
             return prefix
@@ -604,6 +867,227 @@ private extension BookRemoteSearchService {
             return path
         }
         return "https://static.zongheng.com/upload\(path)"
+    }
+
+    func absoluteFanqieDetailURL(from rawHref: String) -> URL? {
+        guard !rawHref.isEmpty else { return nil }
+        if let url = URL(string: rawHref), url.host?.contains("fanqienovel.com") == true {
+            return url
+        }
+        guard rawHref.hasPrefix("/page/") else { return nil }
+        return URL(string: "https://fanqienovel.com\(rawHref)")
+    }
+
+    func normalizeJJWXCURL(_ rawValue: String, fallbackHost: String = "www.jjwxc.net") -> URL? {
+        let trimmed = rawValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+
+        let lowered = trimmed.lowercased()
+        guard !lowered.hasPrefix("javascript:") else { return nil }
+
+        if trimmed.hasPrefix("//") {
+            return secureJJWXCURL(from: URL(string: "https:\(trimmed)"))
+        }
+
+        if trimmed.hasPrefix("/") {
+            return secureJJWXCURL(from: URL(string: "https://\(fallbackHost)\(trimmed)"))
+        }
+
+        if let absoluteURL = URL(string: trimmed), absoluteURL.host != nil {
+            return secureJJWXCURL(from: absoluteURL)
+        }
+
+        guard let baseURL = URL(string: "https://\(fallbackHost)"),
+              let relativeURL = URL(string: trimmed, relativeTo: baseURL) else {
+            return nil
+        }
+        return secureJJWXCURL(from: relativeURL.absoluteURL)
+    }
+
+    func secureJJWXCURL(from url: URL?) -> URL? {
+        guard let url else { return nil }
+        guard let host = url.host?.lowercased(),
+              host == "jjwxc.net" || host.hasSuffix(".jjwxc.net") else {
+            return nil
+        }
+        guard var components = URLComponents(url: url, resolvingAgainstBaseURL: false) else {
+            return nil
+        }
+        if components.scheme == nil || components.scheme?.lowercased() == "http" {
+            components.scheme = "https"
+        }
+        guard components.scheme?.lowercased() == "https" else {
+            return nil
+        }
+        return components.url
+    }
+
+    func normalizeFanqieCoverURL(_ rawValue: String) -> String {
+        let trimmed = rawValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return "" }
+        if trimmed.hasPrefix("//") {
+            return "https:\(trimmed)"
+        }
+        if trimmed.hasPrefix("/") {
+            return "https://fanqienovel.com\(trimmed)"
+        }
+        return trimmed
+    }
+
+    func normalizeFanqieMultilineText(_ rawValue: String) -> String {
+        rawValue
+            .components(separatedBy: .newlines)
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+            .joined(separator: "\n")
+    }
+
+    func normalizeFanqieAuthor(_ rawValue: String) -> String {
+        rawValue
+            .replacingOccurrences(of: "/ 著", with: "")
+            .replacingOccurrences(of: "/著", with: "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    func normalizeFanqieTitleCandidate(_ rawValue: String) -> String {
+        var value = rawValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !value.isEmpty else { return "" }
+
+        if let range = value.range(of: "完整版在线免费阅读") {
+            value = String(value[..<range.lowerBound])
+        }
+        if let range = value.range(of: "小说_番茄小说官网") {
+            value = String(value[..<range.lowerBound])
+        }
+        if let range = value.range(of: "_番茄小说官网") {
+            value = String(value[..<range.lowerBound])
+        }
+        if let first = value.split(separator: "_").first {
+            value = String(first)
+        }
+        return value.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    func resolveFanqieTitle(
+        domTitle: String,
+        initialStateTitle: String?,
+        ogTitle: String,
+        htmlTitle: String
+    ) -> (String, String) {
+        let candidates: [(String, String)] = [
+            ("dom(.info-name h1)", domTitle.trimmingCharacters(in: .whitespacesAndNewlines)),
+            ("state(page.bookName)", initialStateTitle?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""),
+            ("meta(og:title)", ogTitle),
+            ("html(<title>)", htmlTitle)
+        ]
+        for (source, value) in candidates where !value.isEmpty {
+            return (value, source)
+        }
+        return ("", "none")
+    }
+
+    func firstNonEmpty(_ values: [String?]) -> String? {
+        for value in values {
+            let trimmed = (value ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            if !trimmed.isEmpty {
+                return trimmed
+            }
+        }
+        return nil
+    }
+
+    func stringValue(in dictionary: [String: Any], key: String) -> String? {
+        guard let rawValue = dictionary[key] as? String else {
+            return nil
+        }
+        let trimmed = rawValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
+    }
+
+    func fanqieInitialStatePage(from html: String) -> [String: Any]? {
+        guard let jsonString = extractFanqieInitialStateJSON(from: html),
+              let jsonData = jsonString.data(using: .utf8),
+              let object = try? JSONSerialization.jsonObject(with: jsonData, options: []),
+              let root = object as? [String: Any],
+              let page = root["page"] as? [String: Any] else {
+            return nil
+        }
+        return page
+    }
+
+    func extractFanqieInitialStateJSON(from html: String) -> String? {
+        guard let markerRange = html.range(of: "window.__INITIAL_STATE__") else {
+            return nil
+        }
+        guard let jsonStart = html[markerRange.upperBound...].firstIndex(of: "{") else {
+            return nil
+        }
+
+        var depth = 0
+        var inString = false
+        var isEscaped = false
+        for index in html[jsonStart...].indices {
+            let character = html[index]
+            if inString {
+                if isEscaped {
+                    isEscaped = false
+                    continue
+                }
+                if character == "\\" {
+                    isEscaped = true
+                    continue
+                }
+                if character == "\"" {
+                    inString = false
+                }
+                continue
+            }
+
+            if character == "\"" {
+                inString = true
+                continue
+            }
+            if character == "{" {
+                depth += 1
+                continue
+            }
+            if character == "}" {
+                depth -= 1
+                if depth == 0 {
+                    return String(html[jsonStart...index])
+                }
+            }
+        }
+        return nil
+    }
+
+    func parseFanqieWordCount(detail: String, unit: String) -> Int? {
+        let normalizedDetail = detail.trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalizedUnit = unit.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let value = Double(normalizedDetail) else {
+            return nil
+        }
+
+        let multiplier: Double
+        if normalizedUnit.contains("亿") {
+            multiplier = 100_000_000
+        } else if normalizedUnit.contains("万") {
+            multiplier = 10_000
+        } else {
+            multiplier = 1
+        }
+        return Int((value * multiplier).rounded())
+    }
+
+    func fanqieWordCountSummary(_ totalWordCount: Int?) -> String? {
+        guard let totalWordCount else { return nil }
+        if totalWordCount >= 100_000_000 {
+            return String(format: "%.1f 亿字", Double(totalWordCount) / 100_000_000)
+        }
+        if totalWordCount >= 10_000 {
+            return String(format: "%.1f 万字", Double(totalWordCount) / 10_000)
+        }
+        return "\(totalWordCount) 字"
     }
 
     func normalizeDateString(_ rawValue: String?) -> String {
@@ -769,12 +1253,30 @@ private extension String {
         return String(self[captureRange])
     }
 
+    var nilIfEmpty: String? {
+        isEmpty ? nil : self
+    }
+
     static func stringEncoding(forIANAName name: String) -> String.Encoding? {
         let cfEncoding = CFStringConvertIANACharSetNameToEncoding(name as CFString)
         guard cfEncoding != kCFStringEncodingInvalidId else {
             return nil
         }
         return String.Encoding(rawValue: CFStringConvertEncodingToNSStringEncoding(cfEncoding))
+    }
+}
+
+private extension Array {
+    func chunked(into size: Int) -> [ArraySlice<Element>] {
+        guard size > 0 else { return [self[...]] }
+        var result: [ArraySlice<Element>] = []
+        var start = startIndex
+        while start < endIndex {
+            let end = index(start, offsetBy: size, limitedBy: endIndex) ?? endIndex
+            result.append(self[start..<end])
+            start = end
+        }
+        return result
     }
 }
 

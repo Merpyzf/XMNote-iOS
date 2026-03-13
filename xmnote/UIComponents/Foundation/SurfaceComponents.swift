@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 xmnote/Utilities/DesignTokens.swift 的颜色、间距、圆角设计令牌
- * [OUTPUT]: 对外提供 CardContainer（支持圆角/描边可配置）、EmptyStateView、HomeTopHeaderGradient 三个通用表层组件
+ * [OUTPUT]: 对外提供 CardContainer（支持圆角/描边颜色可配置）、EmptyStateView、HomeTopHeaderGradient 三个通用表层组件
  * [POS]: UIComponents/Foundation 的基础表层组件集合，被各业务页面直接复用
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -15,16 +15,19 @@ import UIKit
 struct CardContainer<Content: View>: View {
     let cornerRadius: CGFloat
     let showsBorder: Bool
+    let borderColor: Color
     let content: Content
 
     /// 注入圆角、边框与内容闭包，组装基础容器外观。
     init(
         cornerRadius: CGFloat = CornerRadius.blockLarge,
         showsBorder: Bool = true,
+        borderColor: Color = .surfaceBorderStrong,
         @ViewBuilder content: () -> Content
     ) {
         self.cornerRadius = cornerRadius
         self.showsBorder = showsBorder
+        self.borderColor = borderColor
         self.content = content()
     }
 
@@ -36,7 +39,7 @@ struct CardContainer<Content: View>: View {
             .overlay {
                 if showsBorder {
                     RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                        .stroke(Color.surfaceBorderStrong, lineWidth: CardStyle.borderWidth)
+                        .stroke(borderColor, lineWidth: CardStyle.borderWidth)
                 }
             }
     }
