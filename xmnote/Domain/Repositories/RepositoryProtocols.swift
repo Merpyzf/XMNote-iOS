@@ -43,6 +43,18 @@ protocol BookEditorRepositoryProtocol {
     func saveBook(_ draft: BookEditorDraft) async throws -> Int64
 }
 
+/// OCR 调试仓储契约，统一封装百度 OCR 偏好持久化、鉴权缓存与识别请求。
+protocol OCRRepositoryProtocol {
+    /// 读取 OCR 调试页当前偏好（AK/SK、语言、精度与文案优化开关）。
+    func fetchPreferences() -> OCRPreferences
+    /// 覆盖写入 OCR 调试页偏好。
+    func savePreferences(_ preferences: OCRPreferences)
+    /// 清除 SDK 内部鉴权缓存，便于测试凭据切换与异常恢复链路。
+    func clearAuthorizationCache()
+    /// 对裁切后的图片执行百度 OCR，并返回已做 Android 对齐文本后处理的结果。
+    func recognizeText(request: OCRRecognitionRequest) async throws -> OCRRecognitionResult
+}
+
 /// 笔记模块数据访问契约，覆盖标签分组订阅与笔记详情读写。
 protocol NoteRepositoryProtocol {
     /// 持续监听标签分组及其笔记摘要，供笔记页分区渲染。

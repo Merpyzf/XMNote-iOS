@@ -2,7 +2,7 @@
 import SwiftUI
 
 /**
- * [INPUT]: 依赖 RichTextTestView、HeatmapTestView、ImageLoadingTestView、WebHTMLFetchTestView、CameraTextCaptureTestView、JXPhotoBrowserTestView、ReadCalendarCoverStackTestView、BookCoverStyleTestView、BookCoverProgressBarTestView、SystemColorsTestView、TimelineCardsTestView、TimelineCalendarHorizonTestView 作为导航目的地
+ * [INPUT]: 依赖 RichTextTestView、HeatmapTestView、ImageLoadingTestView、WebHTMLFetchTestView、CameraTextCaptureTestView、BaiduOCRTestView、JXPhotoBrowserTestView、ReadCalendarCoverStackTestView、BookCoverStyleTestView、BookCoverProgressBarTestView、SystemColorsTestView、TimelineCardsTestView、TimelineCalendarHorizonTestView 作为导航目的地
  * [OUTPUT]: 对外提供 DebugCenterView（测试中心列表页）
  * [POS]: Debug 测试入口页，集中展示所有控件测试项，由 PersonalView 跳转进入
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -47,9 +47,15 @@ struct DebugCenterView: View {
         ),
         DebugItem(
             icon: "text.viewfinder",
-            title: "文本识别",
-            subtitle: "系统相机取词 + 可用性/语言列表验证",
+            title: "系统取词",
+            subtitle: "系统键盘 OCR 按钮 + 可用性/语言列表验证",
             destination: AnyView(CameraTextCaptureTestView())
+        ),
+        DebugItem(
+            icon: "doc.text.viewfinder",
+            title: "百度 OCR",
+            subtitle: "官方 SDK + 图片裁切 + 参数持久化 + 富文本回填验证",
+            destination: AnyView(BaiduOCRTestView())
         ),
         DebugItem(
             icon: "rectangle.3.group",

@@ -32,7 +32,7 @@ private struct CameraTextCaptureTestContentView: View {
             .safeAreaPadding(.bottom)
         }
         .background(Color.surfacePage)
-        .navigationTitle("文本识别")
+        .navigationTitle("系统取词")
         .navigationBarTitleDisplayMode(.inline)
     }
 }

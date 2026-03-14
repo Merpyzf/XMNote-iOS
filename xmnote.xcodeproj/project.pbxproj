@@ -194,6 +194,7 @@
 				891114982F39AC2F00D99384 /* Sources */,
 				891114992F39AC2F00D99384 /* Frameworks */,
 				8911149A2F39AC2F00D99384 /* Resources */,
+				B90C00012F4A000000000001 /* Embed Baidu OCR Frameworks */,
 			);
 			buildRules = (
 			);
@@ -289,7 +290,7 @@
 					};
 				};
 			};
-			buildConfigurationList = 891114972F39AC2F00D99384 /* Build configuration list for PBXProject "xmnote" */;
+			buildConfigurationList = 891114972F39AC2F00D99384 /* Build configuration list for PBXProject "XMNote" */;
 			developmentRegion = en;
 			hasScannedForEncodings = 0;
 			knownRegions = (
@@ -345,6 +346,31 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXResourcesBuildPhase section */
+
+/* Begin PBXShellScriptBuildPhase section */
+		B90C00012F4A000000000001 /* Embed Baidu OCR Frameworks */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputPaths = (
+				"$(SRCROOT)/scripts/embed_baidu_ocr_frameworks.sh",
+				"$(SRCROOT)/Vendor/BaiduOCRSDK/AipBase.framework",
+				"$(SRCROOT)/Vendor/BaiduOCRSDK/IdcardQuality.framework",
+				"$(SRCROOT)/Vendor/BaiduOCRSDK/AipOcrSdk.framework",
+			);
+			name = "Embed Baidu OCR Frameworks";
+			outputPaths = (
+				"$(TARGET_BUILD_DIR)/$(FRAMEWORKS_FOLDER_PATH)/AipBase.framework",
+				"$(TARGET_BUILD_DIR)/$(FRAMEWORKS_FOLDER_PATH)/IdcardQuality.framework",
+				"$(TARGET_BUILD_DIR)/$(FRAMEWORKS_FOLDER_PATH)/AipOcrSdk.framework",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "\"${SRCROOT}/scripts/embed_baidu_ocr_frameworks.sh\"\n";
+			showEnvVarsInLog = 0;
+		};
+/* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
 		891114982F39AC2F00D99384 /* Sources */ = {
@@ -514,6 +540,7 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = P7248XXL4Q;
 				ENABLE_PREVIEWS = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				EXCLUDED_SOURCE_FILE_NAMES = (
 					CLAUDE.md,
 					AGENTS.md,
@@ -521,6 +548,7 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = "纸间书摘";
 				INFOPLIST_KEY_NSCameraUsageDescription = "在使用文本识别、添加附图、扫描书籍等功能时会访问设备的相机。";
+				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "在使用百度 OCR 识别时会访问照片，用于选择待识别图片。";
 				INFOPLIST_KEY_UIAppFonts = "RozhaOne-Regular.ttf";
 				INFOPLIST_KEY_UIAppFonts_0 = "RozhaOne-Regular.ttf";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
@@ -539,6 +567,7 @@
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
 				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_OBJC_BRIDGING_HEADER = xmnote/xmnote-Bridging-Header.h;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
@@ -554,6 +583,7 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = P7248XXL4Q;
 				ENABLE_PREVIEWS = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				EXCLUDED_SOURCE_FILE_NAMES = (
 					CLAUDE.md,
 					AGENTS.md,
@@ -561,6 +591,7 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = "纸间书摘";
 				INFOPLIST_KEY_NSCameraUsageDescription = "在使用文本识别、添加附图、扫描书籍等功能时会访问设备的相机。";
+				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "在使用百度 OCR 识别时会访问照片，用于选择待识别图片。";
 				INFOPLIST_KEY_UIAppFonts = "RozhaOne-Regular.ttf";
 				INFOPLIST_KEY_UIAppFonts_0 = "RozhaOne-Regular.ttf";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
@@ -579,6 +610,7 @@
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
 				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_OBJC_BRIDGING_HEADER = xmnote/xmnote-Bridging-Header.h;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
@@ -672,7 +704,7 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
-		891114972F39AC2F00D99384 /* Build configuration list for PBXProject "xmnote" */ = {
+		891114972F39AC2F00D99384 /* Build configuration list for PBXProject "XMNote" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				891114BB2F39AC3200D99384 /* Debug */,

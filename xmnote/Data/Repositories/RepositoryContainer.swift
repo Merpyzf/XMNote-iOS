@@ -15,6 +15,7 @@ final class RepositoryContainer {
     let noteRepository: any NoteRepositoryProtocol
     let bookSearchRepository: any BookSearchRepositoryProtocol
     let bookEditorRepository: any BookEditorRepositoryProtocol
+    let ocrRepository: any OCRRepositoryProtocol
     let backupServerRepository: any BackupServerRepositoryProtocol
     let backupRepository: any BackupRepositoryProtocol
     let s3ConfigRepository: any S3ConfigRepositoryProtocol
@@ -29,11 +30,20 @@ final class RepositoryContainer {
     init(databaseManager: DatabaseManager) {
         let backupServerRepository = BackupServerRepository(databaseManager: databaseManager)
         let s3ConfigRepository = S3ConfigRepository(databaseManager: databaseManager)
+        #if DEBUG
+        let defaultOCRPreferences = OCRRepository.androidAlignedDebugDefaults
+        #else
+        let defaultOCRPreferences = OCRPreferences.default
+        #endif
 
         self.bookRepository = BookRepository(databaseManager: databaseManager)
         self.noteRepository = NoteRepository(databaseManager: databaseManager)
         self.bookSearchRepository = BookSearchRepository()
         self.bookEditorRepository = BookEditorRepository(databaseManager: databaseManager)
+        self.ocrRepository = OCRRepository(
+            runtimeBridge: BaiduOCRSDKRuntimeBridge(),
+            defaultPreferences: defaultOCRPreferences
+        )
         self.backupServerRepository = backupServerRepository
         self.backupRepository = BackupRepository(
             databaseManager: databaseManager,
