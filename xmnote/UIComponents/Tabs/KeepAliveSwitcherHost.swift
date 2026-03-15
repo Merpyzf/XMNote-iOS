@@ -48,6 +48,8 @@ struct KeepAliveSwitcherHost<Selection: Hashable, Content: View>: View {
                         .allowsHitTesting(selection == tab)
                         .accessibilityHidden(selection != tab)
                         .zIndex(selection == tab ? 1 : 0)
+                        // 子页保持常驻，但显隐切换必须硬切，避免在顶部分段动画事务里出现 crossfade 交错。
+                        .animation(nil, value: selection)
                 }
             }
         }
@@ -104,4 +106,3 @@ struct KeepAliveSwitcherHost<Selection: Hashable, Content: View>: View {
         #endif
     }
 }
-
