@@ -22,7 +22,7 @@ struct PersonalView: View {
     }
 
     @Environment(AppState.self) private var appState
-    private let topBarHeight: CGFloat = 52
+    private let topBarHeight: CGFloat = 56
     let onAddBook: () -> Void
     let onAddNote: () -> Void
     let onOpenDebugCenter: (() -> Void)?

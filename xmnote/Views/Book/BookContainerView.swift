@@ -73,7 +73,7 @@ struct BookContainerView: View {
 
 private struct BookContentView: View {
     @Bindable var viewModel: BookViewModel
-    private let topBarHeight: CGFloat = 52
+    private let topBarHeight: CGFloat = 56
     let onAddBook: () -> Void
     let onAddNote: () -> Void
     let onOpenDebugCenter: (() -> Void)?

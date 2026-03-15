@@ -26,7 +26,7 @@ enum ReadingSubTab: String, CaseIterable {
 /// 在读 Tab 容器，负责子页切换并上抛新增、书籍详情与阅读日历跳转事件。
 struct ReadingContainerView: View {
     @State private var selectedSubTab: ReadingSubTab = .reading
-    private let topBarHeight: CGFloat = 52
+    private let topBarHeight: CGFloat = 56
     let onAddBook: () -> Void
     let onAddNote: () -> Void
     let onOpenDebugCenter: (() -> Void)?

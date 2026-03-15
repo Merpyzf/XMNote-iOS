@@ -92,10 +92,18 @@ extension TopSwitcher where Tab == Never {
 
 private enum TopSwitcherQuoteDecorationMetrics {
     static let assetName = "TopSwitcherQuote"
-    static let iconWidth: CGFloat = 23
-    static let iconHeight: CGFloat = 16
-    static let offsetX: CGFloat = -10
-    static let offsetY: CGFloat = -6
+    static let iconWidth: CGFloat = 26
+    static let iconHeight: CGFloat = 18
+    static let offsetX: CGFloat = -11
+    static let offsetY: CGFloat = -7
+}
+
+private enum TopSwitcherTypography {
+    static let selectedTabSize: CGFloat = 22
+    static let unselectedTabSize: CGFloat = 19
+    static let titleSize: CGFloat = 24
+    static let minLabelHeight: CGFloat = 40
+    static let verticalPadding: CGFloat = Spacing.half
 }
 
 private struct TopSwitcherTabBar<Tab: Hashable>: View {
@@ -159,15 +167,15 @@ private struct TopSwitcherTabBar<Tab: Hashable>: View {
             Text(title)
                 .font(
                     SemanticTypography.font(
-                        baseSize: 20,
-                        relativeTo: .headline,
-                        weight: isSelected ? .semibold : .regular
+                        baseSize: isSelected ? TopSwitcherTypography.selectedTabSize : TopSwitcherTypography.unselectedTabSize,
+                        relativeTo: .title3,
+                        weight: isSelected ? .semibold : .medium
                     )
                 )
                 .foregroundStyle(isSelected ? .primary : .secondary)
                 .anchorPreference(key: TopSwitcherTabAnchorKey.self, value: .bounds) { [tab: $0] }
-                .padding(.vertical, Spacing.compact)
-                .frame(minHeight: 32)
+                .padding(.vertical, TopSwitcherTypography.verticalPadding)
+                .frame(minHeight: TopSwitcherTypography.minLabelHeight)
                 .lineLimit(dynamicTypeSize >= .accessibility1 ? 2 : 1)
                 .multilineTextAlignment(.leading)
                 .modifier(TopSwitcherFixedSizeModifier(isEnabled: dynamicTypeSize < .accessibility1))
@@ -184,16 +192,16 @@ private struct TopSwitcherTitleLabel: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     private var titleTrim: BrandTypography.VerticalTrim {
-        BrandTypography.topSwitcherTitleTrim(for: text, size: 20)
+        BrandTypography.topSwitcherTitleTrim(for: text, size: TopSwitcherTypography.titleSize)
     }
 
     var body: some View {
         Text(text)
-            .font(BrandTypography.topSwitcherTitleFont(for: text, size: 20))
+            .font(BrandTypography.topSwitcherTitleFont(for: text, size: TopSwitcherTypography.titleSize))
             .foregroundStyle(.primary)
             .brandVerticalTrim(titleTrim, edges: [.top, .bottom])
-            .padding(.vertical, Spacing.compact)
-            .frame(minHeight: 32, alignment: .leading)
+            .padding(.vertical, TopSwitcherTypography.verticalPadding)
+            .frame(minHeight: TopSwitcherTypography.minLabelHeight, alignment: .leading)
             .lineLimit(dynamicTypeSize >= .accessibility1 ? 2 : 1)
             .background(alignment: .topLeading) {
                 Image(TopSwitcherQuoteDecorationMetrics.assetName)
@@ -213,7 +221,7 @@ private struct TopSwitcherTitleLabel: View {
             .accessibilityIdentifier("top_switcher_title_\(text)")
             .onAppear {
                 #if DEBUG
-                BrandTypography.debugLogTopSwitcherTitle(text, size: 20)
+                BrandTypography.debugLogTopSwitcherTitle(text, size: TopSwitcherTypography.titleSize)
                 #endif
             }
     }

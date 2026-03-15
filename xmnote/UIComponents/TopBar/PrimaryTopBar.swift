@@ -32,7 +32,7 @@ struct PrimaryTopBar<Leading: View, Trailing: View>: View {
             }
         }
         .padding(.horizontal, Spacing.screenEdge)
-        .frame(minHeight: dynamicTypeSize >= .accessibility1 ? 56 : 52)
+        .frame(minHeight: dynamicTypeSize >= .accessibility1 ? 60 : 56)
         .background(Color.clear)
     }
 }
