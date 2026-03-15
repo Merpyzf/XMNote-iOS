@@ -18,7 +18,7 @@ struct TopBarActionIcon: View {
         Image(systemName: systemName)
             .font(.system(size: iconSize, weight: weight))
             .foregroundStyle(foregroundColor)
-            .frame(width: 36, height: 36)
+            .frame(width: 44, height: 44)
             .contentShape(Circle())
     }
 }
