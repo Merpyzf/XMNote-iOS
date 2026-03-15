@@ -48,14 +48,14 @@ struct HeatmapHelpSheetView: View {
 
     private var titleSection: some View {
         Text("热力图说明")
-            .font(.title3.weight(.semibold))
+            .font(AppTypography.title3Semibold)
     }
 
     // MARK: - Description
 
     private var descriptionSection: some View {
         Text("无论是你记录的每一条笔记，还是统计的读书时长，或标记的书籍状态，都可以点亮每天的小格子。记录越多、时长越长，颜色就越深。")
-            .font(.body)
+            .font(AppTypography.body)
             .foregroundStyle(Color.textSecondary)
             .lineSpacing(4)
     }
@@ -95,7 +95,7 @@ struct HeatmapHelpSheetView: View {
                 .fill(color)
                 .frame(width: 12, height: 12)
             Text(title)
-                .font(.subheadline)
+                .font(AppTypography.subheadline)
                 .foregroundStyle(Color.textSecondary)
         }
     }

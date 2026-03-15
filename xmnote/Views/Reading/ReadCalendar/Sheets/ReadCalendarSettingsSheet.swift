@@ -60,13 +60,13 @@ struct ReadCalendarSettingsSheet: View {
 
     private var titleSection: some View {
         Text("阅读日历设置")
-            .font(.title3.weight(.semibold))
+            .font(AppTypography.title3Semibold)
     }
 
     private var eventTogglesSection: some View {
         VStack(alignment: .leading, spacing: Spacing.base) {
             Text("阅读事件")
-                .font(.subheadline.weight(.medium))
+                .font(AppTypography.subheadlineMedium)
                 .foregroundStyle(Color.textSecondary)
 
             Toggle("阅读计时（含补录）", isOn: Binding(
@@ -86,7 +86,7 @@ struct ReadCalendarSettingsSheet: View {
 
             if !settings.isReadBehaviorRuleValid {
                 Text("判定阅读行为的规则至少要选一个")
-                    .font(.footnote)
+                    .font(AppTypography.footnote)
                     .foregroundStyle(Color.feedbackError)
             }
         }
@@ -96,7 +96,7 @@ struct ReadCalendarSettingsSheet: View {
     private var feedbackSection: some View {
         VStack(alignment: .leading, spacing: Spacing.base) {
             Text("交互反馈")
-                .font(.subheadline.weight(.medium))
+                .font(AppTypography.subheadlineMedium)
                 .foregroundStyle(Color.textSecondary)
 
             Toggle("触感反馈", isOn: $settings.isHapticsEnabled)
@@ -108,7 +108,7 @@ struct ReadCalendarSettingsSheet: View {
     private var dayEventCountSection: some View {
         VStack(alignment: .leading, spacing: Spacing.base) {
             Text("每日展示书籍数量")
-                .font(.subheadline.weight(.medium))
+                .font(AppTypography.subheadlineMedium)
                 .foregroundStyle(Color.textSecondary)
 
             HStack(spacing: Spacing.half) {
@@ -124,7 +124,7 @@ struct ReadCalendarSettingsSheet: View {
             withAnimation(.snappy) { settings.dayEventCount = count }
         } label: {
             Text("\(count)")
-                .font(.subheadline.weight(isSelected ? .semibold : .regular))
+                .font(AppTypography.semantic(.subheadline, weight: isSelected ? .semibold : .regular))
                 .foregroundStyle(isSelected ? .white : Color.textPrimary)
                 .frame(width: 36, height: 36)
                 .background(isSelected ? Color.brand : Color.controlFillSecondary, in: Circle())

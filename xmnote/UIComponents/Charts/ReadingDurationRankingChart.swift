@@ -63,12 +63,12 @@ struct ReadingDurationRankingChart: View {
         VStack(alignment: .leading, spacing: Layout.sectionSpacing) {
             VStack(alignment: .leading, spacing: Spacing.half) {
                 Text(title)
-                    .font(.headline.weight(.semibold))
+                    .font(AppTypography.headlineSemibold)
                     .foregroundStyle(Color.textPrimary)
 
                 if let insightText {
                     insightText
-                        .font(.footnote)
+                        .font(AppTypography.footnote)
                         .monospacedDigit()
                         .contentTransition(.numericText())
                 }
@@ -76,7 +76,7 @@ struct ReadingDurationRankingChart: View {
 
             if items.isEmpty {
                 Text(emptyText)
-                    .font(.footnote)
+                    .font(AppTypography.footnote)
                     .foregroundStyle(Color.textHint)
             } else {
                 LazyVStack(spacing: Spacing.cozy) {
@@ -175,14 +175,14 @@ private extension ReadingDurationRankingChart {
 
             VStack(alignment: .leading, spacing: Spacing.hairline) {
                 Text(item.title)
-                    .font(.caption.weight(.medium))
+                    .font(AppTypography.captionMedium)
                     .foregroundStyle(Color.textPrimary)
                     .lineLimit(1)
                     .truncationMode(.tail)
                     .layoutPriority(1)
                     .allowsTightening(true)
                 Text(durationText(item.durationSeconds))
-                    .font(.caption2)
+                    .font(AppTypography.caption2)
                     .foregroundStyle(Color.textSecondary)
                     .monospacedDigit()
                     .contentTransition(.numericText())

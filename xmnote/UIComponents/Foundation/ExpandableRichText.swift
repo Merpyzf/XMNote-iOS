@@ -63,7 +63,7 @@ private struct ExpandableRichTextCore: View {
                         collapse()
                     } label: {
                         Text("收起")
-                            .font(.caption2.weight(.medium))
+                            .font(AppTypography.caption2Medium)
                             .foregroundStyle(Color.brand)
                     }
                     .buttonStyle(.plain)

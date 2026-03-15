@@ -59,14 +59,14 @@ struct ReadingYearSummarySheet: View {
             VStack(alignment: .leading, spacing: Spacing.half) {
                 HStack(alignment: .firstTextBaseline, spacing: Spacing.half) {
                     Text("已读 \(summary.readCount) 本")
-                        .font(.title3.weight(.semibold))
+                        .font(AppTypography.title3Semibold)
                         .foregroundStyle(Color.textPrimary)
                     Text("目标 \(summary.targetCount) 本")
-                        .font(.caption)
+                        .font(AppTypography.caption)
                         .foregroundStyle(Color.textSecondary)
                 }
                 Text(ReadingDashboardFormatting.yearSummarySubtitle(summary: summary))
-                    .font(.caption)
+                    .font(AppTypography.caption)
                     .foregroundStyle(Color.textSecondary)
             }
             .padding(Spacing.base)
@@ -86,17 +86,17 @@ struct ReadingYearSummarySheet: View {
 
                 VStack(alignment: .leading, spacing: Spacing.half) {
                     Text(book.name)
-                        .font(.body.weight(.medium))
+                        .font(AppTypography.bodyMedium)
                         .foregroundStyle(Color.textPrimary)
                         .lineLimit(2)
 
                     Text(ReadDurationFormatter.format(seconds: Int64(book.totalReadSeconds)))
-                        .font(.caption)
+                        .font(AppTypography.caption)
                         .foregroundStyle(Color.textSecondary)
 
                     if book.readDoneCount > 1 {
                         Text("读完 \(book.readDoneCount) 次")
-                            .font(.caption2)
+                            .font(AppTypography.caption2)
                             .foregroundStyle(Color.textHint)
                     }
                 }
@@ -104,7 +104,7 @@ struct ReadingYearSummarySheet: View {
                 Spacer(minLength: 0)
 
                 Image(systemName: "chevron.right")
-                    .font(.footnote.weight(.semibold))
+                    .font(AppTypography.footnoteSemibold)
                     .foregroundStyle(Color.textHint)
             }
             .padding(Spacing.base)

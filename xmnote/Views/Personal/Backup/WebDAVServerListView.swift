@@ -88,9 +88,9 @@ private extension WebDAVServerListContentView {
             HStack {
                 VStack(alignment: .leading, spacing: Spacing.compact) {
                     Text(server.title)
-                        .font(.body)
+                        .font(AppTypography.body)
                     Text(server.serverAddress)
-                        .font(.caption)
+                        .font(AppTypography.caption)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
                 }

@@ -75,20 +75,20 @@ private extension DataBackupContentView {
                 HStack {
                     VStack(alignment: .leading, spacing: Spacing.compact) {
                         Text("备份服务器")
-                            .font(.subheadline)
+                            .font(AppTypography.subheadline)
                         if let server = viewModel.currentServer {
                             Text(server.title)
-                                .font(.caption)
+                                .font(AppTypography.caption)
                                 .foregroundStyle(.secondary)
                         } else {
                             Text("未配置")
-                                .font(.caption)
+                                .font(AppTypography.caption)
                                 .foregroundStyle(Color.feedbackError)
                         }
                     }
                     Spacer()
                     Image(systemName: "chevron.right")
-                        .font(.caption)
+                        .font(AppTypography.caption)
                         .foregroundStyle(.tertiary)
                 }
                 .padding(Spacing.contentEdge)
@@ -119,14 +119,14 @@ private extension DataBackupContentView {
         } label: {
             HStack {
                 Image(systemName: "icloud.and.arrow.up")
-                    .font(.body)
+                    .font(AppTypography.body)
                     .foregroundStyle(Color.brand)
                     .frame(width: 24)
                 Text("备份数据")
                 Spacer()
                 if !viewModel.lastBackupDateText.isEmpty {
                     Text(viewModel.lastBackupDateText)
-                        .font(.caption)
+                        .font(AppTypography.caption)
                         .foregroundStyle(.secondary)
                 }
             }
@@ -147,7 +147,7 @@ private extension DataBackupContentView {
         } label: {
             HStack {
                 Image(systemName: "icloud.and.arrow.down")
-                    .font(.body)
+                    .font(AppTypography.body)
                     .foregroundStyle(Color.brand)
                     .frame(width: 24)
                 Text("恢复数据")
@@ -175,7 +175,7 @@ private extension DataBackupContentView {
                     ProgressView()
                         .controlSize(.large)
                     Text(operationText)
-                        .font(.subheadline)
+                        .font(AppTypography.subheadline)
                         .foregroundStyle(.white)
                 }
                 .padding(Spacing.double)

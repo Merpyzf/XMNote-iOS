@@ -25,7 +25,7 @@ struct ReadCalendarStreakHintBanner: View {
                 .foregroundStyle(Color.brand)
 
             Text(text)
-                .font(.caption.weight(.semibold))
+                .font(AppTypography.captionSemibold)
                 .foregroundStyle(Color.readCalendarSubtleText)
 
             Spacer(minLength: 0)

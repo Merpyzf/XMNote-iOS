@@ -21,7 +21,7 @@ struct TimelineRelevantCard: View {
 
                     if !event.title.isEmpty {
                         Text(event.title)
-                            .font(.subheadline.weight(.semibold))
+                            .font(AppTypography.subheadlineSemibold)
                             .foregroundStyle(Color.textPrimary)
                             .fixedSize(horizontal: false, vertical: true)
                     }
@@ -101,7 +101,7 @@ struct TimelineRelevantCard: View {
         HStack {
             Spacer()
             Image(systemName: "link")
-                .font(.caption)
+                .font(AppTypography.caption)
                 .foregroundStyle(Color.textSecondary)
         }
     }
@@ -110,7 +110,7 @@ struct TimelineRelevantCard: View {
 
     private var categoryTag: some View {
         Text(event.categoryTitle)
-            .font(.caption2)
+            .font(AppTypography.caption2)
             .foregroundStyle(Color.textSecondary)
             .padding(.horizontal, Spacing.cozy)
             .padding(.vertical, Spacing.compact)

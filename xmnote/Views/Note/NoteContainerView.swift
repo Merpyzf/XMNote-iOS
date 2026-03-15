@@ -142,7 +142,7 @@ private struct NoteContentView: View {
                 .foregroundStyle(.secondary)
 
             TextField("搜索标签", text: $viewModel.searchText)
-                .font(.subheadline)
+                .font(AppTypography.subheadline)
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
 

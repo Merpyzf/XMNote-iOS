@@ -1433,16 +1433,16 @@ private extension ReadCalendarContentView {
 
             if let errorMessage = props.errorMessage {
                 Text(errorMessage)
-                    .font(.subheadline)
+                    .font(AppTypography.subheadline)
                     .foregroundStyle(Color.feedbackWarning)
                     .multilineTextAlignment(.center)
 
                 Button("重试", action: onRetry)
-                    .font(.subheadline.weight(.semibold))
+                    .font(AppTypography.subheadlineSemibold)
                     .foregroundStyle(Color.brand)
             } else {
                 Text(isHeatmapMode ? "暂无可展示的年度数据" : "暂无可展示的阅读月份")
-                    .font(.subheadline)
+                    .font(AppTypography.subheadline)
                     .foregroundStyle(Color.textSecondary)
                     .multilineTextAlignment(.center)
             }
@@ -1564,7 +1564,7 @@ private extension ReadCalendarContentView {
     var yearHeatmapLegend: some View {
         HStack(spacing: Spacing.half) {
             Text("少")
-                .font(.caption)
+                .font(AppTypography.caption)
                 .foregroundStyle(Color.textSecondary)
 
             ForEach(HeatmapLevel.allCases.filter { $0 != .none }, id: \.rawValue) { level in
@@ -1574,7 +1574,7 @@ private extension ReadCalendarContentView {
             }
 
             Text("多")
-                .font(.caption)
+                .font(AppTypography.caption)
                 .foregroundStyle(Color.textSecondary)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -1925,7 +1925,7 @@ private struct ReadCalendarBookCoverFullscreenOverlay: View {
                 VStack(spacing: Layout.bottomChromeSpacing) {
                     if shouldShowCountHint {
                         Text("当日共 \(payload.items.count) 本")
-                            .font(.footnote.weight(.semibold))
+                            .font(AppTypography.footnoteSemibold)
                             .foregroundStyle(Color.white.opacity(0.9))
                             .opacity(Double(transitionChannels.chromeOpacity))
                             .shadow(
@@ -1994,7 +1994,7 @@ private struct ReadCalendarBookCoverFullscreenOverlay: View {
                 Image(systemName: isStacked ? "square.grid.2x2" : "square.stack.3d.down.right.fill")
                     .font(.system(size: 13, weight: .semibold))
                 Text(isStacked ? "展开" : "收起")
-                    .font(.subheadline.weight(.semibold))
+                    .font(AppTypography.subheadlineSemibold)
             }
             .foregroundStyle(Color.white.opacity(0.95))
             .padding(.horizontal, Layout.toggleButtonHorizontalPadding)
@@ -2017,10 +2017,10 @@ private struct ReadCalendarBookCoverFullscreenOverlay: View {
         HStack(spacing: Spacing.base) {
             VStack(alignment: .leading, spacing: Spacing.tiny) {
                 Text(formattedDate(payload.date))
-                    .font(.headline)
+                    .font(AppTypography.headline)
                     .foregroundStyle(Color.white.opacity(0.96))
                 Text(formattedWeekday(payload.date))
-                    .font(.caption)
+                    .font(AppTypography.caption)
                     .foregroundStyle(Color.white.opacity(0.52))
             }
 

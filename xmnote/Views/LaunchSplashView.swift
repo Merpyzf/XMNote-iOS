@@ -23,7 +23,7 @@ struct LaunchSplashView: View {
                         .strokeBorder(Color.surfaceBorderDefault, lineWidth: CardStyle.borderWidth)
                 )
             Text("纸间书摘")
-                .font(.title2)
+                .font(AppTypography.title2)
                 .fontWeight(.semibold)
                 .foregroundStyle(Color.textPrimary)
         }

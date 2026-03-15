@@ -17,7 +17,7 @@ struct ReadCalendarInlineErrorBanner: View {
     var body: some View {
         HStack(alignment: usesExpandedTextLayout ? .top : .center, spacing: Spacing.base) {
             Text(message)
-                .font(.caption)
+                .font(AppTypography.caption)
                 .foregroundStyle(Color.feedbackWarning)
                 .lineLimit(usesExpandedTextLayout ? 2 : 1)
                 .multilineTextAlignment(.leading)
@@ -25,7 +25,7 @@ struct ReadCalendarInlineErrorBanner: View {
             Spacer(minLength: 0)
 
             Button("重试", action: onRetry)
-                .font(.caption.weight(.semibold))
+                .font(AppTypography.captionSemibold)
                 .foregroundStyle(Color.brand)
         }
         .padding(.horizontal, Spacing.base)

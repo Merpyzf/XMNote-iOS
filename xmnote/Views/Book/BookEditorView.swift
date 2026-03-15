@@ -109,29 +109,18 @@ struct BookEditorView: View {
 
                 VStack(alignment: .leading, spacing: Spacing.half) {
                     Text(draft.title.isEmpty ? "新书录入" : draft.title)
-                        .font(.brandDisplay(size: 24, relativeTo: .title3))
+                        .font(AppTypography.brandDisplay(size: 24, relativeTo: .title3))
                         .foregroundStyle(Color.textPrimary)
                         .lineLimit(2)
 
                     Text(draft.author.isEmpty ? "请完善书籍核心信息后保存" : draft.author)
-                        .font(
-                            SemanticTypography.font(
-                                baseSize: SemanticTypography.defaultPointSize(for: .subheadline),
-                                relativeTo: .subheadline
-                            )
-                        )
+                        .font(AppTypography.subheadline)
                         .foregroundStyle(Color.textSecondary)
                         .lineLimit(2)
 
                     if let searchSource = draft.searchSource {
                         Text("搜索来源 · \(searchSource.title)")
-                            .font(
-                                SemanticTypography.font(
-                                    baseSize: SemanticTypography.defaultPointSize(for: .footnote),
-                                    relativeTo: .footnote,
-                                    weight: .medium
-                                )
-                            )
+                            .font(AppTypography.semantic(.footnote, weight: .medium))
                             .foregroundStyle(Color.brand)
                             .padding(.horizontal, Spacing.cozy)
                             .padding(.vertical, Spacing.tiny)
@@ -257,13 +246,7 @@ struct BookEditorView: View {
 
             VStack(alignment: .leading, spacing: Spacing.cozy) {
                 Text("标签")
-                    .font(
-                        SemanticTypography.font(
-                            baseSize: SemanticTypography.defaultPointSize(for: .subheadline),
-                            relativeTo: .subheadline,
-                            weight: .semibold
-                        )
-                    )
+                    .font(AppTypography.subheadlineSemibold)
                     .foregroundStyle(Color.textPrimary)
 
                 editorTextField("输入后回车添加", text: Binding(
@@ -319,13 +302,7 @@ struct BookEditorView: View {
         VStack(spacing: Spacing.cozy) {
             if let errorMessage = viewModel.errorMessage {
                 Text(errorMessage)
-                    .font(
-                        SemanticTypography.font(
-                            baseSize: SemanticTypography.defaultPointSize(for: .footnote),
-                            relativeTo: .footnote,
-                            weight: .medium
-                        )
-                    )
+                    .font(AppTypography.semantic(.footnote, weight: .medium))
                     .foregroundStyle(Color.feedbackError)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
@@ -341,13 +318,7 @@ struct BookEditorView: View {
                 HStack {
                     Spacer()
                     Text(viewModel.isSaving ? "正在保存…" : "保存入库")
-                        .font(
-                            SemanticTypography.font(
-                                baseSize: SemanticTypography.defaultPointSize(for: .headline),
-                                relativeTo: .headline,
-                                weight: .semibold
-                            )
-                        )
+                        .font(AppTypography.headlineSemibold)
                         .foregroundStyle(.white)
                     Spacer()
                 }
@@ -367,13 +338,7 @@ struct BookEditorView: View {
         CardContainer(cornerRadius: CornerRadius.containerMedium, showsBorder: false) {
             VStack(alignment: .leading, spacing: Spacing.base) {
                 Text(title)
-                    .font(
-                        SemanticTypography.font(
-                            baseSize: SemanticTypography.defaultPointSize(for: .headline),
-                            relativeTo: .headline,
-                            weight: .semibold
-                        )
-                    )
+                    .font(AppTypography.headlineSemibold)
                     .foregroundStyle(Color.textPrimary)
                 content()
             }
@@ -388,13 +353,7 @@ struct BookEditorView: View {
     ) -> some View {
         VStack(alignment: .leading, spacing: Spacing.half) {
             Text(title)
-                .font(
-                    SemanticTypography.font(
-                        baseSize: SemanticTypography.defaultPointSize(for: .subheadline),
-                        relativeTo: .subheadline,
-                        weight: .semibold
-                    )
-                )
+                .font(AppTypography.subheadlineSemibold)
                 .foregroundStyle(Color.textPrimary)
 
             TextField(title, text: text)
@@ -414,13 +373,7 @@ struct BookEditorView: View {
     ) -> some View {
         VStack(alignment: .leading, spacing: Spacing.half) {
             Text(title)
-                .font(
-                    SemanticTypography.font(
-                        baseSize: SemanticTypography.defaultPointSize(for: .subheadline),
-                        relativeTo: .subheadline,
-                        weight: .semibold
-                    )
-                )
+                .font(AppTypography.subheadlineSemibold)
                 .foregroundStyle(Color.textPrimary)
 
             TextEditor(text: text)
@@ -438,22 +391,11 @@ struct BookEditorView: View {
     ) -> some View {
         VStack(alignment: .leading, spacing: Spacing.cozy) {
             Text(title)
-                .font(
-                    SemanticTypography.font(
-                        baseSize: SemanticTypography.defaultPointSize(for: .subheadline),
-                        relativeTo: .subheadline,
-                        weight: .semibold
-                    )
-                )
+                .font(AppTypography.subheadlineSemibold)
                 .foregroundStyle(Color.textPrimary)
 
             Text(selection)
-                .font(
-                    SemanticTypography.font(
-                        baseSize: SemanticTypography.defaultPointSize(for: .footnote),
-                        relativeTo: .footnote
-                    )
-                )
+                .font(AppTypography.footnote)
                 .foregroundStyle(Color.textHint)
 
             ScrollView(.horizontal, showsIndicators: false) {
@@ -492,13 +434,7 @@ struct BookEditorView: View {
     private func chip(_ title: String, isSelected: Bool, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Text(title)
-                .font(
-                    SemanticTypography.font(
-                        baseSize: SemanticTypography.defaultPointSize(for: .footnote),
-                        relativeTo: .footnote,
-                        weight: .medium
-                    )
-                )
+                .font(AppTypography.semantic(.footnote, weight: .medium))
                 .foregroundStyle(isSelected ? .white : Color.textPrimary)
                 .padding(.horizontal, Spacing.base)
                 .padding(.vertical, Spacing.cozy)
@@ -516,11 +452,7 @@ struct BookEditorView: View {
             }
         }
         .font(
-            SemanticTypography.font(
-                baseSize: SemanticTypography.defaultPointSize(for: .footnote),
-                relativeTo: .footnote,
-                weight: .medium
-            )
+            AppTypography.semantic(.footnote, weight: .medium)
         )
         .foregroundStyle(Color.textPrimary)
         .padding(.horizontal, Spacing.base)

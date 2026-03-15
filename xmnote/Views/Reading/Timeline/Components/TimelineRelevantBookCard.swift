@@ -28,12 +28,12 @@ struct TimelineRelevantBookCard: View {
 
                         VStack(alignment: .leading, spacing: Spacing.compact) {
                             Text(event.contentBookName)
-                                .font(.subheadline.weight(.medium))
+                                .font(AppTypography.subheadlineMedium)
                                 .foregroundStyle(Color.textPrimary)
                                 .lineLimit(1)
 
                             Text(event.contentBookAuthor)
-                                .font(.caption)
+                                .font(AppTypography.caption)
                                 .foregroundStyle(Color.textSecondary)
                                 .lineLimit(1)
                         }
@@ -52,7 +52,7 @@ struct TimelineRelevantBookCard: View {
 
     private var categoryTag: some View {
         Text(event.categoryTitle)
-            .font(.caption2)
+            .font(AppTypography.caption2)
             .foregroundStyle(Color.textSecondary)
             .padding(.horizontal, Spacing.cozy)
             .padding(.vertical, Spacing.compact)

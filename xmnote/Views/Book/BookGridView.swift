@@ -54,7 +54,7 @@ struct BookGridView: View {
             }
         } label: {
             Text(filter.title)
-                .font(.subheadline)
+                .font(AppTypography.subheadline)
                 .padding(.horizontal, Spacing.screenEdge)
                 .padding(.vertical, Spacing.cozy)
                 .background(

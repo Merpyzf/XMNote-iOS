@@ -27,13 +27,7 @@ struct BookSearchRecentQueriesSection: View {
                     .foregroundStyle(Color.textSecondary)
 
                 Text("最近搜索")
-                    .font(
-                        SemanticTypography.font(
-                            baseSize: SemanticTypography.defaultPointSize(for: .caption1),
-                            relativeTo: .caption,
-                            weight: .medium
-                        )
-                    )
+                    .font(AppTypography.captionMedium)
                     .foregroundStyle(Color.textSecondary)
             }
 
@@ -84,13 +78,7 @@ struct BookSearchRecentQueriesSection: View {
                 .frame(minHeight: RecentQueriesLayoutMetrics.chipVisualHeight, alignment: .leading)
         }
         .buttonStyle(SearchChipButtonStyle())
-        .font(
-            SemanticTypography.font(
-                baseSize: SemanticTypography.defaultPointSize(for: .footnote),
-                relativeTo: .footnote,
-                weight: .medium
-            )
-        )
+        .font(AppTypography.semantic(.footnote, weight: .medium))
         .foregroundStyle(Color.textSecondary)
         .background(Color.controlFillSecondary, in: Capsule())
         .overlay {
@@ -117,13 +105,7 @@ struct BookSearchRecentQueriesSection: View {
         } label: {
             Label(isExpanded ? "收起" : "更多", systemImage: isExpanded ? "chevron.up" : "chevron.down")
                 .labelStyle(.titleAndIcon)
-                .font(
-                    SemanticTypography.font(
-                        baseSize: SemanticTypography.defaultPointSize(for: .footnote),
-                        relativeTo: .footnote,
-                        weight: .semibold
-                    )
-                )
+                .font(AppTypography.footnoteSemibold)
                 .foregroundStyle(Color.brand)
                 .padding(.horizontal, RecentQueriesLayoutMetrics.chipHorizontalPadding)
                 .frame(minHeight: RecentQueriesLayoutMetrics.chipVisualHeight)
@@ -178,11 +160,7 @@ struct BookSearchRecentQueriesSection: View {
 
     /// 使用与渲染同源的语义字体测量胶囊宽度，保证折叠态与真实流式排布一致。
     private func width(for query: String) -> CGFloat {
-        let font = SemanticTypography.uiFont(
-            baseSize: SemanticTypography.defaultPointSize(for: .footnote),
-            textStyle: .footnote,
-            weight: .medium
-        )
+        let font = AppTypography.uiSemantic(.footnote, weight: .medium)
         let textWidth = (query as NSString).size(withAttributes: [.font: font]).width.rounded(.up)
         return textWidth + RecentQueriesLayoutMetrics.chipHorizontalPadding * 2
     }

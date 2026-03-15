@@ -376,80 +376,244 @@ enum CardStyle {
 
 // MARK: - Reading Calendar Typography
 
+/// 全局文本语义入口，统一生产路径字体出口，并尽量保持当前默认视觉基线不变。
+enum AppTypography {
+    static let largeTitle: Font = .largeTitle
+    static let title2: Font = .title2
+    static let title3: Font = .title3
+    static let title3Semibold: Font = .title3.weight(.semibold)
+    static let headline: Font = .headline
+    static let headlineSemibold: Font = .headline.weight(.semibold)
+    static let subheadline: Font = .subheadline
+    static let subheadlineMedium: Font = .subheadline.weight(.medium)
+    static let subheadlineSemibold: Font = .subheadline.weight(.semibold)
+    static let body: Font = .body
+    static let bodyMedium: Font = .body.weight(.medium)
+    static let callout: Font = .callout
+    static let footnote: Font = .footnote
+    static let footnoteSemibold: Font = .footnote.weight(.semibold)
+    static let caption: Font = .caption
+    static let captionMedium: Font = .caption.weight(.medium)
+    static let captionSemibold: Font = .caption.weight(.semibold)
+    static let caption2: Font = .caption2
+    static let caption2Medium: Font = .caption2.weight(.medium)
+    static let caption2Semibold: Font = .caption2.weight(.semibold)
+
+    static func semantic(
+        _ style: Font.TextStyle,
+        weight: Font.Weight? = nil,
+        design: Font.Design = .default
+    ) -> Font {
+        fixed(
+            baseSize: SemanticTypography.defaultPointSize(for: style.uiFontTextStyle),
+            relativeTo: style,
+            weight: weight,
+            design: design,
+            minimumPointSize: SemanticTypography.defaultPointSize(for: style.uiFontTextStyle)
+        )
+    }
+
+    static func semanticFont(
+        _ style: UIFont.TextStyle,
+        weight: Font.Weight? = nil,
+        design: Font.Design = .default
+    ) -> Font {
+        fixed(
+            baseSize: SemanticTypography.defaultPointSize(for: style),
+            relativeTo: style.fontTextStyle,
+            weight: weight,
+            design: design,
+            minimumPointSize: SemanticTypography.defaultPointSize(for: style)
+        )
+    }
+
+    static func fixed(
+        baseSize: CGFloat,
+        relativeTo style: Font.TextStyle,
+        weight: Font.Weight? = nil,
+        design: Font.Design = .default,
+        minimumPointSize: CGFloat? = nil
+    ) -> Font {
+        SemanticTypography.font(
+            baseSize: baseSize,
+            relativeTo: style,
+            weight: weight,
+            design: design,
+            minimumPointSize: minimumPointSize ?? baseSize
+        )
+    }
+
+    static func uiSemantic(
+        _ style: UIFont.TextStyle,
+        weight: UIFont.Weight = .regular,
+        design: UIFontDescriptor.SystemDesign = .default
+    ) -> UIFont {
+        let baseSize = SemanticTypography.defaultPointSize(for: style)
+        return SemanticTypography.uiFont(
+            baseSize: baseSize,
+            textStyle: style,
+            weight: weight,
+            design: design,
+            minimumPointSize: baseSize
+        )
+    }
+
+    static func uiFixed(
+        baseSize: CGFloat,
+        textStyle: UIFont.TextStyle,
+        weight: UIFont.Weight = .regular,
+        design: UIFontDescriptor.SystemDesign = .default,
+        minimumPointSize: CGFloat? = nil
+    ) -> UIFont {
+        SemanticTypography.uiFont(
+            baseSize: baseSize,
+            textStyle: textStyle,
+            weight: weight,
+            design: design,
+            minimumPointSize: minimumPointSize ?? baseSize
+        )
+    }
+
+    static func brandDisplay(
+        size: CGFloat,
+        relativeTo textStyle: Font.TextStyle = .title2
+    ) -> Font {
+        .brandDisplay(size: size, relativeTo: textStyle)
+    }
+
+    static func brandTrim(
+        size: CGFloat,
+        textStyle: UIFont.TextStyle = .title2
+    ) -> BrandTypography.VerticalTrim {
+        BrandTypography.verticalTrim(size: size, textStyle: textStyle)
+    }
+
+    static func topSwitcherTitleFont(
+        for text: String,
+        size: CGFloat
+    ) -> Font {
+        if text.xmContainsCJK {
+            return fixed(
+                baseSize: size,
+                relativeTo: .headline,
+                weight: .semibold,
+                minimumPointSize: size
+            )
+        }
+        return brandDisplay(size: size, relativeTo: .headline)
+    }
+
+    static func topSwitcherTitleTrim(
+        for text: String,
+        size: CGFloat
+    ) -> BrandTypography.VerticalTrim {
+        guard !text.xmContainsCJK else { return .zero }
+        return brandTrim(size: size, textStyle: .headline)
+    }
+}
+
+private extension Font.TextStyle {
+    var uiFontTextStyle: UIFont.TextStyle {
+        switch self {
+        case .largeTitle:
+            return .largeTitle
+        case .title:
+            return .title1
+        case .title2:
+            return .title2
+        case .title3:
+            return .title3
+        case .headline:
+            return .headline
+        case .subheadline:
+            return .subheadline
+        case .body:
+            return .body
+        case .callout:
+            return .callout
+        case .footnote:
+            return .footnote
+        case .caption:
+            return .caption1
+        case .caption2:
+            return .caption2
+        @unknown default:
+            return .body
+        }
+    }
+}
+
+private extension UIFont.TextStyle {
+    var fontTextStyle: Font.TextStyle {
+        switch self {
+        case .largeTitle:
+            return .largeTitle
+        case .title1:
+            return .title
+        case .title2:
+            return .title2
+        case .title3:
+            return .title3
+        case .headline:
+            return .headline
+        case .subheadline:
+            return .subheadline
+        case .body:
+            return .body
+        case .callout:
+            return .callout
+        case .footnote:
+            return .footnote
+        case .caption1:
+            return .caption
+        case .caption2:
+            return .caption2
+        default:
+            return .body
+        }
+    }
+}
+
+private extension String {
+    var xmContainsCJK: Bool {
+        unicodeScalars.contains { scalar in
+            switch scalar.value {
+            case 0x3400...0x4DBF,
+                 0x4E00...0x9FFF,
+                 0xF900...0xFAFF,
+                 0x3040...0x30FF,
+                 0xAC00...0xD7AF:
+                return true
+            default:
+                return false
+            }
+        }
+    }
+}
+
 /// 阅读日历字体令牌，集中维护日期相关文本层级。
 enum ReadCalendarTypography {
-    static let topControlTitleFont: Font = SemanticTypography.font(
-        baseSize: 18,
-        relativeTo: .headline,
-        weight: .semibold,
-        design: .rounded
-    )
-    static let weekdayHeaderFont: Font = SemanticTypography.font(
-        baseSize: 13,
-        relativeTo: .caption,
-        weight: .medium,
-        design: .rounded
-    )
-    static let monthGridDayNumberFont: Font = SemanticTypography.font(
-        baseSize: 13,
-        relativeTo: .caption,
-        weight: .medium,
-        design: .rounded
-    )
-    static let monthGridDayNumberSelectedFont: Font = SemanticTypography.font(
-        baseSize: 13,
-        relativeTo: .caption,
-        weight: .bold,
-        design: .rounded
-    )
-    static let yearHeatmapMonthTitleFont: Font = SemanticTypography.font(
-        baseSize: SemanticTypography.defaultPointSize(for: .callout),
-        relativeTo: .callout,
-        weight: .semibold
-    )
+    static let topControlTitleFont: Font = AppTypography.fixed(baseSize: 18, relativeTo: .headline, weight: .semibold, design: .rounded)
+    static let weekdayHeaderFont: Font = AppTypography.fixed(baseSize: 13, relativeTo: .caption, weight: .medium, design: .rounded)
+    static let monthGridDayNumberFont: Font = AppTypography.fixed(baseSize: 13, relativeTo: .caption, weight: .medium, design: .rounded)
+    static let monthGridDayNumberSelectedFont: Font = AppTypography.fixed(baseSize: 13, relativeTo: .caption, weight: .bold, design: .rounded)
+    static let yearHeatmapMonthTitleFont: Font = AppTypography.semantic(.callout, weight: .semibold)
 }
 
 // MARK: - Timeline Calendar Style
 
 /// 时间线日历样式令牌，集中维护字体、尺寸与颜色语义，避免页面内硬编码。
 enum TimelineCalendarStyle {
-    static let monthNumberFont: Font = .brandDisplay(size: 20, relativeTo: .title3)
-    static let monthNumberVerticalTrim = BrandTypography.verticalTrim(size: 20, textStyle: .title3)
-    static let monthUnitFont: Font = SemanticTypography.font(
-        baseSize: 10,
-        relativeTo: .caption2,
-        weight: .medium,
-        design: .rounded,
-        minimumPointSize: 10
-    )
-    static let actionButtonFont: Font = SemanticTypography.font(
-        baseSize: 13,
-        relativeTo: .caption,
-        weight: .semibold,
-        design: .rounded
-    )
-    static let relativeNumberFont: Font = .brandDisplay(size: 16, relativeTo: .body)
-    static let relativeNumberVerticalTrim = BrandTypography.verticalTrim(size: 16, textStyle: .body)
-    static let relativeUnitFont: Font = SemanticTypography.font(
-        baseSize: 10,
-        relativeTo: .caption2,
-        weight: .regular,
-        design: .rounded,
-        minimumPointSize: 10
-    )
-    static let weekdayFont: Font = SemanticTypography.font(
-        baseSize: 11,
-        relativeTo: .caption2,
-        weight: .medium,
-        design: .rounded
-    )
-    static let categoryChipFont: Font = SemanticTypography.font(
-        baseSize: 12,
-        relativeTo: .caption,
-        weight: .medium,
-        design: .rounded
-    )
-    static let dayNumberFont: Font = .brandDisplay(size: 13, relativeTo: .body)
+    static let monthNumberFont: Font = AppTypography.brandDisplay(size: 20, relativeTo: .title3)
+    static let monthNumberVerticalTrim = AppTypography.brandTrim(size: 20, textStyle: .title3)
+    static let monthUnitFont: Font = AppTypography.fixed(baseSize: 10, relativeTo: .caption2, weight: .medium, design: .rounded)
+    static let actionButtonFont: Font = AppTypography.fixed(baseSize: 13, relativeTo: .caption, weight: .semibold, design: .rounded)
+    static let relativeNumberFont: Font = AppTypography.brandDisplay(size: 16, relativeTo: .body)
+    static let relativeNumberVerticalTrim = AppTypography.brandTrim(size: 16, textStyle: .body)
+    static let relativeUnitFont: Font = AppTypography.fixed(baseSize: 10, relativeTo: .caption2, design: .rounded)
+    static let weekdayFont: Font = AppTypography.fixed(baseSize: 11, relativeTo: .caption2, weight: .medium, design: .rounded)
+    static let categoryChipFont: Font = AppTypography.fixed(baseSize: 12, relativeTo: .caption, weight: .medium, design: .rounded)
+    static let dayNumberFont: Font = AppTypography.brandDisplay(size: 13, relativeTo: .body)
 
     // 时间线圆角语义：顶部日历背景卡对齐热力图卡片，事件卡统一主内容卡角色。
     static let panelCornerRadius: CGFloat = CornerRadius.containerLarge
@@ -470,27 +634,19 @@ enum TimelineCalendarStyle {
     static let progressTrackColor: Color = Color.brand.opacity(0.18)
 
     // 粘性日期头部：品牌衬线体提升分组锚点辨识度，与顶部日历标题建立字体家族呼应
-    static let sectionDateFont: Font = .brandDisplay(size: 18, relativeTo: .subheadline)
-    static let sectionYearFont: Font = .brandDisplay(size: 18, relativeTo: .subheadline)
-    static let sectionDateVerticalTrim = BrandTypography.verticalTrim(size: 18, textStyle: .subheadline)
-    static let sectionFilterFont: Font = SemanticTypography.font(
-        baseSize: 12,
-        relativeTo: .caption,
-        weight: .medium,
-        design: .rounded
-    )
+    static let sectionDateFont: Font = AppTypography.brandDisplay(size: 18, relativeTo: .subheadline)
+    static let sectionYearFont: Font = AppTypography.brandDisplay(size: 18, relativeTo: .subheadline)
+    static let sectionDateVerticalTrim = AppTypography.brandTrim(size: 18, textStyle: .subheadline)
+    static let sectionFilterFont: Font = AppTypography.fixed(baseSize: 12, relativeTo: .caption, weight: .medium, design: .rounded)
 }
 
 // MARK: - Timeline Typography
 
 /// 时间线卡片正文字体令牌，确保富文本密度在不同卡片中保持一致。
 enum TimelineTypography {
-    static let eventRichTextBaseFont: UIFont = SemanticTypography.uiFont(
-        baseSize: SemanticTypography.defaultPointSize(for: .callout),
-        textStyle: .callout
-    )
+    static let eventRichTextBaseFont: UIFont = AppTypography.uiSemantic(.callout)
     static let eventRichTextLineSpacing: CGFloat = 4
-    static let eventFallbackTextFont: Font = .callout
+    static let eventFallbackTextFont: Font = AppTypography.callout
 }
 
 // MARK: - Color Helpers

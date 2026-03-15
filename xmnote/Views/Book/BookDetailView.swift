@@ -107,21 +107,21 @@ private struct BookDetailContentView: View {
     private func bookInfo(_ book: BookDetail) -> some View {
         VStack(alignment: .leading, spacing: Spacing.half) {
             Text(book.name)
-                .font(.body)
+                .font(AppTypography.body)
                 .fontWeight(.semibold)
                 .lineLimit(2)
                 .foregroundStyle(.primary)
 
             if !book.author.isEmpty {
                 Text(book.author)
-                    .font(.subheadline)
+                    .font(AppTypography.subheadline)
                     .lineLimit(1)
                     .foregroundStyle(.secondary)
             }
 
             if !book.press.isEmpty {
                 Text(book.press)
-                    .font(.caption)
+                    .font(AppTypography.caption)
                     .lineLimit(1)
                     .foregroundStyle(.secondary)
             }
@@ -131,7 +131,7 @@ private struct BookDetailContentView: View {
             HStack(spacing: Spacing.cozy) {
                 if !book.readStatusName.isEmpty {
                     Text(book.readStatusName)
-                        .font(.caption)
+                        .font(AppTypography.caption)
                         .foregroundStyle(Color.brand)
                         .padding(.horizontal, Spacing.cozy)
                         .padding(.vertical, Spacing.micro)
@@ -139,7 +139,7 @@ private struct BookDetailContentView: View {
                 }
 
                 Text("\(book.noteCount) 条书摘")
-                    .font(.caption)
+                    .font(AppTypography.caption)
                     .foregroundStyle(.secondary)
             }
         }
@@ -154,7 +154,7 @@ private struct BookDetailContentView: View {
                 // 正文
                 if !note.content.isEmpty {
                     Text(plainTextPreview(from: note.content))
-                        .font(.subheadline)
+                        .font(AppTypography.subheadline)
                         .lineLimit(4)
                         .foregroundStyle(.primary)
                 }
@@ -167,7 +167,7 @@ private struct BookDetailContentView: View {
                             .frame(width: 3)
 
                         Text(plainTextPreview(from: note.idea))
-                            .font(.caption)
+                            .font(AppTypography.caption)
                             .lineLimit(3)
                             .foregroundStyle(.secondary)
                     }
@@ -178,7 +178,7 @@ private struct BookDetailContentView: View {
                 let footer = note.footerText
                 if !footer.isEmpty {
                     Text(footer)
-                        .font(.caption2)
+                        .font(AppTypography.caption2)
                         .foregroundStyle(.tertiary)
                         .padding(.top, Spacing.base)
                 }

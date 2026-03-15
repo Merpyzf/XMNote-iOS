@@ -29,12 +29,12 @@ struct ReadCalendarMonthRecordPlaceholderSheet: View {
                     .foregroundStyle(Color.brand)
 
                 Text("\(monthTitle)阅读记录")
-                    .font(.headline.weight(.semibold))
+                    .font(AppTypography.headlineSemibold)
                     .foregroundStyle(Color.textPrimary)
                     .monospacedDigit()
 
                 Text("当月阅读记录页正在接入，当前可先查看该月总结。")
-                    .font(.subheadline)
+                    .font(AppTypography.subheadline)
                     .foregroundStyle(Color.textSecondary)
                     .multilineTextAlignment(.center)
             }
@@ -53,7 +53,7 @@ struct ReadCalendarMonthRecordPlaceholderSheet: View {
                 onOpenMonthSummary(monthStart)
             } label: {
                 Text("查看当月总结")
-                    .font(.subheadline.weight(.semibold))
+                    .font(AppTypography.subheadlineSemibold)
                     .foregroundStyle(Color.readCalendarTopAction)
                     .frame(maxWidth: .infinity, minHeight: Layout.buttonHeight)
             }

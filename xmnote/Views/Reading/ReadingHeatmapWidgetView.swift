@@ -48,7 +48,7 @@ struct ReadingHeatmapWidgetView: View {
                     if let errorMessage = viewModel.errorMessage {
                         HStack(spacing: Spacing.half) {
                             Text(errorMessage)
-                                .font(.caption)
+                                .font(AppTypography.caption)
                                 .foregroundStyle(Color.feedbackWarning)
                                 .lineLimit(1)
 
@@ -59,7 +59,7 @@ struct ReadingHeatmapWidgetView: View {
                                     await viewModel.loadHeatmap(using: repositories.statisticsRepository)
                                 }
                             }
-                            .font(.caption)
+                            .font(AppTypography.caption)
                             .foregroundStyle(Color.brand)
                         }
                         .padding(.horizontal, HeatmapWidgetLayout.contentInset)

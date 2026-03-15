@@ -515,7 +515,7 @@ private struct ReadCalendarMonthGridWeekRow: View {
     private func overflowBadge(_ count: Int) -> some View {
         Text("+\(count)")
             .font(
-                SemanticTypography.font(
+                AppTypography.fixed(
                     baseSize: 9,
                     relativeTo: .caption2,
                     weight: .semibold,
@@ -727,7 +727,7 @@ private struct ReadCalendarMonthGridWeekRow: View {
             if showText {
                 Text(segment.bookName)
                     .font(
-                        SemanticTypography.font(
+                        AppTypography.fixed(
                             baseSize: 9,
                             relativeTo: .caption2,
                             weight: .semibold,

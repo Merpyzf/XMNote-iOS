@@ -166,10 +166,11 @@ private struct TopSwitcherTabBar<Tab: Hashable>: View {
         } label: {
             Text(title)
                 .font(
-                    SemanticTypography.font(
+                    AppTypography.fixed(
                         baseSize: isSelected ? TopSwitcherTypography.selectedTabSize : TopSwitcherTypography.unselectedTabSize,
                         relativeTo: .title3,
-                        weight: isSelected ? .semibold : .medium
+                        weight: isSelected ? .semibold : .medium,
+                        minimumPointSize: isSelected ? TopSwitcherTypography.selectedTabSize : TopSwitcherTypography.unselectedTabSize
                     )
                 )
                 .foregroundStyle(isSelected ? .primary : .secondary)
@@ -192,12 +193,12 @@ private struct TopSwitcherTitleLabel: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     private var titleTrim: BrandTypography.VerticalTrim {
-        BrandTypography.topSwitcherTitleTrim(for: text, size: TopSwitcherTypography.titleSize)
+        AppTypography.topSwitcherTitleTrim(for: text, size: TopSwitcherTypography.titleSize)
     }
 
     var body: some View {
         Text(text)
-            .font(BrandTypography.topSwitcherTitleFont(for: text, size: TopSwitcherTypography.titleSize))
+            .font(AppTypography.topSwitcherTitleFont(for: text, size: TopSwitcherTypography.titleSize))
             .foregroundStyle(.primary)
             .brandVerticalTrim(titleTrim, edges: [.top, .bottom])
             .padding(.vertical, TopSwitcherTypography.verticalPadding)

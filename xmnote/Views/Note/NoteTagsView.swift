@@ -66,11 +66,11 @@ struct NoteTagsView: View {
     private func sectionHeader(_ title: String) -> some View {
         HStack {
             Text(title)
-                .font(.headline)
+                .font(AppTypography.headline)
             Spacer()
             if title == "我的标签" {
                 Button("管理") {}
-                    .font(.subheadline)
+                    .font(AppTypography.subheadline)
             }
         }
     }
@@ -81,14 +81,14 @@ struct NoteTagsView: View {
         HStack {
             VStack(alignment: .leading, spacing: Spacing.compact) {
                 highlightedName(tag.name)
-                    .font(.subheadline)
+                    .font(AppTypography.subheadline)
                 Text("\(tag.noteCount) 条")
-                    .font(.caption)
+                    .font(AppTypography.caption)
                     .foregroundStyle(Color.brand.opacity(0.7))
             }
             Spacer()
             Image(systemName: "chevron.right")
-                .font(.caption)
+                .font(AppTypography.caption)
                 .foregroundStyle(.tertiary)
         }
         .padding(Spacing.base)

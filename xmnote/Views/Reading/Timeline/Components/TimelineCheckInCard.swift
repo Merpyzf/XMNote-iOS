@@ -29,12 +29,12 @@ struct TimelineCheckInCard: View {
 
                     VStack(alignment: .leading, spacing: Spacing.compact) {
                         Text(bookName)
-                            .font(.subheadline.weight(.medium))
+                            .font(AppTypography.subheadlineMedium)
                             .foregroundStyle(Color.textPrimary)
                             .lineLimit(1)
 
                         Text(bookAuthor)
-                            .font(.caption)
+                            .font(AppTypography.caption)
                             .foregroundStyle(Color.textSecondary)
                             .lineLimit(1)
                     }
@@ -56,7 +56,7 @@ struct TimelineCheckInCard: View {
 
     private var amountBadge: some View {
         Text(level.label)
-            .font(.caption2.weight(.medium))
+            .font(AppTypography.caption2Medium)
             .foregroundStyle(.white)
             .padding(.horizontal, Spacing.cozy)
             .padding(.vertical, Spacing.compact)

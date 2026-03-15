@@ -338,7 +338,7 @@ private struct SearchView: View {
                         .font(.system(size: 28, weight: .semibold))
                         .foregroundStyle(.secondary)
                     Text(query.isEmpty ? "输入关键词开始搜索" : "暂无匹配结果")
-                        .font(.body)
+                        .font(AppTypography.body)
                         .foregroundStyle(.secondary)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)

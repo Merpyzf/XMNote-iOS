@@ -79,7 +79,7 @@ private struct NoteDetailContentView: View {
                 if let footer = viewModel.metadata?.footerText, !footer.isEmpty {
                     CardContainer {
                         Text(footer)
-                            .font(.caption)
+                            .font(AppTypography.caption)
                             .foregroundStyle(.secondary)
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .padding(Spacing.contentEdge)
@@ -125,7 +125,7 @@ private struct NoteDetailContentView: View {
                 if let errorMessage = viewModel.errorMessage {
                     CardContainer {
                         Text(errorMessage)
-                            .font(.footnote)
+                            .font(AppTypography.footnote)
                             .foregroundStyle(.red)
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .padding(Spacing.contentEdge)
@@ -148,7 +148,7 @@ private struct NoteDetailContentView: View {
         CardContainer {
             VStack(alignment: .leading, spacing: Spacing.base) {
                 Text(title)
-                    .font(.subheadline.weight(.semibold))
+                    .font(AppTypography.subheadlineSemibold)
                     .foregroundStyle(.secondary)
                 content()
             }

@@ -72,12 +72,12 @@ struct xmnoteApp: App {
     private func databaseErrorView(_ error: Error) -> some View {
         VStack(spacing: Spacing.base) {
             Image(systemName: "exclamationmark.triangle")
-                .font(.largeTitle)
+                .font(AppTypography.largeTitle)
                 .foregroundStyle(Color.feedbackError)
             Text("数据库初始化失败")
-                .font(.headline)
+                .font(AppTypography.headline)
             Text(error.localizedDescription)
-                .font(.caption)
+                .font(AppTypography.caption)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, Spacing.double)

@@ -29,12 +29,12 @@ struct TimelineTimingCard: View {
 
                     VStack(alignment: .leading, spacing: Spacing.compact) {
                         Text(bookName)
-                            .font(.subheadline.weight(.medium))
+                            .font(AppTypography.subheadlineMedium)
                             .foregroundStyle(Color.textPrimary)
                             .lineLimit(1)
 
                         Text(bookAuthor)
-                            .font(.caption)
+                            .font(AppTypography.caption)
                             .foregroundStyle(Color.textSecondary)
                             .lineLimit(1)
                     }
@@ -52,7 +52,7 @@ struct TimelineTimingCard: View {
 
     private var durationBadge: some View {
         Text(ReadDurationFormatter.format(seconds: event.elapsedSeconds))
-            .font(.caption2.weight(.medium))
+            .font(AppTypography.caption2Medium)
             .foregroundStyle(.white)
             .padding(.horizontal, Spacing.cozy)
             .padding(.vertical, Spacing.compact)

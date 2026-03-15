@@ -45,7 +45,7 @@ struct BookGridItemView: View {
     private var noteBadge: some View {
         if book.noteCount > 0 {
             Text("\(book.noteCount)")
-                .font(.caption2)
+                .font(AppTypography.caption2)
                 .fontWeight(.medium)
                 .foregroundStyle(.white)
                 .padding(.horizontal, Spacing.half)
@@ -60,13 +60,13 @@ struct BookGridItemView: View {
     private var bookInfo: some View {
         VStack(alignment: .leading, spacing: Spacing.tiny) {
             Text(book.name)
-                .font(.caption)
+                .font(AppTypography.caption)
                 .fontWeight(.medium)
                 .lineLimit(1)
                 .foregroundStyle(.primary)
 
             Text(book.author.isEmpty ? " " : book.author)
-                .font(.caption2)
+                .font(AppTypography.caption2)
                 .lineLimit(1)
                 .foregroundStyle(.secondary)
         }

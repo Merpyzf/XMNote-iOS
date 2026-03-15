@@ -105,7 +105,7 @@ private extension XMRemoteImage {
 
             if showsGIFBadge {
                 Text("GIF")
-                    .font(.caption2.weight(.semibold))
+                    .font(AppTypography.caption2Semibold)
                     .foregroundStyle(.white)
                     .padding(.horizontal, Spacing.compact)
                     .padding(.vertical, Spacing.hairline)

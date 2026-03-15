@@ -29,12 +29,12 @@ struct TimelineStatusCard: View {
 
                     VStack(alignment: .leading, spacing: Spacing.compact) {
                         Text(bookName)
-                            .font(.subheadline.weight(.medium))
+                            .font(AppTypography.subheadlineMedium)
                             .foregroundStyle(Color.textPrimary)
                             .lineLimit(1)
 
                         Text(bookAuthor)
-                            .font(.caption)
+                            .font(AppTypography.caption)
                             .foregroundStyle(Color.textSecondary)
                             .lineLimit(1)
 
@@ -59,7 +59,7 @@ struct TimelineStatusCard: View {
             for: event.statusId,
             readDoneCount: event.readDoneCount
         ))
-        .font(.caption2.weight(.medium))
+        .font(AppTypography.caption2Medium)
         .foregroundStyle(.white)
         .padding(.horizontal, Spacing.cozy)
         .padding(.vertical, Spacing.compact)
@@ -88,7 +88,7 @@ struct TimelineStatusCard: View {
         return HStack(spacing: Spacing.tiny) {
             ForEach(1...5, id: \.self) { index in
                 starImage(for: index, score: score)
-                    .font(.caption2)
+                    .font(AppTypography.caption2)
                     .foregroundStyle(Color.statusDone)
             }
         }

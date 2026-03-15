@@ -51,22 +51,11 @@ struct BookSearchStatusCard: View {
 
                     VStack(alignment: .leading, spacing: Spacing.half) {
                         Text(title)
-                            .font(
-                                SemanticTypography.font(
-                                    baseSize: SemanticTypography.defaultPointSize(for: .headline),
-                                    relativeTo: .headline,
-                                    weight: .semibold
-                                )
-                            )
+                            .font(AppTypography.headlineSemibold)
                             .foregroundStyle(Color.textPrimary)
 
                         Text(message)
-                            .font(
-                                SemanticTypography.font(
-                                    baseSize: SemanticTypography.defaultPointSize(for: .subheadline),
-                                    relativeTo: .subheadline
-                                )
-                            )
+                            .font(AppTypography.subheadline)
                             .foregroundStyle(Color.textSecondary)
                             .fixedSize(horizontal: false, vertical: true)
                     }
@@ -75,13 +64,7 @@ struct BookSearchStatusCard: View {
                 if let actionTitle, let action {
                     Button(actionTitle, action: action)
                         .buttonStyle(.plain)
-                        .font(
-                            SemanticTypography.font(
-                                baseSize: SemanticTypography.defaultPointSize(for: .subheadline),
-                                relativeTo: .subheadline,
-                                weight: .semibold
-                            )
-                        )
+                        .font(AppTypography.subheadlineSemibold)
                         .foregroundStyle(tint)
                         .padding(.top, Spacing.half)
                 }

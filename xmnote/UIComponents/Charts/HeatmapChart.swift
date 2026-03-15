@@ -536,7 +536,7 @@ private extension HeatmapChart {
 
     /// 返回保留当前视觉基线的 caption2 语义字体，供热力图所有文本统一复用。
     func semanticFont(baseSize: CGFloat) -> Font {
-        SemanticTypography.font(
+        AppTypography.fixed(
             baseSize: baseSize,
             relativeTo: .caption2,
             minimumPointSize: baseSize
@@ -545,7 +545,7 @@ private extension HeatmapChart {
 
     /// 返回与渲染字体一致的 UIKit 语义字体，避免测量仍按旧固定字号进行。
     func semanticUIFont(baseSize: CGFloat) -> UIFont {
-        SemanticTypography.uiFont(
+        AppTypography.uiFixed(
             baseSize: baseSize,
             textStyle: .caption2,
             minimumPointSize: baseSize
@@ -676,7 +676,7 @@ extension HeatmapChart {
 
     /// 图例文本统一走 caption2 语义字体，并固定默认态视觉字号不被抬高。
     private static func legendFont(baseSize: CGFloat) -> Font {
-        SemanticTypography.font(
+        AppTypography.fixed(
             baseSize: baseSize,
             relativeTo: .caption2,
             minimumPointSize: baseSize

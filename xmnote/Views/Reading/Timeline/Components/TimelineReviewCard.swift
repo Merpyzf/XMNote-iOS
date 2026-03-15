@@ -20,7 +20,7 @@ struct TimelineReviewCard: View {
 
                 if !event.title.isEmpty {
                     Text(event.title)
-                        .font(.subheadline.weight(.semibold))
+                        .font(AppTypography.subheadlineSemibold)
                         .foregroundStyle(Color.textPrimary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
@@ -64,7 +64,7 @@ struct TimelineReviewCard: View {
         return HStack(spacing: Spacing.tiny) {
             ForEach(1...5, id: \.self) { index in
                 starImage(for: index, score: score)
-                    .font(.caption)
+                    .font(AppTypography.caption)
                     .foregroundStyle(Color.statusDone)
             }
         }

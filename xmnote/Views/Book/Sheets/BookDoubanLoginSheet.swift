@@ -27,9 +27,9 @@ struct BookDoubanLoginScreen: View {
                     ToolbarItem(placement: .principal) {
                         VStack(spacing: 2) {
                             Text("登录豆瓣")
-                                .font(.headline)
+                                .font(AppTypography.headline)
                             Text(title)
-                                .font(.caption2)
+                                .font(AppTypography.caption2)
                                 .foregroundStyle(Color.textSecondary)
                         }
                     }

@@ -219,13 +219,7 @@ struct BookSearchView: View {
                         }
                     } label: {
                         Text(source.title)
-                            .font(
-                                SemanticTypography.font(
-                                    baseSize: SemanticTypography.defaultPointSize(for: .footnote),
-                                    relativeTo: .footnote,
-                                    weight: isSelected ? .semibold : .medium
-                                )
-                            )
+                            .font(AppTypography.semantic(.footnote, weight: isSelected ? .semibold : .medium))
                             .foregroundStyle(isSelected ? .white : Color.textSecondary)
                             .padding(.horizontal, SearchPageLayout.sourceChipHorizontalPadding)
                             .frame(height: SearchPageLayout.sourceChipVisualHeight)
@@ -317,13 +311,7 @@ struct BookSearchView: View {
                         .controlSize(.small)
 
                     Text("正在从 \(viewModel.selectedSource.title) 搜索")
-                        .font(
-                            SemanticTypography.font(
-                                baseSize: SemanticTypography.defaultPointSize(for: .footnote),
-                                relativeTo: .footnote,
-                                weight: .medium
-                            )
-                        )
+                        .font(AppTypography.semantic(.footnote, weight: .medium))
                         .foregroundStyle(Color.textSecondary)
                 }
                 .padding(.horizontal, Spacing.contentEdge)
@@ -443,13 +431,7 @@ struct BookSearchView: View {
                 ContentUnavailableView.search(text: viewModel.trimmedQuery)
 
                 Text("当前搜索源：\(viewModel.selectedSource.title)")
-                    .font(
-                        SemanticTypography.font(
-                            baseSize: SemanticTypography.defaultPointSize(for: .footnote),
-                            relativeTo: .footnote,
-                            weight: .medium
-                        )
-                    )
+                    .font(AppTypography.semantic(.footnote, weight: .medium))
                     .foregroundStyle(Color.textSecondary)
             }
             .frame(maxWidth: .infinity, minHeight: 220)

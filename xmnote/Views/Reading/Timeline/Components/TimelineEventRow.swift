@@ -219,16 +219,16 @@ struct TimelineCardMetaLine: View {
     var body: some View {
         HStack(spacing: Spacing.compact) {
             Text(timeString)
-                .font(.caption)
+                .font(AppTypography.caption)
                 .foregroundStyle(Color.textHint)
 
             if !bookName.isEmpty {
                 Text("·")
-                    .font(.caption)
+                    .font(AppTypography.caption)
                     .foregroundStyle(Color.textHint)
 
                 Text("《\(bookName)》")
-                    .font(.caption)
+                    .font(AppTypography.caption)
                     .foregroundStyle(Color.textSecondary)
                     .lineLimit(1)
             }

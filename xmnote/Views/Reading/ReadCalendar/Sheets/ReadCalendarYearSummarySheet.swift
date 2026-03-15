@@ -108,13 +108,7 @@ private extension ReadCalendarYearSummarySheet {
             Spacer(minLength: 0)
 
             Text(String(sheet.year))
-                .font(
-                    SemanticTypography.font(
-                        baseSize: SemanticTypography.defaultPointSize(for: .title3),
-                        relativeTo: .title3,
-                        weight: .semibold
-                    )
-                )
+                .font(AppTypography.title3Semibold)
                 .foregroundStyle(Color.textPrimary)
                 .monospacedDigit()
                 .contentTransition(.numericText())
@@ -157,10 +151,10 @@ private extension ReadCalendarYearSummarySheet {
     var summaryHeader: some View {
         VStack(alignment: .leading, spacing: Spacing.compact) {
             Text("阅读总结")
-                .font(.headline.weight(.semibold))
+                .font(AppTypography.headlineSemibold)
                 .foregroundStyle(Color.textPrimary)
             summarySubtitleText
-                .font(.footnote)
+                .font(AppTypography.footnote)
                 .contentTransition(.numericText())
                 .lineLimit(2)
                 .lineSpacing(1)
@@ -258,33 +252,17 @@ private extension ReadCalendarYearSummarySheet {
 
             VStack(alignment: .leading, spacing: Spacing.hairline) {
                 Text(metric.title)
-                    .font(
-                        SemanticTypography.font(
-                            baseSize: SemanticTypography.defaultPointSize(for: .caption2),
-                            relativeTo: .caption2
-                        )
-                    )
+                    .font(AppTypography.caption2)
                     .foregroundStyle(Color.readCalendarSubtleText)
                 Text(metric.value)
-                    .font(
-                        SemanticTypography.font(
-                            baseSize: SemanticTypography.defaultPointSize(for: .subheadline),
-                            relativeTo: .subheadline,
-                            weight: .semibold
-                        )
-                    )
+                    .font(AppTypography.subheadlineSemibold)
                     .foregroundStyle(Color.textPrimary)
                     .monospacedDigit()
                     .contentTransition(.numericText())
                     .lineLimit(1)
                 if let secondaryValue = metric.secondaryValue {
                     Text(secondaryValue.text)
-                        .font(
-                            SemanticTypography.font(
-                                baseSize: SemanticTypography.defaultPointSize(for: .caption2),
-                                relativeTo: .caption2
-                            )
-                        )
+                        .font(AppTypography.caption2)
                         .foregroundStyle(deltaColor(secondaryValue.trend))
                         .monospacedDigit()
                         .contentTransition(.numericText())
@@ -376,7 +354,7 @@ private extension ReadCalendarYearSummarySheet {
                     ProgressView()
                         .controlSize(.small)
                     Text("正在整理年度 Top...")
-                        .font(.footnote)
+                        .font(AppTypography.footnote)
                         .foregroundStyle(Color.textHint)
                 }
             }
@@ -457,12 +435,12 @@ private extension ReadCalendarYearSummarySheet {
     var summaryMonthContribution: some View {
         VStack(alignment: .leading, spacing: Layout.monthContributionItemSpacing) {
             Text("月度阅读分布")
-                .font(.headline.weight(.semibold))
+                .font(AppTypography.headlineSemibold)
                 .foregroundStyle(Color.textPrimary)
 
             if sheet.monthContributions.isEmpty {
                 Text("暂无月度阅读分布数据")
-                    .font(.footnote)
+                    .font(AppTypography.footnote)
                     .foregroundStyle(Color.textHint)
             } else {
                 let maxReadSeconds = max(1, sheet.monthContributions.map(\.totalReadSeconds).max() ?? 1)
@@ -488,20 +466,20 @@ private extension ReadCalendarYearSummarySheet {
         return VStack(alignment: .leading, spacing: Spacing.compact) {
             HStack(alignment: .center, spacing: Spacing.cozy) {
                 Text(monthLabel(month.monthStart))
-                    .font(.subheadline.weight(.medium))
+                    .font(AppTypography.subheadlineMedium)
                     .foregroundStyle(Color.textPrimary)
                     .frame(width: 34, alignment: .leading)
                     .monospacedDigit()
 
                 Text("阅读 \(month.activeDays) 天")
-                    .font(.caption)
+                    .font(AppTypography.caption)
                     .foregroundStyle(Color.textSecondary)
                     .lineLimit(1)
 
                 Spacer(minLength: 0)
 
                 Text(durationTextAllowZero(month.totalReadSeconds))
-                    .font(.caption.weight(.medium))
+                    .font(AppTypography.captionMedium)
                     .foregroundStyle(Color.textPrimary)
                     .monospacedDigit()
 

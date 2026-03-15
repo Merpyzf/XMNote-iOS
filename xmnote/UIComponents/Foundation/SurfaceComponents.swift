@@ -58,7 +58,7 @@ struct EmptyStateView: View {
                 .font(.system(size: 48))
                 .foregroundStyle(Color.brand.opacity(0.3))
             Text(message)
-                .font(.title3)
+                .font(AppTypography.title3)
                 .foregroundStyle(.secondary)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)

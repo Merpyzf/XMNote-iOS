@@ -63,17 +63,17 @@ private extension BackupHistorySheetView {
         VStack(alignment: .leading, spacing: Spacing.compact) {
             HStack {
                 Text(backup.deviceName)
-                    .font(.body)
+                    .font(AppTypography.body)
                 Spacer()
                 Text(formattedSize(backup.size))
-                    .font(.caption)
+                    .font(AppTypography.caption)
                     .foregroundStyle(.secondary)
             }
             if let date = backup.backupDate {
                 Text("\(date, style: .date) \(date, style: .time)")
             }
         }
-        .font(.caption)
+        .font(AppTypography.caption)
         .foregroundStyle(.secondary)
     }
 

@@ -183,13 +183,7 @@ private extension ReadCalendarMonthSummarySheet {
             Spacer(minLength: 0)
             
             Text(summaryMonthTitle(sheet.monthStart))
-                .font(
-                    SemanticTypography.font(
-                        baseSize: SemanticTypography.defaultPointSize(for: .title3),
-                        relativeTo: .title3,
-                        weight: .semibold
-                    )
-                )
+                .font(AppTypography.title3Semibold)
                 .foregroundStyle(Color.textPrimary)
                 .monospacedDigit()
                 .contentTransition(.numericText())
@@ -232,10 +226,10 @@ private extension ReadCalendarMonthSummarySheet {
     var summaryHeader: some View {
         VStack(alignment: .leading, spacing: Spacing.compact) {
             Text("阅读总结")
-                .font(.headline.weight(.semibold))
+                .font(AppTypography.headlineSemibold)
                 .foregroundStyle(Color.textPrimary)
             summaryHeaderSubtitleText
-                .font(.footnote)
+                .font(AppTypography.footnote)
                 .contentTransition(.numericText())
                 .lineLimit(2)
                 .lineSpacing(1)
@@ -365,33 +359,17 @@ private extension ReadCalendarMonthSummarySheet {
 
             VStack(alignment: .leading, spacing: 1) {
                 Text(metric.title)
-                    .font(
-                        SemanticTypography.font(
-                            baseSize: SemanticTypography.defaultPointSize(for: .caption2),
-                            relativeTo: .caption2
-                        )
-                    )
+                    .font(AppTypography.caption2)
                     .foregroundStyle(Color.readCalendarSubtleText)
                 Text(metric.primaryValue)
-                    .font(
-                        SemanticTypography.font(
-                            baseSize: SemanticTypography.defaultPointSize(for: .subheadline),
-                            relativeTo: .subheadline,
-                            weight: .semibold
-                        )
-                    )
+                    .font(AppTypography.subheadlineSemibold)
                     .foregroundStyle(Color.textPrimary)
                     .monospacedDigit()
                     .contentTransition(.numericText())
                     .lineLimit(1)
                 if let secondaryValue = metric.secondaryValue {
                     Text(secondaryValue.text)
-                        .font(
-                            SemanticTypography.font(
-                                baseSize: SemanticTypography.defaultPointSize(for: .caption2),
-                                relativeTo: .caption2
-                            )
-                        )
+                        .font(AppTypography.caption2)
                         .foregroundStyle(deltaColor(secondaryValue.trend))
                         .monospacedDigit()
                         .contentTransition(.numericText())
@@ -496,7 +474,7 @@ private extension ReadCalendarMonthSummarySheet {
 
             if sheet.hasDurationRankingFallback {
                 Text("网络不稳定，已使用默认配色")
-                    .font(.caption2)
+                    .font(AppTypography.caption2)
                     .foregroundStyle(Color.textHint)
                     .padding(.top, Layout.summaryDurationFallbackHintTopSpacing)
             }

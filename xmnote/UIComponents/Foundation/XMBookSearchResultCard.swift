@@ -29,16 +29,8 @@ struct XMBookSearchResultCard: View {
                 highlightedText(
                     result.title,
                     keyword: keyword,
-                    baseFont: SemanticTypography.font(
-                        baseSize: SemanticTypography.defaultPointSize(for: .headline),
-                        relativeTo: .headline,
-                        weight: .semibold
-                    ),
-                    highlightFont: SemanticTypography.font(
-                        baseSize: SemanticTypography.defaultPointSize(for: .headline),
-                        relativeTo: .headline,
-                        weight: .bold
-                    ),
+                    baseFont: AppTypography.semantic(.headline, weight: .semibold),
+                    highlightFont: AppTypography.semantic(.headline, weight: .bold),
                     baseColor: Color.textPrimary,
                     highlightColor: Color.brand
                 )
@@ -51,15 +43,8 @@ struct XMBookSearchResultCard: View {
                         highlightedText(
                             result.subtitle,
                             keyword: keyword,
-                            baseFont: SemanticTypography.font(
-                                baseSize: SemanticTypography.defaultPointSize(for: .subheadline),
-                                relativeTo: .subheadline
-                            ),
-                            highlightFont: SemanticTypography.font(
-                                baseSize: SemanticTypography.defaultPointSize(for: .subheadline),
-                                relativeTo: .subheadline,
-                                weight: .semibold
-                            ),
+                            baseFont: AppTypography.subheadline,
+                            highlightFont: AppTypography.subheadlineSemibold,
                             baseColor: Color.textSecondary,
                             highlightColor: Color.brand
                         )
@@ -73,15 +58,8 @@ struct XMBookSearchResultCard: View {
                             highlightedText(
                                 "\(line.label)\(line.value)",
                                 keyword: keyword,
-                                baseFont: SemanticTypography.font(
-                                    baseSize: SemanticTypography.defaultPointSize(for: .footnote),
-                                    relativeTo: .footnote
-                                ),
-                                highlightFont: SemanticTypography.font(
-                                    baseSize: SemanticTypography.defaultPointSize(for: .footnote),
-                                    relativeTo: .footnote,
-                                    weight: .semibold
-                                ),
+                                baseFont: AppTypography.footnote,
+                                highlightFont: AppTypography.footnoteSemibold,
                                 baseColor: Color.textSecondary,
                                 highlightColor: Color.brand
                             )
@@ -93,15 +71,8 @@ struct XMBookSearchResultCard: View {
                             highlightedText(
                                 result.subtitle,
                                 keyword: keyword,
-                                baseFont: SemanticTypography.font(
-                                    baseSize: SemanticTypography.defaultPointSize(for: .footnote),
-                                    relativeTo: .footnote
-                                ),
-                                highlightFont: SemanticTypography.font(
-                                    baseSize: SemanticTypography.defaultPointSize(for: .footnote),
-                                    relativeTo: .footnote,
-                                    weight: .semibold
-                                ),
+                                baseFont: AppTypography.footnote,
+                                highlightFont: AppTypography.footnoteSemibold,
                                 baseColor: Color.textSecondary,
                                 highlightColor: Color.brand
                             )

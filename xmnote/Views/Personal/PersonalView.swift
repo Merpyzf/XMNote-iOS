@@ -93,18 +93,18 @@ extension PersonalView {
             NavigationLink(value: PersonalRoute.premium) {
                 HStack(spacing: Spacing.base) {
                     Image(systemName: "crown.fill")
-                        .font(.title2)
+                        .font(AppTypography.title2)
                         .foregroundStyle(.orange)
                     VStack(alignment: .leading, spacing: Spacing.tiny) {
                         Text("开通会员")
-                            .font(.headline)
+                            .font(AppTypography.headline)
                         Text("解锁全部高级功能")
-                            .font(.caption)
+                            .font(AppTypography.caption)
                             .foregroundStyle(.secondary)
                     }
                     Spacer()
                     Image(systemName: "chevron.right")
-                        .font(.caption)
+                        .font(AppTypography.caption)
                         .foregroundStyle(.tertiary)
                 }
                 .padding(Spacing.contentEdge)
@@ -176,7 +176,7 @@ extension PersonalView {
             NavigationLink(value: PersonalRoute.about) {
                 HStack {
                     Image(systemName: "info.circle")
-                        .font(.body)
+                        .font(AppTypography.body)
                         .foregroundStyle(Color.brand)
                         .frame(width: Layout.settingsRowIconWidth)
                     Text("关于应用")
@@ -184,7 +184,7 @@ extension PersonalView {
                     Text(appVersion)
                         .foregroundStyle(.secondary)
                     Image(systemName: "chevron.right")
-                        .font(.caption)
+                        .font(AppTypography.caption)
                         .foregroundStyle(.tertiary)
                 }
                 .padding(.horizontal, Spacing.contentEdge)
@@ -203,13 +203,13 @@ extension PersonalView {
             NavigationLink(destination: DebugCenterView()) {
                 HStack {
                     Image(systemName: "hammer")
-                        .font(.body)
+                        .font(AppTypography.body)
                         .foregroundStyle(Color.brand)
                         .frame(width: Layout.settingsRowIconWidth)
                     Text("测试中心")
                     Spacer()
                     Image(systemName: "chevron.right")
-                        .font(.caption)
+                        .font(AppTypography.caption)
                         .foregroundStyle(.tertiary)
                 }
                 .padding(.horizontal, Spacing.contentEdge)
@@ -237,7 +237,7 @@ extension PersonalView {
     ) -> some View {
         VStack(alignment: .leading, spacing: Spacing.none) {
             Text(title)
-                .font(.footnote)
+                .font(AppTypography.footnote)
                 .foregroundStyle(.secondary)
                 .padding(.horizontal, Spacing.compact)
                 .padding(.bottom, Spacing.half)
@@ -260,13 +260,13 @@ extension PersonalView {
             NavigationLink(value: route) {
                 HStack {
                     Image(systemName: icon)
-                        .font(.body)
+                        .font(AppTypography.body)
                         .foregroundStyle(Color.brand)
                         .frame(width: Layout.settingsRowIconWidth)
                     Text(title)
                     Spacer()
                     Image(systemName: "chevron.right")
-                        .font(.caption)
+                        .font(AppTypography.caption)
                         .foregroundStyle(.tertiary)
                 }
                 .padding(.horizontal, Spacing.contentEdge)
@@ -292,14 +292,14 @@ extension PersonalView {
             Button(action: action) {
                 HStack {
                     Image(systemName: icon)
-                        .font(.body)
+                        .font(AppTypography.body)
                         .foregroundStyle(Color.brand)
                         .frame(width: Layout.settingsRowIconWidth)
                     Text(title)
                         .foregroundStyle(.primary)
                     Spacer()
                     Image(systemName: "chevron.right")
-                        .font(.caption)
+                        .font(AppTypography.caption)
                         .foregroundStyle(.tertiary)
                 }
                 .padding(.horizontal, Spacing.contentEdge)
