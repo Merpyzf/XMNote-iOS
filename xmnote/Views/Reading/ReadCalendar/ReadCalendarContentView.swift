@@ -1329,14 +1329,6 @@ private extension ReadCalendarContentView {
                 )
                 .fill(Color.surfaceNested)
             )
-            .overlay {
-                RoundedRectangle(
-                    cornerRadius: Layout.yearHeatmapMonthCardCornerRadius,
-                    style: .continuous
-                )
-                // 年热力图月卡使用弱边框，避免与内容色块争夺视觉焦点。
-                .stroke(Color.surfaceBorderSubtle, lineWidth: CardStyle.borderWidth)
-            }
         }
         .buttonStyle(.plain)
     }

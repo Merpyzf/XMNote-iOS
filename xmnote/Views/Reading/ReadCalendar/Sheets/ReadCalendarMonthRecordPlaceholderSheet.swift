@@ -44,10 +44,6 @@ struct ReadCalendarMonthRecordPlaceholderSheet: View {
                 RoundedRectangle(cornerRadius: Layout.cardCornerRadius, style: .continuous)
                     .fill(Color.surfaceNested)
             )
-            .overlay {
-                RoundedRectangle(cornerRadius: Layout.cardCornerRadius, style: .continuous)
-                    .stroke(Color.surfaceBorderSubtle, lineWidth: CardStyle.borderWidth)
-            }
 
             Button {
                 onOpenMonthSummary(monthStart)

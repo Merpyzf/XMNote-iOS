@@ -33,11 +33,7 @@ struct BookSearchStatusCard: View {
     }
 
     var body: some View {
-        CardContainer(
-            cornerRadius: CornerRadius.containerMedium,
-            showsBorder: true,
-            borderColor: .surfaceBorderSubtle
-        ) {
+        CardContainer(cornerRadius: CornerRadius.containerMedium) {
             VStack(alignment: .leading, spacing: Spacing.base) {
                 HStack(alignment: .top, spacing: Spacing.base) {
                     RoundedRectangle(cornerRadius: CornerRadius.blockMedium, style: .continuous)

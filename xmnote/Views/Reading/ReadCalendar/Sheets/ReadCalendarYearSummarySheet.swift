@@ -279,11 +279,6 @@ private extension ReadCalendarYearSummarySheet {
             RoundedRectangle(cornerRadius: CornerRadius.blockLarge, style: .continuous)
                 .fill(Color.surfaceNested)
         )
-        .overlay {
-            RoundedRectangle(cornerRadius: CornerRadius.blockLarge, style: .continuous)
-                // 二级指标卡降低描边存在感，保留层级同时不压过数据本身。
-                .stroke(Color.surfaceBorderSubtle, lineWidth: CardStyle.borderWidth)
-        }
     }
 
     /// 返回年度指标图标渐变色阶。

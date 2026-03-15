@@ -300,11 +300,7 @@ struct BookSearchView: View {
     }
 
     private func loadingStateCard(_ viewModel: BookSearchViewModel) -> some View {
-        CardContainer(
-            cornerRadius: CornerRadius.containerMedium,
-            showsBorder: true,
-            borderColor: .surfaceBorderSubtle
-        ) {
+        CardContainer(cornerRadius: CornerRadius.containerMedium) {
             VStack(alignment: .leading, spacing: Spacing.none) {
                 HStack(spacing: Spacing.cozy) {
                     ProgressView()
@@ -344,11 +340,7 @@ struct BookSearchView: View {
                 inlineFeedbackCard(inlineFeedback)
             }
 
-            CardContainer(
-                cornerRadius: CornerRadius.containerMedium,
-                showsBorder: true,
-                borderColor: .surfaceBorderSubtle
-            ) {
+            CardContainer(cornerRadius: CornerRadius.containerMedium) {
                 VStack(alignment: .leading, spacing: Spacing.none) {
                     ForEach(Array(viewModel.results.enumerated()), id: \.element.id) { index, result in
                         BookSearchResultRow(
@@ -422,11 +414,7 @@ struct BookSearchView: View {
     }
 
     private func emptyResultsCard(_ viewModel: BookSearchViewModel) -> some View {
-        CardContainer(
-            cornerRadius: CornerRadius.containerMedium,
-            showsBorder: true,
-            borderColor: .surfaceBorderSubtle
-        ) {
+        CardContainer(cornerRadius: CornerRadius.containerMedium) {
             VStack(spacing: Spacing.base) {
                 ContentUnavailableView.search(text: viewModel.trimmedQuery)
 

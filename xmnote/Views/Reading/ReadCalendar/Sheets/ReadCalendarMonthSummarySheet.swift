@@ -386,11 +386,6 @@ private extension ReadCalendarMonthSummarySheet {
             RoundedRectangle(cornerRadius: CornerRadius.blockLarge, style: .continuous)
                 .fill(Color.surfaceNested)
         )
-        .overlay {
-            RoundedRectangle(cornerRadius: CornerRadius.blockLarge, style: .continuous)
-                // 二级指标卡降低描边存在感，保留层级同时不压过数据本身。
-                .stroke(Color.surfaceBorderSubtle, lineWidth: CardStyle.borderWidth)
-        }
     }
 
     /// 根据指标角色返回图标底板渐变色阶。

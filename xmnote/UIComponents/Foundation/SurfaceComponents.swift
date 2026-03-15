@@ -11,7 +11,7 @@ import UIKit
 // MARK: - Card Container
 
 /// 内容卡片容器，对应 Android 端的 ContentBox
-/// 极细边框定义边界，白色背景浮于窗口背景之上
+/// 默认仅提供背景与圆角，按需显式开启描边。
 struct CardContainer<Content: View>: View {
     let cornerRadius: CGFloat
     let showsBorder: Bool
@@ -21,7 +21,7 @@ struct CardContainer<Content: View>: View {
     /// 注入圆角、边框与内容闭包，组装基础容器外观。
     init(
         cornerRadius: CGFloat = CornerRadius.blockLarge,
-        showsBorder: Bool = true,
+        showsBorder: Bool = false,
         borderColor: Color = .surfaceBorderStrong,
         @ViewBuilder content: () -> Content
     ) {
