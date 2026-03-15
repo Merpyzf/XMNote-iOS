@@ -9,12 +9,13 @@ import Foundation
 
 // MARK: - 事件子结构
 
-/// 书摘事件，携带划线正文、用户批注与附图地址
+/// 书摘事件，携带划线正文、用户批注、附图地址与关联标签
 struct TimelineNoteEvent: Equatable {
     let content: String
     let idea: String
     let bookTitle: String
     let imageURLs: [String]
+    let tagNames: [String]
 }
 
 /// 阅读计时事件，携带时长与时间范围

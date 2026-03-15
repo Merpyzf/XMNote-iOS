@@ -92,9 +92,10 @@ private extension TimelineRepository {
 
     // MARK: 书摘
 
-    /// 查询指定时间范围内的书摘事件，并批量关联 attach_image 附图。
+    /// 查询指定时间范围内的书摘事件，并批量关联附图与标签。
     /// 表: note JOIN book | 时间字段: note.created_date | 过滤: is_deleted=0
     /// 附图表: attach_image | 外键: note_id | 排序: id ASC
+    /// 标签表: tag_note JOIN tag | 过滤: tag_note/tag.is_deleted=0, tag.type=0 | 排序: tag.tag_order ASC, tag_note.id ASC
     nonisolated func queryNoteEvents(_ db: Database, start: Int64, end: Int64) throws -> [TimelineEvent] {
         let sql = """
             SELECT n.id, n.content, n.idea, n.created_date,
@@ -112,16 +113,20 @@ private extension TimelineRepository {
             imageColumn: "image_url", ids: noteIds,
             orderClause: "id ASC"
         )
+        let tagMap = try batchFetchNoteTags(db, noteIds: noteIds)
 
         return rows.map { row in
             let noteId = row["id"] as Int64
+            let content = Self.trimTrailingWhitespaceAndNewlines(row["content"] as String? ?? "")
+            let idea = Self.trimTrailingWhitespaceAndNewlines(row["idea"] as String? ?? "")
             return TimelineEvent(
                 id: "note-\(noteId)",
                 kind: .note(TimelineNoteEvent(
-                    content: row["content"] as String? ?? "",
-                    idea: row["idea"] as String? ?? "",
+                    content: content,
+                    idea: idea,
                     bookTitle: row["name"] as String? ?? "",
-                    imageURLs: imageMap[noteId] ?? []
+                    imageURLs: imageMap[noteId] ?? [],
+                    tagNames: tagMap[noteId] ?? []
                 )),
                 timestamp: row["created_date"] as Int64,
                 bookName: row["name"] as String? ?? "",
@@ -269,7 +274,7 @@ private extension TimelineRepository {
                 id: "relevant-\(ccId)",
                 kind: .relevant(TimelineRelevantEvent(
                     title: row["title"] as String? ?? "",
-                    content: row["content"] as String? ?? "",
+                    content: Self.trimTrailingWhitespaceAndNewlines(row["content"] as String? ?? ""),
                     url: row["url"] as String? ?? "",
                     categoryTitle: catTitle,
                     imageURLs: imageMap[ccId] ?? []
@@ -311,7 +316,7 @@ private extension TimelineRepository {
                 id: "review-\(reviewId)",
                 kind: .review(TimelineReviewEvent(
                     title: row["title"] as String? ?? "",
-                    content: row["content"] as String? ?? "",
+                    content: Self.trimTrailingWhitespaceAndNewlines(row["content"] as String? ?? ""),
                     bookScore: row["score"] as Int64? ?? 0,
                     imageURLs: imageMap[reviewId] ?? []
                 )),
@@ -346,6 +351,25 @@ private extension TimelineRepository {
                 bookCover: row["cover"] as String? ?? ""
             )
         }
+    }
+}
+
+// MARK: - 文本清理
+
+private extension TimelineRepository {
+    /// 读取阶段统一清理尾部空白与换行，避免展示层出现末尾空段导致的额外间距。
+    nonisolated static func trimTrailingWhitespaceAndNewlines(_ text: String) -> String {
+        guard !text.isEmpty else { return text }
+        var endIndex = text.endIndex
+        while endIndex > text.startIndex {
+            let previousIndex = text.index(before: endIndex)
+            let scalar = text[previousIndex]
+            guard scalar.unicodeScalars.allSatisfy({ CharacterSet.whitespacesAndNewlines.contains($0) }) else {
+                break
+            }
+            endIndex = previousIndex
+        }
+        return String(text[..<endIndex])
     }
 }
 
@@ -514,6 +538,31 @@ private extension TimelineRepository {
 // MARK: - 图片批量查询
 
 private extension TimelineRepository {
+    /// 批量查询书摘标签，按 note_id 分组返回标签名列表。
+    nonisolated func batchFetchNoteTags(
+        _ db: Database,
+        noteIds: [Int64]
+    ) throws -> [Int64: [String]] {
+        guard !noteIds.isEmpty else { return [:] }
+        let placeholders = noteIds.map { _ in "?" }.joined(separator: ", ")
+        let sql = """
+            SELECT tn.note_id, t.name
+            FROM tag_note tn
+            JOIN tag t ON t.id = tn.tag_id AND t.is_deleted = 0 AND t.type = 0
+            WHERE tn.is_deleted = 0 AND tn.note_id IN (\(placeholders))
+            ORDER BY t.tag_order ASC, tn.id ASC
+            """
+        let rows = try Row.fetchAll(db, sql: sql, arguments: StatementArguments(noteIds))
+        var result: [Int64: [String]] = [:]
+        for row in rows {
+            let noteId = row["note_id"] as Int64
+            let name = row["name"] as String? ?? ""
+            guard !name.isEmpty else { continue }
+            result[noteId, default: []].append(name)
+        }
+        return result
+    }
+
     /// 批量查询图片表，按外键分组返回 URL 列表。
     /// - Parameters:
     ///   - table: 图片表名（attach_image / review_image / category_image）

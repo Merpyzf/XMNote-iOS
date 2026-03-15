@@ -133,7 +133,8 @@ enum TimelineCardsMockData {
                             "https://picsum.photos/200/300",
                             "https://picsum.photos/201/300",
                             "https://picsum.photos/202/300",
-                        ]
+                        ],
+                        tagNames: ["使命", "人生", "摘录"]
                     )),
                     timestamp: base + 36000000,
                     bookName: "活法",
@@ -208,7 +209,8 @@ enum TimelineCardsMockData {
                         content: "简洁是最高形式的复杂。",
                         idea: "",
                         bookTitle: "设计心理学",
-                        imageURLs: []
+                        imageURLs: [],
+                        tagNames: []
                     )),
                     timestamp: base + 57600000,
                     bookName: "设计心理学",

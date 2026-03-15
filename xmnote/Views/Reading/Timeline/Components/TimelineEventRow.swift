@@ -258,7 +258,8 @@ struct TimelineCardMetaLine: View {
                     content: "好的代码读起来像散文一样流畅。",
                     idea: "这就是为什么命名如此重要",
                     bookTitle: "代码整洁之道",
-                    imageURLs: []
+                    imageURLs: [],
+                    tagNames: ["编码", "命名"]
                 )),
                 timestamp: Int64(Date().timeIntervalSince1970 * 1000),
                 bookName: "代码整洁之道",
