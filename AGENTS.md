@@ -15,6 +15,10 @@
 ## 执行优先级（与 CLAUDE.md 融合）
 - 优先级顺序：用户当次明确要求 > `AGENTS.md` > `CLAUDE.md`。
 - 默认执行策略：实现完成后默认只做编译校验；未被明确要求时，不执行单元测试、不执行 UI Test，不主动编写任何测试用例。
+- 命令执行默认策略（强制）：对 `xcodebuild`、访问系统缓存/模拟器服务、网络下载、打开 GUI 等非删除类命令，默认直接执行，不额外做口头确认。
+- 命令提权策略（强制）：若上述非删除类命令因运行环境限制需要额外权限，直接发起权限请求，不再额外先用自然语言征求一次同意。
+- 危险操作审批边界（强制）：凡涉及删除或不可逆覆盖的操作，一律先获得用户批准再执行；包括 `rm`、`git rm`、`git reset --hard`、`git checkout --`、覆盖式移动/替换、批量清理目录，以及其他会隐式删除文件的命令。
+- 平台边界说明：仓库规则只约束协作默认行为；沙箱、系统服务、网络能力等平台级限制仍以运行环境的实际权限模型为准。
 - 文档触发策略（强制）：仅当用户明确发出“任务已完成”后，才允许生成或更新文档（含 `docs/feature/`、`docs/component-guides/`、`docs/learning/`、L1/L2/L3 同构文档）。
 - 对齐情况文档触发策略（强制）：仅对 Android → iOS 迁移功能生效；在“任务已完成”前禁止写入 `docs/feature/功能名/对齐情况.md`，在“任务已完成”后必须与其他文档一次性补齐。
 - 在“任务已完成”前：默认仅允许代码实现与编译校验；仅当用户明确要求测试时才执行测试；禁止文档写入与文档校验脚本执行。
@@ -138,12 +142,14 @@
 
 ## UI 与交互约束
 - 遵循 iOS HIG，保持品牌与信息层级一致，避免无意义视觉修饰。
-- 文本字号治理（强制）：先区分 `生产文本 / 品牌数字与品牌标题 / 图标或装饰 glyph`；生产文本统一走系统语义字体或 `SemanticTypography`，品牌强调位使用 `brandDisplay(size:relativeTo:)`，图标尺寸不得伪装成文本字号规则。
-- 语义化目标（强制）：补齐 Dynamic Type 与语义层级，不得让页面默认态整体变大；需要保留现有视觉基线时，统一通过 `SemanticTypography.font(..., minimumPointSize: baseSize)` 或 `SemanticTypography.uiFont(..., minimumPointSize: baseSize)` 实现。
+- 文本字号治理（强制）：先区分 `生产文本 / 品牌数字与品牌标题 / 图标或装饰 glyph`；生产文本在页面层统一走 `DesignTokens.swift` 中的 `AppTypography`，品牌强调位也统一从 `AppTypography.brandDisplay(...)` / `AppTypography.brandTrim(...)` 进入，图标尺寸不得伪装成文本字号规则。
+- 语义化目标（强制）：补齐 Dynamic Type 与语义层级，不得让页面默认态整体变大；需要保留现有视觉基线时，统一通过 `AppTypography.fixed(..., minimumPointSize: baseSize)` 或 `AppTypography.uiFixed(..., minimumPointSize: baseSize)` 实现。
 - 文本硬编码禁令（强制）：生产文本禁止新增 `.font(.system(size: ...))`、`UIFont.systemFont(ofSize:)`、`UIFont.boldSystemFont(ofSize:)` 等固定字号写法；图标尺寸、装饰性 symbol、Debug/Prototype 不在此禁令内。
-- 文本测量同步（强制）：涉及文本宽度、行高、baseline、截断测量时，测量字体必须与渲染字体同源；系统语义文本统一使用 `SemanticTypography.uiFont(...)`，品牌文本统一使用 `UIFont.brandDisplay(...)`。
+- 文本测量同步（强制）：涉及文本宽度、行高、baseline、截断测量时，测量字体必须与渲染字体同源；系统语义文本统一使用 `AppTypography.uiSemantic(...)` 或 `AppTypography.uiFixed(...)`，品牌文本统一使用 `UIFont.brandDisplay(...)` 或 `AppTypography.brandTrim(...)` 配套链路。
 - 品牌字体边界（强制）：品牌字体只用于品牌标题、关键数字、日期锚点等强调位；中文正文、密集说明、完整中文单位不得整段使用品牌字体，必要时以系统字体承接单位与说明。
-- 新增字体规则（强制）：跨组件重复出现的文本层级必须沉淀到 `DesignTokens.swift` 的语义字体 token；页面私有一次性层级允许局部 helper，但禁止把固定字号散落在页面实现中。
+- 新增字体规则（强制）：跨组件重复出现的文本层级必须沉淀到 `DesignTokens.swift` 的 `AppTypography` 或其组合 token；页面私有一次性层级允许局部 helper，但 helper 仍必须由 `AppTypography` 组合得到，禁止把固定字号散落在页面实现中。
+- 字体入口边界（强制）：生产路径禁止直接新增 `.font(.body/.headline/...)`、`SemanticTypography.*`、`.brandDisplay(...)`、`BrandTypography.verticalTrim(...)` 等字体入口；这些底层能力只允许出现在 `DesignTokens.swift` 或排版基础设施中。
+- 字体 token 收敛（强制）：禁止新增“模块 token 组”或页面级字体族；新增字体语义默认补到 `AppTypography`，只有跨页面稳定复用的组合样式才允许在 `DesignTokens.swift` 内增加极少量别名，且必须引用 `AppTypography`。
 - 语义化后的适配顺序（强制）：出现显示不下时，先修布局、容器高度、换行策略、测量链路与 token 归位，禁止为了适配字号缩写业务文案、压缩中文单位或回退到固定字号。
 - 结构性 UI 变化必须带过渡动画，优先 `.snappy`、`.smooth`、`.spring`。
 - 异步操作必须立即反馈（加载态/按钮禁用/错误提示），避免“点击无响应”。
@@ -173,13 +179,14 @@
 - 双文档同构（强制）：`AGENTS.md` 与 `CLAUDE.md` 的注释约束条款必须保持语义一致。
 - GRDB `Record` 必须通过 `CodingKeys` 做 camelCase → snake_case 映射，并与表结构保持一致。
 - 设计令牌使用规范（详见 `CLAUDE.md` §6）：
-  - 新增文本前先判定对象是 `生产文本 / 品牌强调 / 图标`；文本优先选系统语义样式，只有要保留视觉基线或需要 UIKit 测量同步时才使用 `SemanticTypography`。
-  - 生产文本若需保留现有默认点数，优先使用 `SemanticTypography.defaultPointSize(for:)` 获取系统基线，或显式传入 `minimumPointSize: baseSize`，禁止手抄系统默认字号。
-  - 品牌数字/品牌标题使用 `brandDisplay(size:relativeTo:)`，若存在光学行盒偏移再配合 `BrandTypography.verticalTrim` / `brandVerticalTrim(...)`，禁止把品牌字体铺到正文与密集说明。
+  - 新增文本前先判定对象是 `生产文本 / 品牌强调 / 图标`；生产文本优先选 `AppTypography.body/headline/subheadline/...` 等常量，只有要保留视觉基线或需要 UIKit 测量同步时才使用 `AppTypography.fixed(...)` / `AppTypography.uiFixed(...)`。
+  - 生产文本若需保留现有默认点数，优先使用 `AppTypography.semantic(...)`、`AppTypography.semanticFont(...)` 或 `SemanticTypography.defaultPointSize(for:)` 推导系统基线，禁止手抄系统默认字号。
+  - 品牌数字/品牌标题使用 `AppTypography.brandDisplay(...)`，若存在光学行盒偏移再配合 `AppTypography.brandTrim(...)` / `brandVerticalTrim(...)`，禁止把品牌字体铺到正文与密集说明。
+  - `SemanticTypography` 与 `BrandTypography` 是底层排版基础设施，不是生产视图默认入口；生产路径默认不直接调用。
   - Spacing 先按「是不是留白问题 → Inline / Block / Container / Page 层级」选型，再优先使用默认档：`half / cozy / base / screenEdge / contentEdge / section / double`。
   - `compact / tight / comfortable / hairline / tiny / micro` 仅作为补位档使用；`actionReserved(44)` 属于点击热区/操作预留，不属于常规 spacing。
   - CornerRadius 二维命名：`inlay`（嵌入零件）/ `block`（独立单元）/ `container`（外壳）× `tiny~large`，按「角色→体量」两步选择。
-  - 全局 token 定义在 `DesignTokens.swift`，组件语义别名必须引用全局 token，禁止硬编码魔法数字。
+  - 全局 token 定义在 `DesignTokens.swift`，组件语义别名必须引用全局 token，禁止硬编码魔法数字；字体治理默认只允许扩展 `AppTypography`，禁止继续拆分模块级字体 token 组。
   - 圆角角色映射（强制）：页面级主面板/核心背景卡使用 `container*`；内容主卡使用 `block*`；热力图/图例等密集小单元使用 `inlay*`。
   - 形状边界（强制）：`Capsule` 仅用于胶囊标签与按钮；`Circle` 仅用于点状状态与环形进度，禁止用于页面/内容卡片外壳。
 
