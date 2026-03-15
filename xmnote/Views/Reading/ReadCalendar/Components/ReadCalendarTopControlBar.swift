@@ -75,6 +75,7 @@ private extension ReadCalendarTopControlBar {
                 } label: {
                     if year == selectedYear {
                         Label("\(year)年", systemImage: "checkmark")
+                            .foregroundStyle(.primary)
                     } else {
                         Text("\(year)年")
                     }
@@ -101,6 +102,7 @@ private extension ReadCalendarTopControlBar {
             .padding(.vertical, Spacing.compact)
             .contentShape(Rectangle())
         }
+        .tint(nil)
         .buttonStyle(.plain)
         .accessibilityLabel("年份选择")
         .accessibilityValue("\(selectedYear)年")

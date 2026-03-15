@@ -73,7 +73,6 @@ struct ReadCalendarView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbarBackground(isBookCoverFullscreenPresented ? .hidden : .visible, for: .navigationBar)
         .toolbarBackground(Color.surfacePage, for: .navigationBar)
-        .tint(Color.readCalendarTopAction)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Button { isSettingsPresented = true } label: {

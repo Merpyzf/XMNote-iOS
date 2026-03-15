@@ -476,16 +476,25 @@ struct BookSearchView: View {
 
     private var auxiliaryMenu: some View {
         Menu {
-            Button("扫码录入", systemImage: "barcode.viewfinder") {
+            Button {
                 auxiliaryDestination = .scan
+            } label: {
+                Label("扫码录入", systemImage: "barcode.viewfinder")
+                    .foregroundStyle(.primary)
             }
 
-            Button("手动添加", systemImage: "square.and.pencil") {
+            Button {
                 navigationSeed = .manual
+            } label: {
+                Label("手动添加", systemImage: "square.and.pencil")
+                    .foregroundStyle(.primary)
             }
 
-            Button("设置", systemImage: "slider.horizontal.3") {
+            Button {
                 auxiliaryDestination = .settings
+            } label: {
+                Label("设置", systemImage: "slider.horizontal.3")
+                    .foregroundStyle(.primary)
             }
         } label: {
             Image(systemName: "ellipsis")
@@ -494,6 +503,7 @@ struct BookSearchView: View {
                 .frame(width: 24, height: 24)
                 .contentShape(Rectangle())
         }
+        .tint(nil)
         .accessibilityLabel("更多操作")
     }
 

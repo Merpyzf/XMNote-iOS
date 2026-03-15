@@ -257,6 +257,7 @@ private extension TimelineCalendarPanel {
                 } label: {
                     if calendar.isDate(monthStart, equalTo: viewModel.displayedMonthStart, toGranularity: .month) {
                         Label(monthFormatter.string(from: monthStart), systemImage: "checkmark")
+                            .foregroundStyle(.primary)
                     } else {
                         Text(monthFormatter.string(from: monthStart))
                     }
@@ -266,9 +267,10 @@ private extension TimelineCalendarPanel {
             HStack(alignment: .lastTextBaseline, spacing: Spacing.compact) {
                 displayedMonthTitleText
                     .lineLimit(1)
-                    .minimumScaleFactor(0.9)
+                .minimumScaleFactor(0.9)
             }
         }
+        .tint(nil)
         .buttonStyle(.plain)
     }
 
@@ -974,6 +976,7 @@ private struct TimelineCategoryFilterMenu: View {
                 } label: {
                     if category == selectedCategory {
                         Label(category.rawValue, systemImage: "checkmark")
+                            .foregroundStyle(.primary)
                     } else {
                         Text(category.rawValue)
                     }
@@ -995,6 +998,7 @@ private struct TimelineCategoryFilterMenu: View {
             .frame(minWidth: TimelineFilterHostStyle.controlWidth)
             .contentShape(Rectangle())
         }
+        .tint(nil)
         .buttonStyle(.plain)
     }
 }

@@ -29,13 +29,22 @@ struct AddMenuCircleButton: View {
 
     var body: some View {
         Menu {
-            Button("添加书籍", systemImage: "book.badge.plus", action: onAddBook)
-            Button("添加书摘", systemImage: "square.and.pencil", action: onAddNote)
+            Button(action: onAddBook) {
+                Label("添加书籍", systemImage: "book.badge.plus")
+                    .foregroundStyle(.primary)
+            }
+            Button(action: onAddNote) {
+                Label("添加书摘", systemImage: "square.and.pencil")
+                    .foregroundStyle(.primary)
+            }
             #if DEBUG
             if let onOpenDebugCenter {
                 Divider()
-                Button("测试中心", systemImage: "hammer") {
+                Button {
                     onOpenDebugCenter()
+                } label: {
+                    Label("测试中心", systemImage: "hammer")
+                        .foregroundStyle(.primary)
                 }
             }
             #endif
@@ -57,6 +66,7 @@ struct AddMenuCircleButton: View {
                     .contentShape(Circle())
             }
         }
+        .tint(nil)
         .topBarGlassButtonStyle(usesGlassStyle)
         .accessibilityLabel("添加")
     }

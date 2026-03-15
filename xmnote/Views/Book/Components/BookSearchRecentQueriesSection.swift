@@ -106,6 +106,7 @@ struct BookSearchRecentQueriesSection: View {
                 Label("删除搜索词", systemImage: "trash")
             }
         }
+        .tint(nil)
     }
 
     private var toggleChip: some View {

@@ -40,6 +40,7 @@ struct CalendarMonthStepperBar: View {
                 } label: {
                     if monthStart == selectedMonth {
                         Label(monthLabel(monthStart), systemImage: "checkmark")
+                            .foregroundStyle(.primary)
                     } else {
                         Text(monthLabel(monthStart))
                     }
@@ -66,6 +67,7 @@ struct CalendarMonthStepperBar: View {
             .padding(.vertical, Spacing.compact)
             .contentShape(Rectangle())
         }
+        .tint(nil)
         .buttonStyle(.plain)
     }
 
