@@ -48,36 +48,41 @@ private struct ExpandableRichTextCore: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: Spacing.half) {
-            if isExpanded {
-                RichText(
-                    html: html,
-                    baseFont: baseFont,
-                    textColor: textColor,
-                    lineSpacing: lineSpacing,
-                    maxLines: 0
-                )
+            Group {
+                if isExpanded {
+                    RichText(
+                        html: html,
+                        baseFont: baseFont,
+                        textColor: textColor,
+                        lineSpacing: lineSpacing,
+                        maxLines: 0
+                    )
 
-                HStack {
-                    Spacer()
-                    Button {
-                        collapse()
-                    } label: {
-                        Text("收起")
-                            .font(AppTypography.caption2Medium)
-                            .foregroundStyle(Color.brand)
+                    HStack {
+                        Spacer()
+                        Button {
+                            collapse()
+                        } label: {
+                            Text("收起")
+                                .font(AppTypography.caption2Medium)
+                                .foregroundStyle(Color.brand)
+                        }
+                        .buttonStyle(.plain)
                     }
-                    .buttonStyle(.plain)
+                } else {
+                    CollapsedRichTextPreview(
+                        html: html,
+                        baseFont: baseFont,
+                        textColor: textColor,
+                        lineSpacing: lineSpacing,
+                        maxLines: maxLines,
+                        onExpand: expand
+                    )
                 }
-            } else {
-                CollapsedRichTextPreview(
-                    html: html,
-                    baseFont: baseFont,
-                    textColor: textColor,
-                    lineSpacing: lineSpacing,
-                    maxLines: maxLines,
-                    onExpand: expand
-                )
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .clipped()
+            .transition(.identity)
         }
     }
 

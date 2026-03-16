@@ -184,12 +184,17 @@ private struct TimelineExpandableNoteText: View, Equatable {
                         maxLines: maxLines,
                         onTruncationChanged: { truncated in
                             guard truncated != isTruncated else { return }
-                            isTruncated = truncated
+                            var transaction = Transaction(animation: nil)
+                            transaction.disablesAnimations = true
+                            withTransaction(transaction) {
+                                isTruncated = truncated
+                            }
                         }
                     )
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
+            .clipped()
             .transition(.identity)
 
             if isTruncated {
@@ -210,8 +215,6 @@ private struct TimelineExpandableNoteText: View, Equatable {
                 }
             }
         }
-        .animation(.snappy, value: isExpanded)
-        .animation(.snappy, value: isTruncated)
     }
 }
 

@@ -1,75 +1,103 @@
 /**
- * [INPUT]: 依赖 TimelineRelevantEvent 数据模型、TimelineCardMetaLine、CardContainer 容器、DesignTokens 设计令牌、ExpandableRichText 可展开富文本、XMJXImageWall/XMJXGalleryItem 图片墙
+ * [INPUT]: 依赖 TimelineRelevantEvent 数据模型、TimelineCardHeaderBar/TimelineCardDivider/TimelineCardFooterRow 共享骨架、CardContainer 容器、DesignTokens 设计令牌、ExpandableRichText 可展开富文本、XMJXImageWall/XMJXGalleryItem 图片墙
  * [OUTPUT]: 对外提供 TimelineRelevantCard（时间线相关内容卡片）
- * [POS]: Reading/Timeline 页面私有子视图，渲染相关内容标题/HTML 正文/图片墙/链接/分类标签
+ * [POS]: Reading/Timeline 页面私有子视图，按书摘骨架渲染相关内容标题、HTML 正文、图片墙与分类/链接尾部行
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
 import SwiftUI
 
-/// 时间线相关内容卡片，展示标题、HTML 富文本正文、图片墙、链接图标与分类标签。
+/// 时间线相关内容卡片，对齐书摘结构展示头部、标题、正文、图片墙与分类/链接尾部信息。
 struct TimelineRelevantCard: View {
     let event: TimelineRelevantEvent
     let timestamp: Int64
     let bookName: String
 
     var body: some View {
-        VStack(alignment: .leading, spacing: Spacing.half) {
-            CardContainer(cornerRadius: TimelineCalendarStyle.eventCardCornerRadius) {
-                VStack(alignment: .leading, spacing: Spacing.base) {
-                    TimelineCardMetaLine(timestamp: timestamp, bookName: bookName)
+        CardContainer(cornerRadius: TimelineCalendarStyle.eventCardCornerRadius) {
+            VStack(alignment: .leading, spacing: Spacing.base) {
+                TimelineCardHeaderBar(
+                    iconSystemName: "tray.full",
+                    timestamp: timestamp,
+                    bookName: bookName
+                )
 
-                    if !event.title.isEmpty {
-                        Text(event.title)
-                            .font(AppTypography.subheadlineSemibold)
-                            .foregroundStyle(Color.textPrimary)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
+                TimelineCardDivider()
 
-                    if hasContent {
-                        contentView
-                    }
-
-                    if !event.imageURLs.isEmpty {
-                        imageWall
-                    }
-
-                    if showsLinkButton {
-                        linkButton
-                    }
+                if hasTitle {
+                    Text(trimmedTitle)
+                        .font(AppTypography.subheadlineSemibold)
+                        .foregroundStyle(Color.textPrimary)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
-                .padding(Spacing.contentEdge)
-            }
 
-            if !event.categoryTitle.isEmpty {
-                categoryTag
+                if hasDisplayContent {
+                    contentView
+                }
+
+                if !event.imageURLs.isEmpty {
+                    imageWall
+                }
+
+                if showsFooterRow {
+                    TimelineCardFooterRow(
+                        tagTitle: trimmedCategoryTitle,
+                        linkURLString: showsLinkButton ? trimmedURL : nil,
+                        linkAccessibilityLabel: "打开相关内容链接"
+                    )
+                }
             }
+            .padding(Spacing.contentEdge)
         }
     }
 
     // MARK: - Content Logic
 
-    /// 标题和内容都空时，URL 作为内容显示
-    private var hasContent: Bool {
-        !event.content.isEmpty || contentFallbackToURL
+    private var trimmedTitle: String {
+        TimelineMeaningfulText.trimmedText(event.title)
     }
 
+    private var trimmedURL: String {
+        TimelineMeaningfulText.trimmedText(event.url)
+    }
+
+    private var trimmedCategoryTitle: String {
+        TimelineMeaningfulText.trimmedText(event.categoryTitle)
+    }
+
+    private var hasTitle: Bool {
+        !trimmedTitle.isEmpty
+    }
+
+    private var hasMeaningfulHTMLContent: Bool {
+        TimelineMeaningfulText.hasMeaningfulHTML(event.content)
+    }
+
+    /// 对齐 Android：仅当标题、正文、图片都不可展示且 URL 存在时，才把 URL 作为正文回填。
     private var contentFallbackToURL: Bool {
-        event.title.isEmpty && event.content.isEmpty && !event.url.isEmpty
+        !hasTitle && !hasMeaningfulHTMLContent && event.imageURLs.isEmpty && !trimmedURL.isEmpty
     }
 
-    /// 链接按钮仅在有 URL 且未被 fallback 为内容时显示
+    private var hasDisplayContent: Bool {
+        hasMeaningfulHTMLContent || contentFallbackToURL
+    }
+
+    private var showsFooterRow: Bool {
+        !trimmedCategoryTitle.isEmpty || showsLinkButton
+    }
+
+    /// Android 规则：URL 被正文兜底消费时，底部不再显示链接按钮。
     private var showsLinkButton: Bool {
-        !event.url.isEmpty && !contentFallbackToURL
+        !trimmedURL.isEmpty && !contentFallbackToURL
     }
 
     // MARK: - Content View
 
-    /// URL fallback 用纯文本，正常内容用可展开 HTML 富文本
+    /// URL fallback 用纯文本，正常内容用可展开 HTML 富文本。
     @ViewBuilder
     private var contentView: some View {
         if contentFallbackToURL {
-            Text(event.url)
+            Text(trimmedURL)
                 .font(TimelineTypography.eventFallbackTextFont)
                 .foregroundStyle(Color.textPrimary)
                 .lineSpacing(TimelineTypography.eventRichTextLineSpacing)
@@ -94,28 +122,6 @@ struct TimelineRelevantCard: View {
             columnCount: 3
         )
     }
-
-    // MARK: - Link Button
-
-    private var linkButton: some View {
-        HStack {
-            Spacer()
-            Image(systemName: "link")
-                .font(AppTypography.caption)
-                .foregroundStyle(Color.textSecondary)
-        }
-    }
-
-    // MARK: - Category Tag
-
-    private var categoryTag: some View {
-        Text(event.categoryTitle)
-            .font(AppTypography.caption2)
-            .foregroundStyle(Color.textSecondary)
-            .padding(.horizontal, Spacing.cozy)
-            .padding(.vertical, Spacing.compact)
-            .background(Color.tagBackground, in: Capsule())
-    }
 }
 
 #Preview {
@@ -125,7 +131,7 @@ struct TimelineRelevantCard: View {
             VStack(spacing: Spacing.base) {
                 TimelineRelevantCard(
                     event: TimelineRelevantEvent(
-                        title: "作者的 TED 演讲",
+                        title: " 作者的 TED 演讲 ",
                         content: "关于创造力与约束之间关系的<b>精彩</b>演讲",
                         url: "https://example.com",
                         categoryTitle: "延伸阅读",
@@ -136,8 +142,8 @@ struct TimelineRelevantCard: View {
                 )
                 TimelineRelevantCard(
                     event: TimelineRelevantEvent(
-                        title: "",
-                        content: "",
+                        title: " ",
+                        content: "<p><br></p>",
                         url: "https://example.com/article",
                         categoryTitle: "参考资料",
                         imageURLs: []

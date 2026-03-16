@@ -118,6 +118,7 @@ struct TimelineEventRow: View, Equatable {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.leading, Spacing.cozy)
                 .padding(.bottom, Spacing.screenEdge)
+                .clipped()
         }
     }
 

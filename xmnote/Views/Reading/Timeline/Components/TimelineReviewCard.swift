@@ -1,13 +1,13 @@
 /**
- * [INPUT]: 依赖 TimelineReviewEvent 数据模型、TimelineCardMetaLine、CardContainer 容器、DesignTokens 设计令牌、ExpandableRichText 可展开富文本、XMJXImageWall/XMJXGalleryItem 图片墙
+ * [INPUT]: 依赖 TimelineReviewEvent 数据模型、TimelineCardHeaderBar/TimelineCardDivider 共享骨架、CardContainer 容器、DesignTokens 设计令牌、ExpandableRichText 可展开富文本、XMJXImageWall/XMJXGalleryItem 图片墙
  * [OUTPUT]: 对外提供 TimelineReviewCard（时间线书评卡片）
- * [POS]: Reading/Timeline 页面私有子视图，渲染书评标题、HTML 正文、图片墙与星级评分
+ * [POS]: Reading/Timeline 页面私有子视图，按书摘骨架渲染书评头部、标题、HTML 正文、图片墙与星级评分
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
 import SwiftUI
 
-/// 时间线书评卡片，展示书评标题（粗体）、HTML 富文本正文、图片墙与星级评分。
+/// 时间线书评卡片，对齐书摘结构展示头部、标题、正文、图片墙与星级评分。
 struct TimelineReviewCard: View {
     let event: TimelineReviewEvent
     let timestamp: Int64
@@ -16,16 +16,22 @@ struct TimelineReviewCard: View {
     var body: some View {
         CardContainer(cornerRadius: TimelineCalendarStyle.eventCardCornerRadius) {
             VStack(alignment: .leading, spacing: Spacing.base) {
-                TimelineCardMetaLine(timestamp: timestamp, bookName: bookName)
+                TimelineCardHeaderBar(
+                    iconSystemName: "bubble.and.pencil",
+                    timestamp: timestamp,
+                    bookName: bookName
+                )
 
-                if !event.title.isEmpty {
-                    Text(event.title)
+                TimelineCardDivider()
+
+                if hasTitle {
+                    Text(trimmedTitle)
                         .font(AppTypography.subheadlineSemibold)
                         .foregroundStyle(Color.textPrimary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
 
-                if !event.content.isEmpty {
+                if hasContent {
                     ExpandableRichText(
                         html: event.content,
                         baseFont: TimelineTypography.eventRichTextBaseFont,
@@ -44,6 +50,18 @@ struct TimelineReviewCard: View {
             }
             .padding(Spacing.contentEdge)
         }
+    }
+
+    private var trimmedTitle: String {
+        TimelineMeaningfulText.trimmedText(event.title)
+    }
+
+    private var hasTitle: Bool {
+        !trimmedTitle.isEmpty
+    }
+
+    private var hasContent: Bool {
+        TimelineMeaningfulText.hasMeaningfulHTML(event.content)
     }
 
     // MARK: - Image Wall
@@ -88,7 +106,7 @@ struct TimelineReviewCard: View {
             VStack(spacing: Spacing.base) {
                 TimelineReviewCard(
                     event: TimelineReviewEvent(
-                        title: "一本改变思维方式的书",
+                        title: "  一本改变思维方式的书  ",
                         content: "作者用大量案例说明了<b>系统思维</b>的重要性，读完之后对复杂问题的分析能力有了显著提升。",
                         bookScore: 40,
                         imageURLs: [
@@ -101,8 +119,8 @@ struct TimelineReviewCard: View {
                 )
                 TimelineReviewCard(
                     event: TimelineReviewEvent(
-                        title: "",
-                        content: "简短书评，没有标题也没有评分。",
+                        title: "   ",
+                        content: "<p><br></p>",
                         bookScore: 0,
                         imageURLs: []
                     ),
