@@ -14,6 +14,7 @@
 
 import SwiftUI
 import Nuke
+import AliyunpanSDK
 
 /// 应用入口，异步初始化数据库后注入环境并渲染主界面。
 ///
@@ -40,6 +41,7 @@ struct xmnoteApp: App {
             Group {
                 if let databaseManager, let repositories {
                     ContentView()
+                        .id(appState.dataEpoch)
                         .environment(appState)
                         .environment(databaseManager)
                         .environment(repositories)
@@ -63,6 +65,9 @@ struct xmnoteApp: App {
                 } catch {
                     initError = error
                 }
+            }
+            .onOpenURL { url in
+                _ = Aliyunpan.handleOpenURL(url)
             }
         }
     }

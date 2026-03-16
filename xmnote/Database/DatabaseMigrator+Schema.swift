@@ -35,6 +35,7 @@ extension AppDatabase {
             try seedInitialData(db)
         }
 
+        // 对齐 Android：启动阶段不追加跨表“修复性”写入，避免旧库脏数据在首启被触发 FK 失败。
         return migrator
     }
 }

@@ -32,10 +32,11 @@ struct BookEditorRepository: BookEditorRepositoryProtocol {
     func fetchOptions() async throws -> BookEditorOptions {
         let preference = loadPreference()
         return try await databaseManager.database.dbPool.read { db in
-            BookEditorOptions(
+            let ownerId = try DatabaseOwnerResolver.fetchExistingOwnerID(in: db) ?? 0
+            return BookEditorOptions(
                 sources: try fetchSources(db),
-                groups: try fetchGroups(db),
-                tags: try fetchTags(db),
+                groups: try fetchGroups(db, ownerId: ownerId),
+                tags: try fetchTags(db, ownerId: ownerId),
                 preference: preference
             )
         }
@@ -95,19 +96,21 @@ struct BookEditorRepository: BookEditorRepositoryProtocol {
         }
 
         let result = try await databaseManager.database.dbPool.write { db in
+            let ownerId = try DatabaseOwnerResolver.resolveOwnerID(in: db)
             let normalizedDraft = normalizeDraft(draft)
             let normalizedTagNames = normalizeTagNames(normalizedDraft.tagNames)
-            guard try !isDuplicateBook(normalizedDraft, db: db) else {
+            guard try !isDuplicateBook(normalizedDraft, ownerId: ownerId, db: db) else {
                 throw BookEditorError.duplicateBook
             }
 
             let sourceId = try resolveSourceId(for: normalizedDraft.sourceName, in: db)
-            let groupId = try resolveGroupId(for: normalizedDraft.groupName, in: db)
-            let tagIds = try resolveTagIds(for: normalizedTagNames, in: db)
+            let groupId = try resolveGroupId(for: normalizedDraft.groupName, ownerId: ownerId, in: db)
+            let tagIds = try resolveTagIds(for: normalizedTagNames, ownerId: ownerId, in: db)
             let now = Int64(Date().timeIntervalSince1970 * 1000)
 
             var book = try buildBookRecord(
                 from: normalizedDraft,
+                ownerId: ownerId,
                 sourceId: sourceId,
                 createdAt: now,
                 db: db
@@ -211,31 +214,31 @@ private extension BookEditorRepository {
         }
     }
 
-    nonisolated func fetchGroups(_ db: Database) throws -> [BookEditorNamedOption] {
+    nonisolated func fetchGroups(_ db: Database, ownerId: Int64) throws -> [BookEditorNamedOption] {
         // SQL 目的：读取未删除分组列表，供录入页单选分组建议使用。
         // 过滤条件：仅保留 group.is_deleted = 0，排序规则与 Android 分组列表一致。
         let sql = """
             SELECT id, name
             FROM `group`
-            WHERE is_deleted = 0
+            WHERE is_deleted = 0 AND user_id = ?
             ORDER BY pinned DESC, pin_order ASC, group_order ASC, id ASC
             """
-        return try Row.fetchAll(db, sql: sql).compactMap { row in
+        return try Row.fetchAll(db, sql: sql, arguments: [ownerId]).compactMap { row in
             guard let name: String = row["name"], !name.isEmpty else { return nil }
             return BookEditorNamedOption(id: row["id"], title: name)
         }
     }
 
-    nonisolated func fetchTags(_ db: Database) throws -> [BookEditorNamedOption] {
+    nonisolated func fetchTags(_ db: Database, ownerId: Int64) throws -> [BookEditorNamedOption] {
         // SQL 目的：读取书籍标签列表，供录入页多选建议和新标签补全使用。
         // 过滤条件：仅保留 tag.type = 1 且 tag.is_deleted = 0，避免混入笔记标签。
         let sql = """
             SELECT id, name
             FROM tag
-            WHERE type = 1 AND is_deleted = 0
+            WHERE type = 1 AND is_deleted = 0 AND user_id = ?
             ORDER BY tag_order ASC, id ASC
             """
-        return try Row.fetchAll(db, sql: sql).compactMap { row in
+        return try Row.fetchAll(db, sql: sql, arguments: [ownerId]).compactMap { row in
             guard let name: String = row["name"], !name.isEmpty else { return nil }
             return BookEditorNamedOption(id: row["id"], title: name)
         }
@@ -274,13 +277,14 @@ private extension BookEditorRepository {
         .sorted()
     }
 
-    nonisolated func isDuplicateBook(_ draft: BookEditorDraft, db: Database) throws -> Bool {
+    nonisolated func isDuplicateBook(_ draft: BookEditorDraft, ownerId: Int64, db: Database) throws -> Bool {
         // SQL 目的：按 Android 规则判重，避免新增同一本书。
         // 过滤条件：精确匹配 name/author/translator/press/isbn/pub_date 六元组，且排除软删除记录。
         let sql = """
             SELECT COUNT(*)
             FROM book
             WHERE is_deleted = 0
+              AND user_id = ?
               AND name = ?
               AND author = ?
               AND translator = ?
@@ -292,6 +296,7 @@ private extension BookEditorRepository {
             db,
             sql: sql,
             arguments: [
+                ownerId,
                 draft.title,
                 draft.author,
                 draft.translator,
@@ -333,22 +338,26 @@ private extension BookEditorRepository {
         return record.id ?? 1
     }
 
-    nonisolated func resolveGroupId(for groupName: String, in db: Database) throws -> Int64? {
+    nonisolated func resolveGroupId(for groupName: String, ownerId: Int64, in db: Database) throws -> Int64? {
         guard !groupName.isEmpty else { return nil }
         let querySQL = """
             SELECT id
             FROM `group`
-            WHERE name = ? AND is_deleted = 0
+            WHERE name = ? AND is_deleted = 0 AND user_id = ?
             LIMIT 1
             """
-        if let id = try Int64.fetchOne(db, sql: querySQL, arguments: [groupName]) {
+        if let id = try Int64.fetchOne(db, sql: querySQL, arguments: [groupName, ownerId]) {
             return id
         }
 
-        let nextOrder = (try Int64.fetchOne(db, sql: "SELECT COALESCE(MAX(group_order), -1) + 1 FROM `group`")) ?? 0
+        let nextOrder = (try Int64.fetchOne(
+            db,
+            sql: "SELECT COALESCE(MAX(group_order), -1) + 1 FROM `group` WHERE user_id = ?",
+            arguments: [ownerId]
+        )) ?? 0
         var record = GroupRecord(
             id: nil,
-            userId: 1,
+            userId: ownerId,
             name: groupName,
             groupOrder: nextOrder,
             pinned: 0,
@@ -362,24 +371,28 @@ private extension BookEditorRepository {
         return record.id
     }
 
-    nonisolated func resolveTagIds(for tagNames: [String], in db: Database) throws -> [Int64] {
+    nonisolated func resolveTagIds(for tagNames: [String], ownerId: Int64, in db: Database) throws -> [Int64] {
         var ids: [Int64] = []
         for tagName in tagNames {
             let querySQL = """
                 SELECT id
                 FROM tag
-                WHERE name = ? AND type = 1 AND is_deleted = 0
+                WHERE name = ? AND type = 1 AND is_deleted = 0 AND user_id = ?
                 LIMIT 1
                 """
-            if let existing = try Int64.fetchOne(db, sql: querySQL, arguments: [tagName]) {
+            if let existing = try Int64.fetchOne(db, sql: querySQL, arguments: [tagName, ownerId]) {
                 ids.append(existing)
                 continue
             }
 
-            let nextOrder = (try Int64.fetchOne(db, sql: "SELECT COALESCE(MAX(tag_order), -1) + 1 FROM tag WHERE type = 1")) ?? 0
+            let nextOrder = (try Int64.fetchOne(
+                db,
+                sql: "SELECT COALESCE(MAX(tag_order), -1) + 1 FROM tag WHERE type = 1 AND user_id = ?",
+                arguments: [ownerId]
+            )) ?? 0
             var record = TagRecord(
                 id: nil,
-                userId: 1,
+                userId: ownerId,
                 name: tagName,
                 color: 0,
                 tagOrder: nextOrder,
@@ -399,12 +412,17 @@ private extension BookEditorRepository {
 
     nonisolated func buildBookRecord(
         from draft: BookEditorDraft,
+        ownerId: Int64,
         sourceId: Int64,
         createdAt: Int64,
         db: Database
     ) throws -> BookRecord {
         let readStatusChangedDate = Int64(draft.readStatusChangedDate.timeIntervalSince1970 * 1000)
-        let nextOrder = (try Int64.fetchOne(db, sql: "SELECT COALESCE(MAX(book_order), -1) + 1 FROM book WHERE is_deleted = 0")) ?? 0
+        let nextOrder = (try Int64.fetchOne(
+            db,
+            sql: "SELECT COALESCE(MAX(book_order), -1) + 1 FROM book WHERE is_deleted = 0 AND user_id = ?",
+            arguments: [ownerId]
+        )) ?? 0
         let currentProgress = Double(draft.currentProgressText) ?? 0
         let totalPages = Int64(draft.totalPagesText.digitsOnly) ?? 0
         let totalPosition = Int64(draft.totalPositionText.digitsOnly) ?? 0
@@ -427,7 +445,7 @@ private extension BookEditorRepository {
 
         return BookRecord(
             id: nil,
-            userId: 1,
+            userId: ownerId,
             doubanId: Int64(draft.doubanId ?? 0),
             name: draft.title,
             rawName: draft.rawTitle.isEmpty ? draft.title : draft.rawTitle,

@@ -29,6 +29,9 @@ final class RepositoryContainer {
     /// 在应用启动阶段一次性组装所有仓储依赖，并注入共享数据库管理器。
     init(databaseManager: DatabaseManager) {
         let backupServerRepository = BackupServerRepository(databaseManager: databaseManager)
+        let aliyunDriveProvider = try? AliyunDriveBackupRemoteProvider(
+            configuration: AliyunDriveOpenPlatformConfiguration()
+        )
         let s3ConfigRepository = S3ConfigRepository(databaseManager: databaseManager)
         #if DEBUG
         let defaultOCRPreferences = OCRRepository.androidAlignedDebugDefaults
@@ -47,7 +50,8 @@ final class RepositoryContainer {
         self.backupServerRepository = backupServerRepository
         self.backupRepository = BackupRepository(
             databaseManager: databaseManager,
-            serverRepository: backupServerRepository
+            serverRepository: backupServerRepository,
+            aliyunDriveProvider: aliyunDriveProvider
         )
         self.s3ConfigRepository = s3ConfigRepository
         self.s3UploadRepository = S3UploadRepository(configRepository: s3ConfigRepository)

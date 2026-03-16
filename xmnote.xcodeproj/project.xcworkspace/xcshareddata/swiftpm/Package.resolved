@@ -1,5 +1,5 @@
 {
-  "originHash" : "8a89a574b6a4d06425908772fc20949d7d64cec4875a427a4c7d3ddab2e03632",
+  "originHash" : "d21db55b9a4d5da07a1e16293747f8f43d4fd9ac380957dceccd52f0a4d1a15a",
   "pins" : [
     {
       "identity" : "alamofire",
@@ -8,6 +8,15 @@
       "state" : {
         "revision" : "3f99050e75bbc6fe71fc323adabb039756680016",
         "version" : "5.11.1"
+      }
+    },
+    {
+      "identity" : "aliyunpan-ios-sdk",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/alibaba/aliyunpan-ios-sdk.git",
+      "state" : {
+        "revision" : "66cdb2679e9cbacd7f682e43e784cf481f200a5a",
+        "version" : "0.3.6"
       }
     },
     {

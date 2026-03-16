@@ -14,6 +14,7 @@ class AppState {
     var colorScheme: AppColorScheme = .system
     var isPremium: Bool = false
     var isAIEnabled: Bool = false
+    var dataEpoch: Int = 0
 }
 
 /// 应用主题偏好设置，决定界面跟随系统或强制浅色/深色。

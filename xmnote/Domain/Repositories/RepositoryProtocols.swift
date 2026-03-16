@@ -83,6 +83,16 @@ protocol BackupServerRepositoryProtocol {
 
 /// 数据备份契约，覆盖备份执行、历史读取与恢复流程。
 protocol BackupRepositoryProtocol {
+    /// 读取云备份页面状态快照，聚合当前 provider、WebDAV 配置、阿里云账号信息与最近备份时间。
+    func fetchCloudBackupPageState() async throws -> CloudBackupPageState
+    /// 刷新当前 provider 对应的最近一次云备份时间。
+    func fetchLatestCloudBackupDate() async throws -> Date?
+    /// 持久化当前选中的云备份 provider。
+    func selectCloudBackupProvider(_ provider: CloudBackupProvider) async throws
+    /// 发起阿里云盘授权流程。
+    func authorizeAliyunDrive() async throws
+    /// 清除阿里云盘授权状态。
+    func revokeAliyunDriveAuthorization() async
     /// 执行一次完整备份流程，并通过回调上报阶段进度。
     func backup(progress: (@Sendable (BackupProgress) -> Void)?) async throws
     /// 获取远端备份历史列表，供恢复入口展示可选备份。

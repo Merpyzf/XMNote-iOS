@@ -13,6 +13,7 @@
 		891118422F3C543600D99384 /* GRDB in Frameworks */ = {isa = PBXBuildFile; productRef = 89GRDB0012F3A000000000002 /* GRDB */; };
 		897196B52F54925300159B76 /* appicon.icon in Resources */ = {isa = PBXBuildFile; fileRef = 897196B42F54925300159B76 /* appicon.icon */; };
 		89AF00012F3D000000000002 /* Alamofire in Frameworks */ = {isa = PBXBuildFile; productRef = 89AF00012F3D000000000004 /* Alamofire */; };
+		89ALIY0012F5E000000000002 /* AliyunpanSDK in Frameworks */ = {isa = PBXBuildFile; productRef = 89ALIY0012F5E000000000004 /* AliyunpanSDK */; };
 		89AWS0012F3D000000000002 /* AWSS3 in Frameworks */ = {isa = PBXBuildFile; productRef = 89AWS0012F3D000000000004 /* AWSS3 */; };
 		89AWSI012F3D000000000002 /* AWSSDKIdentity in Frameworks */ = {isa = PBXBuildFile; productRef = 89AWSI012F3D000000000004 /* AWSSDKIdentity */; };
 		89GIFU0012F3D000000000002 /* Gifu in Frameworks */ = {isa = PBXBuildFile; productRef = 89GIFU0012F3D000000000004 /* Gifu */; };
@@ -86,6 +87,7 @@
 			files = (
 				891118422F3C543600D99384 /* GRDB in Frameworks */,
 				89AF00012F3D000000000002 /* Alamofire in Frameworks */,
+				89ALIY0012F5E000000000002 /* AliyunpanSDK in Frameworks */,
 				89NUKE0012F3D000000000002 /* Nuke in Frameworks */,
 				89NUKE0012F3D000000000003 /* NukeUI in Frameworks */,
 				89GIFU0012F3D000000000002 /* Gifu in Frameworks */,
@@ -207,6 +209,7 @@
 			packageProductDependencies = (
 				89GRDB0012F3A000000000002 /* GRDB */,
 				89AF00012F3D000000000004 /* Alamofire */,
+				89ALIY0012F5E000000000004 /* AliyunpanSDK */,
 				89NUKE0012F3D000000000004 /* Nuke */,
 				89NUKE0012F3D000000000005 /* NukeUI */,
 				89GIFU0012F3D000000000004 /* Gifu */,
@@ -290,7 +293,7 @@
 					};
 				};
 			};
-			buildConfigurationList = 891114972F39AC2F00D99384 /* Build configuration list for PBXProject "XMNote" */;
+			buildConfigurationList = 891114972F39AC2F00D99384 /* Build configuration list for PBXProject "xmnote" */;
 			developmentRegion = en;
 			hasScannedForEncodings = 0;
 			knownRegions = (
@@ -302,6 +305,7 @@
 			packageReferences = (
 				89GRDB0012F3A000000000001 /* XCRemoteSwiftPackageReference "GRDB.swift" */,
 				89AF00012F3D000000000001 /* XCRemoteSwiftPackageReference "Alamofire" */,
+				89ALIY0012F5E000000000001 /* XCRemoteSwiftPackageReference "aliyunpan-ios-sdk" */,
 				89NUKE0012F3D000000000001 /* XCRemoteSwiftPackageReference "Nuke" */,
 				89GIFU0012F3D000000000001 /* XCRemoteSwiftPackageReference "Gifu" */,
 				89AWS0012F3D000000000001 /* XCRemoteSwiftPackageReference "aws-sdk-swift" */,
@@ -545,17 +549,8 @@
 					CLAUDE.md,
 					AGENTS.md,
 				);
-				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_CFBundleDisplayName = "纸间书摘";
-				INFOPLIST_KEY_NSCameraUsageDescription = "在使用文本识别、添加附图、扫描书籍等功能时会访问设备的相机。";
-				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "在使用百度 OCR 识别时会访问照片，用于选择待识别图片。";
-				INFOPLIST_KEY_UIAppFonts = "RozhaOne-Regular.ttf";
-				INFOPLIST_KEY_UIAppFonts_0 = "RozhaOne-Regular.ttf";
-				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
-				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
-				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
-				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
-				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = "xmnote-Info.plist";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -588,17 +583,8 @@
 					CLAUDE.md,
 					AGENTS.md,
 				);
-				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_CFBundleDisplayName = "纸间书摘";
-				INFOPLIST_KEY_NSCameraUsageDescription = "在使用文本识别、添加附图、扫描书籍等功能时会访问设备的相机。";
-				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "在使用百度 OCR 识别时会访问照片，用于选择待识别图片。";
-				INFOPLIST_KEY_UIAppFonts = "RozhaOne-Regular.ttf";
-				INFOPLIST_KEY_UIAppFonts_0 = "RozhaOne-Regular.ttf";
-				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
-				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
-				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
-				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
-				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = "xmnote-Info.plist";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -704,7 +690,7 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
-		891114972F39AC2F00D99384 /* Build configuration list for PBXProject "XMNote" */ = {
+		891114972F39AC2F00D99384 /* Build configuration list for PBXProject "xmnote" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				891114BB2F39AC3200D99384 /* Debug */,
@@ -762,6 +748,14 @@
 				minimumVersion = 5.10.0;
 			};
 		};
+		89ALIY0012F5E000000000001 /* XCRemoteSwiftPackageReference "aliyunpan-ios-sdk" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/alibaba/aliyunpan-ios-sdk.git";
+			requirement = {
+				kind = exactVersion;
+				version = 0.3.6;
+			};
+		};
 		89AWS0012F3D000000000001 /* XCRemoteSwiftPackageReference "aws-sdk-swift" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/awslabs/aws-sdk-swift.git";
@@ -817,6 +811,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 89AF00012F3D000000000001 /* XCRemoteSwiftPackageReference "Alamofire" */;
 			productName = Alamofire;
+		};
+		89ALIY0012F5E000000000004 /* AliyunpanSDK */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 89ALIY0012F5E000000000001 /* XCRemoteSwiftPackageReference "aliyunpan-ios-sdk" */;
+			productName = AliyunpanSDK;
 		};
 		89AWS0012F3D000000000004 /* AWSS3 */ = {
 			isa = XCSwiftPackageProductDependency;

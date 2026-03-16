@@ -50,7 +50,7 @@ extension AppDatabase {
     private nonisolated static func openDatabase(at path: String) throws -> DatabasePool {
         var config = Configuration()
         // WAL 模式：与 Android Room 默认行为一致，支持并发读写
-        // 备份时需要先 checkpoint 确保数据完整
+        // 云备份按 Android 侧策略打包 db/wal/shm 文件集
         config.prepareDatabase { db in
             // SQL 目的：启用 WAL journal_mode，提升并发读写能力并与 Android 端行为对齐。
             try db.execute(sql: "PRAGMA journal_mode = WAL")
