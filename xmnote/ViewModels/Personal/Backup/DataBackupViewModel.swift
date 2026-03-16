@@ -76,7 +76,6 @@ final class DataBackupViewModel {
     var lastBackupState: CloudBackupLastSyncState = .idle
     var backupList: [BackupFileInfo] = []
     var isShowingBackupHistory = false
-    var isShowingProviderPicker = false
     var selectedBackup: BackupFileInfo?
     var showRestoreConfirm = false
     var showRestoreSuccess = false
@@ -146,10 +145,10 @@ extension DataBackupViewModel {
         }
     }
 
-    var selectedProviderSummary: String {
+    var selectedProviderSummary: String? {
         switch selectedProvider {
         case .aliyunDrive:
-            return isAliyunAuthorized ? "已登录" : "未登录"
+            return nil
         case .webdav:
             return currentServer?.title ?? "未配置"
         }
@@ -193,6 +192,7 @@ extension DataBackupViewModel {
 
     /// 切换当前云备份方式并刷新页面状态。
     func selectProvider(_ provider: CloudBackupProvider) async {
+        guard provider != selectedProvider else { return }
         guard beginBlockingAction(.switchingProvider) else { return }
         defer { endBlockingAction() }
 

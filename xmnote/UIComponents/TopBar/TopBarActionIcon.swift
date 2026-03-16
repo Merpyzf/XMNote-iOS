@@ -11,6 +11,7 @@ import SwiftUI
 struct TopBarActionIcon: View {
     let systemName: String
     var iconSize: CGFloat = 15
+    var containerSize: CGFloat = 44
     var weight: Font.Weight = .medium
     var foregroundColor: Color = .secondary
 
@@ -18,7 +19,7 @@ struct TopBarActionIcon: View {
         Image(systemName: systemName)
             .font(.system(size: iconSize, weight: weight))
             .foregroundStyle(foregroundColor)
-            .frame(width: 44, height: 44)
+            .frame(width: containerSize, height: containerSize)
             .contentShape(Circle())
     }
 }

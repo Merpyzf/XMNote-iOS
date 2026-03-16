@@ -17,8 +17,12 @@ import SwiftUI
 /// 个人中心首页，汇总设置、备份、阅读偏好与支持入口。
 struct PersonalView: View {
     private enum Layout {
+        static let panelCornerRadius: CGFloat = CornerRadius.containerMedium
+        static let panelSpacing: CGFloat = Spacing.comfortable
+        static let panelEdgeVerticalInset: CGFloat = Spacing.half
         static let settingsRowIconWidth: CGFloat = 24
-        static let rowVerticalPadding: CGFloat = Spacing.comfortable
+        static let rowMinHeight: CGFloat = 44
+        static let rowDividerLeading: CGFloat = Spacing.contentEdge + settingsRowIconWidth + Spacing.base
     }
 
     @Environment(AppState.self) private var appState
@@ -43,16 +47,11 @@ struct PersonalView: View {
             Color.surfacePage.ignoresSafeArea()
 
             ScrollView {
-                VStack(spacing: Spacing.base) {
+                VStack(spacing: Layout.panelSpacing) {
                     premiumSection
-                    readingSection
-                    dataSection
+                    readingAndDataSection
                     managementSection
-                    supportSection
-                    aboutSection
-                    #if DEBUG
-                    debugSection
-                    #endif
+                    supportAndAboutSection
                 }
                 .padding(.horizontal, Spacing.screenEdge)
                 .padding(.vertical, Spacing.base)
@@ -64,7 +63,7 @@ struct PersonalView: View {
 
             TopSwitcher(title: "我的") {
                 NavigationLink(value: PersonalRoute.settings) {
-                    TopBarActionIcon(systemName: "gearshape")
+                    TopBarActionIcon(systemName: "gearshape", containerSize: 36)
                 }
                 .topBarGlassButtonStyle(true)
 
@@ -90,51 +89,47 @@ extension PersonalView {
     @ViewBuilder
     private var premiumSection: some View {
         if !appState.isPremium {
-            NavigationLink(value: PersonalRoute.premium) {
-                HStack(spacing: Spacing.base) {
-                    Image(systemName: "crown.fill")
-                        .font(AppTypography.title2)
-                        .foregroundStyle(.orange)
-                    VStack(alignment: .leading, spacing: Spacing.tiny) {
-                        Text("开通会员")
-                            .font(AppTypography.headline)
-                        Text("解锁全部高级功能")
+            PersonalSettingsPanel(cornerRadius: Layout.panelCornerRadius) {
+                NavigationLink(value: PersonalRoute.premium) {
+                    HStack(spacing: Spacing.base) {
+                        Image(systemName: "crown.fill")
+                            .font(AppTypography.title3Semibold)
+                            .foregroundStyle(Color.feedbackWarning)
+                        VStack(alignment: .leading, spacing: Spacing.compact) {
+                            Text("开通会员")
+                                .font(AppTypography.headlineSemibold)
+                                .foregroundStyle(Color.textPrimary)
+                            Text("解锁全部高级功能")
+                                .font(AppTypography.caption)
+                                .foregroundStyle(Color.textSecondary)
+                        }
+                        Spacer()
+                        Image(systemName: "chevron.right")
                             .font(AppTypography.caption)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(.tertiary)
                     }
-                    Spacer()
-                    Image(systemName: "chevron.right")
-                        .font(AppTypography.caption)
-                        .foregroundStyle(.tertiary)
+                    .padding(.horizontal, Spacing.contentEdge)
+                    .padding(.vertical, Spacing.base)
+                    .contentShape(Rectangle())
                 }
-                .padding(Spacing.contentEdge)
-                .contentShape(Rectangle())
+                .buttonStyle(.plain)
             }
-            .buttonStyle(.plain)
-            .background(Color.surfaceCard)
-            .clipShape(RoundedRectangle(cornerRadius: CornerRadius.blockLarge, style: .continuous))
         }
     }
 
-    // MARK: - 阅读
+    // MARK: - 阅读与数据
 
-    private var readingSection: some View {
-        cardGroup("阅读") {
+    private var readingAndDataSection: some View {
+        groupedPanel {
             settingsRow("calendar", "阅读日历", route: .readCalendar)
-            settingsRow("bell", "阅读提醒", route: .readReminder, isLast: true)
-        }
-    }
-
-    // MARK: - 数据
-
-    private var dataSection: some View {
-        cardGroup("数据") {
+            settingsRow("bell", "阅读提醒", route: .readReminder)
+            PersonalSettingsDivider(leadingInset: Layout.rowDividerLeading)
             settingsRow("square.and.arrow.down", "数据导入", route: .dataImport)
             settingsRow("externaldrive", "数据备份", route: .dataBackup)
             settingsRow("square.and.arrow.up.on.square", "批量导出", route: .batchExport)
             settingsRow("link", "API 集成", route: .apiIntegration,
-                        isLast: !(appState.isAIEnabled && appState.isPremium))
-            if appState.isAIEnabled && appState.isPremium {
+                        isLast: !shouldShowAIConfiguration)
+            if shouldShowAIConfiguration {
                 settingsRow("brain", "AI 配置", route: .aiConfiguration, isLast: true)
             }
         }
@@ -143,7 +138,7 @@ extension PersonalView {
     // MARK: - 管理
 
     private var managementSection: some View {
-        cardGroup("管理") {
+        groupedPanel {
             settingsRow("tag", "标签管理", route: .tagManagement)
             settingsRow("folder", "书籍分组", route: .groupManagement)
             settingsRow("building.columns", "书籍来源", route: .bookSource)
@@ -152,70 +147,38 @@ extension PersonalView {
         }
     }
 
-    // MARK: - 支持
+    // MARK: - 支持与关于
 
-    private var supportSection: some View {
-        cardGroup("支持") {
+    private var supportAndAboutSection: some View {
+        groupedPanel {
             actionRow("questionmark.circle", "帮助文档") {
                 // TODO: 打开帮助文档
             }
-            actionRow("envelope", "反馈", isLast: true) {
+            actionRow("envelope", "反馈") {
                 // TODO: 发送反馈邮件
             }
+            settingsRow(
+                "info.circle",
+                "关于应用",
+                route: .about,
+                trailingText: appVersion,
+                isLast: !hasDebugSection
+            )
+            debugCenterRow()
         }
     }
 
-    // MARK: - 关于
-
-    private var aboutSection: some View {
-        cardGroup("关于") {
-            NavigationLink(value: PersonalRoute.about) {
-                HStack {
-                    Image(systemName: "info.circle")
-                        .font(AppTypography.body)
-                        .foregroundStyle(Color.brand)
-                        .frame(width: Layout.settingsRowIconWidth)
-                    Text("关于应用")
-                    Spacer()
-                    Text(appVersion)
-                        .foregroundStyle(.secondary)
-                    Image(systemName: "chevron.right")
-                        .font(AppTypography.caption)
-                        .foregroundStyle(.tertiary)
-                }
-                .padding(.horizontal, Spacing.contentEdge)
-                .padding(.vertical, Layout.rowVerticalPadding)
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-        }
+    private var shouldShowAIConfiguration: Bool {
+        appState.isAIEnabled && appState.isPremium
     }
 
-    // MARK: - 开发者
-
-    #if DEBUG
-    private var debugSection: some View {
-        cardGroup("开发者") {
-            NavigationLink(destination: DebugCenterView()) {
-                HStack {
-                    Image(systemName: "hammer")
-                        .font(AppTypography.body)
-                        .foregroundStyle(Color.brand)
-                        .frame(width: Layout.settingsRowIconWidth)
-                    Text("测试中心")
-                    Spacer()
-                    Image(systemName: "chevron.right")
-                        .font(AppTypography.caption)
-                        .foregroundStyle(.tertiary)
-                }
-                .padding(.horizontal, Spacing.contentEdge)
-                .padding(.vertical, Layout.rowVerticalPadding)
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-        }
+    private var hasDebugSection: Bool {
+#if DEBUG
+        true
+#else
+        false
+#endif
     }
-    #endif
 
     private var appVersion: String {
         let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0"
@@ -227,22 +190,14 @@ extension PersonalView {
 
 extension PersonalView {
 
-    private func cardGroup<Content: View>(
-        _ title: String,
+    private func groupedPanel<Content: View>(
         @ViewBuilder content: () -> Content
     ) -> some View {
-        VStack(alignment: .leading, spacing: Spacing.none) {
-            Text(title)
-                .font(AppTypography.footnote)
-                .foregroundStyle(.secondary)
-                .padding(.horizontal, Spacing.compact)
-                .padding(.bottom, Spacing.half)
-
-            CardContainer {
-                VStack(spacing: Spacing.none) {
-                    content()
-                }
+        PersonalSettingsPanel(cornerRadius: Layout.panelCornerRadius) {
+            VStack(spacing: Spacing.none) {
+                content()
             }
+            .padding(.vertical, Layout.panelEdgeVerticalInset)
         }
     }
 
@@ -250,30 +205,17 @@ extension PersonalView {
         _ icon: String,
         _ title: String,
         route: PersonalRoute,
+        trailingText: String? = nil,
         isLast: Bool = false
     ) -> some View {
         VStack(spacing: Spacing.none) {
             NavigationLink(value: route) {
-                HStack {
-                    Image(systemName: icon)
-                        .font(AppTypography.body)
-                        .foregroundStyle(Color.brand)
-                        .frame(width: Layout.settingsRowIconWidth)
-                    Text(title)
-                    Spacer()
-                    Image(systemName: "chevron.right")
-                        .font(AppTypography.caption)
-                        .foregroundStyle(.tertiary)
-                }
-                .padding(.horizontal, Spacing.contentEdge)
-                .padding(.vertical, Layout.rowVerticalPadding)
-                .contentShape(Rectangle())
+                rowContent(icon: icon, title: title, trailingText: trailingText)
             }
             .buttonStyle(.plain)
 
             if !isLast {
-                Divider()
-                    .padding(.leading, Spacing.contentEdge + Layout.settingsRowIconWidth + Spacing.base)
+                PersonalSettingsDivider(leadingInset: Layout.rowDividerLeading)
             }
         }
     }
@@ -286,29 +228,88 @@ extension PersonalView {
     ) -> some View {
         VStack(spacing: Spacing.none) {
             Button(action: action) {
-                HStack {
-                    Image(systemName: icon)
-                        .font(AppTypography.body)
-                        .foregroundStyle(Color.brand)
-                        .frame(width: Layout.settingsRowIconWidth)
-                    Text(title)
-                        .foregroundStyle(.primary)
-                    Spacer()
-                    Image(systemName: "chevron.right")
-                        .font(AppTypography.caption)
-                        .foregroundStyle(.tertiary)
-                }
-                .padding(.horizontal, Spacing.contentEdge)
-                .padding(.vertical, Layout.rowVerticalPadding)
-                .contentShape(Rectangle())
+                rowContent(icon: icon, title: title)
             }
             .buttonStyle(.plain)
 
             if !isLast {
-                Divider()
-                    .padding(.leading, Spacing.contentEdge + Layout.settingsRowIconWidth + Spacing.base)
+                PersonalSettingsDivider(leadingInset: Layout.rowDividerLeading)
             }
         }
+    }
+
+    @ViewBuilder
+    private func debugCenterRow() -> some View {
+#if DEBUG
+        NavigationLink(destination: DebugCenterView()) {
+            rowContent(icon: "hammer", title: "测试中心")
+        }
+        .buttonStyle(.plain)
+#endif
+    }
+
+    private func rowContent(
+        icon: String,
+        title: String,
+        trailingText: String? = nil
+    ) -> some View {
+        HStack(spacing: Spacing.base) {
+            Image(systemName: icon)
+                .font(AppTypography.body)
+                .foregroundStyle(Color.textPrimary)
+                .frame(width: Layout.settingsRowIconWidth)
+
+            Text(title)
+                .font(AppTypography.subheadlineMedium)
+                .foregroundStyle(Color.textPrimary)
+
+            Spacer(minLength: Spacing.base)
+
+            if let trailingText {
+                Text(trailingText)
+                    .font(AppTypography.subheadline)
+                    .foregroundStyle(Color.textSecondary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.9)
+            }
+
+            Image(systemName: "chevron.right")
+                .font(AppTypography.caption)
+                .foregroundStyle(.tertiary)
+        }
+        .padding(.horizontal, Spacing.contentEdge)
+        .frame(minHeight: Layout.rowMinHeight)
+        .contentShape(Rectangle())
+    }
+}
+
+private struct PersonalSettingsPanel<Content: View>: View {
+    let cornerRadius: CGFloat
+    let content: Content
+
+    init(
+        cornerRadius: CGFloat,
+        @ViewBuilder content: () -> Content
+    ) {
+        self.cornerRadius = cornerRadius
+        self.content = content()
+    }
+
+    var body: some View {
+        CardContainer(cornerRadius: cornerRadius) {
+            content
+        }
+    }
+}
+
+private struct PersonalSettingsDivider: View {
+    let leadingInset: CGFloat
+
+    var body: some View {
+        Rectangle()
+            .fill(Color.surfaceBorderSubtle.opacity(0.42))
+            .frame(height: CardStyle.borderWidth)
+            .padding(.leading, leadingInset)
     }
 }
 

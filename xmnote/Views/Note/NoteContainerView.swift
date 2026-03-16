@@ -172,7 +172,8 @@ private struct NoteContentView: View {
             // TODO: sort/settings action
         } label: {
             TopBarActionIcon(
-                systemName: selectedSubTab == .notes ? "arrow.up.arrow.down" : "gearshape"
+                systemName: selectedSubTab == .notes ? "arrow.up.arrow.down" : "gearshape",
+                containerSize: 36
             )
         }
         .topBarGlassButtonStyle(true)
