@@ -1,53 +1,119 @@
 /**
- * [INPUT]: 依赖 Foundation、UIKit、ZIPFoundation，依赖 AppDatabase 进行数据库操作
- * [OUTPUT]: 对外提供 BackupService 与 BackupFileInfo，封装备份打包与恢复逻辑
- * [POS]: Services 模块的备份业务服务，被 BackupRepository 消费
+ * [INPUT]: 依赖 Foundation、UIKit、SQLite3、ZIPFoundation 与 AppDatabase/DatabaseManager
+ * [OUTPUT]: 对外提供云备份通用模型、BackupArchiveService 与 CloudBackupRemoteProvider 协议
+ * [POS]: Services 模块的备份内核，负责本地备份包生成/恢复与跨 provider 的公共语义
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
 import Foundation
+import SQLite3
 import UIKit
 import ZIPFoundation
 
-// MARK: - Data Models
+// MARK: - Cloud Backup Models
 
-/// 备份历史列表项模型，供界面展示文件名、大小、设备来源与远端恢复路径。
+/// 当前支持的云备份提供方，rawValue 与 Android 常量保持一致。
+enum CloudBackupProvider: Int, CaseIterable, Identifiable, Sendable {
+    case aliyunDrive = 0
+    case webdav = 1
+
+    var id: Int { rawValue }
+
+    var displayName: String {
+        switch self {
+        case .aliyunDrive:
+            "阿里云盘"
+        case .webdav:
+            "WebDAV"
+        }
+    }
+}
+
+/// 阿里云盘账号信息，供备份页展示昵称、头像与空间占用。
+struct CloudBackupAccountInfo: Sendable {
+    let userId: String
+    let nickName: String
+    let avatarURL: String
+    let usedSpace: Int64?
+    let totalSpace: Int64?
+
+    var storageSummary: String? {
+        guard let usedSpace, let totalSpace else { return nil }
+        let formatter = ByteCountFormatter()
+        formatter.countStyle = .file
+        return "\(formatter.string(fromByteCount: usedSpace)) / \(formatter.string(fromByteCount: totalSpace))"
+    }
+}
+
+/// 备份页面所需的 provider 级状态快照。
+struct CloudBackupPageState: Sendable {
+    let selectedProvider: CloudBackupProvider
+    let webdavServer: BackupServerRecord?
+    let isAliyunAuthorized: Bool
+    let aliyunAccountInfo: CloudBackupAccountInfo?
+    let aliyunAccountInfoErrorMessage: String?
+    let lastBackupDate: Date?
+
+    var isCurrentProviderAvailable: Bool {
+        switch selectedProvider {
+        case .aliyunDrive:
+            isAliyunAuthorized
+        case .webdav:
+            webdavServer != nil
+        }
+    }
+}
+
+/// 备份历史列表项模型，provider-neutral，供界面展示与恢复路由使用。
 struct BackupFileInfo: Identifiable, Sendable {
     let id: String
     let name: String
-    let remotePath: String
+    let remoteIdentifier: String
     let size: Int64
     let lastModified: Date?
     let deviceName: String
     let backupDate: Date?
+    let provider: CloudBackupProvider
 }
 
 /// 手动备份流程阶段，用于驱动备份按钮文案与进度提示。
 enum BackupProgress: Equatable, Sendable {
-    case preparing, packaging, uploading(Double), cleaning, completed
+    case preparing
+    case packaging
+    case uploading(Double?)
+    case finalizing
+    case completed
 }
 
 /// 恢复流程阶段，用于驱动恢复进度条和阶段文案。
 enum RestoreProgress: Equatable, Sendable {
-    case downloading(Double), verifying, extracting, replacing, completed
+    case downloading(Double?)
+    case verifying
+    case extracting
+    case replacing
+    case completed
 }
 
 /// 备份与恢复链路的业务错误类型，统一映射给 UI 层展示。
 enum BackupError: LocalizedError {
     case noServerConfigured
-    case databaseCheckpointFailed
+    case noAliyunDriveAuthorized
+    case invalidAliyunDriveConfiguration
     case zipFailed(underlying: Error)
     case unzipFailed(underlying: Error)
     case versionMismatch(backupVersion: Int, appVersion: Int)
     case backupFileCorrupted
     case webdavError(NetworkError)
+    case aliyunDriveError(message: String)
 
     var errorDescription: String? {
         switch self {
         case .noServerConfigured:
-            return "未配置备份服务器"
-        case .databaseCheckpointFailed:
-            return "数据库 checkpoint 失败"
+            return "未配置 WebDAV 备份服务器"
+        case .noAliyunDriveAuthorized:
+            return "请先登录阿里云盘"
+        case .invalidAliyunDriveConfiguration:
+            return "阿里云盘开放平台配置无效"
         case .zipFailed:
             return "压缩备份文件失败"
         case .unzipFailed:
@@ -58,302 +124,235 @@ enum BackupError: LocalizedError {
             return "备份文件已损坏"
         case .webdavError(let error):
             return error.errorDescription
+        case .aliyunDriveError(let message):
+            return message
         }
     }
 }
 
-// MARK: - BackupService
+/// 统一的远端云备份 provider 能力。
+protocol CloudBackupRemoteProvider {
+    var provider: CloudBackupProvider { get }
+    func listBackups() async throws -> [BackupFileInfo]
+    func uploadBackup(
+        localFileURL: URL,
+        fileName: String,
+        progress: (@Sendable (Double?) -> Void)?
+    ) async throws
+    func downloadBackup(
+        _ backup: BackupFileInfo,
+        to localURL: URL,
+        progress: (@Sendable (Double?) -> Void)?
+    ) async throws
+    func deleteBackup(_ backup: BackupFileInfo) async throws
+}
 
-/// 备份业务服务，负责数据库打包上传、远端列表读取与备份恢复流程。
-struct BackupService: Sendable {
+/// 本地备份包产物，提供归档文件路径与远端使用的逻辑文件名。
+struct BackupArchiveArtifact: Sendable {
+    let localFileURL: URL
+    let fileName: String
+}
+
+// MARK: - Backup Archive Service
+
+/// 本地备份归档服务，负责数据库打包、解压、版本校验与恢复。
+struct BackupArchiveService {
     let database: AppDatabase
-    let client: WebDAVClient
 
-    static let backupDirName = "纸间书摘备份"
     static let maxHistoryCount = 20
+    static let androidPreferencesFileName = "com.merpyzf.xmnote_preferences.xml"
 
     private static let fileNameDateFormatter: DateFormatter = {
-        let f = DateFormatter()
-        f.dateFormat = "yyyy-MM-dd-HH-mm-ss"
-        return f
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd-HH-mm-ss"
+        return formatter
     }()
 }
 
-// MARK: - 备份
+extension BackupArchiveService {
 
-extension BackupService {
-
-    /// 执行备份服务流程（压缩、上传与记录写入），失败时向上抛出错误。
-    func backup(progress: (@Sendable (BackupProgress) -> Void)?) async throws {
-        let fm = FileManager.default
-        let tmpDir = fm.temporaryDirectory.appendingPathComponent(UUID().uuidString)
-        try fm.createDirectory(at: tmpDir, withIntermediateDirectories: true)
-        defer { try? fm.removeItem(at: tmpDir) }
-
-        // 1. Checkpoint
-        progress?(.preparing)
-        do {
-            try database.checkpoint()
-        } catch {
-            throw BackupError.databaseCheckpointFailed
+    /// 创建统一 zip 备份包，内容为数据库文件集（db/wal/shm）与 Android 兼容占位偏好文件。
+    func createBackupArchive(in directory: URL) throws -> BackupArchiveArtifact {
+        let fileName = Self.makeBackupFileName()
+        let archiveURL = directory.appendingPathComponent(fileName)
+        let preferencesURL = directory.appendingPathComponent(Self.androidPreferencesFileName)
+        let databaseURLs = existingDatabaseFileURLs()
+        guard databaseURLs.contains(where: { $0.lastPathComponent == AppDatabase.databaseName }) else {
+            throw BackupError.backupFileCorrupted
         }
 
-        // 2. 打包 ZIP
-        progress?(.packaging)
-        let deviceName = UIDevice.current.name
-            .replacingOccurrences(of: " ", with: "_")
-        let dateStr = Self.fileNameDateFormatter.string(from: Date())
-        let backupName = "\(dateStr)-\(deviceName)-v3"
-        let zipURL = tmpDir.appendingPathComponent("\(backupName).zip")
-
         do {
-            let archive = try Archive(url: zipURL, accessMode: .create)
-            let dbPath = database.databasePath
-            try archive.addEntry(with: AppDatabase.databaseName,
-                                 fileURL: URL(fileURLWithPath: dbPath))
+            try createAndroidPreferencesPlaceholder(at: preferencesURL)
+            let archive = try Archive(url: archiveURL, accessMode: .create)
+            for databaseURL in databaseURLs {
+                try archive.addEntry(
+                    with: databaseURL.lastPathComponent,
+                    fileURL: databaseURL
+                )
+            }
+            try archive.addEntry(
+                with: Self.androidPreferencesFileName,
+                fileURL: preferencesURL
+            )
         } catch {
             throw BackupError.zipFailed(underlying: error)
         }
 
-        // 3. 确保远程目录存在
-        progress?(.uploading(0))
-        do {
-            try await client.createDirectory(Self.backupDirName)
-        } catch {
-            throw BackupError.webdavError(error as? NetworkError ?? .unknown(underlying: error))
-        }
-
-        // 4. 上传
-        let remotePath = "\(Self.backupDirName)/\(backupName)"
-        do {
-            try await client.uploadFile(localURL: zipURL, remotePath: remotePath) { fraction in
-                progress?(.uploading(fraction))
-            }
-        } catch {
-            throw BackupError.webdavError(error as? NetworkError ?? .unknown(underlying: error))
-        }
-
-        // 5. 清理旧备份
-        progress?(.cleaning)
-        await cleanOldBackups()
-
-        progress?(.completed)
+        return BackupArchiveArtifact(localFileURL: archiveURL, fileName: fileName)
     }
-}
 
-// MARK: - 备份列表
-
-extension BackupService {
-
-    /// 读取远端备份目录并转换为历史列表，按备份时间倒序返回。
-    func fetchBackupList() async throws -> [BackupFileInfo] {
-        let resources: [WebDAVResource]
-        do {
-            resources = try await client.listDirectory(Self.backupDirName)
-        } catch {
-            throw BackupError.webdavError(error as? NetworkError ?? .unknown(underlying: error))
-        }
-
-        #if DEBUG
-        print("[Backup] Resources count: \(resources.count)")
-        for r in resources {
-            print("[Backup]   href=\(r.href) name=\(r.displayName) isDir=\(r.isDirectory) size=\(r.contentLength)")
-        }
-        #endif
-
-        let result = resources
-            .filter { !$0.isDirectory && $0.displayName.hasSuffix("-v3") }
-            .compactMap { Self.parseBackupFileInfo(from: $0) }
-            .sorted { ($0.backupDate ?? .distantPast) > ($1.backupDate ?? .distantPast) }
-
-        #if DEBUG
-        print("[Backup] After filter: \(result.count) items")
-        #endif
-
-        return result
-    }
-}
-
-// MARK: - 恢复
-
-extension BackupService {
-
-    /// 执行恢复服务流程（下载、解压与数据回写），失败时向上抛出错误。
-    func restore(_ backup: BackupFileInfo,
-                 databaseManager: DatabaseManager,
-                 progress: (@Sendable (RestoreProgress) -> Void)?) async throws {
-        #if DEBUG
-        print("[Restore] 开始恢复: \(backup.name)")
-        #endif
-
-        let fm = FileManager.default
-        let tmpDir = fm.temporaryDirectory.appendingPathComponent(UUID().uuidString)
-        try fm.createDirectory(at: tmpDir, withIntermediateDirectories: true)
-        defer { try? fm.removeItem(at: tmpDir) }
-
-        // 1. 下载
-        #if DEBUG
-        print("[Restore] Step 1: 开始下载")
-        #endif
-        let zipURL = tmpDir.appendingPathComponent(backup.name)
-        do {
-            try await client.downloadFile(remotePath: backup.remotePath, to: zipURL) { fraction in
-                progress?(.downloading(fraction))
-            }
-        } catch {
-            #if DEBUG
-            print("[Restore] Step 1 失败: \(error)")
-            #endif
-            throw BackupError.webdavError(error as? NetworkError ?? .unknown(underlying: error))
-        }
-        #if DEBUG
-        let fileAttributes = try? fm.attributesOfItem(atPath: zipURL.path)
-        let fileSize = (fileAttributes?[.size] as? NSNumber)?.int64Value ?? 0
-        print("[Restore] Step 1 完成: 文件大小 \(fileSize)")
-        #endif
-
-        // 2. 校验 ZIP
-        #if DEBUG
-        print("[Restore] Step 2: 校验 ZIP")
-        #endif
+    /// 从统一 zip 备份包恢复数据库文件集，并基于 user_version 执行跨端版本校验。
+    func restoreBackupArchive(
+        from archiveURL: URL,
+        databaseManager: DatabaseManager,
+        progress: (@Sendable (RestoreProgress) -> Void)?
+    ) throws {
+        let fileManager = FileManager.default
         progress?(.verifying)
-        guard fm.fileExists(atPath: zipURL.path) else {
-            #if DEBUG
-            print("[Restore] Step 2 失败: ZIP 文件不存在")
-            #endif
+
+        guard fileManager.fileExists(atPath: archiveURL.path) else {
             throw BackupError.backupFileCorrupted
         }
 
-        // 3. 解压
-        #if DEBUG
-        print("[Restore] Step 3: 开始解压")
-        #endif
         progress?(.extracting)
-        let extractDir = tmpDir.appendingPathComponent("extracted")
+        let extractDirectory = archiveURL.deletingLastPathComponent().appendingPathComponent("extracted")
+
         do {
-            try fm.createDirectory(at: extractDir, withIntermediateDirectories: true)
-            try fm.unzipItem(at: zipURL, to: extractDir)
+            try fileManager.createDirectory(at: extractDirectory, withIntermediateDirectories: true)
+            try fileManager.unzipItem(at: archiveURL, to: extractDirectory)
         } catch {
-            #if DEBUG
-            print("[Restore] Step 3 失败: \(error)")
-            #endif
             throw BackupError.unzipFailed(underlying: error)
         }
-        #if DEBUG
-        print("[Restore] Step 3 完成")
-        #endif
 
-        // 4. 校验数据库版本
-        #if DEBUG
-        print("[Restore] Step 4: 校验数据库版本")
-        #endif
-        let extractedDB = extractDir.appendingPathComponent(AppDatabase.databaseName)
-        guard fm.fileExists(atPath: extractedDB.path) else {
-            #if DEBUG
-            print("[Restore] Step 4 失败: 数据库文件不存在")
-            #endif
+        let extractedDatabaseURL = extractDirectory.appendingPathComponent(AppDatabase.databaseName)
+        guard fileManager.fileExists(atPath: extractedDatabaseURL.path) else {
             throw BackupError.backupFileCorrupted
         }
-        try verifyDatabaseVersion(at: extractedDB.path)
-        #if DEBUG
-        print("[Restore] Step 4 完成")
-        #endif
 
-        // 5. 替换数据库文件
-        #if DEBUG
-        print("[Restore] Step 5: 替换数据库文件")
-        #endif
+        try verifyDatabaseVersion(at: extractedDatabaseURL.path)
+
         progress?(.replacing)
+        let databasePath = database.databasePath
+        let databaseURL = URL(fileURLWithPath: databasePath)
+        let extractedWalURL = extractDirectory.appendingPathComponent("\(AppDatabase.databaseName)-wal")
+        let extractedShmURL = extractDirectory.appendingPathComponent("\(AppDatabase.databaseName)-shm")
 
-        let dbPath = database.databasePath
-        let dbURL = URL(fileURLWithPath: dbPath)
-
-        // 移除现有数据库文件（主文件 + WAL + SHM）
         for suffix in ["", "-wal", "-shm"] {
-            let fileURL = URL(fileURLWithPath: dbPath + suffix)
-            try? fm.removeItem(at: fileURL)
+            let fileURL = URL(fileURLWithPath: databasePath + suffix)
+            try? fileManager.removeItem(at: fileURL)
         }
 
-        // 复制恢复的数据库
-        try fm.copyItem(at: extractedDB, to: dbURL)
-        #if DEBUG
-        print("[Restore] Step 5 完成: \(dbPath)")
-        #endif
-
-        // 6. 热重载
-        #if DEBUG
-        print("[Restore] Step 6: 热重载数据库")
-        #endif
+        try fileManager.copyItem(at: extractedDatabaseURL, to: databaseURL)
+        if fileManager.fileExists(atPath: extractedWalURL.path) {
+            try fileManager.copyItem(at: extractedWalURL, to: URL(fileURLWithPath: "\(databasePath)-wal"))
+        }
+        if fileManager.fileExists(atPath: extractedShmURL.path) {
+            try fileManager.copyItem(at: extractedShmURL, to: URL(fileURLWithPath: "\(databasePath)-shm"))
+        }
         try databaseManager.reopen()
-        #if DEBUG
-        print("[Restore] Step 6 完成")
-        #endif
-
         progress?(.completed)
-        #if DEBUG
-        print("[Restore] 恢复流程全部完成")
-        #endif
     }
 }
 
-// MARK: - 辅助方法
+// MARK: - Helpers
 
-private extension BackupService {
+extension BackupArchiveService {
 
-    /// 清理超出上限的旧备份
-    func cleanOldBackups() async {
-        guard let list = try? await fetchBackupList(),
-              list.count > Self.maxHistoryCount else { return }
-
-        let toDelete = list.suffix(from: Self.maxHistoryCount)
-        for file in toDelete {
-            try? await client.deleteResource(file.remotePath)
-        }
+    /// 统一生成云备份逻辑文件名，与 Android `StorageHelper.getCloudBackupFileName()` 对齐。
+    static func makeBackupFileName(
+        date: Date = Date(),
+        deviceName: String = UIDevice.current.name
+    ) -> String {
+        let dateText = fileNameDateFormatter.string(from: date)
+        let sanitizedDeviceName = deviceName
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .replacingOccurrences(of: " ", with: "_")
+            .replacingOccurrences(of: "/", with: "_")
+        return "\(dateText)-\(sanitizedDeviceName)-v3"
     }
 
-    /// 校验备份数据库版本（通过 SQLite PRAGMA）
-    func verifyDatabaseVersion(at path: String) throws {
-        guard let data = FileManager.default.contents(atPath: path),
-              data.count > 100 else {
-            throw BackupError.backupFileCorrupted
-        }
-        // 简单校验：SQLite 文件头 "SQLite format 3\000"
-        let header = String(data: data.prefix(16), encoding: .utf8) ?? ""
-        guard header.hasPrefix("SQLite format 3") else {
-            throw BackupError.backupFileCorrupted
-        }
-    }
-
-    /// 从 WebDAVResource 解析 BackupFileInfo
-    ///
-    /// 文件名格式：{yyyy-MM-dd-HH-mm-ss}-{device}-v3
-    /// 示例：2025-12-22-03-51-50-lynx-v3
-    static func parseBackupFileInfo(from resource: WebDAVResource) -> BackupFileInfo? {
-        let name = resource.displayName
+    /// 解析远端文件信息为统一 `BackupFileInfo`。
+    static func parseBackupFileInfo(
+        name: String,
+        size: Int64,
+        lastModified: Date?,
+        provider: CloudBackupProvider,
+        remoteIdentifier: String
+    ) -> BackupFileInfo? {
         guard name.hasSuffix("-v3") else { return nil }
-
-        // 去掉 "-v3" 后缀
         let stem = String(name.dropLast(3))
-        // 日期部分固定 19 字符：yyyy-MM-dd-HH-mm-ss
         guard stem.count >= 19 else { return nil }
 
-        let dateStr = String(stem.prefix(19))
-        let backupDate = fileNameDateFormatter.date(from: dateStr)
-
-        var deviceName = "未知设备"
-        // 日期后如果还有 "-xxx" 就是设备名
+        let dateText = String(stem.prefix(19))
+        let parsedDate = fileNameDateFormatter.date(from: dateText)
+        let deviceName: String
         if stem.count > 20 {
             deviceName = String(stem.dropFirst(20))
+        } else {
+            deviceName = "未知设备"
         }
 
         return BackupFileInfo(
-            id: resource.href,
+            id: "\(provider.rawValue)-\(remoteIdentifier)",
             name: name,
-            remotePath: "\(backupDirName)/\(name)",
-            size: resource.contentLength,
-            lastModified: resource.lastModified,
+            remoteIdentifier: remoteIdentifier,
+            size: size,
+            lastModified: lastModified,
             deviceName: deviceName,
-            backupDate: backupDate ?? resource.lastModified
+            backupDate: parsedDate ?? lastModified,
+            provider: provider
         )
+    }
+}
+
+private extension BackupArchiveService {
+
+    /// 收集当前数据库目录中存在的 sqlite 文件集（db/wal/shm），用于与 Android 端对齐的备份归档。
+    func existingDatabaseFileURLs() -> [URL] {
+        database.databaseFiles
+            .map { URL(fileURLWithPath: $0) }
+            .filter { FileManager.default.fileExists(atPath: $0.path) }
+    }
+
+    /// 写入 Android 兼容占位偏好文件，保证 Android 恢复流程不因缺少 SP 文件失败。
+    func createAndroidPreferencesPlaceholder(at url: URL) throws {
+        let content = """
+        <?xml version='1.0' encoding='utf-8' standalone='yes' ?>
+        <map />
+        """
+        try content.write(to: url, atomically: true, encoding: .utf8)
+    }
+
+    /// 基于 SQLite `PRAGMA user_version` 校验跨端数据库版本兼容性。
+    func verifyDatabaseVersion(at path: String) throws {
+        guard FileManager.default.fileExists(atPath: path) else {
+            throw BackupError.backupFileCorrupted
+        }
+
+        var databasePointer: OpaquePointer?
+        let openResult = sqlite3_open_v2(path, &databasePointer, SQLITE_OPEN_READONLY, nil)
+        guard openResult == SQLITE_OK, let databasePointer else {
+            throw BackupError.backupFileCorrupted
+        }
+        defer { sqlite3_close(databasePointer) }
+
+        var statement: OpaquePointer?
+        let prepareResult = sqlite3_prepare_v2(databasePointer, "PRAGMA user_version", -1, &statement, nil)
+        guard prepareResult == SQLITE_OK, let statement else {
+            throw BackupError.backupFileCorrupted
+        }
+        defer { sqlite3_finalize(statement) }
+
+        guard sqlite3_step(statement) == SQLITE_ROW else {
+            throw BackupError.backupFileCorrupted
+        }
+
+        let backupVersion = Int(sqlite3_column_int(statement, 0))
+        if backupVersion > AppDatabase.databaseVersion {
+            throw BackupError.versionMismatch(
+                backupVersion: backupVersion,
+                appVersion: AppDatabase.databaseVersion
+            )
+        }
     }
 }
