@@ -1064,6 +1064,7 @@
 
     },
     "未配置" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
