@@ -12,6 +12,7 @@ struct BackupRepository: BackupRepositoryProtocol {
     private enum PreferenceKey {
         // 对齐 Android SpSettingHelper#getCloudBackupService。
         static let selectedProvider = "currCloudBackupService"
+        static let lastLocalBackupExportDate = "lastLocalBackupExportDate"
     }
 
     typealias RemoteProviderFactory = (
@@ -44,6 +45,10 @@ struct BackupRepository: BackupRepositoryProtocol {
 // MARK: - Page State
 
 extension BackupRepository {
+
+    func fetchLastLocalBackupDate() async -> Date? {
+        userDefaults.object(forKey: PreferenceKey.lastLocalBackupExportDate) as? Date
+    }
 
     func fetchCloudBackupPageState() async throws -> CloudBackupPageState {
         let selectedProvider = try await fetchSelectedProvider()
@@ -86,21 +91,79 @@ extension BackupRepository {
 
 extension BackupRepository {
 
+    func prepareLocalExport() async throws -> LocalBackupExportTicket {
+        let workingDirectory = try createTemporaryDirectory()
+        do {
+            let artifact = try await createArchiveArtifact(in: workingDirectory)
+            let exportURL = workingDirectory.appendingPathComponent("\(artifact.fileName).zip")
+            try FileManager.default.moveItem(at: artifact.localFileURL, to: exportURL)
+            return LocalBackupExportTicket(
+                workingDirectoryURL: workingDirectory,
+                archiveFileURL: exportURL,
+                suggestedFileName: exportURL.lastPathComponent
+            )
+        } catch {
+            try? FileManager.default.removeItem(at: workingDirectory)
+            throw error
+        }
+    }
+
+    func finalizeLocalExport(_ ticket: LocalBackupExportTicket, succeeded: Bool) async {
+        if succeeded {
+            userDefaults.set(Date(), forKey: PreferenceKey.lastLocalBackupExportDate)
+        }
+        try? FileManager.default.removeItem(at: ticket.workingDirectoryURL)
+    }
+
+    func prepareLocalImport(from url: URL) async throws -> LocalBackupImportTicket {
+        let workingDirectory = try createTemporaryDirectory()
+        do {
+            let localFileURL = try await copyImportFileToTemporaryDirectory(
+                from: url,
+                workingDirectory: workingDirectory
+            )
+            let inspection = try await runBlockingWork {
+                try archiveService().validateBackupArchive(at: localFileURL)
+            }
+            return LocalBackupImportTicket(
+                workingDirectoryURL: workingDirectory,
+                archiveFileURL: localFileURL,
+                fileName: localFileURL.lastPathComponent,
+                backupDate: inspection.backupDate,
+                deviceName: inspection.deviceName
+            )
+        } catch {
+            try? FileManager.default.removeItem(at: workingDirectory)
+            throw error
+        }
+    }
+
+    func restoreLocalBackup(
+        using ticket: LocalBackupImportTicket,
+        progress: (@Sendable (RestoreProgress) -> Void)?
+    ) async throws {
+        defer { try? FileManager.default.removeItem(at: ticket.workingDirectoryURL) }
+        try await runBlockingWork {
+            try archiveService().restoreBackupArchive(
+                from: ticket.archiveFileURL,
+                databaseManager: databaseManager,
+                progress: progress
+            )
+        }
+    }
+
+    func discardLocalImport(_ ticket: LocalBackupImportTicket) async {
+        try? FileManager.default.removeItem(at: ticket.workingDirectoryURL)
+    }
+
     func backup(progress: (@Sendable (BackupProgress) -> Void)?) async throws {
         let provider = try await currentRemoteProvider()
-
-        let fileManager = FileManager.default
-        let temporaryDirectory = fileManager.temporaryDirectory.appendingPathComponent(UUID().uuidString)
-        try fileManager.createDirectory(at: temporaryDirectory, withIntermediateDirectories: true)
-        defer { try? fileManager.removeItem(at: temporaryDirectory) }
-
-        let archiveService = BackupArchiveService(database: databaseManager.database)
+        let temporaryDirectory = try createTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: temporaryDirectory) }
 
         progress?(.preparing)
         progress?(.packaging)
-        let artifact = try await runBlockingWork {
-            try archiveService.createBackupArchive(in: temporaryDirectory)
-        }
+        let artifact = try await createArchiveArtifact(in: temporaryDirectory)
 
         progress?(.uploading(nil))
         try await provider.uploadBackup(
@@ -124,11 +187,8 @@ extension BackupRepository {
         progress: (@Sendable (RestoreProgress) -> Void)?
     ) async throws {
         let provider = try await makeRequiredRemoteProvider(for: backup.provider)
-
-        let fileManager = FileManager.default
-        let temporaryDirectory = fileManager.temporaryDirectory.appendingPathComponent(UUID().uuidString)
-        try fileManager.createDirectory(at: temporaryDirectory, withIntermediateDirectories: true)
-        defer { try? fileManager.removeItem(at: temporaryDirectory) }
+        let temporaryDirectory = try createTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: temporaryDirectory) }
 
         let localArchiveURL = temporaryDirectory.appendingPathComponent(backup.name)
         progress?(.downloading(nil))
@@ -136,9 +196,8 @@ extension BackupRepository {
             progress?(.downloading(fraction))
         }
 
-        let archiveService = BackupArchiveService(database: databaseManager.database)
         try await runBlockingWork {
-            try archiveService.restoreBackupArchive(
+            try archiveService().restoreBackupArchive(
                 from: localArchiveURL,
                 databaseManager: databaseManager,
                 progress: progress
@@ -150,6 +209,45 @@ extension BackupRepository {
 // MARK: - Internals
 
 private extension BackupRepository {
+
+    func archiveService() -> BackupArchiveService {
+        BackupArchiveService(database: databaseManager.database)
+    }
+
+    func createTemporaryDirectory() throws -> URL {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        return directory
+    }
+
+    func createArchiveArtifact(in directory: URL) async throws -> BackupArchiveArtifact {
+        try await runBlockingWork {
+            try archiveService().createBackupArchive(in: directory)
+        }
+    }
+
+    func copyImportFileToTemporaryDirectory(
+        from sourceURL: URL,
+        workingDirectory: URL
+    ) async throws -> URL {
+        try await runBlockingWork {
+            let hasSecurityScope = sourceURL.startAccessingSecurityScopedResource()
+            defer {
+                if hasSecurityScope {
+                    sourceURL.stopAccessingSecurityScopedResource()
+                }
+            }
+
+            let fileManager = FileManager.default
+            let preferredName = sourceURL.lastPathComponent.isEmpty ? "\(UUID().uuidString).zip" : sourceURL.lastPathComponent
+            let destinationURL = workingDirectory.appendingPathComponent(preferredName)
+            if fileManager.fileExists(atPath: destinationURL.path) {
+                try fileManager.removeItem(at: destinationURL)
+            }
+            try fileManager.copyItem(at: sourceURL, to: destinationURL)
+            return destinationURL
+        }
+    }
 
     func runBlockingWork<T>(
         _ operation: @escaping () throws -> T

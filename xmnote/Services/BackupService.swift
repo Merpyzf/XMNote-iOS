@@ -153,6 +153,30 @@ struct BackupArchiveArtifact: Sendable {
     let fileName: String
 }
 
+/// 本地导出流程的临时票据，持有待交给系统文档选择器的归档文件。
+struct LocalBackupExportTicket: Sendable {
+    let workingDirectoryURL: URL
+    let archiveFileURL: URL
+    let suggestedFileName: String
+}
+
+/// 本地导入流程的临时票据，持有复制到沙盒后的备份文件和展示所需元信息。
+struct LocalBackupImportTicket: Identifiable, Sendable {
+    let workingDirectoryURL: URL
+    let archiveFileURL: URL
+    let fileName: String
+    let backupDate: Date?
+    let deviceName: String
+
+    var id: String { archiveFileURL.path }
+}
+
+/// 备份包校验通过后的摘要信息，供导入前展示备份时间与设备来源。
+struct BackupArchiveInspection: Sendable {
+    let backupDate: Date?
+    let deviceName: String
+}
+
 // MARK: - Backup Archive Service
 
 /// 本地备份归档服务，负责数据库打包、解压、版本校验与恢复。
@@ -160,7 +184,6 @@ struct BackupArchiveService {
     let database: AppDatabase
 
     static let maxHistoryCount = 20
-    static let androidPreferencesFileName = "com.merpyzf.xmnote_preferences.xml"
 
     private static let fileNameDateFormatter: DateFormatter = {
         let formatter = DateFormatter()
@@ -170,19 +193,56 @@ struct BackupArchiveService {
 }
 
 extension BackupArchiveService {
+    /// 对备份包做非破坏性结构校验，确认主数据库存在且版本兼容。
+    func validateBackupArchive(at archiveURL: URL) throws -> BackupArchiveInspection {
+        let fileManager = FileManager.default
+        guard fileManager.fileExists(atPath: archiveURL.path) else {
+            throw BackupError.backupFileCorrupted
+        }
 
-    /// 创建统一 zip 备份包，内容为数据库文件集（db/wal/shm）与 Android 兼容占位偏好文件。
+        let workingDirectory = archiveURL
+            .deletingLastPathComponent()
+            .appendingPathComponent(UUID().uuidString)
+        let extractDirectory = workingDirectory.appendingPathComponent("extracted")
+        defer { try? fileManager.removeItem(at: workingDirectory) }
+
+        do {
+            try fileManager.createDirectory(at: extractDirectory, withIntermediateDirectories: true)
+            try fileManager.unzipItem(at: archiveURL, to: extractDirectory)
+        } catch {
+            throw BackupError.unzipFailed(underlying: error)
+        }
+
+        let extractedDatabaseURL = extractDirectory.appendingPathComponent(AppDatabase.databaseName)
+        guard fileManager.fileExists(atPath: extractedDatabaseURL.path) else {
+            throw BackupError.backupFileCorrupted
+        }
+
+        try verifyDatabaseVersion(at: extractedDatabaseURL.path)
+
+        let resourceValues = try archiveURL.resourceValues(forKeys: [.contentModificationDateKey, .fileSizeKey])
+        let metadata = Self.parseLocalArchiveMetadata(
+            fileName: archiveURL.lastPathComponent,
+            lastModified: resourceValues.contentModificationDate,
+            fileSize: Int64(resourceValues.fileSize ?? 0)
+        )
+
+        return BackupArchiveInspection(
+            backupDate: metadata?.backupDate ?? resourceValues.contentModificationDate,
+            deviceName: metadata?.deviceName ?? "未知设备"
+        )
+    }
+
+    /// 创建统一 zip 备份包，内容仅包含数据库文件集（db/wal/shm）。
     func createBackupArchive(in directory: URL) throws -> BackupArchiveArtifact {
         let fileName = Self.makeBackupFileName()
         let archiveURL = directory.appendingPathComponent(fileName)
-        let preferencesURL = directory.appendingPathComponent(Self.androidPreferencesFileName)
         let databaseURLs = existingDatabaseFileURLs()
         guard databaseURLs.contains(where: { $0.lastPathComponent == AppDatabase.databaseName }) else {
             throw BackupError.backupFileCorrupted
         }
 
         do {
-            try createAndroidPreferencesPlaceholder(at: preferencesURL)
             let archive = try Archive(url: archiveURL, accessMode: .create)
             for databaseURL in databaseURLs {
                 try archive.addEntry(
@@ -190,10 +250,6 @@ extension BackupArchiveService {
                     fileURL: databaseURL
                 )
             }
-            try archive.addEntry(
-                with: Self.androidPreferencesFileName,
-                fileURL: preferencesURL
-            )
         } catch {
             throw BackupError.zipFailed(underlying: error)
         }
@@ -214,10 +270,17 @@ extension BackupArchiveService {
             throw BackupError.backupFileCorrupted
         }
 
+        let workingDirectory = archiveURL
+            .deletingLastPathComponent()
+            .appendingPathComponent(UUID().uuidString)
+        let extractDirectory = workingDirectory.appendingPathComponent("extracted")
+        let rollbackDirectory = workingDirectory.appendingPathComponent("rollback")
+        defer { try? fileManager.removeItem(at: workingDirectory) }
+
         progress?(.extracting)
-        let extractDirectory = archiveURL.deletingLastPathComponent().appendingPathComponent("extracted")
 
         do {
+            try fileManager.createDirectory(at: workingDirectory, withIntermediateDirectories: true)
             try fileManager.createDirectory(at: extractDirectory, withIntermediateDirectories: true)
             try fileManager.unzipItem(at: archiveURL, to: extractDirectory)
         } catch {
@@ -233,24 +296,24 @@ extension BackupArchiveService {
 
         progress?(.replacing)
         let databasePath = database.databasePath
-        let databaseURL = URL(fileURLWithPath: databasePath)
-        let extractedWalURL = extractDirectory.appendingPathComponent("\(AppDatabase.databaseName)-wal")
-        let extractedShmURL = extractDirectory.appendingPathComponent("\(AppDatabase.databaseName)-shm")
+        try fileManager.createDirectory(at: rollbackDirectory, withIntermediateDirectories: true)
 
-        for suffix in ["", "-wal", "-shm"] {
-            let fileURL = URL(fileURLWithPath: databasePath + suffix)
-            try? fileManager.removeItem(at: fileURL)
+        do {
+            try captureRollbackFiles(into: rollbackDirectory, databasePath: databasePath)
+            try replaceDatabaseFiles(
+                from: extractDirectory,
+                databasePath: databasePath
+            )
+            try databaseManager.reopen()
+            progress?(.completed)
+        } catch {
+            try? restoreRollbackFiles(
+                from: rollbackDirectory,
+                databasePath: databasePath
+            )
+            try? databaseManager.reopen()
+            throw error
         }
-
-        try fileManager.copyItem(at: extractedDatabaseURL, to: databaseURL)
-        if fileManager.fileExists(atPath: extractedWalURL.path) {
-            try fileManager.copyItem(at: extractedWalURL, to: URL(fileURLWithPath: "\(databasePath)-wal"))
-        }
-        if fileManager.fileExists(atPath: extractedShmURL.path) {
-            try fileManager.copyItem(at: extractedShmURL, to: URL(fileURLWithPath: "\(databasePath)-shm"))
-        }
-        try databaseManager.reopen()
-        progress?(.completed)
     }
 }
 
@@ -279,8 +342,7 @@ extension BackupArchiveService {
         provider: CloudBackupProvider,
         remoteIdentifier: String
     ) -> BackupFileInfo? {
-        guard name.hasSuffix("-v3") else { return nil }
-        let stem = String(name.dropLast(3))
+        guard let stem = normalizedBackupStem(from: name) else { return nil }
         guard stem.count >= 19 else { return nil }
 
         let dateText = String(stem.prefix(19))
@@ -303,24 +365,46 @@ extension BackupArchiveService {
             provider: provider
         )
     }
+
+    /// 兼容解析无扩展名与 `.zip` 本地导出文件名，统一提取 `-v3` 主干。
+    static func normalizedBackupStem(from fileName: String) -> String? {
+        let stem: String
+        if fileName.lowercased().hasSuffix(".zip") {
+            stem = String(fileName.dropLast(4))
+        } else {
+            stem = fileName
+        }
+        guard stem.hasSuffix("-v3") else { return nil }
+        return String(stem.dropLast(3))
+    }
+
+    /// 解析本地导入文件名中的备份时间与设备信息；无法解析时返回 nil。
+    static func parseLocalArchiveMetadata(
+        fileName: String,
+        lastModified: Date?,
+        fileSize: Int64
+    ) -> (backupDate: Date?, deviceName: String)? {
+        guard let info = parseBackupFileInfo(
+            name: fileName,
+            size: fileSize,
+            lastModified: lastModified,
+            provider: .webdav,
+            remoteIdentifier: fileName
+        ) else {
+            return nil
+        }
+        return (info.backupDate, info.deviceName)
+    }
 }
 
 private extension BackupArchiveService {
+    static let databaseFileSuffixes = ["", "-wal", "-shm"]
 
     /// 收集当前数据库目录中存在的 sqlite 文件集（db/wal/shm），用于与 Android 端对齐的备份归档。
     func existingDatabaseFileURLs() -> [URL] {
         database.databaseFiles
             .map { URL(fileURLWithPath: $0) }
             .filter { FileManager.default.fileExists(atPath: $0.path) }
-    }
-
-    /// 写入 Android 兼容占位偏好文件，保证 Android 恢复流程不因缺少 SP 文件失败。
-    func createAndroidPreferencesPlaceholder(at url: URL) throws {
-        let content = """
-        <?xml version='1.0' encoding='utf-8' standalone='yes' ?>
-        <map />
-        """
-        try content.write(to: url, atomically: true, encoding: .utf8)
     }
 
     /// 基于 SQLite `PRAGMA user_version` 校验跨端数据库版本兼容性。
@@ -353,6 +437,63 @@ private extension BackupArchiveService {
                 backupVersion: backupVersion,
                 appVersion: AppDatabase.databaseVersion
             )
+        }
+    }
+
+    /// 在替换正式数据库前先复制一份当前 db/wal/shm，供恢复失败时回滚。
+    func captureRollbackFiles(
+        into directory: URL,
+        databasePath: String
+    ) throws {
+        let fileManager = FileManager.default
+        for suffix in Self.databaseFileSuffixes {
+            let sourceURL = URL(fileURLWithPath: databasePath + suffix)
+            guard fileManager.fileExists(atPath: sourceURL.path) else { continue }
+            let destinationURL = directory.appendingPathComponent(sourceURL.lastPathComponent)
+            try fileManager.copyItem(at: sourceURL, to: destinationURL)
+        }
+    }
+
+    /// 用 staging 中已校验通过的数据库文件集替换正式数据库文件。
+    func replaceDatabaseFiles(
+        from extractDirectory: URL,
+        databasePath: String
+    ) throws {
+        let fileManager = FileManager.default
+        try removeDatabaseFiles(at: databasePath)
+
+        for suffix in Self.databaseFileSuffixes {
+            let sourceURL = extractDirectory.appendingPathComponent(AppDatabase.databaseName + suffix)
+            guard fileManager.fileExists(atPath: sourceURL.path) else { continue }
+            let destinationURL = URL(fileURLWithPath: databasePath + suffix)
+            try fileManager.copyItem(at: sourceURL, to: destinationURL)
+        }
+    }
+
+    /// 恢复失败时，用 rollback 目录下的文件集还原正式数据库。
+    func restoreRollbackFiles(
+        from rollbackDirectory: URL,
+        databasePath: String
+    ) throws {
+        let fileManager = FileManager.default
+        try removeDatabaseFiles(at: databasePath)
+
+        for suffix in Self.databaseFileSuffixes {
+            let rollbackURL = rollbackDirectory.appendingPathComponent(AppDatabase.databaseName + suffix)
+            guard fileManager.fileExists(atPath: rollbackURL.path) else { continue }
+            let destinationURL = URL(fileURLWithPath: databasePath + suffix)
+            try fileManager.copyItem(at: rollbackURL, to: destinationURL)
+        }
+    }
+
+    /// 删除正式数据库文件集，为替换或回滚准备干净目标路径。
+    func removeDatabaseFiles(at databasePath: String) throws {
+        let fileManager = FileManager.default
+        for suffix in Self.databaseFileSuffixes {
+            let fileURL = URL(fileURLWithPath: databasePath + suffix)
+            if fileManager.fileExists(atPath: fileURL.path) {
+                try fileManager.removeItem(at: fileURL)
+            }
         }
     }
 }

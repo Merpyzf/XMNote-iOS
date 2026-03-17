@@ -206,7 +206,6 @@ struct BackupIntegrationTests {
         )
 
         #expect(archiveEntryNames.contains(AppDatabase.databaseName))
-        #expect(archiveEntryNames.contains(BackupArchiveService.androidPreferencesFileName))
         #expect(existingDatabaseNames.isSubset(of: archiveEntryNames))
     }
 
@@ -301,7 +300,7 @@ struct BackupIntegrationTests {
             lastBackupDate: nil
         )
 
-        let task = Task { await viewModel.performBackup() }
+        let task = Task { await viewModel.performCloudBackup() }
         await Task.yield()
 
         let isPreparing: Bool
@@ -396,6 +395,8 @@ private actor StubCloudBackupRemoteProvider: CloudBackupRemoteProvider {
 private final class SlowBackupRepository: BackupRepositoryProtocol {
     private var selectedProvider: CloudBackupProvider = .webdav
 
+    func fetchLastLocalBackupDate() async -> Date? { nil }
+
     func fetchCloudBackupPageState() async throws -> CloudBackupPageState {
         try await Task.sleep(nanoseconds: 120_000_000)
 
@@ -431,6 +432,23 @@ private final class SlowBackupRepository: BackupRepositoryProtocol {
     func authorizeAliyunDrive() async throws {}
 
     func revokeAliyunDriveAuthorization() async {}
+
+    func prepareLocalExport() async throws -> LocalBackupExportTicket {
+        throw BackupError.backupFileCorrupted
+    }
+
+    func finalizeLocalExport(_ ticket: LocalBackupExportTicket, succeeded: Bool) async {}
+
+    func prepareLocalImport(from url: URL) async throws -> LocalBackupImportTicket {
+        throw BackupError.backupFileCorrupted
+    }
+
+    func restoreLocalBackup(
+        using ticket: LocalBackupImportTicket,
+        progress: (@Sendable (RestoreProgress) -> Void)?
+    ) async throws {}
+
+    func discardLocalImport(_ ticket: LocalBackupImportTicket) async {}
 
     func backup(progress: (@Sendable (BackupProgress) -> Void)?) async throws {
         try await Task.sleep(nanoseconds: 150_000_000)

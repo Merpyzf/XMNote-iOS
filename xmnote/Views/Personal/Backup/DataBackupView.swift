@@ -1,13 +1,15 @@
 /**
- * [INPUT]: 依赖 RepositoryContainer 注入仓储，依赖 DataBackupViewModel 驱动状态
- * [OUTPUT]: 对外提供 DataBackupView，承载 provider 选择、授权状态与手动备份/恢复入口
- * [POS]: Backup 模块入口壳层，对齐 Android 的云备份 provider 切换模式
+ * [INPUT]: 依赖 RepositoryContainer 注入仓储，依赖 DataBackupViewModel 驱动本地与云端备份状态
+ * [OUTPUT]: 对外提供 DataBackupView，承载本地备份、云端备份与恢复确认入口
+ * [POS]: Backup 模块入口壳层，统一组织 iOS 原生本地备份与云备份操作
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
 import SwiftUI
+import UIKit
+import UniformTypeIdentifiers
 
-/// 数据备份入口页，聚合 provider 选择、当前 provider 状态与手动备份/恢复入口。
+/// 数据备份入口页，聚合本地备份、云备份、provider 选择与恢复确认入口。
 struct DataBackupView: View {
     @Environment(AppState.self) private var appState
     @Environment(RepositoryContainer.self) private var repositories
@@ -52,13 +54,10 @@ struct DataBackupView: View {
 private struct DataBackupContentView: View {
     private enum Layout {
         static let panelCornerRadius: CGFloat = CornerRadius.containerMedium
-        static let panelSpacing: CGFloat = Spacing.comfortable
+        static let sectionSpacing: CGFloat = Spacing.section
+        static let sectionTitleBottomSpacing: CGFloat = Spacing.cozy
         static let rowIconWidth: CGFloat = 24
         static let rowVerticalPadding: CGFloat = Spacing.comfortable
-        static let providerRowVerticalPadding: CGFloat = Spacing.cozy
-        static let providerTriggerMinWidth: CGFloat = 92
-        static let providerTriggerMinHeight: CGFloat = 44
-        static let sectionDividerLeading: CGFloat = Spacing.contentEdge
         static let rowDividerLeading: CGFloat = Spacing.contentEdge + rowIconWidth + Spacing.base
         static let avatarSize: CGFloat = 40
         static let avatarDividerLeading: CGFloat = Spacing.contentEdge + avatarSize + Spacing.base
@@ -70,9 +69,16 @@ private struct DataBackupContentView: View {
 
     var body: some View {
         ScrollView {
-            contentSections
-                .padding(.horizontal, Spacing.screenEdge)
-                .padding(.vertical, Spacing.base)
+            VStack(spacing: Layout.sectionSpacing) {
+                backupSection(title: "本地备份") {
+                    localBackupPanel
+                }
+                backupSection(title: "云备份") {
+                    cloudBackupPanel
+                }
+            }
+            .padding(.horizontal, Spacing.screenEdge)
+            .padding(.vertical, Spacing.base)
         }
         .overlay { taskBackdropOverlay }
         .overlay { taskCardOverlay }
@@ -90,24 +96,150 @@ private struct DataBackupContentView: View {
                 viewModel.acknowledgeRestoreSuccess()
             }
         } message: {
-            Text("数据已恢复，页面将刷新")
+            Text("数据已恢复。")
         }
         .sheet(isPresented: $viewModel.isShowingBackupHistory) {
             BackupHistorySheetView(viewModel: viewModel)
         }
-    }
-}
-
-private extension DataBackupContentView {
-    var contentSections: some View {
-        VStack(spacing: Layout.panelSpacing) {
-            cloudBackupPanel
-            actionSection
+        .sheet(
+            isPresented: Binding(
+                get: { viewModel.isShowingRestoreConfirmation },
+                set: { isPresented in
+                    if isPresented == false {
+                        viewModel.handleRestoreSheetDismissed()
+                    }
+                }
+            )
+        ) {
+            if let restoreTarget = viewModel.restoreTarget {
+                BackupRestoreConfirmSheet(
+                    target: restoreTarget,
+                    onCancel: { viewModel.cancelRestore() },
+                    onConfirm: { Task { await viewModel.confirmRestore() } }
+                )
+            }
+        }
+        .sheet(isPresented: $viewModel.isShowingLocalExportPicker) {
+            if let ticket = viewModel.localExportTicket {
+                LocalBackupExportDocumentPicker(fileURL: ticket.archiveFileURL) { succeeded in
+                    viewModel.isShowingLocalExportPicker = false
+                    Task { await viewModel.finishLocalExport(succeeded: succeeded) }
+                }
+            }
+        }
+        .sheet(isPresented: $viewModel.isShowingLocalImportPicker) {
+            LocalBackupImportDocumentPicker(
+                onPick: { url in
+                    viewModel.isShowingLocalImportPicker = false
+                    Task { await viewModel.prepareLocalImport(from: url) }
+                },
+                onCancel: {
+                    viewModel.isShowingLocalImportPicker = false
+                },
+                onFailure: { error in
+                    viewModel.isShowingLocalImportPicker = false
+                    viewModel.errorMessage = error.localizedDescription
+                    viewModel.showError = true
+                }
+            )
         }
     }
 }
 
-// MARK: - Provider Section
+// MARK: - Local Backup
+
+private extension DataBackupContentView {
+
+    func backupSection<Content: View>(
+        title: String,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        VStack(alignment: .leading, spacing: Layout.sectionTitleBottomSpacing) {
+            Text(title)
+                .font(AppTypography.footnoteSemibold)
+                .foregroundStyle(Color.textSecondary)
+
+            content()
+        }
+    }
+
+    var localBackupPanel: some View {
+        BackupSettingsPanel(cornerRadius: Layout.panelCornerRadius) {
+            VStack(spacing: Spacing.none) {
+                localExportButton
+                BackupSettingsDivider(leadingInset: Layout.rowDividerLeading)
+                localRestoreButton
+            }
+        }
+    }
+
+    var localExportButton: some View {
+        Button {
+            Task { await viewModel.prepareLocalExport() }
+        } label: {
+            HStack(spacing: Spacing.base) {
+                Image(systemName: "square.and.arrow.up")
+                    .font(AppTypography.body)
+                    .foregroundStyle(Color.iconSecondary)
+                    .frame(width: Layout.rowIconWidth)
+
+                Text("导出到文件")
+                    .font(AppTypography.subheadlineMedium)
+                    .foregroundStyle(Color.textPrimary)
+
+                Spacer()
+
+                fieldTransitionContainer(
+                    id: "backup.local.lastExport",
+                    isLoading: viewModel.isLocalBackupValueLoading
+                ) {
+                    InlineLoadingTextPlaceholder(width: 76, height: 11)
+                } content: {
+                    Text(viewModel.localBackupDateText)
+                        .font(AppTypography.subheadline)
+                        .foregroundStyle(Color.textSecondary)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.88)
+                }
+            }
+            .padding(.horizontal, Spacing.contentEdge)
+            .padding(.vertical, Layout.rowVerticalPadding)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .disabled(!viewModel.canPerformLocalOperation)
+    }
+
+    var localRestoreButton: some View {
+        Button {
+            viewModel.beginLocalImport()
+        } label: {
+            HStack(spacing: Spacing.base) {
+                Image(systemName: "arrow.down.doc")
+                    .font(AppTypography.body)
+                    .foregroundStyle(Color.iconSecondary)
+                    .frame(width: Layout.rowIconWidth)
+
+                Text("从文件恢复")
+                    .font(AppTypography.subheadlineMedium)
+                    .foregroundStyle(Color.textPrimary)
+
+                Spacer()
+
+                Image(systemName: "chevron.right")
+                    .font(AppTypography.caption)
+                    .foregroundStyle(.tertiary)
+            }
+            .padding(.horizontal, Spacing.contentEdge)
+            .padding(.vertical, Layout.rowVerticalPadding)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .disabled(!viewModel.canPerformLocalOperation)
+    }
+}
+
+// MARK: - Cloud Backup
 
 private extension DataBackupContentView {
 
@@ -115,42 +247,28 @@ private extension DataBackupContentView {
         BackupSettingsPanel(cornerRadius: Layout.panelCornerRadius) {
             VStack(spacing: Spacing.none) {
                 providerSelectionRow
-                BackupSettingsDivider(leadingInset: Layout.sectionDividerLeading)
+                BackupSettingsDivider(leadingInset: Spacing.contentEdge)
                 currentProviderContent
+                BackupSettingsDivider(leadingInset: providerContentDividerLeadingInset)
+                cloudBackupButton
+                BackupSettingsDivider(leadingInset: Layout.rowDividerLeading)
+                cloudRestoreButton
             }
         }
     }
 
     var providerSelectionRow: some View {
         HStack(alignment: .center, spacing: Spacing.base) {
-            VStack(alignment: .leading, spacing: Spacing.compact) {
-                Text("云备份方式")
-                    .font(AppTypography.subheadlineMedium)
-                    .foregroundStyle(Color.textPrimary)
-
-                if viewModel.isProviderSummaryLoading || viewModel.selectedProviderSummary != nil {
-                    fieldTransitionContainer(
-                        id: "backup.provider.summary",
-                        isLoading: viewModel.isProviderSummaryLoading
-                    ) {
-                        InlineLoadingTextPlaceholder(width: 72, height: 11)
-                    } content: {
-                        if let summary = viewModel.selectedProviderSummary {
-                            Text(summary)
-                                .font(AppTypography.caption)
-                                .foregroundStyle(Color.textSecondary)
-                                .contentTransition(.opacity)
-                        }
-                    }
-                }
-            }
+            Text("备份方式")
+                .font(AppTypography.subheadlineMedium)
+                .foregroundStyle(Color.textPrimary)
 
             Spacer(minLength: Spacing.base)
 
             providerSelectionMenu
         }
         .padding(.horizontal, Spacing.contentEdge)
-        .padding(.vertical, Layout.providerRowVerticalPadding)
+        .padding(.vertical, Layout.rowVerticalPadding)
     }
 
     var providerSelectionMenu: some View {
@@ -177,7 +295,6 @@ private extension DataBackupContentView {
                         Text(viewModel.selectedProvider.displayName)
                             .font(AppTypography.subheadline)
                             .foregroundStyle(Color.textSecondary)
-                            .contentTransition(.opacity)
                             .lineLimit(1)
                             .minimumScaleFactor(0.9)
 
@@ -187,11 +304,7 @@ private extension DataBackupContentView {
                     }
                 }
             }
-            .frame(
-                minWidth: Layout.providerTriggerMinWidth,
-                minHeight: Layout.providerTriggerMinHeight,
-                alignment: .trailing
-            )
+            .frame(minHeight: 44, alignment: .trailing)
             .contentShape(Rectangle())
         }
         .tint(nil)
@@ -214,6 +327,11 @@ private extension DataBackupContentView {
     var webdavContent: some View {
         NavigationLink(value: PersonalRoute.webdavServers) {
             HStack(spacing: Spacing.base) {
+                Image(systemName: "externaldrive")
+                    .font(AppTypography.body)
+                    .foregroundStyle(Color.iconSecondary)
+                    .frame(width: Layout.rowIconWidth)
+
                 VStack(alignment: .leading, spacing: Spacing.compact) {
                     Text("WebDAV 服务器")
                         .font(AppTypography.subheadlineMedium)
@@ -251,12 +369,8 @@ private extension DataBackupContentView {
                 aliyunLoadingRow
             } else if let accountInfo = viewModel.aliyunAccountInfo {
                 aliyunAccountRow(accountInfo)
-                BackupSettingsDivider(leadingInset: Layout.avatarDividerLeading)
-                revokeAliyunDriveButton
             } else if viewModel.isAliyunAuthorized {
                 aliyunAuthorizedFallbackRow
-                BackupSettingsDivider(leadingInset: Layout.rowDividerLeading)
-                revokeAliyunDriveButton
             } else {
                 authorizeAliyunDriveButton
             }
@@ -265,21 +379,26 @@ private extension DataBackupContentView {
 
     var aliyunAuthorizedFallbackRow: some View {
         HStack(spacing: Spacing.base) {
-            Image(systemName: "checkmark.shield")
-                .font(AppTypography.body)
-                .foregroundStyle(Color.iconSecondary)
-                .frame(width: Layout.rowIconWidth)
+            Circle()
+                .fill(Color.controlFillSecondary)
+                .overlay {
+                    Image(systemName: "person.fill")
+                        .foregroundStyle(Color.iconSecondary)
+                }
+                .frame(width: Layout.avatarSize, height: Layout.avatarSize)
 
             VStack(alignment: .leading, spacing: Spacing.compact) {
-                Text("阿里云盘已登录")
+                Text("阿里云盘")
                     .font(AppTypography.subheadlineMedium)
                     .foregroundStyle(Color.textPrimary)
-                Text(viewModel.aliyunAccountInfoErrorMessage ?? "当前可继续进行云备份")
+                Text("已登录")
                     .font(AppTypography.caption)
                     .foregroundStyle(Color.textSecondary)
             }
 
             Spacer()
+
+            logoutAccessory
         }
         .padding(.horizontal, Spacing.contentEdge)
         .padding(.vertical, Layout.rowVerticalPadding)
@@ -290,11 +409,16 @@ private extension DataBackupContentView {
             Task { await viewModel.authorizeAliyunDrive() }
         } label: {
             HStack(spacing: Spacing.base) {
+                Image(systemName: "person.crop.circle.badge.checkmark")
+                    .font(AppTypography.body)
+                    .foregroundStyle(Color.iconSecondary)
+                    .frame(width: Layout.rowIconWidth)
+
                 VStack(alignment: .leading, spacing: Spacing.compact) {
                     Text("登录阿里云盘")
                         .font(AppTypography.subheadlineMedium)
                         .foregroundStyle(Color.textPrimary)
-                    Text("登录后可将备份保存到阿里云盘")
+                    Text("登录后即可使用云备份。")
                         .font(AppTypography.caption)
                         .foregroundStyle(Color.textSecondary)
                 }
@@ -302,35 +426,6 @@ private extension DataBackupContentView {
                 Spacer()
 
                 if viewModel.isAliyunAuthorizing {
-                    ProgressView()
-                        .controlSize(.small)
-                }
-            }
-            .padding(.horizontal, Spacing.contentEdge)
-            .padding(.vertical, Layout.rowVerticalPadding)
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .disabled(viewModel.isBusy)
-    }
-
-    var revokeAliyunDriveButton: some View {
-        Button {
-            Task { await viewModel.revokeAliyunDriveAuthorization() }
-        } label: {
-            HStack(spacing: Spacing.base) {
-                Image(systemName: "rectangle.portrait.and.arrow.right")
-                    .font(AppTypography.body)
-                    .foregroundStyle(Color.feedbackError)
-                    .frame(width: Layout.rowIconWidth)
-
-                Text("退出阿里云盘")
-                    .font(AppTypography.subheadlineMedium)
-                    .foregroundStyle(Color.feedbackError)
-
-                Spacer()
-
-                if viewModel.isAliyunRevoking {
                     ProgressView()
                         .controlSize(.small)
                 }
@@ -353,52 +448,33 @@ private extension DataBackupContentView {
             } content: {
                 avatarView(for: accountInfo.avatarURL)
             }
+
             VStack(alignment: .leading, spacing: Spacing.compact) {
-                fieldTransitionContainer(
-                    id: "backup.aliyun.title",
-                    isLoading: false
-                ) {
-                    InlineLoadingTextPlaceholder(width: 92, height: 13)
-                } content: {
-                    Text(accountInfo.nickName)
-                        .font(AppTypography.subheadlineMedium)
-                        .foregroundStyle(Color.textPrimary)
-                }
-                fieldTransitionContainer(
-                    id: "backup.aliyun.subtitle",
-                    isLoading: false
-                ) {
-                    InlineLoadingTextPlaceholder(width: 138, height: 11)
-                } content: {
-                    Text(accountInfo.storageSummary ?? accountInfo.userId)
-                        .font(AppTypography.caption)
-                        .foregroundStyle(Color.textSecondary)
-                }
+                Text(accountInfo.nickName)
+                    .font(AppTypography.subheadlineMedium)
+                    .foregroundStyle(Color.textPrimary)
+                Text(accountInfo.storageSummary ?? accountInfo.userId)
+                    .font(AppTypography.caption)
+                    .foregroundStyle(Color.textSecondary)
             }
+
             Spacer()
+
+            logoutAccessory
         }
         .padding(.horizontal, Spacing.contentEdge)
         .padding(.vertical, Layout.rowVerticalPadding)
     }
 
     var aliyunLoadingRow: some View {
-        VStack(alignment: .leading, spacing: Spacing.compact) {
-            fieldTransitionContainer(
-                id: "backup.aliyun.login.title",
-                isLoading: true
-            ) {
+        HStack(spacing: Spacing.base) {
+            InlineLoadingAvatarPlaceholder(size: Layout.avatarSize)
+
+            VStack(alignment: .leading, spacing: Spacing.compact) {
                 InlineLoadingTextPlaceholder(width: 104, height: 14)
-            } content: {
-                EmptyView()
-            }
-            fieldTransitionContainer(
-                id: "backup.aliyun.login.subtitle",
-                isLoading: true
-            ) {
                 InlineLoadingTextPlaceholder(width: 182, height: 11)
-            } content: {
-                EmptyView()
             }
+            Spacer()
         }
         .padding(.horizontal, Spacing.contentEdge)
         .padding(.vertical, Layout.rowVerticalPadding)
@@ -434,25 +510,37 @@ private extension DataBackupContentView {
                 .frame(width: Layout.avatarSize, height: Layout.avatarSize)
         }
     }
-}
 
-// MARK: - Action Section
-
-private extension DataBackupContentView {
-
-    var actionSection: some View {
-        BackupSettingsPanel(cornerRadius: Layout.panelCornerRadius) {
-            VStack(spacing: Spacing.none) {
-                backupButton
-                BackupSettingsDivider(leadingInset: Layout.rowDividerLeading)
-                restoreButton
+    @ViewBuilder
+    var logoutAccessory: some View {
+        if viewModel.isAliyunRevoking {
+            ProgressView()
+                .controlSize(.small)
+                .frame(minWidth: 44, minHeight: 44, alignment: .trailing)
+        } else {
+            Button("登出") {
+                Task { await viewModel.revokeAliyunDriveAuthorization() }
             }
+            .font(AppTypography.footnoteSemibold)
+            .foregroundStyle(Color.feedbackError)
+            .frame(minHeight: 44, alignment: .trailing)
+            .buttonStyle(.plain)
+            .disabled(viewModel.isBusy)
         }
     }
 
-    var backupButton: some View {
+    var providerContentDividerLeadingInset: CGFloat {
+        switch viewModel.selectedProvider {
+        case .webdav:
+            return Layout.rowDividerLeading
+        case .aliyunDrive:
+            return viewModel.isAliyunAuthorized ? Layout.avatarDividerLeading : Layout.rowDividerLeading
+        }
+    }
+
+    var cloudBackupButton: some View {
         Button {
-            Task { await viewModel.performBackup() }
+            Task { await viewModel.performCloudBackup() }
         } label: {
             HStack(spacing: Spacing.base) {
                 Image(systemName: "icloud.and.arrow.up")
@@ -460,23 +548,22 @@ private extension DataBackupContentView {
                     .foregroundStyle(Color.iconSecondary)
                     .frame(width: Layout.rowIconWidth)
 
-                Text("备份数据")
+                Text("立即备份")
                     .font(AppTypography.subheadlineMedium)
                     .foregroundStyle(Color.textPrimary)
 
                 Spacer()
 
                 fieldTransitionContainer(
-                    id: "backup.lastBackup.value",
-                    isLoading: viewModel.isLastBackupValueLoading
+                    id: "backup.cloud.lastBackup",
+                    isLoading: viewModel.isCloudBackupValueLoading
                 ) {
                     InlineLoadingTextPlaceholder(width: 76, height: 11)
                 } content: {
-                    if !viewModel.lastBackupDateText.isEmpty {
-                        Text(viewModel.lastBackupDateText)
+                    if !viewModel.cloudBackupDateText.isEmpty {
+                        Text(viewModel.cloudBackupDateText)
                             .font(AppTypography.subheadline)
                             .foregroundStyle(viewModel.lastBackupState == .failed ? Color.feedbackError : Color.textSecondary)
-                            .contentTransition(viewModel.lastBackupState == .loaded(nil) ? .opacity : .numericText())
                             .lineLimit(1)
                             .minimumScaleFactor(0.88)
                     }
@@ -490,7 +577,7 @@ private extension DataBackupContentView {
         .disabled(!viewModel.canPerformCloudOperation)
     }
 
-    var restoreButton: some View {
+    var cloudRestoreButton: some View {
         Button {
             Task {
                 if await viewModel.fetchBackupHistory() {
@@ -504,14 +591,19 @@ private extension DataBackupContentView {
                     .foregroundStyle(Color.iconSecondary)
                     .frame(width: Layout.rowIconWidth)
 
-                Text("恢复数据")
+                Text("从云端恢复")
                     .font(AppTypography.subheadlineMedium)
                     .foregroundStyle(Color.textPrimary)
 
                 Spacer()
+
                 if viewModel.isBackupHistoryLoading {
                     ProgressView()
                         .controlSize(.small)
+                } else {
+                    Image(systemName: "chevron.right")
+                        .font(AppTypography.caption)
+                        .foregroundStyle(.tertiary)
                 }
             }
             .padding(.horizontal, Spacing.contentEdge)
@@ -519,8 +611,13 @@ private extension DataBackupContentView {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .disabled(!viewModel.canPerformCloudOperation)
+        .disabled(!viewModel.canPerformCloudOperation && !viewModel.isBackupHistoryLoading)
     }
+}
+
+// MARK: - Shared Section Helpers
+
+private extension DataBackupContentView {
 }
 
 // MARK: - Progress Presentation
@@ -577,6 +674,175 @@ private extension DataBackupContentView {
         )
     }
 }
+
+// MARK: - Restore Confirm Sheet
+
+private struct BackupRestoreConfirmSheet: View {
+    let target: BackupRestoreTarget
+    let onCancel: () -> Void
+    let onConfirm: () -> Void
+
+    private static let dateFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy/MM/dd HH:mm"
+        return formatter
+    }()
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(spacing: Spacing.comfortable) {
+                    BackupSettingsPanel(cornerRadius: CornerRadius.containerMedium) {
+                        VStack(spacing: Spacing.none) {
+                            detailRow(title: "来源", value: target.sourceName)
+                            BackupSettingsDivider(leadingInset: Spacing.contentEdge)
+                            detailRow(title: "设备", value: target.deviceName)
+                            BackupSettingsDivider(leadingInset: Spacing.contentEdge)
+                            detailRow(title: "备份时间", value: backupDateText)
+                        }
+                    }
+
+                    Text("恢复后，当前设备上的数据将被备份中的内容替换。此操作无法撤销。")
+                        .font(AppTypography.footnote)
+                        .foregroundStyle(Color.textSecondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .padding(.horizontal, Spacing.screenEdge)
+                .padding(.vertical, Spacing.base)
+            }
+            .background(Color.surfacePage)
+            .navigationTitle("从备份恢复")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("取消", action: onCancel)
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("恢复", action: onConfirm)
+                        .foregroundStyle(Color.feedbackError)
+                }
+            }
+        }
+    }
+
+    var backupDateText: String {
+        guard let backupDate = target.backupDate else { return "未知" }
+        return Self.dateFormatter.string(from: backupDate)
+    }
+
+    func detailRow(title: String, value: String) -> some View {
+        HStack(spacing: Spacing.base) {
+            Text(title)
+                .font(AppTypography.subheadlineMedium)
+                .foregroundStyle(Color.textPrimary)
+            Spacer()
+            Text(value)
+                .font(AppTypography.subheadline)
+                .foregroundStyle(Color.textSecondary)
+                .multilineTextAlignment(.trailing)
+        }
+        .padding(.horizontal, Spacing.contentEdge)
+        .padding(.vertical, Spacing.comfortable)
+    }
+}
+
+// MARK: - Document Picker
+
+private struct LocalBackupExportDocumentPicker: UIViewControllerRepresentable {
+    let fileURL: URL
+    let onComplete: (Bool) -> Void
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(onComplete: onComplete)
+    }
+
+    func makeUIViewController(context: Context) -> UIDocumentPickerViewController {
+        let controller = UIDocumentPickerViewController(forExporting: [fileURL], asCopy: true)
+        controller.delegate = context.coordinator
+        controller.shouldShowFileExtensions = true
+        return controller
+    }
+
+    func updateUIViewController(_ uiViewController: UIDocumentPickerViewController, context: Context) {}
+
+    final class Coordinator: NSObject, UIDocumentPickerDelegate {
+        private let onComplete: (Bool) -> Void
+        private var hasCompleted = false
+
+        init(onComplete: @escaping (Bool) -> Void) {
+            self.onComplete = onComplete
+        }
+
+        func documentPicker(_ controller: UIDocumentPickerViewController, didPickDocumentsAt urls: [URL]) {
+            complete(with: true)
+        }
+
+        func documentPickerWasCancelled(_ controller: UIDocumentPickerViewController) {
+            complete(with: false)
+        }
+
+        private func complete(with succeeded: Bool) {
+            guard !hasCompleted else { return }
+            hasCompleted = true
+            onComplete(succeeded)
+        }
+    }
+}
+
+private struct LocalBackupImportDocumentPicker: UIViewControllerRepresentable {
+    let onPick: (URL) -> Void
+    let onCancel: () -> Void
+    let onFailure: (Error) -> Void
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(onPick: onPick, onCancel: onCancel, onFailure: onFailure)
+    }
+
+    func makeUIViewController(context: Context) -> UIDocumentPickerViewController {
+        let controller = UIDocumentPickerViewController(forOpeningContentTypes: [.zip], asCopy: false)
+        controller.delegate = context.coordinator
+        controller.allowsMultipleSelection = false
+        controller.shouldShowFileExtensions = true
+        return controller
+    }
+
+    func updateUIViewController(_ uiViewController: UIDocumentPickerViewController, context: Context) {}
+
+    final class Coordinator: NSObject, UIDocumentPickerDelegate {
+        private let onPick: (URL) -> Void
+        private let onCancel: () -> Void
+        private let onFailure: (Error) -> Void
+        private var hasCompleted = false
+
+        init(
+            onPick: @escaping (URL) -> Void,
+            onCancel: @escaping () -> Void,
+            onFailure: @escaping (Error) -> Void
+        ) {
+            self.onPick = onPick
+            self.onCancel = onCancel
+            self.onFailure = onFailure
+        }
+
+        func documentPicker(_ controller: UIDocumentPickerViewController, didPickDocumentsAt urls: [URL]) {
+            guard !hasCompleted else { return }
+            hasCompleted = true
+            guard let url = urls.first else {
+                onFailure(BackupError.backupFileCorrupted)
+                return
+            }
+            onPick(url)
+        }
+
+        func documentPickerWasCancelled(_ controller: UIDocumentPickerViewController) {
+            guard !hasCompleted else { return }
+            hasCompleted = true
+            onCancel()
+        }
+    }
+}
+
+// MARK: - Shared Surface
 
 private struct BackupTaskBackdropView: View {
     var body: some View {
@@ -702,7 +968,6 @@ private struct BackupTaskMessageSwitcher: View {
             .multilineTextAlignment(.center)
             .lineLimit(2)
             .fixedSize(horizontal: false, vertical: true)
-            .contentTransition(.interpolate)
     }
 
     private func transition(to newValue: String) {
@@ -712,10 +977,6 @@ private struct BackupTaskMessageSwitcher: View {
         if reduceMotion {
             incomingOpacity = 0
             outgoingOpacity = 1
-            incomingOffsetY = 0
-            outgoingOffsetY = 0
-            incomingBlur = 0
-            outgoingBlur = 0
 
             withAnimation(.easeInOut(duration: 0.18)) {
                 incomingOpacity = 1

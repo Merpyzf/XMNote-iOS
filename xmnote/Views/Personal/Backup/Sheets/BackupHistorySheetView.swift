@@ -28,16 +28,6 @@ struct BackupHistorySheetView: View {
                     Button("关闭") { dismiss() }
                 }
             }
-            .alert("确认恢复", isPresented: $viewModel.showRestoreConfirm) {
-                Button("取消", role: .cancel) {}
-                Button("恢复", role: .destructive) {
-                    guard let backup = viewModel.selectedBackup else { return }
-                    dismiss()
-                    Task { await viewModel.performRestore(backup) }
-                }
-            } message: {
-                Text("恢复将覆盖当前所有数据，此操作不可撤销")
-            }
         }
     }
 }
@@ -49,8 +39,10 @@ private extension BackupHistorySheetView {
     var backupListView: some View {
         List(viewModel.backupList) { backup in
             Button {
-                viewModel.selectedBackup = backup
-                viewModel.showRestoreConfirm = true
+                dismiss()
+                Task { @MainActor in
+                    viewModel.presentRestoreTarget(for: backup)
+                }
             } label: {
                 backupRow(backup)
             }

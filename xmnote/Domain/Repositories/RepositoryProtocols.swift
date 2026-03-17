@@ -85,6 +85,8 @@ protocol BackupServerRepositoryProtocol {
 protocol BackupRepositoryProtocol {
     /// 读取云备份页面状态快照，聚合当前 provider、WebDAV 配置、阿里云账号信息与最近备份时间。
     func fetchCloudBackupPageState() async throws -> CloudBackupPageState
+    /// 读取最近一次本地导出成功时间；无记录时返回 nil。
+    func fetchLastLocalBackupDate() async -> Date?
     /// 刷新当前 provider 对应的最近一次云备份时间。
     func fetchLatestCloudBackupDate() async throws -> Date?
     /// 持久化当前选中的云备份 provider。
@@ -93,6 +95,19 @@ protocol BackupRepositoryProtocol {
     func authorizeAliyunDrive() async throws
     /// 清除阿里云盘授权状态。
     func revokeAliyunDriveAuthorization() async
+    /// 生成本地导出所需的临时备份包，并返回交给系统文件选择器的票据。
+    func prepareLocalExport() async throws -> LocalBackupExportTicket
+    /// 本地导出流程结束后清理临时文件，并按结果刷新最近导出时间。
+    func finalizeLocalExport(_ ticket: LocalBackupExportTicket, succeeded: Bool) async
+    /// 将用户从“文件”中选择的备份复制到沙盒，并返回后续恢复所需票据。
+    func prepareLocalImport(from url: URL) async throws -> LocalBackupImportTicket
+    /// 使用本地导入票据执行恢复流程，并通过回调上报阶段进度。
+    func restoreLocalBackup(
+        using ticket: LocalBackupImportTicket,
+        progress: (@Sendable (RestoreProgress) -> Void)?
+    ) async throws
+    /// 放弃本地导入票据时清理复制到沙盒的临时文件。
+    func discardLocalImport(_ ticket: LocalBackupImportTicket) async
     /// 执行一次完整备份流程，并通过回调上报阶段进度。
     func backup(progress: (@Sendable (BackupProgress) -> Void)?) async throws
     /// 获取远端备份历史列表，供恢复入口展示可选备份。
