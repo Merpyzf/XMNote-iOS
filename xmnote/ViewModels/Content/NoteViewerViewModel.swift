@@ -64,14 +64,15 @@ final class NoteViewerViewModel {
         selectedDetail?.sourceBookId ?? selectedListItem?.sourceBookId
     }
 
-    var selectedPageText: String {
+    var selectedPageProgress: ContentViewerPageProgress? {
+        guard items.count > 1 else { return nil }
         guard
             let selectedNoteID,
             let selectedIndex = items.firstIndex(where: { $0.id == .note(selectedNoteID) })
         else {
-            return items.isEmpty ? "0 / 0" : "1 / \(items.count)"
+            return ContentViewerPageProgress(current: 1, total: items.count)
         }
-        return "\(selectedIndex + 1) / \(items.count)"
+        return ContentViewerPageProgress(current: selectedIndex + 1, total: items.count)
     }
 
     var selectedTagNames: [String] {

@@ -58,6 +58,7 @@ private struct NoteViewerLoadedView: View {
     @Binding var showsDeleteDialog: Bool
     @Binding var showsTagSheet: Bool
     @Binding var sharePayload: NoteViewerSharePayload?
+    @State private var bottomOrnamentHeight: CGFloat = 0
 
     var body: some View {
         Group {
@@ -71,7 +72,8 @@ private struct NoteViewerLoadedView: View {
         .navigationTitle("")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar { toolbarContent }
-        .safeAreaBar(edge: .bottom, spacing: Spacing.none) {
+        .ignoresSafeArea(edges: .bottom)
+        .overlay(alignment: .bottom) {
             if !viewModel.items.isEmpty {
                 bottomOrnament
             }
@@ -94,6 +96,9 @@ private struct NoteViewerLoadedView: View {
         }
         .sheet(item: $sharePayload) { payload in
             ActivityShareSheet(activityItems: [payload.text])
+        }
+        .onPreferenceChange(NoteViewerBottomOrnamentHeightKey.self) { height in
+            bottomOrnamentHeight = height
         }
     }
 
@@ -125,12 +130,14 @@ private struct NoteViewerLoadedView: View {
             ForEach(viewModel.items) { item in
                 NoteViewerPage(
                     noteID: item.noteID,
-                    viewModel: viewModel
+                    viewModel: viewModel,
+                    bottomOverlayHeight: bottomOrnamentHeight
                 )
                 .tag(item.noteID)
             }
         }
         .tabViewStyle(.page(indexDisplayMode: .never))
+        .ignoresSafeArea(.container, edges: .bottom)
         .overlay {
             if viewModel.isDeleting {
                 Color.overlay.ignoresSafeArea()
@@ -147,32 +154,15 @@ private struct NoteViewerLoadedView: View {
     @ToolbarContentBuilder
     private var toolbarContent: some ToolbarContent {
         ToolbarItem(placement: .principal) {
-            if let selectedBookID = viewModel.selectedBookID {
-                NavigationLink(value: BookRoute.detail(bookId: selectedBookID)) {
-                    Text(viewModel.selectedBookTitle)
-                        .font(AppTypography.subheadlineSemibold)
-                        .lineLimit(1)
-                        .foregroundStyle(Color.textPrimary)
+            ContentViewerNavigationTitle(pageProgress: viewModel.selectedPageProgress) {
+                if let selectedBookID = viewModel.selectedBookID {
+                    NavigationLink(value: BookRoute.detail(bookId: selectedBookID)) {
+                        contentViewerTitleLabel(viewModel.selectedBookTitle)
+                    }
+                    .buttonStyle(.plain)
+                } else {
+                    contentViewerTitleLabel(viewModel.selectedBookTitle)
                 }
-                .buttonStyle(.plain)
-            } else {
-                Text(viewModel.selectedBookTitle)
-                    .font(AppTypography.subheadlineSemibold)
-                    .lineLimit(1)
-                    .foregroundStyle(Color.textPrimary)
-            }
-        }
-
-        ToolbarItem(placement: .topBarTrailing) {
-            if viewModel.items.count > 1 {
-                Text(viewModel.selectedPageText)
-                    .font(AppTypography.caption)
-                    .foregroundStyle(Color.textSecondary)
-                    .padding(.horizontal, Spacing.cozy)
-                    .padding(.vertical, Spacing.micro)
-                    .background(Color.surfaceCard, in: Capsule())
-                    .overlay(Capsule().stroke(Color.surfaceBorderSubtle, lineWidth: CardStyle.borderWidth))
-                    .monospacedDigit()
             }
         }
     }
@@ -215,8 +205,7 @@ private struct NoteViewerLoadedView: View {
                         .accessibilityLabel("分享书摘")
                     }
                     .padding(.horizontal, Spacing.base)
-                    .padding(.vertical, Spacing.half)
-                    .glassEffect(.regular, in: .capsule)
+                    .glassEffect(.regular.interactive(), in: .capsule)
 
                     Button(role: .destructive) {
                         showsDeleteDialog = true
@@ -237,7 +226,13 @@ private struct NoteViewerLoadedView: View {
         }
         .padding(.horizontal, Spacing.screenEdge)
         .padding(.top, Spacing.cozy)
-        .padding(.bottom, Spacing.base)
+        .padding(.bottom, Spacing.micro)
+        .background {
+            GeometryReader { proxy in
+                Color.clear
+                    .preference(key: NoteViewerBottomOrnamentHeightKey.self, value: proxy.size.height)
+            }
+        }
     }
 
     private func shareText(from detail: NoteContentDetail) -> String {
@@ -263,11 +258,23 @@ private struct NoteViewerLoadedView: View {
     }
 }
 
+private struct NoteViewerBottomOrnamentHeightKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = max(value, nextValue())
+    }
+}
+
 private struct NoteViewerPage: View {
     let noteID: Int64
     @Bindable var viewModel: NoteViewerViewModel
+    let bottomOverlayHeight: CGFloat
 
     var body: some View {
+        let immersiveBottomInset = Spacing.none
+        let readableTailBuffer = max(Spacing.half, bottomOverlayHeight + Spacing.micro)
+
         ScrollView {
             VStack(alignment: .leading, spacing: Spacing.base) {
                 switch contentState {
@@ -282,9 +289,15 @@ private struct NoteViewerPage: View {
             }
             .padding(.horizontal, Spacing.screenEdge)
             .padding(.top, Spacing.base)
-            .padding(.bottom, 96)
+            .padding(.bottom, immersiveBottomInset)
+
+            Color.clear
+                .frame(height: readableTailBuffer)
         }
         .background(Color.surfacePage)
+        .contentMargins(.bottom, Spacing.none, for: .scrollContent)
+        .contentMargins(.bottom, Spacing.none, for: .scrollIndicators)
+        .ignoresSafeArea(.container, edges: .bottom)
         .task(id: noteID) {
             await viewModel.loadDetailIfNeeded(noteID: noteID)
         }
@@ -422,7 +435,7 @@ private struct NoteViewerOrnamentIcon: View {
 
     var body: some View {
         Image(systemName: systemName)
-            .font(.system(size: 17, weight: .semibold))
+            .font(.system(size: 16, weight: .semibold))
             .foregroundStyle(foregroundStyle)
             .frame(width: 44, height: 44)
             .contentShape(Circle())

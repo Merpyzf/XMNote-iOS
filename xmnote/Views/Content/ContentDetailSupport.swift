@@ -1,12 +1,66 @@
 /**
  * [INPUT]: 依赖 SwiftUI 与 XMJXImageWall 提供内容详情公共展示能力
- * [OUTPUT]: 对外提供 ContentImageWall 与 ContentDetailDateFormatter 等查看页支撑组件
+ * [OUTPUT]: 对外提供 ContentImageWall、ContentViewerNavigationTitle 与 ContentDetailDateFormatter 等查看页支撑组件
  * [POS]: Content 模块查看页共享支撑视图，供书摘/书评/相关详情页复用
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
 import Foundation
 import SwiftUI
+
+/// 内容查看器页码进度模型，拆分当前页与总数，便于数字转场只作用于真实数值。
+struct ContentViewerPageProgress: Equatable {
+    let current: Int
+    let total: Int
+}
+
+/// 内容查看器导航标题，统一承接书名与页码进度，避免把分页信息悬浮到材质按钮上。
+struct ContentViewerNavigationTitle<TitleContent: View>: View {
+    let pageProgress: ContentViewerPageProgress?
+    let titleContent: TitleContent
+
+    init(
+        pageProgress: ContentViewerPageProgress?,
+        @ViewBuilder titleContent: () -> TitleContent
+    ) {
+        self.pageProgress = pageProgress
+        self.titleContent = titleContent()
+    }
+
+    var body: some View {
+        VStack(spacing: Spacing.tiny) {
+            titleContent
+
+            if let pageProgress {
+                ContentViewerPageProgressLabel(pageProgress: pageProgress)
+            }
+        }
+        .frame(maxWidth: 220)
+        .multilineTextAlignment(.center)
+    }
+}
+
+/// 内容查看器页码副行，按整段 `N/N` 文本驱动 numericText 转场。
+private struct ContentViewerPageProgressLabel: View {
+    let pageProgress: ContentViewerPageProgress
+
+    var body: some View {
+        Text("\(pageProgress.current)/\(pageProgress.total)")
+            .font(AppTypography.caption)
+            .foregroundStyle(Color.textSecondary)
+            .monospacedDigit()
+            .contentTransition(.numericText())
+            .animation(.snappy, value: pageProgress)
+    }
+}
+
+/// 内容查看器标题文本样式，统一书名在导航栏中的字号、截断与前景色。
+func contentViewerTitleLabel(_ title: String) -> some View {
+    Text(title)
+        .font(AppTypography.subheadlineSemibold)
+        .lineLimit(1)
+        .foregroundStyle(Color.textPrimary)
+}
 
 /// 内容详情图片墙，共用单图一列、多图三列的展示策略。
 struct ContentImageWall: View {

@@ -70,14 +70,15 @@ final class ContentViewerViewModel {
         return selectedListItem?.sourceBookId
     }
 
-    var selectedPageText: String {
+    var selectedPageProgress: ContentViewerPageProgress? {
+        guard items.count > 1 else { return nil }
         guard
             let selectedItemID,
             let selectedIndex = items.firstIndex(where: { $0.id == selectedItemID })
         else {
-            return items.isEmpty ? "0 / 0" : "1 / \(items.count)"
+            return ContentViewerPageProgress(current: 1, total: items.count)
         }
-        return "\(selectedIndex + 1) / \(items.count)"
+        return ContentViewerPageProgress(current: selectedIndex + 1, total: items.count)
     }
 
     /// 启动 feed 观察，持续同步来源列表并维护当前分页选择。

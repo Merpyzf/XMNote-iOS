@@ -142,16 +142,9 @@ private struct ContentViewerLoadedView: View {
     @ToolbarContentBuilder
     private var toolbarContent: some ToolbarContent {
         ToolbarItem(placement: .principal) {
-            VStack(spacing: Spacing.tiny) {
-                Text(viewModel.selectedBookTitle)
-                    .font(AppTypography.subheadlineSemibold)
-                    .lineLimit(1)
-
-                Text(viewModel.selectedPageText)
-                    .font(AppTypography.caption)
-                    .foregroundStyle(.secondary)
+            ContentViewerNavigationTitle(pageProgress: viewModel.selectedPageProgress) {
+                contentViewerTitleLabel(viewModel.selectedBookTitle)
             }
-            .frame(maxWidth: 220)
         }
     }
 
