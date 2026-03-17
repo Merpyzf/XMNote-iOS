@@ -131,6 +131,8 @@ struct TimelineRelevantCard: View {
             VStack(spacing: Spacing.base) {
                 TimelineRelevantCard(
                     event: TimelineRelevantEvent(
+                        contentId: 1,
+                        categoryId: 11,
                         title: " 作者的 TED 演讲 ",
                         content: "关于创造力与约束之间关系的<b>精彩</b>演讲",
                         url: "https://example.com",
@@ -142,6 +144,8 @@ struct TimelineRelevantCard: View {
                 )
                 TimelineRelevantCard(
                     event: TimelineRelevantEvent(
+                        contentId: 2,
+                        categoryId: 12,
                         title: " ",
                         content: "<p><br></p>",
                         url: "https://example.com/article",

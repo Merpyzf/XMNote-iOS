@@ -3,7 +3,7 @@ import SwiftUI
 
 /**
  * [INPUT]: 依赖 TimelineRepositoryProtocol 提供事件查询与日历标记聚合
- * [OUTPUT]: 对外提供 TimelineViewModel（时间线页面状态管理：事件列表、日期选择、分类筛选、日历标记预加载）
+ * [OUTPUT]: 对外提供 TimelineViewModel（时间线页面状态管理：事件列表、日期选择、分类筛选、日历标记预加载与 viewer 来源上下文）
  * [POS]: Reading 模块时间线状态中枢，编排时间范围计算、事件加载与日历标记缓存
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -130,6 +130,16 @@ final class TimelineViewModel {
         return markerCache[key]?[normalized]
     }
 
+    /// 将当前时间线筛选与时间范围折叠成内容查看器来源，供点击书摘/书评/相关内容时复用同一分页上下文。
+    func currentViewerSourceContext() -> ContentViewerSourceContext {
+        let range = calculateTimeRange()
+        return .timeline(
+            startTimestamp: range.start,
+            endTimestamp: range.end,
+            filter: currentContentFilter
+        )
+    }
+
     /// 仅在列表数据实际变化时递增 revision，避免滚动期为 Equatable 深比较整组 section。
     func applySections(_ newSections: [TimelineSection]) {
         guard newSections != sections else { return }
@@ -175,6 +185,19 @@ private extension TimelineViewModel {
 
         let startMs = Int64(calendar.startOfDay(for: selectedDate).timeIntervalSince1970 * 1000)
         return (start: startMs, end: endMs)
+    }
+
+    var currentContentFilter: TimelineContentFilter {
+        switch selectedCategory {
+        case .note:
+            .note
+        case .review:
+            .review
+        case .relevant:
+            .relevant
+        default:
+            .allContent
+        }
     }
 }
 

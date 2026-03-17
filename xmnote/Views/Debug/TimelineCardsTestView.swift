@@ -97,7 +97,10 @@ private struct TimelineCardsTestContentView: View {
                 TimelineSectionView(
                     section: section,
                     isLast: index == filteredSections.count - 1,
-                    trailingPlaceholderWidth: 0
+                    trailingPlaceholderWidth: 0,
+                    sourceContext: .timeline(startTimestamp: 0, endTimestamp: 0, filter: .allContent),
+                    onOpenContentViewer: { _, _ in },
+                    onOpenBookDetail: { _ in }
                 )
             }
         }
@@ -126,6 +129,7 @@ enum TimelineCardsMockData {
                 TimelineEvent(
                     id: "note_1",
                     kind: .note(TimelineNoteEvent(
+                        noteId: 1,
                         content: "人生最大的幸运，就是在年富力强时发现了自己的<b>使命</b>。一个人知道自己为什么活着，就能忍受任何一种生活。",
                         idea: "这句话让我想到了尼采的名言——知道为什么活的人，便能生存",
                         bookTitle: "活法",
@@ -137,6 +141,7 @@ enum TimelineCardsMockData {
                         tagNames: ["使命", "人生", "摘录"]
                     )),
                     timestamp: base + 36000000,
+                    sourceBookId: 1001,
                     bookName: "活法",
                     bookAuthor: "稻盛和夫",
                     bookCover: ""
@@ -150,6 +155,7 @@ enum TimelineCardsMockData {
                         fuzzyReadDate: 0
                     )),
                     timestamp: base + 28800000,
+                    sourceBookId: 1002,
                     bookName: "人类简史",
                     bookAuthor: "尤瓦尔·赫拉利",
                     bookCover: ""
@@ -162,6 +168,7 @@ enum TimelineCardsMockData {
                         bookScore: 45
                     )),
                     timestamp: base + 25200000,
+                    sourceBookId: 1003,
                     bookName: "百年孤独",
                     bookAuthor: "加西亚·马尔克斯",
                     bookCover: ""
@@ -183,6 +190,7 @@ enum TimelineCardsMockData {
                     id: "checkin_1",
                     kind: .checkIn(TimelineCheckInEvent(amount: 3)),
                     timestamp: base + 72000000,
+                    sourceBookId: 1004,
                     bookName: "原则",
                     bookAuthor: "瑞·达利欧",
                     bookCover: ""
@@ -190,6 +198,7 @@ enum TimelineCardsMockData {
                 TimelineEvent(
                     id: "review_1",
                     kind: .review(TimelineReviewEvent(
+                        reviewId: 1,
                         title: "一本改变思维方式的书",
                         content: "作者用大量案例说明了<b>系统思维</b>的重要性。读完之后对复杂问题的分析能力有了显著提升，强烈推荐给所有想要提升认知能力的人。",
                         bookScore: 40,
@@ -199,6 +208,7 @@ enum TimelineCardsMockData {
                         ]
                     )),
                     timestamp: base + 64800000,
+                    sourceBookId: 1005,
                     bookName: "系统之美",
                     bookAuthor: "德内拉·梅多斯",
                     bookCover: ""
@@ -206,6 +216,7 @@ enum TimelineCardsMockData {
                 TimelineEvent(
                     id: "note_2",
                     kind: .note(TimelineNoteEvent(
+                        noteId: 2,
                         content: "简洁是最高形式的复杂。",
                         idea: "",
                         bookTitle: "设计心理学",
@@ -213,6 +224,7 @@ enum TimelineCardsMockData {
                         tagNames: []
                     )),
                     timestamp: base + 57600000,
+                    sourceBookId: 1006,
                     bookName: "设计心理学",
                     bookAuthor: "唐纳德·诺曼",
                     bookCover: ""
@@ -233,6 +245,8 @@ enum TimelineCardsMockData {
                 TimelineEvent(
                     id: "relevant_1",
                     kind: .relevant(TimelineRelevantEvent(
+                        contentId: 1,
+                        categoryId: 21,
                         title: "作者的 TED 演讲",
                         content: "关于创造力与约束之间关系的精彩演讲，与书中第三章的论述高度呼应。",
                         url: "https://example.com/ted-talk",
@@ -240,6 +254,7 @@ enum TimelineCardsMockData {
                         imageURLs: ["https://picsum.photos/205/300"]
                     )),
                     timestamp: base + 50400000,
+                    sourceBookId: 1007,
                     bookName: "创新者的窘境",
                     bookAuthor: "克里斯坦森",
                     bookCover: ""
@@ -247,12 +262,14 @@ enum TimelineCardsMockData {
                 TimelineEvent(
                     id: "relevantbook_1",
                     kind: .relevantBook(TimelineRelevantBookEvent(
+                        contentBookId: 2001,
                         contentBookName: "思考快与慢",
                         contentBookAuthor: "丹尼尔·卡尼曼",
                         contentBookCover: "",
                         categoryTitle: "书"
                     )),
                     timestamp: base + 43200000,
+                    sourceBookId: 1007,
                     bookName: "创新者的窘境",
                     bookAuthor: "克里斯坦森",
                     bookCover: ""
@@ -265,6 +282,7 @@ enum TimelineCardsMockData {
                         bookScore: 0
                     )),
                     timestamp: base + 36000000,
+                    sourceBookId: 1008,
                     bookName: "深度工作",
                     bookAuthor: "卡尔·纽波特",
                     bookCover: ""
@@ -273,6 +291,7 @@ enum TimelineCardsMockData {
                     id: "checkin_2",
                     kind: .checkIn(TimelineCheckInEvent(amount: 1)),
                     timestamp: base + 28800000,
+                    sourceBookId: 1009,
                     bookName: "刻意练习",
                     bookAuthor: "安德斯·艾利克森",
                     bookCover: ""

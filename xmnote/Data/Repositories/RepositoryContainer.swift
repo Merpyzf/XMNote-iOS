@@ -13,6 +13,7 @@ import Observation
 final class RepositoryContainer {
     let bookRepository: any BookRepositoryProtocol
     let noteRepository: any NoteRepositoryProtocol
+    let contentRepository: any ContentRepositoryProtocol
     let bookSearchRepository: any BookSearchRepositoryProtocol
     let bookEditorRepository: any BookEditorRepositoryProtocol
     let ocrRepository: any OCRRepositoryProtocol
@@ -41,6 +42,7 @@ final class RepositoryContainer {
 
         self.bookRepository = BookRepository(databaseManager: databaseManager)
         self.noteRepository = NoteRepository(databaseManager: databaseManager)
+        self.contentRepository = ContentRepository(databaseManager: databaseManager)
         self.bookSearchRepository = BookSearchRepository()
         self.bookEditorRepository = BookEditorRepository(databaseManager: databaseManager)
         self.ocrRepository = OCRRepository(

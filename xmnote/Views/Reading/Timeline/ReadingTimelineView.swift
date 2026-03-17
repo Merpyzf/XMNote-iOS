@@ -1,7 +1,7 @@
 /**
- * [INPUT]: 依赖 HorizonCalendar 的 CalendarViewRepresentable/CalendarViewProxy，依赖 TimelineViewModel 提供事件与日历标记数据
+ * [INPUT]: 依赖 HorizonCalendar 的 CalendarViewRepresentable/CalendarViewProxy，依赖 TimelineViewModel 提供事件与日历标记数据，依赖外部跳转回调承接内容查看与书籍详情
  * [OUTPUT]: 对外提供 ReadingTimelineView（首页时间线模块：日历与事件列表联动）
- * [POS]: Reading 模块正式时间线页面，承载月份切换、日期选择、分类过滤与按日时间线渲染
+ * [POS]: Reading 模块正式时间线页面，承载月份切换、日期选择、分类过滤、按日时间线渲染与事件点击跳转
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
@@ -14,11 +14,26 @@ import UIKit
 struct ReadingTimelineView: View {
     @Environment(RepositoryContainer.self) private var repositories
     @State private var viewModel: TimelineViewModel?
+    let onOpenContentViewer: (ContentViewerSourceContext, ContentViewerItemID) -> Void
+    let onOpenBookDetail: (Int64) -> Void
+
+    /// 注入内容查看与书籍详情跳转回调，承接时间线事件点击。
+    init(
+        onOpenContentViewer: @escaping (ContentViewerSourceContext, ContentViewerItemID) -> Void = { _, _ in },
+        onOpenBookDetail: @escaping (Int64) -> Void = { _ in }
+    ) {
+        self.onOpenContentViewer = onOpenContentViewer
+        self.onOpenBookDetail = onOpenBookDetail
+    }
 
     var body: some View {
         Group {
             if let viewModel {
-                ReadingTimelineContentView(viewModel: viewModel)
+                ReadingTimelineContentView(
+                    viewModel: viewModel,
+                    onOpenContentViewer: onOpenContentViewer,
+                    onOpenBookDetail: onOpenBookDetail
+                )
             } else {
                 Color.clear
             }
@@ -37,12 +52,18 @@ struct ReadingTimelineView: View {
 /// 时间线页面内容视图，只负责容器组合，避免列表与日历共享同一观察热区。
 private struct ReadingTimelineContentView: View {
     @Bindable var viewModel: TimelineViewModel
+    let onOpenContentViewer: (ContentViewerSourceContext, ContentViewerItemID) -> Void
+    let onOpenBookDetail: (Int64) -> Void
 
     var body: some View {
         ScrollView {
             VStack(spacing: Spacing.base) {
                 TimelineCalendarPanel(viewModel: viewModel)
-                TimelineListContainer(viewModel: viewModel)
+                TimelineListContainer(
+                    viewModel: viewModel,
+                    onOpenContentViewer: onOpenContentViewer,
+                    onOpenBookDetail: onOpenBookDetail
+                )
             }
             .padding(.horizontal, Spacing.screenEdge)
             .padding(.top, Spacing.half)
@@ -660,6 +681,8 @@ private extension TimelineCalendarPanel {
 /// 时间线列表子树，隔离日历月份和 markerRevision 变化对列表 diff 的影响。
 private struct TimelineListContainer: View {
     @Bindable var viewModel: TimelineViewModel
+    let onOpenContentViewer: (ContentViewerSourceContext, ContentViewerItemID) -> Void
+    let onOpenBookDetail: (Int64) -> Void
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.displayScale) private var displayScale
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
@@ -672,7 +695,10 @@ private struct TimelineListContainer: View {
         TimelineListContent(
             sections: viewModel.sections,
             sectionsRevision: viewModel.sectionsRevision,
-            isLoading: viewModel.isLoading
+            isLoading: viewModel.isLoading,
+            sourceContext: viewModel.currentViewerSourceContext(),
+            onOpenContentViewer: onOpenContentViewer,
+            onOpenBookDetail: onOpenBookDetail
         )
         .equatable()
         .overlay(alignment: .topTrailing) {
@@ -824,10 +850,14 @@ private struct TimelineListContent: View, Equatable {
     let sections: [TimelineSection]
     let sectionsRevision: Int
     let isLoading: Bool
+    let sourceContext: ContentViewerSourceContext
+    let onOpenContentViewer: (ContentViewerSourceContext, ContentViewerItemID) -> Void
+    let onOpenBookDetail: (Int64) -> Void
 
     static func == (lhs: TimelineListContent, rhs: TimelineListContent) -> Bool {
         lhs.sectionsRevision == rhs.sectionsRevision &&
-        lhs.isLoading == rhs.isLoading
+        lhs.isLoading == rhs.isLoading &&
+        lhs.sourceContext == rhs.sourceContext
     }
 
     var body: some View {
@@ -844,7 +874,10 @@ private struct TimelineListContent: View, Equatable {
                         TimelineSectionView(
                             section: section,
                             isLast: section.id == sections.last?.id,
-                            trailingPlaceholderWidth: TimelineFilterHostStyle.controlWidth
+                            trailingPlaceholderWidth: TimelineFilterHostStyle.controlWidth,
+                            sourceContext: sourceContext,
+                            onOpenContentViewer: onOpenContentViewer,
+                            onOpenBookDetail: onOpenBookDetail
                         )
                     }
                 }

@@ -2,7 +2,7 @@ import Foundation
 
 /**
  * [INPUT]: 依赖 Models 与 Services 层的数据类型定义
- * [OUTPUT]: 对外提供 Book/Note/BackupServer/Backup/S3/Statistics/ReadCalendarColor/Timeline/ReadingDashboard 及书籍搜索/录入共十二类 Repository 协议
+ * [OUTPUT]: 对外提供 Book/Note/Content/BackupServer/Backup/S3/Statistics/ReadCalendarColor/Timeline/ReadingDashboard 及书籍搜索/录入共十三类 Repository 协议
  * [POS]: Domain 层仓储契约，定义 Presentation 获取本地/网络数据的唯一入口
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -63,6 +63,24 @@ protocol NoteRepositoryProtocol {
     func fetchNoteDetail(noteId: Int64) async throws -> NoteDetailPayload?
     /// 保存笔记正文与想法 HTML，提交后触发下游观察流更新。
     func saveNoteDetail(noteId: Int64, contentHTML: String, ideaHTML: String) async throws
+}
+
+/// 通用内容查看仓储契约，统一封装书摘/书评/相关内容的查看、编辑与删除入口。
+protocol ContentRepositoryProtocol {
+    /// 持续监听指定来源下的分页内容列表。
+    func observeViewerItems(source: ContentViewerSourceContext) -> AsyncThrowingStream<[ContentViewerListItem], Error>
+    /// 按统一 itemID 拉取查看页完整详情。
+    func fetchViewerDetail(itemID: ContentViewerItemID) async throws -> ContentViewerDetail?
+    /// 读取书评编辑草稿。
+    func fetchReviewEditorDraft(reviewId: Int64) async throws -> ReviewEditorDraft?
+    /// 保存书评编辑草稿。
+    func saveReviewEditorDraft(_ draft: ReviewEditorDraft) async throws
+    /// 读取相关内容编辑草稿。
+    func fetchRelevantEditorDraft(contentId: Int64) async throws -> RelevantEditorDraft?
+    /// 保存相关内容编辑草稿。
+    func saveRelevantEditorDraft(_ draft: RelevantEditorDraft) async throws
+    /// 删除指定内容，按 iOS 当前约定执行主记录与子记录的硬删除事务。
+    func delete(itemID: ContentViewerItemID) async throws
 }
 
 /// 备份服务器配置契约，覆盖服务器列表、当前选择、增删改与连通性校验。

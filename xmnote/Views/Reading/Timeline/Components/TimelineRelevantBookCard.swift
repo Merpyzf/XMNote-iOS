@@ -65,6 +65,7 @@ struct TimelineRelevantBookCard: View {
         Color.surfacePage.ignoresSafeArea()
         TimelineRelevantBookCard(
             event: TimelineRelevantBookEvent(
+                contentBookId: 88,
                 contentBookName: "思考快与慢",
                 contentBookAuthor: "丹尼尔·卡尼曼",
                 contentBookCover: "",

@@ -8,9 +8,9 @@
 import SwiftUI
 
 /**
- * [INPUT]: 依赖 Reading/Book/Note/Personal 各模块容器视图与对应路由枚举，依赖 DebugRoute 提供调试页面跳转
+ * [INPUT]: 依赖 Reading/Book/Note/Content/Personal 各模块容器视图与对应路由枚举，依赖 DebugRoute 提供调试页面跳转
  * [OUTPUT]: 对外提供 MainTabView（四大主 Tab 的 NavigationStack 组织与目的地分发）
- * [POS]: 应用根导航入口，负责跨模块路由承接（含在读页热力图点击进入阅读日历）
+ * [POS]: 应用根导航入口，负责跨模块路由承接（含在读页热力图点击进入阅读日历、内容查看与内容编辑）
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
@@ -42,6 +42,9 @@ struct MainTabView: View {
                         },
                         onOpenBookDetail: { bookId in
                             append(BookRoute.detail(bookId: bookId), to: .reading)
+                        },
+                        onOpenContentViewer: { source, initialItem in
+                            append(contentRoute(for: source, initialItem: initialItem), to: .reading)
                         }
                     )
                         .toolbar(.hidden, for: .navigationBar)
@@ -59,6 +62,10 @@ struct MainTabView: View {
                         }
                         .navigationDestination(for: NoteRoute.self) { route in
                             noteDestination(for: route)
+                                .toolbar(.hidden, for: .tabBar)
+                        }
+                        .navigationDestination(for: ContentRoute.self) { route in
+                            contentDestination(for: route)
                                 .toolbar(.hidden, for: .tabBar)
                         }
                 }
@@ -83,6 +90,10 @@ struct MainTabView: View {
                             noteDestination(for: route)
                                 .toolbar(.hidden, for: .tabBar)
                         }
+                        .navigationDestination(for: ContentRoute.self) { route in
+                            contentDestination(for: route)
+                                .toolbar(.hidden, for: .tabBar)
+                        }
                 }
             }
 
@@ -105,6 +116,10 @@ struct MainTabView: View {
                             noteDestination(for: route)
                                 .toolbar(.hidden, for: .tabBar)
                         }
+                        .navigationDestination(for: ContentRoute.self) { route in
+                            contentDestination(for: route)
+                                .toolbar(.hidden, for: .tabBar)
+                        }
                 }
             }
 
@@ -125,6 +140,10 @@ struct MainTabView: View {
                         }
                         .navigationDestination(for: NoteRoute.self) { route in
                             noteDestination(for: route)
+                                .toolbar(.hidden, for: .tabBar)
+                        }
+                        .navigationDestination(for: ContentRoute.self) { route in
+                            contentDestination(for: route)
                                 .toolbar(.hidden, for: .tabBar)
                         }
                         .navigationDestination(for: PersonalRoute.self) { route in
@@ -152,6 +171,10 @@ struct MainTabView: View {
                         }
                         .navigationDestination(for: NoteRoute.self) { route in
                             noteDestination(for: route)
+                                .toolbar(.hidden, for: .tabBar)
+                        }
+                        .navigationDestination(for: ContentRoute.self) { route in
+                            contentDestination(for: route)
                                 .toolbar(.hidden, for: .tabBar)
                         }
                 }
@@ -205,6 +228,24 @@ struct MainTabView: View {
             Text("创建笔记")
         case .notesByTag:
             Text("标签笔记")
+        }
+    }
+
+    // MARK: - Content Destinations
+
+    @ViewBuilder
+    private func contentDestination(for route: ContentRoute) -> some View {
+        switch route {
+        case .noteViewer(let source, let noteId):
+            NoteViewerView(source: source, initialNoteID: noteId)
+        case .reviewDetail(let reviewId):
+            ReviewDetailView(reviewId: reviewId)
+        case .relevantDetail(let contentId):
+            RelevantDetailView(contentId: contentId)
+        case .reviewEditor(let reviewId):
+            ReviewEditorView(reviewId: reviewId)
+        case .relevantEditor(let contentId):
+            RelevantEditorView(contentId: contentId)
         }
     }
 
@@ -304,6 +345,47 @@ struct MainTabView: View {
             profilePath.append(route)
         case .search:
             searchPath.append(route)
+        }
+    }
+
+    private func append(_ route: ContentRoute, to tab: AppTab) {
+        switch tab {
+        case .reading:
+            readingPath.append(route)
+        case .books:
+            booksPath.append(route)
+        case .notes:
+            notesPath.append(route)
+        case .profile:
+            profilePath.append(route)
+        case .search:
+            searchPath.append(route)
+        }
+    }
+
+    private func contentRoute(
+        for source: ContentViewerSourceContext,
+        initialItem: ContentViewerItemID
+    ) -> ContentRoute {
+        switch initialItem {
+        case .note(let noteId):
+            switch source {
+            case .timeline(let startTimestamp, let endTimestamp, _):
+                .noteViewer(
+                    source: .timeline(
+                        startTimestamp: startTimestamp,
+                        endTimestamp: endTimestamp,
+                        filter: .note
+                    ),
+                    noteId: noteId
+                )
+            case .bookNotes:
+                .noteViewer(source: source, noteId: noteId)
+            }
+        case .review(let reviewId):
+            .reviewDetail(reviewId: reviewId)
+        case .relevant(let contentId):
+            .relevantDetail(contentId: contentId)
         }
     }
 }

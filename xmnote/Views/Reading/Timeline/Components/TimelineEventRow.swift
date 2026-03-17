@@ -1,7 +1,7 @@
 /**
- * [INPUT]: 依赖 TimelineEvent/TimelineSection 领域模型、7 种 Card 组件、DesignTokens 设计令牌
+ * [INPUT]: 依赖 TimelineEvent/TimelineSection 领域模型、7 种 Card 组件、DesignTokens 设计令牌，以及内容查看/书籍详情点击回调
  * [OUTPUT]: 对外提供 TimelineEventRow（时间线单事件行）、TimelineSectionHeader（粘性日期头 + 右侧筛选占位）与 TimelineSectionView（按日分组渲染）
- * [POS]: Reading/Timeline 页面私有子视图，整合左侧虚线装饰列与右侧事件卡片
+ * [POS]: Reading/Timeline 页面私有子视图，整合左侧虚线装饰列、右侧事件卡片与点击跳转分发
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
@@ -81,13 +81,19 @@ struct TimelineSectionView: View {
     let section: TimelineSection
     let isLast: Bool
     let trailingPlaceholderWidth: CGFloat
+    let sourceContext: ContentViewerSourceContext
+    let onOpenContentViewer: (ContentViewerSourceContext, ContentViewerItemID) -> Void
+    let onOpenBookDetail: (Int64) -> Void
 
     var body: some View {
         Section {
             ForEach(section.events) { event in
                 TimelineEventRow(
                     event: event,
-                    isLastEvent: isLast && event.id == section.events.last?.id
+                    isLastEvent: isLast && event.id == section.events.last?.id,
+                    sourceContext: sourceContext,
+                    onOpenContentViewer: onOpenContentViewer,
+                    onOpenBookDetail: onOpenBookDetail
                 )
                 .equatable()
             }
@@ -106,6 +112,15 @@ struct TimelineSectionView: View {
 struct TimelineEventRow: View, Equatable {
     let event: TimelineEvent
     let isLastEvent: Bool
+    let sourceContext: ContentViewerSourceContext
+    let onOpenContentViewer: (ContentViewerSourceContext, ContentViewerItemID) -> Void
+    let onOpenBookDetail: (Int64) -> Void
+
+    static func == (lhs: TimelineEventRow, rhs: TimelineEventRow) -> Bool {
+        lhs.event == rhs.event &&
+        lhs.isLastEvent == rhs.isLastEvent &&
+        lhs.sourceContext == rhs.sourceContext
+    }
 
     var body: some View {
         HStack(alignment: .top, spacing: Spacing.none) {
@@ -114,11 +129,15 @@ struct TimelineEventRow: View, Equatable {
                 .foregroundStyle(Color.textHint.opacity(0.35))
                 .frame(width: decoratorWidth)
 
-            cardContent
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.leading, Spacing.cozy)
-                .padding(.bottom, Spacing.screenEdge)
-                .clipped()
+            Button(action: handleTap) {
+                cardContent
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.leading, Spacing.cozy)
+                    .padding(.bottom, Spacing.screenEdge)
+                    .clipped()
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
         }
     }
 
@@ -181,6 +200,21 @@ struct TimelineEventRow: View, Equatable {
                 timestamp: event.timestamp,
                 bookName: event.bookName
             )
+        }
+    }
+
+    private func handleTap() {
+        switch event.kind {
+        case .note(let note):
+            onOpenContentViewer(sourceContext, .note(note.noteId))
+        case .review(let review):
+            onOpenContentViewer(sourceContext, .review(review.reviewId))
+        case .relevant(let relevant):
+            onOpenContentViewer(sourceContext, .relevant(relevant.contentId))
+        case .readTiming, .readStatus, .checkIn:
+            onOpenBookDetail(event.sourceBookId)
+        case .relevantBook(let relevantBook):
+            onOpenBookDetail(relevantBook.contentBookId)
         }
     }
 }
@@ -256,6 +290,7 @@ struct TimelineCardMetaLine: View {
             TimelineEvent(
                 id: "note_1",
                 kind: .note(TimelineNoteEvent(
+                    noteId: 1,
                     content: "好的代码读起来像散文一样流畅。",
                     idea: "这就是为什么命名如此重要",
                     bookTitle: "代码整洁之道",
@@ -263,6 +298,7 @@ struct TimelineCardMetaLine: View {
                     tagNames: ["编码", "命名"]
                 )),
                 timestamp: Int64(Date().timeIntervalSince1970 * 1000),
+                sourceBookId: 101,
                 bookName: "代码整洁之道",
                 bookAuthor: "Robert C. Martin",
                 bookCover: ""
@@ -274,6 +310,7 @@ struct TimelineCardMetaLine: View {
                     startTime: 0, endTime: 0, fuzzyReadDate: 0
                 )),
                 timestamp: Int64(Date().timeIntervalSince1970 * 1000) - 3600000,
+                sourceBookId: 101,
                 bookName: "代码整洁之道",
                 bookAuthor: "Robert C. Martin",
                 bookCover: ""
@@ -286,7 +323,10 @@ struct TimelineCardMetaLine: View {
             TimelineSectionView(
                 section: section,
                 isLast: true,
-                trailingPlaceholderWidth: 76
+                trailingPlaceholderWidth: 76,
+                sourceContext: .timeline(startTimestamp: 0, endTimestamp: 0, filter: .allContent),
+                onOpenContentViewer: { _, _ in },
+                onOpenBookDetail: { _ in }
             )
         }
     }

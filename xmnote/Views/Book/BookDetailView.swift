@@ -6,9 +6,9 @@
 //
 
 /**
- * [INPUT]: 依赖 RepositoryContainer 注入仓储，依赖 BookDetailViewModel 驱动状态
+ * [INPUT]: 依赖 RepositoryContainer 注入仓储，依赖 BookDetailViewModel 驱动状态，依赖 ContentRoute 承接书摘查看路由
  * [OUTPUT]: 对外提供 BookDetailView，书籍详情与书摘列表页面
- * [POS]: Book 模块详情壳层，通过导航接收 bookId 参数
+ * [POS]: Book 模块详情壳层，通过导航接收 bookId 参数，并把书摘点击转入专用书摘查看器
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
@@ -23,7 +23,10 @@ struct BookDetailView: View {
     var body: some View {
         Group {
             if let viewModel {
-                BookDetailContentView(viewModel: viewModel)
+                BookDetailContentView(
+                    bookId: bookId,
+                    viewModel: viewModel
+                )
             } else {
                 Color.clear
             }
@@ -46,6 +49,7 @@ struct BookDetailView: View {
 // MARK: - Content
 
 private struct BookDetailContentView: View {
+    let bookId: Int64
     @Bindable var viewModel: BookDetailViewModel
 
     var body: some View {
@@ -66,7 +70,12 @@ private struct BookDetailContentView: View {
 
                 if viewModel.hasNotes {
                     ForEach(viewModel.notes) { note in
-                        NavigationLink(value: NoteRoute.detail(noteId: note.id)) {
+                        NavigationLink(
+                            value: ContentRoute.noteViewer(
+                                source: .bookNotes(bookId: bookId),
+                                noteId: note.id
+                            )
+                        ) {
                             noteCard(note)
                         }
                         .buttonStyle(.plain)

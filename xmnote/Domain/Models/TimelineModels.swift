@@ -11,6 +11,7 @@ import Foundation
 
 /// 书摘事件，携带划线正文、用户批注、附图地址与关联标签
 struct TimelineNoteEvent: Equatable {
+    let noteId: Int64
     let content: String
     let idea: String
     let bookTitle: String
@@ -40,6 +41,7 @@ struct TimelineCheckInEvent: Equatable {
 
 /// 书评事件，携带标题、正文、评分与图片地址
 struct TimelineReviewEvent: Equatable {
+    let reviewId: Int64
     let title: String
     let content: String
     let bookScore: Int64
@@ -48,6 +50,8 @@ struct TimelineReviewEvent: Equatable {
 
 /// 相关内容事件，携带标题、正文、链接、分类名与图片地址
 struct TimelineRelevantEvent: Equatable {
+    let contentId: Int64
+    let categoryId: Int64
     let title: String
     let content: String
     let url: String
@@ -57,6 +61,7 @@ struct TimelineRelevantEvent: Equatable {
 
 /// 相关书籍事件，携带被关联书籍信息与分类标签
 struct TimelineRelevantBookEvent: Equatable {
+    let contentBookId: Int64
     let contentBookName: String
     let contentBookAuthor: String
     let contentBookCover: String
@@ -83,6 +88,7 @@ struct TimelineEvent: Identifiable, Equatable {
     let id: String
     let kind: TimelineEventKind
     let timestamp: Int64
+    let sourceBookId: Int64
     let bookName: String
     let bookAuthor: String
     let bookCover: String

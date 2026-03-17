@@ -581,6 +581,7 @@ private final class TimelineCollapsedNotePreviewView: UIView {
             VStack(spacing: Spacing.base) {
                 TimelineNoteCard(
                     event: TimelineNoteEvent(
+                        noteId: 1,
                         content: "人生最大的幸运，就是在年富力强时发现了自己的<b>使命</b>。",
                         idea: "这句话让我想到了乔布斯在斯坦福的演讲",
                         bookTitle: "活法",
@@ -596,6 +597,7 @@ private final class TimelineCollapsedNotePreviewView: UIView {
                 )
                 TimelineNoteCard(
                     event: TimelineNoteEvent(
+                        noteId: 2,
                         content: "我们总是倾向于用最复杂的方式来解决问题，却忽略了最简单的途径往往就在眼前。",
                         idea: "",
                         bookTitle: "思考快与慢",
@@ -607,6 +609,7 @@ private final class TimelineCollapsedNotePreviewView: UIView {
                 )
                 TimelineNoteCard(
                     event: TimelineNoteEvent(
+                        noteId: 3,
                         content: "单图书摘测试",
                         idea: "",
                         bookTitle: "测试",

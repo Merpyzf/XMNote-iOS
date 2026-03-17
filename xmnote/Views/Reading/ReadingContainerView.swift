@@ -1,7 +1,7 @@
 import SwiftUI
 
 /**
- * [INPUT]: 依赖 TopSwitcher/AddMenuCircleButton 顶部交互组件，依赖 Reading 子页面与书籍/日历路由回调
+ * [INPUT]: 依赖 TopSwitcher/AddMenuCircleButton 顶部交互组件，依赖 Reading 子页面与书籍/日历/内容查看路由回调
  * [OUTPUT]: 对外提供 ReadingContainerView（在读 Tab 容器，管理子页切换与事件上抛）
  * [POS]: 在读模块根容器，负责“在读/时间线/统计”切换和首页事件上抛
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -32,6 +32,7 @@ struct ReadingContainerView: View {
     let onOpenDebugCenter: (() -> Void)?
     let onOpenReadCalendar: (Date) -> Void
     let onOpenBookDetail: (Int64) -> Void
+    let onOpenContentViewer: (ContentViewerSourceContext, ContentViewerItemID) -> Void
 
     /// 注入新增书籍回调，连接阅读页顶栏操作入口。
     init(
@@ -39,13 +40,15 @@ struct ReadingContainerView: View {
         onAddNote: @escaping () -> Void = {},
         onOpenDebugCenter: (() -> Void)? = nil,
         onOpenReadCalendar: @escaping (Date) -> Void = { _ in },
-        onOpenBookDetail: @escaping (Int64) -> Void = { _ in }
+        onOpenBookDetail: @escaping (Int64) -> Void = { _ in },
+        onOpenContentViewer: @escaping (ContentViewerSourceContext, ContentViewerItemID) -> Void = { _, _ in }
     ) {
         self.onAddBook = onAddBook
         self.onAddNote = onAddNote
         self.onOpenDebugCenter = onOpenDebugCenter
         self.onOpenReadCalendar = onOpenReadCalendar
         self.onOpenBookDetail = onOpenBookDetail
+        self.onOpenContentViewer = onOpenContentViewer
     }
 
     var body: some View {
@@ -95,7 +98,10 @@ struct ReadingContainerView: View {
                 onOpenBookDetail: onOpenBookDetail
             )
         case .timeline:
-            ReadingTimelineView()
+            ReadingTimelineView(
+                onOpenContentViewer: onOpenContentViewer,
+                onOpenBookDetail: onOpenBookDetail
+            )
         case .statistics:
             StatisticsPlaceholderView()
         }

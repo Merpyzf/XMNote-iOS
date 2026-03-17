@@ -98,7 +98,7 @@ private extension TimelineRepository {
     /// 标签表: tag_note JOIN tag | 过滤: tag_note/tag.is_deleted=0, tag.type=0 | 排序: tag.tag_order ASC, tag_note.id ASC
     nonisolated func queryNoteEvents(_ db: Database, start: Int64, end: Int64) throws -> [TimelineEvent] {
         let sql = """
-            SELECT n.id, n.content, n.idea, n.created_date,
+            SELECT n.id, n.book_id, n.content, n.idea, n.created_date,
                    b.name, b.author, b.cover
             FROM note n
             JOIN book b ON b.id = n.book_id AND b.is_deleted = 0
@@ -122,6 +122,7 @@ private extension TimelineRepository {
             return TimelineEvent(
                 id: "note-\(noteId)",
                 kind: .note(TimelineNoteEvent(
+                    noteId: noteId,
                     content: content,
                     idea: idea,
                     bookTitle: row["name"] as String? ?? "",
@@ -129,6 +130,7 @@ private extension TimelineRepository {
                     tagNames: tagMap[noteId] ?? []
                 )),
                 timestamp: row["created_date"] as Int64,
+                sourceBookId: row["book_id"] as Int64? ?? 0,
                 bookName: row["name"] as String? ?? "",
                 bookAuthor: row["author"] as String? ?? "",
                 bookCover: row["cover"] as String? ?? ""
@@ -143,7 +145,7 @@ private extension TimelineRepository {
     /// 过滤: status=3（已完成）, is_deleted=0
     nonisolated func queryReadTimingEvents(_ db: Database, start: Int64, end: Int64) throws -> [TimelineEvent] {
         let sql = """
-            SELECT r.id, r.start_time, r.end_time, r.elapsed_seconds, r.fuzzy_read_date,
+            SELECT r.id, r.book_id, r.start_time, r.end_time, r.elapsed_seconds, r.fuzzy_read_date,
                    b.name, b.author, b.cover
             FROM read_time_record r
             JOIN book b ON b.id = r.book_id AND b.is_deleted = 0
@@ -165,6 +167,7 @@ private extension TimelineRepository {
                     fuzzyReadDate: fuzzy
                 )),
                 timestamp: effectiveTimestamp,
+                sourceBookId: row["book_id"] as Int64? ?? 0,
                 bookName: row["name"] as String? ?? "",
                 bookAuthor: row["author"] as String? ?? "",
                 bookCover: row["cover"] as String? ?? ""
@@ -204,6 +207,7 @@ private extension TimelineRepository {
                     bookScore: row["score"] as Int64? ?? 0
                 )),
                 timestamp: changedDate,
+                sourceBookId: bookId,
                 bookName: row["name"] as String? ?? "",
                 bookAuthor: row["author"] as String? ?? "",
                 bookCover: row["cover"] as String? ?? ""
@@ -218,7 +222,7 @@ private extension TimelineRepository {
     /// 附图表: category_image | 外键: category_content_id | 排序: order ASC, id ASC
     nonisolated func queryRelevantEvents(_ db: Database, start: Int64, end: Int64) throws -> [TimelineEvent] {
         let sql = """
-            SELECT cc.id, cc.title, cc.content, cc.url, cc.content_book_id, cc.created_date,
+            SELECT cc.id, cc.book_id, cc.category_id, cc.title, cc.content, cc.url, cc.content_book_id, cc.created_date,
                    b.name, b.author, b.cover, cat.title AS category_title
             FROM category_content cc
             JOIN book b ON b.id = cc.book_id AND b.is_deleted = 0
@@ -258,12 +262,14 @@ private extension TimelineRepository {
                 return TimelineEvent(
                     id: "relevant-book-\(ccId)",
                     kind: .relevantBook(TimelineRelevantBookEvent(
+                        contentBookId: contentBookId,
                         contentBookName: contentBook?.name ?? "",
                         contentBookAuthor: contentBook?.author ?? "",
                         contentBookCover: contentBook?.cover ?? "",
                         categoryTitle: catTitle
                     )),
                     timestamp: row["created_date"] as Int64,
+                    sourceBookId: row["book_id"] as Int64? ?? 0,
                     bookName: row["name"] as String? ?? "",
                     bookAuthor: row["author"] as String? ?? "",
                     bookCover: row["cover"] as String? ?? ""
@@ -273,6 +279,8 @@ private extension TimelineRepository {
             return TimelineEvent(
                 id: "relevant-\(ccId)",
                 kind: .relevant(TimelineRelevantEvent(
+                    contentId: ccId,
+                    categoryId: row["category_id"] as Int64? ?? 0,
                     title: row["title"] as String? ?? "",
                     content: Self.trimTrailingWhitespaceAndNewlines(row["content"] as String? ?? ""),
                     url: row["url"] as String? ?? "",
@@ -280,6 +288,7 @@ private extension TimelineRepository {
                     imageURLs: imageMap[ccId] ?? []
                 )),
                 timestamp: row["created_date"] as Int64,
+                sourceBookId: row["book_id"] as Int64? ?? 0,
                 bookName: row["name"] as String? ?? "",
                 bookAuthor: row["author"] as String? ?? "",
                 bookCover: row["cover"] as String? ?? ""
@@ -294,7 +303,7 @@ private extension TimelineRepository {
     /// 附图表: review_image | 外键: review_id | 排序: order ASC, id ASC
     nonisolated func queryReviewEvents(_ db: Database, start: Int64, end: Int64) throws -> [TimelineEvent] {
         let sql = """
-            SELECT rv.id, rv.title, rv.content, rv.created_date,
+            SELECT rv.id, rv.book_id, rv.title, rv.content, rv.created_date,
                    b.name, b.author, b.cover, b.score
             FROM review rv
             JOIN book b ON b.id = rv.book_id AND b.is_deleted = 0
@@ -315,12 +324,14 @@ private extension TimelineRepository {
             return TimelineEvent(
                 id: "review-\(reviewId)",
                 kind: .review(TimelineReviewEvent(
+                    reviewId: reviewId,
                     title: row["title"] as String? ?? "",
                     content: Self.trimTrailingWhitespaceAndNewlines(row["content"] as String? ?? ""),
                     bookScore: row["score"] as Int64? ?? 0,
                     imageURLs: imageMap[reviewId] ?? []
                 )),
                 timestamp: row["created_date"] as Int64,
+                sourceBookId: row["book_id"] as Int64? ?? 0,
                 bookName: row["name"] as String? ?? "",
                 bookAuthor: row["author"] as String? ?? "",
                 bookCover: row["cover"] as String? ?? ""
@@ -334,7 +345,7 @@ private extension TimelineRepository {
     /// 表: check_in_record JOIN book | 时间字段: checkin_date | 过滤: is_deleted=0, checkin_date!=0
     nonisolated func queryCheckInEvents(_ db: Database, start: Int64, end: Int64) throws -> [TimelineEvent] {
         let sql = """
-            SELECT ci.id, ci.amount, ci.checkin_date,
+            SELECT ci.id, ci.book_id, ci.amount, ci.checkin_date,
                    b.name, b.author, b.cover
             FROM check_in_record ci
             JOIN book b ON b.id = ci.book_id AND b.is_deleted = 0
@@ -346,6 +357,7 @@ private extension TimelineRepository {
                 id: "checkin-\(row["id"] as Int64)",
                 kind: .checkIn(TimelineCheckInEvent(amount: row["amount"] as Int64? ?? 1)),
                 timestamp: row["checkin_date"] as Int64,
+                sourceBookId: row["book_id"] as Int64? ?? 0,
                 bookName: row["name"] as String? ?? "",
                 bookAuthor: row["author"] as String? ?? "",
                 bookCover: row["cover"] as String? ?? ""

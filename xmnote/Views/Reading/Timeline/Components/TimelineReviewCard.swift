@@ -106,6 +106,7 @@ struct TimelineReviewCard: View {
             VStack(spacing: Spacing.base) {
                 TimelineReviewCard(
                     event: TimelineReviewEvent(
+                        reviewId: 1,
                         title: "  一本改变思维方式的书  ",
                         content: "作者用大量案例说明了<b>系统思维</b>的重要性，读完之后对复杂问题的分析能力有了显著提升。",
                         bookScore: 40,
@@ -119,6 +120,7 @@ struct TimelineReviewCard: View {
                 )
                 TimelineReviewCard(
                     event: TimelineReviewEvent(
+                        reviewId: 2,
                         title: "   ",
                         content: "<p><br></p>",
                         bookScore: 0,
