@@ -9,7 +9,6 @@ import Foundation
 
 /// ContentRoute 定义三类内容查看页及其子编辑页的导航目标。
 enum ContentRoute: Hashable {
-    case noteViewer(source: ContentViewerSourceContext, noteId: Int64)
     case contentViewer(source: ContentViewerSourceContext, initialItemID: ContentViewerItemID)
     case reviewDetail(reviewId: Int64)
     case relevantDetail(contentId: Int64)

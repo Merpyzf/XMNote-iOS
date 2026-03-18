@@ -30,6 +30,7 @@ struct ContentViewerContentView: View {
         let itemIDs: [ContentViewerItemID]
     }
 
+    let presentationStyle: ContentViewerPresentationStyle
     let props: Props
     let bottomChromeMetrics: ImmersiveBottomChromeMetrics
     let onPagerSelectionChanged: (ContentViewerItemID) -> Void
@@ -74,19 +75,20 @@ private extension ContentViewerContentView {
         ) { itemID in
             ContentViewerPageView(
                 state: pageStateProvider(itemID),
+                presentationStyle: presentationStyle,
                 bottomChromeMetrics: bottomChromeMetrics
             )
         }
     }
 
     var loadingState: some View {
-        ProgressView("正在加载内容…")
+        ProgressView(presentationStyle.loadingMessage)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     func emptyState(message: String) -> some View {
         VStack(spacing: Spacing.base) {
-            Image(systemName: "doc.text.magnifyingglass")
+            Image(systemName: presentationStyle.emptyIconName)
                 .font(.system(size: 28, weight: .semibold))
                 .foregroundStyle(.secondary)
             Text(message)
@@ -102,6 +104,7 @@ private extension ContentViewerContentView {
 /// 通用内容单页详情视图，负责页内滚动和按需加载。
 private struct ContentViewerPageView: View {
     let state: ContentViewerContentView.Props.PageState
+    let presentationStyle: ContentViewerPresentationStyle
     let bottomChromeMetrics: ImmersiveBottomChromeMetrics
 
     var body: some View {
@@ -111,7 +114,7 @@ private struct ContentViewerPageView: View {
             VStack(alignment: .leading, spacing: Spacing.base) {
                 switch state {
                 case .loading:
-                    ProgressView("正在加载内容…")
+                    ProgressView(presentationStyle.loadingMessage)
                         .frame(maxWidth: .infinity, minHeight: 320)
                 case .error(let message):
                     viewerMessageCard(text: message)

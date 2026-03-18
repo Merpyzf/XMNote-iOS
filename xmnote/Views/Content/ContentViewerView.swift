@@ -19,6 +19,10 @@ struct ContentViewerView: View {
     @State private var viewModel: ContentViewerViewModel?
     @State private var showsDeleteDialog = false
 
+    private var presentationStyle: ContentViewerPresentationStyle {
+        ContentViewerPresentationStyle(source: source)
+    }
+
     var body: some View {
         Group {
             if let viewModel {
@@ -41,6 +45,8 @@ struct ContentViewerView: View {
             let newViewModel = ContentViewerViewModel(
                 source: source,
                 initialItemID: initialItemID,
+                defaultTitle: presentationStyle.defaultTitle,
+                missingItemMessage: presentationStyle.missingItemMessage,
                 repository: repositories.contentRepository
             )
             viewModel = newViewModel
@@ -59,12 +65,17 @@ private struct ContentViewerLoadedView: View {
     @State private var showsTagSheet = false
     @State private var sharePayload: ContentViewerSharePayload?
 
+    private var presentationStyle: ContentViewerPresentationStyle {
+        ContentViewerPresentationStyle(source: viewModel.source)
+    }
+
     var body: some View {
         GeometryReader { proxy in
             let safeAreaBottomInset = proxy.safeAreaInsets.bottom
 
             VStack(spacing: Spacing.none) {
-                if let listErrorMessage = viewModel.listErrorMessage,
+                if presentationStyle.showsListErrorBanner,
+                   let listErrorMessage = viewModel.listErrorMessage,
                    !listErrorMessage.isEmpty,
                    !viewModel.items.isEmpty {
                     viewerMessageCard(text: listErrorMessage)
@@ -73,6 +84,7 @@ private struct ContentViewerLoadedView: View {
                 }
 
                 ContentViewerContentView(
+                    presentationStyle: presentationStyle,
                     props: contentProps,
                     bottomChromeMetrics: bottomChromeMetrics(safeAreaBottomInset: safeAreaBottomInset),
                     onPagerSelectionChanged: { viewModel.select($0) },
@@ -81,7 +93,7 @@ private struct ContentViewerLoadedView: View {
                         await viewModel.loadDetailIfNeeded(itemID: itemID)
                     },
                     onRefreshDetail: { itemID in
-                        await viewModel.refreshDetail(itemID: itemID)
+                        await viewModel.loadDetailIfNeeded(itemID: itemID)
                     }
                 )
             }
@@ -109,7 +121,7 @@ private struct ContentViewerLoadedView: View {
                 }
             }
         }
-        .confirmationDialog("删除当前内容？", isPresented: $showsDeleteDialog) {
+        .confirmationDialog(presentationStyle.deleteDialogTitle, isPresented: $showsDeleteDialog) {
             Button("删除", role: .destructive) {
                 Task { await viewModel.deleteCurrentItem() }
             }
@@ -118,7 +130,7 @@ private struct ContentViewerLoadedView: View {
             Text("iOS 端当前按硬删除实现，主记录和子记录会一起删除。")
         }
         .sheet(isPresented: $showsTagSheet) {
-            NoteViewerTagSheet(
+            ContentViewerTagSheet(
                 tags: selectedTagNames,
                 onDismiss: { showsTagSheet = false }
             )
@@ -166,6 +178,7 @@ private struct ContentViewerLoadedView: View {
             HStack(spacing: Spacing.base) {
                 contentActionCluster
                     .padding(.horizontal, Spacing.base)
+                    .frame(height: ImmersiveBottomChromeStyle.controlHeight)
                     .glassEffect(.regular.interactive(), in: .capsule)
 
                 Button(role: .destructive) {
@@ -178,8 +191,12 @@ private struct ContentViewerLoadedView: View {
                 }
                 .buttonStyle(.plain)
                 .disabled(viewModel.selectedItemID == nil || viewModel.isDeleting)
+                .frame(
+                    width: ImmersiveBottomChromeStyle.controlHeight,
+                    height: ImmersiveBottomChromeStyle.controlHeight
+                )
                 .glassEffect(.regular.interactive(), in: .circle)
-                .accessibilityLabel("删除内容")
+                .accessibilityLabel(presentationStyle.deleteAccessibilityLabel)
             }
         }
         .background {
@@ -291,7 +308,7 @@ private struct ContentViewerLoadedView: View {
             if viewModel.isLoadingList {
                 return .loading
             }
-            return .empty(viewModel.listErrorMessage ?? "内容不存在或已删除")
+            return .empty(viewModel.listErrorMessage ?? presentationStyle.missingItemMessage)
         }
         return .content
     }
@@ -445,11 +462,6 @@ struct ViewerScoreRow: View {
         }
         return "star"
     }
-}
-
-private struct ContentViewerSharePayload: Identifiable {
-    let text: String
-    let id = UUID()
 }
 
 #Preview {

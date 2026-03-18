@@ -147,27 +147,124 @@ private extension ContentRepository {
         endTimestamp: Int64,
         filter: TimelineContentFilter
     ) throws -> [ContentViewerListItem] {
-        var items: [ContentViewerListItem] = []
         switch filter {
         case .allContent:
-            items += try fetchTimelineNoteViewerItems(db, startTimestamp: startTimestamp, endTimestamp: endTimestamp)
-            items += try fetchTimelineReviewViewerItems(db, startTimestamp: startTimestamp, endTimestamp: endTimestamp)
-            items += try fetchTimelineRelevantViewerItems(db, startTimestamp: startTimestamp, endTimestamp: endTimestamp)
+            return try fetchTimelineMixedViewerItems(
+                db,
+                startTimestamp: startTimestamp,
+                endTimestamp: endTimestamp
+            )
         case .note:
-            items = try fetchTimelineNoteViewerItems(db, startTimestamp: startTimestamp, endTimestamp: endTimestamp)
+            return try fetchTimelineNoteViewerItems(
+                db,
+                startTimestamp: startTimestamp,
+                endTimestamp: endTimestamp
+            )
         case .review:
-            items = try fetchTimelineReviewViewerItems(db, startTimestamp: startTimestamp, endTimestamp: endTimestamp)
+            return try fetchTimelineReviewViewerItems(
+                db,
+                startTimestamp: startTimestamp,
+                endTimestamp: endTimestamp
+            )
         case .relevant:
-            items = try fetchTimelineRelevantViewerItems(db, startTimestamp: startTimestamp, endTimestamp: endTimestamp)
+            return try fetchTimelineRelevantViewerItems(
+                db,
+                startTimestamp: startTimestamp,
+                endTimestamp: endTimestamp
+            )
         }
+    }
 
-        items.sort { lhs, rhs in
-            if lhs.timestamp == rhs.timestamp {
-                return feedSortKey(lhs.id) > feedSortKey(rhs.id)
+    /// 查询时间线范围内的混合 viewer 列表，在数据库内完成跨类型合并与稳定排序。
+    nonisolated func fetchTimelineMixedViewerItems(
+        _ db: Database,
+        startTimestamp: Int64,
+        endTimestamp: Int64
+    ) throws -> [ContentViewerListItem] {
+        // SQL 目的：在数据库内完成书摘/书评/相关内容的混合聚合与稳定排序，避免内存侧二次排序开销。
+        // 涉及表：note/review/category_content 与 book。
+        // 关键过滤：三类内容统一限制 is_deleted=0 与 created_date 范围；相关内容额外排除 content_book_id != 0。
+        // 排序：created_date DESC，再按 (id * 10 + type_rank) DESC，对齐既有 feedSortKey 语义。
+        let sql = """
+            SELECT item_type, item_id, source_book_id, book_title, timestamp
+            FROM (
+                SELECT
+                    1 AS item_type,
+                    n.id AS item_id,
+                    n.book_id AS source_book_id,
+                    b.name AS book_title,
+                    n.created_date AS timestamp
+                FROM note n
+                JOIN book b ON b.id = n.book_id AND b.is_deleted = 0
+                WHERE n.is_deleted = 0
+                  AND n.created_date BETWEEN ? AND ?
+
+                UNION ALL
+
+                SELECT
+                    2 AS item_type,
+                    rv.id AS item_id,
+                    rv.book_id AS source_book_id,
+                    b.name AS book_title,
+                    rv.created_date AS timestamp
+                FROM review rv
+                JOIN book b ON b.id = rv.book_id AND b.is_deleted = 0
+                WHERE rv.is_deleted = 0
+                  AND rv.created_date BETWEEN ? AND ?
+
+                UNION ALL
+
+                SELECT
+                    3 AS item_type,
+                    cc.id AS item_id,
+                    cc.book_id AS source_book_id,
+                    b.name AS book_title,
+                    cc.created_date AS timestamp
+                FROM category_content cc
+                JOIN book b ON b.id = cc.book_id AND b.is_deleted = 0
+                WHERE cc.is_deleted = 0
+                  AND cc.content_book_id = 0
+                  AND cc.created_date BETWEEN ? AND ?
+            )
+            ORDER BY timestamp DESC, (item_id * 10 + item_type) DESC
+        """
+
+        let rows = try Row.fetchAll(
+            db,
+            sql: sql,
+            arguments: [
+                startTimestamp, endTimestamp,
+                startTimestamp, endTimestamp,
+                startTimestamp, endTimestamp
+            ]
+        )
+
+        return rows.compactMap { row in
+            let itemType = row["item_type"] as Int64? ?? 0
+            let itemID = row["item_id"] as Int64? ?? 0
+            let sourceBookId = row["source_book_id"] as Int64? ?? 0
+            let bookTitle = row["book_title"] as String? ?? ""
+            let timestamp = row["timestamp"] as Int64? ?? 0
+
+            let id: ContentViewerItemID
+            switch itemType {
+            case 1:
+                id = .note(itemID)
+            case 2:
+                id = .review(itemID)
+            case 3:
+                id = .relevant(itemID)
+            default:
+                return nil
             }
-            return lhs.timestamp > rhs.timestamp
+
+            return ContentViewerListItem(
+                id: id,
+                sourceBookId: sourceBookId,
+                bookTitle: bookTitle,
+                timestamp: timestamp
+            )
         }
-        return items
     }
 
     /// 查询时间线范围内的书摘 viewer 列表。
@@ -185,6 +282,7 @@ private extension ContentRepository {
             FROM note n
             JOIN book b ON b.id = n.book_id AND b.is_deleted = 0
             WHERE n.is_deleted = 0 AND n.created_date BETWEEN ? AND ?
+            ORDER BY n.created_date DESC, n.id DESC
         """
         let rows = try Row.fetchAll(db, sql: sql, arguments: [startTimestamp, endTimestamp])
         return rows.map { row in
@@ -212,6 +310,7 @@ private extension ContentRepository {
             FROM review rv
             JOIN book b ON b.id = rv.book_id AND b.is_deleted = 0
             WHERE rv.is_deleted = 0 AND rv.created_date BETWEEN ? AND ?
+            ORDER BY rv.created_date DESC, rv.id DESC
         """
         let rows = try Row.fetchAll(db, sql: sql, arguments: [startTimestamp, endTimestamp])
         return rows.map { row in
@@ -241,6 +340,7 @@ private extension ContentRepository {
             WHERE cc.is_deleted = 0
               AND cc.content_book_id = 0
               AND cc.created_date BETWEEN ? AND ?
+            ORDER BY cc.created_date DESC, cc.id DESC
         """
         let rows = try Row.fetchAll(db, sql: sql, arguments: [startTimestamp, endTimestamp])
         return rows.map { row in
@@ -264,7 +364,7 @@ private extension ContentRepository {
             FROM note n
             JOIN book b ON b.id = n.book_id AND b.is_deleted = 0
             WHERE n.book_id = ? AND n.is_deleted = 0
-            ORDER BY n.created_date DESC
+            ORDER BY n.created_date DESC, n.id DESC
         """
         let rows = try Row.fetchAll(db, sql: sql, arguments: [bookId])
         return rows.map { row in
@@ -508,18 +608,6 @@ private extension ContentRepository {
             ORDER BY t.tag_order ASC, tn.id ASC
         """
         return try String.fetchAll(db, sql: sql, arguments: [noteId])
-    }
-
-    /// 把统一 itemID 压缩成稳定比较键，用于时间戳相同场景下的分页排序。
-    nonisolated func feedSortKey(_ itemID: ContentViewerItemID) -> Int64 {
-        switch itemID {
-        case .note(let id):
-            id * 10 + 1
-        case .review(let id):
-            id * 10 + 2
-        case .relevant(let id):
-            id * 10 + 3
-        }
     }
 
     /// 读取阶段统一清理尾部空白与换行，避免 viewer 页尾部出现额外空段。

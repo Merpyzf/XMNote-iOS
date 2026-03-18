@@ -15,6 +15,10 @@ final class ContentViewerViewModel {
         let deletedItemID: ContentViewerItemID
         let deletedIndex: Int
     }
+    private enum CachePolicy {
+        static let keepRadius = 5
+        static let maxEntries = 80
+    }
 
     let source: ContentViewerSourceContext
 
@@ -33,16 +37,22 @@ final class ContentViewerViewModel {
     private var listObservationTask: Task<Void, Never>?
 
     private let initialItemID: ContentViewerItemID
+    private let defaultTitle: String
+    private let missingItemMessage: String
     private let repository: any ContentRepositoryProtocol
 
     /// 注入 viewer 来源、初始项与仓储，建立分页状态初始化上下文。
     init(
         source: ContentViewerSourceContext,
         initialItemID: ContentViewerItemID,
+        defaultTitle: String,
+        missingItemMessage: String,
         repository: any ContentRepositoryProtocol
     ) {
         self.source = source
         self.initialItemID = initialItemID
+        self.defaultTitle = defaultTitle
+        self.missingItemMessage = missingItemMessage
         self.repository = repository
     }
 
@@ -60,7 +70,7 @@ final class ContentViewerViewModel {
         if let detail = selectedDetail {
             return detail.bookTitle
         }
-        return selectedListItem?.bookTitle ?? "内容查看"
+        return selectedListItem?.bookTitle ?? defaultTitle
     }
 
     var selectedBookID: Int64? {
@@ -112,11 +122,11 @@ final class ContentViewerViewModel {
         }
     }
 
-    /// 更新当前分页选择，并主动刷新所选页详情，确保从编辑页返回后内容同步。
+    /// 更新当前分页选择，并按需读取所选页详情，避免切页过程重复强刷新。
     func select(_ itemID: ContentViewerItemID) {
         guard itemID != selectedItemID else { return }
         selectedItemID = itemID
-        Task { await refreshDetail(itemID: itemID) }
+        Task { await loadDetailIfNeeded(itemID: itemID) }
     }
 
     /// 读取单页详情；命中缓存时可跳过，供分页切换和懒加载使用。
@@ -145,6 +155,7 @@ final class ContentViewerViewModel {
             try await repository.delete(itemID: selectedItemID)
             detailCache.removeValue(forKey: selectedItemID)
             detailErrorMessages.removeValue(forKey: selectedItemID)
+            pruneDetailCache(around: self.selectedItemID)
         } catch {
             pendingDeletedSelection = nil
             listErrorMessage = "删除失败：\(error.localizedDescription)"
@@ -187,11 +198,25 @@ private extension ContentViewerViewModel {
         let previousItems = items
         let previousSelectedItemID = selectedItemID
 
+        if hasAppliedInitialSelection,
+           pendingDeletedSelection == nil,
+           newItems == previousItems {
+            isLoadingList = false
+            if let previousSelectedItemID {
+                Task { await refreshDetail(itemID: previousSelectedItemID) }
+            }
+            pruneDetailCache(around: previousSelectedItemID)
+            return
+        }
+
         items = newItems
         isLoadingList = false
 
         guard !newItems.isEmpty else {
             selectedItemID = nil
+            detailCache.removeAll(keepingCapacity: false)
+            detailLoadingIDs.removeAll(keepingCapacity: false)
+            detailErrorMessages.removeAll(keepingCapacity: false)
             if hasAppliedInitialSelection || pendingDeletedSelection != nil {
                 dismissalRequestToken &+= 1
             }
@@ -226,6 +251,7 @@ private extension ContentViewerViewModel {
         }
 
         selectedItemID = resolvedSelection
+        pruneDetailCache(around: resolvedSelection)
         if let resolvedSelection {
             Task { await refreshDetail(itemID: resolvedSelection) }
         }
@@ -244,12 +270,53 @@ private extension ContentViewerViewModel {
         do {
             guard let detail = try await repository.fetchViewerDetail(itemID: itemID) else {
                 detailCache.removeValue(forKey: itemID)
-                detailErrorMessages[itemID] = "内容不存在或已删除"
+                detailErrorMessages[itemID] = missingItemMessage
+                pruneDetailCache(around: selectedItemID ?? itemID)
                 return
             }
             detailCache[itemID] = detail
+            pruneDetailCache(around: selectedItemID ?? itemID)
         } catch {
             detailErrorMessages[itemID] = "加载失败：\(error.localizedDescription)"
+            pruneDetailCache(around: selectedItemID ?? itemID)
+        }
+    }
+
+    /// 维持详情缓存有界：保留当前选中页邻域，裁剪超出窗口与超出上限的数据。
+    func pruneDetailCache(around anchorID: ContentViewerItemID?) {
+        let validItemIDs = Set(items.map(\.id))
+        detailCache = detailCache.filter { validItemIDs.contains($0.key) }
+        detailErrorMessages = detailErrorMessages.filter { validItemIDs.contains($0.key) }
+        detailLoadingIDs = Set(detailLoadingIDs.filter { validItemIDs.contains($0) })
+
+        guard detailCache.count > CachePolicy.maxEntries else { return }
+
+        let removableIDs: [ContentViewerItemID]
+        if let anchorID,
+           let anchorIndex = items.firstIndex(where: { $0.id == anchorID }) {
+            let lowerBound = max(0, anchorIndex - CachePolicy.keepRadius)
+            let upperBound = min(items.count - 1, anchorIndex + CachePolicy.keepRadius)
+            let protectedIDs = Set(items[lowerBound...upperBound].map(\.id))
+            let indexMap = Dictionary(uniqueKeysWithValues: items.enumerated().map { ($0.element.id, $0.offset) })
+
+            removableIDs = detailCache.keys
+                .filter { !protectedIDs.contains($0) }
+                .sorted { lhs, rhs in
+                    let lhsDistance = indexMap[lhs].map { abs($0 - anchorIndex) } ?? .max
+                    let rhsDistance = indexMap[rhs].map { abs($0 - anchorIndex) } ?? .max
+                    return lhsDistance > rhsDistance
+                }
+        } else {
+            removableIDs = Array(detailCache.keys)
+        }
+
+        var overflow = detailCache.count - CachePolicy.maxEntries
+        guard overflow > 0 else { return }
+
+        for id in removableIDs where overflow > 0 {
+            detailCache.removeValue(forKey: id)
+            detailErrorMessages.removeValue(forKey: id)
+            overflow -= 1
         }
     }
 }

@@ -71,9 +71,9 @@ private struct BookDetailContentView: View {
                 if viewModel.hasNotes {
                     ForEach(viewModel.notes) { note in
                         NavigationLink(
-                            value: ContentRoute.noteViewer(
+                            value: ContentRoute.contentViewer(
                                 source: .bookNotes(bookId: bookId),
-                                noteId: note.id
+                                initialItemID: .note(note.id)
                             )
                         ) {
                             noteCard(note)

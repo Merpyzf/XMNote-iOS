@@ -7,6 +7,15 @@
 
 import SwiftUI
 
+/// 沉浸式底部 chrome 的公共尺寸常量，统一控制可视高度与命中目标。
+enum ImmersiveBottomChromeStyle {
+    static let controlHeight: CGFloat = 50
+    static let minimumHitTarget: CGFloat = 44
+    static let iconSize: CGFloat = 16
+    static let ornamentTopPadding: CGFloat = 6
+    static let minimumBottomPadding: CGFloat = 16
+}
+
 /// 底部沉浸 chrome 的滚动补偿与视觉尺寸快照。
 struct ImmersiveBottomChromeMetrics: Equatable {
     let readableInset: CGFloat
@@ -18,9 +27,9 @@ struct ImmersiveBottomChromeMetrics: Equatable {
     static func make(
         measuredOrnamentHeight: CGFloat,
         safeAreaBottomInset: CGFloat,
-        ornamentMinimumTouchHeight: CGFloat = 44,
-        ornamentTopPadding: CGFloat = Spacing.cozy,
-        minimumBottomPadding: CGFloat = Spacing.contentEdge,
+        ornamentMinimumTouchHeight: CGFloat = ImmersiveBottomChromeStyle.controlHeight,
+        ornamentTopPadding: CGFloat = ImmersiveBottomChromeStyle.ornamentTopPadding,
+        minimumBottomPadding: CGFloat = ImmersiveBottomChromeStyle.minimumBottomPadding,
         readableInsetExtra: CGFloat = Spacing.base,
         scrollIndicatorInsetCompensation: CGFloat = Spacing.cozy,
         gradientMinimumHeight: CGFloat = 120,
@@ -44,7 +53,7 @@ struct ImmersiveBottomChromeOverlay<Ornament: View>: View {
     let metrics: ImmersiveBottomChromeMetrics
     var surfaceColor: Color = .surfacePage
     var horizontalPadding: CGFloat = Spacing.screenEdge
-    var ornamentTopPadding: CGFloat = Spacing.cozy
+    var ornamentTopPadding: CGFloat = ImmersiveBottomChromeStyle.ornamentTopPadding
     @ViewBuilder let ornament: Ornament
 
     var body: some View {
@@ -83,9 +92,12 @@ struct ImmersiveBottomChromeIcon: View {
 
     var body: some View {
         Image(systemName: systemName)
-            .font(.system(size: 16, weight: .semibold))
+            .font(.system(size: ImmersiveBottomChromeStyle.iconSize, weight: .semibold))
             .foregroundStyle(foregroundStyle)
-            .frame(width: 44, height: 44)
+            .frame(
+                width: ImmersiveBottomChromeStyle.minimumHitTarget,
+                height: ImmersiveBottomChromeStyle.minimumHitTarget
+            )
             .contentShape(Circle())
     }
 }

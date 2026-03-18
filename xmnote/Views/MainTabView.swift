@@ -236,8 +236,6 @@ struct MainTabView: View {
     @ViewBuilder
     private func contentDestination(for route: ContentRoute) -> some View {
         switch route {
-        case .noteViewer(let source, let noteId):
-            NoteViewerView(source: source, initialNoteID: noteId)
         case .contentViewer(let source, let initialItemID):
             ContentViewerView(source: source, initialItemID: initialItemID)
         case .reviewDetail(let reviewId):
@@ -369,18 +367,7 @@ struct MainTabView: View {
         for source: ContentViewerSourceContext,
         initialItem: ContentViewerItemID
     ) -> ContentRoute {
-        switch source {
-        case .bookNotes:
-            if case .note(let noteId) = initialItem {
-                return .noteViewer(source: source, noteId: noteId)
-            }
-            return .contentViewer(source: source, initialItemID: initialItem)
-        case .timeline(_, _, let filter):
-            if filter == .note, case .note(let noteId) = initialItem {
-                return .noteViewer(source: source, noteId: noteId)
-            }
-            return .contentViewer(source: source, initialItemID: initialItem)
-        }
+        .contentViewer(source: source, initialItemID: initialItem)
     }
 }
 
