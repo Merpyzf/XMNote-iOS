@@ -1,0 +1,100 @@
+/**
+ * [INPUT]: 依赖 SwiftUI 安全区扩展能力与 DesignTokens 颜色、间距令牌
+ * [OUTPUT]: 对外提供 ImmersiveBottomChromeMetrics、ImmersiveBottomChromeOverlay 与 ImmersiveBottomChromeIcon，承接查看页底部沉浸渐变与悬浮 chrome
+ * [POS]: UIComponents/Foundation 的沉浸式底部表层组件，被书摘查看与通用内容查看复用
+ * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
+ */
+
+import SwiftUI
+
+/// 底部沉浸 chrome 的滚动补偿与视觉尺寸快照。
+struct ImmersiveBottomChromeMetrics: Equatable {
+    let readableInset: CGFloat
+    let scrollIndicatorInset: CGFloat
+    let gradientHeight: CGFloat
+    let bottomPadding: CGFloat
+
+    /// 根据实测 ornament 高度与底部安全区计算正文可读留白、滚动条避让和渐变高度。
+    static func make(
+        measuredOrnamentHeight: CGFloat,
+        safeAreaBottomInset: CGFloat,
+        ornamentMinimumTouchHeight: CGFloat = 44,
+        ornamentTopPadding: CGFloat = Spacing.cozy,
+        minimumBottomPadding: CGFloat = Spacing.contentEdge,
+        readableInsetExtra: CGFloat = Spacing.base,
+        scrollIndicatorInsetCompensation: CGFloat = Spacing.cozy,
+        gradientMinimumHeight: CGFloat = 120,
+        gradientExtraHeight: CGFloat = Spacing.section
+    ) -> Self {
+        let bottomPadding = max(safeAreaBottomInset, minimumBottomPadding)
+        let estimatedOrnamentHeight = ornamentTopPadding + ornamentMinimumTouchHeight + bottomPadding
+        let resolvedOrnamentHeight = max(measuredOrnamentHeight, estimatedOrnamentHeight)
+
+        return Self(
+            readableInset: resolvedOrnamentHeight + readableInsetExtra,
+            scrollIndicatorInset: max(minimumBottomPadding, resolvedOrnamentHeight - scrollIndicatorInsetCompensation),
+            gradientHeight: max(gradientMinimumHeight, resolvedOrnamentHeight + gradientExtraHeight),
+            bottomPadding: bottomPadding
+        )
+    }
+}
+
+/// 通用底部沉浸 overlay，统一承接渐变托底与悬浮 ornament 的安全区延展。
+struct ImmersiveBottomChromeOverlay<Ornament: View>: View {
+    let metrics: ImmersiveBottomChromeMetrics
+    var surfaceColor: Color = .surfacePage
+    var horizontalPadding: CGFloat = Spacing.screenEdge
+    var ornamentTopPadding: CGFloat = Spacing.cozy
+    @ViewBuilder let ornament: Ornament
+
+    var body: some View {
+        ZStack(alignment: .bottom) {
+            LinearGradient(
+                colors: [
+                    surfaceColor.opacity(0),
+                    surfaceColor.opacity(0.82),
+                    surfaceColor
+                ],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+            .frame(maxWidth: .infinity)
+            .frame(height: metrics.gradientHeight)
+            .allowsHitTesting(false)
+
+            HStack {
+                Spacer(minLength: 0)
+                ornament
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, horizontalPadding)
+            .padding(.top, ornamentTopPadding)
+            .padding(.bottom, metrics.bottomPadding)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+        .ignoresSafeArea(edges: .bottom)
+    }
+}
+
+/// 沉浸式底部 ornament 的统一图标尺寸与点击热区。
+struct ImmersiveBottomChromeIcon: View {
+    let systemName: String
+    var foregroundStyle: Color = .textPrimary
+
+    var body: some View {
+        Image(systemName: systemName)
+            .font(.system(size: 16, weight: .semibold))
+            .foregroundStyle(foregroundStyle)
+            .frame(width: 44, height: 44)
+            .contentShape(Circle())
+    }
+}
+
+/// 底部 ornament 高度偏好键，供页面将测量值回写到滚动补偿计算。
+struct ImmersiveBottomChromeHeightPreferenceKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = max(value, nextValue())
+    }
+}

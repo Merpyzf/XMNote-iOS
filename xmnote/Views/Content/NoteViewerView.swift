@@ -61,21 +61,41 @@ private struct NoteViewerLoadedView: View {
     @State private var bottomOrnamentHeight: CGFloat = 0
 
     var body: some View {
-        Group {
-            if viewModel.items.isEmpty {
-                emptyState
-            } else {
-                pager
+        GeometryReader { proxy in
+            let safeAreaBottomInset = proxy.safeAreaInsets.bottom
+
+            NoteViewerContentView(
+                props: contentProps,
+                bottomChromeMetrics: bottomChromeMetrics(safeAreaBottomInset: safeAreaBottomInset),
+                onPagerSelectionChanged: { viewModel.select($0) },
+                onLoadDetail: { noteID in
+                    await viewModel.loadDetailIfNeeded(noteID: noteID)
+                },
+                onRefreshDetail: { noteID in
+                    await viewModel.refreshDetail(noteID: noteID)
+                }
+            )
+            .background(
+                Color.surfacePage.ignoresSafeArea(edges: .bottom)
+            )
+            .navigationTitle("")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar { toolbarContent }
+            .overlay {
+                if viewModel.isDeleting {
+                    Color.overlay.ignoresSafeArea()
+                    ProgressView("正在删除…")
+                        .padding(Spacing.contentEdge)
+                        .background(
+                            Color.surfaceCard,
+                            in: RoundedRectangle(cornerRadius: CornerRadius.blockLarge, style: .continuous)
+                        )
+                }
             }
-        }
-        .background(Color.surfacePage)
-        .navigationTitle("")
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbar { toolbarContent }
-        .ignoresSafeArea(edges: .bottom)
-        .overlay(alignment: .bottom) {
-            if !viewModel.items.isEmpty {
-                bottomOrnament
+            .overlay(alignment: .bottom) {
+                if !viewModel.items.isEmpty {
+                    bottomOverlay(safeAreaBottomInset: safeAreaBottomInset)
+                }
             }
         }
         .confirmationDialog("删除当前书摘？", isPresented: $showsDeleteDialog) {
@@ -97,57 +117,12 @@ private struct NoteViewerLoadedView: View {
         .sheet(item: $sharePayload) { payload in
             ActivityShareSheet(activityItems: [payload.text])
         }
-        .onPreferenceChange(NoteViewerBottomOrnamentHeightKey.self) { height in
+        .onPreferenceChange(ImmersiveBottomChromeHeightPreferenceKey.self) { height in
             bottomOrnamentHeight = height
         }
-    }
-
-    @ViewBuilder
-    private var emptyState: some View {
-        VStack(spacing: Spacing.base) {
-            if viewModel.isLoadingList {
-                ProgressView("正在加载书摘…")
-            } else {
-                Image(systemName: "text.quote")
-                    .font(.system(size: 28, weight: .semibold))
-                    .foregroundStyle(.secondary)
-                Text(viewModel.listErrorMessage ?? "书摘不存在或已删除")
-                    .font(AppTypography.body)
-                    .foregroundStyle(.secondary)
-            }
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-    }
-
-    private var pager: some View {
-        let fallbackSelection = viewModel.selectedNoteID ?? viewModel.items.first?.noteID ?? 0
-        return TabView(
-            selection: Binding(
-                get: { viewModel.selectedNoteID ?? fallbackSelection },
-                set: { viewModel.select($0) }
-            )
-        ) {
-            ForEach(viewModel.items) { item in
-                NoteViewerPage(
-                    noteID: item.noteID,
-                    viewModel: viewModel,
-                    bottomOverlayHeight: bottomOrnamentHeight
-                )
-                .tag(item.noteID)
-            }
-        }
-        .tabViewStyle(.page(indexDisplayMode: .never))
-        .ignoresSafeArea(.container, edges: .bottom)
-        .overlay {
-            if viewModel.isDeleting {
-                Color.overlay.ignoresSafeArea()
-                ProgressView("正在删除…")
-                    .padding(Spacing.contentEdge)
-                    .background(
-                        Color.surfaceCard,
-                        in: RoundedRectangle(cornerRadius: CornerRadius.blockLarge, style: .continuous)
-                    )
-            }
+        .task(id: viewModel.selectedNoteID) {
+            guard let selectedNoteID = viewModel.selectedNoteID else { return }
+            await viewModel.prefetchDetails(around: selectedNoteID, radius: 1)
         }
     }
 
@@ -167,72 +142,78 @@ private struct NoteViewerLoadedView: View {
         }
     }
 
+    private func bottomOverlay(safeAreaBottomInset: CGFloat) -> some View {
+        ImmersiveBottomChromeOverlay(
+            metrics: bottomChromeMetrics(safeAreaBottomInset: safeAreaBottomInset)
+        ) {
+            bottomOrnament
+        }
+    }
+
     private var bottomOrnament: some View {
-        HStack {
-            Spacer(minLength: 0)
-
-            GlassEffectContainer(spacing: Spacing.base) {
-                HStack(spacing: Spacing.base) {
-                    HStack(spacing: Spacing.cozy) {
-                        Button {
-                            showsTagSheet = true
-                        } label: {
-                            NoteViewerOrnamentIcon(systemName: "tag")
-                        }
-                        .buttonStyle(.plain)
-                        .disabled(viewModel.selectedTagNames.isEmpty)
-                        .accessibilityLabel("查看标签")
-
-                        if let noteID = viewModel.selectedNoteID {
-                            NavigationLink(value: NoteRoute.edit(noteId: noteID)) {
-                                NoteViewerOrnamentIcon(systemName: "square.and.pencil")
-                            }
-                            .buttonStyle(.plain)
-                            .accessibilityLabel("编辑书摘")
-                        } else {
-                            NoteViewerOrnamentIcon(systemName: "square.and.pencil")
-                                .opacity(0.4)
-                        }
-
-                        Button {
-                            guard let detail = viewModel.selectedDetail else { return }
-                            sharePayload = NoteViewerSharePayload(text: shareText(from: detail))
-                        } label: {
-                            NoteViewerOrnamentIcon(systemName: "square.and.arrow.up")
-                        }
-                        .buttonStyle(.plain)
-                        .disabled(viewModel.selectedDetail == nil)
-                        .accessibilityLabel("分享书摘")
-                    }
-                    .padding(.horizontal, Spacing.base)
-                    .glassEffect(.regular.interactive(), in: .capsule)
-
-                    Button(role: .destructive) {
-                        showsDeleteDialog = true
+        GlassEffectContainer(spacing: Spacing.base) {
+            HStack(spacing: Spacing.base) {
+                HStack(spacing: Spacing.cozy) {
+                    Button {
+                        showsTagSheet = true
                     } label: {
-                        NoteViewerOrnamentIcon(
-                            systemName: "trash",
-                            foregroundStyle: Color.feedbackError
-                        )
+                        ImmersiveBottomChromeIcon(systemName: "tag")
                     }
                     .buttonStyle(.plain)
-                    .disabled(viewModel.selectedNoteID == nil || viewModel.isDeleting)
-                    .glassEffect(.regular.interactive(), in: .circle)
-                    .accessibilityLabel("删除书摘")
-                }
-            }
+                    .disabled(viewModel.selectedTagNames.isEmpty)
+                    .accessibilityLabel("查看标签")
 
-            Spacer(minLength: 0)
+                    if let noteID = viewModel.selectedNoteID {
+                        NavigationLink(value: NoteRoute.edit(noteId: noteID)) {
+                            ImmersiveBottomChromeIcon(systemName: "square.and.pencil")
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("编辑书摘")
+                    } else {
+                        ImmersiveBottomChromeIcon(systemName: "square.and.pencil")
+                            .opacity(0.4)
+                    }
+
+                    Button {
+                        guard let detail = viewModel.selectedDetail else { return }
+                        sharePayload = NoteViewerSharePayload(text: shareText(from: detail))
+                    } label: {
+                        ImmersiveBottomChromeIcon(systemName: "square.and.arrow.up")
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(viewModel.selectedDetail == nil)
+                    .accessibilityLabel("分享书摘")
+                }
+                .padding(.horizontal, Spacing.base)
+                .glassEffect(.regular.interactive(), in: .capsule)
+
+                Button(role: .destructive) {
+                    showsDeleteDialog = true
+                } label: {
+                    ImmersiveBottomChromeIcon(
+                        systemName: "trash",
+                        foregroundStyle: Color.feedbackError
+                    )
+                }
+                .buttonStyle(.plain)
+                .disabled(viewModel.selectedNoteID == nil || viewModel.isDeleting)
+                .glassEffect(.regular.interactive(), in: .circle)
+                .accessibilityLabel("删除书摘")
+            }
         }
-        .padding(.horizontal, Spacing.screenEdge)
-        .padding(.top, Spacing.cozy)
-        .padding(.bottom, Spacing.micro)
         .background {
             GeometryReader { proxy in
                 Color.clear
-                    .preference(key: NoteViewerBottomOrnamentHeightKey.self, value: proxy.size.height)
+                    .preference(key: ImmersiveBottomChromeHeightPreferenceKey.self, value: proxy.size.height)
             }
         }
+    }
+
+    private func bottomChromeMetrics(safeAreaBottomInset: CGFloat) -> ImmersiveBottomChromeMetrics {
+        ImmersiveBottomChromeMetrics.make(
+            measuredOrnamentHeight: bottomOrnamentHeight,
+            safeAreaBottomInset: safeAreaBottomInset
+        )
     }
 
     private func shareText(from detail: NoteContentDetail) -> String {
@@ -256,58 +237,38 @@ private struct NoteViewerLoadedView: View {
 
         return sections.joined(separator: "\n\n")
     }
-}
 
-private struct NoteViewerBottomOrnamentHeightKey: PreferenceKey {
-    static var defaultValue: CGFloat = 0
-
-    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
-        value = max(value, nextValue())
+    private var contentProps: NoteViewerContentView.Props {
+        NoteViewerContentView.Props(
+            selectedNoteID: viewModel.selectedNoteID,
+            listState: listState,
+            notePages: visibleNoteItems.map(makeNotePage)
+        )
     }
-}
 
-private struct NoteViewerPage: View {
-    let noteID: Int64
-    @Bindable var viewModel: NoteViewerViewModel
-    let bottomOverlayHeight: CGFloat
+    private var visibleNoteItems: [ContentViewerListItem] {
+        viewModel.visibleNoteItems(radius: 3)
+    }
 
-    var body: some View {
-        let immersiveBottomInset = Spacing.none
-        let readableTailBuffer = max(Spacing.half, bottomOverlayHeight + Spacing.micro)
-
-        ScrollView {
-            VStack(alignment: .leading, spacing: Spacing.base) {
-                switch contentState {
-                case .loading:
-                    ProgressView("正在加载书摘…")
-                        .frame(maxWidth: .infinity, minHeight: 320)
-                case .error(let message):
-                    viewerMessageCard(text: message)
-                case .detail(let detail):
-                    noteDetailView(detail)
-                }
+    private var listState: NoteViewerContentView.Props.ListState {
+        if viewModel.items.isEmpty {
+            if viewModel.isLoadingList {
+                return .loading
             }
-            .padding(.horizontal, Spacing.screenEdge)
-            .padding(.top, Spacing.base)
-            .padding(.bottom, immersiveBottomInset)
-
-            Color.clear
-                .frame(height: readableTailBuffer)
+            return .empty(viewModel.listErrorMessage ?? "书摘不存在或已删除")
         }
-        .background(Color.surfacePage)
-        .contentMargins(.bottom, Spacing.none, for: .scrollContent)
-        .contentMargins(.bottom, Spacing.none, for: .scrollIndicators)
-        .ignoresSafeArea(.container, edges: .bottom)
-        .task(id: noteID) {
-            await viewModel.loadDetailIfNeeded(noteID: noteID)
-        }
-        .onAppear {
-            guard viewModel.selectedNoteID == noteID else { return }
-            Task { await viewModel.refreshDetail(noteID: noteID) }
-        }
+        return .content
     }
 
-    private var contentState: NoteContentPageState {
+    private func makeNotePage(_ item: ContentViewerListItem) -> NoteViewerContentView.Props.NotePage {
+        NoteViewerContentView.Props.NotePage(
+            noteID: item.noteID,
+            state: pageState(for: item.noteID),
+            isSelected: item.noteID == viewModel.selectedNoteID
+        )
+    }
+
+    private func pageState(for noteID: Int64) -> NoteViewerContentView.Props.NotePageState {
         if let detail = viewModel.detail(for: noteID) {
             return .detail(detail)
         }
@@ -316,133 +277,9 @@ private struct NoteViewerPage: View {
         }
         return .loading
     }
-
-    private func noteDetailView(_ detail: NoteContentDetail) -> some View {
-        VStack(alignment: .leading, spacing: Spacing.base) {
-            noteMeta(detail)
-
-            if TimelineMeaningfulPreview.hasMeaningfulHTML(detail.contentHTML) {
-                RichText(
-                    html: detail.contentHTML,
-                    baseFont: AppTypography.uiSemantic(.body),
-                    textColor: UIColor.label,
-                    lineSpacing: 5
-                )
-                .frame(maxWidth: .infinity, alignment: .leading)
-            }
-
-            if TimelineMeaningfulPreview.hasMeaningfulHTML(detail.ideaHTML) {
-                RichText(
-                    html: detail.ideaHTML,
-                    baseFont: AppTypography.uiSemantic(.body),
-                    textColor: UIColor(Color.textSecondary),
-                    lineSpacing: 5
-                )
-                .padding(Spacing.cozy)
-                .background(
-                    Color.surfaceCard,
-                    in: RoundedRectangle(cornerRadius: CornerRadius.blockMedium, style: .continuous)
-                )
-            }
-
-            if !detail.imageURLs.isEmpty {
-                ContentImageWall(
-                    imageURLs: detail.imageURLs,
-                    prefix: "note"
-                )
-            }
-
-            if let footer = footerText(for: detail), !footer.isEmpty {
-                Text(footer)
-                    .font(AppTypography.caption)
-                    .foregroundStyle(Color.textSecondary)
-                    .multilineTextAlignment(.leading)
-                    .padding(.top, Spacing.half)
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-    }
-
-    @ViewBuilder
-    private func noteMeta(_ detail: NoteContentDetail) -> some View {
-        if detail.includeTime || !detail.tagNames.isEmpty {
-            VStack(alignment: .leading, spacing: Spacing.cozy) {
-                if detail.includeTime, let dateText = formattedDate(detail.createdDate) {
-                    Text(dateText)
-                        .font(AppTypography.caption)
-                        .foregroundStyle(Color.textSecondary)
-                }
-
-                if !detail.tagNames.isEmpty {
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(spacing: Spacing.tight) {
-                            ForEach(detail.tagNames, id: \.self) { tag in
-                                Text(tag)
-                                    .font(AppTypography.caption2)
-                                    .foregroundStyle(Color.textSecondary)
-                                    .padding(.horizontal, Spacing.cozy)
-                                    .padding(.vertical, Spacing.compact)
-                                    .background(Color.tagBackground, in: Capsule())
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    private func footerText(for detail: NoteContentDetail) -> String? {
-        var parts: [String] = []
-
-        if !detail.position.isEmpty {
-            let positionLabel: String
-            switch detail.positionUnit {
-            case 1:
-                positionLabel = "位置"
-            case 2:
-                positionLabel = "页码"
-            default:
-                positionLabel = "进度"
-            }
-            let value = detail.positionUnit == 3 ? "\(detail.position)%" : detail.position
-            parts.append("\(positionLabel)：\(value)")
-        }
-
-        if !detail.chapterTitle.isEmpty {
-            parts.append("章节：\(detail.chapterTitle)")
-        }
-
-        return parts.isEmpty ? nil : parts.joined(separator: "\n")
-    }
-
-    private func formattedDate(_ timestamp: Int64) -> String? {
-        guard timestamp > 0 else { return nil }
-        return ContentDetailDateFormatter.full.string(
-            from: Date(timeIntervalSince1970: TimeInterval(timestamp) / 1000)
-        )
-    }
 }
 
-private enum NoteContentPageState {
-    case loading
-    case error(String)
-    case detail(NoteContentDetail)
-}
-
-private struct NoteViewerOrnamentIcon: View {
-    let systemName: String
-    var foregroundStyle: Color = .textPrimary
-
-    var body: some View {
-        Image(systemName: systemName)
-            .font(.system(size: 16, weight: .semibold))
-            .foregroundStyle(foregroundStyle)
-            .frame(width: 44, height: 44)
-            .contentShape(Circle())
-    }
-}
-
-private struct NoteViewerTagSheet: View {
+struct NoteViewerTagSheet: View {
     let tags: [String]
     let onDismiss: () -> Void
 
@@ -471,7 +308,7 @@ private struct NoteViewerTagSheet: View {
     }
 }
 
-private struct FlowTagWrap: View {
+struct FlowTagWrap: View {
     let tags: [String]
 
     var body: some View {
@@ -504,7 +341,7 @@ private struct NoteViewerSharePayload: Identifiable {
     let id = UUID()
 }
 
-private struct ActivityShareSheet: UIViewControllerRepresentable {
+struct ActivityShareSheet: UIViewControllerRepresentable {
     let activityItems: [Any]
 
     func makeUIViewController(context: Context) -> UIActivityViewController {

@@ -6,6 +6,7 @@
 - Foundation/RichText.swift: 提供只读 HTML 富文本展示组件（完整富文本排版、截断检测与布局缓存）。
 - Foundation/CollapsedRichTextPreview.swift: 提供 ExpandableRichText 收起态轻量预览组件（UILabel 截断 + 展开按钮）。
 - Foundation/ExpandableRichText.swift: 提供可展开/收起 HTML 富文本组件（完整态与轻量收起态双通道）。
+- Foundation/ImmersiveBottomChrome.swift: 提供底部沉浸遮罩与悬浮 ornament 组件（渐变托底、安全区延展、滚动补偿与统一图标热区）。
 - TopBar/PrimaryTopBar.swift: 提供顶部栏布局容器（PrimaryTopBar）。
 - TopBar/TopBarActionIcon.swift: 提供顶部栏图标组件（TopBarActionIcon）。
 - TopBar/AddMenuCircleButton.swift: 提供顶部添加菜单组件（AddMenuCircleButton）。

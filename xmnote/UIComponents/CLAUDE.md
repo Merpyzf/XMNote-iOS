@@ -13,6 +13,7 @@
 - `RichText.swift`: 只读 HTML 富文本展示组件（`UITextView + RichTextLayoutManager`，支持截断状态回调与布局缓存）
 - `CollapsedRichTextPreview.swift`: ExpandableRichText 收起态轻量预览组件（`UILabel` + 原生省略号截断）
 - `ExpandableRichText.swift`: 可展开/收起 HTML 富文本组件（完整态 RichText + 收起态轻量预览双通道）
+- `ImmersiveBottomChrome.swift`: 底部沉浸遮罩与悬浮 ornament 组件（统一渐变托底、安全区延展、滚动补偿与图标热区）
 
 ## TopBar/
 

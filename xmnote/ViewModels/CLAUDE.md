@@ -12,6 +12,7 @@ ViewModel 层目录，统一承载页面状态管理与业务编排逻辑。按 
 ## 当前子目录
 
 - `Book/`: 书籍模块 ViewModel
+- `Content/`: 书摘/书评/相关内容查看与编辑 ViewModel
 - `Note/`: 笔记模块 ViewModel
 - `Personal/`: 个人模块 ViewModel（含 `Backup/`）
 - `Reading/`: 在读模块 ViewModel（含 `ReadCalendar/`）

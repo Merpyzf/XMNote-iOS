@@ -11,6 +11,7 @@
 | ExpandableRichText | `xmnote/UIComponents/Foundation/ExpandableRichText.swift` | `docs/component-guides/ExpandableRichText使用说明.md` | 已完成 |
 | RichText | `xmnote/UIComponents/Foundation/RichText.swift` | `docs/component-guides/ExpandableRichText使用说明.md` | 已完成 |
 | CollapsedRichTextPreview | `xmnote/UIComponents/Foundation/CollapsedRichTextPreview.swift` | `docs/component-guides/ExpandableRichText使用说明.md` | 已完成 |
+| ImmersiveBottomChrome | `xmnote/UIComponents/Foundation/ImmersiveBottomChrome.swift` | `docs/component-guides/ImmersiveBottomChrome使用说明.md` | 已完成 |
 | XMJXImageWall | `xmnote/UIComponents/GalleryJX/XMJXImageWall.swift` | `docs/component-guides/XMJXImageWall使用说明.md` | 已完成 |
 | XMJXThumbnailView | `xmnote/UIComponents/GalleryJX/XMJXThumbnailView.swift` | `docs/component-guides/XMJXThumbnailView使用说明.md` | 已完成 |
 | BookContainerView | `xmnote/Views/Book/BookContainerView.swift` | `docs/component-guides/BookContainerView使用说明.md` | 已完成 |

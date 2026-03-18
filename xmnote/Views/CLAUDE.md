@@ -10,6 +10,7 @@ SwiftUI 视图层，按功能模块分子目录组织页面壳层、页面私有
 ## 子目录
 
 - `Book/`: 书籍管理视图
+- `Content/`: 书摘/书评/相关内容查看与编辑视图
 - `Note/`: 笔记管理视图
 - `Personal/`: 个人设置视图（含 Backup/ 子目录）
 - `Reading/`: 在读追踪视图（含 ReadCalendar/ 子功能）

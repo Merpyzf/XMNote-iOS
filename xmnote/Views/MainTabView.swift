@@ -238,6 +238,8 @@ struct MainTabView: View {
         switch route {
         case .noteViewer(let source, let noteId):
             NoteViewerView(source: source, initialNoteID: noteId)
+        case .contentViewer(let source, let initialItemID):
+            ContentViewerView(source: source, initialItemID: initialItemID)
         case .reviewDetail(let reviewId):
             ReviewDetailView(reviewId: reviewId)
         case .relevantDetail(let contentId):
@@ -367,25 +369,17 @@ struct MainTabView: View {
         for source: ContentViewerSourceContext,
         initialItem: ContentViewerItemID
     ) -> ContentRoute {
-        switch initialItem {
-        case .note(let noteId):
-            switch source {
-            case .timeline(let startTimestamp, let endTimestamp, _):
-                .noteViewer(
-                    source: .timeline(
-                        startTimestamp: startTimestamp,
-                        endTimestamp: endTimestamp,
-                        filter: .note
-                    ),
-                    noteId: noteId
-                )
-            case .bookNotes:
-                .noteViewer(source: source, noteId: noteId)
+        switch source {
+        case .bookNotes:
+            if case .note(let noteId) = initialItem {
+                return .noteViewer(source: source, noteId: noteId)
             }
-        case .review(let reviewId):
-            .reviewDetail(reviewId: reviewId)
-        case .relevant(let contentId):
-            .relevantDetail(contentId: contentId)
+            return .contentViewer(source: source, initialItemID: initialItem)
+        case .timeline(_, _, let filter):
+            if filter == .note, case .note(let noteId) = initialItem {
+                return .noteViewer(source: source, noteId: noteId)
+            }
+            return .contentViewer(source: source, initialItemID: initialItem)
         }
     }
 }

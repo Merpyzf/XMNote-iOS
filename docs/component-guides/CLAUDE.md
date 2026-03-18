@@ -12,6 +12,7 @@
 - `XMBookCover使用说明.md`: XMBookCover 统一书籍封面组件接入指南与参数说明。
 - `BookCoverProgressBar使用说明.md`: BookCoverProgressBar 封面进度条组件接入指南与参数说明。
 - `ExpandableRichText使用说明.md`: ExpandableRichText / RichText 富文本展示组件接入指南与参数说明。
+- `ImmersiveBottomChrome使用说明.md`: ImmersiveBottomChrome 底部沉浸遮罩与 ornament 组件接入指南与参数说明。
 - `XMJXImageWall使用说明.md`: XMJXImageWall 图片墙组件接入指南与参数说明。
 - `XMJXThumbnailView使用说明.md`: XMJXThumbnailView 缩略图桥接组件接入指南与参数说明。
 - `BookContainerView使用说明.md`: BookContainerView 页面组件接入指南与参数说明。

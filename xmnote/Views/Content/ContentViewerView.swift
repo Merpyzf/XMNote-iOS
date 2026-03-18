@@ -53,470 +53,357 @@ private struct ContentViewerLoadedView: View {
     @Bindable var viewModel: ContentViewerViewModel
     @Binding var showsDeleteDialog: Bool
 
+    @Environment(\.openURL) private var openURL
+
+    @State private var bottomOrnamentHeight: CGFloat = 0
+    @State private var showsTagSheet = false
+    @State private var sharePayload: ContentViewerSharePayload?
+
     var body: some View {
-        Group {
-            if viewModel.items.isEmpty {
-                emptyState
-            } else {
-                pager
+        GeometryReader { proxy in
+            let safeAreaBottomInset = proxy.safeAreaInsets.bottom
+
+            VStack(spacing: Spacing.none) {
+                if let listErrorMessage = viewModel.listErrorMessage,
+                   !listErrorMessage.isEmpty,
+                   !viewModel.items.isEmpty {
+                    viewerMessageCard(text: listErrorMessage)
+                        .padding(.horizontal, Spacing.screenEdge)
+                        .padding(.top, Spacing.base)
+                }
+
+                ContentViewerContentView(
+                    props: contentProps,
+                    bottomChromeMetrics: bottomChromeMetrics(safeAreaBottomInset: safeAreaBottomInset),
+                    onPagerSelectionChanged: { viewModel.select($0) },
+                    onLoadDetail: { itemID in
+                        await viewModel.loadDetailIfNeeded(itemID: itemID)
+                    },
+                    onRefreshDetail: { itemID in
+                        await viewModel.refreshDetail(itemID: itemID)
+                    }
+                )
             }
-        }
-        .background(Color.surfacePage)
-        .navigationTitle("")
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbar { toolbarContent }
-        .safeAreaInset(edge: .bottom) {
-            if !viewModel.items.isEmpty {
-                bottomToolbar
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+            .background(
+                Color.surfacePage.ignoresSafeArea(edges: .bottom)
+            )
+            .navigationTitle("")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar { toolbarContent }
+            .overlay {
+                if viewModel.isDeleting {
+                    Color.overlay.ignoresSafeArea()
+                    ProgressView("正在删除…")
+                        .padding(Spacing.contentEdge)
+                        .background(
+                            Color.surfaceCard,
+                            in: RoundedRectangle(cornerRadius: CornerRadius.blockLarge, style: .continuous)
+                        )
+                }
+            }
+            .overlay(alignment: .bottom) {
+                if !viewModel.items.isEmpty {
+                    bottomOverlay(safeAreaBottomInset: safeAreaBottomInset)
+                }
             }
         }
         .confirmationDialog("删除当前内容？", isPresented: $showsDeleteDialog) {
             Button("删除", role: .destructive) {
                 Task { await viewModel.deleteCurrentItem() }
             }
-            Button("取消", role: .cancel) { }
+            Button("取消", role: .cancel) {}
         } message: {
             Text("iOS 端当前按硬删除实现，主记录和子记录会一起删除。")
         }
-    }
-
-    @ViewBuilder
-    private var emptyState: some View {
-        VStack(spacing: Spacing.base) {
-            if viewModel.isLoadingList {
-                ProgressView("正在加载内容…")
-            } else {
-                Image(systemName: "doc.text.magnifyingglass")
-                    .font(.system(size: 28, weight: .semibold))
-                    .foregroundStyle(.secondary)
-                Text(viewModel.listErrorMessage ?? "内容不存在或已删除")
-                    .font(AppTypography.body)
-                    .foregroundStyle(.secondary)
-            }
+        .sheet(isPresented: $showsTagSheet) {
+            NoteViewerTagSheet(
+                tags: selectedTagNames,
+                onDismiss: { showsTagSheet = false }
+            )
+            .presentationDetents([.height(220)])
+            .presentationDragIndicator(.visible)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-    }
-
-    private var pager: some View {
-        let fallbackSelection = viewModel.selectedItemID ?? viewModel.items.first?.id ?? initialFallbackSelection
-        return VStack(spacing: Spacing.none) {
-            if let listErrorMessage = viewModel.listErrorMessage, !listErrorMessage.isEmpty {
-                viewerMessageCard(text: listErrorMessage)
-                    .padding(.horizontal, Spacing.screenEdge)
-                    .padding(.top, Spacing.base)
-            }
-
-            TabView(
-                selection: Binding(
-                    get: { viewModel.selectedItemID ?? fallbackSelection },
-                    set: { viewModel.select($0) }
-                )
-            ) {
-                ForEach(viewModel.items) { item in
-                    ContentViewerPage(
-                        item: item,
-                        viewModel: viewModel
-                    )
-                    .tag(item.id)
-                }
-            }
-            .tabViewStyle(.page(indexDisplayMode: .never))
+        .sheet(item: $sharePayload) { payload in
+            ActivityShareSheet(activityItems: [payload.text])
         }
-        .overlay {
-            if viewModel.isDeleting {
-                Color.overlay.ignoresSafeArea()
-                ProgressView("正在删除…")
-                    .padding(Spacing.contentEdge)
-                    .background(
-                        Color.surfaceCard,
-                        in: RoundedRectangle(cornerRadius: CornerRadius.blockLarge, style: .continuous)
-                    )
-            }
+        .onPreferenceChange(ImmersiveBottomChromeHeightPreferenceKey.self) { height in
+            bottomOrnamentHeight = height
         }
-    }
-
-    private var initialFallbackSelection: ContentViewerItemID {
-        .note(0)
+        .task(id: viewModel.selectedItemID) {
+            guard let selectedItemID = viewModel.selectedItemID else { return }
+            await viewModel.prefetchDetails(around: selectedItemID, radius: 1)
+        }
     }
 
     @ToolbarContentBuilder
     private var toolbarContent: some ToolbarContent {
         ToolbarItem(placement: .principal) {
             ContentViewerNavigationTitle(pageProgress: viewModel.selectedPageProgress) {
-                contentViewerTitleLabel(viewModel.selectedBookTitle)
+                if let selectedBookID = viewModel.selectedBookID {
+                    NavigationLink(value: BookRoute.detail(bookId: selectedBookID)) {
+                        contentViewerTitleLabel(viewModel.selectedBookTitle)
+                    }
+                    .buttonStyle(.plain)
+                } else {
+                    contentViewerTitleLabel(viewModel.selectedBookTitle)
+                }
             }
         }
     }
 
-    private var bottomToolbar: some View {
-        VStack(spacing: Spacing.none) {
-            Divider()
-            HStack(spacing: Spacing.base) {
-                if let selectedBookID = viewModel.selectedBookID {
-                    NavigationLink(value: BookRoute.detail(bookId: selectedBookID)) {
-                        actionLabel(title: "书籍", systemImage: "book.closed")
-                    }
-                    .buttonStyle(.plain)
-                } else {
-                    disabledActionLabel(title: "书籍", systemImage: "book.closed")
-                }
+    private func bottomOverlay(safeAreaBottomInset: CGFloat) -> some View {
+        ImmersiveBottomChromeOverlay(
+            metrics: bottomChromeMetrics(safeAreaBottomInset: safeAreaBottomInset)
+        ) {
+            bottomOrnament
+        }
+    }
 
-                editAction
+    private var bottomOrnament: some View {
+        GlassEffectContainer(spacing: Spacing.base) {
+            HStack(spacing: Spacing.base) {
+                contentActionCluster
+                    .padding(.horizontal, Spacing.base)
+                    .glassEffect(.regular.interactive(), in: .capsule)
 
                 Button(role: .destructive) {
                     showsDeleteDialog = true
                 } label: {
-                    actionLabel(title: "删除", systemImage: "trash")
+                    ImmersiveBottomChromeIcon(
+                        systemName: "trash",
+                        foregroundStyle: Color.feedbackError
+                    )
                 }
                 .buttonStyle(.plain)
-                .disabled(viewModel.isDeleting || viewModel.selectedItemID == nil)
+                .disabled(viewModel.selectedItemID == nil || viewModel.isDeleting)
+                .glassEffect(.regular.interactive(), in: .circle)
+                .accessibilityLabel("删除内容")
             }
-            .padding(.horizontal, Spacing.screenEdge)
-            .padding(.top, Spacing.cozy)
-            .padding(.bottom, Spacing.cozy)
-            .background(Color.surfacePage)
+        }
+        .background {
+            GeometryReader { proxy in
+                Color.clear
+                    .preference(key: ImmersiveBottomChromeHeightPreferenceKey.self, value: proxy.size.height)
+            }
         }
     }
 
     @ViewBuilder
-    private var editAction: some View {
-        switch viewModel.selectedItemID {
-        case .note(let noteId):
-            NavigationLink(value: NoteRoute.edit(noteId: noteId)) {
-                actionLabel(title: "编辑", systemImage: "pencil")
-            }
-            .buttonStyle(.plain)
-
-        case .review(let reviewId):
-            NavigationLink(value: ContentRoute.reviewEditor(reviewId: reviewId)) {
-                actionLabel(title: "编辑", systemImage: "pencil")
-            }
-            .buttonStyle(.plain)
-
-        case .relevant(let contentId):
-            NavigationLink(value: ContentRoute.relevantEditor(contentId: contentId)) {
-                actionLabel(title: "编辑", systemImage: "pencil")
-            }
-            .buttonStyle(.plain)
-
-        case .none:
-            disabledActionLabel(title: "编辑", systemImage: "pencil")
-        }
-    }
-
-    private func actionLabel(title: String, systemImage: String) -> some View {
-        VStack(spacing: Spacing.tiny) {
-            Image(systemName: systemImage)
-                .font(AppTypography.subheadline)
-            Text(title)
-                .font(AppTypography.caption2)
-        }
-        .frame(maxWidth: .infinity, minHeight: 52)
-        .foregroundStyle(Color.textPrimary)
-        .background(
-            RoundedRectangle(cornerRadius: CornerRadius.blockMedium, style: .continuous)
-                .fill(Color.surfaceCard)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: CornerRadius.blockMedium, style: .continuous)
-                .stroke(Color.surfaceBorderDefault, lineWidth: CardStyle.borderWidth)
-        )
-    }
-
-    private func disabledActionLabel(title: String, systemImage: String) -> some View {
-        actionLabel(title: title, systemImage: systemImage)
-            .foregroundStyle(Color.textHint)
-            .opacity(0.45)
-    }
-}
-
-private struct ContentViewerPage: View {
-    let item: ContentViewerListItem
-    @Bindable var viewModel: ContentViewerViewModel
-
-    var body: some View {
-        ScrollView {
-            LazyVStack(alignment: .leading, spacing: Spacing.base) {
-                switch contentState {
-                case .loading:
-                    ProgressView("正在加载内容…")
-                        .frame(maxWidth: .infinity, minHeight: 320)
-                case .error(let message):
-                    viewerMessageCard(text: message)
-                case .detail(let detail):
-                    detailView(for: detail)
+    private var contentActionCluster: some View {
+        HStack(spacing: Spacing.cozy) {
+            switch viewModel.selectedItemID {
+            case .note(let noteID)?:
+                Button {
+                    showsTagSheet = true
+                } label: {
+                    ImmersiveBottomChromeIcon(systemName: "tag")
                 }
+                .buttonStyle(.plain)
+                .disabled(selectedTagNames.isEmpty)
+                .accessibilityLabel("查看标签")
+
+                NavigationLink(value: NoteRoute.edit(noteId: noteID)) {
+                    ImmersiveBottomChromeIcon(systemName: "square.and.pencil")
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("编辑书摘")
+
+                Button {
+                    guard let detail = selectedNoteDetail else { return }
+                    sharePayload = ContentViewerSharePayload(text: shareText(from: detail))
+                } label: {
+                    ImmersiveBottomChromeIcon(systemName: "square.and.arrow.up")
+                }
+                .buttonStyle(.plain)
+                .disabled(selectedNoteDetail == nil)
+                .accessibilityLabel("分享书摘")
+
+            case .review(let reviewID)?:
+                NavigationLink(value: ContentRoute.reviewEditor(reviewId: reviewID)) {
+                    ImmersiveBottomChromeIcon(systemName: "square.and.pencil")
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("编辑书评")
+
+                Button {
+                    copyCurrentDetail()
+                } label: {
+                    ImmersiveBottomChromeIcon(systemName: "doc.on.doc")
+                }
+                .buttonStyle(.plain)
+                .disabled(selectedReviewDetail == nil)
+                .accessibilityLabel("复制书评")
+
+            case .relevant(let contentID)?:
+                NavigationLink(value: ContentRoute.relevantEditor(contentId: contentID)) {
+                    ImmersiveBottomChromeIcon(systemName: "square.and.pencil")
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("编辑相关内容")
+
+                Button {
+                    guard let relevantURL else { return }
+                    openURL(relevantURL)
+                } label: {
+                    ImmersiveBottomChromeIcon(systemName: "link")
+                }
+                .buttonStyle(.plain)
+                .disabled(relevantURL == nil)
+                .accessibilityLabel("打开链接")
+
+                Button {
+                    copyCurrentDetail()
+                } label: {
+                    ImmersiveBottomChromeIcon(systemName: "doc.on.doc")
+                }
+                .buttonStyle(.plain)
+                .disabled(selectedRelevantDetail == nil)
+                .accessibilityLabel("复制相关内容")
+
+            case .none:
+                ImmersiveBottomChromeIcon(systemName: "square.and.pencil")
+                    .opacity(0.4)
+                ImmersiveBottomChromeIcon(systemName: "doc.on.doc")
+                    .opacity(0.4)
             }
-            .padding(.horizontal, Spacing.screenEdge)
-            .padding(.vertical, Spacing.base)
-        }
-        .background(Color.surfacePage)
-        .task(id: item.id) {
-            await viewModel.loadDetailIfNeeded(itemID: item.id)
-        }
-        .onAppear {
-            guard viewModel.selectedItemID == item.id else { return }
-            Task { await viewModel.refreshDetail(itemID: item.id) }
         }
     }
 
-    private var contentState: ContentPageState {
-        if let detail = viewModel.detail(for: item.id) {
+    private func bottomChromeMetrics(safeAreaBottomInset: CGFloat) -> ImmersiveBottomChromeMetrics {
+        ImmersiveBottomChromeMetrics.make(
+            measuredOrnamentHeight: bottomOrnamentHeight,
+            safeAreaBottomInset: safeAreaBottomInset
+        )
+    }
+
+    private var contentProps: ContentViewerContentView.Props {
+        ContentViewerContentView.Props(
+            selectedItemID: viewModel.selectedItemID,
+            listState: listState,
+            pages: visibleItems.map(makePage)
+        )
+    }
+
+    private var listState: ContentViewerContentView.Props.ListState {
+        if viewModel.items.isEmpty {
+            if viewModel.isLoadingList {
+                return .loading
+            }
+            return .empty(viewModel.listErrorMessage ?? "内容不存在或已删除")
+        }
+        return .content
+    }
+
+    private var visibleItems: [ContentViewerListItem] {
+        viewModel.visibleItems(radius: 3)
+    }
+
+    private func makePage(_ item: ContentViewerListItem) -> ContentViewerContentView.Props.Page {
+        ContentViewerContentView.Props.Page(
+            item: item,
+            state: pageState(for: item.id),
+            isSelected: item.id == viewModel.selectedItemID
+        )
+    }
+
+    private func pageState(for itemID: ContentViewerItemID) -> ContentViewerContentView.Props.PageState {
+        if let detail = viewModel.detail(for: itemID) {
             return .detail(detail)
         }
-        if let message = viewModel.detailErrorMessage(for: item.id) {
+        if let message = viewModel.detailErrorMessage(for: itemID) {
             return .error(message)
         }
         return .loading
     }
 
-    @ViewBuilder
-    private func detailView(for detail: ContentViewerDetail) -> some View {
-        switch detail {
-        case .note(let note):
-            noteDetailView(note)
-        case .review(let review):
-            reviewDetailView(review)
-        case .relevant(let relevant):
-            relevantDetailView(relevant)
+    private var selectedNoteDetail: NoteContentDetail? {
+        guard case .note(let detail)? = viewModel.selectedDetail else { return nil }
+        return detail
+    }
+
+    private var selectedReviewDetail: ReviewContentDetail? {
+        guard case .review(let detail)? = viewModel.selectedDetail else { return nil }
+        return detail
+    }
+
+    private var selectedRelevantDetail: RelevantContentDetail? {
+        guard case .relevant(let detail)? = viewModel.selectedDetail else { return nil }
+        return detail
+    }
+
+    private var selectedTagNames: [String] {
+        selectedNoteDetail?.tagNames ?? []
+    }
+
+    private var relevantURL: URL? {
+        guard let selectedRelevantDetail else { return nil }
+        return normalizedURL(selectedRelevantDetail.url)
+    }
+
+    private func copyCurrentDetail() {
+        switch viewModel.selectedDetail {
+        case .note(let detail)?:
+            UIPasteboard.general.string = shareText(from: detail)
+        case .review(let detail)?:
+            UIPasteboard.general.string = copyText(from: detail)
+        case .relevant(let detail)?:
+            UIPasteboard.general.string = copyText(from: detail)
+        case .none:
+            break
         }
     }
 
-    private func noteDetailView(_ detail: NoteContentDetail) -> some View {
-        Group {
-            ContentViewerHeroCard(
-                title: detail.bookTitle,
-                subtitle: detail.chapterTitle.isEmpty ? "书摘" : detail.chapterTitle
-            ) {
-                if let metadataText = noteMetadataText(detail), !metadataText.isEmpty {
-                    Text(metadataText)
-                        .font(AppTypography.caption)
-                        .foregroundStyle(.secondary)
-                }
-            }
+    private func shareText(from detail: NoteContentDetail) -> String {
+        var sections: [String] = [detail.bookTitle]
 
-            contentSectionCard(title: "书摘内容") {
-                RichText(
-                    html: detail.contentHTML,
-                    baseFont: AppTypography.uiSemantic(.body),
-                    textColor: UIColor.label,
-                    lineSpacing: 5
-                )
-            }
-
-            if TimelineMeaningfulPreview.hasMeaningfulHTML(detail.ideaHTML) {
-                contentSectionCard(title: "想法") {
-                    RichText(
-                        html: detail.ideaHTML,
-                        baseFont: AppTypography.uiSemantic(.body),
-                        textColor: UIColor(Color.textSecondary),
-                        lineSpacing: 5
-                    )
-                }
-            }
-
-            if !detail.imageURLs.isEmpty {
-                contentSectionCard(title: "附图") {
-                    viewerImageWall(detail.imageURLs, prefix: "note")
-                }
-            }
-
-            if !detail.tagNames.isEmpty {
-                contentSectionCard(title: "标签") {
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(spacing: Spacing.tight) {
-                            ForEach(detail.tagNames, id: \.self) { tag in
-                                Text(tag)
-                                    .font(AppTypography.caption2)
-                                    .foregroundStyle(Color.textSecondary)
-                                    .padding(.horizontal, Spacing.cozy)
-                                    .padding(.vertical, Spacing.compact)
-                                    .background(Color.tagBackground, in: Capsule())
-                            }
-                        }
-                    }
-                }
-            }
+        if !detail.chapterTitle.isEmpty {
+            sections.append("章节：\(detail.chapterTitle)")
         }
+
+        let content = RichTextBridge.htmlToAttributed(detail.contentHTML).string
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        if !content.isEmpty {
+            sections.append(content)
+        }
+
+        let idea = RichTextBridge.htmlToAttributed(detail.ideaHTML).string
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        if !idea.isEmpty {
+            sections.append("想法：\(idea)")
+        }
+
+        return sections.joined(separator: "\n\n")
     }
 
-    private func reviewDetailView(_ detail: ReviewContentDetail) -> some View {
-        Group {
-            ContentViewerHeroCard(
-                title: detail.bookTitle,
-                subtitle: "书评"
-            ) {
-                if detail.bookScore > 0 {
-                    ViewerScoreRow(score: detail.bookScore)
-                }
-                if let dateText = formattedDate(detail.createdDate) {
-                    Text(dateText)
-                        .font(AppTypography.caption)
-                        .foregroundStyle(.secondary)
-                }
-            }
-
-            if !detail.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                contentSectionCard(title: "标题") {
-                    Text(detail.title)
-                        .font(AppTypography.subheadlineSemibold)
-                        .foregroundStyle(.primary)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                }
-            }
-
-            if TimelineMeaningfulPreview.hasMeaningfulHTML(detail.contentHTML) {
-                contentSectionCard(title: "正文") {
-                    RichText(
-                        html: detail.contentHTML,
-                        baseFont: AppTypography.uiSemantic(.body),
-                        textColor: UIColor.label,
-                        lineSpacing: 5
-                    )
-                }
-            }
-
-            if !detail.imageURLs.isEmpty {
-                contentSectionCard(title: "配图") {
-                    viewerImageWall(detail.imageURLs, prefix: "review")
-                }
-            }
-        }
+    private func copyText(from detail: ReviewContentDetail) -> String {
+        let content = RichTextBridge.htmlToAttributed(detail.contentHTML).string
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return [detail.title, content]
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+            .joined(separator: "\n\n")
     }
 
-    private func relevantDetailView(_ detail: RelevantContentDetail) -> some View {
-        Group {
-            ContentViewerHeroCard(
-                title: detail.bookTitle,
-                subtitle: detail.categoryTitle.isEmpty ? "相关内容" : detail.categoryTitle
-            ) {
-                if let dateText = formattedDate(detail.createdDate) {
-                    Text(dateText)
-                        .font(AppTypography.caption)
-                        .foregroundStyle(.secondary)
-                }
-            }
-
-            if !detail.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                contentSectionCard(title: "标题") {
-                    Text(detail.title)
-                        .font(AppTypography.subheadlineSemibold)
-                        .foregroundStyle(.primary)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                }
-            }
-
-            if TimelineMeaningfulPreview.hasMeaningfulHTML(detail.contentHTML) {
-                contentSectionCard(title: "正文") {
-                    RichText(
-                        html: detail.contentHTML,
-                        baseFont: AppTypography.uiSemantic(.body),
-                        textColor: UIColor.label,
-                        lineSpacing: 5
-                    )
-                }
-            } else if let normalizedURL = normalizedURL(detail.url) {
-                contentSectionCard(title: "链接") {
-                    Link(destination: normalizedURL) {
-                        Text(normalizedURL.absoluteString)
-                            .font(AppTypography.subheadline)
-                            .foregroundStyle(Color.brandDeep)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                    }
-                }
-            }
-
-            if !detail.imageURLs.isEmpty {
-                contentSectionCard(title: "附图") {
-                    viewerImageWall(detail.imageURLs, prefix: "relevant")
-                }
-            }
-
-            if let normalizedURL = normalizedURL(detail.url), TimelineMeaningfulPreview.hasMeaningfulHTML(detail.contentHTML) {
-                contentSectionCard(title: "链接") {
-                    Link(destination: normalizedURL) {
-                        HStack(spacing: Spacing.compact) {
-                            Image(systemName: "link")
-                            Text(normalizedURL.absoluteString)
-                                .lineLimit(1)
-                        }
-                        .font(AppTypography.subheadline)
-                        .foregroundStyle(Color.brandDeep)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                    }
-                }
-            }
-        }
-    }
-
-    private func contentSectionCard<Content: View>(
-        title: String,
-        @ViewBuilder content: () -> Content
-    ) -> some View {
-        CardContainer {
-            VStack(alignment: .leading, spacing: Spacing.base) {
-                Text(title)
-                    .font(AppTypography.subheadlineSemibold)
-                    .foregroundStyle(.secondary)
-                content()
-            }
-            .padding(Spacing.contentEdge)
-        }
-    }
-
-    private func viewerImageWall(_ imageURLs: [String], prefix: String) -> some View {
-        XMJXImageWall(
-            items: imageURLs.enumerated().map { index, url in
-                XMJXGalleryItem(
-                    id: "\(prefix)-img-\(index)",
-                    thumbnailURL: url,
-                    originalURL: url
-                )
-            },
-            columnCount: imageURLs.count == 1 ? 1 : 3
-        )
-    }
-
-    private func noteMetadataText(_ detail: NoteContentDetail) -> String? {
-        var parts: [String] = []
-        let trimmedPosition = detail.position.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !trimmedPosition.isEmpty {
-            let unitLabel = switch detail.positionUnit {
-            case 1: "位置"
-            case 2: "%"
-            default: "页"
-            }
-            parts.append(detail.positionUnit == 2 ? "\(trimmedPosition)\(unitLabel)" : "第\(trimmedPosition)\(unitLabel)")
-        }
-        if detail.includeTime, let dateText = formattedDate(detail.createdDate) {
-            parts.append(dateText)
-        }
-        return parts.isEmpty ? nil : parts.joined(separator: " · ")
-    }
-
-    private func formattedDate(_ timestamp: Int64) -> String? {
-        guard timestamp > 0 else { return nil }
-        let date = Date(timeIntervalSince1970: TimeInterval(timestamp) / 1000.0)
-        return ContentViewerDateFormatter.shared.string(from: date)
+    private func copyText(from detail: RelevantContentDetail) -> String {
+        let content = RichTextBridge.htmlToAttributed(detail.contentHTML).string
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return [detail.title, content, detail.url]
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+            .joined(separator: "\n\n")
     }
 
     private func normalizedURL(_ rawValue: String) -> URL? {
         let trimmed = rawValue.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return nil }
-        if let directURL = URL(string: trimmed) {
+
+        if let directURL = URL(string: trimmed), directURL.scheme != nil {
             return directURL
         }
-        guard let encoded = trimmed.addingPercentEncoding(withAllowedCharacters: .urlFragmentAllowed) else {
-            return nil
-        }
-        return URL(string: encoded)
-    }
-}
 
-private enum ContentPageState {
-    case loading
-    case error(String)
-    case detail(ContentViewerDetail)
+        return URL(string: "https://\(trimmed)")
+    }
 }
 
 struct ContentViewerHeroCard<Accessory: View>: View {
@@ -569,6 +456,11 @@ struct ViewerScoreRow: View {
         }
         return "star"
     }
+}
+
+private struct ContentViewerSharePayload: Identifiable {
+    let text: String
+    let id = UUID()
 }
 
 #Preview {

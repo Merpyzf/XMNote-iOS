@@ -15,6 +15,7 @@
 | ExpandableRichText | UI-复用关键 | xmnote/UIComponents/Foundation/ExpandableRichText.swift | docs/component-guides/ExpandableRichText使用说明.md | 新增/重大重构 |
 | RichText | UI-复用关键 | xmnote/UIComponents/Foundation/RichText.swift | docs/component-guides/ExpandableRichText使用说明.md | 新增/重大重构 |
 | CollapsedRichTextPreview | UI-复用关键 | xmnote/UIComponents/Foundation/CollapsedRichTextPreview.swift | docs/component-guides/ExpandableRichText使用说明.md | 新增/重大重构 |
+| ImmersiveBottomChrome | UI-复用关键 | xmnote/UIComponents/Foundation/ImmersiveBottomChrome.swift | docs/component-guides/ImmersiveBottomChrome使用说明.md | 新增/重大重构 |
 | XMJXImageWall | UI-复用关键 | xmnote/UIComponents/GalleryJX/XMJXImageWall.swift | docs/component-guides/XMJXImageWall使用说明.md | 新增/重大重构 |
 | XMJXThumbnailView | UI-复用关键 | xmnote/UIComponents/GalleryJX/XMJXThumbnailView.swift | docs/component-guides/XMJXThumbnailView使用说明.md | 新增/重大重构 |
 | BookContainerView | UI-核心页面关键 | xmnote/Views/Book/BookContainerView.swift | docs/component-guides/BookContainerView使用说明.md | 新增/重大重构 |

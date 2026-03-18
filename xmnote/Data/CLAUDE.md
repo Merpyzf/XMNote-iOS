@@ -6,6 +6,7 @@
 ## Repositories/
 
 - `BookRepository.swift`: BookRepositoryProtocol 实现，书籍列表/详情/书摘查询
+- `ContentRepository.swift`: ContentRepositoryProtocol 实现，书摘/书评/相关内容的查看、编辑与硬删除事务
 - `NoteRepository.swift`: NoteRepositoryProtocol 实现，标签分组与笔记详情读写
 - `BackupServerRepository.swift`: BackupServerRepositoryProtocol 实现，备份服务器配置持久化与连通性
 - `BackupRepository.swift`: BackupRepositoryProtocol 实现，备份/历史/恢复流程编排
