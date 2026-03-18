@@ -9,19 +9,21 @@ import HorizonCalendar
 import SwiftUI
 import UIKit
 
+private let readingTimelineScrollCoordinateSpaceName = "reading-timeline-scroll-space"
+
 /// 首页在读模块的正式时间线页面（外壳）。
-/// 通过 .task 延迟创建 ViewModel，确保 @Environment 中的 RepositoryContainer 可用。
 struct ReadingTimelineView: View {
-    @Environment(RepositoryContainer.self) private var repositories
-    @State private var viewModel: TimelineViewModel?
+    let viewModel: TimelineViewModel?
     let onOpenContentViewer: (ContentViewerSourceContext, ContentViewerItemID) -> Void
     let onOpenBookDetail: (Int64) -> Void
 
     /// 注入内容查看与书籍详情跳转回调，承接时间线事件点击。
     init(
+        viewModel: TimelineViewModel? = nil,
         onOpenContentViewer: @escaping (ContentViewerSourceContext, ContentViewerItemID) -> Void = { _, _ in },
         onOpenBookDetail: @escaping (Int64) -> Void = { _ in }
     ) {
+        self.viewModel = viewModel
         self.onOpenContentViewer = onOpenContentViewer
         self.onOpenBookDetail = onOpenBookDetail
     }
@@ -35,15 +37,25 @@ struct ReadingTimelineView: View {
                     onOpenBookDetail: onOpenBookDetail
                 )
             } else {
-                Color.clear
+                ReadingTimelineBootstrapShellView()
             }
         }
-        .task {
-            guard viewModel == nil else { return }
-            let vm = TimelineViewModel(repository: repositories.timelineRepository)
-            viewModel = vm
-            await vm.loadInitialData()
+    }
+}
+
+/// 时间线首开静态壳层，在容器尚未注入状态源或首屏快照未就绪前提供稳定结构。
+private struct ReadingTimelineBootstrapShellView: View {
+    var body: some View {
+        ScrollView {
+            VStack(spacing: Spacing.base) {
+                TimelineBootstrapCalendarPanel()
+                TimelineBootstrapListShell()
+            }
+            .padding(.horizontal, Spacing.screenEdge)
+            .padding(.top, Spacing.half)
+            .padding(.bottom, Spacing.base)
         }
+        .coordinateSpace(name: readingTimelineScrollCoordinateSpaceName)
     }
 }
 
@@ -69,19 +81,164 @@ private struct ReadingTimelineContentView: View {
             .padding(.top, Spacing.half)
             .padding(.bottom, Spacing.base)
         }
-        .coordinateSpace(name: Self.timelineScrollCoordinateSpaceName)
+        .coordinateSpace(name: readingTimelineScrollCoordinateSpaceName)
     }
 }
 
-private extension ReadingTimelineContentView {
-    static var timelineScrollCoordinateSpaceName: String {
-        "reading-timeline-scroll-space"
+/// 时间线首开日历壳层，使用静态网格保持卡片高度与头部节奏稳定。
+private struct TimelineBootstrapCalendarPanel: View {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+    private let calendar: Calendar
+    private let monthStart: Date
+
+    init() {
+        var calendar = Calendar.current
+        calendar.timeZone = .current
+        calendar.locale = Locale(identifier: "zh_Hans_CN")
+        calendar.firstWeekday = 1
+        self.calendar = calendar
+        self.monthStart = Self.monthStart(of: Date(), using: calendar)
+    }
+
+    var body: some View {
+        CardContainer(cornerRadius: TimelineCalendarStyle.panelCornerRadius) {
+            VStack(spacing: Spacing.base) {
+                bootstrapHeader
+                    .padding(.horizontal, Spacing.contentEdge)
+                    .padding(.top, Spacing.contentEdge)
+
+                VStack(spacing: 8) {
+                    weekdayRow
+                    calendarGrid
+                }
+                .padding(.horizontal, Spacing.contentEdge)
+                .padding(.bottom, Spacing.contentEdge)
+            }
+        }
+        .allowsHitTesting(false)
+    }
+}
+
+private extension TimelineBootstrapCalendarPanel {
+    var bootstrapHeader: some View {
+        Group {
+            if dynamicTypeSize >= .accessibility1 {
+                VStack(alignment: .leading, spacing: Spacing.cozy) {
+                    bootstrapMonthTitle
+                    Text("今天")
+                        .font(TimelineCalendarStyle.relativeUnitFont)
+                        .foregroundStyle(TimelineCalendarStyle.relativeUnitColor)
+                }
+            } else {
+                HStack(alignment: .lastTextBaseline, spacing: Spacing.base) {
+                    bootstrapMonthTitle
+                    Spacer(minLength: 0)
+                    Text("今天")
+                        .font(TimelineCalendarStyle.relativeUnitFont)
+                        .foregroundStyle(TimelineCalendarStyle.relativeUnitColor)
+                    bootstrapTodayButton
+                }
+            }
+        }
+    }
+
+    var bootstrapMonthTitle: some View {
+        let components = calendar.dateComponents([.year, .month], from: monthStart)
+        let year = components.year ?? 0
+        let month = components.month ?? 0
+        return HStack(alignment: .firstTextBaseline, spacing: Spacing.none) {
+            Text(verbatim: String(year))
+                .font(TimelineCalendarStyle.monthNumberFont)
+                .foregroundStyle(TimelineCalendarStyle.monthNumberColor)
+                .monospacedDigit()
+                .brandVerticalTrim(TimelineCalendarStyle.monthNumberVerticalTrim, edges: [.top, .bottom])
+            Text(" 年 ")
+                .font(TimelineCalendarStyle.monthUnitFont)
+                .foregroundStyle(TimelineCalendarStyle.monthUnitColor)
+            Text(verbatim: String(month))
+                .font(TimelineCalendarStyle.monthNumberFont)
+                .foregroundStyle(TimelineCalendarStyle.monthNumberColor)
+                .monospacedDigit()
+                .brandVerticalTrim(TimelineCalendarStyle.monthNumberVerticalTrim, edges: [.top, .bottom])
+            Text(" 月")
+                .font(TimelineCalendarStyle.monthUnitFont)
+                .foregroundStyle(TimelineCalendarStyle.monthUnitColor)
+        }
+    }
+
+    var bootstrapTodayButton: some View {
+        Text("今")
+            .font(TimelineCalendarStyle.actionButtonFont)
+            .foregroundStyle(Color.brandDeep.opacity(0.55))
+            .padding(.horizontal, Spacing.tight)
+            .padding(.vertical, Spacing.half)
+            .background(Color.brand.opacity(0.08))
+            .overlay(
+                Capsule()
+                    .stroke(Color.brand.opacity(0.18), lineWidth: CardStyle.borderWidth)
+            )
+            .clipShape(Capsule())
+    }
+
+    var weekdayRow: some View {
+        HStack(spacing: 8) {
+            ForEach(calendar.veryShortStandaloneWeekdaySymbols, id: \.self) { symbol in
+                Text(symbol)
+                    .font(TimelineCalendarStyle.weekdayFont)
+                    .foregroundStyle(TimelineCalendarStyle.weekdayTextColor)
+                    .frame(maxWidth: .infinity)
+            }
+        }
+    }
+
+    var calendarGrid: some View {
+        let today = calendar.startOfDay(for: Date())
+        let days = daySlots
+
+        return LazyVGrid(
+            columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 7),
+            spacing: 8
+        ) {
+            ForEach(Array(days.enumerated()), id: \.offset) { _, day in
+                if let day {
+                    TimelineCalendarDayCell(
+                        dayNumber: day,
+                        marker: nil,
+                        isSelected: calendar.isDate(
+                            calendar.date(byAdding: .day, value: day - 1, to: monthStart) ?? today,
+                            inSameDayAs: today
+                        ),
+                        dayNumberFont: TimelineCalendarStyle.dayNumberFont
+                    )
+                } else {
+                    Color.clear
+                        .frame(width: TimelineCalendarStyle.dayCellSize, height: TimelineCalendarStyle.dayCellSize)
+                }
+            }
+        }
+    }
+
+    var daySlots: [Int?] {
+        guard let dayRange = calendar.range(of: .day, in: .month, for: monthStart) else { return Array(repeating: nil, count: 42) }
+        let weekday = calendar.component(.weekday, from: monthStart)
+        let leading = max(0, weekday - calendar.firstWeekday)
+        let leadingSlots = Array(repeating: Optional<Int>.none, count: leading)
+        let dayValues = dayRange.map(Optional.some)
+        return leadingSlots + dayValues
+    }
+
+    static func monthStart(of date: Date, using calendar: Calendar) -> Date {
+        let normalized = calendar.startOfDay(for: date)
+        let comps = calendar.dateComponents([.year, .month], from: normalized)
+        let start = calendar.date(from: DateComponents(year: comps.year, month: comps.month, day: 1)) ?? normalized
+        return calendar.startOfDay(for: start)
     }
 }
 
 // MARK: - Calendar Panel
 
-/// 日历面板子树，隔离 sections/isLoading 变化对 HorizonCalendar 桥接层的影响。
+/// 日历面板子树，隔离 sections/bootstrapPhase 变化对 HorizonCalendar 桥接层的影响。
 private struct TimelineCalendarPanel: View {
     @Bindable var viewModel: TimelineViewModel
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
@@ -228,6 +385,7 @@ private struct TimelineCalendarPanel: View {
                 .padding(.bottom, Spacing.contentEdge)
             }
         }
+        .allowsHitTesting(viewModel.bootstrapPhase == .ready && !viewModel.isRefreshing)
         .onAppear {
             DispatchQueue.main.async {
                 jumpToDate(calendar.startOfDay(for: Date()), animated: false)
@@ -695,7 +853,8 @@ private struct TimelineListContainer: View {
         TimelineListContent(
             sections: viewModel.sections,
             sectionsRevision: viewModel.sectionsRevision,
-            isLoading: viewModel.isLoading,
+            bootstrapPhase: viewModel.bootstrapPhase,
+            isRefreshing: viewModel.isRefreshing,
             sourceContext: viewModel.currentViewerSourceContext(),
             onOpenContentViewer: onOpenContentViewer,
             onOpenBookDetail: onOpenBookDetail
@@ -708,13 +867,13 @@ private struct TimelineListContainer: View {
                     Task { await viewModel.selectCategory(category) }
                 }
             )
-            .disabled(viewModel.isLoading)
+            .disabled(viewModel.bootstrapPhase != .ready || viewModel.isRefreshing)
             .padding(.top, Spacing.cozy)
             .offset(y: max(0, -timelineListMinY))
             .zIndex(1)
         }
         .onGeometryChange(for: CGFloat.self) { geometry in
-            geometry.frame(in: .named(ReadingTimelineContentView.timelineScrollCoordinateSpaceName)).minY
+            geometry.frame(in: .named(readingTimelineScrollCoordinateSpaceName)).minY
         } action: { minY in
             guard abs(minY - timelineListMinY) > 0.5 else { return }
             timelineListMinY = minY
@@ -783,7 +942,8 @@ private extension TimelineListContainer {
     }
 
     var prewarmRequest: TimelineRichTextPrewarmRequest? {
-        guard !viewModel.isLoading else { return nil }
+        guard viewModel.bootstrapPhase == .ready else { return nil }
+        guard !viewModel.isRefreshing else { return nil }
         guard prewarmWidthBucket > 0 else { return nil }
         guard !prewarmEntries.isEmpty else { return nil }
 
@@ -849,40 +1009,188 @@ private extension TimelineListContainer {
 private struct TimelineListContent: View, Equatable {
     let sections: [TimelineSection]
     let sectionsRevision: Int
-    let isLoading: Bool
+    let bootstrapPhase: TimelineViewModel.BootstrapPhase
+    let isRefreshing: Bool
     let sourceContext: ContentViewerSourceContext
     let onOpenContentViewer: (ContentViewerSourceContext, ContentViewerItemID) -> Void
     let onOpenBookDetail: (Int64) -> Void
 
     static func == (lhs: TimelineListContent, rhs: TimelineListContent) -> Bool {
         lhs.sectionsRevision == rhs.sectionsRevision &&
-        lhs.isLoading == rhs.isLoading &&
+        lhs.bootstrapPhase == rhs.bootstrapPhase &&
+        lhs.isRefreshing == rhs.isRefreshing &&
         lhs.sourceContext == rhs.sourceContext
     }
 
     var body: some View {
         Group {
-            if isLoading {
-                ProgressView()
-                    .padding(.vertical, Spacing.double)
+            if bootstrapPhase == .bootstrapping {
+                TimelineBootstrapListPlaceholder()
+                    .padding(.vertical, Spacing.cozy)
             } else if sections.isEmpty {
                 EmptyStateView(icon: "clock.arrow.circlepath", message: "当日没有匹配事件")
                     .padding(.vertical, Spacing.double)
             } else {
-                LazyVStack(spacing: Spacing.none, pinnedViews: [.sectionHeaders]) {
-                    ForEach(sections) { section in
-                        TimelineSectionView(
-                            section: section,
-                            isLast: section.id == sections.last?.id,
-                            trailingPlaceholderWidth: TimelineFilterHostStyle.controlWidth,
-                            sourceContext: sourceContext,
-                            onOpenContentViewer: onOpenContentViewer,
-                            onOpenBookDetail: onOpenBookDetail
-                        )
+                ZStack(alignment: .topTrailing) {
+                    LazyVStack(spacing: Spacing.none, pinnedViews: [.sectionHeaders]) {
+                        ForEach(sections) { section in
+                            TimelineSectionView(
+                                section: section,
+                                isLast: section.id == sections.last?.id,
+                                trailingPlaceholderWidth: TimelineFilterHostStyle.controlWidth,
+                                sourceContext: sourceContext,
+                                onOpenContentViewer: onOpenContentViewer,
+                                onOpenBookDetail: onOpenBookDetail
+                            )
+                        }
+                    }
+
+                    if isRefreshing {
+                        TimelineRefreshHint()
+                            .padding(.top, Spacing.cozy)
                     }
                 }
             }
         }
+    }
+}
+
+/// 时间线首开列表壳层，使用静态版式占位稳定首屏节奏，不暴露加载中的中间状态。
+private struct TimelineBootstrapListShell: View {
+    var body: some View {
+        TimelineBootstrapListPlaceholder()
+            .overlay(alignment: .topTrailing) {
+                TimelineCategoryFilterMenu(selectedCategory: .all, onCategorySelected: { _ in })
+                    .disabled(true)
+                    .padding(.top, Spacing.cozy)
+            }
+    }
+}
+
+/// 时间线首开列表静态占位，保留 section header 与卡片高度节奏，避免首屏塌缩。
+private struct TimelineBootstrapListPlaceholder: View {
+    private let sectionDates: [Date] = {
+        let calendar = Calendar.current
+        let today = calendar.startOfDay(for: Date())
+        let yesterday = calendar.date(byAdding: .day, value: -1, to: today) ?? today
+        return [today, yesterday]
+    }()
+
+    var body: some View {
+        LazyVStack(spacing: Spacing.none, pinnedViews: [.sectionHeaders]) {
+            ForEach(Array(sectionDates.enumerated()), id: \.offset) { index, date in
+                TimelineBootstrapSection(date: date, cardCount: index == 0 ? 2 : 1)
+            }
+        }
+    }
+}
+
+/// 时间线静态 section，占位阶段沿用真实 section header 结构，减少首开布局跳变。
+private struct TimelineBootstrapSection: View {
+    let date: Date
+    let cardCount: Int
+
+    var body: some View {
+        Section {
+            VStack(spacing: Spacing.none) {
+                ForEach(0..<cardCount, id: \.self) { index in
+                    TimelineBootstrapEventRow(isLast: index == cardCount - 1)
+                }
+            }
+        } header: {
+            TimelineSectionHeader(
+                date: date,
+                trailingPlaceholderWidth: TimelineFilterHostStyle.controlWidth
+            )
+        }
+    }
+}
+
+/// 时间线静态单行占位，保持左侧连接线与右侧卡片体量稳定。
+private struct TimelineBootstrapEventRow: View {
+    let isLast: Bool
+
+    var body: some View {
+        HStack(alignment: .top, spacing: Spacing.base) {
+            TimelineBootstrapConnector(isLastEvent: isLast)
+                .stroke(
+                    Color.textHint.opacity(0.16),
+                    style: StrokeStyle(lineWidth: 1, lineCap: .round, dash: [3, 5])
+                )
+                .frame(width: 18)
+                .padding(.leading, 2)
+
+            TimelineBootstrapCardPlaceholder()
+        }
+        .padding(.bottom, Spacing.base)
+    }
+}
+
+/// 时间线占位连接线，复刻真实时间线左侧装饰列的高度节奏。
+private struct TimelineBootstrapConnector: SwiftUI.Shape {
+    let isLastEvent: Bool
+
+    func path(in rect: CGRect) -> SwiftUI.Path {
+        var path = SwiftUI.Path()
+        let centerX = rect.midX
+        let circleDiameter: CGFloat = 8
+        let circleRect = CGRect(
+            x: centerX - circleDiameter / 2,
+            y: 10,
+            width: circleDiameter,
+            height: circleDiameter
+        )
+        path.addEllipse(in: circleRect)
+
+        let lineStart = circleRect.maxY + 4
+        let lineEnd = isLastEvent ? rect.minY + 30 : rect.maxY
+        path.move(to: CGPoint(x: centerX, y: lineStart))
+        path.addLine(to: CGPoint(x: centerX, y: max(lineStart, lineEnd)))
+        return path
+    }
+}
+
+/// 时间线静态卡片占位，仅保留排版骨架，不使用 shimmer 或全局 loading。
+private struct TimelineBootstrapCardPlaceholder: View {
+    var body: some View {
+        CardContainer(cornerRadius: TimelineCalendarStyle.eventCardCornerRadius) {
+            VStack(alignment: .leading, spacing: Spacing.base) {
+                HStack(spacing: Spacing.cozy) {
+                    placeholderBar(width: 124, height: 12)
+                    Spacer(minLength: 0)
+                    placeholderBar(width: 52, height: 12)
+                }
+
+                placeholderBar(width: nil, height: 18)
+                placeholderBar(width: nil, height: 18)
+                placeholderBar(width: 168, height: 18)
+            }
+            .padding(Spacing.contentEdge)
+        }
+    }
+
+    @ViewBuilder
+    private func placeholderBar(width: CGFloat?, height: CGFloat) -> some View {
+        RoundedRectangle(cornerRadius: CornerRadius.inlaySmall, style: .continuous)
+            .fill(Color.textHint.opacity(0.12))
+            .frame(width: width, height: height)
+    }
+}
+
+/// 保留真实内容在位时，用极轻提示表达“列表正在刷新”，避免回退到整块 loading。
+private struct TimelineRefreshHint: View {
+    var body: some View {
+        Text("正在更新")
+            .font(AppTypography.caption)
+            .foregroundStyle(Color.textSecondary)
+            .padding(.horizontal, Spacing.cozy)
+            .padding(.vertical, Spacing.compact)
+            .background(Color.surfaceCard.opacity(0.92), in: Capsule())
+            .overlay(
+                Capsule()
+                    .stroke(Color.surfaceBorderDefault, lineWidth: CardStyle.borderWidth)
+            )
+            .accessibilityHidden(true)
     }
 }
 

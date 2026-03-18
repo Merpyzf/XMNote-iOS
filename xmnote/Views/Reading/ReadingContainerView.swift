@@ -25,7 +25,10 @@ enum ReadingSubTab: String, CaseIterable {
 
 /// 在读 Tab 容器，负责子页切换并上抛新增、书籍详情与阅读日历跳转事件。
 struct ReadingContainerView: View {
+    @Environment(RepositoryContainer.self) private var repositories
     @State private var selectedSubTab: ReadingSubTab = .reading
+    @State private var timelineViewModel: TimelineViewModel?
+    @State private var subtabBootstrapCoordinator = SubtabBootstrapCoordinator<ReadingSubTab>()
     private let topBarHeight: CGFloat = 56
     let onAddBook: () -> Void
     let onAddNote: () -> Void
@@ -77,6 +80,17 @@ struct ReadingContainerView: View {
             .zIndex(1)
         }
         .toolbar(.hidden, for: .navigationBar)
+        .task {
+            guard timelineViewModel == nil else { return }
+            let viewModel = TimelineViewModel(repository: repositories.timelineRepository)
+            timelineViewModel = viewModel
+            await Task.yield()
+            warmTimelineIfNeeded(priority: .utility)
+        }
+        .onChange(of: selectedSubTab) { _, newSelection in
+            guard newSelection == .timeline else { return }
+            warmTimelineIfNeeded(priority: .userInitiated)
+        }
     }
 
     private var segmentedContent: some View {
@@ -99,11 +113,19 @@ struct ReadingContainerView: View {
             )
         case .timeline:
             ReadingTimelineView(
+                viewModel: timelineViewModel,
                 onOpenContentViewer: onOpenContentViewer,
                 onOpenBookDetail: onOpenBookDetail
             )
         case .statistics:
             StatisticsPlaceholderView()
+        }
+    }
+
+    private func warmTimelineIfNeeded(priority: TaskPriority) {
+        guard let timelineViewModel else { return }
+        subtabBootstrapCoordinator.warm(.timeline, priority: priority) {
+            await timelineViewModel.loadInitialData()
         }
     }
 }

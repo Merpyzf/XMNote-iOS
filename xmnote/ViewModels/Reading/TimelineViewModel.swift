@@ -16,17 +16,24 @@ import SwiftUI
 @Observable
 /// TimelineViewModel 负责时间线页的日期选择、分类过滤、事件加载和月份标记缓存。
 final class TimelineViewModel {
+    enum BootstrapPhase: Equatable {
+        case bootstrapping
+        case ready
+    }
+
     var sections: [TimelineSection] = []
     private(set) var sectionsRevision: Int = 0
     var selectedDate: Date
     var selectedCategory: TimelineEventCategory = .all
     var displayedMonthStart: Date
-    var isLoading = false
+    private(set) var bootstrapPhase: BootstrapPhase = .bootstrapping
+    private(set) var isRefreshing = false
     private(set) var markerRevision: Int = 0
 
     private var markerCache: [String: [Date: TimelineDayMarker]] = [:]
     private let repository: any TimelineRepositoryProtocol
     private let calendar: Calendar
+    private var hasResolvedInitialSnapshot = false
 
     /// 时间范围配置，对齐 Android SpSettingHelper.getTimeLineDataShowRange()。
     /// 0=当天, 1=过去一个月, 2=过去半年(默认), 3=过去一年, 4=全部
@@ -44,28 +51,28 @@ final class TimelineViewModel {
         self.displayedMonthStart = Self.monthStart(of: today, using: cal)
     }
 
-    /// 首次加载：拉取事件列表与当月 ± 1 日历标记。
+    /// 首次加载：并发拉取首屏列表与当前月份 marker，并以单次快照提交首屏。
     func loadInitialData() async {
-        await loadEvents()
+        guard !hasResolvedInitialSnapshot else { return }
+
+        let snapshot = await fetchBootstrapSnapshot()
+        applySections(snapshot.sections)
+        replaceMarkerCache(with: snapshot.markerCache)
+        hasResolvedInitialSnapshot = true
+        bootstrapPhase = .ready
         await preloadMarkers(around: displayedMonthStart)
     }
 
     /// 按当前 selectedDate 和 selectedCategory 拉取事件列表。
     func loadEvents() async {
-        isLoading = true
-        defer { isLoading = false }
-
-        let (start, end) = calculateTimeRange()
-        do {
-            let fetchedSections = try await repository.fetchTimelineEvents(
-                startTimestamp: start,
-                endTimestamp: end,
-                category: selectedCategory
-            )
-            applySections(fetchedSections)
-        } catch {
-            applySections([])
+        guard hasResolvedInitialSnapshot else {
+            await loadInitialData()
+            return
         }
+
+        isRefreshing = true
+        defer { isRefreshing = false }
+        applySections(await fetchSections())
     }
 
     /// 选中日期变更：更新 selectedDate 并重新拉取事件。
@@ -76,13 +83,24 @@ final class TimelineViewModel {
         await loadEvents()
     }
 
-    /// 分类筛选变更：清空日历标记缓存，重新拉取事件与标记。
+    /// 分类筛选变更：保留旧内容在位，待新分类列表与当前月份 marker 就绪后一次性替换。
     func selectCategory(_ category: TimelineEventCategory) async {
         guard category != selectedCategory else { return }
         selectedCategory = category
-        markerCache.removeAll()
-        markerRevision &+= 1
-        await loadEvents()
+        guard hasResolvedInitialSnapshot else {
+            await loadInitialData()
+            return
+        }
+
+        isRefreshing = true
+        defer { isRefreshing = false }
+        let currentMonthStart = displayedMonthStart
+        async let sections = fetchSections()
+        async let markers = fetchMarkers(for: currentMonthStart, category: category)
+        let resolvedSections = await sections
+        let resolvedMarkers = await markers
+        applySections(resolvedSections)
+        replaceMarkerCache(with: [Self.monthKey(for: currentMonthStart, using: calendar): resolvedMarkers])
         await preloadMarkers(around: displayedMonthStart)
     }
 
@@ -91,11 +109,13 @@ final class TimelineViewModel {
         let normalized = Self.monthStart(of: monthStart, using: calendar)
         guard normalized != displayedMonthStart else { return }
         displayedMonthStart = normalized
+        guard hasResolvedInitialSnapshot else { return }
         await preloadMarkers(around: normalized)
     }
 
     /// 预加载目标月份 ± 1 的日历标记，已缓存月份跳过。
     func preloadMarkers(around monthStart: Date) async {
+        guard hasResolvedInitialSnapshot else { return }
         let anchor = Self.monthStart(of: monthStart, using: calendar)
         var didUpdate = false
 
@@ -145,6 +165,10 @@ final class TimelineViewModel {
         guard newSections != sections else { return }
         sections = newSections
         sectionsRevision &+= 1
+    }
+
+    var isLoading: Bool {
+        bootstrapPhase == .bootstrapping || isRefreshing
     }
 }
 
@@ -204,6 +228,57 @@ private extension TimelineViewModel {
 // MARK: - 工具方法
 
 private extension TimelineViewModel {
+    struct BootstrapSnapshot {
+        let sections: [TimelineSection]
+        let markerCache: [String: [Date: TimelineDayMarker]]
+    }
+
+    /// 并发获取首屏最小可用快照，保证列表和当前月份 marker 一次性提交。
+    func fetchBootstrapSnapshot() async -> BootstrapSnapshot {
+        let currentMonthStart = displayedMonthStart
+        async let sections = fetchSections()
+        async let markers = fetchMarkers(for: currentMonthStart, category: selectedCategory)
+        let resolvedSections = await sections
+        let resolvedMarkers = await markers
+        return BootstrapSnapshot(
+            sections: resolvedSections,
+            markerCache: [Self.monthKey(for: currentMonthStart, using: calendar): resolvedMarkers]
+        )
+    }
+
+    /// 读取当前筛选条件下的时间线列表；失败时降级为空数据，避免首帧暴露异常中间态。
+    func fetchSections() async -> [TimelineSection] {
+        let (start, end) = calculateTimeRange()
+        do {
+            return try await repository.fetchTimelineEvents(
+                startTimestamp: start,
+                endTimestamp: end,
+                category: selectedCategory
+            )
+        } catch {
+            return []
+        }
+    }
+
+    /// 读取指定月份的 marker；失败时返回空 marker，保持日历结构稳定。
+    func fetchMarkers(for monthStart: Date, category: TimelineEventCategory) async -> [Date: TimelineDayMarker] {
+        do {
+            return try await repository.fetchCalendarMarkers(
+                for: monthStart,
+                category: category
+            )
+        } catch {
+            return [:]
+        }
+    }
+
+    /// 用新 marker cache 替换当前缓存，仅在实际变化时递增 markerRevision。
+    func replaceMarkerCache(with newCache: [String: [Date: TimelineDayMarker]]) {
+        guard newCache != markerCache else { return }
+        markerCache = newCache
+        markerRevision &+= 1
+    }
+
     /// 把日期折叠到月份首日，供查询范围和 marker cache key 统一使用。
     static func monthStart(of date: Date, using calendar: Calendar) -> Date {
         let normalized = calendar.startOfDay(for: date)

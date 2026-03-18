@@ -12,6 +12,8 @@
 - TopBar/AddMenuCircleButton.swift: 提供顶部添加菜单组件（AddMenuCircleButton）。
 - TopBar/TopBarGlassButtonStyle.swift: 提供顶部栏玻璃态样式扩展（topBarGlassButtonStyle）。
 - Tabs/KeepAliveSwitcherHost.swift: 提供通用懒激活保活切换容器（已激活子页常驻，仅切换可见性）。
+- Tabs/HorizontalPagingHost.swift: 提供通用横向分页宿主（分页吸附、选中同步、窗口化懒挂载与页级生命周期）。
+- Tabs/SubtabBootstrapCoordinator.swift: 提供通用二级页启动协调器（warmup 去重与阶段跟踪）。
 - Tabs/TopSwitcher.swift: 提供顶部切换组件（TopSwitcher）。
 - Charts/HeatmapChart.swift: 提供 GitHub 风格阅读热力图组件。
 - Charts/ReadingDurationRankingChart.swift: 提供阅读时长排行组件（封面 + 条形动画 + 占位态）。
