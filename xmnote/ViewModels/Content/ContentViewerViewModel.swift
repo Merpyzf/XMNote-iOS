@@ -21,6 +21,7 @@ final class ContentViewerViewModel {
     }
 
     let source: ContentViewerSourceContext
+    let keyword: String
 
     var items: [ContentViewerListItem] = []
     var selectedItemID: ContentViewerItemID?
@@ -45,12 +46,14 @@ final class ContentViewerViewModel {
     init(
         source: ContentViewerSourceContext,
         initialItemID: ContentViewerItemID,
+        keyword: String,
         defaultTitle: String,
         missingItemMessage: String,
         repository: any ContentRepositoryProtocol
     ) {
         self.source = source
         self.initialItemID = initialItemID
+        self.keyword = keyword
         self.defaultTitle = defaultTitle
         self.missingItemMessage = missingItemMessage
         self.repository = repository

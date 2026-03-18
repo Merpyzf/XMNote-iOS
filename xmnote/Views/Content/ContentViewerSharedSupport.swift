@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 ContentViewerSourceContext、SwiftUI/UIKit 与 DesignTokens 提供通用查看器共享支撑能力
- * [OUTPUT]: 对外提供 ContentViewerPresentationStyle、ContentViewerTagSheet、FlowTagWrap、ActivityShareSheet、ContentViewerSharePayload
+ * [OUTPUT]: 对外提供 ContentViewerPresentationStyle、占位能力模型、标签弹层、分享面板与共享辅助视图
  * [POS]: Content 模块查看页共享 support，统一书摘/书评/相关内容 viewer 的展示语义与辅助弹层
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -82,6 +82,85 @@ enum ContentViewerPresentationStyle {
             true
         case .noteOnly:
             false
+        }
+    }
+}
+
+/// 通用内容查看未开放能力枚举，统一管理入口提示文案与占位语义。
+enum ContentViewerPendingCapability {
+    case editTags
+    case apiSend
+    case aiAssistant
+    case aiExplain
+    case autoTag
+    case shareCard
+    case keywordHighlight
+
+    var title: String {
+        switch self {
+        case .editTags:
+            "标签编辑"
+        case .apiSend:
+            "API 外发"
+        case .aiAssistant:
+            "AI 助手"
+        case .aiExplain:
+            "AI 解读"
+        case .autoTag:
+            "自动标签"
+        case .shareCard:
+            "分享卡片"
+        case .keywordHighlight:
+            "关键词高亮"
+        }
+    }
+
+    var message: String {
+        switch self {
+        case .editTags:
+            "标签编辑能力已预留，后续版本开放。"
+        case .apiSend:
+            "API 外发能力已预留，后续版本开放。"
+        case .aiAssistant:
+            "AI 助手能力已预留，后续版本开放。"
+        case .aiExplain:
+            "AI 解读能力已预留，后续版本开放。"
+        case .autoTag:
+            "自动标签能力已预留，后续版本开放。"
+        case .shareCard:
+            "书摘分享卡片能力已预留，后续版本开放。"
+        case .keywordHighlight:
+            "关键词高亮能力已预留，后续版本开放。"
+        }
+    }
+}
+
+/// 通用内容查看占位提示载体，供 `.alert(item:)` 统一承接。
+struct PendingCapabilityPresentation: Identifiable {
+    let capability: ContentViewerPendingCapability
+    let id = UUID()
+
+    var title: String { capability.title }
+    var message: String { capability.message }
+}
+
+/// 通用内容查看底部多级动作菜单身份枚举。
+enum ContentViewerActionMenu: Identifiable {
+    case noteTag
+    case noteShare
+    case noteAPISend
+    case noteAI
+
+    var id: String {
+        switch self {
+        case .noteTag:
+            "noteTag"
+        case .noteShare:
+            "noteShare"
+        case .noteAPISend:
+            "noteAPISend"
+        case .noteAI:
+            "noteAI"
         }
     }
 }

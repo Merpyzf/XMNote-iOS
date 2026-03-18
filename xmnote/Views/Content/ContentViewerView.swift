@@ -12,6 +12,7 @@ import UIKit
 struct ContentViewerView: View {
     let source: ContentViewerSourceContext
     let initialItemID: ContentViewerItemID
+    let keyword: String
 
     @Environment(RepositoryContainer.self) private var repositories
     @Environment(\.dismiss) private var dismiss
@@ -45,6 +46,7 @@ struct ContentViewerView: View {
             let newViewModel = ContentViewerViewModel(
                 source: source,
                 initialItemID: initialItemID,
+                keyword: keyword,
                 defaultTitle: presentationStyle.defaultTitle,
                 missingItemMessage: presentationStyle.missingItemMessage,
                 repository: repositories.contentRepository
@@ -64,6 +66,8 @@ private struct ContentViewerLoadedView: View {
     @State private var bottomOrnamentHeight: CGFloat = 0
     @State private var showsTagSheet = false
     @State private var sharePayload: ContentViewerSharePayload?
+    @State private var actionMenu: ContentViewerActionMenu?
+    @State private var pendingPresentation: PendingCapabilityPresentation?
 
     private var presentationStyle: ContentViewerPresentationStyle {
         ContentViewerPresentationStyle(source: viewModel.source)
@@ -81,6 +85,12 @@ private struct ContentViewerLoadedView: View {
                     viewerMessageCard(text: listErrorMessage)
                         .padding(.horizontal, Spacing.screenEdge)
                         .padding(.top, Spacing.base)
+                }
+
+                if hasKeywordPlaceholder {
+                    viewerMessageCard(text: ContentViewerPendingCapability.keywordHighlight.message)
+                        .padding(.horizontal, Spacing.screenEdge)
+                        .padding(.top, viewModel.items.isEmpty ? Spacing.base : Spacing.cozy)
                 }
 
                 ContentViewerContentView(
@@ -128,6 +138,59 @@ private struct ContentViewerLoadedView: View {
             Button("取消", role: .cancel) {}
         } message: {
             Text("iOS 端当前按硬删除实现，主记录和子记录会一起删除。")
+        }
+        .confirmationDialog(
+            "",
+            isPresented: isActionMenuPresented,
+            titleVisibility: .hidden,
+            presenting: actionMenu
+        ) { menu in
+            switch menu {
+            case .noteTag:
+                Button("查看标签") {
+                    showsTagSheet = true
+                }
+                Button("编辑标签") {
+                    presentPending(.editTags)
+                }
+                Button("取消", role: .cancel) {}
+            case .noteShare:
+                Button("系统分享") {
+                    shareCurrentNote()
+                }
+                Button("分享卡片") {
+                    presentPending(.shareCard)
+                }
+                Button("取消", role: .cancel) {}
+            case .noteAPISend:
+                Button("发送到 Flomo") {
+                    presentPending(.apiSend)
+                }
+                Button("发送到 Writeathon") {
+                    presentPending(.apiSend)
+                }
+                Button("发送到 Inbox") {
+                    presentPending(.apiSend)
+                }
+                Button("取消", role: .cancel) {}
+            case .noteAI:
+                Button("AI 解读") {
+                    presentPending(.aiExplain)
+                }
+                Button("自动标签") {
+                    presentPending(.autoTag)
+                }
+                Button("取消", role: .cancel) {}
+            }
+        }
+        .alert(
+            pendingPresentation?.title ?? "",
+            isPresented: isPendingAlertPresented,
+            presenting: pendingPresentation
+        ) { _ in
+            Button("知道了", role: .cancel) {}
+        } message: { presentation in
+            Text(presentation.message)
         }
         .sheet(isPresented: $showsTagSheet) {
             ContentViewerTagSheet(
@@ -213,13 +276,20 @@ private struct ContentViewerLoadedView: View {
             switch viewModel.selectedItemID {
             case .note(let noteID)?:
                 Button {
-                    showsTagSheet = true
+                    handleNoteTagAction()
                 } label: {
                     ImmersiveBottomChromeIcon(systemName: "tag")
                 }
                 .buttonStyle(.plain)
-                .disabled(selectedTagNames.isEmpty)
-                .accessibilityLabel("查看标签")
+                .accessibilityLabel("标签")
+
+                Button {
+                    actionMenu = .noteAPISend
+                } label: {
+                    ImmersiveBottomChromeIcon(systemName: "paperplane")
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("API 外发")
 
                 NavigationLink(value: NoteRoute.edit(noteId: noteID)) {
                     ImmersiveBottomChromeIcon(systemName: "square.and.pencil")
@@ -228,14 +298,21 @@ private struct ContentViewerLoadedView: View {
                 .accessibilityLabel("编辑书摘")
 
                 Button {
-                    guard let detail = selectedNoteDetail else { return }
-                    sharePayload = ContentViewerSharePayload(text: shareText(from: detail))
+                    actionMenu = .noteShare
                 } label: {
                     ImmersiveBottomChromeIcon(systemName: "square.and.arrow.up")
                 }
                 .buttonStyle(.plain)
                 .disabled(selectedNoteDetail == nil)
                 .accessibilityLabel("分享书摘")
+
+                Button {
+                    actionMenu = .noteAI
+                } label: {
+                    ImmersiveBottomChromeIcon(systemName: "sparkles")
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("书摘 AI")
 
             case .review(let reviewID)?:
                 NavigationLink(value: ContentRoute.reviewEditor(reviewId: reviewID)) {
@@ -252,6 +329,14 @@ private struct ContentViewerLoadedView: View {
                 .buttonStyle(.plain)
                 .disabled(selectedReviewDetail == nil)
                 .accessibilityLabel("复制书评")
+
+                Button {
+                    presentPending(.aiAssistant)
+                } label: {
+                    ImmersiveBottomChromeIcon(systemName: "sparkles")
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("书评 AI")
 
             case .relevant(let contentID)?:
                 NavigationLink(value: ContentRoute.relevantEditor(contentId: contentID)) {
@@ -279,6 +364,14 @@ private struct ContentViewerLoadedView: View {
                 .disabled(selectedRelevantDetail == nil)
                 .accessibilityLabel("复制相关内容")
 
+                Button {
+                    presentPending(.aiAssistant)
+                } label: {
+                    ImmersiveBottomChromeIcon(systemName: "sparkles")
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("相关内容 AI")
+
             case .none:
                 ImmersiveBottomChromeIcon(systemName: "square.and.pencil")
                     .opacity(0.4)
@@ -286,6 +379,32 @@ private struct ContentViewerLoadedView: View {
                     .opacity(0.4)
             }
         }
+    }
+
+    private var hasKeywordPlaceholder: Bool {
+        !viewModel.keyword.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    private var isActionMenuPresented: Binding<Bool> {
+        Binding(
+            get: { actionMenu != nil },
+            set: { isPresented in
+                if !isPresented {
+                    actionMenu = nil
+                }
+            }
+        )
+    }
+
+    private var isPendingAlertPresented: Binding<Bool> {
+        Binding(
+            get: { pendingPresentation != nil },
+            set: { isPresented in
+                if !isPresented {
+                    pendingPresentation = nil
+                }
+            }
+        )
     }
 
     private func bottomChromeMetrics(safeAreaBottomInset: CGFloat) -> ImmersiveBottomChromeMetrics {
@@ -345,6 +464,23 @@ private struct ContentViewerLoadedView: View {
     private var relevantURL: URL? {
         guard let selectedRelevantDetail else { return nil }
         return normalizedURL(selectedRelevantDetail.url)
+    }
+
+    private func presentPending(_ capability: ContentViewerPendingCapability) {
+        pendingPresentation = PendingCapabilityPresentation(capability: capability)
+    }
+
+    private func handleNoteTagAction() {
+        if selectedTagNames.isEmpty {
+            presentPending(.editTags)
+        } else {
+            actionMenu = .noteTag
+        }
+    }
+
+    private func shareCurrentNote() {
+        guard let detail = selectedNoteDetail else { return }
+        sharePayload = ContentViewerSharePayload(text: shareText(from: detail))
     }
 
     private func copyCurrentDetail() {
@@ -468,7 +604,8 @@ struct ViewerScoreRow: View {
     NavigationStack {
         ContentViewerView(
             source: .bookNotes(bookId: 1),
-            initialItemID: .note(1)
+            initialItemID: .note(1),
+            keyword: ""
         )
     }
     .environment(RepositoryContainer(databaseManager: DatabaseManager(database: try! .empty())))

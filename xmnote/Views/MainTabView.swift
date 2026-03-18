@@ -236,8 +236,8 @@ struct MainTabView: View {
     @ViewBuilder
     private func contentDestination(for route: ContentRoute) -> some View {
         switch route {
-        case .contentViewer(let source, let initialItemID):
-            ContentViewerView(source: source, initialItemID: initialItemID)
+        case .contentViewer(let source, let initialItemID, let keyword):
+            ContentViewerView(source: source, initialItemID: initialItemID, keyword: keyword)
         case .reviewDetail(let reviewId):
             ReviewDetailView(reviewId: reviewId)
         case .relevantDetail(let contentId):
@@ -367,7 +367,7 @@ struct MainTabView: View {
         for source: ContentViewerSourceContext,
         initialItem: ContentViewerItemID
     ) -> ContentRoute {
-        .contentViewer(source: source, initialItemID: initialItem)
+        .contentViewer(source: source, initialItemID: initialItem, keyword: "")
     }
 }
 
