@@ -68,6 +68,7 @@ private struct NoteViewerLoadedView: View {
                 props: contentProps,
                 bottomChromeMetrics: bottomChromeMetrics(safeAreaBottomInset: safeAreaBottomInset),
                 onPagerSelectionChanged: { viewModel.select($0) },
+                notePageStateProvider: pageState(for:),
                 onLoadDetail: { noteID in
                     await viewModel.loadDetailIfNeeded(noteID: noteID)
                 },
@@ -242,12 +243,8 @@ private struct NoteViewerLoadedView: View {
         NoteViewerContentView.Props(
             selectedNoteID: viewModel.selectedNoteID,
             listState: listState,
-            notePages: visibleNoteItems.map(makeNotePage)
+            noteIDs: viewModel.items.map(\.noteID)
         )
-    }
-
-    private var visibleNoteItems: [ContentViewerListItem] {
-        viewModel.visibleNoteItems(radius: 3)
     }
 
     private var listState: NoteViewerContentView.Props.ListState {
@@ -258,14 +255,6 @@ private struct NoteViewerLoadedView: View {
             return .empty(viewModel.listErrorMessage ?? "书摘不存在或已删除")
         }
         return .content
-    }
-
-    private func makeNotePage(_ item: ContentViewerListItem) -> NoteViewerContentView.Props.NotePage {
-        NoteViewerContentView.Props.NotePage(
-            noteID: item.noteID,
-            state: pageState(for: item.noteID),
-            isSelected: item.noteID == viewModel.selectedNoteID
-        )
     }
 
     private func pageState(for noteID: Int64) -> NoteViewerContentView.Props.NotePageState {

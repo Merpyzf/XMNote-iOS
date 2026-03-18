@@ -162,25 +162,6 @@ final class NoteViewerViewModel {
         detailErrorMessages[noteID]
     }
 
-    /// 返回当前选中书摘附近的窗口化列表，用于横向 pager 懒挂载。
-    func visibleNoteItems(radius: Int) -> [ContentViewerListItem] {
-        guard !items.isEmpty else { return [] }
-
-        let resolvedRadius = max(0, radius)
-        let anchorNoteID = selectedNoteID ?? items.first?.noteID
-        guard
-            let anchorNoteID,
-            let anchorIndex = items.firstIndex(where: { $0.id == .note(anchorNoteID) })
-        else {
-            let upperBound = min(items.count, resolvedRadius * 2 + 1)
-            return Array(items.prefix(upperBound))
-        }
-
-        let lower = max(0, anchorIndex - resolvedRadius)
-        let upper = min(items.count - 1, anchorIndex + resolvedRadius)
-        return Array(items[lower...upper])
-    }
-
     /// 预取当前页相邻书摘详情，减少横向切页后的白屏等待。
     func prefetchDetails(around noteID: Int64, radius: Int) async {
         guard radius > 0 else { return }

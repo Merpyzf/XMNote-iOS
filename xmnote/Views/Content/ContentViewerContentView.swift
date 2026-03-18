@@ -25,29 +25,17 @@ struct ContentViewerContentView: View {
             case detail(ContentViewerDetail)
         }
 
-        /// 单页渲染快照，承接分页窗口内的内容页面。
-        struct Page: Identifiable, Equatable {
-            let item: ContentViewerListItem
-            let state: PageState
-            let isSelected: Bool
-
-            var id: ContentViewerItemID { item.id }
-        }
-
         let selectedItemID: ContentViewerItemID?
         let listState: ListState
-        let pages: [Page]
+        let itemIDs: [ContentViewerItemID]
     }
 
     let props: Props
     let bottomChromeMetrics: ImmersiveBottomChromeMetrics
     let onPagerSelectionChanged: (ContentViewerItemID) -> Void
-    let onLoadDetail: (ContentViewerItemID) async -> Void
-    let onRefreshDetail: (ContentViewerItemID) async -> Void
-
-    @State private var horizontalPagerPosition: ContentViewerItemID?
-    @State private var isHorizontalPagerInteractionActive = false
-    @State private var pendingPagerSelectionCommit: ContentViewerItemID?
+    let pageStateProvider: (ContentViewerItemID) -> Props.PageState
+    let onLoadDetail: @MainActor @Sendable (ContentViewerItemID) async -> Void
+    let onRefreshDetail: @MainActor @Sendable (ContentViewerItemID) async -> Void
 
     var body: some View {
         Group {
@@ -65,78 +53,30 @@ struct ContentViewerContentView: View {
 }
 
 private extension ContentViewerContentView {
-    var visibleItemIDs: [ContentViewerItemID] {
-        props.pages.map(\.item.id)
+    var pagerSelection: Binding<ContentViewerItemID?> {
+        Binding(
+            get: { props.selectedItemID },
+            set: { newValue in
+                guard let newValue, newValue != props.selectedItemID else { return }
+                onPagerSelectionChanged(newValue)
+            }
+        )
     }
 
     var pager: some View {
-        GeometryReader { proxy in
-            let pageWidth = max(1, proxy.size.width)
-            let pageHeight = max(1, proxy.size.height)
-
-            ScrollView(.horizontal, showsIndicators: false) {
-                LazyHStack(spacing: Spacing.none) {
-                    ForEach(props.pages) { page in
-                        ContentViewerPageView(
-                            page: page,
-                            bottomChromeMetrics: bottomChromeMetrics,
-                            onLoadDetail: onLoadDetail,
-                            onRefreshDetail: onRefreshDetail
-                        )
-                        .frame(width: pageWidth, height: pageHeight, alignment: .top)
-                        .id(page.item.id)
-                    }
-                }
-                .scrollTargetLayout()
-            }
-            .scrollTargetBehavior(.paging)
-            .scrollPosition(id: $horizontalPagerPosition, anchor: .topLeading)
-            .onAppear {
-                syncHorizontalPagerPositionIfNeeded(itemID: props.selectedItemID, animated: false)
-            }
-            .onChange(of: props.selectedItemID) { _, itemID in
-                guard !isHorizontalPagerInteractionActive else { return }
-                pendingPagerSelectionCommit = nil
-                syncHorizontalPagerPositionIfNeeded(itemID: itemID, animated: true)
-            }
-            .onChange(of: visibleItemIDs) { _, window in
-                guard !window.isEmpty else {
-                    horizontalPagerPosition = nil
-                    pendingPagerSelectionCommit = nil
-                    return
-                }
-
-                if let pending = pendingPagerSelectionCommit, !window.contains(pending) {
-                    pendingPagerSelectionCommit = nil
-                }
-
-                guard let current = horizontalPagerPosition, window.contains(current) else {
-                    guard !isHorizontalPagerInteractionActive else { return }
-                    syncHorizontalPagerPositionIfNeeded(itemID: props.selectedItemID, animated: false)
-                    return
-                }
-            }
-            .onChange(of: horizontalPagerPosition) { _, itemID in
-                guard let itemID, visibleItemIDs.contains(itemID) else { return }
-                if isHorizontalPagerInteractionActive {
-                    pendingPagerSelectionCommit = itemID
-                    return
-                }
-                guard itemID != props.selectedItemID else { return }
-                onPagerSelectionChanged(itemID)
-            }
-            .onScrollPhaseChange { _, phase in
-                if phase.isScrolling {
-                    isHorizontalPagerInteractionActive = true
-                    return
-                }
-
-                guard isHorizontalPagerInteractionActive else { return }
-                isHorizontalPagerInteractionActive = false
-                commitPendingPagerSelectionIfNeeded()
-            }
+        HorizontalPagingHost(
+            ids: props.itemIDs,
+            selection: pagerSelection,
+            windowAnchorID: props.selectedItemID,
+            windowing: .radius(3),
+            onPageTask: onLoadDetail,
+            onPageDidBecomeSelected: onRefreshDetail
+        ) { itemID in
+            ContentViewerPageView(
+                state: pageStateProvider(itemID),
+                bottomChromeMetrics: bottomChromeMetrics
+            )
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
     }
 
     var loadingState: some View {
@@ -157,57 +97,19 @@ private extension ContentViewerContentView {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .padding(.horizontal, Spacing.screenEdge)
     }
-
-    /// 将外部选中态同步到横向分页位置，避免窗口重建后错页。
-    func syncHorizontalPagerPositionIfNeeded(itemID: ContentViewerItemID?, animated: Bool) {
-        guard let itemID, visibleItemIDs.contains(itemID) else { return }
-        guard horizontalPagerPosition != itemID else { return }
-
-        if animated {
-            withAnimation(.snappy(duration: 0.24)) {
-                horizontalPagerPosition = itemID
-            }
-            return
-        }
-
-        var transaction = Transaction()
-        transaction.animation = nil
-        withTransaction(transaction) {
-            horizontalPagerPosition = itemID
-        }
-    }
-
-    /// 横向滚动结束后再提交最终页，避免滑动过程中反复回写业务状态。
-    func commitPendingPagerSelectionIfNeeded() {
-        defer { pendingPagerSelectionCommit = nil }
-
-        if let pending = pendingPagerSelectionCommit,
-           visibleItemIDs.contains(pending),
-           pending != props.selectedItemID {
-            onPagerSelectionChanged(pending)
-            return
-        }
-
-        if let current = horizontalPagerPosition,
-           !visibleItemIDs.contains(current) {
-            syncHorizontalPagerPositionIfNeeded(itemID: props.selectedItemID, animated: false)
-        }
-    }
 }
 
 /// 通用内容单页详情视图，负责页内滚动和按需加载。
 private struct ContentViewerPageView: View {
-    let page: ContentViewerContentView.Props.Page
+    let state: ContentViewerContentView.Props.PageState
     let bottomChromeMetrics: ImmersiveBottomChromeMetrics
-    let onLoadDetail: (ContentViewerItemID) async -> Void
-    let onRefreshDetail: (ContentViewerItemID) async -> Void
 
     var body: some View {
         let readableTailBuffer = max(Spacing.base, bottomChromeMetrics.readableInset)
 
         ScrollView {
             VStack(alignment: .leading, spacing: Spacing.base) {
-                switch page.state {
+                switch state {
                 case .loading:
                     ProgressView("正在加载内容…")
                         .frame(maxWidth: .infinity, minHeight: 320)
@@ -227,17 +129,6 @@ private struct ContentViewerPageView: View {
         .contentMargins(.bottom, Spacing.none, for: .scrollContent)
         .contentMargins(.bottom, bottomChromeMetrics.scrollIndicatorInset, for: .scrollIndicators)
         .ignoresSafeArea(.container, edges: .bottom)
-        .task(id: page.item.id) {
-            await onLoadDetail(page.item.id)
-        }
-        .onAppear {
-            guard page.isSelected else { return }
-            Task { await onRefreshDetail(page.item.id) }
-        }
-        .onChange(of: page.isSelected) { _, isSelected in
-            guard isSelected else { return }
-            Task { await onRefreshDetail(page.item.id) }
-        }
     }
 
     @ViewBuilder

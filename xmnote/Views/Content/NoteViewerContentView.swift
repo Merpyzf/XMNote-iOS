@@ -6,7 +6,6 @@
  */
 
 import SwiftUI
-import UIKit
 
 /// 书摘查看业务内容壳层，负责空态、横向分页和单页详情滚动。
 struct NoteViewerContentView: View {
@@ -26,29 +25,17 @@ struct NoteViewerContentView: View {
             case detail(NoteContentDetail)
         }
 
-        /// 单页渲染快照，承接分页窗口内的书摘页面。
-        struct NotePage: Identifiable, Equatable {
-            let noteID: Int64
-            let state: NotePageState
-            let isSelected: Bool
-
-            var id: Int64 { noteID }
-        }
-
         let selectedNoteID: Int64?
         let listState: ListState
-        let notePages: [NotePage]
+        let noteIDs: [Int64]
     }
 
     let props: Props
     let bottomChromeMetrics: ImmersiveBottomChromeMetrics
     let onPagerSelectionChanged: (Int64) -> Void
-    let onLoadDetail: (Int64) async -> Void
-    let onRefreshDetail: (Int64) async -> Void
-
-    @State private var horizontalPagerPosition: Int64?
-    @State private var isHorizontalPagerInteractionActive = false
-    @State private var pendingPagerSelectionCommit: Int64?
+    let notePageStateProvider: (Int64) -> Props.NotePageState
+    let onLoadDetail: @MainActor @Sendable (Int64) async -> Void
+    let onRefreshDetail: @MainActor @Sendable (Int64) async -> Void
 
     var body: some View {
         Group {
@@ -66,78 +53,30 @@ struct NoteViewerContentView: View {
 }
 
 private extension NoteViewerContentView {
-    var visibleNoteIDs: [Int64] {
-        props.notePages.map(\.noteID)
+    var pagerSelection: Binding<Int64?> {
+        Binding(
+            get: { props.selectedNoteID },
+            set: { newValue in
+                guard let newValue, newValue != props.selectedNoteID else { return }
+                onPagerSelectionChanged(newValue)
+            }
+        )
     }
 
     var pager: some View {
-        GeometryReader { proxy in
-            let pageWidth = max(1, proxy.size.width)
-            let pageHeight = max(1, proxy.size.height)
-
-            ScrollView(.horizontal, showsIndicators: false) {
-                LazyHStack(spacing: Spacing.none) {
-                    ForEach(props.notePages) { page in
-                        NoteViewerPage(
-                            page: page,
-                            bottomChromeMetrics: bottomChromeMetrics,
-                            onLoadDetail: onLoadDetail,
-                            onRefreshDetail: onRefreshDetail
-                        )
-                        .frame(width: pageWidth, height: pageHeight, alignment: .top)
-                        .id(page.noteID)
-                    }
-                }
-                .scrollTargetLayout()
-            }
-            .scrollTargetBehavior(.paging)
-            .scrollPosition(id: $horizontalPagerPosition, anchor: .topLeading)
-            .onAppear {
-                syncHorizontalPagerPositionIfNeeded(noteID: props.selectedNoteID, animated: false)
-            }
-            .onChange(of: props.selectedNoteID) { _, noteID in
-                guard !isHorizontalPagerInteractionActive else { return }
-                pendingPagerSelectionCommit = nil
-                syncHorizontalPagerPositionIfNeeded(noteID: noteID, animated: true)
-            }
-            .onChange(of: visibleNoteIDs) { _, window in
-                guard !window.isEmpty else {
-                    horizontalPagerPosition = nil
-                    pendingPagerSelectionCommit = nil
-                    return
-                }
-
-                if let pending = pendingPagerSelectionCommit, !window.contains(pending) {
-                    pendingPagerSelectionCommit = nil
-                }
-
-                guard let current = horizontalPagerPosition, window.contains(current) else {
-                    guard !isHorizontalPagerInteractionActive else { return }
-                    syncHorizontalPagerPositionIfNeeded(noteID: props.selectedNoteID, animated: false)
-                    return
-                }
-            }
-            .onChange(of: horizontalPagerPosition) { _, noteID in
-                guard let noteID, visibleNoteIDs.contains(noteID) else { return }
-                if isHorizontalPagerInteractionActive {
-                    pendingPagerSelectionCommit = noteID
-                    return
-                }
-                guard noteID != props.selectedNoteID else { return }
-                onPagerSelectionChanged(noteID)
-            }
-            .onScrollPhaseChange { _, phase in
-                if phase.isScrolling {
-                    isHorizontalPagerInteractionActive = true
-                    return
-                }
-
-                guard isHorizontalPagerInteractionActive else { return }
-                isHorizontalPagerInteractionActive = false
-                commitPendingPagerSelectionIfNeeded()
-            }
+        HorizontalPagingHost(
+            ids: props.noteIDs,
+            selection: pagerSelection,
+            windowAnchorID: props.selectedNoteID,
+            windowing: .radius(3),
+            onPageTask: onLoadDetail,
+            onPageDidBecomeSelected: onRefreshDetail
+        ) { noteID in
+            NoteViewerPage(
+                state: notePageStateProvider(noteID),
+                bottomChromeMetrics: bottomChromeMetrics
+            )
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
     }
 
     var loadingState: some View {
@@ -158,50 +97,12 @@ private extension NoteViewerContentView {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .padding(.horizontal, Spacing.screenEdge)
     }
-
-    /// 将外部选中态同步到横向分页位置，避免窗口重建后错页。
-    func syncHorizontalPagerPositionIfNeeded(noteID: Int64?, animated: Bool) {
-        guard let noteID, visibleNoteIDs.contains(noteID) else { return }
-        guard horizontalPagerPosition != noteID else { return }
-
-        if animated {
-            withAnimation(.snappy(duration: 0.24)) {
-                horizontalPagerPosition = noteID
-            }
-            return
-        }
-
-        var transaction = Transaction()
-        transaction.animation = nil
-        withTransaction(transaction) {
-            horizontalPagerPosition = noteID
-        }
-    }
-
-    /// 横向滚动结束后再提交最终页，避免滑动过程中反复回写业务状态。
-    func commitPendingPagerSelectionIfNeeded() {
-        defer { pendingPagerSelectionCommit = nil }
-
-        if let pending = pendingPagerSelectionCommit,
-           visibleNoteIDs.contains(pending),
-           pending != props.selectedNoteID {
-            onPagerSelectionChanged(pending)
-            return
-        }
-
-        if let current = horizontalPagerPosition,
-           !visibleNoteIDs.contains(current) {
-            syncHorizontalPagerPositionIfNeeded(noteID: props.selectedNoteID, animated: false)
-        }
-    }
 }
 
 /// 单页书摘详情视图，负责页内滚动和按需加载。
 private struct NoteViewerPage: View {
-    let page: NoteViewerContentView.Props.NotePage
+    let state: NoteViewerContentView.Props.NotePageState
     let bottomChromeMetrics: ImmersiveBottomChromeMetrics
-    let onLoadDetail: (Int64) async -> Void
-    let onRefreshDetail: (Int64) async -> Void
 
     var body: some View {
         let immersiveBottomInset = Spacing.none
@@ -209,7 +110,7 @@ private struct NoteViewerPage: View {
 
         ScrollView {
             VStack(alignment: .leading, spacing: Spacing.base) {
-                switch page.state {
+                switch state {
                 case .loading:
                     ProgressView("正在加载书摘…")
                         .frame(maxWidth: .infinity, minHeight: 320)
@@ -230,17 +131,5 @@ private struct NoteViewerPage: View {
         .contentMargins(.bottom, Spacing.none, for: .scrollContent)
         .contentMargins(.bottom, bottomChromeMetrics.scrollIndicatorInset, for: .scrollIndicators)
         .ignoresSafeArea(.container, edges: .bottom)
-        .task(id: page.noteID) {
-            await onLoadDetail(page.noteID)
-        }
-        .onAppear {
-            guard page.isSelected else { return }
-            Task { await onRefreshDetail(page.noteID) }
-        }
-        .onChange(of: page.isSelected) { _, isSelected in
-            guard isSelected else { return }
-            Task { await onRefreshDetail(page.noteID) }
-        }
     }
-
 }

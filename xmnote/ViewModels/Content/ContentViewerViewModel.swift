@@ -167,25 +167,6 @@ final class ContentViewerViewModel {
         detailLoadingIDs.contains(itemID)
     }
 
-    /// 返回当前选中内容附近的窗口化列表，用于横向 pager 懒挂载。
-    func visibleItems(radius: Int) -> [ContentViewerListItem] {
-        guard !items.isEmpty else { return [] }
-
-        let resolvedRadius = max(0, radius)
-        let anchorItemID = selectedItemID ?? items.first?.id
-        guard
-            let anchorItemID,
-            let anchorIndex = items.firstIndex(where: { $0.id == anchorItemID })
-        else {
-            let upperBound = min(items.count, resolvedRadius * 2 + 1)
-            return Array(items.prefix(upperBound))
-        }
-
-        let lower = max(0, anchorIndex - resolvedRadius)
-        let upper = min(items.count - 1, anchorIndex + resolvedRadius)
-        return Array(items[lower...upper])
-    }
-
     /// 预取当前页相邻内容详情，减少横向切页后的白屏等待。
     func prefetchDetails(around itemID: ContentViewerItemID, radius: Int) async {
         guard radius > 0 else { return }

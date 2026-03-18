@@ -83,6 +83,14 @@ struct ReadCalendarContentView: View {
             loadState == .loading
         }
 
+        var isPlaceholder: Bool {
+            loadState == .idle
+                && errorMessage == nil
+                && dayMap.isEmpty
+                && readingDurationTopBooks.isEmpty
+                && summary == .empty
+        }
+
         /// 把当日业务数据映射为网格单元载荷（热度、读完标记、连续阅读态）。
         func payload(for date: Date) -> ReadCalendarMonthGrid.DayPayload {
             let cal = Calendar.current
@@ -148,7 +156,6 @@ struct ReadCalendarContentView: View {
         let isStreakHintEnabled: Bool
         let rootContentState: RootContentState
         let errorMessage: String?
-        let monthPages: [MonthPage]
         let heatmapYearMonthPages: [MonthPage]
         let selectedYearLoadState: YearLoadState
         let selectedYearErrorMessage: String?
@@ -275,6 +282,7 @@ struct ReadCalendarContentView: View {
     }
 
     let props: Props
+    let monthPageProvider: (Date) -> MonthPage
     let onDisplayModeChanged: (DisplayMode) -> Void
     let onPagerSelectionChanged: (Date) -> Void
     let onYearSelectionChanged: (Int) -> Void
@@ -305,9 +313,6 @@ struct ReadCalendarContentView: View {
     @State private var topControlBarFrameInGlobal: CGRect = .zero
     @State private var lastLoggedTopControlBarFrameForDebug: CGRect = .zero
     @State private var lastLoggedCalendarViewportSignatureForDebug = ""
-    @State private var horizontalPagerPosition: Date?
-    @State private var isHorizontalPagerInteractionActive = false
-    @State private var pendingPagerSelectionCommit: Date?
 
     var body: some View {
         bodyContainer
@@ -619,7 +624,8 @@ private extension ReadCalendarContentView {
 
     /// 读取已加载月份页面状态，避免未命中时误用占位数据。
     func monthPageStateIfLoaded(for monthStart: Date) -> MonthPage? {
-        props.monthPages.first(where: { $0.monthStart == monthStart })
+        let page = monthPageProvider(monthStart)
+        return page.isPlaceholder ? nil : page
     }
 
     /// 为单月预构建日期 -> 封面条目映射，避免日格渲染期间重复排序与对象创建。
@@ -892,7 +898,7 @@ private extension ReadCalendarContentView {
     /// 按指定月份生成摘要弹层需要的完整数据快照。
     func summarySheetData(for monthStart: Date) -> MonthSummarySheetData {
         let normalizedMonthStart = Calendar.current.startOfDay(for: monthStart)
-        let page = monthPageStateIfLoaded(for: normalizedMonthStart) ?? monthPageState(for: normalizedMonthStart)
+        let page = monthPageProvider(normalizedMonthStart)
         return buildMonthSummary(from: page)
     }
 
@@ -1140,103 +1146,27 @@ private extension ReadCalendarContentView {
         return Layout.summaryFloatingButtonBottomBase + resolvedSafeAreaBottom
     }
 
-    var visibleMonthStarts: [Date] {
-        props.monthPages.map(\.monthStart)
+    var pagerSelection: Binding<Date?> {
+        Binding(
+            get: { props.pagerSelection },
+            set: { newValue in
+                guard let newValue else { return }
+                let normalized = Calendar.current.startOfDay(for: newValue)
+                guard normalized != props.pagerSelection else { return }
+                onPagerSelectionChanged(normalized)
+            }
+        )
     }
 
     var calendarPager: some View {
-        GeometryReader { proxy in
-            let pageWidth = max(1, proxy.size.width)
-            let pageHeight = max(1, proxy.size.height)
-            ScrollView(.horizontal, showsIndicators: false) {
-                LazyHStack(spacing: Spacing.none) {
-                    ForEach(visibleMonthStarts, id: \.self) { monthStart in
-                        monthPage(for: monthStart)
-                            .frame(width: pageWidth, height: pageHeight, alignment: .top)
-                            .id(monthStart)
-                    }
-                }
-                .scrollTargetLayout()
-            }
-            .scrollTargetBehavior(.paging)
-            .scrollPosition(id: $horizontalPagerPosition, anchor: .topLeading)
-            .onAppear {
-                syncHorizontalPagerPositionIfNeeded(monthStart: props.pagerSelection, animated: false)
-            }
-            .onChange(of: props.pagerSelection) { _, monthStart in
-                guard !isHorizontalPagerInteractionActive else { return }
-                pendingPagerSelectionCommit = nil
-                syncHorizontalPagerPositionIfNeeded(monthStart: monthStart, animated: true)
-            }
-            .onChange(of: visibleMonthStarts) { _, window in
-                guard !window.isEmpty else {
-                    horizontalPagerPosition = nil
-                    pendingPagerSelectionCommit = nil
-                    return
-                }
-                if let pending = pendingPagerSelectionCommit, !window.contains(pending) {
-                    pendingPagerSelectionCommit = nil
-                }
-                guard let current = horizontalPagerPosition, window.contains(current) else {
-                    guard !isHorizontalPagerInteractionActive else { return }
-                    syncHorizontalPagerPositionIfNeeded(monthStart: props.pagerSelection, animated: false)
-                    return
-                }
-            }
-            .onChange(of: horizontalPagerPosition) { _, monthStart in
-                guard let monthStart else { return }
-                guard visibleMonthStarts.contains(monthStart) else { return }
-                if isHorizontalPagerInteractionActive {
-                    pendingPagerSelectionCommit = monthStart
-                    return
-                }
-                guard monthStart != props.pagerSelection else { return }
-                onPagerSelectionChanged(monthStart)
-            }
-            .onScrollPhaseChange { _, phase in
-                if phase.isScrolling {
-                    isHorizontalPagerInteractionActive = true
-                    return
-                }
-                guard isHorizontalPagerInteractionActive else { return }
-                isHorizontalPagerInteractionActive = false
-                commitPendingPagerSelectionIfNeeded()
-            }
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-    }
-
-    /// 将横向分页位置与外部月份状态对齐，避免窗口重建后发生错页。
-    func syncHorizontalPagerPositionIfNeeded(monthStart: Date, animated: Bool) {
-        guard horizontalPagerPosition != monthStart else { return }
-        guard visibleMonthStarts.contains(monthStart) else { return }
-        if animated {
-            withAnimation(.snappy(duration: Layout.horizontalPagerProgrammaticDuration)) {
-                horizontalPagerPosition = monthStart
-            }
-            return
-        }
-        var transaction = Transaction()
-        transaction.animation = nil
-        withTransaction(transaction) {
-            horizontalPagerPosition = monthStart
-        }
-    }
-
-    /// 在横向滚动结束时提交待生效月份，避免滚动中频繁触发业务状态回写造成跳变。
-    func commitPendingPagerSelectionIfNeeded() {
-        defer { pendingPagerSelectionCommit = nil }
-
-        if let pending = pendingPagerSelectionCommit,
-           visibleMonthStarts.contains(pending),
-           pending != props.pagerSelection {
-            onPagerSelectionChanged(pending)
-            return
-        }
-
-        if let current = horizontalPagerPosition,
-           !visibleMonthStarts.contains(current) {
-            syncHorizontalPagerPositionIfNeeded(monthStart: props.pagerSelection, animated: false)
+        HorizontalPagingHost(
+            ids: props.availableMonths,
+            selection: pagerSelection,
+            windowAnchorID: props.pagerSelection,
+            windowing: .radius(3),
+            programmaticScrollAnimation: .snappy(duration: Layout.horizontalPagerProgrammaticDuration)
+        ) { monthStart in
+            monthPage(for: monthStart)
         }
     }
 
@@ -1335,7 +1265,7 @@ private extension ReadCalendarContentView {
 
     /// 渲染单月分页内容（加载态、日历网格与滚动交互）。
     func monthPage(for monthStart: Date) -> some View {
-        let pageState = monthPageState(for: monthStart)
+        let pageState = monthPageProvider(monthStart)
 
         return ScrollView(.vertical, showsIndicators: false) {
             ZStack(alignment: .top) {
@@ -1440,28 +1370,6 @@ private extension ReadCalendarContentView {
             }
         }
         .frame(maxWidth: .infinity, minHeight: Layout.pageMinHeight)
-    }
-
-    /// 返回指定月份页面状态；缺失时构造占位状态保证页面可渲染。
-    func monthPageState(for monthStart: Date) -> MonthPage {
-        if let page = props.monthPages.first(where: { $0.monthStart == monthStart }) {
-            return page
-        }
-
-        return MonthPage(
-            monthStart: monthStart,
-            weeks: [],
-            dayMap: [:],
-            readingDurationTopBooks: [],
-            summary: .empty,
-            rankingBarColorsByBookId: [:],
-            selectedDate: nil,
-            todayStart: Calendar.current.startOfDay(for: Date()),
-            laneLimit: props.laneLimit,
-            isDayMapEmpty: true,
-            loadState: .loading,
-            errorMessage: nil
-        )
     }
 
     /// 将内容展示模式映射为网格组件可识别的显示模式。
@@ -2623,7 +2531,6 @@ private extension View {
             isStreakHintEnabled: true,
             rootContentState: .loading,
             errorMessage: nil,
-            monthPages: [],
             heatmapYearMonthPages: [],
             selectedYearLoadState: .idle,
             selectedYearErrorMessage: nil,
@@ -2643,6 +2550,22 @@ private extension View {
                 errorMessage: nil
             )
         ),
+        monthPageProvider: { monthStart in
+            ReadCalendarContentView.MonthPage(
+                monthStart: monthStart,
+                weeks: [],
+                dayMap: [:],
+                readingDurationTopBooks: [],
+                summary: .empty,
+                rankingBarColorsByBookId: [:],
+                selectedDate: nil,
+                todayStart: Calendar.current.startOfDay(for: Date()),
+                laneLimit: 4,
+                isDayMapEmpty: true,
+                loadState: .idle,
+                errorMessage: nil
+            )
+        },
         onDisplayModeChanged: { _ in },
         onPagerSelectionChanged: { _ in },
         onYearSelectionChanged: { _ in },

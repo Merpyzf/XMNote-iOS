@@ -34,6 +34,12 @@ struct ReadCalendarView: View {
 
             ReadCalendarContentView(
                 props: contentProps,
+                monthPageProvider: { monthStart in
+                    makeContentMonthPage(
+                        for: monthStart,
+                        todayStart: Calendar.current.startOfDay(for: Date())
+                    )
+                },
                 onDisplayModeChanged: { mode in
                     displayMode = mode
                     guard mode == .heatmap else { return }
@@ -152,8 +158,6 @@ private extension ReadCalendarView {
 // MARK: - Props Mapping
 
 private extension ReadCalendarView {
-    var pagerWindowRadius: Int { 3 }
-
     var contentProps: ReadCalendarContentView.Props {
         // 每次 body 求值时重新计算 todayStart，确保跨午夜后"今天"标记实时更新。
         // 代价是每次 body 求值多一次 Calendar.startOfDay 调用，但日历页刷新频率较低，可接受。
@@ -177,32 +181,11 @@ private extension ReadCalendarView {
             isStreakHintEnabled: settings.isStreakHintEnabled,
             rootContentState: mapRootContentState(viewModel.rootContentState),
             errorMessage: viewModel.errorMessage,
-            monthPages: visibleMonthWindow.map { monthStart in
-                makeContentMonthPage(for: monthStart, todayStart: todayStart)
-            },
             heatmapYearMonthPages: heatmapYearPages,
             selectedYearLoadState: mapYearLoadState(viewModel.yearLoadState(for: viewModel.selectedYear)),
             selectedYearErrorMessage: selectedYearSummary.errorMessage,
             yearSummary: mapYearSummary(selectedYearSummary)
         )
-    }
-
-    var visibleMonthWindow: [Date] {
-        let months = viewModel.availableMonths
-        guard !months.isEmpty else { return [] }
-
-        let anchorIndex: Int = {
-            if let idx = months.firstIndex(of: viewModel.pagerSelection) { return idx }
-            if let idx = months.firstIndex(of: viewModel.displayedMonthStart) { return idx }
-            assertionFailure("visibleMonthWindow: pagerSelection 与 displayedMonthStart 均不在 availableMonths 中")
-            #if DEBUG
-            print("[ReadCalendar] visibleMonthWindow fallback: pagerSelection=\(viewModel.pagerSelection), displayedMonthStart=\(viewModel.displayedMonthStart), months.count=\(months.count)")
-            #endif
-            return 0
-        }()
-        let lower = max(0, anchorIndex - pagerWindowRadius)
-        let upper = min(months.count - 1, anchorIndex + pagerWindowRadius)
-        return Array(months[lower...upper])
     }
 
     var heatmapYearMonths: [Date] {

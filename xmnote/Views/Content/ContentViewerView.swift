@@ -76,6 +76,7 @@ private struct ContentViewerLoadedView: View {
                     props: contentProps,
                     bottomChromeMetrics: bottomChromeMetrics(safeAreaBottomInset: safeAreaBottomInset),
                     onPagerSelectionChanged: { viewModel.select($0) },
+                    pageStateProvider: pageState(for:),
                     onLoadDetail: { itemID in
                         await viewModel.loadDetailIfNeeded(itemID: itemID)
                     },
@@ -281,7 +282,7 @@ private struct ContentViewerLoadedView: View {
         ContentViewerContentView.Props(
             selectedItemID: viewModel.selectedItemID,
             listState: listState,
-            pages: visibleItems.map(makePage)
+            itemIDs: viewModel.items.map(\.id)
         )
     }
 
@@ -293,18 +294,6 @@ private struct ContentViewerLoadedView: View {
             return .empty(viewModel.listErrorMessage ?? "内容不存在或已删除")
         }
         return .content
-    }
-
-    private var visibleItems: [ContentViewerListItem] {
-        viewModel.visibleItems(radius: 3)
-    }
-
-    private func makePage(_ item: ContentViewerListItem) -> ContentViewerContentView.Props.Page {
-        ContentViewerContentView.Props.Page(
-            item: item,
-            state: pageState(for: item.id),
-            isSelected: item.id == viewModel.selectedItemID
-        )
     }
 
     private func pageState(for itemID: ContentViewerItemID) -> ContentViewerContentView.Props.PageState {
