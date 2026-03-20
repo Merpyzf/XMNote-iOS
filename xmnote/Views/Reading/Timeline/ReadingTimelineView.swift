@@ -245,6 +245,7 @@ private struct TimelineCalendarPanel: View {
     @StateObject private var calendarProxy = CalendarViewProxy()
     @State private var calendarHeight: CGFloat = 320
     @State private var calendarViewportWidth: CGFloat = 0
+    @State private var hasPerformedInitialViewportSync = false
     @State private var isUserPagingInFlight = false
     @State private var isProgrammaticLongJump = false
     @State private var markerPreloadTask: Task<Void, Never>?
@@ -387,9 +388,7 @@ private struct TimelineCalendarPanel: View {
         }
         .allowsHitTesting(viewModel.bootstrapPhase == .ready && !viewModel.isRefreshing)
         .onAppear {
-            DispatchQueue.main.async {
-                jumpToDate(calendar.startOfDay(for: Date()), animated: false)
-            }
+            performInitialViewportSyncIfNeeded()
         }
         .onDisappear {
             markerPreloadTask?.cancel()
@@ -400,6 +399,30 @@ private struct TimelineCalendarPanel: View {
 }
 
 private extension TimelineCalendarPanel {
+    /// 仅在面板首次挂载时同步日历视口到当前状态，不能在每次重新出现时重置到今天。
+    func performInitialViewportSyncIfNeeded() {
+        guard !hasPerformedInitialViewportSync else { return }
+        hasPerformedInitialViewportSync = true
+
+        let targetMonth = Self.monthStart(of: viewModel.displayedMonthStart, using: calendar)
+        let targetDay = calendar.startOfDay(for: viewModel.selectedDate)
+        DispatchQueue.main.async {
+            applyDisplayedMonth(targetMonth, animated: false)
+            calendarProxy.scrollToMonth(
+                containing: targetMonth,
+                scrollPosition: .firstFullyVisiblePosition,
+                animated: false
+            )
+            if calendar.isDate(targetDay, equalTo: targetMonth, toGranularity: .month) {
+                calendarProxy.scrollToDay(
+                    containing: targetDay,
+                    scrollPosition: .centered,
+                    animated: false
+                )
+            }
+        }
+    }
+
     @ViewBuilder
     var calendarHeader: some View {
         if usesExpandedHeaderLayout {
