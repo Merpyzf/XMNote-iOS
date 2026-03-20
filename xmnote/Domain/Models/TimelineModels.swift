@@ -106,7 +106,7 @@ struct TimelineSection: Identifiable, Equatable {
 // MARK: - 筛选类别
 
 /// 时间线事件筛选类别，对齐 Android 端 7 种 + 全部
-enum TimelineEventCategory: String, CaseIterable, Identifiable, Equatable {
+enum TimelineEventCategory: String, CaseIterable, Identifiable, Equatable, Codable {
     case all = "全部"
     case note = "书摘"
     case readStatus = "状态"
@@ -116,6 +116,47 @@ enum TimelineEventCategory: String, CaseIterable, Identifiable, Equatable {
     case checkIn = "打卡"
 
     var id: String { rawValue }
+
+    private var persistedCode: String {
+        switch self {
+        case .all: "all"
+        case .note: "note"
+        case .readStatus: "read_status"
+        case .relevant: "relevant"
+        case .review: "review"
+        case .readTiming: "read_timing"
+        case .checkIn: "check_in"
+        }
+    }
+
+    init(from decoder: any Decoder) throws {
+        let container = try decoder.singleValueContainer()
+        let raw = try container.decode(String.self)
+
+        switch raw {
+        case "all", "全部":
+            self = .all
+        case "note", "书摘":
+            self = .note
+        case "read_status", "readStatus", "状态":
+            self = .readStatus
+        case "relevant", "相关":
+            self = .relevant
+        case "review", "书评":
+            self = .review
+        case "read_timing", "readTiming", "计时":
+            self = .readTiming
+        case "check_in", "checkIn", "打卡":
+            self = .checkIn
+        default:
+            self = .all
+        }
+    }
+
+    func encode(to encoder: any Encoder) throws {
+        var container = encoder.singleValueContainer()
+        try container.encode(persistedCode)
+    }
 }
 
 // MARK: - Emoji 映射

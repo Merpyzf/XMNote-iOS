@@ -15,10 +15,12 @@ struct ContentViewerView: View {
     let keyword: String
 
     @Environment(RepositoryContainer.self) private var repositories
+    @Environment(SceneStateStore.self) private var sceneStateStore
     @Environment(\.dismiss) private var dismiss
 
     @State private var viewModel: ContentViewerViewModel?
     @State private var showsDeleteDialog = false
+    @State private var didBootstrapFromScene = false
 
     private var presentationStyle: ContentViewerPresentationStyle {
         ContentViewerPresentationStyle(source: source)
@@ -41,11 +43,22 @@ struct ContentViewerView: View {
                     .background(Color.surfacePage)
             }
         }
-        .task {
+        .task(id: sceneStateStore.isRestored) {
+            guard sceneStateStore.isRestored else { return }
+            guard !didBootstrapFromScene else { return }
+            didBootstrapFromScene = true
             guard viewModel == nil else { return }
+            let restoredSelectedItemID: ContentViewerItemID? = {
+                guard let snapshot = sceneStateStore.snapshot.contentViewer,
+                      snapshot.source == source else {
+                    return nil
+                }
+                return snapshot.selectedItemID
+            }()
             let newViewModel = ContentViewerViewModel(
                 source: source,
                 initialItemID: initialItemID,
+                restoredSelectedItemID: restoredSelectedItemID,
                 keyword: keyword,
                 defaultTitle: presentationStyle.defaultTitle,
                 missingItemMessage: presentationStyle.missingItemMessage,
@@ -53,6 +66,12 @@ struct ContentViewerView: View {
             )
             viewModel = newViewModel
             newViewModel.startObservation()
+        }
+        .onChange(of: viewModel?.selectedItemID) { _, newValue in
+            guard let newValue else { return }
+            sceneStateStore.updateContentViewer(
+                ContentViewerSceneSnapshot(source: source, selectedItemID: newValue)
+            )
         }
     }
 }

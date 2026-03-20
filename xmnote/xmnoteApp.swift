@@ -24,6 +24,7 @@ import AliyunpanSDK
 /// 应用入口，负责初始化全局依赖并挂载根界面。
 struct xmnoteApp: App {
     @State private var appState = AppState()
+    @State private var sceneStateStore = SceneStateStore()
     @State private var databaseManager: DatabaseManager?
     @State private var repositories: RepositoryContainer?
     @State private var initError: Error?
@@ -43,6 +44,7 @@ struct xmnoteApp: App {
                     ContentView()
                         .id(appState.dataEpoch)
                         .environment(appState)
+                        .environment(sceneStateStore)
                         .environment(databaseManager)
                         .environment(repositories)
                         .transition(.opacity)

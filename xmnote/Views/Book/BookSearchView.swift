@@ -10,6 +10,7 @@ import SwiftUI
 /// 书籍搜索页入口，负责承接首页新增书籍主链路与豆瓣风控登录恢复。
 struct BookSearchView: View {
     @Environment(RepositoryContainer.self) private var repositories
+    @Environment(SceneStateStore.self) private var sceneStateStore
     @FocusState private var isSearchFieldFocused: Bool
 
     @State private var viewModel: BookSearchViewModel?
@@ -27,6 +28,7 @@ struct BookSearchView: View {
     @State private var didDetectDoubanLogin = false
     @State private var didCompleteFanqieVerification = false
     @State private var isRecentQueriesExpanded = false
+    @State private var didBootstrapFromScene = false
 
     var body: some View {
         Group {
@@ -38,9 +40,17 @@ struct BookSearchView: View {
                     .background(Color.surfacePage)
             }
         }
-        .task {
+        .task(id: sceneStateStore.isRestored) {
+            guard sceneStateStore.isRestored else { return }
+            guard !didBootstrapFromScene else { return }
+            didBootstrapFromScene = true
             guard viewModel == nil else { return }
-            viewModel = BookSearchViewModel(repository: repositories.bookSearchRepository)
+            let snapshot = sceneStateStore.snapshot.books.search
+            viewModel = BookSearchViewModel(
+                repository: repositories.bookSearchRepository,
+                initialQuery: snapshot?.query ?? "",
+                initialSource: snapshot?.selectedSource ?? .wenqu
+            )
             isSearchFieldFocused = true
         }
         .navigationDestination(item: $navigationSeed) { seed in
@@ -138,6 +148,9 @@ struct BookSearchView: View {
                 }
             )
         }
+        .onAppear {
+            syncSceneSnapshot()
+        }
     }
 
     private func content(_ viewModel: BookSearchViewModel) -> some View {
@@ -192,6 +205,22 @@ struct BookSearchView: View {
                 isSearchFieldFocused = true
             }
         }
+        .onChange(of: viewModel.query) { _, _ in
+            syncSceneSnapshot()
+        }
+        .onChange(of: viewModel.selectedSource) { _, _ in
+            syncSceneSnapshot()
+        }
+    }
+
+    private func syncSceneSnapshot() {
+        guard let viewModel else { return }
+        sceneStateStore.updateBookSearch(
+            BookSearchSceneSnapshot(
+                query: viewModel.query,
+                selectedSource: viewModel.selectedSource
+            )
+        )
     }
 
     private func controlsSection(_ viewModel: BookSearchViewModel) -> some View {

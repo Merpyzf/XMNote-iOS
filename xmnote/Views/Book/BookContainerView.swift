@@ -17,7 +17,7 @@ import SwiftUI
 // MARK: - Sub Tab
 
 /// 书籍页二级分栏：书籍列表与书单列表。
-enum BookSubTab: CaseIterable, Hashable {
+enum BookSubTab: String, CaseIterable, Hashable, Codable {
     case books, collections
 
     var title: String {
@@ -33,7 +33,10 @@ enum BookSubTab: CaseIterable, Hashable {
 /// 书籍模块入口容器，负责书籍/书单二级切换与顶部新增操作。
 struct BookContainerView: View {
     @Environment(RepositoryContainer.self) private var repositories
+    @Environment(SceneStateStore.self) private var sceneStateStore
     @State private var viewModel: BookViewModel?
+    @State private var selectedSubTab: BookSubTab = .books
+    @State private var didBootstrapFromScene = false
     let onAddBook: () -> Void
     let onAddNote: () -> Void
     let onOpenDebugCenter: (() -> Void)?
@@ -54,6 +57,7 @@ struct BookContainerView: View {
             if let viewModel {
                 BookContentView(
                     viewModel: viewModel,
+                    selectedSubTab: $selectedSubTab,
                     onAddBook: onAddBook,
                     onAddNote: onAddNote,
                     onOpenDebugCenter: onOpenDebugCenter
@@ -62,9 +66,18 @@ struct BookContainerView: View {
                 Color.clear
             }
         }
+        .task(id: sceneStateStore.isRestored) {
+            guard sceneStateStore.isRestored else { return }
+            guard !didBootstrapFromScene else { return }
+            didBootstrapFromScene = true
+            selectedSubTab = sceneStateStore.snapshot.books.selectedSubTab
+        }
         .task {
             guard viewModel == nil else { return }
             viewModel = BookViewModel(repository: repositories.bookRepository)
+        }
+        .onChange(of: selectedSubTab) { _, newValue in
+            sceneStateStore.updateBookSelectedSubTab(newValue)
         }
     }
 }
@@ -73,11 +86,11 @@ struct BookContainerView: View {
 
 private struct BookContentView: View {
     @Bindable var viewModel: BookViewModel
+    @Binding var selectedSubTab: BookSubTab
     private let topBarHeight: CGFloat = 56
     let onAddBook: () -> Void
     let onAddNote: () -> Void
     let onOpenDebugCenter: (() -> Void)?
-    @State private var selectedSubTab: BookSubTab = .books
 
     var body: some View {
         ZStack(alignment: .top) {

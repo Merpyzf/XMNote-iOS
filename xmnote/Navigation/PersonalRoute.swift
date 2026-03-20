@@ -8,7 +8,7 @@
 import Foundation
 
 /// PersonalRoute 定义主导航的导航目标与路由参数。
-enum PersonalRoute: Hashable {
+enum PersonalRoute: Hashable, Codable {
     case settings
     case premium
     case readCalendar

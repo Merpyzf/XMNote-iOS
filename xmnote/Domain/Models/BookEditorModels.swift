@@ -8,7 +8,7 @@
 import Foundation
 
 /// 书籍类型，对齐 Android `BookType`。
-enum BookEntryBookType: Int64, CaseIterable, Identifiable, Hashable, Sendable {
+enum BookEntryBookType: Int64, CaseIterable, Identifiable, Hashable, Sendable, Codable {
     case paper = 0
     case ebook = 1
 
@@ -34,7 +34,7 @@ enum BookEntryBookType: Int64, CaseIterable, Identifiable, Hashable, Sendable {
 }
 
 /// 阅读进度单位，对齐 Android `BookPositionUnit`。
-enum BookEntryProgressUnit: Int64, CaseIterable, Identifiable, Hashable, Sendable {
+enum BookEntryProgressUnit: Int64, CaseIterable, Identifiable, Hashable, Sendable, Codable {
     case progress = 0
     case position = 1
     case pagination = 2

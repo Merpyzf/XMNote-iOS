@@ -15,12 +15,13 @@ import SwiftUI
  */
 
 /// 应用主 Tab 枚举，统一根级导航页签身份。
-enum AppTab: String, CaseIterable {
+enum AppTab: String, CaseIterable, Codable {
     case reading, books, notes, profile, search
 }
 
 /// 应用主导航容器，组织四个主 Tab 及跨模块路由跳转。
 struct MainTabView: View {
+    @Environment(SceneStateStore.self) private var sceneStateStore
     @State private var selectedTab: AppTab = .reading
     @State private var readingPath = NavigationPath()
     @State private var booksPath = NavigationPath()
@@ -28,6 +29,7 @@ struct MainTabView: View {
     @State private var profilePath = NavigationPath()
     @State private var searchPath = NavigationPath()
     @State private var searchQuery = ""
+    @State private var didBootstrapFromScene = false
 
     var body: some View {
         TabView(selection: $selectedTab) {
@@ -183,6 +185,33 @@ struct MainTabView: View {
         .tabBarMinimizeBehavior(.onScrollDown)
         .tabViewSearchActivation(.searchTabSelection)
         .searchable(text: $searchQuery, prompt: "搜索书籍或书摘")
+        .task(id: sceneStateStore.isRestored) {
+            guard sceneStateStore.isRestored else { return }
+            guard !didBootstrapFromScene else { return }
+            didBootstrapFromScene = true
+            restoreFromSceneSnapshot()
+        }
+        .onChange(of: selectedTab) { _, newValue in
+            sceneStateStore.updateSelectedTab(newValue)
+        }
+        .onChange(of: searchQuery) { _, newValue in
+            sceneStateStore.updateSearchQuery(newValue)
+        }
+        .onChange(of: pathSignature(for: readingPath)) { _, _ in
+            sceneStateStore.updatePath(readingPath, for: .reading)
+        }
+        .onChange(of: pathSignature(for: booksPath)) { _, _ in
+            sceneStateStore.updatePath(booksPath, for: .books)
+        }
+        .onChange(of: pathSignature(for: notesPath)) { _, _ in
+            sceneStateStore.updatePath(notesPath, for: .notes)
+        }
+        .onChange(of: pathSignature(for: profilePath)) { _, _ in
+            sceneStateStore.updatePath(profilePath, for: .profile)
+        }
+        .onChange(of: pathSignature(for: searchPath)) { _, _ in
+            sceneStateStore.updatePath(searchPath, for: .search)
+        }
     }
 
     // MARK: - Reading Destinations
@@ -368,6 +397,32 @@ struct MainTabView: View {
         initialItem: ContentViewerItemID
     ) -> ContentRoute {
         .contentViewer(source: source, initialItemID: initialItem, keyword: "")
+    }
+
+    private func restoreFromSceneSnapshot() {
+        let snapshot = sceneStateStore.snapshot
+        selectedTab = snapshot.selectedTab
+        searchQuery = snapshot.searchQuery
+        readingPath = restoredPath(for: .reading)
+        booksPath = restoredPath(for: .books)
+        notesPath = restoredPath(for: .notes)
+        profilePath = restoredPath(for: .profile)
+        searchPath = restoredPath(for: .search)
+    }
+
+    private func restoredPath(for tab: AppTab) -> NavigationPath {
+        guard let representation = sceneStateStore.pathRepresentation(for: tab) else {
+            return NavigationPath()
+        }
+        return NavigationPath(representation)
+    }
+
+    private func pathSignature(for path: NavigationPath) -> String {
+        guard let representation = path.codable,
+              let data = try? JSONEncoder().encode(representation) else {
+            return "empty"
+        }
+        return data.base64EncodedString()
     }
 }
 

@@ -63,6 +63,7 @@ private struct ReadingTimelineBootstrapShellView: View {
 
 /// 时间线页面内容视图，只负责容器组合，避免列表与日历共享同一观察热区。
 private struct ReadingTimelineContentView: View {
+    @Environment(SceneStateStore.self) private var sceneStateStore
     @Bindable var viewModel: TimelineViewModel
     let onOpenContentViewer: (ContentViewerSourceContext, ContentViewerItemID) -> Void
     let onOpenBookDetail: (Int64) -> Void
@@ -82,6 +83,18 @@ private struct ReadingTimelineContentView: View {
             .padding(.bottom, Spacing.base)
         }
         .coordinateSpace(name: readingTimelineScrollCoordinateSpaceName)
+        .onAppear {
+            sceneStateStore.updateTimeline(viewModel.sceneSnapshot)
+        }
+        .onChange(of: viewModel.selectedDate) { _, _ in
+            sceneStateStore.updateTimeline(viewModel.sceneSnapshot)
+        }
+        .onChange(of: viewModel.displayedMonthStart) { _, _ in
+            sceneStateStore.updateTimeline(viewModel.sceneSnapshot)
+        }
+        .onChange(of: viewModel.selectedCategory) { _, _ in
+            sceneStateStore.updateTimeline(viewModel.sceneSnapshot)
+        }
     }
 }
 

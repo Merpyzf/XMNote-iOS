@@ -17,7 +17,7 @@ import SwiftUI
 // MARK: - Sub Tab
 
 /// 笔记页二级分栏：笔记列表与回顾入口。
-enum NoteSubTab: CaseIterable, Hashable {
+enum NoteSubTab: String, CaseIterable, Hashable, Codable {
     case notes, review
 
     var title: String {
@@ -33,7 +33,10 @@ enum NoteSubTab: CaseIterable, Hashable {
 /// NoteContainerView 作为笔记模块入口容器，负责搭建二级 Tab 与顶栏操作，并托管 NoteViewModel 生命周期。
 struct NoteContainerView: View {
     @Environment(RepositoryContainer.self) private var repositories
+    @Environment(SceneStateStore.self) private var sceneStateStore
     @State private var viewModel: NoteViewModel?
+    @State private var selectedSubTab: NoteSubTab = .notes
+    @State private var didBootstrapFromScene = false
     let onAddBook: () -> Void
     let onAddNote: () -> Void
     let onOpenDebugCenter: (() -> Void)?
@@ -54,6 +57,7 @@ struct NoteContainerView: View {
             if let viewModel {
                 NoteContentView(
                     viewModel: viewModel,
+                    selectedSubTab: $selectedSubTab,
                     onAddBook: onAddBook,
                     onAddNote: onAddNote,
                     onOpenDebugCenter: onOpenDebugCenter
@@ -62,9 +66,18 @@ struct NoteContainerView: View {
                 Color.clear
             }
         }
+        .task(id: sceneStateStore.isRestored) {
+            guard sceneStateStore.isRestored else { return }
+            guard !didBootstrapFromScene else { return }
+            didBootstrapFromScene = true
+            selectedSubTab = sceneStateStore.snapshot.notes.selectedSubTab
+        }
         .task {
             guard viewModel == nil else { return }
             viewModel = NoteViewModel(repository: repositories.noteRepository)
+        }
+        .onChange(of: selectedSubTab) { _, newValue in
+            sceneStateStore.updateNoteSelectedSubTab(newValue)
         }
     }
 }
@@ -73,11 +86,11 @@ struct NoteContainerView: View {
 
 private struct NoteContentView: View {
     @Bindable var viewModel: NoteViewModel
+    @Binding var selectedSubTab: NoteSubTab
     private let topBarHeight: CGFloat = 56
     let onAddBook: () -> Void
     let onAddNote: () -> Void
     let onOpenDebugCenter: (() -> Void)?
-    @State private var selectedSubTab: NoteSubTab = .notes
 
     var body: some View {
         ZStack(alignment: .top) {

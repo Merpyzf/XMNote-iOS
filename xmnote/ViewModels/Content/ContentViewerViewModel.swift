@@ -36,6 +36,7 @@ final class ContentViewerViewModel {
     private var hasAppliedInitialSelection = false
     private var pendingDeletedSelection: PendingDeletedSelection?
     private var listObservationTask: Task<Void, Never>?
+    private let restoredSelectedItemID: ContentViewerItemID?
 
     private let initialItemID: ContentViewerItemID
     private let defaultTitle: String
@@ -46,6 +47,7 @@ final class ContentViewerViewModel {
     init(
         source: ContentViewerSourceContext,
         initialItemID: ContentViewerItemID,
+        restoredSelectedItemID: ContentViewerItemID? = nil,
         keyword: String,
         defaultTitle: String,
         missingItemMessage: String,
@@ -53,6 +55,7 @@ final class ContentViewerViewModel {
     ) {
         self.source = source
         self.initialItemID = initialItemID
+        self.restoredSelectedItemID = restoredSelectedItemID
         self.keyword = keyword
         self.defaultTitle = defaultTitle
         self.missingItemMessage = missingItemMessage
@@ -230,7 +233,10 @@ private extension ContentViewerViewModel {
         let resolvedSelection: ContentViewerItemID?
         if !hasAppliedInitialSelection {
             hasAppliedInitialSelection = true
-            if newItems.contains(where: { $0.id == initialItemID }) {
+            if let restoredSelectedItemID,
+               newItems.contains(where: { $0.id == restoredSelectedItemID }) {
+                resolvedSelection = restoredSelectedItemID
+            } else if newItems.contains(where: { $0.id == initialItemID }) {
                 resolvedSelection = initialItemID
             } else {
                 resolvedSelection = newItems.first?.id

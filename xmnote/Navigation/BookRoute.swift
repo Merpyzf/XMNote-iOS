@@ -8,7 +8,7 @@
 import Foundation
 
 /// BookRoute 定义主导航的导航目标与路由参数。
-enum BookRoute: Hashable {
+enum BookRoute: Hashable, Codable {
     case detail(bookId: Int64)
     case edit(bookId: Int64)
     case add

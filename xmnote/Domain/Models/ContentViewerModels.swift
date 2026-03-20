@@ -8,7 +8,7 @@
 import Foundation
 
 /// 时间线内容查看过滤器，只承接可进入通用查看器的三类内容。
-nonisolated enum TimelineContentFilter: Hashable, Sendable {
+nonisolated enum TimelineContentFilter: Hashable, Sendable, Codable {
     case allContent
     case note
     case review
@@ -16,13 +16,13 @@ nonisolated enum TimelineContentFilter: Hashable, Sendable {
 }
 
 /// 通用内容查看器的数据来源上下文。
-nonisolated enum ContentViewerSourceContext: Hashable, Sendable {
+nonisolated enum ContentViewerSourceContext: Hashable, Sendable, Codable {
     case timeline(startTimestamp: Int64, endTimestamp: Int64, filter: TimelineContentFilter)
     case bookNotes(bookId: Int64)
 }
 
 /// 通用查看器单项身份，保证分页选择与详情查询使用统一 ID。
-nonisolated enum ContentViewerItemID: Hashable, Identifiable, Sendable {
+nonisolated enum ContentViewerItemID: Hashable, Identifiable, Sendable, Codable {
     case note(Int64)
     case review(Int64)
     case relevant(Int64)

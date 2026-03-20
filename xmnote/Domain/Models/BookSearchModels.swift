@@ -8,7 +8,7 @@
 import Foundation
 
 /// 在线书籍搜索源，业务能力与 Android 端 6 个在线搜索平台保持一致。
-enum BookSearchSource: Int, CaseIterable, Identifiable, Hashable, Sendable {
+enum BookSearchSource: Int, CaseIterable, Identifiable, Hashable, Sendable, Codable {
     case wenqu = 0
     case qidian = 1
     case zongHeng = 2
@@ -105,7 +105,7 @@ enum BookSearchError: LocalizedError {
 }
 
 /// 搜索结果进入录入页前的预填载荷，兼容在线搜索与手动创建两种入口。
-struct BookEditorSeed: Identifiable, Hashable, Sendable {
+struct BookEditorSeed: Identifiable, Hashable, Sendable, Codable {
     var searchSource: BookSearchSource?
     var title: String
     var rawTitle: String

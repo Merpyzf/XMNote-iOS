@@ -156,6 +156,7 @@ final class ReadCalendarViewModel {
     private var colorTicketSeed = 0
     private var yearColorTicketSeed = 0
     private var calendar: Calendar
+    private var pendingSceneSnapshot: ReadCalendarSceneSnapshot?
 
     /// 初始化阅读日历状态机，注入初始日期、筛选设置与布局模式作为后续加载基准。
     init(
@@ -178,6 +179,15 @@ final class ReadCalendarViewModel {
         self.pagerSelection = monthStart
         self.selectedDate = today
         self.selectedYear = defaultYear
+    }
+
+    var sceneSnapshot: ReadCalendarSceneSnapshot {
+        ReadCalendarSceneSnapshot(
+            pagerSelection: pagerSelection,
+            selectedDate: selectedDate,
+            displayMode: .activityEvent,
+            selectedYear: selectedYear
+        )
     }
 
     var canGoPrevMonth: Bool {
@@ -255,13 +265,17 @@ final class ReadCalendarViewModel {
                 earliestMonthStart: earliest,
                 latestDate: today
             )
-            selectedDate = preferredSelectedDate
-
-            let preferredMonth = Self.monthStart(of: preferredSelectedDate, using: calendar)
-            let defaultMonth = clampMonthStart(preferredMonth, earliest: earliest, latest: current)
-            displayedMonthStart = defaultMonth
-            pagerSelection = defaultMonth
-            selectedYear = clampYear(calendar.component(.year, from: preferredSelectedDate))
+            let restoredSelection = resolveRestoredSelection(
+                fallbackSelectedDate: preferredSelectedDate,
+                earliestMonthStart: earliest,
+                latestMonthStart: current,
+                latestDate: today
+            )
+            pendingSceneSnapshot = nil
+            selectedDate = restoredSelection.selectedDate
+            displayedMonthStart = restoredSelection.monthStart
+            pagerSelection = restoredSelection.monthStart
+            selectedYear = restoredSelection.selectedYear
 
             monthCache = [:]
             pageStates = [:]
@@ -279,7 +293,7 @@ final class ReadCalendarViewModel {
             cancelAllColorTasks()
 
             await ensureMonthLoaded(
-                for: defaultMonth,
+                for: restoredSelection.monthStart,
                 using: repository,
                 colorRepository: colorRepository,
                 showLoading: true,
@@ -287,13 +301,13 @@ final class ReadCalendarViewModel {
                 reportError: true
             )
             await prefetchAdjacentMonths(
-                around: defaultMonth,
+                around: restoredSelection.monthStart,
                 using: repository,
                 colorRepository: colorRepository
             )
-            cancelOutOfScopeColorTasks(around: defaultMonth)
+            cancelOutOfScopeColorTasks(around: restoredSelection.monthStart)
             syncDisplayedMonthError()
-            trimMonthCachesIfNeeded(around: defaultMonth)
+            trimMonthCachesIfNeeded(around: restoredSelection.monthStart)
             hasLoaded = true
         } catch {
             errorMessage = "阅读日历加载失败：\(error.localizedDescription)"
@@ -624,6 +638,16 @@ final class ReadCalendarViewModel {
             return
         }
         selectedDate = normalized
+    }
+
+    /// 应用 scene 快照，让阅读日历在首次加载时恢复用户上次停留的月份与选中锚点。
+    func applySceneSnapshot(_ snapshot: ReadCalendarSceneSnapshot) {
+        pendingSceneSnapshot = snapshot
+        let normalizedMonth = Self.monthStart(of: snapshot.pagerSelection, using: calendar)
+        pagerSelection = normalizedMonth
+        displayedMonthStart = normalizedMonth
+        selectedDate = snapshot.selectedDate.map { calendar.startOfDay(for: $0) }
+        selectedYear = snapshot.selectedYear
     }
 
     /// 读取指定日期在某月中的业务数据载荷。
@@ -1573,6 +1597,45 @@ private extension ReadCalendarViewModel {
         if normalized < earliestMonthStart { return earliestMonthStart }
         if normalized > upper { return upper }
         return normalized
+    }
+
+    /// 将 scene 快照折叠为安全的月份/年份/日期三元组，避免旧快照越界到当前数据边界。
+    func resolveRestoredSelection(
+        fallbackSelectedDate: Date,
+        earliestMonthStart: Date,
+        latestMonthStart: Date,
+        latestDate: Date
+    ) -> (selectedDate: Date?, monthStart: Date, selectedYear: Int) {
+        guard let snapshot = pendingSceneSnapshot else {
+            let fallbackMonth = clampMonthStart(
+                Self.monthStart(of: fallbackSelectedDate, using: calendar),
+                earliest: earliestMonthStart,
+                latest: latestMonthStart
+            )
+            return (
+                selectedDate: fallbackSelectedDate,
+                monthStart: fallbackMonth,
+                selectedYear: clampYear(calendar.component(.year, from: fallbackSelectedDate))
+            )
+        }
+
+        let restoredDate = snapshot.selectedDate.map {
+            clampSelectedDate(
+                calendar.startOfDay(for: $0),
+                earliestMonthStart: earliestMonthStart,
+                latestDate: latestDate
+            )
+        }
+        let restoredMonth = clampMonthStart(
+            Self.monthStart(of: snapshot.pagerSelection, using: calendar),
+            earliest: earliestMonthStart,
+            latest: latestMonthStart
+        )
+        return (
+            selectedDate: restoredDate,
+            monthStart: restoredMonth,
+            selectedYear: clampYear(snapshot.selectedYear)
+        )
     }
 
     /// 判断给定月份是否在当前可展示范围内。

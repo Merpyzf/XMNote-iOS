@@ -8,6 +8,6 @@
 import Foundation
 
 /// DebugRoute 定义仅用于开发构建的调试导航目标。
-enum DebugRoute: Hashable {
+enum DebugRoute: Hashable, Codable {
     case debugCenter
 }

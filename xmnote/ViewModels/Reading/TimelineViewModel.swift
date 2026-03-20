@@ -170,6 +170,21 @@ final class TimelineViewModel {
     var isLoading: Bool {
         bootstrapPhase == .bootstrapping || isRefreshing
     }
+
+    var sceneSnapshot: TimelineSceneSnapshot {
+        TimelineSceneSnapshot(
+            selectedDate: selectedDate,
+            displayedMonthStart: displayedMonthStart,
+            selectedCategory: selectedCategory
+        )
+    }
+
+    /// 应用 scene 恢复快照，让首次加载直接命中用户上次停留的时间线语义位置。
+    func applySceneSnapshot(_ snapshot: TimelineSceneSnapshot) {
+        selectedDate = calendar.startOfDay(for: snapshot.selectedDate)
+        displayedMonthStart = Self.monthStart(of: snapshot.displayedMonthStart, using: calendar)
+        selectedCategory = snapshot.selectedCategory
+    }
 }
 
 // MARK: - 时间范围计算

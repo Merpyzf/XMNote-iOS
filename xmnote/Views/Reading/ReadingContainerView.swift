@@ -9,7 +9,7 @@ import SwiftUI
 
 // MARK: - Sub Tab
 /// ReadingSubTab 定义在读根容器的三段切换项，统一顶部切换标题和页面选择语义。
-enum ReadingSubTab: String, CaseIterable {
+enum ReadingSubTab: String, CaseIterable, Codable {
     case reading, timeline, statistics
 
     var title: String {
@@ -26,9 +26,11 @@ enum ReadingSubTab: String, CaseIterable {
 /// 在读 Tab 容器，负责子页切换并上抛新增、书籍详情与阅读日历跳转事件。
 struct ReadingContainerView: View {
     @Environment(RepositoryContainer.self) private var repositories
+    @Environment(SceneStateStore.self) private var sceneStateStore
     @State private var selectedSubTab: ReadingSubTab = .reading
     @State private var timelineViewModel: TimelineViewModel?
     @State private var subtabBootstrapCoordinator = SubtabBootstrapCoordinator<ReadingSubTab>()
+    @State private var didBootstrapFromScene = false
     private let topBarHeight: CGFloat = 56
     let onAddBook: () -> Void
     let onAddNote: () -> Void
@@ -80,14 +82,25 @@ struct ReadingContainerView: View {
             .zIndex(1)
         }
         .toolbar(.hidden, for: .navigationBar)
-        .task {
+        .task(id: sceneStateStore.isRestored) {
+            guard sceneStateStore.isRestored else { return }
+            guard !didBootstrapFromScene else { return }
+            didBootstrapFromScene = true
+            selectedSubTab = sceneStateStore.snapshot.reading.selectedSubTab
+        }
+        .task(id: sceneStateStore.isRestored) {
+            guard sceneStateStore.isRestored else { return }
             guard timelineViewModel == nil else { return }
             let viewModel = TimelineViewModel(repository: repositories.timelineRepository)
+            if let snapshot = sceneStateStore.snapshot.reading.timeline {
+                viewModel.applySceneSnapshot(snapshot)
+            }
             timelineViewModel = viewModel
             await Task.yield()
             warmTimelineIfNeeded(priority: .utility)
         }
         .onChange(of: selectedSubTab) { _, newSelection in
+            sceneStateStore.updateReadingSelectedSubTab(newSelection)
             guard newSelection == .timeline else { return }
             warmTimelineIfNeeded(priority: .userInitiated)
         }

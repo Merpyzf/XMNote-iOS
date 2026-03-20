@@ -8,7 +8,7 @@
 import Foundation
 
 /// ReadingRoute 定义主导航的导航目标与路由参数。
-enum ReadingRoute: Hashable {
+enum ReadingRoute: Hashable, Codable {
     case bookDetail(bookId: UUID)
     case readingSession(bookId: UUID)
     case readCalendar(date: Date?)

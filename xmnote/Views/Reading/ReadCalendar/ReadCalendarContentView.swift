@@ -10,7 +10,7 @@ import SwiftUI
 /// 阅读日历主界面组件，组织月/年切换、日历网格和总结弹层入口。
 struct ReadCalendarContentView: View {
     /// DisplayMode 表示日历内容展示方式（热力图/活动事件/封面）。
-    enum DisplayMode: String, CaseIterable, Hashable {
+    enum DisplayMode: String, CaseIterable, Hashable, Codable {
         case heatmap
         case activityEvent
         case bookCover

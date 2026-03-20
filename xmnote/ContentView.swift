@@ -16,9 +16,22 @@ import SwiftUI
 
 /// 应用根视图，挂载主 Tab 导航骨架并统一品牌色 tint。
 struct ContentView: View {
+    @Environment(AppState.self) private var appState
+    @Environment(SceneStateStore.self) private var sceneStateStore
+    @SceneStorage("xmnote.scene.snapshot") private var sceneSnapshotData: Data?
+
     var body: some View {
         MainTabView()
             .tint(Color.brand)
+            .task(id: appState.dataEpoch) {
+                sceneStateStore.restore(
+                    from: sceneSnapshotData,
+                    currentDataEpoch: appState.dataEpoch
+                )
+            }
+            .onChange(of: sceneStateStore.persistedData) { _, newValue in
+                sceneSnapshotData = newValue
+            }
     }
 }
 

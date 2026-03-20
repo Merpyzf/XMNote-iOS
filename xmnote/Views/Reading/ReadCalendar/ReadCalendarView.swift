@@ -10,6 +10,7 @@ import SwiftUI
 /// 阅读日历页面入口，负责创建 ViewModel、挂载设置态并衔接内容壳层。
 struct ReadCalendarView: View {
     @Environment(RepositoryContainer.self) private var repositories
+    @Environment(SceneStateStore.self) private var sceneStateStore
     @State private var viewModel: ReadCalendarViewModel
     @State private var pagerSelectionTask: Task<Void, Never>?
     @State private var yearSelectionTask: Task<Void, Never>?
@@ -19,6 +20,8 @@ struct ReadCalendarView: View {
     @State private var isSettingsPresented = false
     @State private var settingsSheetHeight: CGFloat = 0
     @State private var isBookCoverFullscreenPresented = false
+    @State private var didBootstrapFromScene = false
+    @State private var canPersistSceneSnapshot = false
     @ScaledMetric(relativeTo: .subheadline) private var settingsIconSize = 15
 
     /// 注入初始日期并创建阅读日历页面入口。
@@ -100,11 +103,21 @@ struct ReadCalendarView: View {
         .onChange(of: settings.dayEventCount) { _, _ in
             viewModel.applyLaneLimitChange()
         }
-        .task {
+        .task(id: sceneStateStore.isRestored) {
+            guard sceneStateStore.isRestored else { return }
+            guard !didBootstrapFromScene else { return }
+            didBootstrapFromScene = true
+            canPersistSceneSnapshot = false
+            if let snapshot = sceneStateStore.snapshot.reading.readCalendar {
+                viewModel.applySceneSnapshot(snapshot)
+                displayMode = snapshot.displayMode
+            }
             await viewModel.loadIfNeeded(
                 using: repositories.statisticsRepository,
                 colorRepository: repositories.readCalendarColorRepository
             )
+            canPersistSceneSnapshot = true
+            syncSceneSnapshot()
         }
         // pagerSelection 变更在 @MainActor 上串行执行，cancel → 新 Task 无竞态；
         // ViewModel 内部 per-monthKey ticket 机制保证过期请求被丢弃。
@@ -135,12 +148,39 @@ struct ReadCalendarView: View {
             settingsRefreshTask = nil
             viewModel.cancelAsyncTasks()
         }
+        .onAppear {
+            syncSceneSnapshot()
+        }
+        .onChange(of: viewModel.pagerSelection) { _, _ in
+            syncSceneSnapshot()
+        }
+        .onChange(of: viewModel.selectedDate) { _, _ in
+            syncSceneSnapshot()
+        }
+        .onChange(of: viewModel.selectedYear) { _, _ in
+            syncSceneSnapshot()
+        }
+        .onChange(of: displayMode) { _, _ in
+            syncSceneSnapshot()
+        }
     }
 }
 
 // MARK: - Settings Refresh
 
 private extension ReadCalendarView {
+    func syncSceneSnapshot() {
+        guard canPersistSceneSnapshot else { return }
+        sceneStateStore.updateReadCalendar(
+            ReadCalendarSceneSnapshot(
+                pagerSelection: viewModel.pagerSelection,
+                selectedDate: viewModel.selectedDate,
+                displayMode: displayMode,
+                selectedYear: viewModel.selectedYear
+            )
+        )
+    }
+
     /// 防抖触发设置变更刷新，避免频繁切换开关导致重复重载。
     func scheduleSettingsRefresh() {
         settingsRefreshTask?.cancel()
