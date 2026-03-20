@@ -65,6 +65,50 @@ struct EmptyStateView: View {
     }
 }
 
+// MARK: - Loading State View
+
+/// 通用加载视图，支持轻量 inline 与卡片两种表达。
+struct LoadingStateView: View {
+    enum Style {
+        case inline
+        case card
+    }
+
+    let message: String?
+    let style: Style
+
+    init(_ message: String? = nil, style: Style = .inline) {
+        self.message = message
+        self.style = style
+    }
+
+    var body: some View {
+        Group {
+            switch style {
+            case .inline:
+                progressContent
+            case .card:
+                progressContent
+                    .padding(Spacing.contentEdge)
+                    .background(
+                        Color.surfaceCard,
+                        in: RoundedRectangle(cornerRadius: CornerRadius.blockLarge, style: .continuous)
+                    )
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var progressContent: some View {
+        if let message, !message.isEmpty {
+            ProgressView(message)
+                .font(AppTypography.body)
+        } else {
+            ProgressView()
+        }
+    }
+}
+
 // MARK: - Home Header Gradient
 
 /// 首页顶部氛围渐变背景，用于衬托顶部切换栏与首屏内容层次。

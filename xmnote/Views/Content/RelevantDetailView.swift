@@ -17,9 +17,10 @@ struct RelevantDetailView: View {
 
     @State private var viewModel: RelevantDetailViewModel?
     @State private var showsDeleteDialog = false
+    @State private var bootstrapLoadingGate = LoadingGate()
 
     var body: some View {
-        Group {
+        ZStack {
             if let viewModel {
                 RelevantDetailLoadedView(
                     viewModel: viewModel,
@@ -30,19 +31,25 @@ struct RelevantDetailView: View {
                     dismiss()
                 }
             } else {
-                ProgressView()
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .background(Color.surfacePage)
+                Color.surfacePage.ignoresSafeArea()
+                if bootstrapLoadingGate.isVisible {
+                    LoadingStateView("正在加载相关内容…", style: .card)
+                }
             }
         }
         .task {
             guard viewModel == nil else { return }
+            bootstrapLoadingGate.update(intent: .read)
             let newViewModel = RelevantDetailViewModel(
                 contentId: contentId,
                 repository: repositories.contentRepository
             )
             viewModel = newViewModel
+            bootstrapLoadingGate.update(intent: .none)
             await newViewModel.load()
+        }
+        .onDisappear {
+            bootstrapLoadingGate.hideImmediately()
         }
     }
 }
@@ -50,6 +57,7 @@ struct RelevantDetailView: View {
 private struct RelevantDetailLoadedView: View {
     @Bindable var viewModel: RelevantDetailViewModel
     @Binding var showsDeleteDialog: Bool
+    @State private var readLoadingGate = LoadingGate()
 
     var body: some View {
         ScrollView {
@@ -77,12 +85,21 @@ private struct RelevantDetailLoadedView: View {
             Text("iOS 端当前按硬删除实现，主记录和子记录会一起删除。")
         }
         .overlay {
-            if viewModel.isLoading || viewModel.isDeleting {
-                ProgressView(viewModel.isDeleting ? "正在删除…" : "正在加载…")
+            if viewModel.isDeleting {
+                LoadingStateView("正在删除…", style: .card)
+            } else if readLoadingGate.isVisible {
+                LoadingStateView("正在加载…")
             }
         }
         .onAppear {
+            syncReadLoadingVisibility()
             Task { await viewModel.load() }
+        }
+        .onChange(of: viewModel.isLoading) { _, _ in
+            syncReadLoadingVisibility()
+        }
+        .onDisappear {
+            readLoadingGate.hideImmediately()
         }
     }
 
@@ -188,6 +205,10 @@ private struct RelevantDetailLoadedView: View {
         }
 
         return URL(string: "https://\(trimmed)")
+    }
+
+    private func syncReadLoadingVisibility() {
+        readLoadingGate.update(intent: viewModel.isLoading ? .read : .none)
     }
 }
 

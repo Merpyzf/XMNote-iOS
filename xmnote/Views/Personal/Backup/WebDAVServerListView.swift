@@ -11,13 +11,17 @@ import SwiftUI
 struct WebDAVServerListView: View {
     @Environment(RepositoryContainer.self) private var repositories
     @State private var viewModel: WebDAVServerViewModel?
+    @State private var bootstrapLoadingGate = LoadingGate()
 
     var body: some View {
-        Group {
+        ZStack {
             if let viewModel {
                 WebDAVServerListContentView(viewModel: viewModel)
             } else {
-                Color.clear
+                Color.surfacePage.ignoresSafeArea()
+                if bootstrapLoadingGate.isVisible {
+                    LoadingStateView("正在加载服务器列表…", style: .card)
+                }
             }
         }
         .listStyle(.insetGrouped)
@@ -25,9 +29,14 @@ struct WebDAVServerListView: View {
         .navigationBarTitleDisplayMode(.inline)
         .task {
             guard viewModel == nil else { return }
+            bootstrapLoadingGate.update(intent: .read)
             let vm = WebDAVServerViewModel(repository: repositories.backupServerRepository)
             viewModel = vm
             await vm.loadServers()
+            bootstrapLoadingGate.update(intent: .none)
+        }
+        .onDisappear {
+            bootstrapLoadingGate.hideImmediately()
         }
     }
 }

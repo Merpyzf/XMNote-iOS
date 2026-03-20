@@ -506,7 +506,7 @@ private struct ReadingDailyGoalCard: View {
                         .padding(layout.contentInset)
 
                         if isLoading {
-                            ProgressView()
+                            LoadingStateView(style: .inline)
                                 .controlSize(.small)
                                 .padding(layout.loadingPadding)
                         }
@@ -643,7 +643,7 @@ private struct ReadingResumeBookCard: View {
                         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
 
                         if isLoading {
-                            ProgressView()
+                            LoadingStateView(style: .inline)
                                 .controlSize(.small)
                                 .padding(layout.loadingPadding)
                         }

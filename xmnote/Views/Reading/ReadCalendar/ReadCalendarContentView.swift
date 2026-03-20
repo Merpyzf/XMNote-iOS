@@ -313,6 +313,8 @@ struct ReadCalendarContentView: View {
     @State private var topControlBarFrameInGlobal: CGRect = .zero
     @State private var lastLoggedTopControlBarFrameForDebug: CGRect = .zero
     @State private var lastLoggedCalendarViewportSignatureForDebug = ""
+    @State private var rootLoadingGate = LoadingGate()
+    @State private var heatmapYearLoadingGate = LoadingGate()
 
     var body: some View {
         bodyContainer
@@ -344,6 +346,8 @@ private extension ReadCalendarContentView {
             .onAppear {
                 onBookCoverFullscreenPresentationChanged(isBookCoverFullscreenPresented)
                 evaluateStreakHintIfNeeded()
+                syncRootLoadingVisibility()
+                syncHeatmapYearLoadingVisibility()
                 if props.rootContentState == .content {
                     applySummaryFloatingButtonInitialPolicyIfNeeded()
                 }
@@ -352,6 +356,7 @@ private extension ReadCalendarContentView {
                 onBookCoverFullscreenPresentationChanged(isPresented)
             }
             .onChange(of: props.rootContentState) { _, state in
+                syncRootLoadingVisibility()
                 switch state {
                 case .content:
                     applySummaryFloatingButtonInitialPolicyIfNeeded()
@@ -394,9 +399,13 @@ private extension ReadCalendarContentView {
             }
             .onChange(of: props.selectedYear) { _, _ in
                 guard props.displayMode == .heatmap else { return }
+                syncHeatmapYearLoadingVisibility()
                 markSummaryFloatingButtonInteraction(
                     protectedFor: Layout.summaryFloatingButtonScrollInteractionProtection
                 )
+            }
+            .onChange(of: props.selectedYearLoadState) { _, _ in
+                syncHeatmapYearLoadingVisibility()
             }
             .onChange(of: props.isStreakHintEnabled) { _, isEnabled in
                 guard isEnabled else {
@@ -414,6 +423,8 @@ private extension ReadCalendarContentView {
                 streakHintTask = nil
                 summaryFloatingButtonAutoHideTask?.cancel()
                 summaryFloatingButtonAutoHideTask = nil
+                rootLoadingGate.hideImmediately()
+                heatmapYearLoadingGate.hideImmediately()
                 bookCoverStackFramesByDate = [:]
                 closeBookCoverFullscreen(animated: false)
                 cancelCoverEntryCue()
@@ -1085,9 +1096,15 @@ private extension ReadCalendarContentView {
         ZStack(alignment: .top) {
             switch props.rootContentState {
             case .loading:
-                ProgressView()
-                    .frame(maxWidth: .infinity, minHeight: Layout.pageMinHeight, alignment: .center)
-                    .transition(.opacity.combined(with: .scale(scale: 0.98)))
+                Group {
+                    if rootLoadingGate.isVisible {
+                        LoadingStateView("正在加载阅读日历…")
+                    } else {
+                        Color.clear
+                    }
+                }
+                .frame(maxWidth: .infinity, minHeight: Layout.pageMinHeight, alignment: .center)
+                .transition(.opacity.combined(with: .scale(scale: 0.98)))
             case .empty:
                 emptyState
                     .transition(.opacity.combined(with: .scale(scale: 0.98)))
@@ -1173,8 +1190,14 @@ private extension ReadCalendarContentView {
     @ViewBuilder
     var heatmapYearContent: some View {
         if isCurrentYearHeatmapLoading {
-            ProgressView()
-                .frame(maxWidth: .infinity, minHeight: Layout.pageMinHeight, alignment: .center)
+            Group {
+                if heatmapYearLoadingGate.isVisible {
+                    LoadingStateView("正在整理年度热力图…")
+                } else {
+                    Color.clear
+                }
+            }
+            .frame(maxWidth: .infinity, minHeight: Layout.pageMinHeight, alignment: .center)
         } else {
             ScrollView(.vertical, showsIndicators: false) {
                 VStack(spacing: Layout.yearHeatmapGridSpacing) {
@@ -1270,7 +1293,7 @@ private extension ReadCalendarContentView {
         return ScrollView(.vertical, showsIndicators: false) {
             ZStack(alignment: .top) {
                 if pageState.isLoading && pageState.isDayMapEmpty {
-                    ProgressView()
+                    LoadingStateView()
                         .frame(maxWidth: .infinity, minHeight: Layout.pageMinHeight, alignment: .center)
                         .transition(.opacity)
                 } else {
@@ -1292,6 +1315,16 @@ private extension ReadCalendarContentView {
         .scrollBounceBehavior(.basedOnSize)
         .readCalendarBottomImmersiveStyle()
         .animation(.smooth(duration: 0.24), value: pageState.loadState)
+    }
+
+    private func syncRootLoadingVisibility() {
+        let intent: LoadingIntent = props.rootContentState == .loading ? .read : .none
+        rootLoadingGate.update(intent: intent)
+    }
+
+    private func syncHeatmapYearLoadingVisibility() {
+        let intent: LoadingIntent = isCurrentYearHeatmapLoading ? .read : .none
+        heatmapYearLoadingGate.update(intent: intent)
     }
 
     /// 渲染单月周网格，并处理日期选中/取消选中交互。

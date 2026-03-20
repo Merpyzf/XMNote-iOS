@@ -13,6 +13,7 @@ struct ContentViewerContentView: View {
     struct Props {
         /// 内容列表根状态，区分加载中、空态和可分页内容。
         enum ListState: Equatable {
+            case placeholder
             case loading
             case empty(String)
             case content
@@ -39,21 +40,37 @@ struct ContentViewerContentView: View {
     let onRefreshDetail: @MainActor @Sendable (ContentViewerItemID) async -> Void
 
     var body: some View {
-        Group {
-            switch props.listState {
-            case .loading:
-                loadingState
-            case .empty(let message):
-                emptyState(message: message)
-            case .content:
-                pager
-            }
-        }
+        LoadPhaseHost(
+            phase: phase,
+            content: { pager },
+            placeholder: { placeholderState },
+            loading: { loadingState },
+            empty: { emptyState(message: $0) },
+            failure: { viewerMessageCard(text: $0) }
+        )
         .background(Color.surfacePage)
     }
 }
 
 private extension ContentViewerContentView {
+    var phase: LoadPhase {
+        switch props.listState {
+        case .placeholder:
+            .placeholder
+        case .loading:
+            .loading
+        case .empty(let message):
+            .empty(message: message)
+        case .content:
+            .content
+        }
+    }
+
+    var placeholderState: some View {
+        Color.clear
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
     var pagerSelection: Binding<ContentViewerItemID?> {
         Binding(
             get: { props.selectedItemID },
@@ -82,7 +99,7 @@ private extension ContentViewerContentView {
     }
 
     var loadingState: some View {
-        ProgressView(presentationStyle.loadingMessage)
+        LoadingStateView(presentationStyle.loadingMessage)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
@@ -114,7 +131,7 @@ private struct ContentViewerPageView: View {
             VStack(alignment: .leading, spacing: Spacing.base) {
                 switch state {
                 case .loading:
-                    ProgressView(presentationStyle.loadingMessage)
+                    LoadingStateView(presentationStyle.loadingMessage)
                         .frame(maxWidth: .infinity, minHeight: 320)
                 case .error(let message):
                     viewerMessageCard(text: message)

@@ -22,6 +22,7 @@ struct ReadingHeatmapWidgetView: View {
     @State private var viewModel = ReadingHeatmapWidgetViewModel()
     @State private var isHelpPresented = false
     @State private var helpSheetHeight: CGFloat = 300
+    @State private var readLoadingGate = LoadingGate()
 
     let onOpenReadCalendar: (Date) -> Void
 
@@ -86,9 +87,11 @@ struct ReadingHeatmapWidgetView: View {
                 .accessibilityLabel("热力图说明")
 
                 if viewModel.isLoading {
-                    ProgressView()
-                        .controlSize(.small)
-                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+                    if readLoadingGate.isVisible {
+                        LoadingStateView(style: .inline)
+                            .controlSize(.small)
+                            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+                    }
                 }
             }
         }
@@ -106,5 +109,18 @@ struct ReadingHeatmapWidgetView: View {
                 .onPreferenceChange(SheetHeightKey.self) { helpSheetHeight = $0 }
                 .presentationDetents([.height(helpSheetHeight)])
         }
+        .onAppear {
+            syncReadLoadingVisibility()
+        }
+        .onChange(of: viewModel.isLoading) { _, _ in
+            syncReadLoadingVisibility()
+        }
+        .onDisappear {
+            readLoadingGate.hideImmediately()
+        }
+    }
+
+    private func syncReadLoadingVisibility() {
+        readLoadingGate.update(intent: viewModel.isLoading ? .read : .none)
     }
 }

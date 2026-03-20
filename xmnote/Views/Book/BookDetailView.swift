@@ -19,16 +19,20 @@ struct BookDetailView: View {
     let bookId: Int64
     @Environment(RepositoryContainer.self) private var repositories
     @State private var viewModel: BookDetailViewModel?
+    @State private var bootstrapLoadingGate = LoadingGate()
 
     var body: some View {
-        Group {
+        ZStack {
             if let viewModel {
                 BookDetailContentView(
                     bookId: bookId,
                     viewModel: viewModel
                 )
             } else {
-                Color.clear
+                Color.surfacePage.ignoresSafeArea()
+                if bootstrapLoadingGate.isVisible {
+                    LoadingStateView("正在加载书籍详情…", style: .card)
+                }
             }
         }
         .background(Color.surfacePage)
@@ -36,12 +40,17 @@ struct BookDetailView: View {
         .navigationBarTitleDisplayMode(.inline)
         .task {
             guard viewModel == nil else { return }
+            bootstrapLoadingGate.update(intent: .read)
             let vm = BookDetailViewModel(
                 bookId: bookId,
                 repository: repositories.bookRepository
             )
             viewModel = vm
+            bootstrapLoadingGate.update(intent: .none)
             vm.startObservation()
+        }
+        .onDisappear {
+            bootstrapLoadingGate.hideImmediately()
         }
     }
 }
@@ -51,16 +60,35 @@ struct BookDetailView: View {
 private struct BookDetailContentView: View {
     let bookId: Int64
     @Bindable var viewModel: BookDetailViewModel
+    @State private var readLoadingGate = LoadingGate()
 
     var body: some View {
         Group {
             if let book = viewModel.book {
                 scrollContent(book)
             } else {
-                ProgressView()
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                if readLoadingGate.isVisible {
+                    LoadingStateView("正在加载书籍详情…")
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else {
+                    Color.clear
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                }
             }
         }
+        .onAppear {
+            syncReadLoadingVisibility()
+        }
+        .onChange(of: viewModel.book == nil) { _, _ in
+            syncReadLoadingVisibility()
+        }
+        .onDisappear {
+            readLoadingGate.hideImmediately()
+        }
+    }
+
+    func syncReadLoadingVisibility() {
+        readLoadingGate.update(intent: viewModel.book == nil ? .read : .none)
     }
 
     private func scrollContent(_ book: BookDetail) -> some View {

@@ -21,13 +21,14 @@ struct ContentViewerView: View {
     @State private var viewModel: ContentViewerViewModel?
     @State private var showsDeleteDialog = false
     @State private var didBootstrapFromScene = false
+    @State private var bootstrapLoadingGate = LoadingGate()
 
     private var presentationStyle: ContentViewerPresentationStyle {
         ContentViewerPresentationStyle(source: source)
     }
 
     var body: some View {
-        Group {
+        ZStack {
             if let viewModel {
                 ContentViewerLoadedView(
                     viewModel: viewModel,
@@ -38,9 +39,10 @@ struct ContentViewerView: View {
                     dismiss()
                 }
             } else {
-                ProgressView()
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .background(Color.surfacePage)
+                Color.surfacePage.ignoresSafeArea()
+                if bootstrapLoadingGate.isVisible {
+                    LoadingStateView(presentationStyle.loadingMessage, style: .card)
+                }
             }
         }
         .task(id: sceneStateStore.isRestored) {
@@ -48,6 +50,7 @@ struct ContentViewerView: View {
             guard !didBootstrapFromScene else { return }
             didBootstrapFromScene = true
             guard viewModel == nil else { return }
+            bootstrapLoadingGate.update(intent: .read)
             let restoredSelectedItemID: ContentViewerItemID? = {
                 guard let snapshot = sceneStateStore.snapshot.contentViewer,
                       snapshot.source == source else {
@@ -65,6 +68,7 @@ struct ContentViewerView: View {
                 repository: repositories.contentRepository
             )
             viewModel = newViewModel
+            bootstrapLoadingGate.update(intent: .none)
             newViewModel.startObservation()
         }
         .onChange(of: viewModel?.selectedItemID) { _, newValue in
@@ -72,6 +76,9 @@ struct ContentViewerView: View {
             sceneStateStore.updateContentViewer(
                 ContentViewerSceneSnapshot(source: source, selectedItemID: newValue)
             )
+        }
+        .onDisappear {
+            bootstrapLoadingGate.hideImmediately()
         }
     }
 }
@@ -87,6 +94,7 @@ private struct ContentViewerLoadedView: View {
     @State private var sharePayload: ContentViewerSharePayload?
     @State private var actionMenu: ContentViewerActionMenu?
     @State private var pendingPresentation: PendingCapabilityPresentation?
+    @State private var listLoadingGate = LoadingGate()
 
     private var presentationStyle: ContentViewerPresentationStyle {
         ContentViewerPresentationStyle(source: viewModel.source)
@@ -136,12 +144,7 @@ private struct ContentViewerLoadedView: View {
             .overlay {
                 if viewModel.isDeleting {
                     Color.overlay.ignoresSafeArea()
-                    ProgressView("正在删除…")
-                        .padding(Spacing.contentEdge)
-                        .background(
-                            Color.surfaceCard,
-                            in: RoundedRectangle(cornerRadius: CornerRadius.blockLarge, style: .continuous)
-                        )
+                    LoadingStateView("正在删除…", style: .card)
                 }
             }
             .overlay(alignment: .bottom) {
@@ -222,12 +225,24 @@ private struct ContentViewerLoadedView: View {
         .sheet(item: $sharePayload) { payload in
             ActivityShareSheet(activityItems: [payload.text])
         }
+        .onAppear {
+            syncListLoadingVisibility()
+        }
+        .onChange(of: viewModel.isLoadingList) { _, _ in
+            syncListLoadingVisibility()
+        }
+        .onChange(of: viewModel.items.isEmpty) { _, _ in
+            syncListLoadingVisibility()
+        }
         .onPreferenceChange(ImmersiveBottomChromeHeightPreferenceKey.self) { height in
             bottomOrnamentHeight = height
         }
         .task(id: viewModel.selectedItemID) {
             guard let selectedItemID = viewModel.selectedItemID else { return }
             await viewModel.prefetchDetails(around: selectedItemID, radius: 1)
+        }
+        .onDisappear {
+            listLoadingGate.hideImmediately()
         }
     }
 
@@ -444,11 +459,16 @@ private struct ContentViewerLoadedView: View {
     private var listState: ContentViewerContentView.Props.ListState {
         if viewModel.items.isEmpty {
             if viewModel.isLoadingList {
-                return .loading
+                return listLoadingGate.isVisible ? .loading : .placeholder
             }
             return .empty(viewModel.listErrorMessage ?? presentationStyle.missingItemMessage)
         }
         return .content
+    }
+
+    func syncListLoadingVisibility() {
+        let intent: LoadingIntent = viewModel.items.isEmpty && viewModel.isLoadingList ? .read : .none
+        listLoadingGate.update(intent: intent)
     }
 
     private func pageState(for itemID: ContentViewerItemID) -> ContentViewerContentView.Props.PageState {

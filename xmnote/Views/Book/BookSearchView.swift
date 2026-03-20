@@ -29,15 +29,17 @@ struct BookSearchView: View {
     @State private var didCompleteFanqieVerification = false
     @State private var isRecentQueriesExpanded = false
     @State private var didBootstrapFromScene = false
+    @State private var bootstrapLoadingGate = LoadingGate()
 
     var body: some View {
-        Group {
+        ZStack {
             if let viewModel {
                 content(viewModel)
             } else {
-                ProgressView()
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .background(Color.surfacePage)
+                Color.surfacePage.ignoresSafeArea()
+                if bootstrapLoadingGate.isVisible {
+                    LoadingStateView("正在准备搜索页…", style: .card)
+                }
             }
         }
         .task(id: sceneStateStore.isRestored) {
@@ -45,12 +47,14 @@ struct BookSearchView: View {
             guard !didBootstrapFromScene else { return }
             didBootstrapFromScene = true
             guard viewModel == nil else { return }
+            bootstrapLoadingGate.update(intent: .read)
             let snapshot = sceneStateStore.snapshot.books.search
             viewModel = BookSearchViewModel(
                 repository: repositories.bookSearchRepository,
                 initialQuery: snapshot?.query ?? "",
                 initialSource: snapshot?.selectedSource ?? .wenqu
             )
+            bootstrapLoadingGate.update(intent: .none)
             isSearchFieldFocused = true
         }
         .navigationDestination(item: $navigationSeed) { seed in
@@ -150,6 +154,9 @@ struct BookSearchView: View {
         }
         .onAppear {
             syncSceneSnapshot()
+        }
+        .onDisappear {
+            bootstrapLoadingGate.hideImmediately()
         }
     }
 

@@ -28,7 +28,7 @@ struct WebDAVServerFormView: View {
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     if viewModel.isTesting {
-                        ProgressView()
+                        LoadingStateView(style: .inline)
                     } else {
                         Button("保存") {
                             Task {
@@ -73,7 +73,7 @@ private extension WebDAVServerFormView {
                     Text("测试连接")
                     Spacer()
                     if viewModel.isTesting {
-                        ProgressView()
+                        LoadingStateView(style: .inline)
                     }
                 }
             }

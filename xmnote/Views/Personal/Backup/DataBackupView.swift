@@ -15,13 +15,17 @@ struct DataBackupView: View {
     @Environment(RepositoryContainer.self) private var repositories
     @Environment(\.scenePhase) private var scenePhase
     @State private var viewModel: DataBackupViewModel?
+    @State private var bootstrapLoadingGate = LoadingGate()
 
     var body: some View {
-        Group {
+        ZStack {
             if let viewModel {
                 DataBackupContentView(viewModel: viewModel)
             } else {
-                Color.clear
+                Color.surfacePage.ignoresSafeArea()
+                if bootstrapLoadingGate.isVisible {
+                    LoadingStateView("正在加载备份数据…", style: .card)
+                }
             }
         }
         .background(Color.surfacePage)
@@ -35,16 +39,21 @@ struct DataBackupView: View {
         }
         .task {
             guard viewModel == nil else { return }
+            bootstrapLoadingGate.update(intent: .read)
             let viewModel = DataBackupViewModel(
                 backupRepository: repositories.backupRepository,
                 onRestoreSucceeded: { appState.dataEpoch += 1 }
             )
             self.viewModel = viewModel
             await viewModel.loadPageData()
+            bootstrapLoadingGate.update(intent: .none)
         }
         .onChange(of: scenePhase) { _, newValue in
             guard newValue == .active, let viewModel else { return }
             Task { await viewModel.refreshOnBecomeActive() }
+        }
+        .onDisappear {
+            bootstrapLoadingGate.hideImmediately()
         }
     }
 }

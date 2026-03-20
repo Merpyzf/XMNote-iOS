@@ -15,22 +15,29 @@ struct BookEditorView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var viewModel: BookEditorViewModel?
     @State private var showsDiscardDialog = false
+    @State private var bootstrapLoadingGate = LoadingGate()
 
     var body: some View {
-        Group {
+        ZStack {
             if let viewModel {
                 content(viewModel)
             } else {
-                ProgressView()
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .background(Color.surfacePage)
+                Color.surfacePage.ignoresSafeArea()
+                if bootstrapLoadingGate.isVisible {
+                    LoadingStateView("正在准备录入页…", style: .card)
+                }
             }
         }
         .task {
             guard viewModel == nil else { return }
+            bootstrapLoadingGate.update(intent: .read)
             let newViewModel = BookEditorViewModel(seed: seed, repository: repositories.bookEditorRepository)
             viewModel = newViewModel
+            bootstrapLoadingGate.update(intent: .none)
             await newViewModel.loadIfNeeded()
+        }
+        .onDisappear {
+            bootstrapLoadingGate.hideImmediately()
         }
     }
 
@@ -54,14 +61,16 @@ struct BookEditorView: View {
                 }
                 .scrollIndicators(.hidden)
             } else if viewModel.isLoading {
-                ProgressView("正在准备录入表单…")
+                if readLoadingGate.isVisible {
+                    LoadingStateView("正在准备录入表单…")
+                } else {
+                    Color.clear
+                }
             }
 
             if viewModel.isSaving {
                 Color.overlay.ignoresSafeArea()
-                ProgressView("正在保存…")
-                    .padding(Spacing.contentEdge)
-                    .background(Color.surfaceCard, in: RoundedRectangle(cornerRadius: CornerRadius.blockLarge, style: .continuous))
+                LoadingStateView("正在保存…", style: .card)
             }
         }
         .navigationTitle(navigationTitle)
@@ -93,6 +102,25 @@ struct BookEditorView: View {
             }
             Button("继续编辑", role: .cancel) { }
         }
+        .onAppear {
+            syncReadLoadingVisibility(using: viewModel)
+        }
+        .onChange(of: viewModel.isLoading) { _, _ in
+            syncReadLoadingVisibility(using: viewModel)
+        }
+        .onChange(of: viewModel.draft == nil) { _, _ in
+            syncReadLoadingVisibility(using: viewModel)
+        }
+        .onDisappear {
+            readLoadingGate.hideImmediately()
+        }
+    }
+
+    @State private var readLoadingGate = LoadingGate()
+
+    func syncReadLoadingVisibility(using viewModel: BookEditorViewModel) {
+        let intent: LoadingIntent = (viewModel.isLoading && viewModel.draft == nil) ? .read : .none
+        readLoadingGate.update(intent: intent)
     }
 
     private func headerSection(_ draft: BookEditorDraft) -> some View {

@@ -13,6 +13,7 @@ struct ReadingDashboardView: View {
 
     @State private var viewModel: ReadingDashboardViewModel?
     @State private var isYearSummaryPresented = false
+    @State private var bootstrapLoadingGate = LoadingGate()
 
     let onAddBook: () -> Void
     let onOpenReadCalendar: (Date) -> Void
@@ -30,7 +31,7 @@ struct ReadingDashboardView: View {
     }
 
     var body: some View {
-        Group {
+        ZStack {
             if let viewModel {
                 ReadingDashboardContent(
                     viewModel: viewModel,
@@ -40,18 +41,26 @@ struct ReadingDashboardView: View {
                     isYearSummaryPresented: $isYearSummaryPresented
                 )
             } else {
-                Color.clear
+                Color.surfacePage.ignoresSafeArea()
+                if bootstrapLoadingGate.isVisible {
+                    LoadingStateView("正在准备在读首页…", style: .card)
+                }
             }
         }
         .task {
             guard viewModel == nil else { return }
+            bootstrapLoadingGate.update(intent: .read)
             let newViewModel = ReadingDashboardViewModel(repository: repositories.readingDashboardRepository)
             newViewModel.startObservationIfNeeded()
             viewModel = newViewModel
+            bootstrapLoadingGate.update(intent: .none)
         }
         .onChange(of: scenePhase) { _, newValue in
             guard newValue == .active else { return }
             viewModel?.refreshIfNeeded()
+        }
+        .onDisappear {
+            bootstrapLoadingGate.hideImmediately()
         }
     }
 }
@@ -63,6 +72,7 @@ private struct ReadingDashboardContent: View {
     let onOpenReadCalendar: (Date) -> Void
     let onOpenBookDetail: (Int64) -> Void
     @Binding var isYearSummaryPresented: Bool
+    @State private var readLoadingGate = LoadingGate()
 
     var body: some View {
         ScrollView {
@@ -82,7 +92,7 @@ private struct ReadingDashboardContent: View {
                 ReadingFeatureCardsSection(
                     dailyGoal: viewModel.dailyGoal,
                     resumeBook: viewModel.resumeBook,
-                    isLoading: viewModel.isLoading,
+                    isLoading: readLoadingGate.isVisible,
                     onEditDailyGoal: { viewModel.presentDailyGoalEditor() },
                     onResumeTap: {
                         if let resumeBook = viewModel.resumeBook {
@@ -95,7 +105,7 @@ private struct ReadingDashboardContent: View {
 
                 ReadingRecentBooksCard(
                     books: viewModel.recentBooks,
-                    isLoading: viewModel.isLoading,
+                    isLoading: readLoadingGate.isVisible,
                     onBookTap: onOpenBookDetail
                 )
 
@@ -142,6 +152,19 @@ private struct ReadingDashboardContent: View {
                 onCancel: { viewModel.dismissGoalEditor() }
             )
         }
+        .onAppear {
+            syncReadLoadingVisibility()
+        }
+        .onChange(of: viewModel.isLoading) { _, _ in
+            syncReadLoadingVisibility()
+        }
+        .onDisappear {
+            readLoadingGate.hideImmediately()
+        }
+    }
+
+    private func syncReadLoadingVisibility() {
+        readLoadingGate.update(intent: viewModel.isLoading ? .read : .none)
     }
 }
 

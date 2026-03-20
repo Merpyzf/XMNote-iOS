@@ -60,6 +60,7 @@ struct ReadCalendarYearSummarySheet: View {
 
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @State private var loadingGate = LoadingGate()
 
     var body: some View {
         ScrollView(.vertical, showsIndicators: false) {
@@ -82,6 +83,15 @@ struct ReadCalendarYearSummarySheet: View {
         }
         .scrollEdgeEffectStyle(.soft, for: .top)
         .animation(.snappy(duration: 0.24), value: sheet)
+        .onAppear {
+            syncLoadingVisibility()
+        }
+        .onChange(of: sheet.isLoading) { _, _ in
+            syncLoadingVisibility()
+        }
+        .onDisappear {
+            loadingGate.hideImmediately()
+        }
     }
 }
 
@@ -344,9 +354,9 @@ private extension ReadCalendarYearSummarySheet {
                 onBookTap: nil
             )
 
-            if sheet.isLoading {
+            if loadingGate.isVisible {
                 HStack(spacing: Spacing.half) {
-                    ProgressView()
+                    LoadingStateView(style: .inline)
                         .controlSize(.small)
                     Text("正在整理年度 Top...")
                         .font(AppTypography.footnote)
@@ -547,6 +557,11 @@ private extension ReadCalendarYearSummarySheet {
     func monthContributionRatio(_ value: Int, maxReadSeconds: Int) -> CGFloat {
         guard maxReadSeconds > 0, value > 0 else { return 0 }
         return min(1, max(0, CGFloat(value) / CGFloat(maxReadSeconds)))
+    }
+
+    /// 同步年度总结加载提示，避免瞬时闪烁。
+    func syncLoadingVisibility() {
+        loadingGate.update(intent: sheet.isLoading ? .read : .none)
     }
 
     /// 格式化月贡献列表中的月份标签。

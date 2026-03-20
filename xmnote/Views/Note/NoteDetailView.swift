@@ -15,16 +15,20 @@ struct NoteDetailView: View {
     @Environment(RepositoryContainer.self) private var repositories
     @State private var viewModel: NoteDetailViewModel?
     @State private var isEditing = false
+    @State private var bootstrapLoadingGate = LoadingGate()
 
     var body: some View {
-        Group {
+        ZStack {
             if let viewModel {
                 NoteDetailContentView(
                     viewModel: viewModel,
                     isEditing: isEditing
                 )
             } else {
-                ProgressView()
+                Color.surfacePage.ignoresSafeArea()
+                if bootstrapLoadingGate.isVisible {
+                    LoadingStateView("正在加载笔记…", style: .card)
+                }
             }
         }
         .background(Color.surfacePage)
@@ -33,10 +37,15 @@ struct NoteDetailView: View {
         .toolbar { toolbarContent }
         .task {
             guard viewModel == nil else { return }
+            bootstrapLoadingGate.update(intent: .read)
             let vm = NoteDetailViewModel(noteId: noteId, repository: repositories.noteRepository)
             viewModel = vm
+            bootstrapLoadingGate.update(intent: .none)
             isEditing = startInEditing
             await vm.load()
+        }
+        .onDisappear {
+            bootstrapLoadingGate.hideImmediately()
         }
     }
 
@@ -72,6 +81,7 @@ struct NoteDetailView: View {
 private struct NoteDetailContentView: View {
     @Bindable var viewModel: NoteDetailViewModel
     let isEditing: Bool
+    @State private var readLoadingGate = LoadingGate()
 
     var body: some View {
         ScrollView {
@@ -137,9 +147,18 @@ private struct NoteDetailContentView: View {
             .safeAreaPadding(.bottom)
         }
         .overlay {
-            if viewModel.isLoading {
-                ProgressView("加载中...")
+            if readLoadingGate.isVisible {
+                LoadingStateView("加载中…")
             }
+        }
+        .onAppear {
+            syncReadLoadingVisibility()
+        }
+        .onChange(of: viewModel.isLoading) { _, _ in
+            syncReadLoadingVisibility()
+        }
+        .onDisappear {
+            readLoadingGate.hideImmediately()
         }
     }
 
@@ -154,6 +173,10 @@ private struct NoteDetailContentView: View {
             }
             .padding(Spacing.contentEdge)
         }
+    }
+
+    private func syncReadLoadingVisibility() {
+        readLoadingGate.update(intent: viewModel.isLoading ? .read : .none)
     }
 }
 

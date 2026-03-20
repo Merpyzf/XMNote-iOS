@@ -15,27 +15,34 @@ struct RelevantEditorView: View {
     @Environment(\.dismiss) private var dismiss
 
     @State private var viewModel: RelevantEditorViewModel?
+    @State private var bootstrapLoadingGate = LoadingGate()
 
     var body: some View {
-        Group {
+        ZStack {
             if let viewModel {
                 RelevantEditorLoadedView(viewModel: viewModel) {
                     dismiss()
                 }
             } else {
-                ProgressView()
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .background(Color.surfacePage)
+                Color.surfacePage.ignoresSafeArea()
+                if bootstrapLoadingGate.isVisible {
+                    LoadingStateView("正在准备相关内容编辑页…", style: .card)
+                }
             }
         }
         .task {
             guard viewModel == nil else { return }
+            bootstrapLoadingGate.update(intent: .read)
             let newViewModel = RelevantEditorViewModel(
                 contentId: contentId,
                 repository: repositories.contentRepository
             )
             viewModel = newViewModel
+            bootstrapLoadingGate.update(intent: .none)
             await newViewModel.load()
+        }
+        .onDisappear {
+            bootstrapLoadingGate.hideImmediately()
         }
     }
 }
