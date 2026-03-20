@@ -11,6 +11,18 @@ import UIKit
 
 private let readingTimelineScrollCoordinateSpaceName = "reading-timeline-scroll-space"
 
+/// 统一时间线月历配置，确保所有入口固定周日起始并维持一致周行规则。
+private enum TimelineCalendarFactory {
+    static func make() -> Calendar {
+        var calendar = Calendar.current
+        calendar.timeZone = .current
+        calendar.locale = Locale(identifier: "zh_Hans_CN")
+        calendar.firstWeekday = 1
+        calendar.minimumDaysInFirstWeek = 1
+        return calendar
+    }
+}
+
 /// 首页在读模块的正式时间线页面（外壳）。
 struct ReadingTimelineView: View {
     let viewModel: TimelineViewModel?
@@ -106,10 +118,7 @@ private struct TimelineBootstrapCalendarPanel: View {
     private let monthStart: Date
 
     init() {
-        var calendar = Calendar.current
-        calendar.timeZone = .current
-        calendar.locale = Locale(identifier: "zh_Hans_CN")
-        calendar.firstWeekday = 1
+        let calendar = TimelineCalendarFactory.make()
         self.calendar = calendar
         self.monthStart = Self.monthStart(of: Date(), using: calendar)
     }
@@ -235,7 +244,7 @@ private extension TimelineBootstrapCalendarPanel {
     var daySlots: [Int?] {
         guard let dayRange = calendar.range(of: .day, in: .month, for: monthStart) else { return Array(repeating: nil, count: 42) }
         let weekday = calendar.component(.weekday, from: monthStart)
-        let leading = max(0, weekday - calendar.firstWeekday)
+        let leading = (weekday - calendar.firstWeekday + 7) % 7
         let leadingSlots = Array(repeating: Optional<Int>.none, count: leading)
         let dayValues = dayRange.map(Optional.some)
         return leadingSlots + dayValues
@@ -279,10 +288,7 @@ private struct TimelineCalendarPanel: View {
     init(viewModel: TimelineViewModel) {
         self.viewModel = viewModel
 
-        var cal = Calendar.current
-        cal.timeZone = .current
-        cal.locale = Locale(identifier: "zh_Hans_CN")
-        cal.firstWeekday = 1
+        let cal = TimelineCalendarFactory.make()
         self.calendar = cal
 
         let today = cal.startOfDay(for: Date())
@@ -418,7 +424,6 @@ private extension TimelineCalendarPanel {
         hasPerformedInitialViewportSync = true
 
         let targetMonth = Self.monthStart(of: viewModel.displayedMonthStart, using: calendar)
-        let targetDay = calendar.startOfDay(for: viewModel.selectedDate)
         DispatchQueue.main.async {
             applyDisplayedMonth(targetMonth, animated: false)
             calendarProxy.scrollToMonth(
@@ -426,13 +431,6 @@ private extension TimelineCalendarPanel {
                 scrollPosition: .firstFullyVisiblePosition,
                 animated: false
             )
-            if calendar.isDate(targetDay, equalTo: targetMonth, toGranularity: .month) {
-                calendarProxy.scrollToDay(
-                    containing: targetDay,
-                    scrollPosition: .centered,
-                    animated: false
-                )
-            }
         }
     }
 
@@ -583,8 +581,13 @@ private extension TimelineCalendarPanel {
             .brandVerticalTrim(trim, edges: [.top, .bottom])
     }
 
-    /// 分页结束后根据首个可见日期回写当前月份标题，避免头部与实际可见月份脱节。
+    /// 分页结束后按可见月份左锚点回写当前月份标题，避免首个可见日导致的边界抖动。
     func settleMonthAfterPaging(_ visibleRange: DayComponentsRange) {
+        if let visibleMonthRange = calendarProxy.visibleMonthRange,
+           let leadingMonth = monthStart(for: visibleMonthRange.lowerBound) {
+            applyDisplayedMonth(leadingMonth, animated: false)
+            return
+        }
         guard let firstVisibleDate = date(for: visibleRange.lowerBound) else { return }
         let monthStart = Self.monthStart(of: firstVisibleDate, using: calendar)
         applyDisplayedMonth(monthStart, animated: false)
