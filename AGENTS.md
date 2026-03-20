@@ -19,6 +19,7 @@
 - 组件文档机制：重要 UI 组件（`docs/architecture/UI核心组件白名单.md` 白名单组件 + `xmnote/UIComponents` 下新增/重大重构组件）在收到用户“任务已完成”信号后，必须新增或更新组件使用文档（`docs/component-guides/`），并登记到 `docs/architecture/UI组件文档清单.md`；白名单组件必须被清单全量覆盖。
 - 对齐情况文档机制（强制）：对 Android → iOS 迁移功能，在收到用户“任务已完成”信号后，必须在 `docs/feature/功能名/对齐情况.md` 生成或更新对齐情况文档；该文档属于高优先级决策输入，不得省略。
 - iOS26 参考入口：涉及液态玻璃与 iOS26 新特性时，优先查阅 `docs/learning/iOS26液态玻璃与高相关新特性开发参考.md`，并据此执行“Android 业务意图对齐 + iOS 原生表达”。
+- 页面状态基建参考入口：涉及页面状态恢复、导航路径恢复、scene 级状态持久化时，必须先查阅 `docs/architecture/页面状态基建与开发模式.md`，并按其中分层与接入规则执行。
 
 ## 执行优先级（与 CLAUDE.md 融合）
 - 优先级顺序：用户当次明确要求 > `AGENTS.md` > `CLAUDE.md`。
@@ -219,3 +220,4 @@
 - 重要 UI 组件使用文档统一放在 `docs/component-guides/`，并同步维护 `docs/architecture/UI组件文档清单.md`。
 - 在文档收口阶段，代码实现与文档冲突时，先更新文档再改代码。
 - 严禁提交真实账号、密码、Token、服务器地址；示例配置必须脱敏。
+- 页面状态相关文档同步（强制）：当状态恢复链路或接入模式发生变更时，在文档收口阶段必须同步更新 `docs/architecture/页面状态基建与开发模式.md`。
