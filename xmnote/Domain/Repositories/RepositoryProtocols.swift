@@ -63,6 +63,24 @@ protocol NoteRepositoryProtocol {
     func fetchNoteDetail(noteId: Int64) async throws -> NoteDetailPayload?
     /// 保存笔记正文与想法 HTML，提交后触发下游观察流更新。
     func saveNoteDetail(noteId: Int64, contentHTML: String, ideaHTML: String) async throws
+    /// 拉取书摘编辑页首屏所需草稿、恢复草稿与书/章/标签选项。
+    func fetchNoteEditorBootstrap(mode: NoteEditorMode, seed: NoteEditorSeed?) async throws -> NoteEditorBootstrap
+    /// 当切换书籍时，重新拉取当前书籍下的章节选项。
+    func fetchNoteEditorChapters(bookId: Int64) async throws -> [NoteEditorChapterOption]
+    /// 新建书摘标签；需遵循 Android 的长度与重名校验。
+    func createNoteTag(named name: String) async throws -> NoteEditorTagOption
+    /// 将选中的本地图片暂存到编辑目录，供自动保存与后续上传复用。
+    func stageNoteEditorImage(data: Data, preferredFileExtension: String) async throws -> NoteEditorImageItem
+    /// 删除单张暂存附图，避免残留无效缓存文件。
+    func removeStagedNoteEditorImage(_ item: NoteEditorImageItem) async
+    /// 保存当前编辑草稿，用于自动恢复。
+    func saveNoteEditorDraft(_ draft: NoteEditorDraft)
+    /// 读取指定书籍与书摘组合下的自动保存草稿。
+    func fetchNoteEditorDraft(bookId: Int64, noteId: Int64) -> NoteEditorDraft?
+    /// 删除指定书籍与书摘组合下的自动保存草稿，并清理本地暂存图。
+    func deleteNoteEditorDraft(bookId: Int64, noteId: Int64)
+    /// 按 Android 事务语义保存新建/编辑后的书摘。
+    func saveNoteEditor(_ draft: NoteEditorDraft) async throws -> Int64
 }
 
 /// 通用内容查看仓储契约，统一封装书摘/书评/相关内容的查看、编辑与删除入口。

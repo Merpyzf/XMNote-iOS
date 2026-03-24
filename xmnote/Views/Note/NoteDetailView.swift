@@ -10,11 +10,9 @@ import SwiftUI
 /// 笔记详情页入口，支持查看与编辑模式切换。
 struct NoteDetailView: View {
     let noteId: Int64
-    var startInEditing: Bool = false
 
     @Environment(RepositoryContainer.self) private var repositories
     @State private var viewModel: NoteDetailViewModel?
-    @State private var isEditing = false
     @State private var bootstrapLoadingGate = LoadingGate()
 
     var body: some View {
@@ -22,7 +20,7 @@ struct NoteDetailView: View {
             if let viewModel {
                 NoteDetailContentView(
                     viewModel: viewModel,
-                    isEditing: isEditing
+                    isEditing: false
                 )
             } else {
                 Color.surfacePage.ignoresSafeArea()
@@ -32,7 +30,7 @@ struct NoteDetailView: View {
             }
         }
         .background(Color.surfacePage)
-        .navigationTitle(isEditing ? "编辑笔记" : "笔记详情")
+        .navigationTitle("笔记详情")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar { toolbarContent }
         .task {
@@ -41,7 +39,6 @@ struct NoteDetailView: View {
             let vm = NoteDetailViewModel(noteId: noteId, repository: repositories.noteRepository)
             viewModel = vm
             bootstrapLoadingGate.update(intent: .none)
-            isEditing = startInEditing
             await vm.load()
         }
         .onDisappear {
@@ -53,26 +50,10 @@ struct NoteDetailView: View {
     private var toolbarContent: some ToolbarContent {
         ToolbarItem(placement: .topBarTrailing) {
             if let viewModel {
-                if isEditing {
-                    if viewModel.isSaving {
-                        ProgressView()
-                    } else {
-                        Button("保存") {
-                            Task {
-                                let saved = await viewModel.save()
-                                if saved {
-                                    withAnimation(.snappy) { isEditing = false }
-                                }
-                            }
-                        }
-                        .disabled(viewModel.isLoading)
-                    }
-                } else {
-                    Button("编辑") {
-                        withAnimation(.snappy) { isEditing = true }
-                    }
-                    .disabled(viewModel.isLoading)
+                NavigationLink(value: NoteRoute.edit(noteId: noteId)) {
+                    Text("编辑")
                 }
+                .disabled(viewModel.isLoading)
             }
         }
     }

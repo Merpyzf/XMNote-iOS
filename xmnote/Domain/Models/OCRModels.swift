@@ -116,7 +116,7 @@ enum OCRRepositoryError: LocalizedError {
         case .emptyText:
             return "未从图片中识别出文本信息。"
         case .simulatorUnsupported:
-            return "百度 OCR SDK 当前仅在真机 Debug 构建下可用。"
+            return "百度 OCR SDK 当前仅支持真机环境。"
         case .sdkUnavailable(let reason):
             return reason
         case .authenticationFailed(let message):

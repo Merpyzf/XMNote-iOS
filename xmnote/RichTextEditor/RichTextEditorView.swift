@@ -209,6 +209,21 @@ final class RichTextEditorView: UITextView {
         selectedRange = NSRange(location: pos + 2, length: 0)
     }
 
+    /// 光标左移一个字符；若当前存在选区，则先收敛到选区起点。
+    func moveCursorLeft() {
+        moveCursor(offset: -1)
+    }
+
+    /// 光标右移一个字符；若当前存在选区，则先收敛到选区末尾。
+    func moveCursorRight() {
+        moveCursor(offset: 1)
+    }
+
+    /// 将光标移动到文末，对齐 Android 全屏返回后的行为。
+    func moveCursorToEnd() {
+        selectedRange = NSRange(location: textStorage.length, length: 0)
+    }
+
     // MARK: - 链接
 
     /// 将选区文本设置为超链接。
@@ -225,6 +240,18 @@ final class RichTextEditorView: UITextView {
         mutateTextStorage {
             textStorage.removeAttribute(.link, range: range)
         }
+    }
+
+    private func moveCursor(offset: Int) {
+        let currentRange = selectedRange
+        let baseLocation: Int
+        if currentRange.length > 0 {
+            baseLocation = offset < 0 ? currentRange.location : (currentRange.location + currentRange.length)
+        } else {
+            baseLocation = currentRange.location
+        }
+        let nextLocation = min(max(baseLocation + offset, 0), textStorage.length)
+        selectedRange = NSRange(location: nextLocation, length: 0)
     }
 }
 

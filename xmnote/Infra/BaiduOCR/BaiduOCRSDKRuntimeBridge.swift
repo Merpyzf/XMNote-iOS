@@ -23,7 +23,7 @@ enum BaiduOCRSDKRuntimeError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .simulatorUnsupported:
-            return "百度 OCR SDK 当前仅支持真机 Debug 构建。"
+            return "百度 OCR SDK 当前仅支持真机环境。"
         case .invalidImageData:
             return "裁切后的图片数据无效，无法提交到百度 OCR。"
         case .runtimeUnavailable(let message):

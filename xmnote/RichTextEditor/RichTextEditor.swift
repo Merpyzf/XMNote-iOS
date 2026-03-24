@@ -8,6 +8,12 @@
 import SwiftUI
 import UIKit
 
+/// 富文本工具栏呈现模式：默认跟随键盘，或交由外部浮动挂饰承载。
+enum RichTextToolbarPresentation {
+    case inputAccessory
+    case ornament(RichTextOrnamentController)
+}
+
 /// SwiftUI 入口：UIViewRepresentable 桥接 RichTextEditorView
 struct RichTextEditor: UIViewRepresentable {
 
@@ -19,6 +25,7 @@ struct RichTextEditor: UIViewRepresentable {
     var linkColor: UIColor? = nil
     var isLinkUnderline: Bool = true
     var allowsCameraTextCapture: Bool = false
+    var toolbarPresentation: RichTextToolbarPresentation = .inputAccessory
     var onTextChange: (() -> Void)?
     var onFocusChange: ((Bool) -> Void)?
 
@@ -31,25 +38,8 @@ struct RichTextEditor: UIViewRepresentable {
         editorView.linkColor = linkColor
         editorView.isLinkUnderline = isLinkUnderline
 
-        // 设置 inputAccessoryView（工具栏）
         context.coordinator.currentHighlightARGB = highlightARGB
-        let toolbar = RichTextToolbar(
-            onFormatAction: { action in
-                context.coordinator.handleToolbarAction(action, editorView: editorView)
-            },
-            onClearFormats: {
-                context.coordinator.handleClearFormats(editorView: editorView)
-            },
-            onCameraTextCapture: {
-                context.coordinator.handleCameraTextCapture(editorView: editorView)
-            },
-            onDismissKeyboard: {
-                editorView.resignFirstResponder()
-            },
-            showsCameraTextCapture: allowsCameraTextCapture
-        )
-        toolbar.textView = editorView
-        editorView.inputAccessoryView = toolbar
+        applyToolbarPresentation(to: editorView, context: context)
 
         // 初始内容
         if attributedText.length > 0 {
@@ -61,10 +51,12 @@ struct RichTextEditor: UIViewRepresentable {
 
     /// 同步 SwiftUI 侧可编辑状态、文本内容与工具栏高亮态到 UIKit 编辑器。
     func updateUIView(_ editorView: RichTextEditorView, context: Context) {
+        context.coordinator.parent = self
         editorView.isEditable = isEditable
         editorView.linkColor = linkColor
         editorView.isLinkUnderline = isLinkUnderline
         context.coordinator.currentHighlightARGB = highlightARGB
+        applyToolbarPresentation(to: editorView, context: context)
 
         // 格式操作触发的同步不需要回写，避免用旧 binding 覆盖新格式
         guard !context.coordinator.isSyncingToBinding else {
@@ -91,5 +83,48 @@ struct RichTextEditor: UIViewRepresentable {
     /// 创建协调器用于处理编辑事件回调。
     func makeCoordinator() -> RichTextCoordinator {
         RichTextCoordinator(self)
+    }
+
+    var ornamentController: RichTextOrnamentController? {
+        if case .ornament(let controller) = toolbarPresentation {
+            return controller
+        }
+        return nil
+    }
+
+    private func applyToolbarPresentation(to editorView: RichTextEditorView, context: Context) {
+        switch toolbarPresentation {
+        case .inputAccessory:
+            if editorView.inputAccessoryView == nil {
+                let toolbar = RichTextToolbar(
+                    onFormatAction: { action in
+                        context.coordinator.handleToolbarAction(action, editorView: editorView)
+                    },
+                    onClearFormats: {
+                        context.coordinator.handleClearFormats(editorView: editorView)
+                    },
+                    onCameraTextCapture: {
+                        context.coordinator.handleCameraTextCapture(editorView: editorView)
+                    },
+                    onDismissKeyboard: {
+                        editorView.resignFirstResponder()
+                    },
+                    showsCameraTextCapture: allowsCameraTextCapture
+                )
+                toolbar.textView = editorView
+                editorView.inputAccessoryView = toolbar
+                if editorView.isFirstResponder {
+                    editorView.reloadInputViews()
+                }
+            }
+        case .ornament(let controller):
+            if editorView.inputAccessoryView != nil {
+                editorView.inputAccessoryView = nil
+                if editorView.isFirstResponder {
+                    editorView.reloadInputViews()
+                }
+            }
+            context.coordinator.attachOrnamentController(controller, editorView: editorView)
+        }
     }
 }

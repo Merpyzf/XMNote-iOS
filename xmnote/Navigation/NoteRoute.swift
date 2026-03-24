@@ -11,6 +11,6 @@ import Foundation
 enum NoteRoute: Hashable, Codable {
     case detail(noteId: Int64)
     case edit(noteId: Int64)
-    case create(bookId: Int64?)
+    case create(seed: NoteEditorSeed)
     case notesByTag(tagId: Int64)
 }

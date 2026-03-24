@@ -37,7 +37,7 @@ struct MainTabView: View {
                 NavigationStack(path: $readingPath) {
                     ReadingContainerView(
                         onAddBook: { append(BookRoute.add, to: .reading) },
-                        onAddNote: { append(NoteRoute.create(bookId: nil), to: .reading) },
+                        onAddNote: { append(NoteRoute.create(seed: .empty), to: .reading) },
                         onOpenDebugCenter: { append(DebugRoute.debugCenter, to: .reading) },
                         onOpenReadCalendar: { date in
                             readingPath.append(ReadingRoute.readCalendar(date: date))
@@ -77,7 +77,7 @@ struct MainTabView: View {
                 NavigationStack(path: $booksPath) {
                     BookContainerView(
                         onAddBook: { append(BookRoute.add, to: .books) },
-                        onAddNote: { append(NoteRoute.create(bookId: nil), to: .books) },
+                        onAddNote: { append(NoteRoute.create(seed: .empty), to: .books) },
                         onOpenDebugCenter: { append(DebugRoute.debugCenter, to: .books) }
                     )
                         .navigationDestination(for: DebugRoute.self) { route in
@@ -103,7 +103,7 @@ struct MainTabView: View {
                 NavigationStack(path: $notesPath) {
                     NoteContainerView(
                         onAddBook: { append(BookRoute.add, to: .notes) },
-                        onAddNote: { append(NoteRoute.create(bookId: nil), to: .notes) },
+                        onAddNote: { append(NoteRoute.create(seed: .empty), to: .notes) },
                         onOpenDebugCenter: { append(DebugRoute.debugCenter, to: .notes) }
                     )
                         .navigationDestination(for: DebugRoute.self) { route in
@@ -129,7 +129,7 @@ struct MainTabView: View {
                 NavigationStack(path: $profilePath) {
                     PersonalView(
                         onAddBook: { append(BookRoute.add, to: .profile) },
-                        onAddNote: { append(NoteRoute.create(bookId: nil), to: .profile) },
+                        onAddNote: { append(NoteRoute.create(seed: .empty), to: .profile) },
                         onOpenDebugCenter: { append(DebugRoute.debugCenter, to: .profile) }
                     )
                         .navigationDestination(for: DebugRoute.self) { route in
@@ -160,7 +160,7 @@ struct MainTabView: View {
                     SearchView(
                         query: $searchQuery,
                         onAddBook: { append(BookRoute.add, to: .search) },
-                        onAddNote: { append(NoteRoute.create(bookId: nil), to: .search) },
+                        onAddNote: { append(NoteRoute.create(seed: .empty), to: .search) },
                         onOpenDebugCenter: { append(DebugRoute.debugCenter, to: .search) }
                     )
                         .navigationDestination(for: DebugRoute.self) { route in
@@ -252,9 +252,9 @@ struct MainTabView: View {
         case .detail(let noteId):
             NoteDetailView(noteId: noteId)
         case .edit(let noteId):
-            NoteDetailView(noteId: noteId, startInEditing: true)
-        case .create:
-            Text("创建笔记")
+            NoteEditorView(mode: .edit(noteId: noteId))
+        case .create(let seed):
+            NoteEditorView(mode: .create, seed: seed)
         case .notesByTag:
             Text("标签笔记")
         }

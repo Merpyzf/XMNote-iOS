@@ -317,7 +317,6 @@ private extension OCRRepository {
     }
 }
 
-#if DEBUG
 extension OCRRepository {
     static let androidAlignedDebugDefaults: OCRPreferences = {
         let defaults = OCRPreferences.default
@@ -380,4 +379,3 @@ private extension OCRRepository {
         }
     }
 }
-#endif

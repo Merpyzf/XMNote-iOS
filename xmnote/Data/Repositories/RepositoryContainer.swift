@@ -34,14 +34,14 @@ final class RepositoryContainer {
             configuration: AliyunDriveOpenPlatformConfiguration()
         )
         let s3ConfigRepository = S3ConfigRepository(databaseManager: databaseManager)
-        #if DEBUG
+        let s3UploadRepository = S3UploadRepository(configRepository: s3ConfigRepository)
         let defaultOCRPreferences = OCRRepository.androidAlignedDebugDefaults
-        #else
-        let defaultOCRPreferences = OCRPreferences.default
-        #endif
 
         self.bookRepository = BookRepository(databaseManager: databaseManager)
-        self.noteRepository = NoteRepository(databaseManager: databaseManager)
+        self.noteRepository = NoteRepository(
+            databaseManager: databaseManager,
+            s3UploadRepository: s3UploadRepository
+        )
         self.contentRepository = ContentRepository(databaseManager: databaseManager)
         self.bookSearchRepository = BookSearchRepository()
         self.bookEditorRepository = BookEditorRepository(databaseManager: databaseManager)
@@ -56,7 +56,7 @@ final class RepositoryContainer {
             aliyunDriveProvider: aliyunDriveProvider
         )
         self.s3ConfigRepository = s3ConfigRepository
-        self.s3UploadRepository = S3UploadRepository(configRepository: s3ConfigRepository)
+        self.s3UploadRepository = s3UploadRepository
         self.statisticsRepository = StatisticsRepository(databaseManager: databaseManager)
         self.readingDashboardRepository = ReadingDashboardRepository(databaseManager: databaseManager)
         self.coverImageLoader = NukeCoverImageLoader()

@@ -1,11 +1,6 @@
 #!/bin/sh
 set -eu
 
-if [ "${CONFIGURATION:-}" != "Debug" ]; then
-  echo "Skipping Baidu OCR embed for non-Debug build."
-  exit 0
-fi
-
 if [ "${PLATFORM_NAME:-}" = "iphonesimulator" ]; then
   echo "Skipping Baidu OCR embed for simulator build."
   exit 0

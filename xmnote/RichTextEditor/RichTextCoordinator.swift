@@ -11,7 +11,7 @@ import SwiftUI
 /// 对标 Android TextWatcher 的职责
 final class RichTextCoordinator: NSObject, UITextViewDelegate {
 
-    private let parent: RichTextEditor
+    var parent: RichTextEditor
 
     /// 格式操作同步 binding 时置 true，防止 updateUIView 回写覆盖
     var isSyncingToBinding = false
@@ -45,11 +45,13 @@ final class RichTextCoordinator: NSObject, UITextViewDelegate {
 
     /// 通知 SwiftUI 焦点已进入编辑器，驱动外层工具栏和占位态更新。
     func textViewDidBeginEditing(_ textView: UITextView) {
+        parent.ornamentController?.isFocused = true
         parent.onFocusChange?(true)
     }
 
     /// 通知 SwiftUI 焦点离开编辑器，供页面回收工具栏与提交草稿。
     func textViewDidEndEditing(_ textView: UITextView) {
+        parent.ornamentController?.isFocused = false
         parent.onFocusChange?(false)
     }
 
@@ -82,6 +84,14 @@ final class RichTextCoordinator: NSObject, UITextViewDelegate {
                     && XMCameraTextCaptureSupport.canCapture(on: editorView)
             )
         }
+        parent.ornamentController?.activeFormats = formats
+        parent.ornamentController?.hasSelection = range.length > 0
+        parent.ornamentController?.canUndo = editorView.undoManager?.canUndo ?? false
+        parent.ornamentController?.canRedo = editorView.undoManager?.canRedo ?? false
+        parent.ornamentController?.canCaptureTextFromCamera =
+            parent.allowsCameraTextCapture
+            && editorView.isEditable
+            && XMCameraTextCaptureSupport.canCapture(on: editorView)
     }
 
     // MARK: - 格式传染防护
@@ -249,6 +259,49 @@ final class RichTextCoordinator: NSObject, UITextViewDelegate {
                 isEnabled: XMCameraTextCaptureSupport.canCapture(on: editorView)
             )
         }
+        parent.ornamentController?.canCaptureTextFromCamera =
+            XMCameraTextCaptureSupport.canCapture(on: editorView)
+    }
+
+    /// 为浮动挂饰工具栏安装命令桥接，让 SwiftUI 按钮能驱动当前编辑器。
+    func attachOrnamentController(_ controller: RichTextOrnamentController, editorView: RichTextEditorView) {
+        controller.commandHandler = { [weak self, weak editorView] command in
+            guard let self, let editorView else { return }
+            switch command {
+            case .toggleFormat(let format):
+                self.handleToolbarAction(format, editorView: editorView)
+            case .clearFormats:
+                self.handleClearFormats(editorView: editorView)
+            case .undo:
+                editorView.undoManager?.undo()
+                self.updateActiveFormats(editorView)
+            case .redo:
+                editorView.undoManager?.redo()
+                self.updateActiveFormats(editorView)
+            case .moveCursorLeft:
+                editorView.moveCursorLeft()
+                self.updateActiveFormats(editorView)
+            case .moveCursorRight:
+                editorView.moveCursorRight()
+                self.updateActiveFormats(editorView)
+            case .indent:
+                editorView.indent()
+                self.updateActiveFormats(editorView)
+                self.syncAttributedText(from: editorView)
+            case .focus:
+                _ = editorView.becomeFirstResponder()
+            case .moveCursorToEnd:
+                editorView.moveCursorToEnd()
+                self.updateActiveFormats(editorView)
+            case .insertText(let text):
+                self.insertText(text, editorView: editorView)
+            case .cameraTextCapture:
+                self.handleCameraTextCapture(editorView: editorView)
+            case .dismissKeyboard:
+                editorView.resignFirstResponder()
+            }
+        }
+        updateActiveFormats(editorView)
     }
 
     // MARK: - Binding 同步
@@ -258,6 +311,16 @@ final class RichTextCoordinator: NSObject, UITextViewDelegate {
         isSyncingToBinding = true
         parent.attributedText = editorView.attributedText
         isSyncingToBinding = false
+    }
+
+    private func insertText(_ text: String, editorView: RichTextEditorView) {
+        guard !text.isEmpty else { return }
+        if !editorView.isFirstResponder {
+            _ = editorView.becomeFirstResponder()
+        }
+        editorView.insertText(text)
+        updateActiveFormats(editorView)
+        syncAttributedText(from: editorView)
     }
 
     // MARK: - Link
