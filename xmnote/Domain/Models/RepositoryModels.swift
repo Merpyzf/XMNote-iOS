@@ -71,11 +71,72 @@ struct NoteEditorTagOption: Identifiable, Hashable, Codable, Sendable {
 }
 
 /// 书摘附图条目的统一模型，兼容远端已保存图与本地暂存图。
+enum NoteEditorImageUploadState: String, Codable, Sendable {
+    case uploading
+    case success
+    case failed
+}
+
+/// 书摘附图条目的统一模型，兼容远端已保存图与本地暂存图。
 struct NoteEditorImageItem: Identifiable, Hashable, Codable, Sendable {
     let id: String
     let remoteURL: String?
     let localFilePath: String?
     let createdDate: Int64
+    let uploadState: NoteEditorImageUploadState
+
+    nonisolated init(
+        id: String,
+        remoteURL: String?,
+        localFilePath: String?,
+        createdDate: Int64,
+        uploadState: NoteEditorImageUploadState? = nil
+    ) {
+        self.id = id
+        self.remoteURL = remoteURL
+        self.localFilePath = localFilePath
+        self.createdDate = createdDate
+        if let uploadState {
+            self.uploadState = uploadState
+        } else if let remoteURL, !remoteURL.isEmpty {
+            self.uploadState = .success
+        } else {
+            self.uploadState = .uploading
+        }
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case remoteURL
+        case localFilePath
+        case createdDate
+        case uploadState
+    }
+
+    nonisolated init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let id = try container.decode(String.self, forKey: .id)
+        let remoteURL = try container.decodeIfPresent(String.self, forKey: .remoteURL)
+        let localFilePath = try container.decodeIfPresent(String.self, forKey: .localFilePath)
+        let createdDate = try container.decode(Int64.self, forKey: .createdDate)
+        let uploadState = try container.decodeIfPresent(NoteEditorImageUploadState.self, forKey: .uploadState)
+        self.init(
+            id: id,
+            remoteURL: remoteURL,
+            localFilePath: localFilePath,
+            createdDate: createdDate,
+            uploadState: uploadState
+        )
+    }
+
+    nonisolated func encode(to encoder: any Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encodeIfPresent(remoteURL, forKey: .remoteURL)
+        try container.encodeIfPresent(localFilePath, forKey: .localFilePath)
+        try container.encode(createdDate, forKey: .createdDate)
+        try container.encode(uploadState, forKey: .uploadState)
+    }
 
     var previewPath: String? {
         localFilePath ?? remoteURL
@@ -83,6 +144,30 @@ struct NoteEditorImageItem: Identifiable, Hashable, Codable, Sendable {
 
     var isStagedLocally: Bool {
         remoteURL == nil && localFilePath?.isEmpty == false
+    }
+
+    var canRetryUpload: Bool {
+        uploadState == .failed && localFilePath?.isEmpty == false
+    }
+
+    nonisolated func updatingUploadState(_ uploadState: NoteEditorImageUploadState) -> NoteEditorImageItem {
+        NoteEditorImageItem(
+            id: id,
+            remoteURL: remoteURL,
+            localFilePath: localFilePath,
+            createdDate: createdDate,
+            uploadState: uploadState
+        )
+    }
+
+    nonisolated func withUploadedRemoteURL(_ remoteURL: String) -> NoteEditorImageItem {
+        NoteEditorImageItem(
+            id: id,
+            remoteURL: remoteURL,
+            localFilePath: localFilePath,
+            createdDate: createdDate,
+            uploadState: .success
+        )
     }
 }
 
@@ -128,6 +213,8 @@ enum NoteEditorError: LocalizedError, Equatable {
     case invalidTagName
     case invalidReadPosition(String)
     case invalidImageData
+    case imageUploadInProgress
+    case imageUploadFailed
 
     var errorDescription: String? {
         switch self {
@@ -145,6 +232,10 @@ enum NoteEditorError: LocalizedError, Equatable {
             return message
         case .invalidImageData:
             return "当前图片无法读取，请重新选择后再试"
+        case .imageUploadInProgress:
+            return "请等待图片上传完成"
+        case .imageUploadFailed:
+            return "请先重试上传失败的图片"
         }
     }
 }

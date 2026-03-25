@@ -1,5 +1,6 @@
 import Foundation
 import Observation
+import os
 import SwiftUI
 
 /**
@@ -24,6 +25,16 @@ enum NoteEditorComposerTarget: String, Identifiable {
             return "想法"
         }
     }
+}
+
+/// 聚焦摘录模式下想法输入区的三态状态机，对齐 Android 端 IdeaInputState。
+enum IdeaInputState: Equatable {
+    /// 48pt 折叠行，显示"补充想法"或内容预览
+    case collapsed
+    /// 内联展开编辑器，获取焦点
+    case expanded
+    /// 有内容，保持展开显示
+    case hasContent
 }
 
 /// 书摘编辑状态源，负责 bootstrap、自动保存、附图暂存、OCR 与最终保存。
@@ -115,6 +126,7 @@ final class NoteEditorViewModel {
     var didSave = false
     var pendingRecoveredDraft: NoteEditorDraft?
     var lastAutoSaveTime: Int64 = 0
+    var ideaInputState: IdeaInputState = .collapsed
 
     private let mode: NoteEditorMode
     private let seed: NoteEditorSeed?
@@ -123,6 +135,7 @@ final class NoteEditorViewModel {
     private var initialDraft: NoteEditorDraft?
     private var isHydratingState = false
     private var autoSaveTask: Task<Void, Never>?
+    private var imageUploadTasks: [String: Task<Void, Never>] = [:]
 
     init(
         mode: NoteEditorMode,
@@ -283,11 +296,13 @@ final class NoteEditorViewModel {
     func stageImage(data: Data, fileExtension: String) async {
         errorMessage = nil
         do {
-            let item = try await repository.stageNoteEditorImage(
+            let stagedItem = try await repository.stageNoteEditorImage(
                 data: data,
                 preferredFileExtension: fileExtension
             )
-            imageItems.append(item)
+            let uploadingItem = stagedItem.updatingUploadState(.uploading)
+            imageItems.append(uploadingItem)
+            startImageUpload(for: uploadingItem)
         } catch {
             errorMessage = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
         }
@@ -295,8 +310,47 @@ final class NoteEditorViewModel {
 
     /// 删除一张附图；本地暂存图会同步清理缓存文件。
     func removeImage(_ item: NoteEditorImageItem) async {
+        #if DEBUG
+        let countBefore = imageItems.count
+        Self.attachmentLogger.debug(
+            "[note.editor.attachment.remove.enter] id=\(item.id, privacy: .public) countBefore=\(countBefore)"
+        )
+        #endif
+        imageUploadTasks[item.id]?.cancel()
+        imageUploadTasks[item.id] = nil
         imageItems.removeAll { $0.id == item.id }
+        #if DEBUG
+        let countAfter = imageItems.count
+        let removed = max(0, countBefore - countAfter)
+        Self.attachmentLogger.debug(
+            "[note.editor.attachment.remove.exit] id=\(item.id, privacy: .public) removed=\(removed) countAfter=\(countAfter)"
+        )
+        #endif
         await repository.removeStagedNoteEditorImage(item)
+    }
+
+    /// 重试失败附图上传。
+    func retryImageUpload(_ item: NoteEditorImageItem) {
+        guard item.canRetryUpload else { return }
+        updateImage(item.id) { $0.updatingUploadState(.uploading) }
+        if let latestItem = imageItems.first(where: { $0.id == item.id }) {
+            startImageUpload(for: latestItem)
+        }
+    }
+
+    /// 拖拽排序附图列表。
+    func moveImage(sourceID: String, destinationID: String) {
+        guard let sourceIndex = imageItems.firstIndex(where: { $0.id == sourceID }),
+              let destinationIndex = imageItems.firstIndex(where: { $0.id == destinationID }),
+              sourceIndex != destinationIndex else {
+            return
+        }
+        var reordered = imageItems
+        reordered.move(
+            fromOffsets: IndexSet(integer: sourceIndex),
+            toOffset: destinationIndex > sourceIndex ? destinationIndex + 1 : destinationIndex
+        )
+        imageItems = reordered
     }
 
     /// 为全屏编辑页提供正文或想法的富文本绑定。
@@ -346,6 +400,15 @@ final class NoteEditorViewModel {
 
     /// 提交保存当前书摘。
     func save() async -> Int64? {
+        if imageItems.contains(where: { $0.uploadState == .uploading }) {
+            errorMessage = NoteEditorError.imageUploadInProgress.errorDescription
+            return nil
+        }
+        if imageItems.contains(where: { $0.uploadState == .failed }) {
+            errorMessage = NoteEditorError.imageUploadFailed.errorDescription
+            return nil
+        }
+
         isSaving = true
         errorMessage = nil
         defer { isSaving = false }
@@ -407,6 +470,8 @@ private extension NoteEditorViewModel {
     }()
 
     func applyDraft(_ draft: NoteEditorDraft, resetInitialDraft: Bool) {
+        imageUploadTasks.values.forEach { $0.cancel() }
+        imageUploadTasks.removeAll()
         isHydratingState = true
         defer { isHydratingState = false }
 
@@ -423,10 +488,13 @@ private extension NoteEditorViewModel {
         selectedChapterTitle = draft.chapterTitle
         imageItems = draft.imageItems
         lastAutoSaveTime = draft.lastAutoSaveTime
+        resumePendingImageUploadsIfNeeded()
 
         if resetInitialDraft {
             initialDraft = makeDraftSnapshot(includeAutoSaveTime: false)
         }
+
+        syncIdeaInputStateFromContent()
     }
 
     func mergeMissingSelections(in draft: NoteEditorDraft) -> NoteEditorDraft {
@@ -515,4 +583,155 @@ private extension NoteEditorViewModel {
         guard !text.isEmpty else { return placeholder }
         return text
     }
+
+    func startImageUpload(for item: NoteEditorImageItem) {
+        updateImage(item.id) { $0.updatingUploadState(.uploading) }
+        imageUploadTasks[item.id]?.cancel()
+        imageUploadTasks[item.id] = Task { [weak self] in
+            guard let self else { return }
+            do {
+                let uploadedItem = try await self.repository.uploadStagedNoteEditorImage(item)
+                guard !Task.isCancelled else { return }
+                self.updateImage(item.id) { _ in uploadedItem.updatingUploadState(.success) }
+            } catch {
+                guard !Task.isCancelled else { return }
+                self.updateImage(item.id) { $0.updatingUploadState(.failed) }
+            }
+            self.imageUploadTasks[item.id] = nil
+        }
+    }
+
+    func updateImage(_ imageID: String, mutate: (NoteEditorImageItem) -> NoteEditorImageItem) {
+        guard let index = imageItems.firstIndex(where: { $0.id == imageID }) else { return }
+        imageItems[index] = mutate(imageItems[index])
+    }
+
+    func resumePendingImageUploadsIfNeeded() {
+        for item in imageItems where item.uploadState != .success && item.localFilePath?.isEmpty == false {
+            startImageUpload(for: item.updatingUploadState(.uploading))
+        }
+    }
+}
+
+// MARK: - IdeaInputState
+
+extension NoteEditorViewModel {
+#if DEBUG
+    private static let ideaStateLogger = Logger(
+        subsystem: Bundle.main.bundleIdentifier ?? "xmnote",
+        category: "NoteEditorExpand"
+    )
+    private static let attachmentLogger = Logger(
+        subsystem: Bundle.main.bundleIdentifier ?? "xmnote",
+        category: "NoteEditorAttachment"
+    )
+#endif
+
+    var hasIdeaText: Bool {
+        !ideaText.string.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    /// 聚焦模式下展开想法编辑器。
+    func expandIdea() {
+        let previousState = ideaInputState
+        let nextState: IdeaInputState = hasIdeaText ? .hasContent : .expanded
+        ideaInputState = nextState
+#if DEBUG
+        logIdeaState(
+            "state.expandIdea",
+            previousState: previousState,
+            nextState: nextState,
+            extra: "source=focus_row_tap"
+        )
+#endif
+    }
+
+    /// 聚焦模式下失焦后尝试收起想法：无内容则回到 collapsed。
+    func collapseIdeaIfEmpty() {
+        guard !hasIdeaText else {
+            let previousState = ideaInputState
+            ideaInputState = .hasContent
+#if DEBUG
+            logIdeaState(
+                "state.collapseIfEmpty",
+                previousState: previousState,
+                nextState: .hasContent,
+                extra: "reason=has_content_keep_expanded"
+            )
+#endif
+            return
+        }
+        let previousState = ideaInputState
+        ideaInputState = .collapsed
+#if DEBUG
+        logIdeaState(
+            "state.collapseIfEmpty",
+            previousState: previousState,
+            nextState: .collapsed,
+            extra: "reason=empty_and_focus_lost"
+        )
+#endif
+    }
+
+    /// 根据想法文本内容同步状态（编辑加载后、布局模式切换时调用）。
+    func syncIdeaInputStateFromContent() {
+        let previousState = ideaInputState
+        let nextState: IdeaInputState = hasIdeaText ? .hasContent : .collapsed
+        ideaInputState = nextState
+#if DEBUG
+        logIdeaState(
+            "state.syncFromContent",
+            previousState: previousState,
+            nextState: nextState
+        )
+#endif
+    }
+
+    /// 聚焦摘录布局切换时按 Android 口径同步：有内容 > 有焦点 > 收起。
+    func syncIdeaInputStateForFocusLayout(isIdeaFocused: Bool) {
+        let previousState = ideaInputState
+        let nextState: IdeaInputState
+        if hasIdeaText {
+            nextState = .hasContent
+        } else if isIdeaFocused {
+            nextState = .expanded
+        } else {
+            nextState = .collapsed
+        }
+        ideaInputState = nextState
+#if DEBUG
+        logIdeaState(
+            "state.syncFocusLayout",
+            previousState: previousState,
+            nextState: nextState,
+            extra: "isIdeaFocused=\(isIdeaFocused)"
+        )
+#endif
+    }
+
+#if DEBUG
+    private func logIdeaState(
+        _ event: String,
+        previousState: IdeaInputState,
+        nextState: IdeaInputState,
+        extra: String = ""
+    ) {
+        let previous = ideaStateText(previousState)
+        let next = ideaStateText(nextState)
+        Self.ideaStateLogger.debug(
+            "[note.editor.expand.\(event, privacy: .public)] previous=\(previous, privacy: .public) next=\(next, privacy: .public) hasIdeaText=\(self.hasIdeaText) \(extra, privacy: .public)"
+        )
+    }
+
+    private func ideaStateText(_ state: IdeaInputState) -> String {
+        switch state {
+        case .collapsed:
+            return "collapsed"
+        case .expanded:
+            return "expanded"
+        case .hasContent:
+            return "hasContent"
+        }
+    }
+#endif
 }

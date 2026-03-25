@@ -177,7 +177,10 @@ private extension NoteEditorView {
                                     autoSaveCard(autoSaveDescription)
                                 }
 
-                                imageSection(viewModel)
+                                if !viewModel.imageItems.isEmpty {
+                                    imageSection(viewModel)
+                                        .transition(.move(edge: .top).combined(with: .opacity))
+                                }
                                 metadataSection(viewModel)
 
                                 if let prompt = toolbarPromptMessage, !prompt.isEmpty {
@@ -377,12 +380,6 @@ private extension NoteEditorView {
         } message: {
             Text("检测到这条书摘有未提交的自动保存内容，是否恢复继续编辑？")
         }
-        .simultaneousGesture(
-            DragGesture(minimumDistance: 0)
-                .onChanged { _ in
-                    registerEditorInteraction()
-                }
-        )
         .task(id: attachmentPhotoItems) {
             guard !attachmentPhotoItems.isEmpty else { return }
             await consumeAttachmentPhotoItems(attachmentPhotoItems, viewModel: viewModel)
@@ -648,45 +645,60 @@ private extension NoteEditorView {
 
     func imageSection(_ viewModel: NoteEditorViewModel) -> some View {
         CardContainer(cornerRadius: CornerRadius.containerMedium, showsBorder: false) {
-            VStack(alignment: .leading, spacing: Spacing.base) {
-                HStack {
-                    Text("附图")
-                        .font(AppTypography.subheadlineSemibold)
-                        .foregroundStyle(Color.textPrimary)
-                    Spacer()
-                    PhotosPicker(
-                        selection: $attachmentPhotoItems,
-                        maxSelectionCount: 9,
-                        matching: .images
-                    ) {
-                        HStack(spacing: Spacing.half) {
-                            Image(systemName: "plus")
-                            Text("添加图片")
-                        }
-                        .font(AppTypography.semantic(.footnote, weight: .medium))
-                        .foregroundStyle(Color.brand)
+            XMAttachmentUploadStrip(
+                items: viewModel.imageItems.map { item in
+                    let uploadState: XMAttachmentUploadState
+                    switch item.uploadState {
+                    case .uploading:
+                        uploadState = .uploading
+                    case .success:
+                        uploadState = .success
+                    case .failed:
+                        uploadState = .failed
                     }
-                    .disabled(viewModel.isSaving)
-                }
-
-                if viewModel.imageItems.isEmpty {
-                    Text("暂无附图")
-                        .font(AppTypography.footnote)
-                        .foregroundStyle(Color.textHint)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.vertical, Spacing.cozy)
-                } else {
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(spacing: Spacing.base) {
-                            ForEach(viewModel.imageItems) { item in
-                                NoteEditorImageCell(item: item) {
-                                    Task { await viewModel.removeImage(item) }
-                                }
-                            }
-                        }
+                    return XMAttachmentUploadItem(
+                        id: item.id,
+                        localFilePath: item.localFilePath,
+                        remoteURL: item.remoteURL,
+                        uploadState: uploadState
+                    )
+                },
+                allowsFullScreenPreview: true,
+                accessibilityNamespace: "note_editor.attachment_strip",
+                onMove: { sourceID, destinationID in
+                    registerEditorInteraction(force: true)
+                    withAnimation(.snappy(duration: 0.2)) {
+                        viewModel.moveImage(sourceID: sourceID, destinationID: destinationID)
                     }
+                },
+                onRemove: { id in
+                    registerEditorInteraction(force: true)
+                    #if DEBUG
+                    logExpandEvent("attach.remove.tap", viewModel: viewModel, extra: "id=\(id)")
+                    #endif
+                    guard let item = viewModel.imageItems.first(where: { $0.id == id }) else {
+                        #if DEBUG
+                        let currentIDs = viewModel.imageItems.map(\.id).joined(separator: ",")
+                        logExpandEvent("attach.remove.miss", viewModel: viewModel, extra: "id=\(id) currentIDs=[\(currentIDs)]")
+                        #endif
+                        return
+                    }
+                    #if DEBUG
+                    logExpandEvent("attach.remove.dispatch", viewModel: viewModel, extra: "id=\(id)")
+                    #endif
+                    Task { @MainActor in
+                        await viewModel.removeImage(item)
+                    }
+                },
+                onRetry: { id in
+                    registerEditorInteraction(force: true)
+                    guard let item = viewModel.imageItems.first(where: { $0.id == id }) else { return }
+                    viewModel.retryImageUpload(item)
+                },
+                onTap: { _ in
+                    registerEditorInteraction(force: true)
                 }
-            }
+            )
             .padding(Spacing.contentEdge)
         }
     }
@@ -1361,6 +1373,7 @@ private struct NoteEditorFloatingToolbar: View {
                             .padding(.horizontal, Spacing.base)
                             .padding(.vertical, Spacing.cozy)
                     }
+                    .contentShape(Rectangle())
                     .frame(maxWidth: .infinity, alignment: .leading)
 
                     toolbarDivider
@@ -1374,6 +1387,7 @@ private struct NoteEditorFloatingToolbar: View {
         }
         .padding(.horizontal, Spacing.screenEdge)
         .background(Color.clear)
+        .animation(.snappy(duration: 0.22), value: toolbarMode)
     }
 
     var toolbarDivider: some View {
@@ -1485,45 +1499,6 @@ private enum NoteEditorSheet: String, Identifiable {
     case settings
 
     var id: String { rawValue }
-}
-
-private struct NoteEditorImageCell: View {
-    let item: NoteEditorImageItem
-    let onRemove: () -> Void
-
-    var body: some View {
-        ZStack(alignment: .topTrailing) {
-            Group {
-                if let localFilePath = item.localFilePath,
-                   let image = UIImage(contentsOfFile: localFilePath) {
-                    Image(uiImage: image)
-                        .resizable()
-                        .aspectRatio(contentMode: .fill)
-                } else if let remoteURL = item.remoteURL, !remoteURL.isEmpty {
-                    XMRemoteImage(urlString: remoteURL) {
-                        RoundedRectangle(cornerRadius: CornerRadius.blockMedium, style: .continuous)
-                            .fill(Color.surfaceNested)
-                    }
-                    .aspectRatio(contentMode: .fill)
-                } else {
-                    RoundedRectangle(cornerRadius: CornerRadius.blockMedium, style: .continuous)
-                        .fill(Color.surfaceNested)
-                }
-            }
-            .frame(width: 92, height: 92)
-            .clipShape(RoundedRectangle(cornerRadius: CornerRadius.blockMedium, style: .continuous))
-
-            Button(action: onRemove) {
-                Image(systemName: "xmark")
-                    .font(.system(size: 10, weight: .bold))
-                    .foregroundStyle(.white)
-                    .frame(width: 22, height: 22)
-                    .background(Color.black.opacity(0.65), in: Circle())
-            }
-            .buttonStyle(.plain)
-            .padding(Spacing.compact)
-        }
-    }
 }
 
 private struct NoteEditorBookPickerSheet: View {

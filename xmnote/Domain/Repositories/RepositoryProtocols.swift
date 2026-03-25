@@ -71,6 +71,8 @@ protocol NoteRepositoryProtocol {
     func createNoteTag(named name: String) async throws -> NoteEditorTagOption
     /// 将选中的本地图片暂存到编辑目录，供自动保存与后续上传复用。
     func stageNoteEditorImage(data: Data, preferredFileExtension: String) async throws -> NoteEditorImageItem
+    /// 上传单张暂存附图，返回携带远端 URL 的最新条目。
+    func uploadStagedNoteEditorImage(_ item: NoteEditorImageItem) async throws -> NoteEditorImageItem
     /// 删除单张暂存附图，避免残留无效缓存文件。
     func removeStagedNoteEditorImage(_ item: NoteEditorImageItem) async
     /// 保存当前编辑草稿，用于自动恢复。

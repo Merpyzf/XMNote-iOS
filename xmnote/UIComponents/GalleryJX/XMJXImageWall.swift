@@ -99,65 +99,6 @@ struct XMJXImageWall: View {
 }
 
 @MainActor
-private final class XMJXPhotoBrowserHost {
-    let registry = XMJXThumbnailRegistry()
-
-    private var presenter: XMJXPhotoBrowserPresenter?
-    private var currentItems: [XMJXGalleryItem]
-
-    init(initialItems: [XMJXGalleryItem]) {
-        self.currentItems = initialItems
-        if !initialItems.isEmpty {
-            self.presenter = XMJXPhotoBrowserPresenter(items: initialItems, registry: registry)
-        }
-        XMJXGalleryLogger.verbose(
-            "host.init itemsCount=\(initialItems.count) presenterReady=\(presenter != nil)"
-        )
-    }
-
-    /// 同步图片墙数据源到浏览器桥接器。
-    func updateItems(_ items: [XMJXGalleryItem]) {
-        XMJXGalleryLogger.verbose("host.updateItems.begin itemsCount=\(items.count) presenterReady=\(presenter != nil)")
-        currentItems = items
-        if let presenter {
-            presenter.updateItems(items)
-        } else if !items.isEmpty {
-            presenter = XMJXPhotoBrowserPresenter(items: items, registry: registry)
-        }
-        XMJXGalleryLogger.verbose("host.updateItems.end itemsCount=\(items.count) presenterReady=\(presenter != nil)")
-    }
-
-    /// 打开指定索引的浏览器全屏页。
-    func open(at index: Int, wallID: String, tapSequence: Int) {
-        XMJXGalleryLogger.essential(
-            "host.open.begin wallID=\(wallID) tapSeq=\(tapSequence) index=\(index) itemsCount=\(currentItems.count) presenterReady=\(presenter != nil)"
-        )
-
-        guard !currentItems.isEmpty else {
-            XMJXGalleryLogger.essential("host.open.abort wallID=\(wallID) tapSeq=\(tapSequence) reason=emptyItems")
-            return
-        }
-        guard currentItems.indices.contains(index) else {
-            XMJXGalleryLogger.essential("host.open.abort wallID=\(wallID) tapSeq=\(tapSequence) reason=indexOutOfRange")
-            return
-        }
-        if presenter == nil {
-            presenter = XMJXPhotoBrowserPresenter(items: currentItems, registry: registry)
-            XMJXGalleryLogger.essential("host.open.preparePresenter wallID=\(wallID) tapSeq=\(tapSequence) created=true")
-        }
-        guard let presenter else {
-            XMJXGalleryLogger.essential("host.open.abort wallID=\(wallID) tapSeq=\(tapSequence) reason=presenterMissing")
-            return
-        }
-
-        let itemID = currentItems[index].id
-        XMJXGalleryLogger.essential(
-            "host.open.callPresenter wallID=\(wallID) tapSeq=\(tapSequence) index=\(index) itemID=\(itemID)"
-        )
-        presenter.present(initialIndex: index, wallID: wallID, tapSequence: tapSequence)
-    }
-}
-
 private extension XMJXImageWall {
     /// 把尺寸转换为日志友好的紧凑文本，便于排查命中区域和布局异常。
     func describe(_ size: CGSize) -> String {

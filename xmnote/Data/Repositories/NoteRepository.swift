@@ -171,8 +171,30 @@ struct NoteRepository: NoteRepositoryProtocol {
             id: UUID().uuidString,
             remoteURL: nil,
             localFilePath: fileURL.path,
-            createdDate: Self.currentTimestampMillis
+            createdDate: Self.currentTimestampMillis,
+            uploadState: .uploading
         )
+    }
+
+    /// 上传单张暂存附图，返回携带远端 URL 的最新条目。
+    func uploadStagedNoteEditorImage(_ item: NoteEditorImageItem) async throws -> NoteEditorImageItem {
+        if let remoteURL = item.remoteURL, !remoteURL.isEmpty {
+            return item.updatingUploadState(.success)
+        }
+
+        guard let localFilePath = item.localFilePath, !localFilePath.isEmpty else {
+            throw NoteEditorError.invalidImageData
+        }
+        guard fileManager.fileExists(atPath: localFilePath) else {
+            throw NoteEditorError.invalidImageData
+        }
+
+        let result = try await s3UploadRepository.uploadFile(
+            localURL: URL(fileURLWithPath: localFilePath),
+            prefix: "note_image",
+            progress: nil
+        )
+        return item.withUploadedRemoteURL(result.remoteURL.absoluteString)
     }
 
     /// 删除单张暂存附图，避免残留无效缓存文件。
@@ -212,7 +234,7 @@ struct NoteRepository: NoteRepositoryProtocol {
     /// 按 Android 事务语义保存新建/编辑后的书摘。
     func saveNoteEditor(_ draft: NoteEditorDraft) async throws -> Int64 {
         let validatedDraft = try validateEditorDraft(draft)
-        let uploadedImages = try await resolvePersistedImages(for: validatedDraft.imageItems)
+        let uploadedImages = try ensureReadyUploadedImages(for: validatedDraft.imageItems)
 
         let noteID = try await databaseManager.database.dbPool.write { db in
             let now = Self.currentTimestampMillis
@@ -330,7 +352,7 @@ private extension NoteRepository {
 
     func cleanupDetachedLocalImages(previous: NoteEditorDraft, current: NoteEditorDraft) {
         let currentLocalPaths = Set(current.imageItems.compactMap(\.localFilePath))
-        for image in previous.imageItems where image.isStagedLocally {
+        for image in previous.imageItems {
             guard let localFilePath = image.localFilePath else { continue }
             guard !currentLocalPaths.contains(localFilePath) else { continue }
             try? fileManager.removeItem(atPath: localFilePath)
@@ -338,7 +360,7 @@ private extension NoteRepository {
     }
 
     func cleanupLocalImages(in items: [NoteEditorImageItem]) {
-        for item in items where item.isStagedLocally {
+        for item in items {
             guard let localFilePath = item.localFilePath else { continue }
             try? fileManager.removeItem(atPath: localFilePath)
         }
@@ -641,40 +663,33 @@ private extension NoteRepository {
         }
     }
 
-    func resolvePersistedImages(for items: [NoteEditorImageItem]) async throws -> [NoteEditorImageItem] {
-        var resolved: [NoteEditorImageItem] = []
-        resolved.reserveCapacity(items.count)
+    func ensureReadyUploadedImages(for items: [NoteEditorImageItem]) throws -> [NoteEditorImageItem] {
+        var readyImages: [NoteEditorImageItem] = []
+        readyImages.reserveCapacity(items.count)
 
         for item in items {
-            if let remoteURL = item.remoteURL, !remoteURL.isEmpty {
-                resolved.append(item)
-                continue
-            }
-
-            guard let localFilePath = item.localFilePath, !localFilePath.isEmpty else {
-                throw NoteEditorError.invalidImageData
-            }
-            let localURL = URL(fileURLWithPath: localFilePath)
-            guard fileManager.fileExists(atPath: localFilePath) else {
-                throw NoteEditorError.invalidImageData
-            }
-
-            let result = try await s3UploadRepository.uploadFile(
-                localURL: localURL,
-                prefix: "note_image",
-                progress: nil
-            )
-            resolved.append(
-                NoteEditorImageItem(
-                    id: item.id,
-                    remoteURL: result.remoteURL.absoluteString,
-                    localFilePath: item.localFilePath,
-                    createdDate: item.createdDate
+            switch item.uploadState {
+            case .uploading:
+                throw NoteEditorError.imageUploadInProgress
+            case .failed:
+                throw NoteEditorError.imageUploadFailed
+            case .success:
+                guard let remoteURL = item.remoteURL, !remoteURL.isEmpty else {
+                    throw NoteEditorError.invalidImageData
+                }
+                readyImages.append(
+                    NoteEditorImageItem(
+                        id: item.id,
+                        remoteURL: remoteURL,
+                        localFilePath: item.localFilePath,
+                        createdDate: item.createdDate,
+                        uploadState: .success
+                    )
                 )
-            )
+            }
         }
 
-        return resolved
+        return readyImages
     }
 
     nonisolated func updateBookReadPositionIfNeeded(

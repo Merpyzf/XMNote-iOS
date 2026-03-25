@@ -15,7 +15,7 @@ struct NoteEditorSettingsSheet: View {
     var body: some View {
         NavigationStack {
             Form {
-                Section("编辑模式") {
+                Section {
                     Picker("布局模式", selection: $settings.layoutModeRawValue) {
                         ForEach(NoteEditorLayoutMode.allCases) { mode in
                             Text(mode.title).tag(mode.rawValue)
@@ -24,6 +24,11 @@ struct NoteEditorSettingsSheet: View {
                     .pickerStyle(.inline)
 
                     Toggle("连续编辑（保存后继续下一条）", isOn: $settings.continueEditEnabled)
+                } header: {
+                    Text("编辑模式")
+                } footer: {
+                    let mode = NoteEditorLayoutMode(rawValue: settings.layoutModeRawValue) ?? .classic
+                    Text(mode.subtitle)
                 }
 
                 Section("OCR 入口") {

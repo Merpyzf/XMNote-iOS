@@ -6,10 +6,17 @@
  */
 import UIKit
 import SwiftUI
+import os
 
 /// UITextViewDelegate 桥接：UIKit 事件 → SwiftUI 状态
 /// 对标 Android TextWatcher 的职责
 final class RichTextCoordinator: NSObject, UITextViewDelegate {
+#if DEBUG
+    private static let expandFocusLogger = Logger(
+        subsystem: Bundle.main.bundleIdentifier ?? "xmnote",
+        category: "NoteEditorExpandFocus"
+    )
+#endif
 
     var parent: RichTextEditor
 
@@ -47,12 +54,28 @@ final class RichTextCoordinator: NSObject, UITextViewDelegate {
     func textViewDidBeginEditing(_ textView: UITextView) {
         parent.ornamentController?.isFocused = true
         parent.onFocusChange?(true)
+#if DEBUG
+        logFocusEvent(
+            "editor.didBegin",
+            editorView: textView,
+            controller: parent.ornamentController,
+            extra: "isFirstResponder=\(textView.isFirstResponder)"
+        )
+#endif
     }
 
     /// 通知 SwiftUI 焦点离开编辑器，供页面回收工具栏与提交草稿。
     func textViewDidEndEditing(_ textView: UITextView) {
         parent.ornamentController?.isFocused = false
         parent.onFocusChange?(false)
+#if DEBUG
+        logFocusEvent(
+            "editor.didEnd",
+            editorView: textView,
+            controller: parent.ornamentController,
+            extra: "isFirstResponder=\(textView.isFirstResponder)"
+        )
+#endif
     }
 
     // MARK: - 格式状态检测
@@ -265,6 +288,13 @@ final class RichTextCoordinator: NSObject, UITextViewDelegate {
 
     /// 为浮动挂饰工具栏安装命令桥接，让 SwiftUI 按钮能驱动当前编辑器。
     func attachOrnamentController(_ controller: RichTextOrnamentController, editorView: RichTextEditorView) {
+#if DEBUG
+        logFocusEvent(
+            "ornament.attach",
+            editorView: editorView,
+            controller: controller
+        )
+#endif
         controller.commandHandler = { [weak self, weak editorView] command in
             guard let self, let editorView else { return }
             switch command {
@@ -289,7 +319,15 @@ final class RichTextCoordinator: NSObject, UITextViewDelegate {
                 self.updateActiveFormats(editorView)
                 self.syncAttributedText(from: editorView)
             case .focus:
-                _ = editorView.becomeFirstResponder()
+                let becameFirstResponder = editorView.becomeFirstResponder()
+#if DEBUG
+                self.logFocusEvent(
+                    "ornament.focus.cmd",
+                    editorView: editorView,
+                    controller: controller,
+                    extra: "becameFirstResponder=\(becameFirstResponder) isFirstResponder=\(editorView.isFirstResponder)"
+                )
+#endif
             case .moveCursorToEnd:
                 editorView.moveCursorToEnd()
                 self.updateActiveFormats(editorView)
@@ -322,6 +360,30 @@ final class RichTextCoordinator: NSObject, UITextViewDelegate {
         updateActiveFormats(editorView)
         syncAttributedText(from: editorView)
     }
+
+#if DEBUG
+    private func logFocusEvent(
+        _ event: String,
+        editorView: UITextView,
+        controller: RichTextOrnamentController?,
+        extra: String = ""
+    ) {
+        let normalizedExtra = extra.isEmpty ? "" : " \(extra)"
+        let targetHint = parent.placeholder.isEmpty ? "unknown" : parent.placeholder
+        let controllerIdentity = controller.map(controllerIdentifier(_:)) ?? "nil"
+        Self.expandFocusLogger.debug(
+            "[note.editor.expand.\(event, privacy: .public)] target=\(targetHint, privacy: .public) controller=\(controllerIdentity, privacy: .public) editor=\(self.editorIdentifier(editorView), privacy: .public)\(normalizedExtra, privacy: .public)"
+        )
+    }
+
+    private func editorIdentifier(_ editorView: UITextView) -> String {
+        String(describing: Unmanaged.passUnretained(editorView).toOpaque())
+    }
+
+    private func controllerIdentifier(_ controller: RichTextOrnamentController) -> String {
+        String(describing: Unmanaged.passUnretained(controller).toOpaque())
+    }
+#endif
 
     // MARK: - Link
 
