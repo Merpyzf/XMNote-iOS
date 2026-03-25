@@ -95,45 +95,11 @@ private extension NoteTextComposerView {
             Spacer(minLength: 0)
             GlassEffectContainer(spacing: Spacing.tight) {
                 ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: Spacing.tight) {
-                        ornamentButton("arrow.uturn.backward", isEnabled: ornamentController.canUndo) {
-                            ornamentController.send(.undo)
-                        }
-                        ornamentButton("arrow.uturn.forward", isEnabled: ornamentController.canRedo) {
-                            ornamentController.send(.redo)
-                        }
-                        ornamentButton("arrow.left", isEnabled: true) {
-                            ornamentController.send(.moveCursorLeft)
-                        }
-                        ornamentButton("arrow.right", isEnabled: true) {
-                            ornamentController.send(.moveCursorRight)
-                        }
-                        ornamentDivider
-                        formatButton(.bold, systemName: "bold")
-                        formatButton(.italic, systemName: "italic")
-                        formatButton(.underline, systemName: "underline")
-                        formatButton(.strikethrough, systemName: "strikethrough")
-                        formatButton(.highlight, systemName: "highlighter")
-                        ornamentButton("increase.indent", isEnabled: true) {
-                            ornamentController.send(.indent)
-                        }
-                        ornamentDivider
-                        ornamentButton("textformat", isEnabled: true) {
-                            ornamentController.send(.clearFormats)
-                        }
-                        ornamentDivider
-                        ornamentButton("text.viewfinder", isEnabled: true) {
-                            if ornamentController.canCaptureTextFromCamera || supportsPhotoOCR {
-                                showsOCRChooser = true
-                            } else {
-                                errorMessage = "当前环境不支持 OCR"
-                            }
-                        }
-                    }
-                    .padding(.horizontal, Spacing.base)
-                    .padding(.vertical, Spacing.cozy)
+                    NoteToolbarIconStrip(actions: toolbarIconActions, dividerOpacity: 0.18)
+                        .padding(.horizontal, Spacing.base)
+                        .padding(.vertical, Spacing.cozy)
                 }
-                .frame(maxWidth: 520)
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
             .glassEffect(.regular, in: .capsule)
             .padding(.bottom, Spacing.cozy)
@@ -143,42 +109,89 @@ private extension NoteTextComposerView {
         .background(Color.clear)
     }
 
-    var ornamentDivider: some View {
-        Rectangle()
-            .fill(Color.primary.opacity(0.18))
-            .frame(width: 1, height: 18)
-    }
-
-    func formatButton(_ format: RichTextFormat, systemName: String) -> some View {
-        ornamentButton(
-            systemName,
-            isEnabled: true,
-            isActive: ornamentController.activeFormats.contains(format)
-        ) {
-            ornamentController.send(.toggleFormat(format))
+    var toolbarIconActionIDs: [NoteToolbarActionID] {
+        NoteToolbarActionID.androidPriorityOrder.filter { actionID in
+            switch actionID {
+            case .fullScreen, .choiceImage:
+                return false
+            case .ocr:
+                return showsOCRAction
+            default:
+                return true
+            }
         }
     }
 
-    func ornamentButton(
-        _ systemName: String,
-        isEnabled: Bool,
-        isActive: Bool = false,
-        action: @escaping () -> Void
-    ) -> some View {
-        Button(action: action) {
-            Image(systemName: systemName)
-                .font(.system(size: 15, weight: .semibold))
-                .foregroundStyle(isEnabled ? Color.textPrimary : Color.textHint)
-                .frame(width: 34, height: 34)
-                .background(
-                    isActive ? Color.brand.opacity(0.16) : Color.clear,
-                    in: RoundedRectangle(cornerRadius: CornerRadius.inlayMedium, style: .continuous)
-                )
+    var toolbarIconActions: [NoteToolbarIconAction] {
+        toolbarIconActionIDs.map { actionID in
+            NoteToolbarIconAction(
+                id: actionID,
+                isEnabled: isActionEnabled(actionID),
+                isActive: isActionActive(actionID),
+                handler: { handleToolbarAction(actionID) }
+            )
         }
-        .buttonStyle(.plain)
-        .disabled(!isEnabled)
-        .accessibilityLabel(systemName)
     }
+
+    func isActionEnabled(_ actionID: NoteToolbarActionID) -> Bool {
+        switch actionID {
+        case .undo:
+            return ornamentController.canUndo
+        case .redo:
+            return ornamentController.canRedo
+        case .ocr:
+            return showsOCRAction
+        case .fullScreen, .choiceImage:
+            return false
+        default:
+            return true
+        }
+    }
+
+    func isActionActive(_ actionID: NoteToolbarActionID) -> Bool {
+        guard let format = actionID.format else { return false }
+        return ornamentController.activeFormats.contains(format)
+    }
+
+    func handleToolbarAction(_ actionID: NoteToolbarActionID) {
+        switch actionID {
+        case .undo:
+            ornamentController.send(.undo)
+        case .redo:
+            ornamentController.send(.redo)
+        case .cursorLeft:
+            ornamentController.send(.moveCursorLeft)
+        case .cursorRight:
+            ornamentController.send(.moveCursorRight)
+        case .indent:
+            ornamentController.send(.indent)
+        case .bold:
+            ornamentController.send(.toggleFormat(.bold))
+        case .highlight:
+            ornamentController.send(.toggleFormat(.highlight))
+        case .underlined:
+            ornamentController.send(.toggleFormat(.underline))
+        case .italic:
+            ornamentController.send(.toggleFormat(.italic))
+        case .strikeThrough:
+            ornamentController.send(.toggleFormat(.strikethrough))
+        case .formatClear:
+            ornamentController.send(.clearFormats)
+        case .ocr:
+            if showsOCRAction {
+                showsOCRChooser = true
+            } else {
+                errorMessage = "当前环境不支持 OCR"
+            }
+        case .fullScreen, .choiceImage:
+            break
+        }
+    }
+
+    var showsOCRAction: Bool {
+        ornamentController.canCaptureTextFromCamera || supportsPhotoOCR
+    }
+
     var supportsPhotoOCR: Bool {
         true
     }

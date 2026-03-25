@@ -8,6 +8,7 @@
 import PhotosUI
 import SwiftUI
 import UIKit
+import os
 
 /// 书摘编辑页入口，支持新建与编辑两种模式。
 struct NoteEditorView: View {
@@ -34,12 +35,22 @@ struct NoteEditorView: View {
     @State private var attachmentPhotoItems: [PhotosPickerItem] = []
     @State private var showsAttachmentPicker = false
     @State private var measuredHeights: [NoteEditorMeasuredPart: CGFloat] = [:]
+    @State private var frozenMeasuredHeights: [NoteEditorMeasuredPart: CGFloat]?
+    @State private var measuredHeightsFreezeDeadline: Date = .distantPast
     @State private var keyboardHeight: CGFloat = 0
     @State private var lastClosedComposerTarget: NoteEditorComposerTarget?
     @State private var baselineIdleTimerDisabled: Bool?
     @State private var baselineScreenBrightness: CGFloat?
     @State private var autoDimTask: Task<Void, Never>?
     @State private var lastInteractionDate = Date.distantPast
+    @State private var isLayoutStateInitialized = false
+    @FocusState private var isPositionFocused: Bool
+#if DEBUG
+    private let expandLogger = Logger(
+        subsystem: Bundle.main.bundleIdentifier ?? "xmnote",
+        category: "NoteEditorExpand"
+    )
+#endif
 
     init(mode: NoteEditorMode, seed: NoteEditorSeed? = nil) {
         self.mode = mode
@@ -93,22 +104,37 @@ private extension NoteEditorView {
 
     var supportsPhotoOCR: Bool { true }
     var usesSplitOCREntryButtons: Bool { editorSettings.ocrEntryMode == .splitButtons }
+    var isKeyboardVisible: Bool { keyboardHeight > 0 }
+    var isMeasuredHeightsFrozen: Bool {
+        frozenMeasuredHeights != nil && Date() < measuredHeightsFreezeDeadline
+    }
+    var effectiveMeasuredHeights: [NoteEditorMeasuredPart: CGFloat] {
+        if isMeasuredHeightsFrozen, let frozenMeasuredHeights {
+            return frozenMeasuredHeights
+        }
+        return measuredHeights
+    }
+    var measuredHeightEpsilon: CGFloat { 0.5 }
+    var measuredHeightFreezeDuration: TimeInterval { 0.35 }
 
     func editorContent(_ viewModel: NoteEditorViewModel) -> some View {
         GeometryReader { geometry in
+            let heightsSource = effectiveMeasuredHeights
             let heights = editorHeights(
                 for: geometry.size.height,
-                bookSectionHeight: measuredHeights[.book] ?? 0,
-                tailSectionHeight: measuredHeights[.tail] ?? 0
+                bookSectionHeight: heightsSource[.book] ?? 0,
+                tailSectionHeight: heightsSource[.tail] ?? 0,
+                toolbarHeight: heightsSource[.toolbar] ?? 0,
+                ideaState: viewModel.ideaInputState
             )
-            let scrollBottomPadding = max(Spacing.section, (measuredHeights[.toolbar] ?? 0) + Spacing.base)
+            let scrollBottomPadding = max(Spacing.section, (heightsSource[.toolbar] ?? 0) + Spacing.base)
 
             ZStack {
                 Color.surfacePage.ignoresSafeArea()
 
                 ScrollViewReader { scrollProxy in
                     ScrollView {
-                        LazyVStack(alignment: .leading, spacing: Spacing.base) {
+                        VStack(alignment: .leading, spacing: Spacing.base) {
                             bookCard(viewModel)
                                 .noteEditorReportHeight(.book)
 
@@ -125,8 +151,13 @@ private extension NoteEditorView {
                             .id(NoteEditorComposerTarget.content.scrollAnchorID)
 
                             if layoutMode == .focusExcerpt {
-                                focusIdeaRow(viewModel, height: heights.idea)
-                                    .id(NoteEditorComposerTarget.idea.scrollAnchorID)
+                                focusIdeaInlineCard(
+                                    viewModel,
+                                    height: heights.idea,
+                                    showsInlineOCRButton: usesSplitOCREntryButtons,
+                                    onInlineOCR: { triggerInlineOCR(for: .idea) }
+                                )
+                                .id(NoteEditorComposerTarget.idea.scrollAnchorID)
                             } else {
                                 richTextEditorCard(
                                     target: .idea,
@@ -168,6 +199,16 @@ private extension NoteEditorView {
                         withAnimation(.snappy) {
                             scrollProxy.scrollTo(target.scrollAnchorID, anchor: .center)
                         }
+                    }
+                    .onChange(of: viewModel.ideaInputState) { _, newState in
+#if DEBUG
+                        let branch = (newState == .collapsed) ? "collapsed_row" : "editor"
+                        logExpandEvent(
+                            "idea.ui.branch",
+                            viewModel: viewModel,
+                            extra: "branch=\(branch)"
+                        )
+#endif
                     }
                 }
                 if viewModel.isSaving {
@@ -348,19 +389,26 @@ private extension NoteEditorView {
             attachmentPhotoItems = []
         }
         .onPreferenceChange(NoteEditorMeasuredHeightsPreferenceKey.self) { values in
-            measuredHeights = values
+            mergeMeasuredHeights(values)
         }
         .onAppear {
             handleLayoutModeStateChange(animated: false)
             captureScreenBehaviorBaselineIfNeeded()
             applyScreenBehavior()
             registerEditorInteraction(force: true)
+            if !isLayoutStateInitialized {
+                DispatchQueue.main.async {
+                    isLayoutStateInitialized = true
+                }
+            }
         }
         .onDisappear {
             releaseScreenBehavior()
+            frozenMeasuredHeights = nil
+            measuredHeightsFreezeDeadline = .distantPast
         }
         .onChange(of: editorSettings.layoutModeRawValue) { _, _ in
-            handleLayoutModeStateChange(animated: false)
+            handleLayoutModeStateChange(animated: isLayoutStateInitialized)
         }
         .onChange(of: viewModel.didSave) { _, didSave in
             guard didSave else { return }
@@ -490,26 +538,77 @@ private extension NoteEditorView {
         }
     }
 
-    func focusIdeaRow(_ viewModel: NoteEditorViewModel, height: CGFloat) -> some View {
+    func focusIdeaInlineCard(
+        _ viewModel: NoteEditorViewModel,
+        height: CGFloat,
+        showsInlineOCRButton: Bool,
+        onInlineOCR: @escaping () -> Void
+    ) -> some View {
+        let isCollapsed = viewModel.ideaInputState == .collapsed
+        return CardContainer(cornerRadius: CornerRadius.containerMedium, showsBorder: false) {
+            ZStack(alignment: .topLeading) {
+                RichTextEditor(
+                    attributedText: viewModel.binding(for: .idea),
+                    activeFormats: .constant(Set<RichTextFormat>()),
+                    placeholder: "想法",
+                    isEditable: true,
+                    allowsCameraTextCapture: true,
+                    toolbarPresentation: .ornament(ideaOrnamentController),
+                    onFocusChange: { hasFocus in
+                        handleEditorFocusChange(target: .idea, hasFocus: hasFocus)
+                    }
+                )
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(Color.clear)
+                .allowsHitTesting(!isCollapsed)
+                .opacity(isCollapsed ? 0.01 : 1)
+
+                if viewModel.ideaText.string.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                    && !isIdeaFocused
+                    && !isCollapsed {
+                    Text("想法")
+                        .font(AppTypography.body)
+                        .foregroundStyle(Color.textHint)
+                        .padding(.horizontal, Spacing.base)
+                        .padding(.vertical, Spacing.base)
+                        .allowsHitTesting(false)
+                }
+
+                if isCollapsed {
+                    focusIdeaCollapsedOverlay(viewModel, height: height)
+                }
+            }
+            .overlay(alignment: .topTrailing) {
+                if showsInlineOCRButton && !isCollapsed {
+                    inlineOCRButton(action: onInlineOCR)
+                        .padding(.top, Spacing.half)
+                        .padding(.trailing, Spacing.half)
+                }
+            }
+            .frame(height: height)
+        }
+    }
+
+    func focusIdeaCollapsedOverlay(_ viewModel: NoteEditorViewModel, height: CGFloat) -> some View {
         Button {
             openIdeaComposerFromFocusRow()
         } label: {
-            CardContainer(cornerRadius: CornerRadius.containerMedium, showsBorder: false) {
-                HStack(spacing: Spacing.base) {
-                    Text(focusIdeaRowText(viewModel))
-                        .font(AppTypography.body)
-                        .foregroundStyle(hasIdeaContent(viewModel) ? Color.textPrimary : Color.textHint)
-                        .lineLimit(1)
+            HStack(spacing: Spacing.base) {
+                Text(focusIdeaRowText(viewModel))
+                    .font(AppTypography.body)
+                    .foregroundStyle(viewModel.hasIdeaText ? Color.textPrimary : Color.textHint)
+                    .lineLimit(1)
 
-                    Spacer(minLength: 0)
-                }
-                .padding(.horizontal, Spacing.base)
-                .frame(height: height)
+                Spacer(minLength: 0)
             }
+            .padding(.horizontal, Spacing.base)
+            .frame(height: height)
+            .frame(maxWidth: .infinity)
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .accessibilityLabel("想法")
-        .accessibilityHint("点击全屏编辑")
+        .accessibilityHint("点击展开编辑")
     }
 
     func focusIdeaRowText(_ viewModel: NoteEditorViewModel) -> String {
@@ -609,6 +708,7 @@ private extension NoteEditorView {
                             get: { viewModel.positionText },
                             set: { viewModel.positionText = $0 }
                         ))
+                        .focused($isPositionFocused)
                         .font(AppTypography.body)
                         .keyboardType(viewModel.positionUnit == 2 ? .decimalPad : .numberPad)
                         .padding(.horizontal, Spacing.base)
@@ -692,6 +792,7 @@ private extension NoteEditorView {
             canCaptureTextFromCamera: controller?.canCaptureTextFromCamera ?? false,
             canSave: !viewModel.isSaving,
             showsOCRButton: !usesSplitOCREntryButtons,
+            toolbarMode: isPositionFocused ? .imageOnly : .editor,
             onUndo: { sendToolbarCommand(.undo) },
             onRedo: { sendToolbarCommand(.redo) },
             onMoveCursorLeft: { sendToolbarCommand(.moveCursorLeft) },
@@ -745,23 +846,30 @@ private extension NoteEditorView {
         controller.send(command)
     }
 
-    func handleLayoutModeStateChange(animated _: Bool) {
-        guard layoutMode == .focusExcerpt else { return }
-        clearIdeaInlineEditingStateForFocusLayout()
-    }
-
-    func clearIdeaInlineEditingStateForFocusLayout() {
-        if activeEditorTarget == .idea || isIdeaFocused {
-            ideaOrnamentController.send(.dismissKeyboard)
-            if activeEditorTarget == .idea {
-                activeEditorTarget = nil
+    func handleLayoutModeStateChange(animated: Bool) {
+        guard layoutMode == .focusExcerpt, let viewModel else { return }
+#if DEBUG
+        logExpandEvent(
+            "layout.sync.start",
+            viewModel: viewModel,
+            extra: "animated=\(animated)"
+        )
+#endif
+        if animated {
+            beginMeasuredHeightFreeze(reason: "layout_mode_change")
+            withAnimation(.snappy) {
+                viewModel.syncIdeaInputStateForFocusLayout(isIdeaFocused: isIdeaFocused)
             }
-            isIdeaFocused = false
+        } else {
+            viewModel.syncIdeaInputStateForFocusLayout(isIdeaFocused: isIdeaFocused)
         }
-    }
-
-    func hasIdeaContent(_ viewModel: NoteEditorViewModel) -> Bool {
-        !viewModel.ideaText.string.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+#if DEBUG
+        logExpandEvent(
+            "layout.sync.end",
+            viewModel: viewModel,
+            extra: "animated=\(animated)"
+        )
+#endif
     }
 
     func handleEditorFocusChange(
@@ -780,12 +888,38 @@ private extension NoteEditorView {
                 activeEditorTarget = nil
             }
         case .idea:
+#if DEBUG
+            logExpandEvent(
+                "idea.focus.change",
+                viewModel: viewModel,
+                extra: "hasFocus=\(hasFocus)"
+            )
+#endif
             isIdeaFocused = hasFocus
             if hasFocus {
+                if layoutMode == .focusExcerpt, let viewModel, viewModel.ideaInputState == .collapsed {
+                    beginMeasuredHeightFreeze(reason: "idea_focus_expand")
+                    withAnimation(.snappy) {
+                        viewModel.expandIdea()
+                    }
+                }
                 activeEditorTarget = .idea
             } else {
                 if activeEditorTarget == .idea {
                     activeEditorTarget = nil
+                }
+                if layoutMode == .focusExcerpt, !isKeyboardVisible, let viewModel {
+#if DEBUG
+                    logExpandEvent(
+                        "idea.collapse.trigger",
+                        viewModel: viewModel,
+                        extra: "reason=focus_lost keyboardVisible=\(isKeyboardVisible)"
+                    )
+#endif
+                    beginMeasuredHeightFreeze(reason: "idea_focus_lost")
+                    withAnimation(.snappy) {
+                        viewModel.collapseIdeaIfEmpty()
+                    }
                 }
             }
         }
@@ -826,16 +960,47 @@ private extension NoteEditorView {
     }
 
     func openIdeaComposerFromFocusRow() {
+        guard let viewModel else {
+#if DEBUG
+            logExpandEvent(
+                "focus_row.tap.ignored",
+                viewModel: nil,
+                extra: "reason=viewModel_nil"
+            )
+#endif
+            return
+        }
+#if DEBUG
+        logExpandEvent(
+            "focus_row.tap",
+            viewModel: viewModel
+        )
+#endif
         registerEditorInteraction(force: true)
         toolbarPromptMessage = nil
-        contentOrnamentController.send(.dismissKeyboard)
-        if activeEditorTarget == .content {
-            activeEditorTarget = nil
+        if activeEditorTarget == .content || isContentFocused {
+            contentOrnamentController.send(.dismissKeyboard)
         }
-        isContentFocused = false
-        clearIdeaInlineEditingStateForFocusLayout()
-        lastClosedComposerTarget = .idea
-        activeComposer = .idea
+#if DEBUG
+        logExpandEvent(
+            "idea.expand.request",
+            viewModel: viewModel,
+            extra: "phase=before"
+        )
+#endif
+        beginMeasuredHeightFreeze(reason: "focus_row_tap")
+        withAnimation(.snappy) {
+            viewModel.expandIdea()
+        }
+#if DEBUG
+        logExpandEvent(
+            "idea.expand.request",
+            viewModel: viewModel,
+            extra: "phase=after"
+        )
+#endif
+        activeEditorTarget = .idea
+        focusEditor(.idea, reason: "focus_row_tap", fallbackDelay: 0.1)
     }
 
     func ornamentController(for target: NoteEditorComposerTarget) -> RichTextOrnamentController {
@@ -899,6 +1064,75 @@ private extension NoteEditorView {
             ?? scenes.first?.screen
     }
 
+    func focusEditor(
+        _ target: NoteEditorComposerTarget,
+        reason: String,
+        fallbackDelay: TimeInterval? = nil
+    ) {
+        let controller = ornamentController(for: target)
+#if DEBUG
+        let targetName = target.rawValue
+        let handlerReady = controller.commandHandler != nil
+        logExpandEvent(
+            "idea.focus.send",
+            viewModel: viewModel,
+            extra: "reason=\(reason) target=\(targetName) handlerReady=\(handlerReady) controller=\(controllerIdentifier(controller))"
+        )
+#endif
+        DispatchQueue.main.async {
+            controller.send(.focus)
+            controller.send(.moveCursorToEnd)
+        }
+        guard let fallbackDelay else { return }
+        DispatchQueue.main.asyncAfter(deadline: .now() + fallbackDelay) {
+            let hasFocus = (target == .idea) ? isIdeaFocused : isContentFocused
+            guard !hasFocus else { return }
+#if DEBUG
+            let targetName = target.rawValue
+            let handlerReady = controller.commandHandler != nil
+            logExpandEvent(
+                "idea.focus.send.fallback",
+                viewModel: viewModel,
+                extra: "reason=\(reason) target=\(targetName) handlerReady=\(handlerReady) controller=\(controllerIdentifier(controller))"
+            )
+#endif
+            controller.send(.focus)
+            controller.send(.moveCursorToEnd)
+        }
+    }
+
+#if DEBUG
+    func logExpandEvent(_ event: String, viewModel: NoteEditorViewModel?, extra: String = "") {
+        let snapshot = debugSnapshot(viewModel: viewModel)
+        let normalizedExtra = extra.isEmpty ? "" : " \(extra)"
+        expandLogger.debug(
+            "[note.editor.expand.\(event, privacy: .public)] \(snapshot, privacy: .public)\(normalizedExtra, privacy: .public)"
+        )
+    }
+
+    func debugSnapshot(viewModel: NoteEditorViewModel?) -> String {
+        let ideaState = viewModel.map { ideaStateText($0.ideaInputState) } ?? "nil"
+        let hasIdeaText = viewModel?.hasIdeaText ?? false
+        let activeTarget = activeEditorTarget?.rawValue ?? "nil"
+        return "layout=\(layoutMode.rawValue) ideaState=\(ideaState) hasIdeaText=\(hasIdeaText) isIdeaFocused=\(isIdeaFocused) isContentFocused=\(isContentFocused) activeTarget=\(activeTarget) keyboardVisible=\(isKeyboardVisible)"
+    }
+
+    func ideaStateText(_ state: IdeaInputState) -> String {
+        switch state {
+        case .collapsed:
+            return "collapsed"
+        case .expanded:
+            return "expanded"
+        case .hasContent:
+            return "hasContent"
+        }
+    }
+
+    func controllerIdentifier(_ controller: RichTextOrnamentController) -> String {
+        String(describing: Unmanaged.passUnretained(controller).toOpaque())
+    }
+#endif
+
     func releaseScreenBehavior() {
         autoDimTask?.cancel()
         autoDimTask = nil
@@ -931,11 +1165,13 @@ private extension NoteEditorView {
     func editorHeights(
         for viewportHeight: CGFloat,
         bookSectionHeight: CGFloat,
-        tailSectionHeight: CGFloat
+        tailSectionHeight: CGFloat,
+        toolbarHeight: CGFloat,
+        ideaState: IdeaInputState
     ) -> (content: CGFloat, idea: CGFloat) {
         let defaultEditorHeight: CGFloat = 180
         let collapsedIdeaHeight: CGFloat = 48
-        let stackOuterPadding = Spacing.base + max(Spacing.section, (measuredHeights[.toolbar] ?? 0) + Spacing.base)
+        let stackOuterPadding = Spacing.base + max(Spacing.section, toolbarHeight + Spacing.base)
         let sectionGaps = Spacing.base * 3
         let fixedElementsHeight = bookSectionHeight + tailSectionHeight + stackOuterPadding + sectionGaps
         let availableForEditors = max(viewportHeight - fixedElementsHeight, 0)
@@ -945,17 +1181,23 @@ private extension NoteEditorView {
         case .classic:
             return (defaultEditorHeight, defaultEditorHeight)
         case .focusExcerpt:
-            let contentAvailable = availableForEditors - collapsedIdeaHeight
-            let contentHeight: CGFloat
-            if isKeyboardVisible {
-                contentHeight = max(contentAvailable, 0)
-            } else if contentAvailable >= defaultEditorHeight {
-                contentHeight = contentAvailable
+            if ideaState == .collapsed {
+                let contentAvailable = availableForEditors - collapsedIdeaHeight
+                let contentHeight: CGFloat
+                if isKeyboardVisible {
+                    contentHeight = max(contentAvailable, 0)
+                } else if contentAvailable >= defaultEditorHeight {
+                    contentHeight = contentAvailable
+                } else {
+                    let fallbackFullViewport = max(viewportHeight - collapsedIdeaHeight - Spacing.base, 0)
+                    contentHeight = max(fallbackFullViewport, defaultEditorHeight)
+                }
+                return (contentHeight, collapsedIdeaHeight)
             } else {
-                let fallbackFullViewport = max(viewportHeight - collapsedIdeaHeight - Spacing.base, 0)
-                contentHeight = max(fallbackFullViewport, defaultEditorHeight)
+                let halfSpace = availableForEditors / 2
+                let editorHeight = max(halfSpace, defaultEditorHeight)
+                return (editorHeight, editorHeight)
             }
-            return (contentHeight, collapsedIdeaHeight)
         }
     }
 
@@ -963,20 +1205,27 @@ private extension NoteEditorView {
         let target = lastClosedComposerTarget ?? activeEditorTarget ?? .content
         lastClosedComposerTarget = nil
 
-        if target == .idea, layoutMode == .focusExcerpt {
-            contentOrnamentController.send(.dismissKeyboard)
-            ideaOrnamentController.send(.dismissKeyboard)
-            activeEditorTarget = nil
+        if target == .idea, layoutMode == .focusExcerpt, let viewModel {
+            beginMeasuredHeightFreeze(reason: "composer_dismiss")
+            withAnimation(.snappy) {
+                if viewModel.hasIdeaText {
+                    viewModel.ideaInputState = .hasContent
+                } else {
+                    viewModel.ideaInputState = .expanded
+                }
+            }
             isContentFocused = false
-            isIdeaFocused = false
-            return
         }
 
         activeEditorTarget = target
-        let controller = (target == .content) ? contentOrnamentController : ideaOrnamentController
-        DispatchQueue.main.async {
-            controller.send(.focus)
-            controller.send(.moveCursorToEnd)
+        if target == .idea {
+            focusEditor(.idea, reason: "composer_dismiss", fallbackDelay: 0.1)
+        } else {
+            let controller = contentOrnamentController
+            DispatchQueue.main.async {
+                controller.send(.focus)
+                controller.send(.moveCursorToEnd)
+            }
         }
     }
 
@@ -1000,6 +1249,44 @@ private extension NoteEditorView {
             }
         }
     }
+
+    func mergeMeasuredHeights(_ incoming: [NoteEditorMeasuredPart: CGFloat]) {
+        var next = measuredHeights
+        var hasChange = false
+        for (part, height) in incoming {
+            guard height.isFinite else { continue }
+            if let previous = next[part], abs(previous - height) <= measuredHeightEpsilon {
+                continue
+            }
+            next[part] = height
+            hasChange = true
+        }
+        if hasChange {
+            measuredHeights = next
+        }
+        if !isMeasuredHeightsFrozen, frozenMeasuredHeights != nil {
+#if DEBUG
+            logExpandEvent(
+                "layout.height.freeze.end",
+                viewModel: viewModel
+            )
+#endif
+            frozenMeasuredHeights = nil
+        }
+    }
+
+    func beginMeasuredHeightFreeze(reason: String) {
+        guard layoutMode == .focusExcerpt else { return }
+        frozenMeasuredHeights = measuredHeights
+        measuredHeightsFreezeDeadline = Date().addingTimeInterval(measuredHeightFreezeDuration)
+#if DEBUG
+        logExpandEvent(
+            "layout.height.freeze.start",
+            viewModel: viewModel,
+            extra: "reason=\(reason)"
+        )
+#endif
+    }
 }
 
 enum NoteEditorLayoutMode: Int, CaseIterable, Identifiable {
@@ -1013,7 +1300,16 @@ enum NoteEditorLayoutMode: Int, CaseIterable, Identifiable {
         case .classic:
             return "经典布局"
         case .focusExcerpt:
-            return "专注书摘"
+            return "聚焦摘录"
+        }
+    }
+
+    var subtitle: String {
+        switch self {
+        case .classic:
+            return "摘录和想法都常驻，边摘边写更顺手"
+        case .focusExcerpt:
+            return "想法先收起，先把摘录记下来，需要时再展开补充"
         }
     }
 }
@@ -1030,6 +1326,11 @@ private extension NoteEditorComposerTarget {
 }
 
 private struct NoteEditorFloatingToolbar: View {
+    enum ToolbarMode {
+        case editor
+        case imageOnly
+    }
+
     let activeFormats: Set<RichTextFormat>
     let canEdit: Bool
     let canUndo: Bool
@@ -1037,6 +1338,7 @@ private struct NoteEditorFloatingToolbar: View {
     let canCaptureTextFromCamera: Bool
     let canSave: Bool
     let showsOCRButton: Bool
+    let toolbarMode: ToolbarMode
     let onUndo: () -> Void
     let onRedo: () -> Void
     let onMoveCursorLeft: () -> Void
@@ -1055,47 +1357,22 @@ private struct NoteEditorFloatingToolbar: View {
             GlassEffectContainer(spacing: Spacing.tight) {
                 HStack(spacing: Spacing.tight) {
                     ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(spacing: Spacing.tight) {
-                            toolbarIconButton("arrow.uturn.backward", enabled: canEdit && canUndo, action: onUndo)
-                            toolbarIconButton("arrow.uturn.forward", enabled: canEdit && canRedo, action: onRedo)
-                            toolbarIconButton("arrow.left", enabled: canEdit, action: onMoveCursorLeft)
-                            toolbarIconButton("arrow.right", enabled: canEdit, action: onMoveCursorRight)
-
-                            toolbarDivider
-                            formatButton(.bold, icon: "bold")
-                            formatButton(.italic, icon: "italic")
-                            formatButton(.underline, icon: "underline")
-                            formatButton(.strikethrough, icon: "strikethrough")
-                            formatButton(.highlight, icon: "highlighter")
-                            toolbarIconButton("increase.indent", enabled: canEdit, action: onIndent)
-
-                            toolbarDivider
-                            toolbarIconButton("textformat", enabled: canEdit, action: onClearFormats)
-
-                            if showsOCRButton {
-                                toolbarDivider
-                                toolbarIconButton("text.viewfinder", enabled: canEdit || canCaptureTextFromCamera, action: onOCR)
-                            }
-                            toolbarDivider
-                            toolbarIconButton("photo.on.rectangle.angled", enabled: true, action: onChooseImage)
-                            toolbarIconButton("arrow.up.left.and.arrow.down.right", enabled: canEdit, action: onFullscreen)
-                        }
+                        NoteToolbarIconStrip(actions: iconActions, dividerOpacity: 0.16)
+                            .padding(.horizontal, Spacing.base)
+                            .padding(.vertical, Spacing.cozy)
                     }
-                    .frame(maxWidth: 500)
+                    .frame(maxWidth: .infinity, alignment: .leading)
 
                     toolbarDivider
                     toolbarTextButton("保存", enabled: canSave, action: onSave)
                 }
-                .padding(.horizontal, Spacing.base)
-                .padding(.vertical, Spacing.cozy)
+                .padding(.trailing, Spacing.base)
             }
             .glassEffect(.regular, in: .capsule)
-            .allowsHitTesting(true)
             .padding(.bottom, Spacing.cozy)
             Spacer(minLength: 0)
         }
         .padding(.horizontal, Spacing.screenEdge)
-        .allowsHitTesting(false)
         .background(Color.clear)
     }
 
@@ -1105,39 +1382,82 @@ private struct NoteEditorFloatingToolbar: View {
             .frame(width: 1, height: 18)
     }
 
-    func formatButton(_ format: RichTextFormat, icon: String, enabled: Bool? = nil) -> some View {
-        let isEnabled: Bool
-        if let enabled {
-            isEnabled = enabled
-        } else {
-            isEnabled = canEdit
+    var orderedIconActionIDs: [NoteToolbarActionID] {
+        switch toolbarMode {
+        case .editor:
+            return NoteToolbarActionID.androidPriorityOrder.filter { actionID in
+                if actionID == .ocr {
+                    return showsOCRButton
+                }
+                return true
+            }
+        case .imageOnly:
+            return [.choiceImage]
         }
-        return toolbarIconButton(
-            icon,
-            enabled: isEnabled,
-            isActive: activeFormats.contains(format),
-            action: { onToggleFormat(format) }
-        )
     }
 
-    func toolbarIconButton(
-        _ icon: String,
-        enabled: Bool,
-        isActive: Bool = false,
-        action: @escaping () -> Void
-    ) -> some View {
-        Button(action: action) {
-            Image(systemName: icon)
-                .font(.system(size: 15, weight: .semibold))
-                .foregroundStyle(enabled ? Color.textPrimary : Color.textHint)
-                .frame(width: 34, height: 34)
-                .background(
-                    isActive ? Color.brand.opacity(0.16) : Color.clear,
-                    in: RoundedRectangle(cornerRadius: CornerRadius.inlayMedium, style: .continuous)
-                )
+    var iconActions: [NoteToolbarIconAction] {
+        orderedIconActionIDs.map { actionID in
+            NoteToolbarIconAction(
+                id: actionID,
+                isEnabled: isActionEnabled(actionID),
+                isActive: isActionActive(actionID),
+                handler: { handleIconAction(actionID) }
+            )
         }
-        .buttonStyle(.plain)
-        .disabled(!enabled)
+    }
+
+    func isActionEnabled(_ actionID: NoteToolbarActionID) -> Bool {
+        switch actionID {
+        case .undo:
+            return canEdit && canUndo
+        case .redo:
+            return canEdit && canRedo
+        case .cursorLeft, .cursorRight, .fullScreen, .indent, .bold, .highlight, .underlined, .italic, .strikeThrough, .formatClear:
+            return canEdit
+        case .ocr:
+            return canEdit || canCaptureTextFromCamera
+        case .choiceImage:
+            return true
+        }
+    }
+
+    func isActionActive(_ actionID: NoteToolbarActionID) -> Bool {
+        guard let format = actionID.format else { return false }
+        return activeFormats.contains(format)
+    }
+
+    func handleIconAction(_ actionID: NoteToolbarActionID) {
+        switch actionID {
+        case .undo:
+            onUndo()
+        case .redo:
+            onRedo()
+        case .cursorLeft:
+            onMoveCursorLeft()
+        case .cursorRight:
+            onMoveCursorRight()
+        case .fullScreen:
+            onFullscreen()
+        case .ocr:
+            onOCR()
+        case .choiceImage:
+            onChooseImage()
+        case .indent:
+            onIndent()
+        case .bold:
+            onToggleFormat(.bold)
+        case .highlight:
+            onToggleFormat(.highlight)
+        case .underlined:
+            onToggleFormat(.underline)
+        case .italic:
+            onToggleFormat(.italic)
+        case .strikeThrough:
+            onToggleFormat(.strikethrough)
+        case .formatClear:
+            onClearFormats()
+        }
     }
 
     func toolbarTextButton(_ title: String, enabled: Bool, action: @escaping () -> Void) -> some View {
