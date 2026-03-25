@@ -266,6 +266,11 @@ final class NoteEditorViewModel {
         selectedChapterTitle = chapter?.title ?? ""
     }
 
+    /// 清空当前章节选择并回退为“未设置”状态。
+    func clearSelectedChapter() {
+        selectChapter(nil)
+    }
+
     /// 切换标签勾选状态。
     func toggleTag(_ tag: NoteEditorTagOption) {
         if selectedTags.contains(where: { $0.id == tag.id }) {

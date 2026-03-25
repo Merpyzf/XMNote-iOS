@@ -704,84 +704,172 @@ private extension NoteEditorView {
     }
 
     func metadataSection(_ viewModel: NoteEditorViewModel) -> some View {
-        CardContainer(cornerRadius: CornerRadius.containerMedium, showsBorder: false) {
-            VStack(alignment: .leading, spacing: Spacing.base) {
-                Text("书摘信息")
-                    .font(AppTypography.subheadlineSemibold)
-                    .foregroundStyle(Color.textPrimary)
-
-                VStack(spacing: Spacing.base) {
-                    VStack(alignment: .leading, spacing: Spacing.cozy) {
-                        Text(viewModel.positionTitle)
-                            .font(AppTypography.semantic(.footnote, weight: .medium))
-                            .foregroundStyle(Color.textSecondary)
-
-                        TextField(viewModel.positionPlaceholder, text: Binding(
-                            get: { viewModel.positionText },
-                            set: { viewModel.positionText = $0 }
-                        ))
-                        .focused($isPositionFocused)
-                        .font(AppTypography.body)
-                        .keyboardType(viewModel.positionUnit == 2 ? .decimalPad : .numberPad)
-                        .padding(.horizontal, Spacing.base)
-                        .frame(height: 44)
-                        .background(Color.surfaceNested, in: RoundedRectangle(cornerRadius: CornerRadius.blockMedium, style: .continuous))
-                    }
-
-                    metadataButtonRow(title: "章节", value: viewModel.selectedChapterDisplayTitle) {
-                        activeSheet = .chapter
-                    }
-
-                    VStack(alignment: .leading, spacing: Spacing.cozy) {
-                        metadataButtonRow(title: "标签", value: viewModel.selectedTags.isEmpty ? "添加标签" : "已选 \(viewModel.selectedTags.count) 个") {
-                            activeSheet = .tags
-                        }
-
-                        if !viewModel.selectedTags.isEmpty {
-                            ScrollView(.horizontal, showsIndicators: false) {
-                                HStack(spacing: Spacing.cozy) {
-                                    ForEach(viewModel.selectedTags) { tag in
-                                        Text(tag.title)
-                                            .font(AppTypography.semantic(.footnote, weight: .medium))
-                                            .foregroundStyle(Color.brand)
-                                            .padding(.horizontal, Spacing.cozy)
-                                            .padding(.vertical, Spacing.tiny)
-                                            .background(Color.brand.opacity(0.12), in: Capsule())
-                                    }
-                                }
-                            }
-                        }
-                    }
-
-                    metadataButtonRow(title: "创建时间", value: viewModel.createdDateDescription) {
-                        activeSheet = .createdDate
-                    }
-                }
-            }
-            .padding(Spacing.contentEdge)
-        }
-    }
-
-    func metadataButtonRow(title: String, value: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
+        VStack(spacing: Spacing.none) {
             HStack(spacing: Spacing.base) {
-                Text(title)
+                Text(viewModel.positionTitle)
                     .font(AppTypography.semantic(.footnote, weight: .medium))
                     .foregroundStyle(Color.textSecondary)
-                Spacer()
-                Text(value)
+                Spacer(minLength: Spacing.base)
+                TextField(viewModel.positionPlaceholder, text: Binding(
+                    get: { viewModel.positionText },
+                    set: { viewModel.positionText = $0 }
+                ))
+                .focused($isPositionFocused)
+                .font(AppTypography.subheadline)
+                .foregroundStyle(Color.textPrimary)
+                .keyboardType(viewModel.positionUnit == 2 ? .decimalPad : .numberPad)
+                .multilineTextAlignment(.trailing)
+                .textFieldStyle(.plain)
+                .frame(width: 140)
+            }
+            .padding(.horizontal, Spacing.base)
+            .frame(height: metadataRowHeight)
+            .contentShape(Rectangle())
+            .onTapGesture {
+                registerEditorInteraction(force: true)
+                toolbarPromptMessage = nil
+                isPositionFocused = true
+            }
+
+            metadataDivider
+
+            HStack(spacing: Spacing.base) {
+                Text("章节")
+                    .font(AppTypography.semantic(.footnote, weight: .medium))
+                    .foregroundStyle(Color.textSecondary)
+                Spacer(minLength: Spacing.base)
+                Text(viewModel.selectedChapterDisplayTitle)
                     .font(AppTypography.subheadline)
                     .foregroundStyle(Color.textPrimary)
                     .lineLimit(1)
+                    .contentTransition(.opacity)
+                chapterRowAccessory(viewModel)
+            }
+            .padding(.horizontal, Spacing.base)
+            .frame(height: metadataRowHeight)
+            .contentShape(Rectangle())
+            .onTapGesture {
+                openMetadataSheet(.chapter)
+            }
+
+            metadataDivider
+
+            HStack(spacing: Spacing.base) {
+                Text("标签")
+                    .font(AppTypography.semantic(.footnote, weight: .medium))
+                    .foregroundStyle(Color.textSecondary)
+
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: Spacing.cozy) {
+                        if viewModel.selectedTags.isEmpty {
+                            Text("添加标签")
+                                .font(AppTypography.subheadline)
+                                .foregroundStyle(Color.textHint)
+                                .transition(.move(edge: .trailing).combined(with: .opacity))
+                        } else {
+                            ForEach(viewModel.selectedTags) { tag in
+                                Text(tag.title)
+                                    .font(AppTypography.semantic(.footnote, weight: .medium))
+                                    .foregroundStyle(Color.brand)
+                                    .padding(.horizontal, Spacing.cozy)
+                                    .padding(.vertical, Spacing.tiny)
+                                    .background(Color.brand.opacity(0.12), in: Capsule())
+                            }
+                            .transition(.move(edge: .trailing).combined(with: .opacity))
+                        }
+                    }
+                    .frame(height: 30)
+                }
+
+                Spacer(minLength: Spacing.none)
+
+                Button {
+                    openMetadataSheet(.tags)
+                } label: {
+                    Image(systemName: "plus.circle.fill")
+                        .font(AppTypography.captionSemibold)
+                        .foregroundStyle(Color.textSecondary)
+                        .frame(width: Spacing.actionReserved, height: Spacing.actionReserved)
+                }
+                .buttonStyle(.plain)
+            }
+            .padding(.horizontal, Spacing.base)
+            .frame(height: metadataRowHeight)
+            .contentShape(Rectangle())
+            .onTapGesture {
+                openMetadataSheet(.tags)
+            }
+            .animation(.snappy(duration: 0.22), value: viewModel.selectedTags.map(\.id))
+
+            metadataDivider
+
+            HStack(spacing: Spacing.base) {
+                Text("创建时间")
+                    .font(AppTypography.semantic(.footnote, weight: .medium))
+                    .foregroundStyle(Color.textSecondary)
+                Spacer(minLength: Spacing.base)
+                Text(viewModel.createdDateDescription)
+                    .font(AppTypography.subheadline)
+                    .foregroundStyle(Color.textPrimary)
+                    .lineLimit(1)
+                    .contentTransition(.opacity)
                 Image(systemName: "chevron.right")
-                    .font(.system(size: 12, weight: .semibold))
+                    .font(AppTypography.captionSemibold)
                     .foregroundStyle(Color.textHint)
             }
             .padding(.horizontal, Spacing.base)
-            .frame(height: 44)
-            .background(Color.surfaceNested, in: RoundedRectangle(cornerRadius: CornerRadius.blockMedium, style: .continuous))
+            .frame(height: metadataRowHeight)
+            .contentShape(Rectangle())
+            .onTapGesture {
+                openMetadataSheet(.createdDate)
+            }
         }
-        .buttonStyle(.plain)
+        .background(Color.surfaceCard)
+    }
+
+    var metadataRowHeight: CGFloat { 54 }
+
+    var metadataDivider: some View {
+        Rectangle()
+            .fill(Color.surfaceBorderSubtle)
+            .frame(height: CardStyle.borderWidth)
+    }
+
+    func chapterRowAccessory(_ viewModel: NoteEditorViewModel) -> some View {
+        Group {
+            if viewModel.selectedChapterID > 0 {
+                Button {
+                    registerEditorInteraction(force: true)
+                    toolbarPromptMessage = nil
+                    withAnimation(.snappy(duration: 0.22)) {
+                        viewModel.clearSelectedChapter()
+                    }
+                } label: {
+                    Text("清空")
+                        .font(AppTypography.captionSemibold)
+                        .foregroundStyle(Color.textSecondary)
+                        .frame(width: Spacing.actionReserved, height: Spacing.actionReserved)
+                }
+                .buttonStyle(.plain)
+                .transition(.opacity.combined(with: .scale(scale: 0.92)))
+            } else {
+                Image(systemName: "chevron.right")
+                    .font(AppTypography.captionSemibold)
+                    .foregroundStyle(Color.textHint)
+                    .frame(width: Spacing.actionReserved, height: Spacing.actionReserved)
+                    .transition(.opacity.combined(with: .scale(scale: 0.92)))
+            }
+        }
+        .animation(.snappy(duration: 0.22), value: viewModel.selectedChapterID > 0)
+    }
+
+    func openMetadataSheet(_ sheet: NoteEditorSheet) {
+        registerEditorInteraction(force: true)
+        toolbarPromptMessage = nil
+        isPositionFocused = false
+        withAnimation(.snappy(duration: 0.22)) {
+            activeSheet = sheet
+        }
     }
 
     func errorCard(_ message: String) -> some View {
