@@ -430,17 +430,6 @@ private struct ContentViewerLoadedView: View {
         )
     }
 
-    private var isPendingAlertPresented: Binding<Bool> {
-        Binding(
-            get: { pendingPresentation != nil },
-            set: { isPresented in
-                if !isPresented {
-                    pendingPresentation = nil
-                }
-            }
-        )
-    }
-
     private func bottomChromeMetrics(safeAreaBottomInset: CGFloat) -> ImmersiveBottomChromeMetrics {
         ImmersiveBottomChromeMetrics.make(
             measuredOrnamentHeight: bottomOrnamentHeight,

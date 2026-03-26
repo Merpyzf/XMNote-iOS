@@ -61,14 +61,7 @@ struct NoteTextComposerView: View {
             }
         }
         .xmSystemAlert(
-            isPresented: Binding(
-                get: { errorMessage != nil },
-                set: { isPresented in
-                    if !isPresented {
-                        errorMessage = nil
-                    }
-                }
-            ),
+            isPresented: $errorMessage.isPresented(),
             descriptor: XMSystemAlertDescriptor(
                 title: "OCR 提示",
                 message: errorMessage ?? "",

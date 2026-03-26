@@ -53,6 +53,10 @@
 排版哲学：通过字重、灰度与留白来构建信息层级，而非简单的尺寸堆叠。禁止引入任何无意义的修饰。
 文本字号语义：生产路径字体统一走 `DesignTokens.swift` 中的 `AppTypography`；`SemanticTypography` 与 `BrandTypography` 仅作为底层排版基础设施存在，不再作为页面层默认入口。语义化目标是补齐 Dynamic Type 与可访问性，不得以“整体放大默认视觉”为代价。
 平台适配：UI 必须遵循 iOS Human Interface Guidelines，不照搬 Material Design。
+弹窗实现约束（强制）：生产路径中心弹窗统一使用 `XMSystemAlert`（UIKit `UIAlertController` 桥接），禁止新增 SwiftUI `.alert` 作为中心弹窗实现。
+弹窗颜色语义（强制）：当前工程中 SwiftUI 中心弹窗按钮颜色会继承品牌 tint，无法满足语义化按钮颜色控制；因此中心弹窗必须走 UIKit 桥接路径。
+弹窗按钮颜色规范（强制）：仅 warning/destructive 操作使用警告语义颜色，其余按钮必须使用系统默认语义颜色，禁止使用品牌色按钮。
+弹窗能力扩展约束（强制）：若当前弹窗组件无法满足新业务，必须先在 `xmnote/UIComponents/Foundation` 新增或扩展可复用基础组件，再接入业务页面；禁止页面内临时 patch。
 
 四、 动效与触感原则 (Interaction & Motion)
 原生体验：使用 SwiftUI 原生动画系统，追求流畅自然的交互质感。
@@ -300,6 +304,8 @@ L3 文件头部契约模板：
 - ViewModel（`*ViewModel`）必须位于 `xmnote/ViewModels/<Feature>/`，`xmnote/Views/**` 禁止放置 `*ViewModel.swift`。
 - `xmnote/Views/<Feature>/Components` 仅允许页面私有子视图，术语类别必须为 `UI-页面私有`。
 - 业务 Sheet 必须位于 `xmnote/Views/<Feature>/Sheets/`。
+- 生产路径中心弹窗必须使用 `XMSystemAlert`（UIKit 桥接）；新增 SwiftUI `.alert` 作为中心弹窗实现视为违规。
+- 若当前弹窗能力无法满足新业务，必须先在 `xmnote/UIComponents/Foundation` 新增或扩展可复用基础组件；页面内临时 patch 视为违规。
 - `xmnote/UIComponents` 是跨模块复用 UI 组件唯一归属目录，禁止在 `xmnote/Utilities`、`xmnote/Services` 新增跨模块复用组件。
 - `xmnote/UIComponents` 的跨模块复用 UI 组件必须在术语表中标记为 `UI-复用`。
 - 新增组件前必须先扫描现有实现可复用性；若已有可复用组件，优先复用，仅在跨模块复用成立时才迁入 `xmnote/UIComponents`。
@@ -618,7 +624,7 @@ struct NoteTagsView: View {
 - ❌ 包含业务逻辑判断
 - ❌ 直接操作数据库或网络
 - ❌ 使用 `ObservableObject` / `@Published`（使用 `@Observable` 宏）
-- ❌ 使用 UIKit 视图（除非绝对必要）
+- ❌ 默认使用 UIKit 视图（中心弹窗属于明确例外，且必须走 `XMSystemAlert` 桥接）
 - ❌ 强制解包 `!`（`#Preview` 中除外）
 
 ## 2. ViewModel 层规范

@@ -164,8 +164,8 @@ enum XMSystemAlertController {
                 title: action.title,
                 style: alertActionStyle(for: action.role)
             ) { _ in
-                dismiss?()
                 action.handler()
+                dismiss?()
             }
             uiAction.isEnabled = action.isEnabled
             alertController.addAction(uiAction)
@@ -224,10 +224,16 @@ extension View {
         descriptor: XMSystemAlertDescriptor?,
         onDismiss: (() -> Void)? = nil
     ) -> some View {
-        background(
-            XMSystemAlertPresenter(
-                isPresented: isPresented,
+        let stateProvider: () -> XMSystemAlertPresentationState? = {
+            guard isPresented.wrappedValue, let descriptor else { return nil }
+            return XMSystemAlertPresentationState(
                 descriptor: descriptor,
+                dismiss: { isPresented.wrappedValue = false }
+            )
+        }
+        return background(
+            XMSystemAlertHostPresenter(
+                stateProvider: stateProvider,
                 onDismiss: onDismiss
             )
         )
@@ -238,18 +244,46 @@ extension View {
         item: Binding<Item?>,
         descriptor: @escaping (Item) -> XMSystemAlertDescriptor
     ) -> some View {
-        background(
-            XMSystemAlertItemPresenter(
-                item: item,
-                descriptor: descriptor
+        let stateProvider: () -> XMSystemAlertPresentationState? = {
+            guard let currentItem = item.wrappedValue else { return nil }
+            return XMSystemAlertPresentationState(
+                descriptor: descriptor(currentItem),
+                dismiss: { item.wrappedValue = nil }
+            )
+        }
+        return background(
+            XMSystemAlertHostPresenter(
+                stateProvider: stateProvider,
+                onDismiss: nil
             )
         )
     }
 }
 
-private struct XMSystemAlertPresenter: UIViewControllerRepresentable {
-    @Binding var isPresented: Bool
-    let descriptor: XMSystemAlertDescriptor?
+extension Binding {
+    /// 把可选状态转换为 Alert 是否展示的布尔状态，关闭时自动清空可选值。
+    func isPresented<Wrapped>(onDismiss: (() -> Void)? = nil) -> Binding<Bool> where Value == Wrapped? {
+        Binding<Bool>(
+            get: { wrappedValue != nil },
+            set: { isPresented in
+                guard !isPresented else { return }
+                guard wrappedValue != nil else { return }
+                onDismiss?()
+                if wrappedValue != nil {
+                    wrappedValue = nil
+                }
+            }
+        )
+    }
+}
+
+private struct XMSystemAlertPresentationState {
+    let descriptor: XMSystemAlertDescriptor
+    let dismiss: () -> Void
+}
+
+private struct XMSystemAlertHostPresenter: UIViewControllerRepresentable {
+    let stateProvider: () -> XMSystemAlertPresentationState?
     let onDismiss: (() -> Void)?
 
     func makeCoordinator() -> Coordinator {
@@ -262,9 +296,7 @@ private struct XMSystemAlertPresenter: UIViewControllerRepresentable {
             guard let controller else { return }
             context.coordinator.syncPresentation(
                 for: controller,
-                isPresented: isPresented,
-                descriptor: descriptor,
-                dismiss: { _isPresented.wrappedValue = false },
+                state: stateProvider(),
                 onDismiss: onDismiss
             )
         }
@@ -276,78 +308,23 @@ private struct XMSystemAlertPresenter: UIViewControllerRepresentable {
             guard let uiViewController else { return }
             context.coordinator.syncPresentation(
                 for: uiViewController,
-                isPresented: isPresented,
-                descriptor: descriptor,
-                dismiss: { _isPresented.wrappedValue = false },
+                state: stateProvider(),
                 onDismiss: onDismiss
             )
         }
         context.coordinator.syncPresentation(
             for: uiViewController,
-            isPresented: isPresented,
-            descriptor: descriptor,
-            dismiss: { _isPresented.wrappedValue = false },
+            state: stateProvider(),
             onDismiss: onDismiss
         )
     }
 
     static func dismantleUIViewController(_ uiViewController: HostViewController, coordinator: Coordinator) {
-        coordinator.dismissIfNeeded()
+        coordinator.dismissIfNeeded(notify: false)
     }
 }
 
-private struct XMSystemAlertItemPresenter<Item: Identifiable>: UIViewControllerRepresentable {
-    @Binding var item: Item?
-    let descriptor: (Item) -> XMSystemAlertDescriptor
-
-    func makeCoordinator() -> XMSystemAlertPresenter.Coordinator {
-        XMSystemAlertPresenter.Coordinator()
-    }
-
-    func makeUIViewController(context: Context) -> XMSystemAlertPresenter.HostViewController {
-        let controller = XMSystemAlertPresenter.HostViewController()
-        controller.onViewDidAppear = { [weak controller] in
-            guard let controller else { return }
-            context.coordinator.syncPresentation(
-                for: controller,
-                isPresented: item != nil,
-                descriptor: item.map(descriptor),
-                dismiss: { _item.wrappedValue = nil },
-                onDismiss: nil
-            )
-        }
-        return controller
-    }
-
-    func updateUIViewController(_ uiViewController: XMSystemAlertPresenter.HostViewController, context: Context) {
-        uiViewController.onViewDidAppear = { [weak uiViewController] in
-            guard let uiViewController else { return }
-            context.coordinator.syncPresentation(
-                for: uiViewController,
-                isPresented: item != nil,
-                descriptor: item.map(descriptor),
-                dismiss: { _item.wrappedValue = nil },
-                onDismiss: nil
-            )
-        }
-        context.coordinator.syncPresentation(
-            for: uiViewController,
-            isPresented: item != nil,
-            descriptor: item.map(descriptor),
-            dismiss: { _item.wrappedValue = nil },
-            onDismiss: nil
-        )
-    }
-
-    static func dismantleUIViewController(
-        _ uiViewController: XMSystemAlertPresenter.HostViewController,
-        coordinator: XMSystemAlertPresenter.Coordinator
-    ) {
-        coordinator.dismissIfNeeded()
-    }
-}
-
-private extension XMSystemAlertPresenter {
+private extension XMSystemAlertHostPresenter {
     final class HostViewController: UIViewController {
         var onViewDidAppear: (() -> Void)?
 
@@ -361,50 +338,63 @@ private extension XMSystemAlertPresenter {
         private weak var presentedAlertController: UIAlertController?
         private var dismissPresentation: (() -> Void)?
         private var onDismiss: (() -> Void)?
+        private var didNotifyDismiss = false
 
         func syncPresentation(
             for viewController: UIViewController,
-            isPresented: Bool,
-            descriptor: XMSystemAlertDescriptor?,
-            dismiss: @escaping () -> Void,
+            state: XMSystemAlertPresentationState?,
             onDismiss: (() -> Void)?
         ) {
-            self.dismissPresentation = dismiss
             self.onDismiss = onDismiss
 
-            if isPresented, let descriptor {
-                presentIfNeeded(from: viewController, descriptor: descriptor)
+            if let state {
+                presentIfNeeded(from: viewController, state: state)
             } else {
-                dismissIfNeeded()
+                dismissIfNeeded(notify: true)
             }
         }
 
-        func dismissIfNeeded() {
+        func dismissIfNeeded(notify: Bool) {
             guard let alertController = presentedAlertController else { return }
             presentedAlertController = nil
-            guard alertController.presentingViewController != nil else { return }
-            alertController.dismiss(animated: true)
+            guard alertController.presentingViewController != nil else {
+                notifyDismissIfNeeded(shouldNotify: notify)
+                return
+            }
+            alertController.dismiss(animated: true) { [weak self] in
+                self?.notifyDismissIfNeeded(shouldNotify: notify)
+            }
         }
 
         private func presentIfNeeded(
             from viewController: UIViewController,
-            descriptor: XMSystemAlertDescriptor
+            state: XMSystemAlertPresentationState
         ) {
-            guard descriptor.actions.isEmpty == false else { return }
+            guard state.descriptor.actions.isEmpty == false else { return }
             guard presentedAlertController == nil else { return }
             guard viewController.viewIfLoaded?.window != nil else { return }
             guard viewController.presentedViewController == nil else { return }
 
+            dismissPresentation = state.dismiss
+            didNotifyDismiss = false
             let alertController = XMSystemAlertController.makeAlertController(
-                descriptor: descriptor,
+                descriptor: state.descriptor,
                 dismiss: { [weak self] in
-                    self?.presentedAlertController = nil
-                    self?.dismissPresentation?()
-                    self?.onDismiss?()
+                    guard let self else { return }
+                    self.presentedAlertController = nil
+                    self.notifyDismissIfNeeded(shouldNotify: true)
                 }
             )
             presentedAlertController = alertController
             viewController.present(alertController, animated: true)
+        }
+
+        private func notifyDismissIfNeeded(shouldNotify: Bool) {
+            guard shouldNotify else { return }
+            guard !didNotifyDismiss else { return }
+            didNotifyDismiss = true
+            dismissPresentation?()
+            onDismiss?()
         }
     }
 }

@@ -86,6 +86,7 @@
 - `xmnote/Views/<Feature>/Components` 仅允许页面私有子视图（服务当前 Feature），不得作为跨模块公共组件。
 - 业务 Sheet 必须放在 `xmnote/Views/<Feature>/Sheets/`，禁止与页面壳层混在同一文件。
 - `UIComponents` 只允许放置无业务状态、无数据访问、副作用可控的跨模块复用组件。
+- 弹窗能力扩展约束（强制）：若当前弹窗组件无法满足新业务，必须先在 `xmnote/UIComponents/Foundation` 新增或扩展可复用基础组件，再接入业务页面；禁止页面内临时 patch。
 - 禁止在 `xmnote/Utilities`、`xmnote/Services` 中新增跨模块公共组件。
 - `xmnote/RichTextEditor` 属于功能模块，不整体迁入 `UIComponents`；仅纯展示且跨页面复用的子组件允许抽取到 `UIComponents`。
 - 违反本规则视为阻塞级问题：必须先完成组件归位整改，再继续开发与提交流程。
@@ -153,6 +154,9 @@
 
 ## UI 与交互约束
 - 遵循 iOS HIG，保持品牌与信息层级一致，避免无意义视觉修饰。
+- 弹窗实现约束（强制）：生产路径中心弹窗统一使用 `XMSystemAlert`（UIKit `UIAlertController` 桥接），禁止新增 SwiftUI `.alert` 作为中心弹窗实现。
+- 弹窗颜色语义（强制）：当前工程中 SwiftUI 中心弹窗按钮颜色会继承品牌 tint，无法满足语义化按钮颜色控制；因此中心弹窗必须走 UIKit 桥接路径。
+- 弹窗按钮颜色规范（强制）：仅 warning/destructive 操作使用警告语义颜色，其余按钮必须使用系统默认语义颜色，禁止使用品牌色按钮。
 - 文本字号治理（强制）：先区分 `生产文本 / 品牌数字与品牌标题 / 图标或装饰 glyph`；生产文本在页面层统一走 `DesignTokens.swift` 中的 `AppTypography`，品牌强调位也统一从 `AppTypography.brandDisplay(...)` / `AppTypography.brandTrim(...)` 进入，图标尺寸不得伪装成文本字号规则。
 - 语义化目标（强制）：补齐 Dynamic Type 与语义层级，不得让页面默认态整体变大；需要保留现有视觉基线时，统一通过 `AppTypography.fixed(..., minimumPointSize: baseSize)` 或 `AppTypography.uiFixed(..., minimumPointSize: baseSize)` 实现。
 - 文本硬编码禁令（强制）：生产文本禁止新增 `.font(.system(size: ...))`、`UIFont.systemFont(ofSize:)`、`UIFont.boldSystemFont(ofSize:)` 等固定字号写法；图标尺寸、装饰性 symbol、Debug/Prototype 不在此禁令内。

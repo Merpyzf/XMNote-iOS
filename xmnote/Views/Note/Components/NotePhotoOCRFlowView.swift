@@ -125,14 +125,7 @@ private struct OCRCameraScreen: View {
             }
         }
         .xmSystemAlert(
-            isPresented: Binding(
-                get: { photoLoadingErrorMessage != nil },
-                set: { isPresented in
-                    if !isPresented {
-                        photoLoadingErrorMessage = nil
-                    }
-                }
-            ),
+            isPresented: $photoLoadingErrorMessage.isPresented(),
             descriptor: XMSystemAlertDescriptor(
                 title: "图片载入失败",
                 message: photoLoadingErrorMessage ?? "相册图片读取失败，请重新选择。",

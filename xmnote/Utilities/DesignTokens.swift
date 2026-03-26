@@ -144,12 +144,6 @@ extension Color {
     /// 遮罩层
     static let overlay = Color(light: Color.black.opacity(0.4),
                                 dark: Color.black.opacity(0.5))
-    /// 中心弹窗遮罩层，较阻塞式 loading 更轻，避免出现过重脏感。
-    static let overlayDialog = Color(light: Color.black.opacity(0.26),
-                                     dark: Color.black.opacity(0.42))
-    /// 中心弹窗表层，独立于普通内容卡片，承接确认型模态内容。
-    static let surfaceDialog = Color(light: Color(uiColor: .systemBackground),
-                                     dark: Color(hex: 0x1E1F22))
 }
 
 // MARK: - Status
