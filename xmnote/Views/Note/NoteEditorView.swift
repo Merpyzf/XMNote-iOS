@@ -218,7 +218,7 @@ private extension NoteEditorView {
                                 isFocused: isContentFocused,
                                 height: heights.content,
                                 showsInlineOCRButton: usesSplitOCREntryButtons,
-                                onTextChange: { handleEditorTextChange(target: .content, text: viewModel.contentText) },
+                                onTextChange: { observeEditorTextChange(target: .content, text: viewModel.contentText) },
                                 onInlineOCR: { triggerInlineOCR(for: .content) }
                             )
                             .id(NoteEditorComposerTarget.content.scrollAnchorID)
@@ -228,7 +228,7 @@ private extension NoteEditorView {
                                     viewModel,
                                     height: heights.idea,
                                     showsInlineOCRButton: usesSplitOCREntryButtons,
-                                    onTextChange: { handleEditorTextChange(target: .idea, text: viewModel.ideaText) },
+                                    onTextChange: { observeEditorTextChange(target: .idea, text: viewModel.ideaText) },
                                     onInlineOCR: { triggerInlineOCR(for: .idea) }
                                 )
                                 .id(NoteEditorComposerTarget.idea.scrollAnchorID)
@@ -241,7 +241,7 @@ private extension NoteEditorView {
                                     isFocused: isIdeaFocused,
                                     height: heights.idea,
                                     showsInlineOCRButton: usesSplitOCREntryButtons,
-                                    onTextChange: { handleEditorTextChange(target: .idea, text: viewModel.ideaText) },
+                                    onTextChange: { observeEditorTextChange(target: .idea, text: viewModel.ideaText) },
                                     onInlineOCR: { triggerInlineOCR(for: .idea) }
                                 )
                                 .id(NoteEditorComposerTarget.idea.scrollAnchorID)
@@ -832,21 +832,15 @@ private extension NoteEditorView {
 
             metadataDivider
 
-            HStack(spacing: Spacing.cozy) {
-                Text("章节")
-                    .font(metadataTitleFont)
-                    .foregroundStyle(Color.textSecondary)
-                Spacer(minLength: Spacing.base)
+            metadataActionRow(title: "章节") {
                 Text(viewModel.selectedChapterDisplayTitle)
                     .font(metadataValueFont)
                     .foregroundStyle(Color.textPrimary)
                     .lineLimit(1)
                     .contentTransition(.opacity)
+            } accessory: {
                 chapterRowAccessory(viewModel)
             }
-            .padding(.horizontal, Spacing.base)
-            .frame(height: metadataRowHeight)
-            .contentShape(Rectangle())
             .accessibilityAddTraits(.isButton)
             .onTapGesture {
                 openMetadataSheet(.chapter)
@@ -854,42 +848,9 @@ private extension NoteEditorView {
 
             metadataDivider
 
-            HStack(spacing: Spacing.cozy) {
-                Text("标签")
-                    .font(metadataTitleFont)
-                    .foregroundStyle(Color.textSecondary)
-
-                if viewModel.selectedTags.isEmpty {
-                    Text("添加标签")
-                        .font(metadataValueFont)
-                        .foregroundStyle(Color.textHint)
-                        .lineLimit(1)
-                        .frame(maxWidth: .infinity, alignment: .trailing)
-                        .transition(.move(edge: .trailing).combined(with: .opacity))
-                } else {
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(spacing: Spacing.cozy) {
-                            ForEach(viewModel.selectedTags) { tag in
-                                Text(tag.title)
-                                    .font(AppTypography.semantic(.footnote, weight: .medium))
-                                    .foregroundStyle(Color.textSecondary)
-                                    .padding(.horizontal, Spacing.cozy)
-                                    .padding(.vertical, Spacing.tiny)
-                                    .background(Color.controlFillSecondary, in: Capsule())
-                                    .lineLimit(1)
-                            }
-                            .transition(.move(edge: .trailing).combined(with: .opacity))
-                        }
-                        .frame(height: 30)
-                    }
-                    .frame(maxWidth: .infinity, alignment: .trailing)
-                }
-
-                metadataTrailingAccessoryIcon()
+            metadataActionRow(title: "标签") {
+                metadataTagValue(viewModel)
             }
-            .padding(.horizontal, Spacing.base)
-            .frame(height: metadataRowHeight)
-            .contentShape(Rectangle())
             .accessibilityAddTraits(.isButton)
             .onTapGesture {
                 openMetadataSheet(.tags)
@@ -901,24 +862,72 @@ private extension NoteEditorView {
             Button {
                 openMetadataSheet(.createdDate)
             } label: {
-                HStack(spacing: Spacing.cozy) {
-                    Text("创建时间")
-                        .font(metadataTitleFont)
-                        .foregroundStyle(Color.textSecondary)
-                    Spacer(minLength: Spacing.base)
+                metadataActionRow(title: "创建时间") {
                     Text(viewModel.createdDateDescription)
                         .font(metadataValueFont)
                         .foregroundStyle(Color.textPrimary)
                         .lineLimit(1)
                         .contentTransition(.opacity)
-                    metadataTrailingAccessoryIcon()
                 }
-                .padding(.horizontal, Spacing.base)
-                .frame(height: metadataRowHeight)
-                .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
         }
+    }
+
+    @ViewBuilder
+    func metadataTagValue(_ viewModel: NoteEditorViewModel) -> some View {
+        if viewModel.selectedTags.isEmpty {
+            Text("添加标签")
+                .font(metadataValueFont)
+                .foregroundStyle(Color.textHint)
+                .lineLimit(1)
+                .frame(maxWidth: .infinity, alignment: .trailing)
+                .transition(.move(edge: .trailing).combined(with: .opacity))
+        } else {
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: metadataRowSpacing) {
+                    ForEach(viewModel.selectedTags) { tag in
+                        Text(tag.title)
+                            .font(AppTypography.semantic(.footnote, weight: .medium))
+                            .foregroundStyle(Color.textSecondary)
+                            .padding(.horizontal, Spacing.cozy)
+                            .padding(.vertical, Spacing.tiny)
+                            .background(Color.controlFillSecondary, in: Capsule())
+                            .lineLimit(1)
+                    }
+                    .transition(.move(edge: .trailing).combined(with: .opacity))
+                }
+                .frame(height: 30)
+            }
+            .frame(maxWidth: .infinity, alignment: .trailing)
+        }
+    }
+
+    func metadataActionRow<Value: View>(
+        title: String,
+        @ViewBuilder value: () -> Value
+    ) -> some View {
+        metadataActionRow(title: title, value: value) {
+            metadataTrailingAccessoryIcon()
+        }
+    }
+
+    func metadataActionRow<Value: View, Accessory: View>(
+        title: String,
+        @ViewBuilder value: () -> Value,
+        @ViewBuilder accessory: () -> Accessory
+    ) -> some View {
+        HStack(spacing: metadataRowSpacing) {
+            Text(title)
+                .font(metadataTitleFont)
+                .foregroundStyle(Color.textSecondary)
+            Spacer(minLength: Spacing.base)
+            value()
+            accessory()
+        }
+        .padding(.horizontal, Spacing.base)
+        .frame(height: metadataRowHeight)
+        .contentShape(Rectangle())
     }
 
     var metadataTitleFont: Font {
@@ -935,6 +944,8 @@ private extension NoteEditorView {
     var metadataTrailingAccessoryWidth: CGFloat { 12 }
 
     var metadataRowHeight: CGFloat { 54 }
+
+    var metadataRowSpacing: CGFloat { Spacing.cozy }
 
     var metadataDivider: some View {
         Rectangle()
@@ -1421,23 +1432,10 @@ private extension NoteEditorView {
         }
     }
 
-    func editorHeights(
-        for viewportHeight: CGFloat,
-        bookSectionHeight: CGFloat,
-        stableTailSectionHeight: CGFloat,
-        measuredTailSectionHeight: CGFloat,
-        toolbarHeight: CGFloat,
-        ideaState: IdeaInputState
-    ) -> (content: CGFloat, idea: CGFloat) {
-        let computation = makeEditorHeightComputation(
-            for: viewportHeight,
-            bookSectionHeight: bookSectionHeight,
-            stableTailSectionHeight: stableTailSectionHeight,
-            measuredTailSectionHeight: measuredTailSectionHeight,
-            toolbarHeight: toolbarHeight,
-            ideaState: ideaState
-        )
-        return (computation.contentHeight, computation.ideaHeight)
+    func observeEditorTextChange(target: NoteEditorComposerTarget, text: NSAttributedString) {
+#if DEBUG
+        handleEditorTextChange(target: target, text: text)
+#endif
     }
 
     func makeEditorHeightComputation(
