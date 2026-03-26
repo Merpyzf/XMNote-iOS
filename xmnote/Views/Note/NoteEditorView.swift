@@ -38,6 +38,8 @@ struct NoteEditorView: View {
     @State private var frozenMeasuredHeights: [NoteEditorMeasuredPart: CGFloat]?
     @State private var measuredHeightsFreezeDeadline: Date = .distantPast
     @State private var keyboardHeight: CGFloat = 0
+    @State private var isDismissAttemptInProgress = false
+    @State private var dismissAttemptKeyboardVisibleSnapshot = false
     @State private var lastClosedComposerTarget: NoteEditorComposerTarget?
     @State private var baselineIdleTimerDisabled: Bool?
     @State private var baselineScreenBrightness: CGFloat?
@@ -116,6 +118,9 @@ private extension NoteEditorView {
     }
     var measuredHeightEpsilon: CGFloat { 0.5 }
     var measuredHeightFreezeDuration: TimeInterval { 0.35 }
+    var effectiveKeyboardVisible: Bool {
+        isDismissAttemptInProgress ? dismissAttemptKeyboardVisibleSnapshot : isKeyboardVisible
+    }
 
     @ViewBuilder
     func noteEditorAlertPresenter(_ viewModel: NoteEditorViewModel) -> some View {
@@ -157,7 +162,10 @@ private extension NoteEditorView {
                             }
                         }
                     ]
-                )
+                ),
+                onDismiss: {
+                    finishDismissAttemptIfNeeded(reason: "discard_dialog_dismiss")
+                }
             )
     }
 
@@ -270,15 +278,13 @@ private extension NoteEditorView {
         .navigationPopGuard(
             canPop: !viewModel.hasUnsavedChanges && !viewModel.isSaving,
             onBlockedAttempt: {
-                if !viewModel.isSaving {
-                    showsDiscardDialog = true
-                }
+                requestDismiss(using: viewModel, source: .navigationGesture)
             }
         )
         .toolbar {
             ToolbarItem(placement: .topBarLeading) {
                 Button {
-                    handleDismissAttempt(using: viewModel)
+                    requestDismiss(using: viewModel, source: .toolbarButton)
                 } label: {
                     Image(systemName: "chevron.left")
                         .font(.system(size: 18, weight: .medium))
@@ -424,6 +430,8 @@ private extension NoteEditorView {
             releaseScreenBehavior()
             frozenMeasuredHeights = nil
             measuredHeightsFreezeDeadline = .distantPast
+            isDismissAttemptInProgress = false
+            dismissAttemptKeyboardVisibleSnapshot = false
         }
         .onChange(of: editorSettings.layoutModeRawValue) { _, _ in
             handleLayoutModeStateChange(animated: isLayoutStateInitialized)
@@ -437,6 +445,10 @@ private extension NoteEditorView {
                 return
             }
             dismiss()
+        }
+        .onChange(of: showsDiscardDialog) { _, isPresented in
+            guard !isPresented else { return }
+            finishDismissAttemptIfNeeded(reason: "discard_dialog_hidden")
         }
         .onChange(of: editorSettings.keepScreenOnEnabled) { _, _ in
             applyScreenBehavior()
@@ -967,6 +979,44 @@ private extension NoteEditorView {
         controller.send(command)
     }
 
+    func requestDismiss(using viewModel: NoteEditorViewModel, source: DismissAttemptSource) {
+        guard !viewModel.isSaving else { return }
+        beginDismissAttempt(reason: source.rawValue)
+        if viewModel.hasUnsavedChanges {
+            showsDiscardDialog = true
+        } else {
+            dismiss()
+        }
+    }
+
+    func beginDismissAttempt(reason: String) {
+        if !isDismissAttemptInProgress {
+            isDismissAttemptInProgress = true
+            dismissAttemptKeyboardVisibleSnapshot = isKeyboardVisible
+        }
+        beginMeasuredHeightFreeze(reason: "dismiss_attempt_\(reason)")
+#if DEBUG
+        logExpandEvent(
+            "dismiss.attempt.start",
+            viewModel: viewModel,
+            extra: "reason=\(reason) keyboardVisibleSnapshot=\(dismissAttemptKeyboardVisibleSnapshot)"
+        )
+#endif
+    }
+
+    func finishDismissAttemptIfNeeded(reason: String) {
+        guard isDismissAttemptInProgress else { return }
+        isDismissAttemptInProgress = false
+        dismissAttemptKeyboardVisibleSnapshot = false
+#if DEBUG
+        logExpandEvent(
+            "dismiss.attempt.end",
+            viewModel: viewModel,
+            extra: "reason=\(reason)"
+        )
+#endif
+    }
+
     func handleLayoutModeStateChange(animated: Bool) {
         guard layoutMode == .focusExcerpt, let viewModel else { return }
 #if DEBUG
@@ -1017,8 +1067,12 @@ private extension NoteEditorView {
             )
 #endif
             isIdeaFocused = hasFocus
+            let shouldSyncIdeaLayout = !isDismissAttemptInProgress
             if hasFocus {
-                if layoutMode == .focusExcerpt, let viewModel, viewModel.ideaInputState == .collapsed {
+                if shouldSyncIdeaLayout,
+                   layoutMode == .focusExcerpt,
+                   let viewModel,
+                   viewModel.ideaInputState == .collapsed {
                     beginMeasuredHeightFreeze(reason: "idea_focus_expand")
                     withAnimation(.snappy) {
                         viewModel.expandIdea()
@@ -1029,7 +1083,10 @@ private extension NoteEditorView {
                 if activeEditorTarget == .idea {
                     activeEditorTarget = nil
                 }
-                if layoutMode == .focusExcerpt, !isKeyboardVisible, let viewModel {
+                if shouldSyncIdeaLayout,
+                   layoutMode == .focusExcerpt,
+                   !isKeyboardVisible,
+                   let viewModel {
 #if DEBUG
                     logExpandEvent(
                         "idea.collapse.trigger",
@@ -1296,13 +1353,21 @@ private extension NoteEditorView {
         let sectionGaps = Spacing.base * 3
         let fixedElementsHeight = bookSectionHeight + tailSectionHeight + stackOuterPadding + sectionGaps
         let availableForEditors = max(viewportHeight - fixedElementsHeight, 0)
-        let isKeyboardVisible = keyboardHeight > 0
+        let hasResolvedMeasurements =
+            bookSectionHeight > measuredHeightEpsilon &&
+            tailSectionHeight > measuredHeightEpsilon &&
+            toolbarHeight > measuredHeightEpsilon
+        let isKeyboardVisible = effectiveKeyboardVisible
 
         switch layoutMode {
         case .classic:
             return (defaultEditorHeight, defaultEditorHeight)
         case .focusExcerpt:
             if ideaState == .collapsed {
+                if !hasResolvedMeasurements {
+                    let fallbackFullViewport = max(viewportHeight - collapsedIdeaHeight - Spacing.base, 0)
+                    return (max(fallbackFullViewport, defaultEditorHeight), collapsedIdeaHeight)
+                }
                 let contentAvailable = availableForEditors - collapsedIdeaHeight
                 let contentHeight: CGFloat
                 if isKeyboardVisible {
@@ -1347,15 +1412,6 @@ private extension NoteEditorView {
                 controller.send(.focus)
                 controller.send(.moveCursorToEnd)
             }
-        }
-    }
-
-    func handleDismissAttempt(using viewModel: NoteEditorViewModel) {
-        guard !viewModel.isSaving else { return }
-        if viewModel.hasUnsavedChanges {
-            showsDiscardDialog = true
-        } else {
-            dismiss()
         }
     }
 
@@ -1413,6 +1469,11 @@ private extension NoteEditorView {
         )
 #endif
     }
+}
+
+private enum DismissAttemptSource: String {
+    case toolbarButton = "toolbar_button"
+    case navigationGesture = "navigation_gesture"
 }
 
 enum NoteEditorLayoutMode: Int, CaseIterable, Identifiable {
