@@ -34,6 +34,12 @@ struct DebugCenterView: View {
             destination: AnyView(HeatmapTestView())
         ),
         DebugItem(
+            icon: "rectangle.center.inset.filled.badge.plus",
+            title: "System Alert",
+            subtitle: "XMSystemAlert 基础设施、系统颜色语义与轻输入场景验证",
+            destination: AnyView(SystemAlertTestView())
+        ),
+        DebugItem(
             icon: "photo.stack",
             title: "图片加载",
             subtitle: "静态图/GIF/失败链路与缓存来源观测",

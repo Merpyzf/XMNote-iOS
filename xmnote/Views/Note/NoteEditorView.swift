@@ -117,6 +117,51 @@ private extension NoteEditorView {
     var measuredHeightEpsilon: CGFloat { 0.5 }
     var measuredHeightFreezeDuration: TimeInterval { 0.35 }
 
+    @ViewBuilder
+    func noteEditorAlertPresenter(_ viewModel: NoteEditorViewModel) -> some View {
+        Color.clear
+            .xmSystemAlert(
+                isPresented: Binding(
+                    get: { viewModel.pendingRecoveredDraft != nil },
+                    set: { isPresented in
+                        if !isPresented, viewModel.pendingRecoveredDraft != nil {
+                            viewModel.discardRecoveredDraft()
+                        }
+                    }
+                ),
+                descriptor: XMSystemAlertDescriptor(
+                    title: "发现自动保存草稿",
+                    message: "检测到这条书摘有未提交的自动保存内容，是否恢复继续编辑？",
+                    actions: [
+                        XMSystemAlertAction(title: "恢复") {
+                            viewModel.restoreRecoveredDraft()
+                        },
+                        XMSystemAlertAction(title: "丢弃", role: .destructive) {
+                            viewModel.discardRecoveredDraft()
+                        }
+                    ]
+                )
+            )
+            .xmSystemAlert(
+                isPresented: $showsDiscardDialog,
+                descriptor: XMSystemAlertDescriptor(
+                    title: "提示",
+                    message: "你编辑的内容尚未保存，确定要离开么？",
+                    actions: [
+                        XMSystemAlertAction(title: "继续编辑") { },
+                        XMSystemAlertAction(title: "保存") {
+                            Task { _ = await viewModel.save() }
+                        },
+                        XMSystemAlertAction(title: "离开", role: .destructive) {
+                            Task {
+                                await dismissEditorDiscardingChanges(using: viewModel)
+                            }
+                        }
+                    ]
+                )
+            )
+    }
+
     func editorContent(_ viewModel: NoteEditorViewModel) -> some View {
         GeometryReader { geometry in
             let heightsSource = effectiveMeasuredHeights
@@ -354,31 +399,8 @@ private extension NoteEditorView {
                 }
             }
         }
-        .confirmationDialog("放弃未保存的更改？", isPresented: $showsDiscardDialog) {
-            Button("放弃更改", role: .destructive) {
-                dismiss()
-            }
-            Button("继续编辑", role: .cancel) { }
-        }
-        .alert(
-            "发现自动保存草稿",
-            isPresented: Binding(
-                get: { viewModel.pendingRecoveredDraft != nil },
-                set: { isPresented in
-                    if !isPresented, viewModel.pendingRecoveredDraft != nil {
-                        viewModel.discardRecoveredDraft()
-                    }
-                }
-            )
-        ) {
-            Button("恢复") {
-                viewModel.restoreRecoveredDraft()
-            }
-            Button("丢弃", role: .destructive) {
-                viewModel.discardRecoveredDraft()
-            }
-        } message: {
-            Text("检测到这条书摘有未提交的自动保存内容，是否恢复继续编辑？")
+        .background {
+            noteEditorAlertPresenter(viewModel)
         }
         .task(id: attachmentPhotoItems) {
             guard !attachmentPhotoItems.isEmpty else { return }
@@ -1336,6 +1358,11 @@ private extension NoteEditorView {
         } else {
             dismiss()
         }
+    }
+
+    func dismissEditorDiscardingChanges(using viewModel: NoteEditorViewModel) async {
+        await viewModel.discardEditingSession()
+        dismiss()
     }
 
     func consumeAttachmentPhotoItems(_ items: [PhotosPickerItem], viewModel: NoteEditorViewModel) async {

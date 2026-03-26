@@ -32,11 +32,16 @@ struct ReadCalendarSettingsSheet: View {
             closeButton
         }
         .interactiveDismissDisabled(!settings.isReadBehaviorRuleValid)
-        .alert("无法关闭设置", isPresented: $showInvalidCloseAlert) {
-            Button("我知道了", role: .cancel) {}
-        } message: {
-            Text("判定阅读行为的规则至少要选一个")
-        }
+        .xmSystemAlert(
+            isPresented: $showInvalidCloseAlert,
+            descriptor: XMSystemAlertDescriptor(
+                title: "无法关闭设置",
+                message: "判定阅读行为的规则至少要选一个",
+                actions: [
+                    XMSystemAlertAction(title: "我知道了", role: .cancel) { }
+                ]
+            )
+        )
     }
 
     private var closeButton: some View {

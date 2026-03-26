@@ -205,14 +205,14 @@ private struct ContentViewerLoadedView: View {
                 Button("取消", role: .cancel) {}
             }
         }
-        .alert(
-            pendingPresentation?.title ?? "",
-            isPresented: isPendingAlertPresented,
-            presenting: pendingPresentation
-        ) { _ in
-            Button("知道了", role: .cancel) {}
-        } message: { presentation in
-            Text(presentation.message)
+        .xmSystemAlert(item: $pendingPresentation) { presentation in
+            XMSystemAlertDescriptor(
+                title: presentation.title,
+                message: presentation.message,
+                actions: [
+                    XMSystemAlertAction(title: "知道了", role: .cancel) { }
+                ]
+            )
         }
         .sheet(isPresented: $showsTagSheet) {
             ContentViewerTagSheet(

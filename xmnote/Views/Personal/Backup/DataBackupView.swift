@@ -95,18 +95,28 @@ private struct DataBackupContentView: View {
         .animation(reduceMotion ? nil : .smooth(duration: 0.28), value: viewModel.operationState != .idle)
         .animation(reduceMotion ? nil : .smooth(duration: 0.26), value: viewModel.initialLoadState)
         .animation(reduceMotion ? nil : .smooth(duration: 0.24), value: viewModel.lastBackupState)
-        .alert("错误", isPresented: $viewModel.showError) {
-            Button("确定") {}
-        } message: {
-            Text(viewModel.errorMessage ?? "")
-        }
-        .alert("恢复成功", isPresented: $viewModel.showRestoreSuccess) {
-            Button("确定") {
-                viewModel.acknowledgeRestoreSuccess()
-            }
-        } message: {
-            Text("数据已恢复。")
-        }
+        .xmSystemAlert(
+            isPresented: $viewModel.showError,
+            descriptor: XMSystemAlertDescriptor(
+                title: "错误",
+                message: viewModel.errorMessage ?? "",
+                actions: [
+                    XMSystemAlertAction(title: "确定", role: .cancel) { }
+                ]
+            )
+        )
+        .xmSystemAlert(
+            isPresented: $viewModel.showRestoreSuccess,
+            descriptor: XMSystemAlertDescriptor(
+                title: "恢复成功",
+                message: "数据已恢复。",
+                actions: [
+                    XMSystemAlertAction(title: "确定", role: .cancel) {
+                        viewModel.acknowledgeRestoreSuccess()
+                    }
+                ]
+            )
+        )
         .sheet(isPresented: $viewModel.isShowingBackupHistory) {
             BackupHistorySheetView(viewModel: viewModel)
         }

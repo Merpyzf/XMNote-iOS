@@ -431,6 +431,23 @@ final class NoteEditorViewModel {
         }
     }
 
+    /// 放弃当前编辑会话，并清理自动保存草稿与本地暂存图。
+    func discardEditingSession() async {
+        autoSaveTask?.cancel()
+        autoSaveTask = nil
+
+        imageUploadTasks.values.forEach { $0.cancel() }
+        imageUploadTasks.removeAll()
+
+        let currentDraft = makeDraftSnapshot(includeAutoSaveTime: false)
+        for item in imageItems {
+            await repository.removeStagedNoteEditorImage(item)
+        }
+        repository.deleteNoteEditorDraft(bookId: currentDraft.bookId, noteId: currentDraft.noteId)
+
+        pendingRecoveredDraft = nil
+    }
+
     /// 连续编辑模式下，保存成功后重置为新的创建草稿，仅保留当前选中书籍。
     func prepareForContinuousEditing(preferredBookID: Int64?) async {
         didSave = false

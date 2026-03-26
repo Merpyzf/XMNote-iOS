@@ -60,8 +60,7 @@ struct NoteTextComposerView: View {
                 ornamentController.send(.insertText(payload.summary.combinedText))
             }
         }
-        .alert(
-            "OCR 提示",
+        .xmSystemAlert(
             isPresented: Binding(
                 get: { errorMessage != nil },
                 set: { isPresented in
@@ -69,12 +68,15 @@ struct NoteTextComposerView: View {
                         errorMessage = nil
                     }
                 }
+            ),
+            descriptor: XMSystemAlertDescriptor(
+                title: "OCR 提示",
+                message: errorMessage ?? "",
+                actions: [
+                    XMSystemAlertAction(title: "知道了", role: .cancel) { }
+                ]
             )
-        ) {
-            Button("知道了", role: .cancel) { }
-        } message: {
-            Text(errorMessage ?? "")
-        }
+        )
     }
 }
 

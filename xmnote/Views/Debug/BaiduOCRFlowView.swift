@@ -133,8 +133,7 @@ private struct OCRCameraScreen: View {
                 showGuideTipIfNeeded()
             }
         }
-        .alert(
-            "图片载入失败",
+        .xmSystemAlert(
             isPresented: Binding(
                 get: { photoLoadingErrorMessage != nil },
                 set: { isPresented in
@@ -142,12 +141,15 @@ private struct OCRCameraScreen: View {
                         photoLoadingErrorMessage = nil
                     }
                 }
+            ),
+            descriptor: XMSystemAlertDescriptor(
+                title: "图片载入失败",
+                message: photoLoadingErrorMessage ?? "相册图片读取失败，请重新选择。",
+                actions: [
+                    XMSystemAlertAction(title: "知道了", role: .cancel) { }
+                ]
             )
-        ) {
-            Button("知道了", role: .cancel) { }
-        } message: {
-            Text(photoLoadingErrorMessage ?? "相册图片读取失败，请重新选择。")
-        }
+        )
         .environment(\.colorScheme, .dark)
     }
 }

@@ -5,7 +5,7 @@
 //  Created by 王珂 on 2026/2/10.
 //
 //  [INPUT]: 无外部依赖，仅依赖 SwiftUI 框架
-//  [OUTPUT]: Color 语义扩展（含阅读日历主题/事件条 pending 态/月总结图标渐变语义）、Spacing / CornerRadius / CardStyle 常量、Color(hex:) / Color(light:dark:) / Color(rgbaHex:) 构造器
+//  [OUTPUT]: Color 语义扩展（含阅读日历主题/事件条 pending 态/月总结图标渐变语义、Dialog 表层语义）、Spacing / CornerRadius / CardStyle 常量、Color(hex:) / Color(light:dark:) / Color(rgbaHex:) 构造器
 //  [POS]: Utilities 模块的设计令牌中枢，全局 UI 一致性的单一真相源
 //  [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
 
@@ -144,6 +144,12 @@ extension Color {
     /// 遮罩层
     static let overlay = Color(light: Color.black.opacity(0.4),
                                 dark: Color.black.opacity(0.5))
+    /// 中心弹窗遮罩层，较阻塞式 loading 更轻，避免出现过重脏感。
+    static let overlayDialog = Color(light: Color.black.opacity(0.26),
+                                     dark: Color.black.opacity(0.42))
+    /// 中心弹窗表层，独立于普通内容卡片，承接确认型模态内容。
+    static let surfaceDialog = Color(light: Color(uiColor: .systemBackground),
+                                     dark: Color(hex: 0x1E1F22))
 }
 
 // MARK: - Status

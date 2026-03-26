@@ -63,55 +63,39 @@ struct BookSearchView: View {
         .navigationDestination(item: $auxiliaryDestination) { destination in
             auxiliaryDestinationView(destination)
         }
-        .alert(
-            activeDoubanLoginPrompt?.action.promptTitle ?? "",
-            isPresented: Binding(
-                get: { activeDoubanLoginPrompt != nil },
-                set: { isPresented in
-                    if !isPresented {
+        .xmSystemAlert(item: $activeDoubanLoginPrompt) { prompt in
+            XMSystemAlertDescriptor(
+                title: prompt.action.promptTitle,
+                message: prompt.action.promptMessage,
+                actions: [
+                    XMSystemAlertAction(title: "取消", role: .cancel) {
                         activeDoubanLoginPrompt = nil
+                    },
+                    XMSystemAlertAction(title: "去登录") {
+                        activeDoubanLoginPrompt = nil
+                        Task {
+                            await openDoubanLogin(for: prompt.action)
+                        }
                     }
-                }
-            ),
-            presenting: activeDoubanLoginPrompt
-        ) { prompt in
-            Button("取消", role: .cancel) {
-                activeDoubanLoginPrompt = nil
-            }
-
-            Button("去登录") {
-                activeDoubanLoginPrompt = nil
-                Task {
-                    await openDoubanLogin(for: prompt.action)
-                }
-            }
-        } message: { prompt in
-            Text(prompt.action.promptMessage)
+                ]
+            )
         }
-        .alert(
-            activeFanqieVerificationPrompt?.action.promptTitle ?? "",
-            isPresented: Binding(
-                get: { activeFanqieVerificationPrompt != nil },
-                set: { isPresented in
-                    if !isPresented {
+        .xmSystemAlert(item: $activeFanqieVerificationPrompt) { prompt in
+            XMSystemAlertDescriptor(
+                title: prompt.action.promptTitle,
+                message: prompt.action.promptMessage,
+                actions: [
+                    XMSystemAlertAction(title: "取消", role: .cancel) {
                         activeFanqieVerificationPrompt = nil
+                    },
+                    XMSystemAlertAction(title: "去验证") {
+                        activeFanqieVerificationPrompt = nil
+                        Task {
+                            await openFanqieVerification(for: prompt.action)
+                        }
                     }
-                }
-            ),
-            presenting: activeFanqieVerificationPrompt
-        ) { prompt in
-            Button("取消", role: .cancel) {
-                activeFanqieVerificationPrompt = nil
-            }
-
-            Button("去验证") {
-                activeFanqieVerificationPrompt = nil
-                Task {
-                    await openFanqieVerification(for: prompt.action)
-                }
-            }
-        } message: { prompt in
-            Text(prompt.action.promptMessage)
+                ]
+            )
         }
         .fullScreenCover(
             item: $activeDoubanLoginPresentation,

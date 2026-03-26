@@ -391,26 +391,33 @@ final class RichTextCoordinator: NSObject, UITextViewDelegate {
         guard range.length > 0 else { return }
         guard let presenter = topViewController(from: editorView.window?.rootViewController) else { return }
         guard !(presenter.presentedViewController is UIAlertController) else { return }
-
-        let alert = UIAlertController(title: String(localized: "添加链接"), message: nil, preferredStyle: .alert)
-        alert.addTextField { textField in
-            textField.placeholder = "https://example.com"
-            textField.keyboardType = .URL
-            textField.autocapitalizationType = .none
-            textField.autocorrectionType = .no
-            textField.text = self.currentLinkString(in: range, editorView: editorView)
-        }
-
-        alert.addAction(UIAlertAction(title: String(localized: "取消"), style: .cancel))
-        alert.addAction(UIAlertAction(title: String(localized: "确定"), style: .default) { [weak self, weak editorView, weak alert] _ in
-            guard let self, let editorView, let urlText = alert?.textFields?.first?.text else { return }
-            let trimmed = urlText.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !trimmed.isEmpty else { return }
-            let normalizedURL = Self.normalizeURL(trimmed)
-            self.handleLinkAction(url: normalizedURL, editorView: editorView)
-        })
-
-        presenter.present(alert, animated: true)
+        var urlText = currentLinkString(in: range, editorView: editorView) ?? ""
+        XMSystemAlertController.present(
+            on: presenter,
+            descriptor: XMSystemAlertDescriptor(
+                title: String(localized: "添加链接"),
+                actions: [
+                    XMSystemAlertAction(title: String(localized: "取消"), role: .cancel) { },
+                    XMSystemAlertAction(title: String(localized: "确定")) { [weak self, weak editorView] in
+                        guard let self, let editorView else { return }
+                        let trimmed = urlText.trimmingCharacters(in: .whitespacesAndNewlines)
+                        guard !trimmed.isEmpty else { return }
+                        let normalizedURL = Self.normalizeURL(trimmed)
+                        self.handleLinkAction(url: normalizedURL, editorView: editorView)
+                    }
+                ],
+                textFields: [
+                    XMSystemAlertTextField(
+                        text: { urlText },
+                        setText: { urlText = $0 },
+                        placeholder: "https://example.com",
+                        keyboardType: .URL,
+                        textInputAutocapitalization: .none,
+                        autocorrectionDisabled: true
+                    )
+                ]
+            )
+        )
     }
 
     private static func normalizeURL(_ raw: String) -> String {
