@@ -48,6 +48,8 @@ struct NoteEditorView: View {
     @State private var isLayoutStateInitialized = false
     @FocusState private var isPositionFocused: Bool
 #if DEBUG
+    @State private var lastLoggedTextChangeContextByTarget: [String: String] = [:]
+    @State private var lastObservedTextLengthByTarget: [String: Int] = [:]
     private let expandLogger = Logger(
         subsystem: Bundle.main.bundleIdentifier ?? "xmnote",
         category: "NoteEditorExpand"
@@ -121,6 +123,20 @@ private extension NoteEditorView {
     var effectiveKeyboardVisible: Bool {
         isDismissAttemptInProgress ? dismissAttemptKeyboardVisibleSnapshot : isKeyboardVisible
     }
+    var seededMeasuredHeights: [NoteEditorMeasuredPart: CGFloat] {
+        [
+            .book: 49 + Spacing.contentEdge * 2,
+            .tailStable: metadataRowHeight * 4 + CardStyle.borderWidth * 3,
+            .toolbar: 58
+        ]
+    }
+    var editorContentFont: Font {
+        AppTypography.fixed(
+            baseSize: 16,
+            relativeTo: .body,
+            minimumPointSize: 16
+        )
+    }
 
     @ViewBuilder
     func noteEditorAlertPresenter(_ viewModel: NoteEditorViewModel) -> some View {
@@ -171,14 +187,18 @@ private extension NoteEditorView {
 
     func editorContent(_ viewModel: NoteEditorViewModel) -> some View {
         GeometryReader { geometry in
-            let heightsSource = effectiveMeasuredHeights
-            let heights = editorHeights(
+            let preparedHeights = measuredHeightsForComputation(from: effectiveMeasuredHeights)
+            let heightsSource = preparedHeights.heights
+            let heightComputation = makeEditorHeightComputation(
                 for: geometry.size.height,
                 bookSectionHeight: heightsSource[.book] ?? 0,
-                tailSectionHeight: heightsSource[.tail] ?? 0,
+                stableTailSectionHeight: heightsSource[.tailStable] ?? 0,
+                measuredTailSectionHeight: heightsSource[.tail] ?? 0,
                 toolbarHeight: heightsSource[.toolbar] ?? 0,
-                ideaState: viewModel.ideaInputState
+                ideaState: viewModel.ideaInputState,
+                usedSeededMeasurements: preparedHeights.usedSeededHeights
             )
+            let heights = (content: heightComputation.contentHeight, idea: heightComputation.ideaHeight)
             let scrollBottomPadding = max(Spacing.section, (heightsSource[.toolbar] ?? 0) + Spacing.base)
 
             ZStack {
@@ -198,6 +218,7 @@ private extension NoteEditorView {
                                 isFocused: isContentFocused,
                                 height: heights.content,
                                 showsInlineOCRButton: usesSplitOCREntryButtons,
+                                onTextChange: { handleEditorTextChange(target: .content, text: viewModel.contentText) },
                                 onInlineOCR: { triggerInlineOCR(for: .content) }
                             )
                             .id(NoteEditorComposerTarget.content.scrollAnchorID)
@@ -207,6 +228,7 @@ private extension NoteEditorView {
                                     viewModel,
                                     height: heights.idea,
                                     showsInlineOCRButton: usesSplitOCREntryButtons,
+                                    onTextChange: { handleEditorTextChange(target: .idea, text: viewModel.ideaText) },
                                     onInlineOCR: { triggerInlineOCR(for: .idea) }
                                 )
                                 .id(NoteEditorComposerTarget.idea.scrollAnchorID)
@@ -219,6 +241,7 @@ private extension NoteEditorView {
                                     isFocused: isIdeaFocused,
                                     height: heights.idea,
                                     showsInlineOCRButton: usesSplitOCREntryButtons,
+                                    onTextChange: { handleEditorTextChange(target: .idea, text: viewModel.ideaText) },
                                     onInlineOCR: { triggerInlineOCR(for: .idea) }
                                 )
                                 .id(NoteEditorComposerTarget.idea.scrollAnchorID)
@@ -234,6 +257,7 @@ private extension NoteEditorView {
                                         .transition(.move(edge: .top).combined(with: .opacity))
                                 }
                                 metadataSection(viewModel)
+                                    .noteEditorReportHeight(.tailStable)
 
                                 if let prompt = toolbarPromptMessage, !prompt.isEmpty {
                                     errorCard(prompt)
@@ -249,6 +273,15 @@ private extension NoteEditorView {
                         .padding(.bottom, scrollBottomPadding)
                     }
                     .scrollIndicators(.hidden)
+#if DEBUG
+                    .overlay {
+                        heightDiagnosticsProbe(
+                            viewModel: viewModel,
+                            viewportHeight: geometry.size.height,
+                            computation: heightComputation
+                        )
+                    }
+#endif
                     .onChange(of: activeEditorTarget) { _, target in
                         guard let target else { return }
                         withAnimation(.snappy) {
@@ -369,7 +402,7 @@ private extension NoteEditorView {
                             Date(timeIntervalSince1970: Double(viewModel.createdDate) / 1000)
                         },
                         set: { newValue in
-                            viewModel.createdDate = Int64(newValue.timeIntervalSince1970 * 1000)
+                            viewModel.setCreatedDateManually(newValue)
                         }
                     )
                 )
@@ -416,6 +449,13 @@ private extension NoteEditorView {
             mergeMeasuredHeights(values)
         }
         .onAppear {
+#if DEBUG
+            logExpandEvent(
+                "layout.appear",
+                viewModel: viewModel,
+                extra: "layoutMode=\(layoutMode.rawValue) measured=[\(describeMeasuredHeights(effectiveMeasuredHeights))]"
+            )
+#endif
             handleLayoutModeStateChange(animated: false)
             captureScreenBehaviorBaselineIfNeeded()
             applyScreenBehavior()
@@ -465,7 +505,17 @@ private extension NoteEditorView {
             handleScenePhaseChange(phase)
         }
         .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { _ in
+            let previousHeight = keyboardHeight
             keyboardHeight = 0
+#if DEBUG
+            if previousHeight > measuredHeightEpsilon {
+                logExpandEvent(
+                    "keyboard.hide",
+                    viewModel: viewModel,
+                    extra: "previous=\(formatHeight(previousHeight)) next=0"
+                )
+            }
+#endif
         }
         .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillChangeFrameNotification)) { notification in
             guard let endFrame = notification.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? CGRect else {
@@ -475,7 +525,17 @@ private extension NoteEditorView {
                 .compactMap { ($0 as? UIWindowScene)?.screen.bounds.height }
                 .max() ?? endFrame.maxY
             let keyboardVisibleHeight = max(0, screenHeight - endFrame.minY)
+            let previousHeight = keyboardHeight
             keyboardHeight = keyboardVisibleHeight
+#if DEBUG
+            if abs(previousHeight - keyboardVisibleHeight) > measuredHeightEpsilon {
+                logExpandEvent(
+                    "keyboard.frame.change",
+                    viewModel: viewModel,
+                    extra: "previous=\(formatHeight(previousHeight)) next=\(formatHeight(keyboardVisibleHeight)) endMinY=\(formatHeight(endFrame.minY))"
+                )
+            }
+#endif
         }
     }
 
@@ -530,6 +590,7 @@ private extension NoteEditorView {
         isFocused: Bool,
         height: CGFloat,
         showsInlineOCRButton: Bool,
+        onTextChange: @escaping () -> Void,
         onInlineOCR: @escaping () -> Void
     ) -> some View {
         CardContainer(cornerRadius: CornerRadius.containerMedium, showsBorder: false) {
@@ -539,8 +600,10 @@ private extension NoteEditorView {
                     activeFormats: .constant(Set<RichTextFormat>()),
                     placeholder: hint,
                     isEditable: true,
+                    baseFont: NoteEditorViewModel.editorBaseUIFont,
                     allowsCameraTextCapture: true,
                     toolbarPresentation: .ornament(controller),
+                    onTextChange: onTextChange,
                     onFocusChange: { hasFocus in
                         handleEditorFocusChange(target: target, hasFocus: hasFocus)
                     }
@@ -550,7 +613,7 @@ private extension NoteEditorView {
 
                 if text.wrappedValue.string.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !isFocused {
                     Text(hint)
-                        .font(AppTypography.body)
+                        .font(editorContentFont)
                         .foregroundStyle(Color.textHint)
                         .padding(.horizontal, Spacing.base)
                         .padding(.vertical, Spacing.base)
@@ -572,6 +635,7 @@ private extension NoteEditorView {
         _ viewModel: NoteEditorViewModel,
         height: CGFloat,
         showsInlineOCRButton: Bool,
+        onTextChange: @escaping () -> Void,
         onInlineOCR: @escaping () -> Void
     ) -> some View {
         let isCollapsed = viewModel.ideaInputState == .collapsed
@@ -582,8 +646,10 @@ private extension NoteEditorView {
                     activeFormats: .constant(Set<RichTextFormat>()),
                     placeholder: "想法",
                     isEditable: true,
+                    baseFont: NoteEditorViewModel.editorBaseUIFont,
                     allowsCameraTextCapture: true,
                     toolbarPresentation: .ornament(ideaOrnamentController),
+                    onTextChange: onTextChange,
                     onFocusChange: { hasFocus in
                         handleEditorFocusChange(target: .idea, hasFocus: hasFocus)
                     }
@@ -597,7 +663,7 @@ private extension NoteEditorView {
                     && !isIdeaFocused
                     && !isCollapsed {
                     Text("想法")
-                        .font(AppTypography.body)
+                        .font(editorContentFont)
                         .foregroundStyle(Color.textHint)
                         .padding(.horizontal, Spacing.base)
                         .padding(.vertical, Spacing.base)
@@ -623,9 +689,9 @@ private extension NoteEditorView {
         Button {
             openIdeaComposerFromFocusRow()
         } label: {
-            HStack(spacing: Spacing.base) {
+            HStack(spacing: Spacing.cozy) {
                 Text(focusIdeaRowText(viewModel))
-                    .font(AppTypography.body)
+                    .font(editorContentFont)
                     .foregroundStyle(viewModel.hasIdeaText ? Color.textPrimary : Color.textHint)
                     .lineLimit(1)
 
@@ -738,9 +804,9 @@ private extension NoteEditorView {
 
     func metadataSection(_ viewModel: NoteEditorViewModel) -> some View {
         VStack(spacing: Spacing.none) {
-            HStack(spacing: Spacing.base) {
+            HStack(spacing: Spacing.cozy) {
                 Text(viewModel.positionTitle)
-                    .font(AppTypography.semantic(.footnote, weight: .medium))
+                    .font(metadataTitleFont)
                     .foregroundStyle(Color.textSecondary)
                 Spacer(minLength: Spacing.base)
                 TextField(viewModel.positionPlaceholder, text: Binding(
@@ -748,7 +814,7 @@ private extension NoteEditorView {
                     set: { viewModel.positionText = $0 }
                 ))
                 .focused($isPositionFocused)
-                .font(AppTypography.subheadline)
+                .font(metadataValueFont)
                 .foregroundStyle(Color.textPrimary)
                 .keyboardType(viewModel.positionUnit == 2 ? .decimalPad : .numberPad)
                 .multilineTextAlignment(.trailing)
@@ -766,13 +832,13 @@ private extension NoteEditorView {
 
             metadataDivider
 
-            HStack(spacing: Spacing.base) {
+            HStack(spacing: Spacing.cozy) {
                 Text("章节")
-                    .font(AppTypography.semantic(.footnote, weight: .medium))
+                    .font(metadataTitleFont)
                     .foregroundStyle(Color.textSecondary)
                 Spacer(minLength: Spacing.base)
                 Text(viewModel.selectedChapterDisplayTitle)
-                    .font(AppTypography.subheadline)
+                    .font(metadataValueFont)
                     .foregroundStyle(Color.textPrimary)
                     .lineLimit(1)
                     .contentTransition(.opacity)
@@ -781,54 +847,50 @@ private extension NoteEditorView {
             .padding(.horizontal, Spacing.base)
             .frame(height: metadataRowHeight)
             .contentShape(Rectangle())
+            .accessibilityAddTraits(.isButton)
             .onTapGesture {
                 openMetadataSheet(.chapter)
             }
 
             metadataDivider
 
-            HStack(spacing: Spacing.base) {
+            HStack(spacing: Spacing.cozy) {
                 Text("标签")
-                    .font(AppTypography.semantic(.footnote, weight: .medium))
+                    .font(metadataTitleFont)
                     .foregroundStyle(Color.textSecondary)
 
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: Spacing.cozy) {
-                        if viewModel.selectedTags.isEmpty {
-                            Text("添加标签")
-                                .font(AppTypography.subheadline)
-                                .foregroundStyle(Color.textHint)
-                                .transition(.move(edge: .trailing).combined(with: .opacity))
-                        } else {
+                if viewModel.selectedTags.isEmpty {
+                    Text("添加标签")
+                        .font(metadataValueFont)
+                        .foregroundStyle(Color.textHint)
+                        .lineLimit(1)
+                        .frame(maxWidth: .infinity, alignment: .trailing)
+                        .transition(.move(edge: .trailing).combined(with: .opacity))
+                } else {
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: Spacing.cozy) {
                             ForEach(viewModel.selectedTags) { tag in
                                 Text(tag.title)
                                     .font(AppTypography.semantic(.footnote, weight: .medium))
-                                    .foregroundStyle(Color.brand)
+                                    .foregroundStyle(Color.textSecondary)
                                     .padding(.horizontal, Spacing.cozy)
                                     .padding(.vertical, Spacing.tiny)
-                                    .background(Color.brand.opacity(0.12), in: Capsule())
+                                    .background(Color.controlFillSecondary, in: Capsule())
+                                    .lineLimit(1)
                             }
                             .transition(.move(edge: .trailing).combined(with: .opacity))
                         }
+                        .frame(height: 30)
                     }
-                    .frame(height: 30)
+                    .frame(maxWidth: .infinity, alignment: .trailing)
                 }
 
-                Spacer(minLength: Spacing.none)
-
-                Button {
-                    openMetadataSheet(.tags)
-                } label: {
-                    Image(systemName: "plus.circle.fill")
-                        .font(AppTypography.captionSemibold)
-                        .foregroundStyle(Color.textSecondary)
-                        .frame(width: Spacing.actionReserved, height: Spacing.actionReserved)
-                }
-                .buttonStyle(.plain)
+                metadataTrailingAccessoryIcon()
             }
             .padding(.horizontal, Spacing.base)
             .frame(height: metadataRowHeight)
             .contentShape(Rectangle())
+            .accessibilityAddTraits(.isButton)
             .onTapGesture {
                 openMetadataSheet(.tags)
             }
@@ -836,29 +898,41 @@ private extension NoteEditorView {
 
             metadataDivider
 
-            HStack(spacing: Spacing.base) {
-                Text("创建时间")
-                    .font(AppTypography.semantic(.footnote, weight: .medium))
-                    .foregroundStyle(Color.textSecondary)
-                Spacer(minLength: Spacing.base)
-                Text(viewModel.createdDateDescription)
-                    .font(AppTypography.subheadline)
-                    .foregroundStyle(Color.textPrimary)
-                    .lineLimit(1)
-                    .contentTransition(.opacity)
-                Image(systemName: "chevron.right")
-                    .font(AppTypography.captionSemibold)
-                    .foregroundStyle(Color.textHint)
-            }
-            .padding(.horizontal, Spacing.base)
-            .frame(height: metadataRowHeight)
-            .contentShape(Rectangle())
-            .onTapGesture {
+            Button {
                 openMetadataSheet(.createdDate)
+            } label: {
+                HStack(spacing: Spacing.cozy) {
+                    Text("创建时间")
+                        .font(metadataTitleFont)
+                        .foregroundStyle(Color.textSecondary)
+                    Spacer(minLength: Spacing.base)
+                    Text(viewModel.createdDateDescription)
+                        .font(metadataValueFont)
+                        .foregroundStyle(Color.textPrimary)
+                        .lineLimit(1)
+                        .contentTransition(.opacity)
+                    metadataTrailingAccessoryIcon()
+                }
+                .padding(.horizontal, Spacing.base)
+                .frame(height: metadataRowHeight)
+                .contentShape(Rectangle())
             }
+            .buttonStyle(.plain)
         }
-        .background(Color.surfaceCard)
     }
+
+    var metadataTitleFont: Font {
+        AppTypography.fixed(
+            baseSize: 14,
+            relativeTo: .subheadline,
+            weight: .medium,
+            minimumPointSize: 14
+        )
+    }
+
+    var metadataValueFont: Font { AppTypography.subheadline }
+
+    var metadataTrailingAccessoryWidth: CGFloat { 12 }
 
     var metadataRowHeight: CGFloat { 54 }
 
@@ -866,6 +940,14 @@ private extension NoteEditorView {
         Rectangle()
             .fill(Color.surfaceBorderSubtle)
             .frame(height: CardStyle.borderWidth)
+    }
+
+    func metadataTrailingAccessoryIcon(_ systemName: String = "chevron.right") -> some View {
+        Image(systemName: systemName)
+            .font(AppTypography.captionSemibold)
+            .foregroundStyle(Color.textHint)
+            .frame(width: metadataTrailingAccessoryWidth, alignment: .trailing)
+            .contentShape(Rectangle())
     }
 
     func chapterRowAccessory(_ viewModel: NoteEditorViewModel) -> some View {
@@ -878,21 +960,20 @@ private extension NoteEditorView {
                         viewModel.clearSelectedChapter()
                     }
                 } label: {
-                    Text("清空")
+                    Image(systemName: "xmark.circle.fill")
                         .font(AppTypography.captionSemibold)
-                        .foregroundStyle(Color.textSecondary)
-                        .frame(width: Spacing.actionReserved, height: Spacing.actionReserved)
+                        .foregroundStyle(Color.textHint)
+                        .frame(width: metadataTrailingAccessoryWidth, height: metadataTrailingAccessoryWidth)
                 }
                 .buttonStyle(.plain)
+                .accessibilityLabel("清空章节")
                 .transition(.opacity.combined(with: .scale(scale: 0.92)))
             } else {
-                Image(systemName: "chevron.right")
-                    .font(AppTypography.captionSemibold)
-                    .foregroundStyle(Color.textHint)
-                    .frame(width: Spacing.actionReserved, height: Spacing.actionReserved)
+                metadataTrailingAccessoryIcon()
                     .transition(.opacity.combined(with: .scale(scale: 0.92)))
             }
         }
+        .frame(width: metadataTrailingAccessoryWidth, alignment: .trailing)
         .animation(.snappy(duration: 0.22), value: viewModel.selectedChapterID > 0)
     }
 
@@ -1343,48 +1424,125 @@ private extension NoteEditorView {
     func editorHeights(
         for viewportHeight: CGFloat,
         bookSectionHeight: CGFloat,
-        tailSectionHeight: CGFloat,
+        stableTailSectionHeight: CGFloat,
+        measuredTailSectionHeight: CGFloat,
         toolbarHeight: CGFloat,
         ideaState: IdeaInputState
     ) -> (content: CGFloat, idea: CGFloat) {
+        let computation = makeEditorHeightComputation(
+            for: viewportHeight,
+            bookSectionHeight: bookSectionHeight,
+            stableTailSectionHeight: stableTailSectionHeight,
+            measuredTailSectionHeight: measuredTailSectionHeight,
+            toolbarHeight: toolbarHeight,
+            ideaState: ideaState
+        )
+        return (computation.contentHeight, computation.ideaHeight)
+    }
+
+    func makeEditorHeightComputation(
+        for viewportHeight: CGFloat,
+        bookSectionHeight: CGFloat,
+        stableTailSectionHeight: CGFloat,
+        measuredTailSectionHeight: CGFloat,
+        toolbarHeight: CGFloat,
+        ideaState: IdeaInputState,
+        usedSeededMeasurements: Bool = false
+    ) -> NoteEditorHeightComputation {
         let defaultEditorHeight: CGFloat = 180
         let collapsedIdeaHeight: CGFloat = 48
         let stackOuterPadding = Spacing.base + max(Spacing.section, toolbarHeight + Spacing.base)
         let sectionGaps = Spacing.base * 3
-        let fixedElementsHeight = bookSectionHeight + tailSectionHeight + stackOuterPadding + sectionGaps
+        let fixedElementsHeight = bookSectionHeight + stableTailSectionHeight + stackOuterPadding + sectionGaps
         let availableForEditors = max(viewportHeight - fixedElementsHeight, 0)
         let hasResolvedMeasurements =
             bookSectionHeight > measuredHeightEpsilon &&
-            tailSectionHeight > measuredHeightEpsilon &&
+            stableTailSectionHeight > measuredHeightEpsilon &&
             toolbarHeight > measuredHeightEpsilon
         let isKeyboardVisible = effectiveKeyboardVisible
 
         switch layoutMode {
         case .classic:
-            return (defaultEditorHeight, defaultEditorHeight)
+            return NoteEditorHeightComputation(
+                branch: "classic.fixed",
+                viewportHeight: viewportHeight,
+                bookSectionHeight: bookSectionHeight,
+                stableTailSectionHeight: stableTailSectionHeight,
+                measuredTailSectionHeight: measuredTailSectionHeight,
+                toolbarHeight: toolbarHeight,
+                fixedElementsHeight: fixedElementsHeight,
+                availableForEditors: availableForEditors,
+                hasResolvedMeasurements: hasResolvedMeasurements,
+                ideaState: ideaState,
+                keyboardVisible: isKeyboardVisible,
+                usedSeededMeasurements: usedSeededMeasurements,
+                contentHeight: defaultEditorHeight,
+                ideaHeight: defaultEditorHeight
+            )
         case .focusExcerpt:
             if ideaState == .collapsed {
-                if !hasResolvedMeasurements {
-                    let fallbackFullViewport = max(viewportHeight - collapsedIdeaHeight - Spacing.base, 0)
-                    return (max(fallbackFullViewport, defaultEditorHeight), collapsedIdeaHeight)
-                }
                 let contentAvailable = availableForEditors - collapsedIdeaHeight
                 let contentHeight: CGFloat
+                let branch: String
                 if isKeyboardVisible {
                     contentHeight = max(contentAvailable, 0)
-                } else if contentAvailable >= defaultEditorHeight {
-                    contentHeight = contentAvailable
+                    branch = "focus.collapsed.keyboard_visible"
                 } else {
-                    let fallbackFullViewport = max(viewportHeight - collapsedIdeaHeight - Spacing.base, 0)
-                    contentHeight = max(fallbackFullViewport, defaultEditorHeight)
+                    let fullViewportContent = max(viewportHeight - collapsedIdeaHeight - Spacing.base, 0)
+                    contentHeight = max(fullViewportContent, defaultEditorHeight)
+                    branch = "focus.collapsed.full_viewport_priority"
                 }
-                return (contentHeight, collapsedIdeaHeight)
+                return NoteEditorHeightComputation(
+                    branch: branch,
+                    viewportHeight: viewportHeight,
+                    bookSectionHeight: bookSectionHeight,
+                    stableTailSectionHeight: stableTailSectionHeight,
+                    measuredTailSectionHeight: measuredTailSectionHeight,
+                    toolbarHeight: toolbarHeight,
+                    fixedElementsHeight: fixedElementsHeight,
+                    availableForEditors: availableForEditors,
+                    hasResolvedMeasurements: hasResolvedMeasurements,
+                    ideaState: ideaState,
+                    keyboardVisible: isKeyboardVisible,
+                    usedSeededMeasurements: usedSeededMeasurements,
+                    contentHeight: contentHeight,
+                    ideaHeight: collapsedIdeaHeight
+                )
             } else {
                 let halfSpace = availableForEditors / 2
                 let editorHeight = max(halfSpace, defaultEditorHeight)
-                return (editorHeight, editorHeight)
+                return NoteEditorHeightComputation(
+                    branch: "focus.expanded_or_hasContent.half_split",
+                    viewportHeight: viewportHeight,
+                    bookSectionHeight: bookSectionHeight,
+                    stableTailSectionHeight: stableTailSectionHeight,
+                    measuredTailSectionHeight: measuredTailSectionHeight,
+                    toolbarHeight: toolbarHeight,
+                    fixedElementsHeight: fixedElementsHeight,
+                    availableForEditors: availableForEditors,
+                    hasResolvedMeasurements: hasResolvedMeasurements,
+                    ideaState: ideaState,
+                    keyboardVisible: isKeyboardVisible,
+                    usedSeededMeasurements: usedSeededMeasurements,
+                    contentHeight: editorHeight,
+                    ideaHeight: editorHeight
+                )
             }
         }
+    }
+
+    func measuredHeightsForComputation(from source: [NoteEditorMeasuredPart: CGFloat]) -> (heights: [NoteEditorMeasuredPart: CGFloat], usedSeededHeights: Bool) {
+        var merged = source
+        var usedSeededHeights = false
+        for (part, seededHeight) in seededMeasuredHeights {
+            let currentHeight = merged[part] ?? 0
+            if currentHeight > measuredHeightEpsilon {
+                continue
+            }
+            merged[part] = seededHeight
+            usedSeededHeights = true
+        }
+        return (merged, usedSeededHeights)
     }
 
     func restoreEditorFocusAfterComposerDismiss() {
@@ -1435,6 +1593,10 @@ private extension NoteEditorView {
     func mergeMeasuredHeights(_ incoming: [NoteEditorMeasuredPart: CGFloat]) {
         var next = measuredHeights
         var hasChange = false
+#if DEBUG
+        let previous = measuredHeights
+        var changedParts: [String] = []
+#endif
         for (part, height) in incoming {
             guard height.isFinite else { continue }
             if let previous = next[part], abs(previous - height) <= measuredHeightEpsilon {
@@ -1442,9 +1604,27 @@ private extension NoteEditorView {
             }
             next[part] = height
             hasChange = true
+#if DEBUG
+            let previousValue = previous[part] ?? 0
+            changedParts.append("\(part.debugName):\(formatHeight(previousValue))->\(formatHeight(height))")
+#endif
         }
         if hasChange {
             measuredHeights = next
+#if DEBUG
+            logExpandEvent(
+                "layout.height.measure.merge",
+                viewModel: viewModel,
+                extra: "changes=[\(changedParts.joined(separator: ","))] previous=[\(describeMeasuredHeights(previous))] next=[\(describeMeasuredHeights(next))]"
+            )
+            if !hasResolvedMeasuredHeights(previous) && hasResolvedMeasuredHeights(next) {
+                logExpandEvent(
+                    "layout.height.measure.resolved",
+                    viewModel: viewModel,
+                    extra: "snapshot=[\(describeMeasuredHeights(next))]"
+                )
+            }
+#endif
         }
         if !isMeasuredHeightsFrozen, frozenMeasuredHeights != nil {
 #if DEBUG
@@ -1469,6 +1649,104 @@ private extension NoteEditorView {
         )
 #endif
     }
+
+#if DEBUG
+    @ViewBuilder
+    func heightDiagnosticsProbe(
+        viewModel: NoteEditorViewModel,
+        viewportHeight: CGFloat,
+        computation: NoteEditorHeightComputation
+    ) -> some View {
+        Color.clear
+            .frame(width: 0, height: 0)
+            .onAppear {
+                logHeightComputation(viewModel: viewModel, viewportHeight: viewportHeight, computation: computation)
+            }
+            .onChange(of: heightComputationSignature(viewModel: viewModel, viewportHeight: viewportHeight, computation: computation)) { _, _ in
+                logHeightComputation(viewModel: viewModel, viewportHeight: viewportHeight, computation: computation)
+            }
+    }
+
+    func logHeightComputation(
+        viewModel: NoteEditorViewModel,
+        viewportHeight: CGFloat,
+        computation: NoteEditorHeightComputation
+    ) {
+        logExpandEvent(
+            "layout.height.compute",
+            viewModel: viewModel,
+            extra: "branch=\(computation.branch) viewport=\(formatHeight(viewportHeight)) measured=[\(describeMeasuredHeights(effectiveMeasuredHeights))] stableTail=\(formatHeight(computation.stableTailSectionHeight)) tail=\(formatHeight(computation.measuredTailSectionHeight)) fixed=\(formatHeight(computation.fixedElementsHeight)) available=\(formatHeight(computation.availableForEditors)) resolved=\(computation.hasResolvedMeasurements) keyboardVisible=\(computation.keyboardVisible) seeded=\(computation.usedSeededMeasurements) content=\(formatHeight(computation.contentHeight)) idea=\(formatHeight(computation.ideaHeight))"
+        )
+    }
+
+    func heightComputationSignature(
+        viewModel: NoteEditorViewModel,
+        viewportHeight: CGFloat,
+        computation: NoteEditorHeightComputation
+    ) -> String {
+        [
+            computation.branch,
+            formatHeight(viewportHeight),
+            formatHeight(computation.bookSectionHeight),
+            formatHeight(computation.stableTailSectionHeight),
+            formatHeight(computation.measuredTailSectionHeight),
+            formatHeight(computation.toolbarHeight),
+            formatHeight(computation.fixedElementsHeight),
+            formatHeight(computation.availableForEditors),
+            computation.hasResolvedMeasurements.description,
+            computation.keyboardVisible.description,
+            computation.usedSeededMeasurements.description,
+            ideaStateText(computation.ideaState),
+            formatHeight(computation.contentHeight),
+            formatHeight(computation.ideaHeight),
+            viewModel.hasIdeaText.description,
+            activeEditorTarget?.rawValue ?? "nil"
+        ].joined(separator: "|")
+    }
+
+    func handleEditorTextChange(target: NoteEditorComposerTarget, text: NSAttributedString) {
+        let targetKey = target.rawValue
+        let currentLength = text.string.count
+        let previousLength = lastObservedTextLengthByTarget[targetKey] ?? 0
+        lastObservedTextLengthByTarget[targetKey] = currentLength
+
+        let context = [
+            "measured=[\(describeMeasuredHeights(effectiveMeasuredHeights))]",
+            "keyboard=\(formatHeight(keyboardHeight))",
+            "layoutMode=\(layoutMode.rawValue)",
+            "activeTarget=\(activeEditorTarget?.rawValue ?? "nil")",
+            "ideaState=\(viewModel.map { ideaStateText($0.ideaInputState) } ?? "nil")"
+        ].joined(separator: " ")
+        let previousContext = lastLoggedTextChangeContextByTarget[targetKey]
+        let shouldLog = previousLength == 0 || previousContext != context
+        if shouldLog {
+            logExpandEvent(
+                "editor.text.change",
+                viewModel: viewModel,
+                extra: "target=\(target.rawValue) previousLength=\(previousLength) currentLength=\(currentLength) \(context)"
+            )
+            lastLoggedTextChangeContextByTarget[targetKey] = context
+        }
+    }
+
+    func describeMeasuredHeights(_ heights: [NoteEditorMeasuredPart: CGFloat]) -> String {
+        NoteEditorMeasuredPart.allCases
+            .map { part in
+                "\(part.debugName)=\(formatHeight(heights[part] ?? 0))"
+            }
+            .joined(separator: ",")
+    }
+
+    func hasResolvedMeasuredHeights(_ heights: [NoteEditorMeasuredPart: CGFloat]) -> Bool {
+        [NoteEditorMeasuredPart.toolbar, .book, .tailStable].allSatisfy { part in
+            (heights[part] ?? 0) > measuredHeightEpsilon
+        }
+    }
+
+    func formatHeight(_ value: CGFloat) -> String {
+        String(format: "%.1f", value)
+    }
+#endif
 }
 
 private enum DismissAttemptSource: String {
@@ -1653,11 +1931,11 @@ private struct NoteEditorFloatingToolbar: View {
         Button(action: action) {
             Text(title)
                 .font(AppTypography.semantic(.footnote, weight: .semibold))
-                .foregroundStyle(enabled ? Color.textPrimary : Color.textHint)
+                .foregroundStyle(Color.white.opacity(enabled ? 1 : 0.86))
                 .padding(.horizontal, Spacing.base)
                 .frame(height: 34)
                 .background(
-                    enabled ? Color.brand.opacity(0.16) : Color.clear,
+                    enabled ? Color.brand : Color.buttonDisabled,
                     in: Capsule()
                 )
         }
@@ -1884,10 +2162,43 @@ private struct NoteEditorDateSheet: View {
     }
 }
 
-private enum NoteEditorMeasuredPart: Hashable {
+private enum NoteEditorMeasuredPart: Hashable, CaseIterable {
     case toolbar
     case book
+    case tailStable
     case tail
+
+#if DEBUG
+    var debugName: String {
+        switch self {
+        case .toolbar:
+            return "toolbar"
+        case .book:
+            return "book"
+        case .tailStable:
+            return "tailStable"
+        case .tail:
+            return "tail"
+        }
+    }
+#endif
+}
+
+private struct NoteEditorHeightComputation {
+    let branch: String
+    let viewportHeight: CGFloat
+    let bookSectionHeight: CGFloat
+    let stableTailSectionHeight: CGFloat
+    let measuredTailSectionHeight: CGFloat
+    let toolbarHeight: CGFloat
+    let fixedElementsHeight: CGFloat
+    let availableForEditors: CGFloat
+    let hasResolvedMeasurements: Bool
+    let ideaState: IdeaInputState
+    let keyboardVisible: Bool
+    let usedSeededMeasurements: Bool
+    let contentHeight: CGFloat
+    let ideaHeight: CGFloat
 }
 
 private struct NoteEditorMeasuredHeightsPreferenceKey: PreferenceKey {

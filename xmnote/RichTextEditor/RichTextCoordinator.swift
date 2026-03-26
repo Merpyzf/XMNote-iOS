@@ -149,7 +149,7 @@ final class RichTextCoordinator: NSObject, UITextViewDelegate {
             if let lastFont = lastAttrs[.font] as? UIFont {
                 let traits = lastFont.fontDescriptor.symbolicTraits
                 if traits.contains(.traitBold) || traits.contains(.traitItalic) {
-                    let baseFont = editorView.font ?? .systemFont(ofSize: 16)
+                    let baseFont = editorView.baseFont
                     typing[.font] = baseFont
                 }
             }

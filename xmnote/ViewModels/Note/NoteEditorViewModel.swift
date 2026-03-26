@@ -41,6 +41,16 @@ enum IdeaInputState: Equatable {
 @MainActor
 @Observable
 final class NoteEditorViewModel {
+#if DEBUG
+    private static let bootstrapLogger = Logger(
+        subsystem: Bundle.main.bundleIdentifier ?? "xmnote",
+        category: "NoteEditorExpand"
+    )
+#endif
+
+    /// 书摘编辑富文本基线字体，统一 HTML 解析、编辑器输入与占位展示。
+    nonisolated static let editorBaseUIFont: UIFont = .systemFont(ofSize: 16)
+
     var availableBooks: [NoteEditorBookOption] = []
     var availableTags: [NoteEditorTagOption] = []
     var availableChapters: [NoteEditorChapterOption] = []
@@ -98,6 +108,7 @@ final class NoteEditorViewModel {
     var createdDate = NoteEditorViewModel.currentTimestampMillis {
         didSet {
             guard !isHydratingState else { return }
+            guard !isAutoUpdatingCreatedDate else { return }
             scheduleAutoSave()
         }
     }
@@ -134,7 +145,10 @@ final class NoteEditorViewModel {
     private var hasLoaded = false
     private var initialDraft: NoteEditorDraft?
     private var isHydratingState = false
+    private var isCreatedDateManuallyEdited = false
+    private var isAutoUpdatingCreatedDate = false
     private var autoSaveTask: Task<Void, Never>?
+    private var createdDateAutoUpdateTask: Task<Void, Never>?
     private var imageUploadTasks: [String: Task<Void, Never>] = [:]
 
     init(
@@ -220,6 +234,11 @@ final class NoteEditorViewModel {
         hasLoaded = true
         isLoading = true
         errorMessage = nil
+#if DEBUG
+        Self.bootstrapLogger.debug(
+            "[note.editor.expand.bootstrap.start] mode=\(self.debugModeName, privacy: .public) seedBookID=\(self.seed?.bookId ?? 0) seedChapterID=\(self.seed?.chapterId ?? 0)"
+        )
+#endif
         defer { isLoading = false }
 
         do {
@@ -232,8 +251,19 @@ final class NoteEditorViewModel {
                recoveredDraft != bootstrap.baseDraft {
                 pendingRecoveredDraft = mergeMissingSelections(in: recoveredDraft)
             }
+            syncCreatedDateAutoUpdateState()
+#if DEBUG
+            Self.bootstrapLogger.debug(
+                "[note.editor.expand.bootstrap.success] mode=\(self.debugModeName, privacy: .public) books=\(self.availableBooks.count) tags=\(self.availableTags.count) chapters=\(self.availableChapters.count) recoveredDraft=\(self.pendingRecoveredDraft != nil)"
+            )
+#endif
         } catch {
             errorMessage = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+#if DEBUG
+            Self.bootstrapLogger.error(
+                "[note.editor.expand.bootstrap.failed] mode=\(self.debugModeName, privacy: .public) error=\(self.errorMessage ?? error.localizedDescription, privacy: .public)"
+            )
+#endif
         }
     }
 
@@ -243,6 +273,7 @@ final class NoteEditorViewModel {
         applyDraft(mergeMissingSelections(in: pendingRecoveredDraft), resetInitialDraft: false)
         lastAutoSaveTime = pendingRecoveredDraft.lastAutoSaveTime
         self.pendingRecoveredDraft = nil
+        syncCreatedDateAutoUpdateState()
     }
 
     /// 丢弃自动保存草稿，并清理对应缓存。
@@ -269,6 +300,18 @@ final class NoteEditorViewModel {
     /// 清空当前章节选择并回退为“未设置”状态。
     func clearSelectedChapter() {
         selectChapter(nil)
+    }
+
+    /// 用户手动选择创建时间后，停止自动走时并立即写入新值。
+    func setCreatedDateManually(_ date: Date) {
+        setCreatedDateManually(Int64(date.timeIntervalSince1970 * 1000))
+    }
+
+    /// 用户手动选择创建时间后，停止自动走时并立即写入新值。
+    func setCreatedDateManually(_ milliseconds: Int64) {
+        isCreatedDateManuallyEdited = true
+        stopCreatedDateAutoUpdate()
+        createdDate = milliseconds
     }
 
     /// 切换标签勾选状态。
@@ -384,7 +427,10 @@ final class NoteEditorViewModel {
     func fallbackAppendRecognizedText(_ text: String, to target: NoteEditorComposerTarget) {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
-        let insertion = NSAttributedString(string: trimmed)
+        let insertion = NSAttributedString(
+            string: trimmed,
+            attributes: [.font: Self.editorBaseUIFont]
+        )
         switch target {
         case .content:
             let mutable = NSMutableAttributedString(attributedString: contentText)
@@ -435,6 +481,7 @@ final class NoteEditorViewModel {
     func discardEditingSession() async {
         autoSaveTask?.cancel()
         autoSaveTask = nil
+        stopCreatedDateAutoUpdate()
 
         imageUploadTasks.values.forEach { $0.cancel() }
         imageUploadTasks.removeAll()
@@ -468,6 +515,7 @@ final class NoteEditorViewModel {
             availableChapters = bootstrap.chapters
             applyDraft(bootstrap.baseDraft, resetInitialDraft: true)
             lastAutoSaveTime = 0
+            syncCreatedDateAutoUpdateState()
         } catch {
             errorMessage = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
         }
@@ -500,12 +548,23 @@ private extension NoteEditorViewModel {
         let resolvedBook = availableBooks.first(where: { $0.id == draft.bookId }) ?? fallbackBookOption(from: draft)
         selectedBook = resolvedBook
         selectedTags = draft.selectedTags
-        contentText = RichTextBridge.htmlToAttributed(draft.contentHTML)
-        ideaText = RichTextBridge.htmlToAttributed(draft.ideaHTML)
+        contentText = RichTextBridge.htmlToAttributed(
+            draft.contentHTML,
+            baseFont: Self.editorBaseUIFont
+        )
+        ideaText = RichTextBridge.htmlToAttributed(
+            draft.ideaHTML,
+            baseFont: Self.editorBaseUIFont
+        )
         positionText = draft.position
         positionUnit = draft.positionUnit
         includeTime = draft.includeTime
         createdDate = draft.createdDate
+        if case .edit = self.mode {
+            isCreatedDateManuallyEdited = true
+        } else {
+            isCreatedDateManuallyEdited = false
+        }
         selectedChapterID = draft.chapterId
         selectedChapterTitle = draft.chapterTitle
         imageItems = draft.imageItems
@@ -517,6 +576,14 @@ private extension NoteEditorViewModel {
         }
 
         syncIdeaInputStateFromContent()
+#if DEBUG
+        let selectedBookID = selectedBook?.id ?? 0
+        let contentLength = contentText.string.count
+        let ideaLength = ideaText.string.count
+        Self.bootstrapLogger.debug(
+            "[note.editor.expand.apply-draft] resetInitialDraft=\(resetInitialDraft) selectedBookID=\(selectedBookID) contentLength=\(contentLength) ideaLength=\(ideaLength) imageCount=\(self.imageItems.count) hasRecoveredAutoSaveTime=\(self.lastAutoSaveTime > 0) ideaState=\(self.debugIdeaStateName(self.ideaInputState), privacy: .public)"
+        )
+#endif
     }
 
     func mergeMissingSelections(in draft: NoteEditorDraft) -> NoteEditorDraft {
@@ -552,6 +619,41 @@ private extension NoteEditorViewModel {
             self.repository.saveNoteEditorDraft(snapshot)
             self.lastAutoSaveTime = snapshot.lastAutoSaveTime
         }
+    }
+
+    /// 仅新建书摘在未手动选择时间前保持“当前时间”自动走时。
+    func syncCreatedDateAutoUpdateState() {
+        guard mode == .create else {
+            stopCreatedDateAutoUpdate()
+            return
+        }
+        guard !isCreatedDateManuallyEdited else {
+            stopCreatedDateAutoUpdate()
+            return
+        }
+        startCreatedDateAutoUpdateIfNeeded()
+    }
+
+    /// 启动创建时间自动走时任务；重复调用会被幂等拦截。
+    func startCreatedDateAutoUpdateIfNeeded() {
+        guard createdDateAutoUpdateTask == nil else { return }
+        createdDateAutoUpdateTask = Task { [weak self] in
+            while let self {
+                try? await Task.sleep(for: .seconds(1))
+                guard !Task.isCancelled else { break }
+                guard self.mode == .create, !self.isCreatedDateManuallyEdited else { break }
+                self.isAutoUpdatingCreatedDate = true
+                self.createdDate = Self.currentTimestampMillis
+                self.isAutoUpdatingCreatedDate = false
+            }
+            self?.createdDateAutoUpdateTask = nil
+        }
+    }
+
+    /// 停止创建时间自动走时任务。
+    func stopCreatedDateAutoUpdate() {
+        createdDateAutoUpdateTask?.cancel()
+        createdDateAutoUpdateTask = nil
     }
 
     func makeDraftSnapshot(
@@ -633,6 +735,28 @@ private extension NoteEditorViewModel {
             startImageUpload(for: item.updatingUploadState(.uploading))
         }
     }
+
+#if DEBUG
+    var debugModeName: String {
+        switch mode {
+        case .create:
+            return "create"
+        case .edit:
+            return "edit"
+        }
+    }
+
+    func debugIdeaStateName(_ state: IdeaInputState) -> String {
+        switch state {
+        case .collapsed:
+            return "collapsed"
+        case .expanded:
+            return "expanded"
+        case .hasContent:
+            return "hasContent"
+        }
+    }
+#endif
 }
 
 // MARK: - IdeaInputState

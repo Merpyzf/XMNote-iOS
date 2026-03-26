@@ -45,10 +45,14 @@ final class RichTextEditorView: UITextView {
         didSet { refreshLinkTextAttributes() }
     }
 
+    /// 编辑器基础字体，统一初始输入、清除格式与边界重置时的字体基线。
+    private(set) var baseFont: UIFont
+
     // MARK: - 初始化
 
     /// 创建编辑器并配置 TextKit 管线与默认输入行为。
-    init() {
+    init(baseFont: UIFont = .systemFont(ofSize: 16)) {
+        self.baseFont = baseFont
         let textStorage = NSTextStorage()
         let richLayoutManager = RichTextLayoutManager()
         let container = NSTextContainer(size: .zero)
@@ -68,12 +72,24 @@ final class RichTextEditorView: UITextView {
     }
 
     private func commonInit() {
-        font = .systemFont(ofSize: 16)
+        font = baseFont
         textContainerInset = UIEdgeInsets(top: 12, left: 12, bottom: 12, right: 12)
         alwaysBounceVertical = true
         keyboardDismissMode = .interactive
         contentInsetAdjustmentBehavior = .never
         refreshLinkTextAttributes()
+    }
+
+    /// 更新基础字体并同步到 typingAttributes，确保后续输入与占位基线一致。
+    func updateBaseFont(_ font: UIFont) {
+        if baseFont.fontName == font.fontName, abs(baseFont.pointSize - font.pointSize) < 0.01 {
+            return
+        }
+        baseFont = font
+        self.font = font
+        var typing = typingAttributes
+        typing[.font] = font
+        typingAttributes = typing
     }
 
     private func refreshLinkTextAttributes() {
@@ -190,7 +206,7 @@ final class RichTextEditorView: UITextView {
     func clearFormats(in range: NSRange) {
         guard range.length > 0 else { return }
         let plainText = textStorage.attributedSubstring(from: range).string
-        let attrs: [NSAttributedString.Key: Any] = [.font: font ?? .systemFont(ofSize: 16)]
+        let attrs: [NSAttributedString.Key: Any] = [.font: baseFont]
         mutateTextStorage {
             textStorage.replaceCharacters(in: range, with: NSAttributedString(string: plainText, attributes: attrs))
         }

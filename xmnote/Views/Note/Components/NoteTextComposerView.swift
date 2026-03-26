@@ -79,6 +79,7 @@ private extension NoteTextComposerView {
             attributedText: $text,
             activeFormats: $activeFormats,
             isEditable: true,
+            baseFont: NoteEditorViewModel.editorBaseUIFont,
             allowsCameraTextCapture: true,
             toolbarPresentation: .ornament(ornamentController)
         )

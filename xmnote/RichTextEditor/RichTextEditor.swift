@@ -24,6 +24,7 @@ struct RichTextEditor: UIViewRepresentable {
     var highlightARGB: UInt32 = HighlightColors.defaultHighlightColor
     var linkColor: UIColor? = nil
     var isLinkUnderline: Bool = true
+    var baseFont: UIFont = .systemFont(ofSize: 16)
     var allowsCameraTextCapture: Bool = false
     var toolbarPresentation: RichTextToolbarPresentation = .inputAccessory
     var onTextChange: (() -> Void)?
@@ -31,7 +32,7 @@ struct RichTextEditor: UIViewRepresentable {
 
     /// 创建底层 UITextView 容器并注入配置。
     func makeUIView(context: Context) -> RichTextEditorView {
-        let editorView = RichTextEditorView()
+        let editorView = RichTextEditorView(baseFont: baseFont)
         editorView.delegate = context.coordinator
         editorView.isEditable = isEditable
         editorView.isScrollEnabled = true
@@ -55,6 +56,7 @@ struct RichTextEditor: UIViewRepresentable {
         editorView.isEditable = isEditable
         editorView.linkColor = linkColor
         editorView.isLinkUnderline = isLinkUnderline
+        editorView.updateBaseFont(baseFont)
         context.coordinator.currentHighlightARGB = highlightARGB
         applyToolbarPresentation(to: editorView, context: context)
 
