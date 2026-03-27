@@ -86,7 +86,7 @@ struct BookEditorView: View {
         )
         .toolbar {
             ToolbarItem(placement: .topBarLeading) {
-                TopBarGlassBackButton {
+                TopBarBackButton {
                     handleDismissAttempt(using: viewModel)
                 }
             }

@@ -329,17 +329,12 @@ private extension NoteEditorView {
         )
         .toolbar {
             ToolbarItem(placement: .topBarLeading) {
-                Button {
-                    requestClose(using: viewModel, source: .toolbarButton)
-                } label: {
-                    Image(systemName: "chevron.left")
-                        .font(.system(size: 18, weight: .medium))
-                        .foregroundStyle(Color.textPrimary)
-                        .frame(width: 24, height: 24)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("返回")
+                TopBarBackButton(
+                    action: {
+                        requestClose(using: viewModel, source: .toolbarButton)
+                    },
+                    foregroundColor: .textPrimary
+                )
             }
             ToolbarItem(placement: .topBarTrailing) {
                 Button {
@@ -2267,7 +2262,7 @@ private struct NoteEditorBookPickerSheet: View {
             .searchable(text: $searchText, prompt: "搜索书名或作者")
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    TopBarGlassBackButton {
+                    TopBarBackButton {
                         dismiss()
                     }
                 }
@@ -2322,7 +2317,7 @@ private struct NoteEditorChapterPickerSheet: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    TopBarGlassBackButton {
+                    TopBarBackButton {
                         dismiss()
                     }
                 }
@@ -2390,7 +2385,7 @@ private struct NoteEditorTagPickerSheet: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    TopBarGlassBackButton {
+                    TopBarBackButton {
                         dismiss()
                     }
                 }
@@ -2420,7 +2415,7 @@ private struct NoteEditorDateSheet: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    TopBarGlassBackButton {
+                    TopBarBackButton {
                         dismiss()
                     }
                 }

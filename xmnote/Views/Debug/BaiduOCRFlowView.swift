@@ -615,18 +615,12 @@ private struct OCRCropRecognitionScreen: View {
         .navigationBarBackButtonHidden(true)
         .toolbar {
             ToolbarItem(placement: .topBarLeading) {
-                Button(action: handleBackAction) {
-                    TopBarActionIcon(
-                        systemName: "chevron.left",
-                        iconSize: 15,
-                        weight: .semibold,
-                        foregroundColor: Self.darkForegroundPrimary
-                    )
-                }
-                .buttonStyle(.plain)
-                .disabled(!canPopDuringCrop)
-                .opacity(canPopDuringCrop ? 1 : 0.42)
-                .accessibilityLabel("返回")
+                TopBarBackButton(
+                    action: handleBackAction,
+                    foregroundColor: Self.darkForegroundPrimary,
+                    isEnabled: canPopDuringCrop,
+                    opacity: canPopDuringCrop ? 1 : 0.42
+                )
             }
             ToolbarItemGroup(placement: .topBarTrailing) {
                 languageMenu

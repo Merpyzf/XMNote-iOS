@@ -19,6 +19,7 @@
 - 组件文档机制：重要 UI 组件（`docs/architecture/UI核心组件白名单.md` 白名单组件 + `xmnote/UIComponents` 下新增/重大重构组件）在收到用户“任务已完成”信号后，必须新增或更新组件使用文档（`docs/component-guides/`），并登记到 `docs/architecture/UI组件文档清单.md`；白名单组件必须被清单全量覆盖。
 - 对齐情况文档机制（强制）：对 Android → iOS 迁移功能，在收到用户“任务已完成”信号后，必须在 `docs/feature/功能名/对齐情况.md` 生成或更新对齐情况文档；该文档属于高优先级决策输入，不得省略。
 - iOS26 参考入口：涉及液态玻璃与 iOS26 新特性时，优先查阅 `docs/learning/iOS26液态玻璃与高相关新特性开发参考.md`，并据此执行“Android 业务意图对齐 + iOS 原生表达”。
+- 导航栏玻璃禁令（强制）：已处于系统导航栏上下文的按钮，禁止再显式增加 `.glassEffect(...)`、`.buttonStyle(.glass)`、`.buttonStyle(.glassProminent)` 或等价 glass/material 包装；系统导航栏已提供原生语义与视觉表达，叠加会形成双层玻璃与比例失真。
 - 页面状态基建参考入口：涉及页面状态恢复、导航路径恢复、scene 级状态持久化时，必须先查阅 `docs/architecture/页面状态基建与开发模式.md`，并按其中分层与接入规则执行。
 - 加载状态基建参考入口：涉及加载态策略、读写反馈分级、Loading 门闩接入时，必须先查阅 `docs/architecture/加载状态反馈基建设计.md`，并按其中规则执行。
 
@@ -154,6 +155,10 @@
 
 ## UI 与交互约束
 - 遵循 iOS HIG，保持品牌与信息层级一致，避免无意义视觉修饰。
+- 返回按钮复用约束（强制）：顶部 `leading` 返回按钮统一使用 `TopBarBackButton`；禁止在页面内手写 `Button + chevron.left` 作为导航返回入口。
+- 返回按钮边界约束（强制）：`TopBarBackButton` 仅用于“返回上一级 / 退出当前导航层级”的顶部 `leading` 控件；`关闭`、`取消`、分页切换箭头、标签切换与普通顶部操作按钮不属于该组件范围。
+- 顶部图标职责约束（强制）：`TopBarActionIcon` 只用于普通顶部 action icon，不承载返回语义；若需要深色前景、禁用态或透明度差异，优先扩展 `TopBarBackButton` 的通用参数，禁止再派生 `GlassBackButton`、`OCRBackButton` 一类平行组件。
+- 导航栏按钮玻璃禁令（强制）：已处于系统导航栏上下文的返回或操作按钮，禁止再显式增加 `.glassEffect(...)`、`.buttonStyle(.glass)`、`.buttonStyle(.glassProminent)` 或等价自定义 glass/material 包装；否则会出现双层玻璃、材质重复与比例失真。
 - 弹窗实现约束（强制）：生产路径中心弹窗统一使用 `XMSystemAlert`（UIKit `UIAlertController` 桥接），禁止新增 SwiftUI `.alert` 作为中心弹窗实现。
 - 弹窗颜色语义（强制）：当前工程中 SwiftUI 中心弹窗按钮颜色会继承品牌 tint，无法满足语义化按钮颜色控制；因此中心弹窗必须走 UIKit 桥接路径。
 - 弹窗按钮颜色规范（强制）：仅 warning/destructive 操作使用警告语义颜色，其余按钮必须使用系统默认语义颜色，禁止使用品牌色按钮。

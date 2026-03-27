@@ -1,5 +1,5 @@
 /**
- * [INPUT]: 依赖 NoteEditorSettings 提供书摘编辑设置状态，依赖 DesignTokens 与 TopBarGlassBackButton 承接 iOS 原生设置面板样式
+ * [INPUT]: 依赖 NoteEditorSettings 提供书摘编辑设置状态，依赖 DesignTokens 与 TopBarBackButton 承接 iOS 原生设置面板样式
  * [OUTPUT]: 对外提供 NoteEditorSettingsSheet，统一承载书摘编辑设置项
  * [POS]: Views/Note/Sheets 的业务设置弹层，替代顶部二级菜单直选行为
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -70,7 +70,7 @@ struct NoteEditorSettingsSheet: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    TopBarGlassBackButton {
+                    TopBarBackButton {
                         dismiss()
                     }
                 }

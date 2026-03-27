@@ -31,7 +31,7 @@ struct NoteTextComposerView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .topBarLeading) {
-                TopBarGlassBackButton {
+                TopBarBackButton {
                     dismiss()
                 }
             }
