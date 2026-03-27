@@ -144,6 +144,7 @@ final class NoteEditorViewModel {
     private let repository: any NoteRepositoryProtocol
     private var hasLoaded = false
     private var initialDraft: NoteEditorDraft?
+    private var initialPerceivedDirtyTrackingSnapshot: NoteEditorPerceivedDirtyTrackingSnapshot?
     private var isHydratingState = false
     private var isCreatedDateManuallyEdited = false
     private var isAutoUpdatingCreatedDate = false
@@ -162,8 +163,11 @@ final class NoteEditorViewModel {
     }
 
     var hasUnsavedChanges: Bool {
-        guard let initialDraft else { return false }
-        return makeDraftSnapshot(includeAutoSaveTime: false) != initialDraft
+        guard let initialPerceivedDirtyTrackingSnapshot else { return false }
+        let currentSnapshot = makePerceivedDirtyTrackingSnapshot()
+        // 对齐 Android 当前返回拦截语义：正文与想法都为空时，始终视为“未修改”。
+        guard !currentSnapshot.hasBlankContentAndIdea else { return false }
+        return currentSnapshot != initialPerceivedDirtyTrackingSnapshot
     }
 
     var navigationTitle: String {
@@ -470,6 +474,7 @@ final class NoteEditorViewModel {
             let noteId = try await repository.saveNoteEditor(makeDraftSnapshot(includeAutoSaveTime: false))
             didSave = true
             initialDraft = makeDraftSnapshot(includeAutoSaveTime: false, overridingNoteID: noteId)
+            initialPerceivedDirtyTrackingSnapshot = makePerceivedDirtyTrackingSnapshot()
             return noteId
         } catch {
             errorMessage = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
@@ -573,6 +578,7 @@ private extension NoteEditorViewModel {
 
         if resetInitialDraft {
             initialDraft = makeDraftSnapshot(includeAutoSaveTime: false)
+            initialPerceivedDirtyTrackingSnapshot = makePerceivedDirtyTrackingSnapshot()
         }
 
         syncIdeaInputStateFromContent()
@@ -684,6 +690,42 @@ private extension NoteEditorViewModel {
         )
     }
 
+    func makePerceivedDirtyTrackingSnapshot() -> NoteEditorPerceivedDirtyTrackingSnapshot {
+        NoteEditorPerceivedDirtyTrackingSnapshot(
+            contentText: normalizedVisibleText(from: contentText),
+            ideaText: normalizedVisibleText(from: ideaText),
+            position: positionText,
+            chapterId: selectedChapterID,
+            selectedTagIDs: selectedTags.map(\.id).sorted(),
+            imageIdentities: imageItems.map(imageIdentity(for:))
+        )
+    }
+
+    func normalizedVisibleText(from attributedText: NSAttributedString) -> String {
+        let scalars = Array(
+            attributedText.string.unicodeScalars.filter { $0.value != 0x200D }
+        )
+        var startIndex = 0
+        var endIndex = scalars.count
+        while startIndex < endIndex, scalars[startIndex].value <= 0x20 {
+            startIndex += 1
+        }
+        while startIndex < endIndex, scalars[endIndex - 1].value <= 0x20 {
+            endIndex -= 1
+        }
+        return String(String.UnicodeScalarView(scalars[startIndex..<endIndex]))
+    }
+
+    func imageIdentity(for item: NoteEditorImageItem) -> String {
+        if let remoteURL = item.remoteURL, !remoteURL.isEmpty {
+            return remoteURL
+        }
+        if let localFilePath = item.localFilePath, !localFilePath.isEmpty {
+            return localFilePath
+        }
+        return item.id
+    }
+
     func loadChaptersForCurrentBook() async {
         guard let book = selectedBook, book.id > 0 else {
             availableChapters = []
@@ -757,6 +799,19 @@ private extension NoteEditorViewModel {
         }
     }
 #endif
+}
+
+private struct NoteEditorPerceivedDirtyTrackingSnapshot: Equatable {
+    let contentText: String
+    let ideaText: String
+    let position: String
+    let chapterId: Int64
+    let selectedTagIDs: [Int64]
+    let imageIdentities: [String]
+
+    var hasBlankContentAndIdea: Bool {
+        contentText.isEmpty && ideaText.isEmpty
+    }
 }
 
 // MARK: - IdeaInputState
