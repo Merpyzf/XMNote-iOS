@@ -32,9 +32,9 @@ enum NoteToolbarActionID: String, CaseIterable, Identifiable {
         case .redo:
             return "arrow.uturn.forward"
         case .cursorLeft:
-            return "arrow.left"
+            return "chevron.left"
         case .cursorRight:
-            return "arrow.right"
+            return "chevron.right"
         case .fullScreen:
             return "arrow.up.left.and.arrow.down.right"
         case .ocr:

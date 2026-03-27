@@ -37,7 +37,7 @@ struct TopBarGlassBackButton: View {
                 foregroundColor: .primary
             )
         }
-        .topBarGlassButtonStyle(true)
+        .buttonStyle(.plain)
         .accessibilityLabel("返回")
     }
 }
