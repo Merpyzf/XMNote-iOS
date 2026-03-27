@@ -40,6 +40,7 @@ struct ReadCalendarCoverFullscreenDeckStage: View {
         case fixed(count: Int, degradeForSmallItemCount: Bool)
     }
 
+    /// DeckTransform 负责当前场景的struct定义，明确职责边界并组织相关能力。
     private struct DeckTransform {
         let rotation: Double
         let offsetX: CGFloat
@@ -49,12 +50,14 @@ struct ReadCalendarCoverFullscreenDeckStage: View {
         let opacity: CGFloat
     }
 
+    /// DeskTierSpec 负责当前场景的struct定义，明确职责边界并组织相关能力。
     private struct DeskTierSpec {
         let distanceFactor: CGFloat
         let overlapMin: CGFloat
         let overlapMax: CGFloat
     }
 
+    /// DeckAdaptiveMetrics 负责当前场景的struct定义，明确职责边界并组织相关能力。
     private struct DeckAdaptiveMetrics {
         let coverSize: CGSize
         let gridSpacing: CGFloat
@@ -65,6 +68,7 @@ struct ReadCalendarCoverFullscreenDeckStage: View {
         let deskTiers: [DeskTierSpec]
     }
 
+    /// Layout 负责当前场景的enum定义，明确职责边界并组织相关能力。
     private enum Layout {
         static let hiddenStackAnchorOpacity: CGFloat = 0.001
         static let hiddenExtraGridOpacity: CGFloat = 0
@@ -448,6 +452,7 @@ private extension ReadCalendarCoverFullscreenDeckStage {
         }
     }
 
+    /// 封装legacyCollapsedTransform对应的业务步骤，确保调用方可以稳定复用该能力。
     private func legacyCollapsedTransform(for depth: Int) -> DeckTransform {
         let template = collapsedTemplate(depth: depth)
         let jitterRotation = Double(jitter(depth: depth, channel: 11)) * style.jitterDegree
@@ -629,16 +634,19 @@ private extension ReadCalendarCoverFullscreenDeckStage {
         )
     }
 
+    /// DeskZone 负责当前场景的struct定义，明确职责边界并组织相关能力。
     private struct DeskZone {
         let halfX: CGFloat
         let halfY: CGFloat
     }
 
+    /// DeskPlacement 负责当前场景的struct定义，明确职责边界并组织相关能力。
     private struct DeskPlacement {
         let offset: CGPoint
         let rotation: Double
     }
 
+    /// DeskCandidate 负责当前场景的struct定义，明确职责边界并组织相关能力。
     private struct DeskCandidate {
         let offset: CGPoint
         let score: CGFloat
@@ -723,6 +731,7 @@ private extension ReadCalendarCoverFullscreenDeckStage {
         }
     }
 
+    /// 封装bestDeskPlacement对应的业务步骤，确保调用方可以稳定复用该能力。
     private func bestDeskPlacement(
         for depth: Int,
         placed: [DeskPlacement],
@@ -795,6 +804,7 @@ private extension ReadCalendarCoverFullscreenDeckStage {
         )
     }
 
+    /// 封装clampToDeskZone对应的业务步骤，确保调用方可以稳定复用该能力。
     private func clampToDeskZone(_ offset: CGPoint, zone: DeskZone) -> CGPoint {
         CGPoint(
             x: min(max(offset.x, -zone.halfX), zone.halfX),
@@ -802,6 +812,7 @@ private extension ReadCalendarCoverFullscreenDeckStage {
         )
     }
 
+    /// 封装deskCandidateOffset对应的业务步骤，确保调用方可以稳定复用该能力。
     private func deskCandidateOffset(
         for depth: Int,
         attempt: Int,
@@ -824,6 +835,7 @@ private extension ReadCalendarCoverFullscreenDeckStage {
         return clampToDeskZone(offset, zone: zone)
     }
 
+    /// 封装evaluateDeskCandidate对应的业务步骤，确保调用方可以稳定复用该能力。
     private func evaluateDeskCandidate(
         _ offset: CGPoint,
         placed: [DeskPlacement],
@@ -878,6 +890,7 @@ private extension ReadCalendarCoverFullscreenDeckStage {
         return dominance * 0.6
     }
 
+    /// 封装overlapFitness对应的业务步骤，确保调用方可以稳定复用该能力。
     private func overlapFitness(_ overlap: CGFloat, minOverlap: CGFloat, maxOverlap: CGFloat) -> CGFloat {
         if overlap < minOverlap {
             let penalty = (minOverlap - overlap) / max(0.0001, minOverlap)
@@ -890,6 +903,7 @@ private extension ReadCalendarCoverFullscreenDeckStage {
         return 1
     }
 
+    /// 封装overlapRatio对应的业务步骤，确保调用方可以稳定复用该能力。
     private func overlapRatio(lhs: CGPoint, rhs: CGPoint) -> CGFloat {
         let overlapWidth = max(0, resolvedCoverSize.width - abs(lhs.x - rhs.x))
         let overlapHeight = max(0, resolvedCoverSize.height - abs(lhs.y - rhs.y))
@@ -898,6 +912,7 @@ private extension ReadCalendarCoverFullscreenDeckStage {
         return area / fullArea
     }
 
+    /// 封装quadrantBalanceScore对应的业务步骤，确保调用方可以稳定复用该能力。
     private func quadrantBalanceScore(offset: CGPoint, placed: [DeskPlacement]) -> CGFloat {
         var counts = [0, 0, 0, 0]
         for item in placed {
@@ -910,6 +925,7 @@ private extension ReadCalendarCoverFullscreenDeckStage {
         return max(0, normalized)
     }
 
+    /// 封装quadrantIndex对应的业务步骤，确保调用方可以稳定复用该能力。
     private func quadrantIndex(for offset: CGPoint) -> Int {
         switch (offset.x >= 0, offset.y >= 0) {
         case (true, false):
@@ -923,6 +939,7 @@ private extension ReadCalendarCoverFullscreenDeckStage {
         }
     }
 
+    /// 封装edgeProximityPenalty对应的业务步骤，确保调用方可以稳定复用该能力。
     private func edgeProximityPenalty(offset: CGPoint, zone: DeskZone) -> CGFloat {
         let normalizedX = abs(offset.x) / max(1, zone.halfX)
         let normalizedY = abs(offset.y) / max(1, zone.halfY)
@@ -931,6 +948,7 @@ private extension ReadCalendarCoverFullscreenDeckStage {
         return min(1, (nearEdge - 0.78) / 0.22) * 0.75
     }
 
+    /// 封装editorialRotation对应的业务步骤，确保调用方可以稳定复用该能力。
     private func editorialRotation(for offset: CGPoint, depth: Int, tier: Int) -> Double {
         let randomRotation = Double(deskSymmetricRandom(depth: depth, attempt: 0, tier: tier, channel: 89))
             * Layout.deskRotationMax
@@ -942,14 +960,17 @@ private extension ReadCalendarCoverFullscreenDeckStage {
         return min(Layout.deskRotationMax + 4, max(-(Layout.deskRotationMax + 4), value))
     }
 
+    /// 封装editorialScale对应的业务步骤，确保调用方可以稳定复用该能力。
     private func editorialScale(for depth: Int) -> CGFloat {
         max(Layout.deskMinScale, 1 - CGFloat(depth) * Layout.deskScaleDecay)
     }
 
+    /// 封装editorialOpacity对应的业务步骤，确保调用方可以稳定复用该能力。
     private func editorialOpacity(for depth: Int) -> CGFloat {
         max(Layout.deskMinOpacity, 1 - CGFloat(depth) * Layout.deskOpacityDecay)
     }
 
+    /// 封装deskUnitRandom对应的业务步骤，确保调用方可以稳定复用该能力。
     private func deskUnitRandom(depth: Int, attempt: Int, tier: Int, channel: UInt64) -> CGFloat {
         let depthValue = UInt64(max(0, depth) + 1)
         let attemptValue = UInt64(max(0, attempt) + 1)
@@ -963,6 +984,7 @@ private extension ReadCalendarCoverFullscreenDeckStage {
         return CGFloat(Double(state) / Double(UInt64.max))
     }
 
+    /// 封装deskSymmetricRandom对应的业务步骤，确保调用方可以稳定复用该能力。
     private func deskSymmetricRandom(depth: Int, attempt: Int, tier: Int, channel: UInt64) -> CGFloat {
         deskUnitRandom(depth: depth, attempt: attempt, tier: tier, channel: channel) * 2 - 1
     }

@@ -12,6 +12,7 @@ struct BookSearchRepository: BookSearchRepositoryProtocol {
     private let service: BookRemoteSearchService
     private let userDefaults: UserDefaults
 
+    /// Keys 负责当前场景的enum定义，明确职责边界并组织相关能力。
     private enum Keys {
         static let recentQueries = "book_search_recent_queries"
     }

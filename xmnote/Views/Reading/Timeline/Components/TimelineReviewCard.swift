@@ -88,6 +88,7 @@ struct TimelineReviewCard: View {
         }
     }
 
+    /// 封装starImage对应的业务步骤，确保调用方可以稳定复用该能力。
     private func starImage(for index: Int, score: Double) -> Image {
         let threshold = Double(index)
         if score >= threshold {

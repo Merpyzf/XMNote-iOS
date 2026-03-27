@@ -72,10 +72,12 @@ final class XMJXThumbnailRegistry {
         }
     }
 
+    /// 处理applyHiddenStateIfNeeded对应的状态流转，确保交互过程与数据状态保持一致。
     private func applyHiddenStateIfNeeded(for itemID: String, to view: UIImageView) {
         view.isHidden = hiddenStateStore[itemID] ?? false
     }
 
+    /// 封装cleanupStaleViews对应的业务步骤，确保调用方可以稳定复用该能力。
     private func cleanupStaleViews() {
         viewStore = viewStore.filter { $0.value.view != nil }
     }

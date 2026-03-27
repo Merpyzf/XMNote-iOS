@@ -9,6 +9,7 @@ import SwiftUI
 
 /// 日历顶部控制栏，负责月份或年份切换以及显示模式切换入口。
 struct ReadCalendarTopControlBar: View {
+    /// Layout 负责当前场景的enum定义，明确职责边界并组织相关能力。
     private enum Layout {
         static let topControlSpacing: CGFloat = Spacing.cozy
         static let modeSwitcherWidth: CGFloat = 116

@@ -874,6 +874,7 @@ private extension NoteEditorView {
         }
     }
 
+    /// 渲染标签值区域：空态显示“添加标签”文案，非空态显示可横向滚动的标签胶囊列表。
     @ViewBuilder
     func metadataTagValue(_ viewModel: NoteEditorViewModel) -> some View {
         if viewModel.selectedTags.isEmpty {
@@ -903,6 +904,7 @@ private extension NoteEditorView {
         }
     }
 
+    /// 元数据操作行的默认构建器，统一标题、值区和右侧箭头间距，避免每行独立实现导致视觉漂移。
     func metadataActionRow<Value: View>(
         title: String,
         @ViewBuilder value: () -> Value
@@ -912,6 +914,7 @@ private extension NoteEditorView {
         }
     }
 
+    /// 元数据操作行的自定义附件版本，用于章节行在“清空按钮/箭头”之间切换。
     func metadataActionRow<Value: View, Accessory: View>(
         title: String,
         @ViewBuilder value: () -> Value,
@@ -1432,12 +1435,17 @@ private extension NoteEditorView {
         }
     }
 
+    /// 统一富文本输入变更观察入口，仅在 Debug 下输出诊断日志，避免业务链路与调试逻辑耦合。
     func observeEditorTextChange(target: NoteEditorComposerTarget, text: NSAttributedString) {
 #if DEBUG
         handleEditorTextChange(target: target, text: text)
 #endif
     }
 
+    /// 计算摘录/想法编辑区高度。
+    /// - 业务意图：在聚焦摘录模式下优先保证摘录输入体验，并在键盘显隐时保持“可继续编辑”的高度分配。
+    /// - 输入约束：`stableTailSectionHeight` 只使用稳定元数据区高度，`measuredTailSectionHeight` 仅用于诊断。
+    /// - 输出语义：返回可追踪分支名与最终 content/idea 高度，供 UI 布局与日志使用。
     func makeEditorHeightComputation(
         for viewportHeight: CGFloat,
         bookSectionHeight: CGFloat,
@@ -1747,11 +1755,13 @@ private extension NoteEditorView {
 #endif
 }
 
+/// DismissAttemptSource 负责当前场景的enum定义，明确职责边界并组织相关能力。
 private enum DismissAttemptSource: String {
     case toolbarButton = "toolbar_button"
     case navigationGesture = "navigation_gesture"
 }
 
+/// NoteEditorLayoutMode 负责当前场景的enum定义，明确职责边界并组织相关能力。
 enum NoteEditorLayoutMode: Int, CaseIterable, Identifiable {
     case classic = 0
     case focusExcerpt = 1
@@ -1788,6 +1798,7 @@ private extension NoteEditorComposerTarget {
     }
 }
 
+/// NoteEditorFloatingToolbar 负责当前场景的struct定义，明确职责边界并组织相关能力。
 private struct NoteEditorFloatingToolbar: View {
     enum ToolbarMode {
         case editor
@@ -1942,6 +1953,7 @@ private struct NoteEditorFloatingToolbar: View {
     }
 }
 
+/// NoteEditorSheet 负责当前场景的enum定义，明确职责边界并组织相关能力。
 private enum NoteEditorSheet: String, Identifiable {
     case book
     case chapter
@@ -1952,6 +1964,7 @@ private enum NoteEditorSheet: String, Identifiable {
     var id: String { rawValue }
 }
 
+/// NoteEditorBookPickerSheet 负责当前场景的struct定义，明确职责边界并组织相关能力。
 private struct NoteEditorBookPickerSheet: View {
     let books: [NoteEditorBookOption]
     let onSelect: (NoteEditorBookOption) -> Void
@@ -2007,6 +2020,7 @@ private struct NoteEditorBookPickerSheet: View {
     }
 }
 
+/// NoteEditorChapterPickerSheet 负责当前场景的struct定义，明确职责边界并组织相关能力。
 private struct NoteEditorChapterPickerSheet: View {
     let chapters: [NoteEditorChapterOption]
     let selectedChapterID: Int64
@@ -2062,6 +2076,7 @@ private struct NoteEditorChapterPickerSheet: View {
     }
 }
 
+/// NoteEditorTagPickerSheet 负责当前场景的struct定义，明确职责边界并组织相关能力。
 private struct NoteEditorTagPickerSheet: View {
     let availableTags: [NoteEditorTagOption]
     let selectedTags: [NoteEditorTagOption]
@@ -2130,6 +2145,7 @@ private struct NoteEditorTagPickerSheet: View {
     }
 }
 
+/// NoteEditorDateSheet 负责当前场景的struct定义，明确职责边界并组织相关能力。
 private struct NoteEditorDateSheet: View {
     @Binding var selectedDate: Date
     @Environment(\.dismiss) private var dismiss
@@ -2160,6 +2176,7 @@ private struct NoteEditorDateSheet: View {
     }
 }
 
+/// NoteEditorMeasuredPart 负责当前场景的enum定义，明确职责边界并组织相关能力。
 private enum NoteEditorMeasuredPart: Hashable, CaseIterable {
     case toolbar
     case book
@@ -2182,6 +2199,7 @@ private enum NoteEditorMeasuredPart: Hashable, CaseIterable {
 #endif
 }
 
+/// NoteEditorHeightComputation 负责当前场景的struct定义，明确职责边界并组织相关能力。
 private struct NoteEditorHeightComputation {
     let branch: String
     let viewportHeight: CGFloat
@@ -2199,9 +2217,11 @@ private struct NoteEditorHeightComputation {
     let ideaHeight: CGFloat
 }
 
+/// NoteEditorMeasuredHeightsPreferenceKey 负责当前场景的struct定义，明确职责边界并组织相关能力。
 private struct NoteEditorMeasuredHeightsPreferenceKey: PreferenceKey {
     static var defaultValue: [NoteEditorMeasuredPart: CGFloat] = [:]
 
+    /// 封装reduce对应的业务步骤，确保调用方可以稳定复用该能力。
     static func reduce(value: inout [NoteEditorMeasuredPart: CGFloat], nextValue: () -> [NoteEditorMeasuredPart: CGFloat]) {
         value.merge(nextValue(), uniquingKeysWith: { _, new in new })
     }

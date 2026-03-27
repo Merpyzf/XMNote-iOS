@@ -68,7 +68,9 @@ struct NotePhotoOCRCompletionPayload {
 
 @MainActor
 @Observable
+/// NotePhotoOCRFlowViewModel 负责当前场景的class定义，明确职责边界并组织相关能力。
 final class NotePhotoOCRFlowViewModel {
+    /// PreparedRecognitionRegion 负责当前场景的struct定义，明确职责边界并组织相关能力。
     private struct PreparedRecognitionRegion {
         let region: NotePhotoOCRSelectionRegion
         let imageData: Data
@@ -400,6 +402,7 @@ private extension CGRect {
 }
 
 private extension UIImage {
+    /// 封装normalizedUpImage对应的业务步骤，确保调用方可以稳定复用该能力。
     nonisolated func normalizedUpImage() -> UIImage {
         guard imageOrientation != .up else { return self }
         guard let cgImage else { return self }

@@ -54,6 +54,7 @@ struct RelevantDetailView: View {
     }
 }
 
+/// RelevantDetailLoadedView 负责当前场景的struct定义，明确职责边界并组织相关能力。
 private struct RelevantDetailLoadedView: View {
     @Bindable var viewModel: RelevantDetailViewModel
     @Binding var showsDeleteDialog: Bool
@@ -140,6 +141,7 @@ private struct RelevantDetailLoadedView: View {
         }
     }
 
+    /// 封装relevantContent对应的业务步骤，确保调用方可以稳定复用该能力。
     private func relevantContent(_ detail: RelevantContentDetail) -> some View {
         VStack(alignment: .leading, spacing: Spacing.base) {
             if let dateText = formattedDate(detail.createdDate) {
@@ -176,6 +178,7 @@ private struct RelevantDetailLoadedView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
+    /// 封装copyText对应的业务步骤，确保调用方可以稳定复用该能力。
     private func copyText(from detail: RelevantContentDetail) -> String {
         let content = RichTextBridge.htmlToAttributed(detail.contentHTML).string
             .trimmingCharacters(in: .whitespacesAndNewlines)
@@ -185,10 +188,12 @@ private struct RelevantDetailLoadedView: View {
             .joined(separator: "\n\n")
     }
 
+    /// 封装trimmed对应的业务步骤，确保调用方可以稳定复用该能力。
     private func trimmed(_ text: String) -> String {
         text.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
+    /// 封装formattedDate对应的业务步骤，确保调用方可以稳定复用该能力。
     private func formattedDate(_ timestamp: Int64) -> String? {
         guard timestamp > 0 else { return nil }
         return ContentDetailDateFormatter.full.string(
@@ -196,6 +201,7 @@ private struct RelevantDetailLoadedView: View {
         )
     }
 
+    /// 封装normalizedURL对应的业务步骤，确保调用方可以稳定复用该能力。
     private func normalizedURL(_ raw: String) -> URL? {
         let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return nil }
@@ -207,6 +213,7 @@ private struct RelevantDetailLoadedView: View {
         return URL(string: "https://\(trimmed)")
     }
 
+    /// 处理syncReadLoadingVisibility对应的状态流转，确保交互过程与数据状态保持一致。
     private func syncReadLoadingVisibility() {
         readLoadingGate.update(intent: viewModel.isLoading ? .read : .none)
     }

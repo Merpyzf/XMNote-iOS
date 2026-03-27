@@ -24,6 +24,7 @@ struct BookSearchResultSkeletonRow: View {
 }
 
 private extension BookSearchResult {
+    /// 封装skeletonPlaceholder对应的业务步骤，确保调用方可以稳定复用该能力。
     static func skeletonPlaceholder(for source: BookSearchSource) -> BookSearchResult {
         return BookSearchResult(
             id: "skeleton-\(source.rawValue)",

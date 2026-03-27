@@ -9,6 +9,7 @@ import SwiftUI
 
 /// 月度总结弹层，负责聚合月份切换、指标卡和阅读时长排行展示。
 struct ReadCalendarMonthSummarySheet: View {
+    /// Layout 负责当前场景的enum定义，明确职责边界并组织相关能力。
     private enum Layout {
         static let summarySheetTopInset: CGFloat = 30
         static let summarySheetBottomInset: CGFloat = 28
@@ -959,6 +960,7 @@ private extension ReadCalendarMonthSummarySheet {
     }
 }
 
+/// SummaryFormatter 负责当前场景的enum定义，明确职责边界并组织相关能力。
 private enum SummaryFormatter {
     static let monthTitle: DateFormatter = {
         let formatter = DateFormatter()

@@ -90,6 +90,7 @@ struct KeepAliveSwitcherHost<Selection: Hashable, Content: View>: View {
         logActivation(reason: reason)
     }
 
+    /// 封装logSwitch对应的业务步骤，确保调用方可以稳定复用该能力。
     private func logSwitch(trigger: String) {
         #if DEBUG
         logger.notice(
@@ -98,6 +99,7 @@ struct KeepAliveSwitcherHost<Selection: Hashable, Content: View>: View {
         #endif
     }
 
+    /// 封装logActivation对应的业务步骤，确保调用方可以稳定复用该能力。
     private func logActivation(reason: String) {
         #if DEBUG
         logger.notice(

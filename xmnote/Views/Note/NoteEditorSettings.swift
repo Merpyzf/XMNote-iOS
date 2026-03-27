@@ -95,6 +95,7 @@ final class NoteEditorSettings {
         self.autoDimBrightness = min(max(storedBrightness ?? Self.defaultAutoDimBrightness, 0.1), 1.0)
     }
 
+    /// 封装autoDimDisplayTitle对应的业务步骤，确保调用方可以稳定复用该能力。
     static func autoDimDisplayTitle(seconds: Int) -> String {
         switch seconds {
         case 0:

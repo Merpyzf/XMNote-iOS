@@ -9,6 +9,7 @@ import Foundation
 
 /// 阅读日历事件布局引擎，负责把原始日数据转换为可跨周渲染的布局结果。
 struct ReadCalendarEventLayoutEngine {
+    /// DraftRun 负责当前场景的struct定义，明确职责边界并组织相关能力。
     private struct DraftRun {
         let bookId: Int64
         let bookName: String
@@ -248,6 +249,7 @@ private extension ReadCalendarEventLayoutEngine {
 // MARK: - Helpers
 
 private extension ReadCalendarEventLayoutEngine {
+    /// 执行resolveLane对应的数据处理步骤，并返回当前流程需要的结果。
     private func resolveLane(for run: DraftRun, laneEndDates: inout [Date]) -> Int {
         for lane in laneEndDates.indices {
             // endDate 是 inclusive 最后一天；startDate > endDate 表示无时间重叠。
@@ -261,6 +263,7 @@ private extension ReadCalendarEventLayoutEngine {
         return laneEndDates.count - 1
     }
 
+    /// 执行resolveLane对应的数据处理步骤，并返回当前流程需要的结果。
     private func resolveLane(startOffset: Int, endOffset: Int, laneEndOffsets: inout [Int]) -> Int {
         for lane in laneEndOffsets.indices {
             // endOffset 是 inclusive 最后一天的 0-indexed 偏移；与 Date 版语义一致。
@@ -273,11 +276,13 @@ private extension ReadCalendarEventLayoutEngine {
         return laneEndOffsets.count - 1
     }
 
+    /// 处理startOfWeek对应的状态流转，确保交互过程与数据状态保持一致。
     private func startOfWeek(for date: Date) -> Date {
         let start = calendar.dateInterval(of: .weekOfYear, for: date)?.start ?? date
         return calendar.startOfDay(for: start)
     }
 
+    /// 封装dayDistanceInclusive对应的业务步骤，确保调用方可以稳定复用该能力。
     private func dayDistanceInclusive(from: Date, to: Date) -> Int {
         let fromDay = calendar.startOfDay(for: from)
         let toDay = calendar.startOfDay(for: to)
@@ -285,6 +290,7 @@ private extension ReadCalendarEventLayoutEngine {
         return max(1, distance + 1)
     }
 
+    /// 封装readDoneDates对应的业务步骤，确保调用方可以稳定复用该能力。
     private func readDoneDates(in source: Set<Date>, from start: Date, to end: Date) -> Set<Date> {
         let startDay = calendar.startOfDay(for: start)
         let endDay = calendar.startOfDay(for: end)
@@ -294,6 +300,7 @@ private extension ReadCalendarEventLayoutEngine {
         })
     }
 
+    /// 封装segmentContainsReadDone对应的业务步骤，确保调用方可以稳定复用该能力。
     private func segmentContainsReadDone(readDoneDates: Set<Date>, from start: Date, to end: Date) -> Bool {
         let startDay = calendar.startOfDay(for: start)
         let endDay = calendar.startOfDay(for: end)
@@ -303,6 +310,7 @@ private extension ReadCalendarEventLayoutEngine {
         }
     }
 
+    /// 封装compareSegment对应的业务步骤，确保调用方可以稳定复用该能力。
     private func compareSegment(_ lhs: ReadCalendarEventSegment, _ rhs: ReadCalendarEventSegment) -> Bool {
         if lhs.laneIndex != rhs.laneIndex {
             return lhs.laneIndex < rhs.laneIndex

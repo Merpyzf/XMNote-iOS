@@ -10,11 +10,13 @@ import OSLog
 import WebKit
 
 @MainActor
+/// WebHTMLFetchServiceProtocol 负责当前场景的protocol定义，明确职责边界并组织相关能力。
 protocol WebHTMLFetchServiceProtocol {
     /// 抓取目标网页 HTML，按请求指定的通道与会话策略返回可解析结果。
     func fetchHTML(_ request: WebHTMLFetchRequest) async throws -> WebHTMLFetchResult
 }
 
+/// WebFetchChannel 负责当前场景的enum定义，明确职责边界并组织相关能力。
 enum WebFetchChannel: String, CaseIterable, Identifiable, Sendable {
     case automatic
     case http
@@ -34,6 +36,7 @@ enum WebFetchChannel: String, CaseIterable, Identifiable, Sendable {
     }
 }
 
+/// WebSessionScope 负责当前场景的enum定义，明确职责边界并组织相关能力。
 enum WebSessionScope: String, CaseIterable, Identifiable, Sendable {
     case sharedDefault
     case sharedDouban
@@ -69,6 +72,7 @@ enum WebSessionScope: String, CaseIterable, Identifiable, Sendable {
     }
 }
 
+/// WebWaitPolicy 负责当前场景的enum定义，明确职责边界并组织相关能力。
 enum WebWaitPolicy: Sendable, Equatable {
     case afterDidFinish(delayMilliseconds: Int)
 
@@ -82,6 +86,7 @@ enum WebWaitPolicy: Sendable, Equatable {
     }
 }
 
+/// WebHTMLFetchRequest 负责当前场景的struct定义，明确职责边界并组织相关能力。
 struct WebHTMLFetchRequest: Sendable {
     let url: URL
     let channel: WebFetchChannel
@@ -118,6 +123,7 @@ struct WebHTMLFetchRequest: Sendable {
     }
 }
 
+/// WebHTMLFetchResult 负责当前场景的struct定义，明确职责边界并组织相关能力。
 struct WebHTMLFetchResult: Sendable {
     let html: String
     let finalURL: URL
@@ -131,6 +137,7 @@ struct WebHTMLFetchResult: Sendable {
     }
 }
 
+/// WebHTMLFetchError 负责当前场景的enum定义，明确职责边界并组织相关能力。
 enum WebHTMLFetchError: LocalizedError {
     case invalidHTTPResponse
     case emptyHTML
@@ -158,6 +165,7 @@ final class WebHTMLFetchService: WebHTMLFetchServiceProtocol {
     private static let logger = Logger(subsystem: "xmnote", category: "WebHTMLFetch")
     private static let desktopViewport = CGRect(x: 0, y: 0, width: 1440, height: 900)
 
+    /// SessionContext 负责当前场景的struct定义，明确职责边界并组织相关能力。
     private struct SessionContext {
         let dataStore: WKWebsiteDataStore
         let webView: WKWebView
@@ -298,6 +306,7 @@ private extension WebHTMLFetchService {
         )
     }
 
+    /// 封装sessionContext对应的业务步骤，确保调用方可以稳定复用该能力。
     private func sessionContext(for scope: WebSessionScope) -> SessionContext {
         if scope != .ephemeral, let existing = sessionContexts[scope] {
             return existing
@@ -392,7 +401,9 @@ private extension WebHTMLFetchService {
     }
 }
 
+/// HTMLDecoder 负责当前场景的actor定义，明确职责边界并组织相关能力。
 private actor HTMLDecoder {
+    /// 执行decode对应的数据处理步骤，并返回当前流程需要的结果。
     static func decode(data: Data, textEncodingName: String?) async -> String {
         await Task.detached(priority: .utility) {
             decodeSynchronously(data: data, textEncodingName: textEncodingName)
@@ -424,6 +435,7 @@ private actor HTMLDecoder {
     }
 }
 
+/// WebHTTPCookieBridge 负责当前场景的actor定义，明确职责边界并组织相关能力。
 private actor WebHTTPCookieBridge {
     func allCookies(storeProvider: @escaping @MainActor () -> WKHTTPCookieStore) async -> [HTTPCookie] {
         let store = await MainActor.run {
@@ -454,6 +466,7 @@ private actor WebHTTPCookieBridge {
     }
 }
 
+/// WebViewSessionGate 负责当前场景的actor定义，明确职责边界并组织相关能力。
 private actor WebViewSessionGate {
     private var isLockedByScope: [WebSessionScope: Bool] = [:]
     private var waitersByScope: [WebSessionScope: [CheckedContinuation<Void, Never>]] = [:]
@@ -464,6 +477,7 @@ private actor WebViewSessionGate {
         return try await operation()
     }
 
+    /// 封装acquire对应的业务步骤，确保调用方可以稳定复用该能力。
     private func acquire(scope: WebSessionScope) async {
         if isLockedByScope[scope] != true {
             isLockedByScope[scope] = true
@@ -475,6 +489,7 @@ private actor WebViewSessionGate {
         }
     }
 
+    /// 封装release对应的业务步骤，确保调用方可以稳定复用该能力。
     private func release(scope: WebSessionScope) {
         guard var waiters = waitersByScope[scope], waiters.isEmpty == false else {
             isLockedByScope[scope] = false
@@ -489,6 +504,7 @@ private actor WebViewSessionGate {
 }
 
 private extension HTTPCookie {
+    /// 封装matches对应的业务步骤，确保调用方可以稳定复用该能力。
     nonisolated func matches(url: URL) -> Bool {
         guard let host = url.host?.lowercased() else {
             return false
@@ -503,6 +519,7 @@ private extension HTTPCookie {
     }
 }
 
+/// WebViewHTMLLoader 负责当前场景的enum定义，明确职责边界并组织相关能力。
 private enum WebViewHTMLLoader {
     struct Result {
         let html: String
@@ -510,6 +527,7 @@ private enum WebViewHTMLLoader {
         let pageTitle: String?
     }
 
+    /// 执行loadHTML对应的数据处理步骤，并返回当前流程需要的结果。
     static func loadHTML(
         with webView: WKWebView,
         request: URLRequest,
@@ -598,6 +616,7 @@ private enum WebViewHTMLLoader {
             completionHandler(.performDefaultHandling, nil)
         }
 
+        /// 封装stabilizeDOM对应的业务步骤，确保调用方可以稳定复用该能力。
         private func stabilizeDOM(on webView: WKWebView) async throws {
             for _ in 0..<6 {
                 let state = try await evaluateString(webView, script: "document.readyState")
@@ -609,6 +628,7 @@ private enum WebViewHTMLLoader {
             try await Task.sleep(nanoseconds: waitPolicy.delayNanoseconds)
         }
 
+        /// 封装evaluateString对应的业务步骤，确保调用方可以稳定复用该能力。
         private func evaluateString(_ webView: WKWebView, script: String) async throws -> String {
             try await withCheckedThrowingContinuation { continuation in
                 webView.evaluateJavaScript(script) { value, error in
@@ -629,6 +649,7 @@ private enum WebViewHTMLLoader {
             }
         }
 
+        /// 处理startTimeoutWatchdog对应的状态流转，确保交互过程与数据状态保持一致。
         private func startTimeoutWatchdog(on webView: WKWebView) {
             timeoutTask?.cancel()
             timeoutTask = Task { @MainActor [weak webView] in
@@ -641,6 +662,7 @@ private enum WebViewHTMLLoader {
             }
         }
 
+        /// 处理handleTimeout对应的状态流转，确保交互过程与数据状态保持一致。
         private func handleTimeout(on webView: WKWebView) async {
             guard hasCompleted == false else { return }
             do {
@@ -662,11 +684,13 @@ private enum WebViewHTMLLoader {
             finish(with: .failure(WebHTMLFetchError.webView(description: "网页加载超时。")))
         }
 
+        /// 封装isRecoverableCancellation对应的业务步骤，确保调用方可以稳定复用该能力。
         private func isRecoverableCancellation(_ error: Error) -> Bool {
             let nsError = error as NSError
             return nsError.domain == NSURLErrorDomain && nsError.code == NSURLErrorCancelled
         }
 
+        /// 处理finish对应的状态流转，确保交互过程与数据状态保持一致。
         private func finish(with result: Swift.Result<WebViewHTMLLoader.Result, Error>) {
             guard hasCompleted == false, let continuation else { return }
             hasCompleted = true

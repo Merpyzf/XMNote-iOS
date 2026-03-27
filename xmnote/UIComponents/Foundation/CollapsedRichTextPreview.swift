@@ -244,6 +244,7 @@ final class CollapsedRichTextPreviewView: UIView {
         setNeedsLayout()
     }
 
+    /// 封装setupSubviews对应的业务步骤，确保调用方可以稳定复用该能力。
     private func setupSubviews() {
         backgroundColor = .clear
 
@@ -273,6 +274,7 @@ final class CollapsedRichTextPreviewView: UIView {
         addSubview(expandButton)
     }
 
+    /// 执行measuredTextHeight对应的数据处理步骤，并返回当前流程需要的结果。
     private func measuredTextHeight(
         attributedText: NSAttributedString,
         width: CGFloat,
@@ -286,6 +288,7 @@ final class CollapsedRichTextPreviewView: UIView {
         return ceil(max(0, rect.height))
     }
 
+    /// 执行measuredButtonSize对应的数据处理步骤，并返回当前流程需要的结果。
     private func measuredButtonSize(fittingWidth width: CGFloat) -> CGSize {
         let rawSize = expandButton.sizeThatFits(
             CGSize(width: width, height: CGFloat.greatestFiniteMagnitude)
@@ -294,6 +297,7 @@ final class CollapsedRichTextPreviewView: UIView {
     }
 
     @objc
+    /// 处理handleExpandTapped对应的状态流转，确保交互过程与数据状态保持一致。
     private func handleExpandTapped() {
         onExpand?()
     }

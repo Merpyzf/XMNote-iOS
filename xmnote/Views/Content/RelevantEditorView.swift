@@ -47,6 +47,7 @@ struct RelevantEditorView: View {
     }
 }
 
+/// RelevantEditorLoadedView 负责当前场景的struct定义，明确职责边界并组织相关能力。
 private struct RelevantEditorLoadedView: View {
     @Bindable var viewModel: RelevantEditorViewModel
     let onSaved: () -> Void

@@ -282,6 +282,7 @@ fileprivate struct XMAttachmentUploadStripConfiguration {
 
 /// UIKit 承载视图，负责横向列表布局、拖拽排序与条目更新编排。
 final class XMAttachmentUploadStripView: UIView {
+    /// InteractionPhase 负责当前场景的enum定义，明确职责边界并组织相关能力。
     private enum InteractionPhase: Equatable {
         case idle
         case trackingControl
@@ -426,6 +427,7 @@ final class XMAttachmentUploadStripView: UIView {
 }
 
 private extension XMAttachmentUploadStripView {
+    /// 执行resolveInteractionPhase对应的数据处理步骤，并返回当前流程需要的结果。
     private func resolveInteractionPhase() -> InteractionPhase {
         if let pendingRemoveID {
             return .removing(id: pendingRemoveID)
@@ -439,10 +441,12 @@ private extension XMAttachmentUploadStripView {
         return .idle
     }
 
+    /// 处理syncInteractionPhase对应的状态流转，确保交互过程与数据状态保持一致。
     private func syncInteractionPhase() {
         interactionPhase = resolveInteractionPhase()
     }
 
+    /// 封装configureCell对应的业务步骤，确保调用方可以稳定复用该能力。
     private func configureCell(_ cell: XMAttachmentUploadCell, at indexPath: IndexPath, animated: Bool) {
         guard items.indices.contains(indexPath.item) else { return }
         let item = items[indexPath.item]
@@ -864,6 +868,7 @@ extension XMAttachmentUploadStripView: UICollectionViewDropDelegate {
 
 /// 附图 cell 渲染器：统一处理本地优先、远端回退和异步图片解码。
 private enum XMAttachmentUploadCellRenderer {
+    /// 执行loadImage对应的数据处理步骤，并返回当前流程需要的结果。
     static func loadImage(for item: XMAttachmentUploadItem, maxPixelSize: CGFloat) async -> UIImage? {
         switch XMAttachmentUploadRenderSourceResolver.resolve(
             localFilePath: item.localFilePath,
@@ -927,6 +932,7 @@ private enum XMAttachmentUploadCellRenderer {
 private final class XMAttachmentUploadCell: UICollectionViewCell {
     static let reuseIdentifier = "XMAttachmentUploadCell"
 
+    /// RenderSignature 负责当前场景的struct定义，明确职责边界并组织相关能力。
     private struct RenderSignature: Equatable {
         let id: String
         let localFilePath: String?
@@ -961,6 +967,7 @@ private final class XMAttachmentUploadCell: UICollectionViewCell {
         fatalError("init(coder:) has not been implemented")
     }
 
+    /// 处理prepareForReuse对应的状态流转，确保交互过程与数据状态保持一致。
     override func prepareForReuse() {
         super.prepareForReuse()
         unregisterThumbnailIfNeeded()
@@ -1419,6 +1426,7 @@ private final class XMTouchAreaButton: UIButton {
         convert(expandedHitBounds, to: view)
     }
 
+    /// 封装point对应的业务步骤，确保调用方可以稳定复用该能力。
     override func point(inside point: CGPoint, with event: UIEvent?) -> Bool {
         guard canParticipateInHitTesting else { return false }
         return expandedHitBounds.contains(point)

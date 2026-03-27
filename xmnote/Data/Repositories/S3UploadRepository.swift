@@ -93,6 +93,7 @@ private extension S3UploadRepository {
         }
     }
 
+    /// 封装objectKey对应的业务步骤，确保调用方可以稳定复用该能力。
     static func objectKey(from path: String) -> String {
         let trimmed = path.trimmingCharacters(in: .whitespacesAndNewlines)
         guard let url = URL(string: trimmed), let host = url.host, !host.isEmpty else {
@@ -102,6 +103,7 @@ private extension S3UploadRepository {
         return objectKey.removingPercentEncoding ?? objectKey
     }
 
+    /// 执行makeObjectKey对应的数据处理步骤，并返回当前流程需要的结果。
     static func makeObjectKey(prefix: String, localURL: URL) -> String {
         let sanitizedPrefix = prefix.trimmingCharacters(in: .whitespacesAndNewlines)
         let fileExtension = localURL.pathExtension.isEmpty ? "png" : localURL.pathExtension.lowercased()

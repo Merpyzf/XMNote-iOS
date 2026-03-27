@@ -25,6 +25,7 @@ struct ReadingDurationRankingChart: View {
         let barState: BarState
     }
 
+    /// Layout 负责当前场景的enum定义，明确职责边界并组织相关能力。
     private enum Layout {
         static let sectionSpacing: CGFloat = 16
         static let barLabelSpacing: CGFloat = 0

@@ -83,6 +83,7 @@ struct ContentImageWall: View {
 
 /// 统一判断富文本 HTML 是否存在可展示正文，避免空标签误判为有效内容。
 enum TimelineMeaningfulPreview {
+    /// 封装hasMeaningfulHTML对应的业务步骤，确保调用方可以稳定复用该能力。
     static func hasMeaningfulHTML(_ html: String) -> Bool {
         !RichTextBridge.htmlToAttributed(html).string
             .trimmingCharacters(in: .whitespacesAndNewlines)
@@ -110,6 +111,7 @@ func viewerMessageCard(text: String) -> some View {
     }
 }
 
+/// ContentDetailDateFormatter 负责当前场景的enum定义，明确职责边界并组织相关能力。
 enum ContentDetailDateFormatter {
     static let full: DateFormatter = {
         let formatter = DateFormatter()

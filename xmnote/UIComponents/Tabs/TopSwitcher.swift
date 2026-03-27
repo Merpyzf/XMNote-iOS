@@ -9,6 +9,7 @@ import SwiftUI
 
 /// 首页顶部切换控件：支持「二级标签」与「单标题」两种模式。
 struct TopSwitcher<Tab: Hashable, Trailing: View>: View {
+    /// Mode 负责当前场景的enum定义，明确职责边界并组织相关能力。
     private enum Mode {
         case tabs(
             selection: Binding<Tab>,
@@ -90,6 +91,7 @@ extension TopSwitcher where Tab == Never {
     }
 }
 
+/// TopSwitcherQuoteDecorationMetrics 负责当前场景的enum定义，明确职责边界并组织相关能力。
 private enum TopSwitcherQuoteDecorationMetrics {
     static let assetName = "TopSwitcherQuote"
     static let iconWidth: CGFloat = 26
@@ -98,6 +100,7 @@ private enum TopSwitcherQuoteDecorationMetrics {
     static let offsetY: CGFloat = -7
 }
 
+/// TopSwitcherTypography 负责当前场景的enum定义，明确职责边界并组织相关能力。
 private enum TopSwitcherTypography {
     static let selectedTabSize: CGFloat = 22
     static let unselectedTabSize: CGFloat = 19
@@ -106,6 +109,7 @@ private enum TopSwitcherTypography {
     static let verticalPadding: CGFloat = Spacing.half
 }
 
+/// TopSwitcherTabBar 负责当前场景的struct定义，明确职责边界并组织相关能力。
 private struct TopSwitcherTabBar<Tab: Hashable>: View {
     @Binding var selection: Tab
     let tabs: [Tab]
@@ -146,6 +150,7 @@ private struct TopSwitcherTabBar<Tab: Hashable>: View {
         }
     }
 
+    /// TopSwitcherTabAnchorKey 负责当前场景的struct定义，明确职责边界并组织相关能力。
     private struct TopSwitcherTabAnchorKey: PreferenceKey {
         static var defaultValue: [Tab: Anchor<CGRect>] { [:] }
 
@@ -155,6 +160,7 @@ private struct TopSwitcherTabBar<Tab: Hashable>: View {
         }
     }
 
+    /// 封装tabItem对应的业务步骤，确保调用方可以稳定复用该能力。
     private func tabItem(_ tab: Tab) -> some View {
         let isSelected = selection == tab
         let title = titleProvider(tab)
@@ -186,6 +192,7 @@ private struct TopSwitcherTabBar<Tab: Hashable>: View {
     }
 }
 
+/// TopSwitcherTitleLabel 负责当前场景的struct定义，明确职责边界并组织相关能力。
 private struct TopSwitcherTitleLabel: View {
     let text: String
     let quote: String
@@ -228,6 +235,7 @@ private struct TopSwitcherTitleLabel: View {
     }
 }
 
+/// TopSwitcherFixedSizeModifier 负责当前场景的struct定义，明确职责边界并组织相关能力。
 private struct TopSwitcherFixedSizeModifier: ViewModifier {
     let isEnabled: Bool
 
@@ -263,6 +271,7 @@ private struct TopSwitcherFixedSizeModifier: ViewModifier {
     }
 }
 
+/// TopSwitcherPreviewTab 负责当前场景的enum定义，明确职责边界并组织相关能力。
 private enum TopSwitcherPreviewTab: CaseIterable, Hashable {
     case first, second, third
 

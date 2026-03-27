@@ -41,6 +41,7 @@ struct BookEditorView: View {
         }
     }
 
+    /// 组装content对应的界面片段，保持页面层级与信息结构清晰。
     private func content(_ viewModel: BookEditorViewModel) -> some View {
         ZStack {
             Color.surfacePage.ignoresSafeArea()
@@ -123,6 +124,7 @@ struct BookEditorView: View {
         readLoadingGate.update(intent: intent)
     }
 
+    /// 组装headerSection对应的界面片段，保持页面层级与信息结构清晰。
     private func headerSection(_ draft: BookEditorDraft) -> some View {
         CardContainer(cornerRadius: CornerRadius.containerMedium, showsBorder: false) {
             HStack(alignment: .top, spacing: Spacing.base) {
@@ -167,6 +169,7 @@ struct BookEditorView: View {
         return "确认书籍信息"
     }
 
+    /// 处理handleDismissAttempt对应的状态流转，确保交互过程与数据状态保持一致。
     private func handleDismissAttempt(using viewModel: BookEditorViewModel) {
         guard !viewModel.isSaving else { return }
         if viewModel.hasUnsavedChanges {
@@ -176,6 +179,7 @@ struct BookEditorView: View {
         }
     }
 
+    /// 封装baseInfoSection对应的业务步骤，确保调用方可以稳定复用该能力。
     private func baseInfoSection(_ viewModel: BookEditorViewModel, draft: BookEditorDraft) -> some View {
         editorSection(title: "基础信息") {
             editorTextField("书名", text: binding(viewModel, \.title))
@@ -191,6 +195,7 @@ struct BookEditorView: View {
         }
     }
 
+    /// 封装readingInfoSection对应的业务步骤，确保调用方可以稳定复用该能力。
     private func readingInfoSection(_ viewModel: BookEditorViewModel, draft: BookEditorDraft) -> some View {
         editorSection(title: "阅读设置") {
             optionRow(title: "书籍类型", selection: draft.bookType.title) {
@@ -241,6 +246,7 @@ struct BookEditorView: View {
     }
 
     @ViewBuilder
+    /// 封装progressSection对应的业务步骤，确保调用方可以稳定复用该能力。
     private func progressSection(_ viewModel: BookEditorViewModel, draft: BookEditorDraft) -> some View {
         editorSection(title: "进度信息") {
             switch draft.progressUnit {
@@ -256,6 +262,7 @@ struct BookEditorView: View {
         }
     }
 
+    /// 封装relationSection对应的业务步骤，确保调用方可以稳定复用该能力。
     private func relationSection(_ viewModel: BookEditorViewModel, draft: BookEditorDraft) -> some View {
         editorSection(title: "分组与标签") {
             editorTextField("来源", text: binding(viewModel, \.sourceName))
@@ -304,6 +311,7 @@ struct BookEditorView: View {
         }
     }
 
+    /// 封装extraInfoSection对应的业务步骤，确保调用方可以稳定复用该能力。
     private func extraInfoSection(_ viewModel: BookEditorViewModel, draft: BookEditorDraft) -> some View {
         editorSection(title: "其它信息") {
             editorTextField("封面链接", text: binding(viewModel, \.coverURL))
@@ -326,6 +334,7 @@ struct BookEditorView: View {
         }
     }
 
+    /// 组装bottomBar对应的界面片段，保持页面层级与信息结构清晰。
     private func bottomBar(_ viewModel: BookEditorViewModel, draft: BookEditorDraft) -> some View {
         VStack(spacing: Spacing.cozy) {
             if let errorMessage = viewModel.errorMessage {
@@ -362,6 +371,7 @@ struct BookEditorView: View {
         .background(.ultraThinMaterial)
     }
 
+    /// 封装editorSection对应的业务步骤，确保调用方可以稳定复用该能力。
     private func editorSection<Content: View>(title: String, @ViewBuilder content: () -> Content) -> some View {
         CardContainer(cornerRadius: CornerRadius.containerMedium, showsBorder: false) {
             VStack(alignment: .leading, spacing: Spacing.base) {
@@ -374,6 +384,7 @@ struct BookEditorView: View {
         }
     }
 
+    /// 封装editorTextField对应的业务步骤，确保调用方可以稳定复用该能力。
     private func editorTextField(
         _ title: String,
         text: Binding<String>,
@@ -394,6 +405,7 @@ struct BookEditorView: View {
         }
     }
 
+    /// 封装editorTextEditor对应的业务步骤，确保调用方可以稳定复用该能力。
     private func editorTextEditor(
         _ title: String,
         text: Binding<String>,
@@ -412,6 +424,7 @@ struct BookEditorView: View {
         }
     }
 
+    /// 封装optionRow对应的业务步骤，确保调用方可以稳定复用该能力。
     private func optionRow<Content: View>(
         title: String,
         selection: String,
@@ -434,6 +447,7 @@ struct BookEditorView: View {
         }
     }
 
+    /// 封装suggestionStrip对应的业务步骤，确保调用方可以稳定复用该能力。
     private func suggestionStrip(
         options: [BookEditorNamedOption],
         selectedTitle: String,
@@ -446,6 +460,7 @@ struct BookEditorView: View {
         }
     }
 
+    /// 组装chipWrap对应的界面片段，保持页面层级与信息结构清晰。
     private func chipWrap<Data: RandomAccessCollection, Content: View>(
         _ data: Data,
         @ViewBuilder content: @escaping (Data.Element) -> Content
@@ -459,6 +474,7 @@ struct BookEditorView: View {
         }
     }
 
+    /// 组装chip对应的界面片段，保持页面层级与信息结构清晰。
     private func chip(_ title: String, isSelected: Bool, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Text(title)
@@ -471,6 +487,7 @@ struct BookEditorView: View {
         .buttonStyle(.plain)
     }
 
+    /// 封装removableChip对应的业务步骤，确保调用方可以稳定复用该能力。
     private func removableChip(_ title: String, action: @escaping () -> Void) -> some View {
         HStack(spacing: Spacing.compact) {
             Text(title)
@@ -488,6 +505,7 @@ struct BookEditorView: View {
         .background(Color.surfaceNested, in: Capsule())
     }
 
+    /// 执行binding对应的数据处理步骤，并返回当前流程需要的结果。
     private func binding(_ viewModel: BookEditorViewModel, _ keyPath: WritableKeyPath<BookEditorDraft, String>) -> Binding<String> {
         Binding(
             get: { viewModel.draft?[keyPath: keyPath] ?? "" },

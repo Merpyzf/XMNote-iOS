@@ -9,6 +9,7 @@ import SwiftUI
 
 /// 月度阅读记录占位弹层，当前用于承接未完成能力并提供月总结入口。
 struct ReadCalendarMonthRecordPlaceholderSheet: View {
+    /// Layout 负责当前场景的enum定义，明确职责边界并组织相关能力。
     private enum Layout {
         static let containerPadding: CGFloat = Spacing.contentEdge
         static let contentSpacing: CGFloat = Spacing.base

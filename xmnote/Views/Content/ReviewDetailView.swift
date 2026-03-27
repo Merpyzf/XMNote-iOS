@@ -54,6 +54,7 @@ struct ReviewDetailView: View {
     }
 }
 
+/// ReviewDetailLoadedView 负责当前场景的struct定义，明确职责边界并组织相关能力。
 private struct ReviewDetailLoadedView: View {
     @Bindable var viewModel: ReviewDetailViewModel
     @Binding var showsDeleteDialog: Bool
@@ -128,6 +129,7 @@ private struct ReviewDetailLoadedView: View {
         }
     }
 
+    /// 封装reviewContent对应的业务步骤，确保调用方可以稳定复用该能力。
     private func reviewContent(_ detail: ReviewContentDetail) -> some View {
         VStack(alignment: .leading, spacing: Spacing.base) {
             if let dateText = formattedDate(detail.createdDate) {
@@ -164,6 +166,7 @@ private struct ReviewDetailLoadedView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
+    /// 封装copyText对应的业务步骤，确保调用方可以稳定复用该能力。
     private func copyText(from detail: ReviewContentDetail) -> String {
         let content = RichTextBridge.htmlToAttributed(detail.contentHTML).string
             .trimmingCharacters(in: .whitespacesAndNewlines)
@@ -173,10 +176,12 @@ private struct ReviewDetailLoadedView: View {
             .joined(separator: "\n\n")
     }
 
+    /// 封装trimmed对应的业务步骤，确保调用方可以稳定复用该能力。
     private func trimmed(_ text: String) -> String {
         text.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
+    /// 封装formattedDate对应的业务步骤，确保调用方可以稳定复用该能力。
     private func formattedDate(_ timestamp: Int64) -> String? {
         guard timestamp > 0 else { return nil }
         return ContentDetailDateFormatter.full.string(
@@ -184,6 +189,7 @@ private struct ReviewDetailLoadedView: View {
         )
     }
 
+    /// 处理syncReadLoadingVisibility对应的状态流转，确保交互过程与数据状态保持一致。
     private func syncReadLoadingVisibility() {
         readLoadingGate.update(intent: viewModel.isLoading ? .read : .none)
     }

@@ -7,6 +7,7 @@
 
 import SwiftUI
 
+/// NoteToolbarActionID 负责当前场景的enum定义，明确职责边界并组织相关能力。
 enum NoteToolbarActionID: String, CaseIterable, Identifiable {
     case undo
     case redo
@@ -108,6 +109,7 @@ enum NoteToolbarActionID: String, CaseIterable, Identifiable {
     ]
 }
 
+/// NoteToolbarIconAction 负责当前场景的struct定义，明确职责边界并组织相关能力。
 struct NoteToolbarIconAction: Identifiable {
     let id: NoteToolbarActionID
     let isEnabled: Bool
@@ -117,6 +119,7 @@ struct NoteToolbarIconAction: Identifiable {
     var identity: String { id.rawValue }
 }
 
+/// NoteToolbarIconStrip 负责当前场景的struct定义，明确职责边界并组织相关能力。
 struct NoteToolbarIconStrip: View {
     let actions: [NoteToolbarIconAction]
     var dividerOpacity: Double = 0.16
@@ -136,6 +139,7 @@ struct NoteToolbarIconStrip: View {
         .animation(.snappy(duration: 0.24, extraBounce: 0), value: actions.map(\.identity))
     }
 
+    /// 封装shouldInsertDivider对应的业务步骤，确保调用方可以稳定复用该能力。
     private func shouldInsertDivider(before index: Int) -> Bool {
         guard index > 0 else { return false }
         return actions[index - 1].id.group != actions[index].id.group
@@ -147,6 +151,7 @@ struct NoteToolbarIconStrip: View {
             .frame(width: 1, height: 18)
     }
 
+    /// 组装toolbarIconButton对应的界面片段，保持页面层级与信息结构清晰。
     private func toolbarIconButton(for action: NoteToolbarIconAction) -> some View {
         Button(action: action.handler) {
             Image(systemName: action.id.systemImage)

@@ -366,6 +366,7 @@ private extension NoteRepository {
         }
     }
 
+    /// 执行fetchTagSections对应的数据处理步骤，并返回当前流程需要的结果。
     nonisolated func fetchTagSections(_ db: Database) throws -> [TagSection] {
         // SQL 目的：读取标签列表并统计每个标签关联的有效笔记数。
         // 表关系：tag t LEFT JOIN tag_note tn（仅 tn.is_deleted = 0）。
@@ -408,6 +409,7 @@ private extension NoteRepository {
         return sections
     }
 
+    /// 执行fetchNoteEditorBooks对应的数据处理步骤，并返回当前流程需要的结果。
     nonisolated func fetchNoteEditorBooks(_ db: Database) throws -> [NoteEditorBookOption] {
         // SQL 目的：读取编辑页可选书籍列表，供书卡选择 sheet 展示。
         // 涉及表：book。
@@ -431,6 +433,7 @@ private extension NoteRepository {
         }
     }
 
+    /// 执行fetchNoteEditorTags对应的数据处理步骤，并返回当前流程需要的结果。
     nonisolated func fetchNoteEditorTags(_ db: Database) throws -> [NoteEditorTagOption] {
         let ownerID = try DatabaseOwnerResolver.fetchExistingOwnerID(in: db) ?? 0
         // SQL 目的：读取 note 标签列表，供编辑页标签多选与新增后回填使用。
@@ -448,6 +451,7 @@ private extension NoteRepository {
         }
     }
 
+    /// 执行fetchNoteEditorChapters对应的数据处理步骤，并返回当前流程需要的结果。
     nonisolated func fetchNoteEditorChapters(_ db: Database, bookId: Int64) throws -> [NoteEditorChapterOption] {
         // SQL 目的：读取指定书籍下的章节列表，供书摘编辑页章节选择与恢复使用。
         // 涉及表：chapter。
@@ -464,6 +468,7 @@ private extension NoteRepository {
         }
     }
 
+    /// 执行buildBaseDraft对应的数据处理步骤，并返回当前流程需要的结果。
     nonisolated func buildBaseDraft(
         _ db: Database,
         mode: NoteEditorMode,
@@ -478,6 +483,7 @@ private extension NoteRepository {
         }
     }
 
+    /// 执行buildEditingDraft对应的数据处理步骤，并返回当前流程需要的结果。
     nonisolated func buildEditingDraft(_ db: Database, noteId: Int64) throws -> NoteEditorDraft {
         // SQL 目的：拉取编辑态书摘详情，并补齐书籍与章节信息。
         // 涉及表：note INNER JOIN book LEFT JOIN chapter。
@@ -520,6 +526,7 @@ private extension NoteRepository {
         )
     }
 
+    /// 执行buildCreatingDraft对应的数据处理步骤，并返回当前流程需要的结果。
     nonisolated func buildCreatingDraft(
         _ db: Database,
         seed: NoteEditorSeed?,
@@ -552,6 +559,7 @@ private extension NoteRepository {
         )
     }
 
+    /// 执行resolveSeedBook对应的数据处理步骤，并返回当前流程需要的结果。
     nonisolated func resolveSeedBook(_ bookId: Int64?, books: [NoteEditorBookOption]) -> NoteEditorBookOption? {
         if let bookId, bookId > 0 {
             return books.first(where: { $0.id == bookId })
@@ -559,6 +567,7 @@ private extension NoteRepository {
         return books.first
     }
 
+    /// 执行resolveSeedChapter对应的数据处理步骤，并返回当前流程需要的结果。
     nonisolated func resolveSeedChapter(
         _ db: Database,
         bookId: Int64,
@@ -568,6 +577,7 @@ private extension NoteRepository {
         return try fetchNoteEditorChapters(db, bookId: bookId).first(where: { $0.id == chapterId })
     }
 
+    /// 执行fetchSelectedTags对应的数据处理步骤，并返回当前流程需要的结果。
     nonisolated func fetchSelectedTags(_ db: Database, noteId: Int64) throws -> [NoteEditorTagOption] {
         // SQL 目的：读取指定书摘当前已选标签。
         // 表关系：tag_note INNER JOIN tag。
@@ -585,6 +595,7 @@ private extension NoteRepository {
         }
     }
 
+    /// 执行fetchEditorImages对应的数据处理步骤，并返回当前流程需要的结果。
     nonisolated func fetchEditorImages(_ db: Database, noteId: Int64) throws -> [NoteEditorImageItem] {
         // SQL 目的：读取指定书摘当前附图列表。
         // 表关系：attach_image。
@@ -636,6 +647,7 @@ private extension NoteRepository {
         return normalized
     }
 
+    /// 执行validateReadPosition对应的数据处理步骤，并返回当前流程需要的结果。
     nonisolated func validateReadPosition(
         _ readPosition: Double,
         positionUnit: Int64,
@@ -692,6 +704,7 @@ private extension NoteRepository {
         return readyImages
     }
 
+    /// 处理updateBookReadPositionIfNeeded对应的状态流转，确保交互过程与数据状态保持一致。
     nonisolated func updateBookReadPositionIfNeeded(
         _ db: Database,
         book: inout BookRecord,
@@ -719,6 +732,7 @@ private extension NoteRepository {
         }
     }
 
+    /// 封装replaceNoteTagAssociations对应的业务步骤，确保调用方可以稳定复用该能力。
     nonisolated func replaceNoteTagAssociations(
         _ db: Database,
         noteId: Int64,
@@ -751,6 +765,7 @@ private extension NoteRepository {
         }
     }
 
+    /// 封装replaceNoteImages对应的业务步骤，确保调用方可以稳定复用该能力。
     nonisolated func replaceNoteImages(
         _ db: Database,
         noteId: Int64,

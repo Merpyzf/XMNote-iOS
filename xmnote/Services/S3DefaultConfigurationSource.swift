@@ -40,6 +40,7 @@ private extension S3DefaultConfigurationSource {
         let region: String
     }
 
+    /// 执行decodeHexString对应的数据处理步骤，并返回当前流程需要的结果。
     static func decodeHexString(_ value: String) throws -> String {
         guard value.count.isMultiple(of: 2) else {
             throw S3StorageError.invalidConfig(message: "默认 S3 配置格式错误")

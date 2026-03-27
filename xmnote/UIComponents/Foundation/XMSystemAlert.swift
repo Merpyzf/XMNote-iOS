@@ -122,6 +122,7 @@ struct XMSystemAlertTextField: Identifiable {
 
 /// UIKit imperative presenter，供非 SwiftUI 宿主直接复用同一套系统弹窗模型。
 enum XMSystemAlertController {
+    /// 处理present对应的状态流转，确保交互过程与数据状态保持一致。
     static func present(
         on presenter: UIViewController,
         descriptor: XMSystemAlertDescriptor
@@ -188,6 +189,7 @@ enum XMSystemAlertController {
         }
     }
 
+    /// AssociatedKeys 负责当前场景的enum定义，明确职责边界并组织相关能力。
     private enum AssociatedKeys {
         static var textFieldObservers: UInt8 = 0
     }
@@ -211,6 +213,7 @@ enum XMSystemAlertController {
         }
 
         @objc
+        /// 处理handleEditingChanged对应的状态流转，确保交互过程与数据状态保持一致。
         private func handleEditingChanged(_ textField: UITextField) {
             configuration.setText(textField.text ?? "")
         }
@@ -277,11 +280,13 @@ extension Binding {
     }
 }
 
+/// XMSystemAlertPresentationState 负责当前场景的struct定义，明确职责边界并组织相关能力。
 private struct XMSystemAlertPresentationState {
     let descriptor: XMSystemAlertDescriptor
     let dismiss: () -> Void
 }
 
+/// XMSystemAlertHostPresenter 负责当前场景的struct定义，明确职责边界并组织相关能力。
 private struct XMSystemAlertHostPresenter: UIViewControllerRepresentable {
     let stateProvider: () -> XMSystemAlertPresentationState?
     let onDismiss: (() -> Void)?
@@ -319,21 +324,25 @@ private struct XMSystemAlertHostPresenter: UIViewControllerRepresentable {
         )
     }
 
+    /// 封装dismantleUIViewController对应的业务步骤，确保调用方可以稳定复用该能力。
     static func dismantleUIViewController(_ uiViewController: HostViewController, coordinator: Coordinator) {
         coordinator.dismissIfNeeded(notify: false)
     }
 }
 
 private extension XMSystemAlertHostPresenter {
+    /// HostViewController 负责当前场景的class定义，明确职责边界并组织相关能力。
     final class HostViewController: UIViewController {
         var onViewDidAppear: (() -> Void)?
 
+        /// 封装viewDidAppear对应的业务步骤，确保调用方可以稳定复用该能力。
         override func viewDidAppear(_ animated: Bool) {
             super.viewDidAppear(animated)
             onViewDidAppear?()
         }
     }
 
+    /// Coordinator 负责当前场景的class定义，明确职责边界并组织相关能力。
     final class Coordinator: NSObject {
         private weak var presentedAlertController: UIAlertController?
         private var dismissPresentation: (() -> Void)?
@@ -366,6 +375,7 @@ private extension XMSystemAlertHostPresenter {
             }
         }
 
+        /// 处理presentIfNeeded对应的状态流转，确保交互过程与数据状态保持一致。
         private func presentIfNeeded(
             from viewController: UIViewController,
             state: XMSystemAlertPresentationState
@@ -389,6 +399,7 @@ private extension XMSystemAlertHostPresenter {
             viewController.present(alertController, animated: true)
         }
 
+        /// 封装notifyDismissIfNeeded对应的业务步骤，确保调用方可以稳定复用该能力。
         private func notifyDismissIfNeeded(shouldNotify: Bool) {
             guard shouldNotify else { return }
             guard !didNotifyDismiss else { return }

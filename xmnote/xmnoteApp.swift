@@ -76,6 +76,7 @@ struct xmnoteApp: App {
 
     // MARK: - Error View
 
+    /// 封装databaseErrorView对应的业务步骤，确保调用方可以稳定复用该能力。
     private func databaseErrorView(_ error: Error) -> some View {
         VStack(spacing: Spacing.base) {
             Image(systemName: "exclamationmark.triangle")

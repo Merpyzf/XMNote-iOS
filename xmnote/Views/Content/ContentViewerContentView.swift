@@ -152,6 +152,7 @@ private struct ContentViewerPageView: View {
     }
 
     @ViewBuilder
+    /// 封装detailBody对应的业务步骤，确保调用方可以稳定复用该能力。
     private func detailBody(_ detail: ContentViewerDetail) -> some View {
         switch detail {
         case .note(let note):

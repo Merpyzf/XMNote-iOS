@@ -86,6 +86,7 @@ final class FanqieDOMSearchService {
         let snapshots: [DebugSnapshot]
         let events: [DebugEvent]
 
+        /// 封装idle对应的业务步骤，确保调用方可以稳定复用该能力。
         static func idle(keyword: String) -> DebugReport {
             DebugReport(
                 keyword: keyword,
@@ -105,6 +106,7 @@ final class FanqieDOMSearchService {
             )
         }
 
+        /// 组装loading对应的界面片段，保持页面层级与信息结构清晰。
         static func loading(keyword: String, requestURL: String?) -> DebugReport {
             DebugReport(
                 keyword: keyword,
@@ -803,6 +805,7 @@ private extension FanqieDOMSearchService {
         )
     }
 
+    /// NavigationLoader 负责当前场景的class定义，明确职责边界并组织相关能力。
     final class NavigationLoader: NSObject, WKNavigationDelegate {
         private var continuation: CheckedContinuation<Void, Error>?
         private var hasCompleted = false
@@ -838,6 +841,7 @@ private extension FanqieDOMSearchService {
             completionHandler(.performDefaultHandling, nil)
         }
 
+        /// 处理finish对应的状态流转，确保交互过程与数据状态保持一致。
         private func finish(with result: Result<Void, Error>) {
             guard hasCompleted == false, let continuation else { return }
             hasCompleted = true

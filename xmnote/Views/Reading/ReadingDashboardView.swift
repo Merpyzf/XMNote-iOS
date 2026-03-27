@@ -163,6 +163,7 @@ private struct ReadingDashboardContent: View {
         }
     }
 
+    /// 处理syncReadLoadingVisibility对应的状态流转，确保交互过程与数据状态保持一致。
     private func syncReadLoadingVisibility() {
         readLoadingGate.update(intent: viewModel.isLoading ? .read : .none)
     }

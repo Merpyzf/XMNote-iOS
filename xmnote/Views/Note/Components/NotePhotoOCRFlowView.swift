@@ -13,10 +13,12 @@ import PhotosUI
 import SwiftUI
 import UIKit
 
+/// OCRFlowRoute 负责当前场景的enum定义，明确职责边界并组织相关能力。
 private enum OCRFlowRoute: Hashable {
     case crop
 }
 
+/// NotePhotoOCRFlowView 负责当前场景的struct定义，明确职责边界并组织相关能力。
 struct NotePhotoOCRFlowView: View {
     let target: NoteEditorComposerTarget
     let onComplete: (NotePhotoOCRCompletionPayload) -> Void
@@ -59,23 +61,28 @@ struct NotePhotoOCRFlowView: View {
         .background(Color.black.ignoresSafeArea())
     }
 
+    /// 处理handleSelectedImage对应的状态流转，确保交互过程与数据状态保持一致。
     private func handleSelectedImage(_ image: UIImage, sourceTitle: String) {
         viewModel.selectImage(image, sourceTitle: sourceTitle)
         path.append(.crop)
     }
 
+    /// 封装popCropScreen对应的业务步骤，确保调用方可以稳定复用该能力。
     private func popCropScreen() {
         guard path.last == .crop else { return }
         path.removeLast()
     }
 
+    /// 处理handleRecognitionCompleted对应的状态流转，确保交互过程与数据状态保持一致。
     private func handleRecognitionCompleted(_ payload: NotePhotoOCRCompletionPayload) {
         onComplete(payload)
         dismiss()
     }
 }
 
+/// OCRCameraScreen 负责当前场景的struct定义，明确职责边界并组织相关能力。
 private struct OCRCameraScreen: View {
+    /// FocusIndicatorState 负责当前场景的struct定义，明确职责边界并组织相关能力。
     private struct FocusIndicatorState: Equatable {
         let point: CGPoint
         let scale: CGFloat
@@ -399,6 +406,7 @@ private extension OCRCameraScreen {
         .glassEffect(.regular, in: .rect(cornerRadius: CornerRadius.blockLarge))
     }
 
+    /// 封装focusIndicator对应的业务步骤，确保调用方可以稳定复用该能力。
     private func focusIndicator(state: FocusIndicatorState) -> some View {
         ZStack {
             RoundedRectangle(cornerRadius: 14, style: .continuous)
@@ -537,7 +545,9 @@ private extension OCRCameraScreen {
     }
 }
 
+/// OCRCropRecognitionScreen 负责当前场景的struct定义，明确职责边界并组织相关能力。
 private struct OCRCropRecognitionScreen: View {
+    /// InstructionPresentationStyle 负责当前场景的enum定义，明确职责边界并组织相关能力。
     private enum InstructionPresentationStyle {
         case automatic
         case manual
@@ -626,6 +636,7 @@ private extension OCRCropRecognitionScreen {
         instructionText(for: instructionPresentationStyle)
     }
 
+    /// 封装instructionText对应的业务步骤，确保调用方可以稳定复用该能力。
     private func instructionText(for style: InstructionPresentationStyle) -> String? {
         switch style {
         case .automatic:
@@ -638,6 +649,7 @@ private extension OCRCropRecognitionScreen {
         }
     }
 
+    /// 处理presentInstruction对应的状态流转，确保交互过程与数据状态保持一致。
     private func presentInstruction(_ style: InstructionPresentationStyle) {
         instructionPresentationStyle = style
         instructionPresentationID = UUID()
@@ -674,6 +686,7 @@ private extension OCRCropRecognitionScreen {
     }
 }
 
+/// OCRCropRecognitionPageState 负责当前场景的struct定义，明确职责边界并组织相关能力。
 private struct OCRCropRecognitionPageState {
     let selectedImage: UIImage?
     let selectionMode: NotePhotoOCRSelectionMode
@@ -694,6 +707,7 @@ private struct OCRCropRecognitionPageState {
     }
 }
 
+/// OCRCropRecognitionHost 负责当前场景的struct定义，明确职责边界并组织相关能力。
 private struct OCRCropRecognitionHost: UIViewControllerRepresentable {
     let state: OCRCropRecognitionPageState
     let onSingleSelectionChanged: (CGRect?) -> Void
@@ -764,6 +778,7 @@ private final class OCRCropRecognitionViewController: UIViewController {
         let onInteractionStateChanged: (Bool) -> Void
     }
 
+    /// BannerContent 负责当前场景的enum定义，明确职责边界并组织相关能力。
     fileprivate enum BannerContent: Equatable {
         case error(String)
         case instruction(String)
@@ -797,6 +812,7 @@ private final class OCRCropRecognitionViewController: UIViewController {
     private let recognizeButton = UIButton(type: .system)
     private let clearSelectionButton = UIButton(type: .system)
 
+    /// 封装viewDidLoad对应的业务步骤，确保调用方可以稳定复用该能力。
     override func viewDidLoad() {
         super.viewDidLoad()
         configureHierarchy()
@@ -1254,12 +1270,14 @@ private extension OCRCropRecognitionViewController {
     }
 }
 
+/// OCRSelectionOverlayRegionState 负责当前场景的struct定义，明确职责边界并组织相关能力。
 private struct OCRSelectionOverlayRegionState: Equatable {
     let id: UUID
     let frame: CGRect
     let deleteButtonFrame: CGRect?
 }
 
+/// OCRSelectionOverlayState 负责当前场景的struct定义，明确职责边界并组织相关能力。
 private struct OCRSelectionOverlayState: Equatable {
     let imageFrame: CGRect
     let selectionMode: NotePhotoOCRSelectionMode
@@ -1274,6 +1292,7 @@ private struct OCRSelectionOverlayState: Equatable {
     let singleHandleCenters: [CGPoint]
 }
 
+/// OCRSelectionGeometry 负责当前场景的enum定义，明确职责边界并组织相关能力。
 private enum OCRSelectionGeometry {
     static let minimumRecognitionPixelSize: CGFloat = 2
     static let deleteButtonSize: CGFloat = 28
@@ -1281,6 +1300,7 @@ private enum OCRSelectionGeometry {
     static let externalDeleteButtonSpacing: CGFloat = 8
     static let handleVisibleMinimumDimension: CGFloat = 28
 
+    /// 处理deleteButtonFrame对应的状态流转，确保交互过程与数据状态保持一致。
     static func deleteButtonFrame(for regionFrame: CGRect, imageFrame: CGRect) -> CGRect {
         let preferredInsideFrame = CGRect(
             x: regionFrame.maxX - deleteButtonSize - deleteButtonInset,
@@ -1310,6 +1330,7 @@ private enum OCRSelectionGeometry {
         return resolvedFrame
     }
 
+    /// 处理handleRect对应的状态流转，确保交互过程与数据状态保持一致。
     static func handleRect(center: CGPoint) -> CGRect {
         CGRect(
             x: center.x - 7,
@@ -1341,6 +1362,7 @@ private final class OCRSelectionOverlayView: UIView {
         fatalError("init(coder:) has not been implemented")
     }
 
+    /// 封装draw对应的业务步骤，确保调用方可以稳定复用该能力。
     override func draw(_ rect: CGRect) {
         guard let context = UIGraphicsGetCurrentContext(),
               let state else {
@@ -1556,6 +1578,7 @@ private final class OCRLoupeView: UIView {
         fatalError("init(coder:) has not been implemented")
     }
 
+    /// 封装layoutSubviews对应的业务步骤，确保调用方可以稳定复用该能力。
     override func layoutSubviews() {
         super.layoutSubviews()
 
@@ -1610,6 +1633,7 @@ private final class OCRSelectionCanvasView: UIView {
         let onInteractionStateChanged: (Bool) -> Void
     }
 
+    /// Handle 负责当前场景的enum定义，明确职责边界并组织相关能力。
     fileprivate enum Handle: CaseIterable {
         case topLeft
         case topCenter
@@ -1621,11 +1645,13 @@ private final class OCRSelectionCanvasView: UIView {
         case bottomRight
     }
 
+    /// LoupeSide 负责当前场景的enum定义，明确职责边界并组织相关能力。
     fileprivate enum LoupeSide: Equatable {
         case leading
         case trailing
     }
 
+    /// LoupeUpdateSource 负责当前场景的enum定义，明确职责边界并组织相关能力。
     fileprivate enum LoupeUpdateSource: Equatable {
         case singleDrawing
         case singlePendingOutsideRedraw
@@ -1636,6 +1662,7 @@ private final class OCRSelectionCanvasView: UIView {
         case freeformDrag
     }
 
+    /// SingleInteractionState 负责当前场景的enum定义，明确职责边界并组织相关能力。
     fileprivate enum SingleInteractionState {
         case idle
         case drawing(anchor: CGPoint)
@@ -1645,6 +1672,7 @@ private final class OCRSelectionCanvasView: UIView {
         case resizing(handle: Handle, baseRect: CGRect)
     }
 
+    /// TouchSample 负责当前场景的struct定义，明确职责边界并组织相关能力。
     fileprivate struct TouchSample {
         let rawLocation: CGPoint
         let preciseLocation: CGPoint
@@ -1652,12 +1680,14 @@ private final class OCRSelectionCanvasView: UIView {
         let type: UITouch.TouchType
     }
 
+    /// LoupeState 负责当前场景的struct定义，明确职责边界并组织相关能力。
     fileprivate struct LoupeState {
         let normalizedSamplePoint: CGPoint
         let source: LoupeUpdateSource
         let side: LoupeSide
     }
 
+    /// PendingTouchUpdate 负责当前场景的struct定义，明确职责边界并组织相关能力。
     private struct PendingTouchUpdate {
         let sample: TouchSample
         let location: CGPoint
@@ -1751,11 +1781,13 @@ private final class OCRSelectionCanvasView: UIView {
         renderScene()
     }
 
+    /// 封装layoutSubviews对应的业务步骤，确保调用方可以稳定复用该能力。
     override func layoutSubviews() {
         super.layoutSubviews()
         renderScene()
     }
 
+    /// 封装touchesBegan对应的业务步骤，确保调用方可以稳定复用该能力。
     override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
         guard activeTouchIdentifier == nil,
               let touch = touches.first,
@@ -1810,6 +1842,7 @@ private final class OCRSelectionCanvasView: UIView {
         }
     }
 
+    /// 封装touchesMoved对应的业务步骤，确保调用方可以稳定复用该能力。
     override func touchesMoved(_ touches: Set<UITouch>, with event: UIEvent?) {
         guard let touch = touches.first,
               activeTouchIdentifier == ObjectIdentifier(touch),
@@ -1823,6 +1856,7 @@ private final class OCRSelectionCanvasView: UIView {
         pendingTouchUpdate = PendingTouchUpdate(sample: sample, location: point)
     }
 
+    /// 封装touchesEnded对应的业务步骤，确保调用方可以稳定复用该能力。
     override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent?) {
         guard let touch = touches.first,
               activeTouchIdentifier == ObjectIdentifier(touch),
@@ -1847,6 +1881,7 @@ private final class OCRSelectionCanvasView: UIView {
         pendingTouchUpdate = nil
     }
 
+    /// 封装touchesCancelled对应的业务步骤，确保调用方可以稳定复用该能力。
     override func touchesCancelled(_ touches: Set<UITouch>, with event: UIEvent?) {
         pendingTouchUpdate = nil
         resetAllInteractionState()
@@ -2594,6 +2629,7 @@ private extension OCRSelectionCanvasView {
         Int(value.rounded())
     }
 
+    /// 封装pixelSize对应的业务步骤，确保调用方可以稳定复用该能力。
     static func pixelSize(for image: UIImage?) -> CGSize {
         guard let image else { return .zero }
         if let cgImage = image.cgImage {
@@ -2603,6 +2639,7 @@ private extension OCRSelectionCanvasView {
     }
 }
 
+/// OCRSettingsScreen 负责当前场景的struct定义，明确职责边界并组织相关能力。
 private struct OCRSettingsScreen: View {
     @Bindable var viewModel: NotePhotoOCRFlowViewModel
 
@@ -2779,6 +2816,7 @@ private extension OCRSettingsScreen {
     }
 }
 
+/// OCRSelectionEditor 负责当前场景的struct定义，明确职责边界并组织相关能力。
 private struct OCRSelectionEditor: View {
     enum Handle: CaseIterable {
         case topLeft
@@ -2791,11 +2829,13 @@ private struct OCRSelectionEditor: View {
         case bottomRight
     }
 
+    /// LoupeSide 负责当前场景的enum定义，明确职责边界并组织相关能力。
     private enum LoupeSide: Equatable {
         case leading
         case trailing
     }
 
+    /// LoupeUpdateSource 负责当前场景的enum定义，明确职责边界并组织相关能力。
     private enum LoupeUpdateSource: Equatable {
         case singleDrawing
         case singlePendingOutsideRedraw
@@ -2806,6 +2846,7 @@ private struct OCRSelectionEditor: View {
         case freeformDrag
     }
 
+    /// SingleInteractionState 负责当前场景的enum定义，明确职责边界并组织相关能力。
     private enum SingleInteractionState {
         case idle
         case drawing(anchor: CGPoint)
@@ -3302,6 +3343,7 @@ private extension OCRSelectionEditor {
         endInteraction()
     }
 
+    /// 封装initialSingleInteractionState对应的业务步骤，确保调用方可以稳定复用该能力。
     private func initialSingleInteractionState(at point: CGPoint, in imageFrame: CGRect) -> SingleInteractionState {
         guard let singleSelectionRect,
               let cropFrame = currentSingleFrame(in: imageFrame) else {
@@ -3474,6 +3516,7 @@ private extension OCRSelectionEditor {
         return normalizedRect(from: resizedFrame, in: imageFrame)
     }
 
+    /// 处理updateLoupe对应的状态流转，确保交互过程与数据状态保持一致。
     private func updateLoupe(
         at point: CGPoint,
         in imageFrame: CGRect,
@@ -3503,11 +3546,13 @@ private extension OCRSelectionEditor {
         lastLoupeLogMessage = nil
     }
 
+    /// 封装loupePosition对应的业务步骤，确保调用方可以稳定复用该能力。
     private func loupePosition(in containerSize: CGSize, side: LoupeSide) -> CGPoint {
         let frame = loupeFrame(in: containerSize, side: side)
         return CGPoint(x: frame.midX, y: frame.midY)
     }
 
+    /// 封装loupeFrame对应的业务步骤，确保调用方可以稳定复用该能力。
     private func loupeFrame(in containerSize: CGSize, side: LoupeSide) -> CGRect {
         let width = max(containerSize.width, loupeDiameter + loupeHorizontalPadding * 2)
         let x: CGFloat
@@ -3527,6 +3572,7 @@ private extension OCRSelectionEditor {
         )
     }
 
+    /// 封装oppositeSide对应的业务步骤，确保调用方可以稳定复用该能力。
     private func oppositeSide(of side: LoupeSide) -> LoupeSide {
         switch side {
         case .leading:
@@ -3536,6 +3582,7 @@ private extension OCRSelectionEditor {
         }
     }
 
+    /// 封装loupeContentOffset对应的业务步骤，确保调用方可以稳定复用该能力。
     private func loupeContentOffset(for samplePoint: CGPoint) -> CGSize {
         CGSize(
             width: loupeDiameter / 2 - samplePoint.x * loupeMagnification,
@@ -3543,6 +3590,7 @@ private extension OCRSelectionEditor {
         )
     }
 
+    /// 封装logLoupeState对应的业务步骤，确保调用方可以稳定复用该能力。
     private func logLoupeState(
         inputPoint: CGPoint,
         samplePoint: CGPoint,
@@ -3566,6 +3614,7 @@ private extension OCRSelectionEditor {
         print(message)
     }
 
+    /// 封装loupeSideDescription对应的业务步骤，确保调用方可以稳定复用该能力。
     private func loupeSideDescription(_ side: LoupeSide) -> String {
         switch side {
         case .leading:
@@ -3575,6 +3624,7 @@ private extension OCRSelectionEditor {
         }
     }
 
+    /// 封装loupeSourceDescription对应的业务步骤，确保调用方可以稳定复用该能力。
     private func loupeSourceDescription(_ source: LoupeUpdateSource) -> String {
         switch source {
         case .singleDrawing:
@@ -3594,6 +3644,7 @@ private extension OCRSelectionEditor {
         }
     }
 
+    /// 处理handleDescription对应的状态流转，确保交互过程与数据状态保持一致。
     private func handleDescription(_ handle: Handle) -> String {
         switch handle {
         case .topLeft:
@@ -3615,6 +3666,7 @@ private extension OCRSelectionEditor {
         }
     }
 
+    /// 封装roundedInt对应的业务步骤，确保调用方可以稳定复用该能力。
     private func roundedInt(_ value: CGFloat) -> Int {
         Int(value.rounded())
     }
@@ -3735,6 +3787,7 @@ private extension OCRSelectionEditor {
     }
 }
 
+/// OCRCameraPreview 负责当前场景的struct定义，明确职责边界并组织相关能力。
 private struct OCRCameraPreview: UIViewRepresentable {
     @ObservedObject var controller: OCRCameraSessionController
     let onTapToFocus: (CGPoint) -> Void
@@ -3775,6 +3828,7 @@ private struct OCRCameraPreview: UIViewRepresentable {
         Coordinator(controller: controller, onTapToFocus: onTapToFocus)
     }
 
+    /// Coordinator 负责当前场景的class定义，明确职责边界并组织相关能力。
     final class Coordinator: NSObject {
         weak var previewView: PreviewView?
         weak var controller: OCRCameraSessionController?
@@ -3788,6 +3842,7 @@ private struct OCRCameraPreview: UIViewRepresentable {
             self.onTapToFocus = onTapToFocus
         }
 
+        /// 处理handleTap对应的状态流转，确保交互过程与数据状态保持一致。
         @objc func handleTap(_ gestureRecognizer: UITapGestureRecognizer) {
             guard let previewView else { return }
             let point = gestureRecognizer.location(in: previewView)
@@ -3800,6 +3855,7 @@ private struct OCRCameraPreview: UIViewRepresentable {
 private final class PreviewView: UIView {
     var onLayoutChanged: ((AVCaptureVideoPreviewLayer, CGRect) -> Void)?
 
+    /// var 负责当前场景的class定义，明确职责边界并组织相关能力。
     override class var layerClass: AnyClass {
         AVCaptureVideoPreviewLayer.self
     }
@@ -3808,6 +3864,7 @@ private final class PreviewView: UIView {
         layer as! AVCaptureVideoPreviewLayer
     }
 
+    /// 封装layoutSubviews对应的业务步骤，确保调用方可以稳定复用该能力。
     override func layoutSubviews() {
         super.layoutSubviews()
         onLayoutChanged?(previewLayer, bounds)
@@ -3815,6 +3872,7 @@ private final class PreviewView: UIView {
 }
 
 private final class OCRCameraSessionController: NSObject, ObservableObject {
+    /// OCRCapturedPhotoPayload 负责当前场景的struct定义，明确职责边界并组织相关能力。
     fileprivate struct OCRCapturedPhotoPayload {
         let imageData: Data
         let orientation: CGImagePropertyOrientation
@@ -4143,6 +4201,7 @@ private extension OCRCameraSessionController {
         Self.makeUprightImage(from: payload.imageData, orientation: payload.orientation)
     }
 
+    /// 执行makeUprightImage对应的数据处理步骤，并返回当前流程需要的结果。
     static func makeUprightImage(from imageData: Data, orientation: CGImagePropertyOrientation) -> UIImage? {
         guard let source = CGImageSourceCreateWithData(imageData as CFData, nil),
               let cgImage = CGImageSourceCreateImageAtIndex(source, 0, nil) else {
@@ -4161,6 +4220,7 @@ private extension OCRCameraSessionController {
         return UIImage(cgImage: uprightCGImage, scale: 1, orientation: .up)
     }
 
+    /// 封装aspectFillVisibleRect对应的业务步骤，确保调用方可以稳定复用该能力。
     static func aspectFillVisibleRect(imageSize: CGSize, containerSize: CGSize) -> CGRect {
         guard imageSize.width > 0,
               imageSize.height > 0,
@@ -4183,6 +4243,7 @@ private extension OCRCameraSessionController {
         return CGRect(x: originX, y: 0, width: visibleWidth, height: imageSize.height)
     }
 
+    /// 封装cropImage对应的业务步骤，确保调用方可以稳定复用该能力。
     static func cropImage(_ image: UIImage, to cropRect: CGRect) -> UIImage? {
         guard let cgImage = image.cgImage else { return nil }
 
@@ -4256,12 +4317,14 @@ private final class OCRPhotoCaptureProcessor: NSObject, AVCapturePhotoCaptureDel
         onFinish(resolvedSettings.uniqueID)
     }
 
+    /// 处理finish对应的状态流转，确保交互过程与数据状态保持一致。
     private func finish(_ result: Result<OCRCameraSessionController.OCRCapturedPhotoPayload, Error>) {
         guard !didComplete else { return }
         didComplete = true
         completion(result)
     }
 
+    /// 封装photoOrientation对应的业务步骤，确保调用方可以稳定复用该能力。
     static func photoOrientation(from metadata: [String: Any]) -> CGImagePropertyOrientation {
         if let rawValue = metadata[kCGImagePropertyOrientation as String] as? UInt32,
            let orientation = CGImagePropertyOrientation(rawValue: rawValue) {
@@ -4275,6 +4338,7 @@ private final class OCRPhotoCaptureProcessor: NSObject, AVCapturePhotoCaptureDel
     }
 }
 
+/// OCRCameraControllerError 负责当前场景的enum定义，明确职责边界并组织相关能力。
 private enum OCRCameraControllerError: LocalizedError {
     case invalidPhotoData
     case cameraUnavailable(reason: String)

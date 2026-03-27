@@ -83,6 +83,7 @@ struct ContentViewerView: View {
     }
 }
 
+/// ContentViewerLoadedView 负责当前场景的struct定义，明确职责边界并组织相关能力。
 private struct ContentViewerLoadedView: View {
     @Bindable var viewModel: ContentViewerViewModel
     @Binding var showsDeleteDialog: Bool
@@ -262,6 +263,7 @@ private struct ContentViewerLoadedView: View {
         }
     }
 
+    /// 组装bottomOverlay对应的界面片段，保持页面层级与信息结构清晰。
     private func bottomOverlay(safeAreaBottomInset: CGFloat) -> some View {
         ImmersiveBottomChromeOverlay(
             metrics: bottomChromeMetrics(safeAreaBottomInset: safeAreaBottomInset)
@@ -430,6 +432,7 @@ private struct ContentViewerLoadedView: View {
         )
     }
 
+    /// 组装bottomChromeMetrics对应的界面片段，保持页面层级与信息结构清晰。
     private func bottomChromeMetrics(safeAreaBottomInset: CGFloat) -> ImmersiveBottomChromeMetrics {
         ImmersiveBottomChromeMetrics.make(
             measuredOrnamentHeight: bottomOrnamentHeight,
@@ -460,6 +463,7 @@ private struct ContentViewerLoadedView: View {
         listLoadingGate.update(intent: intent)
     }
 
+    /// 封装pageState对应的业务步骤，确保调用方可以稳定复用该能力。
     private func pageState(for itemID: ContentViewerItemID) -> ContentViewerContentView.Props.PageState {
         if let detail = viewModel.detail(for: itemID) {
             return .detail(detail)
@@ -494,10 +498,12 @@ private struct ContentViewerLoadedView: View {
         return normalizedURL(selectedRelevantDetail.url)
     }
 
+    /// 处理presentPending对应的状态流转，确保交互过程与数据状态保持一致。
     private func presentPending(_ capability: ContentViewerPendingCapability) {
         pendingPresentation = PendingCapabilityPresentation(capability: capability)
     }
 
+    /// 处理handleNoteTagAction对应的状态流转，确保交互过程与数据状态保持一致。
     private func handleNoteTagAction() {
         if selectedTagNames.isEmpty {
             presentPending(.editTags)
@@ -506,11 +512,13 @@ private struct ContentViewerLoadedView: View {
         }
     }
 
+    /// 封装shareCurrentNote对应的业务步骤，确保调用方可以稳定复用该能力。
     private func shareCurrentNote() {
         guard let detail = selectedNoteDetail else { return }
         sharePayload = ContentViewerSharePayload(text: shareText(from: detail))
     }
 
+    /// 封装copyCurrentDetail对应的业务步骤，确保调用方可以稳定复用该能力。
     private func copyCurrentDetail() {
         switch viewModel.selectedDetail {
         case .note(let detail)?:
@@ -524,6 +532,7 @@ private struct ContentViewerLoadedView: View {
         }
     }
 
+    /// 封装shareText对应的业务步骤，确保调用方可以稳定复用该能力。
     private func shareText(from detail: NoteContentDetail) -> String {
         var sections: [String] = [detail.bookTitle]
 
@@ -546,6 +555,7 @@ private struct ContentViewerLoadedView: View {
         return sections.joined(separator: "\n\n")
     }
 
+    /// 封装copyText对应的业务步骤，确保调用方可以稳定复用该能力。
     private func copyText(from detail: ReviewContentDetail) -> String {
         let content = RichTextBridge.htmlToAttributed(detail.contentHTML).string
             .trimmingCharacters(in: .whitespacesAndNewlines)
@@ -555,6 +565,7 @@ private struct ContentViewerLoadedView: View {
             .joined(separator: "\n\n")
     }
 
+    /// 封装copyText对应的业务步骤，确保调用方可以稳定复用该能力。
     private func copyText(from detail: RelevantContentDetail) -> String {
         let content = RichTextBridge.htmlToAttributed(detail.contentHTML).string
             .trimmingCharacters(in: .whitespacesAndNewlines)
@@ -564,6 +575,7 @@ private struct ContentViewerLoadedView: View {
             .joined(separator: "\n\n")
     }
 
+    /// 封装normalizedURL对应的业务步骤，确保调用方可以稳定复用该能力。
     private func normalizedURL(_ rawValue: String) -> URL? {
         let trimmed = rawValue.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return nil }
@@ -576,6 +588,7 @@ private struct ContentViewerLoadedView: View {
     }
 }
 
+/// ContentViewerHeroCard 负责当前场景的struct定义，明确职责边界并组织相关能力。
 struct ContentViewerHeroCard<Accessory: View>: View {
     let title: String
     let subtitle: String
@@ -602,6 +615,7 @@ struct ContentViewerHeroCard<Accessory: View>: View {
     }
 }
 
+/// ViewerScoreRow 负责当前场景的struct定义，明确职责边界并组织相关能力。
 struct ViewerScoreRow: View {
     let score: Int64
 
@@ -615,6 +629,7 @@ struct ViewerScoreRow: View {
         }
     }
 
+    /// 封装imageName对应的业务步骤，确保调用方可以稳定复用该能力。
     private func imageName(for index: Int) -> String {
         let normalizedScore = Double(score) / 10.0
         let threshold = Double(index)

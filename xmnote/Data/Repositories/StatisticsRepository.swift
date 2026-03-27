@@ -91,16 +91,19 @@ private extension StatisticsRepository {
 
 // MARK: - 聚合查询
 
+/// CheckInSummary 负责当前场景的struct定义，明确职责边界并组织相关能力。
 private struct CheckInSummary {
     let count: Int
     let seconds: Int
 }
 
+/// HeatmapDateRange 负责当前场景的struct定义，明确职责边界并组织相关能力。
 private struct HeatmapDateRange {
     let start: Date
     let end: Date
 }
 
+/// ReadCalendarDayBookRow 负责当前场景的struct定义，明确职责边界并组织相关能力。
 private struct ReadCalendarDayBookRow {
     let day: Date
     let bookId: Int64
@@ -109,6 +112,7 @@ private struct ReadCalendarDayBookRow {
     let firstEventTime: Int64
 }
 
+/// ReadCalendarDurationRecordRow 负责当前场景的struct定义，明确职责边界并组织相关能力。
 private struct ReadCalendarDurationRecordRow {
     let bookId: Int64
     let bookName: String
@@ -119,6 +123,7 @@ private struct ReadCalendarDurationRecordRow {
     let fuzzyReadDate: Int64
 }
 
+/// ReadCalendarDurationAggregation 负责当前场景的struct定义，明确职责边界并组织相关能力。
 private struct ReadCalendarDurationAggregation {
     let readSecondsByBookId: [Int64: Int64]
     let bookMetaById: [Int64: (name: String, coverURL: String)]

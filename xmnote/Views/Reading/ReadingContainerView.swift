@@ -116,6 +116,7 @@ struct ReadingContainerView: View {
     }
 
     @ViewBuilder
+    /// 封装segmentedPage对应的业务步骤，确保调用方可以稳定复用该能力。
     private func segmentedPage(for tab: ReadingSubTab) -> some View {
         switch tab {
         case .reading:
@@ -135,6 +136,7 @@ struct ReadingContainerView: View {
         }
     }
 
+    /// 封装warmTimelineIfNeeded对应的业务步骤，确保调用方可以稳定复用该能力。
     private func warmTimelineIfNeeded(priority: TaskPriority) {
         guard let timelineViewModel else { return }
         subtabBootstrapCoordinator.warm(.timeline, priority: priority) {

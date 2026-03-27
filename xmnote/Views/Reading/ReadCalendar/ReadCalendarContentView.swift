@@ -124,6 +124,7 @@ struct ReadCalendarContentView: View {
             return count
         }
 
+        /// 封装isStreakDay对应的业务步骤，确保调用方可以稳定复用该能力。
         private func isStreakDay(on date: Date) -> Bool {
             guard hasActivity(on: date) else { return false }
             let cal = Calendar.current
@@ -134,6 +135,7 @@ struct ReadCalendarContentView: View {
             return hasActivity(on: prev) || hasActivity(on: next)
         }
 
+        /// 封装hasActivity对应的业务步骤，确保调用方可以稳定复用该能力。
         private func hasActivity(on date: Date) -> Bool {
             let cal = Calendar.current
             let normalized = cal.startOfDay(for: date)
@@ -226,6 +228,7 @@ struct ReadCalendarContentView: View {
         var id: Date { date }
     }
 
+    /// Layout 负责当前场景的enum定义，明确职责边界并组织相关能力。
     private enum Layout {
         static let topControlTopPadding: CGFloat = 10
         static let topControlBottomPadding: CGFloat = 14
@@ -1317,11 +1320,13 @@ private extension ReadCalendarContentView {
         .animation(.smooth(duration: 0.24), value: pageState.loadState)
     }
 
+    /// 处理syncRootLoadingVisibility对应的状态流转，确保交互过程与数据状态保持一致。
     private func syncRootLoadingVisibility() {
         let intent: LoadingIntent = props.rootContentState == .loading ? .read : .none
         rootLoadingGate.update(intent: intent)
     }
 
+    /// 处理syncHeatmapYearLoadingVisibility对应的状态流转，确保交互过程与数据状态保持一致。
     private func syncHeatmapYearLoadingVisibility() {
         let intent: LoadingIntent = isCurrentYearHeatmapLoading ? .read : .none
         heatmapYearLoadingGate.update(intent: intent)
@@ -1514,22 +1519,27 @@ private extension ReadCalendarContentView {
     }
 }
 
+/// ReadCalendarBookCoverFullscreenOverlay 负责当前场景的struct定义，明确职责边界并组织相关能力。
 private struct ReadCalendarBookCoverFullscreenOverlay: View {
+    /// LayoutPhaseSource 负责当前场景的enum定义，明确职责边界并组织相关能力。
     private enum LayoutPhaseSource {
         case automatic
         case manual
     }
 
+    /// PhaseTransitionDirection 负责当前场景的enum定义，明确职责边界并组织相关能力。
     private enum PhaseTransitionDirection {
         case toGrid
     }
 
+    /// DismissSource 负责当前场景的enum定义，明确职责边界并组织相关能力。
     private enum DismissSource {
         case dragGesture
         case backdropTap
         case closeButton
     }
 
+    /// LayoutDebugSnapshot 负责当前场景的struct定义，明确职责边界并组织相关能力。
     private struct LayoutDebugSnapshot: Equatable {
         let overlayMinY: Int
         let screenHeight: Int
@@ -1550,6 +1560,7 @@ private struct ReadCalendarBookCoverFullscreenOverlay: View {
         let showToggle: Bool
     }
 
+    /// StackedLayoutBaselineSignature 负责当前场景的struct定义，明确职责边界并组织相关能力。
     private struct StackedLayoutBaselineSignature: Equatable {
         let overlayWidth: Int
         let overlayHeight: Int
@@ -1559,6 +1570,7 @@ private struct ReadCalendarBookCoverFullscreenOverlay: View {
         let topControlMaxY: Int
     }
 
+    /// StackedLayoutBaseline 负责当前场景的struct定义，明确职责边界并组织相关能力。
     private struct StackedLayoutBaseline: Equatable {
         let signature: StackedLayoutBaselineSignature
         let panelHeight: CGFloat
@@ -1568,6 +1580,7 @@ private struct ReadCalendarBookCoverFullscreenOverlay: View {
         let stageBottomChromeHeight: CGFloat
     }
 
+    /// StagePanelLayoutMetrics 负责当前场景的struct定义，明确职责边界并组织相关能力。
     private struct StagePanelLayoutMetrics {
         let panelHeight: CGFloat
         let fittedPanelHeight: CGFloat
@@ -1576,6 +1589,7 @@ private struct ReadCalendarBookCoverFullscreenOverlay: View {
         let usesStackedBaseline: Bool
     }
 
+    /// StackedBaselineCaptureSnapshot 负责当前场景的struct定义，明确职责边界并组织相关能力。
     private struct StackedBaselineCaptureSnapshot: Equatable {
         let signature: StackedLayoutBaselineSignature
         let phase: ReadCalendarCoverFullscreenDeckStage.Phase
@@ -1588,6 +1602,7 @@ private struct ReadCalendarBookCoverFullscreenOverlay: View {
         let stageBottomChromeHeight: Int
     }
 
+    /// Layout 负责当前场景的enum定义，明确职责边界并组织相关能力。
     private enum Layout {
         static let backdropMaxOpacity: CGFloat = 0.46
         static let backdropMaterialOpacity: CGFloat = 0.42
@@ -1999,6 +2014,7 @@ private struct ReadCalendarBookCoverFullscreenOverlay: View {
             }
     }
 
+    /// 执行makeLayoutDebugSnapshot对应的数据处理步骤，并返回当前流程需要的结果。
     private func makeLayoutDebugSnapshot(
         overlayFrameInGlobal: CGRect,
         size: CGSize,
@@ -2034,6 +2050,7 @@ private struct ReadCalendarBookCoverFullscreenOverlay: View {
         )
     }
 
+    /// 封装logLayoutSnapshotIfNeeded对应的业务步骤，确保调用方可以稳定复用该能力。
     private func logLayoutSnapshotIfNeeded(_ snapshot: LayoutDebugSnapshot) {
 #if DEBUG
         guard snapshot != lastLayoutDebugSnapshot else { return }
@@ -2084,6 +2101,7 @@ private struct ReadCalendarBookCoverFullscreenOverlay: View {
         return min(max(preferred, lowerBound), upperBound)
     }
 
+    /// 执行makeStackedLayoutBaselineSignature对应的数据处理步骤，并返回当前流程需要的结果。
     private func makeStackedLayoutBaselineSignature(
         overlayFrameInGlobal: CGRect,
         size: CGSize,
@@ -2099,6 +2117,7 @@ private struct ReadCalendarBookCoverFullscreenOverlay: View {
         )
     }
 
+    /// 封装stackedLayoutBaselineIfValid对应的业务步骤，确保调用方可以稳定复用该能力。
     private func stackedLayoutBaselineIfValid(
         for signature: StackedLayoutBaselineSignature
     ) -> StackedLayoutBaseline? {
@@ -2107,6 +2126,7 @@ private struct ReadCalendarBookCoverFullscreenOverlay: View {
         return baseline
     }
 
+    /// 执行resolvedStageBottomChromeHeight对应的数据处理步骤，并返回当前流程需要的结果。
     private func resolvedStageBottomChromeHeight(
         rawBottomChromeHeight: CGFloat,
         stackedBaseline: StackedLayoutBaseline?
@@ -2117,6 +2137,7 @@ private struct ReadCalendarBookCoverFullscreenOverlay: View {
         return stackedBaseline.stageBottomChromeHeight
     }
 
+    /// 执行resolvedStagePanelLayoutMetrics对应的数据处理步骤，并返回当前流程需要的结果。
     private func resolvedStagePanelLayoutMetrics(
         stackedBaseline: StackedLayoutBaseline?,
         livePanelHeight: CGFloat,
@@ -2142,6 +2163,7 @@ private struct ReadCalendarBookCoverFullscreenOverlay: View {
         )
     }
 
+    /// 执行makeStackedBaselineCaptureSnapshot对应的数据处理步骤，并返回当前流程需要的结果。
     private func makeStackedBaselineCaptureSnapshot(
         signature: StackedLayoutBaselineSignature,
         phase: ReadCalendarCoverFullscreenDeckStage.Phase,
@@ -2164,6 +2186,7 @@ private struct ReadCalendarBookCoverFullscreenOverlay: View {
         )
     }
 
+    /// 处理syncStackedLayoutBaselineIfNeeded对应的状态流转，确保交互过程与数据状态保持一致。
     private func syncStackedLayoutBaselineIfNeeded(
         using snapshot: StackedBaselineCaptureSnapshot
     ) {
@@ -2210,6 +2233,7 @@ private struct ReadCalendarBookCoverFullscreenOverlay: View {
 #endif
     }
 
+    /// 封装logStackedBaselineReuseIfNeeded对应的业务步骤，确保调用方可以稳定复用该能力。
     private func logStackedBaselineReuseIfNeeded(
         signature: StackedLayoutBaselineSignature,
         usesStackedBaseline: Bool
@@ -2224,6 +2248,7 @@ private struct ReadCalendarBookCoverFullscreenOverlay: View {
 #endif
     }
 
+    /// 封装describeStackedLayoutBaselineSignature对应的业务步骤，确保调用方可以稳定复用该能力。
     private func describeStackedLayoutBaselineSignature(
         _ signature: StackedLayoutBaselineSignature
     ) -> String {
@@ -2455,6 +2480,7 @@ private struct ReadCalendarBookCoverFullscreenOverlay: View {
         return formatter.string(from: date)
     }
 
+    /// 处理dismiss对应的状态流转，确保交互过程与数据状态保持一致。
     private func dismiss(source: DismissSource) {
         guard !isClosing else { return }
         cancelAutoGridTransition()
@@ -2472,6 +2498,7 @@ private struct ReadCalendarBookCoverFullscreenOverlay: View {
         runDismissTransition(source: source)
     }
 
+    /// 封装runDismissTransition对应的业务步骤，确保调用方可以稳定复用该能力。
     private func runDismissTransition(source _: DismissSource) {
         transitionPhase = .exiting
         guard isAnimated else {

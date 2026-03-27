@@ -9,6 +9,7 @@ import SwiftUI
 
 /// 统计悬浮按钮组件，统一月度与年度总结入口的液态玻璃外观。
 struct ReadCalendarSummaryFloatingButton: View {
+    /// Layout 负责当前场景的enum定义，明确职责边界并组织相关能力。
     private enum Layout {
         static let buttonSize: CGFloat = 48
         static let iconSize: CGFloat = 16

@@ -126,6 +126,7 @@ struct XMBookSearchResultCard: View {
         )
     }
 
+    /// 封装highlightedAttributedString对应的业务步骤，确保调用方可以稳定复用该能力。
     private func highlightedAttributedString(
         _ text: String,
         keyword: String,
@@ -198,6 +199,7 @@ struct XMBookSearchResultCard: View {
         )
     }
 
+    /// 封装styledSegment对应的业务步骤，确保调用方可以稳定复用该能力。
     private func styledSegment(_ text: String, font: Font, color: Color) -> AttributedString {
         var attributed = AttributedString(text)
         attributed.font = font
@@ -206,6 +208,7 @@ struct XMBookSearchResultCard: View {
     }
 }
 
+/// SearchResultMetadataLine 负责当前场景的struct定义，明确职责边界并组织相关能力。
 private struct SearchResultMetadataLine: Identifiable {
     let id: String
     let label: String

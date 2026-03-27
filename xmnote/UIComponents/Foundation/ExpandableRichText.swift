@@ -18,6 +18,7 @@ struct ExpandableRichText: View, Equatable {
     var lineSpacing: CGFloat = 4
     var maxLines: Int = 3
 
+    /// 比较核心展示参数是否一致，避免可展开富文本在列表中频繁重建视图树。
     static func == (lhs: ExpandableRichText, rhs: ExpandableRichText) -> Bool {
         lhs.html == rhs.html &&
         lhs.baseFont == rhs.baseFont &&
@@ -37,6 +38,7 @@ struct ExpandableRichText: View, Equatable {
     }
 }
 
+/// ExpandableRichTextCore 负责当前场景的struct定义，明确职责边界并组织相关能力。
 private struct ExpandableRichTextCore: View {
     let html: String
     let baseFont: UIFont
@@ -86,12 +88,14 @@ private struct ExpandableRichTextCore: View {
         }
     }
 
+    /// 封装expand对应的业务步骤，确保调用方可以稳定复用该能力。
     private func expand() {
         withAnimation(.snappy) {
             isExpanded = true
         }
     }
 
+    /// 封装collapse对应的业务步骤，确保调用方可以稳定复用该能力。
     private func collapse() {
         withAnimation(.snappy) {
             isExpanded = false

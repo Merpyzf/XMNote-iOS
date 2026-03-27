@@ -59,6 +59,7 @@ final class RichTextToolbar: UIView {
 
     // MARK: - UI 构建
 
+    /// 封装setupUI对应的业务步骤，确保调用方可以稳定复用该能力。
     private func setupUI() {
         backgroundColor = .secondarySystemBackground
         let separatorHeight = 1.0 / max(traitCollection.displayScale, 1)
@@ -159,6 +160,7 @@ final class RichTextToolbar: UIView {
 
     // MARK: - 按钮工厂
 
+    /// 执行makeButton对应的数据处理步骤，并返回当前流程需要的结果。
     private func makeButton(systemName: String, action: Selector) -> UIButton {
         let button = UIButton(type: .system)
         let config = UIImage.SymbolConfiguration(pointSize: 16, weight: .medium)
@@ -173,6 +175,7 @@ final class RichTextToolbar: UIView {
         return button
     }
 
+    /// 执行makeFormatButton对应的数据处理步骤，并返回当前流程需要的结果。
     private func makeFormatButton(format: RichTextFormat, systemName: String) -> UIButton {
         let button = makeButton(systemName: systemName, action: #selector(formatButtonTapped(_:)))
         button.tag = formatTag(for: format)
@@ -180,6 +183,7 @@ final class RichTextToolbar: UIView {
         return button
     }
 
+    /// 执行makeSeparator对应的数据处理步骤，并返回当前流程需要的结果。
     private func makeSeparator() -> UIView {
         let view = UIView()
         view.backgroundColor = .separator
@@ -193,6 +197,7 @@ final class RichTextToolbar: UIView {
 
     // MARK: - 格式 ↔ Tag 映射
 
+    /// 封装formatTag对应的业务步骤，确保调用方可以稳定复用该能力。
     private func formatTag(for format: RichTextFormat) -> Int {
         switch format {
         case .bold: return 100
@@ -206,6 +211,7 @@ final class RichTextToolbar: UIView {
         }
     }
 
+    /// 封装format对应的业务步骤，确保调用方可以稳定复用该能力。
     private func format(for tag: Int) -> RichTextFormat? {
         switch tag {
         case 100: return .bold

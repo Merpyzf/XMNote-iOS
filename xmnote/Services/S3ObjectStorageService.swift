@@ -175,6 +175,7 @@ final class S3ObjectStorageService: S3ObjectStorageServicing {
 }
 
 private extension S3ObjectStorageService {
+    /// 执行makeClient对应的数据处理步骤，并返回当前流程需要的结果。
     static func makeClient(configuration: S3ResolvedConfiguration) async throws -> S3Client {
         let credentials = AWSCredentialIdentity(
             accessKey: configuration.secretId,
@@ -189,12 +190,14 @@ private extension S3ObjectStorageService {
         return S3Client(config: clientConfiguration)
     }
 
+    /// 封装storeCurrentUploadTask对应的业务步骤，确保调用方可以稳定复用该能力。
     private func storeCurrentUploadTask(_ taskBox: UploadTaskBox) {
         taskLock.lock()
         currentUploadTaskBox = taskBox
         taskLock.unlock()
     }
 
+    /// 处理clearCurrentUploadTask对应的状态流转，确保交互过程与数据状态保持一致。
     private func clearCurrentUploadTask(_ taskBox: UploadTaskBox) {
         taskLock.lock()
         defer { taskLock.unlock() }
@@ -203,6 +206,7 @@ private extension S3ObjectStorageService {
         }
     }
 
+    /// 执行mapError对应的数据处理步骤，并返回当前流程需要的结果。
     static func mapError(_ error: Error) -> Error {
         if error is S3StorageError {
             return error

@@ -862,6 +862,7 @@ private extension BookRemoteSearchService {
         return src.hasPrefix("https") ? src : "https:\(src)"
     }
 
+    /// 封装absoluteZongHengCoverURL对应的业务步骤，确保调用方可以稳定复用该能力。
     static func absoluteZongHengCoverURL(_ path: String) -> String {
         if path.hasPrefix("https://") {
             return path
@@ -1109,11 +1110,13 @@ private extension BookRemoteSearchService {
     }
 }
 
+/// WenquResponse 负责当前场景的struct定义，明确职责边界并组织相关能力。
 private struct WenquResponse: Decodable {
     let count: Int
     let books: [WenquBook]
 }
 
+/// WenquBook 负责当前场景的struct定义，明确职责边界并组织相关能力。
 private struct WenquBook: Decodable {
     let id: Int?
     let author: String?
@@ -1132,6 +1135,7 @@ private struct WenquBook: Decodable {
     let url: String?
 }
 
+/// ZongHengResponse 负责当前场景的struct定义，明确职责边界并组织相关能力。
 private struct ZongHengResponse: Decodable {
     let data: DataContainer
 
@@ -1154,6 +1158,7 @@ private struct ZongHengResponse: Decodable {
     }
 }
 
+/// CPResponse 负责当前场景的struct定义，明确职责边界并组织相关能力。
 private struct CPResponse: Decodable {
     let data: DataContainer
 
@@ -1257,6 +1262,7 @@ private extension String {
         isEmpty ? nil : self
     }
 
+    /// 封装stringEncoding对应的业务步骤，确保调用方可以稳定复用该能力。
     static func stringEncoding(forIANAName name: String) -> String.Encoding? {
         let cfEncoding = CFStringConvertIANACharSetNameToEncoding(name as CFString)
         guard cfEncoding != kCFStringEncodingInvalidId else {

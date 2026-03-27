@@ -9,6 +9,7 @@ import SwiftUI
 
 /// 悬浮在封面底部的玻璃进度条，统一表达书籍阅读进度。
 struct BookCoverProgressBar: View {
+    /// Layout 负责当前场景的enum定义，明确职责边界并组织相关能力。
     private enum Layout {
         static let minHorizontalInset: CGFloat = 8
         static let maxHorizontalInset: CGFloat = 12

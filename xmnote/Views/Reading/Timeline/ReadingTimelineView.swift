@@ -13,6 +13,7 @@ private let readingTimelineScrollCoordinateSpaceName = "reading-timeline-scroll-
 
 /// 统一时间线月历配置，确保所有入口固定周日起始并维持一致周行规则。
 private enum TimelineCalendarFactory {
+    /// 执行make对应的数据处理步骤，并返回当前流程需要的结果。
     static func make() -> Calendar {
         var calendar = Calendar.current
         calendar.timeZone = .current
@@ -250,6 +251,7 @@ private extension TimelineBootstrapCalendarPanel {
         return leadingSlots + dayValues
     }
 
+    /// 封装monthStart对应的业务步骤，确保调用方可以稳定复用该能力。
     static func monthStart(of date: Date, using calendar: Calendar) -> Date {
         let normalized = calendar.startOfDay(for: date)
         let comps = calendar.dateComponents([.year, .month], from: normalized)
@@ -568,6 +570,7 @@ private extension TimelineCalendarPanel {
     }
 
     @ViewBuilder
+    /// 封装brandNumberText对应的业务步骤，确保调用方可以稳定复用该能力。
     private func brandNumberText(
         _ value: String,
         font: Font,
@@ -1045,6 +1048,7 @@ private extension TimelineListContainer {
     }
 }
 
+/// TimelineListContent 负责当前场景的struct定义，明确职责边界并组织相关能力。
 private struct TimelineListContent: View, Equatable {
     let sections: [TimelineSection]
     let sectionsRevision: Int
@@ -1054,6 +1058,7 @@ private struct TimelineListContent: View, Equatable {
     let onOpenContentViewer: (ContentViewerSourceContext, ContentViewerItemID) -> Void
     let onOpenBookDetail: (Int64) -> Void
 
+    /// 比较列表内容是否等价，避免时间线在无实质变化时触发额外重绘。
     static func == (lhs: TimelineListContent, rhs: TimelineListContent) -> Bool {
         lhs.sectionsRevision == rhs.sectionsRevision &&
         lhs.bootstrapPhase == rhs.bootstrapPhase &&
@@ -1209,6 +1214,7 @@ private struct TimelineBootstrapCardPlaceholder: View {
     }
 
     @ViewBuilder
+    /// 组装placeholderBar对应的界面片段，保持页面层级与信息结构清晰。
     private func placeholderBar(width: CGFloat?, height: CGFloat) -> some View {
         RoundedRectangle(cornerRadius: CornerRadius.inlaySmall, style: .continuous)
             .fill(Color.textHint.opacity(0.12))
@@ -1235,6 +1241,7 @@ private struct TimelineRefreshHint: View {
 
 // MARK: - Cell
 
+/// TimelineCalendarDayCell 负责当前场景的struct定义，明确职责边界并组织相关能力。
 private struct TimelineCalendarDayCell: View {
     let dayNumber: Int
     let marker: TimelineDayMarker?
@@ -1295,22 +1302,26 @@ private struct TimelineCalendarDayCell: View {
 
 // MARK: - Calendar Dependency
 
+/// CalendarDependencyToken 负责当前场景的struct定义，明确职责边界并组织相关能力。
 private struct CalendarDependencyToken: Hashable {
     let selectedDate: Date
     let selectedCategory: TimelineEventCategory
     let markerRevision: Int
 }
 
+/// TimelineMarkerPreloadRequest 负责当前场景的struct定义，明确职责边界并组织相关能力。
 private struct TimelineMarkerPreloadRequest: Equatable {
     let months: [Date]
     let category: TimelineEventCategory
 }
 
+/// TimelineRichTextPrewarmEntry 负责当前场景的struct定义，明确职责边界并组织相关能力。
 private struct TimelineRichTextPrewarmEntry: Equatable {
     let html: String
     let style: TimelineRichTextPrewarmStyle
 }
 
+/// TimelineRichTextPrewarmRequest 负责当前场景的struct定义，明确职责边界并组织相关能力。
 private struct TimelineRichTextPrewarmRequest: Equatable {
     static let defaultMaxLines = 3
 
@@ -1321,6 +1332,7 @@ private struct TimelineRichTextPrewarmRequest: Equatable {
     let preferredContentSizeCategory: UIContentSizeCategory
 }
 
+/// TimelineRichTextPrewarmStyle 负责当前场景的enum定义，明确职责边界并组织相关能力。
 private enum TimelineRichTextPrewarmStyle: Int, Equatable {
     case primary
     case secondary

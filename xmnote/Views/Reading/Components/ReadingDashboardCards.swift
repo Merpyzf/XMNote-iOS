@@ -122,6 +122,7 @@ private enum ReadingDashboardTypography {
 
 /// ReadingTrendMetricTypography 管理趋势总卡数值位的紧凑语义字体，避免误用正文最小字号下限。
 private enum ReadingTrendMetricTypography {
+    /// 封装compactUnitFont对应的业务步骤，确保调用方可以稳定复用该能力。
     static func compactUnitFont(baseSize: CGFloat) -> Font {
         AppTypography.fixed(
             baseSize: baseSize,
@@ -211,6 +212,7 @@ private struct ReadingTrendMetricValueLabel: View {
 
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
+    /// 封装combinedLineText对应的业务步骤，确保调用方可以稳定复用该能力。
     private func combinedLineText(for pairs: [ReadingDashboardMetricValueDisplay.Pair]) -> Text {
         pairs.enumerated().reduce(Text("")) { partial, item in
             let spacingText = item.offset == 0 ? Text("") : Text(" ")
@@ -218,6 +220,7 @@ private struct ReadingTrendMetricValueLabel: View {
         }
     }
 
+    /// 封装pairText对应的业务步骤，确保调用方可以稳定复用该能力。
     private func pairText(_ pair: ReadingDashboardMetricValueDisplay.Pair) -> Text {
         let numberText = Text(pair.number.text)
             .font(AppTypography.brandDisplay(size: numberFontSize, relativeTo: .title3))
@@ -254,6 +257,7 @@ private struct ReadingTrendMetricPairLine: View {
 
 /// ReadingTrendMiniBarChart 渲染趋势栏位底部柱图，保留 Android 的零值占位语义。
 private struct ReadingTrendMiniBarChart: View {
+    /// AxisStyle 负责当前场景的enum定义，明确职责边界并组织相关能力。
     private enum AxisStyle {
         static let lineWidth: CGFloat = 1
         static let dashPattern: [CGFloat] = [3, 3]

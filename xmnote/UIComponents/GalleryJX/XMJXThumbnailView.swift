@@ -163,6 +163,7 @@ extension XMJXThumbnailView {
             }
         }
 
+        /// 执行resolvedURLString对应的数据处理步骤，并返回当前流程需要的结果。
         private func resolvedURLString(for item: XMJXGalleryItem) -> String? {
             if XMImageRequestBuilder.normalizedURL(from: item.thumbnailURL) != nil {
                 return item.thumbnailURL

@@ -30,6 +30,7 @@ struct BookSearchResultRow: View {
     }
 }
 
+/// BookSearchResultButtonStyle 负责当前场景的struct定义，明确职责边界并组织相关能力。
 private struct BookSearchResultButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label

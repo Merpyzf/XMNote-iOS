@@ -71,6 +71,7 @@ final class RichTextEditorView: UITextView {
         fatalError("Use init() instead")
     }
 
+    /// 封装commonInit对应的业务步骤，确保调用方可以稳定复用该能力。
     private func commonInit() {
         font = baseFont
         textContainerInset = UIEdgeInsets(top: 12, left: 12, bottom: 12, right: 12)
@@ -92,6 +93,7 @@ final class RichTextEditorView: UITextView {
         typingAttributes = typing
     }
 
+    /// 处理refreshLinkTextAttributes对应的状态流转，确保交互过程与数据状态保持一致。
     private func refreshLinkTextAttributes() {
         var attrs: [NSAttributedString.Key: Any] = [
             .underlineStyle: isLinkUnderline ? NSUnderlineStyle.single.rawValue : 0,
@@ -251,6 +253,7 @@ final class RichTextEditorView: UITextView {
         }
     }
 
+    /// 处理removeLink对应的状态流转，确保交互过程与数据状态保持一致。
     private func removeLink(in range: NSRange) {
         guard range.length > 0 else { return }
         mutateTextStorage {
@@ -258,6 +261,7 @@ final class RichTextEditorView: UITextView {
         }
     }
 
+    /// 封装moveCursor对应的业务步骤，确保调用方可以稳定复用该能力。
     private func moveCursor(offset: Int) {
         let currentRange = selectedRange
         let baseLocation: Int
@@ -392,6 +396,7 @@ private extension RichTextEditorView {
         return allContain
     }
 
+    /// 封装characterHasStyle对应的业务步骤，确保调用方可以稳定复用该能力。
     private func characterHasStyle(_ style: FontStyle, at index: Int) -> Bool {
         guard let font = textStorage.attribute(.font, at: index, effectiveRange: nil) as? UIFont else { return false }
         if font.fontDescriptor.symbolicTraits.contains(style.trait) { return true }

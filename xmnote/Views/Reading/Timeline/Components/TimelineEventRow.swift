@@ -116,6 +116,7 @@ struct TimelineEventRow: View, Equatable {
     let onOpenContentViewer: (ContentViewerSourceContext, ContentViewerItemID) -> Void
     let onOpenBookDetail: (Int64) -> Void
 
+    /// 比较事件行关键输入是否一致，减少列表刷新时的无效重算与重绘。
     static func == (lhs: TimelineEventRow, rhs: TimelineEventRow) -> Bool {
         lhs.event == rhs.event &&
         lhs.isLastEvent == rhs.isLastEvent &&
@@ -203,6 +204,7 @@ struct TimelineEventRow: View, Equatable {
         }
     }
 
+    /// 处理handleTap对应的状态流转，确保交互过程与数据状态保持一致。
     private func handleTap() {
         switch event.kind {
         case .note(let note):
@@ -219,6 +221,7 @@ struct TimelineEventRow: View, Equatable {
     }
 }
 
+/// TimelineConnectorShape 负责当前场景的struct定义，明确职责边界并组织相关能力。
 private struct TimelineConnectorShape: Shape {
     let isLastEvent: Bool
 

@@ -399,6 +399,7 @@ enum AppTypography {
     static let caption2Medium: Font = .caption2.weight(.medium)
     static let caption2Semibold: Font = .caption2.weight(.semibold)
 
+    /// 封装semantic对应的业务步骤，确保调用方可以稳定复用该能力。
     static func semantic(
         _ style: Font.TextStyle,
         weight: Font.Weight? = nil,
@@ -413,6 +414,7 @@ enum AppTypography {
         )
     }
 
+    /// 封装semanticFont对应的业务步骤，确保调用方可以稳定复用该能力。
     static func semanticFont(
         _ style: UIFont.TextStyle,
         weight: Font.Weight? = nil,
@@ -427,6 +429,7 @@ enum AppTypography {
         )
     }
 
+    /// 封装fixed对应的业务步骤，确保调用方可以稳定复用该能力。
     static func fixed(
         baseSize: CGFloat,
         relativeTo style: Font.TextStyle,
@@ -443,6 +446,7 @@ enum AppTypography {
         )
     }
 
+    /// 封装uiSemantic对应的业务步骤，确保调用方可以稳定复用该能力。
     static func uiSemantic(
         _ style: UIFont.TextStyle,
         weight: UIFont.Weight = .regular,
@@ -458,6 +462,7 @@ enum AppTypography {
         )
     }
 
+    /// 封装uiFixed对应的业务步骤，确保调用方可以稳定复用该能力。
     static func uiFixed(
         baseSize: CGFloat,
         textStyle: UIFont.TextStyle,
@@ -474,6 +479,7 @@ enum AppTypography {
         )
     }
 
+    /// 封装brandDisplay对应的业务步骤，确保调用方可以稳定复用该能力。
     static func brandDisplay(
         size: CGFloat,
         relativeTo textStyle: Font.TextStyle = .title2
@@ -481,6 +487,7 @@ enum AppTypography {
         .brandDisplay(size: size, relativeTo: textStyle)
     }
 
+    /// 封装brandTrim对应的业务步骤，确保调用方可以稳定复用该能力。
     static func brandTrim(
         size: CGFloat,
         textStyle: UIFont.TextStyle = .title2
@@ -488,6 +495,7 @@ enum AppTypography {
         BrandTypography.verticalTrim(size: size, textStyle: textStyle)
     }
 
+    /// 组装topSwitcherTitleFont对应的界面片段，保持页面层级与信息结构清晰。
     static func topSwitcherTitleFont(
         for text: String,
         size: CGFloat
@@ -503,6 +511,7 @@ enum AppTypography {
         return brandDisplay(size: size, relativeTo: .headline)
     }
 
+    /// 组装topSwitcherTitleTrim对应的界面片段，保持页面层级与信息结构清晰。
     static func topSwitcherTitleTrim(
         for text: String,
         size: CGFloat

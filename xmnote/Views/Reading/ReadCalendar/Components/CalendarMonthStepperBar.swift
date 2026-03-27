@@ -9,6 +9,7 @@ import SwiftUI
 
 /// 阅读日历顶部月份切换条，支持菜单快速跳转到任意可用月份。
 struct CalendarMonthStepperBar: View {
+    /// Layout 负责当前场景的enum定义，明确职责边界并组织相关能力。
     private enum Layout {
         static let barMinHeight: CGFloat = 36
         static let expandedBarMinHeight: CGFloat = 40
@@ -71,6 +72,7 @@ struct CalendarMonthStepperBar: View {
         .buttonStyle(.plain)
     }
 
+    /// 封装monthLabel对应的业务步骤，确保调用方可以稳定复用该能力。
     private func monthLabel(_ monthStart: Date) -> String {
         let formatter = DateFormatter()
         formatter.dateFormat = "yyyy年M月"

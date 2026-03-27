@@ -124,6 +124,7 @@ struct ReadCalendarSettingsSheet: View {
         }
     }
 
+    /// 封装dayCountChip对应的业务步骤，确保调用方可以稳定复用该能力。
     private func dayCountChip(_ count: Int, isSelected: Bool) -> some View {
         Button {
             withAnimation(.snappy) { settings.dayEventCount = count }

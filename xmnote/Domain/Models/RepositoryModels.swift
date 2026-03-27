@@ -129,6 +129,7 @@ struct NoteEditorImageItem: Identifiable, Hashable, Codable, Sendable {
         )
     }
 
+    /// 执行encode对应的数据处理步骤，并返回当前流程需要的结果。
     nonisolated func encode(to encoder: any Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
         try container.encode(id, forKey: .id)
@@ -150,6 +151,7 @@ struct NoteEditorImageItem: Identifiable, Hashable, Codable, Sendable {
         uploadState == .failed && localFilePath?.isEmpty == false
     }
 
+    /// 封装updatingUploadState对应的业务步骤，确保调用方可以稳定复用该能力。
     nonisolated func updatingUploadState(_ uploadState: NoteEditorImageUploadState) -> NoteEditorImageItem {
         NoteEditorImageItem(
             id: id,
@@ -160,6 +162,7 @@ struct NoteEditorImageItem: Identifiable, Hashable, Codable, Sendable {
         )
     }
 
+    /// 封装withUploadedRemoteURL对应的业务步骤，确保调用方可以稳定复用该能力。
     nonisolated func withUploadedRemoteURL(_ remoteURL: String) -> NoteEditorImageItem {
         NoteEditorImageItem(
             id: id,

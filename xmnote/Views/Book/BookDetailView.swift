@@ -57,6 +57,7 @@ struct BookDetailView: View {
 
 // MARK: - Content
 
+/// BookDetailContentView 负责当前场景的struct定义，明确职责边界并组织相关能力。
 private struct BookDetailContentView: View {
     let bookId: Int64
     @Bindable var viewModel: BookDetailViewModel
@@ -91,6 +92,7 @@ private struct BookDetailContentView: View {
         readLoadingGate.update(intent: viewModel.book == nil ? .read : .none)
     }
 
+    /// 封装scrollContent对应的业务步骤，确保调用方可以稳定复用该能力。
     private func scrollContent(_ book: BookDetail) -> some View {
         ScrollView {
             LazyVStack(spacing: Spacing.base) {
@@ -120,6 +122,7 @@ private struct BookDetailContentView: View {
 
     // MARK: - Header
 
+    /// 封装bookHeader对应的业务步骤，确保调用方可以稳定复用该能力。
     private func bookHeader(_ book: BookDetail) -> some View {
         CardContainer {
             HStack(alignment: .top, spacing: Spacing.base) {
@@ -130,6 +133,7 @@ private struct BookDetailContentView: View {
         }
     }
 
+    /// 封装coverImage对应的业务步骤，确保调用方可以稳定复用该能力。
     private func coverImage(_ url: String) -> some View {
         XMBookCover.fixedWidth(
             80,
@@ -141,6 +145,7 @@ private struct BookDetailContentView: View {
         )
     }
 
+    /// 封装bookInfo对应的业务步骤，确保调用方可以稳定复用该能力。
     private func bookInfo(_ book: BookDetail) -> some View {
         VStack(alignment: .leading, spacing: Spacing.half) {
             Text(book.name)
@@ -185,6 +190,7 @@ private struct BookDetailContentView: View {
 
     // MARK: - Note Card
 
+    /// 封装noteCard对应的业务步骤，确保调用方可以稳定复用该能力。
     private func noteCard(_ note: NoteExcerpt) -> some View {
         CardContainer {
             VStack(alignment: .leading, spacing: Spacing.none) {
@@ -225,6 +231,7 @@ private struct BookDetailContentView: View {
         }
     }
 
+    /// 封装plainTextPreview对应的业务步骤，确保调用方可以稳定复用该能力。
     private func plainTextPreview(from html: String) -> String {
         RichTextBridge.htmlToAttributed(html).string
     }

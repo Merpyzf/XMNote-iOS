@@ -39,6 +39,7 @@ struct BookDoubanLoginScreen: View {
     }
 }
 
+/// BookDoubanLoginWebView 负责当前场景的struct定义，明确职责边界并组织相关能力。
 private struct BookDoubanLoginWebView: UIViewRepresentable {
     let onLoginDetected: () -> Void
 
@@ -61,6 +62,7 @@ private struct BookDoubanLoginWebView: UIViewRepresentable {
 
     func updateUIView(_ webView: WKWebView, context: Context) {}
 
+    /// Coordinator 负责当前场景的class定义，明确职责边界并组织相关能力。
     final class Coordinator: NSObject, WKNavigationDelegate {
         private let onLoginDetected: () -> Void
         private var hasReportedSuccess = false

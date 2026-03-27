@@ -193,6 +193,7 @@ final class ReadCalendarOverlayHapticPlayer {
 
     // MARK: - Private
 
+    /// 封装playPattern对应的业务步骤，确保调用方可以稳定复用该能力。
     private func playPattern(
         events: [CHHapticEvent],
         parameterCurves: [CHHapticParameterCurve] = []
@@ -209,6 +210,7 @@ final class ReadCalendarOverlayHapticPlayer {
         }
     }
 
+    /// 封装playMinimalConfirmation对应的业务步骤，确保调用方可以稳定复用该能力。
     private func playMinimalConfirmation() {
         let event = CHHapticEvent(
             eventType: .hapticTransient,
@@ -221,6 +223,7 @@ final class ReadCalendarOverlayHapticPlayer {
         playPattern(events: [event])
     }
 
+    /// 封装fallbackImpact对应的业务步骤，确保调用方可以稳定复用该能力。
     private func fallbackImpact(style: UIImpactFeedbackGenerator.FeedbackStyle, intensity: CGFloat) {
         let generator = UIImpactFeedbackGenerator(style: style)
         generator.prepare()

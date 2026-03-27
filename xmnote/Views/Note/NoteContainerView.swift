@@ -84,6 +84,7 @@ struct NoteContainerView: View {
 
 // MARK: - Content View
 
+/// NoteContentView 负责当前场景的struct定义，明确职责边界并组织相关能力。
 private struct NoteContentView: View {
     @Bindable var viewModel: NoteViewModel
     @Binding var selectedSubTab: NoteSubTab
@@ -133,6 +134,7 @@ private struct NoteContentView: View {
     }
 
     @ViewBuilder
+    /// 封装segmentedPage对应的业务步骤，确保调用方可以稳定复用该能力。
     private func segmentedPage(for tab: NoteSubTab) -> some View {
         switch tab {
         case .notes:

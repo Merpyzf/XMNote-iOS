@@ -94,6 +94,7 @@ struct RichTextEditor: UIViewRepresentable {
         return nil
     }
 
+    /// 处理applyToolbarPresentation对应的状态流转，确保交互过程与数据状态保持一致。
     private func applyToolbarPresentation(to editorView: RichTextEditorView, context: Context) {
         switch toolbarPresentation {
         case .inputAccessory:

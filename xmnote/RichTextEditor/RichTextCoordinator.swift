@@ -351,6 +351,7 @@ final class RichTextCoordinator: NSObject, UITextViewDelegate {
         isSyncingToBinding = false
     }
 
+    /// 封装insertText对应的业务步骤，确保调用方可以稳定复用该能力。
     private func insertText(_ text: String, editorView: RichTextEditorView) {
         guard !text.isEmpty else { return }
         if !editorView.isFirstResponder {
@@ -362,6 +363,7 @@ final class RichTextCoordinator: NSObject, UITextViewDelegate {
     }
 
 #if DEBUG
+    /// 封装logFocusEvent对应的业务步骤，确保调用方可以稳定复用该能力。
     private func logFocusEvent(
         _ event: String,
         editorView: UITextView,
@@ -376,10 +378,12 @@ final class RichTextCoordinator: NSObject, UITextViewDelegate {
         )
     }
 
+    /// 封装editorIdentifier对应的业务步骤，确保调用方可以稳定复用该能力。
     private func editorIdentifier(_ editorView: UITextView) -> String {
         String(describing: Unmanaged.passUnretained(editorView).toOpaque())
     }
 
+    /// 组装controllerIdentifier对应的界面片段，保持页面层级与信息结构清晰。
     private func controllerIdentifier(_ controller: RichTextOrnamentController) -> String {
         String(describing: Unmanaged.passUnretained(controller).toOpaque())
     }
@@ -387,6 +391,7 @@ final class RichTextCoordinator: NSObject, UITextViewDelegate {
 
     // MARK: - Link
 
+    /// 处理presentLinkInput对应的状态流转，确保交互过程与数据状态保持一致。
     private func presentLinkInput(editorView: RichTextEditorView, range: NSRange) {
         guard range.length > 0 else { return }
         guard let presenter = topViewController(from: editorView.window?.rootViewController) else { return }
@@ -427,6 +432,7 @@ final class RichTextCoordinator: NSObject, UITextViewDelegate {
         return "https://\(raw)"
     }
 
+    /// 封装currentLinkString对应的业务步骤，确保调用方可以稳定复用该能力。
     private func currentLinkString(in range: NSRange, editorView: RichTextEditorView) -> String? {
         guard range.length > 0 else { return nil }
         guard range.location < editorView.textStorage.length else { return nil }
@@ -437,6 +443,7 @@ final class RichTextCoordinator: NSObject, UITextViewDelegate {
         return linkValue as? String
     }
 
+    /// 组装topViewController对应的界面片段，保持页面层级与信息结构清晰。
     private func topViewController(from root: UIViewController?) -> UIViewController? {
         var current = root
         while let presented = current?.presentedViewController {

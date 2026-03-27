@@ -8,6 +8,7 @@
 import Foundation
 import WebKit
 
+/// FanqieVerificationHeuristics 负责当前场景的enum定义，明确职责边界并组织相关能力。
 enum FanqieVerificationHeuristics {
     nonisolated static let verificationMarkers = [
         "verifycenter/captcha",
@@ -45,6 +46,7 @@ enum FanqieVerificationHeuristics {
 }
 
 @MainActor
+/// FanqieWebVerificationService 负责当前场景的class定义，明确职责边界并组织相关能力。
 final class FanqieWebVerificationService {
     static let shared = FanqieWebVerificationService()
 

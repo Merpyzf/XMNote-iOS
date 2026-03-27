@@ -9,6 +9,7 @@ import Foundation
 
 /// BackupRepository 统一编排云备份 provider 选择、打包上传、历史读取和恢复流程。
 struct BackupRepository: BackupRepositoryProtocol {
+    /// PreferenceKey 负责当前场景的enum定义，明确职责边界并组织相关能力。
     private enum PreferenceKey {
         // 对齐 Android SpSettingHelper#getCloudBackupService。
         static let selectedProvider = "currCloudBackupService"

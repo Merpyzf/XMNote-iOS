@@ -36,6 +36,7 @@ struct ReadCalendarCoverFanStack: View {
         }
     }
 
+    /// FanTransform 负责当前场景的struct定义，明确职责边界并组织相关能力。
     private struct FanTransform {
         let rotation: Double
         let offsetX: CGFloat
@@ -115,6 +116,7 @@ struct ReadCalendarCoverFanStack: View {
         static let standard = editorial
     }
 
+    /// Layout 负责当前场景的enum定义，明确职责边界并组织相关能力。
     private enum Layout {
         static let maxCollapsedSupportedCount = 14
         static let maxFullscreenSupportedCount = 120

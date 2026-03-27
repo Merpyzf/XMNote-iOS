@@ -17,6 +17,7 @@ enum BackupOperationState: Equatable {
     case restoring(RestoreProgress)
 }
 
+/// CloudBackupLastSyncState 负责当前场景的enum定义，明确职责边界并组织相关能力。
 enum CloudBackupLastSyncState: Equatable {
     case idle
     case loading
@@ -24,6 +25,7 @@ enum CloudBackupLastSyncState: Equatable {
     case failed
 }
 
+/// BackupBlockingAction 负责当前场景的enum定义，明确职责边界并组织相关能力。
 enum BackupBlockingAction: Equatable {
     case loadingPage
     case switchingProvider
@@ -50,6 +52,7 @@ enum BackupBlockingAction: Equatable {
     }
 }
 
+/// BackupInitialLoadState 负责当前场景的enum定义，明确职责边界并组织相关能力。
 enum BackupInitialLoadState: Equatable {
     case idle
     case loading
@@ -57,6 +60,7 @@ enum BackupInitialLoadState: Equatable {
     case failed
 }
 
+/// BackupTaskPresentation 负责当前场景的struct定义，明确职责边界并组织相关能力。
 struct BackupTaskPresentation: Equatable {
     let message: String
 }

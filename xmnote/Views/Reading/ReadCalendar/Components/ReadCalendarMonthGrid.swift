@@ -90,6 +90,7 @@ struct ReadCalendarMonthGrid: View {
         )
     }
 
+    /// Layout 负责当前场景的enum定义，明确职责边界并组织相关能力。
     private enum Layout {
         static let dayHeaderHeight: CGFloat = 24
         static let laneTopInset: CGFloat = 7
@@ -220,7 +221,9 @@ struct ReadCalendarMonthGrid: View {
     }
 }
 
+/// ReadCalendarMonthGridWeekRow 负责当前场景的struct定义，明确职责边界并组织相关能力。
 private struct ReadCalendarMonthGridWeekRow: View {
+    /// Layout 负责当前场景的enum定义，明确职责边界并组织相关能力。
     private enum Layout {
         static let modeContentHPadding: CGFloat = Spacing.cozy
         static let modeContentTopPadding: CGFloat = Spacing.half
@@ -336,6 +339,7 @@ private struct ReadCalendarMonthGridWeekRow: View {
     }
 
     @ViewBuilder
+    /// 封装yearCompactDayCell对应的业务步骤，确保调用方可以稳定复用该能力。
     private func yearCompactDayCell(_ day: Date?) -> some View {
         let payload = day.map(dayPayloadProvider) ?? .empty
         let fillColor = day == nil
@@ -352,6 +356,7 @@ private struct ReadCalendarMonthGridWeekRow: View {
     }
 
     @ViewBuilder
+    /// 封装dayCell对应的业务步骤，确保调用方可以稳定复用该能力。
     private func dayCell(_ day: Date?) -> some View {
         let payload = day.map(dayPayloadProvider) ?? .empty
         let dayOverflowCount = day.map { overflowCount(for: payload, day: $0) } ?? 0
@@ -454,6 +459,7 @@ private struct ReadCalendarMonthGridWeekRow: View {
     }
 
     @ViewBuilder
+    /// 封装modeContent对应的业务步骤，确保调用方可以稳定复用该能力。
     private func modeContent(for day: Date, payload: ReadCalendarMonthGrid.DayPayload) -> some View {
         switch displayMode {
         case .activityEvent:
@@ -472,6 +478,7 @@ private struct ReadCalendarMonthGridWeekRow: View {
     }
 
     @ViewBuilder
+    /// 封装coverStackContent对应的业务步骤，确保调用方可以稳定复用该能力。
     private func coverStackContent(for day: Date, payload: ReadCalendarMonthGrid.DayPayload) -> some View {
         let coverItems = resolvedCoverStackItems(for: day, payload: payload)
         let requestedCount = max(payload.bookCount, coverItems.count)
@@ -501,6 +508,7 @@ private struct ReadCalendarMonthGridWeekRow: View {
         }
     }
 
+    /// 封装overflowCount对应的业务步骤，确保调用方可以稳定复用该能力。
     private func overflowCount(for payload: ReadCalendarMonthGrid.DayPayload, day: Date?) -> Int {
         switch displayMode {
         case .heatmap, .heatmapYearCompact:
@@ -512,6 +520,7 @@ private struct ReadCalendarMonthGridWeekRow: View {
         }
     }
 
+    /// 封装overflowBadge对应的业务步骤，确保调用方可以稳定复用该能力。
     private func overflowBadge(_ count: Int) -> some View {
         Text("+\(count)")
             .font(
@@ -537,10 +546,12 @@ private struct ReadCalendarMonthGridWeekRow: View {
             }
     }
 
+    /// 封装heatmapColor对应的业务步骤，确保调用方可以稳定复用该能力。
     private func heatmapColor(for payload: ReadCalendarMonthGrid.DayPayload) -> Color {
         payload.heatmapLevel.color
     }
 
+    /// 封装yearCompactHeatmapColor对应的业务步骤，确保调用方可以稳定复用该能力。
     private func yearCompactHeatmapColor(for payload: ReadCalendarMonthGrid.DayPayload) -> Color {
         payload.heatmapLevel.color
     }
@@ -649,6 +660,7 @@ private struct ReadCalendarMonthGridWeekRow: View {
         return proxy.frame(in: .global)
     }
 
+    /// 封装segmentView对应的业务步骤，确保调用方可以稳定复用该能力。
     private func segmentView(_ segment: ReadCalendarMonthGrid.EventSegment, cellWidth: CGFloat) -> some View {
         let startOffset = dayOffset(for: segment.segmentStartDate, weekStart: segment.weekStart)
         let endOffset = dayOffset(for: segment.segmentEndDate, weekStart: segment.weekStart)
@@ -766,6 +778,7 @@ private struct ReadCalendarMonthGridWeekRow: View {
         .animation(.spring(response: 0.2, dampingFraction: 0.62), value: badgePulseIDs.contains(segment.id))
     }
 
+    /// 封装dayOffset对应的业务步骤，确保调用方可以稳定复用该能力。
     private func dayOffset(for date: Date, weekStart: Date) -> Int {
         let start = Calendar.current.startOfDay(for: weekStart)
         let target = Calendar.current.startOfDay(for: date)
@@ -773,6 +786,7 @@ private struct ReadCalendarMonthGridWeekRow: View {
         return min(6, max(0, offset))
     }
 
+    /// 封装fillColor对应的业务步骤，确保调用方可以稳定复用该能力。
     private func fillColor(for color: ReadCalendarMonthGrid.EventColor) -> Color {
         switch color.state {
         case .pending:
@@ -782,6 +796,7 @@ private struct ReadCalendarMonthGridWeekRow: View {
         }
     }
 
+    /// 封装textColor对应的业务步骤，确保调用方可以稳定复用该能力。
     private func textColor(for color: ReadCalendarMonthGrid.EventColor) -> Color {
         switch color.state {
         case .pending:
@@ -791,6 +806,7 @@ private struct ReadCalendarMonthGridWeekRow: View {
         }
     }
 
+    /// 封装readDoneBadgeStyle对应的业务步骤，确保调用方可以稳定复用该能力。
     private func readDoneBadgeStyle(for color: ReadCalendarMonthGrid.EventColor) -> (background: Color, foreground: Color) {
         let isDark = isDarkBackground(color)
         if isDark {
@@ -805,6 +821,7 @@ private struct ReadCalendarMonthGridWeekRow: View {
         )
     }
 
+    /// 封装isDarkBackground对应的业务步骤，确保调用方可以稳定复用该能力。
     private func isDarkBackground(_ color: ReadCalendarMonthGrid.EventColor) -> Bool {
         let hex: UInt32
         switch color.state {
@@ -821,6 +838,7 @@ private struct ReadCalendarMonthGridWeekRow: View {
         return luminance < 0.55
     }
 
+    /// 封装shouldDefocusSegment对应的业务步骤，确保调用方可以稳定复用该能力。
     private func shouldDefocusSegment(_ segment: ReadCalendarMonthGrid.EventSegment) -> Bool {
         guard hasFocusedSegment else { return false }
         return !isSegmentFocused(segment)
@@ -830,6 +848,7 @@ private struct ReadCalendarMonthGridWeekRow: View {
         week.segments.contains { isSegmentFocused($0) }
     }
 
+    /// 封装isSegmentFocused对应的业务步骤，确保调用方可以稳定复用该能力。
     private func isSegmentFocused(_ segment: ReadCalendarMonthGrid.EventSegment) -> Bool {
         guard let selected = selectedDate else { return false }
         let normalized = Calendar.current.startOfDay(for: selected)
@@ -838,11 +857,13 @@ private struct ReadCalendarMonthGridWeekRow: View {
         return normalized >= start && normalized <= end
     }
 
+    /// 封装flowingHighlightOffset对应的业务步骤，确保调用方可以稳定复用该能力。
     private func flowingHighlightOffset(segmentWidth: CGFloat) -> CGFloat {
         let distance = max(12, segmentWidth + 16)
         return -12 + distance * flowPhase
     }
 
+    /// 处理startFlowAnimationIfNeeded对应的状态流转，确保交互过程与数据状态保持一致。
     private func startFlowAnimationIfNeeded() {
         guard displayMode == .activityEvent else { return }
         guard flowPhase == 0 else { return }
@@ -851,6 +872,7 @@ private struct ReadCalendarMonthGridWeekRow: View {
         }
     }
 
+    /// 封装triggerBadgePulseIfNeeded对应的业务步骤，确保调用方可以稳定复用该能力。
     private func triggerBadgePulseIfNeeded(for selected: Date?) {
         guard displayMode == .activityEvent else { return }
         guard let selected else {
@@ -885,6 +907,7 @@ private struct ReadCalendarMonthGridWeekRow: View {
     }
 }
 
+/// ReadCalendarMonthGridCoverStackFramePreferenceKey 负责当前场景的struct定义，明确职责边界并组织相关能力。
 private struct ReadCalendarMonthGridCoverStackFramePreferenceKey: PreferenceKey {
     static var defaultValue: [Date: CGRect] = [:]
 
@@ -894,6 +917,7 @@ private struct ReadCalendarMonthGridCoverStackFramePreferenceKey: PreferenceKey 
     }
 }
 
+/// ReadCalendarHaptics 负责当前场景的enum定义，明确职责边界并组织相关能力。
 private enum ReadCalendarHaptics {
     /// 触发轻量选择触感，用于日期切换反馈。
     static func selection() {

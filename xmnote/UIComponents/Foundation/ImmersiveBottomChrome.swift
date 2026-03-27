@@ -106,6 +106,7 @@ struct ImmersiveBottomChromeIcon: View {
 struct ImmersiveBottomChromeHeightPreferenceKey: PreferenceKey {
     static var defaultValue: CGFloat = 0
 
+    /// 封装reduce对应的业务步骤，确保调用方可以稳定复用该能力。
     static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
         value = max(value, nextValue())
     }

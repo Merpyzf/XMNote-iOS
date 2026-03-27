@@ -11,10 +11,12 @@ import Foundation
 @Observable
 /// 通用内容查看器状态源，负责 feed 订阅、分页选择、详情刷新与删除后的相邻项回退。
 final class ContentViewerViewModel {
+    /// PendingDeletedSelection 负责当前场景的struct定义，明确职责边界并组织相关能力。
     private struct PendingDeletedSelection {
         let deletedItemID: ContentViewerItemID
         let deletedIndex: Int
     }
+    /// CachePolicy 负责当前场景的enum定义，明确职责边界并组织相关能力。
     private enum CachePolicy {
         static let keepRadius = 5
         static let maxEntries = 80

@@ -74,6 +74,7 @@ class BookViewModel {
 
     // MARK: - Observation
 
+    /// 处理startObservation对应的状态流转，确保交互过程与数据状态保持一致。
     private func startObservation() {
         observationTask = Task {
             do {

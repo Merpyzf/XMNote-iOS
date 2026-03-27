@@ -41,6 +41,7 @@ struct NoteTagsView: View {
 
     // MARK: - Sections
 
+    /// 封装tagSectionsView对应的业务步骤，确保调用方可以稳定复用该能力。
     private func tagSectionsView(_ sections: [TagSection]) -> some View {
         LazyVStack(alignment: .leading, spacing: Spacing.section, pinnedViews: []) {
             ForEach(sections) { section in
@@ -50,6 +51,7 @@ struct NoteTagsView: View {
         .padding(.horizontal, Spacing.screenEdge)
     }
 
+    /// 组装sectionView对应的界面片段，保持页面层级与信息结构清晰。
     private func sectionView(_ section: TagSection) -> some View {
         VStack(alignment: .leading, spacing: Spacing.base) {
             sectionHeader(section.title)
@@ -63,6 +65,7 @@ struct NoteTagsView: View {
 
     // MARK: - Section Header
 
+    /// 组装sectionHeader对应的界面片段，保持页面层级与信息结构清晰。
     private func sectionHeader(_ title: String) -> some View {
         HStack {
             Text(title)
@@ -77,6 +80,7 @@ struct NoteTagsView: View {
 
     // MARK: - Tag Cell
 
+    /// 封装tagCell对应的业务步骤，确保调用方可以稳定复用该能力。
     private func tagCell(_ tag: Tag) -> some View {
         HStack {
             VStack(alignment: .leading, spacing: Spacing.compact) {
@@ -99,6 +103,7 @@ struct NoteTagsView: View {
 
     // MARK: - Search Highlight
 
+    /// 封装highlightedName对应的业务步骤，确保调用方可以稳定复用该能力。
     private func highlightedName(_ name: String) -> Text {
         guard !viewModel.searchText.isEmpty else {
             return Text(name)

@@ -856,6 +856,7 @@ extension NoteEditorViewModel {
     }
 
 #if DEBUG
+    /// 封装logIdeaState对应的业务步骤，确保调用方可以稳定复用该能力。
     private func logIdeaState(
         _ event: String,
         previousState: IdeaInputState,
@@ -869,6 +870,7 @@ extension NoteEditorViewModel {
         )
     }
 
+    /// 封装ideaStateText对应的业务步骤，确保调用方可以稳定复用该能力。
     private func ideaStateText(_ state: IdeaInputState) -> String {
         switch state {
         case .collapsed:

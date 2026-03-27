@@ -98,6 +98,7 @@ final class BaiduOCRSDKRuntimeBridge {
         #endif
     }
 
+    /// 封装authenticateIfNeeded对应的业务步骤，确保调用方可以稳定复用该能力。
     private func authenticateIfNeeded(credentials: OCRCredentials) throws {
         guard lastAuthenticatedCredentials != credentials else {
             return

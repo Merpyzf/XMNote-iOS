@@ -188,6 +188,7 @@ private extension WebDAVClient {
 // MARK: - WebDAV XML Parser
 // 解析 PROPFIND 207 Multi-Status 响应
 
+/// WebDAVXMLParser 负责当前场景的class定义，明确职责边界并组织相关能力。
 private class WebDAVXMLParser: NSObject, XMLParserDelegate {
     private var resources: [WebDAVResource] = []
     private var currentElement = ""

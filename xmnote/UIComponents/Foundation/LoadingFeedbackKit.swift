@@ -35,6 +35,7 @@ struct LoadingPolicy {
         hideAnimation: .smooth(duration: 0.12)
     )
 
+    /// 封装default对应的业务步骤，确保调用方可以稳定复用该能力。
     static func `default`(for intent: LoadingIntent) -> LoadingPolicy {
         switch intent {
         case .none, .read:
@@ -89,6 +90,7 @@ final class LoadingGate {
         shownMinimumVisible = .zero
     }
 
+    /// 封装showIfNeeded对应的业务步骤，确保调用方可以稳定复用该能力。
     private func showIfNeeded(using policy: LoadingPolicy) {
         guard !isVisible else { return }
         let delay = policy.delay
@@ -104,6 +106,7 @@ final class LoadingGate {
         present(using: policy)
     }
 
+    /// 处理present对应的状态流转，确保交互过程与数据状态保持一致。
     private func present(using policy: LoadingPolicy) {
         guard !isVisible else { return }
         shownMinimumVisible = policy.minimumVisible
@@ -114,6 +117,7 @@ final class LoadingGate {
         }
     }
 
+    /// 封装hideIfNeeded对应的业务步骤，确保调用方可以稳定复用该能力。
     private func hideIfNeeded() {
         guard isVisible else { return }
         let hideAnimation = shownHideAnimation

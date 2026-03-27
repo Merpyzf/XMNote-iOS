@@ -43,6 +43,7 @@ struct WebDAVServerListView: View {
 
 // MARK: - Content View
 
+/// WebDAVServerListContentView 负责当前场景的struct定义，明确职责边界并组织相关能力。
 private struct WebDAVServerListContentView: View {
     @Bindable var viewModel: WebDAVServerViewModel
 

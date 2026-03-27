@@ -89,6 +89,7 @@ struct HeatmapHelpSheetView: View {
         }
     }
 
+    /// 封装statusLegendItem对应的业务步骤，确保调用方可以稳定复用该能力。
     private func statusLegendItem(_ title: String, color: Color) -> some View {
         HStack(spacing: Spacing.half) {
             RoundedRectangle(cornerRadius: CornerRadius.inlayTiny, style: .continuous)

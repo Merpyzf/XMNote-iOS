@@ -144,6 +144,7 @@ struct BookSearchView: View {
         }
     }
 
+    /// 组装content对应的界面片段，保持页面层级与信息结构清晰。
     private func content(_ viewModel: BookSearchViewModel) -> some View {
         ZStack {
             Color.surfacePage.ignoresSafeArea()
@@ -204,6 +205,7 @@ struct BookSearchView: View {
         }
     }
 
+    /// 处理syncSceneSnapshot对应的状态流转，确保交互过程与数据状态保持一致。
     private func syncSceneSnapshot() {
         guard let viewModel else { return }
         sceneStateStore.updateBookSearch(
@@ -214,6 +216,7 @@ struct BookSearchView: View {
         )
     }
 
+    /// 组装controlsSection对应的界面片段，保持页面层级与信息结构清晰。
     private func controlsSection(_ viewModel: BookSearchViewModel) -> some View {
         VStack(alignment: .leading, spacing: SearchPageLayout.controlsVerticalSpacing) {
             sourcePills(viewModel)
@@ -222,6 +225,7 @@ struct BookSearchView: View {
         .padding(.horizontal, Spacing.screenEdge)
     }
 
+    /// 封装sourcePills对应的业务步骤，确保调用方可以稳定复用该能力。
     private func sourcePills(_ viewModel: BookSearchViewModel) -> some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: SearchPageLayout.sourceChipSpacing) {
@@ -265,6 +269,7 @@ struct BookSearchView: View {
     }
 
     @ViewBuilder
+    /// 封装recentQueries对应的业务步骤，确保调用方可以稳定复用该能力。
     private func recentQueries(_ viewModel: BookSearchViewModel) -> some View {
         if viewModel.shouldShowRecentQueries {
             BookSearchRecentQueriesSection(
@@ -285,6 +290,7 @@ struct BookSearchView: View {
     }
 
     @ViewBuilder
+    /// 封装resultsSection对应的业务步骤，确保调用方可以稳定复用该能力。
     private func resultsSection(_ viewModel: BookSearchViewModel) -> some View {
         if resultsDisplayState(viewModel) != .idle {
             ZStack {
@@ -319,6 +325,7 @@ struct BookSearchView: View {
         }
     }
 
+    /// 组装loadingStateCard对应的界面片段，保持页面层级与信息结构清晰。
     private func loadingStateCard(_ viewModel: BookSearchViewModel) -> some View {
         CardContainer(cornerRadius: CornerRadius.containerMedium) {
             VStack(alignment: .leading, spacing: Spacing.none) {
@@ -348,6 +355,7 @@ struct BookSearchView: View {
         }
     }
 
+    /// 封装resultsListSection对应的业务步骤，确保调用方可以稳定复用该能力。
     private func resultsListSection(_ viewModel: BookSearchViewModel) -> some View {
         VStack(alignment: .leading, spacing: Spacing.base) {
             if let pendingRecoveryAction {
@@ -382,6 +390,7 @@ struct BookSearchView: View {
         }
     }
 
+    /// 封装genericErrorCard对应的业务步骤，确保调用方可以稳定复用该能力。
     private func genericErrorCard(_ errorMessage: String, viewModel: BookSearchViewModel) -> some View {
         BookSearchStatusCard(
             systemImage: "wifi.exclamationmark",
@@ -396,6 +405,7 @@ struct BookSearchView: View {
         }
     }
 
+    /// 封装inlineFeedbackCard对应的业务步骤，确保调用方可以稳定复用该能力。
     private func inlineFeedbackCard(_ feedback: InlineFeedback) -> some View {
         BookSearchStatusCard(
             systemImage: "exclamationmark.circle",
@@ -405,6 +415,7 @@ struct BookSearchView: View {
         )
     }
 
+    /// 封装doubanRecoveryCard对应的业务步骤，确保调用方可以稳定复用该能力。
     private func doubanRecoveryCard(_ action: PendingRecoveryAction) -> some View {
         BookSearchStatusCard(
             systemImage: "person.crop.circle.badge.exclamationmark",
@@ -419,6 +430,7 @@ struct BookSearchView: View {
         }
     }
 
+    /// 封装fanqieRecoveryCard对应的业务步骤，确保调用方可以稳定复用该能力。
     private func fanqieRecoveryCard(_ action: FanqieVerificationRecoveryAction) -> some View {
         BookSearchStatusCard(
             systemImage: "checkmark.shield",
@@ -433,6 +445,7 @@ struct BookSearchView: View {
         }
     }
 
+    /// 组装emptyResultsCard对应的界面片段，保持页面层级与信息结构清晰。
     private func emptyResultsCard(_ viewModel: BookSearchViewModel) -> some View {
         CardContainer(cornerRadius: CornerRadius.containerMedium) {
             VStack(spacing: Spacing.base) {
@@ -447,6 +460,7 @@ struct BookSearchView: View {
         }
     }
 
+    /// 封装queryBinding对应的业务步骤，确保调用方可以稳定复用该能力。
     private func queryBinding(for viewModel: BookSearchViewModel) -> Binding<String> {
         Binding(
             get: { viewModel.query },
@@ -498,6 +512,7 @@ struct BookSearchView: View {
     }
 
     @ViewBuilder
+    /// 封装auxiliaryDestinationView对应的业务步骤，确保调用方可以稳定复用该能力。
     private func auxiliaryDestinationView(_ destination: AuxiliaryDestination) -> some View {
         switch destination {
         case .scan:
@@ -508,6 +523,7 @@ struct BookSearchView: View {
     }
 
     @MainActor
+    /// 封装performSearch对应的业务步骤，确保调用方可以稳定复用该能力。
     private func performSearch(
         using viewModel: BookSearchViewModel,
         keyword: String? = nil,
@@ -557,6 +573,7 @@ struct BookSearchView: View {
     }
 
     @MainActor
+    /// 处理prepareSeed对应的状态流转，确保交互过程与数据状态保持一致。
     private func prepareSeed(
         for result: BookSearchResult,
         using viewModel: BookSearchViewModel,
@@ -598,6 +615,7 @@ struct BookSearchView: View {
     }
 
     @MainActor
+    /// 处理presentDoubanRecovery对应的状态流转，确保交互过程与数据状态保持一致。
     private func presentDoubanRecovery(for action: PendingRecoveryAction, autoPrompt: Bool) {
         pendingRecoveryAction = action
         pendingFanqieVerificationAction = nil
@@ -608,6 +626,7 @@ struct BookSearchView: View {
     }
 
     @MainActor
+    /// 处理openDoubanLogin对应的状态流转，确保交互过程与数据状态保持一致。
     private func openDoubanLogin(for action: PendingRecoveryAction) async {
         pendingRecoveryAction = action
         activeDoubanLoginPrompt = nil
@@ -621,6 +640,7 @@ struct BookSearchView: View {
     }
 
     @MainActor
+    /// 处理handleDoubanLoginDismissed对应的状态流转，确保交互过程与数据状态保持一致。
     private func handleDoubanLoginDismissed() async {
         let currentLoginState = await DoubanWebLoginService.shared.isLoggedIn()
         let isLoggedIn = didDetectDoubanLogin || currentLoginState
@@ -630,6 +650,7 @@ struct BookSearchView: View {
     }
 
     @MainActor
+    /// 处理presentFanqieVerificationRecovery对应的状态流转，确保交互过程与数据状态保持一致。
     private func presentFanqieVerificationRecovery(for action: FanqieVerificationRecoveryAction, autoPrompt: Bool) {
         pendingFanqieVerificationAction = action
         pendingRecoveryAction = nil
@@ -640,6 +661,7 @@ struct BookSearchView: View {
     }
 
     @MainActor
+    /// 处理openFanqieVerification对应的状态流转，确保交互过程与数据状态保持一致。
     private func openFanqieVerification(for action: FanqieVerificationRecoveryAction) async {
         pendingFanqieVerificationAction = action
         activeFanqieVerificationPrompt = nil
@@ -660,6 +682,7 @@ struct BookSearchView: View {
     }
 
     @MainActor
+    /// 处理handleFanqieVerificationDismissed对应的状态流转，确保交互过程与数据状态保持一致。
     private func handleFanqieVerificationDismissed() async {
         guard let action = pendingFanqieVerificationAction else {
             didCompleteFanqieVerification = false
@@ -679,6 +702,7 @@ struct BookSearchView: View {
     }
 
     @MainActor
+    /// 处理resumePendingRecoveryAction对应的状态流转，确保交互过程与数据状态保持一致。
     private func resumePendingRecoveryAction() async {
         guard let action = pendingRecoveryAction, let viewModel else { return }
 
@@ -699,6 +723,7 @@ struct BookSearchView: View {
         }
     }
 
+    /// 处理clearTransientState对应的状态流转，确保交互过程与数据状态保持一致。
     private func clearTransientState() {
         pendingRecoveryAction = nil
         activeDoubanLoginPrompt = nil
@@ -714,10 +739,12 @@ struct BookSearchView: View {
         Spacing.contentEdge + BookSearchResultRow.coverWidth + Spacing.base
     }
 
+    /// 封装mainSectionSpacing对应的业务步骤，确保调用方可以稳定复用该能力。
     private func mainSectionSpacing(for viewModel: BookSearchViewModel) -> CGFloat {
         viewModel.shouldShowRecentQueries ? SearchPageLayout.controlsToResultsSpacing : Spacing.base
     }
 
+    /// 封装resultsDisplayState对应的业务步骤，确保调用方可以稳定复用该能力。
     private func resultsDisplayState(_ viewModel: BookSearchViewModel) -> ResultsDisplayState {
         if viewModel.isSearching {
             return .loading

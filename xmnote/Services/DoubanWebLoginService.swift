@@ -9,6 +9,7 @@ import Foundation
 import WebKit
 
 @MainActor
+/// DoubanWebLoginService 负责当前场景的class定义，明确职责边界并组织相关能力。
 final class DoubanWebLoginService {
     static let shared = DoubanWebLoginService()
 

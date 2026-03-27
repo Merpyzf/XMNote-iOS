@@ -145,6 +145,7 @@ struct TimelineNoteCard: View {
     }()
 }
 
+/// TimelineExpandableNoteText 负责当前场景的struct定义，明确职责边界并组织相关能力。
 private struct TimelineExpandableNoteText: View, Equatable {
     let html: String
     var baseFont: UIFont = TimelineTypography.eventRichTextBaseFont
@@ -156,6 +157,7 @@ private struct TimelineExpandableNoteText: View, Equatable {
     @State private var isExpanded = false
     @State private var isTruncated = false
 
+    /// 比较富文本参数是否等价，避免滚动列表中重复触发展开文本重新布局。
     static func == (lhs: TimelineExpandableNoteText, rhs: TimelineExpandableNoteText) -> Bool {
         lhs.html == rhs.html &&
         lhs.baseFont == rhs.baseFont &&
@@ -218,6 +220,7 @@ private struct TimelineExpandableNoteText: View, Equatable {
     }
 }
 
+/// TimelineExpandedNoteBody 负责当前场景的struct定义，明确职责边界并组织相关能力。
 private struct TimelineExpandedNoteBody: UIViewRepresentable {
     let html: String
     let baseFont: UIFont
@@ -338,6 +341,7 @@ private struct TimelineExpandedNoteBody: UIViewRepresentable {
 
     func makeCoordinator() -> Coordinator { Coordinator() }
 
+    /// Coordinator 负责当前场景的class定义，明确职责边界并组织相关能力。
     final class Coordinator {
         var lastContentKey: String = ""
         var lastLayoutKey: String = ""
@@ -345,6 +349,7 @@ private struct TimelineExpandedNoteBody: UIViewRepresentable {
     }
 }
 
+/// TimelineCollapsedNotePreview 负责当前场景的struct定义，明确职责边界并组织相关能力。
 private struct TimelineCollapsedNotePreview: UIViewRepresentable {
     let html: String
     let baseFont: UIFont
@@ -446,6 +451,7 @@ private struct TimelineCollapsedNotePreview: UIViewRepresentable {
 
     func makeCoordinator() -> Coordinator { Coordinator() }
 
+    /// Coordinator 负责当前场景的class定义，明确职责边界并组织相关能力。
     final class Coordinator {
         var lastContentKey: String = ""
         var lastLayoutKey: String = ""
@@ -453,6 +459,7 @@ private struct TimelineCollapsedNotePreview: UIViewRepresentable {
         var lastReportedTruncation: Bool?
     }
 
+    /// 封装notifyTruncationIfNeeded对应的业务步骤，确保调用方可以稳定复用该能力。
     private func notifyTruncationIfNeeded(_ isTruncated: Bool, context: Context) {
         guard context.coordinator.lastReportedTruncation != isTruncated else { return }
         context.coordinator.lastReportedTruncation = isTruncated
@@ -487,6 +494,7 @@ private final class TimelineCollapsedNotePreviewView: UIView {
         snapshot.size
     }
 
+    /// 封装layoutSubviews对应的业务步骤，确保调用方可以稳定复用该能力。
     override func layoutSubviews() {
         super.layoutSubviews()
         let width = bounds.width > 0 ? bounds.width : layoutWidth
@@ -539,6 +547,7 @@ private final class TimelineCollapsedNotePreviewView: UIView {
         setNeedsLayout()
     }
 
+    /// 封装setupSubviews对应的业务步骤，确保调用方可以稳定复用该能力。
     private func setupSubviews() {
         backgroundColor = .clear
 
@@ -560,6 +569,7 @@ private final class TimelineCollapsedNotePreviewView: UIView {
         }
     }
 
+    /// 执行measuredTextHeight对应的数据处理步骤，并返回当前流程需要的结果。
     private func measuredTextHeight(
         attributedText: NSAttributedString,
         width: CGFloat,

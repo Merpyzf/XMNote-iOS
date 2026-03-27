@@ -46,6 +46,7 @@ struct BookGridView: View {
         }
     }
 
+    /// 执行filterPill对应的数据处理步骤，并返回当前流程需要的结果。
     private func filterPill(_ filter: ReadStatusFilter) -> some View {
         let isSelected = viewModel.selectedFilter == filter
         return Button {

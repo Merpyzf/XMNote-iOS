@@ -9,6 +9,7 @@ import Foundation
 
 /// OCR 仓储，统一管理调试偏好、鉴权缓存与百度 OCR 识别结果加工。
 final class OCRRepository: OCRRepositoryProtocol {
+    /// StorageKey 负责当前场景的enum定义，明确职责边界并组织相关能力。
     private enum StorageKey {
         static let preferences = "debug.baidu_ocr.preferences"
     }
@@ -345,6 +346,7 @@ private extension OCRRepository {
 
         private static let androidEncodedConfig = "657941695958427053325635496a6f67496a673354545272527a42464d33464663475652626c52486445313255454a485753497349434a7a5a574e795a58524c5a586b694f6941694e30526855303555616e46485646637a616a52485a6d56595a315a78565574575131467652314a76565530694948303d"
 
+        /// 执行decodeAndroidAlignedDebugPayload对应的数据处理步骤，并返回当前流程需要的结果。
         static func decodeAndroidAlignedDebugPayload() throws -> OCRDefaultCredentialsPayload {
             let base64String = try decodeHexString(androidEncodedConfig)
             guard let jsonData = Data(base64Encoded: base64String) else {
@@ -353,6 +355,7 @@ private extension OCRRepository {
             return try JSONDecoder().decode(OCRDefaultCredentialsPayload.self, from: jsonData)
         }
 
+        /// 执行decodeHexString对应的数据处理步骤，并返回当前流程需要的结果。
         static func decodeHexString(_ value: String) throws -> String {
             guard value.count.isMultiple(of: 2) else {
                 throw OCRRepositoryError.sdkUnavailable(reason: "默认 OCR 配置格式错误。")

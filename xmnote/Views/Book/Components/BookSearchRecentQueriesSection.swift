@@ -67,6 +67,7 @@ struct BookSearchRecentQueriesSection: View {
         .animation(.smooth(duration: 0.18), value: queries)
     }
 
+    /// 封装recentQueryChip对应的业务步骤，确保调用方可以稳定复用该能力。
     private func recentQueryChip(_ query: String) -> some View {
         Button {
             onTap(query)
@@ -165,6 +166,7 @@ struct BookSearchRecentQueriesSection: View {
         return textWidth + RecentQueriesLayoutMetrics.chipHorizontalPadding * 2
     }
 
+    /// 处理updateContainerWidth对应的状态流转，确保交互过程与数据状态保持一致。
     private func updateContainerWidth(_ width: CGFloat) {
         let resolvedWidth = max(width, 0)
         guard abs(resolvedWidth - containerWidth) > 0.5 else { return }
@@ -231,6 +233,7 @@ private struct BookSearchRecentQueriesFlowLayout: Layout {
         }
     }
 
+    /// 组装rows对应的界面片段，保持页面层级与信息结构清晰。
     private func rows(for availableWidth: CGFloat?, subviews: Subviews) -> [FlowLayoutRow] {
         guard !subviews.isEmpty else { return [] }
 

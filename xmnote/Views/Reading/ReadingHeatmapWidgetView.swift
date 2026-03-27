@@ -8,6 +8,7 @@ import SwiftUI
  */
 /// ReadingHeatmapWidgetView 是在读首页顶部热力图卡，负责展示最近阅读活跃度并承接进入阅读日历的入口。
 struct ReadingHeatmapWidgetView: View {
+    /// HeatmapWidgetLayout 负责当前场景的enum定义，明确职责边界并组织相关能力。
     private enum HeatmapWidgetLayout {
         static let cardCornerRadius = CornerRadius.containerLarge
         static let contentInset: CGFloat = Spacing.base
@@ -120,6 +121,7 @@ struct ReadingHeatmapWidgetView: View {
         }
     }
 
+    /// 处理syncReadLoadingVisibility对应的状态流转，确保交互过程与数据状态保持一致。
     private func syncReadLoadingVisibility() {
         readLoadingGate.update(intent: viewModel.isLoading ? .read : .none)
     }

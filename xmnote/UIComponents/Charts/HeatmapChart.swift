@@ -72,18 +72,21 @@ struct HeatmapChartStyle: Equatable, Sendable {
     )
 }
 
+/// HeatmapWeekColumn 负责当前场景的struct定义，明确职责边界并组织相关能力。
 private struct HeatmapWeekColumn: Identifiable {
     let id: String
     let week: [Date]
     let previousWeek: [Date]?
 }
 
+/// HeatmapHeaderToken 负责当前场景的struct定义，明确职责边界并组织相关能力。
 private struct HeatmapHeaderToken: Identifiable {
     let id: String
     let text: String
     let x: CGFloat
 }
 
+/// HeatmapResolvedLayout 负责当前场景的struct定义，明确职责边界并组织相关能力。
 private struct HeatmapResolvedLayout {
     let rawSquareSize: CGFloat
     let squareSize: CGFloat
@@ -91,6 +94,7 @@ private struct HeatmapResolvedLayout {
 }
 
 #if DEBUG
+/// HeatmapDebug 负责当前场景的enum定义，明确职责边界并组织相关能力。
 private enum HeatmapDebug {
     static let logger = Logger(subsystem: "xmnote", category: "HeatmapChartLayout")
 }

@@ -218,6 +218,7 @@ struct RichText: UIViewRepresentable {
         maxLines > 0 ? .byTruncatingTail : .byWordWrapping
     }
 
+    /// 执行measureLayoutSnapshot对应的数据处理步骤，并返回当前流程需要的结果。
     private func measureLayoutSnapshot(
         for textView: UITextView,
         width: CGFloat
@@ -267,6 +268,7 @@ struct RichText: UIViewRepresentable {
         return lineCount > maxLines
     }
 
+    /// 封装notifyTruncationIfNeeded对应的业务步骤，确保调用方可以稳定复用该能力。
     private func notifyTruncationIfNeeded(
         isTruncated: Bool,
         context: Context,

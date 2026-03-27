@@ -16,6 +16,7 @@ import SwiftUI
 
 /// 个人中心首页，汇总设置、备份、阅读偏好与支持入口。
 struct PersonalView: View {
+    /// Layout 负责当前场景的enum定义，明确职责边界并组织相关能力。
     private enum Layout {
         static let panelCornerRadius: CGFloat = CornerRadius.containerMedium
         static let panelSpacing: CGFloat = Spacing.comfortable
@@ -190,6 +191,7 @@ extension PersonalView {
 
 extension PersonalView {
 
+    /// 封装groupedPanel对应的业务步骤，确保调用方可以稳定复用该能力。
     private func groupedPanel<Content: View>(
         @ViewBuilder content: () -> Content
     ) -> some View {
@@ -201,6 +203,7 @@ extension PersonalView {
         }
     }
 
+    /// 封装settingsRow对应的业务步骤，确保调用方可以稳定复用该能力。
     private func settingsRow(
         _ icon: String,
         _ title: String,
@@ -220,6 +223,7 @@ extension PersonalView {
         }
     }
 
+    /// 封装actionRow对应的业务步骤，确保调用方可以稳定复用该能力。
     private func actionRow(
         _ icon: String,
         _ title: String,
@@ -239,6 +243,7 @@ extension PersonalView {
     }
 
     @ViewBuilder
+    /// 封装debugCenterRow对应的业务步骤，确保调用方可以稳定复用该能力。
     private func debugCenterRow() -> some View {
 #if DEBUG
         NavigationLink(destination: DebugCenterView()) {
@@ -248,6 +253,7 @@ extension PersonalView {
 #endif
     }
 
+    /// 组装rowContent对应的界面片段，保持页面层级与信息结构清晰。
     private func rowContent(
         icon: String,
         title: String,
@@ -283,6 +289,7 @@ extension PersonalView {
     }
 }
 
+/// PersonalSettingsPanel 负责当前场景的struct定义，明确职责边界并组织相关能力。
 private struct PersonalSettingsPanel<Content: View>: View {
     let cornerRadius: CGFloat
     let content: Content
@@ -302,6 +309,7 @@ private struct PersonalSettingsPanel<Content: View>: View {
     }
 }
 
+/// PersonalSettingsDivider 负责当前场景的struct定义，明确职责边界并组织相关能力。
 private struct PersonalSettingsDivider: View {
     let leadingInset: CGFloat
 

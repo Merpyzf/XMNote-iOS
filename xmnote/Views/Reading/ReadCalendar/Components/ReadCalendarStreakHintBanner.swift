@@ -9,6 +9,7 @@ import SwiftUI
 
 /// 连续阅读提示横幅，负责展示阶段性激励与保持低干扰视觉提示。
 struct ReadCalendarStreakHintBanner: View {
+    /// Layout 负责当前场景的enum定义，明确职责边界并组织相关能力。
     private enum Layout {
         static let horizontalPadding: CGFloat = Spacing.base
         static let verticalPadding: CGFloat = 6

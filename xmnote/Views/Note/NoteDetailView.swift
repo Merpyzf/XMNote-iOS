@@ -59,6 +59,7 @@ struct NoteDetailView: View {
     }
 }
 
+/// NoteDetailContentView 负责当前场景的struct定义，明确职责边界并组织相关能力。
 private struct NoteDetailContentView: View {
     @Bindable var viewModel: NoteDetailViewModel
     let isEditing: Bool
@@ -144,6 +145,7 @@ private struct NoteDetailContentView: View {
     }
 
     @ViewBuilder
+    /// 组装sectionCard对应的界面片段，保持页面层级与信息结构清晰。
     private func sectionCard<Content: View>(title: String, @ViewBuilder content: () -> Content) -> some View {
         CardContainer {
             VStack(alignment: .leading, spacing: Spacing.base) {
@@ -156,6 +158,7 @@ private struct NoteDetailContentView: View {
         }
     }
 
+    /// 处理syncReadLoadingVisibility对应的状态流转，确保交互过程与数据状态保持一致。
     private func syncReadLoadingVisibility() {
         readLoadingGate.update(intent: viewModel.isLoading ? .read : .none)
     }

@@ -49,6 +49,7 @@ struct ReadingDashboardMetricValueDisplay: Equatable {
 
 /// ReadingDashboardFormatting 统一承接首页仪表盘的文案压缩、趋势值拆段与柱图可视化映射。
 enum ReadingDashboardFormatting {
+    /// TrendBarScale 负责当前场景的enum定义，明确职责边界并组织相关能力。
     private enum TrendBarScale {
         static let shortRangeUpperBound: CGFloat = 0.18
         static let shortRangeGamma: CGFloat = 0.78

@@ -172,24 +172,29 @@ private struct NavigationPopGuardBridge: UIViewControllerRepresentable {
         context.coordinator.attachIfNeeded(to: uiViewController)
     }
 
+    /// 封装dismantleUIViewController对应的业务步骤，确保调用方可以稳定复用该能力。
     static func dismantleUIViewController(_ uiViewController: BridgeViewController, coordinator: Coordinator) {
         coordinator.detach()
     }
 
+    /// BridgeViewController 负责当前场景的class定义，明确职责边界并组织相关能力。
     final class BridgeViewController: UIViewController {
         var onNavigationContextUpdated: (() -> Void)?
 
+        /// 封装viewWillAppear对应的业务步骤，确保调用方可以稳定复用该能力。
         override func viewWillAppear(_ animated: Bool) {
             super.viewWillAppear(animated)
             onNavigationContextUpdated?()
         }
 
+        /// 封装viewDidAppear对应的业务步骤，确保调用方可以稳定复用该能力。
         override func viewDidAppear(_ animated: Bool) {
             super.viewDidAppear(animated)
             onNavigationContextUpdated?()
         }
     }
 
+    /// Coordinator 负责当前场景的class定义，明确职责边界并组织相关能力。
     final class Coordinator: NSObject, UIGestureRecognizerDelegate {
         var canPop = true
         var onBlockedAttempt: () -> Void
@@ -250,6 +255,7 @@ private struct NavigationPopGuardBridge: UIViewControllerRepresentable {
             return false
         }
 
+        /// 封装installGestures对应的业务步骤，确保调用方可以稳定复用该能力。
         private func installGestures(on navigationController: UINavigationController) {
             edgePopGestureRecognizer = navigationController.interactivePopGestureRecognizer
             edgePopGestureRecognizer?.delegate = self

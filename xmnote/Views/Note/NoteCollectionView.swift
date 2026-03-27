@@ -40,6 +40,7 @@ struct NoteCollectionView: View {
         }
     }
 
+    /// 封装categoryPill对应的业务步骤，确保调用方可以稳定复用该能力。
     private func categoryPill(_ category: NoteCategory) -> some View {
         let isSelected = viewModel.selectedCategory == category
         return Button {
@@ -74,6 +75,7 @@ struct NoteCollectionView: View {
         }
     }
 
+    /// 组装placeholderContent对应的界面片段，保持页面层级与信息结构清晰。
     private func placeholderContent(_ title: String) -> some View {
         EmptyStateView(icon: "doc.text", message: title)
     }

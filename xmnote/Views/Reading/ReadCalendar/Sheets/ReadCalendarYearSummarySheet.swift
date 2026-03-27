@@ -9,6 +9,7 @@ import SwiftUI
 
 /// 年度总结弹层，负责呈现年度指标、排行与月份分布洞察。
 struct ReadCalendarYearSummarySheet: View {
+    /// Layout 负责当前场景的enum定义，明确职责边界并组织相关能力。
     private enum Layout {
         static let containerTopInset: CGFloat = 30
         static let containerBottomInset: CGFloat = 28

@@ -345,17 +345,20 @@ private extension ReadCalendarColorRepository {
     }
 }
 
+/// ColorSwatch 负责当前场景的struct定义，明确职责边界并组织相关能力。
 private struct ColorSwatch {
     let color: RGBAColor
     let population: Int
 }
 
+/// HSVColor 负责当前场景的struct定义，明确职责边界并组织相关能力。
 private struct HSVColor {
     let hue: Double
     let saturation: Double
     let value: Double
 }
 
+/// RGBAColor 负责当前场景的struct定义，明确职责边界并组织相关能力。
 private struct RGBAColor {
     let red: UInt8
     let green: UInt8
@@ -428,6 +431,7 @@ private struct RGBAColor {
     }
 }
 
+/// ReadCalendarColorCacheStore 负责当前场景的actor定义，明确职责边界并组织相关能力。
 private actor ReadCalendarColorCacheStore {
     /// CacheRecord 是颜色缓存落盘模型，记录状态、前景/背景色和更新时间。
     struct CacheRecord: Codable {
@@ -487,6 +491,7 @@ private actor ReadCalendarColorCacheStore {
         persistIfPossible()
     }
 
+    /// 封装trimIfNeeded对应的业务步骤，确保调用方可以稳定复用该能力。
     private func trimIfNeeded() {
         guard memory.count > maxEntries else { return }
         let removeCount = memory.count - maxEntries
@@ -498,6 +503,7 @@ private actor ReadCalendarColorCacheStore {
         }
     }
 
+    /// 执行persistIfPossible对应的数据处理步骤，并返回当前流程需要的结果。
     private func persistIfPossible() {
         guard let data = try? JSONEncoder().encode(memory) else { return }
         try? data.write(to: fileURL, options: .atomic)

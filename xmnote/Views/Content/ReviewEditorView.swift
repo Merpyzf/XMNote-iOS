@@ -47,6 +47,7 @@ struct ReviewEditorView: View {
     }
 }
 
+/// ReviewEditorLoadedView 负责当前场景的struct定义，明确职责边界并组织相关能力。
 private struct ReviewEditorLoadedView: View {
     @Bindable var viewModel: ReviewEditorViewModel
     let onSaved: () -> Void

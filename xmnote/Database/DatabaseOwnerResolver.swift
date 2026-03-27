@@ -86,6 +86,7 @@ enum DatabaseOwnerResolver {
     }
 }
 
+/// DatabaseOwnerError 负责当前场景的enum定义，明确职责边界并组织相关能力。
 private enum DatabaseOwnerError: LocalizedError {
     case createOwnerFailed
     case createDefaultSourceFailed

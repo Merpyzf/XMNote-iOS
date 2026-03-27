@@ -25,6 +25,7 @@ struct HighlightColorPicker: View {
 
     // MARK: - Color Dot
 
+    /// 封装colorDot对应的业务步骤，确保调用方可以稳定复用该能力。
     private func colorDot(_ argb: UInt32) -> some View {
         let isSelected = argb == selectedARGB
         return Circle()

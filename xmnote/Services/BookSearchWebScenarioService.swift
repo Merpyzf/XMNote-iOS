@@ -8,6 +8,7 @@
 import Foundation
 import SwiftSoup
 
+/// ScenarioProbeResult 负责当前场景的struct定义，明确职责边界并组织相关能力。
 struct ScenarioProbeResult: Sendable {
     enum Status: String, Sendable {
         case matched
@@ -39,6 +40,7 @@ struct ScenarioProbeResult: Sendable {
     let matchedCount: Int
 }
 
+/// ScenarioFetchAttempt 负责当前场景的struct定义，明确职责边界并组织相关能力。
 struct ScenarioFetchAttempt: Identifiable, Sendable {
     let id = UUID()
     let channel: WebFetchChannel
@@ -48,6 +50,7 @@ struct ScenarioFetchAttempt: Identifiable, Sendable {
     let summary: String
 }
 
+/// DoubanSearchBookItem 负责当前场景的struct定义，明确职责边界并组织相关能力。
 struct DoubanSearchBookItem: Identifiable, Sendable {
     let doubanId: Int
     let title: String
@@ -57,10 +60,12 @@ struct DoubanSearchBookItem: Identifiable, Sendable {
     var id: Int { doubanId }
 }
 
+/// ScenarioParsedPayload 负责当前场景的enum定义，明确职责边界并组织相关能力。
 enum ScenarioParsedPayload: Sendable {
     case doubanBooks([DoubanSearchBookItem])
 }
 
+/// ScenarioFetchResult 负责当前场景的struct定义，明确职责边界并组织相关能力。
 struct ScenarioFetchResult: Sendable {
     let fetchResult: WebHTMLFetchResult
     let probe: ScenarioProbeResult
@@ -71,6 +76,7 @@ struct ScenarioFetchResult: Sendable {
     let parsedPayload: ScenarioParsedPayload?
 }
 
+/// BookSearchWebScenario 负责当前场景的enum定义，明确职责边界并组织相关能力。
 enum BookSearchWebScenario: Identifiable, Sendable {
     case doubanSearch(keyword: String, page: Int)
     case doubanDetail(doubanId: String)
@@ -355,6 +361,7 @@ private extension BookSearchWebScenarioService {
     }
 }
 
+/// ScenarioProbeEngine 负责当前场景的enum定义，明确职责边界并组织相关能力。
 private enum ScenarioProbeEngine {
     nonisolated static func probe(
         html: String,

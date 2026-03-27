@@ -84,6 +84,7 @@ struct BookContainerView: View {
 
 // MARK: - Content View
 
+/// BookContentView 负责当前场景的struct定义，明确职责边界并组织相关能力。
 private struct BookContentView: View {
     @Bindable var viewModel: BookViewModel
     @Binding var selectedSubTab: BookSubTab
@@ -132,6 +133,7 @@ private struct BookContentView: View {
     }
 
     @ViewBuilder
+    /// 封装segmentedPage对应的业务步骤，确保调用方可以稳定复用该能力。
     private func segmentedPage(for tab: BookSubTab) -> some View {
         switch tab {
         case .books:

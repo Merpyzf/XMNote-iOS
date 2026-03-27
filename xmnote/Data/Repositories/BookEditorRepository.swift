@@ -13,6 +13,7 @@ struct BookEditorRepository: BookEditorRepositoryProtocol {
     private let databaseManager: DatabaseManager
     private let userDefaults: UserDefaults
 
+    /// Keys 负责当前场景的enum定义，明确职责边界并组织相关能力。
     private enum Keys {
         static let preferBookType = "book_entry_prefer_type"
         static let preferSourceName = "book_entry_prefer_source_name"
@@ -199,6 +200,7 @@ private extension BookEditorRepository {
         return "未知"
     }
 
+    /// 执行fetchSources对应的数据处理步骤，并返回当前流程需要的结果。
     nonisolated func fetchSources(_ db: Database) throws -> [BookEditorNamedOption] {
         // SQL 目的：读取未删除来源列表，供录入页“来源”建议芯片展示。
         // 过滤条件：仅保留 source.is_deleted = 0，按 source_order 升序保持 Android 字典顺序。
@@ -214,6 +216,7 @@ private extension BookEditorRepository {
         }
     }
 
+    /// 执行fetchGroups对应的数据处理步骤，并返回当前流程需要的结果。
     nonisolated func fetchGroups(_ db: Database, ownerId: Int64) throws -> [BookEditorNamedOption] {
         // SQL 目的：读取未删除分组列表，供录入页单选分组建议使用。
         // 过滤条件：仅保留 group.is_deleted = 0，排序规则与 Android 分组列表一致。
@@ -229,6 +232,7 @@ private extension BookEditorRepository {
         }
     }
 
+    /// 执行fetchTags对应的数据处理步骤，并返回当前流程需要的结果。
     nonisolated func fetchTags(_ db: Database, ownerId: Int64) throws -> [BookEditorNamedOption] {
         // SQL 目的：读取书籍标签列表，供录入页多选建议和新标签补全使用。
         // 过滤条件：仅保留 tag.type = 1 且 tag.is_deleted = 0，避免混入笔记标签。
@@ -244,6 +248,7 @@ private extension BookEditorRepository {
         }
     }
 
+    /// 封装normalizeDraft对应的业务步骤，确保调用方可以稳定复用该能力。
     nonisolated func normalizeDraft(_ draft: BookEditorDraft) -> BookEditorDraft {
         var copy = draft
         copy.title = draft.title.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -266,6 +271,7 @@ private extension BookEditorRepository {
         return copy
     }
 
+    /// 封装normalizeTagNames对应的业务步骤，确保调用方可以稳定复用该能力。
     nonisolated func normalizeTagNames(_ tagNames: [String]) -> [String] {
         Array(
             Set(
@@ -277,6 +283,7 @@ private extension BookEditorRepository {
         .sorted()
     }
 
+    /// 封装isDuplicateBook对应的业务步骤，确保调用方可以稳定复用该能力。
     nonisolated func isDuplicateBook(_ draft: BookEditorDraft, ownerId: Int64, db: Database) throws -> Bool {
         // SQL 目的：按 Android 规则判重，避免新增同一本书。
         // 过滤条件：精确匹配 name/author/translator/press/isbn/pub_date 六元组，且排除软删除记录。
@@ -308,6 +315,7 @@ private extension BookEditorRepository {
         return count > 0
     }
 
+    /// 执行resolveSourceId对应的数据处理步骤，并返回当前流程需要的结果。
     nonisolated func resolveSourceId(for sourceName: String, in db: Database) throws -> Int64 {
         let normalized = sourceName.isEmpty ? "未知" : sourceName
         // SQL 目的：按来源名称查重或创建来源记录，保证在线小说平台也能落到 source 表。
@@ -338,6 +346,7 @@ private extension BookEditorRepository {
         return record.id ?? 1
     }
 
+    /// 执行resolveGroupId对应的数据处理步骤，并返回当前流程需要的结果。
     nonisolated func resolveGroupId(for groupName: String, ownerId: Int64, in db: Database) throws -> Int64? {
         guard !groupName.isEmpty else { return nil }
         let querySQL = """
@@ -371,6 +380,7 @@ private extension BookEditorRepository {
         return record.id
     }
 
+    /// 执行resolveTagIds对应的数据处理步骤，并返回当前流程需要的结果。
     nonisolated func resolveTagIds(for tagNames: [String], ownerId: Int64, in db: Database) throws -> [Int64] {
         var ids: [Int64] = []
         for tagName in tagNames {
@@ -410,6 +420,7 @@ private extension BookEditorRepository {
         return ids
     }
 
+    /// 执行buildBookRecord对应的数据处理步骤，并返回当前流程需要的结果。
     nonisolated func buildBookRecord(
         from draft: BookEditorDraft,
         ownerId: Int64,
@@ -482,6 +493,7 @@ private extension BookEditorRepository {
         )
     }
 
+    /// 封装insertChapters对应的业务步骤，确保调用方可以稳定复用该能力。
     nonisolated func insertChapters(from catalog: String, for bookId: Int64, createdAt: Int64, db: Database) throws {
         let titles = catalog
             .components(separatedBy: .newlines)
@@ -506,6 +518,7 @@ private extension BookEditorRepository {
         }
     }
 
+    /// 封装insertReadStatusRecord对应的业务步骤，确保调用方可以稳定复用该能力。
     nonisolated func insertReadStatusRecord(
         bookId: Int64,
         status: BookEntryReadingStatus,

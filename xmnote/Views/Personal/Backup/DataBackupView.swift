@@ -60,7 +60,9 @@ struct DataBackupView: View {
 
 // MARK: - Content View
 
+/// DataBackupContentView 负责当前场景的struct定义，明确职责边界并组织相关能力。
 private struct DataBackupContentView: View {
+    /// Layout 负责当前场景的enum定义，明确职责边界并组织相关能力。
     private enum Layout {
         static let panelCornerRadius: CGFloat = CornerRadius.containerMedium
         static let sectionSpacing: CGFloat = Spacing.section
@@ -696,6 +698,7 @@ private extension DataBackupContentView {
 
 // MARK: - Restore Confirm Sheet
 
+/// BackupRestoreConfirmSheet 负责当前场景的struct定义，明确职责边界并组织相关能力。
 private struct BackupRestoreConfirmSheet: View {
     let target: BackupRestoreTarget
     let onCancel: () -> Void
@@ -767,6 +770,7 @@ private struct BackupRestoreConfirmSheet: View {
 
 // MARK: - Document Picker
 
+/// LocalBackupExportDocumentPicker 负责当前场景的struct定义，明确职责边界并组织相关能力。
 private struct LocalBackupExportDocumentPicker: UIViewControllerRepresentable {
     let fileURL: URL
     let onComplete: (Bool) -> Void
@@ -784,6 +788,7 @@ private struct LocalBackupExportDocumentPicker: UIViewControllerRepresentable {
 
     func updateUIViewController(_ uiViewController: UIDocumentPickerViewController, context: Context) {}
 
+    /// Coordinator 负责当前场景的class定义，明确职责边界并组织相关能力。
     final class Coordinator: NSObject, UIDocumentPickerDelegate {
         private let onComplete: (Bool) -> Void
         private var hasCompleted = false
@@ -800,6 +805,7 @@ private struct LocalBackupExportDocumentPicker: UIViewControllerRepresentable {
             complete(with: false)
         }
 
+        /// 处理complete对应的状态流转，确保交互过程与数据状态保持一致。
         private func complete(with succeeded: Bool) {
             guard !hasCompleted else { return }
             hasCompleted = true
@@ -808,6 +814,7 @@ private struct LocalBackupExportDocumentPicker: UIViewControllerRepresentable {
     }
 }
 
+/// LocalBackupImportDocumentPicker 负责当前场景的struct定义，明确职责边界并组织相关能力。
 private struct LocalBackupImportDocumentPicker: UIViewControllerRepresentable {
     let onPick: (URL) -> Void
     let onCancel: () -> Void
@@ -827,6 +834,7 @@ private struct LocalBackupImportDocumentPicker: UIViewControllerRepresentable {
 
     func updateUIViewController(_ uiViewController: UIDocumentPickerViewController, context: Context) {}
 
+    /// Coordinator 负责当前场景的class定义，明确职责边界并组织相关能力。
     final class Coordinator: NSObject, UIDocumentPickerDelegate {
         private let onPick: (URL) -> Void
         private let onCancel: () -> Void
@@ -863,6 +871,7 @@ private struct LocalBackupImportDocumentPicker: UIViewControllerRepresentable {
 
 // MARK: - Shared Surface
 
+/// BackupTaskBackdropView 负责当前场景的struct定义，明确职责边界并组织相关能力。
 private struct BackupTaskBackdropView: View {
     var body: some View {
         Color.overlay
@@ -871,6 +880,7 @@ private struct BackupTaskBackdropView: View {
     }
 }
 
+/// BackupSettingsPanel 负责当前场景的struct定义，明确职责边界并组织相关能力。
 private struct BackupSettingsPanel<Content: View>: View {
     let cornerRadius: CGFloat
     let content: Content
@@ -890,6 +900,7 @@ private struct BackupSettingsPanel<Content: View>: View {
     }
 }
 
+/// BackupSettingsDivider 负责当前场景的struct定义，明确职责边界并组织相关能力。
 private struct BackupSettingsDivider: View {
     let leadingInset: CGFloat
 
@@ -901,6 +912,7 @@ private struct BackupSettingsDivider: View {
     }
 }
 
+/// BackupTaskCardView 负责当前场景的struct定义，明确职责边界并组织相关能力。
 private struct BackupTaskCardView: View {
     let presentation: BackupTaskPresentation
     let reduceMotion: Bool
@@ -937,6 +949,7 @@ private struct BackupTaskCardView: View {
     }
 }
 
+/// BackupTaskMessageSwitcher 负责当前场景的struct定义，明确职责边界并组织相关能力。
 private struct BackupTaskMessageSwitcher: View {
     let message: String
     let reduceMotion: Bool
@@ -980,6 +993,7 @@ private struct BackupTaskMessageSwitcher: View {
     }
 
     @ViewBuilder
+    /// 封装messageText对应的业务步骤，确保调用方可以稳定复用该能力。
     private func messageText(_ value: String) -> some View {
         Text(value)
             .font(AppTypography.subheadline)
@@ -989,6 +1003,7 @@ private struct BackupTaskMessageSwitcher: View {
             .fixedSize(horizontal: false, vertical: true)
     }
 
+    /// 封装transition对应的业务步骤，确保调用方可以稳定复用该能力。
     private func transition(to newValue: String) {
         outgoingMessage = displayedMessage
         displayedMessage = newValue
@@ -1034,6 +1049,7 @@ private struct BackupTaskMessageSwitcher: View {
     }
 }
 
+/// InlineLoadingTextPlaceholder 负责当前场景的struct定义，明确职责边界并组织相关能力。
 private struct InlineLoadingTextPlaceholder: View {
     let width: CGFloat
     let height: CGFloat
@@ -1046,6 +1062,7 @@ private struct InlineLoadingTextPlaceholder: View {
     }
 }
 
+/// InlineLoadingAvatarPlaceholder 负责当前场景的struct定义，明确职责边界并组织相关能力。
 private struct InlineLoadingAvatarPlaceholder: View {
     let size: CGFloat
 
@@ -1057,6 +1074,7 @@ private struct InlineLoadingAvatarPlaceholder: View {
     }
 }
 
+/// InlineLoadingShimmerModifier 负责当前场景的struct定义，明确职责边界并组织相关能力。
 private struct InlineLoadingShimmerModifier: ViewModifier {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var phase: CGFloat = -1
@@ -1090,6 +1108,7 @@ private struct InlineLoadingShimmerModifier: ViewModifier {
     }
 }
 
+/// MatchedLoadingTransitionModifier 负责当前场景的struct定义，明确职责边界并组织相关能力。
 private struct MatchedLoadingTransitionModifier<ID: Hashable>: ViewModifier {
     let id: ID
     let namespace: Namespace.ID

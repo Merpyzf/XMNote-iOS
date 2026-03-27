@@ -217,6 +217,7 @@ struct MainTabView: View {
     // MARK: - Reading Destinations
 
     @ViewBuilder
+    /// 封装readingDestination对应的业务步骤，确保调用方可以稳定复用该能力。
     private func readingDestination(for route: ReadingRoute) -> some View {
         switch route {
         case .bookDetail:
@@ -231,6 +232,7 @@ struct MainTabView: View {
     // MARK: - Book Destinations
 
     @ViewBuilder
+    /// 封装bookDestination对应的业务步骤，确保调用方可以稳定复用该能力。
     private func bookDestination(for route: BookRoute) -> some View {
         switch route {
         case .detail(let bookId):
@@ -247,6 +249,7 @@ struct MainTabView: View {
     // MARK: - Note Destinations
 
     @ViewBuilder
+    /// 封装noteDestination对应的业务步骤，确保调用方可以稳定复用该能力。
     private func noteDestination(for route: NoteRoute) -> some View {
         switch route {
         case .detail(let noteId):
@@ -263,6 +266,7 @@ struct MainTabView: View {
     // MARK: - Content Destinations
 
     @ViewBuilder
+    /// 组装contentDestination对应的界面片段，保持页面层级与信息结构清晰。
     private func contentDestination(for route: ContentRoute) -> some View {
         switch route {
         case .contentViewer(let source, let initialItemID, let keyword):
@@ -281,6 +285,7 @@ struct MainTabView: View {
     // MARK: - Personal Destinations
 
     @ViewBuilder
+    /// 封装personalDestination对应的业务步骤，确保调用方可以稳定复用该能力。
     private func personalDestination(for route: PersonalRoute) -> some View {
         switch route {
         case .settings:
@@ -321,6 +326,7 @@ struct MainTabView: View {
     // MARK: - Debug Destinations
 
     @ViewBuilder
+    /// 封装debugDestination对应的业务步骤，确保调用方可以稳定复用该能力。
     private func debugDestination(for route: DebugRoute) -> some View {
         switch route {
         case .debugCenter:
@@ -332,6 +338,7 @@ struct MainTabView: View {
         }
     }
 
+    /// 封装append对应的业务步骤，确保调用方可以稳定复用该能力。
     private func append(_ route: BookRoute, to tab: AppTab) {
         switch tab {
         case .reading:
@@ -347,6 +354,7 @@ struct MainTabView: View {
         }
     }
 
+    /// 封装append对应的业务步骤，确保调用方可以稳定复用该能力。
     private func append(_ route: NoteRoute, to tab: AppTab) {
         switch tab {
         case .reading:
@@ -362,6 +370,7 @@ struct MainTabView: View {
         }
     }
 
+    /// 封装append对应的业务步骤，确保调用方可以稳定复用该能力。
     private func append(_ route: DebugRoute, to tab: AppTab) {
         switch tab {
         case .reading:
@@ -377,6 +386,7 @@ struct MainTabView: View {
         }
     }
 
+    /// 封装append对应的业务步骤，确保调用方可以稳定复用该能力。
     private func append(_ route: ContentRoute, to tab: AppTab) {
         switch tab {
         case .reading:
@@ -392,6 +402,7 @@ struct MainTabView: View {
         }
     }
 
+    /// 组装contentRoute对应的界面片段，保持页面层级与信息结构清晰。
     private func contentRoute(
         for source: ContentViewerSourceContext,
         initialItem: ContentViewerItemID
@@ -399,6 +410,7 @@ struct MainTabView: View {
         .contentViewer(source: source, initialItemID: initialItem, keyword: "")
     }
 
+    /// 执行restoreFromSceneSnapshot对应的数据处理步骤，并返回当前流程需要的结果。
     private func restoreFromSceneSnapshot() {
         let snapshot = sceneStateStore.snapshot
         selectedTab = snapshot.selectedTab
@@ -410,6 +422,7 @@ struct MainTabView: View {
         searchPath = restoredPath(for: .search)
     }
 
+    /// 执行restoredPath对应的数据处理步骤，并返回当前流程需要的结果。
     private func restoredPath(for tab: AppTab) -> NavigationPath {
         guard let representation = sceneStateStore.pathRepresentation(for: tab) else {
             return NavigationPath()
@@ -417,6 +430,7 @@ struct MainTabView: View {
         return NavigationPath(representation)
     }
 
+    /// 封装pathSignature对应的业务步骤，确保调用方可以稳定复用该能力。
     private func pathSignature(for path: NavigationPath) -> String {
         guard let representation = path.codable,
               let data = try? JSONEncoder().encode(representation) else {
@@ -426,6 +440,7 @@ struct MainTabView: View {
     }
 }
 
+/// SearchView 负责当前场景的struct定义，明确职责边界并组织相关能力。
 private struct SearchView: View {
     @Binding var query: String
     private let topBarHeight: CGFloat = 52

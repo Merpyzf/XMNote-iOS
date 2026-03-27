@@ -13,6 +13,7 @@ import SwiftUI
 @Observable
 /// 阅读日历状态中枢，负责月份数据加载、分页切换与颜色回填编排。
 final class ReadCalendarViewModel {
+    /// ReadCalendarColorRequest 负责当前场景的struct定义，明确职责边界并组织相关能力。
     private struct ReadCalendarColorRequest: Hashable {
         let bookId: Int64
         let bookName: String
@@ -943,6 +944,7 @@ private extension ReadCalendarViewModel {
         }
     }
 
+    /// 执行resolveYearTopBookColors对应的数据处理步骤，并返回当前流程需要的结果。
     private func resolveYearTopBookColors(
         year: Int,
         requests: [ReadCalendarColorRequest],
@@ -989,6 +991,7 @@ private extension ReadCalendarViewModel {
         }
     }
 
+    /// 处理applyYearTopBookColors对应的状态流转，确保交互过程与数据状态保持一致。
     private func applyYearTopBookColors(
         _ colorsByBookId: [Int64: ReadCalendarSegmentColor],
         year: Int,
@@ -1058,6 +1061,7 @@ private extension ReadCalendarViewModel {
         }
     }
 
+    /// 执行resolveSegmentColors对应的数据处理步骤，并返回当前流程需要的结果。
     private func resolveSegmentColors(
         monthKey: String,
         requests: [ReadCalendarColorRequest],
@@ -1110,6 +1114,7 @@ private extension ReadCalendarViewModel {
         }
     }
 
+    /// 封装fillPendingRankingFallbackColorsIfNeeded对应的业务步骤，确保调用方可以稳定复用该能力。
     private func fillPendingRankingFallbackColorsIfNeeded(
         monthKey: String,
         ticket: Int,
@@ -1147,6 +1152,7 @@ private extension ReadCalendarViewModel {
         applyColors(fallbackColors, monthKey: monthKey, ticket: ticket)
     }
 
+    /// 处理applyColors对应的状态流转，确保交互过程与数据状态保持一致。
     private func applyColors(
         _ colorsByBookId: [Int64: ReadCalendarSegmentColor],
         monthKey: String,
@@ -1201,6 +1207,7 @@ private extension ReadCalendarViewModel {
         }
     }
 
+    /// 执行buildColorRequests对应的数据处理步骤，并返回当前流程需要的结果。
     private func buildColorRequests(from state: MonthPageState) -> [ReadCalendarColorRequest] {
         var seenBookIds = Set<Int64>()
         var requests: [ReadCalendarColorRequest] = []
@@ -1230,6 +1237,7 @@ private extension ReadCalendarViewModel {
         return requests
     }
 
+    /// 执行buildYearTopBookColorRequests对应的数据处理步骤，并返回当前流程需要的结果。
     private func buildYearTopBookColorRequests(
         topBooks: [ReadCalendarMonthlyDurationBook],
         colorsByBookId: [Int64: ReadCalendarSegmentColor]

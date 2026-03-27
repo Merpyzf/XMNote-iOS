@@ -77,10 +77,12 @@ final class ReadCalendarSettings {
     private static let keyHapticsEnabled = "rcHapticsEnabled"
     private static let keyStreakHintEnabled = "rcStreakHintEnabled"
 
+    /// 执行save对应的数据处理步骤，并返回当前流程需要的结果。
     private func save(_ value: Bool, forKey key: String) {
         UserDefaults.standard.set(value, forKey: key)
     }
 
+    /// 执行save对应的数据处理步骤，并返回当前流程需要的结果。
     private func save(_ value: Int, forKey key: String) {
         UserDefaults.standard.set(value, forKey: key)
     }

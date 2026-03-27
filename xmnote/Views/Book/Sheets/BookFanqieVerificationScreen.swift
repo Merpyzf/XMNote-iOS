@@ -43,6 +43,7 @@ struct BookFanqieVerificationScreen: View {
     }
 }
 
+/// BookFanqieVerificationWebView 负责当前场景的struct定义，明确职责边界并组织相关能力。
 private struct BookFanqieVerificationWebView: UIViewRepresentable {
     let searchURL: URL
     let onVerificationCompleted: () -> Void
@@ -66,6 +67,7 @@ private struct BookFanqieVerificationWebView: UIViewRepresentable {
 
     func updateUIView(_ webView: WKWebView, context: Context) {}
 
+    /// Coordinator 负责当前场景的class定义，明确职责边界并组织相关能力。
     final class Coordinator: NSObject, WKNavigationDelegate {
         private let onVerificationCompleted: () -> Void
         private var hasReportedCompletion = false
@@ -99,6 +101,7 @@ private struct BookFanqieVerificationWebView: UIViewRepresentable {
             completionHandler(.performDefaultHandling, nil)
         }
 
+        /// 封装evaluateString对应的业务步骤，确保调用方可以稳定复用该能力。
         private func evaluateString(_ webView: WKWebView, script: String) async throws -> String {
             try await withCheckedThrowingContinuation { continuation in
                 webView.evaluateJavaScript(script) { value, error in

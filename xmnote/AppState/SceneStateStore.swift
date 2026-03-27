@@ -116,6 +116,7 @@ final class SceneStateStore {
         mutate { $0.contentViewer = contentViewer }
     }
 
+    /// 封装mutate对应的业务步骤，确保调用方可以稳定复用该能力。
     private func mutate(_ mutate: (inout AppSceneSnapshot) -> Void) {
         var next = snapshot
         mutate(&next)
@@ -123,6 +124,7 @@ final class SceneStateStore {
         replaceSnapshot(next, persist: true)
     }
 
+    /// 处理updatePathRepresentation对应的状态流转，确保交互过程与数据状态保持一致。
     private func updatePathRepresentation(_ representation: NavigationPath.CodableRepresentation?, for tab: AppTab) {
         mutate {
             switch tab {
@@ -140,6 +142,7 @@ final class SceneStateStore {
         }
     }
 
+    /// 封装replaceSnapshot对应的业务步骤，确保调用方可以稳定复用该能力。
     private func replaceSnapshot(_ newSnapshot: AppSceneSnapshot, persist: Bool) {
         snapshot = newSnapshot
         if persist {
@@ -160,6 +163,7 @@ struct AppSceneSnapshot: Codable, Equatable {
     var notes: NotesSceneSnapshot
     var contentViewer: ContentViewerSceneSnapshot?
 
+    /// 组装empty对应的界面片段，保持页面层级与信息结构清晰。
     static func empty(dataEpoch: Int) -> AppSceneSnapshot {
         AppSceneSnapshot(
             snapshotVersion: 1,
@@ -175,6 +179,7 @@ struct AppSceneSnapshot: Codable, Equatable {
     }
 }
 
+/// NavigationSceneSnapshot 负责当前场景的struct定义，明确职责边界并组织相关能力。
 struct NavigationSceneSnapshot: Codable, Equatable {
     var reading: NavigationPath.CodableRepresentation?
     var books: NavigationPath.CodableRepresentation?
@@ -183,27 +188,32 @@ struct NavigationSceneSnapshot: Codable, Equatable {
     var search: NavigationPath.CodableRepresentation?
 }
 
+/// ReadingSceneSnapshot 负责当前场景的struct定义，明确职责边界并组织相关能力。
 struct ReadingSceneSnapshot: Codable, Equatable {
     var selectedSubTab: ReadingSubTab = .reading
     var timeline: TimelineSceneSnapshot?
     var readCalendar: ReadCalendarSceneSnapshot?
 }
 
+/// BooksSceneSnapshot 负责当前场景的struct定义，明确职责边界并组织相关能力。
 struct BooksSceneSnapshot: Codable, Equatable {
     var selectedSubTab: BookSubTab = .books
     var search: BookSearchSceneSnapshot?
 }
 
+/// NotesSceneSnapshot 负责当前场景的struct定义，明确职责边界并组织相关能力。
 struct NotesSceneSnapshot: Codable, Equatable {
     var selectedSubTab: NoteSubTab = .notes
 }
 
+/// TimelineSceneSnapshot 负责当前场景的struct定义，明确职责边界并组织相关能力。
 struct TimelineSceneSnapshot: Codable, Equatable {
     var selectedDate: Date
     var displayedMonthStart: Date
     var selectedCategory: TimelineEventCategory
 }
 
+/// ReadCalendarSceneSnapshot 负责当前场景的struct定义，明确职责边界并组织相关能力。
 struct ReadCalendarSceneSnapshot: Codable, Equatable {
     var pagerSelection: Date
     var selectedDate: Date?
@@ -211,11 +221,13 @@ struct ReadCalendarSceneSnapshot: Codable, Equatable {
     var selectedYear: Int
 }
 
+/// BookSearchSceneSnapshot 负责当前场景的struct定义，明确职责边界并组织相关能力。
 struct BookSearchSceneSnapshot: Codable, Equatable {
     var query: String
     var selectedSource: BookSearchSource
 }
 
+/// ContentViewerSceneSnapshot 负责当前场景的struct定义，明确职责边界并组织相关能力。
 struct ContentViewerSceneSnapshot: Codable, Equatable {
     var source: ContentViewerSourceContext
     var selectedItemID: ContentViewerItemID

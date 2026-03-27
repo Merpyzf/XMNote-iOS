@@ -47,6 +47,7 @@ final class HTMLParser: NSObject {
 
     // MARK: - 解析入口
 
+    /// 执行parseHTML对应的数据处理步骤，并返回当前流程需要的结果。
     private func parseHTML(_ html: String) -> NSMutableAttributedString {
         // 清理 Android Knife 的 &zwj; 前缀
         var cleaned = html
@@ -85,6 +86,7 @@ final class HTMLParser: NSObject {
 
     // MARK: - 属性构建
 
+    /// 执行buildAttributes对应的数据处理步骤，并返回当前流程需要的结果。
     private func buildAttributes(for tagStack: [TagContext]) -> [NSAttributedString.Key: Any] {
         var attrs: [NSAttributedString.Key: Any] = [:]
         var traits: UIFontDescriptor.SymbolicTraits = []
@@ -237,6 +239,7 @@ extension HTMLParser: XMLParserDelegate {
 
     // MARK: - 内部方法
 
+    /// 封装flushText对应的业务步骤，确保调用方可以稳定复用该能力。
     private func flushText() {
         guard !currentText.isEmpty else { return }
         let attrs = buildAttributes(for: tagStack)
@@ -244,6 +247,7 @@ extension HTMLParser: XMLParserDelegate {
         currentText = ""
     }
 
+    /// 处理applyCharacterAttributes对应的状态流转，确保交互过程与数据状态保持一致。
     private func applyCharacterAttributes(tag: String, context: TagContext, range: NSRange) {
         guard range.length > 0 else { return }
 
@@ -270,6 +274,7 @@ extension HTMLParser: XMLParserDelegate {
         }
     }
 
+    /// 处理applyFontTrait对应的状态流转，确保交互过程与数据状态保持一致。
     private func applyFontTrait(_ trait: UIFontDescriptor.SymbolicTraits, in range: NSRange) {
         result.enumerateAttribute(.font, in: range, options: []) { value, subRange, _ in
             guard let currentFont = value as? UIFont else { return }
@@ -315,6 +320,7 @@ extension HTMLParser: XMLParserDelegate {
         return UIFont(descriptor: obliqueDesc, size: base.pointSize)
     }
 
+    /// 封装paragraphIndent对应的业务步骤，确保调用方可以稳定复用该能力。
     private func paragraphIndent() -> NSMutableParagraphStyle {
         let style = NSMutableParagraphStyle()
         let indent = RichTextEditorView.defaultParagraphIndent
