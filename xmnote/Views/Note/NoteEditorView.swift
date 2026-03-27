@@ -21,7 +21,7 @@ struct NoteEditorView: View {
     @State private var viewModel: NoteEditorViewModel?
     @State private var editorSettings = NoteEditorSettings()
     @State private var bootstrapLoadingGate = LoadingGate()
-    @State private var showsDiscardDialog = false
+    @State private var closeFlowState: NoteEditorCloseFlowState = .idle
     @State private var activeComposer: NoteEditorComposerTarget?
     @State private var activeSheet: NoteEditorSheet?
     @State private var activeEditorTarget: NoteEditorComposerTarget?
@@ -35,11 +35,11 @@ struct NoteEditorView: View {
     @State private var attachmentPhotoItems: [PhotosPickerItem] = []
     @State private var showsAttachmentPicker = false
     @State private var measuredHeights: [NoteEditorMeasuredPart: CGFloat] = [:]
-    @State private var frozenMeasuredHeights: [NoteEditorMeasuredPart: CGFloat]?
-    @State private var measuredHeightsFreezeDeadline: Date = .distantPast
+    @State private var focusExcerptTransition: NoteEditorFocusExcerptTransition = .idle
+    @State private var layoutFreezeContext: NoteEditorLayoutFreezeContext?
+    @State private var pendingCollapseAfterKeyboardHide = false
     @State private var keyboardHeight: CGFloat = 0
-    @State private var isDismissAttemptInProgress = false
-    @State private var dismissAttemptKeyboardVisibleSnapshot = false
+    @State private var isKeyboardAnimatingOut = false
     @State private var lastClosedComposerTarget: NoteEditorComposerTarget?
     @State private var baselineIdleTimerDisabled: Bool?
     @State private var baselineScreenBrightness: CGFloat?
@@ -109,19 +109,33 @@ private extension NoteEditorView {
     var supportsPhotoOCR: Bool { true }
     var usesSplitOCREntryButtons: Bool { editorSettings.ocrEntryMode == .splitButtons }
     var isKeyboardVisible: Bool { keyboardHeight > 0 }
-    var isMeasuredHeightsFrozen: Bool {
-        frozenMeasuredHeights != nil && Date() < measuredHeightsFreezeDeadline
-    }
     var effectiveMeasuredHeights: [NoteEditorMeasuredPart: CGFloat] {
-        if isMeasuredHeightsFrozen, let frozenMeasuredHeights {
-            return frozenMeasuredHeights
+        if let layoutFreezeContext {
+            return layoutFreezeContext.measuredHeights
         }
         return measuredHeights
     }
     var measuredHeightEpsilon: CGFloat { 0.5 }
-    var measuredHeightFreezeDuration: TimeInterval { 0.35 }
     var effectiveKeyboardVisible: Bool {
-        isDismissAttemptInProgress ? dismissAttemptKeyboardVisibleSnapshot : isKeyboardVisible
+        closeFlowState.keyboardVisibleSnapshot
+            ?? layoutFreezeContext?.keyboardVisible
+            ?? isKeyboardVisible
+    }
+    var isCloseFlowActive: Bool {
+        closeFlowState.isActive
+    }
+    var isFocusExcerptLayoutAnimating: Bool {
+        focusExcerptTransition != .idle || layoutFreezeContext?.source == .focusExcerptTransition
+    }
+    var discardDialogBinding: Binding<Bool> {
+        Binding(
+            get: { closeFlowState.isConfirmingDiscard },
+            set: { isPresented in
+                guard !isPresented else { return }
+                guard closeFlowState.isConfirmingDiscard else { return }
+                transitionCloseFlow(to: .idle, reason: "discard_dialog_closed")
+            }
+        )
     }
     var seededMeasuredHeights: [NoteEditorMeasuredPart: CGFloat] {
         [
@@ -163,32 +177,30 @@ private extension NoteEditorView {
                 )
             )
             .xmSystemAlert(
-                isPresented: $showsDiscardDialog,
+                isPresented: discardDialogBinding,
                 descriptor: XMSystemAlertDescriptor(
                     title: "提示",
                     message: "你编辑的内容尚未保存，确定要离开么？",
                     actions: [
                         XMSystemAlertAction(title: "继续编辑") { },
                         XMSystemAlertAction(title: "保存") {
-                            Task { _ = await viewModel.save() }
+                            beginSaveAndClose(using: viewModel)
                         },
                         XMSystemAlertAction(title: "离开", role: .destructive) {
-                            Task {
-                                await dismissEditorDiscardingChanges(using: viewModel)
-                            }
+                            beginDiscardAndClose(using: viewModel)
                         }
                     ]
-                ),
-                onDismiss: {
-                    finishDismissAttemptIfNeeded(reason: "discard_dialog_dismiss")
-                }
+                )
             )
     }
 
     func editorContent(_ viewModel: NoteEditorViewModel) -> some View {
         GeometryReader { geometry in
-            let preparedHeights = measuredHeightsForComputation(from: effectiveMeasuredHeights)
-            let heightsSource = preparedHeights.heights
+            let layoutInputs = makeFocusExcerptLayoutInputs(
+                measuredHeights: effectiveMeasuredHeights,
+                keyboardVisible: effectiveKeyboardVisible
+            )
+            let heightsSource = layoutInputs.measuredHeights
             let heightComputation = makeEditorHeightComputation(
                 for: geometry.size.height,
                 bookSectionHeight: heightsSource[.book] ?? 0,
@@ -196,7 +208,8 @@ private extension NoteEditorView {
                 measuredTailSectionHeight: heightsSource[.tail] ?? 0,
                 toolbarHeight: heightsSource[.toolbar] ?? 0,
                 ideaState: viewModel.ideaInputState,
-                usedSeededMeasurements: preparedHeights.usedSeededHeights
+                keyboardVisible: layoutInputs.keyboardVisible,
+                usedSeededMeasurements: layoutInputs.usedSeededMeasurements
             )
             let heights = (content: heightComputation.contentHeight, idea: heightComputation.ideaHeight)
             let scrollBottomPadding = max(Spacing.section, (heightsSource[.toolbar] ?? 0) + Spacing.base)
@@ -309,15 +322,15 @@ private extension NoteEditorView {
         .navigationBarTitleDisplayMode(.inline)
         .navigationBarBackButtonHidden(true)
         .navigationPopGuard(
-            canPop: !viewModel.hasUnsavedChanges && !viewModel.isSaving,
+            canPop: closeFlowState == .idle && !viewModel.hasUnsavedChanges && !viewModel.isSaving,
             onBlockedAttempt: {
-                requestDismiss(using: viewModel, source: .navigationGesture)
+                requestClose(using: viewModel, source: .navigationGesture)
             }
         )
         .toolbar {
             ToolbarItem(placement: .topBarLeading) {
                 Button {
-                    requestDismiss(using: viewModel, source: .toolbarButton)
+                    requestClose(using: viewModel, source: .toolbarButton)
                 } label: {
                     Image(systemName: "chevron.left")
                         .font(.system(size: 18, weight: .medium))
@@ -468,16 +481,19 @@ private extension NoteEditorView {
         }
         .onDisappear {
             releaseScreenBehavior()
-            frozenMeasuredHeights = nil
-            measuredHeightsFreezeDeadline = .distantPast
-            isDismissAttemptInProgress = false
-            dismissAttemptKeyboardVisibleSnapshot = false
+            resetFocusExcerptCoordination(reason: "view_disappear")
+            clearLayoutFreezeContext(source: .closeFlow, reason: "view_disappear")
+            closeFlowState = .idle
         }
         .onChange(of: editorSettings.layoutModeRawValue) { _, _ in
             handleLayoutModeStateChange(animated: isLayoutStateInitialized)
         }
         .onChange(of: viewModel.didSave) { _, didSave in
             guard didSave else { return }
+            if closeFlowState.isSavingAndClosing {
+                dismiss()
+                return
+            }
             if shouldContinueEditingAfterSave {
                 Task {
                     await continueEditingAfterSave(using: viewModel)
@@ -485,10 +501,6 @@ private extension NoteEditorView {
                 return
             }
             dismiss()
-        }
-        .onChange(of: showsDiscardDialog) { _, isPresented in
-            guard !isPresented else { return }
-            finishDismissAttemptIfNeeded(reason: "discard_dialog_hidden")
         }
         .onChange(of: editorSettings.keepScreenOnEnabled) { _, _ in
             applyScreenBehavior()
@@ -505,6 +517,7 @@ private extension NoteEditorView {
             handleScenePhaseChange(phase)
         }
         .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { _ in
+            isKeyboardAnimatingOut = true
             let previousHeight = keyboardHeight
             keyboardHeight = 0
 #if DEBUG
@@ -517,6 +530,12 @@ private extension NoteEditorView {
             }
 #endif
         }
+        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardDidHideNotification)) { _ in
+            keyboardHeight = 0
+            isKeyboardAnimatingOut = false
+            guard pendingCollapseAfterKeyboardHide else { return }
+            performIdeaCollapse(reason: "keyboard_did_hide")
+        }
         .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillChangeFrameNotification)) { notification in
             guard let endFrame = notification.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? CGRect else {
                 return
@@ -527,6 +546,9 @@ private extension NoteEditorView {
             let keyboardVisibleHeight = max(0, screenHeight - endFrame.minY)
             let previousHeight = keyboardHeight
             keyboardHeight = keyboardVisibleHeight
+            if keyboardVisibleHeight > measuredHeightEpsilon {
+                isKeyboardAnimatingOut = false
+            }
 #if DEBUG
             if abs(previousHeight - keyboardVisibleHeight) > measuredHeightEpsilon {
                 logExpandEvent(
@@ -1060,46 +1082,80 @@ private extension NoteEditorView {
         controller.send(command)
     }
 
-    func requestDismiss(using viewModel: NoteEditorViewModel, source: DismissAttemptSource) {
+    func requestClose(using viewModel: NoteEditorViewModel, source: DismissAttemptSource) {
+        guard closeFlowState == .idle else { return }
         guard !viewModel.isSaving else { return }
-        beginDismissAttempt(reason: source.rawValue)
+
         if viewModel.hasUnsavedChanges {
-            showsDiscardDialog = true
+            transitionCloseFlow(
+                to: .confirmingDiscard(keyboardVisibleSnapshot: isKeyboardVisible),
+                reason: "request_\(source.rawValue)"
+            )
         } else {
             dismiss()
         }
     }
 
-    func beginDismissAttempt(reason: String) {
-        if !isDismissAttemptInProgress {
-            isDismissAttemptInProgress = true
-            dismissAttemptKeyboardVisibleSnapshot = isKeyboardVisible
-        }
-        beginMeasuredHeightFreeze(reason: "dismiss_attempt_\(reason)")
-#if DEBUG
-        logExpandEvent(
-            "dismiss.attempt.start",
-            viewModel: viewModel,
-            extra: "reason=\(reason) keyboardVisibleSnapshot=\(dismissAttemptKeyboardVisibleSnapshot)"
+    func beginSaveAndClose(using viewModel: NoteEditorViewModel) {
+        transitionCloseFlow(
+            to: .savingAndClosing(keyboardVisibleSnapshot: closeFlowKeyboardVisibleSnapshot),
+            reason: "save_and_close"
         )
-#endif
+        Task {
+            let noteID = await viewModel.save()
+            guard noteID == nil else { return }
+            await MainActor.run {
+                transitionCloseFlow(to: .idle, reason: "save_and_close_failed")
+            }
+        }
     }
 
-    func finishDismissAttemptIfNeeded(reason: String) {
-        guard isDismissAttemptInProgress else { return }
-        isDismissAttemptInProgress = false
-        dismissAttemptKeyboardVisibleSnapshot = false
+    func beginDiscardAndClose(using viewModel: NoteEditorViewModel) {
+        transitionCloseFlow(
+            to: .discardingAndClosing(keyboardVisibleSnapshot: closeFlowKeyboardVisibleSnapshot),
+            reason: "discard_and_close"
+        )
+        Task {
+            await viewModel.discardEditingSession()
+            await MainActor.run {
+                dismiss()
+            }
+        }
+    }
+
+    var closeFlowKeyboardVisibleSnapshot: Bool {
+        closeFlowState.keyboardVisibleSnapshot ?? isKeyboardVisible
+    }
+
+    func transitionCloseFlow(to nextState: NoteEditorCloseFlowState, reason: String) {
+        let previousState = closeFlowState
+        guard previousState != nextState else { return }
+        closeFlowState = nextState
+        if nextState.isActive {
+            resetFocusExcerptCoordination(reason: "close_flow_\(reason)")
+            freezeLayoutContext(
+                source: .closeFlow,
+                reason: "close_flow_\(reason)",
+                keyboardVisible: nextState.keyboardVisibleSnapshot ?? isKeyboardVisible
+            )
+        } else {
+            clearLayoutFreezeContext(source: .closeFlow, reason: "close_flow_\(reason)")
+        }
 #if DEBUG
         logExpandEvent(
-            "dismiss.attempt.end",
+            "close_flow.transition",
             viewModel: viewModel,
-            extra: "reason=\(reason)"
+            extra: "reason=\(reason) previous=\(previousState.debugName) next=\(nextState.debugName) keyboardSnapshot=\(nextState.keyboardVisibleSnapshot?.description ?? "nil")"
         )
 #endif
     }
 
     func handleLayoutModeStateChange(animated: Bool) {
-        guard layoutMode == .focusExcerpt, let viewModel else { return }
+        guard let viewModel else { return }
+        guard layoutMode == .focusExcerpt else {
+            resetFocusExcerptCoordination(reason: "layout_mode_exit")
+            return
+        }
 #if DEBUG
         logExpandEvent(
             "layout.sync.start",
@@ -1108,11 +1164,11 @@ private extension NoteEditorView {
         )
 #endif
         if animated {
-            beginMeasuredHeightFreeze(reason: "layout_mode_change")
-            withAnimation(.snappy) {
+            performFocusExcerptLayoutAnimation(reason: "layout_mode_change") {
                 viewModel.syncIdeaInputStateForFocusLayout(isIdeaFocused: isIdeaFocused)
             }
         } else {
+            resetFocusExcerptCoordination(reason: "layout_mode_sync")
             viewModel.syncIdeaInputStateForFocusLayout(isIdeaFocused: isIdeaFocused)
         }
 #if DEBUG
@@ -1148,17 +1204,9 @@ private extension NoteEditorView {
             )
 #endif
             isIdeaFocused = hasFocus
-            let shouldSyncIdeaLayout = !isDismissAttemptInProgress
+            let shouldSyncIdeaLayout = !isCloseFlowActive
             if hasFocus {
-                if shouldSyncIdeaLayout,
-                   layoutMode == .focusExcerpt,
-                   let viewModel,
-                   viewModel.ideaInputState == .collapsed {
-                    beginMeasuredHeightFreeze(reason: "idea_focus_expand")
-                    withAnimation(.snappy) {
-                        viewModel.expandIdea()
-                    }
-                }
+                pendingCollapseAfterKeyboardHide = false
                 activeEditorTarget = .idea
             } else {
                 if activeEditorTarget == .idea {
@@ -1166,18 +1214,18 @@ private extension NoteEditorView {
                 }
                 if shouldSyncIdeaLayout,
                    layoutMode == .focusExcerpt,
-                   !isKeyboardVisible,
                    let viewModel {
 #if DEBUG
                     logExpandEvent(
                         "idea.collapse.trigger",
                         viewModel: viewModel,
-                        extra: "reason=focus_lost keyboardVisible=\(isKeyboardVisible)"
+                        extra: "reason=focus_lost keyboardVisible=\(isKeyboardVisible) keyboardAnimatingOut=\(isKeyboardAnimatingOut)"
                     )
 #endif
-                    beginMeasuredHeightFreeze(reason: "idea_focus_lost")
-                    withAnimation(.snappy) {
-                        viewModel.collapseIdeaIfEmpty()
+                    if viewModel.hasIdeaText {
+                        viewModel.syncIdeaInputStateForFocusLayout(isIdeaFocused: false)
+                    } else {
+                        requestIdeaCollapseAfterKeyboardHide(reason: "focus_lost")
                     }
                 }
             }
@@ -1237,9 +1285,6 @@ private extension NoteEditorView {
 #endif
         registerEditorInteraction(force: true)
         toolbarPromptMessage = nil
-        if activeEditorTarget == .content || isContentFocused {
-            contentOrnamentController.send(.dismissKeyboard)
-        }
 #if DEBUG
         logExpandEvent(
             "idea.expand.request",
@@ -1247,10 +1292,7 @@ private extension NoteEditorView {
             extra: "phase=before"
         )
 #endif
-        beginMeasuredHeightFreeze(reason: "focus_row_tap")
-        withAnimation(.snappy) {
-            viewModel.expandIdea()
-        }
+        requestIdeaExpand(source: "focus_row_tap", focusAfterAnimation: true)
 #if DEBUG
         logExpandEvent(
             "idea.expand.request",
@@ -1258,8 +1300,6 @@ private extension NoteEditorView {
             extra: "phase=after"
         )
 #endif
-        activeEditorTarget = .idea
-        focusEditor(.idea, reason: "focus_row_tap", fallbackDelay: 0.1)
     }
 
     func ornamentController(for target: NoteEditorComposerTarget) -> RichTextOrnamentController {
@@ -1373,7 +1413,7 @@ private extension NoteEditorView {
         let ideaState = viewModel.map { ideaStateText($0.ideaInputState) } ?? "nil"
         let hasIdeaText = viewModel?.hasIdeaText ?? false
         let activeTarget = activeEditorTarget?.rawValue ?? "nil"
-        return "layout=\(layoutMode.rawValue) ideaState=\(ideaState) hasIdeaText=\(hasIdeaText) isIdeaFocused=\(isIdeaFocused) isContentFocused=\(isContentFocused) activeTarget=\(activeTarget) keyboardVisible=\(isKeyboardVisible)"
+        return "layout=\(layoutMode.rawValue) ideaState=\(ideaState) hasIdeaText=\(hasIdeaText) isIdeaFocused=\(isIdeaFocused) isContentFocused=\(isContentFocused) activeTarget=\(activeTarget) keyboardVisible=\(isKeyboardVisible) closeFlow=\(closeFlowState.debugName)"
     }
 
     func ideaStateText(_ state: IdeaInputState) -> String {
@@ -1421,13 +1461,183 @@ private extension NoteEditorView {
         }
     }
 
+    func makeFocusExcerptLayoutInputs(
+        measuredHeights: [NoteEditorMeasuredPart: CGFloat],
+        keyboardVisible: Bool
+    ) -> NoteEditorFocusExcerptLayoutInputs {
+        let preparedHeights = measuredHeightsForComputation(from: measuredHeights)
+        return NoteEditorFocusExcerptLayoutInputs(
+            measuredHeights: preparedHeights.heights,
+            keyboardVisible: keyboardVisible,
+            usedSeededMeasurements: preparedHeights.usedSeededHeights
+        )
+    }
+
+    func requestIdeaExpand(source: String, focusAfterAnimation: Bool) {
+        guard layoutMode == .focusExcerpt, let viewModel else { return }
+        guard !isCloseFlowActive else { return }
+        if focusExcerptTransition == .idle, isFocusExcerptLayoutAnimating {
+            return
+        }
+        pendingCollapseAfterKeyboardHide = false
+
+        switch focusExcerptTransition {
+        case .idle:
+            guard viewModel.ideaInputState == .collapsed else {
+                guard focusAfterAnimation, !isIdeaFocused else { return }
+                activeEditorTarget = .idea
+                focusEditor(.idea, reason: source, fallbackDelay: 0.1)
+                return
+            }
+            performFocusExcerptLayoutAnimation(
+                reason: "idea_expand_\(source)",
+                transition: .expanding(pendingFocus: focusAfterAnimation),
+                updates: {
+                    viewModel.expandIdea()
+                },
+                onCompletion: {
+                    let shouldFocus = focusExcerptTransition.pendingFocusAfterAnimation
+                    focusExcerptTransition = .idle
+                    clearLayoutFreezeContext(source: .focusExcerptTransition, reason: "idea_expand_\(source)")
+                    guard shouldFocus else { return }
+                    activeEditorTarget = .idea
+                    focusEditor(.idea, reason: source, fallbackDelay: 0.1)
+                }
+            )
+        case .expanding(let pendingFocus):
+            if focusAfterAnimation && !pendingFocus {
+                focusExcerptTransition = .expanding(pendingFocus: true)
+            }
+        case .collapsing:
+            return
+        }
+    }
+
+    func requestIdeaCollapseAfterKeyboardHide(reason: String) {
+        guard layoutMode == .focusExcerpt, let viewModel else { return }
+        guard !isCloseFlowActive else { return }
+        if focusExcerptTransition == .idle, isFocusExcerptLayoutAnimating {
+            return
+        }
+        guard !viewModel.hasIdeaText else {
+            pendingCollapseAfterKeyboardHide = false
+            return
+        }
+        guard viewModel.ideaInputState != .collapsed else {
+            pendingCollapseAfterKeyboardHide = false
+            return
+        }
+        guard focusExcerptTransition != .collapsing else { return }
+        pendingCollapseAfterKeyboardHide = true
+        if !isKeyboardVisible && !isKeyboardAnimatingOut {
+            performIdeaCollapse(reason: reason)
+        }
+    }
+
+    func performIdeaCollapse(reason: String) {
+        guard layoutMode == .focusExcerpt, let viewModel else {
+            pendingCollapseAfterKeyboardHide = false
+            return
+        }
+        guard !isCloseFlowActive else { return }
+        if focusExcerptTransition == .idle, isFocusExcerptLayoutAnimating {
+            return
+        }
+        guard !viewModel.hasIdeaText else {
+            pendingCollapseAfterKeyboardHide = false
+            viewModel.syncIdeaInputStateForFocusLayout(isIdeaFocused: false)
+            return
+        }
+        guard viewModel.ideaInputState != .collapsed else {
+            pendingCollapseAfterKeyboardHide = false
+            return
+        }
+        guard focusExcerptTransition != .collapsing else { return }
+
+        pendingCollapseAfterKeyboardHide = false
+        performFocusExcerptLayoutAnimation(
+            reason: "idea_collapse_\(reason)",
+            transition: .collapsing,
+            updates: {
+                viewModel.collapseIdeaIfEmpty()
+            },
+            onCompletion: {
+                focusExcerptTransition = .idle
+                clearLayoutFreezeContext(source: .focusExcerptTransition, reason: "idea_collapse_\(reason)")
+            }
+        )
+    }
+
+    func performFocusExcerptLayoutAnimation(
+        reason: String,
+        transition: NoteEditorFocusExcerptTransition? = nil,
+        updates: @escaping () -> Void,
+        onCompletion: @escaping () -> Void = {}
+    ) {
+        guard layoutMode == .focusExcerpt else {
+            updates()
+            onCompletion()
+            return
+        }
+        freezeLayoutContext(source: .focusExcerptTransition, reason: reason)
+        if let transition {
+            focusExcerptTransition = transition
+        }
+        var transaction = Transaction(animation: .snappy)
+        transaction.addAnimationCompletion(criteria: .logicallyComplete) {
+            onCompletion()
+        }
+        withTransaction(transaction) {
+            updates()
+        }
+    }
+
+    func freezeLayoutContext(
+        source: NoteEditorLayoutFreezeSource,
+        reason: String,
+        keyboardVisible: Bool? = nil
+    ) {
+        guard layoutMode == .focusExcerpt else { return }
+        layoutFreezeContext = NoteEditorLayoutFreezeContext(
+            source: source,
+            measuredHeights: measuredHeights,
+            keyboardVisible: keyboardVisible ?? isKeyboardVisible
+        )
+#if DEBUG
+        logExpandEvent(
+            "layout.freeze.start",
+            viewModel: viewModel,
+            extra: "source=\(source.debugName) reason=\(reason) keyboardVisible=\((keyboardVisible ?? isKeyboardVisible).description)"
+        )
+#endif
+    }
+
+    func clearLayoutFreezeContext(source: NoteEditorLayoutFreezeSource, reason: String) {
+        guard layoutFreezeContext?.source == source else { return }
+#if DEBUG
+        logExpandEvent(
+            "layout.freeze.end",
+            viewModel: viewModel,
+            extra: "source=\(source.debugName) reason=\(reason)"
+        )
+#endif
+        layoutFreezeContext = nil
+    }
+
+    func resetFocusExcerptCoordination(reason: String) {
+        pendingCollapseAfterKeyboardHide = false
+        focusExcerptTransition = .idle
+        clearLayoutFreezeContext(source: .focusExcerptTransition, reason: reason)
+    }
+
     func editorHeights(
         for viewportHeight: CGFloat,
         bookSectionHeight: CGFloat,
         stableTailSectionHeight: CGFloat,
         measuredTailSectionHeight: CGFloat,
         toolbarHeight: CGFloat,
-        ideaState: IdeaInputState
+        ideaState: IdeaInputState,
+        keyboardVisible: Bool
     ) -> (content: CGFloat, idea: CGFloat) {
         let computation = makeEditorHeightComputation(
             for: viewportHeight,
@@ -1435,7 +1645,8 @@ private extension NoteEditorView {
             stableTailSectionHeight: stableTailSectionHeight,
             measuredTailSectionHeight: measuredTailSectionHeight,
             toolbarHeight: toolbarHeight,
-            ideaState: ideaState
+            ideaState: ideaState,
+            keyboardVisible: keyboardVisible
         )
         return (computation.contentHeight, computation.ideaHeight)
     }
@@ -1447,6 +1658,7 @@ private extension NoteEditorView {
         measuredTailSectionHeight: CGFloat,
         toolbarHeight: CGFloat,
         ideaState: IdeaInputState,
+        keyboardVisible: Bool,
         usedSeededMeasurements: Bool = false
     ) -> NoteEditorHeightComputation {
         let defaultEditorHeight: CGFloat = 180
@@ -1459,8 +1671,6 @@ private extension NoteEditorView {
             bookSectionHeight > measuredHeightEpsilon &&
             stableTailSectionHeight > measuredHeightEpsilon &&
             toolbarHeight > measuredHeightEpsilon
-        let isKeyboardVisible = effectiveKeyboardVisible
-
         switch layoutMode {
         case .classic:
             return NoteEditorHeightComputation(
@@ -1474,7 +1684,7 @@ private extension NoteEditorView {
                 availableForEditors: availableForEditors,
                 hasResolvedMeasurements: hasResolvedMeasurements,
                 ideaState: ideaState,
-                keyboardVisible: isKeyboardVisible,
+                keyboardVisible: keyboardVisible,
                 usedSeededMeasurements: usedSeededMeasurements,
                 contentHeight: defaultEditorHeight,
                 ideaHeight: defaultEditorHeight
@@ -1484,7 +1694,7 @@ private extension NoteEditorView {
                 let contentAvailable = availableForEditors - collapsedIdeaHeight
                 let contentHeight: CGFloat
                 let branch: String
-                if isKeyboardVisible {
+                if keyboardVisible {
                     contentHeight = max(contentAvailable, 0)
                     branch = "focus.collapsed.keyboard_visible"
                 } else {
@@ -1503,7 +1713,7 @@ private extension NoteEditorView {
                     availableForEditors: availableForEditors,
                     hasResolvedMeasurements: hasResolvedMeasurements,
                     ideaState: ideaState,
-                    keyboardVisible: isKeyboardVisible,
+                    keyboardVisible: keyboardVisible,
                     usedSeededMeasurements: usedSeededMeasurements,
                     contentHeight: contentHeight,
                     ideaHeight: collapsedIdeaHeight
@@ -1522,7 +1732,7 @@ private extension NoteEditorView {
                     availableForEditors: availableForEditors,
                     hasResolvedMeasurements: hasResolvedMeasurements,
                     ideaState: ideaState,
-                    keyboardVisible: isKeyboardVisible,
+                    keyboardVisible: keyboardVisible,
                     usedSeededMeasurements: usedSeededMeasurements,
                     contentHeight: editorHeight,
                     ideaHeight: editorHeight
@@ -1549,33 +1759,22 @@ private extension NoteEditorView {
         let target = lastClosedComposerTarget ?? activeEditorTarget ?? .content
         lastClosedComposerTarget = nil
 
-        if target == .idea, layoutMode == .focusExcerpt, let viewModel {
-            beginMeasuredHeightFreeze(reason: "composer_dismiss")
-            withAnimation(.snappy) {
-                if viewModel.hasIdeaText {
-                    viewModel.ideaInputState = .hasContent
-                } else {
-                    viewModel.ideaInputState = .expanded
-                }
-            }
+        if target == .idea, layoutMode == .focusExcerpt {
             isContentFocused = false
+            requestIdeaExpand(source: "composer_dismiss", focusAfterAnimation: true)
+            return
         }
-
-        activeEditorTarget = target
         if target == .idea {
+            activeEditorTarget = .idea
             focusEditor(.idea, reason: "composer_dismiss", fallbackDelay: 0.1)
         } else {
+            activeEditorTarget = target
             let controller = contentOrnamentController
             DispatchQueue.main.async {
                 controller.send(.focus)
                 controller.send(.moveCursorToEnd)
             }
         }
-    }
-
-    func dismissEditorDiscardingChanges(using viewModel: NoteEditorViewModel) async {
-        await viewModel.discardEditingSession()
-        dismiss()
     }
 
     func consumeAttachmentPhotoItems(_ items: [PhotosPickerItem], viewModel: NoteEditorViewModel) async {
@@ -1626,28 +1825,6 @@ private extension NoteEditorView {
             }
 #endif
         }
-        if !isMeasuredHeightsFrozen, frozenMeasuredHeights != nil {
-#if DEBUG
-            logExpandEvent(
-                "layout.height.freeze.end",
-                viewModel: viewModel
-            )
-#endif
-            frozenMeasuredHeights = nil
-        }
-    }
-
-    func beginMeasuredHeightFreeze(reason: String) {
-        guard layoutMode == .focusExcerpt else { return }
-        frozenMeasuredHeights = measuredHeights
-        measuredHeightsFreezeDeadline = Date().addingTimeInterval(measuredHeightFreezeDuration)
-#if DEBUG
-        logExpandEvent(
-            "layout.height.freeze.start",
-            viewModel: viewModel,
-            extra: "reason=\(reason)"
-        )
-#endif
     }
 
 #if DEBUG
@@ -1754,6 +1931,96 @@ private enum DismissAttemptSource: String {
     case navigationGesture = "navigation_gesture"
 }
 
+private enum NoteEditorCloseFlowState: Equatable {
+    case idle
+    case confirmingDiscard(keyboardVisibleSnapshot: Bool)
+    case savingAndClosing(keyboardVisibleSnapshot: Bool)
+    case discardingAndClosing(keyboardVisibleSnapshot: Bool)
+
+    var keyboardVisibleSnapshot: Bool? {
+        switch self {
+        case .idle:
+            return nil
+        case .confirmingDiscard(let snapshot),
+             .savingAndClosing(let snapshot),
+             .discardingAndClosing(let snapshot):
+            return snapshot
+        }
+    }
+
+    var isActive: Bool {
+        self != .idle
+    }
+
+    var isConfirmingDiscard: Bool {
+        if case .confirmingDiscard = self {
+            return true
+        }
+        return false
+    }
+
+    var isSavingAndClosing: Bool {
+        if case .savingAndClosing = self {
+            return true
+        }
+        return false
+    }
+
+    var debugName: String {
+        switch self {
+        case .idle:
+            return "idle"
+        case .confirmingDiscard:
+            return "confirmingDiscard"
+        case .savingAndClosing:
+            return "savingAndClosing"
+        case .discardingAndClosing:
+            return "discardingAndClosing"
+        }
+    }
+}
+
+private enum NoteEditorFocusExcerptTransition: Equatable {
+    case idle
+    case expanding(pendingFocus: Bool)
+    case collapsing
+
+    var pendingFocusAfterAnimation: Bool {
+        if case .expanding(let pendingFocus) = self {
+            return pendingFocus
+        }
+        return false
+    }
+}
+
+private enum NoteEditorLayoutFreezeSource: Equatable {
+    case focusExcerptTransition
+    case closeFlow
+
+#if DEBUG
+    var debugName: String {
+        switch self {
+        case .focusExcerptTransition:
+            return "focusExcerptTransition"
+        case .closeFlow:
+            return "closeFlow"
+        }
+    }
+#endif
+}
+
+private struct NoteEditorLayoutFreezeContext: Equatable {
+    let source: NoteEditorLayoutFreezeSource
+    let measuredHeights: [NoteEditorMeasuredPart: CGFloat]
+    let keyboardVisible: Bool
+}
+
+private struct NoteEditorFocusExcerptLayoutInputs {
+    let measuredHeights: [NoteEditorMeasuredPart: CGFloat]
+    let keyboardVisible: Bool
+    let usedSeededMeasurements: Bool
+}
+
 enum NoteEditorLayoutMode: Int, CaseIterable, Identifiable {
     case classic = 0
     case focusExcerpt = 1
@@ -1834,7 +2101,7 @@ private struct NoteEditorFloatingToolbar: View {
                 }
                 .padding(.trailing, Spacing.base)
             }
-            .glassEffect(.regular, in: .capsule)
+            .glassEffect(.regular.interactive(), in: .capsule)
             .padding(.bottom, Spacing.cozy)
             Spacer(minLength: 0)
         }
