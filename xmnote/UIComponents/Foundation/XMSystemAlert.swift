@@ -224,16 +224,10 @@ extension View {
         descriptor: XMSystemAlertDescriptor?,
         onDismiss: (() -> Void)? = nil
     ) -> some View {
-        let stateProvider: () -> XMSystemAlertPresentationState? = {
-            guard isPresented.wrappedValue, let descriptor else { return nil }
-            return XMSystemAlertPresentationState(
-                descriptor: descriptor,
-                dismiss: { isPresented.wrappedValue = false }
-            )
-        }
         return background(
-            XMSystemAlertHostPresenter(
-                stateProvider: stateProvider,
+            XMSystemAlertBooleanPresenter(
+                isPresented: isPresented,
+                descriptor: descriptor,
                 onDismiss: onDismiss
             )
         )
@@ -244,17 +238,10 @@ extension View {
         item: Binding<Item?>,
         descriptor: @escaping (Item) -> XMSystemAlertDescriptor
     ) -> some View {
-        let stateProvider: () -> XMSystemAlertPresentationState? = {
-            guard let currentItem = item.wrappedValue else { return nil }
-            return XMSystemAlertPresentationState(
-                descriptor: descriptor(currentItem),
-                dismiss: { item.wrappedValue = nil }
-            )
-        }
         return background(
-            XMSystemAlertHostPresenter(
-                stateProvider: stateProvider,
-                onDismiss: nil
+            XMSystemAlertItemPresenter(
+                item: item,
+                descriptor: descriptor
             )
         )
     }
@@ -278,12 +265,110 @@ extension Binding {
 }
 
 private struct XMSystemAlertPresentationState {
+    let requestID: UUID
     let descriptor: XMSystemAlertDescriptor
     let dismiss: () -> Void
 }
 
+private struct XMSystemAlertBooleanPresenter: View {
+    @Binding var isPresented: Bool
+    let descriptor: XMSystemAlertDescriptor?
+    let onDismiss: (() -> Void)?
+
+    @State private var requestID: UUID?
+    @State private var previousIsPresented = false
+
+    var body: some View {
+        XMSystemAlertHostPresenter(
+            state: presentationState,
+            onDismiss: onDismiss
+        )
+        .onAppear {
+            synchronizePresentationCycle()
+        }
+        .onChange(of: isPresented) { _, _ in
+            synchronizePresentationCycle()
+        }
+    }
+
+    private var presentationState: XMSystemAlertPresentationState? {
+        guard isPresented, let descriptor, let requestID else { return nil }
+        let requestIDBinding = $requestID
+        let isPresentedBinding = $isPresented
+        return XMSystemAlertPresentationState(
+            requestID: requestID,
+            descriptor: descriptor,
+            dismiss: {
+                guard requestIDBinding.wrappedValue == requestID else { return }
+                isPresentedBinding.wrappedValue = false
+            }
+        )
+    }
+
+    private func synchronizePresentationCycle() {
+        defer { previousIsPresented = isPresented }
+        guard isPresented else {
+            requestID = nil
+            return
+        }
+        guard !previousIsPresented || requestID == nil else { return }
+        requestID = UUID()
+    }
+}
+
+private struct XMSystemAlertItemPresenter<Item: Identifiable>: View {
+    @Binding var item: Item?
+    let descriptor: (Item) -> XMSystemAlertDescriptor
+
+    @State private var requestID: UUID?
+    @State private var lastItemID: AnyHashable?
+
+    var body: some View {
+        XMSystemAlertHostPresenter(
+            state: presentationState,
+            onDismiss: nil
+        )
+        .onAppear {
+            synchronizePresentationCycle()
+        }
+        .onChange(of: currentItemID) { _, _ in
+            synchronizePresentationCycle()
+        }
+    }
+
+    private var currentItemID: AnyHashable? {
+        item.map { AnyHashable($0.id) }
+    }
+
+    private var presentationState: XMSystemAlertPresentationState? {
+        guard let item, let requestID else { return nil }
+        let requestIDBinding = $requestID
+        let itemBinding = $item
+        return XMSystemAlertPresentationState(
+            requestID: requestID,
+            descriptor: descriptor(item),
+            dismiss: {
+                guard requestIDBinding.wrappedValue == requestID else { return }
+                itemBinding.wrappedValue = nil
+            }
+        )
+    }
+
+    private func synchronizePresentationCycle() {
+        guard let currentItemID else {
+            requestID = nil
+            lastItemID = nil
+            return
+        }
+        if lastItemID != currentItemID || requestID == nil {
+            requestID = UUID()
+        }
+        lastItemID = currentItemID
+    }
+}
+
 private struct XMSystemAlertHostPresenter: UIViewControllerRepresentable {
-    let stateProvider: () -> XMSystemAlertPresentationState?
+    let state: XMSystemAlertPresentationState?
     let onDismiss: (() -> Void)?
 
     func makeCoordinator() -> Coordinator {
@@ -292,101 +377,184 @@ private struct XMSystemAlertHostPresenter: UIViewControllerRepresentable {
 
     func makeUIViewController(context: Context) -> HostViewController {
         let controller = HostViewController()
-        controller.onViewDidAppear = { [weak controller] in
+        controller.onPresentationOpportunity = { [weak controller] in
             guard let controller else { return }
-            context.coordinator.syncPresentation(
-                for: controller,
-                state: stateProvider(),
-                onDismiss: onDismiss
-            )
+            context.coordinator.reconcilePresentationOpportunity(from: controller)
         }
         return controller
     }
 
     func updateUIViewController(_ uiViewController: HostViewController, context: Context) {
-        uiViewController.onViewDidAppear = { [weak uiViewController] in
+        uiViewController.onPresentationOpportunity = { [weak uiViewController] in
             guard let uiViewController else { return }
-            context.coordinator.syncPresentation(
-                for: uiViewController,
-                state: stateProvider(),
-                onDismiss: onDismiss
-            )
+            context.coordinator.reconcilePresentationOpportunity(from: uiViewController)
         }
         context.coordinator.syncPresentation(
             for: uiViewController,
-            state: stateProvider(),
+            state: state,
             onDismiss: onDismiss
         )
     }
 
     static func dismantleUIViewController(_ uiViewController: HostViewController, coordinator: Coordinator) {
+        coordinator.prepareForDismantle()
         coordinator.dismissIfNeeded(notify: false)
     }
 }
 
 private extension XMSystemAlertHostPresenter {
     final class HostViewController: UIViewController {
-        var onViewDidAppear: (() -> Void)?
+        var onPresentationOpportunity: (() -> Void)?
 
         override func viewDidAppear(_ animated: Bool) {
             super.viewDidAppear(animated)
-            onViewDidAppear?()
+            onPresentationOpportunity?()
+        }
+
+        override func viewDidLayoutSubviews() {
+            super.viewDidLayoutSubviews()
+            onPresentationOpportunity?()
         }
     }
 
     final class Coordinator: NSObject {
         private weak var presentedAlertController: UIAlertController?
+        private weak var hostViewController: UIViewController?
         private var dismissPresentation: (() -> Void)?
         private var onDismiss: (() -> Void)?
+        private var desiredState: XMSystemAlertPresentationState?
+        private var activeRequestID: UUID?
+        private var lastDismissedRequestID: UUID?
         private var didNotifyDismiss = false
+        private var isDismissInFlight = false
+        private var isReconcileScheduled = false
 
         func syncPresentation(
             for viewController: UIViewController,
             state: XMSystemAlertPresentationState?,
             onDismiss: (() -> Void)?
         ) {
+            hostViewController = viewController
+            desiredState = state
             self.onDismiss = onDismiss
+            reconcilePresentation(from: viewController)
+        }
 
-            if let state {
-                presentIfNeeded(from: viewController, state: state)
-            } else {
-                dismissIfNeeded(notify: true)
-            }
+        func reconcilePresentationOpportunity(from viewController: UIViewController) {
+            hostViewController = viewController
+            reconcilePresentation(from: viewController)
+        }
+
+        func prepareForDismantle() {
+            desiredState = nil
+            onDismiss = nil
+            dismissPresentation = nil
+            hostViewController = nil
         }
 
         func dismissIfNeeded(notify: Bool) {
             guard let alertController = presentedAlertController else { return }
-            presentedAlertController = nil
+            guard !isDismissInFlight else { return }
+            isDismissInFlight = true
+            let dismissedRequestID = activeRequestID
             guard alertController.presentingViewController != nil else {
-                notifyDismissIfNeeded(shouldNotify: notify)
+                completeDismissTransition(
+                    dismissedRequestID: dismissedRequestID,
+                    shouldNotify: notify
+                )
                 return
             }
             alertController.dismiss(animated: true) { [weak self] in
-                self?.notifyDismissIfNeeded(shouldNotify: notify)
+                self?.completeDismissTransition(
+                    dismissedRequestID: dismissedRequestID,
+                    shouldNotify: notify
+                )
             }
         }
 
-        private func presentIfNeeded(
+        private func reconcilePresentation(from viewController: UIViewController) {
+            guard !isDismissInFlight else { return }
+            if presentedAlertController == nil {
+                activeRequestID = nil
+            }
+
+            guard let desiredState else {
+                dismissIfNeeded(notify: true)
+                return
+            }
+            guard desiredState.descriptor.actions.isEmpty == false else {
+                self.desiredState = nil
+                dismissIfNeeded(notify: true)
+                return
+            }
+            guard desiredState.requestID != activeRequestID else { return }
+            guard desiredState.requestID != lastDismissedRequestID else { return }
+
+            guard presentedAlertController == nil else {
+                dismissIfNeeded(notify: true)
+                return
+            }
+
+            presentIfPossible(from: viewController, state: desiredState)
+        }
+
+        private func presentIfPossible(
             from viewController: UIViewController,
             state: XMSystemAlertPresentationState
         ) {
-            guard state.descriptor.actions.isEmpty == false else { return }
-            guard presentedAlertController == nil else { return }
-            guard viewController.viewIfLoaded?.window != nil else { return }
-            guard viewController.presentedViewController == nil else { return }
+            guard viewController.viewIfLoaded?.window != nil else {
+                scheduleReconcileIfNeeded(from: viewController)
+                return
+            }
+            guard viewController.presentedViewController == nil else {
+                scheduleReconcileIfNeeded(from: viewController)
+                return
+            }
 
             dismissPresentation = state.dismiss
             didNotifyDismiss = false
+            isDismissInFlight = false
+            lastDismissedRequestID = nil
+            activeRequestID = state.requestID
             let alertController = XMSystemAlertController.makeAlertController(
                 descriptor: state.descriptor,
                 dismiss: { [weak self] in
                     guard let self else { return }
-                    self.presentedAlertController = nil
-                    self.notifyDismissIfNeeded(shouldNotify: true)
+                    self.beginDismissTransitionAfterAction(shouldNotify: true)
                 }
             )
             presentedAlertController = alertController
             viewController.present(alertController, animated: true)
+        }
+
+        private func beginDismissTransitionAfterAction(shouldNotify: Bool) {
+            guard !isDismissInFlight else { return }
+            isDismissInFlight = true
+            let dismissedRequestID = activeRequestID
+            let fallbackViewController = hostViewController
+            presentedAlertController = nil
+            DispatchQueue.main.async { [weak self, weak fallbackViewController] in
+                guard let self else { return }
+                self.completeDismissTransition(
+                    dismissedRequestID: dismissedRequestID,
+                    shouldNotify: shouldNotify,
+                    fallbackViewController: fallbackViewController
+                )
+            }
+        }
+
+        private func completeDismissTransition(
+            dismissedRequestID: UUID?,
+            shouldNotify: Bool,
+            fallbackViewController: UIViewController? = nil
+        ) {
+            presentedAlertController = nil
+            activeRequestID = nil
+            lastDismissedRequestID = dismissedRequestID
+            isDismissInFlight = false
+            notifyDismissIfNeeded(shouldNotify: shouldNotify)
+            guard let viewController = hostViewController ?? fallbackViewController else { return }
+            reconcilePresentation(from: viewController)
         }
 
         private func notifyDismissIfNeeded(shouldNotify: Bool) {
@@ -395,6 +563,17 @@ private extension XMSystemAlertHostPresenter {
             didNotifyDismiss = true
             dismissPresentation?()
             onDismiss?()
+        }
+
+        private func scheduleReconcileIfNeeded(from viewController: UIViewController) {
+            guard !isReconcileScheduled else { return }
+            isReconcileScheduled = true
+            DispatchQueue.main.async { [weak self, weak viewController] in
+                guard let self else { return }
+                self.isReconcileScheduled = false
+                guard let viewController else { return }
+                self.reconcilePresentation(from: viewController)
+            }
         }
     }
 }
