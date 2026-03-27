@@ -376,10 +376,22 @@ private extension NoteEditorView {
         .sheet(item: $activeSheet) { sheet in
             switch sheet {
             case .book:
-                NoteEditorBookPickerSheet(
-                    books: viewModel.availableBooks,
-                    onSelect: { book in
-                        viewModel.selectBook(book)
+                BookPickerView(
+                    configuration: BookPickerConfiguration(
+                        scope: .local,
+                        selectionMode: .single,
+                        allowsManualCreate: true,
+                        preselectedBooks: viewModel.selectedBook.map { [$0] } ?? []
+                    ),
+                    onComplete: { result in
+                        switch result {
+                        case .cancelled:
+                            break
+                        case .single(let book):
+                            viewModel.selectBook(book)
+                        case .multiple:
+                            break
+                        }
                         activeSheet = nil
                     }
                 )
@@ -2214,61 +2226,6 @@ private enum NoteEditorSheet: String, Identifiable {
     case settings
 
     var id: String { rawValue }
-}
-
-private struct NoteEditorBookPickerSheet: View {
-    let books: [NoteEditorBookOption]
-    let onSelect: (NoteEditorBookOption) -> Void
-
-    @Environment(\.dismiss) private var dismiss
-    @State private var searchText = ""
-
-    var filteredBooks: [NoteEditorBookOption] {
-        guard !searchText.isEmpty else { return books }
-        return books.filter {
-            $0.title.localizedCaseInsensitiveContains(searchText)
-            || $0.author.localizedCaseInsensitiveContains(searchText)
-        }
-    }
-
-    var body: some View {
-        NavigationStack {
-            List(filteredBooks) { book in
-                Button {
-                    onSelect(book)
-                } label: {
-                    HStack(spacing: Spacing.base) {
-                        XMBookCover.fixedWidth(
-                            44,
-                            urlString: book.coverURL,
-                            cornerRadius: CornerRadius.inlayHairline,
-                            border: .init(color: .surfaceBorderSubtle, width: CardStyle.borderWidth),
-                            placeholderIconSize: .small,
-                            surfaceStyle: .spine
-                        )
-
-                        Text(book.title)
-                            .font(AppTypography.subheadlineSemibold)
-                            .foregroundStyle(Color.textPrimary)
-                            .lineLimit(1)
-
-                        Spacer()
-                    }
-                }
-                .buttonStyle(.plain)
-            }
-            .navigationTitle("选择书籍")
-            .navigationBarTitleDisplayMode(.inline)
-            .searchable(text: $searchText, prompt: "搜索书名或作者")
-            .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    TopBarBackButton {
-                        dismiss()
-                    }
-                }
-            }
-        }
-    }
 }
 
 private struct NoteEditorChapterPickerSheet: View {

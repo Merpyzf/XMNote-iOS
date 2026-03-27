@@ -15,6 +15,10 @@ protocol BookRepositoryProtocol {
     func observeBookDetail(bookId: Int64) -> AsyncThrowingStream<BookDetail?, Error>
     /// 持续监听指定书籍下的书摘列表变化。
     func observeBookNotes(bookId: Int64) -> AsyncThrowingStream<[NoteExcerpt], Error>
+    /// 按关键词读取本地可选书籍列表，供通用书籍选择流实时筛选。
+    func fetchPickerBooks(matching query: String) async throws -> [BookPickerBook]
+    /// 按 bookId 解析单本本地书籍，供创建成功后的选择流回填。
+    func fetchPickerBook(bookId: Int64) async throws -> BookPickerBook?
 }
 
 /// 书籍搜索仓储契约，统一封装六书源搜索、豆瓣详情补抓与最近搜索持久化。

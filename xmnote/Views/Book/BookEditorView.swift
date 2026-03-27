@@ -10,12 +10,21 @@ import SwiftUI
 /// 书籍完整录入页入口，支持搜索结果预填与手动创建。
 struct BookEditorView: View {
     let seed: BookEditorSeed?
+    let onSavedBookID: ((Int64) -> Void)?
 
     @Environment(RepositoryContainer.self) private var repositories
     @Environment(\.dismiss) private var dismiss
     @State private var viewModel: BookEditorViewModel?
     @State private var showsDiscardDialog = false
     @State private var bootstrapLoadingGate = LoadingGate()
+
+    init(
+        seed: BookEditorSeed?,
+        onSavedBookID: ((Int64) -> Void)? = nil
+    ) {
+        self.seed = seed
+        self.onSavedBookID = onSavedBookID
+    }
 
     var body: some View {
         ZStack {
@@ -338,7 +347,8 @@ struct BookEditorView: View {
             Button {
                 Task {
                     let result = await viewModel.save()
-                    if result != nil {
+                    if let result {
+                        onSavedBookID?(result)
                         dismiss()
                     }
                 }

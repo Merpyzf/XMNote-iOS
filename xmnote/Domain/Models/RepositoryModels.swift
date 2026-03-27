@@ -47,17 +47,6 @@ struct NoteEditorSeed: Hashable, Codable, Sendable {
     )
 }
 
-/// 书摘编辑页的书籍选项，承载书卡展示与页码校验所需字段。
-struct NoteEditorBookOption: Identifiable, Hashable, Codable, Sendable {
-    let id: Int64
-    let title: String
-    let author: String
-    let coverURL: String
-    let positionUnit: Int64
-    let totalPosition: Int64
-    let totalPagination: Int64
-}
-
 /// 书摘编辑页的章节候选项。
 struct NoteEditorChapterOption: Identifiable, Hashable, Codable, Sendable {
     let id: Int64
@@ -199,7 +188,7 @@ struct NoteEditorBootstrap: Sendable {
     let mode: NoteEditorMode
     let baseDraft: NoteEditorDraft
     let recoveredDraft: NoteEditorDraft?
-    let books: [NoteEditorBookOption]
+    let books: [BookPickerBook]
     let tags: [NoteEditorTagOption]
     let chapters: [NoteEditorChapterOption]
 }

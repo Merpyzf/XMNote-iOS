@@ -51,11 +51,11 @@ final class NoteEditorViewModel {
     /// 书摘编辑富文本基线字体，统一 HTML 解析、编辑器输入与占位展示。
     nonisolated static let editorBaseUIFont: UIFont = .systemFont(ofSize: 16)
 
-    var availableBooks: [NoteEditorBookOption] = []
+    var availableBooks: [BookPickerBook] = []
     var availableTags: [NoteEditorTagOption] = []
     var availableChapters: [NoteEditorChapterOption] = []
 
-    var selectedBook: NoteEditorBookOption? {
+    var selectedBook: BookPickerBook? {
         didSet {
             guard !isHydratingState else { return }
             positionUnit = selectedBook?.positionUnit ?? 0
@@ -291,7 +291,7 @@ final class NoteEditorViewModel {
     }
 
     /// 选中一本书，并同步当前页码单位与章节列表。
-    func selectBook(_ book: NoteEditorBookOption) {
+    func selectBook(_ book: BookPickerBook) {
         selectedBook = book
     }
 
@@ -600,9 +600,9 @@ private extension NoteEditorViewModel {
         return draft
     }
 
-    func fallbackBookOption(from draft: NoteEditorDraft) -> NoteEditorBookOption? {
+    func fallbackBookOption(from draft: NoteEditorDraft) -> BookPickerBook? {
         guard draft.bookId > 0 else { return nil }
-        return NoteEditorBookOption(
+        return BookPickerBook(
             id: draft.bookId,
             title: draft.bookTitle,
             author: draft.bookAuthor,

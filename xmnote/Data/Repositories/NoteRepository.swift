@@ -408,7 +408,7 @@ private extension NoteRepository {
         return sections
     }
 
-    nonisolated func fetchNoteEditorBooks(_ db: Database) throws -> [NoteEditorBookOption] {
+    nonisolated func fetchNoteEditorBooks(_ db: Database) throws -> [BookPickerBook] {
         // SQL 目的：读取编辑页可选书籍列表，供书卡选择 sheet 展示。
         // 涉及表：book。
         // 关键过滤：仅保留未软删除书籍；按 updated_date DESC 对齐 Android “上次编辑书籍优先”。
@@ -419,7 +419,7 @@ private extension NoteRepository {
             ORDER BY updated_date DESC, id DESC
             """
         return try Row.fetchAll(db, sql: sql).map { row in
-            NoteEditorBookOption(
+            BookPickerBook(
                 id: row["id"],
                 title: row["name"] ?? "",
                 author: row["author"] ?? "",
@@ -468,7 +468,7 @@ private extension NoteRepository {
         _ db: Database,
         mode: NoteEditorMode,
         seed: NoteEditorSeed?,
-        books: [NoteEditorBookOption]
+        books: [BookPickerBook]
     ) throws -> NoteEditorDraft {
         switch mode {
         case .edit(let noteId):
@@ -523,7 +523,7 @@ private extension NoteRepository {
     nonisolated func buildCreatingDraft(
         _ db: Database,
         seed: NoteEditorSeed?,
-        books: [NoteEditorBookOption]
+        books: [BookPickerBook]
     ) throws -> NoteEditorDraft {
         let selectedBook = resolveSeedBook(seed?.bookId, books: books)
         let chapterOption = try resolveSeedChapter(db, bookId: selectedBook?.id ?? 0, chapterId: seed?.chapterId)
@@ -552,7 +552,7 @@ private extension NoteRepository {
         )
     }
 
-    nonisolated func resolveSeedBook(_ bookId: Int64?, books: [NoteEditorBookOption]) -> NoteEditorBookOption? {
+    nonisolated func resolveSeedBook(_ bookId: Int64?, books: [BookPickerBook]) -> BookPickerBook? {
         if let bookId, bookId > 0 {
             return books.first(where: { $0.id == bookId })
         }

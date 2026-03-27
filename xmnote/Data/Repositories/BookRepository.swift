@@ -37,6 +37,20 @@ struct BookRepository: BookRepositoryProtocol {
             try fetchNotes(db, bookId: bookId)
         }
     }
+
+    /// 读取本地书籍选择结果，支持标题/作者/ISBN 关键字筛选。
+    func fetchPickerBooks(matching query: String) async throws -> [BookPickerBook] {
+        try await databaseManager.database.dbPool.read { db in
+            try fetchPickerBooks(db, matching: query)
+        }
+    }
+
+    /// 解析单本本地书籍，供创建成功后的选择流回填。
+    func fetchPickerBook(bookId: Int64) async throws -> BookPickerBook? {
+        try await databaseManager.database.dbPool.read { db in
+            try fetchPickerBook(db, bookId: bookId)
+        }
+    }
 }
 
 private extension BookRepository {
@@ -69,6 +83,54 @@ private extension BookRepository {
                 pinned: (row["pinned"] as Int64? ?? 0) != 0
             )
         }
+    }
+
+    /// 查询书籍选择流需要的本地书籍列表，并按最近编辑优先排序。
+    nonisolated func fetchPickerBooks(_ db: Database, matching query: String) throws -> [BookPickerBook] {
+        let trimmedQuery = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        // SQL 目的：读取本地可选书籍列表，供通用书籍选择流本地搜索与回显。
+        // 涉及表：book。
+        // 关键过滤：仅保留未软删除书籍；若存在 query，则匹配 name/author/isbn；按 updated_date DESC 对齐 Android 最近编辑优先。
+        let baseSQL = """
+            SELECT id, name, author, cover, position_unit, total_position, total_pagination
+            FROM book
+            WHERE is_deleted = 0
+            """
+        let sql: String
+        let arguments: StatementArguments
+        if trimmedQuery.isEmpty {
+            sql = baseSQL + "\nORDER BY updated_date DESC, id DESC"
+            arguments = []
+        } else {
+            sql = baseSQL + """
+                
+                AND (
+                    name LIKE ?
+                    OR author LIKE ?
+                    OR isbn LIKE ?
+                )
+                ORDER BY updated_date DESC, id DESC
+                """
+            let pattern = "%\(trimmedQuery)%"
+            arguments = [pattern, pattern, pattern]
+        }
+        return try Row.fetchAll(db, sql: sql, arguments: arguments).map(mapPickerBook)
+    }
+
+    /// 查询单本本地书籍详情，供创建成功后的回填与默认已选恢复。
+    nonisolated func fetchPickerBook(_ db: Database, bookId: Int64) throws -> BookPickerBook? {
+        // SQL 目的：按主键读取单本本地书籍，供创建成功后回填到书籍选择流。
+        // 涉及表：book。
+        // 关键过滤：限定 id 精确命中，排除软删除书籍。
+        let sql = """
+            SELECT id, name, author, cover, position_unit, total_position, total_pagination
+            FROM book
+            WHERE id = ? AND is_deleted = 0
+            """
+        guard let row = try Row.fetchOne(db, sql: sql, arguments: [bookId]) else {
+            return nil
+        }
+        return mapPickerBook(row)
     }
 
     /// 查询指定书籍详情数据，供详情页头部信息区与统计区渲染。
@@ -127,5 +189,17 @@ private extension BookRepository {
                 createdDate: row["created_date"] ?? 0
             )
         }
+    }
+
+    nonisolated func mapPickerBook(_ row: Row) -> BookPickerBook {
+        BookPickerBook(
+            id: row["id"],
+            title: row["name"] ?? "",
+            author: row["author"] ?? "",
+            coverURL: row["cover"] ?? "",
+            positionUnit: row["position_unit"] ?? 0,
+            totalPosition: row["total_position"] ?? 0,
+            totalPagination: row["total_pagination"] ?? 0
+        )
     }
 }
