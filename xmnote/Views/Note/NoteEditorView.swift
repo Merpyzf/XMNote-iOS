@@ -1,5 +1,5 @@
 /**
- * [INPUT]: 依赖 RepositoryContainer 注入 NoteRepository，依赖 NoteEditorViewModel 驱动完整书摘编辑状态，依赖 NoteTextComposerView 承接全屏富文本输入
+ * [INPUT]: 依赖 RepositoryContainer 注入 NoteRepository，依赖 NoteEditorViewModel 驱动完整书摘编辑状态，依赖 NoteTextComposerView 与 BookPickerView 承接富文本输入和书籍选择
  * [OUTPUT]: 对外提供 NoteEditorView，承载书摘新建/编辑、草稿恢复、附图、章节/标签与保存动作
  * [POS]: Note 模块书摘编辑页壳层，对齐 Android 编辑流程并采用 iOS 原生页面组织
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -380,7 +380,8 @@ private extension NoteEditorView {
                     configuration: BookPickerConfiguration(
                         scope: .local,
                         selectionMode: .single,
-                        allowsManualCreate: true,
+                        allowsCreationFlow: true,
+                        creationAction: .nestedSearchPage,
                         preselectedBooks: viewModel.selectedBook.map { [$0] } ?? []
                     ),
                     onComplete: { result in
@@ -390,6 +391,8 @@ private extension NoteEditorView {
                         case .single(let book):
                             viewModel.selectBook(book)
                         case .multiple:
+                            break
+                        case .addFlowRequested:
                             break
                         }
                         activeSheet = nil

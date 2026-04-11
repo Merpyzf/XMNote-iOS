@@ -77,6 +77,9 @@ extension Color {
     /// 提示文本
     static let textHint = Color(light: Color(hex: 0x999999),
                                  dark: Color(hex: 0x999999))
+    /// 搜索关键词命中色，对齐 Android 端 keywordHighlight 语义。
+    static let keywordHighlight = Color(light: Color(hex: 0xEA4335),
+                                        dark: Color(hex: 0xEA4335))
 }
 
 // MARK: - Icon

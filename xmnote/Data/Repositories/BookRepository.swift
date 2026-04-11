@@ -90,9 +90,9 @@ private extension BookRepository {
         let trimmedQuery = query.trimmingCharacters(in: .whitespacesAndNewlines)
         // SQL 目的：读取本地可选书籍列表，供通用书籍选择流本地搜索与回显。
         // 涉及表：book。
-        // 关键过滤：仅保留未软删除书籍；若存在 query，则匹配 name/author/isbn；按 updated_date DESC 对齐 Android 最近编辑优先。
+        // 关键过滤：仅保留未软删除书籍；若存在 query，则匹配 name/author/press/isbn；按 updated_date DESC 对齐 Android 最近编辑优先。
         let baseSQL = """
-            SELECT id, name, author, cover, position_unit, total_position, total_pagination
+            SELECT id, name, author, press, cover, position_unit, total_position, total_pagination
             FROM book
             WHERE is_deleted = 0
             """
@@ -107,12 +107,13 @@ private extension BookRepository {
                 AND (
                     name LIKE ?
                     OR author LIKE ?
+                    OR press LIKE ?
                     OR isbn LIKE ?
                 )
                 ORDER BY updated_date DESC, id DESC
                 """
             let pattern = "%\(trimmedQuery)%"
-            arguments = [pattern, pattern, pattern]
+            arguments = [pattern, pattern, pattern, pattern]
         }
         return try Row.fetchAll(db, sql: sql, arguments: arguments).map(mapPickerBook)
     }
@@ -121,9 +122,9 @@ private extension BookRepository {
     nonisolated func fetchPickerBook(_ db: Database, bookId: Int64) throws -> BookPickerBook? {
         // SQL 目的：按主键读取单本本地书籍，供创建成功后回填到书籍选择流。
         // 涉及表：book。
-        // 关键过滤：限定 id 精确命中，排除软删除书籍。
+        // 关键过滤：限定 id 精确命中，排除软删除书籍；返回 title/author/press/cover 与位置字段供选择行和回填使用。
         let sql = """
-            SELECT id, name, author, cover, position_unit, total_position, total_pagination
+            SELECT id, name, author, press, cover, position_unit, total_position, total_pagination
             FROM book
             WHERE id = ? AND is_deleted = 0
             """
@@ -196,6 +197,7 @@ private extension BookRepository {
             id: row["id"],
             title: row["name"] ?? "",
             author: row["author"] ?? "",
+            press: row["press"] ?? "",
             coverURL: row["cover"] ?? "",
             positionUnit: row["position_unit"] ?? 0,
             totalPosition: row["total_position"] ?? 0,

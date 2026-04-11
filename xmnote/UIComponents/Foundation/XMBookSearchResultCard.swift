@@ -32,7 +32,7 @@ struct XMBookSearchResultCard: View {
                     baseFont: AppTypography.semantic(.headline, weight: .semibold),
                     highlightFont: AppTypography.semantic(.headline, weight: .bold),
                     baseColor: Color.textPrimary,
-                    highlightColor: Color.brand
+                    highlightColor: Color.keywordHighlight
                 )
                 .multilineTextAlignment(.leading)
                 .lineLimit(2)
@@ -46,7 +46,7 @@ struct XMBookSearchResultCard: View {
                             baseFont: AppTypography.subheadline,
                             highlightFont: AppTypography.subheadlineSemibold,
                             baseColor: Color.textSecondary,
-                            highlightColor: Color.brand
+                            highlightColor: Color.keywordHighlight
                         )
                         .lineLimit(2)
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -61,7 +61,7 @@ struct XMBookSearchResultCard: View {
                                 baseFont: AppTypography.footnote,
                                 highlightFont: AppTypography.footnoteSemibold,
                                 baseColor: Color.textSecondary,
-                                highlightColor: Color.brand
+                                highlightColor: Color.keywordHighlight
                             )
                             .lineLimit(1)
                             .frame(maxWidth: .infinity, alignment: .leading)
@@ -74,7 +74,7 @@ struct XMBookSearchResultCard: View {
                                 baseFont: AppTypography.footnote,
                                 highlightFont: AppTypography.footnoteSemibold,
                                 baseColor: Color.textSecondary,
-                                highlightColor: Color.brand
+                                highlightColor: Color.keywordHighlight
                             )
                             .lineLimit(1)
                             .frame(maxWidth: .infinity, alignment: .leading)

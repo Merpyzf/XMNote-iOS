@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 Foundation 与 BookSearchSource，定义通用书籍选择流的跨层模型与配置语义
- * [OUTPUT]: 对外提供 BookPickerBook、BookPickerScope、BookPickerSelectionMode、BookPickerConfiguration、BookPickerResult
+ * [OUTPUT]: 对外提供 BookPickerBook、BookPickerScope、BookPickerSelectionMode、BookPickerCreationAction、BookPickerConfiguration、BookPickerResult
  * [POS]: Domain/Models 的书籍选择领域模型，被 BookPickerView、ViewModel 与调用业务页共同消费
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -12,6 +12,7 @@ struct BookPickerBook: Identifiable, Hashable, Codable, Sendable {
     let id: Int64
     let title: String
     let author: String
+    let press: String
     let coverURL: String
     let positionUnit: Int64
     let totalPosition: Int64
@@ -31,12 +32,20 @@ enum BookPickerSelectionMode: Hashable, Codable, Sendable {
     case multiple
 }
 
+/// 书籍选择流中“新增一本书”入口的打开方式。
+enum BookPickerCreationAction: Hashable, Codable, Sendable {
+    case inlineManualEditor
+    case separateSearchPage
+    case nestedSearchPage
+}
+
 /// 书籍选择流的公共配置，统一收口标题、来源范围、多选能力与默认上下文。
 struct BookPickerConfiguration: Hashable, Codable, Sendable {
     var title: String
     var scope: BookPickerScope
     var selectionMode: BookPickerSelectionMode
-    var allowsManualCreate: Bool
+    var allowsCreationFlow: Bool
+    var creationAction: BookPickerCreationAction
     var defaultQuery: String
     var preselectedBooks: [BookPickerBook]
     var onlineSources: [BookSearchSource]
@@ -46,7 +55,8 @@ struct BookPickerConfiguration: Hashable, Codable, Sendable {
         title: String = "选择书籍",
         scope: BookPickerScope,
         selectionMode: BookPickerSelectionMode,
-        allowsManualCreate: Bool = false,
+        allowsCreationFlow: Bool = false,
+        creationAction: BookPickerCreationAction = .inlineManualEditor,
         defaultQuery: String = "",
         preselectedBooks: [BookPickerBook] = [],
         onlineSources: [BookSearchSource] = BookSearchSource.allCases,
@@ -55,7 +65,8 @@ struct BookPickerConfiguration: Hashable, Codable, Sendable {
         self.title = title
         self.scope = scope
         self.selectionMode = selectionMode
-        self.allowsManualCreate = allowsManualCreate
+        self.allowsCreationFlow = allowsCreationFlow
+        self.creationAction = creationAction
         self.defaultQuery = defaultQuery
         self.preselectedBooks = preselectedBooks
         self.onlineSources = onlineSources
@@ -68,4 +79,5 @@ enum BookPickerResult: Hashable, Sendable {
     case cancelled
     case single(BookPickerBook)
     case multiple([BookPickerBook])
+    case addFlowRequested
 }

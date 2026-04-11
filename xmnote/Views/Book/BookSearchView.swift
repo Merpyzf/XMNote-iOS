@@ -1,6 +1,6 @@
 /**
- * [INPUT]: 依赖 RepositoryContainer 注入搜索仓储，依赖 BookSearchViewModel 驱动远端查询状态，依赖 BookSearchResultRow、BookSearchStatusCard 与登录/验证弹层承接搜索与回流
- * [OUTPUT]: 对外提供 BookSearchView，承载首页加号进入的完整书籍搜索体验、豆瓣登录恢复与番茄风控恢复
+ * [INPUT]: 依赖 RepositoryContainer 注入搜索仓储与本地书仓储，依赖 BookSearchViewModel 驱动远端查询状态，依赖 BookSearchResultRow、BookSearchStatusCard 与登录/验证弹层承接搜索与回流
+ * [OUTPUT]: 对外提供 BookSearchView，承载完整书籍搜索体验、豆瓣登录恢复、番茄风控恢复与可选的新书回填
  * [POS]: Book 模块搜索页壳层，负责六书源切换、最近搜索、豆瓣/番茄风控回流与结果进入录入页
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -9,15 +9,25 @@ import SwiftUI
 
 /// 书籍搜索页入口，负责承接首页新增书籍主链路与豆瓣风控登录恢复。
 struct BookSearchView: View {
+    enum CompletionDismissBehavior {
+        case dismissSelf
+        case handledByParent
+    }
+
     @Environment(RepositoryContainer.self) private var repositories
+    @Environment(\.dismiss) private var dismiss
     @Environment(SceneStateStore.self) private var sceneStateStore
     @FocusState private var isSearchFieldFocused: Bool
+
+    let onDismissRequested: (() -> Void)?
+    let onCompletedBookSelection: ((BookPickerBook) -> Void)?
+    let completionDismissBehavior: CompletionDismissBehavior
 
     @State private var viewModel: BookSearchViewModel?
     @State private var navigationSeed: BookEditorSeed?
     @State private var auxiliaryDestination: AuxiliaryDestination?
     @State private var isPreparingSeed = false
-    @State private var didRequestSearchFocus = false
+    @State private var isCompletingCreatedBook = false
     @State private var pendingRecoveryAction: PendingRecoveryAction?
     @State private var activeDoubanLoginPrompt: DoubanLoginPromptPresentation?
     @State private var activeDoubanLoginPresentation: DoubanLoginPresentation?
@@ -30,6 +40,16 @@ struct BookSearchView: View {
     @State private var isRecentQueriesExpanded = false
     @State private var didBootstrapFromScene = false
     @State private var bootstrapLoadingGate = LoadingGate()
+
+    init(
+        onDismissRequested: (() -> Void)? = nil,
+        onCompletedBookSelection: ((BookPickerBook) -> Void)? = nil,
+        completionDismissBehavior: CompletionDismissBehavior = .dismissSelf
+    ) {
+        self.onDismissRequested = onDismissRequested
+        self.onCompletedBookSelection = onCompletedBookSelection
+        self.completionDismissBehavior = completionDismissBehavior
+    }
 
     var body: some View {
         ZStack {
@@ -55,10 +75,16 @@ struct BookSearchView: View {
                 initialSource: snapshot?.selectedSource ?? .wenqu
             )
             bootstrapLoadingGate.update(intent: .none)
-            isSearchFieldFocused = true
         }
         .navigationDestination(item: $navigationSeed) { seed in
-            BookEditorView(seed: seed)
+            BookEditorView(
+                seed: seed,
+                onSavedBookID: onCompletedBookSelection == nil ? nil : { bookId in
+                    Task {
+                        await handleCreatedBook(bookId: bookId)
+                    }
+                }
+            )
         }
         .navigationDestination(item: $auxiliaryDestination) { destination in
             auxiliaryDestinationView(destination)
@@ -162,9 +188,9 @@ struct BookSearchView: View {
             }
             .scrollIndicators(.hidden)
 
-            if isPreparingSeed {
+            if isPreparingSeed || isCompletingCreatedBook {
                 Color.overlay.ignoresSafeArea()
-                ProgressView("正在补全书籍信息…")
+                ProgressView(isCompletingCreatedBook ? "正在回填书籍…" : "正在补全书籍信息…")
                     .padding(Spacing.contentEdge)
                     .background(Color.surfaceCard, in: RoundedRectangle(cornerRadius: CornerRadius.blockLarge, style: .continuous))
             }
@@ -185,15 +211,15 @@ struct BookSearchView: View {
             }
         }
         .toolbar {
+            if let onDismissRequested {
+                ToolbarItem(placement: .topBarLeading) {
+                    TopBarBackButton {
+                        onDismissRequested()
+                    }
+                }
+            }
             ToolbarItem(placement: .topBarTrailing) {
                 auxiliaryMenu
-            }
-        }
-        .onAppear {
-            guard !didRequestSearchFocus else { return }
-            didRequestSearchFocus = true
-            DispatchQueue.main.async {
-                isSearchFieldFocused = true
             }
         }
         .onChange(of: viewModel.query) { _, _ in
@@ -593,6 +619,32 @@ struct BookSearchView: View {
             inlineFeedback = InlineFeedback(
                 title: "暂时无法打开这本书",
                 message: (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+            )
+        }
+    }
+
+    @MainActor
+    private func handleCreatedBook(bookId: Int64) async {
+        guard let onCompletedBookSelection else { return }
+        isCompletingCreatedBook = true
+        defer { isCompletingCreatedBook = false }
+
+        do {
+            guard let book = try await repositories.bookRepository.fetchPickerBook(bookId: bookId) else {
+                inlineFeedback = InlineFeedback(
+                    title: "新书已保存",
+                    message: "但未能自动回填到当前书摘，请返回后重新选择。"
+                )
+                return
+            }
+            onCompletedBookSelection(book)
+            if completionDismissBehavior == .dismissSelf {
+                dismiss()
+            }
+        } catch {
+            inlineFeedback = InlineFeedback(
+                title: "新书已保存",
+                message: "但自动回填失败：\((error as? LocalizedError)?.errorDescription ?? error.localizedDescription)"
             )
         }
     }

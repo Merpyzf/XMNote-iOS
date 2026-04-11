@@ -411,9 +411,9 @@ private extension NoteRepository {
     nonisolated func fetchNoteEditorBooks(_ db: Database) throws -> [BookPickerBook] {
         // SQL 目的：读取编辑页可选书籍列表，供书卡选择 sheet 展示。
         // 涉及表：book。
-        // 关键过滤：仅保留未软删除书籍；按 updated_date DESC 对齐 Android “上次编辑书籍优先”。
+        // 关键过滤：仅保留未软删除书籍；返回 title/author/press/cover 与位置字段；按 updated_date DESC 对齐 Android “上次编辑书籍优先”。
         let sql = """
-            SELECT id, name, author, cover, position_unit, total_position, total_pagination
+            SELECT id, name, author, press, cover, position_unit, total_position, total_pagination
             FROM book
             WHERE is_deleted = 0
             ORDER BY updated_date DESC, id DESC
@@ -423,6 +423,7 @@ private extension NoteRepository {
                 id: row["id"],
                 title: row["name"] ?? "",
                 author: row["author"] ?? "",
+                press: row["press"] ?? "",
                 coverURL: row["cover"] ?? "",
                 positionUnit: row["position_unit"] ?? 0,
                 totalPosition: row["total_position"] ?? 0,

@@ -1,13 +1,13 @@
 /**
- * [INPUT]: 依赖 RepositoryContainer 注入本地书仓储与在线搜索仓储，依赖 BookPickerViewModel 驱动选择状态机，依赖 BookEditorView 承接创建与回填
- * [OUTPUT]: 对外提供 BookPickerView，承载通用书籍选择流的本地/在线/创建/多选交互
+ * [INPUT]: 依赖 RepositoryContainer 注入本地书仓储与在线搜索仓储，依赖 BookPickerViewModel 驱动选择状态机，依赖 BookEditorView 与 BookSearchView 承接页内创建与搜索回填
+ * [OUTPUT]: 对外提供 BookPickerView，承载通用书籍选择流的本地/在线/新增入口/多选交互
  * [POS]: Book 模块业务 Sheet，负责统一书籍选择流，不承担具体业务页保存逻辑
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
 import SwiftUI
 
-/// 通用书籍选择流入口，统一承接本地选择、在线搜索、手动创建与结果回填。
+/// 通用书籍选择流入口，统一承接本地选择、在线搜索、新增入口与结果回填。
 struct BookPickerView: View {
     let configuration: BookPickerConfiguration
     let onComplete: (BookPickerResult) -> Void
@@ -17,8 +17,10 @@ struct BookPickerView: View {
 
     @State private var viewModel: BookPickerViewModel?
     @State private var activeSeed: BookEditorSeed?
+    @State private var showsNestedSearchPage = false
     @State private var isPreparingSeed = false
     @State private var didComplete = false
+    @State private var pendingScrollBookID: Int64?
 
     var body: some View {
         NavigationStack {
@@ -45,6 +47,19 @@ struct BookPickerView: View {
                         handleCancel()
                     }
                 }
+                if let viewModel, viewModel.supportsCreationFlow {
+                    ToolbarItem(placement: .topBarTrailing) {
+                        Button {
+                            openCreationFlow()
+                        } label: {
+                            Image(systemName: "plus")
+                                .font(.system(size: 17, weight: .semibold))
+                                .foregroundStyle(Color.textPrimary)
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel(creationEntryLabel)
+                    }
+                }
             }
             .navigationDestination(item: $activeSeed) { seed in
                 BookEditorView(
@@ -56,6 +71,14 @@ struct BookPickerView: View {
                     }
                 )
             }
+            .navigationDestination(isPresented: $showsNestedSearchPage) {
+                BookSearchView(
+                    onCompletedBookSelection: { book in
+                        finish(.single(book))
+                    },
+                    completionDismissBehavior: .handledByParent
+                )
+            }
         }
         .task {
             guard viewModel == nil else { return }
@@ -65,40 +88,49 @@ struct BookPickerView: View {
                 searchRepository: repositories.bookSearchRepository
             )
             viewModel = newViewModel
+            pendingScrollBookID = configuration.preselectedBooks.first?.id
             await newViewModel.loadIfNeeded()
         }
     }
 
     private func content(_ viewModel: BookPickerViewModel) -> some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: Spacing.base) {
-                controlsSection(viewModel)
-                resultsSection(viewModel)
+        ScrollViewReader { proxy in
+            ScrollView {
+                VStack(alignment: .leading, spacing: Spacing.base) {
+                    controlsSection(viewModel)
+                    resultsSection(viewModel)
+                }
+                .padding(.horizontal, Spacing.screenEdge)
+                .padding(.top, Spacing.base)
+                .padding(.bottom, Spacing.section)
             }
-            .padding(.horizontal, Spacing.screenEdge)
-            .padding(.top, Spacing.base)
-            .padding(.bottom, Spacing.section)
-        }
-        .scrollIndicators(.hidden)
-        .searchable(
-            text: Binding(
-                get: { viewModel.query },
-                set: { viewModel.updateQuery($0) }
-            ),
-            placement: .navigationBarDrawer(displayMode: .always),
-            prompt: "搜索书名、作者、ISBN"
-        )
-        .textInputAutocapitalization(.never)
-        .autocorrectionDisabled()
-        .onSubmit(of: .search) {
-            guard viewModel.visibleScope == .online else { return }
-            Task {
-                await viewModel.submitOnlineSearch()
+            .safeAreaInset(edge: .bottom) {
+                if viewModel.isMultipleSelectionEnabled, viewModel.selectedCount > 0 {
+                    multipleSelectionBar(viewModel)
+                }
             }
-        }
-        .safeAreaInset(edge: .bottom) {
-            if viewModel.isMultipleSelectionEnabled, viewModel.selectedCount > 0 {
-                multipleSelectionBar(viewModel)
+            .searchable(
+                text: Binding(
+                    get: { viewModel.query },
+                    set: { viewModel.updateQuery($0) }
+                ),
+                placement: .navigationBarDrawer(displayMode: .always),
+                prompt: "搜索书名、作者、ISBN"
+            )
+            .searchPresentationToolbarBehavior(.avoidHidingContent)
+            .textInputAutocapitalization(.never)
+            .autocorrectionDisabled()
+            .onSubmit(of: .search) {
+                guard viewModel.visibleScope == .online else { return }
+                Task {
+                    await viewModel.submitOnlineSearch()
+                }
+            }
+            .onAppear {
+                scrollToPendingBookIfNeeded(using: proxy, viewModel: viewModel)
+            }
+            .onChange(of: viewModel.localBooks.map(\.id)) { _, _ in
+                scrollToPendingBookIfNeeded(using: proxy, viewModel: viewModel)
             }
         }
     }
@@ -201,11 +233,13 @@ struct BookPickerView: View {
                 } label: {
                     BookPickerLocalBookRow(
                         book: book,
-                        isSelected: viewModel.isBookSelected(book),
-                        showsSelectionIndicator: viewModel.isMultipleSelectionEnabled
+                        keyword: viewModel.trimmedQuery,
+                        selectionStyle: viewModel.isMultipleSelectionEnabled ? .multiple : .single,
+                        isSelected: viewModel.isBookSelected(book)
                     )
                 }
                 .buttonStyle(.plain)
+                .id(book.id)
             }
         }
     }
@@ -220,8 +254,8 @@ struct BookPickerView: View {
             stateActionGroup(
                 primaryTitle: viewModel.supportsOnline ? "在线搜索" : nil,
                 primaryAction: viewModel.supportsOnline ? { viewModel.switchToOnlineIfSupported() } : nil,
-                secondaryTitle: viewModel.supportsManualCreate ? "手动创建书籍" : nil,
-                secondaryAction: viewModel.supportsManualCreate ? { activeSeed = viewModel.makeManualSeed() } : nil
+                secondaryTitle: viewModel.supportsCreationFlow ? creationEntryLabel : nil,
+                secondaryAction: viewModel.supportsCreationFlow ? { openCreationFlow() } : nil
             )
         }
     }
@@ -231,13 +265,13 @@ struct BookPickerView: View {
             BookSearchStatusCard(
                 systemImage: "magnifyingglass",
                 title: "没有找到匹配的书",
-                message: "你可以继续修改关键词，或直接手动创建。"
+                message: localNoResultsMessage
             )
             stateActionGroup(
                 primaryTitle: viewModel.supportsOnline ? "在线搜索" : nil,
                 primaryAction: viewModel.supportsOnline ? { viewModel.switchToOnlineIfSupported() } : nil,
-                secondaryTitle: viewModel.supportsManualCreate ? "手动创建书籍" : nil,
-                secondaryAction: viewModel.supportsManualCreate ? { activeSeed = viewModel.makeManualSeed() } : nil
+                secondaryTitle: viewModel.supportsCreationFlow ? creationEntryLabel : nil,
+                secondaryAction: viewModel.supportsCreationFlow ? { openCreationFlow() } : nil
             )
         }
     }
@@ -249,9 +283,9 @@ struct BookPickerView: View {
                 title: "输入关键词开始搜索",
                 message: "输入书名、作者或 ISBN 后，将在当前在线来源中搜索。"
             )
-            if viewModel.supportsManualCreate {
-                secondaryActionButton("手动创建书籍") {
-                    activeSeed = viewModel.makeManualSeed()
+            if viewModel.supportsCreationFlow {
+                secondaryActionButton(creationEntryLabel) {
+                    openCreationFlow()
                 }
             }
         }
@@ -303,9 +337,9 @@ struct BookPickerView: View {
                     }
                 }
             )
-            if viewModel.supportsManualCreate {
-                secondaryActionButton("手动创建书籍") {
-                    activeSeed = viewModel.makeManualSeed()
+            if viewModel.supportsCreationFlow {
+                secondaryActionButton(creationEntryLabel) {
+                    openCreationFlow()
                 }
             }
         }
@@ -316,11 +350,11 @@ struct BookPickerView: View {
             BookSearchStatusCard(
                 systemImage: "magnifyingglass",
                 title: "没有找到匹配的书",
-                message: "可以切换搜索源继续查找，或直接手动创建。"
+                message: onlineNoResultsMessage
             )
-            if viewModel.supportsManualCreate {
-                secondaryActionButton("手动创建书籍") {
-                    activeSeed = viewModel.makeManualSeed()
+            if viewModel.supportsCreationFlow {
+                secondaryActionButton(creationEntryLabel) {
+                    openCreationFlow()
                 }
             }
         }
@@ -380,6 +414,54 @@ struct BookPickerView: View {
             .foregroundStyle(Color.textPrimary)
     }
 
+    private var creationEntryLabel: String {
+        switch configuration.creationAction {
+        case .inlineManualEditor:
+            return "手动创建书籍"
+        case .separateSearchPage:
+            return "添加新书"
+        case .nestedSearchPage:
+            return "添加新书"
+        }
+    }
+
+    private var localNoResultsMessage: String {
+        switch configuration.creationAction {
+        case .inlineManualEditor:
+            return "你可以继续修改关键词，或直接手动创建。"
+        case .separateSearchPage:
+            return "你可以继续修改关键词，或直接去新增一本书。"
+        case .nestedSearchPage:
+            return "你可以继续修改关键词，或进入添加书籍页。"
+        }
+    }
+
+    private var onlineNoResultsMessage: String {
+        switch configuration.creationAction {
+        case .inlineManualEditor:
+            return "可以切换搜索源继续查找，或直接手动创建。"
+        case .separateSearchPage:
+            return "可以切换搜索源继续查找，或前往新增书籍页。"
+        case .nestedSearchPage:
+            return "可以切换搜索源继续查找，或进入添加书籍页。"
+        }
+    }
+
+    private func presentManualCreate() {
+        activeSeed = .manual
+    }
+
+    private func openCreationFlow() {
+        switch configuration.creationAction {
+        case .inlineManualEditor:
+            presentManualCreate()
+        case .separateSearchPage:
+            finish(.addFlowRequested)
+        case .nestedSearchPage:
+            showsNestedSearchPage = true
+        }
+    }
+
     private func handleCreatedBook(_ bookId: Int64) async {
         guard let viewModel else { return }
         if let result = await viewModel.handleCreatedBook(bookId: bookId) {
@@ -387,8 +469,20 @@ struct BookPickerView: View {
             return
         }
         if viewModel.visibleScope == .local {
+            pendingScrollBookID = bookId
             await viewModel.refreshLocalBooks()
         }
+    }
+
+    private func scrollToPendingBookIfNeeded(
+        using proxy: ScrollViewProxy,
+        viewModel: BookPickerViewModel
+    ) {
+        guard viewModel.visibleScope == .local else { return }
+        guard let pendingScrollBookID else { return }
+        guard viewModel.localBooks.contains(where: { $0.id == pendingScrollBookID }) else { return }
+        proxy.scrollTo(pendingScrollBookID, anchor: .center)
+        self.pendingScrollBookID = nil
     }
 
     private func handleCancel() {
@@ -407,9 +501,15 @@ struct BookPickerView: View {
 }
 
 private struct BookPickerLocalBookRow: View {
+    enum SelectionStyle {
+        case single
+        case multiple
+    }
+
     let book: BookPickerBook
+    let keyword: String
+    let selectionStyle: SelectionStyle
     let isSelected: Bool
-    let showsSelectionIndicator: Bool
 
     var body: some View {
         HStack(spacing: Spacing.base) {
@@ -422,29 +522,149 @@ private struct BookPickerLocalBookRow: View {
                 surfaceStyle: .spine
             )
 
-            VStack(alignment: .leading, spacing: Spacing.tiny) {
-                Text(book.title)
-                    .font(AppTypography.subheadlineSemibold)
-                    .foregroundStyle(Color.textPrimary)
+            VStack(alignment: .leading, spacing: Spacing.cozy) {
+                highlightedText(
+                    book.title,
+                    baseFont: AppTypography.subheadlineSemibold,
+                    highlightFont: AppTypography.semantic(.subheadline, weight: .bold),
+                    baseColor: Color.textPrimary,
+                    highlightColor: Color.keywordHighlight
+                )
                     .lineLimit(1)
 
-                if !book.author.isEmpty {
-                    Text(book.author)
-                        .font(AppTypography.caption)
-                        .foregroundStyle(Color.textSecondary)
+                VStack(alignment: .leading, spacing: Spacing.tiny) {
+                    if !book.author.isEmpty {
+                        highlightedText(
+                            book.author,
+                            baseFont: AppTypography.caption,
+                            highlightFont: AppTypography.captionSemibold,
+                            baseColor: Color.textSecondary,
+                            highlightColor: Color.keywordHighlight
+                        )
                         .lineLimit(1)
+                    }
+
+                    if !book.press.isEmpty {
+                        highlightedText(
+                            book.press,
+                            baseFont: AppTypography.caption,
+                            highlightFont: AppTypography.captionSemibold,
+                            baseColor: Color.textSecondary,
+                            highlightColor: Color.keywordHighlight
+                        )
+                        .lineLimit(1)
+                    }
                 }
             }
 
             Spacer(minLength: 0)
 
-            if showsSelectionIndicator {
-                Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
+            if let indicatorSystemName {
+                Image(systemName: indicatorSystemName)
                     .font(.system(size: 18, weight: .semibold))
                     .foregroundStyle(isSelected ? Color.brand : Color.textHint)
             }
         }
         .padding(Spacing.contentEdge)
         .background(Color.surfaceCard, in: RoundedRectangle(cornerRadius: CornerRadius.containerMedium, style: .continuous))
+        .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
+    }
+
+    private var indicatorSystemName: String? {
+        switch selectionStyle {
+        case .single:
+            return isSelected ? "largecircle.fill.circle" : nil
+        case .multiple:
+            return isSelected ? "checkmark.circle.fill" : "circle"
+        }
+    }
+
+    private func highlightedText(
+        _ text: String,
+        baseFont: Font,
+        highlightFont: Font,
+        baseColor: Color,
+        highlightColor: Color
+    ) -> Text {
+        Text(
+            highlightedAttributedString(
+                text,
+                baseFont: baseFont,
+                highlightFont: highlightFont,
+                baseColor: baseColor,
+                highlightColor: highlightColor
+            )
+        )
+    }
+
+    private func highlightedAttributedString(
+        _ text: String,
+        baseFont: Font,
+        highlightFont: Font,
+        baseColor: Color,
+        highlightColor: Color
+    ) -> AttributedString {
+        let trimmedKeyword = keyword.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else { return AttributedString() }
+
+        guard !trimmedKeyword.isEmpty else {
+            return styledSegment(text, font: baseFont, color: baseColor)
+        }
+
+        var result = AttributedString()
+        var searchStart = text.startIndex
+        var didMatch = false
+
+        while searchStart < text.endIndex,
+              let range = text.range(
+                  of: trimmedKeyword,
+                  options: [.caseInsensitive, .diacriticInsensitive],
+                  range: searchStart..<text.endIndex,
+                  locale: .current
+              ) {
+            if searchStart < range.lowerBound {
+                result.append(
+                    styledSegment(
+                        String(text[searchStart..<range.lowerBound]),
+                        font: baseFont,
+                        color: baseColor
+                    )
+                )
+            }
+
+            result.append(
+                styledSegment(
+                    String(text[range]),
+                    font: highlightFont,
+                    color: highlightColor
+                )
+            )
+            didMatch = true
+            searchStart = range.upperBound
+        }
+
+        if searchStart < text.endIndex {
+            result.append(
+                styledSegment(
+                    String(text[searchStart..<text.endIndex]),
+                    font: baseFont,
+                    color: baseColor
+                )
+            )
+        }
+
+        if didMatch {
+            return result
+        }
+
+        return styledSegment(text, font: baseFont, color: baseColor)
+    }
+
+    private func styledSegment(_ text: String, font: Font, color: Color) -> AttributedString {
+        var attributed = AttributedString(text)
+        attributed.font = font
+        attributed.foregroundColor = color
+        return attributed
     }
 }

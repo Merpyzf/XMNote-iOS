@@ -81,8 +81,8 @@ final class BookPickerViewModel {
         configuration.selectionMode == .multiple
     }
 
-    var supportsManualCreate: Bool {
-        configuration.allowsManualCreate
+    var supportsCreationFlow: Bool {
+        configuration.allowsCreationFlow
     }
 
     var supportsOnline: Bool {
@@ -286,11 +286,6 @@ final class BookPickerViewModel {
     func switchToOnlineIfSupported() {
         guard supportsOnline else { return }
         switchVisibleScope(.online)
-    }
-
-    /// 为创建链路生成手动录入种子。
-    func makeManualSeed() -> BookEditorSeed {
-        .manual
     }
 
     func isBookSelected(_ book: BookPickerBook) -> Bool {

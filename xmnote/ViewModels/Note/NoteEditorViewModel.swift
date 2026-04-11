@@ -606,6 +606,7 @@ private extension NoteEditorViewModel {
             id: draft.bookId,
             title: draft.bookTitle,
             author: draft.bookAuthor,
+            press: "",
             coverURL: draft.bookCoverURL,
             positionUnit: draft.bookPositionUnit,
             totalPosition: draft.bookTotalPosition,
