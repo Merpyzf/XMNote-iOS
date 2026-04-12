@@ -194,6 +194,7 @@ private struct NavigationPopGuardBridge: UIViewControllerRepresentable {
         var canPop = true
         var onBlockedAttempt: () -> Void
 
+        private var attachmentGeneration: UInt64 = 0
         private weak var navigationController: UINavigationController?
         private weak var edgePopGestureRecognizer: UIGestureRecognizer?
         @available(iOS 26.0, *)
@@ -205,8 +206,10 @@ private struct NavigationPopGuardBridge: UIViewControllerRepresentable {
 
         func attachIfNeeded(to viewController: UIViewController) {
             guard let navigationController = viewController.navigationController else {
+                let generation = attachmentGeneration
                 DispatchQueue.main.async { [weak self, weak viewController] in
                     guard let self, let viewController else { return }
+                    guard self.attachmentGeneration == generation else { return }
                     self.attachIfNeeded(to: viewController)
                 }
                 return
@@ -225,6 +228,7 @@ private struct NavigationPopGuardBridge: UIViewControllerRepresentable {
         }
 
         func detach() {
+            attachmentGeneration &+= 1
             edgePopGestureRecognizer?.delegate = nil
             edgePopGestureRecognizer?.isEnabled = true
 

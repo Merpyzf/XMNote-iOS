@@ -183,8 +183,7 @@ struct MainTabView: View {
             }
         }
         .tabBarMinimizeBehavior(.onScrollDown)
-        .tabViewSearchActivation(.searchTabSelection)
-        .searchable(text: $searchQuery, prompt: "搜索书籍或书摘")
+        .mainTabSearchHost(isEnabled: selectedTab == .search, searchQuery: $searchQuery)
         .task(id: sceneStateStore.isRestored) {
             guard sceneStateStore.isRestored else { return }
             guard !didBootstrapFromScene else { return }
@@ -423,6 +422,38 @@ struct MainTabView: View {
             return "empty"
         }
         return data.base64EncodedString()
+    }
+}
+
+private extension View {
+    /// 仅在搜索 Tab 激活时挂载根级搜索宿主，避免其他导航栈长期持有搜索控制器状态。
+    func mainTabSearchHost(
+        isEnabled: Bool,
+        searchQuery: Binding<String>
+    ) -> some View {
+        modifier(
+            MainTabSearchHostModifier(
+                isEnabled: isEnabled,
+                searchQuery: searchQuery
+            )
+        )
+    }
+}
+
+/// MainTabSearchHostModifier 条件挂载搜索 tab 的根级 searchable 宿主，避免跨 tab 残留搜索控制器状态。
+private struct MainTabSearchHostModifier: ViewModifier {
+    let isEnabled: Bool
+    @Binding var searchQuery: String
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if isEnabled {
+            content
+                .tabViewSearchActivation(.searchTabSelection)
+                .searchable(text: $searchQuery, prompt: "搜索书籍或书摘")
+        } else {
+            content
+        }
     }
 }
 
