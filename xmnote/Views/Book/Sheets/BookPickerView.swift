@@ -1,6 +1,6 @@
 /**
- * [INPUT]: 依赖 RepositoryContainer 注入本地书仓储与在线搜索仓储，依赖 BookPickerViewModel 驱动选择状态机，依赖 BookEditorView 与 BookSearchView 承接页内创建与搜索回填
- * [OUTPUT]: 对外提供 BookPickerView，承载通用书籍选择流的本地/在线/新增入口/多选交互
+ * [INPUT]: 依赖 RepositoryContainer 注入本地书仓储与在线搜索仓储，依赖 BookPickerViewModel 驱动本地/远端混合选择状态机，依赖 BookEditorView 与 BookSearchView 承接页内创建与搜索回填
+ * [OUTPUT]: 对外提供 BookPickerView，承载通用书籍选择流的本地/在线/新增入口、远端直返与多选交互
  * [POS]: Book 模块业务 Sheet，负责统一书籍选择流，不承担具体业务页保存逻辑
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -33,9 +33,9 @@ struct BookPickerView: View {
                     LoadingStateView("正在准备书籍选择…", style: .card)
                 }
 
-                if isPreparingSeed {
+                if let viewModel, let blockingOverlayMessage = blockingOverlayMessage(for: viewModel) {
                     Color.overlay.ignoresSafeArea()
-                    LoadingStateView("正在补全书籍信息…", style: .card)
+                    LoadingStateView(blockingOverlayMessage, style: .card)
                 }
             }
             .navigationTitle(configuration.title)
@@ -74,7 +74,7 @@ struct BookPickerView: View {
             .navigationDestination(isPresented: $showsNestedSearchPage) {
                 BookSearchView(
                     onCompletedBookSelection: { book in
-                        finish(.single(book))
+                        finish(.single(.local(book)))
                     },
                     completionDismissBehavior: .handledByParent
                 )
@@ -105,7 +105,7 @@ struct BookPickerView: View {
                 .padding(.bottom, Spacing.section)
             }
             .safeAreaInset(edge: .bottom) {
-                if viewModel.isMultipleSelectionEnabled, viewModel.selectedCount > 0 {
+                if shouldShowMultipleSelectionBar(viewModel) {
                     multipleSelectionBar(viewModel)
                 }
             }
@@ -308,15 +308,12 @@ struct BookPickerView: View {
             ForEach(viewModel.remoteResults) { result in
                 BookSearchResultRow(
                     result: result,
-                    keyword: viewModel.trimmedQuery
+                    keyword: viewModel.trimmedQuery,
+                    accessory: remoteRowAccessory(for: result, viewModel: viewModel),
+                    accessibilityHint: remoteAccessibilityHint(for: viewModel)
                 ) {
                     Task {
-                        isPreparingSeed = true
-                        let seed = await viewModel.prepareSeed(for: result)
-                        isPreparingSeed = false
-                        if let seed {
-                            activeSeed = seed
-                        }
+                        await handleRemoteResultTap(result, viewModel: viewModel)
                     }
                 }
             }
@@ -364,14 +361,16 @@ struct BookPickerView: View {
         VStack(spacing: Spacing.cozy) {
             Divider()
             Button {
-                if let result = viewModel.confirmMultipleSelection() {
-                    finish(result)
+                Task {
+                    if let result = await viewModel.confirmMultipleSelection() {
+                        finish(result)
+                    }
                 }
             } label: {
                 HStack {
-                    Text("添加所选书籍")
+                    Text(configuration.multipleConfirmationTitle)
                     Spacer()
-                    Text("\(viewModel.selectedCount)")
+                    Text(multipleSelectionCountLabel(for: viewModel))
                 }
                 .font(AppTypography.headlineSemibold)
                 .foregroundStyle(.white)
@@ -380,6 +379,7 @@ struct BookPickerView: View {
                 .background(Color.brand, in: RoundedRectangle(cornerRadius: CornerRadius.blockMedium, style: .continuous))
             }
             .buttonStyle(.plain)
+            .disabled(viewModel.isResolvingRemoteSelections)
             .padding(.horizontal, Spacing.screenEdge)
             .padding(.bottom, Spacing.cozy)
             .padding(.top, Spacing.half)
@@ -447,6 +447,47 @@ struct BookPickerView: View {
         }
     }
 
+    private func blockingOverlayMessage(for viewModel: BookPickerViewModel) -> String? {
+        if viewModel.isResolvingRemoteSelections {
+            return "正在整理选中书籍…"
+        }
+        if isPreparingSeed {
+            return "正在补全书籍信息…"
+        }
+        return nil
+    }
+
+    private func shouldShowMultipleSelectionBar(_ viewModel: BookPickerViewModel) -> Bool {
+        guard viewModel.isMultipleSelectionEnabled else { return false }
+        return viewModel.selectedCount > 0 || viewModel.allowsEmptyMultipleConfirmation
+    }
+
+    private func multipleSelectionCountLabel(for viewModel: BookPickerViewModel) -> String {
+        if viewModel.selectedCount == 0, viewModel.allowsEmptyMultipleConfirmation {
+            return "未限制"
+        }
+        return "\(viewModel.selectedCount)"
+    }
+
+    private func remoteRowAccessory(
+        for result: BookSearchResult,
+        viewModel: BookPickerViewModel
+    ) -> BookSearchResultRowAccessory {
+        guard viewModel.isMultipleSelectionEnabled, viewModel.supportsDirectRemoteSelection else {
+            return .none
+        }
+        return .multiple(isSelected: viewModel.isRemoteResultSelected(result))
+    }
+
+    private func remoteAccessibilityHint(for viewModel: BookPickerViewModel) -> String {
+        if viewModel.supportsDirectRemoteSelection {
+            return viewModel.isMultipleSelectionEnabled
+                ? "双击切换书籍选择状态"
+                : "双击补全书籍信息并直接返回结果"
+        }
+        return "双击补全书籍信息并进入编辑页"
+    }
+
     private func presentManualCreate() {
         activeSeed = .manual
     }
@@ -459,6 +500,29 @@ struct BookPickerView: View {
             finish(.addFlowRequested)
         case .nestedSearchPage:
             showsNestedSearchPage = true
+        }
+    }
+
+    private func handleRemoteResultTap(
+        _ result: BookSearchResult,
+        viewModel: BookPickerViewModel
+    ) async {
+        if viewModel.supportsDirectRemoteSelection, viewModel.isMultipleSelectionEnabled {
+            _ = await viewModel.handleRemoteResultTap(result)
+            return
+        }
+
+        isPreparingSeed = true
+        let outcome = await viewModel.handleRemoteResultTap(result)
+        isPreparingSeed = false
+
+        switch outcome {
+        case .presentEditor(let seed):
+            activeSeed = seed
+        case .complete(let result):
+            finish(result)
+        case nil:
+            break
         }
     }
 

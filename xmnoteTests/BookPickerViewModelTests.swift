@@ -7,8 +7,8 @@ struct BookPickerViewModelTests {
     @Test
     func localLoadUsesBookRepositoryAndAppliesDefaultQuery() async {
         let localBooks = [
-            BookPickerBook(id: 1, title: "三体", author: "刘慈欣", coverURL: "", positionUnit: 0, totalPosition: 0, totalPagination: 302),
-            BookPickerBook(id: 2, title: "球状闪电", author: "刘慈欣", coverURL: "", positionUnit: 0, totalPosition: 0, totalPagination: 280)
+            BookPickerBook(id: 1, title: "三体", author: "刘慈欣", totalPagination: 302),
+            BookPickerBook(id: 2, title: "球状闪电", author: "刘慈欣", totalPagination: 280)
         ]
         let bookRepository = BookPickerTestBookRepository(localBooks: localBooks)
         let viewModel = BookPickerViewModel(
@@ -30,8 +30,8 @@ struct BookPickerViewModelTests {
     @Test
     func updatingQueryInLocalScopeRefreshesLocalBooks() async {
         let localBooks = [
-            BookPickerBook(id: 1, title: "三体", author: "刘慈欣", coverURL: "", positionUnit: 0, totalPosition: 0, totalPagination: 302),
-            BookPickerBook(id: 2, title: "球状闪电", author: "刘慈欣", coverURL: "", positionUnit: 0, totalPosition: 0, totalPagination: 280)
+            BookPickerBook(id: 1, title: "三体", author: "刘慈欣", totalPagination: 302),
+            BookPickerBook(id: 2, title: "球状闪电", author: "刘慈欣", totalPagination: 280)
         ]
         let bookRepository = BookPickerTestBookRepository(localBooks: localBooks)
         let viewModel = BookPickerViewModel(
@@ -51,46 +51,9 @@ struct BookPickerViewModelTests {
     @Test
     func switchingOnlineSourceRerunsSearchAndKeepsQuery() async {
         let searchRepository = BookPickerTestSearchRepository()
-        searchRepository.resultsBySource[.wenqu] = [
-            BookSearchResult(
-                id: "w-1",
-                source: .wenqu,
-                title: "三体",
-                author: "刘慈欣",
-                coverURL: "",
-                subtitle: "",
-                summary: "",
-                translator: "",
-                press: "",
-                isbn: "",
-                pubDate: "",
-                doubanId: nil,
-                totalPages: nil,
-                totalWordCount: nil,
-                seed: nil,
-                detailPageURL: nil
-            )
-        ]
-        searchRepository.resultsBySource[.douban] = [
-            BookSearchResult(
-                id: "d-1",
-                source: .douban,
-                title: "三体（豆瓣）",
-                author: "刘慈欣",
-                coverURL: "",
-                subtitle: "",
-                summary: "",
-                translator: "",
-                press: "",
-                isbn: "",
-                pubDate: "",
-                doubanId: nil,
-                totalPages: nil,
-                totalWordCount: nil,
-                seed: nil,
-                detailPageURL: nil
-            )
-        ]
+        searchRepository.resultsBySource[.wenqu] = [sampleRemoteResult(id: "w-1", source: .wenqu, title: "三体")]
+        searchRepository.resultsBySource[.douban] = [sampleRemoteResult(id: "d-1", source: .douban, title: "三体（豆瓣）")]
+
         let viewModel = BookPickerViewModel(
             configuration: BookPickerConfiguration(
                 scope: .online,
@@ -108,7 +71,10 @@ struct BookPickerViewModelTests {
         await settleAsyncState()
 
         #expect(viewModel.query == "三体")
-        #expect(searchRepository.searchRequests == [(.wenqu, "三体"), (.douban, "三体")])
+        #expect(
+            searchRepository.searchRequests.map { "\($0.0.rawValue)-\($0.1)" }
+                == ["0-三体", "6-三体"]
+        )
         #expect(viewModel.remoteResults.map(\.source) == [.douban])
     }
 
@@ -128,7 +94,7 @@ struct BookPickerViewModelTests {
 
     @Test
     func createdBookCompletesSingleModeOrAddsIntoMultipleSelection() async {
-        let createdBook = BookPickerBook(id: 99, title: "新书", author: "作者", coverURL: "", positionUnit: 0, totalPosition: 0, totalPagination: 100)
+        let createdBook = BookPickerBook(id: 99, title: "新书", author: "作者", totalPagination: 100)
 
         let singleRepository = BookPickerTestBookRepository(localBooks: [createdBook], resolvedBooks: [99: createdBook])
         let singleViewModel = BookPickerViewModel(
@@ -138,7 +104,7 @@ struct BookPickerViewModelTests {
         )
         let singleResult = await singleViewModel.handleCreatedBook(bookId: 99)
 
-        #expect(singleResult == .single(createdBook))
+        #expect(singleResult == .single(.local(createdBook)))
 
         let multipleRepository = BookPickerTestBookRepository(localBooks: [createdBook], resolvedBooks: [99: createdBook])
         let multipleViewModel = BookPickerViewModel(
@@ -152,10 +118,209 @@ struct BookPickerViewModelTests {
         #expect(multipleViewModel.selectedBooks == [createdBook])
     }
 
+    @Test
+    func remoteSingleDirectSelectionHydratesSeedAndReturnsRemoteResult() async {
+        let searchRepository = BookPickerTestSearchRepository()
+        let remoteResult = sampleRemoteResult(id: "remote-1", source: .douban, title: "三体")
+        let preparedSeed = sampleSeed(title: "三体", author: "刘慈欣")
+        searchRepository.preparedSeedsByResultID[remoteResult.id] = preparedSeed
+
+        let viewModel = BookPickerViewModel(
+            configuration: BookPickerConfiguration(
+                scope: .online,
+                selectionMode: .single,
+                onlineSelectionPolicy: .returnRemoteSelection,
+                defaultQuery: "三体"
+            ),
+            bookRepository: BookPickerTestBookRepository(localBooks: []),
+            searchRepository: searchRepository
+        )
+
+        let outcome = await viewModel.handleRemoteResultTap(remoteResult)
+
+        #expect(
+            outcome == .complete(
+                .single(
+                    .remote(
+                        BookPickerRemoteSelection(result: remoteResult, seed: preparedSeed)
+                    )
+                )
+            )
+        )
+        #expect(searchRepository.prepareSeedRequests == [remoteResult.id])
+    }
+
+    @Test
+    func mixedMultipleSelectionReturnsStableOrderedSelections() async {
+        let localPreselected = BookPickerBook(id: 1, title: "三体", author: "刘慈欣")
+        let localSecond = BookPickerBook(id: 2, title: "活着", author: "余华")
+        let remoteFirst = sampleRemoteResult(id: "remote-a", source: .douban, title: "明朝那些事儿")
+        let remoteSecond = sampleRemoteResult(id: "remote-b", source: .wenqu, title: "人类群星闪耀时")
+
+        let searchRepository = BookPickerTestSearchRepository()
+        searchRepository.preparedSeedsByResultID[remoteFirst.id] = sampleSeed(title: "明朝那些事儿", author: "当年明月")
+        searchRepository.preparedSeedsByResultID[remoteSecond.id] = sampleSeed(title: "人类群星闪耀时", author: "茨威格")
+
+        let viewModel = BookPickerViewModel(
+            configuration: BookPickerConfiguration(
+                scope: .both,
+                selectionMode: .multiple,
+                onlineSelectionPolicy: .returnRemoteSelection,
+                preselectedBooks: [localPreselected]
+            ),
+            bookRepository: BookPickerTestBookRepository(localBooks: [localPreselected, localSecond]),
+            searchRepository: searchRepository
+        )
+
+        _ = await viewModel.handleRemoteResultTap(remoteFirst)
+        _ = viewModel.handleLocalBookTap(localSecond)
+        _ = await viewModel.handleRemoteResultTap(remoteSecond)
+
+        let result = await viewModel.confirmMultipleSelection()
+
+        #expect(
+            result == .multiple([
+                .local(localPreselected),
+                .remote(BookPickerRemoteSelection(result: remoteFirst, seed: sampleSeed(title: "明朝那些事儿", author: "当年明月"))),
+                .local(localSecond),
+                .remote(BookPickerRemoteSelection(result: remoteSecond, seed: sampleSeed(title: "人类群星闪耀时", author: "茨威格")))
+            ])
+        )
+        #expect(searchRepository.prepareSeedRequests == [remoteFirst.id, remoteSecond.id])
+    }
+
+    @Test
+    func allowsEmptyResultConfirmsEmptyMultipleSelection() async {
+        let viewModel = BookPickerViewModel(
+            configuration: BookPickerConfiguration(
+                scope: .local,
+                selectionMode: .multiple,
+                multipleConfirmationPolicy: .allowsEmptyResult
+            ),
+            bookRepository: BookPickerTestBookRepository(localBooks: []),
+            searchRepository: BookPickerTestSearchRepository()
+        )
+
+        let result = await viewModel.confirmMultipleSelection()
+
+        #expect(result == .multiple([]))
+    }
+
+    @Test
+    func requireLocalCreationKeepsCreationFlow() async {
+        let remoteResult = sampleRemoteResult(id: "remote-2", source: .douban, title: "三体")
+        let preparedSeed = sampleSeed(title: "三体", author: "刘慈欣")
+        let searchRepository = BookPickerTestSearchRepository()
+        searchRepository.preparedSeedsByResultID[remoteResult.id] = preparedSeed
+
+        let viewModel = BookPickerViewModel(
+            configuration: BookPickerConfiguration(
+                scope: .online,
+                selectionMode: .single,
+                onlineSelectionPolicy: .requireLocalCreation
+            ),
+            bookRepository: BookPickerTestBookRepository(localBooks: []),
+            searchRepository: searchRepository
+        )
+
+        let outcome = await viewModel.handleRemoteResultTap(remoteResult)
+
+        #expect(outcome == .presentEditor(preparedSeed))
+        #expect(searchRepository.prepareSeedRequests == [remoteResult.id])
+    }
+
+    @Test
+    func remoteResolutionFailureKeepsSelectionContextAndDoesNotReturnPartialResult() async {
+        let localBook = BookPickerBook(id: 7, title: "三体", author: "刘慈欣")
+        let remoteResult = sampleRemoteResult(id: "remote-fail", source: .douban, title: "球状闪电")
+        let searchRepository = BookPickerTestSearchRepository()
+        searchRepository.prepareSeedErrors[remoteResult.id] = BookPickerTestError.seedFailure
+
+        let viewModel = BookPickerViewModel(
+            configuration: BookPickerConfiguration(
+                scope: .both,
+                selectionMode: .multiple,
+                onlineSelectionPolicy: .returnRemoteSelection
+            ),
+            bookRepository: BookPickerTestBookRepository(localBooks: [localBook]),
+            searchRepository: searchRepository
+        )
+
+        _ = viewModel.handleLocalBookTap(localBook)
+        _ = await viewModel.handleRemoteResultTap(remoteResult)
+
+        let result = await viewModel.confirmMultipleSelection()
+
+        #expect(result == nil)
+        #expect(viewModel.selectedBooks == [localBook])
+        #expect(viewModel.isRemoteResultSelected(remoteResult))
+        #expect(viewModel.selectedCount == 2)
+        #expect(viewModel.onlineErrorMessage == BookPickerTestError.seedFailure.errorDescription)
+    }
+
     private func settleAsyncState() async {
         await Task.yield()
         try? await Task.sleep(for: .milliseconds(50))
         await Task.yield()
+    }
+
+    private func sampleRemoteResult(
+        id: String,
+        source: BookSearchSource,
+        title: String
+    ) -> BookSearchResult {
+        BookSearchResult(
+            id: id,
+            source: source,
+            title: title,
+            author: "作者",
+            coverURL: "",
+            subtitle: "",
+            summary: "",
+            translator: "",
+            press: "",
+            isbn: "",
+            pubDate: "",
+            doubanId: nil,
+            totalPages: nil,
+            totalWordCount: nil,
+            seed: nil,
+            detailPageURL: "https://example.com/\(id)"
+        )
+    }
+
+    private func sampleSeed(title: String, author: String) -> BookEditorSeed {
+        BookEditorSeed(
+            searchSource: .douban,
+            title: title,
+            rawTitle: title,
+            author: author,
+            authorIntro: "",
+            translator: "",
+            press: "",
+            isbn: "",
+            pubDate: "",
+            summary: "",
+            catalog: "",
+            coverURL: "",
+            doubanId: nil,
+            totalPages: nil,
+            totalWordCount: nil,
+            preferredSourceName: nil,
+            preferredBookType: nil,
+            preferredProgressUnit: nil
+        )
+    }
+}
+
+private enum BookPickerTestError: LocalizedError {
+    case seedFailure
+
+    var errorDescription: String? {
+        switch self {
+        case .seedFailure:
+            return "种子补齐失败"
+        }
     }
 }
 
@@ -205,6 +370,9 @@ private final class BookPickerTestBookRepository: BookRepositoryProtocol {
 private final class BookPickerTestSearchRepository: BookSearchRepositoryProtocol {
     var resultsBySource: [BookSearchSource: [BookSearchResult]] = [:]
     var searchRequests: [(BookSearchSource, String)] = []
+    var prepareSeedRequests: [String] = []
+    var preparedSeedsByResultID: [String: BookEditorSeed] = [:]
+    var prepareSeedErrors: [String: Error] = [:]
 
     func search(keyword: String, source: BookSearchSource) async throws -> [BookSearchResult] {
         searchRequests.append((source, keyword))
@@ -212,7 +380,11 @@ private final class BookPickerTestSearchRepository: BookSearchRepositoryProtocol
     }
 
     func prepareSeed(for result: BookSearchResult) async throws -> BookEditorSeed {
-        result.seed ?? .manual
+        prepareSeedRequests.append(result.id)
+        if let error = prepareSeedErrors[result.id] {
+            throw error
+        }
+        return preparedSeedsByResultID[result.id] ?? result.seed ?? .manual
     }
 
     func fetchRecentQueries() -> [String] {

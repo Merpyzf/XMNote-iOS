@@ -1,6 +1,6 @@
 /**
- * [INPUT]: 依赖 BookRepositoryProtocol 提供本地书籍查询与结果解析，依赖 BookSearchRepositoryProtocol 提供在线搜索与种子补齐
- * [OUTPUT]: 对外提供 BookPickerViewModel、BookPickerVisibleScope 与 BookPickerStatus，驱动通用书籍选择流状态机
+ * [INPUT]: 依赖 BookRepositoryProtocol 提供本地书籍查询与结果解析，依赖 BookSearchRepositoryProtocol 提供在线搜索、远端结果补齐与创建回填
+ * [OUTPUT]: 对外提供 BookPickerViewModel、BookPickerVisibleScope、BookPickerStatus 与 BookPickerRemoteTapOutcome，驱动通用书籍选择流状态机
  * [POS]: ViewModels/Book 的书籍选择状态编排器，被 BookPickerView 与测试共同消费
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -27,6 +27,17 @@ enum BookPickerStatus: Hashable {
     case onlineNoResults
 }
 
+/// 在线结果点击后的统一副作用，兼容“进入编辑页”与“直接完成选择”两种链路。
+enum BookPickerRemoteTapOutcome: Hashable {
+    case presentEditor(BookEditorSeed)
+    case complete(BookPickerResult)
+}
+
+private enum BookPickerSelectionKey: Hashable {
+    case local(Int64)
+    case remote(String)
+}
+
 /// 书籍选择状态源，统一承接本地查询、在线搜索、多选与创建回填。
 @MainActor
 @Observable
@@ -37,8 +48,10 @@ final class BookPickerViewModel {
     var localBooks: [BookPickerBook]
     var remoteResults: [BookSearchResult]
     var selectedBooks: [BookPickerBook]
+    var selectedRemoteResults: [BookSearchResult]
     var isLoadingLocal = false
     var isSearchingOnline = false
+    var isResolvingRemoteSelections = false
     var onlineErrorMessage: String?
     var hasSubmittedOnlineSearch = false
 
@@ -51,6 +64,8 @@ final class BookPickerViewModel {
     private var onlineSearchTask: Task<Void, Never>?
     private var localSearchSequence = 0
     private var onlineSearchSequence = 0
+    private var selectionOrder: [BookPickerSelectionKey]
+    private var resolvedRemoteSelections: [String: BookPickerRemoteSelection]
 
     init(
         configuration: BookPickerConfiguration,
@@ -63,7 +78,11 @@ final class BookPickerViewModel {
         self.query = configuration.defaultQuery
         self.localBooks = []
         self.remoteResults = []
-        self.selectedBooks = Self.deduplicatedBooks(configuration.preselectedBooks)
+        let deduplicatedBooks = Self.deduplicatedBooks(configuration.preselectedBooks)
+        self.selectedBooks = deduplicatedBooks
+        self.selectedRemoteResults = []
+        self.selectionOrder = deduplicatedBooks.map { .local($0.id) }
+        self.resolvedRemoteSelections = [:]
         self.visibleScope = configuration.scope == .online ? .online : .local
         if let preferred = configuration.preferredOnlineSource,
            configuration.onlineSources.contains(preferred) {
@@ -93,8 +112,16 @@ final class BookPickerViewModel {
         configuration.scope == .both && supportsOnline
     }
 
+    var supportsDirectRemoteSelection: Bool {
+        configuration.onlineSelectionPolicy == .returnRemoteSelection
+    }
+
+    var allowsEmptyMultipleConfirmation: Bool {
+        configuration.multipleConfirmationPolicy == .allowsEmptyResult
+    }
+
     var selectedCount: Int {
-        selectedBooks.count
+        selectedBooks.count + selectedRemoteResults.count
     }
 
     var status: BookPickerStatus {
@@ -159,6 +186,7 @@ final class BookPickerViewModel {
             guard !trimmedQuery.isEmpty else {
                 remoteResults = []
                 onlineErrorMessage = nil
+                hasSubmittedOnlineSearch = false
                 return
             }
             onlineSearchTask?.cancel()
@@ -242,20 +270,35 @@ final class BookPickerViewModel {
     /// 单选模式直接完成；多选模式则切换本地书籍的选中状态。
     func handleLocalBookTap(_ book: BookPickerBook) -> BookPickerResult? {
         if isMultipleSelectionEnabled {
-            toggleSelection(for: book)
+            toggleLocalSelection(for: book)
             return nil
         }
-        return .single(book)
+        return .single(.local(book))
     }
 
-    /// 远端结果需要先补齐为录入种子，再进入创建链路。
-    func prepareSeed(for result: BookSearchResult) async -> BookEditorSeed? {
-        do {
-            return try await searchRepository.prepareSeed(for: result)
-        } catch {
-            onlineErrorMessage = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+    /// 在线结果点击后根据配置决定是进入创建链路，还是直接作为远端结果回流。
+    func handleRemoteResultTap(_ result: BookSearchResult) async -> BookPickerRemoteTapOutcome? {
+        if supportsDirectRemoteSelection {
+            if isMultipleSelectionEnabled {
+                toggleRemoteSelection(for: result)
+                return nil
+            }
+
+            guard let remoteSelection = await resolveRemoteSelection(for: result) else {
+                return nil
+            }
+            return .complete(.single(.remote(remoteSelection)))
+        }
+
+        guard let seed = await prepareSeed(for: result) else {
             return nil
         }
+        return .presentEditor(seed)
+    }
+
+    /// 将远端结果补齐为录入种子，供“先创建再回填”的链路复用。
+    func prepareSeed(for result: BookSearchResult) async -> BookEditorSeed? {
+        await resolveRemoteSelection(for: result)?.seed
     }
 
     /// 手动创建成功后回填本地书；单选直接完成，多选加入已选集合。
@@ -270,16 +313,18 @@ final class BookPickerViewModel {
                 addSelectedBookIfNeeded(book)
                 return nil
             }
-            return .single(book)
+            return .single(.local(book))
         } catch {
             return nil
         }
     }
 
     /// 多选模式确认当前已选集合。
-    func confirmMultipleSelection() -> BookPickerResult? {
-        guard isMultipleSelectionEnabled, !selectedBooks.isEmpty else { return nil }
-        return .multiple(selectedBooks)
+    func confirmMultipleSelection() async -> BookPickerResult? {
+        guard isMultipleSelectionEnabled else { return nil }
+        guard selectedCount > 0 || allowsEmptyMultipleConfirmation else { return nil }
+        guard let selections = await resolveSelectionsInOrder() else { return nil }
+        return .multiple(selections)
     }
 
     /// 本地无结果时允许直接切换到在线检索，减少任务中断。
@@ -292,17 +337,87 @@ final class BookPickerViewModel {
         selectedBooks.contains(where: { $0.id == book.id })
     }
 
-    private func toggleSelection(for book: BookPickerBook) {
+    func isRemoteResultSelected(_ result: BookSearchResult) -> Bool {
+        selectedRemoteResults.contains(where: { $0.id == result.id })
+    }
+
+    private func toggleLocalSelection(for book: BookPickerBook) {
         if let index = selectedBooks.firstIndex(where: { $0.id == book.id }) {
             selectedBooks.remove(at: index)
+            selectionOrder.removeAll { $0 == .local(book.id) }
         } else {
             selectedBooks.append(book)
+            selectionOrder.append(.local(book.id))
+        }
+    }
+
+    private func toggleRemoteSelection(for result: BookSearchResult) {
+        if let index = selectedRemoteResults.firstIndex(where: { $0.id == result.id }) {
+            selectedRemoteResults.remove(at: index)
+            selectionOrder.removeAll { $0 == .remote(result.id) }
+        } else {
+            selectedRemoteResults.append(result)
+            selectionOrder.append(.remote(result.id))
         }
     }
 
     private func addSelectedBookIfNeeded(_ book: BookPickerBook) {
-        guard !selectedBooks.contains(where: { $0.id == book.id }) else { return }
+        if let index = selectedBooks.firstIndex(where: { $0.id == book.id }) {
+            selectedBooks[index] = book
+            return
+        }
         selectedBooks.append(book)
+        selectionOrder.append(.local(book.id))
+    }
+
+    /// 按用户选择顺序输出本地/在线混合集合；若任一远端结果补齐失败，则整体确认失败以避免半成品回流。
+    private func resolveSelectionsInOrder() async -> [BookPickerSelection]? {
+        let localBooksByID = Dictionary(uniqueKeysWithValues: selectedBooks.map { ($0.id, $0) })
+        let remoteResultsByID = Dictionary(uniqueKeysWithValues: selectedRemoteResults.map { ($0.id, $0) })
+        let requiresRemoteResolution = !remoteResultsByID.isEmpty
+
+        if requiresRemoteResolution {
+            isResolvingRemoteSelections = true
+        }
+        defer {
+            if requiresRemoteResolution {
+                isResolvingRemoteSelections = false
+            }
+        }
+
+        var resolvedSelections: [BookPickerSelection] = []
+        for key in selectionOrder {
+            switch key {
+            case .local(let bookID):
+                guard let book = localBooksByID[bookID] else { continue }
+                resolvedSelections.append(.local(book))
+            case .remote(let resultID):
+                guard let result = remoteResultsByID[resultID] else { continue }
+                guard let remoteSelection = await resolveRemoteSelection(for: result) else {
+                    return nil
+                }
+                resolvedSelections.append(.remote(remoteSelection))
+            }
+        }
+
+        return resolvedSelections
+    }
+
+    /// 将在线结果补齐为完整的远端选择载荷，并缓存成功结果避免重复抓取详情。
+    private func resolveRemoteSelection(for result: BookSearchResult) async -> BookPickerRemoteSelection? {
+        if let cached = resolvedRemoteSelections[result.id] {
+            return cached
+        }
+
+        do {
+            let seed = try await searchRepository.prepareSeed(for: result)
+            let remoteSelection = BookPickerRemoteSelection(result: result, seed: seed)
+            resolvedRemoteSelections[result.id] = remoteSelection
+            return remoteSelection
+        } catch {
+            onlineErrorMessage = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+            return nil
+        }
     }
 
     private static func deduplicatedBooks(_ books: [BookPickerBook]) -> [BookPickerBook] {

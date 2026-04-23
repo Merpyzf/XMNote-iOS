@@ -388,8 +388,10 @@ private extension NoteEditorView {
                         switch result {
                         case .cancelled:
                             break
-                        case .single(let book):
-                            viewModel.selectBook(book)
+                        case .single(let selection):
+                            if case .local(let book) = selection {
+                                viewModel.selectBook(book)
+                            }
                         case .multiple:
                             break
                         case .addFlowRequested:
