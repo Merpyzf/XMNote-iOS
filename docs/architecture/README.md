@@ -3,6 +3,7 @@
 - 术语表：`docs/architecture/术语对照表.md`
 - UI 核心组件白名单：`docs/architecture/UI核心组件白名单.md`
 - UI 组件文档清单：`docs/architecture/UI组件文档清单.md`
+- Git 提交风格规范：`docs/architecture/Git提交风格规范.md`
 - 颜色系统优化规范：`docs/architecture/颜色系统优化规范.md`
 - 页面状态基建与开发模式：`docs/architecture/页面状态基建与开发模式.md`
 - 加载状态反馈基建设计：`docs/architecture/加载状态反馈基建设计.md`
