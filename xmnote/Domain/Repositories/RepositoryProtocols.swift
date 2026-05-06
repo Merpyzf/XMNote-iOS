@@ -25,6 +25,10 @@ protocol BookRepositoryProtocol {
     func moveBookshelfItemsToStart(_ ids: [BookshelfItemID], in currentItems: [BookshelfOrderItem]) async throws
     /// 将非置顶选中项移动到普通区最后，置顶区保持不变。
     func moveBookshelfItemsToEnd(_ ids: [BookshelfItemID], in currentItems: [BookshelfOrderItem]) async throws
+    /// 删除默认书架顶层 Book/Group，分组删除时按传入位置安置组内书籍；真实写入需先完成 Android 对齐验证。
+    func deleteBookshelfItems(_ ids: [BookshelfItemID], groupBooksPlacement: GroupBooksPlacement) async throws
+    /// 将指定书籍移动到目标分组；真实写入需先完成 Android 对齐验证。
+    func moveBooks(_ bookIDs: [Int64], toGroup targetGroupID: Int64) async throws
     /// 持续监听指定书籍详情变化，供详情页实时更新。
     func observeBookDetail(bookId: Int64) -> AsyncThrowingStream<BookDetail?, Error>
     /// 持续监听指定书籍下的书摘列表变化。

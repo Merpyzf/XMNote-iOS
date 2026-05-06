@@ -19,7 +19,7 @@ struct BookItem: Identifiable {
 }
 
 /// 书架条目的稳定身份，区分书籍与分组，避免双表自增 ID 在 UI 与写入意图中混淆。
-enum BookshelfItemID: Hashable, Sendable {
+nonisolated enum BookshelfItemID: Hashable, Sendable {
     case book(Int64)
     case group(Int64)
 }
@@ -78,6 +78,12 @@ enum BookshelfSortMode: String, Hashable, Sendable {
     }
 }
 
+/// 删除分组时组内书籍回到默认书架的位置选择，等待删除与分组写入完成 Android 对齐后启用。
+nonisolated enum GroupBooksPlacement: String, Hashable, Codable, Sendable {
+    case start
+    case end
+}
+
 /// 书架展示配置，本轮仅保存在内存中，用于控制只读 UI 密度与辅助信息。
 struct BookshelfDisplaySetting: Hashable, Sendable {
     static let defaultValue = BookshelfDisplaySetting()
@@ -89,7 +95,7 @@ struct BookshelfDisplaySetting: Hashable, Sendable {
 }
 
 /// 书架排序写入项，携带 Book/Group 稳定身份与当前置顶状态，供移动操作保持 Android 置顶边界。
-struct BookshelfOrderItem: Hashable, Sendable {
+nonisolated struct BookshelfOrderItem: Hashable, Sendable {
     let id: BookshelfItemID
     let isPinned: Bool
 }
@@ -157,12 +163,53 @@ struct BookshelfBookPayload: Hashable, Sendable {
     }
 }
 
+/// 书架聚合列表中的只读书籍行，作为导航路由载荷避免二级页直接访问数据库。
+nonisolated struct BookshelfBookListItem: Identifiable, Hashable, Codable, Sendable {
+    let id: Int64
+    let title: String
+    let author: String
+    let cover: String
+    let noteCount: Int
+
+    /// 从书架书籍载荷裁剪出列表页需要的稳定展示字段。
+    nonisolated init(payload: BookshelfBookPayload) {
+        self.id = payload.id
+        self.title = payload.name
+        self.author = payload.author
+        self.cover = payload.cover
+        self.noteCount = payload.noteCount
+    }
+
+    /// 构建组内书籍等轻量来源的只读列表行。
+    nonisolated init(
+        id: Int64,
+        title: String,
+        author: String,
+        cover: String,
+        noteCount: Int
+    ) {
+        self.id = id
+        self.title = title
+        self.author = author
+        self.cover = cover
+        self.noteCount = noteCount
+    }
+}
+
+/// 书架二级只读列表路由载荷，承载分组、标签、来源、评分、作者等聚合入口。
+nonisolated struct BookshelfBookListRoute: Hashable, Codable, Sendable {
+    let title: String
+    let subtitle: String
+    let books: [BookshelfBookListItem]
+}
+
 /// 书架中的分组展示载荷，保留组名、数量和代表封面。
-struct BookshelfGroupPayload: Hashable, Sendable {
+nonisolated struct BookshelfGroupPayload: Hashable, Sendable {
     let id: Int64
     let name: String
     let bookCount: Int
     let representativeCovers: [String]
+    let books: [BookshelfBookListItem]
 }
 
 /// 书架分区，承载状态、评分等“标题 + 代表书籍条”的只读布局。
@@ -178,12 +225,13 @@ struct BookshelfSection: Identifiable, Hashable, Sendable {
 }
 
 /// 书架聚合卡，承载标签、来源、作者等“标题 + 数量 + 封面拼贴”的只读布局。
-struct BookshelfAggregateGroup: Identifiable, Hashable, Sendable {
+nonisolated struct BookshelfAggregateGroup: Identifiable, Hashable, Sendable {
     let id: String
     let title: String
     let subtitle: String
     let count: Int
     let representativeCovers: [String]
+    let books: [BookshelfBookListItem]
 }
 
 /// 作者字母分区，承载右侧索引和两列作者聚合卡。

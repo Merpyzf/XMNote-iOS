@@ -97,7 +97,8 @@ private struct BookshelfGroupCoverSlot: Identifiable {
         id: 1,
         name: "计算机",
         bookCount: 25,
-        representativeCovers: ["", "", "", ""]
+        representativeCovers: ["", "", "", ""],
+        books: []
     ))
     .frame(width: 110)
     .padding(Spacing.screenEdge)

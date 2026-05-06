@@ -83,6 +83,19 @@ struct BookRepository: BookRepositoryProtocol {
         try await updateBookshelfOrder(orderedItems)
     }
 
+    /// 删除书架条目属于高风险级联写入，等待 Android DAO 矩阵核对完成后再开放真实落库。
+    func deleteBookshelfItems(
+        _ ids: [BookshelfItemID],
+        groupBooksPlacement: GroupBooksPlacement
+    ) async throws {
+        throw BookshelfManagementWriteUnavailableError(action: "删除书籍或分组")
+    }
+
+    /// 移入分组涉及 group_book 事务与时间戳语义，等待 Android 对齐验证完成后再开放真实落库。
+    func moveBooks(_ bookIDs: [Int64], toGroup targetGroupID: Int64) async throws {
+        throw BookshelfManagementWriteUnavailableError(action: "移入分组")
+    }
+
     /// 为书籍详情页提供单书订阅流，用于展示基础信息、阅读状态和笔记统计。
     func observeBookDetail(bookId: Int64) -> AsyncThrowingStream<BookDetail?, Error> {
         ObservationStream.make(in: databaseManager.database.dbPool) { db in
@@ -122,6 +135,7 @@ nonisolated private struct BookshelfGroupBookPreview {
     let name: String
     let author: String
     let cover: String
+    let noteCount: Int
     let pinned: Bool
     let pinOrder: Int64
     let sortOrder: Int64
@@ -153,7 +167,8 @@ nonisolated private struct BookshelfGroupBuilder {
             id: id,
             name: name,
             bookCount: visibleBooks.count,
-            representativeCovers: visibleBooks.prefix(6).map(\.cover)
+            representativeCovers: visibleBooks.prefix(6).map(\.cover),
+            books: visibleBooks.map { $0.listItem }
         )
         return BookshelfItem(
             id: .group(id),
@@ -178,6 +193,26 @@ nonisolated private struct BookshelfGroupBuilder {
             return lhs.id < rhs.id
         }
         return pinnedBooks + notPinnedBooks
+    }
+}
+
+private extension BookshelfGroupBookPreview {
+    nonisolated var listItem: BookshelfBookListItem {
+        BookshelfBookListItem(
+            id: id,
+            title: name,
+            author: author,
+            cover: cover,
+            noteCount: noteCount
+        )
+    }
+}
+
+private struct BookshelfManagementWriteUnavailableError: LocalizedError {
+    let action: String
+
+    var errorDescription: String? {
+        "\(action)需先完成 Android 数据语义核对后再开放"
     }
 }
 
@@ -525,6 +560,12 @@ private extension BookRepository {
                    b.name AS book_name,
                    b.author AS book_author,
                    b.cover AS book_cover,
+                   (
+                       SELECT COUNT(n.id)
+                       FROM note n
+                       WHERE n.book_id = b.id
+                         AND n.is_deleted = 0
+                   ) AS note_count,
                    b.book_order AS book_order,
                    b.pinned AS book_pinned,
                    b.pin_order AS book_pin_order
@@ -559,6 +600,7 @@ private extension BookRepository {
                     name: row["book_name"] ?? "",
                     author: row["book_author"] ?? "",
                     cover: row["book_cover"] ?? "",
+                    noteCount: row["note_count"] ?? 0,
                     pinned: (row["book_pinned"] as Int64? ?? 0) != 0,
                     pinOrder: row["book_pin_order"] ?? 0,
                     sortOrder: row["book_order"] ?? 0
@@ -847,7 +889,8 @@ private extension BookRepository {
             title: title,
             subtitle: "\(sortedRows.count)本",
             count: sortedRows.count,
-            representativeCovers: sortedRows.prefix(6).map(\.payload.cover)
+            representativeCovers: sortedRows.prefix(6).map(\.payload.cover),
+            books: sortedRows.map { BookshelfBookListItem(payload: $0.payload) }
         )
     }
 

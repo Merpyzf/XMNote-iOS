@@ -340,6 +340,47 @@ private final class BookPickerTestBookRepository: BookRepositoryProtocol {
         }
     }
 
+    func observeBookshelf(
+        setting: BookshelfDisplaySetting,
+        searchKeyword: String?
+    ) -> AsyncThrowingStream<[BookshelfItem], Error> {
+        AsyncThrowingStream { continuation in
+            continuation.finish()
+        }
+    }
+
+    func observeBookshelfSnapshot(
+        setting: BookshelfDisplaySetting,
+        searchKeyword: String?
+    ) -> AsyncThrowingStream<BookshelfSnapshot, Error> {
+        AsyncThrowingStream { continuation in
+            continuation.finish()
+        }
+    }
+
+    func updateBookshelfOrder(_ orderedItems: [BookshelfOrderItem]) async throws {}
+
+    func pinBookshelfItems(_ ids: [BookshelfItemID]) async throws {}
+
+    func unpinBookshelfItem(_ id: BookshelfItemID) async throws {}
+
+    func moveBookshelfItemsToStart(
+        _ ids: [BookshelfItemID],
+        in currentItems: [BookshelfOrderItem]
+    ) async throws {}
+
+    func moveBookshelfItemsToEnd(
+        _ ids: [BookshelfItemID],
+        in currentItems: [BookshelfOrderItem]
+    ) async throws {}
+
+    func deleteBookshelfItems(
+        _ ids: [BookshelfItemID],
+        groupBooksPlacement: GroupBooksPlacement
+    ) async throws {}
+
+    func moveBooks(_ bookIDs: [Int64], toGroup targetGroupID: Int64) async throws {}
+
     func observeBookDetail(bookId: Int64) -> AsyncThrowingStream<BookDetail?, Error> {
         AsyncThrowingStream { continuation in
             continuation.finish()

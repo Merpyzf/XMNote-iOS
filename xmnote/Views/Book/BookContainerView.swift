@@ -6,8 +6,8 @@
 //
 
 /**
- * [INPUT]: 依赖 RepositoryContainer 注入仓储，依赖 BookViewModel 驱动状态
- * [OUTPUT]: 对外提供 BookContainerView 与 BookSubTab 枚举
+ * [INPUT]: 依赖 RepositoryContainer 注入仓储，依赖 BookViewModel 驱动书架状态与编辑入口
+ * [OUTPUT]: 对外提供 BookContainerView 与 BookSubTab 枚举，承载书架顶部搜索、显示设置、选择与新增入口
  * [POS]: Book 模块容器壳层，承载书籍/书单二级切换
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -40,16 +40,19 @@ struct BookContainerView: View {
     let onAddBook: () -> Void
     let onAddNote: () -> Void
     let onOpenDebugCenter: (() -> Void)?
+    let onOpenBookRoute: (BookRoute) -> Void
 
     /// 注入新增书籍回调，连接书籍页与外层操作入口。
     init(
         onAddBook: @escaping () -> Void = {},
         onAddNote: @escaping () -> Void = {},
-        onOpenDebugCenter: (() -> Void)? = nil
+        onOpenDebugCenter: (() -> Void)? = nil,
+        onOpenBookRoute: @escaping (BookRoute) -> Void = { _ in }
     ) {
         self.onAddBook = onAddBook
         self.onAddNote = onAddNote
         self.onOpenDebugCenter = onOpenDebugCenter
+        self.onOpenBookRoute = onOpenBookRoute
     }
 
     var body: some View {
@@ -60,7 +63,8 @@ struct BookContainerView: View {
                     selectedSubTab: $selectedSubTab,
                     onAddBook: onAddBook,
                     onAddNote: onAddNote,
-                    onOpenDebugCenter: onOpenDebugCenter
+                    onOpenDebugCenter: onOpenDebugCenter,
+                    onOpenBookRoute: onOpenBookRoute
                 )
             } else {
                 Color.clear
@@ -92,6 +96,7 @@ private struct BookContentView: View {
     let onAddBook: () -> Void
     let onAddNote: () -> Void
     let onOpenDebugCenter: (() -> Void)?
+    let onOpenBookRoute: (BookRoute) -> Void
 
     var body: some View {
         ZStack(alignment: .top) {
@@ -140,6 +145,17 @@ private struct BookContentView: View {
                 }
                 .topBarGlassButtonStyle(true)
                 .accessibilityLabel("显示设置")
+
+                if !viewModel.isEditing {
+                    Button {
+                        viewModel.enterEditing()
+                    } label: {
+                        TopBarActionIcon(systemName: "checkmark.circle")
+                    }
+                    .topBarGlassButtonStyle(true)
+                    .disabled(!viewModel.canEditCurrentDimension)
+                    .accessibilityLabel("选择书架项")
+                }
             }
 
             AddMenuCircleButton(
@@ -166,7 +182,11 @@ private struct BookContentView: View {
     private func segmentedPage(for tab: BookSubTab) -> some View {
         switch tab {
         case .books:
-            BookGridView(viewModel: viewModel)
+            BookGridView(
+                viewModel: viewModel,
+                isPageActive: selectedSubTab == .books,
+                onOpenRoute: onOpenBookRoute
+            )
         case .collections:
             CollectionListPlaceholderView()
                 .frame(maxWidth: .infinity, maxHeight: .infinity)

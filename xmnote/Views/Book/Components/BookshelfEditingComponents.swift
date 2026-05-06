@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 BookshelfPendingAction 与 SwiftUI 按钮、菜单、图标、表层渲染能力
- * [OUTPUT]: 对外提供书架编辑态顶部栏、选择标识与底部操作栏
+ * [OUTPUT]: 对外提供书架编辑态顶部栏、选择标识与底部操作栏，并展示移动 Sheet 入口与迁移状态反馈
  * [POS]: Book 模块页面私有编辑态组件集合，服务默认书架选择、置顶和移动入口
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -70,10 +70,10 @@ struct BookshelfEditBottomBar: View {
     let selectedCount: Int
     let canPin: Bool
     let canMove: Bool
+    let moveDisabledReason: String?
     let activeAction: BookshelfPendingAction?
     let onPin: () -> Void
-    let onMoveToStart: () -> Void
-    let onMoveToEnd: () -> Void
+    let onMove: () -> Void
 
     var body: some View {
         VStack(spacing: Spacing.cozy) {
@@ -85,7 +85,7 @@ struct BookshelfEditBottomBar: View {
                     onTap: onPin
                 )
 
-                moveMenu
+                moveActionButton
 
                 editActionButton(
                     action: .more,
@@ -117,27 +117,13 @@ struct BookshelfEditBottomBar: View {
         }
     }
 
-    private var moveMenu: some View {
-        Menu {
-            Button {
-                onMoveToStart()
-            } label: {
-                Label("移到最前", systemImage: "arrow.up.to.line")
-            }
-            .disabled(!canMove)
-
-            Button {
-                onMoveToEnd()
-            } label: {
-                Label("移到最后", systemImage: "arrow.down.to.line")
-            }
-            .disabled(!canMove)
-        } label: {
+    private var moveActionButton: some View {
+        Button(action: onMove) {
             editActionLabel(action: .move, icon: "folder", isEnabled: canMove)
         }
         .buttonStyle(.plain)
         .disabled(!canMove)
-        .accessibilityLabel(canMove ? "移动选中项" : "移动，需至少选中一个普通项")
+        .accessibilityLabel(canMove ? "移动选中项" : "移动，\(moveDisabledReason ?? "需至少选中一个普通项")")
     }
 
     private var statusText: String {
@@ -147,7 +133,10 @@ struct BookshelfEditBottomBar: View {
         if selectedCount == 0 {
             return "选择书籍或分组后可执行置顶与移动"
         }
-        return "排序、置顶与移动会按 Android 数据规则写入"
+        if let moveDisabledReason {
+            return moveDisabledReason
+        }
+        return "更多与删除将在完成 Android 写入核对后开放"
     }
 
     private func editActionButton(

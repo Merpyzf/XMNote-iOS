@@ -6,8 +6,8 @@
 //
 
 /**
- * [INPUT]: 依赖 BookViewModel 提供书架快照、维度状态、搜索态、显示设置、编辑态与拖拽排序状态
- * [OUTPUT]: 对外提供 BookGridView，展示默认书架、多维度只读聚合骨架、默认书架编辑态与排序置顶入口
+ * [INPUT]: 依赖 BookViewModel 提供书架快照、维度状态、搜索态、显示设置、编辑态与拖拽排序状态，依赖页面可见态驱动 UIKit 滚动观察，依赖 LoadingGate 约束读取加载反馈
+ * [OUTPUT]: 对外提供 BookGridView，展示默认书架、多维度只读聚合入口、默认书架编辑态、排序置顶入口与拖拽排序交互
  * [POS]: Book 模块网格展示层，被 BookContainerView 嵌入
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -16,18 +16,11 @@ import SwiftUI
 
 /// 书籍页内容视图，负责维度 rail、搜索态提示与书架多维度只读渲染。
 struct BookGridView: View {
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Bindable var viewModel: BookViewModel
-    @State private var itemFrames: [BookshelfItemID: CGRect] = [:]
-
-    private static let gridCoordinateSpace = "book-grid-reorder-space"
-
-    private var columns: [GridItem] {
-        Array(
-            repeating: GridItem(.flexible(), spacing: Spacing.screenEdge),
-            count: max(2, min(viewModel.displaySetting.columnCount, 4))
-        )
-    }
+    var isPageActive = true
+    var onOpenRoute: (BookRoute) -> Void = { _ in }
+    @State private var readLoadingGate = LoadingGate()
+    @State private var showsMoveSheet = false
 
     private let aggregateColumns = Array(
         repeating: GridItem(.flexible(), spacing: Spacing.base),
@@ -81,25 +74,60 @@ struct BookGridView: View {
                     selectedCount: viewModel.selectedCount,
                     canPin: viewModel.canSubmitSelectedPin,
                     canMove: viewModel.canMoveSelectedItems,
+                    moveDisabledReason: viewModel.moveDisabledReason,
                     activeAction: viewModel.activeWriteAction,
                     onPin: viewModel.pinSelectedItems,
-                    onMoveToStart: viewModel.moveSelectedItemsToStart,
-                    onMoveToEnd: viewModel.moveSelectedItemsToEnd
+                    onMove: { showsMoveSheet = true }
                 )
                     .transition(.move(edge: .bottom).combined(with: .opacity))
             }
+        }
+        .sheet(isPresented: $showsMoveSheet) {
+            BookshelfMoveSheet(
+                selectedCount: viewModel.selectedCount,
+                canSubmit: viewModel.canMoveSelectedItems,
+                disabledReason: viewModel.moveDisabledReason,
+                activeAction: viewModel.activeWriteAction,
+                onMoveToStart: {
+                    showsMoveSheet = false
+                    viewModel.moveSelectedItemsToStart()
+                },
+                onMoveToEnd: {
+                    showsMoveSheet = false
+                    viewModel.moveSelectedItemsToEnd()
+                }
+            )
+        }
+        .onAppear {
+            syncReadLoadingGate()
+        }
+        .onChange(of: viewModel.contentState) { _, _ in
+            syncReadLoadingGate()
+        }
+        .onDisappear {
+            viewModel.cancelReorderSession()
+            readLoadingGate.hideImmediately()
         }
         .frame(maxHeight: .infinity, alignment: .top)
     }
 
     // MARK: - Grid Content
 
+    private func syncReadLoadingGate() {
+        readLoadingGate.update(intent: viewModel.contentState == .loading ? .read : .none)
+    }
+
     @ViewBuilder
     private var gridContent: some View {
         switch viewModel.contentState {
         case .loading:
-            LoadingStateView("正在整理书架", style: .inline)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            if readLoadingGate.isVisible {
+                LoadingStateView("正在整理书架", style: .inline)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                Color.clear
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
         case .empty:
             EmptyStateView(icon: "book", message: "暂无书籍")
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -159,57 +187,46 @@ struct BookGridView: View {
 
     @ViewBuilder
     private func defaultContent(_ items: [BookshelfItem]) -> some View {
-        switch viewModel.displaySetting.layoutMode {
-        case .grid:
-            bookshelfGrid(items)
-        case .list:
-            bookshelfList(items)
-        }
+        BookshelfDefaultCollectionView(
+            items: items,
+            layoutMode: viewModel.displaySetting.layoutMode,
+            columnCount: viewModel.displaySetting.columnCount,
+            showsNoteCount: viewModel.displaySetting.showsNoteCount,
+            isEditing: viewModel.isEditing,
+            selectedIDs: viewModel.selectedIDSet,
+            canReorder: viewModel.canReorderDefaultItems,
+            isScrollObservationEnabled: isDefaultScrollObservationEnabled,
+            activeWriteAction: viewModel.activeWriteAction,
+            movableIDs: movableIDs(in: items),
+            onOpenRoute: onOpenRoute,
+            onToggleSelection: viewModel.toggleSelection,
+            onEnterEditing: { viewModel.enterEditing(initialSelection: $0) },
+            onPin: viewModel.pinItem,
+            onUnpin: viewModel.unpinItem,
+            onMoveToStart: viewModel.moveItemToStart,
+            onMoveToEnd: viewModel.moveItemToEnd,
+            onCommitOrder: viewModel.commitDefaultItemsOrder
+        )
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .ignoresSafeArea(.container, edges: .bottom)
     }
 
-    private func bookshelfGrid(_ items: [BookshelfItem]) -> some View {
-        ScrollView {
-            LazyVGrid(columns: columns, spacing: Spacing.section) {
-                ForEach(items) { item in
-                    gridItem(item)
-                        .background {
-                            GeometryReader { proxy in
-                                Color.clear.preference(
-                                    key: BookshelfItemFramePreferenceKey.self,
-                                    value: [item.id: proxy.frame(in: .named(Self.gridCoordinateSpace))]
-                                )
-                            }
-                        }
-                }
-            }
-            .coordinateSpace(name: Self.gridCoordinateSpace)
-            .onPreferenceChange(BookshelfItemFramePreferenceKey.self) { frames in
-                itemFrames = frames
-            }
-            .padding(.horizontal, Spacing.screenEdge)
-            .padding(.vertical, Spacing.base)
-            .padding(.bottom, viewModel.isEditing ? 84 : 0)
-        }
-    }
-
-    private func bookshelfList(_ items: [BookshelfItem]) -> some View {
-        ScrollView {
-            LazyVStack(spacing: Spacing.base) {
-                ForEach(items) { item in
-                    defaultListItem(item)
-                }
-            }
-            .padding(.horizontal, Spacing.screenEdge)
-            .padding(.vertical, Spacing.base)
-            .padding(.bottom, viewModel.isEditing ? 84 : 0)
-        }
+    private var isDefaultScrollObservationEnabled: Bool {
+        isPageActive
+            && viewModel.selectedDimension == .default
+            && viewModel.contentState == .content
+            && !viewModel.isSearchActive
+            && !viewModel.hasSearchKeyword
     }
 
     private func aggregateContent(_ groups: [BookshelfAggregateGroup]) -> some View {
         ScrollView {
             LazyVGrid(columns: aggregateColumns, spacing: Spacing.base) {
                 ForEach(groups) { group in
-                    BookshelfAggregateCardView(group: group)
+                    NavigationLink(value: BookRoute.bookshelfList(route(for: group))) {
+                        BookshelfAggregateCardView(group: group)
+                    }
+                    .buttonStyle(.plain)
                 }
             }
             .padding(.horizontal, Spacing.screenEdge)
@@ -221,7 +238,10 @@ struct BookGridView: View {
         ScrollView {
             LazyVStack(spacing: Spacing.base) {
                 ForEach(sections) { section in
-                    BookshelfSectionCardView(section: section)
+                    NavigationLink(value: BookRoute.bookshelfList(route(for: section))) {
+                        BookshelfSectionCardView(section: section)
+                    }
+                    .buttonStyle(.plain)
                 }
             }
             .padding(.horizontal, Spacing.screenEdge)
@@ -275,216 +295,35 @@ struct BookGridView: View {
 
             LazyVGrid(columns: aggregateColumns, spacing: Spacing.base) {
                 ForEach(section.authors) { author in
-                    BookshelfAggregateCardView(group: author)
-                }
-            }
-        }
-    }
-
-    @ViewBuilder
-    private func gridItem(_ item: BookshelfItem) -> some View {
-        if viewModel.isEditing {
-            Button {
-                viewModel.toggleSelection(item.id)
-            } label: {
-                editableGridItemLabel(item)
-            }
-            .buttonStyle(.plain)
-            .simultaneousGesture(reorderGesture(for: item))
-            .accessibilityLabel("\(item.title)，\(viewModel.selectedIDSet.contains(item.id) ? "已选中" : "未选中")")
-        } else {
-            switch item.content {
-            case .book(let book):
-                NavigationLink(value: BookRoute.detail(bookId: book.id)) {
-                    BookGridItemView(book: book, showsNoteCount: viewModel.displaySetting.showsNoteCount)
-                }
-                .buttonStyle(.plain)
-                .contextMenu {
-                    itemContextMenu(for: item)
-                }
-            case .group(let group):
-                BookshelfGroupGridItemView(group: group)
-                    .contextMenu {
-                        itemContextMenu(for: item)
+                    NavigationLink(value: BookRoute.bookshelfList(route(for: author))) {
+                        BookshelfAggregateCardView(group: author)
                     }
-            }
-        }
-    }
-
-    @ViewBuilder
-    private func defaultListItem(_ item: BookshelfItem) -> some View {
-        if viewModel.isEditing {
-            Button {
-                viewModel.toggleSelection(item.id)
-            } label: {
-                editableListItemLabel(item)
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel("\(item.title)，\(viewModel.selectedIDSet.contains(item.id) ? "已选中" : "未选中")")
-        } else {
-            switch item.content {
-            case .book(let book):
-                NavigationLink(value: BookRoute.detail(bookId: book.id)) {
-                    BookshelfDefaultListRow(
-                        item: item,
-                        showsNoteCount: viewModel.displaySetting.showsNoteCount
-                    )
-                }
-                .buttonStyle(.plain)
-                .contextMenu {
-                    itemContextMenu(for: item)
-                }
-            case .group:
-                BookshelfDefaultListRow(
-                    item: item,
-                    showsNoteCount: viewModel.displaySetting.showsNoteCount
-                )
-                .contextMenu {
-                    itemContextMenu(for: item)
+                    .buttonStyle(.plain)
                 }
             }
         }
     }
 
-    @ViewBuilder
-    private func editableGridItemLabel(_ item: BookshelfItem) -> some View {
-        switch item.content {
-        case .book(let book):
-            selectableItemShell(item) {
-                BookGridItemView(book: book, showsNoteCount: viewModel.displaySetting.showsNoteCount)
-            }
-        case .group(let group):
-            selectableItemShell(item) {
-                BookshelfGroupGridItemView(group: group)
-            }
-        }
+    private func route(for group: BookshelfAggregateGroup) -> BookshelfBookListRoute {
+        BookshelfBookListRoute(
+            title: group.title,
+            subtitle: group.subtitle,
+            books: group.books
+        )
     }
 
-    private func editableListItemLabel(_ item: BookshelfItem) -> some View {
-        selectableItemShell(item) {
-            BookshelfDefaultListRow(
-                item: item,
-                showsNoteCount: viewModel.displaySetting.showsNoteCount
-            )
-        }
+    private func route(for section: BookshelfSection) -> BookshelfBookListRoute {
+        BookshelfBookListRoute(
+            title: section.title,
+            subtitle: section.subtitle,
+            books: section.books.map { BookshelfBookListItem(payload: $0) }
+        )
     }
 
-    private func selectableItemShell<Content: View>(
-        _ item: BookshelfItem,
-        @ViewBuilder content: () -> Content
-    ) -> some View {
-        let isSelected = viewModel.selectedIDSet.contains(item.id)
-        let isDragged = viewModel.draggedItemID == item.id
-        let isTargeted = viewModel.dragTargetItemID == item.id && viewModel.draggedItemID != item.id
-        return content()
-            .opacity(isDragged ? 0.58 : (isSelected ? 1 : 0.78))
-            .scaleEffect(isDragged ? 1.035 : 1)
-            .shadow(color: Color.black.opacity(isDragged ? 0.14 : 0), radius: isDragged ? 14 : 0, y: isDragged ? 7 : 0)
-            .zIndex(isDragged ? 2 : 0)
-            .overlay(alignment: .topTrailing) {
-                BookshelfSelectionOverlay(isSelected: isSelected)
-            }
-            .overlay {
-                RoundedRectangle(cornerRadius: CornerRadius.blockLarge, style: .continuous)
-                    .stroke(
-                        isTargeted ? Color.brand : (isSelected ? Color.brand.opacity(0.72) : Color.clear),
-                        style: StrokeStyle(lineWidth: (isTargeted || isSelected) ? 1.5 : 0, dash: isTargeted ? [5, 4] : [])
-                    )
-            }
-            .contentShape(RoundedRectangle(cornerRadius: CornerRadius.blockLarge, style: .continuous))
-    }
-
-    @ViewBuilder
-    private func itemContextMenu(for item: BookshelfItem) -> some View {
-        Button {
-            viewModel.enterEditing(initialSelection: item.id)
-        } label: {
-            Label("选择", systemImage: "checkmark.circle")
-        }
-
-        Divider()
-
-        if item.pinned {
-            Button {
-                viewModel.unpinItem(item.id)
-            } label: {
-                Label("取消置顶", systemImage: "pin.slash")
-            }
-            .disabled(viewModel.activeWriteAction != nil)
-        } else {
-            Button {
-                viewModel.pinItem(item.id)
-            } label: {
-                Label("置顶", systemImage: "pin")
-            }
-            .disabled(viewModel.activeWriteAction != nil)
-
-            Button {
-                viewModel.moveItemToStart(item.id)
-            } label: {
-                Label("移到最前", systemImage: "arrow.up.to.line")
-            }
-            .disabled(viewModel.activeWriteAction != nil)
-
-            Button {
-                viewModel.moveItemToEnd(item.id)
-            } label: {
-                Label("移到最后", systemImage: "arrow.down.to.line")
-            }
-            .disabled(viewModel.activeWriteAction != nil)
-        }
-
-        Button { } label: {
-            Label("更多", systemImage: "ellipsis.circle")
-        }
-        .disabled(true)
-
-        Button(role: .destructive) { } label: {
-            Label("删除", systemImage: "trash")
-        }
-        .disabled(true)
-    }
-
-    private var reorderAnimation: Animation {
-        reduceMotion ? .linear(duration: 0.01) : .snappy(duration: 0.22, extraBounce: 0.04)
-    }
-
-    private func reorderGesture(for item: BookshelfItem) -> some Gesture {
-        LongPressGesture(minimumDuration: 0.22)
-            .sequenced(before: DragGesture(minimumDistance: 0, coordinateSpace: .named(Self.gridCoordinateSpace)))
-            .onChanged { value in
-                switch value {
-                case .first(true):
-                    viewModel.beginReorder(itemID: item.id)
-                case .second(true, let drag):
-                    guard let drag else { return }
-                    withAnimation(reorderAnimation) {
-                        viewModel.updateReorder(
-                            itemID: item.id,
-                            location: drag.location,
-                            itemFrames: itemFrames
-                        )
-                    }
-                default:
-                    break
-                }
-            }
-            .onEnded { _ in
-                withAnimation(reorderAnimation) {
-                    viewModel.endReorder(itemID: item.id)
-                }
-            }
-    }
-}
-
-private struct BookshelfItemFramePreferenceKey: PreferenceKey {
-    static var defaultValue: [BookshelfItemID: CGRect] = [:]
-
-    static func reduce(
-        value: inout [BookshelfItemID: CGRect],
-        nextValue: () -> [BookshelfItemID: CGRect]
-    ) {
-        value.merge(nextValue(), uniquingKeysWith: { _, next in next })
+    private func movableIDs(in items: [BookshelfItem]) -> Set<BookshelfItemID> {
+        Set(items.compactMap { item in
+            viewModel.canMoveItem(item.id) ? item.id : nil
+        })
     }
 }
 

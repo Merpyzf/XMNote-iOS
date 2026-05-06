@@ -10,7 +10,7 @@ import SwiftUI
 /**
  * [INPUT]: 依赖 Reading/Book/Note/Content/Personal 各模块容器视图与对应路由枚举，依赖 DebugRoute 提供调试页面跳转
  * [OUTPUT]: 对外提供 MainTabView（四大主 Tab 的 NavigationStack 组织与目的地分发）
- * [POS]: 应用根导航入口，负责跨模块路由承接（含在读页热力图点击进入阅读日历、内容查看与内容编辑）
+ * [POS]: 应用根导航入口，负责跨模块路由承接（含书架聚合列表、在读页热力图点击进入阅读日历、内容查看与内容编辑）
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
@@ -78,7 +78,8 @@ struct MainTabView: View {
                     BookContainerView(
                         onAddBook: { append(BookRoute.add, to: .books) },
                         onAddNote: { append(NoteRoute.create(seed: .empty), to: .books) },
-                        onOpenDebugCenter: { append(DebugRoute.debugCenter, to: .books) }
+                        onOpenDebugCenter: { append(DebugRoute.debugCenter, to: .books) },
+                        onOpenBookRoute: { append($0, to: .books) }
                     )
                         .navigationDestination(for: DebugRoute.self) { route in
                             debugDestination(for: route)
@@ -240,6 +241,8 @@ struct MainTabView: View {
             BookSearchView()
         case .create(let seed):
             BookEditorView(seed: seed)
+        case .bookshelfList(let route):
+            BookshelfBookListView(route: route)
         }
     }
 
