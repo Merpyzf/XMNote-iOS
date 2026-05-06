@@ -87,6 +87,7 @@ struct BookContainerView: View {
 private struct BookContentView: View {
     @Bindable var viewModel: BookViewModel
     @Binding var selectedSubTab: BookSubTab
+    @State private var showsDisplaySettingSheet = false
     private let topBarHeight: CGFloat = 56
     let onAddBook: () -> Void
     let onAddNote: () -> Void
@@ -108,16 +109,46 @@ private struct BookContentView: View {
                 tabs: BookSubTab.allCases,
                 titleProvider: \.title
             ) {
-                AddMenuCircleButton(
-                    onAddBook: onAddBook,
-                    onAddNote: onAddNote,
-                    onOpenDebugCenter: onOpenDebugCenter,
-                    usesGlassStyle: true
-                )
+                topBarActions
             }
             .zIndex(1)
         }
         .toolbar(.hidden, for: .navigationBar)
+        .sheet(isPresented: $showsDisplaySettingSheet) {
+            BookshelfDisplaySettingSheet(setting: $viewModel.displaySetting)
+        }
+    }
+
+    private var topBarActions: some View {
+        HStack(spacing: Spacing.cozy) {
+            if selectedSubTab == .books {
+                Button {
+                    viewModel.activateSearch()
+                } label: {
+                    TopBarActionIcon(
+                        systemName: "magnifyingglass",
+                        foregroundColor: viewModel.isSearchActive ? Color.brand : .secondary
+                    )
+                }
+                .topBarGlassButtonStyle(true)
+                .accessibilityLabel("搜索书架")
+
+                Button {
+                    showsDisplaySettingSheet = true
+                } label: {
+                    TopBarActionIcon(systemName: "slider.horizontal.3")
+                }
+                .topBarGlassButtonStyle(true)
+                .accessibilityLabel("显示设置")
+            }
+
+            AddMenuCircleButton(
+                onAddBook: onAddBook,
+                onAddNote: onAddNote,
+                onOpenDebugCenter: onOpenDebugCenter,
+                usesGlassStyle: true
+            )
+        }
     }
 
     // MARK: - Segmented Content

@@ -7,10 +7,24 @@ import Foundation
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
-/// 书籍模块数据访问契约，定义书架、书籍详情与书摘的统一读取入口。
+/// 书籍模块数据访问契约，定义书架管理、书籍详情与书摘的统一读取入口。
 protocol BookRepositoryProtocol {
     /// 持续监听书架列表变化，供书籍首页实时刷新。
     func observeBooks() -> AsyncThrowingStream<[BookItem], Error>
+    /// 持续监听默认书架混排列表，供首页展示书籍与分组。
+    func observeBookshelf(setting: BookshelfDisplaySetting, searchKeyword: String?) -> AsyncThrowingStream<[BookshelfItem], Error>
+    /// 持续监听首页书架只读快照，供不同浏览维度共享同一数据来源。
+    func observeBookshelfSnapshot(setting: BookshelfDisplaySetting, searchKeyword: String?) -> AsyncThrowingStream<BookshelfSnapshot, Error>
+    /// 按最终书架顺序写入 Book/Group 的 order 字段，严格复刻 Android 手动排序落库语义。
+    func updateBookshelfOrder(_ orderedItems: [BookshelfOrderItem]) async throws
+    /// 批量置顶默认书架顶层 Book/Group，按传入选择顺序追加 pin_order。
+    func pinBookshelfItems(_ ids: [BookshelfItemID]) async throws
+    /// 取消单个默认书架顶层 Book/Group 的置顶状态。
+    func unpinBookshelfItem(_ id: BookshelfItemID) async throws
+    /// 将非置顶选中项移动到普通区最前，置顶区保持不变。
+    func moveBookshelfItemsToStart(_ ids: [BookshelfItemID], in currentItems: [BookshelfOrderItem]) async throws
+    /// 将非置顶选中项移动到普通区最后，置顶区保持不变。
+    func moveBookshelfItemsToEnd(_ ids: [BookshelfItemID], in currentItems: [BookshelfOrderItem]) async throws
     /// 持续监听指定书籍详情变化，供详情页实时更新。
     func observeBookDetail(bookId: Int64) -> AsyncThrowingStream<BookDetail?, Error>
     /// 持续监听指定书籍下的书摘列表变化。

@@ -2,7 +2,7 @@
 import SwiftUI
 
 /**
- * [INPUT]: 依赖 RichTextTestView、HeatmapTestView、SystemAlertTestView、BookSelectionTestView、ImageLoadingTestView、WebHTMLFetchTestView、CameraTextCaptureTestView、BaiduOCRTestView、JXPhotoBrowserTestView、ReadCalendarCoverStackTestView、BookCoverStyleTestView、BookCoverProgressBarTestView、SystemColorsTestView、TimelineCardsTestView、TimelineCalendarHorizonTestView 作为导航目的地
+ * [INPUT]: 依赖 RichTextTestView、HeatmapTestView、SystemAlertTestView、BookSelectionTestView、BookReorderSandboxTestView、ImageLoadingTestView、WebHTMLFetchTestView、CameraTextCaptureTestView、BaiduOCRTestView、JXPhotoBrowserTestView、ReadCalendarCoverStackTestView、BookCoverStyleTestView、BookCoverProgressBarTestView、SystemColorsTestView、TimelineCardsTestView、TimelineCalendarHorizonTestView 作为导航目的地
  * [OUTPUT]: 对外提供 DebugCenterView（测试中心列表页）
  * [POS]: Debug 测试入口页，集中展示所有控件测试项，由 PersonalView 跳转进入
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -44,6 +44,12 @@ struct DebugCenterView: View {
             title: "书籍选择",
             subtitle: "Android 20 个选书场景在 iOS 统一 BookPicker 中的覆盖与消费验证",
             destination: AnyView(BookSelectionTestView())
+        ),
+        DebugItem(
+            icon: "square.grid.3x3",
+            title: "书架手动排序",
+            subtitle: "LazyVGrid 拖拽、置顶边界、搜索禁用与模拟写入验证",
+            destination: AnyView(BookReorderSandboxTestView())
         ),
         DebugItem(
             icon: "photo.stack",
