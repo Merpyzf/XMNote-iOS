@@ -1,23 +1,22 @@
 /**
  * [INPUT]: 依赖 xmnote/Utilities/DesignTokens.swift 的颜色、圆角、边框与间距令牌
- * [OUTPUT]: 对外提供 CalendarMonthStepperBar（月视图顶部月份切换触发器，支持点击月份快速切换）
+ * [OUTPUT]: 对外提供 CalendarMonthStepperBar（月视图顶部年月选择 Sheet 触发器）
  * [POS]: ReadCalendar 页面私有子视图，服务阅读日历顶部月份切换交互
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
 import SwiftUI
 
-/// 阅读日历顶部月份切换条，支持菜单快速跳转到任意可用月份。
+/// 阅读日历顶部月份切换条，只负责打开统一年月选择 Sheet。
 struct CalendarMonthStepperBar: View {
     private enum Layout {
-        static let barMinHeight: CGFloat = 36
-        static let expandedBarMinHeight: CGFloat = 40
+        static let barMinHeight: CGFloat = Spacing.actionReserved
+        static let expandedBarMinHeight: CGFloat = 48
     }
 
     let title: String
-    let availableMonths: [Date]
     let selectedMonth: Date
-    let onSelectMonth: (Date) -> Void
+    let onRequestPicker: () -> Void
 
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @ScaledMetric(relativeTo: .caption2) private var chevronSymbolSize = 10
@@ -32,20 +31,8 @@ struct CalendarMonthStepperBar: View {
     }
 
     private var monthQuickPicker: some View {
-        Menu {
-            ForEach(availableMonths.reversed(), id: \.self) { monthStart in
-                Button {
-                    guard monthStart != selectedMonth else { return }
-                    onSelectMonth(monthStart)
-                } label: {
-                    if monthStart == selectedMonth {
-                        Label(monthLabel(monthStart), systemImage: "checkmark")
-                            .foregroundStyle(.primary)
-                    } else {
-                        Text(monthLabel(monthStart))
-                    }
-                }
-            }
+        Button {
+            onRequestPicker()
         } label: {
             HStack(spacing: Spacing.compact) {
                 Text(title)
@@ -67,15 +54,9 @@ struct CalendarMonthStepperBar: View {
             .padding(.vertical, Spacing.compact)
             .contentShape(Rectangle())
         }
-        .tint(nil)
         .buttonStyle(.plain)
-    }
-
-    private func monthLabel(_ monthStart: Date) -> String {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "yyyy年M月"
-        formatter.timeZone = .current
-        return formatter.string(from: monthStart)
+        .accessibilityLabel("选择年月")
+        .accessibilityValue(title)
     }
 
     var usesExpandedTextLayout: Bool {
@@ -94,9 +75,8 @@ struct CalendarMonthStepperBar: View {
         Color.surfacePage.ignoresSafeArea()
         CalendarMonthStepperBar(
             title: "2026年2月",
-            availableMonths: availableMonths,
             selectedMonth: availableMonths.last ?? Date(),
-            onSelectMonth: { _ in }
+            onRequestPicker: {}
         )
         .padding(Spacing.screenEdge)
     }

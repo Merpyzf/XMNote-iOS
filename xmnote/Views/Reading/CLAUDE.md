@@ -19,6 +19,6 @@
 - `Components/`: 在读首页页面私有卡片组件（趋势总卡、今日阅读、继续阅读、最近在读、年度摘要）
 - `ReadCalendar/`: 阅读日历子功能（含 Components/ 与 Sheets/）
 - `Timeline/`: 时间线子功能（正式页面与页面私有卡片组件）
-- `Sheets/`: 在读模块业务弹层目录
+- `Sheets/`: 在读模块业务弹层目录；年月/年份随机访问选择统一使用 `xmnote/UIComponents/Foundation/XMYearMonthPickerSheet.swift`
 
 [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md

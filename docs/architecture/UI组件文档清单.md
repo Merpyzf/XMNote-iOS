@@ -11,6 +11,7 @@
 | XMRemoteImage | UI-复用关键 | xmnote/UIComponents/Foundation/XMRemoteImage.swift | docs/component-guides/XMRemoteImage使用说明.md | 新增/重大重构 |
 | XMGIFImageView | UI-复用关键 | xmnote/UIComponents/Foundation/XMGIFImageView.swift | docs/component-guides/XMGIFImageView使用说明.md | 新增/重大重构 |
 | XMBookCover | UI-复用关键 | xmnote/UIComponents/Foundation/XMBookCover.swift | docs/component-guides/XMBookCover使用说明.md | 新增/重大重构 |
+| XMYearMonthPickerSheet | UI-复用关键 | xmnote/UIComponents/Foundation/XMYearMonthPickerSheet.swift | docs/component-guides/XMYearMonthPickerSheet使用说明.md | 新增/重大重构 |
 | BookCoverProgressBar | UI-复用关键 | xmnote/UIComponents/Foundation/BookCoverProgressBar.swift | docs/component-guides/BookCoverProgressBar使用说明.md | 新增/重大重构 |
 | ExpandableRichText | UI-复用关键 | xmnote/UIComponents/Foundation/ExpandableRichText.swift | docs/component-guides/ExpandableRichText使用说明.md | 新增/重大重构 |
 | RichText | UI-复用关键 | xmnote/UIComponents/Foundation/RichText.swift | docs/component-guides/ExpandableRichText使用说明.md | 新增/重大重构 |

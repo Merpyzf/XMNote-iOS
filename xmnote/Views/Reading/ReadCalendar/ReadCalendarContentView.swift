@@ -9,6 +9,8 @@ import SwiftUI
 
 /// 阅读日历主界面组件，组织月/年切换、日历网格和总结弹层入口。
 struct ReadCalendarContentView: View {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
     /// DisplayMode 表示日历内容展示方式（热力图/活动事件/封面）。
     enum DisplayMode: String, CaseIterable, Hashable, Codable {
         case heatmap
@@ -295,6 +297,10 @@ struct ReadCalendarContentView: View {
     @State private var isSummarySheetPresented = false
     @State private var summarySheetMonthStart: Date?
     @State private var isYearSummarySheetPresented = false
+    @State private var isYearMonthPickerPresented = false
+    @State private var pendingYearMonthPickerSelection: Date?
+    @State private var isYearPickerPresented = false
+    @State private var pendingYearPickerSelection: Int?
 
     // MARK: - Summary Floating Button State
     @State private var isSummaryFloatingButtonVisible = false
@@ -427,6 +433,8 @@ private extension ReadCalendarContentView {
                 heatmapYearLoadingGate.hideImmediately()
                 bookCoverStackFramesByDate = [:]
                 closeBookCoverFullscreen(animated: false)
+                pendingYearMonthPickerSelection = nil
+                pendingYearPickerSelection = nil
                 cancelCoverEntryCue()
                 onBookCoverFullscreenPresentationChanged(false)
             }
@@ -453,6 +461,16 @@ private extension ReadCalendarContentView {
                 )
             }) {
                 yearSummarySheetContent
+            }
+            .sheet(isPresented: $isYearMonthPickerPresented, onDismiss: {
+                commitPendingYearMonthPickerSelection()
+            }) {
+                yearMonthPickerSheetContent
+            }
+            .sheet(isPresented: $isYearPickerPresented, onDismiss: {
+                commitPendingYearPickerSelection()
+            }) {
+                yearPickerSheetContent
             }
     }
 
@@ -488,14 +506,18 @@ private extension ReadCalendarContentView {
             ReadCalendarTopControlBar(
                 monthTitle: props.monthTitle,
                 yearTitle: props.yearTitle,
-                availableMonths: props.availableMonths,
-                availableYears: props.availableYears,
                 pagerSelection: props.pagerSelection,
                 selectedYear: props.selectedYear,
                 displayMode: props.displayMode,
                 onDisplayModeChanged: onDisplayModeChanged,
-                onPagerSelectionChanged: onPagerSelectionChanged,
-                onYearSelectionChanged: onYearSelectionChanged
+                onMonthPickerRequested: {
+                    pendingYearMonthPickerSelection = nil
+                    isYearMonthPickerPresented = true
+                },
+                onYearPickerRequested: {
+                    pendingYearPickerSelection = nil
+                    isYearPickerPresented = true
+                }
             )
             .padding(.top, Layout.topControlTopPadding)
             .padding(.bottom, Layout.topControlBottomPadding)
@@ -587,6 +609,42 @@ private extension ReadCalendarContentView {
         .presentationBackground(.regularMaterial)
     }
 
+    var yearMonthPickerSheetContent: some View {
+        XMYearMonthPickerSheet(
+            availableMonths: props.availableMonths,
+            selectedMonth: props.pagerSelection,
+            currentMonth: Self.monthStart(of: Date(), using: Calendar.current),
+            calendar: Calendar.current,
+            onSelectMonth: { monthStart in
+                pendingYearMonthPickerSelection = Self.monthStart(of: monthStart, using: Calendar.current)
+            },
+            onCancel: {
+                pendingYearMonthPickerSelection = nil
+            }
+        )
+        .presentationDetents([.height(XMYearMonthPickerSheet.preferredPresentationHeight(for: dynamicTypeSize, mode: .yearMonth))])
+        .presentationDragIndicator(.hidden)
+        .presentationBackground(.regularMaterial)
+    }
+
+    var yearPickerSheetContent: some View {
+        XMYearMonthPickerSheet(
+            availableYears: props.availableYears,
+            selectedYear: props.selectedYear,
+            currentYear: Calendar.current.component(.year, from: Date()),
+            calendar: Calendar.current,
+            onSelectYear: { year in
+                pendingYearPickerSelection = year
+            },
+            onCancel: {
+                pendingYearPickerSelection = nil
+            }
+        )
+        .presentationDetents([.height(XMYearMonthPickerSheet.preferredPresentationHeight(for: dynamicTypeSize, mode: .year))])
+        .presentationDragIndicator(.hidden)
+        .presentationBackground(.regularMaterial)
+    }
+
     var isHeatmapMode: Bool {
         props.displayMode == .heatmap
     }
@@ -631,6 +689,35 @@ private extension ReadCalendarContentView {
     var presentedSummarySheetData: MonthSummarySheetData {
         let monthStart = summarySheetMonthStart ?? props.pagerSelection
         return summarySheetData(for: monthStart)
+    }
+
+    /// Sheet 完全关闭后再同步分页选择，避免年月选择层与主日历分页动画叠加。
+    func commitPendingYearMonthPickerSelection() {
+        guard let monthStart = pendingYearMonthPickerSelection else { return }
+        pendingYearMonthPickerSelection = nil
+        let normalizedMonth = Self.monthStart(of: monthStart, using: Calendar.current)
+        guard normalizedMonth != props.pagerSelection else { return }
+        withAnimation(.snappy(duration: 0.3)) {
+            onPagerSelectionChanged(normalizedMonth)
+        }
+    }
+
+    /// Sheet 完全关闭后再同步年份选择，避免年份选择层与年度热力图切换叠加。
+    func commitPendingYearPickerSelection() {
+        guard let year = pendingYearPickerSelection else { return }
+        pendingYearPickerSelection = nil
+        guard year != props.selectedYear else { return }
+        withAnimation(.snappy(duration: 0.3)) {
+            onYearSelectionChanged(year)
+        }
+    }
+
+    /// 将日期归一到月份首日，作为阅读日历分页选择的稳定 key。
+    static func monthStart(of date: Date, using calendar: Calendar) -> Date {
+        let normalized = calendar.startOfDay(for: date)
+        let components = calendar.dateComponents([.year, .month], from: normalized)
+        let start = calendar.date(from: DateComponents(year: components.year, month: components.month, day: 1)) ?? normalized
+        return calendar.startOfDay(for: start)
     }
 
     /// 读取已加载月份页面状态，避免未命中时误用占位数据。

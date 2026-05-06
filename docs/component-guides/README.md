@@ -7,6 +7,7 @@
 | XMRemoteImage | `xmnote/UIComponents/Foundation/XMRemoteImage.swift` | `docs/component-guides/XMRemoteImage使用说明.md` | 已完成 |
 | XMGIFImageView | `xmnote/UIComponents/Foundation/XMGIFImageView.swift` | `docs/component-guides/XMGIFImageView使用说明.md` | 已完成 |
 | XMBookCover | `xmnote/UIComponents/Foundation/XMBookCover.swift` | `docs/component-guides/XMBookCover使用说明.md` | 已完成 |
+| XMYearMonthPickerSheet | `xmnote/UIComponents/Foundation/XMYearMonthPickerSheet.swift` | `docs/component-guides/XMYearMonthPickerSheet使用说明.md` | 已完成 |
 | BookCoverProgressBar | `xmnote/UIComponents/Foundation/BookCoverProgressBar.swift` | `docs/component-guides/BookCoverProgressBar使用说明.md` | 已完成 |
 | ExpandableRichText | `xmnote/UIComponents/Foundation/ExpandableRichText.swift` | `docs/component-guides/ExpandableRichText使用说明.md` | 已完成 |
 | RichText | `xmnote/UIComponents/Foundation/RichText.swift` | `docs/component-guides/ExpandableRichText使用说明.md` | 已完成 |

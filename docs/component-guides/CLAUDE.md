@@ -10,6 +10,7 @@
 - `XMRemoteImage使用说明.md`: XMRemoteImage 统一远程图片组件接入指南与参数说明。
 - `XMGIFImageView使用说明.md`: XMGIFImageView GIF 动画承载组件接入指南与参数说明。
 - `XMBookCover使用说明.md`: XMBookCover 统一书籍封面组件接入指南与参数说明。
+- `XMYearMonthPickerSheet使用说明.md`: XMYearMonthPickerSheet 年月/年份选择 Sheet 接入指南与参数说明。
 - `BookCoverProgressBar使用说明.md`: BookCoverProgressBar 封面进度条组件接入指南与参数说明。
 - `ExpandableRichText使用说明.md`: ExpandableRichText / RichText 富文本展示组件接入指南与参数说明。
 - `ImmersiveBottomChrome使用说明.md`: ImmersiveBottomChrome 底部沉浸遮罩与 ornament 组件接入指南与参数说明。

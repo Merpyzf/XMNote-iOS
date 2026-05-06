@@ -270,6 +270,10 @@ private struct TimelineCalendarPanel: View {
     @State private var hasPerformedInitialViewportSync = false
     @State private var isUserPagingInFlight = false
     @State private var isProgrammaticLongJump = false
+    @State private var isCalendarLongJumpFading = false
+    @State private var isYearMonthPickerPresented = false
+    @State private var pendingSheetMonthSelection: Date?
+    @State private var calendarLongJumpRevision = 0
     @State private var markerPreloadTask: Task<Void, Never>?
     @State private var lastMarkerPreloadRequest: TimelineMarkerPreloadRequest?
 
@@ -283,6 +287,9 @@ private struct TimelineCalendarPanel: View {
     private let dayOfWeekAspectRatio: CGFloat = 0.58
     private let monthDayInsets = NSDirectionalEdgeInsets.zero
     private let monthTransitionAnimation = Animation.easeInOut(duration: 0.22)
+    private let monthSelectionAnimation = Animation.snappy(duration: 0.3)
+    private let calendarLongJumpFadeOutAnimation = Animation.easeOut(duration: 0.08)
+    private let calendarLongJumpFadeInAnimation = Animation.easeInOut(duration: 0.16)
     private let longJumpMonthThreshold: Int = 2
 
     init(viewModel: TimelineViewModel) {
@@ -399,6 +406,8 @@ private struct TimelineCalendarPanel: View {
                             animated: false
                         )
                     }
+                    .opacity(isCalendarLongJumpFading ? 0 : 1)
+                    .allowsHitTesting(!isCalendarLongJumpFading)
                 }
                 .frame(height: calendarHeight)
                 .padding(.horizontal, Spacing.contentEdge)
@@ -406,10 +415,19 @@ private struct TimelineCalendarPanel: View {
             }
         }
         .allowsHitTesting(viewModel.bootstrapPhase == .ready && !viewModel.isRefreshing)
+        .sheet(isPresented: $isYearMonthPickerPresented, onDismiss: {
+            commitPendingSheetMonthSelection()
+        }) {
+            yearMonthPickerSheetContent
+        }
         .onAppear {
             performInitialViewportSyncIfNeeded()
         }
         .onDisappear {
+            pendingSheetMonthSelection = nil
+            calendarLongJumpRevision &+= 1
+            isProgrammaticLongJump = false
+            isCalendarLongJumpFading = false
             markerPreloadTask?.cancel()
             markerPreloadTask = nil
             lastMarkerPreloadRequest = nil
@@ -463,32 +481,49 @@ private extension TimelineCalendarPanel {
     }
 
     var monthPicker: some View {
-        Menu {
-            ForEach(availableMonthStarts.reversed(), id: \.self) { monthStart in
-                Button {
-                    jumpToDate(monthStart, animated: true)
-                } label: {
-                    if calendar.isDate(monthStart, equalTo: viewModel.displayedMonthStart, toGranularity: .month) {
-                        Label(monthFormatter.string(from: monthStart), systemImage: "checkmark")
-                            .foregroundStyle(.primary)
-                    } else {
-                        Text(monthFormatter.string(from: monthStart))
-                    }
-                }
-            }
+        Button {
+            pendingSheetMonthSelection = nil
+            isYearMonthPickerPresented = true
         } label: {
-            HStack(alignment: .lastTextBaseline, spacing: Spacing.compact) {
+            HStack(alignment: .firstTextBaseline, spacing: Spacing.compact) {
                 displayedMonthTitleText
                     .lineLimit(1)
-                .minimumScaleFactor(0.9)
+                    .minimumScaleFactor(0.9)
+
+                Image(systemName: "chevron.down")
+                    .font(TimelineCalendarStyle.relativeUnitFont)
+                    .foregroundStyle(TimelineCalendarStyle.monthUnitColor)
+                    .offset(y: -0.5)
             }
+            .contentShape(Rectangle())
         }
-        .tint(nil)
         .buttonStyle(.plain)
+        .frame(minHeight: Spacing.actionReserved, alignment: .leading)
+        .accessibilityLabel("选择年月")
+        .accessibilityValue(monthFormatter.string(from: viewModel.displayedMonthStart))
+    }
+
+    var yearMonthPickerSheetContent: some View {
+        XMYearMonthPickerSheet(
+            availableMonths: availableMonthStarts,
+            selectedMonth: viewModel.displayedMonthStart,
+            currentMonth: Self.monthStart(of: Date(), using: calendar),
+            calendar: calendar,
+            onSelectMonth: { monthStart in
+                pendingSheetMonthSelection = Self.monthStart(of: monthStart, using: calendar)
+            },
+            onCancel: {
+                pendingSheetMonthSelection = nil
+            }
+        )
+        .presentationDetents([.height(XMYearMonthPickerSheet.preferredPresentationHeight(for: dynamicTypeSize, mode: .yearMonth))])
+        .presentationDragIndicator(.hidden)
+        .presentationBackground(.regularMaterial)
     }
 
     var todayButton: some View {
         Button("今") {
+            pendingSheetMonthSelection = nil
             jumpToDate(calendar.startOfDay(for: Date()), animated: true)
         }
         .font(TimelineCalendarStyle.actionButtonFont)
@@ -505,7 +540,9 @@ private extension TimelineCalendarPanel {
 
     var availableMonthStarts: [Date] {
         let lowerMonth = Self.monthStart(of: visibleDateRange.lowerBound, using: calendar)
-        let upperMonth = Self.monthStart(of: visibleDateRange.upperBound, using: calendar)
+        let visibleUpperMonth = Self.monthStart(of: visibleDateRange.upperBound, using: calendar)
+        let todayMonth = Self.monthStart(of: Date(), using: calendar)
+        let upperMonth = min(visibleUpperMonth, todayMonth)
         var result: [Date] = []
         var cursor = lowerMonth
         while cursor <= upperMonth {
@@ -527,6 +564,7 @@ private extension TimelineCalendarPanel {
                 color: TimelineCalendarStyle.monthNumberColor,
                 trim: TimelineCalendarStyle.monthNumberVerticalTrim
             )
+            .contentTransition(.numericText())
             Text(" 年 ")
                 .font(TimelineCalendarStyle.monthUnitFont)
                 .foregroundStyle(TimelineCalendarStyle.monthUnitColor)
@@ -536,11 +574,11 @@ private extension TimelineCalendarPanel {
                 color: TimelineCalendarStyle.monthNumberColor,
                 trim: TimelineCalendarStyle.monthNumberVerticalTrim
             )
+            .contentTransition(.numericText())
             Text(" 月")
                 .font(TimelineCalendarStyle.monthUnitFont)
                 .foregroundStyle(TimelineCalendarStyle.monthUnitColor)
         }
-            .contentTransition(.numericText())
             .animation(.snappy(duration: 0.24), value: viewModel.displayedMonthStart)
     }
 
@@ -637,7 +675,25 @@ private extension TimelineCalendarPanel {
         )
     }
 
-    /// 跳转到指定日期所在月份，远距离跳月时改走无动画长跳，避免分页动画拖影。
+    /// Sheet 完全关闭后提交年月选择，避免选择弹层生命周期与主日历结构切换叠在同一层。
+    func commitPendingSheetMonthSelection() {
+        guard let monthStart = pendingSheetMonthSelection else { return }
+        pendingSheetMonthSelection = nil
+        let targetMonthStart = Self.monthStart(of: monthStart, using: calendar)
+        guard !calendar.isDate(
+            targetMonthStart,
+            equalTo: viewModel.displayedMonthStart,
+            toGranularity: .month
+        ) else {
+            return
+        }
+        performCalendarLongJump(
+            selectedDay: targetMonthStart,
+            monthStart: targetMonthStart
+        )
+    }
+
+    /// 跳转到指定日期所在月份，近距离走分页动画，远距离走受控随机访问以避免跨多月拖影。
     func jumpToDate(_ date: Date, animated: Bool) {
         let normalized = calendar.startOfDay(for: date)
         let clamped = min(max(normalized, visibleDateRange.lowerBound), visibleDateRange.upperBound)
@@ -646,25 +702,14 @@ private extension TimelineCalendarPanel {
         let shouldUseLongJump = animated && abs(monthDistance) > longJumpMonthThreshold
 
         if shouldUseLongJump {
-            isProgrammaticLongJump = true
-            if isUserPagingInFlight {
-                isUserPagingInFlight = false
-            }
-            commitHeaderState(
+            performCalendarLongJump(
                 selectedDay: clamped,
-                monthStart: targetMonthStart,
-                animated: true
+                monthStart: targetMonthStart
             )
-            calendarProxy.scrollToMonth(
-                containing: targetMonthStart,
-                scrollPosition: .firstFullyVisiblePosition,
-                animated: false
-            )
-            DispatchQueue.main.async {
-                isProgrammaticLongJump = false
-            }
             return
         }
+
+        cancelCalendarLongJump(resetVisualState: true)
 
         if animated {
             scheduleMarkerPreload(for: [viewModel.displayedMonthStart, targetMonthStart])
@@ -674,7 +719,8 @@ private extension TimelineCalendarPanel {
             commitHeaderState(
                 selectedDay: clamped,
                 monthStart: targetMonthStart,
-                animated: true
+                animated: true,
+                stateAnimation: monthSelectionAnimation
             )
             calendarProxy.scrollToMonth(
                 containing: targetMonthStart,
@@ -696,27 +742,85 @@ private extension TimelineCalendarPanel {
         )
     }
 
+    /// 随机访问跳月时用 SwiftUI completion 串联遮罩与无动画定位；revision 防止旧 completion 覆盖新选择。
+    func performCalendarLongJump(selectedDay: Date, monthStart: Date) {
+        calendarLongJumpRevision &+= 1
+        let revision = calendarLongJumpRevision
+        scheduleMarkerPreload(for: [viewModel.displayedMonthStart, monthStart])
+        isProgrammaticLongJump = true
+        if isUserPagingInFlight {
+            isUserPagingInFlight = false
+        }
+
+        withAnimation(calendarLongJumpFadeOutAnimation, completionCriteria: .logicallyComplete) {
+            isCalendarLongJumpFading = true
+        } completion: {
+            guard revision == calendarLongJumpRevision else { return }
+            commitHeaderState(
+                selectedDay: selectedDay,
+                monthStart: monthStart,
+                animated: true,
+                stateAnimation: monthSelectionAnimation
+            )
+            calendarProxy.scrollToMonth(
+                containing: monthStart,
+                scrollPosition: .firstFullyVisiblePosition,
+                animated: false
+            )
+            withAnimation(calendarLongJumpFadeInAnimation, completionCriteria: .logicallyComplete) {
+                isCalendarLongJumpFading = false
+            } completion: {
+                guard revision == calendarLongJumpRevision else { return }
+                isProgrammaticLongJump = false
+            }
+        }
+    }
+
+    /// 取消正在进行的长跳任务；需要时在主线程恢复日历网格可见，避免后续近距离滚动继承遮罩状态。
+    func cancelCalendarLongJump(resetVisualState: Bool) {
+        calendarLongJumpRevision &+= 1
+        isProgrammaticLongJump = false
+
+        guard resetVisualState, isCalendarLongJumpFading else { return }
+        withAnimation(calendarLongJumpFadeInAnimation) {
+            isCalendarLongJumpFading = false
+        }
+    }
+
     /// 统一提交头部选中日与月份状态，保证标题、列表和日历指针在同一事务里更新。
-    func commitHeaderState(selectedDay: Date, monthStart: Date, animated: Bool) {
+    func commitHeaderState(
+        selectedDay: Date,
+        monthStart: Date,
+        animated: Bool,
+        stateAnimation: Animation? = nil
+    ) {
         let normalizedDay = calendar.startOfDay(for: selectedDay)
         let normalizedMonth = Self.monthStart(of: monthStart, using: calendar)
         let isMonthChanged = normalizedMonth != viewModel.displayedMonthStart
         let isDayChanged = normalizedDay != viewModel.selectedDate
 
+        let commitStateChanges = {
+            if isMonthChanged {
+                viewModel.displayedMonthStart = normalizedMonth
+            }
+            if isDayChanged {
+                viewModel.selectedDate = normalizedDay
+            }
+        }
+
+        if animated {
+            withAnimation(stateAnimation ?? monthTransitionAnimation) {
+                commitStateChanges()
+            }
+        } else {
+            commitStateChanges()
+        }
+
         if isMonthChanged {
-            viewModel.displayedMonthStart = normalizedMonth
             scheduleMarkerPreload(for: [normalizedMonth])
         }
 
         if isDayChanged {
-            if animated {
-                withAnimation(monthTransitionAnimation) {
-                    viewModel.selectedDate = normalizedDay
-                }
-            } else {
-                viewModel.selectedDate = normalizedDay
-            }
-
             Task {
                 await viewModel.loadEvents()
             }

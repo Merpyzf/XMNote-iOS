@@ -1,7 +1,7 @@
 import SwiftUI
 
 /**
- * [INPUT]: 依赖月份/年份与显示模式状态，依赖回调驱动页面壳层进行状态更新
+ * [INPUT]: 依赖月份/年份与显示模式状态，依赖回调驱动页面壳层打开年月/年份选择 Sheet 或切换显示模式
  * [OUTPUT]: 对外提供 ReadCalendarTopControlBar（阅读日历顶部控制区）
  * [POS]: ReadCalendar 业务内复用组件，承载月份或年份切换与显示模式切换
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -13,18 +13,18 @@ struct ReadCalendarTopControlBar: View {
         static let topControlSpacing: CGFloat = Spacing.cozy
         static let modeSwitcherWidth: CGFloat = 116
         static let expandedModeSwitcherWidth: CGFloat = 128
+        static let leadingSwitcherMinHeight: CGFloat = Spacing.actionReserved
+        static let expandedLeadingSwitcherMinHeight: CGFloat = 48
     }
 
     let monthTitle: String
     let yearTitle: String
-    let availableMonths: [Date]
-    let availableYears: [Int]
     let pagerSelection: Date
     let selectedYear: Int
     let displayMode: ReadCalendarContentView.DisplayMode
     let onDisplayModeChanged: (ReadCalendarContentView.DisplayMode) -> Void
-    let onPagerSelectionChanged: (Date) -> Void
-    let onYearSelectionChanged: (Int) -> Void
+    let onMonthPickerRequested: () -> Void
+    let onYearPickerRequested: () -> Void
 
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @ScaledMetric(relativeTo: .caption2) private var chevronSymbolSize = 10
@@ -56,31 +56,14 @@ private extension ReadCalendarTopControlBar {
     var monthSwitcher: some View {
         CalendarMonthStepperBar(
             title: monthTitle,
-            availableMonths: availableMonths,
             selectedMonth: pagerSelection,
-            onSelectMonth: { monthStart in
-                withAnimation(.snappy(duration: 0.3)) {
-                    onPagerSelectionChanged(monthStart)
-                }
-            }
+            onRequestPicker: onMonthPickerRequested
         )
     }
 
     var yearSwitcher: some View {
-        Menu {
-            ForEach(availableYears, id: \.self) { year in
-                Button {
-                    guard year != selectedYear else { return }
-                    onYearSelectionChanged(year)
-                } label: {
-                    if year == selectedYear {
-                        Label("\(year)年", systemImage: "checkmark")
-                            .foregroundStyle(.primary)
-                    } else {
-                        Text("\(year)年")
-                    }
-                }
-            }
+        Button {
+            onYearPickerRequested()
         } label: {
             HStack(spacing: Spacing.compact) {
                 Text(yearTitle)
@@ -102,8 +85,11 @@ private extension ReadCalendarTopControlBar {
             .padding(.vertical, Spacing.compact)
             .contentShape(Rectangle())
         }
-        .tint(nil)
         .buttonStyle(.plain)
+        .frame(
+            minHeight: usesExpandedTextLayout ? Layout.expandedLeadingSwitcherMinHeight : Layout.leadingSwitcherMinHeight,
+            alignment: .leading
+        )
         .accessibilityLabel("年份选择")
         .accessibilityValue("\(selectedYear)年")
     }
