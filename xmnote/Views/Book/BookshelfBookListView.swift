@@ -172,7 +172,28 @@ private struct BookshelfBookListContentView: View {
                     initialRatingScore: initialRatingScore,
                     onConfirm: viewModel.submitBatchReadStatus
                 )
+            case .moveGroup(options: let options):
+                BookshelfMoveGroupSheet(
+                    options: options,
+                    selectedCount: viewModel.selectedCount,
+                    onConfirm: viewModel.submitMoveToGroup
+                )
             }
+        }
+        .xmSystemAlert(item: $viewModel.activeMoveOutConfirmation) { confirmation in
+            XMSystemAlertDescriptor(
+                title: "移出分组",
+                message: "将已选 \(confirmation.selectedCount) 本书移回默认书架。请选择它们回到默认书架的位置。",
+                actions: [
+                    XMSystemAlertAction(title: "取消", role: .cancel) { },
+                    XMSystemAlertAction(title: "移到最前") {
+                        viewModel.submitMoveOut(placement: .start)
+                    },
+                    XMSystemAlertAction(title: "移到最后") {
+                        viewModel.submitMoveOut(placement: .end)
+                    }
+                ]
+            )
         }
     }
 }
@@ -580,6 +601,31 @@ private extension BookshelfBookListCollectionHostView {
             return nil
         }
     }
+
+    /// 生成 UIKit 右侧分区索引标题，只对真实书籍分区开放，避免副标题/空态进入索引。
+    func sectionIndexTitles() -> [String] {
+        let titles = sections.compactMap { section -> String? in
+            guard let title = section.title,
+                  section.items.contains(where: {
+                    if case .book = $0 { return true }
+                    return false
+                  }) else {
+                return nil
+            }
+            return title
+        }
+        return titles.count > 1 ? titles : []
+    }
+
+    /// 按索引标题定位到对应书籍分区的首项。
+    func indexPath(forSectionIndexTitle title: String, at index: Int) -> IndexPath {
+        let titles = sectionIndexTitles()
+        let targetTitle = titles.indices.contains(index) ? titles[index] : title
+        if let sectionIndex = sections.firstIndex(where: { $0.title == targetTitle }) {
+            return IndexPath(item: 0, section: sectionIndex)
+        }
+        return IndexPath(item: 0, section: 0)
+    }
 }
 
 extension BookshelfBookListCollectionHostView: UICollectionViewDataSource {
@@ -605,6 +651,21 @@ extension BookshelfBookListCollectionHostView: UICollectionViewDataSource {
             cell.configure(with: item, configuration: configuration)
         }
         return cell
+    }
+
+    /// 让 UICollectionView 显示系统右侧索引条，对齐 Android 二级列表快速定位的业务效果。
+    func indexTitles(for collectionView: UICollectionView) -> [String]? {
+        let titles = sectionIndexTitles()
+        return titles.isEmpty ? nil : titles
+    }
+
+    /// 点击索引标题时滚动到对应分区首个书籍行。
+    func collectionView(
+        _ collectionView: UICollectionView,
+        indexPathForIndexTitle title: String,
+        at index: Int
+    ) -> IndexPath {
+        indexPath(forSectionIndexTitle: title, at: index)
     }
 
     /// 告知 UICollectionView 哪些二级列表书籍具备系统重排资格。
@@ -850,7 +911,7 @@ private struct BookshelfBookListSearchBar: View {
             Image(systemName: "magnifyingglass")
                 .foregroundStyle(.secondary)
 
-            TextField("搜索书名或作者", text: $text)
+            TextField("搜索书名、作者、状态或来源", text: $text)
                 .font(AppTypography.body)
                 .textInputAutocapitalization(.never)
                 .disableAutocorrection(true)
@@ -1033,9 +1094,9 @@ private struct BookshelfBookListEditBottomBar: View {
             return "正在加载批量编辑选项..."
         }
         if selectedCount == 0 {
-            return "选择书籍后可批量管理；默认分组支持置顶与组内移动"
+            return "选择书籍后可批量管理；默认分组支持置顶、组内移动与移出"
         }
-        return "已选 \(selectedCount) 本，可批量设置标签、来源与阅读状态"
+        return "已选 \(selectedCount) 本，可批量移组、设置标签、来源与阅读状态"
     }
 
     private var isBusy: Bool {

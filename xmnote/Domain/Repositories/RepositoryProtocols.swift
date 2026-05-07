@@ -41,6 +41,10 @@ protocol BookRepositoryProtocol {
     func batchSetBooksSource(bookIDs: [Int64], sourceID: Int64) async throws
     /// 批量设置书籍阅读状态；读完状态会同步评分与阅读进度到终点。
     func batchSetBookReadStatus(bookIDs: [Int64], input: BookshelfBatchReadStatusInput) async throws
+    /// 读取可作为移入目标的有效分组，排除当前分组后供二级列表批量移组 Sheet 展示。
+    func fetchBookshelfMoveTargetGroups(excludingGroupID: Int64?) async throws -> [BookEditorNamedOption]
+    /// 将指定书籍从当前分组移出到默认书架，并按位置语义写入默认书架排序值。
+    func moveBooksOutOfGroup(bookIDs: [Int64], placement: GroupBooksPlacement) async throws
     /// 批量置顶默认书架顶层 Book/Group，按传入选择顺序追加 pin_order。
     func pinBookshelfItems(_ ids: [BookshelfItemID]) async throws
     /// 取消单个默认书架顶层 Book/Group 的置顶状态。
@@ -51,7 +55,7 @@ protocol BookRepositoryProtocol {
     func moveBookshelfItemsToEnd(_ ids: [BookshelfItemID], in currentItems: [BookshelfOrderItem]) async throws
     /// 删除默认书架顶层 Book/Group，分组删除时按传入位置安置组内书籍；真实写入需先完成 Android 对齐验证。
     func deleteBookshelfItems(_ ids: [BookshelfItemID], groupBooksPlacement: GroupBooksPlacement) async throws
-    /// 将指定书籍移动到目标分组；真实写入需先完成 Android 对齐验证。
+    /// 将指定书籍移动到目标分组，取消置顶并重建唯一有效分组关系。
     func moveBooks(_ bookIDs: [Int64], toGroup targetGroupID: Int64) async throws
     /// 读取按维度和作用域持久化的书架显示设置。
     func fetchBookshelfDisplaySettings(scope: BookshelfDisplaySettingScope) -> [BookshelfDimension: BookshelfDisplaySetting]

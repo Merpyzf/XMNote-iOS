@@ -1,11 +1,75 @@
 /**
  * [INPUT]: 依赖 BookshelfBatchEditOptions 中的标签、来源、阅读状态候选项，依赖外层 ViewModel 闭包提交批量写入意图
- * [OUTPUT]: 对外提供 BookshelfBatchTagsSheet、BookshelfBatchSourceSheet、BookshelfBatchReadStatusSheet 三个批量编辑 Sheet
+ * [OUTPUT]: 对外提供 BookshelfMoveGroupSheet、BookshelfBatchTagsSheet、BookshelfBatchSourceSheet、BookshelfBatchReadStatusSheet 四个批量编辑 Sheet
  * [POS]: Book 模块业务 Sheet，被 BookshelfBookListView 的编辑态批量操作入口唤起
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
 import SwiftUI
+
+/// 二级列表移入分组 Sheet，单选目标分组后提交批量移动意图。
+struct BookshelfMoveGroupSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    @State private var selectedID: Int64
+
+    let options: [BookEditorNamedOption]
+    let selectedCount: Int
+    let onConfirm: (Int64) -> Void
+
+    /// 构建移入分组 Sheet，默认选中第一个有效分组。
+    init(
+        options: [BookEditorNamedOption],
+        selectedCount: Int,
+        onConfirm: @escaping (Int64) -> Void
+    ) {
+        self.options = options
+        self.selectedCount = selectedCount
+        self.onConfirm = onConfirm
+        self._selectedID = State(initialValue: options.first?.id ?? 0)
+    }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section {
+                    ForEach(options) { option in
+                        Button {
+                            selectedID = option.id
+                        } label: {
+                            BookshelfBatchOptionRow(
+                                title: option.title,
+                                isSelected: selectedID == option.id
+                            )
+                        }
+                        .buttonStyle(.plain)
+                    }
+                } footer: {
+                    Text("将 \(selectedCount) 本书移入所选分组；书籍会取消置顶并从原分组关系中移除。")
+                        .font(AppTypography.caption)
+                }
+            }
+            .navigationTitle("移入分组")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("取消") {
+                        dismiss()
+                    }
+                }
+
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("完成") {
+                        onConfirm(selectedID)
+                        dismiss()
+                    }
+                    .disabled(selectedID == 0)
+                }
+            }
+        }
+        .presentationDetents([.medium, .large])
+        .presentationDragIndicator(.visible)
+    }
+}
 
 /// 二级列表批量标签 Sheet，支持空选择并由 Repository 区分单本替换与多本追加。
 struct BookshelfBatchTagsSheet: View {

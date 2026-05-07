@@ -409,6 +409,12 @@ private final class BookPickerTestBookRepository: BookRepositoryProtocol {
 
     func batchSetBookReadStatus(bookIDs: [Int64], input: BookshelfBatchReadStatusInput) async throws {}
 
+    func fetchBookshelfMoveTargetGroups(excludingGroupID: Int64?) async throws -> [BookEditorNamedOption] {
+        []
+    }
+
+    func moveBooksOutOfGroup(bookIDs: [Int64], placement: GroupBooksPlacement) async throws {}
+
     func pinBookshelfItems(_ ids: [BookshelfItemID]) async throws {}
 
     func unpinBookshelfItem(_ id: BookshelfItemID) async throws {}

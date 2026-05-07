@@ -3,7 +3,7 @@ import GRDB
 
 /**
  * [INPUT]: 依赖 AppDatabase 提供本地数据库连接，依赖 ObservationStream 提供观察流桥接
- * [OUTPUT]: 对外提供 BookRepository（BookRepositoryProtocol 的 GRDB 实现，含书架列表读写与批量标签/来源/阅读状态管理）
+ * [OUTPUT]: 对外提供 BookRepository（BookRepositoryProtocol 的 GRDB 实现，含书架列表读写、分组移入移出与批量标签/来源/阅读状态管理）
  * [POS]: Data 层书籍仓储实现，统一封装书架列表/详情/书摘数据读取与默认书架排序置顶写入
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -179,6 +179,20 @@ struct BookRepository: BookRepositoryProtocol {
         }
     }
 
+    /// 读取二级列表移入分组候选项。
+    func fetchBookshelfMoveTargetGroups(excludingGroupID: Int64?) async throws -> [BookEditorNamedOption] {
+        try await databaseManager.database.dbPool.read { db in
+            try fetchMoveTargetGroups(db, excludingGroupID: excludingGroupID)
+        }
+    }
+
+    /// 将书籍从分组移回默认书架，按 Android placement 语义写入默认排序值。
+    func moveBooksOutOfGroup(bookIDs: [Int64], placement: GroupBooksPlacement) async throws {
+        try await databaseManager.database.dbPool.write { db in
+            try moveBooksOutOfGroup(db, bookIDs: bookIDs, placement: placement)
+        }
+    }
+
     /// 按选择顺序批量置顶 Book/Group，跳过 Android 同样会忽略的已置顶项。
     func pinBookshelfItems(_ ids: [BookshelfItemID]) async throws {
         try await databaseManager.database.dbPool.write { db in
@@ -219,9 +233,11 @@ struct BookRepository: BookRepositoryProtocol {
         throw BookshelfManagementWriteUnavailableError(action: "删除书籍或分组")
     }
 
-    /// 移入分组涉及 group_book 事务与时间戳语义，等待 Android 对齐验证完成后再开放真实落库。
+    /// 将书籍移入目标分组，复刻 Android GroupRepository.moveBooksToGroup 语义。
     func moveBooks(_ bookIDs: [Int64], toGroup targetGroupID: Int64) async throws {
-        throw BookshelfManagementWriteUnavailableError(action: "移入分组")
+        try await databaseManager.database.dbPool.write { db in
+            try moveBooksToGroup(db, bookIDs: bookIDs, targetGroupID: targetGroupID)
+        }
     }
 
     /// 从本地轻量设置读取各书架维度显示配置。
@@ -443,6 +459,7 @@ private struct BookshelfManagementWriteUnavailableError: LocalizedError {
 
 private enum BookshelfBatchWriteError: LocalizedError {
     case emptySelection
+    case invalidGroup
     case invalidTag
     case invalidSource
     case invalidReadStatus
@@ -452,6 +469,8 @@ private enum BookshelfBatchWriteError: LocalizedError {
         switch self {
         case .emptySelection:
             return "请先选择书籍"
+        case .invalidGroup:
+            return "分组已不存在，请刷新后重试"
         case .invalidTag:
             return "标签已不存在，请刷新后重试"
         case .invalidSource:
@@ -724,6 +743,91 @@ private extension BookRepository {
         }
     }
 
+    /// 读取仍有效的分组候选项，供批量移入分组 Sheet 使用。
+    /// - Throws: SQL 读取失败时抛出错误。
+    nonisolated func fetchMoveTargetGroups(
+        _ db: Database,
+        excludingGroupID: Int64?
+    ) throws -> [BookEditorNamedOption] {
+        let baseSQL = """
+            SELECT id, COALESCE(name, '') AS name
+            FROM `group`
+            WHERE is_deleted = 0
+            """
+
+        // SQL 目的：读取可作为批量移入目标的有效分组。
+        // 涉及表：`group`。
+        // 关键过滤：is_deleted = 0；默认分组二级页会额外排除当前 group id，避免无意义移入自身。
+        // 返回字段用途：id/name 直接构造目标分组 Sheet 选项；时间字段不参与本查询。
+        let rows: [Row]
+        if let excludingGroupID, excludingGroupID > 0 {
+            rows = try Row.fetchAll(
+                db,
+                sql: baseSQL + "\n  AND id != ?\nORDER BY group_order ASC, id ASC",
+                arguments: [excludingGroupID]
+            )
+        } else {
+            rows = try Row.fetchAll(
+                db,
+                sql: baseSQL + "\nORDER BY group_order ASC, id ASC"
+            )
+        }
+        return rows.map { row in
+            let name: String = row["name"] ?? ""
+            return BookEditorNamedOption(
+                id: row["id"],
+                title: name.isEmpty ? "未命名分组" : name
+            )
+        }
+    }
+
+    /// 复刻 Android GroupRepository.moveBooksToGroup，把书籍移动到指定分组。
+    /// - Throws: 选择为空、目标分组无效或 SQL 写入失败时抛出错误。
+    nonisolated func moveBooksToGroup(
+        _ db: Database,
+        bookIDs: [Int64],
+        targetGroupID: Int64
+    ) throws {
+        let uniqueBookIDs = normalizedPositiveIDs(bookIDs)
+        guard !uniqueBookIDs.isEmpty else { throw BookshelfBatchWriteError.emptySelection }
+        guard try isActiveGroup(db, groupID: targetGroupID) else { throw BookshelfBatchWriteError.invalidGroup }
+
+        let now = timestampMillis()
+        for bookID in uniqueBookIDs {
+            guard try isActiveBook(db, bookID: bookID) else { continue }
+            try updateBookPin(db, bookID: bookID, pinned: false, pinOrder: 0)
+            let nextOrder = try maxBookOrder(inGroup: targetGroupID, db: db) + 1
+            try softDeleteGroupRelations(ofBook: bookID, updatedAt: now, db: db)
+            try insertGroupBook(groupID: targetGroupID, bookID: bookID, createdAt: now, db: db)
+            try updateBookOrderWithTimestamp(db, id: bookID, order: nextOrder, updatedAt: now)
+        }
+    }
+
+    /// 复刻 Android GroupRepository.moveOut，把书籍移回默认书架头部或尾部。
+    /// - Throws: 选择为空或 SQL 写入失败时抛出错误。
+    nonisolated func moveBooksOutOfGroup(
+        _ db: Database,
+        bookIDs: [Int64],
+        placement: GroupBooksPlacement
+    ) throws {
+        let uniqueBookIDs = normalizedPositiveIDs(bookIDs)
+        guard !uniqueBookIDs.isEmpty else { throw BookshelfBatchWriteError.emptySelection }
+
+        let now = timestampMillis()
+        for bookID in uniqueBookIDs {
+            guard try isActiveBook(db, bookID: bookID) else { continue }
+            try updateBookPin(db, bookID: bookID, pinned: false, pinOrder: 0)
+            try softDeleteGroupRelations(ofBook: bookID, updatedAt: now, db: db)
+            let order = switch placement {
+            case .start:
+                try minDefaultBookshelfOrder(db) - 1
+            case .end:
+                try maxDefaultBookshelfOrder(db) + 1
+            }
+            try updateBookOrderWithTimestamp(db, id: bookID, order: order, updatedAt: now)
+        }
+    }
+
     /// 取消单个 Book/Group 置顶状态，写入 pinned = 0 与 pin_order = 0。
     /// - Throws: SQL 写入失败时抛出错误。
     nonisolated func unpinBookshelfItem(
@@ -772,6 +876,188 @@ private extension BookRepository {
               AND id != 0
             """
         try db.execute(sql: sql, arguments: [order, id])
+    }
+
+    /// 更新时间戳并写入单本书排序值；用于移入/移出分组这类 Android 会更新时间的路径。
+    nonisolated func updateBookOrderWithTimestamp(
+        _ db: Database,
+        id: Int64,
+        order: Int64,
+        updatedAt: Int64
+    ) throws {
+        // SQL 目的：写入移入/移出分组后的 Book 排序值。
+        // 涉及表：book。
+        // 关键过滤：id = ?、is_deleted = 0、id != 0，严格对齐 Android BookDao.updateBookOrder。
+        // 时间字段：updated_date 写入当前毫秒时间戳；last_sync_date 保持原值等待同步层处理。
+        // 副作用用途：更新 book_order，让目标分组或默认书架排序立即刷新。
+        let sql = """
+            UPDATE book
+            SET updated_date = ?,
+                book_order = ?
+            WHERE id = ?
+              AND is_deleted = 0
+              AND id != 0
+            """
+        try db.execute(sql: sql, arguments: [updatedAt, order, id])
+    }
+
+    /// 校验分组是否仍有效。
+    nonisolated func isActiveGroup(_ db: Database, groupID: Int64) throws -> Bool {
+        // SQL 目的：校验批量移入目标分组是否仍有效。
+        // 涉及表：`group`。
+        // 关键过滤：id = ? 且 is_deleted = 0。
+        // 返回字段用途：返回计数是否大于 0；时间字段不参与本查询。
+        let sql = """
+            SELECT COUNT(*)
+            FROM `group`
+            WHERE id = ?
+              AND is_deleted = 0
+            """
+        return (try Int.fetchOne(db, sql: sql, arguments: [groupID]) ?? 0) > 0
+    }
+
+    /// 校验书籍是否仍可被书架管理写入处理。
+    nonisolated func isActiveBook(_ db: Database, bookID: Int64) throws -> Bool {
+        // SQL 目的：校验被移组书籍是否仍有效。
+        // 涉及表：book。
+        // 关键过滤：id = ?、is_deleted = 0、id != 0。
+        // 返回字段用途：返回计数是否大于 0；时间字段不参与本查询。
+        let sql = """
+            SELECT COUNT(*)
+            FROM book
+            WHERE id = ?
+              AND is_deleted = 0
+              AND id != 0
+            """
+        return (try Int.fetchOne(db, sql: sql, arguments: [bookID]) ?? 0) > 0
+    }
+
+    /// 软删除单本书当前所有有效分组关系。
+    nonisolated func softDeleteGroupRelations(
+        ofBook bookID: Int64,
+        updatedAt: Int64,
+        db: Database
+    ) throws {
+        // SQL 目的：移入或移出分组时清除该书现有有效分组关系。
+        // 涉及表：group_book。
+        // 关键过滤：book_id = ? 且 is_deleted = 0；对齐 Android GroupBookDao.deleteByBookId。
+        // 时间字段：updated_date 写入当前毫秒时间戳；last_sync_date 保持原值等待同步层处理。
+        // 副作用用途：保证同一本书只保留一个有效分组归属，或回到默认书架顶层。
+        let sql = """
+            UPDATE group_book
+            SET updated_date = ?,
+                is_deleted = 1
+            WHERE book_id = ?
+              AND is_deleted = 0
+            """
+        try db.execute(sql: sql, arguments: [updatedAt, bookID])
+    }
+
+    /// 插入目标分组与书籍关系。
+    nonisolated func insertGroupBook(
+        groupID: Int64,
+        bookID: Int64,
+        createdAt: Int64,
+        db: Database
+    ) throws {
+        var relation = GroupBookRecord(
+            id: nil,
+            groupId: groupID,
+            bookId: bookID,
+            createdDate: createdAt,
+            updatedDate: 0,
+            lastSyncDate: 0,
+            isDeleted: 0
+        )
+        try relation.insert(db)
+    }
+
+    /// 查询指定分组内有效书籍的最大排序值。
+    nonisolated func maxBookOrder(inGroup groupID: Int64, db: Database) throws -> Int64 {
+        // SQL 目的：读取目标分组内有效书籍最大 book_order，作为移入分组追加位置。
+        // 涉及表：group_book JOIN book。
+        // 关键过滤：group_id = ?、group_book/book 均未软删除、book.id != 0，并仅保留该书最早有效分组关系。
+        // 返回字段用途：移入分组时写入 max + 1；空分组回退 0。
+        let sql = """
+            SELECT MAX(book.book_order)
+            FROM group_book
+            JOIN book ON group_book.book_id = book.id
+            WHERE group_book.group_id = ?
+              AND group_book.is_deleted = 0
+              AND book.is_deleted = 0
+              AND book.id != 0
+              AND group_book.id = (
+                  SELECT gb2.id
+                  FROM group_book gb2
+                  WHERE gb2.book_id = book.id
+                    AND gb2.is_deleted = 0
+                  ORDER BY gb2.created_date ASC, gb2.id ASC
+                  LIMIT 1
+              )
+            """
+        return try Int64.fetchOne(db, sql: sql, arguments: [groupID]) ?? 0
+    }
+
+    /// 查询默认书架 Book/Group 混排最大排序值。
+    nonisolated func maxDefaultBookshelfOrder(_ db: Database) throws -> Int64 {
+        // SQL 目的：读取默认书架顶层有效书籍最大 book_order。
+        // 涉及表：book；子查询使用 group_book 排除仍在任意有效分组中的书籍。
+        // 关键过滤：book.is_deleted = 0、book.id != 0、group_book.is_deleted = 0。
+        // 返回字段用途：与 group_order 最大值合并，移出分组到尾部时写入 max + 1。
+        let bookSQL = """
+            SELECT MAX(book_order)
+            FROM book
+            WHERE is_deleted = 0
+              AND id != 0
+              AND id NOT IN (
+                  SELECT book_id
+                  FROM group_book
+                  WHERE is_deleted = 0
+              )
+            """
+        // SQL 目的：读取默认书架有效分组最大 group_order。
+        // 涉及表：`group`。
+        // 关键过滤：is_deleted = 0。
+        // 返回字段用途：与顶层书籍最大值合并，保持 Book/Group 共用手动排序空间。
+        let groupSQL = """
+            SELECT MAX(group_order)
+            FROM `group`
+            WHERE is_deleted = 0
+            """
+        let bookMax = try Int64.fetchOne(db, sql: bookSQL) ?? 0
+        let groupMax = try Int64.fetchOne(db, sql: groupSQL) ?? 0
+        return max(bookMax, groupMax)
+    }
+
+    /// 查询默认书架 Book/Group 混排最小排序值。
+    nonisolated func minDefaultBookshelfOrder(_ db: Database) throws -> Int64 {
+        // SQL 目的：读取默认书架顶层有效书籍最小 book_order。
+        // 涉及表：book；子查询使用 group_book 排除仍在任意有效分组中的书籍。
+        // 关键过滤：book.is_deleted = 0、book.id != 0、group_book.is_deleted = 0。
+        // 返回字段用途：与 group_order 最小值合并，移出分组到头部时写入 min - 1。
+        let bookSQL = """
+            SELECT MIN(book_order)
+            FROM book
+            WHERE is_deleted = 0
+              AND id != 0
+              AND id NOT IN (
+                  SELECT book_id
+                  FROM group_book
+                  WHERE is_deleted = 0
+              )
+            """
+        // SQL 目的：读取默认书架有效分组最小 group_order。
+        // 涉及表：`group`。
+        // 关键过滤：is_deleted = 0。
+        // 返回字段用途：与顶层书籍最小值合并，保持 Book/Group 共用手动排序空间。
+        let groupSQL = """
+            SELECT MIN(group_order)
+            FROM `group`
+            WHERE is_deleted = 0
+            """
+        let bookMin = try Int64.fetchOne(db, sql: bookSQL) ?? 0
+        let groupMin = try Int64.fetchOne(db, sql: groupSQL) ?? 0
+        return min(bookMin, groupMin)
     }
 
     /// 写入单本书置顶字段；用于默认分组组内置顶和取消置顶。
