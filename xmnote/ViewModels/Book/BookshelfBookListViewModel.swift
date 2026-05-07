@@ -15,6 +15,7 @@ enum BookshelfBookListEditAction: String, CaseIterable, Identifiable, Hashable, 
     case moveToStart
     case moveToEnd
     case moveToGroup
+    case addToBookList
     case moveOut
     case setTag
     case setSource
@@ -43,6 +44,8 @@ enum BookshelfBookListEditAction: String, CaseIterable, Identifiable, Hashable, 
             return "最后"
         case .moveToGroup:
             return "移组"
+        case .addToBookList:
+            return "书单"
         case .moveOut:
             return "移出"
         case .setTag:
@@ -78,6 +81,8 @@ enum BookshelfBookListEditAction: String, CaseIterable, Identifiable, Hashable, 
             return "arrow.down.to.line"
         case .moveToGroup:
             return "folder"
+        case .addToBookList:
+            return "books.vertical"
         case .moveOut:
             return "folder.badge.minus"
         case .setTag:
@@ -97,14 +102,14 @@ enum BookshelfBookListEditAction: String, CaseIterable, Identifiable, Hashable, 
         switch self {
         case .deleteGroup, .deleteTag, .deleteSource, .deleteBooks:
             return true
-        case .pin, .unpin, .reorder, .moveToStart, .moveToEnd, .moveToGroup, .moveOut, .setTag, .setSource, .setReadStatus, .renameGroup, .renameTag, .renameSource:
+        case .pin, .unpin, .reorder, .moveToStart, .moveToEnd, .moveToGroup, .addToBookList, .moveOut, .setTag, .setSource, .setReadStatus, .renameGroup, .renameTag, .renameSource:
             return false
         }
     }
 
     var requiresSelection: Bool {
         switch self {
-        case .pin, .unpin, .moveToStart, .moveToEnd, .moveToGroup, .moveOut, .setTag, .setSource, .setReadStatus, .deleteBooks:
+        case .pin, .unpin, .moveToStart, .moveToEnd, .moveToGroup, .addToBookList, .moveOut, .setTag, .setSource, .setReadStatus, .deleteBooks:
             return true
         case .reorder, .renameGroup, .deleteGroup, .renameTag, .deleteTag, .renameSource, .deleteSource:
             return false
@@ -140,6 +145,39 @@ struct BookshelfMoveOutPlacementConfirmation: Identifiable, Hashable, Sendable {
     var id: Int { selectedCount }
 }
 
+/// 二级列表删除确认状态，覆盖批量删书与上下文分组/标签/来源删除。
+struct BookshelfBookListDeleteConfirmation: Identifiable, Hashable, Sendable {
+    enum Kind: Hashable, Sendable {
+        case books(count: Int)
+        case group(title: String)
+        case tag(title: String)
+        case source(title: String)
+    }
+
+    let kind: Kind
+
+    var id: String {
+        switch kind {
+        case .books(let count):
+            return "books-\(count)"
+        case .group(let title):
+            return "group-\(title)"
+        case .tag(let title):
+            return "tag-\(title)"
+        case .source(let title):
+            return "source-\(title)"
+        }
+    }
+}
+
+/// 二级列表重命名输入状态，承载当前上下文对象与初始名称。
+struct BookshelfBookListNameEdit: Identifiable, Hashable, Sendable {
+    let action: BookshelfBookListEditAction
+    let currentName: String
+
+    var id: String { "\(action.rawValue)-\(currentName)" }
+}
+
 /// 二级书籍列表状态编排器，让 pushed destination 通过 Repository 实时观察数据，而不是消费静态路由数组。
 @Observable
 final class BookshelfBookListViewModel {
@@ -160,6 +198,9 @@ final class BookshelfBookListViewModel {
     var writeError: String?
     var activeBatchSheet: BookshelfBatchEditSheet?
     var activeMoveOutConfirmation: BookshelfMoveOutPlacementConfirmation?
+    var activeDeleteConfirmation: BookshelfBookListDeleteConfirmation?
+    var activeNameEdit: BookshelfBookListNameEdit?
+    var nameEditText = ""
     var isLoadingBatchOptions = false
 
     private let repository: any BookRepositoryProtocol
@@ -168,7 +209,7 @@ final class BookshelfBookListViewModel {
     private var batchOptionsTask: Task<Void, Never>?
 
     var navigationTitle: String {
-        route.title
+        snapshot.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? route.title : snapshot.title
     }
 
     var subtitle: String {
@@ -222,13 +263,21 @@ final class BookshelfBookListViewModel {
     var editActions: [BookshelfBookListEditAction] {
         switch route.context {
         case .defaultGroup:
-            return [.pin, .unpin, .moveToStart, .moveToEnd, .moveToGroup, .moveOut, .setTag, .setSource, .setReadStatus, .deleteBooks, .renameGroup, .deleteGroup]
-        case .tag:
-            return [.moveToGroup, .setTag, .setSource, .setReadStatus, .deleteBooks, .renameTag, .deleteTag]
-        case .source:
-            return [.moveToGroup, .setTag, .setSource, .setReadStatus, .deleteBooks, .renameSource, .deleteSource]
+            return [.pin, .unpin, .moveToStart, .moveToEnd, .moveToGroup, .addToBookList, .moveOut, .setTag, .setSource, .setReadStatus, .deleteBooks, .renameGroup, .deleteGroup]
+        case .tag(let tagID):
+            var actions: [BookshelfBookListEditAction] = [.moveToGroup, .addToBookList, .setTag, .setSource, .setReadStatus, .deleteBooks]
+            if tagID != nil {
+                actions.append(contentsOf: [.renameTag, .deleteTag])
+            }
+            return actions
+        case .source(let sourceID):
+            var actions: [BookshelfBookListEditAction] = [.moveToGroup, .addToBookList, .setTag, .setSource, .setReadStatus, .deleteBooks]
+            if sourceID != nil {
+                actions.append(contentsOf: [.renameSource, .deleteSource])
+            }
+            return actions
         case .readStatus, .rating, .author, .press:
-            return [.moveToGroup, .setTag, .setSource, .setReadStatus, .deleteBooks]
+            return [.moveToGroup, .addToBookList, .setTag, .setSource, .setReadStatus, .deleteBooks]
         }
     }
 
@@ -285,6 +334,9 @@ final class BookshelfBookListViewModel {
         selectedBookIDs.removeAll()
         activeBatchSheet = nil
         activeMoveOutConfirmation = nil
+        activeDeleteConfirmation = nil
+        activeNameEdit = nil
+        nameEditText = ""
         cancelBatchOptionsLoading()
         actionNotice = nil
         writeError = nil
@@ -339,11 +391,21 @@ final class BookshelfBookListViewModel {
             moveSelectedBooks(toStart: false)
         case .moveToGroup:
             presentMoveGroupSheet()
+        case .addToBookList:
+            performPlaceholderAction(action)
         case .moveOut:
             presentMoveOutConfirmation()
         case .setTag, .setSource, .setReadStatus:
             presentBatchSheet(for: action)
-        case .reorder, .renameGroup, .deleteGroup, .renameTag, .deleteTag, .renameSource, .deleteSource, .deleteBooks:
+        case .renameGroup, .renameTag, .renameSource:
+            presentNameEdit(for: action)
+        case .deleteBooks:
+            activeDeleteConfirmation = .init(kind: .books(count: selectedBookIDs.count))
+            actionNotice = nil
+            writeError = nil
+        case .deleteGroup, .deleteTag, .deleteSource:
+            presentDeleteConfirmation(for: action)
+        case .reorder:
             performPlaceholderAction(action)
         }
     }
@@ -399,6 +461,72 @@ final class BookshelfBookListViewModel {
         activeMoveOutConfirmation = nil
         runWriteAction(.moveOut, successMessage: "已移出分组") {
             try await self.repository.moveBooksOutOfGroup(bookIDs: bookIDs, placement: placement)
+        }
+    }
+
+    /// 提交二级列表批量删书，成功后清空选择并由观察流刷新当前列表。
+    func submitDeleteBooks() {
+        let bookIDs = selectedBookIDs
+        activeDeleteConfirmation = nil
+        runWriteAction(.deleteBooks, successMessage: "已删除 \(bookIDs.count) 本") {
+            try await self.repository.deleteBooks(bookIDs)
+        }
+    }
+
+    /// 删除当前默认分组上下文，并按 placement 安置组内书籍。
+    func submitDeleteGroup(placement: GroupBooksPlacement) {
+        guard case .defaultGroup(let groupID) = route.context else { return }
+        activeDeleteConfirmation = nil
+        runWriteAction(.deleteGroup, successMessage: "分组已删除") {
+            try await self.repository.deleteGroup(groupID: groupID, placement: placement)
+        }
+    }
+
+    /// 删除当前标签上下文。
+    func submitDeleteTag() {
+        guard case .tag(let tagID) = route.context, let tagID else { return }
+        activeDeleteConfirmation = nil
+        runWriteAction(.deleteTag, successMessage: "标签已删除") {
+            try await self.repository.deleteTag(tagID: tagID)
+        }
+    }
+
+    /// 删除当前来源上下文。
+    func submitDeleteSource() {
+        guard case .source(let sourceID) = route.context, let sourceID else { return }
+        activeDeleteConfirmation = nil
+        runWriteAction(.deleteSource, successMessage: "来源已删除") {
+            try await self.repository.deleteSource(sourceID: sourceID)
+        }
+    }
+
+    /// 提交当前上下文重命名输入，Repository 负责重名校验与真实写入。
+    func submitNameEdit() {
+        guard let activeNameEdit else { return }
+        let name = nameEditText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !name.isEmpty else {
+            actionNotice = "\(activeNameEdit.action.title)名称不能为空"
+            return
+        }
+        self.activeNameEdit = nil
+        switch activeNameEdit.action {
+        case .renameGroup:
+            guard case .defaultGroup(let groupID) = route.context else { return }
+            runWriteAction(.renameGroup, successMessage: "分组已重命名") {
+                try await self.repository.renameGroup(groupID: groupID, newName: name)
+            }
+        case .renameTag:
+            guard case .tag(let tagID) = route.context, let tagID else { return }
+            runWriteAction(.renameTag, successMessage: "标签已重命名") {
+                try await self.repository.renameTag(tagID: tagID, newName: name)
+            }
+        case .renameSource:
+            guard case .source(let sourceID) = route.context, let sourceID else { return }
+            runWriteAction(.renameSource, successMessage: "来源已重命名") {
+                try await self.repository.renameSource(sourceID: sourceID, newName: name)
+            }
+        case .pin, .unpin, .reorder, .moveToStart, .moveToEnd, .moveToGroup, .addToBookList, .moveOut, .setTag, .setSource, .setReadStatus, .deleteGroup, .deleteTag, .deleteSource, .deleteBooks:
+            return
         }
     }
 
@@ -565,6 +693,55 @@ final class BookshelfBookListViewModel {
         writeError = nil
     }
 
+    /// 打开当前上下文对象的重命名输入弹窗。
+    private func presentNameEdit(for action: BookshelfBookListEditAction) {
+        guard activeWriteAction == nil else { return }
+        guard canManageCurrentContext(action) else {
+            performPlaceholderAction(action)
+            return
+        }
+        let currentName = route.title
+        nameEditText = currentName
+        activeNameEdit = BookshelfBookListNameEdit(action: action, currentName: currentName)
+        actionNotice = nil
+        writeError = nil
+    }
+
+    /// 打开当前上下文对象的删除确认弹窗。
+    private func presentDeleteConfirmation(for action: BookshelfBookListEditAction) {
+        guard activeWriteAction == nil else { return }
+        guard canManageCurrentContext(action) else {
+            performPlaceholderAction(action)
+            return
+        }
+        switch action {
+        case .deleteGroup:
+            activeDeleteConfirmation = BookshelfBookListDeleteConfirmation(kind: .group(title: route.title))
+        case .deleteTag:
+            activeDeleteConfirmation = BookshelfBookListDeleteConfirmation(kind: .tag(title: route.title))
+        case .deleteSource:
+            activeDeleteConfirmation = BookshelfBookListDeleteConfirmation(kind: .source(title: route.title))
+        case .pin, .unpin, .reorder, .moveToStart, .moveToEnd, .moveToGroup, .addToBookList, .moveOut, .setTag, .setSource, .setReadStatus, .renameGroup, .renameTag, .renameSource, .deleteBooks:
+            return
+        }
+        actionNotice = nil
+        writeError = nil
+    }
+
+    /// 判断当前路由上下文是否具备对应管理对象。
+    private func canManageCurrentContext(_ action: BookshelfBookListEditAction) -> Bool {
+        switch (route.context, action) {
+        case (.defaultGroup, .renameGroup), (.defaultGroup, .deleteGroup):
+            return true
+        case (.tag(let tagID), .renameTag), (.tag(let tagID), .deleteTag):
+            return tagID != nil
+        case (.source(let sourceID), .renameSource), (.source(let sourceID), .deleteSource):
+            return sourceID != nil
+        default:
+            return false
+        }
+    }
+
     /// 取消正在加载的批量编辑候选项，避免选择集合变化后继续打开旧快照 Sheet。
     private func cancelBatchOptionsLoading() {
         batchOptionsTask?.cancel()
@@ -608,7 +785,7 @@ final class BookshelfBookListViewModel {
                 initialRatingScore: options.initialRatingScore
             )
             actionNotice = nil
-        case .pin, .unpin, .reorder, .moveToStart, .moveToEnd, .moveToGroup, .moveOut, .renameGroup, .deleteGroup, .renameTag, .deleteTag, .renameSource, .deleteSource, .deleteBooks:
+        case .pin, .unpin, .reorder, .moveToStart, .moveToEnd, .moveToGroup, .addToBookList, .moveOut, .renameGroup, .deleteGroup, .renameTag, .deleteTag, .renameSource, .deleteSource, .deleteBooks:
             return
         }
     }
@@ -678,6 +855,10 @@ final class BookshelfBookListViewModel {
 
     /// 展示未开放写入动作的保护提示，避免绕过 Android 数据语义核对。
     private func performPlaceholderAction(_ action: BookshelfBookListEditAction) {
+        if action == .addToBookList {
+            actionNotice = "书单添加将在书单模块开发时开放"
+            return
+        }
         actionNotice = "\(action.title)需先完成 Android 数据语义核对后再开放"
     }
 

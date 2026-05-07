@@ -195,6 +195,88 @@ private struct BookshelfBookListContentView: View {
                 ]
             )
         }
+        .xmSystemAlert(item: $viewModel.activeDeleteConfirmation) { confirmation in
+            deleteDescriptor(for: confirmation)
+        }
+        .xmSystemAlert(item: $viewModel.activeNameEdit) { nameEdit in
+            nameEditDescriptor(for: nameEdit)
+        }
+    }
+
+    private func deleteDescriptor(for confirmation: BookshelfBookListDeleteConfirmation) -> XMSystemAlertDescriptor {
+        switch confirmation.kind {
+        case .books(let count):
+            return XMSystemAlertDescriptor(
+                title: "删除书籍",
+                message: "将删除已选 \(count) 本书，并清理书摘、标签、分组、阅读状态、打卡、书单关系等关联数据。此操作不可撤销。",
+                actions: [
+                    XMSystemAlertAction(title: "取消", role: .cancel) { },
+                    XMSystemAlertAction(title: "删除", role: .destructive) {
+                        viewModel.submitDeleteBooks()
+                    }
+                ],
+                preferredActionID: nil
+            )
+        case .group(let title):
+            return XMSystemAlertDescriptor(
+                title: "删除分组",
+                message: "将删除“\(title)”分组，并把组内书籍移回默认书架。请选择它们回到默认书架的位置。",
+                actions: [
+                    XMSystemAlertAction(title: "取消", role: .cancel) { },
+                    XMSystemAlertAction(title: "移到最前并删除", role: .destructive) {
+                        viewModel.submitDeleteGroup(placement: .start)
+                    },
+                    XMSystemAlertAction(title: "移到最后并删除", role: .destructive) {
+                        viewModel.submitDeleteGroup(placement: .end)
+                    }
+                ]
+            )
+        case .tag(let title):
+            return XMSystemAlertDescriptor(
+                title: "删除标签",
+                message: "将删除“\(title)”标签，并清理它与书籍、书摘的关系。此操作不可撤销。",
+                actions: [
+                    XMSystemAlertAction(title: "取消", role: .cancel) { },
+                    XMSystemAlertAction(title: "删除", role: .destructive) {
+                        viewModel.submitDeleteTag()
+                    }
+                ]
+            )
+        case .source(let title):
+            return XMSystemAlertDescriptor(
+                title: "删除来源",
+                message: "将删除“\(title)”来源，并把使用该来源的书籍迁移到未知来源。此操作不可撤销。",
+                actions: [
+                    XMSystemAlertAction(title: "取消", role: .cancel) { },
+                    XMSystemAlertAction(title: "删除", role: .destructive) {
+                        viewModel.submitDeleteSource()
+                    }
+                ]
+            )
+        }
+    }
+
+    private func nameEditDescriptor(for nameEdit: BookshelfBookListNameEdit) -> XMSystemAlertDescriptor {
+        XMSystemAlertDescriptor(
+            title: nameEdit.action.title,
+            message: "请输入新的名称。",
+            actions: [
+                XMSystemAlertAction(title: "取消", role: .cancel) { },
+                XMSystemAlertAction(title: "完成") {
+                    viewModel.submitNameEdit()
+                }
+            ],
+            textFields: [
+                XMSystemAlertTextField(
+                    text: Binding(
+                        get: { viewModel.nameEditText },
+                        set: { viewModel.nameEditText = $0 }
+                    ),
+                    placeholder: nameEdit.currentName,
+                    autocorrectionDisabled: true
+                )
+            ]
+        )
     }
 }
 

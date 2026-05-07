@@ -436,6 +436,20 @@ private final class BookPickerTestBookRepository: BookRepositoryProtocol {
 
     func moveBooks(_ bookIDs: [Int64], toGroup targetGroupID: Int64) async throws {}
 
+    func deleteBooks(_ bookIDs: [Int64]) async throws {}
+
+    func deleteGroup(groupID: Int64, placement: GroupBooksPlacement) async throws {}
+
+    func renameGroup(groupID: Int64, newName: String) async throws {}
+
+    func renameTag(tagID: Int64, newName: String) async throws {}
+
+    func deleteTag(tagID: Int64) async throws {}
+
+    func renameSource(sourceID: Int64, newName: String) async throws {}
+
+    func deleteSource(sourceID: Int64) async throws {}
+
     func fetchBookshelfDisplaySettings(scope: BookshelfDisplaySettingScope) -> [BookshelfDimension: BookshelfDisplaySetting] {
         Dictionary(uniqueKeysWithValues: BookshelfDimension.allCases.map {
             switch scope {

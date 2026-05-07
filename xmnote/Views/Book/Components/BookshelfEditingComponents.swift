@@ -1,6 +1,6 @@
 /**
- * [INPUT]: 依赖 BookshelfPendingAction 与 SwiftUI 按钮、菜单、图标、表层渲染能力
- * [OUTPUT]: 对外提供书架编辑态顶部栏、选择标识与底部操作栏，并展示移动 Sheet 入口与迁移状态反馈
+ * [INPUT]: 依赖 BookshelfPendingAction、BookshelfBookListEditAction 与 SwiftUI 按钮、菜单、图标、表层渲染能力
+ * [OUTPUT]: 对外提供书架编辑态顶部栏、选择标识与底部操作栏，并展示移动、更多、删除入口与迁移状态反馈
  * [POS]: Book 模块页面私有编辑态组件集合，服务默认书架选择、置顶和移动入口
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -70,10 +70,17 @@ struct BookshelfEditBottomBar: View {
     let selectedCount: Int
     let canPin: Bool
     let canMove: Bool
+    let canMore: Bool
+    let canDelete: Bool
     let moveDisabledReason: String?
     let activeAction: BookshelfPendingAction?
+    let moreActions: [BookshelfBookListEditAction]
+    let isLoadingOptions: Bool
+    let notice: String?
     let onPin: () -> Void
     let onMove: () -> Void
+    let onMoreAction: (BookshelfBookListEditAction) -> Void
+    let onDelete: () -> Void
 
     var body: some View {
         VStack(spacing: Spacing.cozy) {
@@ -87,18 +94,13 @@ struct BookshelfEditBottomBar: View {
 
                 moveActionButton
 
-                editActionButton(
-                    action: .more,
-                    icon: "ellipsis.circle",
-                    isEnabled: false,
-                    onTap: {}
-                )
+                moreActionButton
 
                 editActionButton(
                     action: .delete,
                     icon: "trash",
-                    isEnabled: false,
-                    onTap: {}
+                    isEnabled: canDelete,
+                    onTap: onDelete
                 )
             }
 
@@ -126,17 +128,45 @@ struct BookshelfEditBottomBar: View {
         .accessibilityLabel(canMove ? "移动选中项" : "移动，\(moveDisabledReason ?? "需至少选中一个普通项")")
     }
 
+    private var moreActionButton: some View {
+        Menu {
+            ForEach(moreActions) { action in
+                Button(role: action.isDestructive ? .destructive : nil) {
+                    onMoreAction(action)
+                } label: {
+                    Label(action.title, systemImage: action.systemImage)
+                }
+                .disabled(isBusy)
+            }
+        } label: {
+            editActionLabel(action: .more, icon: "ellipsis.circle", isEnabled: canMore)
+        }
+        .buttonStyle(.plain)
+        .disabled(!canMore || isBusy)
+        .accessibilityLabel(canMore ? "更多操作" : "更多操作，当前不可用")
+    }
+
     private var statusText: String {
+        if let notice, !notice.isEmpty {
+            return notice
+        }
         if let activeAction {
             return "正在\(activeAction.title)..."
         }
+        if isLoadingOptions {
+            return "正在加载批量编辑选项..."
+        }
         if selectedCount == 0 {
-            return "选择书籍或分组后可执行置顶与移动"
+            return "选择书籍或分组后可执行置顶、移动、批量管理与删除"
         }
         if let moveDisabledReason {
             return moveDisabledReason
         }
-        return "更多与删除将在完成 Android 写入核对后开放"
+        return "已选 \(selectedCount) 项，更多管理仅作用于书籍；分组会被自动忽略"
+    }
+
+    private var isBusy: Bool {
+        activeAction != nil || isLoadingOptions
     }
 
     private func editActionButton(
@@ -149,7 +179,7 @@ struct BookshelfEditBottomBar: View {
             editActionLabel(action: action, icon: icon, isEnabled: isEnabled)
         }
         .buttonStyle(.plain)
-        .disabled(!isEnabled)
+        .disabled(!isEnabled || isBusy)
         .accessibilityLabel(isEnabled ? action.title : "\(action.title)，当前不可用")
     }
 

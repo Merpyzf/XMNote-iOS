@@ -3,7 +3,7 @@ import GRDB
 
 /**
  * [INPUT]: 依赖 AppDatabase 提供本地数据库连接，依赖 ObservationStream 提供观察流桥接
- * [OUTPUT]: 对外提供 BookRepository（BookRepositoryProtocol 的 GRDB 实现，含书架列表读写、分组移入移出与批量标签/来源/阅读状态管理）
+ * [OUTPUT]: 对外提供 BookRepository（BookRepositoryProtocol 的 GRDB 实现，含书架列表读写、分组移入移出、批量编辑、删除与重命名管理）
  * [POS]: Data 层书籍仓储实现，统一封装书架列表/详情/书摘数据读取与默认书架排序置顶写入
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -225,18 +225,69 @@ struct BookRepository: BookRepositoryProtocol {
         try await updateBookshelfOrder(orderedItems)
     }
 
-    /// 删除书架条目属于高风险级联写入，等待 Android DAO 矩阵核对完成后再开放真实落库。
+    /// 删除默认书架条目，Book 走软删除级联清理，Group 先安置组内书籍再软删除。
     func deleteBookshelfItems(
         _ ids: [BookshelfItemID],
         groupBooksPlacement: GroupBooksPlacement
     ) async throws {
-        throw BookshelfManagementWriteUnavailableError(action: "删除书籍或分组")
+        try await databaseManager.database.dbPool.write { db in
+            try deleteBookshelfItems(db, ids: ids, groupBooksPlacement: groupBooksPlacement)
+        }
     }
 
     /// 将书籍移入目标分组，复刻 Android GroupRepository.moveBooksToGroup 语义。
     func moveBooks(_ bookIDs: [Int64], toGroup targetGroupID: Int64) async throws {
         try await databaseManager.database.dbPool.write { db in
             try moveBooksToGroup(db, bookIDs: bookIDs, targetGroupID: targetGroupID)
+        }
+    }
+
+    /// 软删除指定书籍及其 Android 对齐关联数据。
+    func deleteBooks(_ bookIDs: [Int64]) async throws {
+        try await databaseManager.database.dbPool.write { db in
+            try deleteBooks(db, bookIDs: bookIDs)
+        }
+    }
+
+    /// 删除指定分组，先将组内书籍移回默认书架。
+    func deleteGroup(groupID: Int64, placement: GroupBooksPlacement) async throws {
+        try await databaseManager.database.dbPool.write { db in
+            try deleteGroup(db, groupID: groupID, placement: placement)
+        }
+    }
+
+    /// 重命名分组，更新时间戳以便后续同步层感知变更。
+    func renameGroup(groupID: Int64, newName: String) async throws {
+        try await databaseManager.database.dbPool.write { db in
+            try renameGroup(db, groupID: groupID, newName: newName)
+        }
+    }
+
+    /// 重命名书籍标签，执行 Android 同等重名校验。
+    func renameTag(tagID: Int64, newName: String) async throws {
+        try await databaseManager.database.dbPool.write { db in
+            try renameTag(db, tagID: tagID, newName: newName)
+        }
+    }
+
+    /// 删除书籍标签，并清理标签与书籍/笔记关系。
+    func deleteTag(tagID: Int64) async throws {
+        try await databaseManager.database.dbPool.write { db in
+            try deleteTag(db, tagID: tagID)
+        }
+    }
+
+    /// 重命名书籍来源，执行 Android 同等重名校验。
+    func renameSource(sourceID: Int64, newName: String) async throws {
+        try await databaseManager.database.dbPool.write { db in
+            try renameSource(db, sourceID: sourceID, newName: newName)
+        }
+    }
+
+    /// 删除书籍来源，并把书籍迁移到未知来源。
+    func deleteSource(sourceID: Int64) async throws {
+        try await databaseManager.database.dbPool.write { db in
+            try deleteSource(db, sourceID: sourceID)
         }
     }
 
@@ -449,14 +500,6 @@ private extension String {
     }
 }
 
-private struct BookshelfManagementWriteUnavailableError: LocalizedError {
-    let action: String
-
-    var errorDescription: String? {
-        "\(action)需先完成 Android 数据语义核对后再开放"
-    }
-}
-
 private enum BookshelfBatchWriteError: LocalizedError {
     case emptySelection
     case invalidGroup
@@ -464,6 +507,9 @@ private enum BookshelfBatchWriteError: LocalizedError {
     case invalidSource
     case invalidReadStatus
     case ratingRequired
+    case invalidName(String)
+    case duplicateName(String)
+    case protectedDefaultSource
 
     var errorDescription: String? {
         switch self {
@@ -479,6 +525,12 @@ private enum BookshelfBatchWriteError: LocalizedError {
             return "阅读状态已不存在，请刷新后重试"
         case .ratingRequired:
             return "标记读完时需要选择评分"
+        case .invalidName(let target):
+            return "\(target)名称不能为空"
+        case .duplicateName(let message):
+            return message
+        case .protectedDefaultSource:
+            return "未知来源不能删除"
         }
     }
 }
@@ -826,6 +878,196 @@ private extension BookRepository {
             }
             try updateBookOrderWithTimestamp(db, id: bookID, order: order, updatedAt: now)
         }
+    }
+
+    /// 复刻 Android BookRepository.deleteBooksAndGroups，先删除顶层书籍，再处理分组内书籍安置与分组删除。
+    /// - Throws: 选择为空或任一 SQL 写入失败时抛出错误。
+    nonisolated func deleteBookshelfItems(
+        _ db: Database,
+        ids: [BookshelfItemID],
+        groupBooksPlacement: GroupBooksPlacement
+    ) throws {
+        guard !ids.isEmpty else { throw BookshelfBatchWriteError.emptySelection }
+
+        let bookIDs = ids.compactMap { id -> Int64? in
+            if case .book(let bookID) = id { return bookID }
+            return nil
+        }
+        if !bookIDs.isEmpty {
+            try deleteBooks(db, bookIDs: bookIDs)
+        }
+
+        let groupIDs = ids.compactMap { id -> Int64? in
+            if case .group(let groupID) = id { return groupID }
+            return nil
+        }
+        for groupID in normalizedPositiveIDs(groupIDs) {
+            try deleteGroup(db, groupID: groupID, placement: groupBooksPlacement)
+        }
+    }
+
+    /// 软删除一组书籍及其 Android 对齐关联数据。
+    /// - Throws: 选择为空或任一 SQL 写入失败时抛出错误。
+    nonisolated func deleteBooks(
+        _ db: Database,
+        bookIDs: [Int64]
+    ) throws {
+        let uniqueBookIDs = normalizedPositiveIDs(bookIDs)
+        guard !uniqueBookIDs.isEmpty else { throw BookshelfBatchWriteError.emptySelection }
+        for bookID in uniqueBookIDs {
+            try deleteBook(db, bookID: bookID)
+        }
+    }
+
+    /// 软删除单本书，并按 Android deleteBook 的 17 步顺序清理 book_id 关联表。
+    /// - Throws: 任一 SQL 写入失败时抛出错误。
+    nonisolated func deleteBook(
+        _ db: Database,
+        bookID: Int64
+    ) throws {
+        guard try isActiveBook(db, bookID: bookID) else { return }
+        let now = timestampMillis()
+        try softDeleteBook(db, bookID: bookID, updatedAt: now)
+        try softDeleteTags(ofBook: bookID, updatedAt: now, db: db)
+        try softDeleteTagNotesOfBook(db, bookID: bookID, updatedAt: now)
+        try softDeleteNotesOfBook(db, bookID: bookID, updatedAt: now)
+        try softDeleteAttachImagesOfBook(db, bookID: bookID, updatedAt: now)
+        try softDeleteCategoriesOfBook(db, bookID: bookID, updatedAt: now)
+        try softDeleteCategoryImagesOfBook(db, bookID: bookID, updatedAt: now)
+        try softDeleteCategoryContentsOfBook(db, bookID: bookID, updatedAt: now)
+        try softDeleteReviewsOfBook(db, bookID: bookID, updatedAt: now)
+        try softDeleteReviewImagesOfBook(db, bookID: bookID, updatedAt: now)
+        try softDeleteChaptersOfBook(db, bookID: bookID, updatedAt: now)
+        try softDeleteGroupRelations(ofBook: bookID, updatedAt: now, db: db)
+        try softDeleteReadStatusRecordsOfBook(db, bookID: bookID, updatedAt: now)
+        try softDeleteReadTimeRecordsOfBook(db, bookID: bookID, updatedAt: now)
+        try softDeleteSortRecordsOfBook(db, bookID: bookID, updatedAt: now)
+        try softDeleteCheckInsOfBook(db, bookID: bookID, updatedAt: now)
+        try softDeleteCollectionBooksOfBook(db, bookID: bookID)
+        try softDeleteReadPlansOfBook(db, bookID: bookID)
+    }
+
+    /// 删除分组前先将组内书籍移回默认书架，再软删除分组本身。
+    /// - Throws: 分组无效或 SQL 写入失败时抛出错误。
+    nonisolated func deleteGroup(
+        _ db: Database,
+        groupID: Int64,
+        placement: GroupBooksPlacement
+    ) throws {
+        guard try isActiveGroup(db, groupID: groupID) else { throw BookshelfBatchWriteError.invalidGroup }
+        let bookIDs = try fetchOrderedBookIDs(inGroup: groupID, db: db)
+        if !bookIDs.isEmpty {
+            try moveBooksOutOfGroup(db, bookIDs: bookIDs, placement: placement)
+        }
+        try softDeleteGroup(db, groupID: groupID)
+    }
+
+    /// 重命名有效分组；Android 分组重命名当前不做重名拦截。
+    /// - Throws: 名称为空、分组无效或 SQL 写入失败时抛出错误。
+    nonisolated func renameGroup(
+        _ db: Database,
+        groupID: Int64,
+        newName: String
+    ) throws {
+        guard try isActiveGroup(db, groupID: groupID) else { throw BookshelfBatchWriteError.invalidGroup }
+        let name = try validatedManagementName(newName, target: "分组")
+        let now = timestampMillis()
+
+        // SQL 目的：重命名有效书籍分组。
+        // 涉及表：`group`。
+        // 关键过滤：id = ? 且 is_deleted = 0，严格对齐 Android GroupDao.updateName。
+        // 时间字段：updated_date 写入当前毫秒时间戳；last_sync_date 保持原值等待同步层处理。
+        // 副作用用途：更新分组名称并触发书架观察流刷新。
+        let sql = """
+            UPDATE `group`
+            SET updated_date = ?,
+                name = ?
+            WHERE id = ?
+              AND is_deleted = 0
+            """
+        try db.execute(sql: sql, arguments: [now, name, groupID])
+    }
+
+    /// 重命名有效书籍标签，并执行 Android TagRepository.rename 的重名校验。
+    /// - Throws: 名称为空、标签无效、名称重复或 SQL 写入失败时抛出错误。
+    nonisolated func renameTag(
+        _ db: Database,
+        tagID: Int64,
+        newName: String
+    ) throws {
+        guard try isActiveBookTag(db, tagID: tagID) else { throw BookshelfBatchWriteError.invalidTag }
+        let name = try validatedManagementName(newName, target: "标签")
+        guard try !isDuplicateBookTagName(db, name: name, excludingTagID: tagID) else {
+            throw BookshelfBatchWriteError.duplicateName("此标签名称已存在，请使用不同的名称")
+        }
+        let now = timestampMillis()
+
+        // SQL 目的：重命名有效书籍标签。
+        // 涉及表：tag。
+        // 关键过滤：id = ?、type = 1 且 is_deleted = 0，只影响书籍标签。
+        // 时间字段：updated_date 写入当前毫秒时间戳；last_sync_date 保持原值等待同步层处理。
+        // 副作用用途：更新标签名称并触发标签维度与二级列表刷新。
+        let sql = """
+            UPDATE tag
+            SET updated_date = ?,
+                name = ?
+            WHERE id = ?
+              AND type = 1
+              AND is_deleted = 0
+            """
+        try db.execute(sql: sql, arguments: [now, name, tagID])
+    }
+
+    /// 删除有效书籍标签，同时清理 tag_book 与 tag_note 关系。
+    /// - Throws: 标签无效或 SQL 写入失败时抛出错误。
+    nonisolated func deleteTag(
+        _ db: Database,
+        tagID: Int64
+    ) throws {
+        guard try isActiveBookTag(db, tagID: tagID) else { throw BookshelfBatchWriteError.invalidTag }
+        let now = timestampMillis()
+        try softDeleteTagBookRelations(db, tagID: tagID, updatedAt: now)
+        try softDeleteTagNoteRelations(db, tagID: tagID, updatedAt: now)
+        try softDeleteBookTag(db, tagID: tagID, updatedAt: now)
+    }
+
+    /// 重命名有效来源，并执行 Android SourceRepository.rename 的重名校验。
+    /// - Throws: 名称为空、来源无效、名称重复或 SQL 写入失败时抛出错误。
+    nonisolated func renameSource(
+        _ db: Database,
+        sourceID: Int64,
+        newName: String
+    ) throws {
+        guard try isActiveSource(db, sourceID: sourceID) else { throw BookshelfBatchWriteError.invalidSource }
+        let name = try validatedManagementName(newName, target: "来源")
+        guard try !isDuplicateSourceName(db, name: name, excludingSourceID: sourceID) else {
+            throw BookshelfBatchWriteError.duplicateName("此来源名称已存在，请使用不同的名称")
+        }
+
+        // SQL 目的：重命名有效书籍来源。
+        // 涉及表：source。
+        // 关键过滤：id = ? 且 is_deleted = 0，对齐 Android SourceDao.rename。
+        // 时间字段：Android 来源重命名不更新 updated_date，iOS 保持一致不改时间字段。
+        // 副作用用途：更新来源名称并触发来源维度与二级列表刷新。
+        let sql = """
+            UPDATE source
+            SET name = ?
+            WHERE id = ?
+              AND is_deleted = 0
+            """
+        try db.execute(sql: sql, arguments: [name, sourceID])
+    }
+
+    /// 删除有效来源前将书籍迁移到未知来源，再软删除来源本身。
+    /// - Throws: 来源无效、尝试删除未知来源或 SQL 写入失败时抛出错误。
+    nonisolated func deleteSource(
+        _ db: Database,
+        sourceID: Int64
+    ) throws {
+        guard try isActiveSource(db, sourceID: sourceID) else { throw BookshelfBatchWriteError.invalidSource }
+        let fallbackSourceID = try unknownSourceID(db, deletingSourceID: sourceID)
+        try migrateBooks(fromSourceID: sourceID, toSourceID: fallbackSourceID, db: db)
+        try softDeleteSource(db, sourceID: sourceID)
     }
 
     /// 取消单个 Book/Group 置顶状态，写入 pinned = 0 与 pin_order = 0。
@@ -1409,6 +1651,356 @@ private extension BookRepository {
         try db.execute(sql: sql, arguments: [updatedAt, bookID])
     }
 
+    /// 软删除单本书主记录。
+    nonisolated func softDeleteBook(
+        _ db: Database,
+        bookID: Int64,
+        updatedAt: Int64
+    ) throws {
+        // SQL 目的：软删除有效书籍主记录。
+        // 涉及表：book。
+        // 关键过滤：id = ?、is_deleted = 0、id != 0，对齐 Android BookDao.deleteBook。
+        // 时间字段：updated_date 写入当前毫秒时间戳；last_sync_date 保持原值等待同步层处理。
+        // 副作用用途：从所有书架观察流中移除该书，后续 helper 清理关联表。
+        let sql = """
+            UPDATE book
+            SET updated_date = ?,
+                is_deleted = 1
+            WHERE id = ?
+              AND is_deleted = 0
+              AND id != 0
+            """
+        try db.execute(sql: sql, arguments: [updatedAt, bookID])
+    }
+
+    /// 软删除书籍下书摘与标签的有效关系。
+    nonisolated func softDeleteTagNotesOfBook(
+        _ db: Database,
+        bookID: Int64,
+        updatedAt: Int64
+    ) throws {
+        // SQL 目的：删除指定书籍下全部书摘与标签关系。
+        // 涉及表：tag_note；子查询读取 note。
+        // 关键过滤：note.book_id = ? 且 tag_note.is_deleted = 0，覆盖该书所有书摘关系。
+        // 时间字段：updated_date 写入当前毫秒时间戳；last_sync_date 保持原值等待同步层处理。
+        // 副作用用途：复刻 Android 删除书籍第 3 步，避免书摘删除后残留 tag_note 关系。
+        let sql = """
+            UPDATE tag_note
+            SET updated_date = ?,
+                is_deleted = 1
+            WHERE is_deleted = 0
+              AND note_id IN (
+                  SELECT id
+                  FROM note
+                  WHERE book_id = ?
+              )
+            """
+        try db.execute(sql: sql, arguments: [updatedAt, bookID])
+    }
+
+    /// 软删除书籍下全部书摘。
+    nonisolated func softDeleteNotesOfBook(
+        _ db: Database,
+        bookID: Int64,
+        updatedAt: Int64
+    ) throws {
+        // SQL 目的：软删除指定书籍下全部书摘。
+        // 涉及表：note。
+        // 关键过滤：book_id = ? 且 is_deleted = 0。
+        // 时间字段：updated_date 写入当前毫秒时间戳；last_sync_date 保持原值等待同步层处理。
+        // 副作用用途：复刻 Android 删除书籍第 4 步，使笔记列表观察流移除这些书摘。
+        let sql = """
+            UPDATE note
+            SET updated_date = ?,
+                is_deleted = 1
+            WHERE book_id = ?
+              AND is_deleted = 0
+            """
+        try db.execute(sql: sql, arguments: [updatedAt, bookID])
+    }
+
+    /// 软删除书籍下书摘附图。
+    nonisolated func softDeleteAttachImagesOfBook(
+        _ db: Database,
+        bookID: Int64,
+        updatedAt: Int64
+    ) throws {
+        // SQL 目的：软删除指定书籍下全部书摘附图。
+        // 涉及表：attach_image；子查询读取 note。
+        // 关键过滤：attach_image.note_id 属于该书 note，且 attach_image.is_deleted = 0。
+        // 时间字段：updated_date 写入当前毫秒时间戳；last_sync_date 保持原值等待同步层处理。
+        // 副作用用途：复刻 Android 删除书籍第 5 步，避免附图关系残留。
+        let sql = """
+            UPDATE attach_image
+            SET updated_date = ?,
+                is_deleted = 1
+            WHERE is_deleted = 0
+              AND note_id IN (
+                  SELECT id
+                  FROM note
+                  WHERE book_id = ?
+              )
+            """
+        try db.execute(sql: sql, arguments: [updatedAt, bookID])
+    }
+
+    /// 软删除书籍相关分类。
+    nonisolated func softDeleteCategoriesOfBook(
+        _ db: Database,
+        bookID: Int64,
+        updatedAt: Int64
+    ) throws {
+        // SQL 目的：软删除指定书籍关联分类。
+        // 涉及表：category。
+        // 关键过滤：book_id = ? 且 is_deleted = 0。
+        // 时间字段：updated_date 写入当前毫秒时间戳；last_sync_date 保持原值等待同步层处理。
+        // 副作用用途：复刻 Android 删除书籍第 6 步，清理相关内容分类入口。
+        let sql = """
+            UPDATE category
+            SET updated_date = ?,
+                is_deleted = 1
+            WHERE book_id = ?
+              AND is_deleted = 0
+            """
+        try db.execute(sql: sql, arguments: [updatedAt, bookID])
+    }
+
+    /// 软删除书籍相关内容图片。
+    nonisolated func softDeleteCategoryImagesOfBook(
+        _ db: Database,
+        bookID: Int64,
+        updatedAt: Int64
+    ) throws {
+        // SQL 目的：软删除指定书籍相关内容的图片。
+        // 涉及表：category_image；子查询读取 category_content。
+        // 关键过滤：category_content.book_id = ? 且 category_image.is_deleted = 0。
+        // 时间字段：updated_date 写入当前毫秒时间戳；last_sync_date 保持原值等待同步层处理。
+        // 副作用用途：复刻 Android 删除书籍第 7 步，避免相关内容图片残留。
+        let sql = """
+            UPDATE category_image
+            SET updated_date = ?,
+                is_deleted = 1
+            WHERE is_deleted = 0
+              AND category_content_id IN (
+                  SELECT id
+                  FROM category_content
+                  WHERE book_id = ?
+              )
+            """
+        try db.execute(sql: sql, arguments: [updatedAt, bookID])
+    }
+
+    /// 软删除书籍相关内容。
+    nonisolated func softDeleteCategoryContentsOfBook(
+        _ db: Database,
+        bookID: Int64,
+        updatedAt: Int64
+    ) throws {
+        // SQL 目的：软删除指定书籍下全部相关内容。
+        // 涉及表：category_content。
+        // 关键过滤：book_id = ? 且 is_deleted = 0。
+        // 时间字段：updated_date 写入当前毫秒时间戳；last_sync_date 保持原值等待同步层处理。
+        // 副作用用途：复刻 Android 删除书籍第 7.1 步。
+        let sql = """
+            UPDATE category_content
+            SET updated_date = ?,
+                is_deleted = 1
+            WHERE book_id = ?
+              AND is_deleted = 0
+            """
+        try db.execute(sql: sql, arguments: [updatedAt, bookID])
+    }
+
+    /// 软删除书籍书评。
+    nonisolated func softDeleteReviewsOfBook(
+        _ db: Database,
+        bookID: Int64,
+        updatedAt: Int64
+    ) throws {
+        // SQL 目的：软删除指定书籍下全部书评。
+        // 涉及表：review。
+        // 关键过滤：book_id = ? 且 is_deleted = 0。
+        // 时间字段：updated_date 写入当前毫秒时间戳；last_sync_date 保持原值等待同步层处理。
+        // 副作用用途：复刻 Android 删除书籍第 8 步。
+        let sql = """
+            UPDATE review
+            SET updated_date = ?,
+                is_deleted = 1
+            WHERE book_id = ?
+              AND is_deleted = 0
+            """
+        try db.execute(sql: sql, arguments: [updatedAt, bookID])
+    }
+
+    /// 软删除书籍书评图片。
+    nonisolated func softDeleteReviewImagesOfBook(
+        _ db: Database,
+        bookID: Int64,
+        updatedAt: Int64
+    ) throws {
+        // SQL 目的：软删除指定书籍书评关联图片。
+        // 涉及表：review_image；子查询读取 review。
+        // 关键过滤：review.book_id = ? 且 review_image.is_deleted = 0。
+        // 时间字段：updated_date 写入当前毫秒时间戳；last_sync_date 保持原值等待同步层处理。
+        // 副作用用途：复刻 Android 删除书籍第 9 步。
+        let sql = """
+            UPDATE review_image
+            SET updated_date = ?,
+                is_deleted = 1
+            WHERE is_deleted = 0
+              AND review_id IN (
+                  SELECT id
+                  FROM review
+                  WHERE book_id = ?
+              )
+            """
+        try db.execute(sql: sql, arguments: [updatedAt, bookID])
+    }
+
+    /// 软删除书籍章节。
+    nonisolated func softDeleteChaptersOfBook(
+        _ db: Database,
+        bookID: Int64,
+        updatedAt: Int64
+    ) throws {
+        // SQL 目的：软删除指定书籍下全部章节。
+        // 涉及表：chapter。
+        // 关键过滤：book_id = ?、id != 0 且 is_deleted = 0。
+        // 时间字段：updated_date 写入当前毫秒时间戳；last_sync_date 保持原值等待同步层处理。
+        // 副作用用途：复刻 Android 删除书籍第 10 步。
+        let sql = """
+            UPDATE chapter
+            SET updated_date = ?,
+                is_deleted = 1
+            WHERE book_id = ?
+              AND id != 0
+              AND is_deleted = 0
+            """
+        try db.execute(sql: sql, arguments: [updatedAt, bookID])
+    }
+
+    /// 软删除书籍阅读状态历史。
+    nonisolated func softDeleteReadStatusRecordsOfBook(
+        _ db: Database,
+        bookID: Int64,
+        updatedAt: Int64
+    ) throws {
+        // SQL 目的：软删除指定书籍的阅读状态历史。
+        // 涉及表：book_read_status_record。
+        // 关键过滤：book_id = ? 且 is_deleted = 0。
+        // 时间字段：updated_date 写入当前毫秒时间戳；last_sync_date 保持原值等待同步层处理。
+        // 副作用用途：复刻 Android 删除书籍第 12 步。
+        let sql = """
+            UPDATE book_read_status_record
+            SET updated_date = ?,
+                is_deleted = 1
+            WHERE book_id = ?
+              AND is_deleted = 0
+            """
+        try db.execute(sql: sql, arguments: [updatedAt, bookID])
+    }
+
+    /// 软删除书籍阅读计时记录。
+    nonisolated func softDeleteReadTimeRecordsOfBook(
+        _ db: Database,
+        bookID: Int64,
+        updatedAt: Int64
+    ) throws {
+        // SQL 目的：软删除指定书籍关联的阅读计时记录。
+        // 涉及表：read_time_record。
+        // 关键过滤：book_id = ? 且 is_deleted = 0。
+        // 时间字段：updated_date 写入当前毫秒时间戳；last_sync_date 保持原值等待同步层处理。
+        // 副作用用途：复刻 Android 删除书籍第 13 步。
+        let sql = """
+            UPDATE read_time_record
+            SET updated_date = ?,
+                is_deleted = 1
+            WHERE book_id = ?
+              AND is_deleted = 0
+            """
+        try db.execute(sql: sql, arguments: [updatedAt, bookID])
+    }
+
+    /// 软删除书籍排序设置。
+    nonisolated func softDeleteSortRecordsOfBook(
+        _ db: Database,
+        bookID: Int64,
+        updatedAt: Int64
+    ) throws {
+        // SQL 目的：软删除指定书籍关联排序设置。
+        // 涉及表：sort。
+        // 关键过滤：book_id = ? 且 is_deleted = 0。
+        // 时间字段：updated_date 写入当前毫秒时间戳；last_sync_date 保持原值等待同步层处理。
+        // 副作用用途：复刻 Android 删除书籍第 14 步。
+        let sql = """
+            UPDATE sort
+            SET updated_date = ?,
+                is_deleted = 1
+            WHERE book_id = ?
+              AND is_deleted = 0
+            """
+        try db.execute(sql: sql, arguments: [updatedAt, bookID])
+    }
+
+    /// 软删除书籍打卡记录。
+    nonisolated func softDeleteCheckInsOfBook(
+        _ db: Database,
+        bookID: Int64,
+        updatedAt: Int64
+    ) throws {
+        // SQL 目的：软删除指定书籍关联打卡记录。
+        // 涉及表：check_in_record。
+        // 关键过滤：book_id = ? 且 is_deleted = 0。
+        // 时间字段：updated_date 写入当前毫秒时间戳；last_sync_date 保持原值等待同步层处理。
+        // 副作用用途：复刻 Android 删除书籍第 15 步。
+        let sql = """
+            UPDATE check_in_record
+            SET updated_date = ?,
+                is_deleted = 1
+            WHERE book_id = ?
+              AND is_deleted = 0
+            """
+        try db.execute(sql: sql, arguments: [updatedAt, bookID])
+    }
+
+    /// 软删除书籍与书单关系；这是删书级联清理，不是“加入书单”功能实现。
+    nonisolated func softDeleteCollectionBooksOfBook(
+        _ db: Database,
+        bookID: Int64
+    ) throws {
+        // SQL 目的：软删除指定书籍关联的全部书单关系。
+        // 涉及表：collection_book。
+        // 关键过滤：book_id = ? 且 is_deleted = 0。
+        // 时间字段：Android CollectionBookDao.deleteByBookId 不更新时间戳，iOS 保持一致不改 updated_date。
+        // 副作用用途：复刻 Android 删除书籍第 16 步，仅作为删除书籍级联清理。
+        let sql = """
+            UPDATE collection_book
+            SET is_deleted = 1
+            WHERE book_id = ?
+              AND is_deleted = 0
+            """
+        try db.execute(sql: sql, arguments: [bookID])
+    }
+
+    /// 软删除书籍阅读计划。
+    nonisolated func softDeleteReadPlansOfBook(
+        _ db: Database,
+        bookID: Int64
+    ) throws {
+        // SQL 目的：软删除指定书籍关联阅读计划。
+        // 涉及表：read_plan。
+        // 关键过滤：book_id = ? 且 is_deleted = 0。
+        // 时间字段：Android ReadPlanDao.deleteFromBook 不更新时间戳，iOS 保持一致不改 updated_date。
+        // 副作用用途：复刻 Android 删除书籍第 17 步。
+        let sql = """
+            UPDATE read_plan
+            SET is_deleted = 1
+            WHERE book_id = ?
+              AND is_deleted = 0
+            """
+        try db.execute(sql: sql, arguments: [bookID])
+    }
+
     /// 读取指定书籍当前有效标签 ID 集合。
     nonisolated func fetchActiveTagIDs(ofBook bookID: Int64, db: Database) throws -> Set<Int64> {
         // SQL 目的：读取单本书现有有效标签关系，用于多本批量追加时避免重复插入。
@@ -1454,8 +2046,267 @@ private extension BookRepository {
             FROM source
             WHERE id = ?
               AND is_deleted = 0
-            """
+        """
         return (try Int.fetchOne(db, sql: sql, arguments: [sourceID]) ?? 0) > 0
+    }
+
+    /// 校验书籍标签是否仍有效。
+    nonisolated func isActiveBookTag(_ db: Database, tagID: Int64) throws -> Bool {
+        // SQL 目的：校验待管理标签是否仍是有效书籍标签。
+        // 涉及表：tag。
+        // 关键过滤：id = ?、type = 1 且 is_deleted = 0。
+        // 返回字段用途：返回计数是否大于 0；时间字段不参与本查询。
+        let sql = """
+            SELECT COUNT(*)
+            FROM tag
+            WHERE id = ?
+              AND type = 1
+              AND is_deleted = 0
+            """
+        return (try Int.fetchOne(db, sql: sql, arguments: [tagID]) ?? 0) > 0
+    }
+
+    /// 校验书籍标签名称是否重复。
+    nonisolated func isDuplicateBookTagName(
+        _ db: Database,
+        name: String,
+        excludingTagID: Int64
+    ) throws -> Bool {
+        let ownerID = try DatabaseOwnerResolver.fetchExistingOwnerID(in: db) ?? 0
+        // SQL 目的：查询同一用户下是否存在同名书籍标签。
+        // 涉及表：tag。
+        // 关键过滤：user_id = ?、name = ?、type = 1、is_deleted = 0，并排除当前 tag id。
+        // 返回字段用途：用于重命名前置重名拦截；时间字段不参与本查询。
+        let sql = """
+            SELECT COUNT(*)
+            FROM tag
+            WHERE user_id = ?
+              AND name = ?
+              AND type = 1
+              AND is_deleted = 0
+              AND id != ?
+            """
+        return (try Int.fetchOne(db, sql: sql, arguments: [ownerID, name, excludingTagID]) ?? 0) > 0
+    }
+
+    /// 校验来源名称是否重复。
+    nonisolated func isDuplicateSourceName(
+        _ db: Database,
+        name: String,
+        excludingSourceID: Int64
+    ) throws -> Bool {
+        // SQL 目的：查询是否存在同名有效来源。
+        // 涉及表：source。
+        // 关键过滤：name = ?、is_deleted = 0，并排除当前 source id。
+        // 返回字段用途：用于来源重命名前置重名拦截；时间字段不参与本查询。
+        let sql = """
+            SELECT COUNT(*)
+            FROM source
+            WHERE name = ?
+              AND is_deleted = 0
+              AND id != ?
+            """
+        return (try Int.fetchOne(db, sql: sql, arguments: [name, excludingSourceID]) ?? 0) > 0
+    }
+
+    /// 校验管理对象的新名称。
+    nonisolated func validatedManagementName(
+        _ name: String,
+        target: String
+    ) throws -> String {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { throw BookshelfBatchWriteError.invalidName(target) }
+        return trimmed
+    }
+
+    /// 软删除分组主记录。
+    nonisolated func softDeleteGroup(
+        _ db: Database,
+        groupID: Int64
+    ) throws {
+        // SQL 目的：软删除有效分组主记录。
+        // 涉及表：`group`。
+        // 关键过滤：id = ? 且 is_deleted = 0，对齐 Android GroupDao.deleteGroup。
+        // 时间字段：Android 删除分组不更新 updated_date，iOS 保持一致不改时间字段。
+        // 副作用用途：从默认书架分组入口移除该分组。
+        let sql = """
+            UPDATE `group`
+            SET is_deleted = 1
+            WHERE id = ?
+              AND is_deleted = 0
+            """
+        try db.execute(sql: sql, arguments: [groupID])
+    }
+
+    /// 软删除标签与书籍关系。
+    nonisolated func softDeleteTagBookRelations(
+        _ db: Database,
+        tagID: Int64,
+        updatedAt: Int64
+    ) throws {
+        // SQL 目的：软删除指定标签的全部书籍关系。
+        // 涉及表：tag_book。
+        // 关键过滤：tag_id = ? 且 is_deleted = 0。
+        // 时间字段：updated_date 写入当前毫秒时间戳；last_sync_date 保持原值等待同步层处理。
+        // 副作用用途：删除标签前清理书籍维度关系，避免孤立 tag_book。
+        let sql = """
+            UPDATE tag_book
+            SET updated_date = ?,
+                is_deleted = 1
+            WHERE tag_id = ?
+              AND is_deleted = 0
+            """
+        try db.execute(sql: sql, arguments: [updatedAt, tagID])
+    }
+
+    /// 软删除标签与书摘关系。
+    nonisolated func softDeleteTagNoteRelations(
+        _ db: Database,
+        tagID: Int64,
+        updatedAt: Int64
+    ) throws {
+        // SQL 目的：软删除指定标签的全部书摘关系。
+        // 涉及表：tag_note。
+        // 关键过滤：tag_id = ? 且 is_deleted = 0。
+        // 时间字段：updated_date 写入当前毫秒时间戳；last_sync_date 保持原值等待同步层处理。
+        // 副作用用途：删除标签前清理书摘维度关系，避免孤立 tag_note。
+        let sql = """
+            UPDATE tag_note
+            SET updated_date = ?,
+                is_deleted = 1
+            WHERE tag_id = ?
+              AND is_deleted = 0
+            """
+        try db.execute(sql: sql, arguments: [updatedAt, tagID])
+    }
+
+    /// 软删除书籍标签主记录。
+    nonisolated func softDeleteBookTag(
+        _ db: Database,
+        tagID: Int64,
+        updatedAt: Int64
+    ) throws {
+        // SQL 目的：软删除有效书籍标签主记录。
+        // 涉及表：tag。
+        // 关键过滤：id = ?、type = 1 且 is_deleted = 0。
+        // 时间字段：updated_date 写入当前毫秒时间戳；last_sync_date 保持原值等待同步层处理。
+        // 副作用用途：对齐 Android TagDao.deleteSync，使标签维度观察流移除该标签。
+        let sql = """
+            UPDATE tag
+            SET updated_date = ?,
+                is_deleted = 1
+            WHERE id = ?
+              AND type = 1
+              AND is_deleted = 0
+            """
+        try db.execute(sql: sql, arguments: [updatedAt, tagID])
+    }
+
+    /// 获取“未知来源”的有效 ID；若缺失且当前删除目标不是默认来源，则按 iOS seed 语义恢复默认来源。
+    nonisolated func unknownSourceID(
+        _ db: Database,
+        deletingSourceID: Int64
+    ) throws -> Int64 {
+        if deletingSourceID == DatabaseOwnerResolver.defaultSourceID {
+            throw BookshelfBatchWriteError.protectedDefaultSource
+        }
+
+        // SQL 目的：优先查找仍有效的“未知”来源，作为删除来源时的迁移目标。
+        // 涉及表：source。
+        // 关键过滤：name = '未知'、is_deleted = 0，并排除当前待删除 source id。
+        // 返回字段用途：返回目标 source.id；时间字段不参与本查询。
+        let lookupSQL = """
+            SELECT id
+            FROM source
+            WHERE name = ?
+              AND is_deleted = 0
+              AND id != ?
+            ORDER BY source_order ASC, id ASC
+            LIMIT 1
+            """
+        if let sourceID = try Int64.fetchOne(
+            db,
+            sql: lookupSQL,
+            arguments: [DatabaseOwnerResolver.defaultSourceName, deletingSourceID]
+        ) {
+            return sourceID
+        }
+
+        // SQL 目的：恢复 iOS 与 Android 对齐的默认未知来源种子。
+        // 涉及表：source。
+        // 关键过滤：使用固定 id = 1；INSERT OR IGNORE 避免已有记录时报错。
+        // 时间字段：种子来源 created/updated/last_sync_date 均保持 0，与初始化种子一致。
+        // 副作用用途：保证删除自定义来源时，总有可迁移的未知来源。
+        let insertSQL = """
+            INSERT OR IGNORE INTO source (id, name, source_order, bookshelf_order, is_hide, created_date, updated_date, last_sync_date, is_deleted)
+            VALUES (?, ?, 0, -1, 0, 0, 0, 0, 0)
+            """
+        try db.execute(
+            sql: insertSQL,
+            arguments: [DatabaseOwnerResolver.defaultSourceID, DatabaseOwnerResolver.defaultSourceName]
+        )
+
+        // SQL 目的：确保默认未知来源处于有效状态并具备标准名称。
+        // 涉及表：source。
+        // 关键过滤：id = 1 且不是当前待删除来源。
+        // 时间字段：保持 Android 删除来源迁移路径不更新时间戳的语义。
+        // 副作用用途：恢复未知来源作为迁移目标。
+        let restoreSQL = """
+            UPDATE source
+            SET name = ?,
+                is_deleted = 0
+            WHERE id = ?
+              AND id != ?
+            """
+        try db.execute(
+            sql: restoreSQL,
+            arguments: [DatabaseOwnerResolver.defaultSourceName, DatabaseOwnerResolver.defaultSourceID, deletingSourceID]
+        )
+
+        guard try isActiveSource(db, sourceID: DatabaseOwnerResolver.defaultSourceID) else {
+            throw BookshelfBatchWriteError.invalidSource
+        }
+        return DatabaseOwnerResolver.defaultSourceID
+    }
+
+    /// 将旧来源下的有效书籍迁移到新来源。
+    nonisolated func migrateBooks(
+        fromSourceID oldSourceID: Int64,
+        toSourceID newSourceID: Int64,
+        db: Database
+    ) throws {
+        // SQL 目的：删除来源前把有效书籍迁移到未知来源。
+        // 涉及表：book。
+        // 关键过滤：source_id = ?、is_deleted = 0、id != 0。
+        // 时间字段：Android updateOldSourceToNew 不更新 updated_date，iOS 保持一致不改时间字段。
+        // 副作用用途：对齐 Android BookDao.updateOldSourceToNew，避免书籍引用已删除来源。
+        let sql = """
+            UPDATE book
+            SET source_id = ?
+            WHERE source_id = ?
+              AND is_deleted = 0
+              AND id != 0
+            """
+        try db.execute(sql: sql, arguments: [newSourceID, oldSourceID])
+    }
+
+    /// 软删除来源主记录。
+    nonisolated func softDeleteSource(
+        _ db: Database,
+        sourceID: Int64
+    ) throws {
+        // SQL 目的：软删除有效来源主记录。
+        // 涉及表：source。
+        // 关键过滤：id = ? 且 is_deleted = 0。
+        // 时间字段：Android SourceDao.delete 不更新 updated_date，iOS 保持一致不改时间字段。
+        // 副作用用途：删除来源维度入口；相关书籍已在前一步迁移到未知来源。
+        let sql = """
+            UPDATE source
+            SET is_deleted = 1
+            WHERE id = ?
+              AND is_deleted = 0
+            """
+        try db.execute(sql: sql, arguments: [sourceID])
     }
 
     /// 更新单本有效书籍的来源。

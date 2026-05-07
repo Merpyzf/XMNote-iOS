@@ -69,10 +69,17 @@ struct BookGridView: View {
                     selectedCount: viewModel.selectedCount,
                     canPin: viewModel.canSubmitSelectedPin,
                     canMove: viewModel.canMoveSelectedItems,
+                    canMore: viewModel.canMoreSelectedItems,
+                    canDelete: viewModel.canDeleteSelectedItems,
                     moveDisabledReason: viewModel.moveDisabledReason,
                     activeAction: viewModel.activeWriteAction,
+                    moreActions: viewModel.defaultMoreActions,
+                    isLoadingOptions: viewModel.isLoadingBatchOptions,
+                    notice: viewModel.actionNotice,
                     onPin: viewModel.pinSelectedItems,
-                    onMove: { showsMoveSheet = true }
+                    onMove: { showsMoveSheet = true },
+                    onMoreAction: viewModel.performMoreAction,
+                    onDelete: viewModel.presentDeleteConfirmation
                 )
                     .transition(.move(edge: .bottom).combined(with: .opacity))
             }
@@ -93,6 +100,52 @@ struct BookGridView: View {
                 }
             )
         }
+        .sheet(item: $viewModel.activeBatchSheet) { sheet in
+            switch sheet {
+            case .tags(
+                options: let options,
+                initialSelectedIDs: let initialSelectedIDs,
+                allowsEmptySelection: let allowsEmptySelection
+            ):
+                BookshelfBatchTagsSheet(
+                    options: options,
+                    selectedCount: viewModel.selectedBookIDs.count,
+                    initialSelectedIDs: initialSelectedIDs,
+                    allowsEmptySelection: allowsEmptySelection,
+                    onConfirm: viewModel.submitBatchTags
+                )
+            case .source(options: let options, initialSelectedID: let initialSelectedID):
+                BookshelfBatchSourceSheet(
+                    options: options,
+                    selectedCount: viewModel.selectedBookIDs.count,
+                    initialSelectedID: initialSelectedID,
+                    onConfirm: viewModel.submitBatchSource
+                )
+            case .readStatus(
+                options: let options,
+                initialStatusID: let initialStatusID,
+                initialChangedAt: let initialChangedAt,
+                initialRatingScore: let initialRatingScore
+            ):
+                BookshelfBatchReadStatusSheet(
+                    options: options,
+                    selectedCount: viewModel.selectedBookIDs.count,
+                    initialStatusID: initialStatusID,
+                    initialChangedAt: initialChangedAt,
+                    initialRatingScore: initialRatingScore,
+                    onConfirm: viewModel.submitBatchReadStatus
+                )
+            case .moveGroup(options: let options):
+                BookshelfMoveGroupSheet(
+                    options: options,
+                    selectedCount: viewModel.selectedBookIDs.count,
+                    onConfirm: viewModel.submitMoveToGroup
+                )
+            }
+        }
+        .xmSystemAlert(item: $viewModel.activeDeleteConfirmation) { confirmation in
+            defaultDeleteDescriptor(for: confirmation)
+        }
         .onAppear {
             syncReadLoadingGate()
         }
@@ -103,6 +156,38 @@ struct BookGridView: View {
             readLoadingGate.hideImmediately()
         }
         .frame(maxHeight: .infinity, alignment: .top)
+    }
+
+    private func defaultDeleteDescriptor(for confirmation: BookshelfDefaultDeleteConfirmation) -> XMSystemAlertDescriptor {
+        if confirmation.groupCount == 0 {
+            return XMSystemAlertDescriptor(
+                title: "删除书籍",
+                message: "将删除已选 \(confirmation.bookCount) 本书，并清理书摘、标签、分组、阅读状态、打卡、书单关系等关联数据。此操作不可撤销。",
+                actions: [
+                    XMSystemAlertAction(title: "取消", role: .cancel) { },
+                    XMSystemAlertAction(title: "删除", role: .destructive) {
+                        viewModel.submitDeleteSelectedItems(placement: .end)
+                    }
+                ]
+            )
+        }
+
+        let bookText = confirmation.bookCount > 0 ? "\(confirmation.bookCount) 本书" : ""
+        let groupText = "\(confirmation.groupCount) 个分组"
+        let targetText = [bookText, groupText].filter { !$0.isEmpty }.joined(separator: "和")
+        return XMSystemAlertDescriptor(
+            title: "删除书架项目",
+            message: "将删除已选 \(targetText)。分组内书籍会移回默认书架，请选择它们的位置；此操作不可撤销。",
+            actions: [
+                XMSystemAlertAction(title: "取消", role: .cancel) { },
+                XMSystemAlertAction(title: "移到最前并删除", role: .destructive) {
+                    viewModel.submitDeleteSelectedItems(placement: .start)
+                },
+                XMSystemAlertAction(title: "移到最后并删除", role: .destructive) {
+                    viewModel.submitDeleteSelectedItems(placement: .end)
+                }
+            ]
+        )
     }
 
     // MARK: - Grid Content

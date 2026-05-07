@@ -9,7 +9,7 @@ import Foundation
 
 /**
  * [INPUT]: 依赖 BookRepositoryProtocol 提供书架快照数据流和排序置顶写入，依赖 BookshelfSnapshot 进行多维度状态编排
- * [OUTPUT]: 对外提供 BookViewModel，驱动书籍页维度浏览、搜索态、显示设置、默认书架编辑态、排序置顶写入与 UICollectionView 排序提交
+ * [OUTPUT]: 对外提供 BookViewModel，驱动书籍页维度浏览、搜索态、显示设置、默认书架编辑态、排序置顶、批量编辑、删除与 UICollectionView 排序提交
  * [POS]: Book 模块书籍列表状态编排器，被 BookContainerView/BookGridView 消费
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -33,6 +33,11 @@ enum BookshelfPendingAction: Hashable {
     case move
     case moveToStart
     case moveToEnd
+    case moveToGroup
+    case addToBookList
+    case setTag
+    case setSource
+    case setReadStatus
     case more
     case delete
     case reorder
@@ -49,6 +54,16 @@ enum BookshelfPendingAction: Hashable {
             return "移到最前"
         case .moveToEnd:
             return "移到最后"
+        case .moveToGroup:
+            return "移组"
+        case .addToBookList:
+            return "书单"
+        case .setTag:
+            return "标签"
+        case .setSource:
+            return "来源"
+        case .setReadStatus:
+            return "状态"
         case .more:
             return "更多"
         case .delete:
@@ -57,6 +72,16 @@ enum BookshelfPendingAction: Hashable {
             return "排序"
         }
     }
+}
+
+/// 默认书架删除确认状态，记录打开确认弹窗时的选中对象数量。
+struct BookshelfDefaultDeleteConfirmation: Identifiable, Hashable, Sendable {
+    let bookCount: Int
+    let groupCount: Int
+
+    var id: String { "book-\(bookCount)-group-\(groupCount)" }
+
+    var totalCount: Int { bookCount + groupCount }
 }
 
 // MARK: - BookViewModel
@@ -94,9 +119,15 @@ class BookViewModel {
     var selectedIDs: [BookshelfItemID] = []
     var activeWriteAction: BookshelfPendingAction?
     var writeError: String?
+    var actionNotice: String?
+    var activeBatchSheet: BookshelfBatchEditSheet?
+    var activeDeleteConfirmation: BookshelfDefaultDeleteConfirmation?
+    var isLoadingBatchOptions = false
 
     private let repository: any BookRepositoryProtocol
     private var observationTask: Task<Void, Never>?
+    private var writeTask: Task<Void, Never>?
+    private var batchOptionsTask: Task<Void, Never>?
 
     var bookshelfItems: [BookshelfItem] {
         snapshot.defaultItems
@@ -120,6 +151,20 @@ class BookViewModel {
 
     var selectedIDSet: Set<BookshelfItemID> {
         Set(selectedIDs)
+    }
+
+    var selectedBookIDs: [Int64] {
+        selectedIDs.compactMap { id in
+            if case .book(let bookID) = id { return bookID }
+            return nil
+        }
+    }
+
+    var selectedGroupCount: Int {
+        selectedIDs.reduce(0) { count, id in
+            if case .group = id { return count + 1 }
+            return count
+        }
     }
 
     var visibleDefaultItemIDs: [BookshelfItemID] {
@@ -155,6 +200,18 @@ class BookViewModel {
         isEditing && activeWriteAction == nil && !hasSearchKeyword && hasSelectedNormalItem
     }
 
+    var canMoreSelectedItems: Bool {
+        isEditing && activeWriteAction == nil && !selectedIDs.isEmpty
+    }
+
+    var canDeleteSelectedItems: Bool {
+        canMoreSelectedItems
+    }
+
+    var defaultMoreActions: [BookshelfBookListEditAction] {
+        [.moveToGroup, .addToBookList, .setTag, .setSource, .setReadStatus]
+    }
+
     var hasSelectedNormalItem: Bool {
         let itemsByID = Dictionary(uniqueKeysWithValues: currentDefaultItems.map { ($0.id, $0) })
         return selectedIDs.contains { id in
@@ -186,6 +243,8 @@ class BookViewModel {
     /// 释放书籍模块运行过程持有的资源与观察任务。
     deinit {
         observationTask?.cancel()
+        writeTask?.cancel()
+        batchOptionsTask?.cancel()
     }
 
     // MARK: - Observation
@@ -344,43 +403,55 @@ class BookViewModel {
 
     /// 退出默认书架编辑态，并清空选择集合和占位写操作状态。
     func exitEditing() {
-        guard isEditing || !selectedIDs.isEmpty || activeWriteAction != nil || writeError != nil else { return }
+        guard isEditing || !selectedIDs.isEmpty || activeWriteAction != nil || writeError != nil || actionNotice != nil else { return }
         isEditing = false
         selectedIDs.removeAll()
         activeWriteAction = nil
         writeError = nil
+        actionNotice = nil
+        activeBatchSheet = nil
+        activeDeleteConfirmation = nil
+        cancelBatchOptionsLoading()
     }
 
     /// 在当前默认书架可见范围内切换单个 Book 或 Group 的选中状态。
     func toggleSelection(_ id: BookshelfItemID) {
         guard isEditing, Set(visibleDefaultItemIDs).contains(id) else { return }
+        cancelBatchOptionsLoading()
         if let index = selectedIDs.firstIndex(of: id) {
             selectedIDs.remove(at: index)
         } else {
             selectedIDs.append(id)
         }
         writeError = nil
+        actionNotice = nil
     }
 
     /// 选中当前默认书架可见的所有顶层 Book 和 Group。
     func selectAllVisible() {
         guard isEditing else { return }
+        cancelBatchOptionsLoading()
         selectedIDs = visibleDefaultItemIDs
         writeError = nil
+        actionNotice = nil
     }
 
     /// 在当前默认书架可见范围内执行反选，不保留不可见对象。
     func invertVisibleSelection() {
         guard isEditing else { return }
+        cancelBatchOptionsLoading()
         let currentSelection = selectedIDSet
         selectedIDs = visibleDefaultItemIDs.filter { !currentSelection.contains($0) }
         writeError = nil
+        actionNotice = nil
     }
 
     /// 清空当前编辑态选择集合，但保留编辑态本身。
     func clearSelection() {
+        cancelBatchOptionsLoading()
         selectedIDs.removeAll()
         writeError = nil
+        actionNotice = nil
     }
 
     /// 批量置顶当前有序选择集合，完成后保留编辑态并清空选择，避免重复提交。
@@ -426,6 +497,112 @@ class BookViewModel {
     func moveSelectedItemsToEnd() {
         guard canMoveSelectedItems else { return }
         moveItems(selectedIDs, placement: .end, clearsSelectionOnSuccess: true)
+    }
+
+    /// 执行默认书架“更多”菜单动作；混选时仅对 Book 生效，Group 被忽略。
+    func performMoreAction(_ action: BookshelfBookListEditAction) {
+        guard canMoreSelectedItems else {
+            actionNotice = "请先选择书籍或分组"
+            return
+        }
+        switch action {
+        case .moveToGroup:
+            presentMoveGroupSheet()
+        case .addToBookList:
+            guard !selectedBookIDs.isEmpty else {
+                actionNotice = "分组暂不支持加入书单，请选择书籍"
+                return
+            }
+            actionNotice = "书单添加将在书单模块开发时开放"
+        case .setTag, .setSource, .setReadStatus:
+            presentBatchSheet(for: action)
+        case .pin, .unpin, .reorder, .moveToStart, .moveToEnd, .moveOut, .renameGroup, .deleteGroup, .renameTag, .deleteTag, .renameSource, .deleteSource, .deleteBooks:
+            actionNotice = "\(action.title)不适用于默认书架更多菜单"
+        }
+    }
+
+    /// 打开默认书架删除确认；Group 删除时需要用户选择组内书籍安置位置。
+    func presentDeleteConfirmation() {
+        guard canDeleteSelectedItems else {
+            actionNotice = "请先选择要删除的书籍或分组"
+            return
+        }
+        activeDeleteConfirmation = BookshelfDefaultDeleteConfirmation(
+            bookCount: selectedBookIDs.count,
+            groupCount: selectedGroupCount
+        )
+        actionNotice = nil
+        writeError = nil
+    }
+
+    /// 删除默认书架选中的 Book/Group，分组内书籍按 placement 安置回默认书架。
+    func submitDeleteSelectedItems(placement: GroupBooksPlacement) {
+        let ids = selectedIDs
+        activeDeleteConfirmation = nil
+        runWriteAction(.delete, successMessage: "已删除选中项") {
+            try await self.repository.deleteBookshelfItems(ids, groupBooksPlacement: placement)
+        }
+    }
+
+    /// 提交默认书架批量标签写入；仅作用于选中的 Book，Group 会被忽略。
+    func submitBatchTags(tagIDs: [Int64]) {
+        let bookIDs = selectedBookIDs
+        activeBatchSheet = nil
+        guard !bookIDs.isEmpty else {
+            actionNotice = "分组不支持设置标签，请选择书籍"
+            return
+        }
+        runWriteAction(.setTag, successMessage: "标签已更新") {
+            try await self.repository.batchSetBooksTags(bookIDs: bookIDs, tagIDs: tagIDs)
+        }
+    }
+
+    /// 提交默认书架批量来源写入；仅作用于选中的 Book。
+    func submitBatchSource(sourceID: Int64) {
+        let bookIDs = selectedBookIDs
+        activeBatchSheet = nil
+        guard !bookIDs.isEmpty else {
+            actionNotice = "分组不支持设置来源，请选择书籍"
+            return
+        }
+        runWriteAction(.setSource, successMessage: "来源已更新") {
+            try await self.repository.batchSetBooksSource(bookIDs: bookIDs, sourceID: sourceID)
+        }
+    }
+
+    /// 提交默认书架批量阅读状态写入；读完状态必须携带评分。
+    func submitBatchReadStatus(statusID: Int64, changedAt: Date, ratingScore: Int64?) {
+        if statusID == BookEntryReadingStatus.finished.rawValue, (ratingScore ?? 0) <= 0 {
+            actionNotice = "标记读完时需要选择评分"
+            return
+        }
+        let bookIDs = selectedBookIDs
+        activeBatchSheet = nil
+        guard !bookIDs.isEmpty else {
+            actionNotice = "分组不支持设置阅读状态，请选择书籍"
+            return
+        }
+        let input = BookshelfBatchReadStatusInput(
+            statusID: statusID,
+            changedAt: Int64(changedAt.timeIntervalSince1970 * 1000),
+            ratingScore: ratingScore
+        )
+        runWriteAction(.setReadStatus, successMessage: "阅读状态已更新") {
+            try await self.repository.batchSetBookReadStatus(bookIDs: bookIDs, input: input)
+        }
+    }
+
+    /// 提交默认书架批量移入分组；仅作用于选中的 Book。
+    func submitMoveToGroup(groupID: Int64) {
+        let bookIDs = selectedBookIDs
+        activeBatchSheet = nil
+        guard !bookIDs.isEmpty else {
+            actionNotice = "分组不能移入分组，请选择书籍"
+            return
+        }
+        runWriteAction(.moveToGroup, successMessage: "已移入分组") {
+            try await self.repository.moveBooks(bookIDs, toGroup: groupID)
+        }
     }
 
     /// 将单项移动到普通区最前。
@@ -588,6 +765,172 @@ private extension BookViewModel {
                     self.snapshot.defaultItems = originalItems
                     self.activeWriteAction = nil
                     self.writeError = error.localizedDescription
+                }
+            }
+        }
+    }
+
+    /// 拉取默认书架批量编辑候选项，混选时只以 Book 集合生成 Sheet。
+    /// - Note: 候选项加载任务可被选择变化或页面释放取消；UI 状态只在 MainActor 回写。
+    func presentBatchSheet(for action: BookshelfBookListEditAction) {
+        guard activeWriteAction == nil, !isLoadingBatchOptions else { return }
+        let bookIDs = selectedBookIDs
+        guard !bookIDs.isEmpty else {
+            actionNotice = "分组不支持\(action.title)，请至少选择一本书"
+            return
+        }
+        isLoadingBatchOptions = true
+        actionNotice = "正在加载\(action.title)选项..."
+        writeError = nil
+        batchOptionsTask?.cancel()
+        batchOptionsTask = Task {
+            do {
+                let options = try await repository.fetchBookshelfBatchEditOptions(bookIDs: bookIDs)
+                guard !Task.isCancelled else { return }
+                await MainActor.run {
+                    guard self.selectedBookIDs == bookIDs else {
+                        self.isLoadingBatchOptions = false
+                        self.actionNotice = nil
+                        return
+                    }
+                    self.isLoadingBatchOptions = false
+                    self.presentBatchSheet(action, options: options, bookIDs: bookIDs)
+                }
+            } catch {
+                guard !Task.isCancelled else { return }
+                await MainActor.run {
+                    self.isLoadingBatchOptions = false
+                    self.writeError = error.localizedDescription
+                    self.actionNotice = error.localizedDescription
+                }
+            }
+        }
+    }
+
+    /// 拉取默认书架可移入目标分组，并打开移组 Sheet。
+    /// - Note: 只经 Repository 获取分组选项，避免 ViewModel 直接访问数据库。
+    func presentMoveGroupSheet() {
+        guard activeWriteAction == nil, !isLoadingBatchOptions else { return }
+        let bookIDs = selectedBookIDs
+        guard !bookIDs.isEmpty else {
+            actionNotice = "分组不能移入分组，请至少选择一本书"
+            return
+        }
+        isLoadingBatchOptions = true
+        actionNotice = "正在加载分组选项..."
+        writeError = nil
+        batchOptionsTask?.cancel()
+        batchOptionsTask = Task {
+            do {
+                let options = try await repository.fetchBookshelfMoveTargetGroups(excludingGroupID: nil)
+                guard !Task.isCancelled else { return }
+                await MainActor.run {
+                    guard self.selectedBookIDs == bookIDs else {
+                        self.isLoadingBatchOptions = false
+                        self.actionNotice = nil
+                        return
+                    }
+                    self.isLoadingBatchOptions = false
+                    guard !options.isEmpty else {
+                        self.actionNotice = "暂无可移入的分组"
+                        return
+                    }
+                    self.activeBatchSheet = .moveGroup(options: options)
+                    self.actionNotice = nil
+                }
+            } catch {
+                guard !Task.isCancelled else { return }
+                await MainActor.run {
+                    self.isLoadingBatchOptions = false
+                    self.writeError = error.localizedDescription
+                    self.actionNotice = error.localizedDescription
+                }
+            }
+        }
+    }
+
+    /// 根据候选项快照打开具体默认书架批量编辑 Sheet。
+    func presentBatchSheet(
+        _ action: BookshelfBookListEditAction,
+        options: BookshelfBatchEditOptions,
+        bookIDs: [Int64]
+    ) {
+        switch action {
+        case .setTag:
+            activeBatchSheet = .tags(
+                options: options.tags,
+                initialSelectedIDs: bookIDs.count == 1 ? options.initialTagIDs : [],
+                allowsEmptySelection: bookIDs.count == 1
+            )
+            actionNotice = nil
+        case .setSource:
+            guard !options.sources.isEmpty else {
+                actionNotice = "暂无可用来源"
+                return
+            }
+            activeBatchSheet = .source(
+                options: options.sources,
+                initialSelectedID: options.initialSourceID ?? options.sources.first?.id
+            )
+            actionNotice = nil
+        case .setReadStatus:
+            guard !options.readStatuses.isEmpty else {
+                actionNotice = "暂无可用阅读状态"
+                return
+            }
+            let initialChangedAt: Date? = options.initialReadStatusChangedAt.flatMap { timestamp in
+                timestamp > 0 ? Date(timeIntervalSince1970: TimeInterval(timestamp) / 1000) : nil
+            }
+            let initialStatusID = options.initialReadStatusID
+                ?? options.readStatuses.first(where: { $0.id == BookEntryReadingStatus.reading.rawValue })?.id
+                ?? options.readStatuses.first?.id
+            activeBatchSheet = .readStatus(
+                options: options.readStatuses,
+                initialStatusID: initialStatusID,
+                initialChangedAt: initialChangedAt,
+                initialRatingScore: options.initialRatingScore
+            )
+            actionNotice = nil
+        case .moveToGroup, .addToBookList, .pin, .unpin, .reorder, .moveToStart, .moveToEnd, .moveOut, .renameGroup, .deleteGroup, .renameTag, .deleteTag, .renameSource, .deleteSource, .deleteBooks:
+            return
+        }
+    }
+
+    /// 取消批量候选项加载，避免旧选择集合打开过期 Sheet。
+    func cancelBatchOptionsLoading() {
+        batchOptionsTask?.cancel()
+        batchOptionsTask = nil
+        isLoadingBatchOptions = false
+    }
+
+    /// 启动默认书架写操作任务，并在成功后清空选择。
+    /// - Note: Repository 写入在后台执行；完成后回到 MainActor 修改 UI 状态，页面释放时 Task 可被取消。
+    func runWriteAction(
+        _ action: BookshelfPendingAction,
+        successMessage: String,
+        operation: @escaping () async throws -> Void
+    ) {
+        guard activeWriteAction == nil else { return }
+        cancelBatchOptionsLoading()
+        activeWriteAction = action
+        actionNotice = "\(action.title)处理中..."
+        writeError = nil
+        writeTask?.cancel()
+        writeTask = Task {
+            do {
+                try await operation()
+                await MainActor.run {
+                    self.selectedIDs.removeAll()
+                    self.activeWriteAction = nil
+                    self.actionNotice = successMessage
+                    self.restartObservation()
+                }
+            } catch {
+                await MainActor.run {
+                    self.activeWriteAction = nil
+                    self.writeError = error.localizedDescription
+                    self.actionNotice = error.localizedDescription
+                    self.restartObservation()
                 }
             }
         }

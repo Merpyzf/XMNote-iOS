@@ -53,10 +53,24 @@ protocol BookRepositoryProtocol {
     func moveBookshelfItemsToStart(_ ids: [BookshelfItemID], in currentItems: [BookshelfOrderItem]) async throws
     /// 将非置顶选中项移动到普通区最后，置顶区保持不变。
     func moveBookshelfItemsToEnd(_ ids: [BookshelfItemID], in currentItems: [BookshelfOrderItem]) async throws
-    /// 删除默认书架顶层 Book/Group，分组删除时按传入位置安置组内书籍；真实写入需先完成 Android 对齐验证。
+    /// 删除默认书架顶层 Book/Group，分组删除时按传入位置安置组内书籍。
     func deleteBookshelfItems(_ ids: [BookshelfItemID], groupBooksPlacement: GroupBooksPlacement) async throws
     /// 将指定书籍移动到目标分组，取消置顶并重建唯一有效分组关系。
     func moveBooks(_ bookIDs: [Int64], toGroup targetGroupID: Int64) async throws
+    /// 软删除指定书籍及其 Android 对齐关联数据。
+    func deleteBooks(_ bookIDs: [Int64]) async throws
+    /// 删除分组并按位置语义把组内书籍安置回默认书架。
+    func deleteGroup(groupID: Int64, placement: GroupBooksPlacement) async throws
+    /// 重命名书籍分组。
+    func renameGroup(groupID: Int64, newName: String) async throws
+    /// 重命名书籍标签。
+    func renameTag(tagID: Int64, newName: String) async throws
+    /// 删除书籍标签并清理标签与书籍/笔记的关系。
+    func deleteTag(tagID: Int64) async throws
+    /// 重命名书籍来源。
+    func renameSource(sourceID: Int64, newName: String) async throws
+    /// 删除书籍来源，并将存量书籍迁移到未知来源。
+    func deleteSource(sourceID: Int64) async throws
     /// 读取按维度和作用域持久化的书架显示设置。
     func fetchBookshelfDisplaySettings(scope: BookshelfDisplaySettingScope) -> [BookshelfDimension: BookshelfDisplaySetting]
     /// 保存单个维度在指定作用域下的书架显示设置。
