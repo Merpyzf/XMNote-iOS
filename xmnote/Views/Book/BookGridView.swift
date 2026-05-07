@@ -105,7 +105,6 @@ struct BookGridView: View {
             syncReadLoadingGate()
         }
         .onDisappear {
-            viewModel.cancelReorderSession()
             readLoadingGate.hideImmediately()
         }
         .frame(maxHeight: .infinity, alignment: .top)

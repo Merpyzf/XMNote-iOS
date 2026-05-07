@@ -6,11 +6,10 @@
 //
 
 import Foundation
-import CoreGraphics
 
 /**
- * [INPUT]: 依赖 BookRepositoryProtocol 提供书架快照数据流和排序置顶写入，依赖 BookshelfSnapshot/CoreGraphics 进行多维度状态与拖拽命中表达
- * [OUTPUT]: 对外提供 BookViewModel，驱动书籍页维度浏览、搜索态、显示设置、默认书架编辑态、排序置顶写入与拖拽排序预览
+ * [INPUT]: 依赖 BookRepositoryProtocol 提供书架快照数据流和排序置顶写入，依赖 BookshelfSnapshot 进行多维度状态编排
+ * [OUTPUT]: 对外提供 BookViewModel，驱动书籍页维度浏览、搜索态、显示设置、默认书架编辑态、排序置顶写入与 UICollectionView 排序提交
  * [POS]: Book 模块书籍列表状态编排器，被 BookContainerView/BookGridView 消费
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -87,7 +86,6 @@ class BookViewModel {
     var selectedIDs: [BookshelfItemID] = []
     var activeWriteAction: BookshelfPendingAction?
     var writeError: String?
-    var reorderSession = BookshelfReorderSession()
 
     private let repository: any BookRepositoryProtocol
     private var observationTask: Task<Void, Never>?
@@ -132,31 +130,13 @@ class BookViewModel {
             && activeWriteAction == nil
     }
 
-    var reorderPolicy: BookshelfReorderPolicy {
-        BookshelfReorderPolicy(
-            isEditing: isEditing,
-            selectedDimension: selectedDimension,
-            sortMode: displaySetting.sortMode,
-            hasSearchKeyword: hasSearchKeyword,
-            activeWriteAction: activeWriteAction,
-            contentState: contentState
-        )
-    }
-
     var canReorderDefaultItems: Bool {
-        reorderPolicy.isEnabled
-    }
-
-    var draggedItemID: BookshelfItemID? {
-        reorderSession.draggedItemID
-    }
-
-    var dragTargetItemID: BookshelfItemID? {
-        reorderSession.dragTargetItemID
-    }
-
-    var reorderOverlayState: BookshelfReorderOverlayState? {
-        reorderSession.overlayState
+        isEditing
+            && selectedDimension == .default
+            && displaySetting.sortMode == .custom
+            && !hasSearchKeyword
+            && activeWriteAction == nil
+            && contentState == .content
     }
 
     var canSubmitSelectedPin: Bool {
@@ -307,7 +287,6 @@ class BookViewModel {
         selectedIDs.removeAll()
         activeWriteAction = nil
         writeError = nil
-        cancelReorderSession()
     }
 
     /// 在当前默认书架可见范围内切换单个 Book 或 Group 的选中状态。
@@ -405,111 +384,6 @@ class BookViewModel {
         return currentDefaultItems.first(where: { $0.id == id })?.pinned == false
     }
 
-    /// 开始默认书架排序拖拽，记录完整快照与初始几何，置顶项不允许进入拖拽会话。
-    func beginReorder(
-        itemID: BookshelfItemID,
-        location: CGPoint,
-        itemFrames: [BookshelfItemID: CGRect]
-    ) -> Bool {
-        let item = currentDefaultItems.first(where: { $0.id == itemID })
-        guard reorderPolicy.canStartReorder(item: item),
-              let item else {
-            writeError = reorderPolicy.disabledReason
-            return false
-        }
-
-        let didBegin = reorderSession.begin(
-            item: item,
-            items: currentDefaultItems,
-            location: location,
-            itemFrames: itemFrames
-        )
-        if didBegin {
-            writeError = nil
-        }
-        return didBegin
-    }
-
-    /// 根据当前拖拽位置预览排序结果，目标按稳定插入槽位让位，避免同一位置反复换位。
-    func updateReorder(
-        itemID: BookshelfItemID,
-        location: CGPoint,
-        itemFrames: [BookshelfItemID: CGRect],
-        layout: BookshelfReorderLayout,
-        source: BookshelfReorderUpdateSource = .gesture
-    ) {
-        guard draggedItemID == itemID else { return }
-        reorderSession.updateLocation(location)
-        guard let hitPoint = reorderSession.overlayState?.center,
-              let dropTarget = reorderSession.dropTarget(
-            at: hitPoint,
-            layout: layout,
-            itemFrames: itemFrames,
-            items: currentDefaultItems
-        ) else {
-            reorderSession.clearDropTarget(preservingCurrentTarget: source.preservesDropTargetOnMiss)
-            return
-        }
-        moveDraggedItem(itemID, to: dropTarget)
-    }
-
-    /// 滚动容器自动滚动后，用当前拖拽位置重新命中目标；Task 可被结束态取消，命中缺帧时保留上一槽位。
-    func updateReorderAfterScroll(
-        itemFrames: [BookshelfItemID: CGRect],
-        layout: BookshelfReorderLayout
-    ) {
-        guard let itemID = draggedItemID,
-              let location = reorderSession.dragLocation else {
-            return
-        }
-        updateReorder(
-            itemID: itemID,
-            location: location,
-            itemFrames: itemFrames,
-            layout: layout,
-            source: .scrollGeometry
-        )
-    }
-
-    /// 计算当前拖拽位置是否需要触发边缘自动滚动。
-    func reorderAutoScrollDelta(scrollSnapshot: BookshelfReorderScrollSnapshot) -> CGFloat {
-        guard let location = reorderSession.dragLocation else { return 0 }
-        return BookshelfReorderSession.autoScrollDelta(
-            locationY: location.y,
-            scrollSnapshot: scrollSnapshot
-        )
-    }
-
-    /// 结束拖拽并一次性提交最终顺序，失败时恢复拖拽前快照。
-    func endReorder(itemID: BookshelfItemID) {
-        guard draggedItemID == itemID else { return }
-        let originalItems = reorderSession.originalItems
-        let nextOrderItems = currentOrderItems
-        let originalIDs = originalItems.map(\.id)
-        let nextIDs = currentDefaultItems.map(\.id)
-
-        reorderSession.reset()
-
-        guard originalIDs != nextIDs else { return }
-
-        activeWriteAction = .reorder
-        writeError = nil
-        Task {
-            do {
-                try await repository.updateBookshelfOrder(nextOrderItems)
-                await MainActor.run {
-                    self.activeWriteAction = nil
-                }
-            } catch {
-                await MainActor.run {
-                    self.snapshot.defaultItems = originalItems
-                    self.activeWriteAction = nil
-                    self.writeError = error.localizedDescription
-                }
-            }
-        }
-    }
-
     /// 按 UIKit 集合视图拖拽结束后的最终 ID 顺序提交默认书架排序；失败时恢复提交前预览顺序。
     func commitDefaultItemsOrder(_ orderedIDs: [BookshelfItemID]) {
         guard canReorderDefaultItems else { return }
@@ -552,14 +426,6 @@ class BookViewModel {
                 }
             }
         }
-    }
-
-    /// 取消当前拖拽排序会话，恢复拖拽前预览顺序，不触发任何写库动作。
-    func cancelReorderSession() {
-        if reorderSession.isActive, !reorderSession.originalItems.isEmpty {
-            snapshot.defaultItems = reorderSession.originalItems
-        }
-        reorderSession.reset()
     }
 }
 
@@ -654,26 +520,6 @@ private extension BookViewModel {
         case .end:
             return pinnedItems + remainingItems + selectedItems
         }
-    }
-
-    func moveDraggedItem(
-        _ draggedID: BookshelfItemID,
-        to dropTarget: BookshelfReorderDropTarget
-    ) {
-        guard let draggedIndex = snapshot.defaultItems.firstIndex(where: { $0.id == draggedID }),
-              let targetIndex = snapshot.defaultItems.firstIndex(where: { $0.id == dropTarget.itemID }),
-              !snapshot.defaultItems[draggedIndex].pinned,
-              !snapshot.defaultItems[targetIndex].pinned else {
-            return
-        }
-        guard reorderSession.setDropTarget(dropTarget) else { return }
-
-        var reorderedItems = snapshot.defaultItems
-        let draggedItem = reorderedItems.remove(at: draggedIndex)
-        let insertionIndex = min(max(dropTarget.insertionIndex, 0), reorderedItems.endIndex)
-        reorderedItems.insert(draggedItem, at: insertionIndex)
-        guard reorderedItems.map(\.id) != snapshot.defaultItems.map(\.id) else { return }
-        snapshot.defaultItems = reorderedItems
     }
 
 }

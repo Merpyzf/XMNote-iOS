@@ -242,7 +242,9 @@ struct MainTabView: View {
         case .create(let seed):
             BookEditorView(seed: seed)
         case .bookshelfList(let route):
-            BookshelfBookListView(route: route)
+            BookshelfBookListView(route: route) { route in
+                append(route, to: selectedTab)
+            }
         }
     }
 
