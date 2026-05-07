@@ -58,8 +58,12 @@ struct BookshelfDisplaySettingSheet: View {
                         }
                     }
 
-                    Toggle("按首字母分区", isOn: $setting.isSectionEnabled)
+                    Toggle(sectionToggleTitle, isOn: $setting.isSectionEnabled)
                         .disabled(!supportsSectionToggle)
+
+                    if dimension == .default, setting.sortCriteria != .custom {
+                        Toggle("置顶项保持在顶部", isOn: $setting.pinnedInAllSorts)
+                    }
 
                     Text(footerText)
                         .font(AppTypography.caption)
@@ -79,11 +83,19 @@ struct BookshelfDisplaySettingSheet: View {
     }
 
     private var supportsSectionToggle: Bool {
-        switch dimension {
-        case .default, .author:
-            return true
-        case .status, .tag, .source, .rating, .press:
-            return false
+        setting.sortCriteria.supportsSection
+    }
+
+    private var sectionToggleTitle: String {
+        switch setting.sortCriteria {
+        case .createdDate, .modifiedDate, .readDoneDate:
+            return "按月份分区"
+        case .publishDate:
+            return "按出版年份分区"
+        case .name, .readStatus, .tagName, .authorName, .pressName, .source:
+            return "按标题分区"
+        case .custom, .noteCount, .bookCount, .rating, .totalReadingTime, .readingProgress:
+            return "按条件分区"
         }
     }
 

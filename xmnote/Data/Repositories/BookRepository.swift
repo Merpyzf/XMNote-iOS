@@ -224,6 +224,13 @@ nonisolated private struct BookshelfGroupBookPreview {
     let author: String
     let cover: String
     let noteCount: Int
+    let createdDate: Int64
+    let modifiedDate: Int64
+    let publishDate: Int64
+    let score: Int64
+    let readDoneDate: Int64
+    let totalReadingTime: Int64
+    let readingProgress: Double?
     let pinned: Bool
     let pinOrder: Int64
     let sortOrder: Int64
@@ -235,6 +242,7 @@ nonisolated private struct BookshelfGroupBuilder {
     let pinned: Bool
     let pinOrder: Int64
     let sortOrder: Int64
+    let createdDate: Int64
     private(set) var books: [BookshelfGroupBookPreview]
 
     mutating func append(_ book: BookshelfGroupBookPreview) {
@@ -263,6 +271,17 @@ nonisolated private struct BookshelfGroupBuilder {
             pinned: pinned,
             pinOrder: pinOrder,
             sortOrder: sortOrder,
+            sortMetadata: BookshelfItemSortMetadata(
+                createdDate: createdDate,
+                modifiedDate: books.map(\.modifiedDate).max() ?? createdDate,
+                publishDate: 0,
+                noteCount: visibleBooks.reduce(0) { $0 + $1.noteCount },
+                rating: visibleBooks.map(\.score).max() ?? 0,
+                readDoneDate: visibleBooks.map(\.readDoneDate).max() ?? 0,
+                totalReadingTime: visibleBooks.reduce(0) { $0 + $1.totalReadingTime },
+                readingProgress: nil,
+                bookCount: visibleBooks.count
+            ),
             content: .group(payload)
         )
     }
@@ -320,6 +339,12 @@ nonisolated private struct BookshelfBookAggregateRow {
     let pinned: Bool
     let pinOrder: Int64
     let sortOrder: Int64
+    let createdDate: Int64
+    let modifiedDate: Int64
+    let publishDate: Int64
+    let readDoneDate: Int64
+    let totalReadingTime: Int64
+    let readingProgress: Double?
 }
 
 nonisolated private struct BookshelfTagInfo: Hashable {
@@ -656,11 +681,16 @@ private extension BookRepository {
         switch context {
         case .defaultGroup(let groupID):
             let group = try fetchBookshelfGroupPayload(db, groupID: groupID, searchKeyword: keyword)
+            let allRows = try fetchAllBookshelfBookRows(db)
+            let groupBookIDs = try fetchBookIDs(inGroup: groupID, db: db)
+            let filteredRows = filterBooks(allRows, keyword: keyword)
+                .filter { groupBookIDs.contains($0.payload.id) }
+            let sortedRows = sortBookRows(filteredRows, setting: setting)
             title = group?.name ?? "分组"
             return BookshelfBookListSnapshot(
                 title: title,
-                subtitle: "\(group?.books.count ?? 0)本",
-                books: group?.books ?? []
+                subtitle: "\(sortedRows.count)本",
+                books: sortedRows.map { BookshelfBookListItem(payload: $0.payload) }
             )
         case .readStatus(let statusID):
             let allRows = filterBooks(try fetchAllBookshelfBookRows(db), keyword: keyword)
@@ -728,7 +758,7 @@ private extension BookRepository {
         let indexedItems = (topLevelBooks + groups).enumerated().map { index, item in
             IndexedBookshelfItem(item: item, sourceIndex: index)
         }
-        return sortByAndroidCustomOrder(indexedItems).map(\.item)
+        return sortBookshelfItems(indexedItems, setting: setting).map(\.item)
     }
 
     /// 查询不属于任何有效分组的书籍，作为默认书架顶层 Book 条目。
@@ -737,20 +767,30 @@ private extension BookRepository {
         _ db: Database,
         searchKeyword: String?
     ) throws -> [BookshelfItem] {
-        // SQL 目的：读取默认书架中不属于有效分组的顶层书籍，并补齐有效书摘数量。
-        // 涉及表：book b；LEFT JOIN note n 统计未删除书摘；LEFT JOIN read_status/source 补齐聚合展示字段；子查询使用 group_book gb JOIN `group` g 排除仍处于有效分组中的书籍。
+        // SQL 目的：读取默认书架中不属于有效分组的顶层书籍，并补齐有效书摘数量、阅读时长与条件排序字段。
+        // 涉及表：book b；LEFT JOIN note n 统计未删除书摘；LEFT JOIN read_status/source 补齐聚合展示字段；LEFT JOIN read_time_record 聚合总阅读秒数；子查询使用 group_book gb JOIN `group` g 排除仍处于有效分组中的书籍。
         // 关键过滤：b.is_deleted = 0、b.id != 0；n.is_deleted = 0；gb.is_deleted = 0；g.is_deleted = 0；搜索过滤在 Swift 层按书名/作者执行。
-        // 排序用途：返回 book_order / pinned / pin_order，最终在 Swift 层按 Android `formatByCustom` 统一混排。
+        // 排序用途：返回 book_order / pinned / pin_order、created_date / updated_date / pub_date / read_status_changed_date / read_position 等字段，最终在 Swift 层按 Android 显示设置统一混排。
         let sql = """
-            SELECT b.id, b.name, b.author, b.cover, b.source_id, b.score,
+            SELECT b.id, b.name, b.author, b.cover, b.pub_date, b.source_id, b.score,
                    b.read_status_id, COALESCE(rs.name, '') AS read_status_name,
                    COALESCE(s.name, '') AS source_name,
                    b.pinned, b.pin_order, b.book_order,
+                   b.created_date, b.updated_date, b.read_status_changed_date,
+                   b.read_position, b.total_position, b.total_pagination,
+                   COALESCE(rt.total_reading_time, 0) AS total_reading_time,
                    COUNT(n.id) AS note_count
             FROM book b
             LEFT JOIN note n ON b.id = n.book_id AND n.is_deleted = 0
             LEFT JOIN read_status rs ON rs.id = b.read_status_id AND rs.is_deleted = 0
             LEFT JOIN source s ON s.id = b.source_id AND s.is_deleted = 0
+            LEFT JOIN (
+                SELECT book_id, SUM(elapsed_seconds) AS total_reading_time
+                FROM read_time_record
+                WHERE is_deleted = 0
+                  AND book_id != 0
+                GROUP BY book_id
+            ) rt ON rt.book_id = b.id
             WHERE b.is_deleted = 0
               AND b.id != 0
               AND b.id NOT IN (
@@ -776,6 +816,7 @@ private extension BookRepository {
                 readStatusName: row["read_status_name"] ?? "",
                 sourceId: row["source_id"] ?? 0,
                 sourceName: row["source_name"] ?? "",
+                press: "",
                 score: row["score"] ?? 0,
                 noteCount: row["note_count"] ?? 0
             )
@@ -784,6 +825,21 @@ private extension BookRepository {
                 pinned: (row["pinned"] as Int64? ?? 0) != 0,
                 pinOrder: row["pin_order"] ?? 0,
                 sortOrder: row["book_order"] ?? 0,
+                sortMetadata: BookshelfItemSortMetadata(
+                    createdDate: row["created_date"] ?? 0,
+                    modifiedDate: row["updated_date"] ?? 0,
+                    publishDate: publishTimestamp(from: row["pub_date"] ?? ""),
+                    noteCount: row["note_count"] ?? 0,
+                    rating: row["score"] ?? 0,
+                    readDoneDate: row["read_status_changed_date"] ?? 0,
+                    totalReadingTime: row["total_reading_time"] ?? 0,
+                    readingProgress: readingProgress(
+                        readPosition: row["read_position"] ?? 0.0,
+                        totalPosition: row["total_position"] ?? 0,
+                        totalPagination: row["total_pagination"] ?? 0
+                    ),
+                    bookCount: 1
+                ),
                 content: .book(payload)
             )
         }
@@ -795,32 +851,49 @@ private extension BookRepository {
         _ db: Database,
         searchKeyword: String?
     ) throws -> [BookshelfItem] {
-        // SQL 目的：读取默认书架有效分组及其有效组内书籍，用于生成顶层 Group 条目和代表封面。
-        // 涉及表：`group` g JOIN group_book gb JOIN book b。
+        // SQL 目的：读取默认书架有效分组及其有效组内书籍，用于生成顶层 Group 条目、代表封面和条件排序元数据。
+        // 涉及表：`group` g JOIN group_book gb JOIN book b；LEFT JOIN read_time_record 聚合组内书籍总阅读秒数。
         // 关键过滤：g.is_deleted = 0、gb.is_deleted = 0、b.is_deleted = 0、b.id != 0；无有效书籍的分组不会出现在 JOIN 结果中；搜索过滤在 Swift 层按组名/组内书名/作者执行。
-        // 排序用途：返回 group_order / pinned / pin_order，以及组内 book_order / pinned / pin_order，Swift 层继续按 Android 自定义排序规则处理。
+        // 排序用途：返回 group_order / pinned / pin_order、group/book 创建修改时间、出版时间、评分、读完时间、阅读进度等字段，Swift 层继续按 Android 显示设置处理。
         let sql = """
             SELECT g.id AS group_id,
                    COALESCE(g.name, '') AS group_name,
                    g.group_order,
                    g.pinned AS group_pinned,
                    g.pin_order AS group_pin_order,
+                   g.created_date AS group_created_date,
                    b.id AS book_id,
                    b.name AS book_name,
                    b.author AS book_author,
                    b.cover AS book_cover,
+                   b.pub_date AS book_pub_date,
                    (
                        SELECT COUNT(n.id)
                        FROM note n
                        WHERE n.book_id = b.id
                          AND n.is_deleted = 0
                    ) AS note_count,
+                   b.created_date AS book_created_date,
+                   b.updated_date AS book_updated_date,
+                   b.score AS book_score,
+                   b.read_status_changed_date AS book_read_status_changed_date,
+                   b.read_position AS book_read_position,
+                   b.total_position AS book_total_position,
+                   b.total_pagination AS book_total_pagination,
+                   COALESCE(rt.total_reading_time, 0) AS book_total_reading_time,
                    b.book_order AS book_order,
                    b.pinned AS book_pinned,
                    b.pin_order AS book_pin_order
             FROM `group` g
             JOIN group_book gb ON gb.group_id = g.id AND gb.is_deleted = 0
             JOIN book b ON b.id = gb.book_id AND b.is_deleted = 0 AND b.id != 0
+            LEFT JOIN (
+                SELECT book_id, SUM(elapsed_seconds) AS total_reading_time
+                FROM read_time_record
+                WHERE is_deleted = 0
+                  AND book_id != 0
+                GROUP BY book_id
+            ) rt ON rt.book_id = b.id
             WHERE g.is_deleted = 0
             ORDER BY g.group_order ASC, g.id ASC
             """
@@ -839,6 +912,7 @@ private extension BookRepository {
                     pinned: (row["group_pinned"] as Int64? ?? 0) != 0,
                     pinOrder: row["group_pin_order"] ?? 0,
                     sortOrder: row["group_order"] ?? 0,
+                    createdDate: row["group_created_date"] ?? 0,
                     books: []
                 )
             }
@@ -850,6 +924,17 @@ private extension BookRepository {
                     author: row["book_author"] ?? "",
                     cover: row["book_cover"] ?? "",
                     noteCount: row["note_count"] ?? 0,
+                    createdDate: row["book_created_date"] ?? 0,
+                    modifiedDate: row["book_updated_date"] ?? 0,
+                    publishDate: publishTimestamp(from: row["book_pub_date"] ?? ""),
+                    score: row["book_score"] ?? 0,
+                    readDoneDate: row["book_read_status_changed_date"] ?? 0,
+                    totalReadingTime: row["book_total_reading_time"] ?? 0,
+                    readingProgress: readingProgress(
+                        readPosition: row["book_read_position"] ?? 0.0,
+                        totalPosition: row["book_total_position"] ?? 0,
+                        totalPagination: row["book_total_pagination"] ?? 0
+                    ),
                     pinned: (row["book_pinned"] as Int64? ?? 0) != 0,
                     pinOrder: row["book_pin_order"] ?? 0,
                     sortOrder: row["book_order"] ?? 0
@@ -879,6 +964,22 @@ private extension BookRepository {
         }.first
     }
 
+    nonisolated func fetchBookIDs(inGroup groupID: Int64, db: Database) throws -> Set<Int64> {
+        // SQL 目的：读取指定有效分组下仍有效的书籍 ID，供二级分组列表按当前显示设置重新排序。
+        // 涉及表：group_book gb JOIN `group` g JOIN book b。
+        // 关键过滤：gb.group_id = ?；gb/g/b 均要求 is_deleted = 0，b.id != 0。
+        // 返回字段用途：仅用于在 Swift 层筛选 `fetchAllBookshelfBookRows` 已补齐的排序元数据，不产生写入副作用。
+        let sql = """
+            SELECT gb.book_id
+            FROM group_book gb
+            JOIN `group` g ON g.id = gb.group_id AND g.is_deleted = 0
+            JOIN book b ON b.id = gb.book_id AND b.is_deleted = 0 AND b.id != 0
+            WHERE gb.is_deleted = 0
+              AND gb.group_id = ?
+            """
+        return Set(try Int64.fetchAll(db, sql: sql, arguments: [groupID]))
+    }
+
     /// 复刻 Android `BookListFormatHelper.formatByCustom` 的默认书架排序规则。
     nonisolated func sortByAndroidCustomOrder(_ items: [IndexedBookshelfItem]) -> [IndexedBookshelfItem] {
         let pinned = items
@@ -896,19 +997,59 @@ private extension BookRepository {
                     return lhs.item.sortOrder < rhs.item.sortOrder
                 }
                 return lhs.sourceIndex < rhs.sourceIndex
-            }
+        }
         return pinned + notPinned
+    }
+
+    /// 按当前显示设置排序默认书架 Book/Group，条件排序时保留 Android 的可选置顶前置语义。
+    nonisolated func sortBookshelfItems(
+        _ items: [IndexedBookshelfItem],
+        setting: BookshelfDisplaySetting
+    ) -> [IndexedBookshelfItem] {
+        guard setting.sortCriteria != .custom else {
+            return sortByAndroidCustomOrder(items)
+        }
+        return sortedWithOptionalPinned(
+            items,
+            setting: setting,
+            isPinned: { $0.item.pinned },
+            pinOrder: { $0.item.pinOrder }
+        ) { lhs, rhs in
+            compareBookshelfItems(lhs, rhs, criteria: setting.sortCriteria, order: setting.sortOrder)
+        }
+    }
+
+    nonisolated func sortedWithOptionalPinned<T>(
+        _ values: [T],
+        setting: BookshelfDisplaySetting,
+        isPinned: (T) -> Bool,
+        pinOrder: (T) -> Int64,
+        comparator: (T, T) -> Bool
+    ) -> [T] {
+        guard setting.pinnedInAllSorts else {
+            return values.sorted(by: comparator)
+        }
+        let pinned = values.filter(isPinned).sorted {
+            let lhsPinOrder = pinOrder($0)
+            let rhsPinOrder = pinOrder($1)
+            if lhsPinOrder != rhsPinOrder {
+                return lhsPinOrder > rhsPinOrder
+            }
+            return comparator($0, $1)
+        }
+        let normal = values.filter { !isPinned($0) }.sorted(by: comparator)
+        return pinned + normal
     }
 
     /// 查询所有有效书籍，作为非默认维度聚合的统一数据源。
     /// - Throws: 数据库查询失败时抛出错误。
     nonisolated func fetchAllBookshelfBookRows(_ db: Database) throws -> [BookshelfBookAggregateRow] {
-        // SQL 目的：读取所有有效书籍并补齐阅读状态、来源、评分、置顶排序和有效书摘数量，供只读维度聚合。
-        // 涉及表：book b；LEFT JOIN note n 统计有效书摘；LEFT JOIN read_status rs/source s 读取维度标题与排序字段。
+        // SQL 目的：读取所有有效书籍并补齐阅读状态、来源、评分、置顶排序、有效书摘数量、阅读时长与条件排序字段，供多维度聚合和二级列表复用。
+        // 涉及表：book b；LEFT JOIN note n 统计有效书摘；LEFT JOIN read_status rs/source s 读取维度标题与排序字段；LEFT JOIN read_time_record 聚合总阅读秒数。
         // 关键过滤：b.is_deleted = 0、b.id != 0；n.is_deleted = 0；rs/s 仅连接未软删除记录。
-        // 返回字段用途：Book payload 用于 UI 代表封面，order/pin/source/read_status 字段用于 Swift 层稳定聚合排序。
+        // 返回字段用途：Book payload 用于 UI 代表封面，order/pin/source/read_status 与创建、修改、出版、读完、阅读进度字段用于 Swift 层稳定聚合和二级列表排序。
         let sql = """
-            SELECT b.id, b.name, b.author, b.cover, b.press,
+            SELECT b.id, b.name, b.author, b.cover, b.press, b.pub_date,
                    b.read_status_id,
                    COALESCE(rs.name, '') AS read_status_name,
                    COALESCE(rs.read_status_order, 999999) AS read_status_order,
@@ -917,11 +1058,21 @@ private extension BookRepository {
                    COALESCE(s.source_order, 999999) AS source_order,
                    COALESCE(s.is_hide, 1) AS source_is_hide,
                    b.score, b.pinned, b.pin_order, b.book_order,
+                   b.created_date, b.updated_date, b.read_status_changed_date,
+                   b.read_position, b.total_position, b.total_pagination,
+                   COALESCE(rt.total_reading_time, 0) AS total_reading_time,
                    COUNT(n.id) AS note_count
             FROM book b
             LEFT JOIN note n ON n.book_id = b.id AND n.is_deleted = 0
             LEFT JOIN read_status rs ON rs.id = b.read_status_id AND rs.is_deleted = 0
             LEFT JOIN source s ON s.id = b.source_id AND s.is_deleted = 0
+            LEFT JOIN (
+                SELECT book_id, SUM(elapsed_seconds) AS total_reading_time
+                FROM read_time_record
+                WHERE is_deleted = 0
+                  AND book_id != 0
+                GROUP BY book_id
+            ) rt ON rt.book_id = b.id
             WHERE b.is_deleted = 0
               AND b.id != 0
             GROUP BY b.id
@@ -948,7 +1099,17 @@ private extension BookRepository {
                 sourceIsHidden: (row["source_is_hide"] as Int64? ?? 1) != 0,
                 pinned: (row["pinned"] as Int64? ?? 0) != 0,
                 pinOrder: row["pin_order"] ?? 0,
-                sortOrder: row["book_order"] ?? 0
+                sortOrder: row["book_order"] ?? 0,
+                createdDate: row["created_date"] ?? 0,
+                modifiedDate: row["updated_date"] ?? 0,
+                publishDate: publishTimestamp(from: row["pub_date"] ?? ""),
+                readDoneDate: row["read_status_changed_date"] ?? 0,
+                totalReadingTime: row["total_reading_time"] ?? 0,
+                readingProgress: readingProgress(
+                    readPosition: row["read_position"] ?? 0.0,
+                    totalPosition: row["total_position"] ?? 0,
+                    totalPagination: row["total_pagination"] ?? 0
+                )
             )
         }
     }
@@ -1014,6 +1175,7 @@ private extension BookRepository {
                 subtitle: "\(sortedRows.count)本",
                 context: .readStatus(key.id == 0 ? nil : key.id),
                 orderID: key.id == 0 ? nil : key.id,
+                sortMetadata: sortMetadata(from: sortedRows),
                 books: sortedRows.map(\.payload)
             )
         }
@@ -1133,6 +1295,7 @@ private extension BookRepository {
                 subtitle: "\(sortedRows.count)本",
                 context: .rating(score),
                 orderID: nil,
+                sortMetadata: sortMetadata(from: sortedRows),
                 books: sortedRows.map(\.payload)
             )
         }
@@ -1203,6 +1366,7 @@ private extension BookRepository {
             count: sortedRows.count,
             context: context,
             orderID: orderID,
+            sortMetadata: sortMetadata(from: sortedRows),
             representativeCovers: sortedRows.prefix(6).map(\.payload.cover),
             books: sortedRows.map { BookshelfBookListItem(payload: $0.payload) }
         )
@@ -1227,28 +1391,155 @@ private extension BookRepository {
         _ rows: [BookshelfBookAggregateRow],
         setting: BookshelfDisplaySetting
     ) -> [BookshelfBookAggregateRow] {
-        switch setting.sortCriteria {
+        guard setting.sortCriteria != .custom else {
+            return sortBooksByShelfOrder(rows)
+        }
+        return sortedWithOptionalPinned(
+            rows,
+            setting: setting,
+            isPinned: { $0.pinned },
+            pinOrder: { $0.pinOrder }
+        ) { lhs, rhs in
+            compareBookRows(lhs, rhs, criteria: setting.sortCriteria, order: setting.sortOrder)
+        }
+    }
+
+    nonisolated func sortMetadata(from rows: [BookshelfBookAggregateRow]) -> BookshelfItemSortMetadata {
+        BookshelfItemSortMetadata(
+            createdDate: rows.map(\.createdDate).min() ?? 0,
+            modifiedDate: rows.map(\.modifiedDate).max() ?? 0,
+            publishDate: rows.map(\.publishDate).max() ?? 0,
+            noteCount: rows.reduce(0) { $0 + $1.payload.noteCount },
+            rating: rows.map(\.payload.score).max() ?? 0,
+            readDoneDate: rows.map(\.readDoneDate).max() ?? 0,
+            totalReadingTime: rows.reduce(0) { $0 + $1.totalReadingTime },
+            readingProgress: nil,
+            bookCount: rows.count
+        )
+    }
+
+    nonisolated func compareBookshelfItems(
+        _ lhs: IndexedBookshelfItem,
+        _ rhs: IndexedBookshelfItem,
+        criteria: BookshelfSortCriteria,
+        order: BookshelfSortOrder
+    ) -> Bool {
+        let lhsItem = lhs.item
+        let rhsItem = rhs.item
+        let tieBreaker = lhs.sourceIndex < rhs.sourceIndex
+        switch criteria {
         case .custom:
-            return sortBooksByShelfOrder(rows)
-        case .name:
-            return rows.sorted { lhs, rhs in
-                let comparison = lhs.payload.name.localizedStandardCompare(rhs.payload.name)
-                if comparison != .orderedSame {
-                    return setting.sortOrder == .ascending ? comparison == .orderedAscending : comparison == .orderedDescending
-                }
-                return lhs.payload.id < rhs.payload.id
-            }
+            return tieBreaker
+        case .createdDate:
+            return compareInt(lhsItem.sortMetadata.createdDate, rhsItem.sortMetadata.createdDate, order: order, missingLast: false, tie: tieBreaker)
+        case .modifiedDate:
+            return compareInt(lhsItem.sortMetadata.modifiedDate, rhsItem.sortMetadata.modifiedDate, order: order, missingLast: false, tie: tieBreaker)
+        case .publishDate:
+            return compareInt(lhsItem.sortMetadata.publishDate, rhsItem.sortMetadata.publishDate, order: order, missingLast: true, tie: tieBreaker)
+        case .name, .readStatus, .tagName, .authorName, .pressName, .source:
+            return compareText(lhsItem.title, rhsItem.title, order: order, tie: tieBreaker)
+        case .noteCount:
+            return compareInt(Int64(lhsItem.sortMetadata.noteCount), Int64(rhsItem.sortMetadata.noteCount), order: order, missingLast: false, tie: tieBreaker)
         case .bookCount:
-            return sortBooksByShelfOrder(rows)
+            return compareInt(Int64(lhsItem.sortMetadata.bookCount), Int64(rhsItem.sortMetadata.bookCount), order: order, missingLast: false, tie: tieBreaker)
         case .rating:
-            return rows.sorted { lhs, rhs in
-                if lhs.payload.score != rhs.payload.score {
-                    return setting.sortOrder == .ascending
-                        ? lhs.payload.score < rhs.payload.score
-                        : lhs.payload.score > rhs.payload.score
-                }
-                return lhs.payload.id < rhs.payload.id
+            return compareInt(lhsItem.sortMetadata.rating, rhsItem.sortMetadata.rating, order: order, missingLast: true, tie: tieBreaker)
+        case .readDoneDate:
+            return compareInt(lhsItem.sortMetadata.readDoneDate, rhsItem.sortMetadata.readDoneDate, order: order, missingLast: true, tie: tieBreaker)
+        case .totalReadingTime:
+            return compareInt(lhsItem.sortMetadata.totalReadingTime, rhsItem.sortMetadata.totalReadingTime, order: order, missingLast: true, tie: tieBreaker)
+        case .readingProgress:
+            return compareOptionalDouble(lhsItem.sortMetadata.readingProgress, rhsItem.sortMetadata.readingProgress, order: order, tie: tieBreaker)
+        }
+    }
+
+    nonisolated func compareBookRows(
+        _ lhs: BookshelfBookAggregateRow,
+        _ rhs: BookshelfBookAggregateRow,
+        criteria: BookshelfSortCriteria,
+        order: BookshelfSortOrder
+    ) -> Bool {
+        let tieBreaker = lhs.payload.id < rhs.payload.id
+        switch criteria {
+        case .custom, .bookCount:
+            return compareInt(lhs.sortOrder, rhs.sortOrder, order: .ascending, missingLast: false, tie: tieBreaker)
+        case .createdDate:
+            return compareInt(lhs.createdDate, rhs.createdDate, order: order, missingLast: false, tie: tieBreaker)
+        case .modifiedDate:
+            return compareInt(lhs.modifiedDate, rhs.modifiedDate, order: order, missingLast: false, tie: tieBreaker)
+        case .publishDate:
+            return compareInt(lhs.publishDate, rhs.publishDate, order: order, missingLast: true, tie: tieBreaker)
+        case .name:
+            return compareText(lhs.payload.name, rhs.payload.name, order: order, tie: tieBreaker)
+        case .noteCount:
+            return compareInt(Int64(lhs.payload.noteCount), Int64(rhs.payload.noteCount), order: order, missingLast: false, tie: tieBreaker)
+        case .rating:
+            return compareInt(lhs.payload.score, rhs.payload.score, order: order, missingLast: true, tie: tieBreaker)
+        case .readDoneDate:
+            return compareInt(lhs.readDoneDate, rhs.readDoneDate, order: order, missingLast: true, tie: tieBreaker)
+        case .totalReadingTime:
+            return compareInt(lhs.totalReadingTime, rhs.totalReadingTime, order: order, missingLast: true, tie: tieBreaker)
+        case .readStatus:
+            if lhs.readStatusOrder != rhs.readStatusOrder {
+                return order == .ascending ? lhs.readStatusOrder < rhs.readStatusOrder : lhs.readStatusOrder > rhs.readStatusOrder
             }
+            return compareText(lhs.payload.readStatusName, rhs.payload.readStatusName, order: order, tie: tieBreaker)
+        case .tagName:
+            return compareText(lhs.payload.name, rhs.payload.name, order: order, tie: tieBreaker)
+        case .authorName:
+            return compareText(lhs.payload.author, rhs.payload.author, order: order, tie: tieBreaker)
+        case .pressName:
+            return compareText(lhs.press, rhs.press, order: order, tie: tieBreaker)
+        case .source:
+            if lhs.sourceOrder != rhs.sourceOrder {
+                return order == .ascending ? lhs.sourceOrder < rhs.sourceOrder : lhs.sourceOrder > rhs.sourceOrder
+            }
+            return compareText(lhs.payload.sourceName, rhs.payload.sourceName, order: order, tie: tieBreaker)
+        case .readingProgress:
+            return compareOptionalDouble(lhs.readingProgress, rhs.readingProgress, order: order, tie: tieBreaker)
+        }
+    }
+
+    nonisolated func compareText(_ lhs: String, _ rhs: String, order: BookshelfSortOrder, tie: Bool) -> Bool {
+        let comparison = lhs.localizedStandardCompare(rhs)
+        guard comparison != .orderedSame else { return tie }
+        return order == .ascending ? comparison == .orderedAscending : comparison == .orderedDescending
+    }
+
+    nonisolated func compareInt(
+        _ lhs: Int64,
+        _ rhs: Int64,
+        order: BookshelfSortOrder,
+        missingLast: Bool,
+        tie: Bool
+    ) -> Bool {
+        if missingLast {
+            let lhsMissing = lhs == 0
+            let rhsMissing = rhs == 0
+            if lhsMissing != rhsMissing {
+                return !lhsMissing
+            }
+        }
+        guard lhs != rhs else { return tie }
+        return order == .ascending ? lhs < rhs : lhs > rhs
+    }
+
+    nonisolated func compareOptionalDouble(
+        _ lhs: Double?,
+        _ rhs: Double?,
+        order: BookshelfSortOrder,
+        tie: Bool
+    ) -> Bool {
+        switch (lhs, rhs) {
+        case (.none, .none):
+            return tie
+        case (.none, .some):
+            return false
+        case (.some, .none):
+            return true
+        case (.some(let lhsValue), .some(let rhsValue)):
+            guard lhsValue != rhsValue else { return tie }
+            return order == .ascending ? lhsValue < rhsValue : lhsValue > rhsValue
         }
     }
 
@@ -1262,6 +1553,48 @@ private extension BookRepository {
 
     nonisolated func ratingTitle(for score: Int64) -> String {
         String(format: "%.1f", Double(score) / 2.0)
+    }
+
+    nonisolated func publishTimestamp(from pubDate: String) -> Int64 {
+        let trimmed = pubDate.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return 0 }
+        let pattern = #"(\d{4})(?:[-/.年 ]+(\d{1,2}))?"#
+        guard let regex = try? NSRegularExpression(pattern: pattern),
+              let match = regex.firstMatch(in: trimmed, range: NSRange(trimmed.startIndex..., in: trimmed)),
+              let yearRange = Range(match.range(at: 1), in: trimmed),
+              let year = Int(trimmed[yearRange]) else {
+            return 0
+        }
+        var month = 1
+        if match.numberOfRanges > 2,
+           let monthRange = Range(match.range(at: 2), in: trimmed),
+           let parsedMonth = Int(trimmed[monthRange]) {
+            month = max(1, min(parsedMonth, 12))
+        }
+        var components = DateComponents()
+        components.calendar = Calendar(identifier: .gregorian)
+        components.timeZone = TimeZone.current
+        components.year = year
+        components.month = month
+        components.day = 1
+        return components.date.map { Int64($0.timeIntervalSince1970 * 1000) } ?? 0
+    }
+
+    nonisolated func readingProgress(
+        readPosition: Double,
+        totalPosition: Int64,
+        totalPagination: Int64
+    ) -> Double? {
+        let denominator: Double
+        if totalPosition > 0 {
+            denominator = Double(totalPosition)
+        } else if totalPagination > 0 {
+            denominator = Double(totalPagination)
+        } else {
+            return nil
+        }
+        let progress = readPosition / denominator * 100
+        return progress > 0 ? progress : nil
     }
 
     nonisolated func normalizedSearchKeyword(_ searchKeyword: String?) -> String {

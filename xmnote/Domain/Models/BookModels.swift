@@ -34,7 +34,7 @@ enum BookshelfDimension: String, CaseIterable, Codable, Hashable, Sendable {
     case author
     case press
 
-    var title: String {
+    nonisolated var title: String {
         switch self {
         case .default:
             return "默认"
@@ -87,20 +87,65 @@ enum BookshelfSortMode: String, Hashable, Sendable {
 /// 书架排序依据，按 Android display type 的可选排序语义收敛成 iOS 侧统一枚举。
 enum BookshelfSortCriteria: String, CaseIterable, Codable, Hashable, Sendable {
     case custom
+    case createdDate
+    case modifiedDate
+    case publishDate
     case name
+    case noteCount
     case bookCount
     case rating
+    case readDoneDate
+    case totalReadingTime
+    case readStatus
+    case tagName
+    case authorName
+    case pressName
+    case source
+    case readingProgress
 
     var title: String {
         switch self {
         case .custom:
             return "手动排序"
+        case .createdDate:
+            return "创建时间"
+        case .modifiedDate:
+            return "修改时间"
+        case .publishDate:
+            return "出版时间"
         case .name:
             return "名称"
+        case .noteCount:
+            return "书摘数量"
         case .bookCount:
             return "书籍数量"
         case .rating:
             return "评分"
+        case .readDoneDate:
+            return "读完时间"
+        case .totalReadingTime:
+            return "阅读时长"
+        case .readStatus:
+            return "阅读状态"
+        case .tagName:
+            return "标签名称"
+        case .authorName:
+            return "作者名称"
+        case .pressName:
+            return "出版社名称"
+        case .source:
+            return "书籍来源"
+        case .readingProgress:
+            return "阅读进度"
+        }
+    }
+
+    var supportsSection: Bool {
+        switch self {
+        case .createdDate, .modifiedDate, .publishDate, .name, .readDoneDate, .readStatus, .tagName, .authorName, .pressName, .source:
+            return true
+        case .custom, .noteCount, .bookCount, .rating, .totalReadingTime, .readingProgress:
+            return false
         }
     }
 
@@ -108,14 +153,36 @@ enum BookshelfSortCriteria: String, CaseIterable, Codable, Hashable, Sendable {
     static func available(for dimension: BookshelfDimension) -> [BookshelfSortCriteria] {
         switch dimension {
         case .default:
-            return [.custom, .name, .rating]
-        case .status, .tag, .source:
-            return [.custom, .bookCount, .name]
+            return [.custom, .noteCount, .totalReadingTime, .readingProgress, .rating, .createdDate, .modifiedDate, .readDoneDate, .publishDate, .name]
+        case .status:
+            return [.custom, .readStatus, .bookCount]
+        case .tag:
+            return [.custom, .createdDate, .bookCount]
+        case .source:
+            return [.custom, .source, .bookCount]
         case .rating:
             return [.rating, .bookCount]
-        case .author, .press:
-            return [.name, .bookCount]
+        case .author:
+            return [.authorName, .bookCount]
+        case .press:
+            return [.pressName, .bookCount]
         }
+    }
+
+    /// 返回二级书籍列表允许展示和提交的排序依据，对齐 Android `getDefaultSubDisplaySetting`。
+    static func availableForBookList(for dimension: BookshelfDimension) -> [BookshelfSortCriteria] {
+        switch dimension {
+        case .default:
+            return [.custom] + secondaryBookCriteria
+        case .rating:
+            return [.createdDate, .modifiedDate, .publishDate, .name, .noteCount, .rating, .readDoneDate, .totalReadingTime, .readingProgress]
+        case .status, .tag, .source, .author, .press:
+            return secondaryBookCriteria
+        }
+    }
+
+    private static var secondaryBookCriteria: [BookshelfSortCriteria] {
+        [.noteCount, .totalReadingTime, .readingProgress, .rating, .createdDate, .modifiedDate, .readDoneDate, .publishDate, .name]
     }
 }
 
@@ -166,12 +233,60 @@ struct BookshelfDisplaySetting: Codable, Hashable, Sendable {
     var columnCount: Int = 3
     var showsNoteCount: Bool = true
     var sortCriteria: BookshelfSortCriteria = .custom
-    var sortOrder: BookshelfSortOrder = .ascending
+    var sortOrder: BookshelfSortOrder = .descending
     var isSectionEnabled: Bool = false
+    var pinnedInAllSorts: Bool = true
     var titleDisplayMode: BookshelfTitleDisplayMode = .standard
 
     var sortMode: BookshelfSortMode {
         sortCriteria == .custom ? .custom : .criteria
+    }
+
+    /// 使用默认参数构建显示设置，兼容旧本地设置缺少新增字段时的解码回退。
+    init(
+        layoutMode: BookshelfLayoutMode = .grid,
+        columnCount: Int = 3,
+        showsNoteCount: Bool = true,
+        sortCriteria: BookshelfSortCriteria = .custom,
+        sortOrder: BookshelfSortOrder = .descending,
+        isSectionEnabled: Bool = false,
+        pinnedInAllSorts: Bool = true,
+        titleDisplayMode: BookshelfTitleDisplayMode = .standard
+    ) {
+        self.layoutMode = layoutMode
+        self.columnCount = columnCount
+        self.showsNoteCount = showsNoteCount
+        self.sortCriteria = sortCriteria
+        self.sortOrder = sortOrder
+        self.isSectionEnabled = isSectionEnabled
+        self.pinnedInAllSorts = pinnedInAllSorts
+        self.titleDisplayMode = titleDisplayMode
+    }
+
+    /// 从本地轻量设置解码；新增字段缺失时按 Android 默认显示语义补齐。
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(
+            layoutMode: try container.decodeIfPresent(BookshelfLayoutMode.self, forKey: .layoutMode) ?? .grid,
+            columnCount: try container.decodeIfPresent(Int.self, forKey: .columnCount) ?? 3,
+            showsNoteCount: try container.decodeIfPresent(Bool.self, forKey: .showsNoteCount) ?? true,
+            sortCriteria: try container.decodeIfPresent(BookshelfSortCriteria.self, forKey: .sortCriteria) ?? .custom,
+            sortOrder: try container.decodeIfPresent(BookshelfSortOrder.self, forKey: .sortOrder) ?? .descending,
+            isSectionEnabled: try container.decodeIfPresent(Bool.self, forKey: .isSectionEnabled) ?? false,
+            pinnedInAllSorts: try container.decodeIfPresent(Bool.self, forKey: .pinnedInAllSorts) ?? true,
+            titleDisplayMode: try container.decodeIfPresent(BookshelfTitleDisplayMode.self, forKey: .titleDisplayMode) ?? .standard
+        )
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case layoutMode
+        case columnCount
+        case showsNoteCount
+        case sortCriteria
+        case sortOrder
+        case isSectionEnabled
+        case pinnedInAllSorts
+        case titleDisplayMode
     }
 
     /// 为指定维度提供 Android 语义更接近的默认排序。
@@ -180,14 +295,53 @@ struct BookshelfDisplaySetting: Codable, Hashable, Sendable {
         switch dimension {
         case .default, .status, .tag, .source:
             setting.sortCriteria = .custom
+            setting.sortOrder = .descending
         case .rating:
             setting.sortCriteria = .rating
-            setting.sortOrder = .descending
-        case .author, .press:
-            setting.sortCriteria = .name
+            setting.sortOrder = .ascending
+            setting.pinnedInAllSorts = false
+        case .author:
+            setting.sortCriteria = .authorName
+            setting.sortOrder = .ascending
+            setting.pinnedInAllSorts = false
+        case .press:
+            setting.sortCriteria = .pressName
+            setting.sortOrder = .ascending
+            setting.pinnedInAllSorts = false
         }
         return setting
     }
+
+    /// 为二级书籍列表提供 Android `getDefaultSubDisplaySetting` 的默认排序。
+    static func defaultBookListValue(for dimension: BookshelfDimension) -> BookshelfDisplaySetting {
+        var setting = BookshelfDisplaySetting()
+        switch dimension {
+        case .default:
+            setting.sortCriteria = .custom
+        case .rating:
+            setting.sortCriteria = .readDoneDate
+        case .status, .tag, .source, .author, .press:
+            setting.sortCriteria = .createdDate
+        }
+        setting.sortOrder = .descending
+        setting.pinnedInAllSorts = true
+        return setting
+    }
+}
+
+/// 书架条目的条件排序元数据，避免默认书架 Book/Group 在 Repository 外再访问数据库。
+nonisolated struct BookshelfItemSortMetadata: Hashable, Sendable {
+    static let empty = BookshelfItemSortMetadata()
+
+    var createdDate: Int64 = 0
+    var modifiedDate: Int64 = 0
+    var publishDate: Int64 = 0
+    var noteCount: Int = 0
+    var rating: Int64 = 0
+    var readDoneDate: Int64 = 0
+    var totalReadingTime: Int64 = 0
+    var readingProgress: Double?
+    var bookCount: Int = 1
 }
 
 /// 书架排序写入项，携带 Book/Group 稳定身份与当前置顶状态，供移动操作保持 Android 置顶边界。
@@ -208,9 +362,10 @@ struct BookshelfItem: Identifiable, Hashable, Sendable {
     let pinned: Bool
     let pinOrder: Int64
     let sortOrder: Int64
+    var sortMetadata: BookshelfItemSortMetadata = .empty
     let content: BookshelfItemContent
 
-    var title: String {
+    nonisolated var title: String {
         switch content {
         case .book(let payload):
             return payload.name
@@ -364,6 +519,7 @@ struct BookshelfSection: Identifiable, Hashable, Sendable {
     let subtitle: String
     let context: BookshelfListContext
     let orderID: Int64?
+    var sortMetadata: BookshelfItemSortMetadata = .empty
     let books: [BookshelfBookPayload]
 
     var count: Int {
@@ -379,6 +535,7 @@ nonisolated struct BookshelfAggregateGroup: Identifiable, Hashable, Sendable {
     let count: Int
     let context: BookshelfListContext
     let orderID: Int64?
+    var sortMetadata: BookshelfItemSortMetadata = .empty
     let representativeCovers: [String]
     let books: [BookshelfBookListItem]
 }

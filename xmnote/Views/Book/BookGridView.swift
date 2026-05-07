@@ -275,6 +275,7 @@ struct BookGridView: View {
                 count: section.count,
                 context: section.context,
                 orderID: section.orderID,
+                sortMetadata: section.sortMetadata,
                 representativeCovers: section.books.prefix(6).map(\.cover),
                 books: section.books.map { BookshelfBookListItem(payload: $0) }
             )
@@ -289,23 +290,58 @@ struct BookGridView: View {
         switch setting.sortCriteria {
         case .custom:
             return groups
-        case .name:
-            return groups.sorted { lhs, rhs in
-                let comparison = lhs.title.localizedStandardCompare(rhs.title)
-                if comparison != .orderedSame {
-                    return setting.sortOrder == .ascending ? comparison == .orderedAscending : comparison == .orderedDescending
-                }
-                return lhs.id < rhs.id
-            }
+        case .name, .readStatus, .tagName, .authorName, .pressName, .source:
+            return groups.sorted { compareText($0.title, $1.title, order: setting.sortOrder, tie: $0.id < $1.id) }
         case .bookCount:
-            return groups.sorted { lhs, rhs in
-                if lhs.count != rhs.count {
-                    return setting.sortOrder == .ascending ? lhs.count < rhs.count : lhs.count > rhs.count
-                }
-                return lhs.title.localizedStandardCompare(rhs.title) == .orderedAscending
-            }
+            return groups.sorted { compareInt(Int64($0.count), Int64($1.count), order: setting.sortOrder, missingLast: false, tie: $0.id < $1.id) }
+        case .createdDate:
+            return groups.sorted { compareInt($0.sortMetadata.createdDate, $1.sortMetadata.createdDate, order: setting.sortOrder, missingLast: false, tie: $0.id < $1.id) }
+        case .modifiedDate:
+            return groups.sorted { compareInt($0.sortMetadata.modifiedDate, $1.sortMetadata.modifiedDate, order: setting.sortOrder, missingLast: false, tie: $0.id < $1.id) }
+        case .publishDate:
+            return groups.sorted { compareInt($0.sortMetadata.publishDate, $1.sortMetadata.publishDate, order: setting.sortOrder, missingLast: true, tie: $0.id < $1.id) }
+        case .noteCount:
+            return groups.sorted { compareInt(Int64($0.sortMetadata.noteCount), Int64($1.sortMetadata.noteCount), order: setting.sortOrder, missingLast: false, tie: $0.id < $1.id) }
         case .rating:
-            return groups
+            return groups.sorted { compareInt($0.sortMetadata.rating, $1.sortMetadata.rating, order: setting.sortOrder, missingLast: true, tie: $0.id < $1.id) }
+        case .readDoneDate:
+            return groups.sorted { compareInt($0.sortMetadata.readDoneDate, $1.sortMetadata.readDoneDate, order: setting.sortOrder, missingLast: true, tie: $0.id < $1.id) }
+        case .totalReadingTime:
+            return groups.sorted { compareInt($0.sortMetadata.totalReadingTime, $1.sortMetadata.totalReadingTime, order: setting.sortOrder, missingLast: true, tie: $0.id < $1.id) }
+        case .readingProgress:
+            return groups.sorted { compareOptionalDouble($0.sortMetadata.readingProgress, $1.sortMetadata.readingProgress, order: setting.sortOrder, tie: $0.id < $1.id) }
+        }
+    }
+
+    private func compareText(_ lhs: String, _ rhs: String, order: BookshelfSortOrder, tie: Bool) -> Bool {
+        let comparison = lhs.localizedStandardCompare(rhs)
+        guard comparison != .orderedSame else { return tie }
+        return order == .ascending ? comparison == .orderedAscending : comparison == .orderedDescending
+    }
+
+    private func compareInt(_ lhs: Int64, _ rhs: Int64, order: BookshelfSortOrder, missingLast: Bool, tie: Bool) -> Bool {
+        if missingLast {
+            let lhsMissing = lhs == 0
+            let rhsMissing = rhs == 0
+            if lhsMissing != rhsMissing {
+                return !lhsMissing
+            }
+        }
+        guard lhs != rhs else { return tie }
+        return order == .ascending ? lhs < rhs : lhs > rhs
+    }
+
+    private func compareOptionalDouble(_ lhs: Double?, _ rhs: Double?, order: BookshelfSortOrder, tie: Bool) -> Bool {
+        switch (lhs, rhs) {
+        case (.none, .none):
+            return tie
+        case (.none, .some):
+            return false
+        case (.some, .none):
+            return true
+        case (.some(let lhsValue), .some(let rhsValue)):
+            guard lhsValue != rhsValue else { return tie }
+            return order == .ascending ? lhsValue < rhsValue : lhsValue > rhsValue
         }
     }
 

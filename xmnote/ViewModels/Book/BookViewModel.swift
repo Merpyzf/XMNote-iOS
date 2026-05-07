@@ -506,6 +506,9 @@ private extension BookViewModel {
         if !BookshelfSortCriteria.available(for: dimension).contains(result.sortCriteria) {
             result.sortCriteria = BookshelfDisplaySetting.defaultValue(for: dimension).sortCriteria
         }
+        if !result.sortCriteria.supportsSection {
+            result.isSectionEnabled = false
+        }
         return result
     }
 

@@ -7,8 +7,8 @@
 
 /**
  * [INPUT]: 依赖 BookshelfBookListRoute 提供聚合上下文，依赖 BookRepositoryProtocol 提供二级列表观察流，依赖外层 BookRoute 闭包承接书籍详情导航
- * [OUTPUT]: 对外提供 BookshelfBookListView，使用 UIKit UICollectionView 展示分组、状态、标签、来源、评分、作者与出版社聚合下的书籍列表
- * [POS]: Book 模块二级只读列表页，被 BookRoute.bookshelfList 导航目标消费
+ * [OUTPUT]: 对外提供 BookshelfBookListView，使用 UIKit UICollectionView 展示分组、状态、标签、来源、评分、作者与出版社聚合下的书籍列表和编辑选择入口
+ * [POS]: Book 模块二级列表页，被 BookRoute.bookshelfList 导航目标消费
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
@@ -59,24 +59,58 @@ private struct BookshelfBookListContentView: View {
 
     var body: some View {
         VStack(spacing: Spacing.compact) {
-            BookshelfBookListSearchBar(
-                text: $viewModel.searchKeyword,
-                onClear: viewModel.clearSearchKeyword
-            )
+            if viewModel.isEditing {
+                BookshelfEditHeader(
+                    selectedCount: viewModel.selectedCount,
+                    isAllVisibleSelected: viewModel.isAllVisibleSelected,
+                    onCancel: viewModel.exitEditing,
+                    onSelectAll: viewModel.selectAllVisible,
+                    onInvertSelection: viewModel.invertVisibleSelection
+                )
+                .transition(.move(edge: .top).combined(with: .opacity))
+            } else {
+                BookshelfBookListSearchBar(
+                    text: $viewModel.searchKeyword,
+                    onClear: viewModel.clearSearchKeyword
+                )
+                .transition(.move(edge: .top).combined(with: .opacity))
+            }
 
             BookshelfBookListCollectionView(
                 snapshot: viewModel.snapshot,
                 subtitle: viewModel.subtitle,
                 contentState: viewModel.contentState,
+                isEditing: viewModel.isEditing,
+                selectedBookIDs: viewModel.selectedBookIDSet,
+                onToggleSelection: viewModel.toggleSelection,
                 onOpenBook: { bookID in
                     onOpenRoute(.detail(bookId: bookID))
                 }
             )
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
+        .animation(.snappy(duration: 0.24, extraBounce: 0.04), value: viewModel.isEditing)
         .background(Color.surfacePage.ignoresSafeArea())
         .navigationTitle(viewModel.navigationTitle)
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                if !viewModel.isEditing, viewModel.canEnterEditing {
+                    Button("选择", action: viewModel.enterEditing)
+                }
+            }
+        }
+        .safeAreaInset(edge: .bottom, spacing: Spacing.none) {
+            if viewModel.isEditing {
+                BookshelfBookListEditBottomBar(
+                    selectedCount: viewModel.selectedCount,
+                    actions: viewModel.editActions,
+                    notice: viewModel.actionNotice,
+                    onAction: viewModel.performPlaceholderAction
+                )
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
+        }
     }
 }
 
@@ -85,6 +119,9 @@ private struct BookshelfBookListCollectionView: UIViewRepresentable {
     let snapshot: BookshelfBookListSnapshot
     let subtitle: String
     let contentState: BookshelfContentState
+    let isEditing: Bool
+    let selectedBookIDs: Set<Int64>
+    let onToggleSelection: (Int64) -> Void
     let onOpenBook: (Int64) -> Void
 
     /// 创建 collection view 承载视图。
@@ -104,6 +141,9 @@ private struct BookshelfBookListCollectionView: UIViewRepresentable {
             snapshot: snapshot,
             subtitle: subtitle,
             contentState: contentState,
+            isEditing: isEditing,
+            selectedBookIDs: selectedBookIDs,
+            onToggleSelection: onToggleSelection,
             onOpenBook: onOpenBook
         )
     }
@@ -114,12 +154,18 @@ private struct BookshelfBookListCollectionConfiguration {
     let snapshot: BookshelfBookListSnapshot
     let subtitle: String
     let contentState: BookshelfContentState
+    let isEditing: Bool
+    let selectedBookIDs: Set<Int64>
+    let onToggleSelection: (Int64) -> Void
     let onOpenBook: (Int64) -> Void
 
     static let empty = BookshelfBookListCollectionConfiguration(
         snapshot: .empty,
         subtitle: "",
         contentState: .loading,
+        isEditing: false,
+        selectedBookIDs: [],
+        onToggleSelection: { _ in },
         onOpenBook: { _ in }
     )
 }
@@ -169,9 +215,13 @@ private final class BookshelfBookListCollectionHostView: UIView {
         animated: Bool
     ) {
         let nextItems = Self.makeItems(from: configuration)
+        let didChangeEditing = configuration.isEditing != self.configuration.isEditing
         self.configuration = configuration
         guard nextItems != items else {
             refreshVisibleCells()
+            if didChangeEditing {
+                collectionView.collectionViewLayout.invalidateLayout()
+            }
             return
         }
         items = nextItems
@@ -246,7 +296,7 @@ private extension BookshelfBookListCollectionHostView {
                   items.indices.contains(indexPath.item) else {
                 continue
             }
-            cell.configure(with: items[indexPath.item])
+            cell.configure(with: items[indexPath.item], configuration: configuration)
         }
     }
 }
@@ -266,7 +316,7 @@ extension BookshelfBookListCollectionHostView: UICollectionViewDataSource {
         ) as? BookshelfBookListCollectionCell else {
             return UICollectionViewCell()
         }
-        cell.configure(with: items[indexPath.item])
+        cell.configure(with: items[indexPath.item], configuration: configuration)
         return cell
     }
 }
@@ -276,7 +326,11 @@ extension BookshelfBookListCollectionHostView: UICollectionViewDelegate {
         collectionView.deselectItem(at: indexPath, animated: true)
         guard items.indices.contains(indexPath.item) else { return }
         if case .book(let book) = items[indexPath.item] {
-            configuration.onOpenBook(book.id)
+            if configuration.isEditing {
+                configuration.onToggleSelection(book.id)
+            } else {
+                configuration.onOpenBook(book.id)
+            }
         }
     }
 
@@ -304,7 +358,10 @@ private final class BookshelfBookListCollectionCell: UICollectionViewCell {
     }
 
     /// 渲染当前 item。
-    func configure(with item: BookshelfBookListCollectionItem) {
+    func configure(
+        with item: BookshelfBookListCollectionItem,
+        configuration: BookshelfBookListCollectionConfiguration
+    ) {
         backgroundColor = .clear
         contentConfiguration = UIHostingConfiguration {
             switch item {
@@ -319,7 +376,11 @@ private final class BookshelfBookListCollectionCell: UICollectionViewCell {
                     .frame(maxWidth: .infinity)
                     .frame(minHeight: 320)
             case .book(let book):
-                BookshelfBookListRowView(book: book)
+                BookshelfBookListRowView(
+                    book: book,
+                    isEditing: configuration.isEditing,
+                    isSelected: configuration.selectedBookIDs.contains(book.id)
+                )
             }
         }
         .margins(.all, 0)
@@ -378,6 +439,8 @@ private struct BookshelfBookListSubtitleView: View {
 /// 二级列表书籍行视觉。
 private struct BookshelfBookListRowView: View {
     let book: BookshelfBookListItem
+    let isEditing: Bool
+    let isSelected: Bool
 
     var body: some View {
         HStack(spacing: Spacing.base) {
@@ -405,9 +468,11 @@ private struct BookshelfBookListRowView: View {
 
             Spacer(minLength: Spacing.compact)
 
-            Image(systemName: "chevron.right")
-                .font(AppTypography.caption)
-                .foregroundStyle(Color.textHint)
+            if !isEditing {
+                Image(systemName: "chevron.right")
+                    .font(AppTypography.caption)
+                    .foregroundStyle(Color.textHint)
+            }
         }
         .padding(Spacing.base)
         .background(Color.surfaceCard, in: RoundedRectangle(cornerRadius: CornerRadius.blockLarge, style: .continuous))
@@ -415,8 +480,14 @@ private struct BookshelfBookListRowView: View {
             RoundedRectangle(cornerRadius: CornerRadius.blockLarge, style: .continuous)
                 .stroke(Color.surfaceBorderSubtle, lineWidth: CardStyle.borderWidth)
         }
+        .opacity(isEditing ? (isSelected ? 1 : 0.78) : 1)
+        .overlay(alignment: .topTrailing) {
+            if isEditing {
+                BookshelfSelectionOverlay(isSelected: isSelected)
+            }
+        }
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(book.title)，\(metadata)")
+        .accessibilityLabel(accessibilityLabel)
         .accessibilityAddTraits(.isButton)
     }
 
@@ -424,6 +495,105 @@ private struct BookshelfBookListRowView: View {
         let authorText = book.author.isEmpty ? "未知作者" : book.author
         guard book.noteCount > 0 else { return authorText }
         return "\(authorText) · \(book.noteCount)条书摘"
+    }
+
+    private var accessibilityLabel: String {
+        if isEditing {
+            return "\(book.title)，\(metadata)，\(isSelected ? "已选中" : "未选中")"
+        }
+        return "\(book.title)，\(metadata)"
+    }
+}
+
+/// 二级列表编辑态底部栏，先提供 Android 管理动作入口，占位写入会显示保护提示。
+private struct BookshelfBookListEditBottomBar: View {
+    let selectedCount: Int
+    let actions: [BookshelfBookListEditAction]
+    let notice: String?
+    let onAction: (BookshelfBookListEditAction) -> Void
+
+    var body: some View {
+        VStack(spacing: Spacing.cozy) {
+            HStack(spacing: Spacing.compact) {
+                ForEach(primaryActions) { action in
+                    Button {
+                        onAction(action)
+                    } label: {
+                        actionLabel(action)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(action.title)
+                }
+
+                if !secondaryActions.isEmpty {
+                    Menu {
+                        ForEach(secondaryActions) { action in
+                            Button(role: action.isDestructive ? .destructive : nil) {
+                                onAction(action)
+                            } label: {
+                                Label(action.title, systemImage: action.systemImage)
+                            }
+                        }
+                    } label: {
+                        actionLabel(.setTag, titleOverride: "更多", iconOverride: "ellipsis.circle", isDestructiveOverride: false)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("更多操作")
+                }
+            }
+            .padding(.horizontal, Spacing.screenEdge)
+
+            Text(statusText)
+                .font(AppTypography.caption)
+                .foregroundStyle(Color.textSecondary)
+                .frame(maxWidth: .infinity, alignment: .center)
+                .lineLimit(2)
+                .padding(.horizontal, Spacing.screenEdge)
+        }
+        .padding(.top, Spacing.base)
+        .padding(.bottom, Spacing.cozy)
+        .background(.regularMaterial)
+        .overlay(alignment: .top) {
+            Divider()
+        }
+    }
+
+    private var statusText: String {
+        if let notice, !notice.isEmpty {
+            return notice
+        }
+        if selectedCount == 0 {
+            return "选择书籍后可批量管理；重命名与删除需完成 Android 写入核对后开放"
+        }
+        return "已选 \(selectedCount) 本，批量写入动作暂未开放"
+    }
+
+    private var primaryActions: [BookshelfBookListEditAction] {
+        Array(actions.prefix(4))
+    }
+
+    private var secondaryActions: [BookshelfBookListEditAction] {
+        Array(actions.dropFirst(4))
+    }
+
+    private func actionLabel(
+        _ action: BookshelfBookListEditAction,
+        titleOverride: String? = nil,
+        iconOverride: String? = nil,
+        isDestructiveOverride: Bool? = nil
+    ) -> some View {
+        VStack(spacing: Spacing.compact) {
+            Image(systemName: iconOverride ?? action.systemImage)
+                .font(AppTypography.headline)
+                .fontWeight(.medium)
+            Text(titleOverride ?? action.title)
+                .font(AppTypography.caption2)
+                .lineLimit(1)
+        }
+        .foregroundStyle((isDestructiveOverride ?? action.isDestructive) ? Color.feedbackError : Color.textPrimary)
+        .frame(width: 64)
+        .frame(minHeight: 48)
+        .contentShape(Rectangle())
     }
 }
 
