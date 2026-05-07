@@ -137,7 +137,7 @@ struct BookGridView: View {
     private var dimensionContent: some View {
         switch viewModel.selectedDimension {
         case .default:
-            defaultContent(viewModel.snapshot.defaultItems)
+            defaultContent(viewModel.snapshot.defaultSections)
         case .status:
             aggregateContent(
                 sections: [aggregateSection(id: "status", groups: groups(from: viewModel.snapshot.statusSections))],
@@ -163,8 +163,8 @@ struct BookGridView: View {
                 sections: viewModel.snapshot.authorSections.map {
                     BookshelfAggregateCollectionSection(
                         id: $0.id,
-                        title: $0.title,
-                        groups: sortedGroups($0.authors, for: .author)
+                        title: $0.title.isEmpty ? nil : $0.title,
+                        groups: $0.authors
                     )
                 },
                 dimension: .author
@@ -206,9 +206,9 @@ struct BookGridView: View {
     }
 
     @ViewBuilder
-    private func defaultContent(_ items: [BookshelfItem]) -> some View {
+    private func defaultContent(_ sections: [BookshelfDefaultSection]) -> some View {
         BookshelfDefaultCollectionView(
-            items: items,
+            sections: sections,
             layoutMode: viewModel.displaySetting.layoutMode,
             columnCount: viewModel.displaySetting.columnCount,
             showsNoteCount: viewModel.displaySetting.showsNoteCount,
@@ -217,7 +217,7 @@ struct BookGridView: View {
             canReorder: viewModel.canReorderDefaultItems,
             isScrollObservationEnabled: isDefaultScrollObservationEnabled,
             activeWriteAction: viewModel.activeWriteAction,
-            movableIDs: movableIDs(in: items),
+            movableIDs: movableIDs(in: sections.flatMap(\.items)),
             onOpenRoute: onOpenRoute,
             onToggleSelection: viewModel.toggleSelection,
             onEnterEditing: { viewModel.enterEditing(initialSelection: $0) },
@@ -262,7 +262,7 @@ struct BookGridView: View {
         BookshelfAggregateCollectionSection(
             id: id,
             title: nil,
-            groups: sortedGroups(groups, for: viewModel.selectedDimension)
+            groups: groups
         )
     }
 
@@ -279,69 +279,6 @@ struct BookGridView: View {
                 representativeCovers: section.books.prefix(6).map(\.cover),
                 books: section.books.map { BookshelfBookListItem(payload: $0) }
             )
-        }
-    }
-
-    private func sortedGroups(
-        _ groups: [BookshelfAggregateGroup],
-        for dimension: BookshelfDimension
-    ) -> [BookshelfAggregateGroup] {
-        let setting = viewModel.displaySetting(for: dimension)
-        switch setting.sortCriteria {
-        case .custom:
-            return groups
-        case .name, .readStatus, .tagName, .authorName, .pressName, .source:
-            return groups.sorted { compareText($0.title, $1.title, order: setting.sortOrder, tie: $0.id < $1.id) }
-        case .bookCount:
-            return groups.sorted { compareInt(Int64($0.count), Int64($1.count), order: setting.sortOrder, missingLast: false, tie: $0.id < $1.id) }
-        case .createdDate:
-            return groups.sorted { compareInt($0.sortMetadata.createdDate, $1.sortMetadata.createdDate, order: setting.sortOrder, missingLast: false, tie: $0.id < $1.id) }
-        case .modifiedDate:
-            return groups.sorted { compareInt($0.sortMetadata.modifiedDate, $1.sortMetadata.modifiedDate, order: setting.sortOrder, missingLast: false, tie: $0.id < $1.id) }
-        case .publishDate:
-            return groups.sorted { compareInt($0.sortMetadata.publishDate, $1.sortMetadata.publishDate, order: setting.sortOrder, missingLast: true, tie: $0.id < $1.id) }
-        case .noteCount:
-            return groups.sorted { compareInt(Int64($0.sortMetadata.noteCount), Int64($1.sortMetadata.noteCount), order: setting.sortOrder, missingLast: false, tie: $0.id < $1.id) }
-        case .rating:
-            return groups.sorted { compareInt($0.sortMetadata.rating, $1.sortMetadata.rating, order: setting.sortOrder, missingLast: true, tie: $0.id < $1.id) }
-        case .readDoneDate:
-            return groups.sorted { compareInt($0.sortMetadata.readDoneDate, $1.sortMetadata.readDoneDate, order: setting.sortOrder, missingLast: true, tie: $0.id < $1.id) }
-        case .totalReadingTime:
-            return groups.sorted { compareInt($0.sortMetadata.totalReadingTime, $1.sortMetadata.totalReadingTime, order: setting.sortOrder, missingLast: true, tie: $0.id < $1.id) }
-        case .readingProgress:
-            return groups.sorted { compareOptionalDouble($0.sortMetadata.readingProgress, $1.sortMetadata.readingProgress, order: setting.sortOrder, tie: $0.id < $1.id) }
-        }
-    }
-
-    private func compareText(_ lhs: String, _ rhs: String, order: BookshelfSortOrder, tie: Bool) -> Bool {
-        let comparison = lhs.localizedStandardCompare(rhs)
-        guard comparison != .orderedSame else { return tie }
-        return order == .ascending ? comparison == .orderedAscending : comparison == .orderedDescending
-    }
-
-    private func compareInt(_ lhs: Int64, _ rhs: Int64, order: BookshelfSortOrder, missingLast: Bool, tie: Bool) -> Bool {
-        if missingLast {
-            let lhsMissing = lhs == 0
-            let rhsMissing = rhs == 0
-            if lhsMissing != rhsMissing {
-                return !lhsMissing
-            }
-        }
-        guard lhs != rhs else { return tie }
-        return order == .ascending ? lhs < rhs : lhs > rhs
-    }
-
-    private func compareOptionalDouble(_ lhs: Double?, _ rhs: Double?, order: BookshelfSortOrder, tie: Bool) -> Bool {
-        switch (lhs, rhs) {
-        case (.none, .none):
-            return tie
-        case (.none, .some):
-            return false
-        case (.some, .none):
-            return true
-        case (.some(let lhsValue), .some(let rhsValue)):
-            guard lhsValue != rhsValue else { return tie }
-            return order == .ascending ? lhsValue < rhsValue : lhsValue > rhsValue
         }
     }
 

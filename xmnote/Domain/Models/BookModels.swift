@@ -140,7 +140,7 @@ enum BookshelfSortCriteria: String, CaseIterable, Codable, Hashable, Sendable {
         }
     }
 
-    var supportsSection: Bool {
+    nonisolated var supportsSection: Bool {
         switch self {
         case .createdDate, .modifiedDate, .publishDate, .name, .readDoneDate, .readStatus, .tagName, .authorName, .pressName, .source:
             return true
@@ -217,6 +217,12 @@ enum BookshelfTitleDisplayMode: String, CaseIterable, Codable, Hashable, Sendabl
             return "完整"
         }
     }
+}
+
+/// 书架显示设置的持久化作用域，区分首页聚合维度和二级书籍列表。
+nonisolated enum BookshelfDisplaySettingScope: String, Codable, Hashable, Sendable {
+    case main
+    case bookList
 }
 
 /// 删除分组时组内书籍回到默认书架的位置选择，等待删除与分组写入完成 Android 对齐后启用。
@@ -450,6 +456,13 @@ nonisolated struct BookshelfBookListItem: Identifiable, Hashable, Codable, Senda
     }
 }
 
+/// 二级书籍列表分区，承载 Android 分区排序语义下的标题与书籍行。
+nonisolated struct BookshelfBookListSection: Identifiable, Hashable, Sendable {
+    let id: String
+    let title: String?
+    let books: [BookshelfBookListItem]
+}
+
 /// 书架二级列表上下文，标识二级列表应从 Repository 观察哪一类书籍集合。
 nonisolated enum BookshelfListContext: Hashable, Codable, Sendable {
     case defaultGroup(Int64)
@@ -489,11 +502,45 @@ nonisolated enum BookshelfAggregateOrderContext: Hashable, Codable, Sendable {
 
 /// 书架二级列表观察快照，由 Repository 实时生成而不是由路由携带静态书籍数组。
 nonisolated struct BookshelfBookListSnapshot: Hashable, Sendable {
-    static let empty = BookshelfBookListSnapshot(title: "", subtitle: "", books: [])
+    static let empty = BookshelfBookListSnapshot(title: "", subtitle: "", sections: [])
 
     let title: String
     let subtitle: String
-    let books: [BookshelfBookListItem]
+    let sections: [BookshelfBookListSection]
+
+    var books: [BookshelfBookListItem] {
+        sections.flatMap(\.books)
+    }
+
+    /// 兼容非分区列表构建；后续分区由 Repository 根据显示设置生成。
+    init(
+        title: String,
+        subtitle: String,
+        books: [BookshelfBookListItem]
+    ) {
+        self.init(
+            title: title,
+            subtitle: subtitle,
+            sections: [
+                BookshelfBookListSection(
+                    id: "books",
+                    title: nil,
+                    books: books
+                )
+            ]
+        )
+    }
+
+    /// 构建已完成分区格式化的二级列表快照。
+    init(
+        title: String,
+        subtitle: String,
+        sections: [BookshelfBookListSection]
+    ) {
+        self.title = title
+        self.subtitle = subtitle
+        self.sections = sections
+    }
 }
 
 /// 书架二级只读列表路由载荷，承载分组、标签、来源、评分、作者、出版社等聚合入口。
@@ -522,7 +569,7 @@ struct BookshelfSection: Identifiable, Hashable, Sendable {
     var sortMetadata: BookshelfItemSortMetadata = .empty
     let books: [BookshelfBookPayload]
 
-    var count: Int {
+    nonisolated var count: Int {
         books.count
     }
 }
@@ -538,6 +585,13 @@ nonisolated struct BookshelfAggregateGroup: Identifiable, Hashable, Sendable {
     var sortMetadata: BookshelfItemSortMetadata = .empty
     let representativeCovers: [String]
     let books: [BookshelfBookListItem]
+}
+
+/// 默认书架分区，承载条件排序分区标题与 Book/Group 混排条目。
+nonisolated struct BookshelfDefaultSection: Identifiable, Hashable, Sendable {
+    let id: String
+    let title: String?
+    let items: [BookshelfItem]
 }
 
 /// 非默认维度聚合快照，供 UICollectionView 聚合入口统一渲染。
@@ -564,6 +618,7 @@ struct BookshelfSnapshot: Hashable, Sendable {
     static let empty = BookshelfSnapshot()
 
     var defaultItems: [BookshelfItem] = []
+    var defaultSections: [BookshelfDefaultSection] = []
     var statusSections: [BookshelfSection] = []
     var tagGroups: [BookshelfAggregateGroup] = []
     var sourceGroups: [BookshelfAggregateGroup] = []
@@ -586,7 +641,7 @@ struct BookshelfSnapshot: Hashable, Sendable {
     func isEmpty(for dimension: BookshelfDimension) -> Bool {
         switch dimension {
         case .default:
-            return defaultItems.isEmpty
+            return defaultSections.isEmpty && defaultItems.isEmpty
         case .status:
             return statusSections.isEmpty
         case .tag:

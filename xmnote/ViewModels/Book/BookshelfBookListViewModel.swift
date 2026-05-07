@@ -151,7 +151,8 @@ final class BookshelfBookListViewModel {
     ) {
         self.route = route
         self.repository = repository
-        self.displaySetting = .defaultBookListValue(for: route.context.dimension)
+        let settings = repository.fetchBookshelfDisplaySettings(scope: .bookList)
+        self.displaySetting = settings[route.context.dimension] ?? .defaultBookListValue(for: route.context.dimension)
         startObservation()
     }
 
@@ -163,6 +164,15 @@ final class BookshelfBookListViewModel {
     /// 清空搜索关键词并恢复完整列表。
     func clearSearchKeyword() {
         searchKeyword = ""
+    }
+
+    /// 保存二级列表显示设置，并重启观察流让排序、分区和布局立即生效。
+    func updateDisplaySetting(_ setting: BookshelfDisplaySetting) {
+        let sanitized = sanitizedDisplaySetting(setting)
+        guard sanitized != displaySetting else { return }
+        displaySetting = sanitized
+        repository.saveBookshelfDisplaySetting(sanitized, for: route.context.dimension, scope: .bookList)
+        restartObservation()
     }
 
     /// 进入二级列表编辑态，只改变本地选择状态，不触发任何写入。
@@ -246,6 +256,23 @@ final class BookshelfBookListViewModel {
 
     private func normalizedSearchKeyword(_ value: String) -> String {
         value.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private func sanitizedDisplaySetting(_ setting: BookshelfDisplaySetting) -> BookshelfDisplaySetting {
+        var sanitized = setting
+        let availableCriteria = BookshelfSortCriteria.availableForBookList(for: route.context.dimension)
+        if !availableCriteria.contains(sanitized.sortCriteria) {
+            sanitized.sortCriteria = BookshelfDisplaySetting.defaultBookListValue(for: route.context.dimension).sortCriteria
+        }
+        if sanitized.sortCriteria == .custom {
+            sanitized.sortOrder = .descending
+            sanitized.isSectionEnabled = false
+        } else if !sanitized.sortCriteria.supportsSection {
+            sanitized.isSectionEnabled = false
+        }
+        sanitized.pinnedInAllSorts = true
+        sanitized.columnCount = max(2, min(sanitized.columnCount, 6))
+        return sanitized
     }
 
     private func pruneSelectionToVisibleBooks() {

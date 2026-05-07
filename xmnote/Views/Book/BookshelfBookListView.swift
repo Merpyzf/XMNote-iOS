@@ -56,6 +56,7 @@ struct BookshelfBookListView: View {
 private struct BookshelfBookListContentView: View {
     @Bindable var viewModel: BookshelfBookListViewModel
     let onOpenRoute: (BookRoute) -> Void
+    @State private var showsDisplaySettingSheet = false
 
     var body: some View {
         VStack(spacing: Spacing.compact) {
@@ -94,9 +95,18 @@ private struct BookshelfBookListContentView: View {
         .navigationTitle(viewModel.navigationTitle)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
-            ToolbarItem(placement: .primaryAction) {
-                if !viewModel.isEditing, viewModel.canEnterEditing {
-                    Button("选择", action: viewModel.enterEditing)
+            ToolbarItemGroup(placement: .primaryAction) {
+                if !viewModel.isEditing {
+                    Button {
+                        showsDisplaySettingSheet = true
+                    } label: {
+                        Image(systemName: "slider.horizontal.3")
+                    }
+                    .accessibilityLabel("显示设置")
+
+                    if viewModel.canEnterEditing {
+                        Button("选择", action: viewModel.enterEditing)
+                    }
                 }
             }
         }
@@ -110,6 +120,17 @@ private struct BookshelfBookListContentView: View {
                 )
                 .transition(.move(edge: .bottom).combined(with: .opacity))
             }
+        }
+        .sheet(isPresented: $showsDisplaySettingSheet) {
+            BookshelfDisplaySettingSheet(
+                dimension: viewModel.route.context.dimension,
+                setting: Binding(
+                    get: { viewModel.displaySetting },
+                    set: { viewModel.updateDisplaySetting($0) }
+                ),
+                availableCriteria: BookshelfSortCriteria.availableForBookList(for: viewModel.route.context.dimension),
+                showsPinnedInAllSortsSetting: true
+            )
         }
     }
 }
@@ -178,10 +199,17 @@ private enum BookshelfBookListCollectionItem: Hashable {
     case book(BookshelfBookListItem)
 }
 
+/// 二级书籍列表 collection 内部 section。
+private struct BookshelfBookListCollectionSectionState: Hashable {
+    let id: String
+    let title: String?
+    let items: [BookshelfBookListCollectionItem]
+}
+
 /// UICollectionView 承载视图，负责单列布局和行点击。
 private final class BookshelfBookListCollectionHostView: UIView {
     private var configuration = BookshelfBookListCollectionConfiguration.empty
-    private var items: [BookshelfBookListCollectionItem] = []
+    private var sections: [BookshelfBookListCollectionSectionState] = []
 
     private lazy var collectionView: UICollectionView = {
         let view = UICollectionView(frame: .zero, collectionViewLayout: makeLayout())
@@ -195,6 +223,11 @@ private final class BookshelfBookListCollectionHostView: UIView {
         view.register(
             BookshelfBookListCollectionCell.self,
             forCellWithReuseIdentifier: BookshelfBookListCollectionCell.reuseIdentifier
+        )
+        view.register(
+            BookshelfBookListSectionHeaderView.self,
+            forSupplementaryViewOfKind: UICollectionView.elementKindSectionHeader,
+            withReuseIdentifier: BookshelfBookListSectionHeaderView.reuseIdentifier
         )
         return view
     }()
@@ -214,17 +247,17 @@ private final class BookshelfBookListCollectionHostView: UIView {
         with configuration: BookshelfBookListCollectionConfiguration,
         animated: Bool
     ) {
-        let nextItems = Self.makeItems(from: configuration)
+        let nextSections = Self.makeSections(from: configuration)
         let didChangeEditing = configuration.isEditing != self.configuration.isEditing
         self.configuration = configuration
-        guard nextItems != items else {
+        guard nextSections != sections else {
             refreshVisibleCells()
             if didChangeEditing {
                 collectionView.collectionViewLayout.invalidateLayout()
             }
             return
         }
-        items = nextItems
+        sections = nextSections
         collectionView.reloadData()
     }
 }
@@ -246,7 +279,7 @@ private extension BookshelfBookListCollectionHostView {
 
     /// 使用单列估算高度布局，让 SwiftUI row 自适应文本高度。
     func makeLayout() -> UICollectionViewLayout {
-        UICollectionViewCompositionalLayout { _, _ in
+        UICollectionViewCompositionalLayout { [weak self] sectionIndex, _ in
             let itemSize = NSCollectionLayoutSize(
                 widthDimension: .fractionalWidth(1),
                 heightDimension: .estimated(92)
@@ -265,45 +298,84 @@ private extension BookshelfBookListCollectionHostView {
                 bottom: Spacing.base,
                 trailing: Spacing.screenEdge
             )
+            if let self,
+               self.sections.indices.contains(sectionIndex),
+               self.sections[sectionIndex].title != nil {
+                let headerSize = NSCollectionLayoutSize(
+                    widthDimension: .fractionalWidth(1),
+                    heightDimension: .estimated(34)
+                )
+                let header = NSCollectionLayoutBoundarySupplementaryItem(
+                    layoutSize: headerSize,
+                    elementKind: UICollectionView.elementKindSectionHeader,
+                    alignment: .top
+                )
+                section.boundarySupplementaryItems = [header]
+            }
             return section
         }
     }
 
     /// 根据观察快照生成 collection item。
-    static func makeItems(from configuration: BookshelfBookListCollectionConfiguration) -> [BookshelfBookListCollectionItem] {
-        var nextItems: [BookshelfBookListCollectionItem] = []
+    static func makeSections(from configuration: BookshelfBookListCollectionConfiguration) -> [BookshelfBookListCollectionSectionState] {
+        var nextSections: [BookshelfBookListCollectionSectionState] = []
         if !configuration.subtitle.isEmpty {
-            nextItems.append(.subtitle(configuration.subtitle))
+            nextSections.append(BookshelfBookListCollectionSectionState(
+                id: "subtitle",
+                title: nil,
+                items: [.subtitle(configuration.subtitle)]
+            ))
         }
         switch configuration.contentState {
         case .loading:
-            nextItems.append(.loading)
+            nextSections.append(BookshelfBookListCollectionSectionState(id: "loading", title: nil, items: [.loading]))
         case .empty:
-            nextItems.append(.empty)
+            nextSections.append(BookshelfBookListCollectionSectionState(id: "empty", title: nil, items: [.empty]))
         case .error(let message):
-            nextItems.append(.subtitle(message.isEmpty ? "书籍加载失败" : message))
-            nextItems.append(.empty)
+            nextSections.append(BookshelfBookListCollectionSectionState(
+                id: "error",
+                title: nil,
+                items: [.subtitle(message.isEmpty ? "书籍加载失败" : message), .empty]
+            ))
         case .content:
-            nextItems.append(contentsOf: configuration.snapshot.books.map(BookshelfBookListCollectionItem.book))
+            nextSections.append(contentsOf: configuration.snapshot.sections.map { section in
+                BookshelfBookListCollectionSectionState(
+                    id: section.id,
+                    title: section.title,
+                    items: section.books.map(BookshelfBookListCollectionItem.book)
+                )
+            })
         }
-        return nextItems
+        return nextSections
     }
 
     /// 刷新可见 cell 中的闭包和选中态，不触发布局重载。
     func refreshVisibleCells() {
         for indexPath in collectionView.indexPathsForVisibleItems {
             guard let cell = collectionView.cellForItem(at: indexPath) as? BookshelfBookListCollectionCell,
-                  items.indices.contains(indexPath.item) else {
+                  let item = item(at: indexPath) else {
                 continue
             }
-            cell.configure(with: items[indexPath.item], configuration: configuration)
+            cell.configure(with: item, configuration: configuration)
         }
+    }
+
+    func item(at indexPath: IndexPath) -> BookshelfBookListCollectionItem? {
+        guard sections.indices.contains(indexPath.section),
+              sections[indexPath.section].items.indices.contains(indexPath.item) else {
+            return nil
+        }
+        return sections[indexPath.section].items[indexPath.item]
     }
 }
 
 extension BookshelfBookListCollectionHostView: UICollectionViewDataSource {
+    func numberOfSections(in collectionView: UICollectionView) -> Int {
+        sections.count
+    }
+
     func collectionView(_ collectionView: UICollectionView, numberOfItemsInSection section: Int) -> Int {
-        items.count
+        sections.indices.contains(section) ? sections[section].items.count : 0
     }
 
     func collectionView(
@@ -316,16 +388,37 @@ extension BookshelfBookListCollectionHostView: UICollectionViewDataSource {
         ) as? BookshelfBookListCollectionCell else {
             return UICollectionViewCell()
         }
-        cell.configure(with: items[indexPath.item], configuration: configuration)
+        if let item = item(at: indexPath) {
+            cell.configure(with: item, configuration: configuration)
+        }
         return cell
+    }
+
+    func collectionView(
+        _ collectionView: UICollectionView,
+        viewForSupplementaryElementOfKind kind: String,
+        at indexPath: IndexPath
+    ) -> UICollectionReusableView {
+        guard kind == UICollectionView.elementKindSectionHeader,
+              let header = collectionView.dequeueReusableSupplementaryView(
+                ofKind: kind,
+                withReuseIdentifier: BookshelfBookListSectionHeaderView.reuseIdentifier,
+                for: indexPath
+              ) as? BookshelfBookListSectionHeaderView,
+              sections.indices.contains(indexPath.section),
+              let title = sections[indexPath.section].title else {
+            return UICollectionReusableView()
+        }
+        header.configure(title: title)
+        return header
     }
 }
 
 extension BookshelfBookListCollectionHostView: UICollectionViewDelegate {
     func collectionView(_ collectionView: UICollectionView, didSelectItemAt indexPath: IndexPath) {
         collectionView.deselectItem(at: indexPath, animated: true)
-        guard items.indices.contains(indexPath.item) else { return }
-        if case .book(let book) = items[indexPath.item] {
+        guard let item = item(at: indexPath) else { return }
+        if case .book(let book) = item {
             if configuration.isEditing {
                 configuration.onToggleSelection(book.id)
             } else {
@@ -335,11 +428,48 @@ extension BookshelfBookListCollectionHostView: UICollectionViewDelegate {
     }
 
     func collectionView(_ collectionView: UICollectionView, shouldSelectItemAt indexPath: IndexPath) -> Bool {
-        guard items.indices.contains(indexPath.item) else { return false }
-        if case .book = items[indexPath.item] {
+        guard let item = item(at: indexPath) else { return false }
+        if case .book = item {
             return true
         }
         return false
+    }
+}
+
+/// 二级列表分区标题。
+private final class BookshelfBookListSectionHeaderView: UICollectionReusableView {
+    static let reuseIdentifier = "BookshelfBookListSectionHeaderView"
+    private let titleLabel = UILabel()
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        setupViewHierarchy()
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    /// 渲染当前分区标题。
+    func configure(title: String) {
+        titleLabel.text = title
+    }
+
+    private func setupViewHierarchy() {
+        backgroundColor = .clear
+        titleLabel.translatesAutoresizingMaskIntoConstraints = false
+        titleLabel.font = UIFont.preferredFont(forTextStyle: .subheadline)
+        titleLabel.adjustsFontForContentSizeCategory = true
+        titleLabel.textColor = .secondaryLabel
+        addSubview(titleLabel)
+
+        NSLayoutConstraint.activate([
+            titleLabel.leadingAnchor.constraint(equalTo: leadingAnchor, constant: Spacing.tiny),
+            titleLabel.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -Spacing.tiny),
+            titleLabel.topAnchor.constraint(equalTo: topAnchor, constant: Spacing.tiny),
+            titleLabel.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -Spacing.tiny)
+        ])
     }
 }
 

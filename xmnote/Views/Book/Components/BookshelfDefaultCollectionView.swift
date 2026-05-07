@@ -10,7 +10,7 @@ import UIKit
 
 /// 默认书架集合区，保留 SwiftUI 卡片视觉，同时由 UICollectionView 承接滚动与重排手势。
 struct BookshelfDefaultCollectionView: UIViewRepresentable {
-    let items: [BookshelfItem]
+    let sections: [BookshelfDefaultSection]
     let layoutMode: BookshelfLayoutMode
     let columnCount: Int
     let showsNoteCount: Bool
@@ -48,7 +48,7 @@ struct BookshelfDefaultCollectionView: UIViewRepresentable {
 
     private var configuration: BookshelfDefaultCollectionConfiguration {
         BookshelfDefaultCollectionConfiguration(
-            items: items,
+            sections: sections,
             layoutMode: layoutMode,
             columnCount: max(2, min(columnCount, 4)),
             showsNoteCount: showsNoteCount,
@@ -72,7 +72,7 @@ struct BookshelfDefaultCollectionView: UIViewRepresentable {
 
 /// UIKit 内部配置模型，统一描述当前集合区渲染、交互与业务回调。
 private struct BookshelfDefaultCollectionConfiguration {
-    let items: [BookshelfItem]
+    let sections: [BookshelfDefaultSection]
     let layoutMode: BookshelfLayoutMode
     let columnCount: Int
     let showsNoteCount: Bool
@@ -92,7 +92,7 @@ private struct BookshelfDefaultCollectionConfiguration {
     let onCommitOrder: ([BookshelfItemID]) -> Void
 
     static let empty = BookshelfDefaultCollectionConfiguration(
-        items: [],
+        sections: [],
         layoutMode: .grid,
         columnCount: 3,
         showsNoteCount: true,
@@ -116,6 +116,7 @@ private struct BookshelfDefaultCollectionConfiguration {
 /// UICollectionView 承载视图，负责布局切换、本地拖拽预览顺序和最终排序回调。
 final class BookshelfDefaultCollectionHostView: UIView {
     private var configuration = BookshelfDefaultCollectionConfiguration.empty
+    private var sections: [BookshelfDefaultSection] = []
     private var items: [BookshelfItem] = []
     private var pendingConfiguration: BookshelfDefaultCollectionConfiguration?
     private var originalItemsBeforeDrag: [BookshelfItem] = []
@@ -144,6 +145,11 @@ final class BookshelfDefaultCollectionHostView: UIView {
             BookshelfDefaultCollectionCell.self,
             forCellWithReuseIdentifier: BookshelfDefaultCollectionCell.reuseIdentifier
         )
+        view.register(
+            BookshelfDefaultSectionHeaderView.self,
+            forSupplementaryViewOfKind: UICollectionView.elementKindSectionHeader,
+            withReuseIdentifier: BookshelfDefaultSectionHeaderView.reuseIdentifier
+        )
         return view
     }()
 
@@ -170,12 +176,17 @@ final class BookshelfDefaultCollectionHostView: UIView {
         }
 
         let previousIDs = items.map(\.id)
-        let nextIDs = configuration.items.map(\.id)
+        let nextItems = configuration.sections.flatMap(\.items)
+        let nextIDs = nextItems.map(\.id)
+        let canAnimateStructuralDiff = self.configuration.sections.count == 1
+            && configuration.sections.count == 1
         let needsLayoutUpdate = self.configuration.layoutMode != configuration.layoutMode
             || self.configuration.columnCount != configuration.columnCount
             || self.configuration.isEditing != configuration.isEditing
+            || self.configuration.sections.map(\.id) != configuration.sections.map(\.id)
 
         self.configuration = configuration
+        sections = configuration.sections
         collectionView.dragInteractionEnabled = configuration.canReorder
         configureScrollEdgeEffect()
         updateContentScrollObservation()
@@ -185,19 +196,20 @@ final class BookshelfDefaultCollectionHostView: UIView {
         }
 
         if previousIDs == nextIDs {
-            items = configuration.items
+            items = nextItems
             refreshVisibleCells()
             return
         }
 
-        let applied = applyStructuralDiffUpdate(
-            from: previousIDs,
-            to: nextIDs,
-            nextItems: configuration.items,
-            animated: animated
-        )
+        let applied = canAnimateStructuralDiff
+            && applyStructuralDiffUpdate(
+                from: previousIDs,
+                to: nextIDs,
+                nextItems: nextItems,
+                animated: animated
+            )
         if !applied {
-            items = configuration.items
+            items = nextItems
             collectionView.reloadData()
         }
     }
@@ -206,6 +218,8 @@ final class BookshelfDefaultCollectionHostView: UIView {
     func prepareForReuse() {
         clearContentScrollObservation()
         pendingConfiguration = nil
+        sections = []
+        items = []
         originalItemsBeforeDrag = []
         isInteractiveReordering = false
         didChangeOrderInCurrentSession = false
@@ -231,16 +245,31 @@ private extension BookshelfDefaultCollectionHostView {
 
     /// 按当前展示模式构建 CompositionalLayout，Grid 和 List 共用同一个集合承载。
     func makeLayout(for configuration: BookshelfDefaultCollectionConfiguration) -> UICollectionViewLayout {
-        UICollectionViewCompositionalLayout { _, _ in
+        UICollectionViewCompositionalLayout { sectionIndex, _ in
+            let section: NSCollectionLayoutSection
             switch configuration.layoutMode {
             case .grid:
-                return Self.makeGridSection(
+                section = Self.makeGridSection(
                     columnCount: configuration.columnCount,
                     isEditing: configuration.isEditing
                 )
             case .list:
-                return Self.makeListSection(isEditing: configuration.isEditing)
+                section = Self.makeListSection(isEditing: configuration.isEditing)
             }
+            if configuration.sections.indices.contains(sectionIndex),
+               configuration.sections[sectionIndex].title != nil {
+                let headerSize = NSCollectionLayoutSize(
+                    widthDimension: .fractionalWidth(1),
+                    heightDimension: .estimated(34)
+                )
+                let header = NSCollectionLayoutBoundarySupplementaryItem(
+                    layoutSize: headerSize,
+                    elementKind: UICollectionView.elementKindSectionHeader,
+                    alignment: .top
+                )
+                section.boundarySupplementaryItems = [header]
+            }
+            return section
         }
     }
 
@@ -373,8 +402,7 @@ private extension BookshelfDefaultCollectionHostView {
 
     /// 绑定 cell 内容，仍复用现有 SwiftUI 书籍、分组与列表行组件。
     func configureCell(_ cell: BookshelfDefaultCollectionCell, at indexPath: IndexPath) {
-        guard items.indices.contains(indexPath.item) else { return }
-        let item = items[indexPath.item]
+        guard let item = item(at: indexPath) else { return }
         cell.configure(
             with: BookshelfDefaultCollectionCellContent(
                 item: item,
@@ -391,6 +419,14 @@ private extension BookshelfDefaultCollectionHostView {
                 onMoveToEnd: configuration.onMoveToEnd
             )
         )
+    }
+
+    func item(at indexPath: IndexPath) -> BookshelfItem? {
+        guard sections.indices.contains(indexPath.section),
+              sections[indexPath.section].items.indices.contains(indexPath.item) else {
+            return nil
+        }
+        return sections[indexPath.section].items[indexPath.item]
     }
 
     /// 外部结构变化转换为批量更新动画；不适合动画时由调用方回退 reloadData。
@@ -453,6 +489,7 @@ private extension BookshelfDefaultCollectionHostView {
     /// 判断指定位置是否允许启动排序；置顶项和非排序态始终返回 false。
     func canBeginReorder(at indexPath: IndexPath) -> Bool {
         guard configuration.canReorder,
+              indexPath.section == 0,
               items.indices.contains(indexPath.item) else {
             return false
         }
@@ -490,6 +527,7 @@ private extension BookshelfDefaultCollectionHostView {
             pendingConfiguration = nil
         } else if originalIDs != currentIDs {
             items = originalItemsBeforeDrag
+            replaceSingleSectionItems(items)
             collectionView.reloadData()
         }
         originalItemsBeforeDrag = []
@@ -533,8 +571,18 @@ private extension BookshelfDefaultCollectionHostView {
             return
         }
         items.xmBookshelfMove(from: sourceIndex, to: destinationIndex)
+        replaceSingleSectionItems(items)
         didChangeOrderInCurrentSession = true
         refreshVisibleCells()
+    }
+
+    func replaceSingleSectionItems(_ nextItems: [BookshelfItem]) {
+        guard sections.count == 1 else { return }
+        sections[0] = BookshelfDefaultSection(
+            id: sections[0].id,
+            title: sections[0].title,
+            items: nextItems
+        )
     }
 
     /// 由 Book/Group 载荷构造主导航路由。
@@ -558,9 +606,14 @@ private extension BookshelfDefaultCollectionHostView {
 }
 
 extension BookshelfDefaultCollectionHostView: UICollectionViewDataSource {
+    /// 返回默认书架当前 section 数量。
+    func numberOfSections(in collectionView: UICollectionView) -> Int {
+        sections.count
+    }
+
     /// 返回默认书架当前可见顶层条目数量。
     func collectionView(_ collectionView: UICollectionView, numberOfItemsInSection section: Int) -> Int {
-        items.count
+        sections.indices.contains(section) ? sections[section].items.count : 0
     }
 
     /// 配置默认书架 cell 的 SwiftUI 内容。
@@ -576,6 +629,26 @@ extension BookshelfDefaultCollectionHostView: UICollectionViewDataSource {
         }
         configureCell(cell, at: indexPath)
         return cell
+    }
+
+    /// 配置条件排序分区标题。
+    func collectionView(
+        _ collectionView: UICollectionView,
+        viewForSupplementaryElementOfKind kind: String,
+        at indexPath: IndexPath
+    ) -> UICollectionReusableView {
+        guard kind == UICollectionView.elementKindSectionHeader,
+              let header = collectionView.dequeueReusableSupplementaryView(
+                ofKind: kind,
+                withReuseIdentifier: BookshelfDefaultSectionHeaderView.reuseIdentifier,
+                for: indexPath
+              ) as? BookshelfDefaultSectionHeaderView,
+              sections.indices.contains(indexPath.section),
+              let title = sections[indexPath.section].title else {
+            return UICollectionReusableView()
+        }
+        header.configure(title: title)
+        return header
     }
 
     /// 告知 UICollectionView 哪些条目具备系统重排资格。
@@ -603,8 +676,7 @@ extension BookshelfDefaultCollectionHostView: UICollectionViewDelegate {
     /// 点击条目：编辑态切换选择，普通态走 SwiftUI 主导航路由。
     func collectionView(_ collectionView: UICollectionView, didSelectItemAt indexPath: IndexPath) {
         collectionView.deselectItem(at: indexPath, animated: true)
-        guard items.indices.contains(indexPath.item) else { return }
-        let item = items[indexPath.item]
+        guard let item = item(at: indexPath) else { return }
         if configuration.isEditing {
             configuration.onToggleSelection(item.id)
         } else {
@@ -697,6 +769,43 @@ extension BookshelfDefaultCollectionHostView: UICollectionViewDropDelegate {
             }
         }
         coordinator.drop(dropItem.dragItem, toItemAt: destination)
+    }
+}
+
+/// 默认书架条件排序分区标题。
+private final class BookshelfDefaultSectionHeaderView: UICollectionReusableView {
+    static let reuseIdentifier = "BookshelfDefaultSectionHeaderView"
+    private let titleLabel = UILabel()
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        setupViewHierarchy()
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    /// 渲染分区标题。
+    func configure(title: String) {
+        titleLabel.text = title
+    }
+
+    private func setupViewHierarchy() {
+        backgroundColor = .clear
+        titleLabel.translatesAutoresizingMaskIntoConstraints = false
+        titleLabel.font = UIFont.preferredFont(forTextStyle: .subheadline)
+        titleLabel.adjustsFontForContentSizeCategory = true
+        titleLabel.textColor = .secondaryLabel
+        addSubview(titleLabel)
+
+        NSLayoutConstraint.activate([
+            titleLabel.leadingAnchor.constraint(equalTo: leadingAnchor, constant: Spacing.tiny),
+            titleLabel.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -Spacing.tiny),
+            titleLabel.topAnchor.constraint(equalTo: topAnchor, constant: Spacing.tiny),
+            titleLabel.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -Spacing.tiny)
+        ])
     }
 }
 

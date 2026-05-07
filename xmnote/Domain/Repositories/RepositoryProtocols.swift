@@ -35,10 +35,10 @@ protocol BookRepositoryProtocol {
     func deleteBookshelfItems(_ ids: [BookshelfItemID], groupBooksPlacement: GroupBooksPlacement) async throws
     /// 将指定书籍移动到目标分组；真实写入需先完成 Android 对齐验证。
     func moveBooks(_ bookIDs: [Int64], toGroup targetGroupID: Int64) async throws
-    /// 读取按维度持久化的书架显示设置。
-    func fetchBookshelfDisplaySettings() -> [BookshelfDimension: BookshelfDisplaySetting]
-    /// 保存单个维度的书架显示设置。
-    func saveBookshelfDisplaySetting(_ setting: BookshelfDisplaySetting, for dimension: BookshelfDimension)
+    /// 读取按维度和作用域持久化的书架显示设置。
+    func fetchBookshelfDisplaySettings(scope: BookshelfDisplaySettingScope) -> [BookshelfDimension: BookshelfDisplaySetting]
+    /// 保存单个维度在指定作用域下的书架显示设置。
+    func saveBookshelfDisplaySetting(_ setting: BookshelfDisplaySetting, for dimension: BookshelfDimension, scope: BookshelfDisplaySettingScope)
     /// 持续监听指定书籍详情变化，供详情页实时更新。
     func observeBookDetail(bookId: Int64) -> AsyncThrowingStream<BookDetail?, Error>
     /// 持续监听指定书籍下的书摘列表变化。

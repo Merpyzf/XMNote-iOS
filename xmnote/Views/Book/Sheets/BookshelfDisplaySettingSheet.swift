@@ -10,8 +10,23 @@ import SwiftUI
 /// 书架显示设置 Sheet，按当前维度调整显示偏好，写入动作由外层 ViewModel 经 Repository 持久化。
 struct BookshelfDisplaySettingSheet: View {
     let dimension: BookshelfDimension
+    let availableCriteria: [BookshelfSortCriteria]
+    let showsPinnedInAllSortsSetting: Bool
     @Binding var setting: BookshelfDisplaySetting
     @Environment(\.dismiss) private var dismiss
+
+    /// 构建书架显示设置 Sheet；二级列表可注入独立排序依据与置顶设置开关。
+    init(
+        dimension: BookshelfDimension,
+        setting: Binding<BookshelfDisplaySetting>,
+        availableCriteria: [BookshelfSortCriteria]? = nil,
+        showsPinnedInAllSortsSetting: Bool? = nil
+    ) {
+        self.dimension = dimension
+        self.availableCriteria = availableCriteria ?? BookshelfSortCriteria.available(for: dimension)
+        self.showsPinnedInAllSortsSetting = showsPinnedInAllSortsSetting ?? (dimension == .default)
+        self._setting = setting
+    }
 
     var body: some View {
         NavigationStack {
@@ -45,7 +60,7 @@ struct BookshelfDisplaySettingSheet: View {
 
                 Section("排序") {
                     Picker("排序依据", selection: $setting.sortCriteria) {
-                        ForEach(BookshelfSortCriteria.available(for: dimension), id: \.self) { criteria in
+                        ForEach(availableCriteria, id: \.self) { criteria in
                             Text(criteria.title).tag(criteria)
                         }
                     }
@@ -61,7 +76,7 @@ struct BookshelfDisplaySettingSheet: View {
                     Toggle(sectionToggleTitle, isOn: $setting.isSectionEnabled)
                         .disabled(!supportsSectionToggle)
 
-                    if dimension == .default, setting.sortCriteria != .custom {
+                    if showsPinnedInAllSortsSetting, setting.sortCriteria != .custom {
                         Toggle("置顶项保持在顶部", isOn: $setting.pinnedInAllSorts)
                     }
 

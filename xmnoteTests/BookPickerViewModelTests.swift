@@ -358,7 +358,28 @@ private final class BookPickerTestBookRepository: BookRepositoryProtocol {
         }
     }
 
+    func observeBookshelfAggregateSnapshot(
+        setting: BookshelfDisplaySetting,
+        searchKeyword: String?
+    ) -> AsyncThrowingStream<BookshelfAggregateSnapshot, Error> {
+        AsyncThrowingStream { continuation in
+            continuation.finish()
+        }
+    }
+
+    func observeBookshelfBookList(
+        context: BookshelfListContext,
+        setting: BookshelfDisplaySetting,
+        searchKeyword: String?
+    ) -> AsyncThrowingStream<BookshelfBookListSnapshot, Error> {
+        AsyncThrowingStream { continuation in
+            continuation.finish()
+        }
+    }
+
     func updateBookshelfOrder(_ orderedItems: [BookshelfOrderItem]) async throws {}
+
+    func updateBookshelfAggregateOrder(context: BookshelfAggregateOrderContext, orderedIDs: [Int64]) async throws {}
 
     func pinBookshelfItems(_ ids: [BookshelfItemID]) async throws {}
 
@@ -380,6 +401,23 @@ private final class BookPickerTestBookRepository: BookRepositoryProtocol {
     ) async throws {}
 
     func moveBooks(_ bookIDs: [Int64], toGroup targetGroupID: Int64) async throws {}
+
+    func fetchBookshelfDisplaySettings(scope: BookshelfDisplaySettingScope) -> [BookshelfDimension: BookshelfDisplaySetting] {
+        Dictionary(uniqueKeysWithValues: BookshelfDimension.allCases.map {
+            switch scope {
+            case .main:
+                return ($0, BookshelfDisplaySetting.defaultValue(for: $0))
+            case .bookList:
+                return ($0, BookshelfDisplaySetting.defaultBookListValue(for: $0))
+            }
+        })
+    }
+
+    func saveBookshelfDisplaySetting(
+        _ setting: BookshelfDisplaySetting,
+        for dimension: BookshelfDimension,
+        scope: BookshelfDisplaySettingScope
+    ) {}
 
     func observeBookDetail(bookId: Int64) -> AsyncThrowingStream<BookDetail?, Error> {
         AsyncThrowingStream { continuation in

@@ -179,7 +179,7 @@ class BookViewModel {
     /// 注入书籍仓储并启动列表数据观察。
     init(repository: any BookRepositoryProtocol) {
         self.repository = repository
-        self.displaySettingsByDimension = repository.fetchBookshelfDisplaySettings()
+        self.displaySettingsByDimension = repository.fetchBookshelfDisplaySettings(scope: .main)
         startObservation()
     }
 
@@ -262,7 +262,7 @@ class BookViewModel {
         let sanitized = sanitizedDisplaySetting(setting, for: dimension)
         guard displaySettingsByDimension[dimension] != sanitized else { return }
         displaySettingsByDimension[dimension] = sanitized
-        repository.saveBookshelfDisplaySetting(sanitized, for: dimension)
+        repository.saveBookshelfDisplaySetting(sanitized, for: dimension, scope: .main)
         if dimension == selectedDimension {
             restartObservation()
         }

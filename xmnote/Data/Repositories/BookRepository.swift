@@ -138,13 +138,17 @@ struct BookRepository: BookRepositoryProtocol {
     }
 
     /// 从本地轻量设置读取各书架维度显示配置。
-    func fetchBookshelfDisplaySettings() -> [BookshelfDimension: BookshelfDisplaySetting] {
-        displaySettingStore.fetchSettings()
+    func fetchBookshelfDisplaySettings(scope: BookshelfDisplaySettingScope) -> [BookshelfDimension: BookshelfDisplaySetting] {
+        displaySettingStore.fetchSettings(scope: scope)
     }
 
     /// 保存单个维度的书架显示配置。
-    func saveBookshelfDisplaySetting(_ setting: BookshelfDisplaySetting, for dimension: BookshelfDimension) {
-        displaySettingStore.save(setting, for: dimension)
+    func saveBookshelfDisplaySetting(
+        _ setting: BookshelfDisplaySetting,
+        for dimension: BookshelfDimension,
+        scope: BookshelfDisplaySettingScope
+    ) {
+        displaySettingStore.save(setting, for: dimension, scope: scope)
     }
 
     /// 为书籍详情页提供单书订阅流，用于展示基础信息、阅读状态和笔记统计。
@@ -181,17 +185,18 @@ struct BookshelfDisplaySettingStore {
     static let shared = BookshelfDisplaySettingStore()
 
     private let defaults: UserDefaults
-    private let key = "bookshelf.display.settings.v1"
+    private let mainKey = "bookshelf.display.settings.v1"
+    private let bookListKey = "bookshelf.book-list.display.settings.v1"
 
     /// 注入 UserDefaults，默认使用标准容器。
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
     }
 
-    /// 读取全部维度设置；缺失或解码失败时回退到各维度默认值。
-    func fetchSettings() -> [BookshelfDimension: BookshelfDisplaySetting] {
-        let fallback = Self.defaultSettings()
-        guard let data = defaults.data(forKey: key),
+    /// 读取全部维度设置；缺失或解码失败时回退到各作用域默认值。
+    func fetchSettings(scope: BookshelfDisplaySettingScope) -> [BookshelfDimension: BookshelfDisplaySetting] {
+        let fallback = Self.defaultSettings(scope: scope)
+        guard let data = defaults.data(forKey: key(for: scope)),
               let decoded = try? JSONDecoder().decode([BookshelfDimension: BookshelfDisplaySetting].self, from: data) else {
             return fallback
         }
@@ -199,16 +204,30 @@ struct BookshelfDisplaySettingStore {
     }
 
     /// 保存指定维度设置。
-    func save(_ setting: BookshelfDisplaySetting, for dimension: BookshelfDimension) {
-        var settings = fetchSettings()
+    func save(_ setting: BookshelfDisplaySetting, for dimension: BookshelfDimension, scope: BookshelfDisplaySettingScope) {
+        var settings = fetchSettings(scope: scope)
         settings[dimension] = setting
         guard let data = try? JSONEncoder().encode(settings) else { return }
-        defaults.set(data, forKey: key)
+        defaults.set(data, forKey: key(for: scope))
     }
 
-    private static func defaultSettings() -> [BookshelfDimension: BookshelfDisplaySetting] {
+    private func key(for scope: BookshelfDisplaySettingScope) -> String {
+        switch scope {
+        case .main:
+            return mainKey
+        case .bookList:
+            return bookListKey
+        }
+    }
+
+    private static func defaultSettings(scope: BookshelfDisplaySettingScope) -> [BookshelfDimension: BookshelfDisplaySetting] {
         Dictionary(uniqueKeysWithValues: BookshelfDimension.allCases.map {
-            ($0, BookshelfDisplaySetting.defaultValue(for: $0))
+            switch scope {
+            case .main:
+                return ($0, BookshelfDisplaySetting.defaultValue(for: $0))
+            case .bookList:
+                return ($0, BookshelfDisplaySetting.defaultBookListValue(for: $0))
+            }
         })
     }
 }
@@ -357,6 +376,11 @@ nonisolated private struct BookshelfStatusKey: Hashable {
     let id: Int64
     let title: String
     let order: Int64
+}
+
+nonisolated private struct BookshelfDisplaySectionKey: Hashable {
+    let id: String
+    let title: String
 }
 
 nonisolated private enum BookshelfMovePlacement {
@@ -657,12 +681,13 @@ private extension BookRepository {
 
         return BookshelfSnapshot(
             defaultItems: defaultItems,
-            statusSections: makeStatusSections(from: filteredBooks),
-            tagGroups: makeTagGroups(from: filteredBooks, tagsByBook: tagsByBook),
-            sourceGroups: makeSourceGroups(from: filteredBooks),
-            ratingSections: makeRatingSections(from: filteredBooks),
-            authorSections: makeAuthorSections(from: filteredBooks),
-            pressGroups: makePressGroups(from: filteredBooks)
+            defaultSections: makeDefaultSections(from: defaultItems, setting: setting),
+            statusSections: makeStatusSections(from: filteredBooks, setting: setting),
+            tagGroups: makeTagGroups(from: filteredBooks, tagsByBook: tagsByBook, setting: setting),
+            sourceGroups: makeSourceGroups(from: filteredBooks, setting: setting),
+            ratingSections: makeRatingSections(from: filteredBooks, setting: setting),
+            authorSections: makeAuthorSections(from: filteredBooks, setting: setting),
+            pressGroups: makePressGroups(from: filteredBooks, setting: setting)
         )
     }
 
@@ -690,7 +715,7 @@ private extension BookRepository {
             return BookshelfBookListSnapshot(
                 title: title,
                 subtitle: "\(sortedRows.count)本",
-                books: sortedRows.map { BookshelfBookListItem(payload: $0.payload) }
+                sections: makeBookListSections(from: sortedRows, setting: setting)
             )
         case .readStatus(let statusID):
             let allRows = filterBooks(try fetchAllBookshelfBookRows(db), keyword: keyword)
@@ -742,7 +767,7 @@ private extension BookRepository {
         return BookshelfBookListSnapshot(
             title: title,
             subtitle: "\(sortedRows.count)本",
-            books: sortedRows.map { BookshelfBookListItem(payload: $0.payload) }
+            sections: makeBookListSections(from: sortedRows, setting: setting)
         )
     }
 
@@ -1158,11 +1183,14 @@ private extension BookRepository {
         }
     }
 
-    nonisolated func makeStatusSections(from books: [BookshelfBookAggregateRow]) -> [BookshelfSection] {
+    nonisolated func makeStatusSections(
+        from books: [BookshelfBookAggregateRow],
+        setting: BookshelfDisplaySetting
+    ) -> [BookshelfSection] {
         let grouped = Dictionary(grouping: books) { row in
             statusKey(for: row)
         }
-        return grouped.sorted { lhs, rhs in
+        let sections = grouped.sorted { lhs, rhs in
             if lhs.key.order != rhs.key.order {
                 return lhs.key.order < rhs.key.order
             }
@@ -1179,11 +1207,13 @@ private extension BookRepository {
                 books: sortedRows.map(\.payload)
             )
         }
+        return sortAggregateSections(sections, dimension: .status, setting: setting)
     }
 
     nonisolated func makeTagGroups(
         from books: [BookshelfBookAggregateRow],
-        tagsByBook: [Int64: [BookshelfTagInfo]]
+        tagsByBook: [Int64: [BookshelfTagInfo]],
+        setting: BookshelfDisplaySetting
     ) -> [BookshelfAggregateGroup] {
         var untaggedBooks: [BookshelfBookAggregateRow] = []
         var taggedBooks: [BookshelfTagInfo: [BookshelfBookAggregateRow]] = [:]
@@ -1225,10 +1255,13 @@ private extension BookRepository {
                     rows: rows
                 )
             })
-        return groups
+        return sortAggregateGroups(groups, dimension: .tag, setting: setting)
     }
 
-    nonisolated func makeSourceGroups(from books: [BookshelfBookAggregateRow]) -> [BookshelfAggregateGroup] {
+    nonisolated func makeSourceGroups(
+        from books: [BookshelfBookAggregateRow],
+        setting: BookshelfDisplaySetting
+    ) -> [BookshelfAggregateGroup] {
         var unknownBooks: [BookshelfBookAggregateRow] = []
         var sourceBooks: [Int64: [BookshelfBookAggregateRow]] = [:]
         var sourceTitles: [Int64: String] = [:]
@@ -1271,17 +1304,22 @@ private extension BookRepository {
                 rows: sourceBooks[sourceID] ?? []
             )
         })
-        return groups
+        return sortAggregateGroups(groups, dimension: .source, setting: setting)
     }
 
-    nonisolated func makeRatingSections(from books: [BookshelfBookAggregateRow]) -> [BookshelfSection] {
-        let grouped = Dictionary(grouping: books) { max(0, min($0.payload.score, 10)) }
+    nonisolated func makeRatingSections(
+        from books: [BookshelfBookAggregateRow],
+        setting: BookshelfDisplaySetting
+    ) -> [BookshelfSection] {
+        let grouped: [Int64: [BookshelfBookAggregateRow]] = Dictionary(grouping: books) { row in
+            max(Int64(0), min(row.payload.score, Int64(10)))
+        }
         let orderedScores = grouped.keys.sorted { lhs, rhs in
             if lhs == 0 { return true }
             if rhs == 0 { return false }
             return lhs > rhs
         }
-        return orderedScores.compactMap { score in
+        let sections: [BookshelfSection] = orderedScores.compactMap { score in
             guard let rows = grouped[score], !rows.isEmpty else { return nil }
             let sortedRows = score == 0 ? sortBooksByShelfOrder(rows) : rows.sorted {
                 if $0.payload.score != $1.payload.score {
@@ -1299,9 +1337,13 @@ private extension BookRepository {
                 books: sortedRows.map(\.payload)
             )
         }
+        return sortAggregateSections(sections, dimension: .rating, setting: setting)
     }
 
-    nonisolated func makeAuthorSections(from books: [BookshelfBookAggregateRow]) -> [BookshelfAuthorSection] {
+    nonisolated func makeAuthorSections(
+        from books: [BookshelfBookAggregateRow],
+        setting: BookshelfDisplaySetting
+    ) -> [BookshelfAuthorSection] {
         var authors: [String: [BookshelfBookAggregateRow]] = [:]
         for book in books {
             let name = normalizedAuthorName(book.payload.author)
@@ -1317,27 +1359,41 @@ private extension BookRepository {
                 rows: rows
             )
         }
-        let grouped = Dictionary(grouping: authorGroups) { authorInitial($0.title) }
-        return grouped.keys.sorted(by: authorSectionComparator).compactMap { key in
+        let sortedGroups = sortAggregateGroups(authorGroups, dimension: .author, setting: setting)
+        guard setting.sortCriteria == .authorName else {
+            return [
+                BookshelfAuthorSection(
+                    id: "author-all",
+                    title: "",
+                    authors: sortedGroups
+                )
+            ]
+        }
+
+        let grouped = Dictionary(grouping: sortedGroups) { authorInitial($0.title) }
+        return grouped.keys.sorted { lhs, rhs in
+            authorSectionComparator(lhs, rhs, order: setting.sortOrder)
+        }.compactMap { key in
             guard let values = grouped[key] else { return nil }
             return BookshelfAuthorSection(
                 id: key,
                 title: key,
-                authors: values.sorted {
-                    $0.title.localizedStandardCompare($1.title) == .orderedAscending
-                }
+                authors: sortAggregateGroups(values, dimension: .author, setting: setting)
             )
         }
     }
 
-    nonisolated func makePressGroups(from books: [BookshelfBookAggregateRow]) -> [BookshelfAggregateGroup] {
+    nonisolated func makePressGroups(
+        from books: [BookshelfBookAggregateRow],
+        setting: BookshelfDisplaySetting
+    ) -> [BookshelfAggregateGroup] {
         var presses: [String: [BookshelfBookAggregateRow]] = [:]
         for book in books {
             let press = normalizedPressName(book.press)
             presses[press, default: []].append(book)
         }
 
-        return presses.map { press, rows in
+        let groups = presses.map { press, rows in
             makeAggregateGroup(
                 id: "press-\(press)",
                 title: press,
@@ -1346,9 +1402,7 @@ private extension BookRepository {
                 rows: rows
             )
         }
-        .sorted {
-            $0.title.localizedStandardCompare($1.title) == .orderedAscending
-        }
+        return sortAggregateGroups(groups, dimension: .press, setting: setting)
     }
 
     nonisolated func makeAggregateGroup(
@@ -1369,6 +1423,195 @@ private extension BookRepository {
             sortMetadata: sortMetadata(from: sortedRows),
             representativeCovers: sortedRows.prefix(6).map(\.payload.cover),
             books: sortedRows.map { BookshelfBookListItem(payload: $0.payload) }
+        )
+    }
+
+    /// 按当前显示设置生成默认书架分区；未启用分区时返回单个无标题 section。
+    nonisolated func makeDefaultSections(
+        from items: [BookshelfItem],
+        setting: BookshelfDisplaySetting
+    ) -> [BookshelfDefaultSection] {
+        guard !items.isEmpty else { return [] }
+        guard setting.isSectionEnabled, setting.sortCriteria.supportsSection else {
+            return [
+                BookshelfDefaultSection(
+                    id: "default",
+                    title: nil,
+                    items: items
+                )
+            ]
+        }
+        var orderedKeys: [BookshelfDisplaySectionKey] = []
+        var groupedItems: [BookshelfDisplaySectionKey: [BookshelfItem]] = [:]
+        for item in items {
+            let key = sectionKey(for: item, criteria: setting.sortCriteria)
+            if groupedItems[key] == nil {
+                orderedKeys.append(key)
+            }
+            groupedItems[key, default: []].append(item)
+        }
+        return orderedKeys.map { key in
+            BookshelfDefaultSection(
+                id: key.id,
+                title: key.title,
+                items: groupedItems[key] ?? []
+            )
+        }
+    }
+
+    /// 按二级列表显示设置生成书籍分区；未启用分区时返回单个无标题 section。
+    nonisolated func makeBookListSections(
+        from rows: [BookshelfBookAggregateRow],
+        setting: BookshelfDisplaySetting
+    ) -> [BookshelfBookListSection] {
+        guard !rows.isEmpty else { return [] }
+        guard setting.isSectionEnabled, setting.sortCriteria.supportsSection else {
+            return [
+                BookshelfBookListSection(
+                    id: "books",
+                    title: nil,
+                    books: rows.map { BookshelfBookListItem(payload: $0.payload) }
+                )
+            ]
+        }
+        var orderedKeys: [BookshelfDisplaySectionKey] = []
+        var groupedRows: [BookshelfDisplaySectionKey: [BookshelfBookAggregateRow]] = [:]
+        for row in rows {
+            let key = sectionKey(for: row, criteria: setting.sortCriteria)
+            if groupedRows[key] == nil {
+                orderedKeys.append(key)
+            }
+            groupedRows[key, default: []].append(row)
+        }
+        return orderedKeys.map { key in
+            BookshelfBookListSection(
+                id: key.id,
+                title: key.title,
+                books: (groupedRows[key] ?? []).map { BookshelfBookListItem(payload: $0.payload) }
+            )
+        }
+    }
+
+    /// 对聚合卡执行 Repository 级排序，保留未设置标签/来源/状态/评分的 Android 前置语义。
+    nonisolated func sortAggregateGroups(
+        _ groups: [BookshelfAggregateGroup],
+        dimension: BookshelfDimension,
+        setting: BookshelfDisplaySetting
+    ) -> [BookshelfAggregateGroup] {
+        guard setting.sortCriteria != .custom else { return groups }
+        let fixedGroups = groups.filter { isFixedLeadingAggregate($0, dimension: dimension) }
+        let sortableGroups = groups.filter { !isFixedLeadingAggregate($0, dimension: dimension) }
+        return fixedGroups + sortableGroups.sorted {
+            compareAggregateGroups($0, $1, criteria: setting.sortCriteria, order: setting.sortOrder)
+        }
+    }
+
+    /// 对状态/评分这类 section 聚合执行 Repository 级排序。
+    nonisolated func sortAggregateSections(
+        _ sections: [BookshelfSection],
+        dimension: BookshelfDimension,
+        setting: BookshelfDisplaySetting
+    ) -> [BookshelfSection] {
+        guard setting.sortCriteria != .custom else { return sections }
+        let fixedSections = sections.filter { isFixedLeadingSection($0, dimension: dimension) }
+        let sortableSections = sections.filter { !isFixedLeadingSection($0, dimension: dimension) }
+        return fixedSections + sortableSections.sorted {
+            compareAggregateSections($0, $1, criteria: setting.sortCriteria, order: setting.sortOrder)
+        }
+    }
+
+    nonisolated func isFixedLeadingAggregate(_ group: BookshelfAggregateGroup, dimension: BookshelfDimension) -> Bool {
+        switch dimension {
+        case .status, .tag, .source:
+            return group.orderID == nil
+        case .rating:
+            if case .rating(let score) = group.context {
+                return score == 0
+            }
+            return false
+        case .default, .author, .press:
+            return false
+        }
+    }
+
+    nonisolated func isFixedLeadingSection(_ section: BookshelfSection, dimension: BookshelfDimension) -> Bool {
+        switch dimension {
+        case .status:
+            return section.orderID == nil
+        case .rating:
+            if case .rating(let score) = section.context {
+                return score == 0
+            }
+            return false
+        case .default, .tag, .source, .author, .press:
+            return false
+        }
+    }
+
+    nonisolated func compareAggregateGroups(
+        _ lhs: BookshelfAggregateGroup,
+        _ rhs: BookshelfAggregateGroup,
+        criteria: BookshelfSortCriteria,
+        order: BookshelfSortOrder
+    ) -> Bool {
+        let tieBreaker = lhs.id < rhs.id
+        switch criteria {
+        case .custom:
+            return tieBreaker
+        case .bookCount:
+            return compareInt(Int64(lhs.count), Int64(rhs.count), order: order, missingLast: false, tie: tieBreaker)
+        case .createdDate:
+            return compareInt(lhs.sortMetadata.createdDate, rhs.sortMetadata.createdDate, order: order, missingLast: false, tie: tieBreaker)
+        case .modifiedDate:
+            return compareInt(lhs.sortMetadata.modifiedDate, rhs.sortMetadata.modifiedDate, order: order, missingLast: false, tie: tieBreaker)
+        case .publishDate:
+            return compareInt(lhs.sortMetadata.publishDate, rhs.sortMetadata.publishDate, order: order, missingLast: true, tie: tieBreaker)
+        case .noteCount:
+            return compareInt(Int64(lhs.sortMetadata.noteCount), Int64(rhs.sortMetadata.noteCount), order: order, missingLast: false, tie: tieBreaker)
+        case .rating:
+            return compareInt(lhs.sortMetadata.rating, rhs.sortMetadata.rating, order: order, missingLast: true, tie: tieBreaker)
+        case .readDoneDate:
+            return compareInt(lhs.sortMetadata.readDoneDate, rhs.sortMetadata.readDoneDate, order: order, missingLast: true, tie: tieBreaker)
+        case .totalReadingTime:
+            return compareInt(lhs.sortMetadata.totalReadingTime, rhs.sortMetadata.totalReadingTime, order: order, missingLast: true, tie: tieBreaker)
+        case .readingProgress:
+            return compareOptionalDouble(lhs.sortMetadata.readingProgress, rhs.sortMetadata.readingProgress, order: order, tie: tieBreaker)
+        case .name, .readStatus, .tagName, .authorName, .pressName, .source:
+            return compareText(lhs.title, rhs.title, order: order, tie: tieBreaker)
+        }
+    }
+
+    nonisolated func compareAggregateSections(
+        _ lhs: BookshelfSection,
+        _ rhs: BookshelfSection,
+        criteria: BookshelfSortCriteria,
+        order: BookshelfSortOrder
+    ) -> Bool {
+        compareAggregateGroups(
+            BookshelfAggregateGroup(
+                id: lhs.id,
+                title: lhs.title,
+                subtitle: lhs.subtitle,
+                count: lhs.count,
+                context: lhs.context,
+                orderID: lhs.orderID,
+                sortMetadata: lhs.sortMetadata,
+                representativeCovers: [],
+                books: []
+            ),
+            BookshelfAggregateGroup(
+                id: rhs.id,
+                title: rhs.title,
+                subtitle: rhs.subtitle,
+                count: rhs.count,
+                context: rhs.context,
+                orderID: rhs.orderID,
+                sortMetadata: rhs.sortMetadata,
+                representativeCovers: [],
+                books: []
+            ),
+            criteria: criteria,
+            order: order
         )
     }
 
@@ -1543,6 +1786,106 @@ private extension BookRepository {
         }
     }
 
+    nonisolated func sectionKey(
+        for item: BookshelfItem,
+        criteria: BookshelfSortCriteria
+    ) -> BookshelfDisplaySectionKey {
+        switch criteria {
+        case .createdDate:
+            return monthSectionKey(timestamp: item.sortMetadata.createdDate, fallback: "未知创建时间", prefix: "created")
+        case .modifiedDate:
+            return monthSectionKey(timestamp: item.sortMetadata.modifiedDate, fallback: "未知修改时间", prefix: "modified")
+        case .readDoneDate:
+            return monthSectionKey(timestamp: item.sortMetadata.readDoneDate, fallback: "未读完", prefix: "read-done")
+        case .publishDate:
+            return yearSectionKey(timestamp: item.sortMetadata.publishDate, fallback: "未知出版年", prefix: "publish")
+        case .name, .readStatus, .tagName, .authorName, .pressName, .source:
+            return initialSectionKey(text: item.title, prefix: criteria.rawValue)
+        case .custom, .noteCount, .bookCount, .rating, .totalReadingTime, .readingProgress:
+            return BookshelfDisplaySectionKey(id: "all", title: "全部")
+        }
+    }
+
+    nonisolated func sectionKey(
+        for row: BookshelfBookAggregateRow,
+        criteria: BookshelfSortCriteria
+    ) -> BookshelfDisplaySectionKey {
+        switch criteria {
+        case .createdDate:
+            return monthSectionKey(timestamp: row.createdDate, fallback: "未知创建时间", prefix: "created")
+        case .modifiedDate:
+            return monthSectionKey(timestamp: row.modifiedDate, fallback: "未知修改时间", prefix: "modified")
+        case .readDoneDate:
+            return monthSectionKey(timestamp: row.readDoneDate, fallback: "未读完", prefix: "read-done")
+        case .publishDate:
+            return yearSectionKey(timestamp: row.publishDate, fallback: "未知出版年", prefix: "publish")
+        case .name:
+            return initialSectionKey(text: row.payload.name, prefix: "name")
+        case .readStatus:
+            return initialSectionKey(text: row.payload.readStatusName, prefix: "read-status")
+        case .tagName:
+            return initialSectionKey(text: row.payload.name, prefix: "tag")
+        case .authorName:
+            return initialSectionKey(text: row.payload.author, prefix: "author")
+        case .pressName:
+            return initialSectionKey(text: row.press, prefix: "press")
+        case .source:
+            return initialSectionKey(text: row.payload.sourceName, prefix: "source")
+        case .custom, .noteCount, .bookCount, .rating, .totalReadingTime, .readingProgress:
+            return BookshelfDisplaySectionKey(id: "all", title: "全部")
+        }
+    }
+
+    nonisolated func monthSectionKey(
+        timestamp: Int64,
+        fallback: String,
+        prefix: String
+    ) -> BookshelfDisplaySectionKey {
+        guard timestamp > 0 else {
+            return BookshelfDisplaySectionKey(id: "\(prefix)-unknown", title: fallback)
+        }
+        let date = Date(timeIntervalSince1970: TimeInterval(timestamp) / 1000.0)
+        let components = Calendar.current.dateComponents([.year, .month], from: date)
+        guard let year = components.year, let month = components.month else {
+            return BookshelfDisplaySectionKey(id: "\(prefix)-unknown", title: fallback)
+        }
+        return BookshelfDisplaySectionKey(
+            id: String(format: "%@-%04d-%02d", prefix, year, month),
+            title: "\(year)年\(month)月"
+        )
+    }
+
+    nonisolated func yearSectionKey(
+        timestamp: Int64,
+        fallback: String,
+        prefix: String
+    ) -> BookshelfDisplaySectionKey {
+        guard timestamp > 0 else {
+            return BookshelfDisplaySectionKey(id: "\(prefix)-unknown", title: fallback)
+        }
+        let date = Date(timeIntervalSince1970: TimeInterval(timestamp) / 1000.0)
+        guard let year = Calendar.current.dateComponents([.year], from: date).year else {
+            return BookshelfDisplaySectionKey(id: "\(prefix)-unknown", title: fallback)
+        }
+        return BookshelfDisplaySectionKey(id: "\(prefix)-\(year)", title: "\(year)年")
+    }
+
+    nonisolated func initialSectionKey(text: String, prefix: String) -> BookshelfDisplaySectionKey {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            return BookshelfDisplaySectionKey(id: "\(prefix)-unknown", title: "#")
+        }
+        let transformed = trimmed
+            .applyingTransform(.toLatin, reverse: false)?
+            .applyingTransform(.stripDiacritics, reverse: false) ?? trimmed
+        guard let first = transformed.trimmingCharacters(in: .whitespacesAndNewlines).first else {
+            return BookshelfDisplaySectionKey(id: "\(prefix)-unknown", title: "#")
+        }
+        let uppercased = String(first).uppercased()
+        let title = ("A"..."Z").contains(uppercased) ? uppercased : "#"
+        return BookshelfDisplaySectionKey(id: "\(prefix)-\(title)", title: title)
+    }
+
     nonisolated func statusKey(for row: BookshelfBookAggregateRow) -> BookshelfStatusKey {
         let title = row.payload.readStatusName.trimmingCharacters(in: .whitespacesAndNewlines)
         guard row.payload.readStatusId != 0, !title.isEmpty else {
@@ -1629,10 +1972,10 @@ private extension BookRepository {
         return ("A"..."Z").contains(uppercased) ? uppercased : "#"
     }
 
-    nonisolated func authorSectionComparator(_ lhs: String, _ rhs: String) -> Bool {
+    nonisolated func authorSectionComparator(_ lhs: String, _ rhs: String, order: BookshelfSortOrder) -> Bool {
         if lhs == "#" { return false }
         if rhs == "#" { return true }
-        return lhs < rhs
+        return order == .ascending ? lhs < rhs : lhs > rhs
     }
 
     /// 查询书架页需要的书籍卡片数据，并补齐每本书的有效笔记数量。
