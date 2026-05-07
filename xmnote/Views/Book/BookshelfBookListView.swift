@@ -83,10 +83,13 @@ private struct BookshelfBookListContentView: View {
                 contentState: viewModel.contentState,
                 isEditing: viewModel.isEditing,
                 selectedBookIDs: viewModel.selectedBookIDSet,
+                canReorder: viewModel.canReorderBooksInDefaultGroup,
+                movableBookIDs: viewModel.movableBookIDs,
                 onToggleSelection: viewModel.toggleSelection,
                 onOpenBook: { bookID in
                     onOpenRoute(.detail(bookId: bookID))
-                }
+                },
+                onCommitOrder: viewModel.commitBooksInDefaultGroupOrder
             )
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
@@ -115,8 +118,10 @@ private struct BookshelfBookListContentView: View {
                 BookshelfBookListEditBottomBar(
                     selectedCount: viewModel.selectedCount,
                     actions: viewModel.editActions,
+                    activeAction: viewModel.activeWriteAction,
+                    isLoadingOptions: viewModel.isLoadingBatchOptions,
                     notice: viewModel.actionNotice,
-                    onAction: viewModel.performPlaceholderAction
+                    onAction: viewModel.performEditAction
                 )
                 .transition(.move(edge: .bottom).combined(with: .opacity))
             }
@@ -132,6 +137,43 @@ private struct BookshelfBookListContentView: View {
                 showsPinnedInAllSortsSetting: true
             )
         }
+        .sheet(item: $viewModel.activeBatchSheet) { sheet in
+            switch sheet {
+            case .tags(
+                options: let options,
+                initialSelectedIDs: let initialSelectedIDs,
+                allowsEmptySelection: let allowsEmptySelection
+            ):
+                BookshelfBatchTagsSheet(
+                    options: options,
+                    selectedCount: viewModel.selectedCount,
+                    initialSelectedIDs: initialSelectedIDs,
+                    allowsEmptySelection: allowsEmptySelection,
+                    onConfirm: viewModel.submitBatchTags
+                )
+            case .source(options: let options, initialSelectedID: let initialSelectedID):
+                BookshelfBatchSourceSheet(
+                    options: options,
+                    selectedCount: viewModel.selectedCount,
+                    initialSelectedID: initialSelectedID,
+                    onConfirm: viewModel.submitBatchSource
+                )
+            case .readStatus(
+                options: let options,
+                initialStatusID: let initialStatusID,
+                initialChangedAt: let initialChangedAt,
+                initialRatingScore: let initialRatingScore
+            ):
+                BookshelfBatchReadStatusSheet(
+                    options: options,
+                    selectedCount: viewModel.selectedCount,
+                    initialStatusID: initialStatusID,
+                    initialChangedAt: initialChangedAt,
+                    initialRatingScore: initialRatingScore,
+                    onConfirm: viewModel.submitBatchReadStatus
+                )
+            }
+        }
     }
 }
 
@@ -142,8 +184,11 @@ private struct BookshelfBookListCollectionView: UIViewRepresentable {
     let contentState: BookshelfContentState
     let isEditing: Bool
     let selectedBookIDs: Set<Int64>
+    let canReorder: Bool
+    let movableBookIDs: Set<Int64>
     let onToggleSelection: (Int64) -> Void
     let onOpenBook: (Int64) -> Void
+    let onCommitOrder: ([Int64]) -> Void
 
     /// 创建 collection view 承载视图。
     func makeUIView(context: Context) -> BookshelfBookListCollectionHostView {
@@ -157,6 +202,11 @@ private struct BookshelfBookListCollectionView: UIViewRepresentable {
         uiView.update(with: configuration, animated: true)
     }
 
+    /// 销毁 UIKit 承载视图时清理拖拽缓存。
+    static func dismantleUIView(_ uiView: BookshelfBookListCollectionHostView, coordinator: ()) {
+        uiView.prepareForReuse()
+    }
+
     private var configuration: BookshelfBookListCollectionConfiguration {
         BookshelfBookListCollectionConfiguration(
             snapshot: snapshot,
@@ -164,8 +214,11 @@ private struct BookshelfBookListCollectionView: UIViewRepresentable {
             contentState: contentState,
             isEditing: isEditing,
             selectedBookIDs: selectedBookIDs,
+            canReorder: canReorder,
+            movableBookIDs: movableBookIDs,
             onToggleSelection: onToggleSelection,
-            onOpenBook: onOpenBook
+            onOpenBook: onOpenBook,
+            onCommitOrder: onCommitOrder
         )
     }
 }
@@ -177,8 +230,11 @@ private struct BookshelfBookListCollectionConfiguration {
     let contentState: BookshelfContentState
     let isEditing: Bool
     let selectedBookIDs: Set<Int64>
+    let canReorder: Bool
+    let movableBookIDs: Set<Int64>
     let onToggleSelection: (Int64) -> Void
     let onOpenBook: (Int64) -> Void
+    let onCommitOrder: ([Int64]) -> Void
 
     static let empty = BookshelfBookListCollectionConfiguration(
         snapshot: .empty,
@@ -186,8 +242,11 @@ private struct BookshelfBookListCollectionConfiguration {
         contentState: .loading,
         isEditing: false,
         selectedBookIDs: [],
+        canReorder: false,
+        movableBookIDs: [],
         onToggleSelection: { _ in },
-        onOpenBook: { _ in }
+        onOpenBook: { _ in },
+        onCommitOrder: { _ in }
     )
 }
 
@@ -210,6 +269,13 @@ private struct BookshelfBookListCollectionSectionState: Hashable {
 private final class BookshelfBookListCollectionHostView: UIView {
     private var configuration = BookshelfBookListCollectionConfiguration.empty
     private var sections: [BookshelfBookListCollectionSectionState] = []
+    private var pendingConfiguration: BookshelfBookListCollectionConfiguration?
+    private var originalSectionsBeforeDrag: [BookshelfBookListCollectionSectionState] = []
+    private var isInteractiveReordering = false
+    private var didChangeOrderInCurrentSession = false
+    private var didReceiveDropInCurrentSession = false
+    private let impactFeedback = UIImpactFeedbackGenerator(style: .medium)
+    private let selectionFeedback = UISelectionFeedbackGenerator()
 
     private lazy var collectionView: UICollectionView = {
         let view = UICollectionView(frame: .zero, collectionViewLayout: makeLayout())
@@ -218,8 +284,12 @@ private final class BookshelfBookListCollectionHostView: UIView {
         view.showsVerticalScrollIndicator = false
         view.contentInsetAdjustmentBehavior = .automatic
         view.keyboardDismissMode = .onDrag
+        view.dragInteractionEnabled = false
+        view.reorderingCadence = .immediate
         view.dataSource = self
         view.delegate = self
+        view.dragDelegate = self
+        view.dropDelegate = self
         view.register(
             BookshelfBookListCollectionCell.self,
             forCellWithReuseIdentifier: BookshelfBookListCollectionCell.reuseIdentifier
@@ -247,9 +317,15 @@ private final class BookshelfBookListCollectionHostView: UIView {
         with configuration: BookshelfBookListCollectionConfiguration,
         animated: Bool
     ) {
+        if isInteractiveReordering {
+            pendingConfiguration = configuration
+            return
+        }
+
         let nextSections = Self.makeSections(from: configuration)
         let didChangeEditing = configuration.isEditing != self.configuration.isEditing
         self.configuration = configuration
+        collectionView.dragInteractionEnabled = configuration.canReorder
         guard nextSections != sections else {
             refreshVisibleCells()
             if didChangeEditing {
@@ -258,6 +334,17 @@ private final class BookshelfBookListCollectionHostView: UIView {
             return
         }
         sections = nextSections
+        collectionView.reloadData()
+    }
+
+    /// 清理拖拽缓存，供 SwiftUI 销毁或复用承载视图时恢复稳定状态。
+    func prepareForReuse() {
+        pendingConfiguration = nil
+        originalSectionsBeforeDrag = []
+        isInteractiveReordering = false
+        didChangeOrderInCurrentSession = false
+        didReceiveDropInCurrentSession = false
+        sections = []
         collectionView.reloadData()
     }
 }
@@ -367,6 +454,132 @@ private extension BookshelfBookListCollectionHostView {
         }
         return sections[indexPath.section].items[indexPath.item]
     }
+
+    /// 判断指定位置是否允许启动组内排序。
+    func canBeginReorder(at indexPath: IndexPath) -> Bool {
+        guard configuration.canReorder,
+              let item = item(at: indexPath),
+              case .book(let book) = item else {
+            return false
+        }
+        return configuration.movableBookIDs.contains(book.id)
+    }
+
+    /// 记录拖拽开始前的本地快照，取消时可恢复预览顺序。
+    func beginReorderSession(at indexPath: IndexPath) {
+        guard !isInteractiveReordering else { return }
+        isInteractiveReordering = true
+        didChangeOrderInCurrentSession = false
+        didReceiveDropInCurrentSession = false
+        originalSectionsBeforeDrag = sections
+        impactFeedback.prepare()
+        impactFeedback.impactOccurred(intensity: 0.82)
+        selectionFeedback.prepare()
+    }
+
+    /// 拖拽结束时决定提交最终顺序或恢复取消前顺序。
+    func finishReorderSession() {
+        guard isInteractiveReordering else { return }
+        let originalIDs = bookIDs(in: originalSectionsBeforeDrag)
+        let currentIDs = bookIDs(in: sections)
+        let shouldCommit = didReceiveDropInCurrentSession
+            && didChangeOrderInCurrentSession
+            && originalIDs != currentIDs
+
+        isInteractiveReordering = false
+        didChangeOrderInCurrentSession = false
+        didReceiveDropInCurrentSession = false
+
+        if shouldCommit {
+            configuration.onCommitOrder(currentIDs)
+            selectionFeedback.selectionChanged()
+            pendingConfiguration = nil
+        } else if originalIDs != currentIDs {
+            sections = originalSectionsBeforeDrag
+            collectionView.reloadData()
+        }
+        originalSectionsBeforeDrag = []
+
+        if let pendingConfiguration {
+            self.pendingConfiguration = nil
+            update(with: pendingConfiguration, animated: false)
+        }
+    }
+
+    /// 将系统建议目标限制在同一个书籍 section 内，避免 subtitle/loading/empty 参与排序。
+    func normalizedDestinationIndexPath(
+        for proposed: IndexPath?,
+        movingBookID: Int64?
+    ) -> IndexPath? {
+        guard let bookSectionIndex = bookSectionIndex(),
+              sections.indices.contains(bookSectionIndex) else {
+            return nil
+        }
+        let itemCount = sections[bookSectionIndex].items.count
+        guard itemCount > 0 else { return nil }
+        var proposedItem = proposed?.item ?? (itemCount - 1)
+        proposedItem = min(max(0, proposedItem), itemCount - 1)
+        if let proposed, proposed.section != bookSectionIndex {
+            proposedItem = proposed.section < bookSectionIndex ? 0 : itemCount - 1
+        }
+        if let movingBookID,
+           !configuration.movableBookIDs.contains(movingBookID),
+           let sourceIndex = bookIndexPath(for: movingBookID) {
+            return sourceIndex
+        }
+        return IndexPath(item: proposedItem, section: bookSectionIndex)
+    }
+
+    /// 在 UIKit 本地 section 中执行移动，最终写入由拖拽结束统一提交。
+    func applyLocalMove(from sourceIndexPath: IndexPath, to destinationIndexPath: IndexPath) {
+        guard sourceIndexPath != destinationIndexPath,
+              sections.indices.contains(sourceIndexPath.section),
+              sections.indices.contains(destinationIndexPath.section),
+              sourceIndexPath.section == destinationIndexPath.section,
+              sections[sourceIndexPath.section].items.indices.contains(sourceIndexPath.item),
+              sections[destinationIndexPath.section].items.indices.contains(destinationIndexPath.item),
+              case .book(let book) = sections[sourceIndexPath.section].items[sourceIndexPath.item],
+              configuration.movableBookIDs.contains(book.id) else {
+            return
+        }
+        var items = sections[sourceIndexPath.section].items
+        let item = items.remove(at: sourceIndexPath.item)
+        items.insert(item, at: destinationIndexPath.item)
+        sections[sourceIndexPath.section] = BookshelfBookListCollectionSectionState(
+            id: sections[sourceIndexPath.section].id,
+            title: sections[sourceIndexPath.section].title,
+            items: items
+        )
+        didChangeOrderInCurrentSession = true
+        refreshVisibleCells()
+    }
+
+    func bookSectionIndex() -> Int? {
+        sections.firstIndex { section in
+            section.items.contains {
+                if case .book = $0 { return true }
+                return false
+            }
+        }
+    }
+
+    func bookIndexPath(for bookID: Int64) -> IndexPath? {
+        for (sectionIndex, section) in sections.enumerated() {
+            for (itemIndex, item) in section.items.enumerated() {
+                if case .book(let book) = item, book.id == bookID {
+                    return IndexPath(item: itemIndex, section: sectionIndex)
+                }
+            }
+        }
+        return nil
+    }
+
+    func bookIDs(in sections: [BookshelfBookListCollectionSectionState]) -> [Int64] {
+        sections.flatMap(\.items).compactMap { item in
+            if case .book(let book) = item { return book.id }
+            return nil
+        }
+    }
 }
 
 extension BookshelfBookListCollectionHostView: UICollectionViewDataSource {
@@ -392,6 +605,28 @@ extension BookshelfBookListCollectionHostView: UICollectionViewDataSource {
             cell.configure(with: item, configuration: configuration)
         }
         return cell
+    }
+
+    /// 告知 UICollectionView 哪些二级列表书籍具备系统重排资格。
+    func collectionView(_ collectionView: UICollectionView, canMoveItemAt indexPath: IndexPath) -> Bool {
+        canBeginReorder(at: indexPath)
+    }
+
+    /// 系统立即重排时同步 UIKit 本地数据源，最终落库仍在拖拽结束后统一提交。
+    func collectionView(
+        _ collectionView: UICollectionView,
+        moveItemAt sourceIndexPath: IndexPath,
+        to destinationIndexPath: IndexPath
+    ) {
+        guard let item = item(at: sourceIndexPath),
+              case .book(let book) = item,
+              let destination = normalizedDestinationIndexPath(
+                for: destinationIndexPath,
+                movingBookID: book.id
+              ) else {
+            return
+        }
+        applyLocalMove(from: sourceIndexPath, to: destination)
     }
 
     func collectionView(
@@ -433,6 +668,94 @@ extension BookshelfBookListCollectionHostView: UICollectionViewDelegate {
             return true
         }
         return false
+    }
+
+    /// 重排目标限制在二级列表当前书籍 section 内。
+    func collectionView(
+        _ collectionView: UICollectionView,
+        targetIndexPathForMoveFromItemAt originalIndexPath: IndexPath,
+        toProposedIndexPath proposedIndexPath: IndexPath
+    ) -> IndexPath {
+        guard let item = item(at: originalIndexPath),
+              case .book(let book) = item else {
+            return originalIndexPath
+        }
+        return normalizedDestinationIndexPath(
+            for: proposedIndexPath,
+            movingBookID: book.id
+        ) ?? originalIndexPath
+    }
+}
+
+extension BookshelfBookListCollectionHostView: UICollectionViewDragDelegate {
+    /// 仅允许默认分组二级列表普通书籍启动本地长按拖拽排序。
+    func collectionView(
+        _ collectionView: UICollectionView,
+        itemsForBeginning session: UIDragSession,
+        at indexPath: IndexPath
+    ) -> [UIDragItem] {
+        guard canBeginReorder(at: indexPath),
+              let item = item(at: indexPath),
+              case .book(let book) = item else {
+            return []
+        }
+        beginReorderSession(at: indexPath)
+        let itemProvider = NSItemProvider(object: NSString(string: "book:\(book.id)"))
+        let dragItem = UIDragItem(itemProvider: itemProvider)
+        dragItem.localObject = book.id
+        return [dragItem]
+    }
+
+    /// 拖拽结束后收束本地顺序并决定提交或恢复。
+    func collectionView(_ collectionView: UICollectionView, dragSessionDidEnd session: UIDragSession) {
+        finishReorderSession()
+    }
+}
+
+extension BookshelfBookListCollectionHostView: UICollectionViewDropDelegate {
+    /// 二级列表排序只接受本地拖拽，拒绝跨应用投递。
+    func collectionView(_ collectionView: UICollectionView, canHandle session: UIDropSession) -> Bool {
+        session.localDragSession != nil
+    }
+
+    /// 声明本地 move + 插入目标，交给系统集合视图处理让位与边缘滚动。
+    func collectionView(
+        _ collectionView: UICollectionView,
+        dropSessionDidUpdate session: UIDropSession,
+        withDestinationIndexPath destinationIndexPath: IndexPath?
+    ) -> UICollectionViewDropProposal {
+        guard session.localDragSession != nil,
+              configuration.canReorder else {
+            return UICollectionViewDropProposal(operation: .forbidden)
+        }
+        return UICollectionViewDropProposal(operation: .move, intent: .insertAtDestinationIndexPath)
+    }
+
+    /// 执行 drop 兜底移动；若系统已在拖拽过程中同步数据源，这里只标记成功结束。
+    func collectionView(_ collectionView: UICollectionView, performDropWith coordinator: UICollectionViewDropCoordinator) {
+        guard let dropItem = coordinator.items.first else { return }
+        didReceiveDropInCurrentSession = true
+
+        let movingID = dropItem.dragItem.localObject as? Int64
+        guard let movingID,
+              let sourceIndexPath = bookIndexPath(for: movingID),
+              let destination = normalizedDestinationIndexPath(
+                for: coordinator.destinationIndexPath,
+                movingBookID: movingID
+              ) else {
+            return
+        }
+
+        if sourceIndexPath != destination {
+            collectionView.performBatchUpdates { [weak self] in
+                guard let self else { return }
+                self.applyLocalMove(from: sourceIndexPath, to: destination)
+                collectionView.moveItem(at: sourceIndexPath, to: destination)
+            } completion: { [weak self] _ in
+                self?.selectionFeedback.selectionChanged()
+            }
+        }
+        coordinator.drop(dropItem.dragItem, toItemAt: destination)
     }
 }
 
@@ -598,6 +921,12 @@ private struct BookshelfBookListRowView: View {
 
             Spacer(minLength: Spacing.compact)
 
+            if book.pinned {
+                Image(systemName: "pin.fill")
+                    .font(AppTypography.caption)
+                    .foregroundStyle(Color.brand)
+            }
+
             if !isEditing {
                 Image(systemName: "chevron.right")
                     .font(AppTypography.caption)
@@ -639,6 +968,8 @@ private struct BookshelfBookListRowView: View {
 private struct BookshelfBookListEditBottomBar: View {
     let selectedCount: Int
     let actions: [BookshelfBookListEditAction]
+    let activeAction: BookshelfBookListEditAction?
+    let isLoadingOptions: Bool
     let notice: String?
     let onAction: (BookshelfBookListEditAction) -> Void
 
@@ -652,6 +983,7 @@ private struct BookshelfBookListEditBottomBar: View {
                         actionLabel(action)
                     }
                     .buttonStyle(.plain)
+                    .disabled(isBusy)
                     .accessibilityLabel(action.title)
                 }
 
@@ -663,11 +995,13 @@ private struct BookshelfBookListEditBottomBar: View {
                             } label: {
                                 Label(action.title, systemImage: action.systemImage)
                             }
+                            .disabled(isBusy)
                         }
                     } label: {
                         actionLabel(.setTag, titleOverride: "更多", iconOverride: "ellipsis.circle", isDestructiveOverride: false)
                     }
                     .buttonStyle(.plain)
+                    .disabled(isBusy)
                     .accessibilityLabel("更多操作")
                 }
             }
@@ -692,10 +1026,20 @@ private struct BookshelfBookListEditBottomBar: View {
         if let notice, !notice.isEmpty {
             return notice
         }
-        if selectedCount == 0 {
-            return "选择书籍后可批量管理；重命名与删除需完成 Android 写入核对后开放"
+        if let activeAction {
+            return "\(activeAction.title)处理中..."
         }
-        return "已选 \(selectedCount) 本，批量写入动作暂未开放"
+        if isLoadingOptions {
+            return "正在加载批量编辑选项..."
+        }
+        if selectedCount == 0 {
+            return "选择书籍后可批量管理；默认分组支持置顶与组内移动"
+        }
+        return "已选 \(selectedCount) 本，可批量设置标签、来源与阅读状态"
+    }
+
+    private var isBusy: Bool {
+        activeAction != nil || isLoadingOptions
     }
 
     private var primaryActions: [BookshelfBookListEditAction] {

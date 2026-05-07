@@ -80,7 +80,7 @@ enum BookEntryReadingStatus: Int64, CaseIterable, Identifiable, Hashable, Sendab
 }
 
 /// 录入页可复用的命名选项，统一表示来源/分组/标签。
-struct BookEditorNamedOption: Identifiable, Hashable, Sendable {
+nonisolated struct BookEditorNamedOption: Identifiable, Hashable, Sendable {
     let id: Int64
     let title: String
 }

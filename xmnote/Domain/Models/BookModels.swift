@@ -2,13 +2,13 @@ import Foundation
 
 /**
  * [INPUT]: 依赖 Foundation 的 Date/DateFormatter 进行时间格式化
- * [OUTPUT]: 对外提供 BookItem、BookshelfSnapshot、BookshelfItem、BookshelfOrderItem、BookshelfListContext、BookDetail、NoteExcerpt 等书籍域展示模型
+ * [OUTPUT]: 对外提供 BookItem、BookshelfSnapshot、BookshelfItem、BookshelfOrderItem、BookshelfListContext、BookshelfBatchEditOptions、BookDetail、NoteExcerpt 等书籍域展示模型
  * [POS]: Domain/Models 的书籍聚合模型定义，被 BookViewModel 与 BookRepository 实现共同消费
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
 /// 书架条目模型，承载书籍列表页展示所需的核心字段。
-struct BookItem: Identifiable {
+nonisolated struct BookItem: Identifiable {
     let id: Int64
     let name: String
     let author: String
@@ -25,7 +25,7 @@ nonisolated enum BookshelfItemID: Hashable, Sendable {
 }
 
 /// 首页书架浏览维度，用于控制书架内容层的只读展示形态。
-enum BookshelfDimension: String, CaseIterable, Codable, Hashable, Sendable {
+nonisolated enum BookshelfDimension: String, CaseIterable, Codable, Hashable, Sendable {
     case `default`
     case status
     case tag
@@ -55,7 +55,7 @@ enum BookshelfDimension: String, CaseIterable, Codable, Hashable, Sendable {
 }
 
 /// 书架布局模式，按书架维度持久化到本地轻量设置。
-enum BookshelfLayoutMode: String, CaseIterable, Codable, Hashable, Sendable {
+nonisolated enum BookshelfLayoutMode: String, CaseIterable, Codable, Hashable, Sendable {
     case grid
     case list
 
@@ -70,7 +70,7 @@ enum BookshelfLayoutMode: String, CaseIterable, Codable, Hashable, Sendable {
 }
 
 /// 书架排序模式，用于兼容默认书架排序入口判断。
-enum BookshelfSortMode: String, Hashable, Sendable {
+nonisolated enum BookshelfSortMode: String, Hashable, Sendable {
     case custom
     case criteria
 
@@ -85,7 +85,7 @@ enum BookshelfSortMode: String, Hashable, Sendable {
 }
 
 /// 书架排序依据，按 Android display type 的可选排序语义收敛成 iOS 侧统一枚举。
-enum BookshelfSortCriteria: String, CaseIterable, Codable, Hashable, Sendable {
+nonisolated enum BookshelfSortCriteria: String, CaseIterable, Codable, Hashable, Sendable {
     case custom
     case createdDate
     case modifiedDate
@@ -187,7 +187,7 @@ enum BookshelfSortCriteria: String, CaseIterable, Codable, Hashable, Sendable {
 }
 
 /// 条件排序方向。
-enum BookshelfSortOrder: String, CaseIterable, Codable, Hashable, Sendable {
+nonisolated enum BookshelfSortOrder: String, CaseIterable, Codable, Hashable, Sendable {
     case ascending
     case descending
 
@@ -202,7 +202,7 @@ enum BookshelfSortOrder: String, CaseIterable, Codable, Hashable, Sendable {
 }
 
 /// 书名在书架卡片上的展示策略，先作为设置语义沉淀，后续视觉细化继续复用。
-enum BookshelfTitleDisplayMode: String, CaseIterable, Codable, Hashable, Sendable {
+nonisolated enum BookshelfTitleDisplayMode: String, CaseIterable, Codable, Hashable, Sendable {
     case standard
     case compact
     case full
@@ -232,7 +232,7 @@ nonisolated enum GroupBooksPlacement: String, Hashable, Codable, Sendable {
 }
 
 /// 书架展示配置，按浏览维度保存布局、排序、分区与辅助信息偏好。
-struct BookshelfDisplaySetting: Codable, Hashable, Sendable {
+nonisolated struct BookshelfDisplaySetting: Codable, Hashable, Sendable {
     static let defaultValue = BookshelfDisplaySetting()
 
     var layoutMode: BookshelfLayoutMode = .grid
@@ -296,7 +296,7 @@ struct BookshelfDisplaySetting: Codable, Hashable, Sendable {
     }
 
     /// 为指定维度提供 Android 语义更接近的默认排序。
-    static func defaultValue(for dimension: BookshelfDimension) -> BookshelfDisplaySetting {
+    nonisolated static func defaultValue(for dimension: BookshelfDimension) -> BookshelfDisplaySetting {
         var setting = BookshelfDisplaySetting()
         switch dimension {
         case .default, .status, .tag, .source:
@@ -319,7 +319,7 @@ struct BookshelfDisplaySetting: Codable, Hashable, Sendable {
     }
 
     /// 为二级书籍列表提供 Android `getDefaultSubDisplaySetting` 的默认排序。
-    static func defaultBookListValue(for dimension: BookshelfDimension) -> BookshelfDisplaySetting {
+    nonisolated static func defaultBookListValue(for dimension: BookshelfDimension) -> BookshelfDisplaySetting {
         var setting = BookshelfDisplaySetting()
         switch dimension {
         case .default:
@@ -356,14 +356,50 @@ nonisolated struct BookshelfOrderItem: Hashable, Sendable {
     let isPinned: Bool
 }
 
+/// 二级书籍列表排序写入项，携带 Book 身份与当前置顶状态，供默认分组内移动保持置顶边界。
+nonisolated struct BookshelfBookListOrderItem: Hashable, Sendable {
+    let id: Int64
+    let isPinned: Bool
+}
+
+/// 书架批量编辑可选项，统一承载标签、来源与阅读状态 Sheet 所需数据。
+nonisolated struct BookshelfBatchEditOptions: Hashable, Sendable {
+    static let empty = BookshelfBatchEditOptions(
+        tags: [],
+        sources: [],
+        readStatuses: [],
+        initialTagIDs: [],
+        initialSourceID: nil,
+        initialReadStatusID: nil,
+        initialReadStatusChangedAt: nil,
+        initialRatingScore: nil
+    )
+
+    let tags: [BookEditorNamedOption]
+    let sources: [BookEditorNamedOption]
+    let readStatuses: [BookEditorNamedOption]
+    let initialTagIDs: [Int64]
+    let initialSourceID: Int64?
+    let initialReadStatusID: Int64?
+    let initialReadStatusChangedAt: Int64?
+    let initialRatingScore: Int64?
+}
+
+/// 批量设置阅读状态的写入输入，封装状态时间与读完评分语义。
+nonisolated struct BookshelfBatchReadStatusInput: Hashable, Sendable {
+    let statusID: Int64
+    let changedAt: Int64
+    let ratingScore: Int64?
+}
+
 /// 书架条目内容，统一表达书籍卡片与分组卡片。
-enum BookshelfItemContent: Hashable, Sendable {
+nonisolated enum BookshelfItemContent: Hashable, Sendable {
     case book(BookshelfBookPayload)
     case group(BookshelfGroupPayload)
 }
 
 /// 书架条目统一模型，承载排序、置顶和具体展示内容。
-struct BookshelfItem: Identifiable, Hashable, Sendable {
+nonisolated struct BookshelfItem: Identifiable, Hashable, Sendable {
     let id: BookshelfItemID
     let pinned: Bool
     let pinOrder: Int64
@@ -382,7 +418,7 @@ struct BookshelfItem: Identifiable, Hashable, Sendable {
 }
 
 /// 书架中的单本书展示载荷，保留默认网格渲染所需字段。
-struct BookshelfBookPayload: Hashable, Sendable {
+nonisolated struct BookshelfBookPayload: Hashable, Sendable {
     let id: Int64
     let name: String
     let author: String
@@ -430,14 +466,16 @@ nonisolated struct BookshelfBookListItem: Identifiable, Hashable, Codable, Senda
     let author: String
     let cover: String
     let noteCount: Int
+    let pinned: Bool
 
     /// 从书架书籍载荷裁剪出列表页需要的稳定展示字段。
-    nonisolated init(payload: BookshelfBookPayload) {
+    nonisolated init(payload: BookshelfBookPayload, pinned: Bool = false) {
         self.id = payload.id
         self.title = payload.name
         self.author = payload.author
         self.cover = payload.cover
         self.noteCount = payload.noteCount
+        self.pinned = pinned
     }
 
     /// 构建组内书籍等轻量来源的只读列表行。
@@ -446,13 +484,15 @@ nonisolated struct BookshelfBookListItem: Identifiable, Hashable, Codable, Senda
         title: String,
         author: String,
         cover: String,
-        noteCount: Int
+        noteCount: Int,
+        pinned: Bool = false
     ) {
         self.id = id
         self.title = title
         self.author = author
         self.cover = cover
         self.noteCount = noteCount
+        self.pinned = pinned
     }
 }
 
@@ -560,7 +600,7 @@ nonisolated struct BookshelfGroupPayload: Hashable, Sendable {
 }
 
 /// 书架分区，承载状态、评分等“标题 + 代表书籍条”的只读布局。
-struct BookshelfSection: Identifiable, Hashable, Sendable {
+nonisolated struct BookshelfSection: Identifiable, Hashable, Sendable {
     let id: String
     let title: String
     let subtitle: String
@@ -595,7 +635,7 @@ nonisolated struct BookshelfDefaultSection: Identifiable, Hashable, Sendable {
 }
 
 /// 非默认维度聚合快照，供 UICollectionView 聚合入口统一渲染。
-struct BookshelfAggregateSnapshot: Hashable, Sendable {
+nonisolated struct BookshelfAggregateSnapshot: Hashable, Sendable {
     static let empty = BookshelfAggregateSnapshot()
 
     var statusSections: [BookshelfSection] = []
@@ -607,14 +647,14 @@ struct BookshelfAggregateSnapshot: Hashable, Sendable {
 }
 
 /// 作者字母分区，承载右侧索引和两列作者聚合卡。
-struct BookshelfAuthorSection: Identifiable, Hashable, Sendable {
+nonisolated struct BookshelfAuthorSection: Identifiable, Hashable, Sendable {
     let id: String
     let title: String
     let authors: [BookshelfAggregateGroup]
 }
 
 /// 首页书架只读快照，一次性提供各浏览维度所需的数据。
-struct BookshelfSnapshot: Hashable, Sendable {
+nonisolated struct BookshelfSnapshot: Hashable, Sendable {
     static let empty = BookshelfSnapshot()
 
     var defaultItems: [BookshelfItem] = []

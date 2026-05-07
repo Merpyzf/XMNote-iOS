@@ -350,7 +350,7 @@ private final class BookPickerTestBookRepository: BookRepositoryProtocol {
     }
 
     func observeBookshelfSnapshot(
-        setting: BookshelfDisplaySetting,
+        settingsByDimension: [BookshelfDimension: BookshelfDisplaySetting],
         searchKeyword: String?
     ) -> AsyncThrowingStream<BookshelfSnapshot, Error> {
         AsyncThrowingStream { continuation in
@@ -380,6 +380,34 @@ private final class BookPickerTestBookRepository: BookRepositoryProtocol {
     func updateBookshelfOrder(_ orderedItems: [BookshelfOrderItem]) async throws {}
 
     func updateBookshelfAggregateOrder(context: BookshelfAggregateOrderContext, orderedIDs: [Int64]) async throws {}
+
+    func updateBooksInGroupOrder(groupID: Int64, orderedBookIDs: [Int64]) async throws {}
+
+    func pinBooksInGroup(groupID: Int64, bookIDs: [Int64]) async throws {}
+
+    func unpinBooksInGroup(bookIDs: [Int64]) async throws {}
+
+    func moveBooksInGroupToStart(
+        _ bookIDs: [Int64],
+        groupID: Int64,
+        currentItems: [BookshelfBookListOrderItem]
+    ) async throws {}
+
+    func moveBooksInGroupToEnd(
+        _ bookIDs: [Int64],
+        groupID: Int64,
+        currentItems: [BookshelfBookListOrderItem]
+    ) async throws {}
+
+    func fetchBookshelfBatchEditOptions(bookIDs: [Int64]) async throws -> BookshelfBatchEditOptions {
+        .empty
+    }
+
+    func batchSetBooksTags(bookIDs: [Int64], tagIDs: [Int64]) async throws {}
+
+    func batchSetBooksSource(bookIDs: [Int64], sourceID: Int64) async throws {}
+
+    func batchSetBookReadStatus(bookIDs: [Int64], input: BookshelfBatchReadStatusInput) async throws {}
 
     func pinBookshelfItems(_ ids: [BookshelfItemID]) async throws {}
 

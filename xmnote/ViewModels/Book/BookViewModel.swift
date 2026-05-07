@@ -192,12 +192,12 @@ class BookViewModel {
 
     private func startObservation() {
         contentState = .loading
-        let currentSetting = displaySetting
+        let currentSettingsByDimension = displaySettingsByDimension
         let currentKeyword = normalizedSearchKeyword(searchKeyword)
         observationTask = Task {
             do {
                 for try await snapshot in repository.observeBookshelfSnapshot(
-                    setting: currentSetting,
+                    settingsByDimension: currentSettingsByDimension,
                     searchKeyword: currentKeyword
                 ) {
                     guard !Task.isCancelled else { return }

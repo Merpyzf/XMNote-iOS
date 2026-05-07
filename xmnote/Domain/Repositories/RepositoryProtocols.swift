@@ -13,8 +13,8 @@ protocol BookRepositoryProtocol {
     func observeBooks() -> AsyncThrowingStream<[BookItem], Error>
     /// 持续监听默认书架混排列表，供首页展示书籍与分组。
     func observeBookshelf(setting: BookshelfDisplaySetting, searchKeyword: String?) -> AsyncThrowingStream<[BookshelfItem], Error>
-    /// 持续监听首页书架只读快照，供不同浏览维度共享同一数据来源。
-    func observeBookshelfSnapshot(setting: BookshelfDisplaySetting, searchKeyword: String?) -> AsyncThrowingStream<BookshelfSnapshot, Error>
+    /// 持续监听首页书架只读快照，按维度设置分别排序与分区，供不同浏览维度共享同一数据来源。
+    func observeBookshelfSnapshot(settingsByDimension: [BookshelfDimension: BookshelfDisplaySetting], searchKeyword: String?) -> AsyncThrowingStream<BookshelfSnapshot, Error>
     /// 持续监听非默认维度聚合入口，供 UIKit 聚合列表独立刷新。
     func observeBookshelfAggregateSnapshot(setting: BookshelfDisplaySetting, searchKeyword: String?) -> AsyncThrowingStream<BookshelfAggregateSnapshot, Error>
     /// 持续监听二级书籍列表，避免路由携带静态书籍数组导致返回后数据陈旧。
@@ -23,6 +23,24 @@ protocol BookRepositoryProtocol {
     func updateBookshelfOrder(_ orderedItems: [BookshelfOrderItem]) async throws
     /// 按最终聚合顺序写入标签、来源或阅读状态的 order 字段。
     func updateBookshelfAggregateOrder(context: BookshelfAggregateOrderContext, orderedIDs: [Int64]) async throws
+    /// 按默认分组二级列表最终顺序写入组内书籍的 book_order 字段。
+    func updateBooksInGroupOrder(groupID: Int64, orderedBookIDs: [Int64]) async throws
+    /// 批量置顶默认分组内的书籍，按组内最大 pin_order 追加。
+    func pinBooksInGroup(groupID: Int64, bookIDs: [Int64]) async throws
+    /// 批量取消默认分组内书籍的置顶状态。
+    func unpinBooksInGroup(bookIDs: [Int64]) async throws
+    /// 将默认分组内选中的非置顶书籍移动到普通区最前。
+    func moveBooksInGroupToStart(_ bookIDs: [Int64], groupID: Int64, currentItems: [BookshelfBookListOrderItem]) async throws
+    /// 将默认分组内选中的非置顶书籍移动到普通区最后。
+    func moveBooksInGroupToEnd(_ bookIDs: [Int64], groupID: Int64, currentItems: [BookshelfBookListOrderItem]) async throws
+    /// 读取二级列表批量编辑所需选项；单本选择时同时返回该书当前标签、来源、阅读状态、状态时间与评分。
+    func fetchBookshelfBatchEditOptions(bookIDs: [Int64]) async throws -> BookshelfBatchEditOptions
+    /// 批量设置书籍标签：单本替换全部标签，多本仅追加缺失标签。
+    func batchSetBooksTags(bookIDs: [Int64], tagIDs: [Int64]) async throws
+    /// 批量设置书籍来源，过滤已删除书籍与占位书籍。
+    func batchSetBooksSource(bookIDs: [Int64], sourceID: Int64) async throws
+    /// 批量设置书籍阅读状态；读完状态会同步评分与阅读进度到终点。
+    func batchSetBookReadStatus(bookIDs: [Int64], input: BookshelfBatchReadStatusInput) async throws
     /// 批量置顶默认书架顶层 Book/Group，按传入选择顺序追加 pin_order。
     func pinBookshelfItems(_ ids: [BookshelfItemID]) async throws
     /// 取消单个默认书架顶层 Book/Group 的置顶状态。
