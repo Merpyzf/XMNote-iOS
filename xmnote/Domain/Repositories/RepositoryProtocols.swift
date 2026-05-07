@@ -7,7 +7,7 @@ import Foundation
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
-/// 书籍模块数据访问契约，定义书架管理、书籍详情与书摘的统一读取入口。
+/// 书籍模块数据访问契约，定义书架管理、书籍详情、书摘与书架本地显示设置的统一入口。
 protocol BookRepositoryProtocol {
     /// 持续监听书架列表变化，供书籍首页实时刷新。
     func observeBooks() -> AsyncThrowingStream<[BookItem], Error>
@@ -15,8 +15,14 @@ protocol BookRepositoryProtocol {
     func observeBookshelf(setting: BookshelfDisplaySetting, searchKeyword: String?) -> AsyncThrowingStream<[BookshelfItem], Error>
     /// 持续监听首页书架只读快照，供不同浏览维度共享同一数据来源。
     func observeBookshelfSnapshot(setting: BookshelfDisplaySetting, searchKeyword: String?) -> AsyncThrowingStream<BookshelfSnapshot, Error>
+    /// 持续监听非默认维度聚合入口，供 UIKit 聚合列表独立刷新。
+    func observeBookshelfAggregateSnapshot(setting: BookshelfDisplaySetting, searchKeyword: String?) -> AsyncThrowingStream<BookshelfAggregateSnapshot, Error>
+    /// 持续监听二级书籍列表，避免路由携带静态书籍数组导致返回后数据陈旧。
+    func observeBookshelfBookList(context: BookshelfListContext, setting: BookshelfDisplaySetting, searchKeyword: String?) -> AsyncThrowingStream<BookshelfBookListSnapshot, Error>
     /// 按最终书架顺序写入 Book/Group 的 order 字段，严格复刻 Android 手动排序落库语义。
     func updateBookshelfOrder(_ orderedItems: [BookshelfOrderItem]) async throws
+    /// 按最终聚合顺序写入标签、来源或阅读状态的 order 字段。
+    func updateBookshelfAggregateOrder(context: BookshelfAggregateOrderContext, orderedIDs: [Int64]) async throws
     /// 批量置顶默认书架顶层 Book/Group，按传入选择顺序追加 pin_order。
     func pinBookshelfItems(_ ids: [BookshelfItemID]) async throws
     /// 取消单个默认书架顶层 Book/Group 的置顶状态。
@@ -29,6 +35,10 @@ protocol BookRepositoryProtocol {
     func deleteBookshelfItems(_ ids: [BookshelfItemID], groupBooksPlacement: GroupBooksPlacement) async throws
     /// 将指定书籍移动到目标分组；真实写入需先完成 Android 对齐验证。
     func moveBooks(_ bookIDs: [Int64], toGroup targetGroupID: Int64) async throws
+    /// 读取按维度持久化的书架显示设置。
+    func fetchBookshelfDisplaySettings() -> [BookshelfDimension: BookshelfDisplaySetting]
+    /// 保存单个维度的书架显示设置。
+    func saveBookshelfDisplaySetting(_ setting: BookshelfDisplaySetting, for dimension: BookshelfDimension)
     /// 持续监听指定书籍详情变化，供详情页实时更新。
     func observeBookDetail(bookId: Int64) -> AsyncThrowingStream<BookDetail?, Error>
     /// 持续监听指定书籍下的书摘列表变化。

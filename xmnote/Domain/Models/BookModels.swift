@@ -2,7 +2,7 @@ import Foundation
 
 /**
  * [INPUT]: 依赖 Foundation 的 Date/DateFormatter 进行时间格式化
- * [OUTPUT]: 对外提供 BookItem、BookshelfSnapshot、BookshelfItem、BookshelfOrderItem、BookDetail、NoteExcerpt 等书籍域展示模型
+ * [OUTPUT]: 对外提供 BookItem、BookshelfSnapshot、BookshelfItem、BookshelfOrderItem、BookshelfListContext、BookDetail、NoteExcerpt 等书籍域展示模型
  * [POS]: Domain/Models 的书籍聚合模型定义，被 BookViewModel 与 BookRepository 实现共同消费
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -25,13 +25,14 @@ nonisolated enum BookshelfItemID: Hashable, Sendable {
 }
 
 /// 首页书架浏览维度，用于控制书架内容层的只读展示形态。
-enum BookshelfDimension: String, CaseIterable, Hashable, Sendable {
+enum BookshelfDimension: String, CaseIterable, Codable, Hashable, Sendable {
     case `default`
     case status
     case tag
     case source
     case rating
     case author
+    case press
 
     var title: String {
         switch self {
@@ -47,12 +48,14 @@ enum BookshelfDimension: String, CaseIterable, Hashable, Sendable {
             return "评分"
         case .author:
             return "作者"
+        case .press:
+            return "出版社"
         }
     }
 }
 
-/// 书架布局模式，本轮仅影响本地 UI 展示，不写入数据库或同步字段。
-enum BookshelfLayoutMode: String, CaseIterable, Hashable, Sendable {
+/// 书架布局模式，按书架维度持久化到本地轻量设置。
+enum BookshelfLayoutMode: String, CaseIterable, Codable, Hashable, Sendable {
     case grid
     case list
 
@@ -66,14 +69,85 @@ enum BookshelfLayoutMode: String, CaseIterable, Hashable, Sendable {
     }
 }
 
-/// 书架排序模式，本轮仅显示当前读取语义，不开放写入排序。
+/// 书架排序模式，用于兼容默认书架排序入口判断。
 enum BookshelfSortMode: String, Hashable, Sendable {
     case custom
+    case criteria
 
     var title: String {
         switch self {
         case .custom:
             return "手动排序"
+        case .criteria:
+            return "条件排序"
+        }
+    }
+}
+
+/// 书架排序依据，按 Android display type 的可选排序语义收敛成 iOS 侧统一枚举。
+enum BookshelfSortCriteria: String, CaseIterable, Codable, Hashable, Sendable {
+    case custom
+    case name
+    case bookCount
+    case rating
+
+    var title: String {
+        switch self {
+        case .custom:
+            return "手动排序"
+        case .name:
+            return "名称"
+        case .bookCount:
+            return "书籍数量"
+        case .rating:
+            return "评分"
+        }
+    }
+
+    /// 返回指定维度允许展示和提交的排序依据。
+    static func available(for dimension: BookshelfDimension) -> [BookshelfSortCriteria] {
+        switch dimension {
+        case .default:
+            return [.custom, .name, .rating]
+        case .status, .tag, .source:
+            return [.custom, .bookCount, .name]
+        case .rating:
+            return [.rating, .bookCount]
+        case .author, .press:
+            return [.name, .bookCount]
+        }
+    }
+}
+
+/// 条件排序方向。
+enum BookshelfSortOrder: String, CaseIterable, Codable, Hashable, Sendable {
+    case ascending
+    case descending
+
+    var title: String {
+        switch self {
+        case .ascending:
+            return "升序"
+        case .descending:
+            return "降序"
+        }
+    }
+}
+
+/// 书名在书架卡片上的展示策略，先作为设置语义沉淀，后续视觉细化继续复用。
+enum BookshelfTitleDisplayMode: String, CaseIterable, Codable, Hashable, Sendable {
+    case standard
+    case compact
+    case full
+
+    var title: String {
+        switch self {
+        case .standard:
+            return "默认"
+        case .compact:
+            return "紧凑"
+        case .full:
+            return "完整"
         }
     }
 }
@@ -84,14 +158,36 @@ nonisolated enum GroupBooksPlacement: String, Hashable, Codable, Sendable {
     case end
 }
 
-/// 书架展示配置，本轮仅保存在内存中，用于控制只读 UI 密度与辅助信息。
-struct BookshelfDisplaySetting: Hashable, Sendable {
+/// 书架展示配置，按浏览维度保存布局、排序、分区与辅助信息偏好。
+struct BookshelfDisplaySetting: Codable, Hashable, Sendable {
     static let defaultValue = BookshelfDisplaySetting()
 
     var layoutMode: BookshelfLayoutMode = .grid
     var columnCount: Int = 3
     var showsNoteCount: Bool = true
-    var sortMode: BookshelfSortMode = .custom
+    var sortCriteria: BookshelfSortCriteria = .custom
+    var sortOrder: BookshelfSortOrder = .ascending
+    var isSectionEnabled: Bool = false
+    var titleDisplayMode: BookshelfTitleDisplayMode = .standard
+
+    var sortMode: BookshelfSortMode {
+        sortCriteria == .custom ? .custom : .criteria
+    }
+
+    /// 为指定维度提供 Android 语义更接近的默认排序。
+    static func defaultValue(for dimension: BookshelfDimension) -> BookshelfDisplaySetting {
+        var setting = BookshelfDisplaySetting()
+        switch dimension {
+        case .default, .status, .tag, .source:
+            setting.sortCriteria = .custom
+        case .rating:
+            setting.sortCriteria = .rating
+            setting.sortOrder = .descending
+        case .author, .press:
+            setting.sortCriteria = .name
+        }
+        return setting
+    }
 }
 
 /// 书架排序写入项，携带 Book/Group 稳定身份与当前置顶状态，供移动操作保持 Android 置顶边界。
@@ -134,6 +230,7 @@ struct BookshelfBookPayload: Hashable, Sendable {
     let readStatusName: String
     let sourceId: Int64
     let sourceName: String
+    let press: String
     let score: Int64
     let noteCount: Int
 
@@ -147,6 +244,7 @@ struct BookshelfBookPayload: Hashable, Sendable {
         readStatusName: String = "",
         sourceId: Int64 = 0,
         sourceName: String = "",
+        press: String = "",
         score: Int64 = 0,
         noteCount: Int
     ) {
@@ -158,6 +256,7 @@ struct BookshelfBookPayload: Hashable, Sendable {
         self.readStatusName = readStatusName
         self.sourceId = sourceId
         self.sourceName = sourceName
+        self.press = press
         self.score = score
         self.noteCount = noteCount
     }
@@ -196,11 +295,57 @@ nonisolated struct BookshelfBookListItem: Identifiable, Hashable, Codable, Senda
     }
 }
 
-/// 书架二级只读列表路由载荷，承载分组、标签、来源、评分、作者等聚合入口。
-nonisolated struct BookshelfBookListRoute: Hashable, Codable, Sendable {
+/// 书架二级列表上下文，标识二级列表应从 Repository 观察哪一类书籍集合。
+nonisolated enum BookshelfListContext: Hashable, Codable, Sendable {
+    case defaultGroup(Int64)
+    case readStatus(Int64?)
+    case tag(Int64?)
+    case source(Int64?)
+    case rating(Int64)
+    case author(String)
+    case press(String)
+
+    var dimension: BookshelfDimension {
+        switch self {
+        case .defaultGroup:
+            return .default
+        case .readStatus:
+            return .status
+        case .tag:
+            return .tag
+        case .source:
+            return .source
+        case .rating:
+            return .rating
+        case .author:
+            return .author
+        case .press:
+            return .press
+        }
+    }
+}
+
+/// 可提交排序写入的聚合上下文。
+nonisolated enum BookshelfAggregateOrderContext: Hashable, Codable, Sendable {
+    case readStatus
+    case tag
+    case source
+}
+
+/// 书架二级列表观察快照，由 Repository 实时生成而不是由路由携带静态书籍数组。
+nonisolated struct BookshelfBookListSnapshot: Hashable, Sendable {
+    static let empty = BookshelfBookListSnapshot(title: "", subtitle: "", books: [])
+
     let title: String
     let subtitle: String
     let books: [BookshelfBookListItem]
+}
+
+/// 书架二级只读列表路由载荷，承载分组、标签、来源、评分、作者、出版社等聚合入口。
+nonisolated struct BookshelfBookListRoute: Hashable, Codable, Sendable {
+    let context: BookshelfListContext
+    let title: String
+    let subtitleHint: String
 }
 
 /// 书架中的分组展示载荷，保留组名、数量和代表封面。
@@ -217,6 +362,8 @@ struct BookshelfSection: Identifiable, Hashable, Sendable {
     let id: String
     let title: String
     let subtitle: String
+    let context: BookshelfListContext
+    let orderID: Int64?
     let books: [BookshelfBookPayload]
 
     var count: Int {
@@ -230,8 +377,22 @@ nonisolated struct BookshelfAggregateGroup: Identifiable, Hashable, Sendable {
     let title: String
     let subtitle: String
     let count: Int
+    let context: BookshelfListContext
+    let orderID: Int64?
     let representativeCovers: [String]
     let books: [BookshelfBookListItem]
+}
+
+/// 非默认维度聚合快照，供 UICollectionView 聚合入口统一渲染。
+struct BookshelfAggregateSnapshot: Hashable, Sendable {
+    static let empty = BookshelfAggregateSnapshot()
+
+    var statusSections: [BookshelfSection] = []
+    var tagGroups: [BookshelfAggregateGroup] = []
+    var sourceGroups: [BookshelfAggregateGroup] = []
+    var ratingSections: [BookshelfSection] = []
+    var authorSections: [BookshelfAuthorSection] = []
+    var pressGroups: [BookshelfAggregateGroup] = []
 }
 
 /// 作者字母分区，承载右侧索引和两列作者聚合卡。
@@ -251,6 +412,18 @@ struct BookshelfSnapshot: Hashable, Sendable {
     var sourceGroups: [BookshelfAggregateGroup] = []
     var ratingSections: [BookshelfSection] = []
     var authorSections: [BookshelfAuthorSection] = []
+    var pressGroups: [BookshelfAggregateGroup] = []
+
+    nonisolated var aggregateSnapshot: BookshelfAggregateSnapshot {
+        BookshelfAggregateSnapshot(
+            statusSections: statusSections,
+            tagGroups: tagGroups,
+            sourceGroups: sourceGroups,
+            ratingSections: ratingSections,
+            authorSections: authorSections,
+            pressGroups: pressGroups
+        )
+    }
 
     /// 判断指定维度是否没有可展示内容，供 ViewModel 派生空态。
     func isEmpty(for dimension: BookshelfDimension) -> Bool {
@@ -267,6 +440,8 @@ struct BookshelfSnapshot: Hashable, Sendable {
             return ratingSections.isEmpty
         case .author:
             return authorSections.isEmpty
+        case .press:
+            return pressGroups.isEmpty
         }
     }
 }

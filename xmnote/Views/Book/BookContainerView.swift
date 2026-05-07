@@ -120,7 +120,10 @@ private struct BookContentView: View {
         }
         .toolbar(.hidden, for: .navigationBar)
         .sheet(isPresented: $showsDisplaySettingSheet) {
-            BookshelfDisplaySettingSheet(setting: $viewModel.displaySetting)
+            BookshelfDisplaySettingSheet(
+                dimension: viewModel.selectedDimension,
+                setting: $viewModel.displaySetting
+            )
         }
     }
 

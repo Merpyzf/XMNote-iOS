@@ -550,9 +550,9 @@ private extension BookshelfDefaultCollectionHostView {
     /// 分组卡片进入二级书籍列表时，复用 SwiftUI 旧路径的路由载荷。
     func route(for group: BookshelfGroupPayload) -> BookshelfBookListRoute {
         BookshelfBookListRoute(
+            context: .defaultGroup(group.id),
             title: group.name,
-            subtitle: "\(group.bookCount)本",
-            books: group.books
+            subtitleHint: "\(group.bookCount)本"
         )
     }
 }

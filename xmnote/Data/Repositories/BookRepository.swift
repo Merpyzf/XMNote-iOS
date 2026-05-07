@@ -11,10 +11,15 @@ import GRDB
 /// 书籍仓储实现，负责书架、详情与书摘订阅查询。
 struct BookRepository: BookRepositoryProtocol {
     private let databaseManager: DatabaseManager
+    private let displaySettingStore: BookshelfDisplaySettingStore
 
     /// 注入数据库管理器，供书架、详情和书摘查询复用同一数据源。
-    init(databaseManager: DatabaseManager) {
+    init(
+        databaseManager: DatabaseManager,
+        displaySettingStore: BookshelfDisplaySettingStore = .shared
+    ) {
         self.databaseManager = databaseManager
+        self.displaySettingStore = displaySettingStore
     }
 
     /// 为书架页提供可持续订阅的数据流，任意书籍或笔记变更后会自动刷新列表。
@@ -44,10 +49,46 @@ struct BookRepository: BookRepositoryProtocol {
         }
     }
 
+    /// 为首页书架聚合维度提供可持续订阅的数据流。
+    func observeBookshelfAggregateSnapshot(
+        setting: BookshelfDisplaySetting,
+        searchKeyword: String?
+    ) -> AsyncThrowingStream<BookshelfAggregateSnapshot, Error> {
+        ObservationStream.make(in: databaseManager.database.dbPool) { db in
+            try fetchBookshelfSnapshot(db, setting: setting, searchKeyword: searchKeyword).aggregateSnapshot
+        }
+    }
+
+    /// 为聚合二级列表提供可持续订阅的数据流。
+    func observeBookshelfBookList(
+        context: BookshelfListContext,
+        setting: BookshelfDisplaySetting,
+        searchKeyword: String?
+    ) -> AsyncThrowingStream<BookshelfBookListSnapshot, Error> {
+        ObservationStream.make(in: databaseManager.database.dbPool) { db in
+            try fetchBookshelfBookList(
+                db,
+                context: context,
+                setting: setting,
+                searchKeyword: searchKeyword
+            )
+        }
+    }
+
     /// 按最终展示顺序提交书架排序，不更新时间戳，避免制造 Android 不会产生的同步事件。
     func updateBookshelfOrder(_ orderedItems: [BookshelfOrderItem]) async throws {
         try await databaseManager.database.dbPool.write { db in
             try updateBookshelfOrder(db, orderedItems: orderedItems)
+        }
+    }
+
+    /// 按最终展示顺序提交标签、来源或阅读状态排序。
+    func updateBookshelfAggregateOrder(
+        context: BookshelfAggregateOrderContext,
+        orderedIDs: [Int64]
+    ) async throws {
+        try await databaseManager.database.dbPool.write { db in
+            try updateBookshelfAggregateOrder(db, context: context, orderedIDs: orderedIDs)
         }
     }
 
@@ -96,6 +137,16 @@ struct BookRepository: BookRepositoryProtocol {
         throw BookshelfManagementWriteUnavailableError(action: "移入分组")
     }
 
+    /// 从本地轻量设置读取各书架维度显示配置。
+    func fetchBookshelfDisplaySettings() -> [BookshelfDimension: BookshelfDisplaySetting] {
+        displaySettingStore.fetchSettings()
+    }
+
+    /// 保存单个维度的书架显示配置。
+    func saveBookshelfDisplaySetting(_ setting: BookshelfDisplaySetting, for dimension: BookshelfDimension) {
+        displaySettingStore.save(setting, for: dimension)
+    }
+
     /// 为书籍详情页提供单书订阅流，用于展示基础信息、阅读状态和笔记统计。
     func observeBookDetail(bookId: Int64) -> AsyncThrowingStream<BookDetail?, Error> {
         ObservationStream.make(in: databaseManager.database.dbPool) { db in
@@ -122,6 +173,43 @@ struct BookRepository: BookRepositoryProtocol {
         try await databaseManager.database.dbPool.read { db in
             try fetchPickerBook(db, bookId: bookId)
         }
+    }
+}
+
+/// 书架显示设置的本地轻量持久化入口，保持 ViewModel 只经 Repository 获取本地数据。
+struct BookshelfDisplaySettingStore {
+    static let shared = BookshelfDisplaySettingStore()
+
+    private let defaults: UserDefaults
+    private let key = "bookshelf.display.settings.v1"
+
+    /// 注入 UserDefaults，默认使用标准容器。
+    init(defaults: UserDefaults = .standard) {
+        self.defaults = defaults
+    }
+
+    /// 读取全部维度设置；缺失或解码失败时回退到各维度默认值。
+    func fetchSettings() -> [BookshelfDimension: BookshelfDisplaySetting] {
+        let fallback = Self.defaultSettings()
+        guard let data = defaults.data(forKey: key),
+              let decoded = try? JSONDecoder().decode([BookshelfDimension: BookshelfDisplaySetting].self, from: data) else {
+            return fallback
+        }
+        return fallback.merging(decoded) { _, stored in stored }
+    }
+
+    /// 保存指定维度设置。
+    func save(_ setting: BookshelfDisplaySetting, for dimension: BookshelfDimension) {
+        var settings = fetchSettings()
+        settings[dimension] = setting
+        guard let data = try? JSONEncoder().encode(settings) else { return }
+        defaults.set(data, forKey: key)
+    }
+
+    private static func defaultSettings() -> [BookshelfDimension: BookshelfDisplaySetting] {
+        Dictionary(uniqueKeysWithValues: BookshelfDimension.allCases.map {
+            ($0, BookshelfDisplaySetting.defaultValue(for: $0))
+        })
     }
 }
 
@@ -208,6 +296,13 @@ private extension BookshelfGroupBookPreview {
     }
 }
 
+private extension String {
+    nonisolated var nonEmptyOrNil: String? {
+        let trimmed = trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
+    }
+}
+
 private struct BookshelfManagementWriteUnavailableError: LocalizedError {
     let action: String
 
@@ -218,6 +313,7 @@ private struct BookshelfManagementWriteUnavailableError: LocalizedError {
 
 nonisolated private struct BookshelfBookAggregateRow {
     let payload: BookshelfBookPayload
+    let press: String
     let readStatusOrder: Int64
     let sourceOrder: Int64
     let sourceIsHidden: Bool
@@ -257,6 +353,25 @@ private extension BookRepository {
                 try updateBookOrder(db, id: id, order: order)
             case .group(let id):
                 try updateGroupOrder(db, id: id, order: order)
+            }
+        }
+    }
+
+    /// 按 Android 聚合维度顺序写入对应 order 字段，不更新时间戳。
+    /// - Throws: 任一 SQL 写入失败时抛出错误。
+    nonisolated func updateBookshelfAggregateOrder(
+        _ db: Database,
+        context: BookshelfAggregateOrderContext,
+        orderedIDs: [Int64]
+    ) throws {
+        for (index, id) in orderedIDs.enumerated() {
+            switch context {
+            case .readStatus:
+                try updateReadStatusOrder(db, id: id, order: Int64(index))
+            case .tag:
+                try updateTagOrder(db, id: id, order: Int64(index))
+            case .source:
+                try updateSourceOrder(db, id: id, order: Int64(index))
             }
         }
     }
@@ -339,6 +454,64 @@ private extension BookRepository {
             UPDATE `group`
             SET group_order = ?
             WHERE id = ?
+            """
+        try db.execute(sql: sql, arguments: [order, id])
+    }
+
+    /// 更新阅读状态排序值；对齐 Android updateBookReadStatusOrder。
+    nonisolated func updateReadStatusOrder(
+        _ db: Database,
+        id: Int64,
+        order: Int64
+    ) throws {
+        // SQL 目的：写入阅读状态在书架状态维度中的手动排序下标。
+        // 涉及表：read_status。
+        // 关键过滤：按 id 精确命中，且排除软删除状态。
+        // 副作用用途：仅更新 read_status_order，不更新 updated_date / last_sync_date。
+        let sql = """
+            UPDATE read_status
+            SET read_status_order = ?
+            WHERE id = ?
+              AND is_deleted = 0
+            """
+        try db.execute(sql: sql, arguments: [order, id])
+    }
+
+    /// 更新标签排序值；对齐 Android tagRepo.updateOrder。
+    nonisolated func updateTagOrder(
+        _ db: Database,
+        id: Int64,
+        order: Int64
+    ) throws {
+        // SQL 目的：写入书籍标签在书架标签维度中的手动排序下标。
+        // 涉及表：tag。
+        // 关键过滤：按 id 精确命中，要求 type = 1 且 is_deleted = 0，避免影响书摘标签。
+        // 副作用用途：仅更新 tag_order，不更新 updated_date / last_sync_date。
+        let sql = """
+            UPDATE tag
+            SET tag_order = ?
+            WHERE id = ?
+              AND type = 1
+              AND is_deleted = 0
+            """
+        try db.execute(sql: sql, arguments: [order, id])
+    }
+
+    /// 更新来源排序值；对齐 Android updateBookSourceListOrder。
+    nonisolated func updateSourceOrder(
+        _ db: Database,
+        id: Int64,
+        order: Int64
+    ) throws {
+        // SQL 目的：写入书籍来源在书架来源维度中的手动排序下标。
+        // 涉及表：source。
+        // 关键过滤：按 id 精确命中，且排除软删除来源。
+        // 副作用用途：仅更新 source_order，不更新 updated_date / last_sync_date。
+        let sql = """
+            UPDATE source
+            SET source_order = ?
+            WHERE id = ?
+              AND is_deleted = 0
             """
         try db.execute(sql: sql, arguments: [order, id])
     }
@@ -463,7 +636,83 @@ private extension BookRepository {
             tagGroups: makeTagGroups(from: filteredBooks, tagsByBook: tagsByBook),
             sourceGroups: makeSourceGroups(from: filteredBooks),
             ratingSections: makeRatingSections(from: filteredBooks),
-            authorSections: makeAuthorSections(from: filteredBooks)
+            authorSections: makeAuthorSections(from: filteredBooks),
+            pressGroups: makePressGroups(from: filteredBooks)
+        )
+    }
+
+    /// 查询二级书籍列表，按上下文实时读取，避免依赖导航时刻的静态数组。
+    /// - Throws: 数据库查询失败时抛出错误。
+    nonisolated func fetchBookshelfBookList(
+        _ db: Database,
+        context: BookshelfListContext,
+        setting: BookshelfDisplaySetting,
+        searchKeyword: String?
+    ) throws -> BookshelfBookListSnapshot {
+        let keyword = normalizedSearchKeyword(searchKeyword)
+        let rows: [BookshelfBookAggregateRow]
+        let title: String
+
+        switch context {
+        case .defaultGroup(let groupID):
+            let group = try fetchBookshelfGroupPayload(db, groupID: groupID, searchKeyword: keyword)
+            title = group?.name ?? "分组"
+            return BookshelfBookListSnapshot(
+                title: title,
+                subtitle: "\(group?.books.count ?? 0)本",
+                books: group?.books ?? []
+            )
+        case .readStatus(let statusID):
+            let allRows = filterBooks(try fetchAllBookshelfBookRows(db), keyword: keyword)
+            rows = allRows.filter { row in
+                if let statusID {
+                    return row.payload.readStatusId == statusID
+                }
+                return row.payload.readStatusId == 0 || row.payload.readStatusName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            }
+            title = rows.first?.payload.readStatusName.nonEmptyOrNil ?? "未设置状态"
+        case .tag(let tagID):
+            let allRows = filterBooks(try fetchAllBookshelfBookRows(db), keyword: keyword)
+            let tagsByBook = try fetchBookshelfTagsByBook(db)
+            if let tagID {
+                rows = allRows.filter { (tagsByBook[$0.payload.id] ?? []).contains { $0.id == tagID } }
+                title = tagsByBook.values.flatMap { $0 }.first(where: { $0.id == tagID })?.name ?? "标签"
+            } else {
+                rows = allRows.filter { (tagsByBook[$0.payload.id] ?? []).isEmpty }
+                title = "未设置标签"
+            }
+        case .source(let sourceID):
+            let allRows = filterBooks(try fetchAllBookshelfBookRows(db), keyword: keyword)
+            if let sourceID {
+                rows = allRows.filter { $0.payload.sourceId == sourceID && !$0.sourceIsHidden }
+                title = rows.first?.payload.sourceName.nonEmptyOrNil ?? "来源"
+            } else {
+                rows = allRows.filter {
+                    $0.payload.sourceId == 0
+                        || $0.sourceIsHidden
+                        || $0.payload.sourceName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                }
+                title = "未知来源"
+            }
+        case .rating(let score):
+            rows = filterBooks(try fetchAllBookshelfBookRows(db), keyword: keyword)
+                .filter { max(0, min($0.payload.score, 10)) == score }
+            title = score == 0 ? "未评分" : ratingTitle(for: score)
+        case .author(let author):
+            rows = filterBooks(try fetchAllBookshelfBookRows(db), keyword: keyword)
+                .filter { normalizedAuthorName($0.payload.author) == author }
+            title = author
+        case .press(let press):
+            rows = filterBooks(try fetchAllBookshelfBookRows(db), keyword: keyword)
+                .filter { normalizedPressName($0.press) == press }
+            title = press
+        }
+
+        let sortedRows = sortBookRows(rows, setting: setting)
+        return BookshelfBookListSnapshot(
+            title: title,
+            subtitle: "\(sortedRows.count)本",
+            books: sortedRows.map { BookshelfBookListItem(payload: $0.payload) }
         )
     }
 
@@ -614,6 +863,22 @@ private extension BookRepository {
         }
     }
 
+    /// 查询单个默认分组的组内书籍，用于二级列表实时观察。
+    /// - Throws: 数据库查询失败时抛出错误。
+    nonisolated func fetchBookshelfGroupPayload(
+        _ db: Database,
+        groupID: Int64,
+        searchKeyword: String
+    ) throws -> BookshelfGroupPayload? {
+        let items = try fetchBookshelfGroups(db, searchKeyword: searchKeyword)
+        return items.compactMap { item -> BookshelfGroupPayload? in
+            guard case .group(let payload) = item.content, payload.id == groupID else {
+                return nil
+            }
+            return payload
+        }.first
+    }
+
     /// 复刻 Android `BookListFormatHelper.formatByCustom` 的默认书架排序规则。
     nonisolated func sortByAndroidCustomOrder(_ items: [IndexedBookshelfItem]) -> [IndexedBookshelfItem] {
         let pinned = items
@@ -643,7 +908,7 @@ private extension BookRepository {
         // 关键过滤：b.is_deleted = 0、b.id != 0；n.is_deleted = 0；rs/s 仅连接未软删除记录。
         // 返回字段用途：Book payload 用于 UI 代表封面，order/pin/source/read_status 字段用于 Swift 层稳定聚合排序。
         let sql = """
-            SELECT b.id, b.name, b.author, b.cover,
+            SELECT b.id, b.name, b.author, b.cover, b.press,
                    b.read_status_id,
                    COALESCE(rs.name, '') AS read_status_name,
                    COALESCE(rs.read_status_order, 999999) AS read_status_order,
@@ -671,11 +936,13 @@ private extension BookRepository {
                 readStatusName: row["read_status_name"] ?? "",
                 sourceId: row["source_id"] ?? 0,
                 sourceName: row["source_name"] ?? "",
+                press: row["press"] ?? "",
                 score: row["score"] ?? 0,
                 noteCount: row["note_count"] ?? 0
             )
             return BookshelfBookAggregateRow(
                 payload: payload,
+                press: row["press"] ?? "",
                 readStatusOrder: row["read_status_order"] ?? 999999,
                 sourceOrder: row["source_order"] ?? 999999,
                 sourceIsHidden: (row["source_is_hide"] as Int64? ?? 1) != 0,
@@ -745,6 +1012,8 @@ private extension BookRepository {
                 id: "status-\(key.id)",
                 title: key.title,
                 subtitle: "\(sortedRows.count)本",
+                context: .readStatus(key.id == 0 ? nil : key.id),
+                orderID: key.id == 0 ? nil : key.id,
                 books: sortedRows.map(\.payload)
             )
         }
@@ -772,6 +1041,8 @@ private extension BookRepository {
             groups.append(makeAggregateGroup(
                 id: "tag-untagged",
                 title: "未设置标签",
+                context: .tag(nil),
+                orderID: nil,
                 rows: untaggedBooks
             ))
         }
@@ -784,7 +1055,13 @@ private extension BookRepository {
                 return lhs.key.name.localizedStandardCompare(rhs.key.name) == .orderedAscending
             }
             .map { tag, rows in
-                makeAggregateGroup(id: "tag-\(tag.id)", title: tag.name, rows: rows)
+                makeAggregateGroup(
+                    id: "tag-\(tag.id)",
+                    title: tag.name,
+                    context: .tag(tag.id),
+                    orderID: tag.id,
+                    rows: rows
+                )
             })
         return groups
     }
@@ -808,7 +1085,13 @@ private extension BookRepository {
 
         var groups: [BookshelfAggregateGroup] = []
         if !unknownBooks.isEmpty {
-            groups.append(makeAggregateGroup(id: "source-unknown", title: "未知来源", rows: unknownBooks))
+            groups.append(makeAggregateGroup(
+                id: "source-unknown",
+                title: "未知来源",
+                context: .source(nil),
+                orderID: nil,
+                rows: unknownBooks
+            ))
         }
         groups.append(contentsOf: sourceBooks.keys.sorted { lhs, rhs in
             let lhsOrder = sourceOrders[lhs] ?? 999999
@@ -821,6 +1104,8 @@ private extension BookRepository {
             makeAggregateGroup(
                 id: "source-\(sourceID)",
                 title: sourceTitles[sourceID] ?? "未知来源",
+                context: .source(sourceID),
+                orderID: sourceID,
                 rows: sourceBooks[sourceID] ?? []
             )
         })
@@ -846,6 +1131,8 @@ private extension BookRepository {
                 id: "rating-\(score)",
                 title: score == 0 ? "未评分" : ratingTitle(for: score),
                 subtitle: "\(sortedRows.count)本",
+                context: .rating(score),
+                orderID: nil,
                 books: sortedRows.map(\.payload)
             )
         }
@@ -862,6 +1149,8 @@ private extension BookRepository {
             makeAggregateGroup(
                 id: "author-\(author)",
                 title: author,
+                context: .author(author),
+                orderID: nil,
                 rows: rows
             )
         }
@@ -878,9 +1167,32 @@ private extension BookRepository {
         }
     }
 
+    nonisolated func makePressGroups(from books: [BookshelfBookAggregateRow]) -> [BookshelfAggregateGroup] {
+        var presses: [String: [BookshelfBookAggregateRow]] = [:]
+        for book in books {
+            let press = normalizedPressName(book.press)
+            presses[press, default: []].append(book)
+        }
+
+        return presses.map { press, rows in
+            makeAggregateGroup(
+                id: "press-\(press)",
+                title: press,
+                context: .press(press),
+                orderID: nil,
+                rows: rows
+            )
+        }
+        .sorted {
+            $0.title.localizedStandardCompare($1.title) == .orderedAscending
+        }
+    }
+
     nonisolated func makeAggregateGroup(
         id: String,
         title: String,
+        context: BookshelfListContext,
+        orderID: Int64?,
         rows: [BookshelfBookAggregateRow]
     ) -> BookshelfAggregateGroup {
         let sortedRows = sortBooksByShelfOrder(rows)
@@ -889,6 +1201,8 @@ private extension BookRepository {
             title: title,
             subtitle: "\(sortedRows.count)本",
             count: sortedRows.count,
+            context: context,
+            orderID: orderID,
             representativeCovers: sortedRows.prefix(6).map(\.payload.cover),
             books: sortedRows.map { BookshelfBookListItem(payload: $0.payload) }
         )
@@ -906,6 +1220,35 @@ private extension BookRepository {
                 return lhs.sortOrder < rhs.sortOrder
             }
             return lhs.payload.id < rhs.payload.id
+        }
+    }
+
+    nonisolated func sortBookRows(
+        _ rows: [BookshelfBookAggregateRow],
+        setting: BookshelfDisplaySetting
+    ) -> [BookshelfBookAggregateRow] {
+        switch setting.sortCriteria {
+        case .custom:
+            return sortBooksByShelfOrder(rows)
+        case .name:
+            return rows.sorted { lhs, rhs in
+                let comparison = lhs.payload.name.localizedStandardCompare(rhs.payload.name)
+                if comparison != .orderedSame {
+                    return setting.sortOrder == .ascending ? comparison == .orderedAscending : comparison == .orderedDescending
+                }
+                return lhs.payload.id < rhs.payload.id
+            }
+        case .bookCount:
+            return sortBooksByShelfOrder(rows)
+        case .rating:
+            return rows.sorted { lhs, rhs in
+                if lhs.payload.score != rhs.payload.score {
+                    return setting.sortOrder == .ascending
+                        ? lhs.payload.score < rhs.payload.score
+                        : lhs.payload.score > rhs.payload.score
+                }
+                return lhs.payload.id < rhs.payload.id
+            }
         }
     }
 
@@ -934,6 +1277,11 @@ private extension BookRepository {
     nonisolated func normalizedAuthorName(_ author: String) -> String {
         let trimmed = author.trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmed.isEmpty ? "未知作者" : trimmed
+    }
+
+    nonisolated func normalizedPressName(_ press: String) -> String {
+        let trimmed = press.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? "未知出版社" : trimmed
     }
 
     nonisolated func authorInitial(_ author: String) -> String {

@@ -81,7 +81,15 @@ class BookViewModel {
         }
     }
     var isSearchActive: Bool = false
-    var displaySetting: BookshelfDisplaySetting = .defaultValue
+    var displaySettingsByDimension: [BookshelfDimension: BookshelfDisplaySetting]
+    var displaySetting: BookshelfDisplaySetting {
+        get {
+            displaySettingsByDimension[selectedDimension] ?? BookshelfDisplaySetting.defaultValue(for: selectedDimension)
+        }
+        set {
+            updateDisplaySetting(newValue, for: selectedDimension)
+        }
+    }
     var isEditing: Bool = false
     var selectedIDs: [BookshelfItemID] = []
     var activeWriteAction: BookshelfPendingAction?
@@ -171,6 +179,7 @@ class BookViewModel {
     /// 注入书籍仓储并启动列表数据观察。
     init(repository: any BookRepositoryProtocol) {
         self.repository = repository
+        self.displaySettingsByDimension = repository.fetchBookshelfDisplaySettings()
         startObservation()
     }
 
@@ -245,6 +254,59 @@ class BookViewModel {
     func selectDimension(_ dimension: BookshelfDimension) {
         guard selectedDimension != dimension else { return }
         selectedDimension = dimension
+        restartObservation()
+    }
+
+    /// 保存当前维度显示设置并重启观察流，使排序和布局偏好立即生效。
+    func updateDisplaySetting(_ setting: BookshelfDisplaySetting, for dimension: BookshelfDimension) {
+        let sanitized = sanitizedDisplaySetting(setting, for: dimension)
+        guard displaySettingsByDimension[dimension] != sanitized else { return }
+        displaySettingsByDimension[dimension] = sanitized
+        repository.saveBookshelfDisplaySetting(sanitized, for: dimension)
+        if dimension == selectedDimension {
+            restartObservation()
+        }
+    }
+
+    /// 返回指定维度当前显示设置。
+    func displaySetting(for dimension: BookshelfDimension) -> BookshelfDisplaySetting {
+        displaySettingsByDimension[dimension] ?? BookshelfDisplaySetting.defaultValue(for: dimension)
+    }
+
+    /// 判断聚合维度是否允许长按排序。
+    func canReorderAggregateItems(for dimension: BookshelfDimension) -> Bool {
+        !isEditing
+            && !hasSearchKeyword
+            && activeWriteAction == nil
+            && contentState == .content
+            && displaySetting(for: dimension).sortCriteria == .custom
+            && aggregateOrderContext(for: dimension) != nil
+    }
+
+    /// 按 UIKit 聚合列表拖拽结束后的最终 ID 顺序提交标签、来源或状态排序。
+    func commitAggregateOrder(_ orderedIDs: [Int64], for dimension: BookshelfDimension) {
+        guard let context = aggregateOrderContext(for: dimension),
+              canReorderAggregateItems(for: dimension),
+              !orderedIDs.isEmpty else {
+            return
+        }
+        activeWriteAction = .reorder
+        writeError = nil
+
+        Task {
+            do {
+                try await repository.updateBookshelfAggregateOrder(context: context, orderedIDs: orderedIDs)
+                await MainActor.run {
+                    self.activeWriteAction = nil
+                }
+            } catch {
+                await MainActor.run {
+                    self.activeWriteAction = nil
+                    self.writeError = error.localizedDescription
+                    self.restartObservation()
+                }
+            }
+        }
     }
 
     /// 激活页内搜索栏，搜索只参与只读过滤。
@@ -435,6 +497,31 @@ private enum BookshelfMoveIntent {
 }
 
 private extension BookViewModel {
+    func sanitizedDisplaySetting(
+        _ setting: BookshelfDisplaySetting,
+        for dimension: BookshelfDimension
+    ) -> BookshelfDisplaySetting {
+        var result = setting
+        result.columnCount = max(2, min(result.columnCount, 6))
+        if !BookshelfSortCriteria.available(for: dimension).contains(result.sortCriteria) {
+            result.sortCriteria = BookshelfDisplaySetting.defaultValue(for: dimension).sortCriteria
+        }
+        return result
+    }
+
+    func aggregateOrderContext(for dimension: BookshelfDimension) -> BookshelfAggregateOrderContext? {
+        switch dimension {
+        case .status:
+            return .readStatus
+        case .tag:
+            return .tag
+        case .source:
+            return .source
+        case .default, .rating, .author, .press:
+            return nil
+        }
+    }
+
     func pinItems(
         _ ids: [BookshelfItemID],
         clearsSelectionOnSuccess: Bool

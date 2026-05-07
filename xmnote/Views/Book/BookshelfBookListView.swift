@@ -6,8 +6,8 @@
 //
 
 /**
- * [INPUT]: 依赖 BookshelfBookListRoute 提供只读聚合列表载荷，依赖外层 BookRoute 闭包承接书籍详情导航
- * [OUTPUT]: 对外提供 BookshelfBookListView，使用 UIKit UICollectionView 展示分组、状态、标签、来源、评分与作者聚合下的书籍列表
+ * [INPUT]: 依赖 BookshelfBookListRoute 提供聚合上下文，依赖 BookRepositoryProtocol 提供二级列表观察流，依赖外层 BookRoute 闭包承接书籍详情导航
+ * [OUTPUT]: 对外提供 BookshelfBookListView，使用 UIKit UICollectionView 展示分组、状态、标签、来源、评分、作者与出版社聚合下的书籍列表
  * [POS]: Book 模块二级只读列表页，被 BookRoute.bookshelfList 导航目标消费
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -15,10 +15,12 @@
 import SwiftUI
 import UIKit
 
-/// 书架聚合入口的二级只读列表页，只消费上级快照裁剪出的展示载荷，不直接访问数据库。
+/// 书架聚合入口的二级只读列表页，通过 Repository 实时观察聚合上下文下的书籍集合。
 struct BookshelfBookListView: View {
+    @Environment(RepositoryContainer.self) private var repositories
     let route: BookshelfBookListRoute
     let onOpenRoute: (BookRoute) -> Void
+    @State private var viewModel: BookshelfBookListViewModel?
 
     /// 构建二级书籍列表；点击书籍时把导航意图交回外层 NavigationStack。
     init(
@@ -30,21 +32,59 @@ struct BookshelfBookListView: View {
     }
 
     var body: some View {
-        BookshelfBookListCollectionView(
-            route: route,
-            onOpenBook: { bookID in
-                onOpenRoute(.detail(bookId: bookID))
+        Group {
+            if let viewModel {
+                BookshelfBookListContentView(
+                    viewModel: viewModel,
+                    onOpenRoute: onOpenRoute
+                )
+            } else {
+                Color.clear
+                    .background(Color.surfacePage.ignoresSafeArea())
             }
-        )
+        }
+        .task(id: route) {
+            viewModel = BookshelfBookListViewModel(
+                route: route,
+                repository: repositories.bookRepository
+            )
+        }
+    }
+}
+
+/// 二级书籍列表 SwiftUI 壳层，承接搜索栏、加载态和 UIKit 集合区。
+private struct BookshelfBookListContentView: View {
+    @Bindable var viewModel: BookshelfBookListViewModel
+    let onOpenRoute: (BookRoute) -> Void
+
+    var body: some View {
+        VStack(spacing: Spacing.compact) {
+            BookshelfBookListSearchBar(
+                text: $viewModel.searchKeyword,
+                onClear: viewModel.clearSearchKeyword
+            )
+
+            BookshelfBookListCollectionView(
+                snapshot: viewModel.snapshot,
+                subtitle: viewModel.subtitle,
+                contentState: viewModel.contentState,
+                onOpenBook: { bookID in
+                    onOpenRoute(.detail(bookId: bookID))
+                }
+            )
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
         .background(Color.surfacePage.ignoresSafeArea())
-        .navigationTitle(route.title)
+        .navigationTitle(viewModel.navigationTitle)
         .navigationBarTitleDisplayMode(.inline)
     }
 }
 
 /// 二级书籍列表 UIKit 集合区，负责滚动、空态和行点击命中。
 private struct BookshelfBookListCollectionView: UIViewRepresentable {
-    let route: BookshelfBookListRoute
+    let snapshot: BookshelfBookListSnapshot
+    let subtitle: String
+    let contentState: BookshelfContentState
     let onOpenBook: (Int64) -> Void
 
     /// 创建 collection view 承载视图。
@@ -61,7 +101,9 @@ private struct BookshelfBookListCollectionView: UIViewRepresentable {
 
     private var configuration: BookshelfBookListCollectionConfiguration {
         BookshelfBookListCollectionConfiguration(
-            route: route,
+            snapshot: snapshot,
+            subtitle: subtitle,
+            contentState: contentState,
             onOpenBook: onOpenBook
         )
     }
@@ -69,11 +111,15 @@ private struct BookshelfBookListCollectionView: UIViewRepresentable {
 
 /// UIKit 集合区输入配置。
 private struct BookshelfBookListCollectionConfiguration {
-    let route: BookshelfBookListRoute
+    let snapshot: BookshelfBookListSnapshot
+    let subtitle: String
+    let contentState: BookshelfContentState
     let onOpenBook: (Int64) -> Void
 
     static let empty = BookshelfBookListCollectionConfiguration(
-        route: BookshelfBookListRoute(title: "", subtitle: "", books: []),
+        snapshot: .empty,
+        subtitle: "",
+        contentState: .loading,
         onOpenBook: { _ in }
     )
 }
@@ -81,6 +127,7 @@ private struct BookshelfBookListCollectionConfiguration {
 /// 二级书籍列表 item 类型，把 subtitle、empty 与书籍行统一交给 collection view 管理。
 private enum BookshelfBookListCollectionItem: Hashable {
     case subtitle(String)
+    case loading
     case empty
     case book(BookshelfBookListItem)
 }
@@ -121,7 +168,7 @@ private final class BookshelfBookListCollectionHostView: UIView {
         with configuration: BookshelfBookListCollectionConfiguration,
         animated: Bool
     ) {
-        let nextItems = Self.makeItems(from: configuration.route)
+        let nextItems = Self.makeItems(from: configuration)
         self.configuration = configuration
         guard nextItems != items else {
             refreshVisibleCells()
@@ -172,16 +219,22 @@ private extension BookshelfBookListCollectionHostView {
         }
     }
 
-    /// 根据路由载荷生成 collection item。
-    static func makeItems(from route: BookshelfBookListRoute) -> [BookshelfBookListCollectionItem] {
+    /// 根据观察快照生成 collection item。
+    static func makeItems(from configuration: BookshelfBookListCollectionConfiguration) -> [BookshelfBookListCollectionItem] {
         var nextItems: [BookshelfBookListCollectionItem] = []
-        if !route.subtitle.isEmpty {
-            nextItems.append(.subtitle(route.subtitle))
+        if !configuration.subtitle.isEmpty {
+            nextItems.append(.subtitle(configuration.subtitle))
         }
-        if route.books.isEmpty {
+        switch configuration.contentState {
+        case .loading:
+            nextItems.append(.loading)
+        case .empty:
             nextItems.append(.empty)
-        } else {
-            nextItems.append(contentsOf: route.books.map(BookshelfBookListCollectionItem.book))
+        case .error(let message):
+            nextItems.append(.subtitle(message.isEmpty ? "书籍加载失败" : message))
+            nextItems.append(.empty)
+        case .content:
+            nextItems.append(contentsOf: configuration.snapshot.books.map(BookshelfBookListCollectionItem.book))
         }
         return nextItems
     }
@@ -257,6 +310,10 @@ private final class BookshelfBookListCollectionCell: UICollectionViewCell {
             switch item {
             case .subtitle(let subtitle):
                 BookshelfBookListSubtitleView(subtitle: subtitle)
+            case .loading:
+                LoadingStateView("正在整理书籍", style: .inline)
+                    .frame(maxWidth: .infinity)
+                    .frame(minHeight: 320)
             case .empty:
                 EmptyStateView(icon: "books.vertical", message: "暂无书籍")
                     .frame(maxWidth: .infinity)
@@ -266,6 +323,42 @@ private final class BookshelfBookListCollectionCell: UICollectionViewCell {
             }
         }
         .margins(.all, 0)
+    }
+}
+
+/// 二级列表搜索栏。
+private struct BookshelfBookListSearchBar: View {
+    @Binding var text: String
+    let onClear: () -> Void
+
+    var body: some View {
+        HStack(spacing: Spacing.compact) {
+            Image(systemName: "magnifyingglass")
+                .foregroundStyle(.secondary)
+
+            TextField("搜索书名或作者", text: $text)
+                .font(AppTypography.body)
+                .textInputAutocapitalization(.never)
+                .disableAutocorrection(true)
+
+            if !text.isEmpty {
+                Button(action: onClear) {
+                    Image(systemName: "xmark.circle.fill")
+                        .foregroundStyle(.tertiary)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("清除搜索")
+            }
+        }
+        .padding(.horizontal, Spacing.base)
+        .frame(minHeight: 40)
+        .background(Color.surfaceCard, in: RoundedRectangle(cornerRadius: CornerRadius.blockMedium, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: CornerRadius.blockMedium, style: .continuous)
+                .stroke(Color.surfaceBorderSubtle, lineWidth: CardStyle.borderWidth)
+        }
+        .padding(.horizontal, Spacing.screenEdge)
+        .padding(.top, Spacing.base)
     }
 }
 
@@ -337,12 +430,10 @@ private struct BookshelfBookListRowView: View {
 #Preview {
     NavigationStack {
         BookshelfBookListView(route: BookshelfBookListRoute(
+            context: .tag(1),
             title: "文学",
-            subtitle: "2本",
-            books: [
-                BookshelfBookListItem(id: 1, title: "月亮与六便士", author: "毛姆", cover: "", noteCount: 12),
-                BookshelfBookListItem(id: 2, title: "长日将尽", author: "石黑一雄", cover: "", noteCount: 3)
-            ]
+            subtitleHint: "2本"
         ))
     }
+    .environment(RepositoryContainer(databaseManager: DatabaseManager(database: try! .empty())))
 }

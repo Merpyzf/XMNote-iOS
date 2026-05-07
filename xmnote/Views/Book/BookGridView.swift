@@ -6,8 +6,8 @@
 //
 
 /**
- * [INPUT]: 依赖 BookViewModel 提供书架快照、维度状态、搜索态、显示设置、编辑态与拖拽排序状态，依赖页面可见态驱动 UIKit 滚动观察，依赖 LoadingGate 约束读取加载反馈
- * [OUTPUT]: 对外提供 BookGridView，展示默认书架、多维度只读聚合入口、默认书架编辑态、排序置顶入口与拖拽排序交互
+ * [INPUT]: 依赖 BookViewModel 提供书架快照、维度状态、搜索态、显示设置、编辑态与 UICollectionView 排序状态，依赖页面可见态驱动 UIKit 滚动观察，依赖 LoadingGate 约束读取加载反馈
+ * [OUTPUT]: 对外提供 BookGridView，展示默认书架、多维度 UICollectionView 聚合入口、默认书架编辑态、排序置顶入口与拖拽排序交互
  * [POS]: Book 模块网格展示层，被 BookContainerView 嵌入
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -21,11 +21,6 @@ struct BookGridView: View {
     var onOpenRoute: (BookRoute) -> Void = { _ in }
     @State private var readLoadingGate = LoadingGate()
     @State private var showsMoveSheet = false
-
-    private let aggregateColumns = Array(
-        repeating: GridItem(.flexible(), spacing: Spacing.base),
-        count: 2
-    )
 
     var body: some View {
         VStack(spacing: Spacing.compact) {
@@ -144,15 +139,41 @@ struct BookGridView: View {
         case .default:
             defaultContent(viewModel.snapshot.defaultItems)
         case .status:
-            sectionContent(viewModel.snapshot.statusSections)
+            aggregateContent(
+                sections: [aggregateSection(id: "status", groups: groups(from: viewModel.snapshot.statusSections))],
+                dimension: .status
+            )
         case .tag:
-            aggregateContent(viewModel.snapshot.tagGroups)
+            aggregateContent(
+                sections: [aggregateSection(id: "tag", groups: viewModel.snapshot.tagGroups)],
+                dimension: .tag
+            )
         case .source:
-            aggregateContent(viewModel.snapshot.sourceGroups)
+            aggregateContent(
+                sections: [aggregateSection(id: "source", groups: viewModel.snapshot.sourceGroups)],
+                dimension: .source
+            )
         case .rating:
-            sectionContent(viewModel.snapshot.ratingSections)
+            aggregateContent(
+                sections: [aggregateSection(id: "rating", groups: groups(from: viewModel.snapshot.ratingSections))],
+                dimension: .rating
+            )
         case .author:
-            authorContent(viewModel.snapshot.authorSections)
+            aggregateContent(
+                sections: viewModel.snapshot.authorSections.map {
+                    BookshelfAggregateCollectionSection(
+                        id: $0.id,
+                        title: $0.title,
+                        groups: sortedGroups($0.authors, for: .author)
+                    )
+                },
+                dimension: .author
+            )
+        case .press:
+            aggregateContent(
+                sections: [aggregateSection(id: "press", groups: viewModel.snapshot.pressGroups)],
+                dimension: .press
+            )
         }
     }
 
@@ -218,105 +239,83 @@ struct BookGridView: View {
             && !viewModel.hasSearchKeyword
     }
 
-    private func aggregateContent(_ groups: [BookshelfAggregateGroup]) -> some View {
-        ScrollView {
-            LazyVGrid(columns: aggregateColumns, spacing: Spacing.base) {
-                ForEach(groups) { group in
-                    NavigationLink(value: BookRoute.bookshelfList(route(for: group))) {
-                        BookshelfAggregateCardView(group: group)
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
-            .padding(.horizontal, Spacing.screenEdge)
-            .padding(.vertical, Spacing.base)
-        }
+    private func aggregateContent(
+        sections: [BookshelfAggregateCollectionSection],
+        dimension: BookshelfDimension
+    ) -> some View {
+        BookshelfAggregateCollectionView(
+            sections: sections,
+            layoutMode: viewModel.displaySetting.layoutMode,
+            columnCount: aggregateColumnCount(for: dimension),
+            canReorder: viewModel.canReorderAggregateItems(for: dimension),
+            onOpenRoute: onOpenRoute,
+            onCommitOrder: { viewModel.commitAggregateOrder($0, for: dimension) }
+        )
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .ignoresSafeArea(.container, edges: .bottom)
     }
 
-    private func sectionContent(_ sections: [BookshelfSection]) -> some View {
-        ScrollView {
-            LazyVStack(spacing: Spacing.base) {
-                ForEach(sections) { section in
-                    NavigationLink(value: BookRoute.bookshelfList(route(for: section))) {
-                        BookshelfSectionCardView(section: section)
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
-            .padding(.horizontal, Spacing.screenEdge)
-            .padding(.vertical, Spacing.base)
-        }
-    }
-
-    private func authorContent(_ sections: [BookshelfAuthorSection]) -> some View {
-        ScrollViewReader { proxy in
-            ZStack(alignment: .trailing) {
-                ScrollView {
-                    LazyVStack(alignment: .leading, spacing: Spacing.section) {
-                        ForEach(sections) { section in
-                            authorSection(section)
-                                .id(section.id)
-                        }
-                    }
-                    .padding(.horizontal, Spacing.screenEdge)
-                    .padding(.trailing, Spacing.double)
-                    .padding(.vertical, Spacing.base)
-                }
-
-                VStack(spacing: Spacing.tiny) {
-                    ForEach(sections) { section in
-                        Button {
-                            withAnimation(.snappy(duration: 0.22, extraBounce: 0.04)) {
-                                proxy.scrollTo(section.id, anchor: .top)
-                            }
-                        } label: {
-                            Text(section.title)
-                                .font(AppTypography.caption2)
-                                .fontWeight(.medium)
-                                .foregroundStyle(Color.brand)
-                                .frame(width: 22, height: 18)
-                        }
-                        .buttonStyle(.plain)
-                    }
-                }
-                .padding(.trailing, Spacing.tiny)
-            }
-        }
-    }
-
-    private func authorSection(_ section: BookshelfAuthorSection) -> some View {
-        VStack(alignment: .leading, spacing: Spacing.base) {
-            Text(section.title)
-                .font(AppTypography.title3)
-                .fontWeight(.semibold)
-                .foregroundStyle(.primary)
-                .padding(.leading, Spacing.tiny)
-
-            LazyVGrid(columns: aggregateColumns, spacing: Spacing.base) {
-                ForEach(section.authors) { author in
-                    NavigationLink(value: BookRoute.bookshelfList(route(for: author))) {
-                        BookshelfAggregateCardView(group: author)
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
-        }
-    }
-
-    private func route(for group: BookshelfAggregateGroup) -> BookshelfBookListRoute {
-        BookshelfBookListRoute(
-            title: group.title,
-            subtitle: group.subtitle,
-            books: group.books
+    private func aggregateSection(
+        id: String,
+        groups: [BookshelfAggregateGroup]
+    ) -> BookshelfAggregateCollectionSection {
+        BookshelfAggregateCollectionSection(
+            id: id,
+            title: nil,
+            groups: sortedGroups(groups, for: viewModel.selectedDimension)
         )
     }
 
-    private func route(for section: BookshelfSection) -> BookshelfBookListRoute {
-        BookshelfBookListRoute(
-            title: section.title,
-            subtitle: section.subtitle,
-            books: section.books.map { BookshelfBookListItem(payload: $0) }
-        )
+    private func groups(from sections: [BookshelfSection]) -> [BookshelfAggregateGroup] {
+        sections.map { section in
+            BookshelfAggregateGroup(
+                id: section.id,
+                title: section.title,
+                subtitle: section.subtitle,
+                count: section.count,
+                context: section.context,
+                orderID: section.orderID,
+                representativeCovers: section.books.prefix(6).map(\.cover),
+                books: section.books.map { BookshelfBookListItem(payload: $0) }
+            )
+        }
+    }
+
+    private func sortedGroups(
+        _ groups: [BookshelfAggregateGroup],
+        for dimension: BookshelfDimension
+    ) -> [BookshelfAggregateGroup] {
+        let setting = viewModel.displaySetting(for: dimension)
+        switch setting.sortCriteria {
+        case .custom:
+            return groups
+        case .name:
+            return groups.sorted { lhs, rhs in
+                let comparison = lhs.title.localizedStandardCompare(rhs.title)
+                if comparison != .orderedSame {
+                    return setting.sortOrder == .ascending ? comparison == .orderedAscending : comparison == .orderedDescending
+                }
+                return lhs.id < rhs.id
+            }
+        case .bookCount:
+            return groups.sorted { lhs, rhs in
+                if lhs.count != rhs.count {
+                    return setting.sortOrder == .ascending ? lhs.count < rhs.count : lhs.count > rhs.count
+                }
+                return lhs.title.localizedStandardCompare(rhs.title) == .orderedAscending
+            }
+        case .rating:
+            return groups
+        }
+    }
+
+    private func aggregateColumnCount(for dimension: BookshelfDimension) -> Int {
+        switch dimension {
+        case .author, .press:
+            return max(2, min(viewModel.displaySetting.columnCount, 4))
+        case .default, .status, .tag, .source, .rating:
+            return max(2, min(viewModel.displaySetting.columnCount, 3))
+        }
     }
 
     private func movableIDs(in items: [BookshelfItem]) -> Set<BookshelfItemID> {
