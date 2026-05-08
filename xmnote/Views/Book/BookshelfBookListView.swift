@@ -7,7 +7,7 @@
 
 /**
  * [INPUT]: 依赖 BookshelfBookListRoute 提供聚合上下文，依赖 BookRepositoryProtocol 提供二级列表观察流，依赖外层 BookRoute 闭包承接书籍详情导航
- * [OUTPUT]: 对外提供 BookshelfBookListView，使用 UIKit UICollectionView 展示分组、状态、标签、来源、评分、作者与出版社聚合下的书籍列表和编辑选择入口
+ * [OUTPUT]: 对外提供 BookshelfBookListView，使用 UIKit UICollectionView 展示聚合书籍列表、编辑选择入口与批量编辑 Sheet 容器
  * [POS]: Book 模块二级列表页，被 BookRoute.bookshelfList 导航目标消费
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -178,6 +178,8 @@ private struct BookshelfBookListContentView: View {
                     selectedCount: viewModel.selectedCount,
                     onConfirm: viewModel.submitMoveToGroup
                 )
+            case .bookList, .export:
+                EmptyView()
             }
         }
         .xmSystemAlert(item: $viewModel.activeMoveOutConfirmation) { confirmation in

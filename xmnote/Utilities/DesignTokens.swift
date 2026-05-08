@@ -147,6 +147,20 @@ extension Color {
     /// 遮罩层
     static let overlay = Color(light: Color.black.opacity(0.4),
                                 dark: Color.black.opacity(0.5))
+    /// 书籍封面毛玻璃角标的清洁白雾层，降低复杂封面采样带来的杂色。
+    static let bookCoverBadgeBlurWash = Color(
+        light: Color.white.opacity(0.04),
+        dark: Color.white.opacity(0.03)
+    )
+    /// 书籍封面深色毛玻璃角标覆盖层，保证白字在浅色封面上不发虚。
+    static let bookCoverBadgeDarkOverlay = Color(
+        light: Color.black.opacity(0.28),
+        dark: Color.black.opacity(0.34)
+    )
+    /// 书籍封面毛玻璃角标内侧轻边界，帮助浅色封面上识别角标边缘。
+    static let bookCoverBadgeInnerStroke = Color.white.opacity(0.10)
+    /// 书籍封面角标文字与图标阴影，低强度兜底白色内容可读性。
+    static let bookCoverBadgeContentShadow = Color.black.opacity(0.28)
 }
 
 // MARK: - Status

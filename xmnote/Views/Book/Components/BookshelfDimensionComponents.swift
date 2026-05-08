@@ -11,45 +11,64 @@ import SwiftUI
 struct BookshelfDimensionRail: View {
     let selectedDimension: BookshelfDimension
     let onSelect: (BookshelfDimension) -> Void
+    var trailingPadding: CGFloat = Spacing.screenEdge
+
+    private enum Style {
+        static let itemSpacing: CGFloat = Spacing.tight
+        static let horizontalPadding: CGFloat = Spacing.tight
+        static let verticalPadding: CGFloat = Spacing.none
+        static let visualMinHeight: CGFloat = 28
+        static let touchMinHeight: CGFloat = 44
+        static let railMinHeight: CGFloat = 44
+        static let cornerRadius: CGFloat = CornerRadius.blockSmall
+        static let unselectedBorderOpacity: Double = 0.18
+    }
 
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: Spacing.compact) {
+            HStack(spacing: Style.itemSpacing) {
                 ForEach(BookshelfDimension.allCases, id: \.self) { dimension in
+                    let isSelected = selectedDimension == dimension
+
                     Button {
                         onSelect(dimension)
                     } label: {
                         Text(dimension.title)
-                            .font(AppTypography.subheadline)
-                            .fontWeight(selectedDimension == dimension ? .semibold : .medium)
-                            .foregroundStyle(selectedDimension == dimension ? .white : .primary)
-                            .padding(.horizontal, Spacing.base)
-                            .frame(minHeight: 36)
+                            .font(AppTypography.caption)
+                            .fontWeight(isSelected ? .medium : .regular)
+                            .foregroundStyle(isSelected ? .white : .primary)
+                            .padding(.horizontal, Style.horizontalPadding)
+                            .frame(minHeight: Style.visualMinHeight)
                             .background(
-                                selectedDimension == dimension ? Color.brand : Color.surfaceCard,
-                                in: Capsule()
+                                isSelected ? Color.brand : Color.surfaceCard,
+                                in: RoundedRectangle(cornerRadius: Style.cornerRadius, style: .continuous)
                             )
                             .overlay {
-                                if selectedDimension != dimension {
-                                    Capsule()
-                                        .stroke(Color.surfaceBorderSubtle, lineWidth: CardStyle.borderWidth)
-                                }
+                                RoundedRectangle(cornerRadius: Style.cornerRadius, style: .continuous)
+                                    .stroke(
+                                        Color.surfaceBorderSubtle.opacity(isSelected ? 0 : Style.unselectedBorderOpacity),
+                                        lineWidth: CardStyle.borderWidth
+                                    )
                             }
+                            .frame(minHeight: Style.touchMinHeight)
+                            .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
                     .accessibilityLabel(dimension.title)
                 }
             }
-            .padding(.horizontal, Spacing.screenEdge)
-            .padding(.vertical, Spacing.compact)
+            .padding(.leading, Spacing.screenEdge)
+            .padding(.trailing, trailingPadding)
+            .padding(.vertical, Style.verticalPadding)
         }
-        .frame(minHeight: 44)
+        .frame(minHeight: Style.railMinHeight)
     }
 }
 
 /// 页内搜索栏，搜索只参与只读过滤，不承载排序写入。
 struct BookshelfSearchBar: View {
     @Binding var text: String
+    var placeholder: String = "搜索书名或作者"
     let onCancel: () -> Void
     let onClear: () -> Void
 
@@ -59,7 +78,7 @@ struct BookshelfSearchBar: View {
                 Image(systemName: "magnifyingglass")
                     .foregroundStyle(.secondary)
 
-                TextField("搜索书名或作者", text: $text)
+                TextField(placeholder, text: $text)
                     .font(AppTypography.body)
                     .textInputAutocapitalization(.never)
                     .disableAutocorrection(true)
@@ -94,11 +113,6 @@ struct BookshelfSearchBar: View {
 struct BookshelfAggregateCardView: View {
     let group: BookshelfAggregateGroup
 
-    private let columns = Array(
-        repeating: GridItem(.flexible(), spacing: Spacing.tiny),
-        count: 3
-    )
-
     var body: some View {
         VStack(alignment: .leading, spacing: Spacing.half) {
             coverMosaic
@@ -123,36 +137,10 @@ struct BookshelfAggregateCardView: View {
     }
 
     private var coverMosaic: some View {
-        ZStack(alignment: .bottomTrailing) {
-            LazyVGrid(columns: columns, spacing: Spacing.tiny) {
-                ForEach(coverSlots) { slot in
-                    XMBookCover.responsive(
-                        urlString: slot.cover,
-                        cornerRadius: CornerRadius.inlaySmall,
-                        border: .init(color: .surfaceBorderSubtle, width: CardStyle.borderWidth),
-                        placeholderIconSize: .small,
-                        surfaceStyle: .spine
-                    )
-                }
-            }
-
-            Text("\(group.count)本")
-                .font(AppTypography.caption2)
-                .fontWeight(.medium)
-                .foregroundStyle(.white)
-                .padding(.horizontal, Spacing.half)
-                .padding(.vertical, Spacing.tiny)
-                .background(Color.black.opacity(0.36), in: Capsule())
-                .padding(Spacing.tiny)
-        }
-        .aspectRatio(1.18, contentMode: .fit)
-    }
-
-    private var coverSlots: [BookshelfCoverSlot] {
-        let covers = Array(group.representativeCovers.prefix(6))
-        return (0..<6).map { index in
-            BookshelfCoverSlot(id: index, cover: index < covers.count ? covers[index] : "")
-        }
+        BookshelfGridGroupCoverView(
+            covers: group.representativeCovers,
+            count: group.count
+        )
     }
 }
 
@@ -269,9 +257,4 @@ struct BookshelfDefaultListRow: View {
             return "\(group.bookCount)本"
         }
     }
-}
-
-private struct BookshelfCoverSlot: Identifiable {
-    let id: Int
-    let cover: String
 }

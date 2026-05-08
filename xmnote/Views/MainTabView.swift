@@ -8,9 +8,9 @@
 import SwiftUI
 
 /**
- * [INPUT]: 依赖 Reading/Book/Note/Content/Personal 各模块容器视图与对应路由枚举，依赖 DebugRoute 提供调试页面跳转
- * [OUTPUT]: 对外提供 MainTabView（四大主 Tab 的 NavigationStack 组织与目的地分发）
- * [POS]: 应用根导航入口，负责跨模块路由承接（含书架聚合列表、在读页热力图点击进入阅读日历、内容查看与内容编辑）
+ * [INPUT]: 依赖 Reading/Book/Note/Content/Personal 各模块容器视图与对应路由枚举，依赖 DebugRoute 提供调试页面跳转，依赖 openURL 打开外部帮助文档
+ * [OUTPUT]: 对外提供 MainTabView（五个主 Tab 的 NavigationStack 组织与目的地分发）
+ * [POS]: 应用根导航入口，负责跨模块路由承接（含书架聚合列表、书架管理入口、在读页热力图点击进入阅读日历、内容查看与内容编辑）
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
@@ -22,6 +22,7 @@ enum AppTab: String, CaseIterable, Codable {
 /// 应用主导航容器，组织四个主 Tab 及跨模块路由跳转。
 struct MainTabView: View {
     @Environment(SceneStateStore.self) private var sceneStateStore
+    @Environment(\.openURL) private var openURL
     @State private var selectedTab: AppTab = .reading
     @State private var readingPath = NavigationPath()
     @State private var booksPath = NavigationPath()
@@ -79,7 +80,12 @@ struct MainTabView: View {
                         onAddBook: { append(BookRoute.add, to: .books) },
                         onAddNote: { append(NoteRoute.create(seed: .empty), to: .books) },
                         onOpenDebugCenter: { append(DebugRoute.debugCenter, to: .books) },
-                        onOpenBookRoute: { append($0, to: .books) }
+                        onOpenBookRoute: { append($0, to: .books) },
+                        onOpenTagManagement: { append(PersonalRoute.tagManagement, to: .books) },
+                        onOpenSourceManagement: { append(PersonalRoute.bookSource, to: .books) },
+                        onOpenAuthorManagement: { append(PersonalRoute.authorManagement, to: .books) },
+                        onOpenPressManagement: { append(PersonalRoute.pressManagement, to: .books) },
+                        onOpenGuide: openBookManagementGuide
                     )
                         .navigationDestination(for: DebugRoute.self) { route in
                             debugDestination(for: route)
@@ -95,6 +101,10 @@ struct MainTabView: View {
                         }
                         .navigationDestination(for: ContentRoute.self) { route in
                             contentDestination(for: route)
+                                .toolbar(.hidden, for: .tabBar)
+                        }
+                        .navigationDestination(for: PersonalRoute.self) { route in
+                            personalDestination(for: route)
                                 .toolbar(.hidden, for: .tabBar)
                         }
                 }
@@ -394,6 +404,26 @@ struct MainTabView: View {
         case .search:
             searchPath.append(route)
         }
+    }
+
+    private func append(_ route: PersonalRoute, to tab: AppTab) {
+        switch tab {
+        case .reading:
+            readingPath.append(route)
+        case .books:
+            booksPath.append(route)
+        case .notes:
+            notesPath.append(route)
+        case .profile:
+            profilePath.append(route)
+        case .search:
+            searchPath.append(route)
+        }
+    }
+
+    private func openBookManagementGuide() {
+        guard let url = URL(string: "https://docs.xmnote.com/#/book/bookmanagement") else { return }
+        openURL(url)
     }
 
     private func contentRoute(

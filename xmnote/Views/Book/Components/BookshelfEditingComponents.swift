@@ -1,11 +1,50 @@
 /**
- * [INPUT]: 依赖 BookshelfPendingAction、BookshelfBookListEditAction 与 SwiftUI 按钮、菜单、图标、表层渲染能力
- * [OUTPUT]: 对外提供书架编辑态顶部栏、选择标识与底部操作栏，并展示移动、更多、删除入口与迁移状态反馈
- * [POS]: Book 模块页面私有编辑态组件集合，服务默认书架选择、置顶和移动入口
+ * [INPUT]: 依赖 BookshelfPendingAction、BookshelfBookListEditAction 与 SwiftUI 按钮、图标、横向滚动、表层渲染和动画能力
+ * [OUTPUT]: 对外提供书架编辑态顶部栏、选择标识、底部操作面板与管理模式转场参数
+ * [POS]: Book 模块页面私有编辑态组件集合，服务默认书架选择、置顶、移动、横向平铺批量操作与删除入口
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
 import SwiftUI
+
+/// 书架管理模式的统一动效参数，保证顶部 chrome、内容 inset 与底部面板按同一语义节奏切换。
+enum BookshelfManagementMotion {
+    static let modeTransition: Animation = .snappy(duration: 0.24, extraBounce: 0.03)
+    static let panelTransition: Animation = .snappy(duration: 0.22, extraBounce: 0.02)
+    static let restoreTransition: Animation = .snappy(duration: 0.20, extraBounce: 0)
+
+    static func modeAnimation(reduceMotion: Bool) -> Animation {
+        reduceMotion ? .easeInOut(duration: 0.16) : modeTransition
+    }
+
+    static func panelAnimation(reduceMotion: Bool) -> Animation {
+        reduceMotion ? .easeInOut(duration: 0.14) : panelTransition
+    }
+
+    static func restoreAnimation(reduceMotion: Bool) -> Animation {
+        reduceMotion ? .easeInOut(duration: 0.14) : restoreTransition
+    }
+
+    static func topChromeTransition(reduceMotion: Bool) -> AnyTransition {
+        reduceMotion ? .opacity : .opacity.combined(with: .offset(y: -4))
+    }
+
+    static func bottomPanelTransition(reduceMotion: Bool) -> AnyTransition {
+        reduceMotion ? .opacity : .move(edge: .bottom).combined(with: .opacity)
+    }
+
+    static func browsingChromeTransition(reduceMotion: Bool) -> AnyTransition {
+        reduceMotion ? .opacity : .opacity.combined(with: .scale(scale: 0.98, anchor: .top))
+    }
+
+    static func editPanelDelay(reduceMotion: Bool) -> Duration {
+        reduceMotion ? .milliseconds(50) : .milliseconds(100)
+    }
+
+    static func editExitSettleDelay(reduceMotion: Bool) -> Duration {
+        reduceMotion ? .milliseconds(90) : .milliseconds(170)
+    }
+}
 
 /// 默认书架编辑态顶部栏，承载退出、已选数量和可见范围选择操作。
 struct BookshelfEditHeader: View {
@@ -54,119 +93,118 @@ struct BookshelfSelectionOverlay: View {
 
     var body: some View {
         Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
-            .font(AppTypography.title2)
-            .fontWeight(.semibold)
+            .font(AppTypography.title3)
+            .fontWeight(isSelected ? .semibold : .medium)
             .symbolRenderingMode(.palette)
-            .foregroundStyle(isSelected ? Color.white : Color.surfaceBorderDefault, isSelected ? Color.brand : Color.surfaceCard)
-            .background(Color.surfaceCard.opacity(0.92), in: Circle())
-            .shadow(color: Color.black.opacity(isSelected ? 0.16 : 0.08), radius: 4, y: 1)
+            .foregroundStyle(
+                isSelected ? Color.white : Color.surfaceBorderDefault.opacity(0.62),
+                isSelected ? Color.brand : Color.surfaceCard.opacity(0.70)
+            )
+            .background(Color.surfaceCard.opacity(isSelected ? 0.90 : 0.48), in: Circle())
+            .shadow(color: Color.black.opacity(isSelected ? 0.12 : 0.04), radius: isSelected ? 3 : 2, y: 1)
             .padding(Spacing.half)
             .accessibilityHidden(true)
     }
 }
 
-/// 默认书架编辑态底部栏，承载已完成 Android 语义核对的置顶与移动入口。
+/// 默认书架编辑态底部操作面板，承载与 Android 横向工具栏对齐的平铺批量操作入口。
 struct BookshelfEditBottomBar: View {
     let selectedCount: Int
+    let bottomSafeAreaInset: CGFloat
     let canPin: Bool
-    let canMove: Bool
-    let canMore: Bool
+    let canMoveBoundary: Bool
+    let canBatchAction: Bool
     let canDelete: Bool
-    let moveDisabledReason: String?
     let activeAction: BookshelfPendingAction?
-    let moreActions: [BookshelfBookListEditAction]
+    let actions: [BookshelfBookListEditAction]
     let isLoadingOptions: Bool
     let notice: String?
     let onPin: () -> Void
-    let onMove: () -> Void
-    let onMoreAction: (BookshelfBookListEditAction) -> Void
+    let onAction: (BookshelfBookListEditAction) -> Void
     let onDelete: () -> Void
 
     var body: some View {
-        VStack(spacing: Spacing.cozy) {
-            HStack(spacing: Spacing.compact) {
-                editActionButton(
-                    action: .pin,
-                    icon: "pin",
-                    isEnabled: canPin,
-                    onTap: onPin
-                )
+        VStack(spacing: statusText == nil ? Spacing.none : Spacing.tight) {
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: Spacing.base) {
+                    editActionButton(
+                        action: .pin,
+                        icon: "pin",
+                        isEnabled: canPin,
+                        onTap: onPin
+                    )
 
-                moveActionButton
+                    ForEach(actions) { action in
+                        editActionButton(
+                            action: action,
+                            isEnabled: isEnabled(action),
+                            onTap: { onAction(action) }
+                        )
+                    }
 
-                moreActionButton
-
-                editActionButton(
-                    action: .delete,
-                    icon: "trash",
-                    isEnabled: canDelete,
-                    onTap: onDelete
-                )
+                    editActionButton(
+                        action: .delete,
+                        icon: "trash",
+                        isEnabled: canDelete,
+                        onTap: onDelete
+                    )
+                }
+                .padding(.horizontal, Spacing.screenEdge)
             }
+            .scrollBounceBehavior(.basedOnSize, axes: .horizontal)
 
-            Text(statusText)
-                .font(AppTypography.caption)
-                .foregroundStyle(Color.textSecondary)
-                .frame(maxWidth: .infinity, alignment: .center)
-                .lineLimit(1)
+            if let statusText {
+                Text(statusText)
+                    .font(AppTypography.caption)
+                    .foregroundStyle(Color.textSecondary)
+                    .frame(maxWidth: .infinity, alignment: .center)
+                    .lineLimit(1)
+                    .transition(.opacity)
+            }
         }
-        .padding(.horizontal, Spacing.screenEdge)
-        .padding(.top, Spacing.base)
-        .padding(.bottom, Spacing.cozy)
-        .background(.regularMaterial)
+        .padding(.top, Spacing.cozy)
+        .padding(.bottom, bottomToolbarPadding)
+        .background {
+            Color.surfaceCard
+                .ignoresSafeArea(.container, edges: .bottom)
+        }
         .overlay(alignment: .top) {
             Divider()
+                .overlay(Color.surfaceBorderDefault.opacity(0.65))
         }
+        .shadow(color: Color.black.opacity(0.08), radius: 10, y: -2)
     }
 
-    private var moveActionButton: some View {
-        Button(action: onMove) {
-            editActionLabel(action: .move, icon: "folder", isEnabled: canMove)
-        }
-        .buttonStyle(.plain)
-        .disabled(!canMove)
-        .accessibilityLabel(canMove ? "移动选中项" : "移动，\(moveDisabledReason ?? "需至少选中一个普通项")")
+    private var bottomToolbarPadding: CGFloat {
+        max(Spacing.cozy, bottomSafeAreaInset - Spacing.section)
     }
 
-    private var moreActionButton: some View {
-        Menu {
-            ForEach(moreActions) { action in
-                Button(role: action.isDestructive ? .destructive : nil) {
-                    onMoreAction(action)
-                } label: {
-                    Label(action.title, systemImage: action.systemImage)
-                }
-                .disabled(isBusy)
-            }
-        } label: {
-            editActionLabel(action: .more, icon: "ellipsis.circle", isEnabled: canMore)
-        }
-        .buttonStyle(.plain)
-        .disabled(!canMore || isBusy)
-        .accessibilityLabel(canMore ? "更多操作" : "更多操作，当前不可用")
-    }
-
-    private var statusText: String {
+    private var statusText: String? {
         if let notice, !notice.isEmpty {
             return notice
         }
         if let activeAction {
-            return "正在\(activeAction.title)..."
+            return "正在\(activeAction.title)"
         }
         if isLoadingOptions {
-            return "正在加载批量编辑选项..."
+            return "正在加载选项"
         }
-        if selectedCount == 0 {
-            return "选择书籍或分组后可执行置顶、移动、批量管理与删除"
-        }
-        if let moveDisabledReason {
-            return moveDisabledReason
-        }
-        return "已选 \(selectedCount) 项，更多管理仅作用于书籍；分组会被自动忽略"
+        return nil
     }
 
     private var isBusy: Bool {
         activeAction != nil || isLoadingOptions
+    }
+
+    private func isEnabled(_ action: BookshelfBookListEditAction) -> Bool {
+        switch action {
+        case .moveToStart, .moveToEnd:
+            return canMoveBoundary
+        case .moveToGroup, .addToBookList, .setTag, .setSource, .setReadStatus, .exportNote, .exportBook:
+            return canBatchAction
+        case .pin, .unpin, .reorder, .moveOut, .renameGroup, .deleteGroup, .renameTag, .deleteTag, .renameSource, .deleteSource, .deleteBooks:
+            return canBatchAction
+        }
     }
 
     private func editActionButton(
@@ -177,6 +215,19 @@ struct BookshelfEditBottomBar: View {
     ) -> some View {
         Button(action: onTap) {
             editActionLabel(action: action, icon: icon, isEnabled: isEnabled)
+        }
+        .buttonStyle(.plain)
+        .disabled(!isEnabled || isBusy)
+        .accessibilityLabel(isEnabled ? action.title : "\(action.title)，当前不可用")
+    }
+
+    private func editActionButton(
+        action: BookshelfBookListEditAction,
+        isEnabled: Bool,
+        onTap: @escaping () -> Void
+    ) -> some View {
+        Button(action: onTap) {
+            editActionLabel(action: action, isEnabled: isEnabled)
         }
         .buttonStyle(.plain)
         .disabled(!isEnabled || isBusy)
@@ -196,7 +247,23 @@ struct BookshelfEditBottomBar: View {
                 .font(AppTypography.caption2)
         }
         .foregroundStyle(foregroundColor(for: action, isEnabled: isEnabled))
-        .frame(maxWidth: .infinity, minHeight: 48)
+        .frame(minWidth: 56, minHeight: 48)
+        .contentShape(Rectangle())
+    }
+
+    private func editActionLabel(
+        action: BookshelfBookListEditAction,
+        isEnabled: Bool
+    ) -> some View {
+        VStack(spacing: Spacing.compact) {
+            Image(systemName: action.systemImage)
+                .font(AppTypography.headline)
+                .fontWeight(.medium)
+            Text(action.title)
+                .font(AppTypography.caption2)
+        }
+        .foregroundStyle(foregroundColor(for: action, isEnabled: isEnabled))
+        .frame(minWidth: 56, minHeight: 48)
         .contentShape(Rectangle())
     }
 
@@ -208,5 +275,15 @@ struct BookshelfEditBottomBar: View {
             return action == .delete ? Color.feedbackError.opacity(0.55) : Color.textSecondary.opacity(0.55)
         }
         return action == .delete ? Color.feedbackError : Color.textPrimary
+    }
+
+    private func foregroundColor(
+        for action: BookshelfBookListEditAction,
+        isEnabled: Bool
+    ) -> Color {
+        guard isEnabled else {
+            return action.isDestructive ? Color.feedbackError.opacity(0.55) : Color.textSecondary.opacity(0.55)
+        }
+        return action.isDestructive ? Color.feedbackError : Color.textPrimary
     }
 }

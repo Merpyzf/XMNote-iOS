@@ -6,146 +6,32 @@
 //
 
 /**
- * [INPUT]: 依赖 BookViewModel 提供书架快照、维度状态、搜索态、显示设置、编辑态与 UICollectionView 排序状态，依赖页面可见态驱动 UIKit 滚动观察，依赖 LoadingGate 约束读取加载反馈
- * [OUTPUT]: 对外提供 BookGridView，展示默认书架、多维度 UICollectionView 聚合入口、默认书架编辑态、排序置顶入口与拖拽排序交互
+ * [INPUT]: 依赖 BookViewModel 提供书架快照、维度状态、显示设置、编辑态与 UICollectionView 排序状态，依赖页面可见态驱动 UIKit 滚动观察，依赖 LoadingGate 约束读取加载反馈，依赖容器注入进入编辑态回调与底部滚动余量
+ * [OUTPUT]: 对外提供 BookGridView，展示书架内容区、多维度 UICollectionView 聚合入口、选择覆盖层、写入错误浮层与拖拽排序交互
  * [POS]: Book 模块网格展示层，被 BookContainerView 嵌入
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
 import SwiftUI
 
-/// 书籍页内容视图，负责维度 rail、搜索态提示与书架多维度只读渲染。
+/// 书籍页内容视图，负责书架多维度只读渲染、选择覆盖层与排序交互。
 struct BookGridView: View {
     @Bindable var viewModel: BookViewModel
     var isPageActive = true
+    var bottomContentInset: CGFloat = 0
     var onOpenRoute: (BookRoute) -> Void = { _ in }
+    var onEnterEditing: (BookshelfItemID) -> Void = { _ in }
     @State private var readLoadingGate = LoadingGate()
-    @State private var showsMoveSheet = false
 
     var body: some View {
-        VStack(spacing: Spacing.compact) {
-            if viewModel.isEditing {
-                BookshelfEditHeader(
-                    selectedCount: viewModel.selectedCount,
-                    isAllVisibleSelected: viewModel.isAllVisibleSelected,
-                    onCancel: viewModel.exitEditing,
-                    onSelectAll: viewModel.selectAllVisible,
-                    onInvertSelection: viewModel.invertVisibleSelection
-                )
-                .transition(.move(edge: .top).combined(with: .opacity))
-            } else if viewModel.isSearchActive {
-                BookshelfSearchBar(
-                    text: $viewModel.searchKeyword,
-                    onCancel: viewModel.deactivateSearch,
-                    onClear: viewModel.clearSearchKeyword
-                )
-                .transition(.move(edge: .top).combined(with: .opacity))
-            }
-
-            if !viewModel.isEditing {
-                BookshelfDimensionRail(
-                    selectedDimension: viewModel.selectedDimension,
-                    onSelect: viewModel.selectDimension
-                )
-                .transition(.move(edge: .top).combined(with: .opacity))
-            }
-
-            if viewModel.hasSearchKeyword, !viewModel.isEditing {
-                searchHint
-            }
-
+        ZStack(alignment: .top) {
+            gridContent
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             if let writeError = viewModel.writeError, !writeError.isEmpty {
                 writeErrorHint(writeError)
             }
-
-            gridContent
         }
-        .animation(.snappy(duration: 0.24, extraBounce: 0.04), value: viewModel.isSearchActive)
-        .animation(.snappy(duration: 0.24, extraBounce: 0.04), value: viewModel.isEditing)
         .animation(.snappy(duration: 0.24, extraBounce: 0.04), value: viewModel.selectedDimension)
-        .safeAreaInset(edge: .bottom, spacing: Spacing.none) {
-            if viewModel.isEditing {
-                BookshelfEditBottomBar(
-                    selectedCount: viewModel.selectedCount,
-                    canPin: viewModel.canSubmitSelectedPin,
-                    canMove: viewModel.canMoveSelectedItems,
-                    canMore: viewModel.canMoreSelectedItems,
-                    canDelete: viewModel.canDeleteSelectedItems,
-                    moveDisabledReason: viewModel.moveDisabledReason,
-                    activeAction: viewModel.activeWriteAction,
-                    moreActions: viewModel.defaultMoreActions,
-                    isLoadingOptions: viewModel.isLoadingBatchOptions,
-                    notice: viewModel.actionNotice,
-                    onPin: viewModel.pinSelectedItems,
-                    onMove: { showsMoveSheet = true },
-                    onMoreAction: viewModel.performMoreAction,
-                    onDelete: viewModel.presentDeleteConfirmation
-                )
-                    .transition(.move(edge: .bottom).combined(with: .opacity))
-            }
-        }
-        .sheet(isPresented: $showsMoveSheet) {
-            BookshelfMoveSheet(
-                selectedCount: viewModel.selectedCount,
-                canSubmit: viewModel.canMoveSelectedItems,
-                disabledReason: viewModel.moveDisabledReason,
-                activeAction: viewModel.activeWriteAction,
-                onMoveToStart: {
-                    showsMoveSheet = false
-                    viewModel.moveSelectedItemsToStart()
-                },
-                onMoveToEnd: {
-                    showsMoveSheet = false
-                    viewModel.moveSelectedItemsToEnd()
-                }
-            )
-        }
-        .sheet(item: $viewModel.activeBatchSheet) { sheet in
-            switch sheet {
-            case .tags(
-                options: let options,
-                initialSelectedIDs: let initialSelectedIDs,
-                allowsEmptySelection: let allowsEmptySelection
-            ):
-                BookshelfBatchTagsSheet(
-                    options: options,
-                    selectedCount: viewModel.selectedBookIDs.count,
-                    initialSelectedIDs: initialSelectedIDs,
-                    allowsEmptySelection: allowsEmptySelection,
-                    onConfirm: viewModel.submitBatchTags
-                )
-            case .source(options: let options, initialSelectedID: let initialSelectedID):
-                BookshelfBatchSourceSheet(
-                    options: options,
-                    selectedCount: viewModel.selectedBookIDs.count,
-                    initialSelectedID: initialSelectedID,
-                    onConfirm: viewModel.submitBatchSource
-                )
-            case .readStatus(
-                options: let options,
-                initialStatusID: let initialStatusID,
-                initialChangedAt: let initialChangedAt,
-                initialRatingScore: let initialRatingScore
-            ):
-                BookshelfBatchReadStatusSheet(
-                    options: options,
-                    selectedCount: viewModel.selectedBookIDs.count,
-                    initialStatusID: initialStatusID,
-                    initialChangedAt: initialChangedAt,
-                    initialRatingScore: initialRatingScore,
-                    onConfirm: viewModel.submitBatchReadStatus
-                )
-            case .moveGroup(options: let options):
-                BookshelfMoveGroupSheet(
-                    options: options,
-                    selectedCount: viewModel.selectedBookIDs.count,
-                    onConfirm: viewModel.submitMoveToGroup
-                )
-            }
-        }
-        .xmSystemAlert(item: $viewModel.activeDeleteConfirmation) { confirmation in
-            defaultDeleteDescriptor(for: confirmation)
-        }
         .onAppear {
             syncReadLoadingGate()
         }
@@ -156,38 +42,6 @@ struct BookGridView: View {
             readLoadingGate.hideImmediately()
         }
         .frame(maxHeight: .infinity, alignment: .top)
-    }
-
-    private func defaultDeleteDescriptor(for confirmation: BookshelfDefaultDeleteConfirmation) -> XMSystemAlertDescriptor {
-        if confirmation.groupCount == 0 {
-            return XMSystemAlertDescriptor(
-                title: "删除书籍",
-                message: "将删除已选 \(confirmation.bookCount) 本书，并清理书摘、标签、分组、阅读状态、打卡、书单关系等关联数据。此操作不可撤销。",
-                actions: [
-                    XMSystemAlertAction(title: "取消", role: .cancel) { },
-                    XMSystemAlertAction(title: "删除", role: .destructive) {
-                        viewModel.submitDeleteSelectedItems(placement: .end)
-                    }
-                ]
-            )
-        }
-
-        let bookText = confirmation.bookCount > 0 ? "\(confirmation.bookCount) 本书" : ""
-        let groupText = "\(confirmation.groupCount) 个分组"
-        let targetText = [bookText, groupText].filter { !$0.isEmpty }.joined(separator: "和")
-        return XMSystemAlertDescriptor(
-            title: "删除书架项目",
-            message: "将删除已选 \(targetText)。分组内书籍会移回默认书架，请选择它们的位置；此操作不可撤销。",
-            actions: [
-                XMSystemAlertAction(title: "取消", role: .cancel) { },
-                XMSystemAlertAction(title: "移到最前并删除", role: .destructive) {
-                    viewModel.submitDeleteSelectedItems(placement: .start)
-                },
-                XMSystemAlertAction(title: "移到最后并删除", role: .destructive) {
-                    viewModel.submitDeleteSelectedItems(placement: .end)
-                }
-            ]
-        )
     }
 
     // MARK: - Grid Content
@@ -262,15 +116,6 @@ struct BookGridView: View {
         }
     }
 
-    private var searchHint: some View {
-        Text("搜索结果不支持排序，清除搜索后可调整书架顺序")
-            .font(AppTypography.caption)
-            .foregroundStyle(.secondary)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, Spacing.screenEdge)
-            .transition(.opacity)
-    }
-
     private func writeErrorHint(_ message: String) -> some View {
         HStack(alignment: .top, spacing: Spacing.cozy) {
             Image(systemName: "exclamationmark.triangle.fill")
@@ -287,7 +132,12 @@ struct BookGridView: View {
         .padding(.vertical, Spacing.tight)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(Color.feedbackWarning.opacity(0.10))
+        .overlay(alignment: .bottom) {
+            Divider()
+                .overlay(Color.feedbackWarning.opacity(0.28))
+        }
         .transition(.opacity)
+        .zIndex(2)
     }
 
     @ViewBuilder
@@ -298,6 +148,7 @@ struct BookGridView: View {
             columnCount: viewModel.displaySetting.columnCount,
             showsNoteCount: viewModel.displaySetting.showsNoteCount,
             isEditing: viewModel.isEditing,
+            bottomContentInset: bottomContentInset,
             selectedIDs: viewModel.selectedIDSet,
             canReorder: viewModel.canReorderDefaultItems,
             isScrollObservationEnabled: isDefaultScrollObservationEnabled,
@@ -305,7 +156,7 @@ struct BookGridView: View {
             movableIDs: movableIDs(in: sections.flatMap(\.items)),
             onOpenRoute: onOpenRoute,
             onToggleSelection: viewModel.toggleSelection,
-            onEnterEditing: { viewModel.enterEditing(initialSelection: $0) },
+            onEnterEditing: enterEditing,
             onPin: viewModel.pinItem,
             onUnpin: viewModel.unpinItem,
             onMoveToStart: viewModel.moveItemToStart,
@@ -322,6 +173,7 @@ struct BookGridView: View {
             && viewModel.contentState == .content
             && !viewModel.isSearchActive
             && !viewModel.hasSearchKeyword
+            && !viewModel.isEditing
     }
 
     private func aggregateContent(
@@ -380,6 +232,10 @@ struct BookGridView: View {
         Set(items.compactMap { item in
             viewModel.canMoveItem(item.id) ? item.id : nil
         })
+    }
+
+    private func enterEditing(_ initialSelection: BookshelfItemID) {
+        onEnterEditing(initialSelection)
     }
 }
 

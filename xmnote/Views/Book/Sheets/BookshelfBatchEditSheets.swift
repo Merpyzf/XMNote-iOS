@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 BookshelfBatchEditOptions 中的标签、来源、阅读状态候选项，依赖外层 ViewModel 闭包提交批量写入意图
- * [OUTPUT]: 对外提供 BookshelfMoveGroupSheet、BookshelfBatchTagsSheet、BookshelfBatchSourceSheet、BookshelfBatchReadStatusSheet 四个批量编辑 Sheet
+ * [OUTPUT]: 对外提供移组、书单、标签、来源、阅读状态与导出入口等批量编辑 Sheet
  * [POS]: Book 模块业务 Sheet，被 BookshelfBookListView 的编辑态批量操作入口唤起
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -67,6 +67,122 @@ struct BookshelfMoveGroupSheet: View {
             }
         }
         .presentationDetents([.medium, .large])
+        .presentationDragIndicator(.visible)
+    }
+}
+
+/// 默认书架批量加入书单 Sheet，支持选择已有手动书单或输入名称创建新书单。
+struct BookshelfAddToBookListSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    @State private var selectedID: Int64?
+    @State private var newTitle = ""
+
+    let options: [BookEditorNamedOption]
+    let selectedCount: Int
+    let onConfirm: (Int64?, String?) -> Void
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section {
+                    TextField("新书单名称", text: $newTitle)
+                        .textInputAutocapitalization(.never)
+                } footer: {
+                    Text("填写名称会创建新书单，并将 \(selectedCount) 本书加入其中。")
+                        .font(AppTypography.caption)
+                }
+
+                Section {
+                    if options.isEmpty {
+                        Text("暂无手动书单，可直接创建新书单。")
+                            .font(AppTypography.body)
+                            .foregroundStyle(Color.textSecondary)
+                    } else {
+                        ForEach(options) { option in
+                            Button {
+                                newTitle = ""
+                                selectedID = option.id
+                            } label: {
+                                BookshelfBatchOptionRow(
+                                    title: option.title,
+                                    isSelected: selectedID == option.id
+                                )
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                } header: {
+                    Text("已有书单")
+                } footer: {
+                    Text("已存在于书单中的书籍会保持原关系，不会重复添加。")
+                        .font(AppTypography.caption)
+                }
+            }
+            .navigationTitle("加入书单")
+            .navigationBarTitleDisplayMode(.inline)
+            .onChange(of: newTitle) { _, value in
+                if !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    selectedID = nil
+                }
+            }
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("取消") {
+                        dismiss()
+                    }
+                }
+
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("完成") {
+                        onConfirm(selectedID, trimmedNewTitle.isEmpty ? nil : trimmedNewTitle)
+                        dismiss()
+                    }
+                    .disabled(!canSubmit)
+                }
+            }
+        }
+        .presentationDetents([.medium, .large])
+        .presentationDragIndicator(.visible)
+    }
+
+    private var trimmedNewTitle: String {
+        newTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var canSubmit: Bool {
+        selectedID != nil || !trimmedNewTitle.isEmpty
+    }
+}
+
+/// 默认书架批量导出配置壳层，承接 Android 底部导出入口的导航语义。
+struct BookshelfBatchExportSheet: View {
+    @Environment(\.dismiss) private var dismiss
+
+    let kind: BookshelfBatchExportKind
+    let bookIDs: [Int64]
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section {
+                    LabeledContent("导出范围", value: "\(bookIDs.count) 本书")
+                    LabeledContent("导出类型", value: kind.title)
+                } footer: {
+                    Text("导出配置页已按 Android 入口接入；文件格式、目标位置与分享能力将在导出模块迁移时在此继续补齐。")
+                        .font(AppTypography.caption)
+                }
+            }
+            .navigationTitle(kind.title)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("完成") {
+                        dismiss()
+                    }
+                }
+            }
+        }
+        .presentationDetents([.medium])
         .presentationDragIndicator(.visible)
     }
 }

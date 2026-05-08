@@ -20,6 +20,8 @@ enum BookshelfBookListEditAction: String, CaseIterable, Identifiable, Hashable, 
     case setTag
     case setSource
     case setReadStatus
+    case exportNote
+    case exportBook
     case renameGroup
     case deleteGroup
     case renameTag
@@ -54,6 +56,10 @@ enum BookshelfBookListEditAction: String, CaseIterable, Identifiable, Hashable, 
             return "来源"
         case .setReadStatus:
             return "状态"
+        case .exportNote:
+            return "导出笔记"
+        case .exportBook:
+            return "导出书籍"
         case .renameGroup, .renameTag, .renameSource:
             return "重命名"
         case .deleteGroup:
@@ -91,6 +97,10 @@ enum BookshelfBookListEditAction: String, CaseIterable, Identifiable, Hashable, 
             return "tray"
         case .setReadStatus:
             return "checklist"
+        case .exportNote:
+            return "doc.text"
+        case .exportBook:
+            return "square.and.arrow.up"
         case .renameGroup, .renameTag, .renameSource:
             return "pencil"
         case .deleteGroup, .deleteTag, .deleteSource, .deleteBooks:
@@ -102,17 +112,32 @@ enum BookshelfBookListEditAction: String, CaseIterable, Identifiable, Hashable, 
         switch self {
         case .deleteGroup, .deleteTag, .deleteSource, .deleteBooks:
             return true
-        case .pin, .unpin, .reorder, .moveToStart, .moveToEnd, .moveToGroup, .addToBookList, .moveOut, .setTag, .setSource, .setReadStatus, .renameGroup, .renameTag, .renameSource:
+        case .pin, .unpin, .reorder, .moveToStart, .moveToEnd, .moveToGroup, .addToBookList, .moveOut, .setTag, .setSource, .setReadStatus, .exportNote, .exportBook, .renameGroup, .renameTag, .renameSource:
             return false
         }
     }
 
     var requiresSelection: Bool {
         switch self {
-        case .pin, .unpin, .moveToStart, .moveToEnd, .moveToGroup, .addToBookList, .moveOut, .setTag, .setSource, .setReadStatus, .deleteBooks:
+        case .pin, .unpin, .moveToStart, .moveToEnd, .moveToGroup, .addToBookList, .moveOut, .setTag, .setSource, .setReadStatus, .exportNote, .exportBook, .deleteBooks:
             return true
         case .reorder, .renameGroup, .deleteGroup, .renameTag, .deleteTag, .renameSource, .deleteSource:
             return false
+        }
+    }
+}
+
+/// 默认书架批量导出入口类型，区分导出书摘与导出书籍配置壳层。
+enum BookshelfBatchExportKind: String, Hashable, Sendable {
+    case notes
+    case books
+
+    var title: String {
+        switch self {
+        case .notes:
+            return "导出笔记"
+        case .books:
+            return "导出书籍"
         }
     }
 }
@@ -123,6 +148,8 @@ enum BookshelfBatchEditSheet: Identifiable, Hashable, Sendable {
     case source(options: [BookEditorNamedOption], initialSelectedID: Int64?)
     case readStatus(options: [BookEditorNamedOption], initialStatusID: Int64?, initialChangedAt: Date?, initialRatingScore: Int64?)
     case moveGroup(options: [BookEditorNamedOption])
+    case bookList(options: [BookEditorNamedOption], bookIDs: [Int64])
+    case export(kind: BookshelfBatchExportKind, bookIDs: [Int64])
 
     var id: String {
         switch self {
@@ -134,6 +161,10 @@ enum BookshelfBatchEditSheet: Identifiable, Hashable, Sendable {
             return "readStatus"
         case .moveGroup:
             return "moveGroup"
+        case .bookList:
+            return "bookList"
+        case .export(let kind, _):
+            return "export-\(kind.rawValue)"
         }
     }
 }
@@ -391,7 +422,7 @@ final class BookshelfBookListViewModel {
             moveSelectedBooks(toStart: false)
         case .moveToGroup:
             presentMoveGroupSheet()
-        case .addToBookList:
+        case .addToBookList, .exportNote, .exportBook:
             performPlaceholderAction(action)
         case .moveOut:
             presentMoveOutConfirmation()
@@ -525,7 +556,7 @@ final class BookshelfBookListViewModel {
             runWriteAction(.renameSource, successMessage: "来源已重命名") {
                 try await self.repository.renameSource(sourceID: sourceID, newName: name)
             }
-        case .pin, .unpin, .reorder, .moveToStart, .moveToEnd, .moveToGroup, .addToBookList, .moveOut, .setTag, .setSource, .setReadStatus, .deleteGroup, .deleteTag, .deleteSource, .deleteBooks:
+        case .pin, .unpin, .reorder, .moveToStart, .moveToEnd, .moveToGroup, .addToBookList, .moveOut, .setTag, .setSource, .setReadStatus, .exportNote, .exportBook, .deleteGroup, .deleteTag, .deleteSource, .deleteBooks:
             return
         }
     }
@@ -721,7 +752,7 @@ final class BookshelfBookListViewModel {
             activeDeleteConfirmation = BookshelfBookListDeleteConfirmation(kind: .tag(title: route.title))
         case .deleteSource:
             activeDeleteConfirmation = BookshelfBookListDeleteConfirmation(kind: .source(title: route.title))
-        case .pin, .unpin, .reorder, .moveToStart, .moveToEnd, .moveToGroup, .addToBookList, .moveOut, .setTag, .setSource, .setReadStatus, .renameGroup, .renameTag, .renameSource, .deleteBooks:
+        case .pin, .unpin, .reorder, .moveToStart, .moveToEnd, .moveToGroup, .addToBookList, .moveOut, .setTag, .setSource, .setReadStatus, .exportNote, .exportBook, .renameGroup, .renameTag, .renameSource, .deleteBooks:
             return
         }
         actionNotice = nil
@@ -785,7 +816,7 @@ final class BookshelfBookListViewModel {
                 initialRatingScore: options.initialRatingScore
             )
             actionNotice = nil
-        case .pin, .unpin, .reorder, .moveToStart, .moveToEnd, .moveToGroup, .addToBookList, .moveOut, .renameGroup, .deleteGroup, .renameTag, .deleteTag, .renameSource, .deleteSource, .deleteBooks:
+        case .pin, .unpin, .reorder, .moveToStart, .moveToEnd, .moveToGroup, .addToBookList, .moveOut, .exportNote, .exportBook, .renameGroup, .deleteGroup, .renameTag, .deleteTag, .renameSource, .deleteSource, .deleteBooks:
             return
         }
     }
@@ -857,6 +888,10 @@ final class BookshelfBookListViewModel {
     private func performPlaceholderAction(_ action: BookshelfBookListEditAction) {
         if action == .addToBookList {
             actionNotice = "书单添加将在书单模块开发时开放"
+            return
+        }
+        if action == .exportNote || action == .exportBook {
+            actionNotice = "\(action.title)将在导出模块迁移时开放"
             return
         }
         actionNotice = "\(action.title)需先完成 Android 数据语义核对后再开放"

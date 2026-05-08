@@ -18,6 +18,7 @@ import SwiftUI
 struct BookGridItemView: View {
     let book: BookshelfBookPayload
     var showsNoteCount = true
+    var isPinned = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: Spacing.half) {
@@ -29,31 +30,11 @@ struct BookGridItemView: View {
     // MARK: - Cover
 
     private var coverImage: some View {
-        XMBookCover.responsive(
-            urlString: book.cover,
-            cornerRadius: CornerRadius.inlayHairline,
-            border: .init(color: .surfaceBorderSubtle, width: CardStyle.borderWidth),
-            surfaceStyle: .spine
+        BookshelfGridBookCoverView(
+            book: book,
+            showsNoteCount: showsNoteCount,
+            isPinned: isPinned
         )
-        .overlay(alignment: .topTrailing) {
-            noteBadge
-        }
-    }
-
-    // MARK: - Badge
-
-    @ViewBuilder
-    private var noteBadge: some View {
-        if showsNoteCount, book.noteCount > 0 {
-            Text("\(book.noteCount)")
-                .font(AppTypography.caption2)
-                .fontWeight(.medium)
-                .foregroundStyle(.white)
-                .padding(.horizontal, Spacing.half)
-                .padding(.vertical, Spacing.tiny)
-                .background(Color.brand, in: Capsule())
-                .padding(Spacing.compact)
-        }
     }
 
     // MARK: - Info
@@ -83,7 +64,7 @@ struct BookGridItemView: View {
         cover: "",
         readStatusId: 2,
         noteCount: 5
-    ))
+    ), isPinned: true)
     .frame(width: 110)
     .padding(Spacing.screenEdge)
 }

@@ -1,5 +1,5 @@
 /**
- * [INPUT]: 依赖 BookshelfItem/BookshelfDisplaySetting、BookRoute 与现有 SwiftUI 书架卡片，接收 BookGridView 注入的导航、选择、排序提交和底部栏滚动观察开关
+ * [INPUT]: 依赖 BookshelfItem/BookshelfDisplaySetting、BookRoute 与现有 SwiftUI 书架卡片，接收 BookGridView 注入的导航、选择、排序提交、底部滚动余量和底部栏滚动观察开关
  * [OUTPUT]: 对外提供 BookshelfDefaultCollectionView，使用 UIKit UICollectionView 承接默认书架滚动、整项长按拖拽排序、本地预览顺序与 iOS 26 底部边缘过渡
  * [POS]: Book 模块页面私有集合区组件，被 BookGridView 的默认书架维度消费
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -15,6 +15,7 @@ struct BookshelfDefaultCollectionView: UIViewRepresentable {
     let columnCount: Int
     let showsNoteCount: Bool
     let isEditing: Bool
+    let bottomContentInset: CGFloat
     let selectedIDs: Set<BookshelfItemID>
     let canReorder: Bool
     let isScrollObservationEnabled: Bool
@@ -53,6 +54,7 @@ struct BookshelfDefaultCollectionView: UIViewRepresentable {
             columnCount: max(2, min(columnCount, 4)),
             showsNoteCount: showsNoteCount,
             isEditing: isEditing,
+            bottomContentInset: bottomContentInset,
             selectedIDs: selectedIDs,
             canReorder: canReorder,
             isScrollObservationEnabled: isScrollObservationEnabled,
@@ -77,6 +79,7 @@ private struct BookshelfDefaultCollectionConfiguration {
     let columnCount: Int
     let showsNoteCount: Bool
     let isEditing: Bool
+    let bottomContentInset: CGFloat
     let selectedIDs: Set<BookshelfItemID>
     let canReorder: Bool
     let isScrollObservationEnabled: Bool
@@ -97,6 +100,7 @@ private struct BookshelfDefaultCollectionConfiguration {
         columnCount: 3,
         showsNoteCount: true,
         isEditing: false,
+        bottomContentInset: 0,
         selectedIDs: [],
         canReorder: false,
         isScrollObservationEnabled: false,
@@ -182,12 +186,12 @@ final class BookshelfDefaultCollectionHostView: UIView {
             && configuration.sections.count == 1
         let needsLayoutUpdate = self.configuration.layoutMode != configuration.layoutMode
             || self.configuration.columnCount != configuration.columnCount
-            || self.configuration.isEditing != configuration.isEditing
             || self.configuration.sections.map(\.id) != configuration.sections.map(\.id)
 
         self.configuration = configuration
         sections = configuration.sections
         collectionView.dragInteractionEnabled = configuration.canReorder
+        updateBottomContentInset()
         configureScrollEdgeEffect()
         updateContentScrollObservation()
 
@@ -250,11 +254,10 @@ private extension BookshelfDefaultCollectionHostView {
             switch configuration.layoutMode {
             case .grid:
                 section = Self.makeGridSection(
-                    columnCount: configuration.columnCount,
-                    isEditing: configuration.isEditing
+                    columnCount: configuration.columnCount
                 )
             case .list:
-                section = Self.makeListSection(isEditing: configuration.isEditing)
+                section = Self.makeListSection()
             }
             if configuration.sections.indices.contains(sectionIndex),
                configuration.sections[sectionIndex].title != nil {
@@ -325,11 +328,28 @@ private extension BookshelfDefaultCollectionHostView {
         collectionView.bottomEdgeEffect.style = .automatic
     }
 
+    /// 只增加滚动余量，不改变 collection layout，避免编辑工具栏入场时书籍网格重新排版。
+    func updateBottomContentInset() {
+        let bottomInset = max(0, configuration.bottomContentInset)
+        guard collectionView.contentInset.bottom != bottomInset
+            || collectionView.verticalScrollIndicatorInsets.bottom != bottomInset else {
+            return
+        }
+
+        var contentInset = collectionView.contentInset
+        contentInset.bottom = bottomInset
+
+        var indicatorInsets = collectionView.verticalScrollIndicatorInsets
+        indicatorInsets.bottom = bottomInset
+
+        UIView.performWithoutAnimation {
+            collectionView.contentInset = contentInset
+            collectionView.verticalScrollIndicatorInsets = indicatorInsets
+        }
+    }
+
     /// Grid 模式使用动态列数和估算高度，交由 UIHostingConfiguration 自适应卡片内容。
-    static func makeGridSection(
-        columnCount: Int,
-        isEditing: Bool
-    ) -> NSCollectionLayoutSection {
+    static func makeGridSection(columnCount: Int) -> NSCollectionLayoutSection {
         let clampedColumnCount = max(2, min(columnCount, 4))
         let itemSize = NSCollectionLayoutSize(
             widthDimension: .fractionalWidth(1.0 / CGFloat(clampedColumnCount)),
@@ -360,14 +380,14 @@ private extension BookshelfDefaultCollectionHostView {
         section.contentInsets = NSDirectionalEdgeInsets(
             top: Spacing.base,
             leading: horizontalInset,
-            bottom: isEditing ? 84 : Spacing.base,
+            bottom: Spacing.base,
             trailing: horizontalInset
         )
         return section
     }
 
     /// List 模式使用单列全宽估算高度，保持现有列表行视觉密度。
-    static func makeListSection(isEditing: Bool) -> NSCollectionLayoutSection {
+    static func makeListSection() -> NSCollectionLayoutSection {
         let itemSize = NSCollectionLayoutSize(
             widthDimension: .fractionalWidth(1),
             heightDimension: .estimated(88)
@@ -383,7 +403,7 @@ private extension BookshelfDefaultCollectionHostView {
         section.contentInsets = NSDirectionalEdgeInsets(
             top: Spacing.base,
             leading: Spacing.screenEdge,
-            bottom: isEditing ? 84 : Spacing.base,
+            bottom: Spacing.base,
             trailing: Spacing.screenEdge
         )
         return section
@@ -873,9 +893,16 @@ private struct BookshelfDefaultCollectionCellContent: View {
         case .grid:
             switch item.content {
             case .book(let book):
-                BookGridItemView(book: book, showsNoteCount: showsNoteCount)
+                BookGridItemView(
+                    book: book,
+                    showsNoteCount: showsNoteCount,
+                    isPinned: item.pinned
+                )
             case .group(let group):
-                BookshelfGroupGridItemView(group: group)
+                BookshelfGroupGridItemView(
+                    group: group,
+                    isPinned: item.pinned
+                )
             }
         case .list:
             BookshelfDefaultListRow(
@@ -960,8 +987,8 @@ private struct BookshelfDefaultCollectionSelectionModifier: ViewModifier {
             .overlay {
                 RoundedRectangle(cornerRadius: CornerRadius.blockLarge, style: .continuous)
                     .stroke(
-                        isEditing && isSelected ? Color.brand.opacity(0.72) : Color.clear,
-                        lineWidth: isEditing && isSelected ? 1.5 : 0
+                        isEditing && isSelected ? Color.brand.opacity(0.42) : Color.clear,
+                        lineWidth: isEditing && isSelected ? 1 : 0
                     )
             }
             .contentShape(RoundedRectangle(cornerRadius: CornerRadius.blockLarge, style: .continuous))

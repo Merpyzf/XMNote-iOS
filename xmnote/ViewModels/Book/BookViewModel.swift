@@ -9,7 +9,7 @@ import Foundation
 
 /**
  * [INPUT]: 依赖 BookRepositoryProtocol 提供书架快照数据流和排序置顶写入，依赖 BookshelfSnapshot 进行多维度状态编排
- * [OUTPUT]: 对外提供 BookViewModel，驱动书籍页维度浏览、搜索态、显示设置、默认书架编辑态、排序置顶、批量编辑、删除与 UICollectionView 排序提交
+ * [OUTPUT]: 对外提供 BookViewModel，驱动书籍页维度浏览、搜索态、显示设置、默认书架编辑态、排序置顶、批量编辑、书单、导出入口、删除与 UICollectionView 排序提交
  * [POS]: Book 模块书籍列表状态编排器，被 BookContainerView/BookGridView 消费
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -38,6 +38,8 @@ enum BookshelfPendingAction: Hashable {
     case setTag
     case setSource
     case setReadStatus
+    case exportNote
+    case exportBook
     case more
     case delete
     case reorder
@@ -64,6 +66,10 @@ enum BookshelfPendingAction: Hashable {
             return "来源"
         case .setReadStatus:
             return "状态"
+        case .exportNote:
+            return "导出笔记"
+        case .exportBook:
+            return "导出书籍"
         case .more:
             return "更多"
         case .delete:
@@ -160,6 +166,22 @@ class BookViewModel {
         }
     }
 
+    var selectedBookIDsIncludingGroupBooks: [Int64] {
+        let itemsByID = Dictionary(uniqueKeysWithValues: currentDefaultItems.map { ($0.id, $0) })
+        return selectedIDs.reduce(into: [Int64]()) { result, id in
+            switch id {
+            case .book(let bookID):
+                guard !result.contains(bookID) else { return }
+                result.append(bookID)
+            case .group:
+                guard let item = itemsByID[id], case .group(let payload) = item.content else { return }
+                for book in payload.books where !result.contains(book.id) {
+                    result.append(book.id)
+                }
+            }
+        }
+    }
+
     var selectedGroupCount: Int {
         selectedIDs.reduce(0) { count, id in
             if case .group = id { return count + 1 }
@@ -196,8 +218,16 @@ class BookViewModel {
         isEditing && !selectedIDs.isEmpty && activeWriteAction == nil
     }
 
+    var canShowMoveBoundaryActions: Bool {
+        selectedDimension == .default && displaySetting.sortMode == .custom
+    }
+
     var canMoveSelectedItems: Bool {
-        isEditing && activeWriteAction == nil && !hasSearchKeyword && hasSelectedNormalItem
+        isEditing
+            && activeWriteAction == nil
+            && canShowMoveBoundaryActions
+            && !hasSearchKeyword
+            && hasSelectedNormalItem
     }
 
     var canMoreSelectedItems: Bool {
@@ -208,8 +238,21 @@ class BookViewModel {
         canMoreSelectedItems
     }
 
-    var defaultMoreActions: [BookshelfBookListEditAction] {
-        [.moveToGroup, .addToBookList, .setTag, .setSource, .setReadStatus]
+    var defaultBottomActions: [BookshelfBookListEditAction] {
+        var actions: [BookshelfBookListEditAction] = []
+        if canShowMoveBoundaryActions {
+            actions.append(contentsOf: [.moveToStart, .moveToEnd])
+        }
+        actions.append(contentsOf: [
+            .moveToGroup,
+            .addToBookList,
+            .setTag,
+            .setReadStatus,
+            .setSource,
+            .exportNote,
+            .exportBook
+        ])
+        return actions
     }
 
     var hasSelectedNormalItem: Bool {
@@ -499,25 +542,29 @@ class BookViewModel {
         moveItems(selectedIDs, placement: .end, clearsSelectionOnSuccess: true)
     }
 
-    /// 执行默认书架“更多”菜单动作；混选时仅对 Book 生效，Group 被忽略。
-    func performMoreAction(_ action: BookshelfBookListEditAction) {
+    /// 执行默认书架底部工具栏动作；书单与导出会展开分组内书籍，其他批量编辑仅作用于已选 Book。
+    func performBottomAction(_ action: BookshelfBookListEditAction) {
         guard canMoreSelectedItems else {
             actionNotice = "请先选择书籍或分组"
             return
         }
         switch action {
+        case .moveToStart:
+            moveSelectedItemsToStart()
+        case .moveToEnd:
+            moveSelectedItemsToEnd()
         case .moveToGroup:
             presentMoveGroupSheet()
         case .addToBookList:
-            guard !selectedBookIDs.isEmpty else {
-                actionNotice = "分组暂不支持加入书单，请选择书籍"
-                return
-            }
-            actionNotice = "书单添加将在书单模块开发时开放"
+            presentBookListSheet()
         case .setTag, .setSource, .setReadStatus:
             presentBatchSheet(for: action)
-        case .pin, .unpin, .reorder, .moveToStart, .moveToEnd, .moveOut, .renameGroup, .deleteGroup, .renameTag, .deleteTag, .renameSource, .deleteSource, .deleteBooks:
-            actionNotice = "\(action.title)不适用于默认书架更多菜单"
+        case .exportNote:
+            presentExportSheet(kind: .notes)
+        case .exportBook:
+            presentExportSheet(kind: .books)
+        case .pin, .unpin, .reorder, .moveOut, .renameGroup, .deleteGroup, .renameTag, .deleteTag, .renameSource, .deleteSource, .deleteBooks:
+            actionNotice = "\(action.title)不适用于默认书架底部工具栏"
         }
     }
 
@@ -602,6 +649,21 @@ class BookViewModel {
         }
         runWriteAction(.moveToGroup, successMessage: "已移入分组") {
             try await self.repository.moveBooks(bookIDs, toGroup: groupID)
+        }
+    }
+
+    /// 提交默认书架批量加入书单；Book 与 Group 内书籍按 Android 语义一起加入目标书单。
+    func submitAddToBookList(collectionID: Int64?, newCollectionTitle: String?, bookIDs: [Int64]) {
+        activeBatchSheet = nil
+        let targetBookIDs = bookIDs
+        runWriteAction(.addToBookList, successMessage: "已加入书单") {
+            let targetCollectionID: Int64
+            if let collectionID, collectionID > 0 {
+                targetCollectionID = collectionID
+            } else {
+                targetCollectionID = try await self.repository.createBookshelfCollection(title: newCollectionTitle ?? "")
+            }
+            try await self.repository.addBooksToCollection(bookIDs: targetBookIDs, collectionID: targetCollectionID)
         }
     }
 
@@ -849,6 +911,56 @@ private extension BookViewModel {
         }
     }
 
+    /// 拉取书单候选项并打开加入书单 Sheet；Group 会先展开为组内书籍。
+    /// - Note: 候选项加载任务可取消，Repository 是唯一数据来源；选中集合变化后丢弃旧快照。
+    func presentBookListSheet() {
+        guard activeWriteAction == nil, !isLoadingBatchOptions else { return }
+        let bookIDs = selectedBookIDsIncludingGroupBooks
+        guard !bookIDs.isEmpty else {
+            actionNotice = "请选择包含书籍的条目后加入书单"
+            return
+        }
+        isLoadingBatchOptions = true
+        actionNotice = "正在加载书单..."
+        writeError = nil
+        batchOptionsTask?.cancel()
+        batchOptionsTask = Task {
+            do {
+                let options = try await repository.fetchBookshelfCollectionOptions()
+                guard !Task.isCancelled else { return }
+                await MainActor.run {
+                    guard self.selectedBookIDsIncludingGroupBooks == bookIDs else {
+                        self.isLoadingBatchOptions = false
+                        self.actionNotice = nil
+                        return
+                    }
+                    self.isLoadingBatchOptions = false
+                    self.activeBatchSheet = .bookList(options: options, bookIDs: bookIDs)
+                    self.actionNotice = nil
+                }
+            } catch {
+                guard !Task.isCancelled else { return }
+                await MainActor.run {
+                    self.isLoadingBatchOptions = false
+                    self.writeError = error.localizedDescription
+                    self.actionNotice = error.localizedDescription
+                }
+            }
+        }
+    }
+
+    /// 打开批量导出配置壳层，目标书籍集合按 Android 语义展开 Group。
+    func presentExportSheet(kind: BookshelfBatchExportKind) {
+        let bookIDs = selectedBookIDsIncludingGroupBooks
+        guard !bookIDs.isEmpty else {
+            actionNotice = "请选择包含书籍的条目后\(kind.title)"
+            return
+        }
+        activeBatchSheet = .export(kind: kind, bookIDs: bookIDs)
+        actionNotice = nil
+        writeError = nil
+    }
+
     /// 根据候选项快照打开具体默认书架批量编辑 Sheet。
     func presentBatchSheet(
         _ action: BookshelfBookListEditAction,
@@ -891,7 +1003,7 @@ private extension BookViewModel {
                 initialRatingScore: options.initialRatingScore
             )
             actionNotice = nil
-        case .moveToGroup, .addToBookList, .pin, .unpin, .reorder, .moveToStart, .moveToEnd, .moveOut, .renameGroup, .deleteGroup, .renameTag, .deleteTag, .renameSource, .deleteSource, .deleteBooks:
+        case .moveToGroup, .addToBookList, .pin, .unpin, .reorder, .moveToStart, .moveToEnd, .moveOut, .exportNote, .exportBook, .renameGroup, .deleteGroup, .renameTag, .deleteTag, .renameSource, .deleteSource, .deleteBooks:
             return
         }
     }

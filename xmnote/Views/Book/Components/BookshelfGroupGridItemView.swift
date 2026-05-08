@@ -10,11 +10,7 @@ import SwiftUI
 /// 默认书架中的分组聚合卡，以轻量封面拼贴表达组内内容。
 struct BookshelfGroupGridItemView: View {
     let group: BookshelfGroupPayload
-
-    private let coverGridColumns = Array(
-        repeating: GridItem(.flexible(), spacing: Spacing.compact),
-        count: 2
-    )
+    var isPinned = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: Spacing.half) {
@@ -26,41 +22,11 @@ struct BookshelfGroupGridItemView: View {
     }
 
     private var coverMosaic: some View {
-        ZStack(alignment: .bottomTrailing) {
-            RoundedRectangle(cornerRadius: CornerRadius.blockLarge, style: .continuous)
-                .fill(Color.surfaceCard)
-                .overlay {
-                    RoundedRectangle(cornerRadius: CornerRadius.blockLarge, style: .continuous)
-                        .stroke(Color.surfaceBorderSubtle, lineWidth: CardStyle.borderWidth)
-                }
-
-            LazyVGrid(columns: coverGridColumns, spacing: Spacing.compact) {
-                ForEach(coverSlots) { slot in
-                    XMBookCover.responsive(
-                        urlString: slot.cover,
-                        cornerRadius: CornerRadius.inlaySmall,
-                        border: .init(color: .surfaceBorderSubtle, width: CardStyle.borderWidth),
-                        placeholderIconSize: .small,
-                        surfaceStyle: .spine
-                    )
-                }
-            }
-            .padding(Spacing.half)
-
-            countBadge
-        }
-        .aspectRatio(XMBookCover.aspectRatio, contentMode: .fit)
-    }
-
-    private var countBadge: some View {
-        Text("\(group.bookCount)本")
-            .font(AppTypography.caption2)
-            .fontWeight(.medium)
-            .foregroundStyle(.white)
-            .padding(.horizontal, Spacing.half)
-            .padding(.vertical, Spacing.tiny)
-            .background(Color.black.opacity(0.36), in: Capsule())
-            .padding(Spacing.compact)
+        BookshelfGridGroupCoverView(
+            covers: group.representativeCovers,
+            count: group.bookCount,
+            isPinned: isPinned
+        )
     }
 
     private var groupInfo: some View {
@@ -79,17 +45,6 @@ struct BookshelfGroupGridItemView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    private var coverSlots: [BookshelfGroupCoverSlot] {
-        let covers = Array(group.representativeCovers.prefix(4))
-        return (0..<4).map { index in
-            BookshelfGroupCoverSlot(id: index, cover: index < covers.count ? covers[index] : "")
-        }
-    }
-}
-
-private struct BookshelfGroupCoverSlot: Identifiable {
-    let id: Int
-    let cover: String
 }
 
 #Preview {
@@ -99,7 +54,7 @@ private struct BookshelfGroupCoverSlot: Identifiable {
         bookCount: 25,
         representativeCovers: ["", "", "", ""],
         books: []
-    ))
+    ), isPinned: true)
     .frame(width: 110)
     .padding(Spacing.screenEdge)
 }
