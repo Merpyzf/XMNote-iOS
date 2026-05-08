@@ -43,12 +43,6 @@ protocol BookRepositoryProtocol {
     func batchSetBookReadStatus(bookIDs: [Int64], input: BookshelfBatchReadStatusInput) async throws
     /// 读取可作为移入目标的有效分组，排除当前分组后供二级列表批量移组 Sheet 展示。
     func fetchBookshelfMoveTargetGroups(excludingGroupID: Int64?) async throws -> [BookEditorNamedOption]
-    /// 读取可作为批量加入目标的手动书单，排除年度书单。
-    func fetchBookshelfCollectionOptions() async throws -> [BookEditorNamedOption]
-    /// 创建手动书单，并返回新书单 ID。
-    func createBookshelfCollection(title: String) async throws -> Int64
-    /// 批量把书籍加入指定书单，已存在的有效关系保持不变。
-    func addBooksToCollection(bookIDs: [Int64], collectionID: Int64) async throws
     /// 将指定书籍从当前分组移出到默认书架，并按位置语义写入默认书架排序值。
     func moveBooksOutOfGroup(bookIDs: [Int64], placement: GroupBooksPlacement) async throws
     /// 批量置顶默认书架顶层 Book/Group，按传入选择顺序追加 pin_order。

@@ -127,29 +127,12 @@ enum BookshelfBookListEditAction: String, CaseIterable, Identifiable, Hashable, 
     }
 }
 
-/// 默认书架批量导出入口类型，区分导出书摘与导出书籍配置壳层。
-enum BookshelfBatchExportKind: String, Hashable, Sendable {
-    case notes
-    case books
-
-    var title: String {
-        switch self {
-        case .notes:
-            return "导出笔记"
-        case .books:
-            return "导出书籍"
-        }
-    }
-}
-
 /// 二级书籍列表批量编辑 Sheet 类型，承载打开 Sheet 时刻的可选项快照。
 enum BookshelfBatchEditSheet: Identifiable, Hashable, Sendable {
     case tags(options: [BookEditorNamedOption], initialSelectedIDs: [Int64], allowsEmptySelection: Bool)
     case source(options: [BookEditorNamedOption], initialSelectedID: Int64?)
     case readStatus(options: [BookEditorNamedOption], initialStatusID: Int64?, initialChangedAt: Date?, initialRatingScore: Int64?)
     case moveGroup(options: [BookEditorNamedOption])
-    case bookList(options: [BookEditorNamedOption], bookIDs: [Int64])
-    case export(kind: BookshelfBatchExportKind, bookIDs: [Int64])
 
     var id: String {
         switch self {
@@ -161,10 +144,6 @@ enum BookshelfBatchEditSheet: Identifiable, Hashable, Sendable {
             return "readStatus"
         case .moveGroup:
             return "moveGroup"
-        case .bookList:
-            return "bookList"
-        case .export(let kind, _):
-            return "export-\(kind.rawValue)"
         }
     }
 }

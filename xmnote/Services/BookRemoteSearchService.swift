@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 Foundation URLSession 执行 JSON 请求，依赖 BookSearchWebScenarioService、FanqieDOMSearchService 与 WebHTMLFetchService 处理网页抓取，依赖 SwiftSoup 解析站点 HTML
- * [OUTPUT]: 对外提供 BookRemoteSearchService，统一封装六书源搜索、番茄 DOM 抓取与豆瓣详情补抓
+ * [OUTPUT]: 对外提供 BookRemoteSearchService，统一封装远端书源搜索、番茄 DOM 抓取与豆瓣详情补抓
  * [POS]: Services 模块的书籍远端搜索业务层，负责把各站点协议差异翻译为统一搜索结果与录入预填种子
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */

@@ -186,8 +186,6 @@ private struct BookshelfBookListContentView: View {
                     selectedCount: viewModel.selectedCount,
                     onConfirm: viewModel.submitMoveToGroup
                 )
-            case .bookList, .export:
-                EmptyView()
             }
         }
         .xmSystemAlert(item: $viewModel.activeMoveOutConfirmation) { confirmation in

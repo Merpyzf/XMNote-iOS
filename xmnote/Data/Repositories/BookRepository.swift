@@ -186,27 +186,6 @@ struct BookRepository: BookRepositoryProtocol {
         }
     }
 
-    /// 读取可加入的手动书单候选项。
-    func fetchBookshelfCollectionOptions() async throws -> [BookEditorNamedOption] {
-        try await databaseManager.database.dbPool.read { db in
-            try fetchCollectionOptions(db)
-        }
-    }
-
-    /// 创建手动书单并返回新记录 ID。
-    func createBookshelfCollection(title: String) async throws -> Int64 {
-        try await databaseManager.database.dbPool.write { db in
-            try createCollection(db, title: title)
-        }
-    }
-
-    /// 批量加入书单，跳过已存在的有效关系。
-    func addBooksToCollection(bookIDs: [Int64], collectionID: Int64) async throws {
-        try await databaseManager.database.dbPool.write { db in
-            try addBooksToCollection(db, bookIDs: bookIDs, collectionID: collectionID)
-        }
-    }
-
     /// 将书籍从分组移回默认书架，按 Android placement 语义写入默认排序值。
     func moveBooksOutOfGroup(bookIDs: [Int64], placement: GroupBooksPlacement) async throws {
         try await databaseManager.database.dbPool.write { db in
@@ -552,7 +531,6 @@ private extension String {
 private enum BookshelfBatchWriteError: LocalizedError {
     case emptySelection
     case invalidGroup
-    case invalidCollection
     case invalidTag
     case invalidSource
     case invalidReadStatus
@@ -567,8 +545,6 @@ private enum BookshelfBatchWriteError: LocalizedError {
             return "请先选择书籍"
         case .invalidGroup:
             return "分组已不存在，请刷新后重试"
-        case .invalidCollection:
-            return "书单已不存在，请刷新后重试"
         case .invalidTag:
             return "标签已不存在，请刷新后重试"
         case .invalidSource:
@@ -882,91 +858,6 @@ private extension BookRepository {
                 id: row["id"],
                 title: name.isEmpty ? "未命名分组" : name
             )
-        }
-    }
-
-    /// 读取手动创建的有效书单候选项，排除年度书单。
-    /// - Throws: SQL 读取失败时抛出错误。
-    nonisolated func fetchCollectionOptions(_ db: Database) throws -> [BookEditorNamedOption] {
-        // SQL 目的：读取批量加入书单 Sheet 可选的手动书单。
-        // 涉及表：collection。
-        // 关键过滤：is_deleted = 0 且 is_annual = 0，保持 Android queryMineCollectionList 语义。
-        // 返回字段用途：id/title 构造目标书单选项；时间字段不参与本查询。
-        let sql = """
-            SELECT id, COALESCE(title, '') AS title
-            FROM collection
-            WHERE is_deleted = 0
-              AND is_annual = 0
-            ORDER BY `order` ASC, id ASC
-            """
-        let rows = try Row.fetchAll(db, sql: sql)
-        return rows.map { row in
-            let title: String = row["title"] ?? ""
-            return BookEditorNamedOption(
-                id: row["id"],
-                title: title.isEmpty ? "未命名书单" : title
-            )
-        }
-    }
-
-    /// 创建一个手动书单并返回新 ID。
-    /// - Throws: 名称为空或 SQL 写入失败时抛出错误。
-    nonisolated func createCollection(_ db: Database, title: String) throws -> Int64 {
-        let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmedTitle.isEmpty else { throw BookshelfBatchWriteError.invalidName("书单") }
-        guard try !isDuplicateCollection(db, title: trimmedTitle, desc: "") else {
-            throw BookshelfBatchWriteError.duplicateName("此书单名称已存在，请使用不同的名称")
-        }
-        let now = timestampMillis()
-        let nextOrder = try minCollectionOrder(db) - 1
-
-        // SQL 目的：创建新的手动书单。
-        // 涉及表：collection。
-        // 关键写入：is_annual = 0、is_deleted = 0、order 写入当前有效书单最小值 - 1，对齐 Android 新建书单置于最前。
-        // 时间字段：created_date/updated_date 写入当前毫秒时间戳；last_sync_date 保持 0 等待同步。
-        // 返回字段用途：插入完成后通过 lastInsertedRowID 返回新书单 ID，供批量加入关系继续使用。
-        let sql = """
-            INSERT INTO collection (
-                title, `desc`, `order`, is_annual, year,
-                created_date, updated_date, last_sync_date, is_deleted
-            ) VALUES (?, '', ?, 0, 0, ?, ?, 0, 0)
-            """
-        try db.execute(sql: sql, arguments: [trimmedTitle, nextOrder, now, now])
-        return db.lastInsertedRowID
-    }
-
-    /// 按 Android addBooksToCollectionList 语义批量加入书单，已存在有效关系时跳过。
-    /// - Throws: 选择为空、目标书单无效或 SQL 写入失败时抛出错误。
-    nonisolated func addBooksToCollection(
-        _ db: Database,
-        bookIDs: [Int64],
-        collectionID: Int64
-    ) throws {
-        let uniqueBookIDs = normalizedPositiveIDs(bookIDs)
-        guard !uniqueBookIDs.isEmpty else { throw BookshelfBatchWriteError.emptySelection }
-        guard try isActiveCollection(db, collectionID: collectionID) else {
-            throw BookshelfBatchWriteError.invalidCollection
-        }
-
-        let now = timestampMillis()
-        for bookID in uniqueBookIDs {
-            guard try isActiveBook(db, bookID: bookID),
-                  try !hasActiveCollectionBook(db, bookID: bookID, collectionID: collectionID) else {
-                continue
-            }
-
-            // SQL 目的：插入书单与书籍的有效关联。
-            // 涉及表：collection_book。
-            // 关键写入：collection_id/book_id 指向目标关系，recommend 为空，order 使用 Int32.max 对齐 Android Int.MAX_VALUE 追加语义。
-            // 时间字段：created_date 写入当前毫秒时间戳；updated_date/last_sync_date 保持 0。
-            // 副作用用途：批量把选中 Book 与已选 Group 内书籍加入目标书单。
-            let sql = """
-                INSERT INTO collection_book (
-                    collection_id, book_id, recommend, `order`,
-                    created_date, updated_date, last_sync_date, is_deleted
-                ) VALUES (?, ?, '', ?, ?, 0, 0, 0)
-                """
-            try db.execute(sql: sql, arguments: [collectionID, bookID, Int64(Int32.max), now])
         }
     }
 
@@ -1365,72 +1256,6 @@ private extension BookRepository {
               AND is_deleted = 0
             """
         return (try Int.fetchOne(db, sql: sql, arguments: [groupID]) ?? 0) > 0
-    }
-
-    /// 校验书单是否仍是可加入的有效手动书单。
-    nonisolated func isActiveCollection(_ db: Database, collectionID: Int64) throws -> Bool {
-        // SQL 目的：校验批量加入目标书单是否仍有效。
-        // 涉及表：collection。
-        // 关键过滤：id = ?、is_deleted = 0 且 is_annual = 0，避免加入年度书单。
-        // 返回字段用途：返回计数是否大于 0；时间字段不参与本查询。
-        let sql = """
-            SELECT COUNT(*)
-            FROM collection
-            WHERE id = ?
-              AND is_deleted = 0
-              AND is_annual = 0
-            """
-        return (try Int.fetchOne(db, sql: sql, arguments: [collectionID]) ?? 0) > 0
-    }
-
-    /// 判断书籍与书单是否已有有效关系，避免重复插入。
-    nonisolated func hasActiveCollectionBook(
-        _ db: Database,
-        bookID: Int64,
-        collectionID: Int64
-    ) throws -> Bool {
-        // SQL 目的：查询指定书籍与书单是否已有有效关联。
-        // 涉及表：collection_book。
-        // 关键过滤：book_id、collection_id 精确匹配且 is_deleted = 0。
-        // 返回字段用途：返回计数是否大于 0；时间字段不参与本查询。
-        let sql = """
-            SELECT COUNT(*)
-            FROM collection_book
-            WHERE book_id = ?
-              AND collection_id = ?
-              AND is_deleted = 0
-            """
-        return (try Int.fetchOne(db, sql: sql, arguments: [bookID, collectionID]) ?? 0) > 0
-    }
-
-    /// 判断有效书单中是否已有相同标题与描述的记录。
-    nonisolated func isDuplicateCollection(_ db: Database, title: String, desc: String) throws -> Bool {
-        // SQL 目的：按 Android CollectionDao.query(title, desc) 语义检查书单重名。
-        // 涉及表：collection。
-        // 关键过滤：title、desc 精确匹配且 is_deleted = 0；年度书单不额外排除，保持 Android 冲突范围。
-        // 返回字段用途：返回计数是否大于 0；时间字段不参与本查询。
-        let sql = """
-            SELECT COUNT(*)
-            FROM collection
-            WHERE title = ?
-              AND `desc` = ?
-              AND is_deleted = 0
-            """
-        return (try Int.fetchOne(db, sql: sql, arguments: [title, desc]) ?? 0) > 0
-    }
-
-    /// 读取有效书单最小排序值，新建书单会放到最前。
-    nonisolated func minCollectionOrder(_ db: Database) throws -> Int64 {
-        // SQL 目的：读取有效书单当前最小 order。
-        // 涉及表：collection。
-        // 关键过滤：is_deleted = 0，对齐 Android queryMinCollectionOrder。
-        // 返回字段用途：新建书单 order = min - 1；时间字段不参与本查询。
-        let sql = """
-            SELECT MIN(`order`)
-            FROM collection
-            WHERE is_deleted = 0
-            """
-        return try Int64.fetchOne(db, sql: sql) ?? 0
     }
 
     /// 校验书籍是否仍可被书架管理写入处理。

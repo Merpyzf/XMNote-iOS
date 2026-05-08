@@ -8,7 +8,7 @@
 /**
  * [INPUT]: 依赖 RepositoryContainer 注入仓储，依赖 BookViewModel 驱动书架浏览、编辑态选择与批量操作，依赖本地 chrome 阶段、固定顶部 chrome 高度与底部面板高度稳定内容布局
  * [OUTPUT]: 对外提供 BookContainerView 与 BookSubTab 枚举，承载书架顶部 chrome、TabBar 协调、编辑工具栏、批量 Sheet 与删除确认
- * [POS]: Book 模块容器壳层，承载书籍/书单二级切换与书架管理模式编排
+ * [POS]: Book 模块容器壳层，承载书籍页与书架管理模式编排
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
@@ -16,14 +16,23 @@ import SwiftUI
 
 // MARK: - Sub Tab
 
-/// 书籍页二级分栏：书籍列表与书单列表。
+/// 书籍页二级分栏；保留 collections 的 Codable 兼容，但生产入口只开放书籍列表。
 enum BookSubTab: String, CaseIterable, Hashable, Codable {
     case books, collections
+
+    static var allCases: [BookSubTab] { [.books] }
 
     var title: String {
         switch self {
         case .books: "书籍"
         case .collections: "书单"
+        }
+    }
+
+    var productionValue: BookSubTab {
+        switch self {
+        case .books, .collections:
+            return .books
         }
     }
 }
@@ -61,7 +70,7 @@ private struct BookshelfEditBottomBarHeightPreferenceKey: PreferenceKey {
 
 // MARK: - Container
 
-/// 书籍模块入口容器，负责书籍/书单二级切换、顶部工具入口与外层路由转发。
+/// 书籍模块入口容器，负责书籍页顶部工具入口与外层路由转发。
 struct BookContainerView: View {
     @Environment(RepositoryContainer.self) private var repositories
     @Environment(SceneStateStore.self) private var sceneStateStore
@@ -129,14 +138,20 @@ struct BookContainerView: View {
             guard sceneStateStore.isRestored else { return }
             guard !didBootstrapFromScene else { return }
             didBootstrapFromScene = true
-            selectedSubTab = sceneStateStore.snapshot.books.selectedSubTab
+            selectedSubTab = sceneStateStore.snapshot.books.selectedSubTab.productionValue
+            sceneStateStore.updateBookSelectedSubTab(selectedSubTab)
         }
         .task {
             guard viewModel == nil else { return }
             viewModel = BookViewModel(repository: repositories.bookRepository)
         }
         .onChange(of: selectedSubTab) { _, newValue in
-            sceneStateStore.updateBookSelectedSubTab(newValue)
+            let normalizedValue = newValue.productionValue
+            guard normalizedValue == newValue else {
+                selectedSubTab = normalizedValue
+                return
+            }
+            sceneStateStore.updateBookSelectedSubTab(normalizedValue)
         }
     }
 }
@@ -232,23 +247,6 @@ private struct BookContentView: View {
                     options: options,
                     selectedCount: viewModel.selectedBookIDs.count,
                     onConfirm: viewModel.submitMoveToGroup
-                )
-            case .bookList(options: let options, bookIDs: let bookIDs):
-                BookshelfAddToBookListSheet(
-                    options: options,
-                    selectedCount: bookIDs.count,
-                    onConfirm: { collectionID, title in
-                        viewModel.submitAddToBookList(
-                            collectionID: collectionID,
-                            newCollectionTitle: title,
-                            bookIDs: bookIDs
-                        )
-                    }
-                )
-            case .export(kind: let kind, bookIDs: let bookIDs):
-                BookshelfBatchExportSheet(
-                    kind: kind,
-                    bookIDs: bookIDs
                 )
             }
         }
@@ -554,20 +552,23 @@ private struct BookContentView: View {
     private func segmentedPage(for tab: BookSubTab) -> some View {
         switch tab {
         case .books:
-            BookGridView(
-                viewModel: viewModel,
-                isPageActive: selectedSubTab == .books,
-                bottomContentInset: editBottomBarHeight,
-                onOpenRoute: onOpenBookRoute,
-                onOpenNoteRoute: onOpenNoteRoute,
-                onEnterEditing: { initialSelection in
-                    enterEditingWithChoreography(initialSelection: initialSelection)
-                }
-            )
+            bookGridPage
         case .collections:
-            CollectionListPlaceholderView()
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            bookGridPage
         }
+    }
+
+    private var bookGridPage: some View {
+        BookGridView(
+            viewModel: viewModel,
+            isPageActive: selectedSubTab.productionValue == .books,
+            bottomContentInset: editBottomBarHeight,
+            onOpenRoute: onOpenBookRoute,
+            onOpenNoteRoute: onOpenNoteRoute,
+            onEnterEditing: { initialSelection in
+                enterEditingWithChoreography(initialSelection: initialSelection)
+            }
+        )
     }
 
 }

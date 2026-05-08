@@ -777,21 +777,6 @@ class BookViewModel {
         }
     }
 
-    /// 提交默认书架批量加入书单；Book 与 Group 内书籍按 Android 语义一起加入目标书单。
-    func submitAddToBookList(collectionID: Int64?, newCollectionTitle: String?, bookIDs: [Int64]) {
-        activeBatchSheet = nil
-        let targetBookIDs = bookIDs
-        runWriteAction(.addToBookList, successMessage: "已加入书单") {
-            let targetCollectionID: Int64
-            if let collectionID, collectionID > 0 {
-                targetCollectionID = collectionID
-            } else {
-                targetCollectionID = try await self.repository.createBookshelfCollection(title: newCollectionTitle ?? "")
-            }
-            try await self.repository.addBooksToCollection(bookIDs: targetBookIDs, collectionID: targetCollectionID)
-        }
-    }
-
     /// 将单项移动到普通区最前。
     func moveItemToStart(_ id: BookshelfItemID) {
         guard canMoveItem(id) else { return }
@@ -1045,56 +1030,6 @@ private extension BookViewModel {
                 }
             }
         }
-    }
-
-    /// 拉取书单候选项并打开加入书单 Sheet；Group 会先展开为组内书籍。
-    /// - Note: 候选项加载任务可取消，Repository 是唯一数据来源；选中集合变化后丢弃旧快照。
-    func presentBookListSheet() {
-        guard activeWriteAction == nil, !isLoadingBatchOptions else { return }
-        let bookIDs = selectedBookIDsIncludingGroupBooks
-        guard !bookIDs.isEmpty else {
-            actionNotice = "请选择包含书籍的条目后加入书单"
-            return
-        }
-        isLoadingBatchOptions = true
-        actionNotice = "正在加载书单..."
-        writeError = nil
-        batchOptionsTask?.cancel()
-        batchOptionsTask = Task {
-            do {
-                let options = try await repository.fetchBookshelfCollectionOptions()
-                guard !Task.isCancelled else { return }
-                await MainActor.run {
-                    guard self.selectedBookIDsIncludingGroupBooks == bookIDs else {
-                        self.isLoadingBatchOptions = false
-                        self.actionNotice = nil
-                        return
-                    }
-                    self.isLoadingBatchOptions = false
-                    self.activeBatchSheet = .bookList(options: options, bookIDs: bookIDs)
-                    self.actionNotice = nil
-                }
-            } catch {
-                guard !Task.isCancelled else { return }
-                await MainActor.run {
-                    self.isLoadingBatchOptions = false
-                    self.writeError = error.localizedDescription
-                    self.actionNotice = error.localizedDescription
-                }
-            }
-        }
-    }
-
-    /// 打开批量导出配置壳层，目标书籍集合按 Android 语义展开 Group。
-    func presentExportSheet(kind: BookshelfBatchExportKind) {
-        let bookIDs = selectedBookIDsIncludingGroupBooks
-        guard !bookIDs.isEmpty else {
-            actionNotice = "请选择包含书籍的条目后\(kind.title)"
-            return
-        }
-        activeBatchSheet = .export(kind: kind, bookIDs: bookIDs)
-        actionNotice = nil
-        writeError = nil
     }
 
     /// 根据候选项快照打开具体默认书架批量编辑 Sheet。
