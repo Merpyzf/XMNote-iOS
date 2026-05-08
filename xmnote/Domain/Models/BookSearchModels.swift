@@ -1,13 +1,13 @@
 /**
  * [INPUT]: 依赖 Foundation 的 Hashable/URL 语义，承接在线搜索与录入页预填所需的跨层数据
- * [OUTPUT]: 对外提供 BookSearchSource、BookSearchResult、BookSearchError、BookEditorSeed 等搜索域模型
+ * [OUTPUT]: 对外提供 BookSearchSource、BookSearchSettings、BookSearchResult、BookSearchError、BookEditorSeed 等搜索域模型
  * [POS]: Domain/Models 的书籍搜索与录入预填模型定义，被搜索仓储、ViewModel 与书籍搜索页共同消费
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
 import Foundation
 
-/// 在线书籍搜索源，业务能力与 Android 端 6 个在线搜索平台保持一致。
+/// 在线书籍搜索源，保留 Android 端来源顺序，并兼容 iOS 已接入的豆瓣来源。
 enum BookSearchSource: Int, CaseIterable, Identifiable, Hashable, Sendable, Codable {
     case wenqu = 0
     case qidian = 1
@@ -60,6 +60,19 @@ enum BookSearchSource: Int, CaseIterable, Identifiable, Hashable, Sendable, Coda
             return nil
         }
     }
+}
+
+/// 添加书籍搜索设置，对齐 Android 快速切换来源、当前来源与创建后返回首页偏好。
+struct BookSearchSettings: Hashable, Sendable, Codable {
+    var defaultSource: BookSearchSource
+    var isQuickSourceSwitchEnabled: Bool
+    var shouldReturnToBookshelfAfterSave: Bool
+
+    static let `default` = BookSearchSettings(
+        defaultSource: .wenqu,
+        isQuickSourceSwitchEnabled: false,
+        shouldReturnToBookshelfAfterSave: false
+    )
 }
 
 /// 搜索结果条目，承接列表页渲染与进入录入页前的预填数据。

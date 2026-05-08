@@ -77,6 +77,14 @@ protocol BookRepositoryProtocol {
     func renameSource(sourceID: Int64, newName: String) async throws
     /// 删除书籍来源，并将存量书籍迁移到未知来源。
     func deleteSource(sourceID: Int64) async throws
+    /// 重命名作者，并同步更新使用旧作者名的书籍。
+    func renameAuthor(oldName: String, newName: String) async throws
+    /// 删除作者维度下的书籍，并按 Android 作者管理语义移除作者记录。
+    func deleteAuthor(name: String) async throws
+    /// 重命名出版社，并同步更新使用旧出版社名的书籍。
+    func renamePress(oldName: String, newName: String) async throws
+    /// 删除出版社维度下的书籍，并按 Android 出版社管理语义移除出版社记录。
+    func deletePress(name: String) async throws
     /// 读取按维度和作用域持久化的书架显示设置。
     func fetchBookshelfDisplaySettings(scope: BookshelfDisplaySettingScope) -> [BookshelfDimension: BookshelfDisplaySetting]
     /// 保存单个维度在指定作用域下的书架显示设置。
@@ -91,7 +99,7 @@ protocol BookRepositoryProtocol {
     func fetchPickerBook(bookId: Int64) async throws -> BookPickerBook?
 }
 
-/// 书籍搜索仓储契约，统一封装六书源搜索、豆瓣详情补抓与最近搜索持久化。
+/// 书籍搜索仓储契约，统一封装在线来源搜索、豆瓣详情补抓与最近搜索持久化。
 protocol BookSearchRepositoryProtocol {
     /// 按来源搜索远端书籍列表；空关键字视为业务错误。
     func search(keyword: String, source: BookSearchSource) async throws -> [BookSearchResult]
@@ -103,6 +111,10 @@ protocol BookSearchRepositoryProtocol {
     func saveRecentQuery(_ query: String)
     /// 删除单条最近搜索词。
     func removeRecentQuery(_ query: String)
+    /// 读取添加书籍搜索设置。
+    func fetchSearchSettings() -> BookSearchSettings
+    /// 保存添加书籍搜索设置。
+    func saveSearchSettings(_ settings: BookSearchSettings)
 }
 
 /// 书籍录入仓储契约，统一封装录入选项、偏好读取与新增保存事务。
@@ -115,6 +127,10 @@ protocol BookEditorRepositoryProtocol {
     func savePreference(_ preference: BookEntryPreference)
     /// 按 Android 判重与事务规则保存新书。
     func saveBook(_ draft: BookEditorDraft) async throws -> Int64
+    /// 读取既有书籍并转换为录入页可编辑草稿。
+    func fetchEditableBook(bookId: Int64) async throws -> BookEditorDraft
+    /// 按当前模式保存书籍草稿。
+    func saveBookDraft(_ draft: BookEditorDraft, mode: BookEditorMode) async throws -> Int64
 }
 
 /// OCR 调试仓储契约，统一封装百度 OCR 偏好持久化、鉴权缓存与识别请求。

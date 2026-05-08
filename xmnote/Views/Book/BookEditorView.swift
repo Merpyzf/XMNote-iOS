@@ -1,15 +1,15 @@
 /**
- * [INPUT]: 依赖 RepositoryContainer 注入录入仓储，依赖 BookEditorViewModel 驱动完整录入页状态
- * [OUTPUT]: 对外提供 BookEditorView，承载搜索结果确认与手动创建的完整录入页
+ * [INPUT]: 依赖 RepositoryContainer 注入录入仓储，依赖 BookEditorViewModel 驱动完整录入页状态，依赖 BookEditorMode 区分新增与编辑入口
+ * [OUTPUT]: 对外提供 BookEditorView，承载搜索结果确认、手动创建与既有书籍编辑的完整录入页
  * [POS]: Book 模块录入页壳层，负责完整字段编辑、未保存拦截与保存动作
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
 import SwiftUI
 
-/// 书籍完整录入页入口，支持搜索结果预填与手动创建。
+/// 书籍完整录入页入口，支持搜索结果预填、手动创建与既有书籍编辑。
 struct BookEditorView: View {
-    let seed: BookEditorSeed?
+    let mode: BookEditorMode
     let onSavedBookID: ((Int64) -> Void)?
 
     @Environment(RepositoryContainer.self) private var repositories
@@ -22,7 +22,15 @@ struct BookEditorView: View {
         seed: BookEditorSeed?,
         onSavedBookID: ((Int64) -> Void)? = nil
     ) {
-        self.seed = seed
+        self.mode = .create(seed: seed)
+        self.onSavedBookID = onSavedBookID
+    }
+
+    init(
+        mode: BookEditorMode,
+        onSavedBookID: ((Int64) -> Void)? = nil
+    ) {
+        self.mode = mode
         self.onSavedBookID = onSavedBookID
     }
 
@@ -40,7 +48,7 @@ struct BookEditorView: View {
         .task {
             guard viewModel == nil else { return }
             bootstrapLoadingGate.update(intent: .read)
-            let newViewModel = BookEditorViewModel(seed: seed, repository: repositories.bookEditorRepository)
+            let newViewModel = BookEditorViewModel(mode: mode, repository: repositories.bookEditorRepository)
             viewModel = newViewModel
             bootstrapLoadingGate.update(intent: .none)
             await newViewModel.loadIfNeeded()
@@ -170,10 +178,14 @@ struct BookEditorView: View {
     }
 
     private var navigationTitle: String {
-        if seed?.searchSource == nil {
+        switch mode {
+        case .edit:
+            return "编辑书籍"
+        case .create(let seed) where seed?.searchSource == nil:
             return "手动创建"
+        case .create:
+            return "确认书籍信息"
         }
-        return "确认书籍信息"
     }
 
     private func handleDismissAttempt(using viewModel: BookEditorViewModel) {
@@ -355,7 +367,7 @@ struct BookEditorView: View {
             } label: {
                 HStack {
                     Spacer()
-                    Text(viewModel.isSaving ? "正在保存…" : "保存入库")
+                    Text(viewModel.isSaving ? "正在保存…" : saveButtonTitle)
                         .font(AppTypography.headlineSemibold)
                         .foregroundStyle(.white)
                     Spacer()
@@ -370,6 +382,15 @@ struct BookEditorView: View {
         .padding(.top, Spacing.cozy)
         .padding(.bottom, Spacing.cozy)
         .background(.ultraThinMaterial)
+    }
+
+    private var saveButtonTitle: String {
+        switch mode {
+        case .create:
+            return "保存入库"
+        case .edit:
+            return "保存修改"
+        }
     }
 
     private func editorSection<Content: View>(title: String, @ViewBuilder content: () -> Content) -> some View {
@@ -486,7 +507,7 @@ struct BookEditorView: View {
             Text(title)
             Button(action: action) {
                 Image(systemName: "xmark")
-                    .font(.system(size: 10, weight: .bold))
+                    .font(AppTypography.caption2Semibold)
             }
         }
         .font(

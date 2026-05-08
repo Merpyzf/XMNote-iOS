@@ -312,6 +312,34 @@ struct BookRepository: BookRepositoryProtocol {
         }
     }
 
+    /// 重命名作者资料并同步更新书籍 author 字段。
+    func renameAuthor(oldName: String, newName: String) async throws {
+        try await databaseManager.database.dbPool.write { db in
+            try renameAuthor(db, oldName: oldName, newName: newName)
+        }
+    }
+
+    /// 删除作者维度下的所有有效书籍，并按 Android 语义硬删除作者资料行。
+    func deleteAuthor(name: String) async throws {
+        try await databaseManager.database.dbPool.write { db in
+            try deleteAuthor(db, name: name)
+        }
+    }
+
+    /// 重命名出版社资料并同步更新书籍 press 字段。
+    func renamePress(oldName: String, newName: String) async throws {
+        try await databaseManager.database.dbPool.write { db in
+            try renamePress(db, oldName: oldName, newName: newName)
+        }
+    }
+
+    /// 删除出版社维度下的所有有效书籍，并按 Android 语义硬删除出版社资料行。
+    func deletePress(name: String) async throws {
+        try await databaseManager.database.dbPool.write { db in
+            try deletePress(db, name: name)
+        }
+    }
+
     /// 从本地轻量设置读取各书架维度显示配置。
     func fetchBookshelfDisplaySettings(scope: BookshelfDisplaySettingScope) -> [BookshelfDimension: BookshelfDisplaySetting] {
         displaySettingStore.fetchSettings(scope: scope)
@@ -1177,6 +1205,78 @@ private extension BookRepository {
         let fallbackSourceID = try unknownSourceID(db, deletingSourceID: sourceID)
         try migrateBooks(fromSourceID: sourceID, toSourceID: fallbackSourceID, db: db)
         try softDeleteSource(db, sourceID: sourceID)
+    }
+
+    /// 重命名作者资料，并按 Android `updateBooksAuthor` 同步所有同名书籍。
+    /// - Throws: 名称为空或 SQL 写入失败时抛出错误。
+    nonisolated func renameAuthor(
+        _ db: Database,
+        oldName: String,
+        newName: String
+    ) throws {
+        let currentName = try validatedManagementName(oldName, target: "作者")
+        let targetName = try validatedManagementName(newName, target: "作者")
+        guard currentName != targetName else { return }
+        let now = timestampMillis()
+
+        if let authorID = try fetchAuthorID(db, name: currentName) {
+            try updateAuthorName(db, authorID: authorID, name: targetName, updatedAt: now)
+        } else {
+            try insertAuthorName(db, name: targetName, now: now)
+        }
+        try updateBooksAuthor(db, oldName: currentName, newName: targetName)
+    }
+
+    /// 删除作者维度下的有效书籍，并按 Android `AuthorDao.deleteById` 硬删除作者资料。
+    /// - Throws: 名称为空或 SQL 写入失败时抛出错误。
+    nonisolated func deleteAuthor(
+        _ db: Database,
+        name: String
+    ) throws {
+        let authorName = try validatedManagementName(name, target: "作者")
+        let bookIDs = try fetchBookIDsByAuthor(db, name: authorName)
+        if !bookIDs.isEmpty {
+            try deleteBooks(db, bookIDs: bookIDs)
+        }
+        if let authorID = try fetchAuthorID(db, name: authorName) {
+            try hardDeleteAuthor(db, authorID: authorID)
+        }
+    }
+
+    /// 重命名出版社资料，并按 Android `updateBooksPress` 同步所有同名书籍。
+    /// - Throws: 名称为空或 SQL 写入失败时抛出错误。
+    nonisolated func renamePress(
+        _ db: Database,
+        oldName: String,
+        newName: String
+    ) throws {
+        let currentName = try validatedManagementName(oldName, target: "出版社")
+        let targetName = try validatedManagementName(newName, target: "出版社")
+        guard currentName != targetName else { return }
+        let now = timestampMillis()
+
+        if let pressID = try fetchPressID(db, name: currentName) {
+            try updatePressName(db, pressID: pressID, name: targetName, updatedAt: now)
+        } else {
+            try insertPressName(db, name: targetName, now: now)
+        }
+        try updateBooksPress(db, oldName: currentName, newName: targetName)
+    }
+
+    /// 删除出版社维度下的有效书籍，并按 Android `PressDao.deleteById` 硬删除出版社资料。
+    /// - Throws: 名称为空或 SQL 写入失败时抛出错误。
+    nonisolated func deletePress(
+        _ db: Database,
+        name: String
+    ) throws {
+        let pressName = try validatedManagementName(name, target: "出版社")
+        let bookIDs = try fetchBookIDsByPress(db, name: pressName)
+        if !bookIDs.isEmpty {
+            try deleteBooks(db, bookIDs: bookIDs)
+        }
+        if let pressID = try fetchPressID(db, name: pressName) {
+            try hardDeletePress(db, pressID: pressID)
+        }
     }
 
     /// 取消单个 Book/Group 置顶状态，写入 pinned = 0 与 pin_order = 0。
@@ -2480,8 +2580,202 @@ private extension BookRepository {
             SET is_deleted = 1
             WHERE id = ?
               AND is_deleted = 0
-            """
+        """
         try db.execute(sql: sql, arguments: [sourceID])
+    }
+
+    /// 读取指定作者名对应的首条作者资料 ID。
+    nonisolated func fetchAuthorID(_ db: Database, name: String) throws -> Int64? {
+        // SQL 目的：按作者名查找 Android 作者资料表中已编辑的作者记录。
+        // 涉及表：author。
+        // 关键过滤：name 精确匹配；Android AuthorDao.queryByName 不过滤 is_deleted，iOS 保持一致。
+        // 返回字段用途：返回首条 author.id，供编辑或删除作者资料时定位主记录；时间字段不参与本查询。
+        let sql = """
+            SELECT id
+            FROM author
+            WHERE name = ?
+            ORDER BY id ASC
+            LIMIT 1
+            """
+        return try Int64.fetchOne(db, sql: sql, arguments: [name])
+    }
+
+    /// 插入只有名称的作者资料，覆盖 Android 从未编辑作者进入编辑页后新增作者记录的场景。
+    nonisolated func insertAuthorName(_ db: Database, name: String, now: Int64) throws {
+        // SQL 目的：为原本只来自 book.author 字段的作者补建作者资料。
+        // 涉及表：author。
+        // 关键过滤：无过滤条件；Android AuthorDao.insertAuthor 使用 ABORT 策略但 author.name 无唯一约束。
+        // 时间字段：created_date/updated_date 写入当前毫秒时间戳，last_sync_date 保持 0。
+        // 副作用用途：让作者管理页后续可保存头像、简介等作者资料。
+        let sql = """
+            INSERT INTO author (
+                douban_personage_id, photo_url, name, gender, birthdate, birthPlace, deathdate, bio,
+                created_date, updated_date, last_sync_date, is_deleted
+            )
+            VALUES ('', '', ?, 0, '', '', '', '', ?, ?, 0, 0)
+            """
+        try db.execute(sql: sql, arguments: [name, now, now])
+    }
+
+    /// 更新作者资料名称。
+    nonisolated func updateAuthorName(
+        _ db: Database,
+        authorID: Int64,
+        name: String,
+        updatedAt: Int64
+    ) throws {
+        // SQL 目的：保存作者编辑页中的作者名称修改。
+        // 涉及表：author。
+        // 关键过滤：id 精确匹配；Android AuthorDao.updateAuthor 不额外过滤 is_deleted，iOS 保持一致。
+        // 时间字段：updated_date 写入当前毫秒时间戳；created_date/last_sync_date 保持原值。
+        // 副作用用途：更新作者资料卡片标题，同时书籍 author 字段会在后续 SQL 中同步。
+        let sql = """
+            UPDATE author
+            SET name = ?,
+                updated_date = ?
+            WHERE id = ?
+            """
+        try db.execute(sql: sql, arguments: [name, updatedAt, authorID])
+    }
+
+    /// 硬删除作者资料主记录。
+    nonisolated func hardDeleteAuthor(_ db: Database, authorID: Int64) throws {
+        // SQL 目的：删除作者资料记录。
+        // 涉及表：author。
+        // 关键过滤：id 精确匹配；Android AuthorDao.deleteById 使用 DELETE FROM，不走软删除。
+        // 副作用用途：删除作者维度下全部书籍后，移除对应作者资料。
+        let sql = """
+            DELETE FROM author
+            WHERE id = ?
+            """
+        try db.execute(sql: sql, arguments: [authorID])
+    }
+
+    /// 查询指定作者名下的有效书籍 ID。
+    nonisolated func fetchBookIDsByAuthor(_ db: Database, name: String) throws -> [Int64] {
+        // SQL 目的：删除作者时定位该作者下仍有效的书籍。
+        // 涉及表：book。
+        // 关键过滤：author 精确匹配且 is_deleted = 0；严格对齐 Android BookDao.queryBooksByAuthor。
+        // 返回字段用途：返回 book.id 交给 deleteBooks 做软删除级联；时间字段不参与本查询。
+        let sql = """
+            SELECT id
+            FROM book
+            WHERE author = ?
+              AND is_deleted = 0
+            """
+        return try Int64.fetchAll(db, sql: sql, arguments: [name])
+    }
+
+    /// 批量更新书籍作者名。
+    nonisolated func updateBooksAuthor(_ db: Database, oldName: String, newName: String) throws {
+        // SQL 目的：作者重命名后同步更新存量书籍 author 字段。
+        // 涉及表：book。
+        // 关键过滤：author 精确匹配旧名称；Android BookDao.updateBooksAuthor 不过滤 is_deleted，iOS 保持一致。
+        // 时间字段：Android 该写入不更新 updated_date，iOS 保持一致不改时间字段。
+        // 副作用用途：让作者聚合维度与二级列表立即归入新作者名。
+        let sql = """
+            UPDATE book
+            SET author = ?
+            WHERE author = ?
+            """
+        try db.execute(sql: sql, arguments: [newName, oldName])
+    }
+
+    /// 读取指定出版社名对应的首条出版社资料 ID。
+    nonisolated func fetchPressID(_ db: Database, name: String) throws -> Int64? {
+        // SQL 目的：按出版社名查找 Android 出版社资料表中已编辑的出版社记录。
+        // 涉及表：press。
+        // 关键过滤：name 精确匹配；Android PressDao.queryPressByName 不过滤 is_deleted，iOS 保持一致。
+        // 返回字段用途：返回首条 press.id，供编辑或删除出版社资料时定位主记录；时间字段不参与本查询。
+        let sql = """
+            SELECT id
+            FROM press
+            WHERE name = ?
+            ORDER BY id ASC
+            LIMIT 1
+            """
+        return try Int64.fetchOne(db, sql: sql, arguments: [name])
+    }
+
+    /// 插入只有名称的出版社资料。
+    nonisolated func insertPressName(_ db: Database, name: String, now: Int64) throws {
+        // SQL 目的：为原本只来自 book.press 字段的出版社补建出版社资料。
+        // 涉及表：press。
+        // 关键过滤：无过滤条件；Android PressDao.insertPress 使用 ABORT 策略但 press.name 无唯一约束。
+        // 时间字段：created_date/updated_date 写入当前毫秒时间戳，last_sync_date 保持 0。
+        // 副作用用途：让出版社管理页后续可保存 logo、简介等资料。
+        let sql = """
+            INSERT INTO press (
+                logo_url, name, introduction,
+                created_date, updated_date, last_sync_date, is_deleted
+            )
+            VALUES ('', ?, '', ?, ?, 0, 0)
+            """
+        try db.execute(sql: sql, arguments: [name, now, now])
+    }
+
+    /// 更新出版社资料名称。
+    nonisolated func updatePressName(
+        _ db: Database,
+        pressID: Int64,
+        name: String,
+        updatedAt: Int64
+    ) throws {
+        // SQL 目的：保存出版社编辑页中的出版社名称修改。
+        // 涉及表：press。
+        // 关键过滤：id 精确匹配；Android PressDao.updatePress 不额外过滤 is_deleted，iOS 保持一致。
+        // 时间字段：updated_date 写入当前毫秒时间戳；created_date/last_sync_date 保持原值。
+        // 副作用用途：更新出版社资料卡片标题，同时书籍 press 字段会在后续 SQL 中同步。
+        let sql = """
+            UPDATE press
+            SET name = ?,
+                updated_date = ?
+            WHERE id = ?
+            """
+        try db.execute(sql: sql, arguments: [name, updatedAt, pressID])
+    }
+
+    /// 硬删除出版社资料主记录。
+    nonisolated func hardDeletePress(_ db: Database, pressID: Int64) throws {
+        // SQL 目的：删除出版社资料记录。
+        // 涉及表：press。
+        // 关键过滤：id 精确匹配；Android PressDao.deleteById 使用 DELETE FROM，不走软删除。
+        // 副作用用途：删除出版社维度下全部书籍后，移除对应出版社资料。
+        let sql = """
+            DELETE FROM press
+            WHERE id = ?
+            """
+        try db.execute(sql: sql, arguments: [pressID])
+    }
+
+    /// 查询指定出版社名下的有效书籍 ID。
+    nonisolated func fetchBookIDsByPress(_ db: Database, name: String) throws -> [Int64] {
+        // SQL 目的：删除出版社时定位该出版社下仍有效的书籍。
+        // 涉及表：book。
+        // 关键过滤：press 精确匹配且 is_deleted = 0；严格对齐 Android BookDao.queryBooksByPress。
+        // 返回字段用途：返回 book.id 交给 deleteBooks 做软删除级联；时间字段不参与本查询。
+        let sql = """
+            SELECT id
+            FROM book
+            WHERE press = ?
+              AND is_deleted = 0
+            """
+        return try Int64.fetchAll(db, sql: sql, arguments: [name])
+    }
+
+    /// 批量更新书籍出版社名。
+    nonisolated func updateBooksPress(_ db: Database, oldName: String, newName: String) throws {
+        // SQL 目的：出版社重命名后同步更新存量书籍 press 字段。
+        // 涉及表：book。
+        // 关键过滤：press 精确匹配旧名称；Android BookDao.updateBooksPress 不过滤 is_deleted，iOS 保持一致。
+        // 时间字段：Android 该写入不更新 updated_date，iOS 保持一致不改时间字段。
+        // 副作用用途：让出版社聚合维度与二级列表立即归入新出版社名。
+        let sql = """
+            UPDATE book
+            SET press = ?
+            WHERE press = ?
+            """
+        try db.execute(sql: sql, arguments: [newName, oldName])
     }
 
     /// 更新单本有效书籍的来源。

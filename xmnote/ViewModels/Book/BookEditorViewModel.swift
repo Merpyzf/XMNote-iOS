@@ -1,5 +1,5 @@
 /**
- * [INPUT]: 依赖 BookEditorRepositoryProtocol 提供录入选项、偏好与保存事务，依赖 BookEditorSeed 提供搜索结果预填数据
+ * [INPUT]: 依赖 BookEditorRepositoryProtocol 提供录入选项、偏好与保存事务，依赖 BookEditorMode 区分新增/编辑入口
  * [OUTPUT]: 对外提供 BookEditorViewModel，驱动完整录入页的加载、编辑与保存交互
  * [POS]: ViewModels/Book 的书籍录入状态编排器，被 BookEditorView 消费
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -8,7 +8,7 @@
 import Foundation
 import Observation
 
-/// 书籍录入状态源，负责录入草稿、建议选项和保存事务的页面编排。
+/// 书籍录入状态源，负责新增与编辑两类草稿、建议选项和保存事务的页面编排。
 @Observable
 final class BookEditorViewModel {
     var draft: BookEditorDraft?
@@ -20,14 +20,14 @@ final class BookEditorViewModel {
     var tagInput: String = ""
     var didSaveBook = false
 
-    private let seed: BookEditorSeed?
+    private let mode: BookEditorMode
     private let repository: any BookEditorRepositoryProtocol
 
     init(
-        seed: BookEditorSeed?,
+        mode: BookEditorMode,
         repository: any BookEditorRepositoryProtocol
     ) {
-        self.seed = seed
+        self.mode = mode
         self.repository = repository
     }
 
@@ -46,7 +46,13 @@ final class BookEditorViewModel {
 
         do {
             let options = try await repository.fetchOptions()
-            let draft = repository.makeDraft(from: seed)
+            let draft: BookEditorDraft
+            switch mode {
+            case .create(let seed):
+                draft = repository.makeDraft(from: seed)
+            case .edit(let bookId):
+                draft = try await repository.fetchEditableBook(bookId: bookId)
+            }
             self.options = options
             self.draft = draft
             self.initialDraft = draft
@@ -118,7 +124,7 @@ final class BookEditorViewModel {
         defer { isSaving = false }
 
         do {
-            let bookId = try await repository.saveBook(draft)
+            let bookId = try await repository.saveBookDraft(draft, mode: mode)
             initialDraft = self.draft
             didSaveBook = true
             return bookId

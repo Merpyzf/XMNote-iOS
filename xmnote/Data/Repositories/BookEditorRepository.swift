@@ -4,11 +4,11 @@ import GRDB
 /**
  * [INPUT]: 依赖 DatabaseManager 提供本地数据库连接，依赖 BookRecord/ChapterRecord/GroupRecord/TagRecord/SourceRecord 等持久化实体
  * [OUTPUT]: 对外提供 BookEditorRepository（BookEditorRepositoryProtocol 的 GRDB 实现）
- * [POS]: Data 层书籍录入仓储实现，统一封装录入选项、偏好和新增保存事务
+ * [POS]: Data 层书籍录入仓储实现，统一封装录入选项、偏好、新增保存与既有书籍编辑事务
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
-/// 书籍录入仓储实现，负责录入页加载、偏好持久化与保存新书事务。
+/// 书籍录入仓储实现，负责录入页加载、偏好持久化与书籍新增/编辑事务。
 struct BookEditorRepository: BookEditorRepositoryProtocol {
     private let databaseManager: DatabaseManager
     private let userDefaults: UserDefaults
@@ -86,6 +86,48 @@ struct BookEditorRepository: BookEditorRepositoryProtocol {
         userDefaults.set(preference.sourceName, forKey: Keys.preferSourceName)
         userDefaults.set(preference.progressUnit.rawValue, forKey: Keys.preferProgressUnit)
         userDefaults.set(preference.readingStatus.rawValue, forKey: Keys.preferReadingStatus)
+    }
+
+    /// 读取既有书籍并转换为录入页可编辑草稿。
+    func fetchEditableBook(bookId: Int64) async throws -> BookEditorDraft {
+        try await databaseManager.database.dbPool.read { db in
+            guard let book = try BookRecord.fetchOne(db, key: bookId), book.isDeleted == 0 else {
+                throw BookEditorError.bookNotFound
+            }
+
+            let sourceName = try fetchSourceName(sourceId: book.sourceId, db: db)
+            let groupName = try fetchPrimaryGroupName(bookId: bookId, db: db)
+            let tagNames = try fetchBookTagNames(bookId: bookId, db: db)
+
+            return BookEditorDraft(
+                title: book.name,
+                rawTitle: book.rawName,
+                author: book.author,
+                authorIntro: book.authorIntro,
+                translator: book.translator,
+                press: book.press,
+                isbn: book.isbn,
+                pubDate: book.pubDate,
+                summary: book.summary,
+                catalog: book.catalog,
+                coverURL: book.cover,
+                doubanId: book.doubanId > 0 ? Int(book.doubanId) : nil,
+                totalPagesText: formatPositiveInteger(book.totalPagination),
+                totalPositionText: formatPositiveInteger(book.totalPosition),
+                currentProgressText: formatProgress(book.readPosition, unit: book.positionUnit),
+                wordCount: book.wordCount.map(Int.init),
+                sourceName: sourceName,
+                groupName: groupName,
+                tagNames: tagNames,
+                purchaseDate: dateFromMillis(book.purchaseDate),
+                priceText: formatPositiveDecimal(book.price),
+                readStatusChangedDate: dateFromMillis(book.readStatusChangedDate) ?? .now,
+                bookType: BookEntryBookType(rawValue: book.type) ?? .paper,
+                progressUnit: BookEntryProgressUnit(rawValue: book.positionUnit) ?? .pagination,
+                readingStatus: BookEntryReadingStatus(rawValue: book.readStatusId) ?? .reading,
+                searchSource: nil
+            )
+        }
     }
 
     /// 按 Android 判重规则和事务顺序保存新书。
@@ -169,9 +211,23 @@ struct BookEditorRepository: BookEditorRepositoryProtocol {
         savePreference(result.1)
         return result.0
     }
+
+    /// 按当前模式保存书籍草稿；新增沿用原事务，编辑更新主表并重建可编辑关系。
+    func saveBookDraft(_ draft: BookEditorDraft, mode: BookEditorMode) async throws -> Int64 {
+        switch mode {
+        case .create:
+            return try await saveBook(draft)
+        case .edit(let bookId):
+            return try await updateBook(draft, bookId: bookId)
+        }
+    }
 }
 
 private extension BookEditorRepository {
+    nonisolated static var currentTimestampMillis: Int64 {
+        Int64(Date().timeIntervalSince1970 * 1000)
+    }
+
     func loadPreference() -> BookEntryPreference {
         let bookType = BookEntryBookType(rawValue: Int64(userDefaults.integer(forKey: Keys.preferBookType)))
             ?? BookEntryPreference.default.bookType
@@ -277,10 +333,15 @@ private extension BookEditorRepository {
         .sorted()
     }
 
-    nonisolated func isDuplicateBook(_ draft: BookEditorDraft, ownerId: Int64, db: Database) throws -> Bool {
+    nonisolated func isDuplicateBook(
+        _ draft: BookEditorDraft,
+        ownerId: Int64,
+        db: Database,
+        excludingBookId: Int64? = nil
+    ) throws -> Bool {
         // SQL 目的：按 Android 规则判重，避免新增同一本书。
-        // 过滤条件：精确匹配 name/author/translator/press/isbn/pub_date 六元组，且排除软删除记录。
-        let sql = """
+        // 过滤条件：精确匹配 name/author/translator/press/isbn/pub_date 六元组，且排除软删除记录；编辑模式额外排除当前书籍 ID。
+        let baseSQL = """
             SELECT COUNT(*)
             FROM book
             WHERE is_deleted = 0
@@ -292,19 +353,37 @@ private extension BookEditorRepository {
               AND isbn = ?
               AND pub_date = ?
             """
-        let count = try Int.fetchOne(
-            db,
-            sql: sql,
-            arguments: [
-                ownerId,
-                draft.title,
-                draft.author,
-                draft.translator,
-                draft.press,
-                draft.isbn,
-                draft.pubDate
-            ]
-        ) ?? 0
+        let count: Int
+        if let excludingBookId {
+            count = try Int.fetchOne(
+                db,
+                sql: baseSQL + "\n  AND id != ?",
+                arguments: [
+                    ownerId,
+                    draft.title,
+                    draft.author,
+                    draft.translator,
+                    draft.press,
+                    draft.isbn,
+                    draft.pubDate,
+                    excludingBookId
+                ]
+            ) ?? 0
+        } else {
+            count = try Int.fetchOne(
+                db,
+                sql: baseSQL,
+                arguments: [
+                    ownerId,
+                    draft.title,
+                    draft.author,
+                    draft.translator,
+                    draft.press,
+                    draft.isbn,
+                    draft.pubDate
+                ]
+            ) ?? 0
+        }
         return count > 0
     }
 
@@ -480,6 +559,234 @@ private extension BookEditorRepository {
             lastSyncDate: 0,
             isDeleted: 0
         )
+    }
+
+    func updateBook(_ draft: BookEditorDraft, bookId: Int64) async throws -> Int64 {
+        let normalizedTitle = draft.trimmedTitle
+        guard !normalizedTitle.isEmpty else {
+            throw BookEditorError.emptyTitle
+        }
+
+        let preference = try await databaseManager.database.dbPool.write { db in
+            guard var book = try BookRecord.fetchOne(db, key: bookId), book.isDeleted == 0 else {
+                throw BookEditorError.bookNotFound
+            }
+
+            let ownerId = book.userId
+            let normalizedDraft = normalizeDraft(draft)
+            let normalizedTagNames = normalizeTagNames(normalizedDraft.tagNames)
+            guard try !isDuplicateBook(
+                normalizedDraft,
+                ownerId: ownerId,
+                db: db,
+                excludingBookId: bookId
+            ) else {
+                throw BookEditorError.duplicateBook
+            }
+
+            let sourceId = try resolveSourceId(for: normalizedDraft.sourceName, in: db)
+            let groupId = try resolveGroupId(for: normalizedDraft.groupName, ownerId: ownerId, in: db)
+            let tagIds = try resolveTagIds(for: normalizedTagNames, ownerId: ownerId, in: db)
+            let now = Self.currentTimestampMillis
+            let changedAt = Int64(normalizedDraft.readStatusChangedDate.timeIntervalSince1970 * 1000)
+            let shouldInsertReadStatus = book.readStatusId != normalizedDraft.readingStatus.rawValue
+                || book.readStatusChangedDate != changedAt
+
+            applyDraft(normalizedDraft, to: &book, sourceId: sourceId, updatedAt: now)
+            try book.update(db)
+
+            try replaceGroupRelation(groupId: groupId, for: bookId, updatedAt: now, db: db)
+            try replaceTagRelations(tagIds: tagIds, for: bookId, updatedAt: now, db: db)
+            if shouldInsertReadStatus {
+                try insertReadStatusRecord(
+                    bookId: bookId,
+                    status: normalizedDraft.readingStatus,
+                    changedAt: changedAt,
+                    createdAt: now,
+                    db: db
+                )
+            }
+
+            return BookEntryPreference(
+                bookType: normalizedDraft.bookType,
+                sourceName: normalizedDraft.sourceName.isEmpty ? "未知" : normalizedDraft.sourceName,
+                progressUnit: normalizedDraft.progressUnit,
+                readingStatus: normalizedDraft.readingStatus
+            )
+        }
+
+        savePreference(preference)
+        return bookId
+    }
+
+    nonisolated func applyDraft(
+        _ draft: BookEditorDraft,
+        to book: inout BookRecord,
+        sourceId: Int64,
+        updatedAt: Int64
+    ) {
+        let readStatusChangedDate = Int64(draft.readStatusChangedDate.timeIntervalSince1970 * 1000)
+        let currentProgress = Double(draft.currentProgressText) ?? 0
+        let totalPages = Int64(draft.totalPagesText.digitsOnly) ?? 0
+        let totalPosition = Int64(draft.totalPositionText.digitsOnly) ?? 0
+        let price = Double(draft.priceText) ?? 0
+
+        var readPosition = currentProgress
+        var resolvedTotalPages = totalPages
+        var resolvedTotalPosition = totalPosition
+
+        switch draft.progressUnit {
+        case .progress:
+            readPosition = min(max(currentProgress, 0), 100)
+        case .position:
+            readPosition = Double(Int64(draft.currentProgressText.digitsOnly) ?? 0)
+            resolvedTotalPages = 0
+        case .pagination:
+            readPosition = Double(Int64(draft.currentProgressText.digitsOnly) ?? 0)
+            resolvedTotalPosition = 0
+        }
+
+        book.doubanId = Int64(draft.doubanId ?? 0)
+        book.name = draft.title
+        book.rawName = draft.rawTitle.isEmpty ? draft.title : draft.rawTitle
+        book.cover = draft.coverURL
+        book.author = draft.author
+        book.authorIntro = draft.authorIntro
+        book.translator = draft.translator
+        book.isbn = draft.isbn
+        book.pubDate = draft.pubDate
+        book.press = draft.press
+        book.summary = draft.summary
+        book.readPosition = readPosition
+        book.totalPosition = resolvedTotalPosition
+        book.totalPagination = resolvedTotalPages
+        book.type = draft.bookType.rawValue
+        book.currentPositionUnit = draft.progressUnit.rawValue
+        book.positionUnit = draft.progressUnit.rawValue
+        book.sourceId = sourceId
+        book.purchaseDate = draft.purchaseDate.map { Int64($0.timeIntervalSince1970 * 1000) } ?? 0
+        book.price = price
+        book.readStatusId = draft.readingStatus.rawValue
+        book.readStatusChangedDate = readStatusChangedDate
+        book.catalog = draft.catalog
+        book.wordCount = draft.wordCount.map(Int64.init)
+        book.updatedDate = updatedAt
+    }
+
+    nonisolated func fetchSourceName(sourceId: Int64, db: Database) throws -> String {
+        // SQL 目的：按书籍 source_id 读取当前来源名称，用于编辑页回填来源文本。
+        // 过滤条件：仅使用未删除 source；若来源缺失则回退 Android 默认“未知”。
+        let sql = """
+            SELECT name
+            FROM source
+            WHERE id = ? AND is_deleted = 0
+            LIMIT 1
+            """
+        return try String.fetchOne(db, sql: sql, arguments: [sourceId]) ?? "未知"
+    }
+
+    nonisolated func fetchPrimaryGroupName(bookId: Int64, db: Database) throws -> String {
+        // SQL 目的：读取书籍当前有效分组名称，供编辑页单分组字段回填。
+        // 关联关系：group_book.group_id -> group.id；仅保留两表未删除记录，按关系创建顺序选择首个有效分组。
+        let sql = """
+            SELECT g.name
+            FROM group_book gb
+            JOIN `group` g ON g.id = gb.group_id
+            WHERE gb.book_id = ?
+              AND gb.is_deleted = 0
+              AND g.is_deleted = 0
+            ORDER BY gb.id ASC
+            LIMIT 1
+            """
+        return try String.fetchOne(db, sql: sql, arguments: [bookId]) ?? ""
+    }
+
+    nonisolated func fetchBookTagNames(bookId: Int64, db: Database) throws -> [String] {
+        // SQL 目的：读取书籍当前有效标签，供编辑页多选标签回填。
+        // 关联关系：tag_book.tag_id -> tag.id；仅保留书籍标签 type = 1 与两表未删除关系，按标签排序稳定展示。
+        let sql = """
+            SELECT t.name
+            FROM tag_book tb
+            JOIN tag t ON t.id = tb.tag_id
+            WHERE tb.book_id = ?
+              AND tb.is_deleted = 0
+              AND t.type = 1
+              AND t.is_deleted = 0
+            ORDER BY t.tag_order ASC, t.id ASC
+            """
+        return try String.fetchAll(db, sql: sql, arguments: [bookId])
+    }
+
+    nonisolated func replaceGroupRelation(groupId: Int64?, for bookId: Int64, updatedAt: Int64, db: Database) throws {
+        // SQL 目的：编辑分组时替换书籍有效分组关系，保持单书唯一有效分组语义。
+        // 副作用：先软删除 group_book 中当前书籍的有效关系，再按草稿分组插入新关系。
+        let sql = """
+            UPDATE group_book
+            SET updated_date = ?, is_deleted = 1
+            WHERE book_id = ? AND is_deleted = 0
+            """
+        try db.execute(sql: sql, arguments: [updatedAt, bookId])
+
+        guard let groupId else { return }
+        var relation = GroupBookRecord(
+            id: nil,
+            groupId: groupId,
+            bookId: bookId,
+            createdDate: updatedAt,
+            updatedDate: 0,
+            lastSyncDate: 0,
+            isDeleted: 0
+        )
+        try relation.insert(db)
+    }
+
+    nonisolated func replaceTagRelations(tagIds: [Int64], for bookId: Int64, updatedAt: Int64, db: Database) throws {
+        // SQL 目的：编辑标签时替换书籍有效标签关系，和 Android 单书编辑保存的全量覆盖意图一致。
+        // 副作用：先软删除 tag_book 中当前书籍的有效关系，再插入当前草稿标签集合。
+        let sql = """
+            UPDATE tag_book
+            SET updated_date = ?, is_deleted = 1
+            WHERE book_id = ? AND is_deleted = 0
+            """
+        try db.execute(sql: sql, arguments: [updatedAt, bookId])
+
+        for tagId in tagIds {
+            var relation = TagBookRecord(
+                id: nil,
+                bookId: bookId,
+                tagId: tagId,
+                createdDate: updatedAt,
+                updatedDate: 0,
+                lastSyncDate: 0,
+                isDeleted: 0
+            )
+            try relation.insert(db)
+        }
+    }
+
+    nonisolated func dateFromMillis(_ value: Int64) -> Date? {
+        guard value > 0 else { return nil }
+        return Date(timeIntervalSince1970: TimeInterval(value) / 1000)
+    }
+
+    nonisolated func formatPositiveInteger(_ value: Int64) -> String {
+        value > 0 ? String(value) : ""
+    }
+
+    nonisolated func formatPositiveDecimal(_ value: Double) -> String {
+        guard value > 0 else { return "" }
+        if value.rounded() == value {
+            return String(Int64(value))
+        }
+        return String(value)
+    }
+
+    nonisolated func formatProgress(_ value: Double, unit: Int64) -> String {
+        guard value > 0 else { return "" }
+        if unit == BookEntryProgressUnit.progress.rawValue {
+            return formatPositiveDecimal(value)
+        }
+        return String(Int64(value))
     }
 
     nonisolated func insertChapters(from catalog: String, for bookId: Int64, createdAt: Int64, db: Database) throws {

@@ -6,7 +6,7 @@
 //
 
 /**
- * [INPUT]: 依赖 BookViewModel 提供书架快照、维度状态、显示设置、编辑态与 UICollectionView 排序状态，依赖页面可见态驱动 UIKit 滚动观察，依赖 LoadingGate 约束读取加载反馈，依赖容器注入进入编辑态回调与底部滚动余量
+ * [INPUT]: 依赖 BookViewModel 提供书架快照、维度状态、显示设置、编辑态与 UICollectionView 排序状态，依赖页面可见态驱动 UIKit 滚动观察，依赖 LoadingGate 约束读取加载反馈，依赖容器注入路由、进入编辑态回调与底部滚动余量
  * [OUTPUT]: 对外提供 BookGridView，展示书架内容区、多维度 UICollectionView 聚合入口、选择覆盖层、写入错误浮层与拖拽排序交互
  * [POS]: Book 模块网格展示层，被 BookContainerView 嵌入
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -20,7 +20,8 @@ struct BookGridView: View {
     var isPageActive = true
     var bottomContentInset: CGFloat = 0
     var onOpenRoute: (BookRoute) -> Void = { _ in }
-    var onEnterEditing: (BookshelfItemID) -> Void = { _ in }
+    var onOpenNoteRoute: (NoteRoute) -> Void = { _ in }
+    var onEnterEditing: (BookshelfItemID?) -> Void = { _ in }
     @State private var readLoadingGate = LoadingGate()
 
     var body: some View {
@@ -30,6 +31,12 @@ struct BookGridView: View {
             if let writeError = viewModel.writeError, !writeError.isEmpty {
                 writeErrorHint(writeError)
             }
+        }
+        .xmSystemAlert(item: $viewModel.activeContributorNameEdit) { nameEdit in
+            contributorNameEditDescriptor(for: nameEdit)
+        }
+        .xmSystemAlert(item: $viewModel.activeContributorDeleteConfirmation) { confirmation in
+            contributorDeleteDescriptor(for: confirmation)
         }
         .animation(.snappy(duration: 0.24, extraBounce: 0.04), value: viewModel.selectedDimension)
         .onAppear {
@@ -161,6 +168,7 @@ struct BookGridView: View {
             onUnpin: viewModel.unpinItem,
             onMoveToStart: viewModel.moveItemToStart,
             onMoveToEnd: viewModel.moveItemToEnd,
+            onContextAction: handleContextAction(_:itemID:),
             onCommitOrder: viewModel.commitDefaultItemsOrder
         )
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -186,6 +194,7 @@ struct BookGridView: View {
             columnCount: aggregateColumnCount(for: dimension),
             canReorder: viewModel.canReorderAggregateItems(for: dimension),
             onOpenRoute: onOpenRoute,
+            onContextAction: handleAggregateContextAction(_:group:),
             onCommitOrder: { viewModel.commitAggregateOrder($0, for: dimension) }
         )
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -236,6 +245,83 @@ struct BookGridView: View {
 
     private func enterEditing(_ initialSelection: BookshelfItemID) {
         onEnterEditing(initialSelection)
+    }
+
+    private func handleContextAction(_ action: BookshelfBookContextAction, itemID: BookshelfItemID) {
+        switch action {
+        case .addNote:
+            guard case .book(let bookID) = itemID else { return }
+            onOpenNoteRoute(.create(seed: NoteEditorSeed(
+                bookId: bookID,
+                chapterId: nil,
+                contentHTML: "",
+                ideaHTML: ""
+            )))
+        case .pin:
+            viewModel.pinItem(itemID)
+        case .unpin:
+            viewModel.unpinItem(itemID)
+        case .editBook:
+            guard case .book(let bookID) = itemID else { return }
+            onOpenRoute(.edit(bookId: bookID))
+        case .showReadingDetail:
+            viewModel.presentContextPlaceholder("阅读详情将在阅读模块迁移后开放")
+        case .startReadTiming:
+            viewModel.presentContextPlaceholder("开始计时将在阅读模块迁移后开放")
+        case .organizeBooks:
+            onEnterEditing(nil)
+        case .delete:
+            viewModel.presentDeleteConfirmation(for: itemID)
+        }
+    }
+
+    private func handleAggregateContextAction(
+        _ action: BookshelfAggregateContextAction,
+        group: BookshelfAggregateGroup
+    ) {
+        switch action {
+        case .edit:
+            viewModel.presentContributorNameEdit(for: group)
+        case .delete:
+            viewModel.presentContributorDeleteConfirmation(for: group)
+        }
+    }
+
+    private func contributorNameEditDescriptor(for nameEdit: BookContributorNameEdit) -> XMSystemAlertDescriptor {
+        XMSystemAlertDescriptor(
+            title: "编辑\(nameEdit.kind.itemTitle)",
+            message: "将同步更新 \(nameEdit.bookCount) 本书的\(nameEdit.kind.itemTitle)名称。",
+            actions: [
+                XMSystemAlertAction(title: "取消", role: .cancel) { },
+                XMSystemAlertAction(title: "完成") {
+                    viewModel.submitContributorNameEdit()
+                }
+            ],
+            textFields: [
+                XMSystemAlertTextField(
+                    text: Binding(
+                        get: { viewModel.contributorNameEditText },
+                        set: { viewModel.contributorNameEditText = $0 }
+                    ),
+                    placeholder: nameEdit.currentName,
+                    autocorrectionDisabled: true
+                )
+            ]
+        )
+    }
+
+    private func contributorDeleteDescriptor(for confirmation: BookContributorDeleteConfirmation) -> XMSystemAlertDescriptor {
+        XMSystemAlertDescriptor(
+            title: "删除\(confirmation.kind.itemTitle)",
+            message: "将删除“\(confirmation.name)”下的 \(confirmation.bookCount) 本书，并移除对应\(confirmation.kind.itemTitle)资料。此操作不可撤销。",
+            actions: [
+                XMSystemAlertAction(title: "取消", role: .cancel) { },
+                XMSystemAlertAction(title: "删除", role: .destructive) {
+                    viewModel.submitContributorDelete()
+                }
+            ],
+            preferredActionID: nil
+        )
     }
 }
 

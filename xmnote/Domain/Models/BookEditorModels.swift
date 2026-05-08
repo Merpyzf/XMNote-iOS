@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 Foundation 的值类型语义，承接书籍录入页的编辑状态、偏好和下拉选项
- * [OUTPUT]: 对外提供 BookEntryBookType、BookEntryProgressUnit、BookEntryReadingStatus、BookEditorDraft、BookEditorOptions、BookEntryPreference 等录入域模型
+ * [OUTPUT]: 对外提供 BookEntryBookType、BookEntryProgressUnit、BookEntryReadingStatus、BookEditorMode、BookEditorDraft、BookEditorOptions、BookEntryPreference 等录入域模型
  * [POS]: Domain/Models 的书籍录入模型定义，被录入仓储、录入页 ViewModel 与保存事务共同消费
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -77,6 +77,12 @@ enum BookEntryReadingStatus: Int64, CaseIterable, Identifiable, Hashable, Sendab
             return "搁置"
         }
     }
+}
+
+/// 书籍录入页模式，区分搜索/手动新增与既有书籍编辑两条保存路径。
+enum BookEditorMode: Hashable, Sendable {
+    case create(seed: BookEditorSeed?)
+    case edit(bookId: Int64)
 }
 
 /// 录入页可复用的命名选项，统一表示来源/分组/标签。
@@ -157,6 +163,7 @@ struct BookEditorDraft: Equatable, Sendable {
 enum BookEditorError: LocalizedError {
     case emptyTitle
     case duplicateBook
+    case bookNotFound
 
     var errorDescription: String? {
         switch self {
@@ -164,6 +171,8 @@ enum BookEditorError: LocalizedError {
             return "书名不能为空"
         case .duplicateBook:
             return "该书已存在"
+        case .bookNotFound:
+            return "书籍不存在或已删除"
         }
     }
 }

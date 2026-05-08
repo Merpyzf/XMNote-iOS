@@ -72,6 +72,7 @@ struct BookContainerView: View {
     let onAddNote: () -> Void
     let onOpenDebugCenter: (() -> Void)?
     let onOpenBookRoute: (BookRoute) -> Void
+    let onOpenNoteRoute: (NoteRoute) -> Void
     let onOpenTagManagement: () -> Void
     let onOpenSourceManagement: () -> Void
     let onOpenAuthorManagement: () -> Void
@@ -84,6 +85,7 @@ struct BookContainerView: View {
         onAddNote: @escaping () -> Void = {},
         onOpenDebugCenter: (() -> Void)? = nil,
         onOpenBookRoute: @escaping (BookRoute) -> Void = { _ in },
+        onOpenNoteRoute: @escaping (NoteRoute) -> Void = { _ in },
         onOpenTagManagement: @escaping () -> Void = {},
         onOpenSourceManagement: @escaping () -> Void = {},
         onOpenAuthorManagement: @escaping () -> Void = {},
@@ -94,6 +96,7 @@ struct BookContainerView: View {
         self.onAddNote = onAddNote
         self.onOpenDebugCenter = onOpenDebugCenter
         self.onOpenBookRoute = onOpenBookRoute
+        self.onOpenNoteRoute = onOpenNoteRoute
         self.onOpenTagManagement = onOpenTagManagement
         self.onOpenSourceManagement = onOpenSourceManagement
         self.onOpenAuthorManagement = onOpenAuthorManagement
@@ -111,6 +114,7 @@ struct BookContainerView: View {
                     onAddNote: onAddNote,
                     onOpenDebugCenter: onOpenDebugCenter,
                     onOpenBookRoute: onOpenBookRoute,
+                    onOpenNoteRoute: onOpenNoteRoute,
                     onOpenTagManagement: onOpenTagManagement,
                     onOpenSourceManagement: onOpenSourceManagement,
                     onOpenAuthorManagement: onOpenAuthorManagement,
@@ -153,6 +157,7 @@ private struct BookContentView: View {
     let onAddNote: () -> Void
     let onOpenDebugCenter: (() -> Void)?
     let onOpenBookRoute: (BookRoute) -> Void
+    let onOpenNoteRoute: (NoteRoute) -> Void
     let onOpenTagManagement: () -> Void
     let onOpenSourceManagement: () -> Void
     let onOpenAuthorManagement: () -> Void
@@ -510,7 +515,7 @@ private struct BookContentView: View {
                 actions: [
                     XMSystemAlertAction(title: "取消", role: .cancel) { },
                     XMSystemAlertAction(title: "删除", role: .destructive) {
-                        viewModel.submitDeleteSelectedItems(placement: .end)
+                        viewModel.submitDeleteItems(confirmation.targetIDs, placement: .end)
                     }
                 ]
             )
@@ -525,10 +530,10 @@ private struct BookContentView: View {
             actions: [
                 XMSystemAlertAction(title: "取消", role: .cancel) { },
                 XMSystemAlertAction(title: "移到最前并删除", role: .destructive) {
-                    viewModel.submitDeleteSelectedItems(placement: .start)
+                    viewModel.submitDeleteItems(confirmation.targetIDs, placement: .start)
                 },
                 XMSystemAlertAction(title: "移到最后并删除", role: .destructive) {
-                    viewModel.submitDeleteSelectedItems(placement: .end)
+                    viewModel.submitDeleteItems(confirmation.targetIDs, placement: .end)
                 }
             ]
         )
@@ -554,6 +559,7 @@ private struct BookContentView: View {
                 isPageActive: selectedSubTab == .books,
                 bottomContentInset: editBottomBarHeight,
                 onOpenRoute: onOpenBookRoute,
+                onOpenNoteRoute: onOpenNoteRoute,
                 onEnterEditing: { initialSelection in
                     enterEditingWithChoreography(initialSelection: initialSelection)
                 }

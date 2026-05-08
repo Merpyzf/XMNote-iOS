@@ -179,7 +179,7 @@ struct BookshelfMoveOutPlacementConfirmation: Identifiable, Hashable, Sendable {
 /// 二级列表删除确认状态，覆盖批量删书与上下文分组/标签/来源删除。
 struct BookshelfBookListDeleteConfirmation: Identifiable, Hashable, Sendable {
     enum Kind: Hashable, Sendable {
-        case books(count: Int)
+        case books(bookIDs: [Int64])
         case group(title: String)
         case tag(title: String)
         case source(title: String)
@@ -189,8 +189,8 @@ struct BookshelfBookListDeleteConfirmation: Identifiable, Hashable, Sendable {
 
     var id: String {
         switch kind {
-        case .books(let count):
-            return "books-\(count)"
+        case .books(let bookIDs):
+            return "books-\(bookIDs.map(String.init).joined(separator: "-"))"
         case .group(let title):
             return "group-\(title)"
         case .tag(let title):
@@ -285,6 +285,10 @@ final class BookshelfBookListViewModel {
     var movableBookIDs: Set<Int64> {
         guard canReorderBooksInDefaultGroup else { return [] }
         return Set(snapshot.books.filter { !$0.pinned }.map(\.id))
+    }
+
+    var supportsContextPin: Bool {
+        defaultGroupID != nil
     }
 
     var hasSearchKeyword: Bool {
@@ -431,7 +435,7 @@ final class BookshelfBookListViewModel {
         case .renameGroup, .renameTag, .renameSource:
             presentNameEdit(for: action)
         case .deleteBooks:
-            activeDeleteConfirmation = .init(kind: .books(count: selectedBookIDs.count))
+            activeDeleteConfirmation = .init(kind: .books(bookIDs: selectedBookIDs))
             actionNotice = nil
             writeError = nil
         case .deleteGroup, .deleteTag, .deleteSource:
@@ -497,11 +501,53 @@ final class BookshelfBookListViewModel {
 
     /// 提交二级列表批量删书，成功后清空选择并由观察流刷新当前列表。
     func submitDeleteBooks() {
-        let bookIDs = selectedBookIDs
+        let bookIDs: [Int64]
+        if case .books(let targetIDs) = activeDeleteConfirmation?.kind {
+            bookIDs = targetIDs
+        } else {
+            bookIDs = selectedBookIDs
+        }
         activeDeleteConfirmation = nil
         runWriteAction(.deleteBooks, successMessage: "已删除 \(bookIDs.count) 本") {
             try await self.repository.deleteBooks(bookIDs)
         }
+    }
+
+    /// 单本置顶，供二级列表长按菜单使用；仅默认分组上下文开放。
+    func pinBook(_ bookID: Int64) {
+        guard let groupID = defaultGroupID else { return }
+        guard snapshot.books.first(where: { $0.id == bookID })?.pinned == false else {
+            actionNotice = "该书籍已置顶"
+            return
+        }
+        runWriteAction(.pin, successMessage: "已置顶") {
+            try await self.repository.pinBooksInGroup(groupID: groupID, bookIDs: [bookID])
+        }
+    }
+
+    /// 单本取消置顶，供二级列表长按菜单使用；仅默认分组上下文开放。
+    func unpinBook(_ bookID: Int64) {
+        guard defaultGroupID != nil else { return }
+        guard snapshot.books.first(where: { $0.id == bookID })?.pinned == true else {
+            actionNotice = "该书籍未置顶"
+            return
+        }
+        runWriteAction(.unpin, successMessage: "已取消置顶") {
+            try await self.repository.unpinBooksInGroup(bookIDs: [bookID])
+        }
+    }
+
+    /// 打开单本书删除确认，供二级列表长按菜单使用。
+    func presentDeleteBookConfirmation(bookID: Int64) {
+        activeDeleteConfirmation = BookshelfBookListDeleteConfirmation(kind: .books(bookIDs: [bookID]))
+        actionNotice = nil
+        writeError = nil
+    }
+
+    /// 展示尚未迁移的跨模块能力占位提示。
+    func presentContextPlaceholder(_ message: String) {
+        writeError = nil
+        actionNotice = message
     }
 
     /// 删除当前默认分组上下文，并按 placement 安置组内书籍。

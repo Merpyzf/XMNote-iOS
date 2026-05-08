@@ -15,6 +15,12 @@ struct BookshelfAggregateCollectionSection: Hashable {
     let groups: [BookshelfAggregateGroup]
 }
 
+/// 聚合卡长按菜单动作，当前仅作者/出版社维度开放编辑与删除。
+enum BookshelfAggregateContextAction: Hashable {
+    case edit
+    case delete
+}
+
 /// 非默认维度聚合入口集合区，保留 SwiftUI 卡片视觉，同时由 UICollectionView 承接滚动与排序。
 struct BookshelfAggregateCollectionView: UIViewRepresentable {
     let sections: [BookshelfAggregateCollectionSection]
@@ -22,6 +28,7 @@ struct BookshelfAggregateCollectionView: UIViewRepresentable {
     let columnCount: Int
     let canReorder: Bool
     let onOpenRoute: (BookRoute) -> Void
+    let onContextAction: (BookshelfAggregateContextAction, BookshelfAggregateGroup) -> Void
     let onCommitOrder: ([Int64]) -> Void
 
     /// 创建 UIKit 承载视图并注入首帧配置。
@@ -43,6 +50,7 @@ struct BookshelfAggregateCollectionView: UIViewRepresentable {
             columnCount: max(1, min(columnCount, 6)),
             canReorder: canReorder && sections.count == 1,
             onOpenRoute: onOpenRoute,
+            onContextAction: onContextAction,
             onCommitOrder: onCommitOrder
         )
     }
@@ -55,6 +63,7 @@ private struct BookshelfAggregateCollectionConfiguration {
     let columnCount: Int
     let canReorder: Bool
     let onOpenRoute: (BookRoute) -> Void
+    let onContextAction: (BookshelfAggregateContextAction, BookshelfAggregateGroup) -> Void
     let onCommitOrder: ([Int64]) -> Void
 
     static let empty = BookshelfAggregateCollectionConfiguration(
@@ -63,6 +72,7 @@ private struct BookshelfAggregateCollectionConfiguration {
         columnCount: 2,
         canReorder: false,
         onOpenRoute: { _ in },
+        onContextAction: { _, _ in },
         onCommitOrder: { _ in }
     )
 }
@@ -266,7 +276,7 @@ extension BookshelfAggregateCollectionHostView: UICollectionViewDataSource {
               let group = group(at: indexPath) else {
             return UICollectionViewCell()
         }
-        cell.configure(group: group)
+        cell.configure(group: group, onContextAction: configuration.onContextAction)
         return cell
     }
 
@@ -399,12 +409,43 @@ private final class BookshelfAggregateCollectionCell: UICollectionViewCell {
         fatalError("init(coder:) has not been implemented")
     }
 
-    /// 渲染聚合卡片。
-    func configure(group: BookshelfAggregateGroup) {
+    /// 渲染聚合卡片，并为作者/出版社维度补齐 Android 对齐的长按菜单。
+    func configure(
+        group: BookshelfAggregateGroup,
+        onContextAction: @escaping (BookshelfAggregateContextAction, BookshelfAggregateGroup) -> Void
+    ) {
         contentConfiguration = UIHostingConfiguration {
-            BookshelfAggregateCardView(group: group)
+            if group.context.supportsContributorContextMenu {
+                BookshelfAggregateCardView(group: group)
+                    .contextMenu {
+                        Button {
+                            onContextAction(.edit, group)
+                        } label: {
+                            Label("编辑", systemImage: "pencil")
+                        }
+
+                        Button(role: .destructive) {
+                            onContextAction(.delete, group)
+                        } label: {
+                            Label("删除", systemImage: "trash")
+                        }
+                    }
+            } else {
+                BookshelfAggregateCardView(group: group)
+            }
         }
         .margins(.all, 0)
+    }
+}
+
+private extension BookshelfListContext {
+    var supportsContributorContextMenu: Bool {
+        switch self {
+        case .author, .press:
+            return true
+        case .defaultGroup, .readStatus, .tag, .source, .rating:
+            return false
+        }
     }
 }
 

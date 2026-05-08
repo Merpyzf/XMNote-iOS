@@ -81,6 +81,7 @@ struct MainTabView: View {
                         onAddNote: { append(NoteRoute.create(seed: .empty), to: .books) },
                         onOpenDebugCenter: { append(DebugRoute.debugCenter, to: .books) },
                         onOpenBookRoute: { append($0, to: .books) },
+                        onOpenNoteRoute: { append($0, to: .books) },
                         onOpenTagManagement: { append(PersonalRoute.tagManagement, to: .books) },
                         onOpenSourceManagement: { append(PersonalRoute.bookSource, to: .books) },
                         onOpenAuthorManagement: { append(PersonalRoute.authorManagement, to: .books) },
@@ -245,16 +246,22 @@ struct MainTabView: View {
         switch route {
         case .detail(let bookId):
             BookDetailView(bookId: bookId)
-        case .edit:
-            Text("编辑书籍")
+        case .edit(let bookId):
+            BookEditorView(mode: .edit(bookId: bookId))
         case .add:
             BookSearchView()
         case .create(let seed):
             BookEditorView(seed: seed)
         case .bookshelfList(let route):
-            BookshelfBookListView(route: route) { route in
-                append(route, to: selectedTab)
-            }
+            BookshelfBookListView(
+                route: route,
+                onOpenRoute: { route in
+                    append(route, to: selectedTab)
+                },
+                onOpenNoteRoute: { route in
+                    append(route, to: selectedTab)
+                }
+            )
         }
     }
 
@@ -324,9 +331,9 @@ struct MainTabView: View {
         case .bookSource:
             Text("书籍来源")
         case .authorManagement:
-            Text("作者管理")
+            BookContributorManagementView(kind: .author)
         case .pressManagement:
-            Text("出版社管理")
+            BookContributorManagementView(kind: .press)
         case .about:
             Text("关于应用")
         }

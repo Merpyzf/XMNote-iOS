@@ -8,6 +8,18 @@
 import SwiftUI
 import UIKit
 
+/// 默认书架长按菜单动作，区分单本书与分组后交由上层路由或 Repository 执行。
+enum BookshelfBookContextAction: Hashable, Sendable {
+    case addNote
+    case pin
+    case unpin
+    case editBook
+    case showReadingDetail
+    case startReadTiming
+    case organizeBooks
+    case delete
+}
+
 /// 默认书架集合区，保留 SwiftUI 卡片视觉，同时由 UICollectionView 承接滚动与重排手势。
 struct BookshelfDefaultCollectionView: UIViewRepresentable {
     let sections: [BookshelfDefaultSection]
@@ -28,6 +40,7 @@ struct BookshelfDefaultCollectionView: UIViewRepresentable {
     let onUnpin: (BookshelfItemID) -> Void
     let onMoveToStart: (BookshelfItemID) -> Void
     let onMoveToEnd: (BookshelfItemID) -> Void
+    let onContextAction: (BookshelfBookContextAction, BookshelfItemID) -> Void
     let onCommitOrder: ([BookshelfItemID]) -> Void
 
     /// 创建 UIKit 承载视图并注入首帧书架配置。
@@ -67,6 +80,7 @@ struct BookshelfDefaultCollectionView: UIViewRepresentable {
             onUnpin: onUnpin,
             onMoveToStart: onMoveToStart,
             onMoveToEnd: onMoveToEnd,
+            onContextAction: onContextAction,
             onCommitOrder: onCommitOrder
         )
     }
@@ -92,6 +106,7 @@ private struct BookshelfDefaultCollectionConfiguration {
     let onUnpin: (BookshelfItemID) -> Void
     let onMoveToStart: (BookshelfItemID) -> Void
     let onMoveToEnd: (BookshelfItemID) -> Void
+    let onContextAction: (BookshelfBookContextAction, BookshelfItemID) -> Void
     let onCommitOrder: ([BookshelfItemID]) -> Void
 
     static let empty = BookshelfDefaultCollectionConfiguration(
@@ -113,6 +128,7 @@ private struct BookshelfDefaultCollectionConfiguration {
         onUnpin: { _ in },
         onMoveToStart: { _ in },
         onMoveToEnd: { _ in },
+        onContextAction: { _, _ in },
         onCommitOrder: { _ in }
     )
 }
@@ -432,11 +448,7 @@ private extension BookshelfDefaultCollectionHostView {
                 isSelected: configuration.selectedIDs.contains(item.id),
                 canMove: configuration.movableIDs.contains(item.id),
                 activeWriteAction: configuration.activeWriteAction,
-                onEnterEditing: configuration.onEnterEditing,
-                onPin: configuration.onPin,
-                onUnpin: configuration.onUnpin,
-                onMoveToStart: configuration.onMoveToStart,
-                onMoveToEnd: configuration.onMoveToEnd
+                onContextAction: configuration.onContextAction
             )
         )
     }
@@ -867,11 +879,7 @@ private struct BookshelfDefaultCollectionCellContent: View {
     let isSelected: Bool
     let canMove: Bool
     let activeWriteAction: BookshelfPendingAction?
-    let onEnterEditing: (BookshelfItemID) -> Void
-    let onPin: (BookshelfItemID) -> Void
-    let onUnpin: (BookshelfItemID) -> Void
-    let onMoveToStart: (BookshelfItemID) -> Void
-    let onMoveToEnd: (BookshelfItemID) -> Void
+    let onContextAction: (BookshelfBookContextAction, BookshelfItemID) -> Void
 
     var body: some View {
         itemLabel
@@ -914,53 +922,81 @@ private struct BookshelfDefaultCollectionCellContent: View {
 
     @ViewBuilder
     private var contextMenu: some View {
-        Button {
-            onEnterEditing(item.id)
-        } label: {
-            Label("选择", systemImage: "checkmark.circle")
+        switch item.content {
+        case .book:
+            Button {
+                onContextAction(.addNote, item.id)
+            } label: {
+                Label("添加笔记", systemImage: "square.and.pencil")
+            }
+
+            pinMenuButton
+
+            Button {
+                onContextAction(.editBook, item.id)
+            } label: {
+                Label("编辑书籍", systemImage: "pencil")
+            }
+
+            Button {
+                onContextAction(.showReadingDetail, item.id)
+            } label: {
+                Label("阅读详情", systemImage: "chart.bar.doc.horizontal")
+            }
+
+            Button {
+                onContextAction(.startReadTiming, item.id)
+            } label: {
+                Label("开始计时", systemImage: "timer")
+            }
+
+            Button {
+                onContextAction(.organizeBooks, item.id)
+            } label: {
+                Label("整理书籍", systemImage: "square.grid.2x2")
+            }
+
+            Button(role: .destructive) {
+                onContextAction(.delete, item.id)
+            } label: {
+                Label("删除书籍", systemImage: "trash")
+            }
+            .disabled(activeWriteAction != nil)
+        case .group:
+            pinMenuButton
+
+            Button {
+                onContextAction(.organizeBooks, item.id)
+            } label: {
+                Label("整理书籍", systemImage: "square.grid.2x2")
+            }
+
+            Button(role: .destructive) {
+                onContextAction(.delete, item.id)
+            } label: {
+                Label("删除分组", systemImage: "trash")
+            }
+            .disabled(activeWriteAction != nil)
         }
+    }
 
-        Divider()
-
+    @ViewBuilder
+    private var pinMenuButton: some View {
         if item.pinned {
             Button {
-                onUnpin(item.id)
+                onContextAction(.unpin, item.id)
             } label: {
                 Label("取消置顶", systemImage: "pin.slash")
             }
             .disabled(activeWriteAction != nil)
         } else {
             Button {
-                onPin(item.id)
+                onContextAction(.pin, item.id)
             } label: {
                 Label("置顶", systemImage: "pin")
             }
             .disabled(activeWriteAction != nil)
-
-            Button {
-                onMoveToStart(item.id)
-            } label: {
-                Label("移到最前", systemImage: "arrow.up.to.line")
-            }
-            .disabled(!canMove)
-
-            Button {
-                onMoveToEnd(item.id)
-            } label: {
-                Label("移到最后", systemImage: "arrow.down.to.line")
-            }
-            .disabled(!canMove)
         }
-
-        Button { } label: {
-            Label("更多", systemImage: "ellipsis.circle")
-        }
-        .disabled(true)
-
-        Button(role: .destructive) { } label: {
-            Label("删除", systemImage: "trash")
-        }
-        .disabled(true)
     }
 
     private var accessibilityLabel: String {

@@ -1,7 +1,7 @@
 /**
  * [INPUT]: 依赖 RepositoryContainer 注入搜索仓储与本地书仓储，依赖 BookSearchViewModel 驱动远端查询状态，依赖 BookSearchResultRow、BookSearchStatusCard 与登录/验证弹层承接搜索与回流
  * [OUTPUT]: 对外提供 BookSearchView，承载完整书籍搜索体验、豆瓣登录恢复、番茄风控恢复与可选的新书回填
- * [POS]: Book 模块搜索页壳层，负责六书源切换、最近搜索、豆瓣/番茄风控回流与结果进入录入页
+ * [POS]: Book 模块搜索页壳层，负责在线来源切换、最近搜索、豆瓣/番茄风控回流与结果进入录入页
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
@@ -72,16 +72,23 @@ struct BookSearchView: View {
             viewModel = BookSearchViewModel(
                 repository: repositories.bookSearchRepository,
                 initialQuery: snapshot?.query ?? "",
-                initialSource: snapshot?.selectedSource ?? .wenqu
+                initialSource: snapshot?.selectedSource
             )
             bootstrapLoadingGate.update(intent: .none)
         }
         .navigationDestination(item: $navigationSeed) { seed in
             BookEditorView(
                 seed: seed,
-                onSavedBookID: onCompletedBookSelection == nil ? nil : { bookId in
-                    Task {
-                        await handleCreatedBook(bookId: bookId)
+                onSavedBookID: { bookId in
+                    if onCompletedBookSelection == nil {
+                        if viewModel?.searchSettings.shouldReturnToBookshelfAfterSave == true {
+                            navigationSeed = nil
+                            dismiss()
+                        }
+                    } else {
+                        Task {
+                            await handleCreatedBook(bookId: bookId)
+                        }
                     }
                 }
             )
@@ -242,7 +249,9 @@ struct BookSearchView: View {
 
     private func controlsSection(_ viewModel: BookSearchViewModel) -> some View {
         VStack(alignment: .leading, spacing: SearchPageLayout.controlsVerticalSpacing) {
-            sourcePills(viewModel)
+            if viewModel.searchSettings.isQuickSourceSwitchEnabled {
+                sourcePills(viewModel)
+            }
             recentQueries(viewModel)
         }
         .padding(.horizontal, Spacing.screenEdge)
@@ -255,7 +264,7 @@ struct BookSearchView: View {
                     let isSelected = source == viewModel.selectedSource
                     Button {
                         withAnimation(.snappy) {
-                            viewModel.selectedSource = source
+                            viewModel.updateSelectedSource(source)
                         }
                         clearTransientState()
 
@@ -514,7 +523,7 @@ struct BookSearchView: View {
             }
         } label: {
             Image(systemName: "ellipsis")
-                .font(.system(size: 18, weight: .medium))
+                .font(AppTypography.semantic(.body, weight: .medium))
                 .foregroundStyle(Color.textPrimary)
                 .frame(width: 24, height: 24)
                 .contentShape(Rectangle())
@@ -527,9 +536,22 @@ struct BookSearchView: View {
     private func auxiliaryDestinationView(_ destination: AuxiliaryDestination) -> some View {
         switch destination {
         case .scan:
-            BookScanPlaceholderView()
+            BookScanPlaceholderView { isbn in
+                guard let viewModel else { return }
+                clearTransientState()
+                auxiliaryDestination = nil
+                Task {
+                    await performSearch(using: viewModel, keyword: isbn)
+                }
+            }
         case .settings:
-            BookSearchSettingsPlaceholderView()
+            if let viewModel {
+                BookSearchSettingsView(viewModel: viewModel)
+            } else {
+                LoadingStateView("正在准备设置…", style: .inline)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .background(Color.surfacePage)
+            }
         }
     }
 
@@ -544,7 +566,7 @@ struct BookSearchView: View {
             viewModel.query = keyword
         }
         if let source {
-            viewModel.selectedSource = source
+            viewModel.updateSelectedSource(source)
         }
 
         if recoveryAttempt == 0 {

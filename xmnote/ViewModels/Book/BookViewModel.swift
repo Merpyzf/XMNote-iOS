@@ -9,7 +9,7 @@ import Foundation
 
 /**
  * [INPUT]: 依赖 BookRepositoryProtocol 提供书架快照数据流和排序置顶写入，依赖 BookshelfSnapshot 进行多维度状态编排
- * [OUTPUT]: 对外提供 BookViewModel，驱动书籍页维度浏览、搜索态、显示设置、默认书架编辑态、排序置顶、批量编辑、书单、导出入口、删除与 UICollectionView 排序提交
+ * [OUTPUT]: 对外提供 BookViewModel，驱动书籍页维度浏览、搜索态、显示设置、默认书架编辑态、排序置顶、批量编辑、跨模块占位、删除与 UICollectionView 排序提交
  * [POS]: Book 模块书籍列表状态编排器，被 BookContainerView/BookGridView 消费
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -42,6 +42,8 @@ enum BookshelfPendingAction: Hashable {
     case exportBook
     case more
     case delete
+    case editContributor
+    case deleteContributor
     case reorder
 
     var title: String {
@@ -74,18 +76,34 @@ enum BookshelfPendingAction: Hashable {
             return "更多"
         case .delete:
             return "删除"
+        case .editContributor:
+            return "编辑"
+        case .deleteContributor:
+            return "删除"
         case .reorder:
             return "排序"
         }
     }
 }
 
-/// 默认书架删除确认状态，记录打开确认弹窗时的选中对象数量。
+/// 默认书架删除确认状态，记录打开确认弹窗时的目标对象与数量。
 struct BookshelfDefaultDeleteConfirmation: Identifiable, Hashable, Sendable {
+    let targetIDs: [BookshelfItemID]
     let bookCount: Int
     let groupCount: Int
 
-    var id: String { "book-\(bookCount)-group-\(groupCount)" }
+    var id: String {
+        let targetKey = targetIDs.map { id in
+            switch id {
+            case .book(let bookID):
+                return "b\(bookID)"
+            case .group(let groupID):
+                return "g\(groupID)"
+            }
+        }
+        .joined(separator: "-")
+        return "book-\(bookCount)-group-\(groupCount)-\(targetKey)"
+    }
 
     var totalCount: Int { bookCount + groupCount }
 }
@@ -128,6 +146,9 @@ class BookViewModel {
     var actionNotice: String?
     var activeBatchSheet: BookshelfBatchEditSheet?
     var activeDeleteConfirmation: BookshelfDefaultDeleteConfirmation?
+    var activeContributorNameEdit: BookContributorNameEdit?
+    var activeContributorDeleteConfirmation: BookContributorDeleteConfirmation?
+    var contributorNameEditText = ""
     var isLoadingBatchOptions = false
 
     private let repository: any BookRepositoryProtocol
@@ -454,6 +475,8 @@ class BookViewModel {
         actionNotice = nil
         activeBatchSheet = nil
         activeDeleteConfirmation = nil
+        activeContributorNameEdit = nil
+        activeContributorDeleteConfirmation = nil
         cancelBatchOptionsLoading()
     }
 
@@ -542,7 +565,7 @@ class BookViewModel {
         moveItems(selectedIDs, placement: .end, clearsSelectionOnSuccess: true)
     }
 
-    /// 执行默认书架底部工具栏动作；书单与导出会展开分组内书籍，其他批量编辑仅作用于已选 Book。
+    /// 执行默认书架底部工具栏动作；书单与导出当前只给占位提示，已核对的批量管理动作走真实写入。
     func performBottomAction(_ action: BookshelfBookListEditAction) {
         guard canMoreSelectedItems else {
             actionNotice = "请先选择书籍或分组"
@@ -556,13 +579,13 @@ class BookViewModel {
         case .moveToGroup:
             presentMoveGroupSheet()
         case .addToBookList:
-            presentBookListSheet()
+            presentPlaceholderAction(action)
         case .setTag, .setSource, .setReadStatus:
             presentBatchSheet(for: action)
         case .exportNote:
-            presentExportSheet(kind: .notes)
+            presentPlaceholderAction(action)
         case .exportBook:
-            presentExportSheet(kind: .books)
+            presentPlaceholderAction(action)
         case .pin, .unpin, .reorder, .moveOut, .renameGroup, .deleteGroup, .renameTag, .deleteTag, .renameSource, .deleteSource, .deleteBooks:
             actionNotice = "\(action.title)不适用于默认书架底部工具栏"
         }
@@ -575,6 +598,7 @@ class BookViewModel {
             return
         }
         activeDeleteConfirmation = BookshelfDefaultDeleteConfirmation(
+            targetIDs: selectedIDs,
             bookCount: selectedBookIDs.count,
             groupCount: selectedGroupCount
         )
@@ -582,12 +606,113 @@ class BookViewModel {
         writeError = nil
     }
 
+    /// 打开单个默认书架项目删除确认，供长按菜单直接删除 Book/Group。
+    func presentDeleteConfirmation(for id: BookshelfItemID) {
+        let counts = deleteCounts(for: [id])
+        activeDeleteConfirmation = BookshelfDefaultDeleteConfirmation(
+            targetIDs: [id],
+            bookCount: counts.bookCount,
+            groupCount: counts.groupCount
+        )
+        actionNotice = nil
+        writeError = nil
+    }
+
     /// 删除默认书架选中的 Book/Group，分组内书籍按 placement 安置回默认书架。
     func submitDeleteSelectedItems(placement: GroupBooksPlacement) {
-        let ids = selectedIDs
+        submitDeleteItems(selectedIDs, placement: placement)
+    }
+
+    /// 删除指定默认书架 Book/Group，分组内书籍按 placement 安置回默认书架。
+    func submitDeleteItems(_ ids: [BookshelfItemID], placement: GroupBooksPlacement) {
         activeDeleteConfirmation = nil
         runWriteAction(.delete, successMessage: "已删除选中项") {
             try await self.repository.deleteBookshelfItems(ids, groupBooksPlacement: placement)
+        }
+    }
+
+    /// 展示当前阶段尚未迁移的跨模块能力占位提示。
+    func presentContextPlaceholder(_ message: String) {
+        writeError = nil
+        actionNotice = message
+    }
+
+    /// 展示尚未纳入本轮的跨模块批量能力提示，避免打开半成品页面或触发书单/导出写入。
+    func presentPlaceholderAction(_ action: BookshelfBookListEditAction) {
+        cancelBatchOptionsLoading()
+        activeBatchSheet = nil
+        writeError = nil
+        switch action {
+        case .addToBookList:
+            actionNotice = "书单添加将在书单模块开发时开放"
+        case .exportNote, .exportBook:
+            actionNotice = "\(action.title)将在导出模块迁移时开放"
+        case .pin, .unpin, .reorder, .moveToStart, .moveToEnd, .moveToGroup, .moveOut, .setTag, .setSource, .setReadStatus, .renameGroup, .deleteGroup, .renameTag, .deleteTag, .renameSource, .deleteSource, .deleteBooks:
+            actionNotice = "\(action.title)需先完成 Android 数据语义核对后再开放"
+        }
+    }
+
+    /// 打开作者/出版社聚合卡名称编辑弹窗，提交前不触发写库。
+    func presentContributorNameEdit(for group: BookshelfAggregateGroup) {
+        guard activeWriteAction == nil, let kind = BookContributorKind(context: group.context) else { return }
+        activeContributorNameEdit = BookContributorNameEdit(
+            kind: kind,
+            currentName: group.title,
+            bookCount: group.count
+        )
+        contributorNameEditText = group.title
+        writeError = nil
+        actionNotice = nil
+    }
+
+    /// 提交作者/出版社重命名；Repository 负责同步更新使用旧名称的书籍。
+    func submitContributorNameEdit() {
+        guard let edit = activeContributorNameEdit else { return }
+        let nextName = contributorNameEditText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !nextName.isEmpty else {
+            writeError = "\(edit.kind.itemTitle)名称不能为空"
+            actionNotice = writeError
+            return
+        }
+        activeContributorNameEdit = nil
+        guard nextName != edit.currentName else {
+            actionNotice = nil
+            return
+        }
+
+        runWriteAction(.editContributor, successMessage: "\(edit.kind.itemTitle)已更新") {
+            switch edit.kind {
+            case .author:
+                try await self.repository.renameAuthor(oldName: edit.currentName, newName: nextName)
+            case .press:
+                try await self.repository.renamePress(oldName: edit.currentName, newName: nextName)
+            }
+        }
+    }
+
+    /// 打开作者/出版社删除确认弹窗，确认前不触发写库。
+    func presentContributorDeleteConfirmation(for group: BookshelfAggregateGroup) {
+        guard activeWriteAction == nil, let kind = BookContributorKind(context: group.context) else { return }
+        activeContributorDeleteConfirmation = BookContributorDeleteConfirmation(
+            kind: kind,
+            name: group.title,
+            bookCount: group.count
+        )
+        writeError = nil
+        actionNotice = nil
+    }
+
+    /// 提交作者/出版社删除；Repository 负责删除该维度下书籍并移除资料行。
+    func submitContributorDelete() {
+        guard let confirmation = activeContributorDeleteConfirmation else { return }
+        activeContributorDeleteConfirmation = nil
+        runWriteAction(.deleteContributor, successMessage: "\(confirmation.kind.itemTitle)已删除") {
+            switch confirmation.kind {
+            case .author:
+                try await self.repository.deleteAuthor(name: confirmation.name)
+            case .press:
+                try await self.repository.deletePress(name: confirmation.name)
+            }
         }
     }
 
@@ -761,6 +886,17 @@ private extension BookViewModel {
             return .source
         case .default, .rating, .author, .press:
             return nil
+        }
+    }
+
+    nonisolated func deleteCounts(for ids: [BookshelfItemID]) -> (bookCount: Int, groupCount: Int) {
+        ids.reduce(into: (bookCount: 0, groupCount: 0)) { result, id in
+            switch id {
+            case .book:
+                result.bookCount += 1
+            case .group:
+                result.groupCount += 1
+            }
         }
     }
 

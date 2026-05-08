@@ -1,6 +1,6 @@
 /**
- * [INPUT]: 依赖 BookSearchRepositoryProtocol 提供远端搜索、详情补抓和最近搜索持久化
- * [OUTPUT]: 对外提供 BookSearchViewModel，驱动书籍搜索页的查询、状态与结果交互
+ * [INPUT]: 依赖 BookSearchRepositoryProtocol 提供远端搜索、详情补抓、最近搜索与搜索设置持久化
+ * [OUTPUT]: 对外提供 BookSearchViewModel，驱动书籍搜索页的查询、状态、设置与结果交互
  * [POS]: ViewModels/Book 的书籍搜索状态编排器，被 BookSearchView 消费
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -18,6 +18,7 @@ final class BookSearchViewModel {
 
     var query: String = ""
     var selectedSource: BookSearchSource = .wenqu
+    var searchSettings: BookSearchSettings = .default
     var recentQueries: [String] = []
     var results: [BookSearchResult] = []
     var errorMessage: String?
@@ -30,11 +31,13 @@ final class BookSearchViewModel {
     init(
         repository: any BookSearchRepositoryProtocol,
         initialQuery: String = "",
-        initialSource: BookSearchSource = .wenqu
+        initialSource: BookSearchSource? = nil
     ) {
         self.repository = repository
+        let settings = repository.fetchSearchSettings()
         self.query = initialQuery
-        self.selectedSource = initialSource
+        self.searchSettings = settings
+        self.selectedSource = initialSource ?? settings.defaultSource
         self.recentQueries = repository.fetchRecentQueries()
     }
 
@@ -107,6 +110,30 @@ final class BookSearchViewModel {
     func removeRecentQuery(_ query: String) {
         repository.removeRecentQuery(query)
         reloadRecentQueries()
+    }
+
+    /// 选择当前搜索来源，并在设置中同步默认来源。
+    func updateSelectedSource(_ source: BookSearchSource) {
+        selectedSource = source
+        updateDefaultSource(source)
+    }
+
+    /// 更新默认搜索源并持久化，供下次进入搜索页直接沿用。
+    func updateDefaultSource(_ source: BookSearchSource) {
+        searchSettings.defaultSource = source
+        repository.saveSearchSettings(searchSettings)
+    }
+
+    /// 更新快速切换开关；关闭后 UI 隐藏来源横排入口但保留当前默认源。
+    func updateQuickSourceSwitch(_ isEnabled: Bool) {
+        searchSettings.isQuickSourceSwitchEnabled = isEnabled
+        repository.saveSearchSettings(searchSettings)
+    }
+
+    /// 更新保存后返回书架偏好，对齐 Android 添加完成后的返回控制。
+    func updateReturnToBookshelfAfterSave(_ isEnabled: Bool) {
+        searchSettings.shouldReturnToBookshelfAfterSave = isEnabled
+        repository.saveSearchSettings(searchSettings)
     }
 
     /// 将轻量结果补齐为录入页种子；豆瓣场景会在这里抓详情。

@@ -6,8 +6,8 @@
 //
 
 /**
- * [INPUT]: 依赖 BookshelfBookListRoute 提供聚合上下文，依赖 BookRepositoryProtocol 提供二级列表观察流，依赖外层 BookRoute 闭包承接书籍详情导航
- * [OUTPUT]: 对外提供 BookshelfBookListView，使用 UIKit UICollectionView 展示聚合书籍列表、编辑选择入口与批量编辑 Sheet 容器
+ * [INPUT]: 依赖 BookshelfBookListRoute 提供聚合上下文，依赖 BookRepositoryProtocol 提供二级列表观察流，依赖外层 BookRoute/NoteRoute 闭包承接书籍与书摘导航
+ * [OUTPUT]: 对外提供 BookshelfBookListView，使用 UIKit UICollectionView 展示聚合书籍列表、长按菜单、编辑选择入口与批量编辑 Sheet 容器
  * [POS]: Book 模块二级列表页，被 BookRoute.bookshelfList 导航目标消费
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -20,15 +20,18 @@ struct BookshelfBookListView: View {
     @Environment(RepositoryContainer.self) private var repositories
     let route: BookshelfBookListRoute
     let onOpenRoute: (BookRoute) -> Void
+    let onOpenNoteRoute: (NoteRoute) -> Void
     @State private var viewModel: BookshelfBookListViewModel?
 
-    /// 构建二级书籍列表；点击书籍时把导航意图交回外层 NavigationStack。
+    /// 构建二级书籍列表；点击书籍与添加笔记时把导航意图交回外层 NavigationStack。
     init(
         route: BookshelfBookListRoute,
-        onOpenRoute: @escaping (BookRoute) -> Void = { _ in }
+        onOpenRoute: @escaping (BookRoute) -> Void = { _ in },
+        onOpenNoteRoute: @escaping (NoteRoute) -> Void = { _ in }
     ) {
         self.route = route
         self.onOpenRoute = onOpenRoute
+        self.onOpenNoteRoute = onOpenNoteRoute
     }
 
     var body: some View {
@@ -36,7 +39,8 @@ struct BookshelfBookListView: View {
             if let viewModel {
                 BookshelfBookListContentView(
                     viewModel: viewModel,
-                    onOpenRoute: onOpenRoute
+                    onOpenRoute: onOpenRoute,
+                    onOpenNoteRoute: onOpenNoteRoute
                 )
             } else {
                 Color.clear
@@ -56,6 +60,7 @@ struct BookshelfBookListView: View {
 private struct BookshelfBookListContentView: View {
     @Bindable var viewModel: BookshelfBookListViewModel
     let onOpenRoute: (BookRoute) -> Void
+    let onOpenNoteRoute: (NoteRoute) -> Void
     @State private var showsDisplaySettingSheet = false
 
     var body: some View {
@@ -85,10 +90,13 @@ private struct BookshelfBookListContentView: View {
                 selectedBookIDs: viewModel.selectedBookIDSet,
                 canReorder: viewModel.canReorderBooksInDefaultGroup,
                 movableBookIDs: viewModel.movableBookIDs,
+                supportsContextPin: viewModel.supportsContextPin,
+                activeWriteAction: viewModel.activeWriteAction,
                 onToggleSelection: viewModel.toggleSelection,
                 onOpenBook: { bookID in
                     onOpenRoute(.detail(bookId: bookID))
                 },
+                onContextAction: handleContextAction(_:bookID:),
                 onCommitOrder: viewModel.commitBooksInDefaultGroupOrder
             )
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -207,10 +215,10 @@ private struct BookshelfBookListContentView: View {
 
     private func deleteDescriptor(for confirmation: BookshelfBookListDeleteConfirmation) -> XMSystemAlertDescriptor {
         switch confirmation.kind {
-        case .books(let count):
+        case .books(let bookIDs):
             return XMSystemAlertDescriptor(
                 title: "删除书籍",
-                message: "将删除已选 \(count) 本书，并清理书摘、标签、分组、阅读状态、打卡、书单关系等关联数据。此操作不可撤销。",
+                message: "将删除已选 \(bookIDs.count) 本书，并清理书摘、标签、分组、阅读状态、打卡、书单关系等关联数据。此操作不可撤销。",
                 actions: [
                     XMSystemAlertAction(title: "取消", role: .cancel) { },
                     XMSystemAlertAction(title: "删除", role: .destructive) {
@@ -258,6 +266,32 @@ private struct BookshelfBookListContentView: View {
         }
     }
 
+    private func handleContextAction(_ action: BookshelfBookContextAction, bookID: Int64) {
+        switch action {
+        case .addNote:
+            onOpenNoteRoute(.create(seed: NoteEditorSeed(
+                bookId: bookID,
+                chapterId: nil,
+                contentHTML: "",
+                ideaHTML: ""
+            )))
+        case .pin:
+            viewModel.pinBook(bookID)
+        case .unpin:
+            viewModel.unpinBook(bookID)
+        case .editBook:
+            onOpenRoute(.edit(bookId: bookID))
+        case .showReadingDetail:
+            viewModel.presentContextPlaceholder("阅读详情将在阅读模块迁移后开放")
+        case .startReadTiming:
+            viewModel.presentContextPlaceholder("开始计时将在阅读模块迁移后开放")
+        case .organizeBooks:
+            viewModel.enterEditing()
+        case .delete:
+            viewModel.presentDeleteBookConfirmation(bookID: bookID)
+        }
+    }
+
     private func nameEditDescriptor(for nameEdit: BookshelfBookListNameEdit) -> XMSystemAlertDescriptor {
         XMSystemAlertDescriptor(
             title: nameEdit.action.title,
@@ -291,8 +325,11 @@ private struct BookshelfBookListCollectionView: UIViewRepresentable {
     let selectedBookIDs: Set<Int64>
     let canReorder: Bool
     let movableBookIDs: Set<Int64>
+    let supportsContextPin: Bool
+    let activeWriteAction: BookshelfBookListEditAction?
     let onToggleSelection: (Int64) -> Void
     let onOpenBook: (Int64) -> Void
+    let onContextAction: (BookshelfBookContextAction, Int64) -> Void
     let onCommitOrder: ([Int64]) -> Void
 
     /// 创建 collection view 承载视图。
@@ -321,8 +358,11 @@ private struct BookshelfBookListCollectionView: UIViewRepresentable {
             selectedBookIDs: selectedBookIDs,
             canReorder: canReorder,
             movableBookIDs: movableBookIDs,
+            supportsContextPin: supportsContextPin,
+            activeWriteAction: activeWriteAction,
             onToggleSelection: onToggleSelection,
             onOpenBook: onOpenBook,
+            onContextAction: onContextAction,
             onCommitOrder: onCommitOrder
         )
     }
@@ -337,8 +377,11 @@ private struct BookshelfBookListCollectionConfiguration {
     let selectedBookIDs: Set<Int64>
     let canReorder: Bool
     let movableBookIDs: Set<Int64>
+    let supportsContextPin: Bool
+    let activeWriteAction: BookshelfBookListEditAction?
     let onToggleSelection: (Int64) -> Void
     let onOpenBook: (Int64) -> Void
+    let onContextAction: (BookshelfBookContextAction, Int64) -> Void
     let onCommitOrder: ([Int64]) -> Void
 
     static let empty = BookshelfBookListCollectionConfiguration(
@@ -349,8 +392,11 @@ private struct BookshelfBookListCollectionConfiguration {
         selectedBookIDs: [],
         canReorder: false,
         movableBookIDs: [],
+        supportsContextPin: false,
+        activeWriteAction: nil,
         onToggleSelection: { _ in },
         onOpenBook: { _ in },
+        onContextAction: { _, _ in },
         onCommitOrder: { _ in }
     )
 }
@@ -977,7 +1023,10 @@ private final class BookshelfBookListCollectionCell: UICollectionViewCell {
                 BookshelfBookListRowView(
                     book: book,
                     isEditing: configuration.isEditing,
-                    isSelected: configuration.selectedBookIDs.contains(book.id)
+                    isSelected: configuration.selectedBookIDs.contains(book.id),
+                    supportsContextPin: configuration.supportsContextPin,
+                    activeWriteAction: configuration.activeWriteAction,
+                    onContextAction: configuration.onContextAction
                 )
             }
         }
@@ -1039,6 +1088,9 @@ private struct BookshelfBookListRowView: View {
     let book: BookshelfBookListItem
     let isEditing: Bool
     let isSelected: Bool
+    let supportsContextPin: Bool
+    let activeWriteAction: BookshelfBookListEditAction?
+    let onContextAction: (BookshelfBookContextAction, Int64) -> Void
 
     var body: some View {
         HStack(spacing: Spacing.base) {
@@ -1093,6 +1145,69 @@ private struct BookshelfBookListRowView: View {
         .accessibilityElement(children: .combine)
         .accessibilityLabel(accessibilityLabel)
         .accessibilityAddTraits(.isButton)
+        .contextMenu {
+            if !isEditing {
+                contextMenu
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var contextMenu: some View {
+        Button {
+            onContextAction(.addNote, book.id)
+        } label: {
+            Label("添加笔记", systemImage: "square.and.pencil")
+        }
+
+        if supportsContextPin {
+            if book.pinned {
+                Button {
+                    onContextAction(.unpin, book.id)
+                } label: {
+                    Label("取消置顶", systemImage: "pin.slash")
+                }
+                .disabled(activeWriteAction != nil)
+            } else {
+                Button {
+                    onContextAction(.pin, book.id)
+                } label: {
+                    Label("置顶", systemImage: "pin")
+                }
+                .disabled(activeWriteAction != nil)
+            }
+        }
+
+        Button {
+            onContextAction(.editBook, book.id)
+        } label: {
+            Label("编辑书籍", systemImage: "pencil")
+        }
+
+        Button {
+            onContextAction(.showReadingDetail, book.id)
+        } label: {
+            Label("阅读详情", systemImage: "chart.bar.doc.horizontal")
+        }
+
+        Button {
+            onContextAction(.startReadTiming, book.id)
+        } label: {
+            Label("开始计时", systemImage: "timer")
+        }
+
+        Button {
+            onContextAction(.organizeBooks, book.id)
+        } label: {
+            Label("整理书籍", systemImage: "square.grid.2x2")
+        }
+
+        Button(role: .destructive) {
+            onContextAction(.delete, book.id)
+        } label: {
+            Label("删除书籍", systemImage: "trash")
+        }
+        .disabled(activeWriteAction != nil)
     }
 
     private var metadata: String {
