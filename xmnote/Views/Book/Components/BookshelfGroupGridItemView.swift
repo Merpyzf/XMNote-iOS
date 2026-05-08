@@ -11,12 +11,14 @@ import SwiftUI
 struct BookshelfGroupGridItemView: View {
     let group: BookshelfGroupPayload
     var isPinned = false
+    var titleDisplayMode: BookshelfTitleDisplayMode = .standard
 
     var body: some View {
         VStack(alignment: .leading, spacing: Spacing.half) {
             coverMosaic
             groupInfo
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
         .accessibilityElement(children: .combine)
         .accessibilityLabel("\(group.name)，\(group.bookCount)本")
     }
@@ -30,18 +32,12 @@ struct BookshelfGroupGridItemView: View {
     }
 
     private var groupInfo: some View {
-        VStack(alignment: .leading, spacing: Spacing.tiny) {
-            Text(group.name)
-                .font(AppTypography.caption)
-                .fontWeight(.medium)
-                .lineLimit(1)
-                .foregroundStyle(.primary)
-
-            Text("\(group.bookCount)本")
-                .font(AppTypography.caption2)
-                .lineLimit(1)
-                .foregroundStyle(.secondary)
-        }
+        BookshelfTitleText(
+            text: group.name,
+            mode: titleDisplayMode,
+            style: .captionMedium,
+            color: .textPrimary
+        )
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 

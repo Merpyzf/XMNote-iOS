@@ -19,12 +19,14 @@ struct BookGridItemView: View {
     let book: BookshelfBookPayload
     var showsNoteCount = true
     var isPinned = false
+    var titleDisplayMode: BookshelfTitleDisplayMode = .standard
 
     var body: some View {
         VStack(alignment: .leading, spacing: Spacing.half) {
             coverImage
             bookInfo
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     // MARK: - Cover
@@ -41,16 +43,17 @@ struct BookGridItemView: View {
 
     private var bookInfo: some View {
         VStack(alignment: .leading, spacing: Spacing.tiny) {
-            Text(book.name)
-                .font(AppTypography.caption)
-                .fontWeight(.medium)
-                .lineLimit(1)
-                .foregroundStyle(.primary)
+            BookshelfTitleText(
+                text: book.name,
+                mode: titleDisplayMode,
+                style: .captionMedium,
+                color: .textPrimary
+            )
 
             Text(book.author.isEmpty ? " " : book.author)
                 .font(AppTypography.caption2)
                 .lineLimit(1)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Color.textSecondary)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }

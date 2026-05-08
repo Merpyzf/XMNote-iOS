@@ -84,9 +84,15 @@ struct ReadCalendarCoverFullscreenDeckStage: View {
         static let maxGridScale: CGFloat = 1.06
         static let minGridCardWidth: CGFloat = 44
         static let maxCollapsedSupportedCount = 14
-        static let defaultCoverAspectRatio: CGFloat = 1.46
-        static let minCoverAspectRatio: CGFloat = 1.35
-        static let maxCoverAspectRatio: CGFloat = 1.55
+        static var defaultCoverAspectRatio: CGFloat {
+            XMBookCover.heightToWidthAspectRatio
+        }
+        static var minCoverAspectRatio: CGFloat {
+            XMBookCover.heightToWidthAspectRatio
+        }
+        static var maxCoverAspectRatio: CGFloat {
+            XMBookCover.heightToWidthAspectRatio
+        }
         static let adaptiveFillRatioLow: CGFloat = 0.55
         static let adaptiveFillRatioMid: CGFloat = 0.63
         static let adaptiveFillRatioHigh: CGFloat = 0.71

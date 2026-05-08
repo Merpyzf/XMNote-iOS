@@ -109,7 +109,7 @@ struct BookshelfSearchBar: View {
     }
 }
 
-/// 标签、来源、作者等聚合维度使用的两列卡片。
+/// 标签、来源、作者等聚合维度使用的轻量封面入口。
 struct BookshelfAggregateCardView: View {
     let group: BookshelfAggregateGroup
 
@@ -117,21 +117,11 @@ struct BookshelfAggregateCardView: View {
         VStack(alignment: .leading, spacing: Spacing.half) {
             coverMosaic
             Text(group.title)
-                .font(AppTypography.caption)
-                .fontWeight(.medium)
-                .foregroundStyle(.primary)
+                .font(AppTypography.captionMedium)
+                .foregroundStyle(Color.textPrimary)
                 .lineLimit(2)
-            Text(group.subtitle)
-                .font(AppTypography.caption2)
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
         }
-        .padding(Spacing.half)
-        .background(Color.surfaceCard, in: RoundedRectangle(cornerRadius: CornerRadius.blockLarge, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: CornerRadius.blockLarge, style: .continuous)
-                .stroke(Color.surfaceBorderSubtle, lineWidth: CardStyle.borderWidth)
-        }
+        .frame(maxWidth: .infinity, alignment: .leading)
         .accessibilityElement(children: .combine)
         .accessibilityLabel("\(group.title)，\(group.subtitle)")
     }
@@ -148,21 +138,23 @@ struct BookshelfAggregateCardView: View {
 struct BookshelfDefaultListRow: View {
     let item: BookshelfItem
     var showsNoteCount = true
+    var titleDisplayMode: BookshelfTitleDisplayMode = .standard
 
     var body: some View {
         HStack(spacing: Spacing.base) {
             thumbnail
 
             VStack(alignment: .leading, spacing: Spacing.tiny) {
-                Text(item.title)
-                    .font(AppTypography.body)
-                    .fontWeight(.medium)
-                    .foregroundStyle(.primary)
-                    .lineLimit(2)
+                BookshelfTitleText(
+                    text: item.title,
+                    mode: titleDisplayMode,
+                    style: .bodyMedium,
+                    color: .textPrimary
+                )
 
                 Text(subtitle)
                     .font(AppTypography.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color.textSecondary)
                     .lineLimit(1)
             }
 
@@ -189,7 +181,10 @@ struct BookshelfDefaultListRow: View {
             )
             .frame(width: 44)
         case .group(let group):
-            BookshelfGroupGridItemView(group: group)
+            BookshelfGroupGridItemView(
+                group: group,
+                titleDisplayMode: titleDisplayMode
+            )
                 .frame(width: 48)
         }
     }

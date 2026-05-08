@@ -140,12 +140,100 @@ nonisolated enum BookshelfSortCriteria: String, CaseIterable, Codable, Hashable,
         }
     }
 
+    var systemImage: String {
+        switch self {
+        case .custom:
+            return "hand.draw"
+        case .createdDate:
+            return "calendar.badge.plus"
+        case .modifiedDate:
+            return "clock.arrow.circlepath"
+        case .publishDate:
+            return "calendar"
+        case .name:
+            return "textformat.abc"
+        case .noteCount:
+            return "note.text"
+        case .bookCount:
+            return "books.vertical"
+        case .rating:
+            return "star"
+        case .readDoneDate:
+            return "checkmark.circle"
+        case .totalReadingTime:
+            return "timer"
+        case .readStatus:
+            return "circle.dotted"
+        case .tagName:
+            return "tag"
+        case .authorName:
+            return "person.text.rectangle"
+        case .pressName:
+            return "building.columns"
+        case .source:
+            return "tray"
+        case .readingProgress:
+            return "chart.line.uptrend.xyaxis"
+        }
+    }
+
+    var ascendingTitle: String {
+        switch self {
+        case .createdDate, .modifiedDate, .publishDate, .readDoneDate:
+            return "由远及近"
+        case .name, .tagName, .authorName, .pressName, .source:
+            return "A-Z"
+        case .noteCount, .bookCount:
+            return "由少到多"
+        case .rating, .readingProgress:
+            return "由低到高"
+        case .totalReadingTime:
+            return "由短到长"
+        case .readStatus:
+            return "由前到后"
+        case .custom:
+            return "升序"
+        }
+    }
+
+    var descendingTitle: String {
+        switch self {
+        case .createdDate, .modifiedDate, .publishDate, .readDoneDate:
+            return "由近及远"
+        case .name, .tagName, .authorName, .pressName, .source:
+            return "Z-A"
+        case .noteCount, .bookCount:
+            return "由多到少"
+        case .rating, .readingProgress:
+            return "由高到低"
+        case .totalReadingTime:
+            return "由长到短"
+        case .readStatus:
+            return "由后到前"
+        case .custom:
+            return "降序"
+        }
+    }
+
     nonisolated var supportsSection: Bool {
         switch self {
         case .createdDate, .modifiedDate, .publishDate, .name, .readDoneDate, .readStatus, .tagName, .authorName, .pressName, .source:
             return true
         case .custom, .noteCount, .bookCount, .rating, .totalReadingTime, .readingProgress:
             return false
+        }
+    }
+
+    nonisolated var sectionToggleTitle: String {
+        switch self {
+        case .createdDate, .modifiedDate, .readDoneDate:
+            return "按月份分区"
+        case .publishDate:
+            return "按出版年份分区"
+        case .name, .readStatus, .tagName, .authorName, .pressName, .source:
+            return "按标题分区"
+        case .custom, .noteCount, .bookCount, .rating, .totalReadingTime, .readingProgress:
+            return "按条件分区"
         }
     }
 
@@ -210,11 +298,22 @@ nonisolated enum BookshelfTitleDisplayMode: String, CaseIterable, Codable, Hasha
     var title: String {
         switch self {
         case .standard:
-            return "默认"
+            return "默认显示"
         case .compact:
-            return "紧凑"
+            return "滚动显示"
         case .full:
-            return "完整"
+            return "两行显示"
+        }
+    }
+
+    var subtitle: String {
+        switch self {
+        case .standard:
+            return "单行显示，超出省略"
+        case .compact:
+            return "单行显示，超出时自动滚动"
+        case .full:
+            return "最多显示两行，超出省略"
         }
     }
 }

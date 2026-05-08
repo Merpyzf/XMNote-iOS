@@ -141,7 +141,7 @@ struct ReadCalendarCoverFanStack: View {
     init(
         items: [Item],
         maxVisibleCount: Int = 3,
-        coverSize: CGSize = CGSize(width: 14, height: 20),
+        coverSize: CGSize = XMBookCover.size(width: 14),
         isAnimated: Bool = true,
         style: Style = .standard,
         presentationMode: PresentationMode = .collapsed,
@@ -150,7 +150,7 @@ struct ReadCalendarCoverFanStack: View {
     ) {
         self.items = items
         self.maxVisibleCount = maxVisibleCount
-        self.coverSize = coverSize
+        self.coverSize = XMBookCover.size(width: coverSize.width)
         self.isAnimated = isAnimated
         self.style = style
         self.presentationMode = presentationMode

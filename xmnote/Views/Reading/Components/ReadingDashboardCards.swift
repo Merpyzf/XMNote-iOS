@@ -688,7 +688,7 @@ private struct ReadingResumeBookCard: View {
                 let coverViewportHeight = max(1, coverViewportSize.height)
                 let coverRenderWidth = max(
                     coverViewportWidth,
-                    coverViewportHeight * XMBookCover.aspectRatio
+                    XMBookCover.width(forHeight: coverViewportHeight)
                 )
 
                 XMBookCover.fixedWidth(

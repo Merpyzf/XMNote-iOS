@@ -330,7 +330,7 @@ private extension BookCoverStyleTestContentView {
 
             Text(surfaceStyle == .spine
                  ? XMBookCover.resolvedSurfaceTier(
-                    for: CGSize(width: width, height: width / XMBookCover.aspectRatio),
+                    for: XMBookCover.size(width: width),
                     requestedStyle: .spine
                  ).title
                  : "Flat")
@@ -353,7 +353,7 @@ private extension BookCoverStyleTestContentView {
             cover(width: width, urlString: urlString, surfaceStyle: surfaceStyle)
             Text(surfaceStyle == .spine
                  ? XMBookCover.resolvedSurfaceTier(
-                    for: CGSize(width: width, height: width / XMBookCover.aspectRatio),
+                    for: XMBookCover.size(width: width),
                     requestedStyle: .spine
                  ).title
                  : "Flat")

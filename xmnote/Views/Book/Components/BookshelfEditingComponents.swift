@@ -9,9 +9,9 @@ import SwiftUI
 
 /// 书架管理模式的统一动效参数，保证顶部 chrome、内容 inset 与底部面板按同一语义节奏切换。
 enum BookshelfManagementMotion {
-    static let modeTransition: Animation = .snappy(duration: 0.24, extraBounce: 0.03)
-    static let panelTransition: Animation = .snappy(duration: 0.22, extraBounce: 0.02)
-    static let restoreTransition: Animation = .snappy(duration: 0.20, extraBounce: 0)
+    static let modeTransition: Animation = .smooth(duration: 0.26)
+    static let panelTransition: Animation = .smooth(duration: 0.24)
+    static let restoreTransition: Animation = .smooth(duration: 0.22)
 
     static func modeAnimation(reduceMotion: Bool) -> Animation {
         reduceMotion ? .easeInOut(duration: 0.16) : modeTransition
@@ -30,19 +30,26 @@ enum BookshelfManagementMotion {
     }
 
     static func bottomPanelTransition(reduceMotion: Bool) -> AnyTransition {
-        reduceMotion ? .opacity : .move(edge: .bottom).combined(with: .opacity)
+        reduceMotion ? .opacity : .asymmetric(
+            insertion: .opacity.combined(with: .offset(x: 0, y: 8)),
+            removal: .opacity.combined(with: .offset(x: 0, y: 6))
+        )
     }
 
     static func browsingChromeTransition(reduceMotion: Bool) -> AnyTransition {
-        reduceMotion ? .opacity : .opacity.combined(with: .scale(scale: 0.98, anchor: .top))
+        reduceMotion ? .opacity : .opacity.combined(with: .offset(x: 0, y: -2))
+    }
+
+    static func editEntryPreparationDelay(reduceMotion: Bool) -> Duration {
+        reduceMotion ? .milliseconds(0) : .milliseconds(60)
     }
 
     static func editPanelDelay(reduceMotion: Bool) -> Duration {
-        reduceMotion ? .milliseconds(50) : .milliseconds(100)
+        reduceMotion ? .milliseconds(40) : .milliseconds(90)
     }
 
     static func editExitSettleDelay(reduceMotion: Bool) -> Duration {
-        reduceMotion ? .milliseconds(90) : .milliseconds(170)
+        reduceMotion ? .milliseconds(80) : .milliseconds(150)
     }
 }
 

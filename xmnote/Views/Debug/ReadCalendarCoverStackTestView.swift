@@ -706,7 +706,7 @@ private struct ReadCalendarCoverStackTestFullscreenOverlay: View {
     var sourceCoverAspectRatio: CGFloat {
         let sourceSize = payload.transitionSession.sourceCoverSize
         guard sourceSize.width > 0, sourceSize.height > 0 else {
-            return 1.46
+            return XMBookCover.heightToWidthAspectRatio
         }
         return sourceSize.height / sourceSize.width
     }
@@ -969,15 +969,14 @@ private struct ReadCalendarCoverStackTestFullscreenOverlay: View {
     }
 
     func resolvedCoverSize(in panelInnerSize: CGSize) -> CGSize {
-        let aspect = min(1.55, max(1.35, sourceCoverAspectRatio))
         guard isPanelAwareSizingEnabled else {
             let width = max(54, min(92, panelInnerSize.width / 5.1))
-            return CGSize(width: width, height: width * aspect)
+            return XMBookCover.size(width: width)
         }
         return ReadCalendarCoverFullscreenDeckStage.resolveAdaptiveCoverSize(
             containerSize: panelInnerSize,
             visibleCount: payload.stackedVisibleCount,
-            sourceAspectRatio: aspect
+            sourceAspectRatio: sourceCoverAspectRatio
         )
     }
 

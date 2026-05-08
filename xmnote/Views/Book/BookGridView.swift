@@ -23,6 +23,8 @@ struct BookGridView: View {
     var onOpenNoteRoute: (NoteRoute) -> Void = { _ in }
     var onEnterEditing: (BookshelfItemID?) -> Void = { _ in }
     @State private var readLoadingGate = LoadingGate()
+    @State private var hasPresentedInitialContent = false
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
 
     var body: some View {
         ZStack(alignment: .top) {
@@ -62,8 +64,13 @@ struct BookGridView: View {
         switch viewModel.contentState {
         case .loading:
             if readLoadingGate.isVisible {
-                LoadingStateView("正在整理书架", style: .inline)
+                BookshelfLoadingSkeletonView(
+                    layoutMode: viewModel.displaySetting.layoutMode,
+                    columnCount: viewModel.displaySetting.columnCount,
+                    bottomContentInset: bottomContentInset
+                )
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .ignoresSafeArea(.container, edges: .bottom)
             } else {
                 Color.clear
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -76,6 +83,15 @@ struct BookGridView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         case .content:
             dimensionContent
+                .transaction { transaction in
+                    guard !hasPresentedInitialContent else { return }
+                    transaction.animation = nil
+                    transaction.disablesAnimations = true
+                }
+                .onAppear {
+                    guard !hasPresentedInitialContent else { return }
+                    hasPresentedInitialContent = true
+                }
         }
     }
 
@@ -154,6 +170,8 @@ struct BookGridView: View {
             layoutMode: viewModel.displaySetting.layoutMode,
             columnCount: viewModel.displaySetting.columnCount,
             showsNoteCount: viewModel.displaySetting.showsNoteCount,
+            titleDisplayMode: viewModel.displaySetting.titleDisplayMode,
+            allowsStructuralAnimation: hasPresentedInitialContent,
             isEditing: viewModel.isEditing,
             bottomContentInset: bottomContentInset,
             selectedIDs: viewModel.selectedIDSet,
@@ -231,7 +249,7 @@ struct BookGridView: View {
     private func aggregateColumnCount(for dimension: BookshelfDimension) -> Int {
         switch dimension {
         case .author, .press:
-            return max(2, min(viewModel.displaySetting.columnCount, 4))
+            return horizontalSizeClass == .regular ? 4 : 3
         case .default, .status, .tag, .source, .rating:
             return max(2, min(viewModel.displaySetting.columnCount, 3))
         }

@@ -17,8 +17,8 @@ import SwiftUI
 ///
 /// 阴影不内置——日历堆叠阴影跟随 style 动态变化，排行榜有固定参数，场景差异大，外挂更灵活。
 struct XMBookCover: View {
-    /// 宽高比常量 0.7（28:40 = 7:10），全项目封面统一基准。
-    static let aspectRatio: CGFloat = 0.7
+    /// 宽高比常量，对齐 Android `AppConstant.BOOK_COVER_WH_RATIO`，作为全项目封面统一基准。
+    static let aspectRatio: CGFloat = 0.68
 
     /// 封面表面样式，默认保持平面封面，需要 Apple Books 风格的轻量厚度边时显式开启 `.spine`。
     enum SurfaceStyle: Hashable {
@@ -139,6 +139,31 @@ struct XMBookCover: View {
 // MARK: - Factory
 
 extension XMBookCover {
+    /// 高宽比视角的封面比例，供需要以高度约束计算布局的场景复用。
+    static var heightToWidthAspectRatio: CGFloat {
+        1 / aspectRatio
+    }
+
+    /// 根据封面宽度推导统一比例高度。
+    static func height(forWidth width: CGFloat) -> CGFloat {
+        width / aspectRatio
+    }
+
+    /// 根据封面高度推导统一比例宽度。
+    static func width(forHeight height: CGFloat) -> CGFloat {
+        height * aspectRatio
+    }
+
+    /// 根据封面宽度生成统一比例尺寸。
+    static func size(width: CGFloat) -> CGSize {
+        CGSize(width: width, height: height(forWidth: width))
+    }
+
+    /// 根据封面高度生成统一比例尺寸。
+    static func size(height: CGFloat) -> CGSize {
+        CGSize(width: width(forHeight: height), height: height)
+    }
+
     /// 响应式模式：宽度由父容器决定，高度按宽高比自动推算。
     static func responsive(
         urlString: String,
@@ -313,9 +338,9 @@ private extension XMBookCover {
         case let (w?, h?):
             return (w, h)
         case let (w?, nil):
-            return (w, w / Self.aspectRatio)
+            return (w, Self.height(forWidth: w))
         case let (nil, h?):
-            return (h * Self.aspectRatio, h)
+            return (Self.width(forHeight: h), h)
         case (nil, nil):
             return (nil, nil)
         }

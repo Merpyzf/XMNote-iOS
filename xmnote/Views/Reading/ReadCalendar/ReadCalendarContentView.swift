@@ -1801,7 +1801,7 @@ private struct ReadCalendarBookCoverFullscreenOverlay: View {
     var sourceCoverAspectRatio: CGFloat {
         let sourceSize = payload.transitionSession.sourceCoverSize
         guard sourceSize.width > 0, sourceSize.height > 0 else {
-            return 1.46
+            return XMBookCover.heightToWidthAspectRatio
         }
         return sourceSize.height / sourceSize.width
     }
@@ -2155,11 +2155,10 @@ private struct ReadCalendarBookCoverFullscreenOverlay: View {
 
     /// 根据当前舞台可用空间和源封面宽高比计算全屏封面尺寸。
     func resolvedCoverSize(in panelInnerSize: CGSize) -> CGSize {
-        let aspect = min(1.55, max(1.35, sourceCoverAspectRatio))
         return ReadCalendarCoverFullscreenDeckStage.resolveAdaptiveCoverSize(
             containerSize: panelInnerSize,
             visibleCount: payload.stackedVisibleCount,
-            sourceAspectRatio: aspect
+            sourceAspectRatio: sourceCoverAspectRatio
         )
     }
 

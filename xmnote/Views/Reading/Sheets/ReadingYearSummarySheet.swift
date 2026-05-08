@@ -77,9 +77,8 @@ struct ReadingYearSummarySheet: View {
     private func yearBookRow(_ book: ReadingYearReadBook) -> some View {
         CardContainer(cornerRadius: CornerRadius.blockLarge) {
             HStack(spacing: Spacing.base) {
-                XMBookCover.fixedSize(
-                    width: 54,
-                    height: 78,
+                XMBookCover.fixedWidth(
+                    54,
                     urlString: book.coverURL,
                     border: .init(color: .surfaceBorderSubtle, width: CardStyle.borderWidth)
                 )

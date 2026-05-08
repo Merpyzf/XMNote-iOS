@@ -204,8 +204,11 @@ private struct BookContentView: View {
         .sheet(isPresented: $showsDisplaySettingSheet) {
             BookshelfDisplaySettingSheet(
                 dimension: viewModel.selectedDimension,
+                scope: .main,
                 setting: $viewModel.displaySetting
             )
+            .presentationDetents([.large])
+            .presentationDragIndicator(.hidden)
         }
         .sheet(item: $viewModel.activeBatchSheet) { sheet in
             switch sheet {
@@ -367,7 +370,7 @@ private struct BookContentView: View {
     }
 
     private var showsBrowsingChrome: Bool {
-        selectedSubTab != .books || chromePhase == .normal || chromePhase == .exitingEdit
+        selectedSubTab != .books || chromePhase == .normal
     }
 
     private var showsEditHeader: Bool {
@@ -405,25 +408,35 @@ private struct BookContentView: View {
         dynamicTypeSize >= .accessibility1 ? BookshelfChromeMetrics.accessibilityTopBarHeight : BookshelfChromeMetrics.topBarHeight
     }
 
-    /// 进入书架管理模式并串联 TabBar 退场与编辑面板入场。
+    /// 进入书架管理模式，并为菜单收口、顶部 chrome 和底部面板保留清晰的分层节奏。
     /// - Note: 所有 SwiftUI 状态都在 MainActor 上修改；延迟任务会被后续进入/退出请求取消，避免旧阶段覆盖新阶段。
     private func enterEditingWithChoreography(initialSelection: BookshelfItemID? = nil) {
         guard selectedSubTab == .books, viewModel.canEditCurrentDimension else { return }
         chromeTransitionTask?.cancel()
         frozenTopChromeHeight = expectedTopChromeHeight
 
-        withAnimation(BookshelfManagementMotion.modeAnimation(reduceMotion: reduceMotion)) {
-            chromePhase = .enteringEdit
-            viewModel.enterEditing(initialSelection: initialSelection)
-        }
-
-        guard viewModel.isEditing else {
-            chromePhase = .normal
-            frozenTopChromeHeight = nil
-            return
-        }
-
         chromeTransitionTask = Task { @MainActor in
+            try? await Task.sleep(for: BookshelfManagementMotion.editEntryPreparationDelay(reduceMotion: reduceMotion))
+            guard !Task.isCancelled else { return }
+            guard selectedSubTab == .books, viewModel.canEditCurrentDimension else {
+                chromePhase = .normal
+                frozenTopChromeHeight = nil
+                chromeTransitionTask = nil
+                return
+            }
+
+            withAnimation(BookshelfManagementMotion.modeAnimation(reduceMotion: reduceMotion)) {
+                chromePhase = .enteringEdit
+                viewModel.enterEditing(initialSelection: initialSelection)
+            }
+
+            guard viewModel.isEditing else {
+                chromePhase = .normal
+                frozenTopChromeHeight = nil
+                chromeTransitionTask = nil
+                return
+            }
+
             try? await Task.sleep(for: BookshelfManagementMotion.editPanelDelay(reduceMotion: reduceMotion))
             guard !Task.isCancelled else { return }
             withAnimation(BookshelfManagementMotion.panelAnimation(reduceMotion: reduceMotion)) {

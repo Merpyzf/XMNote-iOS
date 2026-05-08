@@ -103,10 +103,12 @@ struct ReadCalendarMonthGrid: View {
         static let yearCompactGridBottomPadding: CGFloat = 0
     }
 
-    /// 日历格子内单张封面源尺寸（28×40，宽高比 1:1.43 ≈ √2）。
-    /// 面积 1120px²（较初始 22×32 增长 59.1%），主卡在背景容器中占比 70%×77%。
+    /// 日历格子内单张封面源尺寸，宽度保持紧凑密度，高度由统一封面比例推导。
+    /// 主卡在背景容器中占比 70%×77%。
     /// depth 2 边缘自然溢出约 10pt（iPhone 17 Pro），保留有机溢出美学，不使用 .clipped()。
-    static let sourceCoverSize = CGSize(width: 28, height: 40)
+    static let sourceCoverSize = XMBookCover.size(width: sourceCoverWidth)
+
+    private static let sourceCoverWidth: CGFloat = 28
 
     let weeks: [WeekData]
     let laneLimit: Int

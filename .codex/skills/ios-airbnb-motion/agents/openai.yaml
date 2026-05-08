@@ -1,0 +1,8 @@
+interface:
+  display_name: "iOS Airbnb Motion"
+  short_description: "Applies Airbnb-style motion philosophy to SwiftUI."
+  brand_color: "#FF5A5F"
+  default_prompt: "Use $ios-airbnb-motion to refine this SwiftUI interaction with calm, contextual motion."
+
+policy:
+  allow_implicit_invocation: true

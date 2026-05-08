@@ -668,7 +668,7 @@ private struct DebugBookCoverGroupBadgePreview: View {
             DebugGroupMosaic(samples: samples)
                 .padding(Spacing.half)
         }
-        .frame(width: width, height: width / XMBookCover.aspectRatio)
+        .frame(width: width, height: XMBookCover.height(forWidth: width))
         .overlay {
             ZStack {
                 DebugGlassPinBadge(parameters: parameters, cornerRadius: cornerRadius)
@@ -754,14 +754,26 @@ private struct DebugGroupMosaicMetrics {
         spacing = Spacing.half
         let contentWidth = max(0, size.width)
         let contentHeight = max(0, size.height)
-        let topContentHeight = max(0, contentHeight * 0.68 - spacing)
-        largeWidth = (contentWidth - spacing) * 0.66
-        sideWidth = max(0, contentWidth - largeWidth - spacing)
-        topHeight = topContentHeight
-        sideHeight = max(0, (topContentHeight - spacing) / 2)
-        bottomY = topHeight + spacing
-        bottomWidth = max(0, (contentWidth - spacing * 2) / 3)
-        bottomHeight = max(0, contentHeight - bottomY)
+
+        let rawSideWidth = max(0, (contentWidth - spacing) * 0.34)
+        let rawLargeWidth = max(0, contentWidth - spacing - rawSideWidth)
+        let rawBottomWidth = max(0, (contentWidth - spacing * 2) / 3)
+        let rawLargeHeight = XMBookCover.height(forWidth: rawLargeWidth)
+        let rawSideHeight = XMBookCover.height(forWidth: rawSideWidth)
+        let rawBottomHeight = XMBookCover.height(forWidth: rawBottomWidth)
+        let coverHeightBudget = max(0, contentHeight - spacing * 2)
+        let coverHeightDemand = max(rawLargeHeight, rawSideHeight * 2) + rawBottomHeight
+        let scale = coverHeightDemand > 0 ? min(1, coverHeightBudget / coverHeightDemand) : 1
+
+        largeWidth = rawLargeWidth * scale
+        sideWidth = rawSideWidth * scale
+        bottomWidth = rawBottomWidth * scale
+        topHeight = XMBookCover.height(forWidth: largeWidth)
+        sideHeight = XMBookCover.height(forWidth: sideWidth)
+        bottomHeight = XMBookCover.height(forWidth: bottomWidth)
+
+        let topRowHeight = max(topHeight, sideHeight * 2 + spacing)
+        bottomY = topRowHeight + spacing
         sideX = largeWidth + spacing
     }
 

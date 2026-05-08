@@ -86,6 +86,10 @@ private struct BookshelfBookListContentView: View {
                 snapshot: viewModel.snapshot,
                 subtitle: viewModel.subtitle,
                 contentState: viewModel.contentState,
+                layoutMode: viewModel.displaySetting.layoutMode,
+                columnCount: viewModel.displaySetting.columnCount,
+                showsNoteCount: viewModel.displaySetting.showsNoteCount,
+                titleDisplayMode: viewModel.displaySetting.titleDisplayMode,
                 isEditing: viewModel.isEditing,
                 selectedBookIDs: viewModel.selectedBookIDSet,
                 canReorder: viewModel.canReorderBooksInDefaultGroup,
@@ -137,6 +141,7 @@ private struct BookshelfBookListContentView: View {
         .sheet(isPresented: $showsDisplaySettingSheet) {
             BookshelfDisplaySettingSheet(
                 dimension: viewModel.route.context.dimension,
+                scope: .bookList,
                 setting: Binding(
                     get: { viewModel.displaySetting },
                     set: { viewModel.updateDisplaySetting($0) }
@@ -144,6 +149,8 @@ private struct BookshelfBookListContentView: View {
                 availableCriteria: BookshelfSortCriteria.availableForBookList(for: viewModel.route.context.dimension),
                 showsPinnedInAllSortsSetting: true
             )
+            .presentationDetents([.large])
+            .presentationDragIndicator(.hidden)
         }
         .sheet(item: $viewModel.activeBatchSheet) { sheet in
             switch sheet {
@@ -319,6 +326,10 @@ private struct BookshelfBookListCollectionView: UIViewRepresentable {
     let snapshot: BookshelfBookListSnapshot
     let subtitle: String
     let contentState: BookshelfContentState
+    let layoutMode: BookshelfLayoutMode
+    let columnCount: Int
+    let showsNoteCount: Bool
+    let titleDisplayMode: BookshelfTitleDisplayMode
     let isEditing: Bool
     let selectedBookIDs: Set<Int64>
     let canReorder: Bool
@@ -352,6 +363,10 @@ private struct BookshelfBookListCollectionView: UIViewRepresentable {
             snapshot: snapshot,
             subtitle: subtitle,
             contentState: contentState,
+            layoutMode: layoutMode,
+            columnCount: max(2, min(columnCount, 4)),
+            showsNoteCount: showsNoteCount,
+            titleDisplayMode: titleDisplayMode,
             isEditing: isEditing,
             selectedBookIDs: selectedBookIDs,
             canReorder: canReorder,
@@ -371,6 +386,10 @@ private struct BookshelfBookListCollectionConfiguration {
     let snapshot: BookshelfBookListSnapshot
     let subtitle: String
     let contentState: BookshelfContentState
+    let layoutMode: BookshelfLayoutMode
+    let columnCount: Int
+    let showsNoteCount: Bool
+    let titleDisplayMode: BookshelfTitleDisplayMode
     let isEditing: Bool
     let selectedBookIDs: Set<Int64>
     let canReorder: Bool
@@ -386,6 +405,10 @@ private struct BookshelfBookListCollectionConfiguration {
         snapshot: .empty,
         subtitle: "",
         contentState: .loading,
+        layoutMode: .list,
+        columnCount: 3,
+        showsNoteCount: true,
+        titleDisplayMode: .standard,
         isEditing: false,
         selectedBookIDs: [],
         canReorder: false,
@@ -414,7 +437,7 @@ private struct BookshelfBookListCollectionSectionState: Hashable {
     let items: [BookshelfBookListCollectionItem]
 }
 
-/// UICollectionView 承载视图，负责单列布局和行点击。
+/// UICollectionView 承载视图，负责二级列表 grid/list 布局、行点击与组内排序。
 private final class BookshelfBookListCollectionHostView: UIView {
     private var configuration = BookshelfBookListCollectionConfiguration.empty
     private var sections: [BookshelfBookListCollectionSectionState] = []
@@ -427,7 +450,7 @@ private final class BookshelfBookListCollectionHostView: UIView {
     private let selectionFeedback = UISelectionFeedbackGenerator()
 
     private lazy var collectionView: UICollectionView = {
-        let view = UICollectionView(frame: .zero, collectionViewLayout: makeLayout())
+        let view = UICollectionView(frame: .zero, collectionViewLayout: makeLayout(for: configuration))
         view.backgroundColor = .clear
         view.alwaysBounceVertical = true
         view.showsVerticalScrollIndicator = false
@@ -473,11 +496,18 @@ private final class BookshelfBookListCollectionHostView: UIView {
 
         let nextSections = Self.makeSections(from: configuration)
         let didChangeEditing = configuration.isEditing != self.configuration.isEditing
+        let needsLayoutUpdate = configuration.layoutMode != self.configuration.layoutMode
+            || configuration.columnCount != self.configuration.columnCount
+            || configuration.showsNoteCount != self.configuration.showsNoteCount
+            || configuration.titleDisplayMode != self.configuration.titleDisplayMode
         self.configuration = configuration
         collectionView.dragInteractionEnabled = configuration.canReorder
+        if needsLayoutUpdate {
+            collectionView.setCollectionViewLayout(makeLayout(for: configuration), animated: animated)
+        }
         guard nextSections != sections else {
             refreshVisibleCells()
-            if didChangeEditing {
+            if didChangeEditing || needsLayoutUpdate {
                 collectionView.collectionViewLayout.invalidateLayout()
             }
             return
@@ -513,27 +543,14 @@ private extension BookshelfBookListCollectionHostView {
         ])
     }
 
-    /// 使用单列估算高度布局，让 SwiftUI row 自适应文本高度。
-    func makeLayout() -> UICollectionViewLayout {
+    /// 按当前显示设置生成布局；书籍 section 支持网格，其它副标题、加载与空态保持全宽。
+    func makeLayout(for configuration: BookshelfBookListCollectionConfiguration) -> UICollectionViewLayout {
         UICollectionViewCompositionalLayout { [weak self] sectionIndex, _ in
-            let itemSize = NSCollectionLayoutSize(
-                widthDimension: .fractionalWidth(1),
-                heightDimension: .estimated(92)
-            )
-            let item = NSCollectionLayoutItem(layoutSize: itemSize)
-            let groupSize = NSCollectionLayoutSize(
-                widthDimension: .fractionalWidth(1),
-                heightDimension: .estimated(92)
-            )
-            let group = NSCollectionLayoutGroup.vertical(layoutSize: groupSize, subitems: [item])
-            let section = NSCollectionLayoutSection(group: group)
-            section.interGroupSpacing = Spacing.base
-            section.contentInsets = NSDirectionalEdgeInsets(
-                top: Spacing.base,
-                leading: Spacing.screenEdge,
-                bottom: Spacing.base,
-                trailing: Spacing.screenEdge
-            )
+            let usesGrid = configuration.layoutMode == .grid
+                && (self?.sectionContainsBooks(at: sectionIndex) ?? false)
+            let section = usesGrid
+                ? Self.makeGridSection(columnCount: configuration.columnCount)
+                : Self.makeListSection()
             if let self,
                self.sections.indices.contains(sectionIndex),
                self.sections[sectionIndex].title != nil {
@@ -550,6 +567,66 @@ private extension BookshelfBookListCollectionHostView {
             }
             return section
         }
+    }
+
+    /// 二级列表 grid 模式只让真实书籍多列排列。
+    static func makeGridSection(columnCount: Int) -> NSCollectionLayoutSection {
+        let clampedColumnCount = max(2, min(columnCount, 4))
+        let itemSize = NSCollectionLayoutSize(
+            widthDimension: .fractionalWidth(1.0 / CGFloat(clampedColumnCount)),
+            heightDimension: .estimated(190)
+        )
+        let item = NSCollectionLayoutItem(layoutSize: itemSize)
+        item.contentInsets = NSDirectionalEdgeInsets(
+            top: 0,
+            leading: Spacing.screenEdge / 2,
+            bottom: 0,
+            trailing: Spacing.screenEdge / 2
+        )
+
+        let groupSize = NSCollectionLayoutSize(
+            widthDimension: .fractionalWidth(1),
+            heightDimension: .estimated(220)
+        )
+        let group = NSCollectionLayoutGroup.horizontal(
+            layoutSize: groupSize,
+            repeatingSubitem: item,
+            count: clampedColumnCount
+        )
+
+        let horizontalInset = max(0, Spacing.screenEdge / 2)
+        let section = NSCollectionLayoutSection(group: group)
+        section.interGroupSpacing = Spacing.section
+        section.contentInsets = NSDirectionalEdgeInsets(
+            top: Spacing.base,
+            leading: horizontalInset,
+            bottom: Spacing.base,
+            trailing: horizontalInset
+        )
+        return section
+    }
+
+    /// 二级列表 list 模式与非书籍 section 使用单列全宽估算高度。
+    static func makeListSection() -> NSCollectionLayoutSection {
+        let itemSize = NSCollectionLayoutSize(
+            widthDimension: .fractionalWidth(1),
+            heightDimension: .estimated(92)
+        )
+        let item = NSCollectionLayoutItem(layoutSize: itemSize)
+        let groupSize = NSCollectionLayoutSize(
+            widthDimension: .fractionalWidth(1),
+            heightDimension: .estimated(92)
+        )
+        let group = NSCollectionLayoutGroup.vertical(layoutSize: groupSize, subitems: [item])
+        let section = NSCollectionLayoutSection(group: group)
+        section.interGroupSpacing = Spacing.base
+        section.contentInsets = NSDirectionalEdgeInsets(
+            top: Spacing.base,
+            leading: Spacing.screenEdge,
+            bottom: Spacing.base,
+            trailing: Spacing.screenEdge
+        )
+        return section
     }
 
     /// 根据观察快照生成 collection item。
@@ -602,6 +679,15 @@ private extension BookshelfBookListCollectionHostView {
             return nil
         }
         return sections[indexPath.section].items[indexPath.item]
+    }
+
+    /// 判断当前 section 是否包含真实书籍，用于避免副标题/加载/空态进入网格布局。
+    func sectionContainsBooks(at sectionIndex: Int) -> Bool {
+        guard sections.indices.contains(sectionIndex) else { return false }
+        return sections[sectionIndex].items.contains {
+            if case .book = $0 { return true }
+            return false
+        }
     }
 
     /// 判断指定位置是否允许启动组内排序。
@@ -1018,14 +1104,30 @@ private final class BookshelfBookListCollectionCell: UICollectionViewCell {
                     .frame(maxWidth: .infinity)
                     .frame(minHeight: 320)
             case .book(let book):
-                BookshelfBookListRowView(
-                    book: book,
-                    isEditing: configuration.isEditing,
-                    isSelected: configuration.selectedBookIDs.contains(book.id),
-                    supportsContextPin: configuration.supportsContextPin,
-                    activeWriteAction: configuration.activeWriteAction,
-                    onContextAction: configuration.onContextAction
-                )
+                switch configuration.layoutMode {
+                case .grid:
+                    BookshelfBookListGridItemView(
+                        book: book,
+                        showsNoteCount: configuration.showsNoteCount,
+                        titleDisplayMode: configuration.titleDisplayMode,
+                        isEditing: configuration.isEditing,
+                        isSelected: configuration.selectedBookIDs.contains(book.id),
+                        supportsContextPin: configuration.supportsContextPin,
+                        activeWriteAction: configuration.activeWriteAction,
+                        onContextAction: configuration.onContextAction
+                    )
+                case .list:
+                    BookshelfBookListRowView(
+                        book: book,
+                        showsNoteCount: configuration.showsNoteCount,
+                        titleDisplayMode: configuration.titleDisplayMode,
+                        isEditing: configuration.isEditing,
+                        isSelected: configuration.selectedBookIDs.contains(book.id),
+                        supportsContextPin: configuration.supportsContextPin,
+                        activeWriteAction: configuration.activeWriteAction,
+                        onContextAction: configuration.onContextAction
+                    )
+                }
             }
         }
         .margins(.all, 0)
@@ -1081,9 +1183,160 @@ private struct BookshelfBookListSubtitleView: View {
     }
 }
 
+/// 二级列表 grid 模式书籍卡片，复用书架封面角标与长按菜单语义。
+private struct BookshelfBookListGridItemView: View {
+    let book: BookshelfBookListItem
+    let showsNoteCount: Bool
+    let titleDisplayMode: BookshelfTitleDisplayMode
+    let isEditing: Bool
+    let isSelected: Bool
+    let supportsContextPin: Bool
+    let activeWriteAction: BookshelfBookListEditAction?
+    let onContextAction: (BookshelfBookContextAction, Int64) -> Void
+
+    private let coverCornerRadius = CornerRadius.inlaySmall
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Spacing.half) {
+            cover
+
+            VStack(alignment: .leading, spacing: Spacing.tiny) {
+                BookshelfTitleText(
+                    text: book.title,
+                    mode: titleDisplayMode,
+                    style: .captionMedium,
+                    color: .textPrimary
+                )
+
+                Text(book.author.isEmpty ? " " : book.author)
+                    .font(AppTypography.caption2)
+                    .lineLimit(1)
+                    .foregroundStyle(Color.textSecondary)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .opacity(isEditing ? (isSelected ? 1 : 0.78) : 1)
+        .overlay(alignment: .topTrailing) {
+            if isEditing {
+                BookshelfSelectionOverlay(isSelected: isSelected)
+            }
+        }
+        .contentShape(RoundedRectangle(cornerRadius: CornerRadius.blockLarge, style: .continuous))
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(accessibilityLabel)
+        .accessibilityAddTraits(.isButton)
+        .contextMenu {
+            if !isEditing {
+                contextMenu
+            }
+        }
+    }
+
+    private var cover: some View {
+        XMBookCover.responsive(
+            urlString: book.cover,
+            cornerRadius: coverCornerRadius,
+            border: .init(color: .surfaceBorderSubtle, width: CardStyle.borderWidth),
+            surfaceStyle: .spine
+        )
+        .overlay {
+            ZStack {
+                if book.pinned {
+                    BookshelfCoverPinBadge(cornerRadius: coverCornerRadius)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                }
+
+                if showsNoteCount, book.noteCount > 0 {
+                    BookshelfCoverTextBadge(
+                        text: "\(book.noteCount)",
+                        placement: .bottomTrailing,
+                        tone: .dark,
+                        cornerRadius: coverCornerRadius,
+                        accessibilityLabel: "\(book.noteCount)条书摘"
+                    )
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var contextMenu: some View {
+        Button {
+            onContextAction(.addNote, book.id)
+        } label: {
+            Label("添加笔记", systemImage: "square.and.pencil")
+        }
+
+        if supportsContextPin {
+            if book.pinned {
+                Button {
+                    onContextAction(.unpin, book.id)
+                } label: {
+                    Label("取消置顶", systemImage: "pin.slash")
+                }
+                .disabled(activeWriteAction != nil)
+            } else {
+                Button {
+                    onContextAction(.pin, book.id)
+                } label: {
+                    Label("置顶", systemImage: "pin")
+                }
+                .disabled(activeWriteAction != nil)
+            }
+        }
+
+        Button {
+            onContextAction(.editBook, book.id)
+        } label: {
+            Label("编辑书籍", systemImage: "pencil")
+        }
+
+        Button {
+            onContextAction(.showReadingDetail, book.id)
+        } label: {
+            Label("阅读详情", systemImage: "chart.bar.doc.horizontal")
+        }
+
+        Button {
+            onContextAction(.startReadTiming, book.id)
+        } label: {
+            Label("开始计时", systemImage: "timer")
+        }
+
+        Button {
+            onContextAction(.organizeBooks, book.id)
+        } label: {
+            Label("整理书籍", systemImage: "square.grid.2x2")
+        }
+
+        Button(role: .destructive) {
+            onContextAction(.delete, book.id)
+        } label: {
+            Label("删除书籍", systemImage: "trash")
+        }
+        .disabled(activeWriteAction != nil)
+    }
+
+    private var metadata: String {
+        let authorText = book.author.isEmpty ? "未知作者" : book.author
+        guard showsNoteCount, book.noteCount > 0 else { return authorText }
+        return "\(authorText)，\(book.noteCount)条书摘"
+    }
+
+    private var accessibilityLabel: String {
+        if isEditing {
+            return "\(book.title)，\(metadata)，\(isSelected ? "已选中" : "未选中")"
+        }
+        return "\(book.title)，\(metadata)"
+    }
+}
+
 /// 二级列表书籍行视觉。
 private struct BookshelfBookListRowView: View {
     let book: BookshelfBookListItem
+    let showsNoteCount: Bool
+    let titleDisplayMode: BookshelfTitleDisplayMode
     let isEditing: Bool
     let isSelected: Bool
     let supportsContextPin: Bool
@@ -1102,11 +1355,12 @@ private struct BookshelfBookListRowView: View {
             )
 
             VStack(alignment: .leading, spacing: Spacing.tiny) {
-                Text(book.title)
-                    .font(AppTypography.body)
-                    .fontWeight(.medium)
-                    .foregroundStyle(Color.textPrimary)
-                    .lineLimit(2)
+                BookshelfTitleText(
+                    text: book.title,
+                    mode: titleDisplayMode,
+                    style: .bodyMedium,
+                    color: .textPrimary
+                )
 
                 Text(metadata)
                     .font(AppTypography.caption)
@@ -1210,7 +1464,7 @@ private struct BookshelfBookListRowView: View {
 
     private var metadata: String {
         let authorText = book.author.isEmpty ? "未知作者" : book.author
-        guard book.noteCount > 0 else { return authorText }
+        guard showsNoteCount, book.noteCount > 0 else { return authorText }
         return "\(authorText) · \(book.noteCount)条书摘"
     }
 

@@ -17,20 +17,25 @@ struct BookshelfGridBookCoverView: View {
     private let coverCornerRadius = CornerRadius.inlaySmall
 
     var body: some View {
-        XMBookCover.responsive(
-            urlString: book.cover,
-            cornerRadius: coverCornerRadius,
-            border: .init(color: .surfaceBorderSubtle, width: CardStyle.borderWidth),
-            surfaceStyle: .spine
-        )
-        .overlay {
-            BookshelfCoverBadgeLayer(
-                isPinned: isPinned,
-                topTrailingBadge: readingStatusBadge,
-                bottomTrailingBadge: noteCountBadge,
-                cornerRadius: coverCornerRadius
-            )
-        }
+        Color.clear
+            .bookshelfGridCoverFrame()
+            .overlay {
+                XMBookCover.responsive(
+                    urlString: book.cover,
+                    cornerRadius: coverCornerRadius,
+                    border: .init(color: .surfaceBorderSubtle, width: CardStyle.borderWidth),
+                    surfaceStyle: .spine
+                )
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+            .overlay {
+                BookshelfCoverBadgeLayer(
+                    isPinned: isPinned,
+                    topTrailingBadge: readingStatusBadge,
+                    bottomTrailingBadge: noteCountBadge,
+                    cornerRadius: coverCornerRadius
+                )
+            }
     }
 
     private var readingStatusBadge: BookshelfCoverBadgeContent? {
@@ -65,26 +70,24 @@ struct BookshelfGridGroupCoverView: View {
     private let coverCornerRadius = CornerRadius.inlaySmall
 
     var body: some View {
-        ZStack {
-            RoundedRectangle(cornerRadius: CornerRadius.blockLarge, style: .continuous)
-                .fill(Color.surfaceCard)
-                .overlay {
-                    RoundedRectangle(cornerRadius: CornerRadius.blockLarge, style: .continuous)
-                        .stroke(Color.surfaceBorderSubtle, lineWidth: CardStyle.borderWidth)
-                }
-
-            BookshelfCoverMosaicView(covers: covers)
-                .padding(Spacing.half)
-        }
-        .aspectRatio(XMBookCover.aspectRatio, contentMode: .fit)
-        .overlay {
-            BookshelfCoverBadgeLayer(
-                isPinned: isPinned,
-                topTrailingBadge: nil,
-                bottomTrailingBadge: groupCountBadge,
-                cornerRadius: CornerRadius.blockLarge
-            )
-        }
+        BookshelfCoverMosaicView(covers: covers)
+            .frame(maxWidth: .infinity)
+            .background {
+                RoundedRectangle(cornerRadius: coverCornerRadius, style: .continuous)
+                    .fill(Color.surfaceCard)
+                    .overlay {
+                        RoundedRectangle(cornerRadius: coverCornerRadius, style: .continuous)
+                            .stroke(Color.surfaceBorderSubtle, lineWidth: CardStyle.borderWidth)
+                    }
+            }
+            .overlay {
+                BookshelfCoverBadgeLayer(
+                    isPinned: isPinned,
+                    topTrailingBadge: nil,
+                    bottomTrailingBadge: groupCountBadge,
+                    cornerRadius: coverCornerRadius
+                )
+            }
     }
 
     private var groupCountBadge: BookshelfCoverBadgeContent? {
@@ -96,6 +99,14 @@ struct BookshelfGridGroupCoverView: View {
             tone: .dark,
             accessibilityLabel: "\(count)本书籍"
         )
+    }
+}
+
+private extension View {
+    /// 书架网格封面外框：先吃满列宽，再用统一封面比例推导高度，避免图片原始比例参与测量。
+    func bookshelfGridCoverFrame() -> some View {
+        frame(maxWidth: .infinity)
+            .aspectRatio(XMBookCover.aspectRatio, contentMode: .fit)
     }
 }
 
@@ -350,50 +361,68 @@ private struct BookshelfCoverMosaicView: View {
     let covers: [String]
 
     var body: some View {
-        GeometryReader { proxy in
-            let metrics = BookshelfCoverMosaicMetrics(size: proxy.size)
+        BookshelfCoverMosaicSizingLayout {
+            Color.clear
+        }
+        .overlay {
+            GeometryReader { proxy in
+                let metrics = BookshelfCoverMosaicMetrics(width: proxy.size.width)
 
-            ZStack(alignment: .topLeading) {
-                mosaicCell(at: 0, metrics: metrics)
-                    .frame(width: metrics.largeWidth, height: metrics.topHeight)
-                    .offset(x: metrics.origin, y: metrics.origin)
-
-                mosaicCell(at: 1, metrics: metrics)
-                    .frame(width: metrics.sideWidth, height: metrics.sideHeight)
-                    .offset(x: metrics.sideX, y: metrics.origin)
-
-                mosaicCell(at: 2, metrics: metrics)
-                    .frame(width: metrics.sideWidth, height: metrics.sideHeight)
-                    .offset(x: metrics.sideX, y: metrics.origin + metrics.sideHeight + metrics.spacing)
-
-                ForEach(0..<3, id: \.self) { index in
-                    mosaicCell(at: index + 3, metrics: metrics)
-                        .frame(width: metrics.bottomWidth, height: metrics.bottomHeight)
-                        .offset(
-                            x: metrics.origin + CGFloat(index) * (metrics.bottomWidth + metrics.spacing),
-                            y: metrics.bottomY
-                        )
+                ZStack(alignment: .topLeading) {
+                    ForEach(0..<6, id: \.self) { index in
+                        mosaicCell(at: index, metrics: metrics)
+                    }
                 }
             }
         }
     }
 
     private func mosaicCell(at index: Int, metrics: BookshelfCoverMosaicMetrics) -> some View {
+        let frame = metrics.frame(for: index)
         let cover = cover(at: index)
         return XMBookCover.fixedSize(
-            width: metrics.cellWidth(for: index),
-            height: metrics.cellHeight(for: index),
+            width: frame.width,
+            height: frame.height,
             urlString: cover,
             cornerRadius: index == 0 ? CornerRadius.inlaySmall : CornerRadius.inlayTiny,
             border: .init(color: .surfaceBorderSubtle, width: CardStyle.borderWidth),
             placeholderIconSize: cover.isEmpty ? .hidden : .small,
             surfaceStyle: index == 0 ? .spine : .plain
         )
+        .clipped()
+        .offset(x: frame.minX, y: frame.minY)
     }
 
     private func cover(at index: Int) -> String {
         guard covers.indices.contains(index) else { return "" }
         return covers[index]
+    }
+}
+
+private struct BookshelfCoverMosaicSizingLayout: Layout {
+    func sizeThatFits(
+        proposal: ProposedViewSize,
+        subviews: Subviews,
+        cache: inout ()
+    ) -> CGSize {
+        let width = max(1, proposal.width ?? 1)
+        let metrics = BookshelfCoverMosaicMetrics(width: width)
+        return CGSize(width: width, height: metrics.contentHeight)
+    }
+
+    func placeSubviews(
+        in bounds: CGRect,
+        proposal: ProposedViewSize,
+        subviews: Subviews,
+        cache: inout ()
+    ) {
+        for subview in subviews {
+            subview.place(
+                at: CGPoint(x: bounds.minX, y: bounds.minY),
+                anchor: .topLeading,
+                proposal: ProposedViewSize(width: bounds.width, height: bounds.height)
+            )
+        }
     }
 }
 
@@ -408,42 +437,48 @@ private struct BookshelfCoverMosaicMetrics {
     let bottomHeight: CGFloat
     let sideX: CGFloat
     let bottomY: CGFloat
+    let contentHeight: CGFloat
 
-    init(size: CGSize) {
-        origin = Spacing.tiny
+    init(width: CGFloat) {
+        origin = Spacing.half
         spacing = Spacing.compact
 
-        let availableWidth = max(1, size.width - origin * 2)
-        let availableHeight = max(1, size.height - origin * 2)
-        bottomHeight = max(1, availableHeight * 0.29)
-        topHeight = max(1, availableHeight - spacing - bottomHeight)
-        sideWidth = max(1, (availableWidth - spacing) * 0.34)
+        let availableWidth = max(1, width - origin * 2)
+
+        // 让左侧大封面高度与右侧两张小封面加中缝后的高度对齐。
+        let coverAspectRatio = XMBookCover.aspectRatio
+        sideWidth = max(1, (availableWidth - spacing * (1 + coverAspectRatio)) / 3)
         largeWidth = max(1, availableWidth - spacing - sideWidth)
-        sideHeight = max(1, (topHeight - spacing) / 2)
         bottomWidth = max(1, (availableWidth - spacing * 2) / 3)
+        topHeight = max(1, XMBookCover.height(forWidth: largeWidth))
+        sideHeight = max(1, XMBookCover.height(forWidth: sideWidth))
+        bottomHeight = max(1, XMBookCover.height(forWidth: bottomWidth))
+
+        let topRowHeight = max(topHeight, sideHeight * 2 + spacing)
         sideX = origin + largeWidth + spacing
-        bottomY = origin + topHeight + spacing
+        bottomY = origin + topRowHeight + spacing
+        contentHeight = bottomY + bottomHeight + origin
     }
 
-    func cellWidth(for index: Int) -> CGFloat {
+    func frame(for index: Int) -> CGRect {
         switch index {
         case 0:
-            return largeWidth
+            return CGRect(x: origin, y: origin, width: largeWidth, height: topHeight)
         case 1, 2:
-            return sideWidth
+            return CGRect(
+                x: sideX,
+                y: origin + CGFloat(index - 1) * (sideHeight + spacing),
+                width: sideWidth,
+                height: sideHeight
+            )
         default:
-            return bottomWidth
-        }
-    }
-
-    func cellHeight(for index: Int) -> CGFloat {
-        switch index {
-        case 0:
-            return topHeight
-        case 1, 2:
-            return sideHeight
-        default:
-            return bottomHeight
+            let bottomIndex = max(0, index - 3)
+            return CGRect(
+                x: origin + CGFloat(bottomIndex) * (bottomWidth + spacing),
+                y: bottomY,
+                width: bottomWidth,
+                height: bottomHeight
+            )
         }
     }
 }

@@ -455,9 +455,8 @@ private struct BookReorderSandboxItemCard: View {
                 spacing: spacing
             ) {
                 ForEach(Array(groupCoverColors.prefix(4).enumerated()), id: \.offset) { _, color in
-                    XMBookCover.fixedSize(
-                        width: side,
-                        height: side / XMBookCover.aspectRatio,
+                    XMBookCover.fixedWidth(
+                        side,
                         urlString: "",
                         cornerRadius: CornerRadius.inlayTiny,
                         border: XMBookCover.Border(color: Color.surfaceBorderSubtle, width: CardStyle.borderWidth),

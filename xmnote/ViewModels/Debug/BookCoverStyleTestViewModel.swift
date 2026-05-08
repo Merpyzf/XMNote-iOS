@@ -59,7 +59,7 @@ final class BookCoverStyleTestViewModel {
         let note: String
 
         var id: CGFloat { width }
-        var height: CGFloat { width / XMBookCover.aspectRatio }
+        var height: CGFloat { XMBookCover.height(forWidth: width) }
     }
 
     var displayMode: DisplayMode = .sideBySide
@@ -87,7 +87,7 @@ final class BookCoverStyleTestViewModel {
     ]
 
     var livePreviewHeight: CGFloat {
-        livePreviewWidth / XMBookCover.aspectRatio
+        XMBookCover.height(forWidth: livePreviewWidth)
     }
 
     var livePreviewTier: XMBookCover.SurfaceTier {

@@ -222,7 +222,7 @@ private extension BookCoverProgressBarTestView {
                 y: surfaceStyle == .spine ? 1.2 : 0.8
             )
 
-            Text("\(Int(width.rounded())) × \(Int((width / XMBookCover.aspectRatio).rounded()))")
+            Text("\(Int(width.rounded())) × \(Int(XMBookCover.height(forWidth: width).rounded()))")
                 .font(.caption2.monospacedDigit())
                 .foregroundStyle(Color.textHint)
         }

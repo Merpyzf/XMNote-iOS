@@ -26,6 +26,8 @@ struct BookshelfDefaultCollectionView: UIViewRepresentable {
     let layoutMode: BookshelfLayoutMode
     let columnCount: Int
     let showsNoteCount: Bool
+    let titleDisplayMode: BookshelfTitleDisplayMode
+    let allowsStructuralAnimation: Bool
     let isEditing: Bool
     let bottomContentInset: CGFloat
     let selectedIDs: Set<BookshelfItemID>
@@ -66,6 +68,8 @@ struct BookshelfDefaultCollectionView: UIViewRepresentable {
             layoutMode: layoutMode,
             columnCount: max(2, min(columnCount, 4)),
             showsNoteCount: showsNoteCount,
+            titleDisplayMode: titleDisplayMode,
+            allowsStructuralAnimation: allowsStructuralAnimation,
             isEditing: isEditing,
             bottomContentInset: bottomContentInset,
             selectedIDs: selectedIDs,
@@ -92,6 +96,8 @@ private struct BookshelfDefaultCollectionConfiguration {
     let layoutMode: BookshelfLayoutMode
     let columnCount: Int
     let showsNoteCount: Bool
+    let titleDisplayMode: BookshelfTitleDisplayMode
+    let allowsStructuralAnimation: Bool
     let isEditing: Bool
     let bottomContentInset: CGFloat
     let selectedIDs: Set<BookshelfItemID>
@@ -114,6 +120,8 @@ private struct BookshelfDefaultCollectionConfiguration {
         layoutMode: .grid,
         columnCount: 3,
         showsNoteCount: true,
+        titleDisplayMode: .standard,
+        allowsStructuralAnimation: true,
         isEditing: false,
         bottomContentInset: 0,
         selectedIDs: [],
@@ -202,6 +210,7 @@ final class BookshelfDefaultCollectionHostView: UIView {
             && configuration.sections.count == 1
         let needsLayoutUpdate = self.configuration.layoutMode != configuration.layoutMode
             || self.configuration.columnCount != configuration.columnCount
+            || self.configuration.titleDisplayMode != configuration.titleDisplayMode
             || self.configuration.sections.map(\.id) != configuration.sections.map(\.id)
 
         self.configuration = configuration
@@ -211,8 +220,13 @@ final class BookshelfDefaultCollectionHostView: UIView {
         configureScrollEdgeEffect()
         updateContentScrollObservation()
 
+        let shouldAnimateStructuralChange = animated && configuration.allowsStructuralAnimation
+
         if needsLayoutUpdate {
-            collectionView.setCollectionViewLayout(makeLayout(for: configuration), animated: animated)
+            collectionView.setCollectionViewLayout(
+                makeLayout(for: configuration),
+                animated: shouldAnimateStructuralChange
+            )
         }
 
         if previousIDs == nextIDs {
@@ -226,7 +240,7 @@ final class BookshelfDefaultCollectionHostView: UIView {
                 from: previousIDs,
                 to: nextIDs,
                 nextItems: nextItems,
-                animated: animated
+                animated: shouldAnimateStructuralChange
             )
         if !applied {
             items = nextItems
@@ -444,6 +458,7 @@ private extension BookshelfDefaultCollectionHostView {
                 item: item,
                 layoutMode: configuration.layoutMode,
                 showsNoteCount: configuration.showsNoteCount,
+                titleDisplayMode: configuration.titleDisplayMode,
                 isEditing: configuration.isEditing,
                 isSelected: configuration.selectedIDs.contains(item.id),
                 canMove: configuration.movableIDs.contains(item.id),
@@ -875,6 +890,7 @@ private struct BookshelfDefaultCollectionCellContent: View {
     let item: BookshelfItem
     let layoutMode: BookshelfLayoutMode
     let showsNoteCount: Bool
+    let titleDisplayMode: BookshelfTitleDisplayMode
     let isEditing: Bool
     let isSelected: Bool
     let canMove: Bool
@@ -904,18 +920,21 @@ private struct BookshelfDefaultCollectionCellContent: View {
                 BookGridItemView(
                     book: book,
                     showsNoteCount: showsNoteCount,
-                    isPinned: item.pinned
+                    isPinned: item.pinned,
+                    titleDisplayMode: titleDisplayMode
                 )
             case .group(let group):
                 BookshelfGroupGridItemView(
                     group: group,
-                    isPinned: item.pinned
+                    isPinned: item.pinned,
+                    titleDisplayMode: titleDisplayMode
                 )
             }
         case .list:
             BookshelfDefaultListRow(
                 item: item,
-                showsNoteCount: showsNoteCount
+                showsNoteCount: showsNoteCount,
+                titleDisplayMode: titleDisplayMode
             )
         }
     }
@@ -1009,15 +1028,18 @@ private struct BookshelfDefaultCollectionCellContent: View {
 
 /// 编辑态选中外观，复用旧 SwiftUI 路径中的选择勾选与边框反馈。
 private struct BookshelfDefaultCollectionSelectionModifier: ViewModifier {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     let isEditing: Bool
     let isSelected: Bool
 
     func body(content: Content) -> some View {
         content
-            .opacity(isEditing ? (isSelected ? 1 : 0.78) : 1)
+            .opacity(isEditing ? (isSelected ? 1 : 0.92) : 1)
             .overlay(alignment: .topTrailing) {
                 if isEditing {
                     BookshelfSelectionOverlay(isSelected: isSelected)
+                        .transition(selectionOverlayTransition)
                 }
             }
             .overlay {
@@ -1028,6 +1050,19 @@ private struct BookshelfDefaultCollectionSelectionModifier: ViewModifier {
                     )
             }
             .contentShape(RoundedRectangle(cornerRadius: CornerRadius.blockLarge, style: .continuous))
+            .animation(selectionAnimation, value: isEditing)
+            .animation(selectionAnimation, value: isSelected)
+    }
+
+    private var selectionAnimation: Animation? {
+        reduceMotion ? .easeInOut(duration: 0.12) : .smooth(duration: 0.16)
+    }
+
+    private var selectionOverlayTransition: AnyTransition {
+        reduceMotion ? .opacity : .asymmetric(
+            insertion: .opacity.combined(with: .offset(x: 0, y: -2)),
+            removal: .opacity
+        )
     }
 }
 
