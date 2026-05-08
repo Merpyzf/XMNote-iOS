@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 BookshelfAggregateGroup、BookshelfDisplaySetting 与 BookRoute，接收 BookGridView 注入的导航和聚合排序提交闭包
- * [OUTPUT]: 对外提供 BookshelfAggregateCollectionView，使用 UIKit UICollectionView 承接非默认维度聚合入口滚动、Grid/List 布局与可选排序
+ * [OUTPUT]: 对外提供 BookshelfAggregateCollectionView，使用 UIKit UICollectionView 承接非默认维度聚合入口滚动、按列数约束的 Grid/List 布局与可选排序
  * [POS]: Book 模块页面私有集合区组件，被 BookGridView 的状态、标签、来源、评分、作者与出版社维度消费
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -145,30 +145,41 @@ private extension BookshelfAggregateCollectionHostView {
     /// 根据 Grid/List 模式构建布局。
     func makeLayout(for configuration: BookshelfAggregateCollectionConfiguration) -> UICollectionViewLayout {
         UICollectionViewCompositionalLayout { sectionIndex, _ in
-            let columns = configuration.layoutMode == .grid ? max(2, configuration.columnCount) : 1
+            let isGrid = configuration.layoutMode == .grid
+            let columns = isGrid ? max(2, configuration.columnCount) : 1
             let itemSize = NSCollectionLayoutSize(
-                widthDimension: .fractionalWidth(1),
-                heightDimension: .estimated(configuration.layoutMode == .grid ? 176 : 116)
+                widthDimension: .fractionalWidth(1.0 / CGFloat(columns)),
+                heightDimension: .estimated(isGrid ? 176 : 116)
             )
             let item = NSCollectionLayoutItem(layoutSize: itemSize)
+            if isGrid {
+                item.contentInsets = NSDirectionalEdgeInsets(
+                    top: 0,
+                    leading: Spacing.base / 2,
+                    bottom: 0,
+                    trailing: Spacing.base / 2
+                )
+            }
+
             let groupSize = NSCollectionLayoutSize(
                 widthDimension: .fractionalWidth(1),
-                heightDimension: .estimated(configuration.layoutMode == .grid ? 176 : 116)
+                heightDimension: .estimated(isGrid ? 176 : 116)
             )
             let group = NSCollectionLayoutGroup.horizontal(
                 layoutSize: groupSize,
                 repeatingSubitem: item,
                 count: columns
             )
-            group.interItemSpacing = .fixed(Spacing.base)
+            group.interItemSpacing = .fixed(isGrid ? 0 : Spacing.base)
 
             let section = NSCollectionLayoutSection(group: group)
-            section.interGroupSpacing = Spacing.base
+            section.interGroupSpacing = isGrid ? Spacing.section : Spacing.base
+            let horizontalInset = isGrid ? max(0, Spacing.screenEdge - Spacing.base / 2) : Spacing.screenEdge
             section.contentInsets = NSDirectionalEdgeInsets(
                 top: Spacing.base,
-                leading: Spacing.screenEdge,
+                leading: horizontalInset,
                 bottom: Spacing.base,
-                trailing: Spacing.screenEdge
+                trailing: horizontalInset
             )
 
             if configuration.sections.indices.contains(sectionIndex),

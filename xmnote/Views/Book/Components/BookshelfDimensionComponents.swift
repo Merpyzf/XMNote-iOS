@@ -1,6 +1,6 @@
 /**
- * [INPUT]: 依赖 BookshelfDimension、BookshelfSection、BookshelfAggregateGroup 等只读书架模型
- * [OUTPUT]: 对外提供 Book 页面私有的维度 rail、聚合卡、分区卡与搜索栏组件
+ * [INPUT]: 依赖 BookshelfDimension、BookshelfAggregateGroup 等只读书架模型
+ * [OUTPUT]: 对外提供 Book 页面私有的维度 rail、聚合卡、搜索栏与默认书架列表行组件
  * [POS]: Book 模块页面私有子视图集合，服务 Phase 2 书架维度骨架，不承担数据读取与写入
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -141,58 +141,6 @@ struct BookshelfAggregateCardView: View {
             covers: group.representativeCovers,
             count: group.count
         )
-    }
-}
-
-/// 状态、评分等维度使用的纵向分区卡。
-struct BookshelfSectionCardView: View {
-    let section: BookshelfSection
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: Spacing.base) {
-            HStack(spacing: Spacing.compact) {
-                Text(section.title)
-                    .font(AppTypography.body)
-                    .fontWeight(.medium)
-                    .foregroundStyle(.primary)
-                    .lineLimit(1)
-
-                Spacer(minLength: Spacing.compact)
-
-                Text(section.subtitle)
-                    .font(AppTypography.caption)
-                    .foregroundStyle(.secondary)
-
-                Image(systemName: "chevron.right")
-                    .font(AppTypography.caption)
-                    .foregroundStyle(.tertiary)
-            }
-
-            Divider()
-
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: Spacing.compact) {
-                    ForEach(section.books.prefix(6), id: \.id) { book in
-                        XMBookCover.responsive(
-                            urlString: book.cover,
-                            cornerRadius: CornerRadius.inlaySmall,
-                            border: .init(color: .surfaceBorderSubtle, width: CardStyle.borderWidth),
-                            placeholderIconSize: .small,
-                            surfaceStyle: .spine
-                        )
-                        .frame(width: 54)
-                    }
-                }
-            }
-        }
-        .padding(Spacing.base)
-        .background(Color.surfaceCard, in: RoundedRectangle(cornerRadius: CornerRadius.blockLarge, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: CornerRadius.blockLarge, style: .continuous)
-                .stroke(Color.surfaceBorderSubtle, lineWidth: CardStyle.borderWidth)
-        }
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(section.title)，\(section.subtitle)")
     }
 }
 
