@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 XMBookCover、BookshelfBookPayload 与封面角标语义 token 渲染书籍/分组网格封面
- * [OUTPUT]: 对外提供 BookshelfGridBookCoverView、BookshelfGridGroupCoverView 与轻量毛玻璃角标基础视图
+ * [OUTPUT]: 对外提供 BookshelfGridBookCoverView、BookshelfGridGroupCoverView 与轻量毛玻璃/纯色角标基础视图
  * [POS]: Book 模块页面私有封面展示基础组件，被默认书架与聚合入口网格复用
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -99,7 +99,7 @@ struct BookshelfGridGroupCoverView: View {
     }
 }
 
-/// 书籍封面文字角标，使用紧凑玻璃色块承载阅读状态与数量。
+/// 书籍封面文字角标，按语义使用紧凑毛玻璃或纯色色块承载状态与数量。
 struct BookshelfCoverTextBadge: View {
     let text: String
     let placement: BookshelfCoverBadgePlacement
@@ -116,7 +116,7 @@ struct BookshelfCoverTextBadge: View {
             .padding(.horizontal, Spacing.half)
             .padding(.vertical, Spacing.micro)
             .background {
-                BookshelfCoverGlassBadgeBackground(
+                BookshelfCoverBadgeBackground(
                     placement: placement,
                     tone: tone,
                     cornerRadius: cornerRadius
@@ -141,11 +141,10 @@ struct BookshelfCoverPinBadge: View {
         Image(systemName: "pin.fill")
             .font(AppTypography.caption2Semibold)
             .foregroundStyle(.white)
-            .frame(width: 22, height: 22)
+            .frame(width: BookshelfCoverBadgeMetrics.pinSize, height: BookshelfCoverBadgeMetrics.pinSize)
             .background {
                 BookshelfCoverGlassBadgeBackground(
                     placement: .topLeading,
-                    tone: .dark,
                     cornerRadius: cornerRadius
                 )
             }
@@ -238,46 +237,55 @@ private struct BookshelfCoverBadgeLayer: View {
     }
 }
 
+/// 封面角标背景语义，区分深色玻璃角标与阅读状态纯色角标。
 enum BookshelfCoverBadgeTone {
     case dark
     case status(Color)
+}
 
-    var blurStyle: UIBlurEffect.Style {
-        switch self {
-        case .dark, .status:
-            return .systemUltraThinMaterialDark
-        }
-    }
+/// 根据角标语义分发背景渲染，避免阅读状态继续采样封面产生灰脏感。
+private struct BookshelfCoverBadgeBackground: View {
+    let placement: BookshelfCoverBadgePlacement
+    let tone: BookshelfCoverBadgeTone
+    let cornerRadius: CGFloat
 
-    var overlayFill: Color {
-        switch self {
+    @ViewBuilder
+    var body: some View {
+        switch tone {
         case .dark:
-            return .bookCoverBadgeDarkOverlay
+            BookshelfCoverGlassBadgeBackground(
+                placement: placement,
+                cornerRadius: cornerRadius
+            )
         case .status(let color):
-            return color.opacity(0.42)
+            BookshelfCoverSolidBadgeBackground(
+                placement: placement,
+                color: color,
+                cornerRadius: cornerRadius
+            )
         }
     }
 }
 
+/// 为置顶、书摘数量与分组数量渲染真实封面 backdrop blur。
 private struct BookshelfCoverGlassBadgeBackground: View {
     let placement: BookshelfCoverBadgePlacement
-    let tone: BookshelfCoverBadgeTone
     let cornerRadius: CGFloat
 
     var body: some View {
         let shape = BookshelfCoverBadgeShape(
             radii: placement.cornerRadii(
                 outerRadius: cornerRadius,
-                innerRadius: CornerRadius.inlaySmall
+                innerRadius: BookshelfCoverBadgeMetrics.innerCornerRadius
             )
         )
 
-        BookshelfCoverBadgeBlurView(style: tone.blurStyle)
+        BookshelfCoverBadgeBlurView(style: BookshelfCoverBadgeMetrics.blurStyle)
             .overlay {
                 shape.fill(Color.bookCoverBadgeBlurWash)
             }
             .overlay {
-                shape.fill(tone.overlayFill)
+                shape.fill(Color.bookCoverBadgeDarkOverlay)
             }
             .overlay {
                 shape.stroke(Color.bookCoverBadgeInnerStroke, lineWidth: CardStyle.borderWidth)
@@ -287,7 +295,29 @@ private struct BookshelfCoverGlassBadgeBackground: View {
     }
 }
 
+/// 为阅读状态渲染纯色贴边角标，保持状态语义直接清晰。
+private struct BookshelfCoverSolidBadgeBackground: View {
+    let placement: BookshelfCoverBadgePlacement
+    let color: Color
+    let cornerRadius: CGFloat
+
+    var body: some View {
+        let shape = BookshelfCoverBadgeShape(
+            radii: placement.cornerRadii(
+                outerRadius: cornerRadius,
+                innerRadius: BookshelfCoverBadgeMetrics.innerCornerRadius
+            )
+        )
+
+        shape.fill(color.opacity(BookshelfCoverBadgeMetrics.statusOpacity))
+    }
+}
+
 private enum BookshelfCoverBadgeMetrics {
+    static let blurStyle: UIBlurEffect.Style = .systemUltraThinMaterial
+    static let innerCornerRadius: CGFloat = CornerRadius.inlayMedium
+    static let pinSize: CGFloat = 22
+    static let statusOpacity = 0.92
     static let contentShadowRadius: CGFloat = 0.6
     static let contentShadowY: CGFloat = 0.4
 }

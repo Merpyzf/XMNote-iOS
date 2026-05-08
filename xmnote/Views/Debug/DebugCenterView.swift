@@ -2,7 +2,7 @@
 import SwiftUI
 
 /**
- * [INPUT]: 依赖 RichTextTestView、HeatmapTestView、SystemAlertTestView、BookSelectionTestView、BookReorderSandboxTestView、ImageLoadingTestView、WebHTMLFetchTestView、CameraTextCaptureTestView、BaiduOCRTestView、JXPhotoBrowserTestView、ReadCalendarCoverStackTestView、BookCoverStyleTestView、BookCoverProgressBarTestView、SystemColorsTestView、TimelineCardsTestView、TimelineCalendarHorizonTestView 作为导航目的地
+ * [INPUT]: 依赖 RichTextTestView、HeatmapTestView、SystemAlertTestView、BookSelectionTestView、BookReorderSandboxTestView、ImageLoadingTestView、WebHTMLFetchTestView、CameraTextCaptureTestView、BaiduOCRTestView、JXPhotoBrowserTestView、ReadCalendarCoverStackTestView、BookCoverStyleTestView、BookCoverProgressBarTestView、BookCoverBadgeEffectTestView、SystemColorsTestView、TimelineCardsTestView、TimelineCalendarHorizonTestView 作为导航目的地
  * [OUTPUT]: 对外提供 DebugCenterView（测试中心列表页）
  * [POS]: Debug 测试入口页，集中展示所有控件测试项，由 PersonalView 跳转进入
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -98,6 +98,12 @@ struct DebugCenterView: View {
             title: "封面阅读进度条",
             subtitle: "玻璃轨道、尺寸适配与进度动画验证",
             destination: AnyView(BookCoverProgressBarTestView())
+        ),
+        DebugItem(
+            icon: "pin.square",
+            title: "书封角标效果",
+            subtitle: "置顶/数量毛玻璃参数与阅读状态纯色角标验证",
+            destination: AnyView(BookCoverBadgeEffectTestView())
         ),
         DebugItem(
             icon: "paintpalette",
