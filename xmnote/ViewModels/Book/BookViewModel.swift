@@ -8,7 +8,7 @@
 import Foundation
 
 /**
- * [INPUT]: 依赖 BookRepositoryProtocol 提供书架快照数据流和排序置顶写入，依赖 BookshelfSnapshot 进行多维度状态编排
+ * [INPUT]: 依赖 BookRepositoryProtocol 提供书架快照数据流、显示设置变更流和排序置顶写入，依赖 BookshelfSnapshot 进行多维度状态编排
  * [OUTPUT]: 对外提供 BookViewModel，驱动书籍页维度浏览、搜索态、显示设置、默认书架编辑态、排序置顶、批量编辑、跨模块占位、删除与 UICollectionView 排序提交
  * [POS]: Book 模块书籍列表状态编排器，被 BookContainerView/BookGridView 消费
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -153,6 +153,7 @@ class BookViewModel {
 
     private let repository: any BookRepositoryProtocol
     private var observationTask: Task<Void, Never>?
+    private var displaySettingChangeTask: Task<Void, Never>?
     private var writeTask: Task<Void, Never>?
     private var batchOptionsTask: Task<Void, Never>?
 
@@ -302,11 +303,13 @@ class BookViewModel {
         self.repository = repository
         self.displaySettingsByDimension = repository.fetchBookshelfDisplaySettings(scope: .main)
         startObservation()
+        startDisplaySettingChangeObservation()
     }
 
     /// 释放书籍模块运行过程持有的资源与观察任务。
     deinit {
         observationTask?.cancel()
+        displaySettingChangeTask?.cancel()
         writeTask?.cancel()
         batchOptionsTask?.cancel()
     }
@@ -340,6 +343,20 @@ class BookViewModel {
     private func restartObservation() {
         observationTask?.cancel()
         startObservation()
+    }
+
+    /// 监听默认分组二级列表显示设置变化，确保返回默认书架时分组代表封面使用最新组内排序。
+    /// - Note: 观察任务只消费 Repository 暴露的设置变更流；页面释放时由 deinit 取消，任务回到 MainActor 重启书架快照观察，避免后台线程直接写 UI 状态。
+    private func startDisplaySettingChangeObservation() {
+        displaySettingChangeTask?.cancel()
+        displaySettingChangeTask = Task {
+            for await _ in repository.observeBookshelfDisplaySettingChanges(scope: .bookList, dimension: .default) {
+                guard !Task.isCancelled else { return }
+                await MainActor.run {
+                    self.restartObservation()
+                }
+            }
+        }
     }
 
     private func refreshContentState() {

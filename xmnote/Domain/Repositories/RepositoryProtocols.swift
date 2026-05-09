@@ -2,7 +2,7 @@ import Foundation
 
 /**
  * [INPUT]: 依赖 Models 与 Services 层的数据类型定义
- * [OUTPUT]: 对外提供 Book/Note/Content/BackupServer/Backup/S3/Statistics/ReadCalendarColor/Timeline/ReadingDashboard 及书籍搜索/录入共十三类 Repository 协议
+ * [OUTPUT]: 对外提供 Book/Note/Content/BackupServer/Backup/S3/Statistics/ReadCalendarColor/Timeline/ReadingDashboard 及书籍搜索/录入共十三类 Repository 协议，包含书架显示设置变更观察入口
  * [POS]: Domain 层仓储契约，定义 Presentation 获取本地/网络数据的唯一入口
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -83,6 +83,8 @@ protocol BookRepositoryProtocol {
     func fetchBookshelfDisplaySettings(scope: BookshelfDisplaySettingScope) -> [BookshelfDimension: BookshelfDisplaySetting]
     /// 保存单个维度在指定作用域下的书架显示设置。
     func saveBookshelfDisplaySetting(_ setting: BookshelfDisplaySetting, for dimension: BookshelfDimension, scope: BookshelfDisplaySettingScope)
+    /// 观察指定书架显示设置变更；调用方取消迭代后底层观察任务会随流终止，避免页面释放后继续触发刷新。
+    func observeBookshelfDisplaySettingChanges(scope: BookshelfDisplaySettingScope, dimension: BookshelfDimension) -> AsyncStream<Void>
     /// 持续监听指定书籍详情变化，供详情页实时更新。
     func observeBookDetail(bookId: Int64) -> AsyncThrowingStream<BookDetail?, Error>
     /// 持续监听指定书籍下的书摘列表变化。

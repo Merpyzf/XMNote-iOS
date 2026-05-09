@@ -3,8 +3,8 @@ import GRDB
 
 /**
  * [INPUT]: 依赖 AppDatabase 提供本地数据库连接，依赖 ObservationStream 提供观察流桥接
- * [OUTPUT]: 对外提供 BookRepository（BookRepositoryProtocol 的 GRDB 实现，含书架列表读写、分组移入移出、批量编辑、删除与重命名管理）
- * [POS]: Data 层书籍仓储实现，统一封装书架列表/详情/书摘数据读取与默认书架排序置顶写入
+ * [OUTPUT]: 对外提供 BookRepository（BookRepositoryProtocol 的 GRDB 实现，含书架列表读写、显示设置变更观察、分组移入移出、批量编辑、删除与重命名管理）
+ * [POS]: Data 层书籍仓储实现，统一封装书架列表/详情/书摘数据读取、默认书架分组预览排序与默认书架排序置顶写入
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
@@ -333,6 +333,14 @@ struct BookRepository: BookRepositoryProtocol {
         displaySettingStore.save(setting, for: dimension, scope: scope)
     }
 
+    /// 观察书架显示设置变化，供默认书架在二级分组排序偏好变更后重建只读快照。
+    func observeBookshelfDisplaySettingChanges(
+        scope: BookshelfDisplaySettingScope,
+        dimension: BookshelfDimension
+    ) -> AsyncStream<Void> {
+        displaySettingStore.observeChanges(scope: scope, dimension: dimension)
+    }
+
     /// 为书籍详情页提供单书订阅流，用于展示基础信息、阅读状态和笔记统计。
     func observeBookDetail(bookId: Int64) -> AsyncThrowingStream<BookDetail?, Error> {
         ObservationStream.make(in: databaseManager.database.dbPool) { db in
@@ -369,6 +377,9 @@ struct BookshelfDisplaySettingStore {
     private let defaults: UserDefaults
     private let mainKey = "bookshelf.display.settings.v1"
     private let bookListKey = "bookshelf.book-list.display.settings.v1"
+    private static let didChangeNotification = Notification.Name("BookshelfDisplaySettingStore.didChange")
+    private static let scopeUserInfoKey = "scope"
+    private static let dimensionUserInfoKey = "dimension"
 
     /// 注入 UserDefaults，默认使用标准容器。
     init(defaults: UserDefaults = .standard) {
@@ -391,6 +402,34 @@ struct BookshelfDisplaySettingStore {
         settings[dimension] = setting
         guard let data = try? JSONEncoder().encode(settings) else { return }
         defaults.set(data, forKey: key(for: scope))
+        NotificationCenter.default.post(
+            name: Self.didChangeNotification,
+            object: nil,
+            userInfo: [
+                Self.scopeUserInfoKey: scope.rawValue,
+                Self.dimensionUserInfoKey: dimension.rawValue
+            ]
+        )
+    }
+
+    /// 观察指定维度设置变更；通知过滤在轻量 Task 中执行，AsyncStream 终止时取消该任务。
+    func observeChanges(scope: BookshelfDisplaySettingScope, dimension: BookshelfDimension) -> AsyncStream<Void> {
+        AsyncStream { continuation in
+            let task = Task {
+                for await notification in NotificationCenter.default.notifications(named: Self.didChangeNotification) {
+                    guard let rawScope = notification.userInfo?[Self.scopeUserInfoKey] as? String,
+                          let rawDimension = notification.userInfo?[Self.dimensionUserInfoKey] as? String,
+                          BookshelfDisplaySettingScope(rawValue: rawScope) == scope,
+                          BookshelfDimension(rawValue: rawDimension) == dimension else {
+                        continue
+                    }
+                    continuation.yield(())
+                }
+            }
+            continuation.onTermination = { _ in
+                task.cancel()
+            }
+        }
     }
 
     private func key(for scope: BookshelfDisplaySettingScope) -> String {
@@ -453,8 +492,8 @@ nonisolated private struct BookshelfGroupBuilder {
         books.append(book)
     }
 
-    func makeItem(searchKeyword: String = "") -> BookshelfItem? {
-        let sortedBooks = sortBooksByAndroidCustomOrder(books)
+    /// 用已按二级列表设置排好的组内书构建顶层分组卡片载荷。
+    func makeItem(sortedBooks: [BookshelfGroupBookPreview], searchKeyword: String = "") -> BookshelfItem? {
         let normalizedKeyword = searchKeyword.trimmingCharacters(in: .whitespacesAndNewlines)
         let isGroupMatched = normalizedKeyword.isEmpty || name.localizedCaseInsensitiveContains(normalizedKeyword)
         let visibleBooks = isGroupMatched ? sortedBooks : sortedBooks.filter {
@@ -489,22 +528,6 @@ nonisolated private struct BookshelfGroupBuilder {
             ),
             content: .group(payload)
         )
-    }
-
-    private func sortBooksByAndroidCustomOrder(_ books: [BookshelfGroupBookPreview]) -> [BookshelfGroupBookPreview] {
-        let pinnedBooks = books.filter(\.pinned).sorted { lhs, rhs in
-            if lhs.pinOrder != rhs.pinOrder {
-                return lhs.pinOrder > rhs.pinOrder
-            }
-            return lhs.id < rhs.id
-        }
-        let notPinnedBooks = books.filter { !$0.pinned }.sorted { lhs, rhs in
-            if lhs.sortOrder != rhs.sortOrder {
-                return lhs.sortOrder < rhs.sortOrder
-            }
-            return lhs.id < rhs.id
-        }
-        return pinnedBooks + notPinnedBooks
     }
 }
 
@@ -3204,8 +3227,13 @@ private extension BookRepository {
             builders[groupID] = builder
         }
 
+        let groupBookListSetting = defaultGroupBookListSetting()
         return orderedGroupIDs.compactMap { groupID in
-            builders[groupID]?.makeItem(searchKeyword: normalizedSearchKeyword(searchKeyword))
+            guard let builder = builders[groupID] else { return nil }
+            return builder.makeItem(
+                sortedBooks: sortGroupPreviewBooks(builder.books, setting: groupBookListSetting),
+                searchKeyword: normalizedSearchKeyword(searchKeyword)
+            )
         }
     }
 
@@ -3941,6 +3969,43 @@ private extension BookRepository {
         }
     }
 
+    /// 按默认分组二级列表设置排序分组预览书籍；这是只读展示排序，不回写 book_order 或 pin_order。
+    nonisolated func sortGroupPreviewBooks(
+        _ books: [BookshelfGroupBookPreview],
+        setting: BookshelfDisplaySetting
+    ) -> [BookshelfGroupBookPreview] {
+        guard setting.sortCriteria != .custom else {
+            return sortGroupPreviewBooksByShelfOrder(books)
+        }
+        return sortedWithOptionalPinned(
+            books,
+            setting: setting,
+            isPinned: { $0.pinned },
+            pinOrder: { $0.pinOrder }
+        ) { lhs, rhs in
+            compareGroupPreviewBooks(lhs, rhs, criteria: setting.sortCriteria, order: setting.sortOrder)
+        }
+    }
+
+    /// 复刻 Android DEFAULT 分组手动排序：置顶书按 pin_order 倒序，普通书按 book_order 正序。
+    nonisolated func sortGroupPreviewBooksByShelfOrder(
+        _ books: [BookshelfGroupBookPreview]
+    ) -> [BookshelfGroupBookPreview] {
+        let pinnedBooks = books.filter(\.pinned).sorted { lhs, rhs in
+            if lhs.pinOrder != rhs.pinOrder {
+                return lhs.pinOrder > rhs.pinOrder
+            }
+            return lhs.id < rhs.id
+        }
+        let notPinnedBooks = books.filter { !$0.pinned }.sorted { lhs, rhs in
+            if lhs.sortOrder != rhs.sortOrder {
+                return lhs.sortOrder < rhs.sortOrder
+            }
+            return lhs.id < rhs.id
+        }
+        return pinnedBooks + notPinnedBooks
+    }
+
     nonisolated func sortMetadata(from rows: [BookshelfBookAggregateRow]) -> BookshelfItemSortMetadata {
         BookshelfItemSortMetadata(
             createdDate: rows.map(\.createdDate).min() ?? 0,
@@ -4042,6 +4107,48 @@ private extension BookRepository {
             return compareText(lhs.payload.sourceName, rhs.payload.sourceName, order: order, tie: tieBreaker)
         case .readingProgress:
             return compareOptionalDouble(lhs.readingProgress, rhs.readingProgress, order: order, tie: tieBreaker)
+        }
+    }
+
+    /// 比较两本分组预览书，保持与默认分组二级列表条件排序的字段语义一致。
+    nonisolated func compareGroupPreviewBooks(
+        _ lhs: BookshelfGroupBookPreview,
+        _ rhs: BookshelfGroupBookPreview,
+        criteria: BookshelfSortCriteria,
+        order: BookshelfSortOrder
+    ) -> Bool {
+        let tieBreaker = lhs.id < rhs.id
+        switch criteria {
+        case .custom, .bookCount:
+            return compareInt(lhs.sortOrder, rhs.sortOrder, order: .ascending, missingLast: false, tie: tieBreaker)
+        case .createdDate:
+            return compareInt(lhs.createdDate, rhs.createdDate, order: order, missingLast: false, tie: tieBreaker)
+        case .modifiedDate:
+            return compareInt(lhs.modifiedDate, rhs.modifiedDate, order: order, missingLast: false, tie: tieBreaker)
+        case .publishDate:
+            return compareInt(lhs.publishDate, rhs.publishDate, order: order, missingLast: true, tie: tieBreaker)
+        case .name:
+            return compareText(lhs.name, rhs.name, order: order, tie: tieBreaker)
+        case .noteCount:
+            return compareNoteCount(Int64(lhs.noteCount), Int64(rhs.noteCount), order: order, tie: tieBreaker)
+        case .rating:
+            return compareInt(lhs.score, rhs.score, order: order, missingLast: true, tie: tieBreaker)
+        case .readDoneDate:
+            return compareInt(lhs.readDoneDate, rhs.readDoneDate, order: order, missingLast: true, tie: tieBreaker)
+        case .totalReadingTime:
+            return compareInt(lhs.totalReadingTime, rhs.totalReadingTime, order: order, missingLast: true, tie: tieBreaker)
+        case .readingProgress:
+            return compareOptionalDouble(lhs.readingProgress, rhs.readingProgress, order: order, tie: tieBreaker)
+        case .readStatus:
+            return compareText(lhs.readStatusName, rhs.readStatusName, order: order, tie: tieBreaker)
+        case .tagName:
+            return compareText(lhs.name, rhs.name, order: order, tie: tieBreaker)
+        case .authorName:
+            return compareText(lhs.author, rhs.author, order: order, tie: tieBreaker)
+        case .pressName:
+            return compareText(lhs.name, rhs.name, order: order, tie: tieBreaker)
+        case .source:
+            return compareText(lhs.sourceName, rhs.sourceName, order: order, tie: tieBreaker)
         }
     }
 
@@ -4280,6 +4387,33 @@ private extension BookRepository {
         in settingsByDimension: [BookshelfDimension: BookshelfDisplaySetting]
     ) -> BookshelfDisplaySetting {
         settingsByDimension[dimension] ?? BookshelfDisplaySetting.defaultValue(for: dimension)
+    }
+
+    /// 读取默认分组二级列表设置，供顶层分组卡片代表封面复用 Android 组内排序语义。
+    nonisolated func defaultGroupBookListSetting() -> BookshelfDisplaySetting {
+        let settings = displaySettingStore.fetchSettings(scope: .bookList)
+        let fallback = BookshelfDisplaySetting.defaultBookListValue(for: .default)
+        return sanitizedDefaultGroupBookListSetting(settings[.default] ?? fallback)
+    }
+
+    /// 净化默认分组二级列表设置，避免旧持久化值把不支持的维度排序带入分组预览。
+    nonisolated func sanitizedDefaultGroupBookListSetting(
+        _ setting: BookshelfDisplaySetting
+    ) -> BookshelfDisplaySetting {
+        var sanitized = setting
+        let fallback = BookshelfDisplaySetting.defaultBookListValue(for: .default)
+        let availableCriteria = BookshelfSortCriteria.availableForBookList(for: .default)
+        if !availableCriteria.contains(sanitized.sortCriteria) {
+            sanitized.sortCriteria = fallback.sortCriteria
+        }
+        if sanitized.sortCriteria == .custom {
+            sanitized.sortOrder = .descending
+            sanitized.isSectionEnabled = false
+        } else if !sanitized.sortCriteria.supportsSection {
+            sanitized.isSectionEnabled = false
+        }
+        sanitized.pinnedInAllSorts = true
+        return sanitized
     }
 
     nonisolated func bookMatchesSearch(
