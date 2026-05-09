@@ -493,22 +493,14 @@ nonisolated private struct BookshelfGroupBuilder {
     }
 
     /// 用已按二级列表设置排好的组内书构建顶层分组卡片载荷。
-    func makeItem(sortedBooks: [BookshelfGroupBookPreview], searchKeyword: String = "") -> BookshelfItem? {
-        let normalizedKeyword = searchKeyword.trimmingCharacters(in: .whitespacesAndNewlines)
-        let isGroupMatched = normalizedKeyword.isEmpty || name.localizedCaseInsensitiveContains(normalizedKeyword)
-        let visibleBooks = isGroupMatched ? sortedBooks : sortedBooks.filter {
-            $0.name.localizedCaseInsensitiveContains(normalizedKeyword)
-                || $0.author.localizedCaseInsensitiveContains(normalizedKeyword)
-                || $0.readStatusName.localizedCaseInsensitiveContains(normalizedKeyword)
-                || $0.sourceName.localizedCaseInsensitiveContains(normalizedKeyword)
-        }
-        guard !visibleBooks.isEmpty else { return nil }
+    func makeItem(sortedBooks: [BookshelfGroupBookPreview]) -> BookshelfItem? {
+        guard !sortedBooks.isEmpty else { return nil }
         let payload = BookshelfGroupPayload(
             id: id,
             name: name,
-            bookCount: visibleBooks.count,
-            representativeCovers: visibleBooks.prefix(6).map(\.cover),
-            books: visibleBooks.map { $0.listItem }
+            bookCount: sortedBooks.count,
+            representativeCovers: sortedBooks.prefix(6).map(\.cover),
+            books: sortedBooks.map { $0.listItem }
         )
         return BookshelfItem(
             id: .group(id),
@@ -519,12 +511,12 @@ nonisolated private struct BookshelfGroupBuilder {
                 createdDate: createdDate,
                 modifiedDate: books.map(\.modifiedDate).max() ?? createdDate,
                 publishDate: 0,
-                noteCount: visibleBooks.reduce(0) { $0 + $1.noteCount },
-                rating: visibleBooks.map(\.score).max() ?? 0,
-                readDoneDate: visibleBooks.map(\.readDoneDate).max() ?? 0,
-                totalReadingTime: visibleBooks.reduce(0) { $0 + $1.totalReadingTime },
+                noteCount: sortedBooks.reduce(0) { $0 + $1.noteCount },
+                rating: sortedBooks.map(\.score).max() ?? 0,
+                readDoneDate: sortedBooks.map(\.readDoneDate).max() ?? 0,
+                totalReadingTime: sortedBooks.reduce(0) { $0 + $1.totalReadingTime },
                 readingProgress: nil,
-                bookCount: visibleBooks.count
+                bookCount: sortedBooks.count
             ),
             content: .group(payload)
         )
@@ -2917,18 +2909,43 @@ private extension BookRepository {
         let defaultItems = try fetchBookshelf(db, setting: defaultSetting, searchKeyword: searchKeyword)
         let allBooks = try fetchAllBookshelfBookRows(db)
         let keyword = normalizedSearchKeyword(searchKeyword)
-        let filteredBooks = filterBooks(allBooks, keyword: keyword)
         let tagsByBook = try fetchBookshelfTagsByBook(db)
+
+        let statusSections = makeStatusSections(
+            from: allBooks,
+            setting: setting(for: .status, in: settingsByDimension)
+        )
+        let tagGroups = makeTagGroups(
+            from: allBooks,
+            tagsByBook: tagsByBook,
+            setting: setting(for: .tag, in: settingsByDimension)
+        )
+        let sourceGroups = makeSourceGroups(
+            from: allBooks,
+            setting: setting(for: .source, in: settingsByDimension)
+        )
+        let ratingSections = makeRatingSections(
+            from: allBooks,
+            setting: setting(for: .rating, in: settingsByDimension)
+        )
+        let authorSections = makeAuthorSections(
+            from: allBooks,
+            setting: setting(for: .author, in: settingsByDimension)
+        )
+        let pressGroups = makePressGroups(
+            from: allBooks,
+            setting: setting(for: .press, in: settingsByDimension)
+        )
 
         return BookshelfSnapshot(
             defaultItems: defaultItems,
             defaultSections: makeDefaultSections(from: defaultItems, setting: defaultSetting),
-            statusSections: makeStatusSections(from: filteredBooks, setting: setting(for: .status, in: settingsByDimension)),
-            tagGroups: makeTagGroups(from: filteredBooks, tagsByBook: tagsByBook, setting: setting(for: .tag, in: settingsByDimension)),
-            sourceGroups: makeSourceGroups(from: filteredBooks, setting: setting(for: .source, in: settingsByDimension)),
-            ratingSections: makeRatingSections(from: filteredBooks, setting: setting(for: .rating, in: settingsByDimension)),
-            authorSections: makeAuthorSections(from: filteredBooks, setting: setting(for: .author, in: settingsByDimension)),
-            pressGroups: makePressGroups(from: filteredBooks, setting: setting(for: .press, in: settingsByDimension))
+            statusSections: filterSectionsByTitle(statusSections, keyword: keyword),
+            tagGroups: filterAggregateGroupsByTitle(tagGroups, keyword: keyword),
+            sourceGroups: filterAggregateGroupsByTitle(sourceGroups, keyword: keyword),
+            ratingSections: filterSectionsByTitle(ratingSections, keyword: keyword),
+            authorSections: filterAuthorSectionsByTitle(authorSections, keyword: keyword),
+            pressGroups: filterAggregateGroupsByTitle(pressGroups, keyword: keyword)
         )
     }
 
@@ -2943,14 +2960,16 @@ private extension BookRepository {
         let keyword = normalizedSearchKeyword(searchKeyword)
         let rows: [BookshelfBookAggregateRow]
         let title: String
+        let allRows = try fetchAllBookshelfBookRows(db)
 
         switch context {
         case .defaultGroup(let groupID):
             let group = try fetchBookshelfGroupPayload(db, groupID: groupID, searchKeyword: "")
-            let allRows = try fetchAllBookshelfBookRows(db)
             let groupBookIDs = Set(try fetchOrderedBookIDs(inGroup: groupID, db: db))
-            let filteredRows = filterBooks(allRows, keyword: keyword)
-                .filter { groupBookIDs.contains($0.payload.id) }
+            let filteredRows = filterBookListRows(
+                allRows.filter { groupBookIDs.contains($0.payload.id) },
+                keyword: keyword
+            )
             let sortedRows = sortBookRows(filteredRows, setting: setting)
             title = group?.name ?? "分组"
             return BookshelfBookListSnapshot(
@@ -2959,48 +2978,50 @@ private extension BookRepository {
                 sections: makeBookListSections(from: sortedRows, setting: setting)
             )
         case .readStatus(let statusID):
-            let allRows = filterBooks(try fetchAllBookshelfBookRows(db), keyword: keyword)
-            rows = allRows.filter { row in
+            let scopedRows = allRows.filter { row in
                 if let statusID {
                     return row.payload.readStatusId == statusID
                 }
                 return row.payload.readStatusId == 0 || row.payload.readStatusName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             }
-            title = rows.first?.payload.readStatusName.nonEmptyOrNil ?? "未设置状态"
+            rows = filterBookListRows(scopedRows, keyword: keyword)
+            title = scopedRows.first?.payload.readStatusName.nonEmptyOrNil ?? "未设置状态"
         case .tag(let tagID):
-            let allRows = filterBooks(try fetchAllBookshelfBookRows(db), keyword: keyword)
             let tagsByBook = try fetchBookshelfTagsByBook(db)
+            let scopedRows: [BookshelfBookAggregateRow]
             if let tagID {
-                rows = allRows.filter { (tagsByBook[$0.payload.id] ?? []).contains { $0.id == tagID } }
+                scopedRows = allRows.filter { (tagsByBook[$0.payload.id] ?? []).contains { $0.id == tagID } }
                 title = tagsByBook.values.flatMap { $0 }.first(where: { $0.id == tagID })?.name ?? "标签"
             } else {
-                rows = allRows.filter { (tagsByBook[$0.payload.id] ?? []).isEmpty }
+                scopedRows = allRows.filter { (tagsByBook[$0.payload.id] ?? []).isEmpty }
                 title = "未设置标签"
             }
+            rows = filterBookListRows(scopedRows, keyword: keyword)
         case .source(let sourceID):
-            let allRows = filterBooks(try fetchAllBookshelfBookRows(db), keyword: keyword)
+            let scopedRows: [BookshelfBookAggregateRow]
             if let sourceID {
-                rows = allRows.filter { $0.payload.sourceId == sourceID && !$0.sourceIsHidden }
-                title = rows.first?.payload.sourceName.nonEmptyOrNil ?? "来源"
+                scopedRows = allRows.filter { $0.payload.sourceId == sourceID && !$0.sourceIsHidden }
+                title = scopedRows.first?.payload.sourceName.nonEmptyOrNil ?? "来源"
             } else {
-                rows = allRows.filter {
+                scopedRows = allRows.filter {
                     $0.payload.sourceId == 0
                         || $0.sourceIsHidden
                         || $0.payload.sourceName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
                 }
                 title = "未知来源"
             }
+            rows = filterBookListRows(scopedRows, keyword: keyword)
         case .rating(let score):
-            rows = filterBooks(try fetchAllBookshelfBookRows(db), keyword: keyword)
-                .filter { ratingGroupScore(for: $0.payload.score) == score }
+            let scopedRows = allRows.filter { ratingGroupScore(for: $0.payload.score) == score }
+            rows = filterBookListRows(scopedRows, keyword: keyword)
             title = score == 0 ? "未评分" : ratingTitle(for: score)
         case .author(let author):
-            rows = filterBooks(try fetchAllBookshelfBookRows(db), keyword: keyword)
-                .filter { normalizedAuthorName($0.payload.author) == author }
+            let scopedRows = allRows.filter { normalizedAuthorName($0.payload.author) == author }
+            rows = filterBookListRows(scopedRows, keyword: keyword)
             title = author
         case .press(let press):
-            rows = filterBooks(try fetchAllBookshelfBookRows(db), keyword: keyword)
-                .filter { normalizedPressName($0.press) == press }
+            let scopedRows = allRows.filter { normalizedPressName($0.press) == press }
+            rows = filterBookListRows(scopedRows, keyword: keyword)
             title = press
         }
 
@@ -3035,7 +3056,7 @@ private extension BookRepository {
     ) throws -> [BookshelfItem] {
         // SQL 目的：读取默认书架中不属于有效分组的顶层书籍，并补齐有效书摘数量、阅读时长与条件排序字段。
         // 涉及表：book b；LEFT JOIN note n 统计未删除书摘；LEFT JOIN read_status/source 补齐聚合展示字段；LEFT JOIN read_time_record 聚合已完成阅读秒数；子查询使用 group_book gb JOIN `group` g 排除仍处于有效分组中的书籍。
-        // 关键过滤：b.is_deleted = 0、b.id != 0；n.is_deleted = 0；read_time_record.status = 3；gb.is_deleted = 0；g.is_deleted = 0；搜索过滤在 Swift 层按书名/作者/阅读状态/来源执行。
+        // 关键过滤：b.is_deleted = 0、b.id != 0；n.is_deleted = 0；read_time_record.status = 3；gb.is_deleted = 0；g.is_deleted = 0；搜索过滤在 Swift 层按书名/阅读状态/来源执行。
         // 排序用途：返回 book_order / pinned / pin_order、created_date / updated_date / pub_date / read_status_changed_date / read_position 等字段，最终在 Swift 层按 Android 显示设置统一混排。
         let sql = """
             SELECT b.id, b.name, b.author, b.cover, b.pub_date, b.source_id, b.score,
@@ -3075,9 +3096,8 @@ private extension BookRepository {
             let author: String = row["author"] ?? ""
             let readStatusName: String = row["read_status_name"] ?? ""
             let sourceName: String = row["source_name"] ?? ""
-            guard bookMatchesSearch(
+            guard bookListMatchesSearch(
                 name: name,
-                author: author,
                 readStatusName: readStatusName,
                 sourceName: sourceName,
                 keyword: keyword
@@ -3130,7 +3150,7 @@ private extension BookRepository {
     ) throws -> [BookshelfItem] {
         // SQL 目的：读取默认书架有效分组及其有效组内书籍，用于生成顶层 Group 条目、代表封面和条件排序元数据。
         // 涉及表：`group` g JOIN group_book gb JOIN book b；LEFT JOIN read_time_record 聚合组内书籍已完成阅读秒数。
-        // 关键过滤：g.is_deleted = 0、gb.is_deleted = 0、b.is_deleted = 0、b.id != 0、read_time_record.status = 3；无有效书籍的分组不会出现在 JOIN 结果中；搜索过滤在 Swift 层按组名/组内书名/作者/阅读状态/来源执行。
+        // 关键过滤：g.is_deleted = 0、gb.is_deleted = 0、b.is_deleted = 0、b.id != 0、read_time_record.status = 3；无有效书籍的分组不会出现在 JOIN 结果中；搜索过滤在 Swift 层只按组名执行。
         // 排序用途：返回 group_order / pinned / pin_order、group/book 创建修改时间、出版时间、评分、读完时间、阅读进度等字段，Swift 层继续按 Android 显示设置处理。
         let sql = """
             SELECT g.id AS group_id,
@@ -3228,11 +3248,12 @@ private extension BookRepository {
         }
 
         let groupBookListSetting = defaultGroupBookListSetting()
+        let keyword = normalizedSearchKeyword(searchKeyword)
         return orderedGroupIDs.compactMap { groupID in
             guard let builder = builders[groupID] else { return nil }
+            guard titleMatchesSearch(builder.name, keyword: keyword) else { return nil }
             return builder.makeItem(
-                sortedBooks: sortGroupPreviewBooks(builder.books, setting: groupBookListSetting),
-                searchKeyword: normalizedSearchKeyword(searchKeyword)
+                sortedBooks: sortGroupPreviewBooks(builder.books, setting: groupBookListSetting)
             )
         }
     }
@@ -3489,18 +3510,49 @@ private extension BookRepository {
         return result
     }
 
-    nonisolated func filterBooks(
+    nonisolated func filterBookListRows(
         _ books: [BookshelfBookAggregateRow],
         keyword: String
     ) -> [BookshelfBookAggregateRow] {
         guard !keyword.isEmpty else { return books }
         return books.filter {
-            bookMatchesSearch(
+            bookListMatchesSearch(
                 name: $0.payload.name,
-                author: $0.payload.author,
                 readStatusName: $0.payload.readStatusName,
                 sourceName: $0.payload.sourceName,
                 keyword: keyword
+            )
+        }
+    }
+
+    nonisolated func filterSectionsByTitle(
+        _ sections: [BookshelfSection],
+        keyword: String
+    ) -> [BookshelfSection] {
+        guard !keyword.isEmpty else { return sections }
+        return sections.filter { titleMatchesSearch($0.title, keyword: keyword) }
+    }
+
+    nonisolated func filterAggregateGroupsByTitle(
+        _ groups: [BookshelfAggregateGroup],
+        keyword: String
+    ) -> [BookshelfAggregateGroup] {
+        guard !keyword.isEmpty else { return groups }
+        return groups.filter { titleMatchesSearch($0.title, keyword: keyword) }
+    }
+
+    nonisolated func filterAuthorSectionsByTitle(
+        _ sections: [BookshelfAuthorSection],
+        keyword: String
+    ) -> [BookshelfAuthorSection] {
+        guard !keyword.isEmpty else { return sections }
+        return sections.compactMap { section in
+            let authors = section.authors.filter { titleMatchesSearch($0.title, keyword: keyword) }
+            guard !authors.isEmpty else { return nil }
+            return BookshelfAuthorSection(
+                id: section.id,
+                title: section.title,
+                authors: authors
             )
         }
     }
@@ -4416,18 +4468,21 @@ private extension BookRepository {
         return sanitized
     }
 
-    nonisolated func bookMatchesSearch(
+    nonisolated func bookListMatchesSearch(
         name: String,
-        author: String,
         readStatusName: String,
         sourceName: String,
         keyword: String
     ) -> Bool {
         guard !keyword.isEmpty else { return true }
         return name.localizedCaseInsensitiveContains(keyword)
-            || author.localizedCaseInsensitiveContains(keyword)
             || readStatusName.localizedCaseInsensitiveContains(keyword)
             || sourceName.localizedCaseInsensitiveContains(keyword)
+    }
+
+    nonisolated func titleMatchesSearch(_ title: String, keyword: String) -> Bool {
+        guard !keyword.isEmpty else { return true }
+        return title.localizedCaseInsensitiveContains(keyword)
     }
 
     nonisolated func normalizedAuthorName(_ author: String) -> String {

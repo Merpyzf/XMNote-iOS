@@ -682,7 +682,7 @@ private extension BookshelfDimension {
     var searchPlaceholder: String {
         switch self {
         case .default:
-            return "搜索书名或作者"
+            return "搜索书名、状态或来源"
         case .tag:
             return "搜索标签"
         case .source:
@@ -694,7 +694,7 @@ private extension BookshelfDimension {
         case .press:
             return "搜索出版社"
         case .status:
-            return "搜索当前分类"
+            return "搜索状态"
         }
     }
 

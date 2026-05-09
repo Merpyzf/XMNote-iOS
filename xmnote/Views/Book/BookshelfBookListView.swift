@@ -1144,7 +1144,7 @@ private struct BookshelfBookListSearchBar: View {
             Image(systemName: "magnifyingglass")
                 .foregroundStyle(.secondary)
 
-            TextField("搜索书名、作者、状态或来源", text: $text)
+            TextField("搜索书名、状态或来源", text: $text)
                 .font(AppTypography.body)
                 .textInputAutocapitalization(.never)
                 .disableAutocorrection(true)
