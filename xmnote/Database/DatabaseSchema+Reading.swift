@@ -34,6 +34,8 @@ extension AppDatabase {
             t.column("status", .integer).notNull().defaults(to: 0)
             t.column("fuzzy_read_date", .integer).notNull().defaults(to: 0)
             t.column("weread_read_date", .integer).notNull().defaults(to: 0)
+            t.column("insight", .text).notNull().defaults(to: "")
+            t.column("recorded_position_unit", .integer)
             t.column("created_date", .integer).notNull().defaults(to: 0)
             t.column("updated_date", .integer).notNull().defaults(to: 0)
             t.column("last_sync_date", .integer).notNull().defaults(to: 0)

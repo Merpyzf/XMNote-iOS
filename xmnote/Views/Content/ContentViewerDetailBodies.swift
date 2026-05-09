@@ -91,18 +91,11 @@ private extension NoteContentDetailBody {
     var footerText: String? {
         var parts: [String] = []
 
-        if !detail.position.isEmpty {
-            let positionLabel: String
-            switch detail.positionUnit {
-            case 1:
-                positionLabel = "位置"
-            case 2:
-                positionLabel = "页码"
-            default:
-                positionLabel = "进度"
-            }
-            let value = detail.positionUnit == 3 ? "\(detail.position)%" : detail.position
-            parts.append("\(positionLabel)：\(value)")
+        if let positionText = NotePositionUnitFormatter.labeledFooterText(
+            position: detail.position,
+            unit: detail.positionUnit
+        ) {
+            parts.append(positionText)
         }
 
         if !detail.chapterTitle.isEmpty {

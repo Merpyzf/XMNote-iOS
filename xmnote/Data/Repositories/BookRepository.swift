@@ -1032,7 +1032,7 @@ private extension BookRepository {
 
         // SQL 目的：重命名有效书籍标签。
         // 涉及表：tag。
-        // 关键过滤：id = ?、type = 1 且 is_deleted = 0，只影响书籍标签。
+        // 关键过滤：id = ?、type = 2 且 is_deleted = 0，只影响书籍标签。
         // 时间字段：updated_date 写入当前毫秒时间戳；last_sync_date 保持原值等待同步层处理。
         // 副作用用途：更新标签名称并触发标签维度与二级列表刷新。
         let sql = """
@@ -1040,7 +1040,7 @@ private extension BookRepository {
             SET updated_date = ?,
                 name = ?
             WHERE id = ?
-              AND type = 1
+              AND type = 2
               AND is_deleted = 0
             """
         try db.execute(sql: sql, arguments: [now, name, tagID])
@@ -1468,13 +1468,13 @@ private extension BookRepository {
     ) throws {
         // SQL 目的：写入书籍标签在书架标签维度中的手动排序下标。
         // 涉及表：tag。
-        // 关键过滤：按 id 精确命中，要求 type = 1 且 is_deleted = 0，避免影响书摘标签。
+        // 关键过滤：按 id 精确命中，要求 type = 2 且 is_deleted = 0，避免影响书摘标签。
         // 副作用用途：仅更新 tag_order，不更新 updated_date / last_sync_date。
         let sql = """
             UPDATE tag
             SET tag_order = ?
             WHERE id = ?
-              AND type = 1
+              AND type = 2
               AND is_deleted = 0
             """
         try db.execute(sql: sql, arguments: [order, id])
@@ -1607,13 +1607,13 @@ private extension BookRepository {
     ) throws -> [BookEditorNamedOption] {
         // SQL 目的：读取当前用户下可用于批量设置的书籍标签。
         // 涉及表：tag。
-        // 关键过滤：user_id = ?、type = 1 仅书籍标签、is_deleted = 0 排除软删除。
+        // 关键过滤：user_id = ?、type = 2 仅书籍标签、is_deleted = 0 排除软删除。
         // 返回字段用途：id/name 直接构造批量标签 Sheet 选项；时间字段不参与本查询。
         let sql = """
             SELECT id, COALESCE(name, '') AS name
             FROM tag
             WHERE user_id = ?
-              AND type = 1
+              AND type = 2
               AND is_deleted = 0
             ORDER BY tag_order ASC, id ASC
             """
@@ -1699,13 +1699,13 @@ private extension BookRepository {
     nonisolated func fetchActiveBookTagIDs(_ db: Database, ownerID: Int64) throws -> Set<Int64> {
         // SQL 目的：读取当前用户下仍有效的书籍标签 ID，用于批量标签写入前校验。
         // 涉及表：tag。
-        // 关键过滤：user_id = ?、type = 1、is_deleted = 0。
+        // 关键过滤：user_id = ?、type = 2、is_deleted = 0。
         // 返回字段用途：校验提交 tagIDs 全部来自有效书籍标签；时间字段不参与本查询。
         let sql = """
             SELECT id
             FROM tag
             WHERE user_id = ?
-              AND type = 1
+              AND type = 2
               AND is_deleted = 0
         """
         return Set(try Int64.fetchAll(db, sql: sql, arguments: [ownerID]))
@@ -1715,7 +1715,7 @@ private extension BookRepository {
     nonisolated func fetchBatchSelectedTagIDs(ofBook bookID: Int64, db: Database) throws -> [Int64] {
         // SQL 目的：读取单本书当前有效书籍标签关系，作为标签 Sheet 初始选择。
         // 涉及表：tag_book tb JOIN tag t。
-        // 关键过滤：tb.book_id = ?、tb.is_deleted = 0、t.is_deleted = 0、t.type = 1。
+        // 关键过滤：tb.book_id = ?、tb.is_deleted = 0、t.is_deleted = 0、t.type = 2。
         // 返回字段用途：tag_id 按 tag_order/id 排序返回，用于单本标签替换前的默认勾选；时间字段不参与本查询。
         let sql = """
             SELECT t.id
@@ -1724,7 +1724,7 @@ private extension BookRepository {
             WHERE tb.book_id = ?
               AND tb.is_deleted = 0
               AND t.is_deleted = 0
-              AND t.type = 1
+              AND t.type = 2
             ORDER BY t.tag_order ASC, t.id ASC
             """
         return try Int64.fetchAll(db, sql: sql, arguments: [bookID])
@@ -2154,13 +2154,13 @@ private extension BookRepository {
     nonisolated func isActiveBookTag(_ db: Database, tagID: Int64) throws -> Bool {
         // SQL 目的：校验待管理标签是否仍是有效书籍标签。
         // 涉及表：tag。
-        // 关键过滤：id = ?、type = 1 且 is_deleted = 0。
+        // 关键过滤：id = ?、type = 2 且 is_deleted = 0。
         // 返回字段用途：返回计数是否大于 0；时间字段不参与本查询。
         let sql = """
             SELECT COUNT(*)
             FROM tag
             WHERE id = ?
-              AND type = 1
+              AND type = 2
               AND is_deleted = 0
             """
         return (try Int.fetchOne(db, sql: sql, arguments: [tagID]) ?? 0) > 0
@@ -2175,14 +2175,14 @@ private extension BookRepository {
         let ownerID = try DatabaseOwnerResolver.fetchExistingOwnerID(in: db) ?? 0
         // SQL 目的：查询同一用户下是否存在同名书籍标签。
         // 涉及表：tag。
-        // 关键过滤：user_id = ?、name = ?、type = 1、is_deleted = 0，并排除当前 tag id。
+        // 关键过滤：user_id = ?、name = ?、type = 2、is_deleted = 0，并排除当前 tag id。
         // 返回字段用途：用于重命名前置重名拦截；时间字段不参与本查询。
         let sql = """
             SELECT COUNT(*)
             FROM tag
             WHERE user_id = ?
               AND name = ?
-              AND type = 1
+              AND type = 2
               AND is_deleted = 0
               AND id != ?
             """
@@ -2288,7 +2288,7 @@ private extension BookRepository {
     ) throws {
         // SQL 目的：软删除有效书籍标签主记录。
         // 涉及表：tag。
-        // 关键过滤：id = ?、type = 1 且 is_deleted = 0。
+        // 关键过滤：id = ?、type = 2 且 is_deleted = 0。
         // 时间字段：updated_date 写入当前毫秒时间戳；last_sync_date 保持原值等待同步层处理。
         // 副作用用途：对齐 Android TagDao.deleteSync，使标签维度观察流移除该标签。
         let sql = """
@@ -2296,7 +2296,7 @@ private extension BookRepository {
             SET updated_date = ?,
                 is_deleted = 1
             WHERE id = ?
-              AND type = 1
+              AND type = 2
               AND is_deleted = 0
             """
         try db.execute(sql: sql, arguments: [updatedAt, tagID])
@@ -2480,13 +2480,14 @@ private extension BookRepository {
     nonisolated func fetchBookIDsByAuthor(_ db: Database, name: String) throws -> [Int64] {
         // SQL 目的：删除作者时定位该作者下仍有效的书籍。
         // 涉及表：book。
-        // 关键过滤：author 精确匹配且 is_deleted = 0；严格对齐 Android BookDao.queryBooksByAuthor。
+        // 关键过滤：author 精确匹配、is_deleted = 0、id != 0，避免作者删除路径误处理占位书。
         // 返回字段用途：返回 book.id 交给 deleteBooks 做软删除级联；时间字段不参与本查询。
         let sql = """
             SELECT id
             FROM book
             WHERE author = ?
               AND is_deleted = 0
+              AND id != 0
             """
         return try Int64.fetchAll(db, sql: sql, arguments: [name])
     }
@@ -2577,13 +2578,14 @@ private extension BookRepository {
     nonisolated func fetchBookIDsByPress(_ db: Database, name: String) throws -> [Int64] {
         // SQL 目的：删除出版社时定位该出版社下仍有效的书籍。
         // 涉及表：book。
-        // 关键过滤：press 精确匹配且 is_deleted = 0；严格对齐 Android BookDao.queryBooksByPress。
+        // 关键过滤：press 精确匹配、is_deleted = 0、id != 0，避免出版社删除路径误处理占位书。
         // 返回字段用途：返回 book.id 交给 deleteBooks 做软删除级联；时间字段不参与本查询。
         let sql = """
             SELECT id
             FROM book
             WHERE press = ?
               AND is_deleted = 0
+              AND id != 0
             """
         return try Int64.fetchAll(db, sql: sql, arguments: [name])
     }
@@ -3009,8 +3011,8 @@ private extension BookRepository {
         searchKeyword: String?
     ) throws -> [BookshelfItem] {
         // SQL 目的：读取默认书架中不属于有效分组的顶层书籍，并补齐有效书摘数量、阅读时长与条件排序字段。
-        // 涉及表：book b；LEFT JOIN note n 统计未删除书摘；LEFT JOIN read_status/source 补齐聚合展示字段；LEFT JOIN read_time_record 聚合总阅读秒数；子查询使用 group_book gb JOIN `group` g 排除仍处于有效分组中的书籍。
-        // 关键过滤：b.is_deleted = 0、b.id != 0；n.is_deleted = 0；gb.is_deleted = 0；g.is_deleted = 0；搜索过滤在 Swift 层按书名/作者/阅读状态/来源执行。
+        // 涉及表：book b；LEFT JOIN note n 统计未删除书摘；LEFT JOIN read_status/source 补齐聚合展示字段；LEFT JOIN read_time_record 聚合已完成阅读秒数；子查询使用 group_book gb JOIN `group` g 排除仍处于有效分组中的书籍。
+        // 关键过滤：b.is_deleted = 0、b.id != 0；n.is_deleted = 0；read_time_record.status = 3；gb.is_deleted = 0；g.is_deleted = 0；搜索过滤在 Swift 层按书名/作者/阅读状态/来源执行。
         // 排序用途：返回 book_order / pinned / pin_order、created_date / updated_date / pub_date / read_status_changed_date / read_position 等字段，最终在 Swift 层按 Android 显示设置统一混排。
         let sql = """
             SELECT b.id, b.name, b.author, b.cover, b.pub_date, b.source_id, b.score,
@@ -3029,6 +3031,7 @@ private extension BookRepository {
                 SELECT book_id, SUM(elapsed_seconds) AS total_reading_time
                 FROM read_time_record
                 WHERE is_deleted = 0
+                  AND status = 3
                   AND book_id != 0
                 GROUP BY book_id
             ) rt ON rt.book_id = b.id
@@ -3103,8 +3106,8 @@ private extension BookRepository {
         searchKeyword: String?
     ) throws -> [BookshelfItem] {
         // SQL 目的：读取默认书架有效分组及其有效组内书籍，用于生成顶层 Group 条目、代表封面和条件排序元数据。
-        // 涉及表：`group` g JOIN group_book gb JOIN book b；LEFT JOIN read_time_record 聚合组内书籍总阅读秒数。
-        // 关键过滤：g.is_deleted = 0、gb.is_deleted = 0、b.is_deleted = 0、b.id != 0；无有效书籍的分组不会出现在 JOIN 结果中；搜索过滤在 Swift 层按组名/组内书名/作者/阅读状态/来源执行。
+        // 涉及表：`group` g JOIN group_book gb JOIN book b；LEFT JOIN read_time_record 聚合组内书籍已完成阅读秒数。
+        // 关键过滤：g.is_deleted = 0、gb.is_deleted = 0、b.is_deleted = 0、b.id != 0、read_time_record.status = 3；无有效书籍的分组不会出现在 JOIN 结果中；搜索过滤在 Swift 层按组名/组内书名/作者/阅读状态/来源执行。
         // 排序用途：返回 group_order / pinned / pin_order、group/book 创建修改时间、出版时间、评分、读完时间、阅读进度等字段，Swift 层继续按 Android 显示设置处理。
         let sql = """
             SELECT g.id AS group_id,
@@ -3146,6 +3149,7 @@ private extension BookRepository {
                 SELECT book_id, SUM(elapsed_seconds) AS total_reading_time
                 FROM read_time_record
                 WHERE is_deleted = 0
+                  AND status = 3
                   AND book_id != 0
                 GROUP BY book_id
             ) rt ON rt.book_id = b.id
@@ -3357,8 +3361,8 @@ private extension BookRepository {
     /// - Throws: 数据库查询失败时抛出错误。
     nonisolated func fetchAllBookshelfBookRows(_ db: Database) throws -> [BookshelfBookAggregateRow] {
         // SQL 目的：读取所有有效书籍并补齐阅读状态、来源、评分、置顶排序、有效书摘数量、阅读时长与条件排序字段，供多维度聚合和二级列表复用。
-        // 涉及表：book b；LEFT JOIN note n 统计有效书摘；LEFT JOIN read_status rs/source s 读取维度标题与排序字段；LEFT JOIN read_time_record 聚合总阅读秒数。
-        // 关键过滤：b.is_deleted = 0、b.id != 0；n.is_deleted = 0；rs/s 仅连接未软删除记录。
+        // 涉及表：book b；LEFT JOIN note n 统计有效书摘；LEFT JOIN read_status rs/source s 读取维度标题与排序字段；LEFT JOIN read_time_record 聚合已完成阅读秒数。
+        // 关键过滤：b.is_deleted = 0、b.id != 0；n.is_deleted = 0；read_time_record.status = 3；rs/s 仅连接未软删除记录。
         // 返回字段用途：Book payload 用于 UI 代表封面，order/pin/source/read_status 与创建、修改、出版、读完、阅读进度字段用于 Swift 层稳定聚合和二级列表排序。
         let sql = """
             SELECT b.id, b.name, b.author, b.cover, b.press, b.pub_date,
@@ -3382,6 +3386,7 @@ private extension BookRepository {
                 SELECT book_id, SUM(elapsed_seconds) AS total_reading_time
                 FROM read_time_record
                 WHERE is_deleted = 0
+                  AND status = 3
                   AND book_id != 0
                 GROUP BY book_id
             ) rt ON rt.book_id = b.id
@@ -3431,7 +3436,7 @@ private extension BookRepository {
     nonisolated func fetchBookshelfTagsByBook(_ db: Database) throws -> [Int64: [BookshelfTagInfo]] {
         // SQL 目的：读取书籍标签关系，供首页标签维度按书籍聚合。
         // 涉及表：tag_book tb JOIN tag t。
-        // 关键过滤：tb.is_deleted = 0、t.is_deleted = 0、t.type = 1（书籍标签）。
+        // 关键过滤：tb.is_deleted = 0、t.is_deleted = 0、t.type = 2（书籍标签）。
         // 返回字段用途：book_id 用于归并，tag_order 用于标签卡排序。
         let sql = """
             SELECT tb.book_id, t.id AS tag_id, COALESCE(t.name, '') AS tag_name, t.tag_order
@@ -3439,7 +3444,7 @@ private extension BookRepository {
             JOIN tag t ON t.id = tb.tag_id
             WHERE tb.is_deleted = 0
               AND t.is_deleted = 0
-              AND t.type = 1
+              AND t.type = 2
             ORDER BY t.tag_order ASC, t.id ASC
             """
         var result: [Int64: [BookshelfTagInfo]] = [:]
@@ -3856,7 +3861,7 @@ private extension BookRepository {
         case .publishDate:
             return compareInt(lhs.sortMetadata.publishDate, rhs.sortMetadata.publishDate, order: order, missingLast: true, tie: tieBreaker)
         case .noteCount:
-            return compareInt(Int64(lhs.sortMetadata.noteCount), Int64(rhs.sortMetadata.noteCount), order: order, missingLast: false, tie: tieBreaker)
+            return compareNoteCount(Int64(lhs.sortMetadata.noteCount), Int64(rhs.sortMetadata.noteCount), order: order, tie: tieBreaker)
         case .rating:
             return compareInt(lhs.sortMetadata.rating, rhs.sortMetadata.rating, order: order, missingLast: true, tie: tieBreaker)
         case .readDoneDate:
@@ -3971,7 +3976,15 @@ private extension BookRepository {
         case .name, .readStatus, .tagName, .authorName, .pressName, .source:
             return compareText(lhsItem.title, rhsItem.title, order: order, tie: tieBreaker)
         case .noteCount:
-            return compareInt(Int64(lhsItem.sortMetadata.noteCount), Int64(rhsItem.sortMetadata.noteCount), order: order, missingLast: false, tie: tieBreaker)
+            let lhsIsBook = isBookItem(lhsItem)
+            let rhsIsBook = isBookItem(rhsItem)
+            if lhsIsBook != rhsIsBook {
+                return lhsIsBook
+            }
+            guard lhsIsBook else {
+                return compareInt(lhsItem.sortMetadata.createdDate, rhsItem.sortMetadata.createdDate, order: order, missingLast: false, tie: tieBreaker)
+            }
+            return compareNoteCount(Int64(lhsItem.sortMetadata.noteCount), Int64(rhsItem.sortMetadata.noteCount), order: order, tie: tieBreaker)
         case .bookCount:
             return compareInt(Int64(lhsItem.sortMetadata.bookCount), Int64(rhsItem.sortMetadata.bookCount), order: order, missingLast: false, tie: tieBreaker)
         case .rating:
@@ -4004,7 +4017,7 @@ private extension BookRepository {
         case .name:
             return compareText(lhs.payload.name, rhs.payload.name, order: order, tie: tieBreaker)
         case .noteCount:
-            return compareInt(Int64(lhs.payload.noteCount), Int64(rhs.payload.noteCount), order: order, missingLast: false, tie: tieBreaker)
+            return compareNoteCount(Int64(lhs.payload.noteCount), Int64(rhs.payload.noteCount), order: order, tie: tieBreaker)
         case .rating:
             return compareInt(lhs.payload.score, rhs.payload.score, order: order, missingLast: true, tie: tieBreaker)
         case .readDoneDate:
@@ -4030,6 +4043,29 @@ private extension BookRepository {
         case .readingProgress:
             return compareOptionalDouble(lhs.readingProgress, rhs.readingProgress, order: order, tie: tieBreaker)
         }
+    }
+
+    nonisolated func isBookItem(_ item: BookshelfItem) -> Bool {
+        if case .book = item.content {
+            return true
+        }
+        return false
+    }
+
+    nonisolated func compareNoteCount(
+        _ lhs: Int64,
+        _ rhs: Int64,
+        order: BookshelfSortOrder,
+        tie: Bool
+    ) -> Bool {
+        if order == .ascending {
+            let lhsEmpty = lhs == 0
+            let rhsEmpty = rhs == 0
+            if lhsEmpty != rhsEmpty {
+                return !lhsEmpty
+            }
+        }
+        return compareInt(lhs, rhs, order: order, missingLast: false, tie: tie)
     }
 
     nonisolated func compareText(_ lhs: String, _ rhs: String, order: BookshelfSortOrder, tie: Bool) -> Bool {
@@ -4293,7 +4329,7 @@ private extension BookRepository {
     nonisolated func fetchBooks(_ db: Database) throws -> [BookItem] {
         // SQL 目的：读取书架列表并附带每本书的有效笔记数。
         // 表关系：book b LEFT JOIN note n（仅统计 n.is_deleted = 0）。
-        // 过滤与排序：仅保留未删除书籍，按置顶状态与排序字段输出用于书架展示。
+        // 过滤与排序：仅保留未删除且非占位书籍，按置顶状态与排序字段输出用于书架展示。
         let sql = """
             SELECT b.id, b.name, b.author, b.cover,
                    b.read_status_id, b.pinned, b.pin_order, b.book_order,
@@ -4301,6 +4337,7 @@ private extension BookRepository {
             FROM book b
             LEFT JOIN note n ON b.id = n.book_id AND n.is_deleted = 0
             WHERE b.is_deleted = 0
+              AND b.id != 0
             GROUP BY b.id
             ORDER BY b.pinned DESC, b.pin_order ASC, b.book_order ASC
             """
@@ -4324,11 +4361,12 @@ private extension BookRepository {
         let trimmedQuery = query.trimmingCharacters(in: .whitespacesAndNewlines)
         // SQL 目的：读取本地可选书籍列表，供通用书籍选择流本地搜索与回显。
         // 涉及表：book。
-        // 关键过滤：仅保留未软删除书籍；若存在 query，则匹配 name/author/press/isbn；按 updated_date DESC 对齐 Android 最近编辑优先。
+        // 关键过滤：仅保留未软删除且非占位书籍；若存在 query，则匹配 name/author/press/isbn；按 updated_date DESC 对齐 Android 最近编辑优先。
         let baseSQL = """
             SELECT id, name, author, press, cover, position_unit, total_position, total_pagination
             FROM book
             WHERE is_deleted = 0
+              AND id != 0
             """
         let sql: String
         let arguments: StatementArguments
@@ -4356,11 +4394,11 @@ private extension BookRepository {
     nonisolated func fetchPickerBook(_ db: Database, bookId: Int64) throws -> BookPickerBook? {
         // SQL 目的：按主键读取单本本地书籍，供创建成功后回填到书籍选择流。
         // 涉及表：book。
-        // 关键过滤：限定 id 精确命中，排除软删除书籍；返回 title/author/press/cover 与位置字段供选择行和回填使用。
+        // 关键过滤：限定 id 精确命中，排除软删除书籍与占位书；返回 title/author/press/cover 与位置字段供选择行和回填使用。
         let sql = """
             SELECT id, name, author, press, cover, position_unit, total_position, total_pagination
             FROM book
-            WHERE id = ? AND is_deleted = 0
+            WHERE id = ? AND is_deleted = 0 AND id != 0
             """
         guard let row = try Row.fetchOne(db, sql: sql, arguments: [bookId]) else {
             return nil
@@ -4373,7 +4411,7 @@ private extension BookRepository {
     nonisolated func fetchBook(_ db: Database, bookId: Int64) throws -> BookDetail? {
         // SQL 目的：读取单本书详情，并补充阅读状态名称与笔记总数。
         // 表关系：book b LEFT JOIN read_status rs；子查询统计 note 表有效记录。
-        // 过滤条件：按 bookId 精确命中且排除软删除书籍。
+        // 过滤条件：按 bookId 精确命中且排除软删除书籍与占位书。
         let sql = """
             SELECT b.id, b.name, b.author, b.cover, b.press,
                    COALESCE(rs.name, '') AS read_status_name,
@@ -4381,7 +4419,7 @@ private extension BookRepository {
                     WHERE n.book_id = b.id AND n.is_deleted = 0) AS note_count
             FROM book b
             LEFT JOIN read_status rs ON b.read_status_id = rs.id
-            WHERE b.id = ? AND b.is_deleted = 0
+            WHERE b.id = ? AND b.is_deleted = 0 AND b.id != 0
             """
         guard let row = try Row.fetchOne(db, sql: sql, arguments: [bookId]) else {
             return nil

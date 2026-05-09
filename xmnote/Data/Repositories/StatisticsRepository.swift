@@ -235,17 +235,39 @@ private extension StatisticsRepository {
     /// 按统计维度查询最早业务日期，作为“全部数据”模式的起始边界。
     nonisolated func findEarliestDate(_ db: Database, dataType: HeatmapStatisticsDataType) -> Date? {
         // SQL 目的：读取阅读时长最早事件时间；fuzzy_read_date 优先，其次 start_time。
-        // 过滤条件：排除 read_time_record 软删除记录。
+        // 过滤条件：排除软删除、未完成计时与默认占位书记录。
         let readSql = """
             SELECT MIN(CASE WHEN fuzzy_read_date != 0 THEN fuzzy_read_date ELSE start_time END)
-            FROM read_time_record WHERE is_deleted = 0
+            FROM read_time_record
+            WHERE is_deleted = 0
+              AND status = 3
+              AND book_id != 0
             """
-        // SQL 目的：读取 note 表最早创建时间（毫秒时间戳）。
-        let noteSql = "SELECT MIN(created_date) FROM note WHERE is_deleted = 0"
-        // SQL 目的：读取 check_in_record 最早打卡时间（忽略 0 值）。
-        let checkInSql = "SELECT MIN(checkin_date) FROM check_in_record WHERE is_deleted = 0 AND checkin_date != 0"
+        // SQL 目的：读取仍归属于有效书籍的 note 最早创建时间（毫秒时间戳）。
+        let noteSql = """
+            SELECT MIN(n.created_date)
+            FROM note n
+            JOIN book b ON b.id = n.book_id AND b.is_deleted = 0
+            WHERE n.is_deleted = 0
+            """
+        // SQL 目的：读取有效书籍下 check_in_record 最早打卡时间（忽略 0 值）。
+        let checkInSql = """
+            SELECT MIN(c.checkin_date)
+            FROM check_in_record c
+            JOIN book b ON b.id = c.book_id AND b.is_deleted = 0
+            WHERE c.is_deleted = 0
+              AND c.checkin_date != 0
+              AND c.book_id != 0
+            """
         // SQL 目的：读取 book_read_status_record 最早状态变更时间，覆盖“仅状态变化”场景。
-        let statusSql = "SELECT MIN(changed_date) FROM book_read_status_record WHERE is_deleted = 0 AND changed_date != 0"
+        let statusSql = """
+            SELECT MIN(r.changed_date)
+            FROM book_read_status_record r
+            JOIN book b ON b.id = r.book_id AND b.is_deleted = 0
+            WHERE r.is_deleted = 0
+              AND r.changed_date != 0
+              AND r.book_id != 0
+            """
 
         let queries: [String]
         switch dataType {
@@ -276,7 +298,7 @@ private extension StatisticsRepository {
     nonisolated func aggregateReadSeconds(_ db: Database, millisRange: ClosedRange<Int64>) -> [Date: Int] {
         // SQL 目的：按“本地日”汇总阅读秒数，用于热力图阅读时长维度。
         // 时间语义：fuzzy_read_date 非 0 时按补录日期归属，否则按 start_time；均以 localtime 分桶。
-        // 过滤条件：排除软删除，并限制在输入毫秒区间内。
+        // 过滤条件：排除软删除、未完成计时与默认占位书，并限制在输入毫秒区间内。
         let sql = """
             SELECT DATE(
                 CASE WHEN fuzzy_read_date != 0
@@ -288,6 +310,8 @@ private extension StatisticsRepository {
             SUM(elapsed_seconds) AS total
             FROM read_time_record
             WHERE is_deleted = 0
+              AND status = 3
+              AND book_id != 0
               AND (CASE WHEN fuzzy_read_date != 0 THEN fuzzy_read_date ELSE start_time END) BETWEEN ? AND ?
             GROUP BY day
             """
@@ -302,14 +326,15 @@ private extension StatisticsRepository {
 
     /// 按天 COUNT(note)
     nonisolated func aggregateNoteCounts(_ db: Database, millisRange: ClosedRange<Int64>) -> [Date: Int] {
-        // SQL 目的：按“本地日”统计有效笔记条数。
-        // 过滤条件：仅统计 note.is_deleted = 0 且 created_date 位于目标区间的记录。
+        // SQL 目的：按“本地日”统计归属于有效书籍的笔记条数。
+        // 过滤条件：统计 note/book 均未软删除且 created_date 位于目标区间的记录。
         let sql = """
-            SELECT DATE(created_date / 1000, 'unixepoch', 'localtime') AS day,
+            SELECT DATE(n.created_date / 1000, 'unixepoch', 'localtime') AS day,
                    COUNT(*) AS total
-            FROM note
-            WHERE is_deleted = 0
-              AND created_date BETWEEN ? AND ?
+            FROM note n
+            JOIN book b ON b.id = n.book_id AND b.is_deleted = 0
+            WHERE n.is_deleted = 0
+              AND n.created_date BETWEEN ? AND ?
             GROUP BY day
             """
         return queryDayAggregation(
@@ -323,15 +348,18 @@ private extension StatisticsRepository {
 
     /// 按天聚合打卡次数与时长（amount * 20 分钟）
     nonisolated func aggregateCheckInSummary(_ db: Database, millisRange: ClosedRange<Int64>) -> [Date: CheckInSummary] {
-        // SQL 目的：按“本地日”统计打卡次数与打卡时长（amount * 1200 秒）。
-        // 过滤条件：排除软删除与 checkin_date=0 的无效记录。
+        // SQL 目的：按“本地日”统计有效书籍下的打卡次数与打卡时长（amount * 1200 秒）。
+        // 过滤条件：排除软删除、默认占位书与 checkin_date=0 的无效记录。
         let sql = """
-            SELECT DATE(checkin_date / 1000, 'unixepoch', 'localtime') AS day,
+            SELECT DATE(c.checkin_date / 1000, 'unixepoch', 'localtime') AS day,
                    COUNT(*) AS checkin_count,
-                   COALESCE(SUM(amount * 1200), 0) AS checkin_seconds
-            FROM check_in_record
-            WHERE is_deleted = 0 AND checkin_date != 0
-              AND checkin_date BETWEEN ? AND ?
+                   COALESCE(SUM(c.amount * 1200), 0) AS checkin_seconds
+            FROM check_in_record c
+            JOIN book b ON b.id = c.book_id AND b.is_deleted = 0
+            WHERE c.is_deleted = 0
+              AND c.book_id != 0
+              AND c.checkin_date != 0
+              AND c.checkin_date BETWEEN ? AND ?
             GROUP BY day
             """
         return queryDayCheckInSummary(
@@ -345,16 +373,18 @@ private extension StatisticsRepository {
 
     /// 聚合每日阅读状态变更集合，支持热力图展示“想读/在读/读完”等状态轨迹。
     nonisolated func aggregateBookStates(_ db: Database, millisRange: ClosedRange<Int64>) -> [Date: Set<HeatmapBookState>] {
-        // SQL 目的：按天收集阅读状态变更（read_status_id），用于“状态热力图”展示。
+        // SQL 目的：按天收集有效书籍的阅读状态变更（read_status_id），用于“状态热力图”展示。
         // 输出字段：day + read_status_id；后续在 Swift 侧转为 Set<HeatmapBookState> 去重。
         let sql = """
-            SELECT DATE(changed_date / 1000, 'unixepoch', 'localtime') AS day,
-                   read_status_id
-            FROM book_read_status_record
-            WHERE is_deleted = 0
-              AND changed_date != 0
-              AND changed_date BETWEEN ? AND ?
-            ORDER BY changed_date ASC
+            SELECT DATE(r.changed_date / 1000, 'unixepoch', 'localtime') AS day,
+                   r.read_status_id
+            FROM book_read_status_record r
+            JOIN book b ON b.id = r.book_id AND b.is_deleted = 0
+            WHERE r.is_deleted = 0
+              AND r.book_id != 0
+              AND r.changed_date != 0
+              AND r.changed_date BETWEEN ? AND ?
+            ORDER BY r.changed_date ASC
             """
         guard let rows = try? Row.fetchAll(
             db,
@@ -588,15 +618,17 @@ private extension StatisticsRepository {
     /// 统计每天“读完”事件数量，供阅读日历显示当日读完本数。
     nonisolated func fetchReadDoneCountByDay(_ db: Database, millisRange: ClosedRange<Int64>) -> [Date: Int] {
         // SQL 目的：统计每天“读完”事件次数（read_status_id = 3）。
-        // 过滤条件：排除软删除、changed_date=0、区间外记录。
+        // 过滤条件：排除软删除、默认占位书、已删除书、changed_date=0 与区间外记录。
         let sql = """
-            SELECT DATE(changed_date / 1000, 'unixepoch', 'localtime') AS day,
+            SELECT DATE(r.changed_date / 1000, 'unixepoch', 'localtime') AS day,
                    COUNT(*) AS total
-            FROM book_read_status_record
-            WHERE is_deleted = 0
-              AND read_status_id = 3
-              AND changed_date != 0
-              AND changed_date BETWEEN ? AND ?
+            FROM book_read_status_record r
+            JOIN book b ON b.id = r.book_id AND b.is_deleted = 0
+            WHERE r.is_deleted = 0
+              AND r.read_status_id = 3
+              AND r.changed_date != 0
+              AND r.book_id != 0
+              AND r.changed_date BETWEEN ? AND ?
             GROUP BY day
             """
         return queryDayAggregation(
@@ -608,17 +640,18 @@ private extension StatisticsRepository {
 
     /// 统计每天进入“读完”状态的书籍集合，用于给当日书目打“已读完”标记。
     nonisolated func fetchReadDoneBookIdsByDay(_ db: Database, millisRange: ClosedRange<Int64>) -> [Date: Set<Int64>] {
-        // SQL 目的：统计每天进入“读完”状态的书籍集合（day + book_id 去重）。
+        // SQL 目的：统计每天进入“读完”状态的有效书籍集合（day + book_id 去重）。
         // 用途：在日历单元中标记 isReadDoneOnThisDay。
         let sql = """
-            SELECT DATE(changed_date / 1000, 'unixepoch', 'localtime') AS day,
-                   book_id AS book_id
-            FROM book_read_status_record
-            WHERE is_deleted = 0
-              AND read_status_id = 3
-              AND changed_date != 0
-              AND book_id != 0
-              AND changed_date BETWEEN ? AND ?
+            SELECT DATE(r.changed_date / 1000, 'unixepoch', 'localtime') AS day,
+                   r.book_id AS book_id
+            FROM book_read_status_record r
+            JOIN book b ON b.id = r.book_id AND b.is_deleted = 0
+            WHERE r.is_deleted = 0
+              AND r.read_status_id = 3
+              AND r.changed_date != 0
+              AND r.book_id != 0
+              AND r.changed_date BETWEEN ? AND ?
             GROUP BY day, book_id
             """
         guard let rows = try? Row.fetchAll(
@@ -916,15 +949,16 @@ private extension StatisticsRepository {
 
     /// 统计区间内读完状态的去重书籍数，供月度摘要展示完成规模。
     nonisolated func fetchReadDoneDistinctBookCount(_ db: Database, millisRange: ClosedRange<Int64>) -> Int {
-        // SQL 目的：统计区间内进入“读完”状态的去重书籍数，用于月度 summary.finishedBookCount。
+        // SQL 目的：统计区间内进入“读完”状态的去重有效书籍数，用于月度 summary.finishedBookCount。
         let sql = """
-            SELECT COUNT(DISTINCT book_id)
-            FROM book_read_status_record
-            WHERE is_deleted = 0
-              AND read_status_id = 3
-              AND changed_date != 0
-              AND book_id != 0
-              AND changed_date BETWEEN ? AND ?
+            SELECT COUNT(DISTINCT r.book_id)
+            FROM book_read_status_record r
+            JOIN book b ON b.id = r.book_id AND b.is_deleted = 0
+            WHERE r.is_deleted = 0
+              AND r.read_status_id = 3
+              AND r.changed_date != 0
+              AND r.book_id != 0
+              AND r.changed_date BETWEEN ? AND ?
             """
         return (try? Int.fetchOne(
             db,
@@ -935,12 +969,13 @@ private extension StatisticsRepository {
 
     /// 统计区间内有效笔记总数，供月度摘要展示笔记产出。
     nonisolated func fetchMonthlyNoteCount(_ db: Database, millisRange: ClosedRange<Int64>) -> Int {
-        // SQL 目的：统计区间内有效笔记总数，用于月度 summary.noteCount。
+        // SQL 目的：统计区间内归属于有效书籍的笔记总数，用于月度 summary.noteCount。
         let sql = """
             SELECT COUNT(*)
-            FROM note
-            WHERE is_deleted = 0
-              AND created_date BETWEEN ? AND ?
+            FROM note n
+            JOIN book b ON b.id = n.book_id AND b.is_deleted = 0
+            WHERE n.is_deleted = 0
+              AND n.created_date BETWEEN ? AND ?
             """
         return (try? Int.fetchOne(
             db,
@@ -1037,17 +1072,43 @@ private extension StatisticsRepository {
                 SELECT MIN(CASE WHEN fuzzy_read_date != 0 THEN fuzzy_read_date ELSE start_time END)
                 FROM read_time_record
                 WHERE is_deleted = 0
+                  AND status = 3
+                  AND book_id != 0
                 """),
-            (.note, "SELECT MIN(created_date) FROM note WHERE is_deleted = 0"),
-            (.relevant, "SELECT MIN(created_date) FROM category_content WHERE is_deleted = 0"),
-            (.review, "SELECT MIN(created_date) FROM review WHERE is_deleted = 0"),
-            (.checkIn, "SELECT MIN(checkin_date) FROM check_in_record WHERE is_deleted = 0 AND checkin_date != 0"),
+            (.note, """
+                SELECT MIN(n.created_date)
+                FROM note n
+                JOIN book b ON b.id = n.book_id AND b.is_deleted = 0
+                WHERE n.is_deleted = 0
+                """),
+            (.relevant, """
+                SELECT MIN(c.created_date)
+                FROM category_content c
+                JOIN book b ON b.id = c.book_id AND b.is_deleted = 0
+                WHERE c.is_deleted = 0
+                """),
+            (.review, """
+                SELECT MIN(r.created_date)
+                FROM review r
+                JOIN book b ON b.id = r.book_id AND b.is_deleted = 0
+                WHERE r.is_deleted = 0
+                """),
+            (.checkIn, """
+                SELECT MIN(c.checkin_date)
+                FROM check_in_record c
+                JOIN book b ON b.id = c.book_id AND b.is_deleted = 0
+                WHERE c.is_deleted = 0
+                  AND c.checkin_date != 0
+                  AND c.book_id != 0
+                """),
             (.readDone, """
-                SELECT MIN(changed_date)
-                FROM book_read_status_record
-                WHERE is_deleted = 0
-                  AND changed_date != 0
-                  AND read_status_id = 3
+                SELECT MIN(r.changed_date)
+                FROM book_read_status_record r
+                JOIN book b ON b.id = r.book_id AND b.is_deleted = 0
+                WHERE r.is_deleted = 0
+                  AND r.changed_date != 0
+                  AND r.read_status_id = 3
+                  AND r.book_id != 0
                 """)
         ]
 
@@ -1088,6 +1149,7 @@ private extension StatisticsRepository {
                 MIN(CASE WHEN fuzzy_read_date != 0 THEN fuzzy_read_date ELSE start_time END) AS first_event_time
                 FROM read_time_record
                 WHERE is_deleted = 0
+                  AND status = 3
                   AND book_id != 0
                   AND (CASE WHEN fuzzy_read_date != 0 THEN fuzzy_read_date ELSE start_time END) BETWEEN ? AND ?
                 GROUP BY day, book_id
@@ -1096,78 +1158,83 @@ private extension StatisticsRepository {
         ),
         EventSQLFragment(
             eventType: .note,
-            // SQL 目的：抽取笔记创建事件，形成 day + book_id 级别事件流。
+            // SQL 目的：抽取有效书籍下的笔记创建事件，形成 day + book_id 级别事件流。
             sql: """
-                SELECT DATE(created_date / 1000, 'unixepoch', 'localtime') AS day,
-                       book_id AS book_id,
-                       MIN(created_date) AS first_event_time
-                FROM note
-                WHERE is_deleted = 0
-                  AND book_id != 0
-                  AND created_date BETWEEN ? AND ?
+                SELECT DATE(n.created_date / 1000, 'unixepoch', 'localtime') AS day,
+                       n.book_id AS book_id,
+                       MIN(n.created_date) AS first_event_time
+                FROM note n
+                JOIN book b ON b.id = n.book_id AND b.is_deleted = 0
+                WHERE n.is_deleted = 0
+                  AND n.book_id != 0
+                  AND n.created_date BETWEEN ? AND ?
                 GROUP BY day, book_id
                 """,
             args: { [$0.lowerBound, $0.upperBound] }
         ),
         EventSQLFragment(
             eventType: .relevant,
-            // SQL 目的：抽取“相关内容”创建事件，纳入阅读日历行为判定。
+            // SQL 目的：抽取有效书籍下的“相关内容”创建事件，纳入阅读日历行为判定。
             sql: """
-                SELECT DATE(created_date / 1000, 'unixepoch', 'localtime') AS day,
-                       book_id AS book_id,
-                       MIN(created_date) AS first_event_time
-                FROM category_content
-                WHERE is_deleted = 0
-                  AND book_id != 0
-                  AND created_date BETWEEN ? AND ?
+                SELECT DATE(c.created_date / 1000, 'unixepoch', 'localtime') AS day,
+                       c.book_id AS book_id,
+                       MIN(c.created_date) AS first_event_time
+                FROM category_content c
+                JOIN book b ON b.id = c.book_id AND b.is_deleted = 0
+                WHERE c.is_deleted = 0
+                  AND c.book_id != 0
+                  AND c.created_date BETWEEN ? AND ?
                 GROUP BY day, book_id
                 """,
             args: { [$0.lowerBound, $0.upperBound] }
         ),
         EventSQLFragment(
             eventType: .review,
-            // SQL 目的：抽取书评创建事件，纳入阅读日历行为判定。
+            // SQL 目的：抽取有效书籍下的书评创建事件，纳入阅读日历行为判定。
             sql: """
-                SELECT DATE(created_date / 1000, 'unixepoch', 'localtime') AS day,
-                       book_id AS book_id,
-                       MIN(created_date) AS first_event_time
-                FROM review
-                WHERE is_deleted = 0
-                  AND book_id != 0
-                  AND created_date BETWEEN ? AND ?
+                SELECT DATE(r.created_date / 1000, 'unixepoch', 'localtime') AS day,
+                       r.book_id AS book_id,
+                       MIN(r.created_date) AS first_event_time
+                FROM review r
+                JOIN book b ON b.id = r.book_id AND b.is_deleted = 0
+                WHERE r.is_deleted = 0
+                  AND r.book_id != 0
+                  AND r.created_date BETWEEN ? AND ?
                 GROUP BY day, book_id
                 """,
             args: { [$0.lowerBound, $0.upperBound] }
         ),
         EventSQLFragment(
             eventType: .checkIn,
-            // SQL 目的：抽取打卡事件（book_id 维度），统一并入日历事件流。
+            // SQL 目的：抽取有效书籍下的打卡事件（book_id 维度），统一并入日历事件流。
             sql: """
-                SELECT DATE(checkin_date / 1000, 'unixepoch', 'localtime') AS day,
-                       book_id AS book_id,
-                       MIN(checkin_date) AS first_event_time
-                FROM check_in_record
-                WHERE is_deleted = 0
-                  AND checkin_date != 0
-                  AND book_id != 0
-                  AND checkin_date BETWEEN ? AND ?
+                SELECT DATE(c.checkin_date / 1000, 'unixepoch', 'localtime') AS day,
+                       c.book_id AS book_id,
+                       MIN(c.checkin_date) AS first_event_time
+                FROM check_in_record c
+                JOIN book b ON b.id = c.book_id AND b.is_deleted = 0
+                WHERE c.is_deleted = 0
+                  AND c.checkin_date != 0
+                  AND c.book_id != 0
+                  AND c.checkin_date BETWEEN ? AND ?
                 GROUP BY day, book_id
                 """,
             args: { [$0.lowerBound, $0.upperBound] }
         ),
         EventSQLFragment(
             eventType: .readDone,
-            // SQL 目的：抽取“读完”状态事件（read_status_id = 3），用于行为流和完成标记。
+            // SQL 目的：抽取有效书籍下的“读完”状态事件（read_status_id = 3），用于行为流和完成标记。
             sql: """
-                SELECT DATE(changed_date / 1000, 'unixepoch', 'localtime') AS day,
-                       book_id AS book_id,
-                       MIN(changed_date) AS first_event_time
-                FROM book_read_status_record
-                WHERE is_deleted = 0
-                  AND changed_date != 0
-                  AND read_status_id = 3
-                  AND book_id != 0
-                  AND changed_date BETWEEN ? AND ?
+                SELECT DATE(r.changed_date / 1000, 'unixepoch', 'localtime') AS day,
+                       r.book_id AS book_id,
+                       MIN(r.changed_date) AS first_event_time
+                FROM book_read_status_record r
+                JOIN book b ON b.id = r.book_id AND b.is_deleted = 0
+                WHERE r.is_deleted = 0
+                  AND r.changed_date != 0
+                  AND r.read_status_id = 3
+                  AND r.book_id != 0
+                  AND r.changed_date BETWEEN ? AND ?
                 GROUP BY day, book_id
                 """,
             args: { [$0.lowerBound, $0.upperBound] }

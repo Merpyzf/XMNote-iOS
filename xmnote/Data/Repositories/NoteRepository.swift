@@ -122,11 +122,11 @@ struct NoteRepository: NoteRepositoryProtocol {
 
             // SQL 目的：校验 note 标签是否已存在，避免新增同名标签。
             // 表关系：单表 tag 查询。
-            // 过滤条件：限定 tag.type = 0、同 owner、未软删除，完全对齐 Android note tag 判重语义。
+            // 过滤条件：限定 tag.type = 1、同 owner、未软删除，完全对齐 Android note tag 判重语义。
             let duplicateSQL = """
                 SELECT id
                 FROM tag
-                WHERE name = ? AND type = 0 AND user_id = ? AND is_deleted = 0
+                WHERE name = ? AND type = 1 AND user_id = ? AND is_deleted = 0
                 LIMIT 1
                 """
             if try Int64.fetchOne(db, sql: duplicateSQL, arguments: [normalizedName, ownerID]) != nil {
@@ -135,7 +135,7 @@ struct NoteRepository: NoteRepositoryProtocol {
 
             let nextOrder = (try Int64.fetchOne(
                 db,
-                sql: "SELECT COALESCE(MAX(tag_order), -1) + 1 FROM tag WHERE type = 0 AND user_id = ?",
+                sql: "SELECT COALESCE(MAX(tag_order), -1) + 1 FROM tag WHERE type = 1 AND user_id = ?",
                 arguments: [ownerID]
             )) ?? 0
 
@@ -145,7 +145,7 @@ struct NoteRepository: NoteRepositoryProtocol {
                 name: normalizedName,
                 color: 0,
                 tagOrder: nextOrder,
-                type: 0,
+                type: 1,
                 createdDate: Self.currentTimestampMillis,
                 updatedDate: 0,
                 lastSyncDate: 0,
@@ -391,19 +391,19 @@ private extension NoteRepository {
             let noteCount: Int = row["note_count"]
             let tag = Tag(id: id, name: name, noteCount: noteCount)
 
-            if type == 0 {
+            if type == 1 {
                 noteTagItems.append(tag)
-            } else {
+            } else if type == 2 {
                 bookTagItems.append(tag)
             }
         }
 
         var sections: [TagSection] = []
         if !noteTagItems.isEmpty {
-            sections.append(TagSection(id: 0, title: "笔记标签", tags: noteTagItems))
+            sections.append(TagSection(id: 1, title: "笔记标签", tags: noteTagItems))
         }
         if !bookTagItems.isEmpty {
-            sections.append(TagSection(id: 1, title: "书籍标签", tags: bookTagItems))
+            sections.append(TagSection(id: 2, title: "书籍标签", tags: bookTagItems))
         }
         return sections
     }
@@ -411,11 +411,12 @@ private extension NoteRepository {
     nonisolated func fetchNoteEditorBooks(_ db: Database) throws -> [BookPickerBook] {
         // SQL 目的：读取编辑页可选书籍列表，供书卡选择 sheet 展示。
         // 涉及表：book。
-        // 关键过滤：仅保留未软删除书籍；返回 title/author/press/cover 与位置字段；按 updated_date DESC 对齐 Android “上次编辑书籍优先”。
+        // 关键过滤：仅保留未软删除且非占位书籍；返回 title/author/press/cover 与位置字段；按 updated_date DESC 对齐 Android “上次编辑书籍优先”。
         let sql = """
             SELECT id, name, author, press, cover, position_unit, total_position, total_pagination
             FROM book
             WHERE is_deleted = 0
+              AND id != 0
             ORDER BY updated_date DESC, id DESC
             """
         return try Row.fetchAll(db, sql: sql).map { row in
@@ -436,11 +437,11 @@ private extension NoteRepository {
         let ownerID = try DatabaseOwnerResolver.fetchExistingOwnerID(in: db) ?? 0
         // SQL 目的：读取 note 标签列表，供编辑页标签多选与新增后回填使用。
         // 涉及表：tag。
-        // 关键过滤：type = 0、同 owner、未软删除；排序按 tag_order ASC。
+        // 关键过滤：type = 1、同 owner、未软删除；排序按 tag_order ASC。
         let sql = """
             SELECT id, name
             FROM tag
-            WHERE type = 0 AND user_id = ? AND is_deleted = 0
+            WHERE type = 1 AND user_id = ? AND is_deleted = 0
             ORDER BY tag_order ASC, id ASC
             """
         return try Row.fetchAll(db, sql: sql, arguments: [ownerID]).compactMap { row in
@@ -572,12 +573,12 @@ private extension NoteRepository {
     nonisolated func fetchSelectedTags(_ db: Database, noteId: Int64) throws -> [NoteEditorTagOption] {
         // SQL 目的：读取指定书摘当前已选标签。
         // 表关系：tag_note INNER JOIN tag。
-        // 关键过滤：tag_note/tag 均为未软删除记录，且 tag.type = 0。
+        // 关键过滤：tag_note/tag 均为未软删除记录，且 tag.type = 1。
         let sql = """
             SELECT t.id, t.name
             FROM tag_note tn
             JOIN tag t ON t.id = tn.tag_id AND t.is_deleted = 0
-            WHERE tn.note_id = ? AND tn.is_deleted = 0 AND t.type = 0
+            WHERE tn.note_id = ? AND tn.is_deleted = 0 AND t.type = 1
             ORDER BY t.tag_order ASC, tn.id ASC
             """
         return try Row.fetchAll(db, sql: sql, arguments: [noteId]).compactMap { row in
@@ -643,24 +644,24 @@ private extension NoteRepository {
         totalPosition: Int64,
         totalPagination: Int64
     ) throws {
+        if positionUnit == 0, readPosition < 0 || readPosition > 100 {
+            throw NoteEditorError.invalidReadPosition("进度值应在 [0,100] 区间内")
+        }
         if positionUnit == 1 && totalPosition != 0 {
             if readPosition <= 0 {
-                throw NoteEditorError.invalidReadPosition("页码应大于 0 页")
+                throw NoteEditorError.invalidReadPosition("位置应大于 0")
             }
             if readPosition > Double(totalPosition) {
-                throw NoteEditorError.invalidReadPosition("页码应小于总页码（\(totalPosition) 页）")
+                throw NoteEditorError.invalidReadPosition("位置应小于总位置（\(totalPosition)）")
             }
         }
-        if positionUnit == 0 && totalPagination != 0 {
+        if positionUnit == 2 && totalPagination != 0 {
             if readPosition <= 0 {
                 throw NoteEditorError.invalidReadPosition("页码应大于 0 页")
             }
             if readPosition > Double(totalPagination) {
                 throw NoteEditorError.invalidReadPosition("页码应小于总页码（\(totalPagination) 页）")
             }
-        }
-        if positionUnit == 2, readPosition < 0 || readPosition > 100 {
-            throw NoteEditorError.invalidReadPosition("进度值应在 [0,100] 区间内")
         }
     }
 

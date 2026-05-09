@@ -2,6 +2,7 @@ import Foundation
 import Observation
 import os
 import SwiftUI
+import UIKit
 
 /**
  * [INPUT]: 依赖 NoteRepositoryProtocol 提供 bootstrap、草稿、暂存图、OCR 与保存事务，依赖 RichTextBridge 处理 HTML 与富文本互转
@@ -197,27 +198,20 @@ final class NoteEditorViewModel {
     }
 
     var positionTitle: String {
-        switch positionUnit {
-        case 1:
-            return "位置"
-        case 2:
-            return "进度"
-        default:
-            return "页码"
-        }
+        NotePositionUnitFormatter.title(for: positionUnit)
     }
 
     var positionPlaceholder: String {
         switch positionUnit {
-        case 2:
+        case 0:
             return "输入 0 - 100"
         default:
             return "输入\(positionTitle)"
         }
     }
 
-    var positionKeyboardType: String {
-        positionUnit == 2 ? "decimal" : "number"
+    var positionKeyboardType: UIKeyboardType {
+        positionUnit == 0 ? .decimalPad : .numberPad
     }
 
     var selectedChapterDisplayTitle: String {

@@ -308,7 +308,7 @@ private extension ReadingDashboardRepository {
     nonisolated func fetchRecentBooks(_ db: Database, limit: Int) throws -> [ReadingRecentBook] {
         // 聚合最近在读书籍列表的最近活跃时间。
         // 涉及表：`note`、`category_content`、`review`、`read_time_record`、`check_in_record`、`book`。
-        // 关键条件：所有数据源都要求 `is_deleted = 0` 且 `book_id != 0`；计时优先使用 `fuzzy_read_date`，否则回退 `start_time`；最终按每本书最近活动时间倒序。
+        // 关键条件：所有数据源都要求 `is_deleted = 0` 且 `book_id != 0`；最终只保留 read_status_id = 2 的在读书籍，并按每本书最近活动时间倒序。
         // 返回用途：驱动首页横向“最近在读”列表，保持与 Android 最近阅读口径一致。
         let sql = """
             WITH recent_activity AS (
@@ -358,6 +358,7 @@ private extension ReadingDashboardRepository {
                    MAX(ra.latest_at) AS latest_at
             FROM recent_activity ra
             JOIN book b ON b.id = ra.book_id AND b.is_deleted = 0
+            WHERE b.read_status_id = 2
             GROUP BY b.id
             ORDER BY latest_at DESC, b.id DESC
             LIMIT ?
@@ -525,7 +526,7 @@ private extension ReadingDashboardRepository {
     nonisolated func fetchTotalReadSecondsOfBook(_ db: Database, bookId: Int64) throws -> Int {
         // 汇总指定书籍所有完成状态计时记录的阅读秒数。
         // 涉及表：`read_time_record`。
-        // 关键条件：`status = 3` 表示有效完成计时，过滤 `is_deleted = 0` 且匹配 `book_id`。
+        // 关键条件：`status = 3` 表示有效完成计时，过滤 `is_deleted = 0` 且匹配非占位 `book_id`。
         // 返回用途：年度已读列表展示“总阅读时长”。
         let total = try Int64.fetchOne(
             db,
@@ -534,6 +535,7 @@ private extension ReadingDashboardRepository {
                 FROM read_time_record
                 WHERE is_deleted = 0
                   AND book_id = ?
+                  AND book_id != 0
                   AND status = 3
                 """,
             arguments: [bookId]
@@ -553,16 +555,17 @@ private extension ReadingDashboardRepository {
         try buildRecentDayPoints(referenceDate: referenceDate, window: Defaults.trendDayWindow) { day in
             let range = dayMillisRange(for: day)
             // 统计单个自然日新增书摘数量。
-            // 涉及表：`note`。
-            // 关键条件：`created_date` 使用毫秒时间戳并限制在自然日区间内，过滤 `is_deleted = 0`。
+            // 涉及表：`note` JOIN `book`。
+            // 关键条件：`created_date` 使用毫秒时间戳并限制在自然日区间内，过滤 note/book 均未软删除。
             // 返回用途：构建首页“书摘数量”趋势柱图。
             return try Int.fetchOne(
                 db,
                 sql: """
                     SELECT COUNT(*)
-                    FROM note
-                    WHERE is_deleted = 0
-                      AND created_date BETWEEN ? AND ?
+                    FROM note n
+                    JOIN book b ON b.id = n.book_id AND b.is_deleted = 0
+                    WHERE n.is_deleted = 0
+                      AND n.created_date BETWEEN ? AND ?
                     """,
                 arguments: [range.lowerBound, range.upperBound]
             ) ?? 0
@@ -576,7 +579,7 @@ private extension ReadingDashboardRepository {
             let range = try monthMillisRange(for: monthStart)
             // 统计单个月份内进入“读完”状态的书籍数量。
             // 涉及表：`book`。
-            // 关键条件：`read_status_id = readDone`、`read_status_changed_date` 位于自然月毫秒区间、过滤 `is_deleted = 0`。
+            // 关键条件：`read_status_id = readDone`、`read_status_changed_date` 位于自然月毫秒区间、过滤 `is_deleted = 0` 与默认占位书。
             // 返回用途：构建首页“已读书籍”趋势柱图。
             let count = try Int.fetchOne(
                 db,
@@ -584,6 +587,7 @@ private extension ReadingDashboardRepository {
                     SELECT COUNT(*)
                     FROM book
                     WHERE is_deleted = 0
+                      AND id != 0
                       AND read_status_id = ?
                       AND read_status_changed_date BETWEEN ? AND ?
                     """,
@@ -601,7 +605,7 @@ private extension ReadingDashboardRepository {
         Int(
             // 汇总历史所有有效计时记录的累计阅读秒数。
             // 涉及表：`read_time_record`。
-            // 关键条件：`status = 3` 表示有效完成计时，过滤 `is_deleted = 0`。
+            // 关键条件：`status = 3` 表示有效完成计时，过滤 `is_deleted = 0` 与默认占位书。
             // 返回用途：首页“阅读时长”趋势卡主值。
             try Int64.fetchOne(
                 db,
@@ -610,6 +614,7 @@ private extension ReadingDashboardRepository {
                     FROM read_time_record
                     WHERE is_deleted = 0
                       AND status = 3
+                      AND book_id != 0
                     """
             ) ?? 0
         )
@@ -617,16 +622,17 @@ private extension ReadingDashboardRepository {
 
     /// 总书摘数。
     nonisolated func fetchTotalNoteCount(_ db: Database) throws -> Int {
-        // 统计全量未删除书摘数量。
-        // 涉及表：`note`。
-        // 关键条件：仅过滤 `is_deleted = 0`。
+        // 统计全量归属于有效书籍的未删除书摘数量。
+        // 涉及表：`note` JOIN `book`。
+        // 关键条件：过滤 note/book 均未软删除。
         // 返回用途：首页“书摘数量”趋势卡主值。
         try Int.fetchOne(
             db,
             sql: """
                 SELECT COUNT(*)
-                FROM note
-                WHERE is_deleted = 0
+                FROM note n
+                JOIN book b ON b.id = n.book_id AND b.is_deleted = 0
+                WHERE n.is_deleted = 0
                 """
         ) ?? 0
     }
@@ -635,7 +641,7 @@ private extension ReadingDashboardRepository {
     nonisolated func fetchTotalReadDoneCount(_ db: Database) throws -> Int {
         // 统计当前仍处于“读完”状态的书籍数量。
         // 涉及表：`book`。
-        // 关键条件：`read_status_id = readDone`，过滤 `is_deleted = 0`。
+        // 关键条件：`read_status_id = readDone`，过滤 `is_deleted = 0` 与默认占位书。
         // 返回用途：首页“已读书籍”趋势卡主值，保持与 Android 当前口径一致。
         try Int.fetchOne(
             db,
@@ -643,6 +649,7 @@ private extension ReadingDashboardRepository {
                 SELECT COUNT(*)
                 FROM book
                 WHERE is_deleted = 0
+                  AND id != 0
                   AND read_status_id = ?
                 """,
             arguments: [BookReadingStatus.readDone.rawValue]
@@ -653,7 +660,7 @@ private extension ReadingDashboardRepository {
     nonisolated func fetchReadSeconds(_ db: Database, millisRange: ClosedRange<Int64>) throws -> Int {
         // 汇总时间区间内的阅读秒数，兼容模糊阅读日和精确开始时间两套时间字段。
         // 涉及表：`read_time_record`。
-        // 关键条件：`status = 3`、`is_deleted = 0`；若 `fuzzy_read_date != 0` 则按模糊日期归档，否则按 `start_time` 落桶；时间字段均为毫秒时间戳。
+        // 关键条件：`status = 3`、`is_deleted = 0`、`book_id != 0`；若 `fuzzy_read_date != 0` 则按模糊日期归档，否则按 `start_time` 落桶；时间字段均为毫秒时间戳。
         // 返回用途：今日阅读卡、阅读时长趋势和其他需要区间计时聚合的首页口径。
         let total = try Int64.fetchOne(
             db,
@@ -662,6 +669,7 @@ private extension ReadingDashboardRepository {
                 FROM read_time_record
                 WHERE is_deleted = 0
                   AND status = 3
+                  AND book_id != 0
                   AND (
                     (fuzzy_read_date != 0 AND fuzzy_read_date BETWEEN ? AND ?)
                     OR

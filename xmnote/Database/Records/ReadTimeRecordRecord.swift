@@ -34,6 +34,10 @@ nonisolated struct ReadTimeRecordRecord: BaseRecord {
     var fuzzyReadDate: Int64 = 0
     /// 微信读书中记录的阅读日期
     var wereadReadDate: Int64 = 0
+    /// 阅读感悟，Android v39 增加。
+    var insight: String = ""
+    /// 本次记录的进度单位快照，Android v40 增加，可为空。
+    var recordedPositionUnit: Int64?
 
     // MARK: - BaseRecord
     var createdDate: Int64 = 0
@@ -43,7 +47,7 @@ nonisolated struct ReadTimeRecordRecord: BaseRecord {
 
     /// 映射 Swift 属性名与数据库字段名，保证 Record 与表结构一致。
     enum CodingKeys: String, CodingKey {
-        case id, position, status, paused
+        case id, position, status, paused, insight
         case bookId = "book_id"
         case startTime = "start_time"
         case endTime = "end_time"
@@ -53,6 +57,7 @@ nonisolated struct ReadTimeRecordRecord: BaseRecord {
         case pausedDurationMillis = "paused_duration_millis"
         case fuzzyReadDate = "fuzzy_read_date"
         case wereadReadDate = "weread_read_date"
+        case recordedPositionUnit = "recorded_position_unit"
         case createdDate = "created_date"
         case updatedDate = "updated_date"
         case lastSyncDate = "last_sync_date"

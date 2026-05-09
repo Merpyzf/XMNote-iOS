@@ -598,13 +598,13 @@ private extension ContentRepository {
     nonisolated func fetchNoteTagNames(_ db: Database, noteId: Int64) throws -> [String] {
         // SQL 目的：读取指定书摘的有效标签名列表。
         // 涉及表：tag_note INNER JOIN tag。
-        // 关键过滤：同时要求 tag_note/tag 均为有效记录，并限制 tag.type = 0 保持与书摘标签页一致。
+        // 关键过滤：同时要求 tag_note/tag 均为有效记录，并限制 tag.type = 1 保持与书摘标签页一致。
         // 排序：按 tag.tag_order ASC、tag_note.id ASC 对齐 Android。
         let sql = """
             SELECT t.name
             FROM tag_note tn
             JOIN tag t ON t.id = tn.tag_id AND t.is_deleted = 0
-            WHERE tn.note_id = ? AND tn.is_deleted = 0 AND t.type = 0
+            WHERE tn.note_id = ? AND tn.is_deleted = 0 AND t.type = 1
             ORDER BY t.tag_order ASC, tn.id ASC
         """
         return try String.fetchAll(db, sql: sql, arguments: [noteId])

@@ -7,6 +7,36 @@ import Foundation
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
+/// 书摘位置单位展示策略，按 Android BookPositionUnit 对齐：0=进度、1=位置、2=页码。
+nonisolated enum NotePositionUnitFormatter {
+    /// 生成无标签的位置展示文本，供卡片 footer 组合时间等元信息。
+    nonisolated static func footerText(position: String, unit: Int64) -> String? {
+        guard !position.isEmpty else { return nil }
+        if unit == 0 {
+            return "\(position)%"
+        }
+        return position
+    }
+
+    /// 生成带单位标签的位置展示文本，供详情页独立展示位置元信息。
+    nonisolated static func labeledFooterText(position: String, unit: Int64) -> String? {
+        guard let value = footerText(position: position, unit: unit) else { return nil }
+        return "\(title(for: unit))：\(value)"
+    }
+
+    /// 返回位置单位标题，未知值按 Android 页码兜底口径处理。
+    nonisolated static func title(for unit: Int64) -> String {
+        switch unit {
+        case 0:
+            return "进度"
+        case 1:
+            return "位置"
+        default:
+            return "页码"
+        }
+    }
+}
+
 /// 书架条目模型，承载书籍列表页展示所需的核心字段。
 nonisolated struct BookItem: Identifiable {
     let id: Int64
@@ -820,13 +850,8 @@ struct NoteExcerpt: Identifiable {
 
     var footerText: String {
         var parts: [String] = []
-        if !position.isEmpty {
-            let unit = switch positionUnit {
-            case 1: "位置"
-            case 2: "%"
-            default: "页"
-            }
-            parts.append(positionUnit == 2 ? "\(position)\(unit)" : "第\(position)\(unit)")
+        if let positionText = NotePositionUnitFormatter.footerText(position: position, unit: positionUnit) {
+            parts.append(positionText)
         }
         if includeTime, createdDate > 0 {
             parts.append(Self.formatDate(createdDate))

@@ -287,11 +287,11 @@ private extension BookEditorRepository {
 
     nonisolated func fetchTags(_ db: Database, ownerId: Int64) throws -> [BookEditorNamedOption] {
         // SQL 目的：读取书籍标签列表，供录入页多选建议和新标签补全使用。
-        // 过滤条件：仅保留 tag.type = 1 且 tag.is_deleted = 0，避免混入笔记标签。
+        // 过滤条件：仅保留 tag.type = 2 且 tag.is_deleted = 0，避免混入笔记标签。
         let sql = """
             SELECT id, name
             FROM tag
-            WHERE type = 1 AND is_deleted = 0 AND user_id = ?
+            WHERE type = 2 AND is_deleted = 0 AND user_id = ?
             ORDER BY tag_order ASC, id ASC
             """
         return try Row.fetchAll(db, sql: sql, arguments: [ownerId]).compactMap { row in
@@ -456,7 +456,7 @@ private extension BookEditorRepository {
             let querySQL = """
                 SELECT id
                 FROM tag
-                WHERE name = ? AND type = 1 AND is_deleted = 0 AND user_id = ?
+                WHERE name = ? AND type = 2 AND is_deleted = 0 AND user_id = ?
                 LIMIT 1
                 """
             if let existing = try Int64.fetchOne(db, sql: querySQL, arguments: [tagName, ownerId]) {
@@ -466,7 +466,7 @@ private extension BookEditorRepository {
 
             let nextOrder = (try Int64.fetchOne(
                 db,
-                sql: "SELECT COALESCE(MAX(tag_order), -1) + 1 FROM tag WHERE type = 1 AND user_id = ?",
+                sql: "SELECT COALESCE(MAX(tag_order), -1) + 1 FROM tag WHERE type = 2 AND user_id = ?",
                 arguments: [ownerId]
             )) ?? 0
             var record = TagRecord(
@@ -475,7 +475,7 @@ private extension BookEditorRepository {
                 name: tagName,
                 color: 0,
                 tagOrder: nextOrder,
-                type: 1,
+                type: 2,
                 createdDate: Int64(Date().timeIntervalSince1970 * 1000),
                 updatedDate: 0,
                 lastSyncDate: 0,
@@ -703,14 +703,14 @@ private extension BookEditorRepository {
 
     nonisolated func fetchBookTagNames(bookId: Int64, db: Database) throws -> [String] {
         // SQL 目的：读取书籍当前有效标签，供编辑页多选标签回填。
-        // 关联关系：tag_book.tag_id -> tag.id；仅保留书籍标签 type = 1 与两表未删除关系，按标签排序稳定展示。
+        // 关联关系：tag_book.tag_id -> tag.id；仅保留书籍标签 type = 2 与两表未删除关系，按标签排序稳定展示。
         let sql = """
             SELECT t.name
             FROM tag_book tb
             JOIN tag t ON t.id = tb.tag_id
             WHERE tb.book_id = ?
               AND tb.is_deleted = 0
-              AND t.type = 1
+              AND t.type = 2
               AND t.is_deleted = 0
             ORDER BY t.tag_order ASC, t.id ASC
             """

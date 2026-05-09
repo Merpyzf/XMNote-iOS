@@ -22,7 +22,7 @@ nonisolated struct AppDatabase {
     static let databaseName = "xm_note.db"
 
     /// 数据库版本号，与 Android DBConfig.DB_VERSION 同步
-    static let databaseVersion = 38
+    static let databaseVersion = 40
 }
 
 // MARK: - 初始化
@@ -65,18 +65,22 @@ extension AppDatabase {
             let userVersion = try Int.fetchOne(db, sql: "PRAGMA user_version") ?? 0
             let hasGRDBTable = try db.tableExists("grdb_migrations")
 
-            if userVersion >= databaseVersion && !hasGRDBTable {
+            if userVersion >= 38 && !hasGRDBTable {
                 // SQL 目的：补建 GRDB 迁移记录表，避免旧库重复执行全量建表迁移。
                 try db.execute(sql: """
                     CREATE TABLE grdb_migrations (identifier TEXT NOT NULL PRIMARY KEY)
                 """)
-                // SQL 目的：声明 schema 迁移已完成，和 Android 现有数据库版本语义保持一致。
+                // SQL 目的：声明基础 schema 迁移已完成，和 Android 现有数据库版本语义保持一致。
                 try db.execute(sql: """
                     INSERT INTO grdb_migrations (identifier) VALUES ('v38-schema')
                 """)
-                // SQL 目的：声明 seed 迁移已完成，防止重复写入初始化数据。
+                // SQL 目的：声明基础 seed 迁移已完成，防止重复写入初始化数据。
                 try db.execute(sql: """
                     INSERT INTO grdb_migrations (identifier) VALUES ('v38-seed')
+                """)
+                // SQL 目的：Android Room 既有库已经使用 NOTE=1 / BOOK=2 的标签语义，跳过 iOS 旧本地标签枚举搬迁。
+                try db.execute(sql: """
+                    INSERT INTO grdb_migrations (identifier) VALUES ('legacy-ios-tag-type-alignment')
                 """)
             }
         }

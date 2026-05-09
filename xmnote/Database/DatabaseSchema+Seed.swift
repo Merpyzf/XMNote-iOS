@@ -67,13 +67,14 @@ extension AppDatabase {
         }
     }
 
-    // MARK: - 默认章节（占位记录，id=1）
+    // MARK: - 默认章节（占位记录，id=0）
     private nonisolated static func seedDefaultChapter(_ db: Database) throws {
         try db.execute(
-            // SQL 目的：插入 chapter 占位记录（book_id=0），兼容旧数据的默认章节引用。
+            // SQL 目的：插入 chapter 占位记录（id=0, book_id=0），兼容默认章节引用。
+            // 约束：id 与 Android 默认章节保持一致，避免跨端恢复后 chapter_id 指向不同占位行。
             sql: """
-                INSERT INTO chapter (book_id, parent_id, title, remark, chapter_order, is_import, created_date, updated_date, last_sync_date, is_deleted)
-                VALUES (0, 0, '', '', 0, 0, 0, 0, 0, 0)
+                INSERT INTO chapter (id, book_id, parent_id, title, remark, chapter_order, is_import, created_date, updated_date, last_sync_date, is_deleted)
+                VALUES (0, 0, 0, '', '', 0, 0, 0, 0, 0, 0)
                 """
         )
     }
@@ -94,14 +95,14 @@ extension AppDatabase {
         }
     }
 
-    // MARK: - 默认书籍（占位记录，id=1，用于未归属书籍的笔记）
+    // MARK: - 默认书籍（占位记录，id=0，用于未归属书籍的笔记）
     private nonisolated static func seedDefaultBook(_ db: Database) throws {
         try db.execute(
             // SQL 目的：写入 book 占位记录（逻辑默认书），承接未归属实体的外键引用。
             // 约束：read_status_id/source_id 等默认值需与 Android 初始库保持一致。
             sql: """
-                INSERT INTO book (user_id, douban_id, name, raw_name, cover, author, author_intro, translator, isbn, pub_date, press, summary, read_position, total_position, total_pagination, type, current_position_unit, position_unit, source_id, purchase_date, price, book_order, score, catalog, book_mark_modified_time, read_status_id, read_status_changed_date, pinned, pin_order, created_date, updated_date, last_sync_date, is_deleted)
-                VALUES (1, 0, '', '', '', '', '', '', '', '', '', '', 0, 0, 0, 1, 2, 2, 0, 0, 0, 0, 0, '', 0, 1, 0, 0, 0, 0, 0, 0, 0)
+                INSERT INTO book (id, user_id, douban_id, name, raw_name, cover, author, author_intro, translator, isbn, pub_date, press, summary, read_position, total_position, total_pagination, type, current_position_unit, position_unit, source_id, purchase_date, price, book_order, score, catalog, book_mark_modified_time, read_status_id, read_status_changed_date, pinned, pin_order, created_date, updated_date, last_sync_date, is_deleted)
+                VALUES (0, 1, 0, '', '', '', '', '', '', '', '', '', '', 0, 0, 0, 1, 1, 2, 0, 0, 0, 0, 0, '', 0, 1, 0, 0, 0, 0, 0, 0, 0)
                 """
         )
     }

@@ -31,8 +31,8 @@ nonisolated struct BookRecord: BaseRecord {
     var totalPagination: Int64 = 0
     /// 书籍类型: 0=纸质书, 1=电子书
     var type: Int64 = 0
-    var currentPositionUnit: Int64 = 0
-    var positionUnit: Int64 = 0
+    var currentPositionUnit: Int64 = 2
+    var positionUnit: Int64 = 2
     var sourceId: Int64 = 1
     var purchaseDate: Int64 = 0
     var price: Double = 0.0

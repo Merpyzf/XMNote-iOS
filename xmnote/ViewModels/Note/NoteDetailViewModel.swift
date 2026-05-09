@@ -21,13 +21,8 @@ class NoteDetailViewModel {
 
         var footerText: String {
             var parts: [String] = []
-            if !position.isEmpty {
-                let unit = switch positionUnit {
-                case 1: "位置"
-                case 2: "%"
-                default: "页"
-                }
-                parts.append(positionUnit == 2 ? "\(position)\(unit)" : "第\(position)\(unit)")
+            if let positionText = NotePositionUnitFormatter.footerText(position: position, unit: positionUnit) {
+                parts.append(positionText)
             }
             if includeTime, createdDate > 0 {
                 parts.append(Self.formatDate(createdDate))

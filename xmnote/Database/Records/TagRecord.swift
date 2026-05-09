@@ -19,7 +19,7 @@ nonisolated struct TagRecord: BaseRecord {
     /// 标签颜色值
     var color: Int64 = 0
     var tagOrder: Int64 = 0
-    /// 标签类型: 0=笔记标签, 1=书籍标签
+    /// 标签类型: 1=笔记标签, 2=书籍标签, 3=全部，对齐 Android AppConstant.TagType。
     var type: Int64 = 0
 
     // MARK: - BaseRecord

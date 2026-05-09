@@ -850,7 +850,7 @@ private extension NoteEditorView {
                 .focused($isPositionFocused)
                 .font(metadataValueFont)
                 .foregroundStyle(Color.textPrimary)
-                .keyboardType(viewModel.positionUnit == 2 ? .decimalPad : .numberPad)
+                .keyboardType(viewModel.positionKeyboardType)
                 .multilineTextAlignment(.trailing)
                 .textFieldStyle(.plain)
                 .frame(width: 140)

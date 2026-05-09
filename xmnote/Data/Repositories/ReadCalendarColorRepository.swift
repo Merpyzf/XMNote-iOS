@@ -28,35 +28,34 @@ struct ReadCalendarColorRepository: ReadCalendarColorRepositoryProtocol {
         let normalizedName = bookName.trimmingCharacters(in: .whitespacesAndNewlines)
         let normalizedCoverURL = coverURL.trimmingCharacters(in: .whitespacesAndNewlines)
         let cacheKey = Self.cacheKey(
-            bookId: bookId,
-            bookName: normalizedName,
-            coverURL: normalizedCoverURL
+            bookId: bookId
         )
+        let sourceSignature = Self.sourceSignature(bookName: normalizedName, coverURL: normalizedCoverURL)
 
-        if let cached = await cacheStore.color(for: cacheKey) {
+        if let cached = await cacheStore.color(for: cacheKey, sourceSignature: sourceSignature) {
             return cached
         }
 
-        let fallback = fallbackHashedColor(bookId: bookId, bookName: normalizedName)
+        let fallback = androidFallbackHashedColor(bookName: bookName)
 
         guard let url = XMImageRequestBuilder.normalizedURL(from: normalizedCoverURL) else {
-            await cacheStore.save(fallback, for: cacheKey)
+            await cacheStore.save(fallback, for: cacheKey, sourceSignature: sourceSignature)
             return fallback
         }
 
         do {
             let image = try await imageLoader.loadImage(for: XMImageLoadRequest(url: url))
             if Task.isCancelled {
-                await cacheStore.save(fallback, for: cacheKey)
+                await cacheStore.save(fallback, for: cacheKey, sourceSignature: sourceSignature)
                 return fallback
             }
 
             guard let preferredBackground = await Self.extractPreferredEventBarColorAsync(from: image) else {
-                await cacheStore.save(fallback, for: cacheKey)
+                await cacheStore.save(fallback, for: cacheKey, sourceSignature: sourceSignature)
                 return fallback
             }
             if Task.isCancelled {
-                await cacheStore.save(fallback, for: cacheKey)
+                await cacheStore.save(fallback, for: cacheKey, sourceSignature: sourceSignature)
                 return fallback
             }
 
@@ -65,10 +64,10 @@ struct ReadCalendarColorRepository: ReadCalendarColorRepositoryProtocol {
                 backgroundRGBAHex: preferredBackground.rgbaHex,
                 textRGBAHex: textColor.rgbaHex
             )
-            await cacheStore.save(resolved, for: cacheKey)
+            await cacheStore.save(resolved, for: cacheKey, sourceSignature: sourceSignature)
             return resolved
         } catch {
-            await cacheStore.save(fallback, for: cacheKey)
+            await cacheStore.save(fallback, for: cacheKey, sourceSignature: sourceSignature)
             return fallback
         }
     }
@@ -89,13 +88,13 @@ private extension ReadCalendarColorRepository {
         let swatches = extractColorSwatches(from: image)
         guard !swatches.isEmpty else { return nil }
 
+        if let visualPriority = findVisualPriorityColor(from: swatches) {
+            return visualPriority
+        }
+
         if let dominant = findDominantColor(from: swatches),
            !isInvalidEventBarColor(dominant) {
             return dominant
-        }
-
-        if let visualPriority = findVisualPriorityColor(from: swatches) {
-            return visualPriority
         }
 
         return nil
@@ -113,8 +112,8 @@ private extension ReadCalendarColorRepository {
             return []
         }
 
-        let targetWidth = 40
-        let targetHeight = 56
+        let targetWidth = 10
+        let targetHeight = 14
         let bytesPerPixel = 4
         let bytesPerRow = targetWidth * bytesPerPixel
         let bitmapInfo = CGImageAlphaInfo.premultipliedLast.rawValue
@@ -245,11 +244,16 @@ private extension ReadCalendarColorRepository {
 // MARK: - Cache Key
 
 private extension ReadCalendarColorRepository {
-    nonisolated static let colorAlgorithmVersion = "v2"
+    nonisolated static let colorAlgorithmVersion = "android-calendar-v1"
 
-    /// 生成颜色缓存键（bookId+书名+封面 URL+算法版本）。
-    nonisolated static func cacheKey(bookId: Int64, bookName: String, coverURL: String) -> String {
-        "\(bookId)|\(bookName)|\(coverURL)|algo:\(colorAlgorithmVersion)"
+    /// 生成稳定颜色缓存键（bookId + 算法版本），书名/封面变化由 sourceSignature 触发重算。
+    nonisolated static func cacheKey(bookId: Int64) -> String {
+        "book:\(bookId)|algo:\(colorAlgorithmVersion)"
+    }
+
+    /// 生成颜色来源签名，用于检测书名或封面 URL 变化后覆盖同一 bookId 缓存项。
+    nonisolated static func sourceSignature(bookName: String, coverURL: String) -> String {
+        "\(bookName)\u{0}\(coverURL)"
     }
 }
 
@@ -262,7 +266,12 @@ extension ReadCalendarColorRepository {
 
     /// 测试辅助：返回缓存键生成结果。
     nonisolated static func testingCacheKey(bookId: Int64, bookName: String, coverURL: String) -> String {
-        cacheKey(bookId: bookId, bookName: bookName, coverURL: coverURL)
+        cacheKey(bookId: bookId)
+    }
+
+    /// 测试辅助：返回颜色来源签名。
+    nonisolated static func testingSourceSignature(bookName: String, coverURL: String) -> String {
+        sourceSignature(bookName: bookName, coverURL: coverURL)
     }
 }
 #endif
@@ -309,24 +318,10 @@ private extension ReadCalendarColorRepository {
 // MARK: - Fallback Hash Color
 
 private extension ReadCalendarColorRepository {
-    /// 基于书籍信息生成稳定回退色，保证失败场景也有一致配色。
-    func fallbackHashedColor(bookId: Int64, bookName: String) -> ReadCalendarSegmentColor {
-        let seedString = "\(bookId)|\(bookName)"
-        let hash = Self.fnv1a64(seedString)
-
-        let hue = Double(hash % 360) / 360.0
-        let saturation = 0.34 + Double((hash >> 10) & 0x3F) / 63.0 * 0.22
-        let brightness = 0.66 + Double((hash >> 18) & 0x3F) / 63.0 * 0.2
-        let alpha = 0.88
-
-        let uiColor = UIColor(
-            hue: CGFloat(hue),
-            saturation: CGFloat(saturation),
-            brightness: CGFloat(brightness),
-            alpha: CGFloat(alpha)
-        )
-        let background = RGBAColor(uiColor: uiColor)
-        let text = bestTextColor(for: background)
+    /// 按 Android ColorGenerator.generateColor + changeAlpha(0.64) 生成失败回退色。
+    func androidFallbackHashedColor(bookName: String) -> ReadCalendarSegmentColor {
+        let background = Self.androidGeneratedColor(from: bookName, alpha: 0.64)
+        let text = RGBAColor(red: 0, green: 0, blue: 0, alpha: 0x8A)
 
         return ReadCalendarSegmentColor.failed(
             backgroundRGBAHex: background.rgbaHex,
@@ -334,14 +329,25 @@ private extension ReadCalendarColorRepository {
         )
     }
 
-    /// 计算 FNV-1a 哈希，作为回退配色种子。
-    nonisolated static func fnv1a64(_ value: String) -> UInt64 {
-        var hash: UInt64 = 1469598103934665603
-        for byte in value.utf8 {
-            hash ^= UInt64(byte)
-            hash = hash &* 1099511628211
+    /// 复刻 Java/Kotlin String.hashCode，使用 UTF-16 code unit 参与 31 倍滚动哈希。
+    nonisolated static func javaStringHashCode(_ value: String) -> Int32 {
+        var hash: Int32 = 0
+        for codeUnit in value.utf16 {
+            hash = hash &* 31 &+ Int32(codeUnit)
         }
         return hash
+    }
+
+    /// 复刻 Android ColorGenerator.intToRGB，并按 RGBA Hex 模型输出。
+    nonisolated static func androidGeneratedColor(from value: String, alpha: Double) -> RGBAColor {
+        let bits = UInt32(bitPattern: javaStringHashCode(value))
+        let resolvedAlpha = UInt8(clamping: Int(alpha * 255))
+        return RGBAColor(
+            red: UInt8((bits >> 16) & 0xFF),
+            green: UInt8((bits >> 8) & 0xFF),
+            blue: UInt8(bits & 0xFF),
+            alpha: resolvedAlpha
+        )
     }
 }
 
@@ -434,6 +440,7 @@ private actor ReadCalendarColorCacheStore {
         let state: ReadCalendarSegmentColorState
         let backgroundRGBAHex: UInt32
         let textRGBAHex: UInt32
+        let sourceSignature: String
         let updatedAt: Int64
     }
 
@@ -449,7 +456,7 @@ private actor ReadCalendarColorCacheStore {
     init(fileManager: FileManager = .default) {
         let directory = fileManager.urls(for: .cachesDirectory, in: .userDomainMask).first
             ?? URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)
-        self.fileURL = directory.appendingPathComponent("read_calendar_event_color_cache_v2.json")
+        self.fileURL = directory.appendingPathComponent("read_calendar_event_color_cache_v3.json")
 
         do {
             let data = try Data(contentsOf: fileURL)
@@ -465,8 +472,9 @@ private actor ReadCalendarColorCacheStore {
     }
 
     /// 读取缓存项并还原为业务颜色模型。
-    func color(for key: String) -> ReadCalendarSegmentColor? {
+    func color(for key: String, sourceSignature: String) -> ReadCalendarSegmentColor? {
         guard let record = memory[key] else { return nil }
+        guard record.sourceSignature == sourceSignature else { return nil }
         return ReadCalendarSegmentColor(
             state: record.state,
             backgroundRGBAHex: record.backgroundRGBAHex,
@@ -475,12 +483,13 @@ private actor ReadCalendarColorCacheStore {
     }
 
     /// 写入颜色缓存并触发容量裁剪与持久化。
-    func save(_ color: ReadCalendarSegmentColor, for key: String) {
+    func save(_ color: ReadCalendarSegmentColor, for key: String, sourceSignature: String) {
         guard color.state != .pending else { return }
         memory[key] = CacheRecord(
             state: color.state,
             backgroundRGBAHex: color.backgroundRGBAHex,
             textRGBAHex: color.textRGBAHex,
+            sourceSignature: sourceSignature,
             updatedAt: Int64(Date().timeIntervalSince1970 * 1000)
         )
         trimIfNeeded()

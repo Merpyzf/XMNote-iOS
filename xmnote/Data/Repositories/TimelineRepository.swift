@@ -95,7 +95,7 @@ private extension TimelineRepository {
     /// 查询指定时间范围内的书摘事件，并批量关联附图与标签。
     /// 表: note JOIN book | 时间字段: note.created_date | 过滤: is_deleted=0
     /// 附图表: attach_image | 外键: note_id | 排序: id ASC
-    /// 标签表: tag_note JOIN tag | 过滤: tag_note/tag.is_deleted=0, tag.type=0 | 排序: tag.tag_order ASC, tag_note.id ASC
+    /// 标签表: tag_note JOIN tag | 过滤: tag_note/tag.is_deleted=0, tag.type=1 | 排序: tag.tag_order ASC, tag_note.id ASC
     nonisolated func queryNoteEvents(_ db: Database, start: Int64, end: Int64) throws -> [TimelineEvent] {
         let sql = """
             SELECT n.id, n.book_id, n.content, n.idea, n.created_date,
@@ -142,14 +142,14 @@ private extension TimelineRepository {
 
     /// 查询指定时间范围内的阅读计时事件。
     /// 表: read_time_record JOIN book | 时间字段: CASE WHEN fuzzy_read_date!=0 THEN fuzzy_read_date ELSE start_time END
-    /// 过滤: status=3（已完成）, is_deleted=0
+    /// 过滤: status=3（已完成）, is_deleted=0, book_id!=0
     nonisolated func queryReadTimingEvents(_ db: Database, start: Int64, end: Int64) throws -> [TimelineEvent] {
         let sql = """
             SELECT r.id, r.book_id, r.start_time, r.end_time, r.elapsed_seconds, r.fuzzy_read_date,
                    b.name, b.author, b.cover
             FROM read_time_record r
             JOIN book b ON b.id = r.book_id AND b.is_deleted = 0
-            WHERE r.is_deleted = 0 AND r.status = 3
+            WHERE r.is_deleted = 0 AND r.status = 3 AND r.book_id != 0
               AND (CASE WHEN r.fuzzy_read_date != 0 THEN r.fuzzy_read_date ELSE r.start_time END)
                   BETWEEN ? AND ?
             """
@@ -178,14 +178,16 @@ private extension TimelineRepository {
     // MARK: 阅读状态变更
 
     /// 查询指定时间范围内的阅读状态变更事件，并对每条记录子查询累计读完次数。
-    /// 表: book_read_status_record JOIN book | 时间字段: changed_date | 过滤: is_deleted=0
+    /// 表: book_read_status_record JOIN book | 时间字段: changed_date | 过滤: is_deleted=0, book_id!=0
     nonisolated func queryReadStatusEvents(_ db: Database, start: Int64, end: Int64) throws -> [TimelineEvent] {
         let sql = """
             SELECT s.id, s.read_status_id, s.changed_date, s.book_id,
                    b.name, b.author, b.cover, b.score
             FROM book_read_status_record s
             JOIN book b ON b.id = s.book_id AND b.is_deleted = 0
-            WHERE s.is_deleted = 0 AND s.changed_date BETWEEN ? AND ?
+            WHERE s.is_deleted = 0
+              AND s.book_id != 0
+              AND s.changed_date BETWEEN ? AND ?
             """
         let rows = try Row.fetchAll(db, sql: sql, arguments: [start, end])
 
@@ -459,12 +461,52 @@ private extension TimelineRepository {
         start: Int64,
         end: Int64
     ) throws -> Set<String> {
-        let sql = """
-            SELECT DATE(\(dateColumn) / 1000, 'unixepoch', 'localtime') AS day
-            FROM \(table)
-            WHERE is_deleted = 0 AND \(dateColumn) BETWEEN ? AND ?
-            GROUP BY day
-            """
+        let sql: String
+        switch table {
+        case "note":
+            sql = """
+                SELECT DATE(n.\(dateColumn) / 1000, 'unixepoch', 'localtime') AS day
+                FROM note n
+                JOIN book b ON b.id = n.book_id AND b.is_deleted = 0
+                WHERE n.is_deleted = 0 AND n.\(dateColumn) BETWEEN ? AND ?
+                GROUP BY day
+                """
+        case "category_content":
+            sql = """
+                SELECT DATE(c.\(dateColumn) / 1000, 'unixepoch', 'localtime') AS day
+                FROM category_content c
+                JOIN book b ON b.id = c.book_id AND b.is_deleted = 0
+                WHERE c.is_deleted = 0 AND c.\(dateColumn) BETWEEN ? AND ?
+                GROUP BY day
+                """
+        case "review":
+            sql = """
+                SELECT DATE(r.\(dateColumn) / 1000, 'unixepoch', 'localtime') AS day
+                FROM review r
+                JOIN book b ON b.id = r.book_id AND b.is_deleted = 0
+                WHERE r.is_deleted = 0 AND r.\(dateColumn) BETWEEN ? AND ?
+                GROUP BY day
+                """
+        case "book_read_status_record":
+            sql = """
+                SELECT DATE(r.\(dateColumn) / 1000, 'unixepoch', 'localtime') AS day
+                FROM book_read_status_record r
+                JOIN book b ON b.id = r.book_id AND b.is_deleted = 0
+                WHERE r.is_deleted = 0
+                  AND r.book_id != 0
+                  AND r.\(dateColumn) BETWEEN ? AND ?
+                GROUP BY day
+                """
+        default:
+            let sqlTable = table
+            let sqlDateColumn = dateColumn
+            sql = """
+                SELECT DATE(\(sqlDateColumn) / 1000, 'unixepoch', 'localtime') AS day
+                FROM \(sqlTable)
+                WHERE is_deleted = 0 AND \(sqlDateColumn) BETWEEN ? AND ?
+                GROUP BY day
+                """
+        }
         let rows = try Row.fetchAll(db, sql: sql, arguments: [start, end])
         return Set(rows.compactMap { $0["day"] as String? })
     }
@@ -476,7 +518,7 @@ private extension TimelineRepository {
         let exactSQL = """
             SELECT DATE(start_time / 1000, 'unixepoch', 'localtime') AS day
             FROM read_time_record
-            WHERE is_deleted = 0 AND status = 3 AND fuzzy_read_date = 0
+            WHERE is_deleted = 0 AND status = 3 AND book_id != 0 AND fuzzy_read_date = 0
               AND start_time BETWEEN ? AND ?
             GROUP BY day
             """
@@ -486,7 +528,7 @@ private extension TimelineRepository {
         let fuzzySQL = """
             SELECT DATE(fuzzy_read_date / 1000, 'unixepoch', 'localtime') AS day
             FROM read_time_record
-            WHERE is_deleted = 0 AND status = 3 AND fuzzy_read_date != 0
+            WHERE is_deleted = 0 AND status = 3 AND book_id != 0 AND fuzzy_read_date != 0
               AND fuzzy_read_date BETWEEN ? AND ?
             GROUP BY day
             """
@@ -500,9 +542,13 @@ private extension TimelineRepository {
     /// 打卡活跃天查询，额外过滤 checkin_date != 0。
     nonisolated func queryCheckinActiveDays(_ db: Database, start: Int64, end: Int64) throws -> Set<String> {
         let sql = """
-            SELECT DATE(checkin_date / 1000, 'unixepoch', 'localtime') AS day
-            FROM check_in_record
-            WHERE is_deleted = 0 AND checkin_date != 0 AND checkin_date BETWEEN ? AND ?
+            SELECT DATE(c.checkin_date / 1000, 'unixepoch', 'localtime') AS day
+            FROM check_in_record c
+            JOIN book b ON b.id = c.book_id AND b.is_deleted = 0
+            WHERE c.is_deleted = 0
+              AND c.book_id != 0
+              AND c.checkin_date != 0
+              AND c.checkin_date BETWEEN ? AND ?
             GROUP BY day
             """
         let rows = try Row.fetchAll(db, sql: sql, arguments: [start, end])
@@ -517,7 +563,7 @@ private extension TimelineRepository {
             SELECT DATE(start_time / 1000, 'unixepoch', 'localtime') AS day,
                    SUM(elapsed_seconds) AS total
             FROM read_time_record
-            WHERE is_deleted = 0 AND status = 3 AND fuzzy_read_date = 0
+            WHERE is_deleted = 0 AND status = 3 AND book_id != 0 AND fuzzy_read_date = 0
               AND start_time BETWEEN ? AND ?
             GROUP BY day
             """
@@ -528,7 +574,7 @@ private extension TimelineRepository {
             SELECT DATE(fuzzy_read_date / 1000, 'unixepoch', 'localtime') AS day,
                    SUM(elapsed_seconds) AS total
             FROM read_time_record
-            WHERE is_deleted = 0 AND status = 3 AND fuzzy_read_date != 0
+            WHERE is_deleted = 0 AND status = 3 AND book_id != 0 AND fuzzy_read_date != 0
               AND fuzzy_read_date BETWEEN ? AND ?
             GROUP BY day
             """
@@ -560,7 +606,7 @@ private extension TimelineRepository {
         let sql = """
             SELECT tn.note_id, t.name
             FROM tag_note tn
-            JOIN tag t ON t.id = tn.tag_id AND t.is_deleted = 0 AND t.type = 0
+            JOIN tag t ON t.id = tn.tag_id AND t.is_deleted = 0 AND t.type = 1
             WHERE tn.is_deleted = 0 AND tn.note_id IN (\(placeholders))
             ORDER BY t.tag_order ASC, tn.id ASC
             """
