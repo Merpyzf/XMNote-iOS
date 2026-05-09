@@ -6,8 +6,8 @@
 //
 
 /**
- * [INPUT]: 依赖 RepositoryContainer 注入仓储，依赖 BookViewModel 驱动书架浏览、编辑态选择与批量操作，依赖本地 chrome 阶段、固定顶部 chrome 高度与底部面板高度稳定内容布局
- * [OUTPUT]: 对外提供 BookContainerView 与 BookSubTab 枚举，承载书架顶部 chrome、TabBar 协调、编辑工具栏、批量 Sheet 与删除确认
+ * [INPUT]: 依赖 RepositoryContainer 注入仓储，依赖 BookViewModel 驱动书架浏览、编辑态选择与批量操作，依赖本地 chrome 阶段、固定顶部 chrome 高度、底部面板高度与外层 TabBar snapshot 回调稳定内容布局
+ * [OUTPUT]: 对外提供 BookContainerView 与 BookSubTab 枚举，承载书架顶部 chrome、TabBar 协调、编辑工具栏、批量 Sheet、删除确认与 snapshot 恢复交接通知
  * [POS]: Book 模块容器壳层，承载书籍页与书架管理模式编排
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -87,6 +87,7 @@ struct BookContainerView: View {
     let onOpenAuthorManagement: () -> Void
     let onOpenPressManagement: () -> Void
     let onOpenGuide: () -> Void
+    let onTabBarSnapshotHandoff: (BookshelfTabBarSnapshotHandoffEvent) -> Void
 
     /// 注入书籍页所需操作与路由回调，连接页内 chrome 与外层导航入口。
     init(
@@ -99,7 +100,8 @@ struct BookContainerView: View {
         onOpenSourceManagement: @escaping () -> Void = {},
         onOpenAuthorManagement: @escaping () -> Void = {},
         onOpenPressManagement: @escaping () -> Void = {},
-        onOpenGuide: @escaping () -> Void = {}
+        onOpenGuide: @escaping () -> Void = {},
+        onTabBarSnapshotHandoff: @escaping (BookshelfTabBarSnapshotHandoffEvent) -> Void = { _ in }
     ) {
         self.onAddBook = onAddBook
         self.onAddNote = onAddNote
@@ -111,6 +113,7 @@ struct BookContainerView: View {
         self.onOpenAuthorManagement = onOpenAuthorManagement
         self.onOpenPressManagement = onOpenPressManagement
         self.onOpenGuide = onOpenGuide
+        self.onTabBarSnapshotHandoff = onTabBarSnapshotHandoff
     }
 
     var body: some View {
@@ -128,7 +131,8 @@ struct BookContainerView: View {
                     onOpenSourceManagement: onOpenSourceManagement,
                     onOpenAuthorManagement: onOpenAuthorManagement,
                     onOpenPressManagement: onOpenPressManagement,
-                    onOpenGuide: onOpenGuide
+                    onOpenGuide: onOpenGuide,
+                    onTabBarSnapshotHandoff: onTabBarSnapshotHandoff
                 )
             } else {
                 Color.clear
@@ -178,6 +182,7 @@ private struct BookContentView: View {
     let onOpenAuthorManagement: () -> Void
     let onOpenPressManagement: () -> Void
     let onOpenGuide: () -> Void
+    let onTabBarSnapshotHandoff: (BookshelfTabBarSnapshotHandoffEvent) -> Void
 
     var body: some View {
         ZStack(alignment: .top) {
@@ -411,14 +416,19 @@ private struct BookContentView: View {
     /// 进入书架管理模式，并为菜单收口、顶部 chrome 和底部面板保留清晰的分层节奏。
     /// - Note: 所有 SwiftUI 状态都在 MainActor 上修改；延迟任务会被后续进入/退出请求取消，避免旧阶段覆盖新阶段。
     private func enterEditingWithChoreography(initialSelection: BookshelfItemID? = nil) {
-        guard selectedSubTab == .books, viewModel.canEditCurrentDimension else { return }
+        guard selectedSubTab == .books, viewModel.canEditCurrentDimension else {
+            onTabBarSnapshotHandoff(.hideSnapshot)
+            return
+        }
         chromeTransitionTask?.cancel()
+        onTabBarSnapshotHandoff(.prepareSnapshot)
         frozenTopChromeHeight = expectedTopChromeHeight
 
         chromeTransitionTask = Task { @MainActor in
             try? await Task.sleep(for: BookshelfManagementMotion.editEntryPreparationDelay(reduceMotion: reduceMotion))
             guard !Task.isCancelled else { return }
             guard selectedSubTab == .books, viewModel.canEditCurrentDimension else {
+                onTabBarSnapshotHandoff(.hideSnapshot)
                 chromePhase = .normal
                 frozenTopChromeHeight = nil
                 chromeTransitionTask = nil
@@ -460,12 +470,28 @@ private struct BookContentView: View {
         }
 
         chromeTransitionTask = Task { @MainActor in
-            try? await Task.sleep(for: BookshelfManagementMotion.editExitSettleDelay(reduceMotion: reduceMotion))
-            guard !Task.isCancelled else { return }
+            try? await Task.sleep(for: BookshelfManagementMotion.tabBarSnapshotShowDelay(reduceMotion: reduceMotion))
+            guard !Task.isCancelled else {
+                onTabBarSnapshotHandoff(.hideSnapshot)
+                return
+            }
+            onTabBarSnapshotHandoff(.showSnapshot)
+            try? await Task.sleep(for: BookshelfManagementMotion.tabBarSnapshotRestoreDelay(reduceMotion: reduceMotion))
+            guard !Task.isCancelled else {
+                onTabBarSnapshotHandoff(.hideSnapshot)
+                return
+            }
+
             withAnimation(BookshelfManagementMotion.restoreAnimation(reduceMotion: reduceMotion)) {
                 viewModel.exitEditing()
                 chromePhase = .normal
             }
+            try? await Task.sleep(for: BookshelfManagementMotion.tabBarSnapshotRevealHoldDelay(reduceMotion: reduceMotion))
+            guard !Task.isCancelled else {
+                onTabBarSnapshotHandoff(.hideSnapshot)
+                return
+            }
+            onTabBarSnapshotHandoff(.hideSnapshot)
             frozenTopChromeHeight = nil
             chromeTransitionTask = nil
         }
@@ -494,6 +520,7 @@ private struct BookContentView: View {
                 viewModel.exitEditing()
             }
             chromeTransitionTask?.cancel()
+            onTabBarSnapshotHandoff(.hideSnapshot)
             chromePhase = .normal
             frozenTopChromeHeight = nil
             return
@@ -504,6 +531,7 @@ private struct BookContentView: View {
             frozenTopChromeHeight = expectedTopChromeHeight
         } else if !viewModel.isEditing, chromePhase != .normal {
             chromeTransitionTask?.cancel()
+            onTabBarSnapshotHandoff(.hideSnapshot)
             chromePhase = .normal
             frozenTopChromeHeight = nil
         }
@@ -513,6 +541,7 @@ private struct BookContentView: View {
     private func resetEditingPresentationForContextLoss() {
         chromeTransitionTask?.cancel()
         chromeTransitionTask = nil
+        onTabBarSnapshotHandoff(.hideSnapshot)
         chromePhase = .normal
         frozenTopChromeHeight = nil
         viewModel.exitEditing()

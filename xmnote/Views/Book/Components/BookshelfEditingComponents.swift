@@ -1,11 +1,18 @@
 /**
- * [INPUT]: 依赖 BookshelfPendingAction、BookshelfBookListEditAction 与 SwiftUI 按钮、图标、横向滚动、表层渲染和动画能力
- * [OUTPUT]: 对外提供书架编辑态顶部栏、选择标识、底部操作面板与管理模式转场参数
+ * [INPUT]: 依赖 BookshelfPendingAction、BookshelfBookListEditAction 与 SwiftUI 按钮、图标、横向滚动、表层渲染、TabBar snapshot 交接和动画能力
+ * [OUTPUT]: 对外提供书架编辑态顶部栏、选择标识、底部操作面板、管理模式转场与 TabBar snapshot 恢复交接参数
  * [POS]: Book 模块页面私有编辑态组件集合，服务默认书架选择、置顶、移动、横向平铺批量操作与删除入口
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
 import SwiftUI
+
+/// 书架退出管理模式时通知根 Tab 容器进行真实 TabBar 快照交接的事件。
+enum BookshelfTabBarSnapshotHandoffEvent: Equatable {
+    case prepareSnapshot
+    case showSnapshot
+    case hideSnapshot
+}
 
 /// 书架管理模式的统一动效参数，保证顶部 chrome、内容 inset 与底部面板按同一语义节奏切换。
 enum BookshelfManagementMotion {
@@ -48,8 +55,29 @@ enum BookshelfManagementMotion {
         reduceMotion ? .milliseconds(40) : .milliseconds(90)
     }
 
-    static func editExitSettleDelay(reduceMotion: Bool) -> Duration {
-        reduceMotion ? .milliseconds(80) : .milliseconds(150)
+    /// 退出编辑态后到 TabBar 快照接住底部视觉之间的延迟，让编辑底栏先完成一小段退场。
+    static func tabBarSnapshotShowDelay(reduceMotion: Bool) -> Duration {
+        reduceMotion ? .milliseconds(0) : .milliseconds(75)
+    }
+
+    /// 快照显示后到系统 TabBar 恢复之间的延迟，给底部视觉接力留出呼吸感。
+    static func tabBarSnapshotRestoreDelay(reduceMotion: Bool) -> Duration {
+        reduceMotion ? .milliseconds(40) : .milliseconds(130)
+    }
+
+    /// 系统 TabBar 恢复后保留快照的时间，等真实 TabBar 稳定后再淡出快照层。
+    static func tabBarSnapshotRevealHoldDelay(reduceMotion: Bool) -> Duration {
+        reduceMotion ? .milliseconds(60) : .milliseconds(105)
+    }
+
+    /// UIKit 快照层淡入使用的时长，辅助编辑底栏退场与 TabBar 回归形成短交叠。
+    static func tabBarSnapshotFadeInDuration(reduceMotion: Bool) -> TimeInterval {
+        reduceMotion ? 0.04 : 0.12
+    }
+
+    /// UIKit 快照层淡出使用的时长，保持短促，避免真实 TabBar 与快照重影被感知。
+    static func tabBarSnapshotFadeOutDuration(reduceMotion: Bool) -> TimeInterval {
+        reduceMotion ? 0.06 : 0.10
     }
 }
 
