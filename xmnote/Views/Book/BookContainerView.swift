@@ -6,8 +6,8 @@
 //
 
 /**
- * [INPUT]: 依赖 RepositoryContainer 注入仓储，依赖 BookViewModel 驱动书架浏览、编辑态选择与批量操作，依赖本地 chrome 阶段、固定顶部 chrome 高度、底部面板高度与外层 TabBar snapshot 回调稳定内容布局
- * [OUTPUT]: 对外提供 BookContainerView 与 BookSubTab 枚举，承载书架顶部 chrome、TabBar 协调、编辑工具栏、批量 Sheet、删除确认与 snapshot 恢复交接通知
+ * [INPUT]: 依赖 RepositoryContainer 注入仓储，依赖 BookViewModel 驱动书架浏览、编辑态选择与批量操作，依赖本地 chrome 阶段、固定顶部 chrome 高度、底部浮动 ornament 与外层 TabBar snapshot 回调稳定内容布局
+ * [OUTPUT]: 对外提供 BookContainerView 与 BookSubTab 枚举，承载书架顶部 chrome、TabBar 协调、底部玻璃编辑工具栏、批量 Sheet、删除确认与 snapshot 恢复交接通知
  * [POS]: Book 模块容器壳层，承载书籍页与书架管理模式编排
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -47,7 +47,7 @@ private enum BookshelfChromePhase: Equatable {
     case exitingEdit
 
     var hidesTabBar: Bool {
-        self != .normal
+        self == .editing || self == .exitingEdit
     }
 
     var showsEditHeader: Bool {
@@ -57,9 +57,13 @@ private enum BookshelfChromePhase: Equatable {
     var showsEditBottomBar: Bool {
         self == .editing
     }
+
+    var reservesEditBottomBarSpace: Bool {
+        self == .enteringEdit || self == .editing || self == .exitingEdit
+    }
 }
 
-/// 记录编辑底部面板的实际高度，作为书架集合滚动余量而不是布局压缩来源。
+/// 记录编辑底部浮动栏换算出的滚动余量，避免集合内容被底部玻璃控件遮挡。
 private struct BookshelfEditBottomBarHeightPreferenceKey: PreferenceKey {
     static var defaultValue: CGFloat = 0
 
@@ -171,7 +175,9 @@ private struct BookContentView: View {
     @State private var chromePhase: BookshelfChromePhase = .normal
     @State private var chromeTransitionTask: Task<Void, Never>?
     @State private var editBottomBarHeight: CGFloat = 0
+    @State private var editBottomBarOrnamentHeight: CGFloat = 0
     @State private var frozenTopChromeHeight: CGFloat?
+    @State private var isEditingChoreographyActive = false
     let onAddBook: () -> Void
     let onAddNote: () -> Void
     let onOpenDebugCenter: (() -> Void)?
@@ -271,13 +277,13 @@ private struct BookContentView: View {
             guard newValue != .books else { return }
             exitEditingWithChoreography()
         }
-        .onChange(of: showsEditBottomBar) { _, isVisible in
-            guard !isVisible else { return }
-            editBottomBarHeight = 0
-        }
         .onPreferenceChange(BookshelfEditBottomBarHeightPreferenceKey.self) { height in
-            guard showsEditBottomBar, height > 0 else { return }
+            guard reservesEditBottomBarSpace, editBottomBarHeight != height else { return }
             editBottomBarHeight = height
+        }
+        .onPreferenceChange(ImmersiveBottomChromeHeightPreferenceKey.self) { height in
+            guard showsEditBottomBar, abs(editBottomBarOrnamentHeight - height) > 0.5 else { return }
+            editBottomBarOrnamentHeight = height
         }
         .onDisappear {
             resetEditingPresentationForContextLoss()
@@ -287,24 +293,23 @@ private struct BookContentView: View {
     @ViewBuilder
     private var editBottomBarOverlay: some View {
         GeometryReader { proxy in
-            VStack(spacing: Spacing.none) {
-                Spacer(minLength: Spacing.none)
-                    .allowsHitTesting(false)
+            let metrics = editBottomBarMetrics(safeAreaBottomInset: proxy.safeAreaInsets.bottom)
 
+            if reservesEditBottomBarSpace {
                 if showsEditBottomBar {
-                    editBottomBar(bottomSafeAreaInset: proxy.safeAreaInsets.bottom)
-                        .background {
-                            GeometryReader { panelProxy in
-                                Color.clear.preference(
-                                    key: BookshelfEditBottomBarHeightPreferenceKey.self,
-                                    value: panelProxy.size.height
-                                )
-                            }
-                        }
-                        .transition(BookshelfManagementMotion.bottomPanelTransition(reduceMotion: reduceMotion))
+                    ImmersiveBottomChromeOverlay(metrics: metrics) {
+                        editBottomBar
+                    }
+                    .preference(key: BookshelfEditBottomBarHeightPreferenceKey.self, value: metrics.readableInset)
+                    .transition(BookshelfManagementMotion.bottomPanelTransition(reduceMotion: reduceMotion))
+                } else {
+                    Color.clear
+                        .preference(key: BookshelfEditBottomBarHeightPreferenceKey.self, value: metrics.readableInset)
                 }
+            } else {
+                Color.clear
+                    .preference(key: BookshelfEditBottomBarHeightPreferenceKey.self, value: 0)
             }
-            .ignoresSafeArea(.container, edges: .bottom)
         }
         .allowsHitTesting(showsEditBottomBar)
     }
@@ -356,10 +361,9 @@ private struct BookContentView: View {
         .clipped()
     }
 
-    private func editBottomBar(bottomSafeAreaInset: CGFloat) -> some View {
+    private var editBottomBar: some View {
         BookshelfEditBottomBar(
             selectedCount: viewModel.selectedCount,
-            bottomSafeAreaInset: bottomSafeAreaInset,
             canPin: viewModel.canSubmitSelectedPin,
             canMoveBoundary: viewModel.canMoveSelectedItems,
             canBatchAction: viewModel.canMoreSelectedItems,
@@ -374,6 +378,15 @@ private struct BookContentView: View {
         )
     }
 
+    private func editBottomBarMetrics(safeAreaBottomInset: CGFloat) -> ImmersiveBottomChromeMetrics {
+        ImmersiveBottomChromeMetrics.make(
+            measuredOrnamentHeight: editBottomBarOrnamentHeight,
+            safeAreaBottomInset: safeAreaBottomInset,
+            ornamentMinimumTouchHeight: BookshelfGlassEditBarMetrics.clusterHeight,
+            ornamentTopPadding: Spacing.tight
+        )
+    }
+
     private var showsBrowsingChrome: Bool {
         selectedSubTab != .books || chromePhase == .normal
     }
@@ -384,6 +397,10 @@ private struct BookContentView: View {
 
     private var showsEditBottomBar: Bool {
         selectedSubTab == .books && chromePhase.showsEditBottomBar
+    }
+
+    private var reservesEditBottomBarSpace: Bool {
+        selectedSubTab == .books && chromePhase.reservesEditBottomBarSpace
     }
 
     private var showsBrowsingGradient: Bool {
@@ -421,6 +438,7 @@ private struct BookContentView: View {
             return
         }
         chromeTransitionTask?.cancel()
+        isEditingChoreographyActive = true
         onTabBarSnapshotHandoff(.prepareSnapshot)
         frozenTopChromeHeight = expectedTopChromeHeight
 
@@ -431,6 +449,8 @@ private struct BookContentView: View {
                 onTabBarSnapshotHandoff(.hideSnapshot)
                 chromePhase = .normal
                 frozenTopChromeHeight = nil
+                releaseEditBottomBarSpace()
+                isEditingChoreographyActive = false
                 chromeTransitionTask = nil
                 return
             }
@@ -443,6 +463,8 @@ private struct BookContentView: View {
             guard viewModel.isEditing else {
                 chromePhase = .normal
                 frozenTopChromeHeight = nil
+                releaseEditBottomBarSpace()
+                isEditingChoreographyActive = false
                 chromeTransitionTask = nil
                 return
             }
@@ -452,6 +474,7 @@ private struct BookContentView: View {
             withAnimation(BookshelfManagementMotion.panelAnimation(reduceMotion: reduceMotion)) {
                 chromePhase = .editing
             }
+            isEditingChoreographyActive = false
             chromeTransitionTask = nil
         }
     }
@@ -461,6 +484,7 @@ private struct BookContentView: View {
     private func exitEditingWithChoreography() {
         guard viewModel.isEditing || chromePhase != .normal else { return }
         chromeTransitionTask?.cancel()
+        isEditingChoreographyActive = true
         if frozenTopChromeHeight == nil {
             frozenTopChromeHeight = expectedTopChromeHeight
         }
@@ -491,8 +515,10 @@ private struct BookContentView: View {
                 onTabBarSnapshotHandoff(.hideSnapshot)
                 return
             }
+            releaseEditBottomBarSpace()
             onTabBarSnapshotHandoff(.hideSnapshot)
             frozenTopChromeHeight = nil
+            isEditingChoreographyActive = false
             chromeTransitionTask = nil
         }
     }
@@ -515,6 +541,7 @@ private struct BookContentView: View {
 
     /// 同步外部编辑态变化，保证页面恢复或异步清理后本地 chrome 阶段不滞留。
     private func syncChromePhaseWithEditingState() {
+        guard !isEditingChoreographyActive else { return }
         guard selectedSubTab == .books else {
             if viewModel.isEditing {
                 viewModel.exitEditing()
@@ -523,6 +550,7 @@ private struct BookContentView: View {
             onTabBarSnapshotHandoff(.hideSnapshot)
             chromePhase = .normal
             frozenTopChromeHeight = nil
+            releaseEditBottomBarSpace()
             return
         }
 
@@ -534,7 +562,14 @@ private struct BookContentView: View {
             onTabBarSnapshotHandoff(.hideSnapshot)
             chromePhase = .normal
             frozenTopChromeHeight = nil
+            releaseEditBottomBarSpace()
         }
+    }
+
+    /// 释放编辑底栏的滚动避让。正常退出会在 TabBar 恢复稳定后调用，页面失活路径则立即调用。
+    private func releaseEditBottomBarSpace() {
+        editBottomBarHeight = 0
+        editBottomBarOrnamentHeight = 0
     }
 
     /// 页面失活时立即清理展示阶段和业务编辑态，避免异步动画任务回写已离开的页面。
@@ -544,6 +579,8 @@ private struct BookContentView: View {
         onTabBarSnapshotHandoff(.hideSnapshot)
         chromePhase = .normal
         frozenTopChromeHeight = nil
+        isEditingChoreographyActive = false
+        releaseEditBottomBarSpace()
         viewModel.exitEditing()
     }
 

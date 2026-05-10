@@ -199,7 +199,6 @@ struct BookGridView: View {
             && viewModel.contentState == .content
             && !viewModel.isSearchActive
             && !viewModel.hasSearchKeyword
-            && !viewModel.isEditing
     }
 
     private func aggregateContent(

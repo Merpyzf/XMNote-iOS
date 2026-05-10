@@ -141,6 +141,24 @@ private struct BookshelfDefaultCollectionConfiguration {
     )
 }
 
+/// 默认书架集合视图子类，暴露系统 automatic inset 与布局周期变化给承载层做视口锚点恢复。
+private final class BookshelfDefaultViewportStableCollectionView: UICollectionView {
+    var onAdjustedContentInsetDidChange: (() -> Void)?
+    var onBeforeLayoutSubviews: (() -> Void)?
+
+    /// 布局前让承载层保存当前可见锚点，避免后续系统 inset 调整只能捕获到跳变后的状态。
+    override func layoutSubviews() {
+        onBeforeLayoutSubviews?()
+        super.layoutSubviews()
+    }
+
+    /// UIKit 因 safe area、TabBar 或自定义 inset 合成值变化时通知承载层恢复视口锚点。
+    override func adjustedContentInsetDidChange() {
+        super.adjustedContentInsetDidChange()
+        onAdjustedContentInsetDidChange?()
+    }
+}
+
 /// UICollectionView 承载视图，负责布局切换、本地拖拽预览顺序和最终排序回调。
 final class BookshelfDefaultCollectionHostView: UIView {
     private var configuration = BookshelfDefaultCollectionConfiguration.empty
@@ -151,12 +169,20 @@ final class BookshelfDefaultCollectionHostView: UIView {
     private var isInteractiveReordering = false
     private var didChangeOrderInCurrentSession = false
     private var didReceiveDropInCurrentSession = false
+    private var stableViewportAnchor: ViewportAnchor?
+    private var stableFallbackOffsetY: CGFloat = 0
+    private var isRestoringViewport = false
+    private var isViewportAnchorCaptureSuspended = false
+    private var lastAdjustedContentInset: UIEdgeInsets = .zero
     private weak var observedContentScrollController: UIViewController?
     private let impactFeedback = UIImpactFeedbackGenerator(style: .medium)
     private let selectionFeedback = UISelectionFeedbackGenerator()
 
-    private lazy var collectionView: UICollectionView = {
-        let view = UICollectionView(frame: .zero, collectionViewLayout: makeLayout(for: configuration))
+    private lazy var collectionView: BookshelfDefaultViewportStableCollectionView = {
+        let view = BookshelfDefaultViewportStableCollectionView(
+            frame: .zero,
+            collectionViewLayout: makeLayout(for: configuration)
+        )
         view.backgroundColor = .clear
         view.showsVerticalScrollIndicator = false
         view.alwaysBounceVertical = true
@@ -178,6 +204,12 @@ final class BookshelfDefaultCollectionHostView: UIView {
             forSupplementaryViewOfKind: UICollectionView.elementKindSectionHeader,
             withReuseIdentifier: BookshelfDefaultSectionHeaderView.reuseIdentifier
         )
+        view.onBeforeLayoutSubviews = { [weak self] in
+            self?.storeViewportAnchorIfPossible(requiresLayout: false)
+        }
+        view.onAdjustedContentInsetDidChange = { [weak self] in
+            self?.handleAdjustedContentInsetDidChange()
+        }
         return view
     }()
 
@@ -203,6 +235,7 @@ final class BookshelfDefaultCollectionHostView: UIView {
             return
         }
 
+        storeViewportAnchorIfPossible(requiresLayout: true)
         let previousIDs = items.map(\.id)
         let nextItems = configuration.sections.flatMap(\.items)
         let nextIDs = nextItems.map(\.id)
@@ -309,24 +342,32 @@ private extension BookshelfDefaultCollectionHostView {
     /// 让 UIKit 集合视图参与系统底部栏滚动观察，驱动 iOS 26 TabBar 最小化与底部边缘过渡。
     func updateContentScrollObservation() {
         guard configuration.isScrollObservationEnabled, window != nil else {
-            clearContentScrollObservation()
+            performViewportPreservingSystemUpdate {
+                clearContentScrollObservation()
+            }
             return
         }
 
         guard let controller = nearestOwningViewController() else {
-            clearContentScrollObservation()
+            performViewportPreservingSystemUpdate {
+                clearContentScrollObservation()
+            }
             return
         }
 
         if observedContentScrollController !== controller {
-            clearContentScrollObservation()
-            controller.setContentScrollView(collectionView, for: .bottom)
-            observedContentScrollController = controller
+            performViewportPreservingSystemUpdate {
+                clearContentScrollObservation()
+                controller.setContentScrollView(collectionView, for: .bottom)
+                observedContentScrollController = controller
+            }
             return
         }
 
         if controller.contentScrollView(for: .bottom) !== collectionView {
-            controller.setContentScrollView(collectionView, for: .bottom)
+            performViewportPreservingSystemUpdate {
+                controller.setContentScrollView(collectionView, for: .bottom)
+            }
         }
     }
 
@@ -337,6 +378,22 @@ private extension BookshelfDefaultCollectionHostView {
             controller.setContentScrollView(nil, for: .bottom)
         }
         observedContentScrollController = nil
+    }
+
+    /// 包裹会影响系统 bar 观察对象的 UIKit 调用，确保 safe area 重算后仍恢复进入调用前的可见锚点。
+    func performViewportPreservingSystemUpdate(_ update: () -> Void) {
+        storeViewportAnchorIfPossible(requiresLayout: true)
+        let fallbackOffsetY = collectionView.contentOffset.y
+        let adjustedInsetBeforeUpdate = collectionView.adjustedContentInset
+        isViewportAnchorCaptureSuspended = true
+        update()
+        collectionView.layoutIfNeeded()
+        if collectionView.adjustedContentInset != adjustedInsetBeforeUpdate {
+            restoreViewportAnchor(stableViewportAnchor, fallbackOffsetY: fallbackOffsetY)
+        }
+        isViewportAnchorCaptureSuspended = false
+        lastAdjustedContentInset = collectionView.adjustedContentInset
+        storeViewportAnchorIfPossible(requiresLayout: false)
     }
 
     /// 取当前 UIKit bridge 所属的最近视图控制器，作为系统 bar 观察 scroll view 的登记 owner。
@@ -361,11 +418,15 @@ private extension BookshelfDefaultCollectionHostView {
     /// 只增加滚动余量，不改变 collection layout，避免编辑工具栏入场时书籍网格重新排版。
     func updateBottomContentInset() {
         let bottomInset = max(0, configuration.bottomContentInset)
-        guard collectionView.contentInset.bottom != bottomInset
-            || collectionView.verticalScrollIndicatorInsets.bottom != bottomInset else {
+        let didChangeCustomInset = collectionView.contentInset.bottom != bottomInset
+            || collectionView.verticalScrollIndicatorInsets.bottom != bottomInset
+        let didChangeAdjustedInset = collectionView.adjustedContentInset != lastAdjustedContentInset
+        guard didChangeCustomInset || didChangeAdjustedInset else {
             return
         }
 
+        storeViewportAnchorIfPossible(requiresLayout: true)
+        let fallbackOffsetY = collectionView.contentOffset.y
         var contentInset = collectionView.contentInset
         contentInset.bottom = bottomInset
 
@@ -373,9 +434,109 @@ private extension BookshelfDefaultCollectionHostView {
         indicatorInsets.bottom = bottomInset
 
         UIView.performWithoutAnimation {
+            isViewportAnchorCaptureSuspended = true
             collectionView.contentInset = contentInset
             collectionView.verticalScrollIndicatorInsets = indicatorInsets
+            collectionView.layoutIfNeeded()
+            restoreViewportAnchor(stableViewportAnchor, fallbackOffsetY: fallbackOffsetY)
+            isViewportAnchorCaptureSuspended = false
+            lastAdjustedContentInset = collectionView.adjustedContentInset
+            storeViewportAnchorIfPossible(requiresLayout: false)
         }
+    }
+
+    /// 保存当前稳定视口锚点。该方法可在滚动、SwiftUI update 和 UIKit 布局周期中高频调用，因此只做轻量可见 cell 采样。
+    func storeViewportAnchorIfPossible(requiresLayout: Bool) {
+        guard !isRestoringViewport, !isViewportAnchorCaptureSuspended else { return }
+        stableFallbackOffsetY = collectionView.contentOffset.y
+        guard let anchor = captureViewportAnchor(requiresLayout: requiresLayout) else { return }
+        stableViewportAnchor = anchor
+    }
+
+    /// 响应系统 automatic adjusted inset 变化，覆盖 TabBar 显隐和 safe area 重算绕过自定义 inset 写入的路径。
+    func handleAdjustedContentInsetDidChange() {
+        guard !isRestoringViewport, !isViewportAnchorCaptureSuspended else {
+            lastAdjustedContentInset = collectionView.adjustedContentInset
+            return
+        }
+        guard collectionView.window != nil else {
+            lastAdjustedContentInset = collectionView.adjustedContentInset
+            return
+        }
+        guard collectionView.adjustedContentInset != lastAdjustedContentInset else { return }
+
+        UIView.performWithoutAnimation {
+            restoreViewportAnchor(stableViewportAnchor, fallbackOffsetY: stableFallbackOffsetY)
+            lastAdjustedContentInset = collectionView.adjustedContentInset
+            storeViewportAnchorIfPossible(requiresLayout: false)
+        }
+    }
+
+    /// 捕获当前最靠近可视顶部的 cell，作为后续 inset 写入后的视口稳定锚点。
+    func captureViewportAnchor(requiresLayout: Bool) -> ViewportAnchor? {
+        if requiresLayout {
+            collectionView.layoutIfNeeded()
+        }
+        let visibleTop = collectionView.contentOffset.y + collectionView.adjustedContentInset.top
+        return collectionView.indexPathsForVisibleItems
+            .compactMap { indexPath -> (indexPath: IndexPath, frame: CGRect)? in
+                guard let attributes = collectionView.layoutAttributesForItem(at: indexPath),
+                      attributes.frame.maxY >= visibleTop - 1 else {
+                    return nil
+                }
+                return (indexPath, attributes.frame)
+            }
+            .sorted { lhs, rhs in
+                if abs(lhs.frame.minY - rhs.frame.minY) > 0.5 {
+                    return lhs.frame.minY < rhs.frame.minY
+                }
+                return lhs.frame.minX < rhs.frame.minX
+            }
+            .first
+            .map { candidate in
+                ViewportAnchor(
+                    indexPath: candidate.indexPath,
+                    distanceFromVisibleTop: candidate.frame.minY - visibleTop
+                )
+            }
+    }
+
+    /// 在 inset 变化后恢复先前捕获的视口锚点，避免 UIKit 自动 inset 补偿造成可见内容跳动。
+    func restoreViewportAnchor(_ anchor: ViewportAnchor?, fallbackOffsetY: CGFloat) {
+        isRestoringViewport = true
+        defer { isRestoringViewport = false }
+
+        let targetOffsetY: CGFloat
+        if let anchor,
+           let attributes = collectionView.layoutAttributesForItem(at: anchor.indexPath) {
+            let visibleTop = attributes.frame.minY - anchor.distanceFromVisibleTop
+            targetOffsetY = visibleTop - collectionView.adjustedContentInset.top
+        } else {
+            targetOffsetY = fallbackOffsetY
+        }
+
+        let clampedOffset = CGPoint(
+            x: collectionView.contentOffset.x,
+            y: clampedContentOffsetY(targetOffsetY)
+        )
+        guard abs(collectionView.contentOffset.y - clampedOffset.y) > 0.5 else { return }
+        collectionView.setContentOffset(clampedOffset, animated: false)
+    }
+
+    /// 使用 adjustedContentInset 计算合法滚动边界，兼容系统 TabBar 与自定义底栏同时参与避让。
+    func clampedContentOffsetY(_ offsetY: CGFloat) -> CGFloat {
+        let adjustedInset = collectionView.adjustedContentInset
+        let minimumY = -adjustedInset.top
+        let maximumY = max(
+            minimumY,
+            collectionView.contentSize.height - collectionView.bounds.height + adjustedInset.bottom
+        )
+        return min(max(offsetY, minimumY), maximumY)
+    }
+
+    struct ViewportAnchor {
+        let indexPath: IndexPath
+        let distanceFromVisibleTop: CGFloat
     }
 
     /// Grid 模式使用动态列数和估算高度，交由 UIHostingConfiguration 自适应卡片内容。
@@ -720,6 +881,11 @@ extension BookshelfDefaultCollectionHostView: UICollectionViewDataSource {
 }
 
 extension BookshelfDefaultCollectionHostView: UICollectionViewDelegate {
+    /// 用户或系统滚动后刷新稳定锚点，为后续 safe area / inset 变化保留恢复基准。
+    func scrollViewDidScroll(_ scrollView: UIScrollView) {
+        storeViewportAnchorIfPossible(requiresLayout: false)
+    }
+
     /// 点击条目：编辑态切换选择，普通态走 SwiftUI 主导航路由。
     func collectionView(_ collectionView: UICollectionView, didSelectItemAt indexPath: IndexPath) {
         collectionView.deselectItem(at: indexPath, animated: true)

@@ -7,13 +7,22 @@
 
 /**
  * [INPUT]: 依赖 BookshelfBookListRoute 提供聚合上下文，依赖 BookRepositoryProtocol 提供二级列表观察流，依赖外层 BookRoute/NoteRoute 闭包承接书籍与书摘导航
- * [OUTPUT]: 对外提供 BookshelfBookListView，使用 UIKit UICollectionView 展示聚合书籍列表、长按菜单、编辑选择入口与批量编辑 Sheet 容器
+ * [OUTPUT]: 对外提供 BookshelfBookListView，使用 UIKit UICollectionView 展示聚合书籍列表、长按菜单、编辑选择入口、底部玻璃批量工具栏与批量编辑 Sheet 容器
  * [POS]: Book 模块二级列表页，被 BookRoute.bookshelfList 导航目标消费
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
 import SwiftUI
 import UIKit
+
+/// 二级书籍列表底部玻璃栏换算出的滚动余量，供 UIKit collection 避让浮动控件。
+private struct BookshelfBookListEditBottomInsetPreferenceKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = max(value, nextValue())
+    }
+}
 
 /// 书架聚合入口的二级只读列表页，通过 Repository 实时观察聚合上下文下的书籍集合。
 struct BookshelfBookListView: View {
@@ -58,10 +67,15 @@ struct BookshelfBookListView: View {
 
 /// 二级书籍列表 SwiftUI 壳层，承接搜索栏、加载态和 UIKit 集合区。
 private struct BookshelfBookListContentView: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Bindable var viewModel: BookshelfBookListViewModel
     let onOpenRoute: (BookRoute) -> Void
     let onOpenNoteRoute: (NoteRoute) -> Void
     @State private var showsDisplaySettingSheet = false
+    @State private var bottomOrnamentHeight: CGFloat = 0
+    @State private var bottomContentInset: CGFloat = 0
+    @State private var isRetainingBottomInsetForEditExit = false
+    @State private var bottomInsetReleaseTask: Task<Void, Never>?
 
     var body: some View {
         VStack(spacing: Spacing.compact) {
@@ -96,6 +110,7 @@ private struct BookshelfBookListContentView: View {
                 movableBookIDs: viewModel.movableBookIDs,
                 supportsContextPin: viewModel.supportsContextPin,
                 activeWriteAction: viewModel.activeWriteAction,
+                bottomContentInset: bottomContentInset,
                 onToggleSelection: viewModel.toggleSelection,
                 onOpenBook: { bookID in
                     onOpenRoute(.detail(bookId: bookID))
@@ -125,18 +140,27 @@ private struct BookshelfBookListContentView: View {
                 }
             }
         }
-        .safeAreaInset(edge: .bottom, spacing: Spacing.none) {
-            if viewModel.isEditing {
-                BookshelfBookListEditBottomBar(
-                    selectedCount: viewModel.selectedCount,
-                    actions: viewModel.editActions,
-                    activeAction: viewModel.activeWriteAction,
-                    isLoadingOptions: viewModel.isLoadingBatchOptions,
-                    notice: viewModel.actionNotice,
-                    onAction: viewModel.performEditAction
-                )
-                .transition(.move(edge: .bottom).combined(with: .opacity))
+        .overlay(alignment: .bottom) {
+            editBottomBarOverlay
+        }
+        .onChange(of: viewModel.isEditing) { _, isEditing in
+            if isEditing {
+                cancelBottomInsetRelease()
+            } else {
+                retainBottomInsetDuringEditExit()
             }
+        }
+        .onPreferenceChange(BookshelfBookListEditBottomInsetPreferenceKey.self) { inset in
+            guard reservesEditBottomInset else { return }
+            guard bottomContentInset != inset else { return }
+            bottomContentInset = inset
+        }
+        .onPreferenceChange(ImmersiveBottomChromeHeightPreferenceKey.self) { height in
+            guard viewModel.isEditing, abs(bottomOrnamentHeight - height) > 0.5 else { return }
+            bottomOrnamentHeight = height
+        }
+        .onDisappear {
+            releaseBottomInsetImmediately()
         }
         .sheet(isPresented: $showsDisplaySettingSheet) {
             BookshelfDisplaySettingSheet(
@@ -216,6 +240,86 @@ private struct BookshelfBookListContentView: View {
         .xmSystemAlert(item: $viewModel.activeNameEdit) { nameEdit in
             nameEditDescriptor(for: nameEdit)
         }
+    }
+
+    @ViewBuilder
+    private var editBottomBarOverlay: some View {
+        GeometryReader { proxy in
+            let metrics = bottomChromeMetrics(safeAreaBottomInset: proxy.safeAreaInsets.bottom)
+
+            if viewModel.isEditing {
+                ImmersiveBottomChromeOverlay(metrics: metrics) {
+                    BookshelfBookListEditBottomBar(
+                        selectedCount: viewModel.selectedCount,
+                        actions: viewModel.editActions,
+                        activeAction: viewModel.activeWriteAction,
+                        isLoadingOptions: viewModel.isLoadingBatchOptions,
+                        notice: viewModel.actionNotice,
+                        onAction: viewModel.performEditAction
+                    )
+                }
+                .preference(key: BookshelfBookListEditBottomInsetPreferenceKey.self, value: metrics.readableInset)
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+            } else if reservesEditBottomInset {
+                Color.clear
+                    .preference(key: BookshelfBookListEditBottomInsetPreferenceKey.self, value: metrics.readableInset)
+            } else {
+                Color.clear
+                    .preference(key: BookshelfBookListEditBottomInsetPreferenceKey.self, value: 0)
+            }
+        }
+        .allowsHitTesting(viewModel.isEditing)
+    }
+
+    private func bottomChromeMetrics(safeAreaBottomInset: CGFloat) -> ImmersiveBottomChromeMetrics {
+        ImmersiveBottomChromeMetrics.make(
+            measuredOrnamentHeight: bottomOrnamentHeight,
+            safeAreaBottomInset: safeAreaBottomInset,
+            ornamentMinimumTouchHeight: BookshelfGlassEditBarMetrics.clusterHeight,
+            ornamentTopPadding: Spacing.tight
+        )
+    }
+
+    private var reservesEditBottomInset: Bool {
+        viewModel.isEditing || isRetainingBottomInsetForEditExit || bottomContentInset > 0
+    }
+
+    /// 编辑态退场时短暂保留底部滚动避让，避免玻璃栏动画尚未结束时列表坐标系先变。
+    /// - Note: 延迟任务运行在 MainActor；再次进入编辑态或页面消失会取消任务，避免旧任务回写新的列表状态。
+    private func retainBottomInsetDuringEditExit() {
+        bottomInsetReleaseTask?.cancel()
+        guard bottomContentInset > 0 || bottomOrnamentHeight > 0 else {
+            isRetainingBottomInsetForEditExit = false
+            bottomInsetReleaseTask = nil
+            return
+        }
+
+        isRetainingBottomInsetForEditExit = true
+        let delay: Duration = reduceMotion ? .milliseconds(120) : .milliseconds(280)
+        bottomInsetReleaseTask = Task { @MainActor in
+            try? await Task.sleep(for: delay)
+            guard !Task.isCancelled else { return }
+            isRetainingBottomInsetForEditExit = false
+            bottomContentInset = 0
+            bottomOrnamentHeight = 0
+            bottomInsetReleaseTask = nil
+        }
+    }
+
+    /// 取消退场延迟清理，供重新进入编辑态时保持当前有效避让。
+    private func cancelBottomInsetRelease() {
+        bottomInsetReleaseTask?.cancel()
+        bottomInsetReleaseTask = nil
+        isRetainingBottomInsetForEditExit = false
+    }
+
+    /// 页面离开时立即释放本地避让状态，避免异步退场任务回写已失效页面。
+    private func releaseBottomInsetImmediately() {
+        bottomInsetReleaseTask?.cancel()
+        bottomInsetReleaseTask = nil
+        isRetainingBottomInsetForEditExit = false
+        bottomContentInset = 0
+        bottomOrnamentHeight = 0
     }
 
     private func deleteDescriptor(for confirmation: BookshelfBookListDeleteConfirmation) -> XMSystemAlertDescriptor {
@@ -336,6 +440,7 @@ private struct BookshelfBookListCollectionView: UIViewRepresentable {
     let movableBookIDs: Set<Int64>
     let supportsContextPin: Bool
     let activeWriteAction: BookshelfBookListEditAction?
+    let bottomContentInset: CGFloat
     let onToggleSelection: (Int64) -> Void
     let onOpenBook: (Int64) -> Void
     let onContextAction: (BookshelfBookContextAction, Int64) -> Void
@@ -373,6 +478,7 @@ private struct BookshelfBookListCollectionView: UIViewRepresentable {
             movableBookIDs: movableBookIDs,
             supportsContextPin: supportsContextPin,
             activeWriteAction: activeWriteAction,
+            bottomContentInset: bottomContentInset,
             onToggleSelection: onToggleSelection,
             onOpenBook: onOpenBook,
             onContextAction: onContextAction,
@@ -396,6 +502,7 @@ private struct BookshelfBookListCollectionConfiguration {
     let movableBookIDs: Set<Int64>
     let supportsContextPin: Bool
     let activeWriteAction: BookshelfBookListEditAction?
+    let bottomContentInset: CGFloat
     let onToggleSelection: (Int64) -> Void
     let onOpenBook: (Int64) -> Void
     let onContextAction: (BookshelfBookContextAction, Int64) -> Void
@@ -415,6 +522,7 @@ private struct BookshelfBookListCollectionConfiguration {
         movableBookIDs: [],
         supportsContextPin: false,
         activeWriteAction: nil,
+        bottomContentInset: 0,
         onToggleSelection: { _ in },
         onOpenBook: { _ in },
         onContextAction: { _, _ in },
@@ -437,6 +545,24 @@ private struct BookshelfBookListCollectionSectionState: Hashable {
     let items: [BookshelfBookListCollectionItem]
 }
 
+/// 二级列表集合视图子类，向承载层暴露系统 automatic inset 与布局周期变化。
+private final class BookshelfBookListViewportStableCollectionView: UICollectionView {
+    var onAdjustedContentInsetDidChange: (() -> Void)?
+    var onBeforeLayoutSubviews: (() -> Void)?
+
+    /// 布局前保存当前可见锚点，避免 safe area 调整后只能拿到跳变后的 cell 位置。
+    override func layoutSubviews() {
+        onBeforeLayoutSubviews?()
+        super.layoutSubviews()
+    }
+
+    /// UIKit 合成后的 adjusted inset 变化时，通知承载层恢复视口锚点。
+    override func adjustedContentInsetDidChange() {
+        super.adjustedContentInsetDidChange()
+        onAdjustedContentInsetDidChange?()
+    }
+}
+
 /// UICollectionView 承载视图，负责二级列表 grid/list 布局、行点击与组内排序。
 private final class BookshelfBookListCollectionHostView: UIView {
     private var configuration = BookshelfBookListCollectionConfiguration.empty
@@ -446,11 +572,19 @@ private final class BookshelfBookListCollectionHostView: UIView {
     private var isInteractiveReordering = false
     private var didChangeOrderInCurrentSession = false
     private var didReceiveDropInCurrentSession = false
+    private var stableViewportAnchor: ViewportAnchor?
+    private var stableFallbackOffsetY: CGFloat = 0
+    private var isRestoringViewport = false
+    private var isViewportAnchorCaptureSuspended = false
+    private var lastAdjustedContentInset: UIEdgeInsets = .zero
     private let impactFeedback = UIImpactFeedbackGenerator(style: .medium)
     private let selectionFeedback = UISelectionFeedbackGenerator()
 
-    private lazy var collectionView: UICollectionView = {
-        let view = UICollectionView(frame: .zero, collectionViewLayout: makeLayout(for: configuration))
+    private lazy var collectionView: BookshelfBookListViewportStableCollectionView = {
+        let view = BookshelfBookListViewportStableCollectionView(
+            frame: .zero,
+            collectionViewLayout: makeLayout(for: configuration)
+        )
         view.backgroundColor = .clear
         view.alwaysBounceVertical = true
         view.showsVerticalScrollIndicator = false
@@ -471,6 +605,12 @@ private final class BookshelfBookListCollectionHostView: UIView {
             forSupplementaryViewOfKind: UICollectionView.elementKindSectionHeader,
             withReuseIdentifier: BookshelfBookListSectionHeaderView.reuseIdentifier
         )
+        view.onBeforeLayoutSubviews = { [weak self] in
+            self?.storeViewportAnchorIfPossible(requiresLayout: false)
+        }
+        view.onAdjustedContentInsetDidChange = { [weak self] in
+            self?.handleAdjustedContentInsetDidChange()
+        }
         return view
     }()
 
@@ -494,6 +634,7 @@ private final class BookshelfBookListCollectionHostView: UIView {
             return
         }
 
+        storeViewportAnchorIfPossible(requiresLayout: true)
         let nextSections = Self.makeSections(from: configuration)
         let didChangeEditing = configuration.isEditing != self.configuration.isEditing
         let needsLayoutUpdate = configuration.layoutMode != self.configuration.layoutMode
@@ -502,6 +643,7 @@ private final class BookshelfBookListCollectionHostView: UIView {
             || configuration.titleDisplayMode != self.configuration.titleDisplayMode
         self.configuration = configuration
         collectionView.dragInteractionEnabled = configuration.canReorder
+        updateBottomContentInset()
         if needsLayoutUpdate {
             collectionView.setCollectionViewLayout(makeLayout(for: configuration), animated: animated)
         }
@@ -567,6 +709,130 @@ private extension BookshelfBookListCollectionHostView {
             }
             return section
         }
+    }
+
+    /// 只增加滚动余量，不改变 collection layout，避免底部玻璃栏遮挡最后一行书籍。
+    func updateBottomContentInset() {
+        let bottomInset = max(0, configuration.bottomContentInset)
+        let didChangeCustomInset = collectionView.contentInset.bottom != bottomInset
+            || collectionView.verticalScrollIndicatorInsets.bottom != bottomInset
+        let didChangeAdjustedInset = collectionView.adjustedContentInset != lastAdjustedContentInset
+        guard didChangeCustomInset || didChangeAdjustedInset else {
+            return
+        }
+
+        storeViewportAnchorIfPossible(requiresLayout: true)
+        let fallbackOffsetY = collectionView.contentOffset.y
+        var contentInset = collectionView.contentInset
+        contentInset.bottom = bottomInset
+
+        var indicatorInsets = collectionView.verticalScrollIndicatorInsets
+        indicatorInsets.bottom = bottomInset
+
+        UIView.performWithoutAnimation {
+            isViewportAnchorCaptureSuspended = true
+            collectionView.contentInset = contentInset
+            collectionView.verticalScrollIndicatorInsets = indicatorInsets
+            collectionView.layoutIfNeeded()
+            restoreViewportAnchor(stableViewportAnchor, fallbackOffsetY: fallbackOffsetY)
+            isViewportAnchorCaptureSuspended = false
+            lastAdjustedContentInset = collectionView.adjustedContentInset
+            storeViewportAnchorIfPossible(requiresLayout: false)
+        }
+    }
+
+    /// 保存当前稳定视口锚点，供后续 bottom inset 与 automatic safe area 变化恢复同一可见内容。
+    func storeViewportAnchorIfPossible(requiresLayout: Bool) {
+        guard !isRestoringViewport, !isViewportAnchorCaptureSuspended else { return }
+        stableFallbackOffsetY = collectionView.contentOffset.y
+        guard let anchor = captureViewportAnchor(requiresLayout: requiresLayout) else { return }
+        stableViewportAnchor = anchor
+    }
+
+    /// 响应系统合成 inset 变化，覆盖 safe area 自动调整绕过自定义 inset 写入的路径。
+    func handleAdjustedContentInsetDidChange() {
+        guard !isRestoringViewport, !isViewportAnchorCaptureSuspended else {
+            lastAdjustedContentInset = collectionView.adjustedContentInset
+            return
+        }
+        guard collectionView.window != nil else {
+            lastAdjustedContentInset = collectionView.adjustedContentInset
+            return
+        }
+        guard collectionView.adjustedContentInset != lastAdjustedContentInset else { return }
+
+        UIView.performWithoutAnimation {
+            restoreViewportAnchor(stableViewportAnchor, fallbackOffsetY: stableFallbackOffsetY)
+            lastAdjustedContentInset = collectionView.adjustedContentInset
+            storeViewportAnchorIfPossible(requiresLayout: false)
+        }
+    }
+
+    /// 捕获当前最靠近可视顶部的 cell，作为后续 inset 写入后的视口稳定锚点。
+    func captureViewportAnchor(requiresLayout: Bool) -> ViewportAnchor? {
+        if requiresLayout {
+            collectionView.layoutIfNeeded()
+        }
+        let visibleTop = collectionView.contentOffset.y + collectionView.adjustedContentInset.top
+        return collectionView.indexPathsForVisibleItems
+            .compactMap { indexPath -> (indexPath: IndexPath, frame: CGRect)? in
+                guard let attributes = collectionView.layoutAttributesForItem(at: indexPath),
+                      attributes.frame.maxY >= visibleTop - 1 else {
+                    return nil
+                }
+                return (indexPath, attributes.frame)
+            }
+            .sorted { lhs, rhs in
+                if abs(lhs.frame.minY - rhs.frame.minY) > 0.5 {
+                    return lhs.frame.minY < rhs.frame.minY
+                }
+                return lhs.frame.minX < rhs.frame.minX
+            }
+            .first
+            .map { candidate in
+                ViewportAnchor(
+                    indexPath: candidate.indexPath,
+                    distanceFromVisibleTop: candidate.frame.minY - visibleTop
+                )
+            }
+    }
+
+    /// 在 inset 变化后恢复先前捕获的视口锚点，避免 UIKit 自动 inset 补偿造成可见内容跳动。
+    func restoreViewportAnchor(_ anchor: ViewportAnchor?, fallbackOffsetY: CGFloat) {
+        isRestoringViewport = true
+        defer { isRestoringViewport = false }
+
+        let targetOffsetY: CGFloat
+        if let anchor,
+           let attributes = collectionView.layoutAttributesForItem(at: anchor.indexPath) {
+            let visibleTop = attributes.frame.minY - anchor.distanceFromVisibleTop
+            targetOffsetY = visibleTop - collectionView.adjustedContentInset.top
+        } else {
+            targetOffsetY = fallbackOffsetY
+        }
+
+        let clampedOffset = CGPoint(
+            x: collectionView.contentOffset.x,
+            y: clampedContentOffsetY(targetOffsetY)
+        )
+        guard abs(collectionView.contentOffset.y - clampedOffset.y) > 0.5 else { return }
+        collectionView.setContentOffset(clampedOffset, animated: false)
+    }
+
+    /// 使用 adjustedContentInset 计算合法滚动边界，兼容系统 TabBar 与自定义底栏同时参与避让。
+    func clampedContentOffsetY(_ offsetY: CGFloat) -> CGFloat {
+        let adjustedInset = collectionView.adjustedContentInset
+        let minimumY = -adjustedInset.top
+        let maximumY = max(
+            minimumY,
+            collectionView.contentSize.height - collectionView.bounds.height + adjustedInset.bottom
+        )
+        return min(max(offsetY, minimumY), maximumY)
+    }
+
+    struct ViewportAnchor {
+        let indexPath: IndexPath
+        let distanceFromVisibleTop: CGFloat
     }
 
     /// 二级列表 grid 模式只让真实书籍多列排列。
@@ -925,6 +1191,11 @@ extension BookshelfBookListCollectionHostView: UICollectionViewDataSource {
 }
 
 extension BookshelfBookListCollectionHostView: UICollectionViewDelegate {
+    /// 用户或系统滚动后刷新稳定锚点，为后续 safe area / inset 变化保留恢复基准。
+    func scrollViewDidScroll(_ scrollView: UIScrollView) {
+        storeViewportAnchorIfPossible(requiresLayout: false)
+    }
+
     func collectionView(_ collectionView: UICollectionView, didSelectItemAt indexPath: IndexPath) {
         collectionView.deselectItem(at: indexPath, animated: true)
         guard let item = item(at: indexPath) else { return }
@@ -1476,7 +1747,7 @@ private struct BookshelfBookListRowView: View {
     }
 }
 
-/// 二级列表编辑态底部栏，先提供 Android 管理动作入口，占位写入会显示保护提示。
+/// 二级列表编辑态底部玻璃栏，提供批量管理动作、破坏性操作入口与写入反馈。
 private struct BookshelfBookListEditBottomBar: View {
     let selectedCount: Int
     let actions: [BookshelfBookListEditAction]
@@ -1486,55 +1757,31 @@ private struct BookshelfBookListEditBottomBar: View {
     let onAction: (BookshelfBookListEditAction) -> Void
 
     var body: some View {
-        VStack(spacing: Spacing.cozy) {
-            HStack(spacing: Spacing.compact) {
-                ForEach(primaryActions) { action in
-                    Button {
-                        onAction(action)
-                    } label: {
-                        actionLabel(action)
-                    }
-                    .buttonStyle(.plain)
-                    .disabled(isBusy)
-                    .accessibilityLabel(action.title)
-                }
+        VStack(spacing: statusText == nil ? Spacing.none : Spacing.tight) {
+            if let statusText {
+                BookshelfGlassEditStatusText(text: statusText)
+            }
 
-                if !secondaryActions.isEmpty {
-                    Menu {
-                        ForEach(secondaryActions) { action in
-                            Button(role: action.isDestructive ? .destructive : nil) {
-                                onAction(action)
-                            } label: {
-                                Label(action.title, systemImage: action.systemImage)
-                            }
-                            .disabled(isBusy)
-                        }
-                    } label: {
-                        actionLabel(.setTag, titleOverride: "更多", iconOverride: "ellipsis.circle", isDestructiveOverride: false)
+            GlassEffectContainer(spacing: Spacing.base) {
+                HStack(spacing: Spacing.base) {
+                    actionCluster
+                        .layoutPriority(1)
+
+                    if !destructiveActions.isEmpty {
+                        destructiveActionControl
                     }
-                    .buttonStyle(.plain)
-                    .disabled(isBusy)
-                    .accessibilityLabel("更多操作")
                 }
             }
-            .padding(.horizontal, Spacing.screenEdge)
-
-            Text(statusText)
-                .font(AppTypography.caption)
-                .foregroundStyle(Color.textSecondary)
-                .frame(maxWidth: .infinity, alignment: .center)
-                .lineLimit(2)
-                .padding(.horizontal, Spacing.screenEdge)
         }
-        .padding(.top, Spacing.base)
-        .padding(.bottom, Spacing.cozy)
-        .background(.regularMaterial)
-        .overlay(alignment: .top) {
-            Divider()
+        .background {
+            GeometryReader { proxy in
+                Color.clear
+                    .preference(key: ImmersiveBottomChromeHeightPreferenceKey.self, value: proxy.size.height)
+            }
         }
     }
 
-    private var statusText: String {
+    private var statusText: String? {
         if let notice, !notice.isEmpty {
             return notice
         }
@@ -1544,42 +1791,113 @@ private struct BookshelfBookListEditBottomBar: View {
         if isLoadingOptions {
             return "正在加载批量编辑选项..."
         }
-        if selectedCount == 0 {
-            return "选择书籍后可批量管理；默认分组支持置顶、组内移动与移出"
-        }
-        return "已选 \(selectedCount) 本，可批量移组、设置标签、来源与阅读状态"
+        return nil
     }
 
     private var isBusy: Bool {
         activeAction != nil || isLoadingOptions
     }
 
-    private var primaryActions: [BookshelfBookListEditAction] {
-        Array(actions.prefix(4))
+    private var nonDestructiveActions: [BookshelfBookListEditAction] {
+        actions.filter { !$0.isDestructive }
     }
 
-    private var secondaryActions: [BookshelfBookListEditAction] {
-        Array(actions.dropFirst(4))
+    private var destructiveActions: [BookshelfBookListEditAction] {
+        actions.filter(\.isDestructive)
     }
 
-    private func actionLabel(
-        _ action: BookshelfBookListEditAction,
-        titleOverride: String? = nil,
-        iconOverride: String? = nil,
-        isDestructiveOverride: Bool? = nil
-    ) -> some View {
-        VStack(spacing: Spacing.compact) {
-            Image(systemName: iconOverride ?? action.systemImage)
-                .font(AppTypography.headline)
-                .fontWeight(.medium)
-            Text(titleOverride ?? action.title)
-                .font(AppTypography.caption2)
-                .lineLimit(1)
+    private var actionCluster: some View {
+        BookshelfGlassEditActionCluster {
+            HStack(spacing: BookshelfGlassEditBarMetrics.itemSpacing) {
+                ForEach(nonDestructiveActions) { action in
+                    Button {
+                        onAction(action)
+                    } label: {
+                        actionLabel(action)
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(!isEnabled(action))
+                    .accessibilityLabel(accessibilityLabel(for: action))
+                }
+            }
         }
-        .foregroundStyle((isDestructiveOverride ?? action.isDestructive) ? Color.feedbackError : Color.textPrimary)
-        .frame(width: 64)
-        .frame(minHeight: 48)
-        .contentShape(Rectangle())
+    }
+
+    @ViewBuilder
+    private var destructiveActionControl: some View {
+        if destructiveActions.count == 1, let action = destructiveActions.first {
+            Button(role: .destructive) {
+                onAction(action)
+            } label: {
+                destructiveActionLabel(isEnabled: isEnabled(action))
+            }
+            .buttonStyle(.plain)
+            .disabled(!isEnabled(action))
+            .frame(
+                width: BookshelfGlassEditBarMetrics.destructiveButtonSize,
+                height: BookshelfGlassEditBarMetrics.destructiveButtonSize
+            )
+            .glassEffect(.regular.interactive(), in: .circle)
+            .accessibilityLabel(accessibilityLabel(for: action))
+        } else {
+            Menu {
+                ForEach(destructiveActions) { action in
+                    Button(role: .destructive) {
+                        onAction(action)
+                    } label: {
+                        Label(action.title, systemImage: action.systemImage)
+                    }
+                    .disabled(!isEnabled(action))
+                }
+            } label: {
+                destructiveActionLabel(isEnabled: hasEnabledDestructiveAction)
+            }
+            .buttonStyle(.plain)
+            .disabled(!hasEnabledDestructiveAction)
+            .frame(
+                width: BookshelfGlassEditBarMetrics.destructiveButtonSize,
+                height: BookshelfGlassEditBarMetrics.destructiveButtonSize
+            )
+            .glassEffect(.regular.interactive(), in: .circle)
+            .accessibilityLabel("删除操作")
+        }
+    }
+
+    private var hasEnabledDestructiveAction: Bool {
+        destructiveActions.contains { isEnabled($0) }
+    }
+
+    private func actionLabel(_ action: BookshelfBookListEditAction) -> some View {
+        BookshelfGlassEditActionLabel(
+            title: action.title,
+            systemImage: action.systemImage,
+            foregroundStyle: foregroundColor(for: action),
+            width: BookshelfGlassEditBarMetrics.bookListActionWidth
+        )
+    }
+
+    private func destructiveActionLabel(isEnabled: Bool) -> some View {
+        ImmersiveBottomChromeIcon(
+            systemName: "trash",
+            foregroundStyle: isEnabled ? Color.feedbackError : Color.feedbackError.opacity(0.55)
+        )
+    }
+
+    private func foregroundColor(for action: BookshelfBookListEditAction) -> Color {
+        if !isEnabled(action) {
+            return Color.textSecondary.opacity(0.55)
+        }
+        return Color.textPrimary
+    }
+
+    private func isEnabled(_ action: BookshelfBookListEditAction) -> Bool {
+        guard !isBusy else { return false }
+        guard action.requiresSelection else { return true }
+        return selectedCount > 0
+    }
+
+    private func accessibilityLabel(for action: BookshelfBookListEditAction) -> String {
+        isEnabled(action) ? action.title : "\(action.title)，当前不可用"
     }
 }
 

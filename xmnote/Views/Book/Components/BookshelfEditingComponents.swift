@@ -1,6 +1,6 @@
 /**
- * [INPUT]: 依赖 BookshelfPendingAction、BookshelfBookListEditAction 与 SwiftUI 按钮、图标、横向滚动、表层渲染、TabBar snapshot 交接和动画能力
- * [OUTPUT]: 对外提供书架编辑态顶部栏、选择标识、底部操作面板、管理模式转场与 TabBar snapshot 恢复交接参数
+ * [INPUT]: 依赖 BookshelfPendingAction、BookshelfBookListEditAction 与 SwiftUI 按钮、图标、横向滚动、ImmersiveBottomChrome、TabBar snapshot 交接和动画能力
+ * [OUTPUT]: 对外提供书架编辑态顶部栏、选择标识、底部浮动玻璃操作栏、管理模式转场与 TabBar snapshot 恢复交接参数
  * [POS]: Book 模块页面私有编辑态组件集合，服务默认书架选择、置顶、移动、横向平铺批量操作与删除入口
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -139,10 +139,94 @@ struct BookshelfSelectionOverlay: View {
     }
 }
 
-/// 默认书架编辑态底部操作面板，承载与 Android 横向工具栏对齐的平铺批量操作入口。
+/// 书架玻璃底栏的局部尺寸令牌，统一默认书架与二级书籍列表的触控密度。
+enum BookshelfGlassEditBarMetrics {
+    static let clusterHeight: CGFloat = 56
+    static let destructiveButtonSize: CGFloat = 56
+    static let actionWidth: CGFloat = 58
+    static let bookListActionWidth: CGFloat = 64
+    static let actionMinHeight: CGFloat = 44
+    static let horizontalPadding: CGFloat = 14
+    static let verticalPadding: CGFloat = 5
+    static let itemSpacing: CGFloat = 10
+    static let iconTextSpacing: CGFloat = 3
+    static let actionIconFont: Font = AppTypography.fixed(
+        baseSize: 15,
+        relativeTo: .caption,
+        weight: .medium
+    )
+}
+
+/// 玻璃底栏状态提示，承接写入中、加载中与操作反馈，不参与常态说明占位。
+struct BookshelfGlassEditStatusText: View {
+    let text: String
+
+    var body: some View {
+        Text(text)
+            .font(AppTypography.caption)
+            .foregroundStyle(Color.textSecondary)
+            .lineLimit(2)
+            .multilineTextAlignment(.center)
+            .padding(.horizontal, Spacing.base)
+            .padding(.vertical, Spacing.tiny)
+            .background(Color.surfaceCard.opacity(0.92), in: Capsule())
+            .accessibilityLabel(text)
+    }
+}
+
+/// 玻璃底栏内的图标加短标题按钮内容，保持批量操作可发现性。
+struct BookshelfGlassEditActionLabel: View {
+    let title: String
+    let systemImage: String
+    let foregroundStyle: Color
+    var width: CGFloat = BookshelfGlassEditBarMetrics.actionWidth
+
+    var body: some View {
+        VStack(spacing: BookshelfGlassEditBarMetrics.iconTextSpacing) {
+            Image(systemName: systemImage)
+                .font(BookshelfGlassEditBarMetrics.actionIconFont)
+
+            Text(title)
+                .font(AppTypography.caption2Medium)
+                .lineLimit(1)
+                .minimumScaleFactor(0.82)
+        }
+        .foregroundStyle(foregroundStyle)
+        .frame(width: width)
+        .frame(minHeight: BookshelfGlassEditBarMetrics.actionMinHeight)
+        .padding(.vertical, BookshelfGlassEditBarMetrics.verticalPadding)
+        .contentShape(Rectangle())
+    }
+}
+
+/// 书架底部玻璃操作组，负责横向滚动内容的胶囊裁切与统一玻璃材质。
+struct BookshelfGlassEditActionCluster<Content: View>: View {
+    private let content: Content
+
+    /// 注入横向排列的批量操作内容；裁切和玻璃材质由组件统一处理。
+    init(@ViewBuilder content: () -> Content) {
+        self.content = content()
+    }
+
+    var body: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            content
+                .padding(.horizontal, BookshelfGlassEditBarMetrics.horizontalPadding)
+                .padding(.vertical, BookshelfGlassEditBarMetrics.verticalPadding)
+        }
+        .scrollBounceBehavior(.basedOnSize, axes: .horizontal)
+        .frame(maxWidth: .infinity)
+        .frame(height: BookshelfGlassEditBarMetrics.clusterHeight)
+        .compositingGroup()
+        .clipShape(Capsule())
+        .contentShape(Capsule())
+        .glassEffect(.regular.interactive(), in: .capsule)
+    }
+}
+
+/// 默认书架编辑态底部浮动操作栏，承载与 Android 横向工具栏对齐的平铺批量操作入口。
 struct BookshelfEditBottomBar: View {
     let selectedCount: Int
-    let bottomSafeAreaInset: CGFloat
     let canPin: Bool
     let canMoveBoundary: Bool
     let canBatchAction: Bool
@@ -157,58 +241,25 @@ struct BookshelfEditBottomBar: View {
 
     var body: some View {
         VStack(spacing: statusText == nil ? Spacing.none : Spacing.tight) {
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: Spacing.base) {
-                    editActionButton(
-                        action: .pin,
-                        icon: "pin",
-                        isEnabled: canPin,
-                        onTap: onPin
-                    )
-
-                    ForEach(actions) { action in
-                        editActionButton(
-                            action: action,
-                            isEnabled: isEnabled(action),
-                            onTap: { onAction(action) }
-                        )
-                    }
-
-                    editActionButton(
-                        action: .delete,
-                        icon: "trash",
-                        isEnabled: canDelete,
-                        onTap: onDelete
-                    )
-                }
-                .padding(.horizontal, Spacing.screenEdge)
-            }
-            .scrollBounceBehavior(.basedOnSize, axes: .horizontal)
-
             if let statusText {
-                Text(statusText)
-                    .font(AppTypography.caption)
-                    .foregroundStyle(Color.textSecondary)
-                    .frame(maxWidth: .infinity, alignment: .center)
-                    .lineLimit(1)
-                    .transition(.opacity)
+                BookshelfGlassEditStatusText(text: statusText)
+            }
+
+            GlassEffectContainer(spacing: Spacing.base) {
+                HStack(spacing: Spacing.base) {
+                    actionCluster
+                        .layoutPriority(1)
+
+                    deleteActionButton
+                }
             }
         }
-        .padding(.top, Spacing.cozy)
-        .padding(.bottom, bottomToolbarPadding)
         .background {
-            Color.surfaceCard
-                .ignoresSafeArea(.container, edges: .bottom)
+            GeometryReader { proxy in
+                Color.clear
+                    .preference(key: ImmersiveBottomChromeHeightPreferenceKey.self, value: proxy.size.height)
+            }
         }
-        .overlay(alignment: .top) {
-            Divider()
-                .overlay(Color.surfaceBorderDefault.opacity(0.65))
-        }
-        .shadow(color: Color.black.opacity(0.08), radius: 10, y: -2)
-    }
-
-    private var bottomToolbarPadding: CGFloat {
-        max(Spacing.cozy, bottomSafeAreaInset - Spacing.section)
     }
 
     private var statusText: String? {
@@ -222,6 +273,44 @@ struct BookshelfEditBottomBar: View {
             return "正在加载选项"
         }
         return nil
+    }
+
+    private var actionCluster: some View {
+        BookshelfGlassEditActionCluster {
+            HStack(spacing: BookshelfGlassEditBarMetrics.itemSpacing) {
+                editActionButton(
+                    action: .pin,
+                    icon: "pin",
+                    isEnabled: canPin,
+                    onTap: onPin
+                )
+
+                ForEach(actions) { action in
+                    editActionButton(
+                        action: action,
+                        isEnabled: isEnabled(action),
+                        onTap: { onAction(action) }
+                    )
+                }
+            }
+        }
+    }
+
+    private var deleteActionButton: some View {
+        Button(role: .destructive, action: onDelete) {
+            ImmersiveBottomChromeIcon(
+                systemName: "trash",
+                foregroundStyle: foregroundColor(for: .delete, isEnabled: canDelete && !isBusy)
+            )
+        }
+        .buttonStyle(.plain)
+        .disabled(!canDelete || isBusy)
+        .frame(
+            width: BookshelfGlassEditBarMetrics.destructiveButtonSize,
+            height: BookshelfGlassEditBarMetrics.destructiveButtonSize
+        )
+        .glassEffect(.regular.interactive(), in: .circle)
+        .accessibilityLabel(canDelete && !isBusy ? "删除" : "删除，当前不可用")
     }
 
     private var isBusy: Bool {
@@ -246,11 +335,11 @@ struct BookshelfEditBottomBar: View {
         onTap: @escaping () -> Void
     ) -> some View {
         Button(action: onTap) {
-            editActionLabel(action: action, icon: icon, isEnabled: isEnabled)
+            editActionLabel(action: action, icon: icon, isEnabled: isEnabled && !isBusy)
         }
         .buttonStyle(.plain)
         .disabled(!isEnabled || isBusy)
-        .accessibilityLabel(isEnabled ? action.title : "\(action.title)，当前不可用")
+        .accessibilityLabel(isEnabled && !isBusy ? action.title : "\(action.title)，当前不可用")
     }
 
     private func editActionButton(
@@ -259,11 +348,11 @@ struct BookshelfEditBottomBar: View {
         onTap: @escaping () -> Void
     ) -> some View {
         Button(action: onTap) {
-            editActionLabel(action: action, isEnabled: isEnabled)
+            editActionLabel(action: action, isEnabled: isEnabled && !isBusy)
         }
         .buttonStyle(.plain)
         .disabled(!isEnabled || isBusy)
-        .accessibilityLabel(isEnabled ? action.title : "\(action.title)，当前不可用")
+        .accessibilityLabel(isEnabled && !isBusy ? action.title : "\(action.title)，当前不可用")
     }
 
     private func editActionLabel(
@@ -271,32 +360,22 @@ struct BookshelfEditBottomBar: View {
         icon: String,
         isEnabled: Bool
     ) -> some View {
-        VStack(spacing: Spacing.compact) {
-            Image(systemName: icon)
-                .font(AppTypography.headline)
-                .fontWeight(.medium)
-            Text(action.title)
-                .font(AppTypography.caption2)
-        }
-        .foregroundStyle(foregroundColor(for: action, isEnabled: isEnabled))
-        .frame(minWidth: 56, minHeight: 48)
-        .contentShape(Rectangle())
+        BookshelfGlassEditActionLabel(
+            title: action.title,
+            systemImage: icon,
+            foregroundStyle: foregroundColor(for: action, isEnabled: isEnabled)
+        )
     }
 
     private func editActionLabel(
         action: BookshelfBookListEditAction,
         isEnabled: Bool
     ) -> some View {
-        VStack(spacing: Spacing.compact) {
-            Image(systemName: action.systemImage)
-                .font(AppTypography.headline)
-                .fontWeight(.medium)
-            Text(action.title)
-                .font(AppTypography.caption2)
-        }
-        .foregroundStyle(foregroundColor(for: action, isEnabled: isEnabled))
-        .frame(minWidth: 56, minHeight: 48)
-        .contentShape(Rectangle())
+        BookshelfGlassEditActionLabel(
+            title: action.title,
+            systemImage: action.systemImage,
+            foregroundStyle: foregroundColor(for: action, isEnabled: isEnabled)
+        )
     }
 
     private func foregroundColor(
