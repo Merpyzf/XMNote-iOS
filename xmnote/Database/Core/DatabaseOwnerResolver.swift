@@ -1,12 +1,12 @@
-import Foundation
-import GRDB
-
 /**
  * [INPUT]: 依赖 GRDB Database 与 UserRecord/各 user_id 业务表，统一解析当前 owner user
  * [OUTPUT]: 对外提供 DatabaseOwnerResolver，供迁移和 Repository 共享当前用户归属逻辑
- * [POS]: Database 层兼容桥梁，负责兼容 Android 单临时用户模型并修复遗留 user_id 脏数据
+ * [POS]: Database/Core 的 owner 解析桥梁，负责兼容 Android 单临时用户模型并修复遗留 user_id 脏数据
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
+
+import Foundation
+import GRDB
 
 /// 统一解析当前数据库 owner，并修复旧库中遗留的无效 user_id。
 enum DatabaseOwnerResolver {
@@ -123,8 +123,8 @@ private extension DatabaseOwnerResolver {
 
         try db.execute(
             sql: """
-                INSERT OR IGNORE INTO source (id, name, source_order, is_hide, created_date, updated_date, last_sync_date, is_deleted)
-                VALUES (?, ?, 0, 0, 0, 0, 0, 0)
+                INSERT OR IGNORE INTO source (id, name, source_order, bookshelf_order, is_hide, created_date, updated_date, last_sync_date, is_deleted)
+                VALUES (?, ?, 0, -1, 0, 0, 0, 0, 0)
                 """,
             arguments: [defaultSourceID, defaultSourceName]
         )

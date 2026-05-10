@@ -1,21 +1,42 @@
 # Database/
 > L2 | 父级: /CLAUDE.md
 
-GRDB 数据层，负责 SQLite 持久化、Schema 迁移与 Record 类型定义。与 Android Room 完全兼容。
+GRDB 数据层，负责 SQLite 持久化、Schema 迁移与 Record 类型定义。当前以 Android Room v40 schema JSON 作为物理结构合同，保证整库备份/恢复场景下的双端识别能力。
 
-## 顶层成员
+## 目录结构
 
-- `AppDatabase.swift`: DatabasePool 初始化、迁移执行、生命周期管理
-- `AppDatabaseKey.swift`: SwiftUI Environment 注入 Key，提供 `\.appDatabase` 访问
-- `DatabaseMigrator+Schema.swift`: 迁移入口，v38 全量 Schema 创建
-- `DatabaseSchema+Core.swift`: 核心表 Schema（book/note/tag/author 等）
-- `DatabaseSchema+Relation.swift`: 关联表 Schema（tag_note/tag_book/group_book 等）
-- `DatabaseSchema+Content.swift`: 内容表 Schema（review/chapter/image 等）
-- `DatabaseSchema+Reading.swift`: 阅读表 Schema（read_time_record/read_plan 等）
-- `DatabaseSchema+Config.swift`: 配置表 Schema（setting/widget_config/cos_config 等）
-- `DatabaseSchema+Seed.swift`: 初始数据填充（默认阅读状态、默认分组等）
+- `Core/`: 数据库入口、SwiftUI Environment 注入、迁移注册与数据库 owner 解析。
+- `SchemaContract/`: Android Room v40 物理 Schema 合约、诊断工具与 `RoomSchemaV40.json` 原始契约。
+- `Seed/`: 初始数据填充，包括默认用户、来源、阅读状态、书籍、章节、分类与 COS 配置。
+- `RestoreCompatibility/`: 备份恢复前的 Schema 校验、staging 数据整理、默认根数据补齐、墓碑记录生成与外键违规读取。
+- `Records/`: SQLite 表对应的 GRDB Record 定义，包含 35 个实体 Record 与 `BaseRecord`。
 
-## Records/ 子目录（37 个 Record）
+## Core/ 子目录
+
+- `AppDatabase.swift`: DatabasePool 初始化、迁移执行与生命周期管理。
+- `AppDatabaseKey.swift`: SwiftUI Environment 注入 Key，提供 `\.appDatabase` 访问。
+- `DatabaseMigrator+Schema.swift`: 迁移入口，注册 Room v40 对齐的 Schema 创建与后续迁移。
+- `DatabaseOwnerResolver.swift`: 解析当前数据库 owner，统一默认用户与备份恢复场景的归属判断。
+
+## SchemaContract/ 子目录
+
+- `RoomCanonicalSchemaV40.swift`: iOS 端创建 Android Room v40 等价物理 Schema 的唯一契约入口。
+- `RoomSchemaDiagnostic.swift`: 对比当前 SQLite Schema 与 Room v40 JSON，输出表、索引、外键与 identityHash 差异。
+- `RoomSchemaV40.json`: Android Room 导出的 v40 Schema 原始文件，用于双端数据库对齐校验。
+
+## Seed/ 子目录
+
+- `DatabaseSchema+Seed.swift`: 初始数据填充，保证默认根数据与 Android Room 侧一致。
+
+## RestoreCompatibility/ 子目录
+
+- `BackupSchemaValidator.swift`: 备份恢复前校验 staging 数据库 Schema，并触发受限兼容整理。
+- `DefaultRootSeeder.swift`: 补齐备份数据缺失的默认根记录。
+- `ForeignKeyViolationReader.swift`: 读取 SQLite 外键违规信息，为恢复兼容修复提供定位数据。
+- `StagingIntegrityCanonicalizer.swift`: 在导入正式库前修正 staging 数据的引用完整性。
+- `TombstoneFactory.swift`: 为软删除语义生成兼容的墓碑记录。
+
+## Records/ 子目录（35 个实体 Record + BaseRecord）
 
 每个 Record 对应一张 SQLite 表，遵循 `Codable + FetchableRecord + PersistableRecord` 协议。
 

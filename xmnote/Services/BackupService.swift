@@ -219,6 +219,7 @@ extension BackupArchiveService {
         }
 
         try verifyDatabaseVersion(at: extractedDatabaseURL.path)
+        try BackupSchemaValidator.prepareForRestore(at: extractedDatabaseURL.path)
 
         let resourceValues = try archiveURL.resourceValues(forKeys: [.contentModificationDateKey, .fileSizeKey])
         let metadata = Self.parseLocalArchiveMetadata(
@@ -293,6 +294,7 @@ extension BackupArchiveService {
         }
 
         try verifyDatabaseVersion(at: extractedDatabaseURL.path)
+        try BackupSchemaValidator.prepareForRestore(at: extractedDatabaseURL.path)
 
         progress?(.replacing)
         let databasePath = database.databasePath

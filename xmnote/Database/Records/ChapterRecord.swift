@@ -45,3 +45,23 @@ nonisolated struct ChapterRecord: BaseRecord {
         id = inserted.rowID
     }
 }
+
+extension ChapterRecord {
+    /// 从 Room canonical 表解码章节记录；Android 允许部分文本列为 NULL，进入 iOS 业务模型前统一映射为空字符串。
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(
+            id: try container.decodeIfPresent(Int64.self, forKey: .id),
+            bookId: try container.decodeIfPresent(Int64.self, forKey: .bookId) ?? 0,
+            parentId: try container.decodeIfPresent(Int64.self, forKey: .parentId) ?? 0,
+            title: try container.decodeStringOrEmpty(forKey: .title),
+            remark: try container.decodeStringOrEmpty(forKey: .remark),
+            chapterOrder: try container.decodeIfPresent(Int64.self, forKey: .chapterOrder) ?? 0,
+            isImport: try container.decodeIfPresent(Int64.self, forKey: .isImport) ?? 0,
+            createdDate: try container.decodeIfPresent(Int64.self, forKey: .createdDate) ?? 0,
+            updatedDate: try container.decodeIfPresent(Int64.self, forKey: .updatedDate) ?? 0,
+            lastSyncDate: try container.decodeIfPresent(Int64.self, forKey: .lastSyncDate) ?? 0,
+            isDeleted: try container.decodeIfPresent(Int64.self, forKey: .isDeleted) ?? 0
+        )
+    }
+}

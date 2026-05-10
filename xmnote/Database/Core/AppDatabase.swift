@@ -1,7 +1,7 @@
 /**
  * [INPUT]: 依赖 GRDB 的 DatabasePool/DatabaseMigrator 提供持久化能力
  * [OUTPUT]: 对外提供 AppDatabase 结构体，封装数据库连接池与迁移
- * [POS]: Database 模块入口，被 AppDatabaseKey 通过 Environment 注入全局
+ * [POS]: Database/Core 模块入口，被 AppDatabaseKey 通过 Environment 注入全局
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
@@ -58,31 +58,10 @@ extension AppDatabase {
 
         let dbPool = try DatabasePool(path: path, configuration: config)
 
-        // 兼容 Android Room：如果 user_version 已达标但缺少 grdb_migrations 表，
-        // 手动标记迁移为已完成，避免对已有 schema 重复建表
+        // 兼容 Android Room：恢复库达到 canonical v40 但缺少 grdb_migrations 时，
+        // 只补 iOS 内部迁移标记，避免重复建表或写入 seed。
         try dbPool.write { db in
-            // SQL 目的：读取 SQLite user_version，用于判断是否需要兼容性补丁。
-            let userVersion = try Int.fetchOne(db, sql: "PRAGMA user_version") ?? 0
-            let hasGRDBTable = try db.tableExists("grdb_migrations")
-
-            if userVersion >= 38 && !hasGRDBTable {
-                // SQL 目的：补建 GRDB 迁移记录表，避免旧库重复执行全量建表迁移。
-                try db.execute(sql: """
-                    CREATE TABLE grdb_migrations (identifier TEXT NOT NULL PRIMARY KEY)
-                """)
-                // SQL 目的：声明基础 schema 迁移已完成，和 Android 现有数据库版本语义保持一致。
-                try db.execute(sql: """
-                    INSERT INTO grdb_migrations (identifier) VALUES ('v38-schema')
-                """)
-                // SQL 目的：声明基础 seed 迁移已完成，防止重复写入初始化数据。
-                try db.execute(sql: """
-                    INSERT INTO grdb_migrations (identifier) VALUES ('v38-seed')
-                """)
-                // SQL 目的：Android Room 既有库已经使用 NOTE=1 / BOOK=2 的标签语义，跳过 iOS 旧本地标签枚举搬迁。
-                try db.execute(sql: """
-                    INSERT INTO grdb_migrations (identifier) VALUES ('legacy-ios-tag-type-alignment')
-                """)
-            }
+            try markRoomCanonicalMigrationsIfNeeded(db)
         }
 
         // 执行迁移

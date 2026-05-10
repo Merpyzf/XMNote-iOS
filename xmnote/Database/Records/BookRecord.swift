@@ -85,3 +85,47 @@ nonisolated struct BookRecord: BaseRecord {
         id = inserted.rowID
     }
 }
+
+extension BookRecord {
+    /// 从 Room canonical 表解码书籍记录；Android 允许部分文本列为 NULL，进入 iOS 业务模型前统一映射为空字符串。
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(
+            id: try container.decodeIfPresent(Int64.self, forKey: .id),
+            userId: try container.decodeIfPresent(Int64.self, forKey: .userId) ?? 0,
+            doubanId: try container.decodeIfPresent(Int64.self, forKey: .doubanId) ?? 0,
+            name: try container.decodeStringOrEmpty(forKey: .name),
+            rawName: try container.decodeStringOrEmpty(forKey: .rawName),
+            cover: try container.decodeStringOrEmpty(forKey: .cover),
+            author: try container.decodeStringOrEmpty(forKey: .author),
+            authorIntro: try container.decodeStringOrEmpty(forKey: .authorIntro),
+            translator: try container.decodeStringOrEmpty(forKey: .translator),
+            isbn: try container.decodeStringOrEmpty(forKey: .isbn),
+            pubDate: try container.decodeStringOrEmpty(forKey: .pubDate),
+            press: try container.decodeStringOrEmpty(forKey: .press),
+            summary: try container.decodeStringOrEmpty(forKey: .summary),
+            readPosition: try container.decodeIfPresent(Double.self, forKey: .readPosition) ?? 0,
+            totalPosition: try container.decodeIfPresent(Int64.self, forKey: .totalPosition) ?? 0,
+            totalPagination: try container.decodeIfPresent(Int64.self, forKey: .totalPagination) ?? 0,
+            type: try container.decodeIfPresent(Int64.self, forKey: .type) ?? 0,
+            currentPositionUnit: try container.decodeIfPresent(Int64.self, forKey: .currentPositionUnit) ?? 2,
+            positionUnit: try container.decodeIfPresent(Int64.self, forKey: .positionUnit) ?? 2,
+            sourceId: try container.decodeIfPresent(Int64.self, forKey: .sourceId) ?? 1,
+            purchaseDate: try container.decodeIfPresent(Int64.self, forKey: .purchaseDate) ?? 0,
+            price: try container.decodeIfPresent(Double.self, forKey: .price) ?? 0,
+            bookOrder: try container.decodeIfPresent(Int64.self, forKey: .bookOrder) ?? 0,
+            pinned: try container.decodeIfPresent(Int64.self, forKey: .pinned) ?? 0,
+            pinOrder: try container.decodeIfPresent(Int64.self, forKey: .pinOrder) ?? 0,
+            readStatusId: try container.decodeIfPresent(Int64.self, forKey: .readStatusId) ?? 0,
+            readStatusChangedDate: try container.decodeIfPresent(Int64.self, forKey: .readStatusChangedDate) ?? 0,
+            score: try container.decodeIfPresent(Int64.self, forKey: .score) ?? 0,
+            catalog: try container.decodeStringOrEmpty(forKey: .catalog),
+            bookMarkModifiedTime: try container.decodeIfPresent(Int64.self, forKey: .bookMarkModifiedTime) ?? 0,
+            wordCount: try container.decodeIfPresent(Int64.self, forKey: .wordCount),
+            createdDate: try container.decodeIfPresent(Int64.self, forKey: .createdDate) ?? 0,
+            updatedDate: try container.decodeIfPresent(Int64.self, forKey: .updatedDate) ?? 0,
+            lastSyncDate: try container.decodeIfPresent(Int64.self, forKey: .lastSyncDate) ?? 0,
+            isDeleted: try container.decodeIfPresent(Int64.self, forKey: .isDeleted) ?? 0
+        )
+    }
+}

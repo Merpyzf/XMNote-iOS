@@ -41,3 +41,10 @@ extension BaseRecord {
         updatedDate = now
     }
 }
+
+extension KeyedDecodingContainer {
+    /// Room 物理 schema 中部分文本列允许 NULL；Record 边界将其转为空字符串，避免污染业务层默认展示语义。
+    nonisolated func decodeStringOrEmpty(forKey key: Key) throws -> String {
+        try decodeIfPresent(String.self, forKey: key) ?? ""
+    }
+}

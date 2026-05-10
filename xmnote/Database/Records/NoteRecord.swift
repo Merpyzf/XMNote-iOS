@@ -51,3 +51,25 @@ nonisolated struct NoteRecord: BaseRecord {
         id = inserted.rowID
     }
 }
+
+extension NoteRecord {
+    /// 从 Room canonical 表解码书摘记录；Android 允许部分文本列为 NULL，进入 iOS 业务模型前统一映射为空字符串。
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(
+            id: try container.decodeIfPresent(Int64.self, forKey: .id),
+            bookId: try container.decodeIfPresent(Int64.self, forKey: .bookId) ?? 0,
+            chapterId: try container.decodeIfPresent(Int64.self, forKey: .chapterId) ?? 0,
+            content: try container.decodeStringOrEmpty(forKey: .content),
+            idea: try container.decodeStringOrEmpty(forKey: .idea),
+            position: try container.decodeStringOrEmpty(forKey: .position),
+            positionUnit: try container.decodeIfPresent(Int64.self, forKey: .positionUnit) ?? 0,
+            wereadRange: try container.decodeStringOrEmpty(forKey: .wereadRange),
+            includeTime: try container.decodeIfPresent(Int64.self, forKey: .includeTime) ?? 1,
+            createdDate: try container.decodeIfPresent(Int64.self, forKey: .createdDate) ?? 0,
+            updatedDate: try container.decodeIfPresent(Int64.self, forKey: .updatedDate) ?? 0,
+            lastSyncDate: try container.decodeIfPresent(Int64.self, forKey: .lastSyncDate) ?? 0,
+            isDeleted: try container.decodeIfPresent(Int64.self, forKey: .isDeleted) ?? 0
+        )
+    }
+}
