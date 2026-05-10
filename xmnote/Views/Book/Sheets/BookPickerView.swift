@@ -623,10 +623,13 @@ private struct BookPickerLocalBookRow: View {
 
             Spacer(minLength: 0)
 
-            if let indicatorSystemName {
-                Image(systemName: indicatorSystemName)
-                    .font(.system(size: 18, weight: .semibold))
-                    .foregroundStyle(isSelected ? Color.brand : Color.textHint)
+            if showsIndicator {
+                XMSelectionIndicator(
+                    style: indicatorStyle,
+                    isSelected: isSelected,
+                    font: AppTypography.body,
+                    showsUnselectedBase: selectionStyle == .multiple
+                )
             }
         }
         .padding(Spacing.contentEdge)
@@ -635,12 +638,21 @@ private struct BookPickerLocalBookRow: View {
         .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 
-    private var indicatorSystemName: String? {
+    private var indicatorStyle: XMSelectionIndicatorStyle {
         switch selectionStyle {
         case .single:
-            return isSelected ? "largecircle.fill.circle" : nil
+            return .radio
         case .multiple:
-            return isSelected ? "checkmark.circle.fill" : "circle"
+            return .checkbox
+        }
+    }
+
+    private var showsIndicator: Bool {
+        switch selectionStyle {
+        case .single:
+            return isSelected
+        case .multiple:
+            return true
         }
     }
 

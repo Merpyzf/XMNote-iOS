@@ -43,9 +43,11 @@ struct BookSearchResultRow: View {
                 card
 
                 if case .multiple(let isSelected) = accessory {
-                    Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
-                        .font(.system(size: 20, weight: .semibold))
-                        .foregroundStyle(isSelected ? Color.brand : Color.textHint)
+                    XMSelectionIndicator(
+                        style: .checkbox,
+                        isSelected: isSelected,
+                        font: AppTypography.title3
+                    )
                         .padding(.trailing, Spacing.contentEdge)
                         .accessibilityHidden(true)
                 }

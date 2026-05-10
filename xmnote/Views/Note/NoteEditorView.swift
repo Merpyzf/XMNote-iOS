@@ -2251,8 +2251,12 @@ private struct NoteEditorChapterPickerSheet: View {
                             .foregroundStyle(Color.textPrimary)
                         Spacer()
                         if selectedChapterID == 0 {
-                            Image(systemName: "checkmark.circle.fill")
-                                .foregroundStyle(Color.brand)
+                            XMSelectionIndicator(
+                                style: .checkmarkOnly,
+                                isSelected: true,
+                                font: AppTypography.body,
+                                showsUnselectedBase: false
+                            )
                         }
                     }
                 }
@@ -2267,8 +2271,12 @@ private struct NoteEditorChapterPickerSheet: View {
                                 .foregroundStyle(Color.textPrimary)
                             Spacer()
                             if selectedChapterID == chapter.id {
-                                Image(systemName: "checkmark.circle.fill")
-                                    .foregroundStyle(Color.brand)
+                                XMSelectionIndicator(
+                                    style: .checkmarkOnly,
+                                    isSelected: true,
+                                    font: AppTypography.body,
+                                    showsUnselectedBase: false
+                                )
                             }
                         }
                     }
@@ -2322,8 +2330,12 @@ private struct NoteEditorTagPickerSheet: View {
                                     .foregroundStyle(Color.textPrimary)
                                 Spacer()
                                 if selectedTags.contains(where: { $0.id == tag.id }) {
-                                    Image(systemName: "checkmark.circle.fill")
-                                        .foregroundStyle(Color.brand)
+                                    XMSelectionIndicator(
+                                        style: .checkmarkOnly,
+                                        isSelected: true,
+                                        font: AppTypography.body,
+                                        showsUnselectedBase: false
+                                    )
                                 }
                             }
                         }

@@ -379,9 +379,11 @@ private struct BookshelfBatchOptionRow: View {
 
             Spacer(minLength: Spacing.compact)
 
-            Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
-                .font(AppTypography.body)
-                .foregroundStyle(isSelected ? Color.brand : Color.textHint)
+            XMSelectionIndicator(
+                style: .checkbox,
+                isSelected: isSelected,
+                font: AppTypography.body
+            )
         }
         .contentShape(Rectangle())
         .accessibilityElement(children: .combine)

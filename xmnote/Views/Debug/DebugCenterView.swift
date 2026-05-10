@@ -2,7 +2,7 @@
 import SwiftUI
 
 /**
- * [INPUT]: 依赖 RichTextTestView、HeatmapTestView、SystemAlertTestView、BookSelectionTestView、BookReorderSandboxTestView、ImageLoadingTestView、WebHTMLFetchTestView、CameraTextCaptureTestView、BaiduOCRTestView、JXPhotoBrowserTestView、ReadCalendarCoverStackTestView、BookCoverStyleTestView、BookCoverProgressBarTestView、BookCoverBadgeEffectTestView、SystemColorsTestView、TimelineCardsTestView、TimelineCalendarHorizonTestView 作为导航目的地
+ * [INPUT]: 依赖 RichTextTestView、HeatmapTestView、SystemAlertTestView、BookSelectionTestView、SelectionMotionTestView、BookReorderSandboxTestView、ImageLoadingTestView、WebHTMLFetchTestView、CameraTextCaptureTestView、BaiduOCRTestView、JXPhotoBrowserTestView、ReadCalendarCoverStackTestView、BookCoverStyleTestView、BookCoverProgressBarTestView、BookCoverBadgeEffectTestView、SystemColorsTestView、TimelineCardsTestView、TimelineCalendarHorizonTestView 作为导航目的地
  * [OUTPUT]: 对外提供 DebugCenterView（测试中心列表页）
  * [POS]: Debug 测试入口页，集中展示所有控件测试项，由 PersonalView 跳转进入
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -44,6 +44,12 @@ struct DebugCenterView: View {
             title: "书籍选择",
             subtitle: "Android 20 个选书场景在 iOS 统一 BookPicker 中的覆盖与消费验证",
             destination: AnyView(BookSelectionTestView())
+        ),
+        DebugItem(
+            icon: "checkmark.circle",
+            title: "选择动效",
+            subtitle: "SF Symbols 绘制出现/消失与自定义选择反馈验证",
+            destination: AnyView(SelectionMotionTestView())
         ),
         DebugItem(
             icon: "square.grid.3x3",

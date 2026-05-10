@@ -127,14 +127,11 @@ struct BookshelfSelectionOverlay: View {
     let isSelected: Bool
 
     var body: some View {
-        Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
-            .font(AppTypography.title3)
-            .fontWeight(isSelected ? .semibold : .medium)
-            .symbolRenderingMode(.palette)
-            .foregroundStyle(
-                isSelected ? Color.white : Color.surfaceBorderDefault.opacity(0.62),
-                isSelected ? Color.brand : Color.surfaceCard.opacity(0.70)
-            )
+        XMSelectionIndicator(
+            style: .checkbox,
+            isSelected: isSelected,
+            font: AppTypography.title3
+        )
             .background(Color.surfaceCard.opacity(isSelected ? 0.90 : 0.48), in: Circle())
             .shadow(color: Color.black.opacity(isSelected ? 0.12 : 0.04), radius: isSelected ? 3 : 2, y: 1)
             .padding(Spacing.half)

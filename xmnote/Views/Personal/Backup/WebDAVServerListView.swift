@@ -105,8 +105,12 @@ private extension WebDAVServerListContentView {
                 }
                 Spacer()
                 if server.isUsing == 1 {
-                    Image(systemName: "checkmark.circle.fill")
-                        .foregroundStyle(Color.brand)
+                    XMSelectionIndicator(
+                        style: .checkmarkOnly,
+                        isSelected: true,
+                        font: AppTypography.body,
+                        showsUnselectedBase: false
+                    )
                 }
             }
         }
