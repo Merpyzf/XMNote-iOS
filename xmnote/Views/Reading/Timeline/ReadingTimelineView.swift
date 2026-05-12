@@ -1454,16 +1454,10 @@ private struct TimelineCategoryFilterMenu: View {
 
     var body: some View {
         Menu {
-            ForEach(TimelineEventCategory.allCases) { category in
-                Button {
-                    onCategorySelected(category)
-                } label: {
-                    if category == selectedCategory {
-                        Label(category.rawValue, systemImage: "checkmark")
-                            .foregroundStyle(.primary)
-                    } else {
-                        Text(category.rawValue)
-                    }
+            Picker("分类", selection: selectedCategoryBinding) {
+                ForEach(TimelineEventCategory.allCases) { category in
+                    Text(category.rawValue)
+                        .tag(category)
                 }
             }
         } label: {
@@ -1482,8 +1476,18 @@ private struct TimelineCategoryFilterMenu: View {
             .frame(minWidth: TimelineFilterHostStyle.controlWidth)
             .contentShape(Rectangle())
         }
-        .tint(nil)
+        .xmMenuNeutralTint()
         .buttonStyle(.plain)
+    }
+
+    var selectedCategoryBinding: Binding<TimelineEventCategory> {
+        Binding(
+            get: { selectedCategory },
+            set: { newValue in
+                guard newValue != selectedCategory else { return }
+                onCategorySelected(newValue)
+            }
+        )
     }
 }
 

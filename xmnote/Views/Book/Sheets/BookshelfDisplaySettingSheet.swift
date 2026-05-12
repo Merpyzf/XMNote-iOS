@@ -407,17 +407,17 @@ private struct BookshelfSettingsValueMenuRow<Option: Hashable>: View {
             Spacer(minLength: Spacing.base)
 
             Menu {
-                ForEach(options, id: \.self) { option in
-                    Button {
-                        onSelect(option)
-                    } label: {
+                Picker(title, selection: selectionBinding) {
+                    ForEach(options, id: \.self) { option in
                         menuItemLabel(for: option)
+                            .tag(option)
                     }
                 }
             } label: {
                 valueControl
             }
             .buttonStyle(.plain)
+            .xmMenuNeutralTint()
             .accessibilityLabel("\(title)，当前\(value)")
             .accessibilityHint("打开选项菜单")
         }
@@ -452,12 +452,19 @@ private struct BookshelfSettingsValueMenuRow<Option: Hashable>: View {
         reduceMotion ? nil : .smooth(duration: 0.13)
     }
 
+    private var selectionBinding: Binding<Option> {
+        Binding(
+            get: { selection },
+            set: { newValue in
+                guard newValue != selection else { return }
+                onSelect(newValue)
+            }
+        )
+    }
+
     @ViewBuilder
     private func menuItemLabel(for option: Option) -> some View {
-        if option == selection {
-            Label(optionTitle(option), systemImage: "checkmark")
-                .foregroundStyle(Color.brand)
-        } else if let image = optionImage(option) {
+        if let image = optionImage(option) {
             Label(optionTitle(option), systemImage: image)
         } else {
             Text(optionTitle(option))

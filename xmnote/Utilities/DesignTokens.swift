@@ -5,7 +5,7 @@
 //  Created by 王珂 on 2026/2/10.
 //
 //  [INPUT]: 无外部依赖，仅依赖 SwiftUI 框架
-//  [OUTPUT]: Color 语义扩展（含阅读日历主题/事件条 pending 态/月总结图标渐变语义、Dialog 表层语义）、Spacing / CornerRadius / CardStyle 常量、Color(hex:) / Color(light:dark:) / Color(rgbaHex:) 构造器
+//  [OUTPUT]: Color 语义扩展（含阅读日历主题/事件条 pending 态/月总结图标渐变语义、菜单前景语义、Dialog 表层语义）、Spacing / CornerRadius / CardStyle 常量、Color(hex:) / Color(light:dark:) / Color(rgbaHex:) 构造器
 //  [POS]: Utilities 模块的设计令牌中枢，全局 UI 一致性的单一真相源
 //  [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
 
@@ -93,6 +93,10 @@ extension Color {
                                       dark: Color(hex: 0x8C929B))
     /// 图标容器背景，承接未选中图标按钮与弱强调控件。
     static let iconBgShape = controlFillSecondary
+    /// 普通菜单项前景，隔离根级品牌 tint，承接非危险、非主操作菜单项。
+    static let menuActionForeground = iconPrimary
+    /// 选中菜单项前景：保留业务图标并在尾部 checkmark 标注状态，颜色保持中性避免抢占品牌主语义。
+    static let menuSelectedForeground = iconPrimary
 }
 
 // MARK: - Border & Divider

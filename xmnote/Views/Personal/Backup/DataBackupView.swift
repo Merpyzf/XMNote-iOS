@@ -292,16 +292,10 @@ private extension DataBackupContentView {
 
     var providerSelectionMenu: some View {
         Menu {
-            ForEach([CloudBackupProvider.webdav, .aliyunDrive]) { provider in
-                Button {
-                    Task { await viewModel.selectProvider(provider) }
-                } label: {
-                    if provider == viewModel.selectedProvider {
-                        Label(provider.displayName, systemImage: "checkmark")
-                            .foregroundStyle(.primary)
-                    } else {
-                        Text(provider.displayName)
-                    }
+            Picker("备份方式", selection: selectedProviderBinding) {
+                ForEach([CloudBackupProvider.webdav, .aliyunDrive]) { provider in
+                    Text(provider.displayName)
+                        .tag(provider)
                 }
             }
         } label: {
@@ -326,11 +320,21 @@ private extension DataBackupContentView {
             .frame(minHeight: 44, alignment: .trailing)
             .contentShape(Rectangle())
         }
-        .tint(nil)
+        .xmMenuNeutralTint()
         .buttonStyle(.plain)
         .disabled(viewModel.isBusy)
         .accessibilityLabel("云备份方式")
         .accessibilityValue(viewModel.selectedProvider.displayName)
+    }
+
+    var selectedProviderBinding: Binding<CloudBackupProvider> {
+        Binding(
+            get: { viewModel.selectedProvider },
+            set: { newValue in
+                guard newValue != viewModel.selectedProvider else { return }
+                Task { await viewModel.selectProvider(newValue) }
+            }
+        )
     }
 
     @ViewBuilder
