@@ -144,27 +144,6 @@ struct PendingCapabilityPresentation: Identifiable {
     var message: String { capability.message }
 }
 
-/// 通用内容查看底部多级动作菜单身份枚举。
-enum ContentViewerActionMenu: Identifiable {
-    case noteTag
-    case noteShare
-    case noteAPISend
-    case noteAI
-
-    var id: String {
-        switch self {
-        case .noteTag:
-            "noteTag"
-        case .noteShare:
-            "noteShare"
-        case .noteAPISend:
-            "noteAPISend"
-        case .noteAI:
-            "noteAI"
-        }
-    }
-}
-
 /// 标签查看弹层，统一承接书摘标签只读浏览体验。
 struct ContentViewerTagSheet: View {
     let tags: [String]

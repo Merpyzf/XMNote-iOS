@@ -1,5 +1,5 @@
 /**
- * [INPUT]: 依赖 xmnote/Utilities/DesignTokens.swift 的品牌色与边框令牌，依赖 topBarGlassButtonStyle 样式扩展
+ * [INPUT]: 依赖 xmnote/Utilities/DesignTokens.swift 的品牌色与边框令牌，依赖 XMMenuLabel 与 topBarGlassButtonStyle 样式扩展
  * [OUTPUT]: 对外提供 AddMenuCircleButton 顶部添加菜单组件
  * [POS]: UIComponents/TopBar 的业务操作入口组件，被主页面顶部导航栏复用
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -30,12 +30,10 @@ struct AddMenuCircleButton: View {
     var body: some View {
         Menu {
             Button(action: onAddBook) {
-                Label("添加书籍", systemImage: "book.badge.plus")
-                    .foregroundStyle(.primary)
+                XMMenuLabel("添加书籍", systemImage: "book.badge.plus")
             }
             Button(action: onAddNote) {
-                Label("添加书摘", systemImage: "square.and.pencil")
-                    .foregroundStyle(.primary)
+                XMMenuLabel("添加书摘", systemImage: "square.and.pencil")
             }
             #if DEBUG
             if let onOpenDebugCenter {
@@ -43,8 +41,7 @@ struct AddMenuCircleButton: View {
                 Button {
                     onOpenDebugCenter()
                 } label: {
-                    Label("测试中心", systemImage: "hammer")
-                        .foregroundStyle(.primary)
+                    XMMenuLabel("测试中心", systemImage: "hammer")
                 }
             }
             #endif
@@ -66,7 +63,7 @@ struct AddMenuCircleButton: View {
                     .contentShape(Circle())
             }
         }
-        .tint(nil)
+        .xmMenuNeutralTint()
         .topBarGlassButtonStyle(usesGlassStyle)
         .accessibilityLabel("添加")
     }

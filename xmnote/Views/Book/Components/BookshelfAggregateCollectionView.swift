@@ -421,7 +421,7 @@ private final class BookshelfAggregateCollectionCell: UICollectionViewCell {
                         Button {
                             onContextAction(.edit, group)
                         } label: {
-                            Label("编辑", systemImage: "pencil")
+                            XMMenuLabel("编辑", systemImage: "pencil")
                         }
 
                         Button(role: .destructive) {
@@ -430,6 +430,7 @@ private final class BookshelfAggregateCollectionCell: UICollectionViewCell {
                             Label("删除", systemImage: "trash")
                         }
                     }
+                    .xmMenuNeutralTint()
             } else {
                 BookshelfAggregateCardView(group: group)
             }

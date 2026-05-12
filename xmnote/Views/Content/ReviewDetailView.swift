@@ -118,12 +118,16 @@ private struct ReviewDetailLoadedView: View {
                 }
 
                 Menu {
-                    Button("复制") {
+                    Button {
                         UIPasteboard.general.string = copyText(from: detail)
+                    } label: {
+                        XMMenuLabel("复制", systemImage: "doc.on.doc")
                     }
                 } label: {
                     Image(systemName: "ellipsis.circle")
+                        .foregroundStyle(Color.iconSecondary)
                 }
+                .xmMenuNeutralTint()
             }
         }
     }

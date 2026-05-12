@@ -504,22 +504,19 @@ struct BookSearchView: View {
             Button {
                 auxiliaryDestination = .scan
             } label: {
-                Label("扫码录入", systemImage: "barcode.viewfinder")
-                    .foregroundStyle(.primary)
+                XMMenuLabel("扫码录入", systemImage: "barcode.viewfinder")
             }
 
             Button {
                 navigationSeed = .manual
             } label: {
-                Label("手动添加", systemImage: "square.and.pencil")
-                    .foregroundStyle(.primary)
+                XMMenuLabel("手动添加", systemImage: "square.and.pencil")
             }
 
             Button {
                 auxiliaryDestination = .settings
             } label: {
-                Label("设置", systemImage: "slider.horizontal.3")
-                    .foregroundStyle(.primary)
+                XMMenuLabel("设置", systemImage: "slider.horizontal.3")
             }
         } label: {
             Image(systemName: "ellipsis")
@@ -528,7 +525,7 @@ struct BookSearchView: View {
                 .frame(width: 24, height: 24)
                 .contentShape(Rectangle())
         }
-        .tint(nil)
+        .xmMenuNeutralTint()
         .accessibilityLabel("更多操作")
     }
 

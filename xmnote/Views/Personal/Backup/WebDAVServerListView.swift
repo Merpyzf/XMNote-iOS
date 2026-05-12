@@ -61,7 +61,6 @@ private struct WebDAVServerListContentView: View {
                         } label: {
                             Label("编辑", systemImage: "pencil")
                         }
-                        .tint(.orange)
                     }
             }
         }

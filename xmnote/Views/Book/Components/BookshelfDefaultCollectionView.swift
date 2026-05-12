@@ -1065,6 +1065,11 @@ private struct BookshelfDefaultCollectionCellContent: View {
 
     var body: some View {
         itemLabel
+            .frame(
+                maxWidth: .infinity,
+                maxHeight: layoutMode == .grid ? .infinity : nil,
+                alignment: .topLeading
+            )
             .modifier(BookshelfDefaultCollectionSelectionModifier(
                 isEditing: isEditing,
                 isSelected: isSelected
@@ -1072,6 +1077,7 @@ private struct BookshelfDefaultCollectionCellContent: View {
             .contextMenu {
                 contextMenu
             }
+            .xmMenuNeutralTint()
             .accessibilityElement(children: .combine)
             .accessibilityLabel(accessibilityLabel)
             .accessibilityAddTraits(.isButton)
@@ -1112,7 +1118,7 @@ private struct BookshelfDefaultCollectionCellContent: View {
             Button {
                 onContextAction(.addNote, item.id)
             } label: {
-                Label("添加笔记", systemImage: "square.and.pencil")
+                XMMenuLabel("添加笔记", systemImage: "square.and.pencil")
             }
 
             pinMenuButton
@@ -1120,25 +1126,25 @@ private struct BookshelfDefaultCollectionCellContent: View {
             Button {
                 onContextAction(.editBook, item.id)
             } label: {
-                Label("编辑书籍", systemImage: "pencil")
+                XMMenuLabel("编辑书籍", systemImage: "pencil")
             }
 
             Button {
                 onContextAction(.showReadingDetail, item.id)
             } label: {
-                Label("阅读详情", systemImage: "chart.bar.doc.horizontal")
+                XMMenuLabel("阅读详情", systemImage: "chart.bar.doc.horizontal")
             }
 
             Button {
                 onContextAction(.startReadTiming, item.id)
             } label: {
-                Label("开始计时", systemImage: "timer")
+                XMMenuLabel("开始计时", systemImage: "timer")
             }
 
             Button {
                 onContextAction(.organizeBooks, item.id)
             } label: {
-                Label("整理书籍", systemImage: "square.grid.2x2")
+                XMMenuLabel("整理书籍", systemImage: "square.grid.2x2")
             }
 
             Button(role: .destructive) {
@@ -1153,7 +1159,7 @@ private struct BookshelfDefaultCollectionCellContent: View {
             Button {
                 onContextAction(.organizeBooks, item.id)
             } label: {
-                Label("整理书籍", systemImage: "square.grid.2x2")
+                XMMenuLabel("整理书籍", systemImage: "square.grid.2x2")
             }
 
             Button(role: .destructive) {
@@ -1168,20 +1174,20 @@ private struct BookshelfDefaultCollectionCellContent: View {
     @ViewBuilder
     private var pinMenuButton: some View {
         if item.pinned {
-            Button {
-                onContextAction(.unpin, item.id)
-            } label: {
-                Label("取消置顶", systemImage: "pin.slash")
+                Button {
+                    onContextAction(.unpin, item.id)
+                } label: {
+                    XMMenuLabel("取消置顶", systemImage: "pin.slash")
+                }
+                .disabled(activeWriteAction != nil)
+            } else {
+                Button {
+                    onContextAction(.pin, item.id)
+                } label: {
+                    XMMenuLabel("置顶", systemImage: "pin")
+                }
+                .disabled(activeWriteAction != nil)
             }
-            .disabled(activeWriteAction != nil)
-        } else {
-            Button {
-                onContextAction(.pin, item.id)
-            } label: {
-                Label("置顶", systemImage: "pin")
-            }
-            .disabled(activeWriteAction != nil)
-        }
     }
 
     private var accessibilityLabel: String {

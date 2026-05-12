@@ -6,8 +6,8 @@
 //
 
 /**
- * [INPUT]: 依赖 RepositoryContainer 注入仓储，依赖 BookViewModel 驱动书架浏览、编辑态选择与批量操作，依赖本地 chrome 阶段、固定顶部 chrome 高度、底部浮动 ornament 与外层 TabBar snapshot 回调稳定内容布局
- * [OUTPUT]: 对外提供 BookContainerView 与 BookSubTab 枚举，承载书架顶部 chrome、TabBar 协调、底部玻璃编辑工具栏、批量 Sheet、删除确认与 snapshot 恢复交接通知
+ * [INPUT]: 依赖 RepositoryContainer 注入仓储，依赖 BookViewModel 驱动书架浏览、编辑态选择与批量操作，依赖本地 chrome 阶段、固定顶部 chrome 高度与底部浮动 ornament 稳定内容布局
+ * [OUTPUT]: 对外提供 BookContainerView 与 BookSubTab 枚举，承载书架顶部 chrome、TabBar 显隐协调、底部玻璃编辑工具栏、批量 Sheet 与删除确认
  * [POS]: Book 模块容器壳层，承载书籍页与书架管理模式编排
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -47,11 +47,11 @@ private enum BookshelfChromePhase: Equatable {
     case exitingEdit
 
     var hidesTabBar: Bool {
-        self == .editing || self == .exitingEdit
+        self == .enteringEdit || self == .editing || self == .exitingEdit
     }
 
     var showsEditHeader: Bool {
-        self == .enteringEdit || self == .editing
+        self == .enteringEdit || self == .editing || self == .exitingEdit
     }
 
     var showsEditBottomBar: Bool {
@@ -91,7 +91,6 @@ struct BookContainerView: View {
     let onOpenAuthorManagement: () -> Void
     let onOpenPressManagement: () -> Void
     let onOpenGuide: () -> Void
-    let onTabBarSnapshotHandoff: (BookshelfTabBarSnapshotHandoffEvent) -> Void
 
     /// 注入书籍页所需操作与路由回调，连接页内 chrome 与外层导航入口。
     init(
@@ -104,8 +103,7 @@ struct BookContainerView: View {
         onOpenSourceManagement: @escaping () -> Void = {},
         onOpenAuthorManagement: @escaping () -> Void = {},
         onOpenPressManagement: @escaping () -> Void = {},
-        onOpenGuide: @escaping () -> Void = {},
-        onTabBarSnapshotHandoff: @escaping (BookshelfTabBarSnapshotHandoffEvent) -> Void = { _ in }
+        onOpenGuide: @escaping () -> Void = {}
     ) {
         self.onAddBook = onAddBook
         self.onAddNote = onAddNote
@@ -117,7 +115,6 @@ struct BookContainerView: View {
         self.onOpenAuthorManagement = onOpenAuthorManagement
         self.onOpenPressManagement = onOpenPressManagement
         self.onOpenGuide = onOpenGuide
-        self.onTabBarSnapshotHandoff = onTabBarSnapshotHandoff
     }
 
     var body: some View {
@@ -135,8 +132,7 @@ struct BookContainerView: View {
                     onOpenSourceManagement: onOpenSourceManagement,
                     onOpenAuthorManagement: onOpenAuthorManagement,
                     onOpenPressManagement: onOpenPressManagement,
-                    onOpenGuide: onOpenGuide,
-                    onTabBarSnapshotHandoff: onTabBarSnapshotHandoff
+                    onOpenGuide: onOpenGuide
                 )
             } else {
                 Color.clear
@@ -188,7 +184,6 @@ private struct BookContentView: View {
     let onOpenAuthorManagement: () -> Void
     let onOpenPressManagement: () -> Void
     let onOpenGuide: () -> Void
-    let onTabBarSnapshotHandoff: (BookshelfTabBarSnapshotHandoffEvent) -> Void
 
     var body: some View {
         ZStack(alignment: .top) {
@@ -301,7 +296,7 @@ private struct BookContentView: View {
                         editBottomBar
                     }
                     .preference(key: BookshelfEditBottomBarHeightPreferenceKey.self, value: metrics.readableInset)
-                    .transition(BookshelfManagementMotion.bottomPanelTransition(reduceMotion: reduceMotion))
+                    .transition(BookshelfManagementMotion.editBarRevealTransition(reduceMotion: reduceMotion))
                 } else {
                     Color.clear
                         .preference(key: BookshelfEditBottomBarHeightPreferenceKey.self, value: metrics.readableInset)
@@ -434,19 +429,30 @@ private struct BookContentView: View {
     /// - Note: 所有 SwiftUI 状态都在 MainActor 上修改；延迟任务会被后续进入/退出请求取消，避免旧阶段覆盖新阶段。
     private func enterEditingWithChoreography(initialSelection: BookshelfItemID? = nil) {
         guard selectedSubTab == .books, viewModel.canEditCurrentDimension else {
-            onTabBarSnapshotHandoff(.hideSnapshot)
             return
         }
         chromeTransitionTask?.cancel()
         isEditingChoreographyActive = true
-        onTabBarSnapshotHandoff(.prepareSnapshot)
         frozenTopChromeHeight = expectedTopChromeHeight
 
+        withAnimation(BookshelfManagementMotion.modeAnimation(reduceMotion: reduceMotion)) {
+            chromePhase = .enteringEdit
+            viewModel.enterEditing(initialSelection: initialSelection)
+        }
+
+        guard viewModel.isEditing else {
+            chromePhase = .normal
+            frozenTopChromeHeight = nil
+            releaseEditBottomBarSpace()
+            isEditingChoreographyActive = false
+            chromeTransitionTask = nil
+            return
+        }
+
         chromeTransitionTask = Task { @MainActor in
-            try? await Task.sleep(for: BookshelfManagementMotion.editEntryPreparationDelay(reduceMotion: reduceMotion))
+            try? await Task.sleep(for: BookshelfManagementMotion.editBarRevealDelay(reduceMotion: reduceMotion))
             guard !Task.isCancelled else { return }
-            guard selectedSubTab == .books, viewModel.canEditCurrentDimension else {
-                onTabBarSnapshotHandoff(.hideSnapshot)
+            guard selectedSubTab == .books, viewModel.isEditing else {
                 chromePhase = .normal
                 frozenTopChromeHeight = nil
                 releaseEditBottomBarSpace()
@@ -454,24 +460,7 @@ private struct BookContentView: View {
                 chromeTransitionTask = nil
                 return
             }
-
-            withAnimation(BookshelfManagementMotion.modeAnimation(reduceMotion: reduceMotion)) {
-                chromePhase = .enteringEdit
-                viewModel.enterEditing(initialSelection: initialSelection)
-            }
-
-            guard viewModel.isEditing else {
-                chromePhase = .normal
-                frozenTopChromeHeight = nil
-                releaseEditBottomBarSpace()
-                isEditingChoreographyActive = false
-                chromeTransitionTask = nil
-                return
-            }
-
-            try? await Task.sleep(for: BookshelfManagementMotion.editPanelDelay(reduceMotion: reduceMotion))
-            guard !Task.isCancelled else { return }
-            withAnimation(BookshelfManagementMotion.panelAnimation(reduceMotion: reduceMotion)) {
+            withAnimation(BookshelfManagementMotion.editBarRevealAnimation(reduceMotion: reduceMotion)) {
                 chromePhase = .editing
             }
             isEditingChoreographyActive = false
@@ -489,34 +478,21 @@ private struct BookContentView: View {
             frozenTopChromeHeight = expectedTopChromeHeight
         }
 
-        withAnimation(BookshelfManagementMotion.panelAnimation(reduceMotion: reduceMotion)) {
+        withAnimation(BookshelfManagementMotion.editBarExitAnimation(reduceMotion: reduceMotion)) {
             chromePhase = .exitingEdit
         }
 
         chromeTransitionTask = Task { @MainActor in
-            try? await Task.sleep(for: BookshelfManagementMotion.tabBarSnapshotShowDelay(reduceMotion: reduceMotion))
-            guard !Task.isCancelled else {
-                onTabBarSnapshotHandoff(.hideSnapshot)
-                return
-            }
-            onTabBarSnapshotHandoff(.showSnapshot)
-            try? await Task.sleep(for: BookshelfManagementMotion.tabBarSnapshotRestoreDelay(reduceMotion: reduceMotion))
-            guard !Task.isCancelled else {
-                onTabBarSnapshotHandoff(.hideSnapshot)
-                return
-            }
-
+            try? await Task.sleep(for: BookshelfManagementMotion.editExitRestoreDelay(reduceMotion: reduceMotion))
+            guard !Task.isCancelled else { return }
             withAnimation(BookshelfManagementMotion.restoreAnimation(reduceMotion: reduceMotion)) {
                 viewModel.exitEditing()
                 chromePhase = .normal
             }
-            try? await Task.sleep(for: BookshelfManagementMotion.tabBarSnapshotRevealHoldDelay(reduceMotion: reduceMotion))
-            guard !Task.isCancelled else {
-                onTabBarSnapshotHandoff(.hideSnapshot)
-                return
-            }
+
+            try? await Task.sleep(for: BookshelfManagementMotion.editBottomInsetReleaseDelay(reduceMotion: reduceMotion))
+            guard !Task.isCancelled else { return }
             releaseEditBottomBarSpace()
-            onTabBarSnapshotHandoff(.hideSnapshot)
             frozenTopChromeHeight = nil
             isEditingChoreographyActive = false
             chromeTransitionTask = nil
@@ -547,7 +523,6 @@ private struct BookContentView: View {
                 viewModel.exitEditing()
             }
             chromeTransitionTask?.cancel()
-            onTabBarSnapshotHandoff(.hideSnapshot)
             chromePhase = .normal
             frozenTopChromeHeight = nil
             releaseEditBottomBarSpace()
@@ -559,7 +534,6 @@ private struct BookContentView: View {
             frozenTopChromeHeight = expectedTopChromeHeight
         } else if !viewModel.isEditing, chromePhase != .normal {
             chromeTransitionTask?.cancel()
-            onTabBarSnapshotHandoff(.hideSnapshot)
             chromePhase = .normal
             frozenTopChromeHeight = nil
             releaseEditBottomBarSpace()
@@ -576,7 +550,6 @@ private struct BookContentView: View {
     private func resetEditingPresentationForContextLoss() {
         chromeTransitionTask?.cancel()
         chromeTransitionTask = nil
-        onTabBarSnapshotHandoff(.hideSnapshot)
         chromePhase = .normal
         frozenTopChromeHeight = nil
         isEditingChoreographyActive = false
@@ -843,35 +816,36 @@ private struct BookshelfBrowsingChrome: View {
         Menu {
             if let searchTitle = selectedDimension.searchMenuTitle {
                 Button(action: onActivateSearch) {
-                    Label(searchTitle, systemImage: "magnifyingglass")
+                    XMMenuLabel(searchTitle, systemImage: "magnifyingglass")
                 }
             }
 
             if selectedDimension == .default {
                 Button(action: onEnterEditing) {
-                    Label("书籍整理", systemImage: "sparkles")
+                    XMMenuLabel("书籍整理", systemImage: "sparkles")
                 }
                 .disabled(!canShowSelectAction || !canEditCurrentDimension)
             }
 
             if let managementAction = selectedDimension.managementAction {
                 Button(action: managementActionHandler(for: managementAction)) {
-                    Label(managementAction.title, systemImage: managementAction.systemImage)
+                    XMMenuLabel(managementAction.title, systemImage: managementAction.systemImage)
                 }
             }
 
             Button(action: onShowDisplaySettings) {
-                Label("显示与排序", systemImage: "slider.horizontal.3")
+                XMMenuLabel("显示与排序", systemImage: "slider.horizontal.3")
             }
 
             Divider()
 
             Button(action: onOpenGuide) {
-                Label("使用说明", systemImage: "questionmark.circle")
+                XMMenuLabel("使用说明", systemImage: "questionmark.circle")
             }
         } label: {
             BookshelfToolMenuButton()
         }
+        .xmMenuNeutralTint()
         .menuOrder(.fixed)
         .accessibilityLabel("书架更多操作")
     }

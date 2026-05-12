@@ -1,45 +1,47 @@
 /**
- * [INPUT]: 依赖 BookshelfPendingAction、BookshelfBookListEditAction 与 SwiftUI 按钮、图标、横向滚动、ImmersiveBottomChrome、TabBar snapshot 交接和动画能力
- * [OUTPUT]: 对外提供书架编辑态顶部栏、选择标识、底部浮动玻璃操作栏、管理模式转场与 TabBar snapshot 恢复交接参数
+ * [INPUT]: 依赖 BookshelfPendingAction、BookshelfBookListEditAction 与 SwiftUI 按钮、图标、横向滚动、ImmersiveBottomChrome 和动画能力
+ * [OUTPUT]: 对外提供书架编辑态顶部栏、选择标识、底部浮动玻璃操作栏与管理模式转场参数
  * [POS]: Book 模块页面私有编辑态组件集合，服务默认书架选择、置顶、移动、横向平铺批量操作与删除入口
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
 import SwiftUI
 
-/// 书架退出管理模式时通知根 Tab 容器进行真实 TabBar 快照交接的事件。
-enum BookshelfTabBarSnapshotHandoffEvent: Equatable {
-    case prepareSnapshot
-    case showSnapshot
-    case hideSnapshot
-}
-
 /// 书架管理模式的统一动效参数，保证顶部 chrome、内容 inset 与底部面板按同一语义节奏切换。
 enum BookshelfManagementMotion {
     static let modeTransition: Animation = .smooth(duration: 0.26)
-    static let panelTransition: Animation = .smooth(duration: 0.24)
+    static let editBarRevealTransitionAnimation: Animation = .smooth(duration: 0.26)
+    static let editBarExitTransitionAnimation: Animation = .smooth(duration: 0.20)
     static let restoreTransition: Animation = .smooth(duration: 0.22)
 
     static func modeAnimation(reduceMotion: Bool) -> Animation {
         reduceMotion ? .easeInOut(duration: 0.16) : modeTransition
     }
 
-    static func panelAnimation(reduceMotion: Bool) -> Animation {
-        reduceMotion ? .easeInOut(duration: 0.14) : panelTransition
-    }
-
     static func restoreAnimation(reduceMotion: Bool) -> Animation {
         reduceMotion ? .easeInOut(duration: 0.14) : restoreTransition
+    }
+
+    static func editBarRevealAnimation(reduceMotion: Bool) -> Animation {
+        reduceMotion ? .easeInOut(duration: 0.12) : editBarRevealTransitionAnimation
+    }
+
+    static func editBarExitAnimation(reduceMotion: Bool) -> Animation {
+        reduceMotion ? .easeInOut(duration: 0.10) : editBarExitTransitionAnimation
     }
 
     static func topChromeTransition(reduceMotion: Bool) -> AnyTransition {
         reduceMotion ? .opacity : .opacity.combined(with: .offset(y: -4))
     }
 
-    static func bottomPanelTransition(reduceMotion: Bool) -> AnyTransition {
+    static func editBarRevealTransition(reduceMotion: Bool) -> AnyTransition {
         reduceMotion ? .opacity : .asymmetric(
-            insertion: .opacity.combined(with: .offset(x: 0, y: 8)),
-            removal: .opacity.combined(with: .offset(x: 0, y: 6))
+            insertion: .opacity
+                .combined(with: .offset(x: 0, y: 44))
+                .combined(with: .scale(scale: 0.985, anchor: .bottom)),
+            removal: .opacity
+                .combined(with: .offset(x: 0, y: 48))
+                .combined(with: .scale(scale: 0.985, anchor: .bottom))
         )
     }
 
@@ -47,37 +49,19 @@ enum BookshelfManagementMotion {
         reduceMotion ? .opacity : .opacity.combined(with: .offset(x: 0, y: -2))
     }
 
-    static func editEntryPreparationDelay(reduceMotion: Bool) -> Duration {
-        reduceMotion ? .milliseconds(0) : .milliseconds(60)
+    /// 系统 TabBar 隐藏后，到编辑工具栏抬起之间的短延迟。
+    static func editBarRevealDelay(reduceMotion: Bool) -> Duration {
+        reduceMotion ? .milliseconds(16) : .milliseconds(70)
     }
 
-    static func editPanelDelay(reduceMotion: Bool) -> Duration {
-        reduceMotion ? .milliseconds(40) : .milliseconds(90)
+    /// 编辑工具栏退出后，到系统 TabBar 恢复之间的延迟。
+    static func editExitRestoreDelay(reduceMotion: Bool) -> Duration {
+        reduceMotion ? .milliseconds(40) : .milliseconds(200)
     }
 
-    /// 退出编辑态后到 TabBar 快照接住底部视觉之间的延迟，让编辑底栏先完成一小段退场。
-    static func tabBarSnapshotShowDelay(reduceMotion: Bool) -> Duration {
-        reduceMotion ? .milliseconds(0) : .milliseconds(75)
-    }
-
-    /// 快照显示后到系统 TabBar 恢复之间的延迟，给底部视觉接力留出呼吸感。
-    static func tabBarSnapshotRestoreDelay(reduceMotion: Bool) -> Duration {
-        reduceMotion ? .milliseconds(40) : .milliseconds(130)
-    }
-
-    /// 系统 TabBar 恢复后保留快照的时间，等真实 TabBar 稳定后再淡出快照层。
-    static func tabBarSnapshotRevealHoldDelay(reduceMotion: Bool) -> Duration {
-        reduceMotion ? .milliseconds(60) : .milliseconds(105)
-    }
-
-    /// UIKit 快照层淡入使用的时长，辅助编辑底栏退场与 TabBar 回归形成短交叠。
-    static func tabBarSnapshotFadeInDuration(reduceMotion: Bool) -> TimeInterval {
-        reduceMotion ? 0.04 : 0.12
-    }
-
-    /// UIKit 快照层淡出使用的时长，保持短促，避免真实 TabBar 与快照重影被感知。
-    static func tabBarSnapshotFadeOutDuration(reduceMotion: Bool) -> TimeInterval {
-        reduceMotion ? 0.06 : 0.10
+    /// 系统 TabBar 恢复后释放编辑底栏滚动避让的延迟。
+    static func editBottomInsetReleaseDelay(reduceMotion: Bool) -> Duration {
+        reduceMotion ? .milliseconds(40) : .milliseconds(100)
     }
 }
 

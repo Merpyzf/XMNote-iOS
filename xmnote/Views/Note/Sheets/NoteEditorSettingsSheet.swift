@@ -50,6 +50,7 @@ struct NoteEditorSettingsSheet: View {
                         }
                     }
                     .pickerStyle(.menu)
+                    .xmMenuNeutralTint()
 
                     if settings.autoDimSeconds > 0 {
                         VStack(alignment: .leading, spacing: Spacing.cozy) {

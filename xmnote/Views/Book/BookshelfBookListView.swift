@@ -1501,6 +1501,7 @@ private struct BookshelfBookListGridItemView: View {
                 contextMenu
             }
         }
+        .xmMenuNeutralTint()
     }
 
     private var cover: some View {
@@ -1536,7 +1537,7 @@ private struct BookshelfBookListGridItemView: View {
         Button {
             onContextAction(.addNote, book.id)
         } label: {
-            Label("添加笔记", systemImage: "square.and.pencil")
+            XMMenuLabel("添加笔记", systemImage: "square.and.pencil")
         }
 
         if supportsContextPin {
@@ -1544,14 +1545,14 @@ private struct BookshelfBookListGridItemView: View {
                 Button {
                     onContextAction(.unpin, book.id)
                 } label: {
-                    Label("取消置顶", systemImage: "pin.slash")
+                    XMMenuLabel("取消置顶", systemImage: "pin.slash")
                 }
                 .disabled(activeWriteAction != nil)
             } else {
                 Button {
                     onContextAction(.pin, book.id)
                 } label: {
-                    Label("置顶", systemImage: "pin")
+                    XMMenuLabel("置顶", systemImage: "pin")
                 }
                 .disabled(activeWriteAction != nil)
             }
@@ -1560,25 +1561,25 @@ private struct BookshelfBookListGridItemView: View {
         Button {
             onContextAction(.editBook, book.id)
         } label: {
-            Label("编辑书籍", systemImage: "pencil")
+            XMMenuLabel("编辑书籍", systemImage: "pencil")
         }
 
         Button {
             onContextAction(.showReadingDetail, book.id)
         } label: {
-            Label("阅读详情", systemImage: "chart.bar.doc.horizontal")
+            XMMenuLabel("阅读详情", systemImage: "chart.bar.doc.horizontal")
         }
 
         Button {
             onContextAction(.startReadTiming, book.id)
         } label: {
-            Label("开始计时", systemImage: "timer")
+            XMMenuLabel("开始计时", systemImage: "timer")
         }
 
         Button {
             onContextAction(.organizeBooks, book.id)
         } label: {
-            Label("整理书籍", systemImage: "square.grid.2x2")
+            XMMenuLabel("整理书籍", systemImage: "square.grid.2x2")
         }
 
         Button(role: .destructive) {
@@ -1673,6 +1674,7 @@ private struct BookshelfBookListRowView: View {
                 contextMenu
             }
         }
+        .xmMenuNeutralTint()
     }
 
     @ViewBuilder
@@ -1680,7 +1682,7 @@ private struct BookshelfBookListRowView: View {
         Button {
             onContextAction(.addNote, book.id)
         } label: {
-            Label("添加笔记", systemImage: "square.and.pencil")
+            XMMenuLabel("添加笔记", systemImage: "square.and.pencil")
         }
 
         if supportsContextPin {
@@ -1688,14 +1690,14 @@ private struct BookshelfBookListRowView: View {
                 Button {
                     onContextAction(.unpin, book.id)
                 } label: {
-                    Label("取消置顶", systemImage: "pin.slash")
+                    XMMenuLabel("取消置顶", systemImage: "pin.slash")
                 }
                 .disabled(activeWriteAction != nil)
             } else {
                 Button {
                     onContextAction(.pin, book.id)
                 } label: {
-                    Label("置顶", systemImage: "pin")
+                    XMMenuLabel("置顶", systemImage: "pin")
                 }
                 .disabled(activeWriteAction != nil)
             }
@@ -1704,25 +1706,25 @@ private struct BookshelfBookListRowView: View {
         Button {
             onContextAction(.editBook, book.id)
         } label: {
-            Label("编辑书籍", systemImage: "pencil")
+            XMMenuLabel("编辑书籍", systemImage: "pencil")
         }
 
         Button {
             onContextAction(.showReadingDetail, book.id)
         } label: {
-            Label("阅读详情", systemImage: "chart.bar.doc.horizontal")
+            XMMenuLabel("阅读详情", systemImage: "chart.bar.doc.horizontal")
         }
 
         Button {
             onContextAction(.startReadTiming, book.id)
         } label: {
-            Label("开始计时", systemImage: "timer")
+            XMMenuLabel("开始计时", systemImage: "timer")
         }
 
         Button {
             onContextAction(.organizeBooks, book.id)
         } label: {
-            Label("整理书籍", systemImage: "square.grid.2x2")
+            XMMenuLabel("整理书籍", systemImage: "square.grid.2x2")
         }
 
         Button(role: .destructive) {

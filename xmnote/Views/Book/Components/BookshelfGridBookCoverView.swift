@@ -17,25 +17,21 @@ struct BookshelfGridBookCoverView: View {
     private let coverCornerRadius = CornerRadius.inlaySmall
 
     var body: some View {
-        Color.clear
-            .bookshelfGridCoverFrame()
-            .overlay {
-                XMBookCover.responsive(
-                    urlString: book.cover,
-                    cornerRadius: coverCornerRadius,
-                    border: .init(color: .surfaceBorderSubtle, width: CardStyle.borderWidth),
-                    surfaceStyle: .spine
-                )
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-            }
-            .overlay {
-                BookshelfCoverBadgeLayer(
-                    isPinned: isPinned,
-                    topTrailingBadge: readingStatusBadge,
-                    bottomTrailingBadge: noteCountBadge,
-                    cornerRadius: coverCornerRadius
-                )
-            }
+        XMBookCover.responsive(
+            urlString: book.cover,
+            cornerRadius: coverCornerRadius,
+            border: .init(color: .surfaceBorderSubtle, width: CardStyle.borderWidth),
+            surfaceStyle: .spine
+        )
+        .bookshelfGridCoverFrame()
+        .overlay {
+            BookshelfCoverBadgeLayer(
+                isPinned: isPinned,
+                topTrailingBadge: readingStatusBadge,
+                bottomTrailingBadge: noteCountBadge,
+                cornerRadius: coverCornerRadius
+            )
+        }
     }
 
     private var readingStatusBadge: BookshelfCoverBadgeContent? {
@@ -70,15 +66,16 @@ struct BookshelfGridGroupCoverView: View {
     private let coverCornerRadius = CornerRadius.inlaySmall
 
     var body: some View {
+        let coverShape = RoundedRectangle(cornerRadius: coverCornerRadius, style: .continuous)
+
         BookshelfCoverMosaicView(covers: covers)
             .frame(maxWidth: .infinity)
             .background {
-                RoundedRectangle(cornerRadius: coverCornerRadius, style: .continuous)
-                    .fill(Color.surfaceCard)
-                    .overlay {
-                        RoundedRectangle(cornerRadius: coverCornerRadius, style: .continuous)
-                            .stroke(Color.surfaceBorderSubtle, lineWidth: CardStyle.borderWidth)
-                    }
+                coverShape.fill(Color.surfaceCard)
+            }
+            .clipShape(coverShape)
+            .overlay {
+                coverShape.stroke(Color.surfaceBorderSubtle, lineWidth: CardStyle.borderWidth)
             }
             .overlay {
                 BookshelfCoverBadgeLayer(
@@ -244,6 +241,7 @@ private struct BookshelfCoverBadgeLayer: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
         .allowsHitTesting(false)
     }
 }

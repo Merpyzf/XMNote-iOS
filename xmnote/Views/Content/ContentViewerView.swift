@@ -92,7 +92,6 @@ private struct ContentViewerLoadedView: View {
     @State private var bottomOrnamentHeight: CGFloat = 0
     @State private var showsTagSheet = false
     @State private var sharePayload: ContentViewerSharePayload?
-    @State private var actionMenu: ContentViewerActionMenu?
     @State private var pendingPresentation: PendingCapabilityPresentation?
     @State private var listLoadingGate = LoadingGate()
 
@@ -160,50 +159,6 @@ private struct ContentViewerLoadedView: View {
             Button("取消", role: .cancel) {}
         } message: {
             Text("iOS 端当前按硬删除实现，主记录和子记录会一起删除。")
-        }
-        .confirmationDialog(
-            "",
-            isPresented: isActionMenuPresented,
-            titleVisibility: .hidden,
-            presenting: actionMenu
-        ) { menu in
-            switch menu {
-            case .noteTag:
-                Button("查看标签") {
-                    showsTagSheet = true
-                }
-                Button("编辑标签") {
-                    presentPending(.editTags)
-                }
-                Button("取消", role: .cancel) {}
-            case .noteShare:
-                Button("系统分享") {
-                    shareCurrentNote()
-                }
-                Button("分享卡片") {
-                    presentPending(.shareCard)
-                }
-                Button("取消", role: .cancel) {}
-            case .noteAPISend:
-                Button("发送到 Flomo") {
-                    presentPending(.apiSend)
-                }
-                Button("发送到 Writeathon") {
-                    presentPending(.apiSend)
-                }
-                Button("发送到 Inbox") {
-                    presentPending(.apiSend)
-                }
-                Button("取消", role: .cancel) {}
-            case .noteAI:
-                Button("AI 解读") {
-                    presentPending(.aiExplain)
-                }
-                Button("自动标签") {
-                    presentPending(.autoTag)
-                }
-                Button("取消", role: .cancel) {}
-            }
         }
         .xmSystemAlert(item: $pendingPresentation) { presentation in
             XMSystemAlertDescriptor(
@@ -309,21 +264,9 @@ private struct ContentViewerLoadedView: View {
         HStack(spacing: Spacing.cozy) {
             switch viewModel.selectedItemID {
             case .note(let noteID)?:
-                Button {
-                    handleNoteTagAction()
-                } label: {
-                    ImmersiveBottomChromeIcon(systemName: "tag")
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("标签")
+                noteTagMenu
 
-                Button {
-                    actionMenu = .noteAPISend
-                } label: {
-                    ImmersiveBottomChromeIcon(systemName: "paperplane")
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("API 外发")
+                noteAPISendMenu
 
                 NavigationLink(value: NoteRoute.edit(noteId: noteID)) {
                     ImmersiveBottomChromeIcon(systemName: "square.and.pencil")
@@ -331,22 +274,10 @@ private struct ContentViewerLoadedView: View {
                 .buttonStyle(.plain)
                 .accessibilityLabel("编辑书摘")
 
-                Button {
-                    actionMenu = .noteShare
-                } label: {
-                    ImmersiveBottomChromeIcon(systemName: "square.and.arrow.up")
-                }
-                .buttonStyle(.plain)
+                noteShareMenu
                 .disabled(selectedNoteDetail == nil)
-                .accessibilityLabel("分享书摘")
 
-                Button {
-                    actionMenu = .noteAI
-                } label: {
-                    ImmersiveBottomChromeIcon(systemName: "sparkles")
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("书摘 AI")
+                noteAIMenu
 
             case .review(let reviewID)?:
                 NavigationLink(value: ContentRoute.reviewEditor(reviewId: reviewID)) {
@@ -415,19 +346,96 @@ private struct ContentViewerLoadedView: View {
         }
     }
 
-    private var hasKeywordPlaceholder: Bool {
-        !viewModel.keyword.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-    }
-
-    private var isActionMenuPresented: Binding<Bool> {
-        Binding(
-            get: { actionMenu != nil },
-            set: { isPresented in
-                if !isPresented {
-                    actionMenu = nil
+    private var noteTagMenu: some View {
+        Menu {
+            if !selectedTagNames.isEmpty {
+                Button {
+                    showsTagSheet = true
+                } label: {
+                    XMMenuLabel("查看标签", systemImage: "tag")
                 }
             }
-        )
+
+            Button {
+                presentPending(.editTags)
+            } label: {
+                XMMenuLabel("编辑标签", systemImage: "pencil")
+            }
+        } label: {
+            ImmersiveBottomChromeIcon(systemName: "tag")
+        }
+        .buttonStyle(.plain)
+        .xmMenuNeutralTint()
+        .accessibilityLabel("标签")
+    }
+
+    private var noteAPISendMenu: some View {
+        Menu {
+            Button {
+                presentPending(.apiSend)
+            } label: {
+                XMMenuLabel("发送到 Flomo", systemImage: "paperplane")
+            }
+            Button {
+                presentPending(.apiSend)
+            } label: {
+                XMMenuLabel("发送到 Writeathon", systemImage: "paperplane")
+            }
+            Button {
+                presentPending(.apiSend)
+            } label: {
+                XMMenuLabel("发送到 Inbox", systemImage: "tray.and.arrow.down")
+            }
+        } label: {
+            ImmersiveBottomChromeIcon(systemName: "paperplane")
+        }
+        .buttonStyle(.plain)
+        .xmMenuNeutralTint()
+        .accessibilityLabel("API 外发")
+    }
+
+    private var noteShareMenu: some View {
+        Menu {
+            Button {
+                shareCurrentNote()
+            } label: {
+                XMMenuLabel("系统分享", systemImage: "square.and.arrow.up")
+            }
+            Button {
+                presentPending(.shareCard)
+            } label: {
+                XMMenuLabel("分享卡片", systemImage: "rectangle.portrait.on.rectangle.portrait")
+            }
+        } label: {
+            ImmersiveBottomChromeIcon(systemName: "square.and.arrow.up")
+        }
+        .buttonStyle(.plain)
+        .xmMenuNeutralTint()
+        .accessibilityLabel("分享书摘")
+    }
+
+    private var noteAIMenu: some View {
+        Menu {
+            Button {
+                presentPending(.aiExplain)
+            } label: {
+                XMMenuLabel("AI 解读", systemImage: "sparkles")
+            }
+            Button {
+                presentPending(.autoTag)
+            } label: {
+                XMMenuLabel("自动标签", systemImage: "tag")
+            }
+        } label: {
+            ImmersiveBottomChromeIcon(systemName: "sparkles")
+        }
+        .buttonStyle(.plain)
+        .xmMenuNeutralTint()
+        .accessibilityLabel("书摘 AI")
+    }
+
+    private var hasKeywordPlaceholder: Bool {
+        !viewModel.keyword.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
     private func bottomChromeMetrics(safeAreaBottomInset: CGFloat) -> ImmersiveBottomChromeMetrics {
@@ -496,14 +504,6 @@ private struct ContentViewerLoadedView: View {
 
     private func presentPending(_ capability: ContentViewerPendingCapability) {
         pendingPresentation = PendingCapabilityPresentation(capability: capability)
-    }
-
-    private func handleNoteTagAction() {
-        if selectedTagNames.isEmpty {
-            presentPending(.editTags)
-        } else {
-            actionMenu = .noteTag
-        }
     }
 
     private func shareCurrentNote() {

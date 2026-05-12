@@ -203,7 +203,7 @@ private struct BookContributorManagementRow: View {
 
             Menu {
                 Button(action: onEdit) {
-                    Label("编辑", systemImage: "pencil")
+                    XMMenuLabel("编辑", systemImage: "pencil")
                 }
                 Button(role: .destructive, action: onDelete) {
                     Label("删除", systemImage: "trash")
@@ -216,6 +216,7 @@ private struct BookContributorManagementRow: View {
                     .contentShape(Rectangle())
             }
             .disabled(isDisabled)
+            .xmMenuNeutralTint()
             .accessibilityLabel("\(kind.itemTitle)操作")
         }
         .padding(Spacing.base)
@@ -226,12 +227,13 @@ private struct BookContributorManagementRow: View {
         }
         .contextMenu {
             Button(action: onEdit) {
-                Label("编辑", systemImage: "pencil")
+                XMMenuLabel("编辑", systemImage: "pencil")
             }
             Button(role: .destructive, action: onDelete) {
                 Label("删除", systemImage: "trash")
             }
         }
+        .xmMenuNeutralTint()
         .accessibilityElement(children: .combine)
         .accessibilityLabel("\(group.title)，\(group.subtitle)")
     }
