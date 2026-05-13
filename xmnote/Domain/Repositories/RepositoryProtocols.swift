@@ -39,6 +39,12 @@ protocol BookRepositoryProtocol {
     func batchSetBooksTags(bookIDs: [Int64], tagIDs: [Int64]) async throws
     /// 批量设置书籍来源，过滤已删除书籍与占位书籍。
     func batchSetBooksSource(bookIDs: [Int64], sourceID: Int64) async throws
+    /// 新建书籍分组，供批量移组 Sheet 面板内直接创建并返回新选项。
+    func createGroup(named name: String) async throws -> BookEditorNamedOption
+    /// 新建书籍标签，供批量标签 Sheet 面板内直接创建并返回新选项。
+    func createTag(named name: String) async throws -> BookEditorNamedOption
+    /// 新建书籍来源，供批量来源 Sheet 面板内直接创建并返回新选项。
+    func createSource(named name: String) async throws -> BookshelfSourceOption
     /// 批量设置书籍阅读状态；读完状态会同步评分与阅读进度到终点。
     func batchSetBookReadStatus(bookIDs: [Int64], input: BookshelfBatchReadStatusInput) async throws
     /// 读取可作为移入目标的有效分组，排除当前分组后供二级列表批量移组 Sheet 展示。

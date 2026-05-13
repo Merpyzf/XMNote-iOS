@@ -127,10 +127,16 @@ enum BookshelfBookListEditAction: String, CaseIterable, Identifiable, Hashable, 
     }
 }
 
-/// 二级书籍列表批量编辑 Sheet 类型，承载打开 Sheet 时刻的可选项快照。
+/// 二级书籍列表批量编辑 Sheet 类型，承载打开 Sheet 时刻的可选项快照与局部读取状态。
 enum BookshelfBatchEditSheet: Identifiable, Hashable, Sendable {
-    case tags(options: [BookEditorNamedOption], initialSelectedIDs: [Int64], allowsEmptySelection: Bool)
-    case source(options: [BookEditorNamedOption], initialSelectedID: Int64?)
+    case tags(
+        options: [BookEditorNamedOption],
+        initialSelectedIDs: [Int64],
+        allowsEmptySelection: Bool,
+        isLoading: Bool,
+        errorMessage: String?
+    )
+    case source(options: [BookshelfSourceOption], initialSelectedID: Int64?)
     case readStatus(options: [BookEditorNamedOption], initialStatusID: Int64?, initialChangedAt: Date?, initialRatingScore: Int64?)
     case moveGroup(options: [BookEditorNamedOption])
 
@@ -469,6 +475,21 @@ final class BookshelfBookListViewModel {
         }
     }
 
+    /// 在移组面板内新建分组，并返回可直接选中的目标分组选项。
+    func createMoveTargetGroup(named name: String) async throws -> BookEditorNamedOption {
+        try await repository.createGroup(named: name)
+    }
+
+    /// 在标签面板内新建标签，并返回可直接选中的标签选项。
+    func createBatchTag(named name: String) async throws -> BookEditorNamedOption {
+        try await repository.createTag(named: name)
+    }
+
+    /// 在来源面板内新建来源，并返回可直接选中的来源选项。
+    func createBatchSource(named name: String) async throws -> BookshelfSourceOption {
+        try await repository.createSource(named: name)
+    }
+
     /// 提交从当前分组移出，placement 决定回到默认书架的头部或尾部。
     func submitMoveOut(placement: GroupBooksPlacement) {
         let bookIDs = selectedBookIDs
@@ -670,10 +691,14 @@ final class BookshelfBookListViewModel {
     /// - Note: 只在主线程回写 Sheet 状态；Repository 仍是唯一数据入口，避免 ViewModel 直接访问数据库。
     private func presentBatchSheet(for action: BookshelfBookListEditAction) {
         guard activeWriteAction == nil, !isLoadingBatchOptions, !selectedBookIDs.isEmpty else { return }
+        let bookIDs = selectedBookIDs
+        if action == .setTag {
+            presentBatchTagsSheet(bookIDs: bookIDs)
+            return
+        }
         isLoadingBatchOptions = true
         actionNotice = "正在加载\(action.title)选项..."
         writeError = nil
-        let bookIDs = selectedBookIDs
         batchOptionsTask?.cancel()
         batchOptionsTask = Task {
             do {
@@ -694,6 +719,63 @@ final class BookshelfBookListViewModel {
                     self.isLoadingBatchOptions = false
                     self.writeError = error.localizedDescription
                     self.actionNotice = error.localizedDescription
+                }
+            }
+        }
+    }
+
+    /// 立即打开标签 Sheet，并在 Sheet 内容区异步刷新候选项，避免底部操作栏闪出读取文案。
+    /// - Note: Repository 读取任务可被新请求取消；成功或失败后只在原 Sheet 仍存在且选择集合未变化时回写 MainActor 状态。
+    private func presentBatchTagsSheet(bookIDs: [Int64]) {
+        batchOptionsTask?.cancel()
+        isLoadingBatchOptions = false
+        actionNotice = nil
+        writeError = nil
+        activeBatchSheet = .tags(
+            options: [],
+            initialSelectedIDs: [],
+            allowsEmptySelection: bookIDs.count == 1,
+            isLoading: true,
+            errorMessage: nil
+        )
+        batchOptionsTask = Task {
+            do {
+                let options = try await repository.fetchBookshelfBatchEditOptions(bookIDs: bookIDs)
+                guard !Task.isCancelled else { return }
+                await MainActor.run {
+                    guard self.selectedBookIDs == bookIDs else {
+                        self.activeBatchSheet = nil
+                        self.actionNotice = nil
+                        return
+                    }
+                    guard self.activeBatchSheet?.id == "tags" else { return }
+                    self.activeBatchSheet = .tags(
+                        options: options.tags,
+                        initialSelectedIDs: bookIDs.count == 1 ? options.initialTagIDs : [],
+                        allowsEmptySelection: bookIDs.count == 1,
+                        isLoading: false,
+                        errorMessage: nil
+                    )
+                    self.actionNotice = nil
+                }
+            } catch {
+                guard !Task.isCancelled else { return }
+                await MainActor.run {
+                    guard self.selectedBookIDs == bookIDs else {
+                        self.activeBatchSheet = nil
+                        self.actionNotice = nil
+                        return
+                    }
+                    guard self.activeBatchSheet?.id == "tags" else { return }
+                    self.activeBatchSheet = .tags(
+                        options: [],
+                        initialSelectedIDs: [],
+                        allowsEmptySelection: bookIDs.count == 1,
+                        isLoading: false,
+                        errorMessage: error.localizedDescription
+                    )
+                    self.writeError = nil
+                    self.actionNotice = nil
                 }
             }
         }
@@ -816,7 +898,9 @@ final class BookshelfBookListViewModel {
             activeBatchSheet = .tags(
                 options: options.tags,
                 initialSelectedIDs: bookIDs.count == 1 ? options.initialTagIDs : [],
-                allowsEmptySelection: bookIDs.count == 1
+                allowsEmptySelection: bookIDs.count == 1,
+                isLoading: false,
+                errorMessage: nil
             )
             actionNotice = nil
         case .setSource:
@@ -854,7 +938,7 @@ final class BookshelfBookListViewModel {
         if case .source(let sourceID) = route.context, let sourceID {
             return sourceID
         }
-        return options.sources.first?.id
+        return nil
     }
 
     /// 为阅读状态 Sheet 选择进入时的默认状态，优先保留单本书当前状态，其次沿用状态维度上下文。

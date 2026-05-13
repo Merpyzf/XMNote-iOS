@@ -181,13 +181,18 @@ private struct BookshelfBookListContentView: View {
             case .tags(
                 options: let options,
                 initialSelectedIDs: let initialSelectedIDs,
-                allowsEmptySelection: let allowsEmptySelection
+                allowsEmptySelection: let allowsEmptySelection,
+                isLoading: let isLoading,
+                errorMessage: let errorMessage
             ):
                 BookshelfBatchTagsSheet(
                     options: options,
                     selectedCount: viewModel.selectedCount,
                     initialSelectedIDs: initialSelectedIDs,
                     allowsEmptySelection: allowsEmptySelection,
+                    isLoading: isLoading,
+                    errorMessage: errorMessage,
+                    onCreate: viewModel.createBatchTag(named:),
                     onConfirm: viewModel.submitBatchTags
                 )
             case .source(options: let options, initialSelectedID: let initialSelectedID):
@@ -195,6 +200,7 @@ private struct BookshelfBookListContentView: View {
                     options: options,
                     selectedCount: viewModel.selectedCount,
                     initialSelectedID: initialSelectedID,
+                    onCreate: viewModel.createBatchSource(named:),
                     onConfirm: viewModel.submitBatchSource
                 )
             case .readStatus(
@@ -215,6 +221,7 @@ private struct BookshelfBookListContentView: View {
                 BookshelfMoveGroupSheet(
                     options: options,
                     selectedCount: viewModel.selectedCount,
+                    onCreate: viewModel.createMoveTargetGroup(named:),
                     onConfirm: viewModel.submitMoveToGroup
                 )
             }

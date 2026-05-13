@@ -491,6 +491,28 @@ nonisolated struct BookshelfBookListOrderItem: Hashable, Sendable {
     let isPinned: Bool
 }
 
+/// 来源选项分区，区分“我的来源”与 Android 默认内置来源。
+nonisolated enum BookshelfSourceCategory: Hashable, Sendable {
+    case mine
+    case appDefault
+
+    var title: String {
+        switch self {
+        case .mine:
+            return "我的来源"
+        case .appDefault:
+            return "默认来源"
+        }
+    }
+}
+
+/// 批量来源 Sheet 选项，包含标题与分区元数据。
+nonisolated struct BookshelfSourceOption: Identifiable, Hashable, Sendable {
+    let id: Int64
+    let title: String
+    let category: BookshelfSourceCategory
+}
+
 /// 书架批量编辑可选项，统一承载标签、来源与阅读状态 Sheet 所需数据。
 nonisolated struct BookshelfBatchEditOptions: Hashable, Sendable {
     static let empty = BookshelfBatchEditOptions(
@@ -505,7 +527,7 @@ nonisolated struct BookshelfBatchEditOptions: Hashable, Sendable {
     )
 
     let tags: [BookEditorNamedOption]
-    let sources: [BookEditorNamedOption]
+    let sources: [BookshelfSourceOption]
     let readStatuses: [BookEditorNamedOption]
     let initialTagIDs: [Int64]
     let initialSourceID: Int64?

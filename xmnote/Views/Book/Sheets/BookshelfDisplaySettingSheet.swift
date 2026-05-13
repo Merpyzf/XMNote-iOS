@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 BookshelfDisplaySetting 持久化配置、BookshelfDimension、BookshelfDisplaySettingScope 与 SwiftUI Sheet 展示能力
- * [OUTPUT]: 对外提供 BookshelfDisplaySettingSheet，按书架作用域调整布局、排序、分区、置顶与标题展示偏好
+ * [OUTPUT]: 对外提供 BookshelfDisplaySettingSheet 与设置 Sheet 骨架，按书架作用域调整布局、排序、分区、置顶与标题展示偏好
  * [POS]: Book 模块业务 Sheet，服务首页书架与二级列表显示设置入口，不直接承担数据库读写
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -279,18 +279,21 @@ private struct BookshelfDisplaySettingCapabilities {
 }
 
 /// 显示设置 Sheet 视觉收敛尺寸，统一顶部 chrome 和设置行体量。
-private enum BookshelfDisplaySettingSheetLayout {
+enum BookshelfDisplaySettingSheetLayout {
     static let titleHorizontalReserve: CGFloat = Spacing.actionReserved + Spacing.base
+    static let textActionTitleHorizontalReserve: CGFloat = 96
     static let closeVisualSize: CGFloat = 32
     static let chromeMinHeight: CGFloat = Spacing.actionReserved
     static let menuValueMinWidth: CGFloat = Spacing.actionReserved * 2
 }
 
-/// 设置 Sheet 的页面骨架，提供轻量居中标题与右侧关闭入口。
-private struct BookshelfDisplaySettingPageScaffold<Content: View>: View {
+/// 设置 Sheet 的页面骨架，提供轻量居中标题，并支持默认关闭按钮或双侧文本操作。
+struct BookshelfDisplaySettingPageScaffold<Content: View>: View {
     let title: String
     let subtitle: String?
     let onClose: () -> Void
+    let leadingAction: AnyView?
+    let trailingAction: AnyView?
     let content: Content
 
     /// 注入标题、关闭按钮语义与页面内容。
@@ -303,6 +306,25 @@ private struct BookshelfDisplaySettingPageScaffold<Content: View>: View {
         self.title = title
         self.subtitle = subtitle
         self.onClose = onClose
+        self.leadingAction = nil
+        self.trailingAction = nil
+        self.content = content()
+    }
+
+    /// 注入标题、双侧操作与页面内容，用于需要取消/保存语义的编辑型 Sheet。
+    init<LeadingAction: View, TrailingAction: View>(
+        title: String,
+        subtitle: String?,
+        onClose: @escaping () -> Void,
+        @ViewBuilder leadingAction: () -> LeadingAction,
+        @ViewBuilder trailingAction: () -> TrailingAction,
+        @ViewBuilder content: () -> Content
+    ) {
+        self.title = title
+        self.subtitle = subtitle
+        self.onClose = onClose
+        self.leadingAction = AnyView(leadingAction())
+        self.trailingAction = AnyView(trailingAction())
         self.content = content()
     }
 
@@ -322,10 +344,9 @@ private struct BookshelfDisplaySettingPageScaffold<Content: View>: View {
     private var topChrome: some View {
         ZStack {
             HStack {
-                Color.clear
-                    .frame(width: Spacing.actionReserved, height: Spacing.actionReserved)
+                leadingActionSlot
                 Spacer(minLength: Spacing.none)
-                closeButton
+                trailingActionSlot
             }
             .frame(minHeight: BookshelfDisplaySettingSheetLayout.chromeMinHeight)
 
@@ -343,11 +364,37 @@ private struct BookshelfDisplaySettingPageScaffold<Content: View>: View {
                 }
             }
             .frame(maxWidth: .infinity)
-            .padding(.horizontal, BookshelfDisplaySettingSheetLayout.titleHorizontalReserve)
+            .padding(.horizontal, titleHorizontalReserve)
         }
         .padding(.horizontal, Spacing.screenEdge)
         .padding(.top, Spacing.base)
         .padding(.bottom, Spacing.comfortable)
+    }
+
+    private var titleHorizontalReserve: CGFloat {
+        if leadingAction != nil || trailingAction != nil {
+            return BookshelfDisplaySettingSheetLayout.textActionTitleHorizontalReserve
+        }
+        return BookshelfDisplaySettingSheetLayout.titleHorizontalReserve
+    }
+
+    @ViewBuilder
+    private var leadingActionSlot: some View {
+        if let leadingAction {
+            leadingAction
+        } else {
+            Color.clear
+                .frame(width: Spacing.actionReserved, height: Spacing.actionReserved)
+        }
+    }
+
+    @ViewBuilder
+    private var trailingActionSlot: some View {
+        if let trailingAction {
+            trailingAction
+        } else {
+            closeButton
+        }
     }
 
     private var closeButton: some View {
@@ -369,7 +416,7 @@ private struct BookshelfDisplaySettingPageScaffold<Content: View>: View {
 }
 
 /// 设置分组卡片，使用圆角表层和紧凑内部行距承载设置项。
-private struct BookshelfSettingsGroupCard<Content: View>: View {
+struct BookshelfSettingsGroupCard<Content: View>: View {
     let content: Content
 
     /// 注入设置行内容，构造无描边分组卡片。

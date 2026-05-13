@@ -172,6 +172,27 @@ struct BookRepository: BookRepositoryProtocol {
         }
     }
 
+    /// 新建书籍分组，供批量移组 Sheet 在当前面板内直接创建并回填选中项。
+    func createGroup(named name: String) async throws -> BookEditorNamedOption {
+        try await databaseManager.database.dbPool.write { db in
+            try createGroup(db, name: name)
+        }
+    }
+
+    /// 新建书籍标签，供批量标签 Sheet 在当前面板内直接创建并回填选中项。
+    func createTag(named name: String) async throws -> BookEditorNamedOption {
+        try await databaseManager.database.dbPool.write { db in
+            try createTag(db, name: name)
+        }
+    }
+
+    /// 新建书籍来源，供批量来源 Sheet 在当前面板内直接创建并回填选中项。
+    func createSource(named name: String) async throws -> BookshelfSourceOption {
+        try await databaseManager.database.dbPool.write { db in
+            try createSource(db, name: name)
+        }
+    }
+
     /// 批量设置阅读状态，读完状态同步评分与阅读进度。
     func batchSetBookReadStatus(bookIDs: [Int64], input: BookshelfBatchReadStatusInput) async throws {
         try await databaseManager.database.dbPool.write { db in
@@ -551,6 +572,7 @@ private enum BookshelfBatchWriteError: LocalizedError {
     case invalidReadStatus
     case ratingRequired
     case invalidName(String)
+    case invalidNameLength(target: String, maxLength: Int)
     case duplicateName(String)
     case protectedDefaultSource
 
@@ -570,12 +592,21 @@ private enum BookshelfBatchWriteError: LocalizedError {
             return "标记读完时需要选择评分"
         case .invalidName(let target):
             return "\(target)名称不能为空"
+        case .invalidNameLength(let target, let maxLength):
+            return "\(target)名称长度不能超过\(maxLength)个字符"
         case .duplicateName(let message):
             return message
         case .protectedDefaultSource:
             return "未知来源不能删除"
         }
     }
+}
+
+private enum BookshelfManagementLimits {
+    static let groupNameMaxLength = 100
+    static let tagNameMaxLength = 100
+    static let sourceNameMaxLength = 100
+    static let defaultSourceIDRange: ClosedRange<Int64> = 1...27
 }
 
 nonisolated private struct BookshelfBookAggregateRow {
@@ -806,6 +837,116 @@ private extension BookRepository {
         }
     }
 
+    /// 在批量移组面板中新增分组，默认放到默认书架头部位置，并返回可直接选中的目标分组选项。
+    /// - Throws: 名称非法、名称重复或 SQL 写入失败时抛出错误。
+    nonisolated func createGroup(
+        _ db: Database,
+        name: String
+    ) throws -> BookEditorNamedOption {
+        let normalized = try validatedManagementName(
+            name,
+            target: "分组",
+            maxLength: BookshelfManagementLimits.groupNameMaxLength
+        )
+        guard try !isDuplicateGroupName(db, name: normalized, excludingGroupID: nil) else {
+            throw BookshelfBatchWriteError.duplicateName("此分组名称已存在，请使用不同的名称")
+        }
+
+        let ownerID = try DatabaseOwnerResolver.resolveOwnerID(in: db)
+        var record = GroupRecord(
+            id: nil,
+            userId: ownerID,
+            name: normalized,
+            groupOrder: try minDefaultBookshelfOrder(db) - 1,
+            pinned: 0,
+            pinOrder: 0,
+            createdDate: timestampMillis(),
+            updatedDate: 0,
+            lastSyncDate: 0,
+            isDeleted: 0
+        )
+        try record.insert(db)
+        guard let groupID = record.id else { throw BookshelfBatchWriteError.invalidGroup }
+        return BookEditorNamedOption(id: groupID, title: normalized)
+    }
+
+    /// 在批量标签面板中新增书籍标签，并返回可直接勾选的新选项。
+    /// - Throws: 名称非法、名称重复或 SQL 写入失败时抛出错误。
+    nonisolated func createTag(
+        _ db: Database,
+        name: String
+    ) throws -> BookEditorNamedOption {
+        let normalized = try validatedManagementName(
+            name,
+            target: "标签",
+            maxLength: BookshelfManagementLimits.tagNameMaxLength
+        )
+        guard try !isDuplicateBookTagName(db, name: normalized, excludingTagID: 0) else {
+            throw BookshelfBatchWriteError.duplicateName("此标签名称已存在，请使用不同的名称")
+        }
+
+        let ownerID = try DatabaseOwnerResolver.resolveOwnerID(in: db)
+        let nextOrder = (try Int64.fetchOne(
+            db,
+            sql: "SELECT COALESCE(MAX(tag_order), -1) + 1 FROM tag WHERE type = 2 AND user_id = ?",
+            arguments: [ownerID]
+        )) ?? 0
+        var record = TagRecord(
+            id: nil,
+            userId: ownerID,
+            name: normalized,
+            color: 0,
+            tagOrder: nextOrder,
+            type: 2,
+            createdDate: timestampMillis(),
+            updatedDate: 0,
+            lastSyncDate: 0,
+            isDeleted: 0
+        )
+        try record.insert(db)
+        guard let tagID = record.id else { throw BookshelfBatchWriteError.invalidTag }
+        return BookEditorNamedOption(id: tagID, title: normalized)
+    }
+
+    /// 在批量来源面板中新增书籍来源，并返回可直接选中的来源选项（默认归入“我的来源”分区）。
+    /// - Throws: 名称非法、名称重复或 SQL 写入失败时抛出错误。
+    nonisolated func createSource(
+        _ db: Database,
+        name: String
+    ) throws -> BookshelfSourceOption {
+        let normalized = try validatedManagementName(
+            name,
+            target: "来源",
+            maxLength: BookshelfManagementLimits.sourceNameMaxLength
+        )
+        guard try !isDuplicateSourceName(db, name: normalized, excludingSourceID: 0) else {
+            throw BookshelfBatchWriteError.duplicateName("此来源名称已存在，请使用不同的名称")
+        }
+
+        let nextOrder = (try Int64.fetchOne(
+            db,
+            sql: "SELECT COALESCE(MAX(source_order), -1) + 1 FROM source WHERE is_deleted = 0"
+        )) ?? 0
+        var record = SourceRecord(
+            id: nil,
+            name: normalized,
+            sourceOrder: nextOrder,
+            bookshelfOrder: -1,
+            isHide: 0,
+            createdDate: timestampMillis(),
+            updatedDate: 0,
+            lastSyncDate: 0,
+            isDeleted: 0
+        )
+        try record.insert(db)
+        guard let sourceID = record.id else { throw BookshelfBatchWriteError.invalidSource }
+        return BookshelfSourceOption(
+            id: sourceID,
+            title: normalized,
+            category: sourceCategory(for: sourceID)
+        )
+    }
+
     /// 按 Android `updateBookReadStatus` 与 `rating` 语义批量更新阅读状态。
     /// - Throws: 选择为空、状态无效、读完未评分或 SQL 写入失败时抛出错误。
     nonisolated func batchSetBookReadStatus(
@@ -1005,15 +1146,22 @@ private extension BookRepository {
         try softDeleteGroup(db, groupID: groupID)
     }
 
-    /// 重命名有效分组；Android 分组重命名当前不做重名拦截。
-    /// - Throws: 名称为空、分组无效或 SQL 写入失败时抛出错误。
+    /// 重命名有效分组；iOS 在迁移面板中约束分组名唯一，重命名与新增都执行同一重名校验。
+    /// - Throws: 名称非法、分组无效、名称重复或 SQL 写入失败时抛出错误。
     nonisolated func renameGroup(
         _ db: Database,
         groupID: Int64,
         newName: String
     ) throws {
         guard try isActiveGroup(db, groupID: groupID) else { throw BookshelfBatchWriteError.invalidGroup }
-        let name = try validatedManagementName(newName, target: "分组")
+        let name = try validatedManagementName(
+            newName,
+            target: "分组",
+            maxLength: BookshelfManagementLimits.groupNameMaxLength
+        )
+        guard try !isDuplicateGroupName(db, name: name, excludingGroupID: groupID) else {
+            throw BookshelfBatchWriteError.duplicateName("此分组名称已存在，请使用不同的名称")
+        }
         let now = timestampMillis()
 
         // SQL 目的：重命名有效书籍分组。
@@ -1641,8 +1789,8 @@ private extension BookRepository {
         }
     }
 
-    /// 读取批量来源候选项。
-    nonisolated func fetchBatchSourceOptions(_ db: Database) throws -> [BookEditorNamedOption] {
+    /// 读取批量来源候选项，并补齐“我的来源/默认来源”分区元数据。
+    nonisolated func fetchBatchSourceOptions(_ db: Database) throws -> [BookshelfSourceOption] {
         // SQL 目的：读取可用于批量设置的有效书籍来源。
         // 涉及表：source。
         // 关键过滤：is_deleted = 0 排除软删除来源；隐藏来源仍允许作为存量书籍来源被重新选择。
@@ -1654,12 +1802,22 @@ private extension BookRepository {
             ORDER BY source_order ASC, id ASC
             """
         return try Row.fetchAll(db, sql: sql).map { row in
+            let sourceID: Int64 = row["id"] ?? 0
             let title: String = row["name"] ?? ""
-            return BookEditorNamedOption(
-                id: row["id"],
-                title: title.isEmpty ? "未知来源" : title
+            return BookshelfSourceOption(
+                id: sourceID,
+                title: title.isEmpty ? "未知来源" : title,
+                category: sourceCategory(for: sourceID)
             )
         }
+    }
+
+    /// 按 Android 常量范围识别来源分区：1...27 为默认来源，其余归“我的来源”。
+    nonisolated func sourceCategory(for sourceID: Int64) -> BookshelfSourceCategory {
+        if BookshelfManagementLimits.defaultSourceIDRange.contains(sourceID) {
+            return .appDefault
+        }
+        return .mine
     }
 
     /// 读取批量阅读状态候选项。
@@ -2181,6 +2339,41 @@ private extension BookRepository {
         return (try Int.fetchOne(db, sql: sql, arguments: [tagID]) ?? 0) > 0
     }
 
+    /// 校验分组名称是否重复。
+    nonisolated func isDuplicateGroupName(
+        _ db: Database,
+        name: String,
+        excludingGroupID: Int64?
+    ) throws -> Bool {
+        let ownerID = try DatabaseOwnerResolver.resolveOwnerID(in: db)
+        // SQL 目的：查询当前用户下是否存在同名有效分组。
+        // 涉及表：`group`。
+        // 关键过滤：user_id = ?、name = ?、is_deleted = 0；编辑场景额外排除当前 group id。
+        // 返回字段用途：用于新增/重命名前置重名拦截；时间字段不参与本查询。
+        let baseSQL = """
+            SELECT COUNT(*)
+            FROM `group`
+            WHERE user_id = ?
+              AND name = ?
+              AND is_deleted = 0
+            """
+        let count: Int
+        if let excludingGroupID {
+            count = try Int.fetchOne(
+                db,
+                sql: baseSQL + "\n  AND id != ?",
+                arguments: [ownerID, name, excludingGroupID]
+            ) ?? 0
+        } else {
+            count = try Int.fetchOne(
+                db,
+                sql: baseSQL,
+                arguments: [ownerID, name]
+            ) ?? 0
+        }
+        return count > 0
+    }
+
     /// 校验书籍标签名称是否重复。
     nonisolated func isDuplicateBookTagName(
         _ db: Database,
@@ -2227,10 +2420,14 @@ private extension BookRepository {
     /// 校验管理对象的新名称。
     nonisolated func validatedManagementName(
         _ name: String,
-        target: String
+        target: String,
+        maxLength: Int? = nil
     ) throws -> String {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { throw BookshelfBatchWriteError.invalidName(target) }
+        if let maxLength, trimmed.count > maxLength {
+            throw BookshelfBatchWriteError.invalidNameLength(target: target, maxLength: maxLength)
+        }
         return trimmed
     }
 

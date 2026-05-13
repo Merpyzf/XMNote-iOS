@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 BookshelfBatchEditOptions 中的标签、来源、阅读状态候选项，依赖外层 ViewModel 闭包提交批量写入意图
- * [OUTPUT]: 对外提供移组、标签、来源与阅读状态等批量编辑 Sheet
+ * [OUTPUT]: 对外提供移组、标签、来源与阅读状态等批量编辑 Sheet，并统一标签选择的轻量列表样式与面板内读取反馈
  * [POS]: Book 模块业务 Sheet，被 BookshelfBookListView 的编辑态批量操作入口唤起
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -10,235 +10,898 @@ import SwiftUI
 /// 二级列表移入分组 Sheet，单选目标分组后提交批量移动意图。
 struct BookshelfMoveGroupSheet: View {
     @Environment(\.dismiss) private var dismiss
-    @State private var selectedID: Int64
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var optionsState: [BookEditorNamedOption]
+    @State private var selectedID: Int64?
+    @State private var searchKeyword = ""
+    @State private var createName = ""
+    @State private var createError: String?
+    @State private var isCreating = false
 
-    let options: [BookEditorNamedOption]
     let selectedCount: Int
+    let onCreate: (String) async throws -> BookEditorNamedOption
     let onConfirm: (Int64) -> Void
 
-    /// 构建移入分组 Sheet，默认选中第一个有效分组。
+    /// 构建移入分组 Sheet，默认选中首个分组，并支持面板内新增分组。
     init(
         options: [BookEditorNamedOption],
         selectedCount: Int,
+        onCreate: @escaping (String) async throws -> BookEditorNamedOption,
         onConfirm: @escaping (Int64) -> Void
     ) {
-        self.options = options
         self.selectedCount = selectedCount
+        self.onCreate = onCreate
         self.onConfirm = onConfirm
-        self._selectedID = State(initialValue: options.first?.id ?? 0)
+        self._optionsState = State(initialValue: options)
+        self._selectedID = State(initialValue: options.first?.id)
     }
 
     var body: some View {
-        NavigationStack {
-            Form {
-                Section {
-                    ForEach(options) { option in
-                        Button {
-                            selectedID = option.id
-                        } label: {
-                            BookshelfBatchOptionRow(
-                                title: option.title,
-                                isSelected: selectedID == option.id
-                            )
-                        }
-                        .buttonStyle(.plain)
-                    }
-                } footer: {
-                    Text("将 \(selectedCount) 本书移入所选分组；书籍会取消置顶并从原分组关系中移除。")
-                        .font(AppTypography.caption)
+        BookshelfDisplaySettingPageScaffold(
+            title: "移入分组",
+            subtitle: "已选\(selectedCount)本",
+            onClose: { dismiss() }
+        ) {
+            VStack(spacing: Spacing.comfortable) {
+                BookshelfSettingsGroupCard {
+                    BookshelfBatchSearchField(
+                        text: $searchKeyword,
+                        placeholder: "搜索分组"
+                    )
                 }
-            }
-            .navigationTitle("移入分组")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("取消") {
-                        dismiss()
+
+                BookshelfSettingsGroupCard {
+                    BookshelfBatchCreateField(
+                        text: $createName,
+                        placeholder: "输入新分组名称",
+                        actionTitle: "添加",
+                        isProcessing: isCreating,
+                        errorMessage: createError,
+                        onSubmit: createGroup
+                    )
+                }
+
+                BookshelfSettingsGroupCard {
+                    if filteredOptions.isEmpty {
+                        BookshelfBatchEmptyHint(text: "没有匹配的分组")
+                    } else {
+                        VStack(spacing: Spacing.none) {
+                            ForEach(filteredOptions) { option in
+                                Button {
+                                    selectedID = option.id
+                                } label: {
+                                    BookshelfBatchOptionRow(
+                                        title: option.title,
+                                        isSelected: selectedID == option.id
+                                    )
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
                     }
                 }
 
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("完成") {
-                        onConfirm(selectedID)
-                        dismiss()
-                    }
-                    .disabled(selectedID == 0)
+                Text("将 \(selectedCount) 本书移入所选分组；书籍会取消置顶并从原分组关系中移除。")
+                    .font(AppTypography.caption)
+                    .foregroundStyle(Color.textSecondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+
+                Button {
+                    submitSelection()
+                } label: {
+                    Text("完成")
+                        .font(AppTypography.bodyMedium)
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(Color.brand)
+                .disabled(selectedID == nil || isCreating)
+            }
+            .padding(.horizontal, Spacing.screenEdge)
+            .padding(.bottom, Spacing.contentEdge)
+            .animation(sheetAnimation, value: optionsState)
+            .animation(sheetAnimation, value: filteredOptions.map(\.id))
+        }
+        .background(Color.surfaceSheet.ignoresSafeArea())
+        .presentationDetents([.medium, .large])
+        .presentationDragIndicator(.hidden)
+    }
+
+    private var filteredOptions: [BookEditorNamedOption] {
+        let keyword = searchKeyword.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !keyword.isEmpty else { return optionsState }
+        return optionsState.filter { option in
+            option.title.localizedCaseInsensitiveContains(keyword)
+        }
+    }
+
+    private var sheetAnimation: Animation {
+        reduceMotion ? .smooth(duration: 0.10) : .smooth(duration: 0.22)
+    }
+
+    private func submitSelection() {
+        guard let selectedID else { return }
+        onConfirm(selectedID)
+        dismiss()
+    }
+
+    private func createGroup() {
+        guard !isCreating else { return }
+        let draft = createName
+        isCreating = true
+        createError = nil
+        Task {
+            do {
+                let newOption = try await onCreate(draft)
+                await MainActor.run {
+                    optionsState.removeAll { $0.id == newOption.id }
+                    optionsState.insert(newOption, at: 0)
+                    selectedID = newOption.id
+                    searchKeyword = ""
+                    createName = ""
+                    createError = nil
+                    isCreating = false
+                }
+            } catch {
+                await MainActor.run {
+                    createError = error.localizedDescription
+                    isCreating = false
                 }
             }
         }
-        .presentationDetents([.medium, .large])
-        .presentationDragIndicator(.visible)
     }
 }
 
 /// 二级列表批量标签 Sheet，支持空选择并由 Repository 区分单本替换与多本追加。
 struct BookshelfBatchTagsSheet: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var loadingGate = LoadingGate()
+    @State private var optionsState: [BookEditorNamedOption]
     @State private var selectedIDs: Set<Int64>
+    @State private var searchKeyword = ""
+    @State private var createError: String?
+    @State private var isCreating = false
 
     let options: [BookEditorNamedOption]
+    let initialSelectedIDs: [Int64]
     let selectedCount: Int
     let allowsEmptySelection: Bool
+    let isLoading: Bool
+    let errorMessage: String?
+    let onCreate: (String) async throws -> BookEditorNamedOption
     let onConfirm: ([Int64]) -> Void
 
-    /// 构建批量标签 Sheet；单本书预选已有标签，多本书默认不预选且不允许空提交。
+    /// 构建批量标签 Sheet；支持面板内新增标签，提交语义由 Repository 区分单本替换与多本追加。
     init(
         options: [BookEditorNamedOption],
         selectedCount: Int,
         initialSelectedIDs: [Int64],
         allowsEmptySelection: Bool,
+        isLoading: Bool,
+        errorMessage: String?,
+        onCreate: @escaping (String) async throws -> BookEditorNamedOption,
         onConfirm: @escaping ([Int64]) -> Void
     ) {
         self.options = options
+        self.initialSelectedIDs = initialSelectedIDs
         self.selectedCount = selectedCount
         self.allowsEmptySelection = allowsEmptySelection
+        self.isLoading = isLoading
+        self.errorMessage = errorMessage
+        self.onCreate = onCreate
         self.onConfirm = onConfirm
         let validIDs = Set(options.map(\.id))
+        self._optionsState = State(initialValue: options)
         self._selectedIDs = State(initialValue: Set(initialSelectedIDs.filter { validIDs.contains($0) }))
     }
 
     var body: some View {
-        NavigationStack {
-            Form {
-                Section {
-                    if options.isEmpty {
-                        Text("暂无可用标签，确认后会清空单本书标签；多本书空选择不会改动现有标签。")
-                            .font(AppTypography.body)
-                            .foregroundStyle(Color.textSecondary)
-                    } else {
-                        ForEach(options) { option in
-                            Button {
-                                toggle(option.id)
-                            } label: {
-                                BookshelfBatchOptionRow(
-                                    title: option.title,
-                                    isSelected: selectedIDs.contains(option.id)
-                                )
-                            }
-                            .buttonStyle(.plain)
-                        }
-                    }
-                } footer: {
-                    Text(footerText)
-                        .font(AppTypography.caption)
-                }
+        BookshelfDisplaySettingPageScaffold(
+            title: "设置标签",
+            subtitle: "已选\(selectedCount)本",
+            onClose: { dismiss() },
+            leadingAction: {
+                BookshelfBatchTopTextActionButton(
+                    title: "取消",
+                    foregroundColor: .textSecondary,
+                    action: { dismiss() }
+                )
+            },
+            trailingAction: {
+                BookshelfBatchTopTextActionButton(
+                    title: "保存",
+                    foregroundColor: .brand.opacity(0.82),
+                    isDisabled: !canSubmit || isCreating || isLoading || hasLoadError,
+                    action: submitTags
+                )
             }
-            .navigationTitle("设置标签")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("取消") {
-                        dismiss()
-                    }
-                }
+        ) {
+            VStack(spacing: Spacing.base) {
+                BookshelfBatchSearchField(
+                    text: $searchKeyword,
+                    placeholder: "搜索标签",
+                    backgroundColor: .surfaceCard,
+                    minHeight: 50
+                )
 
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("完成") {
-                        onConfirm(orderedSelectedIDs)
-                        dismiss()
-                    }
-                    .disabled(!canSubmit)
-                }
+                BookshelfBatchTagListPanel(
+                    options: filteredOptions,
+                    selectedIDs: selectedIDs,
+                    createTitle: canCreateSearchedTag ? trimmedSearchKeyword : nil,
+                    isLoading: isLoading,
+                    isLoadingVisible: loadingGate.isVisible,
+                    loadErrorMessage: errorMessage,
+                    isCreating: isCreating,
+                    createError: createError,
+                    emptyText: tagEmptyText,
+                    onCreate: createTag,
+                    onToggle: toggle
+                )
+            }
+            .padding(.horizontal, Spacing.screenEdge)
+            .padding(.bottom, Spacing.contentEdge)
+            .animation(sheetAnimation, value: optionsState)
+            .animation(sheetAnimation, value: selectedIDs)
+            .animation(sheetAnimation, value: canCreateSearchedTag)
+        }
+        .background(Color.surfaceSheet.ignoresSafeArea())
+        .presentationDetents([.large])
+        .presentationDragIndicator(.hidden)
+        .onAppear {
+            syncLoadingGate()
+        }
+        .onChange(of: searchKeyword) { _, _ in
+            if !isCreating {
+                createError = nil
             }
         }
-        .presentationDetents([.medium, .large])
-        .presentationDragIndicator(.visible)
+        .onChange(of: options.map(\.id)) { _, _ in
+            syncOptions(options, initialSelectedIDs: initialSelectedIDs)
+        }
+        .onChange(of: initialSelectedIDs) { _, newInitialSelectedIDs in
+            syncOptions(options, initialSelectedIDs: newInitialSelectedIDs)
+        }
+        .onChange(of: isLoading) { _, _ in
+            syncLoadingGate()
+        }
+        .onDisappear {
+            loadingGate.hideImmediately()
+        }
     }
 
     private var orderedSelectedIDs: [Int64] {
-        options.map(\.id).filter { selectedIDs.contains($0) }
+        optionsState.map(\.id).filter { selectedIDs.contains($0) }
     }
 
-    private var footerText: String {
-        if allowsEmptySelection {
-            return "单本书会替换为当前选中的标签，允许提交空标签。"
+    private var filteredOptions: [BookEditorNamedOption] {
+        let keyword = searchKeyword.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !keyword.isEmpty else { return optionsState }
+        return optionsState.filter { option in
+            option.title.localizedCaseInsensitiveContains(keyword)
         }
-        if orderedSelectedIDs.isEmpty {
-            return "多本书只追加选中的缺失标签，请至少选择一个标签。"
+    }
+
+    private var trimmedSearchKeyword: String {
+        searchKeyword.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var canCreateSearchedTag: Bool {
+        guard !isLoading, !hasLoadError else { return false }
+        guard !trimmedSearchKeyword.isEmpty else { return false }
+        return !optionsState.contains { option in
+            option.title.trimmingCharacters(in: .whitespacesAndNewlines)
+                .localizedCaseInsensitiveCompare(trimmedSearchKeyword) == .orderedSame
         }
-        return "多本书只会追加选中的缺失标签，不会删除已有标签。"
+    }
+
+    private var tagEmptyText: String {
+        trimmedSearchKeyword.isEmpty ? "暂无可用标签" : "没有匹配的标签"
     }
 
     private var canSubmit: Bool {
         allowsEmptySelection || !orderedSelectedIDs.isEmpty
     }
 
+    private var hasLoadError: Bool {
+        guard let errorMessage else { return false }
+        return !errorMessage.isEmpty
+    }
+
+    private var sheetAnimation: Animation {
+        reduceMotion ? .smooth(duration: 0.10) : .smooth(duration: 0.22)
+    }
+
+    private func submitTags() {
+        guard canSubmit, !isCreating, !isLoading, !hasLoadError else { return }
+        onConfirm(orderedSelectedIDs)
+        dismiss()
+    }
+
     /// 切换单个标签选中状态。
     private func toggle(_ id: Int64) {
+        guard !isLoading, !isCreating else { return }
         if selectedIDs.contains(id) {
             selectedIDs.remove(id)
         } else {
             selectedIDs.insert(id)
         }
     }
+
+    private func createTag() {
+        let draft = trimmedSearchKeyword
+        guard !isLoading, !isCreating, canCreateSearchedTag else { return }
+        isCreating = true
+        createError = nil
+        Task {
+            do {
+                let newOption = try await onCreate(draft)
+                await MainActor.run {
+                    optionsState.removeAll { $0.id == newOption.id }
+                    optionsState.insert(newOption, at: 0)
+                    selectedIDs.insert(newOption.id)
+                    searchKeyword = ""
+                    createError = nil
+                    isCreating = false
+                }
+            } catch {
+                await MainActor.run {
+                    createError = error.localizedDescription
+                    isCreating = false
+                }
+            }
+        }
+    }
+
+    /// 同步外部加载完成后的候选项快照，保留只属于当前有效选项集合的初始选中态。
+    private func syncOptions(_ options: [BookEditorNamedOption], initialSelectedIDs: [Int64]) {
+        let validIDs = Set(options.map(\.id))
+        optionsState = options
+        selectedIDs = Set(initialSelectedIDs.filter { validIDs.contains($0) })
+    }
+
+    private func syncLoadingGate() {
+        loadingGate.update(intent: isLoading ? .read : .none)
+    }
 }
 
 /// 二级列表批量来源 Sheet，单选一个有效来源后提交。
 struct BookshelfBatchSourceSheet: View {
     @Environment(\.dismiss) private var dismiss
-    @State private var selectedID: Int64
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var optionsState: [BookshelfSourceOption]
+    @State private var selectedID: Int64?
+    @State private var searchKeyword = ""
+    @State private var createName = ""
+    @State private var createError: String?
+    @State private var isCreating = false
 
-    let options: [BookEditorNamedOption]
     let selectedCount: Int
+    let onCreate: (String) async throws -> BookshelfSourceOption
     let onConfirm: (Int64) -> Void
 
-    /// 构建批量来源 Sheet，默认选中第一个有效来源。
+    /// 构建批量来源 Sheet，支持“我的来源/默认来源”双分区与面板内新增来源。
     init(
-        options: [BookEditorNamedOption],
+        options: [BookshelfSourceOption],
         selectedCount: Int,
         initialSelectedID: Int64?,
+        onCreate: @escaping (String) async throws -> BookshelfSourceOption,
         onConfirm: @escaping (Int64) -> Void
     ) {
-        self.options = options
         self.selectedCount = selectedCount
+        self.onCreate = onCreate
         self.onConfirm = onConfirm
         let optionIDs = Set(options.map(\.id))
-        let initialID = initialSelectedID.flatMap { optionIDs.contains($0) ? $0 : nil }
-            ?? options.first?.id
-            ?? 0
-        self._selectedID = State(initialValue: initialID)
+        let resolvedID = initialSelectedID.flatMap { optionIDs.contains($0) ? $0 : nil }
+        self._optionsState = State(initialValue: options)
+        self._selectedID = State(initialValue: resolvedID)
     }
 
     var body: some View {
-        NavigationStack {
-            Form {
-                Section {
-                    ForEach(options) { option in
+        BookshelfDisplaySettingPageScaffold(
+            title: "设置来源",
+            subtitle: "已选\(selectedCount)本",
+            onClose: { dismiss() }
+        ) {
+            VStack(spacing: Spacing.comfortable) {
+                BookshelfSettingsGroupCard {
+                    BookshelfBatchSearchField(
+                        text: $searchKeyword,
+                        placeholder: "搜索来源"
+                    )
+                }
+
+                BookshelfSettingsGroupCard {
+                    BookshelfBatchCreateField(
+                        text: $createName,
+                        placeholder: "输入新来源",
+                        actionTitle: "添加",
+                        isProcessing: isCreating,
+                        errorMessage: createError,
+                        onSubmit: createSource
+                    )
+                }
+
+                if !mineOptions.isEmpty {
+                    BookshelfSettingsGroupCard {
+                        VStack(spacing: Spacing.none) {
+                            BookshelfBatchSectionTitle(title: BookshelfSourceCategory.mine.title)
+                            ForEach(mineOptions) { option in
+                                Button {
+                                    selectedID = option.id
+                                } label: {
+                                    BookshelfBatchOptionRow(
+                                        title: option.title,
+                                        isSelected: selectedID == option.id
+                                    )
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+                    }
+                }
+
+                if !defaultOptions.isEmpty {
+                    BookshelfSettingsGroupCard {
+                        VStack(spacing: Spacing.none) {
+                            BookshelfBatchSectionTitle(title: BookshelfSourceCategory.appDefault.title)
+                            ForEach(defaultOptions) { option in
+                                Button {
+                                    selectedID = option.id
+                                } label: {
+                                    BookshelfBatchOptionRow(
+                                        title: option.title,
+                                        isSelected: selectedID == option.id
+                                    )
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+                    }
+                }
+
+                if mineOptions.isEmpty && defaultOptions.isEmpty {
+                    BookshelfSettingsGroupCard {
+                        BookshelfBatchEmptyHint(text: "没有匹配的来源")
+                    }
+                }
+
+                Text("将 \(selectedCount) 本书的来源更新为所选来源。")
+                    .font(AppTypography.caption)
+                    .foregroundStyle(Color.textSecondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+
+                Button {
+                    submitSelection()
+                } label: {
+                    Text("完成")
+                        .font(AppTypography.bodyMedium)
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(Color.brand)
+                .disabled(selectedID == nil || isCreating)
+            }
+            .padding(.horizontal, Spacing.screenEdge)
+            .padding(.bottom, Spacing.contentEdge)
+            .animation(sheetAnimation, value: optionsState)
+            .animation(sheetAnimation, value: selectedID)
+        }
+        .background(Color.surfaceSheet.ignoresSafeArea())
+        .presentationDetents([.medium, .large])
+        .presentationDragIndicator(.hidden)
+    }
+
+    private var filteredOptions: [BookshelfSourceOption] {
+        let keyword = searchKeyword.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !keyword.isEmpty else { return optionsState }
+        return optionsState.filter { option in
+            option.title.localizedCaseInsensitiveContains(keyword)
+        }
+    }
+
+    private var mineOptions: [BookshelfSourceOption] {
+        filteredOptions.filter { $0.category == .mine }
+    }
+
+    private var defaultOptions: [BookshelfSourceOption] {
+        filteredOptions.filter { $0.category == .appDefault }
+    }
+
+    private var sheetAnimation: Animation {
+        reduceMotion ? .smooth(duration: 0.10) : .smooth(duration: 0.22)
+    }
+
+    private func submitSelection() {
+        guard let selectedID else { return }
+        onConfirm(selectedID)
+        dismiss()
+    }
+
+    private func createSource() {
+        guard !isCreating else { return }
+        let draft = createName
+        isCreating = true
+        createError = nil
+        Task {
+            do {
+                let newOption = try await onCreate(draft)
+                await MainActor.run {
+                    optionsState.removeAll { $0.id == newOption.id }
+                    optionsState.append(newOption)
+                    selectedID = newOption.id
+                    searchKeyword = ""
+                    createName = ""
+                    createError = nil
+                    isCreating = false
+                }
+            } catch {
+                await MainActor.run {
+                    createError = error.localizedDescription
+                    isCreating = false
+                }
+            }
+        }
+    }
+}
+
+/// 批量编辑面板搜索输入，统一行高与图标语义。
+private struct BookshelfBatchSearchField: View {
+    @Binding var text: String
+    let placeholder: String
+    let backgroundColor: Color
+    let minHeight: CGFloat
+
+    /// 构建搜索输入；外层可按是否嵌入卡片调整底色与高度。
+    init(
+        text: Binding<String>,
+        placeholder: String,
+        backgroundColor: Color = .surfaceNested,
+        minHeight: CGFloat = 46
+    ) {
+        self._text = text
+        self.placeholder = placeholder
+        self.backgroundColor = backgroundColor
+        self.minHeight = minHeight
+    }
+
+    var body: some View {
+        HStack(spacing: Spacing.tight) {
+            Image(systemName: "magnifyingglass")
+                .font(AppTypography.subheadlineMedium)
+                .foregroundStyle(Color.textSecondary)
+
+            TextField(placeholder, text: $text)
+                .font(AppTypography.body)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled(true)
+        }
+        .padding(.horizontal, Spacing.base)
+        .frame(minHeight: minHeight)
+        .background(backgroundColor, in: RoundedRectangle(cornerRadius: CornerRadius.containerMedium, style: .continuous))
+    }
+}
+
+/// 批量标签顶栏文字按钮的私有尺寸，维持横向胶囊比例且不影响公共设计令牌。
+private enum BookshelfBatchTopTextActionButtonLayout {
+    static let minWidth: CGFloat = 76
+}
+
+/// 批量编辑 Sheet 顶部的轻量文字操作按钮，承接取消与保存等编辑型动作。
+private struct BookshelfBatchTopTextActionButton: View {
+    let title: String
+    let foregroundColor: Color
+    let isDisabled: Bool
+    let action: () -> Void
+
+    /// 构建顶部文字操作按钮；禁用态保留热区但弱化文字层级。
+    init(
+        title: String,
+        foregroundColor: Color,
+        isDisabled: Bool = false,
+        action: @escaping () -> Void
+    ) {
+        self.title = title
+        self.foregroundColor = foregroundColor
+        self.isDisabled = isDisabled
+        self.action = action
+    }
+
+    var body: some View {
+        Button(action: action) {
+            Text(title)
+                .font(AppTypography.bodyMedium)
+                .foregroundStyle(isDisabled ? Color.textHint : foregroundColor)
+                .lineLimit(1)
+                .minimumScaleFactor(0.86)
+                .padding(.horizontal, Spacing.base)
+                .frame(
+                    minWidth: BookshelfBatchTopTextActionButtonLayout.minWidth,
+                    minHeight: Spacing.actionReserved
+                )
+                .background(Color.surfaceCard, in: Capsule())
+                .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .disabled(isDisabled)
+        .accessibilityLabel(title)
+    }
+}
+
+/// 标签批量编辑的轻量列表面板，使用留白与内部分割线替代多层卡片。
+private struct BookshelfBatchTagListPanel: View {
+    let options: [BookEditorNamedOption]
+    let selectedIDs: Set<Int64>
+    let createTitle: String?
+    let isLoading: Bool
+    let isLoadingVisible: Bool
+    let loadErrorMessage: String?
+    let isCreating: Bool
+    let createError: String?
+    let emptyText: String
+    let onCreate: () -> Void
+    let onToggle: (Int64) -> Void
+
+    var body: some View {
+        VStack(spacing: Spacing.none) {
+            if let loadErrorMessage, !loadErrorMessage.isEmpty {
+                BookshelfBatchTagLoadErrorRow(text: loadErrorMessage)
+            } else if isLoading {
+                if isLoadingVisible {
+                    BookshelfBatchTagLoadingRow()
+                } else {
+                    BookshelfBatchTagPlaceholderRow()
+                }
+            } else if let createTitle {
+                Button(action: onCreate) {
+                    BookshelfBatchTagCreateRow(
+                        title: createTitle,
+                        isCreating: isCreating,
+                        showsDivider: !options.isEmpty || hasCreateError
+                    )
+                }
+                .buttonStyle(.plain)
+                .disabled(isCreating)
+                .transition(.opacity)
+            }
+
+            if !isLoading, hasCreateError, let createError {
+                Text(createError)
+                    .font(AppTypography.caption)
+                    .foregroundStyle(Color.feedbackError)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, Spacing.contentEdge)
+                    .padding(.vertical, Spacing.half)
+            }
+
+            if !isLoading && !hasLoadError {
+                if options.isEmpty {
+                    if createTitle == nil {
+                        BookshelfBatchTagEmptyRow(text: emptyText)
+                    }
+                } else {
+                    ForEach(Array(options.enumerated()), id: \.element.id) { index, option in
                         Button {
-                            selectedID = option.id
+                            onToggle(option.id)
                         } label: {
-                            BookshelfBatchOptionRow(
+                            BookshelfBatchTagOptionRow(
                                 title: option.title,
-                                isSelected: selectedID == option.id
+                                isSelected: selectedIDs.contains(option.id),
+                                showsDivider: index < options.count - 1
                             )
                         }
                         .buttonStyle(.plain)
                     }
-                } footer: {
-                    Text("将 \(selectedCount) 本书的来源更新为所选来源。")
-                        .font(AppTypography.caption)
-                }
-            }
-            .navigationTitle("设置来源")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("取消") {
-                        dismiss()
-                    }
-                }
-
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("完成") {
-                        onConfirm(selectedID)
-                        dismiss()
-                    }
-                    .disabled(selectedID == 0)
                 }
             }
         }
-        .presentationDetents([.medium, .large])
-        .presentationDragIndicator(.visible)
+        .padding(.vertical, Spacing.half)
+        .background(Color.surfaceCard, in: RoundedRectangle(cornerRadius: CornerRadius.containerMedium, style: .continuous))
+    }
+
+    private var hasCreateError: Bool {
+        guard let createError else { return false }
+        return !createError.isEmpty
+    }
+
+    private var hasLoadError: Bool {
+        guard let loadErrorMessage else { return false }
+        return !loadErrorMessage.isEmpty
+    }
+}
+
+/// 标签候选项读取中的面板内反馈，复用全局延迟 Loading 策略后的可视态。
+private struct BookshelfBatchTagLoadingRow: View {
+    var body: some View {
+        LoadingStateView("正在加载标签…", style: .inline)
+            .frame(maxWidth: .infinity, minHeight: 56)
+    }
+}
+
+/// 标签候选项读取延迟窗口内的占位行，避免快速读取时闪出文字。
+private struct BookshelfBatchTagPlaceholderRow: View {
+    var body: some View {
+        Color.clear
+            .frame(maxWidth: .infinity, minHeight: 56)
+    }
+}
+
+/// 标签候选项读取失败时的面板内错误文案。
+private struct BookshelfBatchTagLoadErrorRow: View {
+    let text: String
+
+    var body: some View {
+        Text(text)
+            .font(AppTypography.body)
+            .foregroundStyle(Color.feedbackError)
+            .fixedSize(horizontal: false, vertical: true)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, Spacing.contentEdge)
+            .padding(.vertical, Spacing.half)
+            .frame(minHeight: 56)
+    }
+}
+
+/// 标签列表中的创建入口行，作为搜索结果的一部分出现。
+private struct BookshelfBatchTagCreateRow: View {
+    let title: String
+    let isCreating: Bool
+    let showsDivider: Bool
+
+    var body: some View {
+        HStack(spacing: Spacing.base) {
+            Image(systemName: "plus.circle.fill")
+                .font(AppTypography.body)
+                .foregroundStyle(Color.brand)
+
+            Text(isCreating ? "正在创建“\(title)”" : "创建“\(title)”")
+                .font(AppTypography.bodyMedium)
+                .foregroundStyle(Color.textPrimary)
+                .lineLimit(2)
+                .fixedSize(horizontal: false, vertical: true)
+
+            Spacer(minLength: Spacing.base)
+        }
+        .padding(.horizontal, Spacing.contentEdge)
+        .padding(.vertical, Spacing.half)
+        .frame(minHeight: 56)
+        .overlay(alignment: .bottom) {
+            BookshelfBatchInsetDivider()
+                .opacity(showsDivider ? 1 : 0)
+        }
+        .contentShape(Rectangle())
+        .accessibilityLabel(isCreating ? "正在创建标签 \(title)" : "创建标签 \(title)")
+    }
+}
+
+/// 标签列表中的选项行，复用书架选择态的动画 checkbox 样式。
+private struct BookshelfBatchTagOptionRow: View {
+    let title: String
+    let isSelected: Bool
+    let showsDivider: Bool
+
+    var body: some View {
+        HStack(spacing: Spacing.base) {
+            Text(title)
+                .font(AppTypography.body)
+                .foregroundStyle(Color.textPrimary)
+                .lineLimit(2)
+                .fixedSize(horizontal: false, vertical: true)
+
+            Spacer(minLength: Spacing.base)
+
+            XMSelectionIndicator(
+                style: .checkbox,
+                isSelected: isSelected,
+                font: AppTypography.bodyMedium
+            )
+            .frame(width: 30, height: 30)
+        }
+        .padding(.horizontal, Spacing.contentEdge)
+        .padding(.vertical, Spacing.half)
+        .frame(minHeight: 56)
+        .overlay(alignment: .bottom) {
+            BookshelfBatchInsetDivider()
+                .opacity(showsDivider ? 1 : 0)
+        }
+        .contentShape(Rectangle())
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(title)，\(isSelected ? "已选中" : "未选中")")
+    }
+}
+
+/// 标签列表空态行，保持和普通列表项一致的适中行高。
+private struct BookshelfBatchTagEmptyRow: View {
+    let text: String
+
+    var body: some View {
+        Text(text)
+            .font(AppTypography.body)
+            .foregroundStyle(Color.textSecondary)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, Spacing.contentEdge)
+            .padding(.vertical, Spacing.half)
+            .frame(minHeight: 56)
+    }
+}
+
+/// 批量标签列表内缩分割线，避免分隔线贴边造成紧张感。
+private struct BookshelfBatchInsetDivider: View {
+    var body: some View {
+        Rectangle()
+            .fill(Color.divider)
+            .frame(height: CardStyle.borderWidth)
+            .padding(.leading, Spacing.contentEdge)
+            .padding(.trailing, Spacing.contentEdge)
+    }
+}
+
+/// 批量编辑面板新增输入行，统一输入、提交与错误反馈语义。
+private struct BookshelfBatchCreateField: View {
+    @Binding var text: String
+    let placeholder: String
+    let actionTitle: String
+    let isProcessing: Bool
+    let errorMessage: String?
+    let onSubmit: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Spacing.tight) {
+            HStack(spacing: Spacing.tight) {
+                TextField(placeholder, text: $text)
+                    .font(AppTypography.body)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled(true)
+                    .padding(.horizontal, Spacing.base)
+                    .frame(minHeight: 46)
+                    .background(Color.surfaceNested, in: RoundedRectangle(cornerRadius: CornerRadius.containerMedium, style: .continuous))
+
+                Button(actionTitle, action: onSubmit)
+                    .font(AppTypography.subheadlineSemibold)
+                    .buttonStyle(.borderedProminent)
+                    .tint(Color.brand)
+                    .disabled(trimmedText.isEmpty || isProcessing)
+            }
+
+            if let errorMessage, !errorMessage.isEmpty {
+                Text(errorMessage)
+                    .font(AppTypography.caption)
+                    .foregroundStyle(Color.feedbackError)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+
+    private var trimmedText: String {
+        text.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+}
+
+/// 批量面板内的空结果提示行。
+private struct BookshelfBatchEmptyHint: View {
+    let text: String
+
+    var body: some View {
+        Text(text)
+            .font(AppTypography.body)
+            .foregroundStyle(Color.textSecondary)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .frame(minHeight: 52)
+    }
+}
+
+/// 批量来源面板分区标题行。
+private struct BookshelfBatchSectionTitle: View {
+    let title: String
+
+    var body: some View {
+        Text(title)
+            .font(AppTypography.captionSemibold)
+            .foregroundStyle(Color.textSecondary)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.top, Spacing.half)
+            .padding(.bottom, Spacing.tight)
     }
 }
 

@@ -794,6 +794,21 @@ class BookViewModel {
         }
     }
 
+    /// 在移组面板内新建分组，并返回可直接选中的目标分组选项。
+    func createMoveTargetGroup(named name: String) async throws -> BookEditorNamedOption {
+        try await repository.createGroup(named: name)
+    }
+
+    /// 在标签面板内新建标签，并返回可直接选中的标签选项。
+    func createBatchTag(named name: String) async throws -> BookEditorNamedOption {
+        try await repository.createTag(named: name)
+    }
+
+    /// 在来源面板内新建来源，并返回可直接选中的来源选项。
+    func createBatchSource(named name: String) async throws -> BookshelfSourceOption {
+        try await repository.createSource(named: name)
+    }
+
     /// 将单项移动到普通区最前。
     func moveItemToStart(_ id: BookshelfItemID) {
         guard canMoveItem(id) else { return }
@@ -979,6 +994,10 @@ private extension BookViewModel {
             actionNotice = "分组不支持\(action.title)，请至少选择一本书"
             return
         }
+        if action == .setTag {
+            presentBatchTagsSheet(bookIDs: bookIDs)
+            return
+        }
         isLoadingBatchOptions = true
         actionNotice = "正在加载\(action.title)选项..."
         writeError = nil
@@ -1002,6 +1021,63 @@ private extension BookViewModel {
                     self.isLoadingBatchOptions = false
                     self.writeError = error.localizedDescription
                     self.actionNotice = error.localizedDescription
+                }
+            }
+        }
+    }
+
+    /// 立即打开标签 Sheet，并在 Sheet 内容区异步刷新候选项，避免底部操作栏闪出读取文案。
+    /// - Note: Repository 读取任务可被新请求取消；成功或失败后只在原 Sheet 仍存在且选择集合未变化时回写 MainActor 状态。
+    private func presentBatchTagsSheet(bookIDs: [Int64]) {
+        batchOptionsTask?.cancel()
+        isLoadingBatchOptions = false
+        actionNotice = nil
+        writeError = nil
+        activeBatchSheet = .tags(
+            options: [],
+            initialSelectedIDs: [],
+            allowsEmptySelection: bookIDs.count == 1,
+            isLoading: true,
+            errorMessage: nil
+        )
+        batchOptionsTask = Task {
+            do {
+                let options = try await repository.fetchBookshelfBatchEditOptions(bookIDs: bookIDs)
+                guard !Task.isCancelled else { return }
+                await MainActor.run {
+                    guard self.selectedBookIDs == bookIDs else {
+                        self.activeBatchSheet = nil
+                        self.actionNotice = nil
+                        return
+                    }
+                    guard self.activeBatchSheet?.id == "tags" else { return }
+                    self.activeBatchSheet = .tags(
+                        options: options.tags,
+                        initialSelectedIDs: bookIDs.count == 1 ? options.initialTagIDs : [],
+                        allowsEmptySelection: bookIDs.count == 1,
+                        isLoading: false,
+                        errorMessage: nil
+                    )
+                    self.actionNotice = nil
+                }
+            } catch {
+                guard !Task.isCancelled else { return }
+                await MainActor.run {
+                    guard self.selectedBookIDs == bookIDs else {
+                        self.activeBatchSheet = nil
+                        self.actionNotice = nil
+                        return
+                    }
+                    guard self.activeBatchSheet?.id == "tags" else { return }
+                    self.activeBatchSheet = .tags(
+                        options: [],
+                        initialSelectedIDs: [],
+                        allowsEmptySelection: bookIDs.count == 1,
+                        isLoading: false,
+                        errorMessage: error.localizedDescription
+                    )
+                    self.writeError = nil
+                    self.actionNotice = nil
                 }
             }
         }
@@ -1060,7 +1136,9 @@ private extension BookViewModel {
             activeBatchSheet = .tags(
                 options: options.tags,
                 initialSelectedIDs: bookIDs.count == 1 ? options.initialTagIDs : [],
-                allowsEmptySelection: bookIDs.count == 1
+                allowsEmptySelection: bookIDs.count == 1,
+                isLoading: false,
+                errorMessage: nil
             )
             actionNotice = nil
         case .setSource:
@@ -1070,7 +1148,7 @@ private extension BookViewModel {
             }
             activeBatchSheet = .source(
                 options: options.sources,
-                initialSelectedID: options.initialSourceID ?? options.sources.first?.id
+                initialSelectedID: options.initialSourceID
             )
             actionNotice = nil
         case .setReadStatus:
