@@ -47,8 +47,8 @@ protocol BookRepositoryProtocol {
     func createSource(named name: String) async throws -> BookshelfSourceOption
     /// 批量设置书籍阅读状态；读完状态会同步评分与阅读进度到终点。
     func batchSetBookReadStatus(bookIDs: [Int64], input: BookshelfBatchReadStatusInput) async throws
-    /// 读取可作为移入目标的有效分组，排除当前分组后供二级列表批量移组 Sheet 展示。
-    func fetchBookshelfMoveTargetGroups(excludingGroupID: Int64?) async throws -> [BookEditorNamedOption]
+    /// 读取可作为移入目标的有效分组，排除当前分组后供批量移组 Sheet 展示封面与数量。
+    func fetchBookshelfMoveTargetGroups(excludingGroupID: Int64?) async throws -> [BookshelfMoveGroupOption]
     /// 将指定书籍从当前分组移出到默认书架，并按位置语义写入默认书架排序值。
     func moveBooksOutOfGroup(bookIDs: [Int64], placement: GroupBooksPlacement) async throws
     /// 批量置顶默认书架顶层 Book/Group，按传入选择顺序追加 pin_order。

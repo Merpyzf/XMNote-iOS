@@ -257,10 +257,16 @@ private struct BookContentView: View {
                     initialRatingScore: initialRatingScore,
                     onConfirm: viewModel.submitBatchReadStatus
                 )
-            case .moveGroup(options: let options):
+            case .moveGroup(
+                options: let options,
+                isLoading: let isLoading,
+                errorMessage: let errorMessage
+            ):
                 BookshelfMoveGroupSheet(
                     options: options,
                     selectedCount: viewModel.selectedBookIDs.count,
+                    isLoading: isLoading,
+                    errorMessage: errorMessage,
                     onCreate: viewModel.createMoveTargetGroup(named:),
                     onConfirm: viewModel.submitMoveToGroup
                 )

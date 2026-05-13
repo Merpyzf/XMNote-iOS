@@ -2,7 +2,7 @@ import Foundation
 
 /**
  * [INPUT]: 依赖 Foundation 的 Date/DateFormatter 进行时间格式化
- * [OUTPUT]: 对外提供 BookItem、BookshelfSnapshot、BookshelfItem、BookshelfOrderItem、BookshelfListContext、BookshelfBatchEditOptions、BookDetail、NoteExcerpt 等书籍域展示模型
+ * [OUTPUT]: 对外提供 BookItem、BookshelfSnapshot、BookshelfItem、BookshelfOrderItem、BookshelfListContext、BookshelfBatchEditOptions、BookshelfMoveGroupOption、BookDetail、NoteExcerpt 等书籍域展示模型
  * [POS]: Domain/Models 的书籍聚合模型定义，被 BookViewModel 与 BookRepository 实现共同消费
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -511,6 +511,14 @@ nonisolated struct BookshelfSourceOption: Identifiable, Hashable, Sendable {
     let id: Int64
     let title: String
     let category: BookshelfSourceCategory
+}
+
+/// 批量移组 Sheet 选项，包含分组标题、书籍数量与代表封面。
+nonisolated struct BookshelfMoveGroupOption: Identifiable, Hashable, Sendable {
+    let id: Int64
+    let title: String
+    let bookCount: Int
+    let representativeCovers: [String]
 }
 
 /// 书架批量编辑可选项，统一承载标签、来源与阅读状态 Sheet 所需数据。

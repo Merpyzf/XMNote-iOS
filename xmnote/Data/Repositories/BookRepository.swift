@@ -201,7 +201,7 @@ struct BookRepository: BookRepositoryProtocol {
     }
 
     /// 读取二级列表移入分组候选项。
-    func fetchBookshelfMoveTargetGroups(excludingGroupID: Int64?) async throws -> [BookEditorNamedOption] {
+    func fetchBookshelfMoveTargetGroups(excludingGroupID: Int64?) async throws -> [BookshelfMoveGroupOption] {
         try await databaseManager.database.dbPool.read { db in
             try fetchMoveTargetGroups(db, excludingGroupID: excludingGroupID)
         }
@@ -984,35 +984,142 @@ private extension BookRepository {
     nonisolated func fetchMoveTargetGroups(
         _ db: Database,
         excludingGroupID: Int64?
-    ) throws -> [BookEditorNamedOption] {
-        let baseSQL = """
-            SELECT id, COALESCE(name, '') AS name
-            FROM `group`
-            WHERE is_deleted = 0
-            """
-
-        // SQL 目的：读取可作为批量移入目标的有效分组。
-        // 涉及表：`group`。
-        // 关键过滤：is_deleted = 0；默认分组二级页会额外排除当前 group id，避免无意义移入自身。
-        // 返回字段用途：id/name 直接构造目标分组 Sheet 选项；时间字段不参与本查询。
-        let rows: [Row]
+    ) throws -> [BookshelfMoveGroupOption] {
+        let exclusionPredicate: String
+        let arguments: StatementArguments
         if let excludingGroupID, excludingGroupID > 0 {
-            rows = try Row.fetchAll(
-                db,
-                sql: baseSQL + "\n  AND id != ?\nORDER BY group_order ASC, id ASC",
-                arguments: [excludingGroupID]
-            )
+            exclusionPredicate = "AND g.id != ?"
+            arguments = [excludingGroupID]
         } else {
-            rows = try Row.fetchAll(
-                db,
-                sql: baseSQL + "\nORDER BY group_order ASC, id ASC"
-            )
+            exclusionPredicate = ""
+            arguments = []
         }
-        return rows.map { row in
-            let name: String = row["name"] ?? ""
-            return BookEditorNamedOption(
-                id: row["id"],
-                title: name.isEmpty ? "未命名分组" : name
+
+        // SQL 目的：读取可作为批量移入目标的有效分组，并补齐分组内有效书籍封面与排序元数据。
+        // 涉及表：`group` g LEFT JOIN group_book gb LEFT JOIN book b，另通过 read_status/source/read_time_record/note 补齐现有分组预览排序所需字段。
+        // 关键过滤：g.is_deleted = 0；gb/b 均过滤软删除；b.id != 0；默认分组二级页会额外排除当前 group id；组内书籍仅保留 Android 语义下最早有效分组关系。
+        // 返回字段用途：group id/name 构造目标分组，book cover/count 构造移组 Sheet 的分组封面与数量；时间字段仅供现有预览排序逻辑使用，不参与写入。
+        let sql = """
+            SELECT g.id AS group_id,
+                   COALESCE(g.name, '') AS group_name,
+                   g.group_order,
+                   g.pinned AS group_pinned,
+                   g.pin_order AS group_pin_order,
+                   g.created_date AS group_created_date,
+                   b.id AS book_id,
+                   b.name AS book_name,
+                   b.author AS book_author,
+                   b.cover AS book_cover,
+                   b.pub_date AS book_pub_date,
+                   COALESCE(rs.name, '') AS book_read_status_name,
+                   COALESCE(s.name, '') AS book_source_name,
+                   (
+                       SELECT COUNT(n.id)
+                       FROM note n
+                       WHERE n.book_id = b.id
+                         AND n.is_deleted = 0
+                   ) AS note_count,
+                   b.created_date AS book_created_date,
+                   b.updated_date AS book_updated_date,
+                   b.score AS book_score,
+                   b.read_status_changed_date AS book_read_status_changed_date,
+                   b.read_position AS book_read_position,
+                   b.total_position AS book_total_position,
+                   b.total_pagination AS book_total_pagination,
+                   COALESCE(rt.total_reading_time, 0) AS book_total_reading_time,
+                   b.book_order AS book_order,
+                   b.pinned AS book_pinned,
+                   b.pin_order AS book_pin_order
+            FROM `group` g
+            LEFT JOIN group_book gb
+              ON gb.group_id = g.id
+             AND gb.is_deleted = 0
+            LEFT JOIN book b
+              ON b.id = gb.book_id
+             AND b.is_deleted = 0
+             AND b.id != 0
+             AND gb.id = (
+                 SELECT gb2.id
+                 FROM group_book gb2
+                 WHERE gb2.book_id = b.id
+                   AND gb2.is_deleted = 0
+                 ORDER BY gb2.created_date ASC, gb2.id ASC
+                 LIMIT 1
+             )
+            LEFT JOIN read_status rs ON rs.id = b.read_status_id AND rs.is_deleted = 0
+            LEFT JOIN source s ON s.id = b.source_id AND s.is_deleted = 0
+            LEFT JOIN (
+                SELECT book_id, SUM(elapsed_seconds) AS total_reading_time
+                FROM read_time_record
+                WHERE is_deleted = 0
+                  AND status = 3
+                  AND book_id != 0
+                GROUP BY book_id
+            ) rt ON rt.book_id = b.id
+            WHERE g.is_deleted = 0
+              \(exclusionPredicate)
+            ORDER BY g.group_order ASC, g.id ASC
+            """
+        let rows = try Row.fetchAll(db, sql: sql, arguments: arguments)
+        var orderedGroupIDs: [Int64] = []
+        var builders: [Int64: BookshelfGroupBuilder] = [:]
+
+        for row in rows {
+            let groupID: Int64 = row["group_id"]
+            if builders[groupID] == nil {
+                let rawGroupName: String = row["group_name"] ?? ""
+                orderedGroupIDs.append(groupID)
+                builders[groupID] = BookshelfGroupBuilder(
+                    id: groupID,
+                    name: rawGroupName.isEmpty ? "未命名分组" : rawGroupName,
+                    pinned: (row["group_pinned"] as Int64? ?? 0) != 0,
+                    pinOrder: row["group_pin_order"] ?? 0,
+                    sortOrder: row["group_order"] ?? 0,
+                    createdDate: row["group_created_date"] ?? 0,
+                    books: []
+                )
+            }
+            guard let bookID = row["book_id"] as Int64?,
+                  var builder = builders[groupID] else {
+                continue
+            }
+            builder.append(
+                BookshelfGroupBookPreview(
+                    id: bookID,
+                    name: row["book_name"] ?? "",
+                    author: row["book_author"] ?? "",
+                    readStatusName: row["book_read_status_name"] ?? "",
+                    sourceName: row["book_source_name"] ?? "",
+                    cover: row["book_cover"] ?? "",
+                    noteCount: row["note_count"] ?? 0,
+                    createdDate: row["book_created_date"] ?? 0,
+                    modifiedDate: row["book_updated_date"] ?? 0,
+                    publishDate: publishTimestamp(from: row["book_pub_date"] ?? ""),
+                    score: row["book_score"] ?? 0,
+                    readDoneDate: row["book_read_status_changed_date"] ?? 0,
+                    totalReadingTime: row["book_total_reading_time"] ?? 0,
+                    readingProgress: readingProgress(
+                        readPosition: row["book_read_position"] ?? 0.0,
+                        totalPosition: row["book_total_position"] ?? 0,
+                        totalPagination: row["book_total_pagination"] ?? 0
+                    ),
+                    pinned: (row["book_pinned"] as Int64? ?? 0) != 0,
+                    pinOrder: row["book_pin_order"] ?? 0,
+                    sortOrder: row["book_order"] ?? 0
+                )
+            )
+            builders[groupID] = builder
+        }
+
+        let groupBookListSetting = defaultGroupBookListSetting()
+        return orderedGroupIDs.compactMap { groupID in
+            guard let builder = builders[groupID] else { return nil }
+            let sortedBooks = sortGroupPreviewBooks(builder.books, setting: groupBookListSetting)
+            return BookshelfMoveGroupOption(
+                id: builder.id,
+                title: builder.name,
+                bookCount: sortedBooks.count,
+                representativeCovers: sortedBooks.prefix(4).map(\.cover)
             )
         }
     }

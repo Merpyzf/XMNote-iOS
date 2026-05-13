@@ -1092,10 +1092,15 @@ private extension BookViewModel {
             actionNotice = "分组不能移入分组，请至少选择一本书"
             return
         }
-        isLoadingBatchOptions = true
-        actionNotice = "正在加载分组选项..."
+        isLoadingBatchOptions = false
+        actionNotice = nil
         writeError = nil
         batchOptionsTask?.cancel()
+        activeBatchSheet = .moveGroup(
+            options: [],
+            isLoading: true,
+            errorMessage: nil
+        )
         batchOptionsTask = Task {
             do {
                 let options = try await repository.fetchBookshelfMoveTargetGroups(excludingGroupID: nil)
@@ -1104,22 +1109,36 @@ private extension BookViewModel {
                     guard self.selectedBookIDs == bookIDs else {
                         self.isLoadingBatchOptions = false
                         self.actionNotice = nil
+                        self.activeBatchSheet = nil
                         return
                     }
+                    guard self.activeBatchSheet?.id == "moveGroup" else { return }
                     self.isLoadingBatchOptions = false
-                    guard !options.isEmpty else {
-                        self.actionNotice = "暂无可移入的分组"
-                        return
-                    }
-                    self.activeBatchSheet = .moveGroup(options: options)
+                    self.activeBatchSheet = .moveGroup(
+                        options: options,
+                        isLoading: false,
+                        errorMessage: nil
+                    )
                     self.actionNotice = nil
                 }
             } catch {
                 guard !Task.isCancelled else { return }
                 await MainActor.run {
+                    guard self.selectedBookIDs == bookIDs else {
+                        self.isLoadingBatchOptions = false
+                        self.actionNotice = nil
+                        self.activeBatchSheet = nil
+                        return
+                    }
+                    guard self.activeBatchSheet?.id == "moveGroup" else { return }
                     self.isLoadingBatchOptions = false
-                    self.writeError = error.localizedDescription
-                    self.actionNotice = error.localizedDescription
+                    self.activeBatchSheet = .moveGroup(
+                        options: [],
+                        isLoading: false,
+                        errorMessage: error.localizedDescription
+                    )
+                    self.writeError = nil
+                    self.actionNotice = nil
                 }
             }
         }
