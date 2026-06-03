@@ -99,8 +99,6 @@ private enum TopSwitcherQuoteDecorationMetrics {
 }
 
 private enum TopSwitcherTypography {
-    static let selectedTabSize: CGFloat = 22
-    static let unselectedTabSize: CGFloat = 19
     static let titleSize: CGFloat = 24
     static let minLabelHeight: CGFloat = 40
     static let verticalPadding: CGFloat = Spacing.half
@@ -165,14 +163,7 @@ private struct TopSwitcherTabBar<Tab: Hashable>: View {
             }
         } label: {
             Text(title)
-                .font(
-                    AppTypography.fixed(
-                        baseSize: isSelected ? TopSwitcherTypography.selectedTabSize : TopSwitcherTypography.unselectedTabSize,
-                        relativeTo: .title3,
-                        weight: isSelected ? .semibold : .medium,
-                        minimumPointSize: isSelected ? TopSwitcherTypography.selectedTabSize : TopSwitcherTypography.unselectedTabSize
-                    )
-                )
+                .font(isSelected ? BookshelfTypography.topSelected : BookshelfTypography.topUnselected)
                 .foregroundStyle(isSelected ? .primary : .secondary)
                 .anchorPreference(key: TopSwitcherTabAnchorKey.self, value: .bounds) { [tab: $0] }
                 .padding(.vertical, TopSwitcherTypography.verticalPadding)

@@ -51,7 +51,7 @@ struct BookGridItemView: View {
             )
 
             Text(book.author.isEmpty ? " " : book.author)
-                .font(AppTypography.caption2)
+                .font(BookshelfTypography.gridSubtitle)
                 .lineLimit(1)
                 .foregroundStyle(Color.textSecondary)
         }

@@ -82,11 +82,28 @@
 - 底部沉浸滚动约束（强制）：涉及 `ScrollView`、`safeArea` 与底部导航/手势区时，内容在底部圆角区域必须平滑过渡，禁止生硬裁切。
 
 ### 字体与设计令牌
-- 生产文本统一走 `xmnote/Utilities/DesignTokens.swift` 中的 `AppTypography`；`SemanticTypography` 与 `BrandTypography` 仅作为底层排版基础设施存在，不作为页面层默认入口。
-- 生产路径禁止直接新增 `.font(.system(size: ...))`、`UIFont.systemFont(ofSize:)`、`UIFont.boldSystemFont(ofSize:)` 等固定字号写法。
-- 新增文本前先判定对象是 `生产文本 / 品牌数字与品牌标题 / 图标或装饰 glyph`；生产文本优先使用 `AppTypography`，品牌强调位使用 `AppTypography.brandDisplay(...)` 与相关裁切能力。
-- 涉及文本宽度、行高、baseline、截断测量时，测量字体必须与渲染字体同源。
+- 生产文本统一走 `xmnote/Utilities/DesignTokens.swift` 中的 `AppTypography` 或页面级组合 token；`SemanticTypography` 与 `BrandTypography` 仅作为底层排版基础设施存在，不作为页面层默认入口。
+- 生产路径禁止直接新增 `.font(.system(size: ...))`、`UIFont.systemFont(ofSize:)`、`UIFont.boldSystemFont(ofSize:)` 等固定字号写法；禁止在页面层随手 `.weight(...)` 或散落 `lineSpacing(...)` 魔法数字。
+- 新增文本前先判定对象是 `生产文本 / 品牌数字与品牌标题 / 图标或装饰 glyph`；生产文本优先使用 `AppTypography`，品牌强调位使用 `AppTypography.brandDisplay(...)` 与相关裁切能力，书架首页优先使用 `BookshelfTypography`，书摘列表优先使用 `NoteExcerptTypography`。
+- 文字层级必须遵循以下已定稿 token，不得因单个功能迭代随意改变字号、字重、行距或使用场景：
+
+  | Token | 字号 | 字重 | 行距/行高 | 使用场景 |
+  | --- | --- | --- | --- | --- |
+  | `BookshelfTypography.topSelected` | 20pt | semibold | SwiftUI `title3` 默认动态行高 | 首页顶部选中 tab |
+  | `BookshelfTypography.topUnselected` | 18pt | medium | SwiftUI `title3` 默认动态行高 | 首页顶部未选中 tab |
+  | `BookshelfTypography.searchField` | 15pt | regular | SwiftUI `body` 默认动态行高 | 首页搜索输入、placeholder 与取消按钮 |
+  | `BookshelfTypography.gridTitle` | 12pt | medium | SwiftUI `caption` 默认动态行高 | 书架网格书名、聚合卡标题 |
+  | `BookshelfTypography.gridSubtitle` | 11pt | regular | SwiftUI `caption2` 默认动态行高 | 书架作者、副标题、列表次级说明 |
+  | `NoteExcerptTypography.body` | 15pt | regular | `lineSpacing = 7pt` | 书摘正文预览，默认第一阅读层级 |
+  | `NoteExcerptTypography.idea` | 13pt | regular | `lineSpacing = 4pt` | 书摘想法、引用说明、正文的补充层 |
+  | `NoteExcerptTypography.footer` | 11pt | regular | SwiftUI `caption2` 默认动态行高 | 书摘时间、来源等辅助信息，颜色优先 `Color.textSecondary` |
+
+- 首页文本层级规则：顶部 tab 必须弱于页面品牌/主标题但强于搜索与书架网格；搜索文案不得回退到 17pt `AppTypography.body`；书名保持 12pt medium，长标题优先通过现有截断、换行或跑马灯能力处理，不通过放大字号制造层级。
+- 书摘列表文本层级规则：正文是第一阅读层级，保持 15pt regular 并通过 7pt 行距形成稳定阅读节奏；想法区低于正文一层；footer 必须可读但不抢正文，主要辅助信息禁止使用过淡的 `.tertiary`。
+- 标题、正文、辅助信息、按钮文案边界：标题优先使用页面专用 token 或 `AppTypography.headline/title*`，不得为了强调直接加粗或放大；正文优先使用 `AppTypography.body/callout/subheadline` 或专用阅读 token，长文本必须同时明确行距与截断策略；辅助信息优先 11-12pt 并使用 `Color.textSecondary` / `Color.textHint` 等语义色；按钮文案使用所在页面 token，普通按钮不得默认使用品牌展示字体或自定义固定字号。
+- 涉及文本宽度、行高、baseline、截断测量时，测量字体必须与渲染字体同源；例如书架标题跑马灯必须同步使用 `BookshelfTypography.gridTitle` 与对应 UIKit 测量字体。
 - 跨组件重复出现的文本层级必须沉淀到 `DesignTokens.swift` 的 `AppTypography` 或其组合 token；禁止散落魔法数字。
+- 后续新增页面或功能必须优先复用现有设计 token；如确需新增文本样式，必须在代码变更说明中写明新增原因、目标场景、与现有 token 的差异，并保持字号、字重、行距和阅读舒适度与当前文字系统一致。
 
 ### 编码与注释
 - Swift/SwiftUI，4 空格缩进；优先小函数与单一职责。

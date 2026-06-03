@@ -79,7 +79,7 @@ struct BookshelfSearchBar: View {
                     .foregroundStyle(.secondary)
 
                 TextField(placeholder, text: $text)
-                    .font(AppTypography.body)
+                    .font(BookshelfTypography.searchField)
                     .textInputAutocapitalization(.never)
                     .disableAutocorrection(true)
 
@@ -101,7 +101,7 @@ struct BookshelfSearchBar: View {
             }
 
             Button("取消", action: onCancel)
-                .font(AppTypography.body)
+                .font(BookshelfTypography.searchField)
                 .foregroundStyle(Color.brand)
                 .frame(minHeight: 40)
         }
@@ -117,7 +117,7 @@ struct BookshelfAggregateCardView: View {
         VStack(alignment: .leading, spacing: Spacing.half) {
             coverMosaic
             Text(group.title)
-                .font(AppTypography.captionMedium)
+                .font(BookshelfTypography.gridTitle)
                 .foregroundStyle(Color.textPrimary)
                 .lineLimit(2)
         }
@@ -153,7 +153,7 @@ struct BookshelfDefaultListRow: View {
                 )
 
                 Text(subtitle)
-                    .font(AppTypography.caption)
+                    .font(BookshelfTypography.gridSubtitle)
                     .foregroundStyle(Color.textSecondary)
                     .lineLimit(1)
             }

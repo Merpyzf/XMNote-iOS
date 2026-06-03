@@ -191,8 +191,9 @@ private struct BookDetailContentView: View {
                 // 正文
                 if !note.content.isEmpty {
                     Text(plainTextPreview(from: note.content))
-                        .font(AppTypography.subheadline)
-                        .lineLimit(4)
+                        .font(NoteExcerptTypography.body)
+                        .lineSpacing(NoteExcerptTypography.bodyLineSpacing)
+                        .lineLimit(6)
                         .foregroundStyle(.primary)
                 }
 
@@ -204,7 +205,8 @@ private struct BookDetailContentView: View {
                             .frame(width: 3)
 
                         Text(plainTextPreview(from: note.idea))
-                            .font(AppTypography.caption)
+                            .font(NoteExcerptTypography.idea)
+                            .lineSpacing(NoteExcerptTypography.ideaLineSpacing)
                             .lineLimit(3)
                             .foregroundStyle(.secondary)
                     }
@@ -215,8 +217,8 @@ private struct BookDetailContentView: View {
                 let footer = note.footerText
                 if !footer.isEmpty {
                     Text(footer)
-                        .font(AppTypography.caption2)
-                        .foregroundStyle(.tertiary)
+                        .font(NoteExcerptTypography.footer)
+                        .foregroundStyle(Color.textSecondary)
                         .padding(.top, Spacing.base)
                 }
             }

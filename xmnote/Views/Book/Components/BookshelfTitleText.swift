@@ -54,7 +54,7 @@ enum BookshelfTitleTextStyle {
     var font: Font {
         switch self {
         case .captionMedium:
-            return AppTypography.captionMedium
+            return BookshelfTypography.gridTitle
         case .bodyMedium:
             return AppTypography.bodyMedium
         }
@@ -63,7 +63,7 @@ enum BookshelfTitleTextStyle {
     var uiFont: UIFont {
         switch self {
         case .captionMedium:
-            return AppTypography.uiSemantic(.caption1, weight: .medium)
+            return BookshelfTypography.uiGridTitle
         case .bodyMedium:
             return AppTypography.uiSemantic(.body, weight: .medium)
         }

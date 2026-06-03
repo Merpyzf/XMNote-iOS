@@ -606,6 +606,66 @@ private extension String {
     }
 }
 
+/// 书架首页与书架列表的排版令牌，承接参考截图量取后的标题、搜索与网格文本层级。
+enum BookshelfTypography {
+    static let topSelected: Font = AppTypography.fixed(
+        baseSize: 20,
+        relativeTo: .title3,
+        weight: .semibold,
+        minimumPointSize: 20
+    )
+    static let topUnselected: Font = AppTypography.fixed(
+        baseSize: 18,
+        relativeTo: .title3,
+        weight: .medium,
+        minimumPointSize: 18
+    )
+    static let searchField: Font = AppTypography.fixed(
+        baseSize: 15,
+        relativeTo: .body,
+        minimumPointSize: 15
+    )
+    static let gridTitle: Font = AppTypography.fixed(
+        baseSize: 12,
+        relativeTo: .caption,
+        weight: .medium,
+        minimumPointSize: 12
+    )
+    static let gridSubtitle: Font = AppTypography.fixed(
+        baseSize: 11,
+        relativeTo: .caption2,
+        minimumPointSize: 11
+    )
+
+    static let uiGridTitle: UIFont = AppTypography.uiFixed(
+        baseSize: 12,
+        textStyle: .caption1,
+        weight: .medium,
+        minimumPointSize: 12
+    )
+}
+
+/// 书摘列表的阅读排版令牌，统一正文、想法与辅助信息的字号和行距。
+enum NoteExcerptTypography {
+    static let body: Font = AppTypography.fixed(
+        baseSize: 15,
+        relativeTo: .subheadline,
+        minimumPointSize: 15
+    )
+    static let bodyLineSpacing: CGFloat = 7
+    static let idea: Font = AppTypography.fixed(
+        baseSize: 13,
+        relativeTo: .footnote,
+        minimumPointSize: 13
+    )
+    static let ideaLineSpacing: CGFloat = 4
+    static let footer: Font = AppTypography.fixed(
+        baseSize: 11,
+        relativeTo: .caption2,
+        minimumPointSize: 11
+    )
+}
+
 /// 阅读日历字体令牌，集中维护日期相关文本层级。
 enum ReadCalendarTypography {
     static let topControlTitleFont: Font = AppTypography.fixed(baseSize: 18, relativeTo: .headline, weight: .semibold, design: .rounded)
