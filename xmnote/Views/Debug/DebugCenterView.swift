@@ -2,7 +2,7 @@
 import SwiftUI
 
 /**
- * [INPUT]: 依赖 RichTextTestView、HeatmapTestView、SystemAlertTestView、BookSelectionTestView、SelectionMotionTestView、BookReorderSandboxTestView、ImageLoadingTestView、WebHTMLFetchTestView、CameraTextCaptureTestView、BaiduOCRTestView、JXPhotoBrowserTestView、ReadCalendarCoverStackTestView、BookCoverStyleTestView、BookCoverProgressBarTestView、BookCoverBadgeEffectTestView、SystemColorsTestView、TimelineCardsTestView、TimelineCalendarHorizonTestView 作为导航目的地
+ * [INPUT]: 依赖 RichTextTestView、HeatmapTestView、SystemAlertTestView、BookSelectionTestView、SelectionMotionTestView、BookReorderSandboxTestView、ImageLoadingTestView、WebHTMLFetchTestView、CameraTextCaptureTestView、BaiduOCRTestView、JXPhotoBrowserTestView、ReadCalendarCoverStackTestView、BookCoverStyleTestView、BookCoverProgressBarTestView、BookCoverBadgeEffectTestView、LiquidGlassLabTestView、SystemColorsTestView、TimelineCardsTestView、TimelineCalendarHorizonTestView 作为导航目的地
  * [OUTPUT]: 对外提供 DebugCenterView（测试中心列表页）
  * [POS]: Debug 测试入口页，集中展示所有控件测试项，由 PersonalView 跳转进入
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -110,6 +110,12 @@ struct DebugCenterView: View {
             title: "书封角标效果",
             subtitle: "置顶/数量毛玻璃参数与阅读状态纯色角标验证",
             destination: AnyView(BookCoverBadgeEffectTestView())
+        ),
+        DebugItem(
+            icon: "camera.filters",
+            title: "iOS 26 Liquid Glass（液态玻璃）",
+            subtitle: "图片背景文本、工具栏、参数预设、截图对比与 FPS 观测",
+            destination: AnyView(LiquidGlassLabTestView())
         ),
         DebugItem(
             icon: "paintpalette",
