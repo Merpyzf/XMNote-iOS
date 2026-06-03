@@ -37,7 +37,7 @@ protocol BookRepositoryProtocol {
     func fetchBookshelfBatchEditOptions(bookIDs: [Int64]) async throws -> BookshelfBatchEditOptions
     /// 批量设置书籍标签：单本替换全部标签，多本仅追加缺失标签。
     func batchSetBooksTags(bookIDs: [Int64], tagIDs: [Int64]) async throws
-    /// 批量设置书籍来源，过滤已删除书籍与占位书籍。
+    /// 批量设置书籍来源，按 Android DAO 语义仅通过 id 定位目标书籍。
     func batchSetBooksSource(bookIDs: [Int64], sourceID: Int64) async throws
     /// 新建书籍分组，供批量移组 Sheet 面板内直接创建并返回新选项。
     func createGroup(named name: String) async throws -> BookEditorNamedOption

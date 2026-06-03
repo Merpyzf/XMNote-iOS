@@ -827,13 +827,12 @@ private extension BookRepository {
         bookIDs: [Int64],
         sourceID: Int64
     ) throws {
-        let uniqueBookIDs = normalizedPositiveIDs(bookIDs)
+        let uniqueBookIDs = normalizedNonNegativeIDs(bookIDs)
         guard !uniqueBookIDs.isEmpty else { throw BookshelfBatchWriteError.emptySelection }
         guard try isActiveSource(db, sourceID: sourceID) else { throw BookshelfBatchWriteError.invalidSource }
 
-        let now = timestampMillis()
         for bookID in uniqueBookIDs {
-            try updateBookSource(db, bookID: bookID, sourceID: sourceID, updatedAt: now)
+            try updateBookSource(db, bookID: bookID, sourceID: sourceID)
         }
     }
 
@@ -2924,27 +2923,23 @@ private extension BookRepository {
         try db.execute(sql: sql, arguments: [newName, oldName])
     }
 
-    /// 更新单本有效书籍的来源。
+    /// 更新单本书籍的来源。
     nonisolated func updateBookSource(
         _ db: Database,
         bookID: Int64,
-        sourceID: Int64,
-        updatedAt: Int64
+        sourceID: Int64
     ) throws {
-        // SQL 目的：批量更新书籍来源，对齐 Android BookDao.updateBookSource 的有效书籍过滤。
+        // SQL 目的：批量更新书籍来源，对齐 Android BookDao.updateBookSource 的窄写入语义。
         // 涉及表：book。
-        // 关键过滤：id = ?、is_deleted = 0、id != 0，避免写入已删除书籍和占位书籍。
-        // 时间字段：updated_date 写入毫秒时间戳，last_sync_date 保持原值等待同步层处理。
+        // 关键过滤：仅 id = ?；不附加 is_deleted/id != 0 过滤，严格复刻 Android DAO。
+        // 时间字段：不更新 updated_date / last_sync_date，避免制造 Android 当前不会产生的同步事件。
         // 副作用用途：更新 source_id，使来源维度观察流立即刷新。
         let sql = """
             UPDATE book
-            SET source_id = ?,
-                updated_date = ?
+            SET source_id = ?
             WHERE id = ?
-              AND is_deleted = 0
-              AND id != 0
             """
-        try db.execute(sql: sql, arguments: [sourceID, updatedAt, bookID])
+        try db.execute(sql: sql, arguments: [sourceID, bookID])
     }
 
     /// 校验阅读状态是否仍可用于书籍写入。
@@ -3193,6 +3188,14 @@ private extension BookRepository {
     nonisolated func normalizedPositiveIDs(_ ids: [Int64]) -> [Int64] {
         ids.reduce(into: [Int64]()) { result, id in
             guard id > 0, !result.contains(id) else { return }
+            result.append(id)
+        }
+    }
+
+    /// 过滤并保留非负 ID 的首次出现顺序。
+    nonisolated func normalizedNonNegativeIDs(_ ids: [Int64]) -> [Int64] {
+        ids.reduce(into: [Int64]()) { result, id in
+            guard id >= 0, !result.contains(id) else { return }
             result.append(id)
         }
     }

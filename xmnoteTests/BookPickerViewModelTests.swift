@@ -407,9 +407,21 @@ private final class BookPickerTestBookRepository: BookRepositoryProtocol {
 
     func batchSetBooksSource(bookIDs: [Int64], sourceID: Int64) async throws {}
 
+    func createGroup(named name: String) async throws -> BookEditorNamedOption {
+        BookEditorNamedOption(id: 1, title: name)
+    }
+
+    func createTag(named name: String) async throws -> BookEditorNamedOption {
+        BookEditorNamedOption(id: 1, title: name)
+    }
+
+    func createSource(named name: String) async throws -> BookshelfSourceOption {
+        BookshelfSourceOption(id: 1, title: name, category: .mine)
+    }
+
     func batchSetBookReadStatus(bookIDs: [Int64], input: BookshelfBatchReadStatusInput) async throws {}
 
-    func fetchBookshelfMoveTargetGroups(excludingGroupID: Int64?) async throws -> [BookEditorNamedOption] {
+    func fetchBookshelfMoveTargetGroups(excludingGroupID: Int64?) async throws -> [BookshelfMoveGroupOption] {
         []
     }
 
@@ -450,6 +462,14 @@ private final class BookPickerTestBookRepository: BookRepositoryProtocol {
 
     func deleteSource(sourceID: Int64) async throws {}
 
+    func renameAuthor(oldName: String, newName: String) async throws {}
+
+    func deleteAuthor(name: String) async throws {}
+
+    func renamePress(oldName: String, newName: String) async throws {}
+
+    func deletePress(name: String) async throws {}
+
     func fetchBookshelfDisplaySettings(scope: BookshelfDisplaySettingScope) -> [BookshelfDimension: BookshelfDisplaySetting] {
         Dictionary(uniqueKeysWithValues: BookshelfDimension.allCases.map {
             switch scope {
@@ -466,6 +486,15 @@ private final class BookPickerTestBookRepository: BookRepositoryProtocol {
         for dimension: BookshelfDimension,
         scope: BookshelfDisplaySettingScope
     ) {}
+
+    func observeBookshelfDisplaySettingChanges(
+        scope: BookshelfDisplaySettingScope,
+        dimension: BookshelfDimension
+    ) -> AsyncStream<Void> {
+        AsyncStream { continuation in
+            continuation.finish()
+        }
+    }
 
     func observeBookDetail(bookId: Int64) -> AsyncThrowingStream<BookDetail?, Error> {
         AsyncThrowingStream { continuation in
@@ -500,6 +529,7 @@ private final class BookPickerTestSearchRepository: BookSearchRepositoryProtocol
     var prepareSeedRequests: [String] = []
     var preparedSeedsByResultID: [String: BookEditorSeed] = [:]
     var prepareSeedErrors: [String: Error] = [:]
+    var searchSettings: BookSearchSettings = .default
 
     func search(keyword: String, source: BookSearchSource) async throws -> [BookSearchResult] {
         searchRequests.append((source, keyword))
@@ -521,4 +551,12 @@ private final class BookPickerTestSearchRepository: BookSearchRepositoryProtocol
     func saveRecentQuery(_ query: String) { }
 
     func removeRecentQuery(_ query: String) { }
+
+    func fetchSearchSettings() -> BookSearchSettings {
+        searchSettings
+    }
+
+    func saveSearchSettings(_ settings: BookSearchSettings) {
+        searchSettings = settings
+    }
 }
