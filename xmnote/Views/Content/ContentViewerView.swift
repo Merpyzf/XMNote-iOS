@@ -602,32 +602,6 @@ struct ContentViewerHeroCard<Accessory: View>: View {
     }
 }
 
-struct ViewerScoreRow: View {
-    let score: Int64
-
-    var body: some View {
-        HStack(spacing: Spacing.tiny) {
-            ForEach(1...5, id: \.self) { index in
-                Image(systemName: imageName(for: index))
-                    .font(AppTypography.caption)
-                    .foregroundStyle(Color.statusDone)
-            }
-        }
-    }
-
-    private func imageName(for index: Int) -> String {
-        let normalizedScore = Double(score) / 10.0
-        let threshold = Double(index)
-        if normalizedScore >= threshold {
-            return "star.fill"
-        }
-        if normalizedScore >= threshold - 0.5 {
-            return "star.leadinghalf.filled"
-        }
-        return "star"
-    }
-}
-
 #Preview {
     NavigationStack {
         ContentViewerView(

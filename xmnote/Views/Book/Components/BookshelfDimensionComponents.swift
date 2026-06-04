@@ -116,10 +116,7 @@ struct BookshelfAggregateCardView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: Spacing.half) {
             coverMosaic
-            Text(group.title)
-                .font(BookshelfTypography.gridTitle)
-                .foregroundStyle(Color.textPrimary)
-                .lineLimit(2)
+            titleContent
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .accessibilityElement(children: .combine)
@@ -131,6 +128,60 @@ struct BookshelfAggregateCardView: View {
             covers: group.representativeCovers,
             count: group.count
         )
+    }
+
+    @ViewBuilder
+    private var titleContent: some View {
+        if let ratingScore = group.aggregateRatingScore {
+            ratingTitle(for: ratingScore)
+        } else {
+            Text(group.title)
+                .font(BookshelfTypography.gridTitle)
+                .foregroundStyle(Color.textPrimary)
+                .lineLimit(2)
+        }
+    }
+
+    private func ratingTitle(for score: Int64) -> some View {
+        HStack(spacing: Spacing.compact) {
+            if score > 0 {
+                XMRatingBar(score: score, preset: .listSmall)
+                    .accessibilityHidden(true)
+
+                Text(score.aggregateRatingTitle)
+                    .font(BookshelfTypography.gridTitle)
+                    .foregroundStyle(Color.ratingActive)
+                    .lineLimit(1)
+            } else {
+                Image(systemName: "star")
+                    .font(BookshelfTypography.gridTitle)
+                    .foregroundStyle(Color.textHint)
+                    .accessibilityHidden(true)
+
+                Text(group.title)
+                    .font(BookshelfTypography.gridTitle)
+                    .foregroundStyle(Color.textPrimary)
+                    .lineLimit(1)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+private extension BookshelfAggregateGroup {
+    var aggregateRatingScore: Int64? {
+        guard case .rating(let score) = context else { return nil }
+        return score
+    }
+}
+
+private extension Int64 {
+    var aggregateRatingValue: Double {
+        Swift.min(Swift.max(Double(self) / 10.0, 0), 5)
+    }
+
+    var aggregateRatingTitle: String {
+        String(format: "%.1f", aggregateRatingValue)
     }
 }
 

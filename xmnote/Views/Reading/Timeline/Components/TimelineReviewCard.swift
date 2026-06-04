@@ -1,5 +1,5 @@
 /**
- * [INPUT]: 依赖 TimelineReviewEvent 数据模型、TimelineCardHeaderBar/TimelineCardDivider 共享骨架、CardContainer 容器、DesignTokens 设计令牌、ExpandableRichText 可展开富文本、XMJXImageWall/XMJXGalleryItem 图片墙
+ * [INPUT]: 依赖 TimelineReviewEvent 数据模型、TimelineCardHeaderBar/TimelineCardDivider 共享骨架、CardContainer 容器、DesignTokens 设计令牌、ExpandableRichText 可展开富文本、XMRatingBar、XMJXImageWall/XMJXGalleryItem 图片墙
  * [OUTPUT]: 对外提供 TimelineReviewCard（时间线书评卡片）
  * [POS]: Reading/Timeline 页面私有子视图，按书摘骨架渲染书评头部、标题、HTML 正文、图片墙与星级评分
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -78,24 +78,7 @@ struct TimelineReviewCard: View {
     // MARK: - Star Rating
 
     private var starRating: some View {
-        let score = Double(event.bookScore) / 10.0
-        return HStack(spacing: Spacing.tiny) {
-            ForEach(1...5, id: \.self) { index in
-                starImage(for: index, score: score)
-                    .font(AppTypography.caption)
-                    .foregroundStyle(Color.statusDone)
-            }
-        }
-    }
-
-    private func starImage(for index: Int, score: Double) -> Image {
-        let threshold = Double(index)
-        if score >= threshold {
-            return Image(systemName: "star.fill")
-        } else if score >= threshold - 0.5 {
-            return Image(systemName: "star.leadinghalf.filled")
-        }
-        return Image(systemName: "star")
+        XMRatingBar(score: event.bookScore, preset: .listSmall)
     }
 }
 

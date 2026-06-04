@@ -1,5 +1,5 @@
 /**
- * [INPUT]: 依赖 BookshelfBatchEditOptions 中的标签、来源、阅读状态候选项与 BookshelfMoveGroupOption 分组封面数据，依赖外层 ViewModel 闭包提交批量写入意图
+ * [INPUT]: 依赖 BookshelfBatchEditOptions 中的标签、来源、阅读状态候选项、XMRatingBar 与 BookshelfMoveGroupOption 分组封面数据，依赖外层 ViewModel 闭包提交批量写入意图
  * [OUTPUT]: 对外提供移组、标签、来源与阅读状态等批量编辑 Sheet，并统一标签/移组选择的轻量列表样式、分组封面预览与面板内读取反馈
  * [POS]: Book 模块业务 Sheet，被 BookshelfBookListView 的编辑态批量操作入口唤起
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -1211,8 +1211,13 @@ struct BookshelfBatchReadStatusSheet: View {
                                     .foregroundStyle(ratingValue > 0 ? Color.textPrimary : Color.feedbackError)
                             }
 
-                            Slider(value: $ratingValue, in: 0...5, step: 0.5)
-                                .accessibilityLabel("评分")
+                            XMRatingBar(
+                                value: $ratingValue,
+                                preset: .form,
+                                step: .half,
+                                isIndicator: false
+                            )
+                            .frame(maxWidth: .infinity, alignment: .leading)
                         }
                     } footer: {
                         Text("读完状态会同步评分，并把阅读进度推进到终点。")

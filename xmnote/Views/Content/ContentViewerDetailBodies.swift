@@ -1,5 +1,5 @@
 /**
- * [INPUT]: 依赖通用内容详情模型、RichText 与图片墙组件，依赖 DesignTokens 排版与颜色令牌
+ * [INPUT]: 依赖通用内容详情模型、RichText、XMRatingBar 与图片墙组件，依赖 DesignTokens 排版与颜色令牌
  * [OUTPUT]: 对外提供 NoteContentDetailBody、ReviewContentDetailBody、RelevantContentDetailBody，承接三类内容的全屏正文结构
  * [POS]: Content 模块查看页正文组件集合，被书摘查看与通用内容查看复用
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -120,7 +120,7 @@ struct ReviewContentDetailBody: View {
     var body: some View {
         VStack(alignment: .leading, spacing: Spacing.base) {
             if detail.bookScore > 0 {
-                ViewerScoreRow(score: detail.bookScore)
+                XMRatingBar(score: detail.bookScore, preset: .listSmall)
             }
 
             if let dateText = formattedDate(detail.createdDate) {

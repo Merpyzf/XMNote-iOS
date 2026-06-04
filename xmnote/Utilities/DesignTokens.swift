@@ -171,6 +171,18 @@ extension Color {
     static let statusAbandoned = Color(hex: 0x9E9E9E)
 }
 
+// MARK: - Rating
+
+extension Color {
+    /// 评分星级激活色，对齐 Android FluentRatingBar 的 activeColor。
+    static let ratingActive = Color(hex: 0xFFC500)
+    /// 评分星级未激活色，浅色对齐 Android，深色降低亮度避免抢占内容层级。
+    static let ratingInactive = Color(
+        light: Color(hex: 0xDFE8F1),
+        dark: Color(hex: 0xDFE8F1, alpha: 0.34)
+    )
+}
+
 // MARK: - Feedback
 
 extension Color {

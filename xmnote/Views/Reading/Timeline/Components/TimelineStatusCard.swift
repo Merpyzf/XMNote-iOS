@@ -1,5 +1,5 @@
 /**
- * [INPUT]: 依赖 TimelineReadStatusEvent/ReadStatusHelper 数据模型、TimelineCardMetaLine、XMBookCover 封面、CardContainer 容器、DesignTokens 设计令牌
+ * [INPUT]: 依赖 TimelineReadStatusEvent/ReadStatusHelper 数据模型、TimelineCardMetaLine、XMBookCover 封面、XMRatingBar、CardContainer 容器、DesignTokens 设计令牌
  * [OUTPUT]: 对外提供 TimelineStatusCard（时间线状态变更卡片）
  * [POS]: Reading/Timeline 页面私有子视图，渲染书籍封面+状态标签+评分
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -84,24 +84,7 @@ struct TimelineStatusCard: View {
     }
 
     private var starRating: some View {
-        let score = Double(event.bookScore) / 10.0
-        return HStack(spacing: Spacing.tiny) {
-            ForEach(1...5, id: \.self) { index in
-                starImage(for: index, score: score)
-                    .font(AppTypography.caption2)
-                    .foregroundStyle(Color.statusDone)
-            }
-        }
-    }
-
-    private func starImage(for index: Int, score: Double) -> Image {
-        let threshold = Double(index)
-        if score >= threshold {
-            return Image(systemName: "star.fill")
-        } else if score >= threshold - 0.5 {
-            return Image(systemName: "star.leadinghalf.filled")
-        }
-        return Image(systemName: "star")
+        XMRatingBar(score: event.bookScore, preset: .listSmall)
     }
 }
 
