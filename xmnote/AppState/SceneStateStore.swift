@@ -23,6 +23,13 @@ final class SceneStateStore {
         snapshot = AppSceneSnapshot.empty(dataEpoch: 0)
     }
 
+    /// 以当前数据版本创建空白 scene 会话；用于冷启动固定回到默认根入口，不读取历史 UI 快照。
+    func startFreshSession(dataEpoch: Int) {
+        replaceSnapshot(AppSceneSnapshot.empty(dataEpoch: dataEpoch), persist: false)
+        persistedData = nil
+        isRestored = true
+    }
+
     /// 从 SceneStorage 恢复快照；当数据 epoch 不匹配时丢弃旧快照。
     func restore(from data: Data?, currentDataEpoch: Int) {
         guard let data else {

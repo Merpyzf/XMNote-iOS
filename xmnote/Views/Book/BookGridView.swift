@@ -6,8 +6,8 @@
 //
 
 /**
- * [INPUT]: 依赖 BookViewModel 提供书架快照、维度状态、显示设置、编辑态与 UICollectionView 排序状态，依赖页面可见态驱动 UIKit 滚动观察，依赖 LoadingGate 约束读取加载反馈，依赖容器注入路由、进入编辑态回调与底部滚动余量
- * [OUTPUT]: 对外提供 BookGridView，展示书架内容区、多维度 UICollectionView 聚合入口、选择覆盖层、写入错误浮层与拖拽排序交互
+ * [INPUT]: 依赖 BookViewModel 提供书架快照、维度状态、搜索状态、显示设置、编辑态与 UICollectionView 排序状态，依赖页面可见态驱动 UIKit 滚动观察，依赖 LoadingGate 约束读取加载反馈，依赖容器注入路由、进入编辑态回调与底部滚动余量
+ * [OUTPUT]: 对外提供 BookGridView，展示书架内容区、多维度 UICollectionView 聚合入口、选择覆盖层、搜索空态、写入错误浮层与拖拽排序交互
  * [POS]: Book 模块网格展示层，被 BookContainerView 嵌入
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -19,6 +19,7 @@ struct BookGridView: View {
     @Bindable var viewModel: BookViewModel
     var isPageActive = true
     var bottomContentInset: CGFloat = 0
+    var hasSearchKeyword = false
     var onOpenRoute: (BookRoute) -> Void = { _ in }
     var onOpenNoteRoute: (NoteRoute) -> Void = { _ in }
     var onEnterEditing: (BookshelfItemID?) -> Void = { _ in }
@@ -76,11 +77,15 @@ struct BookGridView: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         case .empty:
-            EmptyStateView(icon: "book", message: "暂无书籍")
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            emptyStateView
         case .error(let message):
-            EmptyStateView(icon: "exclamationmark.triangle", message: message.isEmpty ? "书架加载失败" : message)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            BookshelfContextualEmptyStateView(
+                icon: "exclamationmark.triangle",
+                title: "书架加载失败",
+                message: message.isEmpty ? "请稍后重试" : message,
+                iconColor: Color.feedbackWarning.opacity(0.42)
+            )
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         case .content:
             dimensionContent
                 .transaction { transaction in
@@ -92,6 +97,21 @@ struct BookGridView: View {
                     guard !hasPresentedInitialContent else { return }
                     hasPresentedInitialContent = true
                 }
+        }
+    }
+
+    @ViewBuilder
+    private var emptyStateView: some View {
+        if hasSearchKeyword {
+            BookshelfContextualEmptyStateView(
+                icon: "books.vertical",
+                title: "没有匹配的书籍",
+                message: viewModel.isEditing ? "已选书籍仍保留，清除搜索可继续整理" : "清除搜索后查看全部书籍"
+            )
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else {
+            EmptyStateView(icon: "book", message: "暂无书籍")
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
     }
 

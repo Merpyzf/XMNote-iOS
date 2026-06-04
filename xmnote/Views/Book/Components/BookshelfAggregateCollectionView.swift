@@ -157,9 +157,10 @@ private extension BookshelfAggregateCollectionHostView {
         UICollectionViewCompositionalLayout { sectionIndex, _ in
             let isGrid = configuration.layoutMode == .grid
             let columns = isGrid ? max(2, configuration.columnCount) : 1
+            let estimatedItemHeight: CGFloat = isGrid ? 176 : 138
             let itemSize = NSCollectionLayoutSize(
                 widthDimension: .fractionalWidth(1.0 / CGFloat(columns)),
-                heightDimension: .estimated(isGrid ? 176 : 116)
+                heightDimension: .estimated(estimatedItemHeight)
             )
             let item = NSCollectionLayoutItem(layoutSize: itemSize)
             if isGrid {
@@ -173,7 +174,7 @@ private extension BookshelfAggregateCollectionHostView {
 
             let groupSize = NSCollectionLayoutSize(
                 widthDimension: .fractionalWidth(1),
-                heightDimension: .estimated(isGrid ? 176 : 116)
+                heightDimension: .estimated(estimatedItemHeight)
             )
             let group = NSCollectionLayoutGroup.horizontal(
                 layoutSize: groupSize,
@@ -276,7 +277,11 @@ extension BookshelfAggregateCollectionHostView: UICollectionViewDataSource {
               let group = group(at: indexPath) else {
             return UICollectionViewCell()
         }
-        cell.configure(group: group, onContextAction: configuration.onContextAction)
+        cell.configure(
+            group: group,
+            layoutMode: configuration.layoutMode,
+            onContextAction: configuration.onContextAction
+        )
         return cell
     }
 
@@ -395,7 +400,7 @@ extension BookshelfAggregateCollectionHostView: UICollectionViewDropDelegate {
     }
 }
 
-/// 聚合卡 cell，使用 UIHostingConfiguration 复用 SwiftUI 卡片视觉。
+/// 聚合入口 cell，按 Grid/List 模式选择封面卡或信息优先的列表行。
 private final class BookshelfAggregateCollectionCell: UICollectionViewCell {
     static let reuseIdentifier = "BookshelfAggregateCollectionCell"
 
@@ -412,30 +417,56 @@ private final class BookshelfAggregateCollectionCell: UICollectionViewCell {
     /// 渲染聚合卡片，并为作者/出版社维度补齐 Android 对齐的长按菜单。
     func configure(
         group: BookshelfAggregateGroup,
+        layoutMode: BookshelfLayoutMode,
         onContextAction: @escaping (BookshelfAggregateContextAction, BookshelfAggregateGroup) -> Void
     ) {
         contentConfiguration = UIHostingConfiguration {
-            if group.context.supportsContributorContextMenu {
-                BookshelfAggregateCardView(group: group)
-                    .contextMenu {
-                        Button {
-                            onContextAction(.edit, group)
-                        } label: {
-                            XMMenuLabel("编辑", systemImage: "pencil")
-                        }
-
-                        Button(role: .destructive) {
-                            onContextAction(.delete, group)
-                        } label: {
-                            Label("删除", systemImage: "trash")
-                        }
-                    }
-                    .xmMenuNeutralTint()
-            } else {
-                BookshelfAggregateCardView(group: group)
-            }
+            BookshelfAggregateCollectionCellContent(
+                group: group,
+                layoutMode: layoutMode,
+                onContextAction: onContextAction
+            )
         }
         .margins(.all, 0)
+    }
+}
+
+/// 聚合入口 cell 的 SwiftUI 内容，避免列表模式继续复用网格拼贴卡。
+private struct BookshelfAggregateCollectionCellContent: View {
+    let group: BookshelfAggregateGroup
+    let layoutMode: BookshelfLayoutMode
+    let onContextAction: (BookshelfAggregateContextAction, BookshelfAggregateGroup) -> Void
+
+    var body: some View {
+        if group.context.supportsContributorContextMenu {
+            content
+                .contextMenu {
+                    Button {
+                        onContextAction(.edit, group)
+                    } label: {
+                        XMMenuLabel("编辑", systemImage: "pencil")
+                    }
+
+                    Button(role: .destructive) {
+                        onContextAction(.delete, group)
+                    } label: {
+                        Label("删除", systemImage: "trash")
+                    }
+                }
+                .xmMenuNeutralTint()
+        } else {
+            content
+        }
+    }
+
+    @ViewBuilder
+    private var content: some View {
+        switch layoutMode {
+        case .grid:
+            BookshelfAggregateCardView(group: group)
+        case .list:
+            BookshelfAggregateListRowView(group: group)
+        }
     }
 }
 

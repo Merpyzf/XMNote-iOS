@@ -747,6 +747,51 @@ nonisolated struct BookshelfBookListRoute: Hashable, Codable, Sendable {
     let context: BookshelfListContext
     let title: String
     let subtitleHint: String
+
+    /// 构建二级列表路由，仅携带可恢复的语义上下文，书籍数据统一由 Repository 实时读取。
+    init(
+        context: BookshelfListContext,
+        title: String,
+        subtitleHint: String
+    ) {
+        self.context = context
+        self.title = title
+        self.subtitleHint = subtitleHint
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case context
+        case title
+        case subtitleHint
+    }
+
+    /// 从可恢复路由载荷解码二级列表，恢复路径保持实时读取。
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.context = try container.decode(BookshelfListContext.self, forKey: .context)
+        self.title = try container.decode(String.self, forKey: .title)
+        self.subtitleHint = try container.decode(String.self, forKey: .subtitleHint)
+    }
+
+    /// 编码可恢复的语义路由，避免把书籍列表数据写入 scene 状态。
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(context, forKey: .context)
+        try container.encode(title, forKey: .title)
+        try container.encode(subtitleHint, forKey: .subtitleHint)
+    }
+
+    static func == (lhs: BookshelfBookListRoute, rhs: BookshelfBookListRoute) -> Bool {
+        lhs.context == rhs.context
+            && lhs.title == rhs.title
+            && lhs.subtitleHint == rhs.subtitleHint
+    }
+
+    func hash(into hasher: inout Hasher) {
+        hasher.combine(context)
+        hasher.combine(title)
+        hasher.combine(subtitleHint)
+    }
 }
 
 /// 书架中的分组展示载荷，保留组名、数量和代表封面。

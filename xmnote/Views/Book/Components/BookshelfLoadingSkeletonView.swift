@@ -1,7 +1,7 @@
 /**
  * [INPUT]: 依赖 BookshelfLayoutMode、XMBookCover 宽高比、DesignTokens 颜色/间距/圆角令牌与系统 Reduce Motion 设置
- * [OUTPUT]: 对外提供 BookshelfLoadingSkeletonView，渲染书籍主列表首次读取阶段的稳定书架骨架
- * [POS]: Book 模块页面私有加载占位组件，被 BookGridView 的主列表读取态消费
+ * [OUTPUT]: 对外提供 BookshelfLoadingSkeletonView，渲染书籍主列表与二级列表首次读取阶段的稳定书架骨架
+ * [POS]: Book 模块页面私有加载占位组件，被 BookGridView 与 BookshelfBookListView 的首次读取态消费
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
@@ -12,6 +12,7 @@ struct BookshelfLoadingSkeletonView: View {
     let layoutMode: BookshelfLayoutMode
     let columnCount: Int
     var bottomContentInset: CGFloat = 0
+    var accessibilityLabel: String = "正在整理书架"
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var isShimmerActive = false
@@ -30,7 +31,7 @@ struct BookshelfLoadingSkeletonView: View {
         }
         .scrollDisabled(true)
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("正在整理书架")
+        .accessibilityLabel(accessibilityLabel)
         .onAppear {
             updateShimmerState()
         }
@@ -54,7 +55,7 @@ struct BookshelfLoadingSkeletonView: View {
     }
 
     private var listSkeleton: some View {
-        VStack(spacing: Spacing.base) {
+        LazyVStack(spacing: Spacing.base) {
             ForEach(0..<Self.listItemCount, id: \.self) { index in
                 BookshelfLoadingListRow(
                     shimmerPhase: isShimmerActive,

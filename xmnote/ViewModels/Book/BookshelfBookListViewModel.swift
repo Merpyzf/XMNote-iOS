@@ -200,6 +200,7 @@ final class BookshelfBookListViewModel {
     let route: BookshelfBookListRoute
     var snapshot: BookshelfBookListSnapshot = .empty
     var contentState: BookshelfContentState = .loading
+    var hasCompletedInitialLoad = false
     var searchKeyword: String = "" {
         didSet {
             guard normalizedSearchKeyword(oldValue) != normalizedSearchKeyword(searchKeyword) else { return }
@@ -375,21 +376,52 @@ final class BookshelfBookListViewModel {
         writeError = nil
     }
 
-    /// 选择当前可见的全部书籍。
-    func selectAllVisible() {
+    /// 清空二级列表本地选择，供整理态顶部“取消全选”语义复用。
+    func clearSelection() {
         guard isEditing else { return }
         cancelBatchOptionsLoading()
-        selectedBookIDs = visibleBookIDs
+        selectedBookIDs.removeAll()
         actionNotice = nil
         writeError = nil
     }
 
-    /// 反选当前可见书籍，保持选择顺序与列表展示顺序一致。
+    /// 选择当前可见的全部书籍。
+    func selectAllVisible() {
+        guard isEditing else { return }
+        cancelBatchOptionsLoading()
+        if hasSearchKeyword {
+            for id in visibleBookIDs where !selectedBookIDs.contains(id) {
+                selectedBookIDs.append(id)
+            }
+        } else {
+            selectedBookIDs = visibleBookIDs
+        }
+        actionNotice = nil
+        writeError = nil
+    }
+
+    /// 取消当前可见书籍的选择；搜索中仅移除搜索结果，非搜索状态下清空全部选择。
+    func clearVisibleSelection() {
+        guard isEditing else { return }
+        cancelBatchOptionsLoading()
+        if hasSearchKeyword {
+            let visibleIDs = Set(visibleBookIDs)
+            selectedBookIDs.removeAll { visibleIDs.contains($0) }
+        } else {
+            selectedBookIDs.removeAll()
+        }
+        actionNotice = nil
+        writeError = nil
+    }
+
+    /// 反选当前可见书籍，搜索中保留不可见对象。
     func invertVisibleSelection() {
         guard isEditing else { return }
         cancelBatchOptionsLoading()
         let selected = selectedBookIDSet
-        selectedBookIDs = visibleBookIDs.filter { !selected.contains($0) }
+        let visibleIDs = Set(visibleBookIDs)
+        let hiddenSelection = hasSearchKeyword ? selectedBookIDs.filter { !visibleIDs.contains($0) } : []
+        selectedBookIDs = hiddenSelection + visibleBookIDs.filter { !selected.contains($0) }
         actionNotice = nil
         writeError = nil
     }
@@ -1026,7 +1058,9 @@ final class BookshelfBookListViewModel {
     }
 
     private func startObservation() {
-        contentState = .loading
+        if !hasCompletedInitialLoad {
+            contentState = .loading
+        }
         let context = route.context
         let currentSetting = displaySetting
         let currentKeyword = normalizedSearchKeyword(searchKeyword)
@@ -1040,12 +1074,14 @@ final class BookshelfBookListViewModel {
                     guard !Task.isCancelled else { return }
                     await MainActor.run {
                         self.snapshot = snapshot
+                        self.hasCompletedInitialLoad = true
                         self.contentState = snapshot.books.isEmpty ? .empty : .content
                         self.pruneSelectionToVisibleBooks()
                     }
                 }
             } catch {
                 await MainActor.run {
+                    self.hasCompletedInitialLoad = true
                     self.contentState = .error(error.localizedDescription)
                 }
             }
@@ -1079,6 +1115,7 @@ final class BookshelfBookListViewModel {
     }
 
     private func pruneSelectionToVisibleBooks() {
+        guard !(isEditing && hasSearchKeyword) else { return }
         let visibleIDs = Set(visibleBookIDs)
         selectedBookIDs = selectedBookIDs.filter { visibleIDs.contains($0) }
         if visibleIDs.isEmpty {

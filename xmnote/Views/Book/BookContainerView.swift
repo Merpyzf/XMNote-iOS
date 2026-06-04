@@ -7,7 +7,7 @@
 
 /**
  * [INPUT]: 依赖 RepositoryContainer 注入仓储，依赖 BookViewModel 驱动书架浏览、编辑态选择与批量操作，依赖本地 chrome 阶段、固定顶部 chrome 高度与底部浮动 ornament 稳定内容布局
- * [OUTPUT]: 对外提供 BookContainerView 与 BookSubTab 枚举，承载书架顶部 chrome、TabBar 显隐协调、底部玻璃编辑工具栏、批量 Sheet 与删除确认
+ * [OUTPUT]: 对外提供 BookContainerView 与 BookSubTab 枚举，承载书架顶部 chrome、整理态上下文检索条、TabBar 显隐协调、底部玻璃编辑工具栏、批量 Sheet 与删除确认
  * [POS]: Book 模块容器壳层，承载书籍页与书架管理模式编排
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -174,6 +174,7 @@ private struct BookContentView: View {
     @State private var editBottomBarOrnamentHeight: CGFloat = 0
     @State private var frozenTopChromeHeight: CGFloat?
     @State private var isEditingChoreographyActive = false
+    @State private var isEditSearchPresented = false
     let onAddBook: () -> Void
     let onAddNote: () -> Void
     let onOpenDebugCenter: (() -> Void)?
@@ -355,13 +356,24 @@ private struct BookContentView: View {
             }
 
             if showsEditHeader {
-                BookshelfEditChrome(
-                    selectedBookCount: viewModel.selectedBookIDs.count,
-                    selectedGroupCount: viewModel.selectedGroupCount,
-                    isAllVisibleSelected: viewModel.isAllVisibleSelected,
-                    onToggleSelectAll: toggleVisibleSelection,
-                    onCancel: exitEditingWithChoreography
-                )
+                VStack(spacing: Spacing.none) {
+                    BookshelfEditChrome(
+                        selectedBookCount: viewModel.selectedBookIDs.count,
+                        selectedGroupCount: viewModel.selectedGroupCount,
+                        isAllVisibleSelected: viewModel.isAllVisibleSelected,
+                        isSelectionToggleEnabled: !viewModel.visibleDefaultItemIDs.isEmpty,
+                        searchState: editSearchState,
+                        onToggleSelectAll: toggleVisibleSelection,
+                        onCancel: exitEditingWithChoreography
+                    )
+                    .frame(height: topBarRowHeight)
+
+                    if showsEditSearchContextBar {
+                        editSearchContextBar
+                            .frame(height: BookshelfEditChromeMetrics.searchContextHeight)
+                            .transition(BookshelfManagementMotion.editSearchTransition(reduceMotion: reduceMotion))
+                    }
+                }
                     .transition(BookshelfManagementMotion.topChromeTransition(reduceMotion: reduceMotion))
             }
         }
@@ -407,6 +419,26 @@ private struct BookContentView: View {
         selectedSubTab == .books && chromePhase.showsEditBottomBar
     }
 
+    private var showsEditSearchContextBar: Bool {
+        selectedSubTab == .books
+            && chromePhase.showsEditHeader
+    }
+
+    private var editSearchState: BookshelfEditChromeSearchState {
+        viewModel.hasSearchKeyword ? .active(resultCount: viewModel.visibleDefaultItemIDs.count) : .inactive
+    }
+
+    private var editSearchContextBar: some View {
+        BookshelfEditSearchContextBar(
+            isPresented: $isEditSearchPresented,
+            text: $viewModel.searchKeyword,
+            placeholder: "在整理结果中搜索",
+            onCollapse: {
+                isEditSearchPresented = false
+            }
+        )
+    }
+
     private var reservesEditBottomBarSpace: Bool {
         selectedSubTab == .books && chromePhase.reservesEditBottomBarSpace
     }
@@ -424,18 +456,25 @@ private struct BookContentView: View {
     }
 
     private var reservedTopChromeHeight: CGFloat {
-        frozenTopChromeHeight ?? expectedTopChromeHeight
+        guard let frozenTopChromeHeight else {
+            return expectedTopChromeHeight
+        }
+        return max(frozenTopChromeHeight, expectedTopChromeHeight)
     }
 
     private var expectedTopChromeHeight: CGFloat {
         guard selectedSubTab == .books else { return topBarRowHeight }
+        if chromePhase.showsEditHeader {
+            return topBarRowHeight
+                + BookshelfEditChromeMetrics.searchContextHeight
+        }
         return topBarRowHeight
             + (viewModel.isSearchActive ? BookshelfChromeMetrics.searchBarHeight : BookshelfChromeMetrics.dimensionRailHeight)
             + (viewModel.hasSearchKeyword ? BookshelfChromeMetrics.searchHintHeight : 0)
     }
 
     private var topBarRowHeight: CGFloat {
-        dynamicTypeSize >= .accessibility1 ? BookshelfChromeMetrics.accessibilityTopBarHeight : BookshelfChromeMetrics.topBarHeight
+        BookshelfEditChromeMetrics.topBarHeight(for: dynamicTypeSize)
     }
 
     /// 进入书架管理模式，并为菜单收口、顶部 chrome 和底部面板保留清晰的分层节奏。
@@ -493,6 +532,7 @@ private struct BookContentView: View {
 
         withAnimation(BookshelfManagementMotion.editBarExitAnimation(reduceMotion: reduceMotion)) {
             chromePhase = .exitingEdit
+            isEditSearchPresented = false
         }
 
         chromeTransitionTask = Task { @MainActor in
@@ -515,7 +555,7 @@ private struct BookContentView: View {
     private func toggleVisibleSelection() {
         withAnimation(BookshelfManagementMotion.modeAnimation(reduceMotion: reduceMotion)) {
             if viewModel.isAllVisibleSelected {
-                viewModel.clearSelection()
+                viewModel.clearVisibleSelection()
             } else {
                 viewModel.selectAllVisible()
             }
@@ -538,6 +578,7 @@ private struct BookContentView: View {
             chromeTransitionTask?.cancel()
             chromePhase = .normal
             frozenTopChromeHeight = nil
+            isEditSearchPresented = false
             releaseEditBottomBarSpace()
             return
         }
@@ -549,6 +590,7 @@ private struct BookContentView: View {
             chromeTransitionTask?.cancel()
             chromePhase = .normal
             frozenTopChromeHeight = nil
+            isEditSearchPresented = false
             releaseEditBottomBarSpace()
         }
     }
@@ -566,6 +608,7 @@ private struct BookContentView: View {
         chromePhase = .normal
         frozenTopChromeHeight = nil
         isEditingChoreographyActive = false
+        isEditSearchPresented = false
         releaseEditBottomBarSpace()
         viewModel.exitEditing()
     }
@@ -628,6 +671,7 @@ private struct BookContentView: View {
             viewModel: viewModel,
             isPageActive: selectedSubTab.productionValue == .books,
             bottomContentInset: editBottomBarHeight,
+            hasSearchKeyword: viewModel.hasSearchKeyword,
             onOpenRoute: onOpenBookRoute,
             onOpenNoteRoute: onOpenNoteRoute,
             onEnterEditing: { initialSelection in
@@ -641,8 +685,6 @@ private struct BookContentView: View {
 // MARK: - Top Chrome Components
 
 private enum BookshelfChromeMetrics {
-    static let topBarHeight: CGFloat = 56
-    static let accessibilityTopBarHeight: CGFloat = 60
     static let dimensionRailHeight: CGFloat = 44
     static let searchBarHeight: CGFloat = 40
     static let searchHintHeight: CGFloat = 20
@@ -926,83 +968,6 @@ private struct BookshelfMoreGlyph: View {
             }
         }
         .accessibilityHidden(true)
-    }
-}
-
-/// 默认书架编辑态顶部 chrome，复用浏览态顶部高度表达当前批量管理上下文。
-private struct BookshelfEditChrome: View {
-    let selectedBookCount: Int
-    let selectedGroupCount: Int
-    let isAllVisibleSelected: Bool
-    let onToggleSelectAll: () -> Void
-    let onCancel: () -> Void
-
-    var body: some View {
-        HStack(alignment: .center, spacing: Spacing.base) {
-            Button(selectionToggleTitle, action: onToggleSelectAll)
-                .font(AppTypography.body)
-                .foregroundStyle(Color.textPrimary)
-                .lineLimit(1)
-                .minimumScaleFactor(0.86)
-                .frame(minWidth: 74, minHeight: Spacing.actionReserved, alignment: .leading)
-                .accessibilityLabel(selectionToggleTitle)
-
-            Spacer(minLength: Spacing.compact)
-
-            VStack(spacing: Spacing.tiny) {
-                Text("选择书籍")
-                    .font(AppTypography.bodyMedium)
-                    .foregroundStyle(Color.textPrimary)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.90)
-
-                Text(selectionSummaryText)
-                    .font(AppTypography.caption)
-                    .foregroundStyle(Color.textSecondary)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.86)
-            }
-            .frame(maxWidth: .infinity)
-            .accessibilityElement(children: .combine)
-
-            Spacer(minLength: Spacing.compact)
-
-            Button("取消", action: onCancel)
-                .font(AppTypography.body)
-                .foregroundStyle(Color.textPrimary)
-                .lineLimit(1)
-                .minimumScaleFactor(0.86)
-                .frame(minWidth: 74, minHeight: Spacing.actionReserved, alignment: .trailing)
-                .accessibilityLabel("取消选择")
-        }
-        .padding(.horizontal, Spacing.screenEdge)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
-        .background {
-            Color.surfacePage
-                .ignoresSafeArea(.container, edges: .top)
-        }
-        .overlay(alignment: .bottom) {
-            Divider()
-                .overlay(Color.surfaceBorderSubtle.opacity(0.38))
-        }
-        .accessibilityElement(children: .contain)
-    }
-
-    private var selectionToggleTitle: String {
-        isAllVisibleSelected ? "取消全选" : "全选"
-    }
-
-    private var selectionSummaryText: String {
-        switch (selectedBookCount, selectedGroupCount) {
-        case (0, 0):
-            return "未选择书籍或分组"
-        case (let bookCount, 0):
-            return "已选择 \(bookCount) 本书籍"
-        case (0, let groupCount):
-            return "已选择 \(groupCount) 个分组"
-        case (let bookCount, let groupCount):
-            return "已选择 \(bookCount) 本书籍和 \(groupCount) 个分组"
-        }
     }
 }
 

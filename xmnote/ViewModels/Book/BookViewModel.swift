@@ -382,6 +382,7 @@ class BookViewModel {
             exitEditing()
             return
         }
+        guard !(isEditing && hasSearchKeyword) else { return }
         let visibleIDs = Set(visibleDefaultItemIDs)
         let nextSelection = selectedIDs.filter { visibleIDs.contains($0) }
         guard nextSelection != selectedIDs else { return }
@@ -486,6 +487,7 @@ class BookViewModel {
     func exitEditing() {
         guard isEditing || !selectedIDs.isEmpty || activeWriteAction != nil || writeError != nil || actionNotice != nil else { return }
         isEditing = false
+        isSearchActive = hasSearchKeyword
         selectedIDs.removeAll()
         activeWriteAction = nil
         writeError = nil
@@ -514,17 +516,39 @@ class BookViewModel {
     func selectAllVisible() {
         guard isEditing else { return }
         cancelBatchOptionsLoading()
-        selectedIDs = visibleDefaultItemIDs
+        if hasSearchKeyword {
+            for id in visibleDefaultItemIDs where !selectedIDs.contains(id) {
+                selectedIDs.append(id)
+            }
+        } else {
+            selectedIDs = visibleDefaultItemIDs
+        }
         writeError = nil
         actionNotice = nil
     }
 
-    /// 在当前默认书架可见范围内执行反选，不保留不可见对象。
+    /// 取消当前可见范围内的选择；搜索中仅移除搜索结果，非搜索状态下清空全部选择。
+    func clearVisibleSelection() {
+        guard isEditing else { return }
+        cancelBatchOptionsLoading()
+        if hasSearchKeyword {
+            let visibleIDs = Set(visibleDefaultItemIDs)
+            selectedIDs.removeAll { visibleIDs.contains($0) }
+        } else {
+            selectedIDs.removeAll()
+        }
+        writeError = nil
+        actionNotice = nil
+    }
+
+    /// 在当前默认书架可见范围内执行反选，搜索中保留不可见对象。
     func invertVisibleSelection() {
         guard isEditing else { return }
         cancelBatchOptionsLoading()
         let currentSelection = selectedIDSet
-        selectedIDs = visibleDefaultItemIDs.filter { !currentSelection.contains($0) }
+        let visibleIDs = Set(visibleDefaultItemIDs)
+        let hiddenSelection = hasSearchKeyword ? selectedIDs.filter { !visibleIDs.contains($0) } : []
+        selectedIDs = hiddenSelection + visibleDefaultItemIDs.filter { !currentSelection.contains($0) }
         writeError = nil
         actionNotice = nil
     }

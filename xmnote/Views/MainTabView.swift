@@ -9,7 +9,7 @@ import SwiftUI
 
 /**
  * [INPUT]: 依赖 Reading/Book/Note/Content/Personal 各模块容器视图与对应路由枚举，依赖 DebugRoute 提供调试页面跳转，依赖 openURL 打开外部帮助文档
- * [OUTPUT]: 对外提供 MainTabView（五个主 Tab 的 NavigationStack 组织与目的地分发）
+ * [OUTPUT]: 对外提供 MainTabView（五个主 Tab 的 NavigationStack 组织、目的地分发与 DEBUG UI Test 二级列表直达路由）
  * [POS]: 应用根导航入口，负责跨模块路由承接（含书架聚合列表、书架管理入口、在读页热力图点击进入阅读日历、内容查看与内容编辑）
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -21,7 +21,6 @@ enum AppTab: String, CaseIterable, Codable {
 
 /// 应用主导航容器，组织四个主 Tab 及跨模块路由跳转。
 struct MainTabView: View {
-    @Environment(SceneStateStore.self) private var sceneStateStore
     @Environment(\.openURL) private var openURL
     @State private var selectedTab: AppTab = .reading
     @State private var readingPath = NavigationPath()
@@ -30,7 +29,9 @@ struct MainTabView: View {
     @State private var profilePath = NavigationPath()
     @State private var searchPath = NavigationPath()
     @State private var searchQuery = ""
-    @State private var didBootstrapFromScene = false
+    #if DEBUG
+    @State private var didApplyUITestLaunchRoute = false
+    #endif
 
     var body: some View {
         TabView(selection: $selectedTab) {
@@ -196,32 +197,10 @@ struct MainTabView: View {
         }
         .tabBarMinimizeBehavior(.onScrollDown)
         .mainTabSearchHost(isEnabled: selectedTab == .search, searchQuery: $searchQuery)
-        .task(id: sceneStateStore.isRestored) {
-            guard sceneStateStore.isRestored else { return }
-            guard !didBootstrapFromScene else { return }
-            didBootstrapFromScene = true
-            restoreFromSceneSnapshot()
-        }
-        .onChange(of: selectedTab) { _, newValue in
-            sceneStateStore.updateSelectedTab(newValue)
-        }
-        .onChange(of: searchQuery) { _, newValue in
-            sceneStateStore.updateSearchQuery(newValue)
-        }
-        .onChange(of: pathSignature(for: readingPath)) { _, _ in
-            sceneStateStore.updatePath(readingPath, for: .reading)
-        }
-        .onChange(of: pathSignature(for: booksPath)) { _, _ in
-            sceneStateStore.updatePath(booksPath, for: .books)
-        }
-        .onChange(of: pathSignature(for: notesPath)) { _, _ in
-            sceneStateStore.updatePath(notesPath, for: .notes)
-        }
-        .onChange(of: pathSignature(for: profilePath)) { _, _ in
-            sceneStateStore.updatePath(profilePath, for: .profile)
-        }
-        .onChange(of: pathSignature(for: searchPath)) { _, _ in
-            sceneStateStore.updatePath(searchPath, for: .search)
+        .task {
+            #if DEBUG
+            await applyUITestLaunchRouteIfNeeded()
+            #endif
         }
     }
 
@@ -440,31 +419,20 @@ struct MainTabView: View {
         .contentViewer(source: source, initialItemID: initialItem, keyword: "")
     }
 
-    private func restoreFromSceneSnapshot() {
-        let snapshot = sceneStateStore.snapshot
-        selectedTab = snapshot.selectedTab
-        searchQuery = snapshot.searchQuery
-        readingPath = restoredPath(for: .reading)
-        booksPath = restoredPath(for: .books)
-        notesPath = restoredPath(for: .notes)
-        profilePath = restoredPath(for: .profile)
-        searchPath = restoredPath(for: .search)
-    }
-
-    private func restoredPath(for tab: AppTab) -> NavigationPath {
-        guard let representation = sceneStateStore.pathRepresentation(for: tab) else {
-            return NavigationPath()
+    #if DEBUG
+    /// UI Test 启动后直达目标二级书籍列表，减少测试对首页聚合入口布局的依赖。
+    @MainActor
+    private func applyUITestLaunchRouteIfNeeded() async {
+        guard !didApplyUITestLaunchRoute,
+              let route = UITestLaunchConfiguration.requestedBookRoute else {
+            return
         }
-        return NavigationPath(representation)
+        didApplyUITestLaunchRoute = true
+        selectedTab = .books
+        await Task.yield()
+        append(route, to: .books)
     }
-
-    private func pathSignature(for path: NavigationPath) -> String {
-        guard let representation = path.codable,
-              let data = try? JSONEncoder().encode(representation) else {
-            return "empty"
-        }
-        return data.base64EncodedString()
-    }
+    #endif
 }
 
 private extension View {

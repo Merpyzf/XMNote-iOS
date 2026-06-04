@@ -168,6 +168,12 @@ struct BookshelfAggregateCardView: View {
     }
 }
 
+/// 聚合分组语义展示信息，统一管理维度图标和语义色。
+private struct BookshelfAggregateSemanticPresentation {
+    let systemImage: String
+    let color: Color
+}
+
 private extension BookshelfAggregateGroup {
     var aggregateRatingScore: Int64? {
         guard case .rating(let score) = context else { return nil }
@@ -182,6 +188,286 @@ private extension Int64 {
 
     var aggregateRatingTitle: String {
         String(format: "%.1f", aggregateRatingValue)
+    }
+}
+
+/// 聚合维度列表模式卡片，使用标题信息与书封横排帮助用户快速识别分组。
+struct BookshelfAggregateListRowView: View {
+    let group: BookshelfAggregateGroup
+
+    private enum Style {
+        static let iconFrame: CGFloat = 24
+        static let maxPreviewCovers = 5
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Spacing.tight) {
+            header
+            BookshelfAggregateCoverShelfView(
+                covers: group.representativeCovers,
+                maxVisibleCovers: Style.maxPreviewCovers
+            )
+        }
+        .padding(.horizontal, Spacing.comfortable)
+        .padding(.vertical, Spacing.base)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.surfaceCard, in: cardShape)
+        .overlay {
+            cardShape
+                .stroke(Color.surfaceBorderSubtle, lineWidth: CardStyle.borderWidth)
+        }
+        .contentShape(cardShape)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(accessibilityText)
+    }
+
+    private var header: some View {
+        HStack(spacing: Spacing.tight) {
+            headerLeadingContent
+
+            Spacer(minLength: Spacing.tight)
+
+            Text(countText)
+                .font(AppTypography.captionMedium)
+                .foregroundStyle(Color.textSecondary)
+                .lineLimit(1)
+                .monospacedDigit()
+                .padding(.horizontal, Spacing.half)
+                .padding(.vertical, Spacing.micro)
+                .background(Color.surfaceNested, in: Capsule())
+
+            chevron
+        }
+        .frame(maxWidth: .infinity, minHeight: Style.iconFrame, alignment: .leading)
+    }
+
+    @ViewBuilder
+    private var headerLeadingContent: some View {
+        if let ratingScore = group.aggregateRatingScore {
+            ratingHeader(for: ratingScore)
+        } else {
+            Image(systemName: semanticPresentation.systemImage)
+                .font(AppTypography.subheadlineMedium)
+                .foregroundStyle(semanticPresentation.color)
+                .frame(width: Style.iconFrame, height: Style.iconFrame)
+                .accessibilityHidden(true)
+
+            Text(group.title)
+                .font(AppTypography.subheadlineMedium)
+                .foregroundStyle(Color.textPrimary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.85)
+        }
+    }
+
+    private func ratingHeader(for score: Int64) -> some View {
+        HStack(spacing: Spacing.compact) {
+            if score > 0 {
+                XMRatingBar(score: score, preset: .listSmall)
+                    .accessibilityHidden(true)
+
+                Text(score.aggregateRatingTitle)
+                    .font(AppTypography.subheadlineMedium)
+                    .foregroundStyle(Color.ratingActive)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.85)
+            } else {
+                Image(systemName: "star")
+                    .font(AppTypography.subheadlineMedium)
+                    .foregroundStyle(Color.textHint)
+                    .frame(width: Style.iconFrame, height: Style.iconFrame)
+                    .accessibilityHidden(true)
+
+                Text(group.title)
+                    .font(AppTypography.subheadlineMedium)
+                    .foregroundStyle(Color.textPrimary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.85)
+            }
+        }
+    }
+
+    private var chevron: some View {
+        Image(systemName: "chevron.right")
+            .font(AppTypography.captionSemibold)
+            .foregroundStyle(Color.textHint)
+            .accessibilityHidden(true)
+    }
+
+    private var cardShape: RoundedRectangle {
+        RoundedRectangle(cornerRadius: CornerRadius.blockLarge, style: .continuous)
+    }
+
+    private var countText: String {
+        "\(group.count)本"
+    }
+
+    private var accessibilityText: String {
+        guard !group.subtitle.isEmpty,
+              group.subtitle != countText else {
+            return "\(group.title)，\(countText)"
+        }
+        return "\(group.title)，\(countText)，\(group.subtitle)"
+    }
+
+    private var semanticPresentation: BookshelfAggregateSemanticPresentation {
+        switch group.context {
+        case .readStatus(let statusID):
+            return readingStatusPresentation(for: statusID)
+        case .rating(let score):
+            return BookshelfAggregateSemanticPresentation(
+                systemImage: "star",
+                color: score > 0 ? .ratingActive : .textHint
+            )
+        case .tag:
+            return BookshelfAggregateSemanticPresentation(systemImage: "tag", color: .brand)
+        case .source:
+            return BookshelfAggregateSemanticPresentation(systemImage: "tray", color: .statusReading)
+        case .author:
+            return BookshelfAggregateSemanticPresentation(systemImage: "person.text.rectangle", color: .textSecondary)
+        case .press:
+            return BookshelfAggregateSemanticPresentation(systemImage: "building.columns", color: .textSecondary)
+        case .defaultGroup:
+            return BookshelfAggregateSemanticPresentation(systemImage: "books.vertical", color: .textSecondary)
+        }
+    }
+
+    private func readingStatusPresentation(for statusID: Int64?) -> BookshelfAggregateSemanticPresentation {
+        guard let statusID,
+              let status = BookEntryReadingStatus(rawValue: statusID) else {
+            return BookshelfAggregateSemanticPresentation(systemImage: "circle.dotted", color: .textHint)
+        }
+
+        return status.bookshelfAggregatePresentation
+    }
+}
+
+/// 聚合分组列表模式中的封面托盘，让代表书封形成一组可扫描的书架索引。
+private struct BookshelfAggregateCoverShelfView: View {
+    let covers: [String]
+    var maxVisibleCovers = 5
+
+    private enum Style {
+        static let targetCoverWidth: CGFloat = 52
+        static let minimumCoverWidth: CGFloat = 42
+        static let coverSpacing: CGFloat = Spacing.cozy
+        static let horizontalPadding: CGFloat = Spacing.tight
+        static let verticalPadding: CGFloat = Spacing.half
+        static let shelfHeight: CGFloat = XMBookCover.height(forWidth: targetCoverWidth) + verticalPadding * 2
+        static let placeholderSpines: [(width: CGFloat, heightRatio: CGFloat, opacity: Double)] = [
+            (8, 0.72, 0.28),
+            (10, 0.88, 0.34),
+            (7, 0.64, 0.24),
+            (9, 0.80, 0.30),
+            (11, 0.92, 0.36)
+        ]
+    }
+
+    var body: some View {
+        GeometryReader { proxy in
+            let coverWidth = resolvedCoverWidth(for: proxy.size.width)
+
+            shelfContent(coverWidth: coverWidth)
+                .padding(.horizontal, Style.horizontalPadding)
+                .padding(.vertical, Style.verticalPadding)
+                .frame(maxWidth: .infinity, minHeight: Style.shelfHeight, alignment: .bottomLeading)
+                .background(Color.surfaceNested, in: shelfShape)
+                .overlay {
+                    shelfShape
+                        .stroke(Color.surfaceBorderSubtle.opacity(0.45), lineWidth: CardStyle.borderWidth)
+                }
+                .overlay(alignment: .bottom) {
+                    Rectangle()
+                        .fill(Color.surfaceBorderSubtle.opacity(0.22))
+                        .frame(height: CardStyle.borderWidth)
+                        .padding(.horizontal, Style.horizontalPadding)
+                }
+        }
+        .frame(height: Style.shelfHeight)
+        .accessibilityHidden(true)
+    }
+
+    @ViewBuilder
+    private func shelfContent(coverWidth: CGFloat) -> some View {
+        if previewCovers.isEmpty {
+            emptyShelf(coverWidth: coverWidth)
+        } else {
+            HStack(alignment: .bottom, spacing: Style.coverSpacing) {
+                ForEach(previewCovers) { cover in
+                    previewCover(cover.urlString, width: coverWidth)
+                }
+
+                Spacer(minLength: 0)
+            }
+        }
+    }
+
+    private func previewCover(_ cover: String, width: CGFloat) -> some View {
+        XMBookCover.fixedWidth(
+            width,
+            urlString: cover,
+            cornerRadius: CornerRadius.inlaySmall,
+            border: .init(color: .surfaceBorderSubtle, width: CardStyle.borderWidth),
+            placeholderIconSize: cover.isEmpty ? .hidden : .small,
+            surfaceStyle: .spine
+        )
+    }
+
+    private func emptyShelf(coverWidth: CGFloat) -> some View {
+        HStack(alignment: .bottom, spacing: Spacing.compact) {
+            ForEach(Array(Style.placeholderSpines.enumerated()), id: \.offset) { _, spine in
+                RoundedRectangle(cornerRadius: CornerRadius.inlaySmall, style: .continuous)
+                    .fill(Color.surfaceBorderSubtle.opacity(spine.opacity))
+                    .frame(
+                        width: spine.width,
+                        height: XMBookCover.height(forWidth: coverWidth) * spine.heightRatio
+                    )
+            }
+
+            Spacer(minLength: 0)
+        }
+    }
+
+    private func resolvedCoverWidth(for containerWidth: CGFloat) -> CGFloat {
+        let visibleCount = CGFloat(max(1, maxVisibleCovers))
+        let horizontalPadding = Style.horizontalPadding * 2
+        let spacing = Style.coverSpacing * max(0, visibleCount - 1)
+        let availableWidth = max(0, containerWidth - horizontalPadding - spacing)
+        let fittingWidth = availableWidth / visibleCount
+        return min(Style.targetCoverWidth, max(Style.minimumCoverWidth, fittingWidth))
+    }
+
+    private var previewCovers: [CoverPreview] {
+        covers
+            .prefix(maxVisibleCovers)
+            .enumerated()
+            .map { CoverPreview(id: $0.offset, urlString: $0.element) }
+    }
+
+    private var shelfShape: RoundedRectangle {
+        RoundedRectangle(cornerRadius: CornerRadius.blockMedium, style: .continuous)
+    }
+
+    private struct CoverPreview: Identifiable {
+        let id: Int
+        let urlString: String
+    }
+}
+
+private extension BookEntryReadingStatus {
+    var bookshelfAggregatePresentation: BookshelfAggregateSemanticPresentation {
+        switch self {
+        case .wantRead:
+            return BookshelfAggregateSemanticPresentation(systemImage: "heart", color: .statusWish)
+        case .reading:
+            return BookshelfAggregateSemanticPresentation(systemImage: "book", color: .statusReading)
+        case .finished:
+            return BookshelfAggregateSemanticPresentation(systemImage: "checkmark.circle", color: .statusDone)
+        case .abandoned:
+            return BookshelfAggregateSemanticPresentation(systemImage: "xmark.circle", color: .statusAbandoned)
+        case .onHold:
+            return BookshelfAggregateSemanticPresentation(systemImage: "archivebox", color: .statusOnHold)
+        }
     }
 }
 
