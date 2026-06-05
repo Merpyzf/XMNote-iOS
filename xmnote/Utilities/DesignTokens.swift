@@ -637,6 +637,11 @@ enum BookshelfTypography {
         relativeTo: .body,
         minimumPointSize: 15
     )
+    static let uiSearchField: UIFont = AppTypography.uiFixed(
+        baseSize: 15,
+        textStyle: .body,
+        minimumPointSize: 15
+    )
     static let gridTitle: Font = AppTypography.fixed(
         baseSize: 12,
         relativeTo: .caption,

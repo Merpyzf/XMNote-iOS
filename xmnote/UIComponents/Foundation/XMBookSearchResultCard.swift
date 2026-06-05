@@ -26,13 +26,12 @@ struct XMBookSearchResultCard: View {
             )
 
             VStack(alignment: .leading, spacing: Spacing.cozy) {
-                highlightedText(
+                XMKeywordHighlighting.text(
                     result.title,
                     keyword: keyword,
                     baseFont: AppTypography.semantic(.headline, weight: .semibold),
                     highlightFont: AppTypography.semantic(.headline, weight: .bold),
-                    baseColor: Color.textPrimary,
-                    highlightColor: Color.keywordHighlight
+                    baseColor: Color.textPrimary
                 )
                 .multilineTextAlignment(.leading)
                 .lineLimit(2)
@@ -40,13 +39,12 @@ struct XMBookSearchResultCard: View {
 
                 if result.isLightweightDoubanSearchCard {
                     if !result.subtitle.isEmpty {
-                        highlightedText(
+                        XMKeywordHighlighting.text(
                             result.subtitle,
                             keyword: keyword,
                             baseFont: AppTypography.subheadline,
                             highlightFont: AppTypography.subheadlineSemibold,
-                            baseColor: Color.textSecondary,
-                            highlightColor: Color.keywordHighlight
+                            baseColor: Color.textSecondary
                         )
                         .lineLimit(2)
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -55,26 +53,24 @@ struct XMBookSearchResultCard: View {
                 } else {
                     VStack(alignment: .leading, spacing: Spacing.tight) {
                         ForEach(result.metadataLines) { line in
-                            highlightedText(
+                            XMKeywordHighlighting.text(
                                 "\(line.label)\(line.value)",
                                 keyword: keyword,
                                 baseFont: AppTypography.footnote,
                                 highlightFont: AppTypography.footnoteSemibold,
-                                baseColor: Color.textSecondary,
-                                highlightColor: Color.keywordHighlight
+                                baseColor: Color.textSecondary
                             )
                             .lineLimit(1)
                             .frame(maxWidth: .infinity, alignment: .leading)
                         }
 
                         if result.shouldShowStructuredSummaryLine {
-                            highlightedText(
+                            XMKeywordHighlighting.text(
                                 result.subtitle,
                                 keyword: keyword,
                                 baseFont: AppTypography.footnote,
                                 highlightFont: AppTypography.footnoteSemibold,
-                                baseColor: Color.textSecondary,
-                                highlightColor: Color.keywordHighlight
+                                baseColor: Color.textSecondary
                             )
                             .lineLimit(1)
                             .frame(maxWidth: .infinity, alignment: .leading)
@@ -105,105 +101,6 @@ struct XMBookSearchResultCard: View {
             .joined(separator: "，")
     }
 
-    /// 生成与当前文本层级同步的高亮文本，保证未命中和空关键字时仍保留既有语义字体。
-    private func highlightedText(
-        _ text: String,
-        keyword: String,
-        baseFont: Font,
-        highlightFont: Font,
-        baseColor: Color,
-        highlightColor: Color
-    ) -> Text {
-        Text(
-            highlightedAttributedString(
-                text,
-                keyword: keyword,
-                baseFont: baseFont,
-                highlightFont: highlightFont,
-                baseColor: baseColor,
-                highlightColor: highlightColor
-            )
-        )
-    }
-
-    private func highlightedAttributedString(
-        _ text: String,
-        keyword: String,
-        baseFont: Font,
-        highlightFont: Font,
-        baseColor: Color,
-        highlightColor: Color
-    ) -> AttributedString {
-        let trimmedKeyword = keyword.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !text.isEmpty else { return AttributedString() }
-
-        guard !trimmedKeyword.isEmpty else {
-            return styledSegment(
-                String(text[text.startIndex..<text.endIndex]),
-                font: baseFont,
-                color: baseColor
-            )
-        }
-
-        var result = AttributedString()
-        var searchStart = text.startIndex
-        var didMatch = false
-
-        while searchStart < text.endIndex,
-              let range = text.range(
-                  of: trimmedKeyword,
-                  options: [.caseInsensitive, .diacriticInsensitive],
-                  range: searchStart..<text.endIndex,
-                  locale: .current
-              ) {
-            if searchStart < range.lowerBound {
-                result.append(
-                    styledSegment(
-                        String(text[searchStart..<range.lowerBound]),
-                        font: baseFont,
-                        color: baseColor
-                    )
-                )
-            }
-
-            result.append(
-                styledSegment(
-                    String(text[range]),
-                    font: highlightFont,
-                    color: highlightColor
-                )
-            )
-            didMatch = true
-            searchStart = range.upperBound
-        }
-
-        if searchStart < text.endIndex {
-            result.append(
-                styledSegment(
-                    String(text[searchStart..<text.endIndex]),
-                    font: baseFont,
-                    color: baseColor
-                )
-            )
-        }
-
-        if didMatch {
-            return result
-        }
-
-        return styledSegment(
-            String(text[text.startIndex..<text.endIndex]),
-            font: baseFont,
-            color: baseColor
-        )
-    }
-
-    private func styledSegment(_ text: String, font: Font, color: Color) -> AttributedString {
-        var attributed = AttributedString(text)
-        attributed.font = font
-        attributed.foregroundColor = color
-        return attributed
-    }
 }
 
 private struct SearchResultMetadataLine: Identifiable {

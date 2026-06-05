@@ -587,34 +587,34 @@ private struct BookPickerLocalBookRow: View {
             )
 
             VStack(alignment: .leading, spacing: Spacing.cozy) {
-                highlightedText(
+                XMKeywordHighlighting.text(
                     book.title,
+                    keyword: keyword,
                     baseFont: AppTypography.subheadlineSemibold,
                     highlightFont: AppTypography.semantic(.subheadline, weight: .bold),
-                    baseColor: Color.textPrimary,
-                    highlightColor: Color.keywordHighlight
+                    baseColor: Color.textPrimary
                 )
                     .lineLimit(1)
 
                 VStack(alignment: .leading, spacing: Spacing.tiny) {
                     if !book.author.isEmpty {
-                        highlightedText(
+                        XMKeywordHighlighting.text(
                             book.author,
+                            keyword: keyword,
                             baseFont: AppTypography.caption,
                             highlightFont: AppTypography.captionSemibold,
-                            baseColor: Color.textSecondary,
-                            highlightColor: Color.keywordHighlight
+                            baseColor: Color.textSecondary
                         )
                         .lineLimit(1)
                     }
 
                     if !book.press.isEmpty {
-                        highlightedText(
+                        XMKeywordHighlighting.text(
                             book.press,
+                            keyword: keyword,
                             baseFont: AppTypography.caption,
                             highlightFont: AppTypography.captionSemibold,
-                            baseColor: Color.textSecondary,
-                            highlightColor: Color.keywordHighlight
+                            baseColor: Color.textSecondary
                         )
                         .lineLimit(1)
                     }
@@ -656,91 +656,4 @@ private struct BookPickerLocalBookRow: View {
         }
     }
 
-    private func highlightedText(
-        _ text: String,
-        baseFont: Font,
-        highlightFont: Font,
-        baseColor: Color,
-        highlightColor: Color
-    ) -> Text {
-        Text(
-            highlightedAttributedString(
-                text,
-                baseFont: baseFont,
-                highlightFont: highlightFont,
-                baseColor: baseColor,
-                highlightColor: highlightColor
-            )
-        )
-    }
-
-    private func highlightedAttributedString(
-        _ text: String,
-        baseFont: Font,
-        highlightFont: Font,
-        baseColor: Color,
-        highlightColor: Color
-    ) -> AttributedString {
-        let trimmedKeyword = keyword.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !text.isEmpty else { return AttributedString() }
-
-        guard !trimmedKeyword.isEmpty else {
-            return styledSegment(text, font: baseFont, color: baseColor)
-        }
-
-        var result = AttributedString()
-        var searchStart = text.startIndex
-        var didMatch = false
-
-        while searchStart < text.endIndex,
-              let range = text.range(
-                  of: trimmedKeyword,
-                  options: [.caseInsensitive, .diacriticInsensitive],
-                  range: searchStart..<text.endIndex,
-                  locale: .current
-              ) {
-            if searchStart < range.lowerBound {
-                result.append(
-                    styledSegment(
-                        String(text[searchStart..<range.lowerBound]),
-                        font: baseFont,
-                        color: baseColor
-                    )
-                )
-            }
-
-            result.append(
-                styledSegment(
-                    String(text[range]),
-                    font: highlightFont,
-                    color: highlightColor
-                )
-            )
-            didMatch = true
-            searchStart = range.upperBound
-        }
-
-        if searchStart < text.endIndex {
-            result.append(
-                styledSegment(
-                    String(text[searchStart..<text.endIndex]),
-                    font: baseFont,
-                    color: baseColor
-                )
-            )
-        }
-
-        if didMatch {
-            return result
-        }
-
-        return styledSegment(text, font: baseFont, color: baseColor)
-    }
-
-    private func styledSegment(_ text: String, font: Font, color: Color) -> AttributedString {
-        var attributed = AttributedString(text)
-        attributed.font = font
-        attributed.foregroundColor = color
-        return attributed
-    }
 }

@@ -151,42 +151,7 @@ private struct BookshelfBookListContentView: View {
         VStack(spacing: Spacing.none) {
             topChrome
                 .zIndex(1)
-            BookshelfBookListCollectionView(
-                snapshot: viewModel.snapshot,
-                subtitle: viewModel.subtitle,
-                contentState: renderedContentState,
-                layoutMode: viewModel.displaySetting.layoutMode,
-                columnCount: viewModel.displaySetting.columnCount,
-                showsNoteCount: viewModel.displaySetting.showsNoteCount,
-                titleDisplayMode: viewModel.displaySetting.titleDisplayMode,
-                isEditing: viewModel.isEditing,
-                hasSearchKeyword: viewModel.hasSearchKeyword,
-                searchDrawerHeight: searchAreaHeight,
-                searchPresentation: browseSearchPresentation,
-                isBrowseSearchFocused: isBrowseSearchFocused,
-                browseSearchKeyword: viewModel.searchKeyword,
-                browseSearchPlaceholder: browseSearchPlaceholder,
-                browseSearchFocusTrigger: browseSearchFocusTrigger,
-                selectedBookIDs: viewModel.selectedBookIDSet,
-                canReorder: viewModel.canReorderBooksInDefaultGroup,
-                movableBookIDs: viewModel.movableBookIDs,
-                supportsContextPin: viewModel.supportsContextPin,
-                activeWriteAction: viewModel.activeWriteAction,
-                bottomContentInset: bottomContentInset,
-                onActivateBrowseSearch: activateBrowseSearch,
-                onBrowseSearchKeywordChange: { viewModel.searchKeyword = $0 },
-                onBrowseSearchFocusChange: handleBrowseSearchFocusChange(_:),
-                onClearBrowseSearch: clearBrowseSearch,
-                onCollapseBrowseSearch: collapseBrowseSearch,
-                onToggleSelection: viewModel.toggleSelection,
-                onOpenBook: { bookID in
-                    onOpenRoute(.detail(bookId: bookID))
-                },
-                onContextAction: handleContextAction(_:bookID:),
-                onCommitOrder: viewModel.commitBooksInDefaultGroupOrder
-            )
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .ignoresSafeArea(.container, edges: .bottom)
+            collectionContent
         }
         .background(Color.surfacePage.ignoresSafeArea())
         .navigationBarBackButtonHidden(true)
@@ -328,7 +293,7 @@ private struct BookshelfBookListContentView: View {
                     onEnterEditing: enterEditingWithChoreography
                 )
                 .allowsHitTesting(chromePhase == .normal)
-                .transition(BookshelfManagementMotion.topChromeTransition(reduceMotion: reduceMotion))
+                .transition(BookshelfManagementMotion.bookListTopChromeTransition(reduceMotion: reduceMotion))
             }
 
             if chromePhase.showsEditHeader {
@@ -338,11 +303,13 @@ private struct BookshelfBookListContentView: View {
                     isAllVisibleSelected: viewModel.isAllVisibleSelected,
                     isSelectionToggleEnabled: !viewModel.visibleBookIDs.isEmpty,
                     searchState: editSearchState,
+                    drawsSurfaceBackground: false,
+                    showsBottomDivider: false,
                     onToggleSelectAll: toggleVisibleSelection,
                     onCancel: exitEditingWithChoreography
                 )
                 .frame(height: topBarRowHeight)
-                .transition(BookshelfManagementMotion.topChromeTransition(reduceMotion: reduceMotion))
+                .transition(BookshelfManagementMotion.bookListTopChromeTransition(reduceMotion: reduceMotion))
             }
         }
         .frame(height: reservedTopChromeHeight, alignment: .top)
@@ -422,17 +389,7 @@ private struct BookshelfBookListContentView: View {
     }
 
     private var browseSearchPlaceholder: String {
-        let rawCount = viewModel.subtitle.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !rawCount.isEmpty else { return "搜索书名、状态或来源" }
-        if rawCount.hasSuffix("本") {
-            let numericText = rawCount
-                .dropLast()
-                .trimmingCharacters(in: .whitespacesAndNewlines)
-            if !numericText.isEmpty {
-                return "在 \(numericText) 本中搜索"
-            }
-        }
-        return "在 \(rawCount) 中搜索"
+        "搜索书籍"
     }
 
     private var editSearchState: BookshelfEditChromeSearchState {
@@ -440,13 +397,72 @@ private struct BookshelfBookListContentView: View {
     }
 
     private var renderedContentState: BookshelfContentState {
-        guard case .loading = viewModel.contentState else {
-            return viewModel.contentState
+        isInitialReadLoading ? .loading : viewModel.contentState
+    }
+
+    private var isInitialReadLoading: Bool {
+        !viewModel.hasCompletedInitialLoad && viewModel.contentState == .loading
+    }
+
+    private var shouldRenderCollection: Bool {
+        !isInitialReadLoading || readLoadingGate.isVisible
+    }
+
+    private var shouldRenderSearchDrawer: Bool {
+        viewModel.hasCompletedInitialLoad
+            || viewModel.hasSearchKeyword
+            || browseSearchPresentation.isPinned
+            || isBrowseSearchFocused
+    }
+
+    private var effectiveSearchDrawerHeight: CGFloat {
+        shouldRenderSearchDrawer ? searchAreaHeight : 0
+    }
+
+    @ViewBuilder
+    private var collectionContent: some View {
+        if shouldRenderCollection {
+            BookshelfBookListCollectionView(
+                snapshot: viewModel.snapshot,
+                subtitle: viewModel.subtitle,
+                contentState: renderedContentState,
+                layoutMode: viewModel.displaySetting.layoutMode,
+                columnCount: viewModel.displaySetting.columnCount,
+                showsNoteCount: viewModel.displaySetting.showsNoteCount,
+                titleDisplayMode: viewModel.displaySetting.titleDisplayMode,
+                isEditing: viewModel.isEditing,
+                hasSearchKeyword: viewModel.hasSearchKeyword,
+                searchDrawerHeight: effectiveSearchDrawerHeight,
+                searchPresentation: browseSearchPresentation,
+                isBrowseSearchFocused: isBrowseSearchFocused,
+                browseSearchKeyword: viewModel.searchKeyword,
+                browseSearchPlaceholder: browseSearchPlaceholder,
+                browseSearchFocusTrigger: browseSearchFocusTrigger,
+                selectedBookIDs: viewModel.selectedBookIDSet,
+                canReorder: viewModel.canReorderBooksInDefaultGroup,
+                movableBookIDs: viewModel.movableBookIDs,
+                supportsContextPin: viewModel.supportsContextPin,
+                activeWriteAction: viewModel.activeWriteAction,
+                bottomContentInset: bottomContentInset,
+                onActivateBrowseSearch: activateBrowseSearch,
+                onBrowseSearchKeywordChange: { viewModel.searchKeyword = $0 },
+                onBrowseSearchFocusChange: handleBrowseSearchFocusChange(_:),
+                onClearBrowseSearch: clearBrowseSearch,
+                onCollapseBrowseSearch: collapseBrowseSearch,
+                onToggleSelection: viewModel.toggleSelection,
+                onOpenBook: { bookID in
+                    onOpenRoute(.detail(bookId: bookID))
+                },
+                onContextAction: handleContextAction(_:bookID:),
+                onCommitOrder: viewModel.commitBooksInDefaultGroupOrder
+            )
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .ignoresSafeArea(.container, edges: .bottom)
+        } else {
+            Color.clear
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .accessibilityHidden(true)
         }
-        guard !viewModel.hasCompletedInitialLoad else {
-            return .content
-        }
-        return readLoadingGate.isVisible ? .loading : .content
     }
 
     private func syncReadLoadingGate() {
@@ -926,8 +942,10 @@ private enum BookshelfBookListEmptyState: Hashable {
 
     var iconColor: Color {
         switch self {
-        case .contentEmpty, .searchEmpty:
-            return Color.brand.opacity(0.30)
+        case .contentEmpty:
+            return Color.brand.opacity(0.32)
+        case .searchEmpty:
+            return Color.brand.opacity(0.40)
         case .error:
             return Color.feedbackWarning.opacity(0.42)
         }
@@ -939,6 +957,30 @@ private enum BookshelfBookListCollectionItem: Hashable {
     case loading
     case empty(BookshelfBookListEmptyState)
     case book(BookshelfBookListItem)
+}
+
+/// 搜索结果区的粗粒度状态，用于决定结构动效是内容补位还是空态稳定刷新。
+private enum BookshelfBookListResultState: Equatable {
+    case content
+    case empty
+    case loading
+    case error
+    case other
+}
+
+/// 二级列表搜索结果切换类型，避免空态重复查询误触发布局位移动画。
+private enum BookshelfBookListResultTransition: Equatable {
+    case contentToEmpty
+    case emptyToContent
+    case contentToContent
+    case emptyToEmpty
+    case other
+}
+
+/// 空态 SwiftUI 容器的呈现模式；重复无结果更新必须保持位置稳定。
+private enum BookshelfBookListEmptyPresentationMode: Hashable {
+    case enteringFromContent
+    case steadyEmptyUpdate
 }
 
 /// 二级列表网格布局的确定性尺寸，保证 UICollectionView 切换整理态时不依赖 self-sizing 猜测。
@@ -967,6 +1009,14 @@ private enum BookshelfBookListGridMetrics {
     }
 }
 
+/// 二级书籍列表非网格内容的确定性尺寸，避免 estimated self-sizing 在状态切换中二次测量。
+private enum BookshelfBookListLayoutMetrics {
+    static let listRowHeight: CGFloat = 92
+    static let loadingHeight: CGFloat = 520
+    static let emptyHeight: CGFloat = 320
+    static let sectionHeaderHeight: CGFloat = 34
+}
+
 /// 二级书籍列表 collection 内部 section。
 private struct BookshelfBookListCollectionSectionState: Hashable {
     let id: String
@@ -979,12 +1029,19 @@ private final class BookshelfBookListViewportStableCollectionView: UICollectionV
     var onAdjustedContentInsetDidChange: (() -> Void)?
     var onBeforeLayoutSubviews: (() -> Void)?
     var onAfterLayoutSubviews: (() -> Void)?
+    var onDidMoveToWindow: (() -> Void)?
 
     /// 布局前保存当前可见锚点，避免 safe area 调整后只能拿到跳变后的 cell 位置。
     override func layoutSubviews() {
         onBeforeLayoutSubviews?()
         super.layoutSubviews()
         onAfterLayoutSubviews?()
+    }
+
+    /// 进入窗口时立即收敛初始滚动位置，避免导航转场首帧暴露隐藏搜索抽屉。
+    override func didMoveToWindow() {
+        super.didMoveToWindow()
+        onDidMoveToWindow?()
     }
 
     /// UIKit 合成后的 adjusted inset 变化时，通知承载层恢复视口锚点。
@@ -1012,6 +1069,11 @@ private final class BookshelfBookListCollectionHostView: UIView {
     private var isPendingInitialSearchDrawerOffset = false
     private var isAdjustingSearchDrawerOffset = false
     private var searchDrawerExtraBottomInset: CGFloat = 0
+    private var pendingAnimatedInsertionIdentities: Set<ViewportAnchorIdentity> = []
+    private var emptyPresentationMode: BookshelfBookListEmptyPresentationMode = .steadyEmptyUpdate
+    private var isContentToEmptyTransitionPending = false
+    private var contentToEmptyTransitionGeneration = 0
+    private var pendingContentToEmptySections: [BookshelfBookListCollectionSectionState]?
     private let impactFeedback = UIImpactFeedbackGenerator(style: .medium)
     private let selectionFeedback = UISelectionFeedbackGenerator()
 
@@ -1021,6 +1083,8 @@ private final class BookshelfBookListCollectionHostView: UIView {
             collectionViewLayout: makeLayout(for: configuration)
         )
         view.backgroundColor = .clear
+        view.alpha = 0
+        view.transform = CGAffineTransform(translationX: 0, y: 6)
         view.alwaysBounceVertical = true
         view.showsVerticalScrollIndicator = false
         view.contentInsetAdjustmentBehavior = .automatic
@@ -1050,6 +1114,9 @@ private final class BookshelfBookListCollectionHostView: UIView {
         view.onAfterLayoutSubviews = { [weak self] in
             self?.applyPendingInitialSearchDrawerOffsetIfNeeded()
         }
+        view.onDidMoveToWindow = { [weak self] in
+            self?.applyPendingInitialSearchDrawerOffsetIfNeeded()
+        }
         view.onAdjustedContentInsetDidChange = { [weak self] in
             self?.handleAdjustedContentInsetDidChange()
         }
@@ -1066,6 +1133,11 @@ private final class BookshelfBookListCollectionHostView: UIView {
         fatalError("init(coder:) has not been implemented")
     }
 
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        applyPendingInitialSearchDrawerOffsetIfNeeded()
+    }
+
     /// 同步 SwiftUI 路由载荷到本地 item 列表。
     func update(
         with configuration: BookshelfBookListCollectionConfiguration,
@@ -1078,26 +1150,65 @@ private final class BookshelfBookListCollectionHostView: UIView {
 
         storeViewportAnchorIfPossible(requiresLayout: true)
         let previousConfiguration = self.configuration
+        let previousSections = sections
         let nextSections = Self.makeSections(from: configuration)
-        let didChangeSearchDrawerAvailability = configuration.showsSearchDrawerInCollection != previousConfiguration.showsSearchDrawerInCollection
-        let needsLayoutUpdate = configuration.layoutMode != self.configuration.layoutMode
-            || configuration.columnCount != self.configuration.columnCount
-            || configuration.titleDisplayMode != self.configuration.titleDisplayMode
-            || didChangeSearchDrawerAvailability
+        let resultTransition = Self.resultTransition(from: previousSections, to: nextSections)
+        let needsLayoutUpdate = configuration.layoutMode != previousConfiguration.layoutMode
+            || configuration.columnCount != previousConfiguration.columnCount
+            || configuration.titleDisplayMode != previousConfiguration.titleDisplayMode
+        let needsLayoutInvalidation = needsLayoutUpdate
+            || configuration.searchDrawerHeight != previousConfiguration.searchDrawerHeight
         self.configuration = configuration
+        updateCollectionVisibilityForSearchDrawerPreparation()
         collectionView.dragInteractionEnabled = configuration.canReorder
         normalizeSearchDrawerExtraBottomInsetForCurrentState()
-        updateBottomContentInset()
+        updateBottomContentInset(
+            animated: animated
+                && collectionView.window != nil
+                && abs(previousConfiguration.bottomContentInset - configuration.bottomContentInset) > 0.5
+        )
         if needsLayoutUpdate {
-            collectionView.setCollectionViewLayout(makeLayout(for: configuration), animated: animated)
+            collectionView.setCollectionViewLayout(
+                makeLayout(for: configuration),
+                animated: animated && collectionView.window != nil
+            )
+        } else if needsLayoutInvalidation {
+            collectionView.collectionViewLayout.invalidateLayout()
+        }
+        if isContentToEmptyTransitionPending,
+           Self.resultState(in: nextSections) == .empty {
+            pendingContentToEmptySections = nextSections
+            refreshSearchDrawerCellOnly()
+            syncSearchDrawerOffsetAfterUpdate(previousConfiguration: previousConfiguration, animated: animated)
+            return
+        } else if isContentToEmptyTransitionPending {
+            cancelPendingContentToEmptyTransition()
         }
         guard nextSections != sections else {
-            refreshVisibleCells()
+            refreshVisibleCells(
+                for: resultTransition,
+                refreshEmptyCells: resultTransition != .emptyToEmpty
+            )
             syncSearchDrawerOffsetAfterUpdate(previousConfiguration: previousConfiguration, animated: animated)
             return
         }
+        let fallbackOffsetY = collectionView.contentOffset.y
+        if !needsLayoutUpdate,
+           applyAnimatedSectionUpdate(
+            from: previousSections,
+            to: nextSections,
+            transition: resultTransition,
+            animated: animated
+           ) {
+            syncSearchDrawerOffsetAfterUpdate(previousConfiguration: previousConfiguration, animated: animated)
+            return
+        }
+        emptyPresentationMode = Self.emptyPresentationMode(for: resultTransition)
         sections = nextSections
-        collectionView.reloadData()
+        reloadCollectionPreservingViewport(
+            fallbackOffsetY: fallbackOffsetY,
+            animated: animated && collectionView.window != nil && !needsLayoutUpdate
+        )
         syncSearchDrawerOffsetAfterUpdate(previousConfiguration: previousConfiguration, animated: animated)
     }
 
@@ -1112,7 +1223,15 @@ private final class BookshelfBookListCollectionHostView: UIView {
         isPendingInitialSearchDrawerOffset = false
         isAdjustingSearchDrawerOffset = false
         searchDrawerExtraBottomInset = 0
+        pendingAnimatedInsertionIdentities = []
+        emptyPresentationMode = .steadyEmptyUpdate
+        isContentToEmptyTransitionPending = false
+        contentToEmptyTransitionGeneration += 1
+        pendingContentToEmptySections = nil
         sections = []
+        collectionView.alpha = 0
+        collectionView.transform = CGAffineTransform(translationX: 0, y: 6)
+        collectionView.isUserInteractionEnabled = true
         collectionView.reloadData()
     }
 }
@@ -1132,27 +1251,374 @@ private extension BookshelfBookListCollectionHostView {
         ])
     }
 
+    /// 初始隐藏搜索抽屉时先等滚动位置收敛，避免用户看到抽屉从首帧闪出再被推走。
+    func updateCollectionVisibilityForSearchDrawerPreparation() {
+        let shouldHideUntilOffsetSettles = configuration.showsSearchDrawerInCollection
+            && !configuration.showsExpandedSearchSurface
+            && !didApplyInitialSearchDrawerOffset
+        let targetAlpha: CGFloat = shouldHideUntilOffsetSettles ? 0 : 1
+        let targetTransform = shouldHideUntilOffsetSettles
+            ? CGAffineTransform(translationX: 0, y: 6)
+            : .identity
+        collectionView.isUserInteractionEnabled = !shouldHideUntilOffsetSettles
+        guard abs(collectionView.alpha - targetAlpha) > 0.01 || collectionView.transform != targetTransform else {
+            return
+        }
+        if shouldHideUntilOffsetSettles || collectionView.window == nil {
+            collectionView.alpha = targetAlpha
+            collectionView.transform = targetTransform
+            return
+        }
+        UIView.animate(
+            withDuration: BookshelfManagementMotion.bookListInitialRevealDuration,
+            delay: 0,
+            options: [.allowUserInteraction, .beginFromCurrentState, .curveEaseOut]
+        ) {
+            self.collectionView.alpha = targetAlpha
+            self.collectionView.transform = targetTransform
+        }
+    }
+
+    /// 从 section 快照识别结果区状态，忽略搜索抽屉这类 chrome section。
+    static func resultState(in sections: [BookshelfBookListCollectionSectionState]) -> BookshelfBookListResultState {
+        let resultSections = sections.filter { $0.id != "search-drawer" }
+        guard !resultSections.isEmpty else { return .other }
+        if resultSections.contains(where: { $0.id == "loading" }) {
+            return .loading
+        }
+        if resultSections.contains(where: { $0.id == "error" }) {
+            return .error
+        }
+        if resultSections.contains(where: { $0.id == "empty" }) {
+            return .empty
+        }
+        if resultSections.contains(where: { section in
+            section.items.contains {
+                if case .book = $0 { return true }
+                return false
+            }
+        }) {
+            return .content
+        }
+        return .other
+    }
+
+    /// 将前后结果状态转换为动效意图，避免把重复无结果输入误当作结构变化。
+    static func resultTransition(
+        from previousSections: [BookshelfBookListCollectionSectionState],
+        to nextSections: [BookshelfBookListCollectionSectionState]
+    ) -> BookshelfBookListResultTransition {
+        switch (resultState(in: previousSections), resultState(in: nextSections)) {
+        case (.content, .empty):
+            return .contentToEmpty
+        case (.empty, .content):
+            return .emptyToContent
+        case (.content, .content):
+            return .contentToContent
+        case (.empty, .empty):
+            return .emptyToEmpty
+        default:
+            return .other
+        }
+    }
+
+    /// 只有内容首次筛成空态时允许空态上浮进入，重复空态更新必须保持稳定。
+    static func emptyPresentationMode(
+        for transition: BookshelfBookListResultTransition
+    ) -> BookshelfBookListEmptyPresentationMode {
+        transition == .contentToEmpty ? .enteringFromContent : .steadyEmptyUpdate
+    }
+
+    /// 取消尚未提交的内容退场动画，避免快速清空关键词时旧 completion 覆盖新结果。
+    func cancelPendingContentToEmptyTransition() {
+        isContentToEmptyTransitionPending = false
+        contentToEmptyTransitionGeneration += 1
+        pendingContentToEmptySections = nil
+        for cell in collectionView.visibleCells {
+            cell.layer.removeAllAnimations()
+            cell.alpha = 1
+            cell.transform = .identity
+        }
+    }
+
+    /// 搜索过滤和空态切换优先走批量更新，保留书籍补位关系；复杂状态仍交给受控 reload 兜底。
+    func applyAnimatedSectionUpdate(
+        from previousSections: [BookshelfBookListCollectionSectionState],
+        to nextSections: [BookshelfBookListCollectionSectionState],
+        transition: BookshelfBookListResultTransition,
+        animated: Bool
+    ) -> Bool {
+        guard animated,
+              collectionView.window != nil,
+              !previousSections.isEmpty,
+              canAnimateTransition(from: previousSections, to: nextSections) else {
+            return false
+        }
+        emptyPresentationMode = Self.emptyPresentationMode(for: transition)
+        if transition == .emptyToEmpty {
+            sections = nextSections
+            refreshVisibleCells(for: transition, refreshEmptyCells: true)
+            return true
+        }
+        if transition == .contentToEmpty {
+            return applyContentToEmptyTransition(from: previousSections, to: nextSections)
+        }
+        if sectionIDs(in: previousSections) == sectionIDs(in: nextSections) {
+            return applyAnimatedItemUpdate(
+                from: previousSections,
+                to: nextSections,
+                transition: transition
+            )
+        }
+        return applyAnimatedSectionReplacement(
+            from: previousSections,
+            to: nextSections,
+            transition: transition
+        )
+    }
+
+    /// 判断本次数据变化是否属于搜索结果/空态这类可安全批量更新的结构切换。
+    func canAnimateTransition(
+        from previousSections: [BookshelfBookListCollectionSectionState],
+        to nextSections: [BookshelfBookListCollectionSectionState]
+    ) -> Bool {
+        let disallowedIDs: Set<String> = ["loading", "error"]
+        return previousSections.allSatisfy { !disallowedIDs.contains($0.id) }
+            && nextSections.allSatisfy { !disallowedIDs.contains($0.id) }
+            && hasUniqueItemIdentities(in: previousSections)
+            && hasUniqueItemIdentities(in: nextSections)
+    }
+
+    /// 在 section 结构稳定时按 item 身份执行插入、删除和移动动画。
+    func applyAnimatedItemUpdate(
+        from previousSections: [BookshelfBookListCollectionSectionState],
+        to nextSections: [BookshelfBookListCollectionSectionState],
+        transition: BookshelfBookListResultTransition
+    ) -> Bool {
+        var deletions: [IndexPath] = []
+        var insertions: [IndexPath] = []
+        var moves: [(from: IndexPath, to: IndexPath)] = []
+        var insertedIdentities = Set<ViewportAnchorIdentity>()
+
+        for sectionIndex in previousSections.indices {
+            let previousIdentities = previousSections[sectionIndex].items.map(anchorIdentity(for:))
+            let nextIdentities = nextSections[sectionIndex].items.map(anchorIdentity(for:))
+            let diff = nextIdentities.difference(from: previousIdentities).inferringMoves()
+            for change in diff {
+                switch change {
+                case let .remove(offset, _, associatedWith):
+                    if let destination = associatedWith {
+                        moves.append((
+                            from: IndexPath(item: offset, section: sectionIndex),
+                            to: IndexPath(item: destination, section: sectionIndex)
+                        ))
+                    } else {
+                        deletions.append(IndexPath(item: offset, section: sectionIndex))
+                    }
+                case let .insert(offset, identity, associatedWith):
+                    if associatedWith == nil {
+                        insertions.append(IndexPath(item: offset, section: sectionIndex))
+                        insertedIdentities.insert(identity)
+                    }
+                }
+            }
+        }
+
+        guard !deletions.isEmpty || !insertions.isEmpty || !moves.isEmpty else {
+            sections = nextSections
+            refreshVisibleCells(for: transition, refreshEmptyCells: true)
+            return true
+        }
+
+        pendingAnimatedInsertionIdentities.formUnion(insertedIdentities)
+        sections = nextSections
+        collectionView.performBatchUpdates {
+            if !deletions.isEmpty {
+                collectionView.deleteItems(at: deletions)
+            }
+            if !insertions.isEmpty {
+                collectionView.insertItems(at: insertions)
+            }
+            for move in moves {
+                collectionView.moveItem(at: move.from, to: move.to)
+            }
+        } completion: { [weak self] _ in
+            self?.pendingAnimatedInsertionIdentities.subtract(insertedIdentities)
+            self?.refreshVisibleCells(for: transition, refreshEmptyCells: true)
+        }
+        return true
+    }
+
+    /// 搜索结果从内容变为空态时，先让可见书籍短退场，再让空态接管结果区。
+    func applyContentToEmptyTransition(
+        from previousSections: [BookshelfBookListCollectionSectionState],
+        to nextSections: [BookshelfBookListCollectionSectionState]
+    ) -> Bool {
+        let generation = contentToEmptyTransitionGeneration + 1
+        contentToEmptyTransitionGeneration = generation
+        isContentToEmptyTransitionPending = true
+        pendingContentToEmptySections = nextSections
+        emptyPresentationMode = .enteringFromContent
+
+        let visibleCells = visibleBookCells(in: previousSections)
+        let commitReplacement = { [weak self] in
+            guard let self,
+                  self.isContentToEmptyTransitionPending,
+                  self.contentToEmptyTransitionGeneration == generation else {
+                return
+            }
+            let committedSections = self.pendingContentToEmptySections ?? nextSections
+            self.pendingContentToEmptySections = nil
+            self.isContentToEmptyTransitionPending = false
+            self.emptyPresentationMode = .enteringFromContent
+            _ = self.applyAnimatedSectionReplacement(
+                from: previousSections,
+                to: committedSections,
+                transition: .contentToEmpty,
+                suppressDefaultAnimation: true
+            )
+        }
+
+        guard !UIAccessibility.isReduceMotionEnabled,
+              !visibleCells.isEmpty else {
+            commitReplacement()
+            return true
+        }
+
+        UIView.animate(
+            withDuration: BookshelfManagementMotion.bookListResultExitDuration,
+            delay: 0,
+            options: [.allowUserInteraction, .beginFromCurrentState, .curveEaseIn]
+        ) {
+            for cell in visibleCells {
+                cell.alpha = 0
+                cell.transform = CGAffineTransform(translationX: 0, y: 8).scaledBy(x: 0.985, y: 0.985)
+            }
+        } completion: { _ in
+            commitReplacement()
+        }
+        return true
+    }
+
+    /// 取出真实书籍 cell，避免搜索框和空态参与内容筛除退场。
+    func visibleBookCells(
+        in previousSections: [BookshelfBookListCollectionSectionState]
+    ) -> [UICollectionViewCell] {
+        collectionView.indexPathsForVisibleItems.compactMap { indexPath in
+            guard previousSections.indices.contains(indexPath.section),
+                  previousSections[indexPath.section].items.indices.contains(indexPath.item),
+                  case .book = previousSections[indexPath.section].items[indexPath.item] else {
+                return nil
+            }
+            return collectionView.cellForItem(at: indexPath)
+        }
+    }
+
+    /// 在搜索结果与空态互换时保留共同前缀 section，只替换实际内容区。
+    func applyAnimatedSectionReplacement(
+        from previousSections: [BookshelfBookListCollectionSectionState],
+        to nextSections: [BookshelfBookListCollectionSectionState],
+        transition: BookshelfBookListResultTransition,
+        suppressDefaultAnimation: Bool = false
+    ) -> Bool {
+        let commonPrefixCount = zip(previousSections, nextSections)
+            .prefix { $0.0.id == $0.1.id }
+            .count
+        guard commonPrefixCount < previousSections.count || commonPrefixCount < nextSections.count else {
+            return false
+        }
+        let deletedSections = IndexSet(integersIn: commonPrefixCount..<previousSections.count)
+        let insertedSections = IndexSet(integersIn: commonPrefixCount..<nextSections.count)
+        let insertedIdentities = Set(nextSections[commonPrefixCount...].flatMap { section in
+            section.items.compactMap { item -> ViewportAnchorIdentity? in
+                if case .book = item {
+                    return anchorIdentity(for: item)
+                }
+                return nil
+            }
+        })
+
+        pendingAnimatedInsertionIdentities.formUnion(insertedIdentities)
+        sections = nextSections
+        let updates = {
+            if !deletedSections.isEmpty {
+                self.collectionView.deleteSections(deletedSections)
+            }
+            if !insertedSections.isEmpty {
+                self.collectionView.insertSections(insertedSections)
+            }
+        }
+        let completion: (Bool) -> Void = { [weak self] _ in
+            self?.pendingAnimatedInsertionIdentities.subtract(insertedIdentities)
+            self?.refreshVisibleCells(for: transition, refreshEmptyCells: true)
+        }
+        if suppressDefaultAnimation {
+            UIView.performWithoutAnimation {
+                collectionView.performBatchUpdates(updates, completion: completion)
+            }
+        } else {
+            collectionView.performBatchUpdates(updates, completion: completion)
+        }
+        return true
+    }
+
+    /// 对无法安全 diff 的状态做受控刷新，并尽量保留刷新前的可见锚点。
+    func reloadCollectionPreservingViewport(fallbackOffsetY: CGFloat, animated: Bool) {
+        let updates = {
+            self.collectionView.reloadData()
+            self.collectionView.layoutIfNeeded()
+            self.restoreViewportAnchor(self.stableViewportAnchor, fallbackOffsetY: fallbackOffsetY)
+        }
+        guard animated else {
+            UIView.performWithoutAnimation(updates)
+            return
+        }
+        UIView.transition(
+            with: collectionView,
+            duration: BookshelfManagementMotion.bookListResultTransitionDuration,
+            options: [.transitionCrossDissolve, .allowUserInteraction, .beginFromCurrentState]
+        ) {
+            updates()
+        }
+    }
+
+    /// 提取 section 稳定身份，用于判断是否可以走 item 级批量更新。
+    func sectionIDs(in sections: [BookshelfBookListCollectionSectionState]) -> [String] {
+        sections.map(\.id)
+    }
+
+    /// 确保批量更新身份唯一，避免 UICollectionView 同一轮 diff 中出现歧义。
+    func hasUniqueItemIdentities(in sections: [BookshelfBookListCollectionSectionState]) -> Bool {
+        let identities = sections.flatMap { section in
+            section.items.map(anchorIdentity(for:))
+        }
+        return Set(identities).count == identities.count
+    }
+
     /// 按当前显示设置生成布局；书籍 section 支持确定性网格，其它副标题、加载与空态保持全宽。
     func makeLayout(for configuration: BookshelfBookListCollectionConfiguration) -> UICollectionViewLayout {
         UICollectionViewCompositionalLayout { [weak self] sectionIndex, environment in
+            let resolvedConfiguration = self?.configuration ?? configuration
             if self?.sectionContainsSearchDrawer(at: sectionIndex) == true {
-                return Self.makeSearchDrawerSection(height: configuration.searchDrawerHeight)
+                return Self.makeSearchDrawerSection(height: resolvedConfiguration.searchDrawerHeight)
             }
-            let usesGrid = configuration.layoutMode == .grid
+            let usesGrid = resolvedConfiguration.layoutMode == .grid
                 && (self?.sectionContainsBooks(at: sectionIndex) ?? false)
             let section = usesGrid
                 ? Self.makeGridSection(
-                    columnCount: configuration.columnCount,
+                    columnCount: resolvedConfiguration.columnCount,
                     containerWidth: environment.container.effectiveContentSize.width,
-                    titleDisplayMode: configuration.titleDisplayMode
+                    titleDisplayMode: resolvedConfiguration.titleDisplayMode
                 )
-                : Self.makeListSection()
+                : Self.makeListSection(
+                    itemHeight: self?.listItemHeight(at: sectionIndex) ?? BookshelfBookListLayoutMetrics.listRowHeight
+                )
             if let self,
                self.sections.indices.contains(sectionIndex),
                self.sections[sectionIndex].title != nil {
                 let headerSize = NSCollectionLayoutSize(
                     widthDimension: .fractionalWidth(1),
-                    heightDimension: .estimated(34)
+                    heightDimension: .absolute(BookshelfBookListLayoutMetrics.sectionHeaderHeight)
                 )
                 let header = NSCollectionLayoutBoundarySupplementaryItem(
                     layoutSize: headerSize,
@@ -1165,8 +1631,26 @@ private extension BookshelfBookListCollectionHostView {
         }
     }
 
+    /// 根据 section 内容返回稳定行高，避免 loading/empty/list row 依赖自动测量。
+    func listItemHeight(at sectionIndex: Int) -> CGFloat {
+        guard sections.indices.contains(sectionIndex),
+              let firstItem = sections[sectionIndex].items.first else {
+            return BookshelfBookListLayoutMetrics.listRowHeight
+        }
+        switch firstItem {
+        case .searchDrawer:
+            return configuration.searchDrawerHeight
+        case .loading:
+            return BookshelfBookListLayoutMetrics.loadingHeight
+        case .empty:
+            return BookshelfBookListLayoutMetrics.emptyHeight
+        case .book:
+            return BookshelfBookListLayoutMetrics.listRowHeight
+        }
+    }
+
     /// 只增加滚动余量，不改变 collection layout，避免底部玻璃栏遮挡最后一行书籍。
-    func updateBottomContentInset() {
+    func updateBottomContentInset(animated: Bool = false) {
         let bottomInset = resolvedBottomContentInset()
         let didChangeCustomInset = collectionView.contentInset.bottom != bottomInset
             || collectionView.verticalScrollIndicatorInsets.bottom != bottomInset
@@ -1183,16 +1667,28 @@ private extension BookshelfBookListCollectionHostView {
         var indicatorInsets = collectionView.verticalScrollIndicatorInsets
         indicatorInsets.bottom = bottomInset
 
-        UIView.performWithoutAnimation {
-            isViewportAnchorCaptureSuspended = true
-            collectionView.contentInset = contentInset
-            collectionView.verticalScrollIndicatorInsets = indicatorInsets
-            collectionView.layoutIfNeeded()
-            restoreViewportAnchor(stableViewportAnchor, fallbackOffsetY: fallbackOffsetY)
-            isViewportAnchorCaptureSuspended = false
-            lastAdjustedContentInset = collectionView.adjustedContentInset
-            storeViewportAnchorIfPossible(requiresLayout: false)
+        let insetUpdates = { [self] in
+            self.isViewportAnchorCaptureSuspended = true
+            self.collectionView.contentInset = contentInset
+            self.collectionView.verticalScrollIndicatorInsets = indicatorInsets
+            self.collectionView.layoutIfNeeded()
+            self.isViewportAnchorCaptureSuspended = false
+            self.lastAdjustedContentInset = self.collectionView.adjustedContentInset
+            self.storeViewportAnchorIfPossible(requiresLayout: false)
         }
+        guard animated else {
+            UIView.performWithoutAnimation {
+                insetUpdates()
+                restoreViewportAnchor(stableViewportAnchor, fallbackOffsetY: fallbackOffsetY)
+            }
+            return
+        }
+        UIView.animate(
+            withDuration: BookshelfManagementMotion.bookListSearchDrawerDuration,
+            delay: 0,
+            options: [.allowUserInteraction, .beginFromCurrentState, .curveEaseInOut],
+            animations: insetUpdates
+        )
     }
 
     /// 根据搜索抽屉当前呈现状态收束额外滚动余量，避免输入态或无抽屉页面继承隐藏位空间。
@@ -1264,6 +1760,7 @@ private extension BookshelfBookListCollectionHostView {
             .first
             .map { candidate in
                 ViewportAnchor(
+                    identity: item(at: candidate.indexPath).map(anchorIdentity(for:)),
                     indexPath: candidate.indexPath,
                     distanceFromVisibleTop: candidate.frame.minY - visibleTop
                 )
@@ -1277,7 +1774,8 @@ private extension BookshelfBookListCollectionHostView {
 
         let targetOffsetY: CGFloat
         if let anchor,
-           let attributes = collectionView.layoutAttributesForItem(at: anchor.indexPath) {
+           let resolvedIndexPath = resolvedIndexPath(for: anchor),
+           let attributes = collectionView.layoutAttributesForItem(at: resolvedIndexPath) {
             let visibleTop = attributes.frame.minY - anchor.distanceFromVisibleTop
             targetOffsetY = visibleTop - collectionView.adjustedContentInset.top
         } else {
@@ -1290,6 +1788,19 @@ private extension BookshelfBookListCollectionHostView {
         )
         guard abs(collectionView.contentOffset.y - clampedOffset.y) > 0.5 else { return }
         collectionView.setContentOffset(clampedOffset, animated: false)
+    }
+
+    /// 优先使用稳定业务身份找回刷新前的可见项；找不到时退回 UIKit 原始 indexPath。
+    func resolvedIndexPath(for anchor: ViewportAnchor) -> IndexPath? {
+        if let identity = anchor.identity,
+           let indexPath = indexPath(for: identity) {
+            return indexPath
+        }
+        guard sections.indices.contains(anchor.indexPath.section),
+              sections[anchor.indexPath.section].items.indices.contains(anchor.indexPath.item) else {
+            return nil
+        }
+        return anchor.indexPath
     }
 
     /// 使用 adjustedContentInset 计算合法滚动边界；系统安全区交给 UIKit，页面只追加真实底部浮层避让。
@@ -1312,11 +1823,13 @@ private extension BookshelfBookListCollectionHostView {
         guard configuration.showsSearchDrawerInCollection else {
             didApplyInitialSearchDrawerOffset = false
             isPendingInitialSearchDrawerOffset = false
+            updateCollectionVisibilityForSearchDrawerPreparation()
             return
         }
         if configuration.showsExpandedSearchSurface {
             didApplyInitialSearchDrawerOffset = true
             isPendingInitialSearchDrawerOffset = false
+            updateCollectionVisibilityForSearchDrawerPreparation()
             if !previousConfiguration.showsExpandedSearchSurface {
                 setSearchDrawerVisible(animated: animated)
             }
@@ -1326,6 +1839,7 @@ private extension BookshelfBookListCollectionHostView {
             didApplyInitialSearchDrawerOffset = true
             isPendingInitialSearchDrawerOffset = false
             setSearchDrawerHidden(animated: animated)
+            updateCollectionVisibilityForSearchDrawerPreparation()
             return
         }
         let shouldApplyInitialOffset = !didApplyInitialSearchDrawerOffset
@@ -1349,6 +1863,7 @@ private extension BookshelfBookListCollectionHostView {
         guard hiddenOffsetY > 0 else {
             isPendingInitialSearchDrawerOffset = false
             didApplyInitialSearchDrawerOffset = true
+            updateCollectionVisibilityForSearchDrawerPreparation()
             return
         }
         ensureSearchDrawerHiddenScrollRange()
@@ -1359,6 +1874,7 @@ private extension BookshelfBookListCollectionHostView {
         setSearchDrawerHidden(animated: false)
         isPendingInitialSearchDrawerOffset = false
         didApplyInitialSearchDrawerOffset = true
+        updateCollectionVisibilityForSearchDrawerPreparation()
     }
 
     /// 搜索抽屉的隐藏位等于抽屉高度；不改外层手势，只改 collection 自身滚动位置。
@@ -1421,6 +1937,8 @@ private extension BookshelfBookListCollectionHostView {
               configuration.showsSearchDrawerInCollection else {
             return
         }
+        collectionView.alpha = 1
+        collectionView.isUserInteractionEnabled = true
         let targetOffset = CGPoint(
             x: collectionView.contentOffset.x,
             y: clampedContentOffsetY(0)
@@ -1429,15 +1947,7 @@ private extension BookshelfBookListCollectionHostView {
 
         isAdjustingSearchDrawerOffset = true
         isViewportAnchorCaptureSuspended = true
-        let updates = { [collectionView] in
-            collectionView.setContentOffset(targetOffset, animated: animated)
-        }
-        if animated {
-            updates()
-        } else {
-            UIView.performWithoutAnimation(updates)
-        }
-        releaseSearchDrawerAdjustmentFlag(animated: animated)
+        animateSearchDrawerOffset(to: targetOffset, animated: animated)
     }
 
     /// 将普通态搜索抽屉收回到书籍列表后方，保持布局尺寸和拖拽排序路径不变。
@@ -1455,26 +1965,30 @@ private extension BookshelfBookListCollectionHostView {
 
         isAdjustingSearchDrawerOffset = true
         isViewportAnchorCaptureSuspended = true
-        let updates = { [collectionView] in
-            collectionView.setContentOffset(targetOffset, animated: animated)
-        }
-        if animated {
-            updates()
-        } else {
-            UIView.performWithoutAnimation(updates)
-        }
-        releaseSearchDrawerAdjustmentFlag(animated: animated)
+        animateSearchDrawerOffset(to: targetOffset, animated: animated)
     }
 
-    func releaseSearchDrawerAdjustmentFlag(animated: Bool) {
-        if animated {
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.28) { [weak self] in
-                self?.isAdjustingSearchDrawerOffset = false
-                self?.isViewportAnchorCaptureSuspended = false
+    /// 用页面统一节奏移动搜索抽屉，避免 UIScrollView 默认动画和 SwiftUI 状态动画脱节。
+    func animateSearchDrawerOffset(to targetOffset: CGPoint, animated: Bool) {
+        guard animated else {
+            UIView.performWithoutAnimation {
+                collectionView.setContentOffset(targetOffset, animated: false)
             }
-        } else {
             isAdjustingSearchDrawerOffset = false
             isViewportAnchorCaptureSuspended = false
+            return
+        }
+
+        UIView.animate(
+            withDuration: BookshelfManagementMotion.bookListSearchDrawerDuration,
+            delay: 0,
+            options: [.allowUserInteraction, .beginFromCurrentState, .curveEaseInOut]
+        ) {
+            self.collectionView.setContentOffset(targetOffset, animated: false)
+            self.collectionView.layoutIfNeeded()
+        } completion: { [weak self] _ in
+            self?.isAdjustingSearchDrawerOffset = false
+            self?.isViewportAnchorCaptureSuspended = false
         }
     }
 
@@ -1501,7 +2015,15 @@ private extension BookshelfBookListCollectionHostView {
         configuration.onCollapseBrowseSearch()
     }
 
+    enum ViewportAnchorIdentity: Hashable {
+        case searchDrawer
+        case loading
+        case empty
+        case book(Int64)
+    }
+
     struct ViewportAnchor {
+        let identity: ViewportAnchorIdentity?
         let indexPath: IndexPath
         let distanceFromVisibleTop: CGFloat
     }
@@ -1571,16 +2093,17 @@ private extension BookshelfBookListCollectionHostView {
         return section
     }
 
-    /// 二级列表 list 模式与非书籍 section 使用单列全宽估算高度。
-    static func makeListSection() -> NSCollectionLayoutSection {
+    /// 二级列表 list 模式与非书籍 section 使用单列全宽确定高度。
+    static func makeListSection(itemHeight: CGFloat) -> NSCollectionLayoutSection {
+        let resolvedHeight = max(1, itemHeight)
         let itemSize = NSCollectionLayoutSize(
             widthDimension: .fractionalWidth(1),
-            heightDimension: .estimated(92)
+            heightDimension: .absolute(resolvedHeight)
         )
         let item = NSCollectionLayoutItem(layoutSize: itemSize)
         let groupSize = NSCollectionLayoutSize(
             widthDimension: .fractionalWidth(1),
-            heightDimension: .estimated(92)
+            heightDimension: .absolute(resolvedHeight)
         )
         let group = NSCollectionLayoutGroup.vertical(layoutSize: groupSize, subitems: [item])
         let section = NSCollectionLayoutSection(group: group)
@@ -1631,7 +2154,10 @@ private extension BookshelfBookListCollectionHostView {
     }
 
     /// 刷新可见 cell 中的闭包和选中态，不触发布局重载。
-    func refreshVisibleCells() {
+    func refreshVisibleCells(
+        for transition: BookshelfBookListResultTransition = .other,
+        refreshEmptyCells: Bool = true
+    ) {
         for indexPath in collectionView.indexPathsForVisibleItems {
             guard let item = item(at: indexPath) else {
                 continue
@@ -1640,8 +2166,27 @@ private extension BookshelfBookListCollectionHostView {
                let cell = collectionView.cellForItem(at: indexPath) as? BookshelfBookListSearchCell {
                 cell.configure(with: configuration)
             } else if let cell = collectionView.cellForItem(at: indexPath) as? BookshelfBookListCollectionCell {
-                cell.configure(with: item, configuration: configuration)
+                if case .empty = item, !refreshEmptyCells {
+                    continue
+                }
+                cell.configure(
+                    with: item,
+                    configuration: configuration,
+                    emptyPresentationMode: transition == .emptyToEmpty ? .steadyEmptyUpdate : emptyPresentationMode
+                )
             }
+        }
+    }
+
+    /// 内容退场期间只同步搜索输入 cell，避免正在淡出的书籍被重复配置后闪回。
+    func refreshSearchDrawerCellOnly() {
+        for indexPath in collectionView.indexPathsForVisibleItems {
+            guard let item = item(at: indexPath),
+                  case .searchDrawer = item,
+                  let cell = collectionView.cellForItem(at: indexPath) as? BookshelfBookListSearchCell else {
+                continue
+            }
+            cell.configure(with: configuration)
         }
     }
 
@@ -1651,6 +2196,32 @@ private extension BookshelfBookListCollectionHostView {
             return nil
         }
         return sections[indexPath.section].items[indexPath.item]
+    }
+
+    /// 将 collection item 映射成跨刷新稳定的锚点身份。
+    func anchorIdentity(for item: BookshelfBookListCollectionItem) -> ViewportAnchorIdentity {
+        switch item {
+        case .searchDrawer:
+            return .searchDrawer
+        case .loading:
+            return .loading
+        case .empty:
+            return .empty
+        case .book(let book):
+            return .book(book.id)
+        }
+    }
+
+    /// 在当前 section 快照中查找锚点身份对应的位置。
+    func indexPath(for identity: ViewportAnchorIdentity) -> IndexPath? {
+        for (sectionIndex, section) in sections.enumerated() {
+            for (itemIndex, item) in section.items.enumerated() {
+                if anchorIdentity(for: item) == identity {
+                    return IndexPath(item: itemIndex, section: sectionIndex)
+                }
+            }
+        }
+        return nil
     }
 
     /// 判断当前 section 是否包含真实书籍，用于避免副标题/加载/空态进入网格布局。
@@ -1852,7 +2423,11 @@ extension BookshelfBookListCollectionHostView: UICollectionViewDataSource {
             return UICollectionViewCell()
         }
         if let item = item(at: indexPath) {
-            cell.configure(with: item, configuration: configuration)
+            cell.configure(
+                with: item,
+                configuration: configuration,
+                emptyPresentationMode: emptyPresentationMode
+            )
         }
         return cell
     }
@@ -1915,6 +2490,23 @@ extension BookshelfBookListCollectionHostView: UICollectionViewDataSource {
 }
 
 extension BookshelfBookListCollectionHostView: UICollectionViewDelegate {
+    /// 对批量更新插入的 cell 补一段轻量进场，强化结果恢复时的空间连续性。
+    func collectionView(_ collectionView: UICollectionView, willDisplay cell: UICollectionViewCell, forItemAt indexPath: IndexPath) {
+        guard let item = item(at: indexPath) else { return }
+        let identity = anchorIdentity(for: item)
+        guard pendingAnimatedInsertionIdentities.contains(identity) else { return }
+        cell.alpha = 0
+        cell.transform = CGAffineTransform(translationX: 0, y: 10).scaledBy(x: 0.985, y: 0.985)
+        UIView.animate(
+            withDuration: BookshelfManagementMotion.bookListResultTransitionDuration,
+            delay: 0,
+            options: [.allowUserInteraction, .beginFromCurrentState, .curveEaseOut]
+        ) {
+            cell.alpha = 1
+            cell.transform = .identity
+        }
+    }
+
     /// 用户或系统滚动后刷新稳定锚点，为后续 safe area / inset 变化保留恢复基准。
     func scrollViewDidScroll(_ scrollView: UIScrollView) {
         storeViewportAnchorIfPossible(requiresLayout: false)
@@ -2062,18 +2654,43 @@ private final class BookshelfBookListSearchCell: UICollectionViewCell, UITextFie
     static let reuseIdentifier = "BookshelfBookListSearchCell"
 
     private let containerControl = BookshelfBookListSearchContainerControl()
-    private let materialView = UIVisualEffectView(effect: UIBlurEffect(style: .systemMaterial))
+    private let surfaceView = UIView()
     private let stackView = UIStackView()
     private let iconView = UIImageView(image: UIImage(systemName: "magnifyingglass"))
+    private let textContainerView = UIView()
     private let placeholderLabel = UILabel()
     private let textField = UITextField()
     private let clearButton = UIButton(type: .system)
+    private let cancelButton = UIButton(type: .system)
+    private var containerHeightConstraint: NSLayoutConstraint?
+    private var surfaceHeightConstraint: NSLayoutConstraint?
+    private var cancelButtonWidthConstraint: NSLayoutConstraint?
+    private var surfaceToCancelSpacingConstraint: NSLayoutConstraint?
     private var lastFocusTrigger = 0
     private var onActivate: () -> Void = {}
     private var onTextChange: (String) -> Void = { _ in }
     private var onFocusChange: (Bool) -> Void = { _ in }
     private var onClear: () -> Void = {}
     private var onCollapse: () -> Void = {}
+    private var isSearchFocused = false
+    private var showsInputMode = false
+    private var showsClearAction = false
+    private var didApplyInitialSearchMode = false
+
+    private enum Style {
+        static let touchHeight: CGFloat = 44
+        static let compactVisualHeight: CGFloat = 38
+        static let accessibilityVisualHeight: CGFloat = 46
+        static let cancelButtonWidth: CGFloat = 56
+        static let iconSize: CGFloat = 18
+        static let cornerRadius = CornerRadius.blockMedium
+        static let collapsedBackgroundOpacity: Double = 0.48
+        static let expandedBackgroundOpacity: Double = 0.68
+        static let focusedBackgroundOpacity: Double = 0.82
+        static let collapsedBorderOpacity: Double = 0.12
+        static let expandedBorderOpacity: Double = 0.18
+        static let focusedBorderOpacity: Double = 0.34
+    }
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -2095,6 +2712,9 @@ private final class BookshelfBookListSearchCell: UICollectionViewCell, UITextFie
         onCollapse = {}
         textField.text = nil
         textField.resignFirstResponder()
+        didApplyInitialSearchMode = false
+        setSearchMode(false, showsClearAction: false, animated: false)
+        updateSearchAppearance(isFocused: false, showsInput: false, animated: false)
     }
 
     /// 同步搜索 surface 的折叠/输入状态；关键词回写由闭包交给 ViewModel。
@@ -2106,23 +2726,37 @@ private final class BookshelfBookListSearchCell: UICollectionViewCell, UITextFie
         onCollapse = configuration.onCollapseBrowseSearch
 
         let showsInput = configuration.showsExpandedSearchSurface
+        let visualHeight = configuration.searchDrawerHeight > BookshelfBookListChromeMetrics.normalSearchAreaHeight
+            ? Style.accessibilityVisualHeight
+            : Style.compactVisualHeight
+        let didChangeHeight = abs((surfaceHeightConstraint?.constant ?? visualHeight) - visualHeight) > 0.5
+        surfaceHeightConstraint?.constant = visualHeight
+        containerHeightConstraint?.constant = max(Style.touchHeight, visualHeight)
         placeholderLabel.text = configuration.browseSearchPlaceholder
-        textField.placeholder = configuration.browseSearchPlaceholder
+        textField.attributedPlaceholder = NSAttributedString(
+            string: configuration.browseSearchPlaceholder,
+            attributes: [.foregroundColor: UIColor(Color.textHint)]
+        )
         if textField.text != configuration.browseSearchKeyword {
             textField.text = configuration.browseSearchKeyword
         }
 
-        placeholderLabel.isHidden = showsInput
-        textField.isHidden = !showsInput
-        clearButton.isHidden = !showsInput
+        setSearchMode(
+            showsInput,
+            showsClearAction: configuration.hasBrowseSearchKeyword,
+            animated: didApplyInitialSearchMode
+        )
         stackView.isUserInteractionEnabled = showsInput
         containerControl.isAccessibilityElement = !showsInput
         containerControl.accessibilityIdentifier = showsInput ? nil : "bookshelf.book-list.search.drawer"
         containerControl.accessibilityTraits = showsInput ? [] : [.button]
-        containerControl.accessibilityLabel = showsInput ? nil : configuration.browseSearchPlaceholder
+        containerControl.accessibilityLabel = showsInput ? nil : "搜索当前列表书籍"
         textField.accessibilityIdentifier = "bookshelf.book-list.search.field"
+        textField.accessibilityLabel = "搜索当前列表书籍"
         clearButton.accessibilityIdentifier = "bookshelf.book-list.search.clear"
-        clearButton.accessibilityLabel = configuration.hasBrowseSearchKeyword ? "清除搜索" : "收起搜索"
+        clearButton.accessibilityLabel = "清除搜索"
+        cancelButton.accessibilityIdentifier = "bookshelf.book-list.search.cancel"
+        cancelButton.accessibilityLabel = "取消搜索"
 
         if showsInput,
            configuration.browseSearchFocusTrigger > 0,
@@ -2134,6 +2768,12 @@ private final class BookshelfBookListSearchCell: UICollectionViewCell, UITextFie
         } else if !showsInput {
             textField.resignFirstResponder()
         }
+        updateSearchAppearance(
+            isFocused: showsInput && textField.isFirstResponder,
+            showsInput: showsInput,
+            animated: didApplyInitialSearchMode || didChangeHeight
+        )
+        didApplyInitialSearchMode = true
     }
 
     private func setupViewHierarchy() {
@@ -2141,33 +2781,36 @@ private final class BookshelfBookListSearchCell: UICollectionViewCell, UITextFie
         contentView.backgroundColor = .clear
 
         containerControl.translatesAutoresizingMaskIntoConstraints = false
-        containerControl.layer.cornerRadius = CornerRadius.blockMedium
-        containerControl.layer.cornerCurve = .continuous
-        containerControl.layer.borderWidth = CardStyle.borderWidth
-        containerControl.layer.borderColor = UIColor(Color.surfaceBorderSubtle).cgColor
-        containerControl.clipsToBounds = true
+        containerControl.backgroundColor = .clear
+        containerControl.clipsToBounds = false
         containerControl.addTarget(self, action: #selector(handleContainerTap), for: .touchUpInside)
         containerControl.onAccessibilityActivate = { [weak self] in
             self?.handleContainerTap()
             return true
         }
 
-        materialView.translatesAutoresizingMaskIntoConstraints = false
-        materialView.isUserInteractionEnabled = false
+        surfaceView.translatesAutoresizingMaskIntoConstraints = false
+        surfaceView.isUserInteractionEnabled = false
+        surfaceView.layer.cornerRadius = Style.cornerRadius
+        surfaceView.layer.cornerCurve = .continuous
+        surfaceView.layer.borderWidth = CardStyle.borderWidth
+        surfaceView.clipsToBounds = true
 
         iconView.translatesAutoresizingMaskIntoConstraints = false
-        iconView.tintColor = UIColor.secondaryLabel
         iconView.contentMode = .scaleAspectFit
         iconView.setContentHuggingPriority(.required, for: .horizontal)
 
-        placeholderLabel.font = AppTypography.uiFixed(baseSize: 15, textStyle: .body, minimumPointSize: 15)
+        textContainerView.translatesAutoresizingMaskIntoConstraints = false
+        textContainerView.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        textContainerView.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+
+        placeholderLabel.font = BookshelfTypography.uiSearchField
         placeholderLabel.adjustsFontForContentSizeCategory = true
-        placeholderLabel.textColor = UIColor.secondaryLabel
         placeholderLabel.numberOfLines = 1
 
-        textField.font = AppTypography.uiFixed(baseSize: 15, textStyle: .body, minimumPointSize: 15)
+        textField.font = BookshelfTypography.uiSearchField
         textField.adjustsFontForContentSizeCategory = true
-        textField.textColor = UIColor.label
+        textField.textColor = UIColor(Color.textPrimary)
         textField.tintColor = UIColor(Color.brand)
         textField.borderStyle = .none
         textField.returnKeyType = .search
@@ -2175,11 +2818,26 @@ private final class BookshelfBookListSearchCell: UICollectionViewCell, UITextFie
         textField.autocorrectionType = .no
         textField.delegate = self
         textField.addTarget(self, action: #selector(handleTextChange), for: .editingChanged)
+        textField.alpha = 0
+        textField.isUserInteractionEnabled = false
+        textField.isAccessibilityElement = false
 
         clearButton.setImage(UIImage(systemName: "xmark.circle.fill"), for: .normal)
         clearButton.tintColor = UIColor.tertiaryLabel
         clearButton.addTarget(self, action: #selector(handleClearTap), for: .touchUpInside)
         clearButton.setContentHuggingPriority(.required, for: .horizontal)
+        clearButton.alpha = 0
+        clearButton.isUserInteractionEnabled = false
+
+        cancelButton.translatesAutoresizingMaskIntoConstraints = false
+        cancelButton.setTitle("取消", for: .normal)
+        cancelButton.titleLabel?.font = BookshelfTypography.uiSearchField
+        cancelButton.titleLabel?.adjustsFontForContentSizeCategory = true
+        cancelButton.setTitleColor(UIColor(Color.textSecondary), for: .normal)
+        cancelButton.addTarget(self, action: #selector(handleCancelTap), for: .touchUpInside)
+        cancelButton.setContentHuggingPriority(.required, for: .horizontal)
+        cancelButton.alpha = 0
+        cancelButton.isUserInteractionEnabled = false
 
         stackView.translatesAutoresizingMaskIntoConstraints = false
         stackView.axis = .horizontal
@@ -2187,39 +2845,67 @@ private final class BookshelfBookListSearchCell: UICollectionViewCell, UITextFie
         stackView.spacing = Spacing.compact
         stackView.isUserInteractionEnabled = false
         stackView.addArrangedSubview(iconView)
-        stackView.addArrangedSubview(placeholderLabel)
-        stackView.addArrangedSubview(textField)
+        stackView.addArrangedSubview(textContainerView)
         stackView.addArrangedSubview(clearButton)
+        textContainerView.addSubview(placeholderLabel)
+        textContainerView.addSubview(textField)
+        placeholderLabel.translatesAutoresizingMaskIntoConstraints = false
+        textField.translatesAutoresizingMaskIntoConstraints = false
 
         contentView.addSubview(containerControl)
-        containerControl.addSubview(materialView)
+        containerControl.addSubview(surfaceView)
         containerControl.addSubview(stackView)
+        containerControl.addSubview(cancelButton)
+        let containerHeightConstraint = containerControl.heightAnchor.constraint(equalToConstant: Style.touchHeight)
+        let surfaceHeightConstraint = surfaceView.heightAnchor.constraint(equalToConstant: Style.compactVisualHeight)
+        let cancelButtonWidthConstraint = cancelButton.widthAnchor.constraint(equalToConstant: 0)
+        let surfaceToCancelSpacingConstraint = surfaceView.trailingAnchor.constraint(equalTo: cancelButton.leadingAnchor)
+        self.containerHeightConstraint = containerHeightConstraint
+        self.surfaceHeightConstraint = surfaceHeightConstraint
+        self.cancelButtonWidthConstraint = cancelButtonWidthConstraint
+        self.surfaceToCancelSpacingConstraint = surfaceToCancelSpacingConstraint
+        updateSearchAppearance(isFocused: false, showsInput: false, animated: false)
 
         NSLayoutConstraint.activate([
             containerControl.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: Spacing.screenEdge),
             containerControl.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -Spacing.screenEdge),
-            containerControl.topAnchor.constraint(equalTo: contentView.topAnchor, constant: Spacing.base),
-            containerControl.heightAnchor.constraint(greaterThanOrEqualToConstant: 40),
+            containerControl.centerYAnchor.constraint(equalTo: contentView.centerYAnchor),
+            containerControl.topAnchor.constraint(greaterThanOrEqualTo: contentView.topAnchor),
+            containerControl.bottomAnchor.constraint(lessThanOrEqualTo: contentView.bottomAnchor),
+            containerHeightConstraint,
 
-            materialView.leadingAnchor.constraint(equalTo: containerControl.leadingAnchor),
-            materialView.trailingAnchor.constraint(equalTo: containerControl.trailingAnchor),
-            materialView.topAnchor.constraint(equalTo: containerControl.topAnchor),
-            materialView.bottomAnchor.constraint(equalTo: containerControl.bottomAnchor),
+            surfaceView.leadingAnchor.constraint(equalTo: containerControl.leadingAnchor),
+            surfaceToCancelSpacingConstraint,
+            surfaceView.centerYAnchor.constraint(equalTo: containerControl.centerYAnchor),
+            surfaceHeightConstraint,
 
-            stackView.leadingAnchor.constraint(equalTo: containerControl.leadingAnchor, constant: Spacing.base),
-            stackView.trailingAnchor.constraint(equalTo: containerControl.trailingAnchor, constant: -Spacing.base),
+            cancelButton.trailingAnchor.constraint(equalTo: containerControl.trailingAnchor),
+            cancelButton.centerYAnchor.constraint(equalTo: containerControl.centerYAnchor),
+            cancelButton.heightAnchor.constraint(equalToConstant: Style.touchHeight),
+            cancelButtonWidthConstraint,
+
+            stackView.leadingAnchor.constraint(equalTo: surfaceView.leadingAnchor, constant: Spacing.base),
+            stackView.trailingAnchor.constraint(equalTo: surfaceView.trailingAnchor, constant: -Spacing.tiny),
             stackView.topAnchor.constraint(equalTo: containerControl.topAnchor),
             stackView.bottomAnchor.constraint(equalTo: containerControl.bottomAnchor),
 
-            iconView.widthAnchor.constraint(equalToConstant: 18),
-            iconView.heightAnchor.constraint(equalToConstant: 18),
+            iconView.widthAnchor.constraint(equalToConstant: Style.iconSize),
+            iconView.heightAnchor.constraint(equalToConstant: Style.iconSize),
+            textContainerView.heightAnchor.constraint(greaterThanOrEqualToConstant: Style.iconSize),
+            placeholderLabel.leadingAnchor.constraint(equalTo: textContainerView.leadingAnchor),
+            placeholderLabel.trailingAnchor.constraint(equalTo: textContainerView.trailingAnchor),
+            placeholderLabel.centerYAnchor.constraint(equalTo: textContainerView.centerYAnchor),
+            textField.leadingAnchor.constraint(equalTo: textContainerView.leadingAnchor),
+            textField.trailingAnchor.constraint(equalTo: textContainerView.trailingAnchor),
+            textField.topAnchor.constraint(equalTo: textContainerView.topAnchor),
+            textField.bottomAnchor.constraint(equalTo: textContainerView.bottomAnchor),
             clearButton.widthAnchor.constraint(equalToConstant: Spacing.actionReserved),
             clearButton.heightAnchor.constraint(equalToConstant: Spacing.actionReserved)
         ])
     }
 
     @objc private func handleContainerTap() {
-        if textField.isHidden {
+        if !showsInputMode {
             onActivate()
         } else {
             textField.becomeFirstResponder()
@@ -2227,24 +2913,148 @@ private final class BookshelfBookListSearchCell: UICollectionViewCell, UITextFie
     }
 
     @objc private func handleTextChange() {
-        onTextChange(textField.text ?? "")
+        let text = textField.text ?? ""
+        setClearActionVisible(!text.isEmpty, animated: true)
+        onTextChange(text)
     }
 
     @objc private func handleClearTap() {
-        if (textField.text ?? "").isEmpty {
-            textField.resignFirstResponder()
-            onCollapse()
-        } else {
+        guard !(textField.text ?? "").isEmpty else { return }
+        textField.text = nil
+        setClearActionVisible(false, animated: true)
+        onClear()
+        textField.becomeFirstResponder()
+    }
+
+    @objc private func handleCancelTap() {
+        let hadText = !(textField.text ?? "").isEmpty
+        textField.text = nil
+        setClearActionVisible(false, animated: true)
+        textField.resignFirstResponder()
+        if hadText {
             onClear()
         }
+        onCollapse()
     }
 
     func textFieldDidBeginEditing(_ textField: UITextField) {
+        updateSearchAppearance(isFocused: true, showsInput: true, animated: true)
         onFocusChange(true)
     }
 
     func textFieldDidEndEditing(_ textField: UITextField) {
+        updateSearchAppearance(isFocused: false, showsInput: showsInputMode, animated: true)
         onFocusChange(false)
+    }
+
+    /// 在同一文本容器内交接 placeholder 与输入控件，避免展开搜索时内部元素闪现。
+    private func setSearchMode(_ showsInput: Bool, showsClearAction: Bool, animated: Bool) {
+        showsInputMode = showsInput
+        self.showsClearAction = showsClearAction
+        textField.isUserInteractionEnabled = showsInput
+        textField.isAccessibilityElement = showsInput
+        clearButton.isUserInteractionEnabled = showsInput && showsClearAction
+        clearButton.isAccessibilityElement = showsInput && showsClearAction
+        cancelButton.isUserInteractionEnabled = showsInput
+        cancelButton.isAccessibilityElement = showsInput
+        cancelButtonWidthConstraint?.constant = showsInput ? Style.cancelButtonWidth : 0
+        surfaceToCancelSpacingConstraint?.constant = showsInput ? -Spacing.cozy : 0
+        let updates = {
+            self.placeholderLabel.alpha = showsInput ? 0 : 1
+            self.placeholderLabel.transform = showsInput
+                ? CGAffineTransform(translationX: 0, y: -2)
+                : .identity
+            self.textField.alpha = showsInput ? 1 : 0
+            self.textField.transform = showsInput
+                ? .identity
+                : CGAffineTransform(translationX: 0, y: 2)
+            self.clearButton.alpha = showsInput && showsClearAction ? 1 : 0
+            self.clearButton.transform = showsInput && showsClearAction
+                ? .identity
+                : CGAffineTransform(scaleX: 0.92, y: 0.92)
+            self.cancelButton.alpha = showsInput ? 1 : 0
+            self.cancelButton.transform = showsInput
+                ? .identity
+                : CGAffineTransform(translationX: 6, y: 0)
+            self.contentView.layoutIfNeeded()
+        }
+        guard animated else {
+            updates()
+            return
+        }
+        UIView.animate(
+            withDuration: BookshelfManagementMotion.bookListSearchSurfaceDuration,
+            delay: 0,
+            options: [.allowUserInteraction, .beginFromCurrentState, .curveEaseInOut],
+            animations: updates
+        )
+    }
+
+    /// 跟随输入内容显隐清除按钮，保证空文本时右侧只保留“取消”退出语义。
+    private func setClearActionVisible(_ isVisible: Bool, animated: Bool) {
+        guard showsClearAction != isVisible else { return }
+        showsClearAction = isVisible
+        clearButton.isUserInteractionEnabled = showsInputMode && isVisible
+        clearButton.isAccessibilityElement = showsInputMode && isVisible
+        let updates = {
+            self.clearButton.alpha = self.showsInputMode && isVisible ? 1 : 0
+            self.clearButton.transform = self.showsInputMode && isVisible
+                ? .identity
+                : CGAffineTransform(scaleX: 0.92, y: 0.92)
+        }
+        guard animated else {
+            updates()
+            return
+        }
+        UIView.animate(
+            withDuration: BookshelfManagementMotion.bookListSearchSurfaceDuration,
+            delay: 0,
+            options: [.allowUserInteraction, .beginFromCurrentState, .curveEaseInOut],
+            animations: updates
+        )
+    }
+
+    /// 按折叠、输入和聚焦态同步 surface 材质，让背景与边框随搜索状态细腻过渡。
+    private func updateSearchAppearance(isFocused: Bool, showsInput: Bool, animated: Bool) {
+        isSearchFocused = isFocused
+        let backgroundOpacity: Double
+        let borderOpacity: Double
+        if isFocused {
+            backgroundOpacity = Style.focusedBackgroundOpacity
+            borderOpacity = Style.focusedBorderOpacity
+        } else if showsInput {
+            backgroundOpacity = Style.expandedBackgroundOpacity
+            borderOpacity = Style.expandedBorderOpacity
+        } else {
+            backgroundOpacity = Style.collapsedBackgroundOpacity
+            borderOpacity = Style.collapsedBorderOpacity
+        }
+        let backgroundColor = UIColor(Color.surfaceCard.opacity(backgroundOpacity))
+        let borderWidth = isFocused ? max(1, CardStyle.borderWidth) : CardStyle.borderWidth
+        let borderColor = UIColor(
+            isFocused
+                ? Color.brand.opacity(borderOpacity)
+                : Color.surfaceBorderSubtle.opacity(borderOpacity)
+        ).cgColor
+        let updates = {
+            self.surfaceView.backgroundColor = backgroundColor
+            self.surfaceView.layer.borderWidth = borderWidth
+            self.surfaceView.layer.borderColor = borderColor
+            self.iconView.tintColor = UIColor(isFocused ? Color.iconSecondary : Color.textHint)
+            self.placeholderLabel.textColor = UIColor(Color.textHint)
+            self.clearButton.tintColor = UIColor(Color.textHint)
+            self.contentView.layoutIfNeeded()
+        }
+        guard animated else {
+            updates()
+            return
+        }
+        UIView.animate(
+            withDuration: BookshelfManagementMotion.bookListSearchSurfaceDuration,
+            delay: 0,
+            options: [.allowUserInteraction, .beginFromCurrentState, .curveEaseInOut],
+            animations: updates
+        )
     }
 }
 
@@ -2285,6 +3095,51 @@ private final class BookshelfBookListSectionHeaderView: UICollectionReusableView
     }
 }
 
+/// 二级列表空态的进场承载层，避免搜索结果区从网格硬切到占位。
+private struct BookshelfBookListEmptyStateContainer: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    let emptyState: BookshelfBookListEmptyState
+    let presentationMode: BookshelfBookListEmptyPresentationMode
+    @State private var isVisible: Bool
+
+    init(
+        emptyState: BookshelfBookListEmptyState,
+        presentationMode: BookshelfBookListEmptyPresentationMode
+    ) {
+        self.emptyState = emptyState
+        self.presentationMode = presentationMode
+        _isVisible = State(initialValue: presentationMode == .steadyEmptyUpdate)
+    }
+
+    var body: some View {
+        BookshelfContextualEmptyStateView(
+            icon: emptyState.icon,
+            title: emptyState.title,
+            message: emptyState.message,
+            iconColor: emptyState.iconColor
+        )
+        .frame(maxWidth: .infinity)
+        .frame(minHeight: BookshelfBookListLayoutMetrics.emptyHeight)
+        .opacity(isVisible ? 1 : 0)
+        .scaleEffect(shouldUseSpatialEntrance && !isVisible ? 0.985 : 1)
+        .offset(y: shouldUseSpatialEntrance && !isVisible ? 8 : 0)
+        .onAppear {
+            guard !isVisible else { return }
+            guard presentationMode == .enteringFromContent else {
+                isVisible = true
+                return
+            }
+            withAnimation(BookshelfManagementMotion.bookListResultStateAnimation(reduceMotion: reduceMotion)) {
+                isVisible = true
+            }
+        }
+    }
+
+    private var shouldUseSpatialEntrance: Bool {
+        presentationMode == .enteringFromContent && !reduceMotion
+    }
+}
+
 /// 二级列表 cell，使用 UIHostingConfiguration 复用 SwiftUI 行视觉。
 private final class BookshelfBookListCollectionCell: UICollectionViewCell {
     static let reuseIdentifier = "BookshelfBookListCollectionCell"
@@ -2308,7 +3163,8 @@ private final class BookshelfBookListCollectionCell: UICollectionViewCell {
     /// 渲染当前 item。
     func configure(
         with item: BookshelfBookListCollectionItem,
-        configuration: BookshelfBookListCollectionConfiguration
+        configuration: BookshelfBookListCollectionConfiguration,
+        emptyPresentationMode: BookshelfBookListEmptyPresentationMode = .steadyEmptyUpdate
     ) {
         backgroundColor = .clear
         contentConfiguration = nil
@@ -2322,18 +3178,14 @@ private final class BookshelfBookListCollectionCell: UICollectionViewCell {
                     columnCount: configuration.columnCount,
                     bottomContentInset: configuration.bottomContentInset,
                     accessibilityLabel: "正在整理书籍"
-                )
+                    )
                     .frame(maxWidth: .infinity)
-                    .frame(minHeight: 520)
+                    .frame(minHeight: BookshelfBookListLayoutMetrics.loadingHeight)
             case .empty(let emptyState):
-                BookshelfContextualEmptyStateView(
-                    icon: emptyState.icon,
-                    title: emptyState.title,
-                    message: emptyState.message,
-                    iconColor: emptyState.iconColor
+                BookshelfBookListEmptyStateContainer(
+                    emptyState: emptyState,
+                    presentationMode: emptyPresentationMode
                 )
-                    .frame(maxWidth: .infinity)
-                    .frame(minHeight: 320)
             case .book(let book):
                 switch configuration.layoutMode {
                 case .grid:
@@ -2341,6 +3193,7 @@ private final class BookshelfBookListCollectionCell: UICollectionViewCell {
                         book: book,
                         showsNoteCount: configuration.showsNoteCount,
                         titleDisplayMode: configuration.titleDisplayMode,
+                        searchKeyword: configuration.browseSearchKeyword,
                         isEditing: configuration.isEditing,
                         isSelected: configuration.selectedBookIDs.contains(book.id),
                         supportsContextPin: configuration.supportsContextPin,
@@ -2352,6 +3205,7 @@ private final class BookshelfBookListCollectionCell: UICollectionViewCell {
                         book: book,
                         showsNoteCount: configuration.showsNoteCount,
                         titleDisplayMode: configuration.titleDisplayMode,
+                        searchKeyword: configuration.browseSearchKeyword,
                         isEditing: configuration.isEditing,
                         isSelected: configuration.selectedBookIDs.contains(book.id),
                         supportsContextPin: configuration.supportsContextPin,
@@ -2367,6 +3221,7 @@ private final class BookshelfBookListCollectionCell: UICollectionViewCell {
 
 /// 二级列表普通态本地顶部 chrome，承载返回、标题、显示设置与整理入口。
 private struct BookshelfBookListBrowsingChrome: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let title: String
     let canEnterEditing: Bool
     let topBarHeight: CGFloat
@@ -2380,7 +3235,7 @@ private struct BookshelfBookListBrowsingChrome: View {
                 .font(AppTypography.bodyMedium)
                 .foregroundStyle(Color.textPrimary)
                 .lineLimit(1)
-                .minimumScaleFactor(0.86)
+                .truncationMode(.tail)
                 .padding(.horizontal, BookshelfBookListChromeMetrics.titleHorizontalInset)
                 .frame(maxWidth: .infinity)
                 .accessibilityAddTraits(.isHeader)
@@ -2399,10 +3254,6 @@ private struct BookshelfBookListBrowsingChrome: View {
         .padding(.horizontal, Spacing.screenEdge)
         .frame(height: topBarHeight)
         .frame(maxWidth: .infinity, alignment: .top)
-        .background {
-            Color.surfacePage
-                .ignoresSafeArea(.container, edges: .top)
-        }
         .accessibilityElement(children: .contain)
     }
 
@@ -2417,22 +3268,24 @@ private struct BookshelfBookListBrowsingChrome: View {
             .buttonStyle(.plain)
             .accessibilityLabel("显示设置")
 
-            if canEnterEditing {
-                Divider()
-                    .frame(height: Spacing.double)
-                    .overlay(Color.surfaceBorderSubtle.opacity(0.58))
+            Divider()
+                .frame(height: Spacing.double)
+                .overlay(Color.surfaceBorderSubtle.opacity(canEnterEditing ? 0.58 : 0.18))
+                .animation(BookshelfManagementMotion.bookListTopActionAnimation(reduceMotion: reduceMotion), value: canEnterEditing)
 
-                Button(action: onEnterEditing) {
-                    Text("选择")
-                        .font(AppTypography.body)
-                        .foregroundStyle(Color.textPrimary)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.86)
-                        .frame(minWidth: 58, minHeight: Spacing.actionReserved)
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("整理书籍")
+            Button(action: onEnterEditing) {
+                TopBarActionIcon(
+                    systemName: "checklist",
+                    foregroundColor: canEnterEditing ? Color.iconPrimary : Color.textHint
+                )
             }
+            .buttonStyle(.plain)
+            .disabled(!canEnterEditing)
+            .opacity(canEnterEditing ? 1 : 0.42)
+            .scaleEffect(canEnterEditing ? 1 : 0.96)
+            .animation(BookshelfManagementMotion.bookListTopActionAnimation(reduceMotion: reduceMotion), value: canEnterEditing)
+            .accessibilityLabel(canEnterEditing ? "整理书籍" : "整理书籍，当前不可用")
+            .accessibilityHint(canEnterEditing ? "进入书籍整理模式" : "当前没有可整理的书籍")
         }
         .topBarGlassCapsuleStyle(true)
     }
@@ -2477,6 +3330,7 @@ private struct BookshelfBookListGridItemView: View {
     let book: BookshelfBookListItem
     let showsNoteCount: Bool
     let titleDisplayMode: BookshelfTitleDisplayMode
+    let searchKeyword: String
     let isEditing: Bool
     let isSelected: Bool
     let supportsContextPin: Bool
@@ -2494,13 +3348,18 @@ private struct BookshelfBookListGridItemView: View {
                     text: book.title,
                     mode: titleDisplayMode,
                     style: .captionMedium,
-                    color: .textPrimary
+                    color: .textPrimary,
+                    highlightKeyword: searchKeyword
                 )
 
-                Text(book.author.isEmpty ? " " : book.author)
-                    .font(AppTypography.caption2)
+                XMKeywordHighlighting.text(
+                    metadataText(separator: "，", emptyAuthorFallback: " ", includesNoteCount: false),
+                    keyword: searchKeyword,
+                    baseFont: AppTypography.caption2,
+                    highlightFont: AppTypography.caption2,
+                    baseColor: Color.textSecondary
+                )
                     .lineLimit(1)
-                    .foregroundStyle(Color.textSecondary)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
@@ -2603,7 +3462,7 @@ private struct BookshelfBookListGridItemView: View {
         Button {
             onContextAction(.organizeBooks, book.id)
         } label: {
-            XMMenuLabel("整理书籍", systemImage: "square.grid.2x2")
+            XMMenuLabel("整理书籍", systemImage: "checklist")
         }
 
         Button(role: .destructive) {
@@ -2615,9 +3474,47 @@ private struct BookshelfBookListGridItemView: View {
     }
 
     private var metadata: String {
-        let authorText = book.author.isEmpty ? "未知作者" : book.author
-        guard showsNoteCount, book.noteCount > 0 else { return authorText }
-        return "\(authorText)，\(book.noteCount)条书摘"
+        metadataText(separator: "，", emptyAuthorFallback: "未知作者", includesNoteCount: true)
+    }
+
+    private func metadataText(separator: String, emptyAuthorFallback: String, includesNoteCount: Bool) -> String {
+        let authorText = book.author.trimmingCharacters(in: .whitespacesAndNewlines)
+        var parts: [String] = []
+        if let searchContextText {
+            parts.append(searchContextText)
+        }
+        if !authorText.isEmpty {
+            parts.append(authorText)
+        } else if searchContextText == nil {
+            parts.append(emptyAuthorFallback)
+        }
+        if includesNoteCount, showsNoteCount, book.noteCount > 0 {
+            parts.append("\(book.noteCount)条书摘")
+        }
+        return parts.joined(separator: separator)
+    }
+
+    private var searchContextText: String? {
+        guard hasSearchKeyword,
+              !XMKeywordHighlighting.contains(book.title, keyword: searchKeyword),
+              !XMKeywordHighlighting.contains(book.author, keyword: searchKeyword) else {
+            return nil
+        }
+        let readStatusName = book.readStatusName.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !readStatusName.isEmpty,
+           XMKeywordHighlighting.contains(readStatusName, keyword: searchKeyword) {
+            return "状态：\(readStatusName)"
+        }
+        let sourceName = book.sourceName.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !sourceName.isEmpty,
+           XMKeywordHighlighting.contains(sourceName, keyword: searchKeyword) {
+            return "来源：\(sourceName)"
+        }
+        return nil
+    }
+
+    private var hasSearchKeyword: Bool {
+        !searchKeyword.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
     private var accessibilityLabel: String {
@@ -2634,6 +3531,7 @@ private struct BookshelfBookListRowView: View {
     let book: BookshelfBookListItem
     let showsNoteCount: Bool
     let titleDisplayMode: BookshelfTitleDisplayMode
+    let searchKeyword: String
     let isEditing: Bool
     let isSelected: Bool
     let supportsContextPin: Bool
@@ -2656,12 +3554,17 @@ private struct BookshelfBookListRowView: View {
                     text: book.title,
                     mode: titleDisplayMode,
                     style: .bodyMedium,
-                    color: .textPrimary
+                    color: .textPrimary,
+                    highlightKeyword: searchKeyword
                 )
 
-                Text(metadata)
-                    .font(AppTypography.caption)
-                    .foregroundStyle(Color.textSecondary)
+                XMKeywordHighlighting.text(
+                    metadata,
+                    keyword: searchKeyword,
+                    baseFont: AppTypography.caption,
+                    highlightFont: AppTypography.caption,
+                    baseColor: Color.textSecondary
+                )
                     .lineLimit(1)
             }
 
@@ -2750,7 +3653,7 @@ private struct BookshelfBookListRowView: View {
         Button {
             onContextAction(.organizeBooks, book.id)
         } label: {
-            XMMenuLabel("整理书籍", systemImage: "square.grid.2x2")
+            XMMenuLabel("整理书籍", systemImage: "checklist")
         }
 
         Button(role: .destructive) {
@@ -2766,9 +3669,43 @@ private struct BookshelfBookListRowView: View {
     }
 
     private var metadata: String {
-        let authorText = book.author.isEmpty ? "未知作者" : book.author
-        guard showsNoteCount, book.noteCount > 0 else { return authorText }
-        return "\(authorText) · \(book.noteCount)条书摘"
+        metadataText(separator: " · ", emptyAuthorFallback: "未知作者")
+    }
+
+    private func metadataText(separator: String, emptyAuthorFallback: String) -> String {
+        let authorText = book.author.trimmingCharacters(in: .whitespacesAndNewlines)
+        var parts: [String] = []
+        if let searchContextText {
+            parts.append(searchContextText)
+        }
+        parts.append(authorText.isEmpty ? emptyAuthorFallback : authorText)
+        if showsNoteCount, book.noteCount > 0 {
+            parts.append("\(book.noteCount)条书摘")
+        }
+        return parts.joined(separator: separator)
+    }
+
+    private var searchContextText: String? {
+        guard hasSearchKeyword,
+              !XMKeywordHighlighting.contains(book.title, keyword: searchKeyword),
+              !XMKeywordHighlighting.contains(book.author, keyword: searchKeyword) else {
+            return nil
+        }
+        let readStatusName = book.readStatusName.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !readStatusName.isEmpty,
+           XMKeywordHighlighting.contains(readStatusName, keyword: searchKeyword) {
+            return "状态：\(readStatusName)"
+        }
+        let sourceName = book.sourceName.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !sourceName.isEmpty,
+           XMKeywordHighlighting.contains(sourceName, keyword: searchKeyword) {
+            return "来源：\(sourceName)"
+        }
+        return nil
+    }
+
+    private var hasSearchKeyword: Bool {
+        !searchKeyword.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
     private var accessibilityLabel: String {
@@ -2789,21 +3726,15 @@ private struct BookshelfBookListEditBottomBar: View {
     let onAction: (BookshelfBookListEditAction) -> Void
 
     var body: some View {
-        VStack(spacing: statusText == nil ? Spacing.none : Spacing.tight) {
-            if let statusText {
-                BookshelfGlassEditStatusText(text: statusText)
-            }
+        GlassEffectContainer(spacing: Spacing.base) {
+            HStack(spacing: Spacing.base) {
+                actionCluster
+                    .layoutPriority(1)
+                    .opacity(waitingForSelection ? 0.72 : 1)
 
-            GlassEffectContainer(spacing: Spacing.base) {
-                HStack(spacing: Spacing.base) {
-                    actionCluster
-                        .layoutPriority(1)
-                        .opacity(waitingForSelection ? 0.72 : 1)
-
-                    if !destructiveActions.isEmpty {
-                        destructiveActionControl
-                            .opacity(destructiveActionOpacity)
-                    }
+                if !destructiveActions.isEmpty {
+                    destructiveActionControl
+                        .opacity(destructiveActionOpacity)
                 }
             }
         }
@@ -2811,6 +3742,15 @@ private struct BookshelfBookListEditBottomBar: View {
             GeometryReader { proxy in
                 Color.clear
                     .preference(key: ImmersiveBottomChromeHeightPreferenceKey.self, value: proxy.size.height)
+            }
+        }
+        .overlay(alignment: .bottom) {
+            if let statusText {
+                BookshelfGlassEditStatusText(text: statusText)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .offset(y: -(BookshelfGlassEditBarMetrics.clusterHeight + Spacing.tight))
+                    .transition(.opacity)
+                    .allowsHitTesting(false)
             }
         }
     }

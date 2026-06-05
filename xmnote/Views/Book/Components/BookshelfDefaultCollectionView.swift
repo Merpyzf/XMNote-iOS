@@ -1144,7 +1144,7 @@ private struct BookshelfDefaultCollectionCellContent: View {
             Button {
                 onContextAction(.organizeBooks, item.id)
             } label: {
-                XMMenuLabel("整理书籍", systemImage: "square.grid.2x2")
+                XMMenuLabel("整理书籍", systemImage: "checklist")
             }
 
             Button(role: .destructive) {
@@ -1159,7 +1159,7 @@ private struct BookshelfDefaultCollectionCellContent: View {
             Button {
                 onContextAction(.organizeBooks, item.id)
             } label: {
-                XMMenuLabel("整理书籍", systemImage: "square.grid.2x2")
+                XMMenuLabel("整理书籍", systemImage: "checklist")
             }
 
             Button(role: .destructive) {

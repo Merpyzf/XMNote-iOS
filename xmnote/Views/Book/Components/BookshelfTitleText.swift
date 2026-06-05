@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 BookshelfTitleDisplayMode、DesignTokens 字体与 SwiftUI 可访问性 Reduce Motion 环境
- * [OUTPUT]: 对外提供 BookshelfTitleText，统一书架卡片与列表中的书名单行、滚动和两行显示语义
+ * [OUTPUT]: 对外提供 BookshelfTitleText，统一书架卡片与列表中的书名单行、滚动、两行显示和搜索关键字高亮语义
  * [POS]: Book 模块页面私有标题组件，被默认书架与二级书籍列表复用
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -14,6 +14,7 @@ struct BookshelfTitleText: View {
     let mode: BookshelfTitleDisplayMode
     var style: BookshelfTitleTextStyle = .captionMedium
     var color: Color = .textPrimary
+    var highlightKeyword: String = ""
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
@@ -29,7 +30,8 @@ struct BookshelfTitleText: View {
                 BookshelfMarqueeTitleText(
                     text: text,
                     style: style,
-                    color: color
+                    color: color,
+                    highlightKeyword: highlightKeyword
                 )
             }
         case .full:
@@ -39,9 +41,13 @@ struct BookshelfTitleText: View {
     }
 
     private var titleLabel: some View {
-        Text(text)
-            .font(style.font)
-            .foregroundStyle(color)
+        XMKeywordHighlighting.text(
+            text,
+            keyword: highlightKeyword,
+            baseFont: style.font,
+            highlightFont: style.font,
+            baseColor: color
+        )
             .fixedSize(horizontal: false, vertical: true)
     }
 }
@@ -79,6 +85,7 @@ private struct BookshelfMarqueeTitleText: View {
     let text: String
     let style: BookshelfTitleTextStyle
     let color: Color
+    let highlightKeyword: String
     @State private var isScrolling = false
     @State private var animationToken = UUID()
 
@@ -121,9 +128,13 @@ private struct BookshelfMarqueeTitleText: View {
     }
 
     private var titleLabel: some View {
-        Text(text)
-            .font(style.font)
-            .foregroundStyle(color)
+        XMKeywordHighlighting.text(
+            text,
+            keyword: highlightKeyword,
+            baseFont: style.font,
+            highlightFont: style.font,
+            baseColor: color
+        )
             .lineLimit(1)
     }
 

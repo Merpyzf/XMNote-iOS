@@ -624,8 +624,21 @@ nonisolated struct BookshelfBookListItem: Identifiable, Hashable, Codable, Senda
     let title: String
     let author: String
     let cover: String
+    let readStatusName: String
+    let sourceName: String
     let noteCount: Int
     let pinned: Bool
+
+    private enum CodingKeys: String, CodingKey {
+        case id
+        case title
+        case author
+        case cover
+        case readStatusName
+        case sourceName
+        case noteCount
+        case pinned
+    }
 
     /// 从书架书籍载荷裁剪出列表页需要的稳定展示字段。
     nonisolated init(payload: BookshelfBookPayload, pinned: Bool = false) {
@@ -633,6 +646,8 @@ nonisolated struct BookshelfBookListItem: Identifiable, Hashable, Codable, Senda
         self.title = payload.name
         self.author = payload.author
         self.cover = payload.cover
+        self.readStatusName = payload.readStatusName
+        self.sourceName = payload.sourceName
         self.noteCount = payload.noteCount
         self.pinned = pinned
     }
@@ -643,6 +658,8 @@ nonisolated struct BookshelfBookListItem: Identifiable, Hashable, Codable, Senda
         title: String,
         author: String,
         cover: String,
+        readStatusName: String = "",
+        sourceName: String = "",
         noteCount: Int,
         pinned: Bool = false
     ) {
@@ -650,8 +667,36 @@ nonisolated struct BookshelfBookListItem: Identifiable, Hashable, Codable, Senda
         self.title = title
         self.author = author
         self.cover = cover
+        self.readStatusName = readStatusName
+        self.sourceName = sourceName
         self.noteCount = noteCount
         self.pinned = pinned
+    }
+
+    /// 解码书籍列表行，兼容旧路由恢复数据中缺少状态与来源字段的场景。
+    nonisolated init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(Int64.self, forKey: .id)
+        title = try container.decode(String.self, forKey: .title)
+        author = try container.decode(String.self, forKey: .author)
+        cover = try container.decode(String.self, forKey: .cover)
+        readStatusName = try container.decodeIfPresent(String.self, forKey: .readStatusName) ?? ""
+        sourceName = try container.decodeIfPresent(String.self, forKey: .sourceName) ?? ""
+        noteCount = try container.decode(Int.self, forKey: .noteCount)
+        pinned = try container.decode(Bool.self, forKey: .pinned)
+    }
+
+    /// 编码书籍列表行，供导航恢复与本地临时快照保持完整展示上下文。
+    nonisolated func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(title, forKey: .title)
+        try container.encode(author, forKey: .author)
+        try container.encode(cover, forKey: .cover)
+        try container.encode(readStatusName, forKey: .readStatusName)
+        try container.encode(sourceName, forKey: .sourceName)
+        try container.encode(noteCount, forKey: .noteCount)
+        try container.encode(pinned, forKey: .pinned)
     }
 }
 

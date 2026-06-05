@@ -71,39 +71,52 @@ struct BookshelfSearchBar: View {
     var placeholder: String = "搜索书名或作者"
     let onCancel: () -> Void
     let onClear: () -> Void
+    @FocusState private var isFocused: Bool
+
+    private enum Style {
+        static let height: CGFloat = 44
+        static let iconSize: CGFloat = 18
+    }
 
     var body: some View {
         HStack(spacing: Spacing.compact) {
             HStack(spacing: Spacing.compact) {
                 Image(systemName: "magnifyingglass")
-                    .foregroundStyle(.secondary)
+                    .font(BookshelfTypography.searchField)
+                    .foregroundStyle(isFocused ? Color.iconPrimary : Color.textHint)
+                    .frame(width: Style.iconSize, height: Style.iconSize)
 
                 TextField(placeholder, text: $text)
                     .font(BookshelfTypography.searchField)
+                    .focused($isFocused)
                     .textInputAutocapitalization(.never)
                     .disableAutocorrection(true)
 
                 if !text.isEmpty {
                     Button(action: onClear) {
                         Image(systemName: "xmark.circle.fill")
-                            .foregroundStyle(.tertiary)
+                            .foregroundStyle(Color.textHint)
+                            .frame(width: Spacing.actionReserved, height: Spacing.actionReserved)
                     }
                     .buttonStyle(.plain)
                     .accessibilityLabel("清除搜索")
                 }
             }
             .padding(.horizontal, Spacing.base)
-            .frame(minHeight: 40)
+            .frame(minHeight: Style.height)
             .background(Color.surfaceCard, in: RoundedRectangle(cornerRadius: CornerRadius.blockMedium, style: .continuous))
             .overlay {
                 RoundedRectangle(cornerRadius: CornerRadius.blockMedium, style: .continuous)
-                    .stroke(Color.surfaceBorderSubtle, lineWidth: CardStyle.borderWidth)
+                    .stroke(
+                        isFocused ? Color.brand.opacity(0.62) : Color.surfaceBorderSubtle,
+                        lineWidth: isFocused ? max(1, CardStyle.borderWidth) : CardStyle.borderWidth
+                    )
             }
 
             Button("取消", action: onCancel)
                 .font(BookshelfTypography.searchField)
                 .foregroundStyle(Color.brand)
-                .frame(minHeight: 40)
+                .frame(minHeight: Style.height)
         }
         .padding(.horizontal, Spacing.screenEdge)
     }

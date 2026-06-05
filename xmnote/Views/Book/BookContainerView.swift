@@ -686,7 +686,7 @@ private struct BookContentView: View {
 
 private enum BookshelfChromeMetrics {
     static let dimensionRailHeight: CGFloat = 44
-    static let searchBarHeight: CGFloat = 40
+    static let searchBarHeight: CGFloat = 44
     static let searchHintHeight: CGFloat = 20
     static let editContextHeight: CGFloat = 40
 }
@@ -877,7 +877,7 @@ private struct BookshelfBrowsingChrome: View {
 
             if selectedDimension == .default {
                 Button(action: onEnterEditing) {
-                    XMMenuLabel("书籍整理", systemImage: "sparkles")
+                    XMMenuLabel("书籍整理", systemImage: "checklist")
                 }
                 .disabled(!canShowSelectAction || !canEditCurrentDimension)
             }

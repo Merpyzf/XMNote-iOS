@@ -13,9 +13,23 @@ enum BookshelfManagementMotion {
     static let editBarRevealTransitionAnimation: Animation = .smooth(duration: 0.26)
     static let editBarExitTransitionAnimation: Animation = .smooth(duration: 0.20)
     static let restoreTransition: Animation = .smooth(duration: 0.22)
+    static let bookListSearchDrawerDuration: TimeInterval = 0.28
+    static let bookListSearchSurfaceDuration: TimeInterval = 0.18
+    static let bookListResultTransitionDuration: TimeInterval = 0.30
+    static let bookListResultExitDuration: TimeInterval = 0.16
+    static let bookListInitialRevealDuration: TimeInterval = 0.24
+    static let bookListTopActionDuration: TimeInterval = 0.26
 
     static func modeAnimation(reduceMotion: Bool) -> Animation {
         reduceMotion ? .easeInOut(duration: 0.16) : modeTransition
+    }
+
+    static func bookListTopActionAnimation(reduceMotion: Bool) -> Animation {
+        reduceMotion ? .easeInOut(duration: 0.10) : .smooth(duration: bookListTopActionDuration)
+    }
+
+    static func bookListResultStateAnimation(reduceMotion: Bool) -> Animation {
+        reduceMotion ? .easeInOut(duration: 0.12) : .smooth(duration: bookListResultTransitionDuration)
     }
 
     static func restoreAnimation(reduceMotion: Bool) -> Animation {
@@ -32,6 +46,17 @@ enum BookshelfManagementMotion {
 
     static func topChromeTransition(reduceMotion: Bool) -> AnyTransition {
         reduceMotion ? .opacity : .opacity.combined(with: .offset(y: -4))
+    }
+
+    static func bookListTopChromeTransition(reduceMotion: Bool) -> AnyTransition {
+        reduceMotion ? .opacity : .asymmetric(
+            insertion: .opacity
+                .combined(with: .offset(y: 5))
+                .combined(with: .scale(scale: 0.99, anchor: .center)),
+            removal: .opacity
+                .combined(with: .offset(y: -5))
+                .combined(with: .scale(scale: 0.99, anchor: .center))
+        )
     }
 
     static func editBarRevealTransition(reduceMotion: Bool) -> AnyTransition {
@@ -122,12 +147,15 @@ enum BookshelfEditChromeSearchState: Equatable {
 /// 书架编辑态顶部 chrome，复用浏览态顶部高度表达当前批量管理上下文。
 struct BookshelfEditChrome: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let selectedBookCount: Int
     let selectedGroupCount: Int
     let selectionScope: BookshelfEditChromeSelectionScope
     let isAllVisibleSelected: Bool
     let isSelectionToggleEnabled: Bool
     let searchState: BookshelfEditChromeSearchState
+    let drawsSurfaceBackground: Bool
+    let showsBottomDivider: Bool
     let onToggleSelectAll: () -> Void
     let onCancel: () -> Void
 
@@ -139,6 +167,8 @@ struct BookshelfEditChrome: View {
         isAllVisibleSelected: Bool,
         isSelectionToggleEnabled: Bool = true,
         searchState: BookshelfEditChromeSearchState = .inactive,
+        drawsSurfaceBackground: Bool = true,
+        showsBottomDivider: Bool = true,
         onToggleSelectAll: @escaping () -> Void,
         onCancel: @escaping () -> Void
     ) {
@@ -148,6 +178,8 @@ struct BookshelfEditChrome: View {
         self.isAllVisibleSelected = isAllVisibleSelected
         self.isSelectionToggleEnabled = isSelectionToggleEnabled
         self.searchState = searchState
+        self.drawsSurfaceBackground = drawsSurfaceBackground
+        self.showsBottomDivider = showsBottomDivider
         self.onToggleSelectAll = onToggleSelectAll
         self.onCancel = onCancel
     }
@@ -158,7 +190,7 @@ struct BookshelfEditChrome: View {
                 .font(AppTypography.body)
                 .foregroundStyle(selectionToggleForegroundStyle)
                 .lineLimit(1)
-                .minimumScaleFactor(0.86)
+                .truncationMode(.tail)
                 .frame(width: sideSlotWidth, alignment: .leading)
                 .frame(minHeight: Spacing.actionReserved)
                 .accessibilityLabel(selectionToggleTitle)
@@ -171,13 +203,15 @@ struct BookshelfEditChrome: View {
                     .font(AppTypography.bodyMedium)
                     .foregroundStyle(Color.textPrimary)
                     .lineLimit(1)
-                    .minimumScaleFactor(0.90)
+                    .truncationMode(.tail)
 
                 Text(selectionSummaryText)
                     .font(AppTypography.caption)
                     .foregroundStyle(Color.textSecondary)
                     .lineLimit(1)
-                    .minimumScaleFactor(0.86)
+                    .truncationMode(.tail)
+                    .contentTransition(.numericText(value: selectionSummaryNumericValue))
+                    .animation(selectionSummaryAnimation, value: selectionSummaryNumericValue)
             }
             .frame(maxWidth: .infinity)
             .accessibilityElement(children: .combine)
@@ -191,12 +225,16 @@ struct BookshelfEditChrome: View {
         .padding(.horizontal, Spacing.screenEdge)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
         .background {
-            Color.surfacePage
-                .ignoresSafeArea(.container, edges: .top)
+            if drawsSurfaceBackground {
+                Color.surfacePage
+                    .ignoresSafeArea(.container, edges: .top)
+            }
         }
         .overlay(alignment: .bottom) {
-            Divider()
-                .overlay(Color.surfaceBorderSubtle.opacity(0.38))
+            if showsBottomDivider {
+                Divider()
+                    .overlay(Color.surfaceBorderSubtle.opacity(0.38))
+            }
         }
         .accessibilityElement(children: .contain)
     }
@@ -209,6 +247,14 @@ struct BookshelfEditChrome: View {
         isSelectionToggleEnabled && !searchState.hasEmptyResult
     }
 
+    private var selectionSummaryNumericValue: Double {
+        Double(selectedBookCount + selectedGroupCount)
+    }
+
+    private var selectionSummaryAnimation: Animation? {
+        reduceMotion ? nil : BookshelfManagementMotion.modeAnimation(reduceMotion: false)
+    }
+
     private var selectionToggleForegroundStyle: Color {
         effectiveSelectionToggleEnabled ? Color.textPrimary : Color.textSecondary.opacity(0.56)
     }
@@ -218,7 +264,7 @@ struct BookshelfEditChrome: View {
             .font(AppTypography.body)
             .foregroundStyle(Color.textPrimary)
             .lineLimit(1)
-            .minimumScaleFactor(0.86)
+            .truncationMode(.tail)
             .frame(minWidth: 50, minHeight: Spacing.actionReserved, alignment: .trailing)
             .accessibilityLabel("退出整理模式")
     }
@@ -228,7 +274,7 @@ struct BookshelfEditChrome: View {
             return "无结果"
         }
         if searchState.isFiltering {
-            return isAllVisibleSelected ? "取消结果选择" : "全选结果"
+            return isAllVisibleSelected ? "取消选择" : "全选结果"
         }
         return isAllVisibleSelected ? "取消全选" : "全选"
     }
@@ -334,7 +380,7 @@ struct BookshelfEditSearchContextBar: View {
                     .font(AppTypography.subheadline)
                     .foregroundStyle(Color.textSecondary)
                     .lineLimit(1)
-                    .minimumScaleFactor(0.88)
+                    .truncationMode(.tail)
             }
             .padding(.horizontal, Spacing.base)
             .frame(height: 38)
@@ -352,46 +398,58 @@ struct BookshelfEditSearchContextBar: View {
     }
 
     private var expandedSearchField: some View {
-        HStack(spacing: Spacing.compact) {
-            Image(systemName: "magnifyingglass")
-                .font(AppTypography.body)
-                .foregroundStyle(Color.iconSecondary)
-
-            TextField(placeholder, text: $text)
-                .font(BookshelfTypography.searchField)
-                .textInputAutocapitalization(.never)
-                .disableAutocorrection(true)
-                .submitLabel(.search)
-                .focused($isFocused)
-
-            Button(action: trailingAction) {
-                Image(systemName: text.isEmpty ? "xmark" : "xmark.circle.fill")
+        HStack(spacing: Spacing.cozy) {
+            HStack(spacing: Spacing.compact) {
+                Image(systemName: "magnifyingglass")
                     .font(AppTypography.body)
-                    .foregroundStyle(text.isEmpty ? Color.iconPrimary : Color.iconSecondary)
-                    .frame(width: Spacing.actionReserved, height: Spacing.actionReserved)
-                    .contentShape(Circle())
+                    .foregroundStyle(Color.iconSecondary)
+
+                TextField(placeholder, text: $text)
+                    .font(BookshelfTypography.searchField)
+                    .textInputAutocapitalization(.never)
+                    .disableAutocorrection(true)
+                    .submitLabel(.search)
+                    .focused($isFocused)
+
+                Button(action: clearSearchText) {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(AppTypography.body)
+                        .foregroundStyle(Color.iconSecondary)
+                        .frame(width: Spacing.actionReserved, height: Spacing.actionReserved)
+                        .contentShape(Circle())
+                }
+                .buttonStyle(.plain)
+                .opacity(text.isEmpty ? 0 : 1)
+                .scaleEffect(text.isEmpty ? 0.92 : 1)
+                .disabled(text.isEmpty)
+                .accessibilityHidden(text.isEmpty)
+                .accessibilityLabel("清除整理搜索")
             }
-            .buttonStyle(.plain)
-            .accessibilityLabel(text.isEmpty ? "收起整理搜索" : "清除整理搜索")
+            .padding(.leading, Spacing.base)
+            .padding(.trailing, Spacing.tiny)
+            .frame(height: 40)
+            .background(Color.surfaceCard.opacity(0.84), in: Capsule())
+            .overlay {
+                Capsule()
+                    .stroke(Color.surfaceBorderSubtle.opacity(0.42), lineWidth: CardStyle.borderWidth)
+            }
+            .glassEffect(.regular.interactive(), in: .capsule)
+
+            Button("取消", action: cancelSearch)
+                .font(BookshelfTypography.searchField)
+                .foregroundStyle(Color.textSecondary)
+                .lineLimit(1)
+                .frame(minWidth: Spacing.actionReserved, minHeight: Spacing.actionReserved)
+                .accessibilityLabel("退出整理搜索")
         }
-        .padding(.leading, Spacing.base)
-        .padding(.trailing, Spacing.tiny)
-        .frame(height: 40)
-        .background(Color.surfaceCard.opacity(0.84), in: Capsule())
-        .overlay {
-            Capsule()
-                .stroke(Color.surfaceBorderSubtle.opacity(0.42), lineWidth: CardStyle.borderWidth)
-        }
-        .glassEffect(.regular.interactive(), in: .capsule)
     }
 
-    private func trailingAction() {
-        if text.isEmpty {
-            collapseSearch()
-        } else {
+    private func clearSearchText() {
+        withAnimation(BookshelfManagementMotion.modeAnimation(reduceMotion: reduceMotion)) {
             isPresented = true
             text = ""
         }
+        focusSearchField()
     }
 
     private func presentSearch() {
@@ -401,8 +459,9 @@ struct BookshelfEditSearchContextBar: View {
         focusSearchField()
     }
 
-    private func collapseSearch() {
+    private func cancelSearch() {
         withAnimation(BookshelfManagementMotion.modeAnimation(reduceMotion: reduceMotion)) {
+            text = ""
             isPresented = false
             isFocused = false
             onCollapse()
@@ -527,7 +586,7 @@ struct BookshelfGlassEditActionLabel: View {
             Text(title)
                 .font(AppTypography.caption2Medium)
                 .lineLimit(1)
-                .minimumScaleFactor(0.82)
+                .truncationMode(.tail)
         }
         .foregroundStyle(foregroundStyle)
         .frame(width: width)
