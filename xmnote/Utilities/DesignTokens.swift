@@ -660,6 +660,11 @@ enum BookshelfTypography {
         weight: .medium,
         minimumPointSize: 12
     )
+    static let uiGridSubtitle: UIFont = AppTypography.uiFixed(
+        baseSize: 11,
+        textStyle: .caption2,
+        minimumPointSize: 11
+    )
 }
 
 /// 书摘列表的阅读排版令牌，统一正文、想法与辅助信息的字号和行距。

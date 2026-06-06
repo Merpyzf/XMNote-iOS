@@ -115,6 +115,7 @@ struct BookshelfDefaultDeleteConfirmation: Identifiable, Hashable, Sendable {
 class BookViewModel {
     var snapshot: BookshelfSnapshot = .empty
     var contentState: BookshelfContentState = .loading
+    var hasCompletedInitialLoad = false
     var selectedDimension: BookshelfDimension = .default {
         didSet {
             if selectedDimension != .default {
@@ -298,6 +299,19 @@ class BookViewModel {
         return nil
     }
 
+    var searchReorderDisabledNotice: String? {
+        guard isEditing,
+              hasSearchKeyword,
+              activeWriteAction == nil,
+              !isLoadingBatchOptions,
+              selectedDimension == .default,
+              displaySetting.sortMode == .custom,
+              contentState == .content else {
+            return nil
+        }
+        return "搜索结果暂不支持排序，清除搜索后可调整顺序"
+    }
+
     /// 注入书籍仓储并启动列表数据观察。
     init(repository: any BookRepositoryProtocol) {
         self.repository = repository
@@ -317,7 +331,9 @@ class BookViewModel {
     // MARK: - Observation
 
     private func startObservation() {
-        contentState = .loading
+        if !hasCompletedInitialLoad {
+            contentState = .loading
+        }
         let currentSettingsByDimension = displaySettingsByDimension
         let currentKeyword = normalizedSearchKeyword(searchKeyword)
         observationTask = Task {
@@ -329,11 +345,13 @@ class BookViewModel {
                     guard !Task.isCancelled else { return }
                     await MainActor.run {
                         self.snapshot = snapshot
+                        self.hasCompletedInitialLoad = true
                         self.applySnapshotContentState()
                     }
                 }
             } catch {
                 await MainActor.run {
+                    self.hasCompletedInitialLoad = true
                     self.contentState = .error(error.localizedDescription)
                 }
             }

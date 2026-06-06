@@ -1,11 +1,12 @@
 /**
  * [INPUT]: 依赖 BookshelfPendingAction、BookshelfBookListEditAction 与 SwiftUI 按钮、图标、横向滚动、ImmersiveBottomChrome 和动画能力
- * [OUTPUT]: 对外提供书架编辑态顶部 chrome、整理态双态上下文检索入口、选择标识、底部浮动玻璃操作栏与管理模式转场参数
- * [POS]: Book 模块页面私有编辑态组件集合，服务默认书架与二级书籍列表的整理模式选择、检索、置顶、移动、横向平铺批量操作与删除入口
+ * [OUTPUT]: 对外提供书架编辑态顶部 chrome、统一搜索 surface、整理态双态上下文检索入口、选择标识、底部浮动玻璃操作栏与管理模式转场参数
+ * [POS]: Book 模块页面私有编辑态与搜索组件集合，服务默认书架与二级书籍列表的整理模式选择、检索、置顶、移动、横向平铺批量操作与删除入口
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
 import SwiftUI
+import UIKit
 
 /// 书架管理模式的统一动效参数，保证顶部 chrome、内容 inset 与底部面板按同一语义节奏切换。
 enum BookshelfManagementMotion {
@@ -19,6 +20,7 @@ enum BookshelfManagementMotion {
     static let bookListResultExitDuration: TimeInterval = 0.16
     static let bookListInitialRevealDuration: TimeInterval = 0.24
     static let bookListTopActionDuration: TimeInterval = 0.26
+    static let editSelectionPulseDamping: CGFloat = 0.76
 
     static func modeAnimation(reduceMotion: Bool) -> Animation {
         reduceMotion ? .easeInOut(duration: 0.16) : modeTransition
@@ -93,6 +95,448 @@ enum BookshelfManagementMotion {
     /// 系统 TabBar 恢复后释放编辑底栏滚动避让的延迟。
     static func editBottomInsetReleaseDelay(reduceMotion: Bool) -> Duration {
         reduceMotion ? .milliseconds(40) : .milliseconds(100)
+    }
+}
+
+/// 为书架一级页与二级页提供一致的搜索 drawer 展示尺寸。
+enum BookshelfSearchSurfaceMetrics {
+    static let touchHeight: CGFloat = 44
+    static let compactVisualHeight: CGFloat = 38
+    static let accessibilityVisualHeight: CGFloat = 46
+    static let iconSize: CGFloat = 17
+
+    /// 根据动态字体布局模式返回搜索 surface 的视觉高度，保证大字号下输入区域不会被压缩。
+    static func visualHeight(usesAccessibilityLayout: Bool) -> CGFloat {
+        usesAccessibilityLayout ? accessibilityVisualHeight : compactVisualHeight
+    }
+}
+
+/// 搜索 drawer 在 collection 内的呈现方式，hidden 表示保留可下拉空间但收在可视顶部外侧。
+enum BookshelfSearchDrawerPresentation: Equatable {
+    case hidden
+    case pinned
+
+    var isPinned: Bool {
+        self == .pinned
+    }
+}
+
+/// 描述书架搜索 surface 的输入、焦点、清除与取消语义，供一级页和二级页复用同一控件。
+struct BookshelfSearchSurfaceConfiguration {
+    let namespace: String
+    let placeholder: String
+    let keyword: String
+    let showsInput: Bool
+    let showsClearAction: Bool
+    let usesAccessibilityLayout: Bool
+    let focusTrigger: Int
+    let accessibilityLabel: String
+    let onActivate: () -> Void
+    let onTextChange: (String) -> Void
+    let onSubmit: (String) -> Void
+    let onClear: () -> Void
+    let onCancel: () -> Void
+    let onFocusChange: (Bool) -> Void
+}
+
+/// 协调搜索 drawer 从点击激活到输入聚焦的两阶段请求，避免 offset 收敛与键盘动画同帧竞争。
+final class BookshelfSearchFocusRequestCoordinator {
+    private var generation = 0
+    private(set) var isPending = false
+
+    /// 外部配置已进入焦点或退出输入态时结束 pending，避免旧请求在后续布局周期误保留。
+    func reconcile(isFocused: Bool, isExpanded: Bool) {
+        guard isFocused || !isExpanded else { return }
+        generation += 1
+        isPending = false
+    }
+
+    /// 在 drawer 位置稳定后延迟到下一轮 runloop 请求 SwiftUI 递增 focus trigger。
+    func request(_ requestFocus: @escaping () -> Void) {
+        generation += 1
+        let currentGeneration = generation
+        isPending = true
+
+        DispatchQueue.main.async { [weak self] in
+            guard let self, self.generation == currentGeneration else { return }
+            requestFocus()
+        }
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.7) { [weak self] in
+            guard let self, self.generation == currentGeneration else { return }
+            self.isPending = false
+        }
+    }
+
+    /// 页面销毁、复用或搜索不支持时取消未完成的聚焦请求。
+    func cancel() {
+        generation += 1
+        isPending = false
+    }
+}
+
+/// 承载折叠态点击区域，让隐藏输入态也能以同一 accessibility drawer 入口被测试与读屏发现。
+final class BookshelfSearchSurfaceContainerControl: UIControl {
+    override var isHighlighted: Bool {
+        didSet {
+            updateHighlightAppearance(animated: true)
+        }
+    }
+
+    /// 根据按压状态同步轻量反馈，避免 drawer 被激活时产生突兀的视觉跳变。
+    private func updateHighlightAppearance(animated: Bool) {
+        let updates = {
+            self.alpha = self.isHighlighted ? 0.82 : 1
+        }
+        guard animated else {
+            updates()
+            return
+        }
+        UIView.animate(
+            withDuration: BookshelfManagementMotion.bookListSearchSurfaceDuration,
+            delay: 0,
+            options: [.beginFromCurrentState, .allowUserInteraction],
+            animations: updates
+        )
+    }
+}
+
+/// UIKit 搜索 surface，统一一级书架和二级列表的折叠、输入、清除、取消、焦点与 Reduce Motion 行为。
+final class BookshelfSearchSurfaceView: UIView, UITextFieldDelegate {
+    private let containerControl = BookshelfSearchSurfaceContainerControl()
+    private let surfaceView = UIView()
+    private let iconView = UIImageView(image: UIImage(systemName: "magnifyingglass"))
+    private let textField = UITextField()
+    private let clearButton = UIButton(type: .system)
+    private let cancelButton = UIButton(type: .system)
+    private lazy var surfaceTapRecognizer: UITapGestureRecognizer = {
+        let recognizer = UITapGestureRecognizer(target: self, action: #selector(handleSurfaceTap))
+        recognizer.cancelsTouchesInView = false
+        return recognizer
+    }()
+    private var surfaceHeightConstraint: NSLayoutConstraint?
+    private var activeSurfaceTrailingConstraint: NSLayoutConstraint?
+    private var collapsedSurfaceTrailingConstraint: NSLayoutConstraint?
+    private var configuration: BookshelfSearchSurfaceConfiguration?
+    private var lastFocusTrigger: Int = 0
+    private var isSearchMode = false
+    private var shouldShowClearAction = false
+    private var isAccessibilityLayout = false
+    private var pendingFocusTrigger: Int?
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        setUpViews()
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    /// 重置复用状态，避免 UICollectionView cell 复用时残留焦点与 closure。
+    func prepareForReuse() {
+        configuration = nil
+        pendingFocusTrigger = nil
+        textField.resignFirstResponder()
+    }
+
+    /// 按传入配置刷新 surface 的命名空间、输入值、状态与焦点触发。
+    func configure(with configuration: BookshelfSearchSurfaceConfiguration) {
+        self.configuration = configuration
+        isAccessibilityLayout = configuration.usesAccessibilityLayout
+
+        containerControl.accessibilityIdentifier = "\(configuration.namespace).drawer"
+        containerControl.accessibilityLabel = configuration.accessibilityLabel
+        containerControl.isAccessibilityElement = !configuration.showsInput
+        containerControl.accessibilityTraits = configuration.showsInput ? [] : [.button]
+        textField.accessibilityIdentifier = "\(configuration.namespace).field"
+        clearButton.accessibilityIdentifier = "\(configuration.namespace).clear"
+        cancelButton.accessibilityIdentifier = "\(configuration.namespace).cancel"
+
+        textField.attributedPlaceholder = NSAttributedString(
+            string: configuration.placeholder,
+            attributes: [.foregroundColor: UIColor(Color.textHint)]
+        )
+        if textField.text != configuration.keyword {
+            textField.text = configuration.keyword
+        }
+
+        setSearchMode(configuration.showsInput, animated: true)
+        setClearActionVisible(configuration.showsClearAction, animated: true)
+        updateSearchAppearance()
+
+        let visualHeight = BookshelfSearchSurfaceMetrics.visualHeight(
+            usesAccessibilityLayout: configuration.usesAccessibilityLayout
+        )
+        if abs((surfaceHeightConstraint?.constant ?? visualHeight) - visualHeight) > 0.5 {
+            surfaceHeightConstraint?.constant = visualHeight
+            setNeedsLayout()
+        }
+
+        if configuration.showsInput, configuration.focusTrigger != lastFocusTrigger {
+            requestInputFocus(for: configuration.focusTrigger)
+        } else if !configuration.showsInput, textField.isFirstResponder {
+            pendingFocusTrigger = nil
+            textField.resignFirstResponder()
+        }
+    }
+
+    /// 建立输入区域、清除按钮与取消按钮的层级，并统一 UIKit 动效参数。
+    private func setUpViews() {
+        backgroundColor = .clear
+        isAccessibilityElement = false
+
+        containerControl.translatesAutoresizingMaskIntoConstraints = false
+        containerControl.backgroundColor = .clear
+        containerControl.addTarget(self, action: #selector(handleActivateTap), for: .touchUpInside)
+
+        surfaceView.translatesAutoresizingMaskIntoConstraints = false
+        surfaceView.backgroundColor = UIColor(Color.surfaceCard).withAlphaComponent(0.68)
+        surfaceView.layer.cornerRadius = BookshelfSearchSurfaceMetrics.compactVisualHeight / 2
+        surfaceView.layer.cornerCurve = .continuous
+        surfaceView.layer.borderWidth = CardStyle.borderWidth
+        surfaceView.layer.borderColor = UIColor(Color.surfaceBorderSubtle.opacity(0.22)).cgColor
+        surfaceView.addGestureRecognizer(surfaceTapRecognizer)
+
+        iconView.translatesAutoresizingMaskIntoConstraints = false
+        iconView.tintColor = UIColor(Color.textHint)
+        iconView.contentMode = .scaleAspectFit
+        iconView.setContentHuggingPriority(.required, for: .horizontal)
+
+        textField.translatesAutoresizingMaskIntoConstraints = false
+        textField.borderStyle = .none
+        textField.backgroundColor = .clear
+        textField.textColor = UIColor(Color.textPrimary)
+        textField.tintColor = UIColor(Color.brand)
+        textField.returnKeyType = .search
+        textField.clearButtonMode = .never
+        textField.font = BookshelfTypography.uiSearchField
+        textField.adjustsFontForContentSizeCategory = true
+        textField.delegate = self
+        textField.addTarget(self, action: #selector(textFieldDidChange), for: .editingChanged)
+
+        clearButton.translatesAutoresizingMaskIntoConstraints = false
+        clearButton.tintColor = UIColor(Color.textHint)
+        clearButton.setImage(UIImage(systemName: "xmark.circle.fill"), for: .normal)
+        clearButton.accessibilityLabel = "清除搜索"
+        clearButton.alpha = 0
+        clearButton.isHidden = true
+        clearButton.addTarget(self, action: #selector(handleClearTap), for: .touchUpInside)
+
+        cancelButton.translatesAutoresizingMaskIntoConstraints = false
+        cancelButton.setTitle("取消", for: .normal)
+        cancelButton.titleLabel?.font = BookshelfTypography.uiSearchField
+        cancelButton.titleLabel?.adjustsFontForContentSizeCategory = true
+        cancelButton.setTitleColor(UIColor(Color.textSecondary), for: .normal)
+        cancelButton.accessibilityLabel = "取消搜索"
+        cancelButton.setContentHuggingPriority(.required, for: .horizontal)
+        cancelButton.alpha = 0
+        cancelButton.isHidden = true
+        cancelButton.addTarget(self, action: #selector(handleCancelTap), for: .touchUpInside)
+
+        addSubview(containerControl)
+        containerControl.addSubview(surfaceView)
+        containerControl.addSubview(cancelButton)
+        surfaceView.addSubview(iconView)
+        surfaceView.addSubview(textField)
+        surfaceView.addSubview(clearButton)
+
+        let heightConstraint = surfaceView.heightAnchor.constraint(equalToConstant: BookshelfSearchSurfaceMetrics.compactVisualHeight)
+        let activeTrailingConstraint = surfaceView.trailingAnchor.constraint(equalTo: cancelButton.leadingAnchor, constant: -8)
+        let collapsedTrailingConstraint = surfaceView.trailingAnchor.constraint(equalTo: containerControl.trailingAnchor)
+        surfaceHeightConstraint = heightConstraint
+        activeSurfaceTrailingConstraint = activeTrailingConstraint
+        collapsedSurfaceTrailingConstraint = collapsedTrailingConstraint
+        activeTrailingConstraint.isActive = false
+
+        NSLayoutConstraint.activate([
+            containerControl.topAnchor.constraint(equalTo: topAnchor),
+            containerControl.leadingAnchor.constraint(equalTo: leadingAnchor),
+            containerControl.trailingAnchor.constraint(equalTo: trailingAnchor),
+            containerControl.bottomAnchor.constraint(equalTo: bottomAnchor),
+
+            surfaceView.leadingAnchor.constraint(equalTo: containerControl.leadingAnchor),
+            surfaceView.centerYAnchor.constraint(equalTo: containerControl.centerYAnchor),
+            heightConstraint,
+            collapsedTrailingConstraint,
+
+            cancelButton.trailingAnchor.constraint(equalTo: containerControl.trailingAnchor),
+            cancelButton.centerYAnchor.constraint(equalTo: containerControl.centerYAnchor),
+            cancelButton.heightAnchor.constraint(greaterThanOrEqualToConstant: BookshelfSearchSurfaceMetrics.touchHeight),
+
+            iconView.leadingAnchor.constraint(equalTo: surfaceView.leadingAnchor, constant: 12),
+            iconView.centerYAnchor.constraint(equalTo: surfaceView.centerYAnchor),
+            iconView.widthAnchor.constraint(equalToConstant: BookshelfSearchSurfaceMetrics.iconSize),
+            iconView.heightAnchor.constraint(equalToConstant: BookshelfSearchSurfaceMetrics.iconSize),
+
+            clearButton.trailingAnchor.constraint(equalTo: surfaceView.trailingAnchor, constant: -8),
+            clearButton.centerYAnchor.constraint(equalTo: surfaceView.centerYAnchor),
+            clearButton.widthAnchor.constraint(equalToConstant: 32),
+            clearButton.heightAnchor.constraint(equalToConstant: 32),
+
+            textField.leadingAnchor.constraint(equalTo: iconView.trailingAnchor, constant: Spacing.compact),
+            textField.trailingAnchor.constraint(equalTo: clearButton.leadingAnchor, constant: -Spacing.tiny),
+            textField.topAnchor.constraint(equalTo: surfaceView.topAnchor),
+            textField.bottomAnchor.constraint(equalTo: surfaceView.bottomAnchor)
+        ])
+
+        setSearchMode(false, animated: false)
+        setClearActionVisible(false, animated: false)
+    }
+
+    /// 切换折叠态与输入态，并在 Reduce Motion 下退化为无位移动画。
+    private func setSearchMode(_ enabled: Bool, animated: Bool) {
+        guard isSearchMode != enabled else {
+            surfaceView.isUserInteractionEnabled = enabled
+            textField.isUserInteractionEnabled = enabled
+            clearButton.isUserInteractionEnabled = enabled
+            cancelButton.alpha = enabled ? 1 : 0
+            cancelButton.isHidden = !enabled
+            updateSurfaceTrailingConstraintForSearchMode(enabled)
+            return
+        }
+        isSearchMode = enabled
+        let updates = {
+            self.cancelButton.alpha = enabled ? 1 : 0
+            self.cancelButton.isHidden = !enabled
+            self.updateSurfaceTrailingConstraintForSearchMode(enabled)
+            self.surfaceView.isUserInteractionEnabled = enabled
+            self.textField.isUserInteractionEnabled = enabled
+            self.clearButton.isUserInteractionEnabled = enabled
+            self.layoutIfNeeded()
+        }
+        guard animated, !UIAccessibility.isReduceMotionEnabled else {
+            updates()
+            return
+        }
+        UIView.animate(
+            withDuration: BookshelfManagementMotion.bookListSearchSurfaceDuration,
+            delay: 0,
+            options: [.beginFromCurrentState, .allowUserInteraction, .curveEaseInOut],
+            animations: updates
+        )
+    }
+
+    /// 切换搜索框右侧约束，折叠态铺满容器，输入态为取消按钮让位。
+    private func updateSurfaceTrailingConstraintForSearchMode(_ enabled: Bool) {
+        if enabled {
+            collapsedSurfaceTrailingConstraint?.isActive = false
+            activeSurfaceTrailingConstraint?.isActive = true
+        } else {
+            activeSurfaceTrailingConstraint?.isActive = false
+            collapsedSurfaceTrailingConstraint?.isActive = true
+        }
+    }
+
+    /// 同步清除按钮显隐，保证清空后焦点仍停留在输入框。
+    private func setClearActionVisible(_ visible: Bool, animated: Bool) {
+        guard shouldShowClearAction != visible
+                || clearButton.isHidden != !visible
+                || abs(clearButton.alpha - (visible ? 1 : 0)) > 0.01 else {
+            return
+        }
+        shouldShowClearAction = visible
+        let updates = {
+            self.clearButton.alpha = visible ? 1 : 0
+            self.clearButton.isHidden = !visible
+        }
+        guard animated, !UIAccessibility.isReduceMotionEnabled else {
+            updates()
+            return
+        }
+        UIView.animate(
+            withDuration: BookshelfManagementMotion.bookListSearchSurfaceDuration,
+            delay: 0,
+            options: [.beginFromCurrentState, .allowUserInteraction],
+            animations: updates
+        )
+    }
+
+    /// 根据焦点与输入态刷新背景、边框和圆角，维持一级/二级页一致的层级反馈。
+    private func updateSearchAppearance() {
+        let isActive = isSearchMode || textField.isFirstResponder
+        surfaceView.backgroundColor = UIColor(Color.surfaceCard).withAlphaComponent(isActive ? 0.82 : 0.62)
+        surfaceView.layer.borderColor = UIColor(Color.surfaceBorderSubtle.opacity(isActive ? 0.38 : 0.22)).cgColor
+        surfaceView.layer.cornerRadius = BookshelfSearchSurfaceMetrics.visualHeight(
+            usesAccessibilityLayout: isAccessibilityLayout
+        ) / 2
+    }
+
+    /// 处理折叠 surface 点击，将搜索切换到输入态并交给宿主驱动聚焦。
+    @objc private func handleActivateTap() {
+        configuration?.onActivate()
+    }
+
+    /// 激活态下点击胶囊任意空白区域都应回到输入框，保持原生搜索控件的命中预期。
+    @objc private func handleSurfaceTap() {
+        guard configuration?.showsInput == true else { return }
+        textField.becomeFirstResponder()
+    }
+
+    /// 清除关键词但保持输入态，支持连续修正搜索条件。
+    @objc private func handleClearTap() {
+        textField.text = ""
+        configuration?.onClear()
+        configuration?.onTextChange("")
+        textField.becomeFirstResponder()
+    }
+
+    /// 取消搜索并交由宿主恢复原列表状态。
+    @objc private func handleCancelTap() {
+        textField.text = ""
+        textField.resignFirstResponder()
+        configuration?.onCancel()
+    }
+
+    /// 将用户输入即时回写到宿主，宿主负责同步搜索关键词并刷新过滤结果。
+    @objc private func textFieldDidChange() {
+        configuration?.onTextChange(textField.text ?? "")
+    }
+
+    /// 输入框开始编辑时同步激活态，避免键盘焦点和外层 drawer 状态脱节。
+    func textFieldDidBeginEditing(_ textField: UITextField) {
+        configuration?.onFocusChange(true)
+        updateSearchAppearance()
+    }
+
+    /// 输入框结束编辑时通知宿主，空关键词场景可由宿主决定是否折叠。
+    func textFieldDidEndEditing(_ textField: UITextField) {
+        configuration?.onFocusChange(false)
+        updateSearchAppearance()
+    }
+
+    /// 搜索键提交当前草稿并收起键盘，保持结果页可继续浏览。
+    func textFieldShouldReturn(_ textField: UITextField) -> Bool {
+        configuration?.onSubmit(textField.text ?? "")
+        textField.resignFirstResponder()
+        return true
+    }
+
+    /// 在 collection offset 和 cell 刷新同一帧发生时重试聚焦，避免首次点击被布局切换吞掉。
+    private func requestInputFocus(for trigger: Int, attempt: Int = 0) {
+        lastFocusTrigger = trigger
+        pendingFocusTrigger = trigger
+        DispatchQueue.main.asyncAfter(deadline: .now() + (attempt == 0 ? 0 : 0.05)) { [weak self] in
+            guard let self,
+                  self.configuration?.showsInput == true,
+                  self.configuration?.focusTrigger == trigger,
+                  self.pendingFocusTrigger == trigger else {
+                return
+            }
+            self.surfaceView.isUserInteractionEnabled = true
+            self.textField.isUserInteractionEnabled = true
+            self.clearButton.isUserInteractionEnabled = true
+            self.layoutIfNeeded()
+
+            let didFocus = self.textField.becomeFirstResponder() || self.textField.isFirstResponder
+            self.updateSearchAppearance()
+            if didFocus {
+                self.pendingFocusTrigger = nil
+            } else if attempt < 4 {
+                self.requestInputFocus(for: trigger, attempt: attempt + 1)
+            }
+        }
     }
 }
 
@@ -260,13 +704,15 @@ struct BookshelfEditChrome: View {
     }
 
     private var rightActions: some View {
-        Button("取消", action: onCancel)
-            .font(AppTypography.body)
-            .foregroundStyle(Color.textPrimary)
-            .lineLimit(1)
-            .truncationMode(.tail)
-            .frame(minWidth: 50, minHeight: Spacing.actionReserved, alignment: .trailing)
-            .accessibilityLabel("退出整理模式")
+        HStack(spacing: 6) {
+            Button("取消", action: onCancel)
+                .font(AppTypography.body)
+                .foregroundStyle(Color.textPrimary)
+                .lineLimit(1)
+                .truncationMode(.tail)
+                .frame(minWidth: 50, minHeight: Spacing.actionReserved, alignment: .trailing)
+                .accessibilityLabel("退出整理模式")
+        }
     }
 
     private var selectionToggleTitle: String {
@@ -284,24 +730,24 @@ struct BookshelfEditChrome: View {
         switch selectionScope {
         case .booksOnly:
             if searchState.isFiltering {
-                baseText = selectedBookCount == 0 ? "未选择" : "已选择 \(selectedBookCount) 本"
+                baseText = selectedBookCount == 0 ? "未选择" : "已选 \(selectedBookCount) 本"
             } else {
-                baseText = selectedBookCount == 0 ? "未选择书籍" : "已选择 \(selectedBookCount) 本书籍"
+                baseText = selectedBookCount == 0 ? "未选择书籍" : "已选 \(selectedBookCount) 本"
             }
         case .booksAndGroups:
             if searchState.isFiltering {
                 let totalCount = selectedBookCount + selectedGroupCount
-                baseText = totalCount == 0 ? "未选择" : "已选择 \(totalCount) 项"
+                baseText = totalCount == 0 ? "未选择" : "已选 \(totalCount) 项"
             } else {
                 switch (selectedBookCount, selectedGroupCount) {
                 case (0, 0):
-                    baseText = "未选择书籍或分组"
+                    baseText = "未选择"
                 case (let bookCount, 0):
-                    baseText = "已选择 \(bookCount) 本书籍"
+                    baseText = "已选 \(bookCount) 本"
                 case (0, let groupCount):
-                    baseText = "已选择 \(groupCount) 个分组"
+                    baseText = "已选 \(groupCount) 组"
                 case (let bookCount, let groupCount):
-                    baseText = "已选择 \(bookCount) 本书籍和 \(groupCount) 个分组"
+                    baseText = "已选 \(bookCount) 本 \(groupCount) 组"
                 }
             }
         }

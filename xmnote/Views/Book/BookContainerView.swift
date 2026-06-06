@@ -7,12 +7,13 @@
 
 /**
  * [INPUT]: 依赖 RepositoryContainer 注入仓储，依赖 BookViewModel 驱动书架浏览、编辑态选择与批量操作，依赖本地 chrome 阶段、固定顶部 chrome 高度与底部浮动 ornament 稳定内容布局
- * [OUTPUT]: 对外提供 BookContainerView 与 BookSubTab 枚举，承载书架顶部 chrome、整理态上下文检索条、TabBar 显隐协调、底部玻璃编辑工具栏、批量 Sheet 与删除确认
+ * [OUTPUT]: 对外提供 BookContainerView 与 BookSubTab 枚举，承载书架顶部 chrome、集合内统一搜索 drawer、TabBar 显隐协调、底部玻璃编辑工具栏、批量 Sheet 与删除确认
  * [POS]: Book 模块容器壳层，承载书籍页与书架管理模式编排
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
 import SwiftUI
+import UIKit
 
 // MARK: - Sub Tab
 
@@ -174,7 +175,10 @@ private struct BookContentView: View {
     @State private var editBottomBarOrnamentHeight: CGFloat = 0
     @State private var frozenTopChromeHeight: CGFloat?
     @State private var isEditingChoreographyActive = false
-    @State private var isEditSearchPresented = false
+    @State private var browseSearchPresentation: BookshelfSearchDrawerPresentation = .hidden
+    @State private var isBrowseSearchFocused = false
+    @State private var browseSearchDraftKeyword = ""
+    @State private var browseSearchFocusTrigger = 0
     let onAddBook: () -> Void
     let onAddNote: () -> Void
     let onOpenDebugCenter: (() -> Void)?
@@ -193,6 +197,7 @@ private struct BookContentView: View {
             segmentedContent
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
                 .padding(.top, reservedTopChromeHeight)
+                .ignoresSafeArea(.keyboard, edges: .bottom)
 
             if showsBrowsingGradient {
                 HomeTopHeaderGradient()
@@ -284,7 +289,11 @@ private struct BookContentView: View {
         }
         .onChange(of: selectedSubTab) { _, newValue in
             guard newValue != .books else { return }
+            collapseBrowseSearch()
             exitEditingWithChoreography()
+        }
+        .onChange(of: viewModel.selectedDimension) { _, _ in
+            collapseBrowseSearchIfUnsupported()
         }
         .onPreferenceChange(BookshelfEditBottomBarHeightPreferenceKey.self) { height in
             guard reservesEditBottomBarSpace, editBottomBarHeight != height else { return }
@@ -330,15 +339,9 @@ private struct BookContentView: View {
                 BookshelfBrowsingChrome(
                     selectedSubTab: $selectedSubTab,
                     selectedDimension: viewModel.selectedDimension,
-                    isSearchActive: viewModel.isSearchActive,
-                    searchKeyword: $viewModel.searchKeyword,
-                    hasSearchKeyword: viewModel.hasSearchKeyword,
                     canShowBookActions: selectedSubTab == .books,
                     canShowSelectAction: canShowSelectAction,
                     canEditCurrentDimension: viewModel.canEditCurrentDimension,
-                    onActivateSearch: viewModel.activateSearch,
-                    onDeactivateSearch: viewModel.deactivateSearch,
-                    onClearSearch: viewModel.clearSearchKeyword,
                     onSelectDimension: viewModel.selectDimension,
                     onShowDisplaySettings: { showsDisplaySettingSheet = true },
                     onEnterEditing: { enterEditingWithChoreography() },
@@ -367,12 +370,6 @@ private struct BookContentView: View {
                         onCancel: exitEditingWithChoreography
                     )
                     .frame(height: topBarRowHeight)
-
-                    if showsEditSearchContextBar {
-                        editSearchContextBar
-                            .frame(height: BookshelfEditChromeMetrics.searchContextHeight)
-                            .transition(BookshelfManagementMotion.editSearchTransition(reduceMotion: reduceMotion))
-                    }
                 }
                     .transition(BookshelfManagementMotion.topChromeTransition(reduceMotion: reduceMotion))
             }
@@ -391,7 +388,7 @@ private struct BookContentView: View {
             activeAction: viewModel.activeWriteAction,
             actions: viewModel.defaultBottomActions,
             isLoadingOptions: viewModel.isLoadingBatchOptions,
-            notice: viewModel.actionNotice,
+            notice: editBottomBarNotice,
             onPin: viewModel.pinSelectedItems,
             onAction: viewModel.performBottomAction,
             onDelete: viewModel.presentDeleteConfirmation
@@ -419,28 +416,45 @@ private struct BookContentView: View {
         selectedSubTab == .books && chromePhase.showsEditBottomBar
     }
 
-    private var showsEditSearchContextBar: Bool {
-        selectedSubTab == .books
-            && chromePhase.showsEditHeader
-    }
-
     private var editSearchState: BookshelfEditChromeSearchState {
         viewModel.hasSearchKeyword ? .active(resultCount: viewModel.visibleDefaultItemIDs.count) : .inactive
     }
 
-    private var editSearchContextBar: some View {
-        BookshelfEditSearchContextBar(
-            isPresented: $isEditSearchPresented,
-            text: $viewModel.searchKeyword,
-            placeholder: "在整理结果中搜索",
-            onCollapse: {
-                isEditSearchPresented = false
-            }
-        )
+    private var editBottomBarNotice: String? {
+        if let notice = viewModel.actionNotice, !notice.isEmpty {
+            return notice
+        }
+        return viewModel.searchReorderDisabledNotice
     }
 
     private var reservesEditBottomBarSpace: Bool {
         selectedSubTab == .books && chromePhase.reservesEditBottomBarSpace
+    }
+
+    private var canSearchCurrentDimension: Bool {
+        selectedSubTab == .books && viewModel.selectedDimension.searchMenuTitle != nil
+    }
+
+    private var shouldRenderBrowseSearchDrawer: Bool {
+        canSearchCurrentDimension
+    }
+
+    private var browseSearchDrawerHeight: CGFloat {
+        shouldRenderBrowseSearchDrawer
+            ? BookshelfChromeMetrics.searchDrawerHeight(for: dynamicTypeSize)
+            : 0
+    }
+
+    private var isBrowseSearchSurfacePresented: Bool {
+        browseSearchPresentation.isPinned
+            || isBrowseSearchFocused
+            || viewModel.isSearchActive
+            || hasBrowseSearchDraftKeyword
+            || viewModel.hasSearchKeyword
+    }
+
+    private var hasBrowseSearchDraftKeyword: Bool {
+        !browseSearchDraftKeyword.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
     private var showsBrowsingGradient: Bool {
@@ -466,11 +480,9 @@ private struct BookContentView: View {
         guard selectedSubTab == .books else { return topBarRowHeight }
         if chromePhase.showsEditHeader {
             return topBarRowHeight
-                + BookshelfEditChromeMetrics.searchContextHeight
         }
         return topBarRowHeight
-            + (viewModel.isSearchActive ? BookshelfChromeMetrics.searchBarHeight : BookshelfChromeMetrics.dimensionRailHeight)
-            + (viewModel.hasSearchKeyword ? BookshelfChromeMetrics.searchHintHeight : 0)
+            + BookshelfChromeMetrics.dimensionRailHeight
     }
 
     private var topBarRowHeight: CGFloat {
@@ -485,7 +497,8 @@ private struct BookContentView: View {
         }
         chromeTransitionTask?.cancel()
         isEditingChoreographyActive = true
-        frozenTopChromeHeight = expectedTopChromeHeight
+        frozenTopChromeHeight = topBarRowHeight
+        prepareBrowseSearchForEditing()
 
         withAnimation(BookshelfManagementMotion.modeAnimation(reduceMotion: reduceMotion)) {
             chromePhase = .enteringEdit
@@ -514,6 +527,7 @@ private struct BookContentView: View {
             }
             withAnimation(BookshelfManagementMotion.editBarRevealAnimation(reduceMotion: reduceMotion)) {
                 chromePhase = .editing
+                frozenTopChromeHeight = nil
             }
             isEditingChoreographyActive = false
             chromeTransitionTask = nil
@@ -532,7 +546,6 @@ private struct BookContentView: View {
 
         withAnimation(BookshelfManagementMotion.editBarExitAnimation(reduceMotion: reduceMotion)) {
             chromePhase = .exitingEdit
-            isEditSearchPresented = false
         }
 
         chromeTransitionTask = Task { @MainActor in
@@ -578,19 +591,19 @@ private struct BookContentView: View {
             chromeTransitionTask?.cancel()
             chromePhase = .normal
             frozenTopChromeHeight = nil
-            isEditSearchPresented = false
+            collapseBrowseSearchIfUnsupported()
             releaseEditBottomBarSpace()
             return
         }
 
         if viewModel.isEditing, chromePhase == .normal {
             chromePhase = .editing
-            frozenTopChromeHeight = expectedTopChromeHeight
+            frozenTopChromeHeight = nil
         } else if !viewModel.isEditing, chromePhase != .normal {
             chromeTransitionTask?.cancel()
             chromePhase = .normal
             frozenTopChromeHeight = nil
-            isEditSearchPresented = false
+            collapseBrowseSearchIfUnsupported()
             releaseEditBottomBarSpace()
         }
     }
@@ -601,6 +614,114 @@ private struct BookContentView: View {
         editBottomBarOrnamentHeight = 0
     }
 
+    /// 打开集合顶部搜索 drawer；输入焦点由 collection 在 drawer 稳定后回调触发。
+    private func activateBrowseSearch() {
+        guard canSearchCurrentDimension else { return }
+        if browseSearchDraftKeyword.isEmpty, viewModel.hasSearchKeyword {
+            browseSearchDraftKeyword = viewModel.searchKeyword
+        }
+        withAnimation(BookshelfManagementMotion.modeAnimation(reduceMotion: reduceMotion)) {
+            viewModel.activateSearch()
+            browseSearchPresentation = .pinned
+        }
+    }
+
+    /// 在搜索 drawer 完成 pinned 收敛后请求输入焦点，避免键盘动画与 offset 动画重叠。
+    private func requestBrowseSearchFocus() {
+        guard canSearchCurrentDimension else { return }
+        browseSearchFocusTrigger += 1
+    }
+
+    /// 处理搜索输入变化；关键词即时进入 ViewModel 触发过滤，键盘焦点继续由搜索 surface 管理。
+    private func updateBrowseSearchKeyword(_ keyword: String) {
+        guard canSearchCurrentDimension else { return }
+        let normalizedKeyword = keyword.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !viewModel.isSearchActive {
+            viewModel.activateSearch()
+        }
+        browseSearchDraftKeyword = keyword
+        if normalizedKeyword.isEmpty {
+            viewModel.clearSearchKeyword()
+        } else if viewModel.searchKeyword != normalizedKeyword {
+            viewModel.searchKeyword = normalizedKeyword
+        }
+        browseSearchPresentation = .pinned
+    }
+
+    /// 用户点击键盘 Search 后确认当前输入；过滤已随输入实时发生，这里只做 trim 收尾。
+    private func submitBrowseSearch(_ keyword: String) {
+        guard canSearchCurrentDimension else { return }
+        let submittedKeyword = keyword.trimmingCharacters(in: .whitespacesAndNewlines)
+        browseSearchDraftKeyword = submittedKeyword
+        if submittedKeyword.isEmpty {
+            viewModel.clearSearchKeyword()
+        } else {
+            viewModel.activateSearch()
+            if viewModel.searchKeyword != submittedKeyword {
+                viewModel.searchKeyword = submittedKeyword
+            }
+            browseSearchPresentation = .pinned
+        }
+    }
+
+    /// 清空关键词但保持搜索 drawer 与键盘焦点，方便用户连续修正查询。
+    private func clearBrowseSearch() {
+        guard canSearchCurrentDimension else { return }
+        withAnimation(BookshelfManagementMotion.modeAnimation(reduceMotion: reduceMotion)) {
+            browseSearchDraftKeyword = ""
+            viewModel.clearSearchKeyword()
+            viewModel.activateSearch()
+            browseSearchPresentation = .pinned
+            browseSearchFocusTrigger += 1
+        }
+    }
+
+    /// 退出搜索并恢复原书架列表；整理态选择状态仍按 ViewModel 现有规则保留。
+    private func collapseBrowseSearch() {
+        withAnimation(BookshelfManagementMotion.modeAnimation(reduceMotion: reduceMotion)) {
+            browseSearchDraftKeyword = ""
+            viewModel.deactivateSearch()
+            browseSearchPresentation = .hidden
+            isBrowseSearchFocused = false
+        }
+    }
+
+    /// 同步输入框焦点变化，让 drawer 激活态与 UIKit first responder 不脱节。
+    private func updateBrowseSearchFocus(_ isFocused: Bool) {
+        isBrowseSearchFocused = isFocused
+        if isFocused, canSearchCurrentDimension {
+            if !viewModel.isSearchActive {
+                viewModel.activateSearch()
+            }
+            if browseSearchPresentation != .pinned {
+                browseSearchPresentation = .pinned
+            }
+        } else if !isFocused, !hasBrowseSearchDraftKeyword, !viewModel.hasSearchKeyword {
+            viewModel.deactivateSearch()
+            browseSearchPresentation = .hidden
+        }
+    }
+
+    /// 进入整理态时收起空搜索；有关键词时仅保留过滤结果，不让键盘继续抢占批量操作。
+    private func prepareBrowseSearchForEditing() {
+        isBrowseSearchFocused = false
+        if viewModel.hasSearchKeyword {
+            browseSearchDraftKeyword = viewModel.searchKeyword
+            browseSearchPresentation = .pinned
+        } else {
+            browseSearchDraftKeyword = ""
+            viewModel.deactivateSearch()
+            browseSearchPresentation = .hidden
+        }
+        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+    }
+
+    /// 当当前维度不支持搜索时收束搜索状态，避免关键词泄漏到状态维度。
+    private func collapseBrowseSearchIfUnsupported() {
+        guard !canSearchCurrentDimension else { return }
+        collapseBrowseSearch()
+    }
+
     /// 页面失活时立即清理展示阶段和业务编辑态，避免异步动画任务回写已离开的页面。
     private func resetEditingPresentationForContextLoss() {
         chromeTransitionTask?.cancel()
@@ -608,7 +729,7 @@ private struct BookContentView: View {
         chromePhase = .normal
         frozenTopChromeHeight = nil
         isEditingChoreographyActive = false
-        isEditSearchPresented = false
+        collapseBrowseSearchIfUnsupported()
         releaseEditBottomBarSpace()
         viewModel.exitEditing()
     }
@@ -672,6 +793,21 @@ private struct BookContentView: View {
             isPageActive: selectedSubTab.productionValue == .books,
             bottomContentInset: editBottomBarHeight,
             hasSearchKeyword: viewModel.hasSearchKeyword,
+            searchDrawerHeight: browseSearchDrawerHeight,
+            searchPresentation: browseSearchPresentation,
+            isSearchPresented: isBrowseSearchSurfacePresented,
+            isSearchFocused: isBrowseSearchFocused,
+            searchText: browseSearchDraftKeyword,
+            searchKeyword: viewModel.searchKeyword,
+            searchPlaceholder: viewModel.selectedDimension.searchPlaceholder,
+            searchFocusTrigger: browseSearchFocusTrigger,
+            onActivateSearch: activateBrowseSearch,
+            onRequestSearchFocus: requestBrowseSearchFocus,
+            onSearchKeywordChange: updateBrowseSearchKeyword,
+            onSubmitSearch: submitBrowseSearch,
+            onClearSearch: clearBrowseSearch,
+            onCancelSearch: collapseBrowseSearch,
+            onSearchFocusChange: updateBrowseSearchFocus,
             onOpenRoute: onOpenBookRoute,
             onOpenNoteRoute: onOpenNoteRoute,
             onEnterEditing: { initialSelection in
@@ -686,9 +822,12 @@ private struct BookContentView: View {
 
 private enum BookshelfChromeMetrics {
     static let dimensionRailHeight: CGFloat = 44
-    static let searchBarHeight: CGFloat = 44
-    static let searchHintHeight: CGFloat = 20
     static let editContextHeight: CGFloat = 40
+
+    /// 根据动态字体返回集合内搜索 drawer 高度，让一级页与二级列表在大字号下保持一致热区。
+    static func searchDrawerHeight(for dynamicTypeSize: DynamicTypeSize) -> CGFloat {
+        dynamicTypeSize >= .accessibility1 ? 62 : 52
+    }
 }
 
 private enum BookshelfDimensionManagementAction {
@@ -747,7 +886,7 @@ private extension BookshelfDimension {
     var searchPlaceholder: String {
         switch self {
         case .default:
-            return "搜索书名、状态或来源"
+            return "搜索书名或作者"
         case .tag:
             return "搜索标签"
         case .source:
@@ -784,15 +923,9 @@ private struct BookshelfBrowsingChrome: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Binding var selectedSubTab: BookSubTab
     let selectedDimension: BookshelfDimension
-    let isSearchActive: Bool
-    @Binding var searchKeyword: String
-    let hasSearchKeyword: Bool
     let canShowBookActions: Bool
     let canShowSelectAction: Bool
     let canEditCurrentDimension: Bool
-    let onActivateSearch: () -> Void
-    let onDeactivateSearch: () -> Void
-    let onClearSearch: () -> Void
     let onSelectDimension: (BookshelfDimension) -> Void
     let onShowDisplaySettings: () -> Void
     let onEnterEditing: () -> Void
@@ -816,26 +949,9 @@ private struct BookshelfBrowsingChrome: View {
             }
 
             if canShowBookActions {
-                if isSearchActive {
-                    BookshelfSearchBar(
-                        text: $searchKeyword,
-                        placeholder: selectedDimension.searchPlaceholder,
-                        onCancel: onDeactivateSearch,
-                        onClear: onClearSearch
-                    )
-                    .frame(minHeight: BookshelfChromeMetrics.searchBarHeight)
+                dimensionToolRow
+                    .frame(minHeight: BookshelfChromeMetrics.dimensionRailHeight)
                     .transition(BookshelfManagementMotion.browsingChromeTransition(reduceMotion: reduceMotion))
-                } else {
-                    dimensionToolRow
-                        .frame(minHeight: BookshelfChromeMetrics.dimensionRailHeight)
-                        .transition(BookshelfManagementMotion.browsingChromeTransition(reduceMotion: reduceMotion))
-                }
-
-                if hasSearchKeyword {
-                    searchHint
-                        .frame(minHeight: BookshelfChromeMetrics.searchHintHeight)
-                        .transition(.opacity)
-                }
             }
         }
         .accessibilityElement(children: .contain)
@@ -869,12 +985,6 @@ private struct BookshelfBrowsingChrome: View {
 
     private var bookshelfToolMenu: some View {
         Menu {
-            if let searchTitle = selectedDimension.searchMenuTitle {
-                Button(action: onActivateSearch) {
-                    XMMenuLabel(searchTitle, systemImage: "magnifyingglass")
-                }
-            }
-
             if selectedDimension == .default {
                 Button(action: onEnterEditing) {
                     XMMenuLabel("书籍整理", systemImage: "checklist")
@@ -918,13 +1028,6 @@ private struct BookshelfBrowsingChrome: View {
         }
     }
 
-    private var searchHint: some View {
-        Text("搜索结果不支持排序，清除搜索后可调整书架顺序")
-            .font(AppTypography.caption)
-            .foregroundStyle(.secondary)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, Spacing.screenEdge)
-    }
 }
 
 /// 书架维度 rail 右侧固定的末尾 chip，保持 44pt 热区并对齐未选中维度项。

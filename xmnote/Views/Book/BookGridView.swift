@@ -6,8 +6,8 @@
 //
 
 /**
- * [INPUT]: 依赖 BookViewModel 提供书架快照、维度状态、搜索状态、显示设置、编辑态与 UICollectionView 排序状态，依赖页面可见态驱动 UIKit 滚动观察，依赖 LoadingGate 约束读取加载反馈，依赖容器注入路由、进入编辑态回调与底部滚动余量
- * [OUTPUT]: 对外提供 BookGridView，展示书架内容区、多维度 UICollectionView 聚合入口、选择覆盖层、搜索空态、写入错误浮层与拖拽排序交互
+ * [INPUT]: 依赖 BookViewModel 提供书架快照、维度状态、搜索状态、显示设置、编辑态与 UICollectionView 排序状态，依赖页面可见态驱动 UIKit 滚动观察，依赖 LoadingGate 约束读取加载反馈，依赖容器注入路由、搜索 drawer 回调、进入编辑态回调与底部滚动余量
+ * [OUTPUT]: 对外提供 BookGridView，展示书架内容区、集合顶部搜索 drawer、多维度 UICollectionView 聚合入口、选择覆盖层、搜索空态、写入错误浮层与拖拽排序交互
  * [POS]: Book 模块网格展示层，被 BookContainerView 嵌入
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -20,6 +20,21 @@ struct BookGridView: View {
     var isPageActive = true
     var bottomContentInset: CGFloat = 0
     var hasSearchKeyword = false
+    var searchDrawerHeight: CGFloat = 0
+    var searchPresentation: BookshelfSearchDrawerPresentation = .hidden
+    var isSearchPresented = false
+    var isSearchFocused = false
+    var searchText = ""
+    var searchKeyword = ""
+    var searchPlaceholder = ""
+    var searchFocusTrigger = 0
+    var onActivateSearch: () -> Void = {}
+    var onRequestSearchFocus: () -> Void = {}
+    var onSearchKeywordChange: (String) -> Void = { _ in }
+    var onSubmitSearch: (String) -> Void = { _ in }
+    var onClearSearch: () -> Void = {}
+    var onCancelSearch: () -> Void = {}
+    var onSearchFocusChange: (Bool) -> Void = { _ in }
     var onOpenRoute: (BookRoute) -> Void = { _ in }
     var onOpenNoteRoute: (NoteRoute) -> Void = { _ in }
     var onEnterEditing: (BookshelfItemID?) -> Void = { _ in }
@@ -77,7 +92,11 @@ struct BookGridView: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         case .empty:
-            emptyStateView
+            if hasSearchKeyword {
+                dimensionCollectionContent
+            } else {
+                emptyStateView
+            }
         case .error(let message):
             BookshelfContextualEmptyStateView(
                 icon: "exclamationmark.triangle",
@@ -87,16 +106,7 @@ struct BookGridView: View {
             )
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         case .content:
-            dimensionContent
-                .transaction { transaction in
-                    guard !hasPresentedInitialContent else { return }
-                    transaction.animation = nil
-                    transaction.disablesAnimations = true
-                }
-                .onAppear {
-                    guard !hasPresentedInitialContent else { return }
-                    hasPresentedInitialContent = true
-                }
+            dimensionCollectionContent
         }
     }
 
@@ -113,6 +123,20 @@ struct BookGridView: View {
             EmptyStateView(icon: "book", message: "暂无书籍")
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
+    }
+
+    @ViewBuilder
+    private var dimensionCollectionContent: some View {
+        dimensionContent
+            .transaction { transaction in
+                guard !hasPresentedInitialContent else { return }
+                transaction.animation = nil
+                transaction.disablesAnimations = true
+            }
+            .onAppear {
+                guard !hasPresentedInitialContent else { return }
+                hasPresentedInitialContent = true
+            }
     }
 
     @ViewBuilder
@@ -189,16 +213,32 @@ struct BookGridView: View {
             sections: sections,
             layoutMode: viewModel.displaySetting.layoutMode,
             columnCount: viewModel.displaySetting.columnCount,
+            contentState: viewModel.contentState,
             showsNoteCount: viewModel.displaySetting.showsNoteCount,
             titleDisplayMode: viewModel.displaySetting.titleDisplayMode,
             allowsStructuralAnimation: hasPresentedInitialContent,
             isEditing: viewModel.isEditing,
             bottomContentInset: bottomContentInset,
+            searchDrawerHeight: searchDrawerHeight,
+            searchPresentation: searchPresentation,
+            isSearchPresented: isSearchPresented,
+            isSearchFocused: isSearchFocused,
+            searchText: searchText,
+            searchKeyword: searchKeyword,
+            searchPlaceholder: searchPlaceholder,
+            searchFocusTrigger: searchFocusTrigger,
             selectedIDs: viewModel.selectedIDSet,
             canReorder: viewModel.canReorderDefaultItems,
             isScrollObservationEnabled: isDefaultScrollObservationEnabled,
             activeWriteAction: viewModel.activeWriteAction,
             movableIDs: movableIDs(in: sections.flatMap(\.items)),
+            onActivateSearch: onActivateSearch,
+            onRequestSearchFocus: onRequestSearchFocus,
+            onSearchKeywordChange: onSearchKeywordChange,
+            onSubmitSearch: onSubmitSearch,
+            onClearSearch: onClearSearch,
+            onCancelSearch: onCancelSearch,
+            onSearchFocusChange: onSearchFocusChange,
             onOpenRoute: onOpenRoute,
             onToggleSelection: viewModel.toggleSelection,
             onEnterEditing: enterEditing,
@@ -211,6 +251,7 @@ struct BookGridView: View {
         )
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .ignoresSafeArea(.container, edges: .bottom)
+        .ignoresSafeArea(.keyboard, edges: .bottom)
     }
 
     private var isDefaultScrollObservationEnabled: Bool {
@@ -229,13 +270,30 @@ struct BookGridView: View {
             sections: sections,
             layoutMode: viewModel.displaySetting.layoutMode,
             columnCount: aggregateColumnCount(for: dimension),
+            contentState: viewModel.contentState,
+            searchDrawerHeight: searchDrawerHeight,
+            searchPresentation: searchPresentation,
+            isSearchPresented: isSearchPresented,
+            isSearchFocused: isSearchFocused,
+            searchText: searchText,
+            searchKeyword: searchKeyword,
+            searchPlaceholder: searchPlaceholder,
+            searchFocusTrigger: searchFocusTrigger,
             canReorder: viewModel.canReorderAggregateItems(for: dimension),
+            onActivateSearch: onActivateSearch,
+            onRequestSearchFocus: onRequestSearchFocus,
+            onSearchKeywordChange: onSearchKeywordChange,
+            onSubmitSearch: onSubmitSearch,
+            onClearSearch: onClearSearch,
+            onCancelSearch: onCancelSearch,
+            onSearchFocusChange: onSearchFocusChange,
             onOpenRoute: onOpenRoute,
             onContextAction: handleAggregateContextAction(_:group:),
             onCommitOrder: { viewModel.commitAggregateOrder($0, for: dimension) }
         )
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .ignoresSafeArea(.container, edges: .bottom)
+        .ignoresSafeArea(.keyboard, edges: .bottom)
     }
 
     private func aggregateSection(

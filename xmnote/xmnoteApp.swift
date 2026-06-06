@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 SwiftUI App 生命周期、RepositoryContainer 与全局服务初始化流程
- * [OUTPUT]: 对外提供 xmnoteApp（应用入口）完成数据库/仓储/根视图启动，并在 DEBUG UI Test 下提供隔离书架二级列表 fixture
+ * [OUTPUT]: 对外提供 xmnoteApp（应用入口）完成数据库/仓储/根视图启动，并在 DEBUG UI Test 下提供隔离书架首页与二级列表 fixture
  * [POS]: 应用启动编排层，负责组装全局依赖并挂载 ContentView
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -99,21 +99,36 @@ struct xmnoteApp: App {
 }
 
 #if DEBUG
-/// UI Test 专用启动配置，使用隔离数据库构造二级书籍列表与可排序分组的稳定测试场景。
+/// UI Test 专用启动配置，使用隔离数据库构造书架首页、二级书籍列表与可排序分组的稳定测试场景。
 enum UITestLaunchConfiguration {
     nonisolated static let seedBookListArgument = "-XMNoteUITestSeedBookshelfBookList"
+    nonisolated static let openDefaultBookshelfArgument = "-XMNoteUITestOpenDefaultBookshelf"
     nonisolated static let openWantReadListArgument = "-XMNoteUITestOpenWantReadList"
     nonisolated static let openReorderGroupListArgument = "-XMNoteUITestOpenReorderGroupList"
     nonisolated static let reorderGroupID: Int64 = 9_001
 
     /// 根据 UI Test 启动参数决定是否创建临时数据库；返回 nil 时保持生产数据库路径。
     nonisolated static func makeDatabaseIfNeeded() throws -> AppDatabase? {
-        guard ProcessInfo.processInfo.arguments.contains(seedBookListArgument) else {
+        guard shouldSeedBookshelfFixture else {
             return nil
         }
         let database = try AppDatabase.empty()
         try seedBookshelfBookListFixture(in: database)
         return database
+    }
+
+    /// 一级书架 UI Test 直达书籍首页，不依赖用户真实 Tab 恢复状态。
+    nonisolated static var shouldOpenDefaultBookshelf: Bool {
+        ProcessInfo.processInfo.arguments.contains(openDefaultBookshelfArgument)
+    }
+
+    /// 需要隔离书架数据的 UI Test 启动参数集合。
+    nonisolated static var shouldSeedBookshelfFixture: Bool {
+        let arguments = ProcessInfo.processInfo.arguments
+        return arguments.contains(seedBookListArgument)
+            || arguments.contains(openDefaultBookshelfArgument)
+            || arguments.contains(openWantReadListArgument)
+            || arguments.contains(openReorderGroupListArgument)
     }
 
     /// UI Test 直达二级列表的路由，避免测试依赖首页聚合卡视觉排序。

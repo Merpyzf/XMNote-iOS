@@ -125,6 +125,7 @@ struct BookshelfSearchBar: View {
 /// 标签、来源、作者等聚合维度使用的轻量封面入口。
 struct BookshelfAggregateCardView: View {
     let group: BookshelfAggregateGroup
+    var searchKeyword = ""
 
     var body: some View {
         VStack(alignment: .leading, spacing: Spacing.half) {
@@ -148,9 +149,13 @@ struct BookshelfAggregateCardView: View {
         if let ratingScore = group.aggregateRatingScore {
             ratingTitle(for: ratingScore)
         } else {
-            Text(group.title)
-                .font(BookshelfTypography.gridTitle)
-                .foregroundStyle(Color.textPrimary)
+            XMKeywordHighlighting.text(
+                group.title,
+                keyword: searchKeyword,
+                baseFont: BookshelfTypography.gridTitle,
+                highlightFont: BookshelfTypography.gridTitle,
+                baseColor: Color.textPrimary
+            )
                 .lineLimit(2)
         }
     }
@@ -171,9 +176,13 @@ struct BookshelfAggregateCardView: View {
                     .foregroundStyle(Color.textHint)
                     .accessibilityHidden(true)
 
-                Text(group.title)
-                    .font(BookshelfTypography.gridTitle)
-                    .foregroundStyle(Color.textPrimary)
+                XMKeywordHighlighting.text(
+                    group.title,
+                    keyword: searchKeyword,
+                    baseFont: BookshelfTypography.gridTitle,
+                    highlightFont: BookshelfTypography.gridTitle,
+                    baseColor: Color.textPrimary
+                )
                     .lineLimit(1)
             }
         }
@@ -207,6 +216,7 @@ private extension Int64 {
 /// 聚合维度列表模式卡片，使用标题信息与书封横排帮助用户快速识别分组。
 struct BookshelfAggregateListRowView: View {
     let group: BookshelfAggregateGroup
+    var searchKeyword = ""
 
     private enum Style {
         static let iconFrame: CGFloat = 24
@@ -265,9 +275,13 @@ struct BookshelfAggregateListRowView: View {
                 .frame(width: Style.iconFrame, height: Style.iconFrame)
                 .accessibilityHidden(true)
 
-            Text(group.title)
-                .font(AppTypography.subheadlineMedium)
-                .foregroundStyle(Color.textPrimary)
+            XMKeywordHighlighting.text(
+                group.title,
+                keyword: searchKeyword,
+                baseFont: AppTypography.subheadlineMedium,
+                highlightFont: AppTypography.subheadlineMedium,
+                baseColor: Color.textPrimary
+            )
                 .lineLimit(1)
                 .minimumScaleFactor(0.85)
         }
@@ -291,9 +305,13 @@ struct BookshelfAggregateListRowView: View {
                     .frame(width: Style.iconFrame, height: Style.iconFrame)
                     .accessibilityHidden(true)
 
-                Text(group.title)
-                    .font(AppTypography.subheadlineMedium)
-                    .foregroundStyle(Color.textPrimary)
+                XMKeywordHighlighting.text(
+                    group.title,
+                    keyword: searchKeyword,
+                    baseFont: AppTypography.subheadlineMedium,
+                    highlightFont: AppTypography.subheadlineMedium,
+                    baseColor: Color.textPrimary
+                )
                     .lineLimit(1)
                     .minimumScaleFactor(0.85)
             }
@@ -489,6 +507,7 @@ struct BookshelfDefaultListRow: View {
     let item: BookshelfItem
     var showsNoteCount = true
     var titleDisplayMode: BookshelfTitleDisplayMode = .standard
+    var searchKeyword = ""
 
     var body: some View {
         HStack(spacing: Spacing.base) {
@@ -499,12 +518,17 @@ struct BookshelfDefaultListRow: View {
                     text: item.title,
                     mode: titleDisplayMode,
                     style: .bodyMedium,
-                    color: .textPrimary
+                    color: .textPrimary,
+                    highlightKeyword: searchKeyword
                 )
 
-                Text(subtitle)
-                    .font(BookshelfTypography.gridSubtitle)
-                    .foregroundStyle(Color.textSecondary)
+                XMKeywordHighlighting.text(
+                    subtitle,
+                    keyword: searchKeyword,
+                    baseFont: BookshelfTypography.gridSubtitle,
+                    highlightFont: BookshelfTypography.gridSubtitle,
+                    baseColor: Color.textSecondary
+                )
                     .lineLimit(1)
             }
 
@@ -533,7 +557,8 @@ struct BookshelfDefaultListRow: View {
         case .group(let group):
             BookshelfGroupGridItemView(
                 group: group,
-                titleDisplayMode: titleDisplayMode
+                titleDisplayMode: titleDisplayMode,
+                searchKeyword: searchKeyword
             )
                 .frame(width: 48)
         }

@@ -20,6 +20,7 @@ struct BookGridItemView: View {
     var showsNoteCount = true
     var isPinned = false
     var titleDisplayMode: BookshelfTitleDisplayMode = .standard
+    var searchKeyword = ""
 
     var body: some View {
         VStack(alignment: .leading, spacing: Spacing.half) {
@@ -47,13 +48,18 @@ struct BookGridItemView: View {
                 text: book.name,
                 mode: titleDisplayMode,
                 style: .captionMedium,
-                color: .textPrimary
+                color: .textPrimary,
+                highlightKeyword: searchKeyword
             )
 
-            Text(book.author.isEmpty ? " " : book.author)
-                .font(BookshelfTypography.gridSubtitle)
+            XMKeywordHighlighting.text(
+                book.author.isEmpty ? " " : book.author,
+                keyword: searchKeyword,
+                baseFont: BookshelfTypography.gridSubtitle,
+                highlightFont: BookshelfTypography.gridSubtitle,
+                baseColor: Color.textSecondary
+            )
                 .lineLimit(1)
-                .foregroundStyle(Color.textSecondary)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }

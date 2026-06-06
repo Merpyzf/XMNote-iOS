@@ -3363,7 +3363,7 @@ private extension BookRepository {
     ) throws -> [BookshelfItem] {
         // SQL 目的：读取默认书架中不属于有效分组的顶层书籍，并补齐有效书摘数量、阅读时长与条件排序字段。
         // 涉及表：book b；LEFT JOIN note n 统计未删除书摘；LEFT JOIN read_status/source 补齐聚合展示字段；LEFT JOIN read_time_record 聚合已完成阅读秒数；子查询使用 group_book gb JOIN `group` g 排除仍处于有效分组中的书籍。
-        // 关键过滤：b.is_deleted = 0、b.id != 0；n.is_deleted = 0；read_time_record.status = 3；gb.is_deleted = 0；g.is_deleted = 0；搜索过滤在 Swift 层按书名/阅读状态/来源执行。
+        // 关键过滤：b.is_deleted = 0、b.id != 0；n.is_deleted = 0；read_time_record.status = 3；gb.is_deleted = 0；g.is_deleted = 0；搜索过滤在 Swift 层按书名/作者执行。
         // 排序用途：返回 book_order / pinned / pin_order、created_date / updated_date / pub_date / read_status_changed_date / read_position 等字段，最终在 Swift 层按 Android 显示设置统一混排。
         let sql = """
             SELECT b.id, b.name, b.author, b.cover, b.pub_date, b.source_id, b.score,
@@ -3405,8 +3405,7 @@ private extension BookRepository {
             let sourceName: String = row["source_name"] ?? ""
             guard bookListMatchesSearch(
                 name: name,
-                readStatusName: readStatusName,
-                sourceName: sourceName,
+                author: author,
                 keyword: keyword
             ) else {
                 return nil
@@ -3825,8 +3824,7 @@ private extension BookRepository {
         return books.filter {
             bookListMatchesSearch(
                 name: $0.payload.name,
-                readStatusName: $0.payload.readStatusName,
-                sourceName: $0.payload.sourceName,
+                author: $0.payload.author,
                 keyword: keyword
             )
         }
@@ -4777,14 +4775,12 @@ private extension BookRepository {
 
     nonisolated func bookListMatchesSearch(
         name: String,
-        readStatusName: String,
-        sourceName: String,
+        author: String,
         keyword: String
     ) -> Bool {
         guard !keyword.isEmpty else { return true }
         return name.localizedCaseInsensitiveContains(keyword)
-            || readStatusName.localizedCaseInsensitiveContains(keyword)
-            || sourceName.localizedCaseInsensitiveContains(keyword)
+            || author.localizedCaseInsensitiveContains(keyword)
     }
 
     nonisolated func titleMatchesSearch(_ title: String, keyword: String) -> Bool {

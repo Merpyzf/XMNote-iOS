@@ -281,6 +281,20 @@ final class BookshelfBookListViewModel {
         !normalizedSearchKeyword(searchKeyword).isEmpty
     }
 
+    var searchReorderDisabledNotice: String? {
+        guard isEditing,
+              hasSearchKeyword,
+              activeWriteAction == nil,
+              !isLoadingBatchOptions,
+              contentState == .content,
+              displaySetting.sortCriteria == .custom,
+              defaultGroupID != nil,
+              snapshot.sections.count == 1 else {
+            return nil
+        }
+        return "搜索结果暂不支持排序，清除搜索后可调整组内顺序"
+    }
+
     var editActions: [BookshelfBookListEditAction] {
         switch route.context {
         case .defaultGroup:

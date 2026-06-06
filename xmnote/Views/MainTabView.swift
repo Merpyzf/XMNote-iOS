@@ -9,7 +9,7 @@ import SwiftUI
 
 /**
  * [INPUT]: 依赖 Reading/Book/Note/Content/Personal 各模块容器视图与对应路由枚举，依赖 DebugRoute 提供调试页面跳转，依赖 openURL 打开外部帮助文档
- * [OUTPUT]: 对外提供 MainTabView（五个主 Tab 的 NavigationStack 组织、目的地分发与 DEBUG UI Test 二级列表直达路由）
+ * [OUTPUT]: 对外提供 MainTabView（五个主 Tab 的 NavigationStack 组织、目的地分发与 DEBUG UI Test 书架首页/二级列表直达路由）
  * [POS]: 应用根导航入口，负责跨模块路由承接（含书架聚合列表、书架管理入口、在读页热力图点击进入阅读日历、内容查看与内容编辑）
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -420,17 +420,20 @@ struct MainTabView: View {
     }
 
     #if DEBUG
-    /// UI Test 启动后直达目标二级书籍列表，减少测试对首页聚合入口布局的依赖。
+    /// UI Test 启动后直达书籍首页或目标二级列表，减少测试对真实恢复状态与首页聚合入口布局的依赖。
     @MainActor
     private func applyUITestLaunchRouteIfNeeded() async {
-        guard !didApplyUITestLaunchRoute,
-              let route = UITestLaunchConfiguration.requestedBookRoute else {
+        guard !didApplyUITestLaunchRoute else {
             return
         }
+        let requestedRoute = UITestLaunchConfiguration.requestedBookRoute
+        guard UITestLaunchConfiguration.shouldOpenDefaultBookshelf || requestedRoute != nil else { return }
         didApplyUITestLaunchRoute = true
         selectedTab = .books
         await Task.yield()
-        append(route, to: .books)
+        if let requestedRoute {
+            append(requestedRoute, to: .books)
+        }
     }
     #endif
 }

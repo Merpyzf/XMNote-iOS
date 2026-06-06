@@ -144,6 +144,7 @@ private struct BookshelfBookListContentView: View {
     @State private var bottomInsetReleaseTask: Task<Void, Never>?
     @State private var browseSearchPresentation: BookshelfBookListSearchPresentation = .hidden
     @State private var isBrowseSearchFocused = false
+    @State private var browseSearchDraftKeyword = ""
     @State private var browseSearchFocusTrigger = 0
     @State private var readLoadingGate = LoadingGate()
 
@@ -153,6 +154,7 @@ private struct BookshelfBookListContentView: View {
                 .zIndex(1)
             collectionContent
         }
+        .ignoresSafeArea(.keyboard, edges: .bottom)
         .background(Color.surfacePage.ignoresSafeArea())
         .navigationBarBackButtonHidden(true)
         .toolbar(.hidden, for: .navigationBar)
@@ -353,7 +355,7 @@ private struct BookshelfBookListContentView: View {
                             actions: viewModel.editActions,
                             activeAction: viewModel.activeWriteAction,
                             isLoadingOptions: viewModel.isLoadingBatchOptions,
-                            notice: viewModel.actionNotice,
+                            notice: editBottomBarNotice,
                             onAction: viewModel.performEditAction
                         )
                     }
@@ -389,11 +391,18 @@ private struct BookshelfBookListContentView: View {
     }
 
     private var browseSearchPlaceholder: String {
-        "搜索书籍"
+        "搜索书名或作者"
     }
 
     private var editSearchState: BookshelfEditChromeSearchState {
         viewModel.hasSearchKeyword ? .active(resultCount: viewModel.visibleBookIDs.count) : .inactive
+    }
+
+    private var editBottomBarNotice: String? {
+        if let notice = viewModel.actionNotice, !notice.isEmpty {
+            return notice
+        }
+        return viewModel.searchReorderDisabledNotice
     }
 
     private var renderedContentState: BookshelfContentState {
@@ -411,8 +420,13 @@ private struct BookshelfBookListContentView: View {
     private var shouldRenderSearchDrawer: Bool {
         viewModel.hasCompletedInitialLoad
             || viewModel.hasSearchKeyword
+            || hasBrowseSearchDraftKeyword
             || browseSearchPresentation.isPinned
             || isBrowseSearchFocused
+    }
+
+    private var hasBrowseSearchDraftKeyword: Bool {
+        !browseSearchDraftKeyword.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
     private var effectiveSearchDrawerHeight: CGFloat {
@@ -435,6 +449,7 @@ private struct BookshelfBookListContentView: View {
                 searchDrawerHeight: effectiveSearchDrawerHeight,
                 searchPresentation: browseSearchPresentation,
                 isBrowseSearchFocused: isBrowseSearchFocused,
+                browseSearchText: browseSearchDraftKeyword,
                 browseSearchKeyword: viewModel.searchKeyword,
                 browseSearchPlaceholder: browseSearchPlaceholder,
                 browseSearchFocusTrigger: browseSearchFocusTrigger,
@@ -445,7 +460,9 @@ private struct BookshelfBookListContentView: View {
                 activeWriteAction: viewModel.activeWriteAction,
                 bottomContentInset: bottomContentInset,
                 onActivateBrowseSearch: activateBrowseSearch,
-                onBrowseSearchKeywordChange: { viewModel.searchKeyword = $0 },
+                onRequestBrowseSearchFocus: requestBrowseSearchFocus,
+                onBrowseSearchKeywordChange: updateBrowseSearchKeyword(_:),
+                onSubmitBrowseSearch: submitBrowseSearch(_:),
                 onBrowseSearchFocusChange: handleBrowseSearchFocusChange(_:),
                 onClearBrowseSearch: clearBrowseSearch,
                 onCollapseBrowseSearch: collapseBrowseSearch,
@@ -458,6 +475,7 @@ private struct BookshelfBookListContentView: View {
             )
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .ignoresSafeArea(.container, edges: .bottom)
+            .ignoresSafeArea(.keyboard, edges: .bottom)
         } else {
             Color.clear
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -477,6 +495,7 @@ private struct BookshelfBookListContentView: View {
         chromeTransitionTask?.cancel()
         cancelBottomInsetRelease()
         isEditingChoreographyActive = true
+        prepareBrowseSearchForEditing()
 
         withAnimation(BookshelfManagementMotion.modeAnimation(reduceMotion: reduceMotion)) {
             chromePhase = .enteringEdit
@@ -515,20 +534,55 @@ private struct BookshelfBookListContentView: View {
     }
 
     private func activateBrowseSearch() {
+        if browseSearchDraftKeyword.isEmpty, viewModel.hasSearchKeyword {
+            browseSearchDraftKeyword = viewModel.searchKeyword
+        }
         withAnimation(BookshelfManagementMotion.modeAnimation(reduceMotion: reduceMotion)) {
             browseSearchPresentation = .pinned
-            browseSearchFocusTrigger += 1
+        }
+    }
+
+    private func requestBrowseSearchFocus() {
+        browseSearchFocusTrigger += 1
+    }
+
+    private func updateBrowseSearchKeyword(_ keyword: String) {
+        let normalizedKeyword = keyword.trimmingCharacters(in: .whitespacesAndNewlines)
+        browseSearchDraftKeyword = keyword
+        if normalizedKeyword.isEmpty {
+            viewModel.clearSearchKeyword()
+        } else if viewModel.searchKeyword != normalizedKeyword {
+            viewModel.searchKeyword = normalizedKeyword
+        }
+        browseSearchPresentation = .pinned
+    }
+
+    private func submitBrowseSearch(_ keyword: String) {
+        let submittedKeyword = keyword.trimmingCharacters(in: .whitespacesAndNewlines)
+        browseSearchDraftKeyword = submittedKeyword
+        if submittedKeyword.isEmpty {
+            viewModel.clearSearchKeyword()
+        } else {
+            if viewModel.searchKeyword != submittedKeyword {
+                viewModel.searchKeyword = submittedKeyword
+            }
+            browseSearchPresentation = .pinned
         }
     }
 
     private func handleBrowseSearchFocusChange(_ isFocused: Bool) {
         isBrowseSearchFocused = isFocused
         if isFocused {
-            browseSearchPresentation = .pinned
+            if browseSearchPresentation != .pinned {
+                browseSearchPresentation = .pinned
+            }
+        } else if !hasBrowseSearchDraftKeyword, !viewModel.hasSearchKeyword {
+            browseSearchPresentation = .hidden
         }
     }
 
     private func clearBrowseSearch() {
+        browseSearchDraftKeyword = ""
         viewModel.clearSearchKeyword()
         withAnimation(BookshelfManagementMotion.modeAnimation(reduceMotion: reduceMotion)) {
             browseSearchPresentation = .pinned
@@ -537,11 +591,26 @@ private struct BookshelfBookListContentView: View {
     }
 
     private func collapseBrowseSearch() {
-        guard !viewModel.hasSearchKeyword else { return }
+        browseSearchDraftKeyword = ""
+        viewModel.clearSearchKeyword()
         withAnimation(BookshelfManagementMotion.modeAnimation(reduceMotion: reduceMotion)) {
             browseSearchPresentation = .hidden
             isBrowseSearchFocused = false
         }
+    }
+
+    /// 进入整理态时收起空搜索；有关键词时保留过滤结果但取消键盘焦点。
+    private func prepareBrowseSearchForEditing() {
+        isBrowseSearchFocused = false
+        if viewModel.hasSearchKeyword {
+            browseSearchDraftKeyword = viewModel.searchKeyword
+            browseSearchPresentation = .pinned
+        } else {
+            browseSearchDraftKeyword = ""
+            viewModel.clearSearchKeyword()
+            browseSearchPresentation = .hidden
+        }
+        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
     }
 
     /// 退出整理模式时先收起底部栏，再恢复普通顶部 chrome 并释放滚动避让。
@@ -745,6 +814,7 @@ private struct BookshelfBookListCollectionView: UIViewRepresentable {
     let searchDrawerHeight: CGFloat
     let searchPresentation: BookshelfBookListSearchPresentation
     let isBrowseSearchFocused: Bool
+    let browseSearchText: String
     let browseSearchKeyword: String
     let browseSearchPlaceholder: String
     let browseSearchFocusTrigger: Int
@@ -755,7 +825,9 @@ private struct BookshelfBookListCollectionView: UIViewRepresentable {
     let activeWriteAction: BookshelfBookListEditAction?
     let bottomContentInset: CGFloat
     let onActivateBrowseSearch: () -> Void
+    let onRequestBrowseSearchFocus: () -> Void
     let onBrowseSearchKeywordChange: (String) -> Void
+    let onSubmitBrowseSearch: (String) -> Void
     let onBrowseSearchFocusChange: (Bool) -> Void
     let onClearBrowseSearch: () -> Void
     let onCollapseBrowseSearch: () -> Void
@@ -795,6 +867,7 @@ private struct BookshelfBookListCollectionView: UIViewRepresentable {
             searchDrawerHeight: searchDrawerHeight,
             searchPresentation: searchPresentation,
             isBrowseSearchFocused: isBrowseSearchFocused,
+            browseSearchText: browseSearchText,
             browseSearchKeyword: browseSearchKeyword,
             browseSearchPlaceholder: browseSearchPlaceholder,
             browseSearchFocusTrigger: browseSearchFocusTrigger,
@@ -805,7 +878,9 @@ private struct BookshelfBookListCollectionView: UIViewRepresentable {
             activeWriteAction: activeWriteAction,
             bottomContentInset: bottomContentInset,
             onActivateBrowseSearch: onActivateBrowseSearch,
+            onRequestBrowseSearchFocus: onRequestBrowseSearchFocus,
             onBrowseSearchKeywordChange: onBrowseSearchKeywordChange,
+            onSubmitBrowseSearch: onSubmitBrowseSearch,
             onBrowseSearchFocusChange: onBrowseSearchFocusChange,
             onClearBrowseSearch: onClearBrowseSearch,
             onCollapseBrowseSearch: onCollapseBrowseSearch,
@@ -831,6 +906,7 @@ private struct BookshelfBookListCollectionConfiguration {
     let searchDrawerHeight: CGFloat
     let searchPresentation: BookshelfBookListSearchPresentation
     let isBrowseSearchFocused: Bool
+    let browseSearchText: String
     let browseSearchKeyword: String
     let browseSearchPlaceholder: String
     let browseSearchFocusTrigger: Int
@@ -841,7 +917,9 @@ private struct BookshelfBookListCollectionConfiguration {
     let activeWriteAction: BookshelfBookListEditAction?
     let bottomContentInset: CGFloat
     let onActivateBrowseSearch: () -> Void
+    let onRequestBrowseSearchFocus: () -> Void
     let onBrowseSearchKeywordChange: (String) -> Void
+    let onSubmitBrowseSearch: (String) -> Void
     let onBrowseSearchFocusChange: (Bool) -> Void
     let onClearBrowseSearch: () -> Void
     let onCollapseBrowseSearch: () -> Void
@@ -863,6 +941,7 @@ private struct BookshelfBookListCollectionConfiguration {
         searchDrawerHeight: 0,
         searchPresentation: .hidden,
         isBrowseSearchFocused: false,
+        browseSearchText: "",
         browseSearchKeyword: "",
         browseSearchPlaceholder: "",
         browseSearchFocusTrigger: 0,
@@ -873,7 +952,9 @@ private struct BookshelfBookListCollectionConfiguration {
         activeWriteAction: nil,
         bottomContentInset: 0,
         onActivateBrowseSearch: {},
+        onRequestBrowseSearchFocus: {},
         onBrowseSearchKeywordChange: { _ in },
+        onSubmitBrowseSearch: { _ in },
         onBrowseSearchFocusChange: { _ in },
         onClearBrowseSearch: {},
         onCollapseBrowseSearch: {},
@@ -891,12 +972,16 @@ private struct BookshelfBookListCollectionConfiguration {
         !browseSearchKeyword.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
+    var hasBrowseSearchText: Bool {
+        !browseSearchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
     var isBrowseSearchPinned: Bool {
         searchPresentation.isPinned
     }
 
     var showsExpandedSearchSurface: Bool {
-        searchPresentation.isPinned || hasBrowseSearchKeyword || isBrowseSearchFocused
+        searchPresentation.isPinned || hasBrowseSearchText || hasBrowseSearchKeyword || isBrowseSearchFocused
     }
 
 }
@@ -1069,6 +1154,10 @@ private final class BookshelfBookListCollectionHostView: UIView {
     private var isPendingInitialSearchDrawerOffset = false
     private var isAdjustingSearchDrawerOffset = false
     private var searchDrawerExtraBottomInset: CGFloat = 0
+    private var keyboardAvoidanceInset: CGFloat = 0
+    private var searchDrawerLockedOffsetY: CGFloat?
+    private let searchFocusRequestCoordinator = BookshelfSearchFocusRequestCoordinator()
+    private var lastCollectionBounds: CGRect = .zero
     private var pendingAnimatedInsertionIdentities: Set<ViewportAnchorIdentity> = []
     private var emptyPresentationMode: BookshelfBookListEmptyPresentationMode = .steadyEmptyUpdate
     private var isContentToEmptyTransitionPending = false
@@ -1076,6 +1165,12 @@ private final class BookshelfBookListCollectionHostView: UIView {
     private var pendingContentToEmptySections: [BookshelfBookListCollectionSectionState]?
     private let impactFeedback = UIImpactFeedbackGenerator(style: .medium)
     private let selectionFeedback = UISelectionFeedbackGenerator()
+    private lazy var keyboardAvoidanceCoordinator = BookshelfCollectionKeyboardAvoidanceCoordinator(
+        hostView: self,
+        scrollView: collectionView
+    ) { [weak self] inset, animation in
+        self?.applyKeyboardAvoidanceInset(inset, animation: animation)
+    }
 
     private lazy var collectionView: BookshelfBookListViewportStableCollectionView = {
         let view = BookshelfBookListViewportStableCollectionView(
@@ -1126,6 +1221,7 @@ private final class BookshelfBookListCollectionHostView: UIView {
     override init(frame: CGRect) {
         super.init(frame: frame)
         setupViewHierarchy()
+        keyboardAvoidanceCoordinator.start()
     }
 
     @available(*, unavailable)
@@ -1133,8 +1229,20 @@ private final class BookshelfBookListCollectionHostView: UIView {
         fatalError("init(coder:) has not been implemented")
     }
 
+    deinit {
+        keyboardAvoidanceCoordinator.invalidate()
+    }
+
     override func layoutSubviews() {
         super.layoutSubviews()
+        reconcileCollectionBoundsIfNeeded()
+        keyboardAvoidanceCoordinator.recalculate(animated: false)
+        applyPendingInitialSearchDrawerOffsetIfNeeded()
+    }
+
+    override func didMoveToWindow() {
+        super.didMoveToWindow()
+        keyboardAvoidanceCoordinator.recalculate(animated: false)
         applyPendingInitialSearchDrawerOffsetIfNeeded()
     }
 
@@ -1159,6 +1267,10 @@ private final class BookshelfBookListCollectionHostView: UIView {
         let needsLayoutInvalidation = needsLayoutUpdate
             || configuration.searchDrawerHeight != previousConfiguration.searchDrawerHeight
         self.configuration = configuration
+        searchFocusRequestCoordinator.reconcile(
+            isFocused: configuration.isBrowseSearchFocused,
+            isExpanded: configuration.showsExpandedSearchSurface
+        )
         updateCollectionVisibilityForSearchDrawerPreparation()
         collectionView.dragInteractionEnabled = configuration.canReorder
         normalizeSearchDrawerExtraBottomInsetForCurrentState()
@@ -1223,6 +1335,11 @@ private final class BookshelfBookListCollectionHostView: UIView {
         isPendingInitialSearchDrawerOffset = false
         isAdjustingSearchDrawerOffset = false
         searchDrawerExtraBottomInset = 0
+        keyboardAvoidanceInset = 0
+        searchDrawerLockedOffsetY = nil
+        searchFocusRequestCoordinator.cancel()
+        lastCollectionBounds = .zero
+        keyboardAvoidanceCoordinator.reset()
         pendingAnimatedInsertionIdentities = []
         emptyPresentationMode = .steadyEmptyUpdate
         isContentToEmptyTransitionPending = false
@@ -1249,6 +1366,43 @@ private extension BookshelfBookListCollectionHostView {
             collectionView.topAnchor.constraint(equalTo: topAnchor),
             collectionView.bottomAnchor.constraint(equalTo: bottomAnchor)
         ])
+    }
+
+    /// collection 尺寸变化时只重算布局与滚动边界，不把搜索结果重置成另一套页面状态。
+    func reconcileCollectionBoundsIfNeeded() {
+        let bounds = collectionView.bounds
+        guard bounds.width > 0, bounds.height > 0 else { return }
+        let previousBounds = lastCollectionBounds
+        guard previousBounds == .zero
+            || abs(previousBounds.width - bounds.width) > 0.5
+            || abs(previousBounds.height - bounds.height) > 0.5 else {
+            return
+        }
+
+        lastCollectionBounds = bounds
+        guard previousBounds != .zero else { return }
+        storeViewportAnchorIfPossible(requiresLayout: false)
+        collectionView.collectionViewLayout.invalidateLayout()
+        updateBottomContentInset(animated: false)
+        applyPendingInitialSearchDrawerOffsetIfNeeded()
+        storeViewportAnchorIfPossible(requiresLayout: false)
+    }
+
+    /// 接收统一键盘协调器给出的自定义避让高度，并进入二级列表现有 bottom inset 管线。
+    func applyKeyboardAvoidanceInset(
+        _ inset: CGFloat,
+        animation: BookshelfCollectionKeyboardAvoidanceCoordinator.AnimationContext
+    ) {
+        guard abs(keyboardAvoidanceInset - inset) > 0.5 else { return }
+        keyboardAvoidanceInset = inset
+        updateBottomContentInset(animation: animation)
+    }
+
+    private var defaultBottomInsetAnimationContext: BookshelfCollectionKeyboardAvoidanceCoordinator.AnimationContext {
+        BookshelfCollectionKeyboardAvoidanceCoordinator.AnimationContext(
+            duration: BookshelfManagementMotion.bookListSearchDrawerDuration,
+            options: [.allowUserInteraction, .beginFromCurrentState, .curveEaseInOut]
+        )
     }
 
     /// 初始隐藏搜索抽屉时先等滚动位置收敛，避免用户看到抽屉从首帧闪出再被推走。
@@ -1651,6 +1805,15 @@ private extension BookshelfBookListCollectionHostView {
 
     /// 只增加滚动余量，不改变 collection layout，避免底部玻璃栏遮挡最后一行书籍。
     func updateBottomContentInset(animated: Bool = false) {
+        updateBottomContentInset(
+            animation: animated ? defaultBottomInsetAnimationContext : .immediate
+        )
+    }
+
+    /// 只增加滚动余量，不改变 collection layout，避免底部玻璃栏遮挡最后一行书籍。
+    func updateBottomContentInset(
+        animation: BookshelfCollectionKeyboardAvoidanceCoordinator.AnimationContext
+    ) {
         let bottomInset = resolvedBottomContentInset()
         let didChangeCustomInset = collectionView.contentInset.bottom != bottomInset
             || collectionView.verticalScrollIndicatorInsets.bottom != bottomInset
@@ -1659,7 +1822,10 @@ private extension BookshelfBookListCollectionHostView {
             return
         }
 
-        storeViewportAnchorIfPossible(requiresLayout: true)
+        let shouldPreserveSearchDrawer = shouldPreserveTopPinnedSearchDuringInsetChange
+        if !shouldPreserveSearchDrawer {
+            storeViewportAnchorIfPossible(requiresLayout: true)
+        }
         let fallbackOffsetY = collectionView.contentOffset.y
         var contentInset = collectionView.contentInset
         contentInset.bottom = bottomInset
@@ -1667,28 +1833,61 @@ private extension BookshelfBookListCollectionHostView {
         var indicatorInsets = collectionView.verticalScrollIndicatorInsets
         indicatorInsets.bottom = bottomInset
 
+        if shouldPreserveSearchDrawer {
+            let lockedUpdates = {
+                self.performSearchDrawerOffsetLocked {
+                    self.collectionView.contentInset = contentInset
+                    self.collectionView.verticalScrollIndicatorInsets = indicatorInsets
+                    self.collectionView.layoutIfNeeded()
+                }
+            }
+            guard animation.isAnimated else {
+                UIView.performWithoutAnimation(lockedUpdates)
+                return
+            }
+            UIView.animate(
+                withDuration: animation.duration,
+                delay: 0,
+                options: animation.options,
+                animations: lockedUpdates
+            )
+            return
+        }
+
         let insetUpdates = { [self] in
             self.isViewportAnchorCaptureSuspended = true
             self.collectionView.contentInset = contentInset
             self.collectionView.verticalScrollIndicatorInsets = indicatorInsets
             self.collectionView.layoutIfNeeded()
+            self.restoreViewportAnchor(stableViewportAnchor, fallbackOffsetY: fallbackOffsetY)
             self.isViewportAnchorCaptureSuspended = false
             self.lastAdjustedContentInset = self.collectionView.adjustedContentInset
             self.storeViewportAnchorIfPossible(requiresLayout: false)
         }
-        guard animated else {
+        guard animation.isAnimated else {
             UIView.performWithoutAnimation {
                 insetUpdates()
-                restoreViewportAnchor(stableViewportAnchor, fallbackOffsetY: fallbackOffsetY)
             }
             return
         }
         UIView.animate(
-            withDuration: BookshelfManagementMotion.bookListSearchDrawerDuration,
+            withDuration: animation.duration,
             delay: 0,
-            options: [.allowUserInteraction, .beginFromCurrentState, .curveEaseInOut],
+            options: animation.options,
             animations: insetUpdates
         )
+    }
+
+    /// 搜索输入聚焦期间，键盘只改变底部可滚动空间，不恢复书籍 cell 锚点。
+    var shouldPreserveTopPinnedSearchDuringInsetChange: Bool {
+        configuration.showsSearchDrawerInCollection
+            && (
+                configuration.isBrowseSearchPinned
+                || configuration.isBrowseSearchFocused
+                || searchFocusRequestCoordinator.isPending
+                || configuration.hasBrowseSearchText
+                || configuration.hasBrowseSearchKeyword
+            )
     }
 
     /// 根据搜索抽屉当前呈现状态收束额外滚动余量，避免输入态或无抽屉页面继承隐藏位空间。
@@ -1706,7 +1905,8 @@ private extension BookshelfBookListCollectionHostView {
         max(
             0,
             configuration.bottomContentInset,
-            searchDrawerExtraBottomInset
+            searchDrawerExtraBottomInset,
+            keyboardAvoidanceInset
         )
     }
 
@@ -1714,6 +1914,11 @@ private extension BookshelfBookListCollectionHostView {
     func storeViewportAnchorIfPossible(requiresLayout: Bool) {
         guard !isRestoringViewport, !isViewportAnchorCaptureSuspended else { return }
         stableFallbackOffsetY = collectionView.contentOffset.y
+        guard !shouldPreserveTopPinnedSearchDuringInsetChange else {
+            searchDrawerLockedOffsetY = collectionView.contentOffset.y
+            return
+        }
+        searchDrawerLockedOffsetY = nil
         guard let anchor = captureViewportAnchor(requiresLayout: requiresLayout) else { return }
         stableViewportAnchor = anchor
     }
@@ -1731,10 +1936,30 @@ private extension BookshelfBookListCollectionHostView {
         guard collectionView.adjustedContentInset != lastAdjustedContentInset else { return }
 
         UIView.performWithoutAnimation {
-            restoreViewportAnchor(stableViewportAnchor, fallbackOffsetY: stableFallbackOffsetY)
+            if shouldPreserveTopPinnedSearchDuringInsetChange {
+                performSearchDrawerOffsetLocked { }
+            } else {
+                restoreViewportAnchor(stableViewportAnchor, fallbackOffsetY: stableFallbackOffsetY)
+            }
             lastAdjustedContentInset = collectionView.adjustedContentInset
-            storeViewportAnchorIfPossible(requiresLayout: false)
+            if !shouldPreserveTopPinnedSearchDuringInsetChange {
+                storeViewportAnchorIfPossible(requiresLayout: false)
+            }
         }
+    }
+
+    /// 在键盘或安全区重算期间锁住当前搜索抽屉 offset，避免输入框被普通内容锚点牵引。
+    func performSearchDrawerOffsetLocked(_ updates: () -> Void) {
+        let lockedOffsetY = searchDrawerLockedOffsetY ?? collectionView.contentOffset.y
+        searchDrawerLockedOffsetY = lockedOffsetY
+        isViewportAnchorCaptureSuspended = true
+        updates()
+        UIView.performWithoutAnimation {
+            restorePinnedSearchDrawerOffsetIfNeeded(lockedOffsetY: lockedOffsetY)
+            collectionView.layoutIfNeeded()
+        }
+        isViewportAnchorCaptureSuspended = false
+        lastAdjustedContentInset = collectionView.adjustedContentInset
     }
 
     /// 捕获当前最靠近可视顶部的 cell，作为后续 inset 写入后的视口稳定锚点。
@@ -1790,6 +2015,16 @@ private extension BookshelfBookListCollectionHostView {
         collectionView.setContentOffset(clampedOffset, animated: false)
     }
 
+    /// 搜索输入态以 drawer 自身作为锚点，保证键盘 inset 改变时搜索框不被书籍 cell 锚点牵引。
+    func restorePinnedSearchDrawerOffsetIfNeeded(lockedOffsetY: CGFloat? = nil) {
+        let targetOffset = CGPoint(
+            x: collectionView.contentOffset.x,
+            y: clampedContentOffsetY(lockedOffsetY ?? searchDrawerLockedOffsetY ?? 0)
+        )
+        guard abs(collectionView.contentOffset.y - targetOffset.y) > 0.5 else { return }
+        collectionView.setContentOffset(targetOffset, animated: false)
+    }
+
     /// 优先使用稳定业务身份找回刷新前的可见项；找不到时退回 UIKit 原始 indexPath。
     func resolvedIndexPath(for anchor: ViewportAnchor) -> IndexPath? {
         if let identity = anchor.identity,
@@ -1831,7 +2066,9 @@ private extension BookshelfBookListCollectionHostView {
             isPendingInitialSearchDrawerOffset = false
             updateCollectionVisibilityForSearchDrawerPreparation()
             if !previousConfiguration.showsExpandedSearchSurface {
-                setSearchDrawerVisible(animated: animated)
+                setSearchDrawerVisible(animated: animated) { [weak self] in
+                    self?.requestSearchFocusAfterDrawerSettles()
+                }
             }
             return
         }
@@ -1893,7 +2130,7 @@ private extension BookshelfBookListCollectionHostView {
         let hiddenOffsetY = hiddenSearchDrawerOffsetY()
         guard hiddenOffsetY > 0 else { return }
 
-        let overlayInset = max(0, configuration.bottomContentInset)
+        let overlayInset = max(0, configuration.bottomContentInset, keyboardAvoidanceInset)
         let requiredSearchInset = requiredSearchDrawerBottomInset(for: hiddenOffsetY)
         let nextExtraInset = requiredSearchInset > overlayInset + 0.5 ? requiredSearchInset : 0
         guard abs(nextExtraInset - searchDrawerExtraBottomInset) > 0.5 else { return }
@@ -1932,9 +2169,10 @@ private extension BookshelfBookListCollectionHostView {
     }
 
     /// 将列表滚动到搜索 surface 完整可见的位置，不改变搜索所属的 collection 层级。
-    func setSearchDrawerVisible(animated: Bool) {
+    func setSearchDrawerVisible(animated: Bool, completion: (() -> Void)? = nil) {
         guard !isInteractiveReordering,
               configuration.showsSearchDrawerInCollection else {
+            completion?()
             return
         }
         collectionView.alpha = 1
@@ -1943,11 +2181,14 @@ private extension BookshelfBookListCollectionHostView {
             x: collectionView.contentOffset.x,
             y: clampedContentOffsetY(0)
         )
-        guard abs(collectionView.contentOffset.y - targetOffset.y) > 0.5 else { return }
+        guard abs(collectionView.contentOffset.y - targetOffset.y) > 0.5 else {
+            completion?()
+            return
+        }
 
         isAdjustingSearchDrawerOffset = true
         isViewportAnchorCaptureSuspended = true
-        animateSearchDrawerOffset(to: targetOffset, animated: animated)
+        animateSearchDrawerOffset(to: targetOffset, animated: animated, completion: completion)
     }
 
     /// 将普通态搜索抽屉收回到书籍列表后方，保持布局尺寸和拖拽排序路径不变。
@@ -1969,13 +2210,14 @@ private extension BookshelfBookListCollectionHostView {
     }
 
     /// 用页面统一节奏移动搜索抽屉，避免 UIScrollView 默认动画和 SwiftUI 状态动画脱节。
-    func animateSearchDrawerOffset(to targetOffset: CGPoint, animated: Bool) {
-        guard animated else {
+    func animateSearchDrawerOffset(to targetOffset: CGPoint, animated: Bool, completion: (() -> Void)? = nil) {
+        guard animated, !UIAccessibility.isReduceMotionEnabled else {
             UIView.performWithoutAnimation {
                 collectionView.setContentOffset(targetOffset, animated: false)
             }
             isAdjustingSearchDrawerOffset = false
             isViewportAnchorCaptureSuspended = false
+            completion?()
             return
         }
 
@@ -1989,13 +2231,24 @@ private extension BookshelfBookListCollectionHostView {
         } completion: { [weak self] _ in
             self?.isAdjustingSearchDrawerOffset = false
             self?.isViewportAnchorCaptureSuspended = false
+            completion?()
         }
+    }
+
+    /// drawer offset 已稳定后再让 SwiftUI 触发 TextField 聚焦，避免键盘动画叠加顶部位移。
+    func requestSearchFocusAfterDrawerSettles() {
+        guard configuration.showsExpandedSearchSurface,
+              !configuration.isBrowseSearchFocused else {
+            return
+        }
+        searchFocusRequestCoordinator.request(configuration.onRequestBrowseSearchFocus)
     }
 
     /// 下拉抽屉只在普通浏览态、无焦点、无拖拽排序时接管松手后的回弹目标。
     func canSnapSearchDrawerAfterPull() -> Bool {
         configuration.showsSearchDrawerInCollection
             && configuration.searchPresentation == .hidden
+            && !configuration.hasBrowseSearchText
             && !configuration.hasBrowseSearchKeyword
             && !configuration.isBrowseSearchFocused
             && !isInteractiveReordering
@@ -2006,6 +2259,7 @@ private extension BookshelfBookListCollectionHostView {
     func collapsePinnedSearchIfNeeded(_ scrollView: UIScrollView) {
         guard configuration.isBrowseSearchPinned,
               !configuration.isBrowseSearchFocused,
+              !configuration.hasBrowseSearchText,
               !configuration.hasBrowseSearchKeyword,
               configuration.showsSearchDrawerInCollection,
               !isInteractiveReordering,
@@ -2641,56 +2895,9 @@ extension BookshelfBookListCollectionHostView: UICollectionViewDropDelegate {
 }
 
 /// 二级列表搜索 surface，作为 collection 顶部唯一检索入口承载折叠态和输入态。
-private final class BookshelfBookListSearchContainerControl: UIControl {
-    var onAccessibilityActivate: () -> Bool = { false }
-
-    override func accessibilityActivate() -> Bool {
-        onAccessibilityActivate()
-    }
-}
-
-/// 二级列表搜索 surface，作为 collection 顶部唯一检索入口承载折叠态和输入态。
-private final class BookshelfBookListSearchCell: UICollectionViewCell, UITextFieldDelegate {
+private final class BookshelfBookListSearchCell: UICollectionViewCell {
     static let reuseIdentifier = "BookshelfBookListSearchCell"
-
-    private let containerControl = BookshelfBookListSearchContainerControl()
-    private let surfaceView = UIView()
-    private let stackView = UIStackView()
-    private let iconView = UIImageView(image: UIImage(systemName: "magnifyingglass"))
-    private let textContainerView = UIView()
-    private let placeholderLabel = UILabel()
-    private let textField = UITextField()
-    private let clearButton = UIButton(type: .system)
-    private let cancelButton = UIButton(type: .system)
-    private var containerHeightConstraint: NSLayoutConstraint?
-    private var surfaceHeightConstraint: NSLayoutConstraint?
-    private var cancelButtonWidthConstraint: NSLayoutConstraint?
-    private var surfaceToCancelSpacingConstraint: NSLayoutConstraint?
-    private var lastFocusTrigger = 0
-    private var onActivate: () -> Void = {}
-    private var onTextChange: (String) -> Void = { _ in }
-    private var onFocusChange: (Bool) -> Void = { _ in }
-    private var onClear: () -> Void = {}
-    private var onCollapse: () -> Void = {}
-    private var isSearchFocused = false
-    private var showsInputMode = false
-    private var showsClearAction = false
-    private var didApplyInitialSearchMode = false
-
-    private enum Style {
-        static let touchHeight: CGFloat = 44
-        static let compactVisualHeight: CGFloat = 38
-        static let accessibilityVisualHeight: CGFloat = 46
-        static let cancelButtonWidth: CGFloat = 56
-        static let iconSize: CGFloat = 18
-        static let cornerRadius = CornerRadius.blockMedium
-        static let collapsedBackgroundOpacity: Double = 0.48
-        static let expandedBackgroundOpacity: Double = 0.68
-        static let focusedBackgroundOpacity: Double = 0.82
-        static let collapsedBorderOpacity: Double = 0.12
-        static let expandedBorderOpacity: Double = 0.18
-        static let focusedBorderOpacity: Double = 0.34
-    }
+    private let searchSurface = BookshelfSearchSurfaceView()
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -2704,357 +2911,40 @@ private final class BookshelfBookListSearchCell: UICollectionViewCell, UITextFie
 
     override func prepareForReuse() {
         super.prepareForReuse()
-        lastFocusTrigger = 0
-        onActivate = {}
-        onTextChange = { _ in }
-        onFocusChange = { _ in }
-        onClear = {}
-        onCollapse = {}
-        textField.text = nil
-        textField.resignFirstResponder()
-        didApplyInitialSearchMode = false
-        setSearchMode(false, showsClearAction: false, animated: false)
-        updateSearchAppearance(isFocused: false, showsInput: false, animated: false)
+        searchSurface.prepareForReuse()
     }
 
     /// 同步搜索 surface 的折叠/输入状态；关键词回写由闭包交给 ViewModel。
     func configure(with configuration: BookshelfBookListCollectionConfiguration) {
-        onActivate = configuration.onActivateBrowseSearch
-        onTextChange = configuration.onBrowseSearchKeywordChange
-        onFocusChange = configuration.onBrowseSearchFocusChange
-        onClear = configuration.onClearBrowseSearch
-        onCollapse = configuration.onCollapseBrowseSearch
-
-        let showsInput = configuration.showsExpandedSearchSurface
-        let visualHeight = configuration.searchDrawerHeight > BookshelfBookListChromeMetrics.normalSearchAreaHeight
-            ? Style.accessibilityVisualHeight
-            : Style.compactVisualHeight
-        let didChangeHeight = abs((surfaceHeightConstraint?.constant ?? visualHeight) - visualHeight) > 0.5
-        surfaceHeightConstraint?.constant = visualHeight
-        containerHeightConstraint?.constant = max(Style.touchHeight, visualHeight)
-        placeholderLabel.text = configuration.browseSearchPlaceholder
-        textField.attributedPlaceholder = NSAttributedString(
-            string: configuration.browseSearchPlaceholder,
-            attributes: [.foregroundColor: UIColor(Color.textHint)]
-        )
-        if textField.text != configuration.browseSearchKeyword {
-            textField.text = configuration.browseSearchKeyword
-        }
-
-        setSearchMode(
-            showsInput,
-            showsClearAction: configuration.hasBrowseSearchKeyword,
-            animated: didApplyInitialSearchMode
-        )
-        stackView.isUserInteractionEnabled = showsInput
-        containerControl.isAccessibilityElement = !showsInput
-        containerControl.accessibilityIdentifier = showsInput ? nil : "bookshelf.book-list.search.drawer"
-        containerControl.accessibilityTraits = showsInput ? [] : [.button]
-        containerControl.accessibilityLabel = showsInput ? nil : "搜索当前列表书籍"
-        textField.accessibilityIdentifier = "bookshelf.book-list.search.field"
-        textField.accessibilityLabel = "搜索当前列表书籍"
-        clearButton.accessibilityIdentifier = "bookshelf.book-list.search.clear"
-        clearButton.accessibilityLabel = "清除搜索"
-        cancelButton.accessibilityIdentifier = "bookshelf.book-list.search.cancel"
-        cancelButton.accessibilityLabel = "取消搜索"
-
-        if showsInput,
-           configuration.browseSearchFocusTrigger > 0,
-           configuration.browseSearchFocusTrigger != lastFocusTrigger {
-            lastFocusTrigger = configuration.browseSearchFocusTrigger
-            DispatchQueue.main.async { [weak self] in
-                self?.textField.becomeFirstResponder()
-            }
-        } else if !showsInput {
-            textField.resignFirstResponder()
-        }
-        updateSearchAppearance(
-            isFocused: showsInput && textField.isFirstResponder,
-            showsInput: showsInput,
-            animated: didApplyInitialSearchMode || didChangeHeight
-        )
-        didApplyInitialSearchMode = true
+        searchSurface.configure(with: BookshelfSearchSurfaceConfiguration(
+            namespace: "bookshelf.book-list.search",
+            placeholder: configuration.browseSearchPlaceholder,
+            keyword: configuration.browseSearchText,
+            showsInput: configuration.showsExpandedSearchSurface,
+            showsClearAction: configuration.hasBrowseSearchText || configuration.hasBrowseSearchKeyword,
+            usesAccessibilityLayout: configuration.searchDrawerHeight > BookshelfBookListChromeMetrics.normalSearchAreaHeight,
+            focusTrigger: configuration.browseSearchFocusTrigger,
+            accessibilityLabel: configuration.browseSearchPlaceholder,
+            onActivate: configuration.onActivateBrowseSearch,
+            onTextChange: configuration.onBrowseSearchKeywordChange,
+            onSubmit: configuration.onSubmitBrowseSearch,
+            onClear: configuration.onClearBrowseSearch,
+            onCancel: configuration.onCollapseBrowseSearch,
+            onFocusChange: configuration.onBrowseSearchFocusChange
+        ))
     }
 
     private func setupViewHierarchy() {
         backgroundColor = .clear
         contentView.backgroundColor = .clear
-
-        containerControl.translatesAutoresizingMaskIntoConstraints = false
-        containerControl.backgroundColor = .clear
-        containerControl.clipsToBounds = false
-        containerControl.addTarget(self, action: #selector(handleContainerTap), for: .touchUpInside)
-        containerControl.onAccessibilityActivate = { [weak self] in
-            self?.handleContainerTap()
-            return true
-        }
-
-        surfaceView.translatesAutoresizingMaskIntoConstraints = false
-        surfaceView.isUserInteractionEnabled = false
-        surfaceView.layer.cornerRadius = Style.cornerRadius
-        surfaceView.layer.cornerCurve = .continuous
-        surfaceView.layer.borderWidth = CardStyle.borderWidth
-        surfaceView.clipsToBounds = true
-
-        iconView.translatesAutoresizingMaskIntoConstraints = false
-        iconView.contentMode = .scaleAspectFit
-        iconView.setContentHuggingPriority(.required, for: .horizontal)
-
-        textContainerView.translatesAutoresizingMaskIntoConstraints = false
-        textContainerView.setContentHuggingPriority(.defaultLow, for: .horizontal)
-        textContainerView.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
-
-        placeholderLabel.font = BookshelfTypography.uiSearchField
-        placeholderLabel.adjustsFontForContentSizeCategory = true
-        placeholderLabel.numberOfLines = 1
-
-        textField.font = BookshelfTypography.uiSearchField
-        textField.adjustsFontForContentSizeCategory = true
-        textField.textColor = UIColor(Color.textPrimary)
-        textField.tintColor = UIColor(Color.brand)
-        textField.borderStyle = .none
-        textField.returnKeyType = .search
-        textField.autocapitalizationType = .none
-        textField.autocorrectionType = .no
-        textField.delegate = self
-        textField.addTarget(self, action: #selector(handleTextChange), for: .editingChanged)
-        textField.alpha = 0
-        textField.isUserInteractionEnabled = false
-        textField.isAccessibilityElement = false
-
-        clearButton.setImage(UIImage(systemName: "xmark.circle.fill"), for: .normal)
-        clearButton.tintColor = UIColor.tertiaryLabel
-        clearButton.addTarget(self, action: #selector(handleClearTap), for: .touchUpInside)
-        clearButton.setContentHuggingPriority(.required, for: .horizontal)
-        clearButton.alpha = 0
-        clearButton.isUserInteractionEnabled = false
-
-        cancelButton.translatesAutoresizingMaskIntoConstraints = false
-        cancelButton.setTitle("取消", for: .normal)
-        cancelButton.titleLabel?.font = BookshelfTypography.uiSearchField
-        cancelButton.titleLabel?.adjustsFontForContentSizeCategory = true
-        cancelButton.setTitleColor(UIColor(Color.textSecondary), for: .normal)
-        cancelButton.addTarget(self, action: #selector(handleCancelTap), for: .touchUpInside)
-        cancelButton.setContentHuggingPriority(.required, for: .horizontal)
-        cancelButton.alpha = 0
-        cancelButton.isUserInteractionEnabled = false
-
-        stackView.translatesAutoresizingMaskIntoConstraints = false
-        stackView.axis = .horizontal
-        stackView.alignment = .center
-        stackView.spacing = Spacing.compact
-        stackView.isUserInteractionEnabled = false
-        stackView.addArrangedSubview(iconView)
-        stackView.addArrangedSubview(textContainerView)
-        stackView.addArrangedSubview(clearButton)
-        textContainerView.addSubview(placeholderLabel)
-        textContainerView.addSubview(textField)
-        placeholderLabel.translatesAutoresizingMaskIntoConstraints = false
-        textField.translatesAutoresizingMaskIntoConstraints = false
-
-        contentView.addSubview(containerControl)
-        containerControl.addSubview(surfaceView)
-        containerControl.addSubview(stackView)
-        containerControl.addSubview(cancelButton)
-        let containerHeightConstraint = containerControl.heightAnchor.constraint(equalToConstant: Style.touchHeight)
-        let surfaceHeightConstraint = surfaceView.heightAnchor.constraint(equalToConstant: Style.compactVisualHeight)
-        let cancelButtonWidthConstraint = cancelButton.widthAnchor.constraint(equalToConstant: 0)
-        let surfaceToCancelSpacingConstraint = surfaceView.trailingAnchor.constraint(equalTo: cancelButton.leadingAnchor)
-        self.containerHeightConstraint = containerHeightConstraint
-        self.surfaceHeightConstraint = surfaceHeightConstraint
-        self.cancelButtonWidthConstraint = cancelButtonWidthConstraint
-        self.surfaceToCancelSpacingConstraint = surfaceToCancelSpacingConstraint
-        updateSearchAppearance(isFocused: false, showsInput: false, animated: false)
-
+        searchSurface.translatesAutoresizingMaskIntoConstraints = false
+        contentView.addSubview(searchSurface)
         NSLayoutConstraint.activate([
-            containerControl.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: Spacing.screenEdge),
-            containerControl.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -Spacing.screenEdge),
-            containerControl.centerYAnchor.constraint(equalTo: contentView.centerYAnchor),
-            containerControl.topAnchor.constraint(greaterThanOrEqualTo: contentView.topAnchor),
-            containerControl.bottomAnchor.constraint(lessThanOrEqualTo: contentView.bottomAnchor),
-            containerHeightConstraint,
-
-            surfaceView.leadingAnchor.constraint(equalTo: containerControl.leadingAnchor),
-            surfaceToCancelSpacingConstraint,
-            surfaceView.centerYAnchor.constraint(equalTo: containerControl.centerYAnchor),
-            surfaceHeightConstraint,
-
-            cancelButton.trailingAnchor.constraint(equalTo: containerControl.trailingAnchor),
-            cancelButton.centerYAnchor.constraint(equalTo: containerControl.centerYAnchor),
-            cancelButton.heightAnchor.constraint(equalToConstant: Style.touchHeight),
-            cancelButtonWidthConstraint,
-
-            stackView.leadingAnchor.constraint(equalTo: surfaceView.leadingAnchor, constant: Spacing.base),
-            stackView.trailingAnchor.constraint(equalTo: surfaceView.trailingAnchor, constant: -Spacing.tiny),
-            stackView.topAnchor.constraint(equalTo: containerControl.topAnchor),
-            stackView.bottomAnchor.constraint(equalTo: containerControl.bottomAnchor),
-
-            iconView.widthAnchor.constraint(equalToConstant: Style.iconSize),
-            iconView.heightAnchor.constraint(equalToConstant: Style.iconSize),
-            textContainerView.heightAnchor.constraint(greaterThanOrEqualToConstant: Style.iconSize),
-            placeholderLabel.leadingAnchor.constraint(equalTo: textContainerView.leadingAnchor),
-            placeholderLabel.trailingAnchor.constraint(equalTo: textContainerView.trailingAnchor),
-            placeholderLabel.centerYAnchor.constraint(equalTo: textContainerView.centerYAnchor),
-            textField.leadingAnchor.constraint(equalTo: textContainerView.leadingAnchor),
-            textField.trailingAnchor.constraint(equalTo: textContainerView.trailingAnchor),
-            textField.topAnchor.constraint(equalTo: textContainerView.topAnchor),
-            textField.bottomAnchor.constraint(equalTo: textContainerView.bottomAnchor),
-            clearButton.widthAnchor.constraint(equalToConstant: Spacing.actionReserved),
-            clearButton.heightAnchor.constraint(equalToConstant: Spacing.actionReserved)
+            searchSurface.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: Spacing.screenEdge),
+            searchSurface.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -Spacing.screenEdge),
+            searchSurface.topAnchor.constraint(equalTo: contentView.topAnchor),
+            searchSurface.bottomAnchor.constraint(equalTo: contentView.bottomAnchor)
         ])
-    }
-
-    @objc private func handleContainerTap() {
-        if !showsInputMode {
-            onActivate()
-        } else {
-            textField.becomeFirstResponder()
-        }
-    }
-
-    @objc private func handleTextChange() {
-        let text = textField.text ?? ""
-        setClearActionVisible(!text.isEmpty, animated: true)
-        onTextChange(text)
-    }
-
-    @objc private func handleClearTap() {
-        guard !(textField.text ?? "").isEmpty else { return }
-        textField.text = nil
-        setClearActionVisible(false, animated: true)
-        onClear()
-        textField.becomeFirstResponder()
-    }
-
-    @objc private func handleCancelTap() {
-        let hadText = !(textField.text ?? "").isEmpty
-        textField.text = nil
-        setClearActionVisible(false, animated: true)
-        textField.resignFirstResponder()
-        if hadText {
-            onClear()
-        }
-        onCollapse()
-    }
-
-    func textFieldDidBeginEditing(_ textField: UITextField) {
-        updateSearchAppearance(isFocused: true, showsInput: true, animated: true)
-        onFocusChange(true)
-    }
-
-    func textFieldDidEndEditing(_ textField: UITextField) {
-        updateSearchAppearance(isFocused: false, showsInput: showsInputMode, animated: true)
-        onFocusChange(false)
-    }
-
-    /// 在同一文本容器内交接 placeholder 与输入控件，避免展开搜索时内部元素闪现。
-    private func setSearchMode(_ showsInput: Bool, showsClearAction: Bool, animated: Bool) {
-        showsInputMode = showsInput
-        self.showsClearAction = showsClearAction
-        textField.isUserInteractionEnabled = showsInput
-        textField.isAccessibilityElement = showsInput
-        clearButton.isUserInteractionEnabled = showsInput && showsClearAction
-        clearButton.isAccessibilityElement = showsInput && showsClearAction
-        cancelButton.isUserInteractionEnabled = showsInput
-        cancelButton.isAccessibilityElement = showsInput
-        cancelButtonWidthConstraint?.constant = showsInput ? Style.cancelButtonWidth : 0
-        surfaceToCancelSpacingConstraint?.constant = showsInput ? -Spacing.cozy : 0
-        let updates = {
-            self.placeholderLabel.alpha = showsInput ? 0 : 1
-            self.placeholderLabel.transform = showsInput
-                ? CGAffineTransform(translationX: 0, y: -2)
-                : .identity
-            self.textField.alpha = showsInput ? 1 : 0
-            self.textField.transform = showsInput
-                ? .identity
-                : CGAffineTransform(translationX: 0, y: 2)
-            self.clearButton.alpha = showsInput && showsClearAction ? 1 : 0
-            self.clearButton.transform = showsInput && showsClearAction
-                ? .identity
-                : CGAffineTransform(scaleX: 0.92, y: 0.92)
-            self.cancelButton.alpha = showsInput ? 1 : 0
-            self.cancelButton.transform = showsInput
-                ? .identity
-                : CGAffineTransform(translationX: 6, y: 0)
-            self.contentView.layoutIfNeeded()
-        }
-        guard animated else {
-            updates()
-            return
-        }
-        UIView.animate(
-            withDuration: BookshelfManagementMotion.bookListSearchSurfaceDuration,
-            delay: 0,
-            options: [.allowUserInteraction, .beginFromCurrentState, .curveEaseInOut],
-            animations: updates
-        )
-    }
-
-    /// 跟随输入内容显隐清除按钮，保证空文本时右侧只保留“取消”退出语义。
-    private func setClearActionVisible(_ isVisible: Bool, animated: Bool) {
-        guard showsClearAction != isVisible else { return }
-        showsClearAction = isVisible
-        clearButton.isUserInteractionEnabled = showsInputMode && isVisible
-        clearButton.isAccessibilityElement = showsInputMode && isVisible
-        let updates = {
-            self.clearButton.alpha = self.showsInputMode && isVisible ? 1 : 0
-            self.clearButton.transform = self.showsInputMode && isVisible
-                ? .identity
-                : CGAffineTransform(scaleX: 0.92, y: 0.92)
-        }
-        guard animated else {
-            updates()
-            return
-        }
-        UIView.animate(
-            withDuration: BookshelfManagementMotion.bookListSearchSurfaceDuration,
-            delay: 0,
-            options: [.allowUserInteraction, .beginFromCurrentState, .curveEaseInOut],
-            animations: updates
-        )
-    }
-
-    /// 按折叠、输入和聚焦态同步 surface 材质，让背景与边框随搜索状态细腻过渡。
-    private func updateSearchAppearance(isFocused: Bool, showsInput: Bool, animated: Bool) {
-        isSearchFocused = isFocused
-        let backgroundOpacity: Double
-        let borderOpacity: Double
-        if isFocused {
-            backgroundOpacity = Style.focusedBackgroundOpacity
-            borderOpacity = Style.focusedBorderOpacity
-        } else if showsInput {
-            backgroundOpacity = Style.expandedBackgroundOpacity
-            borderOpacity = Style.expandedBorderOpacity
-        } else {
-            backgroundOpacity = Style.collapsedBackgroundOpacity
-            borderOpacity = Style.collapsedBorderOpacity
-        }
-        let backgroundColor = UIColor(Color.surfaceCard.opacity(backgroundOpacity))
-        let borderWidth = isFocused ? max(1, CardStyle.borderWidth) : CardStyle.borderWidth
-        let borderColor = UIColor(
-            isFocused
-                ? Color.brand.opacity(borderOpacity)
-                : Color.surfaceBorderSubtle.opacity(borderOpacity)
-        ).cgColor
-        let updates = {
-            self.surfaceView.backgroundColor = backgroundColor
-            self.surfaceView.layer.borderWidth = borderWidth
-            self.surfaceView.layer.borderColor = borderColor
-            self.iconView.tintColor = UIColor(isFocused ? Color.iconSecondary : Color.textHint)
-            self.placeholderLabel.textColor = UIColor(Color.textHint)
-            self.clearButton.tintColor = UIColor(Color.textHint)
-            self.contentView.layoutIfNeeded()
-        }
-        guard animated else {
-            updates()
-            return
-        }
-        UIView.animate(
-            withDuration: BookshelfManagementMotion.bookListSearchSurfaceDuration,
-            delay: 0,
-            options: [.allowUserInteraction, .beginFromCurrentState, .curveEaseInOut],
-            animations: updates
-        )
     }
 }
 
@@ -3365,7 +3255,7 @@ private struct BookshelfBookListGridItemView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .opacity(isEditing ? (isSelected ? 1 : BookshelfBookListSelectionVisualStyle.unselectedEditingOpacity) : 1)
-        .overlay(alignment: .topTrailing) {
+        .overlay(alignment: .bottomLeading) {
             if isEditing {
                 BookshelfSelectionOverlay(isSelected: isSelected)
                     .transition(selectionOverlayTransition)
@@ -3500,16 +3390,6 @@ private struct BookshelfBookListGridItemView: View {
               !XMKeywordHighlighting.contains(book.author, keyword: searchKeyword) else {
             return nil
         }
-        let readStatusName = book.readStatusName.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !readStatusName.isEmpty,
-           XMKeywordHighlighting.contains(readStatusName, keyword: searchKeyword) {
-            return "状态：\(readStatusName)"
-        }
-        let sourceName = book.sourceName.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !sourceName.isEmpty,
-           XMKeywordHighlighting.contains(sourceName, keyword: searchKeyword) {
-            return "来源：\(sourceName)"
-        }
         return nil
     }
 
@@ -3589,7 +3469,7 @@ private struct BookshelfBookListRowView: View {
                 .stroke(Color.surfaceBorderSubtle, lineWidth: CardStyle.borderWidth)
         }
         .opacity(isEditing ? (isSelected ? 1 : BookshelfBookListSelectionVisualStyle.unselectedEditingOpacity) : 1)
-        .overlay(alignment: .topTrailing) {
+        .overlay(alignment: .bottomLeading) {
             if isEditing {
                 BookshelfSelectionOverlay(isSelected: isSelected)
                     .transition(selectionOverlayTransition)
@@ -3690,16 +3570,6 @@ private struct BookshelfBookListRowView: View {
               !XMKeywordHighlighting.contains(book.title, keyword: searchKeyword),
               !XMKeywordHighlighting.contains(book.author, keyword: searchKeyword) else {
             return nil
-        }
-        let readStatusName = book.readStatusName.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !readStatusName.isEmpty,
-           XMKeywordHighlighting.contains(readStatusName, keyword: searchKeyword) {
-            return "状态：\(readStatusName)"
-        }
-        let sourceName = book.sourceName.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !sourceName.isEmpty,
-           XMKeywordHighlighting.contains(sourceName, keyword: searchKeyword) {
-            return "来源：\(sourceName)"
         }
         return nil
     }

@@ -12,6 +12,7 @@ struct BookshelfGroupGridItemView: View {
     let group: BookshelfGroupPayload
     var isPinned = false
     var titleDisplayMode: BookshelfTitleDisplayMode = .standard
+    var searchKeyword = ""
 
     var body: some View {
         VStack(alignment: .leading, spacing: Spacing.half) {
@@ -36,7 +37,8 @@ struct BookshelfGroupGridItemView: View {
             text: group.name,
             mode: titleDisplayMode,
             style: .captionMedium,
-            color: .textPrimary
+            color: .textPrimary,
+            highlightKeyword: searchKeyword
         )
         .frame(maxWidth: .infinity, alignment: .leading)
     }
