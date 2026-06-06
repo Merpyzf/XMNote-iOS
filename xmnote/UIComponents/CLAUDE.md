@@ -25,10 +25,11 @@
 
 ## Tabs/
 
-- `KeepAliveSwitcherHost.swift`: 通用懒激活保活切换容器（已激活子页常驻，仅切换可见性）
+- `KeepAliveSwitcherHost.swift`: 通用懒激活保活切换容器（已激活子页常驻，selection/激活集合/显隐硬切）
+- `HomeSubtabScaffold.swift`: 首页二级页壳层（统一顶部切换、保活宿主、顶部渐变与 hardSwitch 默认策略）
 - `HorizontalPagingHost.swift`: 通用横向分页宿主（分页吸附、选中同步、窗口化懒挂载与页级生命周期）
 - `SubtabBootstrapCoordinator.swift`: 通用二级页启动协调器（warmup 去重、启动阶段跟踪）
-- `TopSwitcher.swift`: 顶部标题/标签切换组件
+- `TopSwitcher.swift`: 顶部标题/标签切换组件（hardSwitch 下路由 selection 与视觉 selection 同帧无动画写入）
 
 ## Charts/
 

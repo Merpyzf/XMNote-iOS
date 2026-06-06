@@ -17,6 +17,7 @@ struct BookSearchRepository: BookSearchRepositoryProtocol {
         static let defaultSource = "book_search_default_source"
         static let quickSourceSwitch = "book_search_quick_source_switch"
         static let autoBackHome = "book_search_auto_back_home"
+        static let pageCounts = "book_search_page_counts"
     }
 
     init(
@@ -29,7 +30,13 @@ struct BookSearchRepository: BookSearchRepositoryProtocol {
 
     /// 搜索远端书籍列表，统一交给服务层屏蔽站点差异。
     func search(keyword: String, source: BookSearchSource) async throws -> [BookSearchResult] {
-        try await service.search(keyword: keyword, source: source)
+        let settings = fetchSearchSettings()
+        let effectiveSource = source.isProductionVisible ? source : BookSearchSettings.default.defaultSource
+        return try await service.search(
+            keyword: keyword,
+            source: effectiveSource,
+            pageCount: settings.pageCount(for: effectiveSource)
+        )
     }
 
     /// 将轻量搜索条目补齐为录入页种子，豆瓣场景会在这里抓详情页。
@@ -64,14 +71,41 @@ struct BookSearchRepository: BookSearchRepositoryProtocol {
         return BookSearchSettings(
             defaultSource: source,
             isQuickSourceSwitchEnabled: userDefaults.bool(forKey: Keys.quickSourceSwitch),
-            shouldReturnToBookshelfAfterSave: userDefaults.bool(forKey: Keys.autoBackHome)
-        )
+            shouldReturnToBookshelfAfterSave: userDefaults.bool(forKey: Keys.autoBackHome),
+            pageCounts: fetchSearchPageCounts()
+        ).normalized()
     }
 
     /// 持久化搜索设置，供搜索页与设置页共享当前来源和流程偏好。
     func saveSearchSettings(_ settings: BookSearchSettings) {
-        userDefaults.set(settings.defaultSource.rawValue, forKey: Keys.defaultSource)
-        userDefaults.set(settings.isQuickSourceSwitchEnabled, forKey: Keys.quickSourceSwitch)
-        userDefaults.set(settings.shouldReturnToBookshelfAfterSave, forKey: Keys.autoBackHome)
+        let normalized = settings.normalized()
+        userDefaults.set(normalized.defaultSource.rawValue, forKey: Keys.defaultSource)
+        userDefaults.set(normalized.isQuickSourceSwitchEnabled, forKey: Keys.quickSourceSwitch)
+        userDefaults.set(normalized.shouldReturnToBookshelfAfterSave, forKey: Keys.autoBackHome)
+        saveSearchPageCounts(normalized.pageCounts)
+    }
+
+    private func fetchSearchPageCounts() -> [BookSearchSource: Int] {
+        guard let raw = userDefaults.dictionary(forKey: Keys.pageCounts) as? [String: Int] else {
+            return BookSearchSettings.defaultPageCounts
+        }
+        var counts = BookSearchSettings.defaultPageCounts
+        for (rawKey, value) in raw {
+            guard let sourceID = Int(rawKey),
+                  let source = BookSearchSource(rawValue: sourceID),
+                  source.supportsSearchPageCount else {
+                continue
+            }
+            counts[source] = BookSearchSettings.clampedPageCount(value)
+        }
+        return counts
+    }
+
+    private func saveSearchPageCounts(_ pageCounts: [BookSearchSource: Int]) {
+        let raw = pageCounts.reduce(into: [String: Int]()) { result, item in
+            guard item.key.supportsSearchPageCount else { return }
+            result[String(item.key.rawValue)] = BookSearchSettings.clampedPageCount(item.value)
+        }
+        userDefaults.set(raw, forKey: Keys.pageCounts)
     }
 }

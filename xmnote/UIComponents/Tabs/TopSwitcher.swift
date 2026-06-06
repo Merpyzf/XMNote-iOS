@@ -1,11 +1,50 @@
 /**
- * [INPUT]: 依赖 UIComponents/TopBar 的 PrimaryTopBar 与 AddMenuCircleButton，依赖 SwiftUI 动画与无障碍能力
- * [OUTPUT]: 对外提供 TopSwitcher 组件（支持标签模式与标题模式）
+ * [INPUT]: 依赖 UIComponents/TopBar 的 PrimaryTopBar 与 AddMenuCircleButton，依赖 SwiftUI 事务、局部动画与无障碍能力
+ * [OUTPUT]: 对外提供 TopSwitcher 组件（支持标签模式与标题模式，默认将外部 selection 作为无动画路由写入）
  * [POS]: UIComponents/Tabs 的顶部切换入口，被 Book/Note/Reading/Personal 页面复用
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
 import SwiftUI
+
+/// 顶部切换器写入外部 selection 时采用的事务策略，区分路由硬切与显式动画切换。
+enum TopSwitcherSelectionTransactionPolicy {
+    case hardSwitch
+    case animated(Animation)
+
+    /// 写入父级路由 selection；首页二级页默认禁用动画，避免动画事务污染内容宿主。
+    func updateRouteSelection(_ update: () -> Void) {
+        switch self {
+        case .hardSwitch:
+            updateWithoutAnimation(update)
+        case .animated(let animation):
+            withAnimation(animation) {
+                update()
+            }
+        }
+    }
+
+    /// 更新 TopSwitcher 自己的视觉 selection；硬切路由必须与内容页同帧落位。
+    func updateTopFeedback(_ update: () -> Void) {
+        switch self {
+        case .hardSwitch:
+            updateWithoutAnimation(update)
+        case .animated(let animation):
+            withAnimation(animation) {
+                update()
+            }
+        }
+    }
+
+    /// 在禁动画事务中同步 selection，避免外层事务把路由硬切扩散成视觉过渡。
+    private func updateWithoutAnimation(_ update: () -> Void) {
+        var transaction = Transaction(animation: nil)
+        transaction.disablesAnimations = true
+        withTransaction(transaction) {
+            update()
+        }
+    }
+}
 
 /// 首页顶部切换控件：支持「二级标签」与「单标题」两种模式。
 struct TopSwitcher<Tab: Hashable, Trailing: View>: View {
@@ -20,6 +59,7 @@ struct TopSwitcher<Tab: Hashable, Trailing: View>: View {
     }
 
     private let mode: Mode
+    private let selectionTransactionPolicy: TopSwitcherSelectionTransactionPolicy
     private let trailing: Trailing
 
     /// 注入分段数据与标题文案，构建顶部切换器交互。
@@ -27,6 +67,7 @@ struct TopSwitcher<Tab: Hashable, Trailing: View>: View {
         selection: Binding<Tab>,
         tabs: [Tab],
         quote: String = "“",
+        selectionTransactionPolicy: TopSwitcherSelectionTransactionPolicy = .hardSwitch,
         titleProvider: @escaping (Tab) -> String,
         @ViewBuilder trailing: () -> Trailing
     ) {
@@ -36,6 +77,7 @@ struct TopSwitcher<Tab: Hashable, Trailing: View>: View {
             quote: quote,
             titleProvider: titleProvider
         )
+        self.selectionTransactionPolicy = selectionTransactionPolicy
         self.trailing = trailing()
     }
 
@@ -47,6 +89,7 @@ struct TopSwitcher<Tab: Hashable, Trailing: View>: View {
                     selection: selection,
                     tabs: tabs,
                     quote: quote,
+                    selectionTransactionPolicy: selectionTransactionPolicy,
                     titleProvider: titleProvider
                 )
                 .onAppear {
@@ -86,6 +129,7 @@ extension TopSwitcher where Tab == Never {
         @ViewBuilder trailing: () -> Trailing
     ) {
         self.mode = .title(text: title, quote: quote)
+        self.selectionTransactionPolicy = .hardSwitch
         self.trailing = trailing()
     }
 }
@@ -108,9 +152,15 @@ private struct TopSwitcherTabBar<Tab: Hashable>: View {
     @Binding var selection: Tab
     let tabs: [Tab]
     let quote: String
+    let selectionTransactionPolicy: TopSwitcherSelectionTransactionPolicy
     let titleProvider: (Tab) -> String
 
+    @State private var visualSelection: Tab?
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+    private var displayedSelection: Tab {
+        visualSelection ?? selection
+    }
 
     var body: some View {
         HStack(spacing: Spacing.double) {
@@ -120,10 +170,26 @@ private struct TopSwitcherTabBar<Tab: Hashable>: View {
             #if DEBUG
             BrandTypography.debugLogTopSwitcherTabsUsesQuoteIcon(tabs.count)
             #endif
+            guard visualSelection == nil else { return }
+            selectionTransactionPolicy.updateTopFeedback {
+                visualSelection = selection
+            }
+        }
+        .onChange(of: selection) { _, newSelection in
+            guard visualSelection != newSelection else { return }
+            selectionTransactionPolicy.updateTopFeedback {
+                visualSelection = newSelection
+            }
+        }
+        .onChange(of: tabs) { _, newTabs in
+            guard let visualSelection, !newTabs.contains(visualSelection) else { return }
+            selectionTransactionPolicy.updateTopFeedback {
+                self.visualSelection = selection
+            }
         }
         .backgroundPreferenceValue(TopSwitcherTabAnchorKey.self, alignment: .topLeading) { anchors in
             GeometryReader { proxy in
-                if let anchor = anchors[selection] {
+                if let anchor = anchors[displayedSelection] {
                     let rect = proxy[anchor]
                     Image(TopSwitcherQuoteDecorationMetrics.assetName)
                         .resizable()
@@ -138,7 +204,6 @@ private struct TopSwitcherTabBar<Tab: Hashable>: View {
                         )
                         .allowsHitTesting(false)
                         .accessibilityHidden(true)
-                        .animation(.snappy(duration: 0.25, extraBounce: 0.06), value: selection)
                 }
             }
         }
@@ -154,12 +219,16 @@ private struct TopSwitcherTabBar<Tab: Hashable>: View {
     }
 
     private func tabItem(_ tab: Tab) -> some View {
-        let isSelected = selection == tab
+        let isSelected = displayedSelection == tab
         let title = titleProvider(tab)
 
         return Button {
-            withAnimation(.snappy(duration: 0.25, extraBounce: 0.06)) {
+            guard selection != tab else { return }
+            selectionTransactionPolicy.updateRouteSelection {
                 selection = tab
+            }
+            selectionTransactionPolicy.updateTopFeedback {
+                visualSelection = tab
             }
         } label: {
             Text(title)

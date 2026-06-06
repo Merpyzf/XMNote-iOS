@@ -62,6 +62,13 @@ private struct BookDetailContentView: View {
     @Bindable var viewModel: BookDetailViewModel
     @State private var readLoadingGate = LoadingGate()
 
+    private enum Layout {
+        static let attributeTitleWidth: CGFloat = 76
+        static var attributeDividerInset: CGFloat {
+            attributeTitleWidth + Spacing.base
+        }
+    }
+
     var body: some View {
         Group {
             if let book = viewModel.book {
@@ -96,22 +103,23 @@ private struct BookDetailContentView: View {
             LazyVStack(spacing: Spacing.base) {
                 bookHeader(book)
 
-                if viewModel.hasNotes {
-                    ForEach(viewModel.notes) { note in
-                        NavigationLink(
-                            value: ContentRoute.contentViewer(
-                                source: .bookNotes(bookId: bookId),
-                                initialItemID: .note(note.id)
-                            )
-                        ) {
-                            noteCard(note)
-                        }
-                        .buttonStyle(.plain)
-                    }
-                } else {
-                    EmptyStateView(icon: "text.quote", message: "暂无书摘")
-                        .frame(minHeight: 300)
+                if !book.attributes.isEmpty {
+                    attributesSection(book.attributes)
                 }
+
+                if let summary = nonEmptyPlainText(book.summary) {
+                    textSection(title: "简介", text: summary)
+                }
+
+                if let authorIntro = nonEmptyPlainText(book.authorIntro) {
+                    textSection(title: "作者简介", text: authorIntro)
+                }
+
+                if !book.chapters.isEmpty {
+                    chaptersSection(book.chapters)
+                }
+
+                notesSection
             }
             .padding(.horizontal, Spacing.screenEdge)
             .padding(.vertical, Spacing.base)
@@ -144,8 +152,7 @@ private struct BookDetailContentView: View {
     private func bookInfo(_ book: BookDetail) -> some View {
         VStack(alignment: .leading, spacing: Spacing.half) {
             Text(book.name)
-                .font(AppTypography.body)
-                .fontWeight(.semibold)
+                .font(AppTypography.bodyMedium)
                 .lineLimit(2)
                 .foregroundStyle(.primary)
 
@@ -181,6 +188,152 @@ private struct BookDetailContentView: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    // MARK: - Detail Sections
+
+    private func attributesSection(_ attributes: [BookDetailAttribute]) -> some View {
+        CardContainer {
+            VStack(spacing: Spacing.none) {
+                ForEach(Array(attributes.enumerated()), id: \.element.id) { index, attribute in
+                    if let route = route(for: attribute) {
+                        NavigationLink(value: route) {
+                            attributeRow(attribute, showsDisclosure: true)
+                        }
+                        .buttonStyle(.plain)
+                    } else {
+                        attributeRow(attribute, showsDisclosure: false)
+                    }
+
+                    if index < attributes.count - 1 {
+                        Divider()
+                            .padding(.leading, Layout.attributeDividerInset)
+                    }
+                }
+            }
+            .padding(.horizontal, Spacing.contentEdge)
+        }
+    }
+
+    private func attributeRow(_ attribute: BookDetailAttribute, showsDisclosure: Bool) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: Spacing.base) {
+            Text(attribute.kind.title)
+                .font(AppTypography.subheadline)
+                .foregroundStyle(Color.textSecondary)
+                .frame(width: Layout.attributeTitleWidth, alignment: .leading)
+
+            Text(attribute.value)
+                .font(AppTypography.body)
+                .foregroundStyle(Color.textPrimary)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+            if showsDisclosure {
+                Image(systemName: "chevron.right")
+                    .font(AppTypography.caption)
+                    .foregroundStyle(Color.textHint)
+            }
+        }
+        .padding(.vertical, Spacing.cozy)
+        .contentShape(Rectangle())
+        .accessibilityElement(children: .combine)
+    }
+
+    private func textSection(title: String, text: String) -> some View {
+        CardContainer {
+            VStack(alignment: .leading, spacing: Spacing.cozy) {
+                Text(title)
+                    .font(AppTypography.headlineSemibold)
+                    .foregroundStyle(Color.textPrimary)
+
+                Text(text)
+                    .font(AppTypography.body)
+                    .foregroundStyle(Color.textPrimary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(Spacing.contentEdge)
+        }
+    }
+
+    private func chaptersSection(_ chapters: [BookDetailChapter]) -> some View {
+        CardContainer {
+            VStack(alignment: .leading, spacing: Spacing.cozy) {
+                Text("目录")
+                    .font(AppTypography.headlineSemibold)
+                    .foregroundStyle(Color.textPrimary)
+
+                VStack(alignment: .leading, spacing: Spacing.none) {
+                    ForEach(Array(chapters.enumerated()), id: \.element.id) { index, chapter in
+                        Text(chapter.title)
+                            .font(AppTypography.body)
+                            .foregroundStyle(Color.textPrimary)
+                            .lineLimit(2)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .padding(.leading, chapterIndent(for: chapter))
+                            .padding(.vertical, Spacing.tight)
+
+                        if index < chapters.count - 1 {
+                            Divider()
+                                .padding(.leading, chapterIndent(for: chapter))
+                        }
+                    }
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(Spacing.contentEdge)
+        }
+    }
+
+    @ViewBuilder
+    private var notesSection: some View {
+        VStack(alignment: .leading, spacing: Spacing.base) {
+            Text("书摘")
+                .font(AppTypography.headlineSemibold)
+                .foregroundStyle(Color.textPrimary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.top, Spacing.half)
+
+            if viewModel.hasNotes {
+                ForEach(viewModel.notes) { note in
+                    NavigationLink(
+                        value: ContentRoute.contentViewer(
+                            source: .bookNotes(bookId: bookId),
+                            initialItemID: .note(note.id)
+                        )
+                    ) {
+                        noteCard(note)
+                    }
+                    .buttonStyle(.plain)
+                }
+            } else {
+                EmptyStateView(icon: "text.quote", message: "暂无书摘")
+                    .frame(minHeight: 180)
+            }
+        }
+    }
+
+    private func route(for attribute: BookDetailAttribute) -> BookRoute? {
+        switch attribute.kind {
+        case .author:
+            return BookRoute.bookshelfList(BookshelfBookListRoute(
+                context: .author(attribute.value),
+                title: attribute.value,
+                subtitleHint: "相关书籍"
+            ))
+        case .press:
+            return BookRoute.bookshelfList(BookshelfBookListRoute(
+                context: .press(attribute.value),
+                title: attribute.value,
+                subtitleHint: "相关书籍"
+            ))
+        case .translator, .pubDate, .isbn, .source, .readStatus:
+            return nil
+        }
+    }
+
+    private func chapterIndent(for chapter: BookDetailChapter) -> CGFloat {
+        CGFloat(max(0, min(chapter.level - 1, 4))) * Spacing.base
     }
 
     // MARK: - Note Card
@@ -229,6 +382,11 @@ private struct BookDetailContentView: View {
 
     private func plainTextPreview(from html: String) -> String {
         RichTextBridge.htmlToAttributed(html).string
+    }
+
+    private func nonEmptyPlainText(_ value: String) -> String? {
+        let text = plainTextPreview(from: value).trimmingCharacters(in: .whitespacesAndNewlines)
+        return text.isEmpty ? nil : text
     }
 }
 

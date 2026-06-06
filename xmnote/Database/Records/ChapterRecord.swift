@@ -20,6 +20,12 @@ nonisolated struct ChapterRecord: BaseRecord {
     var remark: String = ""
     var chapterOrder: Int64 = 0
     var isImport: Int64 = 0
+    var chapterLevel: Int64 = 0
+    var sourceType: Int64 = 0
+    var sourceUid: String?
+    var sourceAnchor: String?
+    var sourceOrder: Int64 = 0
+    var sourcePath: String?
 
     // MARK: - BaseRecord
     var createdDate: Int64 = 0
@@ -34,6 +40,12 @@ nonisolated struct ChapterRecord: BaseRecord {
         case parentId = "parent_id"
         case chapterOrder = "chapter_order"
         case isImport = "is_import"
+        case chapterLevel = "chapter_level"
+        case sourceType = "source_type"
+        case sourceUid = "source_uid"
+        case sourceAnchor = "source_anchor"
+        case sourceOrder = "source_order"
+        case sourcePath = "source_path"
         case createdDate = "created_date"
         case updatedDate = "updated_date"
         case lastSyncDate = "last_sync_date"
@@ -58,6 +70,12 @@ extension ChapterRecord {
             remark: try container.decodeStringOrEmpty(forKey: .remark),
             chapterOrder: try container.decodeIfPresent(Int64.self, forKey: .chapterOrder) ?? 0,
             isImport: try container.decodeIfPresent(Int64.self, forKey: .isImport) ?? 0,
+            chapterLevel: try container.decodeIfPresent(Int64.self, forKey: .chapterLevel) ?? 0,
+            sourceType: try container.decodeIfPresent(Int64.self, forKey: .sourceType) ?? 0,
+            sourceUid: try container.decodeIfPresent(String.self, forKey: .sourceUid),
+            sourceAnchor: try container.decodeIfPresent(String.self, forKey: .sourceAnchor),
+            sourceOrder: try container.decodeIfPresent(Int64.self, forKey: .sourceOrder) ?? 0,
+            sourcePath: try container.decodeIfPresent(String.self, forKey: .sourcePath),
             createdDate: try container.decodeIfPresent(Int64.self, forKey: .createdDate) ?? 0,
             updatedDate: try container.decodeIfPresent(Int64.self, forKey: .updatedDate) ?? 0,
             lastSyncDate: try container.decodeIfPresent(Int64.self, forKey: .lastSyncDate) ?? 0,

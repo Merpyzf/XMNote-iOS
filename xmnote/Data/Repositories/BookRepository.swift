@@ -3,7 +3,7 @@ import GRDB
 
 /**
  * [INPUT]: 依赖 AppDatabase 提供本地数据库连接，依赖 ObservationStream 提供观察流桥接
- * [OUTPUT]: 对外提供 BookRepository（BookRepositoryProtocol 的 GRDB 实现，含书架列表读写、显示设置变更观察、分组移入移出、批量编辑、删除与重命名管理）
+ * [OUTPUT]: 对外提供 BookRepository（BookRepositoryProtocol 的 GRDB 实现，含书架列表读写、显示设置变更观察、分组移入移出、书单加入、批量编辑、删除与重命名管理）
  * [POS]: Data 层书籍仓储实现，统一封装书架列表/详情/书摘数据读取、默认书架分组预览排序与默认书架排序置顶写入
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -35,7 +35,13 @@ struct BookRepository: BookRepositoryProtocol {
         searchKeyword: String?
     ) -> AsyncThrowingStream<[BookshelfItem], Error> {
         ObservationStream.make(in: databaseManager.database.dbPool) { db in
-            try fetchBookshelf(db, setting: setting, searchKeyword: searchKeyword)
+            let rows = try fetchAllBookshelfBookRows(db)
+            return try fetchBookshelf(
+                db,
+                rows: rows,
+                setting: setting,
+                searchKeyword: searchKeyword
+            )
         }
     }
 
@@ -204,6 +210,27 @@ struct BookRepository: BookRepositoryProtocol {
     func fetchBookshelfMoveTargetGroups(excludingGroupID: Int64?) async throws -> [BookshelfMoveGroupOption] {
         try await databaseManager.database.dbPool.read { db in
             try fetchMoveTargetGroups(db, excludingGroupID: excludingGroupID)
+        }
+    }
+
+    /// 读取可作为“加入书单”目标的手动书单，排除年度书单。
+    func fetchManualBookCollections() async throws -> [BookCollectionSummary] {
+        try await databaseManager.database.dbPool.read { db in
+            try fetchManualBookCollections(db)
+        }
+    }
+
+    /// 新建手动书单，供加入书单 Sheet 在面板内直接创建并回填选中项。
+    func createBookCollection(title: String) async throws -> BookCollectionSummary {
+        try await databaseManager.database.dbPool.write { db in
+            try createBookCollection(db, title: title)
+        }
+    }
+
+    /// 批量加入书单，已有有效关系不会重复插入。
+    func addBooks(_ bookIDs: [Int64], toCollection collectionID: Int64) async throws {
+        try await databaseManager.database.dbPool.write { db in
+            try addBooksToCollection(db, bookIDs: bookIDs, collectionID: collectionID)
         }
     }
 
@@ -391,6 +418,457 @@ struct BookRepository: BookRepositoryProtocol {
     }
 }
 
+/// 书籍阅读状态写入助手，统一批量管理、编辑页与新增书的状态历史和年度书单副作用。
+nonisolated enum BookReadStatusMutation {
+    /// 新书创建后插入初始阅读状态历史，并按 Android 年度书单语义同步归档关系。
+    static func insertInitialReadStatusAndSyncAnnual(
+        _ db: Database,
+        bookID: Int64,
+        statusID: Int64,
+        changedAt: Int64,
+        createdAt: Int64
+    ) throws {
+        try insertBookReadStatusRecord(
+            db,
+            bookID: bookID,
+            statusID: statusID,
+            changedAt: changedAt,
+            createdAt: createdAt
+        )
+        try AnnualCollectionSync.syncAfterReadHistoryChanged(db, bookID: bookID)
+    }
+
+    /// 按 Android `updateBookReadStatus` 语义更新单本书状态；读完状态会推进阅读位置并同步评分。
+    static func updateBookReadStatus(
+        _ db: Database,
+        bookID: Int64,
+        statusID: Int64,
+        changedAt: Int64,
+        updatedAt: Int64,
+        finishedRatingScore: Int64?
+    ) throws {
+        guard let bookState = try fetchBookState(db, bookID: bookID) else { return }
+        if let latestStatus = try fetchNewestReadStatusRecord(db, bookID: bookID),
+           latestStatus.readStatusID == statusID {
+            try updateNewestReadStatusRecord(
+                db,
+                recordID: latestStatus.id,
+                changedAt: changedAt,
+                updatedAt: updatedAt
+            )
+        } else {
+            try insertBookReadStatusRecord(
+                db,
+                bookID: bookID,
+                statusID: statusID,
+                changedAt: changedAt,
+                createdAt: updatedAt
+            )
+        }
+
+        try updateBookCurrentReadStatus(
+            db,
+            bookID: bookID,
+            userID: bookState.userID,
+            statusID: statusID,
+            changedAt: changedAt,
+            updatedAt: updatedAt
+        )
+
+        if statusID == BookEntryReadingStatus.finished.rawValue {
+            try markBookAsFinished(
+                db,
+                bookID: bookID,
+                positionUnit: bookState.positionUnit,
+                totalPosition: bookState.totalPosition,
+                totalPagination: bookState.totalPagination,
+                updatedAt: updatedAt
+            )
+            try updateBookRating(
+                db,
+                bookID: bookID,
+                ratingScore: max(0, min(finishedRatingScore ?? 0, 50)),
+                updatedAt: updatedAt
+            )
+        }
+
+        try AnnualCollectionSync.syncAfterReadHistoryChanged(db, bookID: bookID)
+    }
+
+    /// 读取状态写入所需的书籍基础字段。
+    static func fetchBookState(
+        _ db: Database,
+        bookID: Int64
+    ) throws -> (userID: Int64, positionUnit: Int64, totalPosition: Int64, totalPagination: Int64)? {
+        // SQL 目的：读取阅读状态写入所需的书籍用户与进度单位字段。
+        // 涉及表：book。
+        // 关键过滤：id = ?、is_deleted = 0、id != 0，跳过已删除书籍和占位书籍。
+        // 返回字段用途：user_id 用于同步当前状态过滤；position_unit/total_position/total_pagination 用于读完时推进到终点。
+        let sql = """
+            SELECT user_id, position_unit, total_position, total_pagination
+            FROM book
+            WHERE id = ?
+              AND is_deleted = 0
+              AND id != 0
+            LIMIT 1
+            """
+        guard let row = try Row.fetchOne(db, sql: sql, arguments: [bookID]) else { return nil }
+        return (
+            userID: row["user_id"] ?? 0,
+            positionUnit: row["position_unit"] ?? 0,
+            totalPosition: row["total_position"] ?? 0,
+            totalPagination: row["total_pagination"] ?? 0
+        )
+    }
+
+    /// 读取单本书最新的有效阅读状态记录。
+    static func fetchNewestReadStatusRecord(
+        _ db: Database,
+        bookID: Int64
+    ) throws -> (id: Int64, readStatusID: Int64)? {
+        // SQL 目的：读取单本书最新有效阅读状态记录，决定复用更新还是插入新记录。
+        // 涉及表：book_read_status_record。
+        // 关键过滤：book_id = ?、is_deleted = 0。
+        // 时间字段：changed_date 为毫秒时间戳；排序按 id DESC 后 changed_date DESC，对齐 Android 最新记录口径。
+        // 返回字段用途：id 用于更新最新记录，read_status_id 用于判断状态是否相同。
+        let sql = """
+            SELECT id, read_status_id
+            FROM book_read_status_record
+            WHERE book_id = ?
+              AND is_deleted = 0
+            ORDER BY id DESC, changed_date DESC
+            LIMIT 1
+            """
+        guard let row = try Row.fetchOne(db, sql: sql, arguments: [bookID]) else { return nil }
+        return (id: row["id"], readStatusID: row["read_status_id"])
+    }
+
+    /// 最新记录状态相同时更新时间，不新增历史。
+    static func updateNewestReadStatusRecord(
+        _ db: Database,
+        recordID: Int64,
+        changedAt: Int64,
+        updatedAt: Int64
+    ) throws {
+        // SQL 目的：当最新阅读状态与目标状态一致时，仅更新时间而不插入新历史。
+        // 涉及表：book_read_status_record。
+        // 关键过滤：id = ? 且 is_deleted = 0。
+        // 时间字段：changed_date 写入用户选择的毫秒时间戳，updated_date 写入本次写入毫秒时间戳。
+        // 副作用用途：复刻 Android updateBookReadStatus 中“最新同状态则更新”的历史合并语义。
+        let sql = """
+            UPDATE book_read_status_record
+            SET changed_date = ?,
+                updated_date = ?
+            WHERE id = ?
+              AND is_deleted = 0
+            """
+        try db.execute(sql: sql, arguments: [changedAt, updatedAt, recordID])
+    }
+
+    /// 插入一条新的阅读状态历史记录。
+    static func insertBookReadStatusRecord(
+        _ db: Database,
+        bookID: Int64,
+        statusID: Int64,
+        changedAt: Int64,
+        createdAt: Int64
+    ) throws {
+        var record = BookReadStatusRecordRecord(
+            id: nil,
+            bookId: bookID,
+            readStatusId: statusID,
+            changedDate: changedAt,
+            createdDate: createdAt,
+            updatedDate: 0,
+            lastSyncDate: 0,
+            isDeleted: 0
+        )
+        try record.insert(db)
+    }
+
+    /// 同步 book 表当前阅读状态字段。
+    static func updateBookCurrentReadStatus(
+        _ db: Database,
+        bookID: Int64,
+        userID: Int64,
+        statusID: Int64,
+        changedAt: Int64,
+        updatedAt: Int64
+    ) throws {
+        // SQL 目的：同步 book 当前阅读状态字段，供书架状态维度与详情页直接读取。
+        // 涉及表：book。
+        // 关键过滤：id = ?、user_id = ?、is_deleted = 0、id != 0，对齐 Android updateBookReadStatus 的用户与有效书过滤。
+        // 时间字段：read_status_changed_date 写入用户选择的毫秒时间戳，updated_date 写入本次写入毫秒时间戳。
+        // 副作用用途：更新当前状态，使 Repository 观察流刷新。
+        let sql = """
+            UPDATE book
+            SET updated_date = ?,
+                read_status_id = ?,
+                read_status_changed_date = ?
+            WHERE id = ?
+              AND user_id = ?
+              AND is_deleted = 0
+              AND id != 0
+            """
+        try db.execute(sql: sql, arguments: [updatedAt, statusID, changedAt, bookID, userID])
+    }
+
+    /// 标记书籍阅读位置到当前进度单位的终点。
+    static func markBookAsFinished(
+        _ db: Database,
+        bookID: Int64,
+        positionUnit: Int64,
+        totalPosition: Int64,
+        totalPagination: Int64,
+        updatedAt: Int64
+    ) throws {
+        let readPosition: Double?
+        switch positionUnit {
+        case BookEntryProgressUnit.progress.rawValue:
+            readPosition = 100.0
+        case BookEntryProgressUnit.position.rawValue where totalPosition != 0:
+            readPosition = Double(totalPosition)
+        case BookEntryProgressUnit.pagination.rawValue where totalPagination != 0:
+            readPosition = Double(totalPagination)
+        default:
+            readPosition = nil
+        }
+        guard let readPosition else { return }
+
+        // SQL 目的：标记读完时把当前阅读位置推进到终点，对齐 Android updateBookReadPositionSync。
+        // 涉及表：book。
+        // 关键过滤：id = ?、is_deleted = 0、id != 0。
+        // 时间字段：updated_date 写入本次写入毫秒时间戳；位置字段不涉及时区。
+        // 副作用用途：更新 current_position_unit 与 read_position，使阅读进度排序和详情展示同步到终点。
+        let sql = """
+            UPDATE book
+            SET current_position_unit = position_unit,
+                read_position = ?,
+                updated_date = ?
+            WHERE id = ?
+              AND is_deleted = 0
+              AND id != 0
+            """
+        try db.execute(sql: sql, arguments: [readPosition, updatedAt, bookID])
+    }
+
+    /// 更新单本有效书籍评分。
+    static func updateBookRating(
+        _ db: Database,
+        bookID: Int64,
+        ratingScore: Int64,
+        updatedAt: Int64
+    ) throws {
+        // SQL 目的：读完状态写入时同步评分，允许 0 分保存。
+        // 涉及表：book。
+        // 关键过滤：id = ?、is_deleted = 0、id != 0。
+        // 时间字段：updated_date 写入本次写入毫秒时间戳；score 为 0...50 的半星分值。
+        // 副作用用途：让评分排序、评分维度与详情展示和 Android 批量读完语义一致。
+        let sql = """
+            UPDATE book
+            SET score = ?,
+                updated_date = ?
+            WHERE id = ?
+              AND is_deleted = 0
+              AND id != 0
+            """
+        try db.execute(sql: sql, arguments: [max(0, min(ratingScore, 50)), updatedAt, bookID])
+    }
+}
+
+/// 年度书单同步助手，复刻 Android `updateCollectionCauseReadStatusChanged` 的关系维护规则。
+nonisolated enum AnnualCollectionSync {
+    /// 按当前读完历史重算指定书籍所属年度书单关系。
+    static func syncAfterReadHistoryChanged(_ db: Database, bookID: Int64) throws {
+        let linkedCollections = try fetchLinkedAnnualCollections(db, bookID: bookID)
+        let readDoneYears = try fetchCompletedReadDoneYears(db, bookID: bookID)
+
+        for collection in linkedCollections where !readDoneYears.contains(collection.year) {
+            try softDeleteAnnualRelation(db, bookID: bookID, collectionID: collection.id)
+        }
+
+        let linkedYears = Set(linkedCollections.map(\.year))
+        for year in readDoneYears.sorted() where !linkedYears.contains(year) {
+            try ensureBookInAnnualCollection(db, bookID: bookID, year: year)
+        }
+    }
+
+    /// 查询当前书籍已关联的有效年度书单。
+    static func fetchLinkedAnnualCollections(
+        _ db: Database,
+        bookID: Int64
+    ) throws -> [(id: Int64, year: Int)] {
+        // SQL 目的：查询指定书籍当前有效年度书单关系，用于移除不再属于读完年份的关系。
+        // 涉及表：collection_book cb 与 collection c；cb.collection_id -> c.id。
+        // 关键过滤：cb.book_id 精确匹配、两表 is_deleted = 0、c.is_annual = 1。
+        // 返回字段用途：collection.id 用于软删关系，year 用于与读完年份集合比对；时间字段不参与。
+        let sql = """
+            SELECT c.id, c.year
+            FROM collection_book cb
+            JOIN collection c ON c.id = cb.collection_id
+            WHERE cb.book_id = ?
+              AND cb.is_deleted = 0
+              AND c.is_deleted = 0
+              AND c.is_annual = 1
+            """
+        return try Row.fetchAll(db, sql: sql, arguments: [bookID]).compactMap { row in
+            guard let id: Int64 = row["id"] else { return nil }
+            let yearValue: Int64 = row["year"] ?? 0
+            guard yearValue > 0 else { return nil }
+            return (id: id, year: Int(yearValue))
+        }
+    }
+
+    /// 查询状态历史与 book 快照共同形成的读完年份集合。
+    static func fetchCompletedReadDoneYears(_ db: Database, bookID: Int64) throws -> Set<Int> {
+        let timestamps = try fetchCompletedReadDoneTimestamps(db, bookID: bookID)
+        let calendar = Calendar.current
+        return Set(timestamps.compactMap { timestamp in
+            guard timestamp > 0 else { return nil }
+            return calendar.dateComponents([.year], from: Date(timeIntervalSince1970: TimeInterval(timestamp) / 1000)).year
+        })
+    }
+
+    /// 查询指定书籍的全部读完事件毫秒时间戳，并追加 book 表当前读完快照兜底。
+    static func fetchCompletedReadDoneTimestamps(_ db: Database, bookID: Int64) throws -> Set<Int64> {
+        // SQL 目的：读取指定书籍全部有效读完历史时间。
+        // 涉及表：book_read_status_record。
+        // 关键过滤：book_id 精确匹配、read_status_id = 3、changed_date > 0、is_deleted = 0。
+        // 时间字段：changed_date 为本地毫秒时间戳，按 Calendar.current 计算自然年。
+        // 返回字段用途：生成年度书单年份集合。
+        let historySQL = """
+            SELECT changed_date
+            FROM book_read_status_record
+            WHERE book_id = ?
+              AND read_status_id = ?
+              AND changed_date > 0
+              AND is_deleted = 0
+            """
+        var timestamps = Set(try Int64.fetchAll(db, sql: historySQL, arguments: [bookID, BookEntryReadingStatus.finished.rawValue]))
+
+        // SQL 目的：追加 book 表当前读完状态快照，兼容 Android appendCompletedReadDoneSnapshotIfNeeded。
+        // 涉及表：book。
+        // 关键过滤：id 精确匹配、read_status_id = 3、read_status_changed_date > 0、is_deleted = 0。
+        // 时间字段：read_status_changed_date 为本地毫秒时间戳，按 Calendar.current 计算自然年。
+        // 返回字段用途：当历史表缺失但 book 当前为读完时，仍能进入年度书单。
+        let snapshotSQL = """
+            SELECT read_status_changed_date
+            FROM book
+            WHERE id = ?
+              AND read_status_id = ?
+              AND read_status_changed_date > 0
+              AND is_deleted = 0
+              AND id != 0
+            LIMIT 1
+            """
+        if let snapshot = try Int64.fetchOne(db, sql: snapshotSQL, arguments: [bookID, BookEntryReadingStatus.finished.rawValue]) {
+            timestamps.insert(snapshot)
+        }
+        return timestamps
+    }
+
+    /// 软删除指定书籍与指定年度书单的关系，保持 Android 状态变更路径不更新时间戳的语义。
+    static func softDeleteAnnualRelation(
+        _ db: Database,
+        bookID: Int64,
+        collectionID: Int64
+    ) throws {
+        // SQL 目的：移除书籍不再属于的年度书单关系。
+        // 涉及表：collection_book。
+        // 关键过滤：book_id 与 collection_id 精确匹配，且关系仍有效。
+        // 时间字段：Android deleteByBookAndCollectionId 不更新 updated_date，iOS 保持一致。
+        // 副作用用途：当读完年份变化或取消读完时，年度书单不再显示该书。
+        let sql = """
+            UPDATE collection_book
+            SET is_deleted = 1
+            WHERE book_id = ?
+              AND collection_id = ?
+              AND is_deleted = 0
+            """
+        try db.execute(sql: sql, arguments: [bookID, collectionID])
+    }
+
+    /// 确保指定书籍存在于目标年度书单中，缺失年度书单时先创建。
+    static func ensureBookInAnnualCollection(
+        _ db: Database,
+        bookID: Int64,
+        year: Int
+    ) throws {
+        let collectionID = try fetchAnnualCollectionID(db, year: year) ?? createAnnualCollection(db, year: year)
+        guard try !hasCollectionBookRelation(db, bookID: bookID, collectionID: collectionID) else { return }
+
+        let now = Int64(Date().timeIntervalSince1970 * 1000)
+        var relation = CollectionBookRecord(
+            id: nil,
+            collectionId: collectionID,
+            bookId: bookID,
+            recommend: "",
+            order: 0,
+            createdDate: now,
+            updatedDate: 0,
+            lastSyncDate: 0,
+            isDeleted: 0
+        )
+        try relation.insert(db)
+    }
+
+    /// 查询指定年份的有效年度书单 ID。
+    static func fetchAnnualCollectionID(_ db: Database, year: Int) throws -> Int64? {
+        // SQL 目的：查询指定年份已有的有效年度书单。
+        // 涉及表：collection。
+        // 关键过滤：is_annual = 1、year 精确匹配、is_deleted = 0。
+        // 返回字段用途：返回 collection.id 供 collection_book 插入关系；时间字段不参与。
+        let sql = """
+            SELECT id
+            FROM collection
+            WHERE is_annual = 1
+              AND year = ?
+              AND is_deleted = 0
+            LIMIT 1
+            """
+        return try Int64.fetchOne(db, sql: sql, arguments: [year])
+    }
+
+    /// 创建指定年份年度书单，并返回新主键。
+    static func createAnnualCollection(_ db: Database, year: Int) throws -> Int64 {
+        let now = Int64(Date().timeIntervalSince1970 * 1000)
+        var collection = CollectionRecord(
+            id: nil,
+            title: "\(year) 年阅读书单",
+            desc: "",
+            order: Int64(year),
+            isAnnual: 1,
+            year: Int64(year),
+            createdDate: now,
+            updatedDate: 0,
+            lastSyncDate: 0,
+            isDeleted: 0
+        )
+        try collection.insert(db)
+        return collection.id ?? db.lastInsertedRowID
+    }
+
+    /// 判断指定书籍与书单的有效关系是否已经存在。
+    static func hasCollectionBookRelation(
+        _ db: Database,
+        bookID: Int64,
+        collectionID: Int64
+    ) throws -> Bool {
+        // SQL 目的：避免重复插入同一书籍与年度书单的有效关系。
+        // 涉及表：collection_book。
+        // 关键过滤：book_id、collection_id 精确匹配，且 is_deleted = 0。
+        // 返回字段用途：返回计数是否大于 0；时间字段不参与。
+        let sql = """
+            SELECT COUNT(*)
+            FROM collection_book
+            WHERE book_id = ?
+              AND collection_id = ?
+              AND is_deleted = 0
+            """
+        return (try Int.fetchOne(db, sql: sql, arguments: [bookID, collectionID]) ?? 0) > 0
+    }
+}
+
 /// 书架显示设置的本地轻量持久化入口，保持 ViewModel 只经 Repository 获取本地数据。
 struct BookshelfDisplaySettingStore {
     static let shared = BookshelfDisplaySettingStore()
@@ -570,6 +1048,7 @@ private enum BookshelfBatchWriteError: LocalizedError {
     case invalidTag
     case invalidSource
     case invalidReadStatus
+    case invalidCollection
     case ratingRequired
     case invalidName(String)
     case invalidNameLength(target: String, maxLength: Int)
@@ -588,6 +1067,8 @@ private enum BookshelfBatchWriteError: LocalizedError {
             return "来源已不存在，请刷新后重试"
         case .invalidReadStatus:
             return "阅读状态已不存在，请刷新后重试"
+        case .invalidCollection:
+            return "书单已不存在，请刷新后重试"
         case .ratingRequired:
             return "标记读完时需要选择评分"
         case .invalidName(let target):
@@ -606,12 +1087,14 @@ private enum BookshelfManagementLimits {
     static let groupNameMaxLength = 100
     static let tagNameMaxLength = 100
     static let sourceNameMaxLength = 100
+    static let collectionNameMaxLength = 100
     static let defaultSourceIDRange: ClosedRange<Int64> = 1...27
 }
 
 nonisolated private struct BookshelfBookAggregateRow {
     let payload: BookshelfBookPayload
     let press: String
+    let pubDateText: String
     let readStatusOrder: Int64
     let sourceOrder: Int64
     let sourceIsHidden: Bool
@@ -624,6 +1107,54 @@ nonisolated private struct BookshelfBookAggregateRow {
     let readDoneDate: Int64
     let totalReadingTime: Int64
     let readingProgress: Double?
+    let readingProgressText: String
+    let bookmarkText: String
+    let readStatusBadgeTitle: String
+    let tags: [BookshelfBookListTag]
+}
+
+private extension BookshelfBookAggregateRow {
+    nonisolated var listItem: BookshelfBookListItem {
+        BookshelfBookListItem(
+            payload: payload,
+            pinned: pinned,
+            pubDateText: pubDateText,
+            tags: tags,
+            createdDate: createdDate,
+            modifiedDate: modifiedDate,
+            readDoneDate: readDoneDate,
+            totalReadingTime: totalReadingTime,
+            readingProgressText: readingProgressText,
+            bookmarkText: bookmarkText,
+            readStatusBadgeTitle: readStatusBadgeTitle
+        )
+    }
+
+    nonisolated var bookshelfItem: BookshelfItem {
+        BookshelfItem(
+            id: .book(payload.id),
+            pinned: pinned,
+            pinOrder: pinOrder,
+            sortOrder: sortOrder,
+            sortMetadata: sortMetadata,
+            bookListItem: listItem,
+            content: .book(payload)
+        )
+    }
+
+    nonisolated var sortMetadata: BookshelfItemSortMetadata {
+        BookshelfItemSortMetadata(
+            createdDate: createdDate,
+            modifiedDate: modifiedDate,
+            publishDate: publishDate,
+            noteCount: payload.noteCount,
+            rating: payload.score,
+            readDoneDate: readDoneDate,
+            totalReadingTime: totalReadingTime,
+            readingProgress: readingProgress,
+            bookCount: 1
+        )
+    }
 }
 
 nonisolated private struct BookshelfTagInfo: Hashable {
@@ -959,21 +1490,17 @@ private extension BookRepository {
             throw BookshelfBatchWriteError.invalidReadStatus
         }
 
-        let finishedStatusID = BookEntryReadingStatus.finished.rawValue
-        let ratingScore = input.ratingScore.map { max(0, min($0, 50)) }
-        if input.statusID == finishedStatusID, (ratingScore ?? 0) <= 0 {
-            throw BookshelfBatchWriteError.ratingRequired
-        }
-
         let now = timestampMillis()
+        let finishedStatusID = BookEntryReadingStatus.finished.rawValue
+        let ratingScore = input.statusID == finishedStatusID ? max(0, min(input.ratingScore ?? 0, 50)) : nil
         for bookID in uniqueBookIDs {
-            try updateSingleBookReadStatus(
+            try BookReadStatusMutation.updateBookReadStatus(
                 db,
                 bookID: bookID,
                 statusID: input.statusID,
                 changedAt: input.changedAt,
                 updatedAt: now,
-                finishedRatingScore: input.statusID == finishedStatusID ? ratingScore : nil
+                finishedRatingScore: ratingScore
             )
         }
     }
@@ -1121,6 +1648,177 @@ private extension BookRepository {
                 representativeCovers: sortedBooks.prefix(4).map(\.cover)
             )
         }
+    }
+
+    /// 读取未删除的手动书单列表，供批量加入书单 Sheet 使用。
+    /// - Throws: SQL 读取失败时抛出错误。
+    nonisolated func fetchManualBookCollections(_ db: Database) throws -> [BookCollectionSummary] {
+        // SQL 目的：读取可作为批量加入目标的手动书单，并统计每个书单下有效书籍关系数量。
+        // 涉及表：collection c LEFT JOIN collection_book cb LEFT JOIN book b。
+        // 关键过滤：c.is_deleted = 0、c.is_annual = 0；统计时仅计算 cb.is_deleted = 0 且 book 未软删除、非占位书的关系。
+        // 时间字段：不参与排序和返回，保持 Android queryMineCollectionList 的 order 升序语义。
+        // 返回字段用途：构建加入书单 Sheet 的标题、描述和书籍数量。
+        let sql = """
+            SELECT c.id,
+                   COALESCE(c.title, '') AS title,
+                   COALESCE(c.`desc`, '') AS description,
+                   COUNT(b.id) AS book_count
+            FROM collection c
+            LEFT JOIN collection_book cb
+              ON cb.collection_id = c.id
+             AND cb.is_deleted = 0
+            LEFT JOIN book b
+              ON b.id = cb.book_id
+             AND b.is_deleted = 0
+             AND b.id != 0
+            WHERE c.is_deleted = 0
+              AND c.is_annual = 0
+            GROUP BY c.id
+            ORDER BY c.`order` ASC, c.id ASC
+            """
+        return try Row.fetchAll(db, sql: sql).compactMap { row in
+            let title = (row["title"] as String? ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !title.isEmpty else { return nil }
+            return BookCollectionSummary(
+                id: row["id"],
+                title: title,
+                description: row["description"] ?? "",
+                bookCount: row["book_count"] ?? 0
+            )
+        }
+    }
+
+    /// 新建手动书单并返回可立即选中的摘要。
+    /// - Throws: 名称为空、名称过长、重名或 SQL 写入失败时抛出错误。
+    nonisolated func createBookCollection(_ db: Database, title: String) throws -> BookCollectionSummary {
+        let normalized = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalized.isEmpty else { throw BookshelfBatchWriteError.invalidName("书单") }
+        guard normalized.count <= BookshelfManagementLimits.collectionNameMaxLength else {
+            throw BookshelfBatchWriteError.invalidNameLength(
+                target: "书单",
+                maxLength: BookshelfManagementLimits.collectionNameMaxLength
+            )
+        }
+
+        // SQL 目的：按 Android CollectionDao.query(title, desc) 判定手动书单重名。
+        // 涉及表：collection。
+        // 关键过滤：title 与空 desc 精确匹配，且 is_deleted = 0；is_annual 不额外参与 Android 原始查重口径。
+        // 时间字段：不读取时间字段。
+        // 返回字段用途：存在任意同名空描述书单时阻止新增。
+        let duplicateSQL = """
+            SELECT id
+            FROM collection
+            WHERE title = ?
+              AND `desc` = ''
+              AND is_deleted = 0
+            LIMIT 1
+            """
+        if try Int64.fetchOne(db, sql: duplicateSQL, arguments: [normalized]) != nil {
+            throw BookshelfBatchWriteError.duplicateName("要创建的书单已经存在了")
+        }
+
+        // SQL 目的：读取当前有效书单最小 order，新书单按 Android 规则放在最前。
+        // 涉及表：collection。
+        // 关键过滤：只看 is_deleted = 0 的有效书单；Android queryMinCollectionOrder 不区分年度与手动书单。
+        // 时间字段：不参与。
+        // 返回字段用途：新建书单 order = min(order) - 1。
+        let minOrder = try Int64.fetchOne(
+            db,
+            sql: "SELECT MIN(`order`) FROM collection WHERE is_deleted = 0"
+        ) ?? 0
+        let now = timestampMillis()
+        var record = CollectionRecord(
+            id: nil,
+            title: normalized,
+            desc: "",
+            order: minOrder - 1,
+            isAnnual: 0,
+            year: 0,
+            createdDate: now,
+            updatedDate: 0,
+            lastSyncDate: 0,
+            isDeleted: 0
+        )
+        try record.insert(db)
+        return BookCollectionSummary(
+            id: record.id ?? 0,
+            title: normalized,
+            description: "",
+            bookCount: 0
+        )
+    }
+
+    /// 批量把书籍加入目标手动书单，仅为缺失的有效关系插入记录。
+    /// - Throws: 选择为空、书单无效或 SQL 写入失败时抛出错误。
+    nonisolated func addBooksToCollection(
+        _ db: Database,
+        bookIDs: [Int64],
+        collectionID: Int64
+    ) throws {
+        let uniqueBookIDs = normalizedPositiveIDs(bookIDs)
+        guard !uniqueBookIDs.isEmpty else { throw BookshelfBatchWriteError.emptySelection }
+        guard try isActiveManualCollection(db, collectionID: collectionID) else {
+            throw BookshelfBatchWriteError.invalidCollection
+        }
+
+        let now = timestampMillis()
+        for bookID in uniqueBookIDs {
+            guard try isActiveBook(db, bookID: bookID) else { continue }
+            guard try !hasActiveCollectionBookRelation(db, bookID: bookID, collectionID: collectionID) else {
+                continue
+            }
+            var relation = CollectionBookRecord(
+                id: nil,
+                collectionId: collectionID,
+                bookId: bookID,
+                recommend: "",
+                order: Int64(Int32.max),
+                createdDate: now,
+                updatedDate: 0,
+                lastSyncDate: 0,
+                isDeleted: 0
+            )
+            try relation.insert(db)
+        }
+    }
+
+    /// 校验目标书单为未删除、非年度的手动书单。
+    nonisolated func isActiveManualCollection(_ db: Database, collectionID: Int64) throws -> Bool {
+        // SQL 目的：确认加入书单目标仍是可写手动书单。
+        // 涉及表：collection。
+        // 关键过滤：id 精确命中、is_deleted = 0、is_annual = 0。
+        // 时间字段：不参与。
+        // 返回字段用途：防止批量写入年度书单或已删除书单。
+        let sql = """
+            SELECT COUNT(*)
+            FROM collection
+            WHERE id = ?
+              AND is_deleted = 0
+              AND is_annual = 0
+            """
+        return (try Int.fetchOne(db, sql: sql, arguments: [collectionID]) ?? 0) > 0
+    }
+
+    /// 查询有效书单关系是否已存在，避免重复插入。
+    nonisolated func hasActiveCollectionBookRelation(
+        _ db: Database,
+        bookID: Int64,
+        collectionID: Int64
+    ) throws -> Bool {
+        // SQL 目的：复刻 Android queryCollectionBookSuspend 的去重判断。
+        // 涉及表：collection_book。
+        // 关键过滤：book_id、collection_id 精确匹配且 is_deleted = 0。
+        // 时间字段：不参与。
+        // 返回字段用途：已有有效关系时跳过插入，保留原 recommend/order/created_date。
+        let sql = """
+            SELECT id
+            FROM collection_book
+            WHERE book_id = ?
+              AND collection_id = ?
+              AND is_deleted = 0
+            LIMIT 1
+            """
+        return try Int64.fetchOne(db, sql: sql, arguments: [bookID, collectionID]) != nil
     }
 
     /// 复刻 Android GroupRepository.moveBooksToGroup，把书籍移动到指定分组。
@@ -3213,8 +3911,13 @@ private extension BookRepository {
         searchKeyword: String?
     ) throws -> BookshelfSnapshot {
         let defaultSetting = setting(for: .default, in: settingsByDimension)
-        let defaultItems = try fetchBookshelf(db, setting: defaultSetting, searchKeyword: searchKeyword)
         let allBooks = try fetchAllBookshelfBookRows(db)
+        let defaultItems = try fetchBookshelf(
+            db,
+            rows: allBooks,
+            setting: defaultSetting,
+            searchKeyword: searchKeyword
+        )
         let keyword = normalizedSearchKeyword(searchKeyword)
         let tagsByBook = try fetchBookshelfTagsByBook(db)
 
@@ -3344,15 +4047,59 @@ private extension BookRepository {
     /// - Throws: 数据库查询失败时抛出错误。
     nonisolated func fetchBookshelf(
         _ db: Database,
+        rows: [BookshelfBookAggregateRow],
         setting: BookshelfDisplaySetting,
         searchKeyword: String?
     ) throws -> [BookshelfItem] {
-        let topLevelBooks = try fetchTopLevelBookshelfBooks(db, searchKeyword: searchKeyword)
+        let topLevelBooks = try makeTopLevelBookshelfBookItems(
+            db,
+            rows: rows,
+            searchKeyword: searchKeyword
+        )
         let groups = try fetchBookshelfGroups(db, searchKeyword: searchKeyword)
         let indexedItems = (topLevelBooks + groups).enumerated().map { index, item in
             IndexedBookshelfItem(item: item, sourceIndex: index)
         }
         return sortBookshelfItems(indexedItems, setting: setting).map(\.item)
+    }
+
+    /// 从全量聚合行中过滤默认书架顶层书籍，保留 Android 同源列表展示模型。
+    /// - Throws: 分组排除关系查询失败时抛出错误。
+    nonisolated func makeTopLevelBookshelfBookItems(
+        _ db: Database,
+        rows: [BookshelfBookAggregateRow],
+        searchKeyword: String?
+    ) throws -> [BookshelfItem] {
+        let groupedBookIDs = try fetchGroupedBookshelfBookIDs(db)
+        let keyword = normalizedSearchKeyword(searchKeyword)
+        return rows.compactMap { row in
+            guard !groupedBookIDs.contains(row.payload.id),
+                  bookListMatchesSearch(
+                    name: row.payload.name,
+                    author: row.payload.author,
+                    keyword: keyword
+                  ) else {
+                return nil
+            }
+            return row.bookshelfItem
+        }
+    }
+
+    /// 查询仍属于有效分组的书籍 ID，用于默认书架顶层列表排除组内书。
+    /// - Throws: 数据库查询失败时抛出错误。
+    nonisolated func fetchGroupedBookshelfBookIDs(_ db: Database) throws -> Set<Int64> {
+        // SQL 目的：查询所有仍属于有效分组的书籍 ID，供默认书架顶层列表排除组内书。
+        // 涉及表：group_book gb 与 `group` g；通过 gb.group_id 关联分组表。
+        // 关键过滤：gb.is_deleted = 0、g.is_deleted = 0、gb.book_id != 0；仅保留未删除分组中的未删除关联关系。
+        // 返回字段用途：book_id 用于与 fetchAllBookshelfBookRows 返回的全量书籍聚合行做集合差集。
+        let sql = """
+            SELECT DISTINCT gb.book_id
+            FROM group_book gb
+            INNER JOIN `group` g ON g.id = gb.group_id AND g.is_deleted = 0
+            WHERE gb.is_deleted = 0
+              AND gb.book_id != 0
+            """
+        return Set(try Int64.fetchAll(db, sql: sql))
     }
 
     /// 查询不属于任何有效分组的书籍，作为默认书架顶层 Book 条目。
@@ -3715,9 +4462,15 @@ private extension BookRepository {
     /// 查询所有有效书籍，作为非默认维度聚合的统一数据源。
     /// - Throws: 数据库查询失败时抛出错误。
     nonisolated func fetchAllBookshelfBookRows(_ db: Database) throws -> [BookshelfBookAggregateRow] {
+        let tagsByBook = try fetchBookshelfTagsByBook(db)
+        let readDoneDatesByBook = try fetchBookshelfLatestReadDoneDates(db)
+        let readDoneCountsByBook = try fetchBookshelfReadDoneCounts(db)
+        let latestActivityDatesByBook = try fetchBookshelfLatestActivityDates(db)
+
         // SQL 目的：读取所有有效书籍并补齐阅读状态、来源、评分、置顶排序、有效书摘数量、阅读时长与条件排序字段，供多维度聚合和二级列表复用。
         // 涉及表：book b；LEFT JOIN note n 统计有效书摘；LEFT JOIN read_status rs/source s 读取维度标题与排序字段；LEFT JOIN read_time_record 聚合已完成阅读秒数。
         // 关键过滤：b.is_deleted = 0、b.id != 0；n.is_deleted = 0；read_time_record.status = 3；rs/s 仅连接未软删除记录。
+        // 时间字段单位：Android Room 表统一保存毫秒时间戳；read_time_record.elapsed_seconds 是秒，用于阅读时长展示。
         // 返回字段用途：Book payload 用于 UI 代表封面，order/pin/source/read_status 与创建、修改、出版、读完、阅读进度字段用于 Swift 层稳定聚合和二级列表排序。
         let sql = """
             SELECT b.id, b.name, b.author, b.cover, b.press, b.pub_date,
@@ -3729,8 +4482,8 @@ private extension BookRepository {
                    COALESCE(s.source_order, 999999) AS source_order,
                    COALESCE(s.is_hide, 1) AS source_is_hide,
                    b.score, b.pinned, b.pin_order, b.book_order,
-                   b.created_date, b.updated_date, b.read_status_changed_date,
-                   b.read_position, b.total_position, b.total_pagination,
+                   b.created_date, b.updated_date, b.read_status_changed_date, b.book_mark_modified_time,
+                   b.read_position, b.current_position_unit, b.total_position, b.total_pagination,
                    COALESCE(rt.total_reading_time, 0) AS total_reading_time,
                    COUNT(n.id) AS note_count
             FROM book b
@@ -3750,13 +4503,43 @@ private extension BookRepository {
             GROUP BY b.id
             """
         return try Row.fetchAll(db, sql: sql).map { row in
+            let bookID: Int64 = row["id"]
+            let readStatusID: Int64 = row["read_status_id"] ?? 0
+            let readStatusName: String = row["read_status_name"] ?? ""
+            let rawPubDate: String = row["pub_date"] ?? ""
+            let readPosition: Double = row["read_position"] ?? 0.0
+            let currentPositionUnit: Int64 = row["current_position_unit"] ?? 2
+            let totalPosition: Int64 = row["total_position"] ?? 0
+            let totalPagination: Int64 = row["total_pagination"] ?? 0
+            let createdDate: Int64 = row["created_date"] ?? 0
+            let updatedDate: Int64 = row["updated_date"] ?? 0
+            let readStatusChangedDate: Int64 = row["read_status_changed_date"] ?? 0
+            let bookmarkModifiedDate: Int64 = row["book_mark_modified_time"] ?? 0
+            let readDoneDate = resolvedReadDoneDate(
+                readStatusID: readStatusID,
+                statusChangedDate: readStatusChangedDate,
+                latestReadDoneDate: readDoneDatesByBook[bookID] ?? 0
+            )
+            let latestActivityDate = max(
+                latestActivityDatesByBook[bookID] ?? 0,
+                createdDate,
+                updatedDate,
+                readStatusChangedDate,
+                bookmarkModifiedDate
+            )
+            let progress = readingProgress(
+                readPosition: readPosition,
+                currentPositionUnit: currentPositionUnit,
+                totalPosition: totalPosition,
+                totalPagination: totalPagination
+            )
             let payload = BookshelfBookPayload(
-                id: row["id"],
+                id: bookID,
                 name: row["name"] ?? "",
                 author: row["author"] ?? "",
                 cover: row["cover"] ?? "",
-                readStatusId: row["read_status_id"] ?? 0,
-                readStatusName: row["read_status_name"] ?? "",
+                readStatusId: readStatusID,
+                readStatusName: readStatusName,
                 sourceId: row["source_id"] ?? 0,
                 sourceName: row["source_name"] ?? "",
                 press: row["press"] ?? "",
@@ -3766,23 +4549,214 @@ private extension BookRepository {
             return BookshelfBookAggregateRow(
                 payload: payload,
                 press: row["press"] ?? "",
+                pubDateText: normalizedPubDateText(from: rawPubDate),
                 readStatusOrder: row["read_status_order"] ?? 999999,
                 sourceOrder: row["source_order"] ?? 999999,
                 sourceIsHidden: (row["source_is_hide"] as Int64? ?? 1) != 0,
                 pinned: (row["pinned"] as Int64? ?? 0) != 0,
                 pinOrder: row["pin_order"] ?? 0,
                 sortOrder: row["book_order"] ?? 0,
-                createdDate: row["created_date"] ?? 0,
-                modifiedDate: row["updated_date"] ?? 0,
-                publishDate: publishTimestamp(from: row["pub_date"] ?? ""),
-                readDoneDate: row["read_status_changed_date"] ?? 0,
+                createdDate: createdDate,
+                modifiedDate: latestActivityDate,
+                publishDate: publishTimestamp(from: rawPubDate),
+                readDoneDate: readDoneDate,
                 totalReadingTime: row["total_reading_time"] ?? 0,
-                readingProgress: readingProgress(
-                    readPosition: row["read_position"] ?? 0.0,
-                    totalPosition: row["total_position"] ?? 0,
-                    totalPagination: row["total_pagination"] ?? 0
-                )
+                readingProgress: progress,
+                readingProgressText: readingProgressText(from: progress),
+                bookmarkText: bookmarkText(readPosition: readPosition, currentPositionUnit: currentPositionUnit),
+                readStatusBadgeTitle: readStatusBadgeTitle(
+                    readStatusID: readStatusID,
+                    readStatusName: readStatusName,
+                    readDoneCount: readDoneCountsByBook[bookID] ?? 0
+                ),
+                tags: (tagsByBook[bookID] ?? []).map {
+                    BookshelfBookListTag(id: $0.id, name: $0.name, order: $0.order)
+                }
             )
+        }
+    }
+
+    /// 查询每本书最近一次“读完”状态记录，供读完时间排序与列表辅助文案对齐 Android。
+    /// - Throws: 数据库查询失败时抛出错误。
+    nonisolated func fetchBookshelfLatestReadDoneDates(_ db: Database) throws -> [Int64: Int64] {
+        // SQL 目的：按书籍聚合最近一次读完时间，优先于 book.read_status_changed_date 作为 Android `readDoneTime` 来源。
+        // 涉及表：book_read_status_record。
+        // 关键过滤：仅统计未软删除、book_id 非占位、read_status_id = 3（读完）的状态记录。
+        // 时间字段单位：changed_date 为毫秒时间戳，直接返回给列表排序和日期格式化。
+        // 返回字段用途：book_id 用于归并到 BookshelfBookAggregateRow，latest_read_done_date 用于读完时间排序与“未读完”兜底判断。
+        let sql = """
+            SELECT book_id, MAX(changed_date) AS latest_read_done_date
+            FROM book_read_status_record
+            WHERE is_deleted = 0
+              AND book_id != 0
+              AND read_status_id = ?
+            GROUP BY book_id
+            """
+        var result: [Int64: Int64] = [:]
+        for row in try Row.fetchAll(db, sql: sql, arguments: [BookEntryReadingStatus.finished.rawValue]) {
+            let bookID: Int64 = row["book_id"]
+            result[bookID] = row["latest_read_done_date"] ?? 0
+        }
+        return result
+    }
+
+    /// 查询每本书历史读完次数，供阅读状态角标显示“N 刷 / N+1 刷中”。
+    /// - Throws: 数据库查询失败时抛出错误。
+    nonisolated func fetchBookshelfReadDoneCounts(_ db: Database) throws -> [Int64: Int64] {
+        // SQL 目的：按书籍统计有效读完状态记录数，对齐 Android `batchQueryReadDoneCountOfBookSuspend`。
+        // 涉及表：book_read_status_record。
+        // 关键过滤：仅统计未软删除、book_id 非占位、read_status_id = 3（读完）的状态记录。
+        // 时间字段单位：本查询不返回时间字段，仅返回计数。
+        // 返回字段用途：read_done_count 用于构造列表封面阅读状态角标标题。
+        let sql = """
+            SELECT book_id, COUNT(*) AS read_done_count
+            FROM book_read_status_record
+            WHERE is_deleted = 0
+              AND book_id != 0
+              AND read_status_id = ?
+            GROUP BY book_id
+            """
+        var result: [Int64: Int64] = [:]
+        for row in try Row.fetchAll(db, sql: sql, arguments: [BookEntryReadingStatus.finished.rawValue]) {
+            let bookID: Int64 = row["book_id"]
+            result[bookID] = row["read_done_count"] ?? 0
+        }
+        return result
+    }
+
+    /// 聚合 Android “最近修改”排序的关联活动时间。
+    /// - Throws: 数据库查询失败时抛出错误。
+    nonisolated func fetchBookshelfLatestActivityDates(_ db: Database) throws -> [Int64: Int64] {
+        // SQL 目的：对齐 Android BookRepository.getAllDetailedBookList 的最近活动时间来源，按 book_id 汇总书摘、分类内容、书评、计时、打卡与书签更新时间。
+        // 涉及表：note、category_content、review、read_time_record、check_in_record、book；各子查询通过 book_id 或 book.id 归并。
+        // 关键过滤：book 子查询限定有效非占位书籍；其余子查询与 Android 当前 DAO 保持一致，不额外过滤 is_deleted，仅排除 book_id = 0。
+        // 时间字段单位：所有 created_date/updated_date/book_mark_modified_time 均为毫秒时间戳；read_time_record 对齐 Android 使用 created_date。
+        // 返回字段用途：latest_activity_date 用于二级列表修改时间排序、分区与 Item 辅助时间。
+        let sql = """
+            SELECT book_id, MAX(latest_at) AS latest_activity_date
+            FROM (
+                SELECT book_id,
+                       MAX(CASE WHEN created_date > updated_date THEN created_date ELSE updated_date END) AS latest_at
+                FROM note
+                WHERE book_id != 0
+                GROUP BY book_id
+                UNION ALL
+                SELECT book_id,
+                       MAX(CASE WHEN created_date > updated_date THEN created_date ELSE updated_date END) AS latest_at
+                FROM category_content
+                WHERE book_id != 0
+                GROUP BY book_id
+                UNION ALL
+                SELECT book_id,
+                       MAX(CASE WHEN created_date > updated_date THEN created_date ELSE updated_date END) AS latest_at
+                FROM review
+                WHERE book_id != 0
+                GROUP BY book_id
+                UNION ALL
+                SELECT book_id, MAX(created_date) AS latest_at
+                FROM read_time_record
+                WHERE book_id != 0
+                GROUP BY book_id
+                UNION ALL
+                SELECT book_id,
+                       MAX(CASE WHEN created_date > updated_date THEN created_date ELSE updated_date END) AS latest_at
+                FROM check_in_record
+                WHERE book_id != 0
+                GROUP BY book_id
+                UNION ALL
+                SELECT id AS book_id, MAX(book_mark_modified_time) AS latest_at
+                FROM book
+                WHERE is_deleted = 0
+                  AND id != 0
+                  AND book_mark_modified_time != 0
+                GROUP BY id
+            )
+            WHERE latest_at IS NOT NULL
+            GROUP BY book_id
+            """
+        var result: [Int64: Int64] = [:]
+        for row in try Row.fetchAll(db, sql: sql) {
+            let bookID: Int64 = row["book_id"]
+            result[bookID] = row["latest_activity_date"] ?? 0
+        }
+        return result
+    }
+
+    nonisolated func resolvedReadDoneDate(
+        readStatusID: Int64,
+        statusChangedDate: Int64,
+        latestReadDoneDate: Int64
+    ) -> Int64 {
+        if latestReadDoneDate > 0 {
+            return latestReadDoneDate
+        }
+        guard readStatusID == BookEntryReadingStatus.finished.rawValue else {
+            return 0
+        }
+        return statusChangedDate
+    }
+
+    nonisolated func normalizedPubDateText(from rawValue: String) -> String {
+        let trimmed = rawValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return "" }
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd"
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        if let date = formatter.date(from: trimmed) {
+            let output = DateFormatter()
+            output.dateFormat = "yyyy-MM"
+            output.locale = Locale(identifier: "en_US_POSIX")
+            return output.string(from: date)
+        }
+        return trimmed
+    }
+
+    nonisolated func bookmarkText(readPosition: Double, currentPositionUnit: Int64) -> String {
+        guard currentPositionUnit != 0 else { return "" }
+        guard Int(readPosition * 100) != 0 else { return "" }
+        return "\(Int(readPosition.rounded())) 页"
+    }
+
+    nonisolated func readingProgressText(from progress: Double?) -> String {
+        guard let progress else { return "" }
+        let rounded = (progress * 10).rounded() / 10
+        guard rounded != 0 else { return "" }
+        if rounded == 100 {
+            return "100%"
+        }
+        return String(format: "%.1f%%", rounded)
+    }
+
+    nonisolated func readStatusBadgeTitle(
+        readStatusID: Int64,
+        readStatusName: String,
+        readDoneCount: Int64
+    ) -> String {
+        if readStatusID == BookEntryReadingStatus.finished.rawValue, readDoneCount > 1 {
+            return "\(readDoneCount) 刷"
+        }
+        if readStatusID == BookEntryReadingStatus.reading.rawValue, readDoneCount >= 1 {
+            return "\(readDoneCount + 1) 刷中"
+        }
+        if let status = BookEntryReadingStatus(rawValue: readStatusID) {
+            let title = readStatusName.trimmingCharacters(in: .whitespacesAndNewlines)
+            return title.isEmpty ? fallbackReadStatusTitle(for: status) : title
+        }
+        return readStatusName.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    nonisolated func fallbackReadStatusTitle(for status: BookEntryReadingStatus) -> String {
+        switch status {
+        case .wantRead:
+            return "想读"
+        case .reading:
+            return "在读"
+        case .finished:
+            return "读完"
+        case .abandoned:
+            return "弃读"
+        case .onHold:
+            return "搁置"
         }
     }
 
@@ -4101,7 +5075,7 @@ private extension BookRepository {
             orderID: orderID,
             sortMetadata: sortMetadata(from: sortedRows),
             representativeCovers: sortedRows.prefix(6).map(\.payload.cover),
-            books: sortedRows.map { BookshelfBookListItem(payload: $0.payload, pinned: $0.pinned) }
+            books: sortedRows.map(\.listItem)
         )
     }
 
@@ -4149,7 +5123,7 @@ private extension BookRepository {
                 BookshelfBookListSection(
                     id: "books",
                     title: nil,
-                    books: rows.map { BookshelfBookListItem(payload: $0.payload, pinned: $0.pinned) }
+                    books: rows.map(\.listItem)
                 )
             ]
         }
@@ -4166,7 +5140,7 @@ private extension BookRepository {
             BookshelfBookListSection(
                 id: key.id,
                 title: key.title,
-                books: (groupedRows[key] ?? []).map { BookshelfBookListItem(payload: $0.payload, pinned: $0.pinned) }
+                books: (groupedRows[key] ?? []).map(\.listItem)
             )
         }
     }
@@ -4723,8 +5697,29 @@ private extension BookRepository {
         totalPosition: Int64,
         totalPagination: Int64
     ) -> Double? {
+        readingProgress(
+            readPosition: readPosition,
+            currentPositionUnit: totalPosition > 0 ? 1 : 2,
+            totalPosition: totalPosition,
+            totalPagination: totalPagination
+        )
+    }
+
+    nonisolated func readingProgress(
+        readPosition: Double,
+        currentPositionUnit: Int64,
+        totalPosition: Int64,
+        totalPagination: Int64
+    ) -> Double? {
+        if currentPositionUnit == 0 {
+            return readPosition > 0 ? readPosition : nil
+        }
         let denominator: Double
-        if totalPosition > 0 {
+        if currentPositionUnit == 1, totalPosition > 0 {
+            denominator = Double(totalPosition)
+        } else if currentPositionUnit == 2, totalPagination > 0 {
+            denominator = Double(totalPagination)
+        } else if totalPosition > 0 {
             denominator = Double(totalPosition)
         } else if totalPagination > 0 {
             denominator = Double(totalPagination)
@@ -4898,34 +5893,126 @@ private extension BookRepository {
         return mapPickerBook(row)
     }
 
-    /// 查询指定书籍详情数据，供详情页头部信息区与统计区渲染。
+    /// 查询指定书籍详情数据，供详情页头部信息区、资料分区与目录分区渲染。
     /// - Throws: 数据库查询失败时抛出错误。
     nonisolated func fetchBook(_ db: Database, bookId: Int64) throws -> BookDetail? {
-        // SQL 目的：读取单本书详情，并补充阅读状态名称与笔记总数。
-        // 表关系：book b LEFT JOIN read_status rs；子查询统计 note 表有效记录。
-        // 过滤条件：按 bookId 精确命中且排除软删除书籍与占位书。
+        // SQL 目的：读取单本书资料详情，并补充阅读状态、来源名称与有效书摘总数。
+        // 涉及表：book b LEFT JOIN read_status rs LEFT JOIN source s；子查询统计 note 表有效记录。
+        // 关键过滤：按 bookId 精确命中，排除软删除书籍与占位书 b.id = 0。
+        // 时间字段：pub_date 为 Android 原始文本字段，仅展示不转时区；note.created_date 不在此查询排序。
+        // 返回字段用途：构建头部、资料属性、简介、作者简介与书摘数量。
         let sql = """
             SELECT b.id, b.name, b.author, b.cover, b.press,
+                   b.author_intro, b.translator, b.isbn, b.pub_date,
+                   b.summary, b.source_id,
                    COALESCE(rs.name, '') AS read_status_name,
+                   COALESCE(s.name, '') AS source_name,
                    (SELECT COUNT(*) FROM note n
                     WHERE n.book_id = b.id AND n.is_deleted = 0) AS note_count
             FROM book b
             LEFT JOIN read_status rs ON b.read_status_id = rs.id
+            LEFT JOIN source s ON b.source_id = s.id
             WHERE b.id = ? AND b.is_deleted = 0 AND b.id != 0
             """
         guard let row = try Row.fetchOne(db, sql: sql, arguments: [bookId]) else {
             return nil
         }
 
+        let author: String = row["author"] ?? ""
+        let press: String = row["press"] ?? ""
+        let translator: String = row["translator"] ?? ""
+        let pubDate: String = row["pub_date"] ?? ""
+        let isbn: String = row["isbn"] ?? ""
+        let sourceName: String = row["source_name"] ?? ""
+        let readStatusName: String = row["read_status_name"] ?? ""
+        let attributes = makeBookDetailAttributes(
+            author: author,
+            translator: translator,
+            press: press,
+            pubDate: pubDate,
+            isbn: isbn,
+            sourceName: sourceName,
+            readStatusName: readStatusName
+        )
+
         return BookDetail(
             id: row["id"],
             name: row["name"] ?? "",
-            author: row["author"] ?? "",
+            author: author,
             cover: row["cover"] ?? "",
-            press: row["press"] ?? "",
+            press: press,
             noteCount: row["note_count"] ?? 0,
-            readStatusName: row["read_status_name"] ?? ""
+            readStatusName: readStatusName,
+            summary: row["summary"] ?? "",
+            authorIntro: row["author_intro"] ?? "",
+            attributes: attributes,
+            chapters: try fetchBookDetailChapters(db, bookId: bookId)
         )
+    }
+
+    /// 查询书籍目录条目，供详情页资料区按层级展示。
+    /// - Throws: 数据库查询失败时抛出错误。
+    nonisolated func fetchBookDetailChapters(_ db: Database, bookId: Int64) throws -> [BookDetailChapter] {
+        // SQL 目的：读取指定书籍下的有效目录章节，并保留 Android v41 章节层级字段。
+        // 涉及表：chapter。
+        // 关键过滤：book_id 精确命中，chapter.is_deleted = 0；空标题不在 SQL 层过滤，交给映射阶段丢弃。
+        // 时间字段：不参与排序；排序按 parent_id/chapter_order/source_order/id 保持 Android 章节组织顺序。
+        // 返回字段用途：构建详情页目录分区的标题、缩进层级与稳定 ID。
+        let sql = """
+            SELECT id,
+                   COALESCE(title, '') AS title,
+                   chapter_level,
+                   parent_id,
+                   chapter_order,
+                   source_order
+            FROM chapter
+            WHERE book_id = ?
+              AND is_deleted = 0
+            ORDER BY parent_id ASC, chapter_order ASC, source_order ASC, id ASC
+            """
+        return try Row.fetchAll(db, sql: sql, arguments: [bookId]).compactMap { row in
+            let title = (row["title"] as String? ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !title.isEmpty else { return nil }
+            let rawLevel: Int64 = row["chapter_level"] ?? 0
+            let parentID: Int64 = row["parent_id"] ?? 0
+            return BookDetailChapter(
+                id: row["id"],
+                title: title,
+                level: rawLevel > 0 ? rawLevel : (parentID == 0 ? 1 : 2),
+                order: row["chapter_order"] ?? 0
+            )
+        }
+    }
+
+    /// 组装详情页资料属性，空字段不生成空壳。
+    nonisolated func makeBookDetailAttributes(
+        author: String,
+        translator: String,
+        press: String,
+        pubDate: String,
+        isbn: String,
+        sourceName: String,
+        readStatusName: String
+    ) -> [BookDetailAttribute] {
+        [
+            makeBookDetailAttribute(.author, value: author),
+            makeBookDetailAttribute(.translator, value: translator),
+            makeBookDetailAttribute(.press, value: press),
+            makeBookDetailAttribute(.pubDate, value: pubDate),
+            makeBookDetailAttribute(.isbn, value: isbn),
+            makeBookDetailAttribute(.source, value: sourceName),
+            makeBookDetailAttribute(.readStatus, value: readStatusName)
+        ]
+        .compactMap { $0 }
+    }
+
+    /// 创建非空详情属性。
+    nonisolated func makeBookDetailAttribute(
+        _ kind: BookDetailAttributeKind,
+        value: String
+    ) -> BookDetailAttribute? {
+        guard let trimmed = value.nonEmptyOrNil else { return nil }
+        return BookDetailAttribute(kind: kind, value: trimmed)
     }
 
     /// 查询书籍下的书摘列表，供详情页“书摘时间线”模块展示。

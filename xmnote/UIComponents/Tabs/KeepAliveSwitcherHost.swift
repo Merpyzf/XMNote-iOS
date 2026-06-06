@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 SwiftUI 状态系统，接收 selection/tabs/content 构建二级页面常驻容器
- * [OUTPUT]: 对外提供 KeepAliveSwitcherHost（懒激活 + 常驻保活 + 可见性切换）
+ * [OUTPUT]: 对外提供 KeepAliveSwitcherHost（懒激活 + 常驻保活 + 子页显隐硬切）
  * [POS]: UIComponents/Tabs 的通用切换承载组件，被 Reading/Book/Note 容器复用
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -48,10 +48,23 @@ struct KeepAliveSwitcherHost<Selection: Hashable, Content: View>: View {
                         .allowsHitTesting(selection == tab)
                         .accessibilityHidden(selection != tab)
                         .zIndex(selection == tab ? 1 : 0)
-                        // 子页保持常驻，但显隐切换必须硬切，避免在顶部分段动画事务里出现 crossfade 交错。
+                        // 子页保持常驻，但 selection 驱动的显隐必须硬切，避免顶部分段切换扩散成内容 crossfade。
+                        .transaction(value: selection) { transaction in
+                            transaction.animation = nil
+                            transaction.disablesAnimations = true
+                        }
                         .animation(nil, value: selection)
+                        .animation(nil, value: activatedTabs)
                 }
             }
+        }
+        .transaction(value: selection) { transaction in
+            transaction.animation = nil
+            transaction.disablesAnimations = true
+        }
+        .transaction(value: activatedTabs) { transaction in
+            transaction.animation = nil
+            transaction.disablesAnimations = true
         }
         .onAppear {
             activateIfNeeded(selection, reason: "onAppear")
@@ -66,7 +79,9 @@ struct KeepAliveSwitcherHost<Selection: Hashable, Content: View>: View {
         }
         .onChange(of: tabs) { _, newTabs in
             if !lazyActivation {
-                activatedTabs = Set(newTabs)
+                updateActivatedTabsWithoutAnimation {
+                    activatedTabs = Set(newTabs)
+                }
                 logActivation(reason: "tabsChangedEager")
             } else {
                 activateIfNeeded(selection, reason: "tabsChangedSelection")
@@ -78,7 +93,9 @@ struct KeepAliveSwitcherHost<Selection: Hashable, Content: View>: View {
     /// 首次命中某个分段时激活并常驻，避免后续切回触发重建。
     private func activateIfNeeded(_ tab: Selection, reason: String) {
         guard !activatedTabs.contains(tab) else { return }
-        activatedTabs.insert(tab)
+        updateActivatedTabsWithoutAnimation {
+            activatedTabs.insert(tab)
+        }
         logActivation(reason: reason)
     }
 
@@ -86,8 +103,19 @@ struct KeepAliveSwitcherHost<Selection: Hashable, Content: View>: View {
     private func activateAllIfNeeded(reason: String) {
         let allTabs = Set(tabs)
         guard activatedTabs != allTabs else { return }
-        activatedTabs = allTabs
+        updateActivatedTabsWithoutAnimation {
+            activatedTabs = allTabs
+        }
         logActivation(reason: reason)
+    }
+
+    /// 任何激活集合变化都必须硬切，避免新子页插入继承外层动画事务。
+    private func updateActivatedTabsWithoutAnimation(_ update: () -> Void) {
+        var transaction = Transaction(animation: nil)
+        transaction.disablesAnimations = true
+        withTransaction(transaction) {
+            update()
+        }
     }
 
     private func logSwitch(trigger: String) {

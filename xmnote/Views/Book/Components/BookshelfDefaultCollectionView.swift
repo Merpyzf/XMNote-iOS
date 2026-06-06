@@ -1,6 +1,6 @@
 /**
- * [INPUT]: 依赖 BookshelfItem/BookshelfDisplaySetting、BookRoute 与现有 SwiftUI 书架卡片，接收 BookGridView 注入的导航、搜索 drawer、选择、排序提交、底部滚动余量和底部栏滚动观察开关
- * [OUTPUT]: 对外提供 BookshelfDefaultCollectionView，使用 UIKit UICollectionView 承接默认书架滚动、集合顶部搜索 drawer、整项长按拖拽排序、本地预览顺序与 iOS 26 底部边缘过渡
+ * [INPUT]: 依赖 BookshelfItem/BookshelfDisplaySetting、BookRoute 与现有 SwiftUI 书架卡片，接收 BookGridView 注入的导航、搜索 drawer、选择、排序提交、页面激活态、底部滚动余量和底部栏滚动观察开关
+ * [OUTPUT]: 对外提供 BookshelfDefaultCollectionView，使用 UIKit UICollectionView 承接默认书架滚动、集合顶部搜索 drawer、二级页硬切禁动画、整项长按拖拽排序、本地预览顺序与 iOS 26 底部边缘过渡
  * [POS]: Book 模块页面私有集合区组件，被 BookGridView 的默认书架维度消费
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -27,8 +27,10 @@ struct BookshelfDefaultCollectionView: UIViewRepresentable {
     let columnCount: Int
     let contentState: BookshelfContentState
     let showsNoteCount: Bool
+    let sortCriteria: BookshelfSortCriteria
     let titleDisplayMode: BookshelfTitleDisplayMode
     let allowsStructuralAnimation: Bool
+    let isPageActive: Bool
     let isEditing: Bool
     let bottomContentInset: CGFloat
     let searchDrawerHeight: CGFloat
@@ -70,7 +72,7 @@ struct BookshelfDefaultCollectionView: UIViewRepresentable {
 
     /// 将 SwiftUI 最新状态同步到 UIKit；拖拽中由承载视图缓存并在结束后回放。
     func updateUIView(_ uiView: BookshelfDefaultCollectionHostView, context: Context) {
-        uiView.update(with: configuration, animated: true)
+        uiView.update(with: configuration, animated: configuration.allowsUpdateAnimation)
     }
 
     /// 销毁时清理拖拽会话与缓存配置，避免复用残留影响下一次进入页面。
@@ -85,8 +87,10 @@ struct BookshelfDefaultCollectionView: UIViewRepresentable {
             columnCount: max(2, min(columnCount, 4)),
             contentState: contentState,
             showsNoteCount: showsNoteCount,
+            sortCriteria: sortCriteria,
             titleDisplayMode: titleDisplayMode,
             allowsStructuralAnimation: allowsStructuralAnimation,
+            isPageActive: isPageActive,
             isEditing: isEditing,
             bottomContentInset: bottomContentInset,
             searchDrawerHeight: searchDrawerHeight,
@@ -129,8 +133,10 @@ private struct BookshelfDefaultCollectionConfiguration {
     let columnCount: Int
     let contentState: BookshelfContentState
     let showsNoteCount: Bool
+    let sortCriteria: BookshelfSortCriteria
     let titleDisplayMode: BookshelfTitleDisplayMode
     let allowsStructuralAnimation: Bool
+    let isPageActive: Bool
     let isEditing: Bool
     let bottomContentInset: CGFloat
     let searchDrawerHeight: CGFloat
@@ -167,6 +173,10 @@ private struct BookshelfDefaultCollectionConfiguration {
         searchDrawerHeight > 0.5
     }
 
+    var allowsUpdateAnimation: Bool {
+        isPageActive && allowsStructuralAnimation
+    }
+
     var showsExpandedSearchSurface: Bool {
         searchPresentation.isPinned || isSearchPresented || isSearchFocused || hasSearchText || hasSearchKeyword
     }
@@ -189,8 +199,10 @@ private struct BookshelfDefaultCollectionConfiguration {
         columnCount: 3,
         contentState: .empty,
         showsNoteCount: true,
+        sortCriteria: .custom,
         titleDisplayMode: .standard,
         allowsStructuralAnimation: true,
+        isPageActive: false,
         isEditing: false,
         bottomContentInset: 0,
         searchDrawerHeight: 0,
@@ -299,6 +311,7 @@ final class BookshelfDefaultCollectionHostView: UIView {
     private var isContentToEmptyTransitionPending = false
     private var contentToEmptyTransitionGeneration = 0
     private var pendingContentToEmptyConfiguration: BookshelfDefaultCollectionConfiguration?
+    private var suppressesNextSearchDrawerVisibilityAnimation = false
     private let searchFocusRequestCoordinator = BookshelfSearchFocusRequestCoordinator()
     private var lastCollectionBounds: CGRect = .zero
     private weak var observedContentScrollController: UIViewController?
@@ -404,6 +417,7 @@ final class BookshelfDefaultCollectionHostView: UIView {
 
         storeViewportAnchorIfPossible(requiresLayout: true)
         let previousConfiguration = self.configuration
+        let didChangePageActivation = previousConfiguration.isPageActive != configuration.isPageActive
         let previousIDs = items.map(\.id)
         let nextItems = configuration.sections.flatMap(\.items)
         let nextIDs = nextItems.map(\.id)
@@ -429,12 +443,20 @@ final class BookshelfDefaultCollectionHostView: UIView {
             || didChangeSearchDrawerHeight
             || didChangeSearchDrawerVisibility
             || didChangeSearchEmptyState
+        let shouldAnimateStructuralChange = animated
+            && configuration.allowsStructuralAnimation
+            && !didChangePageActivation
+
+        if didChangePageActivation {
+            suppressesNextSearchDrawerVisibilityAnimation = true
+            cancelVisibleCellAnimationsForPageSwitch()
+        }
 
         let shouldAnimateContentToEmpty = shouldAnimateSearchContentToEmptyTransition(
             from: previousConfiguration,
             to: configuration,
             previousIDs: previousIDs,
-            animated: animated && configuration.allowsStructuralAnimation
+            animated: shouldAnimateStructuralChange
         )
         if shouldAnimateContentToEmpty {
             applySearchContentToEmptyTransition(
@@ -451,13 +473,11 @@ final class BookshelfDefaultCollectionHostView: UIView {
         )
         sections = configuration.sections
         collectionView.dragInteractionEnabled = configuration.canReorder
-        updateCollectionVisibilityForSearchDrawerPreparation()
+        updateCollectionVisibilityForSearchDrawerPreparation(animated: shouldAnimateStructuralChange)
         normalizeSearchDrawerExtraBottomInsetForCurrentState()
         updateBottomContentInset()
         configureScrollEdgeEffect()
         updateContentScrollObservation()
-
-        let shouldAnimateStructuralChange = animated && configuration.allowsStructuralAnimation
 
         if needsLayoutUpdate {
             collectionView.setCollectionViewLayout(
@@ -541,6 +561,7 @@ final class BookshelfDefaultCollectionHostView: UIView {
         didApplyInitialSearchDrawerOffset = false
         isPendingInitialSearchDrawerOffset = false
         isAdjustingSearchDrawerOffset = false
+        suppressesNextSearchDrawerVisibilityAnimation = false
         searchDrawerExtraBottomInset = 0
         keyboardAvoidanceInset = 0
         searchDrawerLockedOffsetY = nil
@@ -600,7 +621,7 @@ private extension BookshelfDefaultCollectionHostView {
     }
 
     /// 初始隐藏搜索抽屉时先等滚动位置收敛，避免首帧露出一个会被马上推走的半高胶囊。
-    func updateCollectionVisibilityForSearchDrawerPreparation() {
+    func updateCollectionVisibilityForSearchDrawerPreparation(animated: Bool = true) {
         let shouldHideUntilOffsetSettles = configuration.showsSearchDrawerInCollection
             && !configuration.showsExpandedSearchSurface
             && !didApplyInitialSearchDrawerOffset
@@ -610,11 +631,14 @@ private extension BookshelfDefaultCollectionHostView {
             : .identity
         collectionView.isUserInteractionEnabled = !shouldHideUntilOffsetSettles
         guard abs(collectionView.alpha - targetAlpha) > 0.01 || collectionView.transform != targetTransform else {
+            clearVisibilityAnimationSuppressionIfSettled(shouldHideUntilOffsetSettles: shouldHideUntilOffsetSettles)
             return
         }
-        if shouldHideUntilOffsetSettles || collectionView.window == nil {
+        let canAnimateVisibility = animated && !suppressesNextSearchDrawerVisibilityAnimation
+        if !canAnimateVisibility || shouldHideUntilOffsetSettles || collectionView.window == nil {
             collectionView.alpha = targetAlpha
             collectionView.transform = targetTransform
+            clearVisibilityAnimationSuppressionIfSettled(shouldHideUntilOffsetSettles: shouldHideUntilOffsetSettles)
             return
         }
         UIView.animate(
@@ -625,6 +649,23 @@ private extension BookshelfDefaultCollectionHostView {
             self.collectionView.alpha = targetAlpha
             self.collectionView.transform = targetTransform
         }
+    }
+
+    /// 子页切换期间取消 UIKit 侧残留动画，避免隐藏页面的 cell 动画在切回时继续播放。
+    func cancelVisibleCellAnimationsForPageSwitch() {
+        collectionView.layer.removeAllAnimations()
+        for cell in collectionView.visibleCells {
+            cell.layer.removeAllAnimations()
+            cell.contentView.layer.removeAllAnimations()
+            cell.alpha = 1
+            cell.transform = .identity
+        }
+    }
+
+    /// 页面切换触发的搜索抽屉首帧隐藏需要一直禁动画到可见态落位。
+    func clearVisibilityAnimationSuppressionIfSettled(shouldHideUntilOffsetSettles: Bool) {
+        guard !shouldHideUntilOffsetSettles else { return }
+        suppressesNextSearchDrawerVisibilityAnimation = false
     }
 
     var searchSectionOffset: Int {
@@ -935,13 +976,13 @@ private extension BookshelfDefaultCollectionHostView {
         guard configuration.showsSearchDrawerInCollection else {
             didApplyInitialSearchDrawerOffset = false
             isPendingInitialSearchDrawerOffset = false
-            updateCollectionVisibilityForSearchDrawerPreparation()
+            updateCollectionVisibilityForSearchDrawerPreparation(animated: animated)
             return
         }
         if configuration.showsExpandedSearchSurface {
             didApplyInitialSearchDrawerOffset = true
             isPendingInitialSearchDrawerOffset = false
-            updateCollectionVisibilityForSearchDrawerPreparation()
+            updateCollectionVisibilityForSearchDrawerPreparation(animated: animated)
             if !previousConfiguration.showsExpandedSearchSurface {
                 setSearchDrawerVisible(animated: animated) { [weak self] in
                     self?.requestSearchFocusAfterDrawerSettles()
@@ -953,7 +994,7 @@ private extension BookshelfDefaultCollectionHostView {
             didApplyInitialSearchDrawerOffset = true
             isPendingInitialSearchDrawerOffset = false
             setSearchDrawerHidden(animated: animated)
-            updateCollectionVisibilityForSearchDrawerPreparation()
+            updateCollectionVisibilityForSearchDrawerPreparation(animated: animated)
             return
         }
         let shouldApplyInitialOffset = !didApplyInitialSearchDrawerOffset
@@ -1323,16 +1364,16 @@ private extension BookshelfDefaultCollectionHostView {
         return section
     }
 
-    /// List 模式使用单列全宽估算高度，保持现有列表行视觉密度。
+    /// List 模式使用单列全宽估算高度，容纳完整书籍元信息并交给自适应测量收敛。
     static func makeListSection() -> NSCollectionLayoutSection {
         let itemSize = NSCollectionLayoutSize(
             widthDimension: .fractionalWidth(1),
-            heightDimension: .estimated(88)
+            heightDimension: .estimated(128)
         )
         let item = NSCollectionLayoutItem(layoutSize: itemSize)
         let groupSize = NSCollectionLayoutSize(
             widthDimension: .fractionalWidth(1),
-            heightDimension: .estimated(88)
+            heightDimension: .estimated(128)
         )
         let group = NSCollectionLayoutGroup.vertical(layoutSize: groupSize, subitems: [item])
         let section = NSCollectionLayoutSection(group: group)
@@ -1557,6 +1598,7 @@ private extension BookshelfDefaultCollectionHostView {
                 item: item,
                 layoutMode: configuration.layoutMode,
                 showsNoteCount: configuration.showsNoteCount,
+                sortCriteria: configuration.sortCriteria,
                 titleDisplayMode: configuration.titleDisplayMode,
                 searchKeyword: configuration.searchKeyword,
                 isEditing: configuration.isEditing,
@@ -2154,6 +2196,7 @@ private struct BookshelfDefaultCollectionCellContent: View {
     let item: BookshelfItem
     let layoutMode: BookshelfLayoutMode
     let showsNoteCount: Bool
+    let sortCriteria: BookshelfSortCriteria
     let titleDisplayMode: BookshelfTitleDisplayMode
     let searchKeyword: String
     let isEditing: Bool
@@ -2198,7 +2241,8 @@ private struct BookshelfDefaultCollectionCellContent: View {
                     isEditing: isEditing,
                     isSelected: isSelected,
                     titleDisplayMode: titleDisplayMode,
-                    searchKeyword: searchKeyword
+                    searchKeyword: searchKeyword,
+                    sortAuxiliaryText: item.bookListItem?.sortAuxiliaryText(for: sortCriteria)
                 )
             case .group(let group):
                 BookshelfGroupGridItemView(
@@ -2211,12 +2255,23 @@ private struct BookshelfDefaultCollectionCellContent: View {
                 )
             }
         case .list:
-            BookshelfDefaultListRow(
-                item: item,
-                showsNoteCount: showsNoteCount,
-                titleDisplayMode: titleDisplayMode,
-                searchKeyword: searchKeyword
-            )
+            switch item.content {
+            case .book(let book):
+                BookshelfBookListRowContent(
+                    book: item.bookListItem ?? BookshelfBookListItem(payload: book, pinned: item.pinned),
+                    showsNoteCount: showsNoteCount,
+                    sortCriteria: sortCriteria,
+                    titleDisplayMode: titleDisplayMode,
+                    searchKeyword: searchKeyword
+                )
+            case .group:
+                BookshelfDefaultListRow(
+                    item: item,
+                    showsNoteCount: showsNoteCount,
+                    titleDisplayMode: titleDisplayMode,
+                    searchKeyword: searchKeyword
+                )
+            }
         }
     }
 
@@ -2236,18 +2291,6 @@ private struct BookshelfDefaultCollectionCellContent: View {
                 onContextAction(.editBook, item.id)
             } label: {
                 XMMenuLabel("编辑书籍", systemImage: "pencil")
-            }
-
-            Button {
-                onContextAction(.showReadingDetail, item.id)
-            } label: {
-                XMMenuLabel("阅读详情", systemImage: "chart.bar.doc.horizontal")
-            }
-
-            Button {
-                onContextAction(.startReadTiming, item.id)
-            } label: {
-                XMMenuLabel("开始计时", systemImage: "timer")
             }
 
             Button {
@@ -2300,10 +2343,28 @@ private struct BookshelfDefaultCollectionCellContent: View {
     }
 
     private var accessibilityLabel: String {
+        let title = accessibilityTitleWithMetadata
         if isEditing {
-            return "\(item.title)，\(isSelected ? "已选中" : "未选中")"
+            return "\(title)，\(isSelected ? "已选中" : "未选中")"
         }
-        return item.title
+        return title
+    }
+
+    private var accessibilityTitleWithMetadata: String {
+        let metadata = bookAccessibilityMetadata
+        return metadata.isEmpty ? item.title : "\(item.title)，\(metadata)"
+    }
+
+    private var bookAccessibilityMetadata: String {
+        guard let book = item.bookListItem else { return "" }
+        return [
+            book.bookListBasicMetadataText,
+            book.bookListRatingAccessibilityText,
+            book.bookListReadingAccessibilityText,
+            book.sortAuxiliaryText(for: sortCriteria) ?? ""
+        ]
+            .filter { !$0.isEmpty }
+            .joined(separator: "，")
     }
 
     private var accessibilityIdentifier: String {

@@ -1,6 +1,6 @@
 /**
- * [INPUT]: 依赖 BookshelfAggregateGroup、BookshelfDisplaySetting 与 BookRoute，接收 BookGridView 注入的导航、搜索 drawer 和聚合排序提交闭包
- * [OUTPUT]: 对外提供 BookshelfAggregateCollectionView，使用 UIKit UICollectionView 承接非默认维度聚合入口滚动、集合顶部搜索 drawer、按列数约束的 Grid/List 布局与可选排序
+ * [INPUT]: 依赖 BookshelfAggregateGroup、BookshelfDisplaySetting 与 BookRoute，接收 BookGridView 注入的导航、搜索 drawer、页面激活态和聚合排序提交闭包
+ * [OUTPUT]: 对外提供 BookshelfAggregateCollectionView，使用 UIKit UICollectionView 承接非默认维度聚合入口滚动、集合顶部搜索 drawer、二级页硬切禁动画、按列数约束的 Grid/List 布局与可选排序
  * [POS]: Book 模块页面私有集合区组件，被 BookGridView 的状态、标签、来源、评分、作者与出版社维度消费
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -27,6 +27,8 @@ struct BookshelfAggregateCollectionView: UIViewRepresentable {
     let layoutMode: BookshelfLayoutMode
     let columnCount: Int
     let contentState: BookshelfContentState
+    let allowsStructuralAnimation: Bool
+    let isPageActive: Bool
     let searchDrawerHeight: CGFloat
     let searchPresentation: BookshelfSearchDrawerPresentation
     let isSearchPresented: Bool
@@ -56,7 +58,7 @@ struct BookshelfAggregateCollectionView: UIViewRepresentable {
 
     /// 同步 SwiftUI 最新状态。
     func updateUIView(_ uiView: BookshelfAggregateCollectionHostView, context: Context) {
-        uiView.update(with: configuration, animated: true)
+        uiView.update(with: configuration, animated: configuration.allowsUpdateAnimation)
     }
 
     private var configuration: BookshelfAggregateCollectionConfiguration {
@@ -65,6 +67,8 @@ struct BookshelfAggregateCollectionView: UIViewRepresentable {
             layoutMode: layoutMode,
             columnCount: max(1, min(columnCount, 6)),
             contentState: contentState,
+            allowsStructuralAnimation: allowsStructuralAnimation,
+            isPageActive: isPageActive,
             searchDrawerHeight: searchDrawerHeight,
             searchPresentation: searchPresentation,
             isSearchPresented: isSearchPresented,
@@ -94,6 +98,8 @@ private struct BookshelfAggregateCollectionConfiguration {
     let layoutMode: BookshelfLayoutMode
     let columnCount: Int
     let contentState: BookshelfContentState
+    let allowsStructuralAnimation: Bool
+    let isPageActive: Bool
     let searchDrawerHeight: CGFloat
     let searchPresentation: BookshelfSearchDrawerPresentation
     let isSearchPresented: Bool
@@ -118,6 +124,10 @@ private struct BookshelfAggregateCollectionConfiguration {
         searchDrawerHeight > 0.5
     }
 
+    var allowsUpdateAnimation: Bool {
+        isPageActive && allowsStructuralAnimation
+    }
+
     var showsExpandedSearchSurface: Bool {
         searchPresentation.isPinned || isSearchPresented || isSearchFocused || hasSearchText || hasSearchKeyword
     }
@@ -139,6 +149,8 @@ private struct BookshelfAggregateCollectionConfiguration {
         layoutMode: .grid,
         columnCount: 2,
         contentState: .empty,
+        allowsStructuralAnimation: true,
+        isPageActive: false,
         searchDrawerHeight: 0,
         searchPresentation: .hidden,
         isSearchPresented: false,
@@ -181,6 +193,7 @@ final class BookshelfAggregateCollectionHostView: UIView {
     private var isContentToEmptyTransitionPending = false
     private var contentToEmptyTransitionGeneration = 0
     private var pendingContentToEmptyConfiguration: BookshelfAggregateCollectionConfiguration?
+    private var suppressesNextSearchDrawerVisibilityAnimation = false
     private let searchFocusRequestCoordinator = BookshelfSearchFocusRequestCoordinator()
     private var lastCollectionBounds: CGRect = .zero
     private let impactFeedback = UIImpactFeedbackGenerator(style: .medium)
@@ -265,6 +278,7 @@ final class BookshelfAggregateCollectionHostView: UIView {
         }
 
         let previousConfiguration = self.configuration
+        let didChangePageActivation = previousConfiguration.isPageActive != configuration.isPageActive
         let previousSections = sections
         let nextSections = configuration.sections
         let didChangeSearchDrawerVisibility = previousConfiguration.showsSearchDrawerInCollection != configuration.showsSearchDrawerInCollection
@@ -281,11 +295,20 @@ final class BookshelfAggregateCollectionHostView: UIView {
             || didChangeSearchDrawerVisibility
             || didChangeSearchEmptyState
             || abs(previousConfiguration.searchDrawerHeight - configuration.searchDrawerHeight) > 0.5
+        let shouldAnimateUpdate = animated
+            && configuration.allowsStructuralAnimation
+            && !didChangePageActivation
+
+        if didChangePageActivation {
+            suppressesNextSearchDrawerVisibilityAnimation = true
+            cancelVisibleCellAnimationsForPageSwitch()
+        }
+
         let shouldAnimateContentToEmpty = shouldAnimateSearchContentToEmptyTransition(
             from: previousConfiguration,
             to: configuration,
             previousSections: previousSections,
-            animated: animated
+            animated: shouldAnimateUpdate
         )
         if shouldAnimateContentToEmpty {
             applySearchContentToEmptyTransition(
@@ -301,19 +324,19 @@ final class BookshelfAggregateCollectionHostView: UIView {
             isExpanded: configuration.showsExpandedSearchSurface
         )
         collectionView.dragInteractionEnabled = configuration.canReorder
-        updateCollectionVisibilityForSearchDrawerPreparation()
+        updateCollectionVisibilityForSearchDrawerPreparation(animated: shouldAnimateUpdate)
         normalizeSearchDrawerExtraBottomInsetForCurrentState()
         updateBottomContentInset()
 
         if needsLayoutUpdate {
-            collectionView.setCollectionViewLayout(makeLayout(for: configuration), animated: animated)
+            collectionView.setCollectionViewLayout(makeLayout(for: configuration), animated: shouldAnimateUpdate)
         }
         if didChangeSearchDrawerVisibility || didChangeSearchEmptyState {
             let insertedGroupIDs = shouldAnimateSearchEmptyToContentTransition(
                 from: previousConfiguration,
                 to: configuration,
                 nextSections: nextSections,
-                animated: animated
+                animated: shouldAnimateUpdate
             ) ? Set(nextSections.flatMap(\.groups).map(\.id)) : []
             pendingAnimatedInsertionGroupIDs.formUnion(insertedGroupIDs)
             sections = nextSections
@@ -323,7 +346,7 @@ final class BookshelfAggregateCollectionHostView: UIView {
             }
             animateVisiblePendingInsertions()
             animateVisibleSearchEmptyIfNeeded(
-                shouldAnimate: animated
+                shouldAnimate: shouldAnimateUpdate
                     && !UIAccessibility.isReduceMotionEnabled
                     && configuration.showsSearchEmptyState
                     && previousConfiguration.showsSearchEmptyState == false
@@ -333,21 +356,21 @@ final class BookshelfAggregateCollectionHostView: UIView {
                applyAnimatedGroupUpdate(
                 from: previousSections,
                 to: nextSections,
-                animated: animated
+                animated: shouldAnimateUpdate
                ) {
                 if didChangeSearchSurfaceContent {
                     refreshVisibleSearchCells()
                 }
-                syncSearchDrawerOffsetAfterUpdate(previousConfiguration: previousConfiguration, animated: animated)
+                syncSearchDrawerOffsetAfterUpdate(previousConfiguration: previousConfiguration, animated: shouldAnimateUpdate)
                 return
             }
             sections = nextSections
-            reloadCollectionWithCrossfadeIfNeeded(animated: animated && configuration.showsExpandedSearchSurface)
+            reloadCollectionWithCrossfadeIfNeeded(animated: shouldAnimateUpdate && configuration.showsExpandedSearchSurface)
         } else if didChangeSearchSurfaceContent {
             refreshVisibleSearchCells()
             refreshVisibleGroupCells()
         }
-        syncSearchDrawerOffsetAfterUpdate(previousConfiguration: previousConfiguration, animated: animated)
+        syncSearchDrawerOffsetAfterUpdate(previousConfiguration: previousConfiguration, animated: shouldAnimateUpdate)
     }
 }
 
@@ -395,7 +418,7 @@ private extension BookshelfAggregateCollectionHostView {
     }
 
     /// 初始隐藏搜索抽屉时先等滚动位置收敛，避免首帧露出半收起胶囊。
-    func updateCollectionVisibilityForSearchDrawerPreparation() {
+    func updateCollectionVisibilityForSearchDrawerPreparation(animated: Bool = true) {
         let shouldHideUntilOffsetSettles = configuration.showsSearchDrawerInCollection
             && !configuration.showsExpandedSearchSurface
             && !didApplyInitialSearchDrawerOffset
@@ -405,11 +428,14 @@ private extension BookshelfAggregateCollectionHostView {
             : .identity
         collectionView.isUserInteractionEnabled = !shouldHideUntilOffsetSettles
         guard abs(collectionView.alpha - targetAlpha) > 0.01 || collectionView.transform != targetTransform else {
+            clearVisibilityAnimationSuppressionIfSettled(shouldHideUntilOffsetSettles: shouldHideUntilOffsetSettles)
             return
         }
-        if shouldHideUntilOffsetSettles || collectionView.window == nil {
+        let canAnimateVisibility = animated && !suppressesNextSearchDrawerVisibilityAnimation
+        if !canAnimateVisibility || shouldHideUntilOffsetSettles || collectionView.window == nil {
             collectionView.alpha = targetAlpha
             collectionView.transform = targetTransform
+            clearVisibilityAnimationSuppressionIfSettled(shouldHideUntilOffsetSettles: shouldHideUntilOffsetSettles)
             return
         }
         UIView.animate(
@@ -420,6 +446,23 @@ private extension BookshelfAggregateCollectionHostView {
             self.collectionView.alpha = targetAlpha
             self.collectionView.transform = targetTransform
         }
+    }
+
+    /// 子页切换期间取消 UIKit 侧残留动画，避免隐藏页面的聚合卡动画在切回时继续播放。
+    func cancelVisibleCellAnimationsForPageSwitch() {
+        collectionView.layer.removeAllAnimations()
+        for cell in collectionView.visibleCells {
+            cell.layer.removeAllAnimations()
+            cell.contentView.layer.removeAllAnimations()
+            cell.alpha = 1
+            cell.transform = .identity
+        }
+    }
+
+    /// 页面切换触发的搜索抽屉首帧隐藏需要一直禁动画到可见态落位。
+    func clearVisibilityAnimationSuppressionIfSettled(shouldHideUntilOffsetSettles: Bool) {
+        guard !shouldHideUntilOffsetSettles else { return }
+        suppressesNextSearchDrawerVisibilityAnimation = false
     }
 
     var searchSectionOffset: Int {
@@ -558,13 +601,13 @@ private extension BookshelfAggregateCollectionHostView {
         guard configuration.showsSearchDrawerInCollection else {
             didApplyInitialSearchDrawerOffset = false
             isPendingInitialSearchDrawerOffset = false
-            updateCollectionVisibilityForSearchDrawerPreparation()
+            updateCollectionVisibilityForSearchDrawerPreparation(animated: animated)
             return
         }
         if configuration.showsExpandedSearchSurface {
             didApplyInitialSearchDrawerOffset = true
             isPendingInitialSearchDrawerOffset = false
-            updateCollectionVisibilityForSearchDrawerPreparation()
+            updateCollectionVisibilityForSearchDrawerPreparation(animated: animated)
             if !previousConfiguration.showsExpandedSearchSurface {
                 setSearchDrawerVisible(animated: animated) { [weak self] in
                     self?.requestSearchFocusAfterDrawerSettles()
@@ -576,7 +619,7 @@ private extension BookshelfAggregateCollectionHostView {
             didApplyInitialSearchDrawerOffset = true
             isPendingInitialSearchDrawerOffset = false
             setSearchDrawerHidden(animated: animated)
-            updateCollectionVisibilityForSearchDrawerPreparation()
+            updateCollectionVisibilityForSearchDrawerPreparation(animated: animated)
             return
         }
         let shouldApplyInitialOffset = !didApplyInitialSearchDrawerOffset

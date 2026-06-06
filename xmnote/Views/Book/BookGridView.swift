@@ -6,13 +6,67 @@
 //
 
 /**
- * [INPUT]: 依赖 BookViewModel 提供书架快照、维度状态、搜索状态、显示设置、编辑态与 UICollectionView 排序状态，依赖页面可见态驱动 UIKit 滚动观察，依赖 LoadingGate 约束读取加载反馈，依赖容器注入路由、搜索 drawer 回调、进入编辑态回调与底部滚动余量
- * [OUTPUT]: 对外提供 BookGridView，展示书架内容区、集合顶部搜索 drawer、多维度 UICollectionView 聚合入口、选择覆盖层、搜索空态、写入错误浮层与拖拽排序交互
+ * [INPUT]: 依赖 BookViewModel 提供书架快照、维度状态、搜索状态、显示设置、编辑态与 UICollectionView 排序状态，依赖页面可见态驱动 UIKit 滚动观察与二级页切换禁动画边界，依赖 LoadingGate 约束读取加载反馈，依赖容器注入路由、搜索 drawer 回调、进入编辑态回调、维度工具回调与底部滚动余量
+ * [OUTPUT]: 对外提供 BookGridView，展示书籍子页维度工具行、书架内容区、集合顶部搜索 drawer、多维度 UICollectionView 聚合入口、选择覆盖层、搜索空态、写入错误浮层与拖拽排序交互
  * [POS]: Book 模块网格展示层，被 BookContainerView 嵌入
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
 import SwiftUI
+
+private enum BookGridToolbarMetrics {
+    static let dimensionRailHeight: CGFloat = 44
+}
+
+private enum BookshelfDimensionManagementAction {
+    case tag
+    case source
+    case author
+    case press
+
+    var title: String {
+        switch self {
+        case .tag:
+            return "标签管理"
+        case .source:
+            return "来源管理"
+        case .author:
+            return "作者管理"
+        case .press:
+            return "出版社管理"
+        }
+    }
+
+    var systemImage: String {
+        switch self {
+        case .tag:
+            return "tag"
+        case .source:
+            return "tray.full"
+        case .author:
+            return "person.text.rectangle"
+        case .press:
+            return "building.2"
+        }
+    }
+}
+
+private extension BookshelfDimension {
+    var managementAction: BookshelfDimensionManagementAction? {
+        switch self {
+        case .tag:
+            return .tag
+        case .source:
+            return .source
+        case .author:
+            return .author
+        case .press:
+            return .press
+        case .default, .status, .rating:
+            return nil
+        }
+    }
+}
 
 /// 书籍页内容视图，负责书架多维度只读渲染、选择覆盖层与排序交互。
 struct BookGridView: View {
@@ -28,6 +82,8 @@ struct BookGridView: View {
     var searchKeyword = ""
     var searchPlaceholder = ""
     var searchFocusTrigger = 0
+    var canShowSelectAction = false
+    var canEditCurrentDimension = false
     var onActivateSearch: () -> Void = {}
     var onRequestSearchFocus: () -> Void = {}
     var onSearchKeywordChange: (String) -> Void = { _ in }
@@ -38,16 +94,32 @@ struct BookGridView: View {
     var onOpenRoute: (BookRoute) -> Void = { _ in }
     var onOpenNoteRoute: (NoteRoute) -> Void = { _ in }
     var onEnterEditing: (BookshelfItemID?) -> Void = { _ in }
+    var onShowDisplaySettings: () -> Void = {}
+    var onOpenTagManagement: () -> Void = {}
+    var onOpenSourceManagement: () -> Void = {}
+    var onOpenAuthorManagement: () -> Void = {}
+    var onOpenPressManagement: () -> Void = {}
+    var onOpenGuide: () -> Void = {}
     @State private var readLoadingGate = LoadingGate()
     @State private var hasPresentedInitialContent = false
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         ZStack(alignment: .top) {
-            gridContent
+            VStack(spacing: Spacing.none) {
+                if showsDimensionToolbar {
+                    dimensionToolRow
+                        .frame(height: BookGridToolbarMetrics.dimensionRailHeight)
+                        .transition(BookshelfManagementMotion.browsingChromeTransition(reduceMotion: reduceMotion))
+                }
+
+                gridContent
+            }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             if let writeError = viewModel.writeError, !writeError.isEmpty {
                 writeErrorHint(writeError)
+                    .padding(.top, showsDimensionToolbar ? BookGridToolbarMetrics.dimensionRailHeight : 0)
             }
         }
         .xmSystemAlert(item: $viewModel.activeContributorNameEdit) { nameEdit in
@@ -73,6 +145,73 @@ struct BookGridView: View {
 
     private func syncReadLoadingGate() {
         readLoadingGate.update(intent: viewModel.contentState == .loading ? .read : .none)
+    }
+
+    private var showsDimensionToolbar: Bool {
+        !viewModel.isEditing
+    }
+
+    private var dimensionToolRow: some View {
+        HStack(spacing: Spacing.none) {
+            BookshelfDimensionRail(
+                selectedDimension: viewModel.selectedDimension,
+                onSelect: viewModel.selectDimension,
+                trailingPadding: Spacing.none
+            )
+            .frame(maxWidth: .infinity)
+
+            bookshelfToolMenu
+                .padding(.leading, Spacing.tight)
+                .padding(.trailing, Spacing.screenEdge)
+        }
+        .accessibilityElement(children: .contain)
+    }
+
+    private var bookshelfToolMenu: some View {
+        Menu {
+            if viewModel.selectedDimension == .default {
+                Button {
+                    onEnterEditing(nil)
+                } label: {
+                    XMMenuLabel("书籍整理", systemImage: "checklist")
+                }
+                .disabled(!canShowSelectAction || !canEditCurrentDimension)
+            }
+
+            if let managementAction = viewModel.selectedDimension.managementAction {
+                Button(action: managementActionHandler(for: managementAction)) {
+                    XMMenuLabel(managementAction.title, systemImage: managementAction.systemImage)
+                }
+            }
+
+            Button(action: onShowDisplaySettings) {
+                XMMenuLabel("显示与排序", systemImage: "slider.horizontal.3")
+            }
+
+            Divider()
+
+            Button(action: onOpenGuide) {
+                XMMenuLabel("使用说明", systemImage: "questionmark.circle")
+            }
+        } label: {
+            BookshelfToolMenuButton()
+        }
+        .xmMenuNeutralTint()
+        .menuOrder(.fixed)
+        .accessibilityLabel("书架更多操作")
+    }
+
+    private func managementActionHandler(for action: BookshelfDimensionManagementAction) -> () -> Void {
+        switch action {
+        case .tag:
+            return onOpenTagManagement
+        case .source:
+            return onOpenSourceManagement
+        case .author:
+            return onOpenAuthorManagement
+        case .press:
+            return onOpenPressManagement
+        }
     }
 
     @ViewBuilder
@@ -215,8 +354,10 @@ struct BookGridView: View {
             columnCount: viewModel.displaySetting.columnCount,
             contentState: viewModel.contentState,
             showsNoteCount: viewModel.displaySetting.showsNoteCount,
+            sortCriteria: viewModel.displaySetting.sortCriteria,
             titleDisplayMode: viewModel.displaySetting.titleDisplayMode,
             allowsStructuralAnimation: hasPresentedInitialContent,
+            isPageActive: isPageActive,
             isEditing: viewModel.isEditing,
             bottomContentInset: bottomContentInset,
             searchDrawerHeight: searchDrawerHeight,
@@ -271,6 +412,8 @@ struct BookGridView: View {
             layoutMode: viewModel.displaySetting.layoutMode,
             columnCount: aggregateColumnCount(for: dimension),
             contentState: viewModel.contentState,
+            allowsStructuralAnimation: hasPresentedInitialContent,
+            isPageActive: isPageActive,
             searchDrawerHeight: searchDrawerHeight,
             searchPresentation: searchPresentation,
             isSearchPresented: isSearchPresented,
@@ -417,6 +560,50 @@ struct BookGridView: View {
             ],
             preferredActionID: nil
         )
+    }
+}
+
+/// 书架维度 rail 右侧固定的末尾 chip，保持 44pt 热区并对齐未选中维度项。
+private struct BookshelfToolMenuButton: View {
+    private enum Style {
+        static let hitSize = Spacing.actionReserved
+        static let visualWidth: CGFloat = 32
+        static let visualHeight: CGFloat = 28
+        static let cornerRadius = CornerRadius.blockSmall
+    }
+
+    var body: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: Style.cornerRadius, style: .continuous)
+                .fill(Color.surfaceCard)
+
+            RoundedRectangle(cornerRadius: Style.cornerRadius, style: .continuous)
+                .stroke(Color.surfaceBorderSubtle.opacity(0.18), lineWidth: CardStyle.borderWidth)
+
+            BookshelfMoreGlyph()
+        }
+        .frame(width: Style.visualWidth, height: Style.visualHeight)
+        .frame(width: Style.hitSize, height: Style.hitSize)
+        .contentShape(Rectangle())
+    }
+}
+
+/// 自绘竖向三点，避免 SF Symbol 旋转或 `ellipsis.vertical` 在菜单 label 中显示不稳定。
+private struct BookshelfMoreGlyph: View {
+    private enum Style {
+        static let dotSize: CGFloat = 3
+        static let dotSpacing: CGFloat = 2.5
+    }
+
+    var body: some View {
+        VStack(spacing: Style.dotSpacing) {
+            ForEach(0..<3, id: \.self) { _ in
+                Circle()
+                    .fill(Color.iconSecondary)
+                    .frame(width: Style.dotSize, height: Style.dotSize)
+            }
+        }
+        .accessibilityHidden(true)
     }
 }
 

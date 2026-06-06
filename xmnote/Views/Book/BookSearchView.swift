@@ -260,7 +260,7 @@ struct BookSearchView: View {
     private func sourcePills(_ viewModel: BookSearchViewModel) -> some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: SearchPageLayout.sourceChipSpacing) {
-                ForEach(BookSearchSource.allCases) { source in
+                ForEach(viewModel.availableSources) { source in
                     let isSelected = source == viewModel.selectedSource
                     Button {
                         withAnimation(.snappy) {

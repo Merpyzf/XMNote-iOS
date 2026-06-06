@@ -257,6 +257,19 @@ private struct BookshelfBookListContentView: View {
                     onCreate: viewModel.createMoveTargetGroup(named:),
                     onConfirm: viewModel.submitMoveToGroup
                 )
+            case .bookCollection(
+                options: let options,
+                isLoading: let isLoading,
+                errorMessage: let errorMessage
+            ):
+                BookshelfBookCollectionSheet(
+                    options: options,
+                    selectedCount: viewModel.selectedCount,
+                    isLoading: isLoading,
+                    errorMessage: errorMessage,
+                    onCreate: viewModel.createBookCollection(named:),
+                    onConfirm: viewModel.submitBookCollection
+                )
             }
         }
         .xmSystemAlert(item: $viewModel.activeMoveOutConfirmation) { confirmation in
@@ -443,6 +456,7 @@ private struct BookshelfBookListContentView: View {
                 layoutMode: viewModel.displaySetting.layoutMode,
                 columnCount: viewModel.displaySetting.columnCount,
                 showsNoteCount: viewModel.displaySetting.showsNoteCount,
+                sortCriteria: viewModel.displaySetting.sortCriteria,
                 titleDisplayMode: viewModel.displaySetting.titleDisplayMode,
                 isEditing: viewModel.isEditing,
                 hasSearchKeyword: viewModel.hasSearchKeyword,
@@ -808,6 +822,7 @@ private struct BookshelfBookListCollectionView: UIViewRepresentable {
     let layoutMode: BookshelfLayoutMode
     let columnCount: Int
     let showsNoteCount: Bool
+    let sortCriteria: BookshelfSortCriteria
     let titleDisplayMode: BookshelfTitleDisplayMode
     let isEditing: Bool
     let hasSearchKeyword: Bool
@@ -861,6 +876,7 @@ private struct BookshelfBookListCollectionView: UIViewRepresentable {
             layoutMode: layoutMode,
             columnCount: max(2, min(columnCount, 4)),
             showsNoteCount: showsNoteCount,
+            sortCriteria: sortCriteria,
             titleDisplayMode: titleDisplayMode,
             isEditing: isEditing,
             hasSearchKeyword: hasSearchKeyword,
@@ -900,6 +916,7 @@ private struct BookshelfBookListCollectionConfiguration {
     let layoutMode: BookshelfLayoutMode
     let columnCount: Int
     let showsNoteCount: Bool
+    let sortCriteria: BookshelfSortCriteria
     let titleDisplayMode: BookshelfTitleDisplayMode
     let isEditing: Bool
     let hasSearchKeyword: Bool
@@ -935,6 +952,7 @@ private struct BookshelfBookListCollectionConfiguration {
         layoutMode: .list,
         columnCount: 3,
         showsNoteCount: true,
+        sortCriteria: .custom,
         titleDisplayMode: .standard,
         isEditing: false,
         hasSearchKeyword: false,
@@ -1094,9 +1112,9 @@ private enum BookshelfBookListGridMetrics {
     }
 }
 
-/// 二级书籍列表非网格内容的确定性尺寸，避免 estimated self-sizing 在状态切换中二次测量。
+/// 二级书籍列表非网格内容的基础尺寸，书籍行以估算高度承接完整元信息。
 private enum BookshelfBookListLayoutMetrics {
-    static let listRowHeight: CGFloat = 92
+    static let listRowHeight: CGFloat = 128
     static let loadingHeight: CGFloat = 520
     static let emptyHeight: CGFloat = 320
     static let sectionHeaderHeight: CGFloat = 34
@@ -1758,6 +1776,8 @@ private extension BookshelfBookListCollectionHostView {
             }
             let usesGrid = resolvedConfiguration.layoutMode == .grid
                 && (self?.sectionContainsBooks(at: sectionIndex) ?? false)
+            let listItemHeight = self?.listItemHeight(at: sectionIndex) ?? BookshelfBookListLayoutMetrics.listRowHeight
+            let usesEstimatedHeight = self?.listItemUsesEstimatedHeight(at: sectionIndex) ?? false
             let section = usesGrid
                 ? Self.makeGridSection(
                     columnCount: resolvedConfiguration.columnCount,
@@ -1765,7 +1785,8 @@ private extension BookshelfBookListCollectionHostView {
                     titleDisplayMode: resolvedConfiguration.titleDisplayMode
                 )
                 : Self.makeListSection(
-                    itemHeight: self?.listItemHeight(at: sectionIndex) ?? BookshelfBookListLayoutMetrics.listRowHeight
+                    itemHeight: listItemHeight,
+                    usesEstimatedHeight: usesEstimatedHeight
                 )
             if let self,
                self.sections.indices.contains(sectionIndex),
@@ -1785,7 +1806,7 @@ private extension BookshelfBookListCollectionHostView {
         }
     }
 
-    /// 根据 section 内容返回稳定行高，避免 loading/empty/list row 依赖自动测量。
+    /// 根据 section 内容返回基础行高，书籍行会以该值作为自适应估算高度。
     func listItemHeight(at sectionIndex: Int) -> CGFloat {
         guard sections.indices.contains(sectionIndex),
               let firstItem = sections[sectionIndex].items.first else {
@@ -1801,6 +1822,18 @@ private extension BookshelfBookListCollectionHostView {
         case .book:
             return BookshelfBookListLayoutMetrics.listRowHeight
         }
+    }
+
+    /// 书籍列表行需要承载可变标签与排序辅助信息，使用 self-sizing 避免固定高度截断内容。
+    func listItemUsesEstimatedHeight(at sectionIndex: Int) -> Bool {
+        guard sections.indices.contains(sectionIndex),
+              let firstItem = sections[sectionIndex].items.first else {
+            return false
+        }
+        if case .book = firstItem {
+            return true
+        }
+        return false
     }
 
     /// 只增加滚动余量，不改变 collection layout，避免底部玻璃栏遮挡最后一行书籍。
@@ -2347,17 +2380,20 @@ private extension BookshelfBookListCollectionHostView {
         return section
     }
 
-    /// 二级列表 list 模式与非书籍 section 使用单列全宽确定高度。
-    static func makeListSection(itemHeight: CGFloat) -> NSCollectionLayoutSection {
+    /// 二级列表 list 模式使用单列全宽布局；书籍行估算高度，加载与空态保持确定高度。
+    static func makeListSection(itemHeight: CGFloat, usesEstimatedHeight: Bool) -> NSCollectionLayoutSection {
         let resolvedHeight = max(1, itemHeight)
+        let heightDimension: NSCollectionLayoutDimension = usesEstimatedHeight
+            ? .estimated(resolvedHeight)
+            : .absolute(resolvedHeight)
         let itemSize = NSCollectionLayoutSize(
             widthDimension: .fractionalWidth(1),
-            heightDimension: .absolute(resolvedHeight)
+            heightDimension: heightDimension
         )
         let item = NSCollectionLayoutItem(layoutSize: itemSize)
         let groupSize = NSCollectionLayoutSize(
             widthDimension: .fractionalWidth(1),
-            heightDimension: .absolute(resolvedHeight)
+            heightDimension: heightDimension
         )
         let group = NSCollectionLayoutGroup.vertical(layoutSize: groupSize, subitems: [item])
         let section = NSCollectionLayoutSection(group: group)
@@ -3082,6 +3118,7 @@ private final class BookshelfBookListCollectionCell: UICollectionViewCell {
                     BookshelfBookListGridItemView(
                         book: book,
                         showsNoteCount: configuration.showsNoteCount,
+                        sortCriteria: configuration.sortCriteria,
                         titleDisplayMode: configuration.titleDisplayMode,
                         searchKeyword: configuration.browseSearchKeyword,
                         isEditing: configuration.isEditing,
@@ -3094,6 +3131,7 @@ private final class BookshelfBookListCollectionCell: UICollectionViewCell {
                     BookshelfBookListRowView(
                         book: book,
                         showsNoteCount: configuration.showsNoteCount,
+                        sortCriteria: configuration.sortCriteria,
                         titleDisplayMode: configuration.titleDisplayMode,
                         searchKeyword: configuration.browseSearchKeyword,
                         isEditing: configuration.isEditing,
@@ -3219,6 +3257,7 @@ private struct BookshelfBookListGridItemView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let book: BookshelfBookListItem
     let showsNoteCount: Bool
+    let sortCriteria: BookshelfSortCriteria
     let titleDisplayMode: BookshelfTitleDisplayMode
     let searchKeyword: String
     let isEditing: Bool
@@ -3250,6 +3289,13 @@ private struct BookshelfBookListGridItemView: View {
                     baseColor: Color.textSecondary
                 )
                     .lineLimit(1)
+
+                if let sortAuxiliaryText {
+                    Text(sortAuxiliaryText)
+                        .font(BookshelfTypography.gridSubtitle)
+                        .foregroundStyle(Color.textHint)
+                        .lineLimit(1)
+                }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
@@ -3335,18 +3381,6 @@ private struct BookshelfBookListGridItemView: View {
         }
 
         Button {
-            onContextAction(.showReadingDetail, book.id)
-        } label: {
-            XMMenuLabel("阅读详情", systemImage: "chart.bar.doc.horizontal")
-        }
-
-        Button {
-            onContextAction(.startReadTiming, book.id)
-        } label: {
-            XMMenuLabel("开始计时", systemImage: "timer")
-        }
-
-        Button {
             onContextAction(.organizeBooks, book.id)
         } label: {
             XMMenuLabel("整理书籍", systemImage: "checklist")
@@ -3361,7 +3395,12 @@ private struct BookshelfBookListGridItemView: View {
     }
 
     private var metadata: String {
-        metadataText(separator: "，", emptyAuthorFallback: "未知作者", includesNoteCount: true)
+        let parts = [
+            metadataText(separator: "，", emptyAuthorFallback: "未知作者", includesNoteCount: true),
+            sortAuxiliaryText ?? ""
+        ]
+            .filter { !$0.isEmpty }
+        return parts.joined(separator: "，")
     }
 
     private func metadataText(separator: String, emptyAuthorFallback: String, includesNoteCount: Bool) -> String {
@@ -3394,6 +3433,10 @@ private struct BookshelfBookListGridItemView: View {
         !searchKeyword.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
+    private var sortAuxiliaryText: String? {
+        book.sortAuxiliaryText(for: sortCriteria)
+    }
+
     private var accessibilityLabel: String {
         if isEditing {
             return "\(book.title)，\(metadata)，\(isSelected ? "已选中" : "未选中")"
@@ -3407,6 +3450,7 @@ private struct BookshelfBookListRowView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let book: BookshelfBookListItem
     let showsNoteCount: Bool
+    let sortCriteria: BookshelfSortCriteria
     let titleDisplayMode: BookshelfTitleDisplayMode
     let searchKeyword: String
     let isEditing: Bool
@@ -3416,55 +3460,14 @@ private struct BookshelfBookListRowView: View {
     let onContextAction: (BookshelfBookContextAction, Int64) -> Void
 
     var body: some View {
-        HStack(spacing: Spacing.base) {
-            XMBookCover.fixedWidth(
-                48,
-                urlString: book.cover,
-                cornerRadius: CornerRadius.inlaySmall,
-                border: .init(color: .surfaceBorderSubtle, width: CardStyle.borderWidth),
-                placeholderIconSize: .small,
-                surfaceStyle: .spine
-            )
-
-            VStack(alignment: .leading, spacing: Spacing.tiny) {
-                BookshelfTitleText(
-                    text: book.title,
-                    mode: titleDisplayMode,
-                    style: .bodyMedium,
-                    color: .textPrimary,
-                    highlightKeyword: searchKeyword
-                )
-
-                XMKeywordHighlighting.text(
-                    metadata,
-                    keyword: searchKeyword,
-                    baseFont: AppTypography.caption,
-                    highlightFont: AppTypography.caption,
-                    baseColor: Color.textSecondary
-                )
-                    .lineLimit(1)
-            }
-
-            Spacer(minLength: Spacing.compact)
-
-            if book.pinned {
-                Image(systemName: "pin.fill")
-                    .font(AppTypography.caption)
-                    .foregroundStyle(Color.brand)
-            }
-
-            if !isEditing {
-                Image(systemName: "chevron.right")
-                    .font(AppTypography.caption)
-                    .foregroundStyle(Color.textHint)
-            }
-        }
-        .padding(Spacing.base)
-        .background(Color.surfaceCard, in: RoundedRectangle(cornerRadius: CornerRadius.blockLarge, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: CornerRadius.blockLarge, style: .continuous)
-                .stroke(Color.surfaceBorderSubtle, lineWidth: CardStyle.borderWidth)
-        }
+        BookshelfBookListRowContent(
+            book: book,
+            showsNoteCount: showsNoteCount,
+            sortCriteria: sortCriteria,
+            titleDisplayMode: titleDisplayMode,
+            searchKeyword: searchKeyword,
+            showsChevron: !isEditing
+        )
         .opacity(isEditing ? (isSelected ? 1 : BookshelfBookListSelectionVisualStyle.unselectedEditingOpacity) : 1)
         .overlay {
             if isEditing {
@@ -3516,18 +3519,6 @@ private struct BookshelfBookListRowView: View {
         }
 
         Button {
-            onContextAction(.showReadingDetail, book.id)
-        } label: {
-            XMMenuLabel("阅读详情", systemImage: "chart.bar.doc.horizontal")
-        }
-
-        Button {
-            onContextAction(.startReadTiming, book.id)
-        } label: {
-            XMMenuLabel("开始计时", systemImage: "timer")
-        }
-
-        Button {
             onContextAction(.organizeBooks, book.id)
         } label: {
             XMMenuLabel("整理书籍", systemImage: "checklist")
@@ -3541,41 +3532,23 @@ private struct BookshelfBookListRowView: View {
         .disabled(activeWriteAction != nil)
     }
 
-    private var metadata: String {
-        metadataText(separator: " · ", emptyAuthorFallback: "未知作者")
-    }
-
-    private func metadataText(separator: String, emptyAuthorFallback: String) -> String {
-        let authorText = book.author.trimmingCharacters(in: .whitespacesAndNewlines)
-        var parts: [String] = []
-        if let searchContextText {
-            parts.append(searchContextText)
-        }
-        parts.append(authorText.isEmpty ? emptyAuthorFallback : authorText)
-        if showsNoteCount, book.noteCount > 0 {
-            parts.append("\(book.noteCount)条书摘")
-        }
-        return parts.joined(separator: separator)
-    }
-
-    private var searchContextText: String? {
-        guard hasSearchKeyword,
-              !XMKeywordHighlighting.contains(book.title, keyword: searchKeyword),
-              !XMKeywordHighlighting.contains(book.author, keyword: searchKeyword) else {
-            return nil
-        }
-        return nil
-    }
-
-    private var hasSearchKeyword: Bool {
-        !searchKeyword.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    private var sortAuxiliaryText: String? {
+        book.sortAuxiliaryText(for: sortCriteria)
     }
 
     private var accessibilityLabel: String {
+        let visibleMetadata = [
+            book.bookListBasicMetadataText,
+            book.bookListRatingAccessibilityText,
+            book.bookListReadingAccessibilityText,
+            sortAuxiliaryText ?? ""
+        ]
+            .filter { !$0.isEmpty }
+            .joined(separator: "，")
         if isEditing {
-            return "\(book.title)，\(metadata)，\(isSelected ? "已选中" : "未选中")"
+            return "\(book.title)，\(visibleMetadata)，\(isSelected ? "已选中" : "未选中")"
         }
-        return "\(book.title)，\(metadata)"
+        return visibleMetadata.isEmpty ? book.title : "\(book.title)，\(visibleMetadata)"
     }
 }
 

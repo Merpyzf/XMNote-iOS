@@ -2,7 +2,7 @@ import Foundation
 
 /**
  * [INPUT]: 依赖 Foundation 的 Date/DateFormatter 进行时间格式化
- * [OUTPUT]: 对外提供 BookItem、BookshelfSnapshot、BookshelfItem、BookshelfOrderItem、BookshelfListContext、BookshelfBatchEditOptions、BookshelfMoveGroupOption、BookDetail、NoteExcerpt 等书籍域展示模型
+ * [OUTPUT]: 对外提供 BookItem、BookshelfSnapshot、BookshelfItem、BookshelfOrderItem、BookshelfListContext、BookshelfBatchEditOptions、BookshelfMoveGroupOption、BookCollectionSummary、BookDetail、NoteExcerpt 等书籍域展示模型
  * [POS]: Domain/Models 的书籍聚合模型定义，被 BookViewModel 与 BookRepository 实现共同消费
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -521,6 +521,14 @@ nonisolated struct BookshelfMoveGroupOption: Identifiable, Hashable, Sendable {
     let representativeCovers: [String]
 }
 
+/// 批量加入书单 Sheet 使用的轻量书单摘要，排除年度书单，仅承载手动书单候选项。
+nonisolated struct BookCollectionSummary: Identifiable, Hashable, Sendable {
+    let id: Int64
+    let title: String
+    let description: String
+    let bookCount: Int
+}
+
 /// 书架批量编辑可选项，统一承载标签、来源与阅读状态 Sheet 所需数据。
 nonisolated struct BookshelfBatchEditOptions: Hashable, Sendable {
     static let empty = BookshelfBatchEditOptions(
@@ -551,6 +559,19 @@ nonisolated struct BookshelfBatchReadStatusInput: Hashable, Sendable {
     let ratingScore: Int64?
 }
 
+/// 书架写操作反馈，区分处理中、成功、警告与错误，供 iOS 内联提示按语义展示。
+nonisolated struct BookshelfActionFeedback: Hashable, Sendable {
+    enum Kind: Hashable, Sendable {
+        case processing
+        case success
+        case warning
+        case error
+    }
+
+    let kind: Kind
+    let message: String
+}
+
 /// 书架条目内容，统一表达书籍卡片与分组卡片。
 nonisolated enum BookshelfItemContent: Hashable, Sendable {
     case book(BookshelfBookPayload)
@@ -564,7 +585,27 @@ nonisolated struct BookshelfItem: Identifiable, Hashable, Sendable {
     let pinOrder: Int64
     let sortOrder: Int64
     var sortMetadata: BookshelfItemSortMetadata = .empty
+    let bookListItem: BookshelfBookListItem?
     let content: BookshelfItemContent
+
+    /// 构建书架混排条目，书籍条目可携带完整列表行展示模型，分组条目保持为空。
+    nonisolated init(
+        id: BookshelfItemID,
+        pinned: Bool,
+        pinOrder: Int64,
+        sortOrder: Int64,
+        sortMetadata: BookshelfItemSortMetadata = .empty,
+        bookListItem: BookshelfBookListItem? = nil,
+        content: BookshelfItemContent
+    ) {
+        self.id = id
+        self.pinned = pinned
+        self.pinOrder = pinOrder
+        self.sortOrder = sortOrder
+        self.sortMetadata = sortMetadata
+        self.bookListItem = bookListItem
+        self.content = content
+    }
 
     nonisolated var title: String {
         switch content {
@@ -618,38 +659,93 @@ nonisolated struct BookshelfBookPayload: Hashable, Sendable {
     }
 }
 
+/// 二级书籍列表行的轻量标签，保留导航恢复所需的稳定展示字段。
+nonisolated struct BookshelfBookListTag: Identifiable, Hashable, Codable, Sendable {
+    let id: Int64
+    let name: String
+    let order: Int64
+}
+
 /// 书架聚合列表中的只读书籍行，作为导航路由载荷避免二级页直接访问数据库。
 nonisolated struct BookshelfBookListItem: Identifiable, Hashable, Codable, Sendable {
     let id: Int64
     let title: String
     let author: String
     let cover: String
+    let readStatusId: Int64
     let readStatusName: String
+    let readStatusBadgeTitle: String
     let sourceName: String
+    let press: String
+    let pubDateText: String
+    let score: Int64
     let noteCount: Int
+    let tags: [BookshelfBookListTag]
     let pinned: Bool
+    let createdDate: Int64
+    let modifiedDate: Int64
+    let readDoneDate: Int64
+    let totalReadingTime: Int64
+    let readingProgressText: String
+    let bookmarkText: String
 
     private enum CodingKeys: String, CodingKey {
         case id
         case title
         case author
         case cover
+        case readStatusId
         case readStatusName
+        case readStatusBadgeTitle
         case sourceName
+        case press
+        case pubDateText
+        case score
         case noteCount
+        case tags
         case pinned
+        case createdDate
+        case modifiedDate
+        case readDoneDate
+        case totalReadingTime
+        case readingProgressText
+        case bookmarkText
     }
 
     /// 从书架书籍载荷裁剪出列表页需要的稳定展示字段。
-    nonisolated init(payload: BookshelfBookPayload, pinned: Bool = false) {
+    nonisolated init(
+        payload: BookshelfBookPayload,
+        pinned: Bool = false,
+        pubDateText: String = "",
+        tags: [BookshelfBookListTag] = [],
+        createdDate: Int64 = 0,
+        modifiedDate: Int64 = 0,
+        readDoneDate: Int64 = 0,
+        totalReadingTime: Int64 = 0,
+        readingProgressText: String = "",
+        bookmarkText: String = "",
+        readStatusBadgeTitle: String = ""
+    ) {
         self.id = payload.id
         self.title = payload.name
         self.author = payload.author
         self.cover = payload.cover
+        self.readStatusId = payload.readStatusId
         self.readStatusName = payload.readStatusName
+        self.readStatusBadgeTitle = readStatusBadgeTitle
         self.sourceName = payload.sourceName
+        self.press = payload.press
+        self.pubDateText = pubDateText
+        self.score = payload.score
         self.noteCount = payload.noteCount
+        self.tags = tags
         self.pinned = pinned
+        self.createdDate = createdDate
+        self.modifiedDate = modifiedDate
+        self.readDoneDate = readDoneDate
+        self.totalReadingTime = totalReadingTime
+        self.readingProgressText = readingProgressText
+        self.bookmarkText = bookmarkText
     }
 
     /// 构建组内书籍等轻量来源的只读列表行。
@@ -658,19 +754,43 @@ nonisolated struct BookshelfBookListItem: Identifiable, Hashable, Codable, Senda
         title: String,
         author: String,
         cover: String,
+        readStatusId: Int64 = 0,
         readStatusName: String = "",
+        readStatusBadgeTitle: String = "",
         sourceName: String = "",
+        press: String = "",
+        pubDateText: String = "",
+        score: Int64 = 0,
         noteCount: Int,
-        pinned: Bool = false
+        tags: [BookshelfBookListTag] = [],
+        pinned: Bool = false,
+        createdDate: Int64 = 0,
+        modifiedDate: Int64 = 0,
+        readDoneDate: Int64 = 0,
+        totalReadingTime: Int64 = 0,
+        readingProgressText: String = "",
+        bookmarkText: String = ""
     ) {
         self.id = id
         self.title = title
         self.author = author
         self.cover = cover
+        self.readStatusId = readStatusId
         self.readStatusName = readStatusName
+        self.readStatusBadgeTitle = readStatusBadgeTitle
         self.sourceName = sourceName
+        self.press = press
+        self.pubDateText = pubDateText
+        self.score = score
         self.noteCount = noteCount
+        self.tags = tags
         self.pinned = pinned
+        self.createdDate = createdDate
+        self.modifiedDate = modifiedDate
+        self.readDoneDate = readDoneDate
+        self.totalReadingTime = totalReadingTime
+        self.readingProgressText = readingProgressText
+        self.bookmarkText = bookmarkText
     }
 
     /// 解码书籍列表行，兼容旧路由恢复数据中缺少状态与来源字段的场景。
@@ -680,10 +800,22 @@ nonisolated struct BookshelfBookListItem: Identifiable, Hashable, Codable, Senda
         title = try container.decode(String.self, forKey: .title)
         author = try container.decode(String.self, forKey: .author)
         cover = try container.decode(String.self, forKey: .cover)
+        readStatusId = try container.decodeIfPresent(Int64.self, forKey: .readStatusId) ?? 0
         readStatusName = try container.decodeIfPresent(String.self, forKey: .readStatusName) ?? ""
+        readStatusBadgeTitle = try container.decodeIfPresent(String.self, forKey: .readStatusBadgeTitle) ?? readStatusName
         sourceName = try container.decodeIfPresent(String.self, forKey: .sourceName) ?? ""
+        press = try container.decodeIfPresent(String.self, forKey: .press) ?? ""
+        pubDateText = try container.decodeIfPresent(String.self, forKey: .pubDateText) ?? ""
+        score = try container.decodeIfPresent(Int64.self, forKey: .score) ?? 0
         noteCount = try container.decode(Int.self, forKey: .noteCount)
+        tags = try container.decodeIfPresent([BookshelfBookListTag].self, forKey: .tags) ?? []
         pinned = try container.decode(Bool.self, forKey: .pinned)
+        createdDate = try container.decodeIfPresent(Int64.self, forKey: .createdDate) ?? 0
+        modifiedDate = try container.decodeIfPresent(Int64.self, forKey: .modifiedDate) ?? 0
+        readDoneDate = try container.decodeIfPresent(Int64.self, forKey: .readDoneDate) ?? 0
+        totalReadingTime = try container.decodeIfPresent(Int64.self, forKey: .totalReadingTime) ?? 0
+        readingProgressText = try container.decodeIfPresent(String.self, forKey: .readingProgressText) ?? ""
+        bookmarkText = try container.decodeIfPresent(String.self, forKey: .bookmarkText) ?? ""
     }
 
     /// 编码书籍列表行，供导航恢复与本地临时快照保持完整展示上下文。
@@ -693,10 +825,78 @@ nonisolated struct BookshelfBookListItem: Identifiable, Hashable, Codable, Senda
         try container.encode(title, forKey: .title)
         try container.encode(author, forKey: .author)
         try container.encode(cover, forKey: .cover)
+        try container.encode(readStatusId, forKey: .readStatusId)
         try container.encode(readStatusName, forKey: .readStatusName)
+        try container.encode(readStatusBadgeTitle, forKey: .readStatusBadgeTitle)
         try container.encode(sourceName, forKey: .sourceName)
+        try container.encode(press, forKey: .press)
+        try container.encode(pubDateText, forKey: .pubDateText)
+        try container.encode(score, forKey: .score)
         try container.encode(noteCount, forKey: .noteCount)
+        try container.encode(tags, forKey: .tags)
         try container.encode(pinned, forKey: .pinned)
+        try container.encode(createdDate, forKey: .createdDate)
+        try container.encode(modifiedDate, forKey: .modifiedDate)
+        try container.encode(readDoneDate, forKey: .readDoneDate)
+        try container.encode(totalReadingTime, forKey: .totalReadingTime)
+        try container.encode(readingProgressText, forKey: .readingProgressText)
+        try container.encode(bookmarkText, forKey: .bookmarkText)
+    }
+
+    /// 按当前排序依据返回 Android 列表/网格同源的辅助展示文案。
+    nonisolated func sortAuxiliaryText(for criteria: BookshelfSortCriteria) -> String? {
+        switch criteria {
+        case .createdDate:
+            return Self.formattedDayText(createdDate)
+        case .modifiedDate:
+            return Self.formattedDayText(modifiedDate)
+        case .publishDate:
+            let text = pubDateText.trimmingCharacters(in: .whitespacesAndNewlines)
+            return text.isEmpty ? nil : "出版 \(text)"
+        case .readDoneDate:
+            return Self.formattedDayText(readDoneDate) ?? "未读完"
+        case .rating:
+            return String(format: "评分 %.1f", Double(score) / 10.0)
+        case .totalReadingTime:
+            return "阅读 \(totalReadingTimeText)"
+        case .readingProgress:
+            let text = readingProgressText.trimmingCharacters(in: .whitespacesAndNewlines)
+            return text.isEmpty ? nil : "进度 \(text)"
+        case .custom, .name, .noteCount, .bookCount, .readStatus, .tagName, .authorName, .pressName, .source:
+            return nil
+        }
+    }
+
+    /// 将阅读总秒数转换为 Android `toReadableTimeDuration(spaceDelimiter = true)` 同源文案。
+    nonisolated var totalReadingTimeText: String {
+        Self.formattedDuration(totalReadingTime)
+    }
+
+    private nonisolated static func formattedDayText(_ timestamp: Int64) -> String? {
+        guard timestamp > 0 else { return nil }
+        let date = Date(timeIntervalSince1970: Double(timestamp) / 1000.0)
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy 年 M 月 d 日"
+        return formatter.string(from: date)
+    }
+
+    private nonisolated static func formattedDuration(_ seconds: Int64) -> String {
+        let hours = seconds / 3600
+        let minutes = (seconds % 3600) / 60
+        let restSeconds = seconds % 60
+        if hours > 0 {
+            if minutes == 0 {
+                return "\(hours) 小时"
+            }
+            return "\(hours) 小时 \(minutes) 分钟"
+        }
+        if minutes > 0 {
+            if restSeconds > 0 {
+                return "\(minutes) 分钟 \(restSeconds) 秒"
+            }
+            return "\(minutes) 分钟"
+        }
+        return "\(max(0, restSeconds)) 秒"
     }
 }
 
@@ -947,8 +1147,54 @@ nonisolated struct BookshelfSnapshot: Hashable, Sendable {
     }
 }
 
-/// 书籍详情页模型，聚合书名、作者、出版社、书摘数量与阅读状态。
-struct BookDetail: Identifiable {
+/// 书籍详情可点击属性类型，用于把作者与出版社继续导向现有二级书籍列表。
+nonisolated enum BookDetailAttributeKind: Hashable, Sendable {
+    case author
+    case translator
+    case press
+    case pubDate
+    case isbn
+    case source
+    case readStatus
+
+    var title: String {
+        switch self {
+        case .author:
+            return "作者"
+        case .translator:
+            return "译者"
+        case .press:
+            return "出版社"
+        case .pubDate:
+            return "出版时间"
+        case .isbn:
+            return "ISBN"
+        case .source:
+            return "来源"
+        case .readStatus:
+            return "阅读状态"
+        }
+    }
+}
+
+/// 书籍详情页资料属性，属性值保留原始展示文本。
+nonisolated struct BookDetailAttribute: Identifiable, Hashable, Sendable {
+    let kind: BookDetailAttributeKind
+    let value: String
+
+    var id: String { "\(kind)-\(value)" }
+}
+
+/// 书籍详情页目录条目，按 Android v41 章节层级字段展示缩进。
+nonisolated struct BookDetailChapter: Identifiable, Hashable, Sendable {
+    let id: Int64
+    let title: String
+    let level: Int64
+    let order: Int64
+}
+
+/// 书籍详情页模型，聚合资料字段、目录、书摘数量与阅读状态。
+nonisolated struct BookDetail: Identifiable, Sendable {
     let id: Int64
     let name: String
     let author: String
@@ -956,10 +1202,14 @@ struct BookDetail: Identifiable {
     let press: String
     let noteCount: Int
     let readStatusName: String
+    let summary: String
+    let authorIntro: String
+    let attributes: [BookDetailAttribute]
+    let chapters: [BookDetailChapter]
 }
 
 /// 书籍详情中的书摘条目，包含正文、感想、位置与时间信息。
-struct NoteExcerpt: Identifiable {
+nonisolated struct NoteExcerpt: Identifiable {
     let id: Int64
     let content: String
     let idea: String

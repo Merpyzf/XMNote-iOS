@@ -35,6 +35,7 @@ final class RepositoryContainer {
         )
         let s3ConfigRepository = S3ConfigRepository(databaseManager: databaseManager)
         let s3UploadRepository = S3UploadRepository(configRepository: s3ConfigRepository)
+        let coverImageLoader = NukeCoverImageLoader()
         let defaultOCRPreferences = OCRRepository.androidAlignedDebugDefaults
 
         self.bookRepository = BookRepository(databaseManager: databaseManager)
@@ -44,7 +45,11 @@ final class RepositoryContainer {
         )
         self.contentRepository = ContentRepository(databaseManager: databaseManager)
         self.bookSearchRepository = BookSearchRepository()
-        self.bookEditorRepository = BookEditorRepository(databaseManager: databaseManager)
+        self.bookEditorRepository = BookEditorRepository(
+            databaseManager: databaseManager,
+            s3UploadRepository: s3UploadRepository,
+            coverImageLoader: coverImageLoader
+        )
         self.ocrRepository = OCRRepository(
             runtimeBridge: BaiduOCRSDKRuntimeBridge(),
             defaultPreferences: defaultOCRPreferences
@@ -59,7 +64,7 @@ final class RepositoryContainer {
         self.s3UploadRepository = s3UploadRepository
         self.statisticsRepository = StatisticsRepository(databaseManager: databaseManager)
         self.readingDashboardRepository = ReadingDashboardRepository(databaseManager: databaseManager)
-        self.coverImageLoader = NukeCoverImageLoader()
+        self.coverImageLoader = coverImageLoader
         self.readCalendarColorRepository = ReadCalendarColorRepository(imageLoader: coverImageLoader)
         self.timelineRepository = TimelineRepository(databaseManager: databaseManager)
     }

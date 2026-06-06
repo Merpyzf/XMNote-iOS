@@ -1,6 +1,6 @@
 /**
- * [INPUT]: 依赖 BookshelfBatchEditOptions 中的标签、来源、阅读状态候选项、XMRatingBar 与 BookshelfMoveGroupOption 分组封面数据，依赖外层 ViewModel 闭包提交批量写入意图
- * [OUTPUT]: 对外提供移组、标签、来源与阅读状态等批量编辑 Sheet，并统一标签/移组选择的轻量列表样式、分组封面预览与面板内读取反馈
+ * [INPUT]: 依赖 BookshelfBatchEditOptions 中的标签、来源、阅读状态候选项、XMRatingBar、BookshelfMoveGroupOption 分组封面数据与 BookCollectionSummary 书单候选项，依赖外层 ViewModel 闭包提交批量写入意图
+ * [OUTPUT]: 对外提供移组、加入书单、标签、来源与阅读状态等批量编辑 Sheet，并统一标签/移组/书单选择的轻量列表样式、分组封面预览与面板内读取反馈
  * [POS]: Book 模块业务 Sheet，被 BookshelfBookListView 的编辑态批量操作入口唤起
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -203,6 +203,210 @@ struct BookshelfMoveGroupSheet: View {
     }
 
     private func syncOptions(_ options: [BookshelfMoveGroupOption]) {
+        let validIDs = Set(options.map(\.id))
+        optionsState = options
+        if let selectedID, validIDs.contains(selectedID) {
+            self.selectedID = selectedID
+        } else {
+            selectedID = options.first?.id
+        }
+    }
+
+    private func syncLoadingGate() {
+        loadingGate.update(intent: isLoading ? .read : .none)
+    }
+}
+
+/// 批量加入书单 Sheet，单选已有手动书单或面板内创建后提交写入意图。
+struct BookshelfBookCollectionSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var loadingGate = LoadingGate()
+    @State private var optionsState: [BookCollectionSummary]
+    @State private var selectedID: Int64?
+    @State private var searchKeyword = ""
+    @State private var createError: String?
+    @State private var isCreating = false
+
+    let options: [BookCollectionSummary]
+    let selectedCount: Int
+    let isLoading: Bool
+    let errorMessage: String?
+    let onCreate: (String) async throws -> BookCollectionSummary
+    let onConfirm: (Int64) -> Void
+
+    /// 构建加入书单 Sheet，默认选中首个手动书单，并支持面板内新增书单。
+    init(
+        options: [BookCollectionSummary],
+        selectedCount: Int,
+        isLoading: Bool,
+        errorMessage: String?,
+        onCreate: @escaping (String) async throws -> BookCollectionSummary,
+        onConfirm: @escaping (Int64) -> Void
+    ) {
+        self.options = options
+        self.selectedCount = selectedCount
+        self.isLoading = isLoading
+        self.errorMessage = errorMessage
+        self.onCreate = onCreate
+        self.onConfirm = onConfirm
+        self._optionsState = State(initialValue: options)
+        self._selectedID = State(initialValue: options.first?.id)
+    }
+
+    var body: some View {
+        BookshelfDisplaySettingPageScaffold(
+            title: "加入书单",
+            subtitle: "已选\(selectedCount)本",
+            onClose: { dismiss() },
+            leadingAction: {
+                BookshelfBatchTopTextActionButton(
+                    title: "取消",
+                    foregroundColor: .textSecondary,
+                    action: { dismiss() }
+                )
+            },
+            trailingAction: {
+                BookshelfBatchTopTextActionButton(
+                    title: "保存",
+                    foregroundColor: .brand.opacity(0.82),
+                    isDisabled: !canSubmit || isCreating || isLoading || hasLoadError,
+                    action: submitSelection
+                )
+            }
+        ) {
+            VStack(spacing: Spacing.base) {
+                BookshelfBatchSearchField(
+                    text: $searchKeyword,
+                    placeholder: "搜索书单",
+                    backgroundColor: .surfaceCard,
+                    minHeight: 50
+                )
+
+                BookshelfBatchNamedOptionListPanel(
+                    options: filteredOptions,
+                    selectedIDs: selectedID.map { Set([$0]) } ?? [],
+                    createTitle: canCreateSearchedCollection ? trimmedSearchKeyword : nil,
+                    optionName: "书单",
+                    isLoading: isLoading,
+                    isLoadingVisible: loadingGate.isVisible,
+                    loadErrorMessage: errorMessage,
+                    isCreating: isCreating,
+                    createError: createError,
+                    emptyText: collectionEmptyText,
+                    onCreate: createCollection,
+                    onToggle: selectCollection
+                ) { option, isSelected, showsDivider in
+                    BookshelfBatchBookCollectionOptionRow(
+                        option: option,
+                        isSelected: isSelected,
+                        showsDivider: showsDivider
+                    )
+                }
+            }
+            .padding(.horizontal, Spacing.screenEdge)
+            .padding(.bottom, Spacing.contentEdge)
+            .animation(sheetAnimation, value: optionsState)
+            .animation(sheetAnimation, value: selectedID)
+            .animation(sheetAnimation, value: canCreateSearchedCollection)
+        }
+        .background(Color.surfaceSheet.ignoresSafeArea())
+        .presentationDetents([.large])
+        .presentationDragIndicator(.hidden)
+        .onAppear {
+            syncLoadingGate()
+        }
+        .onChange(of: searchKeyword) { _, _ in
+            if !isCreating {
+                createError = nil
+            }
+        }
+        .onChange(of: options) { _, newOptions in
+            syncOptions(newOptions)
+        }
+        .onChange(of: isLoading) { _, _ in
+            syncLoadingGate()
+        }
+        .onDisappear {
+            loadingGate.hideImmediately()
+        }
+    }
+
+    private var filteredOptions: [BookCollectionSummary] {
+        let keyword = searchKeyword.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !keyword.isEmpty else { return optionsState }
+        return optionsState.filter { option in
+            option.title.localizedCaseInsensitiveContains(keyword)
+        }
+    }
+
+    private var trimmedSearchKeyword: String {
+        searchKeyword.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var canCreateSearchedCollection: Bool {
+        guard !isLoading, !hasLoadError else { return false }
+        guard !trimmedSearchKeyword.isEmpty else { return false }
+        return !optionsState.contains { option in
+            option.title.trimmingCharacters(in: .whitespacesAndNewlines)
+                .localizedCaseInsensitiveCompare(trimmedSearchKeyword) == .orderedSame
+        }
+    }
+
+    private var collectionEmptyText: String {
+        trimmedSearchKeyword.isEmpty ? "暂无手动书单" : "没有匹配的书单"
+    }
+
+    private var canSubmit: Bool {
+        selectedID != nil
+    }
+
+    private var hasLoadError: Bool {
+        guard let errorMessage else { return false }
+        return !errorMessage.isEmpty
+    }
+
+    private var sheetAnimation: Animation {
+        reduceMotion ? .smooth(duration: 0.10) : .smooth(duration: 0.22)
+    }
+
+    private func submitSelection() {
+        guard let selectedID, !isCreating, !isLoading, !hasLoadError else { return }
+        onConfirm(selectedID)
+        dismiss()
+    }
+
+    private func selectCollection(_ id: Int64) {
+        guard !isLoading, !isCreating else { return }
+        selectedID = id
+    }
+
+    private func createCollection() {
+        let draft = trimmedSearchKeyword
+        guard !isLoading, !isCreating, canCreateSearchedCollection else { return }
+        isCreating = true
+        createError = nil
+        Task {
+            do {
+                let newOption = try await onCreate(draft)
+                await MainActor.run {
+                    optionsState.removeAll { $0.id == newOption.id }
+                    optionsState.insert(newOption, at: 0)
+                    selectedID = newOption.id
+                    searchKeyword = ""
+                    createError = nil
+                    isCreating = false
+                }
+            } catch {
+                await MainActor.run {
+                    createError = error.localizedDescription
+                    isCreating = false
+                }
+            }
+        }
+    }
+
+    private func syncOptions(_ options: [BookCollectionSummary]) {
         let validIDs = Set(options.map(\.id))
         optionsState = options
         if let selectedID, validIDs.contains(selectedID) {
@@ -932,6 +1136,74 @@ private struct BookshelfBatchMoveGroupOptionRow: View {
     }
 }
 
+/// 加入书单列表中的书单候选行，以轻量图标和书籍数量辅助识别目标书单。
+private struct BookshelfBatchBookCollectionOptionRow: View {
+    let option: BookCollectionSummary
+    let isSelected: Bool
+    let showsDivider: Bool
+
+    var body: some View {
+        HStack(spacing: Spacing.base) {
+            ZStack {
+                RoundedRectangle(cornerRadius: CornerRadius.inlaySmall, style: .continuous)
+                    .fill(Color.surfaceNested)
+
+                Image(systemName: "rectangle.stack")
+                    .font(AppTypography.subheadlineMedium)
+                    .foregroundStyle(Color.textSecondary)
+            }
+            .frame(width: BookshelfBatchCollectionIconLayout.size, height: BookshelfBatchCollectionIconLayout.size)
+
+            VStack(alignment: .leading, spacing: Spacing.micro) {
+                Text(option.title)
+                    .font(AppTypography.body)
+                    .foregroundStyle(Color.textPrimary)
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                Text(collectionSubtitle)
+                    .font(AppTypography.caption)
+                    .foregroundStyle(Color.textSecondary)
+                    .lineLimit(1)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            XMSelectionIndicator(
+                style: .checkbox,
+                isSelected: isSelected,
+                font: AppTypography.bodyMedium
+            )
+            .frame(width: 30, height: 30)
+        }
+        .padding(.horizontal, Spacing.contentEdge)
+        .padding(.vertical, Spacing.half)
+        .frame(minHeight: 64)
+        .overlay(alignment: .bottom) {
+            BookshelfBatchInsetDivider(
+                leadingInset: Spacing.contentEdge
+                    + BookshelfBatchCollectionIconLayout.size
+                    + Spacing.base
+            )
+            .opacity(showsDivider ? 1 : 0)
+        }
+        .contentShape(Rectangle())
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(option.title)，\(option.bookCount)本，\(isSelected ? "已选中" : "未选中")")
+    }
+
+    private var collectionSubtitle: String {
+        let description = option.description.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !description.isEmpty {
+            return description
+        }
+        return "\(option.bookCount)本"
+    }
+}
+
+private enum BookshelfBatchCollectionIconLayout {
+    static let size: CGFloat = 44
+}
+
 /// 移组行左侧的小型 2x2 代表封面预览。
 private struct BookshelfBatchGroupCoverPreview: View {
     let covers: [String]
@@ -1208,7 +1480,7 @@ struct BookshelfBatchReadStatusSheet: View {
                                 Spacer()
                                 Text(ratingTitle)
                                     .font(AppTypography.body)
-                                    .foregroundStyle(ratingValue > 0 ? Color.textPrimary : Color.feedbackError)
+                                    .foregroundStyle(ratingValue > 0 ? Color.textPrimary : Color.textSecondary)
                             }
 
                             XMRatingBar(
@@ -1252,13 +1524,13 @@ struct BookshelfBatchReadStatusSheet: View {
     }
 
     private var canSubmit: Bool {
-        selectedStatusID != 0 && (!isFinished || ratingScore != nil)
+        selectedStatusID != 0
     }
 
     private var ratingScore: Int64? {
         guard isFinished else { return nil }
         let score = Int64((ratingValue * 10).rounded())
-        return score > 0 ? score : nil
+        return max(0, score)
     }
 
     private var ratingTitle: String {

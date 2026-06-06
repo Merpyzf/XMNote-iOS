@@ -144,7 +144,15 @@ class BookViewModel {
     var selectedIDs: [BookshelfItemID] = []
     var activeWriteAction: BookshelfPendingAction?
     var writeError: String?
-    var actionNotice: String?
+    var actionFeedback: BookshelfActionFeedback?
+    var actionNotice: String? {
+        get { actionFeedback?.message }
+        set {
+            actionFeedback = newValue.map {
+                BookshelfActionFeedback(kind: .warning, message: $0)
+            }
+        }
+    }
     var activeBatchSheet: BookshelfBatchEditSheet?
     var activeDeleteConfirmation: BookshelfDefaultDeleteConfirmation?
     var activeContributorNameEdit: BookContributorNameEdit?
@@ -157,6 +165,7 @@ class BookViewModel {
     private var displaySettingChangeTask: Task<Void, Never>?
     private var writeTask: Task<Void, Never>?
     private var batchOptionsTask: Task<Void, Never>?
+    private var feedbackClearTask: Task<Void, Never>?
 
     var bookshelfItems: [BookshelfItem] {
         snapshot.defaultItems
@@ -271,9 +280,7 @@ class BookViewModel {
             .addToBookList,
             .setTag,
             .setReadStatus,
-            .setSource,
-            .exportNote,
-            .exportBook
+            .setSource
         ])
         return actions
     }
@@ -638,7 +645,7 @@ class BookViewModel {
         case .moveToGroup:
             presentMoveGroupSheet()
         case .addToBookList:
-            presentPlaceholderAction(action)
+            presentBookCollectionSheet()
         case .setTag, .setSource, .setReadStatus:
             presentBatchSheet(for: action)
         case .exportNote:
@@ -801,12 +808,8 @@ class BookViewModel {
         }
     }
 
-    /// 提交默认书架批量阅读状态写入；读完状态必须携带评分。
+    /// 提交默认书架批量阅读状态写入；读完未选择评分时按 0 分保存。
     func submitBatchReadStatus(statusID: Int64, changedAt: Date, ratingScore: Int64?) {
-        if statusID == BookEntryReadingStatus.finished.rawValue, (ratingScore ?? 0) <= 0 {
-            actionNotice = "标记读完时需要选择评分"
-            return
-        }
         let bookIDs = selectedBookIDs
         activeBatchSheet = nil
         guard !bookIDs.isEmpty else {
@@ -836,9 +839,27 @@ class BookViewModel {
         }
     }
 
+    /// 提交默认书架批量加入书单；选中的分组会展开为组内书籍。
+    func submitBookCollection(_ collectionID: Int64) {
+        let bookIDs = selectedBookIDsIncludingGroupBooks
+        activeBatchSheet = nil
+        guard !bookIDs.isEmpty else {
+            actionNotice = "空分组不能加入书单，请选择至少一本书"
+            return
+        }
+        runWriteAction(.addToBookList, successMessage: "已加入书单") {
+            try await self.repository.addBooks(bookIDs, toCollection: collectionID)
+        }
+    }
+
     /// 在移组面板内新建分组，并返回可直接选中的目标分组选项。
     func createMoveTargetGroup(named name: String) async throws -> BookEditorNamedOption {
         try await repository.createGroup(named: name)
+    }
+
+    /// 在加入书单面板内新建手动书单，并返回可直接选中的目标书单。
+    func createBookCollection(named name: String) async throws -> BookCollectionSummary {
+        try await repository.createBookCollection(title: name)
     }
 
     /// 在标签面板内新建标签，并返回可直接选中的标签选项。
@@ -1186,6 +1207,67 @@ private extension BookViewModel {
         }
     }
 
+    /// 拉取默认书架可加入的手动书单，并打开加入书单 Sheet。
+    /// - Note: 只经 Repository 获取书单选项；选中的 Group 会先在 ViewModel 内展开为书籍 ID 快照，避免 Sheet 回填时选择已变化。
+    func presentBookCollectionSheet() {
+        guard activeWriteAction == nil, !isLoadingBatchOptions else { return }
+        let bookIDs = selectedBookIDsIncludingGroupBooks
+        guard !bookIDs.isEmpty else {
+            actionNotice = "空分组不能加入书单，请至少选择一本书"
+            return
+        }
+        isLoadingBatchOptions = false
+        actionNotice = nil
+        writeError = nil
+        batchOptionsTask?.cancel()
+        activeBatchSheet = .bookCollection(
+            options: [],
+            isLoading: true,
+            errorMessage: nil
+        )
+        batchOptionsTask = Task {
+            do {
+                let options = try await repository.fetchManualBookCollections()
+                guard !Task.isCancelled else { return }
+                await MainActor.run {
+                    guard self.selectedBookIDsIncludingGroupBooks == bookIDs else {
+                        self.isLoadingBatchOptions = false
+                        self.actionNotice = nil
+                        self.activeBatchSheet = nil
+                        return
+                    }
+                    guard self.activeBatchSheet?.id == "bookCollection" else { return }
+                    self.isLoadingBatchOptions = false
+                    self.activeBatchSheet = .bookCollection(
+                        options: options,
+                        isLoading: false,
+                        errorMessage: nil
+                    )
+                    self.actionNotice = nil
+                }
+            } catch {
+                guard !Task.isCancelled else { return }
+                await MainActor.run {
+                    guard self.selectedBookIDsIncludingGroupBooks == bookIDs else {
+                        self.isLoadingBatchOptions = false
+                        self.actionNotice = nil
+                        self.activeBatchSheet = nil
+                        return
+                    }
+                    guard self.activeBatchSheet?.id == "bookCollection" else { return }
+                    self.isLoadingBatchOptions = false
+                    self.activeBatchSheet = .bookCollection(
+                        options: [],
+                        isLoading: false,
+                        errorMessage: error.localizedDescription
+                    )
+                    self.writeError = nil
+                    self.actionNotice = nil
+                }
+            }
+        }
+    }
+
     /// 根据候选项快照打开具体默认书架批量编辑 Sheet。
     func presentBatchSheet(
         _ action: BookshelfBookListEditAction,
@@ -1252,7 +1334,7 @@ private extension BookViewModel {
         guard activeWriteAction == nil else { return }
         cancelBatchOptionsLoading()
         activeWriteAction = action
-        actionNotice = "\(action.title)处理中..."
+        actionFeedback = BookshelfActionFeedback(kind: .processing, message: "\(action.title)处理中...")
         writeError = nil
         writeTask?.cancel()
         writeTask = Task {
@@ -1261,16 +1343,30 @@ private extension BookViewModel {
                 await MainActor.run {
                     self.selectedIDs.removeAll()
                     self.activeWriteAction = nil
-                    self.actionNotice = successMessage
+                    let feedback = BookshelfActionFeedback(kind: .success, message: successMessage)
+                    self.actionFeedback = feedback
+                    self.clearSuccessFeedbackLater(feedback)
                     self.restartObservation()
                 }
             } catch {
                 await MainActor.run {
                     self.activeWriteAction = nil
                     self.writeError = error.localizedDescription
-                    self.actionNotice = error.localizedDescription
+                    self.actionFeedback = BookshelfActionFeedback(kind: .error, message: error.localizedDescription)
                     self.restartObservation()
                 }
+            }
+        }
+    }
+
+    /// 成功反馈短驻留后自动收起；警告和错误不自动清除，等用户下一次操作覆盖。
+    private func clearSuccessFeedbackLater(_ feedback: BookshelfActionFeedback) {
+        feedbackClearTask?.cancel()
+        feedbackClearTask = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: 1_600_000_000)
+            await MainActor.run {
+                guard self?.actionFeedback == feedback else { return }
+                self?.actionFeedback = nil
             }
         }
     }

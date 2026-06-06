@@ -2,7 +2,7 @@ import Foundation
 
 /**
  * [INPUT]: 依赖 Models 与 Services 层的数据类型定义
- * [OUTPUT]: 对外提供 Book/Note/Content/BackupServer/Backup/S3/Statistics/ReadCalendarColor/Timeline/ReadingDashboard 及书籍搜索/录入共十三类 Repository 协议，包含书架显示设置变更观察入口
+ * [OUTPUT]: 对外提供 Book/Note/Content/BackupServer/Backup/S3/Statistics/ReadCalendarColor/Timeline/ReadingDashboard 及书籍搜索/录入共十三类 Repository 协议，包含书架显示设置变更观察入口与书单最小写入能力
  * [POS]: Domain 层仓储契约，定义 Presentation 获取本地/网络数据的唯一入口
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -49,6 +49,12 @@ protocol BookRepositoryProtocol {
     func batchSetBookReadStatus(bookIDs: [Int64], input: BookshelfBatchReadStatusInput) async throws
     /// 读取可作为移入目标的有效分组，排除当前分组后供批量移组 Sheet 展示封面与数量。
     func fetchBookshelfMoveTargetGroups(excludingGroupID: Int64?) async throws -> [BookshelfMoveGroupOption]
+    /// 读取未删除、非年度的手动书单，供批量加入书单 Sheet 展示。
+    func fetchManualBookCollections() async throws -> [BookCollectionSummary]
+    /// 新建手动书单，创建后可立即作为加入书单目标。
+    func createBookCollection(title: String) async throws -> BookCollectionSummary
+    /// 批量加入书单；已有有效关系保持不变，只为缺失关系插入记录。
+    func addBooks(_ bookIDs: [Int64], toCollection collectionID: Int64) async throws
     /// 将指定书籍从当前分组移出到默认书架，并按位置语义写入默认书架排序值。
     func moveBooksOutOfGroup(bookIDs: [Int64], placement: GroupBooksPlacement) async throws
     /// 批量置顶默认书架顶层 Book/Group，按传入选择顺序追加 pin_order。

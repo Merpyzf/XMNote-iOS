@@ -22,7 +22,7 @@ nonisolated struct AppDatabase {
     static let databaseName = "xm_note.db"
 
     /// 数据库版本号，与 Android DBConfig.DB_VERSION 同步
-    static let databaseVersion = 40
+    static let databaseVersion = 41
 }
 
 // MARK: - 初始化
@@ -58,7 +58,7 @@ extension AppDatabase {
 
         let dbPool = try DatabasePool(path: path, configuration: config)
 
-        // 兼容 Android Room：恢复库达到 canonical v40 但缺少 grdb_migrations 时，
+        // 兼容 Android Room：恢复库达到 canonical v40/v41 但缺少 grdb_migrations 时，
         // 只补 iOS 内部迁移标记，避免重复建表或写入 seed。
         try dbPool.write { db in
             try markRoomCanonicalMigrationsIfNeeded(db)

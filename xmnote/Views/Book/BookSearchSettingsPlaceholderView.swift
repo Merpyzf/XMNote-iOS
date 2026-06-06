@@ -15,6 +15,7 @@ struct BookSearchSettingsView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: Spacing.base) {
                 sourceSection
+                pageCountSection
                 behaviorSection
             }
             .padding(.horizontal, Spacing.screenEdge)
@@ -34,7 +35,7 @@ struct BookSearchSettingsView: View {
                     .foregroundStyle(Color.textPrimary)
 
                 LazyVGrid(columns: [GridItem(.adaptive(minimum: 96), spacing: Spacing.cozy)], spacing: Spacing.cozy) {
-                    ForEach(BookSearchSource.allCases) { source in
+                    ForEach(viewModel.availableSources) { source in
                         Button {
                             viewModel.updateSelectedSource(source)
                         } label: {
@@ -49,6 +50,36 @@ struct BookSearchSettingsView: View {
                                 )
                         }
                         .buttonStyle(.plain)
+                    }
+                }
+            }
+            .padding(Spacing.contentEdge)
+        }
+    }
+
+    private var pageCountSection: some View {
+        CardContainer(cornerRadius: CornerRadius.containerMedium, showsBorder: false) {
+            VStack(alignment: .leading, spacing: Spacing.base) {
+                Text("搜索页数")
+                    .font(AppTypography.headlineSemibold)
+                    .foregroundStyle(Color.textPrimary)
+
+                let sources = viewModel.availableSources.filter { $0.supportsSearchPageCount }
+                VStack(spacing: Spacing.base) {
+                    ForEach(Array(sources.enumerated()), id: \.element.id) { index, source in
+                        Stepper(
+                            value: pageCountBinding(for: source),
+                            in: BookSearchSource.searchPageCountRange
+                        ) {
+                            settingText(
+                                title: source.title,
+                                subtitle: "\(viewModel.searchPageCount(for: source) ?? source.defaultSearchPageCount ?? 1) 页"
+                            )
+                        }
+
+                        if index < sources.count - 1 {
+                            Divider()
+                        }
                     }
                 }
             }
@@ -98,6 +129,13 @@ struct BookSearchSettingsView: View {
                 .font(AppTypography.caption)
                 .foregroundStyle(Color.textSecondary)
         }
+    }
+
+    private func pageCountBinding(for source: BookSearchSource) -> Binding<Int> {
+        Binding(
+            get: { viewModel.searchPageCount(for: source) ?? source.defaultSearchPageCount ?? 1 },
+            set: { viewModel.updateSearchPageCount($0, for: source) }
+        )
     }
 }
 

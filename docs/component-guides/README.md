@@ -8,11 +8,15 @@
 | XMGIFImageView | `xmnote/UIComponents/Foundation/XMGIFImageView.swift` | `docs/component-guides/XMGIFImageView使用说明.md` | 已完成 |
 | XMBookCover | `xmnote/UIComponents/Foundation/XMBookCover.swift` | `docs/component-guides/XMBookCover使用说明.md` | 已完成 |
 | XMYearMonthPickerSheet | `xmnote/UIComponents/Foundation/XMYearMonthPickerSheet.swift` | `docs/component-guides/XMYearMonthPickerSheet使用说明.md` | 已完成 |
+| XMRatingBar | `xmnote/UIComponents/Foundation/XMRatingBar.swift` | `docs/component-guides/XMRatingBar使用说明.md` | 已完成 |
 | BookCoverProgressBar | `xmnote/UIComponents/Foundation/BookCoverProgressBar.swift` | `docs/component-guides/BookCoverProgressBar使用说明.md` | 已完成 |
 | ExpandableRichText | `xmnote/UIComponents/Foundation/ExpandableRichText.swift` | `docs/component-guides/ExpandableRichText使用说明.md` | 已完成 |
 | RichText | `xmnote/UIComponents/Foundation/RichText.swift` | `docs/component-guides/ExpandableRichText使用说明.md` | 已完成 |
 | CollapsedRichTextPreview | `xmnote/UIComponents/Foundation/CollapsedRichTextPreview.swift` | `docs/component-guides/ExpandableRichText使用说明.md` | 已完成 |
 | ImmersiveBottomChrome | `xmnote/UIComponents/Foundation/ImmersiveBottomChrome.swift` | `docs/component-guides/ImmersiveBottomChrome使用说明.md` | 已完成 |
+| TopSwitcher | `xmnote/UIComponents/Tabs/TopSwitcher.swift` | `docs/component-guides/TopSwitcher使用说明.md` | 已完成 |
+| KeepAliveSwitcherHost | `xmnote/UIComponents/Tabs/KeepAliveSwitcherHost.swift` | `docs/component-guides/KeepAliveSwitcherHost使用说明.md` | 已完成 |
+| HomeSubtabScaffold | `xmnote/UIComponents/Tabs/HomeSubtabScaffold.swift` | `docs/component-guides/HomeSubtabScaffold使用说明.md` | 已完成 |
 | XMJXImageWall | `xmnote/UIComponents/GalleryJX/XMJXImageWall.swift` | `docs/component-guides/XMJXImageWall使用说明.md` | 已完成 |
 | XMJXThumbnailView | `xmnote/UIComponents/GalleryJX/XMJXThumbnailView.swift` | `docs/component-guides/XMJXThumbnailView使用说明.md` | 已完成 |
 | BookContainerView | `xmnote/Views/Book/BookContainerView.swift` | `docs/component-guides/BookContainerView使用说明.md` | 已完成 |

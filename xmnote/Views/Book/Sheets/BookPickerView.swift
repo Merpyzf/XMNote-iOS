@@ -21,6 +21,7 @@ struct BookPickerView: View {
     @State private var isPreparingSeed = false
     @State private var didComplete = false
     @State private var pendingScrollBookID: Int64?
+    @State private var localLoadingGate = LoadingGate()
 
     var body: some View {
         NavigationStack {
@@ -127,10 +128,17 @@ struct BookPickerView: View {
                 }
             }
             .onAppear {
+                syncLocalLoadingGate(viewModel)
                 scrollToPendingBookIfNeeded(using: proxy, viewModel: viewModel)
+            }
+            .onChange(of: viewModel.status) { _, _ in
+                syncLocalLoadingGate(viewModel)
             }
             .onChange(of: viewModel.localBooks.map(\.id)) { _, _ in
                 scrollToPendingBookIfNeeded(using: proxy, viewModel: viewModel)
+            }
+            .onDisappear {
+                localLoadingGate.hideImmediately()
             }
         }
     }
@@ -217,9 +225,15 @@ struct BookPickerView: View {
 
     private var localLoadingSection: some View {
         VStack(spacing: Spacing.base) {
-            ProgressView("正在读取本地书籍…")
-                .frame(maxWidth: .infinity, alignment: .center)
-                .padding(.vertical, Spacing.section)
+            if localLoadingGate.isVisible {
+                LoadingStateView("正在读取本地书籍…", style: .inline)
+                    .frame(maxWidth: .infinity, alignment: .center)
+                    .padding(.vertical, Spacing.section)
+            } else {
+                Color.clear
+                    .frame(maxWidth: .infinity, minHeight: Spacing.section * 2)
+                    .accessibilityHidden(true)
+            }
         }
     }
 
@@ -242,6 +256,10 @@ struct BookPickerView: View {
                 .id(book.id)
             }
         }
+    }
+
+    private func syncLocalLoadingGate(_ viewModel: BookPickerViewModel) {
+        localLoadingGate.update(intent: viewModel.status == .localLoading ? .read : .none)
     }
 
     private func localEmptyLibrarySection(_ viewModel: BookPickerViewModel) -> some View {

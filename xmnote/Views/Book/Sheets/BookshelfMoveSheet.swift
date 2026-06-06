@@ -56,8 +56,7 @@ struct BookshelfMoveSheet: View {
         HStack(spacing: Spacing.base) {
             VStack(alignment: .leading, spacing: Spacing.tiny) {
                 Text("移动")
-                    .font(AppTypography.title3)
-                    .fontWeight(.semibold)
+                    .font(AppTypography.title3Semibold)
                     .foregroundStyle(Color.textPrimary)
 
                 Text("已选 \(selectedCount) 项")
@@ -95,8 +94,7 @@ struct BookshelfMoveSheet: View {
 
                 VStack(alignment: .leading, spacing: Spacing.tiny) {
                     Text(title)
-                        .font(AppTypography.body)
-                        .fontWeight(.medium)
+                        .font(AppTypography.bodyMedium)
                         .foregroundStyle(canSubmit ? Color.textPrimary : Color.textSecondary)
 
                     Text(subtitle)

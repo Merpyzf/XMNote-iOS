@@ -139,6 +139,7 @@ enum BookshelfBatchEditSheet: Identifiable, Hashable, Sendable {
     case source(options: [BookshelfSourceOption], initialSelectedID: Int64?)
     case readStatus(options: [BookEditorNamedOption], initialStatusID: Int64?, initialChangedAt: Date?, initialRatingScore: Int64?)
     case moveGroup(options: [BookshelfMoveGroupOption], isLoading: Bool, errorMessage: String?)
+    case bookCollection(options: [BookCollectionSummary], isLoading: Bool, errorMessage: String?)
 
     var id: String {
         switch self {
@@ -150,6 +151,8 @@ enum BookshelfBatchEditSheet: Identifiable, Hashable, Sendable {
             return "readStatus"
         case .moveGroup:
             return "moveGroup"
+        case .bookCollection:
+            return "bookCollection"
         }
     }
 }
@@ -210,7 +213,15 @@ final class BookshelfBookListViewModel {
     var displaySetting: BookshelfDisplaySetting
     var isEditing = false
     var selectedBookIDs: [Int64] = []
-    var actionNotice: String?
+    var actionFeedback: BookshelfActionFeedback?
+    var actionNotice: String? {
+        get { actionFeedback?.message }
+        set {
+            actionFeedback = newValue.map {
+                BookshelfActionFeedback(kind: .warning, message: $0)
+            }
+        }
+    }
     var activeWriteAction: BookshelfBookListEditAction?
     var writeError: String?
     var activeBatchSheet: BookshelfBatchEditSheet?
@@ -224,6 +235,7 @@ final class BookshelfBookListViewModel {
     private var observationTask: Task<Void, Never>?
     private var writeTask: Task<Void, Never>?
     private var batchOptionsTask: Task<Void, Never>?
+    private var feedbackClearTask: Task<Void, Never>?
 
     var navigationTitle: String {
         snapshot.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? route.title : snapshot.title
@@ -457,7 +469,9 @@ final class BookshelfBookListViewModel {
             moveSelectedBooks(toStart: false)
         case .moveToGroup:
             presentMoveGroupSheet()
-        case .addToBookList, .exportNote, .exportBook:
+        case .addToBookList:
+            presentBookCollectionSheet()
+        case .exportNote, .exportBook:
             performPlaceholderAction(action)
         case .moveOut:
             presentMoveOutConfirmation()
@@ -494,12 +508,8 @@ final class BookshelfBookListViewModel {
         }
     }
 
-    /// 提交批量阅读状态写入；读完状态必须携带评分，时间统一转成毫秒时间戳。
+    /// 提交批量阅读状态写入；读完未选择评分时按 0 分保存，时间统一转成毫秒时间戳。
     func submitBatchReadStatus(statusID: Int64, changedAt: Date, ratingScore: Int64?) {
-        if statusID == BookEntryReadingStatus.finished.rawValue, (ratingScore ?? 0) <= 0 {
-            actionNotice = "标记读完时需要选择评分"
-            return
-        }
         let bookIDs = selectedBookIDs
         let input = BookshelfBatchReadStatusInput(
             statusID: statusID,
@@ -521,9 +531,23 @@ final class BookshelfBookListViewModel {
         }
     }
 
+    /// 提交批量加入书单，成功后由观察流刷新关联数据。
+    func submitBookCollection(_ collectionID: Int64) {
+        let bookIDs = selectedBookIDs
+        activeBatchSheet = nil
+        runWriteAction(.addToBookList, successMessage: "已加入书单") {
+            try await self.repository.addBooks(bookIDs, toCollection: collectionID)
+        }
+    }
+
     /// 在移组面板内新建分组，并返回可直接选中的目标分组选项。
     func createMoveTargetGroup(named name: String) async throws -> BookEditorNamedOption {
         try await repository.createGroup(named: name)
+    }
+
+    /// 在加入书单面板内新建手动书单，并返回可直接选中的目标书单。
+    func createBookCollection(named name: String) async throws -> BookCollectionSummary {
+        try await repository.createBookCollection(title: name)
     }
 
     /// 在标签面板内新建标签，并返回可直接选中的标签选项。
@@ -884,6 +908,62 @@ final class BookshelfBookListViewModel {
         }
     }
 
+    /// 拉取手动书单候选项并打开加入书单 Sheet，避免 ViewModel 直接查询数据库。
+    private func presentBookCollectionSheet() {
+        guard activeWriteAction == nil, !isLoadingBatchOptions, !selectedBookIDs.isEmpty else { return }
+        isLoadingBatchOptions = false
+        actionNotice = nil
+        writeError = nil
+        let bookIDs = selectedBookIDs
+        batchOptionsTask?.cancel()
+        activeBatchSheet = .bookCollection(
+            options: [],
+            isLoading: true,
+            errorMessage: nil
+        )
+        batchOptionsTask = Task {
+            do {
+                let options = try await repository.fetchManualBookCollections()
+                guard !Task.isCancelled else { return }
+                await MainActor.run {
+                    guard self.selectedBookIDs == bookIDs else {
+                        self.isLoadingBatchOptions = false
+                        self.actionNotice = nil
+                        self.activeBatchSheet = nil
+                        return
+                    }
+                    guard self.activeBatchSheet?.id == "bookCollection" else { return }
+                    self.isLoadingBatchOptions = false
+                    self.activeBatchSheet = .bookCollection(
+                        options: options,
+                        isLoading: false,
+                        errorMessage: nil
+                    )
+                    self.actionNotice = nil
+                }
+            } catch {
+                guard !Task.isCancelled else { return }
+                await MainActor.run {
+                    guard self.selectedBookIDs == bookIDs else {
+                        self.isLoadingBatchOptions = false
+                        self.actionNotice = nil
+                        self.activeBatchSheet = nil
+                        return
+                    }
+                    guard self.activeBatchSheet?.id == "bookCollection" else { return }
+                    self.isLoadingBatchOptions = false
+                    self.activeBatchSheet = .bookCollection(
+                        options: [],
+                        isLoading: false,
+                        errorMessage: error.localizedDescription
+                    )
+                    self.writeError = nil
+                    self.actionNotice = nil
+                }
+            }
+        }
+    }
+
     /// 打开默认分组移出确认，用户选择回到默认书架的头部或尾部。
     private func presentMoveOutConfirmation() {
         guard case .defaultGroup = route.context else {
@@ -1035,7 +1115,7 @@ final class BookshelfBookListViewModel {
         batchOptionsTask?.cancel()
         isLoadingBatchOptions = false
         activeWriteAction = action
-        actionNotice = "\(action.title)处理中..."
+        actionFeedback = BookshelfActionFeedback(kind: .processing, message: "\(action.title)处理中...")
         writeError = nil
         writeTask?.cancel()
         writeTask = Task {
@@ -1044,16 +1124,30 @@ final class BookshelfBookListViewModel {
                 await MainActor.run {
                     self.activeWriteAction = nil
                     self.selectedBookIDs.removeAll()
-                    self.actionNotice = successMessage
+                    let feedback = BookshelfActionFeedback(kind: .success, message: successMessage)
+                    self.actionFeedback = feedback
+                    self.clearSuccessFeedbackLater(feedback)
                     self.restartObservation()
                 }
             } catch {
                 await MainActor.run {
                     self.activeWriteAction = nil
                     self.writeError = error.localizedDescription
-                    self.actionNotice = error.localizedDescription
+                    self.actionFeedback = BookshelfActionFeedback(kind: .error, message: error.localizedDescription)
                     self.restartObservation()
                 }
+            }
+        }
+    }
+
+    /// 成功反馈短驻留后自动收起；警告和错误不自动清除，等用户下一次操作覆盖。
+    private func clearSuccessFeedbackLater(_ feedback: BookshelfActionFeedback) {
+        feedbackClearTask?.cancel()
+        feedbackClearTask = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: 1_600_000_000)
+            await MainActor.run {
+                guard self?.actionFeedback == feedback else { return }
+                self?.actionFeedback = nil
             }
         }
     }

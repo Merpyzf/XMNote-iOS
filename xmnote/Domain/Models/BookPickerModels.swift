@@ -120,7 +120,7 @@ struct BookPickerConfiguration: Hashable, Codable, Sendable {
         multipleConfirmationTitle: String = "添加所选书籍",
         defaultQuery: String = "",
         preselectedBooks: [BookPickerBook] = [],
-        onlineSources: [BookSearchSource] = BookSearchSource.allCases,
+        onlineSources: [BookSearchSource] = BookSearchSource.productionCases,
         preferredOnlineSource: BookSearchSource? = nil
     ) {
         self.title = title

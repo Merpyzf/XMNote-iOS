@@ -34,10 +34,11 @@ final class BookSearchViewModel {
         initialSource: BookSearchSource? = nil
     ) {
         self.repository = repository
-        let settings = repository.fetchSearchSettings()
+        let settings = repository.fetchSearchSettings().normalized()
+        let seedSource = initialSource ?? settings.defaultSource
         self.query = initialQuery
         self.searchSettings = settings
-        self.selectedSource = initialSource ?? settings.defaultSource
+        self.selectedSource = seedSource.isProductionVisible ? seedSource : BookSearchSettings.default.defaultSource
         self.recentQueries = repository.fetchRecentQueries()
     }
 
@@ -51,6 +52,10 @@ final class BookSearchViewModel {
 
     var shouldShowEmptyState: Bool {
         hasSearched && !isSearching && results.isEmpty && errorMessage == nil
+    }
+
+    var availableSources: [BookSearchSource] {
+        BookSearchSource.productionCases
     }
 
     /// 刷新最近搜索词，保证删除或新增后 UI 与本地存储一致。
@@ -114,14 +119,29 @@ final class BookSearchViewModel {
 
     /// 选择当前搜索来源，并在设置中同步默认来源。
     func updateSelectedSource(_ source: BookSearchSource) {
-        selectedSource = source
-        updateDefaultSource(source)
+        let effectiveSource = source.isProductionVisible ? source : BookSearchSettings.default.defaultSource
+        selectedSource = effectiveSource
+        updateDefaultSource(effectiveSource)
     }
 
     /// 更新默认搜索源并持久化，供下次进入搜索页直接沿用。
     func updateDefaultSource(_ source: BookSearchSource) {
-        searchSettings.defaultSource = source
+        searchSettings.defaultSource = source.isProductionVisible ? source : BookSearchSettings.default.defaultSource
+        searchSettings = searchSettings.normalized()
         repository.saveSearchSettings(searchSettings)
+    }
+
+    /// 更新来源搜索页数；只有服务层实际消费页数的来源会被持久化。
+    func updateSearchPageCount(_ count: Int, for source: BookSearchSource) {
+        guard source.supportsSearchPageCount else { return }
+        searchSettings.pageCounts[source] = BookSearchSettings.clampedPageCount(count)
+        searchSettings = searchSettings.normalized()
+        repository.saveSearchSettings(searchSettings)
+    }
+
+    /// 读取来源当前页数，供设置页用原生 Stepper 展示。
+    func searchPageCount(for source: BookSearchSource) -> Int? {
+        searchSettings.pageCount(for: source)
     }
 
     /// 更新快速切换开关；关闭后 UI 隐藏来源横排入口但保留当前默认源。

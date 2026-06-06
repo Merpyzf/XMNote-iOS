@@ -34,8 +34,7 @@ struct BookshelfDimensionRail: View {
                         onSelect(dimension)
                     } label: {
                         Text(dimension.title)
-                            .font(AppTypography.caption)
-                            .fontWeight(isSelected ? .medium : .regular)
+                            .font(isSelected ? AppTypography.captionMedium : AppTypography.caption)
                             .foregroundStyle(isSelected ? .white : .primary)
                             .padding(.horizontal, Style.horizontalPadding)
                             .frame(minHeight: Style.visualMinHeight)

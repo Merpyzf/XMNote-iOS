@@ -2,7 +2,7 @@ import Foundation
 import GRDB
 
 /**
- * [INPUT]: 依赖 DatabaseManager 提供本地数据库连接，依赖 BookRecord/ChapterRecord/GroupRecord/TagRecord/SourceRecord 等持久化实体
+ * [INPUT]: 依赖 DatabaseManager 提供本地数据库连接，依赖 BookRecord/ChapterRecord/GroupRecord/TagRecord/SourceRecord 等持久化实体，依赖 S3UploadRepositoryProtocol 与 XMCoverImageLoading 执行新书外部封面异步转存
  * [OUTPUT]: 对外提供 BookEditorRepository（BookEditorRepositoryProtocol 的 GRDB 实现）
  * [POS]: Data 层书籍录入仓储实现，统一封装录入选项、偏好、新增保存与既有书籍编辑事务
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -12,20 +12,32 @@ import GRDB
 struct BookEditorRepository: BookEditorRepositoryProtocol {
     private let databaseManager: DatabaseManager
     private let userDefaults: UserDefaults
+    private let s3UploadRepository: (any S3UploadRepositoryProtocol)?
+    private let coverImageLoader: (any XMCoverImageLoading)?
 
     private enum Keys {
         static let preferBookType = "book_entry_prefer_type"
         static let preferSourceName = "book_entry_prefer_source_name"
         static let preferProgressUnit = "book_entry_prefer_unit"
         static let preferReadingStatus = "book_entry_prefer_status"
+        static let newAddBookPosition = "newAddBookPosition"
+    }
+
+    private nonisolated enum NewBookAddPosition {
+        static let start = 0
+        static let end = 1
     }
 
     init(
         databaseManager: DatabaseManager,
-        userDefaults: UserDefaults = .standard
+        userDefaults: UserDefaults = .standard,
+        s3UploadRepository: (any S3UploadRepositoryProtocol)? = nil,
+        coverImageLoader: (any XMCoverImageLoading)? = nil
     ) {
         self.databaseManager = databaseManager
         self.userDefaults = userDefaults
+        self.s3UploadRepository = s3UploadRepository
+        self.coverImageLoader = coverImageLoader
     }
 
     /// 读取录入页选项集合，覆盖来源、分组、标签与录入偏好。
@@ -136,6 +148,7 @@ struct BookEditorRepository: BookEditorRepositoryProtocol {
         guard !normalizedTitle.isEmpty else {
             throw BookEditorError.emptyTitle
         }
+        let newBookPlacement = userDefaults.object(forKey: Keys.newAddBookPosition) as? Int ?? NewBookAddPosition.start
 
         let result = try await databaseManager.database.dbPool.write { db in
             let ownerId = try DatabaseOwnerResolver.resolveOwnerID(in: db)
@@ -154,6 +167,8 @@ struct BookEditorRepository: BookEditorRepositoryProtocol {
                 from: normalizedDraft,
                 ownerId: ownerId,
                 sourceId: sourceId,
+                groupId: groupId,
+                newBookPlacement: newBookPlacement,
                 createdAt: now,
                 db: db
             )
@@ -163,12 +178,12 @@ struct BookEditorRepository: BookEditorRepositoryProtocol {
             }
 
             try insertChapters(from: normalizedDraft.catalog, for: bookId, createdAt: now, db: db)
-            try insertReadStatusRecord(
-                bookId: bookId,
-                status: normalizedDraft.readingStatus,
+            try BookReadStatusMutation.insertInitialReadStatusAndSyncAnnual(
+                db,
+                bookID: bookId,
+                statusID: normalizedDraft.readingStatus.rawValue,
                 changedAt: Int64(normalizedDraft.readStatusChangedDate.timeIntervalSince1970 * 1000),
-                createdAt: now,
-                db: db
+                createdAt: now
             )
 
             if let groupId {
@@ -204,11 +219,13 @@ struct BookEditorRepository: BookEditorRepositoryProtocol {
                     sourceName: normalizedDraft.sourceName.isEmpty ? "未知" : normalizedDraft.sourceName,
                     progressUnit: normalizedDraft.progressUnit,
                     readingStatus: normalizedDraft.readingStatus
-                )
+                ),
+                normalizedDraft.coverURL
             )
         }
 
         savePreference(result.1)
+        scheduleCoverTransferIfNeeded(bookID: result.0, coverURL: result.2)
         return result.0
     }
 
@@ -226,6 +243,94 @@ struct BookEditorRepository: BookEditorRepositoryProtocol {
 private extension BookEditorRepository {
     nonisolated static var currentTimestampMillis: Int64 {
         Int64(Date().timeIntervalSince1970 * 1000)
+    }
+
+    /// 保存成功后按 Android 规则异步转存外部封面；失败时保留原始 URL，不回滚新书保存。
+    func scheduleCoverTransferIfNeeded(bookID: Int64, coverURL: String) {
+        guard needTransferCover(coverURL),
+              let s3UploadRepository,
+              let coverImageLoader,
+              let url = URL(string: coverURL.trimmingCharacters(in: .whitespacesAndNewlines)) else {
+            return
+        }
+
+        Task(priority: .utility) {
+            do {
+                let localURL = try await downloadCover(url, bookID: bookID, loader: coverImageLoader)
+                defer {
+                    try? FileManager.default.removeItem(at: localURL)
+                }
+                let uploadResult = try await s3UploadRepository.uploadFile(
+                    localURL: localURL,
+                    prefix: "book_cover",
+                    progress: nil
+                )
+                try await databaseManager.database.dbPool.write { db in
+                    try updateBookCover(
+                        db,
+                        bookID: bookID,
+                        cover: uploadResult.remoteURL.absoluteString,
+                        updatedAt: Self.currentTimestampMillis
+                    )
+                }
+            } catch {
+                print("BookEditorRepository cover transfer failed: \(error.localizedDescription)")
+            }
+        }
+    }
+
+    /// 判断外部封面是否需要转存到 COS，完全对齐 Android needTransferCover。
+    nonisolated func needTransferCover(_ coverURL: String) -> Bool {
+        let trimmed = coverURL.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return false }
+        guard !trimmed.contains("ck-cdn.annatarhe.cn") else { return false }
+        guard !trimmed.contains("myqcloud.com") else { return false }
+        guard !trimmed.hasPrefix("file://"), !trimmed.hasPrefix("/") else { return false }
+        return trimmed.hasPrefix("http://") || trimmed.hasPrefix("https://")
+    }
+
+    /// 下载封面到临时 jpg 文件，供 S3UploadRepository 复用现有文件上传能力。
+    func downloadCover(
+        _ url: URL,
+        bookID: Int64,
+        loader: any XMCoverImageLoading
+    ) async throws -> URL {
+        let data = try await loader.loadData(for: XMImageLoadRequest(
+            url: url,
+            priority: .high,
+            cachePolicy: .reloadIgnoringLocalCacheData
+        ))
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("xmnote_book_covers", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let localURL = directory.appendingPathComponent(
+            "cover_\(bookID)_\(Self.currentTimestampMillis).jpg"
+        )
+        try data.write(to: localURL, options: .atomic)
+        return localURL
+    }
+
+    /// 转存成功后更新书籍封面 URL。
+    nonisolated func updateBookCover(
+        _ db: Database,
+        bookID: Int64,
+        cover: String,
+        updatedAt: Int64
+    ) throws {
+        // SQL 目的：外部封面转存 COS 成功后，把新远端 URL 回写到 book.cover。
+        // 涉及表：book。
+        // 关键过滤：id 精确命中，排除软删除书籍与占位书。
+        // 时间字段：updated_date 写入当前毫秒时间戳，对齐 Android updateCoverSync 默认时间语义。
+        // 副作用用途：触发书架与详情观察流刷新封面；失败路径不调用本写入。
+        let sql = """
+            UPDATE book
+            SET cover = ?,
+                updated_date = ?
+            WHERE id = ?
+              AND is_deleted = 0
+              AND id != 0
+            """
+        try db.execute(sql: sql, arguments: [cover, updatedAt, bookID])
     }
 
     func loadPreference() -> BookEntryPreference {
@@ -493,15 +598,13 @@ private extension BookEditorRepository {
         from draft: BookEditorDraft,
         ownerId: Int64,
         sourceId: Int64,
+        groupId: Int64?,
+        newBookPlacement: Int,
         createdAt: Int64,
         db: Database
     ) throws -> BookRecord {
         let readStatusChangedDate = Int64(draft.readStatusChangedDate.timeIntervalSince1970 * 1000)
-        let nextOrder = (try Int64.fetchOne(
-            db,
-            sql: "SELECT COALESCE(MAX(book_order), -1) + 1 FROM book WHERE is_deleted = 0 AND user_id = ?",
-            arguments: [ownerId]
-        )) ?? 0
+        let nextOrder = try nextBookOrder(db, ownerId: ownerId, groupId: groupId, placement: newBookPlacement)
         let currentProgress = Double(draft.currentProgressText) ?? 0
         let totalPages = Int64(draft.totalPagesText.digitsOnly) ?? 0
         let totalPosition = Int64(draft.totalPositionText.digitsOnly) ?? 0
@@ -589,7 +692,7 @@ private extension BookEditorRepository {
             let tagIds = try resolveTagIds(for: normalizedTagNames, ownerId: ownerId, in: db)
             let now = Self.currentTimestampMillis
             let changedAt = Int64(normalizedDraft.readStatusChangedDate.timeIntervalSince1970 * 1000)
-            let shouldInsertReadStatus = book.readStatusId != normalizedDraft.readingStatus.rawValue
+            let shouldUpdateReadStatus = book.readStatusId != normalizedDraft.readingStatus.rawValue
                 || book.readStatusChangedDate != changedAt
 
             applyDraft(normalizedDraft, to: &book, sourceId: sourceId, updatedAt: now)
@@ -597,13 +700,15 @@ private extension BookEditorRepository {
 
             try replaceGroupRelation(groupId: groupId, for: bookId, updatedAt: now, db: db)
             try replaceTagRelations(tagIds: tagIds, for: bookId, updatedAt: now, db: db)
-            if shouldInsertReadStatus {
-                try insertReadStatusRecord(
-                    bookId: bookId,
-                    status: normalizedDraft.readingStatus,
+            if shouldUpdateReadStatus {
+                let ratingScore: Int64? = normalizedDraft.readingStatus == .finished ? 0 : nil
+                try BookReadStatusMutation.updateBookReadStatus(
+                    db,
+                    bookID: bookId,
+                    statusID: normalizedDraft.readingStatus.rawValue,
                     changedAt: changedAt,
-                    createdAt: now,
-                    db: db
+                    updatedAt: now,
+                    finishedRatingScore: ratingScore
                 )
             }
 
@@ -625,7 +730,6 @@ private extension BookEditorRepository {
         sourceId: Int64,
         updatedAt: Int64
     ) {
-        let readStatusChangedDate = Int64(draft.readStatusChangedDate.timeIntervalSince1970 * 1000)
         let currentProgress = Double(draft.currentProgressText) ?? 0
         let totalPages = Int64(draft.totalPagesText.digitsOnly) ?? 0
         let totalPosition = Int64(draft.totalPositionText.digitsOnly) ?? 0
@@ -666,11 +770,118 @@ private extension BookEditorRepository {
         book.sourceId = sourceId
         book.purchaseDate = draft.purchaseDate.map { Int64($0.timeIntervalSince1970 * 1000) } ?? 0
         book.price = price
-        book.readStatusId = draft.readingStatus.rawValue
-        book.readStatusChangedDate = readStatusChangedDate
         book.catalog = draft.catalog
         book.wordCount = draft.wordCount.map(Int64.init)
         book.updatedDate = updatedAt
+    }
+
+    /// 按 Android 新书摆放设置计算 `book_order`，默认放到目标作用域开头。
+    nonisolated func nextBookOrder(
+        _ db: Database,
+        ownerId: Int64,
+        groupId: Int64?,
+        placement: Int
+    ) throws -> Int64 {
+        if placement == NewBookAddPosition.end {
+            return try maxBookOrder(db, ownerId: ownerId, groupId: groupId) + 1
+        }
+        return try minBookOrder(db, ownerId: ownerId, groupId: groupId) - 1
+    }
+
+    /// 查询目标作用域内最小书籍排序值，空作用域返回 1 以便新书得到 0。
+    nonisolated func minBookOrder(
+        _ db: Database,
+        ownerId: Int64,
+        groupId: Int64?
+    ) throws -> Int64 {
+        if let groupId {
+            // SQL 目的：读取指定有效分组内书籍最小 book_order，用于新书插入到分组开头。
+            // 涉及表：book b、group_book gb、group g；gb.book_id -> b.id，gb.group_id -> g.id。
+            // 关键过滤：目标 group_id、三表有效记录、b.user_id 匹配当前用户、排除占位书 id=0。
+            // 时间字段：不参与；返回 book_order 用于计算新书排序。
+            let sql = """
+                SELECT COALESCE(MIN(b.book_order), 1)
+                FROM book b
+                JOIN group_book gb ON gb.book_id = b.id
+                JOIN `group` g ON g.id = gb.group_id
+                WHERE gb.group_id = ?
+                  AND gb.is_deleted = 0
+                  AND g.is_deleted = 0
+                  AND b.is_deleted = 0
+                  AND b.user_id = ?
+                  AND b.id != 0
+                """
+            return try Int64.fetchOne(db, sql: sql, arguments: [groupId, ownerId]) ?? 1
+        }
+
+        // SQL 目的：读取默认书架顶层有效书籍最小 book_order，用于新书插入到默认书架开头。
+        // 涉及表：book b；NOT EXISTS 子查询检查 group_book 与 group 的有效关系。
+        // 关键过滤：b.user_id 匹配当前用户、b.is_deleted = 0、b.id != 0、书籍不属于任何有效分组。
+        // 时间字段：不参与；返回 book_order 用于计算新书排序。
+        let sql = """
+            SELECT COALESCE(MIN(b.book_order), 1)
+            FROM book b
+            WHERE b.is_deleted = 0
+              AND b.user_id = ?
+              AND b.id != 0
+              AND NOT EXISTS (
+                  SELECT 1
+                  FROM group_book gb
+                  JOIN `group` g ON g.id = gb.group_id
+                  WHERE gb.book_id = b.id
+                    AND gb.is_deleted = 0
+                    AND g.is_deleted = 0
+              )
+            """
+        return try Int64.fetchOne(db, sql: sql, arguments: [ownerId]) ?? 1
+    }
+
+    /// 查询目标作用域内最大书籍排序值，空作用域返回 -1 以便新书得到 0。
+    nonisolated func maxBookOrder(
+        _ db: Database,
+        ownerId: Int64,
+        groupId: Int64?
+    ) throws -> Int64 {
+        if let groupId {
+            // SQL 目的：读取指定有效分组内书籍最大 book_order，用于新书追加到分组末尾。
+            // 涉及表：book b、group_book gb、group g；gb.book_id -> b.id，gb.group_id -> g.id。
+            // 关键过滤：目标 group_id、三表有效记录、b.user_id 匹配当前用户、排除占位书 id=0。
+            // 时间字段：不参与；返回 book_order 用于计算新书排序。
+            let sql = """
+                SELECT COALESCE(MAX(b.book_order), -1)
+                FROM book b
+                JOIN group_book gb ON gb.book_id = b.id
+                JOIN `group` g ON g.id = gb.group_id
+                WHERE gb.group_id = ?
+                  AND gb.is_deleted = 0
+                  AND g.is_deleted = 0
+                  AND b.is_deleted = 0
+                  AND b.user_id = ?
+                  AND b.id != 0
+                """
+            return try Int64.fetchOne(db, sql: sql, arguments: [groupId, ownerId]) ?? -1
+        }
+
+        // SQL 目的：读取默认书架顶层有效书籍最大 book_order，用于新书追加到默认书架末尾。
+        // 涉及表：book b；NOT EXISTS 子查询检查 group_book 与 group 的有效关系。
+        // 关键过滤：b.user_id 匹配当前用户、b.is_deleted = 0、b.id != 0、书籍不属于任何有效分组。
+        // 时间字段：不参与；返回 book_order 用于计算新书排序。
+        let sql = """
+            SELECT COALESCE(MAX(b.book_order), -1)
+            FROM book b
+            WHERE b.is_deleted = 0
+              AND b.user_id = ?
+              AND b.id != 0
+              AND NOT EXISTS (
+                  SELECT 1
+                  FROM group_book gb
+                  JOIN `group` g ON g.id = gb.group_id
+                  WHERE gb.book_id = b.id
+                    AND gb.is_deleted = 0
+                    AND g.is_deleted = 0
+              )
+            """
+        return try Int64.fetchOne(db, sql: sql, arguments: [ownerId]) ?? -1
     }
 
     nonisolated func fetchSourceName(sourceId: Int64, db: Database) throws -> String {

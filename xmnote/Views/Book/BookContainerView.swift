@@ -6,8 +6,8 @@
 //
 
 /**
- * [INPUT]: 依赖 RepositoryContainer 注入仓储，依赖 BookViewModel 驱动书架浏览、编辑态选择与批量操作，依赖本地 chrome 阶段、固定顶部 chrome 高度与底部浮动 ornament 稳定内容布局
- * [OUTPUT]: 对外提供 BookContainerView 与 BookSubTab 枚举，承载书架顶部 chrome、集合内统一搜索 drawer、TabBar 显隐协调、底部玻璃编辑工具栏、批量 Sheet 与删除确认
+ * [INPUT]: 依赖 RepositoryContainer 注入仓储，依赖 HomeSubtabScaffold 承载首页二级页硬切，依赖 BookViewModel 驱动书架浏览、编辑态选择与批量操作
+ * [OUTPUT]: 对外提供 BookContainerView 与 BookSubTab 枚举，承载书籍/书单二级页切换、TabBar 显隐协调、底部玻璃编辑工具栏、批量 Sheet 与删除确认
  * [POS]: Book 模块容器壳层，承载书籍页与书架管理模式编排
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -17,11 +17,11 @@ import UIKit
 
 // MARK: - Sub Tab
 
-/// 书籍页二级分栏；保留 collections 的 Codable 兼容，但生产入口只开放书籍列表。
+/// 书籍页二级分栏；书单当前仅开放空白子页面，真实书单列表后续补齐。
 enum BookSubTab: String, CaseIterable, Hashable, Codable {
     case books, collections
 
-    static var allCases: [BookSubTab] { [.books] }
+    static var allCases: [BookSubTab] { [.books, .collections] }
 
     var title: String {
         switch self {
@@ -31,10 +31,7 @@ enum BookSubTab: String, CaseIterable, Hashable, Codable {
     }
 
     var productionValue: BookSubTab {
-        switch self {
-        case .books, .collections:
-            return .books
-        }
+        self
     }
 }
 
@@ -173,7 +170,6 @@ private struct BookContentView: View {
     @State private var chromeTransitionTask: Task<Void, Never>?
     @State private var editBottomBarHeight: CGFloat = 0
     @State private var editBottomBarOrnamentHeight: CGFloat = 0
-    @State private var frozenTopChromeHeight: CGFloat?
     @State private var isEditingChoreographyActive = false
     @State private var browseSearchPresentation: BookshelfSearchDrawerPresentation = .hidden
     @State private var isBrowseSearchFocused = false
@@ -191,27 +187,24 @@ private struct BookContentView: View {
     let onOpenGuide: () -> Void
 
     var body: some View {
-        ZStack(alignment: .top) {
-            Color.surfacePage.ignoresSafeArea()
-
-            segmentedContent
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-                .padding(.top, reservedTopChromeHeight)
-                .ignoresSafeArea(.keyboard, edges: .bottom)
-
-            if showsBrowsingGradient {
-                HomeTopHeaderGradient()
-                    .allowsHitTesting(false)
-                    .transition(.opacity)
-            }
-
-            topChrome
-                .zIndex(1)
+        HomeSubtabScaffold(
+            selection: $selectedSubTab,
+            tabs: BookSubTab.allCases,
+            topBarHeight: topBarRowHeight,
+            showsTopSwitcher: showsBrowsingChrome,
+            showsHeaderGradient: showsBrowsingChrome,
+            titleProvider: \.title
+        ) { tab in
+            topSwitcherTrailing(for: tab)
+        } content: { tab in
+            segmentedPage(for: tab)
+        }
+        .overlay(alignment: .top) {
+            editHeaderOverlay
         }
         .overlay(alignment: .bottom) {
             editBottomBarOverlay
         }
-        .toolbar(.hidden, for: .navigationBar)
         .toolbar(tabBarVisibility, for: .tabBar)
         .sheet(isPresented: $showsDisplaySettingSheet) {
             BookshelfDisplaySettingSheet(
@@ -276,6 +269,19 @@ private struct BookContentView: View {
                     onCreate: viewModel.createMoveTargetGroup(named:),
                     onConfirm: viewModel.submitMoveToGroup
                 )
+            case .bookCollection(
+                options: let options,
+                isLoading: let isLoading,
+                errorMessage: let errorMessage
+            ):
+                BookshelfBookCollectionSheet(
+                    options: options,
+                    selectedCount: viewModel.selectedBookIDsIncludingGroupBooks.count,
+                    isLoading: isLoading,
+                    errorMessage: errorMessage,
+                    onCreate: viewModel.createBookCollection(named:),
+                    onConfirm: viewModel.submitBookCollection
+                )
             }
         }
         .xmSystemAlert(item: $viewModel.activeDeleteConfirmation) { confirmation in
@@ -289,8 +295,7 @@ private struct BookContentView: View {
         }
         .onChange(of: selectedSubTab) { _, newValue in
             guard newValue != .books else { return }
-            collapseBrowseSearch()
-            exitEditingWithChoreography()
+            resetBookChromeForSubtabSwitch()
         }
         .onChange(of: viewModel.selectedDimension) { _, _ in
             collapseBrowseSearchIfUnsupported()
@@ -333,49 +338,24 @@ private struct BookContentView: View {
     }
 
     @ViewBuilder
-    private var topChrome: some View {
-        ZStack(alignment: .top) {
-            if showsBrowsingChrome {
-                BookshelfBrowsingChrome(
-                    selectedSubTab: $selectedSubTab,
-                    selectedDimension: viewModel.selectedDimension,
-                    canShowBookActions: selectedSubTab == .books,
-                    canShowSelectAction: canShowSelectAction,
-                    canEditCurrentDimension: viewModel.canEditCurrentDimension,
-                    onSelectDimension: viewModel.selectDimension,
-                    onShowDisplaySettings: { showsDisplaySettingSheet = true },
-                    onEnterEditing: { enterEditingWithChoreography() },
-                    onAddBook: onAddBook,
-                    onAddNote: onAddNote,
-                    onOpenDebugCenter: onOpenDebugCenter,
-                    onOpenTagManagement: onOpenTagManagement,
-                    onOpenSourceManagement: onOpenSourceManagement,
-                    onOpenAuthorManagement: onOpenAuthorManagement,
-                    onOpenPressManagement: onOpenPressManagement,
-                    onOpenGuide: onOpenGuide
+    private var editHeaderOverlay: some View {
+        if showsEditHeader {
+            VStack(spacing: Spacing.none) {
+                BookshelfEditChrome(
+                    selectedBookCount: viewModel.selectedBookIDs.count,
+                    selectedGroupCount: viewModel.selectedGroupCount,
+                    isAllVisibleSelected: viewModel.isAllVisibleSelected,
+                    isSelectionToggleEnabled: !viewModel.visibleDefaultItemIDs.isEmpty,
+                    searchState: editSearchState,
+                    onToggleSelectAll: toggleVisibleSelection,
+                    onCancel: exitEditingWithChoreography
                 )
-                .allowsHitTesting(chromePhase == .normal)
-                .transition(BookshelfManagementMotion.topChromeTransition(reduceMotion: reduceMotion))
+                .frame(height: topBarRowHeight)
             }
-
-            if showsEditHeader {
-                VStack(spacing: Spacing.none) {
-                    BookshelfEditChrome(
-                        selectedBookCount: viewModel.selectedBookIDs.count,
-                        selectedGroupCount: viewModel.selectedGroupCount,
-                        isAllVisibleSelected: viewModel.isAllVisibleSelected,
-                        isSelectionToggleEnabled: !viewModel.visibleDefaultItemIDs.isEmpty,
-                        searchState: editSearchState,
-                        onToggleSelectAll: toggleVisibleSelection,
-                        onCancel: exitEditingWithChoreography
-                    )
-                    .frame(height: topBarRowHeight)
-                }
-                    .transition(BookshelfManagementMotion.topChromeTransition(reduceMotion: reduceMotion))
-            }
+            .frame(height: topBarRowHeight, alignment: .top)
+            .transition(BookshelfManagementMotion.topChromeTransition(reduceMotion: reduceMotion))
+            .zIndex(2)
         }
-        .frame(height: reservedTopChromeHeight, alignment: .top)
-        .clipped()
     }
 
     private var editBottomBar: some View {
@@ -393,6 +373,22 @@ private struct BookContentView: View {
             onAction: viewModel.performBottomAction,
             onDelete: viewModel.presentDeleteConfirmation
         )
+    }
+
+    private func topSwitcherTrailing(for tab: BookSubTab) -> some View {
+        AddMenuCircleButton(
+            onAddBook: onAddBook,
+            onAddNote: onAddNote,
+            onOpenDebugCenter: onOpenDebugCenter,
+            usesGlassStyle: true
+        )
+        .opacity(tab == .books ? 1 : 0)
+        .allowsHitTesting(tab == .books)
+        .accessibilityHidden(tab != .books)
+        .transaction { transaction in
+            transaction.animation = nil
+            transaction.disablesAnimations = true
+        }
     }
 
     private func editBottomBarMetrics(safeAreaBottomInset: CGFloat) -> ImmersiveBottomChromeMetrics {
@@ -469,22 +465,6 @@ private struct BookContentView: View {
         selectedSubTab == .books && chromePhase.hidesTabBar ? .hidden : .automatic
     }
 
-    private var reservedTopChromeHeight: CGFloat {
-        guard let frozenTopChromeHeight else {
-            return expectedTopChromeHeight
-        }
-        return max(frozenTopChromeHeight, expectedTopChromeHeight)
-    }
-
-    private var expectedTopChromeHeight: CGFloat {
-        guard selectedSubTab == .books else { return topBarRowHeight }
-        if chromePhase.showsEditHeader {
-            return topBarRowHeight
-        }
-        return topBarRowHeight
-            + BookshelfChromeMetrics.dimensionRailHeight
-    }
-
     private var topBarRowHeight: CGFloat {
         BookshelfEditChromeMetrics.topBarHeight(for: dynamicTypeSize)
     }
@@ -497,7 +477,6 @@ private struct BookContentView: View {
         }
         chromeTransitionTask?.cancel()
         isEditingChoreographyActive = true
-        frozenTopChromeHeight = topBarRowHeight
         prepareBrowseSearchForEditing()
 
         withAnimation(BookshelfManagementMotion.modeAnimation(reduceMotion: reduceMotion)) {
@@ -507,7 +486,6 @@ private struct BookContentView: View {
 
         guard viewModel.isEditing else {
             chromePhase = .normal
-            frozenTopChromeHeight = nil
             releaseEditBottomBarSpace()
             isEditingChoreographyActive = false
             chromeTransitionTask = nil
@@ -519,7 +497,6 @@ private struct BookContentView: View {
             guard !Task.isCancelled else { return }
             guard selectedSubTab == .books, viewModel.isEditing else {
                 chromePhase = .normal
-                frozenTopChromeHeight = nil
                 releaseEditBottomBarSpace()
                 isEditingChoreographyActive = false
                 chromeTransitionTask = nil
@@ -527,7 +504,6 @@ private struct BookContentView: View {
             }
             withAnimation(BookshelfManagementMotion.editBarRevealAnimation(reduceMotion: reduceMotion)) {
                 chromePhase = .editing
-                frozenTopChromeHeight = nil
             }
             isEditingChoreographyActive = false
             chromeTransitionTask = nil
@@ -540,9 +516,6 @@ private struct BookContentView: View {
         guard viewModel.isEditing || chromePhase != .normal else { return }
         chromeTransitionTask?.cancel()
         isEditingChoreographyActive = true
-        if frozenTopChromeHeight == nil {
-            frozenTopChromeHeight = expectedTopChromeHeight
-        }
 
         withAnimation(BookshelfManagementMotion.editBarExitAnimation(reduceMotion: reduceMotion)) {
             chromePhase = .exitingEdit
@@ -559,7 +532,6 @@ private struct BookContentView: View {
             try? await Task.sleep(for: BookshelfManagementMotion.editBottomInsetReleaseDelay(reduceMotion: reduceMotion))
             guard !Task.isCancelled else { return }
             releaseEditBottomBarSpace()
-            frozenTopChromeHeight = nil
             isEditingChoreographyActive = false
             chromeTransitionTask = nil
         }
@@ -590,7 +562,6 @@ private struct BookContentView: View {
             }
             chromeTransitionTask?.cancel()
             chromePhase = .normal
-            frozenTopChromeHeight = nil
             collapseBrowseSearchIfUnsupported()
             releaseEditBottomBarSpace()
             return
@@ -598,11 +569,9 @@ private struct BookContentView: View {
 
         if viewModel.isEditing, chromePhase == .normal {
             chromePhase = .editing
-            frozenTopChromeHeight = nil
         } else if !viewModel.isEditing, chromePhase != .normal {
             chromeTransitionTask?.cancel()
             chromePhase = .normal
-            frozenTopChromeHeight = nil
             collapseBrowseSearchIfUnsupported()
             releaseEditBottomBarSpace()
         }
@@ -686,6 +655,27 @@ private struct BookContentView: View {
         }
     }
 
+    /// 二级页切换离开书籍页时立即收束页面私有状态，避免搜索与整理模式的退场动画污染子页面切换。
+    private func resetBookChromeForSubtabSwitch() {
+        chromeTransitionTask?.cancel()
+        chromeTransitionTask = nil
+
+        var transaction = Transaction(animation: nil)
+        transaction.disablesAnimations = true
+        withTransaction(transaction) {
+            browseSearchDraftKeyword = ""
+            viewModel.deactivateSearch()
+            browseSearchPresentation = .hidden
+            isBrowseSearchFocused = false
+            viewModel.exitEditing()
+            chromePhase = .normal
+            isEditingChoreographyActive = false
+            releaseEditBottomBarSpace()
+        }
+
+        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+    }
+
     /// 同步输入框焦点变化，让 drawer 激活态与 UIKit first responder 不脱节。
     private func updateBrowseSearchFocus(_ isFocused: Bool) {
         isBrowseSearchFocused = isFocused
@@ -727,7 +717,6 @@ private struct BookContentView: View {
         chromeTransitionTask?.cancel()
         chromeTransitionTask = nil
         chromePhase = .normal
-        frozenTopChromeHeight = nil
         isEditingChoreographyActive = false
         collapseBrowseSearchIfUnsupported()
         releaseEditBottomBarSpace()
@@ -783,14 +772,14 @@ private struct BookContentView: View {
         case .books:
             bookGridPage
         case .collections:
-            bookGridPage
+            collectionPlaceholderPage
         }
     }
 
     private var bookGridPage: some View {
         BookGridView(
             viewModel: viewModel,
-            isPageActive: selectedSubTab.productionValue == .books,
+            isPageActive: selectedSubTab == .books,
             bottomContentInset: editBottomBarHeight,
             hasSearchKeyword: viewModel.hasSearchKeyword,
             searchDrawerHeight: browseSearchDrawerHeight,
@@ -801,6 +790,8 @@ private struct BookContentView: View {
             searchKeyword: viewModel.searchKeyword,
             searchPlaceholder: viewModel.selectedDimension.searchPlaceholder,
             searchFocusTrigger: browseSearchFocusTrigger,
+            canShowSelectAction: canShowSelectAction,
+            canEditCurrentDimension: viewModel.canEditCurrentDimension,
             onActivateSearch: activateBrowseSearch,
             onRequestSearchFocus: requestBrowseSearchFocus,
             onSearchKeywordChange: updateBrowseSearchKeyword,
@@ -812,8 +803,20 @@ private struct BookContentView: View {
             onOpenNoteRoute: onOpenNoteRoute,
             onEnterEditing: { initialSelection in
                 enterEditingWithChoreography(initialSelection: initialSelection)
-            }
+            },
+            onShowDisplaySettings: { showsDisplaySettingSheet = true },
+            onOpenTagManagement: onOpenTagManagement,
+            onOpenSourceManagement: onOpenSourceManagement,
+            onOpenAuthorManagement: onOpenAuthorManagement,
+            onOpenPressManagement: onOpenPressManagement,
+            onOpenGuide: onOpenGuide
         )
+    }
+
+    private var collectionPlaceholderPage: some View {
+        CollectionListPlaceholderView()
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(Color.surfacePage)
     }
 
 }
@@ -821,45 +824,9 @@ private struct BookContentView: View {
 // MARK: - Top Chrome Components
 
 private enum BookshelfChromeMetrics {
-    static let dimensionRailHeight: CGFloat = 44
-    static let editContextHeight: CGFloat = 40
-
     /// 根据动态字体返回集合内搜索 drawer 高度，让一级页与二级列表在大字号下保持一致热区。
     static func searchDrawerHeight(for dynamicTypeSize: DynamicTypeSize) -> CGFloat {
         dynamicTypeSize >= .accessibility1 ? 62 : 52
-    }
-}
-
-private enum BookshelfDimensionManagementAction {
-    case tag
-    case source
-    case author
-    case press
-
-    var title: String {
-        switch self {
-        case .tag:
-            return "标签管理"
-        case .source:
-            return "来源管理"
-        case .author:
-            return "作者管理"
-        case .press:
-            return "出版社管理"
-        }
-    }
-
-    var systemImage: String {
-        switch self {
-        case .tag:
-            return "tag"
-        case .source:
-            return "tray.full"
-        case .author:
-            return "person.text.rectangle"
-        case .press:
-            return "building.2"
-        }
     }
 }
 
@@ -900,177 +867,6 @@ private extension BookshelfDimension {
         case .status:
             return "搜索状态"
         }
-    }
-
-    var managementAction: BookshelfDimensionManagementAction? {
-        switch self {
-        case .tag:
-            return .tag
-        case .source:
-            return .source
-        case .author:
-            return .author
-        case .press:
-            return .press
-        case .default, .status, .rating:
-            return nil
-        }
-    }
-}
-
-/// 普通浏览态顶部 chrome，承载页面切换、书架工具、搜索与维度 rail。
-private struct BookshelfBrowsingChrome: View {
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @Binding var selectedSubTab: BookSubTab
-    let selectedDimension: BookshelfDimension
-    let canShowBookActions: Bool
-    let canShowSelectAction: Bool
-    let canEditCurrentDimension: Bool
-    let onSelectDimension: (BookshelfDimension) -> Void
-    let onShowDisplaySettings: () -> Void
-    let onEnterEditing: () -> Void
-    let onAddBook: () -> Void
-    let onAddNote: () -> Void
-    let onOpenDebugCenter: (() -> Void)?
-    let onOpenTagManagement: () -> Void
-    let onOpenSourceManagement: () -> Void
-    let onOpenAuthorManagement: () -> Void
-    let onOpenPressManagement: () -> Void
-    let onOpenGuide: () -> Void
-
-    var body: some View {
-        VStack(spacing: Spacing.none) {
-            TopSwitcher(
-                selection: $selectedSubTab,
-                tabs: BookSubTab.allCases,
-                titleProvider: \.title
-            ) {
-                topBarActions
-            }
-
-            if canShowBookActions {
-                dimensionToolRow
-                    .frame(minHeight: BookshelfChromeMetrics.dimensionRailHeight)
-                    .transition(BookshelfManagementMotion.browsingChromeTransition(reduceMotion: reduceMotion))
-            }
-        }
-        .accessibilityElement(children: .contain)
-    }
-
-    private var topBarActions: some View {
-        HStack(spacing: Spacing.cozy) {
-            AddMenuCircleButton(
-                onAddBook: onAddBook,
-                onAddNote: onAddNote,
-                onOpenDebugCenter: onOpenDebugCenter,
-                usesGlassStyle: true
-            )
-        }
-    }
-
-    private var dimensionToolRow: some View {
-        HStack(spacing: Spacing.none) {
-            BookshelfDimensionRail(
-                selectedDimension: selectedDimension,
-                onSelect: onSelectDimension,
-                trailingPadding: Spacing.none
-            )
-            .frame(maxWidth: .infinity)
-
-            bookshelfToolMenu
-                .padding(.leading, Spacing.tight)
-                .padding(.trailing, Spacing.screenEdge)
-        }
-    }
-
-    private var bookshelfToolMenu: some View {
-        Menu {
-            if selectedDimension == .default {
-                Button(action: onEnterEditing) {
-                    XMMenuLabel("书籍整理", systemImage: "checklist")
-                }
-                .disabled(!canShowSelectAction || !canEditCurrentDimension)
-            }
-
-            if let managementAction = selectedDimension.managementAction {
-                Button(action: managementActionHandler(for: managementAction)) {
-                    XMMenuLabel(managementAction.title, systemImage: managementAction.systemImage)
-                }
-            }
-
-            Button(action: onShowDisplaySettings) {
-                XMMenuLabel("显示与排序", systemImage: "slider.horizontal.3")
-            }
-
-            Divider()
-
-            Button(action: onOpenGuide) {
-                XMMenuLabel("使用说明", systemImage: "questionmark.circle")
-            }
-        } label: {
-            BookshelfToolMenuButton()
-        }
-        .xmMenuNeutralTint()
-        .menuOrder(.fixed)
-        .accessibilityLabel("书架更多操作")
-    }
-
-    private func managementActionHandler(for action: BookshelfDimensionManagementAction) -> () -> Void {
-        switch action {
-        case .tag:
-            return onOpenTagManagement
-        case .source:
-            return onOpenSourceManagement
-        case .author:
-            return onOpenAuthorManagement
-        case .press:
-            return onOpenPressManagement
-        }
-    }
-
-}
-
-/// 书架维度 rail 右侧固定的末尾 chip，保持 44pt 热区并对齐未选中维度项。
-private struct BookshelfToolMenuButton: View {
-    private enum Style {
-        static let hitSize = Spacing.actionReserved
-        static let visualWidth: CGFloat = 32
-        static let visualHeight: CGFloat = 28
-        static let cornerRadius = CornerRadius.blockSmall
-    }
-
-    var body: some View {
-        ZStack {
-            RoundedRectangle(cornerRadius: Style.cornerRadius, style: .continuous)
-                .fill(Color.surfaceCard)
-
-            RoundedRectangle(cornerRadius: Style.cornerRadius, style: .continuous)
-                .stroke(Color.surfaceBorderSubtle.opacity(0.18), lineWidth: CardStyle.borderWidth)
-
-            BookshelfMoreGlyph()
-        }
-        .frame(width: Style.visualWidth, height: Style.visualHeight)
-        .frame(width: Style.hitSize, height: Style.hitSize)
-        .contentShape(Rectangle())
-    }
-}
-
-/// 自绘竖向三点，避免 SF Symbol 旋转或 `ellipsis.vertical` 在菜单 label 中显示不稳定。
-private struct BookshelfMoreGlyph: View {
-    private enum Style {
-        static let dotSize: CGFloat = 3
-        static let dotSpacing: CGFloat = 2.5
-    }
-
-    var body: some View {
-        VStack(spacing: Style.dotSpacing) {
-            ForEach(0..<3, id: \.self) { _ in
-                Circle()
-                    .fill(Color.iconSecondary)
-                    .frame(width: Style.dotSize, height: Style.dotSize)
-            }
-        }
-        .accessibilityHidden(true)
     }
 }
 

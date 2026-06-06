@@ -6,7 +6,7 @@
 //
 
 /**
- * [INPUT]: 依赖 BookshelfBookPayload 展示模型、封面角标显示设置、置顶状态与编辑选择状态
+ * [INPUT]: 依赖 BookshelfBookPayload 展示模型、封面角标显示设置、排序辅助文案、置顶状态与编辑选择状态
  * [OUTPUT]: 对外提供 BookGridItemView，单本书籍卡片渲染与网格编辑态封面选择反馈
  * [POS]: Book 模块最小展示单元，被 BookGridView 复用
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -23,6 +23,7 @@ struct BookGridItemView: View {
     var isSelected = false
     var titleDisplayMode: BookshelfTitleDisplayMode = .standard
     var searchKeyword = ""
+    var sortAuxiliaryText: String?
 
     var body: some View {
         VStack(alignment: .leading, spacing: Spacing.half) {
@@ -30,6 +31,8 @@ struct BookGridItemView: View {
             bookInfo
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(accessibilityLabel)
     }
 
     // MARK: - Cover
@@ -64,8 +67,25 @@ struct BookGridItemView: View {
                 baseColor: Color.textSecondary
             )
                 .lineLimit(1)
+
+            if let sortAuxiliaryText {
+                Text(sortAuxiliaryText)
+                    .font(BookshelfTypography.gridSubtitle)
+                    .foregroundStyle(Color.textHint)
+                    .lineLimit(1)
+            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var accessibilityLabel: String {
+        let metadata = [
+            book.author.trimmingCharacters(in: .whitespacesAndNewlines),
+            sortAuxiliaryText?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        ]
+            .filter { !$0.isEmpty }
+            .joined(separator: "，")
+        return metadata.isEmpty ? book.name : "\(book.name)，\(metadata)"
     }
 }
 

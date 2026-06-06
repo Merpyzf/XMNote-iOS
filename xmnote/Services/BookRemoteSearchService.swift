@@ -30,7 +30,7 @@ final class BookRemoteSearchService {
     }
 
     /// 搜索指定来源书籍；ISBN 输入遵循 Android 端“优先 Wenqu / 豆瓣”兜底逻辑。
-    func search(keyword: String, source: BookSearchSource) async throws -> [BookSearchResult] {
+    func search(keyword: String, source: BookSearchSource, pageCount: Int? = nil) async throws -> [BookSearchResult] {
         let trimmed = keyword.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else {
             throw BookSearchError.emptyKeyword
@@ -54,9 +54,9 @@ final class BookRemoteSearchService {
         case .wenqu:
             return try await searchWenqu(by: .query(trimmed))
         case .douban:
-            return try await searchDouban(keyword: trimmed)
+            return try await searchDouban(keyword: trimmed, pageCount: pageCount ?? BookSearchSource.douban.defaultSearchPageCount ?? 1)
         case .qidian:
-            return try await searchQidian(keyword: trimmed)
+            return try await searchQidian(keyword: trimmed, pageCount: pageCount ?? BookSearchSource.qidian.defaultSearchPageCount ?? 2)
         case .zongHeng:
             return try await searchZongHeng(keyword: trimmed)
         case .jjwxc:
@@ -64,7 +64,7 @@ final class BookRemoteSearchService {
         case .fanqie:
             return try await searchFanqie(keyword: trimmed)
         case .cp:
-            return try await searchCP(keyword: trimmed)
+            return try await searchCP(keyword: trimmed, pageCount: pageCount ?? BookSearchSource.cp.defaultSearchPageCount ?? 2)
         }
     }
 
@@ -173,39 +173,54 @@ private extension BookRemoteSearchService {
         }
     }
 
-    func searchDouban(keyword: String) async throws -> [BookSearchResult] {
-        let result = try await webScenarioService.execute(.doubanSearch(keyword: keyword, page: 1))
-        if result.probe.status == .antiBot {
-            throw BookSearchError.doubanLoginRequired
+    func searchDouban(keyword: String, pageCount: Int) async throws -> [BookSearchResult] {
+        var results: [BookSearchResult] = []
+        for page in 1...BookSearchSettings.clampedPageCount(pageCount) {
+            let result = try await webScenarioService.execute(.doubanSearch(keyword: keyword, page: page))
+            if result.probe.status == .antiBot {
+                throw BookSearchError.doubanLoginRequired
+            }
+            guard case .doubanBooks(let books) = result.parsedPayload else {
+                if page == 1 {
+                    return []
+                }
+                break
+            }
+            let pageResults = books.map { item in
+                BookSearchResult(
+                    id: "douban-\(item.doubanId)",
+                    source: .douban,
+                    title: item.title,
+                    author: "",
+                    coverURL: item.coverURLString,
+                    subtitle: item.info,
+                    summary: "",
+                    translator: "",
+                    press: "",
+                    isbn: "",
+                    pubDate: "",
+                    doubanId: item.doubanId,
+                    totalPages: nil,
+                    totalWordCount: nil,
+                    seed: nil,
+                    detailPageURL: "https://book.douban.com/subject/\(item.doubanId)/"
+                )
+            }
+            guard !pageResults.isEmpty else { break }
+            results.append(contentsOf: pageResults)
         }
-        guard case .doubanBooks(let books) = result.parsedPayload else {
-            return []
-        }
-        return books.map { item in
-            BookSearchResult(
-                id: "douban-\(item.doubanId)",
-                source: .douban,
-                title: item.title,
-                author: "",
-                coverURL: item.coverURLString,
-                subtitle: item.info,
-                summary: "",
-                translator: "",
-                press: "",
-                isbn: "",
-                pubDate: "",
-                doubanId: item.doubanId,
-                totalPages: nil,
-                totalWordCount: nil,
-                seed: nil,
-                detailPageURL: "https://book.douban.com/subject/\(item.doubanId)/"
-            )
-        }
+        return uniqueResults(results)
     }
 
-    func searchQidian(keyword: String) async throws -> [BookSearchResult] {
-        let result = try await webScenarioService.execute(.qidianSearch(keyword: keyword, page: 1))
-        return try parseQidianResults(html: result.fetchResult.html)
+    func searchQidian(keyword: String, pageCount: Int) async throws -> [BookSearchResult] {
+        var results: [BookSearchResult] = []
+        for page in 1...BookSearchSettings.clampedPageCount(pageCount) {
+            let result = try await webScenarioService.execute(.qidianSearch(keyword: keyword, page: page))
+            let pageResults = try parseQidianResults(html: result.fetchResult.html)
+            guard !pageResults.isEmpty else { break }
+            results.append(contentsOf: pageResults)
+        }
+        return uniqueResults(results)
     }
 
     func searchZongHeng(keyword: String) async throws -> [BookSearchResult] {
@@ -293,51 +308,57 @@ private extension BookRemoteSearchService {
         }
     }
 
-    func searchCP(keyword: String) async throws -> [BookSearchResult] {
-        guard let url = URL(string: "https://gongzicp.com/webapi/search/novels?k=\(keyword.urlQueryEncoded)&page=1") else {
-            throw BookSearchError.sourceUnavailable(message: "长佩请求地址无效")
+    func searchCP(keyword: String, pageCount: Int) async throws -> [BookSearchResult] {
+        var results: [BookSearchResult] = []
+        for page in 1...BookSearchSettings.clampedPageCount(pageCount) {
+            guard let url = URL(string: "https://gongzicp.com/webapi/search/novels?k=\(keyword.urlQueryEncoded)&page=\(page)") else {
+                throw BookSearchError.sourceUnavailable(message: "长佩请求地址无效")
+            }
+            let response: CPResponse = try await requestJSON(url: url)
+            let pageResults = response.data.list.map { item in
+                let seed = BookEditorSeed(
+                    searchSource: .cp,
+                    title: item.name,
+                    rawTitle: item.name,
+                    author: item.author,
+                    authorIntro: "",
+                    translator: "",
+                    press: "",
+                    isbn: "",
+                    pubDate: normalizeDateString(item.updateTime),
+                    summary: item.description,
+                    catalog: "",
+                    coverURL: item.cover,
+                    doubanId: nil,
+                    totalPages: nil,
+                    totalWordCount: item.wordCount,
+                    preferredSourceName: BookSearchSource.cp.preferredDraftSourceName,
+                    preferredBookType: .ebook,
+                    preferredProgressUnit: .position
+                )
+                return BookSearchResult(
+                    id: "cp-\(item.id)",
+                    source: .cp,
+                    title: item.name,
+                    author: item.author,
+                    coverURL: item.cover,
+                    subtitle: item.info,
+                    summary: item.description,
+                    translator: "",
+                    press: "",
+                    isbn: "",
+                    pubDate: seed.pubDate,
+                    doubanId: nil,
+                    totalPages: nil,
+                    totalWordCount: item.wordCount,
+                    seed: seed,
+                    detailPageURL: nil
+                )
+            }
+            guard !pageResults.isEmpty else { break }
+            results.append(contentsOf: pageResults)
         }
-        let response: CPResponse = try await requestJSON(url: url)
-        return response.data.list.map { item in
-            let seed = BookEditorSeed(
-                searchSource: .cp,
-                title: item.name,
-                rawTitle: item.name,
-                author: item.author,
-                authorIntro: "",
-                translator: "",
-                press: "",
-                isbn: "",
-                pubDate: normalizeDateString(item.updateTime),
-                summary: item.description,
-                catalog: "",
-                coverURL: item.cover,
-                doubanId: nil,
-                totalPages: nil,
-                totalWordCount: item.wordCount,
-                preferredSourceName: BookSearchSource.cp.preferredDraftSourceName,
-                preferredBookType: .ebook,
-                preferredProgressUnit: .position
-            )
-            return BookSearchResult(
-                id: "cp-\(item.id)",
-                source: .cp,
-                title: item.name,
-                author: item.author,
-                coverURL: item.cover,
-                subtitle: item.info,
-                summary: item.description,
-                translator: "",
-                press: "",
-                isbn: "",
-                pubDate: seed.pubDate,
-                doubanId: nil,
-                totalPages: nil,
-                totalWordCount: item.wordCount,
-                seed: seed,
-                detailPageURL: nil
-            )
-        }
+        return uniqueResults(results)
     }
 
     func searchFanqie(keyword: String) async throws -> [BookSearchResult] {
@@ -433,6 +454,13 @@ private extension BookRemoteSearchService {
         let decoder = JSONDecoder()
         decoder.keyDecodingStrategy = .useDefaultKeys
         return try decoder.decode(Response.self, from: data)
+    }
+
+    func uniqueResults(_ results: [BookSearchResult]) -> [BookSearchResult] {
+        var seenIDs = Set<String>()
+        return results.filter { result in
+            seenIDs.insert(result.id).inserted
+        }
     }
 
     func parseQidianResults(html: String) throws -> [BookSearchResult] {

@@ -19,6 +19,19 @@ enum BookSearchSource: Int, CaseIterable, Identifiable, Hashable, Sendable, Coda
 
     var id: Int { rawValue }
 
+    /// 生产入口默认展示的在线搜索源；番茄保留内部能力，不作为默认可见入口。
+    static let productionCases: [BookSearchSource] = [
+        .wenqu,
+        .douban,
+        .qidian,
+        .zongHeng,
+        .jjwxc,
+        .cp
+    ]
+
+    /// 搜索页数配置范围，对齐 Android 的轻量设置入口并避免远端请求过量。
+    static let searchPageCountRange = 1...8
+
     var title: String {
         switch self {
         case .wenqu:
@@ -35,6 +48,33 @@ enum BookSearchSource: Int, CaseIterable, Identifiable, Hashable, Sendable, Coda
             return "番茄小说"
         case .cp:
             return "长佩文学"
+        }
+    }
+
+    /// 判断来源是否应出现在正式搜索入口中。
+    var isProductionVisible: Bool {
+        Self.productionCases.contains(self)
+    }
+
+    /// 当前服务层实际消费页数配置的来源。
+    var supportsSearchPageCount: Bool {
+        switch self {
+        case .douban, .qidian, .cp:
+            return true
+        case .wenqu, .zongHeng, .jjwxc, .fanqie:
+            return false
+        }
+    }
+
+    /// Android 默认页数语义；不支持页数的来源返回 nil，设置页不会展示。
+    var defaultSearchPageCount: Int? {
+        switch self {
+        case .douban:
+            return 1
+        case .qidian, .cp:
+            return 2
+        case .wenqu, .zongHeng, .jjwxc, .fanqie:
+            return nil
         }
     }
 
@@ -67,12 +107,47 @@ struct BookSearchSettings: Hashable, Sendable, Codable {
     var defaultSource: BookSearchSource
     var isQuickSourceSwitchEnabled: Bool
     var shouldReturnToBookshelfAfterSave: Bool
+    var pageCounts: [BookSearchSource: Int]
+
+    static let defaultPageCounts: [BookSearchSource: Int] = [
+        .douban: 1,
+        .qidian: 2,
+        .cp: 2
+    ]
 
     static let `default` = BookSearchSettings(
         defaultSource: .wenqu,
         isQuickSourceSwitchEnabled: false,
-        shouldReturnToBookshelfAfterSave: false
+        shouldReturnToBookshelfAfterSave: false,
+        pageCounts: defaultPageCounts
     )
+
+    /// 返回指定来源当前生效的页数；不支持页数配置的来源返回 nil。
+    func pageCount(for source: BookSearchSource) -> Int? {
+        guard source.supportsSearchPageCount else { return nil }
+        let fallback = source.defaultSearchPageCount ?? 1
+        return Self.clampedPageCount(pageCounts[source] ?? fallback)
+    }
+
+    /// 清洗设置，保证隐藏来源不会成为默认入口，页数只保留服务层实际消费的来源。
+    func normalized() -> BookSearchSettings {
+        var normalizedCounts: [BookSearchSource: Int] = [:]
+        for source in BookSearchSource.productionCases where source.supportsSearchPageCount {
+            let fallback = source.defaultSearchPageCount ?? 1
+            normalizedCounts[source] = Self.clampedPageCount(pageCounts[source] ?? fallback)
+        }
+        return BookSearchSettings(
+            defaultSource: defaultSource.isProductionVisible ? defaultSource : .wenqu,
+            isQuickSourceSwitchEnabled: isQuickSourceSwitchEnabled,
+            shouldReturnToBookshelfAfterSave: shouldReturnToBookshelfAfterSave,
+            pageCounts: normalizedCounts
+        )
+    }
+
+    /// 将外部写入的页数收敛到允许范围，避免异常偏好造成过量网络请求。
+    static func clampedPageCount(_ value: Int) -> Int {
+        min(max(value, BookSearchSource.searchPageCountRange.lowerBound), BookSearchSource.searchPageCountRange.upperBound)
+    }
 }
 
 /// 搜索结果条目，承接列表页渲染与进入录入页前的预填数据。
