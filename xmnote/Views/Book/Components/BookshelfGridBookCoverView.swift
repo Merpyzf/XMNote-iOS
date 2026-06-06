@@ -1,6 +1,6 @@
 /**
- * [INPUT]: 依赖 XMBookCover、BookshelfBookPayload 与封面角标语义 token 渲染书籍/分组网格封面
- * [OUTPUT]: 对外提供 BookshelfGridBookCoverView、BookshelfGridGroupCoverView 与轻量毛玻璃/纯色角标基础视图
+ * [INPUT]: 依赖 XMBookCover、BookshelfBookPayload、编辑选择状态与封面角标语义 token 渲染书籍/分组网格封面
+ * [OUTPUT]: 对外提供 BookshelfGridBookCoverView、BookshelfGridGroupCoverView、选择态封面遮罩与轻量毛玻璃/纯色角标基础视图
  * [POS]: Book 模块页面私有封面展示基础组件，被默认书架与聚合入口网格复用
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -13,6 +13,8 @@ struct BookshelfGridBookCoverView: View {
     let book: BookshelfBookPayload
     var showsNoteCount = true
     var isPinned = false
+    var isEditing = false
+    var isSelected = false
 
     private let coverCornerRadius = CornerRadius.inlaySmall
 
@@ -29,6 +31,12 @@ struct BookshelfGridBookCoverView: View {
                 isPinned: isPinned,
                 topTrailingBadge: readingStatusBadge,
                 bottomTrailingBadge: noteCountBadge,
+                cornerRadius: coverCornerRadius
+            )
+        }
+        .overlay {
+            BookshelfSelectionCoverOverlay(
+                isSelected: isEditing && isSelected,
                 cornerRadius: coverCornerRadius
             )
         }
@@ -62,6 +70,8 @@ struct BookshelfGridGroupCoverView: View {
     let covers: [String]
     let count: Int
     var isPinned = false
+    var isEditing = false
+    var isSelected = false
 
     private let coverCornerRadius = CornerRadius.inlaySmall
 
@@ -82,6 +92,12 @@ struct BookshelfGridGroupCoverView: View {
                     isPinned: isPinned,
                     topTrailingBadge: nil,
                     bottomTrailingBadge: groupCountBadge,
+                    cornerRadius: coverCornerRadius
+                )
+            }
+            .overlay {
+                BookshelfSelectionCoverOverlay(
+                    isSelected: isEditing && isSelected,
                     cornerRadius: coverCornerRadius
                 )
             }

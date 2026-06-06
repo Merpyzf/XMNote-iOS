@@ -6,8 +6,8 @@
 //
 
 /**
- * [INPUT]: 依赖 BookshelfBookPayload 展示模型
- * [OUTPUT]: 对外提供 BookGridItemView，单本书籍卡片渲染
+ * [INPUT]: 依赖 BookshelfBookPayload 展示模型、封面角标显示设置、置顶状态与编辑选择状态
+ * [OUTPUT]: 对外提供 BookGridItemView，单本书籍卡片渲染与网格编辑态封面选择反馈
  * [POS]: Book 模块最小展示单元，被 BookGridView 复用
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -19,6 +19,8 @@ struct BookGridItemView: View {
     let book: BookshelfBookPayload
     var showsNoteCount = true
     var isPinned = false
+    var isEditing = false
+    var isSelected = false
     var titleDisplayMode: BookshelfTitleDisplayMode = .standard
     var searchKeyword = ""
 
@@ -36,7 +38,9 @@ struct BookGridItemView: View {
         BookshelfGridBookCoverView(
             book: book,
             showsNoteCount: showsNoteCount,
-            isPinned: isPinned
+            isPinned: isPinned,
+            isEditing: isEditing,
+            isSelected: isSelected
         )
     }
 

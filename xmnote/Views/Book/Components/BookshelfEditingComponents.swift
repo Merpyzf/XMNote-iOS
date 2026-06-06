@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 BookshelfPendingAction、BookshelfBookListEditAction 与 SwiftUI 按钮、图标、横向滚动、ImmersiveBottomChrome 和动画能力
- * [OUTPUT]: 对外提供书架编辑态顶部 chrome、统一搜索 surface、整理态双态上下文检索入口、选择标识、底部浮动玻璃操作栏与管理模式转场参数
+ * [OUTPUT]: 对外提供书架编辑态顶部 chrome、统一搜索 surface、整理态双态上下文检索入口、选择态封面/行遮罩、底部浮动玻璃操作栏与管理模式转场参数
  * [POS]: Book 模块页面私有编辑态与搜索组件集合，服务默认书架与二级书籍列表的整理模式选择、检索、置顶、移动、横向平铺批量操作与删除入口
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -965,20 +965,95 @@ struct BookshelfContextualEmptyStateView: View {
     }
 }
 
-/// 书架 item 选中态角标，用于网格与列表模式的统一视觉反馈。
-struct BookshelfSelectionOverlay: View {
+/// 书架网格封面的选中遮罩，用中性复合层表达稳定选择态。
+struct BookshelfSelectionCoverOverlay: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    let isSelected: Bool
+    let cornerRadius: CGFloat
+
+    var body: some View {
+        let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+
+        ZStack {
+            shape
+                .fill(Color.black.opacity(0.34))
+                .opacity(isSelected ? 1 : 0)
+                .animation(maskAnimation, value: isSelected)
+
+            shape
+                .strokeBorder(Color.white.opacity(0.22), lineWidth: CardStyle.borderWidth)
+                .opacity(isSelected ? 1 : 0)
+                .animation(maskAnimation, value: isSelected)
+        }
+        .compositingGroup()
+        .clipShape(shape)
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
+    }
+
+    private var maskAnimation: Animation? {
+        if reduceMotion {
+            return .easeInOut(duration: 0.14)
+        }
+        return isSelected
+            ? .smooth(duration: 0.24).delay(0.04)
+            : .smooth(duration: 0.22).delay(0.04)
+    }
+}
+
+/// 书架列表行的选中遮罩，不改变行内布局，仅用轻量 tint 与尾部符号确认状态。
+struct BookshelfSelectionRowOverlay: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @ScaledMetric(relativeTo: .subheadline) private var checkSize = 17
+
     let isSelected: Bool
 
     var body: some View {
-        XMSelectionIndicator(
-            style: .checkbox,
-            isSelected: isSelected,
-            font: AppTypography.title3
-        )
-            .background(Color.surfaceCard.opacity(isSelected ? 0.90 : 0.48), in: Circle())
-            .shadow(color: Color.black.opacity(isSelected ? 0.12 : 0.04), radius: isSelected ? 3 : 2, y: 1)
-            .padding(Spacing.half)
-            .accessibilityHidden(true)
+        let shape = RoundedRectangle(cornerRadius: CornerRadius.blockLarge, style: .continuous)
+
+        ZStack(alignment: .trailing) {
+            shape
+                .fill(Color.brand.opacity(0.08))
+                .opacity(isSelected ? 1 : 0)
+                .animation(rowSurfaceAnimation, value: isSelected)
+
+            shape
+                .stroke(Color.brand.opacity(0.18), lineWidth: CardStyle.borderWidth)
+                .opacity(isSelected ? 1 : 0)
+                .animation(rowSurfaceAnimation, value: isSelected)
+
+            Image(systemName: "checkmark")
+                .font(AppTypography.fixed(
+                    baseSize: checkSize,
+                    relativeTo: .subheadline,
+                    weight: .semibold
+                ))
+                .foregroundStyle(Color.brand)
+                .padding(.trailing, Spacing.base)
+                .opacity(isSelected ? 1 : 0)
+                .animation(rowCheckAnimation, value: isSelected)
+        }
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
+    }
+
+    private var rowSurfaceAnimation: Animation? {
+        if reduceMotion {
+            return .easeInOut(duration: 0.10)
+        }
+        return isSelected
+            ? .easeOut(duration: 0.12)
+            : .easeInOut(duration: 0.10).delay(0.02)
+    }
+
+    private var rowCheckAnimation: Animation? {
+        if reduceMotion {
+            return .easeInOut(duration: 0.08)
+        }
+        return isSelected
+            ? .easeOut(duration: 0.10).delay(0.02)
+            : .easeIn(duration: 0.07)
     }
 }
 
@@ -1239,9 +1314,6 @@ struct BookshelfEditBottomBar: View {
         isEnabled: Bool
     ) -> Color {
         guard isEnabled else {
-            if action == .delete, selectedCount > 0 {
-                return Color.feedbackError.opacity(0.55)
-            }
             return Color.textSecondary.opacity(waitingForSelection ? 0.42 : 0.55)
         }
         return action == .delete ? Color.feedbackError : Color.textPrimary
@@ -1252,9 +1324,6 @@ struct BookshelfEditBottomBar: View {
         isEnabled: Bool
     ) -> Color {
         guard isEnabled else {
-            if action.isDestructive, selectedCount > 0 {
-                return Color.feedbackError.opacity(0.55)
-            }
             return Color.textSecondary.opacity(waitingForSelection ? 0.42 : 0.55)
         }
         return action.isDestructive ? Color.feedbackError : Color.textPrimary

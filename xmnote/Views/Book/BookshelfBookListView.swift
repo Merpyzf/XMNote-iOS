@@ -3255,18 +3255,13 @@ private struct BookshelfBookListGridItemView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .opacity(isEditing ? (isSelected ? 1 : BookshelfBookListSelectionVisualStyle.unselectedEditingOpacity) : 1)
-        .overlay(alignment: .bottomLeading) {
-            if isEditing {
-                BookshelfSelectionOverlay(isSelected: isSelected)
-                    .transition(selectionOverlayTransition)
-            }
-        }
         .animation(BookshelfManagementMotion.modeAnimation(reduceMotion: reduceMotion), value: isEditing)
         .animation(BookshelfManagementMotion.modeAnimation(reduceMotion: reduceMotion), value: isSelected)
         .contentShape(RoundedRectangle(cornerRadius: CornerRadius.blockLarge, style: .continuous))
         .accessibilityElement(children: .combine)
         .accessibilityLabel(accessibilityLabel)
         .accessibilityAddTraits(.isButton)
+        .accessibilityAddTraits(isEditing && isSelected ? .isSelected : [])
         .accessibilityIdentifier("bookshelf.book-list.book.\(book.id)")
         .bookshelfBookContextMenu(isEnabled: !isEditing) {
             contextMenu
@@ -3299,10 +3294,12 @@ private struct BookshelfBookListGridItemView: View {
                 }
             }
         }
-    }
-
-    private var selectionOverlayTransition: AnyTransition {
-        .opacity.combined(with: .scale(scale: 0.94, anchor: .center))
+        .overlay {
+            BookshelfSelectionCoverOverlay(
+                isSelected: isEditing && isSelected,
+                cornerRadius: coverCornerRadius
+            )
+        }
     }
 
     @ViewBuilder
@@ -3469,10 +3466,9 @@ private struct BookshelfBookListRowView: View {
                 .stroke(Color.surfaceBorderSubtle, lineWidth: CardStyle.borderWidth)
         }
         .opacity(isEditing ? (isSelected ? 1 : BookshelfBookListSelectionVisualStyle.unselectedEditingOpacity) : 1)
-        .overlay(alignment: .bottomLeading) {
+        .overlay {
             if isEditing {
-                BookshelfSelectionOverlay(isSelected: isSelected)
-                    .transition(selectionOverlayTransition)
+                BookshelfSelectionRowOverlay(isSelected: isSelected)
             }
         }
         .animation(BookshelfManagementMotion.modeAnimation(reduceMotion: reduceMotion), value: isEditing)
@@ -3480,6 +3476,7 @@ private struct BookshelfBookListRowView: View {
         .accessibilityElement(children: .combine)
         .accessibilityLabel(accessibilityLabel)
         .accessibilityAddTraits(.isButton)
+        .accessibilityAddTraits(isEditing && isSelected ? .isSelected : [])
         .accessibilityIdentifier("bookshelf.book-list.book.\(book.id)")
         .bookshelfBookContextMenu(isEnabled: !isEditing) {
             contextMenu
@@ -3542,10 +3539,6 @@ private struct BookshelfBookListRowView: View {
             Label("删除书籍", systemImage: "trash")
         }
         .disabled(activeWriteAction != nil)
-    }
-
-    private var selectionOverlayTransition: AnyTransition {
-        .opacity.combined(with: .scale(scale: 0.94, anchor: .center))
     }
 
     private var metadata: String {
@@ -3746,10 +3739,7 @@ private struct BookshelfBookListEditBottomBar: View {
         if isEnabled {
             return Color.feedbackError
         }
-        if waitingForSelection {
-            return Color.textSecondary.opacity(0.42)
-        }
-        return Color.feedbackError.opacity(0.55)
+        return Color.textSecondary.opacity(waitingForSelection ? 0.42 : 0.55)
     }
 
     private func isEnabled(_ action: BookshelfBookListEditAction) -> Bool {

@@ -2170,6 +2170,7 @@ private struct BookshelfDefaultCollectionCellContent: View {
                 alignment: .topLeading
             )
             .modifier(BookshelfDefaultCollectionSelectionModifier(
+                layoutMode: layoutMode,
                 isEditing: isEditing,
                 isSelected: isSelected
             ))
@@ -2181,6 +2182,7 @@ private struct BookshelfDefaultCollectionCellContent: View {
             .accessibilityLabel(accessibilityLabel)
             .accessibilityIdentifier(accessibilityIdentifier)
             .accessibilityAddTraits(.isButton)
+            .accessibilityAddTraits(isEditing && isSelected ? .isSelected : [])
     }
 
     @ViewBuilder
@@ -2193,6 +2195,8 @@ private struct BookshelfDefaultCollectionCellContent: View {
                     book: book,
                     showsNoteCount: showsNoteCount,
                     isPinned: item.pinned,
+                    isEditing: isEditing,
+                    isSelected: isSelected,
                     titleDisplayMode: titleDisplayMode,
                     searchKeyword: searchKeyword
                 )
@@ -2200,6 +2204,8 @@ private struct BookshelfDefaultCollectionCellContent: View {
                 BookshelfGroupGridItemView(
                     group: group,
                     isPinned: item.pinned,
+                    isEditing: isEditing,
+                    isSelected: isSelected,
                     titleDisplayMode: titleDisplayMode,
                     searchKeyword: searchKeyword
                 )
@@ -2310,28 +2316,21 @@ private struct BookshelfDefaultCollectionCellContent: View {
     }
 }
 
-/// 编辑态选中外观，复用旧 SwiftUI 路径中的选择勾选与边框反馈。
+/// 编辑态选中外观，负责外层点击区域、列表行 tint 与状态切换动画。
 private struct BookshelfDefaultCollectionSelectionModifier: ViewModifier {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
+    let layoutMode: BookshelfLayoutMode
     let isEditing: Bool
     let isSelected: Bool
 
     func body(content: Content) -> some View {
         content
             .opacity(isEditing ? (isSelected ? 1 : 0.92) : 1)
-            .overlay(alignment: .bottomLeading) {
-                if isEditing {
-                    BookshelfSelectionOverlay(isSelected: isSelected)
-                        .transition(selectionOverlayTransition)
-                }
-            }
             .overlay {
-                RoundedRectangle(cornerRadius: CornerRadius.blockLarge, style: .continuous)
-                    .stroke(
-                        isEditing && isSelected ? Color.brand.opacity(0.42) : Color.clear,
-                        lineWidth: isEditing && isSelected ? 1 : 0
-                    )
+                if isEditing && layoutMode == .list {
+                    BookshelfSelectionRowOverlay(isSelected: isSelected)
+                }
             }
             .contentShape(RoundedRectangle(cornerRadius: CornerRadius.blockLarge, style: .continuous))
             .animation(selectionAnimation, value: isEditing)
@@ -2340,13 +2339,6 @@ private struct BookshelfDefaultCollectionSelectionModifier: ViewModifier {
 
     private var selectionAnimation: Animation? {
         reduceMotion ? .easeInOut(duration: 0.12) : .smooth(duration: 0.16)
-    }
-
-    private var selectionOverlayTransition: AnyTransition {
-        reduceMotion ? .opacity : .asymmetric(
-            insertion: .opacity.combined(with: .offset(x: 0, y: -2)),
-            removal: .opacity
-        )
     }
 }
 

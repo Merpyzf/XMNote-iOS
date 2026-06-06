@@ -1,6 +1,6 @@
 /**
- * [INPUT]: 依赖 BookshelfGroupPayload 展示分组名称、书籍数量与代表封面
- * [OUTPUT]: 对外提供 BookshelfGroupGridItemView，渲染默认书架中的分组聚合卡
+ * [INPUT]: 依赖 BookshelfGroupPayload 展示分组名称、书籍数量、代表封面、置顶状态与编辑选择状态
+ * [OUTPUT]: 对外提供 BookshelfGroupGridItemView，渲染默认书架中的分组聚合卡与网格编辑态封面选择反馈
  * [POS]: Book 模块页面私有子视图，服务 BookGridView 的分组条目展示，不承担导航与数据读取
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -11,6 +11,8 @@ import SwiftUI
 struct BookshelfGroupGridItemView: View {
     let group: BookshelfGroupPayload
     var isPinned = false
+    var isEditing = false
+    var isSelected = false
     var titleDisplayMode: BookshelfTitleDisplayMode = .standard
     var searchKeyword = ""
 
@@ -28,7 +30,9 @@ struct BookshelfGroupGridItemView: View {
         BookshelfGridGroupCoverView(
             covers: group.representativeCovers,
             count: group.bookCount,
-            isPinned: isPinned
+            isPinned: isPinned,
+            isEditing: isEditing,
+            isSelected: isSelected
         )
     }
 
