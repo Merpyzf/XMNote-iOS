@@ -1,5 +1,5 @@
 /**
- * [INPUT]: 依赖 BookRepositoryProtocol 提供二级书籍列表观察流，依赖 BookshelfBookListRoute 描述当前聚合上下文
+ * [INPUT]: 依赖 BookshelfRepositoryProtocol 提供二级书籍列表观察流，依赖 BookshelfBookListRoute 描述当前聚合上下文
  * [OUTPUT]: 对外提供 BookshelfBookListViewModel，驱动二级书籍列表加载、空态、搜索、编辑选择、分组移动、批量写入与实时刷新
  * [POS]: Book 模块二级书籍列表状态编排器，被 BookshelfBookListView 消费
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -7,197 +7,7 @@
 
 import Foundation
 
-/// 二级书籍列表编辑动作，已核对动作走真实写入，未核对 destructive 动作继续保护提示。
-enum BookshelfBookListEditAction: String, CaseIterable, Identifiable, Hashable, Sendable {
-    case pin
-    case unpin
-    case reorder
-    case moveToStart
-    case moveToEnd
-    case moveToGroup
-    case addToBookList
-    case moveOut
-    case setTag
-    case setSource
-    case setReadStatus
-    case exportNote
-    case exportBook
-    case renameGroup
-    case deleteGroup
-    case renameTag
-    case deleteTag
-    case renameSource
-    case deleteSource
-    case deleteBooks
-
-    var id: String { rawValue }
-
-    var title: String {
-        switch self {
-        case .pin:
-            return "置顶"
-        case .unpin:
-            return "取消置顶"
-        case .reorder:
-            return "排序"
-        case .moveToStart:
-            return "最前"
-        case .moveToEnd:
-            return "最后"
-        case .moveToGroup:
-            return "移组"
-        case .addToBookList:
-            return "书单"
-        case .moveOut:
-            return "移出"
-        case .setTag:
-            return "标签"
-        case .setSource:
-            return "来源"
-        case .setReadStatus:
-            return "状态"
-        case .exportNote:
-            return "导出笔记"
-        case .exportBook:
-            return "导出书籍"
-        case .renameGroup, .renameTag, .renameSource:
-            return "重命名"
-        case .deleteGroup:
-            return "删分组"
-        case .deleteTag:
-            return "删标签"
-        case .deleteSource:
-            return "删来源"
-        case .deleteBooks:
-            return "删除"
-        }
-    }
-
-    var systemImage: String {
-        switch self {
-        case .pin:
-            return "pin"
-        case .unpin:
-            return "pin.slash"
-        case .reorder:
-            return "arrow.up.arrow.down"
-        case .moveToStart:
-            return "arrow.up.to.line"
-        case .moveToEnd:
-            return "arrow.down.to.line"
-        case .moveToGroup:
-            return "folder"
-        case .addToBookList:
-            return "books.vertical"
-        case .moveOut:
-            return "folder.badge.minus"
-        case .setTag:
-            return "tag"
-        case .setSource:
-            return "tray"
-        case .setReadStatus:
-            return "checklist"
-        case .exportNote:
-            return "doc.text"
-        case .exportBook:
-            return "square.and.arrow.up"
-        case .renameGroup, .renameTag, .renameSource:
-            return "pencil"
-        case .deleteGroup, .deleteTag, .deleteSource, .deleteBooks:
-            return "trash"
-        }
-    }
-
-    var isDestructive: Bool {
-        switch self {
-        case .deleteGroup, .deleteTag, .deleteSource, .deleteBooks:
-            return true
-        case .pin, .unpin, .reorder, .moveToStart, .moveToEnd, .moveToGroup, .addToBookList, .moveOut, .setTag, .setSource, .setReadStatus, .exportNote, .exportBook, .renameGroup, .renameTag, .renameSource:
-            return false
-        }
-    }
-
-    var requiresSelection: Bool {
-        switch self {
-        case .pin, .unpin, .moveToStart, .moveToEnd, .moveToGroup, .addToBookList, .moveOut, .setTag, .setSource, .setReadStatus, .exportNote, .exportBook, .deleteBooks:
-            return true
-        case .reorder, .renameGroup, .deleteGroup, .renameTag, .deleteTag, .renameSource, .deleteSource:
-            return false
-        }
-    }
-}
-
-/// 二级书籍列表批量编辑 Sheet 类型，承载打开 Sheet 时刻的可选项快照与局部读取状态。
-enum BookshelfBatchEditSheet: Identifiable, Hashable, Sendable {
-    case tags(
-        options: [BookEditorNamedOption],
-        initialSelectedIDs: [Int64],
-        allowsEmptySelection: Bool,
-        isLoading: Bool,
-        errorMessage: String?
-    )
-    case source(options: [BookshelfSourceOption], initialSelectedID: Int64?)
-    case readStatus(options: [BookEditorNamedOption], initialStatusID: Int64?, initialChangedAt: Date?, initialRatingScore: Int64?)
-    case moveGroup(options: [BookshelfMoveGroupOption], isLoading: Bool, errorMessage: String?)
-    case bookCollection(options: [BookCollectionSummary], isLoading: Bool, errorMessage: String?)
-
-    var id: String {
-        switch self {
-        case .tags:
-            return "tags"
-        case .source:
-            return "source"
-        case .readStatus:
-            return "readStatus"
-        case .moveGroup:
-            return "moveGroup"
-        case .bookCollection:
-            return "bookCollection"
-        }
-    }
-}
-
-/// 默认分组移出确认状态，承载打开弹窗时的选择数量。
-struct BookshelfMoveOutPlacementConfirmation: Identifiable, Hashable, Sendable {
-    let selectedCount: Int
-
-    var id: Int { selectedCount }
-}
-
-/// 二级列表删除确认状态，覆盖批量删书与上下文分组/标签/来源删除。
-struct BookshelfBookListDeleteConfirmation: Identifiable, Hashable, Sendable {
-    enum Kind: Hashable, Sendable {
-        case books(bookIDs: [Int64])
-        case group(title: String)
-        case tag(title: String)
-        case source(title: String)
-    }
-
-    let kind: Kind
-
-    var id: String {
-        switch kind {
-        case .books(let bookIDs):
-            return "books-\(bookIDs.map(String.init).joined(separator: "-"))"
-        case .group(let title):
-            return "group-\(title)"
-        case .tag(let title):
-            return "tag-\(title)"
-        case .source(let title):
-            return "source-\(title)"
-        }
-    }
-}
-
-/// 二级列表重命名输入状态，承载当前上下文对象与初始名称。
-struct BookshelfBookListNameEdit: Identifiable, Hashable, Sendable {
-    let action: BookshelfBookListEditAction
-    let currentName: String
-
-    var id: String { "\(action.rawValue)-\(currentName)" }
-}
-
-/// 二级书籍列表状态编排器，让 pushed destination 通过 Repository 实时观察数据，而不是消费静态路由数组。
+@MainActor
 @Observable
 final class BookshelfBookListViewModel {
     let route: BookshelfBookListRoute
@@ -213,17 +23,23 @@ final class BookshelfBookListViewModel {
     var displaySetting: BookshelfDisplaySetting
     var isEditing = false
     var selectedBookIDs: [Int64] = []
-    var actionFeedback: BookshelfActionFeedback?
-    var actionNotice: String? {
-        get { actionFeedback?.message }
-        set {
-            actionFeedback = newValue.map {
-                BookshelfActionFeedback(kind: .warning, message: $0)
-            }
-        }
+    private var writeActionState = BookshelfWriteActionState<BookshelfBookListEditAction>()
+    var actionFeedback: BookshelfActionFeedback? {
+        get { writeActionState.feedback }
+        set { writeActionState.feedback = newValue }
     }
-    var activeWriteAction: BookshelfBookListEditAction?
-    var writeError: String?
+    var actionNotice: String? {
+        get { writeActionState.notice }
+        set { writeActionState.notice = newValue }
+    }
+    var activeWriteAction: BookshelfBookListEditAction? {
+        get { writeActionState.activeAction }
+        set { writeActionState.activeAction = newValue }
+    }
+    var writeError: String? {
+        get { writeActionState.error }
+        set { writeActionState.error = newValue }
+    }
     var activeBatchSheet: BookshelfBatchEditSheet?
     var activeMoveOutConfirmation: BookshelfMoveOutPlacementConfirmation?
     var activeDeleteConfirmation: BookshelfBookListDeleteConfirmation?
@@ -231,7 +47,7 @@ final class BookshelfBookListViewModel {
     var nameEditText = ""
     var isLoadingBatchOptions = false
 
-    private let repository: any BookRepositoryProtocol
+    private let repository: any BookshelfRepositoryProtocol
     private var observationTask: Task<Void, Never>?
     private var writeTask: Task<Void, Never>?
     private var batchOptionsTask: Task<Void, Never>?
@@ -308,24 +124,7 @@ final class BookshelfBookListViewModel {
     }
 
     var editActions: [BookshelfBookListEditAction] {
-        switch route.context {
-        case .defaultGroup:
-            return [.pin, .unpin, .moveToStart, .moveToEnd, .moveToGroup, .addToBookList, .moveOut, .setTag, .setSource, .setReadStatus, .deleteBooks, .renameGroup, .deleteGroup]
-        case .tag(let tagID):
-            var actions: [BookshelfBookListEditAction] = [.moveToGroup, .addToBookList, .setTag, .setSource, .setReadStatus, .deleteBooks]
-            if tagID != nil {
-                actions.append(contentsOf: [.renameTag, .deleteTag])
-            }
-            return actions
-        case .source(let sourceID):
-            var actions: [BookshelfBookListEditAction] = [.moveToGroup, .addToBookList, .setTag, .setSource, .setReadStatus, .deleteBooks]
-            if sourceID != nil {
-                actions.append(contentsOf: [.renameSource, .deleteSource])
-            }
-            return actions
-        case .readStatus, .rating, .author, .press:
-            return [.moveToGroup, .addToBookList, .setTag, .setSource, .setReadStatus, .deleteBooks]
-        }
+        BookshelfBookListActionPolicy.editActions(for: route.context)
     }
 
     private var defaultGroupID: Int64? {
@@ -336,7 +135,7 @@ final class BookshelfBookListViewModel {
     /// 注入路由和仓储，并启动二级列表观察流。
     init(
         route: BookshelfBookListRoute,
-        repository: any BookRepositoryProtocol
+        repository: any BookshelfRepositoryProtocol
     ) {
         self.route = route
         self.repository = repository
@@ -346,15 +145,30 @@ final class BookshelfBookListViewModel {
     }
 
     /// 取消二级列表观察与写入任务，避免页面释放后继续回写 UI 状态。
-    deinit {
+    isolated deinit {
         observationTask?.cancel()
         writeTask?.cancel()
         batchOptionsTask?.cancel()
+        feedbackClearTask?.cancel()
     }
 
     /// 清空搜索关键词并恢复完整列表。
     func clearSearchKeyword() {
         searchKeyword = ""
+    }
+
+    /// 处理列表内搜索输入变化，统一由页面意图驱动关键词过滤与观察流刷新。
+    func searchQueryDidChange(_ keyword: String) {
+        if normalizedSearchKeyword(keyword).isEmpty {
+            clearSearchKeyword()
+        } else {
+            setSearchKeyword(keyword)
+        }
+    }
+
+    /// 提交列表内搜索输入，空查询恢复完整列表，非空查询写入最终关键词。
+    func submitSearchQuery(_ keyword: String) {
+        searchQueryDidChange(keyword)
     }
 
     /// 保存二级列表显示设置，并重启观察流让排序、分区和布局立即生效。
@@ -979,7 +793,7 @@ final class BookshelfBookListViewModel {
     /// 打开当前上下文对象的重命名输入弹窗。
     private func presentNameEdit(for action: BookshelfBookListEditAction) {
         guard activeWriteAction == nil else { return }
-        guard canManageCurrentContext(action) else {
+        guard BookshelfBookListActionPolicy.canManageCurrentContext(action, in: route.context) else {
             performPlaceholderAction(action)
             return
         }
@@ -993,7 +807,7 @@ final class BookshelfBookListViewModel {
     /// 打开当前上下文对象的删除确认弹窗。
     private func presentDeleteConfirmation(for action: BookshelfBookListEditAction) {
         guard activeWriteAction == nil else { return }
-        guard canManageCurrentContext(action) else {
+        guard BookshelfBookListActionPolicy.canManageCurrentContext(action, in: route.context) else {
             performPlaceholderAction(action)
             return
         }
@@ -1009,20 +823,6 @@ final class BookshelfBookListViewModel {
         }
         actionNotice = nil
         writeError = nil
-    }
-
-    /// 判断当前路由上下文是否具备对应管理对象。
-    private func canManageCurrentContext(_ action: BookshelfBookListEditAction) -> Bool {
-        switch (route.context, action) {
-        case (.defaultGroup, .renameGroup), (.defaultGroup, .deleteGroup):
-            return true
-        case (.tag(let tagID), .renameTag), (.tag(let tagID), .deleteTag):
-            return tagID != nil
-        case (.source(let sourceID), .renameSource), (.source(let sourceID), .deleteSource):
-            return sourceID != nil
-        default:
-            return false
-        }
     }
 
     /// 取消正在加载的批量编辑候选项，避免选择集合变化后继续打开旧快照 Sheet。
@@ -1114,26 +914,20 @@ final class BookshelfBookListViewModel {
         guard activeWriteAction == nil else { return }
         batchOptionsTask?.cancel()
         isLoadingBatchOptions = false
-        activeWriteAction = action
-        actionFeedback = BookshelfActionFeedback(kind: .processing, message: "\(action.title)处理中...")
-        writeError = nil
+        writeActionState.start(action)
         writeTask?.cancel()
         writeTask = Task {
             do {
                 try await operation()
                 await MainActor.run {
-                    self.activeWriteAction = nil
                     self.selectedBookIDs.removeAll()
-                    let feedback = BookshelfActionFeedback(kind: .success, message: successMessage)
-                    self.actionFeedback = feedback
+                    let feedback = self.writeActionState.finishSuccess(successMessage)
                     self.clearSuccessFeedbackLater(feedback)
                     self.restartObservation()
                 }
             } catch {
                 await MainActor.run {
-                    self.activeWriteAction = nil
-                    self.writeError = error.localizedDescription
-                    self.actionFeedback = BookshelfActionFeedback(kind: .error, message: error.localizedDescription)
+                    self.writeActionState.finishFailure(error)
                     self.restartObservation()
                 }
             }
@@ -1146,8 +940,7 @@ final class BookshelfBookListViewModel {
         feedbackClearTask = Task { [weak self] in
             try? await Task.sleep(nanoseconds: 1_600_000_000)
             await MainActor.run {
-                guard self?.actionFeedback == feedback else { return }
-                self?.actionFeedback = nil
+                self?.writeActionState.clearFeedback(ifMatches: feedback)
             }
         }
     }
@@ -1203,6 +996,12 @@ final class BookshelfBookListViewModel {
 
     private func normalizedSearchKeyword(_ value: String) -> String {
         value.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private func setSearchKeyword(_ keyword: String) {
+        let normalized = normalizedSearchKeyword(keyword)
+        guard searchKeyword != normalized else { return }
+        searchKeyword = normalized
     }
 
     private func sanitizedDisplaySetting(_ setting: BookshelfDisplaySetting) -> BookshelfDisplaySetting {

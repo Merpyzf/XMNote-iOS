@@ -368,7 +368,7 @@ final class BookSelectionTestViewModel {
     }
 
     /// 读取本地书架样本，供预选和调试页概览使用；读取失败不阻断测试页打开。
-    func loadSampleLocalBooks(using repository: any BookRepositoryProtocol) async {
+    func loadSampleLocalBooks(using repository: any BookPickerRepositoryProtocol) async {
         guard !isLoadingSampleLocalBooks, sampleLocalBooks.isEmpty else { return }
         isLoadingSampleLocalBooks = true
         defer { isLoadingSampleLocalBooks = false }

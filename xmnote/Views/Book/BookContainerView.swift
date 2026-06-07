@@ -35,32 +35,6 @@ enum BookSubTab: String, CaseIterable, Hashable, Codable {
     }
 }
 
-// MARK: - Management Chrome
-
-/// 书架管理模式的本地展示阶段，仅编排顶部 chrome、底部面板与 TabBar 的视觉交接。
-private enum BookshelfChromePhase: Equatable {
-    case normal
-    case enteringEdit
-    case editing
-    case exitingEdit
-
-    var hidesTabBar: Bool {
-        self == .enteringEdit || self == .editing || self == .exitingEdit
-    }
-
-    var showsEditHeader: Bool {
-        self == .enteringEdit || self == .editing || self == .exitingEdit
-    }
-
-    var showsEditBottomBar: Bool {
-        self == .editing
-    }
-
-    var reservesEditBottomBarSpace: Bool {
-        self == .enteringEdit || self == .editing || self == .exitingEdit
-    }
-}
-
 /// 记录编辑底部浮动栏换算出的滚动余量，避免集合内容被底部玻璃控件遮挡。
 private struct BookshelfEditBottomBarHeightPreferenceKey: PreferenceKey {
     static var defaultValue: CGFloat = 0
@@ -166,15 +140,9 @@ private struct BookContentView: View {
     @Bindable var viewModel: BookViewModel
     @Binding var selectedSubTab: BookSubTab
     @State private var showsDisplaySettingSheet = false
-    @State private var chromePhase: BookshelfChromePhase = .normal
+    @State private var editingPresentation = BookshelfEditingPresentationState()
     @State private var chromeTransitionTask: Task<Void, Never>?
-    @State private var editBottomBarHeight: CGFloat = 0
-    @State private var editBottomBarOrnamentHeight: CGFloat = 0
-    @State private var isEditingChoreographyActive = false
-    @State private var browseSearchPresentation: BookshelfSearchDrawerPresentation = .hidden
-    @State private var isBrowseSearchFocused = false
-    @State private var browseSearchDraftKeyword = ""
-    @State private var browseSearchFocusTrigger = 0
+    @State private var browseSearch = BookshelfSearchDrawerState()
     let onAddBook: () -> Void
     let onAddNote: () -> Void
     let onOpenDebugCenter: (() -> Void)?
@@ -185,6 +153,46 @@ private struct BookContentView: View {
     let onOpenAuthorManagement: () -> Void
     let onOpenPressManagement: () -> Void
     let onOpenGuide: () -> Void
+
+    private var chromePhase: BookshelfEditingChromePhase {
+        get { editingPresentation.phase }
+        nonmutating set { editingPresentation.phase = newValue }
+    }
+
+    private var isEditingChoreographyActive: Bool {
+        get { editingPresentation.isChoreographyActive }
+        nonmutating set { editingPresentation.isChoreographyActive = newValue }
+    }
+
+    private var editBottomBarHeight: CGFloat {
+        get { editingPresentation.bottomContentInset }
+        nonmutating set { editingPresentation.bottomContentInset = newValue }
+    }
+
+    private var editBottomBarOrnamentHeight: CGFloat {
+        get { editingPresentation.bottomOrnamentHeight }
+        nonmutating set { editingPresentation.bottomOrnamentHeight = newValue }
+    }
+
+    private var browseSearchPresentation: BookshelfSearchDrawerPresentation {
+        get { browseSearch.presentation }
+        nonmutating set { browseSearch.presentation = newValue }
+    }
+
+    private var isBrowseSearchFocused: Bool {
+        get { browseSearch.isFocused }
+        nonmutating set { browseSearch.isFocused = newValue }
+    }
+
+    private var browseSearchDraftKeyword: String {
+        get { browseSearch.draftKeyword }
+        nonmutating set { browseSearch.draftKeyword = newValue }
+    }
+
+    private var browseSearchFocusTrigger: Int {
+        get { browseSearch.focusTrigger }
+        nonmutating set { browseSearch.focusTrigger = newValue }
+    }
 
     var body: some View {
         HomeSubtabScaffold(
@@ -424,7 +432,8 @@ private struct BookContentView: View {
     }
 
     private var reservesEditBottomBarSpace: Bool {
-        selectedSubTab == .books && chromePhase.reservesEditBottomBarSpace
+        selectedSubTab == .books
+            && editingPresentation.reservesChromeBottomBarSpace(policy: .mainBookshelf)
     }
 
     private var canSearchCurrentDimension: Bool {
@@ -442,15 +451,14 @@ private struct BookContentView: View {
     }
 
     private var isBrowseSearchSurfacePresented: Bool {
-        browseSearchPresentation.isPinned
-            || isBrowseSearchFocused
-            || viewModel.isSearchActive
-            || hasBrowseSearchDraftKeyword
-            || viewModel.hasSearchKeyword
+        browseSearch.isSurfacePresented(
+            isSearchActive: viewModel.isSearchActive,
+            hasSearchKeyword: viewModel.hasSearchKeyword
+        )
     }
 
     private var hasBrowseSearchDraftKeyword: Bool {
-        !browseSearchDraftKeyword.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        browseSearch.hasDraftKeyword
     }
 
     private var showsBrowsingGradient: Bool {
@@ -561,9 +569,8 @@ private struct BookContentView: View {
                 viewModel.exitEditing()
             }
             chromeTransitionTask?.cancel()
-            chromePhase = .normal
+            editingPresentation.resetForContextLoss()
             collapseBrowseSearchIfUnsupported()
-            releaseEditBottomBarSpace()
             return
         }
 
@@ -579,79 +586,61 @@ private struct BookContentView: View {
 
     /// 释放编辑底栏的滚动避让。正常退出会在 TabBar 恢复稳定后调用，页面失活路径则立即调用。
     private func releaseEditBottomBarSpace() {
-        editBottomBarHeight = 0
-        editBottomBarOrnamentHeight = 0
+        editingPresentation.releaseBottomInsetMeasurements()
     }
 
     /// 打开集合顶部搜索 drawer；输入焦点由 collection 在 drawer 稳定后回调触发。
     private func activateBrowseSearch() {
         guard canSearchCurrentDimension else { return }
-        if browseSearchDraftKeyword.isEmpty, viewModel.hasSearchKeyword {
-            browseSearchDraftKeyword = viewModel.searchKeyword
-        }
+        browseSearch.seedDraftIfNeeded(
+            hasSearchKeyword: viewModel.hasSearchKeyword,
+            searchKeyword: viewModel.searchKeyword
+        )
         withAnimation(BookshelfManagementMotion.modeAnimation(reduceMotion: reduceMotion)) {
             viewModel.activateSearch()
-            browseSearchPresentation = .pinned
+            browseSearch.pin()
         }
     }
 
     /// 在搜索 drawer 完成 pinned 收敛后请求输入焦点，避免键盘动画与 offset 动画重叠。
     private func requestBrowseSearchFocus() {
         guard canSearchCurrentDimension else { return }
-        browseSearchFocusTrigger += 1
+        browseSearch.requestFocus()
     }
 
     /// 处理搜索输入变化；关键词即时进入 ViewModel 触发过滤，键盘焦点继续由搜索 surface 管理。
     private func updateBrowseSearchKeyword(_ keyword: String) {
         guard canSearchCurrentDimension else { return }
-        let normalizedKeyword = keyword.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !viewModel.isSearchActive {
-            viewModel.activateSearch()
-        }
-        browseSearchDraftKeyword = keyword
-        if normalizedKeyword.isEmpty {
-            viewModel.clearSearchKeyword()
-        } else if viewModel.searchKeyword != normalizedKeyword {
-            viewModel.searchKeyword = normalizedKeyword
-        }
-        browseSearchPresentation = .pinned
+        let normalizedKeyword = browseSearch.updateDraft(keyword)
+        viewModel.searchQueryDidChange(normalizedKeyword)
     }
 
     /// 用户点击键盘 Search 后确认当前输入；过滤已随输入实时发生，这里只做 trim 收尾。
     private func submitBrowseSearch(_ keyword: String) {
         guard canSearchCurrentDimension else { return }
-        let submittedKeyword = keyword.trimmingCharacters(in: .whitespacesAndNewlines)
-        browseSearchDraftKeyword = submittedKeyword
+        let submittedKeyword = browseSearch.submit(keyword)
+        viewModel.submitSearchQuery(submittedKeyword)
         if submittedKeyword.isEmpty {
-            viewModel.clearSearchKeyword()
-        } else {
-            viewModel.activateSearch()
-            if viewModel.searchKeyword != submittedKeyword {
-                viewModel.searchKeyword = submittedKeyword
-            }
-            browseSearchPresentation = .pinned
+            return
         }
+        browseSearch.pin()
     }
 
     /// 清空关键词但保持搜索 drawer 与键盘焦点，方便用户连续修正查询。
     private func clearBrowseSearch() {
         guard canSearchCurrentDimension else { return }
         withAnimation(BookshelfManagementMotion.modeAnimation(reduceMotion: reduceMotion)) {
-            browseSearchDraftKeyword = ""
             viewModel.clearSearchKeyword()
             viewModel.activateSearch()
-            browseSearchPresentation = .pinned
-            browseSearchFocusTrigger += 1
+            browseSearch.clearDraftAndPin(requestsFocus: true)
         }
     }
 
     /// 退出搜索并恢复原书架列表；整理态选择状态仍按 ViewModel 现有规则保留。
     private func collapseBrowseSearch() {
         withAnimation(BookshelfManagementMotion.modeAnimation(reduceMotion: reduceMotion)) {
-            browseSearchDraftKeyword = ""
             viewModel.deactivateSearch()
-            browseSearchPresentation = .hidden
-            isBrowseSearchFocused = false
+            browseSearch.collapse()
         }
     }
 
@@ -663,14 +652,10 @@ private struct BookContentView: View {
         var transaction = Transaction(animation: nil)
         transaction.disablesAnimations = true
         withTransaction(transaction) {
-            browseSearchDraftKeyword = ""
             viewModel.deactivateSearch()
-            browseSearchPresentation = .hidden
-            isBrowseSearchFocused = false
+            browseSearch.collapse()
             viewModel.exitEditing()
-            chromePhase = .normal
-            isEditingChoreographyActive = false
-            releaseEditBottomBarSpace()
+            editingPresentation.resetForContextLoss()
         }
 
         UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
@@ -678,30 +663,28 @@ private struct BookContentView: View {
 
     /// 同步输入框焦点变化，让 drawer 激活态与 UIKit first responder 不脱节。
     private func updateBrowseSearchFocus(_ isFocused: Bool) {
-        isBrowseSearchFocused = isFocused
+        browseSearch.updateFocus(isFocused)
         if isFocused, canSearchCurrentDimension {
             if !viewModel.isSearchActive {
                 viewModel.activateSearch()
             }
-            if browseSearchPresentation != .pinned {
-                browseSearchPresentation = .pinned
+            if !browseSearch.presentation.isPinned {
+                browseSearch.pin()
             }
         } else if !isFocused, !hasBrowseSearchDraftKeyword, !viewModel.hasSearchKeyword {
             viewModel.deactivateSearch()
-            browseSearchPresentation = .hidden
+            browseSearch.presentation = .hidden
         }
     }
 
     /// 进入整理态时收起空搜索；有关键词时仅保留过滤结果，不让键盘继续抢占批量操作。
     private func prepareBrowseSearchForEditing() {
-        isBrowseSearchFocused = false
-        if viewModel.hasSearchKeyword {
-            browseSearchDraftKeyword = viewModel.searchKeyword
-            browseSearchPresentation = .pinned
-        } else {
-            browseSearchDraftKeyword = ""
+        browseSearch.prepareForEditing(
+            hasSearchKeyword: viewModel.hasSearchKeyword,
+            searchKeyword: viewModel.searchKeyword
+        )
+        if !viewModel.hasSearchKeyword {
             viewModel.deactivateSearch()
-            browseSearchPresentation = .hidden
         }
         UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
     }
@@ -716,10 +699,8 @@ private struct BookContentView: View {
     private func resetEditingPresentationForContextLoss() {
         chromeTransitionTask?.cancel()
         chromeTransitionTask = nil
-        chromePhase = .normal
-        isEditingChoreographyActive = false
+        editingPresentation.resetForContextLoss()
         collapseBrowseSearchIfUnsupported()
-        releaseEditBottomBarSpace()
         viewModel.exitEditing()
     }
 

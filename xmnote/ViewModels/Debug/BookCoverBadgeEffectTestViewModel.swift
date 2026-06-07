@@ -3,7 +3,7 @@ import Foundation
 import UIKit
 
 /**
- * [INPUT]: 依赖 BookRepositoryProtocol 读取真实书籍封面样例，依赖 UIKit 提供系统毛玻璃样式枚举
+ * [INPUT]: 依赖 BookCoverSampleRepositoryProtocol 读取真实书籍封面样例，依赖 UIKit 提供系统毛玻璃样式枚举
  * [OUTPUT]: 对外提供 BookCoverBadgeEffectTestViewModel（书封角标效果测试页状态编排）
  * [POS]: Debug 测试状态中枢，集中管理书封角标毛玻璃参数、样例封面与参数摘要
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -191,7 +191,7 @@ final class BookCoverBadgeEffectTestViewModel {
     }
 
     /// 首次按需加载本地真实封面，避免测试页重复订阅书籍观察流。
-    func loadBookCoversIfNeeded(using repository: any BookRepositoryProtocol) async {
+    func loadBookCoversIfNeeded(using repository: any BookCoverSampleRepositoryProtocol) async {
         guard !hasLoadedRealBookCovers else { return }
         await loadBookCovers(using: repository)
     }
@@ -271,7 +271,7 @@ private extension BookCoverBadgeEffectTestViewModel {
         placeholderSample
     ]
 
-    func loadBookCovers(using repository: any BookRepositoryProtocol) async {
+    func loadBookCovers(using repository: any BookCoverSampleRepositoryProtocol) async {
         isLoadingRealBookCovers = true
         realBookCoverStatusMessage = nil
         defer {

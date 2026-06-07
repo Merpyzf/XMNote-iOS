@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 GRDB 的 DatabasePool/DatabaseMigrator 提供持久化能力
- * [OUTPUT]: 对外提供 AppDatabase 结构体，封装数据库连接池与迁移
+ * [OUTPUT]: 对外提供 AppDatabase 结构体，封装数据库连接池、迁移与显式生命周期控制
  * [POS]: Database/Core 模块入口，被 AppDatabaseKey 通过 Environment 注入全局
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -116,5 +116,20 @@ extension AppDatabase {
             // SQL 目的：触发 WAL checkpoint(TRUNCATE)，将 WAL 合并回主库并截断 WAL 文件，便于备份一致性。
             try db.execute(sql: "PRAGMA wal_checkpoint(TRUNCATE)")
         }
+    }
+}
+
+// MARK: - Lifecycle
+
+extension AppDatabase {
+
+    /// 中断当前连接池上的进行中数据库操作，用于备份恢复替换文件前终止旧连接读写。
+    func interrupt() {
+        dbPool.interrupt()
+    }
+
+    /// 显式关闭当前数据库连接池，用于依赖精确关闭语义的整库文件替换场景。
+    func close() throws {
+        try dbPool.close()
     }
 }

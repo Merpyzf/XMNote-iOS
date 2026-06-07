@@ -3,7 +3,7 @@ import Foundation
 import UIKit
 
 /**
- * [INPUT]: 依赖 BookRepositoryProtocol 读取真实书封背景样例，依赖 UIKit 截取预览区域并保存 PNG
+ * [INPUT]: 依赖 BookCoverSampleRepositoryProtocol 读取真实书封背景样例，依赖 UIKit 截取预览区域并保存 PNG
  * [OUTPUT]: 对外提供 LiquidGlassLabTestViewModel（液态玻璃视觉调试页状态编排）
  * [POS]: Debug 模块液态玻璃专项测试页状态中枢，集中管理参数、预设、截图、FPS 与真实背景样例
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -396,7 +396,7 @@ final class LiquidGlassLabTestViewModel {
         """
     }
 
-    func loadBookCoversIfNeeded(using repository: any BookRepositoryProtocol) async {
+    func loadBookCoversIfNeeded(using repository: any BookCoverSampleRepositoryProtocol) async {
         guard !hasLoadedBookCovers else { return }
         await loadBookCovers(using: repository)
     }
@@ -626,7 +626,7 @@ private extension LiquidGlassLabTestViewModel {
         }
     }
 
-    func loadBookCovers(using repository: any BookRepositoryProtocol) async {
+    func loadBookCovers(using repository: any BookCoverSampleRepositoryProtocol) async {
         isLoadingRealBookCovers = true
         realBookCoverStatusMessage = nil
         defer {

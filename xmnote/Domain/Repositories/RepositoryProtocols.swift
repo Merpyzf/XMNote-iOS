@@ -2,15 +2,19 @@ import Foundation
 
 /**
  * [INPUT]: 依赖 Models 与 Services 层的数据类型定义
- * [OUTPUT]: 对外提供 Book/Note/Content/BackupServer/Backup/S3/Statistics/ReadCalendarColor/Timeline/ReadingDashboard 及书籍搜索/录入共十三类 Repository 协议，包含书架显示设置变更观察入口与书单最小写入能力
+ * [OUTPUT]: 对外提供 Book/Note/Content/BackupServer/Backup/S3/Statistics/ReadCalendarColor/Timeline/ReadingDashboard 及书籍搜索/录入等 Repository 协议，包含书架显示设置变更观察入口与书单最小写入能力
  * [POS]: Domain 层仓储契约，定义 Presentation 获取本地/网络数据的唯一入口
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
-/// 书籍模块数据访问契约，定义书架管理、书籍详情、书摘与书架本地显示设置的统一入口。
-protocol BookRepositoryProtocol {
+/// 书籍封面样例数据访问契约，供调试预览读取真实书籍封面。
+protocol BookCoverSampleRepositoryProtocol {
     /// 持续监听书架列表变化，供书籍首页实时刷新。
     func observeBooks() -> AsyncThrowingStream<[BookItem], Error>
+}
+
+/// 书架管理数据访问契约，定义首页、二级列表和聚合管理的观察与写入入口。
+protocol BookshelfRepositoryProtocol {
     /// 持续监听默认书架混排列表，供首页展示书籍与分组。
     func observeBookshelf(setting: BookshelfDisplaySetting, searchKeyword: String?) -> AsyncThrowingStream<[BookshelfItem], Error>
     /// 持续监听首页书架只读快照，按维度设置分别排序与分区，供不同浏览维度共享同一数据来源。
@@ -97,14 +101,30 @@ protocol BookRepositoryProtocol {
     func saveBookshelfDisplaySetting(_ setting: BookshelfDisplaySetting, for dimension: BookshelfDimension, scope: BookshelfDisplaySettingScope)
     /// 观察指定书架显示设置变更；调用方取消迭代后底层观察任务会随流终止，避免页面释放后继续触发刷新。
     func observeBookshelfDisplaySettingChanges(scope: BookshelfDisplaySettingScope, dimension: BookshelfDimension) -> AsyncStream<Void>
+}
+
+/// 书籍详情数据访问契约，定义详情页所需的书籍与书摘观察入口。
+protocol BookDetailRepositoryProtocol {
     /// 持续监听指定书籍详情变化，供详情页实时更新。
     func observeBookDetail(bookId: Int64) -> AsyncThrowingStream<BookDetail?, Error>
     /// 持续监听指定书籍下的书摘列表变化。
     func observeBookNotes(bookId: Int64) -> AsyncThrowingStream<[NoteExcerpt], Error>
+}
+
+/// 本地选书数据访问契约，定义通用选书器需要的最小书籍查询能力。
+protocol BookPickerRepositoryProtocol {
     /// 按关键词读取本地可选书籍列表，供通用书籍选择流实时筛选。
     func fetchPickerBooks(matching query: String) async throws -> [BookPickerBook]
     /// 按 bookId 解析单本本地书籍，供创建成功后的选择流回填。
     func fetchPickerBook(bookId: Int64) async throws -> BookPickerBook?
+}
+
+/// 书籍模块完整本地仓储契约，由更窄的书架、详情、选书与封面样例能力组合而成。
+protocol BookRepositoryProtocol:
+    BookCoverSampleRepositoryProtocol,
+    BookshelfRepositoryProtocol,
+    BookDetailRepositoryProtocol,
+    BookPickerRepositoryProtocol {
 }
 
 /// 书籍搜索仓储契约，统一封装在线来源搜索、豆瓣详情补抓与最近搜索持久化。

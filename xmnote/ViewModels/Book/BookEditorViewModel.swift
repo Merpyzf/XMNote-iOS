@@ -8,7 +8,8 @@
 import Foundation
 import Observation
 
-/// 书籍录入状态源，负责新增与编辑两类草稿、建议选项和保存事务的页面编排。
+/// 书籍录入状态源，负责新增与编辑两类草稿、建议选项和保存事务的页面编排；所有 UI 状态均在主线程更新。
+@MainActor
 @Observable
 final class BookEditorViewModel {
     var draft: BookEditorDraft?
@@ -34,6 +35,46 @@ final class BookEditorViewModel {
     var hasUnsavedChanges: Bool {
         guard let draft, let initialDraft else { return false }
         return draft != initialDraft
+    }
+
+    /// 更新草稿文本字段，供输入控件通过统一入口写入页面状态。
+    func updateDraftText(_ value: String, for keyPath: WritableKeyPath<BookEditorDraft, String>) {
+        updateDraft { draft in
+            draft[keyPath: keyPath] = value
+        }
+    }
+
+    /// 更新标签输入框文本，便于后续集中增加去重、校验或输入清洗。
+    func updateTagInput(_ value: String) {
+        tagInput = value
+    }
+
+    /// 设置进度单位，不改变其它进度字段，保留用户当前输入。
+    func setProgressUnit(_ progressUnit: BookEntryProgressUnit) {
+        updateDraft { draft in
+            draft.progressUnit = progressUnit
+        }
+    }
+
+    /// 设置阅读状态，状态时间仍由用户或独立控件决定。
+    func setReadingStatus(_ readingStatus: BookEntryReadingStatus) {
+        updateDraft { draft in
+            draft.readingStatus = readingStatus
+        }
+    }
+
+    /// 设置阅读状态变更日期，供状态日期控件写入草稿。
+    func setReadStatusChangedDate(_ date: Date) {
+        updateDraft { draft in
+            draft.readStatusChangedDate = date
+        }
+    }
+
+    /// 设置购买日期，nil 由保存归一化流程继续按未填写处理。
+    func setPurchaseDate(_ date: Date?) {
+        updateDraft { draft in
+            draft.purchaseDate = date
+        }
     }
 
     /// 首次进入录入页时加载选项并构建草稿。
@@ -63,55 +104,62 @@ final class BookEditorViewModel {
 
     /// 录入新标签并去重，保持标签编辑区的即时反馈。
     func commitTagInput() {
-        guard var draft else { return }
         let normalized = tagInput.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !normalized.isEmpty else { return }
-        if !draft.tagNames.contains(normalized) {
-            draft.tagNames.append(normalized)
-            draft.tagNames.sort()
-            self.draft = draft
+        guard let currentDraft = draft else { return }
+        if !currentDraft.tagNames.contains(normalized) {
+            updateDraft { draft in
+                draft.tagNames.append(normalized)
+                draft.tagNames.sort()
+            }
         }
         tagInput = ""
     }
 
     /// 删除已选择标签。
     func removeTag(_ tag: String) {
-        guard var draft else { return }
-        draft.tagNames.removeAll { $0 == tag }
-        self.draft = draft
+        updateDraft { draft in
+            draft.tagNames.removeAll { $0 == tag }
+        }
     }
 
     /// 选择来源建议值，回填来源文本框。
     func selectSource(_ option: BookEditorNamedOption) {
-        guard var draft else { return }
-        draft.sourceName = option.title
-        self.draft = draft
+        updateDraft { draft in
+            draft.sourceName = option.title
+        }
     }
 
     /// 选择分组建议值，回填分组文本框。
     func selectGroup(_ option: BookEditorNamedOption) {
-        guard var draft else { return }
-        draft.groupName = option.title
-        self.draft = draft
+        updateDraft { draft in
+            draft.groupName = option.title
+        }
     }
 
     /// 选择或取消标签建议值。
     func toggleTag(_ option: BookEditorNamedOption) {
-        guard var draft else { return }
-        if draft.tagNames.contains(option.title) {
-            draft.tagNames.removeAll { $0 == option.title }
-        } else {
-            draft.tagNames.append(option.title)
-            draft.tagNames.sort()
+        updateDraft { draft in
+            if draft.tagNames.contains(option.title) {
+                draft.tagNames.removeAll { $0 == option.title }
+            } else {
+                draft.tagNames.append(option.title)
+                draft.tagNames.sort()
+            }
         }
-        self.draft = draft
     }
 
     /// 按当前书籍类型重置默认进度单位，避免纸书和电子书沿用错误单位。
     func applyBookType(_ bookType: BookEntryBookType) {
+        updateDraft { draft in
+            draft.bookType = bookType
+            draft.progressUnit = bookType.defaultProgressUnit
+        }
+    }
+
+    private func updateDraft(_ mutate: (inout BookEditorDraft) -> Void) {
         guard var draft else { return }
-        draft.bookType = bookType
-        draft.progressUnit = bookType.defaultProgressUnit
+        mutate(&draft)
         self.draft = draft
     }
 

@@ -225,10 +225,7 @@ struct BookEditorView: View {
             optionRow(title: "进度单位", selection: draft.progressUnit.title) {
                 ForEach(BookEntryProgressUnit.allCases) { item in
                     chip(item.title, isSelected: draft.progressUnit == item) {
-                        if var mutableDraft = viewModel.draft {
-                            mutableDraft.progressUnit = item
-                            viewModel.draft = mutableDraft
-                        }
+                        viewModel.setProgressUnit(item)
                     }
                 }
             }
@@ -236,10 +233,7 @@ struct BookEditorView: View {
             optionRow(title: "阅读状态", selection: draft.readingStatus.title) {
                 ForEach(BookEntryReadingStatus.allCases) { item in
                     chip(item.title, isSelected: draft.readingStatus == item) {
-                        if var mutableDraft = viewModel.draft {
-                            mutableDraft.readingStatus = item
-                            viewModel.draft = mutableDraft
-                        }
+                        viewModel.setReadingStatus(item)
                     }
                 }
             }
@@ -249,10 +243,7 @@ struct BookEditorView: View {
                 selection: Binding(
                     get: { draft.readStatusChangedDate },
                     set: {
-                        if var mutableDraft = viewModel.draft {
-                            mutableDraft.readStatusChangedDate = $0
-                            viewModel.draft = mutableDraft
-                        }
+                        viewModel.setReadStatusChangedDate($0)
                     }
                 ),
                 displayedComponents: [.date]
@@ -300,7 +291,7 @@ struct BookEditorView: View {
 
                 editorTextField("输入后回车添加", text: Binding(
                     get: { viewModel.tagInput },
-                    set: { viewModel.tagInput = $0 }
+                    set: { viewModel.updateTagInput($0) }
                 ))
                 .onSubmit {
                     viewModel.commitTagInput()
@@ -335,10 +326,7 @@ struct BookEditorView: View {
                 selection: Binding(
                     get: { draft.purchaseDate ?? .now },
                     set: {
-                        if var mutableDraft = viewModel.draft {
-                            mutableDraft.purchaseDate = $0
-                            viewModel.draft = mutableDraft
-                        }
+                        viewModel.setPurchaseDate($0)
                     }
                 ),
                 displayedComponents: [.date]
@@ -523,10 +511,7 @@ struct BookEditorView: View {
         Binding(
             get: { viewModel.draft?[keyPath: keyPath] ?? "" },
             set: { newValue in
-                if var draft = viewModel.draft {
-                    draft[keyPath: keyPath] = newValue
-                    viewModel.draft = draft
-                }
+                viewModel.updateDraftText(newValue, for: keyPath)
             }
         )
     }

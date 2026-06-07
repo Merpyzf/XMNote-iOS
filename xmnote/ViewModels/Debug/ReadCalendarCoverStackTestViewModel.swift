@@ -3,7 +3,7 @@ import Foundation
 import SwiftUI
 
 /**
- * [INPUT]: 依赖 ReadCalendarCoverFanStack / ReadCalendarMonthGrid 组件契约，依赖 BookRepositoryProtocol 提供 Book 表封面
+ * [INPUT]: 依赖 ReadCalendarCoverFanStack / ReadCalendarMonthGrid 组件契约，依赖 BookCoverSampleRepositoryProtocol 提供 Book 表封面
  * [OUTPUT]: 对外提供 ReadCalendarCoverStackTestViewModel（封面堆叠测试页状态编排）
  * [POS]: Debug 测试状态中枢，覆盖组件级与网格级封面堆叠效果验证，并支持手动参数调节
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -227,12 +227,12 @@ final class ReadCalendarCoverStackTestViewModel {
     }
 
     /// 首次按需加载 Book 表封面，避免重复触发仓储读取。
-    func loadBookCoversIfNeeded(using repository: any BookRepositoryProtocol) async {
+    func loadBookCoversIfNeeded(using repository: any BookCoverSampleRepositoryProtocol) async {
         await loadBookCovers(using: repository, force: false)
     }
 
     /// 强制刷新 Book 表封面，供调试面板手动触发。
-    func reloadBookCovers(using repository: any BookRepositoryProtocol) async {
+    func reloadBookCovers(using repository: any BookCoverSampleRepositoryProtocol) async {
         await loadBookCovers(using: repository, force: true)
     }
 
@@ -263,7 +263,7 @@ final class ReadCalendarCoverStackTestViewModel {
 }
 
 private extension ReadCalendarCoverStackTestViewModel {
-    func loadBookCovers(using repository: any BookRepositoryProtocol, force: Bool) async {
+    func loadBookCovers(using repository: any BookCoverSampleRepositoryProtocol, force: Bool) async {
         guard force || !hasLoadedBookCovers else { return }
 
         isLoadingBookCovers = true

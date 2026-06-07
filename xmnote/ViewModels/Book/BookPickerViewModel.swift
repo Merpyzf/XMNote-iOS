@@ -1,5 +1,5 @@
 /**
- * [INPUT]: 依赖 BookRepositoryProtocol 提供本地书籍查询与结果解析，依赖 BookSearchRepositoryProtocol 提供在线搜索、远端结果补齐与创建回填
+ * [INPUT]: 依赖 BookPickerRepositoryProtocol 提供本地书籍查询与结果解析，依赖 BookSearchRepositoryProtocol 提供在线搜索、远端结果补齐与创建回填
  * [OUTPUT]: 对外提供 BookPickerViewModel、BookPickerVisibleScope、BookPickerStatus 与 BookPickerRemoteTapOutcome，驱动通用书籍选择流状态机
  * [POS]: ViewModels/Book 的书籍选择状态编排器，被 BookPickerView 与测试共同消费
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -57,7 +57,7 @@ final class BookPickerViewModel {
 
     let configuration: BookPickerConfiguration
 
-    private let bookRepository: any BookRepositoryProtocol
+    private let bookRepository: any BookPickerRepositoryProtocol
     private let searchRepository: any BookSearchRepositoryProtocol
     private var hasLoaded = false
     private var localSearchTask: Task<Void, Never>?
@@ -69,7 +69,7 @@ final class BookPickerViewModel {
 
     init(
         configuration: BookPickerConfiguration,
-        bookRepository: any BookRepositoryProtocol,
+        bookRepository: any BookPickerRepositoryProtocol,
         searchRepository: any BookSearchRepositoryProtocol
     ) {
         self.configuration = configuration

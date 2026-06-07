@@ -8,7 +8,7 @@
 import Foundation
 
 /**
- * [INPUT]: 依赖 BookRepositoryProtocol 提供书架快照数据流、显示设置变更流和排序置顶写入，依赖 BookshelfSnapshot 进行多维度状态编排
+ * [INPUT]: 依赖 BookshelfRepositoryProtocol 提供书架快照数据流、显示设置变更流和排序置顶写入，依赖 BookshelfSnapshot 进行多维度状态编排
  * [OUTPUT]: 对外提供 BookViewModel，驱动书籍页维度浏览、搜索态、显示设置、默认书架编辑态、排序置顶、批量编辑、跨模块占位、删除与 UICollectionView 排序提交
  * [POS]: Book 模块书籍列表状态编排器，被 BookContainerView/BookGridView 消费
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -110,9 +110,10 @@ struct BookshelfDefaultDeleteConfirmation: Identifiable, Hashable, Sendable {
 
 // MARK: - BookViewModel
 
-/// BookViewModel 负责书架快照订阅，把 Repository 多维度结果和编辑态选择映射成界面可消费的数据集。
+/// BookViewModel 负责书架快照订阅，把 Repository 多维度结果和编辑态选择映射成界面可消费的数据集；所有 UI 状态均在主线程更新。
+@MainActor
 @Observable
-class BookViewModel {
+final class BookViewModel {
     var snapshot: BookshelfSnapshot = .empty
     var contentState: BookshelfContentState = .loading
     var hasCompletedInitialLoad = false
@@ -142,16 +143,22 @@ class BookViewModel {
     }
     var isEditing: Bool = false
     var selectedIDs: [BookshelfItemID] = []
-    var activeWriteAction: BookshelfPendingAction?
-    var writeError: String?
-    var actionFeedback: BookshelfActionFeedback?
+    private var writeActionState = BookshelfWriteActionState<BookshelfPendingAction>()
+    var activeWriteAction: BookshelfPendingAction? {
+        get { writeActionState.activeAction }
+        set { writeActionState.activeAction = newValue }
+    }
+    var writeError: String? {
+        get { writeActionState.error }
+        set { writeActionState.error = newValue }
+    }
+    var actionFeedback: BookshelfActionFeedback? {
+        get { writeActionState.feedback }
+        set { writeActionState.feedback = newValue }
+    }
     var actionNotice: String? {
-        get { actionFeedback?.message }
-        set {
-            actionFeedback = newValue.map {
-                BookshelfActionFeedback(kind: .warning, message: $0)
-            }
-        }
+        get { writeActionState.notice }
+        set { writeActionState.notice = newValue }
     }
     var activeBatchSheet: BookshelfBatchEditSheet?
     var activeDeleteConfirmation: BookshelfDefaultDeleteConfirmation?
@@ -160,7 +167,7 @@ class BookViewModel {
     var contributorNameEditText = ""
     var isLoadingBatchOptions = false
 
-    private let repository: any BookRepositoryProtocol
+    private let repository: any BookshelfRepositoryProtocol
     private var observationTask: Task<Void, Never>?
     private var displaySettingChangeTask: Task<Void, Never>?
     private var writeTask: Task<Void, Never>?
@@ -320,7 +327,7 @@ class BookViewModel {
     }
 
     /// 注入书籍仓储并启动列表数据观察。
-    init(repository: any BookRepositoryProtocol) {
+    init(repository: any BookshelfRepositoryProtocol) {
         self.repository = repository
         self.displaySettingsByDimension = repository.fetchBookshelfDisplaySettings(scope: .main)
         startObservation()
@@ -328,11 +335,12 @@ class BookViewModel {
     }
 
     /// 释放书籍模块运行过程持有的资源与观察任务。
-    deinit {
+    isolated deinit {
         observationTask?.cancel()
         displaySettingChangeTask?.cancel()
         writeTask?.cancel()
         batchOptionsTask?.cancel()
+        feedbackClearTask?.cancel()
     }
 
     // MARK: - Observation
@@ -400,6 +408,12 @@ class BookViewModel {
 
     private func normalizedSearchKeyword(_ value: String) -> String {
         value.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private func setSearchKeyword(_ keyword: String) {
+        let normalized = normalizedSearchKeyword(keyword)
+        guard searchKeyword != normalized else { return }
+        searchKeyword = normalized
     }
 
     private func pruneSelectionToVisibleItems() {
@@ -478,6 +492,26 @@ class BookViewModel {
     /// 激活页内搜索栏，搜索只参与只读过滤。
     func activateSearch() {
         isSearchActive = true
+    }
+
+    /// 处理搜索输入变化，统一由页面意图驱动关键词过滤与观察流刷新。
+    func searchQueryDidChange(_ keyword: String) {
+        activateSearch()
+        if normalizedSearchKeyword(keyword).isEmpty {
+            clearSearchKeyword()
+        } else {
+            setSearchKeyword(keyword)
+        }
+    }
+
+    /// 提交搜索输入，空查询仅清空过滤，非空查询保持搜索态并写入最终关键词。
+    func submitSearchQuery(_ keyword: String) {
+        if normalizedSearchKeyword(keyword).isEmpty {
+            clearSearchKeyword()
+        } else {
+            activateSearch()
+            setSearchKeyword(keyword)
+        }
     }
 
     /// 退出搜索并清空关键词，恢复当前维度的完整只读数据。
@@ -1333,26 +1367,20 @@ private extension BookViewModel {
     ) {
         guard activeWriteAction == nil else { return }
         cancelBatchOptionsLoading()
-        activeWriteAction = action
-        actionFeedback = BookshelfActionFeedback(kind: .processing, message: "\(action.title)处理中...")
-        writeError = nil
+        writeActionState.start(action)
         writeTask?.cancel()
         writeTask = Task {
             do {
                 try await operation()
                 await MainActor.run {
                     self.selectedIDs.removeAll()
-                    self.activeWriteAction = nil
-                    let feedback = BookshelfActionFeedback(kind: .success, message: successMessage)
-                    self.actionFeedback = feedback
+                    let feedback = self.writeActionState.finishSuccess(successMessage)
                     self.clearSuccessFeedbackLater(feedback)
                     self.restartObservation()
                 }
             } catch {
                 await MainActor.run {
-                    self.activeWriteAction = nil
-                    self.writeError = error.localizedDescription
-                    self.actionFeedback = BookshelfActionFeedback(kind: .error, message: error.localizedDescription)
+                    self.writeActionState.finishFailure(error)
                     self.restartObservation()
                 }
             }
@@ -1365,8 +1393,7 @@ private extension BookViewModel {
         feedbackClearTask = Task { [weak self] in
             try? await Task.sleep(nanoseconds: 1_600_000_000)
             await MainActor.run {
-                guard self?.actionFeedback == feedback else { return }
-                self?.actionFeedback = nil
+                self?.writeActionState.clearFeedback(ifMatches: feedback)
             }
         }
     }

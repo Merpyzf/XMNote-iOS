@@ -1,5 +1,5 @@
 /**
- * [INPUT]: 依赖 BookRepositoryProtocol 观察作者/出版社聚合快照，并提交作者/出版社重命名与删除写入
+ * [INPUT]: 依赖 BookshelfRepositoryProtocol 观察作者/出版社聚合快照，并提交作者/出版社重命名与删除写入
  * [OUTPUT]: 对外提供 BookContributorKind、BookContributorManagementViewModel 与作者/出版社编辑删除弹窗状态
  * [POS]: ViewModels/Book 的作者/出版社管理状态编排器，被书架聚合卡和管理页复用
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -91,7 +91,8 @@ enum BookContributorWriteAction: Hashable {
     }
 }
 
-/// 作者/出版社管理页状态源，负责观察聚合数据并提交编辑、删除动作。
+/// 作者/出版社管理页状态源，负责观察聚合数据并提交编辑、删除动作；所有 UI 状态均在主线程更新。
+@MainActor
 @Observable
 final class BookContributorManagementViewModel {
     var groups: [BookshelfAggregateGroup] = []
@@ -105,19 +106,19 @@ final class BookContributorManagementViewModel {
 
     let kind: BookContributorKind
 
-    private let repository: any BookRepositoryProtocol
+    private let repository: any BookshelfRepositoryProtocol
     private var observationTask: Task<Void, Never>?
     private var writeTask: Task<Void, Never>?
 
     /// 注入仓储并启动聚合快照观察；观察任务在实例释放时取消，回写 UI 状态统一回到 MainActor。
-    init(kind: BookContributorKind, repository: any BookRepositoryProtocol) {
+    init(kind: BookContributorKind, repository: any BookshelfRepositoryProtocol) {
         self.kind = kind
         self.repository = repository
         startObservation()
     }
 
     /// 释放观察与写入任务，避免页面退出后继续回写状态。
-    deinit {
+    isolated deinit {
         observationTask?.cancel()
         writeTask?.cancel()
     }

@@ -9,7 +9,7 @@ import GRDB
  */
 /// ReadingDashboardRepository 汇总在读首页所需的多路统计、目标和书籍信息，并对外暴露可持续观察的数据入口。
 nonisolated struct ReadingDashboardRepository: ReadingDashboardRepositoryProtocol {
-    private let dbPool: DatabasePool
+    private let databaseManager: DatabaseManager
     private let calendar = Calendar.current
 
     /// Defaults 统一维护首页统计窗口与默认目标，确保仓储和视图使用同一业务口径。
@@ -24,13 +24,18 @@ nonisolated struct ReadingDashboardRepository: ReadingDashboardRepositoryProtoco
     /// 注入数据库管理器，供首页 observation 与目标写入复用同一数据源。
     @MainActor
     init(databaseManager: DatabaseManager) {
-        self.dbPool = databaseManager.database.dbPool
+        self.databaseManager = databaseManager
+    }
+
+    /// 每次数据库操作都从 DatabaseManager 读取当前连接池，避免备份恢复后继续使用旧 DatabasePool。
+    private var currentDatabasePool: DatabasePool {
+        databaseManager.database.dbPool
     }
 
     /// 持续观察指定参考日期的首页仪表盘快照，数据库变更后自动推送最新聚合结果。
     nonisolated func observeDashboard(referenceDate: Date) -> AsyncThrowingStream<ReadingDashboardSnapshot, Error> {
         let normalizedReferenceDate = calendar.startOfDay(for: referenceDate)
-        return ObservationStream.make(in: dbPool) { db in
+        return ObservationStream.make(in: currentDatabasePool) { db in
             try buildDashboardSnapshot(db, referenceDate: normalizedReferenceDate)
         }
     }
@@ -45,7 +50,7 @@ nonisolated struct ReadingDashboardRepository: ReadingDashboardRepositoryProtoco
         let dayStartMillis = Int64(dayStart.timeIntervalSince1970 * 1000)
         let now = Int64(Date().timeIntervalSince1970 * 1000)
 
-        try await dbPool.write { db in
+        try await currentDatabasePool.write { db in
             // 查询指定自然日对应的阅读目标主键。
             // 涉及表：`read_target`。
             // 关键条件：`is_deleted = 0`、`type = 1` 表示每日目标、`time` 使用当天 00:00:00 的毫秒时间戳。
@@ -97,7 +102,7 @@ nonisolated struct ReadingDashboardRepository: ReadingDashboardRepositoryProtoco
         let clampedCount = max(1, count)
         let now = Int64(Date().timeIntervalSince1970 * 1000)
 
-        try await dbPool.write { db in
+        try await currentDatabasePool.write { db in
             // 查询指定年份对应的年度目标主键。
             // 涉及表：`read_target`。
             // 关键条件：`type = 0` 表示年度目标，`time` 直接存储年份整数。

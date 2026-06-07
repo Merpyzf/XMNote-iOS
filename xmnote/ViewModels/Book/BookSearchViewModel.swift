@@ -8,7 +8,8 @@
 import Foundation
 import Observation
 
-/// 书籍搜索状态源，负责组织远端书源搜索、最近搜索和搜索结果选择流程。
+/// 书籍搜索状态源，负责组织远端书源搜索、最近搜索和搜索结果选择流程；所有 UI 状态均在主线程更新。
+@MainActor
 @Observable
 final class BookSearchViewModel {
     struct SearchFailure {

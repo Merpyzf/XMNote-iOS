@@ -107,12 +107,12 @@ private struct BookDetailContentView: View {
                     attributesSection(book.attributes)
                 }
 
-                if let summary = nonEmptyPlainText(book.summary) {
-                    textSection(title: "简介", text: summary)
+                if !book.summaryPlainText.isEmpty {
+                    textSection(title: "简介", text: book.summaryPlainText)
                 }
 
-                if let authorIntro = nonEmptyPlainText(book.authorIntro) {
-                    textSection(title: "作者简介", text: authorIntro)
+                if !book.authorIntroPlainText.isEmpty {
+                    textSection(title: "作者简介", text: book.authorIntroPlainText)
                 }
 
                 if !book.chapters.isEmpty {
@@ -342,8 +342,8 @@ private struct BookDetailContentView: View {
         CardContainer {
             VStack(alignment: .leading, spacing: Spacing.none) {
                 // 正文
-                if !note.content.isEmpty {
-                    Text(plainTextPreview(from: note.content))
+                if !note.contentPlainText.isEmpty {
+                    Text(note.contentPlainText)
                         .font(NoteExcerptTypography.body)
                         .lineSpacing(NoteExcerptTypography.bodyLineSpacing)
                         .lineLimit(6)
@@ -351,13 +351,13 @@ private struct BookDetailContentView: View {
                 }
 
                 // 想法
-                if !note.idea.isEmpty {
+                if !note.ideaPlainText.isEmpty {
                     HStack(alignment: .top, spacing: Spacing.base) {
                         RoundedRectangle(cornerRadius: CornerRadius.inlayHairline, style: .continuous)
                             .fill(Color.textHint.opacity(0.6))
                             .frame(width: 3)
 
-                        Text(plainTextPreview(from: note.idea))
+                        Text(note.ideaPlainText)
                             .font(NoteExcerptTypography.idea)
                             .lineSpacing(NoteExcerptTypography.ideaLineSpacing)
                             .lineLimit(3)
@@ -380,14 +380,6 @@ private struct BookDetailContentView: View {
         }
     }
 
-    private func plainTextPreview(from html: String) -> String {
-        RichTextBridge.htmlToAttributed(html).string
-    }
-
-    private func nonEmptyPlainText(_ value: String) -> String? {
-        let text = plainTextPreview(from: value).trimmingCharacters(in: .whitespacesAndNewlines)
-        return text.isEmpty ? nil : text
-    }
 }
 
 #Preview {

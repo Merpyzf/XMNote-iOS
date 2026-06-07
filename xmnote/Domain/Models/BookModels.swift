@@ -1203,20 +1203,78 @@ nonisolated struct BookDetail: Identifiable, Sendable {
     let noteCount: Int
     let readStatusName: String
     let summary: String
+    let summaryPlainText: String
     let authorIntro: String
+    let authorIntroPlainText: String
     let attributes: [BookDetailAttribute]
     let chapters: [BookDetailChapter]
+
+    /// 构建详情页展示模型；纯文本预览由页面状态源按需预处理，Repository 可只提供原始 HTML 字段。
+    init(
+        id: Int64,
+        name: String,
+        author: String,
+        cover: String,
+        press: String,
+        noteCount: Int,
+        readStatusName: String,
+        summary: String,
+        summaryPlainText: String = "",
+        authorIntro: String,
+        authorIntroPlainText: String = "",
+        attributes: [BookDetailAttribute],
+        chapters: [BookDetailChapter]
+    ) {
+        self.id = id
+        self.name = name
+        self.author = author
+        self.cover = cover
+        self.press = press
+        self.noteCount = noteCount
+        self.readStatusName = readStatusName
+        self.summary = summary
+        self.summaryPlainText = summaryPlainText
+        self.authorIntro = authorIntro
+        self.authorIntroPlainText = authorIntroPlainText
+        self.attributes = attributes
+        self.chapters = chapters
+    }
 }
 
 /// 书籍详情中的书摘条目，包含正文、感想、位置与时间信息。
-nonisolated struct NoteExcerpt: Identifiable {
+nonisolated struct NoteExcerpt: Identifiable, Sendable {
     let id: Int64
     let content: String
+    let contentPlainText: String
     let idea: String
+    let ideaPlainText: String
     let position: String
     let positionUnit: Int64
     let includeTime: Bool
     let createdDate: Int64
+
+    /// 构建书摘展示模型；纯文本预览由页面状态源按需预处理，Repository 可只提供原始 HTML 字段。
+    init(
+        id: Int64,
+        content: String,
+        contentPlainText: String = "",
+        idea: String,
+        ideaPlainText: String = "",
+        position: String,
+        positionUnit: Int64,
+        includeTime: Bool,
+        createdDate: Int64
+    ) {
+        self.id = id
+        self.content = content
+        self.contentPlainText = contentPlainText
+        self.idea = idea
+        self.ideaPlainText = ideaPlainText
+        self.position = position
+        self.positionUnit = positionUnit
+        self.includeTime = includeTime
+        self.createdDate = createdDate
+    }
 
     var footerText: String {
         var parts: [String] = []

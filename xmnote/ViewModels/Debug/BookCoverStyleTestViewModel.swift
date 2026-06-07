@@ -3,7 +3,7 @@ import Foundation
 import SwiftUI
 
 /**
- * [INPUT]: 依赖 XMBookCover 厚度边阈值逻辑，依赖 BookRepositoryProtocol 提供真实封面样例
+ * [INPUT]: 依赖 XMBookCover 厚度边阈值逻辑，依赖 BookCoverSampleRepositoryProtocol 提供真实封面样例
  * [OUTPUT]: 对外提供 BookCoverStyleTestViewModel（书籍封面样式测试页状态编排）
  * [POS]: Debug 测试状态中枢，集中验证 Apple Books 参考方向的薄厚边样式在尺寸阈值、内容源与业务场景接入下的表现
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -136,7 +136,7 @@ final class BookCoverStyleTestViewModel {
     }
 
     /// 首次按需加载真实封面样例，避免重复触发仓储观察流。
-    func loadBookCoversIfNeeded(using repository: any BookRepositoryProtocol) async {
+    func loadBookCoversIfNeeded(using repository: any BookCoverSampleRepositoryProtocol) async {
         guard !hasLoadedRealBookCovers else { return }
         await loadBookCovers(using: repository)
     }
@@ -161,7 +161,7 @@ final class BookCoverStyleTestViewModel {
 }
 
 private extension BookCoverStyleTestViewModel {
-    func loadBookCovers(using repository: any BookRepositoryProtocol) async {
+    func loadBookCovers(using repository: any BookCoverSampleRepositoryProtocol) async {
         isLoadingRealBookCovers = true
         realBookCoverStatusMessage = nil
         defer {

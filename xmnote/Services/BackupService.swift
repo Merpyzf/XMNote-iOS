@@ -1,7 +1,7 @@
 /**
  * [INPUT]: 依赖 Foundation、UIKit、SQLite3、ZIPFoundation 与 AppDatabase/DatabaseManager
  * [OUTPUT]: 对外提供云备份通用模型、BackupArchiveService 与 CloudBackupRemoteProvider 协议
- * [POS]: Services 模块的备份内核，负责本地备份包生成/恢复与跨 provider 的公共语义
+ * [POS]: Services 模块的备份内核，负责本地备份包生成、数据库热切换恢复与跨 provider 的公共语义
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
@@ -297,24 +297,38 @@ extension BackupArchiveService {
         try BackupSchemaValidator.prepareForRestore(at: extractedDatabaseURL.path)
 
         progress?(.replacing)
-        let databasePath = database.databasePath
+        var databasePath = database.databasePath
         try fileManager.createDirectory(at: rollbackDirectory, withIntermediateDirectories: true)
+        try captureRollbackFiles(into: rollbackDirectory, databasePath: databasePath)
 
+        var didCloseDatabase = false
+        var shouldRestoreRollback = false
         do {
-            try captureRollbackFiles(into: rollbackDirectory, databasePath: databasePath)
+            databasePath = try databaseManager.closeCurrentDatabaseForReplacement()
+            didCloseDatabase = true
+            shouldRestoreRollback = true
             try replaceDatabaseFiles(
                 from: extractDirectory,
                 databasePath: databasePath
             )
-            try databaseManager.reopen()
+            try databaseManager.reopen(at: databasePath)
+            shouldRestoreRollback = false
             progress?(.completed)
-        } catch {
-            try? restoreRollbackFiles(
-                from: rollbackDirectory,
-                databasePath: databasePath
-            )
-            try? databaseManager.reopen()
-            throw error
+        } catch let restoreError {
+            if didCloseDatabase {
+                do {
+                    if shouldRestoreRollback {
+                        try restoreRollbackFiles(
+                            from: rollbackDirectory,
+                            databasePath: databasePath
+                        )
+                    }
+                    try databaseManager.reopen(at: databasePath)
+                } catch {
+                    throw error
+                }
+            }
+            throw restoreError
         }
     }
 }
