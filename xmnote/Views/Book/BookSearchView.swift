@@ -308,7 +308,7 @@ struct BookSearchView: View {
                 onTap: { query in
                     clearTransientState()
                     Task {
-                        viewModel.query = query
+                        viewModel.searchQueryDidChange(query)
                         await performSearch(using: viewModel)
                     }
                 },
@@ -486,12 +486,8 @@ struct BookSearchView: View {
         Binding(
             get: { viewModel.query },
             set: { query in
-                viewModel.query = query
+                viewModel.searchQueryDidChange(query)
                 if query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    viewModel.results = []
-                    viewModel.errorMessage = nil
-                    viewModel.latestSearchError = nil
-                    viewModel.hasSearched = false
                     isRecentQueriesExpanded = false
                     clearTransientState()
                 }
@@ -560,7 +556,7 @@ struct BookSearchView: View {
         recoveryAttempt: Int = 0
     ) async {
         if let keyword {
-            viewModel.query = keyword
+            viewModel.searchQueryDidChange(keyword)
         }
         if let source {
             viewModel.updateSelectedSource(source)
@@ -572,13 +568,26 @@ struct BookSearchView: View {
         }
         inlineFeedback = nil
 
-        let failure = await viewModel.search()
-        guard let failure else {
+        let outcome = await viewModel.search()
+        switch outcome {
+        case .success:
             pendingRecoveryAction = nil
             pendingFanqieVerificationAction = nil
             return
+        case .stale:
+            return
+        case .failure(let failure):
+            handleSearchFailure(failure, viewModel: viewModel, recoveryAttempt: recoveryAttempt)
         }
+    }
 
+    /// 按搜索失败类型更新页面恢复入口；只在当前请求确认有效后由 MainActor 调用，避免旧请求覆盖新 UI。
+    @MainActor
+    private func handleSearchFailure(
+        _ failure: BookSearchViewModel.SearchFailure,
+        viewModel: BookSearchViewModel,
+        recoveryAttempt: Int
+    ) {
         switch failure.bookSearchError {
         case .doubanLoginRequired?:
             pendingFanqieVerificationAction = nil

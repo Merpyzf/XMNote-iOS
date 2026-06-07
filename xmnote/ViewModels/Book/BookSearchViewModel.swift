@@ -16,6 +16,13 @@ final class BookSearchViewModel {
         let message: String
     }
 
+    /// 搜索请求完成后的页面处理语义，区分真实成功、业务失败与已过期回调。
+    enum SearchOutcome {
+        case success
+        case failure(SearchFailure)
+        case stale
+    }
+
     var query: String = ""
     var selectedSource: BookSearchSource = .wenqu
     var searchSettings: BookSearchSettings = .default
@@ -27,6 +34,7 @@ final class BookSearchViewModel {
     var hasSearched = false
 
     private let repository: any BookSearchRepositoryProtocol
+    private var searchRequestSequence = 0
 
     init(
         repository: any BookSearchRepositoryProtocol,
@@ -58,14 +66,24 @@ final class BookSearchViewModel {
         BookSearchSource.productionCases
     }
 
+    /// 更新搜索输入；输入变化会令当前搜索请求过期，清空时同步复位结果与错误状态。
+    func searchQueryDidChange(_ query: String) {
+        self.query = query
+        invalidateSearchRequests()
+        if query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            resetSearchStateForEmptyQuery()
+        }
+    }
+
     /// 刷新最近搜索词，保证删除或新增后 UI 与本地存储一致。
     func reloadRecentQueries() {
         recentQueries = repository.fetchRecentQueries()
     }
 
-    /// 执行当前来源搜索，并在发起有效搜索时立即刷新最近搜索列表。
+    /// 执行当前来源搜索；状态回写固定在 MainActor，并用请求序号把已取消或过期的旧请求标记为 stale。
     @MainActor
-    func search() async -> SearchFailure? {
+    func search() async -> SearchOutcome {
+        let requestID = nextSearchRequestID()
         let keyword = trimmedQuery
         hasSearched = true
         results = []
@@ -79,20 +97,26 @@ final class BookSearchViewModel {
             )
             errorMessage = failure.message
             latestSearchError = failure.bookSearchError
-            return failure
+            return .failure(failure)
         }
 
         repository.saveRecentQuery(keyword)
         reloadRecentQueries()
 
         isSearching = true
-        defer { isSearching = false }
+        defer {
+            if isCurrentSearchRequest(requestID) {
+                isSearching = false
+            }
+        }
 
         do {
             let items = try await repository.search(keyword: keyword, source: selectedSource)
+            guard !Task.isCancelled, isCurrentSearchRequest(requestID) else { return .stale }
             results = items
-            return nil
+            return .success
         } catch {
+            guard !Task.isCancelled, isCurrentSearchRequest(requestID) else { return .stale }
             let bookSearchError = error as? BookSearchError
             let failure = SearchFailure(
                 bookSearchError: bookSearchError,
@@ -100,14 +124,14 @@ final class BookSearchViewModel {
             )
             errorMessage = failure.message
             latestSearchError = failure.bookSearchError
-            return failure
+            return .failure(failure)
         }
     }
 
     /// 将最近搜索词回填到输入框并立即触发搜索。
     @MainActor
     func search(withRecentQuery query: String) async {
-        self.query = query
+        searchQueryDidChange(query)
         _ = await search()
     }
 
@@ -120,6 +144,9 @@ final class BookSearchViewModel {
     /// 选择当前搜索来源，并在设置中同步默认来源。
     func updateSelectedSource(_ source: BookSearchSource) {
         let effectiveSource = source.isProductionVisible ? source : BookSearchSettings.default.defaultSource
+        if selectedSource != effectiveSource {
+            invalidateSearchRequests()
+        }
         selectedSource = effectiveSource
         updateDefaultSource(effectiveSource)
     }
@@ -159,5 +186,27 @@ final class BookSearchViewModel {
     /// 将轻量结果补齐为录入页种子；豆瓣场景会在这里抓详情。
     func prepareSeed(for result: BookSearchResult) async throws -> BookEditorSeed {
         try await repository.prepareSeed(for: result)
+    }
+
+    private func resetSearchStateForEmptyQuery() {
+        results = []
+        errorMessage = nil
+        latestSearchError = nil
+        isSearching = false
+        hasSearched = false
+    }
+
+    private func nextSearchRequestID() -> Int {
+        searchRequestSequence += 1
+        return searchRequestSequence
+    }
+
+    private func invalidateSearchRequests() {
+        searchRequestSequence += 1
+        isSearching = false
+    }
+
+    private func isCurrentSearchRequest(_ requestID: Int) -> Bool {
+        searchRequestSequence == requestID
     }
 }
