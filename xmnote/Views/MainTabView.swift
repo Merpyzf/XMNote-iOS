@@ -29,6 +29,8 @@ struct MainTabView: View {
     @State private var profilePath = NavigationPath()
     @State private var searchPath = NavigationPath()
     @State private var searchQuery = ""
+    @State private var isSearchPresented = false
+    @State private var previousNonSearchTab: AppTab = .reading
     #if DEBUG
     @State private var didApplyUITestLaunchRoute = false
     #endif
@@ -170,11 +172,14 @@ struct MainTabView: View {
 
             Tab("搜索", systemImage: "magnifyingglass", value: .search, role: .search) {
                 NavigationStack(path: $searchPath) {
-                    SearchView(
+                    GlobalSearchView(
                         query: $searchQuery,
-                        onAddBook: { append(BookRoute.add, to: .search) },
-                        onAddNote: { append(NoteRoute.create(seed: .empty), to: .search) },
-                        onOpenDebugCenter: { append(DebugRoute.debugCenter, to: .search) }
+                        onOpenBookRoute: { route in
+                            append(route, to: .search)
+                        },
+                        onOpenContentRoute: { route in
+                            append(route, to: .search)
+                        }
                     )
                         .navigationDestination(for: DebugRoute.self) { route in
                             debugDestination(for: route)
@@ -196,7 +201,19 @@ struct MainTabView: View {
             }
         }
         .tabBarMinimizeBehavior(.onScrollDown)
-        .mainTabSearchHost(isEnabled: selectedTab == .search, searchQuery: $searchQuery)
+        .mainTabSearchHost(
+            searchQuery: $searchQuery,
+            isPresented: $isSearchPresented
+        )
+        .onChange(of: selectedTab) { oldValue, newValue in
+            syncSearchPresentationForSelectedTab(oldValue: oldValue, newValue: newValue)
+        }
+        .onChange(of: isSearchPresented) { _, newValue in
+            restorePreviousTabAfterSearchDismissal(isPresented: newValue)
+        }
+        .onChange(of: searchPath.count) { _, newValue in
+            syncSearchPresentationForNavigationDepth(newValue)
+        }
         .task {
             #if DEBUG
             await applyUITestLaunchRouteIfNeeded()
@@ -407,6 +424,39 @@ struct MainTabView: View {
         }
     }
 
+    /// 同步搜索 Tab 与系统搜索框呈现状态；仅维护会话内返回目标，不写入 scene 级恢复状态。
+    private func syncSearchPresentationForSelectedTab(oldValue: AppTab, newValue: AppTab) {
+        if newValue == .search {
+            if oldValue != .search {
+                previousNonSearchTab = oldValue
+            }
+            if !isSearchPresented {
+                isSearchPresented = true
+            }
+        } else {
+            previousNonSearchTab = newValue
+            if isSearchPresented {
+                isSearchPresented = false
+            }
+        }
+    }
+
+    /// 用户关闭系统搜索框时回到进入搜索前的业务 Tab，避免重新创建上一级根页面。
+    private func restorePreviousTabAfterSearchDismissal(isPresented: Bool) {
+        guard !isPresented, selectedTab == .search, searchPath.isEmpty else { return }
+        selectedTab = previousNonSearchTab
+    }
+
+    /// 搜索结果详情页隐藏系统搜索宿主；返回搜索根页后恢复搜索输入，避免底部工具栏与搜索胶囊叠放。
+    private func syncSearchPresentationForNavigationDepth(_ depth: Int) {
+        guard selectedTab == .search else { return }
+        if depth > 0 {
+            isSearchPresented = false
+        } else if !isSearchPresented {
+            isSearchPresented = true
+        }
+    }
+
     private func openBookManagementGuide() {
         guard let url = URL(string: "https://docs.xmnote.com/#/book/bookmanagement") else { return }
         openURL(url)
@@ -439,91 +489,29 @@ struct MainTabView: View {
 }
 
 private extension View {
-    /// 仅在搜索 Tab 激活时挂载根级搜索宿主，避免其他导航栈长期持有搜索控制器状态。
+    /// 稳定挂载根级搜索宿主，通过呈现绑定控制搜索框生命周期，避免切换搜索 Tab 时重绑 TabView。
     func mainTabSearchHost(
-        isEnabled: Bool,
-        searchQuery: Binding<String>
+        searchQuery: Binding<String>,
+        isPresented: Binding<Bool>
     ) -> some View {
         modifier(
             MainTabSearchHostModifier(
-                isEnabled: isEnabled,
-                searchQuery: searchQuery
+                searchQuery: searchQuery,
+                isPresented: isPresented
             )
         )
     }
 }
 
-/// MainTabSearchHostModifier 条件挂载搜索 tab 的根级 searchable 宿主，避免跨 tab 残留搜索控制器状态。
+/// MainTabSearchHostModifier 承载搜索 tab 的根级 searchable 宿主，保持 TabView 外层结构身份稳定。
 private struct MainTabSearchHostModifier: ViewModifier {
-    let isEnabled: Bool
     @Binding var searchQuery: String
+    @Binding var isPresented: Bool
 
-    @ViewBuilder
     func body(content: Content) -> some View {
-        if isEnabled {
-            content
-                .tabViewSearchActivation(.searchTabSelection)
-                .searchable(text: $searchQuery, prompt: "搜索书籍或书摘")
-        } else {
-            content
-        }
-    }
-}
-
-private struct SearchView: View {
-    @Binding var query: String
-    private let topBarHeight: CGFloat = 52
-    let onAddBook: () -> Void
-    let onAddNote: () -> Void
-    let onOpenDebugCenter: (() -> Void)?
-
-    /// 注入搜索与新增回调，组装主 Tab 页面上下文。
-    init(
-        query: Binding<String>,
-        onAddBook: @escaping () -> Void = {},
-        onAddNote: @escaping () -> Void = {},
-        onOpenDebugCenter: (() -> Void)? = nil
-    ) {
-        self._query = query
-        self.onAddBook = onAddBook
-        self.onAddNote = onAddNote
-        self.onOpenDebugCenter = onOpenDebugCenter
-    }
-
-    var body: some View {
-        ZStack(alignment: .top) {
-            Color.surfacePage.ignoresSafeArea()
-
-            VStack(spacing: Spacing.base) {
-                VStack(spacing: Spacing.base) {
-                    Image(systemName: "magnifyingglass")
-                        .font(.system(size: 28, weight: .semibold))
-                        .foregroundStyle(.secondary)
-                    Text(query.isEmpty ? "输入关键词开始搜索" : "暂无匹配结果")
-                        .font(AppTypography.body)
-                        .foregroundStyle(.secondary)
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-            .padding(.top, topBarHeight)
-
-            HomeTopHeaderGradient()
-                .allowsHitTesting(false)
-
-            HStack {
-                Spacer(minLength: 0)
-                AddMenuCircleButton(
-                    onAddBook: onAddBook,
-                    onAddNote: onAddNote,
-                    onOpenDebugCenter: onOpenDebugCenter
-                )
-            }
-            .padding(.horizontal, Spacing.screenEdge)
-            .frame(height: topBarHeight)
-            .zIndex(1)
-        }
-        .toolbar(.hidden, for: .navigationBar)
+        content
+            .tabViewSearchActivation(.searchTabSelection)
+            .searchable(text: $searchQuery, isPresented: $isPresented, prompt: "搜索本地内容")
     }
 }
 

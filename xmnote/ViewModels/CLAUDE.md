@@ -16,6 +16,7 @@ ViewModel 层目录，统一承载页面状态管理与业务编排逻辑。按 
 - `Note/`: 笔记模块 ViewModel
 - `Personal/`: 个人模块 ViewModel（含 `Backup/`）
 - `Reading/`: 在读模块 ViewModel（含 `ReadCalendar/`）
+- `Search/`: 全局搜索模块 ViewModel
 - `Debug/`: 调试页 ViewModel
 
 [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md

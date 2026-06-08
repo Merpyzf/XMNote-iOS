@@ -11,7 +11,9 @@
 - `XMYearMonthPickerSheet.swift`: 项目级年月/年份选择 Sheet（固定标题栏、年月/年份两种模式、动态字体自适应）
 - `XMRemoteImage.swift`: 统一远程图片组件（静态图 + GIF 探测/降级 + 占位）
 - `XMGIFImageView.swift`: GIF 动画承载桥接组件（基于 Gifu）
-- `XMScopeSelector.swift`: 范围选择控件（2-5 项等宽单选、数量 badge、跟手拖拽、内容流/浮层玻璃两种样式）
+- `XMScopeSelector.swift`: 范围选择控件（2-5 项等宽同屏、6+ 内部横向滚动、数量 badge、跟手拖拽、内容流/浮层玻璃两种样式）
+- `XMScrollEdgeChrome.swift`: 滚动边缘栏容器（contained 固定占位栏、overlaySoft 系统软边缘、顶部/底部栏组合）
+- `XMScrollEdgeWash.swift`: 滚动边缘柔化层（顶部/底部/双向覆盖层、强度/高度/surface/可见性策略）
 - `RichText.swift`: 只读 HTML 富文本展示组件（`UITextView + RichTextLayoutManager`，支持截断状态回调与布局缓存）
 - `CollapsedRichTextPreview.swift`: ExpandableRichText 收起态轻量预览组件（`UILabel` + 原生省略号截断）
 - `ExpandableRichText.swift`: 可展开/收起 HTML 富文本组件（完整态 RichText + 收起态轻量预览双通道）

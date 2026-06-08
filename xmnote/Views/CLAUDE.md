@@ -5,7 +5,7 @@ SwiftUI 视图层，按功能模块分子目录组织页面壳层、页面私有
 
 ## 顶层成员
 
-- `MainTabView.swift`: 四 Tab 根视图（在读/书籍/笔记/我的）
+- `MainTabView.swift`: 五 Tab 根视图（在读/书籍/笔记/我的/搜索）
 
 ## 子目录
 
@@ -14,6 +14,7 @@ SwiftUI 视图层，按功能模块分子目录组织页面壳层、页面私有
 - `Note/`: 笔记管理视图
 - `Personal/`: 个人设置视图（含 Backup/ 子目录）
 - `Reading/`: 在读追踪视图（含 ReadCalendar/ 子功能）
+- `Search/`: 全局搜索视图
 - `Statistics/`: 统计占位视图
 - `Debug/`: 调试测试视图（#if DEBUG 编译隔离，含 Prototypes/ 原型子目录）
 

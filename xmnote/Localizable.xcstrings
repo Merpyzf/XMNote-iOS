@@ -2,14 +2,7 @@
   "sourceLanguage" : "zh-Hans",
   "strings" : {
     "" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "needs_review",
-            "value" : ""
-          }
-        }
-      }
+
     },
     " " : {
 
@@ -158,14 +151,7 @@
 
     },
     "%lld" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "needs_review",
-            "value" : ""
-          }
-        }
-      }
+
     },
     "%lld × %lld" : {
       "localizations" : {
@@ -184,26 +170,42 @@
 
     },
     "%lld 条" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "needs_review",
-            "value" : ""
-          }
-        }
-      }
+
     },
     "%lld 条书摘" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "needs_review",
-            "value" : ""
-          }
-        }
-      }
+
     },
     "%lld 项" : {
+
+    },
+    "项" : {
+
+    },
+    "全部" : {
+
+    },
+    "书名" : {
+
+    },
+    "书摘" : {
+
+    },
+    "内容" : {
+
+    },
+    "作者" : {
+
+    },
+    "出版社" : {
+
+    },
+    "搜索范围" : {
+
+    },
+    "相关" : {
+
+    },
+    "范围选择" : {
 
     },
     "%lld." : {
@@ -265,14 +267,7 @@
 
     },
     "AI 配置" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "needs_review",
-            "value" : ""
-          }
-        }
-      }
+
     },
     "Android / iOS 对照" : {
 
@@ -281,14 +276,7 @@
 
     },
     "API 集成" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "needs_review",
-            "value" : ""
-          }
-        }
-      }
+
     },
     "Container" : {
 
@@ -307,24 +295,10 @@
       }
     },
     "HTML 往返一致" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "needs_review",
-            "value" : ""
-          }
-        }
-      }
+
     },
     "HTML 往返不一致" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "needs_review",
-            "value" : ""
-          }
-        }
-      }
+
     },
     "HTML 结果" : {
 
@@ -417,24 +391,10 @@
 
     },
     "书籍" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "needs_review",
-            "value" : ""
-          }
-        }
-      }
+
     },
     "书籍分组" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "needs_review",
-            "value" : ""
-          }
-        }
-      }
+
     },
     "书籍封面样式" : {
 
@@ -443,24 +403,10 @@
 
     },
     "书籍来源" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "needs_review",
-            "value" : ""
-          }
-        }
-      }
+
     },
     "书籍详情" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "needs_review",
-            "value" : ""
-          }
-        }
-      }
+
     },
     "书籍选择" : {
 
@@ -517,14 +463,7 @@
 
     },
     "会员" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "needs_review",
-            "value" : ""
-          }
-        }
-      }
+
     },
     "会话" : {
 
@@ -533,15 +472,7 @@
 
     },
     "作者管理" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "needs_review",
-            "value" : ""
-          }
-        }
-      }
+      "extractionState" : "stale"
     },
     "使用 Vibrancy 文本" : {
 
@@ -553,14 +484,7 @@
 
     },
     "保存" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "needs_review",
-            "value" : ""
-          }
-        }
-      }
+
     },
     "保持屏幕常亮" : {
 
@@ -578,24 +502,10 @@
 
     },
     "关于应用" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "needs_review",
-            "value" : ""
-          }
-        }
-      }
+
     },
     "关闭" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "needs_review",
-            "value" : ""
-          }
-        }
-      }
+
     },
     "关闭 OCR 流程" : {
 
@@ -637,15 +547,7 @@
 
     },
     "出版社管理" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "needs_review",
-            "value" : ""
-          }
-        }
-      }
+      "extractionState" : "stale"
     },
     "分享书摘" : {
 
@@ -688,25 +590,10 @@
 
     },
     "创建笔记" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "needs_review",
-            "value" : ""
-          }
-        }
-      }
+      "extractionState" : "stale"
     },
     "删除" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "needs_review",
-            "value" : ""
-          }
-        }
-      }
+
     },
     "删除，当前不可用" : {
 
@@ -745,25 +632,10 @@
 
     },
     "加载中..." : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "needs_review",
-            "value" : ""
-          }
-        }
-      }
+      "extractionState" : "stale"
     },
     "加载到编辑器" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "needs_review",
-            "value" : ""
-          }
-        }
-      }
+
     },
     "加载预设" : {
 
@@ -802,14 +674,7 @@
 
     },
     "取消" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "needs_review",
-            "value" : ""
-          }
-        }
-      }
+
     },
     "变更时间" : {
 
@@ -821,14 +686,7 @@
 
     },
     "名称" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "needs_review",
-            "value" : ""
-          }
-        }
-      }
+
     },
     "启用动画" : {
 
@@ -855,51 +713,22 @@
 
     },
     "在读" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "needs_review",
-            "value" : ""
-          }
-        }
-      }
+
     },
     "埃里克·乔根森" : {
 
     },
     "备份历史" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "needs_review",
-            "value" : ""
-          }
-        }
-      }
+
     },
     "备份数据" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "needs_review",
-            "value" : ""
-          }
-        }
-      }
+      "extractionState" : "stale"
     },
     "备份方式" : {
 
     },
     "备份服务器" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "needs_review",
-            "value" : ""
-          }
-        }
-      }
+
     },
     "复制书评" : {
 
@@ -935,24 +764,10 @@
 
     },
     "密码" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "needs_review",
-            "value" : ""
-          }
-        }
-      }
+
     },
     "富文本编辑器测试" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "needs_review",
-            "value" : ""
-          }
-        }
-      }
+
     },
     "导出到文件" : {
 
@@ -1045,24 +860,10 @@
 
     },
     "序列化想法" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "needs_review",
-            "value" : ""
-          }
-        }
-      }
+
     },
     "序列化摘录" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "needs_review",
-            "value" : ""
-          }
-        }
-      }
+
     },
     "底部偏移与左右留白会随封面尺寸收敛，小封面保持细条感，大封面保持悬浮感。" : {
 
@@ -1074,14 +875,7 @@
 
     },
     "开通会员" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "needs_review",
-            "value" : ""
-          }
-        }
-      }
+
     },
     "当前书摘没有标签" : {
 
@@ -1123,27 +917,13 @@
 
     },
     "往返测试" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "needs_review",
-            "value" : ""
-          }
-        }
-      }
+
     },
     "快照轨迹" : {
 
     },
     "恢复" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "needs_review",
-            "value" : ""
-          }
-        }
-      }
+
     },
     "恢复后，当前设备上的数据将被备份中的内容替换。此操作无法撤销。" : {
 
@@ -1152,37 +932,13 @@
 
     },
     "恢复将覆盖当前所有数据，此操作不可撤销" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "needs_review",
-            "value" : ""
-          }
-        }
-      }
+      "extractionState" : "stale"
     },
     "恢复成功" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "needs_review",
-            "value" : ""
-          }
-        }
-      }
+      "extractionState" : "stale"
     },
     "恢复数据" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "needs_review",
-            "value" : ""
-          }
-        }
-      }
+      "extractionState" : "stale"
     },
     "恢复默认" : {
 
@@ -1191,14 +947,7 @@
 
     },
     "我的" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "needs_review",
-            "value" : ""
-          }
-        }
-      }
+
     },
     "截图对比" : {
 
@@ -1243,14 +992,7 @@
 
     },
     "批量导出" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "needs_review",
-            "value" : ""
-          }
-        }
-      }
+
     },
     "批量操作" : {
 
@@ -1289,14 +1031,7 @@
 
     },
     "搜索" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "needs_review",
-            "value" : ""
-          }
-        }
-      }
+
     },
     "搜索书名、作者、ISBN" : {
 
@@ -1305,14 +1040,7 @@
 
     },
     "搜索书籍或书摘" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "needs_review",
-            "value" : ""
-          }
-        }
-      }
+
     },
     "搜索整理结果" : {
 
@@ -1321,14 +1049,7 @@
 
     },
     "搜索标签" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "needs_review",
-            "value" : ""
-          }
-        }
-      }
+
     },
     "搜索结果不支持排序，清除搜索后可调整书架顺序" : {
 
@@ -1346,35 +1067,13 @@
 
     },
     "数据备份" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "needs_review",
-            "value" : ""
-          }
-        }
-      }
+
     },
     "数据导入" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "needs_review",
-            "value" : ""
-          }
-        }
-      }
+
     },
     "数据已恢复到备份时的状态" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "needs_review",
-            "value" : ""
-          }
-        }
-      }
+      "extractionState" : "stale"
     },
     "数据库初始化失败" : {
 
@@ -1392,14 +1091,7 @@
 
     },
     "无" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "needs_review",
-            "value" : ""
-          }
-        }
-      }
+
     },
     "无论是你记录的每一条笔记，还是统计的读书时长，或标记的书籍状态，都可以点亮每天的小格子。记录越多、时长越长，颜色就越深。" : {
 
@@ -1432,14 +1124,7 @@
 
     },
     "暂无匹配结果" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "needs_review",
-            "value" : ""
-          }
-        }
-      }
+
     },
     "暂无可展示的年度数据" : {
 
@@ -1466,14 +1151,7 @@
 
     },
     "服务器地址" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "needs_review",
-            "value" : ""
-          }
-        }
-      }
+
     },
     "未聚焦" : {
 
@@ -1482,15 +1160,7 @@
 
     },
     "未配置" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "needs_review",
-            "value" : ""
-          }
-        }
-      }
+      "extractionState" : "stale"
     },
     "本" : {
 
@@ -1536,24 +1206,10 @@
 
     },
     "标签笔记" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "needs_review",
-            "value" : ""
-          }
-        }
-      }
+
     },
     "标签管理" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "needs_review",
-            "value" : ""
-          }
-        }
-      }
+
     },
     "标题" : {
 
@@ -1662,14 +1318,7 @@
 
     },
     "测试连接" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "needs_review",
-            "value" : ""
-          }
-        }
-      }
+
     },
     "测试页会复用正式业务中的番茄验证页。完成验证后，会自动重新搜索当前关键词。" : {
 
@@ -1678,61 +1327,25 @@
 
     },
     "添加" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "needs_review",
-            "value" : ""
-          }
-        }
-      }
+
     },
     "添加书摘" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "needs_review",
-            "value" : ""
-          }
-        }
-      }
+      "extractionState" : "stale"
     },
     "添加书籍" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "needs_review",
-            "value" : ""
-          }
-        }
-      }
+
     },
     "添加书籍设置" : {
 
     },
     "添加服务器" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "needs_review",
-            "value" : ""
-          }
-        }
-      }
+
     },
     "添加标签" : {
 
     },
     "添加链接" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "needs_review",
-            "value" : ""
-          }
-        }
-      }
+
     },
     "清空报告" : {
 
@@ -1756,14 +1369,7 @@
 
     },
     "激活格式:" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "needs_review",
-            "value" : ""
-          }
-        }
-      }
+
     },
     "点击“运行番茄搜索”后，这里会显示实际加载的番茄搜索页。" : {
 
@@ -1838,25 +1444,10 @@
 
     },
     "确定" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "needs_review",
-            "value" : ""
-          }
-        }
-      }
+
     },
     "确认恢复" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "needs_review",
-            "value" : ""
-          }
-        }
-      }
+      "extractionState" : "stale"
     },
     "移动" : {
 
@@ -1868,37 +1459,16 @@
 
     },
     "笔记" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "needs_review",
-            "value" : ""
-          }
-        }
-      }
+
     },
     "笔记记录" : {
 
     },
     "笔记详情" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "needs_review",
-            "value" : ""
-          }
-        }
-      }
+
     },
     "管理" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "needs_review",
-            "value" : ""
-          }
-        }
-      }
+
     },
     "系统取词" : {
 
@@ -1946,28 +1516,13 @@
 
     },
     "编辑" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "needs_review",
-            "value" : ""
-          }
-        }
-      }
+
     },
     "编辑书摘" : {
 
     },
     "编辑书籍" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "needs_review",
-            "value" : ""
-          }
-        }
-      }
+      "extractionState" : "stale"
     },
     "编辑书评" : {
 
@@ -1976,14 +1531,7 @@
 
     },
     "编辑服务器" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "needs_review",
-            "value" : ""
-          }
-        }
-      }
+
     },
     "编辑模式" : {
 
@@ -1992,15 +1540,7 @@
 
     },
     "编辑笔记" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "needs_review",
-            "value" : ""
-          }
-        }
-      }
+      "extractionState" : "stale"
     },
     "编辑设置" : {
 
@@ -2039,27 +1579,13 @@
 
     },
     "解锁全部高级功能" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "needs_review",
-            "value" : ""
-          }
-        }
-      }
+
     },
     "触感反馈" : {
 
     },
     "设置" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "needs_review",
-            "value" : ""
-          }
-        }
-      }
+
     },
     "设置状态" : {
 
@@ -2107,14 +1633,7 @@
 
     },
     "账号" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "needs_review",
-            "value" : ""
-          }
-        }
-      }
+
     },
     "购买日期" : {
 
@@ -2126,14 +1645,7 @@
 
     },
     "输入关键词开始搜索" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "needs_review",
-            "value" : ""
-          }
-        }
-      }
+
     },
     "输入后创建并选中" : {
 
@@ -2223,14 +1735,7 @@
 
     },
     "选择示例" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "needs_review",
-            "value" : ""
-          }
-        }
-      }
+
     },
     "通道" : {
 
@@ -2260,15 +1765,7 @@
 
     },
     "错误" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "needs_review",
-            "value" : ""
-          }
-        }
-      }
+      "extractionState" : "stale"
     },
     "阅读 %lld 天" : {
 
@@ -2286,24 +1783,10 @@
 
     },
     "阅读提醒" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "needs_review",
-            "value" : ""
-          }
-        }
-      }
+
     },
     "阅读日历" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "needs_review",
-            "value" : ""
-          }
-        }
-      }
+
     },
     "阅读日历显示模式" : {
 
@@ -2318,14 +1801,7 @@
 
     },
     "阅读计时" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "needs_review",
-            "value" : ""
-          }
-        }
-      }
+
     },
     "阅读计时（含补录）" : {
 

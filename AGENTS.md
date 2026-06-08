@@ -168,6 +168,7 @@
 - `xmnote/Utilities`
 - `xmnote/ViewModels`
 - `xmnote/Views`
+- `xmnote/zh-Hans.lproj`
 <!-- AUTO_SYNC_MODULES_END -->
 - 同步命令：`bash scripts/sync_arch_docs.sh`
 - 校验命令：`bash scripts/verify_arch_docs_sync.sh`

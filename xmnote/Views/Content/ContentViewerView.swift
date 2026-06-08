@@ -94,6 +94,7 @@ private struct ContentViewerLoadedView: View {
     @State private var sharePayload: ContentViewerSharePayload?
     @State private var pendingPresentation: PendingCapabilityPresentation?
     @State private var listLoadingGate = LoadingGate()
+    @State private var searchMatchIndex = 0
 
     private var presentationStyle: ContentViewerPresentationStyle {
         ContentViewerPresentationStyle(source: viewModel.source)
@@ -113,10 +114,16 @@ private struct ContentViewerLoadedView: View {
                         .padding(.top, Spacing.base)
                 }
 
-                if hasKeywordPlaceholder {
-                    viewerMessageCard(text: ContentViewerPendingCapability.keywordHighlight.message)
-                        .padding(.horizontal, Spacing.screenEdge)
-                        .padding(.top, viewModel.items.isEmpty ? Spacing.base : Spacing.cozy)
+                if let searchMatchContext {
+                    ContentViewerSearchContextCard(
+                        context: searchMatchContext,
+                        currentIndex: selectedSearchMatchDisplayIndex,
+                        totalCount: selectedSearchMatches.count,
+                        onPrevious: selectPreviousSearchMatch,
+                        onNext: selectNextSearchMatch
+                    )
+                    .padding(.horizontal, Spacing.screenEdge)
+                    .padding(.top, viewModel.items.isEmpty ? Spacing.base : Spacing.cozy)
                 }
 
                 ContentViewerContentView(
@@ -189,6 +196,9 @@ private struct ContentViewerLoadedView: View {
         .onChange(of: viewModel.items.isEmpty) { _, _ in
             syncListLoadingVisibility()
         }
+        .onChange(of: viewModel.selectedItemID) { _, _ in
+            searchMatchIndex = 0
+        }
         .onPreferenceChange(ImmersiveBottomChromeHeightPreferenceKey.self) { height in
             bottomOrnamentHeight = height
         }
@@ -227,7 +237,7 @@ private struct ContentViewerLoadedView: View {
 
     private var bottomOrnament: some View {
         GlassEffectContainer(spacing: Spacing.base) {
-            HStack(spacing: Spacing.base) {
+            HStack(spacing: Spacing.double) {
                 contentActionCluster
                     .padding(.horizontal, Spacing.base)
                     .frame(height: ImmersiveBottomChromeStyle.controlHeight)
@@ -434,10 +444,6 @@ private struct ContentViewerLoadedView: View {
         .accessibilityLabel("书摘 AI")
     }
 
-    private var hasKeywordPlaceholder: Bool {
-        !viewModel.keyword.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-    }
-
     private func bottomChromeMetrics(safeAreaBottomInset: CGFloat) -> ImmersiveBottomChromeMetrics {
         ImmersiveBottomChromeMetrics.make(
             measuredOrnamentHeight: bottomOrnamentHeight,
@@ -497,6 +503,26 @@ private struct ContentViewerLoadedView: View {
         selectedNoteDetail?.tagNames ?? []
     }
 
+    private var selectedSearchMatches: [ContentViewerSearchMatchContext] {
+        guard let selectedDetail = viewModel.selectedDetail else { return [] }
+        return ContentViewerSearchMatchContext.matches(
+            in: selectedDetail,
+            keyword: viewModel.keyword
+        )
+    }
+
+    private var searchMatchContext: ContentViewerSearchMatchContext? {
+        let matches = selectedSearchMatches
+        guard !matches.isEmpty else { return nil }
+        return matches[min(searchMatchIndex, matches.count - 1)]
+    }
+
+    private var selectedSearchMatchDisplayIndex: Int {
+        let count = selectedSearchMatches.count
+        guard count > 0 else { return 0 }
+        return min(searchMatchIndex, count - 1) + 1
+    }
+
     private var relevantURL: URL? {
         guard let selectedRelevantDetail else { return nil }
         return normalizedURL(selectedRelevantDetail.url)
@@ -504,6 +530,22 @@ private struct ContentViewerLoadedView: View {
 
     private func presentPending(_ capability: ContentViewerPendingCapability) {
         pendingPresentation = PendingCapabilityPresentation(capability: capability)
+    }
+
+    private func selectPreviousSearchMatch() {
+        let count = selectedSearchMatches.count
+        guard count > 1 else { return }
+        withAnimation(.snappy) {
+            searchMatchIndex = searchMatchIndex == 0 ? count - 1 : searchMatchIndex - 1
+        }
+    }
+
+    private func selectNextSearchMatch() {
+        let count = selectedSearchMatches.count
+        guard count > 1 else { return }
+        withAnimation(.snappy) {
+            searchMatchIndex = (searchMatchIndex + 1) % count
+        }
     }
 
     private func shareCurrentNote() {
@@ -576,6 +618,154 @@ private struct ContentViewerLoadedView: View {
     }
 }
 
+/// 搜索进入详情页时展示的命中上下文，保留字段来源和片段，帮助用户确认为什么来到当前内容。
+private struct ContentViewerSearchMatchContext: Identifiable, Equatable {
+    let id: String
+    let field: String
+    let keyword: String
+    let snippet: String
+
+    static func matches(
+        in detail: ContentViewerDetail,
+        keyword: String
+    ) -> [ContentViewerSearchMatchContext] {
+        let trimmedKeyword = keyword.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedKeyword.isEmpty else { return [] }
+
+        let fields: [(String, String)]
+        switch detail {
+        case .note(let note):
+            fields = [
+                ("正文", plainText(note.contentHTML)),
+                ("想法", plainText(note.ideaHTML)),
+                ("章节", note.chapterTitle)
+            ]
+        case .review(let review):
+            fields = [
+                ("标题", review.title),
+                ("正文", plainText(review.contentHTML))
+            ]
+        case .relevant(let relevant):
+            fields = [
+                ("标题", relevant.title),
+                ("正文", plainText(relevant.contentHTML)),
+                ("链接", relevant.url)
+            ]
+        }
+
+        return fields.compactMap { field, text in
+            guard contains(text, keyword: trimmedKeyword) else { return nil }
+            return ContentViewerSearchMatchContext(
+                id: field,
+                field: field,
+                keyword: trimmedKeyword,
+                snippet: snippet(from: text, keyword: trimmedKeyword)
+            )
+        }
+    }
+
+    private static func plainText(_ html: String) -> String {
+        RichTextBridge.htmlToAttributed(html).string
+            .collapsingInternalWhitespace()
+    }
+
+    private static func contains(_ text: String, keyword: String) -> Bool {
+        text.range(
+            of: keyword,
+            options: [.caseInsensitive, .diacriticInsensitive],
+            range: text.startIndex..<text.endIndex,
+            locale: .current
+        ) != nil
+    }
+
+    private static func snippet(from text: String, keyword: String, maximumLength: Int = 92) -> String {
+        let normalized = text.collapsingInternalWhitespace()
+        guard normalized.count > maximumLength else {
+            return normalized
+        }
+        guard let range = normalized.range(
+            of: keyword,
+            options: [.caseInsensitive, .diacriticInsensitive],
+            range: normalized.startIndex..<normalized.endIndex,
+            locale: .current
+        ) else {
+            return String(normalized.prefix(maximumLength)).trimmingCharacters(in: .whitespacesAndNewlines) + "…"
+        }
+
+        let leadingContext = 24
+        let trailingContext = maximumLength - leadingContext
+        let start = normalized.index(range.lowerBound, offsetBy: -leadingContext, limitedBy: normalized.startIndex) ?? normalized.startIndex
+        let end = normalized.index(range.lowerBound, offsetBy: trailingContext, limitedBy: normalized.endIndex) ?? normalized.endIndex
+        let prefix = start > normalized.startIndex ? "…" : ""
+        let suffix = end < normalized.endIndex ? "…" : ""
+        return prefix + normalized[start..<end].trimmingCharacters(in: .whitespacesAndNewlines) + suffix
+    }
+}
+
+private struct ContentViewerSearchContextCard: View {
+    let context: ContentViewerSearchMatchContext
+    let currentIndex: Int
+    let totalCount: Int
+    let onPrevious: () -> Void
+    let onNext: () -> Void
+
+    var body: some View {
+        CardContainer(cornerRadius: CornerRadius.blockMedium, showsBorder: true, borderColor: .surfaceBorderSubtle) {
+            VStack(alignment: .leading, spacing: Spacing.cozy) {
+                HStack(spacing: Spacing.cozy) {
+                    Label("搜索命中", systemImage: "magnifyingglass")
+                        .font(AppTypography.captionSemibold)
+                        .foregroundStyle(Color.brandDeep)
+
+                    Text(context.field)
+                        .font(AppTypography.caption)
+                        .foregroundStyle(Color.textSecondary)
+
+                    Spacer(minLength: 0)
+
+                    if totalCount > 1 {
+                        HStack(spacing: Spacing.tight) {
+                            Button(action: onPrevious) {
+                                Image(systemName: "chevron.up")
+                                    .font(AppTypography.captionSemibold)
+                            }
+                            .buttonStyle(.plain)
+                            .frame(width: Spacing.actionReserved, height: Spacing.actionReserved)
+                            .accessibilityLabel("上一个命中")
+
+                            Text("\(currentIndex)/\(totalCount)")
+                                .font(AppTypography.caption2Medium)
+                                .foregroundStyle(Color.textSecondary)
+                                .monospacedDigit()
+
+                            Button(action: onNext) {
+                                Image(systemName: "chevron.down")
+                                    .font(AppTypography.captionSemibold)
+                            }
+                            .buttonStyle(.plain)
+                            .frame(width: Spacing.actionReserved, height: Spacing.actionReserved)
+                            .accessibilityLabel("下一个命中")
+                        }
+                        .foregroundStyle(Color.iconSecondary)
+                    }
+                }
+
+                XMKeywordHighlighting.text(
+                    context.snippet,
+                    keyword: context.keyword,
+                    baseFont: AppTypography.subheadline,
+                    baseColor: Color.textPrimary
+                )
+                .lineLimit(3)
+                .multilineTextAlignment(.leading)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .padding(Spacing.base)
+        }
+        .accessibilityElement(children: .combine)
+    }
+}
+
 struct ContentViewerHeroCard<Accessory: View>: View {
     let title: String
     let subtitle: String
@@ -599,6 +789,15 @@ struct ContentViewerHeroCard<Accessory: View>: View {
             }
             .padding(Spacing.contentEdge)
         }
+    }
+}
+
+private extension String {
+    func collapsingInternalWhitespace() -> String {
+        components(separatedBy: .whitespacesAndNewlines)
+            .filter { !$0.isEmpty }
+            .joined(separator: " ")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
     }
 }
 

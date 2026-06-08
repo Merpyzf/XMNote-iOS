@@ -189,7 +189,7 @@ private struct TopSwitcherTabBar<Tab: Hashable>: View {
         }
         .backgroundPreferenceValue(TopSwitcherTabAnchorKey.self, alignment: .topLeading) { anchors in
             GeometryReader { proxy in
-                if let anchor = anchors[displayedSelection] {
+                if !quote.isEmpty, let anchor = anchors[displayedSelection] {
                     let rect = proxy[anchor]
                     Image(TopSwitcherQuoteDecorationMetrics.assetName)
                         .resizable()
@@ -265,19 +265,21 @@ private struct TopSwitcherTitleLabel: View {
             .frame(minHeight: TopSwitcherTypography.minLabelHeight, alignment: .leading)
             .lineLimit(dynamicTypeSize >= .accessibility1 ? 2 : 1)
             .background(alignment: .topLeading) {
-                Image(TopSwitcherQuoteDecorationMetrics.assetName)
-                    .resizable()
-                    .aspectRatio(contentMode: .fit)
-                    .frame(
-                        width: TopSwitcherQuoteDecorationMetrics.iconWidth,
-                        height: TopSwitcherQuoteDecorationMetrics.iconHeight
-                    )
-                    .offset(
-                        x: TopSwitcherQuoteDecorationMetrics.offsetX,
-                        y: TopSwitcherQuoteDecorationMetrics.offsetY
-                    )
-                    .allowsHitTesting(false)
-                    .accessibilityHidden(true)
+                if !quote.isEmpty {
+                    Image(TopSwitcherQuoteDecorationMetrics.assetName)
+                        .resizable()
+                        .aspectRatio(contentMode: .fit)
+                        .frame(
+                            width: TopSwitcherQuoteDecorationMetrics.iconWidth,
+                            height: TopSwitcherQuoteDecorationMetrics.iconHeight
+                        )
+                        .offset(
+                            x: TopSwitcherQuoteDecorationMetrics.offsetX,
+                            y: TopSwitcherQuoteDecorationMetrics.offsetY
+                        )
+                        .allowsHitTesting(false)
+                        .accessibilityHidden(true)
+                }
             }
             .accessibilityIdentifier("top_switcher_title_\(text)")
             .onAppear {

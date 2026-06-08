@@ -2,7 +2,7 @@
 import SwiftUI
 
 /**
- * [INPUT]: 依赖 RichTextTestView、HeatmapTestView、SystemAlertTestView、RatingBarTestView、BookSelectionTestView、SelectionMotionTestView、XMScopeSelectorTestView、BookReorderSandboxTestView、ImageLoadingTestView、WebHTMLFetchTestView、CameraTextCaptureTestView、BaiduOCRTestView、JXPhotoBrowserTestView、ReadCalendarCoverStackTestView、BookCoverStyleTestView、BookCoverProgressBarTestView、BookCoverBadgeEffectTestView、LiquidGlassLabTestView、SystemColorsTestView、TimelineCardsTestView、TimelineCalendarHorizonTestView 作为导航目的地
+ * [INPUT]: 依赖 RichTextTestView、HeatmapTestView、SystemAlertTestView、RatingBarTestView、BookSelectionTestView、SelectionMotionTestView、XMScopeSelectorTestView、XMScrollEdgeChromeTestView、BookReorderSandboxTestView、ImageLoadingTestView、WebHTMLFetchTestView、CameraTextCaptureTestView、BaiduOCRTestView、JXPhotoBrowserTestView、ReadCalendarCoverStackTestView、BookCoverStyleTestView、BookCoverProgressBarTestView、BookCoverBadgeEffectTestView、LiquidGlassLabTestView、SystemColorsTestView、TimelineCardsTestView、TimelineCalendarHorizonTestView 作为导航目的地
  * [OUTPUT]: 对外提供 DebugCenterView（测试中心列表页）
  * [POS]: Debug 测试入口页，集中展示所有控件测试项，由 PersonalView 跳转进入
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -62,6 +62,12 @@ struct DebugCenterView: View {
             title: "范围选择控件",
             subtitle: "2-5 项单选范围、数量、长文案、浅深色与玻璃样式验证",
             destination: AnyView(XMScopeSelectorTestView())
+        ),
+        DebugItem(
+            icon: "rectangle.portrait.and.arrow.right",
+            title: "滚动边缘覆盖层",
+            subtitle: "顶部/底部柔化、背景、强度、高度与深色模式验证",
+            destination: AnyView(XMScrollEdgeChromeTestView())
         ),
         DebugItem(
             icon: "square.grid.3x3",

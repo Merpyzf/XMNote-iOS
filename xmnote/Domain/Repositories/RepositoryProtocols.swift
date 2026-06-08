@@ -2,7 +2,7 @@ import Foundation
 
 /**
  * [INPUT]: 依赖 Models 与 Services 层的数据类型定义
- * [OUTPUT]: 对外提供 Book/Note/Content/BackupServer/Backup/S3/Statistics/ReadCalendarColor/Timeline/ReadingDashboard 及书籍搜索/录入等 Repository 协议，包含书架显示设置变更观察入口与书单最小写入能力
+ * [OUTPUT]: 对外提供 Book/Note/Content/GlobalSearch/BackupServer/Backup/S3/Statistics/ReadCalendarColor/Timeline/ReadingDashboard 及书籍搜索/录入等 Repository 协议，包含书架显示设置变更观察入口与书单最小写入能力
  * [POS]: Domain 层仓储契约，定义 Presentation 获取本地/网络数据的唯一入口
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -219,6 +219,16 @@ protocol ContentRepositoryProtocol {
     func saveRelevantEditorDraft(_ draft: RelevantEditorDraft) async throws
     /// 删除指定内容，按 iOS 当前约定执行主记录与子记录的硬删除事务。
     func delete(itemID: ContentViewerItemID) async throws
+}
+
+/// 全局搜索仓储契约，统一封装书籍、书摘、相关与书评四类本地检索。
+protocol GlobalSearchRepositoryProtocol {
+    /// 按关键词执行一次全局本地搜索；空关键词返回空快照，不触发 Toast 式错误。
+    func search(keyword: String) async throws -> GlobalSearchSnapshot
+    /// 读取最近全局搜索词，供搜索根页展示真实历史。
+    func fetchRecentQueries() -> [String]
+    /// 写入最近全局搜索词，按最近使用顺序去重保留。
+    func saveRecentQuery(_ query: String)
 }
 
 /// 备份服务器配置契约，覆盖服务器列表、当前选择、增删改与连通性校验。

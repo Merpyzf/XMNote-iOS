@@ -1,7 +1,7 @@
 #if DEBUG
 /**
  * [INPUT]: 依赖 XMScopeSelector、SwiftUI 原生 segmented Picker、DesignTokens 与 Debug 导航环境，提供范围选择控件的样式、Dynamic Type 与场景样本
- * [OUTPUT]: 对外提供 XMScopeSelectorTestView，集中验证 2-5 项单选范围控件、原生 segmented 对照、数量、长文案、浅深色、Dynamic Type 与 Liquid Glass 浮层样式
+ * [OUTPUT]: 对外提供 XMScopeSelectorTestView，集中验证 2-5 项等宽、6+ 横向滚动、原生 segmented 对照、数量、长文案、浅深色、Dynamic Type 与 Liquid Glass 浮层样式
  * [POS]: Debug 测试页，仅用于 XMScopeSelector 产品级基建接入真实页面前的可视化验证
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -12,6 +12,7 @@ import SwiftUI
 struct XMScopeSelectorTestView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var visualStyle: XMScopeSelectorDemoStyle = .content
+    @State private var countFormat: XMScopeSelectorCountFormat = .plain
     @State private var schemeMode: XMScopeSelectorDemoScheme = .system
     @State private var dynamicTypeMode: XMScopeSelectorDynamicTypeMode = .system
     @State private var showsInvalidSamples = false
@@ -21,6 +22,7 @@ struct XMScopeSelectorTestView: View {
     @State private var mixedScope: XMScopeSelectorMixedScope = .all
     @State private var technicalScope: XMScopeSelectorTechnicalScope = .all
     @State private var longScope: XMScopeSelectorLongScope = .all
+    @State private var overflowScope: XMScopeSelectorOverflowScope = .all
     @State private var invalidScope = "missing"
 
     var body: some View {
@@ -45,6 +47,13 @@ struct XMScopeSelectorTestView: View {
                 Picker("控件样式", selection: $visualStyle) {
                     ForEach(XMScopeSelectorDemoStyle.allCases) { style in
                         Text(style.title).tag(style)
+                    }
+                }
+                .pickerStyle(.segmented)
+
+                Picker("数字格式", selection: $countFormat) {
+                    ForEach(XMScopeSelectorCountFormat.allCases) { format in
+                        Text(format.debugTitle).tag(format)
                     }
                 }
                 .pickerStyle(.segmented)
@@ -106,7 +115,8 @@ struct XMScopeSelectorTestView: View {
                 subtitle: "4 项单选范围，模拟搜索结果主分类。",
                 items: XMScopeSelectorSearchScope.items,
                 selection: $searchScope,
-                demoStyle: visualStyle
+                demoStyle: visualStyle,
+                countFormat: countFormat
             )
 
             XMScopeSelectorScenarioSection(
@@ -114,7 +124,8 @@ struct XMScopeSelectorTestView: View {
                 subtitle: "2 项结果来源，验证短分段下的平衡感。",
                 items: XMScopeSelectorPickerScope.items,
                 selection: $pickerScope,
-                demoStyle: visualStyle
+                demoStyle: visualStyle,
+                countFormat: countFormat
             )
 
             XMScopeSelectorScenarioSection(
@@ -122,7 +133,8 @@ struct XMScopeSelectorTestView: View {
                 subtitle: "3 项短中文范围，替代平铺圆形按钮。",
                 items: XMScopeSelectorScreenshotScope.items,
                 selection: $screenshotScope,
-                demoStyle: visualStyle
+                demoStyle: visualStyle,
+                countFormat: countFormat
             )
 
             XMScopeSelectorScenarioSection(
@@ -130,7 +142,8 @@ struct XMScopeSelectorTestView: View {
                 subtitle: "4 项混合 count，验证有无数量时的对齐稳定性。",
                 items: XMScopeSelectorMixedScope.items,
                 selection: $mixedScope,
-                demoStyle: visualStyle
+                demoStyle: visualStyle,
+                countFormat: countFormat
             )
 
             XMScopeSelectorScenarioSection(
@@ -138,7 +151,8 @@ struct XMScopeSelectorTestView: View {
                 subtitle: "5 项英文、数字和 ISBN 长串，验证截断与 count 保留。",
                 items: XMScopeSelectorTechnicalScope.items,
                 selection: $technicalScope,
-                demoStyle: visualStyle
+                demoStyle: visualStyle,
+                countFormat: countFormat
             )
 
             XMScopeSelectorScenarioSection(
@@ -146,7 +160,17 @@ struct XMScopeSelectorTestView: View {
                 subtitle: "5 项上限、长标题和数量徽标的拥挤验证。",
                 items: XMScopeSelectorLongScope.items,
                 selection: $longScope,
-                demoStyle: visualStyle
+                demoStyle: visualStyle,
+                countFormat: countFormat
+            )
+
+            XMScopeSelectorScenarioSection(
+                title: "6+ 横向滚动",
+                subtitle: "7 项搜索范围，验证固定外壳内横向滚动、自动定位与标题优先级。",
+                items: XMScopeSelectorOverflowScope.items,
+                selection: $overflowScope,
+                demoStyle: visualStyle,
+                countFormat: countFormat
             )
         }
     }
@@ -164,6 +188,7 @@ struct XMScopeSelectorTestView: View {
                         items: XMScopeSelectorInvalidScope.items,
                         selection: $invalidScope,
                         style: visualStyle.selectorStyle,
+                        countFormat: countFormat,
                         accessibilityLabel: "非法输入样例"
                     )
                 }
@@ -205,6 +230,7 @@ private struct XMScopeSelectorScenarioSection<ID: Hashable>: View {
     let items: [XMScopeSelectorItem<ID>]
     @Binding private var selection: ID
     let demoStyle: XMScopeSelectorDemoStyle
+    let countFormat: XMScopeSelectorCountFormat
 
     private var selectedTitle: String {
         items.first { $0.id == selection }?.title ?? "未选中"
@@ -216,13 +242,15 @@ private struct XMScopeSelectorScenarioSection<ID: Hashable>: View {
         subtitle: String,
         items: [XMScopeSelectorItem<ID>],
         selection: Binding<ID>,
-        demoStyle: XMScopeSelectorDemoStyle
+        demoStyle: XMScopeSelectorDemoStyle,
+        countFormat: XMScopeSelectorCountFormat
     ) {
         self.title = title
         self.subtitle = subtitle
         self.items = items
         self._selection = selection
         self.demoStyle = demoStyle
+        self.countFormat = countFormat
     }
 
     var body: some View {
@@ -253,6 +281,7 @@ private struct XMScopeSelectorScenarioSection<ID: Hashable>: View {
                         items: items,
                         selection: $selection,
                         style: demoStyle.selectorStyle,
+                        countFormat: countFormat,
                         accessibilityLabel: title
                     )
                 }
@@ -264,6 +293,7 @@ private struct XMScopeSelectorScenarioSection<ID: Hashable>: View {
                     XMScopeSelectorNativeSegmentedComparison(
                         items: items,
                         selection: $selection,
+                        countFormat: countFormat,
                         accessibilityLabel: "\(title)原生对照"
                     )
                 }
@@ -308,23 +338,26 @@ private struct XMScopeSelectorScenarioSection<ID: Hashable>: View {
 private struct XMScopeSelectorNativeSegmentedComparison<ID: Hashable>: View {
     let items: [XMScopeSelectorItem<ID>]
     @Binding private var selection: ID
+    let countFormat: XMScopeSelectorCountFormat
     let accessibilityLabel: String
 
     /// 注入同源样本与选中绑定，生成不带自定义外观的系统 segmented 对照。
     init(
         items: [XMScopeSelectorItem<ID>],
         selection: Binding<ID>,
+        countFormat: XMScopeSelectorCountFormat,
         accessibilityLabel: String
     ) {
         self.items = items
         self._selection = selection
+        self.countFormat = countFormat
         self.accessibilityLabel = accessibilityLabel
     }
 
     var body: some View {
         Picker(accessibilityLabel, selection: $selection) {
             ForEach(items) { item in
-                Text(displayTitle(for: item))
+                Text(verbatim: displayTitle(for: item))
                     .tag(item.id)
             }
         }
@@ -334,7 +367,7 @@ private struct XMScopeSelectorNativeSegmentedComparison<ID: Hashable>: View {
 
     private func displayTitle(for item: XMScopeSelectorItem<ID>) -> String {
         if let count = item.count {
-            return "\(item.title) \(count)"
+            return "\(item.title) \(countFormat.displayText(for: count))"
         }
         return item.title
     }
@@ -421,6 +454,17 @@ private enum XMScopeSelectorDemoStyle: String, CaseIterable, Identifiable {
     }
 }
 
+private extension XMScopeSelectorCountFormat {
+    var debugTitle: String {
+        switch self {
+        case .plain:
+            return "原始"
+        case .grouped:
+            return "分组"
+        }
+    }
+}
+
 /// 测试页配色枚举，用于快速切换浅色、深色与系统跟随。
 private enum XMScopeSelectorDemoScheme: String, CaseIterable, Identifiable {
     case system
@@ -454,10 +498,10 @@ private enum XMScopeSelectorDemoScheme: String, CaseIterable, Identifiable {
 
 /// 全局搜索范围样本，覆盖四个搜索结果主分类。
 private enum XMScopeSelectorSearchScope: Hashable, CaseIterable {
+    case all
     case book
     case note
     case relevant
-    case review
 
     static let items: [XMScopeSelectorItem<Self>] = allCases.map {
         XMScopeSelectorItem(id: $0, title: $0.title, count: $0.count)
@@ -465,27 +509,27 @@ private enum XMScopeSelectorSearchScope: Hashable, CaseIterable {
 
     var title: String {
         switch self {
+        case .all:
+            return "全部"
         case .book:
             return "书籍"
         case .note:
             return "书摘"
         case .relevant:
             return "相关"
-        case .review:
-            return "书评"
         }
     }
 
     var count: Int {
         switch self {
+        case .all:
+            return 4203
         case .book:
-            return 18
+            return 13
         case .note:
-            return 42
+            return 4169
         case .relevant:
-            return 9
-        case .review:
-            return 5
+            return 21
         }
     }
 }
@@ -572,18 +616,6 @@ private enum XMScopeSelectorTechnicalScope: Hashable, CaseIterable {
     ]
 }
 
-/// 非法输入样本，验证 Debug 断言与 Release 空渲染路径。
-private enum XMScopeSelectorInvalidScope {
-    static let items: [XMScopeSelectorItem<String>] = [
-        XMScopeSelectorItem(id: "one", title: "一"),
-        XMScopeSelectorItem(id: "two", title: "二"),
-        XMScopeSelectorItem(id: "three", title: "三"),
-        XMScopeSelectorItem(id: "four", title: "四"),
-        XMScopeSelectorItem(id: "five", title: "五"),
-        XMScopeSelectorItem(id: "six", title: "六")
-    ]
-}
-
 /// 长文案范围样本，验证五项上限、数量徽标与截断策略。
 private enum XMScopeSelectorLongScope: Hashable, CaseIterable {
     case all
@@ -640,6 +672,68 @@ private enum XMScopeSelectorLongScope: Hashable, CaseIterable {
             return 6
         }
     }
+}
+
+/// 横向滚动范围样本，验证 6 项以上时不再压缩同屏。
+private enum XMScopeSelectorOverflowScope: Hashable, CaseIterable {
+    case all
+    case book
+    case note
+    case relevant
+    case review
+    case tag
+    case chapter
+
+    static let items: [XMScopeSelectorItem<Self>] = allCases.map {
+        XMScopeSelectorItem(id: $0, title: $0.title, count: $0.count)
+    }
+
+    var title: String {
+        switch self {
+        case .all:
+            return "全部"
+        case .book:
+            return "书籍"
+        case .note:
+            return "书摘"
+        case .relevant:
+            return "相关"
+        case .review:
+            return "书评"
+        case .tag:
+            return "标签"
+        case .chapter:
+            return "章节"
+        }
+    }
+
+    var count: Int {
+        switch self {
+        case .all:
+            return 4203
+        case .book:
+            return 13
+        case .note:
+            return 4169
+        case .relevant:
+            return 21
+        case .review:
+            return 5
+        case .tag:
+            return 128
+        case .chapter:
+            return 76
+        }
+    }
+}
+
+/// 非法输入样本，验证 Debug 断言与 Release 空渲染路径。
+private enum XMScopeSelectorInvalidScope {
+    static let items: [XMScopeSelectorItem<String>] = [
+        XMScopeSelectorItem(id: "one", title: "一"),
+        XMScopeSelectorItem(id: "two", title: "二"),
+        XMScopeSelectorItem(id: "three", title: "三")
+    ]
 }
 
 #Preview {

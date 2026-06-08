@@ -10,6 +10,8 @@
 | XMYearMonthPickerSheet | `xmnote/UIComponents/Foundation/XMYearMonthPickerSheet.swift` | `docs/component-guides/XMYearMonthPickerSheet使用说明.md` | 已完成 |
 | XMRatingBar | `xmnote/UIComponents/Foundation/XMRatingBar.swift` | `docs/component-guides/XMRatingBar使用说明.md` | 已完成 |
 | XMScopeSelector | `xmnote/UIComponents/Foundation/XMScopeSelector.swift` | `docs/component-guides/XMScopeSelector使用说明.md` | 已完成 |
+| XMScrollEdgeChrome | `xmnote/UIComponents/Foundation/XMScrollEdgeChrome.swift` | `docs/component-guides/XMScrollEdgeChrome使用说明.md` | 已完成 |
+| XMScrollEdgeWash | `xmnote/UIComponents/Foundation/XMScrollEdgeWash.swift` | `docs/component-guides/XMScrollEdgeChrome使用说明.md` | 已完成 |
 | BookCoverProgressBar | `xmnote/UIComponents/Foundation/BookCoverProgressBar.swift` | `docs/component-guides/BookCoverProgressBar使用说明.md` | 已完成 |
 | ExpandableRichText | `xmnote/UIComponents/Foundation/ExpandableRichText.swift` | `docs/component-guides/ExpandableRichText使用说明.md` | 已完成 |
 | RichText | `xmnote/UIComponents/Foundation/RichText.swift` | `docs/component-guides/ExpandableRichText使用说明.md` | 已完成 |

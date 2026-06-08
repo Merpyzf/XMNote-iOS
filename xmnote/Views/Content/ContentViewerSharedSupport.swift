@@ -94,7 +94,6 @@ enum ContentViewerPendingCapability {
     case aiExplain
     case autoTag
     case shareCard
-    case keywordHighlight
 
     var title: String {
         switch self {
@@ -110,8 +109,6 @@ enum ContentViewerPendingCapability {
             "自动标签"
         case .shareCard:
             "分享卡片"
-        case .keywordHighlight:
-            "关键词高亮"
         }
     }
 
@@ -129,8 +126,6 @@ enum ContentViewerPendingCapability {
             "自动标签能力已预留，后续版本开放。"
         case .shareCard:
             "书摘分享卡片能力已预留，后续版本开放。"
-        case .keywordHighlight:
-            "关键词高亮能力已预留，后续版本开放。"
         }
     }
 }

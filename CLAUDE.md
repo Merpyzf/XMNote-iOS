@@ -16,4 +16,5 @@ AGENTS.md
 - `xmnote/Utilities`
 - `xmnote/ViewModels`
 - `xmnote/Views`
+- `xmnote/zh-Hans.lproj`
 <!-- AUTO_SYNC_MODULES_END -->
