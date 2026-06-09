@@ -1,25 +1,37 @@
 /**
- * [INPUT]: 依赖 MainTabView 提供搜索 query 绑定与导航回调，依赖 RepositoryContainer 注入全局搜索仓储，依赖 GlobalSearchViewModel 驱动本地搜索状态
- * [OUTPUT]: 对外提供 GlobalSearchView，渲染 iOS 原生搜索 Tab 下的固定范围栏、全局搜索结果、分类筛选、空态、加载态与错误态
- * [POS]: Search 模块根视图，被 MainTabView 的搜索 Tab NavigationStack 消费，并通过回调回传 BookRoute/ContentRoute
+ * [INPUT]: 依赖 MainTabView 提供搜索 query 绑定、搜索提交事件、软键盘收起动作、详情全屏覆盖打开回调与覆盖呈现状态，依赖 RepositoryContainer 注入全局搜索仓储，依赖 GlobalSearchViewModel 驱动本地搜索状态
+ * [OUTPUT]: 对外提供 GlobalSearchView，渲染 iOS 原生搜索 Tab 下的固定范围栏、全局搜索结果、搜索历史、分类筛选、空态、加载态、错误态与搜索来源详情打开入口
+ * [POS]: Search 模块根视图，被 MainTabView 的搜索 Tab NavigationStack 消费；搜索结果通过 route-only target 交给根级 fullScreenCover 呈现
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
 import SwiftUI
-import UIKit
+
+/// 搜索宿主捕获到的提交事件，使用唯一 id 保证相同关键词连续提交也能被搜索页感知。
+struct GlobalSearchSubmitRequest: Equatable, Identifiable {
+    let id = UUID()
+    let query: String
+}
+
+/// 搜索来源详情覆盖层可承载的导航目标，避免搜索页直接写入外层 NavigationPath 或动画状态。
+enum SearchResultViewerTarget: Hashable {
+    case book(BookRoute)
+    case content(ContentRoute)
+}
 
 /// 全局搜索 Tab 根视图，承接系统搜索框 query 并在 iOS 原生搜索语境内展示四类本地结果。
 struct GlobalSearchView: View {
     @Binding private var query: String
-    private let onOpenBookRoute: (BookRoute) -> Void
-    private let onOpenContentRoute: (ContentRoute) -> Void
+    private let submitRequest: GlobalSearchSubmitRequest?
+    private let isSearchResultCoverPresented: Bool
+    private let onClearHistoryRequested: (@escaping () -> Void) -> Void
+    private let onDismissSearchKeyboard: () -> Void
+    private let onOpenSearchResultCover: (SearchResultViewerTarget) -> Void
 
     @Environment(RepositoryContainer.self) private var repositories
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var viewModel: GlobalSearchViewModel?
     @State private var bootstrapLoadingGate = LoadingGate()
-    @State private var isSearchTextComposing = false
-    @State private var queryDispatchTask: Task<Void, Never>?
 
     private var topBarHeight: CGFloat {
         dynamicTypeSize >= .accessibility1 ? 60 : 56
@@ -32,12 +44,18 @@ struct GlobalSearchView: View {
     /// 注入系统搜索框 query 与导航回调，保持搜索页不直接持有外层 NavigationPath。
     init(
         query: Binding<String>,
-        onOpenBookRoute: @escaping (BookRoute) -> Void,
-        onOpenContentRoute: @escaping (ContentRoute) -> Void
+        submitRequest: GlobalSearchSubmitRequest?,
+        isSearchResultCoverPresented: Bool,
+        onClearHistoryRequested: @escaping (@escaping () -> Void) -> Void,
+        onDismissSearchKeyboard: @escaping () -> Void,
+        onOpenSearchResultCover: @escaping (SearchResultViewerTarget) -> Void
     ) {
         self._query = query
-        self.onOpenBookRoute = onOpenBookRoute
-        self.onOpenContentRoute = onOpenContentRoute
+        self.submitRequest = submitRequest
+        self.isSearchResultCoverPresented = isSearchResultCoverPresented
+        self.onClearHistoryRequested = onClearHistoryRequested
+        self.onDismissSearchKeyboard = onDismissSearchKeyboard
+        self.onOpenSearchResultCover = onOpenSearchResultCover
     }
 
     var body: some View {
@@ -48,8 +66,10 @@ struct GlobalSearchView: View {
                 GlobalSearchLoadedContent(
                     query: trimmedQuery,
                     viewModel: viewModel,
+                    isSearchResultCoverPresented: isSearchResultCoverPresented,
                     onOpenResult: openResult,
-                    onSelectSuggestion: selectSuggestion
+                    onSelectSuggestion: selectSuggestion,
+                    onClearHistoryRequested: onClearHistoryRequested
                 )
                 .padding(.top, topBarHeight)
             } else if bootstrapLoadingGate.isVisible {
@@ -73,77 +93,78 @@ struct GlobalSearchView: View {
             let newViewModel = GlobalSearchViewModel(repository: repositories.globalSearchRepository)
             viewModel = newViewModel
             bootstrapLoadingGate.update(intent: .none)
-            newViewModel.queryDidChange(query)
+            newViewModel.draftDidChange(query)
+            if let submitRequest {
+                newViewModel.submit(query: submitRequest.query)
+            }
         }
         .onChange(of: query) { _, newValue in
-            dispatchQueryChange(newValue)
+            viewModel?.draftDidChange(newValue)
         }
-        .onChange(of: isSearchTextComposing) { oldValue, newValue in
-            guard oldValue, !newValue else { return }
-            dispatchQueryChange(query)
-        }
-        .onSubmit(of: .search) {
-            viewModel?.submit(query: query)
-        }
-        .background {
-            SearchTextCompositionProbe(isComposing: $isSearchTextComposing)
-                .frame(width: 0, height: 0)
+        .onChange(of: submitRequest?.id) { _, _ in
+            guard let submitRequest else { return }
+            viewModel?.submit(query: submitRequest.query)
         }
         .onDisappear {
-            queryDispatchTask?.cancel()
-            queryDispatchTask = nil
+            guard !isSearchResultCoverPresented else { return }
             bootstrapLoadingGate.hideImmediately()
             viewModel?.cancelSearch()
         }
     }
 
     private func openResult(_ result: GlobalSearchResult) {
-        switch result.target {
+        let keyword = trimmedQuery
+        viewModel?.recordConfirmedQuery(keyword)
+        guard let target = searchResultCoverTarget(for: result.target, keyword: keyword) else {
+            return
+        }
+        onOpenSearchResultCover(target)
+    }
+
+    private func searchResultCoverTarget(
+        for target: GlobalSearchTarget,
+        keyword: String
+    ) -> SearchResultViewerTarget? {
+        switch target {
         case .bookDetail(let bookId):
-            onOpenBookRoute(.detail(bookId: bookId))
+            return .book(.detail(bookId: bookId))
         case .noteViewer(let noteId, let bookId):
-            onOpenContentRoute(
+            return .content(
                 .contentViewer(
                     source: .bookNotes(bookId: bookId),
                     initialItemID: .note(noteId),
-                    keyword: trimmedQuery
+                    keyword: keyword
                 )
             )
         case .relevantDetail(let contentId):
-            onOpenContentRoute(.relevantDetail(contentId: contentId))
+            return .content(.relevantDetail(contentId: contentId))
         case .relevantBook(_, let bookId):
-            onOpenBookRoute(.detail(bookId: bookId))
+            return .book(.detail(bookId: bookId))
         case .reviewDetail(let reviewId):
-            onOpenContentRoute(.reviewDetail(reviewId: reviewId))
-        }
-    }
-
-    /// 延后一轮主线程再读取输入组合态；这样拼音候选的 marked text 更新有机会先到达，避免临时拼音触发搜索任务。
-    private func dispatchQueryChange(_ newValue: String) {
-        queryDispatchTask?.cancel()
-        queryDispatchTask = Task { @MainActor in
-            await Task.yield()
-            guard !Task.isCancelled else { return }
-            guard !isSearchTextComposing else { return }
-            viewModel?.queryDidChange(newValue)
+            return .content(.reviewDetail(reviewId: reviewId))
         }
     }
 
     private func selectSuggestion(_ suggestion: String) {
         query = suggestion
         viewModel?.submit(query: suggestion)
+        onDismissSearchKeyboard()
     }
 }
 
 private struct GlobalSearchLoadedContent: View {
     let query: String
     @Bindable var viewModel: GlobalSearchViewModel
+    let isSearchResultCoverPresented: Bool
     let onOpenResult: (GlobalSearchResult) -> Void
     let onSelectSuggestion: (String) -> Void
+    let onClearHistoryRequested: (@escaping () -> Void) -> Void
 
     @State private var loadingGate = LoadingGate()
     @State private var resultScrollTarget: GlobalSearchScrollTarget? = .top
     @State private var scopeScrollTargets: [GlobalSearchScope: GlobalSearchScrollTarget] = [:]
+    @State private var isHistoryExpanded = false
+    @State private var isHistoryEditing = false
 
     var body: some View {
         ZStack {
@@ -151,11 +172,16 @@ private struct GlobalSearchLoadedContent: View {
             case .idle:
                 GlobalSearchRootView(
                     recentQueries: viewModel.recentQueries,
-                    onSelectSuggestion: onSelectSuggestion
+                    isHistoryExpanded: $isHistoryExpanded,
+                    isHistoryEditing: $isHistoryEditing,
+                    onSelectSuggestion: onSelectSuggestion,
+                    onRemoveSuggestion: viewModel.removeRecentQuery,
+                    onClearAllHistory: {
+                        onClearHistoryRequested {
+                            viewModel.clearRecentQueries()
+                        }
+                    }
                 )
-            case .preparing:
-                Color.clear
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
             case .loading:
                 if loadingGate.isVisible {
                     LoadingStateView("正在搜索…")
@@ -193,6 +219,7 @@ private struct GlobalSearchLoadedContent: View {
             handleScopeChange(from: oldValue, to: newValue)
         }
         .onDisappear {
+            guard !isSearchResultCoverPresented else { return }
             loadingGate.hideImmediately()
         }
     }
@@ -428,19 +455,34 @@ private struct GlobalSearchResultRow: View {
 
     var body: some View {
         Button(action: onOpen) {
-            CardContainer(cornerRadius: CornerRadius.blockMedium, showsBorder: true, borderColor: .surfaceBorderSubtle) {
-                rowContent
-                    .padding(Spacing.base)
-            }
+            rowLabel
         }
         .buttonStyle(.plain)
         .accessibilityElement(children: .combine)
         .accessibilityAddTraits(.isButton)
+        .accessibilityHint("打开\(result.title)")
+    }
+
+    private var rowLabel: some View {
+        GlobalSearchResultSourcePreview(display: result.display, keyword: keyword)
+    }
+}
+
+/// 搜索结果卡片的语义预览面，供列表 row 与覆盖详情入口共用。
+struct GlobalSearchResultSourcePreview: View {
+    let display: GlobalSearchResultDisplay
+    let keyword: String
+
+    var body: some View {
+        CardContainer(cornerRadius: CornerRadius.blockMedium, showsBorder: true, borderColor: .surfaceBorderSubtle) {
+            rowContent
+                .padding(Spacing.base)
+        }
     }
 
     @ViewBuilder
     private var rowContent: some View {
-        switch result.display {
+        switch display {
         case .book(let book):
             GlobalSearchBookRow(book: book, keyword: keyword)
         case .note(let note):
@@ -499,53 +541,29 @@ private struct GlobalSearchPlaceholderView: View {
 
 private struct GlobalSearchRootView: View {
     let recentQueries: [String]
+    @Binding var isHistoryExpanded: Bool
+    @Binding var isHistoryEditing: Bool
     let onSelectSuggestion: (String) -> Void
+    let onRemoveSuggestion: (String) -> Void
+    let onClearAllHistory: () -> Void
 
     var body: some View {
-        if recentQueries.isEmpty {
-            GlobalSearchPlaceholderView(
-                title: "输入关键词",
-                subtitle: "查找你的本地内容"
+        ScrollView {
+            XMSearchHistorySection(
+                queries: recentQueries,
+                isExpanded: $isHistoryExpanded,
+                isEditing: $isHistoryEditing,
+                title: "最近搜索",
+                emptyPresentation: .hidden,
+                onSelect: onSelectSuggestion,
+                onRemove: onRemoveSuggestion,
+                onClearAll: onClearAllHistory
             )
-            .padding(.bottom, Spacing.actionReserved * 2)
-        } else {
-            ScrollView {
-                suggestionSection
-                    .padding(.horizontal, Spacing.screenEdge)
-                    .padding(.top, Spacing.section)
-                    .padding(.bottom, Spacing.actionReserved * 3)
-            }
-            .scrollIndicators(.hidden)
+            .padding(.horizontal, Spacing.screenEdge)
+            .padding(.top, Spacing.section)
+            .padding(.bottom, Spacing.actionReserved * 3)
         }
-    }
-
-    private var suggestionSection: some View {
-        VStack(alignment: .leading, spacing: Spacing.cozy) {
-            Text("最近搜索")
-                .font(AppTypography.subheadlineSemibold)
-                .foregroundStyle(Color.textPrimary)
-
-            LazyVGrid(
-                columns: [GridItem(.adaptive(minimum: 88), alignment: .leading)],
-                alignment: .leading,
-                spacing: Spacing.cozy
-            ) {
-                ForEach(recentQueries, id: \.self) { suggestion in
-                    Button {
-                        onSelectSuggestion(suggestion)
-                    } label: {
-                        Text(suggestion)
-                            .font(AppTypography.caption)
-                            .foregroundStyle(Color.textPrimary)
-                            .lineLimit(1)
-                            .padding(.horizontal, Spacing.base)
-                            .frame(minHeight: Spacing.actionReserved)
-                    }
-                    .buttonStyle(GlobalSearchChipButtonStyle())
-                    .accessibilityLabel("搜索 \(suggestion)")
-                }
-            }
-        }
+        .scrollIndicators(.hidden)
     }
 }
 
@@ -914,18 +932,6 @@ private struct GlobalSearchErrorView: View {
     }
 }
 
-private struct GlobalSearchChipButtonStyle: ButtonStyle {
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .background(Color.surfaceCard, in: Capsule())
-            .overlay {
-                Capsule()
-                    .stroke(Color.surfaceBorderSubtle, lineWidth: CardStyle.borderWidth)
-            }
-            .opacity(configuration.isPressed ? 0.72 : 1)
-    }
-}
-
 private func formattedBookTitle(_ title: String) -> String {
     let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
     return trimmed.isEmpty ? "" : "《\(trimmed)》"
@@ -936,106 +942,5 @@ private extension GlobalSearchBookDisplay {
         [readStatusName, sourceName, progressText.isEmpty ? "" : "进度 \(progressText)", recentReadText]
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
             .filter { !$0.isEmpty }
-    }
-}
-
-/// 监听系统搜索框的多阶段输入状态；marked text 未确认时不触发搜索，避免中文拼音候选中途发起读取任务。
-private struct SearchTextCompositionProbe: UIViewRepresentable {
-    @Binding var isComposing: Bool
-
-    func makeUIView(context: Context) -> ProbeView {
-        let view = ProbeView()
-        let binding = $isComposing
-        view.onCompositionChange = { composing in
-            if binding.wrappedValue != composing {
-                binding.wrappedValue = composing
-            }
-        }
-        return view
-    }
-
-    func updateUIView(_ uiView: ProbeView, context: Context) {
-        let binding = $isComposing
-        uiView.onCompositionChange = { composing in
-            if binding.wrappedValue != composing {
-                binding.wrappedValue = composing
-            }
-        }
-        uiView.refreshSoon()
-    }
-
-    /// UIKit 通知回调始终在主线程处理；对象释放时移除观察，避免搜索页离场后继续回写 SwiftUI 状态。
-    final class ProbeView: UIView {
-        var onCompositionChange: ((Bool) -> Void)?
-        private var observers: [NSObjectProtocol] = []
-
-        override init(frame: CGRect) {
-            super.init(frame: frame)
-            isHidden = true
-            isUserInteractionEnabled = false
-            registerObservers()
-        }
-
-        required init?(coder: NSCoder) {
-            fatalError("init(coder:) has not been implemented")
-        }
-
-        deinit {
-            observers.forEach(NotificationCenter.default.removeObserver)
-        }
-
-        override func didMoveToWindow() {
-            super.didMoveToWindow()
-            refreshSoon()
-        }
-
-        func refreshSoon() {
-            DispatchQueue.main.async { [weak self] in
-                guard let self else { return }
-                self.publish(self.window?.activeTextField?.markedTextRange != nil)
-            }
-        }
-
-        private func registerObservers() {
-            let names: [Notification.Name] = [
-                UITextField.textDidBeginEditingNotification,
-                UITextField.textDidChangeNotification,
-                UITextField.textDidEndEditingNotification
-            ]
-            observers = names.map { name in
-                NotificationCenter.default.addObserver(
-                    forName: name,
-                    object: nil,
-                    queue: .main
-                ) { [weak self] notification in
-                    guard let self else { return }
-                    guard let textField = notification.object as? UITextField else {
-                        self.refreshSoon()
-                        return
-                    }
-                    self.publish(textField.markedTextRange != nil)
-                }
-            }
-        }
-
-        private func publish(_ composing: Bool) {
-            onCompositionChange?(composing)
-        }
-    }
-}
-
-private extension UIView {
-    var activeTextField: UITextField? {
-        if let textField = self as? UITextField, textField.isFirstResponder {
-            return textField
-        }
-
-        for subview in subviews {
-            if let match = subview.activeTextField {
-                return match
-            }
-        }
-
-        return nil
     }
 }

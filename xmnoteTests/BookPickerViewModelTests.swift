@@ -378,6 +378,8 @@ private final class BookPickerTestSearchRepository: BookSearchRepositoryProtocol
 
     func removeRecentQuery(_ query: String) { }
 
+    func clearRecentQueries() { }
+
     func fetchSearchSettings() -> BookSearchSettings {
         searchSettings
     }

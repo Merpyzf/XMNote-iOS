@@ -69,6 +69,11 @@
 
 ### UI 与交互
 - 遵循 iOS Human Interface Guidelines，保证业务一致，但采用 iOS 原生表达。
+
+#### 导航 API 选择
+- 导航实现前必须先判定页面关系，再选择 API：当前 Tab 内继续深入，用该 Tab 的 `NavigationStack + route enum + NavigationPath`；需要覆盖 `TabView` 且返回时保留底层现场，用根视图 `.fullScreenCover(item:)`，cover 内如需二级跳转再放独立 `NavigationStack`；只为当前页面补充参数、选择、确认或短信息展示，才用 `sheet` / `popover` / `alert`。
+- 判定口诀：属于当前 Tab 浏览路径就 push；必须保住底层现场就 cover；只是辅助当前任务就 sheet/popover/alert。三者都不匹配时，先重审交互关系，禁止直接自造 overlay/navigation 动画系统。
+
 - 返回按钮复用约束（强制）：顶部 `leading` 返回按钮统一使用 `TopBarBackButton`；禁止在页面内手写 `Button + chevron.left` 作为导航返回入口。
 - 顶部图标职责约束（强制）：`TopBarActionIcon` 只用于普通顶部 action icon，不承载返回语义。
 - 导航栏玻璃禁令（强制）：已处于系统导航栏上下文的按钮，禁止再显式增加 `.glassEffect(...)`、`.buttonStyle(.glass)`、`.buttonStyle(.glassProminent)` 或等价 glass/material 包装。

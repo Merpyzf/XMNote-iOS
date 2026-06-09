@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 GlobalSearchRepositoryProtocol 执行四类本地检索，依赖 GlobalSearchModels 表达筛选、结果与加载阶段
- * [OUTPUT]: 对外提供 GlobalSearchViewModel，驱动 iOS 全局搜索页的 query 防抖、加载态、错误态、结果筛选与结果版本
+ * [OUTPUT]: 对外提供 GlobalSearchViewModel，驱动 iOS 全局搜索页的提交式搜索、加载态、错误态、结果筛选、结果版本与确认式历史记录
  * [POS]: ViewModels/Search 的全局搜索状态编排器，被 GlobalSearchView 消费
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -12,10 +12,9 @@ import Observation
 @MainActor
 @Observable
 final class GlobalSearchViewModel {
-    /// 搜索加载阶段，区分初始、输入稳定、读取、成功与失败状态。
+    /// 搜索加载阶段，区分初始、读取、成功与失败状态。
     enum LoadState: Equatable {
         case idle
-        case preparing(keyword: String)
         case loading(keyword: String)
         case loaded(keyword: String)
         case failed(keyword: String, message: String)
@@ -26,10 +25,6 @@ final class GlobalSearchViewModel {
             }
             return false
         }
-    }
-
-    private enum Timing {
-        static let debounceNanoseconds: UInt64 = 450_000_000
     }
 
     private enum ResultLimit {
@@ -109,19 +104,53 @@ final class GlobalSearchViewModel {
         return nil
     }
 
-    /// 响应搜索框输入变化；会取消尚未完成的旧任务，并对非空关键词启动防抖读取。
-    func queryDidChange(_ query: String) {
-        scheduleSearch(query: query, debounce: true)
+    /// 响应搜索框草稿变化；仅在草稿偏离当前提交关键词时取消旧任务并回到根态，不触发本地检索。
+    func draftDidChange(_ query: String) {
+        let keyword = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !keyword.isEmpty else {
+            resetToIdle()
+            return
+        }
+        guard activeKeyword != keyword else { return }
+        resetToIdle()
     }
 
-    /// 响应键盘 search 提交；跳过防抖立即读取，并继续使用任务取消防止旧结果覆盖新 query。
+    /// 响应键盘 search 提交；提交本身代表明确搜索意图，因此先记录历史，再立即读取。
     func submit(query: String) {
-        scheduleSearch(query: query, debounce: false)
+        let keyword = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !keyword.isEmpty else {
+            resetToIdle()
+            return
+        }
+        rememberQuery(keyword)
+        startSearch(keyword: keyword, remembersOnSuccess: false)
     }
 
     /// 对当前关键词重试；重试会复用相同取消机制，确保失败后的旧任务不会回写状态。
     func retry(query: String) {
-        scheduleSearch(query: query, debounce: false)
+        let keyword = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !keyword.isEmpty else {
+            resetToIdle()
+            return
+        }
+        startSearch(keyword: keyword, remembersOnSuccess: true)
+    }
+
+    /// 记录用户通过打开结果等方式确认过的关键词，避免输入过程词污染历史。
+    func recordConfirmedQuery(_ query: String) {
+        rememberQuery(query)
+    }
+
+    /// 删除一条最近搜索词，并刷新根页历史展示。
+    func removeRecentQuery(_ query: String) {
+        repository.removeRecentQuery(query)
+        recentQueries = Array(repository.fetchRecentQueries().prefix(ResultLimit.recentQueryCount))
+    }
+
+    /// 清空全部最近搜索词，并刷新根页空态。
+    func clearRecentQueries() {
+        repository.clearRecentQueries()
+        recentQueries = []
     }
 
     /// 切换分类内字段范围；nil 表示回到当前分类的完整结果。
@@ -159,43 +188,34 @@ final class GlobalSearchViewModel {
         searchTask = nil
     }
 
-    /// 编排一次搜索任务；非空关键词先等待输入稳定，真正读取前再进入 loading，任务取消后不会触发错误态。
-    private func scheduleSearch(query: String, debounce: Bool) {
-        let keyword = query.trimmingCharacters(in: .whitespacesAndNewlines)
+    private var activeKeyword: String? {
+        switch loadState {
+        case .idle:
+            return nil
+        case .loading(let keyword), .loaded(let keyword), .failed(let keyword, _):
+            return keyword
+        }
+    }
+
+    /// 编排一次提交式搜索任务；任务取消后不会触发错误态，避免过期结果回写当前页面。
+    private func startSearch(keyword: String, remembersOnSuccess: Bool) {
         searchTask?.cancel()
         searchTask = nil
-
-        guard !keyword.isEmpty else {
-            snapshot = .empty
-            selectedScope = .all
-            selectedFieldScopes.removeAll()
-            resultRevision += 1
-            loadState = .idle
-            return
-        }
 
         snapshot = .empty
         selectedScope = .all
         selectedFieldScopes.removeAll()
         resultRevision += 1
-        loadState = debounce ? .preparing(keyword: keyword) : .loading(keyword: keyword)
+        loadState = .loading(keyword: keyword)
         let repository = self.repository
         searchTask = Task { [weak self] in
             do {
-                if debounce {
-                    try await Task.sleep(nanoseconds: Timing.debounceNanoseconds)
-                }
-                try Task.checkCancellation()
-                await MainActor.run {
-                    guard let self else { return }
-                    self.loadState = .loading(keyword: keyword)
-                }
                 try Task.checkCancellation()
                 let result = try await repository.search(keyword: keyword)
                 try Task.checkCancellation()
                 await MainActor.run {
                     guard let self else { return }
-                    self.apply(snapshot: result, keyword: keyword)
+                    self.apply(snapshot: result, keyword: keyword, remembersOnSuccess: remembersOnSuccess)
                 }
             } catch is CancellationError {
                 return
@@ -214,12 +234,31 @@ final class GlobalSearchViewModel {
         }
     }
 
-    private func apply(snapshot: GlobalSearchSnapshot, keyword: String) {
+    private func resetToIdle() {
+        searchTask?.cancel()
+        searchTask = nil
+
+        guard snapshot != .empty ||
+                selectedScope != .all ||
+                !selectedFieldScopes.isEmpty ||
+                loadState != .idle else {
+            return
+        }
+        snapshot = .empty
+        selectedScope = .all
+        selectedFieldScopes.removeAll()
+        resultRevision += 1
+        loadState = .idle
+    }
+
+    private func apply(snapshot: GlobalSearchSnapshot, keyword: String, remembersOnSuccess: Bool) {
         self.snapshot = snapshot
         selectedScope = availableScopes.first ?? .all
         pruneFieldScopes()
         resultRevision += 1
-        rememberQuery(keyword)
+        if remembersOnSuccess {
+            rememberQuery(keyword)
+        }
         loadState = .loaded(keyword: keyword)
     }
 

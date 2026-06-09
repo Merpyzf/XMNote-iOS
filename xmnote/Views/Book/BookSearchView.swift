@@ -38,6 +38,8 @@ struct BookSearchView: View {
     @State private var didDetectDoubanLogin = false
     @State private var didCompleteFanqieVerification = false
     @State private var isRecentQueriesExpanded = false
+    @State private var isRecentQueriesEditing = false
+    @State private var isClearHistoryConfirmationPresented = false
     @State private var didBootstrapFromScene = false
     @State private var bootstrapLoadingGate = LoadingGate()
 
@@ -130,6 +132,10 @@ struct BookSearchView: View {
                 ]
             )
         }
+        .xmSystemAlert(
+            isPresented: $isClearHistoryConfirmationPresented,
+            descriptor: clearHistoryDescriptor
+        )
         .fullScreenCover(
             item: $activeDoubanLoginPresentation,
             onDismiss: {
@@ -291,7 +297,7 @@ struct BookSearchView: View {
                             }
                             .frame(minHeight: SearchPageLayout.chipTapHeight)
                     }
-                    .buttonStyle(SearchChipButtonStyle())
+                    .buttonStyle(BookSearchChipButtonStyle())
                 }
             }
             .padding(.vertical, SearchPageLayout.sourceChipVerticalPadding)
@@ -302,21 +308,38 @@ struct BookSearchView: View {
     @ViewBuilder
     private func recentQueries(_ viewModel: BookSearchViewModel) -> some View {
         if viewModel.shouldShowRecentQueries {
-            BookSearchRecentQueriesSection(
+            XMSearchHistorySection(
                 queries: viewModel.recentQueries,
                 isExpanded: $isRecentQueriesExpanded,
-                onTap: { query in
+                isEditing: $isRecentQueriesEditing,
+                title: "最近搜索",
+                emptyPresentation: .hidden,
+                onSelect: { query in
                     clearTransientState()
                     Task {
                         viewModel.searchQueryDidChange(query)
                         await performSearch(using: viewModel)
                     }
                 },
-                onRemove: { query in
-                    viewModel.removeRecentQuery(query)
+                onRemove: viewModel.removeRecentQuery,
+                onClearAll: {
+                    isClearHistoryConfirmationPresented = true
                 }
             )
         }
+    }
+
+    private var clearHistoryDescriptor: XMSystemAlertDescriptor {
+        XMSystemAlertDescriptor(
+            title: "清空搜索历史？",
+            message: "这会移除全部最近搜索词，不影响书籍数据或搜索设置。",
+            actions: [
+                XMSystemAlertAction(title: "取消", role: .cancel) { },
+                XMSystemAlertAction(title: "清空", role: .destructive) {
+                    viewModel?.clearRecentQueries()
+                }
+            ]
+        )
     }
 
     @ViewBuilder

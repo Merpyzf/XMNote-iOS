@@ -142,6 +142,12 @@ final class BookSearchViewModel {
         reloadRecentQueries()
     }
 
+    /// 清空全部最近搜索词，并立即刷新历史区空态。
+    func clearRecentQueries() {
+        repository.clearRecentQueries()
+        reloadRecentQueries()
+    }
+
     /// 选择当前搜索来源，并在设置中同步默认来源。
     func updateSelectedSource(_ source: BookSearchSource) {
         let effectiveSource = source.isProductionVisible ? source : BookSearchSettings.default.defaultSource

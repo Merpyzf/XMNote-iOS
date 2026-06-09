@@ -191,7 +191,7 @@ struct BookPickerView: View {
                                             )
                                     }
                             }
-                            .buttonStyle(SearchChipButtonStyle())
+                            .buttonStyle(BookSearchChipButtonStyle())
                         }
                     }
                 }

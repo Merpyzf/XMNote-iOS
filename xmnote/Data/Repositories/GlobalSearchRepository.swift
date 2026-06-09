@@ -12,7 +12,7 @@ import SwiftSoup
 /// 全局搜索仓储实现，负责聚合 Android 对齐的四类本地检索结果。
 struct GlobalSearchRepository: GlobalSearchRepositoryProtocol {
     private let databaseManager: DatabaseManager
-    private let userDefaults: UserDefaults
+    private let recentQueryStore: SearchHistoryStore
 
     private enum Keys {
         static let recentQueries = "global_search_recent_queries"
@@ -21,7 +21,7 @@ struct GlobalSearchRepository: GlobalSearchRepositoryProtocol {
     /// 注入数据库管理器，供全局搜索读取当前本地库快照。
     init(databaseManager: DatabaseManager, userDefaults: UserDefaults = .standard) {
         self.databaseManager = databaseManager
-        self.userDefaults = userDefaults
+        self.recentQueryStore = SearchHistoryStore(key: Keys.recentQueries, userDefaults: userDefaults)
     }
 
     /// 执行一次只读全局搜索；方法运行在调用方任务中，底层 GRDB read 闭包负责数据库线程切换。
@@ -55,18 +55,22 @@ struct GlobalSearchRepository: GlobalSearchRepositoryProtocol {
 
     /// 读取最近全局搜索词，默认按最近使用顺序返回。
     func fetchRecentQueries() -> [String] {
-        userDefaults.stringArray(forKey: Keys.recentQueries) ?? []
+        recentQueryStore.fetch()
     }
 
     /// 保存最近全局搜索词，最多保留 8 条并去重。
     func saveRecentQuery(_ query: String) {
-        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return }
-        var queries = fetchRecentQueries().filter {
-            $0.compare(trimmed, options: [.caseInsensitive, .diacriticInsensitive]) != .orderedSame
-        }
-        queries.insert(trimmed, at: 0)
-        userDefaults.set(Array(queries.prefix(8)), forKey: Keys.recentQueries)
+        recentQueryStore.save(query)
+    }
+
+    /// 删除单条最近全局搜索词。
+    func removeRecentQuery(_ query: String) {
+        recentQueryStore.remove(query)
+    }
+
+    /// 清空全部最近全局搜索词。
+    func clearRecentQueries() {
+        recentQueryStore.clear()
     }
 }
 

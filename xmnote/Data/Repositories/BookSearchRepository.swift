@@ -11,6 +11,7 @@ import Foundation
 struct BookSearchRepository: BookSearchRepositoryProtocol {
     private let service: BookRemoteSearchService
     private let userDefaults: UserDefaults
+    private let recentQueryStore: SearchHistoryStore
 
     private enum Keys {
         static let recentQueries = "book_search_recent_queries"
@@ -26,6 +27,7 @@ struct BookSearchRepository: BookSearchRepositoryProtocol {
     ) {
         self.service = service
         self.userDefaults = userDefaults
+        self.recentQueryStore = SearchHistoryStore(key: Keys.recentQueries, userDefaults: userDefaults)
     }
 
     /// 搜索远端书籍列表，统一交给服务层屏蔽站点差异。
@@ -46,22 +48,22 @@ struct BookSearchRepository: BookSearchRepositoryProtocol {
 
     /// 读取最近搜索词，默认按最近使用顺序返回。
     func fetchRecentQueries() -> [String] {
-        userDefaults.stringArray(forKey: Keys.recentQueries) ?? []
+        recentQueryStore.fetch()
     }
 
     /// 保存最近搜索词，最多保留 8 条并去重。
     func saveRecentQuery(_ query: String) {
-        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return }
-        var queries = fetchRecentQueries().filter { $0 != trimmed }
-        queries.insert(trimmed, at: 0)
-        userDefaults.set(Array(queries.prefix(8)), forKey: Keys.recentQueries)
+        recentQueryStore.save(query)
     }
 
     /// 删除单条最近搜索词。
     func removeRecentQuery(_ query: String) {
-        let updated = fetchRecentQueries().filter { $0 != query }
-        userDefaults.set(updated, forKey: Keys.recentQueries)
+        recentQueryStore.remove(query)
+    }
+
+    /// 清空全部最近搜索词。
+    func clearRecentQueries() {
+        recentQueryStore.clear()
     }
 
     /// 读取搜索设置，缺省值保持 Android 首次进入设置页的关闭态。

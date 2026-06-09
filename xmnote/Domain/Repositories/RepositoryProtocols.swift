@@ -139,6 +139,8 @@ protocol BookSearchRepositoryProtocol {
     func saveRecentQuery(_ query: String)
     /// 删除单条最近搜索词。
     func removeRecentQuery(_ query: String)
+    /// 清空全部最近搜索词。
+    func clearRecentQueries()
     /// 读取添加书籍搜索设置。
     func fetchSearchSettings() -> BookSearchSettings
     /// 保存添加书籍搜索设置。
@@ -229,6 +231,10 @@ protocol GlobalSearchRepositoryProtocol {
     func fetchRecentQueries() -> [String]
     /// 写入最近全局搜索词，按最近使用顺序去重保留。
     func saveRecentQuery(_ query: String)
+    /// 删除单条最近全局搜索词。
+    func removeRecentQuery(_ query: String)
+    /// 清空全部最近全局搜索词。
+    func clearRecentQueries()
 }
 
 /// 备份服务器配置契约，覆盖服务器列表、当前选择、增删改与连通性校验。

@@ -6,11 +6,12 @@
 //
 
 import SwiftUI
+import UIKit
 
 /**
- * [INPUT]: 依赖 Reading/Book/Note/Content/Personal 各模块容器视图与对应路由枚举，依赖 DebugRoute 提供调试页面跳转，依赖 openURL 打开外部帮助文档
- * [OUTPUT]: 对外提供 MainTabView（五个主 Tab 的 NavigationStack 组织、目的地分发与 DEBUG UI Test 书架首页/二级列表直达路由）
- * [POS]: 应用根导航入口，负责跨模块路由承接（含书架聚合列表、书架管理入口、在读页热力图点击进入阅读日历、内容查看与内容编辑）
+ * [INPUT]: 依赖 Reading/Book/Note/Content/Personal/Search 各模块容器视图与对应路由枚举，依赖 DebugRoute 提供调试页面跳转，依赖 openURL 打开外部帮助文档
+ * [OUTPUT]: 对外提供 MainTabView（五个主 Tab 的 NavigationStack 组织、普通目的地分发、搜索来源详情系统全屏覆盖与 DEBUG UI Test 书架首页/二级列表直达路由）
+ * [POS]: 应用根导航入口，负责跨模块路由承接（含书架聚合列表、书架管理入口、在读页热力图点击进入阅读日历、内容查看与内容编辑、搜索来源详情根级 fullScreenCover）
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
@@ -19,7 +20,7 @@ enum AppTab: String, CaseIterable, Codable {
     case reading, books, notes, profile, search
 }
 
-/// 应用主导航容器，组织四个主 Tab 及跨模块路由跳转。
+/// 应用主导航容器，组织五个主 Tab 及跨模块路由跳转。
 struct MainTabView: View {
     @Environment(\.openURL) private var openURL
     @State private var selectedTab: AppTab = .reading
@@ -28,9 +29,13 @@ struct MainTabView: View {
     @State private var notesPath = NavigationPath()
     @State private var profilePath = NavigationPath()
     @State private var searchPath = NavigationPath()
+    @State private var searchResultCoverPath = NavigationPath()
+    @State private var searchResultCover: SearchResultCover?
+    @State private var shouldRestoreSearchPresentationAfterCover = false
     @State private var searchQuery = ""
+    @State private var searchSubmitRequest: GlobalSearchSubmitRequest?
+    @State private var globalSearchClearHistoryRequest: GlobalSearchClearHistoryRequest?
     @State private var isSearchPresented = false
-    @State private var previousNonSearchTab: AppTab = .reading
     #if DEBUG
     @State private var didApplyUITestLaunchRoute = false
     #endif
@@ -174,12 +179,11 @@ struct MainTabView: View {
                 NavigationStack(path: $searchPath) {
                     GlobalSearchView(
                         query: $searchQuery,
-                        onOpenBookRoute: { route in
-                            append(route, to: .search)
-                        },
-                        onOpenContentRoute: { route in
-                            append(route, to: .search)
-                        }
+                        submitRequest: searchSubmitRequest,
+                        isSearchResultCoverPresented: searchResultCover != nil,
+                        onClearHistoryRequested: presentGlobalSearchHistoryClearConfirmation,
+                        onDismissSearchKeyboard: dismissGlobalSearchKeyboard,
+                        onOpenSearchResultCover: openSearchResultCover
                     )
                         .navigationDestination(for: DebugRoute.self) { route in
                             debugDestination(for: route)
@@ -196,28 +200,120 @@ struct MainTabView: View {
                         .navigationDestination(for: ContentRoute.self) { route in
                             contentDestination(for: route)
                                 .toolbar(.hidden, for: .tabBar)
-                        }
+                    }
                 }
             }
         }
         .tabBarMinimizeBehavior(.onScrollDown)
         .mainTabSearchHost(
-            searchQuery: $searchQuery,
-            isPresented: $isSearchPresented
+            searchText: searchHostTextBinding,
+            isPresented: $isSearchPresented,
+            onSubmit: submitGlobalSearchQuery
         )
-        .onChange(of: selectedTab) { oldValue, newValue in
-            syncSearchPresentationForSelectedTab(oldValue: oldValue, newValue: newValue)
+        .tabViewSearchActivation(.searchTabSelection)
+        .onChange(of: selectedTab) { _, _ in
+            syncSearchPresentationForCurrentState()
         }
-        .onChange(of: isSearchPresented) { _, newValue in
-            restorePreviousTabAfterSearchDismissal(isPresented: newValue)
+        .onChange(of: searchPath.count) { _, _ in
+            syncSearchPresentationForCurrentState()
         }
-        .onChange(of: searchPath.count) { _, newValue in
-            syncSearchPresentationForNavigationDepth(newValue)
+        .fullScreenCover(
+            item: $searchResultCover,
+            onDismiss: completeSearchResultCoverDismissal
+        ) { cover in
+            searchResultCoverContent(for: cover)
+        }
+        .xmSystemAlert(item: $globalSearchClearHistoryRequest) { request in
+            globalSearchClearHistoryDescriptor(for: request)
         }
         .task {
             #if DEBUG
             await applyUITestLaunchRouteIfNeeded()
             #endif
+        }
+    }
+
+    private var searchHostTextBinding: Binding<String> {
+        Binding(
+            get: {
+                searchQuery
+            },
+            set: { newValue in
+                guard !shouldIgnoreSearchHostTextUpdate(newValue) else { return }
+                searchQuery = newValue
+            }
+        )
+    }
+
+    @ViewBuilder
+    private func searchResultCoverContent(for cover: SearchResultCover) -> some View {
+        NavigationStack(path: $searchResultCoverPath) {
+            searchResultCoverDestination(for: cover.target)
+                .navigationDestination(for: BookRoute.self) { route in
+                    searchResultBookDestination(for: route)
+                        .toolbar(.hidden, for: .tabBar)
+                }
+                .navigationDestination(for: NoteRoute.self) { route in
+                    noteDestination(for: route)
+                        .toolbar(.hidden, for: .tabBar)
+                }
+                .navigationDestination(for: ContentRoute.self) { route in
+                    contentDestination(for: route)
+                        .toolbar(.hidden, for: .tabBar)
+                }
+        }
+    }
+
+    @ViewBuilder
+    private func searchResultCoverDestination(for target: SearchResultViewerTarget) -> some View {
+        searchResultCoverRoot(for: target)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(Color.surfacePage.ignoresSafeArea())
+            .navigationBarBackButtonHidden(true)
+            .toolbar(.visible, for: .navigationBar)
+            .toolbar(.hidden, for: .tabBar)
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    TopBarBackButton(
+                        action: dismissSearchResultCover,
+                        foregroundColor: Color.textPrimary
+                    )
+                    .accessibilityLabel("返回搜索结果")
+                }
+            }
+    }
+
+    @ViewBuilder
+    private func searchResultCoverRoot(for target: SearchResultViewerTarget) -> some View {
+        switch target {
+        case .book(let route):
+            searchResultBookDestination(for: route)
+        case .content(let route):
+            contentDestination(for: route)
+        }
+    }
+
+    @ViewBuilder
+    private func searchResultBookDestination(for route: BookRoute) -> some View {
+        switch route {
+        case .detail(let bookId):
+            BookDetailView(bookId: bookId)
+        case .edit(let bookId):
+            BookEditorView(mode: .edit(bookId: bookId))
+        case .add:
+            BookSearchView()
+        case .create(let seed):
+            BookEditorView(seed: seed)
+        case .bookshelfList(let route):
+            BookshelfBookListView(
+                route: route,
+                onOpenRoute: { route in
+                    searchResultCoverPath.append(route)
+                },
+                onOpenNoteRoute: { route in
+                    searchResultCoverPath.append(route)
+                }
+            )
         }
     }
 
@@ -424,37 +520,89 @@ struct MainTabView: View {
         }
     }
 
-    /// 同步搜索 Tab 与系统搜索框呈现状态；仅维护会话内返回目标，不写入 scene 级恢复状态。
-    private func syncSearchPresentationForSelectedTab(oldValue: AppTab, newValue: AppTab) {
-        if newValue == .search {
-            if oldValue != .search {
-                previousNonSearchTab = oldValue
-            }
-            if !isSearchPresented {
-                isSearchPresented = true
-            }
+    /// 搜索结果详情以系统全屏覆盖打开，底层 TabView 与搜索页保持原有身份和状态。
+    private func openSearchResultCover(_ target: SearchResultViewerTarget) {
+        guard searchResultCover == nil else { return }
+        searchResultCoverPath = NavigationPath()
+        shouldRestoreSearchPresentationAfterCover = selectedTab == .search && searchPath.isEmpty
+        searchResultCover = SearchResultCover(target: target)
+    }
+
+    /// 关闭搜索结果全屏覆盖；覆盖层内仍有导航路径时先触发一次系统 pop，根详情再交给系统 dismiss。
+    private func dismissSearchResultCover() {
+        guard searchResultCover != nil else { return }
+        if searchResultCoverPath.isEmpty {
+            searchResultCover = nil
         } else {
-            previousNonSearchTab = newValue
-            if isSearchPresented {
-                isSearchPresented = false
-            }
+            searchResultCoverPath.removeLast()
         }
     }
 
-    /// 用户关闭系统搜索框时回到进入搜索前的业务 Tab，避免重新创建上一级根页面。
-    private func restorePreviousTabAfterSearchDismissal(isPresented: Bool) {
-        guard !isPresented, selectedTab == .search, searchPath.isEmpty else { return }
-        selectedTab = previousNonSearchTab
+    /// 完成系统覆盖层清理并按进入详情前的搜索呈现状态恢复搜索宿主。
+    private func completeSearchResultCoverDismissal() {
+        searchResultCoverPath = NavigationPath()
+        searchResultCover = nil
+        if shouldRestoreSearchPresentationAfterCover,
+           selectedTab == .search,
+           searchPath.isEmpty {
+            setSearchPresented(true, disablesAnimations: true)
+        }
+        shouldRestoreSearchPresentationAfterCover = false
     }
 
-    /// 搜索结果详情页隐藏系统搜索宿主；返回搜索根页后恢复搜索输入，避免底部工具栏与搜索胶囊叠放。
-    private func syncSearchPresentationForNavigationDepth(_ depth: Int) {
-        guard selectedTab == .search else { return }
-        if depth > 0 {
-            isSearchPresented = false
-        } else if !isSearchPresented {
-            isSearchPresented = true
+    /// 按当前 Tab 和搜索栈深度同步系统搜索宿主；只在 Tab/path 变化时恢复，避免覆盖用户在搜索根页主动关闭搜索框的选择。
+    private func syncSearchPresentationForCurrentState() {
+        if selectedTab == .search && searchPath.isEmpty {
+            setSearchPresented(true, disablesAnimations: false)
+        } else if selectedTab != .search {
+            setSearchPresented(false, disablesAnimations: true)
         }
+    }
+
+    private func setSearchPresented(_ isPresented: Bool, disablesAnimations: Bool) {
+        guard isSearchPresented != isPresented else { return }
+        var transaction = Transaction()
+        transaction.disablesAnimations = disablesAnimations
+        withTransaction(transaction) {
+            isSearchPresented = isPresented
+        }
+    }
+
+    /// 防御详情全屏覆盖关闭前 searchable 可能产生的空文本回写，保留用户进入详情前的关键词。
+    private func shouldIgnoreSearchHostTextUpdate(_ newValue: String) -> Bool {
+        shouldRestoreSearchPresentationAfterCover
+            && newValue.isEmpty
+            && !searchQuery.isEmpty
+    }
+
+    /// 系统搜索框提交由搜索宿主捕获，再用一次性 request 下发给搜索页 ViewModel。
+    private func submitGlobalSearchQuery() {
+        let keyword = searchQuery.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !keyword.isEmpty else { return }
+        searchSubmitRequest = GlobalSearchSubmitRequest(query: keyword)
+    }
+
+    /// 最近搜索词注入后主动释放系统搜索框焦点，避免软键盘遮挡用户刚触发的结果列表。
+    private func dismissGlobalSearchKeyboard() {
+        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+    }
+
+    private func presentGlobalSearchHistoryClearConfirmation(_ clearHistory: @escaping () -> Void) {
+        globalSearchClearHistoryRequest = GlobalSearchClearHistoryRequest(clearHistory: clearHistory)
+    }
+
+    private func globalSearchClearHistoryDescriptor(for request: GlobalSearchClearHistoryRequest) -> XMSystemAlertDescriptor {
+        XMSystemAlertDescriptor(
+            title: "清空搜索历史？",
+            message: "这会移除全部最近搜索词，不影响你的本地内容。",
+            actions: [
+                XMSystemAlertAction(title: "取消", role: .cancel) {
+                },
+                XMSystemAlertAction(title: "清空", role: .destructive) {
+                    request.clearHistory()
+                }
+            ]
+        )
     }
 
     private func openBookManagementGuide() {
@@ -488,31 +636,44 @@ struct MainTabView: View {
     #endif
 }
 
+/// 搜索结果系统全屏覆盖的根级呈现项，保持底层 TabView 与搜索状态不参与导航栈变化。
+private struct SearchResultCover: Identifiable {
+    let id = UUID()
+    let target: SearchResultViewerTarget
+}
+
 private extension View {
-    /// 稳定挂载根级搜索宿主，通过呈现绑定控制搜索框生命周期，避免切换搜索 Tab 时重绑 TabView。
+    /// 稳定挂载搜索 Tab 的根级搜索宿主，让 TabView 统一管理 search tab activation 与系统输入框生命周期。
     func mainTabSearchHost(
-        searchQuery: Binding<String>,
-        isPresented: Binding<Bool>
+        searchText: Binding<String>,
+        isPresented: Binding<Bool>,
+        onSubmit: @escaping () -> Void
     ) -> some View {
         modifier(
             MainTabSearchHostModifier(
-                searchQuery: searchQuery,
-                isPresented: isPresented
+                searchText: searchText,
+                isPresented: isPresented,
+                onSubmit: onSubmit
             )
         )
     }
 }
-
 /// MainTabSearchHostModifier 承载搜索 tab 的根级 searchable 宿主，保持 TabView 外层结构身份稳定。
 private struct MainTabSearchHostModifier: ViewModifier {
-    @Binding var searchQuery: String
+    @Binding var searchText: String
     @Binding var isPresented: Bool
+    let onSubmit: () -> Void
 
     func body(content: Content) -> some View {
         content
-            .tabViewSearchActivation(.searchTabSelection)
-            .searchable(text: $searchQuery, isPresented: $isPresented, prompt: "搜索本地内容")
+            .searchable(text: $searchText, isPresented: $isPresented, prompt: "搜索本地内容")
+            .onSubmit(of: .search, onSubmit)
     }
+}
+
+private struct GlobalSearchClearHistoryRequest: Identifiable {
+    let id = UUID()
+    let clearHistory: () -> Void
 }
 
 #Preview {
