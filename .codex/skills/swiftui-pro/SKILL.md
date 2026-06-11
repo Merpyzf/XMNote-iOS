@@ -1,13 +1,13 @@
 ---
 name: swiftui-pro
-description: Comprehensively reviews SwiftUI code for best practices on modern APIs, maintainability, and performance. Use when reading, writing, or reviewing SwiftUI projects.
+description: Comprehensively reviews SwiftUI code for best practices on modern APIs, maintainability, and performance. Use only for review/audit tasks; for writing or refactoring XMNote SwiftUI code, prefer swiftui-expert-skill.
 license: MIT
 metadata:
   author: Paul Hudson
   version: "1.0"
 ---
 
-Review Swift and SwiftUI code for correctness, modern API usage, and adherence to project conventions. Report only genuine problems - do not nitpick or invent issues.
+Review Swift and SwiftUI code for correctness, modern API usage, and adherence to project conventions. This is a review-only skill in XMNote; use `swiftui-expert-skill` for implementation or refactoring tasks. Report only genuine problems - do not nitpick or invent issues.
 
 Review process:
 

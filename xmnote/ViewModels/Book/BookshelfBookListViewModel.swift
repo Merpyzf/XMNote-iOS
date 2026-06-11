@@ -7,6 +7,11 @@
 
 import Foundation
 
+/// 二级书籍列表搜索输入防抖策略，避免连续输入期间反复重建列表观察流。
+private enum BookshelfBookListSearchDebouncePolicy {
+    static let delayNanoseconds: UInt64 = 200_000_000
+}
+
 @MainActor
 @Observable
 final class BookshelfBookListViewModel {
@@ -17,7 +22,7 @@ final class BookshelfBookListViewModel {
     var searchKeyword: String = "" {
         didSet {
             guard normalizedSearchKeyword(oldValue) != normalizedSearchKeyword(searchKeyword) else { return }
-            restartObservation()
+            scheduleSearchObservationRestart()
         }
     }
     var displaySetting: BookshelfDisplaySetting
@@ -49,6 +54,7 @@ final class BookshelfBookListViewModel {
 
     private let repository: any BookshelfRepositoryProtocol
     private var observationTask: Task<Void, Never>?
+    private var searchDebounceTask: Task<Void, Never>?
     private var writeTask: Task<Void, Never>?
     private var batchOptionsTask: Task<Void, Never>?
     private var feedbackClearTask: Task<Void, Never>?
@@ -147,6 +153,7 @@ final class BookshelfBookListViewModel {
     /// 取消二级列表观察与写入任务，避免页面释放后继续回写 UI 状态。
     isolated deinit {
         observationTask?.cancel()
+        searchDebounceTask?.cancel()
         writeTask?.cancel()
         batchOptionsTask?.cancel()
         feedbackClearTask?.cancel()
@@ -990,8 +997,35 @@ final class BookshelfBookListViewModel {
     }
 
     private func restartObservation() {
+        searchDebounceTask?.cancel()
+        searchDebounceTask = nil
+        restartObservationNow()
+    }
+
+    private func restartObservationNow() {
         observationTask?.cancel()
         startObservation()
+    }
+
+    /// 列表内搜索输入稳定 200ms 后再重启观察流；新输入会取消旧任务，避免连续敲字时反复读取二级列表快照。
+    private func scheduleSearchObservationRestart() {
+        searchDebounceTask?.cancel()
+        searchDebounceTask = Task { [weak self] in
+            do {
+                try await Task.sleep(nanoseconds: BookshelfBookListSearchDebouncePolicy.delayNanoseconds)
+                try Task.checkCancellation()
+                self?.restartObservationAfterDebounce()
+            } catch is CancellationError {
+                return
+            } catch {
+                return
+            }
+        }
+    }
+
+    private func restartObservationAfterDebounce() {
+        searchDebounceTask = nil
+        restartObservationNow()
     }
 
     private func normalizedSearchKeyword(_ value: String) -> String {

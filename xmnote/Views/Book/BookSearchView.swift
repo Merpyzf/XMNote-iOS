@@ -6,6 +6,7 @@
  */
 
 import SwiftUI
+import UIKit
 
 /// 书籍搜索页入口，负责承接首页新增书籍主链路与豆瓣风控登录恢复。
 struct BookSearchView: View {
@@ -272,6 +273,7 @@ struct BookSearchView: View {
                         withAnimation(.snappy) {
                             viewModel.updateSelectedSource(source)
                         }
+                        resetRecentQueryManagementState()
                         clearTransientState()
 
                         guard !viewModel.trimmedQuery.isEmpty, !viewModel.isSearching else { return }
@@ -315,7 +317,9 @@ struct BookSearchView: View {
                 title: "最近搜索",
                 emptyPresentation: .hidden,
                 onSelect: { query in
+                    resetRecentQueryManagementState()
                     clearTransientState()
+                    dismissSearchKeyboard()
                     Task {
                         viewModel.searchQueryDidChange(query)
                         await performSearch(using: viewModel)
@@ -337,6 +341,7 @@ struct BookSearchView: View {
                 XMSystemAlertAction(title: "取消", role: .cancel) { },
                 XMSystemAlertAction(title: "清空", role: .destructive) {
                     viewModel?.clearRecentQueries()
+                    resetRecentQueryManagementState()
                 }
             ]
         )
@@ -511,7 +516,7 @@ struct BookSearchView: View {
             set: { query in
                 viewModel.searchQueryDidChange(query)
                 if query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    isRecentQueriesExpanded = false
+                    resetRecentQueryManagementState()
                     clearTransientState()
                 }
             }
@@ -554,6 +559,7 @@ struct BookSearchView: View {
         case .scan:
             BookScanPlaceholderView { isbn in
                 guard let viewModel else { return }
+                resetRecentQueryManagementState()
                 clearTransientState()
                 auxiliaryDestination = nil
                 Task {
@@ -578,6 +584,9 @@ struct BookSearchView: View {
         source: BookSearchSource? = nil,
         recoveryAttempt: Int = 0
     ) async {
+        if recoveryAttempt == 0 {
+            resetRecentQueryManagementState()
+        }
         if let keyword {
             viewModel.searchQueryDidChange(keyword)
         }
@@ -811,6 +820,17 @@ struct BookSearchView: View {
         inlineFeedback = nil
         didDetectDoubanLogin = false
         didCompleteFanqieVerification = false
+    }
+
+    private func resetRecentQueryManagementState() {
+        guard isRecentQueriesExpanded || isRecentQueriesEditing else { return }
+        isRecentQueriesExpanded = false
+        isRecentQueriesEditing = false
+    }
+
+    private func dismissSearchKeyboard() {
+        isSearchFieldFocused = false
+        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
     }
 
     private var rowDividerLeadingInset: CGFloat {

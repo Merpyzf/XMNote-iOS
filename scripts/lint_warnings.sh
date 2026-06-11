@@ -4,7 +4,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PROJECT_PATH="$ROOT_DIR/XMNote.xcodeproj"
 SCHEME="xmnote"
-DESTINATION="${LINT_DESTINATION:-platform=iOS Simulator,name=iPhone 17 Pro}"
+DESTINATION="${LINT_DESTINATION:-platform=iOS Simulator,name=iPhone 17 Pro iOS 26.2 Clean}"
 
 if [[ ! -d "$PROJECT_PATH" ]]; then
     echo "ERROR: 未找到工程文件: $PROJECT_PATH"

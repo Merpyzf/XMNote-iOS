@@ -38,6 +38,11 @@ private enum BookPickerSelectionKey: Hashable {
     case remote(String)
 }
 
+/// 选书本地搜索输入防抖策略，用于平衡输入跟手感和本地数据库读取频率。
+private enum BookPickerSearchDebouncePolicy {
+    static let delayNanoseconds: UInt64 = 200_000_000
+}
+
 /// 书籍选择状态源，统一承接本地查询、在线搜索、多选与创建回填。
 @MainActor
 @Observable
@@ -90,6 +95,12 @@ final class BookPickerViewModel {
         } else {
             self.selectedOnlineSource = configuration.onlineSources.first ?? .wenqu
         }
+    }
+
+    /// 取消仍在等待或执行中的搜索任务，避免选书流释放后继续回写 MainActor 状态。
+    isolated deinit {
+        localSearchTask?.cancel()
+        onlineSearchTask?.cancel()
     }
 
     var trimmedQuery: String {
@@ -159,11 +170,10 @@ final class BookPickerViewModel {
 
         switch visibleScope {
         case .local:
-            localSearchTask?.cancel()
-            localSearchTask = Task { [weak self] in
-                await self?.refreshLocalBooks()
-            }
+            scheduleLocalBooksRefreshAfterInputSettles()
         case .online:
+            localSearchTask?.cancel()
+            localSearchTask = nil
             if trimmedQuery.isEmpty {
                 remoteResults = []
                 onlineErrorMessage = nil
@@ -183,6 +193,8 @@ final class BookPickerViewModel {
                 await self?.refreshLocalBooks()
             }
         case .online:
+            localSearchTask?.cancel()
+            localSearchTask = nil
             guard !trimmedQuery.isEmpty else {
                 remoteResults = []
                 onlineErrorMessage = nil
@@ -230,6 +242,22 @@ final class BookPickerViewModel {
         } catch {
             guard requestID == localSearchSequence else { return }
             localBooks = []
+        }
+    }
+
+    /// 输入型本地搜索延迟 200ms 后执行；新输入或页面释放会取消旧任务，避免短时间内连续触发数据库读取。
+    private func scheduleLocalBooksRefreshAfterInputSettles() {
+        localSearchTask?.cancel()
+        localSearchTask = Task { [weak self] in
+            do {
+                try await Task.sleep(nanoseconds: BookPickerSearchDebouncePolicy.delayNanoseconds)
+                try Task.checkCancellation()
+                await self?.refreshLocalBooks()
+            } catch is CancellationError {
+                return
+            } catch {
+                return
+            }
         }
     }
 

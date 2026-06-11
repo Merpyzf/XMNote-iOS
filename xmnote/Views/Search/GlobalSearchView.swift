@@ -1,11 +1,12 @@
 /**
- * [INPUT]: 依赖 MainTabView 提供搜索 query 绑定、搜索提交事件、软键盘收起动作、详情全屏覆盖打开回调与覆盖呈现状态，依赖 RepositoryContainer 注入全局搜索仓储，依赖 GlobalSearchViewModel 驱动本地搜索状态
+ * [INPUT]: 依赖 MainTabView 提供搜索 query 绑定、搜索提交事件、历史词按下/取消/提交协调回调、清空确认前焦点稳定回调、详情全屏覆盖打开回调与覆盖呈现状态，依赖 RepositoryContainer 注入全局搜索仓储，依赖 GlobalSearchViewModel 驱动本地搜索状态
  * [OUTPUT]: 对外提供 GlobalSearchView，渲染 iOS 原生搜索 Tab 下的固定范围栏、全局搜索结果、搜索历史、分类筛选、空态、加载态、错误态与搜索来源详情打开入口
  * [POS]: Search 模块根视图，被 MainTabView 的搜索 Tab NavigationStack 消费；搜索结果通过 route-only target 交给根级 fullScreenCover 呈现
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
 import SwiftUI
+import UIKit
 
 /// 搜索宿主捕获到的提交事件，使用唯一 id 保证相同关键词连续提交也能被搜索页感知。
 struct GlobalSearchSubmitRequest: Equatable, Identifiable {
@@ -24,14 +25,18 @@ struct GlobalSearchView: View {
     @Binding private var query: String
     private let submitRequest: GlobalSearchSubmitRequest?
     private let isSearchResultCoverPresented: Bool
-    private let onClearHistoryRequested: (@escaping () -> Void) -> Void
-    private let onDismissSearchKeyboard: () -> Void
+    private let onBeginSearchSuggestion: (String) -> Void
+    private let onCancelSearchSuggestion: (String) -> Void
+    private let onCommitSearchSuggestion: (String) -> Void
+    private let onPrepareHistoryClearConfirmation: () -> Void
     private let onOpenSearchResultCover: (SearchResultViewerTarget) -> Void
 
     @Environment(RepositoryContainer.self) private var repositories
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var viewModel: GlobalSearchViewModel?
     @State private var bootstrapLoadingGate = LoadingGate()
+    @State private var clearHistoryConfirmationRequest: GlobalSearchHistoryClearConfirmationRequest?
+    @State private var historyManagementResetID = UUID()
 
     private var topBarHeight: CGFloat {
         dynamicTypeSize >= .accessibility1 ? 60 : 56
@@ -46,15 +51,19 @@ struct GlobalSearchView: View {
         query: Binding<String>,
         submitRequest: GlobalSearchSubmitRequest?,
         isSearchResultCoverPresented: Bool,
-        onClearHistoryRequested: @escaping (@escaping () -> Void) -> Void,
-        onDismissSearchKeyboard: @escaping () -> Void,
+        onBeginSearchSuggestion: @escaping (String) -> Void,
+        onCancelSearchSuggestion: @escaping (String) -> Void,
+        onCommitSearchSuggestion: @escaping (String) -> Void,
+        onPrepareHistoryClearConfirmation: @escaping () -> Void,
         onOpenSearchResultCover: @escaping (SearchResultViewerTarget) -> Void
     ) {
         self._query = query
         self.submitRequest = submitRequest
         self.isSearchResultCoverPresented = isSearchResultCoverPresented
-        self.onClearHistoryRequested = onClearHistoryRequested
-        self.onDismissSearchKeyboard = onDismissSearchKeyboard
+        self.onBeginSearchSuggestion = onBeginSearchSuggestion
+        self.onCancelSearchSuggestion = onCancelSearchSuggestion
+        self.onCommitSearchSuggestion = onCommitSearchSuggestion
+        self.onPrepareHistoryClearConfirmation = onPrepareHistoryClearConfirmation
         self.onOpenSearchResultCover = onOpenSearchResultCover
     }
 
@@ -67,9 +76,12 @@ struct GlobalSearchView: View {
                     query: trimmedQuery,
                     viewModel: viewModel,
                     isSearchResultCoverPresented: isSearchResultCoverPresented,
+                    historyManagementResetID: historyManagementResetID,
                     onOpenResult: openResult,
+                    onBeginSuggestion: beginSuggestion,
+                    onCancelSuggestion: cancelSuggestion,
                     onSelectSuggestion: selectSuggestion,
-                    onClearHistoryRequested: onClearHistoryRequested
+                    onRequestHistoryClearConfirmation: requestHistoryClearConfirmation
                 )
                 .padding(.top, topBarHeight)
             } else if bootstrapLoadingGate.isVisible {
@@ -145,10 +157,86 @@ struct GlobalSearchView: View {
         }
     }
 
+    private func beginSuggestion(_ suggestion: String) {
+        onBeginSearchSuggestion(suggestion)
+    }
+
+    private func cancelSuggestion(_ suggestion: String) {
+        onCancelSearchSuggestion(suggestion)
+    }
+
     private func selectSuggestion(_ suggestion: String) {
-        query = suggestion
-        viewModel?.submit(query: suggestion)
-        onDismissSearchKeyboard()
+        onCommitSearchSuggestion(suggestion)
+    }
+
+    private func requestHistoryClearConfirmation() {
+        onPrepareHistoryClearConfirmation()
+        let request = GlobalSearchHistoryClearConfirmationRequest()
+        clearHistoryConfirmationRequest = request
+        DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(220)) {
+            presentClearHistoryConfirmation(for: request)
+        }
+    }
+
+    private func presentClearHistoryConfirmation(for request: GlobalSearchHistoryClearConfirmationRequest) {
+        guard clearHistoryConfirmationRequest?.id == request.id else { return }
+        guard let presenter = UIApplication.shared.xmActiveAlertPresenter else { return }
+        XMSystemAlertController.present(
+            on: presenter,
+            descriptor: clearHistoryDescriptor(for: request)
+        )
+    }
+
+    private func clearHistoryDescriptor(for request: GlobalSearchHistoryClearConfirmationRequest) -> XMSystemAlertDescriptor {
+        XMSystemAlertDescriptor(
+            title: "清空搜索历史？",
+            message: "这会移除全部最近搜索词，不影响你的本地内容。",
+            actions: [
+                XMSystemAlertAction(title: "取消", role: .cancel) {
+                    dismissHistoryClearConfirmation(request)
+                },
+                XMSystemAlertAction(title: "清空", role: .destructive) {
+                    viewModel?.clearRecentQueries()
+                    historyManagementResetID = UUID()
+                    dismissHistoryClearConfirmation(request)
+                }
+            ]
+        )
+    }
+
+    private func dismissHistoryClearConfirmation(_ request: GlobalSearchHistoryClearConfirmationRequest) {
+        guard clearHistoryConfirmationRequest?.id == request.id else { return }
+        clearHistoryConfirmationRequest = nil
+    }
+}
+
+private struct GlobalSearchHistoryClearConfirmationRequest: Identifiable {
+    let id = UUID()
+}
+
+private extension UIApplication {
+    var xmActiveAlertPresenter: UIViewController? {
+        connectedScenes
+            .compactMap { $0 as? UIWindowScene }
+            .flatMap(\.windows)
+            .first { $0.isKeyWindow }?
+            .rootViewController?
+            .xmTopMostPresentedViewController
+    }
+}
+
+private extension UIViewController {
+    var xmTopMostPresentedViewController: UIViewController {
+        if let presentedViewController {
+            return presentedViewController.xmTopMostPresentedViewController
+        }
+        if let navigationController = self as? UINavigationController {
+            return navigationController.visibleViewController?.xmTopMostPresentedViewController ?? navigationController
+        }
+        if let tabBarController = self as? UITabBarController {
+            return tabBarController.selectedViewController?.xmTopMostPresentedViewController ?? tabBarController
+        }
+        return self
     }
 }
 
@@ -156,9 +244,12 @@ private struct GlobalSearchLoadedContent: View {
     let query: String
     @Bindable var viewModel: GlobalSearchViewModel
     let isSearchResultCoverPresented: Bool
+    let historyManagementResetID: UUID
     let onOpenResult: (GlobalSearchResult) -> Void
+    let onBeginSuggestion: (String) -> Void
+    let onCancelSuggestion: (String) -> Void
     let onSelectSuggestion: (String) -> Void
-    let onClearHistoryRequested: (@escaping () -> Void) -> Void
+    let onRequestHistoryClearConfirmation: () -> Void
 
     @State private var loadingGate = LoadingGate()
     @State private var resultScrollTarget: GlobalSearchScrollTarget? = .top
@@ -174,13 +265,11 @@ private struct GlobalSearchLoadedContent: View {
                     recentQueries: viewModel.recentQueries,
                     isHistoryExpanded: $isHistoryExpanded,
                     isHistoryEditing: $isHistoryEditing,
-                    onSelectSuggestion: onSelectSuggestion,
+                    onBeginSuggestion: onBeginSuggestion,
+                    onCancelSuggestion: onCancelSuggestion,
+                    onSelectSuggestion: selectHistorySuggestion,
                     onRemoveSuggestion: viewModel.removeRecentQuery,
-                    onClearAllHistory: {
-                        onClearHistoryRequested {
-                            viewModel.clearRecentQueries()
-                        }
-                    }
+                    onClearAllHistory: onRequestHistoryClearConfirmation
                 )
             case .loading:
                 if loadingGate.isVisible {
@@ -206,14 +295,21 @@ private struct GlobalSearchLoadedContent: View {
             }
         }
         .onAppear(perform: syncLoadingGate)
-        .onChange(of: viewModel.loadState) { _, _ in
+        .onChange(of: viewModel.loadState) { _, newValue in
             syncLoadingGate()
+            if !isIdle(newValue) {
+                resetHistoryManagementState()
+            }
         }
         .onChange(of: query) { _, _ in
             resetResultScrollState()
+            resetHistoryManagementState()
         }
         .onChange(of: viewModel.resultRevision) { _, _ in
             resetResultScrollState()
+        }
+        .onChange(of: historyManagementResetID) { _, _ in
+            resetHistoryManagementState()
         }
         .onChange(of: viewModel.selectedScope) { oldValue, newValue in
             handleScopeChange(from: oldValue, to: newValue)
@@ -255,14 +351,17 @@ private struct GlobalSearchLoadedContent: View {
     }
 
     private func resultsScrollContent(topPadding: CGFloat) -> some View {
-        ScrollView {
+        let showsFieldScopeFilter = viewModel.shouldShowFieldScopeFilter
+        let visibleResults = viewModel.visibleResults
+
+        return ScrollView {
             LazyVStack(alignment: .leading, spacing: Spacing.base) {
-                if viewModel.shouldShowFieldScopeFilter {
+                if showsFieldScopeFilter {
                     fieldScopeFilterSection
                 }
 
-                if viewModel.visibleResults.isEmpty {
-                    if viewModel.shouldShowFieldScopeFilter {
+                if visibleResults.isEmpty {
+                    if showsFieldScopeFilter {
                         GlobalSearchInlineEmptyView(title: "没有找到内容", subtitle: "换个范围试试")
                     } else {
                         topAnchoredContent {
@@ -270,7 +369,7 @@ private struct GlobalSearchLoadedContent: View {
                         }
                     }
                 } else {
-                    resultRows
+                    resultRows(visibleResults: visibleResults, showsFieldScopeFilter: showsFieldScopeFilter)
                 }
             }
             .scrollTargetLayout()
@@ -297,10 +396,13 @@ private struct GlobalSearchLoadedContent: View {
         }
     }
 
-    private var resultRows: some View {
-        let firstResultID = viewModel.visibleResults.first?.id
-        return ForEach(viewModel.visibleResults) { result in
-            if result.id == firstResultID, !viewModel.shouldShowFieldScopeFilter {
+    private func resultRows(
+        visibleResults: [GlobalSearchResult],
+        showsFieldScopeFilter: Bool
+    ) -> some View {
+        let firstResultID = visibleResults.first?.id
+        return ForEach(visibleResults) { result in
+            if result.id == firstResultID, !showsFieldScopeFilter {
                 topAnchoredContent {
                     resultRow(result)
                 }
@@ -351,6 +453,24 @@ private struct GlobalSearchLoadedContent: View {
 
     private func syncLoadingGate() {
         loadingGate.update(intent: viewModel.loadState.isLoading ? .read : .none)
+    }
+
+    private func selectHistorySuggestion(_ suggestion: String) {
+        resetHistoryManagementState()
+        onSelectSuggestion(suggestion)
+    }
+
+    private func resetHistoryManagementState() {
+        guard isHistoryExpanded || isHistoryEditing else { return }
+        isHistoryExpanded = false
+        isHistoryEditing = false
+    }
+
+    private func isIdle(_ loadState: GlobalSearchViewModel.LoadState) -> Bool {
+        if case .idle = loadState {
+            return true
+        }
+        return false
     }
 
     private func selectScope(_ scope: GlobalSearchScope) {
@@ -543,6 +663,8 @@ private struct GlobalSearchRootView: View {
     let recentQueries: [String]
     @Binding var isHistoryExpanded: Bool
     @Binding var isHistoryEditing: Bool
+    let onBeginSuggestion: (String) -> Void
+    let onCancelSuggestion: (String) -> Void
     let onSelectSuggestion: (String) -> Void
     let onRemoveSuggestion: (String) -> Void
     let onClearAllHistory: () -> Void
@@ -555,6 +677,8 @@ private struct GlobalSearchRootView: View {
                 isEditing: $isHistoryEditing,
                 title: "最近搜索",
                 emptyPresentation: .hidden,
+                onBeginSelect: onBeginSuggestion,
+                onCancelBeginSelect: onCancelSuggestion,
                 onSelect: onSelectSuggestion,
                 onRemove: onRemoveSuggestion,
                 onClearAll: onClearAllHistory
@@ -564,6 +688,7 @@ private struct GlobalSearchRootView: View {
             .padding(.bottom, Spacing.actionReserved * 3)
         }
         .scrollIndicators(.hidden)
+        .scrollDismissesKeyboard(.never)
     }
 }
 
@@ -799,20 +924,25 @@ private struct GlobalSearchIdeaBlock: View {
 }
 
 private struct GlobalSearchImageWall: View {
-    let imageURLs: [String]
-    let idPrefix: String
+    private let items: [XMJXGalleryItem]
+    private let columnCount: Int
+
+    init(imageURLs: [String], idPrefix: String) {
+        self.items = imageURLs.enumerated().map { index, url in
+            XMJXGalleryItem(
+                id: "\(idPrefix)-\(index)-\(url)",
+                thumbnailURL: url,
+                originalURL: url
+            )
+        }
+        self.columnCount = imageURLs.count == 1 ? 1 : min(5, imageURLs.count)
+    }
 
     var body: some View {
-        if !imageURLs.isEmpty {
+        if !items.isEmpty {
             XMJXImageWall(
-                items: imageURLs.enumerated().map { index, url in
-                    XMJXGalleryItem(
-                        id: "\(idPrefix)-\(index)-\(url)",
-                        thumbnailURL: url,
-                        originalURL: url
-                    )
-                },
-                columnCount: imageURLs.count == 1 ? 1 : min(5, imageURLs.count),
+                items: items,
+                columnCount: columnCount,
                 spacing: Spacing.half
             )
         }

@@ -14,6 +14,7 @@
 | XMYearMonthPickerSheet | UI-复用关键 | xmnote/UIComponents/Foundation/XMYearMonthPickerSheet.swift | docs/component-guides/XMYearMonthPickerSheet使用说明.md | 新增/重大重构 |
 | XMRatingBar | UI-复用关键 | xmnote/UIComponents/Foundation/XMRatingBar.swift | docs/component-guides/XMRatingBar使用说明.md | 新增/重大重构 |
 | XMScopeSelector | UI-复用关键 | xmnote/UIComponents/Foundation/XMScopeSelector.swift | docs/component-guides/XMScopeSelector使用说明.md | 新增/重大重构 |
+| XMSearchHistorySection | UI-复用关键 | xmnote/UIComponents/Foundation/XMSearchHistorySection.swift | docs/component-guides/XMSearchHistorySection使用说明.md | 新增/重大重构 |
 | XMScrollEdgeChrome | UI-复用关键 | xmnote/UIComponents/Foundation/XMScrollEdgeChrome.swift | docs/component-guides/XMScrollEdgeChrome使用说明.md | 新增/重大重构 |
 | XMScrollEdgeWash | UI-复用关键 | xmnote/UIComponents/Foundation/XMScrollEdgeWash.swift | docs/component-guides/XMScrollEdgeChrome使用说明.md | 新增/重大重构 |
 | BookCoverProgressBar | UI-复用关键 | xmnote/UIComponents/Foundation/BookCoverProgressBar.swift | docs/component-guides/BookCoverProgressBar使用说明.md | 新增/重大重构 |

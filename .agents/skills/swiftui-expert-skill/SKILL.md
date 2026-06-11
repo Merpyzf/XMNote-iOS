@@ -1,12 +1,14 @@
 ---
 name: swiftui-expert-skill
-description: Write, review, or improve SwiftUI code following best practices for state management, view composition, performance, macOS-specific APIs, and iOS 26+ Liquid Glass adoption. Use when building new SwiftUI features, refactoring existing views, reviewing code quality, or adopting modern SwiftUI patterns.
+description: Write, review, or improve SwiftUI code for XMNote using Xcode 26/iOS 26 as the default baseline, with modern state management, view composition, performance, localization, soft-deprecation scope, macOS-specific APIs, iOS 26+ Liquid Glass, and explicitly gated SDK 27 future references. Use when building new SwiftUI features, refactoring existing views, reviewing code quality, or adopting modern SwiftUI patterns.
 ---
 
 # SwiftUI Expert Skill
 
 ## Overview
 Use this skill to build, review, or improve SwiftUI features with correct state management, optimal view composition, and iOS 26+ Liquid Glass styling. Prioritize native APIs, Apple design guidance, and performance-conscious patterns. This skill focuses on facts and best practices without enforcing specific architectural patterns.
+
+XMNote currently targets Xcode 26 / iOS 26.1. Treat Xcode 27 guidance as either source-compatible SwiftUI practice or a future SDK reference; do not generate SDK 27-only APIs unless the user explicitly asks for Xcode 27 / SDK 27 work or an SDK 27 migration error.
 
 ## Workflow Decision Tree
 
@@ -16,11 +18,15 @@ Use this skill to build, review, or improve SwiftUI features with correct state 
 - Verify view composition follows extraction rules (see `references/view-structure.md`)
 - Check performance patterns are applied (see `references/performance-patterns.md`)
 - Verify list patterns use stable identity (see `references/list-patterns.md`)
+- Check custom environment/focused values for invalidation hazards (see `references/environment-patterns.md`)
+- Check user-facing strings, formatting, and RTL layout (see `references/localization-patterns.md`)
+- Apply soft-deprecation guidance only to code in the current task scope (see `references/soft-deprecation-scope.md`)
 - Check animation patterns for correctness (see `references/animation-basics.md`, `references/animation-transitions.md`)
 - Review accessibility: proper grouping, traits, Dynamic Type support (see `references/accessibility-patterns.md`)
 - For macOS targets: verify correct use of macOS-specific APIs and patterns (see `references/macos-scenes.md`, `references/macos-window-styling.md`, `references/macos-views.md`)
 - Inspect Liquid Glass usage for correctness and consistency (see `references/liquid-glass.md`)
 - Validate iOS 26+ availability handling with sensible fallbacks
+- When SDK 27 APIs, compiler errors, or availability questions appear, consult `references/sdk27-future-reference.md` before recommending code
 
 ### 2) Improve existing SwiftUI code
 - **First, consult `references/latest-apis.md`** to replace any deprecated APIs with their modern equivalents
@@ -28,24 +34,36 @@ Use this skill to build, review, or improve SwiftUI features with correct state 
 - Extract complex views into separate subviews (see `references/view-structure.md`)
 - Refactor hot paths to minimize redundant state updates (see `references/performance-patterns.md`)
 - Ensure ForEach uses stable identity (see `references/list-patterns.md`)
+- Keep soft-deprecated API cleanup limited to the code the user asked to touch (see `references/soft-deprecation-scope.md`)
+- Preserve localization context when changing text or formatting (see `references/localization-patterns.md`)
 - Improve animation patterns (use value parameter, proper transitions, see `references/animation-basics.md`, `references/animation-transitions.md`)
 - Improve accessibility: use `Button` over tap gestures, add `@ScaledMetric` for Dynamic Type (see `references/accessibility-patterns.md`)
 - For macOS targets: adopt macOS-specific APIs (MenuBarExtra, Settings, Table, Commands, etc.) where appropriate (see `references/macos-scenes.md`, `references/macos-window-styling.md`, `references/macos-views.md`)
 - Suggest image downsampling when `UIImage(data:)` is used (as optional optimization, see `references/image-optimization.md`)
 - Adopt Liquid Glass only when explicitly requested by the user
+- Do not migrate to SDK 27-only APIs unless the user explicitly requests SDK 27 work
 
 ### 3) Implement new SwiftUI feature
 - **First, consult `references/latest-apis.md`** to use only current, non-deprecated APIs for the target deployment version
 - Design data flow first: identify owned vs injected state (see `references/state-management.md`)
 - Structure views for optimal diffing (extract subviews early, see `references/view-structure.md`)
 - Keep business logic in services and models for testability (see `references/layout-best-practices.md`)
+- Keep custom environment values stable and avoid closure-valued keys (see `references/environment-patterns.md`)
+- Type reusable user-facing strings as localized resources where appropriate (see `references/localization-patterns.md`)
 - Use correct animation patterns (implicit vs explicit, transitions, see `references/animation-basics.md`, `references/animation-transitions.md`, `references/animation-advanced.md`)
 - Use `Button` for tappable elements, add accessibility grouping and labels (see `references/accessibility-patterns.md`)
 - For macOS targets: use macOS-specific scenes (see `references/macos-scenes.md`), window styling (see `references/macos-window-styling.md`), and views like HSplitView, Table (see `references/macos-views.md`)
 - Apply glass effects after layout/appearance modifiers (see `references/liquid-glass.md`)
 - Gate iOS 26+ features with `#available` and provide fallbacks
+- Prefer Xcode 26/iOS 26 APIs by default; read `references/sdk27-future-reference.md` only for explicit SDK 27 tasks
 
 ## Core Guidelines
+
+### Source and Availability Discipline
+- Current default: Xcode 26.2, Swift 6.2.x, iOS 26.1 deployment.
+- Xcode 27 skills are guidance inputs, not an instruction to install or generate SDK 27 APIs by default.
+- If Apple API behavior, availability, deprecation, or platform semantics matters, verify with `apple-doc-mcp` when available, Apple official documentation, or a local Xcode 27 export before changing code.
+- Do not copy upstream skill text verbatim into product answers; use these references as concise local decision guides.
 
 ### State Management
 - `@State` must be `private`; use for internal view state
@@ -157,6 +175,7 @@ Button("Confirm") { }
 ### Latest APIs (see `references/latest-apis.md`)
 - [ ] No deprecated modifiers used (check against the quick lookup table)
 - [ ] API choices match the project's minimum deployment target
+- [ ] SDK 27-only APIs are absent unless the task explicitly targets SDK 27
 
 ### State Management
 - [ ] `@State` properties are `private`
@@ -190,11 +209,23 @@ Button("Confirm") { }
 - [ ] Heavy computation moved out of `body`
 - [ ] Sendable closures capture values instead of accessing @MainActor state
 
+### Environment & Localization (see `references/environment-patterns.md`, `references/localization-patterns.md`)
+- [ ] Custom environment/focused values do not store closures
+- [ ] Frequently-changing values are not pushed through broad environment scopes
+- [ ] User-facing strings preserve localization context
+- [ ] Formatting uses locale-aware format styles where practical
+- [ ] Layout uses leading/trailing instead of left/right for localized UI
+
 ### List Patterns (see `references/list-patterns.md`)
 - [ ] ForEach uses stable identity (not `.indices`)
 - [ ] Constant number of views per ForEach element
 - [ ] No inline filtering in ForEach
 - [ ] No `AnyView` in list rows
+
+### Soft Deprecation (see `references/soft-deprecation-scope.md`)
+- [ ] New code does not introduce soft-deprecated SwiftUI APIs
+- [ ] Existing soft-deprecated APIs are only discussed or migrated inside the current task scope
+- [ ] Unrelated views/files are not scanned or pressured into opportunistic cleanup
 
 ### Layout (see `references/layout-best-practices.md`)
 - [ ] Avoiding layout thrash (deep hierarchies, excessive GeometryReader)
@@ -244,6 +275,10 @@ Button("Confirm") { }
 - `references/view-structure.md` - View composition, extraction, and container patterns
 - `references/performance-patterns.md` - Performance optimization techniques and anti-patterns
 - `references/list-patterns.md` - ForEach identity, stability, Table (iOS 16+), and list best practices
+- `references/environment-patterns.md` - Custom environment/focused values, invalidation hazards, and scope control
+- `references/localization-patterns.md` - Localized strings, format styles, interpolation, casing, and RTL layout
+- `references/soft-deprecation-scope.md` - How to handle SwiftUI soft-deprecated APIs without unrelated churn
+- `references/sdk27-future-reference.md` - SDK 27/Xcode 27 SwiftUI APIs and migration notes; explicit opt-in only
 - `references/layout-best-practices.md` - Layout patterns, context-agnostic views, and testability
 - `references/accessibility-patterns.md` - Accessibility traits, grouping, Dynamic Type, and VoiceOver
 - `references/animation-basics.md` - Core animation concepts, implicit/explicit animations, timing, performance

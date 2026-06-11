@@ -122,21 +122,28 @@ struct Article: Identifiable {
 
 ## Enumerated Sequences
 
-**Always convert enumerated sequences to arrays. To be able to use them in a ForEach.**
+Swift 6.1 and later conditionally makes `enumerated()` a collection when the base collection supports it. On XMNote's Xcode 26 / Swift 6.2 baseline, `ForEach(items.enumerated(), ...)` can compile without `Array(...)`.
+
+Use the element's real identity as the `id`. Treat the offset as display data, not identity, for dynamic collections.
 
 ```swift
-let items = ["A", "B", "C"]
-
-// Correct
-ForEach(Array(items.enumerated()), id: \.offset) { index, item in
-    Text("\(index): \(item)")
+struct Book: Identifiable {
+    let id: UUID
+    let title: String
 }
 
-// Wrong - Doesn't compile, enumerated() isn't an array
-ForEach(items.enumerated(), id: \.offset) { index, item in
+// Preferred when each element has stable identity
+ForEach(books.enumerated(), id: \.element.id) { index, book in
+    Text("\(index): \(book.title)")
+}
+
+// Acceptable only for static collections whose order never changes
+ForEach(["A", "B", "C"].enumerated(), id: \.offset) { index, item in
     Text("\(index): \(item)")
 }
 ```
+
+Use `Array(items.enumerated())` only when supporting older toolchains that require a random-access collection wrapper.
 
 ## List with Custom Styling
 
@@ -374,7 +381,8 @@ Table(people) { /* columns */ }
 - [ ] Constant number of views per ForEach element
 - [ ] No inline filtering in ForEach (prefilter and cache instead)
 - [ ] No `AnyView` in list rows
-- [ ] Don't convert enumerated sequences to arrays
+- [ ] `enumerated()` uses the element's stable identity when the collection can change
+- [ ] `Array(items.enumerated())` used only for older toolchain compatibility
 - [ ] Use `.refreshable` for pull-to-refresh
 - [ ] Use `ContentUnavailableView` for empty states (iOS 17+)
 - [ ] Use `.scrollContentBackground(.hidden)` for custom list backgrounds

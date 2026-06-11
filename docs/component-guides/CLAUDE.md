@@ -13,6 +13,7 @@
 - `XMYearMonthPickerSheet使用说明.md`: XMYearMonthPickerSheet 年月/年份选择 Sheet 接入指南与参数说明。
 - `XMRatingBar使用说明.md`: XMRatingBar 统一评分条组件接入指南与参数说明。
 - `XMScopeSelector使用说明.md`: XMScopeSelector 范围选择控件接入指南与参数说明。
+- `XMSearchHistorySection使用说明.md`: XMSearchHistorySection 搜索历史区块接入指南与参数说明。
 - `XMScrollEdgeChrome使用说明.md`: XMScrollEdgeChrome / XMScrollEdgeWash 滚动边缘容器与柔化层接入指南与参数说明。
 - `BookCoverProgressBar使用说明.md`: BookCoverProgressBar 封面进度条组件接入指南与参数说明。
 - `ExpandableRichText使用说明.md`: ExpandableRichText / RichText 富文本展示组件接入指南与参数说明。

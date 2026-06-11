@@ -6,10 +6,9 @@
 //
 
 import SwiftUI
-import UIKit
 
 /**
- * [INPUT]: 依赖 Reading/Book/Note/Content/Personal/Search 各模块容器视图与对应路由枚举，依赖 DebugRoute 提供调试页面跳转，依赖 openURL 打开外部帮助文档
+ * [INPUT]: 依赖 Reading/Book/Note/Content/Personal/Search 各模块容器视图与对应路由枚举，依赖 DebugRoute 提供调试页面跳转，依赖 openURL 打开外部帮助文档，依赖 SwiftUI search focus 状态协调全局搜索输入
  * [OUTPUT]: 对外提供 MainTabView（五个主 Tab 的 NavigationStack 组织、普通目的地分发、搜索来源详情系统全屏覆盖与 DEBUG UI Test 书架首页/二级列表直达路由）
  * [POS]: 应用根导航入口，负责跨模块路由承接（含书架聚合列表、书架管理入口、在读页热力图点击进入阅读日历、内容查看与内容编辑、搜索来源详情根级 fullScreenCover）
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -18,6 +17,43 @@ import UIKit
 /// 应用主 Tab 枚举，统一根级导航页签身份。
 enum AppTab: String, CaseIterable, Codable {
     case reading, books, notes, profile, search
+}
+
+/// 全局搜索提交节流策略，用于错开系统搜索输入层动画与结果页刷新。
+private enum GlobalSearchCommitPolicy {
+    static let keyboardSubmitDelayNanoseconds: UInt64 = 180_000_000
+    static let suggestionFocusSettleDelayNanoseconds: UInt64 = 260_000_000
+    static let suggestionTextSettleDelayNanoseconds: UInt64 = 60_000_000
+    static let suggestionFallbackSubmitDelayNanoseconds: UInt64 = 320_000_000
+    static let queryClearProtectionGraceNanoseconds: UInt64 = 120_000_000
+}
+
+/// 全局搜索提交来源，区分键盘提交和历史词直达，便于保持统一协调入口。
+private enum GlobalSearchCommitSource: Sendable {
+    case keyboard
+    case suggestion
+
+    var focusSettleDelayNanoseconds: UInt64 {
+        switch self {
+        case .keyboard:
+            return 0
+        case .suggestion:
+            return GlobalSearchCommitPolicy.suggestionFocusSettleDelayNanoseconds
+        }
+    }
+
+    var submitDelayNanoseconds: UInt64 {
+        switch self {
+        case .keyboard:
+            return GlobalSearchCommitPolicy.keyboardSubmitDelayNanoseconds
+        case .suggestion:
+            return GlobalSearchCommitPolicy.suggestionTextSettleDelayNanoseconds
+        }
+    }
+
+    var defersQueryWriteUntilFocusSettles: Bool {
+        self == .suggestion
+    }
 }
 
 /// 应用主导航容器，组织五个主 Tab 及跨模块路由跳转。
@@ -34,8 +70,13 @@ struct MainTabView: View {
     @State private var shouldRestoreSearchPresentationAfterCover = false
     @State private var searchQuery = ""
     @State private var searchSubmitRequest: GlobalSearchSubmitRequest?
-    @State private var globalSearchClearHistoryRequest: GlobalSearchClearHistoryRequest?
     @State private var isSearchPresented = false
+    @FocusState private var isSearchFieldFocused: Bool
+    @State private var pendingGlobalSearchSuggestion: PendingGlobalSearchSuggestion?
+    @State private var pendingGlobalSearchSuggestionTask: Task<Void, Never>?
+    @State private var pendingGlobalSearchSubmitTask: Task<Void, Never>?
+    @State private var protectedGlobalSearchQuery: String?
+    @State private var globalSearchCommitToken: UUID?
     #if DEBUG
     @State private var didApplyUITestLaunchRoute = false
     #endif
@@ -181,8 +222,10 @@ struct MainTabView: View {
                         query: $searchQuery,
                         submitRequest: searchSubmitRequest,
                         isSearchResultCoverPresented: searchResultCover != nil,
-                        onClearHistoryRequested: presentGlobalSearchHistoryClearConfirmation,
-                        onDismissSearchKeyboard: dismissGlobalSearchKeyboard,
+                        onBeginSearchSuggestion: beginGlobalSearchSuggestion,
+                        onCancelSearchSuggestion: cancelGlobalSearchSuggestion,
+                        onCommitSearchSuggestion: commitGlobalSearchSuggestion,
+                        onPrepareHistoryClearConfirmation: dismissGlobalSearchKeyboard,
                         onOpenSearchResultCover: openSearchResultCover
                     )
                         .navigationDestination(for: DebugRoute.self) { route in
@@ -208,6 +251,7 @@ struct MainTabView: View {
         .mainTabSearchHost(
             searchText: searchHostTextBinding,
             isPresented: $isSearchPresented,
+            isFocused: $isSearchFieldFocused,
             onSubmit: submitGlobalSearchQuery
         )
         .tabViewSearchActivation(.searchTabSelection)
@@ -223,9 +267,6 @@ struct MainTabView: View {
         ) { cover in
             searchResultCoverContent(for: cover)
         }
-        .xmSystemAlert(item: $globalSearchClearHistoryRequest) { request in
-            globalSearchClearHistoryDescriptor(for: request)
-        }
         .task {
             #if DEBUG
             await applyUITestLaunchRouteIfNeeded()
@@ -240,6 +281,10 @@ struct MainTabView: View {
             },
             set: { newValue in
                 guard !shouldIgnoreSearchHostTextUpdate(newValue) else { return }
+                if let protectedGlobalSearchQuery,
+                   newValue != protectedGlobalSearchQuery {
+                    cancelPendingGlobalSearchCommit()
+                }
                 searchQuery = newValue
             }
         )
@@ -560,49 +605,167 @@ struct MainTabView: View {
     }
 
     private func setSearchPresented(_ isPresented: Bool, disablesAnimations: Bool) {
-        guard isSearchPresented != isPresented else { return }
+        guard self.isSearchPresented != isPresented || (!isPresented && isSearchFieldFocused) else { return }
         var transaction = Transaction()
         transaction.disablesAnimations = disablesAnimations
         withTransaction(transaction) {
-            isSearchPresented = isPresented
+            if !isPresented {
+                isSearchFieldFocused = false
+            }
+            self.isSearchPresented = isPresented
         }
     }
 
-    /// 防御详情全屏覆盖关闭前 searchable 可能产生的空文本回写，保留用户进入详情前的关键词。
+    /// 防御系统搜索框在覆盖层或焦点切换期间产生的瞬时文本回写，保留当前明确提交的关键词。
     private func shouldIgnoreSearchHostTextUpdate(_ newValue: String) -> Bool {
-        shouldRestoreSearchPresentationAfterCover
-            && newValue.isEmpty
-            && !searchQuery.isEmpty
+        if newValue.isEmpty, !searchQuery.isEmpty, shouldRestoreSearchPresentationAfterCover {
+            return true
+        }
+        if let protectedGlobalSearchQuery,
+           newValue != protectedGlobalSearchQuery,
+           !isSearchFieldFocused {
+            return true
+        }
+        return false
     }
 
-    /// 系统搜索框提交由搜索宿主捕获，再用一次性 request 下发给搜索页 ViewModel。
+    /// 系统搜索框提交由搜索宿主捕获，并交给统一协调器错开键盘动画与结果刷新。
     private func submitGlobalSearchQuery() {
-        let keyword = searchQuery.trimmingCharacters(in: .whitespacesAndNewlines)
+        commitGlobalSearch(searchQuery, source: .keyboard)
+    }
+
+    /// 记录最近搜索词按下意图；任务固定在 MainActor，fallback 会在 Button release 被系统失焦吞掉时消费同一 token。
+    private func beginGlobalSearchSuggestion(_ rawSuggestion: String) {
+        let keyword = rawSuggestion.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !keyword.isEmpty else { return }
-        searchSubmitRequest = GlobalSearchSubmitRequest(query: keyword)
+
+        pendingGlobalSearchSuggestionTask?.cancel()
+
+        let pending = PendingGlobalSearchSuggestion(keyword: keyword)
+        pendingGlobalSearchSuggestion = pending
+        protectedGlobalSearchQuery = keyword
+        if selectedTab == .search, searchPath.isEmpty {
+            setSearchPresented(true, disablesAnimations: true)
+        }
+        dismissGlobalSearchKeyboard()
+
+        pendingGlobalSearchSuggestionTask = Task { @MainActor in
+            do {
+                try await Task.sleep(nanoseconds: GlobalSearchCommitPolicy.suggestionFallbackSubmitDelayNanoseconds)
+                try Task.checkCancellation()
+                consumePendingGlobalSearchSuggestion(pending)
+            } catch is CancellationError {
+                return
+            } catch {
+                return
+            }
+        }
+    }
+
+    /// 历史词按下后若被识别为滚动或拖离，取消同一关键词的 fallback 提交，避免非点击手势触发搜索。
+    private func cancelGlobalSearchSuggestion(_ rawSuggestion: String) {
+        let keyword = rawSuggestion.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !keyword.isEmpty,
+              pendingGlobalSearchSuggestion?.keyword == keyword else { return }
+        clearPendingGlobalSearchSuggestion()
+        if protectedGlobalSearchQuery == keyword {
+            protectedGlobalSearchQuery = nil
+        }
+    }
+
+    /// 最近搜索词点击代表直接提交搜索；若按下阶段已有 pending token，则消费同一次交互避免双提交。
+    private func commitGlobalSearchSuggestion(_ suggestion: String) {
+        let keyword = suggestion.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !keyword.isEmpty else { return }
+        if let pendingGlobalSearchSuggestion,
+           pendingGlobalSearchSuggestion.keyword == keyword {
+            consumePendingGlobalSearchSuggestion(pendingGlobalSearchSuggestion)
+        } else {
+            clearPendingGlobalSearchSuggestion()
+            commitGlobalSearch(keyword, source: .suggestion)
+        }
+    }
+
+    /// 消费一次历史词按下意图；按 token 校验防止 fallback 与 Button action 竞态重复下发搜索。
+    private func consumePendingGlobalSearchSuggestion(_ pending: PendingGlobalSearchSuggestion) {
+        guard pendingGlobalSearchSuggestion?.id == pending.id else { return }
+        clearPendingGlobalSearchSuggestion()
+        commitGlobalSearch(pending.keyword, source: .suggestion)
+    }
+
+    /// 统一编排全局搜索提交：用 SwiftUI 焦点状态释放键盘，并把历史词写入错开系统 search field 的布局切换窗口。
+    /// - Note: 任务固定在 MainActor 写入 SwiftUI 状态；等待期间若用户重新聚焦并修改输入，会取消待提交关键词，避免过期搜索回写。
+    private func commitGlobalSearch(_ rawKeyword: String, source: GlobalSearchCommitSource) {
+        let keyword = rawKeyword.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !keyword.isEmpty else { return }
+
+        clearPendingGlobalSearchSuggestion()
+        pendingGlobalSearchSubmitTask?.cancel()
+
+        let token = UUID()
+        globalSearchCommitToken = token
+        protectedGlobalSearchQuery = keyword
+        if !source.defersQueryWriteUntilFocusSettles, searchQuery != keyword {
+            searchQuery = keyword
+        }
+        if selectedTab == .search, searchPath.isEmpty {
+            setSearchPresented(true, disablesAnimations: true)
+        }
+        dismissGlobalSearchKeyboard()
+
+        pendingGlobalSearchSubmitTask = Task { @MainActor in
+            do {
+                try await sleepIfNeeded(nanoseconds: source.focusSettleDelayNanoseconds)
+                try Task.checkCancellation()
+                guard globalSearchCommitToken == token else { return }
+                if source.defersQueryWriteUntilFocusSettles, searchQuery != keyword {
+                    searchQuery = keyword
+                }
+
+                try await sleepIfNeeded(nanoseconds: source.submitDelayNanoseconds)
+                try Task.checkCancellation()
+                guard globalSearchCommitToken == token else { return }
+                searchSubmitRequest = GlobalSearchSubmitRequest(query: keyword)
+
+                try await Task.sleep(nanoseconds: GlobalSearchCommitPolicy.queryClearProtectionGraceNanoseconds)
+                try Task.checkCancellation()
+                guard globalSearchCommitToken == token else { return }
+                protectedGlobalSearchQuery = nil
+                globalSearchCommitToken = nil
+                pendingGlobalSearchSubmitTask = nil
+            } catch is CancellationError {
+                return
+            } catch {
+                return
+            }
+        }
+    }
+
+    /// 只在确有延迟需要时挂起当前提交任务，避免 0ns sleep 额外切出当前 MainActor 片段。
+    private func sleepIfNeeded(nanoseconds: UInt64) async throws {
+        guard nanoseconds > 0 else { return }
+        try await Task.sleep(nanoseconds: nanoseconds)
+    }
+
+    /// 取消仍在等待的全局搜索提交，并解除对系统搜索框空文本回写的保护。
+    private func cancelPendingGlobalSearchCommit() {
+        clearPendingGlobalSearchSuggestion()
+        pendingGlobalSearchSubmitTask?.cancel()
+        pendingGlobalSearchSubmitTask = nil
+        protectedGlobalSearchQuery = nil
+        globalSearchCommitToken = nil
+    }
+
+    /// 清理历史词按下阶段的 fallback 任务；用户主动改写输入或提交落地时用于收口竞态窗口。
+    private func clearPendingGlobalSearchSuggestion() {
+        pendingGlobalSearchSuggestionTask?.cancel()
+        pendingGlobalSearchSuggestionTask = nil
+        pendingGlobalSearchSuggestion = nil
     }
 
     /// 最近搜索词注入后主动释放系统搜索框焦点，避免软键盘遮挡用户刚触发的结果列表。
     private func dismissGlobalSearchKeyboard() {
-        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
-    }
-
-    private func presentGlobalSearchHistoryClearConfirmation(_ clearHistory: @escaping () -> Void) {
-        globalSearchClearHistoryRequest = GlobalSearchClearHistoryRequest(clearHistory: clearHistory)
-    }
-
-    private func globalSearchClearHistoryDescriptor(for request: GlobalSearchClearHistoryRequest) -> XMSystemAlertDescriptor {
-        XMSystemAlertDescriptor(
-            title: "清空搜索历史？",
-            message: "这会移除全部最近搜索词，不影响你的本地内容。",
-            actions: [
-                XMSystemAlertAction(title: "取消", role: .cancel) {
-                },
-                XMSystemAlertAction(title: "清空", role: .destructive) {
-                    request.clearHistory()
-                }
-            ]
-        )
+        isSearchFieldFocused = false
     }
 
     private func openBookManagementGuide() {
@@ -642,17 +805,25 @@ private struct SearchResultCover: Identifiable {
     let target: SearchResultViewerTarget
 }
 
+/// 最近搜索词按下阶段的待消费意图，用独立 id 区分连续点击同一个关键词的不同交互。
+private struct PendingGlobalSearchSuggestion: Identifiable, Equatable {
+    let id = UUID()
+    let keyword: String
+}
+
 private extension View {
     /// 稳定挂载搜索 Tab 的根级搜索宿主，让 TabView 统一管理 search tab activation 与系统输入框生命周期。
     func mainTabSearchHost(
         searchText: Binding<String>,
         isPresented: Binding<Bool>,
+        isFocused: FocusState<Bool>.Binding,
         onSubmit: @escaping () -> Void
     ) -> some View {
         modifier(
             MainTabSearchHostModifier(
                 searchText: searchText,
                 isPresented: isPresented,
+                isFocused: isFocused,
                 onSubmit: onSubmit
             )
         )
@@ -662,18 +833,15 @@ private extension View {
 private struct MainTabSearchHostModifier: ViewModifier {
     @Binding var searchText: String
     @Binding var isPresented: Bool
+    var isFocused: FocusState<Bool>.Binding
     let onSubmit: () -> Void
 
     func body(content: Content) -> some View {
         content
             .searchable(text: $searchText, isPresented: $isPresented, prompt: "搜索本地内容")
+            .searchFocused(isFocused)
             .onSubmit(of: .search, onSubmit)
     }
-}
-
-private struct GlobalSearchClearHistoryRequest: Identifiable {
-    let id = UUID()
-    let clearHistory: () -> Void
 }
 
 #Preview {

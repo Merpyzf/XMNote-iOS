@@ -108,6 +108,11 @@ struct BookshelfDefaultDeleteConfirmation: Identifiable, Hashable, Sendable {
     var totalCount: Int { bookCount + groupCount }
 }
 
+/// 书架搜索输入防抖策略，避免连续输入期间反复重建书架观察流。
+private enum BookshelfSearchDebouncePolicy {
+    static let delayNanoseconds: UInt64 = 200_000_000
+}
+
 // MARK: - BookViewModel
 
 /// BookViewModel 负责书架快照订阅，把 Repository 多维度结果和编辑态选择映射成界面可消费的数据集；所有 UI 状态均在主线程更新。
@@ -128,7 +133,7 @@ final class BookViewModel {
     var searchKeyword: String = "" {
         didSet {
             guard normalizedSearchKeyword(oldValue) != normalizedSearchKeyword(searchKeyword) else { return }
-            restartObservation()
+            scheduleSearchObservationRestart()
         }
     }
     var isSearchActive: Bool = false
@@ -170,6 +175,7 @@ final class BookViewModel {
     private let repository: any BookshelfRepositoryProtocol
     private var observationTask: Task<Void, Never>?
     private var displaySettingChangeTask: Task<Void, Never>?
+    private var searchDebounceTask: Task<Void, Never>?
     private var writeTask: Task<Void, Never>?
     private var batchOptionsTask: Task<Void, Never>?
     private var feedbackClearTask: Task<Void, Never>?
@@ -338,6 +344,7 @@ final class BookViewModel {
     isolated deinit {
         observationTask?.cancel()
         displaySettingChangeTask?.cancel()
+        searchDebounceTask?.cancel()
         writeTask?.cancel()
         batchOptionsTask?.cancel()
         feedbackClearTask?.cancel()
@@ -374,8 +381,35 @@ final class BookViewModel {
     }
 
     private func restartObservation() {
+        searchDebounceTask?.cancel()
+        searchDebounceTask = nil
+        restartObservationNow()
+    }
+
+    private func restartObservationNow() {
         observationTask?.cancel()
         startObservation()
+    }
+
+    /// 搜索输入稳定 200ms 后再重启观察流；新输入会取消旧任务，避免连续敲字时反复触发整组书架快照读取。
+    private func scheduleSearchObservationRestart() {
+        searchDebounceTask?.cancel()
+        searchDebounceTask = Task { [weak self] in
+            do {
+                try await Task.sleep(nanoseconds: BookshelfSearchDebouncePolicy.delayNanoseconds)
+                try Task.checkCancellation()
+                self?.restartObservationAfterDebounce()
+            } catch is CancellationError {
+                return
+            } catch {
+                return
+            }
+        }
+    }
+
+    private func restartObservationAfterDebounce() {
+        searchDebounceTask = nil
+        restartObservationNow()
     }
 
     /// 监听默认分组二级列表显示设置变化，确保返回默认书架时分组代表封面使用最新组内排序。

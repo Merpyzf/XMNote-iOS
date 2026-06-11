@@ -12,6 +12,7 @@
 - `XMRemoteImage.swift`: 统一远程图片组件（静态图 + GIF 探测/降级 + 占位）
 - `XMGIFImageView.swift`: GIF 动画承载桥接组件（基于 Gifu）
 - `XMScopeSelector.swift`: 范围选择控件（2-5 项等宽同屏、6+ 内部横向滚动、数量 badge、跟手拖拽、内容流/浮层玻璃两种样式）
+- `XMSearchHistorySection.swift`: 通用搜索历史区块（最近搜索词、展开/收起、编辑态、右侧删除操作槽、清空入口、可选空态与内容/玻璃两种样式）
 - `XMScrollEdgeChrome.swift`: 滚动边缘栏容器（contained 固定占位栏、overlaySoft 系统软边缘、顶部/底部栏组合）
 - `XMScrollEdgeWash.swift`: 滚动边缘柔化层（顶部/底部/双向覆盖层、强度/高度/surface/可见性策略）
 - `RichText.swift`: 只读 HTML 富文本展示组件（`UITextView + RichTextLayoutManager`，支持截断状态回调与布局缓存）

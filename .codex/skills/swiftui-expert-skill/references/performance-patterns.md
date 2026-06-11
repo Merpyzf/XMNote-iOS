@@ -41,7 +41,7 @@ Hot paths are frequently executed code (scroll handlers, animations, gestures):
 
 ### 3. Pass Only What Views Need
 
-**Avoid passing large "config" or "context" objects.** Pass only the specific values each view needs.
+**Avoid passing large value-type "config" or "context" objects.** Pass only the specific values each view needs. SwiftUI compares value-type view inputs by their stored fields, so passing a large struct to a view that reads one field increases the comparison surface and can invalidate the view when unrelated fields change.
 
 ```swift
 // Good - pass specific values
@@ -77,7 +77,7 @@ struct SettingsView: View {
 }
 ```
 
-**Why**: When using `ObservableObject`, any `@Published` property change triggers updates in all views observing the object. With `@Observable`, views update when properties they access change, but passing entire objects still creates unnecessary dependencies.
+**Why**: With value types, the view input itself is compared. With `ObservableObject`, any `@Published` property change triggers all observers. With `@Observable`, views update when accessed properties change, so passing a stable reference model is acceptable when the child truly reads the model; still avoid handing a whole model to a child that only needs one scalar value.
 
 ### 4. Use Equatable Views
 
