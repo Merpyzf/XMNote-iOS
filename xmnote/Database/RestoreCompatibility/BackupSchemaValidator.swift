@@ -1,5 +1,5 @@
 /**
- * [INPUT]: 依赖 GRDB、RoomCanonicalSchemaV40/RoomCanonicalSchemaV41、StagingIntegrityCanonicalizer 与核心 Record，校验备份 staging 数据库
+ * [INPUT]: 依赖 GRDB、RoomCanonicalSchemaCompatibility、StagingIntegrityCanonicalizer 与核心 Record，校验备份 staging 数据库
  * [OUTPUT]: 对外提供 BackupSchemaValidator，在正式替换前完成版本、schema、外键和解码校验
  * [POS]: Database/RestoreCompatibility 的恢复安全闸门，被 BackupArchiveService 调用
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -30,21 +30,11 @@ nonisolated enum BackupSchemaValidator {
 
 private extension BackupSchemaValidator {
     nonisolated static func validatePhysicalSchema(_ db: Database) throws {
-        let userVersion = try Int.fetchOne(db, sql: "PRAGMA user_version") ?? 0
-        if userVersion >= RoomCanonicalSchemaV41.databaseVersion {
-            try RoomCanonicalSchemaV41.validatePhysicalSchema(db)
-        } else {
-            try RoomCanonicalSchemaV40.validatePhysicalSchema(db)
-        }
+        try RoomCanonicalSchemaCompatibility.validatePhysicalSchema(db)
     }
 
     nonisolated static func assertForeignKeyIntegrity(_ db: Database) throws {
-        let userVersion = try Int.fetchOne(db, sql: "PRAGMA user_version") ?? 0
-        if userVersion >= RoomCanonicalSchemaV41.databaseVersion {
-            try RoomCanonicalSchemaV41.assertForeignKeyIntegrity(db)
-        } else {
-            try RoomCanonicalSchemaV40.assertForeignKeyIntegrity(db)
-        }
+        try RoomCanonicalSchemaCompatibility.assertForeignKeyIntegrity(db)
     }
 
     nonisolated static func decodeCoreRecords(_ db: Database) throws {

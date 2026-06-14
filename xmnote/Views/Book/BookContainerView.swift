@@ -7,7 +7,7 @@
 
 /**
  * [INPUT]: 依赖 RepositoryContainer 注入仓储，依赖 HomeSubtabScaffold 承载首页二级页硬切，依赖 BookViewModel 驱动书架浏览、编辑态选择与批量操作
- * [OUTPUT]: 对外提供 BookContainerView 与 BookSubTab 枚举，承载书籍/书单二级页切换、TabBar 显隐协调、底部玻璃编辑工具栏、批量 Sheet 与删除确认
+ * [OUTPUT]: 对外提供 BookContainerView 与 BookSubTab 枚举，承载书籍/书单二级页切换、TabBar 显隐协调、底部玻璃编辑工具栏、批量 Sheet、删除确认与书单入口
  * [POS]: Book 模块容器壳层，承载书籍页与书架管理模式编排
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -17,7 +17,7 @@ import UIKit
 
 // MARK: - Sub Tab
 
-/// 书籍页二级分栏；书单当前仅开放空白子页面，真实书单列表后续补齐。
+/// 书籍页二级分栏，承载书架与书单两个首页入口。
 enum BookSubTab: String, CaseIterable, Hashable, Codable {
     case books, collections
 
@@ -795,7 +795,9 @@ private struct BookContentView: View {
     }
 
     private var collectionPlaceholderPage: some View {
-        CollectionListPlaceholderView()
+        BookCollectionListView(onOpenCollection: { collectionID in
+            onOpenBookRoute(.collectionDetail(collectionID: collectionID))
+        })
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(Color.surfacePage)
     }

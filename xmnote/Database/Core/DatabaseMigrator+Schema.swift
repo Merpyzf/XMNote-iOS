@@ -1,5 +1,5 @@
 /**
- * [INPUT]: 依赖 GRDB DatabaseMigrator、RoomCanonicalSchemaV40/RoomCanonicalSchemaV41 与 DatabaseSchema+Seed
+ * [INPUT]: 依赖 GRDB DatabaseMigrator、RoomCanonicalSchemaV40/RoomCanonicalSchemaV41/RoomCanonicalSchemaCompatibility 与 DatabaseSchema+Seed
  * [OUTPUT]: 对外提供 AppDatabase.migrator 与 Room canonical 迁移标识
  * [POS]: Database/Core 的迁移入口，被 AppDatabase.init 调用执行 Schema 创建
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -43,11 +43,7 @@ extension AppDatabase {
             return
         }
 
-        if userVersion >= RoomCanonicalSchemaV41.databaseVersion {
-            try RoomCanonicalSchemaV41.validatePhysicalSchema(db)
-        } else {
-            try RoomCanonicalSchemaV40.validatePhysicalSchema(db)
-        }
+        try RoomCanonicalSchemaCompatibility.validatePhysicalSchema(db)
 
         // SQL 目的：为 Android Room canonical 库补建 GRDB 内部迁移表，避免后续迁移器误判为空库。
         // 涉及表：grdb_migrations；副作用：只写 iOS 内部迁移标记，不修改任何业务表。

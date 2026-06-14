@@ -220,6 +220,27 @@ struct BookRepository: BookRepositoryProtocol {
         }
     }
 
+    /// 持续监听书单列表快照，并按 collection 类型拆分手动书单与年度书单。
+    func observeBookCollectionList() -> AsyncThrowingStream<BookCollectionListSnapshot, Error> {
+        ObservationStream.make(in: databaseManager.database.dbPool) { db in
+            try fetchBookCollectionListSnapshot(db)
+        }
+    }
+
+    /// 持续监听指定书单详情，详情页打开期间 collection 或 relation 变化会自动刷新。
+    func observeBookCollectionDetail(collectionID: Int64) -> AsyncThrowingStream<BookCollectionDetail?, Error> {
+        ObservationStream.make(in: databaseManager.database.dbPool) { db in
+            try fetchBookCollectionDetail(db, collectionID: collectionID)
+        }
+    }
+
+    /// 扫描有效书籍并按读完历史修复年度书单关系，用于 Android 历史数据迁移后的首轮读取补齐。
+    func repairAnnualBookCollections() async throws {
+        try await databaseManager.database.dbPool.write { db in
+            try repairAnnualBookCollections(db)
+        }
+    }
+
     /// 新建手动书单，供加入书单 Sheet 在面板内直接创建并回填选中项。
     func createBookCollection(title: String) async throws -> BookCollectionSummary {
         try await databaseManager.database.dbPool.write { db in
@@ -227,10 +248,63 @@ struct BookRepository: BookRepositoryProtocol {
         }
     }
 
+    /// 新建手动书单并写入标题与简介。
+    func createBookCollection(input: BookCollectionFormInput) async throws -> BookCollectionListItem {
+        try await databaseManager.database.dbPool.write { db in
+            let collectionID = try createBookCollection(db, input: input)
+            guard let item = try fetchBookCollectionListItem(db, collectionID: collectionID) else {
+                throw BookshelfBatchWriteError.invalidCollection
+            }
+            return item
+        }
+    }
+
+    /// 编辑手动书单标题与简介。
+    func updateBookCollection(collectionID: Int64, input: BookCollectionFormInput) async throws {
+        try await databaseManager.database.dbPool.write { db in
+            try updateBookCollection(db, collectionID: collectionID, input: input)
+        }
+    }
+
+    /// 删除手动书单及其全部 relation。
+    func deleteBookCollection(collectionID: Int64) async throws {
+        try await databaseManager.database.dbPool.write { db in
+            try deleteBookCollection(db, collectionID: collectionID)
+        }
+    }
+
+    /// 写入手动书单最终排序。
+    func updateManualBookCollectionOrder(_ collectionIDs: [Int64]) async throws {
+        try await databaseManager.database.dbPool.write { db in
+            try updateManualBookCollectionOrder(db, collectionIDs: collectionIDs)
+        }
+    }
+
     /// 批量加入书单，已有有效关系不会重复插入。
     func addBooks(_ bookIDs: [Int64], toCollection collectionID: Int64) async throws {
         try await databaseManager.database.dbPool.write { db in
             try addBooksToCollection(db, bookIDs: bookIDs, collectionID: collectionID)
+        }
+    }
+
+    /// 从书单内移除指定 relation。
+    func removeBooksFromCollection(collectionBookIDs: [Int64]) async throws {
+        try await databaseManager.database.dbPool.write { db in
+            try removeBooksFromCollection(db, collectionBookIDs: collectionBookIDs)
+        }
+    }
+
+    /// 写入书单内 relation 最终排序。
+    func updateBooksInCollectionOrder(collectionID: Int64, relationIDs: [Int64]) async throws {
+        try await databaseManager.database.dbPool.write { db in
+            try updateBooksInCollectionOrder(db, collectionID: collectionID, relationIDs: relationIDs)
+        }
+    }
+
+    /// 编辑书单内推荐语。
+    func updateCollectionBookRecommend(collectionBookID: Int64, recommend: String) async throws {
+        try await databaseManager.database.dbPool.write { db in
+            try updateCollectionBookRecommend(db, collectionBookID: collectionBookID, recommend: recommend)
         }
     }
 

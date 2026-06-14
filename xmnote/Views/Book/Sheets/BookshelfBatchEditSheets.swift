@@ -1136,7 +1136,7 @@ private struct BookshelfBatchMoveGroupOptionRow: View {
     }
 }
 
-/// 加入书单列表中的书单候选行，以轻量图标和书籍数量辅助识别目标书单。
+/// 加入书单列表中的书单候选行，以封面拼贴、简介和书籍数量辅助识别目标书单。
 private struct BookshelfBatchBookCollectionOptionRow: View {
     let option: BookCollectionSummary
     let isSelected: Bool
@@ -1144,15 +1144,11 @@ private struct BookshelfBatchBookCollectionOptionRow: View {
 
     var body: some View {
         HStack(spacing: Spacing.base) {
-            ZStack {
-                RoundedRectangle(cornerRadius: CornerRadius.inlaySmall, style: .continuous)
-                    .fill(Color.surfaceNested)
-
-                Image(systemName: "rectangle.stack")
-                    .font(AppTypography.subheadlineMedium)
-                    .foregroundStyle(Color.textSecondary)
-            }
-            .frame(width: BookshelfBatchCollectionIconLayout.size, height: BookshelfBatchCollectionIconLayout.size)
+            BookCollectionCoverMosaicView(
+                covers: option.representativeCovers,
+                size: BookshelfBatchCollectionIconLayout.size,
+                tone: .manual
+            )
 
             VStack(alignment: .leading, spacing: Spacing.micro) {
                 Text(option.title)
@@ -1164,7 +1160,8 @@ private struct BookshelfBatchBookCollectionOptionRow: View {
                 Text(collectionSubtitle)
                     .font(AppTypography.caption)
                     .foregroundStyle(Color.textSecondary)
-                    .lineLimit(1)
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
 
@@ -1194,7 +1191,7 @@ private struct BookshelfBatchBookCollectionOptionRow: View {
     private var collectionSubtitle: String {
         let description = option.description.trimmingCharacters(in: .whitespacesAndNewlines)
         if !description.isEmpty {
-            return description
+            return "\(option.bookCount)本 · \(description)"
         }
         return "\(option.bookCount)本"
     }

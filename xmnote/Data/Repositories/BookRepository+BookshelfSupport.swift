@@ -130,7 +130,7 @@ extension BookRepository {
         }
     }
 
-    enum BookshelfManagementLimits {
+    nonisolated enum BookshelfManagementLimits {
         static let groupNameMaxLength = 100
         static let tagNameMaxLength = 100
         static let sourceNameMaxLength = 100

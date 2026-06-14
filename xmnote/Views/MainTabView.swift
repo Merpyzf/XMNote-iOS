@@ -359,6 +359,13 @@ struct MainTabView: View {
                     searchResultCoverPath.append(route)
                 }
             )
+        case .collectionDetail(let collectionID):
+            BookCollectionDetailView(
+                collectionID: collectionID,
+                onOpenRoute: { route in
+                    searchResultCoverPath.append(route)
+                }
+            )
         }
     }
 
@@ -396,6 +403,13 @@ struct MainTabView: View {
                     append(route, to: selectedTab)
                 },
                 onOpenNoteRoute: { route in
+                    append(route, to: selectedTab)
+                }
+            )
+        case .collectionDetail(let collectionID):
+            BookCollectionDetailView(
+                collectionID: collectionID,
+                onOpenRoute: { route in
                     append(route, to: selectedTab)
                 }
             )

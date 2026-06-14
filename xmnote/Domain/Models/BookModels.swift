@@ -527,6 +527,83 @@ nonisolated struct BookCollectionSummary: Identifiable, Hashable, Sendable {
     let title: String
     let description: String
     let bookCount: Int
+    let representativeCovers: [String]
+}
+
+/// 书单类型，区分用户手动维护的书单与系统按读完年份同步的年度书单。
+nonisolated enum BookCollectionKind: String, Codable, Hashable, Sendable {
+    case manual
+    case annual
+
+    var title: String {
+        switch self {
+        case .manual:
+            return "我的书单"
+        case .annual:
+            return "年度书单"
+        }
+    }
+}
+
+/// 书单列表项，承载列表首屏展示、排序和年度目标统计所需字段。
+nonisolated struct BookCollectionListItem: Identifiable, Hashable, Sendable {
+    let id: Int64
+    let title: String
+    let description: String
+    let kind: BookCollectionKind
+    let order: Int64
+    let year: Int?
+    let bookCount: Int
+    let finishedCount: Int
+    let targetReadCount: Int?
+    let representativeCovers: [String]
+}
+
+/// 书单列表快照，按 Android “我的书单 / 年度书单”事实分组，但交由 iOS 页面用分段结构表达。
+nonisolated struct BookCollectionListSnapshot: Hashable, Sendable {
+    static let empty = BookCollectionListSnapshot(manualCollections: [], annualCollections: [])
+
+    let manualCollections: [BookCollectionListItem]
+    let annualCollections: [BookCollectionListItem]
+
+    var isEmpty: Bool {
+        manualCollections.isEmpty && annualCollections.isEmpty
+    }
+}
+
+/// 书单内的书籍关系展示项，保留 collection_book relation 字段，避免丢失推荐语、排序与时间戳语义。
+nonisolated struct BookCollectionBookItem: Identifiable, Hashable, Sendable {
+    let id: Int64
+    let collectionID: Int64
+    let book: BookshelfBookListItem
+    let recommend: String
+    let order: Int64
+    let createdDate: Int64
+    let updatedDate: Int64
+}
+
+/// 书单详情快照，汇总 collection 元信息、书籍关系和年度目标信息。
+nonisolated struct BookCollectionDetail: Identifiable, Hashable, Sendable {
+    let id: Int64
+    let title: String
+    let description: String
+    let kind: BookCollectionKind
+    let order: Int64
+    let year: Int?
+    let targetReadCount: Int?
+    let books: [BookCollectionBookItem]
+
+    var bookCount: Int { books.count }
+
+    var finishedCount: Int {
+        books.filter { $0.book.readStatusId == BookEntryReadingStatus.finished.rawValue }.count
+    }
+}
+
+/// 书单编辑输入，仅覆盖 Android 当前允许保存的标题与简介字段。
+nonisolated struct BookCollectionFormInput: Hashable, Sendable {
+    let title: String
+    let description: String
 }
 
 /// 书架批量编辑可选项，统一承载标签、来源与阅读状态 Sheet 所需数据。

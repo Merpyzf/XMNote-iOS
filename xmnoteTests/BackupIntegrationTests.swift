@@ -134,6 +134,63 @@ struct BackupIntegrationTests {
     }
 
     @Test
+    func androidRoomV43BackupPassesRestoreGateAndKeepsNewColumns() throws {
+        let databaseURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("android_room_v43_\(UUID().uuidString).db")
+        let archiveRoot = FileManager.default.temporaryDirectory
+            .appendingPathComponent("android_room_v43_archive_\(UUID().uuidString)")
+        defer { Self.removeDatabaseArtifacts(at: databaseURL) }
+        defer { try? FileManager.default.removeItem(at: archiveRoot) }
+
+        try Self.prepareAndroidRoomV43Database(at: databaseURL.path)
+        let archiveURL = try Self.makeBackupArchive(containing: databaseURL, in: archiveRoot)
+
+        let service = BackupArchiveService(database: try AppDatabase.empty())
+        do {
+            _ = try service.validateBackupArchive(at: archiveURL)
+        } catch {
+            Issue.record("Android Room v43 备份包校验失败：\(String(describing: error))")
+            throw error
+        }
+        do {
+            try BackupSchemaValidator.prepareForRestore(at: databaseURL.path)
+        } catch {
+            Issue.record("Android Room v43 staging 恢复准备失败：\(String(describing: error))")
+            throw error
+        }
+
+        let restoredDatabase: AppDatabase
+        do {
+            restoredDatabase = try AppDatabase(path: databaseURL.path)
+        } catch {
+            Issue.record("Android Room v43 数据库打开失败：\(String(describing: error))")
+            throw error
+        }
+        defer { try? restoredDatabase.close() }
+
+        try restoredDatabase.dbPool.read { db in
+            let userVersion = try Int.fetchOne(db, sql: "PRAGMA user_version") ?? 0
+            #expect(userVersion == 43)
+
+            let migrationMarker = try Int.fetchOne(
+                db,
+                sql: """
+                    SELECT COUNT(*)
+                    FROM grdb_migrations
+                    WHERE identifier = ?
+                    """,
+                arguments: [AppDatabase.roomV41MigrationIdentifier]
+            ) ?? 0
+            #expect(migrationMarker == 1)
+
+            let bookColumns = try Self.tableColumns("book", db: db)
+            let chapterColumns = try Self.tableColumns("chapter", db: db)
+            #expect(bookColumns.contains("weread_book_id"))
+            #expect(chapterColumns.contains("is_starred"))
+        }
+    }
+
+    @Test
     func selectingProviderUsesAndroidPreferenceKey() async throws {
         let suiteName = "backup.integration.\(UUID().uuidString)"
         let userDefaults = try #require(UserDefaults(suiteName: suiteName))
@@ -564,5 +621,75 @@ private extension BackupIntegrationTests {
                     """
             )
         }
+    }
+
+    nonisolated static func prepareAndroidRoomV43Database(at path: String) throws {
+        let database = try AppDatabase(path: path)
+        try database.dbPool.write { db in
+            try addColumnIfMissing(
+                table: "book",
+                column: "weread_book_id",
+                definition: "TEXT NOT NULL DEFAULT ''",
+                db: db
+            )
+            try addColumnIfMissing(
+                table: "chapter",
+                column: "is_starred",
+                definition: "INTEGER NOT NULL DEFAULT 0",
+                db: db
+            )
+
+            // SQL 目的：写入 Android Room v43 identity hash，模拟 Android 当前 DB_VERSION=43 的备份库。
+            // 涉及表：room_master_table；关键字段：id=42、identity_hash。
+            try db.execute(sql: """
+                INSERT OR REPLACE INTO room_master_table (id, identity_hash)
+                VALUES (42, '24d3737f9e3495337a4fbe9d9b3ac68f')
+            """)
+
+            // SQL 目的：将 fixture 标记为 Android Room v43 物理版本，覆盖 iOS 初始库的 v41 user_version。
+            // 涉及表：无；返回方通过 PRAGMA user_version 选择恢复校验合同。
+            try db.execute(sql: "PRAGMA user_version = 43")
+
+            // SQL 目的：移除 iOS 内部迁移表，模拟 Android 备份库没有 GRDB 迁移标记的真实状态。
+            // 涉及表：grdb_migrations；副作用：仅作用于测试 fixture。
+            try db.execute(sql: "DROP TABLE IF EXISTS grdb_migrations")
+        }
+        try database.dbPool.writeWithoutTransaction { db in
+            try db.execute(sql: "PRAGMA wal_checkpoint(TRUNCATE)")
+        }
+        try database.close()
+    }
+
+    nonisolated static func makeBackupArchive(containing databaseURL: URL, in directory: URL) throws -> URL {
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let archiveURL = directory.appendingPathComponent("2026-06-14-09-30-00-Android-v3.zip")
+        let archive = try Archive(url: archiveURL, accessMode: .create)
+        try archive.addEntry(with: AppDatabase.databaseName, fileURL: databaseURL)
+        return archiveURL
+    }
+
+    nonisolated static func addColumnIfMissing(
+        table: String,
+        column: String,
+        definition: String,
+        db: Database
+    ) throws {
+        guard !(try tableColumns(table, db: db).contains(column)) else { return }
+        // SQL 目的：按 Android Room migration 追加新列，构造 v42/v43 恢复兼容测试库。
+        // 涉及表：当前 table 参数；关键字段：当前 column 参数；副作用：只新增缺失列，使用 Android 默认值定义。
+        try db.execute(sql: "ALTER TABLE \(quote(table)) ADD COLUMN \(quote(column)) \(definition)")
+    }
+
+    nonisolated static func tableColumns(_ table: String, db: Database) throws -> Set<String> {
+        // SQL 目的：读取表字段元数据，验证 Android v42/v43 新列与测试迁移补丁是否存在。
+        // 涉及表：当前 table 参数；返回字段：PRAGMA table_info 的 name 集合。
+        Set(try Row.fetchAll(db, sql: "PRAGMA table_info(\(quote(table)))").compactMap { row in
+            let value: String? = row["name"]
+            return value
+        })
+    }
+
+    nonisolated static func quote(_ identifier: String) -> String {
+        "\"\(identifier.replacingOccurrences(of: "\"", with: "\"\""))\""
     }
 }

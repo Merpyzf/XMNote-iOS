@@ -253,6 +253,7 @@ struct BookPickerView: View {
                     )
                 }
                 .buttonStyle(.plain)
+                .accessibilityIdentifier("book.picker.local.\(book.id)")
                 .id(book.id)
             }
         }
@@ -398,6 +399,7 @@ struct BookPickerView: View {
             }
             .buttonStyle(.plain)
             .disabled(viewModel.isResolvingRemoteSelections)
+            .accessibilityIdentifier("book.picker.confirm")
             .padding(.horizontal, Spacing.screenEdge)
             .padding(.bottom, Spacing.cozy)
             .padding(.top, Spacing.half)
