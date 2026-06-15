@@ -12,6 +12,8 @@ enum TopSwitcherSelectionTransactionPolicy {
     case hardSwitch
     case animated(Animation)
 
+    private static let topFeedbackAnimation = Animation.snappy(duration: 0.22)
+
     /// 写入父级路由 selection；首页二级页默认禁用动画，避免动画事务污染内容宿主。
     func updateRouteSelection(_ update: () -> Void) {
         switch self {
@@ -24,11 +26,22 @@ enum TopSwitcherSelectionTransactionPolicy {
         }
     }
 
-    /// 更新 TopSwitcher 自己的视觉 selection；硬切路由必须与内容页同帧落位。
-    func updateTopFeedback(_ update: () -> Void) {
+    /// 更新 TopSwitcher 自己的视觉 selection；路由保持硬切，顶部焦点反馈在局部动画事务中完成。
+    func updateTopFeedback(
+        reduceMotion: Bool,
+        animated: Bool = true,
+        _ update: () -> Void
+    ) {
+        guard animated, !reduceMotion else {
+            updateWithoutAnimation(update)
+            return
+        }
+
         switch self {
         case .hardSwitch:
-            updateWithoutAnimation(update)
+            withAnimation(Self.topFeedbackAnimation) {
+                update()
+            }
         case .animated(let animation):
             withAnimation(animation) {
                 update()
@@ -156,6 +169,7 @@ private struct TopSwitcherTabBar<Tab: Hashable>: View {
     let titleProvider: (Tab) -> String
 
     @State private var visualSelection: Tab?
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     private var displayedSelection: Tab {
@@ -171,19 +185,25 @@ private struct TopSwitcherTabBar<Tab: Hashable>: View {
             BrandTypography.debugLogTopSwitcherTabsUsesQuoteIcon(tabs.count)
             #endif
             guard visualSelection == nil else { return }
-            selectionTransactionPolicy.updateTopFeedback {
+            selectionTransactionPolicy.updateTopFeedback(
+                reduceMotion: reduceMotion,
+                animated: false
+            ) {
                 visualSelection = selection
             }
         }
         .onChange(of: selection) { _, newSelection in
             guard visualSelection != newSelection else { return }
-            selectionTransactionPolicy.updateTopFeedback {
+            selectionTransactionPolicy.updateTopFeedback(reduceMotion: reduceMotion) {
                 visualSelection = newSelection
             }
         }
         .onChange(of: tabs) { _, newTabs in
             guard let visualSelection, !newTabs.contains(visualSelection) else { return }
-            selectionTransactionPolicy.updateTopFeedback {
+            selectionTransactionPolicy.updateTopFeedback(
+                reduceMotion: reduceMotion,
+                animated: false
+            ) {
                 self.visualSelection = selection
             }
         }
@@ -227,7 +247,7 @@ private struct TopSwitcherTabBar<Tab: Hashable>: View {
             selectionTransactionPolicy.updateRouteSelection {
                 selection = tab
             }
-            selectionTransactionPolicy.updateTopFeedback {
+            selectionTransactionPolicy.updateTopFeedback(reduceMotion: reduceMotion) {
                 visualSelection = tab
             }
         } label: {
