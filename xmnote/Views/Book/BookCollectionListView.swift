@@ -1,6 +1,6 @@
 /**
- * [INPUT]: 依赖 RepositoryContainer 注入书架仓储，依赖 BookCollectionListViewModel、LoadingGate 与 XMScopeSelector 驱动手动书单、年度书单、创建、删除、排序和稳定 List 视口加载占位
- * [OUTPUT]: 对外提供 BookCollectionListView，承载首页书单 Tab 的范围切换、集合卡片、空态、错误态、写操作反馈与书单详情入口
+ * [INPUT]: 依赖外部注入的 BookCollectionListViewModel 与 EditMode，依赖 LoadingGate 与 XMScopeSelector 驱动手动书单、年度书单、删除确认、排序和稳定 List 视口加载占位
+ * [OUTPUT]: 对外提供 BookCollectionListView，承载首页书单 Tab 的范围切换、集合卡片、空态、错误态、写操作反馈、表单弹层与书单详情入口
  * [POS]: Views/Book 的书单首页页面壳层，被 BookContainerView 的书单二级页消费
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -9,19 +9,19 @@ import SwiftUI
 
 /// 首页书单列表页，按 iOS 分段结构表达 Android “我的书单 / 年度书单”业务分组。
 struct BookCollectionListView: View {
-    @Environment(RepositoryContainer.self) private var repositories
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Bindable var viewModel: BookCollectionListViewModel
+    @Binding var editMode: EditMode
     let onOpenCollection: (Int64) -> Void
-    @State private var viewModel: BookCollectionListViewModel?
-    @State private var editMode: EditMode = .inactive
     @State private var loadingGate = LoadingGate()
 
-    private var isReordering: Bool {
-        editMode.isEditing
-    }
-
-    /// 注入书单打开回调，保持列表页只负责发出导航意图。
-    init(onOpenCollection: @escaping (Int64) -> Void = { _ in }) {
+    /// 注入书单状态与打开回调，保持列表页只负责范围、列表与弹层渲染。
+    init(
+        viewModel: BookCollectionListViewModel,
+        editMode: Binding<EditMode>,
+        onOpenCollection: @escaping (Int64) -> Void = { _ in }
+    ) {
+        self.viewModel = viewModel
+        self._editMode = editMode
         self.onOpenCollection = onOpenCollection
     }
 
@@ -31,94 +31,55 @@ struct BookCollectionListView: View {
             content
         }
         .background(Color.surfacePage.ignoresSafeArea())
-        .transaction(value: viewModel == nil) { transaction in
-            transaction.animation = nil
-            transaction.disablesAnimations = true
-        }
         .onAppear {
             syncLoadingGate()
         }
         .onDisappear {
             loadingGate.hideImmediately()
         }
-        .onChange(of: viewModel?.contentState) { _, _ in
+        .onChange(of: viewModel.contentState) { _, _ in
             syncLoadingGate()
         }
-        .onChange(of: viewModel?.selectedKind) { _, _ in
+        .onChange(of: viewModel.selectedKind) { _, _ in
             guard editMode.isEditing else { return }
             editMode = .inactive
         }
         .sheet(item: activeFormBinding) { presentation in
             BookCollectionFormSheet(
                 presentation: presentation,
-                isSaving: viewModel?.activeAction != nil
+                isSaving: viewModel.activeAction != nil
             ) { title, description in
-                viewModel?.submitForm(presentation, title: title, description: description)
+                viewModel.submitForm(presentation, title: title, description: description)
             }
         }
         .xmSystemAlert(item: deleteConfirmationBinding) { confirmation in
             deleteDescriptor(for: confirmation)
         }
-        .task {
-            guard viewModel == nil else { return }
-            let nextViewModel = BookCollectionListViewModel(repository: repositories.bookRepository)
-            var transaction = Transaction(animation: nil)
-            transaction.disablesAnimations = true
-            withTransaction(transaction) {
-                viewModel = nextViewModel
-            }
-            syncLoadingGate()
-        }
     }
 
     private var activeFormBinding: Binding<BookCollectionFormPresentation?> {
         Binding(
-            get: { viewModel?.activeForm },
-            set: { viewModel?.activeForm = $0 }
+            get: { viewModel.activeForm },
+            set: { viewModel.activeForm = $0 }
         )
     }
 
     private var deleteConfirmationBinding: Binding<BookCollectionDeleteConfirmation?> {
         Binding(
-            get: { viewModel?.deleteConfirmation },
-            set: { viewModel?.deleteConfirmation = $0 }
+            get: { viewModel.deleteConfirmation },
+            set: { viewModel.deleteConfirmation = $0 }
         )
     }
 
-    @ViewBuilder
     private var controls: some View {
-        if let viewModel {
-            BookCollectionScopeHeader(
-                selectedKind: Binding(
-                    get: { viewModel.selectedKind },
-                    set: { viewModel.selectedKind = $0 }
-                ),
-                manualCount: viewModel.snapshot.manualCollections.count,
-                annualCount: viewModel.snapshot.annualCollections.count,
-                visibleCount: viewModel.visibleCollections.count,
-                isReordering: isReordering,
-                canCreate: viewModel.canCreateManualCollection,
-                canReorder: viewModel.selectedKind == .manual
-                    && viewModel.visibleCollections.count >= 2
-                    && viewModel.activeAction == nil,
-                onCreate: viewModel.presentCreateForm,
-                onToggleReorder: toggleReordering
-            )
-        } else {
-            BookCollectionScopeHeader(
-                selectedKind: .constant(.manual),
-                manualCount: 0,
-                annualCount: 0,
-                visibleCount: 0,
-                isReordering: false,
-                canCreate: false,
-                canReorder: false,
-                isPlaceholder: true,
-                reservesReorderAction: true,
-                onCreate: {},
-                onToggleReorder: {}
-            )
-        }
+        BookCollectionScopeHeader(
+            selectedKind: Binding(
+                get: { viewModel.selectedKind },
+                set: { viewModel.selectedKind = $0 }
+            ),
+            manualCount: viewModel.snapshot.manualCollections.count,
+            annualCount: viewModel.snapshot.annualCollections.count
+        )
     }
 
     private var content: some View {
@@ -135,7 +96,7 @@ struct BookCollectionListView: View {
             transaction.disablesAnimations = true
         }
         .overlay(alignment: .top) {
-            if let feedback = viewModel?.actionFeedback {
+            if let feedback = viewModel.actionFeedback {
                 BookCollectionFeedbackBanner(feedback: feedback)
                     .padding(.horizontal, Spacing.screenEdge)
                     .padding(.top, Spacing.tight)
@@ -191,16 +152,14 @@ struct BookCollectionListView: View {
 
     @ViewBuilder
     private var collectionRows: some View {
-        if let viewModel {
-            ForEach(viewModel.visibleCollections) { item in
-                collectionRow(for: item, viewModel: viewModel)
-            }
-            .onMove { offsets, destination in
-                guard viewModel.selectedKind == .manual else { return }
-                var items = viewModel.visibleCollections
-                items.move(fromOffsets: offsets, toOffset: destination)
-                viewModel.submitManualOrder(items.map(\.id))
-            }
+        ForEach(viewModel.visibleCollections) { item in
+            collectionRow(for: item, viewModel: viewModel)
+        }
+        .onMove { offsets, destination in
+            guard viewModel.selectedKind == .manual else { return }
+            var items = viewModel.visibleCollections
+            items.move(fromOffsets: offsets, toOffset: destination)
+            viewModel.submitManualOrder(items.map(\.id))
         }
     }
 
@@ -213,7 +172,7 @@ struct BookCollectionListView: View {
         } label: {
             BookCollectionListCard(item: item)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(BookCollectionListCardButtonStyle())
         .accessibilityIdentifier("book.collection.row.\(item.id)")
         .swipeActions(edge: .trailing, allowsFullSwipe: false) {
             if item.kind == .manual {
@@ -254,9 +213,6 @@ struct BookCollectionListView: View {
     }
 
     private var loadPhase: LoadPhase {
-        guard let viewModel else {
-            return .placeholder
-        }
         switch viewModel.contentState {
         case .loading:
             return loadingGate.isVisible ? .loading : .placeholder
@@ -283,21 +239,14 @@ struct BookCollectionListView: View {
     }
 
     private var selectedKind: BookCollectionKind {
-        viewModel?.selectedKind ?? .manual
+        viewModel.selectedKind
     }
 
     private func syncLoadingGate() {
-        if case .loading = viewModel?.contentState {
+        if case .loading = viewModel.contentState {
             loadingGate.update(intent: .read)
         } else {
             loadingGate.update(intent: .none)
-        }
-    }
-
-    private func toggleReordering() {
-        guard viewModel != nil else { return }
-        withAnimation(reduceMotion ? nil : .smooth(duration: 0.18)) {
-            editMode = isReordering ? .inactive : .active
         }
     }
 
@@ -312,13 +261,13 @@ struct BookCollectionListView: View {
 
             if selectedKind == .manual {
                 Button {
-                    viewModel?.presentCreateForm()
+                    viewModel.presentCreateForm()
                 } label: {
                     Label("新建第一份书单", systemImage: "plus")
                         .font(AppTypography.subheadlineMedium)
                 }
                 .buttonStyle(.borderedProminent)
-                .disabled(viewModel?.canCreateManualCollection != true)
+                .disabled(!viewModel.canCreateManualCollection)
                 .accessibilityIdentifier("book.collection.empty.create")
             }
         }
@@ -350,29 +299,22 @@ struct BookCollectionListView: View {
             actions: [
                 XMSystemAlertAction(title: "取消", role: .cancel) {},
                 XMSystemAlertAction(title: "删除", role: .destructive) {
-                    viewModel?.confirmDelete(confirmation)
+                    viewModel.confirmDelete(confirmation)
                 }
             ]
         )
     }
 }
 
-/// 书单列表顶部范围说明，负责把类型切换、数量和当前可用动作组织在同一区域。
+/// 书单列表顶部范围切换，帮助用户在手动书单和年度书单之间快速定位。
 private struct BookCollectionScopeHeader: View {
     @Binding var selectedKind: BookCollectionKind
     let manualCount: Int
     let annualCount: Int
-    let visibleCount: Int
-    let isReordering: Bool
-    let canCreate: Bool
-    let canReorder: Bool
     var isPlaceholder: Bool = false
-    var reservesReorderAction: Bool = false
-    let onCreate: () -> Void
-    let onToggleReorder: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: Spacing.base) {
+        VStack(alignment: .leading, spacing: Spacing.none) {
             XMScopeSelector(
                 items: scopeItems,
                 selection: $selectedKind,
@@ -381,33 +323,6 @@ private struct BookCollectionScopeHeader: View {
                 accessibilityLabel: "书单范围"
             )
             .accessibilityIdentifier("book.collection.kind.picker")
-
-            HStack(alignment: .center, spacing: Spacing.base) {
-                VStack(alignment: .leading, spacing: Spacing.compact) {
-                    Text(selectedKind.title)
-                        .font(AppTypography.headlineSemibold)
-                        .foregroundStyle(Color.textPrimary)
-
-                    Text(subtitle)
-                        .font(AppTypography.caption)
-                        .foregroundStyle(Color.textSecondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-
-                manualActions
-            }
-
-            if isReordering {
-                Label("拖动右侧把手调整顺序。", systemImage: "arrow.up.arrow.down")
-                    .font(AppTypography.caption)
-                    .foregroundStyle(Color.textSecondary)
-                    .padding(.horizontal, Spacing.tight)
-                    .padding(.vertical, Spacing.cozy)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(Color.surfaceNested, in: RoundedRectangle(cornerRadius: CornerRadius.blockSmall, style: .continuous))
-                    .transition(.opacity.combined(with: .move(edge: .top)))
-            }
         }
         .padding(.horizontal, Spacing.screenEdge)
         .padding(.top, Spacing.tight)
@@ -434,54 +349,6 @@ private struct BookCollectionScopeHeader: View {
         ]
     }
 
-    private var manualActions: some View {
-        HStack(spacing: Spacing.cozy) {
-            Button(action: onCreate) {
-                Label("新建", systemImage: "plus")
-                    .font(AppTypography.subheadlineMedium)
-            }
-            .buttonStyle(.borderedProminent)
-            .disabled(!canCreate)
-            .accessibilityIdentifier("book.collection.create")
-
-            Button(action: onToggleReorder) {
-                Label(isReordering ? "完成" : "排序", systemImage: isReordering ? "checkmark" : "arrow.up.arrow.down")
-                    .font(AppTypography.subheadlineMedium)
-            }
-            .buttonStyle(.bordered)
-            .opacity(shouldShowReorderAction ? 1 : 0)
-            .disabled(!canUseReorderAction)
-            .accessibilityLabel(isReordering ? "完成排序" : "调整排序")
-            .accessibilityHidden(!canUseReorderAction)
-            .accessibilityIdentifier("book.collection.reorder")
-        }
-        .opacity(selectedKind == .manual ? 1 : 0)
-        .allowsHitTesting(selectedKind == .manual && !isPlaceholder)
-        .accessibilityHidden(selectedKind != .manual || isPlaceholder)
-    }
-
-    private var canUseReorderAction: Bool {
-        canReorder || isReordering
-    }
-
-    private var shouldShowReorderAction: Bool {
-        canUseReorderAction || isPlaceholder || reservesReorderAction
-    }
-
-    private var subtitle: String {
-        switch selectedKind {
-        case .manual:
-            if visibleCount == 0 {
-                return "按主题整理你的书架。"
-            }
-            return "\(visibleCount) 份书单"
-        case .annual:
-            if visibleCount == 0 {
-                return "读完记录会自动沉淀为年份书单。"
-            }
-            return "\(visibleCount) 个年份"
-        }
-    }
 }
 
 private struct BookCollectionListRowChrome: ViewModifier {
@@ -498,6 +365,18 @@ private struct BookCollectionListRowChrome: ViewModifier {
                 trailing: Spacing.screenEdge
             ))
             .listRowBackground(Color.clear)
+    }
+}
+
+private struct BookCollectionListCardButtonStyle: ButtonStyle {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    /// 提供卡片级轻量按压反馈，避免改变列表布局和滑动操作语义。
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .opacity(configuration.isPressed ? 0.94 : 1)
+            .scaleEffect(configuration.isPressed && !reduceMotion ? 0.985 : 1)
+            .animation(reduceMotion ? nil : .snappy(duration: 0.12), value: configuration.isPressed)
     }
 }
 

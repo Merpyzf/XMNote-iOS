@@ -1,26 +1,46 @@
 /**
  * [INPUT]: 依赖 SwiftUI 图标与字体渲染能力
- * [OUTPUT]: 对外提供 TopBarActionIcon 顶部栏统一图标组件，以及 TopBarBackButton 导航返回按钮
+ * [OUTPUT]: 对外提供 TopBarActionIcon 顶部栏统一图标组件、TopBarActionHitShape 热区形态，以及 TopBarBackButton 导航返回按钮
  * [POS]: UIComponents/TopBar 的原子级按钮图标与导航返回组件，被顶部操作区域与返回入口复用
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
 import SwiftUI
 
+/// 顶部工具图标的命中区域形态，区分独立圆形按钮与胶囊内分段按钮。
+enum TopBarActionHitShape {
+    case circle
+    case rectangle
+}
+
 /// 顶部栏操作图标原子组件，统一尺寸、字重与点击热区。
 struct TopBarActionIcon: View {
     let systemName: String
-    var iconSize: CGFloat = 15
+    var iconSize: CGFloat = 12
     var containerSize: CGFloat = 44
     var weight: Font.Weight = .medium
-    var foregroundColor: Color = .secondary
+    var foregroundColor: Color = Color.textPrimary.opacity(0.80)
+    var hitShape: TopBarActionHitShape = .circle
 
     var body: some View {
         Image(systemName: systemName)
             .font(.system(size: iconSize, weight: weight))
             .foregroundStyle(foregroundColor)
             .frame(width: containerSize, height: containerSize)
-            .contentShape(Circle())
+            .modifier(TopBarActionHitShapeModifier(hitShape: hitShape))
+    }
+}
+
+private struct TopBarActionHitShapeModifier: ViewModifier {
+    let hitShape: TopBarActionHitShape
+
+    func body(content: Content) -> some View {
+        switch hitShape {
+        case .circle:
+            content.contentShape(Circle())
+        case .rectangle:
+            content.contentShape(Rectangle())
+        }
     }
 }
 

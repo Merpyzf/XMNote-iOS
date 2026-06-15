@@ -1,7 +1,7 @@
 /**
- * [INPUT]: 依赖 SwiftUI App 生命周期、GRDB Database、RepositoryContainer 与全局服务初始化流程
- * [OUTPUT]: 对外提供 xmnoteApp（应用入口）完成数据库/仓储/根视图启动，并在 DEBUG UI Test 下提供隔离书架首页、二级列表与书单 fixture
- * [POS]: 应用启动编排层，负责组装全局依赖并挂载 ContentView
+ * [INPUT]: 依赖 SwiftUI App 生命周期、GRDB Database、RepositoryContainer、XMToastCenter 与全局服务初始化流程
+ * [OUTPUT]: 对外提供 xmnoteApp（应用入口）完成数据库/仓储/根视图启动、全局 Toast Host 挂载，并在 DEBUG UI Test 下提供隔离书架首页、二级列表与书单 fixture
+ * [POS]: 应用启动编排层，负责组装全局依赖并挂载 ContentView 与跨页面轻提示基础设施
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
@@ -27,6 +27,7 @@ import GRDB
 struct xmnoteApp: App {
     @State private var appState = AppState()
     @State private var sceneStateStore = SceneStateStore()
+    @State private var toastCenter = XMToastCenter()
     @State private var databaseManager: DatabaseManager?
     @State private var repositories: RepositoryContainer?
     @State private var initError: Error?
@@ -56,6 +57,8 @@ struct xmnoteApp: App {
                     LaunchSplashView()
                 }
             }
+            .environment(toastCenter)
+            .xmToastHost(center: toastCenter)
             .animation(.smooth(duration: 0.35), value: repositories != nil)
             .task {
                 guard databaseManager == nil, initError == nil else { return }

@@ -18,6 +18,7 @@
 - `BookCoverProgressBar使用说明.md`: BookCoverProgressBar 封面进度条组件接入指南与参数说明。
 - `ExpandableRichText使用说明.md`: ExpandableRichText / RichText 富文本展示组件接入指南与参数说明。
 - `ImmersiveBottomChrome使用说明.md`: ImmersiveBottomChrome 底部沉浸遮罩与 ornament 组件接入指南与参数说明。
+- `XMToast使用说明.md`: XMToast 全局轻量消息提示基建接入指南与参数说明。
 - `TopSwitcher使用说明.md`: TopSwitcher 顶部标题/标签切换组件接入指南与参数说明。
 - `KeepAliveSwitcherHost使用说明.md`: KeepAliveSwitcherHost 懒激活保活切换容器接入指南与参数说明。
 - `HomeSubtabScaffold使用说明.md`: HomeSubtabScaffold 首页二级页壳层接入指南与参数说明。

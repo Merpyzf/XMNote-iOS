@@ -183,7 +183,8 @@ final class BookCollectionListViewModel {
             setActiveAction(.reorder, message: "正在更新排序…")
             do {
                 try await repository.updateManualBookCollectionOrder(ids)
-                finishAction(message: "排序已更新")
+                activeAction = nil
+                actionFeedback = nil
             } catch {
                 failAction(error)
             }

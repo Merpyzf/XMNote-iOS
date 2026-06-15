@@ -272,7 +272,7 @@ final class BookCollectionDetailViewModel {
             bookCount: detail.bookCount,
             finishedCount: detail.finishedCount,
             targetReadCount: detail.targetReadCount,
-            representativeCovers: detail.books.prefix(4).map(\.book.cover)
+            representativeCovers: detail.books.prefix(5).map(\.book.cover)
         )
     }
 }

@@ -21,6 +21,7 @@
 		89JXPB0012F3D000000000002 /* JXPhotoBrowser in Frameworks */ = {isa = PBXBuildFile; productRef = 89JXPB0012F3D000000000004 /* JXPhotoBrowser */; };
 		89NUKE0012F3D000000000002 /* Nuke in Frameworks */ = {isa = PBXBuildFile; productRef = 89NUKE0012F3D000000000004 /* Nuke */; };
 		89NUKE0012F3D000000000003 /* NukeUI in Frameworks */ = {isa = PBXBuildFile; productRef = 89NUKE0012F3D000000000005 /* NukeUI */; };
+		89POPV0012F600000000002 /* PopupView in Frameworks */ = {isa = PBXBuildFile; productRef = 89POPV0012F600000000004 /* PopupView */; };
 		89SOUP0012F3D000000000002 /* SwiftSoup in Frameworks */ = {isa = PBXBuildFile; productRef = 89SOUP0012F3D000000000004 /* SwiftSoup */; };
 		89ZIP0012F3D000000000002 /* ZIPFoundation in Frameworks */ = {isa = PBXBuildFile; productRef = 89ZIP0012F3D000000000004 /* ZIPFoundation */; };
 		8ACCED43ABCD66D13B6BD021 /* libresolv.tbd in Frameworks */ = {isa = PBXBuildFile; fileRef = 19696D8CA8AA0D3676516DC3 /* libresolv.tbd */; };
@@ -90,6 +91,7 @@
 				89ALIY0012F5E000000000002 /* AliyunpanSDK in Frameworks */,
 				89NUKE0012F3D000000000002 /* Nuke in Frameworks */,
 				89NUKE0012F3D000000000003 /* NukeUI in Frameworks */,
+				89POPV0012F600000000002 /* PopupView in Frameworks */,
 				89GIFU0012F3D000000000002 /* Gifu in Frameworks */,
 				89AWS0012F3D000000000002 /* AWSS3 in Frameworks */,
 				89AWSI012F3D000000000002 /* AWSSDKIdentity in Frameworks */,
@@ -212,6 +214,7 @@
 				89ALIY0012F5E000000000004 /* AliyunpanSDK */,
 				89NUKE0012F3D000000000004 /* Nuke */,
 				89NUKE0012F3D000000000005 /* NukeUI */,
+				89POPV0012F600000000004 /* PopupView */,
 				89GIFU0012F3D000000000004 /* Gifu */,
 				89AWS0012F3D000000000004 /* AWSS3 */,
 				89AWSI012F3D000000000004 /* AWSSDKIdentity */,
@@ -307,6 +310,7 @@
 				89AF00012F3D000000000001 /* XCRemoteSwiftPackageReference "Alamofire" */,
 				89ALIY0012F5E000000000001 /* XCRemoteSwiftPackageReference "aliyunpan-ios-sdk" */,
 				89NUKE0012F3D000000000001 /* XCRemoteSwiftPackageReference "Nuke" */,
+				89POPV0012F600000000001 /* XCRemoteSwiftPackageReference "PopupView" */,
 				89GIFU0012F3D000000000001 /* XCRemoteSwiftPackageReference "Gifu" */,
 				89AWS0012F3D000000000001 /* XCRemoteSwiftPackageReference "aws-sdk-swift" */,
 				89HZCAL12F3D000000000001 /* XCLocalSwiftPackageReference "Vendor/HorizonCalendar" */,
@@ -788,6 +792,14 @@
 				minimumVersion = 12.9.0;
 			};
 		};
+		89POPV0012F600000000001 /* XCRemoteSwiftPackageReference "PopupView" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/exyte/PopupView.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 5.0.1;
+			};
+		};
 		89SOUP0012F3D000000000001 /* XCRemoteSwiftPackageReference "SwiftSoup" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/scinfu/SwiftSoup.git";
@@ -856,6 +868,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 89NUKE0012F3D000000000001 /* XCRemoteSwiftPackageReference "Nuke" */;
 			productName = NukeUI;
+		};
+		89POPV0012F600000000004 /* PopupView */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 89POPV0012F600000000001 /* XCRemoteSwiftPackageReference "PopupView" */;
+			productName = PopupView;
 		};
 		89SOUP0012F3D000000000004 /* SwiftSoup */ = {
 			isa = XCSwiftPackageProductDependency;

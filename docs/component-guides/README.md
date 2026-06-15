@@ -18,6 +18,7 @@
 | RichText | `xmnote/UIComponents/Foundation/RichText.swift` | `docs/component-guides/ExpandableRichText使用说明.md` | 已完成 |
 | CollapsedRichTextPreview | `xmnote/UIComponents/Foundation/CollapsedRichTextPreview.swift` | `docs/component-guides/ExpandableRichText使用说明.md` | 已完成 |
 | ImmersiveBottomChrome | `xmnote/UIComponents/Foundation/ImmersiveBottomChrome.swift` | `docs/component-guides/ImmersiveBottomChrome使用说明.md` | 已完成 |
+| XMToast | `xmnote/UIComponents/Foundation/XMToast.swift` | `docs/component-guides/XMToast使用说明.md` | 已完成 |
 | TopSwitcher | `xmnote/UIComponents/Tabs/TopSwitcher.swift` | `docs/component-guides/TopSwitcher使用说明.md` | 已完成 |
 | KeepAliveSwitcherHost | `xmnote/UIComponents/Tabs/KeepAliveSwitcherHost.swift` | `docs/component-guides/KeepAliveSwitcherHost使用说明.md` | 已完成 |
 | HomeSubtabScaffold | `xmnote/UIComponents/Tabs/HomeSubtabScaffold.swift` | `docs/component-guides/HomeSubtabScaffold使用说明.md` | 已完成 |

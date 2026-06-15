@@ -6,8 +6,8 @@
 //
 
 /**
- * [INPUT]: 依赖 RepositoryContainer 注入仓储，依赖 HomeSubtabScaffold 承载首页二级页硬切，依赖 BookViewModel 驱动书架浏览、编辑态选择与批量操作
- * [OUTPUT]: 对外提供 BookContainerView 与 BookSubTab 枚举，承载书籍/书单二级页切换、TabBar 显隐协调、底部玻璃编辑工具栏、批量 Sheet、删除确认与书单入口
+ * [INPUT]: 依赖 RepositoryContainer 注入仓储，依赖 HomeSubtabScaffold 承载首页二级页硬切，依赖 BookViewModel 与 BookCollectionListViewModel 驱动书架浏览、书单列表与顶部操作
+ * [OUTPUT]: 对外提供 BookContainerView 与 BookSubTab 枚举，承载书籍/书单二级页切换、TabBar 显隐协调、底部玻璃编辑工具栏、批量 Sheet、删除确认、书单入口与书单顶部操作
  * [POS]: Book 模块容器壳层，承载书籍页与书架管理模式编排
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -135,10 +135,13 @@ struct BookContainerView: View {
 // MARK: - Content View
 
 private struct BookContentView: View {
+    @Environment(RepositoryContainer.self) private var repositories
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Bindable var viewModel: BookViewModel
     @Binding var selectedSubTab: BookSubTab
+    @State private var collectionViewModel: BookCollectionListViewModel?
+    @State private var collectionEditMode: EditMode = .inactive
     @State private var showsDisplaySettingSheet = false
     @State private var editingPresentation = BookshelfEditingPresentationState()
     @State private var chromeTransitionTask: Task<Void, Never>?
@@ -295,6 +298,15 @@ private struct BookContentView: View {
         .xmSystemAlert(item: $viewModel.activeDeleteConfirmation) { confirmation in
             defaultDeleteDescriptor(for: confirmation)
         }
+        .task {
+            guard collectionViewModel == nil else { return }
+            let nextViewModel = BookCollectionListViewModel(repository: repositories.bookRepository)
+            var transaction = Transaction(animation: nil)
+            transaction.disablesAnimations = true
+            withTransaction(transaction) {
+                collectionViewModel = nextViewModel
+            }
+        }
         .onAppear {
             syncChromePhaseWithEditingState()
         }
@@ -383,19 +395,34 @@ private struct BookContentView: View {
         )
     }
 
+    @ViewBuilder
     private func topSwitcherTrailing(for tab: BookSubTab) -> some View {
-        AddMenuCircleButton(
-            onAddBook: onAddBook,
-            onAddNote: onAddNote,
-            onOpenDebugCenter: onOpenDebugCenter,
-            usesGlassStyle: true
-        )
-        .opacity(tab == .books ? 1 : 0)
-        .allowsHitTesting(tab == .books)
-        .accessibilityHidden(tab != .books)
-        .transaction { transaction in
-            transaction.animation = nil
-            transaction.disablesAnimations = true
+        switch tab {
+        case .books:
+            AddMenuCircleButton(
+                onAddBook: onAddBook,
+                onAddNote: onAddNote,
+                onOpenDebugCenter: onOpenDebugCenter,
+                usesGlassStyle: true
+            )
+            .transaction { transaction in
+                transaction.animation = nil
+                transaction.disablesAnimations = true
+            }
+        case .collections:
+            if let collectionViewModel, collectionViewModel.selectedKind == .manual {
+                BookCollectionTopActionPill(
+                    isReordering: collectionEditMode.isEditing,
+                    canCreate: collectionViewModel.canCreateManualCollection,
+                    manualCount: collectionViewModel.snapshot.manualCollections.count,
+                    canReorder: collectionViewModel.selectedKind == .manual
+                        && collectionViewModel.visibleCollections.count >= 2
+                        && collectionViewModel.activeAction == nil,
+                    onCreate: collectionViewModel.presentCreateForm,
+                    onToggleReorder: toggleCollectionReordering
+                )
+                .transition(.opacity.combined(with: .scale(scale: 0.96, anchor: .trailing)))
+            }
         }
     }
 
@@ -475,6 +502,12 @@ private struct BookContentView: View {
 
     private var topBarRowHeight: CGFloat {
         BookshelfEditChromeMetrics.topBarHeight(for: dynamicTypeSize)
+    }
+
+    private func toggleCollectionReordering() {
+        withAnimation(reduceMotion ? nil : .smooth(duration: 0.18)) {
+            collectionEditMode = collectionEditMode.isEditing ? .inactive : .active
+        }
     }
 
     /// 进入书架管理模式，并为菜单收口、顶部 chrome 和底部面板保留清晰的分层节奏。
@@ -795,16 +828,121 @@ private struct BookContentView: View {
     }
 
     private var collectionPlaceholderPage: some View {
-        BookCollectionListView(onOpenCollection: { collectionID in
-            onOpenBookRoute(.collectionDetail(collectionID: collectionID))
-        })
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(Color.surfacePage)
+        Group {
+            if let collectionViewModel {
+                BookCollectionListView(
+                    viewModel: collectionViewModel,
+                    editMode: $collectionEditMode,
+                    onOpenCollection: { collectionID in
+                        onOpenBookRoute(.collectionDetail(collectionID: collectionID))
+                    }
+                )
+            } else {
+                BookCollectionListSkeletonRows()
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color.surfacePage)
     }
 
 }
 
 // MARK: - Top Chrome Components
+
+/// 书单页顶部操作区，以轻量图标按钮承接新建、排序和完成排序入口。
+private struct BookCollectionTopActionPill: View {
+    let isReordering: Bool
+    let canCreate: Bool
+    let manualCount: Int
+    let canReorder: Bool
+    let onCreate: () -> Void
+    let onToggleReorder: () -> Void
+
+    private enum Style {
+        static let hitSize: CGFloat = Spacing.actionReserved
+        static let iconColor = Color.textPrimary.opacity(0.80)
+    }
+
+    var body: some View {
+        Group {
+            if isReordering {
+                actionButton(
+                    systemImage: "checkmark",
+                    tint: Style.iconColor,
+                    isDisabled: false,
+                    presentation: .standalone,
+                    accessibilityLabel: "完成排序",
+                    accessibilityIdentifier: "book.collection.top.reorder.done",
+                    action: onToggleReorder
+                )
+            } else if showsReorderAction {
+                TopBarActionPill {
+                    actionButton(
+                        systemImage: "plus",
+                        tint: Style.iconColor,
+                        isDisabled: !canCreate,
+                        presentation: .pillSegment,
+                        accessibilityLabel: "新建书单",
+                        accessibilityIdentifier: "book.collection.top.create",
+                        action: onCreate
+                    )
+                } trailing: {
+                    actionButton(
+                        systemImage: "arrow.up.arrow.down",
+                        tint: Style.iconColor,
+                        isDisabled: !canReorder,
+                        presentation: .pillSegment,
+                        accessibilityLabel: "调整排序",
+                        accessibilityIdentifier: "book.collection.top.reorder",
+                        action: onToggleReorder
+                    )
+                }
+            } else {
+                actionButton(
+                    systemImage: "plus",
+                    tint: Style.iconColor,
+                    isDisabled: !canCreate,
+                    presentation: .standalone,
+                    accessibilityLabel: "新建书单",
+                    accessibilityIdentifier: "book.collection.top.create",
+                    action: onCreate
+                )
+            }
+        }
+        .frame(height: Style.hitSize)
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("book.collection.top.actions")
+        .animation(.smooth(duration: 0.16), value: isReordering)
+        .animation(.smooth(duration: 0.16), value: showsReorderAction)
+    }
+
+    private var showsReorderAction: Bool {
+        manualCount >= 2 || isReordering
+    }
+
+    /// 构造顶部轻量图标按钮，保留 44pt 热区并由无障碍标签补足语义。
+    private func actionButton(
+        systemImage: String,
+        tint: Color,
+        isDisabled: Bool,
+        presentation: TopBarActionPresentation,
+        accessibilityLabel: String,
+        accessibilityIdentifier: String,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            TopBarActionIcon(
+                systemName: systemImage,
+                foregroundColor: isDisabled ? Color.textHint : tint,
+                hitShape: presentation == .pillSegment ? .rectangle : .circle
+            )
+        }
+        .topBarActionPresentationStyle(presentation, enabled: !isDisabled)
+        .disabled(isDisabled)
+        .accessibilityLabel(accessibilityLabel)
+        .accessibilityIdentifier(accessibilityIdentifier)
+    }
+}
 
 private enum BookshelfChromeMetrics {
     /// 根据动态字体返回集合内搜索 drawer 高度，让一级页与二级列表在大字号下保持一致热区。

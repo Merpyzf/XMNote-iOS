@@ -355,7 +355,7 @@ private extension BookRepository {
             bookCount: books.count,
             finishedCount: books.filter { $0.book.readStatusId == BookEntryReadingStatus.finished.rawValue }.count,
             targetReadCount: isAnnual ? try fetchReadTarget(db, year: yearValue) : nil,
-            representativeCovers: books.prefix(4).map(\.book.cover)
+            representativeCovers: books.prefix(5).map(\.book.cover)
         )
     }
 

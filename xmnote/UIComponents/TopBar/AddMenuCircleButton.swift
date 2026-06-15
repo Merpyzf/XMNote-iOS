@@ -1,5 +1,5 @@
 /**
- * [INPUT]: 依赖 xmnote/Utilities/DesignTokens.swift 的品牌色与边框令牌，依赖 XMMenuLabel 与 topBarGlassButtonStyle 样式扩展
+ * [INPUT]: 依赖 xmnote/Utilities/DesignTokens.swift 的语义色令牌，依赖 XMMenuLabel 与顶部 action 展示样式扩展
  * [OUTPUT]: 对外提供 AddMenuCircleButton 顶部添加菜单组件
  * [POS]: UIComponents/TopBar 的业务操作入口组件，被主页面顶部导航栏复用
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -7,24 +7,28 @@
 
 import SwiftUI
 
-/// 统一 `+` 菜单按钮。glass 模式下通过 `.glassEffect(.regular.interactive())` 实现液态玻璃与按压反馈。
+/// 统一 `+` 菜单按钮，静止态使用中性顶部工具图标，按压时由顶部 action 样式提供反馈。
 struct AddMenuCircleButton: View {
     let onAddBook: () -> Void
     let onAddNote: () -> Void
     let onOpenDebugCenter: (() -> Void)?
+    /// 兼容旧玻璃样式调用参数，当前视觉统一由 topBarActionButtonStyle 承接。
     let usesGlassStyle: Bool
+    let presentation: TopBarActionPresentation
 
     /// 注入新增书籍/笔记操作回调，配置顶部加号入口行为。
     init(
         onAddBook: @escaping () -> Void,
         onAddNote: @escaping () -> Void,
         onOpenDebugCenter: (() -> Void)? = nil,
-        usesGlassStyle: Bool = false
+        usesGlassStyle: Bool = false,
+        presentation: TopBarActionPresentation = .standalone
     ) {
         self.onAddBook = onAddBook
         self.onAddNote = onAddNote
         self.onOpenDebugCenter = onOpenDebugCenter
         self.usesGlassStyle = usesGlassStyle
+        self.presentation = presentation
     }
 
     var body: some View {
@@ -46,25 +50,13 @@ struct AddMenuCircleButton: View {
             }
             #endif
         } label: {
-            if usesGlassStyle {
-                Image(systemName: "plus")
-                    .font(.system(size: 15, weight: .medium))
-                    .foregroundStyle(Color.brand)
-                    .frame(width: 36, height: 36)
-                    .contentShape(Circle())
-            } else {
-                Image(systemName: "plus")
-                    .font(.system(size: 18, weight: .medium))
-                    .foregroundStyle(Color.brand)
-                    .frame(width: 36, height: 36)
-                    .background(Color.surfaceCard, in: Circle())
-                    .overlay(Circle().stroke(Color.surfaceBorderDefault, lineWidth: CardStyle.borderWidth))
-                    .frame(width: 44, height: 44)
-                    .contentShape(Circle())
-            }
+            TopBarActionIcon(
+                systemName: "plus",
+                hitShape: presentation == .pillSegment ? .rectangle : .circle
+            )
         }
         .xmMenuNeutralTint()
-        .topBarGlassButtonStyle(usesGlassStyle)
+        .topBarActionPresentationStyle(presentation)
         .accessibilityLabel("添加")
     }
 }
