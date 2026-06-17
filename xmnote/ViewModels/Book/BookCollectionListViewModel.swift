@@ -1,6 +1,6 @@
 /**
- * [INPUT]: 依赖 BookshelfRepositoryProtocol 的书单观察流与写入能力
- * [OUTPUT]: 对外提供 BookCollectionListViewModel，驱动书单 Tab 的列表、创建、编辑、删除、排序与反馈状态
+ * [INPUT]: 依赖 BookshelfRepositoryProtocol 的书单观察流、写入能力与书单显示设置读写入口
+ * [OUTPUT]: 对外提供 BookCollectionListViewModel，驱动书单 Tab 的列表、显示设置、创建、编辑、删除、排序与反馈状态
  * [POS]: ViewModels/Book 的书单列表状态编排器，被书单列表页消费
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -84,6 +84,7 @@ final class BookCollectionListViewModel {
     var snapshot: BookCollectionListSnapshot = .empty
     var contentState: BookCollectionContentState = .loading
     var selectedKind: BookCollectionKind = .manual
+    var displaySetting: BookCollectionDisplaySetting
     var activeForm: BookCollectionFormPresentation?
     var deleteConfirmation: BookCollectionDeleteConfirmation?
     var activeAction: BookCollectionPendingAction?
@@ -110,6 +111,7 @@ final class BookCollectionListViewModel {
     /// 注入书架仓储并启动书单观察流。
     init(repository: any BookshelfRepositoryProtocol) {
         self.repository = repository
+        self.displaySetting = repository.fetchBookCollectionDisplaySetting()
         startObservation()
         repairAnnualCollections()
     }
@@ -137,6 +139,13 @@ final class BookCollectionListViewModel {
     func presentDeleteConfirmation(for item: BookCollectionListItem) {
         guard item.kind == .manual, activeAction == nil else { return }
         deleteConfirmation = BookCollectionDeleteConfirmation(item: item)
+    }
+
+    /// 保存书单首页显示设置，立即驱动列表渲染刷新。
+    func updateDisplaySetting(_ setting: BookCollectionDisplaySetting) {
+        guard setting != displaySetting else { return }
+        displaySetting = setting
+        repository.saveBookCollectionDisplaySetting(setting)
     }
 
     /// 提交创建或编辑表单。
