@@ -6,8 +6,8 @@
 //
 
 /**
- * [INPUT]: 依赖 RepositoryContainer 注入仓储，依赖 HomeSubtabScaffold 承载首页二级页硬切，依赖 BookViewModel 与 BookCollectionListViewModel 驱动书架浏览、书单列表与顶部操作
- * [OUTPUT]: 对外提供 BookContainerView 与 BookSubTab 枚举，承载书籍/书单二级页切换、TabBar 显隐协调、底部玻璃编辑工具栏、批量 Sheet、删除确认、书单入口与书单顶部操作
+ * [INPUT]: 依赖 RepositoryContainer 注入仓储，依赖 HomeSubtabScaffold 承载首页二级页硬切，依赖 BookViewModel 与 BookCollectionListViewModel 驱动书架浏览、书单列表、显示设置与顶部操作
+ * [OUTPUT]: 对外提供 BookContainerView 与 BookSubTab 枚举，承载书籍/书单二级页切换、TabBar 显隐协调、底部玻璃编辑工具栏、批量 Sheet、删除确认、书单入口与书单更多菜单
  * [POS]: Book 模块容器壳层，承载书籍页与书架管理模式编排
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -143,6 +143,7 @@ private struct BookContentView: View {
     @State private var collectionViewModel: BookCollectionListViewModel?
     @State private var collectionEditMode: EditMode = .inactive
     @State private var showsDisplaySettingSheet = false
+    @State private var showsCollectionDisplaySettingSheet = false
     @State private var editingPresentation = BookshelfEditingPresentationState()
     @State private var chromeTransitionTask: Task<Void, Never>?
     @State private var browseSearch = BookshelfSearchDrawerState()
@@ -225,6 +226,18 @@ private struct BookContentView: View {
             )
             .presentationDetents([.large])
             .presentationDragIndicator(.hidden)
+        }
+        .sheet(isPresented: $showsCollectionDisplaySettingSheet) {
+            if let collectionViewModel {
+                BookCollectionDisplaySettingSheet(
+                    setting: Binding(
+                        get: { collectionViewModel.displaySetting },
+                        set: { collectionViewModel.updateDisplaySetting($0) }
+                    )
+                )
+                .presentationDetents([.large])
+                .presentationDragIndicator(.hidden)
+            }
         }
         .sheet(item: $viewModel.activeBatchSheet) { sheet in
             switch sheet {
@@ -410,16 +423,19 @@ private struct BookContentView: View {
                 transaction.disablesAnimations = true
             }
         case .collections:
-            if let collectionViewModel, collectionViewModel.selectedKind == .manual {
+            if let collectionViewModel {
                 BookCollectionTopActionPill(
                     isReordering: collectionEditMode.isEditing,
+                    showsCreateAction: collectionViewModel.selectedKind == .manual,
                     canCreate: collectionViewModel.canCreateManualCollection,
+                    allowsReorderAction: collectionViewModel.selectedKind == .manual,
                     manualCount: collectionViewModel.snapshot.manualCollections.count,
                     canReorder: collectionViewModel.selectedKind == .manual
                         && collectionViewModel.visibleCollections.count >= 2
                         && collectionViewModel.activeAction == nil,
                     onCreate: collectionViewModel.presentCreateForm,
-                    onToggleReorder: toggleCollectionReordering
+                    onToggleReorder: toggleCollectionReordering,
+                    onShowDisplaySettings: { showsCollectionDisplaySettingSheet = true }
                 )
                 .transition(.opacity.combined(with: .scale(scale: 0.96, anchor: .trailing)))
             }
@@ -849,14 +865,17 @@ private struct BookContentView: View {
 
 // MARK: - Top Chrome Components
 
-/// 书单页顶部操作区，以轻量图标按钮承接新建、排序和完成排序入口。
+/// 书单页顶部操作区，以轻量图标按钮承接新建、更多菜单和完成排序入口。
 private struct BookCollectionTopActionPill: View {
     let isReordering: Bool
+    let showsCreateAction: Bool
     let canCreate: Bool
+    let allowsReorderAction: Bool
     let manualCount: Int
     let canReorder: Bool
     let onCreate: () -> Void
     let onToggleReorder: () -> Void
+    let onShowDisplaySettings: () -> Void
 
     private enum Style {
         static let hitSize: CGFloat = Spacing.actionReserved
@@ -875,7 +894,7 @@ private struct BookCollectionTopActionPill: View {
                     accessibilityIdentifier: "book.collection.top.reorder.done",
                     action: onToggleReorder
                 )
-            } else if showsReorderAction {
+            } else if showsCreateAction {
                 TopBarActionPill {
                     actionButton(
                         systemImage: "plus",
@@ -887,37 +906,21 @@ private struct BookCollectionTopActionPill: View {
                         action: onCreate
                     )
                 } trailing: {
-                    actionButton(
-                        systemImage: "arrow.up.arrow.down",
-                        tint: Style.iconColor,
-                        isDisabled: !canReorder,
-                        presentation: .pillSegment,
-                        accessibilityLabel: "调整排序",
-                        accessibilityIdentifier: "book.collection.top.reorder",
-                        action: onToggleReorder
-                    )
+                    moreMenu(presentation: .pillSegment)
                 }
             } else {
-                actionButton(
-                    systemImage: "plus",
-                    tint: Style.iconColor,
-                    isDisabled: !canCreate,
-                    presentation: .standalone,
-                    accessibilityLabel: "新建书单",
-                    accessibilityIdentifier: "book.collection.top.create",
-                    action: onCreate
-                )
+                moreMenu(presentation: .standalone)
             }
         }
         .frame(height: Style.hitSize)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("book.collection.top.actions")
         .animation(.smooth(duration: 0.16), value: isReordering)
-        .animation(.smooth(duration: 0.16), value: showsReorderAction)
+        .animation(.smooth(duration: 0.16), value: showsCreateAction)
     }
 
-    private var showsReorderAction: Bool {
-        manualCount >= 2 || isReordering
+    private var canStartReordering: Bool {
+        allowsReorderAction && manualCount >= 2 && canReorder
     }
 
     /// 构造顶部轻量图标按钮，保留 44pt 热区并由无障碍标签补足语义。
@@ -941,6 +944,69 @@ private struct BookCollectionTopActionPill: View {
         .disabled(isDisabled)
         .accessibilityLabel(accessibilityLabel)
         .accessibilityIdentifier(accessibilityIdentifier)
+    }
+
+    /// 构造书单更多菜单，把低频整理和显示设置收敛到同一入口。
+    private func moreMenu(presentation: TopBarActionPresentation) -> some View {
+        Menu {
+            if allowsReorderAction {
+                Button(action: onToggleReorder) {
+                    XMMenuLabel("调整排序", systemImage: "arrow.up.arrow.down")
+                }
+                .disabled(!canStartReordering)
+            }
+
+            Button(action: onShowDisplaySettings) {
+                XMMenuLabel("显示设置", systemImage: "slider.horizontal.3")
+            }
+        } label: {
+            BookCollectionMoreIcon(
+                foregroundColor: Style.iconColor,
+                hitShape: presentation == .pillSegment ? .rectangle : .circle
+            )
+        }
+        .topBarActionPresentationStyle(presentation)
+        .xmMenuNeutralTint()
+        .menuOrder(.fixed)
+        .accessibilityLabel("书单更多操作")
+        .accessibilityIdentifier("book.collection.top.more")
+    }
+}
+
+/// 书单顶部更多按钮的竖向三点图标，保持与书架更多入口一致的轻量几何语言。
+private struct BookCollectionMoreIcon: View {
+    let foregroundColor: Color
+    let hitShape: TopBarActionHitShape
+
+    private enum Style {
+        static let dotSize: CGFloat = 3
+        static let dotSpacing: CGFloat = 2.5
+    }
+
+    var body: some View {
+        VStack(spacing: Style.dotSpacing) {
+            ForEach(0..<3, id: \.self) { _ in
+                Circle()
+                    .fill(foregroundColor)
+                    .frame(width: Style.dotSize, height: Style.dotSize)
+            }
+        }
+        .frame(width: Spacing.actionReserved, height: Spacing.actionReserved)
+        .modifier(TopBarActionHitShapeModifierForBookCollection(hitShape: hitShape))
+        .accessibilityHidden(true)
+    }
+}
+
+private struct TopBarActionHitShapeModifierForBookCollection: ViewModifier {
+    let hitShape: TopBarActionHitShape
+
+    func body(content: Content) -> some View {
+        switch hitShape {
+        case .circle:
+            content.contentShape(Circle())
+        case .rectangle:
+            content.contentShape(Rectangle())
+        }
     }
 }
 

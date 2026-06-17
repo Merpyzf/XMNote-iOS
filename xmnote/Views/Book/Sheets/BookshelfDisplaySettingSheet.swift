@@ -434,7 +434,7 @@ struct BookshelfSettingsGroupCard<Content: View>: View {
 }
 
 /// 行内值菜单设置项，适合布局、标题展示、排序依据和排序方向等离散选择。
-private struct BookshelfSettingsValueMenuRow<Option: Hashable>: View {
+struct BookshelfSettingsValueMenuRow<Option: Hashable>: View {
     let title: String
     let value: String
     let options: [Option]
@@ -520,7 +520,7 @@ private struct BookshelfSettingsValueMenuRow<Option: Hashable>: View {
 }
 
 /// 右侧开关设置行，保持偏好设置的紧凑行高。
-private struct BookshelfSettingsToggleRow: View {
+struct BookshelfSettingsToggleRow: View {
     let title: String
     @Binding var isOn: Bool
 

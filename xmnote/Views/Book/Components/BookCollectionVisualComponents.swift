@@ -1,6 +1,6 @@
 /**
- * [INPUT]: 依赖 BookCollectionListItem、BookCollectionDetail、BookCollectionBookItem 与 XMBookCover 渲染书单列表、详情和书单内书籍关系
- * [OUTPUT]: 对外提供书单模块页面私有视觉组件，统一封面拼贴、海报式封面、指标、详情头、书籍卡片与推荐语区块
+ * [INPUT]: 依赖 BookCollectionListItem、BookCollectionDisplaySetting、BookCollectionDetail、BookCollectionBookItem 与 XMBookCover 渲染书单列表、详情和书单内书籍关系
+ * [OUTPUT]: 对外提供书单模块页面私有视觉组件，统一堆叠/规整封面、海报式封面、指标、详情头、书籍卡片与推荐语区块
  * [POS]: Book 模块书单页面私有展示组件，被 BookCollectionListView、BookCollectionDetailView 与加入书单 Sheet 复用
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -240,6 +240,106 @@ struct BookCollectionMutedPosterCoverView: View {
                 .stroke(Color.surfaceBorderSubtle.opacity(0.72), lineWidth: CardStyle.borderWidth)
         }
         .accessibilityHidden(true)
+    }
+}
+
+/// 书单规整海报封面，用等距封面陈列表达更稳定的信息浏览模式。
+struct BookCollectionRegularPosterCoverView: View {
+    let covers: [String]
+    var tone: BookCollectionKind = .manual
+    var seed: String = ""
+    var displayMode: BookCollectionMutedPosterCoverView.DisplayMode = .list
+
+    private var visibleCovers: [String] {
+        Array(covers.prefix(displayMode.realCoverLimit))
+    }
+
+    private var paletteSeed: String {
+        seed.isEmpty ? covers.first ?? "" : "\(seed)-\(covers.first ?? "")"
+    }
+
+    private var palette: BookCollectionMutedPosterPalette {
+        BookCollectionMutedPosterPalette.resolve(
+            seed: paletteSeed,
+            tone: tone
+        )
+    }
+
+    var body: some View {
+        let shape = RoundedRectangle(cornerRadius: CornerRadius.blockLarge, style: .continuous)
+
+        Color.clear
+            .aspectRatio(displayMode.aspectRatio, contentMode: .fit)
+            .frame(maxWidth: .infinity)
+            .overlay {
+                GeometryReader { proxy in
+                    let size = proxy.size
+
+                    ZStack {
+                        palette.base
+
+                        HStack(alignment: .center, spacing: coverSpacing(in: size)) {
+                            if visibleCovers.isEmpty {
+                                placeholderRow(width: coverWidth(in: size))
+                            } else {
+                                ForEach(Array(visibleCovers.enumerated()), id: \.offset) { _, cover in
+                                    XMBookCover.fixedWidth(
+                                        coverWidth(in: size),
+                                        urlString: cover,
+                                        cornerRadius: CornerRadius.inlaySmall,
+                                        border: .init(color: .surfaceBorderSubtle, width: CardStyle.borderWidth),
+                                        placeholderIconSize: .small,
+                                        surfaceStyle: .spine
+                                    )
+                                    .shadow(
+                                        color: Color.bookCoverDropShadow.opacity(0.20),
+                                        radius: 4,
+                                        x: Spacing.none,
+                                        y: 2
+                                    )
+                                }
+                            }
+                        }
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .padding(.horizontal, Spacing.base)
+                    }
+                }
+            }
+            .compositingGroup()
+            .clipShape(shape)
+            .overlay {
+                shape
+                    .stroke(Color.surfaceBorderSubtle.opacity(0.72), lineWidth: CardStyle.borderWidth)
+            }
+            .accessibilityHidden(true)
+    }
+
+    private func coverWidth(in size: CGSize) -> CGFloat {
+        let rawWidth = displayMode == .list ? size.width * 0.15 : size.width * 0.20
+        let minimum: CGFloat = displayMode == .list ? 36 : 28
+        let maximum: CGFloat = displayMode == .list ? 58 : 44
+        return min(max(rawWidth, minimum), maximum)
+    }
+
+    private func coverSpacing(in size: CGSize) -> CGFloat {
+        displayMode == .list ? min(Spacing.base, size.width * 0.035) : min(Spacing.cozy, size.width * 0.030)
+    }
+
+    private func placeholderRow(width: CGFloat) -> some View {
+        HStack(alignment: .bottom, spacing: Spacing.cozy) {
+            ForEach(0..<3, id: \.self) { index in
+                RoundedRectangle(cornerRadius: CornerRadius.inlaySmall, style: .continuous)
+                    .fill(index == 0 ? palette.paper.opacity(0.94) : palette.paperBand.opacity(0.58))
+                    .overlay {
+                        if index == 0 {
+                            Image(systemName: tone == .annual ? "calendar" : "books.vertical")
+                                .font(AppTypography.callout)
+                                .foregroundStyle(Color.textHint)
+                        }
+                    }
+                    .frame(width: width, height: XMBookCover.height(forWidth: width))
+            }
+        }
     }
 }
 
@@ -734,15 +834,24 @@ struct BookCollectionProgressMeter: View {
 /// 书单列表卡片，建立封面、主题和统计之间的稳定层级。
 struct BookCollectionListCard: View {
     let item: BookCollectionListItem
+    var displayMode: BookCollectionDisplayMode = .list
+    var coverArrangement: BookCollectionCoverArrangement = .stacked
+    var showsStatistics: Bool = true
+    @ScaledMetric(relativeTo: .subheadline) private var gridTextSlotHeight: CGFloat = 64
+    @ScaledMetric(relativeTo: .caption) private var gridMetricSlotHeight: CGFloat = 20
 
     var body: some View {
+        switch displayMode {
+        case .list:
+            listCard
+        case .grid:
+            gridCard
+        }
+    }
+
+    private var listCard: some View {
         VStack(alignment: .leading, spacing: Spacing.base) {
-            BookCollectionMutedPosterCoverView(
-                covers: item.representativeCovers,
-                tone: item.kind,
-                seed: posterSeed,
-                displayMode: .list
-            )
+            posterCover(displayMode: .list)
 
             VStack(alignment: .leading, spacing: Spacing.cozy) {
                 Text(title)
@@ -751,26 +860,28 @@ struct BookCollectionListCard: View {
                     .lineLimit(2)
                     .fixedSize(horizontal: false, vertical: true)
 
-                if !subtitle.isEmpty {
-                    Text(subtitle)
-                        .font(AppTypography.caption)
-                        .foregroundStyle(Color.textSecondary)
-                        .lineLimit(2)
-                        .fixedSize(horizontal: false, vertical: true)
+                Text(subtitle)
+                    .font(AppTypography.caption)
+                    .foregroundStyle(subtitleColor)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+
+                if showsStatistics {
+                    BookCollectionProgressMeter(
+                        finishedCount: item.finishedCount,
+                        targetReadCount: item.targetReadCount
+                    )
                 }
 
-                BookCollectionProgressMeter(
-                    finishedCount: item.finishedCount,
-                    targetReadCount: item.targetReadCount
-                )
-
                 HStack(alignment: .center, spacing: Spacing.tight) {
-                    BookCollectionMetricStrip(
-                        bookCount: item.bookCount,
-                        finishedCount: item.finishedCount,
-                        targetReadCount: item.targetReadCount,
-                        layout: .compact
-                    )
+                    if showsStatistics {
+                        BookCollectionMetricStrip(
+                            bookCount: item.bookCount,
+                            finishedCount: item.finishedCount,
+                            targetReadCount: item.targetReadCount,
+                            layout: .compact
+                        )
+                    }
 
                     Spacer(minLength: Spacing.tight)
 
@@ -793,6 +904,74 @@ struct BookCollectionListCard: View {
         .accessibilityLabel(accessibilityLabel)
     }
 
+    private var gridCard: some View {
+        VStack(alignment: .leading, spacing: Spacing.cozy) {
+            posterCover(displayMode: .compactGrid)
+
+            VStack(alignment: .leading, spacing: Spacing.half) {
+                VStack(alignment: .leading, spacing: Spacing.compact) {
+                    Text(title)
+                        .font(AppTypography.subheadlineSemibold)
+                        .foregroundStyle(Color.textPrimary)
+                        .lineLimit(2)
+                        .truncationMode(.tail)
+                        .frame(maxWidth: .infinity, alignment: .topLeading)
+
+                    Text(subtitle)
+                        .font(AppTypography.caption2)
+                        .foregroundStyle(subtitleColor)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                        .frame(maxWidth: .infinity, alignment: .topLeading)
+                }
+                .frame(maxWidth: .infinity, alignment: .topLeading)
+                .frame(height: gridTextSlotHeight, alignment: .topLeading)
+
+                if showsStatistics {
+                    BookCollectionMetricStrip(
+                        bookCount: item.bookCount,
+                        finishedCount: item.finishedCount,
+                        targetReadCount: item.targetReadCount,
+                        layout: .compact
+                    )
+                    .padding(.top, Spacing.micro)
+                    .frame(height: gridMetricSlotHeight, alignment: .leading)
+                }
+            }
+            .padding(.horizontal, Spacing.compact)
+            .padding(.bottom, Spacing.compact)
+        }
+        .padding(Spacing.cozy)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.surfaceCard, in: RoundedRectangle(cornerRadius: CornerRadius.containerMedium, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: CornerRadius.containerMedium, style: .continuous)
+                .stroke(Color.surfaceBorderSubtle, lineWidth: CardStyle.borderWidth)
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(accessibilityLabel)
+    }
+
+    @ViewBuilder
+    private func posterCover(displayMode: BookCollectionMutedPosterCoverView.DisplayMode) -> some View {
+        switch coverArrangement {
+        case .stacked:
+            BookCollectionMutedPosterCoverView(
+                covers: item.representativeCovers,
+                tone: item.kind,
+                seed: posterSeed,
+                displayMode: displayMode
+            )
+        case .regular:
+            BookCollectionRegularPosterCoverView(
+                covers: item.representativeCovers,
+                tone: item.kind,
+                seed: posterSeed,
+                displayMode: displayMode
+            )
+        }
+    }
+
     private var title: String {
         if item.kind == .annual, let year = item.year, item.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             return "\(year) 年阅读"
@@ -802,15 +981,15 @@ struct BookCollectionListCard: View {
 
     private var subtitle: String {
         let description = item.description.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !description.isEmpty {
-            return description
-        }
-        switch item.kind {
-        case .manual:
-            return item.bookCount == 0 ? "还没有加入书籍。" : ""
-        case .annual:
-            return item.bookCount == 0 ? "读完记录会显示在这里。" : ""
-        }
+        return description.isEmpty ? "还没有写简介" : description
+    }
+
+    private var subtitleColor: Color {
+        hasWrittenDescription ? Color.textSecondary : Color.textHint
+    }
+
+    private var hasWrittenDescription: Bool {
+        !item.description.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
     private var accessibilityLabel: String {

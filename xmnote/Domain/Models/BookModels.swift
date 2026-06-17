@@ -2,7 +2,7 @@ import Foundation
 
 /**
  * [INPUT]: 依赖 Foundation 的 Date/DateFormatter 进行时间格式化
- * [OUTPUT]: 对外提供 BookItem、BookshelfSnapshot、BookshelfItem、BookshelfOrderItem、BookshelfListContext、BookshelfBatchEditOptions、BookshelfMoveGroupOption、BookCollectionSummary、BookDetail、NoteExcerpt 等书籍域展示模型
+ * [OUTPUT]: 对外提供 BookItem、BookshelfSnapshot、BookshelfItem、BookshelfOrderItem、BookshelfListContext、BookshelfBatchEditOptions、BookshelfMoveGroupOption、BookCollectionSummary、BookCollectionDisplaySetting、BookDetail、NoteExcerpt 等书籍域展示模型
  * [POS]: Domain/Models 的书籍聚合模型定义，被 BookViewModel 与 BookRepository 实现共同消费
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -542,6 +542,81 @@ nonisolated enum BookCollectionKind: String, Codable, Hashable, Sendable {
         case .annual:
             return "年度书单"
         }
+    }
+}
+
+/// 书单首页展示方式，控制书单卡片在列表与网格之间切换。
+nonisolated enum BookCollectionDisplayMode: String, CaseIterable, Codable, Hashable, Sendable {
+    case list
+    case grid
+
+    var title: String {
+        switch self {
+        case .list:
+            return "列表"
+        case .grid:
+            return "网格"
+        }
+    }
+
+    var systemImage: String {
+        switch self {
+        case .list:
+            return "list.bullet"
+        case .grid:
+            return "square.grid.2x2"
+        }
+    }
+}
+
+/// 书单封面排布方式，控制集合封面是偏自然堆叠还是规整拼贴。
+nonisolated enum BookCollectionCoverArrangement: String, CaseIterable, Codable, Hashable, Sendable {
+    case stacked
+    case regular
+
+    var title: String {
+        switch self {
+        case .stacked:
+            return "堆叠"
+        case .regular:
+            return "规整"
+        }
+    }
+}
+
+/// 书单首页显示偏好，独立于书架显示设置以避免混入书籍列表专属语义。
+nonisolated struct BookCollectionDisplaySetting: Codable, Hashable, Sendable {
+    static let defaultValue = BookCollectionDisplaySetting()
+
+    var displayMode: BookCollectionDisplayMode = .list
+    var coverArrangement: BookCollectionCoverArrangement = .stacked
+    var showsStatistics: Bool = true
+
+    /// 使用默认参数构建书单显示设置，兼容旧本地设置缺少新增字段时的解码回退。
+    init(
+        displayMode: BookCollectionDisplayMode = .list,
+        coverArrangement: BookCollectionCoverArrangement = .stacked,
+        showsStatistics: Bool = true
+    ) {
+        self.displayMode = displayMode
+        self.coverArrangement = coverArrangement
+        self.showsStatistics = showsStatistics
+    }
+
+    /// 从本地轻量设置解码；字段缺失时回到当前书单首页的默认展示语义。
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(
+            displayMode: try container.decodeIfPresent(BookCollectionDisplayMode.self, forKey: .displayMode) ?? .list,
+            coverArrangement: try container.decodeIfPresent(BookCollectionCoverArrangement.self, forKey: .coverArrangement) ?? .stacked,
+            showsStatistics: try container.decodeIfPresent(Bool.self, forKey: .showsStatistics) ?? true
+        )
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case displayMode
+        case coverArrangement
+        case showsStatistics
     }
 }
 

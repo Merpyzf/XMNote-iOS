@@ -1,6 +1,6 @@
 /**
- * [INPUT]: 依赖外部注入的 BookCollectionListViewModel 与 EditMode，依赖 LoadingGate 与 XMScopeSelector 驱动手动书单、年度书单、删除确认、排序和稳定 List 视口加载占位
- * [OUTPUT]: 对外提供 BookCollectionListView，承载首页书单 Tab 的范围切换、集合卡片、空态、错误态、写操作反馈、表单弹层与书单详情入口
+ * [INPUT]: 依赖外部注入的 BookCollectionListViewModel 与 EditMode，依赖书单显示设置、LoadingGate 与 XMScopeSelector 驱动手动书单、年度书单、删除确认、排序和稳定加载占位
+ * [OUTPUT]: 对外提供 BookCollectionListView，承载首页书单 Tab 的范围切换、列表/网格集合卡片、空态、错误态、写操作反馈、表单弹层与书单详情入口
  * [POS]: Views/Book 的书单首页页面壳层，被 BookContainerView 的书单二级页消费
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -82,7 +82,16 @@ struct BookCollectionListView: View {
         )
     }
 
+    @ViewBuilder
     private var content: some View {
+        if shouldUseGridContent {
+            gridContent
+        } else {
+            listContent
+        }
+    }
+
+    private var listContent: some View {
         List {
             phaseRows
         }
@@ -96,12 +105,64 @@ struct BookCollectionListView: View {
             transaction.disablesAnimations = true
         }
         .overlay(alignment: .top) {
-            if let feedback = viewModel.actionFeedback {
-                BookCollectionFeedbackBanner(feedback: feedback)
-                    .padding(.horizontal, Spacing.screenEdge)
-                    .padding(.top, Spacing.tight)
-                    .transition(.opacity.combined(with: .move(edge: .top)))
+            feedbackBanner
+        }
+    }
+
+    private var shouldUseGridContent: Bool {
+        viewModel.displaySetting.displayMode == .grid
+            && !editMode.isEditing
+            && loadPhase == .content
+            && !viewModel.visibleCollections.isEmpty
+    }
+
+    private var gridContent: some View {
+        ScrollView {
+            LazyVGrid(columns: gridColumns, spacing: Spacing.base) {
+                ForEach(viewModel.visibleCollections) { item in
+                    Button {
+                        onOpenCollection(item.id)
+                    } label: {
+                        BookCollectionListCard(
+                            item: item,
+                            displayMode: .grid,
+                            coverArrangement: viewModel.displaySetting.coverArrangement,
+                            showsStatistics: viewModel.displaySetting.showsStatistics
+                        )
+                    }
+                    .buttonStyle(BookCollectionListCardButtonStyle())
+                    .contextMenu {
+                        collectionContextMenu(for: item)
+                    }
+                    .accessibilityIdentifier("book.collection.grid.\(item.id)")
+                }
             }
+            .padding(.horizontal, Spacing.screenEdge)
+            .padding(.top, Spacing.half)
+            .padding(.bottom, Spacing.contentEdge)
+        }
+        .scrollIndicators(.hidden)
+        .background(Color.surfacePage)
+        .accessibilityIdentifier("book.collection.grid")
+        .overlay(alignment: .top) {
+            feedbackBanner
+        }
+    }
+
+    private var gridColumns: [GridItem] {
+        [
+            GridItem(.flexible(), spacing: Spacing.base),
+            GridItem(.flexible(), spacing: Spacing.base)
+        ]
+    }
+
+    @ViewBuilder
+    private var feedbackBanner: some View {
+        if let feedback = viewModel.actionFeedback {
+            BookCollectionFeedbackBanner(feedback: feedback)
+                .padding(.horizontal, Spacing.screenEdge)
+                .padding(.top, Spacing.tight)
+                .transition(.opacity.combined(with: .move(edge: .top)))
         }
     }
 
@@ -170,7 +231,12 @@ struct BookCollectionListView: View {
         Button {
             onOpenCollection(item.id)
         } label: {
-            BookCollectionListCard(item: item)
+            BookCollectionListCard(
+                item: item,
+                displayMode: .list,
+                coverArrangement: viewModel.displaySetting.coverArrangement,
+                showsStatistics: viewModel.displaySetting.showsStatistics
+            )
         }
         .buttonStyle(BookCollectionListCardButtonStyle())
         .accessibilityIdentifier("book.collection.row.\(item.id)")
@@ -191,25 +257,30 @@ struct BookCollectionListView: View {
             }
         }
         .contextMenu {
-            Button {
-                onOpenCollection(item.id)
-            } label: {
-                XMMenuLabel("查看书单", systemImage: "book.pages")
-            }
-            if item.kind == .manual {
-                Button {
-                    viewModel.presentEditForm(for: item)
-                } label: {
-                    XMMenuLabel("编辑书单", systemImage: "pencil")
-                }
-                Button(role: .destructive) {
-                    viewModel.presentDeleteConfirmation(for: item)
-                } label: {
-                    Label("删除书单", systemImage: "trash")
-                }
-            }
+            collectionContextMenu(for: item)
         }
         .modifier(BookCollectionListRowChrome())
+    }
+
+    @ViewBuilder
+    private func collectionContextMenu(for item: BookCollectionListItem) -> some View {
+        Button {
+            onOpenCollection(item.id)
+        } label: {
+            XMMenuLabel("查看书单", systemImage: "book.pages")
+        }
+        if item.kind == .manual {
+            Button {
+                viewModel.presentEditForm(for: item)
+            } label: {
+                XMMenuLabel("编辑书单", systemImage: "pencil")
+            }
+            Button(role: .destructive) {
+                viewModel.presentDeleteConfirmation(for: item)
+            } label: {
+                Label("删除书单", systemImage: "trash")
+            }
+        }
     }
 
     private var loadPhase: LoadPhase {
@@ -226,16 +297,7 @@ struct BookCollectionListView: View {
     }
 
     private var emptyTitle: String {
-        selectedKind == .manual ? "还没有手动书单" : "暂无年度书单"
-    }
-
-    private var emptyMessage: String {
-        switch selectedKind {
-        case .manual:
-            return "新建后可从书架加入书籍。"
-        case .annual:
-            return "读完记录会生成年度书单。"
-        }
+        selectedKind == .manual ? "还没有书单，点击右上角按钮创建" : "今年还没有读完的书"
     }
 
     private var selectedKind: BookCollectionKind {
@@ -255,7 +317,7 @@ struct BookCollectionListView: View {
             BookshelfContextualEmptyStateView(
                 icon: selectedKind == .manual ? "rectangle.stack.badge.plus" : "calendar",
                 title: title,
-                message: emptyMessage
+                message: nil
             )
             .frame(maxHeight: 260)
 

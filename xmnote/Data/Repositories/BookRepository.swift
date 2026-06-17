@@ -3,7 +3,7 @@ import GRDB
 
 /**
  * [INPUT]: 依赖 AppDatabase 提供本地数据库连接，依赖 ObservationStream 提供观察流桥接
- * [OUTPUT]: 对外提供 BookRepository（BookRepositoryProtocol 的 GRDB 实现，含书架列表读写、显示设置变更观察、分组移入移出、书单加入、批量编辑、删除与重命名管理）
+ * [OUTPUT]: 对外提供 BookRepository（BookRepositoryProtocol 的 GRDB 实现，含书架列表读写、书架/书单显示设置、分组移入移出、书单加入、批量编辑、删除与重命名管理）
  * [POS]: Data 层书籍仓储实现，统一封装书架列表/详情/书摘数据读取、默认书架分组预览排序与默认书架排序置顶写入
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -12,14 +12,17 @@ import GRDB
 struct BookRepository: BookRepositoryProtocol {
     private let databaseManager: DatabaseManager
     nonisolated private let displaySettingStore: BookshelfDisplaySettingStore
+    nonisolated private let bookCollectionDisplaySettingStore: BookCollectionDisplaySettingStore
 
     /// 注入数据库管理器，供书架、详情和书摘查询复用同一数据源。
     init(
         databaseManager: DatabaseManager,
-        displaySettingStore: BookshelfDisplaySettingStore = .shared
+        displaySettingStore: BookshelfDisplaySettingStore = .shared,
+        bookCollectionDisplaySettingStore: BookCollectionDisplaySettingStore = .shared
     ) {
         self.databaseManager = databaseManager
         self.displaySettingStore = displaySettingStore
+        self.bookCollectionDisplaySettingStore = bookCollectionDisplaySettingStore
     }
 
     /// 为书架页提供可持续订阅的数据流，任意书籍或笔记变更后会自动刷新列表。
@@ -461,6 +464,16 @@ struct BookRepository: BookRepositoryProtocol {
         dimension: BookshelfDimension
     ) -> AsyncStream<Void> {
         displaySettingStore.observeChanges(scope: scope, dimension: dimension)
+    }
+
+    /// 从本地轻量设置读取书单首页显示配置。
+    func fetchBookCollectionDisplaySetting() -> BookCollectionDisplaySetting {
+        bookCollectionDisplaySettingStore.fetchSetting()
+    }
+
+    /// 保存书单首页显示配置。
+    func saveBookCollectionDisplaySetting(_ setting: BookCollectionDisplaySetting) {
+        bookCollectionDisplaySettingStore.save(setting)
     }
 
     /// 为书籍详情页提供单书订阅流，用于展示基础信息、阅读状态和笔记统计。
