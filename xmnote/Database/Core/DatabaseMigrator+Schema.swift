@@ -1,5 +1,5 @@
 /**
- * [INPUT]: 依赖 GRDB DatabaseMigrator、RoomCanonicalSchemaV40/RoomCanonicalSchemaV41 与 DatabaseSchema+Seed
+ * [INPUT]: 依赖 GRDB DatabaseMigrator、RoomCanonicalSchemaV40/RoomCanonicalSchemaV41/RoomCanonicalSchemaV42/RoomCanonicalSchemaV43 与 DatabaseSchema+Seed
  * [OUTPUT]: 对外提供 AppDatabase.migrator 与 Room canonical 迁移标识
  * [POS]: Database/Core 的迁移入口，被 AppDatabase.init 调用执行 Schema 创建
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -8,13 +8,15 @@
 import Foundation
 import GRDB
 
-// MARK: - Room canonical v41 迁移
-// iOS 新库先创建 Android Room v40 canonical schema，再执行 Android 40→41 等价补丁，保证旧 v40 库与新 v41 库共用同一升级路径。
+// MARK: - Room canonical v43 迁移
+// iOS 新库先创建 Android Room v40 canonical schema，再逐步执行 Android 40→41→42→43 等价补丁，保证旧库与新库共用同一升级路径。
 
 extension AppDatabase {
     nonisolated static let roomSchemaMigrationIdentifier = "room-v40-schema"
     nonisolated static let roomSeedMigrationIdentifier = "room-v40-seed"
     nonisolated static let roomV41MigrationIdentifier = "room-v41-schema"
+    nonisolated static let roomV42MigrationIdentifier = "room-v42-schema"
+    nonisolated static let roomV43MigrationIdentifier = "room-v43-schema"
 
     nonisolated static var migrator: DatabaseMigrator {
         var migrator = DatabaseMigrator()
@@ -31,11 +33,21 @@ extension AppDatabase {
             try RoomCanonicalSchemaV41.migrateFromV40(db)
         }
 
+        migrator.registerMigration(roomV42MigrationIdentifier) { db in
+            try RoomCanonicalSchemaV42.migrateFromV41(db)
+        }
+
+        migrator.registerMigration(roomV43MigrationIdentifier) { db in
+            try RoomCanonicalSchemaV43.migrateFromV42(db)
+        }
+
         return migrator
     }
 
-    /// Android Room 备份库没有 GRDB 迁移表；仅补内部迁移标记，避免 iOS 打开恢复库时重复执行建表、seed 或 v41 补丁。
+    /// Android Room 备份库没有 GRDB 迁移表；仅补内部迁移标记，避免 iOS 打开恢复库时重复执行建表、seed 或已完成的 Room 补丁。
     nonisolated static func markRoomCanonicalMigrationsIfNeeded(_ db: Database) throws {
+        // SQL 目的：读取 SQLite user_version，判断 Android Room canonical 库当前物理版本并选择对应校验入口。
+        // 涉及表：无；返回字段：数据库版本号，用于只补已完成迁移的 GRDB 内部标记。
         let userVersion = try Int.fetchOne(db, sql: "PRAGMA user_version") ?? 0
         guard userVersion >= RoomCanonicalSchemaV40.databaseVersion else { return }
 
@@ -43,11 +55,7 @@ extension AppDatabase {
             return
         }
 
-        if userVersion >= RoomCanonicalSchemaV41.databaseVersion {
-            try RoomCanonicalSchemaV41.validatePhysicalSchema(db)
-        } else {
-            try RoomCanonicalSchemaV40.validatePhysicalSchema(db)
-        }
+        try validateRoomCanonicalSchema(userVersion: userVersion, db: db)
 
         // SQL 目的：为 Android Room canonical 库补建 GRDB 内部迁移表，避免后续迁移器误判为空库。
         // 涉及表：grdb_migrations；副作用：只写 iOS 内部迁移标记，不修改任何业务表。
@@ -58,6 +66,28 @@ extension AppDatabase {
         try markMigration(roomSeedMigrationIdentifier, in: db)
         if userVersion >= RoomCanonicalSchemaV41.databaseVersion {
             try markMigration(roomV41MigrationIdentifier, in: db)
+        }
+        if userVersion >= RoomCanonicalSchemaV42.databaseVersion {
+            try markMigration(roomV42MigrationIdentifier, in: db)
+        }
+        if userVersion >= RoomCanonicalSchemaV43.databaseVersion {
+            try markMigration(roomV43MigrationIdentifier, in: db)
+        }
+    }
+
+    private nonisolated static func validateRoomCanonicalSchema(userVersion: Int, db: Database) throws {
+        guard userVersion <= AppDatabase.databaseVersion else {
+            throw RoomCanonicalSchemaError.versionMismatch(userVersion)
+        }
+
+        if userVersion >= RoomCanonicalSchemaV43.databaseVersion {
+            try RoomCanonicalSchemaV43.validatePhysicalSchema(db)
+        } else if userVersion >= RoomCanonicalSchemaV42.databaseVersion {
+            try RoomCanonicalSchemaV42.validatePhysicalSchema(db)
+        } else if userVersion >= RoomCanonicalSchemaV41.databaseVersion {
+            try RoomCanonicalSchemaV41.validatePhysicalSchema(db)
+        } else {
+            try RoomCanonicalSchemaV40.validatePhysicalSchema(db)
         }
     }
 

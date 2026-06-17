@@ -22,7 +22,7 @@ nonisolated struct AppDatabase {
     static let databaseName = "xm_note.db"
 
     /// 数据库版本号，与 Android DBConfig.DB_VERSION 同步
-    static let databaseVersion = 41
+    static let databaseVersion = 43
 }
 
 // MARK: - 初始化

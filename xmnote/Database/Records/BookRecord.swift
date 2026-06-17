@@ -16,6 +16,7 @@ nonisolated struct BookRecord: BaseRecord {
     var id: Int64?
     var userId: Int64 = 0
     var doubanId: Int64 = 0
+    var wereadBookId: String = ""
     var name: String = ""
     var rawName: String = ""
     var cover: String = ""
@@ -58,6 +59,7 @@ nonisolated struct BookRecord: BaseRecord {
         case id, name, cover, author, translator, isbn, press, summary, type, score, catalog, pinned, price
         case userId = "user_id"
         case doubanId = "douban_id"
+        case wereadBookId = "weread_book_id"
         case rawName = "raw_name"
         case authorIntro = "author_intro"
         case pubDate = "pub_date"
@@ -94,6 +96,7 @@ extension BookRecord {
             id: try container.decodeIfPresent(Int64.self, forKey: .id),
             userId: try container.decodeIfPresent(Int64.self, forKey: .userId) ?? 0,
             doubanId: try container.decodeIfPresent(Int64.self, forKey: .doubanId) ?? 0,
+            wereadBookId: try container.decodeStringOrEmpty(forKey: .wereadBookId),
             name: try container.decodeStringOrEmpty(forKey: .name),
             rawName: try container.decodeStringOrEmpty(forKey: .rawName),
             cover: try container.decodeStringOrEmpty(forKey: .cover),

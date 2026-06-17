@@ -1,5 +1,5 @@
 /**
- * [INPUT]: 依赖 GRDB、RoomCanonicalSchemaV40/RoomCanonicalSchemaV41、StagingIntegrityCanonicalizer 与核心 Record，校验备份 staging 数据库
+ * [INPUT]: 依赖 GRDB、RoomCanonicalSchemaV40/RoomCanonicalSchemaV41/RoomCanonicalSchemaV42/RoomCanonicalSchemaV43、StagingIntegrityCanonicalizer 与核心 Record，校验备份 staging 数据库
  * [OUTPUT]: 对外提供 BackupSchemaValidator，在正式替换前完成版本、schema、外键和解码校验
  * [POS]: Database/RestoreCompatibility 的恢复安全闸门，被 BackupArchiveService 调用
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -30,8 +30,18 @@ nonisolated enum BackupSchemaValidator {
 
 private extension BackupSchemaValidator {
     nonisolated static func validatePhysicalSchema(_ db: Database) throws {
+        // SQL 目的：读取 staging 库 SQLite user_version，决定按哪个 Android Room schema 合同校验物理结构。
+        // 涉及表：无；返回字段：数据库版本号，用于阻断高于当前 iOS 支持版本的备份。
         let userVersion = try Int.fetchOne(db, sql: "PRAGMA user_version") ?? 0
-        if userVersion >= RoomCanonicalSchemaV41.databaseVersion {
+        guard userVersion <= AppDatabase.databaseVersion else {
+            throw RoomCanonicalSchemaError.versionMismatch(userVersion)
+        }
+
+        if userVersion >= RoomCanonicalSchemaV43.databaseVersion {
+            try RoomCanonicalSchemaV43.validatePhysicalSchema(db)
+        } else if userVersion >= RoomCanonicalSchemaV42.databaseVersion {
+            try RoomCanonicalSchemaV42.validatePhysicalSchema(db)
+        } else if userVersion >= RoomCanonicalSchemaV41.databaseVersion {
             try RoomCanonicalSchemaV41.validatePhysicalSchema(db)
         } else {
             try RoomCanonicalSchemaV40.validatePhysicalSchema(db)
@@ -39,8 +49,18 @@ private extension BackupSchemaValidator {
     }
 
     nonisolated static func assertForeignKeyIntegrity(_ db: Database) throws {
+        // SQL 目的：读取 staging 库 SQLite user_version，决定按哪个 Android Room schema 合同执行外键闭包校验。
+        // 涉及表：无；返回字段：数据库版本号，用于阻断高于当前 iOS 支持版本的备份。
         let userVersion = try Int.fetchOne(db, sql: "PRAGMA user_version") ?? 0
-        if userVersion >= RoomCanonicalSchemaV41.databaseVersion {
+        guard userVersion <= AppDatabase.databaseVersion else {
+            throw RoomCanonicalSchemaError.versionMismatch(userVersion)
+        }
+
+        if userVersion >= RoomCanonicalSchemaV43.databaseVersion {
+            try RoomCanonicalSchemaV43.assertForeignKeyIntegrity(db)
+        } else if userVersion >= RoomCanonicalSchemaV42.databaseVersion {
+            try RoomCanonicalSchemaV42.assertForeignKeyIntegrity(db)
+        } else if userVersion >= RoomCanonicalSchemaV41.databaseVersion {
             try RoomCanonicalSchemaV41.assertForeignKeyIntegrity(db)
         } else {
             try RoomCanonicalSchemaV40.assertForeignKeyIntegrity(db)

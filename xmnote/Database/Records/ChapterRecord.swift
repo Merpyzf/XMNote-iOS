@@ -26,6 +26,7 @@ nonisolated struct ChapterRecord: BaseRecord {
     var sourceAnchor: String?
     var sourceOrder: Int64 = 0
     var sourcePath: String?
+    var isStarred: Int64 = 0
 
     // MARK: - BaseRecord
     var createdDate: Int64 = 0
@@ -46,6 +47,7 @@ nonisolated struct ChapterRecord: BaseRecord {
         case sourceAnchor = "source_anchor"
         case sourceOrder = "source_order"
         case sourcePath = "source_path"
+        case isStarred = "is_starred"
         case createdDate = "created_date"
         case updatedDate = "updated_date"
         case lastSyncDate = "last_sync_date"
@@ -76,6 +78,7 @@ extension ChapterRecord {
             sourceAnchor: try container.decodeIfPresent(String.self, forKey: .sourceAnchor),
             sourceOrder: try container.decodeIfPresent(Int64.self, forKey: .sourceOrder) ?? 0,
             sourcePath: try container.decodeIfPresent(String.self, forKey: .sourcePath),
+            isStarred: try container.decodeIfPresent(Int64.self, forKey: .isStarred) ?? 0,
             createdDate: try container.decodeIfPresent(Int64.self, forKey: .createdDate) ?? 0,
             updatedDate: try container.decodeIfPresent(Int64.self, forKey: .updatedDate) ?? 0,
             lastSyncDate: try container.decodeIfPresent(Int64.self, forKey: .lastSyncDate) ?? 0,

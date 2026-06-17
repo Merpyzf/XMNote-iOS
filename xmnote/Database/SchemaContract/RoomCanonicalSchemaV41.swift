@@ -160,62 +160,114 @@ private extension RoomCanonicalSchemaV41 {
     }
 
     nonisolated static func fillChapterLevelAndPath(_ db: Database) throws {
-        // SQL 目的：按 Android MIGRATION_40_41 的递归 CTE 回填章节层级与来源路径。
-        // 涉及表：chapter；关键过滤：以 book_id + parent_id 构建目录树，软删除数据同样保持历史字段可回填。
-        // 时间字段：不修改 created_date/updated_date/last_sync_date；副作用：仅填充 chapter_level/source_path。
+        // SQL 目的：清理 Android 40→41 迁移使用的章节树临时表，避免上次异常中断残留影响本次回填。
+        // 涉及表：temp_chapter_tree_40_41；副作用：仅删除迁移临时表，不触碰业务表。
+        try db.execute(sql: "DROP TABLE IF EXISTS \(tempChapterTreeTable)")
+        // SQL 目的：创建 Android 40→41 迁移同名临时表，缓存章节递归层级与来源路径。
+        // 涉及表：temp_chapter_tree_40_41；关键字段：id/depth/path，对应 chapter 主键、层级和路径。
         try db.execute(sql: """
-            WITH RECURSIVE chapter_tree(id, book_id, depth, path, visited) AS (
-                SELECT
-                    id,
-                    book_id,
-                    1,
-                    TRIM(COALESCE(title, '')),
-                    ',' || id || ','
-                FROM chapter
-                WHERE parent_id = 0
-
-                UNION ALL
-
-                SELECT
-                    c.id,
-                    c.book_id,
-                    chapter_tree.depth + 1,
-                    CASE
-                        WHEN chapter_tree.path = '' THEN TRIM(COALESCE(c.title, ''))
-                        WHEN TRIM(COALESCE(c.title, '')) = '' THEN chapter_tree.path
-                        ELSE chapter_tree.path || '/' || TRIM(COALESCE(c.title, ''))
-                    END,
-                    chapter_tree.visited || c.id || ','
-                FROM chapter c
-                JOIN chapter_tree ON c.parent_id = chapter_tree.id
-                WHERE c.book_id = chapter_tree.book_id
-                  AND instr(chapter_tree.visited, ',' || c.id || ',') = 0
+            CREATE TEMP TABLE \(tempChapterTreeTable) (
+                id INTEGER PRIMARY KEY NOT NULL,
+                depth INTEGER NOT NULL,
+                path TEXT
             )
-            UPDATE chapter
-            SET
-                chapter_level = (
-                    SELECT depth
-                    FROM chapter_tree
-                    WHERE chapter_tree.id = chapter.id
-                ),
-                source_path = (
-                    SELECT path
-                    FROM chapter_tree
-                    WHERE chapter_tree.id = chapter.id
+        """)
+
+        do {
+            // SQL 目的：按 Android MIGRATION_40_41 的递归 CTE 回填可达章节树，包含根章节与活跃父节点缺失的孤儿章节。
+            // 涉及表：chapter、temp_chapter_tree_40_41；关键过滤：id != 0、is_deleted = 0、同 book_id、最大深度 5、防循环 visited。
+            // 时间字段：不修改 created_date/updated_date/last_sync_date；返回字段：章节 id、层级 depth、以 ` / ` 拼接的来源路径。
+            try db.execute(sql: """
+                INSERT OR REPLACE INTO \(tempChapterTreeTable)(id, depth, path)
+                WITH RECURSIVE chapter_tree(id, book_id, depth, path, visited) AS (
+                    SELECT
+                        root.id,
+                        root.book_id,
+                        1,
+                        TRIM(COALESCE(root.title, '')),
+                        ',' || root.id || ','
+                    FROM chapter AS root
+                    WHERE root.id != 0
+                      AND root.is_deleted = 0
+                      AND (
+                        root.parent_id = 0
+                        OR NOT EXISTS (
+                            SELECT 1
+                            FROM chapter AS parent
+                            WHERE parent.id = root.parent_id
+                              AND parent.book_id = root.book_id
+                              AND parent.is_deleted = 0
+                        )
+                      )
+
+                    UNION ALL
+
+                    SELECT
+                        child.id,
+                        child.book_id,
+                        chapter_tree.depth + 1,
+                        CASE
+                            WHEN TRIM(COALESCE(child.title, '')) = '' THEN chapter_tree.path
+                            WHEN chapter_tree.path = '' THEN TRIM(COALESCE(child.title, ''))
+                            ELSE chapter_tree.path || '\(pathSeparator)' || TRIM(COALESCE(child.title, ''))
+                        END,
+                        chapter_tree.visited || child.id || ','
+                    FROM chapter AS child
+                    INNER JOIN chapter_tree
+                        ON child.parent_id = chapter_tree.id
+                       AND child.book_id = chapter_tree.book_id
+                    WHERE child.id != 0
+                      AND child.is_deleted = 0
+                      AND chapter_tree.depth < \(maxChapterDepth)
+                      AND INSTR(chapter_tree.visited, ',' || child.id || ',') = 0
                 )
-            WHERE id IN (SELECT id FROM chapter_tree)
+                SELECT id, depth, path FROM chapter_tree
             """)
 
-        // SQL 目的：为未被递归树覆盖的历史章节提供 Android fallback 层级与路径。
-        // 涉及表：chapter；关键过滤：chapter_level 仍为 0 的遗留孤儿节点；副作用：只补默认层级和标题路径。
-        try db.execute(sql: """
-            UPDATE chapter
-            SET
-                chapter_level = CASE WHEN parent_id = 0 THEN 1 ELSE 2 END,
-                source_path = TRIM(COALESCE(title, ''))
-            WHERE chapter_level = 0
+            // SQL 目的：将临时表中的 Android 递归结果写回章节表，补齐历史章节层级与来源路径。
+            // 涉及表：chapter、temp_chapter_tree_40_41；关键字段：chapter_level/source_path；副作用：只更新迁移新增冗余字段。
+            try db.execute(sql: """
+                UPDATE chapter
+                SET
+                    chapter_level = (
+                        SELECT depth
+                        FROM \(tempChapterTreeTable)
+                        WHERE \(tempChapterTreeTable).id = chapter.id
+                    ),
+                    source_path = (
+                        SELECT path
+                        FROM \(tempChapterTreeTable)
+                        WHERE \(tempChapterTreeTable).id = chapter.id
+                    )
+                WHERE id IN (SELECT id FROM \(tempChapterTreeTable))
             """)
+
+            // SQL 目的：为未被递归树覆盖的活跃历史章节提供 Android fallback 层级与路径。
+            // 涉及表：chapter；关键过滤：id != 0、is_deleted = 0、chapter_level 仍为 0；副作用：只补默认层级和标题路径。
+            try db.execute(sql: """
+                UPDATE chapter
+                SET
+                    chapter_level = CASE WHEN parent_id = 0 THEN 1 ELSE 2 END,
+                    source_path = TRIM(COALESCE(title, ''))
+                WHERE id != 0
+                  AND is_deleted = 0
+                  AND chapter_level = 0
+            """)
+        } catch {
+            // SQL 目的：异常时清理章节迁移临时表，保证下次打开数据库可重新执行同一迁移步骤。
+            // 涉及表：temp_chapter_tree_40_41；副作用：仅删除迁移临时表。
+            try? db.execute(sql: "DROP TABLE IF EXISTS \(tempChapterTreeTable)")
+            throw error
+        }
+
+        // SQL 目的：迁移成功后清理章节树临时表，与 Android finally 清理语义一致。
+        // 涉及表：temp_chapter_tree_40_41；副作用：仅删除迁移临时表。
+        try db.execute(sql: "DROP TABLE IF EXISTS \(tempChapterTreeTable)")
     }
+
+    nonisolated static let maxChapterDepth = 5
+    nonisolated static let pathSeparator = " / "
+    nonisolated static let tempChapterTreeTable = "temp_chapter_tree_40_41"
 
     nonisolated static func roomSQL(_ sql: String, tableName: String) -> String {
         sql
