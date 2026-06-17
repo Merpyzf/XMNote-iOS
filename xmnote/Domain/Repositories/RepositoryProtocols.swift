@@ -55,10 +55,30 @@ protocol BookshelfRepositoryProtocol {
     func fetchBookshelfMoveTargetGroups(excludingGroupID: Int64?) async throws -> [BookshelfMoveGroupOption]
     /// 读取未删除、非年度的手动书单，供批量加入书单 Sheet 展示。
     func fetchManualBookCollections() async throws -> [BookCollectionSummary]
+    /// 持续监听手动书单与年度书单列表快照，供书单 Tab 实时展示。
+    func observeBookCollectionList() -> AsyncThrowingStream<BookCollectionListSnapshot, Error>
+    /// 持续监听指定书单详情，供书单详情页展示 collection 与 collection_book 关系。
+    func observeBookCollectionDetail(collectionID: Int64) -> AsyncThrowingStream<BookCollectionDetail?, Error>
+    /// 按当前读完历史修复年度书单关系，供年度书单入口在读取前补齐 Android 历史迁移副作用。
+    func repairAnnualBookCollections() async throws
     /// 新建手动书单，创建后可立即作为加入书单目标。
     func createBookCollection(title: String) async throws -> BookCollectionSummary
+    /// 按 Android saveCollection 语义新建手动书单，写入标题与简介。
+    func createBookCollection(input: BookCollectionFormInput) async throws -> BookCollectionListItem
+    /// 编辑手动书单标题与简介；年度书单不允许通过此入口编辑。
+    func updateBookCollection(collectionID: Int64, input: BookCollectionFormInput) async throws
+    /// 删除手动书单及其关联关系；年度书单不允许通过此入口删除。
+    func deleteBookCollection(collectionID: Int64) async throws
+    /// 按最终列表顺序写入手动书单 order 字段。
+    func updateManualBookCollectionOrder(_ collectionIDs: [Int64]) async throws
     /// 批量加入书单；已有有效关系保持不变，只为缺失关系插入记录。
     func addBooks(_ bookIDs: [Int64], toCollection collectionID: Int64) async throws
+    /// 从书单内移除指定关系，按 Android deleteSync 语义只软删除 relation。
+    func removeBooksFromCollection(collectionBookIDs: [Int64]) async throws
+    /// 按书单内最终顺序写入 relation order 字段。
+    func updateBooksInCollectionOrder(collectionID: Int64, relationIDs: [Int64]) async throws
+    /// 编辑书单内推荐语，保留同一 relation 并更新 relation 时间戳。
+    func updateCollectionBookRecommend(collectionBookID: Int64, recommend: String) async throws
     /// 将指定书籍从当前分组移出到默认书架，并按位置语义写入默认书架排序值。
     func moveBooksOutOfGroup(bookIDs: [Int64], placement: GroupBooksPlacement) async throws
     /// 批量置顶默认书架顶层 Book/Group，按传入选择顺序追加 pin_order。

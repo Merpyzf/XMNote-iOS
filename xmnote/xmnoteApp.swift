@@ -1,7 +1,7 @@
 /**
- * [INPUT]: 依赖 SwiftUI App 生命周期、RepositoryContainer 与全局服务初始化流程
- * [OUTPUT]: 对外提供 xmnoteApp（应用入口）完成数据库/仓储/根视图启动，并在 DEBUG UI Test 下提供隔离书架首页与二级列表 fixture
- * [POS]: 应用启动编排层，负责组装全局依赖并挂载 ContentView
+ * [INPUT]: 依赖 SwiftUI App 生命周期、GRDB Database、RepositoryContainer、XMToastCenter 与全局服务初始化流程
+ * [OUTPUT]: 对外提供 xmnoteApp（应用入口）完成数据库/仓储/根视图启动、全局 Toast Host 挂载，并在 DEBUG UI Test 下提供隔离书架首页、二级列表与书单 fixture
+ * [POS]: 应用启动编排层，负责组装全局依赖并挂载 ContentView 与跨页面轻提示基础设施
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
@@ -13,6 +13,7 @@
 //
 
 import SwiftUI
+import GRDB
 import Nuke
 import AliyunpanSDK
 import GRDB
@@ -26,6 +27,7 @@ import GRDB
 struct xmnoteApp: App {
     @State private var appState = AppState()
     @State private var sceneStateStore = SceneStateStore()
+    @State private var toastCenter = XMToastCenter()
     @State private var databaseManager: DatabaseManager?
     @State private var repositories: RepositoryContainer?
     @State private var initError: Error?
@@ -55,6 +57,8 @@ struct xmnoteApp: App {
                     LaunchSplashView()
                 }
             }
+            .environment(toastCenter)
+            .xmToastHost(center: toastCenter)
             .animation(.smooth(duration: 0.35), value: repositories != nil)
             .task {
                 guard databaseManager == nil, initError == nil else { return }
@@ -106,6 +110,9 @@ enum UITestLaunchConfiguration {
     nonisolated static let openWantReadListArgument = "-XMNoteUITestOpenWantReadList"
     nonisolated static let openReorderGroupListArgument = "-XMNoteUITestOpenReorderGroupList"
     nonisolated static let reorderGroupID: Int64 = 9_001
+    nonisolated static let manualCollectionID: Int64 = 9_101
+    nonisolated static let annualCollectionID: Int64 = 9_102
+    nonisolated static let annualFinishedBookID: Int64 = 4_001
 
     /// 根据 UI Test 启动参数决定是否创建临时数据库；返回 nil 时保持生产数据库路径。
     nonisolated static func makeDatabaseIfNeeded() throws -> AppDatabase? {
@@ -196,6 +203,70 @@ enum UITestLaunchConfiguration {
                 relation.updatedDate = now
                 try relation.insert(db)
             }
+
+            try seedBookCollectionFixture(now: now, db: db)
+        }
+    }
+
+    /// 写入书单 UI Test 数据，覆盖手动书单、年度书单、推荐语与详情展示路径。
+    nonisolated static func seedBookCollectionFixture(now: Int64, db: Database) throws {
+        let annualReadDate: Int64 = 1_767_225_600_000
+        var annualFinishedBook = makeFixtureBook(
+            id: annualFinishedBookID,
+            title: "UI测试读完年度书",
+            author: "年度作者",
+            order: 1,
+            readStatusID: 3,
+            now: annualReadDate
+        )
+        try annualFinishedBook.insert(db)
+
+        var readStatusRecord = BookReadStatusRecordRecord()
+        readStatusRecord.id = 9_301
+        readStatusRecord.bookId = annualFinishedBookID
+        readStatusRecord.readStatusId = 3
+        readStatusRecord.changedDate = annualReadDate
+        readStatusRecord.createdDate = annualReadDate
+        readStatusRecord.updatedDate = annualReadDate
+        try readStatusRecord.insert(db)
+
+        var manual = CollectionRecord()
+        manual.id = manualCollectionID
+        manual.title = "UI测试手动书单"
+        manual.desc = "用于验证 iOS 书单列表与详情"
+        manual.order = 1
+        manual.isAnnual = 0
+        manual.year = 0
+        manual.createdDate = now
+        manual.updatedDate = now
+        try manual.insert(db)
+
+        var annual = CollectionRecord()
+        annual.id = annualCollectionID
+        annual.title = "2026 年阅读书单"
+        annual.desc = "年度只读验证"
+        annual.order = 2026
+        annual.isAnnual = 1
+        annual.year = 2026
+        annual.createdDate = now
+        annual.updatedDate = now
+        try annual.insert(db)
+
+        let relations: [(Int64, Int64, Int64, String, Int64)] = [
+            (9_201, manualCollectionID, 1_001, "适合验证书单详情的推荐语", 0),
+            (9_202, manualCollectionID, 1_002, "", 1),
+            (9_203, annualCollectionID, annualFinishedBookID, "年度书单只读推荐语", 0)
+        ]
+        for relationData in relations {
+            var relation = CollectionBookRecord()
+            relation.id = relationData.0
+            relation.collectionId = relationData.1
+            relation.bookId = relationData.2
+            relation.recommend = relationData.3
+            relation.order = relationData.4
+            relation.createdDate = now
+            relation.updatedDate = now
+            try relation.insert(db)
         }
     }
 

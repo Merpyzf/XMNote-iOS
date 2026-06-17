@@ -62,17 +62,20 @@ struct PersonalView: View {
                 .allowsHitTesting(false)
 
             TopSwitcher(title: "我的") {
-                NavigationLink(value: PersonalRoute.settings) {
-                    TopBarActionIcon(systemName: "gearshape", containerSize: 36)
+                TopBarActionPill {
+                    NavigationLink(value: PersonalRoute.settings) {
+                        TopBarActionIcon(systemName: "gearshape", hitShape: .rectangle)
+                    }
+                    .topBarActionPillSegmentStyle(true)
+                } trailing: {
+                    AddMenuCircleButton(
+                        onAddBook: onAddBook,
+                        onAddNote: onAddNote,
+                        onOpenDebugCenter: onOpenDebugCenter,
+                        usesGlassStyle: true,
+                        presentation: .pillSegment
+                    )
                 }
-                .topBarGlassButtonStyle(true)
-
-                AddMenuCircleButton(
-                    onAddBook: onAddBook,
-                    onAddNote: onAddNote,
-                    onOpenDebugCenter: onOpenDebugCenter,
-                    usesGlassStyle: true
-                )
             }
             .zIndex(1)
         }

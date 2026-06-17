@@ -1,5 +1,5 @@
 /**
- * [INPUT]: 依赖 GRDB DatabaseMigrator、RoomCanonicalSchemaV40/RoomCanonicalSchemaV41/RoomCanonicalSchemaV42/RoomCanonicalSchemaV43 与 DatabaseSchema+Seed
+ * [INPUT]: 依赖 GRDB DatabaseMigrator、RoomCanonicalSchemaV40/RoomCanonicalSchemaV41/RoomCanonicalSchemaV42/RoomCanonicalSchemaV43、RoomCanonicalSchemaCompatibility 与 DatabaseSchema+Seed
  * [OUTPUT]: 对外提供 AppDatabase.migrator 与 Room canonical 迁移标识
  * [POS]: Database/Core 的迁移入口，被 AppDatabase.init 调用执行 Schema 创建
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -55,7 +55,7 @@ extension AppDatabase {
             return
         }
 
-        try validateRoomCanonicalSchema(userVersion: userVersion, db: db)
+        try RoomCanonicalSchemaCompatibility.validatePhysicalSchema(db)
 
         // SQL 目的：为 Android Room canonical 库补建 GRDB 内部迁移表，避免后续迁移器误判为空库。
         // 涉及表：grdb_migrations；副作用：只写 iOS 内部迁移标记，不修改任何业务表。
@@ -72,22 +72,6 @@ extension AppDatabase {
         }
         if userVersion >= RoomCanonicalSchemaV43.databaseVersion {
             try markMigration(roomV43MigrationIdentifier, in: db)
-        }
-    }
-
-    private nonisolated static func validateRoomCanonicalSchema(userVersion: Int, db: Database) throws {
-        guard userVersion <= AppDatabase.databaseVersion else {
-            throw RoomCanonicalSchemaError.versionMismatch(userVersion)
-        }
-
-        if userVersion >= RoomCanonicalSchemaV43.databaseVersion {
-            try RoomCanonicalSchemaV43.validatePhysicalSchema(db)
-        } else if userVersion >= RoomCanonicalSchemaV42.databaseVersion {
-            try RoomCanonicalSchemaV42.validatePhysicalSchema(db)
-        } else if userVersion >= RoomCanonicalSchemaV41.databaseVersion {
-            try RoomCanonicalSchemaV41.validatePhysicalSchema(db)
-        } else {
-            try RoomCanonicalSchemaV40.validatePhysicalSchema(db)
         }
     }
 

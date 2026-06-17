@@ -108,13 +108,17 @@ private struct NoteContentView: View {
                 tabs: NoteSubTab.allCases,
                 titleProvider: \.title
             ) {
-                noteActionButton
-                AddMenuCircleButton(
-                    onAddBook: onAddBook,
-                    onAddNote: onAddNote,
-                    onOpenDebugCenter: onOpenDebugCenter,
-                    usesGlassStyle: true
-                )
+                TopBarActionPill {
+                    noteActionButton(presentation: .pillSegment)
+                } trailing: {
+                    AddMenuCircleButton(
+                        onAddBook: onAddBook,
+                        onAddNote: onAddNote,
+                        onOpenDebugCenter: onOpenDebugCenter,
+                        usesGlassStyle: true,
+                        presentation: .pillSegment
+                    )
+                }
             }
             .zIndex(1)
         }
@@ -180,16 +184,16 @@ private struct NoteContentView: View {
         .padding(.bottom, Spacing.half)
     }
 
-    private var noteActionButton: some View {
+    private func noteActionButton(presentation: TopBarActionPresentation) -> some View {
         Button {
             // TODO: sort/settings action
         } label: {
             TopBarActionIcon(
                 systemName: selectedSubTab == .notes ? "arrow.up.arrow.down" : "gearshape",
-                containerSize: 36
+                hitShape: presentation == .pillSegment ? .rectangle : .circle
             )
         }
-        .topBarGlassButtonStyle(true)
+        .topBarActionPresentationStyle(presentation)
     }
 }
 

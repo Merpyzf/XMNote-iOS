@@ -430,7 +430,7 @@ private extension BackupArchiveService {
         }
 
         var databasePointer: OpaquePointer?
-        let openResult = sqlite3_open_v2(path, &databasePointer, SQLITE_OPEN_READONLY, nil)
+        let openResult = sqlite3_open_v2(path, &databasePointer, SQLITE_OPEN_READWRITE, nil)
         guard openResult == SQLITE_OK, let databasePointer else {
             throw BackupError.backupFileCorrupted
         }
@@ -448,10 +448,10 @@ private extension BackupArchiveService {
         }
 
         let backupVersion = Int(sqlite3_column_int(statement, 0))
-        if backupVersion > AppDatabase.databaseVersion {
+        if backupVersion > AppDatabase.maximumRestorableDatabaseVersion {
             throw BackupError.versionMismatch(
                 backupVersion: backupVersion,
-                appVersion: AppDatabase.databaseVersion
+                appVersion: AppDatabase.maximumRestorableDatabaseVersion
             )
         }
     }

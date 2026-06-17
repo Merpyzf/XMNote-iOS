@@ -207,6 +207,121 @@ final class BookshelfBookListSearchDrawerUITests: XCTestCase {
         XCTAssertNotEqual(movedFrame, firstFrameBefore)
     }
 
+    func testBookCollectionManualListAndDetailOpen() throws {
+        let app = launchDefaultBookshelf()
+        openBookCollectionTab(in: app)
+
+        XCTAssertTrue(app.buttons["book.collection.create"].waitForExistence(timeout: 3), app.debugDescription)
+        XCTAssertTrue(app.buttons["book.collection.reorder"].exists)
+        XCTAssertTrue(app.staticTexts["UI测试手动书单"].waitForExistence(timeout: 3), app.debugDescription)
+
+        app.staticTexts["UI测试手动书单"].tap()
+
+        XCTAssertTrue(app.otherElements["book.collection.detail"].waitForExistence(timeout: 4), app.debugDescription)
+        XCTAssertTrue(app.buttons["加入书籍"].waitForExistence(timeout: 3), app.debugDescription)
+        XCTAssertTrue(app.staticTexts["适合验证书单详情的推荐语"].waitForExistence(timeout: 3), app.debugDescription)
+    }
+
+    func testBookCollectionAnnualListAndReadOnlyDetailOpen() throws {
+        let app = launchDefaultBookshelf()
+        openBookCollectionTab(in: app)
+
+        let annualSegment = app.buttons["年度书单"]
+        XCTAssertTrue(annualSegment.waitForExistence(timeout: 3), app.debugDescription)
+        annualSegment.tap()
+
+        XCTAssertTrue(app.staticTexts["2026 年阅读书单"].waitForExistence(timeout: 3), app.debugDescription)
+        app.staticTexts["2026 年阅读书单"].tap()
+
+        XCTAssertTrue(app.otherElements["book.collection.detail"].waitForExistence(timeout: 4), app.debugDescription)
+        XCTAssertTrue(app.staticTexts["年度书单由读完记录维护，标题、书籍和顺序在 iOS 端保持只读。"].waitForExistence(timeout: 3), app.debugDescription)
+        XCTAssertFalse(app.buttons["加入书籍"].exists)
+    }
+
+    func testBookCollectionCreateEditAddAndDeleteFlow() throws {
+        let app = launchDefaultBookshelf()
+        openBookCollectionTab(in: app)
+
+        let createdTitle = "UITest Collection"
+        let editedTitle = "UITest Collection Edited"
+
+        app.buttons["book.collection.create"].tap()
+        let createAlert = app.alerts["新建书单"]
+        XCTAssertTrue(createAlert.waitForExistence(timeout: 3), app.debugDescription)
+        createAlert.textFields.element(boundBy: 0).tap()
+        createAlert.textFields.element(boundBy: 0).typeText(createdTitle)
+        createAlert.textFields.element(boundBy: 1).tap()
+        createAlert.textFields.element(boundBy: 1).typeText("Created by UI test")
+        createAlert.buttons["创建"].tap()
+
+        let createdTitleElement = app.staticTexts[createdTitle]
+        XCTAssertTrue(createdTitleElement.waitForExistence(timeout: 4), app.debugDescription)
+
+        createdTitleElement.swipeLeft()
+        let editButton = app.buttons["编辑"]
+        XCTAssertTrue(editButton.waitForExistence(timeout: 2), app.debugDescription)
+        editButton.tap()
+
+        let editAlert = app.alerts["编辑书单"]
+        XCTAssertTrue(editAlert.waitForExistence(timeout: 3), app.debugDescription)
+        replaceText(in: editAlert.textFields.element(boundBy: 0), with: editedTitle)
+        editAlert.buttons["保存"].tap()
+
+        let editedTitleElement = app.staticTexts[editedTitle]
+        XCTAssertTrue(editedTitleElement.waitForExistence(timeout: 4), app.debugDescription)
+        editedTitleElement.tap()
+
+        XCTAssertTrue(app.otherElements["book.collection.detail"].waitForExistence(timeout: 4), app.debugDescription)
+        XCTAssertTrue(app.buttons["加入书籍"].waitForExistence(timeout: 3), app.debugDescription)
+        app.buttons["加入书籍"].tap()
+
+        XCTAssertTrue(app.navigationBars["加入书单"].waitForExistence(timeout: 4), app.debugDescription)
+        let pickerSearchField = app.searchFields["搜索书名、作者、ISBN"]
+        XCTAssertTrue(pickerSearchField.waitForExistence(timeout: 3), app.debugDescription)
+        pickerSearchField.tap()
+        pickerSearchField.typeText("想读 03")
+
+        let bookToAdd = app.buttons["book.picker.local.1003"]
+        XCTAssertTrue(bookToAdd.waitForExistence(timeout: 4), app.debugDescription)
+        bookToAdd.tap()
+
+        let confirm = app.buttons["book.picker.confirm"]
+        XCTAssertTrue(confirm.waitForExistence(timeout: 3), app.debugDescription)
+        confirm.tap()
+
+        let addedBookTitle = app.staticTexts["UI测试想读 03"]
+        XCTAssertTrue(addedBookTitle.waitForExistence(timeout: 5), app.debugDescription)
+
+        let addedBookCell = app.cells.containing(.staticText, identifier: "UI测试想读 03").firstMatch
+        if addedBookCell.waitForExistence(timeout: 1) {
+            addedBookCell.swipeLeft()
+        } else {
+            addedBookTitle.swipeLeft()
+        }
+        let recommendButton = app.buttons["推荐语"]
+        XCTAssertTrue(recommendButton.waitForExistence(timeout: 3), app.debugDescription)
+        recommendButton.tap()
+
+        let recommendAlert = app.alerts["编辑推荐语"]
+        XCTAssertTrue(recommendAlert.waitForExistence(timeout: 3), app.debugDescription)
+        recommendAlert.textFields.element(boundBy: 0).tap()
+        recommendAlert.textFields.element(boundBy: 0).typeText("UI 自动化推荐语")
+        recommendAlert.buttons["保存"].tap()
+        XCTAssertTrue(app.staticTexts["UI 自动化推荐语"].waitForExistence(timeout: 4), app.debugDescription)
+
+        app.buttons["书单更多操作"].tap()
+        let deleteMenuItem = app.buttons["删除书单"]
+        XCTAssertTrue(deleteMenuItem.waitForExistence(timeout: 3), app.debugDescription)
+        deleteMenuItem.tap()
+
+        let deleteAlert = app.alerts.matching(NSPredicate(format: "label CONTAINS %@", editedTitle)).firstMatch
+        XCTAssertTrue(deleteAlert.waitForExistence(timeout: 3), app.debugDescription)
+        deleteAlert.buttons["删除"].tap()
+
+        XCTAssertTrue(app.staticTexts["UI测试手动书单"].waitForExistence(timeout: 4), app.debugDescription)
+        XCTAssertFalse(app.staticTexts[editedTitle].waitForExistence(timeout: 2))
+    }
+
     private func launchBookList(argument: String) -> XCUIApplication {
         let app = XCUIApplication()
         app.launchArguments = [seedArgument, argument]
@@ -236,6 +351,14 @@ final class BookshelfBookListSearchDrawerUITests: XCTestCase {
         let organizeButton = app.buttons["书籍整理"]
         XCTAssertTrue(organizeButton.waitForExistence(timeout: 3), app.debugDescription)
         organizeButton.tap()
+    }
+
+    private func openBookCollectionTab(in app: XCUIApplication) {
+        _ = waitForDefaultBookshelf(in: app)
+        let collectionTab = app.buttons["书单"]
+        XCTAssertTrue(collectionTab.waitForExistence(timeout: 4), app.debugDescription)
+        collectionTab.tap()
+        XCTAssertTrue(app.staticTexts["UI测试手动书单"].waitForExistence(timeout: 6), app.debugDescription)
     }
 
     private func waitForBookList(in app: XCUIApplication) -> XCUIElement {
@@ -285,5 +408,11 @@ final class BookshelfBookListSearchDrawerUITests: XCTestCase {
         if !drawer.waitForExistence(timeout: 1) || !drawer.isHittable {
             collection.swipeDown()
         }
+    }
+
+    private func replaceText(in field: XCUIElement, with text: String) {
+        field.tap()
+        field.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: 80))
+        field.typeText(text)
     }
 }

@@ -476,22 +476,34 @@ extension BookRepository {
     nonisolated func fetchManualBookCollections(_ db: Database) throws -> [BookCollectionSummary] {
         // SQL 目的：读取可作为批量加入目标的手动书单，并统计每个书单下有效书籍关系数量。
         // 涉及表：collection c LEFT JOIN collection_book cb LEFT JOIN book b。
-        // 关键过滤：c.is_deleted = 0、c.is_annual = 0；统计时仅计算 cb.is_deleted = 0 且 book 未软删除、非占位书的关系。
+        // 关键过滤：c.is_deleted = 0、c.is_annual = 0；统计时只要求 cb.is_deleted = 0 且能 join 到 book，保留 Android 手动书单对软删除书籍和占位书籍的兼容口径。
         // 时间字段：不参与排序和返回，保持 Android queryMineCollectionList 的 order 升序语义。
-        // 返回字段用途：构建加入书单 Sheet 的标题、描述和书籍数量。
+        // 返回字段用途：构建加入书单 Sheet 的标题、描述、书籍数量和代表封面。
         let sql = """
             SELECT c.id,
                    COALESCE(c.title, '') AS title,
                    COALESCE(c.`desc`, '') AS description,
-                   COUNT(b.id) AS book_count
+                   COUNT(b.id) AS book_count,
+                   COALESCE((
+                       SELECT GROUP_CONCAT(book_cover, char(31))
+                       FROM (
+                           SELECT COALESCE(b2.cover, '') AS book_cover
+                           FROM collection_book cb2
+                           LEFT JOIN book b2
+                             ON b2.id = cb2.book_id
+                           WHERE cb2.collection_id = c.id
+                             AND cb2.is_deleted = 0
+                             AND b2.id IS NOT NULL
+                           ORDER BY cb2.`order` ASC, cb2.id ASC
+                           LIMIT 4
+                       )
+                   ), '') AS representative_covers
             FROM collection c
             LEFT JOIN collection_book cb
               ON cb.collection_id = c.id
              AND cb.is_deleted = 0
             LEFT JOIN book b
               ON b.id = cb.book_id
-             AND b.is_deleted = 0
-             AND b.id != 0
             WHERE c.is_deleted = 0
               AND c.is_annual = 0
             GROUP BY c.id
@@ -504,7 +516,8 @@ extension BookRepository {
                 id: row["id"],
                 title: title,
                 description: row["description"] ?? "",
-                bookCount: row["book_count"] ?? 0
+                bookCount: row["book_count"] ?? 0,
+                representativeCovers: Self.decodeRepresentativeCovers(row["representative_covers"] ?? "")
             )
         }
     }
@@ -565,7 +578,8 @@ extension BookRepository {
             id: record.id ?? 0,
             title: normalized,
             description: "",
-            bookCount: 0
+            bookCount: 0,
+            representativeCovers: []
         )
     }
 
@@ -584,7 +598,7 @@ extension BookRepository {
 
         let now = timestampMillis()
         for bookID in uniqueBookIDs {
-            guard try isActiveBook(db, bookID: bookID) else { continue }
+            guard try bookRowExists(db, bookID: bookID) else { continue }
             guard try !hasActiveCollectionBookRelation(db, bookID: bookID, collectionID: collectionID) else {
                 continue
             }
@@ -1058,6 +1072,20 @@ extension BookRepository {
             WHERE id = ?
               AND is_deleted = 0
               AND id != 0
+        """
+        return (try Int.fetchOne(db, sql: sql, arguments: [bookID]) ?? 0) > 0
+    }
+
+    /// 校验书籍父记录是否存在，不过滤软删除状态，用于书单关系写入兼容 Android 历史数据。
+    nonisolated func bookRowExists(_ db: Database, bookID: Int64) throws -> Bool {
+        // SQL 目的：确认待加入书单的 book 父记录存在，避免插入缺失父记录导致外键异常。
+        // 涉及表：book。
+        // 关键过滤：仅按 id 精确命中，不过滤 is_deleted，也不排除 id = 0；Android addBooksToCollectionList 只做 relation 查重，不做有效书籍过滤。
+        // 返回字段用途：存在父行时允许写入 collection_book，以兼容软删除书籍、占位书籍和备份恢复历史数据。
+        let sql = """
+            SELECT COUNT(*)
+            FROM book
+            WHERE id = ?
             """
         return (try Int.fetchOne(db, sql: sql, arguments: [bookID]) ?? 0) > 0
     }
@@ -2490,6 +2518,13 @@ extension BookRepository {
             guard id >= 0, !result.contains(id) else { return }
             result.append(id)
         }
+    }
+
+    /// 解码只读代表封面聚合字段，空封面不参与视觉拼贴。
+    nonisolated private static func decodeRepresentativeCovers(_ value: String) -> [String] {
+        value.split(separator: "\u{1F}")
+            .map { String($0).trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
     }
 
     /// 返回当前毫秒时间戳。

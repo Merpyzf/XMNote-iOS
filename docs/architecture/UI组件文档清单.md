@@ -22,6 +22,7 @@
 | RichText | UI-复用关键 | xmnote/UIComponents/Foundation/RichText.swift | docs/component-guides/ExpandableRichText使用说明.md | 新增/重大重构 |
 | CollapsedRichTextPreview | UI-复用关键 | xmnote/UIComponents/Foundation/CollapsedRichTextPreview.swift | docs/component-guides/ExpandableRichText使用说明.md | 新增/重大重构 |
 | ImmersiveBottomChrome | UI-复用关键 | xmnote/UIComponents/Foundation/ImmersiveBottomChrome.swift | docs/component-guides/ImmersiveBottomChrome使用说明.md | 新增/重大重构 |
+| XMToast | UI-复用关键 | xmnote/UIComponents/Foundation/XMToast.swift | docs/component-guides/XMToast使用说明.md | 新增/重大重构 |
 | TopSwitcher | UI-复用关键 | xmnote/UIComponents/Tabs/TopSwitcher.swift | docs/component-guides/TopSwitcher使用说明.md | 新增/重大重构 |
 | KeepAliveSwitcherHost | UI-复用关键 | xmnote/UIComponents/Tabs/KeepAliveSwitcherHost.swift | docs/component-guides/KeepAliveSwitcherHost使用说明.md | 新增/重大重构 |
 | HomeSubtabScaffold | UI-复用关键 | xmnote/UIComponents/Tabs/HomeSubtabScaffold.swift | docs/component-guides/HomeSubtabScaffold使用说明.md | 新增/重大重构 |
