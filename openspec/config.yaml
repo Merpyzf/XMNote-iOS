@@ -1,0 +1,38 @@
+schema: spec-driven
+
+context: |
+  XMNote 是一个 Android -> iOS 迁移项目，目标是业务意图对齐而不是机械翻译实现。
+  iOS 端技术栈为 Swift / SwiftUI / Xcode 26 / iOS 26，生产代码需遵守仓库根目录 AGENTS.md。
+  Android 参考工程路径：/Users/wangke/Workspace/AndroidProjects/XMNote。
+
+  关键约束：
+  - 用户沟通、OpenSpec artifact 与实现说明默认使用中文。
+  - 任何数据库、迁移、seed、SQL、Repository 行为涉及 Android -> iOS 对齐时，必须先查 Android 与 iOS 双端事实。
+  - 本地/网络数据访问必须经 Repository；ViewModel 禁止直接访问 AppDatabase、WebDAVClient、NetworkClient。
+  - 涉及 Apple API、SwiftUI、iOS 26、Liquid Glass、HIG、可用性或弃用语义时，必须查 Apple 官方文档或项目内对应学习文档。
+  - UI 生产文本优先使用 DesignTokens.swift 中的 AppTypography 与语义色；书籍封面必须使用 XMBookCover。
+  - Liquid Glass 只用于导航层、控制层与真实交互浮层；内容卡片、正文阅读区、列表主体不得为了装饰使用玻璃。
+  - 开发阶段默认只做代码实现与构建校验；未明确要求时不主动新增单元测试、UI Test 或治理文档。
+  - 收到“任务已完成”后才进入收口阶段，按 AGENTS.md 补齐 docs/feature、docs/learning、组件文档与治理校验。
+
+rules:
+  proposal:
+    - 使用中文，先写清 Why，再写 What，不要把实现细节塞进 proposal。
+    - Capabilities 必须使用 kebab-case；只在需求行为变化时列为 New/Modified Capability。
+    - Impact 必须标明 Android -> iOS 对齐影响、涉及模块、潜在数据/导航/UI 边界。
+    - 如果只是视觉微调或内部重构，明确说明不改变业务数据、排序、同步、迁移等外部行为。
+  specs:
+    - 需求必须可测试，使用 SHALL/MUST 表达强约束，避免“应该/可以/优化体验”这类不可验收表述。
+    - 每个 Requirement 至少包含一个 Scenario，Scenario 标题必须使用四级标题 `#### Scenario:`。
+    - Scenario 使用 WHEN/THEN；涉及错误态、空态、只读态、动态字体、深色模式或 Reduce Motion 时应写入场景。
+    - 修改已有能力时优先使用 MODIFIED Requirements，并保留完整 Requirement block。
+  design:
+    - 先列真实 owner、真实写入点、数据流与触发时机，再给方案。
+    - 涉及数据库或迁移时，必须列 Android/iOS 双端代码路径、差异、风险、回滚方案。
+    - 涉及 UI 时，必须说明信息层级、组件归位、设计令牌、Liquid Glass 边界、可访问性与动态字体处理。
+    - 明确 Non-Goals，避免把单点问题升级成无证据的架构改造。
+  tasks:
+    - 使用 OpenSpec 可解析的 checkbox：`- [ ] X.Y 任务描述`，不要使用其他列表格式。
+    - 任务按依赖顺序拆分，优先事实核对、接口/数据流、实现、构建验证。
+    - 默认包含 `xcodebuild -project xmnote.xcodeproj -scheme xmnote -destination 'platform=iOS Simulator,name=iPhone 17 Pro iOS 26.2 Clean' build` 或等价 XcodeBuildMCP 构建校验。
+    - 未经用户明确要求，不把单元测试、UI Test、文档收口脚本列为开发阶段必做任务。
