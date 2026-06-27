@@ -6,8 +6,8 @@
 //
 
 /**
- * [INPUT]: 依赖 RepositoryContainer 注入仓储，依赖 HomeSubtabScaffold 承载首页二级页硬切，依赖 BookViewModel 与 BookCollectionListViewModel 驱动书架浏览、书单列表、显示设置与顶部操作
- * [OUTPUT]: 对外提供 BookContainerView 与 BookSubTab 枚举，承载书籍/书单二级页切换、TabBar 显隐协调、底部玻璃编辑工具栏、批量 Sheet、删除确认、书单入口与书单更多菜单
+ * [INPUT]: 依赖 RepositoryContainer 注入仓储，依赖 BookCollectionImportRouter 承接外部书单导入，依赖 HomeSubtabScaffold 承载首页二级页硬切，依赖 BookViewModel 与 BookCollectionListViewModel 驱动书架浏览、书单列表、显示设置与顶部操作
+ * [OUTPUT]: 对外提供 BookContainerView 与 BookSubTab 枚举，承载书籍/书单二级页切换、外部导入入口定位、TabBar 显隐协调、底部玻璃编辑工具栏、批量 Sheet、删除确认、书单入口与书单更多菜单
  * [POS]: Book 模块容器壳层，承载书籍页与书架管理模式编排
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -50,6 +50,7 @@ private struct BookshelfEditBottomBarHeightPreferenceKey: PreferenceKey {
 struct BookContainerView: View {
     @Environment(RepositoryContainer.self) private var repositories
     @Environment(SceneStateStore.self) private var sceneStateStore
+    @Environment(BookCollectionImportRouter.self) private var importRouter
     @State private var viewModel: BookViewModel?
     @State private var selectedSubTab: BookSubTab = .books
     @State private var didBootstrapFromScene = false
@@ -114,12 +115,18 @@ struct BookContainerView: View {
             guard sceneStateStore.isRestored else { return }
             guard !didBootstrapFromScene else { return }
             didBootstrapFromScene = true
-            selectedSubTab = sceneStateStore.snapshot.books.selectedSubTab.productionValue
+            selectedSubTab = importRouter.pendingImport == nil
+                ? sceneStateStore.snapshot.books.selectedSubTab.productionValue
+                : .collections
             sceneStateStore.updateBookSelectedSubTab(selectedSubTab)
         }
         .task {
             guard viewModel == nil else { return }
             viewModel = BookViewModel(repository: repositories.bookRepository)
+        }
+        .onAppear {
+            guard importRouter.pendingImport != nil else { return }
+            selectedSubTab = .collections
         }
         .onChange(of: selectedSubTab) { _, newValue in
             let normalizedValue = newValue.productionValue
@@ -128,6 +135,10 @@ struct BookContainerView: View {
                 return
             }
             sceneStateStore.updateBookSelectedSubTab(normalizedValue)
+        }
+        .onChange(of: importRouter.pendingImport) { _, request in
+            guard request != nil else { return }
+            selectedSubTab = .collections
         }
     }
 }
@@ -433,7 +444,9 @@ private struct BookContentView: View {
                     canReorder: collectionViewModel.selectedKind == .manual
                         && collectionViewModel.visibleCollections.count >= 2
                         && collectionViewModel.activeAction == nil,
+                    canImportWeread: collectionViewModel.activeAction == nil,
                     onCreate: collectionViewModel.presentCreateForm,
+                    onImportWeread: collectionViewModel.presentWereadImport,
                     onToggleReorder: toggleCollectionReordering,
                     onShowDisplaySettings: { showsCollectionDisplaySettingSheet = true }
                 )
@@ -873,7 +886,9 @@ private struct BookCollectionTopActionPill: View {
     let allowsReorderAction: Bool
     let manualCount: Int
     let canReorder: Bool
+    let canImportWeread: Bool
     let onCreate: () -> Void
+    let onImportWeread: () -> Void
     let onToggleReorder: () -> Void
     let onShowDisplaySettings: () -> Void
 
@@ -955,6 +970,11 @@ private struct BookCollectionTopActionPill: View {
                 }
                 .disabled(!canStartReordering)
             }
+
+            Button(action: onImportWeread) {
+                XMMenuLabel("导入微信读书书单", systemImage: "link.badge.plus")
+            }
+            .disabled(!canImportWeread)
 
             Button(action: onShowDisplaySettings) {
                 XMMenuLabel("显示设置", systemImage: "slider.horizontal.3")

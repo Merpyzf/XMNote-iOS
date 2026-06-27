@@ -2,7 +2,7 @@ import Foundation
 
 /**
  * [INPUT]: 依赖 Foundation 的 Date/DateFormatter 进行时间格式化
- * [OUTPUT]: 对外提供 BookItem、BookshelfSnapshot、BookshelfItem、BookshelfOrderItem、BookshelfListContext、BookshelfBatchEditOptions、BookshelfMoveGroupOption、BookCollectionSummary、BookCollectionDisplaySetting、BookDetail、NoteExcerpt 等书籍域展示模型
+ * [OUTPUT]: 对外提供 BookItem、BookshelfSnapshot、BookshelfItem、BookshelfOrderItem、BookshelfListContext、BookshelfBatchEditOptions、BookshelfMoveGroupOption、BookCollectionSummary、BookCollectionDisplaySetting（含书单首页分组偏好）、BookCollectionBookMetadataEditInput、BookDetail、NoteExcerpt 等书籍域展示模型
  * [POS]: Domain/Models 的书籍聚合模型定义，被 BookViewModel 与 BookRepository 实现共同消费
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -591,16 +591,19 @@ nonisolated struct BookCollectionDisplaySetting: Codable, Hashable, Sendable {
     var displayMode: BookCollectionDisplayMode = .list
     var coverArrangement: BookCollectionCoverArrangement = .stacked
     var showsStatistics: Bool = true
+    var selectedKind: BookCollectionKind = .manual
 
     /// 使用默认参数构建书单显示设置，兼容旧本地设置缺少新增字段时的解码回退。
     init(
         displayMode: BookCollectionDisplayMode = .list,
         coverArrangement: BookCollectionCoverArrangement = .stacked,
-        showsStatistics: Bool = true
+        showsStatistics: Bool = true,
+        selectedKind: BookCollectionKind = .manual
     ) {
         self.displayMode = displayMode
         self.coverArrangement = coverArrangement
         self.showsStatistics = showsStatistics
+        self.selectedKind = selectedKind
     }
 
     /// 从本地轻量设置解码；字段缺失时回到当前书单首页的默认展示语义。
@@ -609,7 +612,8 @@ nonisolated struct BookCollectionDisplaySetting: Codable, Hashable, Sendable {
         self.init(
             displayMode: try container.decodeIfPresent(BookCollectionDisplayMode.self, forKey: .displayMode) ?? .list,
             coverArrangement: try container.decodeIfPresent(BookCollectionCoverArrangement.self, forKey: .coverArrangement) ?? .stacked,
-            showsStatistics: try container.decodeIfPresent(Bool.self, forKey: .showsStatistics) ?? true
+            showsStatistics: try container.decodeIfPresent(Bool.self, forKey: .showsStatistics) ?? true,
+            selectedKind: try container.decodeIfPresent(BookCollectionKind.self, forKey: .selectedKind) ?? .manual
         )
     }
 
@@ -617,10 +621,11 @@ nonisolated struct BookCollectionDisplaySetting: Codable, Hashable, Sendable {
         case displayMode
         case coverArrangement
         case showsStatistics
+        case selectedKind
     }
 }
 
-/// 书单列表项，承载列表首屏展示、排序和年度目标统计所需字段。
+/// 书单列表项，承载列表首屏展示、排序和书单展示域统计所需字段；年度书单的 `finishedCount` 使用年度投影书籍数，手动书单按当前已读状态统计。
 nonisolated struct BookCollectionListItem: Identifiable, Hashable, Sendable {
     let id: Int64
     let title: String
@@ -646,15 +651,200 @@ nonisolated struct BookCollectionListSnapshot: Hashable, Sendable {
     }
 }
 
-/// 书单内的书籍关系展示项，保留 collection_book relation 字段，避免丢失推荐语、排序与时间戳语义。
+/// 书单内的书籍关系展示项，保留 collection_book relation 字段，避免丢失收藏理由、排序与时间戳语义。
 nonisolated struct BookCollectionBookItem: Identifiable, Hashable, Sendable {
     let id: Int64
     let collectionID: Int64
     let book: BookshelfBookListItem
+    let summary: String
+    let summaryPlainText: String
     let recommend: String
+    let isPlaceholder: Bool
     let order: Int64
     let createdDate: Int64
     let updatedDate: Int64
+}
+
+/// 书单内单本书籍元信息编辑输入，对齐 Android 书单编辑页可修改的书籍字段与 relation 收藏理由。
+nonisolated struct BookCollectionBookMetadataEditInput: Hashable, Sendable {
+    let collectionBookID: Int64
+    let bookID: Int64
+    let title: String
+    let author: String
+    let press: String
+    let pubDate: String
+    let coverURL: String
+    let recommend: String
+}
+
+/// 书单添加书籍的统一输入，覆盖本地有效书和可作为书单占位书保存的远端/导入草稿。
+nonisolated enum BookCollectionBookSelectionInput: Hashable, Sendable {
+    case localBook(id: Int64)
+    case placeholder(BookCollectionPlaceholderBookDraft)
+}
+
+/// 书单占位书草稿，对齐 Android `book.is_deleted = 1` 的书单关系语义。
+nonisolated struct BookCollectionPlaceholderBookDraft: Identifiable, Hashable, Sendable {
+    let id: String
+    let title: String
+    let rawTitle: String
+    let author: String
+    let translator: String
+    let press: String
+    let isbn: String
+    let pubDate: String
+    let summary: String
+    let coverURL: String
+    let doubanId: Int?
+    let totalPages: Int?
+    let totalWordCount: Int?
+    let preferredBookType: BookEntryBookType?
+    let preferredProgressUnit: BookEntryProgressUnit?
+    let recommend: String
+
+    init(
+        id: String = UUID().uuidString,
+        title: String,
+        rawTitle: String = "",
+        author: String = "",
+        translator: String = "",
+        press: String = "",
+        isbn: String = "",
+        pubDate: String = "",
+        summary: String = "",
+        coverURL: String = "",
+        doubanId: Int? = nil,
+        totalPages: Int? = nil,
+        totalWordCount: Int? = nil,
+        preferredBookType: BookEntryBookType? = nil,
+        preferredProgressUnit: BookEntryProgressUnit? = nil,
+        recommend: String = ""
+    ) {
+        self.id = id
+        self.title = title
+        self.rawTitle = rawTitle
+        self.author = author
+        self.translator = translator
+        self.press = press
+        self.isbn = isbn
+        self.pubDate = pubDate
+        self.summary = summary
+        self.coverURL = coverURL
+        self.doubanId = doubanId
+        self.totalPages = totalPages
+        self.totalWordCount = totalWordCount
+        self.preferredBookType = preferredBookType
+        self.preferredProgressUnit = preferredProgressUnit
+        self.recommend = recommend
+    }
+
+    init(remoteSelection: BookPickerRemoteSelection) {
+        let seed = remoteSelection.seed
+        self.init(
+            id: remoteSelection.result.id,
+            title: seed.title.isEmpty ? remoteSelection.result.title : seed.title,
+            rawTitle: seed.rawTitle,
+            author: seed.author.isEmpty ? remoteSelection.result.author : seed.author,
+            translator: seed.translator,
+            press: seed.press,
+            isbn: seed.isbn,
+            pubDate: seed.pubDate,
+            summary: seed.summary.isEmpty ? remoteSelection.result.summary : seed.summary,
+            coverURL: seed.coverURL.isEmpty ? remoteSelection.result.coverURL : seed.coverURL,
+            doubanId: seed.doubanId,
+            totalPages: seed.totalPages,
+            totalWordCount: seed.totalWordCount,
+            preferredBookType: seed.preferredBookType,
+            preferredProgressUnit: seed.preferredProgressUnit,
+            recommend: ""
+        )
+    }
+}
+
+/// 微信读书书单导入预览，保存前只存在于内存，避免解析异常时写入半成品数据。
+nonisolated struct BookCollectionImportPreview: Identifiable, Hashable, Sendable {
+    let id: String
+    let sourceURL: String
+    let title: String
+    let description: String
+    let books: [BookCollectionImportPreviewBook]
+
+    init(
+        id: String = UUID().uuidString,
+        sourceURL: String,
+        title: String,
+        description: String,
+        books: [BookCollectionImportPreviewBook]
+    ) {
+        self.id = id
+        self.sourceURL = sourceURL
+        self.title = title
+        self.description = description
+        self.books = books
+    }
+}
+
+/// 微信读书书单导入预览中的单本书条目，保留推荐语到 `collection_book.recommend`。
+nonisolated struct BookCollectionImportPreviewBook: Identifiable, Hashable, Sendable {
+    let id: String
+    let title: String
+    let author: String
+    let coverURL: String
+    let summary: String
+    let recommend: String
+
+    init(
+        id: String = UUID().uuidString,
+        title: String,
+        author: String,
+        coverURL: String = "",
+        summary: String = "",
+        recommend: String = ""
+    ) {
+        self.id = id
+        self.title = title
+        self.author = author
+        self.coverURL = coverURL
+        self.summary = summary
+        self.recommend = recommend
+    }
+
+    var placeholderDraft: BookCollectionPlaceholderBookDraft {
+        BookCollectionPlaceholderBookDraft(
+            id: id,
+            title: title,
+            author: author,
+            summary: summary,
+            coverURL: coverURL,
+            recommend: recommend
+        )
+    }
+}
+
+/// 书单导出或分享生成后的临时文件载体，供系统分享面板使用。
+nonisolated struct BookCollectionGeneratedFile: Identifiable, Hashable, Sendable {
+    let id: UUID
+    let title: String
+    let url: URL
+    let urls: [URL]
+    let kind: Kind
+
+    enum Kind: Hashable, Sendable {
+        case export
+        case shareImage
+    }
+
+    init(title: String, url: URL, kind: Kind) {
+        self.init(title: title, urls: [url], kind: kind)
+    }
+
+    init(title: String, urls: [URL], kind: Kind) {
+        self.id = UUID()
+        self.title = title
+        self.url = urls[0]
+        self.urls = urls
+        self.kind = kind
+    }
 }
 
 /// 书单详情快照，汇总 collection 元信息、书籍关系和年度目标信息。
@@ -670,8 +860,14 @@ nonisolated struct BookCollectionDetail: Identifiable, Hashable, Sendable {
 
     var bookCount: Int { books.count }
 
+    /// 返回书单展示域的读完数：年度书单按年度投影集合计数，手动书单按当前书籍已读状态计数；不是全局阅读统计或读完次数。
     var finishedCount: Int {
-        books.filter { $0.book.readStatusId == BookEntryReadingStatus.finished.rawValue }.count
+        switch kind {
+        case .annual:
+            return bookCount
+        case .manual:
+            return books.filter { $0.book.readStatusId == BookEntryReadingStatus.finished.rawValue }.count
+        }
     }
 }
 

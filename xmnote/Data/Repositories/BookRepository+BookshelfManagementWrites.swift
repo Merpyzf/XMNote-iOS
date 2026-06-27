@@ -599,7 +599,11 @@ extension BookRepository {
         let now = timestampMillis()
         for bookID in uniqueBookIDs {
             guard try bookRowExists(db, bookID: bookID) else { continue }
-            guard try !hasActiveCollectionBookRelation(db, bookID: bookID, collectionID: collectionID) else {
+            guard try !hasActiveCollectionBookRelationByBookIdentityForWrite(
+                db,
+                bookID: bookID,
+                collectionID: collectionID
+            ) else {
                 continue
             }
             var relation = CollectionBookRecord(
@@ -651,6 +655,35 @@ extension BookRepository {
             WHERE book_id = ?
               AND collection_id = ?
               AND is_deleted = 0
+            LIMIT 1
+            """
+        return try Int64.fetchOne(db, sql: sql, arguments: [bookID, collectionID]) != nil
+    }
+
+    /// 读取候选本地书的书名与作者，并按 Android 书单内 name + author 口径判断是否已有等价关系。
+    nonisolated func hasActiveCollectionBookRelationByBookIdentityForWrite(
+        _ db: Database,
+        bookID: Int64,
+        collectionID: Int64
+    ) throws -> Bool {
+        guard bookID > 0 else { return false }
+
+        // SQL 目的：本地书加入书单前，用候选 book 的 name/author 与目标书单现有 relation 关联 book 比对，复刻 Android queryBook(id, name, author) 去重策略。
+        // 涉及表：book candidate、book existing、collection_book cb。
+        // 关键过滤：candidate.id 精确匹配，cb.collection_id 精确匹配且 cb.is_deleted = 0，existing.name/author 与 candidate.name/author 完全一致。
+        // 时间字段：不参与。
+        // 返回字段用途：目标书单已有同名同作者书籍时跳过新增 relation，即使 book_id 不同。
+        let sql = """
+            SELECT cb.id
+            FROM book candidate
+            INNER JOIN book existing
+                ON existing.name = candidate.name
+               AND existing.author = candidate.author
+            INNER JOIN collection_book cb
+                ON cb.book_id = existing.id
+            WHERE candidate.id = ?
+              AND cb.collection_id = ?
+              AND cb.is_deleted = 0
             LIMIT 1
             """
         return try Int64.fetchOne(db, sql: sql, arguments: [bookID, collectionID]) != nil

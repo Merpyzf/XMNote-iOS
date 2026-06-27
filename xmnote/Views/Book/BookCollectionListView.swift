@@ -1,6 +1,6 @@
 /**
- * [INPUT]: 依赖外部注入的 BookCollectionListViewModel 与 EditMode，依赖书单显示设置、LoadingGate 与 XMScopeSelector 驱动手动书单、年度书单、删除确认、排序和稳定加载占位
- * [OUTPUT]: 对外提供 BookCollectionListView，承载首页书单 Tab 的范围切换、列表/网格集合卡片、空态、错误态、写操作反馈、表单弹层与书单详情入口
+ * [INPUT]: 依赖外部注入的 BookCollectionListViewModel 与 EditMode，依赖书单显示设置、分组切换保存入口、BookCollectionImportRouter、LoadingGate 与 XMScopeSelector 驱动手动书单、年度书单、删除确认、排序和稳定加载占位
+ * [OUTPUT]: 对外提供 BookCollectionListView，承载首页书单 Tab 的范围切换、列表/网格集合卡片、空态、错误态、写操作反馈、系统分享导入、表单弹层与书单详情入口
  * [POS]: Views/Book 的书单首页页面壳层，被 BookContainerView 的书单二级页消费
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -9,6 +9,7 @@ import SwiftUI
 
 /// 首页书单列表页，按 iOS 分段结构表达 Android “我的书单 / 年度书单”业务分组。
 struct BookCollectionListView: View {
+    @Environment(BookCollectionImportRouter.self) private var importRouter
     @Bindable var viewModel: BookCollectionListViewModel
     @Binding var editMode: EditMode
     let onOpenCollection: (Int64) -> Void
@@ -33,6 +34,7 @@ struct BookCollectionListView: View {
         .background(Color.surfacePage.ignoresSafeArea())
         .onAppear {
             syncLoadingGate()
+            consumePendingWereadImport()
         }
         .onDisappear {
             loadingGate.hideImmediately()
@@ -44,6 +46,18 @@ struct BookCollectionListView: View {
             guard editMode.isEditing else { return }
             editMode = .inactive
         }
+        .onChange(of: importRouter.pendingImport) { _, _ in
+            consumePendingWereadImport()
+        }
+        .onChange(of: viewModel.activeAction) { _, action in
+            guard action == nil else { return }
+            consumePendingWereadImport()
+        }
+        .onChange(of: viewModel.importedCollectionID) { _, collectionID in
+            guard let collectionID else { return }
+            onOpenCollection(collectionID)
+            viewModel.consumeImportedCollectionID()
+        }
         .sheet(item: activeFormBinding) { presentation in
             BookCollectionFormSheet(
                 presentation: presentation,
@@ -51,6 +65,21 @@ struct BookCollectionListView: View {
             ) { title, description in
                 viewModel.submitForm(presentation, title: title, description: description)
             }
+        }
+        .sheet(item: $viewModel.wereadImportRequest) { _ in
+            BookCollectionWereadImportSheet(
+                isLoading: viewModel.activeAction == .import,
+                errorMessage: viewModel.wereadImportErrorMessage,
+                onParse: viewModel.parseWereadImportLink
+            )
+        }
+        .sheet(item: $viewModel.importPreview) { preview in
+            BookCollectionWereadImportPreviewSheet(
+                preview: preview,
+                isSaving: viewModel.activeAction == .import,
+                errorMessage: viewModel.wereadImportErrorMessage,
+                onConfirm: viewModel.confirmWereadImport
+            )
         }
         .xmSystemAlert(item: deleteConfirmationBinding) { confirmation in
             deleteDescriptor(for: confirmation)
@@ -75,7 +104,7 @@ struct BookCollectionListView: View {
         BookCollectionScopeHeader(
             selectedKind: Binding(
                 get: { viewModel.selectedKind },
-                set: { viewModel.selectedKind = $0 }
+                set: { viewModel.selectKind($0) }
             ),
             manualCount: viewModel.snapshot.manualCollections.count,
             annualCount: viewModel.snapshot.annualCollections.count
@@ -310,6 +339,20 @@ struct BookCollectionListView: View {
         } else {
             loadingGate.update(intent: .none)
         }
+    }
+
+    private func consumePendingWereadImport() {
+        guard viewModel.activeAction == nil,
+              let request = importRouter.pendingImport else {
+            return
+        }
+        switch request.source {
+        case .deepLink:
+            viewModel.parseWereadImportLink(request.link)
+        case .systemShare:
+            viewModel.importWereadLinkDirectly(request.link)
+        }
+        importRouter.consumePendingImport(request)
     }
 
     private func emptyState(title: String) -> some View {

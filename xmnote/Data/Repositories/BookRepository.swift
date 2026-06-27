@@ -3,7 +3,7 @@ import GRDB
 
 /**
  * [INPUT]: 依赖 AppDatabase 提供本地数据库连接，依赖 ObservationStream 提供观察流桥接
- * [OUTPUT]: 对外提供 BookRepository（BookRepositoryProtocol 的 GRDB 实现，含书架列表读写、书架/书单显示设置、分组移入移出、书单加入、批量编辑、删除与重命名管理）
+ * [OUTPUT]: 对外提供 BookRepository（BookRepositoryProtocol 的 GRDB 实现，含书架列表读写、书架/书单显示设置、分组移入移出、书单加入、书单书籍元信息编辑、批量编辑、删除与重命名管理）
  * [POS]: Data 层书籍仓储实现，统一封装书架列表/详情/书摘数据读取、默认书架分组预览排序与默认书架排序置顶写入
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -290,6 +290,23 @@ struct BookRepository: BookRepositoryProtocol {
         }
     }
 
+    /// 将本地书或远端草稿加入手动书单；远端草稿按 Android 书单占位书语义落库。
+    func addBookSelections(
+        _ selections: [BookCollectionBookSelectionInput],
+        toCollection collectionID: Int64
+    ) async throws {
+        try await databaseManager.database.dbPool.write { db in
+            try addBookSelectionsToCollection(db, selections: selections, collectionID: collectionID)
+        }
+    }
+
+    /// 将书单占位书恢复到书架，保留原有书单 relation 与 relation 文本。
+    func restoreCollectionPlaceholderBook(bookID: Int64) async throws {
+        try await databaseManager.database.dbPool.write { db in
+            try restoreCollectionPlaceholderBook(db, bookID: bookID)
+        }
+    }
+
     /// 从书单内移除指定 relation。
     func removeBooksFromCollection(collectionBookIDs: [Int64]) async throws {
         try await databaseManager.database.dbPool.write { db in
@@ -308,6 +325,46 @@ struct BookRepository: BookRepositoryProtocol {
     func updateCollectionBookRecommend(collectionBookID: Int64, recommend: String) async throws {
         try await databaseManager.database.dbPool.write { db in
             try updateCollectionBookRecommend(db, collectionBookID: collectionBookID, recommend: recommend)
+        }
+    }
+
+    /// 编辑书单内单本书籍元信息与 relation 收藏理由，保持 Android 双表写入事务语义。
+    func updateCollectionBookMetadata(_ input: BookCollectionBookMetadataEditInput) async throws {
+        try await databaseManager.database.dbPool.write { db in
+            try updateCollectionBookMetadata(db, input: input)
+        }
+    }
+
+    /// 更新年度书单本体说明，不开放年度标题、成员和排序写入。
+    func updateAnnualBookCollectionDescription(collectionID: Int64, description: String) async throws {
+        try await databaseManager.database.dbPool.write { db in
+            try updateAnnualBookCollectionDescription(db, collectionID: collectionID, description: description)
+        }
+    }
+
+    /// 解析微信读书书单链接，返回导入预览。
+    func parseWereadBookCollectionImport(link: String) async throws -> BookCollectionImportPreview {
+        try await parseWereadBookCollectionImportPreview(link: link)
+    }
+
+    /// 保存微信读书导入预览，单事务创建书单与占位书关系。
+    func saveWereadBookCollectionImport(_ preview: BookCollectionImportPreview) async throws -> BookCollectionListItem {
+        try await databaseManager.database.dbPool.write { db in
+            let collectionID = try saveWereadBookCollectionImport(db, preview: preview)
+            guard let item = try fetchBookCollectionListItem(db, collectionID: collectionID) else {
+                throw BookshelfBatchWriteError.invalidCollection
+            }
+            return item
+        }
+    }
+
+    /// 读取当前书单导出与分享所需快照。
+    func fetchBookCollectionExportSnapshot(collectionID: Int64) async throws -> BookCollectionDetail {
+        try await databaseManager.database.dbPool.read { db in
+            guard let detail = try fetchBookCollectionDetail(db, collectionID: collectionID) else {
+                throw BookshelfBatchWriteError.invalidCollection
+            }
+            return detail
         }
     }
 

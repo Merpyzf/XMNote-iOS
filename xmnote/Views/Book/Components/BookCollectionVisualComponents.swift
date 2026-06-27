@@ -1,11 +1,56 @@
 /**
  * [INPUT]: 依赖 BookCollectionListItem、BookCollectionDisplaySetting、BookCollectionDetail、BookCollectionBookItem 与 XMBookCover 渲染书单列表、详情和书单内书籍关系
- * [OUTPUT]: 对外提供书单模块页面私有视觉组件，统一堆叠/规整封面、海报式封面、指标、详情头、书籍卡片与推荐语区块
+ * [OUTPUT]: 对外提供书单模块页面私有视觉组件，统一堆叠/规整封面、海报式封面、指标、详情头、书籍卡片、书籍元信息入口与 relation 文本语义区块
  * [POS]: Book 模块书单页面私有展示组件，被 BookCollectionListView、BookCollectionDetailView 与加入书单 Sheet 复用
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
 import SwiftUI
+
+/// 书单内 relation 文本的页面展示语义，将同一 `recommend` 字段映射为普通书单收藏理由或年度书单年度点评。
+nonisolated struct BookCollectionRelationNotePresentation: Hashable, Sendable {
+    let title: String
+    let addTitle: String
+    let editTitle: String
+    let placeholder: String
+    let clearHint: String
+    let emptyAccessibilityHint: String
+    let savingMessage: String
+    let savedMessage: String
+
+    /// 根据书单类型生成 relation 文本在当前页面中的业务文案。
+    static func make(kind: BookCollectionKind) -> BookCollectionRelationNotePresentation {
+        switch kind {
+        case .manual:
+            return BookCollectionRelationNotePresentation(
+                title: "收藏理由",
+                addTitle: "添加收藏理由",
+                editTitle: "编辑收藏理由",
+                placeholder: "写下收藏理由",
+                clearHint: "留空保存会清除收藏理由，但不会移出书单。",
+                emptyAccessibilityHint: "可添加收藏理由",
+                savingMessage: "正在保存收藏理由…",
+                savedMessage: "收藏理由已保存"
+            )
+        case .annual:
+            return BookCollectionRelationNotePresentation(
+                title: "年度点评",
+                addTitle: "添加年度点评",
+                editTitle: "编辑年度点评",
+                placeholder: "写下年度点评",
+                clearHint: "留空保存会清除年度点评，但不会改变年度书单成员。",
+                emptyAccessibilityHint: "可添加年度点评",
+                savingMessage: "正在保存年度点评…",
+                savedMessage: "年度点评已保存"
+            )
+        }
+    }
+
+    /// 根据 relation 文本是否已有内容，输出用户当前会执行的编辑动作。
+    func editActionTitle(hasText: Bool) -> String {
+        hasText ? editTitle : addTitle
+    }
+}
 
 /// 书单封面拼贴，以真实书籍封面建立书单识别，不复刻 Android 重渐变与遮罩。
 struct BookCollectionCoverMosaicView: View {
@@ -164,6 +209,7 @@ struct BookCollectionMutedPosterCoverView: View {
     enum DisplayMode: Equatable {
         case list
         case compactGrid
+        case detailHero
 
         var aspectRatio: CGFloat {
             switch self {
@@ -171,12 +217,14 @@ struct BookCollectionMutedPosterCoverView: View {
                 return 2.9
             case .compactGrid:
                 return 2.35
+            case .detailHero:
+                return 1.88
             }
         }
 
         var realCoverLimit: Int {
             switch self {
-            case .list:
+            case .list, .detailHero:
                 return 5
             case .compactGrid:
                 return 3
@@ -315,14 +363,35 @@ struct BookCollectionRegularPosterCoverView: View {
     }
 
     private func coverWidth(in size: CGSize) -> CGFloat {
-        let rawWidth = displayMode == .list ? size.width * 0.15 : size.width * 0.20
-        let minimum: CGFloat = displayMode == .list ? 36 : 28
-        let maximum: CGFloat = displayMode == .list ? 58 : 44
+        let rawWidth: CGFloat
+        let minimum: CGFloat
+        let maximum: CGFloat
+        switch displayMode {
+        case .list:
+            rawWidth = size.width * 0.15
+            minimum = 36
+            maximum = 58
+        case .compactGrid:
+            rawWidth = size.width * 0.20
+            minimum = 28
+            maximum = 44
+        case .detailHero:
+            rawWidth = size.width * 0.20
+            minimum = 56
+            maximum = 82
+        }
         return min(max(rawWidth, minimum), maximum)
     }
 
     private func coverSpacing(in size: CGSize) -> CGFloat {
-        displayMode == .list ? min(Spacing.base, size.width * 0.035) : min(Spacing.cozy, size.width * 0.030)
+        switch displayMode {
+        case .list:
+            return min(Spacing.base, size.width * 0.035)
+        case .compactGrid:
+            return min(Spacing.cozy, size.width * 0.030)
+        case .detailHero:
+            return min(Spacing.base, size.width * 0.036)
+        }
     }
 
     private func placeholderRow(width: CGFloat) -> some View {
@@ -495,6 +564,52 @@ private struct BookCollectionMutedPosterStack: View {
             return listSlots
         case .compactGrid:
             return compactGridSlots
+        case .detailHero:
+            return detailHeroSlots
+        }
+    }
+
+    private var detailHeroSlots: [BookCollectionMutedPosterSlot] {
+        switch covers.count {
+        case 0:
+            return [
+                paper(id: 0, x: 0.39, y: 0.58, width: 0.206, rotation: -3.0, zIndex: 2, opacity: 0.60),
+                paper(id: 1, x: 0.50, y: 0.50, width: 0.222, rotation: 2.0, zIndex: 3, opacity: 0.68),
+                paper(id: 2, x: 0.62, y: 0.58, width: 0.190, rotation: 3.0, zIndex: 1, opacity: 0.52)
+            ]
+        case 1:
+            return [
+                paper(id: 0, x: 0.39, y: 0.58, width: 0.186, rotation: -3.0, zIndex: 1, opacity: 0.42),
+                paper(id: 1, x: 0.61, y: 0.56, width: 0.178, rotation: 3.0, zIndex: 2, opacity: 0.46),
+                cover(id: 2, index: 0, x: 0.50, y: 0.53, width: 0.238, rotation: 0.0, zIndex: 3)
+            ]
+        case 2:
+            return [
+                paper(id: 0, x: 0.62, y: 0.57, width: 0.176, rotation: 2.0, zIndex: 1, opacity: 0.42),
+                cover(id: 1, index: 1, x: 0.54, y: 0.51, width: 0.208, rotation: 3.0, zIndex: 2),
+                cover(id: 2, index: 0, x: 0.42, y: 0.56, width: 0.232, rotation: -2.0, zIndex: 3)
+            ]
+        case 3:
+            return [
+                cover(id: 0, index: 2, x: 0.62, y: 0.56, width: 0.196, rotation: 3.0, zIndex: 1),
+                cover(id: 1, index: 1, x: 0.50, y: 0.49, width: 0.224, rotation: -1.5, zIndex: 3),
+                cover(id: 2, index: 0, x: 0.38, y: 0.57, width: 0.204, rotation: -3.0, zIndex: 2)
+            ]
+        case 4:
+            return [
+                cover(id: 0, index: 3, x: 0.67, y: 0.55, width: 0.174, rotation: 3.0, zIndex: 1),
+                cover(id: 1, index: 2, x: 0.56, y: 0.49, width: 0.206, rotation: 2.0, zIndex: 3),
+                cover(id: 2, index: 1, x: 0.45, y: 0.52, width: 0.218, rotation: -1.0, zIndex: 4),
+                cover(id: 3, index: 0, x: 0.34, y: 0.58, width: 0.190, rotation: -3.0, zIndex: 2)
+            ]
+        default:
+            return [
+                cover(id: 0, index: 4, x: 0.70, y: 0.57, width: 0.160, rotation: 3.0, zIndex: 1),
+                cover(id: 1, index: 3, x: 0.60, y: 0.49, width: 0.180, rotation: 2.0, zIndex: 3),
+                cover(id: 2, index: 2, x: 0.50, y: 0.54, width: 0.222, rotation: -0.5, zIndex: 5),
+                cover(id: 3, index: 1, x: 0.40, y: 0.50, width: 0.196, rotation: -2.0, zIndex: 4),
+                cover(id: 4, index: 0, x: 0.30, y: 0.58, width: 0.168, rotation: -3.0, zIndex: 2)
+            ]
         }
     }
 
@@ -640,8 +755,19 @@ private struct BookCollectionMutedPosterSlot: Identifiable {
         displayMode: BookCollectionMutedPosterCoverView.DisplayMode
     ) -> CGFloat {
         let rawWidth = size.width * widthRatio
-        let minimum: CGFloat = displayMode == .list ? 36 : 28
-        let maximum: CGFloat = displayMode == .list ? 58 : 44
+        let minimum: CGFloat
+        let maximum: CGFloat
+        switch displayMode {
+        case .list:
+            minimum = 36
+            maximum = 58
+        case .compactGrid:
+            minimum = 28
+            maximum = 44
+        case .detailHero:
+            minimum = 54
+            maximum = 88
+        }
         return min(max(rawWidth, minimum), maximum)
     }
 }
@@ -1013,24 +1139,407 @@ struct BookCollectionListCard: View {
     }
 }
 
-/// 书单详情头，将书单主题、统计、只读边界和主动作集中在页面叙事层。
-struct BookCollectionDetailHero: View {
-    let detail: BookCollectionDetail
-    let canPerformAction: Bool
-    let onAddBook: () -> Void
+/// 书单详情 Header 视觉实验方案，仅影响封面识别区的表达方式。
+enum BookCollectionHeaderVisualStyle: String, CaseIterable, Identifiable {
+    case editorialDesk
+    case gallery
+    case shelf
+    case quietPoster
+
+    var id: String { rawValue }
+
+    var menuTitle: String {
+        switch self {
+        case .editorialDesk:
+            return "D 阅读桌面"
+        case .gallery:
+            return "A 无背景画廊"
+        case .shelf:
+            return "B 书脊陈列台"
+        case .quietPoster:
+            return "C 消隐海报"
+        }
+    }
+}
+
+/// 书单详情阅读桌面封面组，用真实封面在信息区右侧建立书单对象感。
+private struct BookCollectionEditorialCoverCluster: View {
+    let covers: [String]
+    let tone: BookCollectionKind
+
+    private var visibleCovers: [String] {
+        Array(covers.prefix(5))
+    }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: Spacing.section) {
-            HStack(alignment: .top, spacing: Spacing.base) {
-                BookCollectionCoverMosaicView(
-                    covers: detail.books.prefix(4).map(\.book.cover),
-                    size: 106,
-                    tone: detail.kind
+        ZStack {
+            Capsule()
+                .fill(Color.bookCoverDropShadow.opacity(0.06))
+                .blur(radius: 7)
+                .frame(width: 86, height: 9)
+                .offset(y: 47)
+
+            if visibleCovers.isEmpty {
+                placeholderStack
+            } else {
+                coverStack
+            }
+        }
+        .frame(width: 116, height: 108)
+        .accessibilityHidden(true)
+    }
+
+    private var coverStack: some View {
+        ZStack {
+            ForEach(Array(visibleCovers.enumerated()), id: \.offset) { index, cover in
+                XMBookCover.fixedWidth(
+                    coverWidth(for: index),
+                    urlString: cover,
+                    cornerRadius: CornerRadius.inlaySmall,
+                    border: .init(color: .surfaceBorderSubtle, width: CardStyle.borderWidth),
+                    placeholderIconSize: .small,
+                    surfaceStyle: .spine
                 )
+                .rotationEffect(.degrees(rotation(for: index)))
+                .offset(offset(for: index))
+                .zIndex(zIndex(for: index))
+                .shadow(
+                    color: Color.bookCoverDropShadow.opacity(index == 0 ? 0.22 : 0.14),
+                    radius: index == 0 ? 8 : 5,
+                    x: Spacing.none,
+                    y: index == 0 ? 6 : 3
+                )
+            }
+        }
+    }
+
+    private var placeholderStack: some View {
+        ZStack {
+            ForEach(0..<3, id: \.self) { index in
+                RoundedRectangle(cornerRadius: CornerRadius.inlaySmall, style: .continuous)
+                    .fill(index == 0 ? Color.surfaceCard : Color.surfaceNested)
+                    .overlay {
+                        RoundedRectangle(cornerRadius: CornerRadius.inlaySmall, style: .continuous)
+                            .stroke(Color.surfaceBorderSubtle.opacity(index == 0 ? 0.76 : 0.52), lineWidth: CardStyle.borderWidth)
+                    }
+                    .overlay(alignment: .topLeading) {
+                        RoundedRectangle(cornerRadius: CornerRadius.inlayHairline, style: .continuous)
+                            .fill(Color.surfacePage.opacity(0.62))
+                            .frame(width: 22, height: 3)
+                            .padding(.top, Spacing.cozy)
+                            .padding(.leading, Spacing.cozy)
+                    }
+                    .overlay {
+                        if index == 0 {
+                            Image(systemName: tone == .annual ? "calendar" : "books.vertical")
+                                .font(AppTypography.caption)
+                                .foregroundStyle(Color.textHint)
+                        }
+                    }
+                    .frame(width: placeholderWidth(for: index), height: placeholderHeight(for: index))
+                    .rotationEffect(.degrees(placeholderRotation(for: index)))
+                    .offset(placeholderOffset(for: index))
+                    .zIndex(Double(3 - index))
+            }
+        }
+    }
+
+    private func coverWidth(for index: Int) -> CGFloat {
+        switch index {
+        case 0:
+            return 60
+        case 1, 2:
+            return 41
+        default:
+            return 32
+        }
+    }
+
+    private func offset(for index: Int) -> CGSize {
+        switch index {
+        case 0:
+            return CGSize(width: 0, height: 1)
+        case 1:
+            return CGSize(width: -29, height: 11)
+        case 2:
+            return CGSize(width: 29, height: 12)
+        case 3:
+            return CGSize(width: -43, height: 19)
+        default:
+            return CGSize(width: 43, height: 20)
+        }
+    }
+
+    private func rotation(for index: Int) -> Double {
+        switch index {
+        case 1:
+            return -2
+        case 2:
+            return 2
+        case 3:
+            return -1.5
+        case 4:
+            return 1.5
+        default:
+            return 0
+        }
+    }
+
+    private func zIndex(for index: Int) -> Double {
+        switch index {
+        case 0:
+            return 5
+        case 1, 2:
+            return 3
+        default:
+            return 1
+        }
+    }
+
+    private func placeholderWidth(for index: Int) -> CGFloat {
+        index == 0 ? 54 : 42
+    }
+
+    private func placeholderHeight(for index: Int) -> CGFloat {
+        XMBookCover.height(forWidth: placeholderWidth(for: index))
+    }
+
+    private func placeholderOffset(for index: Int) -> CGSize {
+        switch index {
+        case 0:
+            return CGSize(width: 0, height: 4)
+        case 1:
+            return CGSize(width: -29, height: 14)
+        default:
+            return CGSize(width: 29, height: 15)
+        }
+    }
+
+    private func placeholderRotation(for index: Int) -> Double {
+        switch index {
+        case 1:
+            return -1.5
+        case 2:
+            return 1.5
+        default:
+            return 0
+        }
+    }
+}
+
+/// 书单详情封面舞台，在相同封面槽位下提供可对比的 Header 视觉方案。
+private struct BookCollectionHeaderCoverStage: View {
+    let covers: [String]
+    let tone: BookCollectionKind
+    let seed: String
+    let visualStyle: BookCollectionHeaderVisualStyle
+
+    private var visibleCovers: [String] {
+        Array(covers.prefix(BookCollectionMutedPosterCoverView.DisplayMode.detailHero.realCoverLimit))
+    }
+
+    private var paletteSeed: String {
+        seed.isEmpty ? covers.first ?? "" : "\(seed)-\(covers.first ?? "")"
+    }
+
+    private var palette: BookCollectionMutedPosterPalette {
+        BookCollectionMutedPosterPalette.resolve(seed: paletteSeed, tone: tone)
+    }
+
+    var body: some View {
+        Color.clear
+            .aspectRatio(BookCollectionMutedPosterCoverView.DisplayMode.detailHero.aspectRatio, contentMode: .fit)
+            .frame(maxWidth: .infinity)
+            .overlay {
+                GeometryReader { proxy in
+                    let size = proxy.size
+
+                    ZStack {
+                        backgroundLayer(in: size)
+
+                        BookCollectionMutedPosterStack(
+                            covers: visibleCovers,
+                            palette: palette,
+                            size: size,
+                            displayMode: .detailHero
+                        )
+                    }
+                    .frame(width: size.width, height: size.height)
+                }
+            }
+            .accessibilityHidden(true)
+    }
+
+    @ViewBuilder
+    private func backgroundLayer(in size: CGSize) -> some View {
+        switch visualStyle {
+        case .editorialDesk:
+            EmptyView()
+        case .gallery:
+            Capsule()
+                .fill(Color.bookCoverDropShadow.opacity(0.07))
+                .blur(radius: 8)
+                .frame(width: size.width * 0.46, height: max(8, size.height * 0.05))
+                .position(x: size.width * 0.50, y: size.height * 0.77)
+        case .shelf:
+            RoundedRectangle(cornerRadius: CornerRadius.inlaySmall, style: .continuous)
+                .fill(Color.surfaceCard.opacity(0.96))
+                .frame(width: size.width * 0.70, height: max(18, size.height * 0.10))
+                .overlay(alignment: .top) {
+                    Rectangle()
+                        .fill(Color.surfaceBorderSubtle.opacity(0.74))
+                        .frame(height: CardStyle.borderWidth)
+                        .padding(.horizontal, Spacing.tight)
+                }
+                .overlay(alignment: .bottom) {
+                    Rectangle()
+                        .fill(Color.surfaceNested.opacity(0.42))
+                        .frame(height: max(4, size.height * 0.025))
+                }
+                .shadow(
+                    color: Color.bookCoverDropShadow.opacity(0.10),
+                    radius: 8,
+                    x: Spacing.none,
+                    y: 3
+                )
+                .position(x: size.width * 0.50, y: size.height * 0.82)
+        case .quietPoster:
+            quietPosterBackground(in: size)
+        }
+    }
+
+    private func quietPosterBackground(in size: CGSize) -> some View {
+        let shape = RoundedRectangle(cornerRadius: CornerRadius.blockLarge, style: .continuous)
+
+        return ZStack(alignment: .bottom) {
+            shape
+                .fill(Color.surfaceCard)
+
+            Rectangle()
+                .fill(Color.surfaceNested.opacity(0.24))
+                .frame(height: size.height * 0.36)
+
+            LinearGradient(
+                colors: [
+                    Color.white.opacity(0.18),
+                    Color.white.opacity(0.02),
+                    Color.clear
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+        }
+        .frame(width: size.width, height: size.height)
+        .clipShape(shape)
+        .overlay {
+            shape
+                .stroke(Color.surfaceBorderSubtle.opacity(0.52), lineWidth: CardStyle.borderWidth)
+        }
+        .shadow(
+            color: Color.bookCoverDropShadow.opacity(0.04),
+            radius: 10,
+            x: Spacing.none,
+            y: 4
+        )
+    }
+}
+
+/// 书单详情头，将书单主题、统计、同步边界和主动作集中在页面叙事层。
+struct BookCollectionDetailHero: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var hasAppeared = false
+    let detail: BookCollectionDetail
+    var visualStyle: BookCollectionHeaderVisualStyle = .editorialDesk
+    var onShowFullSummary: () -> Void = {}
+
+    var body: some View {
+        Group {
+            switch visualStyle {
+            case .editorialDesk:
+                editorialDeskHero
+            case .gallery, .shelf, .quietPoster:
+                legacyHero
+            }
+        }
+        .onAppear {
+            guard !hasAppeared else { return }
+            if reduceMotion {
+                hasAppeared = true
+            } else {
+                withAnimation(.smooth(duration: 0.26)) {
+                    hasAppeared = true
+                }
+            }
+        }
+        .accessibilityElement(children: .contain)
+    }
+
+    private var editorialDeskHero: some View {
+        HStack(alignment: .top, spacing: Spacing.section) {
+            VStack(alignment: .leading, spacing: Spacing.base) {
+                Text(title)
+                    .font(AppTypography.title3Semibold)
+                    .foregroundStyle(Color.textPrimary)
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityAddTraits(.isHeader)
+
+                Text(description)
+                    .font(AppTypography.footnote)
+                    .foregroundStyle(Color.textSecondary)
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                if shouldOfferFullSummary {
+                    Button(action: onShowFullSummary) {
+                        Text("查看完整简介")
+                            .font(AppTypography.captionMedium)
+                            .foregroundStyle(Color.brandDeep)
+                            .frame(minHeight: 28, alignment: .leading)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("查看完整书单简介")
+                }
+
+                BookCollectionProgressSummary(
+                    kind: detail.kind,
+                    bookCount: detail.bookCount,
+                    finishedCount: detail.finishedCount,
+                    targetReadCount: detail.targetReadCount,
+                    displayStyle: .compact
+                )
+                .padding(.top, Spacing.base)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .layoutPriority(1)
+            .opacity(hasAppeared ? 1 : 0)
+            .offset(y: hasAppeared || reduceMotion ? 0 : 6)
+
+            BookCollectionEditorialCoverCluster(
+                covers: posterCovers,
+                tone: detail.kind
+            )
+            .padding(.top, Spacing.cozy)
+            .opacity(hasAppeared ? 1 : 0)
+            .scaleEffect(hasAppeared || reduceMotion ? 1 : 0.975)
+        }
+    }
+
+    private var legacyHero: some View {
+        VStack(alignment: .leading, spacing: Spacing.section) {
+            VStack(alignment: .leading, spacing: Spacing.base) {
+                BookCollectionHeaderCoverStage(
+                    covers: posterCovers,
+                    tone: detail.kind,
+                    seed: posterSeed,
+                    visualStyle: visualStyle
+                )
+                .id(visualStyle)
+                .opacity(hasAppeared ? 1 : 0)
+                .scaleEffect(hasAppeared || reduceMotion ? 1 : 0.985)
+                .transition(.opacity.combined(with: .scale(scale: 0.985)))
 
                 VStack(alignment: .leading, spacing: Spacing.cozy) {
-                    BookCollectionStatusBadge(text: kindLabel, systemImage: kindIcon)
-
                     Text(title)
                         .font(AppTypography.title3Semibold)
                         .foregroundStyle(Color.textPrimary)
@@ -1040,42 +1549,24 @@ struct BookCollectionDetailHero: View {
                     Text(description)
                         .font(AppTypography.callout)
                         .foregroundStyle(Color.textSecondary)
-                        .lineLimit(3)
+                        .lineLimit(2)
                         .fixedSize(horizontal: false, vertical: true)
-
-                    BookCollectionMetricStrip(
-                        bookCount: detail.bookCount,
-                        finishedCount: detail.finishedCount,
-                        targetReadCount: detail.targetReadCount
-                    )
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
+                .opacity(hasAppeared ? 1 : 0)
+                .offset(y: hasAppeared || reduceMotion ? 0 : 6)
             }
+            .animation(reduceMotion ? nil : .smooth(duration: 0.22), value: visualStyle)
 
-            BookCollectionProgressMeter(
+            BookCollectionProgressSummary(
+                kind: detail.kind,
+                bookCount: detail.bookCount,
                 finishedCount: detail.finishedCount,
                 targetReadCount: detail.targetReadCount
             )
-
-            if detail.kind == .annual {
-                BookCollectionReadOnlyNotice()
-            } else {
-                Button(action: onAddBook) {
-                    Label("加入书籍", systemImage: "plus")
-                        .font(AppTypography.subheadlineMedium)
-                        .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.borderedProminent)
-                .disabled(!canPerformAction)
-            }
+            .opacity(hasAppeared ? 1 : 0)
+            .offset(y: hasAppeared || reduceMotion ? 0 : 6)
         }
-        .padding(Spacing.section)
-        .background(Color.surfaceCard, in: RoundedRectangle(cornerRadius: CornerRadius.containerMedium, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: CornerRadius.containerMedium, style: .continuous)
-                .stroke(Color.surfaceBorderSubtle, lineWidth: CardStyle.borderWidth)
-        }
-        .accessibilityElement(children: .contain)
     }
 
     private var title: String {
@@ -1098,116 +1589,476 @@ struct BookCollectionDetailHero: View {
         }
     }
 
-    private var kindLabel: String {
-        switch detail.kind {
-        case .manual:
-            return "我的整理"
-        case .annual:
-            return "年度同步"
+    private var shouldOfferFullSummary: Bool {
+        let rawDescription = detail.description.trimmingCharacters(in: .whitespacesAndNewlines)
+        return title.count > 18 || rawDescription.count > 24 || rawDescription.contains(where: \.isNewline)
+    }
+
+    private var posterCovers: [String] {
+        Array(detail.books.prefix(5).map(\.book.cover))
+    }
+
+    private var posterSeed: String {
+        [
+            String(detail.id),
+            title,
+            detail.year.map(String.init) ?? ""
+        ]
+        .joined(separator: "-")
+    }
+}
+
+/// 书单详情摘要，根据书单类型区分目标进度与普通书单概览。
+struct BookCollectionProgressSummary: View {
+    /// 控制进度区在详情头和完整简介 Sheet 中的可见信息密度。
+    enum DisplayStyle {
+        case standard
+        case compact
+    }
+
+    let kind: BookCollectionKind
+    let bookCount: Int
+    let finishedCount: Int
+    let targetReadCount: Int?
+    var displayStyle: DisplayStyle = .standard
+
+    var body: some View {
+        Group {
+            switch kind {
+            case .manual:
+                manualSummary
+            case .annual:
+                annualSummary
+            }
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(accessibilityLabel)
+    }
+
+    private var manualSummary: some View {
+        VStack(alignment: .leading, spacing: Spacing.cozy) {
+            if displayStyle == .standard {
+                Text("书单概览")
+                    .font(AppTypography.captionMedium)
+                    .foregroundStyle(Color.textSecondary)
+                    .lineLimit(1)
+            }
+
+            BookCollectionManualSummaryLine(
+                bookCount: bookCount,
+                finishedCount: finishedCount
+            )
         }
     }
 
-    private var kindIcon: String {
-        switch detail.kind {
+    @ViewBuilder
+    private var annualSummary: some View {
+        if hasTarget {
+            annualTargetSummary
+        } else {
+            annualRecordSummary
+        }
+    }
+
+    private var annualTargetSummary: some View {
+        VStack(alignment: .leading, spacing: Spacing.cozy) {
+            switch displayStyle {
+            case .standard:
+                standardHeader
+                progressTrack
+            case .compact:
+                compactProgressRow
+            }
+
+            Text(detailText)
+                .font(AppTypography.caption)
+                .foregroundStyle(Color.textSecondary)
+                .lineLimit(2)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    private var annualRecordSummary: some View {
+        VStack(alignment: .leading, spacing: Spacing.cozy) {
+            if displayStyle == .standard {
+                Text("年度记录")
+                    .font(AppTypography.captionMedium)
+                    .foregroundStyle(Color.textSecondary)
+                    .lineLimit(1)
+            }
+
+            BookCollectionSummaryMetricPill(
+                title: "今年读完",
+                value: "\(completedCount) 本",
+                tint: Color.brandDeep,
+                isEmphasized: true
+            )
+        }
+    }
+
+    private var standardHeader: some View {
+        HStack(alignment: .firstTextBaseline) {
+            Text(progressTitle)
+                .font(AppTypography.captionSemibold)
+                .foregroundStyle(Color.textPrimary)
+
+            Spacer(minLength: Spacing.tight)
+
+            Text("\(completionPercent)%")
+                .font(AppTypography.captionSemibold)
+                .foregroundStyle(Color.textPrimary)
+                .contentTransition(.numericText())
+        }
+    }
+
+    private var compactProgressRow: some View {
+        VStack(alignment: .leading, spacing: Spacing.half) {
+            HStack(alignment: .firstTextBaseline, spacing: Spacing.cozy) {
+                Text(progressTitle)
+                    .font(AppTypography.captionSemibold)
+                    .foregroundStyle(Color.textPrimary)
+
+                Spacer(minLength: Spacing.tight)
+
+                Text("\(completionPercent)%")
+                    .font(AppTypography.captionMedium)
+                    .foregroundStyle(Color.textSecondary)
+                    .contentTransition(.numericText())
+            }
+
+            progressTrack
+        }
+    }
+
+    private var progressTrack: some View {
+        GeometryReader { proxy in
+            ZStack(alignment: .leading) {
+                Capsule()
+                    .fill(Color.surfaceBorderSubtle.opacity(0.46))
+
+                Capsule()
+                    .fill(Color.brandDeep.opacity(0.62))
+                    .frame(width: proxy.size.width * progressFraction)
+            }
+        }
+        .frame(height: 6)
+        .accessibilityHidden(true)
+    }
+
+    private var denominator: Int {
+        if let targetReadCount, targetReadCount > 0 {
+            return targetReadCount
+        }
+        return bookCount
+    }
+
+    private var progressFraction: CGFloat {
+        guard denominator > 0 else { return 0 }
+        return min(CGFloat(completedCount) / CGFloat(denominator), 1)
+    }
+
+    private var completionPercent: Int {
+        guard denominator > 0 else { return 0 }
+        return Int((Double(completedCount) / Double(denominator) * 100).rounded())
+    }
+
+    private var progressTitle: String {
+        guard denominator > 0 else {
+            return "已读 0 本"
+        }
+        return "年度目标 \(completedCount)/\(denominator)"
+    }
+
+    private var detailText: String {
+        if let targetReadCount, targetReadCount > 0 {
+            return "今年读完 \(completedCount) 本 · 目标 \(targetReadCount) 本"
+        }
+        return "今年读完 \(completedCount) 本"
+    }
+
+    private var hasTarget: Bool {
+        (targetReadCount ?? 0) > 0
+    }
+
+    private var completedCount: Int {
+        kind == .annual ? bookCount : finishedCount
+    }
+
+    private var accessibilityLabel: String {
+        switch kind {
         case .manual:
-            return "books.vertical"
+            return "书单概览，收录 \(bookCount) 本，已读 \(finishedCount) 本"
         case .annual:
-            return "lock"
+            if hasTarget {
+                return "年度目标，完成 \(completionPercent)%，\(detailText)"
+            }
+            return "年度记录，\(detailText)"
         }
     }
 }
 
-/// 书单内书籍卡片，将书籍信息、阅读元数据和推荐语组织在同一关系单元内。
+/// 普通书单的中性概览文本，避免用多个标签制造按钮感和进度感。
+private struct BookCollectionManualSummaryLine: View {
+    let bookCount: Int
+    let finishedCount: Int
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: Spacing.half) {
+            Text("收录")
+            metricValue("\(bookCount) 本")
+            separator
+            Text("已读")
+            metricValue("\(finishedCount) 本")
+        }
+        .font(AppTypography.captionMedium)
+        .foregroundStyle(Color.textSecondary)
+        .lineLimit(1)
+        .minimumScaleFactor(0.88)
+        .contentTransition(.numericText())
+    }
+
+    private func metricValue(_ value: String) -> some View {
+        Text(value)
+            .foregroundStyle(Color.textPrimary.opacity(0.78))
+    }
+
+    private var separator: some View {
+        Text("·")
+            .foregroundStyle(Color.textHint.opacity(0.72))
+    }
+}
+
+/// 书单摘要中的轻量数值标签，避免普通书单被误读成任务进度或强按钮。
+private struct BookCollectionSummaryMetricPill: View {
+    let title: String
+    let value: String
+    let tint: Color
+    let isEmphasized: Bool
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: Spacing.half) {
+            Text(title)
+                .font(AppTypography.caption2)
+                .foregroundStyle(Color.textSecondary)
+
+            Text(value)
+                .font(AppTypography.captionMedium)
+                .foregroundStyle(isEmphasized ? tint.opacity(0.92) : Color.textPrimary)
+                .contentTransition(.numericText())
+        }
+        .frame(minHeight: 24)
+        .fixedSize(horizontal: true, vertical: false)
+    }
+}
+
+/// 书单内容区头部，只承载分区标题与同步状态，添加入口交给底部悬浮操作层。
+struct BookCollectionContentHeader: View {
+    enum Status {
+        case autoSynced
+
+        var title: String {
+            switch self {
+            case .autoSynced:
+                return "自动同步"
+            }
+        }
+
+        var systemImage: String {
+            switch self {
+            case .autoSynced:
+                return "arrow.triangle.2.circlepath"
+            }
+        }
+
+        var accessibilityLabel: String {
+            switch self {
+            case .autoSynced:
+                return "年度书单内容自动同步"
+            }
+        }
+    }
+
+    let title: String
+    let status: Status?
+
+    var body: some View {
+        HStack(alignment: .center, spacing: Spacing.base) {
+            Text(title)
+                .font(AppTypography.subheadlineMedium)
+                .foregroundStyle(Color.textSecondary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.86)
+
+            Spacer(minLength: Spacing.tight)
+
+            if let status {
+                Label(status.title, systemImage: status.systemImage)
+                    .font(AppTypography.captionMedium)
+                    .foregroundStyle(Color.textSecondary)
+                    .labelStyle(.titleAndIcon)
+                    .padding(.horizontal, Spacing.cozy)
+                    .frame(minHeight: 32)
+                    .background(Color.surfaceNested, in: Capsule())
+                    .accessibilityLabel(status.accessibilityLabel)
+            }
+        }
+        .padding(.horizontal, Spacing.contentEdge)
+        .padding(.top, Spacing.contentEdge)
+        .padding(.bottom, Spacing.tight)
+    }
+}
+
+/// 书单详情底部悬浮添加入口，作为手动书单的高频操作控件承接 Liquid Glass 反馈。
+struct BookCollectionFloatingAddBookButton: View {
+    let isEnabled: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Group {
+            if #available(iOS 26, *) {
+                baseButton
+                    .glassEffect(.regular.interactive(), in: .capsule)
+            } else {
+                baseButton
+                    .background(.ultraThinMaterial, in: Capsule())
+                    .overlay {
+                        Capsule()
+                            .stroke(Color.surfaceBorderSubtle.opacity(0.30), lineWidth: CardStyle.borderWidth)
+                    }
+            }
+        }
+        .shadow(
+            color: Color.bookCoverDropShadow.opacity(isEnabled ? 0.06 : 0.03),
+            radius: 10,
+            x: Spacing.none,
+            y: 4
+        )
+    }
+
+    private var baseButton: some View {
+        Button(action: action) {
+            HStack(alignment: .center, spacing: Spacing.half) {
+                Image(systemName: "plus")
+                    .font(AppTypography.subheadlineSemibold)
+
+                Text("添加书籍")
+                    .font(AppTypography.footnoteSemibold)
+            }
+            .foregroundStyle(isEnabled ? Color.textPrimary.opacity(0.78) : Color.textSecondary.opacity(0.56))
+            .padding(.horizontal, Spacing.base)
+            .frame(height: ImmersiveBottomChromeStyle.controlHeight)
+            .contentShape(Capsule())
+        }
+        .buttonStyle(BookCollectionFloatingAddBookButtonStyle(isEnabled: isEnabled))
+        .disabled(!isEnabled)
+        .opacity(isEnabled ? 1 : 0.48)
+        .accessibilityLabel("添加书籍到书单")
+    }
+}
+
+/// 为底部悬浮添加入口提供克制按压缩放，Reduce Motion 下自动取消形变。
+private struct BookCollectionFloatingAddBookButtonStyle: ButtonStyle {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    let isEnabled: Bool
+
+    func makeBody(configuration: Configuration) -> some View {
+        let isPressed = isEnabled && configuration.isPressed
+
+        configuration.label
+            .scaleEffect(!reduceMotion && isPressed ? 0.97 : 1)
+            .animation(reduceMotion ? nil : .snappy(duration: 0.12), value: configuration.isPressed)
+    }
+}
+
+/// 空书单在内容容器内部的轻量说明，保持和非空书单一致的页面重心。
+struct BookCollectionEmptyBooksRow: View {
+    let isManual: Bool
+
+    var body: some View {
+        VStack(spacing: Spacing.cozy) {
+            Image(systemName: isManual ? "book.badge.plus" : "calendar")
+                .font(AppTypography.title3)
+                .foregroundStyle(Color.textHint)
+
+            Text("书单里还没有书")
+                .font(AppTypography.subheadlineSemibold)
+                .foregroundStyle(Color.textPrimary)
+                .multilineTextAlignment(.center)
+
+            Text(isManual ? "添加书籍后，会在这里按顺序显示。" : "读完记录会在这里同步显示。")
+                .font(AppTypography.caption)
+                .foregroundStyle(Color.textSecondary)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(.horizontal, Spacing.base)
+        .padding(.vertical, Spacing.section)
+        .frame(maxWidth: .infinity)
+        .accessibilityElement(children: .combine)
+    }
+}
+
+/// 书单内书籍档案卡，将封面、简介、阅读状态和 relation 文本组织成一个完整策展单元。
 struct BookCollectionBookCard: View {
+    @ScaledMetric(relativeTo: .subheadline) private var scaledCoverWidth: CGFloat = 72
     let item: BookCollectionBookItem
-    let isEditable: Bool
+    let canEditStructure: Bool
+    let canEditRelationNote: Bool
+    let canEditMetadata: Bool
+    var relationNotePresentation: BookCollectionRelationNotePresentation = .make(kind: .manual)
+    var showsSeparator: Bool = false
     let onOpen: () -> Void
     let onEditBook: () -> Void
+    let onEditMetadata: () -> Void
+    let onRestorePlaceholder: () -> Void
     let onEditRecommend: () -> Void
     let onRemove: () -> Void
 
     var body: some View {
-        Button(action: onOpen) {
-            VStack(alignment: .leading, spacing: Spacing.base) {
-                HStack(alignment: .top, spacing: Spacing.base) {
-                    XMBookCover.fixedWidth(
-                        62,
-                        urlString: item.book.cover,
-                        cornerRadius: CornerRadius.inlaySmall,
-                        border: .init(color: .surfaceBorderSubtle, width: CardStyle.borderWidth),
-                        placeholderIconSize: .small,
-                        surfaceStyle: .spine
-                    )
-
-                    VStack(alignment: .leading, spacing: Spacing.cozy) {
-                        Text(item.book.title.isEmpty ? "未命名书籍" : item.book.title)
-                            .font(AppTypography.subheadlineSemibold)
-                            .foregroundStyle(Color.textPrimary)
-                            .lineLimit(2)
-                            .fixedSize(horizontal: false, vertical: true)
-
-                        if !item.book.author.isEmpty {
-                            Text(item.book.author)
-                                .font(AppTypography.caption)
-                                .foregroundStyle(Color.textSecondary)
-                                .lineLimit(1)
-                        }
-
-                        if !metadataText.isEmpty {
-                            Label(metadataText, systemImage: "bookmark")
-                                .font(AppTypography.caption2)
-                                .foregroundStyle(Color.textHint)
-                                .labelStyle(.titleAndIcon)
-                                .lineLimit(1)
-                        }
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-
-                    Image(systemName: "chevron.right")
-                        .font(AppTypography.caption2Semibold)
-                        .foregroundStyle(Color.textHint)
-                        .padding(.top, Spacing.half)
-                }
-
-                if !trimmedRecommend.isEmpty {
-                    BookCollectionRecommendQuote(
-                        text: trimmedRecommend,
-                        isEditable: isEditable,
-                        onEdit: onEditRecommend
-                    )
-                }
+        cardContent
+            .padding(Spacing.base)
+            .background(Color.surfaceCard, in: RoundedRectangle(cornerRadius: CornerRadius.blockLarge, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: CornerRadius.blockLarge, style: .continuous)
+                    .stroke(Color.surfaceBorderSubtle.opacity(0.58), lineWidth: CardStyle.borderWidth)
             }
-            .padding(.horizontal, Spacing.base)
-            .padding(.vertical, Spacing.tight)
-            .contentShape(RoundedRectangle(cornerRadius: CornerRadius.blockLarge, style: .continuous))
-        }
-        .buttonStyle(.plain)
-        .background(Color.surfaceCard, in: RoundedRectangle(cornerRadius: CornerRadius.blockLarge, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: CornerRadius.blockLarge, style: .continuous)
-                .stroke(Color.surfaceBorderSubtle.opacity(0.55), lineWidth: CardStyle.borderWidth)
-        }
+            .shadow(
+                color: Color.bookCoverDropShadow.opacity(0.055),
+                radius: 10,
+                x: Spacing.none,
+                y: 4
+            )
+            .padding(.bottom, showsSeparator ? Spacing.base : Spacing.contentEdge)
         .contextMenu {
             Button {
-                onOpen()
+                item.isPlaceholder ? onRestorePlaceholder() : onOpen()
             } label: {
-                XMMenuLabel("查看书籍", systemImage: "book")
+                XMMenuLabel(item.isPlaceholder ? "加入书架" : "查看书籍", systemImage: item.isPlaceholder ? "plus.circle" : "book")
             }
 
-            Button {
-                onEditBook()
-            } label: {
-                XMMenuLabel("编辑书籍", systemImage: "pencil")
+            if !item.isPlaceholder {
+                Button {
+                    onEditBook()
+                } label: {
+                    XMMenuLabel("编辑书籍", systemImage: "pencil")
+                }
+            } else {
+                Button {
+                    onEditMetadata()
+                } label: {
+                    XMMenuLabel("编辑书籍信息", systemImage: "square.and.pencil")
+                }
+                .disabled(!canEditMetadata)
             }
 
             Button {
                 onEditRecommend()
             } label: {
-                XMMenuLabel(item.recommend.isEmpty ? "添加推荐语" : "编辑推荐语", systemImage: "quote.bubble")
+                XMMenuLabel(relationNoteActionTitle, systemImage: "quote.bubble")
             }
-            .disabled(!isEditable)
+            .disabled(!canEditRelationNote)
 
-            if isEditable {
+            if canEditStructure {
                 Button(role: .destructive) {
                     onRemove()
                 } label: {
@@ -1216,14 +2067,16 @@ struct BookCollectionBookCard: View {
             }
         }
         .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-            if isEditable {
+            if canEditRelationNote {
                 Button {
                     onEditRecommend()
                 } label: {
-                    Label("推荐语", systemImage: "quote.bubble")
+                    Label(relationNotePresentation.title, systemImage: "quote.bubble")
                 }
                 .tint(.blue)
+            }
 
+            if canEditStructure {
                 Button(role: .destructive) {
                     onRemove()
                 } label: {
@@ -1233,80 +2086,366 @@ struct BookCollectionBookCard: View {
         }
         .accessibilityElement(children: .combine)
         .accessibilityLabel(accessibilityLabel)
+        .accessibilityAction(named: item.isPlaceholder ? "加入书架" : "查看书籍", item.isPlaceholder ? onRestorePlaceholder : onOpen)
+        .modifier(BookCollectionEditBookAccessibilityAction(
+            title: item.isPlaceholder ? "编辑书籍信息" : "编辑书籍",
+            isEnabled: item.isPlaceholder ? canEditMetadata : true,
+            action: item.isPlaceholder ? onEditMetadata : onEditBook
+        ))
+        .modifier(BookCollectionEditableBookActions(
+            canEditStructure: canEditStructure,
+            canEditRelationNote: canEditRelationNote,
+            noteActionTitle: relationNoteActionTitle,
+            onEditRecommend: onEditRecommend,
+            onRemove: onRemove
+        ))
     }
 
-    private var metadataText: String {
-        var parts: [String] = []
-        if !item.book.readStatusBadgeTitle.isEmpty {
-            parts.append(item.book.readStatusBadgeTitle)
+    private var cardContent: some View {
+        VStack(alignment: .leading, spacing: Spacing.base) {
+            Button(action: onOpen) {
+                HStack(alignment: .top, spacing: Spacing.base) {
+                    XMBookCover.fixedWidth(
+                        coverWidth,
+                        urlString: item.book.cover,
+                        cornerRadius: CornerRadius.inlaySmall,
+                        border: .init(color: .surfaceBorderSubtle, width: CardStyle.borderWidth),
+                        placeholderIconSize: .small,
+                        surfaceStyle: .spine
+                    )
+                    .shadow(
+                        color: Color.bookCoverDropShadow.opacity(0.14),
+                        radius: 7,
+                        x: Spacing.none,
+                        y: 4
+                    )
+
+                    VStack(alignment: .leading, spacing: Spacing.cozy) {
+                        titleCluster
+
+                        if hasSummary {
+                            BookCollectionBookSummaryText(text: trimmedSummary)
+                        }
+
+                        if item.isPlaceholder {
+                            BookCollectionPlaceholderRestorePrompt()
+                        }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .layoutPriority(1)
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+
+            reasonContent
         }
-        if item.book.noteCount > 0 {
-            parts.append("\(item.book.noteCount) 条书摘")
+    }
+
+    private var titleCluster: some View {
+        HStack(alignment: .top, spacing: Spacing.cozy) {
+            VStack(alignment: .leading, spacing: Spacing.compact) {
+                Text(displayTitle)
+                    .font(AppTypography.subheadlineSemibold)
+                    .foregroundStyle(Color.textPrimary)
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                if !item.book.author.isEmpty {
+                    Text(item.book.author)
+                        .font(AppTypography.footnote)
+                        .foregroundStyle(Color.textSecondary)
+                        .lineLimit(1)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .layoutPriority(1)
+
+            if !statusTitle.isEmpty {
+                BookCollectionReadStatusChip(
+                    text: statusTitle,
+                    readStatusID: item.book.readStatusId
+                )
+            }
         }
-        if !item.book.readingProgressText.isEmpty {
-            parts.append(item.book.readingProgressText)
+    }
+
+    @ViewBuilder
+    private var reasonContent: some View {
+        if !trimmedRecommend.isEmpty {
+            BookCollectionRecommendQuote(
+                text: trimmedRecommend,
+                isEditable: canEditRelationNote,
+                presentation: relationNotePresentation,
+                onEdit: onEditRecommend
+            )
+        } else if canEditRelationNote {
+            BookCollectionAddReasonPrompt(
+                presentation: relationNotePresentation,
+                action: onEditRecommend
+            )
         }
-        return parts.joined(separator: " · ")
+    }
+
+    private var coverWidth: CGFloat {
+        min(scaledCoverWidth, 84)
+    }
+
+    private var displayTitle: String {
+        item.book.title.isEmpty ? "未命名书籍" : item.book.title
+    }
+
+    private var statusTitle: String {
+        if item.isPlaceholder {
+            return "未加入书架"
+        }
+        return item.book.readStatusBadgeTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var hasSummary: Bool {
+        !trimmedSummary.isEmpty
+    }
+
+    private var trimmedSummary: String {
+        item.summaryPlainText.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     private var trimmedRecommend: String {
         item.recommend.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
+    private var relationNoteActionTitle: String {
+        relationNotePresentation.editActionTitle(hasText: !trimmedRecommend.isEmpty)
+    }
+
     private var accessibilityLabel: String {
-        var parts = [item.book.title.isEmpty ? "未命名书籍" : item.book.title]
+        var parts = [displayTitle]
         if !item.book.author.isEmpty {
             parts.append(item.book.author)
         }
-        if !metadataText.isEmpty {
-            parts.append(metadataText)
+        if !statusTitle.isEmpty {
+            parts.append(item.isPlaceholder ? statusTitle : "阅读状态，\(statusTitle)")
+        }
+        if hasSummary {
+            parts.append("简介，\(trimmedSummary)")
         }
         if !trimmedRecommend.isEmpty {
-            parts.append("推荐语，\(trimmedRecommend)")
-        } else if isEditable {
-            parts.append("可添加推荐语")
+            parts.append("\(relationNotePresentation.title)，\(trimmedRecommend)")
+        } else if canEditRelationNote {
+            parts.append(relationNotePresentation.emptyAccessibilityHint)
         }
         return parts.joined(separator: "，")
     }
 }
 
-/// 推荐语区块，让 relation 的主观价值成为书单内容，而不是行内弱说明。
+private struct BookCollectionEditBookAccessibilityAction: ViewModifier {
+    let title: String
+    let isEnabled: Bool
+    let action: () -> Void
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if isEnabled {
+            content.accessibilityAction(named: title, action)
+        } else {
+            content
+        }
+    }
+}
+
+/// 书单书籍卡片中的阅读状态标签，用低饱和色表达状态，不抢标题和简介。
+private struct BookCollectionReadStatusChip: View {
+    let text: String
+    let readStatusID: Int64
+
+    var body: some View {
+        Text(text)
+            .font(AppTypography.caption2Medium)
+            .foregroundStyle(tint)
+            .padding(.horizontal, Spacing.half)
+            .frame(minHeight: 24)
+            .background(tint.opacity(0.07), in: Capsule())
+            .overlay {
+                Capsule()
+                    .stroke(tint.opacity(0.10), lineWidth: CardStyle.borderWidth)
+            }
+            .fixedSize(horizontal: true, vertical: false)
+            .accessibilityLabel("阅读状态 \(text)")
+    }
+
+    private var tint: Color {
+        if text == "未加入书架" {
+            return Color.textSecondary.opacity(0.64)
+        }
+        return BookEntryReadingStatus(rawValue: readStatusID)?.collectionBookCardTint ?? Color.textSecondary
+    }
+}
+
+/// 占位书恢复提示，实际操作由整张卡片、上下文菜单与无障碍 action 承接。
+private struct BookCollectionPlaceholderRestorePrompt: View {
+    var body: some View {
+        HStack(spacing: Spacing.half) {
+            Image(systemName: "plus.circle")
+                .font(AppTypography.captionMedium)
+
+            Text("点击卡片加入书架")
+                .font(AppTypography.captionMedium)
+        }
+        .foregroundStyle(Color.textSecondary)
+        .frame(minHeight: 32, alignment: .leading)
+    }
+}
+
+/// 书籍简介预览，只在存在真实简介时展示，避免空文案降低列表质感。
+private struct BookCollectionBookSummaryText: View {
+    let text: String
+
+    var body: some View {
+        Text(text)
+            .font(AppTypography.footnote)
+            .foregroundStyle(Color.textSecondary)
+            .lineLimit(2)
+            .fixedSize(horizontal: false, vertical: true)
+            .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+/// 可编辑 relation 文本的占位入口，保持卡片可操作但不制造主按钮压力。
+private struct BookCollectionAddReasonPrompt: View {
+    let presentation: BookCollectionRelationNotePresentation
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(alignment: .center, spacing: Spacing.half) {
+                Image(systemName: "plus")
+                    .font(AppTypography.captionMedium)
+
+                Text(presentation.addTitle)
+                    .font(AppTypography.captionMedium)
+            }
+            .foregroundStyle(Color.textSecondary)
+            .frame(maxWidth: .infinity, minHeight: Spacing.actionReserved, alignment: .leading)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(presentation.addTitle)
+    }
+}
+
+private extension BookEntryReadingStatus {
+    var collectionBookCardTint: Color {
+        switch self {
+        case .wantRead:
+            return Color.statusWish.opacity(0.68)
+        case .reading:
+            return Color.statusReading.opacity(0.68)
+        case .finished:
+            return Color.statusDone.opacity(0.70)
+        case .abandoned:
+            return Color.statusAbandoned.opacity(0.66)
+        case .onHold:
+            return Color.statusOnHold.opacity(0.66)
+        }
+    }
+}
+
+private struct BookCollectionEditableBookActions: ViewModifier {
+    let canEditStructure: Bool
+    let canEditRelationNote: Bool
+    let noteActionTitle: String
+    let onEditRecommend: () -> Void
+    let onRemove: () -> Void
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        content
+            .modifier(BookCollectionRelationNoteAccessibilityAction(
+                isEnabled: canEditRelationNote,
+                title: noteActionTitle,
+                action: onEditRecommend
+            ))
+            .modifier(BookCollectionRemoveAccessibilityAction(
+                isEnabled: canEditStructure,
+                action: onRemove
+            ))
+    }
+}
+
+private struct BookCollectionRelationNoteAccessibilityAction: ViewModifier {
+    let isEnabled: Bool
+    let title: String
+    let action: () -> Void
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if isEnabled {
+            content.accessibilityAction(named: title, action)
+        } else {
+            content
+        }
+    }
+}
+
+private struct BookCollectionRemoveAccessibilityAction: ViewModifier {
+    let isEnabled: Bool
+    let action: () -> Void
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if isEnabled {
+            content.accessibilityAction(named: "移出书单", action)
+        } else {
+            content
+        }
+    }
+}
+
+/// Relation 文本区块，让收藏理由或年度点评成为书籍行内附属信息，而不是漂浮卡片。
 struct BookCollectionRecommendQuote: View {
     let text: String
     let isEditable: Bool
+    let presentation: BookCollectionRelationNotePresentation
     let onEdit: () -> Void
 
     var body: some View {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
 
         Button(action: onEdit) {
-            HStack(alignment: .top, spacing: Spacing.tight) {
-                RoundedRectangle(cornerRadius: CornerRadius.inlayTiny, style: .continuous)
-                    .fill(Color.brand.opacity(0.18))
-                    .frame(width: 3, height: 34)
+            VStack(alignment: .leading, spacing: Spacing.compact) {
+                HStack(alignment: .center, spacing: Spacing.compact) {
+                    Text(presentation.title)
+                        .font(AppTypography.caption2Medium)
+                        .foregroundStyle(Color.textSecondary)
+                        .lineLimit(1)
+
+                    Spacer(minLength: Spacing.compact)
+
+                    if isEditable {
+                        Image(systemName: "pencil")
+                            .font(AppTypography.caption2)
+                            .foregroundStyle(Color.textHint.opacity(0.58))
+                    }
+                }
 
                 Text(trimmed)
-                    .font(AppTypography.caption)
+                    .font(AppTypography.footnote)
                     .foregroundStyle(Color.textSecondary)
-                    .lineLimit(4)
+                    .lineLimit(3)
                     .fixedSize(horizontal: false, vertical: true)
-
-                Spacer(minLength: Spacing.compact)
-
-                if isEditable {
-                    Image(systemName: "pencil")
-                        .font(AppTypography.caption)
-                        .foregroundStyle(Color.textHint)
-                }
             }
             .padding(.horizontal, Spacing.tight)
             .padding(.vertical, Spacing.cozy)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Color.surfaceNested.opacity(0.82), in: RoundedRectangle(cornerRadius: CornerRadius.blockSmall, style: .continuous))
+            .background(Color.surfaceNested.opacity(0.54), in: RoundedRectangle(cornerRadius: CornerRadius.blockSmall, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: CornerRadius.blockSmall, style: .continuous)
+                    .stroke(Color.surfaceBorderSubtle.opacity(0.22), lineWidth: CardStyle.borderWidth)
+            }
         }
         .buttonStyle(.plain)
         .disabled(!isEditable)
-        .accessibilityLabel("推荐语，\(trimmed)")
+        .accessibilityLabel("\(presentation.title)，\(trimmed)")
     }
 }
 
@@ -1327,10 +2466,10 @@ struct BookCollectionStatusBadge: View {
     }
 }
 
-/// 年度书单只读说明，放在详情头内，避免页面中部重复占位。
+/// 年度书单自动同步说明，放在详情头内，避免页面中部重复占位。
 private struct BookCollectionReadOnlyNotice: View {
     var body: some View {
-        Label("年度书单只读，随读完记录同步。", systemImage: "lock")
+        Label("年度书单随读完记录自动同步，年度点评可编辑。", systemImage: "arrow.triangle.2.circlepath")
             .font(AppTypography.caption)
             .foregroundStyle(Color.textSecondary)
             .padding(.horizontal, Spacing.tight)

@@ -8,8 +8,8 @@
 import SwiftUI
 
 /**
- * [INPUT]: 依赖 Reading/Book/Note/Content/Personal/Search 各模块容器视图与对应路由枚举，依赖 DebugRoute 提供调试页面跳转，依赖 openURL 打开外部帮助文档，依赖 SwiftUI search focus 状态协调全局搜索输入
- * [OUTPUT]: 对外提供 MainTabView（五个主 Tab 的 NavigationStack 组织、普通目的地分发、搜索来源详情系统全屏覆盖与 DEBUG UI Test 书架首页/二级列表直达路由）
+ * [INPUT]: 依赖 Reading/Book/Note/Content/Personal/Search 各模块容器视图与对应路由枚举，依赖 BookCollectionImportRouter 承接外部书单导入，依赖 DebugRoute 提供调试页面跳转，依赖 openURL 打开外部帮助文档，依赖 SwiftUI search focus 状态协调全局搜索输入
+ * [OUTPUT]: 对外提供 MainTabView（五个主 Tab 的 NavigationStack 组织、书单分享导入入口定位、普通目的地分发、搜索来源详情系统全屏覆盖与 DEBUG UI Test 书架首页/二级列表直达路由）
  * [POS]: 应用根导航入口，负责跨模块路由承接（含书架聚合列表、书架管理入口、在读页热力图点击进入阅读日历、内容查看与内容编辑、搜索来源详情根级 fullScreenCover）
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -59,6 +59,7 @@ private enum GlobalSearchCommitSource: Sendable {
 /// 应用主导航容器，组织五个主 Tab 及跨模块路由跳转。
 struct MainTabView: View {
     @Environment(\.openURL) private var openURL
+    @Environment(BookCollectionImportRouter.self) private var bookCollectionImportRouter
     @State private var selectedTab: AppTab = .reading
     @State private var readingPath = NavigationPath()
     @State private var booksPath = NavigationPath()
@@ -261,6 +262,10 @@ struct MainTabView: View {
         .onChange(of: searchPath.count) { _, _ in
             syncSearchPresentationForCurrentState()
         }
+        .onChange(of: bookCollectionImportRouter.pendingImport) { _, request in
+            guard let request else { return }
+            prepareForBookCollectionImport(request)
+        }
         .fullScreenCover(
             item: $searchResultCover,
             onDismiss: completeSearchResultCoverDismissal
@@ -268,6 +273,9 @@ struct MainTabView: View {
             searchResultCoverContent(for: cover)
         }
         .task {
+            if let pendingImport = bookCollectionImportRouter.pendingImport {
+                prepareForBookCollectionImport(pendingImport)
+            }
             #if DEBUG
             await applyUITestLaunchRouteIfNeeded()
             #endif
@@ -785,6 +793,13 @@ struct MainTabView: View {
     private func openBookManagementGuide() {
         guard let url = URL(string: "https://docs.xmnote.com/#/book/bookmanagement") else { return }
         openURL(url)
+    }
+
+    private func prepareForBookCollectionImport(_ request: BookCollectionImportRequest) {
+        selectedTab = .books
+        if request.source == .systemShare {
+            booksPath = NavigationPath()
+        }
     }
 
     private func contentRoute(
