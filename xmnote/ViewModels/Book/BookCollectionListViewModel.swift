@@ -1,6 +1,6 @@
 /**
- * [INPUT]: 依赖 BookshelfRepositoryProtocol 的书单观察流、写入能力与书单显示设置读写入口
- * [OUTPUT]: 对外提供 BookCollectionListViewModel，驱动书单 Tab 的列表、显示设置、创建、编辑、删除、排序与反馈状态
+ * [INPUT]: 依赖 BookshelfRepositoryProtocol 的书单观察流、写入能力、微信读书书单解析保存能力与书单显示设置读写入口
+ * [OUTPUT]: 对外提供 BookCollectionListViewModel，驱动书单 Tab 的列表、分组偏好恢复、显示设置、创建、编辑、删除、排序、系统分享导入与反馈状态
  * [POS]: ViewModels/Book 的书单列表状态编排器，被书单列表页消费
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -22,6 +22,10 @@ enum BookCollectionPendingAction: Hashable {
     case delete
     case reorder
     case repairAnnual
+    case restore
+    case `import`
+    case export
+    case share
 }
 
 /// 书单表单弹窗状态，承载创建或编辑时的初始值。
@@ -77,6 +81,11 @@ struct BookCollectionDeleteConfirmation: Identifiable, Hashable {
     var id: Int64 { item.id }
 }
 
+/// 微信读书书单导入链接输入 Sheet 状态。
+struct BookCollectionWereadImportRequest: Identifiable, Hashable {
+    let id = UUID()
+}
+
 /// 书单列表状态编排器，负责把 Repository 快照转换为列表 UI 可消费状态；所有 UI 状态在主线程更新。
 @MainActor
 @Observable
@@ -87,10 +96,15 @@ final class BookCollectionListViewModel {
     var displaySetting: BookCollectionDisplaySetting
     var activeForm: BookCollectionFormPresentation?
     var deleteConfirmation: BookCollectionDeleteConfirmation?
+    var wereadImportRequest: BookCollectionWereadImportRequest?
+    var importPreview: BookCollectionImportPreview?
+    var wereadImportErrorMessage: String?
+    var importedCollectionID: Int64?
     var activeAction: BookCollectionPendingAction?
     var actionFeedback: BookshelfActionFeedback?
 
     private let repository: any BookshelfRepositoryProtocol
+    private var persistedSelectedKind: BookCollectionKind = .manual
     private var observationTask: Task<Void, Never>?
     private var writeTask: Task<Void, Never>?
     private var feedbackClearTask: Task<Void, Never>?
@@ -111,7 +125,10 @@ final class BookCollectionListViewModel {
     /// 注入书架仓储并启动书单观察流。
     init(repository: any BookshelfRepositoryProtocol) {
         self.repository = repository
-        self.displaySetting = repository.fetchBookCollectionDisplaySetting()
+        let initialDisplaySetting = repository.fetchBookCollectionDisplaySetting()
+        self.displaySetting = initialDisplaySetting
+        self.selectedKind = initialDisplaySetting.selectedKind
+        self.persistedSelectedKind = initialDisplaySetting.selectedKind
         startObservation()
         repairAnnualCollections()
     }
@@ -141,11 +158,27 @@ final class BookCollectionListViewModel {
         deleteConfirmation = BookCollectionDeleteConfirmation(item: item)
     }
 
+    /// 打开微信读书书单导入链接输入面板。
+    func presentWereadImport() {
+        guard activeAction == nil else { return }
+        wereadImportErrorMessage = nil
+        wereadImportRequest = BookCollectionWereadImportRequest()
+    }
+
     /// 保存书单首页显示设置，立即驱动列表渲染刷新。
     func updateDisplaySetting(_ setting: BookCollectionDisplaySetting) {
-        guard setting != displaySetting else { return }
-        displaySetting = setting
-        repository.saveBookCollectionDisplaySetting(setting)
+        var nextSetting = setting
+        nextSetting.selectedKind = persistedSelectedKind
+        guard nextSetting != displaySetting else { return }
+        displaySetting = nextSetting
+        repository.saveBookCollectionDisplaySetting(nextSetting)
+    }
+
+    /// 切换书单首页分组，并把用户主动选择立即写入轻量偏好。
+    func selectKind(_ kind: BookCollectionKind) {
+        guard selectedKind != kind || persistedSelectedKind != kind else { return }
+        selectedKind = kind
+        persistSelectedKind(kind)
     }
 
     /// 提交创建或编辑表单。
@@ -200,6 +233,73 @@ final class BookCollectionListViewModel {
         }
     }
 
+    /// 解析微信读书书单链接，成功后进入导入预览，不提前写入数据库。
+    func parseWereadImportLink(_ link: String) {
+        guard activeAction == nil else { return }
+        writeTask?.cancel()
+        writeTask = Task { [repository] in
+            wereadImportErrorMessage = nil
+            setActiveAction(.import, message: "正在解析微信读书书单…")
+            do {
+                let preview = try await repository.parseWereadBookCollectionImport(link: link)
+                activeAction = nil
+                wereadImportRequest = nil
+                importPreview = preview
+                wereadImportErrorMessage = nil
+                actionFeedback = nil
+            } catch {
+                failWereadImportInSheet(error)
+            }
+        }
+    }
+
+    /// 系统分享入口直接完成解析与保存；数据库写入仍经 Repository，并在成功后跳转新书单详情。
+    func importWereadLinkDirectly(_ link: String) {
+        guard activeAction == nil else { return }
+        writeTask?.cancel()
+        writeTask = Task { [repository] in
+            wereadImportErrorMessage = nil
+            setActiveAction(.import, message: "正在导入微信读书书单…")
+            do {
+                let preview = try await repository.parseWereadBookCollectionImport(link: link)
+                let item = try await repository.saveWereadBookCollectionImport(preview)
+                wereadImportRequest = nil
+                importPreview = nil
+                wereadImportErrorMessage = nil
+                selectKind(.manual)
+                importedCollectionID = item.id
+                finishAction(message: "微信读书书单已导入")
+            } catch {
+                failAction(error)
+            }
+        }
+    }
+
+    /// 确认导入预览，在单个事务中创建书单、占位书与收藏理由。
+    func confirmWereadImport(_ preview: BookCollectionImportPreview) {
+        guard activeAction == nil else { return }
+        writeTask?.cancel()
+        writeTask = Task { [repository] in
+            wereadImportErrorMessage = nil
+            setActiveAction(.import, message: "正在导入书单…")
+            do {
+                let item = try await repository.saveWereadBookCollectionImport(preview)
+                importPreview = nil
+                wereadImportErrorMessage = nil
+                selectKind(.manual)
+                importedCollectionID = item.id
+                finishAction(message: "微信读书书单已导入")
+            } catch {
+                failWereadImportInSheet(error)
+            }
+        }
+    }
+
+    /// 消费导入成功后的详情跳转 ID，避免页面重绘重复导航。
+    func consumeImportedCollectionID() {
+        importedCollectionID = nil
+    }
+
     private func startObservation() {
         observationTask?.cancel()
         contentState = .loading
@@ -244,6 +344,15 @@ final class BookCollectionListViewModel {
         }
     }
 
+    private func persistSelectedKind(_ kind: BookCollectionKind) {
+        persistedSelectedKind = kind
+        var nextSetting = displaySetting
+        nextSetting.selectedKind = kind
+        guard nextSetting != displaySetting else { return }
+        displaySetting = nextSetting
+        repository.saveBookCollectionDisplaySetting(nextSetting)
+    }
+
     private func setActiveAction(_ action: BookCollectionPendingAction, message: String) {
         activeAction = action
         actionFeedback = BookshelfActionFeedback(kind: .processing, message: message)
@@ -253,12 +362,21 @@ final class BookCollectionListViewModel {
         activeAction = nil
         activeForm = nil
         deleteConfirmation = nil
+        wereadImportRequest = nil
+        wereadImportErrorMessage = nil
         actionFeedback = BookshelfActionFeedback(kind: .success, message: message)
         scheduleFeedbackClear()
     }
 
+    private func failWereadImportInSheet(_ error: Error) {
+        activeAction = nil
+        actionFeedback = nil
+        wereadImportErrorMessage = error.localizedDescription
+    }
+
     private func failAction(_ error: Error) {
         activeAction = nil
+        wereadImportErrorMessage = nil
         actionFeedback = BookshelfActionFeedback(kind: .error, message: error.localizedDescription)
         scheduleFeedbackClear()
     }

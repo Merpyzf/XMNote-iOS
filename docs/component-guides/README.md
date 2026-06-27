@@ -28,6 +28,9 @@
 | BookGridView | `xmnote/Views/Book/BookGridView.swift` | `docs/component-guides/BookGridView使用说明.md` | 已完成 |
 | BookGridItemView | `xmnote/Views/Book/BookGridItemView.swift` | `docs/component-guides/BookGridItemView使用说明.md` | 已完成 |
 | BookDetailView | `xmnote/Views/Book/BookDetailView.swift` | `docs/component-guides/BookDetailView使用说明.md` | 已完成 |
+| BookCollectionListView | `xmnote/Views/Book/BookCollectionListView.swift` | `docs/component-guides/BookCollectionListView使用说明.md` | 已完成 |
+| BookCollectionDetailView | `xmnote/Views/Book/BookCollectionDetailView.swift` | `docs/component-guides/BookCollectionDetailView使用说明.md` | 已完成 |
+| BookCollectionCoverSearchSheet | `xmnote/Views/Book/Sheets/BookCollectionCoverSearchSheet.swift` | `docs/component-guides/BookCollectionCoverSearchSheet使用说明.md` | 已完成 |
 | NoteContainerView | `xmnote/Views/Note/NoteContainerView.swift` | `docs/component-guides/NoteContainerView使用说明.md` | 已完成 |
 | NoteCollectionView | `xmnote/Views/Note/NoteCollectionView.swift` | `docs/component-guides/NoteCollectionView使用说明.md` | 已完成 |
 | NoteTagsView | `xmnote/Views/Note/NoteTagsView.swift` | `docs/component-guides/NoteTagsView使用说明.md` | 已完成 |

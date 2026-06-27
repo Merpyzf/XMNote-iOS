@@ -32,6 +32,16 @@
 				<string>smartdrivee2e4452a2d2144a1b45c4ae31e80af5c</string>
 			</array>
 		</dict>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Viewer</string>
+			<key>CFBundleURLName</key>
+			<string>com.xmnote.import</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>xmnote</string>
+			</array>
+		</dict>
 	</array>
 	<key>CFBundleVersion</key>
 	<string>$(CURRENT_PROJECT_VERSION)</string>
@@ -45,6 +55,8 @@
 	<string>在使用文本识别、添加附图、扫描书籍等功能时会访问设备的相机。</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>在使用百度 OCR 识别时会访问照片，用于选择待识别图片。</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>在分享书单时会将生成的书单图片保存到相册，便于继续分享。</string>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
 	<key>UILaunchScreen</key>

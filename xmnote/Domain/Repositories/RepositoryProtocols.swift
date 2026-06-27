@@ -2,7 +2,7 @@ import Foundation
 
 /**
  * [INPUT]: 依赖 Models 与 Services 层的数据类型定义
- * [OUTPUT]: 对外提供 Book/Note/Content/GlobalSearch/BackupServer/Backup/S3/Statistics/ReadCalendarColor/Timeline/ReadingDashboard 及书籍搜索/录入等 Repository 协议，包含书架与书单显示设置入口及书单最小写入能力
+ * [OUTPUT]: 对外提供 Book/Note/Content/GlobalSearch/BackupServer/Backup/S3/Statistics/ReadCalendarColor/Timeline/ReadingDashboard 及书籍搜索/录入等 Repository 协议，包含书架与书单显示设置入口及书单书籍元信息写入能力
  * [POS]: Domain 层仓储契约，定义 Presentation 获取本地/网络数据的唯一入口
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -73,12 +73,26 @@ protocol BookshelfRepositoryProtocol {
     func updateManualBookCollectionOrder(_ collectionIDs: [Int64]) async throws
     /// 批量加入书单；已有有效关系保持不变，只为缺失关系插入记录。
     func addBooks(_ bookIDs: [Int64], toCollection collectionID: Int64) async throws
+    /// 将本地书或在线/导入草稿统一加入当前手动书单；草稿会按 Android 语义保存为占位书。
+    func addBookSelections(_ selections: [BookCollectionBookSelectionInput], toCollection collectionID: Int64) async throws
+    /// 将书单中的占位书恢复为书架有效书籍，保留原书单 relation。
+    func restoreCollectionPlaceholderBook(bookID: Int64) async throws
     /// 从书单内移除指定关系，按 Android deleteSync 语义只软删除 relation。
     func removeBooksFromCollection(collectionBookIDs: [Int64]) async throws
     /// 按书单内最终顺序写入 relation order 字段。
     func updateBooksInCollectionOrder(collectionID: Int64, relationIDs: [Int64]) async throws
     /// 编辑书单内推荐语，保留同一 relation 并更新 relation 时间戳。
     func updateCollectionBookRecommend(collectionBookID: Int64, recommend: String) async throws
+    /// 编辑书单内单本书籍元信息与收藏理由，支持有效书和占位书，手动/年度书单均可使用。
+    func updateCollectionBookMetadata(_ input: BookCollectionBookMetadataEditInput) async throws
+    /// 编辑年度书单本体说明；不允许修改标题、年份、成员或排序。
+    func updateAnnualBookCollectionDescription(collectionID: Int64, description: String) async throws
+    /// 解析微信读书书单链接，返回保存前预览，不写入数据库。
+    func parseWereadBookCollectionImport(link: String) async throws -> BookCollectionImportPreview
+    /// 保存微信读书导入预览，在单个事务中创建书单、占位书与 relation 推荐语。
+    func saveWereadBookCollectionImport(_ preview: BookCollectionImportPreview) async throws -> BookCollectionListItem
+    /// 读取当前书单一次性快照，供导出与分享生成锁定范围。
+    func fetchBookCollectionExportSnapshot(collectionID: Int64) async throws -> BookCollectionDetail
     /// 将指定书籍从当前分组移出到默认书架，并按位置语义写入默认书架排序值。
     func moveBooksOutOfGroup(bookIDs: [Int64], placement: GroupBooksPlacement) async throws
     /// 批量置顶默认书架顶层 Book/Group，按传入选择顺序追加 pin_order。

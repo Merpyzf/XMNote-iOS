@@ -1,6 +1,6 @@
 /**
- * [INPUT]: 依赖 SwiftUI App 生命周期、GRDB Database、RepositoryContainer、XMToastCenter 与全局服务初始化流程
- * [OUTPUT]: 对外提供 xmnoteApp（应用入口）完成数据库/仓储/根视图启动、全局 Toast Host 挂载，并在 DEBUG UI Test 下提供隔离书架首页、二级列表与书单 fixture
+ * [INPUT]: 依赖 SwiftUI App 生命周期、GRDB Database、RepositoryContainer、XMToastCenter、App Group 书单分享导入 handoff 与全局服务初始化流程
+ * [OUTPUT]: 对外提供 xmnoteApp（应用入口）完成数据库/仓储/根视图启动、全局 Toast Host 挂载、微信读书书单分享导入路由，并在 DEBUG UI Test 下提供隔离书架首页、二级列表与书单 fixture
  * [POS]: 应用启动编排层，负责组装全局依赖并挂载 ContentView 与跨页面轻提示基础设施
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -25,11 +25,13 @@ import GRDB
 @main
 /// 应用入口，负责初始化全局依赖并挂载根界面。
 struct xmnoteApp: App {
+    @Environment(\.scenePhase) private var scenePhase
     @State private var appState = AppState()
     @State private var sceneStateStore = SceneStateStore()
     @State private var toastCenter = XMToastCenter()
     @State private var databaseManager: DatabaseManager?
     @State private var repositories: RepositoryContainer?
+    @State private var bookCollectionImportRouter = BookCollectionImportRouter()
     @State private var initError: Error?
 
     init() {
@@ -50,6 +52,7 @@ struct xmnoteApp: App {
                         .environment(sceneStateStore)
                         .environment(databaseManager)
                         .environment(repositories)
+                        .environment(bookCollectionImportRouter)
                         .transition(.opacity)
                 } else if let initError {
                     databaseErrorView(initError)
@@ -61,6 +64,7 @@ struct xmnoteApp: App {
             .xmToastHost(center: toastCenter)
             .animation(.smooth(duration: 0.35), value: repositories != nil)
             .task {
+                bookCollectionImportRouter.consumePendingShareImport()
                 guard databaseManager == nil, initError == nil else { return }
                 do {
                     let database = try await Task.detached(priority: .userInitiated) {
@@ -80,6 +84,11 @@ struct xmnoteApp: App {
             }
             .onOpenURL { url in
                 _ = Aliyunpan.handleOpenURL(url)
+                bookCollectionImportRouter.handle(url)
+            }
+            .onChange(of: scenePhase) { _, phase in
+                guard phase == .active else { return }
+                bookCollectionImportRouter.consumePendingShareImport()
             }
         }
     }
@@ -99,6 +108,88 @@ struct xmnoteApp: App {
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, Spacing.double)
         }
+    }
+}
+
+/// 书单导入请求，区分手动深链预览与系统分享自动导入两条消费路径。
+nonisolated struct BookCollectionImportRequest: Identifiable, Equatable, Sendable {
+    let id: UUID
+    let link: String
+    let source: Source
+
+    enum Source: Equatable, Sendable {
+        case deepLink
+        case systemShare
+    }
+
+    init(link: String, source: Source) {
+        self.id = UUID()
+        self.link = link
+        self.source = source
+    }
+}
+
+/// 书单导入深链分发器，把系统 URL 与 Share Extension handoff 转成书单页可消费的导入请求。
+@Observable
+final class BookCollectionImportRouter {
+    var pendingImport: BookCollectionImportRequest?
+
+    private let handoffStore = BookCollectionShareImportHandoffStore()
+
+    /// 处理 App 级打开 URL 事件；直接 weread 链接或带 `url` 参数的深链进入预览，Share Extension 深链消费 App Group handoff。
+    func handle(_ url: URL) {
+        if Self.isShareExtensionImportURL(url) {
+            consumePendingShareImport()
+            return
+        }
+        guard let link = Self.wereadLink(from: url) else { return }
+        pendingImport = BookCollectionImportRequest(link: link, source: .deepLink)
+    }
+
+    /// 消费 Share Extension 写入的待导入链接；失败时静默忽略，让用户仍可使用书单页粘贴导入兜底。
+    func consumePendingShareImport() {
+        do {
+            guard let payload = try handoffStore.consumePendingPayload() else { return }
+            guard let link = WereadCollectionLinkExtractor.extractLink(from: payload.link) else { return }
+            pendingImport = BookCollectionImportRequest(link: link, source: .systemShare)
+        } catch {
+            #if DEBUG
+            print("BookCollectionImportRouter handoff consume failed: \(error.localizedDescription)")
+            #endif
+        }
+    }
+
+    /// 消费当前待导入请求，避免页面恢复后重复解析或重复落库。
+    func consumePendingImport(_ request: BookCollectionImportRequest) {
+        guard pendingImport?.id == request.id else { return }
+        pendingImport = nil
+    }
+
+    private static func wereadLink(from url: URL) -> String? {
+        if let link = WereadCollectionLinkExtractor.extractLink(from: url) {
+            return link
+        }
+        guard url.scheme == "xmnote" else { return nil }
+        let components = URLComponents(url: url, resolvingAgainstBaseURL: false)
+        if url.host == "import-weread" || url.path.contains("import-weread") {
+            return components?.queryItems?
+                .first(where: { $0.name == "url" })?
+                .value
+                .flatMap(WereadCollectionLinkExtractor.extractLink(from:))
+        }
+        return nil
+    }
+
+    private static func isShareExtensionImportURL(_ url: URL) -> Bool {
+        guard url.scheme == "xmnote",
+              url.host == "import-weread" || url.path.contains("import-weread") else {
+            return false
+        }
+        let source = URLComponents(url: url, resolvingAgainstBaseURL: false)?
+            .queryItems?
+            .first(where: { $0.name == "source" })?
+            .value
+        return source == "share-extension"
     }
 }
 

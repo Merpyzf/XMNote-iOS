@@ -1,13 +1,13 @@
 /**
- * [INPUT]: 依赖 RepositoryContainer 注入书架仓储，依赖 BookCollectionDetailViewModel 驱动书单详情、加入书籍、移除、排序、推荐语编辑与删除确认
- * [OUTPUT]: 对外提供 BookCollectionDetailView，承载手动书单与年度书单详情、只读边界、书籍行操作和系统弹窗
+ * [INPUT]: 依赖 RepositoryContainer 注入书架与封面上传仓储，依赖 BookCollectionDetailViewModel 驱动书单详情、添加书籍、移除、排序、relation 文本编辑、书籍元信息编辑、导出占位与删除确认
+ * [OUTPUT]: 对外提供 BookCollectionDetailView，承载手动书单与年度书单详情、自动同步边界、导出入口、书籍行操作、书籍元信息编辑、收藏理由/年度点评编辑和系统弹窗
  * [POS]: Views/Book 的书单详情页面壳层，被 BookRoute.collectionDetail 导航目标消费
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
 import SwiftUI
 
-/// 书单详情页，手动书单提供整理能力，年度书单保持系统同步只读展示。
+/// 书单详情页，手动书单提供整理能力，年度书单保持成员自动同步并允许编辑年度点评。
 struct BookCollectionDetailView: View {
     @Environment(RepositoryContainer.self) private var repositories
     let collectionID: Int64
@@ -37,48 +37,25 @@ struct BookCollectionDetailView: View {
         .task(id: collectionID) {
             viewModel = BookCollectionDetailViewModel(
                 collectionID: collectionID,
-                repository: repositories.bookRepository
+                repository: repositories.bookRepository,
+                s3UploadRepository: repositories.s3UploadRepository,
+                coverImageLoader: repositories.coverImageLoader
             )
         }
     }
 }
 
-/// 书单详情启动占位，确保导航转场期间已有顶部返回与内容骨架。
+/// 书单详情启动占位，等待详情数据加载时保留系统导航与内容骨架。
 private struct BookCollectionDetailLoadingScaffold: View {
-    @Environment(\.dismiss) private var dismiss
-
     var body: some View {
-        VStack(spacing: Spacing.none) {
-            HStack(spacing: Spacing.tight) {
-                TopBarBackButton {
-                    dismiss()
-                }
-
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("书单")
-                        .font(AppTypography.headlineSemibold)
-                        .foregroundStyle(Color.textPrimary)
-
-                    Text("正在整理内容")
-                        .font(AppTypography.caption)
-                        .foregroundStyle(Color.textSecondary)
-                }
-
-                Spacer(minLength: Spacing.tight)
-            }
-            .padding(.horizontal, Spacing.screenEdge)
-            .frame(height: 56)
-            .background(Color.surfacePage)
-
-            BookCollectionDetailSkeletonContent()
-        }
+        BookCollectionDetailSkeletonContent()
         .background(Color.surfacePage.ignoresSafeArea())
-        .navigationBarBackButtonHidden(true)
-        .toolbar(.hidden, for: .navigationBar)
+        .navigationTitle("书单")
+        .navigationBarTitleDisplayMode(.inline)
     }
 }
 
-/// 书单详情内容视图，集中承载本地顶部栏、详情头、书籍列表和业务弹窗。
+/// 书单详情内容视图，集中承载系统工具栏入口、详情头、书籍列表和业务弹窗。
 private struct BookCollectionDetailContentView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -87,19 +64,37 @@ private struct BookCollectionDetailContentView: View {
     @State private var editMode: EditMode = .inactive
     @State private var loadingGate = LoadingGate()
     @State private var showsBookPicker = false
+    @State private var showsCollectionSummary = false
+    @State private var contentTrayTop: CGFloat = .nan
+    @State private var floatingAddBookOrnamentHeight: CGFloat = .zero
+    @State private var floatingAddBookContentInset: CGFloat = .zero
+    #if DEBUG
+    @State private var headerVisualStyle: BookCollectionHeaderVisualStyle = .editorialDesk
+    #endif
 
     private var isReordering: Bool {
         editMode.isEditing
     }
 
     var body: some View {
-        VStack(spacing: Spacing.none) {
-            topChrome
-            content
-        }
+        content
         .background(Color.surfacePage.ignoresSafeArea())
-        .navigationBarBackButtonHidden(true)
-        .toolbar(.hidden, for: .navigationBar)
+        .navigationTitle("")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            if shouldShowMoreMenu {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Menu {
+                        moreMenuContent
+                    } label: {
+                        Image(systemName: "ellipsis")
+                            .foregroundStyle(Color.textPrimary)
+                            .accessibilityLabel("书单更多操作")
+                    }
+                    .accessibilityIdentifier("book.collection.detail.more")
+                }
+            }
+        }
         .onAppear {
             syncLoadingGate()
         }
@@ -119,6 +114,11 @@ private struct BookCollectionDetailContentView: View {
                 viewModel.addPickerResult(result)
             }
         }
+        .sheet(isPresented: $showsCollectionSummary) {
+            if let detail = viewModel.detail {
+                BookCollectionSummarySheet(detail: detail)
+            }
+        }
         .sheet(item: $viewModel.activeForm) { presentation in
             BookCollectionFormSheet(
                 presentation: presentation,
@@ -127,13 +127,42 @@ private struct BookCollectionDetailContentView: View {
                 viewModel.submitForm(presentation, title: title, description: description)
             }
         }
-        .sheet(item: $viewModel.recommendEdit) { edit in
-            BookCollectionRecommendSheet(
+        .sheet(item: $viewModel.annualDescriptionEdit) { edit in
+            BookCollectionAnnualDescriptionSheet(
                 edit: edit,
                 isSaving: viewModel.activeAction != nil
-            ) { recommend in
-                viewModel.submitRecommend(edit, recommend: recommend)
+            ) { description in
+                viewModel.submitAnnualDescription(edit, description: description)
             }
+        }
+        .sheet(item: $viewModel.recommendEdit) { edit in
+            let presentation = relationNotePresentation
+            BookCollectionRecommendSheet(
+                edit: edit,
+                isSaving: viewModel.activeAction != nil,
+                presentation: presentation
+            ) { recommend in
+                viewModel.submitRecommend(
+                    edit,
+                    recommend: recommend,
+                    savingMessage: presentation.savingMessage,
+                    savedMessage: presentation.savedMessage
+                )
+            }
+        }
+        .sheet(item: $viewModel.metadataEdit) { edit in
+            let presentation = relationNotePresentation
+            BookCollectionBookMetadataEditSheet(
+                edit: edit,
+                isSaving: viewModel.activeAction != nil,
+                presentation: presentation
+            ) { draft in
+                viewModel.submitBookMetadata(edit, draft: draft)
+            }
+        }
+        .sheet(item: $viewModel.generatedFile) { file in
+            ActivityShareSheet(activityItems: file.urls)
+                .presentationDetents([.medium, .large])
         }
         .xmSystemAlert(item: $viewModel.removeConfirmation) { confirmation in
             removeDescriptor(for: confirmation)
@@ -142,64 +171,6 @@ private struct BookCollectionDetailContentView: View {
             deleteDescriptor(for: confirmation)
         }
         .accessibilityIdentifier("book.collection.detail")
-    }
-
-    private var topChrome: some View {
-        HStack(spacing: Spacing.tight) {
-            TopBarBackButton {
-                dismiss()
-            }
-
-            VStack(alignment: .leading, spacing: 2) {
-                Text(viewModel.detail?.title ?? "书单")
-                    .font(AppTypography.headlineSemibold)
-                    .foregroundStyle(Color.textPrimary)
-                    .lineLimit(1)
-
-                if let detail = viewModel.detail {
-                    Text(detail.kind == .annual ? "年度书单 · 系统同步" : "我的书单")
-                        .font(AppTypography.caption)
-                        .foregroundStyle(Color.textSecondary)
-                }
-            }
-
-            Spacer(minLength: Spacing.tight)
-
-            if viewModel.isManual {
-                Menu {
-                    Button {
-                        viewModel.presentEditForm()
-                    } label: {
-                        Label("编辑书单信息", systemImage: "pencil")
-                    }
-                    .disabled(viewModel.activeAction != nil)
-
-                    if canReorderCurrentDetail {
-                        Button {
-                            toggleReordering()
-                        } label: {
-                            Label(isReordering ? "完成排序" : "调整排序", systemImage: isReordering ? "checkmark" : "arrow.up.arrow.down")
-                        }
-                        .disabled(viewModel.activeAction != nil)
-                    }
-
-                    Button(role: .destructive) {
-                        viewModel.presentDeleteConfirmation()
-                    } label: {
-                        Label("删除书单", systemImage: "trash")
-                    }
-                    .disabled(viewModel.activeAction != nil)
-                } label: {
-                    TopBarActionIcon(systemName: "ellipsis.circle", foregroundColor: Color.textPrimary)
-                }
-                .disabled(viewModel.activeAction != nil)
-                .accessibilityLabel("书单更多操作")
-                .accessibilityIdentifier("book.collection.detail.more")
-            }
-        }
-        .padding(.horizontal, Spacing.screenEdge)
-        .frame(height: 56)
-        .background(Color.surfacePage)
     }
 
     @ViewBuilder
@@ -217,12 +188,13 @@ private struct BookCollectionDetailContentView: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             },
             empty: { message in
-                VStack(spacing: Spacing.base) {
-                    header
+                if viewModel.detail != nil {
+                    bookList
+                } else {
                     BookshelfContextualEmptyStateView(
                         icon: viewModel.isManual ? "book.badge.plus" : "calendar",
                         title: message,
-                        message: viewModel.isManual ? "加入书籍后会显示在这里。" : "读完记录会显示在这里。"
+                        message: viewModel.isManual ? "添加书籍后会显示在这里。" : "读完记录会显示在这里。"
                     )
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
@@ -248,64 +220,209 @@ private struct BookCollectionDetailContentView: View {
     }
 
     private var bookList: some View {
-        List {
-            Section {
-                header
-                    .listRowSeparator(.hidden)
-                    .listRowInsets(EdgeInsets())
-                    .listRowBackground(Color.clear)
+        ZStack(alignment: .topLeading) {
+            BookCollectionFullHeightTrayBackground(topOffset: contentTrayTop)
+                .ignoresSafeArea(.container, edges: .bottom)
 
-                if isReordering {
-                    reorderStatusRow
+            List {
+                Section {
+                    header
                         .listRowSeparator(.hidden)
-                        .listRowInsets(EdgeInsets(
-                            top: Spacing.half,
-                            leading: Spacing.screenEdge,
-                            bottom: Spacing.base,
-                            trailing: Spacing.screenEdge
-                        ))
+                        .listRowInsets(EdgeInsets())
                         .listRowBackground(Color.clear)
                 }
-            }
 
-            ForEach(viewModel.detail?.books ?? []) { item in
-                BookCollectionBookCard(
-                    item: item,
-                    isEditable: viewModel.isManual,
-                    onOpen: {
-                        onOpenRoute(.detail(bookId: item.book.id))
-                    },
-                    onEditBook: {
-                        onOpenRoute(.edit(bookId: item.book.id))
-                    },
-                    onEditRecommend: {
-                        viewModel.presentRecommendEdit(for: item)
-                    },
-                    onRemove: {
-                        viewModel.presentRemoveConfirmation(for: item)
+                if let detail = viewModel.detail {
+                    Section {
+                        BookCollectionContentHeader(
+                            title: contentHeaderTitle(for: detail),
+                            status: contentHeaderStatus(for: detail)
+                        )
+                        .padding(.horizontal, Spacing.screenEdge)
+                        .onGeometryChange(for: CGFloat.self) { proxy in
+                            proxy.frame(in: .named(BookCollectionContentTrayCoordinateSpace.name)).minY
+                        } action: { newTop in
+                            updateContentTrayTop(newTop)
+                        }
+                        .listRowSeparator(.hidden)
+                        .listRowInsets(contentSectionInsets)
+                        .listRowBackground(BookCollectionContentRowBackground(position: .top))
+
+                        if isReordering {
+                            reorderStatusRow
+                                .padding(.horizontal, Spacing.screenEdge)
+                                .listRowSeparator(.hidden)
+                                .listRowInsets(contentSectionInsets)
+                                .listRowBackground(BookCollectionContentRowBackground(position: .middle))
+                        }
+
+                        if detail.books.isEmpty {
+                            BookCollectionEmptyBooksRow(isManual: viewModel.isManual)
+                                .padding(.horizontal, Spacing.screenEdge)
+                                .listRowSeparator(.hidden)
+                                .listRowInsets(contentSectionInsets)
+                                .listRowBackground(BookCollectionContentRowBackground(position: .middle))
+                        } else {
+                            ForEach(detail.books) { item in
+                                BookCollectionBookCard(
+                                    item: item,
+                                    canEditStructure: canEditBookStructure,
+                                    canEditRelationNote: canEditRelationNote,
+                                    canEditMetadata: canEditBookMetadata,
+                                    relationNotePresentation: relationNotePresentation,
+                                    showsSeparator: item.id != detail.books.last?.id,
+                                    onOpen: {
+                                        if item.isPlaceholder {
+                                            viewModel.restorePlaceholderBook(item)
+                                        } else {
+                                            onOpenRoute(.detail(bookId: item.book.id))
+                                        }
+                                    },
+                                    onEditBook: {
+                                        onOpenRoute(.edit(bookId: item.book.id))
+                                    },
+                                    onEditMetadata: {
+                                        viewModel.presentMetadataEdit(for: item)
+                                    },
+                                    onRestorePlaceholder: {
+                                        viewModel.restorePlaceholderBook(item)
+                                    },
+                                    onEditRecommend: {
+                                        viewModel.presentRecommendEdit(for: item)
+                                    },
+                                    onRemove: {
+                                        viewModel.presentRemoveConfirmation(for: item)
+                                    }
+                                )
+                                .padding(.horizontal, Spacing.screenEdge)
+                                .listRowSeparator(.hidden)
+                                .listRowInsets(contentSectionInsets)
+                                .listRowBackground(BookCollectionContentRowBackground(position: .middle))
+                                .accessibilityIdentifier("book.collection.detail.book.\(item.id)")
+                            }
+                            .onMove { offsets, destination in
+                                guard viewModel.isManual else { return }
+                                var items = viewModel.detail?.books ?? []
+                                items.move(fromOffsets: offsets, toOffset: destination)
+                                viewModel.submitBookOrder(items.map(\.id))
+                            }
+                        }
                     }
-                )
-                .listRowSeparator(.hidden)
-                .listRowInsets(EdgeInsets(
-                    top: Spacing.half,
-                    leading: Spacing.screenEdge,
-                    bottom: Spacing.half,
-                    trailing: Spacing.screenEdge
-                ))
-                .listRowBackground(Color.clear)
-                .accessibilityIdentifier("book.collection.detail.book.\(item.id)")
+                }
             }
-            .onMove { offsets, destination in
-                guard viewModel.isManual else { return }
-                var items = viewModel.detail?.books ?? []
-                items.move(fromOffsets: offsets, toOffset: destination)
-                viewModel.submitBookOrder(items.map(\.id))
+            .listStyle(.plain)
+            .scrollContentBackground(.hidden)
+            .contentMargins(.top, Spacing.none, for: .scrollContent)
+            .contentMargins(.bottom, floatingAddBookContentInset, for: .scrollContent)
+            .scrollEdgeEffectStyle(.soft, for: .top)
+            .environment(\.defaultMinListRowHeight, 1)
+            .environment(\.editMode, $editMode)
+            .coordinateSpace(.named(BookCollectionContentTrayCoordinateSpace.name))
+            .accessibilityIdentifier("book.collection.detail.list")
+        }
+        .overlay(alignment: .bottom) {
+            floatingAddBookOverlay
+        }
+        .onPreferenceChange(BookCollectionFloatingAddBookContentInsetPreferenceKey.self) { inset in
+            updateFloatingAddBookContentInset(inset)
+        }
+        .onPreferenceChange(ImmersiveBottomChromeHeightPreferenceKey.self) { height in
+            updateFloatingAddBookOrnamentHeight(height)
+        }
+        .onChange(of: showsFloatingAddBookButton) { _, isVisible in
+            guard !isVisible else { return }
+            updateFloatingAddBookOrnamentHeight(.zero)
+            updateFloatingAddBookContentInset(.zero)
+        }
+    }
+
+    private func updateContentTrayTop(_ newTop: CGFloat) {
+        guard newTop.isFinite else { return }
+        if !contentTrayTop.isFinite || abs(contentTrayTop - newTop) > 0.5 {
+            contentTrayTop = newTop
+        }
+    }
+
+    /// 同步底部悬浮添加入口的滚动避让高度，避免长书单最后一项被遮挡。
+    private func updateFloatingAddBookContentInset(_ inset: CGFloat) {
+        guard inset.isFinite, abs(floatingAddBookContentInset - inset) > 0.5 else { return }
+        floatingAddBookContentInset = inset
+    }
+
+    /// 同步底部悬浮按钮实测高度，用于下一帧计算沉浸托底尺寸。
+    private func updateFloatingAddBookOrnamentHeight(_ height: CGFloat) {
+        guard height.isFinite, abs(floatingAddBookOrnamentHeight - height) > 0.5 else { return }
+        floatingAddBookOrnamentHeight = height
+    }
+
+    @ViewBuilder
+    private var floatingAddBookOverlay: some View {
+        GeometryReader { proxy in
+            let metrics = floatingAddBookMetrics(safeAreaBottomInset: proxy.safeAreaInsets.bottom)
+            let ornamentWidth = max(proxy.size.width - Spacing.screenEdge * 2, .zero)
+
+            if showsFloatingAddBookButton {
+                ImmersiveBottomChromeOverlay(
+                    metrics: metrics,
+                    surfaceColor: Color.surfaceCard.opacity(0.78),
+                    horizontalPadding: Spacing.screenEdge
+                ) {
+                    HStack {
+                        Spacer(minLength: Spacing.none)
+
+                        BookCollectionFloatingAddBookButton(
+                            isEnabled: canUseFloatingAddBookButton,
+                            action: presentBookPicker
+                        )
+                    }
+                    .frame(width: ornamentWidth, alignment: .trailing)
+                    .background {
+                        GeometryReader { ornamentProxy in
+                            Color.clear
+                                .preference(
+                                    key: ImmersiveBottomChromeHeightPreferenceKey.self,
+                                    value: ornamentProxy.size.height
+                                )
+                        }
+                    }
+                }
+                .preference(
+                    key: BookCollectionFloatingAddBookContentInsetPreferenceKey.self,
+                    value: metrics.readableInset
+                )
+                .transition(.opacity.combined(with: .move(edge: .bottom)))
+            } else {
+                Color.clear
+                    .preference(key: BookCollectionFloatingAddBookContentInsetPreferenceKey.self, value: .zero)
             }
         }
-        .listStyle(.plain)
-        .scrollContentBackground(.hidden)
-        .environment(\.editMode, $editMode)
-        .accessibilityIdentifier("book.collection.detail.list")
+        .allowsHitTesting(showsFloatingAddBookButton)
+        .animation(reduceMotion ? nil : .smooth(duration: 0.18), value: showsFloatingAddBookButton)
+    }
+
+    /// 依据安全区和按钮实测高度计算底部浮层的渐变托底与滚动补偿。
+    private func floatingAddBookMetrics(safeAreaBottomInset: CGFloat) -> ImmersiveBottomChromeMetrics {
+        ImmersiveBottomChromeMetrics.make(
+            measuredOrnamentHeight: floatingAddBookOrnamentHeight,
+            safeAreaBottomInset: safeAreaBottomInset,
+            ornamentMinimumTouchHeight: ImmersiveBottomChromeStyle.controlHeight,
+            ornamentTopPadding: Spacing.tight,
+            readableInsetExtra: Spacing.double
+        )
+    }
+
+    private var showsFloatingAddBookButton: Bool {
+        viewModel.isManual && viewModel.detail != nil && !isReordering
+    }
+
+    private var canUseFloatingAddBookButton: Bool {
+        viewModel.activeAction == nil
+    }
+
+    /// 展示现有书籍选择器，保持添加入口和业务流程解耦。
+    private func presentBookPicker() {
+        guard canUseFloatingAddBookButton else { return }
+        showsBookPicker = true
     }
 
     @ViewBuilder
@@ -313,14 +430,151 @@ private struct BookCollectionDetailContentView: View {
         if let detail = viewModel.detail {
             BookCollectionDetailHero(
                 detail: detail,
-                canPerformAction: viewModel.activeAction == nil,
-                onAddBook: {
-                    showsBookPicker = true
+                visualStyle: activeHeaderVisualStyle,
+                onShowFullSummary: {
+                    showsCollectionSummary = true
                 }
             )
             .padding(.horizontal, Spacing.screenEdge)
-            .padding(.vertical, Spacing.base)
+            .padding(.top, Spacing.base)
+            .padding(.bottom, Spacing.double)
         }
+    }
+
+    @ViewBuilder
+    private var moreMenuContent: some View {
+        Section {
+            // TODO(book-collection-batch-export, review-skip): Android 详情页支持“批量导出书籍”；本次按用户要求暂缓实现，迁移审查请跳过此项。
+            Button {
+                guard canUseCollectionExportAction else { return }
+                viewModel.shareCurrentCollectionImage()
+            } label: {
+                Label("分享书单", systemImage: "photo.on.rectangle")
+            }
+            .disabled(!canUseCollectionExportAction)
+        }
+
+        #if DEBUG
+        Section("Header 方案") {
+            ForEach(BookCollectionHeaderVisualStyle.allCases) { style in
+                Button {
+                    selectHeaderVisualStyle(style)
+                } label: {
+                    Label(
+                        style.menuTitle,
+                        systemImage: isSelectedHeaderVisualStyle(style) ? "checkmark" : "circle"
+                    )
+                }
+            }
+        }
+        #endif
+
+        Section {
+            if viewModel.isManual {
+                Button {
+                    viewModel.presentEditForm()
+                } label: {
+                    Label("编辑书单信息", systemImage: "pencil")
+                }
+                .disabled(viewModel.activeAction != nil)
+
+                if canReorderCurrentDetail {
+                    Button {
+                        toggleReordering()
+                    } label: {
+                        Label(isReordering ? "完成排序" : "调整排序", systemImage: isReordering ? "checkmark" : "arrow.up.arrow.down")
+                    }
+                    .disabled(viewModel.activeAction != nil)
+                }
+
+                Button(role: .destructive) {
+                    viewModel.presentDeleteConfirmation()
+                } label: {
+                    Label("删除书单", systemImage: "trash")
+                }
+                .disabled(viewModel.activeAction != nil)
+            } else {
+                Button {
+                    viewModel.presentAnnualDescriptionEdit()
+                } label: {
+                    Label("编辑年度说明", systemImage: "text.badge.star")
+                }
+                .disabled(viewModel.activeAction != nil)
+            }
+        }
+    }
+
+    private var contentSectionInsets: EdgeInsets {
+        EdgeInsets()
+    }
+
+    private var detailTitle: String {
+        guard let detail = viewModel.detail else { return "书单" }
+        let trimmedTitle = detail.title.trimmingCharacters(in: .whitespacesAndNewlines)
+        if detail.kind == .annual, let year = detail.year, trimmedTitle.isEmpty {
+            return "\(year) 年阅读"
+        }
+        return trimmedTitle.isEmpty ? "未命名书单" : trimmedTitle
+    }
+
+    private func contentHeaderTitle(for detail: BookCollectionDetail) -> String {
+        if detail.kind == .annual {
+            return "年度书籍"
+        }
+        return "书单书籍"
+    }
+
+    private func contentHeaderStatus(for detail: BookCollectionDetail) -> BookCollectionContentHeader.Status? {
+        detail.kind == .annual ? .autoSynced : nil
+    }
+
+    private var relationNotePresentation: BookCollectionRelationNotePresentation {
+        BookCollectionRelationNotePresentation.make(kind: viewModel.detail?.kind ?? .manual)
+    }
+
+    private var canEditRelationNote: Bool {
+        viewModel.detail != nil && viewModel.activeAction == nil && !isReordering
+    }
+
+    private var canEditBookStructure: Bool {
+        viewModel.isManual && viewModel.activeAction == nil && !isReordering
+    }
+
+    private var canEditBookMetadata: Bool {
+        viewModel.detail != nil && viewModel.activeAction == nil && !isReordering
+    }
+
+    private var activeHeaderVisualStyle: BookCollectionHeaderVisualStyle {
+        #if DEBUG
+        headerVisualStyle
+        #else
+        .editorialDesk
+        #endif
+    }
+
+    private var shouldShowMoreMenu: Bool {
+        #if DEBUG
+        true
+        #else
+        viewModel.detail != nil
+        #endif
+    }
+
+    private var canUseCollectionExportAction: Bool {
+        viewModel.detail != nil && viewModel.activeAction == nil && !isReordering
+    }
+
+    private func isSelectedHeaderVisualStyle(_ style: BookCollectionHeaderVisualStyle) -> Bool {
+        activeHeaderVisualStyle == style
+    }
+
+    private func selectHeaderVisualStyle(_ style: BookCollectionHeaderVisualStyle) {
+        #if DEBUG
+        guard style != headerVisualStyle else { return }
+        withAnimation(reduceMotion ? nil : .smooth(duration: 0.22)) {
+            headerVisualStyle = style
+        }
+        #endif
     }
 
     private var canReorderCurrentDetail: Bool {
@@ -353,7 +607,7 @@ private struct BookCollectionDetailContentView: View {
         case .content:
             return .content
         case .empty:
-            return .empty(message: "书单里还没有书")
+            return viewModel.detail == nil ? .empty(message: "书单里还没有书") : .content
         case .error(let message):
             return .error(message: message)
         }
@@ -369,13 +623,17 @@ private struct BookCollectionDetailContentView: View {
             )
         }
         return BookPickerConfiguration(
-            title: "加入书单",
-            scope: .local,
+            title: "添加书籍",
+            scope: .both,
             selectionMode: .multiple,
-            allowsCreationFlow: false,
+            allowsCreationFlow: true,
+            creationAction: .inlineManualEditor,
+            onlineSelectionPolicy: .returnRemoteSelection,
             multipleConfirmationPolicy: .requiresSelection,
             multipleConfirmationTitle: "加入书单",
-            preselectedBooks: preselected
+            preselectedBooks: preselected,
+            onlineSources: BookSearchSource.productionCases,
+            preferredOnlineSource: .wenqu
         )
     }
 
@@ -417,5 +675,116 @@ private struct BookCollectionDetailContentView: View {
                 }
             ]
         )
+    }
+}
+
+private enum BookCollectionContentTrayCoordinateSpace {
+    static let name = "book.collection.detail.contentTray"
+}
+
+/// 书单详情底部悬浮添加入口的可读底距偏好，驱动 `List` 底部内容避让。
+private struct BookCollectionFloatingAddBookContentInsetPreferenceKey: PreferenceKey {
+    static var defaultValue: CGFloat = .zero
+
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = max(value, nextValue())
+    }
+}
+
+private enum BookCollectionContentRowPosition {
+    case top
+    case middle
+}
+
+private struct BookCollectionContentRowBackground: View {
+    let position: BookCollectionContentRowPosition
+
+    var body: some View {
+        BookCollectionContentRowShape(position: position)
+            .fill(Color.surfaceCard)
+    }
+}
+
+private struct BookCollectionContentRowShape: Shape {
+    let position: BookCollectionContentRowPosition
+
+    func path(in rect: CGRect) -> Path {
+        let topRadius: CGFloat = switch position {
+        case .top:
+            CornerRadius.containerMedium
+        case .middle:
+            0
+        }
+        if topRadius == 0 {
+            return Path(rect)
+        }
+
+        var path = Path()
+        path.move(to: CGPoint(x: rect.minX + topRadius, y: rect.minY))
+        path.addLine(to: CGPoint(x: rect.maxX - topRadius, y: rect.minY))
+        path.addQuadCurve(
+            to: CGPoint(x: rect.maxX, y: rect.minY + topRadius),
+            control: CGPoint(x: rect.maxX, y: rect.minY)
+        )
+        path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY))
+        path.addLine(to: CGPoint(x: rect.minX, y: rect.maxY))
+        path.addLine(to: CGPoint(x: rect.minX, y: rect.minY + topRadius))
+        path.addQuadCurve(
+            to: CGPoint(x: rect.minX + topRadius, y: rect.minY),
+            control: CGPoint(x: rect.minX, y: rect.minY)
+        )
+        path.closeSubpath()
+        return path
+    }
+}
+
+private struct BookCollectionFullHeightTrayBackground: View {
+    let topOffset: CGFloat
+
+    var body: some View {
+        GeometryReader { proxy in
+            if topOffset.isFinite {
+                let trayTop = max(topOffset, 0)
+                let trayWidth = proxy.size.width
+                let trayHeight = max(proxy.size.height - trayTop + CornerRadius.containerMedium, 0)
+                let topRadius = topOffset > 0 ? CornerRadius.containerMedium : 0
+
+                BookCollectionFullHeightTrayShape(topRadius: topRadius)
+                    .fill(Color.surfaceCard)
+                    .frame(width: trayWidth, height: trayHeight)
+                    .offset(y: trayTop)
+                    .ignoresSafeArea(.container, edges: .bottom)
+                    .accessibilityHidden(true)
+            }
+        }
+    }
+}
+
+private struct BookCollectionFullHeightTrayShape: Shape {
+    let topRadius: CGFloat
+
+    func path(in rect: CGRect) -> Path {
+        let radius = min(max(topRadius, 0), min(rect.width, rect.height) / 2)
+        if radius == 0 {
+            return Path(rect)
+        }
+
+        var path = Path()
+
+        path.move(to: CGPoint(x: rect.minX + radius, y: rect.minY))
+        path.addLine(to: CGPoint(x: rect.maxX - radius, y: rect.minY))
+        path.addQuadCurve(
+            to: CGPoint(x: rect.maxX, y: rect.minY + radius),
+            control: CGPoint(x: rect.maxX, y: rect.minY)
+        )
+        path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY))
+        path.addLine(to: CGPoint(x: rect.minX, y: rect.maxY))
+        path.addLine(to: CGPoint(x: rect.minX, y: rect.minY + radius))
+        path.addQuadCurve(
+            to: CGPoint(x: rect.minX + radius, y: rect.minY),
+            control: CGPoint(x: rect.minX, y: rect.minY)
+        )
+        path.closeSubpath()
+        return path
     }
 }
