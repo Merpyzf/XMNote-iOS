@@ -14,6 +14,9 @@
 - xmnote/Views/Book/BookGridView.swift
 - xmnote/Views/Book/BookGridItemView.swift
 - xmnote/Views/Book/BookDetailView.swift
+- xmnote/Views/Book/BookCollectionListView.swift
+- xmnote/Views/Book/BookCollectionDetailView.swift
+- xmnote/Views/Book/Sheets/BookCollectionCoverSearchSheet.swift
 - xmnote/Views/Note/NoteContainerView.swift
 - xmnote/Views/Note/NoteCollectionView.swift
 - xmnote/Views/Note/NoteTagsView.swift

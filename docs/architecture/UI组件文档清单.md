@@ -34,6 +34,9 @@
 | BookGridView | UI-核心页面关键 | xmnote/Views/Book/BookGridView.swift | docs/component-guides/BookGridView使用说明.md | 新增/重大重构 |
 | BookGridItemView | UI-核心页面关键 | xmnote/Views/Book/BookGridItemView.swift | docs/component-guides/BookGridItemView使用说明.md | 新增/重大重构 |
 | BookDetailView | UI-核心页面关键 | xmnote/Views/Book/BookDetailView.swift | docs/component-guides/BookDetailView使用说明.md | 新增/重大重构 |
+| BookCollectionListView | UI-核心页面关键 | xmnote/Views/Book/BookCollectionListView.swift | docs/component-guides/BookCollectionListView使用说明.md | 新增/重大重构 |
+| BookCollectionDetailView | UI-核心页面关键 | xmnote/Views/Book/BookCollectionDetailView.swift | docs/component-guides/BookCollectionDetailView使用说明.md | 新增/重大重构 |
+| BookCollectionCoverSearchSheet | UI-核心页面关键 | xmnote/Views/Book/Sheets/BookCollectionCoverSearchSheet.swift | docs/component-guides/BookCollectionCoverSearchSheet使用说明.md | 新增/重大重构 |
 | NoteContainerView | UI-核心页面关键 | xmnote/Views/Note/NoteContainerView.swift | docs/component-guides/NoteContainerView使用说明.md | 新增/重大重构 |
 | NoteCollectionView | UI-核心页面关键 | xmnote/Views/Note/NoteCollectionView.swift | docs/component-guides/NoteCollectionView使用说明.md | 新增/重大重构 |
 | NoteTagsView | UI-核心页面关键 | xmnote/Views/Note/NoteTagsView.swift | docs/component-guides/NoteTagsView使用说明.md | 新增/重大重构 |
