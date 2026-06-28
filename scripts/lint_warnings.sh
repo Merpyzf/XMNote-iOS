@@ -4,7 +4,23 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PROJECT_PATH="$ROOT_DIR/XMNote.xcodeproj"
 SCHEME="xmnote"
-DESTINATION="${LINT_DESTINATION:-platform=iOS Simulator,name=iPhone 17 Pro iOS 26.2 Clean}"
+DESTINATION="${LINT_DESTINATION:-}"
+
+if [[ -z "$DESTINATION" ]]; then
+    # 默认跟随当前 booted 模拟器；多台 booted 时使用 simctl 输出中的第一台。
+    BOOTED_SIMULATOR_ID="$(
+        xcrun simctl list devices booted |
+            sed -nE 's/.*\(([0-9A-F]{8}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{12})\) \(Booted\).*/\1/p' |
+            head -n 1
+    )"
+
+    if [[ -z "$BOOTED_SIMULATOR_ID" ]]; then
+        echo "ERROR: 未找到已启动的 iOS 模拟器，请先启动一个模拟器或设置 LINT_DESTINATION。"
+        exit 1
+    fi
+
+    DESTINATION="platform=iOS Simulator,id=${BOOTED_SIMULATOR_ID}"
+fi
 
 if [[ ! -d "$PROJECT_PATH" ]]; then
     echo "ERROR: 未找到工程文件: $PROJECT_PATH"

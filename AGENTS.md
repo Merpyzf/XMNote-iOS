@@ -154,9 +154,9 @@
 ## 6. 提交与校验清单
 ### 构建与验证命令
 - `open xmnote.xcodeproj`：用 Xcode 打开工程。
-- `xcodebuild -project xmnote.xcodeproj -scheme xmnote -destination 'platform=iOS Simulator,name=iPhone 17 Pro iOS 26.2 Clean' build`：默认交付验证命令。
+- `BOOTED_SIMULATOR_ID="$(xcrun simctl list devices booted | sed -nE 's/.*\(([0-9A-F]{8}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{12})\) \(Booted\).*/\1/p' | head -n 1)" && xcodebuild -project xmnote.xcodeproj -scheme xmnote -destination "platform=iOS Simulator,id=${BOOTED_SIMULATOR_ID}" build`：默认交付验证命令，直接使用当前已启动的 iOS 模拟器。
 - `xcodebuild -project xmnote.xcodeproj -scheme xmnote clean`：清理构建产物。
-- 默认交付模拟器名称是构建命令事实源；后续如创建、重命名或切换默认验证模拟器，必须同步更新本节默认命令与 `scripts/lint_warnings.sh` 的默认 `LINT_DESTINATION`。
+- 默认交付目标不再绑定模拟器名称；默认取 `xcrun simctl list devices booted` 输出中的第一台已启动 iOS 模拟器。如需指定目标，可显式传入目标 UDID 或设置 `scripts/lint_warnings.sh` 的 `LINT_DESTINATION`。后续如调整默认目标选择策略，必须同步更新本节默认命令与 `scripts/lint_warnings.sh`。
 
 ### 自动同步模块清单（脚本生成）
 <!-- AUTO_SYNC_MODULES_START -->

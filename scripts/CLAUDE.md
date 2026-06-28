@@ -9,6 +9,7 @@
 - `verify_l3_protocol_headers.sh`: 校验 `xmnote/**/*.swift` 是否具备 L3 头部协议语句。
 - `sync_arch_docs.sh`: 根据 `xmnote/` 顶层目录自动同步 `AGENTS.md` 与 `CLAUDE.md` 的模块清单块。
 - `verify_arch_docs_sync.sh`: 校验 `AGENTS.md` 与 `CLAUDE.md` 模块清单块是否与实际目录一致。
+- `lint_warnings.sh`: 使用当前已启动的 iOS 模拟器执行 `xcodebuild clean build`，并过滤仓库源码 warning/error。
 
 执行约束
 - 提交前执行：`bash scripts/verify_glossary.sh && bash scripts/verify_ui_glossary_scope.sh && bash scripts/verify_view_component_boundaries.sh && bash scripts/verify_l3_protocol_headers.sh && bash scripts/verify_arch_docs_sync.sh && bash scripts/verify_component_guides.sh`。
