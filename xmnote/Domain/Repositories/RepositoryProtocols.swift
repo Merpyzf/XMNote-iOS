@@ -2,7 +2,7 @@ import Foundation
 
 /**
  * [INPUT]: 依赖 Models 与 Services 层的数据类型定义
- * [OUTPUT]: 对外提供 Book/Note/Content/GlobalSearch/BackupServer/Backup/S3/Statistics/ReadCalendarColor/Timeline/ReadingDashboard 及书籍搜索/录入等 Repository 协议，包含书架与书单显示设置入口及书单书籍元信息写入能力
+ * [OUTPUT]: 对外提供 Book/Note/Content/GlobalSearch/BackupServer/Backup/S3/TagManagement/Statistics/ReadCalendarColor/Timeline/ReadingDashboard 及书籍搜索/录入等 Repository 协议，包含书架、书单显示设置与基础数据管理入口
  * [POS]: Domain 层仓储契约，定义 Presentation 获取本地/网络数据的唯一入口
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -241,6 +241,20 @@ protocol NoteRepositoryProtocol {
     func deleteNoteEditorDraft(bookId: Int64, noteId: Int64)
     /// 按 Android 事务语义保存新建/编辑后的书摘。
     func saveNoteEditor(_ draft: NoteEditorDraft) async throws -> Int64
+}
+
+/// 标签管理仓储契约，统一封装“我的 > 标签管理”的书摘/书籍标签读写语义。
+protocol TagManagementRepositoryProtocol {
+    /// 持续观察书摘与书籍标签管理快照，供分段数量与当前列表同步刷新。
+    func observeTagManagementSnapshot() -> AsyncThrowingStream<TagManagementSnapshot, Error>
+    /// 新建指定范围的标签，按 Android 标签管理语义写入默认字段。
+    func createTag(named name: String, scope: TagManagementScope) async throws
+    /// 编辑指定标签名称，按 Android TagManage 的 @Update 全列语义提交。
+    func updateTag(tagID: Int64, name: String, scope: TagManagementScope) async throws
+    /// 删除指定范围下的标签；批量删除时每个标签保持独立事务。
+    func deleteTags(tagIDs: [Int64], scope: TagManagementScope) async throws
+    /// 按当前展示顺序写入 tag_order，并更新 updated_date。
+    func updateTagOrder(tagIDs: [Int64], scope: TagManagementScope) async throws
 }
 
 /// 通用内容查看仓储契约，统一封装书摘/书评/相关内容的查看、编辑与删除入口。

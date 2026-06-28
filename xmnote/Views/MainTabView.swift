@@ -484,7 +484,7 @@ struct MainTabView: View {
         case .aiConfiguration:
             Text("AI 配置")
         case .tagManagement:
-            Text("标签管理")
+            TagManagementView()
         case .groupManagement:
             Text("书籍分组")
         case .bookSource:
