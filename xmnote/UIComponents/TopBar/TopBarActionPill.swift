@@ -113,7 +113,7 @@ private enum TopBarActionPillMetrics {
     static let whiteWashOpacity = 0.32
     static let borderOpacity = 0.30
     static let pressedScale = 0.95
-    static let pressedBrandOpacity = 0.12
+    static let pressedNeutralOpacity = 0.08
     static let innerHighlightOpacity = 0.28
 }
 
@@ -129,7 +129,7 @@ private struct TopBarActionPillSegmentPressFeedbackStyle: ButtonStyle {
             .background {
                 if isPressed {
                     RoundedRectangle(cornerRadius: segmentCornerRadius, style: .continuous)
-                        .fill(Color.brand.opacity(TopBarActionPillMetrics.pressedBrandOpacity))
+                        .fill(Color.textPrimary.opacity(TopBarActionPillMetrics.pressedNeutralOpacity))
                         .frame(
                             width: max(TopBarActionPillMetrics.hitSize - 4, TopBarActionPillMetrics.visualSize),
                             height: max(TopBarActionPillMetrics.height - 4, TopBarActionPillMetrics.visualSize)

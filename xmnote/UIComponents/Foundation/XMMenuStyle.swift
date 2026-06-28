@@ -56,4 +56,9 @@ extension View {
     func xmMenuNeutralTint() -> some View {
         tint(Color.menuActionForeground)
     }
+
+    /// 将顶部工具按钮局部 tint 收敛为中性色，避免继承根视图品牌色而破坏系统导航栏克制感。
+    func xmToolbarNeutralTint() -> some View {
+        tint(Color.iconPrimary)
+    }
 }

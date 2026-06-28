@@ -39,7 +39,9 @@ struct TagManagementView: View {
 private struct TagManagementContentView: View {
     @Bindable var viewModel: TagManagementViewModel
     @State private var readLoadingGate = LoadingGate()
+    @State private var isSearchPresented = false
     @State private var isReordering = false
+    @State private var scrollEdgeWashEdges = XMScrollEdgeWashEdges.hidden
 
     var body: some View {
         ZStack(alignment: .top) {
@@ -54,6 +56,12 @@ private struct TagManagementContentView: View {
                 notice(message)
             }
         }
+        .searchable(
+            text: $viewModel.searchText,
+            isPresented: $isSearchPresented,
+            prompt: "搜索"
+        )
+        .toolbar(removing: isNormalMode ? nil : .search)
         .toolbar { toolbarContent }
         .safeAreaInset(edge: .bottom, spacing: Spacing.none) {
             if viewModel.isSelectionMode {
@@ -76,15 +84,27 @@ private struct TagManagementContentView: View {
         }
         .onChange(of: viewModel.selectedScope) { _, _ in
             isReordering = false
+            scrollEdgeWashEdges = .hidden
         }
         .onChange(of: viewModel.isSelectionMode) { _, isSelectionMode in
             if isSelectionMode {
                 isReordering = false
             }
         }
+        .onChange(of: isNormalMode) { _, isNormalMode in
+            guard !isNormalMode else { return }
+            isSearchPresented = false
+            viewModel.clearSearchText()
+        }
         .onDisappear {
             readLoadingGate.hideImmediately()
+            viewModel.clearSearchText()
+            scrollEdgeWashEdges = .hidden
         }
+    }
+
+    private var isNormalMode: Bool {
+        !viewModel.isSelectionMode && !isReordering
     }
 
     private var scopeSelector: some View {
@@ -134,76 +154,104 @@ private struct TagManagementContentView: View {
             )
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         case .content:
-            tagGrid
+            if viewModel.isSearchResultEmpty {
+                ContentUnavailableView.search(text: viewModel.normalizedSearchText)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                tagGrid
+            }
         }
     }
 
     private var tagGrid: some View {
         TagManagementCollectionView(
-            items: viewModel.currentTags,
+            items: isReordering ? viewModel.currentTags : viewModel.visibleTags,
             scope: viewModel.selectedScope,
             isSelectionMode: viewModel.isSelectionMode,
             isReordering: isReordering,
             selectedTagIDs: viewModel.selectedTagIDs,
             isDisabled: viewModel.activeWriteAction != nil,
-            bottomContentInset: viewModel.isSelectionMode ? 96 : 0,
+            bottomContentInset: contentBottomInset,
+            onScrollEdgeWashEdgesChange: { scrollEdgeWashEdges = $0 },
             onPrimaryAction: { item in handlePrimaryAction(for: item) },
             onRename: { item in viewModel.presentRenameSheet(for: item) },
             onDelete: { item in viewModel.presentDeleteConfirmation(for: item) },
             onCommitOrder: { orderedIDs in viewModel.commitTagOrder(orderedIDs) }
         )
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .xmScrollEdgeWash(
+            edges: .top,
+            style: TagManagementLayoutMetrics.gridTopWashStyle,
+            activeEdges: scrollEdgeWashEdges
+        )
+        .ignoresSafeArea(.container, edges: .bottom)
+        .scrollEdgeEffectStyle(.soft, for: .bottom)
+    }
+
+    private var contentBottomInset: CGFloat {
+        if viewModel.isSelectionMode {
+            return TagManagementBottomBarMetrics.selectionContentInset
+        }
+        return 0
     }
 
     @ToolbarContentBuilder
     private var toolbarContent: some ToolbarContent {
-        ToolbarItemGroup(placement: .topBarTrailing) {
-            if viewModel.isSelectionMode {
+        if viewModel.isSelectionMode {
+            ToolbarItem(placement: .topBarTrailing) {
                 Button("取消") {
                     viewModel.exitSelectionMode()
                 }
                 .disabled(viewModel.activeWriteAction != nil)
-            } else if isReordering {
+                .xmToolbarNeutralTint()
+            }
+        } else if isReordering {
+            ToolbarItem(placement: .topBarTrailing) {
                 Button("完成") {
                     isReordering = false
                 }
                 .disabled(viewModel.activeWriteAction == .reorder)
-            } else {
-                Button {
-                    viewModel.presentCreateSheet()
-                } label: {
-                    Image(systemName: "plus")
-                        .font(AppTypography.bodyMedium)
-                        .foregroundStyle(Color.iconPrimary)
-                        .frame(width: 44, height: 44)
-                        .contentShape(Rectangle())
-                }
-                .disabled(viewModel.activeWriteAction != nil)
-                .tint(Color.iconPrimary)
-                .accessibilityLabel("添加标签")
-
+                .xmToolbarNeutralTint()
+            }
+        } else {
+            ToolbarItem(placement: .topBarTrailing) {
                 Menu {
                     Button {
                         viewModel.enterSelectionMode()
                     } label: {
                         XMMenuLabel("选择标签", systemImage: "checklist")
                     }
-                    .disabled(viewModel.currentTags.isEmpty)
+                    .disabled(!viewModel.canEnterSelectionMode)
 
                     Button {
                         isReordering = true
+                        isSearchPresented = false
+                        viewModel.clearSearchText()
                     } label: {
                         XMMenuLabel("调整顺序", systemImage: "arrow.up.arrow.down")
                     }
-                    .disabled(viewModel.currentTags.count < 2)
+                    .disabled(!viewModel.canEnterReorder)
                 } label: {
-                    TagManagementMoreGlyph(color: Color.iconSecondary)
-                        .frame(width: 44, height: 44)
-                        .contentShape(Rectangle())
+                    Image(systemName: "ellipsis")
                 }
                 .disabled(viewModel.activeWriteAction != nil)
-                .xmMenuNeutralTint()
+                .xmToolbarNeutralTint()
                 .accessibilityLabel("更多操作")
+            }
+
+            DefaultToolbarItem(kind: .search, placement: .bottomBar)
+
+            ToolbarSpacer(placement: .bottomBar)
+
+            ToolbarItem(placement: .bottomBar) {
+                Button {
+                    viewModel.presentCreateSheet()
+                } label: {
+                    Image(systemName: "plus")
+                }
+                .disabled(viewModel.activeWriteAction != nil)
+                .xmToolbarNeutralTint()
+                .accessibilityLabel("添加标签")
             }
         }
     }
@@ -289,6 +337,15 @@ private struct TagManagementContentView: View {
 private enum TagManagementBottomBarMetrics {
     static let controlHeight: CGFloat = 52
     static let destructiveButtonSize: CGFloat = 50
+    static let selectionContentInset: CGFloat = 96
+}
+
+private enum TagManagementLayoutMetrics {
+    static let gridTopWashStyle = XMScrollEdgeWashStyle(
+        height: 28,
+        strength: .regular,
+        surface: .page
+    )
 }
 
 private struct TagManagementSelectionBottomBar: View {

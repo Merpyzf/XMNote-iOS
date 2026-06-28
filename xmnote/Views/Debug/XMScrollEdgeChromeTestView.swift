@@ -11,6 +11,7 @@ import SwiftUI
 /// 滚动边缘覆盖层测试页，验证基础组件在固定栏、普通滚动区和不同表层背景下的表现。
 struct XMScrollEdgeChromeTestView: View {
     @State private var lastTapped = "尚未点击"
+    @State private var controlledWashEdges = XMScrollEdgeWashEdges.hidden
 
     private let strengths: [XMScrollEdgeWashStrength] = [.subtle, .regular, .prominent]
     private let heights: [CGFloat] = [16, 24, 36]
@@ -25,6 +26,7 @@ struct XMScrollEdgeChromeTestView: View {
                 backgroundSection
                 matrixSection
                 darkModeSection
+                controlledSection
                 tapStatusCard
             }
             .padding(.horizontal, Spacing.screenEdge)
@@ -170,6 +172,33 @@ struct XMScrollEdgeChromeTestView: View {
         }
     }
 
+    private var controlledSection: some View {
+        XMScrollEdgeDemoCard(title: "外部状态控制") {
+            VStack(alignment: .leading, spacing: Spacing.half) {
+                Text("模拟 UIKit bridge 主动上报顶部与底部滚动状态，验证 controlled 模式复用同一套柔化层。")
+                    .font(AppTypography.caption)
+                    .foregroundStyle(Color.textSecondary)
+
+                HStack(spacing: Spacing.base) {
+                    Toggle("顶部", isOn: controlledTopBinding)
+                    Toggle("底部", isOn: controlledBottomBinding)
+                }
+                .font(AppTypography.captionMedium)
+
+                demoScrollList(surface: .page, rowPrefix: "Controlled")
+                    .xmScrollEdgeWash(
+                        edges: [.top, .bottom],
+                        style: XMScrollEdgeWashStyle(height: 24, strength: .regular, surface: .page),
+                        activeEdges: controlledWashEdges
+                    )
+                    .frame(height: 260)
+                    .background(Color.surfacePage)
+                    .clipShape(RoundedRectangle(cornerRadius: CornerRadius.blockLarge, style: .continuous))
+                    .overlay(demoBorder)
+            }
+        }
+    }
+
     private var tapStatusCard: some View {
         XMScrollEdgeDemoCard(title: "点击穿透") {
             Text(lastTapped)
@@ -269,6 +298,30 @@ struct XMScrollEdgeChromeTestView: View {
             .overlay(demoBorder)
         }
         .frame(maxWidth: .infinity)
+    }
+
+    private var controlledTopBinding: Binding<Bool> {
+        Binding(
+            get: { controlledWashEdges.top },
+            set: { isActive in
+                controlledWashEdges = XMScrollEdgeWashEdges(
+                    top: isActive,
+                    bottom: controlledWashEdges.bottom
+                )
+            }
+        )
+    }
+
+    private var controlledBottomBinding: Binding<Bool> {
+        Binding(
+            get: { controlledWashEdges.bottom },
+            set: { isActive in
+                controlledWashEdges = XMScrollEdgeWashEdges(
+                    top: controlledWashEdges.top,
+                    bottom: isActive
+                )
+            }
+        )
     }
 
     private var demoBorder: some View {

@@ -1,6 +1,6 @@
 /**
- * [INPUT]: 依赖 TagManagementItem/TagManagementScope、XMSelectionIndicator 与页面传入的标签操作回调，承接标签管理页的两列展示与本地拖拽排序
- * [OUTPUT]: 对外提供 TagManagementCollectionView，封装页面私有 UICollectionView bridge、两列布局、选择态与排序态
+ * [INPUT]: 依赖 TagManagementItem/TagManagementScope、XMSelectionIndicator、XMScrollEdgeWashEdges 与页面传入的标签操作回调，承接标签管理页的两列展示与本地拖拽排序
+ * [OUTPUT]: 对外提供 TagManagementCollectionView，封装页面私有 UICollectionView bridge、两列布局、选择态、排序态与滚动边缘状态上报
  * [POS]: Views/Personal/Components 的标签管理页面私有集合组件，被 TagManagementView 用作标签主体内容区
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -17,6 +17,7 @@ struct TagManagementCollectionView: UIViewRepresentable {
     let selectedTagIDs: Set<Int64>
     let isDisabled: Bool
     let bottomContentInset: CGFloat
+    let onScrollEdgeWashEdgesChange: (XMScrollEdgeWashEdges) -> Void
     let onPrimaryAction: (TagManagementItem) -> Void
     let onRename: (TagManagementItem) -> Void
     let onDelete: (TagManagementItem) -> Void
@@ -48,6 +49,7 @@ struct TagManagementCollectionView: UIViewRepresentable {
             selectedTagIDs: selectedTagIDs,
             isDisabled: isDisabled,
             bottomContentInset: bottomContentInset,
+            onScrollEdgeWashEdgesChange: onScrollEdgeWashEdgesChange,
             onPrimaryAction: onPrimaryAction,
             onRename: onRename,
             onDelete: onDelete,
@@ -65,6 +67,7 @@ final class TagManagementCollectionHostView: UIView {
     private var isInteractiveReordering = false
     private var didChangeOrderInCurrentSession = false
     private var didReceiveDropInCurrentSession = false
+    private var lastReportedScrollEdgeWashEdges = XMScrollEdgeWashEdges.hidden
     private let impactFeedback = UIImpactFeedbackGenerator(style: .light)
     private let selectionFeedback = UISelectionFeedbackGenerator()
 
@@ -126,6 +129,7 @@ final class TagManagementCollectionHostView: UIView {
         UIView.performWithoutAnimation {
             collectionView.reloadData()
         }
+        updateScrollEdgeWashEdges()
     }
 
     /// 清理拖拽缓存，供 SwiftUI 销毁或复用承载视图时恢复稳定状态。
@@ -136,6 +140,11 @@ final class TagManagementCollectionHostView: UIView {
         didChangeOrderInCurrentSession = false
         didReceiveDropInCurrentSession = false
         items = []
+        lastReportedScrollEdgeWashEdges = .hidden
+        let onScrollEdgeWashEdgesChange = configuration.onScrollEdgeWashEdgesChange
+        DispatchQueue.main.async {
+            onScrollEdgeWashEdgesChange(.hidden)
+        }
         collectionView.reloadData()
     }
 }
@@ -193,11 +202,38 @@ private extension TagManagementCollectionHostView {
         return UICollectionViewCompositionalLayout(section: section, configuration: layoutConfiguration)
     }
 
-    /// 同步底部操作栏占位，避免选择态底部内容被遮挡。
+    /// 同步自定义底部操作栏占位；普通系统 toolbar 由安全区与滚动边缘效果接管。
     func updateBottomContentInset() {
-        guard abs(collectionView.contentInset.bottom - configuration.bottomContentInset) > 0.5 else { return }
-        collectionView.contentInset.bottom = configuration.bottomContentInset
-        collectionView.verticalScrollIndicatorInsets.bottom = configuration.bottomContentInset
+        let targetBottomInset = configuration.bottomContentInset
+        let needsContentInsetUpdate = abs(collectionView.contentInset.bottom - targetBottomInset) > 0.5
+        let needsScrollIndicatorInsetUpdate = abs(collectionView.verticalScrollIndicatorInsets.bottom - targetBottomInset) > 0.5
+        guard needsContentInsetUpdate || needsScrollIndicatorInsetUpdate else { return }
+        collectionView.contentInset.bottom = targetBottomInset
+        collectionView.verticalScrollIndicatorInsets.bottom = targetBottomInset
+    }
+
+    /// 将 UIKit 滚动状态转换为公共柔化层状态，并去重后回传给 SwiftUI 外层。
+    func updateScrollEdgeWashEdges() {
+        let topOffset = collectionView.contentOffset.y + collectionView.adjustedContentInset.top
+        let bottomRemaining = collectionView.contentSize.height
+            + collectionView.adjustedContentInset.bottom
+            - collectionView.bounds.height
+            - collectionView.contentOffset.y
+        let activeEdges = XMScrollEdgeWashEdges(
+            top: topOffset > Spacing.hairline,
+            bottom: bottomRemaining > Spacing.hairline
+        )
+        reportScrollEdgeWashEdges(activeEdges)
+    }
+
+    /// 异步上报边缘状态，避免 UIViewRepresentable 更新期同步写入 SwiftUI 状态。
+    func reportScrollEdgeWashEdges(_ activeEdges: XMScrollEdgeWashEdges) {
+        guard activeEdges != lastReportedScrollEdgeWashEdges else { return }
+        lastReportedScrollEdgeWashEdges = activeEdges
+        let onScrollEdgeWashEdgesChange = configuration.onScrollEdgeWashEdgesChange
+        DispatchQueue.main.async {
+            onScrollEdgeWashEdgesChange(activeEdges)
+        }
     }
 
     /// 读取指定位置的标签项。
@@ -322,6 +358,10 @@ extension TagManagementCollectionHostView: UICollectionViewDataSource {
 }
 
 extension TagManagementCollectionHostView: UICollectionViewDelegate {
+    func scrollViewDidScroll(_ scrollView: UIScrollView) {
+        updateScrollEdgeWashEdges()
+    }
+
     func collectionView(_ collectionView: UICollectionView, didSelectItemAt indexPath: IndexPath) {
         collectionView.deselectItem(at: indexPath, animated: true)
         guard let item = item(at: indexPath) else { return }
@@ -407,6 +447,7 @@ struct TagManagementCollectionConfiguration {
     let selectedTagIDs: Set<Int64>
     let isDisabled: Bool
     let bottomContentInset: CGFloat
+    let onScrollEdgeWashEdgesChange: (XMScrollEdgeWashEdges) -> Void
     let onPrimaryAction: (TagManagementItem) -> Void
     let onRename: (TagManagementItem) -> Void
     let onDelete: (TagManagementItem) -> Void
@@ -428,6 +469,7 @@ struct TagManagementCollectionConfiguration {
         selectedTagIDs: [],
         isDisabled: false,
         bottomContentInset: 0,
+        onScrollEdgeWashEdgesChange: { _ in },
         onPrimaryAction: { _ in },
         onRename: { _ in },
         onDelete: { _ in },
@@ -437,15 +479,15 @@ struct TagManagementCollectionConfiguration {
 
 private enum TagManagementCollectionMetrics {
     static let columnCount = 2
-    static let normalItemHeight: CGFloat = 56
-    static let selectionItemHeight: CGFloat = 74
+    static let normalItemHeight: CGFloat = 44
+    static let selectionItemHeight: CGFloat = 60
     static let horizontalInset: CGFloat = Spacing.screenEdge
     static let topInset: CGFloat = Spacing.base
     static let bottomInset: CGFloat = Spacing.double
-    static let itemHorizontalGap: CGFloat = Spacing.tight
-    static let rowSpacing: CGFloat = Spacing.tight
-    static let menuHitWidth: CGFloat = 30
-    static let menuHitHeight: CGFloat = 44
+    static let itemHorizontalGap: CGFloat = Spacing.cozy
+    static let rowSpacing: CGFloat = Spacing.cozy
+    static let menuHitWidth: CGFloat = Spacing.actionReserved
+    static let menuHitHeight: CGFloat = Spacing.actionReserved
 }
 
 /// 标签管理更多按钮的竖向三点图标，用几何点阵规避 SF Symbol 名称在 Menu label 中解析为空的问题。
@@ -535,7 +577,7 @@ private struct TagManagementCollectionItemView: View {
                 Text(item.name)
                     .font(AppTypography.subheadlineMedium)
                     .foregroundStyle(Color.textPrimary)
-                    .lineLimit(2)
+                    .lineLimit(1)
                     .multilineTextAlignment(.leading)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .layoutPriority(1)
@@ -573,11 +615,10 @@ private struct TagManagementCollectionItemView: View {
             }
         }
         .padding(.horizontal, Spacing.tight)
-        .padding(.vertical, Spacing.tight)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
-        .background(Color.surfaceCard, in: RoundedRectangle(cornerRadius: CornerRadius.blockMedium, style: .continuous))
+        .background(Color.surfaceCard, in: RoundedRectangle(cornerRadius: CornerRadius.blockSmall, style: .continuous))
         .overlay {
-            RoundedRectangle(cornerRadius: CornerRadius.blockMedium, style: .continuous)
+            RoundedRectangle(cornerRadius: CornerRadius.blockSmall, style: .continuous)
                 .stroke(Color.surfaceBorderSubtle, lineWidth: CardStyle.borderWidth)
         }
         .contextMenu {

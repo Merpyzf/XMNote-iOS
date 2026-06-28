@@ -93,6 +93,8 @@ final class TagManagementViewModel {
     var activeNameEdit: TagManagementNameEdit?
     var activeDeleteConfirmation: TagManagementDeleteConfirmation?
     var nameEditText = ""
+    /// 记录标签管理页搜索栏输入，切换书摘/书籍范围时保留关键字以延续用户当前筛选意图。
+    var searchText = ""
 
     private let repository: any TagManagementRepositoryProtocol
     private var observationTask: Task<Void, Never>?
@@ -104,6 +106,40 @@ final class TagManagementViewModel {
 
     var selectedTags: [TagManagementItem] {
         currentTags.filter { selectedTagIDs.contains($0.id) }
+    }
+
+    /// 将搜索栏输入收敛为用于本地匹配的关键字；首尾空白不参与筛选，避免空格输入制造伪搜索态。
+    var normalizedSearchText: String {
+        searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    /// 标记页面是否处在标签筛选语境，供列表空态和排序入口区分全量数据与搜索子集。
+    var isSearchFiltering: Bool {
+        !normalizedSearchText.isEmpty
+    }
+
+    /// 为当前选中范围提供可展示标签；筛选只作用于当前范围的全量标签，不跨书摘/书籍混合查询。
+    var visibleTags: [TagManagementItem] {
+        let keyword = normalizedSearchText
+        guard !keyword.isEmpty else { return currentTags }
+        return currentTags.filter { item in
+            item.name.localizedCaseInsensitiveContains(keyword)
+        }
+    }
+
+    /// 区分“当前范围有标签但没有命中搜索”和真正无标签，避免读取状态被搜索结果污染。
+    var isSearchResultEmpty: Bool {
+        isSearchFiltering && !currentTags.isEmpty && visibleTags.isEmpty
+    }
+
+    /// 控制批量选择入口；过滤后没有可见标签时不进入，以免用户面对空结果仍进入编辑态。
+    var canEnterSelectionMode: Bool {
+        activeWriteAction == nil && !visibleTags.isEmpty
+    }
+
+    /// 控制手动排序入口；搜索过滤态只展示子集，禁止进入以保证落盘顺序始终来自当前范围全量标签。
+    var canEnterReorder: Bool {
+        activeWriteAction == nil && !isSelectionMode && !isSearchFiltering && currentTags.count >= 2
     }
 
     var canSubmitNameEdit: Bool {
@@ -226,9 +262,15 @@ final class TagManagementViewModel {
 
     /// 进入多选模式；空列表或写入中不进入。
     func enterSelectionMode() {
-        guard activeWriteAction == nil, !currentTags.isEmpty else { return }
+        guard canEnterSelectionMode else { return }
         isSelectionMode = true
         clearTransientMessages()
+    }
+
+    /// 清除当前筛选关键字，让用户从搜索结果回到当前范围的完整标签列表。
+    func clearSearchText() {
+        guard !searchText.isEmpty else { return }
+        searchText = ""
     }
 
     /// 退出多选模式并清空选中项。

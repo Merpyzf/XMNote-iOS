@@ -107,7 +107,7 @@ struct BookCollectionCoverSearchSheet: View {
                 } label: {
                     TopBarActionIcon(
                         systemName: "magnifyingglass",
-                        foregroundColor: canSearch(viewModel) ? Color.brand.opacity(0.86) : Color.textHint,
+                        foregroundColor: canSearch(viewModel) ? Color.iconPrimary : Color.textHint,
                         hitShape: .circle
                     )
                 }

@@ -104,7 +104,7 @@ private extension ReadCalendarTopControlBar {
             }
         }
         .pickerStyle(.segmented)
-        .tint(Color.brand)
+        .xmToolbarNeutralTint()
         .labelsHidden()
         .accessibilityLabel("阅读日历显示模式")
         .accessibilityValue(displayMode.title)

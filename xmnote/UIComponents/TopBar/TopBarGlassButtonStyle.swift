@@ -35,7 +35,7 @@ extension View {
     }
 }
 
-/// 顶部 action icon 的轻量材质底与按压反馈，只在交互瞬间呈现品牌反馈层。
+/// 顶部 action icon 的轻量材质底与按压反馈，只在交互瞬间呈现中性反馈层。
 private struct TopBarActionPressFeedbackStyle: ButtonStyle {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let isEnabled: Bool
@@ -49,7 +49,7 @@ private struct TopBarActionPressFeedbackStyle: ButtonStyle {
         static let pressedBorderOpacity = 0.36
         static let innerHighlightOpacity = 0.28
         static let pressedScale = 0.95
-        static let pressedBrandOpacity = 0.12
+        static let pressedNeutralOpacity = 0.08
     }
 
     func makeBody(configuration: Configuration) -> some View {
@@ -80,7 +80,7 @@ private struct TopBarActionPressFeedbackStyle: ButtonStyle {
                         .overlay {
                             if isPressed {
                                 Circle()
-                                    .fill(Color.brand.opacity(Metrics.pressedBrandOpacity))
+                                    .fill(Color.textPrimary.opacity(Metrics.pressedNeutralOpacity))
                             }
                         }
                         .overlay {
