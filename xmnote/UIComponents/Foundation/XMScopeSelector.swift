@@ -274,6 +274,8 @@ struct XMScopeSelector<ID: Hashable>: View {
                     .foregroundStyle(isSelected ? selectedCountColor : unselectedCountColor)
                     .lineLimit(1)
                     .fixedSize(horizontal: true, vertical: false)
+                    .contentTransition(countContentTransition(for: count))
+                    .animation(countAnimation, value: count)
                     .layoutPriority(1)
                     .padding(.horizontal, XMScopeSelectorMetrics.countBadgeHorizontalPadding)
                     .padding(.vertical, Spacing.tiny)
@@ -456,6 +458,17 @@ struct XMScopeSelector<ID: Hashable>: View {
         AppTypography.caption2Medium
     }
 
+    private var countAnimation: Animation? {
+        if reduceMotion {
+            return .easeOut(duration: XMScopeSelectorMetrics.reducedMotionCountAnimationDuration)
+        }
+        return .snappy(duration: XMScopeSelectorMetrics.countAnimationDuration)
+    }
+
+    private func countContentTransition(for count: Int) -> ContentTransition {
+        reduceMotion ? .opacity : .numericText(value: Double(count))
+    }
+
     private func countBadgeFill(isSelected: Bool) -> Color {
         if isSelected {
             return Color.brand.opacity(0.10)
@@ -561,6 +574,8 @@ private enum XMScopeSelectorMetrics {
     static let selectionShadowRadius: CGFloat = 3
     static let selectionShadowOffsetY: CGFloat = 1
     static let selectionAnimationDuration: TimeInterval = 0.22
+    static let countAnimationDuration: TimeInterval = 0.18
+    static let reducedMotionCountAnimationDuration: TimeInterval = 0.12
     static let pressAnimationDuration: TimeInterval = 0.12
     static let dragActivationDistance: CGFloat = 3
 }

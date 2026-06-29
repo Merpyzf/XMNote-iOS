@@ -51,25 +51,24 @@ struct TagManagementDeleteConfirmation: Identifiable, Hashable, Sendable {
     }
 }
 
-/// 标签管理写入动作，用于禁用重复触发并显示即时反馈。
+/// 标签管理一次性轻提示事件，只承载无法由界面变化直接表达的 warning/error。
+struct TagManagementToastFeedback: Identifiable, Equatable, Sendable {
+    enum Role: Equatable, Sendable {
+        case warning
+        case error
+    }
+
+    let id = UUID()
+    let role: Role
+    let message: String
+}
+
+/// 标签管理写入动作，用于禁用重复触发并驱动局部写入反馈。
 enum TagManagementWriteAction: Hashable {
     case create
     case rename
     case delete
     case reorder
-
-    var progressTitle: String {
-        switch self {
-        case .create:
-            return "正在添加标签"
-        case .rename:
-            return "正在更新标签"
-        case .delete:
-            return "正在删除标签"
-        case .reorder:
-            return "正在保存排序"
-        }
-    }
 }
 
 /// 标签管理页状态源，负责订阅标签快照并提交增改删与排序操作；所有 UI 状态均在主线程更新。
@@ -88,8 +87,8 @@ final class TagManagementViewModel {
     var selectedTagIDs: Set<Int64> = []
     var isSelectionMode = false
     var activeWriteAction: TagManagementWriteAction?
-    var actionNotice: String?
     var writeError: String?
+    var toastFeedback: TagManagementToastFeedback?
     var activeNameEdit: TagManagementNameEdit?
     var activeDeleteConfirmation: TagManagementDeleteConfirmation?
     var nameEditText = ""
@@ -127,6 +126,12 @@ final class TagManagementViewModel {
         }
     }
 
+    /// 判断当前可见标签是否已全部选中，供底部批量选择入口切换“全选/取消全选”语义。
+    var isAllVisibleSelected: Bool {
+        let visibleIDs = Set(visibleTags.map(\.id))
+        return !visibleIDs.isEmpty && visibleIDs.isSubset(of: selectedTagIDs)
+    }
+
     /// 区分“当前范围有标签但没有命中搜索”和真正无标签，避免读取状态被搜索结果污染。
     var isSearchResultEmpty: Bool {
         isSearchFiltering && !currentTags.isEmpty && visibleTags.isEmpty
@@ -140,6 +145,20 @@ final class TagManagementViewModel {
     /// 控制手动排序入口；搜索过滤态只展示子集，禁止进入以保证落盘顺序始终来自当前范围全量标签。
     var canEnterReorder: Bool {
         activeWriteAction == nil && !isSelectionMode && !isSearchFiltering && currentTags.count >= 2
+    }
+
+    /// 为“调整顺序”入口提供可访问性说明，禁用时解释阻断原因。
+    var reorderActionAccessibilityHint: String {
+        if activeWriteAction != nil {
+            return "当前操作完成后可调整顺序"
+        }
+        if isSearchFiltering {
+            return "清除搜索后可调整顺序"
+        }
+        if currentTags.count < 2 {
+            return "至少需要两个标签才能调整顺序"
+        }
+        return "进入后可拖动标签调整顺序"
     }
 
     var canSubmitNameEdit: Bool {
@@ -206,7 +225,6 @@ final class TagManagementViewModel {
     func updateNameEditText(_ value: String) {
         nameEditText = value
         writeError = nil
-        actionNotice = nil
     }
 
     /// 关闭名称编辑 Sheet；写入进行中时忽略关闭请求。
@@ -234,7 +252,6 @@ final class TagManagementViewModel {
 
         let action: TagManagementWriteAction = edit.isCreating ? .create : .rename
         activeWriteAction = action
-        actionNotice = action.progressTitle
         writeError = nil
         writeTask?.cancel()
         writeTask = Task {
@@ -248,13 +265,12 @@ final class TagManagementViewModel {
                     self.activeWriteAction = nil
                     self.activeNameEdit = nil
                     self.nameEditText = ""
-                    self.actionNotice = edit.isCreating ? "标签已添加" : "标签已更新"
+                    self.writeError = nil
                 }
             } catch {
                 await MainActor.run {
                     self.activeWriteAction = nil
                     self.writeError = self.displayMessage(for: error)
-                    self.actionNotice = self.writeError
                 }
             }
         }
@@ -289,6 +305,20 @@ final class TagManagementViewModel {
         }
     }
 
+    /// 选中当前可见的全部标签；搜索过滤时只补齐当前结果，非搜索时等价于选中当前范围全部标签。
+    func selectAllVisible() {
+        guard isSelectionMode else { return }
+        selectedTagIDs.formUnion(Set(visibleTags.map(\.id)))
+        clearTransientMessages()
+    }
+
+    /// 取消当前可见标签的选择；搜索过滤时只移除当前结果，非搜索时清空当前范围选择。
+    func clearVisibleSelection() {
+        guard isSelectionMode else { return }
+        selectedTagIDs.subtract(Set(visibleTags.map(\.id)))
+        clearTransientMessages()
+    }
+
     /// 打开单个标签删除确认。
     func presentDeleteConfirmation(for item: TagManagementItem) {
         guard activeWriteAction == nil else { return }
@@ -306,7 +336,10 @@ final class TagManagementViewModel {
         guard activeWriteAction == nil else { return }
         let tags = selectedTags
         guard !tags.isEmpty else {
-            actionNotice = TagManagementRepositoryError.emptySelection.localizedDescription
+            toastFeedback = TagManagementToastFeedback(
+                role: .warning,
+                message: TagManagementRepositoryError.emptySelection.localizedDescription
+            )
             return
         }
         activeDeleteConfirmation = TagManagementDeleteConfirmation(
@@ -322,7 +355,6 @@ final class TagManagementViewModel {
     func submitDelete() {
         guard let confirmation = activeDeleteConfirmation, activeWriteAction == nil else { return }
         activeWriteAction = .delete
-        actionNotice = TagManagementWriteAction.delete.progressTitle
         writeError = nil
         writeTask?.cancel()
         writeTask = Task {
@@ -331,13 +363,16 @@ final class TagManagementViewModel {
                 await MainActor.run {
                     self.activeWriteAction = nil
                     self.exitSelectionMode()
-                    self.actionNotice = confirmation.tagCount > 1 ? "标签已删除" : "标签已删除"
+                    self.writeError = nil
                 }
             } catch {
                 await MainActor.run {
                     self.activeWriteAction = nil
-                    self.writeError = self.displayMessage(for: error)
-                    self.actionNotice = self.writeError
+                    self.writeError = nil
+                    self.toastFeedback = TagManagementToastFeedback(
+                        role: .error,
+                        message: self.displayMessage(for: error)
+                    )
                 }
             }
         }
@@ -350,16 +385,20 @@ final class TagManagementViewModel {
         let currentIDs = previousItems.map(\.id)
         guard orderedIDs != currentIDs else { return }
         guard orderedIDs.count == currentIDs.count, Set(orderedIDs) == Set(currentIDs) else {
-            writeError = "标签列表已更新，请重新调整顺序"
-            actionNotice = writeError
+            toastFeedback = TagManagementToastFeedback(
+                role: .warning,
+                message: "标签列表已更新，请重新调整顺序"
+            )
             return
         }
 
         let itemsByID = Dictionary(uniqueKeysWithValues: previousItems.map { ($0.id, $0) })
         let reorderedItems = orderedIDs.compactMap { itemsByID[$0] }
         guard reorderedItems.count == orderedIDs.count else {
-            writeError = "标签列表已更新，请重新调整顺序"
-            actionNotice = writeError
+            toastFeedback = TagManagementToastFeedback(
+                role: .warning,
+                message: "标签列表已更新，请重新调整顺序"
+            )
             return
         }
 
@@ -367,7 +406,6 @@ final class TagManagementViewModel {
         snapshot = snapshot.replacing(reorderedItems, for: scope)
 
         activeWriteAction = .reorder
-        actionNotice = TagManagementWriteAction.reorder.progressTitle
         writeError = nil
         writeTask?.cancel()
         writeTask = Task {
@@ -375,17 +413,25 @@ final class TagManagementViewModel {
                 try await repository.updateTagOrder(tagIDs: orderedIDs, scope: scope)
                 await MainActor.run {
                     self.activeWriteAction = nil
-                    self.actionNotice = nil
+                    self.writeError = nil
                 }
             } catch {
                 await MainActor.run {
                     self.snapshot = self.snapshot.replacing(previousItems, for: scope)
                     self.activeWriteAction = nil
-                    self.writeError = self.displayMessage(for: error)
-                    self.actionNotice = self.writeError
+                    self.writeError = nil
+                    self.toastFeedback = TagManagementToastFeedback(
+                        role: .error,
+                        message: self.displayMessage(for: error)
+                    )
                 }
             }
         }
+    }
+
+    /// 消费一次性 Toast 事件，避免 SwiftUI 重绘或页面返回时重复展示。
+    func consumeToastFeedback() {
+        toastFeedback = nil
     }
 }
 
@@ -424,7 +470,7 @@ private extension TagManagementViewModel {
 
     func clearTransientMessages() {
         writeError = nil
-        actionNotice = nil
+        toastFeedback = nil
     }
 
     func displayMessage(for error: Error) -> String {

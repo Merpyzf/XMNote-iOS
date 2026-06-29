@@ -4,6 +4,7 @@
 - 源码路径：`xmnote/UIComponents/Foundation/XMToast.swift`
 - 角色：统一承接全局轻量消息提示的语义角色、展示时长、位置、动效、布局和交互策略。
 - 边界：业务代码只调用 `XMToastCenter`；禁止在业务页面直接 `import PopupView` 或直接写 `.popup(...)`。
+- 使用边界：是否需要展示消息，先遵循 `docs/architecture/消息提示设计规范.md`；本文件只说明组件接入方式。
 
 ## 快速接入
 ### 1. App 根部挂载 Host
@@ -27,8 +28,8 @@ struct ExampleView: View {
     @Environment(XMToastCenter.self) private var toastCenter
 
     var body: some View {
-        Button("保存") {
-            toastCenter.success("已保存")
+        Button("重试") {
+            toastCenter.error("操作失败，请稍后再试")
         }
     }
 }
@@ -41,9 +42,9 @@ toastCenter.processing("正在更新排序...")
 Task { @MainActor in
     do {
         try await submitOrder()
-        toastCenter.success("排序已保存")
+        toastCenter.dismiss()
     } catch {
-        toastCenter.error("排序失败，请稍后再试")
+        toastCenter.error("排序保存失败，已恢复原顺序")
     }
 }
 ```
@@ -52,7 +53,7 @@ Task { @MainActor in
 ### `XMToastRole`
 | 角色 | 默认时长 | 适用场景 |
 | --- | --- | --- |
-| `success` | 约 1.8 秒 | 保存成功、同步完成、轻量确认。 |
+| `success` | 约 1.8 秒 | 结果不在当前视野内、确需补足的轻量确认。 |
 | `info` | 约 1.8 秒 | 不打断当前任务的信息说明。 |
 | `warning` | 约 2.4 秒 | 可继续操作但需要注意的状态。 |
 | `error` | 约 3.2 秒 | 不需要中心弹窗确认的轻量失败反馈。 |
@@ -81,9 +82,9 @@ Task { @MainActor in
 | `dismiss(id:)` | 关闭当前 Toast；传入 id 时只关闭匹配消息。 |
 
 ## 示例
-### 示例 1：保存成功
+### 示例 1：不可执行说明
 ```swift
-toastCenter.success("已保存")
+toastCenter.warning("搜索结果不支持排序，清除搜索后可调整顺序")
 ```
 
 ### 示例 2：失败但不打断任务
@@ -115,6 +116,6 @@ Toast 用于短驻留、非阻塞、不需要确认的轻反馈；需要用户�
 `XMToastCenter` 采用 newest-wins：新消息直接替换当前消息，不排队、不堆叠，避免挡住内容或制造噪音。
 
 ### 5. 处理中态为什么不自动消失？
-处理中代表写操作仍在进行。调用方应在成功或失败后用结果 Toast 替换，避免用户误以为操作已经结束。
+处理中代表写操作仍在进行。调用方应在成功后静默关闭或由界面状态收口，失败后用错误 Toast 或 `XMSystemAlert` 收口，避免用户误以为操作已经结束。
 
 [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md

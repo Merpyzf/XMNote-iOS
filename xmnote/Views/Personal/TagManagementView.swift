@@ -1,5 +1,5 @@
 /**
- * [INPUT]: 依赖 RepositoryContainer 注入 TagManagementRepositoryProtocol，依赖 TagManagementViewModel 驱动标签管理状态，依赖 XMScopeSelector/XMSystemAlert/LoadingGate 渲染 iOS 原生管理交互
+ * [INPUT]: 依赖 RepositoryContainer 注入 TagManagementRepositoryProtocol，依赖 TagManagementViewModel 驱动标签管理与搜索状态，依赖 XMScopeSelector/XMSystemAlert/XMToastCenter/LoadingGate 渲染 iOS 原生管理交互
  * [OUTPUT]: 对外提供 TagManagementView，承接“我的 > 标签管理”入口的真实管理页
  * [POS]: Views/Personal 的标签管理页面壳层，被 PersonalRoute.tagManagement 导航消费
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -37,39 +37,44 @@ struct TagManagementView: View {
 }
 
 private struct TagManagementContentView: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(XMToastCenter.self) private var toastCenter
     @Bindable var viewModel: TagManagementViewModel
     @State private var readLoadingGate = LoadingGate()
     @State private var isSearchPresented = false
     @State private var isReordering = false
     @State private var scrollEdgeWashEdges = XMScrollEdgeWashEdges.hidden
+    @FocusState private var isSearchFocused: Bool
 
     var body: some View {
-        ZStack(alignment: .top) {
-            VStack(spacing: Spacing.base) {
-                scopeSelector
-                    .padding(.horizontal, Spacing.screenEdge)
-                    .padding(.top, Spacing.base)
-                content
-            }
-
-            if let message = viewModel.writeError ?? viewModel.actionNotice {
-                notice(message)
-            }
+        VStack(spacing: Spacing.base) {
+            scopeSelector
+                .padding(.horizontal, Spacing.screenEdge)
+                .padding(.top, Spacing.base)
+            content
+                .id(contentTransitionKey)
+                .transition(.opacity)
+                .animation(contentTransitionAnimation, value: contentTransitionKey)
         }
         .searchable(
             text: $viewModel.searchText,
             isPresented: $isSearchPresented,
             prompt: "搜索"
         )
+        .searchFocused($isSearchFocused)
+        .searchPresentationToolbarBehavior(.avoidHidingContent)
+        .textInputAutocapitalization(.never)
+        .autocorrectionDisabled()
         .toolbar(removing: isNormalMode ? nil : .search)
         .toolbar { toolbarContent }
-        .safeAreaInset(edge: .bottom, spacing: Spacing.none) {
+        .safeAreaBar(edge: .bottom, spacing: Spacing.none) {
             if viewModel.isSelectionMode {
                 selectionBottomChrome
                     .transition(.move(edge: .bottom).combined(with: .opacity))
             }
         }
-        .animation(.smooth(duration: 0.22), value: viewModel.isSelectionMode)
+        .animation(modeTransitionAnimation, value: viewModel.isSelectionMode)
+        .animation(modeTransitionAnimation, value: isReordering)
         .sheet(item: $viewModel.activeNameEdit) { edit in
             TagNameEditSheet(viewModel: viewModel, edit: edit)
         }
@@ -82,6 +87,9 @@ private struct TagManagementContentView: View {
         .onChange(of: viewModel.contentState) { _, _ in
             syncLoadingGate()
         }
+        .onChange(of: viewModel.toastFeedback) { _, feedback in
+            presentToastFeedback(feedback)
+        }
         .onChange(of: viewModel.selectedScope) { _, _ in
             isReordering = false
             scrollEdgeWashEdges = .hidden
@@ -93,18 +101,60 @@ private struct TagManagementContentView: View {
         }
         .onChange(of: isNormalMode) { _, isNormalMode in
             guard !isNormalMode else { return }
-            isSearchPresented = false
-            viewModel.clearSearchText()
+            dismissSearch()
         }
         .onDisappear {
             readLoadingGate.hideImmediately()
-            viewModel.clearSearchText()
+            dismissSearch()
             scrollEdgeWashEdges = .hidden
         }
     }
 
     private var isNormalMode: Bool {
         !viewModel.isSelectionMode && !isReordering
+    }
+
+    private var isSearchActive: Bool {
+        isSearchPresented || isSearchFocused || viewModel.isSearchFiltering
+    }
+
+    private var searchControlAnimation: Animation? {
+        reduceMotion ? nil : .smooth(duration: 0.14)
+    }
+
+    private var modeTransitionAnimation: Animation? {
+        reduceMotion ? nil : .smooth(duration: 0.22)
+    }
+
+    private var contentTransitionAnimation: Animation? {
+        reduceMotion ? .easeOut(duration: 0.12) : .smooth(duration: 0.18)
+    }
+
+    private var selectionToggleAnimation: Animation? {
+        reduceMotion ? nil : .snappy(duration: 0.16)
+    }
+
+    private var contentTransitionKey: String {
+        switch viewModel.contentState {
+        case .loading:
+            return readLoadingGate.isVisible ? "loading-visible" : "loading-hidden"
+        case .empty:
+            return "empty-\(viewModel.selectedScope.rawValue)"
+        case .error:
+            return "error"
+        case .content:
+            return viewModel.isSearchResultEmpty ? "search-empty" : "content"
+        }
+    }
+
+    private var topTrailingMode: TagManagementTopTrailingMode {
+        if isReordering {
+            return .reordering
+        }
+        if viewModel.isSelectionMode {
+            return .selecting
+        }
+        return .normal
     }
 
     private var scopeSelector: some View {
@@ -167,11 +217,12 @@ private struct TagManagementContentView: View {
         TagManagementCollectionView(
             items: isReordering ? viewModel.currentTags : viewModel.visibleTags,
             scope: viewModel.selectedScope,
+            searchKeyword: viewModel.normalizedSearchText,
             isSelectionMode: viewModel.isSelectionMode,
             isReordering: isReordering,
             selectedTagIDs: viewModel.selectedTagIDs,
             isDisabled: viewModel.activeWriteAction != nil,
-            bottomContentInset: contentBottomInset,
+            bottomContentInset: 0,
             onScrollEdgeWashEdgesChange: { scrollEdgeWashEdges = $0 },
             onPrimaryAction: { item in handlePrimaryAction(for: item) },
             onRename: { item in viewModel.presentRenameSheet(for: item) },
@@ -188,57 +239,28 @@ private struct TagManagementContentView: View {
         .scrollEdgeEffectStyle(.soft, for: .bottom)
     }
 
-    private var contentBottomInset: CGFloat {
-        if viewModel.isSelectionMode {
-            return TagManagementBottomBarMetrics.selectionContentInset
-        }
-        return 0
-    }
-
     @ToolbarContentBuilder
     private var toolbarContent: some ToolbarContent {
-        if viewModel.isSelectionMode {
-            ToolbarItem(placement: .topBarTrailing) {
-                Button("取消") {
-                    viewModel.exitSelectionMode()
-                }
-                .disabled(viewModel.activeWriteAction != nil)
-                .xmToolbarNeutralTint()
-            }
-        } else if isReordering {
-            ToolbarItem(placement: .topBarTrailing) {
-                Button("完成") {
-                    isReordering = false
-                }
-                .disabled(viewModel.activeWriteAction == .reorder)
-                .xmToolbarNeutralTint()
-            }
-        } else {
-            ToolbarItem(placement: .topBarTrailing) {
-                Menu {
-                    Button {
-                        viewModel.enterSelectionMode()
-                    } label: {
-                        XMMenuLabel("选择标签", systemImage: "checklist")
-                    }
-                    .disabled(!viewModel.canEnterSelectionMode)
+        ToolbarItem(placement: .topBarTrailing) {
+            TagManagementTopTrailingControl(
+                mode: topTrailingMode,
+                isBusy: viewModel.activeWriteAction != nil,
+                isReorderBusy: viewModel.activeWriteAction == .reorder,
+                canEnterSelectionMode: viewModel.canEnterSelectionMode,
+                canEnterReorder: viewModel.canEnterReorder,
+                reorderAccessibilityHint: viewModel.reorderActionAccessibilityHint,
+                onEnterSelectionMode: { viewModel.enterSelectionMode() },
+                onEnterReorder: {
+                    dismissSearch()
+                    isReordering = true
+                },
+                onCompleteSelection: { viewModel.exitSelectionMode() },
+                onFinishReorder: { isReordering = false }
+            )
+            .xmToolbarNeutralTint()
+        }
 
-                    Button {
-                        isReordering = true
-                        isSearchPresented = false
-                        viewModel.clearSearchText()
-                    } label: {
-                        XMMenuLabel("调整顺序", systemImage: "arrow.up.arrow.down")
-                    }
-                    .disabled(!viewModel.canEnterReorder)
-                } label: {
-                    Image(systemName: "ellipsis")
-                }
-                .disabled(viewModel.activeWriteAction != nil)
-                .xmToolbarNeutralTint()
-                .accessibilityLabel("更多操作")
-            }
-
+        if isNormalMode {
             DefaultToolbarItem(kind: .search, placement: .bottomBar)
 
             ToolbarSpacer(placement: .bottomBar)
@@ -249,42 +271,40 @@ private struct TagManagementContentView: View {
                 } label: {
                     Image(systemName: "plus")
                 }
-                .disabled(viewModel.activeWriteAction != nil)
+                .disabled(viewModel.activeWriteAction != nil || isSearchActive)
+                .opacity(isSearchActive ? 0 : 1)
+                .animation(searchControlAnimation, value: isSearchActive)
                 .xmToolbarNeutralTint()
+                .accessibilityHidden(isSearchActive)
                 .accessibilityLabel("添加标签")
             }
         }
     }
 
     private var selectionBottomChrome: some View {
-        VStack(spacing: Spacing.none) {
-            LinearGradient(
-                colors: [
-                    Color.surfacePage.opacity(0),
-                    Color.surfacePage.opacity(0.82),
-                    Color.surfacePage
-                ],
-                startPoint: .top,
-                endPoint: .bottom
-            )
-            .frame(height: Spacing.double)
-            .allowsHitTesting(false)
-
-            TagManagementSelectionBottomBar(
-                selectedCount: viewModel.selectedTagIDs.count,
-                isBusy: viewModel.activeWriteAction != nil,
-                notice: viewModel.actionNotice,
-                onCancel: { viewModel.exitSelectionMode() },
-                onDelete: { viewModel.presentDeleteConfirmationForSelection() }
-            )
-            .padding(.horizontal, Spacing.screenEdge)
-            .padding(.bottom, Spacing.base)
-        }
-        .background(Color.surfacePage)
+        TagManagementSelectionBottomBar(
+            selectedCount: viewModel.selectedTagIDs.count,
+            isAllVisibleSelected: viewModel.isAllVisibleSelected,
+            isBusy: viewModel.activeWriteAction != nil,
+            onToggleSelectAll: toggleVisibleSelection,
+            onDelete: { viewModel.presentDeleteConfirmationForSelection() }
+        )
+        .padding(.horizontal, Spacing.screenEdge)
+        .padding(.bottom, Spacing.base)
     }
 
     private func syncLoadingGate() {
         readLoadingGate.update(intent: viewModel.contentState == .loading ? .read : .none)
+    }
+
+    private func dismissSearch(disablesAnimations: Bool = true) {
+        var transaction = Transaction(animation: nil)
+        transaction.disablesAnimations = disablesAnimations || reduceMotion
+        withTransaction(transaction) {
+            isSearchFocused = false
+            isSearchPresented = false
+            viewModel.clearSearchText()
+        }
     }
 
     private func handlePrimaryAction(for item: TagManagementItem) {
@@ -295,20 +315,25 @@ private struct TagManagementContentView: View {
         }
     }
 
-    private func notice(_ message: String) -> some View {
-        Text(message)
-            .font(AppTypography.caption)
-            .foregroundStyle(Color.textSecondary)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, Spacing.screenEdge)
-            .padding(.vertical, Spacing.tight)
-            .background(Color.surfaceCard)
-            .overlay(alignment: .bottom) {
-                Divider()
-                    .overlay(Color.surfaceBorderSubtle)
+    private func toggleVisibleSelection() {
+        withAnimation(selectionToggleAnimation) {
+            if viewModel.isAllVisibleSelected {
+                viewModel.clearVisibleSelection()
+            } else {
+                viewModel.selectAllVisible()
             }
-            .transition(.opacity)
-            .zIndex(2)
+        }
+    }
+
+    private func presentToastFeedback(_ feedback: TagManagementToastFeedback?) {
+        guard let feedback else { return }
+        switch feedback.role {
+        case .warning:
+            toastCenter.warning(feedback.message)
+        case .error:
+            toastCenter.error(feedback.message)
+        }
+        viewModel.consumeToastFeedback()
     }
 
     private func deleteDescriptor(for confirmation: TagManagementDeleteConfirmation) -> XMSystemAlertDescriptor {
@@ -336,8 +361,12 @@ private struct TagManagementContentView: View {
 
 private enum TagManagementBottomBarMetrics {
     static let controlHeight: CGFloat = 52
-    static let destructiveButtonSize: CGFloat = 50
-    static let selectionContentInset: CGFloat = 96
+    static let actionButtonWidth: CGFloat = 72
+    static let selectionToggleButtonWidth: CGFloat = 92
+    static let ornamentMinWidth: CGFloat = 86
+    static let ornamentMaxWidth: CGFloat = 128
+    static let ornamentHorizontalPadding: CGFloat = Spacing.tight
+    static let groupSpacing: CGFloat = Spacing.cozy
 }
 
 private enum TagManagementLayoutMetrics {
@@ -348,59 +377,236 @@ private enum TagManagementLayoutMetrics {
     )
 }
 
-private struct TagManagementSelectionBottomBar: View {
-    let selectedCount: Int
+/// 标签管理顶部右侧操作区模式，让系统 toolbar slot 在模式切换时保持稳定身份。
+private enum TagManagementTopTrailingMode: Hashable {
+    case normal
+    case selecting
+    case reordering
+}
+
+/// 标签管理顶部右侧操作区，在同一个 44pt toolbar slot 内完成模式 icon 的局部过渡。
+private struct TagManagementTopTrailingControl: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    let mode: TagManagementTopTrailingMode
     let isBusy: Bool
-    let notice: String?
-    let onCancel: () -> Void
+    let isReorderBusy: Bool
+    let canEnterSelectionMode: Bool
+    let canEnterReorder: Bool
+    let reorderAccessibilityHint: String
+    let onEnterSelectionMode: () -> Void
+    let onEnterReorder: () -> Void
+    let onCompleteSelection: () -> Void
+    let onFinishReorder: () -> Void
+
+    var body: some View {
+        ZStack(alignment: .trailing) {
+            switch mode {
+            case .normal:
+                normalMenu
+                    .transition(modeTransition)
+            case .selecting:
+                toolbarIconButton(
+                    systemName: "checkmark",
+                    foregroundColor: isBusy ? Color.textHint : Color.brand,
+                    isEnabled: !isBusy,
+                    accessibilityLabel: "完成选择",
+                    action: onCompleteSelection
+                )
+                    .transition(modeTransition)
+            case .reordering:
+                toolbarIconButton(
+                    systemName: "checkmark",
+                    foregroundColor: isReorderBusy ? Color.textHint : Color.brand,
+                    isEnabled: !isReorderBusy,
+                    accessibilityLabel: "完成排序",
+                    action: onFinishReorder
+                )
+                    .transition(modeTransition)
+            }
+        }
+        .fixedSize()
+        .animation(modeAnimation, value: mode)
+    }
+
+    private var normalMenu: some View {
+        Menu {
+            Button {
+                onEnterSelectionMode()
+            } label: {
+                XMMenuLabel("选择标签", systemImage: "checklist")
+            }
+            .disabled(!canEnterSelectionMode)
+
+            Button {
+                onEnterReorder()
+            } label: {
+                XMMenuLabel("调整顺序", systemImage: "arrow.up.arrow.down")
+            }
+            .disabled(!canEnterReorder)
+            .accessibilityHint(reorderAccessibilityHint)
+        } label: {
+            toolbarGlyph(
+                systemName: "ellipsis",
+                foregroundColor: isBusy ? Color.textHint : Color.iconPrimary
+            )
+        }
+        .disabled(isBusy)
+        .accessibilityLabel("更多操作")
+    }
+
+    private var modeAnimation: Animation? {
+        if reduceMotion {
+            return .easeOut(duration: TagManagementTopTrailingMetrics.reducedMotionDuration)
+        }
+        return .smooth(duration: TagManagementTopTrailingMetrics.transitionDuration)
+    }
+
+    private var modeTransition: AnyTransition {
+        guard !reduceMotion else { return .opacity }
+        return .opacity.combined(with: .scale(scale: TagManagementTopTrailingMetrics.hiddenScale))
+    }
+
+    private func toolbarIconButton(
+        systemName: String,
+        foregroundColor: Color,
+        isEnabled: Bool,
+        accessibilityLabel: String,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            toolbarGlyph(systemName: systemName, foregroundColor: foregroundColor)
+        }
+        .buttonStyle(.plain)
+        .disabled(!isEnabled)
+        .accessibilityLabel(accessibilityLabel)
+    }
+
+    private func toolbarGlyph(
+        systemName: String,
+        foregroundColor: Color
+    ) -> some View {
+        Image(systemName: systemName)
+            .font(.system(size: TagManagementTopTrailingMetrics.iconSize, weight: .semibold))
+            .foregroundStyle(foregroundColor)
+    }
+}
+
+private enum TagManagementTopTrailingMetrics {
+    static let iconSize: CGFloat = 15
+    static let hiddenScale: CGFloat = 0.94
+    static let transitionDuration: TimeInterval = 0.18
+    static let reducedMotionDuration: TimeInterval = 0.12
+}
+
+/// 标签选择态底部浮层，提供可见范围全选切换、只读选择状态与删除入口。
+private struct TagManagementSelectionBottomBar: View {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    let selectedCount: Int
+    let isAllVisibleSelected: Bool
+    let isBusy: Bool
+    let onToggleSelectAll: () -> Void
     let onDelete: () -> Void
 
-    private var statusText: String? {
-        if let notice, !notice.isEmpty {
-            return notice
+    private var selectionToggleTitle: String {
+        isAllVisibleSelected ? "取消全选" : "全选"
+    }
+
+    private var statusText: String {
+        guard selectedCount > 0 else { return "未选择" }
+        if dynamicTypeSize.isAccessibilitySize {
+            return "\(selectedCount) 个"
         }
-        return selectedCount > 0 ? "已选择 \(selectedCount) 个标签" : "请选择标签"
+        return "已选 \(selectedCount) 个"
+    }
+
+    private var statusAccessibilityLabel: String {
+        selectedCount > 0 ? "已选择 \(selectedCount) 个标签" : "未选择标签"
+    }
+
+    private var canDelete: Bool {
+        selectedCount > 0 && !isBusy
+    }
+
+    private var canToggleSelection: Bool {
+        !isBusy
     }
 
     var body: some View {
-        VStack(spacing: Spacing.tight) {
-            if let statusText {
-                Text(statusText)
-                    .font(AppTypography.caption)
-                    .foregroundStyle(Color.textSecondary)
-                    .lineLimit(1)
-                    .transition(.opacity)
-            }
+        GlassEffectContainer(spacing: TagManagementBottomBarMetrics.groupSpacing) {
+            HStack(spacing: TagManagementBottomBarMetrics.groupSpacing) {
+                selectionToggleButton
 
-            GlassEffectContainer(spacing: Spacing.base) {
-                HStack(spacing: Spacing.base) {
-                    Button(action: onCancel) {
-                        Text("取消")
-                            .font(AppTypography.subheadlineMedium)
-                            .foregroundStyle(Color.textPrimary)
-                            .frame(minWidth: 74, minHeight: TagManagementBottomBarMetrics.controlHeight)
-                    }
-                    .buttonStyle(.plain)
-                    .disabled(isBusy)
-                    .glassEffect(.regular.interactive(), in: .capsule)
+                selectionOrnament
+                    .layoutPriority(1)
 
-                    Button(role: .destructive, action: onDelete) {
-                        ImmersiveBottomChromeIcon(
-                            systemName: "trash",
-                            foregroundStyle: selectedCount > 0 && !isBusy ? Color.feedbackError : Color.textHint
-                        )
-                    }
-                    .buttonStyle(.plain)
-                    .disabled(selectedCount == 0 || isBusy)
-                    .frame(
-                        width: TagManagementBottomBarMetrics.destructiveButtonSize,
-                        height: TagManagementBottomBarMetrics.destructiveButtonSize
-                    )
-                    .glassEffect(.regular.interactive(), in: .circle)
-                    .accessibilityLabel(selectedCount > 0 && !isBusy ? "删除" : "删除，当前不可用")
-                }
+                deleteButton
             }
         }
+        .frame(maxWidth: .infinity)
+        .accessibilityElement(children: .contain)
+    }
+
+    private var selectionToggleButton: some View {
+        Button(action: onToggleSelectAll) {
+            Text(selectionToggleTitle)
+                .font(AppTypography.subheadlineMedium)
+                .foregroundStyle(canToggleSelection ? Color.textPrimary : Color.textHint)
+                .lineLimit(1)
+                .minimumScaleFactor(0.82)
+                .frame(width: TagManagementBottomBarMetrics.selectionToggleButtonWidth)
+                .frame(minHeight: TagManagementBottomBarMetrics.controlHeight)
+                .contentTransition(.opacity)
+                .animation(selectionCountAnimation, value: isAllVisibleSelected)
+        }
+        .buttonStyle(.plain)
+        .disabled(!canToggleSelection)
+        .glassEffect(.regular.interactive(), in: .capsule)
+        .accessibilityLabel(selectionToggleTitle)
+    }
+
+    private var selectionOrnament: some View {
+        Text(statusText)
+            .font(AppTypography.subheadlineMedium)
+            .foregroundStyle(Color.textPrimary)
+            .lineLimit(1)
+            .minimumScaleFactor(0.82)
+            .frame(
+                minWidth: TagManagementBottomBarMetrics.ornamentMinWidth,
+                maxWidth: TagManagementBottomBarMetrics.ornamentMaxWidth,
+                minHeight: TagManagementBottomBarMetrics.controlHeight
+            )
+            .padding(.horizontal, TagManagementBottomBarMetrics.ornamentHorizontalPadding)
+            .contentTransition(selectionCountTransition)
+            .animation(selectionCountAnimation, value: selectedCount)
+            .glassEffect(.regular, in: .capsule)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(statusAccessibilityLabel)
+    }
+
+    private var selectionCountTransition: ContentTransition {
+        reduceMotion ? .opacity : .numericText(value: Double(selectedCount))
+    }
+
+    private var selectionCountAnimation: Animation? {
+        if reduceMotion {
+            return .easeOut(duration: 0.12)
+        }
+        return .snappy(duration: 0.16)
+    }
+
+    private var deleteButton: some View {
+        Button(role: .destructive, action: onDelete) {
+            Image(systemName: "trash")
+                .font(AppTypography.subheadlineMedium)
+                .foregroundStyle(canDelete ? Color.feedbackError : Color.textHint)
+                .frame(width: TagManagementBottomBarMetrics.actionButtonWidth)
+                .frame(minHeight: TagManagementBottomBarMetrics.controlHeight)
+        }
+        .buttonStyle(.plain)
+        .disabled(!canDelete)
+        .glassEffect(.regular.interactive(), in: .capsule)
+        .accessibilityLabel(canDelete ? "删除" : "删除，当前不可用")
     }
 }
 
@@ -408,5 +614,6 @@ private struct TagManagementSelectionBottomBar: View {
     NavigationStack {
         TagManagementView()
             .environment(RepositoryContainer(databaseManager: DatabaseManager(database: try! .empty())))
+            .environment(XMToastCenter())
     }
 }

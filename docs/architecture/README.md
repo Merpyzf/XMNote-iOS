@@ -7,6 +7,7 @@
 - 颜色系统优化规范：`docs/architecture/颜色系统优化规范.md`
 - 页面状态基建与开发模式：`docs/architecture/页面状态基建与开发模式.md`
 - 加载状态反馈基建设计：`docs/architecture/加载状态反馈基建设计.md`
+- 消息提示设计规范：`docs/architecture/消息提示设计规范.md`
 
 提交前校验
 - `bash scripts/verify_glossary.sh`

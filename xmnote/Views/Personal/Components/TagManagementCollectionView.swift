@@ -1,5 +1,5 @@
 /**
- * [INPUT]: 依赖 TagManagementItem/TagManagementScope、XMSelectionIndicator、XMScrollEdgeWashEdges 与页面传入的标签操作回调，承接标签管理页的两列展示与本地拖拽排序
+ * [INPUT]: 依赖 TagManagementItem/TagManagementScope、XMSelectionIndicator/XMKeywordHighlighting、XMScrollEdgeWashEdges 与页面传入的搜索关键词和标签操作回调，承接标签管理页的两列展示与本地拖拽排序
  * [OUTPUT]: 对外提供 TagManagementCollectionView，封装页面私有 UICollectionView bridge、两列布局、选择态、排序态与滚动边缘状态上报
  * [POS]: Views/Personal/Components 的标签管理页面私有集合组件，被 TagManagementView 用作标签主体内容区
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -12,6 +12,7 @@ import UIKit
 struct TagManagementCollectionView: UIViewRepresentable {
     let items: [TagManagementItem]
     let scope: TagManagementScope
+    let searchKeyword: String
     let isSelectionMode: Bool
     let isReordering: Bool
     let selectedTagIDs: Set<Int64>
@@ -22,6 +23,8 @@ struct TagManagementCollectionView: UIViewRepresentable {
     let onRename: (TagManagementItem) -> Void
     let onDelete: (TagManagementItem) -> Void
     let onCommitOrder: ([Int64]) -> Void
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     /// 创建 UIKit 承载视图。
     func makeUIView(context: Context) -> TagManagementCollectionHostView {
@@ -44,10 +47,12 @@ struct TagManagementCollectionView: UIViewRepresentable {
         TagManagementCollectionConfiguration(
             items: items,
             scope: scope,
+            searchKeyword: searchKeyword,
             isSelectionMode: isSelectionMode,
             isReordering: isReordering,
             selectedTagIDs: selectedTagIDs,
             isDisabled: isDisabled,
+            reducesMotion: reduceMotion,
             bottomContentInset: bottomContentInset,
             onScrollEdgeWashEdgesChange: onScrollEdgeWashEdgesChange,
             onPrimaryAction: onPrimaryAction,
@@ -112,9 +117,11 @@ final class TagManagementCollectionHostView: UIView {
         }
 
         let previousConfiguration = self.configuration
+        let displayedItems = items
         let needsLayoutUpdate = abs(previousConfiguration.itemHeight - configuration.itemHeight) > 0.5
+        let needsDataUpdate = displayedItems != configuration.items
+        let needsVisibleCellUpdate = previousConfiguration.presentationSignature != configuration.presentationSignature
         self.configuration = configuration
-        items = configuration.items
         collectionView.dragInteractionEnabled = configuration.canReorder
         collectionView.isUserInteractionEnabled = !configuration.isDisabled || configuration.canReorder
         updateBottomContentInset()
@@ -126,8 +133,14 @@ final class TagManagementCollectionHostView: UIView {
             )
         }
 
-        UIView.performWithoutAnimation {
-            collectionView.reloadData()
+        if needsDataUpdate {
+            applyItemChanges(
+                from: displayedItems,
+                previousConfiguration: previousConfiguration,
+                animated: animated && collectionView.window != nil
+            )
+        } else if needsVisibleCellUpdate {
+            updateVisibleCells(animated: animated && collectionView.window != nil && !configuration.reducesMotion)
         }
         updateScrollEdgeWashEdges()
     }
@@ -212,6 +225,171 @@ private extension TagManagementCollectionHostView {
         collectionView.verticalScrollIndicatorInsets.bottom = targetBottomInset
     }
 
+    /// 根据稳定标签 ID 应用局部数据变化，保留删除、插入和排序回滚时的对象连续性。
+    func applyItemChanges(
+        from previousItems: [TagManagementItem],
+        previousConfiguration: TagManagementCollectionConfiguration,
+        animated: Bool
+    ) {
+        let nextItems = configuration.items
+        if animated,
+           canApplyIdentityItemUpdate(
+            from: previousItems,
+            to: nextItems,
+            previousConfiguration: previousConfiguration,
+            nextConfiguration: configuration
+           ),
+           applyIdentityItemUpdate(from: previousItems, to: nextItems, animated: animated) {
+            return
+        }
+
+        items = nextItems
+        reloadCollection(
+            animated: shouldCrossfadeReload(
+                from: previousConfiguration,
+                to: configuration,
+                animated: animated
+            )
+        )
+    }
+
+    /// 判断两个标签数组是否可在当前 collection section 内安全做 item 级批量更新。
+    func canApplyIdentityItemUpdate(
+        from previousItems: [TagManagementItem],
+        to nextItems: [TagManagementItem],
+        previousConfiguration: TagManagementCollectionConfiguration,
+        nextConfiguration: TagManagementCollectionConfiguration
+    ) -> Bool {
+        previousConfiguration.scope == nextConfiguration.scope
+            && previousConfiguration.searchKeyword == nextConfiguration.searchKeyword
+            && hasUniqueTagIDs(in: previousItems)
+            && hasUniqueTagIDs(in: nextItems)
+    }
+
+    /// 将同一语境下的标签数组差异转换为 collection view 的删除、插入和移动动画。
+    func applyIdentityItemUpdate(
+        from previousItems: [TagManagementItem],
+        to nextItems: [TagManagementItem],
+        animated: Bool
+    ) -> Bool {
+        let previousIDs = previousItems.map(\.id)
+        let nextIDs = nextItems.map(\.id)
+        let difference = nextIDs.difference(from: previousIDs).inferringMoves()
+        var deletions: [IndexPath] = []
+        var insertions: [IndexPath] = []
+        var moves: [(from: IndexPath, to: IndexPath)] = []
+
+        for change in difference {
+            switch change {
+            case let .remove(offset, _, associatedWith):
+                if let destination = associatedWith {
+                    moves.append((
+                        from: IndexPath(item: offset, section: 0),
+                        to: IndexPath(item: destination, section: 0)
+                    ))
+                } else {
+                    deletions.append(IndexPath(item: offset, section: 0))
+                }
+            case let .insert(offset, _, associatedWith):
+                if associatedWith == nil {
+                    insertions.append(IndexPath(item: offset, section: 0))
+                }
+            }
+        }
+
+        guard !deletions.isEmpty || !insertions.isEmpty || !moves.isEmpty else {
+            items = nextItems
+            updateVisibleCells(animated: animated && !configuration.reducesMotion)
+            return true
+        }
+        guard collectionView.numberOfSections > 0,
+              collectionView.numberOfItems(inSection: 0) == previousItems.count else {
+            return false
+        }
+
+        items = nextItems
+        let updates = {
+            if !deletions.isEmpty {
+                self.collectionView.deleteItems(at: deletions)
+            }
+            if !insertions.isEmpty {
+                self.collectionView.insertItems(at: insertions)
+            }
+            for move in moves {
+                self.collectionView.moveItem(at: move.from, to: move.to)
+            }
+        }
+        let completion: (Bool) -> Void = { [weak self] _ in
+            guard let self else { return }
+            self.updateVisibleCells(animated: animated && !self.configuration.reducesMotion)
+            self.updateScrollEdgeWashEdges()
+        }
+
+        if animated && !configuration.reducesMotion {
+            collectionView.performBatchUpdates(updates, completion: completion)
+        } else {
+            UIView.performWithoutAnimation {
+                collectionView.performBatchUpdates(updates, completion: completion)
+            }
+        }
+        return true
+    }
+
+    /// 对不适合 item diff 的语境切换做受控刷新，避免搜索逐字筛选产生误导性删除动画。
+    func reloadCollection(animated: Bool) {
+        let updates = {
+            self.collectionView.reloadData()
+            self.collectionView.layoutIfNeeded()
+        }
+        guard animated else {
+            UIView.performWithoutAnimation(updates)
+            return
+        }
+        UIView.transition(
+            with: collectionView,
+            duration: TagManagementCollectionMetrics.reloadCrossfadeDuration,
+            options: [.transitionCrossDissolve, .allowUserInteraction, .beginFromCurrentState]
+        ) {
+            updates()
+        }
+    }
+
+    /// 判断当前 reload 是否适合轻微 crossfade；搜索变化保持即时刷新以保证输入跟手。
+    func shouldCrossfadeReload(
+        from previousConfiguration: TagManagementCollectionConfiguration,
+        to nextConfiguration: TagManagementCollectionConfiguration,
+        animated: Bool
+    ) -> Bool {
+        animated
+            && !nextConfiguration.reducesMotion
+            && previousConfiguration.scope != nextConfiguration.scope
+    }
+
+    /// 撤销未提交的拖拽预览顺序时复用 item 级移动，避免取消排序时整组闪烁。
+    func restoreItemsAfterCancelledReorder(
+        from previewItems: [TagManagementItem],
+        to restoredItems: [TagManagementItem]
+    ) {
+        if collectionView.window != nil,
+           canApplyIdentityItemUpdate(
+            from: previewItems,
+            to: restoredItems,
+            previousConfiguration: configuration,
+            nextConfiguration: configuration
+           ),
+           applyIdentityItemUpdate(from: previewItems, to: restoredItems, animated: true) {
+            return
+        }
+
+        items = restoredItems
+        reloadCollection(animated: false)
+    }
+
+    /// 校验标签 ID 唯一性，避免同一轮批量更新中出现 UIKit 无法判定的身份冲突。
+    func hasUniqueTagIDs(in items: [TagManagementItem]) -> Bool {
+        Set(items.map(\.id)).count == items.count
+    }
+
     /// 将 UIKit 滚动状态转换为公共柔化层状态，并去重后回传给 SwiftUI 外层。
     func updateScrollEdgeWashEdges() {
         let topOffset = collectionView.contentOffset.y + collectionView.adjustedContentInset.top
@@ -240,6 +418,37 @@ private extension TagManagementCollectionHostView {
     func item(at indexPath: IndexPath) -> TagManagementItem? {
         guard indexPath.section == 0, items.indices.contains(indexPath.item) else { return nil }
         return items[indexPath.item]
+    }
+
+    /// 按当前位置重新配置可见 cell，让模式切换和选择反馈保留 SwiftUI 内部过渡。
+    func updateVisibleCells(animated: Bool) {
+        for case let cell as TagManagementCollectionCell in collectionView.visibleCells {
+            guard let indexPath = collectionView.indexPath(for: cell) else { continue }
+            configure(cell, at: indexPath, animated: animated)
+        }
+    }
+
+    /// 统一组装 cell 的展示配置和操作闭包，避免 data source 与局部刷新路径行为分叉。
+    func configure(_ cell: TagManagementCollectionCell, at indexPath: IndexPath, animated: Bool) {
+        guard let item = item(at: indexPath) else { return }
+        cell.configure(
+            with: item,
+            configuration: configuration,
+            animated: animated,
+            onRename: { [weak self] in
+                guard let self else { return }
+                self.configuration.onRename(self.currentItem(matching: item))
+            },
+            onDelete: { [weak self] in
+                guard let self else { return }
+                self.configuration.onDelete(self.currentItem(matching: item))
+            }
+        )
+    }
+
+    /// 按标签 ID 回读当前数据源中的展示项，让复用 cell 的菜单动作始终使用最新配置分发。
+    func currentItem(matching item: TagManagementItem) -> TagManagementItem {
+        items.first { $0.id == item.id } ?? item
     }
 
     /// 返回指定标签 ID 当前所在位置。
@@ -288,8 +497,7 @@ private extension TagManagementCollectionHostView {
             selectionFeedback.selectionChanged()
             pendingConfiguration = nil
         } else if originalIDs != currentIDs {
-            items = originalItemsBeforeDrag
-            collectionView.reloadData()
+            restoreItemsAfterCancelledReorder(from: items, to: originalItemsBeforeDrag)
         }
         originalItemsBeforeDrag = []
 
@@ -334,12 +542,11 @@ extension TagManagementCollectionHostView: UICollectionViewDataSource {
         guard let cell = collectionView.dequeueReusableCell(
             withReuseIdentifier: TagManagementCollectionCell.reuseIdentifier,
             for: indexPath
-        ) as? TagManagementCollectionCell,
-              let item = item(at: indexPath) else {
+        ) as? TagManagementCollectionCell else {
             return UICollectionViewCell()
         }
 
-        cell.configure(with: item, configuration: configuration)
+        configure(cell, at: indexPath, animated: false)
         return cell
     }
 
@@ -442,10 +649,12 @@ extension TagManagementCollectionHostView: UICollectionViewDropDelegate {
 struct TagManagementCollectionConfiguration {
     let items: [TagManagementItem]
     let scope: TagManagementScope
+    let searchKeyword: String
     let isSelectionMode: Bool
     let isReordering: Bool
     let selectedTagIDs: Set<Int64>
     let isDisabled: Bool
+    let reducesMotion: Bool
     let bottomContentInset: CGFloat
     let onScrollEdgeWashEdgesChange: (XMScrollEdgeWashEdges) -> Void
     let onPrimaryAction: (TagManagementItem) -> Void
@@ -458,16 +667,31 @@ struct TagManagementCollectionConfiguration {
     }
 
     var itemHeight: CGFloat {
-        isSelectionMode ? TagManagementCollectionMetrics.selectionItemHeight : TagManagementCollectionMetrics.normalItemHeight
+        TagManagementCollectionMetrics.normalItemHeight
+    }
+
+    var presentationSignature: TagManagementCollectionPresentationSignature {
+        TagManagementCollectionPresentationSignature(
+            items: items,
+            scope: scope,
+            searchKeyword: searchKeyword,
+            isSelectionMode: isSelectionMode,
+            isReordering: isReordering,
+            selectedTagIDs: selectedTagIDs,
+            isDisabled: isDisabled,
+            reducesMotion: reducesMotion
+        )
     }
 
     static let empty = TagManagementCollectionConfiguration(
         items: [],
         scope: .note,
+        searchKeyword: "",
         isSelectionMode: false,
         isReordering: false,
         selectedTagIDs: [],
         isDisabled: false,
+        reducesMotion: false,
         bottomContentInset: 0,
         onScrollEdgeWashEdgesChange: { _ in },
         onPrimaryAction: { _ in },
@@ -477,10 +701,21 @@ struct TagManagementCollectionConfiguration {
     )
 }
 
+/// 聚合会影响 cell 内容、布局态或交互语义的字段，用于过滤 SwiftUI 外层状态变化带来的无效刷新。
+struct TagManagementCollectionPresentationSignature: Hashable {
+    let items: [TagManagementItem]
+    let scope: TagManagementScope
+    let searchKeyword: String
+    let isSelectionMode: Bool
+    let isReordering: Bool
+    let selectedTagIDs: Set<Int64>
+    let isDisabled: Bool
+    let reducesMotion: Bool
+}
+
 private enum TagManagementCollectionMetrics {
     static let columnCount = 2
     static let normalItemHeight: CGFloat = 44
-    static let selectionItemHeight: CGFloat = 60
     static let horizontalInset: CGFloat = Spacing.screenEdge
     static let topInset: CGFloat = Spacing.base
     static let bottomInset: CGFloat = Spacing.double
@@ -488,6 +723,7 @@ private enum TagManagementCollectionMetrics {
     static let rowSpacing: CGFloat = Spacing.cozy
     static let menuHitWidth: CGFloat = Spacing.actionReserved
     static let menuHitHeight: CGFloat = Spacing.actionReserved
+    static let reloadCrossfadeDuration: TimeInterval = 0.16
 }
 
 /// 标签管理更多按钮的竖向三点图标，用几何点阵规避 SF Symbol 名称在 Menu label 中解析为空的问题。
@@ -531,34 +767,50 @@ private final class TagManagementCollectionCell: UICollectionViewCell {
     /// 渲染当前标签项。
     func configure(
         with item: TagManagementItem,
-        configuration: TagManagementCollectionConfiguration
+        configuration: TagManagementCollectionConfiguration,
+        animated: Bool,
+        onRename: @escaping () -> Void,
+        onDelete: @escaping () -> Void
     ) {
         backgroundColor = .clear
         contentView.backgroundColor = .clear
-        contentConfiguration = nil
-        contentConfiguration = UIHostingConfiguration {
+
+        let nextContentConfiguration = UIHostingConfiguration {
             TagManagementCollectionItemView(
                 item: item,
                 scope: configuration.scope,
+                searchKeyword: configuration.searchKeyword,
                 isSelectionMode: configuration.isSelectionMode,
                 isSelected: configuration.selectedTagIDs.contains(item.id),
                 isReordering: configuration.isReordering,
                 isDisabled: configuration.isDisabled,
-                onRename: { configuration.onRename(item) },
-                onDelete: { configuration.onDelete(item) }
+                allowsMotion: animated && !configuration.reducesMotion,
+                onRename: onRename,
+                onDelete: onDelete
             )
         }
         .margins(.all, 0)
+
+        if animated {
+            contentConfiguration = nextContentConfiguration
+        } else {
+            UIView.performWithoutAnimation {
+                contentConfiguration = nextContentConfiguration
+            }
+        }
     }
 }
 
 private struct TagManagementCollectionItemView: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let item: TagManagementItem
     let scope: TagManagementScope
+    let searchKeyword: String
     let isSelectionMode: Bool
     let isSelected: Bool
     let isReordering: Bool
     let isDisabled: Bool
+    let allowsMotion: Bool
     let onRename: () -> Void
     let onDelete: () -> Void
 
@@ -570,51 +822,29 @@ private struct TagManagementCollectionItemView: View {
                     isSelected: isSelected,
                     font: AppTypography.subheadline
                 )
-                .transition(.scale.combined(with: .opacity))
+                .transition(selectionIndicatorTransition)
+                .animation(selectionAnimation, value: isSelected)
             }
 
-            VStack(alignment: .leading, spacing: Spacing.tiny) {
-                Text(item.name)
-                    .font(AppTypography.subheadlineMedium)
-                    .foregroundStyle(Color.textPrimary)
-                    .lineLimit(1)
-                    .multilineTextAlignment(.leading)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .layoutPriority(1)
+            XMKeywordHighlighting.text(
+                item.name,
+                keyword: searchKeyword,
+                baseFont: AppTypography.subheadlineMedium,
+                highlightFont: AppTypography.subheadlineMedium,
+                baseColor: Color.textPrimary
+            )
+                .lineLimit(1)
+                .multilineTextAlignment(.leading)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .layoutPriority(1)
 
-                if isSelectionMode {
-                    Text(associatedText)
-                        .font(AppTypography.caption)
-                        .foregroundStyle(Color.textSecondary)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.82)
-                        .transition(.opacity)
-                }
-            }
-            .layoutPriority(1)
-
-            if shouldShowMoreButton {
-                Menu {
-                    Button(action: onRename) {
-                        XMMenuLabel("编辑", systemImage: "pencil")
-                    }
-                    Button(role: .destructive, action: onDelete) {
-                        Label("删除", systemImage: "trash")
-                    }
-                } label: {
-                    TagManagementMoreGlyph(color: Color.textSecondary, dotSize: 2.7, dotSpacing: 2.4)
-                        .frame(
-                            width: TagManagementCollectionMetrics.menuHitWidth,
-                            height: TagManagementCollectionMetrics.menuHitHeight
-                        )
-                        .contentShape(Rectangle())
-                }
-                .disabled(isDisabled)
-                .xmMenuNeutralTint()
-                .accessibilityLabel("标签操作")
+            if shouldReserveTrailingAccessory {
+                trailingAccessory
+                    .transition(trailingSlotTransition)
             }
         }
-        .padding(.horizontal, Spacing.tight)
+        .padding(.leading, Spacing.tight)
+        .padding(.trailing, shouldReserveTrailingAccessory ? Spacing.none : Spacing.tight)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
         .background(Color.surfaceCard, in: RoundedRectangle(cornerRadius: CornerRadius.blockSmall, style: .continuous))
         .overlay {
@@ -635,10 +865,117 @@ private struct TagManagementCollectionItemView: View {
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(accessibilityLabel)
         .accessibilityAddTraits(isReordering ? AccessibilityTraits() : .isButton)
+        .animation(modeAnimation, value: isSelectionMode)
+        .animation(modeAnimation, value: isReordering)
+        .animation(selectionAnimation, value: isSelected)
+        .transaction { transaction in
+            guard shouldReduceMotion else { return }
+            transaction.disablesAnimations = true
+            transaction.animation = nil
+        }
+    }
+
+    private var trailingAccessory: some View {
+        ZStack(alignment: .trailing) {
+            if shouldShowReorderHandle {
+                reorderHandle
+                    .transition(accessorySwapTransition)
+            }
+
+            if shouldShowMoreButton {
+                moreButton
+                    .transition(accessorySwapTransition)
+            }
+        }
+        .frame(
+            width: TagManagementCollectionMetrics.menuHitWidth,
+            height: TagManagementCollectionMetrics.menuHitHeight,
+            alignment: .center
+        )
+    }
+
+    private var reorderHandle: some View {
+        Image(systemName: "line.3.horizontal")
+            .font(AppTypography.subheadline)
+            .foregroundStyle(Color.textSecondary)
+            .frame(
+                width: TagManagementCollectionMetrics.menuHitWidth,
+                height: TagManagementCollectionMetrics.menuHitHeight,
+                alignment: .center
+            )
+            .contentShape(Rectangle())
+            .accessibilityHidden(true)
+    }
+
+    private var moreButton: some View {
+        Menu {
+            Button(action: onRename) {
+                XMMenuLabel("编辑", systemImage: "pencil")
+            }
+            Button(role: .destructive, action: onDelete) {
+                Label("删除", systemImage: "trash")
+            }
+        } label: {
+            TagManagementMoreGlyph(color: Color.textSecondary, dotSize: 2.7, dotSpacing: 2.4)
+                .frame(
+                    width: TagManagementCollectionMetrics.menuHitWidth,
+                    height: TagManagementCollectionMetrics.menuHitHeight,
+                    alignment: .center
+                )
+                .contentShape(Rectangle())
+        }
+        .disabled(isDisabled)
+        .xmMenuNeutralTint()
+        .accessibilityLabel("标签操作")
+        .accessibilityHint("打开编辑和删除操作")
     }
 
     private var shouldShowMoreButton: Bool {
         !isSelectionMode && !isReordering
+    }
+
+    private var shouldShowReorderHandle: Bool {
+        isReordering
+    }
+
+    private var shouldReserveTrailingAccessory: Bool {
+        !isSelectionMode
+    }
+
+    private var shouldReduceMotion: Bool {
+        reduceMotion || !allowsMotion
+    }
+
+    private var modeAnimation: Animation? {
+        shouldReduceMotion ? nil : .smooth(duration: 0.22)
+    }
+
+    private var selectionAnimation: Animation? {
+        shouldReduceMotion ? nil : .snappy(duration: 0.16)
+    }
+
+    private var selectionIndicatorTransition: AnyTransition {
+        if shouldReduceMotion {
+            return .opacity
+        }
+        return .scale(scale: 0.82, anchor: .center).combined(with: .opacity)
+    }
+
+    private var trailingSlotTransition: AnyTransition {
+        if shouldReduceMotion {
+            return .opacity
+        }
+        return .opacity.combined(with: .scale(scale: 0.94, anchor: .trailing))
+    }
+
+    private var accessorySwapTransition: AnyTransition {
+        if shouldReduceMotion {
+            return .opacity
+        }
+        return .asymmetric(
+            insertion: .opacity.combined(with: .offset(x: 6)),
+            removal: .opacity.combined(with: .offset(x: -4))
+        )
     }
 
     private var associatedText: String {
@@ -651,6 +988,9 @@ private struct TagManagementCollectionItemView: View {
     private var accessibilityLabel: String {
         if isSelectionMode {
             return "\(item.name)，\(associatedText)"
+        }
+        if isReordering {
+            return "\(item.name)，可拖动调整顺序"
         }
         return item.name
     }
