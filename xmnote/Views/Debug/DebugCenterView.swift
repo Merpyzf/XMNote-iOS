@@ -2,7 +2,7 @@
 import SwiftUI
 
 /**
- * [INPUT]: 依赖 RichTextTestView、HeatmapTestView、SystemAlertTestView、PopupViewToastTestView、RatingBarTestView、BookSelectionTestView、SelectionMotionTestView、XMScopeSelectorTestView、SearchHistoryTestView、SearchableSystemBugReproView、XMScrollEdgeChromeTestView、BookReorderSandboxTestView、ImageLoadingTestView、WebHTMLFetchTestView、CameraTextCaptureTestView、BaiduOCRTestView、JXPhotoBrowserTestView、ReadCalendarCoverStackTestView、NoteReviewCardStackTestView、BookCoverStyleTestView、BookCoverProgressBarTestView、BookCoverBadgeEffectTestView、TopBarActionStyleLabTestView、LiquidGlassLabTestView、SystemColorsTestView、TimelineCardsTestView、TimelineCalendarHorizonTestView 作为导航目的地
+ * [INPUT]: 依赖 RichTextTestView、HeatmapTestView、SystemAlertTestView、PopupViewToastTestView、RatingBarTestView、BookSelectionTestView、SelectionMotionTestView、XMScopeSelectorTestView、SearchHistoryTestView、SearchableSystemBugReproView、XMScrollEdgeChromeTestView、BookReorderSandboxTestView、ImageLoadingTestView、WebHTMLFetchTestView、CameraTextCaptureTestView、BaiduOCRTestView、JXPhotoBrowserTestView、ReadCalendarCoverStackTestView、NoteReviewPagingTestView、BookCoverStyleTestView、BookCoverProgressBarTestView、BookCoverBadgeEffectTestView、TopBarActionStyleLabTestView、LiquidGlassLabTestView、SystemColorsTestView、TimelineCardsTestView、TimelineCalendarHorizonTestView 作为导航目的地
  * [OUTPUT]: 对外提供 DebugCenterView（测试中心列表页）
  * [POS]: Debug 测试入口页，集中展示所有控件测试项，由 PersonalView 跳转进入
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -132,8 +132,8 @@ struct DebugCenterView: View {
         DebugItem(
             icon: "rectangle.stack",
             title: "书摘回顾卡堆",
-            subtitle: "UIKit 源码卡堆桥接、四方向滑动、撤回与长文滚动仲裁",
-            destination: AnyView(NoteReviewCardStackTestView())
+            subtitle: "BigUIPaging Core + XMNote 自定义卡堆动效与长文滚动仲裁",
+            destination: AnyView(NoteReviewPagingTestView())
         ),
         DebugItem(
             icon: "book.closed",

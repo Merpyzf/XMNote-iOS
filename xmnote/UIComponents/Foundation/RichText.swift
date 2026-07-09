@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 RichTextEditor/HTMLParser（HTML→NSAttributedString）与 RichTextLayoutManager（引用块/列表绘制）
- * [OUTPUT]: 对外提供 RichText（只读 HTML 富文本展示组件，支持 maxLines 截断与截断状态回调）
+ * [OUTPUT]: 对外提供 RichText（只读 HTML 富文本展示组件，支持 maxLines 截断、文本对齐与截断状态回调）
  * [POS]: UIComponents/Foundation 的跨模块复用展示组件，供时间线卡片与未来笔记预览等场景使用
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -74,6 +74,7 @@ struct RichText: UIViewRepresentable {
     var baseFont: UIFont = .preferredFont(forTextStyle: .body)
     var textColor: UIColor = .label
     var lineSpacing: CGFloat = 4
+    var textAlignment: NSTextAlignment = .natural
     /// 最大显示行数，0 = 无限制（默认），正数启用原生省略号截断
     var maxLines: Int = 0
     /// 截断状态变更回调，仅在 maxLines > 0 时有意义
@@ -114,6 +115,7 @@ struct RichText: UIViewRepresentable {
             baseFont: baseFont,
             textColor: textColor,
             lineSpacing: lineSpacing,
+            textAlignment: textAlignment,
             traitCollection: traitCollection
         )
         let needsContentUpdate = context.coordinator.lastContentKey != contentKey
@@ -129,6 +131,7 @@ struct RichText: UIViewRepresentable {
                 baseFont: baseFont,
                 textColor: textColor,
                 lineSpacing: lineSpacing,
+                textAlignment: textAlignment,
                 traitCollection: traitCollection
             )
             textView.textStorage.setAttributedString(attributed)
@@ -151,6 +154,7 @@ struct RichText: UIViewRepresentable {
             baseFont: baseFont,
             textColor: textColor,
             lineSpacing: lineSpacing,
+            textAlignment: textAlignment,
             traitCollection: traitCollection
         )
         let scale = uiView.window?.screen.scale ?? max(uiView.traitCollection.displayScale, 1)
@@ -285,6 +289,7 @@ struct RichText: UIViewRepresentable {
         baseFont: UIFont,
         textColor: UIColor,
         lineSpacing: CGFloat,
+        textAlignment: NSTextAlignment = .natural,
         traitCollection: UITraitCollection
     ) -> NSAttributedString {
         let contentKey = contentCacheKey(
@@ -292,6 +297,7 @@ struct RichText: UIViewRepresentable {
             baseFont: baseFont,
             textColor: textColor,
             lineSpacing: lineSpacing,
+            textAlignment: textAlignment,
             traitCollection: traitCollection
         )
         return resolveAttributedString(contentKey: contentKey) {
@@ -300,6 +306,7 @@ struct RichText: UIViewRepresentable {
                 baseFont: baseFont,
                 textColor: textColor,
                 lineSpacing: lineSpacing,
+                textAlignment: textAlignment,
                 traitCollection: traitCollection
             )
         }
@@ -311,6 +318,7 @@ struct RichText: UIViewRepresentable {
         baseFont: UIFont,
         textColor: UIColor,
         lineSpacing: CGFloat,
+        textAlignment: NSTextAlignment = .natural,
         traitCollection: UITraitCollection
     ) -> NSAttributedString {
         let previewKey = previewContentKey(
@@ -318,6 +326,7 @@ struct RichText: UIViewRepresentable {
             baseFont: baseFont,
             textColor: textColor,
             lineSpacing: lineSpacing,
+            textAlignment: textAlignment,
             traitCollection: traitCollection
         )
         return resolveAttributedString(contentKey: previewKey) {
@@ -326,6 +335,7 @@ struct RichText: UIViewRepresentable {
                 baseFont: baseFont,
                 textColor: textColor,
                 lineSpacing: lineSpacing,
+                textAlignment: textAlignment,
                 traitCollection: traitCollection
             )
             let previewAttributed = NSMutableAttributedString(attributedString: baseAttributed)
@@ -339,6 +349,7 @@ struct RichText: UIViewRepresentable {
         baseFont: UIFont,
         textColor: UIColor,
         lineSpacing: CGFloat,
+        textAlignment: NSTextAlignment,
         traitCollection: UITraitCollection
     ) -> NSAttributedString {
         let mutable = HTMLParser.parse(html, baseFont: baseFont, traitCollection: traitCollection)
@@ -352,10 +363,12 @@ struct RichText: UIViewRepresentable {
 
         let style = NSMutableParagraphStyle()
         style.lineSpacing = lineSpacing
+        style.alignment = textAlignment
         mutable.enumerateAttribute(.paragraphStyle, in: fullRange, options: []) { value, range, _ in
             if let existing = value as? NSParagraphStyle {
                 let merged = existing.mutableCopy() as! NSMutableParagraphStyle
                 merged.lineSpacing = lineSpacing
+                merged.alignment = textAlignment
                 mutable.addAttribute(.paragraphStyle, value: merged, range: range)
             } else {
                 mutable.addAttribute(.paragraphStyle, value: style, range: range)
@@ -485,6 +498,7 @@ struct RichText: UIViewRepresentable {
         baseFont: UIFont,
         textColor: UIColor,
         lineSpacing: CGFloat,
+        textAlignment: NSTextAlignment = .natural,
         traitCollection: UITraitCollection
     ) -> String {
         let baseKey = contentCacheKey(
@@ -492,6 +506,7 @@ struct RichText: UIViewRepresentable {
             baseFont: baseFont,
             textColor: textColor,
             lineSpacing: lineSpacing,
+            textAlignment: textAlignment,
             traitCollection: traitCollection
         )
         return "preview|\(baseKey)"
@@ -518,12 +533,13 @@ struct RichText: UIViewRepresentable {
         RichTextRenderCache.shared.storeLayoutSnapshot(snapshot, for: layoutKey)
     }
 
-    /// 把 HTML、字体、颜色、行距和系统环境折叠成稳定内容签名。
+    /// 把 HTML、字体、颜色、行距、对齐方式和系统环境折叠成稳定内容签名。
     static func contentCacheKey(
         html: String,
         baseFont: UIFont,
         textColor: UIColor,
         lineSpacing: CGFloat,
+        textAlignment: NSTextAlignment = .natural,
         traitCollection: UITraitCollection
     ) -> String {
         [
@@ -532,6 +548,7 @@ struct RichText: UIViewRepresentable {
             Self.roundedToken(baseFont.pointSize),
             Self.colorToken(textColor, traitCollection: traitCollection),
             Self.roundedToken(lineSpacing),
+            String(textAlignment.rawValue),
             String(traitCollection.userInterfaceStyle.rawValue),
             traitCollection.preferredContentSizeCategory.rawValue,
         ].joined(separator: "|")

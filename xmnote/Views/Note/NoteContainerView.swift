@@ -6,8 +6,8 @@
 //
 
 /**
- * [INPUT]: 依赖 RepositoryContainer 注入仓储，依赖 NoteViewModel 驱动状态
- * [OUTPUT]: 对外提供 NoteContainerView 与 NoteSubTab 枚举
+ * [INPUT]: 依赖 RepositoryContainer 注入笔记与外部应用仓储，依赖 NoteViewModel/NoteReviewViewModel 驱动状态
+ * [OUTPUT]: 对外提供 NoteContainerView 与 NoteSubTab 枚举，并承接回顾内容查看路由
  * [POS]: Note 模块容器壳层，承载笔记/回顾二级切换
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -35,31 +35,37 @@ struct NoteContainerView: View {
     @Environment(RepositoryContainer.self) private var repositories
     @Environment(SceneStateStore.self) private var sceneStateStore
     @State private var viewModel: NoteViewModel?
+    @State private var reviewViewModel: NoteReviewViewModel?
     @State private var selectedSubTab: NoteSubTab = .notes
     @State private var didBootstrapFromScene = false
     let onAddBook: () -> Void
     let onAddNote: () -> Void
+    let onOpenContentViewer: (ContentViewerSourceContext, ContentViewerItemID) -> Void
     let onOpenDebugCenter: (() -> Void)?
 
     /// 注入新增书籍/笔记回调，让顶部快捷入口把用户操作上抛到外层页面。
     init(
         onAddBook: @escaping () -> Void = {},
         onAddNote: @escaping () -> Void = {},
+        onOpenContentViewer: @escaping (ContentViewerSourceContext, ContentViewerItemID) -> Void = { _, _ in },
         onOpenDebugCenter: (() -> Void)? = nil
     ) {
         self.onAddBook = onAddBook
         self.onAddNote = onAddNote
+        self.onOpenContentViewer = onOpenContentViewer
         self.onOpenDebugCenter = onOpenDebugCenter
     }
 
     var body: some View {
         Group {
-            if let viewModel {
+            if let viewModel, let reviewViewModel {
                 NoteContentView(
                     viewModel: viewModel,
+                    reviewViewModel: reviewViewModel,
                     selectedSubTab: $selectedSubTab,
                     onAddBook: onAddBook,
                     onAddNote: onAddNote,
+                    onOpenContentViewer: onOpenContentViewer,
                     onOpenDebugCenter: onOpenDebugCenter
                 )
             } else {
@@ -73,8 +79,15 @@ struct NoteContainerView: View {
             selectedSubTab = sceneStateStore.snapshot.notes.selectedSubTab
         }
         .task {
-            guard viewModel == nil else { return }
-            viewModel = NoteViewModel(repository: repositories.noteRepository)
+            if viewModel == nil {
+                viewModel = NoteViewModel(repository: repositories.noteRepository)
+            }
+            if reviewViewModel == nil {
+                reviewViewModel = NoteReviewViewModel(
+                    repository: repositories.noteRepository,
+                    externalAppIntegrationRepository: repositories.externalAppIntegrationRepository
+                )
+            }
         }
         .onChange(of: selectedSubTab) { _, newValue in
             sceneStateStore.updateNoteSelectedSubTab(newValue)
@@ -86,10 +99,13 @@ struct NoteContainerView: View {
 
 private struct NoteContentView: View {
     @Bindable var viewModel: NoteViewModel
+    @Bindable var reviewViewModel: NoteReviewViewModel
     @Binding var selectedSubTab: NoteSubTab
+    @State private var isReviewSettingsPresented = false
     private let topBarHeight: CGFloat = 56
     let onAddBook: () -> Void
     let onAddNote: () -> Void
+    let onOpenContentViewer: (ContentViewerSourceContext, ContentViewerItemID) -> Void
     let onOpenDebugCenter: (() -> Void)?
 
     var body: some View {
@@ -116,13 +132,19 @@ private struct NoteContentView: View {
                         onAddNote: onAddNote,
                         onOpenDebugCenter: onOpenDebugCenter,
                         usesGlassStyle: true,
-                        presentation: .pillSegment
+                        presentation: .pillSegment,
+                        iconSize: NoteTopBarMetrics.actionIconSize
                     )
                 }
             }
             .zIndex(1)
         }
         .toolbar(.hidden, for: .navigationBar)
+        .sheet(isPresented: $isReviewSettingsPresented) {
+            NoteReviewSettingsSheet(viewModel: reviewViewModel)
+                .presentationDetents([.medium, .large])
+                .presentationDragIndicator(.visible)
+        }
     }
 
     // MARK: - Segmented Content
@@ -147,7 +169,11 @@ private struct NoteContentView: View {
                 }
             }
         case .review:
-            NoteReviewPlaceholderView()
+            NoteReviewView(
+                viewModel: reviewViewModel,
+                onOpenContentViewer: onOpenContentViewer,
+                onOpenSettings: { isReviewSettingsPresented = true }
+            )
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
     }
@@ -186,15 +212,22 @@ private struct NoteContentView: View {
 
     private func noteActionButton(presentation: TopBarActionPresentation) -> some View {
         Button {
-            // TODO: sort/settings action
+            if selectedSubTab == .review {
+                isReviewSettingsPresented = true
+            }
         } label: {
             TopBarActionIcon(
                 systemName: selectedSubTab == .notes ? "arrow.up.arrow.down" : "gearshape",
+                iconSize: NoteTopBarMetrics.actionIconSize,
                 hitShape: presentation == .pillSegment ? .rectangle : .circle
             )
         }
         .topBarActionPresentationStyle(presentation)
     }
+}
+
+private enum NoteTopBarMetrics {
+    static let actionIconSize: CGFloat = 14
 }
 
 #Preview {

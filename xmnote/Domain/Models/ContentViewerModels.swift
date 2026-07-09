@@ -19,6 +19,7 @@ nonisolated enum TimelineContentFilter: Hashable, Sendable, Codable {
 nonisolated enum ContentViewerSourceContext: Hashable, Sendable, Codable {
     case timeline(startTimestamp: Int64, endTimestamp: Int64, filter: TimelineContentFilter)
     case bookNotes(bookId: Int64)
+    case noteReview(noteIDs: [Int64])
 }
 
 /// 通用查看器单项身份，保证分页选择与详情查询使用统一 ID。

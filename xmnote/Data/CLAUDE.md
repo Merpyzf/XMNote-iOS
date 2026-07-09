@@ -9,6 +9,10 @@
 - `ContentRepository.swift`: ContentRepositoryProtocol 实现，书摘/书评/相关内容的查看、编辑与硬删除事务
 - `GlobalSearchRepository.swift`: GlobalSearchRepositoryProtocol 实现，书籍/书摘/相关/书评四类本地全局搜索
 - `NoteRepository.swift`: NoteRepositoryProtocol 实现，标签分组与笔记详情读写
+- `NoteReviewSettingStore.swift`: 书摘回顾设置本地存储与变更广播
+- `TagManagementRepository.swift`: TagManagementRepositoryProtocol 实现，书摘/书籍标签管理读写与排序
+- `ExternalAppIntegrationRepository.swift`: ExternalAppIntegrationRepositoryProtocol 实现，关联应用配置和书摘发送
+- `ExternalAppIntegrationSettingStore.swift`: 关联应用配置本地存储
 - `BackupServerRepository.swift`: BackupServerRepositoryProtocol 实现，备份服务器配置持久化与连通性
 - `BackupRepository.swift`: BackupRepositoryProtocol 实现，备份/历史/恢复流程编排
 - `StatisticsRepository.swift`: StatisticsRepositoryProtocol 实现，热力图聚合查询 + 阅读日历月数据聚合（多事件源按日按书去重、读完计数、最早日期查询）

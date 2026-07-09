@@ -19,6 +19,8 @@
 - `ExpandableRichText使用说明.md`: ExpandableRichText / RichText 富文本展示组件接入指南与参数说明。
 - `ImmersiveBottomChrome使用说明.md`: ImmersiveBottomChrome 底部沉浸遮罩与 ornament 组件接入指南与参数说明。
 - `XMToast使用说明.md`: XMToast 全局轻量消息提示基建接入指南与参数说明。
+- `XMSettingsSheetComponents使用说明.md`: XMSettingsSheetComponents 通用设置 Sheet 组件组接入指南与参数说明。
+- `NoteReviewPagingDeck使用说明.md`: NoteReviewPagingDeck 书摘回顾分页卡组组件接入指南与参数说明。
 - `TopSwitcher使用说明.md`: TopSwitcher 顶部标题/标签切换组件接入指南与参数说明。
 - `KeepAliveSwitcherHost使用说明.md`: KeepAliveSwitcherHost 懒激活保活切换容器接入指南与参数说明。
 - `HomeSubtabScaffold使用说明.md`: HomeSubtabScaffold 首页二级页壳层接入指南与参数说明。
@@ -35,6 +37,7 @@
 - `NoteCollectionView使用说明.md`: NoteCollectionView 页面组件接入指南与参数说明。
 - `NoteTagsView使用说明.md`: NoteTagsView 页面组件接入指南与参数说明。
 - `NoteDetailView使用说明.md`: NoteDetailView 页面组件接入指南与参数说明。
+- `NoteReviewView使用说明.md`: NoteReviewView 书摘回顾核心页面接入指南与参数说明。
 - `DataBackupView使用说明.md`: DataBackupView 页面组件接入指南与参数说明。
 - `WebDAVServerListView使用说明.md`: WebDAVServerListView 页面组件接入指南与参数说明。
 - `WebDAVServerFormView使用说明.md`: WebDAVServerFormView 页面组件接入指南与参数说明。

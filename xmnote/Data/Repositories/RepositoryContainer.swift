@@ -23,6 +23,7 @@ final class RepositoryContainer {
     let s3ConfigRepository: any S3ConfigRepositoryProtocol
     let s3UploadRepository: any S3UploadRepositoryProtocol
     let tagManagementRepository: any TagManagementRepositoryProtocol
+    let externalAppIntegrationRepository: any ExternalAppIntegrationRepositoryProtocol
     let statisticsRepository: any StatisticsRepositoryProtocol
     let readingDashboardRepository: any ReadingDashboardRepositoryProtocol
     let coverImageLoader: any XMCoverImageLoading
@@ -48,6 +49,7 @@ final class RepositoryContainer {
         self.contentRepository = ContentRepository(databaseManager: databaseManager)
         self.globalSearchRepository = GlobalSearchRepository(databaseManager: databaseManager)
         self.tagManagementRepository = TagManagementRepository(databaseManager: databaseManager)
+        self.externalAppIntegrationRepository = ExternalAppIntegrationRepository(databaseManager: databaseManager)
         self.bookSearchRepository = BookSearchRepository()
         self.bookEditorRepository = BookEditorRepository(
             databaseManager: databaseManager,

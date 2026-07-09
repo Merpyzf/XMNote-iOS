@@ -30,6 +30,8 @@ struct ContentRepository: ContentRepositoryProtocol {
                 )
             case .bookNotes(let bookId):
                 try fetchBookNoteViewerItems(db, bookId: bookId)
+            case .noteReview(let noteIDs):
+                try fetchNoteReviewViewerItems(db, noteIDs: noteIDs)
             }
         }
     }
@@ -376,6 +378,42 @@ private extension ContentRepository {
             )
         }
     }
+
+    /// 查询书摘回顾来源下的 viewer 列表，按卡堆当前顺序输出。
+    nonisolated func fetchNoteReviewViewerItems(_ db: Database, noteIDs: [Int64]) throws -> [ContentViewerListItem] {
+        let ids = Self.uniquePositiveIDs(noteIDs)
+        guard !ids.isEmpty else { return [] }
+
+        // SQL 目的：按回顾卡堆当前 note_id 集合读取通用查看器分页项。
+        // 涉及表：note LEFT JOIN book。
+        // 关键过滤：限定 note.id IN 当前卡堆列表，并排除已软删除书摘；book 仅用于展示书名。
+        // 排序：数据库仅批量取数，最终顺序在内存侧恢复为卡堆传入顺序。
+        // 时间字段：created_date 为 Android 毫秒时间戳，读取阶段不做时区转换。
+        // 返回字段用途：构建 ContentViewerListItem，让详情页继续复用 fetchViewerDetail 读取完整内容。
+        let sql = """
+            SELECT n.id, n.book_id, n.created_date, COALESCE(b.name, '') AS book_name
+            FROM note n
+            LEFT JOIN book b ON b.id = n.book_id
+            WHERE n.id IN (\(Self.placeholders(count: ids.count)))
+              AND n.is_deleted = 0
+            """
+        let rows = try Row.fetchAll(db, sql: sql, arguments: StatementArguments(ids))
+        let itemsByID: [Int64: ContentViewerListItem] = Dictionary(
+            uniqueKeysWithValues: rows.map { row in
+                let noteID: Int64 = row["id"]
+                return (
+                    noteID,
+                    ContentViewerListItem(
+                        id: .note(noteID),
+                        sourceBookId: row["book_id"],
+                        bookTitle: row["book_name"] ?? "",
+                        timestamp: row["created_date"]
+                    )
+                )
+            }
+        )
+        return ids.compactMap { itemsByID[$0] }
+    }
 }
 
 // MARK: - Detail Queries
@@ -623,5 +661,20 @@ private extension ContentRepository {
             endIndex = previousIndex
         }
         return String(text[..<endIndex])
+    }
+
+    nonisolated static func placeholders(count: Int) -> String {
+        Array(repeating: "?", count: count).joined(separator: ", ")
+    }
+
+    nonisolated static func uniquePositiveIDs(_ ids: [Int64]) -> [Int64] {
+        var seen = Set<Int64>()
+        var result: [Int64] = []
+        result.reserveCapacity(ids.count)
+        for id in ids where id > 0 && !seen.contains(id) {
+            seen.insert(id)
+            result.append(id)
+        }
+        return result
     }
 }

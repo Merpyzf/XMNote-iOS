@@ -6,6 +6,9 @@
 ## 成员清单
 
 - `PersonalView.swift`: 我的 Tab 核心入口
+- `ApiIntegrationView.swift`: API 集成设置页面
+- `TagManagementView.swift`: 标签管理页面
+- `Components/TagManagementCollectionView.swift`: 标签管理页面私有集合视图
 
 ## 子目录
 

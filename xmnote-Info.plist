@@ -56,7 +56,7 @@
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>在使用百度 OCR 识别时会访问照片，用于选择待识别图片。</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>
-	<string>在分享书单时会将生成的书单图片保存到相册，便于继续分享。</string>
+	<string>在分享书单或书摘回顾时会将生成的图片保存到相册，便于继续分享。</string>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
 	<key>UILaunchScreen</key>

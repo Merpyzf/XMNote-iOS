@@ -166,6 +166,9 @@ struct MainTabView: View {
                     NoteContainerView(
                         onAddBook: { append(BookRoute.add, to: .notes) },
                         onAddNote: { append(NoteRoute.create(seed: .empty), to: .notes) },
+                        onOpenContentViewer: { source, initialItem in
+                            append(contentRoute(for: source, initialItem: initialItem), to: .notes)
+                        },
                         onOpenDebugCenter: { append(DebugRoute.debugCenter, to: .notes) }
                     )
                         .navigationDestination(for: DebugRoute.self) { route in
@@ -480,7 +483,7 @@ struct MainTabView: View {
         case .batchExport:
             Text("批量导出")
         case .apiIntegration:
-            Text("API 集成")
+            ApiIntegrationView()
         case .aiConfiguration:
             Text("AI 配置")
         case .tagManagement:

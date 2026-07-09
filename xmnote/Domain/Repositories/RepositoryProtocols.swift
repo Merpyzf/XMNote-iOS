@@ -2,7 +2,7 @@ import Foundation
 
 /**
  * [INPUT]: 依赖 Models 与 Services 层的数据类型定义
- * [OUTPUT]: 对外提供 Book/Note/Content/GlobalSearch/BackupServer/Backup/S3/TagManagement/Statistics/ReadCalendarColor/Timeline/ReadingDashboard 及书籍搜索/录入等 Repository 协议，包含书架、书单显示设置与基础数据管理入口
+ * [OUTPUT]: 对外提供 Book/Note/Content/GlobalSearch/BackupServer/Backup/S3/TagManagement/ExternalAppIntegration/Statistics/ReadCalendarColor/Timeline/ReadingDashboard 及书籍搜索/录入等 Repository 协议，包含书架、书单显示设置与基础数据管理入口
  * [POS]: Domain 层仓储契约，定义 Presentation 获取本地/网络数据的唯一入口
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -213,10 +213,26 @@ protocol OCRRepositoryProtocol {
     func recognizeText(request: OCRRecognitionRequest) async throws -> OCRRecognitionResult
 }
 
-/// 笔记模块数据访问契约，覆盖标签分组订阅与笔记详情读写。
+/// 笔记模块数据访问契约，覆盖标签分组、书摘回顾与笔记详情读写。
 protocol NoteRepositoryProtocol {
     /// 持续监听标签分组及其笔记摘要，供笔记页分区渲染。
     func observeTagSections() -> AsyncThrowingStream<[TagSection], Error>
+    /// 读取书摘回顾设置，供回顾页首屏恢复用户偏好。
+    func fetchNoteReviewSettings() -> NoteReviewSettings
+    /// 保存书摘回顾设置，供设置 Sheet 即时持久化偏好。
+    func saveNoteReviewSettings(_ settings: NoteReviewSettings)
+    /// 观察书摘回顾设置变更，供多入口设置修改后同步刷新。
+    func observeNoteReviewSettingChanges() -> AsyncStream<Void>
+    /// 按当前回顾设置读取一页书摘卡片，统一承接顺序分页与随机排除语义。
+    func fetchNoteReviewPage(request: NoteReviewPageRequest) async throws -> [NoteReviewCardItem]
+    /// 读取回顾设置可选标签，供标签筛选 Sheet 展示。
+    func fetchNoteReviewTagOptions() async throws -> [NoteReviewTagOption]
+    /// 读取当前回顾卡片的标签编辑快照，供操作菜单进入标签 Sheet。
+    func fetchNoteReviewTagEditSnapshot(noteID: Int64) async throws -> NoteReviewTagEditSnapshot
+    /// 替换当前回顾卡片的书摘标签，并返回数据库确认后的最新选中标签。
+    func replaceNoteReviewTags(noteID: Int64, tags: [NoteEditorTagOption]) async throws -> [NoteEditorTagOption]
+    /// 按已选书籍 ID 读取回显信息，供设置页展示与 BookPicker 预选。
+    func fetchNoteReviewSelectedBooks(bookIDs: [Int64]) async throws -> [BookPickerBook]
     /// 按笔记 ID 拉取可编辑详情（正文/想法 HTML 与元信息）。
     func fetchNoteDetail(noteId: Int64) async throws -> NoteDetailPayload?
     /// 保存笔记正文与想法 HTML，提交后触发下游观察流更新。
@@ -287,6 +303,18 @@ protocol GlobalSearchRepositoryProtocol {
     func removeRecentQuery(_ query: String)
     /// 清空全部最近全局搜索词。
     func clearRecentQueries()
+}
+
+/// 关联应用集成仓储契约，统一封装三方配置读取、保存、已配置目标计算与书摘发送。
+protocol ExternalAppIntegrationRepositoryProtocol {
+    /// 读取当前关联应用配置；纯本地同步读取，不触发数据库或网络访问。
+    func fetchSettings() -> ExternalAppIntegrationSettings
+    /// 保存关联应用配置；空值表示清空配置，非空 URL 会在写入前做 Android 对齐格式校验。
+    func saveSettings(_ settings: ExternalAppIntegrationSettings) throws
+    /// 基于当前配置计算已启用目标，供发送菜单或设置页状态展示。
+    func configuredDestinations() -> [ExternalAppDestination]
+    /// 按书摘 ID 读取数据库载荷并发送到指定目标；数据库读取与网络请求均在 Repository 内完成，调用任务取消后不再回写调用方状态。
+    func send(noteID: Int64, to destination: ExternalAppDestination) async throws -> ExternalAppIntegrationSendResult
 }
 
 /// 备份服务器配置契约，覆盖服务器列表、当前选择、增删改与连通性校验。

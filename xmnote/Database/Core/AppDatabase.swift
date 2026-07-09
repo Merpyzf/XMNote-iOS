@@ -22,7 +22,7 @@ nonisolated struct AppDatabase {
     static let databaseName = "xm_note.db"
 
     /// 数据库版本号，与 Android DBConfig.DB_VERSION 同步。
-    static let databaseVersion = RoomCanonicalSchemaV43.databaseVersion
+    static let databaseVersion = RoomCanonicalSchemaV44.databaseVersion
 
     /// 当前恢复闸门可识别的 Android Room 备份最高版本。
     static let maximumRestorableDatabaseVersion = RoomCanonicalSchemaCompatibility.maximumRestorableDatabaseVersion
