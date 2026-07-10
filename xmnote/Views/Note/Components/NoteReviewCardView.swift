@@ -6,6 +6,7 @@
  */
 
 import SwiftUI
+import CoreText
 
 /// 书摘回顾卡片内容，负责正文、想法、附图、标签摘要与来源信息的阅读排版。
 struct NoteReviewCardView: View {
@@ -14,38 +15,27 @@ struct NoteReviewCardView: View {
 
     @Environment(\.noteReviewPagingCardContentVisibility) private var cardContentVisibility
 
+    /// 当前设置解析出的统一卡片外观，避免各内容层独立选择颜色。
+    private var appearance: NoteReviewCardAppearance {
+        settings.cardAppearance
+    }
+
     var body: some View {
         VStack(spacing: Spacing.none) {
-            ScrollView {
-                reviewBodySection
-                    .frame(maxWidth: .infinity, alignment: frameAlignment)
-                    .padding(.horizontal, NoteReviewCardLayout.horizontalPadding)
-                    .padding(.top, contentTopPadding)
-                    .padding(.bottom, NoteReviewCardLayout.bodyBottomPadding)
-            }
-            .scrollIndicators(.hidden)
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .xmScrollEdgeWash(
-                edges: [.top, .bottom],
-                style: XMScrollEdgeWashStyle(
-                    height: NoteReviewCardLayout.scrollEdgeWashHeight,
-                    strength: .subtle,
-                    surface: .custom(settings.palette.scrollEdgeWashSurfaceColor)
-                )
-            )
-            .opacity(cardContentVisibility.bodyOpacity)
+            reviewScrollView
+                .opacity(cardContentVisibility.bodyOpacity)
 
             bookFooterSection
                 .padding(.horizontal, NoteReviewCardLayout.horizontalPadding)
                 .padding(.bottom, NoteReviewCardLayout.bottomPadding)
                 .opacity(cardContentVisibility.footerOpacity)
         }
-        .background(settings.palette.backgroundStyle)
+        .background(cardBackground)
         .compositingGroup()
         .clipShape(cardShape)
         .overlay {
             cardShape
-                .stroke(settings.palette.cardBorderColor, lineWidth: NoteReviewCardLayout.borderWidth)
+                .stroke(appearance.borderColor, lineWidth: NoteReviewCardLayout.borderWidth)
         }
         .shadow(
             color: Color.black.opacity(NoteReviewCardLayout.shadowOpacity),
@@ -56,28 +46,57 @@ struct NoteReviewCardView: View {
         .accessibilityElement(children: .combine)
     }
 
+    @ViewBuilder
+    private var reviewScrollView: some View {
+        if settings.backgroundMode == .image {
+            reviewScrollViewport
+                .xmScrollEdgeWash(
+                    edges: [.top, .bottom],
+                    style: XMScrollEdgeWashStyle(
+                        height: NoteReviewCardLayout.scrollEdgeWashHeight,
+                        strength: .subtle,
+                        surface: .custom(appearance.surface)
+                    )
+                )
+        } else {
+            reviewScrollViewport
+        }
+    }
+
+    private var reviewScrollViewport: some View {
+        ScrollView {
+            reviewBodySection
+                .frame(maxWidth: .infinity, alignment: frameAlignment)
+                .padding(.horizontal, NoteReviewCardLayout.horizontalPadding)
+                .padding(.top, contentTopPadding)
+                .padding(.bottom, NoteReviewCardLayout.bodyBottomPadding)
+        }
+        .scrollIndicators(.hidden)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
     private var bookFooterSection: some View {
         HStack(alignment: .center, spacing: NoteReviewCardLayout.footerContentSpacing) {
             XMBookCover.fixedWidth(
                 NoteReviewCardLayout.footerCoverWidth,
                 urlString: item.bookCoverURL,
                 cornerRadius: CornerRadius.inlaySmall,
-                border: .init(color: settings.palette.textColor.opacity(NoteReviewCardLayout.coverBorderOpacity), width: CardStyle.borderWidth),
+                border: .init(color: appearance.coverBorderColor, width: CardStyle.borderWidth),
                 placeholderIconSize: .small,
                 surfaceStyle: .spine
             )
 
             VStack(alignment: .leading, spacing: NoteReviewCardLayout.footerTextSpacing) {
                 Text(bookTitle)
-                    .font(NoteReviewCardTypography.footerTitle)
-                    .foregroundStyle(settings.palette.textColor.opacity(NoteReviewCardLayout.footerTitleOpacity))
+                    .font(NoteReviewCardTypography.footerTitle(for: settings))
+                    .foregroundStyle(appearance.bodyForegroundColor)
                     .lineLimit(1)
                     .multilineTextAlignment(.leading)
 
                 if !bookAuthor.isEmpty {
                     Text(bookAuthor)
-                        .font(NoteReviewCardTypography.footerAuthor)
-                        .foregroundStyle(settings.palette.secondaryTextColor)
+                        .font(NoteReviewCardTypography.footerAuthor(for: settings))
+                    .foregroundStyle(appearance.secondaryTextColor)
                         .lineLimit(1)
                         .multilineTextAlignment(.leading)
                 }
@@ -88,9 +107,9 @@ struct NoteReviewCardView: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.top, NoteReviewCardLayout.footerTopPadding)
-        .overlay(alignment: .top) {
-            Rectangle()
-                .fill(settings.palette.footerDividerColor)
+            .overlay(alignment: .top) {
+                Rectangle()
+                .fill(appearance.footerDividerColor)
                 .frame(height: CardStyle.borderWidth)
         }
         .accessibilityElement(children: .combine)
@@ -112,8 +131,8 @@ struct NoteReviewCardView: View {
         if !item.contentHTML.isEmpty {
             RichText(
                 html: item.contentHTML,
-                baseFont: NoteReviewCardTypography.body,
-                textColor: settings.palette.uiBodyTextColor,
+                baseFont: NoteReviewCardTypography.body(for: settings),
+                textColor: appearance.bodyTextColor,
                 lineSpacing: NoteReviewCardTypography.bodyLineSpacing,
                 textAlignment: settings.textAlignment.nsTextAlignment
             )
@@ -127,8 +146,8 @@ struct NoteReviewCardView: View {
         if !item.ideaHTML.isEmpty {
             RichText(
                 html: item.ideaHTML,
-                baseFont: NoteReviewCardTypography.idea,
-                textColor: settings.palette.uiSupplementTextColor,
+                baseFont: NoteReviewCardTypography.idea(for: settings),
+                textColor: appearance.supplementTextColor,
                 lineSpacing: NoteReviewCardTypography.ideaLineSpacing,
                 textAlignment: settings.textAlignment.nsTextAlignment
             )
@@ -138,7 +157,7 @@ struct NoteReviewCardView: View {
             .frame(maxWidth: .infinity, alignment: frameAlignment)
             .overlay(alignment: .leading) {
                 Capsule()
-                    .fill(settings.palette.textColor.opacity(NoteReviewCardLayout.ideaRuleOpacity))
+                    .fill(appearance.ideaRuleColor)
                     .frame(width: NoteReviewCardLayout.ideaRuleWidth)
             }
         }
@@ -150,7 +169,7 @@ struct NoteReviewCardView: View {
             NoteReviewImageCollage(
                 imageURLs: item.imageURLs,
                 namespace: "note-review-\(item.id)",
-                palette: settings.palette
+                settings: settings
             )
             .frame(maxWidth: .infinity, alignment: frameAlignment)
         }
@@ -161,8 +180,8 @@ struct NoteReviewCardView: View {
         if !item.tags.isEmpty {
             NoteReviewCardTagRail(
                 tags: item.tags.map(\.title),
-                foreground: settings.palette.secondaryTextColor,
-                background: settings.palette.textColor.opacity(0.06),
+                foreground: appearance.tagForegroundColor,
+                background: appearance.tagBackgroundColor,
                 alignment: frameAlignment
             )
             .padding(.top, Spacing.half)
@@ -203,34 +222,58 @@ struct NoteReviewCardView: View {
     private var cardShape: RoundedRectangle {
         RoundedRectangle(cornerRadius: NoteReviewCardLayout.cornerRadius, style: .continuous)
     }
+
+    @ViewBuilder
+    private var cardBackground: some View {
+        if let backgroundURL = appearance.backgroundImageURL {
+            XMRemoteImage(urlString: backgroundURL, contentMode: .fill) {
+                Rectangle().fill(appearance.surface)
+            }
+            .overlay(appearance.onSurface.opacity(NoteReviewCardLayout.imageBackgroundOverlayOpacity))
+        } else {
+            Rectangle().fill(appearance.surface)
+        }
+    }
 }
 
 /// 回顾卡片内部的页面级字体包装，保持书摘文字系统基线但微调来源信息层级。
 private enum NoteReviewCardTypography {
-    static let body = AppTypography.uiFixed(
-        baseSize: 17,
-        textStyle: .body,
-        minimumPointSize: 17
-    )
+    static func body(for settings: NoteReviewSettings) -> UIFont {
+        settings.fontSelection.uiFont(
+            base: AppTypography.uiFixed(baseSize: 17, textStyle: .body, minimumPointSize: 17)
+        )
+    }
     static let bodyLineSpacing: CGFloat = 8.5
-    static let idea = AppTypography.uiFixed(
-        baseSize: 14,
-        textStyle: .callout,
-        minimumPointSize: 14
-    )
+    static func idea(for settings: NoteReviewSettings) -> UIFont {
+        settings.fontSelection.uiFont(
+            base: AppTypography.uiFixed(baseSize: 14, textStyle: .callout, minimumPointSize: 14)
+        )
+    }
     static let ideaLineSpacing: CGFloat = 5
-    static let footerTitle = AppTypography.fixed(
-        baseSize: 13,
-        relativeTo: .footnote,
-        weight: .semibold,
-        minimumPointSize: 13
-    )
-    static let footerAuthor = AppTypography.fixed(
-        baseSize: 11,
-        relativeTo: .caption2,
-        weight: .regular,
-        minimumPointSize: 11
-    )
+    static func footerTitle(for settings: NoteReviewSettings) -> Font {
+        Font(
+            settings.fontSelection.uiFont(
+                base: AppTypography.uiFixed(
+                    baseSize: 13,
+                    textStyle: .footnote,
+                    weight: .semibold,
+                    minimumPointSize: 13
+                )
+            ) as CTFont
+        )
+    }
+    static func footerAuthor(for settings: NoteReviewSettings) -> Font {
+        Font(
+            settings.fontSelection.uiFont(
+                base: AppTypography.uiFixed(
+                    baseSize: 11,
+                    textStyle: .caption2,
+                    weight: .regular,
+                    minimumPointSize: 11
+                )
+            ) as CTFont
+        )
+    }
 }
 
 /// 回顾卡片布局常量，控制阅读纸面比例、来源区托底和正文内边距。
@@ -242,6 +285,7 @@ enum NoteReviewCardLayout {
     static let bottomPadding = Spacing.contentEdge
     static let cornerRadius = CornerRadius.containerXL
     static let borderWidth: CGFloat = 0.75
+    static let borderOpacity = 0.16
     static let shadowOpacity = 0.052
     static let shadowRadius: CGFloat = 22
     static let shadowYOffset: CGFloat = 12
@@ -267,6 +311,7 @@ enum NoteReviewCardLayout {
     static let imageWallBorderOpacity = 0.11
     static let imageWallPlaceholderOpacity = 0.08
     static let imageWallOverlayOpacity = 0.34
+    static let imageBackgroundOverlayOpacity = 0.03
 
     static func readableContentWidth(forCardWidth cardWidth: CGFloat) -> CGFloat {
         min(textColumnMaxWidth, max(0, cardWidth - horizontalPadding * 2))
@@ -276,7 +321,7 @@ enum NoteReviewCardLayout {
 private struct NoteReviewImageCollage: View {
     let imageURLs: [String]
     let namespace: String
-    let palette: NoteReviewPalette
+    let settings: NoteReviewSettings
 
     @State private var host: XMJXPhotoBrowserHost
     @State private var tapSequence = 0
@@ -285,10 +330,10 @@ private struct NoteReviewImageCollage: View {
     private let galleryItems: [XMJXGalleryItem]
 
     /// 初始化卡片内图片拼贴，并为 JX 浏览器准备稳定的缩略图数据源。
-    init(imageURLs: [String], namespace: String, palette: NoteReviewPalette) {
+    init(imageURLs: [String], namespace: String, settings: NoteReviewSettings) {
         self.imageURLs = imageURLs
         self.namespace = namespace
-        self.palette = palette
+        self.settings = settings
         let items = imageURLs.enumerated().map { index, url in
             XMJXGalleryItem(
                 id: "\(namespace)-image-\(index)",
@@ -401,18 +446,18 @@ private struct NoteReviewImageCollage: View {
             }
             .background {
                 RoundedRectangle(cornerRadius: NoteReviewCardLayout.imageWallCornerRadius, style: .continuous)
-                    .fill(palette.textColor.opacity(NoteReviewCardLayout.imageWallPlaceholderOpacity))
+                    .fill(settings.cardAppearance.imagePlaceholderColor)
                     .overlay {
                         Image(systemName: "photo")
                             .font(AppTypography.title3)
-                            .foregroundStyle(palette.secondaryTextColor)
+                            .foregroundStyle(settings.cardAppearance.secondaryTextColor)
                     }
             }
             .clipShape(RoundedRectangle(cornerRadius: NoteReviewCardLayout.imageWallCornerRadius, style: .continuous))
             .overlay {
                 RoundedRectangle(cornerRadius: NoteReviewCardLayout.imageWallCornerRadius, style: .continuous)
                     .stroke(
-                        palette.textColor.opacity(NoteReviewCardLayout.imageWallBorderOpacity),
+                        settings.cardAppearance.imageBorderColor,
                         lineWidth: CardStyle.borderWidth
                     )
             }

@@ -8,138 +8,145 @@
 import SwiftUI
 import UIKit
 
-/// 书摘回顾卡片配色的页面级 UI 映射。
+/// 书摘回顾配色的页面级 UI 映射，始终从领域层的亮暗纯色集合构造动态颜色。
 extension NoteReviewPalette {
-    var backgroundStyle: AnyShapeStyle {
-        switch self {
-        case .paper:
-            return AnyShapeStyle(
-                LinearGradient(
-                    colors: [
-                        Color(light: Color(hex: 0xFEFFFE), dark: Color(hex: 0x242827)),
-                        Color(light: Color(hex: 0xF9FCFA), dark: Color(hex: 0x222724)),
-                        Color(light: Color(hex: 0xF4FAF6), dark: Color(hex: 0x202522))
-                    ],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
-            )
-        case .dark:
-            return AnyShapeStyle(Color(light: Color(hex: 0x282829), dark: Color(hex: 0x19191A)))
-        case .lightGray:
-            return AnyShapeStyle(Color(light: Color(hex: 0xF5F5F5), dark: Color(hex: 0x2A2A2C)))
-        case .mistBlue:
-            return AnyShapeStyle(Color(light: Color(hex: 0xE8EDF6), dark: Color(hex: 0x253044)))
-        case .sageGreen:
-            return AnyShapeStyle(Color(light: Color(hex: 0xE7F3E7), dark: Color(hex: 0x243529)))
-        case .rose:
-            return AnyShapeStyle(Color(light: Color(hex: 0xF5E9ED), dark: Color(hex: 0x3A2730)))
-        }
+    /// 当前规范化配色的自适应不透明卡片表面。
+    var cardSurfaceColor: Color {
+        Color(uiColor: uiCardSurfaceColor)
     }
 
-    var textColor: Color {
-        switch self {
-        case .paper:
-            return Color(light: Color(hex: 0x3B4540), dark: Color(hex: 0xE4E8E5))
-        case .dark:
-            return Color(light: .white, dark: Color(hex: 0xF2F2F7))
-        case .lightGray:
-            return Color(light: Color(hex: 0x202124), dark: Color(hex: 0xE5E5EA))
-        case .mistBlue:
-            return Color(light: Color(hex: 0x254975), dark: Color(hex: 0xDCE8F8))
-        case .sageGreen:
-            return Color(light: Color(hex: 0x46554A), dark: Color(hex: 0xDCEADE))
-        case .rose:
-            return Color(light: Color(hex: 0x76393B), dark: Color(hex: 0xF2DDE4))
-        }
+    /// 当前规范化配色的自适应卡片前景色。
+    var cardOnSurfaceColor: Color {
+        Color(uiColor: uiCardOnSurfaceColor)
     }
 
+    /// 当前规范化配色的 UIKit 表面色，供 RichText 等 UIKit 路径按系统主题解析。
+    var uiCardSurfaceColor: UIColor {
+        let colorSet = canonicalPalette.cardColorSet
+        return UIColor(lightHex: UInt(colorSet.lightSurfaceHex), darkHex: UInt(colorSet.darkSurfaceHex))
+    }
+
+    /// 当前规范化配色的 UIKit 前景色，供 RichText 等 UIKit 路径按系统主题解析。
+    var uiCardOnSurfaceColor: UIColor {
+        let colorSet = canonicalPalette.cardColorSet
+        return UIColor(lightHex: UInt(colorSet.lightTextHex), darkHex: UInt(colorSet.darkTextHex))
+    }
+}
+
+/// 回顾卡片的单一外观描述，确保所有前景层级均由同一 on-surface 颜色派生。
+struct NoteReviewCardAppearance {
+    /// 用于颜色模式卡片与图片加载失败的纯色表面。
+    let surface: Color
+    /// 用于图片模式加载成功时覆盖卡片的远程背景地址。
+    let backgroundImageURL: String?
+    /// 卡片的基础 on-surface 前景色；仅图片模式会应用已存储的自定义文字色。
+    let onSurface: Color
+    /// UIKit 富文本所需的动态 on-surface 前景色。
+    let uiOnSurface: UIColor
+
+    /// 正文使用的 92% on-surface UIKit 颜色。
+    var bodyTextColor: UIColor {
+        uiOnSurface.withOpacity(0.92)
+    }
+
+    /// 辅助富文本使用的 76% on-surface UIKit 颜色。
+    var supplementTextColor: UIColor {
+        uiOnSurface.withOpacity(0.76)
+    }
+
+    /// SwiftUI 辅助文字使用的 76% on-surface 颜色。
     var secondaryTextColor: Color {
-        textColor.opacity(0.68)
+        onSurface.opacity(0.76)
     }
 
-    var cardBorderColor: Color {
-        switch self {
-        case .paper:
-            return Color(light: Color(hex: 0xDDE8E1).opacity(0.62), dark: Color.white.opacity(0.08))
-        case .dark:
-            return Color.white.opacity(0.09)
-        case .lightGray:
-            return textColor.opacity(0.10)
-        case .mistBlue:
-            return Color(light: Color(hex: 0xC9D5E5).opacity(0.56), dark: textColor.opacity(0.10))
-        case .sageGreen:
-            return Color(light: Color(hex: 0xC9DBC9).opacity(0.56), dark: textColor.opacity(0.10))
-        case .rose:
-            return Color(light: Color(hex: 0xE5CCD2).opacity(0.56), dark: textColor.opacity(0.10))
-        }
+    /// 页脚标题等主要 SwiftUI 文字使用的 92% on-surface 颜色。
+    var bodyForegroundColor: Color {
+        onSurface.opacity(0.92)
     }
 
+    /// 卡片边框使用的 on-surface 派生颜色。
+    var borderColor: Color {
+        onSurface.opacity(0.16)
+    }
+
+    /// 页脚分隔线使用的 on-surface 派生颜色。
     var footerDividerColor: Color {
+        onSurface.opacity(0.045)
+    }
+
+    /// 想法引导线使用的 on-surface 派生颜色。
+    var ideaRuleColor: Color {
+        onSurface.opacity(0.18)
+    }
+
+    /// 标签文字使用的 on-surface 派生颜色。
+    var tagForegroundColor: Color {
+        secondaryTextColor
+    }
+
+    /// 标签胶囊底色使用的 on-surface 派生颜色。
+    var tagBackgroundColor: Color {
+        onSurface.opacity(0.06)
+    }
+
+    /// 图片未加载时的占位表面使用的 on-surface 派生颜色。
+    var imagePlaceholderColor: Color {
+        onSurface.opacity(0.08)
+    }
+
+    /// 图片边框使用的 on-surface 派生颜色。
+    var imageBorderColor: Color {
+        onSurface.opacity(0.11)
+    }
+
+    /// 书籍封面边框使用的 on-surface 派生颜色。
+    var coverBorderColor: Color {
+        onSurface.opacity(0.12)
+    }
+}
+
+/// 将回顾设置映射为卡片的唯一 UI 外观入口，并保留旧版自定义背景数据的纯色兼容回退。
+extension NoteReviewSettings {
+    /// 当前设置对应的卡片外观；颜色模式不生成渐变，图片不可用时回退到规范化 palette 表面。
+    var cardAppearance: NoteReviewCardAppearance {
+        let imageURL = normalizedBackgroundImageURL
+        let surface = Color(uiColor: UIColor(
+            lightHex: UInt(cardSurfaceHex(isDarkAppearance: false)),
+            darkHex: UInt(cardSurfaceHex(isDarkAppearance: true))
+        ))
+        let uiOnSurface = UIColor(
+            lightHex: UInt(cardTextHex(isDarkAppearance: false)),
+            darkHex: UInt(cardTextHex(isDarkAppearance: true))
+        )
+
+        return NoteReviewCardAppearance(
+            surface: surface,
+            backgroundImageURL: imageURL,
+            onSurface: Color(uiColor: uiOnSurface),
+            uiOnSurface: uiOnSurface
+        )
+    }
+
+    /// 规范化图片地址，避免空白字符串触发无效的远程图片请求。
+    private var normalizedBackgroundImageURL: String? {
+        guard backgroundMode == .image else { return nil }
+        guard let backgroundImageURL else { return nil }
+        let trimmedURL = backgroundImageURL.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmedURL.isEmpty ? nil : trimmedURL
+    }
+}
+
+/// 将领域字体选择转换为 RichText 所需的 UIKit 字体；本地字体未注册时安全回退到系统字体。
+extension NoteReviewFontSelection {
+    /// 按当前字体选择生成与基础字号一致的 UIKit 字体。
+    func uiFont(base: UIFont) -> UIFont {
         switch self {
-        case .dark:
-            return Color.white.opacity(0.06)
-        default:
-            return textColor.opacity(0.045)
-        }
-    }
-
-    var scrollEdgeWashSurfaceColor: Color {
-        switch self {
-        case .paper:
-            return Color(light: Color(hex: 0xF8FCF9), dark: Color(hex: 0x222724))
-        case .dark:
-            return Color(light: Color(hex: 0x282829), dark: Color(hex: 0x19191A))
-        case .lightGray:
-            return Color(light: Color(hex: 0xF5F5F5), dark: Color(hex: 0x2A2A2C))
-        case .mistBlue:
-            return Color(light: Color(hex: 0xE8EDF6), dark: Color(hex: 0x253044))
-        case .sageGreen:
-            return Color(light: Color(hex: 0xE7F3E7), dark: Color(hex: 0x243529))
-        case .rose:
-            return Color(light: Color(hex: 0xF5E9ED), dark: Color(hex: 0x3A2730))
-        }
-    }
-
-    var ideaBackgroundColor: Color {
-        switch self {
-        case .dark:
-            return Color.white.opacity(0.08)
-        default:
-            return textColor.opacity(0.08)
-        }
-    }
-
-    var swatchStyle: AnyShapeStyle {
-        backgroundStyle
-    }
-
-    var uiTextColor: UIColor {
-        switch self {
-        case .paper:
-            return UIColor(lightHex: 0x3B4540, darkHex: 0xE4E8E5)
-        case .dark:
-            return UIColor(lightHex: 0xFFFFFF, darkHex: 0xF2F2F7)
-        case .lightGray:
-            return UIColor(lightHex: 0x202124, darkHex: 0xE5E5EA)
-        case .mistBlue:
-            return UIColor(lightHex: 0x254975, darkHex: 0xDCE8F8)
-        case .sageGreen:
-            return UIColor(lightHex: 0x46554A, darkHex: 0xDCEADE)
-        case .rose:
-            return UIColor(lightHex: 0x76393B, darkHex: 0xF2DDE4)
-        }
-    }
-
-    var uiBodyTextColor: UIColor {
-        UIColor { traitCollection in
-            uiTextColor.resolvedColor(with: traitCollection).withAlphaComponent(0.92)
-        }
-    }
-
-    var uiSupplementTextColor: UIColor {
-        UIColor { traitCollection in
-            uiTextColor.resolvedColor(with: traitCollection).withAlphaComponent(0.88)
+        case .system:
+            return base
+        case .sourceHanSerif:
+            return UIFont(name: "Songti SC", size: base.pointSize) ?? base
+        case .local(_, let displayName):
+            return UIFont(name: displayName, size: base.pointSize) ?? base
         }
     }
 }
@@ -181,6 +188,14 @@ extension NoteReviewTextAlignment {
 }
 
 private extension UIColor {
+    /// 创建保留亮暗模式解析能力的指定不透明度颜色。
+    func withOpacity(_ opacity: CGFloat) -> UIColor {
+        UIColor { traitCollection in
+            self.resolvedColor(with: traitCollection).withAlphaComponent(opacity)
+        }
+    }
+
+    /// 根据系统亮暗模式解析两组 RGB 十六进制颜色。
     convenience init(lightHex: UInt, darkHex: UInt) {
         self.init { traitCollection in
             switch traitCollection.userInterfaceStyle {
@@ -192,6 +207,7 @@ private extension UIColor {
         }
     }
 
+    /// 根据 RGB 十六进制值创建不透明 UIKit 颜色。
     convenience init(hex: UInt) {
         self.init(
             red: CGFloat((hex >> 16) & 0xFF) / 255.0,
@@ -199,5 +215,21 @@ private extension UIColor {
             blue: CGFloat(hex & 0xFF) / 255.0,
             alpha: 1.0
         )
+    }
+}
+
+extension Color {
+    /// 将当前 ColorPicker 选择转换为持久化使用的 RGB 十六进制值。
+    var rgbHex: UInt32 {
+        let resolved = UIColor(self)
+        var red: CGFloat = 0
+        var green: CGFloat = 0
+        var blue: CGFloat = 0
+        guard resolved.getRed(&red, green: &green, blue: &blue, alpha: nil) else {
+            return 0
+        }
+        return UInt32(red * 255.0) << 16
+            | UInt32(green * 255.0) << 8
+            | UInt32(blue * 255.0)
     }
 }

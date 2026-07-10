@@ -6,6 +6,8 @@
  */
 
 import SwiftUI
+import PhotosUI
+import UniformTypeIdentifiers
 
 /// 书摘回顾设置 Sheet，复用项目设置页分组风格并将写入动作委托给 ViewModel。
 struct NoteReviewSettingsSheet: View {
@@ -14,6 +16,8 @@ struct NoteReviewSettingsSheet: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var activeSheet: ActiveSheet?
+    @State private var selectedBackgroundPhoto: PhotosPickerItem?
+    @State private var isImportingFont = false
 
     private enum ActiveSheet: Identifiable {
         case books
@@ -61,6 +65,16 @@ struct NoteReviewSettingsSheet: View {
                 .presentationDragIndicator(.visible)
             }
         }
+        .task(id: selectedBackgroundPhoto) {
+            await consumeBackgroundPhoto()
+        }
+        .fileImporter(
+            isPresented: $isImportingFont,
+            allowedContentTypes: [.font]
+        ) { result in
+            guard case .success(let url) = result else { return }
+            Task { await viewModel.importFont(from: url) }
+        }
     }
 
     private var scopeGroup: some View {
@@ -107,10 +121,72 @@ struct NoteReviewSettingsSheet: View {
                     onSelect: updateSortRule
                 )
 
-                NoteReviewPalettePickerRow(
-                    selection: viewModel.settings.palette,
-                    onSelect: updatePalette
+                XMSettingsValueMenuRow(
+                    title: "背景类型",
+                    value: viewModel.settings.backgroundMode.title,
+                    options: NoteReviewBackgroundMode.allCases,
+                    selection: viewModel.settings.backgroundMode,
+                    optionTitle: { $0.title },
+                    optionImage: { _ in nil },
+                    onSelect: updateBackgroundMode
                 )
+
+                if viewModel.settings.backgroundMode == .color {
+                    NoteReviewPalettePickerRow(
+                        selection: viewModel.settings.palette,
+                        onSelect: updatePalette
+                    )
+                }
+
+                if viewModel.settings.backgroundMode == .image {
+                    NoteReviewBackgroundImageRow(
+                        imageURL: viewModel.settings.backgroundImageURL,
+                        isUploading: viewModel.isUploadingBackground,
+                        onClear: clearBackgroundImage,
+                        selectedPhoto: $selectedBackgroundPhoto
+                    )
+
+                    NoteReviewTextColorRow(
+                        color: Binding(
+                            get: { viewModel.settings.cardAppearance.onSurface },
+                            set: { color in
+                                Task { await viewModel.updateCustomTextColorHex(color.rgbHex) }
+                            }
+                        )
+                    )
+                }
+
+                XMSettingsValueMenuRow(
+                    title: "字体",
+                    value: viewModel.settings.fontSelection.title,
+                    options: fontOptions,
+                    selection: viewModel.settings.fontSelection,
+                    optionTitle: { $0.title },
+                    optionImage: { _ in nil },
+                    onSelect: updateFontSelection
+                )
+
+                Button {
+                    isImportingFont = true
+                } label: {
+                    HStack {
+                        Text("导入本地字体")
+                            .font(AppTypography.subheadlineSemibold)
+                            .foregroundStyle(Color.textPrimary)
+                        Spacer()
+                        if viewModel.isImportingFont {
+                            ProgressView()
+                                .controlSize(.small)
+                        } else {
+                            Image(systemName: "doc.badge.plus")
+                                .foregroundStyle(Color.textSecondary)
+                        }
+                    }
+                    .frame(minHeight: 52)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .disabled(viewModel.isImportingFont)
 
                 XMSettingsValueMenuRow(
                     title: "文本对齐",
@@ -166,7 +242,31 @@ struct NoteReviewSettingsSheet: View {
     private func updatePalette(_ palette: NoteReviewPalette) {
         var next = viewModel.settings
         next.palette = palette
+        next.customBackgroundStartHex = nil
+        next.customBackgroundEndHex = nil
         Task { await viewModel.updateSettings(next) }
+    }
+
+    private var fontOptions: [NoteReviewFontSelection] {
+        var options: [NoteReviewFontSelection] = [.system, .sourceHanSerif]
+        if case .local = viewModel.settings.fontSelection {
+            options.append(viewModel.settings.fontSelection)
+        }
+        return options
+    }
+
+    private func updateBackgroundMode(_ mode: NoteReviewBackgroundMode) {
+        Task { await viewModel.updateBackgroundMode(mode) }
+    }
+
+    private func updateFontSelection(_ selection: NoteReviewFontSelection) {
+        var next = viewModel.settings
+        next.fontSelection = selection
+        Task { await viewModel.updateSettings(next) }
+    }
+
+    private func clearBackgroundImage() {
+        Task { await viewModel.clearBackgroundImage() }
     }
 
     private func updateTextAlignment(_ alignment: NoteReviewTextAlignment) {
@@ -187,11 +287,86 @@ struct NoteReviewSettingsSheet: View {
     private func handleTagSelection(_ ids: [Int64]) {
         Task { await viewModel.updateSelectedTagIDs(ids) }
     }
+
+    private func consumeBackgroundPhoto() async {
+        guard let selectedBackgroundPhoto else { return }
+        defer { self.selectedBackgroundPhoto = nil }
+
+        do {
+            guard let data = try await selectedBackgroundPhoto.loadTransferable(type: Data.self) else {
+                viewModel.errorMessage = "读取背景图片失败"
+                return
+            }
+            let url = FileManager.default.temporaryDirectory
+                .appendingPathComponent("note-review-background-\(UUID().uuidString).jpg")
+            try data.write(to: url, options: .atomic)
+            await viewModel.uploadBackgroundImage(from: url)
+        } catch {
+            guard !Task.isCancelled else { return }
+            viewModel.errorMessage = "读取背景图片失败：\(error.localizedDescription)"
+        }
+    }
+}
+
+private struct NoteReviewBackgroundImageRow: View {
+    let imageURL: String?
+    let isUploading: Bool
+    let onClear: () -> Void
+    @Binding var selectedPhoto: PhotosPickerItem?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Spacing.half) {
+            HStack {
+                Text("背景图片")
+                    .font(AppTypography.subheadlineSemibold)
+                    .foregroundStyle(Color.textPrimary)
+                Spacer()
+                if isUploading {
+                    ProgressView()
+                        .controlSize(.small)
+                } else {
+                    PhotosPicker(selection: $selectedPhoto, matching: .images) {
+                        Text(imageURL == nil ? "选择图片" : "更换图片")
+                            .font(AppTypography.subheadlineMedium)
+                            .foregroundStyle(Color.brand)
+                    }
+                }
+            }
+
+            if imageURL != nil {
+                Button("清除图片", action: onClear)
+                    .font(AppTypography.captionMedium)
+                    .foregroundStyle(Color.feedbackWarning)
+            }
+        }
+        .frame(minHeight: 52)
+    }
+}
+
+private struct NoteReviewTextColorRow: View {
+    @Binding var color: Color
+
+    var body: some View {
+        HStack {
+            Text("文字颜色")
+                .font(AppTypography.subheadlineSemibold)
+                .foregroundStyle(Color.textPrimary)
+            Spacer()
+            ColorPicker("", selection: $color, supportsOpacity: false)
+                .labelsHidden()
+        }
+        .frame(minHeight: 52)
+    }
 }
 
 private struct NoteReviewPalettePickerRow: View {
     let selection: NoteReviewPalette
     let onSelect: (NoteReviewPalette) -> Void
+
+    /// 归一化后的当前选择，避免历史持久化值影响标题与选中态。
+    private var canonicalSelection: NoteReviewPalette {
+        selection.canonicalPalette
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: Spacing.cozy) {
@@ -202,7 +377,7 @@ private struct NoteReviewPalettePickerRow: View {
 
                 Spacer(minLength: Spacing.base)
 
-                Text(selection.title)
+                Text(canonicalSelection.title)
                     .font(AppTypography.subheadlineMedium)
                     .foregroundStyle(Color.textHint)
                     .contentTransition(.opacity)
@@ -210,32 +385,32 @@ private struct NoteReviewPalettePickerRow: View {
 
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: Spacing.cozy) {
-                    ForEach(NoteReviewPalette.allCases, id: \.self) { palette in
+                    ForEach(NoteReviewPalette.selectablePalettes, id: \.self) { palette in
                         Button {
-                            guard palette != selection else { return }
+                            guard palette != canonicalSelection else { return }
                             onSelect(palette)
                         } label: {
                             RoundedRectangle(cornerRadius: CornerRadius.inlayMedium, style: .continuous)
-                                .fill(palette.swatchStyle)
+                                .fill(palette.cardSurfaceColor)
                                 .frame(width: 34, height: 34)
                                 .overlay {
                                     RoundedRectangle(cornerRadius: CornerRadius.inlayMedium, style: .continuous)
                                         .stroke(
-                                            palette == selection ? Color.brand : Color.surfaceBorderSubtle,
-                                            lineWidth: palette == selection ? 2 : CardStyle.borderWidth
+                                            palette == canonicalSelection ? Color.brand : Color.surfaceBorderSubtle,
+                                            lineWidth: palette == canonicalSelection ? 2 : CardStyle.borderWidth
                                         )
                                 }
                                 .overlay {
-                                    if palette == selection {
+                                    if palette == canonicalSelection {
                                         Image(systemName: "checkmark")
                                             .font(AppTypography.captionSemibold)
-                                            .foregroundStyle(palette.textColor)
+                                            .foregroundStyle(palette.cardOnSurfaceColor)
                                     }
                                 }
                         }
                         .buttonStyle(.plain)
                         .accessibilityLabel(palette.title)
-                        .accessibilityAddTraits(palette == selection ? .isSelected : [])
+                        .accessibilityAddTraits(palette == canonicalSelection ? .isSelected : [])
                     }
                 }
                 .padding(.vertical, Spacing.micro)

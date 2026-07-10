@@ -55,6 +55,49 @@ struct NoteRepository: NoteRepositoryProtocol {
         noteReviewSettingStore.observeChanges()
     }
 
+    /// 将回顾依赖的数据库表变化桥接为无载荷事件；观察任务由调用方取消，避免保活页面释放后继续占用数据库观察资源。
+    func observeNoteReviewDataChanges() -> AsyncThrowingStream<Void, Error> {
+        let source = ObservationStream.make(in: databaseManager.database.dbPool) { db in
+            try noteReviewDataFingerprint(db)
+        }
+        return AsyncThrowingStream { continuation in
+            let task = Task {
+                var lastFingerprint: String?
+                do {
+                    for try await fingerprint in source {
+                        guard !Task.isCancelled else { return }
+                        guard fingerprint != lastFingerprint else { continue }
+                        lastFingerprint = fingerprint
+                        continuation.yield(())
+                    }
+                    continuation.finish()
+                } catch {
+                    if !Task.isCancelled {
+                        continuation.finish(throwing: error)
+                    }
+                }
+            }
+            continuation.onTermination = { _ in
+                task.cancel()
+            }
+        }
+    }
+
+    /// 使用当前 S3 配置上传回顾背景图；对象键由统一上传仓储生成，避免 ViewModel 直接依赖网络客户端。
+    func uploadNoteReviewBackground(localURL: URL) async throws -> S3UploadResult {
+        try await s3UploadRepository.uploadFile(localURL: localURL, prefix: "note_review_background", progress: nil)
+    }
+
+    /// 下载回顾背景图；网络响应必须是成功状态，避免把错误页面当作图片交给分享渲染器。
+    func fetchNoteReviewBackgroundData(remoteURL: URL) async throws -> Data {
+        let (data, response) = try await URLSession.shared.data(from: remoteURL)
+        if let httpResponse = response as? HTTPURLResponse,
+           !(200..<300).contains(httpResponse.statusCode) {
+            throw URLError(.badServerResponse)
+        }
+        return data
+    }
+
     /// 按当前筛选与排序读取一页书摘回顾卡片。
     func fetchNoteReviewPage(request: NoteReviewPageRequest) async throws -> [NoteReviewCardItem] {
         try await databaseManager.database.dbPool.read { db in
@@ -402,6 +445,30 @@ struct NoteRepository: NoteRepositoryProtocol {
 }
 
 private extension NoteRepository {
+    /// SQL 目的：追踪会影响书摘回顾卡片内容、书籍来源、标签与附图的全部本地表变更。
+    /// 涉及表：note、book、chapter、tag_note、tag、attach_image；通过各表记录数、更新时间与文本长度聚合形成观察指纹。
+    /// 关键过滤：仅用于变化检测，不改变回顾查询的 is_deleted 语义；所有软删除和有效记录变化都必须触发刷新。
+    /// 时间字段：updated_date 沿用 Android 毫秒时间戳，仅参与变化比较，不做时区转换。
+    /// 返回字段用途：ValueObservation 仅在指纹变化时向 ViewModel 发出外部数据变更事件。
+    nonisolated func noteReviewDataFingerprint(_ db: Database) throws -> String {
+        let sql = """
+            SELECT
+                (SELECT COUNT(*) || ':' || COALESCE(MAX(updated_date), 0) || ':' || COALESCE(SUM(LENGTH(content) + LENGTH(idea)), 0) FROM note)
+                || '|' ||
+                (SELECT COUNT(*) || ':' || COALESCE(MAX(updated_date), 0) || ':' || COALESCE(SUM(LENGTH(name) + LENGTH(author) + LENGTH(cover)), 0) FROM book)
+                || '|' ||
+                (SELECT COUNT(*) || ':' || COALESCE(MAX(updated_date), 0) || ':' || COALESCE(SUM(LENGTH(title) + LENGTH(source_uid)), 0) FROM chapter)
+                || '|' ||
+                (SELECT COUNT(*) || ':' || COALESCE(MAX(updated_date), 0) || ':' || COALESCE(SUM(note_id + tag_id), 0) FROM tag_note)
+                || '|' ||
+                (SELECT COUNT(*) || ':' || COALESCE(MAX(updated_date), 0) || ':' || COALESCE(SUM(LENGTH(name)), 0) FROM tag)
+                || '|' ||
+                (SELECT COUNT(*) || ':' || COALESCE(MAX(updated_date), 0) || ':' || COALESCE(SUM(LENGTH(image_url)), 0) FROM attach_image)
+                AS fingerprint
+            """
+        return try String.fetchOne(db, sql: sql) ?? ""
+    }
+
     nonisolated static var currentTimestampMillis: Int64 {
         Int64(Date().timeIntervalSince1970 * 1000)
     }

@@ -44,6 +44,11 @@ struct ExternalAppIntegrationRepository: ExternalAppIntegrationRepositoryProtoco
         fetchSettings().configuredDestinations
     }
 
+    /// 转发关联应用配置存储的变更流，避免页面直接依赖 UserDefaults 或通知细节。
+    func observeConfigurationChanges() -> AsyncStream<Void> {
+        settingStore.observeChanges()
+    }
+
     /// 按书摘 ID 读取载荷并发送到指定外部工具。
     func send(noteID: Int64, to destination: ExternalAppDestination) async throws -> ExternalAppIntegrationSendResult {
         let settings = fetchSettings()

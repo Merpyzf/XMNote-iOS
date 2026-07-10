@@ -223,6 +223,12 @@ protocol NoteRepositoryProtocol {
     func saveNoteReviewSettings(_ settings: NoteReviewSettings)
     /// 观察书摘回顾设置变更，供多入口设置修改后同步刷新。
     func observeNoteReviewSettingChanges() -> AsyncStream<Void>
+    /// 观察书摘、书籍、章节、标签关系与附图变化，供保活的回顾卡组同步外部编辑结果。
+    func observeNoteReviewDataChanges() -> AsyncThrowingStream<Void, Error>
+    /// 上传回顾背景图并返回远端地址，供回顾设置保存图片背景。
+    func uploadNoteReviewBackground(localURL: URL) async throws -> S3UploadResult
+    /// 下载回顾背景图数据，供分享图渲染复用当前图片背景。
+    func fetchNoteReviewBackgroundData(remoteURL: URL) async throws -> Data
     /// 按当前回顾设置读取一页书摘卡片，统一承接顺序分页与随机排除语义。
     func fetchNoteReviewPage(request: NoteReviewPageRequest) async throws -> [NoteReviewCardItem]
     /// 读取回顾设置可选标签，供标签筛选 Sheet 展示。
@@ -313,6 +319,8 @@ protocol ExternalAppIntegrationRepositoryProtocol {
     func saveSettings(_ settings: ExternalAppIntegrationSettings) throws
     /// 基于当前配置计算已启用目标，供发送菜单或设置页状态展示。
     func configuredDestinations() -> [ExternalAppDestination]
+    /// 观察关联应用配置变化，供保活页面同步发送入口可用性。
+    func observeConfigurationChanges() -> AsyncStream<Void>
     /// 按书摘 ID 读取数据库载荷并发送到指定目标；数据库读取与网络请求均在 Repository 内完成，调用任务取消后不再回写调用方状态。
     func send(noteID: Int64, to destination: ExternalAppDestination) async throws -> ExternalAppIntegrationSendResult
 }

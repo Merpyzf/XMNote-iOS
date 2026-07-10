@@ -10,6 +10,7 @@ import Foundation
 /// 关联应用配置的本地持久化入口，对齐 Android SharedPreferences 的轻量配置语义。
 nonisolated struct ExternalAppIntegrationSettingStore {
     static let shared = ExternalAppIntegrationSettingStore()
+    static let didChangeNotification = Notification.Name("ExternalAppIntegrationSettingStore.didChange")
 
     private let defaults: UserDefaults
     private let key = "external-app.integration.settings.v1"
@@ -33,8 +34,25 @@ nonisolated struct ExternalAppIntegrationSettingStore {
         do {
             let data = try JSONEncoder().encode(settings.normalized)
             defaults.set(data, forKey: key)
+            NotificationCenter.default.post(name: Self.didChangeNotification, object: nil)
         } catch {
             throw ExternalAppIntegrationError.persistenceFailure(message: error.localizedDescription)
+        }
+    }
+
+    /// 观察关联应用配置变化，供保活的书摘回顾页实时更新“发送到”入口。
+    func observeChanges() -> AsyncStream<Void> {
+        AsyncStream { continuation in
+            let task = Task {
+                for await _ in NotificationCenter.default.notifications(named: Self.didChangeNotification) {
+                    guard !Task.isCancelled else { return }
+                    continuation.yield(())
+                }
+                continuation.finish()
+            }
+            continuation.onTermination = { _ in
+                task.cancel()
+            }
         }
     }
 }

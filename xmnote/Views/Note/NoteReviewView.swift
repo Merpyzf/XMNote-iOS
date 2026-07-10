@@ -1,6 +1,6 @@
 /**
- * [INPUT]: 依赖 NoteReviewViewModel、NoteReviewPagingDeck、NoteReviewCardView 与外部导航/设置闭包
- * [OUTPUT]: 对外提供 NoteReviewView，承载 iOS 端书摘回顾分页卡组主界面、卡片菜单与外部应用发送反馈
+ * [INPUT]: 依赖 NoteReviewViewModel、页面私有 NoteReviewRefreshDeckHost、NoteReviewCardView 与外部导航/设置闭包
+ * [OUTPUT]: 对外提供 NoteReviewView，承载 iOS 端书摘回顾分页卡组主界面、随机换组交接、原尺寸卡片菜单与外部应用发送反馈
  * [POS]: Note 模块回顾 Tab 页面入口，被 NoteContainerView 托管
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -15,6 +15,7 @@ struct NoteReviewView: View {
 
     @Environment(XMToastCenter.self) private var toastCenter
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.colorScheme) private var colorScheme
     @Environment(\.openURL) private var openURL
 
     @State private var loadingGate = LoadingGate()
@@ -90,44 +91,23 @@ struct NoteReviewView: View {
     }
 
     private var cardStackContent: some View {
-        VStack(spacing: NoteReviewBottomLayout.actionRowSpacing) {
-            NoteReviewPagingDeck(
-                items: viewModel.items,
-                selection: $viewModel.selectedItemID,
-                hasMoreItems: viewModel.hasMoreItems,
-                configuration: deckConfiguration,
-                onCardAppeared: { item, index in
-                    viewModel.handleCardAppeared(item, index: index)
-                },
-                onNeedsMoreItems: {
-                    Task { await viewModel.loadMoreIfNeeded() }
-                },
-                onTap: { item, _ in
-                    openContentViewer(for: item)
+        NoteReviewRefreshDeckHost(
+            viewModel: viewModel,
+            onCardTapped: openContentViewer
+        ) { item in
+            NoteReviewCardView(item: item, settings: viewModel.settings)
+                .contentShape(
+                    .contextMenuPreview,
+                    RoundedRectangle(
+                        cornerRadius: NoteReviewCardLayout.cornerRadius,
+                        style: .continuous
+                    )
+                )
+                .contextMenu {
+                    reviewCardContextMenu(for: item)
                 }
-            ) { item, _ in
-                NoteReviewCardView(item: item, settings: viewModel.settings)
-                    .contextMenu {
-                        reviewCardContextMenu(for: item)
-                    }
-                    .padding(.horizontal, reviewLayoutSpec.cardHorizontalPadding)
-                    .padding(.bottom, NoteReviewBottomLayout.cardContentBottomPadding)
-            } emptyContent: {
-                Color.clear
-            }
-            .frame(maxWidth: reviewLayoutSpec.maxDeckWidth, maxHeight: .infinity)
-            .padding(.top, NoteReviewBottomLayout.deckTopPadding)
-            .padding(.bottom, NoteReviewBottomLayout.deckBottomPadding)
-            .animation(.smooth(duration: reduceMotion ? 0.01 : 0.22), value: viewModel.settings.palette)
-
-            NoteReviewAuxiliaryActionRow(
-                title: viewModel.settings.sortRule == .random ? "换一组" : "刷新",
-                isRefreshing: viewModel.isRefreshing,
-                isDisabled: viewModel.isInitialLoading || viewModel.isRefreshing,
-                action: refreshCards
-            )
-            .padding(.horizontal, Spacing.screenEdge)
-            .padding(.bottom, NoteReviewBottomLayout.actionRowBottomPadding)
+                .padding(.horizontal, NoteReviewPagingLayoutSpec.iOSReviewDefault.cardHorizontalPadding)
+                .padding(.bottom, Spacing.cozy)
         }
     }
 
@@ -150,22 +130,6 @@ struct NoteReviewView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .padding(.horizontal, Spacing.screenEdge)
-    }
-
-    private var reviewLayoutSpec: NoteReviewPagingLayoutSpec {
-        .iOSReviewDefault
-    }
-
-    private var deckConfiguration: NoteReviewPagingDeckConfiguration {
-        var configuration = NoteReviewPagingDeckConfiguration.iOSReviewDefault
-        configuration.cardInsets = reviewLayoutSpec.cardInsets
-        return configuration
-    }
-
-    private func refreshCards() {
-        Task {
-            await viewModel.refresh()
-        }
     }
 
     private func openContentViewer(for item: NoteReviewCardItem) {
@@ -267,8 +231,9 @@ struct NoteReviewView: View {
 
     /// 生成并分享高质量回顾图片；实际渲染与相册保存由 ViewModel 编排。
     private func shareImage(for item: NoteReviewCardItem) {
+        let isDarkAppearance = colorScheme == .dark
         Task {
-            await viewModel.shareImage(for: item)
+            await viewModel.shareImage(for: item, isDarkAppearance: isDarkAppearance)
         }
     }
 
@@ -333,82 +298,4 @@ private struct NoteReviewTagEditSession: Identifiable {
     var id: Int64 {
         item.id
     }
-}
-
-private enum NoteReviewBottomLayout {
-    static let cardContentBottomPadding = Spacing.cozy
-    static let deckTopPadding = Spacing.base
-    static let deckBottomPadding = Spacing.none
-    static let actionRowSpacing = Spacing.base
-    static let actionRowBottomPadding = Spacing.section
-    static let actionRowMinHeight: CGFloat = 34
-}
-
-private struct NoteReviewAuxiliaryActionRow: View {
-    let title: String
-    let isRefreshing: Bool
-    let isDisabled: Bool
-    let action: () -> Void
-
-    var body: some View {
-        HStack {
-            Spacer()
-            Button(action: action) {
-                HStack(spacing: Spacing.tiny) {
-                    if isRefreshing {
-                        ProgressView()
-                            .controlSize(.mini)
-                            .tint(Color.textSecondary.opacity(NoteReviewAuxiliaryActionMetrics.progressOpacity))
-                    } else {
-                        Image(systemName: "arrow.clockwise")
-                            .font(AppTypography.captionMedium)
-                            .accessibilityHidden(true)
-                    }
-
-                    Text(isRefreshing ? "正在刷新" : title)
-                        .font(AppTypography.captionMedium)
-                }
-                .foregroundStyle(Color.textSecondary.opacity(isDisabled ? NoteReviewAuxiliaryActionMetrics.disabledOpacity : NoteReviewAuxiliaryActionMetrics.enabledOpacity))
-                .frame(minHeight: NoteReviewBottomLayout.actionRowMinHeight)
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(NoteReviewAuxiliaryActionButtonStyle(isEnabled: !isDisabled))
-            .disabled(isDisabled)
-            .accessibilityLabel(title == "换一组" ? "换一组书摘" : "刷新回顾")
-            .accessibilityHint("重新加载当前范围内的书摘卡片")
-            Spacer()
-        }
-    }
-}
-
-private struct NoteReviewAuxiliaryActionButtonStyle: ButtonStyle {
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-
-    let isEnabled: Bool
-
-    func makeBody(configuration: Configuration) -> some View {
-        let isPressed = isEnabled && configuration.isPressed
-
-        configuration.label
-            .background {
-                if isPressed {
-                    Capsule()
-                        .fill(Color.controlFillSecondary.opacity(NoteReviewAuxiliaryActionMetrics.pressedFillOpacity))
-                        .padding(.horizontal, -Spacing.half)
-                        .padding(.vertical, Spacing.tiny)
-                        .accessibilityHidden(true)
-                }
-            }
-            .scaleEffect(!reduceMotion && isPressed ? NoteReviewAuxiliaryActionMetrics.pressedScale : 1)
-            .animation(reduceMotion ? nil : .snappy(duration: NoteReviewAuxiliaryActionMetrics.pressAnimationDuration), value: configuration.isPressed)
-    }
-}
-
-private enum NoteReviewAuxiliaryActionMetrics {
-    static let enabledOpacity = 0.72
-    static let disabledOpacity = 0.36
-    static let progressOpacity = 0.68
-    static let pressedFillOpacity = 0.10
-    static let pressedScale = 0.96
-    static let pressAnimationDuration = 0.12
 }
