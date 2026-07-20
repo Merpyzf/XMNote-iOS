@@ -8,9 +8,9 @@
 import SwiftUI
 
 /**
- * [INPUT]: 依赖 Reading/Book/Note/Content/Personal/Search 各模块容器视图与对应路由枚举，依赖 BookCollectionImportRouter 承接外部书单导入，依赖 DebugRoute 提供调试页面跳转，依赖 openURL 打开外部帮助文档，依赖 SwiftUI search focus 状态协调全局搜索输入
- * [OUTPUT]: 对外提供 MainTabView（五个主 Tab 的 NavigationStack 组织、书单分享导入入口定位、普通目的地分发、搜索来源详情系统全屏覆盖与 DEBUG UI Test 书架首页/二级列表直达路由）
- * [POS]: 应用根导航入口，负责跨模块路由承接（含书架聚合列表、书架管理入口、在读页热力图点击进入阅读日历、内容查看与内容编辑、搜索来源详情根级 fullScreenCover）
+ * [INPUT]: 依赖可选 AppRuntimeContext、五个业务根容器与路由枚举，依赖 SceneStateStore、BookCollectionImportRouter、openURL 与 SwiftUI search focus
+ * [OUTPUT]: 对外提供 MainTabView，常驻五 Tab 导航骨架，在运行时依赖未就绪时展示静态结构壳层，就绪后原位接入生产页面并维持 scene/深链/搜索路由
+ * [POS]: 应用根导航入口，负责启动期壳层与生产内容切换、跨模块路由、五栈恢复写回和搜索结果独立导航现场
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
@@ -59,7 +59,11 @@ private enum GlobalSearchCommitSource: Sendable {
 /// 应用主导航容器，组织五个主 Tab 及跨模块路由跳转。
 struct MainTabView: View {
     @Environment(\.openURL) private var openURL
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(BookCollectionImportRouter.self) private var bookCollectionImportRouter
+    @Environment(SceneStateStore.self) private var sceneStateStore
+    let runtime: AppRuntimeContext?
+    let initialSceneSnapshot: AppSceneSnapshot
     @State private var selectedTab: AppTab = .reading
     @State private var readingPath = NavigationPath()
     @State private var booksPath = NavigationPath()
@@ -78,177 +82,272 @@ struct MainTabView: View {
     @State private var pendingGlobalSearchSubmitTask: Task<Void, Never>?
     @State private var protectedGlobalSearchQuery: String?
     @State private var globalSearchCommitToken: UUID?
+    @State private var didBootstrapFromScene = false
+    @State private var canPersistSceneSnapshot = false
     #if DEBUG
     @State private var didApplyUITestLaunchRoute = false
     #endif
 
+    /// 以 SceneStorage 解码结果建立首帧 Tab 与路径初值；后续 runtime 更新不会重置这些本地导航状态。
+    init(runtime: AppRuntimeContext?, initialSceneSnapshot: AppSceneSnapshot) {
+        self.runtime = runtime
+        self.initialSceneSnapshot = initialSceneSnapshot
+        _selectedTab = State(initialValue: initialSceneSnapshot.selectedTab)
+        _readingPath = State(initialValue: Self.navigationPath(from: initialSceneSnapshot.navigation.reading))
+        _booksPath = State(initialValue: Self.navigationPath(from: initialSceneSnapshot.navigation.books))
+        _notesPath = State(initialValue: Self.navigationPath(from: initialSceneSnapshot.navigation.notes))
+        _profilePath = State(initialValue: Self.navigationPath(from: initialSceneSnapshot.navigation.profile))
+        _searchPath = State(initialValue: Self.navigationPath(from: initialSceneSnapshot.navigation.search))
+        _searchQuery = State(initialValue: initialSceneSnapshot.searchQuery)
+    }
+
     var body: some View {
         TabView(selection: $selectedTab) {
             Tab("在读", systemImage: "calendar", value: .reading) {
-                NavigationStack(path: $readingPath) {
-                    ReadingContainerView(
-                        onAddBook: { append(BookRoute.add, to: .reading) },
-                        onAddNote: { append(NoteRoute.create(seed: .empty), to: .reading) },
-                        onOpenDebugCenter: { append(DebugRoute.debugCenter, to: .reading) },
-                        onOpenReadCalendar: { date in
-                            readingPath.append(ReadingRoute.readCalendar(date: date))
-                        },
-                        onOpenBookDetail: { bookId in
-                            append(BookRoute.detail(bookId: bookId), to: .reading)
-                        },
-                        onOpenContentViewer: { source, initialItem in
-                            append(contentRoute(for: source, initialItem: initialItem), to: .reading)
+                Group {
+                    if let runtime {
+                        NavigationStack(path: $readingPath) {
+                            ReadingContainerView(
+                                onAddBook: { append(BookRoute.add, to: .reading) },
+                                onAddNote: { append(NoteRoute.create(seed: .empty), to: .reading) },
+                                onOpenDebugCenter: { append(DebugRoute.debugCenter, to: .reading) },
+                                onOpenReadCalendar: { date in
+                                    readingPath.append(ReadingRoute.readCalendar(date: date))
+                                },
+                                onOpenBookDetail: { bookId in
+                                    append(BookRoute.detail(bookId: bookId), to: .reading)
+                                },
+                                onOpenContentViewer: { source, initialItem in
+                                    append(contentRoute(for: source, initialItem: initialItem), to: .reading)
+                                }
+                            )
+                                .toolbar(.hidden, for: .navigationBar)
+                                .navigationDestination(for: DebugRoute.self) { route in
+                                    debugDestination(for: route)
+                                        .toolbar(.hidden, for: .tabBar)
+                                }
+                                .navigationDestination(for: ReadingRoute.self) { route in
+                                    readingDestination(for: route)
+                                        .toolbar(.hidden, for: .tabBar)
+                                }
+                                .navigationDestination(for: BookRoute.self) { route in
+                                    bookDestination(for: route)
+                                        .toolbar(.hidden, for: .tabBar)
+                                }
+                                .navigationDestination(for: NoteRoute.self) { route in
+                                    noteDestination(for: route)
+                                        .toolbar(.hidden, for: .tabBar)
+                                }
+                                .navigationDestination(for: ContentRoute.self) { route in
+                                    contentDestination(for: route)
+                                        .toolbar(.hidden, for: .tabBar)
+                                }
                         }
-                    )
-                        .toolbar(.hidden, for: .navigationBar)
-                        .navigationDestination(for: DebugRoute.self) { route in
-                            debugDestination(for: route)
-                                .toolbar(.hidden, for: .tabBar)
-                        }
-                        .navigationDestination(for: ReadingRoute.self) { route in
-                            readingDestination(for: route)
-                                .toolbar(.hidden, for: .tabBar)
-                        }
-                        .navigationDestination(for: BookRoute.self) { route in
-                            bookDestination(for: route)
-                                .toolbar(.hidden, for: .tabBar)
-                        }
-                        .navigationDestination(for: NoteRoute.self) { route in
-                            noteDestination(for: route)
-                                .toolbar(.hidden, for: .tabBar)
-                        }
-                        .navigationDestination(for: ContentRoute.self) { route in
-                            contentDestination(for: route)
-                                .toolbar(.hidden, for: .tabBar)
-                        }
+
+                        .environment(runtime.databaseManager)
+                        .environment(runtime.repositories)
+                        .transition(.opacity)
+                    } else {
+                        MainTabBootstrapPage(
+                            tab: .reading,
+                            snapshot: bootstrapSceneSnapshot,
+                            hasRestoredNavigation: !readingPath.isEmpty
+                        )
+                        .transition(.opacity)
+                    }
                 }
+                .animation(runtimeTransitionAnimation, value: isRuntimeReady)
             }
 
             Tab("书籍", systemImage: "book", value: .books) {
-                NavigationStack(path: $booksPath) {
-                    BookContainerView(
-                        onAddBook: { append(BookRoute.add, to: .books) },
-                        onAddNote: { append(NoteRoute.create(seed: .empty), to: .books) },
-                        onOpenDebugCenter: { append(DebugRoute.debugCenter, to: .books) },
-                        onOpenBookRoute: { append($0, to: .books) },
-                        onOpenNoteRoute: { append($0, to: .books) },
-                        onOpenTagManagement: { append(PersonalRoute.tagManagement, to: .books) },
-                        onOpenSourceManagement: { append(PersonalRoute.bookSource, to: .books) },
-                        onOpenAuthorManagement: { append(PersonalRoute.authorManagement, to: .books) },
-                        onOpenPressManagement: { append(PersonalRoute.pressManagement, to: .books) },
-                        onOpenGuide: openBookManagementGuide
-                    )
-                        .navigationDestination(for: DebugRoute.self) { route in
-                            debugDestination(for: route)
-                                .toolbar(.hidden, for: .tabBar)
+                Group {
+                    if let runtime {
+                        NavigationStack(path: $booksPath) {
+                            BookContainerView(
+                                onAddBook: { append(BookRoute.add, to: .books) },
+                                onAddNote: { append(NoteRoute.create(seed: .empty), to: .books) },
+                                onOpenDebugCenter: { append(DebugRoute.debugCenter, to: .books) },
+                                onOpenBookRoute: { append($0, to: .books) },
+                                onOpenNoteRoute: { append($0, to: .books) },
+                                onOpenTagManagement: { append(PersonalRoute.tagManagement, to: .books) },
+                                onOpenSourceManagement: { append(PersonalRoute.bookSource, to: .books) },
+                                onOpenAuthorManagement: { append(PersonalRoute.authorManagement, to: .books) },
+                                onOpenPressManagement: { append(PersonalRoute.pressManagement, to: .books) },
+                                onOpenGuide: openBookManagementGuide
+                            )
+                                .navigationDestination(for: DebugRoute.self) { route in
+                                    debugDestination(for: route)
+                                        .toolbar(.hidden, for: .tabBar)
+                                }
+                                .navigationDestination(for: BookRoute.self) { route in
+                                    bookDestination(for: route)
+                                        .toolbar(.hidden, for: .tabBar)
+                                }
+                                .navigationDestination(for: NoteRoute.self) { route in
+                                    noteDestination(for: route)
+                                        .toolbar(.hidden, for: .tabBar)
+                                }
+                                .navigationDestination(for: ContentRoute.self) { route in
+                                    contentDestination(for: route)
+                                        .toolbar(.hidden, for: .tabBar)
+                                }
+                                .navigationDestination(for: PersonalRoute.self) { route in
+                                    personalDestination(for: route)
+                                        .toolbar(.hidden, for: .tabBar)
+                                }
                         }
-                        .navigationDestination(for: BookRoute.self) { route in
-                            bookDestination(for: route)
-                                .toolbar(.hidden, for: .tabBar)
-                        }
-                        .navigationDestination(for: NoteRoute.self) { route in
-                            noteDestination(for: route)
-                                .toolbar(.hidden, for: .tabBar)
-                        }
-                        .navigationDestination(for: ContentRoute.self) { route in
-                            contentDestination(for: route)
-                                .toolbar(.hidden, for: .tabBar)
-                        }
-                        .navigationDestination(for: PersonalRoute.self) { route in
-                            personalDestination(for: route)
-                                .toolbar(.hidden, for: .tabBar)
-                        }
+
+                        .environment(runtime.databaseManager)
+                        .environment(runtime.repositories)
+                        .transition(.opacity)
+                    } else {
+                        MainTabBootstrapPage(
+                            tab: .books,
+                            snapshot: bootstrapSceneSnapshot,
+                            hasRestoredNavigation: !booksPath.isEmpty
+                        )
+                        .transition(.opacity)
+                    }
                 }
+                .animation(runtimeTransitionAnimation, value: isRuntimeReady)
             }
 
             Tab("笔记", systemImage: "archivebox", value: .notes) {
-                NavigationStack(path: $notesPath) {
-                    NoteContainerView(
-                        onAddBook: { append(BookRoute.add, to: .notes) },
-                        onAddNote: { append(NoteRoute.create(seed: .empty), to: .notes) },
-                        onOpenContentViewer: { source, initialItem in
-                            append(contentRoute(for: source, initialItem: initialItem), to: .notes)
-                        },
-                        onOpenDebugCenter: { append(DebugRoute.debugCenter, to: .notes) }
-                    )
-                        .navigationDestination(for: DebugRoute.self) { route in
-                            debugDestination(for: route)
-                                .toolbar(.hidden, for: .tabBar)
+                Group {
+                    if let runtime {
+                        NavigationStack(path: $notesPath) {
+                            NoteContainerView(
+                                onAddBook: { append(BookRoute.add, to: .notes) },
+                                onAddNote: { append(NoteRoute.create(seed: .empty), to: .notes) },
+                                onOpenContentViewer: { source, initialItem in
+                                    append(contentRoute(for: source, initialItem: initialItem), to: .notes)
+                                },
+                                onOpenDebugCenter: { append(DebugRoute.debugCenter, to: .notes) }
+                            )
+                                .navigationDestination(for: DebugRoute.self) { route in
+                                    debugDestination(for: route)
+                                        .toolbar(.hidden, for: .tabBar)
+                                }
+                                .navigationDestination(for: BookRoute.self) { route in
+                                    bookDestination(for: route)
+                                        .toolbar(.hidden, for: .tabBar)
+                                }
+                                .navigationDestination(for: NoteRoute.self) { route in
+                                    noteDestination(for: route)
+                                        .toolbar(.hidden, for: .tabBar)
+                                }
+                                .navigationDestination(for: ContentRoute.self) { route in
+                                    contentDestination(for: route)
+                                        .toolbar(.hidden, for: .tabBar)
+                                }
                         }
-                        .navigationDestination(for: BookRoute.self) { route in
-                            bookDestination(for: route)
-                                .toolbar(.hidden, for: .tabBar)
-                        }
-                        .navigationDestination(for: NoteRoute.self) { route in
-                            noteDestination(for: route)
-                                .toolbar(.hidden, for: .tabBar)
-                        }
-                        .navigationDestination(for: ContentRoute.self) { route in
-                            contentDestination(for: route)
-                                .toolbar(.hidden, for: .tabBar)
-                        }
+
+                        .environment(runtime.databaseManager)
+                        .environment(runtime.repositories)
+                        .transition(.opacity)
+                    } else {
+                        MainTabBootstrapPage(
+                            tab: .notes,
+                            snapshot: bootstrapSceneSnapshot,
+                            hasRestoredNavigation: !notesPath.isEmpty
+                        )
+                        .transition(.opacity)
+                    }
                 }
+                .animation(runtimeTransitionAnimation, value: isRuntimeReady)
             }
 
             Tab("我的", systemImage: "person", value: .profile) {
-                NavigationStack(path: $profilePath) {
-                    PersonalView(
-                        onAddBook: { append(BookRoute.add, to: .profile) },
-                        onAddNote: { append(NoteRoute.create(seed: .empty), to: .profile) },
-                        onOpenDebugCenter: { append(DebugRoute.debugCenter, to: .profile) }
-                    )
-                        .navigationDestination(for: DebugRoute.self) { route in
-                            debugDestination(for: route)
-                                .toolbar(.hidden, for: .tabBar)
+                Group {
+                    if let runtime {
+                        NavigationStack(path: $profilePath) {
+                            PersonalView(
+                                onAddBook: { append(BookRoute.add, to: .profile) },
+                                onAddNote: { append(NoteRoute.create(seed: .empty), to: .profile) },
+                                onOpenDebugCenter: { append(DebugRoute.debugCenter, to: .profile) }
+                            )
+                                .navigationDestination(for: DebugRoute.self) { route in
+                                    debugDestination(for: route)
+                                        .toolbar(.hidden, for: .tabBar)
+                                }
+                                .navigationDestination(for: BookRoute.self) { route in
+                                    bookDestination(for: route)
+                                        .toolbar(.hidden, for: .tabBar)
+                                }
+                                .navigationDestination(for: NoteRoute.self) { route in
+                                    noteDestination(for: route)
+                                        .toolbar(.hidden, for: .tabBar)
+                                }
+                                .navigationDestination(for: ContentRoute.self) { route in
+                                    contentDestination(for: route)
+                                        .toolbar(.hidden, for: .tabBar)
+                                }
+                                .navigationDestination(for: PersonalRoute.self) { route in
+                                    personalDestination(for: route)
+                                        .toolbar(.hidden, for: .tabBar)
+                                }
                         }
-                        .navigationDestination(for: BookRoute.self) { route in
-                            bookDestination(for: route)
-                                .toolbar(.hidden, for: .tabBar)
-                        }
-                        .navigationDestination(for: NoteRoute.self) { route in
-                            noteDestination(for: route)
-                                .toolbar(.hidden, for: .tabBar)
-                        }
-                        .navigationDestination(for: ContentRoute.self) { route in
-                            contentDestination(for: route)
-                                .toolbar(.hidden, for: .tabBar)
-                        }
-                        .navigationDestination(for: PersonalRoute.self) { route in
-                            personalDestination(for: route)
-                                .toolbar(.hidden, for: .tabBar)
-                        }
+
+                        .environment(runtime.databaseManager)
+                        .environment(runtime.repositories)
+                        .transition(.opacity)
+                    } else {
+                        MainTabBootstrapPage(
+                            tab: .profile,
+                            snapshot: bootstrapSceneSnapshot,
+                            hasRestoredNavigation: !profilePath.isEmpty
+                        )
+                        .transition(.opacity)
+                    }
                 }
+                .animation(runtimeTransitionAnimation, value: isRuntimeReady)
             }
 
             Tab("搜索", systemImage: "magnifyingglass", value: .search, role: .search) {
-                NavigationStack(path: $searchPath) {
-                    GlobalSearchView(
-                        query: $searchQuery,
-                        submitRequest: searchSubmitRequest,
-                        isSearchResultCoverPresented: searchResultCover != nil,
-                        onBeginSearchSuggestion: beginGlobalSearchSuggestion,
-                        onCancelSearchSuggestion: cancelGlobalSearchSuggestion,
-                        onCommitSearchSuggestion: commitGlobalSearchSuggestion,
-                        onPrepareHistoryClearConfirmation: dismissGlobalSearchKeyboard,
-                        onOpenSearchResultCover: openSearchResultCover
-                    )
-                        .navigationDestination(for: DebugRoute.self) { route in
-                            debugDestination(for: route)
-                                .toolbar(.hidden, for: .tabBar)
+                Group {
+                    if let runtime {
+                        NavigationStack(path: $searchPath) {
+                            GlobalSearchView(
+                                query: $searchQuery,
+                                submitRequest: searchSubmitRequest,
+                                isSearchResultCoverPresented: searchResultCover != nil,
+                                onBeginSearchSuggestion: beginGlobalSearchSuggestion,
+                                onCancelSearchSuggestion: cancelGlobalSearchSuggestion,
+                                onCommitSearchSuggestion: commitGlobalSearchSuggestion,
+                                onPrepareHistoryClearConfirmation: dismissGlobalSearchKeyboard,
+                                onOpenSearchResultCover: openSearchResultCover
+                            )
+                                .navigationDestination(for: DebugRoute.self) { route in
+                                    debugDestination(for: route)
+                                        .toolbar(.hidden, for: .tabBar)
+                                }
+                                .navigationDestination(for: BookRoute.self) { route in
+                                    bookDestination(for: route)
+                                        .toolbar(.hidden, for: .tabBar)
+                                }
+                                .navigationDestination(for: NoteRoute.self) { route in
+                                    noteDestination(for: route)
+                                        .toolbar(.hidden, for: .tabBar)
+                                }
+                                .navigationDestination(for: ContentRoute.self) { route in
+                                    contentDestination(for: route)
+                                        .toolbar(.hidden, for: .tabBar)
+                            }
                         }
-                        .navigationDestination(for: BookRoute.self) { route in
-                            bookDestination(for: route)
-                                .toolbar(.hidden, for: .tabBar)
-                        }
-                        .navigationDestination(for: NoteRoute.self) { route in
-                            noteDestination(for: route)
-                                .toolbar(.hidden, for: .tabBar)
-                        }
-                        .navigationDestination(for: ContentRoute.self) { route in
-                            contentDestination(for: route)
-                                .toolbar(.hidden, for: .tabBar)
+
+                        .environment(runtime.databaseManager)
+                        .environment(runtime.repositories)
+                        .transition(.opacity)
+                    } else {
+                        MainTabBootstrapPage(
+                            tab: .search,
+                            snapshot: bootstrapSceneSnapshot,
+                            hasRestoredNavigation: !searchPath.isEmpty
+                        )
+                        .transition(.opacity)
                     }
                 }
+                .animation(runtimeTransitionAnimation, value: isRuntimeReady)
             }
         }
         .tabBarMinimizeBehavior(.onScrollDown)
@@ -259,11 +358,47 @@ struct MainTabView: View {
             onSubmit: submitGlobalSearchQuery
         )
         .tabViewSearchActivation(.searchTabSelection)
-        .onChange(of: selectedTab) { _, _ in
+        .task(id: sceneStateStore.isRestored) {
+            guard sceneStateStore.isRestored, !didBootstrapFromScene else { return }
+            didBootstrapFromScene = true
+            canPersistSceneSnapshot = false
+            restoreFromSceneSnapshot()
+            canPersistSceneSnapshot = true
+            persistCurrentSceneSnapshot()
+
+            if let pendingImport = bookCollectionImportRouter.pendingImport {
+                prepareForBookCollectionImport(pendingImport)
+            }
+            #if DEBUG
+            await applyUITestLaunchRouteIfNeeded()
+            #endif
+        }
+        .onChange(of: selectedTab) { _, newValue in
             syncSearchPresentationForCurrentState()
+            guard canPersistSceneSnapshot else { return }
+            sceneStateStore.updateSelectedTab(newValue)
+        }
+        .onChange(of: searchQuery) { _, newValue in
+            guard canPersistSceneSnapshot else { return }
+            sceneStateStore.updateSearchQuery(newValue)
         }
         .onChange(of: searchPath.count) { _, _ in
             syncSearchPresentationForCurrentState()
+        }
+        .onChange(of: pathPersistenceSignature(for: readingPath)) { _, _ in
+            persistPath(readingPath, for: .reading)
+        }
+        .onChange(of: pathPersistenceSignature(for: booksPath)) { _, _ in
+            persistPath(booksPath, for: .books)
+        }
+        .onChange(of: pathPersistenceSignature(for: notesPath)) { _, _ in
+            persistPath(notesPath, for: .notes)
+        }
+        .onChange(of: pathPersistenceSignature(for: profilePath)) { _, _ in
+            persistPath(profilePath, for: .profile)
+        }
+        .onChange(of: pathPersistenceSignature(for: searchPath)) { _, _ in
+            persistPath(searchPath, for: .search)
         }
         .onChange(of: bookCollectionImportRouter.pendingImport) { _, request in
             guard let request else { return }
@@ -273,16 +408,32 @@ struct MainTabView: View {
             item: $searchResultCover,
             onDismiss: completeSearchResultCoverDismissal
         ) { cover in
-            searchResultCoverContent(for: cover)
-        }
-        .task {
-            if let pendingImport = bookCollectionImportRouter.pendingImport {
-                prepareForBookCollectionImport(pendingImport)
+            if let runtime {
+                searchResultCoverContent(for: cover)
+                    .environment(runtime.databaseManager)
+                    .environment(runtime.repositories)
             }
-            #if DEBUG
-            await applyUITestLaunchRouteIfNeeded()
-            #endif
         }
+    }
+
+    private var isRuntimeReady: Bool {
+        runtime != nil
+    }
+
+    private var runtimeTransitionAnimation: Animation {
+        reduceMotion ? .easeOut(duration: 0.08) : .smooth(duration: 0.16)
+    }
+
+    private var bootstrapSceneSnapshot: AppSceneSnapshot {
+        sceneStateStore.isRestored ? sceneStateStore.snapshot : initialSceneSnapshot
+    }
+
+    /// 将 SceneStorage 中的可编码表示转换为首帧 NavigationPath；缺失表示时保持根页面。
+    private static func navigationPath(
+        from representation: NavigationPath.CodableRepresentation?
+    ) -> NavigationPath {
+        guard let representation else { return NavigationPath() }
+        return NavigationPath(representation)
     }
 
     private var searchHostTextBinding: Binding<String> {
@@ -812,6 +963,51 @@ struct MainTabView: View {
         .contentViewer(source: source, initialItemID: initialItem, keyword: "")
     }
 
+    /// SceneStateStore 完成解码后一次性恢复根选择与五个系统 NavigationPath，随后才开放写回门闩。
+    private func restoreFromSceneSnapshot() {
+        let snapshot = sceneStateStore.snapshot
+        selectedTab = snapshot.selectedTab
+        searchQuery = snapshot.searchQuery
+        readingPath = restoredPath(for: .reading)
+        booksPath = restoredPath(for: .books)
+        notesPath = restoredPath(for: .notes)
+        profilePath = restoredPath(for: .profile)
+        searchPath = restoredPath(for: .search)
+        syncSearchPresentationForCurrentState()
+    }
+
+    /// SceneStateStore 已完成 CodableRepresentation 解码；这里直接交还系统重建路径，避免依赖其不透明编码格式。
+    private func restoredPath(for tab: AppTab) -> NavigationPath {
+        guard let representation = sceneStateStore.pathRepresentation(for: tab) else {
+            return NavigationPath()
+        }
+        return NavigationPath(representation)
+    }
+
+    private func persistCurrentSceneSnapshot() {
+        guard canPersistSceneSnapshot else { return }
+        sceneStateStore.updateSelectedTab(selectedTab)
+        sceneStateStore.updateSearchQuery(searchQuery)
+        sceneStateStore.updatePath(readingPath, for: .reading)
+        sceneStateStore.updatePath(booksPath, for: .books)
+        sceneStateStore.updatePath(notesPath, for: .notes)
+        sceneStateStore.updatePath(profilePath, for: .profile)
+        sceneStateStore.updatePath(searchPath, for: .search)
+    }
+
+    private func persistPath(_ path: NavigationPath, for tab: AppTab) {
+        guard canPersistSceneSnapshot else { return }
+        sceneStateStore.updatePath(path, for: tab)
+    }
+
+    private func pathPersistenceSignature(for path: NavigationPath) -> String {
+        guard let representation = path.codable,
+              let data = try? JSONEncoder().encode(representation) else {
+            return path.isEmpty ? "empty" : "non-codable-\(path.count)"
+        }
+        return data.base64EncodedString()
+    }
+
     #if DEBUG
     /// UI Test 启动后直达书籍首页或目标二级列表，减少测试对真实恢复状态与首页聚合入口布局的依赖。
     @MainActor
@@ -830,7 +1026,6 @@ struct MainTabView: View {
     }
     #endif
 }
-
 /// 搜索结果系统全屏覆盖的根级呈现项，保持底层 TabView 与搜索状态不参与导航栈变化。
 private struct SearchResultCover: Identifiable {
     let id = UUID()
@@ -841,6 +1036,511 @@ private struct SearchResultCover: Identifiable {
 private struct PendingGlobalSearchSuggestion: Identifiable, Equatable {
     let id = UUID()
     let keyword: String
+}
+
+/// 运行时依赖未就绪时的根 Tab 内容；只保留真实页面结构，不暴露伪内容或可操作元素。
+private struct MainTabBootstrapPage: View {
+    let tab: AppTab
+    let snapshot: AppSceneSnapshot
+    let hasRestoredNavigation: Bool
+
+    var body: some View {
+        Group {
+            if hasRestoredNavigation {
+                Color.surfacePage
+                    .ignoresSafeArea()
+                    .toolbar(.hidden, for: .tabBar)
+            } else {
+                MainTabBootstrapHome(tab: tab, snapshot: snapshot)
+            }
+        }
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
+    }
+}
+
+/// 启动壳层复用生产首页的背景、顶部渐变与切换器，保证系统启动页之后立即建立真实版式重心。
+private struct MainTabBootstrapHome: View {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    let tab: AppTab
+    let snapshot: AppSceneSnapshot
+
+    private var topBarHeight: CGFloat {
+        dynamicTypeSize >= .accessibility1 ? 60 : 56
+    }
+
+    var body: some View {
+        ZStack(alignment: .top) {
+            Color.surfacePage.ignoresSafeArea()
+
+            MainTabBootstrapContent(tab: tab, snapshot: snapshot)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                .padding(.top, topBarHeight)
+
+            HomeTopHeaderGradient()
+                .allowsHitTesting(false)
+
+            MainTabBootstrapTopBar(tab: tab, snapshot: snapshot)
+                .zIndex(1)
+        }
+        .toolbar(.hidden, for: .navigationBar)
+    }
+}
+
+/// 启动壳层顶部栏使用恢复后的真实栏目名称，右侧操作仅绘制生产组件外观且不响应交互。
+private struct MainTabBootstrapTopBar: View {
+    let tab: AppTab
+    let snapshot: AppSceneSnapshot
+
+    @ViewBuilder
+    var body: some View {
+        switch tab {
+        case .reading:
+            TopSwitcher(
+                selection: .constant(snapshot.reading.selectedSubTab),
+                tabs: ReadingSubTab.allCases,
+                titleProvider: \.title
+            ) {
+                staticAddMenu
+            }
+        case .books:
+            TopSwitcher(
+                selection: .constant(snapshot.books.selectedSubTab),
+                tabs: BookSubTab.allCases,
+                titleProvider: \.title
+            ) {
+                staticAddMenu
+            }
+        case .notes:
+            TopSwitcher(
+                selection: .constant(snapshot.notes.selectedSubTab),
+                tabs: NoteSubTab.allCases,
+                titleProvider: \.title
+            ) {
+                TopBarActionPill {
+                    TopBarActionIcon(
+                        systemName: "arrow.up.arrow.down",
+                        hitShape: .rectangle
+                    )
+                } trailing: {
+                    TopBarActionIcon(systemName: "plus", hitShape: .rectangle)
+                }
+            }
+        case .profile:
+            TopSwitcher(title: "我的") {
+                TopBarActionPill {
+                    TopBarActionIcon(systemName: "gearshape", hitShape: .rectangle)
+                } trailing: {
+                    TopBarActionIcon(systemName: "plus", hitShape: .rectangle)
+                }
+            }
+        case .search:
+            TopSwitcher(title: "搜索", quote: "") {
+                EmptyView()
+            }
+        }
+    }
+
+    private var staticAddMenu: some View {
+        AddMenuCircleButton(
+            onAddBook: {},
+            onAddNote: {},
+            usesGlassStyle: true
+        )
+    }
+}
+
+/// 五个根页的低对比静态结构，沿用生产页面的容器节奏但不承载数据或加载文案。
+private struct MainTabBootstrapContent: View {
+    let tab: AppTab
+    let snapshot: AppSceneSnapshot
+
+    @ViewBuilder
+    var body: some View {
+        switch tab {
+        case .reading:
+            MainTabReadingBootstrapContent(selectedSubTab: snapshot.reading.selectedSubTab)
+        case .books:
+            MainTabBooksBootstrapContent(selectedSubTab: snapshot.books.selectedSubTab)
+        case .notes:
+            MainTabNotesBootstrapContent(selectedSubTab: snapshot.notes.selectedSubTab)
+        case .profile:
+            MainTabProfileBootstrapContent()
+        case .search:
+            Color.clear
+        }
+    }
+}
+
+/// 在读页按恢复的二级栏目保留热力图卡、指标卡、双卡或列表的真实空间节奏。
+private struct MainTabReadingBootstrapContent: View {
+    let selectedSubTab: ReadingSubTab
+
+    var body: some View {
+        ScrollView {
+            Group {
+                switch selectedSubTab {
+                case .reading:
+                    readingDashboardStructure
+                case .timeline:
+                    BootstrapGroupedListStructure(rowCount: 5)
+                case .statistics:
+                    statisticsStructure
+                }
+            }
+            .padding(.horizontal, Spacing.screenEdge)
+            .padding(.top, Spacing.half)
+            .padding(.bottom, Spacing.section)
+        }
+        .scrollIndicators(.hidden)
+    }
+
+    private var readingDashboardStructure: some View {
+        VStack(spacing: Spacing.base) {
+            BootstrapHeatmapCard()
+            BootstrapMetricsCard()
+
+            HStack(alignment: .top, spacing: Spacing.base) {
+                BootstrapFeatureCard()
+                BootstrapFeatureCard()
+            }
+
+            BootstrapRecentCard()
+        }
+    }
+
+    private var statisticsStructure: some View {
+        VStack(spacing: Spacing.base) {
+            BootstrapMetricsCard()
+            BootstrapWidePanel(height: 176)
+            HStack(spacing: Spacing.base) {
+                BootstrapFeatureCard()
+                BootstrapFeatureCard()
+            }
+        }
+    }
+}
+
+/// 书籍页使用封面网格或书单面板骨架，宽度随容器变化但不制造具体书目。
+private struct MainTabBooksBootstrapContent: View {
+    let selectedSubTab: BookSubTab
+
+    private let columns = Array(
+        repeating: GridItem(.flexible(), spacing: Spacing.base),
+        count: 3
+    )
+
+    var body: some View {
+        ScrollView {
+            Group {
+                switch selectedSubTab {
+                case .books:
+                    LazyVGrid(columns: columns, spacing: Spacing.section) {
+                        ForEach(0..<6, id: \.self) { _ in
+                            BootstrapBookGridItem()
+                        }
+                    }
+                case .collections:
+                    VStack(spacing: Spacing.base) {
+                        ForEach(0..<4, id: \.self) { _ in
+                            BootstrapCollectionPanel()
+                        }
+                    }
+                }
+            }
+            .padding(.horizontal, Spacing.screenEdge)
+            .padding(.top, Spacing.base)
+            .padding(.bottom, Spacing.section)
+        }
+        .scrollIndicators(.hidden)
+    }
+}
+
+/// 笔记页保留分组列表的段落密度；回顾页使用更疏朗的摘要卡节奏。
+private struct MainTabNotesBootstrapContent: View {
+    let selectedSubTab: NoteSubTab
+
+    var body: some View {
+        ScrollView {
+            Group {
+                switch selectedSubTab {
+                case .notes:
+                    BootstrapGroupedListStructure(rowCount: 5)
+                case .review:
+                    VStack(spacing: Spacing.base) {
+                        BootstrapWidePanel(height: 132)
+                        BootstrapGroupedListStructure(rowCount: 3)
+                    }
+                }
+            }
+            .padding(.horizontal, Spacing.screenEdge)
+            .padding(.top, Spacing.base)
+            .padding(.bottom, Spacing.section)
+        }
+        .scrollIndicators(.hidden)
+    }
+}
+
+/// 我的页复刻生产设置分组的面板尺度与行高，不显示会员状态或具体设置内容。
+private struct MainTabProfileBootstrapContent: View {
+    var body: some View {
+        ScrollView {
+            VStack(spacing: Spacing.comfortable) {
+                BootstrapSettingsPanel(rowCount: 2)
+                BootstrapSettingsPanel(rowCount: 4)
+                BootstrapSettingsPanel(rowCount: 3)
+                BootstrapSettingsPanel(rowCount: 2)
+            }
+            .padding(.horizontal, Spacing.screenEdge)
+            .padding(.vertical, Spacing.base)
+        }
+        .scrollIndicators(.hidden)
+    }
+}
+
+/// 热力图占位只呈现卡片与低对比格点关系，避免形成可被误认为真实数据的数值。
+private struct BootstrapHeatmapCard: View {
+    var body: some View {
+        CardContainer(cornerRadius: CornerRadius.containerLarge) {
+            VStack(alignment: .leading, spacing: Spacing.base) {
+                BootstrapLine(width: 76)
+                VStack(spacing: Spacing.compact) {
+                    ForEach(0..<5, id: \.self) { _ in
+                        HStack(spacing: Spacing.compact) {
+                            ForEach(0..<15, id: \.self) { _ in
+                                RoundedRectangle(cornerRadius: CornerRadius.inlayTiny, style: .continuous)
+                                    .fill(Color.controlFillSecondary.opacity(0.72))
+                                    .frame(width: 8, height: 8)
+                            }
+                        }
+                    }
+                }
+                .frame(maxWidth: .infinity)
+            }
+            .padding(Spacing.contentEdge)
+        }
+        .frame(height: 132)
+    }
+}
+
+/// 指标卡以等分栏保留生产趋势区的基线关系，所有块均为同一中性色阶。
+private struct BootstrapMetricsCard: View {
+    var body: some View {
+        CardContainer {
+            HStack(spacing: Spacing.none) {
+                ForEach(0..<3, id: \.self) { index in
+                    VStack(alignment: .leading, spacing: Spacing.cozy) {
+                        BootstrapLine(width: 42, height: 7)
+                        BootstrapLine(width: 68, height: 14)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, Spacing.base)
+
+                    if index < 2 {
+                        Rectangle()
+                            .fill(Color.surfaceBorderSubtle.opacity(0.42))
+                            .frame(width: CardStyle.borderWidth, height: 38)
+                    }
+                }
+            }
+            .padding(.vertical, Spacing.contentEdge)
+        }
+        .frame(height: 84)
+    }
+}
+
+/// 双卡区域按生产卡片比例保留视觉重心，不放置图标、插画或大色块。
+private struct BootstrapFeatureCard: View {
+    var body: some View {
+        CardContainer {
+            VStack(alignment: .leading, spacing: Spacing.base) {
+                BootstrapLine(width: 64)
+                BootstrapLine(width: 94, height: 14)
+                Spacer(minLength: Spacing.base)
+                HStack(alignment: .bottom, spacing: Spacing.compact) {
+                    ForEach([24.0, 42.0, 32.0, 54.0, 38.0], id: \.self) { height in
+                        RoundedRectangle(cornerRadius: CornerRadius.inlaySmall, style: .continuous)
+                            .fill(Color.controlFillSecondary.opacity(0.72))
+                            .frame(maxWidth: .infinity)
+                            .frame(height: height)
+                    }
+                }
+            }
+            .padding(Spacing.contentEdge)
+        }
+        .aspectRatio(0.88, contentMode: .fit)
+    }
+}
+
+/// 最近阅读区域用短封面序列和文本基线表示信息密度，不模拟书名或阅读进度。
+private struct BootstrapRecentCard: View {
+    var body: some View {
+        CardContainer {
+            VStack(alignment: .leading, spacing: Spacing.base) {
+                BootstrapLine(width: 84)
+                HStack(spacing: Spacing.base) {
+                    ForEach(0..<3, id: \.self) { _ in
+                        VStack(alignment: .leading, spacing: Spacing.cozy) {
+                            RoundedRectangle(cornerRadius: CornerRadius.inlaySmall, style: .continuous)
+                                .fill(Color.controlFillSecondary.opacity(0.72))
+                                .aspectRatio(0.72, contentMode: .fit)
+                            BootstrapLine(height: 7)
+                        }
+                    }
+                }
+            }
+            .padding(Spacing.contentEdge)
+        }
+    }
+}
+
+/// 书架网格占位沿用封面纵横比和两级文本基线，确保切换到真实封面时列宽不变化。
+private struct BootstrapBookGridItem: View {
+    var body: some View {
+        VStack(alignment: .leading, spacing: Spacing.cozy) {
+            RoundedRectangle(cornerRadius: CornerRadius.inlaySmall, style: .continuous)
+                .fill(Color.surfaceCard)
+                .overlay {
+                    RoundedRectangle(cornerRadius: CornerRadius.inlaySmall, style: .continuous)
+                        .stroke(Color.surfaceBorderSubtle.opacity(0.32), lineWidth: CardStyle.borderWidth)
+                }
+                .aspectRatio(0.68, contentMode: .fit)
+            BootstrapLine(height: 8)
+            BootstrapLine(width: 58, height: 7)
+        }
+    }
+}
+
+/// 书单面板以重叠封面轮廓和两条信息基线表达生产结构，不注入任何具体内容。
+private struct BootstrapCollectionPanel: View {
+    var body: some View {
+        CardContainer {
+            HStack(spacing: Spacing.contentEdge) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: CornerRadius.inlaySmall, style: .continuous)
+                        .fill(Color.controlFillSecondary.opacity(0.58))
+                        .frame(width: 54, height: 76)
+                        .offset(x: 8)
+                    RoundedRectangle(cornerRadius: CornerRadius.inlaySmall, style: .continuous)
+                        .fill(Color.controlFillSecondary)
+                        .frame(width: 54, height: 76)
+                        .offset(x: -8)
+                }
+                .frame(width: 76)
+
+                VStack(alignment: .leading, spacing: Spacing.base) {
+                    BootstrapLine(width: 112, height: 10)
+                    BootstrapLine(width: 76)
+                }
+            }
+            .padding(Spacing.contentEdge)
+        }
+        .frame(height: 112)
+    }
+}
+
+/// 分组列表保留卡片边界、行距和分隔线，适配时间线与笔记首页的共同版式节奏。
+private struct BootstrapGroupedListStructure: View {
+    let rowCount: Int
+
+    var body: some View {
+        VStack(spacing: Spacing.base) {
+            BootstrapWidePanel(height: 82)
+            CardContainer {
+                VStack(spacing: Spacing.none) {
+                    ForEach(0..<rowCount, id: \.self) { index in
+                        HStack(spacing: Spacing.base) {
+                            RoundedRectangle(cornerRadius: CornerRadius.inlayMedium, style: .continuous)
+                                .fill(Color.controlFillSecondary.opacity(0.72))
+                                .frame(width: 36, height: 36)
+                            VStack(alignment: .leading, spacing: Spacing.cozy) {
+                                BootstrapLine(width: index.isMultiple(of: 2) ? 124 : 96, height: 9)
+                                BootstrapLine(width: index.isMultiple(of: 2) ? 184 : 148)
+                            }
+                            Spacer(minLength: 0)
+                        }
+                        .frame(minHeight: 64)
+                        .padding(.horizontal, Spacing.contentEdge)
+
+                        if index < rowCount - 1 {
+                            Rectangle()
+                                .fill(Color.surfaceBorderSubtle.opacity(0.36))
+                                .frame(height: CardStyle.borderWidth)
+                                .padding(.leading, 66)
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// 我的页设置面板按生产 44pt 行高组织，圆角与表面色均复用现有令牌。
+private struct BootstrapSettingsPanel: View {
+    let rowCount: Int
+
+    var body: some View {
+        CardContainer(cornerRadius: CornerRadius.containerMedium) {
+            VStack(spacing: Spacing.none) {
+                ForEach(0..<rowCount, id: \.self) { index in
+                    HStack(spacing: Spacing.base) {
+                        RoundedRectangle(cornerRadius: CornerRadius.inlayMedium, style: .continuous)
+                            .fill(Color.controlFillSecondary.opacity(0.72))
+                            .frame(width: 24, height: 24)
+                        BootstrapLine(width: index.isMultiple(of: 2) ? 92 : 116, height: 9)
+                        Spacer(minLength: 0)
+                        BootstrapLine(width: 18, height: 7)
+                    }
+                    .frame(minHeight: 44)
+                    .padding(.horizontal, Spacing.contentEdge)
+
+                    if index < rowCount - 1 {
+                        Rectangle()
+                            .fill(Color.surfaceBorderSubtle.opacity(0.36))
+                            .frame(height: CardStyle.borderWidth)
+                            .padding(.leading, 54)
+                    }
+                }
+            }
+            .padding(.vertical, Spacing.half)
+        }
+    }
+}
+
+/// 宽面板是启动壳层内的纯结构容器，提供疏密有别的短基线而不展示假数据。
+private struct BootstrapWidePanel: View {
+    let height: CGFloat
+
+    var body: some View {
+        CardContainer {
+            VStack(alignment: .leading, spacing: Spacing.base) {
+                BootstrapLine(width: 82, height: 9)
+                BootstrapLine(width: 156)
+                BootstrapLine(width: 112)
+                Spacer(minLength: 0)
+            }
+            .padding(Spacing.contentEdge)
+        }
+        .frame(height: height)
+    }
+}
+
+/// 中性短基线只用于表达排版层级，不使用文字或品牌色制造伪内容。
+private struct BootstrapLine: View {
+    var width: CGFloat?
+    var height: CGFloat
+
+    init(width: CGFloat? = nil, height: CGFloat = 6) {
+        self.width = width
+        self.height = height
+    }
+
+    var body: some View {
+        Capsule()
+            .fill(Color.controlFillSecondary.opacity(0.72))
+            .frame(maxWidth: width ?? .infinity, alignment: .leading)
+            .frame(height: height)
+    }
 }
 
 private extension View {
@@ -877,6 +1577,11 @@ private struct MainTabSearchHostModifier: ViewModifier {
 }
 
 #Preview {
-    MainTabView()
+    MainTabView(
+        runtime: nil,
+        initialSceneSnapshot: AppSceneSnapshot.empty(dataEpoch: 0)
+    )
         .environment(AppState())
+        .environment(SceneStateStore())
+        .environment(BookCollectionImportRouter())
 }

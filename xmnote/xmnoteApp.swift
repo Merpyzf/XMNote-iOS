@@ -1,7 +1,7 @@
 /**
  * [INPUT]: 依赖 SwiftUI App 生命周期、GRDB Database、RepositoryContainer、XMToastCenter、App Group 书单分享导入 handoff 与全局服务初始化流程
- * [OUTPUT]: 对外提供 xmnoteApp（应用入口）完成数据库/仓储/根视图启动、全局 Toast Host 挂载、微信读书书单分享导入路由，并在 DEBUG UI Test 下提供隔离书架首页、二级列表与书单 fixture
- * [POS]: 应用启动编排层，负责组装全局依赖并挂载 ContentView 与跨页面轻提示基础设施
+ * [OUTPUT]: 对外提供 xmnoteApp（应用入口）常驻挂载 ContentView、原子发布数据库运行时依赖、承接全局 Toast 与书单分享导入，并在 DEBUG UI Test 下提供隔离书架 fixture
+ * [POS]: 应用启动编排层，负责异步组装运行时依赖但不阻塞首页导航壳层建立
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
@@ -18,19 +18,20 @@ import Nuke
 import AliyunpanSDK
 import GRDB
 
-/// 应用入口，异步初始化数据库后注入环境并渲染主界面。
-///
-/// 数据库 I/O（DatabasePool 创建 + 迁移 + seed）通过 `Task.detached` 脱离主线程，
-/// 消除首次启动 300-1200ms 的主线程阻塞。复用项目 Optional State + `.task` 延迟初始化模式。
+/// 启动期一次性发布的运行时依赖，避免数据库管理器和仓储容器分步写入产生不可用中间态。
+struct AppRuntimeContext {
+    let databaseManager: DatabaseManager
+    let repositories: RepositoryContainer
+}
+
 @main
-/// 应用入口，负责初始化全局依赖并挂载根界面。
+/// 应用入口，常驻挂载根界面并在后台完成数据库与仓储依赖组装。
 struct xmnoteApp: App {
     @Environment(\.scenePhase) private var scenePhase
     @State private var appState = AppState()
     @State private var sceneStateStore = SceneStateStore()
     @State private var toastCenter = XMToastCenter()
-    @State private var databaseManager: DatabaseManager?
-    @State private var repositories: RepositoryContainer?
+    @State private var runtime: AppRuntimeContext?
     @State private var bookCollectionImportRouter = BookCollectionImportRouter()
     @State private var initError: Error?
 
@@ -44,69 +45,42 @@ struct xmnoteApp: App {
 
     var body: some Scene {
         WindowGroup {
-            Group {
-                if let databaseManager, let repositories {
-                    ContentView()
-                        .id(appState.dataEpoch)
-                        .environment(appState)
-                        .environment(sceneStateStore)
-                        .environment(databaseManager)
-                        .environment(repositories)
-                        .environment(bookCollectionImportRouter)
-                        .transition(.opacity)
-                } else if let initError {
-                    databaseErrorView(initError)
-                } else {
-                    LaunchSplashView()
+            ContentView(runtime: runtime, initializationError: initError)
+                .environment(appState)
+                .environment(sceneStateStore)
+                .environment(bookCollectionImportRouter)
+                .environment(toastCenter)
+                .xmToastHost(center: toastCenter)
+                .task {
+                    bookCollectionImportRouter.consumePendingShareImport()
+                    guard runtime == nil, initError == nil else { return }
+                    do {
+                        let database = try await Task.detached(priority: .userInitiated) {
+                            #if DEBUG
+                            if let uiTestDatabase = try UITestLaunchConfiguration.makeDatabaseIfNeeded() {
+                                return uiTestDatabase
+                            }
+                            #endif
+                            return try AppDatabase()
+                        }.value
+                        let manager = DatabaseManager(database: database)
+                        let repositories = RepositoryContainer(databaseManager: manager)
+                        runtime = AppRuntimeContext(
+                            databaseManager: manager,
+                            repositories: repositories
+                        )
+                    } catch {
+                        initError = error
+                    }
                 }
-            }
-            .environment(toastCenter)
-            .xmToastHost(center: toastCenter)
-            .animation(.smooth(duration: 0.35), value: repositories != nil)
-            .task {
-                bookCollectionImportRouter.consumePendingShareImport()
-                guard databaseManager == nil, initError == nil else { return }
-                do {
-                    let database = try await Task.detached(priority: .userInitiated) {
-                        #if DEBUG
-                        if let uiTestDatabase = try UITestLaunchConfiguration.makeDatabaseIfNeeded() {
-                            return uiTestDatabase
-                        }
-                        #endif
-                        return try AppDatabase()
-                    }.value
-                    let manager = DatabaseManager(database: database)
-                    databaseManager = manager
-                    repositories = RepositoryContainer(databaseManager: manager)
-                } catch {
-                    initError = error
+                .onOpenURL { url in
+                    _ = Aliyunpan.handleOpenURL(url)
+                    bookCollectionImportRouter.handle(url)
                 }
-            }
-            .onOpenURL { url in
-                _ = Aliyunpan.handleOpenURL(url)
-                bookCollectionImportRouter.handle(url)
-            }
-            .onChange(of: scenePhase) { _, phase in
-                guard phase == .active else { return }
-                bookCollectionImportRouter.consumePendingShareImport()
-            }
-        }
-    }
-
-    // MARK: - Error View
-
-    private func databaseErrorView(_ error: Error) -> some View {
-        VStack(spacing: Spacing.base) {
-            Image(systemName: "exclamationmark.triangle")
-                .font(AppTypography.largeTitle)
-                .foregroundStyle(Color.feedbackError)
-            Text("数据库初始化失败")
-                .font(AppTypography.headline)
-            Text(error.localizedDescription)
-                .font(AppTypography.caption)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-                .padding(.horizontal, Spacing.double)
+                .onChange(of: scenePhase) { _, phase in
+                    guard phase == .active else { return }
+                    bookCollectionImportRouter.consumePendingShareImport()
+                }
         }
     }
 }
