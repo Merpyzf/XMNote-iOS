@@ -352,12 +352,12 @@ struct MainTabView: View {
         }
         .tabBarMinimizeBehavior(.onScrollDown)
         .mainTabSearchHost(
+            isEnabled: selectedTab == .search,
             searchText: searchHostTextBinding,
             isPresented: $isSearchPresented,
             isFocused: $isSearchFieldFocused,
             onSubmit: submitGlobalSearchQuery
         )
-        .tabViewSearchActivation(.searchTabSelection)
         .task(id: sceneStateStore.isRestored) {
             guard sceneStateStore.isRestored, !didBootstrapFromScene else { return }
             didBootstrapFromScene = true
@@ -1544,8 +1544,9 @@ private struct BootstrapLine: View {
 }
 
 private extension View {
-    /// 稳定挂载搜索 Tab 的根级搜索宿主，让 TabView 统一管理 search tab activation 与系统输入框生命周期。
+    /// 仅在搜索 Tab 激活时挂载根级搜索宿主，避免其他导航栈长期持有系统搜索与滚动宿主状态。
     func mainTabSearchHost(
+        isEnabled: Bool,
         searchText: Binding<String>,
         isPresented: Binding<Bool>,
         isFocused: FocusState<Bool>.Binding,
@@ -1553,6 +1554,7 @@ private extension View {
     ) -> some View {
         modifier(
             MainTabSearchHostModifier(
+                isEnabled: isEnabled,
                 searchText: searchText,
                 isPresented: isPresented,
                 isFocused: isFocused,
@@ -1561,18 +1563,26 @@ private extension View {
         )
     }
 }
-/// MainTabSearchHostModifier 承载搜索 tab 的根级 searchable 宿主，保持 TabView 外层结构身份稳定。
+
+/// MainTabSearchHostModifier 条件挂载搜索 Tab 的系统宿主，隔离非搜索 Tab 的导航与滚动状态。
 private struct MainTabSearchHostModifier: ViewModifier {
+    let isEnabled: Bool
     @Binding var searchText: String
     @Binding var isPresented: Bool
     var isFocused: FocusState<Bool>.Binding
     let onSubmit: () -> Void
 
+    @ViewBuilder
     func body(content: Content) -> some View {
-        content
-            .searchable(text: $searchText, isPresented: $isPresented, prompt: "搜索本地内容")
-            .searchFocused(isFocused)
-            .onSubmit(of: .search, onSubmit)
+        if isEnabled {
+            content
+                .tabViewSearchActivation(.searchTabSelection)
+                .searchable(text: $searchText, isPresented: $isPresented, prompt: "搜索本地内容")
+                .searchFocused(isFocused)
+                .onSubmit(of: .search, onSubmit)
+        } else {
+            content
+        }
     }
 }
 
