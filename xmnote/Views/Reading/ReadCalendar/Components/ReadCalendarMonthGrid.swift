@@ -115,6 +115,8 @@ struct ReadCalendarMonthGrid: View {
     let displayMode: DisplayMode
     let selectedDate: Date?
     let isHapticsEnabled: Bool
+    let doneMarkerStyle: ReadCalendarDoneMarkerStyle
+    let doneEmojiAssetName: String
     let dayPayloadProvider: (Date) -> DayPayload
     let coverItemsProvider: ((Date) -> [ReadCalendarCoverFanStack.Item])?
     let bookCoverStyleProvider: ((Date) -> ReadCalendarCoverFanStack.Style)?
@@ -134,6 +136,8 @@ struct ReadCalendarMonthGrid: View {
         displayMode: DisplayMode,
         selectedDate: Date?,
         isHapticsEnabled: Bool,
+        doneMarkerStyle: ReadCalendarDoneMarkerStyle = .checkmark,
+        doneEmojiAssetName: String = "ReadCalendarDonePartyPopper",
         dayPayloadProvider: @escaping (Date) -> DayPayload,
         coverItemsProvider: ((Date) -> [ReadCalendarCoverFanStack.Item])? = nil,
         bookCoverStyleProvider: ((Date) -> ReadCalendarCoverFanStack.Style)? = nil,
@@ -151,6 +155,8 @@ struct ReadCalendarMonthGrid: View {
         self.displayMode = displayMode
         self.selectedDate = selectedDate
         self.isHapticsEnabled = isHapticsEnabled
+        self.doneMarkerStyle = doneMarkerStyle
+        self.doneEmojiAssetName = doneEmojiAssetName
         self.dayPayloadProvider = dayPayloadProvider
         self.coverItemsProvider = coverItemsProvider
         self.bookCoverStyleProvider = bookCoverStyleProvider
@@ -179,6 +185,8 @@ struct ReadCalendarMonthGrid: View {
                     segmentHorizontalInset: Layout.segmentHorizontalInset,
                     selectedDate: selectedDate,
                     isHapticsEnabled: isHapticsEnabled,
+                    doneMarkerStyle: doneMarkerStyle,
+                    doneEmojiAssetName: doneEmojiAssetName,
                     dayPayloadProvider: dayPayloadProvider,
                     coverItemsProvider: coverItemsProvider,
                     bookCoverStyleProvider: bookCoverStyleProvider,
@@ -245,6 +253,8 @@ private struct ReadCalendarMonthGridWeekRow: View {
     let segmentHorizontalInset: CGFloat
     let selectedDate: Date?
     let isHapticsEnabled: Bool
+    let doneMarkerStyle: ReadCalendarDoneMarkerStyle
+    let doneEmojiAssetName: String
     let dayPayloadProvider: (Date) -> ReadCalendarMonthGrid.DayPayload
     let coverItemsProvider: ((Date) -> [ReadCalendarCoverFanStack.Item])?
     let bookCoverStyleProvider: ((Date) -> ReadCalendarCoverFanStack.Style)?
@@ -393,9 +403,7 @@ private struct ReadCalendarMonthGridWeekRow: View {
                     .frame(maxWidth: .infinity, alignment: .center)
                     .overlay(alignment: .topTrailing) {
                         if readDone && displayMode != .activityEvent {
-                            Image(systemName: "checkmark.circle.fill")
-                                .font(.system(size: readDoneIndicatorSize))
-                                .foregroundStyle(Color.readCalendarTodayMark)
+                            readDoneMarker(size: readDoneIndicatorSize)
                                 .offset(x: -2, y: 4)
                         }
                     }
@@ -430,20 +438,16 @@ private struct ReadCalendarMonthGridWeekRow: View {
         }
         .contentShape(Rectangle())
         .onTapGesture {
-            guard let day, !payload.isFuture else { return }
-            if displayMode == .bookCover,
-               payload.bookCount > 0,
-               let onOpenBookCoverFullscreen {
-                if isHapticsEnabled {
-                    ReadCalendarHaptics.selection()
-                }
-                onOpenBookCoverFullscreen(day)
-                return
-            }
-            if !payload.isSelected, isHapticsEnabled {
-                ReadCalendarHaptics.selection()
-            }
-            onSelectDay(day)
+            guard let day else { return }
+            activateDay(day, payload: payload)
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(dayAccessibilityLabel(day, payload: payload))
+        .accessibilityAddTraits(day != nil && !payload.isFuture ? .isButton : [])
+        .accessibilityHidden(day == nil)
+        .accessibilityAction {
+            guard let day else { return }
+            activateDay(day, payload: payload)
         }
         .overlay {
             if let day,
@@ -453,6 +457,39 @@ private struct ReadCalendarMonthGridWeekRow: View {
             }
         }
         .opacity(payload.isFuture ? 0.55 : 1)
+    }
+
+    /// 统一触摸与辅助功能激活路径，避免读屏用户无法进入当日阅读。
+    private func activateDay(_ day: Date, payload: ReadCalendarMonthGrid.DayPayload) {
+        guard !payload.isFuture else { return }
+        if displayMode == .bookCover,
+           payload.bookCount > 0,
+           let onOpenBookCoverFullscreen {
+            if isHapticsEnabled {
+                ReadCalendarHaptics.selection()
+            }
+            onOpenBookCoverFullscreen(day)
+            return
+        }
+        if !payload.isSelected, isHapticsEnabled {
+            ReadCalendarHaptics.selection()
+        }
+        onSelectDay(day)
+    }
+
+    /// 生成日期格的完整读屏描述，包含活动书数、热度和读完状态。
+    private func dayAccessibilityLabel(
+        _ day: Date?,
+        payload: ReadCalendarMonthGrid.DayPayload
+    ) -> String {
+        guard let day else { return "" }
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "zh_Hans_CN")
+        formatter.dateFormat = "M月d日"
+        var parts = [formatter.string(from: day), "\(payload.bookCount)本书", payload.heatmapLevel.accessibilityText]
+        if payload.isReadDoneDay { parts.append("有读完记录") }
+        if payload.isToday { parts.append("今天") }
+        return parts.joined(separator: "，")
     }
 
     @ViewBuilder
@@ -745,16 +782,8 @@ private struct ReadCalendarMonthGridWeekRow: View {
             }
 
             if showBadge {
-                let style = readDoneBadgeStyle(for: segment.color)
-                Circle()
-                    .fill(style.background)
-                    .frame(width: readDoneBadgeCircleSize, height: readDoneBadgeCircleSize)
+                segmentReadDoneMarker(color: segment.color)
                     .scaleEffect(badgePulseIDs.contains(segment.id) ? 1.15 : 1)
-                    .overlay {
-                        Image(systemName: "checkmark")
-                            .font(.system(size: readDoneBadgeCheckmarkSize, weight: .bold))
-                            .foregroundStyle(style.foreground)
-                    }
                     .padding(.trailing, Spacing.micro)
                     .frame(maxWidth: .infinity, alignment: .trailing)
             }
@@ -790,6 +819,42 @@ private struct ReadCalendarMonthGridWeekRow: View {
             return Color.readCalendarEventPendingText
         case .resolved, .failed:
             return Color(rgbaHex: color.textRGBAHex)
+        }
+    }
+
+    /// 依据用户设置渲染日格读完标记；图案直接使用 Android 同源资源。
+    @ViewBuilder
+    private func readDoneMarker(size: CGFloat) -> some View {
+        if doneMarkerStyle == .emoji {
+            Image(doneEmojiAssetName)
+                .resizable()
+                .scaledToFit()
+                .frame(width: size + 3, height: size + 3)
+        } else {
+            Image(systemName: "checkmark.circle.fill")
+                .font(.system(size: size))
+                .foregroundStyle(Color.readCalendarTodayMark)
+        }
+    }
+
+    /// 在活动条末端渲染紧凑读完标记，同时保持原有颜色对比度规则。
+    @ViewBuilder
+    private func segmentReadDoneMarker(color: ReadCalendarMonthGrid.EventColor) -> some View {
+        if doneMarkerStyle == .emoji {
+            Image(doneEmojiAssetName)
+                .resizable()
+                .scaledToFit()
+                .frame(width: readDoneBadgeCircleSize + 2, height: readDoneBadgeCircleSize + 2)
+        } else {
+            let style = readDoneBadgeStyle(for: color)
+            Circle()
+                .fill(style.background)
+                .frame(width: readDoneBadgeCircleSize, height: readDoneBadgeCircleSize)
+                .overlay {
+                    Image(systemName: "checkmark")
+                        .font(.system(size: readDoneBadgeCheckmarkSize, weight: .bold))
+                        .foregroundStyle(style.foreground)
+                }
         }
     }
 

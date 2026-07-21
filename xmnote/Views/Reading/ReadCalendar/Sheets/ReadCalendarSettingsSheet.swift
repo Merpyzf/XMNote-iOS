@@ -3,7 +3,7 @@ import SwiftUI
 /**
  * [INPUT]: 依赖 ReadCalendarSettings 提供可绑定设置状态，依赖 DesignTokens 提供视觉语义令牌
  * [OUTPUT]: 对外提供 ReadCalendarSettingsSheet（阅读日历设置弹层）
- * [POS]: ReadCalendar 业务模块 Sheet，负责阅读事件筛选与交互反馈设置
+ * [POS]: ReadCalendar 业务模块 Sheet，负责六类事件源、读完标记与交互反馈设置
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
@@ -15,19 +15,17 @@ struct ReadCalendarSettingsSheet: View {
 
     var body: some View {
         ZStack(alignment: .topTrailing) {
-            VStack(alignment: .leading, spacing: Spacing.double) {
-                titleSection
-                    .padding(.trailing, Spacing.actionReserved)
-                eventTogglesSection
-                feedbackSection
-                dayEventCountSection
-            }
-            .padding(Spacing.double)
-            .background(
-                GeometryReader { proxy in
-                    Color.clear.preference(key: SheetHeightKey.self, value: proxy.size.height)
+            ScrollView {
+                VStack(alignment: .leading, spacing: Spacing.double) {
+                    titleSection
+                        .padding(.trailing, Spacing.actionReserved)
+                    eventTogglesSection
+                    doneMarkerSection
+                    feedbackSection
+                    dayEventCountSection
                 }
-            )
+                .padding(Spacing.double)
+            }
 
             closeButton
         }
@@ -79,9 +77,24 @@ struct ReadCalendarSettingsSheet: View {
                 set: { settings.excludeReadTiming = !$0 }
             ))
 
-            Toggle("笔记记录", isOn: Binding(
-                get: { !settings.excludeNoteRecord },
-                set: { settings.excludeNoteRecord = !$0 }
+            Toggle("书摘", isOn: Binding(
+                get: { !settings.excludeNote },
+                set: { settings.excludeNote = !$0 }
+            ))
+
+            Toggle("相关内容", isOn: Binding(
+                get: { !settings.excludeRelevant },
+                set: { settings.excludeRelevant = !$0 }
+            ))
+
+            Toggle("书评", isOn: Binding(
+                get: { !settings.excludeReview },
+                set: { settings.excludeReview = !$0 }
+            ))
+
+            Toggle("读完记录", isOn: Binding(
+                get: { !settings.excludeReadDone },
+                set: { settings.excludeReadDone = !$0 }
             ))
 
             Toggle("阅读打卡", isOn: Binding(
@@ -96,6 +109,60 @@ struct ReadCalendarSettingsSheet: View {
             }
         }
         .tint(.brand)
+    }
+
+    private var doneMarkerSection: some View {
+        VStack(alignment: .leading, spacing: Spacing.base) {
+            Text("读完标记")
+                .font(AppTypography.subheadlineMedium)
+                .foregroundStyle(Color.textSecondary)
+
+            Picker("读完标记样式", selection: $settings.doneMarkerStyle) {
+                ForEach(ReadCalendarDoneMarkerStyle.allCases) { style in
+                    Text(style.title).tag(style)
+                }
+            }
+            .pickerStyle(.segmented)
+
+            if settings.doneMarkerStyle == .emoji {
+                LazyVGrid(
+                    columns: Array(repeating: GridItem(.flexible(), spacing: Spacing.half), count: 6),
+                    spacing: Spacing.half
+                ) {
+                    ForEach(ReadCalendarSettings.doneEmojiAssetNames, id: \.self) { assetName in
+                        doneEmojiButton(assetName)
+                    }
+                }
+                .transition(.opacity.combined(with: .move(edge: .top)))
+            }
+        }
+        .animation(.snappy, value: settings.doneMarkerStyle)
+    }
+
+    private func doneEmojiButton(_ assetName: String) -> some View {
+        let isSelected = settings.doneEmojiAssetName == assetName
+        return Button {
+            settings.doneEmojiAssetName = assetName
+        } label: {
+            Image(assetName)
+                .resizable()
+                .scaledToFit()
+                .padding(Spacing.half)
+                .frame(minWidth: 44, minHeight: 44)
+                .background(
+                    isSelected ? Color.brand.opacity(0.14) : Color.controlFillSecondary,
+                    in: RoundedRectangle(cornerRadius: CornerRadius.blockSmall, style: .continuous)
+                )
+                .overlay {
+                    if isSelected {
+                        RoundedRectangle(cornerRadius: CornerRadius.blockSmall, style: .continuous)
+                            .stroke(Color.brand, lineWidth: 1.5)
+                    }
+                }
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("读完标记图案")
+        .accessibilityValue(isSelected ? "已选择" : "未选择")
     }
 
     private var feedbackSection: some View {

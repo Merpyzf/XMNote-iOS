@@ -146,6 +146,7 @@ private extension TimelineRepository {
     nonisolated func queryReadTimingEvents(_ db: Database, start: Int64, end: Int64) throws -> [TimelineEvent] {
         let sql = """
             SELECT r.id, r.book_id, r.start_time, r.end_time, r.elapsed_seconds, r.fuzzy_read_date,
+                   r.position, r.recorded_position_unit, r.insight,
                    b.name, b.author, b.cover
             FROM read_time_record r
             JOIN book b ON b.id = r.book_id AND b.is_deleted = 0
@@ -164,7 +165,10 @@ private extension TimelineRepository {
                     elapsedSeconds: row["elapsed_seconds"] as Int64,
                     startTime: startTime,
                     endTime: row["end_time"] as Int64,
-                    fuzzyReadDate: fuzzy
+                    fuzzyReadDate: fuzzy,
+                    position: row["position"] as Double? ?? 0,
+                    recordedPositionUnit: row["recorded_position_unit"] as Int64?,
+                    insight: row["insight"] as String? ?? ""
                 )),
                 timestamp: effectiveTimestamp,
                 sourceBookId: row["book_id"] as Int64? ?? 0,

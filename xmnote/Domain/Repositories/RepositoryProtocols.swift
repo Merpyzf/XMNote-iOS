@@ -293,6 +293,8 @@ protocol ContentRepositoryProtocol {
     func fetchRelevantEditorDraft(contentId: Int64) async throws -> RelevantEditorDraft?
     /// 保存相关内容编辑草稿。
     func saveRelevantEditorDraft(_ draft: RelevantEditorDraft) async throws
+    /// 物理删除普通相关内容或相关书籍关系，并清理失去最后引用的业务占位书。
+    func deleteRelatedRelation(relationID: Int64) async throws
     /// 删除指定内容，按 iOS 当前约定执行主记录与子记录的硬删除事务。
     func delete(itemID: ContentViewerItemID) async throws
 }

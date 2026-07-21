@@ -64,6 +64,16 @@ struct ReadCalendarContentView: View {
         case failed
     }
 
+    /// SheetDestination 统一管理总结与年月选择器，避免同一宿主上的多个 Sheet 竞争展示。
+    private enum SheetDestination: String, Identifiable {
+        case monthSummary
+        case yearSummary
+        case yearMonthPicker
+        case yearPicker
+
+        var id: String { rawValue }
+    }
+
     /// MonthPage 封装单月渲染快照，聚合周网格、日数据、排行与摘要。
     struct MonthPage: Identifiable, Hashable {
         let monthStart: Date
@@ -156,6 +166,8 @@ struct ReadCalendarContentView: View {
         let laneLimit: Int
         let isHapticsEnabled: Bool
         let isStreakHintEnabled: Bool
+        let doneMarkerStyle: ReadCalendarDoneMarkerStyle
+        let doneEmojiAssetName: String
         let rootContentState: RootContentState
         let errorMessage: String?
         let heatmapYearMonthPages: [MonthPage]
@@ -289,17 +301,16 @@ struct ReadCalendarContentView: View {
     let onPagerSelectionChanged: (Date) -> Void
     let onYearSelectionChanged: (Int) -> Void
     let onSelectDate: (Date?) -> Void
+    let onOpenDay: (Date) -> Void
     let onRetry: () -> Void
     let onBookCoverFullscreenPresentationChanged: (Bool) -> Void
     @State private var streakHintMessage: String?
     @State private var streakHintTask: Task<Void, Never>?
     @State private var shownStreakMilestonesByMonth: [Date: Set<Int>] = [:]
-    @State private var isSummarySheetPresented = false
+    @State private var activeSheetDestination: SheetDestination?
+    @State private var lastPresentedSheetDestination: SheetDestination?
     @State private var summarySheetMonthStart: Date?
-    @State private var isYearSummarySheetPresented = false
-    @State private var isYearMonthPickerPresented = false
     @State private var pendingYearMonthPickerSelection: Date?
-    @State private var isYearPickerPresented = false
     @State private var pendingYearPickerSelection: Int?
 
     // MARK: - Summary Floating Button State
@@ -386,8 +397,8 @@ private extension ReadCalendarContentView {
             }
             .onChange(of: props.displayMode) { _, mode in
                 markSummaryFloatingButtonInteraction()
-                if mode != .heatmap {
-                    isYearSummarySheetPresented = false
+                if mode != .heatmap, activeSheetDestination == .yearSummary {
+                    activeSheetDestination = nil
                 }
                 if mode != .bookCover {
                     bookCoverStackFramesByDate = [:]
@@ -445,32 +456,11 @@ private extension ReadCalendarContentView {
             .overlay {
                 bookCoverFullscreenOverlay
             }
-            .sheet(isPresented: $isSummarySheetPresented, onDismiss: {
-                summarySheetMonthStart = nil
-                markSummaryFloatingButtonInteraction(
-                    protectedFor: Layout.summaryFloatingButtonPostDismissProtection,
-                    force: true
-                )
-            }) {
-                monthSummarySheetContent
-            }
-            .sheet(isPresented: $isYearSummarySheetPresented, onDismiss: {
-                markSummaryFloatingButtonInteraction(
-                    protectedFor: Layout.summaryFloatingButtonPostDismissProtection,
-                    force: true
-                )
-            }) {
-                yearSummarySheetContent
-            }
-            .sheet(isPresented: $isYearMonthPickerPresented, onDismiss: {
-                commitPendingYearMonthPickerSelection()
-            }) {
-                yearMonthPickerSheetContent
-            }
-            .sheet(isPresented: $isYearPickerPresented, onDismiss: {
-                commitPendingYearPickerSelection()
-            }) {
-                yearPickerSheetContent
+            .sheet(item: $activeSheetDestination, onDismiss: handleSheetDismiss) { destination in
+                sheetContent(destination)
+                    .onAppear {
+                        lastPresentedSheetDestination = destination
+                    }
             }
     }
 
@@ -512,11 +502,11 @@ private extension ReadCalendarContentView {
                 onDisplayModeChanged: onDisplayModeChanged,
                 onMonthPickerRequested: {
                     pendingYearMonthPickerSelection = nil
-                    isYearMonthPickerPresented = true
+                    activeSheetDestination = .yearMonthPicker
                 },
                 onYearPickerRequested: {
                     pendingYearPickerSelection = nil
-                    isYearPickerPresented = true
+                    activeSheetDestination = .yearPicker
                 }
             )
             .padding(.top, Layout.topControlTopPadding)
@@ -565,7 +555,11 @@ private extension ReadCalendarContentView {
                 payload: payload,
                 isHapticsEnabled: props.isHapticsEnabled,
                 topControlBarFrameInGlobal: topControlBarFrameInGlobal,
-                onClose: { closeBookCoverFullscreen() }
+                onClose: { closeBookCoverFullscreen() },
+                onOpenDaily: {
+                    closeBookCoverFullscreen(animated: false)
+                    onOpenDay(payload.date)
+                }
             )
             .zIndex(Layout.bookCoverFullscreenOverlayZIndex)
             .transition(.opacity)
@@ -645,8 +639,55 @@ private extension ReadCalendarContentView {
         .presentationBackground(.regularMaterial)
     }
 
+    @ViewBuilder
+    private func sheetContent(_ destination: SheetDestination) -> some View {
+        switch destination {
+        case .monthSummary:
+            monthSummarySheetContent
+        case .yearSummary:
+            yearSummarySheetContent
+        case .yearMonthPicker:
+            yearMonthPickerSheetContent
+        case .yearPicker:
+            yearPickerSheetContent
+        }
+    }
+
+    /// 按实际关闭的 Sheet 执行提交或现场恢复，避免选择器与总结弹层互相清理状态。
+    func handleSheetDismiss() {
+        let dismissedDestination = lastPresentedSheetDestination
+        lastPresentedSheetDestination = nil
+        switch dismissedDestination {
+        case .monthSummary:
+            summarySheetMonthStart = nil
+            markSummaryFloatingButtonInteraction(
+                protectedFor: Layout.summaryFloatingButtonPostDismissProtection,
+                force: true
+            )
+        case .yearSummary:
+            markSummaryFloatingButtonInteraction(
+                protectedFor: Layout.summaryFloatingButtonPostDismissProtection,
+                force: true
+            )
+        case .yearMonthPicker:
+            commitPendingYearMonthPickerSelection()
+        case .yearPicker:
+            commitPendingYearPickerSelection()
+        case nil:
+            break
+        }
+    }
+
     var isHeatmapMode: Bool {
         props.displayMode == .heatmap
+    }
+
+    var isSummarySheetPresented: Bool {
+        activeSheetDestination == .monthSummary
+    }
+
+    var isYearSummarySheetPresented: Bool {
+        activeSheetDestination == .yearSummary
     }
 
     var shouldMountSummaryFloatingButton: Bool {
@@ -657,7 +698,6 @@ private extension ReadCalendarContentView {
 
     var shouldShowSummaryFloatingButton: Bool {
         shouldMountSummaryFloatingButton
-            && isSummaryFloatingButtonVisible
     }
 
     var activeMonthPage: MonthPage? {
@@ -868,7 +908,7 @@ private extension ReadCalendarContentView {
         let normalizedMonthStart = Calendar.current.startOfDay(for: props.pagerSelection)
         summarySheetMonthStart = normalizedMonthStart
         isSummaryFloatingButtonVisible = false
-        isSummarySheetPresented = true
+        activeSheetDestination = .monthSummary
         summaryFloatingButtonAutoHideTask?.cancel()
         summaryFloatingButtonAutoHideTask = nil
     }
@@ -876,7 +916,7 @@ private extension ReadCalendarContentView {
     /// 根据当前模式切换总结弹层与悬浮按钮状态，保持交互路径一致。
     func openYearSummaryManually() {
         isSummaryFloatingButtonVisible = false
-        isYearSummarySheetPresented = true
+        activeSheetDestination = .yearSummary
         summaryFloatingButtonAutoHideTask?.cancel()
         summaryFloatingButtonAutoHideTask = nil
     }
@@ -1352,6 +1392,8 @@ private extension ReadCalendarContentView {
                         displayMode: .heatmapYearCompact,
                         selectedDate: nil,
                         isHapticsEnabled: false,
+                        doneMarkerStyle: props.doneMarkerStyle,
+                        doneEmojiAssetName: props.doneEmojiAssetName,
                         dayPayloadProvider: { date in
                             page.payload(for: date)
                         },
@@ -1425,6 +1467,8 @@ private extension ReadCalendarContentView {
             displayMode: allowsDateSelection ? mapGridDisplayMode(props.displayMode) : .heatmap,
             selectedDate: allowsDateSelection ? page.selectedDate : nil,
             isHapticsEnabled: allowsDateSelection ? props.isHapticsEnabled : false,
+            doneMarkerStyle: props.doneMarkerStyle,
+            doneEmojiAssetName: props.doneEmojiAssetName,
             dayPayloadProvider: { date in
                 page.payload(for: date)
             },
@@ -1454,6 +1498,7 @@ private extension ReadCalendarContentView {
             onSelectDay: { date in
                 guard allowsDateSelection else { return }
                 markSummaryFloatingButtonInteraction()
+                let payload = page.payload(for: date)
                 withAnimation(.smooth(duration: 0.22)) {
                     if let selectedDate = page.selectedDate,
                        Calendar.current.isDate(selectedDate, inSameDayAs: date) {
@@ -1461,6 +1506,9 @@ private extension ReadCalendarContentView {
                     } else {
                         onSelectDate(date)
                     }
+                }
+                if !payload.isFuture, (payload.bookCount > 0 || payload.isReadDoneDay) {
+                    onOpenDay(date)
                 }
             }
         )
@@ -1512,7 +1560,7 @@ private extension ReadCalendarContentView {
         }
         summarySheetMonthStart = normalized
         isSummaryFloatingButtonVisible = false
-        isSummarySheetPresented = true
+        activeSheetDestination = .monthSummary
         summaryFloatingButtonAutoHideTask?.cancel()
         summaryFloatingButtonAutoHideTask = nil
     }
@@ -1521,11 +1569,11 @@ private extension ReadCalendarContentView {
     func openMonthSummaryAfterAuxSheetDismiss(monthStart: Date) {
         let normalized = Calendar.current.startOfDay(for: monthStart)
         summarySheetMonthStart = normalized
-        isYearSummarySheetPresented = false
+        activeSheetDestination = nil
         Task {
             try? await Task.sleep(for: .milliseconds(120))
-            guard !Task.isCancelled, !isYearSummarySheetPresented else { return }
-            isSummarySheetPresented = true
+            guard !Task.isCancelled, activeSheetDestination != .yearSummary else { return }
+            activeSheetDestination = .monthSummary
         }
     }
 
@@ -1720,6 +1768,7 @@ private struct ReadCalendarBookCoverFullscreenOverlay: View {
     let isHapticsEnabled: Bool
     let topControlBarFrameInGlobal: CGRect
     let onClose: () -> Void
+    let onOpenDaily: () -> Void
 
     @Environment(\.accessibilityReduceMotion) private var accessibilityReduceMotion
     @State private var dragOffsetY: CGFloat = 0
@@ -1829,7 +1878,7 @@ private struct ReadCalendarBookCoverFullscreenOverlay: View {
             )
             let topChromeHeight = headerTopInset + Layout.headerEstimatedHeight + Layout.headerBottomGap
             let countHintHeight = shouldShowCountHint ? Layout.countHintEstimatedHeight : 0
-            let toggleButtonHeight = shouldShowToggleButton ? Layout.toggleButtonEstimatedHeight : 0
+            let toggleButtonHeight = Layout.toggleButtonEstimatedHeight
             let bottomChromeSpacing = (shouldShowCountHint && shouldShowToggleButton)
                 ? Layout.bottomChromeSpacing
                 : 0
@@ -1956,10 +2005,21 @@ private struct ReadCalendarBookCoverFullscreenOverlay: View {
                             )
                     }
 
-                    if shouldShowToggleButton {
-                        toggleButton
-                            .opacity(Double(transitionChannels.chromeOpacity))
+                    HStack(spacing: Spacing.half) {
+                        if shouldShowToggleButton {
+                            toggleButton
+                        }
+                        Button(action: onOpenDaily) {
+                            Label("查看当日阅读", systemImage: "chart.bar.xaxis")
+                                .font(AppTypography.subheadlineSemibold)
+                                .foregroundStyle(Color.white.opacity(0.96))
+                                .padding(.horizontal, Layout.toggleButtonHorizontalPadding)
+                                .padding(.vertical, Layout.toggleButtonVerticalPadding)
+                                .background(Color.brand.opacity(0.9), in: Capsule())
+                        }
+                        .buttonStyle(.plain)
                     }
+                    .opacity(Double(transitionChannels.chromeOpacity))
                 }
                 .padding(.bottom, toggleBottomInset)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
@@ -2648,6 +2708,8 @@ private extension View {
             laneLimit: 4,
             isHapticsEnabled: true,
             isStreakHintEnabled: true,
+            doneMarkerStyle: .emoji,
+            doneEmojiAssetName: ReadCalendarSettings.defaultDoneEmojiAssetName,
             rootContentState: .loading,
             errorMessage: nil,
             heatmapYearMonthPages: [],
@@ -2689,6 +2751,7 @@ private extension View {
         onPagerSelectionChanged: { _ in },
         onYearSelectionChanged: { _ in },
         onSelectDate: { _ in },
+        onOpenDay: { _ in },
         onRetry: {},
         onBookCoverFullscreenPresentationChanged: { _ in }
     )

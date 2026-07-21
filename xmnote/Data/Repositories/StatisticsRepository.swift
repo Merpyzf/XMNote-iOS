@@ -93,6 +93,7 @@ private extension StatisticsRepository {
 
 private struct CheckInSummary {
     let count: Int
+    let amount: Int
     let seconds: Int
 }
 
@@ -121,6 +122,7 @@ private struct ReadCalendarDurationRecordRow {
 
 private struct ReadCalendarDurationAggregation {
     let readSecondsByBookId: [Int64: Int64]
+    let readSecondsByDay: [Date: Int]
     let bookMetaById: [Int64: (name: String, coverURL: String)]
     let totalReadSeconds: Int64
     let timeSlotReadSeconds: [ReadCalendarTimeSlot: Int]
@@ -344,6 +346,72 @@ private extension StatisticsRepository {
         )
     }
 
+    /// 按天聚合相关内容与书评数量，供阅读日历热力口径使用。
+    nonisolated func aggregateContentActivityCounts(
+        _ db: Database,
+        millisRange: ClosedRange<Int64>,
+        excludedEventTypes: Set<ReadCalendarEventType>
+    ) -> [Date: Int] {
+        var result: [Date: Int] = [:]
+        if !excludedEventTypes.contains(.relevant) {
+            // SQL 目的：按本地自然日统计有效书籍下的相关内容数量。
+            // 涉及表：category_content JOIN book。
+            // 关键过滤：两表 is_deleted=0、created_date 位于目标毫秒闭区间。
+            // 时间字段：created_date 通过 unixepoch/localtime 分桶。
+            // 返回字段用途：参与阅读日历内容活动热力等级。
+            let relevantSQL = """
+                SELECT DATE(c.created_date / 1000, 'unixepoch', 'localtime') AS day,
+                       COUNT(*) AS total
+                FROM category_content c
+                JOIN book b ON b.id = c.book_id AND b.is_deleted = 0
+                WHERE c.is_deleted = 0
+                  AND c.created_date BETWEEN ? AND ?
+                GROUP BY day
+                """
+            mergeDayCounts(
+                queryDayAggregation(
+                    db,
+                    sql: relevantSQL,
+                    arguments: StatementArguments([millisRange.lowerBound, millisRange.upperBound])
+                ),
+                into: &result
+            )
+        }
+
+        if !excludedEventTypes.contains(.review) {
+            // SQL 目的：按本地自然日统计有效书籍下的书评数量。
+            // 涉及表：review JOIN book。
+            // 关键过滤：两表 is_deleted=0、created_date 位于目标毫秒闭区间。
+            // 时间字段：created_date 通过 unixepoch/localtime 分桶。
+            // 返回字段用途：与相关内容合并为 Android contentActivityCount。
+            let reviewSQL = """
+                SELECT DATE(r.created_date / 1000, 'unixepoch', 'localtime') AS day,
+                       COUNT(*) AS total
+                FROM review r
+                JOIN book b ON b.id = r.book_id AND b.is_deleted = 0
+                WHERE r.is_deleted = 0
+                  AND r.created_date BETWEEN ? AND ?
+                GROUP BY day
+                """
+            mergeDayCounts(
+                queryDayAggregation(
+                    db,
+                    sql: reviewSQL,
+                    arguments: StatementArguments([millisRange.lowerBound, millisRange.upperBound])
+                ),
+                into: &result
+            )
+        }
+        return result
+    }
+
+    /// 累加两个按日计数字典，保持日期键归一化结果。
+    nonisolated func mergeDayCounts(_ source: [Date: Int], into target: inout [Date: Int]) {
+        for (day, count) in source {
+            target[day, default: 0] += count
+        }
+    }
+
     // MARK: - 打卡聚合
 
     /// 按天聚合打卡次数与时长（amount * 20 分钟）
@@ -353,6 +421,7 @@ private extension StatisticsRepository {
         let sql = """
             SELECT DATE(c.checkin_date / 1000, 'unixepoch', 'localtime') AS day,
                    COUNT(*) AS checkin_count,
+                   COALESCE(SUM(c.amount), 0) AS checkin_amount,
                    COALESCE(SUM(c.amount * 1200), 0) AS checkin_seconds
             FROM check_in_record c
             JOIN book b ON b.id = c.book_id AND b.is_deleted = 0
@@ -436,10 +505,12 @@ private extension StatisticsRepository {
         for row in rows {
             guard let dayStr: String = row["day"],
                   let count: Int = row["checkin_count"],
+                  let amount: Int = row["checkin_amount"],
                   let seconds: Int = row["checkin_seconds"],
                   let date = Self.dayFormatter.date(from: dayStr) else { continue }
             result[calendar.startOfDay(for: date)] = CheckInSummary(
                 count: count,
+                amount: amount,
                 seconds: seconds
             )
         }
@@ -462,15 +533,21 @@ private extension StatisticsRepository {
 
         let queryRange = millisRangeForQuery(HeatmapDateRange(start: normalizedMonthStart, end: monthEnd))
         let dayBookRows = fetchReadCalendarDayBookRows(db, millisRange: queryRange, excludedEventTypes: excludedEventTypes)
-        let readDoneMap = fetchReadDoneCountByDay(db, millisRange: queryRange)
-        let readDoneBookIdsByDay = fetchReadDoneBookIdsByDay(db, millisRange: queryRange)
-        let monthMillisRange = queryRange
-        let dayReadSecondsMap = excludedEventTypes.contains(.readTiming)
+        let readDoneMap = excludedEventTypes.contains(.readDone)
             ? [:]
-            : aggregateReadSeconds(db, millisRange: monthMillisRange)
+            : fetchReadDoneCountByDay(db, millisRange: queryRange)
+        let readDoneBookIdsByDay = excludedEventTypes.contains(.readDone)
+            ? [:]
+            : fetchReadDoneBookIdsByDay(db, millisRange: queryRange)
+        let monthMillisRange = queryRange
         let dayNoteCountMap = excludedEventTypes.contains(.note)
             ? [:]
             : aggregateNoteCounts(db, millisRange: monthMillisRange)
+        let dayContentActivityCountMap = aggregateContentActivityCounts(
+            db,
+            millisRange: monthMillisRange,
+            excludedEventTypes: excludedEventTypes
+        )
         let dayCheckInMap = excludedEventTypes.contains(.checkIn)
             ? [:]
             : aggregateCheckInSummary(db, millisRange: monthMillisRange)
@@ -485,6 +562,9 @@ private extension StatisticsRepository {
             records: durationRecords,
             monthMillisRange: monthMillisRange
         )
+        let dayReadSecondsMap = excludedEventTypes.contains(.readTiming)
+            ? [:]
+            : durationAggregation.readSecondsByDay
 
         var dayBookMap: [Date: [ReadCalendarDayBook]] = [:]
         for row in dayBookRows {
@@ -503,6 +583,7 @@ private extension StatisticsRepository {
             .union(readDoneMap.keys)
             .union(dayReadSecondsMap.keys)
             .union(dayNoteCountMap.keys)
+            .union(dayContentActivityCountMap.keys)
             .union(dayCheckInMap.keys)
         for day in dayKeys {
             let books = (dayBookMap[day] ?? []).sorted {
@@ -517,7 +598,9 @@ private extension StatisticsRepository {
                 readDoneCount: readDoneMap[day] ?? 0,
                 readSeconds: dayReadSecondsMap[day] ?? 0,
                 noteCount: dayNoteCountMap[day] ?? 0,
+                contentActivityCount: dayContentActivityCountMap[day] ?? 0,
                 checkInCount: dayCheckInMap[day]?.count ?? 0,
+                checkInAmount: dayCheckInMap[day]?.amount ?? 0,
                 checkInSeconds: dayCheckInMap[day]?.seconds ?? 0
             )
         }
@@ -528,6 +611,8 @@ private extension StatisticsRepository {
         let monthSummary = buildReadCalendarMonthSummary(
             excludedEventTypes: excludedEventTypes,
             dayBookRows: dayBookRows,
+            activeDates: Set(dayKeys),
+            monthStart: normalizedMonthStart,
             monthMillisRange: monthMillisRange,
             durationAggregation: durationAggregation,
             db: db
@@ -843,6 +928,7 @@ private extension StatisticsRepository {
 
         let aggregation = ReadCalendarDurationAggregation(
             readSecondsByBookId: readSecondsByBookId,
+            readSecondsByDay: [:],
             bookMetaById: bookMetaById,
             totalReadSeconds: 0,
             timeSlotReadSeconds: [:]
@@ -856,6 +942,7 @@ private extension StatisticsRepository {
         monthMillisRange: ClosedRange<Int64>
     ) -> ReadCalendarDurationAggregation {
         var readSecondsByBookId: [Int64: Int64] = [:]
+        var readSecondsByDay: [Date: Int] = [:]
         var bookMetaById: [Int64: (name: String, coverURL: String)] = [:]
         var totalReadSeconds: Int64 = 0
         var timeSlotReadSeconds: [ReadCalendarTimeSlot: Int] = [:]
@@ -873,6 +960,7 @@ private extension StatisticsRepository {
                 guard monthMillisRange.contains(dayMs) else { continue }
                 secondsInMonthForRecord += seconds
                 readSecondsByBookId[record.bookId, default: 0] += seconds
+                readSecondsByDay[day, default: 0] += Int(seconds)
             }
 
             guard secondsInMonthForRecord > 0 else { continue }
@@ -891,6 +979,7 @@ private extension StatisticsRepository {
 
         return ReadCalendarDurationAggregation(
             readSecondsByBookId: readSecondsByBookId,
+            readSecondsByDay: readSecondsByDay,
             bookMetaById: bookMetaById,
             totalReadSeconds: totalReadSeconds,
             timeSlotReadSeconds: timeSlotReadSeconds
@@ -924,6 +1013,8 @@ private extension StatisticsRepository {
     nonisolated func buildReadCalendarMonthSummary(
         excludedEventTypes: Set<ReadCalendarEventType>,
         dayBookRows: [ReadCalendarDayBookRow],
+        activeDates: Set<Date>,
+        monthStart: Date,
         monthMillisRange: ClosedRange<Int64>,
         durationAggregation: ReadCalendarDurationAggregation,
         db: Database
@@ -937,13 +1028,28 @@ private extension StatisticsRepository {
             : fetchMonthlyNoteCount(db, millisRange: monthMillisRange)
         let totalReadSeconds = excludedEventTypes.contains(.readTiming) ? 0 : Int(durationAggregation.totalReadSeconds)
         let timeSlotReadSeconds = excludedEventTypes.contains(.readTiming) ? [:] : durationAggregation.timeSlotReadSeconds
+        let checkInCount = excludedEventTypes.contains(.checkIn)
+            ? 0
+            : fetchMonthlyCheckInCount(db, millisRange: monthMillisRange)
+        let totalDays = calendar.range(of: .day, in: .month, for: monthStart)?.count ?? 0
+        let longestStreak = calculateLongestStreak(activeDates)
+        let peak = timeSlotReadSeconds.max { lhs, rhs in lhs.value < rhs.value }
+        let peakRatio = totalReadSeconds > 0
+            ? Double(peak?.value ?? 0) / Double(totalReadSeconds)
+            : 0
 
         return ReadCalendarMonthSummary(
+            activeDays: activeDates.count,
+            totalDays: totalDays,
+            longestStreak: longestStreak,
             uniqueReadBookCount: uniqueReadBookCount,
             finishedBookCount: finishedBookCount,
             noteCount: noteCount,
+            checkInCount: checkInCount,
             totalReadSeconds: totalReadSeconds,
-            timeSlotReadSeconds: timeSlotReadSeconds
+            timeSlotReadSeconds: timeSlotReadSeconds,
+            peakTimeSlot: peak?.key,
+            peakTimeSlotRatio: peakRatio
         )
     }
 
@@ -984,6 +1090,50 @@ private extension StatisticsRepository {
         )) ?? 0
     }
 
+    /// 统计区间内有效打卡记录总数，供月度摘要展示。
+    nonisolated func fetchMonthlyCheckInCount(_ db: Database, millisRange: ClosedRange<Int64>) -> Int {
+        // SQL 目的：统计目标月份有效书籍下的打卡记录总数。
+        // 涉及表：check_in_record JOIN book。
+        // 关键过滤：两表 is_deleted=0、book_id!=0、checkin_date 位于毫秒闭区间。
+        // 时间字段：checkin_date 原样使用 Android 毫秒时间戳。
+        // 返回字段用途：ReadCalendarMonthSummary.checkInCount。
+        let sql = """
+            SELECT COUNT(*)
+            FROM check_in_record c
+            JOIN book b ON b.id = c.book_id AND b.is_deleted = 0
+            WHERE c.is_deleted = 0
+              AND c.book_id != 0
+              AND c.checkin_date BETWEEN ? AND ?
+            """
+        return (try? Int.fetchOne(
+            db,
+            sql: sql,
+            arguments: StatementArguments([millisRange.lowerBound, millisRange.upperBound])
+        )) ?? 0
+    }
+
+    /// 计算月份活跃日期的最长连续天数。
+    nonisolated func calculateLongestStreak(_ activeDates: Set<Date>) -> Int {
+        let sortedDates = activeDates
+            .map { calendar.startOfDay(for: $0) }
+            .sorted()
+        guard !sortedDates.isEmpty else { return 0 }
+
+        var longest = 1
+        var current = 1
+        for index in 1..<sortedDates.count {
+            let previous = sortedDates[index - 1]
+            let expected = calendar.date(byAdding: .day, value: 1, to: previous)
+            if expected == sortedDates[index] {
+                current += 1
+                longest = max(longest, current)
+            } else if sortedDates[index] != previous {
+                current = 1
+            }
+        }
+        return longest
+    }
+
     /// 把小时映射到阅读日历的时间段标签，用于月度时段分布统计。
     nonisolated func readCalendarTimeSlot(forHour hour: Int) -> ReadCalendarTimeSlot {
         switch hour {
@@ -991,7 +1141,7 @@ private extension StatisticsRepository {
             return .morning
         case 12..<18:
             return .afternoon
-        case 18..<24:
+        case 18..<23:
             return .evening
         default:
             return .lateNight

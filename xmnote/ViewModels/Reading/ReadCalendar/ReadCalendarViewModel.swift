@@ -3,7 +3,7 @@ import Observation
 import SwiftUI
 
 /**
- * [INPUT]: 依赖 StatisticsRepositoryProtocol 提供月历聚合数据，依赖 ReadCalendarColorRepositoryProtocol 提供封面取色，依赖 ReadCalendarEventLayoutEngine 生成事件条布局
+ * [INPUT]: 依赖 ReadCalendarRepositoryProtocol 提供月历聚合数据，依赖 ReadCalendarColorRepositoryProtocol 提供封面取色，依赖 ReadCalendarEventLayoutEngine 生成事件条布局
  * [OUTPUT]: 对外提供 ReadCalendarViewModel（阅读日历页面状态、分页切月/快速跳转、跨周事件条布局、事件条颜色异步回填、月度阅读时长排行与月度摘要透传）
  * [POS]: ReadCalendar 子功能状态中枢，负责数据加载、分页状态、选中态、周布局构建、快速跳月与封面取色任务编排
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -231,7 +231,7 @@ final class ReadCalendarViewModel {
 
     /// 在首次进入页面时加载阅读日历基础数据。
     func loadIfNeeded(
-        using repository: any StatisticsRepositoryProtocol,
+        using repository: any ReadCalendarRepositoryProtocol,
         colorRepository: any ReadCalendarColorRepositoryProtocol
     ) async {
         guard !hasLoaded else { return }
@@ -240,7 +240,7 @@ final class ReadCalendarViewModel {
 
     /// 重新加载阅读日历基础数据并重建月份/年份缓存。
     func reload(
-        using repository: any StatisticsRepositoryProtocol,
+        using repository: any ReadCalendarRepositoryProtocol,
         colorRepository: any ReadCalendarColorRepositoryProtocol
     ) async {
         guard !isLoading else { return }
@@ -250,7 +250,7 @@ final class ReadCalendarViewModel {
         let today = calendar.startOfDay(for: Date())
 
         do {
-            let earliestDate = try await repository.fetchReadCalendarEarliestDate(
+            let earliestDate = try await repository.fetchEarliestDate(
                 excludedEventTypes: settings.excludedEventTypes
             )
             let earliest = Self.monthStart(of: earliestDate ?? today, using: calendar)
@@ -349,7 +349,7 @@ final class ReadCalendarViewModel {
     /// 处理月份分页切换并串联加载、预取与错误同步。
     func handlePagerSelectionChange(
         to monthStart: Date,
-        using repository: any StatisticsRepositoryProtocol,
+        using repository: any ReadCalendarRepositoryProtocol,
         colorRepository: any ReadCalendarColorRepositoryProtocol
     ) async {
         guard hasLoaded else { return }
@@ -387,7 +387,7 @@ final class ReadCalendarViewModel {
     /// 处理年份切换并确保年度数据、排行与对比年份已准备。
     func handleYearSelectionChange(
         to year: Int,
-        using repository: any StatisticsRepositoryProtocol,
+        using repository: any ReadCalendarRepositoryProtocol,
         colorRepository: any ReadCalendarColorRepositoryProtocol
     ) async {
         guard hasLoaded else { return }
@@ -419,7 +419,7 @@ final class ReadCalendarViewModel {
 
     /// 确保年度热力图页已就绪：补齐当前年份数据、榜单与对比年份缓存。
     func prepareHeatmapYearIfNeeded(
-        using repository: any StatisticsRepositoryProtocol,
+        using repository: any ReadCalendarRepositoryProtocol,
         colorRepository: any ReadCalendarColorRepositoryProtocol
     ) async {
         guard hasLoaded else { return }
@@ -445,7 +445,7 @@ final class ReadCalendarViewModel {
 
     /// 重试当前展示月份加载，并补齐相邻月份预取。
     func retryDisplayedMonth(
-        using repository: any StatisticsRepositoryProtocol,
+        using repository: any ReadCalendarRepositoryProtocol,
         colorRepository: any ReadCalendarColorRepositoryProtocol
     ) async {
         await ensureMonthLoaded(
@@ -474,7 +474,7 @@ final class ReadCalendarViewModel {
     /// 若存在上一年数据则预加载上一年，用于年度对比展示。
     func preloadComparisonYearIfNeeded(
         for year: Int,
-        using repository: any StatisticsRepositoryProtocol,
+        using repository: any ReadCalendarRepositoryProtocol,
         colorRepository: any ReadCalendarColorRepositoryProtocol
     ) async {
         let previousYear = year - 1
@@ -537,7 +537,7 @@ final class ReadCalendarViewModel {
 
     /// 设置变更后清缓存并重新加载
     func applySettingsChange(
-        using repository: any StatisticsRepositoryProtocol,
+        using repository: any ReadCalendarRepositoryProtocol,
         colorRepository: any ReadCalendarColorRepositoryProtocol
     ) async {
         hasLoaded = false
@@ -685,7 +685,7 @@ private extension ReadCalendarViewModel {
     /// 确保目标月份数据可用，并处理加载态、失败态与并发竞态。
     func ensureMonthLoaded(
         for monthStart: Date,
-        using repository: any StatisticsRepositoryProtocol,
+        using repository: any ReadCalendarRepositoryProtocol,
         colorRepository: any ReadCalendarColorRepositoryProtocol,
         showLoading: Bool,
         forceRefresh: Bool,
@@ -786,7 +786,7 @@ private extension ReadCalendarViewModel {
     /// 预取当前月份窗口（当前月±3），减少连续翻页时的等待。
     func prefetchAdjacentMonths(
         around monthStart: Date,
-        using repository: any StatisticsRepositoryProtocol,
+        using repository: any ReadCalendarRepositoryProtocol,
         colorRepository: any ReadCalendarColorRepositoryProtocol
     ) async {
         let offsets = (-Self.pagerWindowRadius...Self.pagerWindowRadius).filter { $0 != 0 }
@@ -807,7 +807,7 @@ private extension ReadCalendarViewModel {
     /// 确保目标年份所有月份已加载并汇总年度加载结果。
     func ensureYearLoaded(
         for year: Int,
-        using repository: any StatisticsRepositoryProtocol,
+        using repository: any ReadCalendarRepositoryProtocol,
         colorRepository: any ReadCalendarColorRepositoryProtocol,
         reportError: Bool
     ) async {
@@ -861,13 +861,13 @@ private extension ReadCalendarViewModel {
     /// 加载年度阅读时长 Top 并初始化排行条颜色映射。
     func ensureYearTopBooksLoaded(
         for year: Int,
-        using repository: any StatisticsRepositoryProtocol,
+        using repository: any ReadCalendarRepositoryProtocol,
         colorRepository: any ReadCalendarColorRepositoryProtocol
     ) async {
         let clampedYear = clampYear(year)
         if yearTopBooksByYear[clampedYear] == nil {
             do {
-                let topBooks = try await repository.fetchReadCalendarYearTopBooks(
+                let topBooks = try await repository.fetchYearTopBooks(
                     year: clampedYear,
                     excludedEventTypes: settings.excludedEventTypes,
                     limit: Self.yearTopBookLimit
@@ -1388,7 +1388,7 @@ private extension ReadCalendarViewModel {
     /// 获取指定月份数据，优先走缓存并在需要时回源仓储。
     func fetchMonthData(
         monthStart: Date,
-        using repository: any StatisticsRepositoryProtocol,
+        using repository: any ReadCalendarRepositoryProtocol,
         forceRefresh: Bool
     ) async throws -> ReadCalendarMonthData {
         let key = Self.monthKey(for: monthStart, using: calendar)
@@ -1400,7 +1400,7 @@ private extension ReadCalendarViewModel {
             return cached
         }
 
-        let fetched = try await repository.fetchReadCalendarMonthData(
+        let fetched = try await repository.fetchMonthData(
             monthStart: monthStart,
             excludedEventTypes: settings.excludedEventTypes
         )

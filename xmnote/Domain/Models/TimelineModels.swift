@@ -10,7 +10,7 @@ import Foundation
 // MARK: - 事件子结构
 
 /// 书摘事件，携带划线正文、用户批注、附图地址与关联标签
-struct TimelineNoteEvent: Equatable {
+nonisolated struct TimelineNoteEvent: Equatable {
     let noteId: Int64
     let content: String
     let idea: String
@@ -20,27 +20,49 @@ struct TimelineNoteEvent: Equatable {
 }
 
 /// 阅读计时事件，携带时长与时间范围
-struct TimelineReadTimingEvent: Equatable {
+nonisolated struct TimelineReadTimingEvent: Equatable {
     let elapsedSeconds: Int64
     let startTime: Int64
     let endTime: Int64
     let fuzzyReadDate: Int64
+    let position: Double
+    let recordedPositionUnit: Int64?
+    let insight: String
+
+    /// 创建计时事件；进度和感想提供默认值以兼容普通时间线的既有调用。
+    init(
+        elapsedSeconds: Int64,
+        startTime: Int64,
+        endTime: Int64,
+        fuzzyReadDate: Int64,
+        position: Double = 0,
+        recordedPositionUnit: Int64? = nil,
+        insight: String = ""
+    ) {
+        self.elapsedSeconds = elapsedSeconds
+        self.startTime = startTime
+        self.endTime = endTime
+        self.fuzzyReadDate = fuzzyReadDate
+        self.position = position
+        self.recordedPositionUnit = recordedPositionUnit
+        self.insight = insight
+    }
 }
 
 /// 阅读状态变更事件，携带状态 ID、读完次数与评分
-struct TimelineReadStatusEvent: Equatable {
+nonisolated struct TimelineReadStatusEvent: Equatable {
     let statusId: Int64
     let readDoneCount: Int64
     let bookScore: Int64
 }
 
 /// 打卡事件，携带阅读量级别
-struct TimelineCheckInEvent: Equatable {
+nonisolated struct TimelineCheckInEvent: Equatable {
     let amount: Int64
 }
 
 /// 书评事件，携带标题、正文、评分与图片地址
-struct TimelineReviewEvent: Equatable {
+nonisolated struct TimelineReviewEvent: Equatable {
     let reviewId: Int64
     let title: String
     let content: String
@@ -49,7 +71,7 @@ struct TimelineReviewEvent: Equatable {
 }
 
 /// 相关内容事件，携带标题、正文、链接、分类名与图片地址
-struct TimelineRelevantEvent: Equatable {
+nonisolated struct TimelineRelevantEvent: Equatable {
     let contentId: Int64
     let categoryId: Int64
     let title: String
@@ -60,7 +82,7 @@ struct TimelineRelevantEvent: Equatable {
 }
 
 /// 相关书籍事件，携带被关联书籍信息与分类标签
-struct TimelineRelevantBookEvent: Equatable {
+nonisolated struct TimelineRelevantBookEvent: Equatable {
     let contentBookId: Int64
     let contentBookName: String
     let contentBookAuthor: String
@@ -71,7 +93,7 @@ struct TimelineRelevantBookEvent: Equatable {
 // MARK: - 事件类型
 
 /// 7 种时间线事件的类型判别联合体
-enum TimelineEventKind: Equatable {
+nonisolated enum TimelineEventKind: Equatable {
     case note(TimelineNoteEvent)
     case readTiming(TimelineReadTimingEvent)
     case readStatus(TimelineReadStatusEvent)
@@ -84,7 +106,7 @@ enum TimelineEventKind: Equatable {
 // MARK: - 统一事件
 
 /// 时间线单条事件，聚合事件类型与书籍信息，按 timestamp 排序
-struct TimelineEvent: Identifiable, Equatable {
+nonisolated struct TimelineEvent: Identifiable, Equatable {
     let id: String
     let kind: TimelineEventKind
     let timestamp: Int64
@@ -97,7 +119,7 @@ struct TimelineEvent: Identifiable, Equatable {
 // MARK: - 按日分组
 
 /// 时间线按日分组，date 为当日零时，events 按时间降序排列
-struct TimelineSection: Identifiable, Equatable {
+nonisolated struct TimelineSection: Identifiable, Equatable {
     let id: String
     let date: Date
     let events: [TimelineEvent]
@@ -106,7 +128,7 @@ struct TimelineSection: Identifiable, Equatable {
 // MARK: - 筛选类别
 
 /// 时间线事件筛选类别，对齐 Android 端 7 种 + 全部
-enum TimelineEventCategory: String, CaseIterable, Identifiable, Equatable, Codable {
+nonisolated enum TimelineEventCategory: String, CaseIterable, Identifiable, Equatable, Codable {
     case all = "全部"
     case note = "书摘"
     case readStatus = "状态"
@@ -161,7 +183,7 @@ enum TimelineEventCategory: String, CaseIterable, Identifiable, Equatable, Codab
 
 // MARK: - Emoji 映射
 
-extension TimelineEventKind {
+nonisolated extension TimelineEventKind {
 
     /// 事件类型对应的 Emoji 标记，对齐 Android TimelineRepository 的 emojiSign 字段
     var emoji: String {
@@ -200,7 +222,7 @@ extension TimelineEventKind {
 // MARK: - 阅读状态辅助
 
 /// 阅读状态 ID → 显示名，对齐 Android READ_STATUS_NAMES
-enum ReadStatusHelper {
+nonisolated enum ReadStatusHelper {
 
     /// 把阅读状态 ID 和刷读次数转换成时间线可直接展示的状态文案。
     static func statusName(for statusId: Int64, readDoneCount: Int64 = 0) -> String {
@@ -218,7 +240,7 @@ enum ReadStatusHelper {
 // MARK: - 阅读时长格式化
 
 /// 秒数 → 可读时长，对齐 Android LongExtensions.toReadableTimeDuration
-enum ReadDurationFormatter {
+nonisolated enum ReadDurationFormatter {
 
     /// 把秒数压缩成时间线卡片可读时长，保持和 Android 可读时长文案一致。
     static func format(seconds: Int64) -> String {
@@ -238,7 +260,7 @@ enum ReadDurationFormatter {
 // MARK: - 打卡阅读量级别
 
 /// 阅读量级别 1-4 的文案与颜色，对齐 Android ReadAmountLevel + ChartHelper
-enum CheckInAmountLevel {
+nonisolated enum CheckInAmountLevel {
     case veryLess, less, more, veryMore
 
     init(amount: Int64) {
@@ -264,7 +286,7 @@ enum CheckInAmountLevel {
 // MARK: - 日历标记
 
 /// 日历单日标记，标识该日是否有事件活动及阅读进度，供日历 cell 渲染点标记与进度环。
-struct TimelineDayMarker: Hashable {
+nonisolated struct TimelineDayMarker: Hashable {
     let isActive: Bool
     /// 阅读进度百分比（0-100），0 表示无阅读计时记录
     let readingProgress: Int

@@ -145,6 +145,12 @@ struct MainTabView: View {
                                 .toolbar(.hidden, for: .tabBar)
                         }
                     }
+                    .navigationDestination(for: ReadCalendarRoute.self) { route in
+                        readingRuntimeDestination { _ in
+                            readCalendarDestination(for: route)
+                                .toolbar(.hidden, for: .tabBar)
+                        }
+                    }
                     .navigationDestination(for: BookRoute.self) { route in
                         readingRuntimeDestination { _ in
                             bookDestination(for: route)
@@ -206,6 +212,10 @@ struct MainTabView: View {
                                 }
                                 .navigationDestination(for: PersonalRoute.self) { route in
                                     personalDestination(for: route)
+                                        .toolbar(.hidden, for: .tabBar)
+                                }
+                                .navigationDestination(for: ReadCalendarRoute.self) { route in
+                                    readCalendarDestination(for: route)
                                         .toolbar(.hidden, for: .tabBar)
                                 }
                         }
@@ -297,6 +307,10 @@ struct MainTabView: View {
                                 }
                                 .navigationDestination(for: PersonalRoute.self) { route in
                                     personalDestination(for: route)
+                                        .toolbar(.hidden, for: .tabBar)
+                                }
+                                .navigationDestination(for: ReadCalendarRoute.self) { route in
+                                    readCalendarDestination(for: route)
                                         .toolbar(.hidden, for: .tabBar)
                                 }
                         }
@@ -570,7 +584,39 @@ struct MainTabView: View {
         case .readingSession:
             Text("阅读计时")
         case .readCalendar(let date):
-            ReadCalendarView(date: date)
+            ReadCalendarView(
+                date: date,
+                onOpenRoute: { append($0, to: selectedTab) },
+                onOpenPremium: { append(PersonalRoute.premium, to: selectedTab) }
+            )
+        }
+    }
+
+    // MARK: - Read Calendar Destinations
+
+    @ViewBuilder
+    private func readCalendarDestination(for route: ReadCalendarRoute) -> some View {
+        switch route {
+        case .daily(let date):
+            DailyReadingView(
+                date: date,
+                onOpenRoute: { append($0, to: selectedTab) },
+                onOpenBookRoute: { append($0, to: selectedTab) }
+            )
+        case .dailyBook(let date, let summary):
+            DailyReadingBookView(
+                date: date,
+                summary: summary,
+                onOpenBookRoute: { append($0, to: selectedTab) },
+                onOpenNoteRoute: { append($0, to: selectedTab) },
+                onOpenContentRoute: { append($0, to: selectedTab) }
+            )
+        case .share(let monthStart, let initialType):
+            ReadCalendarShareView(
+                monthStart: monthStart,
+                initialType: initialType,
+                onOpenPremium: { append(PersonalRoute.premium, to: selectedTab) }
+            )
         }
     }
 
@@ -651,7 +697,11 @@ struct MainTabView: View {
         case .premium:
             Text("会员")
         case .readCalendar:
-            ReadCalendarView(date: nil)
+            ReadCalendarView(
+                date: nil,
+                onOpenRoute: { append($0, to: selectedTab) },
+                onOpenPremium: { append(PersonalRoute.premium, to: selectedTab) }
+            )
         case .readReminder:
             Text("阅读提醒")
         case .dataImport:
@@ -741,6 +791,22 @@ struct MainTabView: View {
     }
 
     private func append(_ route: ContentRoute, to tab: AppTab) {
+        switch tab {
+        case .reading:
+            readingPath.append(route)
+        case .books:
+            booksPath.append(route)
+        case .notes:
+            notesPath.append(route)
+        case .profile:
+            profilePath.append(route)
+        case .search:
+            searchPath.append(route)
+        }
+    }
+
+    /// 将阅读日历内部路由追加到当前业务栈，保证在读/我的两个入口都保留各自现场。
+    private func append(_ route: ReadCalendarRoute, to tab: AppTab) {
         switch tab {
         case .reading:
             readingPath.append(route)

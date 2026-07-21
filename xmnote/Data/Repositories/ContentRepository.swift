@@ -121,6 +121,13 @@ struct ContentRepository: ContentRepositoryProtocol {
         }
     }
 
+    /// 物理删除普通相关内容或相关书籍关系，并在最后引用移除后清理占位书。
+    func deleteRelatedRelation(relationID: Int64) async throws {
+        try await databaseManager.database.dbPool.write { db in
+            try deleteRelevant(db, contentId: relationID)
+        }
+    }
+
     /// 删除指定内容，按 iOS 当前约定执行主记录与子记录的硬删除事务。
     func delete(itemID: ContentViewerItemID) async throws {
         try await databaseManager.database.dbPool.write { db in
@@ -590,6 +597,16 @@ private extension ContentRepository {
 
     /// 硬删除相关内容及其附图。
     nonisolated func deleteRelevant(_ db: Database, contentId: Int64) throws {
+        // SQL 目的：在删除相关关系前读取可能引用的业务占位书 ID。
+        // 涉及表：category_content。
+        // 关键过滤：按关系主键精确命中；普通内容返回 0，相关书籍返回 content_book_id。
+        // 时间字段：不读取时间字段。
+        // 返回字段用途：关系删除后判断是否需要清理最后一个无引用占位书。
+        let relatedBookID = try Int64.fetchOne(
+            db,
+            sql: "SELECT content_book_id FROM category_content WHERE id = ? LIMIT 1",
+            arguments: [contentId]
+        ) ?? 0
         try db.execute(
             // SQL 目的：物理删除指定相关内容关联的全部附图记录。
             // 涉及表：category_image。
@@ -604,6 +621,22 @@ private extension ContentRepository {
             sql: "DELETE FROM category_content WHERE id = ?",
             arguments: [contentId]
         )
+        if relatedBookID > 0 {
+            try db.execute(
+                // SQL 目的：物理删除失去最后一个真实引用的业务占位书。
+                // 涉及表：book，反查 category_content 与 collection_book。
+                // 关键过滤：仅处理 is_deleted=1 占位书；任一物理关系仍存在时保留。
+                // 时间字段：不读取时间字段。
+                // 副作用：最后引用移除后删除 book 主记录，不影响有效书籍。
+                sql: """
+                    DELETE FROM book
+                    WHERE id = ? AND id != 0 AND is_deleted = 1
+                      AND NOT EXISTS (SELECT 1 FROM category_content WHERE content_book_id = book.id)
+                      AND NOT EXISTS (SELECT 1 FROM collection_book WHERE book_id = book.id)
+                    """,
+                arguments: [relatedBookID]
+            )
+        }
     }
 }
 
