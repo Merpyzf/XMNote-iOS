@@ -600,6 +600,11 @@ private extension HeatmapChart {
             }
             .sensoryFeedback(.impact(flexibility: .soft), trigger: day.id)
             .accessibilityLabel(accessibilityText(date: date, day: day))
+            .accessibilityAddTraits(onDayTap != nil && !isFuture ? .isButton : [])
+            .accessibilityAction {
+                guard !isFuture else { return }
+                onDayTap?(day)
+            }
     }
 
     /// 按事件分段颜色填充单个方格。
