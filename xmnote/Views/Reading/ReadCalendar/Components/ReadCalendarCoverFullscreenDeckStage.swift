@@ -402,7 +402,7 @@ private extension ReadCalendarCoverFullscreenDeckStage {
         let cardSize = gridCardSize
         let columns = gridColumns(for: cardSize.width)
 
-        return ScrollView(.vertical, showsIndicators: true) {
+        return ScrollView(.vertical) {
             LazyVGrid(columns: columns, spacing: resolvedGridSpacing) {
                 ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
                     if stackedItemIDSet.contains(item.id) {
@@ -440,6 +440,8 @@ private extension ReadCalendarCoverFullscreenDeckStage {
             .frame(maxWidth: .infinity, alignment: .center)
             .padding(.vertical, Spacing.base)
         }
+        .scrollIndicators(.hidden, axes: .vertical)
+        .scrollBounceBehavior(.basedOnSize)
     }
 
     /// 折叠态：与日格封面组件使用同源算法，保证打开首帧摆放一致。

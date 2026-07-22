@@ -2,34 +2,72 @@ import Foundation
 
 /**
  * [INPUT]: 依赖 ReadCalendarEventType 提供事件类型枚举
- * [OUTPUT]: 对外提供 ReadCalendarSettings 与读完标记配置（UserDefaults 持久化）
- * [POS]: ReadCalendar 子功能设置状态，供 ViewModel 消费六类事件过滤、标记与交互配置
+ * [OUTPUT]: 对外提供 ReadCalendarSettings、阅读行为设置项与读完标记配置（UserDefaults 持久化）
+ * [POS]: ReadCalendar 子功能设置状态，统一约束六类事件过滤、读完标记与触感配置
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
 // MARK: - 阅读日历设置
+
+/// 阅读日历可配置的六类行为，集中提供展示顺序与核心规则归属。
+enum ReadCalendarBehaviorSetting: CaseIterable, Identifiable {
+    case readTiming
+    case note
+    case relevant
+    case review
+    case readDone
+    case checkIn
+
+    var id: Self { self }
+
+    var title: String {
+        switch self {
+        case .readTiming:
+            "阅读计时"
+        case .note:
+            "书摘记录"
+        case .relevant:
+            "相关内容"
+        case .review:
+            "书评记录"
+        case .readDone:
+            "读完事件"
+        case .checkIn:
+            "阅读打卡"
+        }
+    }
+
+    var isCoreBehavior: Bool {
+        switch self {
+        case .readTiming, .note, .relevant, .review:
+            true
+        case .readDone, .checkIn:
+            false
+        }
+    }
+}
 
 /// 阅读日历设置状态源，负责持久化事件过滤与交互偏好，不承担页面数据查询。
 @MainActor
 @Observable
 /// 阅读日历设置状态容器，负责本地持久化与业务规则校验。
 final class ReadCalendarSettings {
-    var excludeReadTiming: Bool {
+    private(set) var excludeReadTiming: Bool {
         didSet { save(excludeReadTiming, forKey: Self.keyReadTiming) }
     }
-    var excludeNote: Bool {
+    private(set) var excludeNote: Bool {
         didSet { save(excludeNote, forKey: Self.keyNote) }
     }
-    var excludeRelevant: Bool {
+    private(set) var excludeRelevant: Bool {
         didSet { save(excludeRelevant, forKey: Self.keyRelevant) }
     }
-    var excludeReview: Bool {
+    private(set) var excludeReview: Bool {
         didSet { save(excludeReview, forKey: Self.keyReview) }
     }
-    var excludeReadDone: Bool {
+    private(set) var excludeReadDone: Bool {
         didSet { save(excludeReadDone, forKey: Self.keyReadDone) }
     }
-    var excludeCheckIn: Bool {
+    private(set) var excludeCheckIn: Bool {
         didSet { save(excludeCheckIn, forKey: Self.keyCheckIn) }
     }
     var dayEventCount: Int {
@@ -37,9 +75,6 @@ final class ReadCalendarSettings {
     }
     var isHapticsEnabled: Bool {
         didSet { save(isHapticsEnabled, forKey: Self.keyHapticsEnabled) }
-    }
-    var isStreakHintEnabled: Bool {
-        didSet { save(isStreakHintEnabled, forKey: Self.keyStreakHintEnabled) }
     }
     var doneMarkerStyle: ReadCalendarDoneMarkerStyle {
         didSet { save(doneMarkerStyle.rawValue, forKey: Self.keyDoneMarkerStyle) }
@@ -51,15 +86,24 @@ final class ReadCalendarSettings {
     /// 从 UserDefaults 恢复阅读日历筛选与交互配置，并应用默认值兜底。
     init() {
         let defaults = UserDefaults.standard
-        self.excludeReadTiming = defaults.bool(forKey: Self.keyReadTiming)
         let legacyExcludeNoteRecord = defaults.bool(forKey: Self.legacyKeyNoteRecord)
-        self.excludeNote = defaults.object(forKey: Self.keyNote) as? Bool ?? legacyExcludeNoteRecord
-        self.excludeRelevant = defaults.object(forKey: Self.keyRelevant) as? Bool ?? legacyExcludeNoteRecord
-        self.excludeReview = defaults.object(forKey: Self.keyReview) as? Bool ?? legacyExcludeNoteRecord
+        var storedExcludeReadTiming = defaults.bool(forKey: Self.keyReadTiming)
+        let storedExcludeNote = defaults.object(forKey: Self.keyNote) as? Bool ?? legacyExcludeNoteRecord
+        let storedExcludeRelevant = defaults.object(forKey: Self.keyRelevant) as? Bool ?? legacyExcludeNoteRecord
+        let storedExcludeReview = defaults.object(forKey: Self.keyReview) as? Bool ?? legacyExcludeNoteRecord
+
+        if storedExcludeReadTiming && storedExcludeNote && storedExcludeRelevant && storedExcludeReview {
+            storedExcludeReadTiming = false
+            defaults.set(false, forKey: Self.keyReadTiming)
+        }
+
+        self.excludeReadTiming = storedExcludeReadTiming
+        self.excludeNote = storedExcludeNote
+        self.excludeRelevant = storedExcludeRelevant
+        self.excludeReview = storedExcludeReview
         self.excludeReadDone = defaults.bool(forKey: Self.keyReadDone)
         self.excludeCheckIn = defaults.bool(forKey: Self.keyCheckIn)
         self.isHapticsEnabled = defaults.object(forKey: Self.keyHapticsEnabled) as? Bool ?? true
-        self.isStreakHintEnabled = defaults.object(forKey: Self.keyStreakHintEnabled) as? Bool ?? true
         self.doneMarkerStyle = ReadCalendarDoneMarkerStyle(
             rawValue: defaults.string(forKey: Self.keyDoneMarkerStyle) ?? ""
         ) ?? .emoji
@@ -85,9 +129,62 @@ final class ReadCalendarSettings {
         return result
     }
 
-    /// 阅读行为判定规则：阅读计时和笔记记录至少保留一个
+    /// 返回指定阅读行为当前是否参与日历统计与展示。
+    func isBehaviorEnabled(_ behavior: ReadCalendarBehaviorSetting) -> Bool {
+        switch behavior {
+        case .readTiming:
+            !excludeReadTiming
+        case .note:
+            !excludeNote
+        case .relevant:
+            !excludeRelevant
+        case .review:
+            !excludeReview
+        case .readDone:
+            !excludeReadDone
+        case .checkIn:
+            !excludeCheckIn
+        }
+    }
+
+    /// 修改阅读行为开关；拒绝关闭最后一个核心行为，并保持持久化状态不变。
+    @discardableResult
+    func setBehavior(_ behavior: ReadCalendarBehaviorSetting, isEnabled: Bool) -> Bool {
+        guard isBehaviorEnabled(behavior) != isEnabled else { return true }
+        if !isEnabled,
+           behavior.isCoreBehavior,
+           enabledCoreBehaviorCount <= 1 {
+            return false
+        }
+
+        let shouldExclude = !isEnabled
+        switch behavior {
+        case .readTiming:
+            excludeReadTiming = shouldExclude
+        case .note:
+            excludeNote = shouldExclude
+        case .relevant:
+            excludeRelevant = shouldExclude
+        case .review:
+            excludeReview = shouldExclude
+        case .readDone:
+            excludeReadDone = shouldExclude
+        case .checkIn:
+            excludeCheckIn = shouldExclude
+        }
+        return true
+    }
+
+    /// 阅读行为判定规则：四类核心行为至少保留一个。
     var isReadBehaviorRuleValid: Bool {
         !(excludeReadTiming && excludeNote && excludeRelevant && excludeReview)
+    }
+
+    private var enabledCoreBehaviorCount: Int {
+        ReadCalendarBehaviorSetting.allCases.lazy
+            .filter(\.isCoreBehavior)
+            .filter(isBehaviorEnabled)
+            .count
     }
 
     // MARK: - 常量
@@ -119,7 +216,6 @@ final class ReadCalendarSettings {
     private static let keyCheckIn = "rcExcludeCheckIn"
     private static let keyDayEventCount = "rcDayEventCount"
     private static let keyHapticsEnabled = "rcHapticsEnabled"
-    private static let keyStreakHintEnabled = "rcStreakHintEnabled"
     private static let keyDoneMarkerStyle = "rcDoneMarkerStyle"
     private static let keyDoneEmojiAssetName = "rcDoneEmojiAssetName"
 
@@ -143,5 +239,5 @@ enum ReadCalendarDoneMarkerStyle: String, CaseIterable, Identifiable {
 
     var id: String { rawValue }
 
-    var title: String { self == .checkmark ? "勾选" : "图案" }
+    var title: String { self == .checkmark ? "对勾" : "Emoji" }
 }

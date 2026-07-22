@@ -568,7 +568,7 @@ private extension xmnoteTests {
     }
 }
 
-private struct StubStatisticsRepository: StatisticsRepositoryProtocol {
+private struct StubStatisticsRepository: StatisticsRepositoryProtocol, ReadCalendarRepositoryProtocol {
     let earliestDate: Date?
 
     func fetchHeatmapData(
@@ -601,6 +601,61 @@ private struct StubStatisticsRepository: StatisticsRepositoryProtocol {
     ) async throws -> [ReadCalendarMonthlyDurationBook] {
         []
     }
+
+    func fetchEarliestDate(
+        excludedEventTypes: Set<ReadCalendarEventType>
+    ) async throws -> Date? {
+        try await fetchReadCalendarEarliestDate(excludedEventTypes: excludedEventTypes)
+    }
+
+    func fetchMonthData(
+        monthStart: Date,
+        excludedEventTypes: Set<ReadCalendarEventType>,
+        excludedBookIDs: Set<Int64>
+    ) async throws -> ReadCalendarMonthData {
+        try await fetchReadCalendarMonthData(
+            monthStart: monthStart,
+            excludedEventTypes: excludedEventTypes
+        )
+    }
+
+    func fetchYearTopBooks(
+        year: Int,
+        excludedEventTypes: Set<ReadCalendarEventType>,
+        limit: Int,
+        includedMonthStarts: Set<Date>?,
+        excludedBookIDs: Set<Int64>
+    ) async throws -> [ReadCalendarMonthlyDurationBook] {
+        try await fetchReadCalendarYearTopBooks(
+            year: year,
+            excludedEventTypes: excludedEventTypes,
+            limit: limit
+        )
+    }
+
+    func fetchDailySummary(
+        for date: Date,
+        excludedEventTypes: Set<ReadCalendarEventType>
+    ) async throws -> DailyReadingSummary {
+        .empty(for: date)
+    }
+
+    func fetchDailyBookRecords(
+        for date: Date,
+        bookID: Int64,
+        filter: DailyReadingTimelineFilter,
+        sortOrder: DailyReadingSortOrder
+    ) async throws -> [DailyReadingRecord] {
+        []
+    }
+
+    func saveCheckIn(_ draft: ReadCalendarCheckInDraft) async throws {}
+
+    func updateTiming(_ draft: ReadCalendarTimingDraft) async throws {}
+
+    func deleteCheckIn(recordID: Int64) async throws {}
+
+    func deleteTiming(recordID: Int64) async throws {}
 }
 
 private struct StubReadCalendarColorRepository: ReadCalendarColorRepositoryProtocol {

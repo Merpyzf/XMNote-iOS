@@ -1,6 +1,6 @@
 /**
- * [INPUT]: 依赖 RepositoryContainer/AppState、ReadCalendarShareViewModel、分享卡与系统年月选择/弹窗/分享组件
- * [OUTPUT]: 对外提供 ReadCalendarShareView，完成三类预览、48 模板、排行、书籍排除、保存与分享
+ * [INPUT]: 依赖 RepositoryContainer/AppState 及其会员限制开关、ReadCalendarShareViewModel、分享卡与系统年月选择/弹窗/分享组件
+ * [OUTPUT]: 对外提供 ReadCalendarShareView，完成三类预览、48 模板、书籍排除重算、会员拦截、保存与分享
  * [POS]: ReadCalendar 分享页面壳层，采用 iOS 原生 push、Sheet 与系统分享/相册能力表达 Android 业务规则
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -61,11 +61,25 @@ struct ReadCalendarShareView: View {
         }
         .xmToastHost(center: toastCenter)
         .task {
+            viewModel.updateAccessBoundary(
+                minimumAccessibleMonthStart: shareMinimumAccessibleMonthStart
+            )
             syncLoadingGate()
             await viewModel.loadIfNeeded(using: repositories.readCalendarRepository)
             syncLoadingGate()
         }
         .onChange(of: viewModel.isLoading) { _, _ in syncLoadingGate() }
+        .onChange(of: appState.shouldEnforcePremiumRestrictions) { _, shouldEnforce in
+            if !shouldEnforce {
+                premiumBlock = nil
+            }
+            viewModel.updateAccessBoundary(
+                minimumAccessibleMonthStart: shareMinimumAccessibleMonthStart
+            )
+            Task {
+                await viewModel.reload(using: repositories.readCalendarRepository)
+            }
+        }
         .onDisappear {
             viewModel.cancel()
             loadingGate.hideImmediately()
@@ -170,10 +184,10 @@ struct ReadCalendarShareView: View {
                 value: viewModel.excludedBookIDs.isEmpty ? "未排除" : "已排除 \(viewModel.excludedBookIDs.count) 本",
                 systemImage: "books.vertical"
             ) {
-                if appState.isPremium {
-                    activeSheet = .bookFilter
-                } else {
+                if appState.shouldEnforcePremiumRestrictions {
                     premiumBlock = .excludedBooks
+                } else {
+                    activeSheet = .bookFilter
                 }
             }
         }
@@ -208,7 +222,7 @@ struct ReadCalendarShareView: View {
         Binding(
             get: { viewModel.rankingDisplayCount },
             set: { value in
-                if !appState.isPremium, value > 5 {
+                if appState.shouldEnforcePremiumRestrictions, value > 5 {
                     premiumBlock = .ranking
                     return
                 }
@@ -341,10 +355,11 @@ struct ReadCalendarShareView: View {
         NavigationStack {
             List(viewModel.filterBooks) { book in
                 Button {
-                    if viewModel.excludedBookIDs.contains(book.bookId) {
-                        viewModel.excludedBookIDs.remove(book.bookId)
-                    } else {
-                        viewModel.excludedBookIDs.insert(book.bookId)
+                    Task {
+                        await viewModel.toggleExcludedBook(
+                            book.bookId,
+                            using: repositories.readCalendarRepository
+                        )
                     }
                 } label: {
                     HStack(spacing: Spacing.base) {
@@ -390,15 +405,15 @@ struct ReadCalendarShareView: View {
     }
 
     private func beginExport(mode: ExportMode) {
-        if !appState.isPremium, !viewModel.template.isFree {
+        if appState.shouldEnforcePremiumRestrictions, !viewModel.template.isFree {
             premiumBlock = .template
             return
         }
-        if !appState.isPremium, viewModel.rankingDisplayCount > 5 {
+        if appState.shouldEnforcePremiumRestrictions, viewModel.rankingDisplayCount > 5 {
             premiumBlock = .ranking
             return
         }
-        if !appState.isPremium, !viewModel.excludedBookIDs.isEmpty {
+        if appState.shouldEnforcePremiumRestrictions, !viewModel.excludedBookIDs.isEmpty {
             premiumBlock = .excludedBooks
             return
         }
@@ -474,11 +489,18 @@ struct ReadCalendarShareView: View {
     }
 
     private func isMonthPremiumLocked(_ date: Date) -> Bool {
-        guard !appState.isPremium else { return false }
+        guard let shareMinimumAccessibleMonthStart else { return false }
+        let calendar = Calendar.current
+        let normalized = calendar.date(from: calendar.dateComponents([.year, .month], from: date)) ?? date
+        return normalized < shareMinimumAccessibleMonthStart
+    }
+
+    /// 免费版分享与主日历复用当前月向前五个月的查询下界。
+    private var shareMinimumAccessibleMonthStart: Date? {
+        guard appState.shouldEnforcePremiumRestrictions else { return nil }
         let calendar = Calendar.current
         let current = calendar.date(from: calendar.dateComponents([.year, .month], from: Date())) ?? Date()
-        let boundary = calendar.date(byAdding: .month, value: -5, to: current) ?? current
-        return date < boundary
+        return calendar.date(byAdding: .month, value: -5, to: current) ?? current
     }
 
     private func syncLoadingGate() {

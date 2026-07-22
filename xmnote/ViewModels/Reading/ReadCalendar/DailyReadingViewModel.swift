@@ -1,5 +1,5 @@
 /**
- * [INPUT]: 依赖 ReadCalendarRepositoryProtocol 获取当日聚合并保存打卡
+ * [INPUT]: 依赖 ReadCalendarRepositoryProtocol 与 ReadCalendarSettings 获取同源筛选下的当日聚合并保存打卡
  * [OUTPUT]: 对外提供 DailyReadingViewModel，驱动日期汇总、书籍卡片与打卡写入状态
  * [POS]: Reading/ReadCalendar 二级页面状态中枢，不直接访问数据库
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -28,6 +28,7 @@ struct DailyReadingMetric: Identifiable, Hashable {
 @Observable
 final class DailyReadingViewModel {
     let date: Date
+    let settings: ReadCalendarSettings
     private(set) var summary: DailyReadingSummary
     private(set) var loadPhase: DailyReadingLoadPhase = .idle
     private(set) var errorMessage: String?
@@ -37,9 +38,10 @@ final class DailyReadingViewModel {
     private var requestToken: UInt64 = 0
 
     /// 以自然日初始化页面，导航携带的书籍快照不会作为数据真相源。
-    init(date: Date) {
+    init(date: Date, settings: ReadCalendarSettings? = nil) {
         let normalized = Calendar.current.startOfDay(for: date)
         self.date = normalized
+        self.settings = settings ?? ReadCalendarSettings()
         self.summary = .empty(for: normalized)
     }
 
@@ -114,7 +116,10 @@ final class DailyReadingViewModel {
 
         let task = Task {
             do {
-                let result = try await repository.fetchDailySummary(for: date)
+                let result = try await repository.fetchDailySummary(
+                    for: date,
+                    excludedEventTypes: settings.excludedEventTypes
+                )
                 guard !Task.isCancelled, token == requestToken else { return }
                 summary = result
                 loadPhase = .loaded

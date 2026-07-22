@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 DesignTokens、TopBarActionIcon 与 SwiftUI Menu/Toggle/Button 等系统控件
- * [OUTPUT]: 对外提供 XMSettingsPageScaffold、XMSettingsGroupCard 与通用设置行组件
+ * [OUTPUT]: 对外提供 XMSettingsPageScaffold、XMSettingsGroupCard、内容自适应选项胶囊、弱分割线与通用设置行组件
  * [POS]: UIComponents/Foundation 的通用设置 Sheet 组件，统一业务设置页标题栏、分组卡片与行样式
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -13,6 +13,10 @@ enum XMSettingsSheetLayout {
     static let closeVisualSize: CGFloat = 32
     static let chromeMinHeight: CGFloat = Spacing.actionReserved
     static let menuValueMinWidth: CGFloat = Spacing.actionReserved * 2
+    static let choiceVisualHeight: CGFloat = 30
+    static let choiceSelectedLightFillOpacity = 0.12
+    static let choiceSelectedDarkFillOpacity = 0.20
+    static let weakSeparatorOpacity = 0.42
 }
 
 /// 通用设置 Sheet 页面骨架，提供居中标题、可选副标题与右侧关闭按钮。
@@ -117,6 +121,85 @@ struct XMSettingsGroupCard<Content: View>: View {
     }
 }
 
+/// 设置卡片内的弱分割线，以半点语义线降低结构噪声，同时保持分组关系可辨识。
+struct XMSettingsDivider: View {
+    var body: some View {
+        Rectangle()
+            .fill(Color.surfaceBorderSubtle.opacity(XMSettingsSheetLayout.weakSeparatorOpacity))
+            .frame(height: CardStyle.borderWidth)
+            .accessibilityHidden(true)
+    }
+}
+
+/// 设置页离散选项胶囊，将 30pt 内容自适应表层与 44pt 最小命中区分离。
+struct XMSettingsChoiceChip: View {
+    let title: String
+    let isSelected: Bool
+    let action: () -> Void
+    @Environment(\.colorScheme) private var colorScheme
+    @ScaledMetric(relativeTo: .footnote) private var visualMinHeight = XMSettingsSheetLayout.choiceVisualHeight
+
+    /// 创建可复用的紧凑选项胶囊，宽度由文案和水平内边距决定。
+    init(
+        _ title: String,
+        isSelected: Bool,
+        action: @escaping () -> Void
+    ) {
+        self.title = title
+        self.isSelected = isSelected
+        self.action = action
+    }
+
+    var body: some View {
+        Button(action: action) {
+            Text(title)
+                .font(AppTypography.footnoteMedium)
+                .foregroundStyle(isSelected ? selectedForeground : Color.textSecondary)
+                .lineLimit(1)
+                .fixedSize(horizontal: true, vertical: true)
+                .padding(.horizontal, Spacing.base)
+                .frame(minHeight: visualMinHeight)
+                .background(
+                    isSelected
+                        ? Color.brand.opacity(selectedFillOpacity)
+                        : Color.controlFillSecondary,
+                    in: Capsule()
+                )
+                .frame(minHeight: Spacing.actionReserved)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(XMSettingsChoiceChipButtonStyle())
+        .accessibilityValue(isSelected ? "已选择" : "未选择")
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
+    }
+
+    private var selectedForeground: Color {
+        colorScheme == .dark ? Color.brand : Color.brandDeep
+    }
+
+    private var selectedFillOpacity: Double {
+        colorScheme == .dark
+            ? XMSettingsSheetLayout.choiceSelectedDarkFillOpacity
+            : XMSettingsSheetLayout.choiceSelectedLightFillOpacity
+    }
+}
+
+/// 为设置胶囊提供克制的按压反馈，减少动态效果时不执行缩放。
+private struct XMSettingsChoiceChipButtonStyle: ButtonStyle {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    /// 在不改变布局尺寸的前提下表达按压状态。
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .opacity(configuration.isPressed ? 0.78 : 1)
+            .scaleEffect(reduceMotion ? 1 : (configuration.isPressed ? 0.98 : 1))
+            .animation(
+                reduceMotion ? nil : .smooth(duration: 0.12),
+                value: configuration.isPressed
+            )
+    }
+}
+
 /// 行内值菜单设置项，适合排序、规则、配色等离散选项。
 struct XMSettingsValueMenuRow<Option: Hashable>: View {
     let title: String
@@ -211,7 +294,7 @@ struct XMSettingsToggleRow: View {
     var body: some View {
         Toggle(isOn: $isOn) {
             Text(title)
-                .font(AppTypography.subheadlineSemibold)
+                .font(AppTypography.subheadlineMedium)
                 .foregroundStyle(Color.textPrimary)
                 .fixedSize(horizontal: false, vertical: true)
         }

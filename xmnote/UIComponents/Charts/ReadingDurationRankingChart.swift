@@ -1,13 +1,20 @@
 import SwiftUI
 
 /**
- * [INPUT]: 依赖 SwiftUI 视图系统与 DesignTokens（Spacing/CornerRadius/Color）提供时长排行视觉语义
- * [OUTPUT]: 对外提供 ReadingDurationRankingChart（阅读时长排行图表）与 Item 数据输入模型
+ * [INPUT]: 依赖 SwiftUI 视图系统与阅读日历统计设计令牌提供时长排行视觉语义
+ * [OUTPUT]: 对外提供 ReadingDurationRankingChart、Item 与结构化 Insight 数据输入模型
  * [POS]: UIComponents/Charts 跨模块复用组件，承载月度/年度阅读时长排行展示
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 /// ReadingDurationRankingChart 以封面 + 横向条形宽度展示阅读时长排行，供月度和年度总结共用。
 struct ReadingDurationRankingChart: View {
+    /// Insight 允许调用方组合标签胶囊与分段着色文本，同时提供完整无障碍读法。
+    struct Insight {
+        let label: String?
+        let content: Text
+        let accessibilityLabel: String
+    }
+
     /// Item 定义阅读时长排行单行数据模型。
     struct Item: Identifiable, Hashable {
         /// BarState 表示排行条颜色状态（占位/解析成功/回退色）。
@@ -49,8 +56,8 @@ struct ReadingDurationRankingChart: View {
     }
 
     let title: String
-    let insightText: Text?
-    let emptyText: String
+    let insight: Insight?
+    let emptyText: String?
     let items: [Item]
     let animationIdentity: String
     let onBookTap: ((Int64) -> Void)?
@@ -63,20 +70,17 @@ struct ReadingDurationRankingChart: View {
         VStack(alignment: .leading, spacing: Layout.sectionSpacing) {
             VStack(alignment: .leading, spacing: Spacing.half) {
                 Text(title)
-                    .font(AppTypography.headlineSemibold)
+                    .font(ReadCalendarSummaryTypography.sectionTitle)
                     .foregroundStyle(Color.textPrimary)
 
-                if let insightText {
-                    insightText
-                        .font(AppTypography.footnote)
-                        .monospacedDigit()
-                        .contentTransition(.numericText())
+                if let insight {
+                    insightView(insight)
                 }
             }
 
-            if items.isEmpty {
+            if items.isEmpty, let emptyText {
                 Text(emptyText)
-                    .font(AppTypography.footnote)
+                    .font(ReadCalendarSummaryTypography.insightMeta)
                     .foregroundStyle(Color.textHint)
             } else {
                 LazyVStack(spacing: Spacing.cozy) {
@@ -164,6 +168,8 @@ private extension ReadingDurationRankingChart {
             .frame(width: rowWidth, height: Layout.rowHeight, alignment: .leading)
             // 约束排行行内容只在本行区域内绘制，避免切换与增长动画在边缘帧越界。
             .clipped()
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel("\(item.title)，阅读时长\(durationText(item.durationSeconds))")
         }
         .frame(height: Layout.rowHeight)
     }
@@ -175,15 +181,13 @@ private extension ReadingDurationRankingChart {
 
             VStack(alignment: .leading, spacing: Spacing.hairline) {
                 Text(item.title)
-                    .font(AppTypography.captionMedium)
+                    .font(ReadCalendarSummaryTypography.rankingTitle)
                     .foregroundStyle(Color.textPrimary)
                     .lineLimit(1)
                     .truncationMode(.tail)
                     .layoutPriority(1)
                     .allowsTightening(true)
-                Text(durationText(item.durationSeconds))
-                    .font(AppTypography.caption2)
-                    .foregroundStyle(Color.textSecondary)
+                durationValue(item.durationSeconds)
                     .monospacedDigit()
                     .contentTransition(.numericText())
                     .lineLimit(1)
@@ -191,6 +195,36 @@ private extension ReadingDurationRankingChart {
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .frame(width: width, alignment: .leading)
+    }
+
+    /// 将排行行内时长拆成数字与单位，保持和指标卡一致的文本颜色层级。
+    func durationValue(_ durationSeconds: Int) -> some View {
+        let parts = durationParts(durationSeconds)
+        return HStack(alignment: .firstTextBaseline, spacing: 1) {
+            ForEach(Array(parts.enumerated()), id: \.offset) { _, part in
+                Text(part.text)
+                    .font(part.isNumber ? ReadCalendarSummaryTypography.rankingNumber : ReadCalendarSummaryTypography.rankingUnit)
+                    .foregroundStyle(part.isNumber ? Color.textPrimary : Color.textSecondary)
+            }
+        }
+    }
+
+    /// 返回用于行内分段排版的时长片段。
+    func durationParts(_ durationSeconds: Int) -> [(text: String, isNumber: Bool)] {
+        let hours = durationSeconds / 3600
+        let minutes = (durationSeconds % 3600) / 60
+        if hours > 0 {
+            var parts: [(String, Bool)] = [(String(hours), true), ("小时", false)]
+            if minutes > 0 {
+                parts.append((String(minutes), true))
+                parts.append(("分", false))
+            }
+            return parts
+        }
+        if minutes > 0 {
+            return [(String(minutes), true), ("分", false)]
+        }
+        return [(String(max(1, durationSeconds)), true), ("秒", false)]
     }
 
     /// 渲染排行项封面（含占位图与边框阴影）。
@@ -310,3 +344,23 @@ private extension ReadingDurationRankingChart {
         }
     }
 }
+    /// 渲染标签胶囊和分段洞察文本，并将视觉片段合并为一条 VoiceOver 语句。
+private func insightView(_ insight: ReadingDurationRankingChart.Insight) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: Spacing.half) {
+            if let label = insight.label {
+                Text(label)
+                    .font(ReadCalendarSummaryTypography.insightLabel)
+                    .foregroundStyle(Color.textSecondary)
+                    .padding(.horizontal, Spacing.half)
+                    .padding(.vertical, Spacing.compact)
+                    .background(Color.controlFillSecondary, in: Capsule())
+            }
+
+            insight.content
+                .font(ReadCalendarSummaryTypography.insightMeta)
+                .monospacedDigit()
+                .contentTransition(.numericText())
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(insight.accessibilityLabel)
+    }

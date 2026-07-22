@@ -2,7 +2,7 @@ import Foundation
 
 /**
  * [INPUT]: 依赖 Foundation 基础值类型与 ReadCalendarMonthData 月度聚合模型
- * [OUTPUT]: 对外提供阅读日历分享类型、48 套 Android 同源模板与年度分享快照
+ * [OUTPUT]: 对外提供阅读日历分享类型、48 套 Android 同源模板与含年度稳定排行的分享快照
  * [POS]: Domain 层阅读日历分享领域模型，供分享 ViewModel 与渲染视图共同消费
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -204,4 +204,5 @@ nonisolated struct ReadCalendarShareSnapshot: Hashable {
     let selectedMonth: Date
     let monthData: ReadCalendarMonthData
     let yearMonths: [ReadCalendarMonthData]
+    let yearTopBooks: [ReadCalendarMonthlyDurationBook]
 }

@@ -416,6 +416,30 @@ protocol ReadCalendarColorRepositoryProtocol {
         bookName: String,
         coverURL: String
     ) async -> ReadCalendarSegmentColor
+
+    /// 强制重算颜色；不支持强制语义的替身实现可回落到普通读取。
+    func resolveEventColor(
+        bookId: Int64,
+        bookName: String,
+        coverURL: String,
+        forceRefresh: Bool
+    ) async -> ReadCalendarSegmentColor
+}
+
+extension ReadCalendarColorRepositoryProtocol {
+    /// 默认兼容既有仓储替身；生产仓储覆写该方法以真正跳过颜色结果缓存。
+    func resolveEventColor(
+        bookId: Int64,
+        bookName: String,
+        coverURL: String,
+        forceRefresh _: Bool
+    ) async -> ReadCalendarSegmentColor {
+        await resolveEventColor(
+            bookId: bookId,
+            bookName: bookName,
+            coverURL: coverURL
+        )
+    }
 }
 
 /// 统计数据仓储（热力图、阅读统计）

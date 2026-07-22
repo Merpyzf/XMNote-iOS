@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 Foundation、阅读日历领域模型与 Timeline 领域模型
- * [OUTPUT]: 对外提供 ReadCalendarRepositoryProtocol，统一阅读日历聚合、当日时间线及打卡/计时写入契约
+ * [OUTPUT]: 对外提供 ReadCalendarRepositoryProtocol，统一事件/书籍筛选后的月年聚合、当日时间线及写入契约
  * [POS]: Domain/Repositories 层阅读日历专属仓储契约，被阅读日历相关 ViewModel 统一依赖
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -28,24 +28,30 @@ enum ReadCalendarRepositoryError: LocalizedError {
 
 /// 阅读日历仓储契约，确保日历、摘要、时间线与分享复用同一业务口径。
 protocol ReadCalendarRepositoryProtocol {
-    /// 读取启用事件源中的最早业务日期，作为日历可回溯下界。
+    /// 按 Android 全局统计来源读取最早业务日期；展示筛选不改变日历可回溯下界。
     func fetchEarliestDate(excludedEventTypes: Set<ReadCalendarEventType>) async throws -> Date?
 
     /// 读取单月日历、排行和摘要聚合结果。
     func fetchMonthData(
         monthStart: Date,
-        excludedEventTypes: Set<ReadCalendarEventType>
+        excludedEventTypes: Set<ReadCalendarEventType>,
+        excludedBookIDs: Set<Int64>
     ) async throws -> ReadCalendarMonthData
 
     /// 读取指定自然年的阅读时长排行。
     func fetchYearTopBooks(
         year: Int,
         excludedEventTypes: Set<ReadCalendarEventType>,
-        limit: Int
+        limit: Int,
+        includedMonthStarts: Set<Date>?,
+        excludedBookIDs: Set<Int64>
     ) async throws -> [ReadCalendarMonthlyDurationBook]
 
-    /// 重新按目标日期计算当日全部书籍与指标，禁止依赖导航参数中的书籍快照。
-    func fetchDailySummary(for date: Date) async throws -> DailyReadingSummary
+    /// 按日历事件筛选重新计算当日书籍与指标，禁止使用另一套独立书籍集合。
+    func fetchDailySummary(
+        for date: Date,
+        excludedEventTypes: Set<ReadCalendarEventType>
+    ) async throws -> DailyReadingSummary
 
     /// 读取某书在指定自然日内的可管理记录，按过滤类型与排序方向返回。
     func fetchDailyBookRecords(
@@ -66,4 +72,38 @@ protocol ReadCalendarRepositoryProtocol {
 
     /// 物理删除指定阅读计时记录。
     func deleteTiming(recordID: Int64) async throws
+}
+
+extension ReadCalendarRepositoryProtocol {
+    /// 无书籍排除时的常规月查询入口。
+    func fetchMonthData(
+        monthStart: Date,
+        excludedEventTypes: Set<ReadCalendarEventType>
+    ) async throws -> ReadCalendarMonthData {
+        try await fetchMonthData(
+            monthStart: monthStart,
+            excludedEventTypes: excludedEventTypes,
+            excludedBookIDs: []
+        )
+    }
+
+    /// 使用 Android 默认年度有效范围且不排除书籍的排行入口。
+    func fetchYearTopBooks(
+        year: Int,
+        excludedEventTypes: Set<ReadCalendarEventType>,
+        limit: Int
+    ) async throws -> [ReadCalendarMonthlyDurationBook] {
+        try await fetchYearTopBooks(
+            year: year,
+            excludedEventTypes: excludedEventTypes,
+            limit: limit,
+            includedMonthStarts: nil,
+            excludedBookIDs: []
+        )
+    }
+
+    /// 未配置展示筛选时的当日汇总入口。
+    func fetchDailySummary(for date: Date) async throws -> DailyReadingSummary {
+        try await fetchDailySummary(for: date, excludedEventTypes: [])
+    }
 }

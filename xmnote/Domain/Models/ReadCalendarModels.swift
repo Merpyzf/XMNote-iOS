@@ -2,7 +2,7 @@ import Foundation
 
 /**
  * [INPUT]: 依赖 Foundation 提供 Date 与集合类型
- * [OUTPUT]: 对外提供阅读日历、当日阅读汇总、单书时间线与打卡/计时编辑领域模型
+ * [OUTPUT]: 对外提供阅读日历、全量书籍贡献、月度摘要、同期比较、当日阅读汇总及编辑领域模型
  * [POS]: Domain 层阅读日历数据结构定义，供 ReadCalendarRepository 产出、ViewModel 与视图层消费
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -13,20 +13,23 @@ nonisolated struct ReadCalendarDayBook: Identifiable, Hashable {
     let name: String
     let coverURL: String
     let firstEventTime: Int64
+    let lastEventTime: Int64
     let isReadDoneOnThisDay: Bool
 
-    /// 创建单日书籍事件模型，写入书籍基础信息、首个事件时间与读完标记。
+    /// 创建单日书籍事件模型，写入书籍基础信息、首末事件时间与读完标记。
     init(
         id: Int64,
         name: String,
         coverURL: String,
         firstEventTime: Int64,
+        lastEventTime: Int64? = nil,
         isReadDoneOnThisDay: Bool = false
     ) {
         self.id = id
         self.name = name
         self.coverURL = coverURL
         self.firstEventTime = firstEventTime
+        self.lastEventTime = lastEventTime ?? firstEventTime
         self.isReadDoneOnThisDay = isReadDoneOnThisDay
     }
 }
@@ -111,7 +114,23 @@ nonisolated struct ReadCalendarMonthData: Hashable {
     let monthStart: Date
     let days: [Date: ReadCalendarDay]
     let readingDurationTopBooks: [ReadCalendarMonthlyDurationBook]
+    let bookContributions: [ReadCalendarBookContribution]
     let summary: ReadCalendarMonthSummary
+
+    /// 构造单月完整聚合；书籍贡献保留所有活跃书籍，不能由截断后的排行榜反推。
+    init(
+        monthStart: Date,
+        days: [Date: ReadCalendarDay],
+        readingDurationTopBooks: [ReadCalendarMonthlyDurationBook],
+        bookContributions: [ReadCalendarBookContribution] = [],
+        summary: ReadCalendarMonthSummary
+    ) {
+        self.monthStart = monthStart
+        self.days = days
+        self.readingDurationTopBooks = readingDurationTopBooks
+        self.bookContributions = bookContributions
+        self.summary = summary
+    }
 
     /// 构造空月份默认数据，保证无记录月份也可稳定渲染。
     static func empty(for monthStart: Date) -> ReadCalendarMonthData {
@@ -119,6 +138,7 @@ nonisolated struct ReadCalendarMonthData: Hashable {
             monthStart: monthStart,
             days: [:],
             readingDurationTopBooks: [],
+            bookContributions: [],
             summary: .empty
         )
     }
@@ -132,6 +152,27 @@ nonisolated struct ReadCalendarMonthlyDurationBook: Identifiable, Hashable {
     let readSeconds: Int
 
     var id: Int64 { bookId }
+}
+
+/// 阅读日历周期内单本书的完整贡献，用于分享排除与全量排行重算。
+nonisolated struct ReadCalendarBookContribution: Identifiable, Hashable {
+    let bookId: Int64
+    let name: String
+    let coverURL: String
+    let readSeconds: Int
+    let activeDays: Int
+
+    var id: Int64 { bookId }
+
+    /// 转换为现有排行展示模型，避免页面层重复拼装书籍元数据。
+    var durationBook: ReadCalendarMonthlyDurationBook {
+        ReadCalendarMonthlyDurationBook(
+            bookId: bookId,
+            name: name,
+            coverURL: coverURL,
+            readSeconds: readSeconds
+        )
+    }
 }
 
 /// 月度阅读时段（按本地时间小时段）
@@ -154,14 +195,14 @@ nonisolated struct ReadCalendarMonthSummary: Hashable {
     let totalReadSeconds: Int
     let timeSlotReadSeconds: [ReadCalendarTimeSlot: Int]
     let peakTimeSlot: ReadCalendarTimeSlot?
-    let peakTimeSlotRatio: Double
-    let activeDaysDelta: Int
-    let uniqueReadBookCountDelta: Int
-    let finishedBookCountDelta: Int
-    let noteCountDelta: Int
-    let totalReadSecondsDelta: Int
+    let peakTimeSlotRatio: Int?
+    let activeDaysDelta: Int?
+    let readSecondsDelta: Int?
+    let uniqueReadBookCountDelta: Int?
+    let finishedBookCountDelta: Int?
+    let noteCountDelta: Int?
 
-    /// 构造月度摘要；比较字段缺省为 0，便于当前月与历史缓存分阶段接入。
+    /// 构造月度摘要；缺少有效上一周期时比较字段保持为空，避免伪造零值环比。
     init(
         activeDays: Int = 0,
         totalDays: Int = 0,
@@ -173,12 +214,12 @@ nonisolated struct ReadCalendarMonthSummary: Hashable {
         totalReadSeconds: Int,
         timeSlotReadSeconds: [ReadCalendarTimeSlot: Int],
         peakTimeSlot: ReadCalendarTimeSlot? = nil,
-        peakTimeSlotRatio: Double = 0,
-        activeDaysDelta: Int = 0,
-        uniqueReadBookCountDelta: Int = 0,
-        finishedBookCountDelta: Int = 0,
-        noteCountDelta: Int = 0,
-        totalReadSecondsDelta: Int = 0
+        peakTimeSlotRatio: Int? = nil,
+        activeDaysDelta: Int? = nil,
+        readSecondsDelta: Int? = nil,
+        uniqueReadBookCountDelta: Int? = nil,
+        finishedBookCountDelta: Int? = nil,
+        noteCountDelta: Int? = nil
     ) {
         self.activeDays = activeDays
         self.totalDays = totalDays
@@ -192,10 +233,10 @@ nonisolated struct ReadCalendarMonthSummary: Hashable {
         self.peakTimeSlot = peakTimeSlot
         self.peakTimeSlotRatio = peakTimeSlotRatio
         self.activeDaysDelta = activeDaysDelta
+        self.readSecondsDelta = readSecondsDelta
         self.uniqueReadBookCountDelta = uniqueReadBookCountDelta
         self.finishedBookCountDelta = finishedBookCountDelta
         self.noteCountDelta = noteCountDelta
-        self.totalReadSecondsDelta = totalReadSecondsDelta
     }
 
     static let empty = ReadCalendarMonthSummary(
@@ -213,6 +254,124 @@ nonisolated struct ReadCalendarMonthSummary: Hashable {
     /// 读取指定时段的阅读秒数；缺省时返回 0。
     func readSeconds(in slot: ReadCalendarTimeSlot) -> Int {
         timeSlotReadSeconds[slot] ?? 0
+    }
+
+    /// 合并上一周期快照并生成五类可选环比；上一周期无有效行为时保持无对比状态。
+    func applyingComparison(_ previous: ReadCalendarSummaryComparisonSnapshot?) -> ReadCalendarMonthSummary {
+        let comparablePrevious = previous?.hasActivity == true ? previous : nil
+        return ReadCalendarMonthSummary(
+            activeDays: activeDays,
+            totalDays: totalDays,
+            longestStreak: longestStreak,
+            uniqueReadBookCount: uniqueReadBookCount,
+            finishedBookCount: finishedBookCount,
+            noteCount: noteCount,
+            checkInCount: checkInCount,
+            totalReadSeconds: totalReadSeconds,
+            timeSlotReadSeconds: timeSlotReadSeconds,
+            peakTimeSlot: peakTimeSlot,
+            peakTimeSlotRatio: peakTimeSlotRatio,
+            activeDaysDelta: comparablePrevious.map { activeDays - $0.activeDays },
+            readSecondsDelta: comparablePrevious.map { totalReadSeconds - $0.totalReadSeconds },
+            uniqueReadBookCountDelta: comparablePrevious.map { uniqueReadBookCount - $0.uniqueReadBookCount },
+            finishedBookCountDelta: comparablePrevious.map { finishedBookCount - $0.finishedBookCount },
+            noteCountDelta: comparablePrevious.map { noteCount - $0.noteCount }
+        )
+    }
+}
+
+/// 阅读日历统计对比快照，集中承载月度与年度同期比较所需的五类指标。
+nonisolated struct ReadCalendarSummaryComparisonSnapshot: Hashable {
+    let activeDays: Int
+    let totalReadSeconds: Int
+    let uniqueReadBookCount: Int
+    let finishedBookCount: Int
+    let noteCount: Int
+
+    var hasActivity: Bool {
+        activeDays > 0
+            || totalReadSeconds > 0
+            || uniqueReadBookCount > 0
+            || finishedBookCount > 0
+            || noteCount > 0
+    }
+
+    /// 从 Repository 产出的每日快照聚合比较指标，可按截止日裁切当前周期的同期范围。
+    static func make(
+        days: [Date: ReadCalendarDay],
+        through cutoff: Date? = nil,
+        calendar: Calendar = .current
+    ) -> ReadCalendarSummaryComparisonSnapshot {
+        let normalizedCutoff = cutoff.map { calendar.startOfDay(for: $0) }
+        let includedDays = days.filter { date, _ in
+            guard let normalizedCutoff else { return true }
+            return calendar.startOfDay(for: date) <= normalizedCutoff
+        }
+        let values = includedDays.map(\.value)
+        let uniqueBookIDs = Set(values.flatMap { $0.books.map(\.id) })
+        let finishedBookIDs = Set(values.flatMap { day in
+            day.books.filter(\.isReadDoneOnThisDay).map(\.id)
+        })
+        return ReadCalendarSummaryComparisonSnapshot(
+            activeDays: values.count { !$0.books.isEmpty || $0.isReadDoneDay },
+            totalReadSeconds: values.reduce(0) { $0 + $1.readSeconds },
+            uniqueReadBookCount: uniqueBookIDs.count,
+            finishedBookCount: finishedBookIDs.count,
+            noteCount: values.reduce(0) { $0 + $1.noteCount }
+        )
+    }
+}
+
+/// 阅读日历同期边界计算器，负责短月与闰年日期的安全收口。
+nonisolated enum ReadCalendarSummaryComparison {
+    /// 当前月返回上月同日截止日期，历史月返回 nil 表示比较完整上月。
+    static func previousMonthCutoff(
+        selectedMonthStart: Date,
+        now: Date = Date(),
+        calendar: Calendar = .current
+    ) -> Date? {
+        guard calendar.isDate(selectedMonthStart, equalTo: now, toGranularity: .month),
+              let previousMonthStart = calendar.date(byAdding: .month, value: -1, to: selectedMonthStart) else {
+            return nil
+        }
+        let requestedDay = calendar.component(.day, from: now)
+        return clampedDate(
+            year: calendar.component(.year, from: previousMonthStart),
+            month: calendar.component(.month, from: previousMonthStart),
+            day: requestedDay,
+            calendar: calendar
+        )
+    }
+
+    /// 当前年返回上年同月同日截止日期，历史年返回 nil 表示比较完整上一年。
+    static func previousYearCutoff(
+        selectedYear: Int,
+        now: Date = Date(),
+        calendar: Calendar = .current
+    ) -> Date? {
+        guard selectedYear == calendar.component(.year, from: now) else { return nil }
+        return clampedDate(
+            year: selectedYear - 1,
+            month: calendar.component(.month, from: now),
+            day: calendar.component(.day, from: now),
+            calendar: calendar
+        )
+    }
+
+    /// 将目标年月日收口到该月最后一个有效自然日。
+    private static func clampedDate(
+        year: Int,
+        month: Int,
+        day: Int,
+        calendar: Calendar
+    ) -> Date? {
+        guard let monthStart = calendar.date(from: DateComponents(year: year, month: month, day: 1)),
+              let dayRange = calendar.range(of: .day, in: .month, for: monthStart) else {
+            return nil
+        }
+        let clampedDay = min(max(day, dayRange.lowerBound), dayRange.upperBound - 1)
+        return calendar.date(from: DateComponents(year: year, month: month, day: clampedDay))
+            .map { calendar.startOfDay(for: $0) }
     }
 }
 

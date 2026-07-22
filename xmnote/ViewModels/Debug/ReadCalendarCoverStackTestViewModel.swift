@@ -207,7 +207,6 @@ final class ReadCalendarCoverStackTestViewModel {
             isReadDoneDay: false,
             heatmapLevel: .none,
             overflowCount: max(0, count - collapsedVisibleCount),
-            isStreakDay: false,
             isToday: calendar.isDateInToday(normalized),
             isSelected: selectedDate.map { calendar.isDate(normalized, inSameDayAs: $0) } ?? false,
             isFuture: false

@@ -3,7 +3,7 @@ import GRDB
 
 /**
  * [INPUT]: 依赖 DatabaseManager、StatisticsRepository、TimelineRepository 与阅读日历领域模型
- * [OUTPUT]: 对外提供 ReadCalendarRepository，统一日历聚合、当日汇总、单书时间线及打卡/计时写入
+ * [OUTPUT]: 对外提供 ReadCalendarRepository，统一日历筛选、分享排除、当日汇总、跨日计时分段及打卡/计时写入
  * [POS]: Data 层阅读日历业务真相源，被阅读日历相关 ViewModel 通过协议依赖
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -35,11 +35,13 @@ nonisolated struct ReadCalendarRepository: ReadCalendarRepositoryProtocol {
     /// 读取指定月份的完整日历聚合。
     nonisolated func fetchMonthData(
         monthStart: Date,
-        excludedEventTypes: Set<ReadCalendarEventType>
+        excludedEventTypes: Set<ReadCalendarEventType>,
+        excludedBookIDs: Set<Int64>
     ) async throws -> ReadCalendarMonthData {
         try await statisticsRepository.fetchReadCalendarMonthData(
             monthStart: monthStart,
-            excludedEventTypes: excludedEventTypes
+            excludedEventTypes: excludedEventTypes,
+            excludedBookIDs: excludedBookIDs
         )
     }
 
@@ -47,20 +49,32 @@ nonisolated struct ReadCalendarRepository: ReadCalendarRepositoryProtocol {
     nonisolated func fetchYearTopBooks(
         year: Int,
         excludedEventTypes: Set<ReadCalendarEventType>,
-        limit: Int
+        limit: Int,
+        includedMonthStarts: Set<Date>?,
+        excludedBookIDs: Set<Int64>
     ) async throws -> [ReadCalendarMonthlyDurationBook] {
         try await statisticsRepository.fetchReadCalendarYearTopBooks(
             year: year,
             excludedEventTypes: excludedEventTypes,
-            limit: limit
+            limit: limit,
+            includedMonthStarts: includedMonthStarts,
+            excludedBookIDs: excludedBookIDs
         )
     }
 
-    /// 重新聚合指定自然日的书籍与行为指标。
-    nonisolated func fetchDailySummary(for date: Date) async throws -> DailyReadingSummary {
+    /// 使用阅读日历当前事件筛选重新聚合指定自然日的书籍与行为指标。
+    nonisolated func fetchDailySummary(
+        for date: Date,
+        excludedEventTypes: Set<ReadCalendarEventType>
+    ) async throws -> DailyReadingSummary {
         let dayRange = dayMillisRange(for: date)
         return try await databaseManager.database.dbPool.read { db in
-            try buildDailySummary(db, date: date, dayRange: dayRange)
+            try buildDailySummary(
+                db,
+                date: date,
+                dayRange: dayRange,
+                excludedEventTypes: excludedEventTypes
+            )
         }
     }
 
@@ -293,6 +307,7 @@ nonisolated struct ReadCalendarRepository: ReadCalendarRepositoryProtocol {
 private extension ReadCalendarRepository {
     nonisolated struct BookActivityAggregate {
         var firstEventTime: Int64 = .max
+        var lastEventTime: Int64 = .min
         var noteCount = 0
         var relevantCount = 0
         var reviewCount = 0
@@ -300,15 +315,22 @@ private extension ReadCalendarRepository {
         var readDoneCount = 0
         var readSeconds = 0
 
-        mutating func merge(count: Int, firstEventTime: Int64, into keyPath: WritableKeyPath<Self, Int>) {
+        mutating func merge(
+            count: Int,
+            firstEventTime: Int64,
+            lastEventTime: Int64,
+            into keyPath: WritableKeyPath<Self, Int>
+        ) {
             self[keyPath: keyPath] += count
             self.firstEventTime = min(self.firstEventTime, firstEventTime)
+            self.lastEventTime = max(self.lastEventTime, lastEventTime)
         }
     }
 
-    nonisolated struct CountAndFirst {
+    nonisolated struct CountAndRange {
         let count: Int
         let firstEventTime: Int64
+        let lastEventTime: Int64
     }
 
     nonisolated struct DailyTimingRow {
@@ -326,73 +348,92 @@ private extension ReadCalendarRepository {
         let bookCover: String
     }
 
-    /// 合并六类事件为当日书籍摘要，并保持首事件时间排序。
+    nonisolated struct DailyTimingSegment {
+        let elapsedSeconds: Int64
+        let startTime: Int64
+        let endTime: Int64
+        let activityTime: Int64
+        let timelineTime: Int64
+    }
+
+    /// 复刻 Android 二级页两阶段查询：筛选决定普通书籍集合，入选书籍指标按全部事件统计，读完快照始终补入。
     nonisolated func buildDailySummary(
         _ db: Database,
         date: Date,
-        dayRange: ClosedRange<Int64>
+        dayRange: ClosedRange<Int64>,
+        excludedEventTypes: Set<ReadCalendarEventType>
     ) throws -> DailyReadingSummary {
-        var aggregates: [Int64: BookActivityAggregate] = [:]
-
-        let noteMap = try queryCountAndFirst(
-            db,
-            sql: Self.noteDailyAggregateSQL,
-            dayRange: dayRange
-        )
-        merge(noteMap, into: &aggregates, keyPath: \.noteCount)
-
-        let relevantMap = try queryCountAndFirst(
-            db,
-            sql: Self.relevantDailyAggregateSQL,
-            dayRange: dayRange
-        )
-        merge(relevantMap, into: &aggregates, keyPath: \.relevantCount)
-
-        let reviewMap = try queryCountAndFirst(
-            db,
-            sql: Self.reviewDailyAggregateSQL,
-            dayRange: dayRange
-        )
-        merge(reviewMap, into: &aggregates, keyPath: \.reviewCount)
-
-        let checkInMap = try queryCountAndFirst(
-            db,
-            sql: Self.checkInDailyAggregateSQL,
-            dayRange: dayRange
-        )
-        merge(checkInMap, into: &aggregates, keyPath: \.checkInCount)
-
-        let readDoneMap = try queryCountAndFirst(
-            db,
-            sql: Self.readDoneDailyAggregateSQL,
-            dayRange: dayRange
-        )
-        merge(readDoneMap, into: &aggregates, keyPath: \.readDoneCount)
-
+        let noteMap = try queryCountAndRange(db, sql: Self.noteDailyAggregateSQL, dayRange: dayRange)
+        let relevantMap = try queryCountAndRange(db, sql: Self.relevantDailyAggregateSQL, dayRange: dayRange)
+        let reviewMap = try queryCountAndRange(db, sql: Self.reviewDailyAggregateSQL, dayRange: dayRange)
+        let checkInMap = try queryCountAndRange(db, sql: Self.checkInDailyAggregateSQL, dayRange: dayRange)
+        let readDoneMap = try queryCountAndRange(db, sql: Self.readDoneDailyAggregateSQL, dayRange: dayRange)
         let timingRows = try queryDailyTimingRows(db, bookID: nil, dayRange: dayRange)
-        for row in timingRows {
-            let seconds = timingSeconds(row, in: dayRange)
-            guard seconds > 0 else { continue }
-            var aggregate = aggregates[row.bookID, default: BookActivityAggregate()]
-            aggregate.readSeconds += Int(seconds)
-            aggregate.firstEventTime = min(
-                aggregate.firstEventTime,
-                timingTimestamp(row, in: dayRange)
-            )
-            aggregates[row.bookID] = aggregate
+
+        var allMetrics: [Int64: BookActivityAggregate] = [:]
+        merge(noteMap, into: &allMetrics, keyPath: \.noteCount)
+        merge(relevantMap, into: &allMetrics, keyPath: \.relevantCount)
+        merge(reviewMap, into: &allMetrics, keyPath: \.reviewCount)
+        merge(checkInMap, into: &allMetrics, keyPath: \.checkInCount)
+        merge(readDoneMap, into: &allMetrics, keyPath: \.readDoneCount)
+        mergeTimingRows(timingRows, dayRange: dayRange, into: &allMetrics)
+
+        var orderingMetrics: [Int64: BookActivityAggregate] = [:]
+
+        if !excludedEventTypes.contains(.note) {
+            merge(noteMap, into: &orderingMetrics, keyPath: \.noteCount)
+        }
+        if !excludedEventTypes.contains(.relevant) {
+            merge(relevantMap, into: &orderingMetrics, keyPath: \.relevantCount)
+        }
+        if !excludedEventTypes.contains(.review) {
+            merge(reviewMap, into: &orderingMetrics, keyPath: \.reviewCount)
+        }
+        if !excludedEventTypes.contains(.checkIn) {
+            merge(checkInMap, into: &orderingMetrics, keyPath: \.checkInCount)
+        }
+        if !excludedEventTypes.contains(.readDone) {
+            merge(readDoneMap, into: &orderingMetrics, keyPath: \.readDoneCount)
+        }
+        if !excludedEventTypes.contains(.readTiming) {
+            mergeTimingRows(timingRows, dayRange: dayRange, into: &orderingMetrics)
         }
 
-        let bookMetadata = try queryBookMetadata(db, bookIDs: Set(aggregates.keys))
-        let books = aggregates.compactMap { bookID, aggregate -> DailyReadingBookSummary? in
-            guard let metadata = bookMetadata[bookID] else { return nil }
-            let firstEventTime = aggregate.firstEventTime == .max
+        let filteredBookIDs = orderingMetrics.keys.sorted {
+            let lhs = orderingMetrics[$0] ?? BookActivityAggregate()
+            let rhs = orderingMetrics[$1] ?? BookActivityAggregate()
+            if lhs.lastEventTime != rhs.lastEventTime { return lhs.lastEventTime > rhs.lastEventTime }
+            if lhs.firstEventTime != rhs.firstEventTime { return lhs.firstEventTime > rhs.firstEventTime }
+            return $0 < $1
+        }
+        let readDoneOnlyBookIDs = readDoneMap.keys
+            .filter { orderingMetrics[$0] == nil }
+            .sorted {
+                let lhs = readDoneMap[$0]
+                let rhs = readDoneMap[$1]
+                if lhs?.lastEventTime != rhs?.lastEventTime {
+                    return (lhs?.lastEventTime ?? .min) > (rhs?.lastEventTime ?? .min)
+                }
+                return $0 < $1
+            }
+        let orderedBookIDs = filteredBookIDs + readDoneOnlyBookIDs
+        let bookMetadata = try queryBookMetadata(db, bookIDs: Set(orderedBookIDs))
+        let books = orderedBookIDs.compactMap { bookID -> DailyReadingBookSummary? in
+            guard let aggregate = allMetrics[bookID],
+                  let metadata = bookMetadata[bookID] else { return nil }
+            let orderAggregate = orderingMetrics[bookID] ?? aggregate
+            let firstEventTime = orderAggregate.firstEventTime == .max
                 ? dayRange.lowerBound
-                : aggregate.firstEventTime
+                : orderAggregate.firstEventTime
+            let lastEventTime = orderAggregate.lastEventTime == .min
+                ? firstEventTime
+                : orderAggregate.lastEventTime
             let book = ReadCalendarDayBook(
                 id: bookID,
                 name: metadata.name,
                 coverURL: metadata.cover,
                 firstEventTime: firstEventTime,
+                lastEventTime: lastEventTime,
                 isReadDoneOnThisDay: aggregate.readDoneCount > 0
             )
             return DailyReadingBookSummary(
@@ -404,12 +445,6 @@ private extension ReadCalendarRepository {
                 checkInCount: aggregate.checkInCount,
                 readDoneCount: aggregate.readDoneCount
             )
-        }
-        .sorted {
-            if $0.book.firstEventTime != $1.book.firstEventTime {
-                return $0.book.firstEventTime < $1.book.firstEventTime
-            }
-            return $0.id < $1.id
         }
 
         return DailyReadingSummary(
@@ -424,9 +459,25 @@ private extension ReadCalendarRepository {
         )
     }
 
+    /// 将当日计时分段并入目标聚合；零时长单日/模糊记录仍建立书籍成员关系。
+    nonisolated func mergeTimingRows(
+        _ rows: [DailyTimingRow],
+        dayRange: ClosedRange<Int64>,
+        into target: inout [Int64: BookActivityAggregate]
+    ) {
+        for row in rows {
+            guard let segment = dailyTimingSegment(row, in: dayRange) else { continue }
+            var aggregate = target[row.bookID, default: BookActivityAggregate()]
+            aggregate.readSeconds += Int(segment.elapsedSeconds)
+            aggregate.firstEventTime = min(aggregate.firstEventTime, segment.activityTime)
+            aggregate.lastEventTime = max(aggregate.lastEventTime, segment.activityTime)
+            target[row.bookID] = aggregate
+        }
+    }
+
     /// 把单类事件聚合结果合并到每书摘要。
     nonisolated func merge(
-        _ source: [Int64: CountAndFirst],
+        _ source: [Int64: CountAndRange],
         into target: inout [Int64: BookActivityAggregate],
         keyPath: WritableKeyPath<BookActivityAggregate, Int>
     ) {
@@ -435,18 +486,19 @@ private extension ReadCalendarRepository {
             aggregate.merge(
                 count: value.count,
                 firstEventTime: value.firstEventTime,
+                lastEventTime: value.lastEventTime,
                 into: keyPath
             )
             target[bookID] = aggregate
         }
     }
 
-    /// 执行 book_id + count + first_event_time 聚合查询。
-    nonisolated func queryCountAndFirst(
+    /// 执行 book_id + count + 首末事件时间聚合查询。
+    nonisolated func queryCountAndRange(
         _ db: Database,
         sql: String,
         dayRange: ClosedRange<Int64>
-    ) throws -> [Int64: CountAndFirst] {
+    ) throws -> [Int64: CountAndRange] {
         let rows = try Row.fetchAll(
             db,
             sql: sql,
@@ -454,9 +506,10 @@ private extension ReadCalendarRepository {
         )
         return rows.reduce(into: [:]) { result, row in
             let bookID: Int64 = row["book_id"]
-            result[bookID] = CountAndFirst(
+            result[bookID] = CountAndRange(
                 count: row["total"] ?? 0,
-                firstEventTime: row["first_event_time"] ?? dayRange.lowerBound
+                firstEventTime: row["first_event_time"] ?? dayRange.lowerBound,
+                lastEventTime: row["last_event_time"] ?? dayRange.lowerBound
             )
         }
     }
@@ -520,21 +573,19 @@ private extension ReadCalendarRepository {
         dayRange: ClosedRange<Int64>
     ) throws -> [TimelineEvent] {
         try queryDailyTimingRows(db, bookID: bookID, dayRange: dayRange).compactMap { row in
-            let seconds = timingSeconds(row, in: dayRange)
-            guard seconds > 0 else { return nil }
-            let timestamp = timingTimestamp(row, in: dayRange)
+            guard let segment = dailyTimingSegment(row, in: dayRange) else { return nil }
             return TimelineEvent(
                 id: "timing-\(row.id)",
                 kind: .readTiming(TimelineReadTimingEvent(
-                    elapsedSeconds: row.elapsedSeconds,
-                    startTime: row.startTime,
-                    endTime: row.endTime,
+                    elapsedSeconds: segment.elapsedSeconds,
+                    startTime: segment.startTime,
+                    endTime: segment.endTime,
                     fuzzyReadDate: row.fuzzyReadDate,
                     position: row.position,
                     recordedPositionUnit: row.recordedPositionUnit,
                     insight: row.insight
                 )),
-                timestamp: timestamp,
+                timestamp: segment.timelineTime,
                 sourceBookId: row.bookID,
                 bookName: row.bookName,
                 bookAuthor: row.bookAuthor,
@@ -602,38 +653,70 @@ private extension ReadCalendarRepository {
         }
     }
 
-    /// 按 wall-time 占比分配跨日精确计时在目标日内的阅读秒数。
-    nonisolated func timingSeconds(
+    /// 按 Android splitCrossDayRecords 生成目标自然日的精确计时分段；模糊记录保持原值。
+    nonisolated func dailyTimingSegment(
         _ row: DailyTimingRow,
         in dayRange: ClosedRange<Int64>
-    ) -> Int64 {
-        guard row.elapsedSeconds > 0 else { return 0 }
+    ) -> DailyTimingSegment? {
         if row.fuzzyReadDate != 0 {
-            return dayRange.contains(row.fuzzyReadDate) ? row.elapsedSeconds : 0
+            guard dayRange.contains(row.fuzzyReadDate) else { return nil }
+            return DailyTimingSegment(
+                elapsedSeconds: row.elapsedSeconds,
+                startTime: row.startTime,
+                endTime: row.endTime,
+                activityTime: row.fuzzyReadDate,
+                timelineTime: row.fuzzyReadDate
+            )
         }
 
-        let effectiveEnd = row.endTime > row.startTime
-            ? row.endTime
-            : row.startTime + row.elapsedSeconds * 1_000
-        let overlapStart = max(row.startTime, dayRange.lowerBound)
-        let overlapEnd = min(effectiveEnd, dayRange.upperBound + 1)
-        guard overlapEnd > overlapStart else { return 0 }
-        let wallDuration = max(Int64(1), effectiveEnd - row.startTime)
-        let overlapDuration = overlapEnd - overlapStart
-        return min(
-            row.elapsedSeconds,
-            Int64((Double(overlapDuration) / Double(wallDuration) * Double(row.elapsedSeconds)).rounded())
+        let startDay = calendar.startOfDay(
+            for: Date(timeIntervalSince1970: Double(row.startTime) / 1_000)
         )
-    }
+        let endDay = calendar.startOfDay(
+            for: Date(timeIntervalSince1970: Double(row.endTime) / 1_000)
+        )
+        if startDay == endDay {
+            guard dayRange.contains(row.startTime) else { return nil }
+            return DailyTimingSegment(
+                elapsedSeconds: row.elapsedSeconds,
+                startTime: row.startTime,
+                endTime: row.endTime,
+                activityTime: row.startTime,
+                timelineTime: row.endTime != 0 ? row.endTime : row.startTime
+            )
+        }
 
-    /// 计算计时记录在目标日时间线中的排序时间。
-    nonisolated func timingTimestamp(
-        _ row: DailyTimingRow,
-        in dayRange: ClosedRange<Int64>
-    ) -> Int64 {
-        row.fuzzyReadDate != 0
-            ? row.fuzzyReadDate
-            : max(row.startTime, dayRange.lowerBound)
+        guard row.elapsedSeconds > 0, row.endTime > row.startTime else { return nil }
+        let wallTimeTotal = row.endTime - row.startTime
+        var allocatedSeconds: Int64 = 0
+        var currentMillis = row.startTime
+        var cursorDay = startDay
+
+        while cursorDay <= endDay, allocatedSeconds < row.elapsedSeconds {
+            guard let nextDay = calendar.date(byAdding: .day, value: 1, to: cursorDay) else { break }
+            let dayStartMillis = Self.milliseconds(cursorDay)
+            let dayEndMillis = Self.milliseconds(nextDay) - 1
+            let segmentStart = max(currentMillis, dayStartMillis)
+            let segmentEnd = min(row.endTime, dayEndMillis)
+            if segmentStart < segmentEnd {
+                let ratio = Double(segmentEnd - segmentStart) / Double(wallTimeTotal)
+                var seconds = Int64((ratio * Double(row.elapsedSeconds)).rounded())
+                seconds = min(seconds, row.elapsedSeconds - allocatedSeconds)
+                allocatedSeconds += seconds
+                if dayRange.contains(segmentStart) {
+                    return DailyTimingSegment(
+                        elapsedSeconds: seconds,
+                        startTime: segmentStart,
+                        endTime: segmentEnd,
+                        activityTime: segmentStart,
+                        timelineTime: segmentEnd != 0 ? segmentEnd : segmentStart
+                    )
+                }
+                currentMillis = segmentEnd + 1
+            }
+            cursorDay = nextDay
+        }
+        return nil
     }
 
     /// 提取不同事件类型的真实数据库主键。
@@ -760,7 +843,9 @@ private extension ReadCalendarRepository {
     // 涉及表：note JOIN book；过滤双方 is_deleted=0，created_date 为毫秒闭区间。
     // 返回字段用途：当日汇总书摘指标与排序。
     nonisolated static let noteDailyAggregateSQL = """
-        SELECT n.book_id, COUNT(*) AS total, MIN(n.created_date) AS first_event_time
+        SELECT n.book_id, COUNT(*) AS total,
+               MIN(n.created_date) AS first_event_time,
+               MAX(n.created_date) AS last_event_time
         FROM note n
         JOIN book b ON b.id = n.book_id AND b.is_deleted = 0
         WHERE n.is_deleted = 0 AND n.created_date BETWEEN ? AND ?
@@ -771,7 +856,9 @@ private extension ReadCalendarRepository {
     // 涉及表：category_content JOIN book；过滤双方 is_deleted=0，created_date 为毫秒闭区间。
     // 返回字段用途：当日汇总相关内容指标与排序。
     nonisolated static let relevantDailyAggregateSQL = """
-        SELECT c.book_id, COUNT(*) AS total, MIN(c.created_date) AS first_event_time
+        SELECT c.book_id, COUNT(*) AS total,
+               MIN(c.created_date) AS first_event_time,
+               MAX(c.created_date) AS last_event_time
         FROM category_content c
         JOIN book b ON b.id = c.book_id AND b.is_deleted = 0
         WHERE c.is_deleted = 0 AND c.created_date BETWEEN ? AND ?
@@ -782,7 +869,9 @@ private extension ReadCalendarRepository {
     // 涉及表：review JOIN book；过滤双方 is_deleted=0，created_date 为毫秒闭区间。
     // 返回字段用途：当日汇总书评指标与排序。
     nonisolated static let reviewDailyAggregateSQL = """
-        SELECT r.book_id, COUNT(*) AS total, MIN(r.created_date) AS first_event_time
+        SELECT r.book_id, COUNT(*) AS total,
+               MIN(r.created_date) AS first_event_time,
+               MAX(r.created_date) AS last_event_time
         FROM review r
         JOIN book b ON b.id = r.book_id AND b.is_deleted = 0
         WHERE r.is_deleted = 0 AND r.created_date BETWEEN ? AND ?
@@ -793,23 +882,38 @@ private extension ReadCalendarRepository {
     // 涉及表：check_in_record JOIN book；过滤双方 is_deleted=0，checkin_date 为毫秒闭区间。
     // 返回字段用途：当日汇总打卡指标与排序。
     nonisolated static let checkInDailyAggregateSQL = """
-        SELECT c.book_id, COUNT(*) AS total, MIN(c.checkin_date) AS first_event_time
+        SELECT c.book_id, COUNT(*) AS total,
+               MIN(c.checkin_date) AS first_event_time,
+               MAX(c.checkin_date) AS last_event_time
         FROM check_in_record c
         JOIN book b ON b.id = c.book_id AND b.is_deleted = 0
         WHERE c.is_deleted = 0 AND c.checkin_date BETWEEN ? AND ?
         GROUP BY c.book_id
         """
 
-    // SQL 目的：按书籍聚合目标日读完状态数量与最早变更时间。
-    // 涉及表：book_read_status_record JOIN book；过滤双方 is_deleted=0、read_status_id=3。
-    // 返回字段用途：当日汇总读完指标、封面标记与排序。
+    // SQL 目的：合并读完历史与 book 当前快照后，按书籍聚合目标日读完次数及首末时间。
+    // 涉及表：book_read_status_record、book；过滤有效书籍、read_status_id=3，UNION 按书籍+时间去重。
+    // 返回字段用途：当日汇总读完指标、封面标记与 Android 同源书籍集合排序。
     nonisolated static let readDoneDailyAggregateSQL = """
-        SELECT r.book_id, COUNT(*) AS total, MIN(r.changed_date) AS first_event_time
-        FROM book_read_status_record r
-        JOIN book b ON b.id = r.book_id AND b.is_deleted = 0
-        WHERE r.is_deleted = 0
-          AND r.read_status_id = 3
-          AND r.changed_date BETWEEN ? AND ?
-        GROUP BY r.book_id
+        WITH completed AS (
+            SELECT r.book_id AS book_id, r.changed_date AS event_time
+            FROM book_read_status_record r
+            JOIN book b ON b.id = r.book_id AND b.is_deleted = 0
+            WHERE r.is_deleted = 0
+              AND r.read_status_id = 3
+              AND r.changed_date BETWEEN ?1 AND ?2
+            UNION
+            SELECT b.id AS book_id, b.read_status_changed_date AS event_time
+            FROM book b
+            WHERE b.is_deleted = 0
+              AND b.id != 0
+              AND b.read_status_id = 3
+              AND b.read_status_changed_date BETWEEN ?1 AND ?2
+        )
+        SELECT book_id, COUNT(*) AS total,
+               MIN(event_time) AS first_event_time,
+               MAX(event_time) AS last_event_time
+        FROM completed
+        GROUP BY book_id
         """
 }

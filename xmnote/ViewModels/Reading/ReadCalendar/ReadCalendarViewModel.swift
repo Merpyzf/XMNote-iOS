@@ -4,7 +4,7 @@ import SwiftUI
 
 /**
  * [INPUT]: 依赖 ReadCalendarRepositoryProtocol 提供月历聚合数据，依赖 ReadCalendarColorRepositoryProtocol 提供封面取色，依赖 ReadCalendarEventLayoutEngine 生成事件条布局
- * [OUTPUT]: 对外提供 ReadCalendarViewModel（阅读日历页面状态、分页切月/快速跳转、跨周事件条布局、事件条颜色异步回填、月度阅读时长排行与月度摘要透传）
+ * [OUTPUT]: 对外提供 ReadCalendarViewModel（阅读日历页面状态、月度摘要、十二月贡献、有效月份年度排行与同期比较）
  * [POS]: ReadCalendar 子功能状态中枢，负责数据加载、分页状态、选中态、周布局构建、快速跳月与封面取色任务编排
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -18,27 +18,6 @@ final class ReadCalendarViewModel {
         let bookName: String
         let coverURL: String
     }
-
-    private static let monthTitleFormatter: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "yyyy年M月"
-        formatter.timeZone = .current
-        return formatter
-    }()
-
-    private static let yearTitleFormatter: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "yyyy年"
-        formatter.timeZone = .current
-        return formatter
-    }()
-
-    private static let monthKeyFormatter: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "yyyy-MM"
-        formatter.timeZone = .current
-        return formatter
-    }()
 
     private static let colorBatchCount = 8
     private static let colorBatchInterval: TimeInterval = 0.12
@@ -103,11 +82,33 @@ final class ReadCalendarViewModel {
         let totalReadSeconds: Int
         let noteCount: Int
         let finishedBookCount: Int
+        let activeDaysDelta: Int?
+        let readSecondsDelta: Int?
+        let noteCountDelta: Int?
         let monthContributions: [YearMonthContribution]
         let topBooks: [ReadCalendarMonthlyDurationBook]
         let rankingBarColorsByBookId: [Int64: ReadCalendarSegmentColor]
         let isLoading: Bool
         let errorMessage: String?
+    }
+
+    /// YearSummaryAggregate 是年度汇总与同期比较共享的纯指标快照。
+    private struct YearSummaryAggregate {
+        let activeDays: Int
+        let totalReadSeconds: Int
+        let noteCount: Int
+        let finishedBookCount: Int
+        let monthContributions: [YearMonthContribution]
+
+        var comparisonSnapshot: ReadCalendarSummaryComparisonSnapshot {
+            ReadCalendarSummaryComparisonSnapshot(
+                activeDays: activeDays,
+                totalReadSeconds: totalReadSeconds,
+                uniqueReadBookCount: 0,
+                finishedBookCount: finishedBookCount,
+                noteCount: noteCount
+            )
+        }
     }
 
     /// RootContentState 表示阅读日历入口页面根状态。
@@ -157,6 +158,7 @@ final class ReadCalendarViewModel {
     private var yearColorTicketSeed = 0
     private var calendar: Calendar
     private var pendingSceneSnapshot: ReadCalendarSceneSnapshot?
+    private var minimumAccessibleMonthStart: Date?
 
     /// 初始化阅读日历状态机，注入初始日期、筛选设置与布局模式作为后续加载基准。
     init(
@@ -209,14 +211,12 @@ final class ReadCalendarViewModel {
     }
 
     var monthTitle: String {
-        Self.monthTitleFormatter.string(from: pagerSelection)
+        let components = calendar.dateComponents([.year, .month], from: pagerSelection)
+        return "\(components.year ?? selectedYear)年\(components.month ?? 1)月"
     }
 
     var yearTitle: String {
-        guard let date = calendar.date(from: DateComponents(year: selectedYear, month: 1, day: 1)) else {
-            return "\(selectedYear)年"
-        }
-        return Self.yearTitleFormatter.string(from: date)
+        "\(selectedYear)年"
     }
 
     var rootContentState: RootContentState {
@@ -443,11 +443,45 @@ final class ReadCalendarViewModel {
         trimMonthCachesIfNeeded(around: displayedMonthStart)
     }
 
+    /// 页面重新可见时强制刷新年度热力图当前年份，确保其他页面修改历史记录后不命中旧月份缓存。
+    func refreshHeatmapYear(
+        using repository: any ReadCalendarRepositoryProtocol,
+        colorRepository: any ReadCalendarColorRepositoryProtocol
+    ) async {
+        guard hasLoaded else { return }
+        let year = clampYear(selectedYear)
+        yearTopBooksByYear.removeValue(forKey: year)
+        yearRankingBarColorsByYear.removeValue(forKey: year)
+        yearColorTasks[year]?.cancel()
+        yearColorTasks[year] = nil
+        inFlightYearColorRequestBookIDsByYear[year] = nil
+
+        await ensureYearLoaded(
+            for: year,
+            using: repository,
+            colorRepository: colorRepository,
+            reportError: false,
+            forceRefresh: true
+        )
+        await ensureYearTopBooksLoaded(
+            for: year,
+            using: repository,
+            colorRepository: colorRepository
+        )
+        await preloadComparisonYearIfNeeded(
+            for: year,
+            using: repository,
+            colorRepository: colorRepository
+        )
+        trimMonthCachesIfNeeded(around: displayedMonthStart)
+    }
+
     /// 重试当前展示月份加载，并补齐相邻月份预取。
     func retryDisplayedMonth(
         using repository: any ReadCalendarRepositoryProtocol,
         colorRepository: any ReadCalendarColorRepositoryProtocol
     ) async {
+        guard hasLoaded else { return }
         await ensureMonthLoaded(
             for: displayedMonthStart,
             using: repository,
@@ -464,6 +498,35 @@ final class ReadCalendarViewModel {
         cancelOutOfScopeColorTasks(around: displayedMonthStart)
         syncDisplayedMonthError()
         trimMonthCachesIfNeeded(around: displayedMonthStart)
+    }
+
+    /// 在页面恢复可见时刷新本地日历快照；时区变化会重建全部范围，否则仅强制刷新当前月。
+    func refreshVisibleRange(
+        using repository: any ReadCalendarRepositoryProtocol,
+        colorRepository: any ReadCalendarColorRepositoryProtocol
+    ) async {
+        guard hasLoaded else { return }
+        var latestCalendar = Calendar.current
+        latestCalendar.firstWeekday = 2
+        let didCalendarBoundaryChange = latestCalendar.identifier != calendar.identifier
+            || latestCalendar.timeZone.identifier != calendar.timeZone.identifier
+        let currentMonthStart = Self.currentMonthStart(using: latestCalendar)
+        let didAvailableRangeChange = availableMonths.last.map {
+            !latestCalendar.isDate($0, equalTo: currentMonthStart, toGranularity: .month)
+        } ?? true
+
+        if didCalendarBoundaryChange || didAvailableRangeChange {
+            pendingSceneSnapshot = sceneSnapshot
+            calendar = latestCalendar
+            hasLoaded = false
+            await reload(using: repository, colorRepository: colorRepository)
+            return
+        }
+
+        await retryDisplayedMonth(
+            using: repository,
+            colorRepository: colorRepository
+        )
     }
 
     /// 取消并清理不再需要的异步任务，避免陈旧结果回写状态。
@@ -576,6 +639,32 @@ final class ReadCalendarViewModel {
         Self.monthStarts(of: clampYear(year), using: calendar)
     }
 
+    /// 更新免费版可访问月份下界；边界收紧时立即移除已缓存的锁定月份，避免年度页继续持有真实数据。
+    func updateAccessBoundary(minimumAccessibleMonthStart: Date?) {
+        let normalized = minimumAccessibleMonthStart.map { Self.monthStart(of: $0, using: calendar) }
+        guard normalized != self.minimumAccessibleMonthStart else { return }
+        self.minimumAccessibleMonthStart = normalized
+
+        let lockedKeys = pageStates.compactMap { key, state in
+            isMonthLocked(state.monthStart) ? key : nil
+        }
+        for key in lockedKeys {
+            evictMonthCacheState(forKey: key)
+        }
+        yearTopBooksByYear = [:]
+        yearRankingBarColorsByYear = [:]
+        yearLoadStateByYear = [:]
+        yearErrorMessageByYear = [:]
+        latestYearRequestTicketByYear = [:]
+        latestYearColorTicketByYear = [:]
+    }
+
+    /// 判断月份是否位于当前账号不可访问的历史范围。
+    func isMonthLocked(_ monthStart: Date) -> Bool {
+        guard let minimumAccessibleMonthStart else { return false }
+        return Self.monthStart(of: monthStart, using: calendar) < minimumAccessibleMonthStart
+    }
+
     /// 读取某年份年度数据加载状态。
     func yearLoadState(for year: Int) -> YearLoadState {
         yearLoadStateByYear[year] ?? .idle
@@ -584,37 +673,31 @@ final class ReadCalendarViewModel {
     /// 汇总年度指标、月贡献与年度排行数据。
     func yearSummaryState(for year: Int) -> YearSummaryState {
         let clampedYear = clampYear(year)
-        let monthStarts = monthStartsForYear(clampedYear)
-        var activeDays = 0
-        var totalReadSeconds = 0
-        var noteCount = 0
-        var finishedBookCount = 0
-        var contributions: [YearMonthContribution] = []
-
-        for monthStart in monthStarts {
-            let state = monthState(for: monthStart)
-            let monthActiveDays = activeDayCount(in: state.dayMap)
-            activeDays += monthActiveDays
-            totalReadSeconds += state.summary.totalReadSeconds
-            noteCount += state.summary.noteCount
-            finishedBookCount += state.summary.finishedBookCount
-            contributions.append(
-                YearMonthContribution(
-                    monthStart: monthStart,
-                    activeDays: monthActiveDays,
-                    totalReadSeconds: state.summary.totalReadSeconds
-                )
+        let currentAggregate = yearSummaryAggregate(for: clampedYear)
+        let previousYear = clampedYear - 1
+        let previousAggregate: YearSummaryAggregate? = {
+            guard availableYears.contains(previousYear), yearLoadState(for: previousYear) == .loaded else {
+                return nil
+            }
+            let cutoff = ReadCalendarSummaryComparison.previousYearCutoff(
+                selectedYear: clampedYear,
+                calendar: calendar
             )
-        }
+            let aggregate = yearSummaryAggregate(for: previousYear, through: cutoff)
+            return aggregate.comparisonSnapshot.hasActivity ? aggregate : nil
+        }()
 
         let topBooks = yearTopBooksByYear[clampedYear] ?? []
         return YearSummaryState(
             year: clampedYear,
-            activeDays: activeDays,
-            totalReadSeconds: totalReadSeconds,
-            noteCount: noteCount,
-            finishedBookCount: finishedBookCount,
-            monthContributions: contributions.sorted { $0.monthStart < $1.monthStart },
+            activeDays: currentAggregate.activeDays,
+            totalReadSeconds: currentAggregate.totalReadSeconds,
+            noteCount: currentAggregate.noteCount,
+            finishedBookCount: currentAggregate.finishedBookCount,
+            activeDaysDelta: previousAggregate.map { currentAggregate.activeDays - $0.activeDays },
+            readSecondsDelta: previousAggregate.map { currentAggregate.totalReadSeconds - $0.totalReadSeconds },
+            noteCountDelta: previousAggregate.map { currentAggregate.noteCount - $0.noteCount },
+            monthContributions: currentAggregate.monthContributions,
             topBooks: topBooks,
             rankingBarColorsByBookId: buildInitialYearRankingBarColorMap(
                 topBooks: topBooks,
@@ -622,6 +705,78 @@ final class ReadCalendarViewModel {
             ),
             isLoading: yearLoadState(for: clampedYear) == .loading,
             errorMessage: yearErrorMessageByYear[clampedYear]
+        )
+    }
+
+    /// 按可访问月份汇总年度指标，并固定产出十二个月贡献槽；不可访问或未来月份使用零值遮罩。
+    private func yearSummaryAggregate(for year: Int, through cutoff: Date? = nil) -> YearSummaryAggregate {
+        var activeDays = 0
+        var totalReadSeconds = 0
+        var noteCount = 0
+        var finishedBookCount = 0
+        var contributions: [YearMonthContribution] = []
+        let normalizedCutoff = cutoff.map { calendar.startOfDay(for: $0) }
+        let currentMonthStart = Self.monthStart(of: Date(), using: calendar)
+
+        for monthStart in monthStartsForYear(year) {
+            let isAfterCutoff = normalizedCutoff.map {
+                calendar.compare(monthStart, to: $0, toGranularity: .month) == .orderedDescending
+            } ?? false
+            let shouldInclude = isMonthInAvailableRange(monthStart)
+                && !isMonthLocked(monthStart)
+                && monthStart <= currentMonthStart
+                && !isAfterCutoff
+
+            let snapshot: ReadCalendarSummaryComparisonSnapshot
+            if shouldInclude {
+                let state = monthState(for: monthStart)
+                let isCutoffMonth = normalizedCutoff.map {
+                    calendar.isDate(monthStart, equalTo: $0, toGranularity: .month)
+                } ?? false
+                if isCutoffMonth {
+                    snapshot = ReadCalendarSummaryComparisonSnapshot.make(
+                        days: state.dayMap,
+                        through: normalizedCutoff,
+                        calendar: calendar
+                    )
+                } else {
+                    snapshot = ReadCalendarSummaryComparisonSnapshot(
+                        activeDays: state.summary.activeDays,
+                        totalReadSeconds: state.summary.totalReadSeconds,
+                        uniqueReadBookCount: state.summary.uniqueReadBookCount,
+                        finishedBookCount: state.summary.finishedBookCount,
+                        noteCount: state.summary.noteCount
+                    )
+                }
+            } else {
+                snapshot = ReadCalendarSummaryComparisonSnapshot(
+                    activeDays: 0,
+                    totalReadSeconds: 0,
+                    uniqueReadBookCount: 0,
+                    finishedBookCount: 0,
+                    noteCount: 0
+                )
+            }
+
+            activeDays += snapshot.activeDays
+            totalReadSeconds += snapshot.totalReadSeconds
+            noteCount += snapshot.noteCount
+            finishedBookCount += snapshot.finishedBookCount
+            contributions.append(
+                YearMonthContribution(
+                    monthStart: monthStart,
+                    activeDays: snapshot.activeDays,
+                    totalReadSeconds: snapshot.totalReadSeconds
+                )
+            )
+        }
+
+        return YearSummaryAggregate(
+            activeDays: activeDays,
+            totalReadSeconds: totalReadSeconds,
+            noteCount: noteCount,
+            finishedBookCount: finishedBookCount,
+            monthContributions: contributions.sorted { $0.monthStart < $1.monthStart }
         )
     }
 
@@ -689,10 +844,15 @@ private extension ReadCalendarViewModel {
         colorRepository: any ReadCalendarColorRepositoryProtocol,
         showLoading: Bool,
         forceRefresh: Bool,
-        reportError: Bool
+        reportError: Bool,
+        invalidateYearOnSuccess: Bool = true
     ) async {
         let normalized = Self.monthStart(of: monthStart, using: calendar)
         let key = Self.monthKey(for: normalized, using: calendar)
+        guard !isMonthLocked(normalized) else {
+            evictMonthCacheState(forKey: key)
+            return
+        }
         let previousState = pageStates[key]
         if !forceRefresh, let existing = pageStates[key], existing.loadState == .loaded {
             markMonthAccessed(forKey: key)
@@ -738,8 +898,12 @@ private extension ReadCalendarViewModel {
             markMonthAccessed(forKey: key)
             scheduleColorResolutionIfNeeded(
                 for: normalized,
-                using: colorRepository
+                using: colorRepository,
+                forceRefresh: forceRefresh
             )
+            if forceRefresh, invalidateYearOnSuccess {
+                invalidateYearDerivedState(containing: normalized)
+            }
             if normalized == displayedMonthStart {
                 errorMessage = nil
             }
@@ -763,17 +927,32 @@ private extension ReadCalendarViewModel {
             if let task = monthColorTasks.removeValue(forKey: key) {
                 task.cancel()
             }
-            monthCache.removeValue(forKey: key)
-            let failed = MonthPageState(
-                monthStart: normalized,
-                weeks: makeDisplayWeeks(for: normalized),
-                dayMap: [:],
-                readingDurationTopBooks: [],
-                summary: .empty,
-                rankingBarColorsByBookId: [:],
-                loadState: .failed,
-                errorMessage: "月份切换失败：\(error.localizedDescription)"
-            )
+            let failureMessage = "月份切换失败：\(error.localizedDescription)"
+            let failed: MonthPageState
+            if let previousState, previousState.loadState == .loaded {
+                failed = MonthPageState(
+                    monthStart: previousState.monthStart,
+                    weeks: previousState.weeks,
+                    dayMap: previousState.dayMap,
+                    readingDurationTopBooks: previousState.readingDurationTopBooks,
+                    summary: previousState.summary,
+                    rankingBarColorsByBookId: previousState.rankingBarColorsByBookId,
+                    loadState: .loaded,
+                    errorMessage: failureMessage
+                )
+            } else {
+                monthCache.removeValue(forKey: key)
+                failed = MonthPageState(
+                    monthStart: normalized,
+                    weeks: makeDisplayWeeks(for: normalized),
+                    dayMap: [:],
+                    readingDurationTopBooks: [],
+                    summary: .empty,
+                    rankingBarColorsByBookId: [:],
+                    loadState: .failed,
+                    errorMessage: failureMessage
+                )
+            }
             pageStates[key] = failed
             markMonthAccessed(forKey: key)
             inFlightColorRequestBookIDsByMonthKey[key] = nil
@@ -809,18 +988,25 @@ private extension ReadCalendarViewModel {
         for year: Int,
         using repository: any ReadCalendarRepositoryProtocol,
         colorRepository: any ReadCalendarColorRepositoryProtocol,
-        reportError: Bool
+        reportError: Bool,
+        forceRefresh: Bool = false
     ) async {
         guard hasLoaded else { return }
         let clampedYear = clampYear(year)
-        let months = monthStartsForYear(clampedYear).filter { isMonthInAvailableRange($0) }
+        let availableMonths = monthStartsForYear(clampedYear).filter(isMonthInAvailableRange)
+        let months = availableMonths.filter { !isMonthLocked($0) }
         guard !months.isEmpty else {
-            yearLoadStateByYear[clampedYear] = .failed
-            yearErrorMessageByYear[clampedYear] = "该年份暂无可展示数据"
+            if !availableMonths.isEmpty, availableMonths.allSatisfy(isMonthLocked) {
+                yearLoadStateByYear[clampedYear] = .loaded
+                yearErrorMessageByYear[clampedYear] = nil
+            } else {
+                yearLoadStateByYear[clampedYear] = .failed
+                yearErrorMessageByYear[clampedYear] = "该年份暂无可展示数据"
+            }
             return
         }
 
-        if yearLoadStateByYear[clampedYear] == .loaded {
+        if !forceRefresh, yearLoadStateByYear[clampedYear] == .loaded {
             return
         }
 
@@ -836,15 +1022,17 @@ private extension ReadCalendarViewModel {
                 using: repository,
                 colorRepository: colorRepository,
                 showLoading: false,
-                forceRefresh: false,
-                reportError: false
+                forceRefresh: forceRefresh,
+                reportError: false,
+                invalidateYearOnSuccess: false
             )
         }
 
         guard latestYearRequestTicketByYear[clampedYear] == ticket else { return }
 
         let hasFailedMonth = months.contains { monthStart in
-            monthState(for: monthStart).loadState == .failed
+            let state = monthState(for: monthStart)
+            return state.loadState == .failed || state.errorMessage != nil
         }
         if hasFailedMonth {
             yearLoadStateByYear[clampedYear] = .failed
@@ -867,10 +1055,17 @@ private extension ReadCalendarViewModel {
         let clampedYear = clampYear(year)
         if yearTopBooksByYear[clampedYear] == nil {
             do {
+                let includedMonthStarts = Set(
+                    monthStartsForYear(clampedYear).filter {
+                        isMonthInAvailableRange($0) && !isMonthLocked($0)
+                    }
+                )
                 let topBooks = try await repository.fetchYearTopBooks(
                     year: clampedYear,
                     excludedEventTypes: settings.excludedEventTypes,
-                    limit: Self.yearTopBookLimit
+                    limit: Self.yearTopBookLimit,
+                    includedMonthStarts: includedMonthStarts,
+                    excludedBookIDs: []
                 )
                 yearTopBooksByYear[clampedYear] = topBooks
                 yearRankingBarColorsByYear[clampedYear] = buildInitialYearRankingBarColorMap(
@@ -1022,7 +1217,8 @@ private extension ReadCalendarViewModel {
     /// 为当前月份事件条异步解析封面主色并回写颜色映射。
     func scheduleColorResolutionIfNeeded(
         for monthStart: Date,
-        using colorRepository: any ReadCalendarColorRepositoryProtocol
+        using colorRepository: any ReadCalendarColorRepositoryProtocol,
+        forceRefresh: Bool = false
     ) {
         let normalized = Self.monthStart(of: monthStart, using: calendar)
         let monthKey = Self.monthKey(for: normalized, using: calendar)
@@ -1035,7 +1231,8 @@ private extension ReadCalendarViewModel {
         }
 
         let requestBookIDs = Set(requests.map(\.bookId))
-        if let inFlightBookIDs = inFlightColorRequestBookIDsByMonthKey[monthKey],
+        if !forceRefresh,
+           let inFlightBookIDs = inFlightColorRequestBookIDsByMonthKey[monthKey],
            monthColorTasks[monthKey] != nil,
            requestBookIDs.isSubset(of: inFlightBookIDs) {
             return
@@ -1053,6 +1250,7 @@ private extension ReadCalendarViewModel {
                 monthKey: monthKey,
                 requests: requests,
                 ticket: ticket,
+                forceRefresh: forceRefresh,
                 using: colorRepository
             )
         }
@@ -1062,6 +1260,7 @@ private extension ReadCalendarViewModel {
         monthKey: String,
         requests: [ReadCalendarColorRequest],
         ticket: Int,
+        forceRefresh: Bool,
         using colorRepository: any ReadCalendarColorRepositoryProtocol
     ) async {
         var stagedColors: [Int64: ReadCalendarSegmentColor] = [:]
@@ -1076,7 +1275,8 @@ private extension ReadCalendarViewModel {
             let color = await colorRepository.resolveEventColor(
                 bookId: request.bookId,
                 bookName: request.bookName,
-                coverURL: request.coverURL
+                coverURL: request.coverURL,
+                forceRefresh: forceRefresh
             )
             if Task.isCancelled {
                 return
@@ -1101,6 +1301,7 @@ private extension ReadCalendarViewModel {
         await fillPendingRankingFallbackColorsIfNeeded(
             monthKey: monthKey,
             ticket: ticket,
+            forceRefresh: forceRefresh,
             using: colorRepository
         )
 
@@ -1113,6 +1314,7 @@ private extension ReadCalendarViewModel {
     private func fillPendingRankingFallbackColorsIfNeeded(
         monthKey: String,
         ticket: Int,
+        forceRefresh: Bool,
         using colorRepository: any ReadCalendarColorRepositoryProtocol
     ) async {
         guard latestColorTicketByMonthKey[monthKey] == ticket else { return }
@@ -1136,7 +1338,8 @@ private extension ReadCalendarViewModel {
             let fallbackColor = await colorRepository.resolveEventColor(
                 bookId: book.bookId,
                 bookName: book.name,
-                coverURL: ""
+                coverURL: "",
+                forceRefresh: forceRefresh
             )
             if Task.isCancelled {
                 return
@@ -1297,6 +1500,21 @@ private extension ReadCalendarViewModel {
         inFlightYearColorRequestBookIDsByYear = [:]
     }
 
+    /// 月份强制刷新成功后使对应年度派生状态失效，避免年度热力图与月视图使用不同快照。
+    func invalidateYearDerivedState(containing monthStart: Date) {
+        let year = calendar.component(.year, from: monthStart)
+        yearTopBooksByYear.removeValue(forKey: year)
+        yearRankingBarColorsByYear.removeValue(forKey: year)
+        yearLoadStateByYear.removeValue(forKey: year)
+        yearErrorMessageByYear.removeValue(forKey: year)
+        latestYearRequestTicketByYear.removeValue(forKey: year)
+        latestYearColorTicketByYear.removeValue(forKey: year)
+        inFlightYearColorRequestBookIDsByYear.removeValue(forKey: year)
+        if let task = yearColorTasks.removeValue(forKey: year) {
+            task.cancel()
+        }
+    }
+
     /// 标记月份缓存访问顺序，用于 LRU 裁剪。
     func markMonthAccessed(forKey key: String) {
         if monthAccessOrder.last == key {
@@ -1392,10 +1610,7 @@ private extension ReadCalendarViewModel {
         forceRefresh: Bool
     ) async throws -> ReadCalendarMonthData {
         let key = Self.monthKey(for: monthStart, using: calendar)
-        if forceRefresh {
-            monthCache.removeValue(forKey: key)
-        }
-        if let cached = monthCache[key] {
+        if !forceRefresh, let cached = monthCache[key] {
             markMonthAccessed(forKey: key)
             return cached
         }
@@ -1665,7 +1880,8 @@ private extension ReadCalendarViewModel {
     /// 生成月份键用于缓存与状态索引。
     static func monthKey(for date: Date, using calendar: Calendar) -> String {
         let monthStart = monthStart(of: date, using: calendar)
-        return Self.monthKeyFormatter.string(from: monthStart)
+        let components = calendar.dateComponents([.year, .month], from: monthStart)
+        return String(format: "%04d-%02d", components.year ?? 0, components.month ?? 0)
     }
 
     /// 获取当前自然月首日。
