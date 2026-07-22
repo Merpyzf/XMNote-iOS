@@ -1,5 +1,5 @@
 /**
- * [INPUT]: 依赖 GRDB DatabaseMigrator、RoomCanonicalSchemaV40/RoomCanonicalSchemaV41/RoomCanonicalSchemaV42/RoomCanonicalSchemaV43、RoomCanonicalSchemaCompatibility 与 DatabaseSchema+Seed
+ * [INPUT]: 依赖 GRDB DatabaseMigrator、RoomCanonicalSchemaV40...V44、RoomCanonicalSchemaCompatibility 与 DatabaseSchema+Seed
  * [OUTPUT]: 对外提供 AppDatabase.migrator 与 Room canonical 迁移标识
  * [POS]: Database/Core 的迁移入口，被 AppDatabase.init 调用执行 Schema 创建
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -8,8 +8,8 @@
 import Foundation
 import GRDB
 
-// MARK: - Room canonical v43 迁移
-// iOS 新库先创建 Android Room v40 canonical schema，再逐步执行 Android 40→41→42→43 等价补丁，保证旧库与新库共用同一升级路径。
+// MARK: - Room canonical v44 迁移
+// iOS 新库先创建 Android Room v40 canonical schema，再逐步执行 Android 40→41→42→43→44 等价补丁，保证旧库与新库共用同一升级路径。
 
 extension AppDatabase {
     nonisolated static let roomSchemaMigrationIdentifier = "room-v40-schema"
@@ -17,6 +17,7 @@ extension AppDatabase {
     nonisolated static let roomV41MigrationIdentifier = "room-v41-schema"
     nonisolated static let roomV42MigrationIdentifier = "room-v42-schema"
     nonisolated static let roomV43MigrationIdentifier = "room-v43-schema"
+    nonisolated static let roomV44MigrationIdentifier = "room-v44-data-cleanup"
 
     nonisolated static var migrator: DatabaseMigrator {
         var migrator = DatabaseMigrator()
@@ -39,6 +40,10 @@ extension AppDatabase {
 
         migrator.registerMigration(roomV43MigrationIdentifier) { db in
             try RoomCanonicalSchemaV43.migrateFromV42(db)
+        }
+
+        migrator.registerMigration(roomV44MigrationIdentifier) { db in
+            try RoomCanonicalSchemaV44.migrateFromV43(db)
         }
 
         return migrator
@@ -72,6 +77,9 @@ extension AppDatabase {
         }
         if userVersion >= RoomCanonicalSchemaV43.databaseVersion {
             try markMigration(roomV43MigrationIdentifier, in: db)
+        }
+        if userVersion >= RoomCanonicalSchemaV44.databaseVersion {
+            try markMigration(roomV44MigrationIdentifier, in: db)
         }
     }
 

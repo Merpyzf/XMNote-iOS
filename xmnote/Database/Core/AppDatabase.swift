@@ -1,5 +1,5 @@
 /**
- * [INPUT]: 依赖 GRDB 的 DatabasePool/DatabaseMigrator 提供持久化能力
+ * [INPUT]: 依赖 GRDB 的 DatabasePool/DatabaseMigrator 与 RoomCanonicalSchemaV44 提供持久化和版本合同
  * [OUTPUT]: 对外提供 AppDatabase 结构体，封装数据库连接池、迁移与显式生命周期控制
  * [POS]: Database/Core 模块入口，被 AppDatabaseKey 通过 Environment 注入全局
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -22,7 +22,7 @@ nonisolated struct AppDatabase {
     static let databaseName = "xm_note.db"
 
     /// 数据库版本号，与 Android DBConfig.DB_VERSION 同步。
-    static let databaseVersion = RoomCanonicalSchemaV43.databaseVersion
+    static let databaseVersion = RoomCanonicalSchemaV44.databaseVersion
 
     /// 当前恢复闸门可识别的 Android Room 备份最高版本。
     static let maximumRestorableDatabaseVersion = RoomCanonicalSchemaCompatibility.maximumRestorableDatabaseVersion
@@ -61,7 +61,7 @@ extension AppDatabase {
 
         let dbPool = try DatabasePool(path: path, configuration: config)
 
-        // 兼容 Android Room：恢复库达到 canonical v40/v41 但缺少 grdb_migrations 时，
+        // 兼容 Android Room：恢复库达到 canonical v40...v44 但缺少 grdb_migrations 时，
         // 只补 iOS 内部迁移标记，避免重复建表或写入 seed。
         try dbPool.write { db in
             try markRoomCanonicalMigrationsIfNeeded(db)
