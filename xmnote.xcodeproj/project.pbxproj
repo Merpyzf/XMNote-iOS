@@ -17,6 +17,7 @@
 		89AWS0012F3D000000000002 /* AWSS3 in Frameworks */ = {isa = PBXBuildFile; productRef = 89AWS0012F3D000000000004 /* AWSS3 */; };
 		89AWSI012F3D000000000002 /* AWSSDKIdentity in Frameworks */ = {isa = PBXBuildFile; productRef = 89AWSI012F3D000000000004 /* AWSSDKIdentity */; };
 		89GIFU0012F3D000000000002 /* Gifu in Frameworks */ = {isa = PBXBuildFile; productRef = 89GIFU0012F3D000000000004 /* Gifu */; };
+		89HUMM0012F8000000000002 /* Hummingbird in Frameworks */ = {isa = PBXBuildFile; productRef = 89HUMM0012F8000000000004 /* Hummingbird */; };
 		89HZCAL12F3D000000000002 /* HorizonCalendar in Frameworks */ = {isa = PBXBuildFile; productRef = 89HZCAL12F3D000000000004 /* HorizonCalendar */; };
 		89JXPB0012F3D000000000002 /* JXPhotoBrowser in Frameworks */ = {isa = PBXBuildFile; productRef = 89JXPB0012F3D000000000004 /* JXPhotoBrowser */; };
 		89NUKE0012F3D000000000002 /* Nuke in Frameworks */ = {isa = PBXBuildFile; productRef = 89NUKE0012F3D000000000004 /* Nuke */; };
@@ -146,6 +147,7 @@
 				89JXPB0012F3D000000000002 /* JXPhotoBrowser in Frameworks */,
 				89SOUP0012F3D000000000002 /* SwiftSoup in Frameworks */,
 				89ZIP0012F3D000000000002 /* ZIPFoundation in Frameworks */,
+				89HUMM0012F8000000000002 /* Hummingbird in Frameworks */,
 				13EDBCA7EBD2A99FE721F9E9 /* CoreMedia.framework in Frameworks */,
 				4C61B9167A0412B5D37618F9 /* Accelerate.framework in Frameworks */,
 				8F053895DF208544572BAAEE /* SystemConfiguration.framework in Frameworks */,
@@ -281,6 +283,7 @@
 				89JXPB0012F3D000000000004 /* JXPhotoBrowser */,
 				89SOUP0012F3D000000000004 /* SwiftSoup */,
 				89ZIP0012F3D000000000004 /* ZIPFoundation */,
+				89HUMM0012F8000000000004 /* Hummingbird */,
 			);
 			productName = xmnote;
 			productReference = 8911149C2F39AC2F00D99384 /* xmnote.app */;
@@ -402,6 +405,7 @@
 				89JXPB0012F3D000000000001 /* XCLocalSwiftPackageReference "Vendor/PhotoBrowser" */,
 				89SOUP0012F3D000000000001 /* XCRemoteSwiftPackageReference "SwiftSoup" */,
 				89ZIP0012F3D000000000001 /* XCRemoteSwiftPackageReference "ZIPFoundation" */,
+				89HUMM0012F8000000000001 /* XCRemoteSwiftPackageReference "hummingbird" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 8911149D2F39AC2F00D99384 /* Products */;
@@ -1010,6 +1014,14 @@
 				minimumVersion = 0.9.0;
 			};
 		};
+		89HUMM0012F8000000000001 /* XCRemoteSwiftPackageReference "hummingbird" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/hummingbird-project/hummingbird.git";
+			requirement = {
+				kind = exactVersion;
+				version = 2.22.0;
+			};
+		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
@@ -1077,6 +1089,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 89ZIP0012F3D000000000001 /* XCRemoteSwiftPackageReference "ZIPFoundation" */;
 			productName = ZIPFoundation;
+		};
+		89HUMM0012F8000000000004 /* Hummingbird */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 89HUMM0012F8000000000001 /* XCRemoteSwiftPackageReference "hummingbird" */;
+			productName = Hummingbird;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

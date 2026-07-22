@@ -1,0 +1,2 @@
+# Import parser parity fixtures intentionally preserve CRLF, BOM, truncation, and binary payload bytes.
+xmnoteTests/Fixtures/ImportParity/** -text whitespace=cr-at-eol

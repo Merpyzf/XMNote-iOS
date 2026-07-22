@@ -472,7 +472,9 @@ struct MainTabView: View {
         case .readReminder:
             Text("阅读提醒")
         case .dataImport:
-            Text("数据导入")
+            DataImportView {
+                append(.premium, to: .profile)
+            }
         case .dataBackup:
             DataBackupView()
         case .webdavServers:

@@ -490,3 +490,46 @@ protocol ReadingDashboardRepositoryProtocol {
     /// 更新指定年份对应的年度阅读目标（本）。
     func updateYearlyReadGoal(count: Int, forYear year: Int) async throws
 }
+
+/// 微信读书扫码授权导入仓储契约，统一授权校验、远端抓取、目标书匹配与增量落库。
+@MainActor
+protocol WereadImportRepositoryProtocol {
+    func fetchPreferences() -> WereadImportPreferences
+    func savePreferences(_ preferences: WereadImportPreferences)
+    func restoreAuthorization() async -> WereadAuthorization?
+    func validateAuthorization(cookieHeader: String) async throws -> WereadAuthorization
+    func clearAuthorization() async
+    func fetchImportBookIDs(authorization: WereadAuthorization, preferences: WereadImportPreferences) async throws -> [String]
+    func fetchImportBooks(
+        authorization: WereadAuthorization,
+        preferences: WereadImportPreferences,
+        progress: @escaping (Int, Int) -> Void,
+        warning: @escaping (String) -> Void
+    ) async throws -> [WereadImportBook]
+    func fetchImportBooks(
+        authorization: WereadAuthorization,
+        bookIDs: [String],
+        importsReadingTime: Bool,
+        progress: @escaping (Int, Int) -> Void
+    ) async throws -> [WereadImportBook]
+    func matchLocalBooks(_ books: [WereadImportBook]) async throws -> [WereadImportBook]
+    func commitImport(
+        books: [WereadImportBook],
+        progress: @escaping (Int, Int) -> Void
+    ) async throws
+    func fetchBackfillPrompt() async throws -> WereadBackfillPrompt
+    func performBackfill(
+        authorization: WereadAuthorization,
+        progress: @escaping (WereadBackfillProgress) -> Void
+    ) async throws -> WereadBackfillResult
+}
+
+/// 全来源书摘导入仓储契约；Parser、API 和特殊入口统一通过 Draft 进入此写入边界。
+@MainActor
+protocol NoteImportRepositoryProtocol {
+    func matchLocalBook(for draft: NoteImportDraftBook) async throws -> BookPickerBook?
+    func commitImport(
+        books: [NoteImportCommitBook],
+        progress: @escaping (Int, Int) -> Void
+    ) async throws
+}

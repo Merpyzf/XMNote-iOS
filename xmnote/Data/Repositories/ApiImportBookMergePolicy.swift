@@ -97,6 +97,7 @@ nonisolated struct ApiImportBookPayload: Sendable, Equatable {
     var tags: [ApiImportTagPayload] = []
     var noteList: [ApiImportNotePayload] = []
     var apiImportReviews: [ApiImportReviewPayload] = []
+    var apiImportChapterList: [ApiImportChapterPayload] = []
     var preciseReadingDurations: [ApiImportPreciseReadingDurationPayload]?
     var fuzzyReadingDurations: [ApiImportFuzzyReadingDurationPayload]?
     var apiImportCoverBase64 = ""
@@ -136,6 +137,14 @@ nonisolated struct ApiImportChapterPayload: Sendable, Equatable {
     var currentItemType: Int64 = 0
     var isChecked = false
     var isImport: Int64 = 0
+    var level: Int64 = 0
+    var sourceType: Int64 = 0
+    var sourceUID = ""
+    var sourceAnchor = ""
+    var sourceOrder: Int64 = 0
+    var sourcePath = ""
+    var pathTitles: [String] = []
+    var children: [ApiImportChapterPayload] = []
 }
 
 /// API 导入阶段的临时书摘载荷。
@@ -214,6 +223,7 @@ private extension ApiImportBookMergePolicy {
         target.tags = mergeTags(target.tags, incoming.tags)
         target.noteList = mergeNotes(target.noteList, incoming.noteList)
         target.apiImportReviews = mergeReviews(target.apiImportReviews, incoming.apiImportReviews)
+        target.apiImportChapterList = mergeChapterTrees(target.apiImportChapterList, incoming.apiImportChapterList)
         target.preciseReadingDurations = mergePreciseDurations(
             target.preciseReadingDurations,
             incoming.preciseReadingDurations
@@ -376,6 +386,48 @@ private extension ApiImportBookMergePolicy {
         target.content = preferNonBlank(target.content, incoming.content)
         if target.createdDateTime == 0, incoming.createdDateTime != 0 {
             target.createdDateTime = incoming.createdDateTime
+        }
+    }
+
+    nonisolated static func mergeChapterTrees(
+        _ target: [ApiImportChapterPayload],
+        _ incoming: [ApiImportChapterPayload]
+    ) -> [ApiImportChapterPayload] {
+        var result = target
+        for chapter in incoming { mergeChapter(&result, incoming: chapter) }
+        resetChapterOrder(&result, parentPath: [])
+        return result
+    }
+
+    nonisolated static func mergeChapter(
+        _ siblings: inout [ApiImportChapterPayload],
+        incoming: ApiImportChapterPayload
+    ) {
+        let title = incoming.title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !title.isEmpty else { return }
+        guard let index = siblings.firstIndex(where: { $0.title.trimmingCharacters(in: .whitespacesAndNewlines) == title }) else {
+            siblings.append(incoming)
+            return
+        }
+        siblings[index].remark = preferNonBlank(siblings[index].remark, incoming.remark)
+        siblings[index].sourceUID = preferNonBlank(siblings[index].sourceUID, incoming.sourceUID)
+        siblings[index].sourceAnchor = preferNonBlank(siblings[index].sourceAnchor, incoming.sourceAnchor)
+        siblings[index].sourcePath = preferNonBlank(siblings[index].sourcePath, incoming.sourcePath)
+        if siblings[index].sourceOrder == 0 { siblings[index].sourceOrder = incoming.sourceOrder }
+        if siblings[index].level == 0 { siblings[index].level = incoming.level }
+        if siblings[index].sourceType == 0 { siblings[index].sourceType = incoming.sourceType }
+        for child in incoming.children { mergeChapter(&siblings[index].children, incoming: child) }
+    }
+
+    nonisolated static func resetChapterOrder(_ chapters: inout [ApiImportChapterPayload], parentPath: [String]) {
+        for index in chapters.indices {
+            let title = chapters[index].title.trimmingCharacters(in: .whitespacesAndNewlines)
+            let path = parentPath + [title]
+            chapters[index].order = Int64(index + 1)
+            chapters[index].level = Int64(path.count)
+            chapters[index].pathTitles = path
+            chapters[index].sourcePath = path.joined(separator: "$")
+            resetChapterOrder(&chapters[index].children, parentPath: path)
         }
     }
 

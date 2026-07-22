@@ -53,10 +53,12 @@
 	<true/>
 	<key>NSCameraUsageDescription</key>
 	<string>在使用文本识别、添加附图、扫描书籍等功能时会访问设备的相机。</string>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>用于在同一局域网内从电脑或 API 客户端向本机导入书籍与书摘。</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>在使用百度 OCR 识别时会访问照片，用于选择待识别图片。</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>
-	<string>在分享书单时会将生成的书单图片保存到相册，便于继续分享。</string>
+	<string>用于保存分享书单图片或微信读书登录二维码，便于继续分享或扫码授权导入。</string>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
 	<key>UILaunchScreen</key>
