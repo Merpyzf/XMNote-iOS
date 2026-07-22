@@ -6,9 +6,9 @@
 //
 
 /**
- * [INPUT]: 依赖 AppState 环境状态，依赖 PersonalRoute 导航路由
- * [OUTPUT]: 对外提供 PersonalView，我的 Tab 核心入口
- * [POS]: Personal 模块容器壳层，承载设置列表与备份入口
+ * [INPUT]: 依赖 AppState、DesktopWebSessionCoordinator 环境状态与 PersonalRoute 导航路由
+ * [OUTPUT]: 对外提供 PersonalView，我的 Tab 核心入口与独立网页端入口状态
+ * [POS]: Personal 模块容器壳层，承载设置列表、网页端与备份入口
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
@@ -26,6 +26,7 @@ struct PersonalView: View {
     }
 
     @Environment(AppState.self) private var appState
+    @Environment(DesktopWebSessionCoordinator.self) private var desktopWebSessionCoordinator
     private let topBarHeight: CGFloat = 56
     let onAddBook: () -> Void
     let onAddNote: () -> Void
@@ -126,6 +127,15 @@ extension PersonalView {
         groupedPanel {
             settingsRow("calendar", "阅读日历", route: .readCalendar)
             settingsRow("bell", "阅读提醒", route: .readReminder)
+            settingsRow(
+                "desktopcomputer",
+                "网页端",
+                route: .desktopWeb,
+                trailingText: desktopWebStatusText,
+                trailingColor: .feedbackSuccess,
+                isLast: true
+            )
+            .animation(.smooth, value: desktopWebSessionCoordinator.state.isRunning)
             PersonalSettingsDivider(leadingInset: Layout.rowDividerLeading)
             settingsRow("square.and.arrow.down", "数据导入", route: .dataImport)
             settingsRow("externaldrive", "数据备份", route: .dataBackup)
@@ -175,6 +185,10 @@ extension PersonalView {
         appState.isAIEnabled && appState.isPremium
     }
 
+    private var desktopWebStatusText: String? {
+        desktopWebSessionCoordinator.state.isRunning ? "运行中" : nil
+    }
+
     private var hasDebugSection: Bool {
 #if DEBUG
         true
@@ -209,11 +223,17 @@ extension PersonalView {
         _ title: String,
         route: PersonalRoute,
         trailingText: String? = nil,
+        trailingColor: Color = .textSecondary,
         isLast: Bool = false
     ) -> some View {
         VStack(spacing: Spacing.none) {
             NavigationLink(value: route) {
-                rowContent(icon: icon, title: title, trailingText: trailingText)
+                rowContent(
+                    icon: icon,
+                    title: title,
+                    trailingText: trailingText,
+                    trailingColor: trailingColor
+                )
             }
             .buttonStyle(.plain)
 
@@ -254,7 +274,8 @@ extension PersonalView {
     private func rowContent(
         icon: String,
         title: String,
-        trailingText: String? = nil
+        trailingText: String? = nil,
+        trailingColor: Color = .textSecondary
     ) -> some View {
         HStack(spacing: Spacing.base) {
             Image(systemName: icon)
@@ -271,9 +292,10 @@ extension PersonalView {
             if let trailingText {
                 Text(trailingText)
                     .font(AppTypography.subheadline)
-                    .foregroundStyle(Color.textSecondary)
+                    .foregroundStyle(trailingColor)
                     .lineLimit(1)
                     .minimumScaleFactor(0.9)
+                    .transition(.opacity)
             }
 
             Image(systemName: "chevron.right")
@@ -320,5 +342,6 @@ private struct PersonalSettingsDivider: View {
     NavigationStack {
         PersonalView()
             .environment(AppState())
+            .environment(DesktopWebSessionCoordinator())
     }
 }
