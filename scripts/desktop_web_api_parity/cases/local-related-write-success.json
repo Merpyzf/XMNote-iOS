@@ -1,0 +1,237 @@
+{
+  "schemaVersion": 1,
+  "name": "local-related-write-success",
+  "cases": [
+    {
+      "caseId": "related-category-create-a-success",
+      "endpointId": "WEB-API-091",
+      "path": "/api/v1/books/351/related-categories",
+      "jsonBody": {
+        "title": "  XMNote Web 分类 A  ",
+        "order": 20,
+        "scope": "book"
+      },
+      "responseNormalizations": [
+        {
+          "path": "$.data.createdTime",
+          "strategy": "independent-epoch-millis",
+          "reason": "Android 与 iOS 依各自设备时钟创建类别"
+        },
+        {
+          "path": "$.data.updatedTime",
+          "strategy": "independent-epoch-millis",
+          "reason": "Android 与 iOS 依各自设备时钟初始化类别更新时间"
+        }
+      ]
+    },
+    {
+      "caseId": "related-category-create-b-success",
+      "endpointId": "WEB-API-091",
+      "path": "/api/v1/books/351/related-categories",
+      "jsonBody": {
+        "title": "XMNote Web 分类 B",
+        "order": 21,
+        "scope": "book"
+      },
+      "responseNormalizations": [
+        {
+          "path": "$.data.createdTime",
+          "strategy": "independent-epoch-millis",
+          "reason": "Android 与 iOS 依各自设备时钟创建类别"
+        },
+        {
+          "path": "$.data.updatedTime",
+          "strategy": "independent-epoch-millis",
+          "reason": "Android 与 iOS 依各自设备时钟初始化类别更新时间"
+        }
+      ]
+    },
+    {
+      "caseId": "related-category-update-a-success",
+      "endpointId": "WEB-API-092",
+      "path": "/api/v1/related-categories/18",
+      "jsonBody": {
+        "title": "  XMNote Web 分类 A 更新  ",
+        "order": 10
+      },
+      "responseNormalizations": [
+        {
+          "path": "$.data.createdTime",
+          "strategy": "independent-epoch-millis",
+          "reason": "响应保留两端各自类别创建时钟"
+        },
+        {
+          "path": "$.data.updatedTime",
+          "strategy": "independent-epoch-millis",
+          "reason": "Android 与 iOS 依各自设备时钟更新类别"
+        }
+      ]
+    },
+    {
+      "caseId": "related-category-hide-a-success",
+      "endpointId": "WEB-API-093",
+      "path": "/api/v1/related-categories/18/visibility",
+      "jsonBody": {
+        "isHide": true
+      },
+      "responseNormalizations": [
+        {
+          "path": "$.data.createdTime",
+          "strategy": "independent-epoch-millis",
+          "reason": "响应保留两端各自类别创建时钟"
+        },
+        {
+          "path": "$.data.updatedTime",
+          "strategy": "independent-epoch-millis",
+          "reason": "Android 与 iOS 依各自设备时钟更新隐藏状态"
+        }
+      ]
+    },
+    {
+      "caseId": "related-category-reorder-success",
+      "endpointId": "WEB-API-095",
+      "path": "/api/v1/books/351/related-categories/reorder",
+      "jsonBody": {
+        "ids": [
+          19,
+          18,
+          13,
+          6,
+          5,
+          4,
+          3,
+          2,
+          1
+        ]
+      }
+    },
+    {
+      "caseId": "related-sort-rule-update-success",
+      "endpointId": "WEB-API-097",
+      "path": "/api/v1/books/351/related-notes/sort-rule",
+      "jsonBody": {
+        "sortBy": "create_time",
+        "sortOrder": "desc"
+      }
+    },
+    {
+      "caseId": "related-note-create-one-success",
+      "endpointId": "WEB-API-102",
+      "path": "/api/v1/related-notes",
+      "jsonBody": {
+        "bookId": 351,
+        "categoryId": 18,
+        "title": "XMNote Web 相关内容一",
+        "content": "相关内容一正文",
+        "url": "https://example.com/related-one",
+        "imageUrls": [],
+        "contentBookId": 554,
+        "createdTime": 1700000101000
+      },
+      "responseNormalizations": [
+        {
+          "path": "$.data.updatedTime",
+          "strategy": "independent-epoch-millis",
+          "reason": "Android 与 iOS 依各自设备时钟初始化相关内容更新时间"
+        }
+      ]
+    },
+    {
+      "caseId": "related-note-create-two-success",
+      "endpointId": "WEB-API-102",
+      "path": "/api/v1/related-notes",
+      "jsonBody": {
+        "bookId": 351,
+        "categoryId": 18,
+        "title": "XMNote Web 相关内容二",
+        "content": "相关内容二正文",
+        "url": "",
+        "imageUrls": [],
+        "contentBookId": 0,
+        "createdTime": 1700000102000
+      },
+      "responseNormalizations": [
+        {
+          "path": "$.data.updatedTime",
+          "strategy": "independent-epoch-millis",
+          "reason": "Android 与 iOS 依各自设备时钟初始化相关内容更新时间"
+        }
+      ]
+    },
+    {
+      "caseId": "related-note-create-three-success",
+      "endpointId": "WEB-API-102",
+      "path": "/api/v1/related-notes",
+      "jsonBody": {
+        "bookId": 351,
+        "categoryId": 18,
+        "title": "XMNote Web 相关内容三",
+        "content": "相关内容三正文",
+        "url": "",
+        "imageUrls": [],
+        "contentBookId": 0,
+        "createdTime": 1700000103000
+      },
+      "responseNormalizations": [
+        {
+          "path": "$.data.updatedTime",
+          "strategy": "independent-epoch-millis",
+          "reason": "Android 与 iOS 依各自设备时钟初始化相关内容更新时间"
+        }
+      ]
+    },
+    {
+      "caseId": "related-note-update-one-success",
+      "endpointId": "WEB-API-103",
+      "path": "/api/v1/related-notes/89",
+      "jsonBody": {
+        "categoryId": 19,
+        "title": "XMNote Web 已更新相关内容一",
+        "content": "更新后的相关内容正文",
+        "url": "https://example.com/related-one-updated",
+        "imageUrls": [],
+        "contentBookId": 0,
+        "createdTime": 1700000111000
+      },
+      "responseNormalizations": [
+        {
+          "path": "$.data.updatedTime",
+          "strategy": "independent-epoch-millis",
+          "reason": "Android 与 iOS 依各自设备时钟更新相关内容"
+        }
+      ]
+    },
+    {
+      "caseId": "related-note-batch-move-two-success",
+      "endpointId": "WEB-API-106",
+      "path": "/api/v1/related-notes/batch-update-category",
+      "jsonBody": {
+        "ids": [
+          90
+        ],
+        "categoryId": 19
+      }
+    },
+    {
+      "caseId": "related-note-delete-one-success",
+      "endpointId": "WEB-API-104",
+      "path": "/api/v1/related-notes/89"
+    },
+    {
+      "caseId": "related-note-batch-delete-two-success",
+      "endpointId": "WEB-API-105",
+      "path": "/api/v1/related-notes/batch-delete",
+      "jsonBody": {
+        "ids": [
+          90,
+          999999
+        ]
+      }
+    },
+    {
+      "caseId": "related-category-delete-a-success",
+      "endpointId": "WEB-API-094",
+      "path": "/api/v1/related-categories/18"
+    }
+  ]
+}

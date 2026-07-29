@@ -1,0 +1,42 @@
+{
+  "schemaVersion": 1,
+  "name": "local-book-direct-write-success",
+  "epochMillisColumns": [
+    {
+      "table": "book",
+      "column": "read_status_changed_date",
+      "reason": "WEB-API-016 按各设备请求时钟恢复在读状态"
+    },
+    {
+      "table": "book",
+      "column": "purchase_date",
+      "reason": "WEB-API-016 按各设备请求时钟恢复购买时间"
+    },
+    {
+      "table": "book",
+      "column": "updated_date",
+      "reason": "WEB-API-011/016 按各设备请求时钟写入删除或恢复时间"
+    },
+    {
+      "table": "book_read_status_record",
+      "column": "changed_date",
+      "reason": "WEB-API-016 按各设备请求时钟创建状态历史"
+    },
+    {
+      "table": "book_read_status_record",
+      "column": "created_date",
+      "reason": "WEB-API-016 按各设备请求时钟创建状态历史"
+    },
+    {
+      "table": "book_read_status_record",
+      "column": "updated_date",
+      "reason": "WEB-API-011 按各设备请求时钟软删除状态历史"
+    }
+  ],
+  "stablePlatformTables": [
+    {
+      "table": "grdb_migrations",
+      "reason": "iOS 的 GRDB 迁移元数据表在 Web API 调用前后保持不变，Android Room 不创建该表"
+    }
+  ]
+}

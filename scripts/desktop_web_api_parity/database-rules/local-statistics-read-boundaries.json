@@ -1,0 +1,6 @@
+{
+  "schemaVersion": 1,
+  "name": "local-statistics-read-boundaries",
+  "epochMillisColumns": [],
+  "stablePlatformTables": []
+}

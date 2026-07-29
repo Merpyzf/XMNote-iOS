@@ -96,6 +96,132 @@ struct ApiNoteImportTests {
         }
         #expect(zip(counts, baseline).map { $0.0 - $0.1 } == [1, 2, 1, 1, 1, 1, 1, 1, 1, 2, 1])
     }
+
+    @Test @MainActor
+    func existingTargetImportPreservesAndroidRawNameAndZeroUpdateDefaults() async throws {
+        let database = try AppDatabase.empty()
+        let defaults = try #require(UserDefaults(suiteName: UUID().uuidString))
+        let repository = NoteImportRepository(
+            databaseManager: DatabaseManager(database: database),
+            defaults: defaults
+        )
+        try await database.dbPool.write { db in
+            try DatabaseOwnerResolver.repairUserScopedReferences(in: db)
+            var target = BookRecord()
+            target.id = 9_001
+            target.userId = try DatabaseOwnerResolver.resolveOwnerID(in: db)
+            target.name = "现有目标书"
+            target.rawName = "原始目标名"
+            target.sourceId = 1
+            target.readStatusId = 1
+            target.updatedDate = 777
+            try target.insert(db)
+        }
+
+        var draft = NoteImportDraftBook()
+        draft.name = "导入来源书"
+        draft.rawName = "导入来源原名"
+        draft.source = 23
+        draft.notes = [
+            .init(
+                content: "导入原文",
+                idea: "导入想法",
+                createdTime: 1_710_000_000_000,
+                chapter: .init(title: "导入章节")
+            )
+        ]
+
+        try await repository.commitImport(
+            books: [.init(draft: draft, targetBookID: 9_001)]
+        ) { _, _ in }
+
+        let snapshot = try await database.dbPool.read { db in
+            (
+                try BookRecord.fetchOne(db, key: 9_001),
+                try ChapterRecord
+                    .filter(Column("book_id") == 9_001)
+                    .fetchOne(db),
+                try NoteRecord
+                    .filter(Column("book_id") == 9_001)
+                    .fetchOne(db)
+            )
+        }
+        let storedBook = try #require(snapshot.0)
+        let storedChapter = try #require(snapshot.1)
+        let storedNote = try #require(snapshot.2)
+        #expect(storedBook.rawName == "导入来源书")
+        #expect(storedBook.updatedDate == 777)
+        #expect(storedChapter.sourceType == 2)
+        #expect(storedChapter.sourceUid == "")
+        #expect(storedChapter.sourceAnchor == "")
+        #expect(storedChapter.createdDate > 0)
+        #expect(storedChapter.updatedDate == 0)
+        #expect(storedNote.createdDate == 1_710_000_000_000)
+        #expect(storedNote.updatedDate == 0)
+    }
+
+    @Test @MainActor
+    func webImportEnrichmentMatchesAndroidWenquMergeAndPersistsDoubanID() async throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("note_import_enrichment_\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let database = try AppDatabase(
+            path: directory.appendingPathComponent(AppDatabase.databaseName).path
+        )
+        var seed = BookEditorSeed.manual
+        seed.authorIntro = "候选作者简介"
+        let candidate = BookSearchResult(
+            id: "wenqu-1",
+            source: .wenqu,
+            title: "目标书",
+            author: "候选作者",
+            coverURL: " https://example.com/cover.jpg ",
+            subtitle: "",
+            summary: "候选简介",
+            translator: "候选译者",
+            press: "候选出版社",
+            isbn: " 9780000000001 ",
+            pubDate: " 2026-07-23 ",
+            doubanId: 42,
+            totalPages: nil,
+            totalWordCount: nil,
+            seed: seed,
+            detailPageURL: nil
+        )
+        let search = ImportBookSearchRepositoryStub(results: [candidate])
+        let repository = NoteImportRepository(
+            databaseManager: DatabaseManager(database: database),
+            defaults: UserDefaults(suiteName: UUID().uuidString)!,
+            bookSearchRepository: search
+        )
+        var draft = NoteImportDraftBook()
+        draft.name = "目标书（珍藏版）"
+        draft.rawName = draft.name
+        draft.press = "原出版社"
+        draft.notes = [.init(content: "原文")]
+
+        let enriched = await repository.enrichImportBookInfoIfNeeded([
+            .init(draft: draft)
+        ])
+        let result = try #require(enriched.first?.draft)
+        #expect(search.lastKeyword == "目标书")
+        #expect(result.doubanID == 42)
+        #expect(result.author == "候选作者")
+        #expect(result.press == "原出版社")
+        #expect(result.cover == "https://example.com/cover.jpg")
+        #expect(result.isbn == "9780000000001")
+        #expect(result.authorIntro == "候选作者简介")
+
+        try await repository.commitImport(books: enriched) { _, _ in }
+        let stored = try await database.dbPool.read { db in
+            try BookRecord
+                .filter(Column("name") == "目标书（珍藏版）")
+                .fetchOne(db)
+        }
+        #expect(stored?.doubanId == 42)
+        #expect(stored?.summary == "候选简介")
+    }
 }
 
 private actor ApiServerProbe {
@@ -104,4 +230,31 @@ private actor ApiServerProbe {
     var isRunning: Bool { state == .running }
     func receive(_ value: ApiNoteImportServer.State) { state = value }
     func receive(_ payload: ApiImportBookPayload) { bookName = payload.name }
+}
+
+@MainActor
+private final class ImportBookSearchRepositoryStub: BookSearchRepositoryProtocol {
+    let results: [BookSearchResult]
+    private(set) var lastKeyword: String?
+
+    init(results: [BookSearchResult]) {
+        self.results = results
+    }
+
+    func search(keyword: String, source: BookSearchSource) async throws -> [BookSearchResult] {
+        lastKeyword = keyword
+        #expect(source == .wenqu)
+        return results
+    }
+
+    func prepareSeed(for result: BookSearchResult) async throws -> BookEditorSeed {
+        result.seed ?? .manual
+    }
+
+    func fetchRecentQueries() -> [String] { [] }
+    func saveRecentQuery(_: String) {}
+    func removeRecentQuery(_: String) {}
+    func clearRecentQueries() {}
+    func fetchSearchSettings() -> BookSearchSettings { .default }
+    func saveSearchSettings(_: BookSearchSettings) {}
 }

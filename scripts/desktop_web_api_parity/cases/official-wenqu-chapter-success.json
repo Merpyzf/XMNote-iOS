@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "name": "official-wenqu-chapter-success",
+  "dataPolicy": "Only a public Wenqu search term, a public Douban identifier and the frozen active book identifier are sent; response payloads are compared in memory and only hashes or difference categories are persisted.",
+  "cases": [
+    {
+      "caseId": "online-chapter-search-known-title",
+      "endpointId": "WEB-API-047",
+      "path": "/api/v1/books/722/chapters/online/search?keyword=%E6%B4%BB%E7%9D%80"
+    },
+    {
+      "caseId": "online-chapter-catalog-known-douban-id",
+      "endpointId": "WEB-API-048",
+      "path": "/api/v1/books/722/chapters/online-catalog?doubanId=3673614"
+    }
+  ]
+}

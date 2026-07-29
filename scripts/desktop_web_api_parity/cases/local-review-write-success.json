@@ -1,0 +1,198 @@
+{
+  "schemaVersion": 1,
+  "name": "local-review-write-success",
+  "cases": [
+    {
+      "caseId": "review-draft-clean",
+      "endpointId": "WEB-API-110",
+      "path": "/api/v1/reviews/drafts?bookId=351&reviewId=987654"
+    },
+    {
+      "caseId": "review-draft-upsert",
+      "endpointId": "WEB-API-109",
+      "path": "/api/v1/reviews/drafts",
+      "jsonBody": {
+        "bookId": 351,
+        "reviewId": 987654,
+        "title": "  XMNote Web 书评草稿  ",
+        "content": "草稿正文",
+        "imageUrls": [
+          " https://example.com/draft.png ",
+          " "
+        ],
+        "uploadedTicketIds": [],
+        "createdTime": 1700000200000,
+        "savedTimeMillis": 1700000200100
+      }
+    },
+    {
+      "caseId": "review-draft-read",
+      "endpointId": "WEB-API-108",
+      "path": "/api/v1/reviews/drafts?bookId=351&reviewId=987654"
+    },
+    {
+      "caseId": "review-draft-clear",
+      "endpointId": "WEB-API-109",
+      "path": "/api/v1/reviews/drafts",
+      "jsonBody": {
+        "bookId": 351,
+        "reviewId": 987654,
+        "title": " ",
+        "content": "",
+        "imageUrls": [
+          " "
+        ],
+        "savedTimeMillis": 1700000200200
+      }
+    },
+    {
+      "caseId": "review-draft-read-cleared",
+      "endpointId": "WEB-API-108",
+      "path": "/api/v1/reviews/drafts?bookId=351&reviewId=987654"
+    },
+    {
+      "caseId": "review-draft-save-again",
+      "endpointId": "WEB-API-109",
+      "path": "/api/v1/reviews/drafts",
+      "jsonBody": {
+        "bookId": 351,
+        "reviewId": 987654,
+        "title": "待删除草稿",
+        "content": "",
+        "imageUrls": [],
+        "savedTimeMillis": 1700000200300
+      }
+    },
+    {
+      "caseId": "review-draft-delete",
+      "endpointId": "WEB-API-110",
+      "path": "/api/v1/reviews/drafts?bookId=351&reviewId=987654"
+    },
+    {
+      "caseId": "review-draft-read-deleted",
+      "endpointId": "WEB-API-108",
+      "path": "/api/v1/reviews/drafts?bookId=351&reviewId=987654"
+    },
+    {
+      "caseId": "review-sort-update",
+      "endpointId": "WEB-API-113",
+      "path": "/api/v1/books/351/reviews/sort-rule",
+      "jsonBody": {
+        "sortBy": "create_time",
+        "sortOrder": "desc"
+      }
+    },
+    {
+      "caseId": "review-sort-read-updated",
+      "endpointId": "WEB-API-112",
+      "path": "/api/v1/books/351/reviews/sort-rule"
+    },
+    {
+      "caseId": "review-create",
+      "endpointId": "WEB-API-115",
+      "path": "/api/v1/reviews",
+      "jsonBody": {
+        "bookId": 351,
+        "title": "  XMNote Web 书评  ",
+        "content": "Review content",
+        "imageUrls": [
+          "",
+          "https://example.com/review.png"
+        ],
+        "uploadedTicketIds": [],
+        "createdTime": 1700000201000
+      },
+      "responseNormalizations": [
+        {
+          "path": "$.data.updatedTime",
+          "strategy": "independent-epoch-millis",
+          "reason": "Android 与 iOS 依各自设备时钟创建书评"
+        }
+      ]
+    },
+    {
+      "caseId": "review-detail-after-create",
+      "endpointId": "WEB-API-114",
+      "path": "/api/v1/reviews/3",
+      "responseNormalizations": [
+        {
+          "path": "$.data.updatedTime",
+          "strategy": "independent-epoch-millis",
+          "reason": "详情保留两端各自书评更新时间"
+        }
+      ]
+    },
+    {
+      "caseId": "review-global-after-create",
+      "endpointId": "WEB-API-107",
+      "path": "/api/v1/reviews?page=1&pageSize=20&keyword=XMNote&bookId=351&sortBy=create_time&sortOrder=desc&sortMode=latest",
+      "responseNormalizations": [
+        {
+          "path": "$.data.items[0].updatedTime",
+          "strategy": "independent-epoch-millis",
+          "reason": "全局列表保留两端各自书评更新时间"
+        }
+      ]
+    },
+    {
+      "caseId": "review-book-after-create",
+      "endpointId": "WEB-API-111",
+      "path": "/api/v1/books/351/reviews?page=1&pageSize=20&sortBy=word_count&sortOrder=desc",
+      "responseNormalizations": [
+        {
+          "path": "$.data.items[0].updatedTime",
+          "strategy": "independent-epoch-millis",
+          "reason": "书内列表保留两端各自书评更新时间"
+        }
+      ]
+    },
+    {
+      "caseId": "review-update",
+      "endpointId": "WEB-API-116",
+      "path": "/api/v1/reviews/3",
+      "jsonBody": {
+        "title": "  XMNote Web 更新书评  ",
+        "content": "Updated review content",
+        "imageUrls": [
+          "https://example.com/review-updated.png"
+        ],
+        "uploadedTicketIds": [],
+        "createdTime": 1700000202000
+      },
+      "responseNormalizations": [
+        {
+          "path": "$.data.updatedTime",
+          "strategy": "independent-epoch-millis",
+          "reason": "Android 与 iOS 依各自设备时钟更新书评"
+        }
+      ]
+    },
+    {
+      "caseId": "review-detail-after-update",
+      "endpointId": "WEB-API-114",
+      "path": "/api/v1/reviews/3",
+      "responseNormalizations": [
+        {
+          "path": "$.data.updatedTime",
+          "strategy": "independent-epoch-millis",
+          "reason": "详情保留两端各自书评更新时间"
+        }
+      ]
+    },
+    {
+      "caseId": "review-delete",
+      "endpointId": "WEB-API-117",
+      "path": "/api/v1/reviews/3"
+    },
+    {
+      "caseId": "review-detail-after-delete",
+      "endpointId": "WEB-API-114",
+      "path": "/api/v1/reviews/3"
+    },
+    {
+      "caseId": "review-global-after-delete",
+      "endpointId": "WEB-API-107",
+      "path": "/api/v1/reviews?bookId=351"
+    }
+  ]
+}

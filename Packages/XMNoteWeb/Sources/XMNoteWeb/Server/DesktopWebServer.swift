@@ -1,5 +1,5 @@
 /**
- * [INPUT]: 依赖 Hummingbird listener、Bundle.module 冻结网页资源和内部路由/中间件
+ * [INPUT]: 依赖 Hummingbird listener、Bundle.module 冻结网页资源、内部路由/中间件和可选 API 端口
  * [OUTPUT]: 对 App 仅公开可等待监听就绪、查询在途请求和有限优雅停机的 DesktopWebServer
  * [POS]: XMNoteWeb 的唯一公开运行时入口；隐藏全部 Hummingbird 与静态资源实现细节
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -35,9 +35,12 @@ public actor DesktopWebServer {
 
     private var runningServer: RunningServer?
     private let requestActivity = DesktopWebRequestActivity()
+    private let apiDependencies: DesktopWebAPIDependencies?
 
     /// 创建尚未监听端口的 Web 运行时；状态由 actor 隔离，不继承 App 的 MainActor。
-    public init() {}
+    public init(apiDependencies: DesktopWebAPIDependencies? = nil) {
+        self.apiDependencies = apiDependencies
+    }
 
     /// 校验 Package 静态资源并启动 listener；只有 socket 真正 bind 成功才返回。
     public func start(
@@ -61,6 +64,131 @@ public actor DesktopWebServer {
         let router = Router()
         router.middlewares.add(DesktopWebRequestActivityMiddleware(activity: requestActivity))
         router.middlewares.add(DesktopWebCachePolicyMiddleware())
+        if let apiDependencies {
+            var routeDefinitions: Set<DesktopWebAPIRouteDefinition> = []
+            if apiDependencies.settings != nil {
+                routeDefinitions.formUnion(DesktopWebSettingsRoutes.definitions)
+            }
+            if apiDependencies.source != nil {
+                routeDefinitions.formUnion(DesktopWebSourceRoutes.definitions)
+            }
+            if apiDependencies.tag != nil {
+                routeDefinitions.formUnion(DesktopWebTagRoutes.definitions)
+            }
+            if apiDependencies.group != nil {
+                routeDefinitions.formUnion(DesktopWebGroupRoutes.definitions)
+            }
+            if apiDependencies.book != nil {
+                routeDefinitions.formUnion(DesktopWebBookRoutes.definitions)
+            }
+            if apiDependencies.bookshelf != nil {
+                routeDefinitions.formUnion(DesktopWebBookshelfRoutes.definitions)
+            }
+            if apiDependencies.calendar != nil {
+                routeDefinitions.formUnion(DesktopWebCalendarRoutes.definitions)
+            }
+            if apiDependencies.chapter != nil {
+                routeDefinitions.formUnion(DesktopWebChapterRoutes.definitions)
+            }
+            if apiDependencies.note != nil {
+                routeDefinitions.formUnion(DesktopWebNoteRoutes.definitions)
+            }
+            if apiDependencies.related != nil {
+                routeDefinitions.formUnion(DesktopWebRelatedRoutes.definitions)
+            }
+            if apiDependencies.review != nil {
+                routeDefinitions.formUnion(DesktopWebReviewRoutes.definitions)
+            }
+            if apiDependencies.readingRecord != nil {
+                routeDefinitions.formUnion(DesktopWebReadingRecordRoutes.definitions)
+            }
+            if apiDependencies.search != nil {
+                routeDefinitions.formUnion(DesktopWebSearchRoutes.definitions)
+            }
+            if apiDependencies.statistics != nil {
+                routeDefinitions.formUnion(DesktopWebStatisticsRoutes.definitions)
+            }
+            if apiDependencies.ai != nil {
+                routeDefinitions.formUnion(DesktopWebAIRoutes.definitions)
+            }
+            if apiDependencies.onlineBook != nil || apiDependencies.bookCover != nil {
+                routeDefinitions.formUnion(DesktopWebExternalBookRoutes.definitions)
+            }
+            if apiDependencies.export != nil {
+                routeDefinitions.formUnion(DesktopWebExportRoutes.definitions)
+            }
+            if apiDependencies.importTask != nil {
+                routeDefinitions.formUnion(DesktopWebImportRoutes.definitions)
+            }
+            if apiDependencies.upload != nil {
+                routeDefinitions.formUnion(DesktopWebUploadRoutes.definitions)
+            }
+            DesktopWebAPIMiddleware.install(
+                on: router,
+                dependencies: apiDependencies,
+                routeMatcher: DesktopWebAPIRouteMatcher(routes: routeDefinitions)
+            )
+            if let settings = apiDependencies.settings {
+                DesktopWebSettingsRoutes(port: settings).register(on: router)
+            }
+            if let source = apiDependencies.source {
+                DesktopWebSourceRoutes(port: source).register(on: router)
+            }
+            if let tag = apiDependencies.tag {
+                DesktopWebTagRoutes(port: tag).register(on: router)
+            }
+            if let group = apiDependencies.group {
+                DesktopWebGroupRoutes(port: group).register(on: router)
+            }
+            if let book = apiDependencies.book {
+                DesktopWebBookRoutes(port: book).register(on: router)
+            }
+            if let bookshelf = apiDependencies.bookshelf {
+                DesktopWebBookshelfRoutes(port: bookshelf).register(on: router)
+            }
+            if let calendar = apiDependencies.calendar {
+                DesktopWebCalendarRoutes(port: calendar).register(on: router)
+            }
+            if let chapter = apiDependencies.chapter {
+                DesktopWebChapterRoutes(port: chapter).register(on: router)
+            }
+            if let note = apiDependencies.note {
+                DesktopWebNoteRoutes(port: note).register(on: router)
+            }
+            if let related = apiDependencies.related {
+                DesktopWebRelatedRoutes(port: related).register(on: router)
+            }
+            if let review = apiDependencies.review {
+                DesktopWebReviewRoutes(port: review).register(on: router)
+            }
+            if let readingRecord = apiDependencies.readingRecord {
+                DesktopWebReadingRecordRoutes(port: readingRecord).register(on: router)
+            }
+            if let search = apiDependencies.search {
+                DesktopWebSearchRoutes(port: search).register(on: router)
+            }
+            if let statistics = apiDependencies.statistics {
+                DesktopWebStatisticsRoutes(port: statistics).register(on: router)
+            }
+            if let ai = apiDependencies.ai {
+                DesktopWebAIRoutes(port: ai).register(on: router)
+            }
+            if apiDependencies.onlineBook != nil || apiDependencies.bookCover != nil {
+                DesktopWebExternalBookRoutes(
+                    onlineBook: apiDependencies.onlineBook,
+                    bookCover: apiDependencies.bookCover
+                ).register(on: router)
+            }
+            if let export = apiDependencies.export {
+                DesktopWebExportRoutes(port: export).register(on: router)
+            }
+            if let importTask = apiDependencies.importTask {
+                DesktopWebImportRoutes(port: importTask).register(on: router)
+            }
+            if let upload = apiDependencies.upload {
+                DesktopWebUploadRoutes(port: upload).register(on: router)
+            }
+        }
         DesktopWebHealthRoutes().register(on: router)
         router.middlewares.add(FileMiddleware(staticRoot.path, searchForIndexHtml: true))
 

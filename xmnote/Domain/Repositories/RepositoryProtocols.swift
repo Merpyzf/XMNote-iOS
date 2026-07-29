@@ -528,6 +528,12 @@ protocol WereadImportRepositoryProtocol {
 @MainActor
 protocol NoteImportRepositoryProtocol {
     func matchLocalBook(for draft: NoteImportDraftBook) async throws -> BookPickerBook?
+    /// 按 Android `BookDao.queryByIdSuspend` 语义判断显式导入目标是否存在；软删除记录仍是可解析目标。
+    func hasImportTargetBook(id: Int64) async throws -> Bool
+    /// 为未匹配本地书籍且非三联来源的新书请求文渠候选；远端失败不得阻断导入。
+    func enrichImportBookInfoIfNeeded(
+        _ books: [NoteImportCommitBook]
+    ) async -> [NoteImportCommitBook]
     func commitImport(
         books: [NoteImportCommitBook],
         progress: @escaping (Int, Int) -> Void

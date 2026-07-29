@@ -81,6 +81,7 @@ nonisolated protocol NoteImportFileNameAwareParser: NoteImportParser {
 nonisolated struct NoteImportDraftBook: Equatable, Sendable {
     var name = ""
     var rawName = ""
+    var doubanID: Int64 = 0
     var author = ""
     var authorIntro = ""
     var translator = ""

@@ -1,0 +1,53 @@
+{
+  "schemaVersion": 1,
+  "name": "remaining-official-safe",
+  "dataPolicy": "Only synthetic missing identifiers and malformed or absent request bodies are used; no production payload is persisted.",
+  "cases": [
+    {
+      "caseId": "ai-config-malformed-json",
+      "endpointId": "WEB-API-002",
+      "path": "/api/v1/ai/config",
+      "textBody": "{"
+    },
+    {
+      "caseId": "online-book-search-missing-keyword",
+      "endpointId": "WEB-API-013",
+      "path": "/api/v1/books/search/online"
+    },
+    {
+      "caseId": "book-cover-missing-book",
+      "endpointId": "WEB-API-024",
+      "path": "/api/v1/book-covers/proxy/999999"
+    },
+    {
+      "caseId": "online-chapter-search-missing-book",
+      "endpointId": "WEB-API-047",
+      "path": "/api/v1/books/999999/chapters/online/search?keyword=parity"
+    },
+    {
+      "caseId": "online-chapter-catalog-missing-book",
+      "endpointId": "WEB-API-048",
+      "path": "/api/v1/books/999999/chapters/online-catalog"
+    },
+    {
+      "caseId": "import-task-missing",
+      "endpointId": "WEB-API-064",
+      "path": "/api/v1/import/tasks/parity-task-does-not-exist"
+    },
+    {
+      "caseId": "premium-upgrade-already-premium",
+      "endpointId": "WEB-API-067",
+      "path": "/api/v1/native/actions/open-vip-upgrade"
+    },
+    {
+      "caseId": "note-image-upload-missing-multipart",
+      "endpointId": "WEB-API-158",
+      "path": "/api/v1/note-images/upload"
+    },
+    {
+      "caseId": "book-cover-upload-missing-multipart",
+      "endpointId": "WEB-API-160",
+      "path": "/api/v1/book-covers/upload"
+    }
+  ]
+}

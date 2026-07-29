@@ -1,0 +1,74 @@
+{
+  "schemaVersion": 1,
+  "name": "isolated-ai-config-workflow",
+  "dataPolicy": "Only synthetic non-secret AI keys, models and prompts are written to the isolated Android test package and iOS parity defaults suite; response payloads are compared in memory and only hashes or difference categories are persisted.",
+  "cases": [
+    {
+      "caseId": "ai-config-full-update",
+      "endpointId": "WEB-API-002",
+      "path": "/api/v1/ai/config",
+      "jsonBody": {
+        "isEnabled": true,
+        "provider": 99,
+        "deepSeek": {
+          "apiKey": "parity-deepseek-key",
+          "model": "parity-deepseek-model"
+        },
+        "siliconFlow": {
+          "apiKey": "parity-siliconflow-key",
+          "model": "parity-siliconflow-model"
+        },
+        "prompts": {
+          "noteExplanation": {
+            "system": "parity-note-system",
+            "user": "parity-note-user"
+          },
+          "autoTag": {
+            "system": "parity-tag-system",
+            "user": "parity-tag-user"
+          },
+          "wordLookup": {
+            "system": "parity-word-system",
+            "user": "parity-word-user"
+          }
+        }
+      }
+    },
+    {
+      "caseId": "ai-config-read-after-full-update",
+      "endpointId": "WEB-API-001",
+      "path": "/api/v1/ai/config"
+    },
+    {
+      "caseId": "ai-config-partial-update",
+      "endpointId": "WEB-API-002",
+      "path": "/api/v1/ai/config",
+      "jsonBody": {
+        "isEnabled": false,
+        "deepSeek": {
+          "model": "parity-deepseek-model-updated"
+        },
+        "prompts": {
+          "autoTag": {
+            "user": "parity-tag-user-updated"
+          }
+        }
+      }
+    },
+    {
+      "caseId": "ai-config-read-after-partial-update",
+      "endpointId": "WEB-API-001",
+      "path": "/api/v1/ai/config"
+    },
+    {
+      "caseId": "ai-chat-rejects-unknown-provider",
+      "endpointId": "WEB-API-003",
+      "path": "/api/v1/ai/chat/completions",
+      "jsonBody": {
+        "model": "parity-model",
+        "messages": [],
+        "stream": false
+      }
+    }
+  ]
+}

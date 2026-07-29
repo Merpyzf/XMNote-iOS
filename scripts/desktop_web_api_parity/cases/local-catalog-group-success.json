@@ -1,0 +1,135 @@
+{
+  "schemaVersion": 1,
+  "name": "local-catalog-group-success",
+  "cases": [
+    {
+      "caseId": "group-create-success",
+      "endpointId": "WEB-API-057",
+      "path": "/api/v1/groups",
+      "jsonBody": {
+        "name": "XMNote Web 对齐分组"
+      },
+      "responseNormalizations": [
+        {
+          "path": "$.data.createdTime",
+          "strategy": "independent-epoch-millis",
+          "reason": "Android 与 iOS 依各自设备时钟生成分组创建时间"
+        }
+      ]
+    },
+    {
+      "caseId": "group-update-success",
+      "endpointId": "WEB-API-058",
+      "path": "/api/v1/groups/20",
+      "jsonBody": {
+        "name": "XMNote Web 一致性分组"
+      },
+      "responseNormalizations": [
+        {
+          "path": "$.data.createdTime",
+          "strategy": "independent-epoch-millis",
+          "reason": "更新响应保留原创建时间，两端来自各自创建请求时钟"
+        }
+      ]
+    },
+    {
+      "caseId": "group-pin-success",
+      "endpointId": "WEB-API-060",
+      "path": "/api/v1/groups/20/pin",
+      "jsonBody": {
+        "pinned": true
+      },
+      "responseNormalizations": [
+        {
+          "path": "$.data.createdTime",
+          "strategy": "independent-epoch-millis",
+          "reason": "置顶响应保留原创建时间，两端来自各自创建请求时钟"
+        }
+      ]
+    },
+    {
+      "caseId": "group-order-success",
+      "endpointId": "WEB-API-061",
+      "path": "/api/v1/groups/order",
+      "jsonBody": {
+        "ids": [
+          20,
+          19,
+          18,
+          17,
+          11
+        ]
+      }
+    },
+    {
+      "caseId": "group-book-order-success",
+      "endpointId": "WEB-API-062",
+      "path": "/api/v1/groups/11/books/order",
+      "jsonBody": {
+        "ids": [
+          650,
+          401,
+          363,
+          362,
+          360,
+          359,
+          358,
+          357,
+          356,
+          355,
+          354,
+          353,
+          352,
+          351
+        ]
+      }
+    },
+    {
+      "caseId": "group-delete-success",
+      "endpointId": "WEB-API-059",
+      "path": "/api/v1/groups/20?placeAtEnd=true"
+    },
+    {
+      "caseId": "tag-create-success",
+      "endpointId": "WEB-API-153",
+      "path": "/api/v1/tags",
+      "jsonBody": {
+        "name": "XMNote Web 对齐标签",
+        "type": 1
+      }
+    },
+    {
+      "caseId": "tag-update-success",
+      "endpointId": "WEB-API-154",
+      "path": "/api/v1/tags/41",
+      "jsonBody": {
+        "name": "XMNote Web 一致性标签"
+      }
+    },
+    {
+      "caseId": "tag-order-success",
+      "endpointId": "WEB-API-156",
+      "path": "/api/v1/tags/order",
+      "jsonBody": {
+        "ids": [
+          41,
+          40,
+          39,
+          37,
+          36,
+          35
+        ]
+      }
+    },
+    {
+      "caseId": "tag-delete-success",
+      "endpointId": "WEB-API-155",
+      "path": "/api/v1/tags/41"
+    },
+    {
+      "caseId": "source-delete-success",
+      "endpointId": "WEB-API-130",
+      "path": "/api/v1/sources/30"
+    }
+  ]
+}

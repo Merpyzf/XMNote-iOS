@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 1,
+  "name": "local-bookshelf-write-success",
+  "epochMillisColumns": [
+    {
+      "table": "book",
+      "column": "updated_date",
+      "reason": "WEB-API-030/031 按各设备请求时钟更新书籍排序时间"
+    },
+    {
+      "table": "group",
+      "column": "updated_date",
+      "reason": "WEB-API-030/031 按各设备请求时钟更新分组排序时间"
+    }
+  ],
+  "stablePlatformTables": [
+    {
+      "table": "grdb_migrations",
+      "reason": "iOS 的 GRDB 迁移元数据表在 Web API 调用前后保持不变，Android Room 不创建该表"
+    }
+  ]
+}

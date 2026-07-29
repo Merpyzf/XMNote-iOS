@@ -1,0 +1,162 @@
+{
+  "schemaVersion": 1,
+  "name": "local-note-read-boundaries",
+  "dataPolicy": "Only frozen numeric entity identifiers, synthetic search text and case labels are stored.",
+  "cases": [
+    {
+      "caseId": "book-notes-existing",
+      "endpointId": "WEB-API-068",
+      "path": "/api/v1/books/554/notes?pageSize=3"
+    },
+    {
+      "caseId": "book-notes-existing-chapter",
+      "endpointId": "WEB-API-068",
+      "path": "/api/v1/books/554/notes?chapterId=3801&pageSize=5"
+    },
+    {
+      "caseId": "book-notes-empty-chapter",
+      "endpointId": "WEB-API-068",
+      "path": "/api/v1/books/554/notes?chapterId=999999&pageSize=5"
+    },
+    {
+      "caseId": "book-notes-empty-book",
+      "endpointId": "WEB-API-068",
+      "path": "/api/v1/books/351/notes?pageSize=3"
+    },
+    {
+      "caseId": "book-notes-deleted-book",
+      "endpointId": "WEB-API-068",
+      "path": "/api/v1/books/1/notes"
+    },
+    {
+      "caseId": "book-notes-missing-book",
+      "endpointId": "WEB-API-068",
+      "path": "/api/v1/books/999999/notes"
+    },
+    {
+      "caseId": "book-notes-invalid-book-id",
+      "endpointId": "WEB-API-068",
+      "path": "/api/v1/books/not-a-number/notes"
+    },
+    {
+      "caseId": "book-notes-conflicting-tag-filters",
+      "endpointId": "WEB-API-068",
+      "path": "/api/v1/books/554/notes?tagId=1&tagIds=2"
+    },
+    {
+      "caseId": "book-notes-invalid-page",
+      "endpointId": "WEB-API-068",
+      "path": "/api/v1/books/554/notes?page=oops"
+    },
+    {
+      "caseId": "book-note-tags-existing",
+      "endpointId": "WEB-API-069",
+      "path": "/api/v1/books/554/note-tags"
+    },
+    {
+      "caseId": "book-note-tags-empty-book",
+      "endpointId": "WEB-API-069",
+      "path": "/api/v1/books/351/note-tags"
+    },
+    {
+      "caseId": "book-note-tags-deleted-book",
+      "endpointId": "WEB-API-069",
+      "path": "/api/v1/books/1/note-tags"
+    },
+    {
+      "caseId": "book-note-tags-missing-book",
+      "endpointId": "WEB-API-069",
+      "path": "/api/v1/books/999999/note-tags"
+    },
+    {
+      "caseId": "book-note-tags-invalid-book-id",
+      "endpointId": "WEB-API-069",
+      "path": "/api/v1/books/not-a-number/note-tags"
+    },
+    {
+      "caseId": "book-note-sort-existing",
+      "endpointId": "WEB-API-070",
+      "path": "/api/v1/books/554/notes/sort-rule"
+    },
+    {
+      "caseId": "book-note-sort-empty-book",
+      "endpointId": "WEB-API-070",
+      "path": "/api/v1/books/351/notes/sort-rule"
+    },
+    {
+      "caseId": "book-note-sort-deleted-book",
+      "endpointId": "WEB-API-070",
+      "path": "/api/v1/books/1/notes/sort-rule"
+    },
+    {
+      "caseId": "book-note-sort-missing-book",
+      "endpointId": "WEB-API-070",
+      "path": "/api/v1/books/999999/notes/sort-rule"
+    },
+    {
+      "caseId": "book-note-sort-invalid-book-id",
+      "endpointId": "WEB-API-070",
+      "path": "/api/v1/books/not-a-number/notes/sort-rule"
+    },
+    {
+      "caseId": "global-notes-first-page",
+      "endpointId": "WEB-API-072",
+      "path": "/api/v1/notes?pageSize=3"
+    },
+    {
+      "caseId": "global-notes-existing-book",
+      "endpointId": "WEB-API-072",
+      "path": "/api/v1/notes?bookId=554&pageSize=3"
+    },
+    {
+      "caseId": "global-notes-empty-book",
+      "endpointId": "WEB-API-072",
+      "path": "/api/v1/notes?bookId=351&pageSize=3"
+    },
+    {
+      "caseId": "global-notes-no-keyword-match",
+      "endpointId": "WEB-API-072",
+      "path": "/api/v1/notes?keyword=XMNOTE-NO-MATCH-9D9A&pageSize=3"
+    },
+    {
+      "caseId": "global-notes-exclude-existing",
+      "endpointId": "WEB-API-072",
+      "path": "/api/v1/notes?excludeIds=7600,7599&pageSize=3"
+    },
+    {
+      "caseId": "global-notes-invalid-page",
+      "endpointId": "WEB-API-072",
+      "path": "/api/v1/notes?page=oops"
+    },
+    {
+      "caseId": "global-notes-invalid-book-id",
+      "endpointId": "WEB-API-072",
+      "path": "/api/v1/notes?bookId=oops"
+    },
+    {
+      "caseId": "global-note-tags",
+      "endpointId": "WEB-API-073",
+      "path": "/api/v1/note-tags/filters"
+    },
+    {
+      "caseId": "note-detail-existing",
+      "endpointId": "WEB-API-074",
+      "path": "/api/v1/notes/7287"
+    },
+    {
+      "caseId": "note-detail-soft-deleted",
+      "endpointId": "WEB-API-074",
+      "path": "/api/v1/notes/1766"
+    },
+    {
+      "caseId": "note-detail-missing",
+      "endpointId": "WEB-API-074",
+      "path": "/api/v1/notes/999999"
+    },
+    {
+      "caseId": "note-detail-invalid-id",
+      "endpointId": "WEB-API-074",
+      "path": "/api/v1/notes/not-a-number"
+    }
+  ]
+}

@@ -1,0 +1,5034 @@
+{
+  "schemaVersion": 1,
+  "androidBaseline": {
+    "sourceRevision": "fe5cde3964692ce7c86d0f8a8ce3973a7124dc13",
+    "installedVersionName": "5.6.0-r8verify",
+    "installedVersionCode": 185,
+    "installedApkSHA256": "6f0e966432cd123a0431f68f112e1d8f9a36832617d9b24febd36f36bf3fd395",
+    "controllerAggregateSHA256": "871e4d786f5c1a86031f4cdd6c101bedf39d349b34ec147d2f2d6ea26a2eb993",
+    "controllerCount": 21,
+    "endpointCount": 162,
+    "methodCounts": {
+      "GET": 73,
+      "POST": 43,
+      "PUT": 34,
+      "DELETE": 12
+    },
+    "phaseCounts": {
+      "1": 7,
+      "2": 45,
+      "3": 57,
+      "4": 30,
+      "5": 23
+    }
+  },
+  "statusValues": {
+    "parity": [
+      "pending",
+      "exact",
+      "normalized",
+      "protocol",
+      "blocked",
+      "deferred-p0"
+    ]
+  },
+  "deferredScopes": [
+    {
+      "kind": "endpoint",
+      "method": "GET",
+      "path": "/api/v1/export/platforms/notion/connection",
+      "status": "deferred-p0"
+    },
+    {
+      "kind": "endpoint",
+      "method": "POST",
+      "path": "/api/v1/native/actions/open-notion-connection",
+      "status": "deferred-p0"
+    },
+    {
+      "kind": "shared-branch",
+      "paths": [
+        "GET /api/v1/settings/export",
+        "PUT /api/v1/settings/export",
+        "POST /api/v1/export/notes/remote"
+      ],
+      "branch": "notion-oauth-connection-sync",
+      "status": "deferred-p0"
+    }
+  ],
+  "crossCuttingIssueCoverage": {
+    "ANDROID-WEB-088": [
+      "WEB-API-037",
+      "WEB-API-038",
+      "WEB-API-039",
+      "WEB-API-041",
+      "WEB-API-042",
+      "WEB-API-043",
+      "WEB-API-044",
+      "WEB-API-045",
+      "WEB-API-046",
+      "WEB-API-049",
+      "WEB-API-050",
+      "WEB-API-057",
+      "WEB-API-058",
+      "WEB-API-060",
+      "WEB-API-061",
+      "WEB-API-062",
+      "WEB-API-065",
+      "WEB-API-071",
+      "WEB-API-075",
+      "WEB-API-076",
+      "WEB-API-078",
+      "WEB-API-079",
+      "WEB-API-080",
+      "WEB-API-081",
+      "WEB-API-082",
+      "WEB-API-091",
+      "WEB-API-092",
+      "WEB-API-093",
+      "WEB-API-095",
+      "WEB-API-097",
+      "WEB-API-102",
+      "WEB-API-103",
+      "WEB-API-105",
+      "WEB-API-106",
+      "WEB-API-109",
+      "WEB-API-113",
+      "WEB-API-115",
+      "WEB-API-116",
+      "WEB-API-153",
+      "WEB-API-154",
+      "WEB-API-156",
+      "WEB-API-157",
+      "WEB-API-159"
+    ]
+  },
+  "endpoints": [
+    {
+      "id": "WEB-API-001",
+      "phase": 5,
+      "controller": "AIController",
+      "function": "getConfig",
+      "method": "GET",
+      "path": "/api/v1/ai/config",
+      "responseKind": "json-envelope",
+      "mutatesState": false,
+      "hasExternalDependency": true,
+      "android": {
+        "sourcePath": "web/src/main/java/com/merpyzf/web/controller/AIController.kt",
+    "line": 43,
+    "services": [
+      "AIController.getConfig"
+    ],
+    "repositoryOwner": "SpSettingHelper",
+    "daoOwner": "SharedPreferences",
+    "appReference": "AIConfigurationViewModel.kt:26-123; App.kt:225-275"
+  },
+      "status": {
+        "iosDevelopmentCompleted": true,
+        "iosUnitTestCompleted": true,
+        "androidReviewCompleted": true,
+        "parity": "exact"
+      },
+      "issueIds": [
+        "ANDROID-WEB-001"
+      ]
+    },
+    {
+      "id": "WEB-API-002",
+      "phase": 5,
+      "controller": "AIController",
+      "function": "updateConfig",
+      "method": "PUT",
+      "path": "/api/v1/ai/config",
+      "responseKind": "json-envelope",
+      "mutatesState": true,
+      "hasExternalDependency": true,
+      "android": {
+        "sourcePath": "web/src/main/java/com/merpyzf/web/controller/AIController.kt",
+    "line": 86,
+    "services": [
+      "AIController.updateConfig"
+    ],
+    "repositoryOwner": "SpSettingHelper",
+    "daoOwner": "SharedPreferences",
+    "appReference": "AIConfigurationViewModel.kt:26-123; App.kt:225-275"
+  },
+      "status": {
+        "iosDevelopmentCompleted": true,
+        "iosUnitTestCompleted": true,
+        "androidReviewCompleted": true,
+        "parity": "exact"
+      },
+      "issueIds": [
+        "ANDROID-WEB-089"
+      ]
+    },
+    {
+      "id": "WEB-API-003",
+      "phase": 5,
+      "controller": "AIController",
+      "function": "chatCompletions",
+      "method": "POST",
+      "path": "/api/v1/ai/chat/completions",
+      "responseKind": "proxy-or-sse",
+      "mutatesState": false,
+      "hasExternalDependency": true,
+      "android": {
+        "sourcePath": "web/src/main/java/com/merpyzf/web/controller/AIController.kt",
+    "line": 130,
+    "services": [
+      "AIController.chatCompletions"
+    ],
+    "repositoryOwner": "SpSettingHelper",
+    "daoOwner": "HttpsURLConnection",
+    "appReference": "App.kt:225-275; PersonalContainerFragment.kt:396"
+  },
+  "status": {
+    "iosDevelopmentCompleted": true,
+    "iosUnitTestCompleted": true,
+    "androidReviewCompleted": true,
+        "parity": "exact"
+      },
+  "issueIds": [
+    "ANDROID-WEB-081",
+    "ANDROID-WEB-082"
+  ]
+    },
+    {
+      "id": "WEB-API-004",
+      "phase": 2,
+      "controller": "BookController",
+      "function": "getBookStats",
+      "method": "GET",
+      "path": "/api/v1/books/stats",
+      "responseKind": "json-envelope",
+      "mutatesState": false,
+      "hasExternalDependency": false,
+      "android": {
+        "sourcePath": "web/src/main/java/com/merpyzf/web/controller/BookController.kt",
+        "line": 31,
+        "services": [
+          "BookService.getBookStats"
+        ],
+        "repositoryOwner": "WebBookRepository",
+        "daoOwner": "WebBookDao",
+        "appReference": "BookRepository.kt:1773-1889; BookDao.kt:309-318"
+      },
+      "status": {
+        "iosDevelopmentCompleted": true,
+        "iosUnitTestCompleted": true,
+        "androidReviewCompleted": true,
+        "parity": "exact"
+      },
+      "issueIds": [
+        "ANDROID-WEB-008"
+      ]
+    },
+    {
+      "id": "WEB-API-005",
+      "phase": 2,
+      "controller": "BookController",
+      "function": "getBook",
+      "method": "GET",
+      "path": "/api/v1/books/{id}",
+      "responseKind": "json-envelope",
+      "mutatesState": false,
+      "hasExternalDependency": false,
+      "android": {
+        "sourcePath": "web/src/main/java/com/merpyzf/web/controller/BookController.kt",
+        "line": 38,
+        "services": [
+          "BookService.getBook"
+        ],
+        "repositoryOwner": "WebBookRepository",
+        "daoOwner": "WebBookDao",
+        "appReference": "BookRepository.kt:1095-1149; BookDao.kt:221-237"
+      },
+      "status": {
+        "iosDevelopmentCompleted": true,
+        "iosUnitTestCompleted": true,
+        "androidReviewCompleted": true,
+        "parity": "exact"
+      },
+      "issueIds": [
+        "ANDROID-WEB-008"
+      ]
+    },
+    {
+      "id": "WEB-API-006",
+      "phase": 2,
+      "controller": "BookController",
+      "function": "getBookList",
+      "method": "GET",
+      "path": "/api/v1/books",
+      "responseKind": "json-envelope",
+      "mutatesState": false,
+      "hasExternalDependency": false,
+      "android": {
+        "sourcePath": "web/src/main/java/com/merpyzf/web/controller/BookController.kt",
+        "line": 45,
+        "services": [
+          "BookService.getBookSections",
+          "BookService.getBookList"
+        ],
+        "repositoryOwner": "WebBookRepository",
+        "daoOwner": "WebBookDao",
+        "appReference": "BookListFormatHelper.kt:24-412; SubBookListFormatHelper.kt:21-501; DefaultBookListViewModel.kt:106-305; GroupBooksViewModel.kt:133-280; BookRepository.kt:1773-1969"
+      },
+      "status": {
+        "iosDevelopmentCompleted": true,
+        "iosUnitTestCompleted": true,
+        "androidReviewCompleted": true,
+        "parity": "exact"
+      },
+      "issueIds": [
+        "ANDROID-WEB-003",
+        "ANDROID-WEB-008",
+        "ANDROID-WEB-010",
+        "ANDROID-WEB-011",
+        "ANDROID-WEB-012"
+      ]
+    },
+    {
+      "id": "WEB-API-007",
+      "phase": 2,
+      "controller": "BookController",
+      "function": "getRecentReadBooks",
+      "method": "GET",
+      "path": "/api/v1/books/recent-read",
+      "responseKind": "json-envelope",
+      "mutatesState": false,
+      "hasExternalDependency": false,
+      "android": {
+        "sourcePath": "web/src/main/java/com/merpyzf/web/controller/BookController.kt",
+        "line": 105,
+        "services": [
+          "BookService.getRecentReadBooks"
+        ],
+        "repositoryOwner": "WebBookRepository",
+        "daoOwner": "WebBookDao",
+        "appReference": "BookRepository.kt:1522-1557; BookDao.kt:543-691"
+      },
+      "status": {
+        "iosDevelopmentCompleted": true,
+        "iosUnitTestCompleted": true,
+        "androidReviewCompleted": true,
+        "parity": "exact"
+      },
+      "issueIds": [
+        "ANDROID-WEB-008"
+      ]
+    },
+    {
+      "id": "WEB-API-008",
+      "phase": 2,
+      "controller": "BookController",
+      "function": "getLastNoteBook",
+      "method": "GET",
+      "path": "/api/v1/books/last-note-book",
+      "responseKind": "json-envelope",
+      "mutatesState": false,
+      "hasExternalDependency": false,
+      "android": {
+        "sourcePath": "web/src/main/java/com/merpyzf/web/controller/BookController.kt",
+        "line": 125,
+        "services": [
+          "BookService.getLastNoteBook"
+        ],
+        "repositoryOwner": "WebBookRepository",
+        "daoOwner": "WebBookDao",
+        "appReference": "BookRepository.kt:1506-1519; BookDao.kt:537-541"
+      },
+      "status": {
+        "iosDevelopmentCompleted": true,
+        "iosUnitTestCompleted": true,
+        "androidReviewCompleted": true,
+        "parity": "exact"
+      },
+      "issueIds": [
+        "ANDROID-WEB-008"
+      ]
+    },
+    {
+      "id": "WEB-API-009",
+      "phase": 2,
+      "controller": "BookController",
+      "function": "getPinnedBooks",
+      "method": "GET",
+      "path": "/api/v1/books/pinned",
+      "responseKind": "json-envelope",
+      "mutatesState": false,
+      "hasExternalDependency": false,
+      "android": {
+        "sourcePath": "web/src/main/java/com/merpyzf/web/controller/BookController.kt",
+        "line": 132,
+        "services": [
+          "BookService.getPinnedBooks"
+        ],
+        "repositoryOwner": "WebBookRepository",
+        "daoOwner": "WebBookDao",
+        "appReference": "BookRepository.kt:1773-1969; BookDao.kt:932-942"
+      },
+      "status": {
+        "iosDevelopmentCompleted": true,
+        "iosUnitTestCompleted": true,
+        "androidReviewCompleted": true,
+        "parity": "exact"
+      },
+      "issueIds": [
+        "ANDROID-WEB-003",
+        "ANDROID-WEB-008"
+      ]
+    },
+    {
+      "id": "WEB-API-010",
+      "phase": 2,
+      "controller": "BookController",
+      "function": "getUngroupedBooks",
+      "method": "GET",
+      "path": "/api/v1/books/ungrouped",
+      "responseKind": "json-envelope",
+      "mutatesState": false,
+      "hasExternalDependency": false,
+      "android": {
+        "sourcePath": "web/src/main/java/com/merpyzf/web/controller/BookController.kt",
+        "line": 143,
+        "services": [
+          "BookService.getUngroupedBooks"
+        ],
+        "repositoryOwner": "WebBookRepository",
+        "daoOwner": "WebBookDao",
+        "appReference": "BookRepository.kt:1893-1969; BookDao.kt:251-264"
+      },
+      "status": {
+        "iosDevelopmentCompleted": true,
+        "iosUnitTestCompleted": true,
+        "androidReviewCompleted": true,
+        "parity": "exact"
+      },
+      "issueIds": [
+        "ANDROID-WEB-003",
+        "ANDROID-WEB-008",
+        "ANDROID-WEB-009"
+      ]
+    },
+    {
+      "id": "WEB-API-011",
+      "phase": 2,
+      "controller": "BookController",
+      "function": "deleteBook",
+      "method": "DELETE",
+      "path": "/api/v1/books/{id}",
+      "responseKind": "json-envelope",
+      "mutatesState": true,
+      "hasExternalDependency": false,
+      "android": {
+        "sourcePath": "web/src/main/java/com/merpyzf/web/controller/BookController.kt",
+        "line": 157,
+        "services": [
+          "BookService.deleteBook"
+        ],
+        "repositoryOwner": "BookRepository",
+        "daoOwner": "BookDao + 16 类关联 DAO",
+        "appReference": "BookRepository.kt:794-848; BookDao.kt:29-30; 各关联 DAO 删除方法"
+      },
+      "status": {
+        "iosDevelopmentCompleted": true,
+        "iosUnitTestCompleted": true,
+        "androidReviewCompleted": true,
+        "parity": "exact"
+      },
+      "issueIds": [
+        "ANDROID-WEB-008",
+        "ANDROID-WEB-013"
+      ]
+    },
+    {
+      "id": "WEB-API-012",
+      "phase": 2,
+      "controller": "BookController",
+      "function": "updateBookPin",
+      "method": "PUT",
+      "path": "/api/v1/books/{id}/pin",
+      "responseKind": "json-envelope",
+      "mutatesState": true,
+      "hasExternalDependency": false,
+      "android": {
+        "sourcePath": "web/src/main/java/com/merpyzf/web/controller/BookController.kt",
+        "line": 164,
+        "services": [
+          "BookService.updateBookPin"
+        ],
+        "repositoryOwner": "WebBookRepository",
+        "daoOwner": "WebBookDao",
+        "appReference": "BookRepository.kt:3504-3560; BookDao.kt:932-939; GroupBookDao.kt:79-80"
+      },
+      "status": {
+        "iosDevelopmentCompleted": true,
+        "iosUnitTestCompleted": true,
+        "androidReviewCompleted": true,
+        "parity": "exact"
+      },
+      "issueIds": [
+        "ANDROID-WEB-008",
+        "ANDROID-WEB-011",
+        "ANDROID-WEB-015",
+        "ANDROID-WEB-087"
+      ]
+    },
+    {
+      "id": "WEB-API-013",
+      "phase": 5,
+      "controller": "BookController",
+      "function": "searchOnline",
+      "method": "GET",
+      "path": "/api/v1/books/search/online",
+      "responseKind": "json-envelope",
+      "mutatesState": false,
+      "hasExternalDependency": true,
+      "android": {
+        "sourcePath": "web/src/main/java/com/merpyzf/web/controller/BookController.kt",
+        "line": 174,
+        "services": [
+          "OnlineSearchService.searchOnline"
+        ],
+        "repositoryOwner": "ServiceHelper/WenQuService",
+        "daoOwner": "BookDtoMapper",
+        "appReference": "BookSearchPresenter.kt; BookSearchSheetViewModel.kt; MatchBookInfoHelper.java"
+      },
+      "status": {
+        "iosDevelopmentCompleted": true,
+        "iosUnitTestCompleted": true,
+        "androidReviewCompleted": true,
+        "parity": "exact"
+      },
+      "issueIds": [
+        "ANDROID-WEB-095"
+      ]
+    },
+    {
+      "id": "WEB-API-014",
+      "phase": 2,
+      "controller": "BookController",
+      "function": "createBook",
+      "method": "POST",
+      "path": "/api/v1/books",
+      "responseKind": "json-envelope",
+      "mutatesState": true,
+      "hasExternalDependency": false,
+      "android": {
+        "sourcePath": "web/src/main/java/com/merpyzf/web/controller/BookController.kt",
+        "line": 183,
+        "services": [
+          "BookService.createBook"
+        ],
+        "repositoryOwner": "WebBookRepository",
+        "daoOwner": "WebBookDao",
+        "appReference": "BookRepository.kt:409-458"
+      },
+      "status": {
+        "iosDevelopmentCompleted": true,
+        "iosUnitTestCompleted": true,
+        "androidReviewCompleted": true,
+        "parity": "exact"
+      },
+      "issueIds": [
+        "ANDROID-WEB-008",
+        "ANDROID-WEB-011",
+        "ANDROID-WEB-017",
+        "ANDROID-WEB-087"
+      ]
+    },
+    {
+      "id": "WEB-API-015",
+      "phase": 2,
+      "controller": "BookController",
+      "function": "updateBook",
+      "method": "PUT",
+      "path": "/api/v1/books/{id}",
+      "responseKind": "json-envelope",
+      "mutatesState": true,
+      "hasExternalDependency": false,
+      "android": {
+        "sourcePath": "web/src/main/java/com/merpyzf/web/controller/BookController.kt",
+        "line": 190,
+        "services": [
+          "BookService.updateBook"
+        ],
+        "repositoryOwner": "WebBookRepository",
+        "daoOwner": "WebBookDao",
+        "appReference": "BookRepository.kt:861-897"
+      },
+      "status": {
+        "iosDevelopmentCompleted": true,
+        "iosUnitTestCompleted": true,
+        "androidReviewCompleted": true,
+        "parity": "exact"
+      },
+      "issueIds": [
+        "ANDROID-WEB-008",
+        "ANDROID-WEB-011",
+        "ANDROID-WEB-016",
+        "ANDROID-WEB-018",
+        "ANDROID-WEB-087"
+      ]
+    },
+    {
+      "id": "WEB-API-016",
+      "phase": 2,
+      "controller": "BookController",
+      "function": "addToBookshelf",
+      "method": "PUT",
+      "path": "/api/v1/books/{id}/add-to-bookshelf",
+      "responseKind": "json-envelope",
+      "mutatesState": true,
+      "hasExternalDependency": false,
+      "android": {
+        "sourcePath": "web/src/main/java/com/merpyzf/web/controller/BookController.kt",
+        "line": 200,
+        "services": [
+          "BookService.addToBookshelf"
+        ],
+        "repositoryOwner": "WebBookRepository",
+        "daoOwner": "WebBookDao + BookReadStatusRecordDao",
+        "appReference": "BookRepository.kt:1466-1503; BookInfoViewModel.kt:137-145"
+      },
+      "status": {
+        "iosDevelopmentCompleted": true,
+        "iosUnitTestCompleted": true,
+        "androidReviewCompleted": true,
+        "parity": "exact"
+      },
+      "issueIds": [
+        "ANDROID-WEB-008",
+        "ANDROID-WEB-014"
+      ]
+    },
+    {
+      "id": "WEB-API-017",
+      "phase": 2,
+      "controller": "BookController",
+      "function": "batchDeleteBooks",
+      "method": "POST",
+      "path": "/api/v1/books/batch-delete",
+      "responseKind": "json-envelope",
+      "mutatesState": true,
+      "hasExternalDependency": false,
+      "android": {
+        "sourcePath": "web/src/main/java/com/merpyzf/web/controller/BookController.kt",
+        "line": 207,
+        "services": [
+          "BookService.batchDeleteBooks"
+        ],
+        "repositoryOwner": "BookRepository",
+        "daoOwner": "BookDao + 16 类关联 DAO",
+        "appReference": "BookRepository.kt:794-848"
+      },
+      "status": {
+        "iosDevelopmentCompleted": true,
+        "iosUnitTestCompleted": true,
+        "androidReviewCompleted": true,
+        "parity": "exact"
+      },
+      "issueIds": [
+        "ANDROID-WEB-008",
+        "ANDROID-WEB-013",
+        "ANDROID-WEB-087"
+      ]
+    },
+    {
+      "id": "WEB-API-018",
+      "phase": 2,
+      "controller": "BookController",
+      "function": "batchPinBooks",
+      "method": "POST",
+      "path": "/api/v1/books/batch-pin",
+      "responseKind": "json-envelope",
+      "mutatesState": true,
+      "hasExternalDependency": false,
+      "android": {
+        "sourcePath": "web/src/main/java/com/merpyzf/web/controller/BookController.kt",
+        "line": 214,
+        "services": [
+          "BookService.batchPinBooks"
+        ],
+        "repositoryOwner": "WebBookRepository",
+        "daoOwner": "WebBookDao",
+        "appReference": "BookRepository.kt:3504-3560"
+      },
+      "status": {
+        "iosDevelopmentCompleted": true,
+        "iosUnitTestCompleted": true,
+        "androidReviewCompleted": true,
+        "parity": "exact"
+      },
+      "issueIds": [
+        "ANDROID-WEB-008",
+        "ANDROID-WEB-011",
+        "ANDROID-WEB-015",
+        "ANDROID-WEB-087"
+      ]
+    },
+    {
+      "id": "WEB-API-019",
+      "phase": 2,
+      "controller": "BookController",
+      "function": "batchUpdateBooks",
+      "method": "POST",
+      "path": "/api/v1/books/batch-update",
+      "responseKind": "json-envelope",
+      "mutatesState": true,
+      "hasExternalDependency": false,
+      "android": {
+        "sourcePath": "web/src/main/java/com/merpyzf/web/controller/BookController.kt",
+        "line": 221,
+        "services": [
+          "BookService.batchUpdateBooks"
+        ],
+        "repositoryOwner": "WebBookRepository",
+        "daoOwner": "WebBookDao + BookReadStatusRecordDao",
+        "appReference": "BookRepository.kt:861-897,3293-3353; GroupRepository.kt:71-95"
+      },
+      "status": {
+        "iosDevelopmentCompleted": true,
+        "iosUnitTestCompleted": true,
+        "androidReviewCompleted": true,
+        "parity": "exact"
+      },
+      "issueIds": [
+        "ANDROID-WEB-008",
+        "ANDROID-WEB-011",
+        "ANDROID-WEB-016",
+        "ANDROID-WEB-087"
+      ]
+    },
+    {
+      "id": "WEB-API-020",
+      "phase": 2,
+      "controller": "BookController",
+      "function": "batchSetBookTags",
+      "method": "POST",
+      "path": "/api/v1/books/batch-set-tags",
+      "responseKind": "json-envelope",
+      "mutatesState": true,
+      "hasExternalDependency": false,
+      "android": {
+        "sourcePath": "web/src/main/java/com/merpyzf/web/controller/BookController.kt",
+        "line": 228,
+        "services": [
+          "BookService.batchSetBookTags"
+        ],
+        "repositoryOwner": "WebBookRepository",
+        "daoOwner": "WebBookDao",
+        "appReference": "BookRepository.kt:3293-3353"
+      },
+      "status": {
+        "iosDevelopmentCompleted": true,
+        "iosUnitTestCompleted": true,
+        "androidReviewCompleted": true,
+        "parity": "exact"
+      },
+      "issueIds": [
+        "ANDROID-WEB-005",
+        "ANDROID-WEB-008",
+        "ANDROID-WEB-087"
+      ]
+    },
+    {
+      "id": "WEB-API-021",
+      "phase": 2,
+      "controller": "BookController",
+      "function": "batchReplaceBookTags",
+      "method": "POST",
+      "path": "/api/v1/books/batch-replace-tags",
+      "responseKind": "json-envelope",
+      "mutatesState": true,
+      "hasExternalDependency": false,
+      "android": {
+        "sourcePath": "web/src/main/java/com/merpyzf/web/controller/BookController.kt",
+        "line": 235,
+        "services": [
+          "BookService.batchReplaceBookTags"
+        ],
+        "repositoryOwner": "WebBookRepository",
+        "daoOwner": "WebBookDao",
+        "appReference": "BookRepository.kt:3293-3353"
+      },
+      "status": {
+        "iosDevelopmentCompleted": true,
+        "iosUnitTestCompleted": true,
+        "androidReviewCompleted": true,
+        "parity": "exact"
+      },
+      "issueIds": [
+        "ANDROID-WEB-005",
+        "ANDROID-WEB-008",
+        "ANDROID-WEB-087"
+      ]
+    },
+    {
+      "id": "WEB-API-022",
+      "phase": 2,
+      "controller": "BookController",
+      "function": "batchMoveToGroup",
+      "method": "POST",
+      "path": "/api/v1/books/batch-move-to-group",
+      "responseKind": "json-envelope",
+      "mutatesState": true,
+      "hasExternalDependency": false,
+      "android": {
+        "sourcePath": "web/src/main/java/com/merpyzf/web/controller/BookController.kt",
+        "line": 242,
+        "services": [
+          "BookService.batchMoveToGroup"
+        ],
+        "repositoryOwner": "WebBookRepository",
+        "daoOwner": "WebBookDao",
+        "appReference": "GroupRepository.kt:71-95"
+      },
+      "status": {
+        "iosDevelopmentCompleted": true,
+        "iosUnitTestCompleted": true,
+        "androidReviewCompleted": true,
+        "parity": "exact"
+      },
+      "issueIds": [
+        "ANDROID-WEB-006",
+        "ANDROID-WEB-008",
+        "ANDROID-WEB-011",
+        "ANDROID-WEB-087"
+      ]
+    },
+    {
+      "id": "WEB-API-023",
+      "phase": 2,
+      "controller": "BookController",
+      "function": "batchMoveOut",
+      "method": "POST",
+      "path": "/api/v1/books/batch-move-out",
+      "responseKind": "json-envelope",
+      "mutatesState": true,
+      "hasExternalDependency": false,
+      "android": {
+        "sourcePath": "web/src/main/java/com/merpyzf/web/controller/BookController.kt",
+        "line": 249,
+        "services": [
+          "BookService.batchMoveOut"
+        ],
+        "repositoryOwner": "WebBookRepository",
+        "daoOwner": "WebBookDao",
+        "appReference": "GroupRepository.kt:140-168"
+      },
+      "status": {
+        "iosDevelopmentCompleted": true,
+        "iosUnitTestCompleted": true,
+        "androidReviewCompleted": true,
+        "parity": "exact"
+      },
+      "issueIds": [
+        "ANDROID-WEB-008",
+        "ANDROID-WEB-019",
+        "ANDROID-WEB-087"
+      ]
+    },
+    {
+  "id": "WEB-API-024",
+      "phase": 5,
+      "controller": "BookCoverController",
+      "function": "proxyBookCover",
+      "method": "GET",
+      "path": "/api/v1/book-covers/proxy/{bookId}",
+      "responseKind": "binary",
+      "mutatesState": false,
+      "hasExternalDependency": true,
+      "android": {
+        "sourcePath": "web/src/main/java/com/merpyzf/web/controller/BookCoverController.kt",
+        "line": 23,
+        "services": [
+          "BookCoverProxyService.load"
+        ],
+    "repositoryOwner": "WebBookRepository",
+    "daoOwner": "WebBookDao + Coil + OkHttp",
+    "appReference": "BookRepository.kt:1095-1149; App Coil cover pipeline"
+  },
+  "status": {
+    "iosDevelopmentCompleted": true,
+    "iosUnitTestCompleted": true,
+    "androidReviewCompleted": true,
+        "parity": "exact"
+      },
+  "issueIds": [
+    "ANDROID-WEB-070",
+    "ANDROID-WEB-071"
+  ]
+    },
+    {
+      "id": "WEB-API-025",
+      "phase": 2,
+      "controller": "BookshelfController",
+      "function": "getBookshelf",
+      "method": "GET",
+      "path": "/api/v1/bookshelf",
+      "responseKind": "json-envelope",
+      "mutatesState": false,
+      "hasExternalDependency": false,
+      "android": {
+        "sourcePath": "web/src/main/java/com/merpyzf/web/controller/BookshelfController.kt",
+        "line": 21,
+        "services": [
+          "BookshelfService.getBookshelf"
+        ],
+        "repositoryOwner": "WebBookRepository",
+        "daoOwner": "WebBookDao",
+        "appReference": "BookListFormatHelper.kt:24-412; SubBookListFormatHelper.kt:21-501; BookRepository.kt:1773-1969"
+      },
+      "status": {
+        "iosDevelopmentCompleted": true,
+        "iosUnitTestCompleted": true,
+        "androidReviewCompleted": true,
+        "parity": "exact"
+      },
+      "issueIds": [
+        "ANDROID-WEB-003",
+        "ANDROID-WEB-006",
+        "ANDROID-WEB-008"
+      ]
+    },
+    {
+      "id": "WEB-API-026",
+      "phase": 2,
+      "controller": "BookshelfController",
+      "function": "getSortedBookshelf",
+      "method": "GET",
+      "path": "/api/v1/bookshelf/sorted",
+      "responseKind": "json-envelope",
+      "mutatesState": false,
+      "hasExternalDependency": false,
+      "android": {
+        "sourcePath": "web/src/main/java/com/merpyzf/web/controller/BookshelfController.kt",
+        "line": 44,
+        "services": [
+          "BookshelfService.getSortedBookshelf"
+        ],
+        "repositoryOwner": "WebBookRepository",
+        "daoOwner": "WebBookDao",
+        "appReference": "BookListFormatHelper.kt:24-412; SubBookListFormatHelper.kt:21-501; BookRepository.kt:1773-1969"
+      },
+      "status": {
+        "iosDevelopmentCompleted": true,
+        "iosUnitTestCompleted": true,
+        "androidReviewCompleted": true,
+        "parity": "exact"
+      },
+      "issueIds": [
+        "ANDROID-WEB-003",
+        "ANDROID-WEB-006",
+        "ANDROID-WEB-008"
+      ]
+    },
+    {
+      "id": "WEB-API-027",
+      "phase": 2,
+      "controller": "BookshelfController",
+      "function": "getBookshelfManifest",
+      "method": "GET",
+      "path": "/api/v1/bookshelf/manifest",
+      "responseKind": "json-envelope",
+      "mutatesState": false,
+      "hasExternalDependency": false,
+      "android": {
+        "sourcePath": "web/src/main/java/com/merpyzf/web/controller/BookshelfController.kt",
+        "line": 72,
+        "services": [
+          "BookshelfService.getManifest"
+        ],
+        "repositoryOwner": "WebBookRepository",
+        "daoOwner": "WebBookDao",
+        "appReference": "BookListFormatHelper.kt:24-47; BookRepository.kt:694-751"
+      },
+      "status": {
+        "iosDevelopmentCompleted": true,
+        "iosUnitTestCompleted": true,
+        "androidReviewCompleted": true,
+        "parity": "exact"
+      },
+      "issueIds": [
+        "ANDROID-WEB-006",
+        "ANDROID-WEB-008"
+      ]
+    },
+    {
+      "id": "WEB-API-028",
+      "phase": 2,
+      "controller": "BookshelfController",
+      "function": "getBookshelfPinnedGroupsMeta",
+      "method": "GET",
+      "path": "/api/v1/bookshelf/pinned-groups/meta",
+      "responseKind": "json-envelope",
+      "mutatesState": false,
+      "hasExternalDependency": false,
+      "android": {
+        "sourcePath": "web/src/main/java/com/merpyzf/web/controller/BookshelfController.kt",
+        "line": 79,
+        "services": [
+          "BookshelfService.getPinnedGroupsMeta"
+        ],
+        "repositoryOwner": "WebBookRepository",
+        "daoOwner": "WebBookDao",
+        "appReference": "SubBookListFormatHelper.kt:21-501; BookRepository.kt:1773-1969"
+      },
+      "status": {
+        "iosDevelopmentCompleted": true,
+        "iosUnitTestCompleted": true,
+        "androidReviewCompleted": true,
+        "parity": "exact"
+      },
+      "issueIds": [
+        "ANDROID-WEB-006",
+        "ANDROID-WEB-008"
+      ]
+    },
+    {
+      "id": "WEB-API-029",
+      "phase": 2,
+      "controller": "BookshelfController",
+      "function": "queryBookshelfItems",
+      "method": "POST",
+      "path": "/api/v1/bookshelf/items/query",
+      "responseKind": "json-envelope",
+      "mutatesState": false,
+      "hasExternalDependency": false,
+      "android": {
+        "sourcePath": "web/src/main/java/com/merpyzf/web/controller/BookshelfController.kt",
+        "line": 105,
+        "services": [
+          "BookshelfService.queryItems"
+        ],
+        "repositoryOwner": "WebBookRepository",
+        "daoOwner": "WebBookDao",
+        "appReference": "BookRepository.kt:1095-1149,1773-1969"
+      },
+      "status": {
+        "iosDevelopmentCompleted": true,
+        "iosUnitTestCompleted": true,
+        "androidReviewCompleted": true,
+        "parity": "exact"
+      },
+      "issueIds": [
+        "ANDROID-WEB-006",
+        "ANDROID-WEB-008",
+        "ANDROID-WEB-021",
+        "ANDROID-WEB-087"
+      ]
+    },
+    {
+      "id": "WEB-API-030",
+      "phase": 2,
+      "controller": "BookshelfController",
+      "function": "moveBookshelfItems",
+      "method": "POST",
+      "path": "/api/v1/bookshelf/move",
+      "responseKind": "json-envelope",
+      "mutatesState": true,
+      "hasExternalDependency": false,
+      "android": {
+        "sourcePath": "web/src/main/java/com/merpyzf/web/controller/BookshelfController.kt",
+        "line": 121,
+        "services": [
+          "BookshelfService.move"
+        ],
+        "repositoryOwner": "WebBookRepository",
+        "daoOwner": "WebBookDao",
+        "appReference": "BookRepository.kt:694-751"
+      },
+      "status": {
+        "iosDevelopmentCompleted": true,
+        "iosUnitTestCompleted": true,
+        "androidReviewCompleted": true,
+        "parity": "exact"
+      },
+      "issueIds": [
+        "ANDROID-WEB-006",
+        "ANDROID-WEB-008",
+        "ANDROID-WEB-087"
+      ]
+    },
+    {
+      "id": "WEB-API-031",
+      "phase": 2,
+      "controller": "BookshelfController",
+      "function": "reorderBookshelf",
+      "method": "PUT",
+      "path": "/api/v1/bookshelf/order",
+      "responseKind": "json-envelope",
+      "mutatesState": true,
+      "hasExternalDependency": false,
+      "android": {
+        "sourcePath": "web/src/main/java/com/merpyzf/web/controller/BookshelfController.kt",
+        "line": 128,
+        "services": [
+          "BookshelfService.reorder"
+        ],
+        "repositoryOwner": "WebBookRepository",
+        "daoOwner": "WebBookDao",
+        "appReference": "BookRepository.kt:694-751"
+      },
+      "status": {
+        "iosDevelopmentCompleted": true,
+        "iosUnitTestCompleted": true,
+        "androidReviewCompleted": true,
+        "parity": "exact"
+      },
+      "issueIds": [
+        "ANDROID-WEB-006",
+        "ANDROID-WEB-008",
+        "ANDROID-WEB-020",
+        "ANDROID-WEB-087"
+      ]
+    },
+    {
+      "id": "WEB-API-032",
+      "phase": 4,
+      "controller": "CalendarController",
+      "function": "getCalendarMonth",
+      "method": "GET",
+      "path": "/api/v1/calendar/month",
+      "responseKind": "json-envelope",
+      "mutatesState": false,
+      "hasExternalDependency": false,
+      "android": {
+        "sourcePath": "web/src/main/java/com/merpyzf/web/controller/CalendarController.kt",
+        "line": 14,
+        "services": [
+          "CalendarWebService.getCalendarMonth"
+        ],
+        "repositoryOwner": "ReadCalendarRepository",
+        "daoOwner": "NoteDao / CategoryContentDao / ReviewDao / ReadTimeRecordDao / BookReadStatusRecordDao / CheckInRecordDao / BookDao",
+        "appReference": "ReadCalendarRepository.kt:1153-1246,1757-1800,1834-2000; ReadCalendarComposeViewModel.kt"
+      },
+      "status": {
+        "iosDevelopmentCompleted": true,
+        "iosUnitTestCompleted": true,
+        "androidReviewCompleted": true,
+        "parity": "exact"
+      },
+      "issueIds": [
+        "ANDROID-WEB-022",
+        "ANDROID-WEB-023",
+        "ANDROID-WEB-091",
+        "ANDROID-WEB-092"
+      ]
+    },
+    {
+      "id": "WEB-API-033",
+      "phase": 4,
+      "controller": "CalendarController",
+      "function": "getDaySummary",
+      "method": "GET",
+      "path": "/api/v1/calendar/day",
+      "responseKind": "json-envelope",
+      "mutatesState": false,
+      "hasExternalDependency": false,
+      "android": {
+        "sourcePath": "web/src/main/java/com/merpyzf/web/controller/CalendarController.kt",
+        "line": 23,
+        "services": [
+          "CalendarWebService.getDaySummary"
+        ],
+        "repositoryOwner": "ReadCalendarRepository",
+        "daoOwner": "NoteDao / CategoryContentDao / ReviewDao / ReadTimeRecordDao / BookReadStatusRecordDao / CheckInRecordDao / BookDao",
+        "appReference": "ReadCalendarRepository.kt:1153-1246,1757-1800,1834-2000; ReadCalendarComposeViewModel.kt"
+      },
+      "status": {
+        "iosDevelopmentCompleted": true,
+        "iosUnitTestCompleted": true,
+        "androidReviewCompleted": true,
+        "parity": "exact"
+      },
+      "issueIds": [
+        "ANDROID-WEB-022",
+        "ANDROID-WEB-091"
+      ]
+    },
+    {
+      "id": "WEB-API-034",
+      "phase": 3,
+      "controller": "ChapterController",
+      "function": "getBookChapters",
+      "method": "GET",
+      "path": "/api/v1/books/{bookId}/chapters",
+      "responseKind": "json-envelope",
+      "mutatesState": false,
+      "hasExternalDependency": false,
+      "android": {
+        "sourcePath": "web/src/main/java/com/merpyzf/web/controller/ChapterController.kt",
+        "line": 31,
+        "services": [
+          "ChapterService.getBookChapters"
+        ],
+        "repositoryOwner": "WebChapterRepository",
+        "daoOwner": "WebChapterDao + ChapterTreeHelper",
+        "appReference": "ChapterRepository.kt; ChapterManagerViewModel.kt; ChapterListViewModel.kt"
+      },
+      "status": {
+        "iosDevelopmentCompleted": true,
+        "iosUnitTestCompleted": true,
+        "androidReviewCompleted": true,
+        "parity": "exact"
+      },
+      "issueIds": []
+    },
+    {
+      "id": "WEB-API-035",
+      "phase": 3,
+      "controller": "ChapterController",
+      "function": "getLastUsedChapter",
+      "method": "GET",
+      "path": "/api/v1/books/{bookId}/chapters/last-used",
+      "responseKind": "json-envelope",
+      "mutatesState": false,
+      "hasExternalDependency": false,
+      "android": {
+        "sourcePath": "web/src/main/java/com/merpyzf/web/controller/ChapterController.kt",
+        "line": 38,
+        "services": [
+          "ChapterService.getLastUsedChapter"
+        ],
+        "repositoryOwner": "WebChapterRepository + WebNoteRepository",
+        "daoOwner": "WebChapterDao + WebNoteDao",
+        "appReference": "ChapterRepository.kt; NoteRepository.kt; ChapterListViewModel.kt"
+      },
+      "status": {
+        "iosDevelopmentCompleted": true,
+        "iosUnitTestCompleted": true,
+        "androidReviewCompleted": true,
+        "parity": "exact"
+      },
+      "issueIds": []
+    },
+    {
+      "id": "WEB-API-036",
+      "phase": 3,
+      "controller": "ChapterController",
+      "function": "getStarredChapters",
+      "method": "GET",
+      "path": "/api/v1/chapters/starred",
+      "responseKind": "json-envelope",
+      "mutatesState": false,
+      "hasExternalDependency": false,
+      "android": {
+        "sourcePath": "web/src/main/java/com/merpyzf/web/controller/ChapterController.kt",
+        "line": 45,
+        "services": [
+          "ChapterService.getStarredChapterGroups"
+        ],
+        "repositoryOwner": "WebChapterRepository + WebBookRepository + WebNoteRepository",
+        "daoOwner": "WebChapterDao + WebBookDao + WebNoteDao",
+        "appReference": "ChapterRepository.kt; ChapterListViewModel.kt; NoteRepository.kt"
+      },
+      "status": {
+        "iosDevelopmentCompleted": true,
+        "iosUnitTestCompleted": true,
+        "androidReviewCompleted": true,
+        "parity": "exact"
+      },
+      "issueIds": []
+    },
+    {
+      "id": "WEB-API-037",
+      "phase": 3,
+      "controller": "ChapterController",
+      "function": "createChapter",
+      "method": "POST",
+      "path": "/api/v1/books/{bookId}/chapters",
+      "responseKind": "json-envelope",
+      "mutatesState": true,
+      "hasExternalDependency": false,
+      "android": {
+        "sourcePath": "web/src/main/java/com/merpyzf/web/controller/ChapterController.kt",
+        "line": 52,
+        "services": [
+          "ChapterService.createChapter"
+        ],
+        "repositoryOwner": "WebChapterRepository + WebBookRepository",
+        "daoOwner": "WebChapterDao + WebBookDao",
+        "appReference": "ChapterRepository.kt; ChapterManagerViewModel.kt"
+      },
+      "status": {
+        "iosDevelopmentCompleted": true,
+        "iosUnitTestCompleted": true,
+        "androidReviewCompleted": true,
+        "parity": "exact"
+      },
+      "issueIds": []
+    },
+    {
+      "id": "WEB-API-038",
+      "phase": 3,
+      "controller": "ChapterController",
+      "function": "updateChapter",
+      "method": "PUT",
+      "path": "/api/v1/chapters/{id}",
+      "responseKind": "json-envelope",
+      "mutatesState": true,
+      "hasExternalDependency": false,
+      "android": {
+        "sourcePath": "web/src/main/java/com/merpyzf/web/controller/ChapterController.kt",
+        "line": 63,
+        "services": [
+          "ChapterService.updateChapter"
+        ],
+        "repositoryOwner": "WebChapterRepository",
+        "daoOwner": "WebChapterDao + WebNoteDao",
+        "appReference": "ChapterRepository.kt; ChapterManagerViewModel.kt"
+      },
+      "status": {
+        "iosDevelopmentCompleted": true,
+        "iosUnitTestCompleted": true,
+        "androidReviewCompleted": true,
+        "parity": "exact"
+      },
+      "issueIds": [
+        "ANDROID-WEB-025",
+        "ANDROID-WEB-026"
+      ]
+    },
+    {
+      "id": "WEB-API-039",
+      "phase": 3,
+      "controller": "ChapterController",
+      "function": "updateChapterStarred",
+      "method": "PUT",
+      "path": "/api/v1/chapters/{id}/starred",
+      "responseKind": "json-envelope",
+      "mutatesState": true,
+      "hasExternalDependency": false,
+      "android": {
+        "sourcePath": "web/src/main/java/com/merpyzf/web/controller/ChapterController.kt",
+        "line": 74,
+        "services": [
+          "ChapterService.setChapterStarred"
+        ],
+        "repositoryOwner": "WebChapterRepository + WebBookRepository",
+        "daoOwner": "WebChapterDao + WebBookDao",
+        "appReference": "ChapterRepository.kt; ChapterManagerViewModel.kt"
+      },
+      "status": {
+        "iosDevelopmentCompleted": true,
+        "iosUnitTestCompleted": true,
+        "androidReviewCompleted": true,
+        "parity": "exact"
+      },
+      "issueIds": []
+    },
+    {
+      "id": "WEB-API-040",
+      "phase": 3,
+      "controller": "ChapterController",
+      "function": "deleteChapter",
+      "method": "DELETE",
+      "path": "/api/v1/chapters/{id}",
+      "responseKind": "json-envelope",
+      "mutatesState": true,
+      "hasExternalDependency": false,
+      "android": {
+        "sourcePath": "web/src/main/java/com/merpyzf/web/controller/ChapterController.kt",
+        "line": 85,
+        "services": [
+          "ChapterService.deleteChapter"
+        ],
+        "repositoryOwner": "WebChapterRepository + WebNoteRepository",
+        "daoOwner": "WebChapterDao + WebNoteDao",
+        "appReference": "ChapterRepository.kt; ChapterManagerViewModel.kt"
+      },
+      "status": {
+        "iosDevelopmentCompleted": true,
+        "iosUnitTestCompleted": true,
+        "androidReviewCompleted": true,
+        "parity": "exact"
+      },
+      "issueIds": [
+        "ANDROID-WEB-026"
+      ]
+    },
+    {
+      "id": "WEB-API-041",
+      "phase": 3,
+      "controller": "ChapterController",
+      "function": "batchDeleteChapters",
+      "method": "POST",
+      "path": "/api/v1/chapters/batch-delete",
+      "responseKind": "json-envelope",
+      "mutatesState": true,
+      "hasExternalDependency": false,
+      "android": {
+        "sourcePath": "web/src/main/java/com/merpyzf/web/controller/ChapterController.kt",
+        "line": 92,
+        "services": [
+          "ChapterService.batchDeleteChapters"
+        ],
+        "repositoryOwner": "WebChapterRepository + WebNoteRepository",
+        "daoOwner": "WebChapterDao + WebNoteDao",
+        "appReference": "ChapterRepository.kt; ChapterManagerViewModel.kt"
+      },
+      "status": {
+        "iosDevelopmentCompleted": true,
+        "iosUnitTestCompleted": true,
+        "androidReviewCompleted": true,
+        "parity": "exact"
+      },
+      "issueIds": [
+        "ANDROID-WEB-024",
+        "ANDROID-WEB-026"
+      ]
+    },
+    {
+      "id": "WEB-API-042",
+      "phase": 3,
+      "controller": "ChapterController",
+      "function": "reorderParentChapters",
+      "method": "PUT",
+      "path": "/api/v1/books/{bookId}/chapters/order",
+      "responseKind": "json-envelope",
+      "mutatesState": true,
+      "hasExternalDependency": false,
+      "android": {
+        "sourcePath": "web/src/main/java/com/merpyzf/web/controller/ChapterController.kt",
+        "line": 100,
+        "services": [
+          "ChapterService.reorderParentChapters"
+        ],
+        "repositoryOwner": "WebChapterRepository + WebBookRepository",
+        "daoOwner": "WebChapterDao + WebBookDao",
+        "appReference": "ChapterRepository.kt; ChapterManagerViewModel.kt"
+      },
+      "status": {
+        "iosDevelopmentCompleted": true,
+        "iosUnitTestCompleted": true,
+        "androidReviewCompleted": true,
+        "parity": "exact"
+      },
+      "issueIds": [
+        "ANDROID-WEB-025"
+      ]
+    },
+    {
+      "id": "WEB-API-043",
+      "phase": 3,
+      "controller": "ChapterController",
+      "function": "reorderChildChapters",
+      "method": "PUT",
+      "path": "/api/v1/chapters/{parentId}/children/order",
+      "responseKind": "json-envelope",
+      "mutatesState": true,
+      "hasExternalDependency": false,
+      "android": {
+        "sourcePath": "web/src/main/java/com/merpyzf/web/controller/ChapterController.kt",
+        "line": 111,
+        "services": [
+          "ChapterService.reorderChildChapters"
+        ],
+        "repositoryOwner": "WebChapterRepository",
+        "daoOwner": "WebChapterDao",
+        "appReference": "ChapterRepository.kt; ChapterManagerViewModel.kt"
+      },
+      "status": {
+        "iosDevelopmentCompleted": true,
+        "iosUnitTestCompleted": true,
+        "androidReviewCompleted": true,
+        "parity": "exact"
+      },
+      "issueIds": [
+        "ANDROID-WEB-025",
+        "ANDROID-WEB-026"
+      ]
+    },
+    {
+      "id": "WEB-API-044",
+      "phase": 3,
+      "controller": "ChapterController",
+      "function": "moveToParent",
+      "method": "PUT",
+      "path": "/api/v1/chapters/move-to-parent",
+      "responseKind": "json-envelope",
+      "mutatesState": true,
+      "hasExternalDependency": false,
+      "android": {
+        "sourcePath": "web/src/main/java/com/merpyzf/web/controller/ChapterController.kt",
+        "line": 122,
+        "services": [
+          "ChapterService.moveToParent"
+        ],
+        "repositoryOwner": "WebChapterRepository",
+        "daoOwner": "WebChapterDao + WebNoteDao",
+        "appReference": "ChapterRepository.kt; ChapterManagerViewModel.kt"
+      },
+      "status": {
+        "iosDevelopmentCompleted": true,
+        "iosUnitTestCompleted": true,
+        "androidReviewCompleted": true,
+        "parity": "exact"
+      },
+      "issueIds": [
+        "ANDROID-WEB-025",
+        "ANDROID-WEB-026"
+      ]
+    },
+    {
+      "id": "WEB-API-045",
+      "phase": 3,
+      "controller": "ChapterController",
+      "function": "moveOut",
+      "method": "PUT",
+      "path": "/api/v1/chapters/move-out",
+      "responseKind": "json-envelope",
+      "mutatesState": true,
+      "hasExternalDependency": false,
+      "android": {
+        "sourcePath": "web/src/main/java/com/merpyzf/web/controller/ChapterController.kt",
+        "line": 130,
+        "services": [
+          "ChapterService.moveOut"
+        ],
+        "repositoryOwner": "WebChapterRepository",
+        "daoOwner": "WebChapterDao + WebNoteDao",
+        "appReference": "ChapterRepository.kt; ChapterManagerViewModel.kt"
+      },
+      "status": {
+        "iosDevelopmentCompleted": true,
+        "iosUnitTestCompleted": true,
+        "androidReviewCompleted": true,
+        "parity": "exact"
+      },
+      "issueIds": [
+        "ANDROID-WEB-025",
+        "ANDROID-WEB-026"
+      ]
+    },
+    {
+      "id": "WEB-API-046",
+      "phase": 3,
+      "controller": "ChapterController",
+      "function": "batchCreateChapters",
+      "method": "POST",
+      "path": "/api/v1/books/{bookId}/chapters/batch",
+      "responseKind": "json-envelope",
+      "mutatesState": true,
+      "hasExternalDependency": false,
+      "android": {
+        "sourcePath": "web/src/main/java/com/merpyzf/web/controller/ChapterController.kt",
+        "line": 138,
+        "services": [
+          "ChapterService.batchCreateChapters"
+        ],
+        "repositoryOwner": "WebChapterRepository + WebBookRepository",
+        "daoOwner": "WebChapterDao + WebBookDao",
+        "appReference": "ChapterRepository.kt; BatchAddChapterPresenter.kt"
+      },
+      "status": {
+        "iosDevelopmentCompleted": true,
+        "iosUnitTestCompleted": true,
+        "androidReviewCompleted": true,
+        "parity": "exact"
+      },
+      "issueIds": [
+        "ANDROID-WEB-025"
+      ]
+    },
+    {
+      "id": "WEB-API-047",
+      "phase": 5,
+      "controller": "ChapterController",
+      "function": "searchOnlineChapterCandidates",
+      "method": "GET",
+      "path": "/api/v1/books/{bookId}/chapters/online/search",
+      "responseKind": "json-envelope",
+      "mutatesState": false,
+      "hasExternalDependency": true,
+      "android": {
+        "sourcePath": "web/src/main/java/com/merpyzf/web/controller/ChapterController.kt",
+        "line": 149,
+        "services": [
+          "ChapterService.searchOnlineChapterCandidates"
+        ],
+        "repositoryOwner": "OnlineSearchService + WebBookRepository",
+        "daoOwner": "WebBookDao",
+        "appReference": "ChapterRemoteSyncSheetViewModel.kt; BookRepository.kt"
+      },
+      "status": {
+        "iosDevelopmentCompleted": true,
+        "iosUnitTestCompleted": true,
+        "androidReviewCompleted": true,
+        "parity": "exact"
+      },
+      "issueIds": []
+    },
+    {
+      "id": "WEB-API-048",
+      "phase": 5,
+      "controller": "ChapterController",
+      "function": "getOnlineChapterCatalog",
+      "method": "GET",
+      "path": "/api/v1/books/{bookId}/chapters/online-catalog",
+      "responseKind": "json-envelope",
+      "mutatesState": false,
+      "hasExternalDependency": true,
+      "android": {
+        "sourcePath": "web/src/main/java/com/merpyzf/web/controller/ChapterController.kt",
+        "line": 159,
+        "services": [
+          "ChapterService.getOnlineCatalog"
+        ],
+        "repositoryOwner": "OnlineSearchService + WebBookRepository",
+        "daoOwner": "WebBookDao",
+        "appReference": "ChapterRemoteSyncSheetViewModel.kt; ChapterRepository.kt"
+      },
+      "status": {
+        "iosDevelopmentCompleted": true,
+        "iosUnitTestCompleted": true,
+        "androidReviewCompleted": true,
+        "parity": "exact"
+      },
+      "issueIds": []
+    },
+    {
+      "id": "WEB-API-049",
+      "phase": 5,
+      "controller": "ChapterController",
+      "function": "previewChapterImport",
+      "method": "POST",
+      "path": "/api/v1/books/{bookId}/chapters/import-preview",
+      "responseKind": "json-envelope",
+      "mutatesState": true,
+      "hasExternalDependency": false,
+      "android": {
+        "sourcePath": "web/src/main/java/com/merpyzf/web/controller/ChapterController.kt",
+        "line": 169,
+        "services": [
+          "ChapterService.previewImport"
+        ],
+        "repositoryOwner": "WebChapterRepository",
+        "daoOwner": "WebChapterDao + ChapterTreeHelper",
+        "appReference": "ChapterRemoteSyncSheetViewModel.kt; ChapterRepository.kt"
+      },
+      "status": {
+        "iosDevelopmentCompleted": true,
+        "iosUnitTestCompleted": true,
+        "androidReviewCompleted": true,
+        "parity": "exact"
+      },
+      "issueIds": []
+    },
+    {
+      "id": "WEB-API-050",
+      "phase": 5,
+      "controller": "ChapterController",
+      "function": "commitChapterImport",
+      "method": "POST",
+      "path": "/api/v1/books/{bookId}/chapters/import-commit",
+      "responseKind": "json-envelope",
+      "mutatesState": true,
+      "hasExternalDependency": false,
+      "android": {
+        "sourcePath": "web/src/main/java/com/merpyzf/web/controller/ChapterController.kt",
+        "line": 180,
+        "services": [
+          "ChapterService.commitImport"
+        ],
+        "repositoryOwner": "WebChapterRepository",
+        "daoOwner": "WebChapterDao + ChapterTreeHelper",
+        "appReference": "ChapterRemoteSyncSheetViewModel.kt; ChapterRepository.kt"
+      },
+      "status": {
+        "iosDevelopmentCompleted": true,
+        "iosUnitTestCompleted": true,
+        "androidReviewCompleted": true,
+        "parity": "exact"
+      },
+      "issueIds": [
+        "ANDROID-WEB-027"
+      ]
+    },
+    {
+  "id": "WEB-API-051",
+      "phase": 5,
+      "controller": "ExportController",
+      "function": "listSiYuanNotebooks",
+      "method": "GET",
+      "path": "/api/v1/export/platforms/siyuan/notebooks",
+      "responseKind": "json-envelope",
+      "mutatesState": false,
+      "hasExternalDependency": true,
+      "android": {
+        "sourcePath": "web/src/main/java/com/merpyzf/web/controller/ExportController.kt",
+        "line": 23,
+        "services": [
+          "NoteExportWebService.listSiYuanNotebooks"
+        ],
+    "repositoryOwner": "SiYuanRepository",
+    "daoOwner": "SiYuan HTTP API",
+    "appReference": "NoteExportPresenter.kt; NoteExportSettingActivity.kt"
+  },
+  "status": {
+    "iosDevelopmentCompleted": true,
+    "iosUnitTestCompleted": true,
+    "androidReviewCompleted": true,
+        "parity": "exact"
+      },
+      "issueIds": []
+    },
+    {
+  "id": "WEB-API-052",
+      "phase": 5,
+      "controller": "ExportController",
+      "function": "listObsidianDirs",
+      "method": "GET",
+      "path": "/api/v1/export/platforms/obsidian/dirs",
+      "responseKind": "json-envelope",
+      "mutatesState": false,
+      "hasExternalDependency": true,
+      "android": {
+        "sourcePath": "web/src/main/java/com/merpyzf/web/controller/ExportController.kt",
+        "line": 34,
+        "services": [
+          "NoteExportWebService.listObsidianDirs"
+        ],
+    "repositoryOwner": "ObsidianRepository",
+    "daoOwner": "Obsidian Local REST API",
+    "appReference": "NoteExportPresenter.kt; NoteExportSettingActivity.kt"
+  },
+  "status": {
+    "iosDevelopmentCompleted": true,
+    "iosUnitTestCompleted": true,
+    "androidReviewCompleted": true,
+        "parity": "exact"
+      },
+      "issueIds": []
+    },
+    {
+  "id": "WEB-API-053",
+      "phase": 5,
+      "controller": "ExportController",
+      "function": "exportLocal",
+      "method": "POST",
+      "path": "/api/v1/export/notes/local",
+      "responseKind": "file",
+      "mutatesState": true,
+      "hasExternalDependency": true,
+      "android": {
+        "sourcePath": "web/src/main/java/com/merpyzf/web/controller/ExportController.kt",
+        "line": 45,
+        "services": [
+          "NoteExportWebService.exportLocal"
+        ],
+    "repositoryOwner": "BookRepository + NoteRepository + ReviewRepository + RelevantRepository",
+    "daoOwner": "content generators + ZipHelper",
+    "appReference": "NoteExportPresenter.kt; NoteExportActivity.kt"
+  },
+  "status": {
+    "iosDevelopmentCompleted": true,
+    "iosUnitTestCompleted": true,
+    "androidReviewCompleted": true,
+        "parity": "exact"
+      },
+  "issueIds": [
+    "ANDROID-WEB-083",
+    "ANDROID-WEB-087"
+  ]
+    },
+    {
+  "id": "WEB-API-054",
+      "phase": 5,
+      "controller": "ExportController",
+      "function": "exportRemote",
+      "method": "POST",
+      "path": "/api/v1/export/notes/remote",
+      "responseKind": "json-envelope",
+      "mutatesState": true,
+      "hasExternalDependency": true,
+      "android": {
+        "sourcePath": "web/src/main/java/com/merpyzf/web/controller/ExportController.kt",
+        "line": 66,
+        "services": [
+          "NoteExportWebService.exportRemote"
+        ],
+    "repositoryOwner": "content repositories + Yuque/Notion/SiYuan/ObsidianRepository",
+    "daoOwner": "external APIs",
+    "appReference": "NoteExportPresenter.kt; NoteExportActivity.kt"
+  },
+  "status": {
+    "iosDevelopmentCompleted": true,
+    "iosUnitTestCompleted": true,
+    "androidReviewCompleted": true,
+        "parity": "exact"
+      },
+      "issueIds": ["ANDROID-WEB-087"]
+    },
+    {
+      "id": "WEB-API-055",
+      "phase": 2,
+      "controller": "GroupController",
+      "function": "getGroupList",
+      "method": "GET",
+      "path": "/api/v1/groups",
+      "responseKind": "json-envelope",
+      "mutatesState": false,
+      "hasExternalDependency": false,
+      "android": {
+        "sourcePath": "web/src/main/java/com/merpyzf/web/controller/GroupController.kt",
+        "line": 27,
+        "services": [
+          "BookService.getGroupList"
+        ],
+        "repositoryOwner": "WebBookRepository",
+        "daoOwner": "WebBookDao",
+        "appReference": "GroupRepository.kt:32-49,207-213"
+      },
+      "status": {
+        "iosDevelopmentCompleted": true,
+        "iosUnitTestCompleted": true,
+        "androidReviewCompleted": true,
+        "parity": "exact"
+      },
+      "issueIds": [
+        "ANDROID-WEB-003",
+        "ANDROID-WEB-006",
+        "ANDROID-WEB-091"
+      ]
+    },
+    {
+      "id": "WEB-API-056",
+      "phase": 2,
+      "controller": "GroupController",
+      "function": "getBooksInGroup",
+      "method": "GET",
+      "path": "/api/v1/groups/{id}/books",
+      "responseKind": "json-envelope",
+      "mutatesState": false,
+      "hasExternalDependency": false,
+      "android": {
+        "sourcePath": "web/src/main/java/com/merpyzf/web/controller/GroupController.kt",
+        "line": 38,
+        "services": [
+          "BookService.getBooksInGroup"
+        ],
+        "repositoryOwner": "WebBookRepository",
+        "daoOwner": "WebBookDao",
+        "appReference": "GroupRepository.kt:217-229,233-245"
+      },
+      "status": {
+        "iosDevelopmentCompleted": true,
+        "iosUnitTestCompleted": true,
+        "androidReviewCompleted": true,
+        "parity": "exact"
+      },
+      "issueIds": [
+        "ANDROID-WEB-003",
+        "ANDROID-WEB-006",
+        "ANDROID-WEB-011",
+        "ANDROID-WEB-055",
+        "ANDROID-WEB-091",
+        "ANDROID-WEB-093"
+      ]
+    },
+    {
+      "id": "WEB-API-057",
+      "phase": 2,
+      "controller": "GroupController",
+      "function": "createGroup",
+      "method": "POST",
+      "path": "/api/v1/groups",
+      "responseKind": "json-envelope",
+      "mutatesState": true,
+      "hasExternalDependency": false,
+      "android": {
+        "sourcePath": "web/src/main/java/com/merpyzf/web/controller/GroupController.kt",
+        "line": 53,
+        "services": [
+          "GroupService.createGroup"
+        ],
+        "repositoryOwner": "WebGroupRepository",
+        "daoOwner": "WebGroupDao + WebBookDao",
+        "appReference": "GroupRepository.kt:32-49"
+      },
+      "status": {
+        "iosDevelopmentCompleted": true,
+        "iosUnitTestCompleted": true,
+        "androidReviewCompleted": true,
+        "parity": "exact"
+      },
+      "issueIds": [
+        "ANDROID-WEB-006"
+      ]
+    },
+    {
+      "id": "WEB-API-058",
+      "phase": 2,
+      "controller": "GroupController",
+      "function": "updateGroup",
+      "method": "PUT",
+      "path": "/api/v1/groups/{id}",
+      "responseKind": "json-envelope",
+      "mutatesState": true,
+      "hasExternalDependency": false,
+      "android": {
+        "sourcePath": "web/src/main/java/com/merpyzf/web/controller/GroupController.kt",
+        "line": 61,
+        "services": [
+          "GroupService.updateGroup"
+        ],
+        "repositoryOwner": "WebGroupRepository",
+        "daoOwner": "WebGroupDao",
+        "appReference": "GroupRepository.kt:195-202"
+      },
+      "status": {
+        "iosDevelopmentCompleted": true,
+        "iosUnitTestCompleted": true,
+        "androidReviewCompleted": true,
+        "parity": "exact"
+      },
+      "issueIds": [
+        "ANDROID-WEB-006"
+      ]
+    },
+    {
+      "id": "WEB-API-059",
+      "phase": 2,
+      "controller": "GroupController",
+      "function": "deleteGroup",
+      "method": "DELETE",
+      "path": "/api/v1/groups/{id}",
+      "responseKind": "json-envelope",
+      "mutatesState": true,
+      "hasExternalDependency": false,
+      "android": {
+        "sourcePath": "web/src/main/java/com/merpyzf/web/controller/GroupController.kt",
+        "line": 72,
+        "services": [
+          "GroupService.deleteGroup"
+        ],
+        "repositoryOwner": "WebGroupRepository + WebBookRepository",
+        "daoOwner": "WebGroupDao + WebBookDao",
+        "appReference": "GroupRepository.kt:101-117,140-169"
+      },
+      "status": {
+        "iosDevelopmentCompleted": true,
+        "iosUnitTestCompleted": true,
+        "androidReviewCompleted": true,
+        "parity": "exact"
+      },
+      "issueIds": [
+        "ANDROID-WEB-006",
+        "ANDROID-WEB-007"
+      ]
+    },
+    {
+      "id": "WEB-API-060",
+      "phase": 2,
+      "controller": "GroupController",
+      "function": "updateGroupPin",
+      "method": "PUT",
+      "path": "/api/v1/groups/{id}/pin",
+      "responseKind": "json-envelope",
+      "mutatesState": true,
+      "hasExternalDependency": false,
+      "android": {
+        "sourcePath": "web/src/main/java/com/merpyzf/web/controller/GroupController.kt",
+        "line": 82,
+        "services": [
+          "GroupService.updateGroupPin"
+        ],
+        "repositoryOwner": "WebGroupRepository",
+        "daoOwner": "WebGroupDao",
+        "appReference": "BookRepository.kt:3504-3541"
+      },
+      "status": {
+        "iosDevelopmentCompleted": true,
+        "iosUnitTestCompleted": true,
+        "androidReviewCompleted": true,
+        "parity": "exact"
+      },
+      "issueIds": [
+        "ANDROID-WEB-006",
+        "ANDROID-WEB-015"
+      ]
+    },
+    {
+      "id": "WEB-API-061",
+      "phase": 2,
+      "controller": "GroupController",
+      "function": "reorderGroups",
+      "method": "PUT",
+      "path": "/api/v1/groups/order",
+      "responseKind": "json-envelope",
+      "mutatesState": true,
+      "hasExternalDependency": false,
+      "android": {
+        "sourcePath": "web/src/main/java/com/merpyzf/web/controller/GroupController.kt",
+        "line": 93,
+        "services": [
+          "GroupService.reorderGroups"
+        ],
+        "repositoryOwner": "WebGroupRepository",
+        "daoOwner": "WebGroupDao",
+        "appReference": "GroupRepository.kt:207-213"
+      },
+      "status": {
+        "iosDevelopmentCompleted": true,
+        "iosUnitTestCompleted": true,
+        "androidReviewCompleted": true,
+        "parity": "exact"
+      },
+      "issueIds": [
+        "ANDROID-WEB-006"
+      ]
+    },
+    {
+      "id": "WEB-API-062",
+      "phase": 2,
+      "controller": "GroupController",
+      "function": "reorderGroupBooks",
+      "method": "PUT",
+      "path": "/api/v1/groups/{id}/books/order",
+      "responseKind": "json-envelope",
+      "mutatesState": true,
+      "hasExternalDependency": false,
+      "android": {
+        "sourcePath": "web/src/main/java/com/merpyzf/web/controller/GroupController.kt",
+        "line": 101,
+        "services": [
+          "BookService.reorderGroupBooks"
+        ],
+        "repositoryOwner": "WebBookRepository",
+        "daoOwner": "WebBookDao",
+        "appReference": "GroupRepository.kt:68-95,140-169,207-213"
+      },
+      "status": {
+        "iosDevelopmentCompleted": true,
+        "iosUnitTestCompleted": true,
+        "androidReviewCompleted": true,
+        "parity": "exact"
+      },
+      "issueIds": [
+        "ANDROID-WEB-006"
+      ]
+    },
+    {
+  "id": "WEB-API-063",
+      "phase": 5,
+      "controller": "ImportController",
+      "function": "createImportTask",
+      "method": "POST",
+      "path": "/api/v1/import/tasks",
+      "responseKind": "json-envelope",
+      "mutatesState": true,
+      "hasExternalDependency": false,
+      "android": {
+        "sourcePath": "web/src/main/java/com/merpyzf/web/controller/ImportController.kt",
+        "line": 22,
+        "services": [
+          "ImportTaskService.createTask"
+        ],
+    "repositoryOwner": "12 import parsers",
+    "daoOwner": "upload and extracted artifacts",
+    "appReference": "ImportPresenter.kt; ImportBookListPresenter.kt; ImportNoteListPresenter.kt"
+  },
+  "status": {
+    "iosDevelopmentCompleted": true,
+    "iosUnitTestCompleted": true,
+    "androidReviewCompleted": true,
+        "parity": "exact"
+      },
+  "issueIds": [
+    "ANDROID-WEB-073",
+    "ANDROID-WEB-084"
+  ]
+    },
+    {
+  "id": "WEB-API-064",
+      "phase": 5,
+      "controller": "ImportController",
+      "function": "getImportTask",
+      "method": "GET",
+      "path": "/api/v1/import/tasks/{taskId}",
+      "responseKind": "json-envelope",
+      "mutatesState": false,
+      "hasExternalDependency": false,
+      "android": {
+        "sourcePath": "web/src/main/java/com/merpyzf/web/controller/ImportController.kt",
+        "line": 32,
+        "services": [
+          "ImportTaskService.getTask"
+        ],
+    "repositoryOwner": "ConcurrentHashMap",
+    "daoOwner": "ImportTaskRecord",
+    "appReference": "ImportPresenter.kt; ImportBookListPresenter.kt"
+  },
+  "status": {
+    "iosDevelopmentCompleted": true,
+    "iosUnitTestCompleted": true,
+    "androidReviewCompleted": true,
+        "parity": "exact"
+      },
+  "issueIds": [
+    "ANDROID-WEB-084",
+    "ANDROID-WEB-094"
+  ]
+    },
+    {
+  "id": "WEB-API-065",
+      "phase": 5,
+      "controller": "ImportController",
+      "function": "commitImportTask",
+      "method": "POST",
+      "path": "/api/v1/import/tasks/{taskId}/commit",
+      "responseKind": "json-envelope",
+      "mutatesState": true,
+      "hasExternalDependency": false,
+      "android": {
+        "sourcePath": "web/src/main/java/com/merpyzf/web/controller/ImportController.kt",
+        "line": 41,
+        "services": [
+          "ImportTaskService.commitTask"
+        ],
+    "repositoryOwner": "BookRepository + NoteRepository + MatchBookInfoHelper",
+    "daoOwner": "App DAO transaction",
+    "appReference": "NoteRepository.importNotesToDbSuspend; ImportPresenter.kt:105-185"
+  },
+  "status": {
+    "iosDevelopmentCompleted": true,
+    "iosUnitTestCompleted": true,
+    "androidReviewCompleted": true,
+        "parity": "exact"
+      },
+  "issueIds": [
+    "ANDROID-WEB-072",
+    "ANDROID-WEB-084"
+  ]
+    },
+    {
+  "id": "WEB-API-066",
+      "phase": 5,
+      "controller": "ImportController",
+      "function": "deleteImportTask",
+      "method": "DELETE",
+      "path": "/api/v1/import/tasks/{taskId}",
+      "responseKind": "json-envelope",
+      "mutatesState": true,
+      "hasExternalDependency": false,
+      "android": {
+        "sourcePath": "web/src/main/java/com/merpyzf/web/controller/ImportController.kt",
+        "line": 53,
+        "services": [
+          "ImportTaskService.deleteTask"
+        ],
+    "repositoryOwner": "ConcurrentHashMap",
+    "daoOwner": "upload and extracted artifacts",
+    "appReference": "ImportPresenter.kt; ImportBookListPresenter.kt"
+  },
+  "status": {
+    "iosDevelopmentCompleted": true,
+    "iosUnitTestCompleted": true,
+    "androidReviewCompleted": true,
+        "parity": "exact"
+      },
+  "issueIds": [
+    "ANDROID-WEB-084"
+  ]
+    },
+    {
+      "id": "WEB-API-067",
+      "phase": 1,
+      "controller": "NativeActionController",
+      "function": "openVipUpgrade",
+      "method": "POST",
+      "path": "/api/v1/native/actions/open-vip-upgrade",
+      "responseKind": "json-envelope",
+      "mutatesState": true,
+      "hasExternalDependency": false,
+      "android": {
+        "sourcePath": "web/src/main/java/com/merpyzf/web/controller/NativeActionController.kt",
+        "line": 14,
+        "services": [
+          "MembershipCapabilityService.openVipUpgrade"
+        ],
+        "repositoryOwner": "SpSecuritySettingHelper（会员状态）",
+        "daoOwner": "不适用（加密 SharedPreferences 与原生 Activity）",
+        "appReference": "PremiumHelper.kt:54-83,128-139；PersonalContainerFragment.kt:440-445；VipUpgradeActivity.kt:404-408"
+      },
+      "status": {
+        "iosDevelopmentCompleted": true,
+        "iosUnitTestCompleted": true,
+        "androidReviewCompleted": true,
+        "parity": "exact"
+      },
+      "issueIds": []
+    },
+    {
+      "id": "WEB-API-068",
+      "phase": 3,
+      "controller": "NoteController",
+      "function": "getBookNotes",
+      "method": "GET",
+      "path": "/api/v1/books/{bookId}/notes",
+      "responseKind": "json-envelope",
+      "mutatesState": false,
+      "hasExternalDependency": false,
+      "android": {
+        "sourcePath": "web/src/main/java/com/merpyzf/web/controller/NoteController.kt",
+        "line": 29,
+        "services": [
+          "NoteService.getBookNotes"
+        ],
+        "repositoryOwner": "WebNoteRepository",
+        "daoOwner": "WebNoteDao",
+        "appReference": "NoteRepository.kt:651-1118,1249-1388; NotesViewModel.kt"
+      },
+      "status": {
+        "iosDevelopmentCompleted": true,
+        "iosUnitTestCompleted": true,
+        "androidReviewCompleted": true,
+        "parity": "exact"
+      },
+      "issueIds": [
+        "ANDROID-WEB-003",
+        "ANDROID-WEB-008",
+        "ANDROID-WEB-034",
+        "ANDROID-WEB-086"
+      ]
+    },
+    {
+      "id": "WEB-API-069",
+      "phase": 3,
+      "controller": "NoteController",
+      "function": "getBookNoteTagFilters",
+      "method": "GET",
+      "path": "/api/v1/books/{bookId}/note-tags",
+      "responseKind": "json-envelope",
+      "mutatesState": false,
+      "hasExternalDependency": false,
+      "android": {
+        "sourcePath": "web/src/main/java/com/merpyzf/web/controller/NoteController.kt",
+        "line": 57,
+        "services": [
+          "NoteService.getBookNoteTagFilters"
+        ],
+        "repositoryOwner": "WebNoteRepository",
+        "daoOwner": "WebNoteDao",
+        "appReference": "NoteRepository.kt:1249-1388; TagRepository.kt:43-163"
+      },
+      "status": {
+        "iosDevelopmentCompleted": true,
+        "iosUnitTestCompleted": true,
+        "androidReviewCompleted": true,
+        "parity": "exact"
+      },
+      "issueIds": [
+        "ANDROID-WEB-008",
+        "ANDROID-WEB-034"
+      ]
+    },
+    {
+      "id": "WEB-API-070",
+      "phase": 3,
+      "controller": "NoteController",
+      "function": "getBookNoteSortRule",
+      "method": "GET",
+      "path": "/api/v1/books/{bookId}/notes/sort-rule",
+      "responseKind": "json-envelope",
+      "mutatesState": false,
+      "hasExternalDependency": false,
+      "android": {
+        "sourcePath": "web/src/main/java/com/merpyzf/web/controller/NoteController.kt",
+        "line": 66,
+        "services": [
+          "NoteService.getBookNoteSortRule"
+        ],
+        "repositoryOwner": "SortRepository",
+        "daoOwner": "SortDao, NoteDao",
+        "appReference": "SortRepository.kt:24-96,122-160"
+      },
+      "status": {
+        "iosDevelopmentCompleted": true,
+        "iosUnitTestCompleted": true,
+        "androidReviewCompleted": true,
+        "parity": "exact"
+      },
+      "issueIds": [
+        "ANDROID-WEB-008"
+      ]
+    },
+    {
+      "id": "WEB-API-071",
+      "phase": 3,
+      "controller": "NoteController",
+      "function": "updateBookNoteSortRule",
+      "method": "PUT",
+      "path": "/api/v1/books/{bookId}/notes/sort-rule",
+      "responseKind": "json-envelope",
+      "mutatesState": true,
+      "hasExternalDependency": false,
+      "android": {
+        "sourcePath": "web/src/main/java/com/merpyzf/web/controller/NoteController.kt",
+        "line": 75,
+        "services": [
+          "NoteService.updateBookNoteSortRule"
+        ],
+        "repositoryOwner": "SortRepository",
+        "daoOwner": "SortDao",
+        "appReference": "SortRepository.kt:24-96,122-160"
+      },
+      "status": {
+        "iosDevelopmentCompleted": true,
+        "iosUnitTestCompleted": true,
+        "androidReviewCompleted": true,
+        "parity": "exact"
+      },
+      "issueIds": [
+        "ANDROID-WEB-008"
+      ]
+    },
+    {
+      "id": "WEB-API-072",
+      "phase": 3,
+      "controller": "NoteController",
+      "function": "getGlobalNotes",
+      "method": "GET",
+      "path": "/api/v1/notes",
+      "responseKind": "json-envelope",
+      "mutatesState": false,
+      "hasExternalDependency": false,
+      "android": {
+        "sourcePath": "web/src/main/java/com/merpyzf/web/controller/NoteController.kt",
+        "line": 91,
+        "services": [
+          "NoteService.getGlobalNotes"
+        ],
+        "repositoryOwner": "WebNoteRepository",
+        "daoOwner": "WebNoteDao",
+        "appReference": "NoteRepository.kt:1249-1468; SearchPresenter.kt:40-99"
+      },
+      "status": {
+        "iosDevelopmentCompleted": true,
+        "iosUnitTestCompleted": true,
+        "androidReviewCompleted": true,
+        "parity": "exact"
+      },
+      "issueIds": [
+        "ANDROID-WEB-003",
+        "ANDROID-WEB-005",
+        "ANDROID-WEB-008",
+        "ANDROID-WEB-034",
+        "ANDROID-WEB-086"
+      ]
+    },
+    {
+      "id": "WEB-API-073",
+      "phase": 3,
+      "controller": "NoteController",
+      "function": "getGlobalNoteTagFilters",
+      "method": "GET",
+      "path": "/api/v1/note-tags/filters",
+      "responseKind": "json-envelope",
+      "mutatesState": false,
+      "hasExternalDependency": false,
+      "android": {
+        "sourcePath": "web/src/main/java/com/merpyzf/web/controller/NoteController.kt",
+        "line": 131,
+        "services": [
+          "NoteService.getGlobalNoteTagFilters"
+        ],
+        "repositoryOwner": "WebNoteRepository",
+        "daoOwner": "WebNoteDao",
+        "appReference": "TagRepository.kt:43-163; NotesViewModel.kt:486-503"
+      },
+      "status": {
+        "iosDevelopmentCompleted": true,
+        "iosUnitTestCompleted": true,
+        "androidReviewCompleted": true,
+        "parity": "exact"
+      },
+      "issueIds": [
+        "ANDROID-WEB-005",
+        "ANDROID-WEB-008",
+        "ANDROID-WEB-034"
+      ]
+    },
+    {
+      "id": "WEB-API-074",
+      "phase": 3,
+      "controller": "NoteController",
+      "function": "getNote",
+      "method": "GET",
+      "path": "/api/v1/notes/{id}",
+      "responseKind": "json-envelope",
+      "mutatesState": false,
+      "hasExternalDependency": false,
+      "android": {
+        "sourcePath": "web/src/main/java/com/merpyzf/web/controller/NoteController.kt",
+        "line": 138,
+        "services": [
+          "NoteService.getNote"
+        ],
+        "repositoryOwner": "WebNoteRepository",
+        "daoOwner": "WebNoteDao",
+        "appReference": "NoteRepository.kt; NoteViewPresenter.kt:40-99"
+      },
+      "status": {
+        "iosDevelopmentCompleted": true,
+        "iosUnitTestCompleted": true,
+        "androidReviewCompleted": true,
+        "parity": "exact"
+      },
+      "issueIds": [
+        "ANDROID-WEB-008",
+        "ANDROID-WEB-028"
+      ]
+    },
+    {
+      "id": "WEB-API-075",
+      "phase": 3,
+      "controller": "NoteController",
+      "function": "createNote",
+      "method": "POST",
+      "path": "/api/v1/notes",
+      "responseKind": "json-envelope",
+      "mutatesState": true,
+      "hasExternalDependency": false,
+      "android": {
+        "sourcePath": "web/src/main/java/com/merpyzf/web/controller/NoteController.kt",
+        "line": 149,
+        "services": [
+          "NoteService.createNote"
+        ],
+        "repositoryOwner": "WebNoteRepository, WebBookRepository",
+        "daoOwner": "WebNoteDao, WebBookDao",
+        "appReference": "NoteRepository.kt:1124-1165; NoteEditPresenter.kt"
+      },
+      "status": {
+        "iosDevelopmentCompleted": true,
+        "iosUnitTestCompleted": true,
+        "androidReviewCompleted": true,
+        "parity": "exact"
+      },
+      "issueIds": [
+        "ANDROID-WEB-005",
+        "ANDROID-WEB-008",
+        "ANDROID-WEB-029",
+        "ANDROID-WEB-030",
+        "ANDROID-WEB-033"
+      ]
+    },
+    {
+      "id": "WEB-API-076",
+      "phase": 3,
+      "controller": "NoteController",
+      "function": "updateNote",
+      "method": "PUT",
+      "path": "/api/v1/notes/{id}",
+      "responseKind": "json-envelope",
+      "mutatesState": true,
+      "hasExternalDependency": false,
+      "android": {
+        "sourcePath": "web/src/main/java/com/merpyzf/web/controller/NoteController.kt",
+        "line": 161,
+        "services": [
+          "NoteService.updateNote"
+        ],
+        "repositoryOwner": "WebNoteRepository, WebBookRepository",
+        "daoOwner": "WebNoteDao, WebBookDao",
+        "appReference": "NoteRepository.kt:1172-1225; NoteEditPresenter.kt:313"
+      },
+      "status": {
+        "iosDevelopmentCompleted": true,
+        "iosUnitTestCompleted": true,
+        "androidReviewCompleted": true,
+        "parity": "exact"
+      },
+      "issueIds": [
+        "ANDROID-WEB-005",
+        "ANDROID-WEB-008",
+        "ANDROID-WEB-028",
+        "ANDROID-WEB-029",
+        "ANDROID-WEB-030",
+        "ANDROID-WEB-033"
+      ]
+    },
+    {
+      "id": "WEB-API-077",
+      "phase": 3,
+      "controller": "NoteController",
+      "function": "deleteNote",
+      "method": "DELETE",
+      "path": "/api/v1/notes/{id}",
+      "responseKind": "json-envelope",
+      "mutatesState": true,
+      "hasExternalDependency": false,
+      "android": {
+        "sourcePath": "web/src/main/java/com/merpyzf/web/controller/NoteController.kt",
+        "line": 176,
+        "services": [
+          "NoteService.deleteNote"
+        ],
+        "repositoryOwner": "WebNoteRepository",
+        "daoOwner": "WebNoteDao",
+        "appReference": "NoteRepository.kt:1396-1402,1797-1804; NotesViewModel.kt:293-312"
+      },
+      "status": {
+        "iosDevelopmentCompleted": true,
+        "iosUnitTestCompleted": true,
+        "androidReviewCompleted": true,
+        "parity": "exact"
+      },
+      "issueIds": [
+        "ANDROID-WEB-008",
+        "ANDROID-WEB-028"
+      ]
+    },
+    {
+      "id": "WEB-API-078",
+      "phase": 3,
+      "controller": "NoteController",
+      "function": "batchDeleteNotes",
+      "method": "POST",
+      "path": "/api/v1/notes/batch-delete",
+      "responseKind": "json-envelope",
+      "mutatesState": true,
+      "hasExternalDependency": false,
+      "android": {
+        "sourcePath": "web/src/main/java/com/merpyzf/web/controller/NoteController.kt",
+        "line": 187,
+        "services": [
+          "NoteService.batchDeleteNotes"
+        ],
+        "repositoryOwner": "WebNoteRepository",
+        "daoOwner": "WebNoteDao",
+        "appReference": "NoteRepository.kt:1233-1241,1797-1804; NotesViewModel.kt:315-337"
+      },
+      "status": {
+        "iosDevelopmentCompleted": true,
+        "iosUnitTestCompleted": true,
+        "androidReviewCompleted": true,
+        "parity": "exact"
+      },
+      "issueIds": [
+        "ANDROID-WEB-008",
+        "ANDROID-WEB-028"
+      ]
+    },
+    {
+      "id": "WEB-API-079",
+      "phase": 3,
+      "controller": "NoteController",
+      "function": "batchMoveNotesToChapter",
+      "method": "POST",
+      "path": "/api/v1/notes/batch-move-chapter",
+      "responseKind": "json-envelope",
+      "mutatesState": true,
+      "hasExternalDependency": false,
+      "android": {
+        "sourcePath": "web/src/main/java/com/merpyzf/web/controller/NoteController.kt",
+        "line": 199,
+        "services": [
+          "NoteService.batchMoveNotesToChapter"
+        ],
+        "repositoryOwner": "WebNoteRepository, WebChapterRepository",
+        "daoOwner": "WebNoteDao, WebChapterDao",
+        "appReference": "NoteRepository.kt:2040-2049; NotesViewModel.kt:446-483"
+      },
+      "status": {
+        "iosDevelopmentCompleted": true,
+        "iosUnitTestCompleted": true,
+        "androidReviewCompleted": true,
+        "parity": "exact"
+      },
+      "issueIds": [
+        "ANDROID-WEB-008",
+        "ANDROID-WEB-028",
+        "ANDROID-WEB-031"
+      ]
+    },
+    {
+      "id": "WEB-API-080",
+      "phase": 3,
+      "controller": "NoteController",
+      "function": "batchSetNoteTags",
+      "method": "POST",
+      "path": "/api/v1/notes/batch-set-tags",
+      "responseKind": "json-envelope",
+      "mutatesState": true,
+      "hasExternalDependency": false,
+      "android": {
+        "sourcePath": "web/src/main/java/com/merpyzf/web/controller/NoteController.kt",
+        "line": 211,
+        "services": [
+          "NoteService.batchSetNoteTags"
+        ],
+        "repositoryOwner": "WebNoteRepository",
+        "daoOwner": "WebNoteDao",
+        "appReference": "TagRepository.kt:294-324; NotesViewModel.kt:530-579"
+      },
+      "status": {
+        "iosDevelopmentCompleted": true,
+        "iosUnitTestCompleted": true,
+        "androidReviewCompleted": true,
+        "parity": "exact"
+      },
+      "issueIds": [
+        "ANDROID-WEB-005",
+        "ANDROID-WEB-008",
+        "ANDROID-WEB-028",
+        "ANDROID-WEB-031"
+      ]
+    },
+    {
+      "id": "WEB-API-081",
+      "phase": 3,
+      "controller": "NoteController",
+      "function": "batchMoveNotesToBook",
+      "method": "POST",
+      "path": "/api/v1/notes/batch-move-book",
+      "responseKind": "json-envelope",
+      "mutatesState": true,
+      "hasExternalDependency": false,
+      "android": {
+        "sourcePath": "web/src/main/java/com/merpyzf/web/controller/NoteController.kt",
+        "line": 223,
+        "services": [
+          "NoteService.batchMoveNotesToBook"
+        ],
+        "repositoryOwner": "WebNoteRepository, WebChapterRepository",
+        "daoOwner": "WebNoteDao, WebChapterDao",
+        "appReference": "NoteRepository.kt:2052-2075; NotesViewModel.kt:351-385"
+      },
+      "status": {
+        "iosDevelopmentCompleted": true,
+        "iosUnitTestCompleted": true,
+        "androidReviewCompleted": true,
+        "parity": "exact"
+      },
+      "issueIds": [
+        "ANDROID-WEB-008",
+        "ANDROID-WEB-028"
+      ]
+    },
+    {
+      "id": "WEB-API-082",
+      "phase": 3,
+      "controller": "NoteController",
+      "function": "batchMergeNotes",
+      "method": "POST",
+      "path": "/api/v1/notes/batch-merge",
+      "responseKind": "json-envelope",
+      "mutatesState": true,
+      "hasExternalDependency": false,
+      "android": {
+        "sourcePath": "web/src/main/java/com/merpyzf/web/controller/NoteController.kt",
+        "line": 235,
+        "services": [
+          "NoteService.batchMergeNotes"
+        ],
+        "repositoryOwner": "WebNoteRepository",
+        "daoOwner": "WebNoteDao",
+        "appReference": "NoteRepository.kt:1809-1819; NotesMergePresenter.kt:254-271"
+      },
+      "status": {
+        "iosDevelopmentCompleted": true,
+        "iosUnitTestCompleted": true,
+        "androidReviewCompleted": true,
+        "parity": "exact"
+      },
+      "issueIds": [
+        "ANDROID-WEB-005",
+        "ANDROID-WEB-008",
+        "ANDROID-WEB-028",
+        "ANDROID-WEB-030",
+        "ANDROID-WEB-032",
+        "ANDROID-WEB-035"
+      ]
+    },
+  {
+    "id": "WEB-API-083",
+      "phase": 4,
+      "controller": "ReadTimeController",
+      "function": "createSession",
+      "method": "POST",
+      "path": "/api/v1/reading-timer/sessions",
+      "responseKind": "json-envelope",
+      "mutatesState": true,
+      "hasExternalDependency": false,
+      "android": {
+        "sourcePath": "web/src/main/java/com/merpyzf/web/controller/ReadTimeController.kt",
+        "line": 15,
+        "services": [
+          "ReadTimeWebService.createSession"
+        ],
+      "repositoryOwner": "ReadTimingRepository",
+      "daoOwner": "ReadTimeRecordDao、BookDao",
+      "appReference": "ReadTimingPresenter.kt:158-224；ReadTimeRecordPresenter.kt:125-163"
+    },
+    "status": {
+      "iosDevelopmentCompleted": true,
+      "iosUnitTestCompleted": true,
+      "androidReviewCompleted": true,
+      "parity": "exact"
+    },
+    "issueIds": [
+      "ANDROID-WEB-008",
+      "ANDROID-WEB-043",
+      "ANDROID-WEB-087"
+    ]
+  },
+  {
+    "id": "WEB-API-084",
+      "phase": 4,
+      "controller": "ReadingRecordController",
+      "function": "getBookReadingRecords",
+      "method": "GET",
+      "path": "/api/v1/books/{bookId}/reading-records",
+      "responseKind": "json-envelope",
+      "mutatesState": false,
+      "hasExternalDependency": false,
+      "android": {
+        "sourcePath": "web/src/main/java/com/merpyzf/web/controller/ReadingRecordController.kt",
+        "line": 21,
+        "services": [
+          "ReadingRecordWebService.getBookReadingRecords"
+        ],
+      "repositoryOwner": "ReadTimingRepository、TimingRecordRepository",
+      "daoOwner": "ReadTimeRecordDao、BookDao",
+      "appReference": "ReadTimeRecordPresenter.kt:54-123"
+    },
+    "status": {
+      "iosDevelopmentCompleted": true,
+      "iosUnitTestCompleted": true,
+      "androidReviewCompleted": true,
+      "parity": "exact"
+    },
+    "issueIds": [
+      "ANDROID-WEB-008",
+      "ANDROID-WEB-091"
+    ]
+  },
+  {
+    "id": "WEB-API-085",
+      "phase": 4,
+      "controller": "ReadingRecordController",
+      "function": "getBookReadingRecord",
+      "method": "GET",
+      "path": "/api/v1/books/{bookId}/reading-records/{recordId}",
+      "responseKind": "json-envelope",
+      "mutatesState": false,
+      "hasExternalDependency": false,
+      "android": {
+        "sourcePath": "web/src/main/java/com/merpyzf/web/controller/ReadingRecordController.kt",
+        "line": 32,
+        "services": [
+          "ReadingRecordWebService.getBookReadingRecord"
+        ],
+      "repositoryOwner": "ReadTimingRepository、TimingRecordRepository",
+      "daoOwner": "ReadTimeRecordDao、BookDao",
+      "appReference": "ReadTimeRecordPresenter.kt:54-123"
+    },
+    "status": {
+      "iosDevelopmentCompleted": true,
+      "iosUnitTestCompleted": true,
+      "androidReviewCompleted": true,
+      "parity": "exact"
+    },
+    "issueIds": [
+      "ANDROID-WEB-008",
+      "ANDROID-WEB-044"
+    ]
+  },
+  {
+    "id": "WEB-API-086",
+      "phase": 4,
+      "controller": "ReadingRecordController",
+      "function": "createBookReadingRecord",
+      "method": "POST",
+      "path": "/api/v1/books/{bookId}/reading-records",
+      "responseKind": "json-envelope",
+      "mutatesState": true,
+      "hasExternalDependency": false,
+      "android": {
+        "sourcePath": "web/src/main/java/com/merpyzf/web/controller/ReadingRecordController.kt",
+        "line": 42,
+        "services": [
+          "ReadingRecordWebService.createBookReadingRecord"
+        ],
+      "repositoryOwner": "ReadTimingRepository、TimingRecordRepository",
+      "daoOwner": "ReadTimeRecordDao、BookDao",
+      "appReference": "ReadTimeRecordPresenter.kt:97-163"
+    },
+    "status": {
+      "iosDevelopmentCompleted": true,
+      "iosUnitTestCompleted": true,
+      "androidReviewCompleted": true,
+      "parity": "exact"
+    },
+    "issueIds": [
+      "ANDROID-WEB-008",
+      "ANDROID-WEB-046",
+      "ANDROID-WEB-087"
+    ]
+  },
+  {
+    "id": "WEB-API-087",
+      "phase": 4,
+      "controller": "ReadingRecordController",
+      "function": "updateBookReadingRecord",
+      "method": "PUT",
+      "path": "/api/v1/books/{bookId}/reading-records/{recordId}",
+      "responseKind": "json-envelope",
+      "mutatesState": true,
+      "hasExternalDependency": false,
+      "android": {
+        "sourcePath": "web/src/main/java/com/merpyzf/web/controller/ReadingRecordController.kt",
+        "line": 52,
+        "services": [
+          "ReadingRecordWebService.updateBookReadingRecord"
+        ],
+      "repositoryOwner": "ReadTimingRepository、TimingRecordRepository",
+      "daoOwner": "ReadTimeRecordDao、BookDao",
+      "appReference": "ReadTimeRecordPresenter.kt:54-163"
+    },
+    "status": {
+      "iosDevelopmentCompleted": true,
+      "iosUnitTestCompleted": true,
+      "androidReviewCompleted": true,
+      "parity": "exact"
+    },
+    "issueIds": [
+      "ANDROID-WEB-008",
+      "ANDROID-WEB-044",
+      "ANDROID-WEB-045",
+      "ANDROID-WEB-046",
+      "ANDROID-WEB-087"
+    ]
+  },
+  {
+    "id": "WEB-API-088",
+      "phase": 4,
+      "controller": "ReadingRecordController",
+      "function": "deleteBookReadingRecord",
+      "method": "DELETE",
+      "path": "/api/v1/books/{bookId}/reading-records/{recordId}",
+      "responseKind": "json-envelope",
+      "mutatesState": true,
+      "hasExternalDependency": false,
+      "android": {
+        "sourcePath": "web/src/main/java/com/merpyzf/web/controller/ReadingRecordController.kt",
+        "line": 63,
+        "services": [
+          "ReadingRecordWebService.deleteBookReadingRecord"
+        ],
+      "repositoryOwner": "TimingRecordRepository",
+      "daoOwner": "ReadTimeRecordDao、BookDao",
+      "appReference": "ReadTimeRecordPresenter.kt:189-200"
+    },
+    "status": {
+      "iosDevelopmentCompleted": true,
+      "iosUnitTestCompleted": true,
+      "androidReviewCompleted": true,
+      "parity": "exact"
+    },
+    "issueIds": [
+      "ANDROID-WEB-008",
+      "ANDROID-WEB-044"
+    ]
+  },
+    {
+      "id": "WEB-API-089",
+      "phase": 3,
+      "controller": "RelatedController",
+      "function": "getGlobalRelatedCategories",
+      "method": "GET",
+      "path": "/api/v1/related-categories",
+      "responseKind": "json-envelope",
+      "mutatesState": false,
+      "hasExternalDependency": false,
+      "android": {
+        "sourcePath": "web/src/main/java/com/merpyzf/web/controller/RelatedController.kt",
+        "line": 30,
+        "services": [
+          "RelatedService.getGlobalRelatedCategories"
+        ],
+        "repositoryOwner": "WebRelatedRepository",
+        "daoOwner": "WebRelatedDao",
+        "appReference": "RelevantRepository.kt; RelatedNoteCategoriesViewModel.kt"
+      },
+      "status": {
+        "iosDevelopmentCompleted": true,
+        "iosUnitTestCompleted": true,
+        "androidReviewCompleted": true,
+        "parity": "exact"
+      },
+      "issueIds": [
+        "ANDROID-WEB-047"
+      ]
+    },
+    {
+      "id": "WEB-API-090",
+      "phase": 3,
+      "controller": "RelatedController",
+      "function": "getRelatedCategories",
+      "method": "GET",
+      "path": "/api/v1/books/{bookId}/related-categories",
+      "responseKind": "json-envelope",
+      "mutatesState": false,
+      "hasExternalDependency": false,
+      "android": {
+        "sourcePath": "web/src/main/java/com/merpyzf/web/controller/RelatedController.kt",
+        "line": 39,
+        "services": [
+          "RelatedService.getRelatedCategories"
+        ],
+        "repositoryOwner": "WebRelatedRepository",
+        "daoOwner": "WebRelatedDao",
+        "appReference": "RelevantRepository.kt; RelatedNoteCategoriesViewModel.kt"
+      },
+      "status": {
+        "iosDevelopmentCompleted": true,
+        "iosUnitTestCompleted": true,
+        "androidReviewCompleted": true,
+        "parity": "exact"
+      },
+      "issueIds": [
+        "ANDROID-WEB-008"
+      ]
+    },
+    {
+      "id": "WEB-API-091",
+      "phase": 3,
+      "controller": "RelatedController",
+      "function": "createRelatedCategory",
+      "method": "POST",
+      "path": "/api/v1/books/{bookId}/related-categories",
+      "responseKind": "json-envelope",
+      "mutatesState": true,
+      "hasExternalDependency": false,
+      "android": {
+        "sourcePath": "web/src/main/java/com/merpyzf/web/controller/RelatedController.kt",
+        "line": 49,
+        "services": [
+          "RelatedService.createRelatedCategory"
+        ],
+        "repositoryOwner": "WebRelatedRepository",
+        "daoOwner": "WebRelatedDao",
+        "appReference": "RelevantRepository.kt; CategoryManagerPresenter.kt"
+      },
+      "status": {
+        "iosDevelopmentCompleted": true,
+        "iosUnitTestCompleted": true,
+        "androidReviewCompleted": true,
+        "parity": "exact"
+      },
+      "issueIds": [
+        "ANDROID-WEB-008",
+        "ANDROID-WEB-047",
+        "ANDROID-WEB-051"
+      ]
+    },
+    {
+      "id": "WEB-API-092",
+      "phase": 3,
+      "controller": "RelatedController",
+      "function": "updateRelatedCategory",
+      "method": "PUT",
+      "path": "/api/v1/related-categories/{id}",
+      "responseKind": "json-envelope",
+      "mutatesState": true,
+      "hasExternalDependency": false,
+      "android": {
+        "sourcePath": "web/src/main/java/com/merpyzf/web/controller/RelatedController.kt",
+        "line": 64,
+        "services": [
+          "RelatedService.updateRelatedCategory"
+        ],
+        "repositoryOwner": "WebRelatedRepository",
+        "daoOwner": "WebRelatedDao",
+        "appReference": "RelevantRepository.kt; CategoryManagerPresenter.kt"
+      },
+      "status": {
+        "iosDevelopmentCompleted": true,
+        "iosUnitTestCompleted": true,
+        "androidReviewCompleted": true,
+        "parity": "exact"
+      },
+      "issueIds": [
+        "ANDROID-WEB-048"
+      ]
+    },
+    {
+      "id": "WEB-API-093",
+      "phase": 3,
+      "controller": "RelatedController",
+      "function": "updateRelatedCategoryVisibility",
+      "method": "PUT",
+      "path": "/api/v1/related-categories/{id}/visibility",
+      "responseKind": "json-envelope",
+      "mutatesState": true,
+      "hasExternalDependency": false,
+      "android": {
+        "sourcePath": "web/src/main/java/com/merpyzf/web/controller/RelatedController.kt",
+        "line": 79,
+        "services": [
+          "RelatedService.updateRelatedCategoryVisibility"
+        ],
+        "repositoryOwner": "WebRelatedRepository",
+        "daoOwner": "WebRelatedDao",
+        "appReference": "RelevantRepository.kt; CategoryManagerPresenter.kt"
+      },
+      "status": {
+        "iosDevelopmentCompleted": true,
+        "iosUnitTestCompleted": true,
+        "androidReviewCompleted": true,
+        "parity": "exact"
+      },
+      "issueIds": []
+    },
+    {
+      "id": "WEB-API-094",
+      "phase": 3,
+      "controller": "RelatedController",
+      "function": "deleteRelatedCategory",
+      "method": "DELETE",
+      "path": "/api/v1/related-categories/{id}",
+      "responseKind": "json-envelope",
+      "mutatesState": true,
+      "hasExternalDependency": false,
+      "android": {
+        "sourcePath": "web/src/main/java/com/merpyzf/web/controller/RelatedController.kt",
+        "line": 94,
+        "services": [
+          "RelatedService.deleteRelatedCategory"
+        ],
+        "repositoryOwner": "WebRelatedRepository",
+        "daoOwner": "WebRelatedDao",
+        "appReference": "RelevantRepository.kt; CategoryManagerPresenter.kt"
+      },
+      "status": {
+        "iosDevelopmentCompleted": true,
+        "iosUnitTestCompleted": true,
+        "androidReviewCompleted": true,
+        "parity": "exact"
+      },
+      "issueIds": [
+        "ANDROID-WEB-049"
+      ]
+    },
+    {
+      "id": "WEB-API-095",
+      "phase": 3,
+      "controller": "RelatedController",
+      "function": "reorderRelatedCategories",
+      "method": "POST",
+      "path": "/api/v1/books/{bookId}/related-categories/reorder",
+      "responseKind": "json-envelope",
+      "mutatesState": true,
+      "hasExternalDependency": false,
+      "android": {
+        "sourcePath": "web/src/main/java/com/merpyzf/web/controller/RelatedController.kt",
+        "line": 105,
+        "services": [
+          "RelatedService.reorderRelatedCategories"
+        ],
+        "repositoryOwner": "WebRelatedRepository",
+        "daoOwner": "WebRelatedDao",
+        "appReference": "RelevantRepository.kt; CategoryManagerPresenter.kt"
+      },
+      "status": {
+        "iosDevelopmentCompleted": true,
+        "iosUnitTestCompleted": true,
+        "androidReviewCompleted": true,
+        "parity": "exact"
+      },
+      "issueIds": [
+        "ANDROID-WEB-050"
+      ]
+    },
+    {
+      "id": "WEB-API-096",
+      "phase": 3,
+      "controller": "RelatedController",
+      "function": "getRelatedNoteSortRule",
+      "method": "GET",
+      "path": "/api/v1/books/{bookId}/related-notes/sort-rule",
+      "responseKind": "json-envelope",
+      "mutatesState": false,
+      "hasExternalDependency": false,
+      "android": {
+        "sourcePath": "web/src/main/java/com/merpyzf/web/controller/RelatedController.kt",
+        "line": 120,
+        "services": [
+          "RelatedService.getRelatedNoteSortRule"
+        ],
+        "repositoryOwner": "SortRepository",
+        "daoOwner": "SortDao",
+        "appReference": "RelevantListViewModel.kt"
+      },
+      "status": {
+        "iosDevelopmentCompleted": true,
+        "iosUnitTestCompleted": true,
+        "androidReviewCompleted": true,
+        "parity": "exact"
+      },
+      "issueIds": [
+        "ANDROID-WEB-008"
+      ]
+    },
+    {
+      "id": "WEB-API-097",
+      "phase": 3,
+      "controller": "RelatedController",
+      "function": "updateRelatedNoteSortRule",
+      "method": "PUT",
+      "path": "/api/v1/books/{bookId}/related-notes/sort-rule",
+      "responseKind": "json-envelope",
+      "mutatesState": true,
+      "hasExternalDependency": false,
+      "android": {
+        "sourcePath": "web/src/main/java/com/merpyzf/web/controller/RelatedController.kt",
+        "line": 129,
+        "services": [
+          "RelatedService.updateRelatedNoteSortRule"
+        ],
+        "repositoryOwner": "SortRepository",
+        "daoOwner": "SortDao",
+        "appReference": "RelevantListViewModel.kt"
+      },
+      "status": {
+        "iosDevelopmentCompleted": true,
+        "iosUnitTestCompleted": true,
+        "androidReviewCompleted": true,
+        "parity": "exact"
+      },
+      "issueIds": [
+        "ANDROID-WEB-008"
+      ]
+    },
+    {
+      "id": "WEB-API-098",
+      "phase": 3,
+      "controller": "RelatedController",
+      "function": "getRelatedNotes",
+      "method": "GET",
+      "path": "/api/v1/books/{bookId}/related-notes",
+      "responseKind": "json-envelope",
+      "mutatesState": false,
+      "hasExternalDependency": false,
+      "android": {
+        "sourcePath": "web/src/main/java/com/merpyzf/web/controller/RelatedController.kt",
+        "line": 144,
+        "services": [
+          "RelatedService.getRelatedNotes"
+        ],
+        "repositoryOwner": "WebRelatedRepository",
+        "daoOwner": "WebRelatedDao",
+        "appReference": "RelevantRepository.kt; RelevantListViewModel.kt"
+      },
+      "status": {
+        "iosDevelopmentCompleted": true,
+        "iosUnitTestCompleted": true,
+        "androidReviewCompleted": true,
+        "parity": "exact"
+      },
+      "issueIds": [
+        "ANDROID-WEB-008",
+        "ANDROID-WEB-051"
+      ]
+    },
+    {
+      "id": "WEB-API-099",
+      "phase": 3,
+      "controller": "RelatedController",
+      "function": "getAllRelatedNotes",
+      "method": "GET",
+      "path": "/api/v1/books/{bookId}/related-notes/all",
+      "responseKind": "json-envelope",
+      "mutatesState": false,
+      "hasExternalDependency": false,
+      "android": {
+        "sourcePath": "web/src/main/java/com/merpyzf/web/controller/RelatedController.kt",
+        "line": 169,
+        "services": [
+          "RelatedService.getAllRelatedNotes"
+        ],
+        "repositoryOwner": "WebRelatedRepository",
+        "daoOwner": "WebRelatedDao",
+        "appReference": "RelevantRepository.kt; RelevantListViewModel.kt"
+      },
+      "status": {
+        "iosDevelopmentCompleted": true,
+        "iosUnitTestCompleted": true,
+        "androidReviewCompleted": true,
+        "parity": "exact"
+      },
+      "issueIds": [
+        "ANDROID-WEB-008",
+        "ANDROID-WEB-051",
+        "ANDROID-WEB-052"
+      ]
+    },
+    {
+      "id": "WEB-API-100",
+      "phase": 3,
+      "controller": "RelatedController",
+      "function": "getGlobalRelatedNotes",
+      "method": "GET",
+      "path": "/api/v1/related-notes",
+      "responseKind": "json-envelope",
+      "mutatesState": false,
+      "hasExternalDependency": false,
+      "android": {
+        "sourcePath": "web/src/main/java/com/merpyzf/web/controller/RelatedController.kt",
+        "line": 189,
+        "services": [
+          "RelatedService.getGlobalRelatedNotes"
+        ],
+        "repositoryOwner": "WebRelevantRepository",
+        "daoOwner": "WebRelevantDao, WebRelatedDao, WebBookDao",
+        "appReference": "RelevantRepository.kt; RelevantManagerViewModel.kt"
+      },
+      "status": {
+        "iosDevelopmentCompleted": true,
+        "iosUnitTestCompleted": true,
+        "androidReviewCompleted": true,
+        "parity": "exact"
+      },
+      "issueIds": [
+        "ANDROID-WEB-008",
+        "ANDROID-WEB-051"
+      ]
+    },
+    {
+      "id": "WEB-API-101",
+      "phase": 3,
+      "controller": "RelatedController",
+      "function": "getRelatedNote",
+      "method": "GET",
+      "path": "/api/v1/related-notes/{id}",
+      "responseKind": "json-envelope",
+      "mutatesState": false,
+      "hasExternalDependency": false,
+      "android": {
+        "sourcePath": "web/src/main/java/com/merpyzf/web/controller/RelatedController.kt",
+        "line": 220,
+        "services": [
+          "RelatedService.getRelatedNote"
+        ],
+        "repositoryOwner": "WebRelatedRepository",
+        "daoOwner": "WebRelatedDao",
+        "appReference": "RelevantRepository.kt; RelevantViewPresenter.kt"
+      },
+      "status": {
+        "iosDevelopmentCompleted": true,
+        "iosUnitTestCompleted": true,
+        "androidReviewCompleted": true,
+        "parity": "exact"
+      },
+      "issueIds": [
+        "ANDROID-WEB-051"
+      ]
+    },
+    {
+      "id": "WEB-API-102",
+      "phase": 3,
+      "controller": "RelatedController",
+      "function": "createRelatedNote",
+      "method": "POST",
+      "path": "/api/v1/related-notes",
+      "responseKind": "json-envelope",
+      "mutatesState": true,
+      "hasExternalDependency": false,
+      "android": {
+        "sourcePath": "web/src/main/java/com/merpyzf/web/controller/RelatedController.kt",
+        "line": 231,
+        "services": [
+          "RelatedService.createRelatedNote"
+        ],
+        "repositoryOwner": "WebRelatedRepository",
+        "daoOwner": "WebRelatedDao",
+        "appReference": "RelevantRepository.kt; RelevantEditPresenter.kt"
+      },
+      "status": {
+        "iosDevelopmentCompleted": true,
+        "iosUnitTestCompleted": true,
+        "androidReviewCompleted": true,
+        "parity": "exact"
+      },
+      "issueIds": [
+        "ANDROID-WEB-008",
+        "ANDROID-WEB-051"
+      ]
+    },
+    {
+      "id": "WEB-API-103",
+      "phase": 3,
+      "controller": "RelatedController",
+      "function": "updateRelatedNote",
+      "method": "PUT",
+      "path": "/api/v1/related-notes/{id}",
+      "responseKind": "json-envelope",
+      "mutatesState": true,
+      "hasExternalDependency": false,
+      "android": {
+        "sourcePath": "web/src/main/java/com/merpyzf/web/controller/RelatedController.kt",
+        "line": 243,
+        "services": [
+          "RelatedService.updateRelatedNote"
+        ],
+        "repositoryOwner": "WebRelatedRepository",
+        "daoOwner": "WebRelatedDao",
+        "appReference": "RelevantRepository.kt; RelevantEditPresenter.kt"
+      },
+      "status": {
+        "iosDevelopmentCompleted": true,
+        "iosUnitTestCompleted": true,
+        "androidReviewCompleted": true,
+        "parity": "exact"
+      },
+      "issueIds": [
+        "ANDROID-WEB-051",
+        "ANDROID-WEB-054"
+      ]
+    },
+    {
+      "id": "WEB-API-104",
+      "phase": 3,
+      "controller": "RelatedController",
+      "function": "deleteRelatedNote",
+      "method": "DELETE",
+      "path": "/api/v1/related-notes/{id}",
+      "responseKind": "json-envelope",
+      "mutatesState": true,
+      "hasExternalDependency": false,
+      "android": {
+        "sourcePath": "web/src/main/java/com/merpyzf/web/controller/RelatedController.kt",
+        "line": 258,
+        "services": [
+          "RelatedService.deleteRelatedNote"
+        ],
+        "repositoryOwner": "WebRelatedRepository",
+        "daoOwner": "WebRelatedDao",
+        "appReference": "RelevantRepository.kt; RelevantListViewModel.kt"
+      },
+      "status": {
+        "iosDevelopmentCompleted": true,
+        "iosUnitTestCompleted": true,
+        "androidReviewCompleted": true,
+        "parity": "exact"
+      },
+      "issueIds": [
+        "ANDROID-WEB-053"
+      ]
+    },
+    {
+      "id": "WEB-API-105",
+      "phase": 3,
+      "controller": "RelatedController",
+      "function": "batchDeleteRelatedNotes",
+      "method": "POST",
+      "path": "/api/v1/related-notes/batch-delete",
+      "responseKind": "json-envelope",
+      "mutatesState": true,
+      "hasExternalDependency": false,
+      "android": {
+        "sourcePath": "web/src/main/java/com/merpyzf/web/controller/RelatedController.kt",
+        "line": 269,
+        "services": [
+          "RelatedService.batchDeleteRelatedNotes"
+        ],
+        "repositoryOwner": "WebRelatedRepository",
+        "daoOwner": "WebRelatedDao",
+        "appReference": "RelevantRepository.kt; RelevantListViewModel.kt"
+      },
+      "status": {
+        "iosDevelopmentCompleted": true,
+        "iosUnitTestCompleted": true,
+        "androidReviewCompleted": true,
+        "parity": "exact"
+      },
+      "issueIds": [
+        "ANDROID-WEB-053"
+      ]
+    },
+    {
+      "id": "WEB-API-106",
+      "phase": 3,
+      "controller": "RelatedController",
+      "function": "batchUpdateRelatedNotesCategory",
+      "method": "POST",
+      "path": "/api/v1/related-notes/batch-update-category",
+      "responseKind": "json-envelope",
+      "mutatesState": true,
+      "hasExternalDependency": false,
+      "android": {
+        "sourcePath": "web/src/main/java/com/merpyzf/web/controller/RelatedController.kt",
+        "line": 281,
+        "services": [
+          "RelatedService.batchUpdateRelatedNotesCategory"
+        ],
+        "repositoryOwner": "WebRelatedRepository",
+        "daoOwner": "WebRelatedDao",
+        "appReference": "RelevantRepository.kt; RelevantManagerViewModel.kt"
+      },
+      "status": {
+        "iosDevelopmentCompleted": true,
+        "iosUnitTestCompleted": true,
+        "androidReviewCompleted": true,
+        "parity": "exact"
+      },
+      "issueIds": [
+        "ANDROID-WEB-051"
+      ]
+    },
+    {
+      "id": "WEB-API-107",
+      "phase": 3,
+      "controller": "ReviewController",
+      "function": "getGlobalReviews",
+      "method": "GET",
+      "path": "/api/v1/reviews",
+      "responseKind": "json-envelope",
+      "mutatesState": false,
+      "hasExternalDependency": false,
+      "android": {
+        "sourcePath": "web/src/main/java/com/merpyzf/web/controller/ReviewController.kt",
+        "line": 26,
+        "services": [
+          "ReviewService.getGlobalReviews"
+        ],
+        "repositoryOwner": "WebReviewRepository",
+        "daoOwner": "WebReviewDao、WebBookDao",
+        "appReference": "ReviewRepository.kt:26-79；ReviewEditPresenter.kt:116-182"
+      },
+      "status": {
+        "iosDevelopmentCompleted": true,
+        "iosUnitTestCompleted": true,
+        "androidReviewCompleted": true,
+        "parity": "exact"
+      },
+      "issueIds": [
+        "ANDROID-WEB-003",
+        "ANDROID-WEB-008",
+        "ANDROID-WEB-041"
+      ]
+    },
+    {
+      "id": "WEB-API-108",
+      "phase": 3,
+      "controller": "ReviewController",
+      "function": "getReviewDraft",
+      "method": "GET",
+      "path": "/api/v1/reviews/drafts",
+      "responseKind": "json-envelope",
+      "mutatesState": false,
+      "hasExternalDependency": false,
+      "android": {
+        "sourcePath": "web/src/main/java/com/merpyzf/web/controller/ReviewController.kt",
+        "line": 55,
+        "services": [
+          "ReviewDraftService.getDraft"
+        ],
+        "repositoryOwner": "WebReviewDraftRepository",
+        "daoOwner": "SpSettingHelper（SharedPreferences）",
+        "appReference": "ReviewEditPresenter.kt:55-110"
+      },
+      "status": {
+        "iosDevelopmentCompleted": true,
+        "iosUnitTestCompleted": true,
+        "androidReviewCompleted": true,
+        "parity": "exact"
+      },
+      "issueIds": [
+        "ANDROID-WEB-039"
+      ]
+    },
+    {
+      "id": "WEB-API-109",
+      "phase": 3,
+      "controller": "ReviewController",
+      "function": "upsertReviewDraft",
+      "method": "PUT",
+      "path": "/api/v1/reviews/drafts",
+      "responseKind": "json-envelope",
+      "mutatesState": true,
+      "hasExternalDependency": false,
+      "android": {
+        "sourcePath": "web/src/main/java/com/merpyzf/web/controller/ReviewController.kt",
+        "line": 69,
+        "services": [
+          "ReviewDraftService.upsertDraft"
+        ],
+        "repositoryOwner": "WebReviewDraftRepository",
+        "daoOwner": "SpSettingHelper（SharedPreferences）",
+        "appReference": "ReviewEditPresenter.kt:55-110"
+      },
+      "status": {
+        "iosDevelopmentCompleted": true,
+        "iosUnitTestCompleted": true,
+        "androidReviewCompleted": true,
+        "parity": "exact"
+      },
+      "issueIds": [
+        "ANDROID-WEB-040"
+      ]
+    },
+    {
+      "id": "WEB-API-110",
+      "phase": 3,
+      "controller": "ReviewController",
+      "function": "deleteReviewDraft",
+      "method": "DELETE",
+      "path": "/api/v1/reviews/drafts",
+      "responseKind": "json-envelope",
+      "mutatesState": true,
+      "hasExternalDependency": false,
+      "android": {
+        "sourcePath": "web/src/main/java/com/merpyzf/web/controller/ReviewController.kt",
+        "line": 81,
+        "services": [
+          "ReviewDraftService.deleteDraft"
+        ],
+        "repositoryOwner": "WebReviewDraftRepository",
+        "daoOwner": "SpSettingHelper（SharedPreferences）",
+        "appReference": "ReviewEditPresenter.kt:55-110"
+      },
+      "status": {
+        "iosDevelopmentCompleted": true,
+        "iosUnitTestCompleted": true,
+        "androidReviewCompleted": true,
+        "parity": "exact"
+      },
+      "issueIds": [
+        "ANDROID-WEB-039"
+      ]
+    },
+    {
+      "id": "WEB-API-111",
+      "phase": 3,
+      "controller": "ReviewController",
+      "function": "getBookReviews",
+      "method": "GET",
+      "path": "/api/v1/books/{bookId}/reviews",
+      "responseKind": "json-envelope",
+      "mutatesState": false,
+      "hasExternalDependency": false,
+      "android": {
+        "sourcePath": "web/src/main/java/com/merpyzf/web/controller/ReviewController.kt",
+        "line": 95,
+        "services": [
+          "ReviewService.getBookReviews"
+        ],
+        "repositoryOwner": "WebReviewRepository",
+        "daoOwner": "WebReviewDao",
+        "appReference": "ReviewRepository.kt:26-79；ReviewEditPresenter.kt:116-182"
+      },
+      "status": {
+        "iosDevelopmentCompleted": true,
+        "iosUnitTestCompleted": true,
+        "androidReviewCompleted": true,
+        "parity": "exact"
+      },
+      "issueIds": [
+        "ANDROID-WEB-003",
+        "ANDROID-WEB-008",
+        "ANDROID-WEB-041"
+      ]
+    },
+    {
+      "id": "WEB-API-112",
+      "phase": 3,
+      "controller": "ReviewController",
+      "function": "getBookReviewSortRule",
+      "method": "GET",
+      "path": "/api/v1/books/{bookId}/reviews/sort-rule",
+      "responseKind": "json-envelope",
+      "mutatesState": false,
+      "hasExternalDependency": false,
+      "android": {
+        "sourcePath": "web/src/main/java/com/merpyzf/web/controller/ReviewController.kt",
+        "line": 116,
+        "services": [
+          "ReviewService.getBookReviewSortRule"
+        ],
+        "repositoryOwner": "SortRepository",
+        "daoOwner": "SortDao",
+        "appReference": "SortRepository.kt:24-160"
+      },
+      "status": {
+        "iosDevelopmentCompleted": true,
+        "iosUnitTestCompleted": true,
+        "androidReviewCompleted": true,
+        "parity": "exact"
+      },
+      "issueIds": [
+        "ANDROID-WEB-008"
+      ]
+    },
+    {
+      "id": "WEB-API-113",
+      "phase": 3,
+      "controller": "ReviewController",
+      "function": "updateBookReviewSortRule",
+      "method": "PUT",
+      "path": "/api/v1/books/{bookId}/reviews/sort-rule",
+      "responseKind": "json-envelope",
+      "mutatesState": true,
+      "hasExternalDependency": false,
+      "android": {
+        "sourcePath": "web/src/main/java/com/merpyzf/web/controller/ReviewController.kt",
+        "line": 127,
+        "services": [
+          "ReviewService.updateBookReviewSortRule"
+        ],
+        "repositoryOwner": "SortRepository",
+        "daoOwner": "SortDao",
+        "appReference": "SortRepository.kt:24-160"
+      },
+      "status": {
+        "iosDevelopmentCompleted": true,
+        "iosUnitTestCompleted": true,
+        "androidReviewCompleted": true,
+        "parity": "exact"
+      },
+      "issueIds": [
+        "ANDROID-WEB-008"
+      ]
+    },
+    {
+      "id": "WEB-API-114",
+      "phase": 3,
+      "controller": "ReviewController",
+      "function": "getReview",
+      "method": "GET",
+      "path": "/api/v1/reviews/{id}",
+      "responseKind": "json-envelope",
+      "mutatesState": false,
+      "hasExternalDependency": false,
+      "android": {
+        "sourcePath": "web/src/main/java/com/merpyzf/web/controller/ReviewController.kt",
+        "line": 146,
+        "services": [
+          "ReviewService.getReview"
+        ],
+        "repositoryOwner": "WebReviewRepository",
+        "daoOwner": "WebReviewDao",
+        "appReference": "ReviewRepository.kt:26-79；ReviewEditPresenter.kt:116-182"
+      },
+      "status": {
+        "iosDevelopmentCompleted": true,
+        "iosUnitTestCompleted": true,
+        "androidReviewCompleted": true,
+        "parity": "exact"
+      },
+      "issueIds": [
+        "ANDROID-WEB-036"
+      ]
+    },
+    {
+      "id": "WEB-API-115",
+      "phase": 3,
+      "controller": "ReviewController",
+      "function": "createReview",
+      "method": "POST",
+      "path": "/api/v1/reviews",
+      "responseKind": "json-envelope",
+      "mutatesState": true,
+      "hasExternalDependency": false,
+      "android": {
+        "sourcePath": "web/src/main/java/com/merpyzf/web/controller/ReviewController.kt",
+        "line": 157,
+        "services": [
+          "ReviewService.createReview"
+        ],
+        "repositoryOwner": "WebReviewRepository",
+        "daoOwner": "WebReviewDao",
+        "appReference": "ReviewRepository.kt:26-79；ReviewEditPresenter.kt:116-182"
+      },
+      "status": {
+        "iosDevelopmentCompleted": true,
+        "iosUnitTestCompleted": true,
+        "androidReviewCompleted": true,
+        "parity": "exact"
+      },
+      "issueIds": [
+        "ANDROID-WEB-037",
+        "ANDROID-WEB-038"
+      ]
+    },
+    {
+      "id": "WEB-API-116",
+      "phase": 3,
+      "controller": "ReviewController",
+      "function": "updateReview",
+      "method": "PUT",
+      "path": "/api/v1/reviews/{id}",
+      "responseKind": "json-envelope",
+      "mutatesState": true,
+      "hasExternalDependency": false,
+      "android": {
+        "sourcePath": "web/src/main/java/com/merpyzf/web/controller/ReviewController.kt",
+        "line": 169,
+        "services": [
+          "ReviewService.updateReview"
+        ],
+        "repositoryOwner": "WebReviewRepository",
+        "daoOwner": "WebReviewDao",
+        "appReference": "ReviewRepository.kt:26-79；ReviewEditPresenter.kt:116-182"
+      },
+      "status": {
+        "iosDevelopmentCompleted": true,
+        "iosUnitTestCompleted": true,
+        "androidReviewCompleted": true,
+        "parity": "exact"
+      },
+      "issueIds": [
+        "ANDROID-WEB-036",
+        "ANDROID-WEB-037",
+        "ANDROID-WEB-038"
+      ]
+    },
+    {
+      "id": "WEB-API-117",
+      "phase": 3,
+      "controller": "ReviewController",
+      "function": "deleteReview",
+      "method": "DELETE",
+      "path": "/api/v1/reviews/{id}",
+      "responseKind": "json-envelope",
+      "mutatesState": true,
+      "hasExternalDependency": false,
+      "android": {
+        "sourcePath": "web/src/main/java/com/merpyzf/web/controller/ReviewController.kt",
+        "line": 184,
+        "services": [
+          "ReviewService.deleteReview"
+        ],
+        "repositoryOwner": "WebReviewRepository",
+        "daoOwner": "WebReviewDao",
+        "appReference": "ReviewRepository.kt:26-79；ReviewEditPresenter.kt:116-182"
+      },
+      "status": {
+        "iosDevelopmentCompleted": true,
+        "iosUnitTestCompleted": true,
+        "androidReviewCompleted": true,
+        "parity": "exact"
+      },
+      "issueIds": [
+        "ANDROID-WEB-036",
+        "ANDROID-WEB-042"
+      ]
+    },
+    {
+      "id": "WEB-API-118",
+      "phase": 4,
+      "controller": "SearchController",
+      "function": "search",
+      "method": "GET",
+      "path": "/api/v1/search",
+      "responseKind": "json-envelope",
+      "mutatesState": false,
+      "hasExternalDependency": false,
+      "android": {
+        "sourcePath": "web/src/main/java/com/merpyzf/web/controller/SearchController.kt",
+        "line": 15,
+        "services": [
+          "SearchService.search"
+        ],
+        "repositoryOwner": "WebBookRepository, WebNoteRepository, WebReviewRepository, WebRelevantRepository",
+        "daoOwner": "WebBookDao, WebNoteDao, WebReviewDao, WebRelevantDao, WebRelatedDao",
+        "appReference": "SearchPresenter.kt:74-143；BookRepository.kt:1164-1175；NoteRepository、ReviewRepository、RelevantRepository 搜索路径"
+      },
+      "status": {
+        "iosDevelopmentCompleted": true,
+        "iosUnitTestCompleted": true,
+        "androidReviewCompleted": true,
+        "parity": "exact"
+      },
+      "issueIds": [
+        "ANDROID-WEB-008",
+        "ANDROID-WEB-034",
+        "ANDROID-WEB-055",
+        "ANDROID-WEB-056",
+        "ANDROID-WEB-057"
+      ]
+    },
+    {
+      "id": "WEB-API-119",
+      "phase": 4,
+      "controller": "SearchController",
+      "function": "searchAggregate",
+      "method": "GET",
+      "path": "/api/v1/search/aggregate",
+      "responseKind": "json-envelope",
+      "mutatesState": false,
+      "hasExternalDependency": false,
+      "android": {
+        "sourcePath": "web/src/main/java/com/merpyzf/web/controller/SearchController.kt",
+        "line": 31,
+        "services": [
+          "SearchService.searchAggregate"
+        ],
+        "repositoryOwner": "WebBookRepository, WebNoteRepository, WebReviewRepository, WebRelevantRepository",
+        "daoOwner": "WebBookDao, WebNoteDao, WebReviewDao, WebRelevantDao, WebRelatedDao",
+        "appReference": "SearchPresenter.kt:74-143；BookRepository.kt:1164-1175；NoteRepository、ReviewRepository、RelevantRepository 搜索路径"
+      },
+      "status": {
+        "iosDevelopmentCompleted": true,
+        "iosUnitTestCompleted": true,
+        "androidReviewCompleted": true,
+        "parity": "exact"
+      },
+      "issueIds": [
+        "ANDROID-WEB-008",
+        "ANDROID-WEB-034",
+        "ANDROID-WEB-055",
+        "ANDROID-WEB-056",
+        "ANDROID-WEB-057"
+      ]
+    },
+    {
+      "id": "WEB-API-120",
+      "phase": 1,
+      "controller": "SettingsController",
+      "function": "getWebSettings",
+      "method": "GET",
+      "path": "/api/v1/settings/web",
+      "responseKind": "json-envelope",
+      "mutatesState": false,
+      "hasExternalDependency": false,
+      "android": {
+        "sourcePath": "web/src/main/java/com/merpyzf/web/controller/SettingsController.kt",
+        "line": 24,
+        "services": [
+          "SpSettingHelper"
+        ],
+        "repositoryOwner": "SpSettingHelper（SharedPreferences）",
+        "daoOwner": "不适用（设置不进入数据库）",
+        "appReference": "BookEntryPreferenceSheet.kt:100-109,178-197（录入偏好与 App 共用）"
+      },
+      "status": {
+        "iosDevelopmentCompleted": true,
+        "iosUnitTestCompleted": true,
+        "androidReviewCompleted": true,
+        "parity": "exact"
+      },
+      "issueIds": []
+    },
+    {
+      "id": "WEB-API-121",
+      "phase": 1,
+      "controller": "SettingsController",
+      "function": "getAccessAuthSettings",
+      "method": "GET",
+      "path": "/api/v1/settings/access-auth",
+      "responseKind": "json-envelope",
+      "mutatesState": false,
+      "hasExternalDependency": false,
+      "android": {
+        "sourcePath": "web/src/main/java/com/merpyzf/web/controller/SettingsController.kt",
+        "line": 30,
+        "services": [
+          "AccessAuthService.isAccessAuthEnabled"
+        ],
+        "repositoryOwner": "SpSettingHelper（SharedPreferences）",
+        "daoOwner": "不适用（设置不进入数据库）",
+        "appReference": "DesktopClientViewModel.kt:111-161"
+      },
+      "status": {
+        "iosDevelopmentCompleted": true,
+        "iosUnitTestCompleted": true,
+        "androidReviewCompleted": true,
+        "parity": "exact"
+      },
+      "issueIds": []
+    },
+    {
+      "id": "WEB-API-122",
+      "phase": 1,
+      "controller": "SettingsController",
+      "function": "getExportSettings",
+      "method": "GET",
+      "path": "/api/v1/settings/export",
+      "responseKind": "json-envelope",
+      "mutatesState": false,
+      "hasExternalDependency": false,
+      "android": {
+        "sourcePath": "web/src/main/java/com/merpyzf/web/controller/SettingsController.kt",
+        "line": 41,
+        "services": [
+          "NoteExportWebService.getSettings"
+        ],
+        "repositoryOwner": "SpSettingHelper（SharedPreferences）",
+        "daoOwner": "不适用（设置不进入数据库）",
+        "appReference": "NoteExportSettingActivity.kt:46-106；NoteExportPresenter.kt:80-94"
+      },
+      "status": {
+        "iosDevelopmentCompleted": true,
+        "iosUnitTestCompleted": true,
+        "androidReviewCompleted": true,
+        "parity": "exact"
+      },
+      "issueIds": [
+        "ANDROID-WEB-002"
+      ]
+    },
+    {
+      "id": "WEB-API-123",
+      "phase": 1,
+      "controller": "SettingsController",
+      "function": "getMembershipSettings",
+      "method": "GET",
+      "path": "/api/v1/settings/membership",
+      "responseKind": "json-envelope",
+      "mutatesState": false,
+      "hasExternalDependency": false,
+      "android": {
+        "sourcePath": "web/src/main/java/com/merpyzf/web/controller/SettingsController.kt",
+        "line": 48,
+        "services": [
+          "MembershipCapabilityService.getCapability"
+        ],
+        "repositoryOwner": "SpSecuritySettingHelper（会员状态）",
+        "daoOwner": "不适用（加密 SharedPreferences）",
+        "appReference": "PremiumHelper.kt:54-83,128-139"
+      },
+      "status": {
+        "iosDevelopmentCompleted": true,
+        "iosUnitTestCompleted": true,
+        "androidReviewCompleted": true,
+        "parity": "exact"
+      },
+      "issueIds": []
+    },
+    {
+      "id": "WEB-API-124",
+      "phase": 1,
+      "controller": "SettingsController",
+      "function": "updateWebSettings",
+      "method": "PUT",
+      "path": "/api/v1/settings/web",
+      "responseKind": "json-envelope",
+      "mutatesState": true,
+      "hasExternalDependency": false,
+      "android": {
+        "sourcePath": "web/src/main/java/com/merpyzf/web/controller/SettingsController.kt",
+        "line": 55,
+        "services": [
+          "SpSettingHelper"
+        ],
+        "repositoryOwner": "SpSettingHelper（SharedPreferences）",
+        "daoOwner": "不适用（设置不进入数据库）",
+        "appReference": "BookEntryPreferenceSheet.kt:100-109,178-197（录入偏好与 App 共用）"
+      },
+      "status": {
+        "iosDevelopmentCompleted": true,
+        "iosUnitTestCompleted": true,
+        "androidReviewCompleted": true,
+        "parity": "exact"
+      },
+      "issueIds": ["ANDROID-WEB-087"]
+    },
+    {
+      "id": "WEB-API-125",
+      "phase": 1,
+      "controller": "SettingsController",
+      "function": "updateExportSettings",
+      "method": "PUT",
+      "path": "/api/v1/settings/export",
+      "responseKind": "json-envelope",
+      "mutatesState": true,
+      "hasExternalDependency": false,
+      "android": {
+        "sourcePath": "web/src/main/java/com/merpyzf/web/controller/SettingsController.kt",
+        "line": 66,
+        "services": [
+          "NoteExportWebService.updateSettings"
+        ],
+        "repositoryOwner": "SpSettingHelper（SharedPreferences）",
+        "daoOwner": "不适用（设置不进入数据库）",
+        "appReference": "NoteExportSettingActivity.kt:46-106；NoteExportPresenter.kt:80-94"
+      },
+      "status": {
+        "iosDevelopmentCompleted": true,
+        "iosUnitTestCompleted": true,
+        "androidReviewCompleted": true,
+        "parity": "exact"
+      },
+      "issueIds": ["ANDROID-WEB-087"]
+    },
+    {
+  "id": "WEB-API-126",
+      "phase": 2,
+      "controller": "SourceController",
+      "function": "getSourceList",
+      "method": "GET",
+      "path": "/api/v1/sources",
+      "responseKind": "json-envelope",
+      "mutatesState": false,
+      "hasExternalDependency": false,
+      "android": {
+        "sourcePath": "web/src/main/java/com/merpyzf/web/controller/SourceController.kt",
+        "line": 22,
+        "services": [
+          "SourceService.getSourceList"
+        ],
+    "repositoryOwner": "WebSourceRepository",
+    "daoOwner": "WebSourceDao",
+    "appReference": "SourceRepository.kt:27-117; BookSourceViewModel.kt:80-144"
+      },
+      "status": {
+    "iosDevelopmentCompleted": true,
+    "iosUnitTestCompleted": true,
+    "androidReviewCompleted": true,
+        "parity": "exact"
+      },
+      "issueIds": []
+    },
+    {
+  "id": "WEB-API-127",
+      "phase": 2,
+      "controller": "SourceController",
+      "function": "getSourceDetail",
+      "method": "GET",
+      "path": "/api/v1/sources/{id}",
+      "responseKind": "json-envelope",
+      "mutatesState": false,
+      "hasExternalDependency": false,
+      "android": {
+        "sourcePath": "web/src/main/java/com/merpyzf/web/controller/SourceController.kt",
+        "line": 31,
+        "services": [
+          "SourceService.getSourceDetail"
+        ],
+    "repositoryOwner": "WebSourceRepository",
+    "daoOwner": "WebSourceDao",
+    "appReference": "SourceRepository.kt:27-117; BookSourceViewModel.kt:80-144"
+      },
+      "status": {
+    "iosDevelopmentCompleted": true,
+    "iosUnitTestCompleted": true,
+    "androidReviewCompleted": true,
+        "parity": "exact"
+      },
+      "issueIds": []
+    },
+    {
+  "id": "WEB-API-128",
+      "phase": 2,
+      "controller": "SourceController",
+      "function": "createSource",
+      "method": "POST",
+      "path": "/api/v1/sources",
+      "responseKind": "json-envelope",
+      "mutatesState": true,
+      "hasExternalDependency": false,
+      "android": {
+        "sourcePath": "web/src/main/java/com/merpyzf/web/controller/SourceController.kt",
+        "line": 38,
+        "services": [
+          "SourceService.createSource"
+        ],
+    "repositoryOwner": "WebSourceRepository",
+    "daoOwner": "WebSourceDao",
+    "appReference": "SourceRepository.kt:27-117; BookSourceViewModel.kt:80-144"
+      },
+      "status": {
+    "iosDevelopmentCompleted": true,
+    "iosUnitTestCompleted": true,
+    "androidReviewCompleted": true,
+        "parity": "exact"
+      },
+      "issueIds": ["ANDROID-WEB-087"]
+    },
+    {
+  "id": "WEB-API-129",
+      "phase": 2,
+      "controller": "SourceController",
+      "function": "updateSource",
+      "method": "PUT",
+      "path": "/api/v1/sources/{id}",
+      "responseKind": "json-envelope",
+      "mutatesState": true,
+      "hasExternalDependency": false,
+      "android": {
+        "sourcePath": "web/src/main/java/com/merpyzf/web/controller/SourceController.kt",
+        "line": 45,
+        "services": [
+          "SourceService.updateSource"
+        ],
+    "repositoryOwner": "WebSourceRepository",
+    "daoOwner": "WebSourceDao",
+    "appReference": "SourceRepository.kt:27-117; BookSourceViewModel.kt:80-144"
+      },
+      "status": {
+    "iosDevelopmentCompleted": true,
+    "iosUnitTestCompleted": true,
+    "androidReviewCompleted": true,
+        "parity": "exact"
+      },
+      "issueIds": ["ANDROID-WEB-087"]
+    },
+    {
+  "id": "WEB-API-130",
+      "phase": 2,
+      "controller": "SourceController",
+      "function": "deleteSource",
+      "method": "DELETE",
+      "path": "/api/v1/sources/{id}",
+      "responseKind": "json-envelope",
+      "mutatesState": true,
+      "hasExternalDependency": false,
+      "android": {
+        "sourcePath": "web/src/main/java/com/merpyzf/web/controller/SourceController.kt",
+        "line": 55,
+        "services": [
+          "SourceService.deleteSource"
+        ],
+    "repositoryOwner": "WebSourceRepository",
+    "daoOwner": "WebSourceDao",
+    "appReference": "SourceRepository.kt:27-117; BookSourceViewModel.kt:80-144"
+      },
+      "status": {
+    "iosDevelopmentCompleted": true,
+    "iosUnitTestCompleted": true,
+    "androidReviewCompleted": true,
+        "parity": "exact"
+      },
+      "issueIds": []
+    },
+    {
+  "id": "WEB-API-131",
+      "phase": 2,
+      "controller": "SourceController",
+      "function": "updateOrder",
+      "method": "PUT",
+      "path": "/api/v1/sources/order",
+      "responseKind": "json-envelope",
+      "mutatesState": true,
+      "hasExternalDependency": false,
+      "android": {
+        "sourcePath": "web/src/main/java/com/merpyzf/web/controller/SourceController.kt",
+        "line": 62,
+        "services": [
+          "SourceService.updateOrder"
+        ],
+    "repositoryOwner": "WebSourceRepository",
+    "daoOwner": "WebSourceDao",
+    "appReference": "SourceRepository.kt:27-117; BookSourceViewModel.kt:80-144"
+      },
+      "status": {
+    "iosDevelopmentCompleted": true,
+    "iosUnitTestCompleted": true,
+    "androidReviewCompleted": true,
+        "parity": "exact"
+      },
+      "issueIds": ["ANDROID-WEB-087"]
+    },
+    {
+      "id": "WEB-API-132",
+      "phase": 4,
+      "controller": "StatisticsController",
+      "function": "getMonthlyReading",
+      "method": "GET",
+      "path": "/api/v1/statistics/monthly-reading",
+      "responseKind": "json-envelope",
+      "mutatesState": false,
+      "hasExternalDependency": false,
+      "android": {
+        "sourcePath": "web/src/main/java/com/merpyzf/web/controller/StatisticsController.kt",
+        "line": 21,
+        "services": [
+          "StatisticsWebService.getMonthlyReading"
+        ],
+        "repositoryOwner": "StatisticsRepository",
+        "daoOwner": "ReadTimeRecordDao",
+        "appReference": "StatisticsViewModel.kt:16-94; StatisticsPresenter.kt:21-94"
+      },
+      "status": {
+        "iosDevelopmentCompleted": true,
+        "iosUnitTestCompleted": true,
+        "androidReviewCompleted": true,
+        "parity": "exact"
+      },
+      "issueIds": ["ANDROID-WEB-059"]
+    },
+    {
+      "id": "WEB-API-133",
+      "phase": 4,
+      "controller": "StatisticsController",
+      "function": "getWeeklyReading",
+      "method": "GET",
+      "path": "/api/v1/statistics/weekly-reading",
+      "responseKind": "json-envelope",
+      "mutatesState": false,
+      "hasExternalDependency": false,
+      "android": {
+        "sourcePath": "web/src/main/java/com/merpyzf/web/controller/StatisticsController.kt",
+        "line": 33,
+        "services": [
+          "StatisticsWebService.getWeeklyReading"
+        ],
+        "repositoryOwner": "StatisticsRepository",
+        "daoOwner": "ReadTimeRecordDao",
+        "appReference": "StatisticsViewModel.kt:16-94; StatisticsPresenter.kt:21-94"
+      },
+      "status": {
+        "iosDevelopmentCompleted": true,
+        "iosUnitTestCompleted": true,
+        "androidReviewCompleted": true,
+        "parity": "exact"
+      },
+      "issueIds": ["ANDROID-WEB-060", "ANDROID-WEB-066"]
+    },
+    {
+      "id": "WEB-API-134",
+      "phase": 4,
+      "controller": "StatisticsController",
+      "function": "getReadingRhythm",
+      "method": "GET",
+      "path": "/api/v1/statistics/reading-rhythm",
+      "responseKind": "json-envelope",
+      "mutatesState": false,
+      "hasExternalDependency": false,
+      "android": {
+        "sourcePath": "web/src/main/java/com/merpyzf/web/controller/StatisticsController.kt",
+        "line": 42,
+        "services": [
+          "StatisticsWebService.getReadingRhythm"
+        ],
+        "repositoryOwner": "StatisticsRepository",
+        "daoOwner": "ReadTimeRecordDao",
+        "appReference": "StatisticsViewModel.kt:16-94; StatisticsPresenter.kt:21-94"
+      },
+      "status": {
+        "iosDevelopmentCompleted": true,
+        "iosUnitTestCompleted": true,
+        "androidReviewCompleted": true,
+        "parity": "exact"
+      },
+      "issueIds": ["ANDROID-WEB-066", "ANDROID-WEB-090"]
+    },
+    {
+      "id": "WEB-API-135",
+      "phase": 4,
+      "controller": "StatisticsController",
+      "function": "getHeatmap",
+      "method": "GET",
+      "path": "/api/v1/statistics/heatmap",
+      "responseKind": "json-envelope",
+      "mutatesState": false,
+      "hasExternalDependency": false,
+      "android": {
+        "sourcePath": "web/src/main/java/com/merpyzf/web/controller/StatisticsController.kt",
+        "line": 53,
+        "services": [
+          "StatisticsWebService.getHeatmap"
+        ],
+        "repositoryOwner": "StatisticsRepository",
+        "daoOwner": "ReadTimeRecordDao; NoteDao; CheckInRecordDao; BookReadStatusRecordDao",
+        "appReference": "HeatChartPresenter.kt:23-150; HeatChartFragment.kt:34-175"
+      },
+      "status": {
+        "iosDevelopmentCompleted": true,
+        "iosUnitTestCompleted": true,
+        "androidReviewCompleted": true,
+        "parity": "exact"
+      },
+      "issueIds": ["ANDROID-WEB-067", "ANDROID-WEB-068", "ANDROID-WEB-069"]
+    },
+    {
+      "id": "WEB-API-136",
+      "phase": 4,
+      "controller": "StatisticsController",
+      "function": "getOverview",
+      "method": "GET",
+      "path": "/api/v1/statistics/overview",
+      "responseKind": "json-envelope",
+      "mutatesState": false,
+      "hasExternalDependency": false,
+      "android": {
+        "sourcePath": "web/src/main/java/com/merpyzf/web/controller/StatisticsController.kt",
+        "line": 63,
+        "services": [
+          "StatisticsWebService.getOverview"
+        ],
+        "repositoryOwner": "StatisticsRepository",
+        "daoOwner": "BookDao; NoteDao; ReadTimeRecordDao; BookReadStatusRecordDao; CheckInRecordDao",
+        "appReference": "StatisticsViewModel.kt:16-94; StatisticsPresenter.kt:21-94"
+      },
+      "status": {
+        "iosDevelopmentCompleted": true,
+        "iosUnitTestCompleted": true,
+        "androidReviewCompleted": true,
+        "parity": "exact"
+      },
+      "issueIds": ["ANDROID-WEB-008", "ANDROID-WEB-063", "ANDROID-WEB-064", "ANDROID-WEB-090"]
+    },
+    {
+      "id": "WEB-API-137",
+      "phase": 4,
+      "controller": "StatisticsController",
+      "function": "getYearlyBooks",
+      "method": "GET",
+      "path": "/api/v1/statistics/yearly-books",
+      "responseKind": "json-envelope",
+      "mutatesState": false,
+      "hasExternalDependency": false,
+      "android": {
+        "sourcePath": "web/src/main/java/com/merpyzf/web/controller/StatisticsController.kt",
+        "line": 74,
+        "services": [
+          "StatisticsWebService.getYearlyBooks"
+        ],
+        "repositoryOwner": "StatisticsRepository; WebBookRepository",
+        "daoOwner": "BookDao; BookReadStatusRecordDao; WebBookDao",
+        "appReference": "StatisticsViewModel.kt:16-94; StatisticsPresenter.kt:21-94"
+      },
+      "status": {
+        "iosDevelopmentCompleted": true,
+        "iosUnitTestCompleted": true,
+        "androidReviewCompleted": true,
+        "parity": "exact"
+      },
+      "issueIds": ["ANDROID-WEB-008", "ANDROID-WEB-090"]
+    },
+    {
+      "id": "WEB-API-138",
+      "phase": 4,
+      "controller": "StatisticsController",
+      "function": "getAllReadTargets",
+      "method": "GET",
+      "path": "/api/v1/statistics/read-targets",
+      "responseKind": "json-envelope",
+      "mutatesState": false,
+      "hasExternalDependency": false,
+      "android": {
+        "sourcePath": "web/src/main/java/com/merpyzf/web/controller/StatisticsController.kt",
+        "line": 83,
+        "services": [
+          "StatisticsWebService.getAllReadTargets"
+        ],
+        "repositoryOwner": "StatisticsRepository; ReadTargetRepository",
+        "daoOwner": "ReadTargetDao",
+        "appReference": "ReadingPresenter.kt:45-155; ReadTargetRepository.kt:22-135"
+      },
+      "status": {
+        "iosDevelopmentCompleted": true,
+        "iosUnitTestCompleted": true,
+        "androidReviewCompleted": true,
+        "parity": "exact"
+      },
+      "issueIds": []
+    },
+    {
+      "id": "WEB-API-139",
+      "phase": 4,
+      "controller": "StatisticsController",
+      "function": "getReadTarget",
+      "method": "GET",
+      "path": "/api/v1/statistics/read-target",
+      "responseKind": "json-envelope",
+      "mutatesState": false,
+      "hasExternalDependency": false,
+      "android": {
+        "sourcePath": "web/src/main/java/com/merpyzf/web/controller/StatisticsController.kt",
+        "line": 90,
+        "services": [
+          "StatisticsWebService.getReadTarget"
+        ],
+        "repositoryOwner": "StatisticsRepository; ReadTargetRepository",
+        "daoOwner": "ReadTargetDao",
+        "appReference": "ReadingPresenter.kt:45-155; ReadTargetRepository.kt:22-135"
+      },
+      "status": {
+        "iosDevelopmentCompleted": true,
+        "iosUnitTestCompleted": true,
+        "androidReviewCompleted": true,
+        "parity": "exact"
+      },
+      "issueIds": []
+    },
+    {
+      "id": "WEB-API-140",
+      "phase": 4,
+      "controller": "StatisticsController",
+      "function": "setReadTarget",
+      "method": "PUT",
+      "path": "/api/v1/statistics/read-target",
+      "responseKind": "json-envelope",
+      "mutatesState": true,
+      "hasExternalDependency": false,
+      "android": {
+        "sourcePath": "web/src/main/java/com/merpyzf/web/controller/StatisticsController.kt",
+        "line": 99,
+        "services": [
+          "StatisticsWebService.setReadTarget"
+        ],
+        "repositoryOwner": "StatisticsRepository; ReadTargetRepository",
+        "daoOwner": "ReadTargetDao",
+        "appReference": "ReadingPresenter.kt:45-155; ReadTargetRepository.kt:22-135"
+      },
+      "status": {
+        "iosDevelopmentCompleted": true,
+        "iosUnitTestCompleted": true,
+        "androidReviewCompleted": true,
+        "parity": "exact"
+      },
+      "issueIds": ["ANDROID-WEB-062", "ANDROID-WEB-087"]
+    },
+    {
+      "id": "WEB-API-141",
+      "phase": 4,
+      "controller": "StatisticsController",
+      "function": "getYearlyGoalCelebration",
+      "method": "GET",
+      "path": "/api/v1/statistics/yearly-goal-celebration",
+      "responseKind": "json-envelope",
+      "mutatesState": false,
+      "hasExternalDependency": false,
+      "android": {
+        "sourcePath": "web/src/main/java/com/merpyzf/web/controller/StatisticsController.kt",
+        "line": 106,
+        "services": [
+          "StatisticsWebService.getYearlyGoalCelebration"
+        ],
+        "repositoryOwner": "StatisticsRepository; ReadTargetRepository",
+        "daoOwner": "ReadTargetDao",
+        "appReference": "ReadingPresenter.kt:45-155; ReadTargetRepository.kt:22-135"
+      },
+      "status": {
+        "iosDevelopmentCompleted": true,
+        "iosUnitTestCompleted": true,
+        "androidReviewCompleted": true,
+        "parity": "exact"
+      },
+      "issueIds": []
+    },
+    {
+      "id": "WEB-API-142",
+      "phase": 4,
+      "controller": "StatisticsController",
+      "function": "markYearlyGoalCelebrationShown",
+      "method": "PUT",
+      "path": "/api/v1/statistics/yearly-goal-celebration",
+      "responseKind": "json-envelope",
+      "mutatesState": true,
+      "hasExternalDependency": false,
+      "android": {
+        "sourcePath": "web/src/main/java/com/merpyzf/web/controller/StatisticsController.kt",
+        "line": 115,
+        "services": [
+          "StatisticsWebService.markYearlyGoalCelebrationShown"
+        ],
+        "repositoryOwner": "StatisticsRepository; ReadTargetRepository",
+        "daoOwner": "ReadTargetDao",
+        "appReference": "ReadingPresenter.kt:45-155; ReadTargetRepository.kt:22-135"
+      },
+      "status": {
+        "iosDevelopmentCompleted": true,
+        "iosUnitTestCompleted": true,
+        "androidReviewCompleted": true,
+        "parity": "exact"
+      },
+      "issueIds": ["ANDROID-WEB-087"]
+    },
+    {
+      "id": "WEB-API-143",
+      "phase": 4,
+      "controller": "StatisticsController",
+      "function": "getDailyReadingTarget",
+      "method": "GET",
+      "path": "/api/v1/statistics/daily-reading-target",
+      "responseKind": "json-envelope",
+      "mutatesState": false,
+      "hasExternalDependency": false,
+      "android": {
+        "sourcePath": "web/src/main/java/com/merpyzf/web/controller/StatisticsController.kt",
+        "line": 122,
+        "services": [
+          "StatisticsWebService.getDailyReadingTimeTarget"
+        ],
+        "repositoryOwner": "StatisticsRepository; ReadTargetRepository",
+        "daoOwner": "ReadTargetDao; ReadTimeRecordDao",
+        "appReference": "ReadingPresenter.kt:45-155; ReadTargetRepository.kt:22-135"
+      },
+      "status": {
+        "iosDevelopmentCompleted": true,
+        "iosUnitTestCompleted": true,
+        "androidReviewCompleted": true,
+        "parity": "exact"
+      },
+      "issueIds": ["ANDROID-WEB-061"]
+    },
+    {
+      "id": "WEB-API-144",
+      "phase": 4,
+      "controller": "StatisticsController",
+      "function": "setDailyReadingTarget",
+      "method": "PUT",
+      "path": "/api/v1/statistics/daily-reading-target",
+      "responseKind": "json-envelope",
+      "mutatesState": true,
+      "hasExternalDependency": false,
+      "android": {
+        "sourcePath": "web/src/main/java/com/merpyzf/web/controller/StatisticsController.kt",
+        "line": 129,
+        "services": [
+          "StatisticsWebService.setDailyReadingTimeTarget"
+        ],
+        "repositoryOwner": "StatisticsRepository; ReadTargetRepository",
+        "daoOwner": "ReadTargetDao; ReadTimeRecordDao",
+        "appReference": "ReadingPresenter.kt:45-155; ReadTargetRepository.kt:22-135"
+      },
+      "status": {
+        "iosDevelopmentCompleted": true,
+        "iosUnitTestCompleted": true,
+        "androidReviewCompleted": true,
+        "parity": "exact"
+      },
+      "issueIds": ["ANDROID-WEB-087"]
+    },
+    {
+      "id": "WEB-API-145",
+      "phase": 4,
+      "controller": "StatisticsController",
+      "function": "getNoteCountChart",
+      "method": "GET",
+      "path": "/api/v1/statistics/chart/note-count",
+      "responseKind": "json-envelope",
+      "mutatesState": false,
+      "hasExternalDependency": false,
+      "android": {
+        "sourcePath": "web/src/main/java/com/merpyzf/web/controller/StatisticsController.kt",
+        "line": 138,
+        "services": [
+          "StatisticsWebService.getNoteCountChart"
+        ],
+        "repositoryOwner": "StatisticsRepository",
+        "daoOwner": "NoteDao",
+        "appReference": "StatisticsViewModel.kt:16-94; StatisticsPresenter.kt:21-94"
+      },
+      "status": {
+        "iosDevelopmentCompleted": true,
+        "iosUnitTestCompleted": true,
+        "androidReviewCompleted": true,
+        "parity": "exact"
+      },
+      "issueIds": ["ANDROID-WEB-065", "ANDROID-WEB-090"]
+    },
+    {
+      "id": "WEB-API-146",
+      "phase": 4,
+      "controller": "StatisticsController",
+      "function": "getReadDoneChart",
+      "method": "GET",
+      "path": "/api/v1/statistics/chart/read-done",
+      "responseKind": "json-envelope",
+      "mutatesState": false,
+      "hasExternalDependency": false,
+      "android": {
+        "sourcePath": "web/src/main/java/com/merpyzf/web/controller/StatisticsController.kt",
+        "line": 149,
+        "services": [
+          "StatisticsWebService.getReadDoneChart"
+        ],
+        "repositoryOwner": "StatisticsRepository",
+        "daoOwner": "BookDao; BookReadStatusRecordDao",
+        "appReference": "StatisticsViewModel.kt:16-94; StatisticsPresenter.kt:21-94"
+      },
+      "status": {
+        "iosDevelopmentCompleted": true,
+        "iosUnitTestCompleted": true,
+        "androidReviewCompleted": true,
+        "parity": "exact"
+      },
+      "issueIds": ["ANDROID-WEB-065", "ANDROID-WEB-090"]
+    },
+    {
+      "id": "WEB-API-147",
+      "phase": 4,
+      "controller": "StatisticsController",
+      "function": "getWordCountChart",
+      "method": "GET",
+      "path": "/api/v1/statistics/chart/word-count",
+      "responseKind": "json-envelope",
+      "mutatesState": false,
+      "hasExternalDependency": false,
+      "android": {
+        "sourcePath": "web/src/main/java/com/merpyzf/web/controller/StatisticsController.kt",
+        "line": 160,
+        "services": [
+          "StatisticsWebService.getWordCountChart"
+        ],
+        "repositoryOwner": "StatisticsRepository",
+        "daoOwner": "BookDao; BookReadStatusRecordDao",
+        "appReference": "StatisticsViewModel.kt:16-94; StatisticsPresenter.kt:21-94"
+      },
+      "status": {
+        "iosDevelopmentCompleted": true,
+        "iosUnitTestCompleted": true,
+        "androidReviewCompleted": true,
+        "parity": "exact"
+      },
+      "issueIds": ["ANDROID-WEB-065", "ANDROID-WEB-090"]
+    },
+    {
+      "id": "WEB-API-148",
+      "phase": 4,
+      "controller": "StatisticsController",
+      "function": "getPurchaseChart",
+      "method": "GET",
+      "path": "/api/v1/statistics/chart/purchase",
+      "responseKind": "json-envelope",
+      "mutatesState": false,
+      "hasExternalDependency": false,
+      "android": {
+        "sourcePath": "web/src/main/java/com/merpyzf/web/controller/StatisticsController.kt",
+        "line": 171,
+        "services": [
+          "StatisticsWebService.getPurchaseChart"
+        ],
+        "repositoryOwner": "StatisticsRepository",
+        "daoOwner": "BookDao",
+        "appReference": "StatisticsViewModel.kt:16-94; StatisticsPresenter.kt:21-94"
+      },
+      "status": {
+        "iosDevelopmentCompleted": true,
+        "iosUnitTestCompleted": true,
+        "androidReviewCompleted": true,
+        "parity": "exact"
+      },
+      "issueIds": ["ANDROID-WEB-065", "ANDROID-WEB-090"]
+    },
+    {
+      "id": "WEB-API-149",
+      "phase": 4,
+      "controller": "StatisticsController",
+      "function": "getBookSourcePieChart",
+      "method": "GET",
+      "path": "/api/v1/statistics/chart/book-source",
+      "responseKind": "json-envelope",
+      "mutatesState": false,
+      "hasExternalDependency": false,
+      "android": {
+        "sourcePath": "web/src/main/java/com/merpyzf/web/controller/StatisticsController.kt",
+        "line": 182,
+        "services": [
+          "StatisticsWebService.getBookSourcePieChart"
+        ],
+        "repositoryOwner": "StatisticsRepository",
+        "daoOwner": "BookDao; SourceDao",
+        "appReference": "StatisticsViewModel.kt:16-94; StatisticsPresenter.kt:21-94"
+      },
+      "status": {
+        "iosDevelopmentCompleted": true,
+        "iosUnitTestCompleted": true,
+        "androidReviewCompleted": true,
+        "parity": "exact"
+      },
+      "issueIds": ["ANDROID-WEB-008", "ANDROID-WEB-065", "ANDROID-WEB-090"]
+    },
+    {
+      "id": "WEB-API-150",
+      "phase": 4,
+      "controller": "StatisticsController",
+      "function": "getNoteTagPieChart",
+      "method": "GET",
+      "path": "/api/v1/statistics/chart/note-tag",
+      "responseKind": "json-envelope",
+      "mutatesState": false,
+      "hasExternalDependency": false,
+      "android": {
+        "sourcePath": "web/src/main/java/com/merpyzf/web/controller/StatisticsController.kt",
+        "line": 193,
+        "services": [
+          "StatisticsWebService.getNoteTagPieChart"
+        ],
+        "repositoryOwner": "StatisticsRepository",
+        "daoOwner": "TagDao; NoteDao",
+        "appReference": "StatisticsViewModel.kt:16-94; StatisticsPresenter.kt:21-94"
+      },
+      "status": {
+        "iosDevelopmentCompleted": true,
+        "iosUnitTestCompleted": true,
+        "androidReviewCompleted": true,
+        "parity": "exact"
+      },
+      "issueIds": ["ANDROID-WEB-058", "ANDROID-WEB-065", "ANDROID-WEB-090"]
+    },
+    {
+      "id": "WEB-API-151",
+      "phase": 4,
+      "controller": "StatisticsController",
+      "function": "getBookTagPieChart",
+      "method": "GET",
+      "path": "/api/v1/statistics/chart/book-tag",
+      "responseKind": "json-envelope",
+      "mutatesState": false,
+      "hasExternalDependency": false,
+      "android": {
+        "sourcePath": "web/src/main/java/com/merpyzf/web/controller/StatisticsController.kt",
+        "line": 204,
+        "services": [
+          "StatisticsWebService.getBookTagPieChart"
+        ],
+        "repositoryOwner": "StatisticsRepository",
+        "daoOwner": "TagDao; BookDao",
+        "appReference": "StatisticsViewModel.kt:16-94; StatisticsPresenter.kt:21-94"
+      },
+      "status": {
+        "iosDevelopmentCompleted": true,
+        "iosUnitTestCompleted": true,
+        "androidReviewCompleted": true,
+        "parity": "exact"
+      },
+      "issueIds": ["ANDROID-WEB-008", "ANDROID-WEB-065", "ANDROID-WEB-090"]
+    },
+    {
+  "id": "WEB-API-152",
+      "phase": 2,
+      "controller": "TagController",
+      "function": "getTagList",
+      "method": "GET",
+      "path": "/api/v1/tags",
+      "responseKind": "json-envelope",
+      "mutatesState": false,
+      "hasExternalDependency": false,
+      "android": {
+        "sourcePath": "web/src/main/java/com/merpyzf/web/controller/TagController.kt",
+        "line": 23,
+        "services": [
+          "TagService.getTagList"
+        ],
+    "repositoryOwner": "WebTagRepository",
+    "daoOwner": "WebTagDao",
+    "appReference": "TagRepository.kt:43-163,206-209"
+      },
+      "status": {
+    "iosDevelopmentCompleted": true,
+    "iosUnitTestCompleted": true,
+    "androidReviewCompleted": true,
+        "parity": "exact"
+      },
+  "issueIds": ["ANDROID-WEB-005", "ANDROID-WEB-091"]
+    },
+    {
+  "id": "WEB-API-153",
+      "phase": 2,
+      "controller": "TagController",
+      "function": "createTag",
+      "method": "POST",
+      "path": "/api/v1/tags",
+      "responseKind": "json-envelope",
+      "mutatesState": true,
+      "hasExternalDependency": false,
+      "android": {
+        "sourcePath": "web/src/main/java/com/merpyzf/web/controller/TagController.kt",
+        "line": 32,
+        "services": [
+          "TagService.createTag"
+        ],
+    "repositoryOwner": "WebTagRepository",
+    "daoOwner": "WebTagDao",
+    "appReference": "TagRepository.kt:43-163,206-209"
+      },
+      "status": {
+    "iosDevelopmentCompleted": true,
+    "iosUnitTestCompleted": true,
+    "androidReviewCompleted": true,
+        "parity": "exact"
+      },
+  "issueIds": ["ANDROID-WEB-005"]
+    },
+    {
+  "id": "WEB-API-154",
+      "phase": 2,
+      "controller": "TagController",
+      "function": "updateTag",
+      "method": "PUT",
+      "path": "/api/v1/tags/{id}",
+      "responseKind": "json-envelope",
+      "mutatesState": true,
+      "hasExternalDependency": false,
+      "android": {
+        "sourcePath": "web/src/main/java/com/merpyzf/web/controller/TagController.kt",
+        "line": 40,
+        "services": [
+          "TagService.updateTag"
+        ],
+    "repositoryOwner": "WebTagRepository",
+    "daoOwner": "WebTagDao",
+    "appReference": "TagRepository.kt:43-163,206-209"
+      },
+      "status": {
+    "iosDevelopmentCompleted": true,
+    "iosUnitTestCompleted": true,
+    "androidReviewCompleted": true,
+        "parity": "exact"
+      },
+  "issueIds": ["ANDROID-WEB-005"]
+    },
+    {
+  "id": "WEB-API-155",
+      "phase": 2,
+      "controller": "TagController",
+      "function": "deleteTag",
+      "method": "DELETE",
+      "path": "/api/v1/tags/{id}",
+      "responseKind": "json-envelope",
+      "mutatesState": true,
+      "hasExternalDependency": false,
+      "android": {
+        "sourcePath": "web/src/main/java/com/merpyzf/web/controller/TagController.kt",
+        "line": 51,
+        "services": [
+          "TagService.deleteTag"
+        ],
+    "repositoryOwner": "WebTagRepository",
+    "daoOwner": "WebTagDao",
+    "appReference": "TagRepository.kt:43-163,206-209"
+      },
+      "status": {
+    "iosDevelopmentCompleted": true,
+    "iosUnitTestCompleted": true,
+    "androidReviewCompleted": true,
+        "parity": "exact"
+      },
+  "issueIds": ["ANDROID-WEB-004", "ANDROID-WEB-005"]
+    },
+    {
+  "id": "WEB-API-156",
+      "phase": 2,
+      "controller": "TagController",
+      "function": "reorderTags",
+      "method": "PUT",
+      "path": "/api/v1/tags/order",
+      "responseKind": "json-envelope",
+      "mutatesState": true,
+      "hasExternalDependency": false,
+      "android": {
+        "sourcePath": "web/src/main/java/com/merpyzf/web/controller/TagController.kt",
+        "line": 58,
+        "services": [
+          "TagService.reorderTags"
+        ],
+    "repositoryOwner": "WebTagRepository",
+    "daoOwner": "WebTagDao",
+    "appReference": "TagRepository.kt:43-163,206-209"
+      },
+      "status": {
+    "iosDevelopmentCompleted": true,
+    "iosUnitTestCompleted": true,
+    "androidReviewCompleted": true,
+        "parity": "exact"
+      },
+  "issueIds": ["ANDROID-WEB-005"]
+    },
+    {
+  "id": "WEB-API-157",
+      "phase": 5,
+      "controller": "UploadController",
+      "function": "reserveNoteImageTickets",
+      "method": "POST",
+      "path": "/api/v1/note-images/upload-tickets",
+      "responseKind": "json-envelope",
+      "mutatesState": true,
+      "hasExternalDependency": false,
+      "android": {
+        "sourcePath": "web/src/main/java/com/merpyzf/web/controller/UploadController.kt",
+        "line": 21,
+        "services": [
+          "NoteImageUploadRiskControlService.reserveTickets"
+        ],
+    "repositoryOwner": "SpSecuritySettingHelper",
+    "daoOwner": "SharedPreferences ticket store",
+    "appReference": "AttachImagesView.kt; CosConfigPresenter.kt"
+  },
+  "status": {
+    "iosDevelopmentCompleted": true,
+    "iosUnitTestCompleted": true,
+    "androidReviewCompleted": true,
+        "parity": "exact"
+      },
+  "issueIds": [
+    "ANDROID-WEB-074",
+    "ANDROID-WEB-075",
+    "ANDROID-WEB-078",
+    "ANDROID-WEB-080",
+    "ANDROID-WEB-094"
+  ]
+    },
+    {
+  "id": "WEB-API-158",
+      "phase": 5,
+      "controller": "UploadController",
+      "function": "uploadNoteImage",
+      "method": "POST",
+      "path": "/api/v1/note-images/upload",
+      "responseKind": "json-envelope",
+      "mutatesState": true,
+      "hasExternalDependency": true,
+      "android": {
+        "sourcePath": "web/src/main/java/com/merpyzf/web/controller/UploadController.kt",
+        "line": 32,
+        "services": [
+          "NoteImageUploadRiskControlService.uploadNoteImage"
+        ],
+    "repositoryOwner": "ticket store + RxCosHelper/CosHelper",
+    "daoOwner": "COS",
+    "appReference": "AttachImagesView.kt; EditOrAddBookPresenter.kt"
+  },
+  "status": {
+    "iosDevelopmentCompleted": true,
+    "iosUnitTestCompleted": true,
+    "androidReviewCompleted": true,
+        "parity": "exact"
+      },
+  "issueIds": [
+    "ANDROID-WEB-074",
+    "ANDROID-WEB-075",
+    "ANDROID-WEB-076",
+    "ANDROID-WEB-077",
+    "ANDROID-WEB-078",
+    "ANDROID-WEB-079",
+    "ANDROID-WEB-080",
+    "ANDROID-WEB-094"
+  ]
+    },
+    {
+  "id": "WEB-API-159",
+      "phase": 5,
+      "controller": "UploadController",
+      "function": "releaseNoteImageTickets",
+      "method": "POST",
+      "path": "/api/v1/note-images/upload-tickets/release",
+      "responseKind": "json-envelope",
+      "mutatesState": true,
+      "hasExternalDependency": false,
+      "android": {
+        "sourcePath": "web/src/main/java/com/merpyzf/web/controller/UploadController.kt",
+        "line": 43,
+        "services": [
+          "NoteImageUploadRiskControlService.releaseTickets"
+        ],
+    "repositoryOwner": "ticket store + NoteImageCleanupCoordinator",
+    "daoOwner": "COS",
+    "appReference": "AttachImagesView.kt; CosConfigPresenter.kt"
+  },
+  "status": {
+    "iosDevelopmentCompleted": true,
+    "iosUnitTestCompleted": true,
+    "androidReviewCompleted": true,
+        "parity": "exact"
+      },
+  "issueIds": [
+    "ANDROID-WEB-074",
+    "ANDROID-WEB-075",
+    "ANDROID-WEB-078",
+    "ANDROID-WEB-080",
+    "ANDROID-WEB-094"
+  ]
+    },
+    {
+  "id": "WEB-API-160",
+      "phase": 5,
+      "controller": "UploadController",
+      "function": "uploadBookCover",
+      "method": "POST",
+      "path": "/api/v1/book-covers/upload",
+      "responseKind": "json-envelope",
+      "mutatesState": true,
+      "hasExternalDependency": true,
+      "android": {
+        "sourcePath": "web/src/main/java/com/merpyzf/web/controller/UploadController.kt",
+        "line": 54,
+        "services": [
+          "ImageService.uploadCoverImage"
+        ],
+    "repositoryOwner": "ImageValidationService + RxCosHelper/CosHelper",
+    "daoOwner": "COS",
+    "appReference": "EditOrAddBookPresenter.kt:514; CosConfigPresenter.kt"
+  },
+  "status": {
+    "iosDevelopmentCompleted": true,
+    "iosUnitTestCompleted": true,
+    "androidReviewCompleted": true,
+        "parity": "exact"
+      },
+  "issueIds": [
+    "ANDROID-WEB-074",
+    "ANDROID-WEB-075",
+    "ANDROID-WEB-077",
+    "ANDROID-WEB-078",
+    "ANDROID-WEB-079",
+    "ANDROID-WEB-080",
+    "ANDROID-WEB-094"
+  ]
+    },
+    {
+      "id": "WEB-API-161",
+      "phase": 5,
+      "controller": "ExportController",
+      "function": "getNotionConnection",
+      "method": "GET",
+      "path": "/api/v1/export/platforms/notion/connection",
+      "responseKind": "json-envelope",
+      "mutatesState": false,
+      "hasExternalDependency": true,
+      "android": {
+        "sourcePath": "web/src/main/java/com/merpyzf/web/controller/ExportController.kt",
+        "line": 27,
+        "services": [
+          "NotionConnectionWebService.status"
+        ],
+        "repositoryOwner": "Notion OAuth connection state",
+        "daoOwner": "Notion connection preferences",
+        "appReference": "NotionConnectionWebService"
+      },
+      "status": {
+        "iosDevelopmentCompleted": false,
+        "iosUnitTestCompleted": false,
+        "androidReviewCompleted": true,
+        "parity": "deferred-p0"
+      },
+      "issueIds": [
+        "DEFERRED-P0-NOTION-MIGRATION"
+      ]
+    },
+    {
+      "id": "WEB-API-162",
+      "phase": 5,
+      "controller": "NativeActionController",
+      "function": "openNotionConnection",
+      "method": "POST",
+      "path": "/api/v1/native/actions/open-notion-connection",
+      "responseKind": "json-envelope",
+      "mutatesState": true,
+      "hasExternalDependency": true,
+      "android": {
+        "sourcePath": "web/src/main/java/com/merpyzf/web/controller/NativeActionController.kt",
+        "line": 24,
+        "services": [
+          "NotionConnectionWebService.open"
+        ],
+        "repositoryOwner": "Notion OAuth native connection flow",
+        "daoOwner": "Notion connection preferences",
+        "appReference": "NotionConnectionWebService"
+      },
+      "status": {
+        "iosDevelopmentCompleted": false,
+        "iosUnitTestCompleted": false,
+        "androidReviewCompleted": true,
+        "parity": "deferred-p0"
+      },
+      "issueIds": [
+        "DEFERRED-P0-NOTION-MIGRATION"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "name": "official-native-action-premium",
+  "dataPolicy": "The case records only the frozen endpoint and premium-state label; response payloads remain hash-only.",
+  "cases": [
+    {
+      "caseId": "premium-account-rejects-duplicate-upgrade-navigation",
+      "endpointId": "WEB-API-067",
+      "path": "/api/v1/native/actions/open-vip-upgrade"
+    }
+  ]
+}

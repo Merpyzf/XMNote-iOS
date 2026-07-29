@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 1,
+  "name": "local-reading-record-delete-success",
+  "dataPolicy": "Uses one frozen unfinished reading-record ID in isolated database copies; response payloads remain hash-only.",
+  "cases": [
+    {
+      "caseId": "reading-record-unfinished-before-delete",
+      "endpointId": "WEB-API-085",
+      "path": "/api/v1/books/698/reading-records/410"
+    },
+    {
+      "caseId": "reading-record-delete-unfinished",
+      "endpointId": "WEB-API-088",
+      "path": "/api/v1/books/698/reading-records/410"
+    },
+    {
+      "caseId": "reading-record-detail-after-delete",
+      "endpointId": "WEB-API-085",
+      "path": "/api/v1/books/698/reading-records/410"
+    },
+    {
+      "caseId": "reading-record-delete-again",
+      "endpointId": "WEB-API-088",
+      "path": "/api/v1/books/698/reading-records/410"
+    }
+  ]
+}

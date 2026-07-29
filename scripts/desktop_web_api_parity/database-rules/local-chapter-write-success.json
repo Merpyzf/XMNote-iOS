@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 1,
+  "name": "local-chapter-write-success",
+  "epochMillisColumns": [
+    {
+      "table": "chapter",
+      "column": "created_date",
+      "reason": "WEB-API-037/046/050 按各设备请求时钟生成章节创建时间"
+    },
+    {
+      "table": "chapter",
+      "column": "updated_date",
+      "reason": "Chapter 写接口按各设备请求时钟更新章节、排序、层级元数据和软删除时间"
+    },
+    {
+      "table": "note",
+      "column": "updated_date",
+      "reason": "WEB-API-040 删除目录时按各设备请求时钟解除笔记目录关系"
+    }
+  ],
+  "stablePlatformTables": [
+    {
+      "table": "grdb_migrations",
+      "reason": "iOS 的 GRDB 迁移元数据表在 Web API 调用前后保持不变，Android Room 不创建该表"
+    }
+  ]
+}

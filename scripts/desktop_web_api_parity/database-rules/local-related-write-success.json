@@ -1,0 +1,32 @@
+{
+  "schemaVersion": 1,
+  "name": "local-related-write-success",
+  "epochMillisColumns": [
+    {
+      "table": "category",
+      "column": "created_date",
+      "reason": "创建类别时两端分别使用设备请求时钟"
+    },
+    {
+      "table": "category",
+      "column": "updated_date",
+      "reason": "创建、更新、隐藏和重排类别时两端分别使用设备请求时钟"
+    },
+    {
+      "table": "sort",
+      "column": "created_date",
+      "reason": "首次保存相关内容排序规则时两端分别使用设备请求时钟"
+    },
+    {
+      "table": "category_content",
+      "column": "updated_date",
+      "reason": "创建、更新、移动类别和软删除相关内容时两端分别使用设备请求时钟"
+    }
+  ],
+  "stablePlatformTables": [
+    {
+      "table": "grdb_migrations",
+      "reason": "iOS 的 GRDB 迁移元数据表在 Web API 调用前后保持不变，Android Room 不创建该表"
+    }
+  ]
+}

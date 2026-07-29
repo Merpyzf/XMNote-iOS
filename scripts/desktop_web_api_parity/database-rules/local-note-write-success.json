@@ -1,0 +1,42 @@
+{
+  "schemaVersion": 1,
+  "name": "local-note-write-success",
+  "epochMillisColumns": [
+    {
+      "table": "sort",
+      "column": "created_date",
+      "reason": "首次保存书摘排序规则时，Android BaseEntity 与 iOS Adapter 分别使用设备请求时钟"
+    },
+    {
+      "table": "note",
+      "column": "updated_date",
+      "reason": "书摘更新、移动、标签替换、合并与软删除均按各设备请求时钟写入更新时间"
+    },
+    {
+      "table": "tag_note",
+      "column": "created_date",
+      "reason": "创建、更新、批量标签和合并按各设备请求时钟创建标签关系"
+    },
+    {
+      "table": "tag_note",
+      "column": "updated_date",
+      "reason": "更新、标签替换、合并和删除按各设备请求时钟软删除标签关系"
+    },
+    {
+      "table": "chapter",
+      "column": "created_date",
+      "reason": "跨书移动按各设备请求时钟创建目标书中的章节路径"
+    },
+    {
+      "table": "chapter",
+      "column": "updated_date",
+      "reason": "跨书移动生成章节时沿用各设备请求时钟初始化章节更新时间"
+    }
+  ],
+  "stablePlatformTables": [
+    {
+      "table": "grdb_migrations",
+      "reason": "iOS 的 GRDB 迁移元数据表在 Web API 调用前后保持不变，Android Room 不创建该表"
+    }
+  ]
+}

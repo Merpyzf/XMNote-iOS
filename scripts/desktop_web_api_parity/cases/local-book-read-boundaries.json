@@ -1,0 +1,547 @@
+{
+  "schemaVersion": 1,
+  "name": "local-book-read-boundaries",
+  "dataPolicy": "Only frozen non-secret book/group/tag/source IDs, synthetic parameters and case labels are stored; response payloads remain hash-only.",
+  "cases": [
+    {
+      "caseId": "book-stats-default",
+      "endpointId": "WEB-API-004",
+      "path": "/api/v1/books/stats"
+    },
+    {
+      "caseId": "book-detail-existing",
+      "endpointId": "WEB-API-005",
+      "path": "/api/v1/books/641"
+    },
+    {
+      "caseId": "book-detail-placeholder-zero",
+      "endpointId": "WEB-API-005",
+      "path": "/api/v1/books/0"
+    },
+    {
+      "caseId": "book-detail-deleted",
+      "endpointId": "WEB-API-005",
+      "path": "/api/v1/books/1"
+    },
+    {
+      "caseId": "book-detail-missing",
+      "endpointId": "WEB-API-005",
+      "path": "/api/v1/books/999999999"
+    },
+    {
+      "caseId": "book-detail-negative",
+      "endpointId": "WEB-API-005",
+      "path": "/api/v1/books/-1"
+    },
+    {
+      "caseId": "book-detail-int64-max",
+      "endpointId": "WEB-API-005",
+      "path": "/api/v1/books/9223372036854775807"
+    },
+    {
+      "caseId": "book-detail-int64-min",
+      "endpointId": "WEB-API-005",
+      "path": "/api/v1/books/-9223372036854775808"
+    },
+    {
+      "caseId": "book-detail-overflow",
+      "endpointId": "WEB-API-005",
+      "path": "/api/v1/books/9223372036854775808"
+    },
+    {
+      "caseId": "book-detail-invalid",
+      "endpointId": "WEB-API-005",
+      "path": "/api/v1/books/bad"
+    },
+    {
+      "caseId": "book-detail-encoded-plus",
+      "endpointId": "WEB-API-005",
+      "path": "/api/v1/books/%2B641"
+    },
+    {
+      "caseId": "book-list-default",
+      "endpointId": "WEB-API-006",
+      "path": "/api/v1/books"
+    },
+    {
+      "caseId": "book-list-second-page",
+      "endpointId": "WEB-API-006",
+      "path": "/api/v1/books?page=2&pageSize=3"
+    },
+    {
+      "caseId": "book-list-zero-pagination",
+      "endpointId": "WEB-API-006",
+      "path": "/api/v1/books?page=0&pageSize=0"
+    },
+    {
+      "caseId": "book-list-empty-pagination",
+      "endpointId": "WEB-API-006",
+      "path": "/api/v1/books?page=&pageSize="
+    },
+    {
+      "caseId": "book-list-invalid-page",
+      "endpointId": "WEB-API-006",
+      "path": "/api/v1/books?page=bad"
+    },
+    {
+      "caseId": "book-list-page-overflow",
+      "endpointId": "WEB-API-006",
+      "path": "/api/v1/books?page=2147483648"
+    },
+    {
+      "caseId": "book-list-page-underflow",
+      "endpointId": "WEB-API-006",
+      "path": "/api/v1/books?page=-2147483649"
+    },
+    {
+      "caseId": "book-list-page-encoded-plus",
+      "endpointId": "WEB-API-006",
+      "path": "/api/v1/books?page=%2B1&pageSize=2"
+    },
+    {
+      "caseId": "book-list-page-duplicate-first",
+      "endpointId": "WEB-API-006",
+      "path": "/api/v1/books?page=1&page=2"
+    },
+    {
+      "caseId": "book-list-page-duplicate-after-unused",
+      "endpointId": "WEB-API-006",
+      "path": "/api/v1/books?unused=1&page=1&page=2&pageSize=2"
+    },
+    {
+      "caseId": "book-list-page-bare-then-valued",
+      "endpointId": "WEB-API-006",
+      "path": "/api/v1/books?page&page=2&pageSize=2"
+    },
+    {
+      "caseId": "book-list-keyword",
+      "endpointId": "WEB-API-006",
+      "path": "/api/v1/books?keyword=Android&pageSize=3"
+    },
+    {
+      "caseId": "book-list-keyword-unescaped-plus",
+      "endpointId": "WEB-API-006",
+      "path": "/api/v1/books?keyword=Android+Gradle&pageSize=3"
+    },
+    {
+      "caseId": "book-list-keyword-encoded-plus",
+      "endpointId": "WEB-API-006",
+      "path": "/api/v1/books?keyword=Android%2BGradle&pageSize=3"
+    },
+    {
+      "caseId": "book-list-keyword-duplicate-first",
+      "endpointId": "WEB-API-006",
+      "path": "/api/v1/books?keyword=Android&keyword=Gradle&pageSize=3"
+    },
+    {
+      "caseId": "book-list-keyword-duplicate-after-unused",
+      "endpointId": "WEB-API-006",
+      "path": "/api/v1/books?unused=1&keyword=Android&keyword=Gradle&pageSize=3"
+    },
+    {
+      "caseId": "book-list-status-reading",
+      "endpointId": "WEB-API-006",
+      "path": "/api/v1/books?status=1&pageSize=3"
+    },
+    {
+      "caseId": "book-list-status-want",
+      "endpointId": "WEB-API-006",
+      "path": "/api/v1/books?status=2&pageSize=3"
+    },
+    {
+      "caseId": "book-list-status-read",
+      "endpointId": "WEB-API-006",
+      "path": "/api/v1/books?status=3&pageSize=3"
+    },
+    {
+      "caseId": "book-list-status-dropped",
+      "endpointId": "WEB-API-006",
+      "path": "/api/v1/books?status=4&pageSize=3"
+    },
+    {
+      "caseId": "book-list-status-hold",
+      "endpointId": "WEB-API-006",
+      "path": "/api/v1/books?status=5&pageSize=3"
+    },
+    {
+      "caseId": "book-list-status-unknown",
+      "endpointId": "WEB-API-006",
+      "path": "/api/v1/books?status=99&pageSize=3"
+    },
+    {
+      "caseId": "book-list-status-invalid",
+      "endpointId": "WEB-API-006",
+      "path": "/api/v1/books?status=bad&pageSize=3"
+    },
+    {
+      "caseId": "book-list-group-existing",
+      "endpointId": "WEB-API-006",
+      "path": "/api/v1/books?groupId=11&pageSize=3"
+    },
+    {
+      "caseId": "book-list-group-zero",
+      "endpointId": "WEB-API-006",
+      "path": "/api/v1/books?groupId=0&pageSize=3"
+    },
+    {
+      "caseId": "book-list-group-negative",
+      "endpointId": "WEB-API-006",
+      "path": "/api/v1/books?groupId=-1&pageSize=3"
+    },
+    {
+      "caseId": "book-list-group-missing",
+      "endpointId": "WEB-API-006",
+      "path": "/api/v1/books?groupId=999999&pageSize=3"
+    },
+    {
+      "caseId": "book-list-group-overflow",
+      "endpointId": "WEB-API-006",
+      "path": "/api/v1/books?groupId=9223372036854775808&pageSize=3"
+    },
+    {
+      "caseId": "book-list-tag-or",
+      "endpointId": "WEB-API-006",
+      "path": "/api/v1/books?tagIds=18&tagMode=or&pageSize=3"
+    },
+    {
+      "caseId": "book-list-tag-and-two",
+      "endpointId": "WEB-API-006",
+      "path": "/api/v1/books?tagIds=18,19&tagMode=and&pageSize=3"
+    },
+    {
+      "caseId": "book-list-tag-and-duplicate",
+      "endpointId": "WEB-API-006",
+      "path": "/api/v1/books?tagIds=18,18&tagMode=and&pageSize=3"
+    },
+    {
+      "caseId": "book-list-tag-invalid-mix",
+      "endpointId": "WEB-API-006",
+      "path": "/api/v1/books?tagIds=18,bad,-1,,19&tagMode=sideways&pageSize=3"
+    },
+    {
+      "caseId": "book-list-source-single",
+      "endpointId": "WEB-API-006",
+      "path": "/api/v1/books?sourceId=4&pageSize=3"
+    },
+    {
+      "caseId": "book-list-source-list",
+      "endpointId": "WEB-API-006",
+      "path": "/api/v1/books?sourceIds=4,1&pageSize=3"
+    },
+    {
+      "caseId": "book-list-source-list-deduplicated",
+      "endpointId": "WEB-API-006",
+      "path": "/api/v1/books?sourceIds=4,4,1,0,-1&pageSize=3"
+    },
+    {
+      "caseId": "book-list-source-fallback",
+      "endpointId": "WEB-API-006",
+      "path": "/api/v1/books?sourceIds=bad,0,-1&sourceId=14&pageSize=3"
+    },
+    {
+      "caseId": "book-list-sort-custom",
+      "endpointId": "WEB-API-006",
+      "path": "/api/v1/books?sortBy=custom&sortOrder=asc&pageSize=3"
+    },
+    {
+      "caseId": "book-list-sort-create-time",
+      "endpointId": "WEB-API-006",
+      "path": "/api/v1/books?sortBy=create_time&sortOrder=asc&pageSize=3"
+    },
+    {
+      "caseId": "book-list-sort-modify-time",
+      "endpointId": "WEB-API-006",
+      "path": "/api/v1/books?sortBy=modify_time&sortOrder=asc&pageSize=3"
+    },
+    {
+      "caseId": "book-list-sort-name",
+      "endpointId": "WEB-API-006",
+      "path": "/api/v1/books?sortBy=name&sortOrder=asc&pageSize=3"
+    },
+    {
+      "caseId": "book-list-sort-rating",
+      "endpointId": "WEB-API-006",
+      "path": "/api/v1/books?sortBy=rating&sortOrder=asc&pageSize=3"
+    },
+    {
+      "caseId": "book-list-sort-publish-date",
+      "endpointId": "WEB-API-006",
+      "path": "/api/v1/books?sortBy=publish_date&sortOrder=asc&pageSize=3"
+    },
+    {
+      "caseId": "book-list-sort-note-count",
+      "endpointId": "WEB-API-006",
+      "path": "/api/v1/books?sortBy=note_count&sortOrder=asc&pageSize=3"
+    },
+    {
+      "caseId": "book-list-sort-read-done-time",
+      "endpointId": "WEB-API-006",
+      "path": "/api/v1/books?sortBy=read_done_time&sortOrder=asc&pageSize=3"
+    },
+    {
+      "caseId": "book-list-sort-total-reading-time",
+      "endpointId": "WEB-API-006",
+      "path": "/api/v1/books?sortBy=total_reading_time&sortOrder=asc&pageSize=3"
+    },
+    {
+      "caseId": "book-list-sort-reading-progress",
+      "endpointId": "WEB-API-006",
+      "path": "/api/v1/books?sortBy=reading_progress&sortOrder=asc&pageSize=3"
+    },
+    {
+      "caseId": "book-list-sort-invalid",
+      "endpointId": "WEB-API-006",
+      "path": "/api/v1/books?sortBy=bad&sortOrder=bad&pageSize=3"
+    },
+    {
+      "caseId": "book-list-sort-uppercase",
+      "endpointId": "WEB-API-006",
+      "path": "/api/v1/books?sortBy=NAME&sortOrder=ASC&pageSize=3"
+    },
+    {
+      "caseId": "book-list-sort-duplicate-first",
+      "endpointId": "WEB-API-006",
+      "path": "/api/v1/books?sortBy=name&sortBy=create_time&pageSize=3"
+    },
+    {
+      "caseId": "book-list-sort-duplicate-after-unused",
+      "endpointId": "WEB-API-006",
+      "path": "/api/v1/books?unused=1&sortBy=name&sortBy=create_time&pageSize=3"
+    },
+    {
+      "caseId": "book-list-section-create-time",
+      "endpointId": "WEB-API-006",
+      "path": "/api/v1/books?keyword=Android&sectionBy=create_time&sortOrder=asc"
+    },
+    {
+      "caseId": "book-list-section-modify-time",
+      "endpointId": "WEB-API-006",
+      "path": "/api/v1/books?keyword=Android&sectionBy=modify_time&sortOrder=asc"
+    },
+    {
+      "caseId": "book-list-section-publish-date",
+      "endpointId": "WEB-API-006",
+      "path": "/api/v1/books?keyword=Android&sectionBy=publish_date&sortOrder=asc"
+    },
+    {
+      "caseId": "book-list-section-name",
+      "endpointId": "WEB-API-006",
+      "path": "/api/v1/books?keyword=Android&sectionBy=name&sortOrder=asc"
+    },
+    {
+      "caseId": "book-list-section-read-done-time",
+      "endpointId": "WEB-API-006",
+      "path": "/api/v1/books?keyword=Android&sectionBy=read_done_time&sortOrder=asc"
+    },
+    {
+      "caseId": "book-list-section-invalid",
+      "endpointId": "WEB-API-006",
+      "path": "/api/v1/books?keyword=Android&sectionBy=bad&pageSize=3"
+    },
+    {
+      "caseId": "book-list-section-group-options",
+      "endpointId": "WEB-API-006",
+      "path": "/api/v1/books?keyword=Android&sectionBy=name&groupSortBy=rating&groupSortOrder=asc&groupEnableSection=true"
+    },
+    {
+      "caseId": "book-recent-default",
+      "endpointId": "WEB-API-007",
+      "path": "/api/v1/books/recent-read"
+    },
+    {
+      "caseId": "book-recent-limit-one",
+      "endpointId": "WEB-API-007",
+      "path": "/api/v1/books/recent-read?limit=1"
+    },
+    {
+      "caseId": "book-recent-limit-capped",
+      "endpointId": "WEB-API-007",
+      "path": "/api/v1/books/recent-read?limit=999"
+    },
+    {
+      "caseId": "book-recent-limit-negative",
+      "endpointId": "WEB-API-007",
+      "path": "/api/v1/books/recent-read?limit=-1"
+    },
+    {
+      "caseId": "book-recent-paged",
+      "endpointId": "WEB-API-007",
+      "path": "/api/v1/books/recent-read?page=2&pageSize=1"
+    },
+    {
+      "caseId": "book-recent-page-size-precedence",
+      "endpointId": "WEB-API-007",
+      "path": "/api/v1/books/recent-read?page=0&pageSize=3&limit=1"
+    },
+    {
+      "caseId": "book-recent-page-with-default-size",
+      "endpointId": "WEB-API-007",
+      "path": "/api/v1/books/recent-read?page=2&pageSize=0&limit=1"
+    },
+    {
+      "caseId": "book-recent-invalid-page",
+      "endpointId": "WEB-API-007",
+      "path": "/api/v1/books/recent-read?page=bad"
+    },
+    {
+      "caseId": "book-recent-page-overflow",
+      "endpointId": "WEB-API-007",
+      "path": "/api/v1/books/recent-read?page=2147483648"
+    },
+    {
+      "caseId": "book-recent-page-duplicate-first",
+      "endpointId": "WEB-API-007",
+      "path": "/api/v1/books/recent-read?page=1&page=2"
+    },
+    {
+      "caseId": "book-recent-page-duplicate-after-unused",
+      "endpointId": "WEB-API-007",
+      "path": "/api/v1/books/recent-read?unused=1&page=1&page=2&pageSize=2"
+    },
+    {
+      "caseId": "book-recent-limit-duplicate-first",
+      "endpointId": "WEB-API-007",
+      "path": "/api/v1/books/recent-read?limit=1&limit=2"
+    },
+    {
+      "caseId": "book-last-note-default",
+      "endpointId": "WEB-API-008",
+      "path": "/api/v1/books/last-note-book"
+    },
+    {
+      "caseId": "book-pinned-default",
+      "endpointId": "WEB-API-009",
+      "path": "/api/v1/books/pinned"
+    },
+    {
+      "caseId": "book-pinned-second-page",
+      "endpointId": "WEB-API-009",
+      "path": "/api/v1/books/pinned?page=2&pageSize=3"
+    },
+    {
+      "caseId": "book-pinned-zero-pagination",
+      "endpointId": "WEB-API-009",
+      "path": "/api/v1/books/pinned?page=0&pageSize=0"
+    },
+    {
+      "caseId": "book-pinned-empty-pagination",
+      "endpointId": "WEB-API-009",
+      "path": "/api/v1/books/pinned?page=&pageSize="
+    },
+    {
+      "caseId": "book-pinned-invalid-page",
+      "endpointId": "WEB-API-009",
+      "path": "/api/v1/books/pinned?page=bad"
+    },
+    {
+      "caseId": "book-pinned-page-overflow",
+      "endpointId": "WEB-API-009",
+      "path": "/api/v1/books/pinned?page=2147483648"
+    },
+    {
+      "caseId": "book-pinned-page-duplicate-first",
+      "endpointId": "WEB-API-009",
+      "path": "/api/v1/books/pinned?page=1&page=2"
+    },
+    {
+      "caseId": "book-pinned-page-duplicate-after-unused",
+      "endpointId": "WEB-API-009",
+      "path": "/api/v1/books/pinned?unused=1&page=1&page=2&pageSize=3"
+    },
+    {
+      "caseId": "book-ungrouped-default",
+      "endpointId": "WEB-API-010",
+      "path": "/api/v1/books/ungrouped"
+    },
+    {
+      "caseId": "book-ungrouped-second-page",
+      "endpointId": "WEB-API-010",
+      "path": "/api/v1/books/ungrouped?page=2&pageSize=3"
+    },
+    {
+      "caseId": "book-ungrouped-zero-pagination",
+      "endpointId": "WEB-API-010",
+      "path": "/api/v1/books/ungrouped?page=0&pageSize=0"
+    },
+    {
+      "caseId": "book-ungrouped-invalid-page",
+      "endpointId": "WEB-API-010",
+      "path": "/api/v1/books/ungrouped?page=bad"
+    },
+    {
+      "caseId": "book-ungrouped-page-duplicate-first",
+      "endpointId": "WEB-API-010",
+      "path": "/api/v1/books/ungrouped?page=1&page=2"
+    },
+    {
+      "caseId": "book-ungrouped-page-duplicate-after-unused",
+      "endpointId": "WEB-API-010",
+      "path": "/api/v1/books/ungrouped?unused=1&page=1&page=2&pageSize=3"
+    },
+    {
+      "caseId": "book-ungrouped-sort-custom",
+      "endpointId": "WEB-API-010",
+      "path": "/api/v1/books/ungrouped?sortBy=custom&sortOrder=asc&pageSize=3"
+    },
+    {
+      "caseId": "book-ungrouped-sort-create-time",
+      "endpointId": "WEB-API-010",
+      "path": "/api/v1/books/ungrouped?sortBy=create_time&sortOrder=asc&pageSize=3"
+    },
+    {
+      "caseId": "book-ungrouped-sort-modify-time",
+      "endpointId": "WEB-API-010",
+      "path": "/api/v1/books/ungrouped?sortBy=modify_time&sortOrder=asc&pageSize=3"
+    },
+    {
+      "caseId": "book-ungrouped-sort-name",
+      "endpointId": "WEB-API-010",
+      "path": "/api/v1/books/ungrouped?sortBy=name&sortOrder=asc&pageSize=3"
+    },
+    {
+      "caseId": "book-ungrouped-sort-rating",
+      "endpointId": "WEB-API-010",
+      "path": "/api/v1/books/ungrouped?sortBy=rating&sortOrder=asc&pageSize=3"
+    },
+    {
+      "caseId": "book-ungrouped-sort-publish-date",
+      "endpointId": "WEB-API-010",
+      "path": "/api/v1/books/ungrouped?sortBy=publish_date&sortOrder=asc&pageSize=3"
+    },
+    {
+      "caseId": "book-ungrouped-sort-note-count",
+      "endpointId": "WEB-API-010",
+      "path": "/api/v1/books/ungrouped?sortBy=note_count&sortOrder=asc&pageSize=3"
+    },
+    {
+      "caseId": "book-ungrouped-sort-read-done-time",
+      "endpointId": "WEB-API-010",
+      "path": "/api/v1/books/ungrouped?sortBy=read_done_time&sortOrder=asc&pageSize=3"
+    },
+    {
+      "caseId": "book-ungrouped-sort-total-reading-time",
+      "endpointId": "WEB-API-010",
+      "path": "/api/v1/books/ungrouped?sortBy=total_reading_time&sortOrder=asc&pageSize=3"
+    },
+    {
+      "caseId": "book-ungrouped-sort-reading-progress",
+      "endpointId": "WEB-API-010",
+      "path": "/api/v1/books/ungrouped?sortBy=reading_progress&sortOrder=asc&pageSize=3"
+    },
+    {
+      "caseId": "book-ungrouped-sort-invalid",
+      "endpointId": "WEB-API-010",
+      "path": "/api/v1/books/ungrouped?sortBy=bad&sortOrder=bad&pageSize=3"
+    },
+    {
+      "caseId": "book-ungrouped-sort-duplicate-first",
+      "endpointId": "WEB-API-010",
+      "path": "/api/v1/books/ungrouped?sortBy=name&sortBy=create_time&pageSize=3"
+    },
+    {
+      "caseId": "book-ungrouped-sort-duplicate-after-unused",
+      "endpointId": "WEB-API-010",
+      "path": "/api/v1/books/ungrouped?unused=1&sortBy=name&sortBy=create_time&pageSize=3"
+    }
+  ]
+}

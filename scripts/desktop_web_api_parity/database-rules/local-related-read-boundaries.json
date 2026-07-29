@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "name": "local-related-read-boundaries",
+  "epochMillisColumns": [],
+  "stablePlatformTables": [
+    {
+      "table": "grdb_migrations",
+      "reason": "iOS 的 GRDB 迁移元数据表在 Web API 调用前后保持不变，Android Room 不创建该表"
+    }
+  ]
+}

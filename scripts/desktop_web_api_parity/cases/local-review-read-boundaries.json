@@ -1,0 +1,95 @@
+{
+  "schemaVersion": 1,
+  "name": "local-review-read-boundaries",
+  "cases": [
+    {
+      "caseId": "review-global-empty-default",
+      "endpointId": "WEB-API-107",
+      "path": "/api/v1/reviews"
+    },
+    {
+      "caseId": "review-global-empty-filtered",
+      "endpointId": "WEB-API-107",
+      "path": "/api/v1/reviews?page=1&pageSize=1&bookId=648&sortBy=word_count&sortOrder=asc&sortMode=ordered&excludeIds=2,x,-1,2"
+    },
+    {
+      "caseId": "review-global-empty-random",
+      "endpointId": "WEB-API-107",
+      "path": "/api/v1/reviews?page=3&pageSize=20&sortMode=random&excludeIds=2"
+    },
+    {
+      "caseId": "review-global-invalid-page",
+      "endpointId": "WEB-API-107",
+      "path": "/api/v1/reviews?page=oops"
+    },
+    {
+      "caseId": "review-draft-missing",
+      "endpointId": "WEB-API-108",
+      "path": "/api/v1/reviews/drafts?bookId=351&reviewId=987654"
+    },
+    {
+      "caseId": "review-draft-invalid-book",
+      "endpointId": "WEB-API-108",
+      "path": "/api/v1/reviews/drafts?bookId=0&reviewId=0"
+    },
+    {
+      "caseId": "review-draft-invalid-review",
+      "endpointId": "WEB-API-108",
+      "path": "/api/v1/reviews/drafts?bookId=351&reviewId=-1"
+    },
+    {
+      "caseId": "review-draft-malformed-book",
+      "endpointId": "WEB-API-108",
+      "path": "/api/v1/reviews/drafts?bookId=oops"
+    },
+    {
+      "caseId": "review-book-empty",
+      "endpointId": "WEB-API-111",
+      "path": "/api/v1/books/351/reviews?page=1&pageSize=20&sortBy=create_time&sortOrder=desc"
+    },
+    {
+      "caseId": "review-book-deleted",
+      "endpointId": "WEB-API-111",
+      "path": "/api/v1/books/1/reviews"
+    },
+    {
+      "caseId": "review-book-invalid-path",
+      "endpointId": "WEB-API-111",
+      "path": "/api/v1/books/oops/reviews"
+    },
+    {
+      "caseId": "review-sort-default",
+      "endpointId": "WEB-API-112",
+      "path": "/api/v1/books/351/reviews/sort-rule"
+    },
+    {
+      "caseId": "review-sort-deleted-book",
+      "endpointId": "WEB-API-112",
+      "path": "/api/v1/books/1/reviews/sort-rule"
+    },
+    {
+      "caseId": "review-sort-unsupported-word-count",
+      "endpointId": "WEB-API-113",
+      "path": "/api/v1/books/351/reviews/sort-rule",
+      "jsonBody": {
+        "sortBy": "word_count",
+        "sortOrder": "desc"
+      }
+    },
+    {
+      "caseId": "review-detail-deleted",
+      "endpointId": "WEB-API-114",
+      "path": "/api/v1/reviews/2"
+    },
+    {
+      "caseId": "review-detail-missing",
+      "endpointId": "WEB-API-114",
+      "path": "/api/v1/reviews/999999"
+    },
+    {
+      "caseId": "review-detail-invalid-path",
+      "endpointId": "WEB-API-114",
+      "path": "/api/v1/reviews/oops"
+    }
+  ]
+}

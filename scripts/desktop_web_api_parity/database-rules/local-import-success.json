@@ -1,0 +1,37 @@
+{
+  "schemaVersion": 1,
+  "name": "local-import-success",
+  "epochMillisColumns": [
+    {
+      "table": "note",
+      "column": "created_date",
+      "reason": "导入书摘按 Android 与 iOS 各自的提交时钟创建"
+    },
+    {
+      "table": "note",
+      "column": "updated_date",
+      "reason": "导入书摘按 Android 与 iOS 各自的提交时钟初始化更新时间"
+    },
+    {
+      "table": "chapter",
+      "column": "created_date",
+      "reason": "导入章节按 Android 与 iOS 各自的提交时钟创建"
+    },
+    {
+      "table": "chapter",
+      "column": "updated_date",
+      "reason": "导入章节按 Android 与 iOS 各自的提交时钟初始化更新时间"
+    },
+    {
+      "table": "book",
+      "column": "updated_date",
+      "reason": "导入书摘后书籍聚合更新时间来自各设备提交时钟"
+    }
+  ],
+  "stablePlatformTables": [
+    {
+      "table": "grdb_migrations",
+      "reason": "iOS 的 GRDB 迁移元数据表在 Web API 调用前后保持不变，Android Room 不创建该表"
+    }
+  ]
+}

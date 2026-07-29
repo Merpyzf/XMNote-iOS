@@ -1,0 +1,49 @@
+{
+  "schemaVersion": 1,
+  "name": "local-book-direct-write-success",
+  "dataPolicy": "Only frozen non-secret IDs and case labels are stored; response payloads remain hash-only.",
+  "cases": [
+    {
+      "caseId": "add-active-book-to-bookshelf-is-idempotent",
+      "endpointId": "WEB-API-016",
+      "path": "/api/v1/books/722/add-to-bookshelf"
+    },
+    {
+      "caseId": "restore-deleted-book-to-bookshelf",
+      "endpointId": "WEB-API-016",
+      "path": "/api/v1/books/848/add-to-bookshelf",
+      "responseNormalizations": [
+        {
+          "path": "$.data.purchaseDate",
+          "strategy": "independent-epoch-millis",
+          "reason": "Android 与 iOS 分别以本机请求时钟恢复购买时间"
+        },
+        {
+          "path": "$.data.readStatusChangedTime",
+          "strategy": "independent-epoch-millis",
+          "reason": "Android 与 iOS 分别以本机请求时钟恢复在读状态时间"
+        },
+        {
+          "path": "$.data.updatedTime",
+          "strategy": "independent-epoch-millis",
+          "reason": "Android 与 iOS 分别以本机请求时钟恢复书籍更新时间"
+        }
+      ]
+    },
+    {
+      "caseId": "add-missing-book-to-bookshelf",
+      "endpointId": "WEB-API-016",
+      "path": "/api/v1/books/999999/add-to-bookshelf"
+    },
+    {
+      "caseId": "delete-active-book",
+      "endpointId": "WEB-API-011",
+      "path": "/api/v1/books/722"
+    },
+    {
+      "caseId": "delete-already-deleted-book",
+      "endpointId": "WEB-API-011",
+      "path": "/api/v1/books/722"
+    }
+  ]
+}

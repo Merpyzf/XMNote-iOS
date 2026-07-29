@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 1,
+  "name": "remaining-sanitized-settings",
+  "dataPolicy": "Only isolated application IDs with sanitized preferences are queried; reports persist hashes and mismatch paths only.",
+  "cases": [
+    {
+      "caseId": "ai-config-sanitized",
+      "endpointId": "WEB-API-001",
+      "path": "/api/v1/ai/config"
+    },
+    {
+      "caseId": "ai-chat-missing-api-key",
+      "endpointId": "WEB-API-003",
+      "path": "/api/v1/ai/chat/completions",
+      "jsonBody": {}
+    },
+    {
+      "caseId": "siyuan-notebooks-missing-settings",
+      "endpointId": "WEB-API-051",
+      "path": "/api/v1/export/platforms/siyuan/notebooks"
+    },
+    {
+      "caseId": "obsidian-directories-missing-settings",
+      "endpointId": "WEB-API-052",
+      "path": "/api/v1/export/platforms/obsidian/dirs"
+    }
+  ]
+}

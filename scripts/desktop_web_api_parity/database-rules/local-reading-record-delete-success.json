@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "name": "local-reading-record-delete-success",
+  "epochMillisColumns": [
+    {
+      "table": "read_time_record",
+      "column": "updated_date",
+      "reason": "软删除阅读记录时 Android 与 iOS 分别使用设备请求时钟"
+    }
+  ],
+  "stablePlatformTables": [
+    {
+      "table": "grdb_migrations",
+      "reason": "iOS 的 GRDB 迁移元数据表在 Web API 调用前后保持不变，Android Room 不创建该表"
+    }
+  ]
+}

@@ -79,6 +79,9 @@ final class RepositoryContainer {
             bookSearchRepository: bookSearchRepository,
             s3UploadRepository: s3UploadRepository
         )
-        self.noteImportRepository = NoteImportRepository(databaseManager: databaseManager)
+        self.noteImportRepository = NoteImportRepository(
+            databaseManager: databaseManager,
+            bookSearchRepository: bookSearchRepository
+        )
     }
 }

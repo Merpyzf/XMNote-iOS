@@ -1,6 +1,6 @@
 /**
- * [INPUT]: 依赖 SwiftUI App 生命周期、GRDB Database、RepositoryContainer、XMToastCenter、桌面网页 App 级会话与 App Group 分享导入 handoff
- * [OUTPUT]: 对外提供 xmnoteApp 完成数据库/仓储/根视图启动、网页会话前后台调和、全局 Toast Host 与书单分享导入路由
+ * [INPUT]: 依赖 SwiftUI App 生命周期、GRDB Database、RepositoryContainer、AppState 会员能力、XMToastCenter、桌面网页 App 级会话、DEBUG 隔离数据库启动参数与 App Group 分享导入 handoff
+ * [OUTPUT]: 对外提供 xmnoteApp 完成数据库/仓储/根视图启动、网页会话前后台及实时会员调和、DEBUG Web API 一致性数据库装配、全局 Toast Host 与书单分享导入路由
  * [POS]: 应用启动编排层，负责组装全局依赖并持有不能随页面销毁的跨页面服务
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -16,7 +16,6 @@ import SwiftUI
 import GRDB
 import Nuke
 import AliyunpanSDK
-import GRDB
 
 /// 应用入口，异步初始化数据库后注入环境并渲染主界面。
 ///
@@ -66,8 +65,17 @@ struct xmnoteApp: App {
             .xmToastHost(center: toastCenter)
             .animation(.smooth(duration: 0.35), value: repositories != nil)
             .task {
-                await desktopWebSessionCoordinator.handleScenePhase(scenePhase)
                 bookCollectionImportRouter.consumePendingShareImport()
+                #if DEBUG
+                if ProcessInfo.processInfo.environment["XMNOTE_WEB_PARITY_PREMIUM"] == "1" {
+                    appState.isPremium = true
+                }
+                #endif
+                await desktopWebSessionCoordinator.updatePremiumStatus(appState.isPremium)
+                if databaseManager != nil {
+                    await desktopWebSessionCoordinator.handleScenePhase(scenePhase)
+                    return
+                }
                 guard databaseManager == nil, initError == nil else { return }
                 do {
                     let database = try await Task.detached(priority: .userInitiated) {
@@ -79,8 +87,14 @@ struct xmnoteApp: App {
                         return try AppDatabase()
                     }.value
                     let manager = DatabaseManager(database: database)
+                    let repositoryContainer = RepositoryContainer(databaseManager: manager)
+                    desktopWebSessionCoordinator.configure(
+                        database: database,
+                        repositories: repositoryContainer
+                    )
                     databaseManager = manager
-                    repositories = RepositoryContainer(databaseManager: manager)
+                    repositories = repositoryContainer
+                    await desktopWebSessionCoordinator.handleScenePhase(scenePhase)
                 } catch {
                     initError = error
                 }
@@ -95,6 +109,11 @@ struct xmnoteApp: App {
                 }
                 Task {
                     await desktopWebSessionCoordinator.handleScenePhase(phase)
+                }
+            }
+            .onChange(of: appState.isPremium) { _, isPremium in
+                Task {
+                    await desktopWebSessionCoordinator.updatePremiumStatus(isPremium)
                 }
             }
         }
@@ -201,8 +220,9 @@ final class BookCollectionImportRouter {
 }
 
 #if DEBUG
-/// UI Test 专用启动配置，使用隔离数据库构造书架首页、二级书籍列表与可排序分组的稳定测试场景。
+/// DEBUG 测试启动配置，使用指定 V44 快照或内存夹具隔离 Web API 一致性验证与 UI Test。
 enum UITestLaunchConfiguration {
+    nonisolated static let webAPIParityDatabasePathEnvironment = "XMNOTE_WEB_PARITY_DATABASE_PATH"
     nonisolated static let seedBookListArgument = "-XMNoteUITestSeedBookshelfBookList"
     nonisolated static let openDefaultBookshelfArgument = "-XMNoteUITestOpenDefaultBookshelf"
     nonisolated static let openWantReadListArgument = "-XMNoteUITestOpenWantReadList"
@@ -212,8 +232,13 @@ enum UITestLaunchConfiguration {
     nonisolated static let annualCollectionID: Int64 = 9_102
     nonisolated static let annualFinishedBookID: Int64 = 4_001
 
-    /// 根据 UI Test 启动参数决定是否创建临时数据库；返回 nil 时保持生产数据库路径。
+    /// 优先打开调用方提供的隔离 V44 快照，否则按 UI Test 参数创建夹具；返回 nil 时保持生产数据库路径。
     nonisolated static func makeDatabaseIfNeeded() throws -> AppDatabase? {
+        if let databasePath = ProcessInfo.processInfo.environment[webAPIParityDatabasePathEnvironment]?
+            .trimmingCharacters(in: .whitespacesAndNewlines),
+           !databasePath.isEmpty {
+            return try AppDatabase(path: databasePath)
+        }
         guard shouldSeedBookshelfFixture else {
             return nil
         }

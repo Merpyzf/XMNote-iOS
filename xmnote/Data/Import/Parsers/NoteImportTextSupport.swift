@@ -12,7 +12,9 @@ nonisolated enum NoteImportTextSupport {
         guard let content = String(data: data, encoding: .utf8) else {
             throw NoteImportParserError.noteFormat
         }
-        return content
+        // Foundation 会自动移除 UTF-8 BOM，而 Android String(bytes, UTF_8) 会保留 U+FEFF。
+        // 解析器依赖首行格式时，这个差异会改变成功/失败合同，因此显式恢复 BOM。
+        return data.starts(with: [0xEF, 0xBB, 0xBF]) ? "\u{FEFF}\(content)" : content
     }
 
     static func isBlank(_ value: String) -> Bool {

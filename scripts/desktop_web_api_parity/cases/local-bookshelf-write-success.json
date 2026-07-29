@@ -1,0 +1,62 @@
+{
+  "schemaVersion": 1,
+  "name": "local-bookshelf-write-success",
+  "dataPolicy": "Only frozen non-secret IDs, request DTOs and case labels are stored; response payloads remain hash-only.",
+  "cases": [
+    {
+      "caseId": "bookshelf-query-existing-book-and-group",
+      "endpointId": "WEB-API-029",
+      "path": "/api/v1/bookshelf/items/query",
+      "jsonBody": {
+        "items": [
+          {
+            "type": "book",
+            "id": 641
+          },
+          {
+            "type": "group",
+            "id": 11
+          }
+        ],
+        "groupSortBy": "name",
+        "groupSortOrder": "asc",
+        "groupEnableSection": true
+      }
+    },
+    {
+      "caseId": "bookshelf-move-unpinned-book-after-group",
+      "endpointId": "WEB-API-030",
+      "path": "/api/v1/bookshelf/move",
+      "jsonBody": {
+        "movedItems": [
+          {
+            "type": "book",
+            "id": 858
+          }
+        ],
+        "anchorItem": {
+          "type": "group",
+          "id": 11
+        },
+        "placement": "after"
+      }
+    },
+    {
+      "caseId": "bookshelf-reorder-group-and-book",
+      "endpointId": "WEB-API-031",
+      "path": "/api/v1/bookshelf/order",
+      "jsonBody": {
+        "items": [
+          {
+            "type": "group",
+            "id": 11
+          },
+          {
+            "type": "book",
+            "id": 858
+          }
+        ]
+      }
+    }
+  ]
+}

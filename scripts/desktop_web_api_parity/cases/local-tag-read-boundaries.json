@@ -1,0 +1,87 @@
+{
+  "schemaVersion": 1,
+  "name": "local-tag-read-boundaries",
+  "dataPolicy": "Only synthetic query parameters and case labels are stored; response payloads remain hash-only.",
+  "cases": [
+    {
+      "caseId": "tag-all-default",
+      "endpointId": "WEB-API-152",
+      "path": "/api/v1/tags"
+    },
+    {
+      "caseId": "tag-all-empty-type",
+      "endpointId": "WEB-API-152",
+      "path": "/api/v1/tags?type="
+    },
+    {
+      "caseId": "tag-note-type",
+      "endpointId": "WEB-API-152",
+      "path": "/api/v1/tags?type=1"
+    },
+    {
+      "caseId": "tag-book-type",
+      "endpointId": "WEB-API-152",
+      "path": "/api/v1/tags?type=2"
+    },
+    {
+      "caseId": "tag-unknown-positive-type",
+      "endpointId": "WEB-API-152",
+      "path": "/api/v1/tags?type=3"
+    },
+    {
+      "caseId": "tag-unknown-negative-type",
+      "endpointId": "WEB-API-152",
+      "path": "/api/v1/tags?type=-1"
+    },
+    {
+      "caseId": "tag-leading-zero-type",
+      "endpointId": "WEB-API-152",
+      "path": "/api/v1/tags?type=01"
+    },
+    {
+      "caseId": "tag-encoded-positive-sign",
+      "endpointId": "WEB-API-152",
+      "path": "/api/v1/tags?type=%2B1"
+    },
+    {
+      "caseId": "tag-invalid-text-type",
+      "endpointId": "WEB-API-152",
+      "path": "/api/v1/tags?type=bad"
+    },
+    {
+      "caseId": "tag-int32-overflow-type",
+      "endpointId": "WEB-API-152",
+      "path": "/api/v1/tags?type=2147483648"
+    },
+    {
+      "caseId": "tag-int32-underflow-type",
+      "endpointId": "WEB-API-152",
+      "path": "/api/v1/tags?type=-2147483649"
+    },
+    {
+      "caseId": "tag-decimal-type",
+      "endpointId": "WEB-API-152",
+      "path": "/api/v1/tags?type=1.0"
+    },
+    {
+      "caseId": "tag-encoded-space-type",
+      "endpointId": "WEB-API-152",
+      "path": "/api/v1/tags?type=%20"
+    },
+    {
+      "caseId": "tag-unescaped-plus-type",
+      "endpointId": "WEB-API-152",
+      "path": "/api/v1/tags?type=+1"
+    },
+    {
+      "caseId": "tag-duplicate-type",
+      "endpointId": "WEB-API-152",
+      "path": "/api/v1/tags?type=1&type=2"
+    },
+    {
+      "caseId": "tag-bare-then-valued-type",
+      "endpointId": "WEB-API-152",
+      "path": "/api/v1/tags?type&type=2"
+    }
+  ]
+}

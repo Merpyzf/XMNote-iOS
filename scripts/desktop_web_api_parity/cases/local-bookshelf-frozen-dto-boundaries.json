@@ -1,0 +1,98 @@
+{
+  "schemaVersion": 1,
+  "name": "local-bookshelf-frozen-dto-boundaries",
+  "dataPolicy": "Only synthetic request DTOs, frozen non-secret IDs and case labels are stored; response payloads remain hash-only.",
+  "cases": [
+    {
+      "caseId": "bookshelf-query-valid-dto",
+      "endpointId": "WEB-API-029",
+      "path": "/api/v1/bookshelf/items/query",
+      "jsonBody": {
+        "items": [
+          {
+            "type": "book",
+            "id": 641
+          },
+          {
+            "type": "group",
+            "id": 11
+          }
+        ],
+        "groupSortBy": "name",
+        "groupSortOrder": "asc",
+        "groupEnableSection": true
+      }
+    },
+    {
+      "caseId": "bookshelf-query-empty-object",
+      "endpointId": "WEB-API-029",
+      "path": "/api/v1/bookshelf/items/query",
+      "jsonBody": {}
+    },
+    {
+      "caseId": "bookshelf-query-malformed-json",
+      "endpointId": "WEB-API-029",
+      "path": "/api/v1/bookshelf/items/query",
+      "textBody": "{"
+    },
+    {
+      "caseId": "bookshelf-move-valid-dto",
+      "endpointId": "WEB-API-030",
+      "path": "/api/v1/bookshelf/move",
+      "jsonBody": {
+        "movedItems": [
+          {
+            "type": "book",
+            "id": 641
+          }
+        ],
+        "anchorItem": {
+          "type": "group",
+          "id": 11
+        },
+        "placement": "after"
+      }
+    },
+    {
+      "caseId": "bookshelf-move-empty-object",
+      "endpointId": "WEB-API-030",
+      "path": "/api/v1/bookshelf/move",
+      "jsonBody": {}
+    },
+    {
+      "caseId": "bookshelf-move-malformed-json",
+      "endpointId": "WEB-API-030",
+      "path": "/api/v1/bookshelf/move",
+      "textBody": "{"
+    },
+    {
+      "caseId": "bookshelf-reorder-valid-dto",
+      "endpointId": "WEB-API-031",
+      "path": "/api/v1/bookshelf/order",
+      "jsonBody": {
+        "items": [
+          {
+            "type": "group",
+            "id": 11
+          },
+          {
+            "type": "book",
+            "id": 641
+          }
+        ]
+      }
+    },
+    {
+      "caseId": "bookshelf-reorder-empty-object",
+      "endpointId": "WEB-API-031",
+      "path": "/api/v1/bookshelf/order",
+      "jsonBody": {}
+    },
+    {
+      "caseId": "bookshelf-reorder-malformed-json",
+      "endpointId": "WEB-API-031",
+      "path": "/api/v1/bookshelf/order",
+      "textBody": "{"
+    }
+  ]
+}

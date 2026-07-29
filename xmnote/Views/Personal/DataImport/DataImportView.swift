@@ -56,7 +56,7 @@ struct DataImportView: View {
 
     @ViewBuilder private func sourceRow(_ id: String) -> some View {
         switch id {
-        case "computer": NavigationLink("从电脑导入") { NoteImportSourceScreen(title: "从电脑导入", input: .file(parserID: nil)) }
+        case "computer": NavigationLink("从电脑导入") { DesktopWebView(mode: .computerImport) }
         case "lifeweek": NavigationLink("三联生活周刊") { LifeWeekImportView(repository: repositories.noteImportRepository) }
         case "weread-auth": NavigationLink("微信读书授权导入") { WereadImportAuthView(repository: repositories.wereadImportRepository, onOpenPremium: onOpenPremium) }
         case "kindle": NavigationLink("Kindle") { NoteImportSourceScreen(title: "Kindle", input: .fileCandidates([.kindle, .kindleApp])) }
