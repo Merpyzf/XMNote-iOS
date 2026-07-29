@@ -17,6 +17,7 @@ enum PersonalRoute: Hashable, Codable {
     case dataBackup
     case webdavServers
     case batchExport
+    case desktopWeb
     case apiIntegration
     case aiConfiguration
     case tagManagement

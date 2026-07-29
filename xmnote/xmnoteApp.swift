@@ -1,7 +1,7 @@
 /**
- * [INPUT]: 依赖 SwiftUI App 生命周期、GRDB Database、RepositoryContainer、XMToastCenter、App Group 书单分享导入 handoff 与全局服务初始化流程
- * [OUTPUT]: 对外提供 xmnoteApp（应用入口）完成数据库/仓储/根视图启动、全局 Toast Host 挂载、微信读书书单分享导入路由，并在 DEBUG UI Test 下提供隔离书架首页、二级列表与书单 fixture
- * [POS]: 应用启动编排层，负责组装全局依赖并挂载 ContentView 与跨页面轻提示基础设施
+ * [INPUT]: 依赖 SwiftUI App 生命周期、GRDB Database、RepositoryContainer、XMToastCenter、桌面网页 App 级会话与 App Group 分享导入 handoff
+ * [OUTPUT]: 对外提供 xmnoteApp 完成数据库/仓储/根视图启动、网页会话前后台调和、全局 Toast Host 与书单分享导入路由
+ * [POS]: 应用启动编排层，负责组装全局依赖并持有不能随页面销毁的跨页面服务
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
@@ -32,6 +32,7 @@ struct xmnoteApp: App {
     @State private var databaseManager: DatabaseManager?
     @State private var repositories: RepositoryContainer?
     @State private var bookCollectionImportRouter = BookCollectionImportRouter()
+    @State private var desktopWebSessionCoordinator = DesktopWebSessionCoordinator()
     @State private var initError: Error?
 
     init() {
@@ -53,6 +54,7 @@ struct xmnoteApp: App {
                         .environment(databaseManager)
                         .environment(repositories)
                         .environment(bookCollectionImportRouter)
+                        .environment(desktopWebSessionCoordinator)
                         .transition(.opacity)
                 } else if let initError {
                     databaseErrorView(initError)
@@ -64,6 +66,7 @@ struct xmnoteApp: App {
             .xmToastHost(center: toastCenter)
             .animation(.smooth(duration: 0.35), value: repositories != nil)
             .task {
+                await desktopWebSessionCoordinator.handleScenePhase(scenePhase)
                 bookCollectionImportRouter.consumePendingShareImport()
                 guard databaseManager == nil, initError == nil else { return }
                 do {
@@ -87,8 +90,12 @@ struct xmnoteApp: App {
                 bookCollectionImportRouter.handle(url)
             }
             .onChange(of: scenePhase) { _, phase in
-                guard phase == .active else { return }
-                bookCollectionImportRouter.consumePendingShareImport()
+                if phase == .active {
+                    bookCollectionImportRouter.consumePendingShareImport()
+                }
+                Task {
+                    await desktopWebSessionCoordinator.handleScenePhase(phase)
+                }
             }
         }
     }

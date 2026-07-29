@@ -31,6 +31,7 @@
 		BCA0000E2F70000000000001 /* XMNoteShareExtension.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = BCA000012F70000000000001 /* XMNoteShareExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		CD05E992341473F154FD6BBC /* libz.tbd in Frameworks */ = {isa = PBXBuildFile; fileRef = BF3A7869DE2C456031F4060C /* libz.tbd */; };
 		CD50D944953BA933E99C8134 /* WebKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 1B6C51CAFCFECD4301B5122C /* WebKit.framework */; };
+		D35B00032FA0000000000003 /* XMNoteWeb in Frameworks */ = {isa = PBXBuildFile; productRef = D35B00022FA0000000000002 /* XMNoteWeb */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -148,6 +149,7 @@
 				89SOUP0012F3D000000000002 /* SwiftSoup in Frameworks */,
 				89ZIP0012F3D000000000002 /* ZIPFoundation in Frameworks */,
 				89HUMM0012F8000000000002 /* Hummingbird in Frameworks */,
+				D35B00032FA0000000000003 /* XMNoteWeb in Frameworks */,
 				13EDBCA7EBD2A99FE721F9E9 /* CoreMedia.framework in Frameworks */,
 				4C61B9167A0412B5D37618F9 /* Accelerate.framework in Frameworks */,
 				8F053895DF208544572BAAEE /* SystemConfiguration.framework in Frameworks */,
@@ -284,6 +286,7 @@
 				89SOUP0012F3D000000000004 /* SwiftSoup */,
 				89ZIP0012F3D000000000004 /* ZIPFoundation */,
 				89HUMM0012F8000000000004 /* Hummingbird */,
+				D35B00022FA0000000000002 /* XMNoteWeb */,
 			);
 			productName = xmnote;
 			productReference = 8911149C2F39AC2F00D99384 /* xmnote.app */;
@@ -406,6 +409,7 @@
 				89SOUP0012F3D000000000001 /* XCRemoteSwiftPackageReference "SwiftSoup" */,
 				89ZIP0012F3D000000000001 /* XCRemoteSwiftPackageReference "ZIPFoundation" */,
 				89HUMM0012F8000000000001 /* XCRemoteSwiftPackageReference "hummingbird" */,
+				D35B00012FA0000000000001 /* XCLocalSwiftPackageReference "Packages/XMNoteWeb" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 8911149D2F39AC2F00D99384 /* Products */;
@@ -939,6 +943,10 @@
 			isa = XCLocalSwiftPackageReference;
 			relativePath = Vendor/PhotoBrowser;
 		};
+		D35B00012FA0000000000001 /* XCLocalSwiftPackageReference "Packages/XMNoteWeb" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = Packages/XMNoteWeb;
+		};
 /* End XCLocalSwiftPackageReference section */
 
 /* Begin XCRemoteSwiftPackageReference section */
@@ -1094,6 +1102,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 89HUMM0012F8000000000001 /* XCRemoteSwiftPackageReference "hummingbird" */;
 			productName = Hummingbird;
+		};
+		D35B00022FA0000000000002 /* XMNoteWeb */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = D35B00012FA0000000000001 /* XCLocalSwiftPackageReference "Packages/XMNoteWeb" */;
+			productName = XMNoteWeb;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

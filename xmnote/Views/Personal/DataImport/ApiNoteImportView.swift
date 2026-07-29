@@ -1,11 +1,10 @@
 /**
- * [INPUT]: 依赖 ApiNoteImportServer、API 会话合并策略、统一预览与 App 生命周期
- * [OUTPUT]: 对外提供 8080 API 导入页面，展示地址/访问码并接收多次 `/send`
+ * [INPUT]: 依赖 ApiNoteImportServer、LocalNetworkEndpointProvider、API 会话合并策略、统一预览与 App 生命周期
+ * [OUTPUT]: 对外提供 8080 API 导入页面，基于系统有效接口展示地址/访问码并接收多次 `/send`
  * [POS]: Views/Personal/DataImport 的 API 特殊入口；离开页面或 App 进入后台即停止服务
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
-import Darwin
 import Observation
 import SwiftUI
 
@@ -16,20 +15,27 @@ private final class ApiNoteImportViewModel {
     var errorMessage: String?
     var opensPreview = false
     let accessCode: String
-    let address: String
+    var address = "等待局域网地址"
     private let server = ApiNoteImportServer()
     private let isPremium: Bool
+    private var endpointProvider: LocalNetworkEndpointProvider?
 
     init(isPremium: Bool) {
         self.isPremium = isPremium
         let defaults = UserDefaults.standard
         if let saved = defaults.string(forKey: "apiImportAccessCode"), !saved.isEmpty { accessCode = saved }
         else { let generated = String(format: "%06d", Int.random(in: 0...999_999)); defaults.set(generated, forKey: "apiImportAccessCode"); accessCode = generated }
-        address = "http://\(Self.localIPv4Address() ?? "设备局域网 IP"):8080/send"
     }
 
+    /// 启动 8080 导入服务与共享局域网地址发现；两者均随页面会话停止。
     func start() {
         guard isPremium else { errorMessage = "API 导入是会员功能"; return }
+        endpointProvider?.stop()
+        let provider = LocalNetworkEndpointProvider()
+        endpointProvider = provider
+        provider.start(port: 8080, path: "/send") { [weak self] endpoints in
+            self?.address = endpoints.first?.url.absoluteString ?? "等待局域网地址"
+        }
         Task {
             await server.start(accessCode: accessCode, isPremium: isPremium) { [weak self] incoming in
                 await self?.receive(incoming)
@@ -49,22 +55,16 @@ private final class ApiNoteImportViewModel {
         if case .failed(let message) = value { errorMessage = message }
     }
 
-    func stop() { Task { await server.stop() }; state = .stopped }
-    func openPreview() { guard !books.isEmpty else { errorMessage = "尚未收到可导入的书籍"; return }; opensPreview = true }
-
-    private nonisolated static func localIPv4Address() -> String? {
-        var pointer: UnsafeMutablePointer<ifaddrs>?
-        guard getifaddrs(&pointer) == 0, let first = pointer else { return nil }
-        defer { freeifaddrs(pointer) }
-        for item in sequence(first: first, next: { $0.pointee.ifa_next }) {
-            let interface = item.pointee
-            guard interface.ifa_addr.pointee.sa_family == UInt8(AF_INET), String(cString: interface.ifa_name) == "en0" else { continue }
-            var host = [CChar](repeating: 0, count: Int(NI_MAXHOST))
-            let result = getnameinfo(interface.ifa_addr, socklen_t(interface.ifa_addr.pointee.sa_len), &host, socklen_t(host.count), nil, 0, NI_NUMERICHOST)
-            if result == 0 { return String(cString: host) }
-        }
-        return nil
+    /// 停止导入 listener 与地址监听；服务器任务取消后不再接收新请求。
+    func stop() {
+        endpointProvider?.stop()
+        endpointProvider = nil
+        Task { await server.stop() }
+        state = .stopped
     }
+
+    /// 仅在已收到至少一本书时进入统一预览。
+    func openPreview() { guard !books.isEmpty else { errorMessage = "尚未收到可导入的书籍"; return }; opensPreview = true }
 }
 
 struct ApiNoteImportView: View {
@@ -104,14 +104,33 @@ struct ApiNoteImportView: View {
         .navigationDestination(isPresented: $model.opensPreview) {
             UnifiedNoteImportPreviewView(books: model.books.map { $0.asNoteImportDraft() }, repository: repository)
         }
-        .alert("API 导入", isPresented: Binding(get: { model.errorMessage != nil }, set: { if !$0 { model.errorMessage = nil } })) {
-            Button("取消", role: .cancel) { model.errorMessage = nil }
-            Button("升级会员") { onOpenPremium() }
-        } message: { Text(model.errorMessage ?? "") }
+        .xmSystemAlert(
+            isPresented: Binding(
+                get: { model.errorMessage != nil },
+                set: { if !$0 { model.errorMessage = nil } }
+            ),
+            descriptor: apiImportErrorDescriptor
+        )
     }
 
     private var stateIsActive: Bool { stateText == "启动中" || stateText == "运行中" }
     private var stateText: String {
         switch model.state { case .stopped: "已停止"; case .starting: "启动中"; case .running: "运行中"; case .failed: "启动失败" }
+    }
+
+    private var apiImportErrorDescriptor: XMSystemAlertDescriptor? {
+        guard let errorMessage = model.errorMessage else { return nil }
+        return XMSystemAlertDescriptor(
+            title: "API 导入",
+            message: errorMessage,
+            actions: [
+                XMSystemAlertAction(title: "升级会员") {
+                    onOpenPremium()
+                },
+                XMSystemAlertAction(title: "取消", role: .cancel) {
+                    model.errorMessage = nil
+                }
+            ]
+        )
     }
 }
