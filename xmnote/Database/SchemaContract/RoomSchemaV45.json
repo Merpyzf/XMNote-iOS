@@ -2,7 +2,7 @@
   "formatVersion": 1,
   "database": {
     "version": 45,
-    "identityHash": "c3cabdc4132a8a9e7845cc467c360b77",
+    "identityHash": "4e076c66571412594ff567eae85b68fc",
     "entities": [
       {
         "tableName": "note",
@@ -3427,7 +3427,7 @@
       },
       {
         "tableName": "notion_page_sync",
-        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `connection_key` TEXT NOT NULL, `data_source_id` TEXT NOT NULL, `scope` TEXT NOT NULL, `book_id` INTEGER NOT NULL, `sync_id` TEXT NOT NULL, `page_id` TEXT NOT NULL, `page_url` TEXT NOT NULL, `status` TEXT NOT NULL, `conflict_count` INTEGER NOT NULL, `first_sync_date` INTEGER NOT NULL, `last_sync_date` INTEGER NOT NULL)",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `connection_key` TEXT NOT NULL, `data_source_id` TEXT NOT NULL, `book_id` INTEGER NOT NULL, `sync_id` TEXT NOT NULL, `page_id` TEXT NOT NULL, `page_url` TEXT NOT NULL, `status` TEXT NOT NULL, `conflict_count` INTEGER NOT NULL, `first_sync_date` INTEGER NOT NULL, `last_sync_date` INTEGER NOT NULL, `metadata_fingerprint` TEXT NOT NULL DEFAULT '', `content_fingerprint` TEXT NOT NULL DEFAULT '', `remote_last_edited_time` TEXT NOT NULL DEFAULT '', `last_exported_title` TEXT NOT NULL DEFAULT '')",
         "fields": [
           {
             "fieldPath": "id",
@@ -3444,12 +3444,6 @@
           {
             "fieldPath": "dataSourceId",
             "columnName": "data_source_id",
-            "affinity": "TEXT",
-            "notNull": true
-          },
-          {
-            "fieldPath": "scope",
-            "columnName": "scope",
             "affinity": "TEXT",
             "notNull": true
           },
@@ -3500,6 +3494,34 @@
             "columnName": "last_sync_date",
             "affinity": "INTEGER",
             "notNull": true
+          },
+          {
+            "fieldPath": "metadataFingerprint",
+            "columnName": "metadata_fingerprint",
+            "affinity": "TEXT",
+            "notNull": true,
+            "defaultValue": "''"
+          },
+          {
+            "fieldPath": "contentFingerprint",
+            "columnName": "content_fingerprint",
+            "affinity": "TEXT",
+            "notNull": true,
+            "defaultValue": "''"
+          },
+          {
+            "fieldPath": "remoteLastEditedTime",
+            "columnName": "remote_last_edited_time",
+            "affinity": "TEXT",
+            "notNull": true,
+            "defaultValue": "''"
+          },
+          {
+            "fieldPath": "lastExportedTitle",
+            "columnName": "last_exported_title",
+            "affinity": "TEXT",
+            "notNull": true,
+            "defaultValue": "''"
           }
         ],
         "primaryKey": {
@@ -3510,16 +3532,15 @@
         },
         "indices": [
           {
-            "name": "index_notion_page_sync_connection_key_data_source_id_scope_book_id",
+            "name": "index_notion_page_sync_connection_key_data_source_id_book_id",
             "unique": true,
             "columnNames": [
               "connection_key",
               "data_source_id",
-              "scope",
               "book_id"
             ],
             "orders": [],
-            "createSql": "CREATE UNIQUE INDEX IF NOT EXISTS `index_notion_page_sync_connection_key_data_source_id_scope_book_id` ON `${TABLE_NAME}` (`connection_key`, `data_source_id`, `scope`, `book_id`)"
+            "createSql": "CREATE UNIQUE INDEX IF NOT EXISTS `index_notion_page_sync_connection_key_data_source_id_book_id` ON `${TABLE_NAME}` (`connection_key`, `data_source_id`, `book_id`)"
           },
           {
             "name": "index_notion_page_sync_sync_id",
@@ -3772,11 +3793,53 @@
             ]
           }
         ]
+      },
+      {
+        "tableName": "note_import_hash",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`book_id` INTEGER NOT NULL, `content_hash` TEXT NOT NULL, `note_id` INTEGER NOT NULL, PRIMARY KEY(`book_id`, `content_hash`))",
+        "fields": [
+          {
+            "fieldPath": "bookId",
+            "columnName": "book_id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "contentHash",
+            "columnName": "content_hash",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "noteId",
+            "columnName": "note_id",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "book_id",
+            "content_hash"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_note_import_hash_note_id",
+            "unique": false,
+            "columnNames": [
+              "note_id"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_note_import_hash_note_id` ON `${TABLE_NAME}` (`note_id`)"
+          }
+        ]
       }
     ],
     "setupQueries": [
       "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
-      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, 'c3cabdc4132a8a9e7845cc467c360b77')"
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '4e076c66571412594ff567eae85b68fc')"
     ]
   }
 }

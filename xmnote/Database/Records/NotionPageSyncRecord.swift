@@ -1,6 +1,6 @@
 /**
- * [INPUT]: 依赖 GRDB Record 协议与 Android Room v46 notion_page_sync 表结构
- * [OUTPUT]: 对外提供 NotionPageSyncRecord，完整映射页面级同步和快速判断基线
+ * [INPUT]: 依赖 GRDB Record 协议与 Android Room v45 notion_page_sync 表结构
+ * [OUTPUT]: 对外提供 NotionPageSyncRecord，完整映射页面级同步和元数据/内容指纹基线
  * [POS]: Database/Records 层单表映射模型；当前只服务 schema/恢复兼容，不开放 Notion 业务入口
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -15,7 +15,6 @@ nonisolated struct NotionPageSyncRecord: Codable, FetchableRecord, PersistableRe
     var id: Int64?
     var connectionKey: String
     var dataSourceId: String
-    var scope: String
     var bookId: Int64
     var syncId: String
     var pageId: String
@@ -24,13 +23,14 @@ nonisolated struct NotionPageSyncRecord: Codable, FetchableRecord, PersistableRe
     var conflictCount: Int
     var firstSyncDate: Int64
     var lastSyncDate: Int64
-    var sourceFingerprint: String = ""
+    var metadataFingerprint: String = ""
+    var contentFingerprint: String = ""
     var remoteLastEditedTime: String = ""
     var lastExportedTitle: String = ""
 
     /// 映射 Swift 属性名与 Android Room snake_case 字段名。
     enum CodingKeys: String, CodingKey {
-        case id, scope, status
+        case id, status
         case connectionKey = "connection_key"
         case dataSourceId = "data_source_id"
         case bookId = "book_id"
@@ -40,7 +40,8 @@ nonisolated struct NotionPageSyncRecord: Codable, FetchableRecord, PersistableRe
         case conflictCount = "conflict_count"
         case firstSyncDate = "first_sync_date"
         case lastSyncDate = "last_sync_date"
-        case sourceFingerprint = "source_fingerprint"
+        case metadataFingerprint = "metadata_fingerprint"
+        case contentFingerprint = "content_fingerprint"
         case remoteLastEditedTime = "remote_last_edited_time"
         case lastExportedTitle = "last_exported_title"
     }

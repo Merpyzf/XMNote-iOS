@@ -1,7 +1,7 @@
 /**
- * [INPUT]: 依赖 AppDatabase、RoomCanonicalSchemaV44...V46、GRDB 与临时 SQLite 数据库
- * [OUTPUT]: 验证 v44→v45→v46、v45→v46、v46 直接恢复、v47 拒绝和 Notion 外键级联
- * [POS]: iOS 数据库迁移集成测试，锁定 Android Room v46 物理合同
+ * [INPUT]: 依赖 AppDatabase、RoomCanonicalSchemaV44/V45、GRDB 与临时 SQLite 数据库
+ * [OUTPUT]: 验证 v45 新库、v44→v45、Android v45 恢复、v46 拒绝、seed、导入 Hash 与 Notion 外键级联
+ * [POS]: iOS 数据库迁移集成测试，锁定 Android Room v45 最终物理合同
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
@@ -10,25 +10,48 @@ import GRDB
 import Testing
 @testable import xmnote
 
-struct RoomCanonicalSchemaV46Tests {
+struct RoomCanonicalSchemaV45Tests {
     @Test
-    func freshDatabaseUsesAndroidRoomV46Contract() throws {
-        let database = try AppDatabase.empty()
+    func freshDatabaseUsesAndroidRoomV45ContractAndSafeSeed() throws {
+        let databaseURL = temporaryDatabaseURL("room_v45_fresh")
+        defer { removeDatabaseArtifacts(at: databaseURL) }
+        let database = try AppDatabase(path: databaseURL.path)
         defer { try? database.close() }
 
         try database.dbPool.read { db in
-            #expect(try databaseVersion(db) == 46)
-            #expect(try RoomCanonicalSchemaV46.hasValidIdentityHash(db))
-            try RoomCanonicalSchemaV46.validateExistingDatabase(db)
+            #expect(try databaseVersion(db) == 45)
+            #expect(try RoomCanonicalSchemaV45.hasValidIdentityHash(db))
+            try RoomCanonicalSchemaV45.validateExistingDatabase(db)
+            #expect(try RoomCanonicalSchemaV45.loadSchema().entities.count == 39)
             #expect(try db.tableExists("notion_page_sync"))
             #expect(try db.tableExists("notion_block_sync"))
             #expect(try db.tableExists("notion_sync_operation"))
+            #expect(try db.tableExists("note_import_hash"))
+
+            #expect(try WhiteNoiseRecord.fetchCount(db) == 5)
+            #expect(try ImageRecord.fetchCount(db) == 31)
+            #expect(try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM image WHERE pro = 0") == 4)
+
+            let defaultBook = try Row.fetchOne(
+                db,
+                sql: """
+                    SELECT user_id, source_id, read_status_id, pinned
+                    FROM book
+                    WHERE id = 0
+                    """
+            )
+            #expect((defaultBook?["user_id"] as Int64?) == 1)
+            #expect((defaultBook?["source_id"] as Int64?) == 0)
+            #expect((defaultBook?["read_status_id"] as Int64?) == 1)
+            #expect((defaultBook?["pinned"] as Int64?) == 0)
+            #expect(try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM user WHERE id = 1") == 1)
+            #expect(try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM source WHERE id = 0") == 1)
         }
     }
 
     @Test
-    func androidRoomV44DatabaseMigratesThroughV45ToV46() throws {
-        let databaseURL = temporaryDatabaseURL("room_v44_to_v46")
+    func androidRoomV44DatabaseMigratesToV45() throws {
+        let databaseURL = temporaryDatabaseURL("room_v44_to_v45")
         defer { removeDatabaseArtifacts(at: databaseURL) }
 
         try DatabaseQueue(path: databaseURL.path).write { db in
@@ -39,77 +62,44 @@ struct RoomCanonicalSchemaV46Tests {
         defer { try? database.close() }
 
         try database.dbPool.read { db in
-            #expect(try databaseVersion(db) == 46)
-            try RoomCanonicalSchemaV46.validateExistingDatabase(db)
+            #expect(try databaseVersion(db) == 45)
+            try RoomCanonicalSchemaV45.validateExistingDatabase(db)
             #expect(try migrationMarkerCount(AppDatabase.roomV45MigrationIdentifier, db: db) == 1)
-            #expect(try migrationMarkerCount(AppDatabase.roomV46MigrationIdentifier, db: db) == 1)
+            #expect(try db.tableExists("note_import_hash"))
         }
     }
 
     @Test
-    func v45MigrationAddsThreeNonNullEmptyBaselineFields() throws {
-        let databaseURL = temporaryDatabaseURL("room_v45_to_v46")
-        defer { removeDatabaseArtifacts(at: databaseURL) }
-        let queue = try DatabaseQueue(path: databaseURL.path)
-
-        try queue.write { db in
-            try RoomCanonicalSchemaV45.createAllTables(db)
-            // SQL 目的：插入 v45 页面映射 fixture，验证 v46 ALTER TABLE 对既有行写入 Android 默认值。
-            // 涉及表：notion_page_sync；不含 v46 新字段。
-            // 时间字段：first_sync_date/last_sync_date 使用固定 Unix 毫秒，避免动态测试值。
-            // 副作用：只写测试临时数据库。
-            try db.execute(sql: """
-                INSERT INTO notion_page_sync (
-                    id, connection_key, data_source_id, scope, book_id,
-                    sync_id, page_id, page_url, status, conflict_count,
-                    first_sync_date, last_sync_date
-                ) VALUES (1, 'connection', 'source', 'book', 7,
-                          'sync', 'page', 'https://example.invalid/page',
-                          'active', 0, 1000, 2000)
-                """)
-            try RoomCanonicalSchemaV46.migrateFromV45(db)
-        }
-
-        try queue.read { db in
-            #expect(try databaseVersion(db) == 46)
-            try RoomCanonicalSchemaV46.validateExistingDatabase(db)
-            let record = try NotionPageSyncRecord.fetchOne(db, key: 1)
-            #expect(record?.sourceFingerprint == "")
-            #expect(record?.remoteLastEditedTime == "")
-            #expect(record?.lastExportedTitle == "")
-        }
-    }
-
-    @Test
-    func androidRoomV46DatabaseWithoutGRDBMarkersOpensWithoutReapplyingMigrations() throws {
-        let databaseURL = temporaryDatabaseURL("room_v46_restore")
+    func androidRoomV45DatabaseWithoutGRDBMarkersOpensWithoutReapplyingSeed() throws {
+        let databaseURL = temporaryDatabaseURL("room_v45_restore")
         defer { removeDatabaseArtifacts(at: databaseURL) }
 
         try DatabaseQueue(path: databaseURL.path).write { db in
-            try RoomCanonicalSchemaV46.createAllTables(db)
+            try RoomCanonicalSchemaV45.createAllTables(db)
         }
 
         let database = try AppDatabase(path: databaseURL.path)
         defer { try? database.close() }
 
         try database.dbPool.read { db in
-            #expect(try databaseVersion(db) == 46)
+            #expect(try databaseVersion(db) == 45)
+            #expect(try migrationMarkerCount(AppDatabase.roomSeedMigrationIdentifier, db: db) == 1)
             #expect(try migrationMarkerCount(AppDatabase.roomV45MigrationIdentifier, db: db) == 1)
-            #expect(try migrationMarkerCount(AppDatabase.roomV46MigrationIdentifier, db: db) == 1)
-            try RoomCanonicalSchemaV46.validateExistingDatabase(db)
+            #expect(try UserRecord.fetchCount(db) == 0)
+            try RoomCanonicalSchemaV45.validateExistingDatabase(db)
         }
     }
 
     @Test
-    func databaseNewerThanV46IsRejected() throws {
-        let databaseURL = temporaryDatabaseURL("room_v47_rejected")
+    func databaseNewerThanV45IsRejected() throws {
+        let databaseURL = temporaryDatabaseURL("room_v46_rejected")
         defer { removeDatabaseArtifacts(at: databaseURL) }
 
         try DatabaseQueue(path: databaseURL.path).write { db in
-            try RoomCanonicalSchemaV46.createAllTables(db)
-            // SQL 目的：构造未来版本 Room fixture，验证恢复兼容上限拒绝 user_version=47。
+            try RoomCanonicalSchemaV45.createAllTables(db)
+            // SQL 目的：构造未来版本 Room fixture，验证恢复兼容上限拒绝 user_version=46。
             // 涉及表：无；副作用：只更新测试临时数据库版本号。
-            try db.execute(sql: "PRAGMA user_version = 47")
+            try db.execute(sql: "PRAGMA user_version = 46")
         }
 
         #expect(throws: RoomCanonicalSchemaError.self) {
@@ -118,8 +108,31 @@ struct RoomCanonicalSchemaV46Tests {
     }
 
     @Test
+    func noteImportHashIgnoresDuplicateCompositeKeyAndSupportsPhysicalDelete() throws {
+        let databaseURL = temporaryDatabaseURL("room_v45_note_import_hash")
+        defer { removeDatabaseArtifacts(at: databaseURL) }
+        let database = try AppDatabase(path: databaseURL.path)
+        defer { try? database.close() }
+
+        try database.dbPool.write { db in
+            try NoteImportHashRecord(bookId: 7, contentHash: "same", noteId: 11).insert(db)
+            try NoteImportHashRecord(bookId: 7, contentHash: "same", noteId: 12).insert(db)
+
+            #expect(try NoteImportHashRecord.fetchCount(db) == 1)
+            #expect(try NoteImportHashRecord.fetchOne(db)?.noteId == 11)
+
+            // SQL 目的：验证 Android NoteImportHashDao 的物理删除语义，不引入 is_deleted。
+            // 涉及表：note_import_hash；关键过滤：note_id 精确匹配。
+            try db.execute(sql: "DELETE FROM note_import_hash WHERE note_id = ?", arguments: [11])
+            #expect(try NoteImportHashRecord.fetchCount(db) == 0)
+        }
+    }
+
+    @Test
     func deletingPageSyncCascadesBlockAndOperationRows() throws {
-        let database = try AppDatabase.empty()
+        let databaseURL = temporaryDatabaseURL("room_v45_notion_cascade")
+        defer { removeDatabaseArtifacts(at: databaseURL) }
+        let database = try AppDatabase(path: databaseURL.path)
         defer { try? database.close() }
 
         try database.dbPool.write { db in
@@ -127,7 +140,6 @@ struct RoomCanonicalSchemaV46Tests {
                 id: 1,
                 connectionKey: "connection",
                 dataSourceId: "source",
-                scope: "book",
                 bookId: 7,
                 syncId: "sync",
                 pageId: "page",
@@ -135,7 +147,11 @@ struct RoomCanonicalSchemaV46Tests {
                 status: "active",
                 conflictCount: 0,
                 firstSyncDate: 1_000,
-                lastSyncDate: 2_000
+                lastSyncDate: 2_000,
+                metadataFingerprint: "metadata",
+                contentFingerprint: "content",
+                remoteLastEditedTime: "remote-time",
+                lastExportedTitle: "title"
             )
             try page.insert(db)
             let pageID: Int64 = 1
@@ -179,7 +195,7 @@ struct RoomCanonicalSchemaV46Tests {
     }
 }
 
-private extension RoomCanonicalSchemaV46Tests {
+private extension RoomCanonicalSchemaV45Tests {
     func temporaryDatabaseURL(_ prefix: String) -> URL {
         FileManager.default.temporaryDirectory
             .appendingPathComponent("\(prefix)_\(UUID().uuidString).db")

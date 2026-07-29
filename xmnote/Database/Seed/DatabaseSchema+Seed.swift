@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 GRDB Database 与 Android Room v40 canonical 表结构
- * [OUTPUT]: 对外提供 Android 对齐的默认 seed 数据
+ * [OUTPUT]: 对外提供 Android 对齐的根记录、字典、白噪音与背景图 seed 数据
  * [POS]: Database/Seed 初始化数据定义文件，被 Room canonical seed 迁移调用
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -21,6 +21,8 @@ extension AppDatabase {
         try seedDefaultBook(db)
         try seedDefaultChapter(db)
         try seedDefaultCategory(db)
+        try seedWhiteNoise(db)
+        try seedBackgroundImages(db)
         try seedCosConfig(db)
     }
 
@@ -142,6 +144,131 @@ extension AppDatabase {
                     )
                     """,
                 arguments: [title, index, title]
+            )
+        }
+    }
+
+    // MARK: - 白噪音（5 种）
+    /// 写入 Android 新库内置的白噪音资源，稳定 ID、顺序和付费标记供跨端恢复后继续识别。
+    private nonisolated static func seedWhiteNoise(_ db: Database) throws {
+        let resources: [(name: String, size: Int64, isPro: Bool, cover: String, source: String)] = [
+            (
+                "雨天",
+                60_624_912,
+                false,
+                "https://xmnote-1252413502.cos.ap-shanghai.myqcloud.com/rain.jpg",
+                "https://xmnote-1252413502.cos.ap-shanghai.myqcloud.com/rainbest.mp3"
+            ),
+            (
+                "森林",
+                17_666_725,
+                true,
+                "https://xmnote-1252413502.cos.ap-shanghai.myqcloud.com/forest.jpg",
+                "https://xmnote-1252413502.cos.ap-shanghai.myqcloud.com/birds.mp3"
+            ),
+            (
+                "冬天",
+                14_453_352,
+                true,
+                "https://xmnote-1252413502.cos.ap-shanghai.myqcloud.com/snow.jpg",
+                "https://xmnote-1252413502.cos.ap-shanghai.myqcloud.com/snow.mp3"
+            ),
+            (
+                "雷雨天",
+                8_095_536,
+                true,
+                "https://xmnote-1252413502.cos.ap-shanghai.myqcloud.com/thunder.jpg",
+                "https://xmnote-1252413502.cos.ap-shanghai.myqcloud.com/thunder.mp3"
+            ),
+            (
+                "咖啡馆",
+                16_573_824,
+                true,
+                "https://xmnote-1252413502.cos.ap-shanghai.myqcloud.com/cafe-bar.jpg",
+                "https://xmnote-1252413502.cos.ap-shanghai.myqcloud.com/cafe-brazil-walla.mp3"
+            )
+        ]
+        let now = Int64(Date().timeIntervalSince1970 * 1000)
+        for (index, resource) in resources.enumerated() {
+            // SQL 目的：按 Android BaseDataRepository 顺序写入内置白噪音，显式 ID 避免跨端资源标识漂移。
+            // 涉及表：white_noise；时间字段：created_date 使用 Unix 毫秒，其余同步字段为 0。
+            // 冲突策略：相同 ID 已存在时保持原记录，避免 seed 重放覆盖用户侧状态。
+            try db.execute(
+                sql: """
+                    INSERT OR IGNORE INTO white_noise (
+                        id, name, cover, source, size, pro,
+                        created_date, updated_date, last_sync_date, is_deleted
+                    )
+                    VALUES (?, ?, ?, ?, ?, ?, ?, 0, 0, 0)
+                    """,
+                arguments: [
+                    index + 1,
+                    resource.name,
+                    resource.cover,
+                    resource.source,
+                    resource.size,
+                    resource.isPro ? 1 : 0,
+                    now
+                ]
+            )
+        }
+    }
+
+    // MARK: - 阅读计时背景图（31 张）
+    /// 写入 Android 新库内置的阅读计时背景图，保持稳定 ID、原始顺序和付费分组。
+    private nonisolated static func seedBackgroundImages(_ db: Database) throws {
+        let resources: [(url: String, isPro: Bool)] = [
+            ("https://xmnote-1252413502.cos.ap-shanghai.myqcloud.com/marcel-strauss-lRIMRLE9SOk-unsplash.jpg", false),
+            ("https://xmnote-1252413502.cos.ap-shanghai.myqcloud.com/aswin-raj-thekkoot-H90LxRG9n2g-unsplash.jpg", false),
+            ("https://xmnote-1252413502.cos.ap-shanghai.myqcloud.com/nasa-Yj1M5riCKk4-unsplash.jpeg", false),
+            ("https://xmnote-1252413502.cos.ap-shanghai.myqcloud.com/patrick-hodskins-mU4Y8dX-iJE-unsplash-2.jpg", false),
+            ("https://xmnote-1252413502.cos.ap-shanghai.myqcloud.com/eberhard-grossgasteiger-XAxEp-NKBiQ-unsplash.jpeg", true),
+            ("https://xmnote-1252413502.cos.ap-shanghai.myqcloud.com/mona-eendra-vC8wj_Kphak-unsplash-2.jpeg", true),
+            ("https://xmnote-1252413502.cos.ap-shanghai.myqcloud.com/szabo-viktor-28ZbKOWiZfs-unsplash.jpeg", true),
+            ("https://xmnote-1252413502.cos.ap-shanghai.myqcloud.com/wolfgang-hasselmann-jfk5YgXAPRM-unsplash.jpeg", true),
+            ("https://xmnote-1252413502.cos.ap-shanghai.myqcloud.com/eberhard-grossgasteiger-tXdiTsGf2z0-unsplash.jpeg", true),
+            ("https://xmnote-1252413502.cos.ap-shanghai.myqcloud.com/greg-kantra-23w5guoXxMM-unsplash.jpeg", true),
+            ("https://xmnote-1252413502.cos.ap-shanghai.myqcloud.com/charles-etoroma-QMUfC72oEWk-unsplash.jpeg", true),
+            ("https://xmnote-1252413502.cos.ap-shanghai.myqcloud.com/patrick-langwallner-3pR7d-tIRx8-unsplash.jpeg", true),
+            ("https://xmnote-1252413502.cos.ap-shanghai.myqcloud.com/caseen-kyle-registos-iHtwBlSOXjc-unsplash.jpeg", true),
+            ("https://xmnote-1252413502.cos.ap-shanghai.myqcloud.com/sen-KQ3GGLRnUtE-unsplash.jpeg", true),
+            ("https://xmnote-1252413502.cos.ap-shanghai.myqcloud.com/peter-burdon-oDv2Lft6610-unsplash.jpeg", true),
+            ("https://xmnote-1252413502.cos.ap-shanghai.myqcloud.com/aliaksei-zc-yuEJWyg8-unsplash.jpeg", true),
+            ("https://xmnote-1252413502.cos.ap-shanghai.myqcloud.com/livia-fressy-toaa6L4C3bk-unsplash.jpeg", true),
+            ("https://xmnote-1252413502.cos.ap-shanghai.myqcloud.com/zoltan-tasi-gN-r3UPfajY-unsplash.jpeg", true),
+            ("https://xmnote-1252413502.cos.ap-shanghai.myqcloud.com/masako-ishida-2bDOv9lhZJU-unsplash.jpeg", true),
+            ("https://xmnote-1252413502.cos.ap-shanghai.myqcloud.com/matei-pruteanu-qmqI6cWVMeI-unsplash.jpeg", true),
+            ("https://xmnote-1252413502.cos.ap-shanghai.myqcloud.com/paolo-celentano-7Kti8iT3bjg-unsplash.jpeg", true),
+            ("https://xmnote-1252413502.cos.ap-shanghai.myqcloud.com/amirhossein-khedri-1nhIdeKrVdY-unsplash.jpeg", true),
+            ("https://xmnote-1252413502.cos.ap-shanghai.myqcloud.com/kristaps-ungurs-_xfxnGGa088-unsplash.jpeg", true),
+            ("https://xmnote-1252413502.cos.ap-shanghai.myqcloud.com/zoe-V8dteQ3sdx0-unsplash.jpeg", true),
+            ("https://xmnote-1252413502.cos.ap-shanghai.myqcloud.com/colin-lloyd-5lyqDE0VpQI-unsplash.jpeg", true),
+            ("https://xmnote-1252413502.cos.ap-shanghai.myqcloud.com/milin-john-2Z-uXuaGADg-unsplash.jpeg", true),
+            ("https://xmnote-1252413502.cos.ap-shanghai.myqcloud.com/tanya-pro-LFJi3Deh_Gk-unsplash.jpeg", true),
+            ("https://xmnote-1252413502.cos.ap-shanghai.myqcloud.com/tito-la-star-xSRmNcisgDk-unsplash.jpeg", true),
+            ("https://xmnote-1252413502.cos.ap-shanghai.myqcloud.com/luke-peterson-y5_N-lH93U0-unsplash.jpeg", true),
+            ("https://xmnote-1252413502.cos.ap-shanghai.myqcloud.com/anil-xavier-GqEykCDt_e8-unsplash.jpeg", true),
+            ("https://xmnote-1252413502.cos.ap-shanghai.myqcloud.com/jasper-garratt-iZai8e-Ymy0-unsplash.jpeg", true)
+        ]
+        let now = Int64(Date().timeIntervalSince1970 * 1000)
+        for (index, resource) in resources.enumerated() {
+            // SQL 目的：按 Android BaseDataRepository 顺序写入阅读计时背景图，显式 ID 保证资源标识稳定。
+            // 涉及表：image；关键字段：type=1 对齐 Android BackgroundImageType.TIMING。
+            // 时间字段：created_date 使用 Unix 毫秒，其余同步字段为 0；相同 ID 冲突时保留原记录。
+            try db.execute(
+                sql: """
+                    INSERT OR IGNORE INTO image (
+                        id, url, type, pro,
+                        created_date, updated_date, last_sync_date, is_deleted
+                    )
+                    VALUES (?, ?, 1, ?, ?, 0, 0, 0)
+                    """,
+                arguments: [
+                    index + 1,
+                    resource.url,
+                    resource.isPro ? 1 : 0,
+                    now
+                ]
             )
         }
     }

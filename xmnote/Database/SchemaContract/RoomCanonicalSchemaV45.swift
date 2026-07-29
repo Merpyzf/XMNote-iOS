@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 Android Room 导出的 v45 schema JSON 与 GRDB Database 执行 v44→v45 结构迁移和物理校验
- * [OUTPUT]: 对外提供 RoomCanonicalSchemaV45，作为 Notion 同步映射表的跨端物理 schema 合同
+ * [OUTPUT]: 对外提供 RoomCanonicalSchemaV45，作为 Notion 同步与导入 Hash 表的跨端物理 schema 合同
  * [POS]: Database/SchemaContract 的 Room v45 事实源适配器，被迁移与恢复 staging 校验流程调用
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -8,10 +8,10 @@
 import Foundation
 import GRDB
 
-/// Android Room v45 物理结构合同，新增 Notion 页面、Block 和恢复操作三张同步表。
+/// Android Room v45 物理结构合同，新增 Notion 三张同步表和按书保存的导入内容 Hash 表。
 nonisolated enum RoomCanonicalSchemaV45 {
     nonisolated static let databaseVersion = 45
-    nonisolated static let identityHash = "c3cabdc4132a8a9e7845cc467c360b77"
+    nonisolated static let identityHash = "4e076c66571412594ff567eae85b68fc"
     nonisolated static let schemaResourceName = "RoomSchemaV45"
 
     /// 按 Room v45 JSON 创建全部实体表、索引、room_master_table，并写入 user_version=45。
@@ -24,7 +24,7 @@ nonisolated enum RoomCanonicalSchemaV45 {
         )
     }
 
-    /// 在 Room v44 数据库上创建 Android v45 的三张 Notion 同步表和六个索引。
+    /// 在 Room v44 数据库上创建 Android v45 的三张 Notion 同步表、导入 Hash 表和七个索引。
     nonisolated static func migrateFromV44(_ db: Database) throws {
         // SQL 目的：创建一本书在一个 Notion 数据源中的持续同步页面映射。
         // 涉及表：notion_page_sync；无外键；唯一键约束由后续索引提供。
@@ -35,7 +35,6 @@ nonisolated enum RoomCanonicalSchemaV45 {
                 id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
                 connection_key TEXT NOT NULL,
                 data_source_id TEXT NOT NULL,
-                scope TEXT NOT NULL,
                 book_id INTEGER NOT NULL,
                 sync_id TEXT NOT NULL,
                 page_id TEXT NOT NULL,
@@ -43,17 +42,21 @@ nonisolated enum RoomCanonicalSchemaV45 {
                 status TEXT NOT NULL,
                 conflict_count INTEGER NOT NULL,
                 first_sync_date INTEGER NOT NULL,
-                last_sync_date INTEGER NOT NULL
+                last_sync_date INTEGER NOT NULL,
+                metadata_fingerprint TEXT NOT NULL DEFAULT '',
+                content_fingerprint TEXT NOT NULL DEFAULT '',
+                remote_last_edited_time TEXT NOT NULL DEFAULT '',
+                last_exported_title TEXT NOT NULL DEFAULT ''
             )
             """)
 
-        // SQL 目的：保证一个连接、数据源、范围和书籍只对应一个持续同步页面。
-        // 涉及表：notion_page_sync；关键字段：connection_key、data_source_id、scope、book_id。
+        // SQL 目的：保证一个连接、数据源和书籍只对应一个持续同步页面。
+        // 涉及表：notion_page_sync；关键字段：connection_key、data_source_id、book_id。
         // 副作用：新增唯一索引，不改业务行。
         try db.execute(sql: """
             CREATE UNIQUE INDEX IF NOT EXISTS
-            index_notion_page_sync_connection_key_data_source_id_scope_book_id
-            ON notion_page_sync(connection_key, data_source_id, scope, book_id)
+            index_notion_page_sync_connection_key_data_source_id_book_id
+            ON notion_page_sync(connection_key, data_source_id, book_id)
             """)
 
         // SQL 目的：加速通过稳定同步 ID 定位 Notion 页面映射。
@@ -141,6 +144,26 @@ nonisolated enum RoomCanonicalSchemaV45 {
         try db.execute(sql: """
             CREATE INDEX IF NOT EXISTS index_notion_sync_operation_page_sync_id
             ON notion_sync_operation(page_sync_id)
+            """)
+
+        // SQL 目的：保存按书计算的导入内容 Hash，供重复导入时通过复合主键前置去重。
+        // 涉及表：note_import_hash；关键字段：book_id/content_hash 组成复合主键，note_id 指向业务书摘但不建立外键。
+        // 副作用：只新增空表，不回填存量书摘；Android 会在后续导入时懒回填。
+        try db.execute(sql: """
+            CREATE TABLE IF NOT EXISTS note_import_hash (
+                book_id INTEGER NOT NULL,
+                content_hash TEXT NOT NULL,
+                note_id INTEGER NOT NULL,
+                PRIMARY KEY(book_id, content_hash)
+            )
+            """)
+
+        // SQL 目的：加速按书摘 ID 清理和读取导入 Hash。
+        // 涉及表：note_import_hash；关键字段：note_id。
+        // 副作用：新增普通索引，不改业务行。
+        try db.execute(sql: """
+            CREATE INDEX IF NOT EXISTS index_note_import_hash_note_id
+            ON note_import_hash(note_id)
             """)
 
         try createRoomMasterTable(db)
