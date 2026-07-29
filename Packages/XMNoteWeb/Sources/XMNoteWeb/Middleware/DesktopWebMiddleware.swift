@@ -1,11 +1,15 @@
 /**
- * [INPUT]: 依赖 Hummingbird 中间件链、请求路径和响应头
- * [OUTPUT]: 提供在途请求统计，以及静态资源和入口文档的分层缓存策略
+ * [INPUT]: 依赖 Hummingbird 中间件链、请求路径、响应头和正式 APK 异常分支的内部标记
+ * [OUTPUT]: 提供在途请求统计，以及静态资源、业务响应和入口文档的分层缓存策略
  * [POS]: XMNoteWeb 的内部 HTTP 中间件层，不改变业务响应语义
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
 import Hummingbird
+
+enum DesktopWebInternalHeaders {
+    static let suppressCacheControl = HTTPFields.Key("X-XMNote-Suppress-Cache-Control")!
+}
 
 /// 记录仍在路由处理中、尚未生成响应的请求，供 App 后台切换时判断是否需要有限收尾。
 actor DesktopWebRequestActivity {
@@ -58,7 +62,17 @@ struct DesktopWebCachePolicyMiddleware: RouterMiddleware {
         next: @concurrent (Request, BasicRequestContext) async throws -> Response
     ) async throws -> Response {
         var response = try await next(request, context)
-        if request.uri.path.hasPrefix("/_next/static/") {
+        if response.headers[DesktopWebInternalHeaders.suppressCacheControl] != nil {
+            response.headers[DesktopWebInternalHeaders.suppressCacheControl] = nil
+            response.headers[.cacheControl] = nil
+            return response
+        }
+        if request.uri.path.hasPrefix("/api/v1/") {
+            if (request.method == .get || request.method == .head),
+               response.headers[.cacheControl] == nil {
+                response.headers[.cacheControl] = "private"
+            }
+        } else if request.uri.path.hasPrefix("/_next/static/") {
             response.headers[.cacheControl] = "public, max-age=31536000, immutable"
         } else if request.uri.path == "/health" {
             response.headers[.cacheControl] = "no-store"

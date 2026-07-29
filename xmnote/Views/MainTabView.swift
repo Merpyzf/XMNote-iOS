@@ -8,9 +8,9 @@
 import SwiftUI
 
 /**
- * [INPUT]: 依赖 Reading/Book/Note/Content/Personal/Search 各模块容器视图与对应路由枚举，依赖 BookCollectionImportRouter 承接外部书单导入，依赖 DebugRoute 提供调试页面跳转，依赖 openURL 打开外部帮助文档，依赖 SwiftUI search focus 状态协调全局搜索输入
- * [OUTPUT]: 对外提供 MainTabView（五个主 Tab 的 NavigationStack 组织、书单分享导入入口定位、普通目的地分发、搜索来源详情系统全屏覆盖与 DEBUG UI Test 书架首页/二级列表直达路由）
- * [POS]: 应用根导航入口，负责跨模块路由承接（含书架聚合列表、书架管理入口、在读页热力图点击进入阅读日历、内容查看与内容编辑、搜索来源详情根级 fullScreenCover）
+ * [INPUT]: 依赖 Reading/Book/Note/Content/Personal/Search 各模块容器视图与对应路由枚举，依赖 BookCollectionImportRouter 承接外部书单导入，依赖 DesktopWebSessionCoordinator 消费网页端原生动作，依赖 DebugRoute、openURL 与 SwiftUI search focus 状态
+ * [OUTPUT]: 对外提供 MainTabView（五个主 Tab 的 NavigationStack 组织、书单分享导入与网页端高级版入口定位、普通目的地分发、搜索来源详情系统全屏覆盖与 DEBUG UI Test 路由）
+ * [POS]: 应用根导航入口，负责跨模块路由承接（含书架聚合列表、在读阅读日历、内容查看/编辑、网页端原生导航与搜索来源详情根级 fullScreenCover）
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
@@ -60,6 +60,7 @@ private enum GlobalSearchCommitSource: Sendable {
 struct MainTabView: View {
     @Environment(\.openURL) private var openURL
     @Environment(BookCollectionImportRouter.self) private var bookCollectionImportRouter
+    @Environment(DesktopWebSessionCoordinator.self) private var desktopWebSessionCoordinator
     @State private var selectedTab: AppTab = .reading
     @State private var readingPath = NavigationPath()
     @State private var booksPath = NavigationPath()
@@ -265,6 +266,10 @@ struct MainTabView: View {
         .onChange(of: bookCollectionImportRouter.pendingImport) { _, request in
             guard let request else { return }
             prepareForBookCollectionImport(request)
+        }
+        .onChange(of: desktopWebSessionCoordinator.premiumUpgradeRequestID) { _, requestID in
+            guard requestID != nil else { return }
+            openPremiumUpgradeFromDesktopWeb()
         }
         .fullScreenCover(
             item: $searchResultCover,
@@ -799,6 +804,12 @@ struct MainTabView: View {
         openURL(url)
     }
 
+    /// 消费网页端原生高级版动作，切换到“我的”并沿用该 Tab 的既有导航栈继续 push。
+    private func openPremiumUpgradeFromDesktopWeb() {
+        selectedTab = .profile
+        profilePath.append(PersonalRoute.premium)
+    }
+
     private func prepareForBookCollectionImport(_ request: BookCollectionImportRequest) {
         selectedTab = .books
         if request.source == .systemShare {
@@ -880,4 +891,5 @@ private struct MainTabSearchHostModifier: ViewModifier {
 #Preview {
     MainTabView()
         .environment(AppState())
+        .environment(DesktopWebSessionCoordinator())
 }

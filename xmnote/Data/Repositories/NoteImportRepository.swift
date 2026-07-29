@@ -12,10 +12,16 @@ import GRDB
 final class NoteImportRepository: NoteImportRepositoryProtocol {
     private let databaseManager: DatabaseManager
     private let defaults: UserDefaults
+    private let bookSearchRepository: any BookSearchRepositoryProtocol
 
-    init(databaseManager: DatabaseManager, defaults: UserDefaults = .standard) {
+    init(
+        databaseManager: DatabaseManager,
+        defaults: UserDefaults = .standard,
+        bookSearchRepository: (any BookSearchRepositoryProtocol)? = nil
+    ) {
         self.databaseManager = databaseManager
         self.defaults = defaults
+        self.bookSearchRepository = bookSearchRepository ?? BookSearchRepository()
     }
 
     func matchLocalBook(for draft: NoteImportDraftBook) async throws -> BookPickerBook? {
@@ -42,6 +48,50 @@ final class NoteImportRepository: NoteImportRepositoryProtocol {
                 totalPagination: record.totalPagination
             )
         }
+    }
+
+    /// 显式目标校验只按主键判断存在性，刻意不排除软删除和占位书，以复刻 Android `queryByIdSuspend`。
+    func hasImportTargetBook(id: Int64) async throws -> Bool {
+        try await databaseManager.database.dbPool.read { db in
+            // SQL 目的：确认 Web 导入请求显式指定的目标书主键存在。
+            // 涉及表：book。
+            // 关键过滤：只按 id 精确命中；Android queryByIdSuspend 不过滤 is_deleted 或 id = 0。
+            // 时间字段：不涉及时间字段。
+            // 返回字段用途：在开始写入前阻止不存在的 targetBookId 被误当成新书导入。
+            (try Int.fetchOne(
+                db,
+                sql: "SELECT COUNT(*) FROM book WHERE id = ?",
+                arguments: [id]
+            ) ?? 0) > 0
+        }
+    }
+
+    /// 逐书容错执行文渠补全；调用运行在 MainActor，远端请求异步挂起，取消由上层提交任务继承。
+    func enrichImportBookInfoIfNeeded(
+        _ books: [NoteImportCommitBook]
+    ) async -> [NoteImportCommitBook] {
+        var enriched = books
+        for index in enriched.indices {
+            let item = enriched[index]
+            guard item.targetBookID == nil, item.draft.source != 22 else { continue }
+            do {
+                let candidates = try await bookSearchRepository.search(
+                    keyword: Self.cleanedBookName(item.draft.name),
+                    source: .wenqu
+                )
+                guard let match = candidates.enumerated().max(by: { lhs, rhs in
+                    Self.matchScore(lhs.element, draft: item.draft)
+                        < Self.matchScore(rhs.element, draft: item.draft)
+                })?.element else {
+                    continue
+                }
+                enriched[index].draft = Self.merging(match, into: item.draft)
+            } catch {
+                // Android MatchBookInfoHelper 对单书网络或解析失败只记录日志并继续导入。
+                continue
+            }
+        }
+        return enriched
     }
 
     func commitImport(
@@ -86,17 +136,12 @@ private extension NoteImportRepository {
     ) throws -> Int64 {
         let draft = item.draft
         if let targetID = item.targetBookID, var record = try BookRecord.fetchOne(db, key: targetID) {
-            if record.rawName.isEmpty { record.rawName = draft.rawName.isEmpty ? draft.name : draft.rawName }
-            if record.author.isEmpty { record.author = draft.author }
-            if record.authorIntro.isEmpty { record.authorIntro = draft.authorIntro }
-            if record.translator.isEmpty { record.translator = draft.translator }
-            if record.press.isEmpty { record.press = draft.press }
-            if record.isbn.isEmpty { record.isbn = draft.isbn }
-            if record.summary.isEmpty { record.summary = draft.summary }
-            if record.pubDate.isEmpty { record.pubDate = draft.pubDate }
-            if record.cover.isEmpty { record.cover = draft.cover }
-            if record.wordCount == nil { record.wordCount = draft.wordCount }
-            record.updatedDate = now
+            // Android `addBookForImport` 对显式目标只记录本次导入的原书名，不把导入元数据
+            // 回填目标书，也不刷新 book.updated_date。
+            record.rawName = draft.source == 2
+                ? (draft.rawName.isEmpty ? draft.name : draft.rawName)
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                : draft.name
             try record.update(db)
             return targetID
         }
@@ -107,6 +152,7 @@ private extension NoteImportRepository {
         let createdDate = derivedCreatedDate(draft, fallback: now)
         var record = BookRecord()
         record.userId = ownerID
+        record.doubanId = draft.doubanID
         record.name = draft.name
         record.rawName = draft.rawName.isEmpty ? draft.name : draft.rawName
         record.author = draft.author
@@ -136,6 +182,49 @@ private extension NoteImportRepository {
         try record.insert(db)
         guard let id = record.id else { throw NoteImportParserError.unexpected("创建书籍失败") }
         return id
+    }
+
+    nonisolated static func cleanedBookName(_ name: String) -> String {
+        let fullWidth = name.firstIndex(of: "（")
+        let ascii = name.firstIndex(of: "(")
+        let boundary = [fullWidth, ascii].compactMap { $0 }.min()
+        return boundary.map { String(name[..<$0]) } ?? name
+    }
+
+    nonisolated static func matchScore(
+        _ candidate: BookSearchResult,
+        draft: NoteImportDraftBook
+    ) -> Int {
+        DesktopWebChapterOnlineRepository.ratio(draft.name, candidate.title)
+            + DesktopWebChapterOnlineRepository.ratio(draft.author, candidate.author)
+    }
+
+    nonisolated static func merging(
+        _ candidate: BookSearchResult,
+        into draft: NoteImportDraftBook
+    ) -> NoteImportDraftBook {
+        var result = draft
+        result.doubanID = Int64(candidate.doubanId ?? 0)
+        if result.press.isEmpty {
+            result.press = candidate.press.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        if result.cover.isEmpty {
+            result.cover = candidate.coverURL.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        if result.author.isEmpty { result.author = candidate.author }
+        if result.translator.isEmpty { result.translator = candidate.translator }
+        if result.isbn.isEmpty {
+            result.isbn = candidate.isbn.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        if result.pubDate.isEmpty {
+            result.pubDate = candidate.pubDate.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        if result.authorIntro.isEmpty {
+            result.authorIntro = candidate.seed?.authorIntro
+                .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        }
+        if result.summary.isEmpty { result.summary = candidate.summary }
+        return result
     }
 
     nonisolated func upsertChapters(
@@ -170,10 +259,10 @@ private extension NoteImportRepository {
             value.isImport = 1
             value.sourceType = chapter.sourceType == 0 ? 2 : chapter.sourceType
             value.sourceUid = sourceUID ?? Self.catalogUID(path)
-            value.sourceAnchor = chapter.sourceAnchor.isEmpty ? nil : chapter.sourceAnchor
+            value.sourceAnchor = chapter.sourceAnchor
             value.sourceOrder = chapter.sourceOrder
             value.sourcePath = chapter.sourcePath.isEmpty ? path.joined(separator: "$") : chapter.sourcePath
-            value.updatedDate = now
+            value.updatedDate = isNew ? 0 : now
             value.isDeleted = 0
             if isNew { value.createdDate = now; try value.insert(db) } else { try value.update(db) }
             guard let chapterID = value.id else { continue }
@@ -196,10 +285,7 @@ private extension NoteImportRepository {
         for note in notes where !note.content.isEmpty || !note.idea.isEmpty {
             let existingID: Int64? = try Int64.fetchOne(db, sql: "SELECT id FROM note WHERE book_id = ? AND content = ? AND idea = ? AND is_deleted = 0 LIMIT 1", arguments: [bookID, note.content, note.idea])
             let chapterID = resolveChapter(note.chapter, fallbackUID: note.wereadChapterUID, index: chapterIndex)
-            if let existingID {
-                if chapterID > 0 { try db.execute(sql: "UPDATE note SET chapter_id = ?, updated_date = ? WHERE id = ?", arguments: [chapterID, now, existingID]) }
-                continue
-            }
+            guard existingID == nil else { continue }
             var record = NoteRecord()
             record.bookId = bookID
             record.chapterId = chapterID
@@ -210,7 +296,7 @@ private extension NoteImportRepository {
             record.wereadRange = note.wereadRange
             record.includeTime = note.isIncludeTime ? 1 : 0
             record.createdDate = note.createdTime == 0 ? now : note.createdTime
-            record.updatedDate = now
+            record.updatedDate = 0
             try record.insert(db)
             guard let noteID = record.id else { continue }
             for attachment in note.attachments where !attachment.imageURL.isEmpty {
@@ -245,7 +331,18 @@ private extension NoteImportRepository {
                 if let existingID = index.path[key] { parentID = existingID; continue }
                 var record = try ChapterRecord.fetchOne(db, sql: "SELECT * FROM chapter WHERE book_id = ? AND parent_id = ? AND title = ? AND is_deleted = 0 LIMIT 1", arguments: [bookID, parentID, title]) ?? ChapterRecord()
                 let isNew = record.id == nil
-                record.bookId = bookID; record.parentId = parentID; record.title = title; record.chapterOrder = Int64(offset + 1); record.chapterLevel = Int64(currentPath.count); record.isImport = 1; record.sourceType = 0; record.sourcePath = key; record.updatedDate = now; record.isDeleted = 0
+                record.bookId = bookID
+                record.parentId = parentID
+                record.title = title
+                record.chapterOrder = Int64(offset + 1)
+                record.chapterLevel = Int64(currentPath.count)
+                record.isImport = 1
+                record.sourceType = 2
+                record.sourceUid = ""
+                record.sourceAnchor = ""
+                record.sourcePath = key
+                record.updatedDate = isNew ? 0 : now
+                record.isDeleted = 0
                 if isNew { record.createdDate = now; try record.insert(db) } else { try record.update(db) }
                 guard let chapterID = record.id else { continue }
                 index.path[key] = chapterID; index.title[title, default: []].append(chapterID); parentID = chapterID

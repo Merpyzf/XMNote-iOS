@@ -5,7 +5,8 @@ import PackageDescription
 let package = Package(
     name: "XMNoteWeb",
     platforms: [
-        .iOS("26.0")
+        .iOS("26.0"),
+        .macOS(.v14)
     ],
     products: [
         .library(
@@ -27,6 +28,16 @@ let package = Package(
             ],
             resources: [
                 .copy("Resources/DesktopWebSite")
+            ]
+        ),
+        .testTarget(
+            name: "XMNoteWebTests",
+            dependencies: [
+                "XMNoteWeb",
+                .product(name: "HummingbirdTesting", package: "hummingbird")
+            ],
+            resources: [
+                .copy("Fixtures")
             ]
         )
     ]

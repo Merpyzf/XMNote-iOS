@@ -1,0 +1,136 @@
+{
+  "schemaVersion": 1,
+  "name": "local-related-read-boundaries",
+  "cases": [
+    {
+      "caseId": "related-global-categories-default",
+      "endpointId": "WEB-API-089",
+      "path": "/api/v1/related-categories"
+    },
+    {
+      "caseId": "related-global-categories-include-hidden",
+      "endpointId": "WEB-API-089",
+      "path": "/api/v1/related-categories?includeHidden=true"
+    },
+    {
+      "caseId": "related-book-categories-existing",
+      "endpointId": "WEB-API-090",
+      "path": "/api/v1/books/554/related-categories"
+    },
+    {
+      "caseId": "related-book-categories-include-hidden",
+      "endpointId": "WEB-API-090",
+      "path": "/api/v1/books/554/related-categories?includeHidden=true"
+    },
+    {
+      "caseId": "related-book-categories-empty-book",
+      "endpointId": "WEB-API-090",
+      "path": "/api/v1/books/351/related-categories"
+    },
+    {
+      "caseId": "related-book-categories-missing-book",
+      "endpointId": "WEB-API-090",
+      "path": "/api/v1/books/999999/related-categories"
+    },
+    {
+      "caseId": "related-sort-rule-default",
+      "endpointId": "WEB-API-096",
+      "path": "/api/v1/books/554/related-notes/sort-rule"
+    },
+    {
+      "caseId": "related-sort-rule-existing",
+      "endpointId": "WEB-API-096",
+      "path": "/api/v1/books/693/related-notes/sort-rule"
+    },
+    {
+      "caseId": "related-sort-rule-invalid-book-path",
+      "endpointId": "WEB-API-096",
+      "path": "/api/v1/books/not-a-number/related-notes/sort-rule"
+    },
+    {
+      "caseId": "related-book-list-existing",
+      "endpointId": "WEB-API-098",
+      "path": "/api/v1/books/554/related-notes?page=1&pageSize=5"
+    },
+    {
+      "caseId": "related-book-list-category",
+      "endpointId": "WEB-API-098",
+      "path": "/api/v1/books/554/related-notes?categoryId=5&pageSize=5"
+    },
+    {
+      "caseId": "related-book-list-keyword",
+      "endpointId": "WEB-API-098",
+      "path": "/api/v1/books/554/related-notes?keyword=%E8%82%AF%C2%B7%E6%B1%A4%E6%99%AE%E6%A3%AE&pageSize=5"
+    },
+    {
+      "caseId": "related-book-list-no-match",
+      "endpointId": "WEB-API-098",
+      "path": "/api/v1/books/554/related-notes?keyword=XMNOTE-NO-MATCH-9D9A&pageSize=5"
+    },
+    {
+      "caseId": "related-book-list-missing-book",
+      "endpointId": "WEB-API-098",
+      "path": "/api/v1/books/999999/related-notes?pageSize=5"
+    },
+    {
+      "caseId": "related-book-list-invalid-page",
+      "endpointId": "WEB-API-098",
+      "path": "/api/v1/books/554/related-notes?page=bad&pageSize=5"
+    },
+    {
+      "caseId": "related-book-all-existing",
+      "endpointId": "WEB-API-099",
+      "path": "/api/v1/books/554/related-notes/all"
+    },
+    {
+      "caseId": "related-book-all-category",
+      "endpointId": "WEB-API-099",
+      "path": "/api/v1/books/554/related-notes/all?categoryId=12"
+    },
+    {
+      "caseId": "related-book-all-no-match",
+      "endpointId": "WEB-API-099",
+      "path": "/api/v1/books/554/related-notes/all?keyword=XMNOTE-NO-MATCH-9D9A"
+    },
+    {
+      "caseId": "related-global-list-default",
+      "endpointId": "WEB-API-100",
+      "path": "/api/v1/related-notes?page=1&pageSize=5"
+    },
+    {
+      "caseId": "related-global-list-book",
+      "endpointId": "WEB-API-100",
+      "path": "/api/v1/related-notes?bookId=554&pageSize=5"
+    },
+    {
+      "caseId": "related-global-list-keyword",
+      "endpointId": "WEB-API-100",
+      "path": "/api/v1/related-notes?keyword=%E5%8D%8F%E7%A8%8B&pageSize=5"
+    },
+    {
+      "caseId": "related-global-list-random-exclude",
+      "endpointId": "WEB-API-100",
+      "path": "/api/v1/related-notes?sortMode=random&excludeIds=1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60,61,62,63,64,65,66,67,68,69,70,71,72,73,74,75,76,77,78,79,80,81,82,83,84,85,86,87,88&pageSize=5"
+    },
+    {
+      "caseId": "related-global-list-invalid-page",
+      "endpointId": "WEB-API-100",
+      "path": "/api/v1/related-notes?page=bad&pageSize=5"
+    },
+    {
+      "caseId": "related-detail-existing",
+      "endpointId": "WEB-API-101",
+      "path": "/api/v1/related-notes/11"
+    },
+    {
+      "caseId": "related-detail-missing",
+      "endpointId": "WEB-API-101",
+      "path": "/api/v1/related-notes/999999"
+    },
+    {
+      "caseId": "related-detail-invalid-path",
+      "endpointId": "WEB-API-101",
+      "path": "/api/v1/related-notes/not-a-number"
+    }
+  ]
+}

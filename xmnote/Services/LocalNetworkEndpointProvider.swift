@@ -9,7 +9,7 @@ import Darwin
 import Foundation
 import Network
 
-/// 一个可展示、复制并编码为二维码的局域网 HTTP 访问端点。
+/// 一个可展示和复制的局域网 HTTP 访问端点。
 nonisolated struct LocalNetworkEndpoint: Identifiable, Hashable, Sendable {
     let interfaceName: String
     let host: String

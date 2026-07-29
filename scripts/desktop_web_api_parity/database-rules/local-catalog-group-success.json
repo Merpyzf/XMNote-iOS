@@ -1,0 +1,36 @@
+{
+  "schemaVersion": 1,
+  "name": "local-catalog-group-success",
+  "epochMillisColumns": [
+    {
+      "table": "book",
+      "column": "updated_date",
+      "reason": "WEB-API-062 按各设备请求时钟更新书籍排序时间"
+    },
+    {
+      "table": "group",
+      "column": "created_date",
+      "reason": "WEB-API-057 按各设备请求时钟生成分组创建时间"
+    },
+    {
+      "table": "group",
+      "column": "updated_date",
+      "reason": "WEB-API-058/059/060/061 按各设备请求时钟更新分组时间"
+    },
+    {
+      "table": "source",
+      "column": "updated_date",
+      "reason": "WEB-API-130 按各设备请求时钟写入软删除时间"
+    },
+    {
+      "table": "tag",
+      "column": "created_date",
+      "reason": "WEB-API-153 按各设备请求时钟生成标签创建时间"
+    },
+    {
+      "table": "tag",
+      "column": "updated_date",
+      "reason": "WEB-API-154/155/156 按各设备请求时钟更新标签时间"
+    }
+  ]
+}

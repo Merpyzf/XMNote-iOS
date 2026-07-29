@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "name": "official-book-cover-proxy-success",
+  "dataPolicy": "Only a frozen soft-deleted book identifier, its public cover URL-derived signature and a synthetic access code are used; binary response bodies are compared in memory and only hashes or difference categories are persisted.",
+  "cases": [
+    {
+      "caseId": "book-cover-proxy-soft-deleted-public-cover",
+      "endpointId": "WEB-API-024",
+      "path": "/api/v1/book-covers/proxy/434?expires=4102444800000&sig=eeb06fecf5c97ed56644c4829abf38832fb37316633209e32ce56ba1510df889"
+    }
+  ]
+}

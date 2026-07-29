@@ -1,0 +1,86 @@
+{
+  "schemaVersion": 1,
+  "name": "local-search-read-boundaries",
+  "cases": [
+    {
+      "caseId": "search-book-first-page",
+      "endpointId": "WEB-API-118",
+      "path": "/api/v1/search?type=BoOk&keyword=UNIX&page=1&pageSize=2"
+    },
+    {
+      "caseId": "search-book-second-page",
+      "endpointId": "WEB-API-118",
+      "path": "/api/v1/search?type=book&keyword=UNIX&page=2&pageSize=2"
+    },
+    {
+      "caseId": "search-note-book-filter",
+      "endpointId": "WEB-API-118",
+      "path": "/api/v1/search?type=note&keyword=UNIX&page=1&pageSize=3&bookId=554&tagId=0"
+    },
+    {
+      "caseId": "search-note-no-tag",
+      "endpointId": "WEB-API-118",
+      "path": "/api/v1/search?type=note&keyword=UNIX&page=1&pageSize=3&tagId=-1"
+    },
+    {
+      "caseId": "search-review-empty",
+      "endpointId": "WEB-API-118",
+      "path": "/api/v1/search?type=review&keyword=UNIX&page=1&pageSize=20"
+    },
+    {
+      "caseId": "search-relevant",
+      "endpointId": "WEB-API-118",
+      "path": "/api/v1/search?type=relevant&keyword=UNIX&page=1&pageSize=3"
+    },
+    {
+      "caseId": "search-invalid-type",
+      "endpointId": "WEB-API-118",
+      "path": "/api/v1/search?type=unknown&keyword=UNIX"
+    },
+    {
+      "caseId": "search-missing-type",
+      "endpointId": "WEB-API-118",
+      "path": "/api/v1/search?keyword=UNIX"
+    },
+    {
+      "caseId": "search-missing-keyword",
+      "endpointId": "WEB-API-118",
+      "path": "/api/v1/search?type=book"
+    },
+    {
+      "caseId": "search-invalid-page",
+      "endpointId": "WEB-API-118",
+      "path": "/api/v1/search?type=book&keyword=UNIX&page=oops"
+    },
+    {
+      "caseId": "search-invalid-book",
+      "endpointId": "WEB-API-118",
+      "path": "/api/v1/search?type=note&keyword=UNIX&bookId=oops"
+    },
+    {
+      "caseId": "search-aggregate",
+      "endpointId": "WEB-API-119",
+      "path": "/api/v1/search/aggregate?keyword=UNIX&page=1&pageSize=2"
+    },
+    {
+      "caseId": "search-aggregate-book-filter",
+      "endpointId": "WEB-API-119",
+      "path": "/api/v1/search/aggregate?keyword=UNIX&page=1&pageSize=3&bookId=554"
+    },
+    {
+      "caseId": "search-aggregate-normalized-pagination",
+      "endpointId": "WEB-API-119",
+      "path": "/api/v1/search/aggregate?keyword=UNIX&page=0&pageSize=0"
+    },
+    {
+      "caseId": "search-aggregate-invalid-page",
+      "endpointId": "WEB-API-119",
+      "path": "/api/v1/search/aggregate?keyword=UNIX&page=oops"
+    },
+    {
+      "caseId": "search-aggregate-missing-keyword",
+      "endpointId": "WEB-API-119",
+      "path": "/api/v1/search/aggregate?page=1"
+    }
+  ]
+}

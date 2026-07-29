@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "name": "official-upload-ticket-frozen-dto",
+  "dataPolicy": "Only synthetic valid DTO bodies are sent; the frozen APK fails before upload-ticket state is mutated and response payloads are not persisted.",
+  "cases": [
+    {
+      "caseId": "reserve-valid-body-frozen-apk-failure",
+      "endpointId": "WEB-API-157",
+      "path": "/api/v1/note-images/upload-tickets",
+      "jsonBody": {
+        "count": 1
+      }
+    },
+    {
+      "caseId": "release-valid-body-frozen-apk-failure",
+      "endpointId": "WEB-API-159",
+      "path": "/api/v1/note-images/upload-tickets/release",
+      "jsonBody": {
+        "ticketIds": []
+      }
+    }
+  ]
+}

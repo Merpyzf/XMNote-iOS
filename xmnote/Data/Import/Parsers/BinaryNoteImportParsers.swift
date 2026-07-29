@@ -15,7 +15,7 @@ nonisolated struct IReaderEBookNoteImportParser: NoteImportParser {
 
     func parse(data: Data, fileExtension _: String?) async throws -> [NoteImportDraftBook] {
         try withExtractedArchive(data, extension: "epub") { root in
-            let oebps = root.appendingPathComponent("OEBPS", isDirectory: true)
+            let oebps = try locateOEBPS(in: root)
             let opf = oebps.appendingPathComponent("content.opf")
             let source = try String(contentsOf: opf, encoding: .utf8)
             guard let rawTitle = NoteImportTextSupport.firstCapture(
@@ -77,13 +77,7 @@ nonisolated struct AppleBooksNoteImportParser: NoteImportParser {
 
     func parse(data: Data, fileExtension _: String?) async throws -> [NoteImportDraftBook] {
         try withExtractedArchive(data, extension: "zip") { root in
-            let children = try FileManager.default.contentsOfDirectory(
-                at: root,
-                includingPropertiesForKeys: [.isDirectoryKey]
-            )
-            guard children.count == 1 else { throw NoteImportParserError.invalidDatabase }
-            let export = children[0]
-            let files = try FileManager.default.contentsOfDirectory(at: export, includingPropertiesForKeys: nil)
+            let files = try flattenedRootFiles(in: root)
             guard let bookDB = files.first(where: { $0.lastPathComponent.hasPrefix("BKLibrary") && $0.pathExtension == "sqlite" }),
                   let noteDB = files.first(where: { $0.lastPathComponent.hasPrefix("AEAnnotation") && $0.pathExtension == "sqlite" })
             else { throw NoteImportParserError.invalidDatabase }
@@ -130,6 +124,46 @@ nonisolated struct AppleBooksNoteImportParser: NoteImportParser {
             return books
         }
     }
+}
+
+/// 定位原生 EPUB 根目录或 Android ZIP 一层扁平化前的包装目录。
+private nonisolated func locateOEBPS(in root: URL) throws -> URL {
+    let fileManager = FileManager.default
+    let direct = root.appendingPathComponent("OEBPS", isDirectory: true)
+    if fileManager.fileExists(atPath: direct.path) { return direct }
+    let children = try fileManager.contentsOfDirectory(
+        at: root,
+        includingPropertiesForKeys: [.isDirectoryKey]
+    )
+    for child in children {
+        let candidate = child.appendingPathComponent("OEBPS", isDirectory: true)
+        if fileManager.fileExists(atPath: candidate.path) { return candidate }
+    }
+    throw NoteImportParserError.noteFormat
+}
+
+/// 复刻 Android `moveFilesToRootAndDeleteSubfolders` 后 Apple Books Parser 可见的文件集合。
+private nonisolated func flattenedRootFiles(in root: URL) throws -> [URL] {
+    let fileManager = FileManager.default
+    let children = try fileManager.contentsOfDirectory(
+        at: root,
+        includingPropertiesForKeys: [.isDirectoryKey]
+    )
+    var files: [URL] = []
+    for child in children {
+        let values = try child.resourceValues(forKeys: [.isDirectoryKey])
+        if values.isDirectory == true {
+            files.append(contentsOf: try fileManager.contentsOfDirectory(
+                at: child,
+                includingPropertiesForKeys: [.isDirectoryKey]
+            ).filter {
+                (try? $0.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) != true
+            })
+        } else {
+            files.append(child)
+        }
+    }
+    return files
 }
 
 private nonisolated func withExtractedArchive<T>(

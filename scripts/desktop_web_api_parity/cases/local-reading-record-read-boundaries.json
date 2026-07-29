@@ -1,0 +1,187 @@
+{
+  "schemaVersion": 1,
+  "name": "local-reading-record-read-boundaries",
+  "dataPolicy": "Only frozen non-secret book/record IDs, synthetic parameters and case labels are stored; response payloads remain hash-only.",
+  "cases": [
+    {
+      "caseId": "reading-record-list-existing-default",
+      "endpointId": "WEB-API-084",
+      "path": "/api/v1/books/641/reading-records"
+    },
+    {
+      "caseId": "reading-record-list-ascending",
+      "endpointId": "WEB-API-084",
+      "path": "/api/v1/books/641/reading-records?sortOrder=asc"
+    },
+    {
+      "caseId": "reading-record-list-uppercase",
+      "endpointId": "WEB-API-084",
+      "path": "/api/v1/books/641/reading-records?sortOrder=ASC"
+    },
+    {
+      "caseId": "reading-record-list-invalid-sort",
+      "endpointId": "WEB-API-084",
+      "path": "/api/v1/books/641/reading-records?sortOrder=sideways"
+    },
+    {
+      "caseId": "reading-record-list-empty-sort",
+      "endpointId": "WEB-API-084",
+      "path": "/api/v1/books/641/reading-records?sortOrder="
+    },
+    {
+      "caseId": "reading-record-list-unescaped-plus",
+      "endpointId": "WEB-API-084",
+      "path": "/api/v1/books/641/reading-records?sortOrder=+asc"
+    },
+    {
+      "caseId": "reading-record-list-encoded-plus",
+      "endpointId": "WEB-API-084",
+      "path": "/api/v1/books/641/reading-records?sortOrder=%2Basc"
+    },
+    {
+      "caseId": "reading-record-list-sort-duplicate-first",
+      "endpointId": "WEB-API-084",
+      "path": "/api/v1/books/641/reading-records?sortOrder=asc&sortOrder=desc"
+    },
+    {
+      "caseId": "reading-record-list-sort-duplicate-after-unused",
+      "endpointId": "WEB-API-084",
+      "path": "/api/v1/books/641/reading-records?unused=1&sortOrder=asc&sortOrder=desc"
+    },
+    {
+      "caseId": "reading-record-list-sort-bare-then-valued",
+      "endpointId": "WEB-API-084",
+      "path": "/api/v1/books/641/reading-records?sortOrder&sortOrder=asc"
+    },
+    {
+      "caseId": "reading-record-list-zero-book",
+      "endpointId": "WEB-API-084",
+      "path": "/api/v1/books/0/reading-records"
+    },
+    {
+      "caseId": "reading-record-list-active-empty-book",
+      "endpointId": "WEB-API-084",
+      "path": "/api/v1/books/4/reading-records"
+    },
+    {
+      "caseId": "reading-record-list-missing-book",
+      "endpointId": "WEB-API-084",
+      "path": "/api/v1/books/999999999/reading-records"
+    },
+    {
+      "caseId": "reading-record-list-deleted-book",
+      "endpointId": "WEB-API-084",
+      "path": "/api/v1/books/1/reading-records"
+    },
+    {
+      "caseId": "reading-record-list-negative-book",
+      "endpointId": "WEB-API-084",
+      "path": "/api/v1/books/-1/reading-records"
+    },
+    {
+      "caseId": "reading-record-list-int64-max-book",
+      "endpointId": "WEB-API-084",
+      "path": "/api/v1/books/9223372036854775807/reading-records"
+    },
+    {
+      "caseId": "reading-record-list-int64-min-book",
+      "endpointId": "WEB-API-084",
+      "path": "/api/v1/books/-9223372036854775808/reading-records"
+    },
+    {
+      "caseId": "reading-record-list-book-overflow",
+      "endpointId": "WEB-API-084",
+      "path": "/api/v1/books/9223372036854775808/reading-records"
+    },
+    {
+      "caseId": "reading-record-list-book-underflow",
+      "endpointId": "WEB-API-084",
+      "path": "/api/v1/books/-9223372036854775809/reading-records"
+    },
+    {
+      "caseId": "reading-record-list-invalid-book",
+      "endpointId": "WEB-API-084",
+      "path": "/api/v1/books/bad/reading-records"
+    },
+    {
+      "caseId": "reading-record-list-encoded-plus-book",
+      "endpointId": "WEB-API-084",
+      "path": "/api/v1/books/%2B641/reading-records"
+    },
+    {
+      "caseId": "reading-record-detail-existing",
+      "endpointId": "WEB-API-085",
+      "path": "/api/v1/books/641/reading-records/569"
+    },
+    {
+      "caseId": "reading-record-detail-unfinished",
+      "endpointId": "WEB-API-085",
+      "path": "/api/v1/books/698/reading-records/410"
+    },
+    {
+      "caseId": "reading-record-detail-wrong-book",
+      "endpointId": "WEB-API-085",
+      "path": "/api/v1/books/641/reading-records/410"
+    },
+    {
+      "caseId": "reading-record-detail-deleted-record",
+      "endpointId": "WEB-API-085",
+      "path": "/api/v1/books/775/reading-records/1025"
+    },
+    {
+      "caseId": "reading-record-detail-missing-record",
+      "endpointId": "WEB-API-085",
+      "path": "/api/v1/books/641/reading-records/999999999"
+    },
+    {
+      "caseId": "reading-record-detail-missing-book-precedes-record",
+      "endpointId": "WEB-API-085",
+      "path": "/api/v1/books/999999999/reading-records/569"
+    },
+    {
+      "caseId": "reading-record-detail-deleted-book",
+      "endpointId": "WEB-API-085",
+      "path": "/api/v1/books/1/reading-records/569"
+    },
+    {
+      "caseId": "reading-record-detail-zero-book",
+      "endpointId": "WEB-API-085",
+      "path": "/api/v1/books/0/reading-records/569"
+    },
+    {
+      "caseId": "reading-record-detail-invalid-book",
+      "endpointId": "WEB-API-085",
+      "path": "/api/v1/books/bad/reading-records/569"
+    },
+    {
+      "caseId": "reading-record-detail-invalid-record",
+      "endpointId": "WEB-API-085",
+      "path": "/api/v1/books/641/reading-records/bad"
+    },
+    {
+      "caseId": "reading-record-detail-book-overflow",
+      "endpointId": "WEB-API-085",
+      "path": "/api/v1/books/9223372036854775808/reading-records/569"
+    },
+    {
+      "caseId": "reading-record-detail-record-overflow",
+      "endpointId": "WEB-API-085",
+      "path": "/api/v1/books/641/reading-records/9223372036854775808"
+    },
+    {
+      "caseId": "reading-record-detail-int64-min-record",
+      "endpointId": "WEB-API-085",
+      "path": "/api/v1/books/641/reading-records/-9223372036854775808"
+    },
+    {
+      "caseId": "reading-record-detail-encoded-plus-book",
+      "endpointId": "WEB-API-085",
+      "path": "/api/v1/books/%2B641/reading-records/569"
+    },
+    {
+      "caseId": "reading-record-detail-encoded-plus-record",
+      "endpointId": "WEB-API-085",
+      "path": "/api/v1/books/641/reading-records/%2B569"
+    }
+  ]
+}

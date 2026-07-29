@@ -1,0 +1,387 @@
+{
+  "schemaVersion": 1,
+  "name": "local-bookshelf-read-boundaries",
+  "dataPolicy": "Only frozen non-secret book/group identifiers, synthetic parameters and case labels are stored; response payloads remain hash-only.",
+  "cases": [
+    {
+      "caseId": "bookshelf-default",
+      "endpointId": "WEB-API-025",
+      "path": "/api/v1/bookshelf"
+    },
+    {
+      "caseId": "bookshelf-second-page",
+      "endpointId": "WEB-API-025",
+      "path": "/api/v1/bookshelf?page=2&pageSize=3"
+    },
+    {
+      "caseId": "bookshelf-zero-pagination",
+      "endpointId": "WEB-API-025",
+      "path": "/api/v1/bookshelf?page=0&pageSize=0"
+    },
+    {
+      "caseId": "bookshelf-negative-pagination",
+      "endpointId": "WEB-API-025",
+      "path": "/api/v1/bookshelf?page=-1&pageSize=-1"
+    },
+    {
+      "caseId": "bookshelf-empty-pagination",
+      "endpointId": "WEB-API-025",
+      "path": "/api/v1/bookshelf?page=&pageSize="
+    },
+    {
+      "caseId": "bookshelf-int32-max-pagination",
+      "endpointId": "WEB-API-025",
+      "path": "/api/v1/bookshelf?page=2147483647&pageSize=2147483647"
+    },
+    {
+      "caseId": "bookshelf-page-overflow",
+      "endpointId": "WEB-API-025",
+      "path": "/api/v1/bookshelf?page=2147483648"
+    },
+    {
+      "caseId": "bookshelf-page-underflow",
+      "endpointId": "WEB-API-025",
+      "path": "/api/v1/bookshelf?page=-2147483649"
+    },
+    {
+      "caseId": "bookshelf-page-invalid",
+      "endpointId": "WEB-API-025",
+      "path": "/api/v1/bookshelf?page=bad"
+    },
+    {
+      "caseId": "bookshelf-page-unescaped-plus",
+      "endpointId": "WEB-API-025",
+      "path": "/api/v1/bookshelf?page=+2&pageSize=2"
+    },
+    {
+      "caseId": "bookshelf-page-encoded-plus",
+      "endpointId": "WEB-API-025",
+      "path": "/api/v1/bookshelf?page=%2B2&pageSize=2"
+    },
+    {
+      "caseId": "bookshelf-page-duplicate-first",
+      "endpointId": "WEB-API-025",
+      "path": "/api/v1/bookshelf?page=1&page=2"
+    },
+    {
+      "caseId": "bookshelf-page-duplicate-after-unused",
+      "endpointId": "WEB-API-025",
+      "path": "/api/v1/bookshelf?unused=1&page=2&page=3&pageSize=2"
+    },
+    {
+      "caseId": "bookshelf-page-bare-then-valued",
+      "endpointId": "WEB-API-025",
+      "path": "/api/v1/bookshelf?page&page=2&pageSize=2"
+    },
+    {
+      "caseId": "bookshelf-page-size-overflow",
+      "endpointId": "WEB-API-025",
+      "path": "/api/v1/bookshelf?pageSize=2147483648"
+    },
+    {
+      "caseId": "bookshelf-page-size-invalid",
+      "endpointId": "WEB-API-025",
+      "path": "/api/v1/bookshelf?pageSize=bad"
+    },
+    {
+      "caseId": "bookshelf-keyword-book",
+      "endpointId": "WEB-API-025",
+      "path": "/api/v1/bookshelf?keyword=Android"
+    },
+    {
+      "caseId": "bookshelf-keyword-trimmed",
+      "endpointId": "WEB-API-025",
+      "path": "/api/v1/bookshelf?keyword=%20Android%20"
+    },
+    {
+      "caseId": "bookshelf-keyword-unescaped-plus",
+      "endpointId": "WEB-API-025",
+      "path": "/api/v1/bookshelf?keyword=Android+Gradle"
+    },
+    {
+      "caseId": "bookshelf-keyword-encoded-plus",
+      "endpointId": "WEB-API-025",
+      "path": "/api/v1/bookshelf?keyword=Android%2BGradle"
+    },
+    {
+      "caseId": "bookshelf-keyword-group",
+      "endpointId": "WEB-API-025",
+      "path": "/api/v1/bookshelf?keyword=%E7%BA%B8%E8%B4%A8%E4%B9%A6"
+    },
+    {
+      "caseId": "bookshelf-keyword-duplicate-first",
+      "endpointId": "WEB-API-025",
+      "path": "/api/v1/bookshelf?keyword=Android&keyword=Gradle"
+    },
+    {
+      "caseId": "bookshelf-keyword-duplicate-after-unused",
+      "endpointId": "WEB-API-025",
+      "path": "/api/v1/bookshelf?unused=1&keyword=Android&keyword=Gradle"
+    },
+    {
+      "caseId": "bookshelf-group-sort-invalid",
+      "endpointId": "WEB-API-025",
+      "path": "/api/v1/bookshelf?pageSize=20&groupSortBy=BAD&groupSortOrder=BAD"
+    },
+    {
+      "caseId": "bookshelf-group-sort-custom-asc",
+      "endpointId": "WEB-API-025",
+      "path": "/api/v1/bookshelf?pageSize=20&groupSortBy=custom&groupSortOrder=asc"
+    },
+    {
+      "caseId": "bookshelf-group-sort-create-time",
+      "endpointId": "WEB-API-025",
+      "path": "/api/v1/bookshelf?pageSize=20&groupSortBy=create_time&groupSortOrder=asc"
+    },
+    {
+      "caseId": "bookshelf-group-sort-modify-time",
+      "endpointId": "WEB-API-025",
+      "path": "/api/v1/bookshelf?pageSize=20&groupSortBy=modify_time&groupSortOrder=desc"
+    },
+    {
+      "caseId": "bookshelf-group-sort-name-section",
+      "endpointId": "WEB-API-025",
+      "path": "/api/v1/bookshelf?pageSize=20&groupSortBy=name&groupSortOrder=asc&groupEnableSection=true"
+    },
+    {
+      "caseId": "bookshelf-group-sort-rating",
+      "endpointId": "WEB-API-025",
+      "path": "/api/v1/bookshelf?pageSize=20&groupSortBy=rating&groupSortOrder=asc"
+    },
+    {
+      "caseId": "bookshelf-group-sort-publish-date",
+      "endpointId": "WEB-API-025",
+      "path": "/api/v1/bookshelf?pageSize=20&groupSortBy=publish_date&groupSortOrder=desc"
+    },
+    {
+      "caseId": "bookshelf-group-sort-note-count",
+      "endpointId": "WEB-API-025",
+      "path": "/api/v1/bookshelf?pageSize=20&groupSortBy=note_count&groupSortOrder=asc"
+    },
+    {
+      "caseId": "bookshelf-group-sort-read-done-time",
+      "endpointId": "WEB-API-025",
+      "path": "/api/v1/bookshelf?pageSize=20&groupSortBy=read_done_time&groupSortOrder=desc"
+    },
+    {
+      "caseId": "bookshelf-group-sort-total-reading-time",
+      "endpointId": "WEB-API-025",
+      "path": "/api/v1/bookshelf?pageSize=20&groupSortBy=total_reading_time&groupSortOrder=asc"
+    },
+    {
+      "caseId": "bookshelf-group-sort-reading-progress",
+      "endpointId": "WEB-API-025",
+      "path": "/api/v1/bookshelf?pageSize=20&groupSortBy=reading_progress&groupSortOrder=desc"
+    },
+    {
+      "caseId": "bookshelf-group-section-uppercase-true",
+      "endpointId": "WEB-API-025",
+      "path": "/api/v1/bookshelf?pageSize=20&groupSortBy=name&groupEnableSection=TRUE"
+    },
+    {
+      "caseId": "bookshelf-group-section-invalid",
+      "endpointId": "WEB-API-025",
+      "path": "/api/v1/bookshelf?pageSize=20&groupSortBy=name&groupEnableSection=1"
+    },
+    {
+      "caseId": "sorted-bookshelf-default",
+      "endpointId": "WEB-API-026",
+      "path": "/api/v1/bookshelf/sorted"
+    },
+    {
+      "caseId": "sorted-bookshelf-second-page",
+      "endpointId": "WEB-API-026",
+      "path": "/api/v1/bookshelf/sorted?page=2&pageSize=3"
+    },
+    {
+      "caseId": "sorted-bookshelf-zero-pagination",
+      "endpointId": "WEB-API-026",
+      "path": "/api/v1/bookshelf/sorted?page=0&pageSize=0"
+    },
+    {
+      "caseId": "sorted-bookshelf-int32-max-pagination",
+      "endpointId": "WEB-API-026",
+      "path": "/api/v1/bookshelf/sorted?page=2147483647&pageSize=2147483647"
+    },
+    {
+      "caseId": "sorted-bookshelf-page-overflow",
+      "endpointId": "WEB-API-026",
+      "path": "/api/v1/bookshelf/sorted?page=2147483648"
+    },
+    {
+      "caseId": "sorted-bookshelf-page-invalid",
+      "endpointId": "WEB-API-026",
+      "path": "/api/v1/bookshelf/sorted?page=bad"
+    },
+    {
+      "caseId": "sorted-bookshelf-page-duplicate-first",
+      "endpointId": "WEB-API-026",
+      "path": "/api/v1/bookshelf/sorted?page=1&page=2"
+    },
+    {
+      "caseId": "sorted-bookshelf-page-duplicate-after-unused",
+      "endpointId": "WEB-API-026",
+      "path": "/api/v1/bookshelf/sorted?unused=1&page=2&page=3&pageSize=2"
+    },
+    {
+      "caseId": "sorted-bookshelf-keyword-book",
+      "endpointId": "WEB-API-026",
+      "path": "/api/v1/bookshelf/sorted?keyword=Android&pageSize=20"
+    },
+    {
+      "caseId": "sorted-bookshelf-keyword-unescaped-plus",
+      "endpointId": "WEB-API-026",
+      "path": "/api/v1/bookshelf/sorted?keyword=Android+Gradle&pageSize=20"
+    },
+    {
+      "caseId": "sorted-bookshelf-keyword-encoded-plus",
+      "endpointId": "WEB-API-026",
+      "path": "/api/v1/bookshelf/sorted?keyword=Android%2BGradle&pageSize=20"
+    },
+    {
+      "caseId": "sorted-bookshelf-keyword-non-pinned-group",
+      "endpointId": "WEB-API-026",
+      "path": "/api/v1/bookshelf/sorted?keyword=%E7%BA%B8%E8%B4%A8%E4%B9%A6&pageSize=20"
+    },
+    {
+      "caseId": "sorted-bookshelf-sort-custom-asc",
+      "endpointId": "WEB-API-026",
+      "path": "/api/v1/bookshelf/sorted?pageSize=20&sortBy=custom&sortOrder=asc"
+    },
+    {
+      "caseId": "sorted-bookshelf-sort-create-time-asc",
+      "endpointId": "WEB-API-026",
+      "path": "/api/v1/bookshelf/sorted?pageSize=20&sortBy=create_time&sortOrder=asc"
+    },
+    {
+      "caseId": "sorted-bookshelf-sort-modify-time-asc",
+      "endpointId": "WEB-API-026",
+      "path": "/api/v1/bookshelf/sorted?pageSize=20&sortBy=modify_time&sortOrder=asc"
+    },
+    {
+      "caseId": "sorted-bookshelf-sort-name-asc",
+      "endpointId": "WEB-API-026",
+      "path": "/api/v1/bookshelf/sorted?pageSize=20&sortBy=name&sortOrder=asc"
+    },
+    {
+      "caseId": "sorted-bookshelf-sort-rating-asc",
+      "endpointId": "WEB-API-026",
+      "path": "/api/v1/bookshelf/sorted?pageSize=20&sortBy=rating&sortOrder=asc"
+    },
+    {
+      "caseId": "sorted-bookshelf-sort-publish-date-asc",
+      "endpointId": "WEB-API-026",
+      "path": "/api/v1/bookshelf/sorted?pageSize=20&sortBy=publish_date&sortOrder=asc"
+    },
+    {
+      "caseId": "sorted-bookshelf-sort-note-count-asc",
+      "endpointId": "WEB-API-026",
+      "path": "/api/v1/bookshelf/sorted?pageSize=20&sortBy=note_count&sortOrder=asc"
+    },
+    {
+      "caseId": "sorted-bookshelf-sort-read-done-time-asc",
+      "endpointId": "WEB-API-026",
+      "path": "/api/v1/bookshelf/sorted?pageSize=20&sortBy=read_done_time&sortOrder=asc"
+    },
+    {
+      "caseId": "sorted-bookshelf-sort-total-reading-time-asc",
+      "endpointId": "WEB-API-026",
+      "path": "/api/v1/bookshelf/sorted?pageSize=20&sortBy=total_reading_time&sortOrder=asc"
+    },
+    {
+      "caseId": "sorted-bookshelf-sort-reading-progress-asc",
+      "endpointId": "WEB-API-026",
+      "path": "/api/v1/bookshelf/sorted?pageSize=20&sortBy=reading_progress&sortOrder=asc"
+    },
+    {
+      "caseId": "sorted-bookshelf-sort-invalid",
+      "endpointId": "WEB-API-026",
+      "path": "/api/v1/bookshelf/sorted?pageSize=20&sortBy=BAD&sortOrder=ASC"
+    },
+    {
+      "caseId": "sorted-bookshelf-group-preview-section",
+      "endpointId": "WEB-API-026",
+      "path": "/api/v1/bookshelf/sorted?pageSize=20&groupSortBy=name&groupSortOrder=asc&groupEnableSection=true"
+    },
+    {
+      "caseId": "bookshelf-manifest",
+      "endpointId": "WEB-API-027",
+      "path": "/api/v1/bookshelf/manifest"
+    },
+    {
+      "caseId": "pinned-groups-meta-default",
+      "endpointId": "WEB-API-028",
+      "path": "/api/v1/bookshelf/pinned-groups/meta"
+    },
+    {
+      "caseId": "pinned-groups-meta-top-level-sort-unused",
+      "endpointId": "WEB-API-028",
+      "path": "/api/v1/bookshelf/pinned-groups/meta?sortBy=name&sortOrder=asc&enableSection=true"
+    },
+    {
+      "caseId": "pinned-groups-meta-invalid-sorts",
+      "endpointId": "WEB-API-028",
+      "path": "/api/v1/bookshelf/pinned-groups/meta?sortBy=BAD&sortOrder=BAD&groupSortBy=BAD&groupSortOrder=BAD"
+    },
+    {
+      "caseId": "pinned-groups-meta-grid-section",
+      "endpointId": "WEB-API-028",
+      "path": "/api/v1/bookshelf/pinned-groups/meta?groupSortBy=name&groupSortOrder=asc&groupEnableSection=true&layout=grid"
+    },
+    {
+      "caseId": "pinned-groups-meta-list-section",
+      "endpointId": "WEB-API-028",
+      "path": "/api/v1/bookshelf/pinned-groups/meta?groupSortBy=name&groupSortOrder=asc&groupEnableSection=true&layout=list"
+    },
+    {
+      "caseId": "pinned-groups-meta-uppercase-list",
+      "endpointId": "WEB-API-028",
+      "path": "/api/v1/bookshelf/pinned-groups/meta?layout=LIST"
+    },
+    {
+      "caseId": "pinned-groups-meta-invalid-layout",
+      "endpointId": "WEB-API-028",
+      "path": "/api/v1/bookshelf/pinned-groups/meta?layout=table"
+    },
+    {
+      "caseId": "pinned-groups-meta-empty-layout",
+      "endpointId": "WEB-API-028",
+      "path": "/api/v1/bookshelf/pinned-groups/meta?layout="
+    },
+    {
+      "caseId": "pinned-groups-meta-duplicate-layout-first",
+      "endpointId": "WEB-API-028",
+      "path": "/api/v1/bookshelf/pinned-groups/meta?layout=grid&layout=list"
+    },
+    {
+      "caseId": "pinned-groups-meta-duplicate-layout-after-unused",
+      "endpointId": "WEB-API-028",
+      "path": "/api/v1/bookshelf/pinned-groups/meta?unused=1&layout=grid&layout=list"
+    },
+    {
+      "caseId": "pinned-groups-meta-uppercase-booleans",
+      "endpointId": "WEB-API-028",
+      "path": "/api/v1/bookshelf/pinned-groups/meta?enableSection=TRUE&groupEnableSection=TRUE"
+    },
+    {
+      "caseId": "pinned-groups-meta-invalid-booleans",
+      "endpointId": "WEB-API-028",
+      "path": "/api/v1/bookshelf/pinned-groups/meta?enableSection=1&groupEnableSection=yes"
+    },
+    {
+      "caseId": "pinned-groups-meta-empty-booleans",
+      "endpointId": "WEB-API-028",
+      "path": "/api/v1/bookshelf/pinned-groups/meta?enableSection=&groupEnableSection="
+    },
+    {
+      "caseId": "pinned-groups-meta-duplicate-boolean-first",
+      "endpointId": "WEB-API-028",
+      "path": "/api/v1/bookshelf/pinned-groups/meta?groupEnableSection=false&groupEnableSection=true"
+    },
+    {
+      "caseId": "pinned-groups-meta-duplicate-boolean-after-unused",
+      "endpointId": "WEB-API-028",
+      "path": "/api/v1/bookshelf/pinned-groups/meta?unused=1&groupEnableSection=false&groupEnableSection=true"
+    }
+  ]
+}

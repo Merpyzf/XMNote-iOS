@@ -1,0 +1,35 @@
+{
+  "schemaVersion": 1,
+  "name": "isolated-export-workflow",
+  "dataPolicy": "Only frozen book identifiers, non-secret local export options and empty remote credentials are used in the isolated Android test package and iOS parity defaults suite; response payloads are compared in memory and only hashes or difference categories are persisted.",
+  "cases": [
+    {
+      "caseId": "local-markdown-single-book-single-note",
+      "endpointId": "WEB-API-053",
+      "path": "/api/v1/export/notes/local",
+      "jsonBody": {
+        "bookIds": [372],
+        "target": "markdown",
+        "content": {
+          "note": true,
+          "relevant": false,
+          "review": false
+        }
+      }
+    },
+    {
+      "caseId": "remote-empty-book-selection",
+      "endpointId": "WEB-API-054",
+      "path": "/api/v1/export/notes/remote",
+      "jsonBody": {
+        "bookIds": [],
+        "target": "yuque",
+        "content": {
+          "note": true,
+          "relevant": false,
+          "review": false
+        }
+      }
+    }
+  ]
+}

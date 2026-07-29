@@ -1,0 +1,37 @@
+{
+  "schemaVersion": 1,
+  "name": "isolated-ai-proxy-errors",
+  "dataPolicy": "Only a synthetic invalid API key, a public provider endpoint and non-sensitive prompts are used; no successful billable model request is made, response payloads are compared in memory and only hashes or difference categories are persisted.",
+  "cases": [
+    {
+      "caseId": "ai-chat-invalid-key-non-stream",
+      "endpointId": "WEB-API-003",
+      "path": "/api/v1/ai/chat/completions",
+      "jsonBody": {
+        "model": "deepseek-chat",
+        "messages": [
+          {
+            "role": "user",
+            "content": "parity probe"
+          }
+        ],
+        "stream": false
+      }
+    },
+    {
+      "caseId": "ai-chat-invalid-key-stream-request",
+      "endpointId": "WEB-API-003",
+      "path": "/api/v1/ai/chat/completions",
+      "jsonBody": {
+        "model": "deepseek-chat",
+        "messages": [
+          {
+            "role": "user",
+            "content": "parity probe"
+          }
+        ],
+        "stream": true
+      }
+    }
+  ]
+}

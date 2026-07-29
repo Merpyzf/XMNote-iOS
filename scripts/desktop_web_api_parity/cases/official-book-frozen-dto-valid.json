@@ -1,0 +1,110 @@
+{
+  "schemaVersion": 1,
+  "name": "official-book-frozen-dto-valid",
+  "dataPolicy": "Only synthetic DTO values, frozen non-secret IDs and case labels are stored; response payloads remain hash-only.",
+  "cases": [
+    {
+      "caseId": "book-pin-valid-dto",
+      "endpointId": "WEB-API-012",
+      "path": "/api/v1/books/722/pin",
+      "jsonBody": {
+        "pinned": true
+      }
+    },
+    {
+      "caseId": "book-create-valid-dto",
+      "endpointId": "WEB-API-014",
+      "path": "/api/v1/books",
+      "jsonBody": {
+        "name": "XMNote Web Parity Book"
+      }
+    },
+    {
+      "caseId": "book-update-valid-dto",
+      "endpointId": "WEB-API-015",
+      "path": "/api/v1/books/722",
+      "jsonBody": {
+        "name": "XMNote Web Parity Book Update"
+      }
+    },
+    {
+      "caseId": "book-batch-delete-valid-dto",
+      "endpointId": "WEB-API-017",
+      "path": "/api/v1/books/batch-delete",
+      "jsonBody": {
+        "ids": [
+          722
+        ]
+      }
+    },
+    {
+      "caseId": "book-batch-pin-valid-dto",
+      "endpointId": "WEB-API-018",
+      "path": "/api/v1/books/batch-pin",
+      "jsonBody": {
+        "ids": [
+          722
+        ],
+        "pinned": true
+      }
+    },
+    {
+      "caseId": "book-batch-update-valid-dto",
+      "endpointId": "WEB-API-019",
+      "path": "/api/v1/books/batch-update",
+      "jsonBody": {
+        "ids": [
+          722
+        ],
+        "readStatus": 2
+      }
+    },
+    {
+      "caseId": "book-batch-set-tags-valid-dto",
+      "endpointId": "WEB-API-020",
+      "path": "/api/v1/books/batch-set-tags",
+      "jsonBody": {
+        "ids": [
+          722
+        ],
+        "tagIds": [],
+        "mode": "replace"
+      }
+    },
+    {
+      "caseId": "book-batch-replace-tags-valid-dto",
+      "endpointId": "WEB-API-021",
+      "path": "/api/v1/books/batch-replace-tags",
+      "jsonBody": {
+        "items": [
+          {
+            "id": 722,
+            "tagIds": []
+          }
+        ]
+      }
+    },
+    {
+      "caseId": "book-batch-move-to-group-valid-dto",
+      "endpointId": "WEB-API-022",
+      "path": "/api/v1/books/batch-move-to-group",
+      "jsonBody": {
+        "ids": [
+          722
+        ],
+        "targetGroupId": 11
+      }
+    },
+    {
+      "caseId": "book-batch-move-out-valid-dto",
+      "endpointId": "WEB-API-023",
+      "path": "/api/v1/books/batch-move-out",
+      "jsonBody": {
+        "ids": [
+          722
+        ],
+        "placeAtEnd": true
+      }
+    }
+  ]
+}

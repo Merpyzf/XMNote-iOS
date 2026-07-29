@@ -1,0 +1,222 @@
+{
+  "schemaVersion": 1,
+  "name": "local-statistics-read-boundaries",
+  "dataPolicy": "Only fixed historical scopes, synthetic future scopes and malformed parameter labels are stored.",
+  "cases": [
+    {
+      "caseId": "monthly-reading-data",
+      "endpointId": "WEB-API-132",
+      "path": "/api/v1/statistics/monthly-reading?year=2022&month=3"
+    },
+    {
+      "caseId": "monthly-reading-empty-future",
+      "endpointId": "WEB-API-132",
+      "path": "/api/v1/statistics/monthly-reading?year=2040&month=2"
+    },
+    {
+      "caseId": "monthly-reading-explicit-default",
+      "endpointId": "WEB-API-132",
+      "path": "/api/v1/statistics/monthly-reading?year=0&month=0"
+    },
+    {
+      "caseId": "monthly-reading-invalid-year",
+      "endpointId": "WEB-API-132",
+      "path": "/api/v1/statistics/monthly-reading?year=bad&month=3"
+    },
+    {
+      "caseId": "monthly-reading-overflow-month",
+      "endpointId": "WEB-API-132",
+      "path": "/api/v1/statistics/monthly-reading?year=2022&month=2147483648"
+    },
+    {
+      "caseId": "weekly-reading-data",
+      "endpointId": "WEB-API-133",
+      "path": "/api/v1/statistics/weekly-reading?weekStart=2022-03-28"
+    },
+    {
+      "caseId": "weekly-reading-empty-future",
+      "endpointId": "WEB-API-133",
+      "path": "/api/v1/statistics/weekly-reading?weekStart=2040-01-02"
+    },
+    {
+      "caseId": "weekly-reading-invalid-date",
+      "endpointId": "WEB-API-133",
+      "path": "/api/v1/statistics/weekly-reading?weekStart=not-a-date"
+    },
+    {
+      "caseId": "reading-rhythm-all",
+      "endpointId": "WEB-API-134",
+      "path": "/api/v1/statistics/reading-rhythm?year=0&month=0"
+    },
+    {
+      "caseId": "reading-rhythm-year",
+      "endpointId": "WEB-API-134",
+      "path": "/api/v1/statistics/reading-rhythm?year=2022"
+    },
+    {
+      "caseId": "reading-rhythm-month",
+      "endpointId": "WEB-API-134",
+      "path": "/api/v1/statistics/reading-rhythm?year=2022&month=3"
+    },
+    {
+      "caseId": "reading-rhythm-week",
+      "endpointId": "WEB-API-134",
+      "path": "/api/v1/statistics/reading-rhythm?weekStart=2022-03-28"
+    },
+    {
+      "caseId": "heatmap-all-2022",
+      "endpointId": "WEB-API-135",
+      "path": "/api/v1/statistics/heatmap?year=2022&type=all"
+    },
+    {
+      "caseId": "heatmap-reading-time-2022",
+      "endpointId": "WEB-API-135",
+      "path": "/api/v1/statistics/heatmap?year=2022&type=reading_time"
+    },
+    {
+      "caseId": "heatmap-note-count-2022",
+      "endpointId": "WEB-API-135",
+      "path": "/api/v1/statistics/heatmap?year=2022&type=note_count"
+    },
+    {
+      "caseId": "heatmap-check-in-2022",
+      "endpointId": "WEB-API-135",
+      "path": "/api/v1/statistics/heatmap?year=2022&type=check_in"
+    },
+    {
+      "caseId": "heatmap-unknown-type-falls-back-all",
+      "endpointId": "WEB-API-135",
+      "path": "/api/v1/statistics/heatmap?year=2022&type=unexpected"
+    },
+    {
+      "caseId": "heatmap-empty-future",
+      "endpointId": "WEB-API-135",
+      "path": "/api/v1/statistics/heatmap?year=2040"
+    },
+    {
+      "caseId": "overview-all",
+      "endpointId": "WEB-API-136",
+      "path": "/api/v1/statistics/overview?year=0&month=0"
+    },
+    {
+      "caseId": "overview-year",
+      "endpointId": "WEB-API-136",
+      "path": "/api/v1/statistics/overview?year=2022"
+    },
+    {
+      "caseId": "overview-month",
+      "endpointId": "WEB-API-136",
+      "path": "/api/v1/statistics/overview?year=2022&month=3"
+    },
+    {
+      "caseId": "overview-week",
+      "endpointId": "WEB-API-136",
+      "path": "/api/v1/statistics/overview?weekStart=2022-03-28"
+    },
+    {
+      "caseId": "yearly-books-data",
+      "endpointId": "WEB-API-137",
+      "path": "/api/v1/statistics/yearly-books?year=2022"
+    },
+    {
+      "caseId": "yearly-books-empty-future",
+      "endpointId": "WEB-API-137",
+      "path": "/api/v1/statistics/yearly-books?year=2040"
+    },
+    {
+      "caseId": "yearly-books-default",
+      "endpointId": "WEB-API-137",
+      "path": "/api/v1/statistics/yearly-books?year=0"
+    },
+    {
+      "caseId": "read-targets-all",
+      "endpointId": "WEB-API-138",
+      "path": "/api/v1/statistics/read-targets"
+    },
+    {
+      "caseId": "read-target-existing",
+      "endpointId": "WEB-API-139",
+      "path": "/api/v1/statistics/read-target?year=2022"
+    },
+    {
+      "caseId": "read-target-missing-future",
+      "endpointId": "WEB-API-139",
+      "path": "/api/v1/statistics/read-target?year=2040"
+    },
+    {
+      "caseId": "read-target-default",
+      "endpointId": "WEB-API-139",
+      "path": "/api/v1/statistics/read-target?year=0"
+    },
+    {
+      "caseId": "yearly-celebration-shown",
+      "endpointId": "WEB-API-141",
+      "path": "/api/v1/statistics/yearly-goal-celebration?year=2024"
+    },
+    {
+      "caseId": "yearly-celebration-not-shown",
+      "endpointId": "WEB-API-141",
+      "path": "/api/v1/statistics/yearly-goal-celebration?year=2022"
+    },
+    {
+      "caseId": "daily-reading-target",
+      "endpointId": "WEB-API-143",
+      "path": "/api/v1/statistics/daily-reading-target"
+    },
+    {
+      "caseId": "chart-note-count-all",
+      "endpointId": "WEB-API-145",
+      "path": "/api/v1/statistics/chart/note-count?year=0&month=0"
+    },
+    {
+      "caseId": "chart-note-count-year",
+      "endpointId": "WEB-API-145",
+      "path": "/api/v1/statistics/chart/note-count?year=2022"
+    },
+    {
+      "caseId": "chart-note-count-month",
+      "endpointId": "WEB-API-145",
+      "path": "/api/v1/statistics/chart/note-count?year=2022&month=3"
+    },
+    {
+      "caseId": "chart-note-count-week",
+      "endpointId": "WEB-API-145",
+      "path": "/api/v1/statistics/chart/note-count?weekStart=2022-03-28"
+    },
+    {
+      "caseId": "chart-note-count-invalid-year",
+      "endpointId": "WEB-API-145",
+      "path": "/api/v1/statistics/chart/note-count?year=1.5"
+    },
+    {
+      "caseId": "chart-read-done-month",
+      "endpointId": "WEB-API-146",
+      "path": "/api/v1/statistics/chart/read-done?year=2022&month=3"
+    },
+    {
+      "caseId": "chart-word-count-month",
+      "endpointId": "WEB-API-147",
+      "path": "/api/v1/statistics/chart/word-count?year=2022&month=3"
+    },
+    {
+      "caseId": "chart-purchase-month",
+      "endpointId": "WEB-API-148",
+      "path": "/api/v1/statistics/chart/purchase?year=2022&month=3"
+    },
+    {
+      "caseId": "chart-book-source-month",
+      "endpointId": "WEB-API-149",
+      "path": "/api/v1/statistics/chart/book-source?year=2022&month=3"
+    },
+    {
+      "caseId": "chart-note-tag-month",
+      "endpointId": "WEB-API-150",
+      "path": "/api/v1/statistics/chart/note-tag?year=2022&month=3"
+    },
+    {
+      "caseId": "chart-book-tag-month",
+      "endpointId": "WEB-API-151",
+      "path": "/api/v1/statistics/chart/book-tag?year=2022&month=3"
+    }
+  ]
+}

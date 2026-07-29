@@ -1,0 +1,102 @@
+{
+  "schemaVersion": 1,
+  "name": "local-path-read-existing",
+  "dataPolicy": "Only frozen numeric entity identifiers and synthetic case labels are stored.",
+  "cases": [
+    {
+      "caseId": "book-existing-554",
+      "endpointId": "WEB-API-005",
+      "path": "/api/v1/books/554"
+    },
+    {
+      "caseId": "chapters-existing-book-554",
+      "endpointId": "WEB-API-034",
+      "path": "/api/v1/books/554/chapters"
+    },
+    {
+      "caseId": "last-used-chapter-existing-book-554",
+      "endpointId": "WEB-API-035",
+      "path": "/api/v1/books/554/chapters/last-used"
+    },
+    {
+      "caseId": "group-books-existing-group-11",
+      "endpointId": "WEB-API-056",
+      "path": "/api/v1/groups/11/books"
+    },
+    {
+      "caseId": "book-notes-existing-book-554",
+      "endpointId": "WEB-API-068",
+      "path": "/api/v1/books/554/notes"
+    },
+    {
+      "caseId": "book-note-tags-existing-book-554",
+      "endpointId": "WEB-API-069",
+      "path": "/api/v1/books/554/note-tags"
+    },
+    {
+      "caseId": "book-note-sort-existing-book-554",
+      "endpointId": "WEB-API-070",
+      "path": "/api/v1/books/554/notes/sort-rule"
+    },
+    {
+      "caseId": "note-existing-7287",
+      "endpointId": "WEB-API-074",
+      "path": "/api/v1/notes/7287"
+    },
+    {
+      "caseId": "reading-records-existing-book-554",
+      "endpointId": "WEB-API-084",
+      "path": "/api/v1/books/554/reading-records"
+    },
+    {
+      "caseId": "reading-record-existing-223",
+      "endpointId": "WEB-API-085",
+      "path": "/api/v1/books/554/reading-records/223"
+    },
+    {
+      "caseId": "related-categories-existing-book-554",
+      "endpointId": "WEB-API-090",
+      "path": "/api/v1/books/554/related-categories"
+    },
+    {
+      "caseId": "related-sort-existing-book-554",
+      "endpointId": "WEB-API-096",
+      "path": "/api/v1/books/554/related-notes/sort-rule"
+    },
+    {
+      "caseId": "related-notes-existing-book-554",
+      "endpointId": "WEB-API-098",
+      "path": "/api/v1/books/554/related-notes"
+    },
+    {
+      "caseId": "related-notes-all-existing-book-554",
+      "endpointId": "WEB-API-099",
+      "path": "/api/v1/books/554/related-notes/all"
+    },
+    {
+      "caseId": "related-note-existing-12",
+      "endpointId": "WEB-API-101",
+      "path": "/api/v1/related-notes/12"
+    },
+    {
+      "caseId": "reviews-empty-existing-book-554",
+      "endpointId": "WEB-API-111",
+      "path": "/api/v1/books/554/reviews"
+    },
+    {
+      "caseId": "review-sort-existing-book-554",
+      "endpointId": "WEB-API-112",
+      "path": "/api/v1/books/554/reviews/sort-rule"
+    },
+    {
+      "caseId": "review-soft-deleted-2",
+      "endpointId": "WEB-API-114",
+      "path": "/api/v1/reviews/2"
+    },
+    {
+      "caseId": "source-existing-1",
+      "endpointId": "WEB-API-127",
+      "path": "/api/v1/sources/1"
+    }
+  ]
+}

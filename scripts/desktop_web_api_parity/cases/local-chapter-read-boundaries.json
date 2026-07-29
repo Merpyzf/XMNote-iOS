@@ -1,0 +1,61 @@
+{
+  "schemaVersion": 1,
+  "name": "local-chapter-read-boundaries",
+  "cases": [
+    {
+      "caseId": "chapters-existing-book",
+      "endpointId": "WEB-API-034",
+      "path": "/api/v1/books/554/chapters"
+    },
+    {
+      "caseId": "chapters-empty-book",
+      "endpointId": "WEB-API-034",
+      "path": "/api/v1/books/351/chapters"
+    },
+    {
+      "caseId": "chapters-deleted-book",
+      "endpointId": "WEB-API-034",
+      "path": "/api/v1/books/1/chapters"
+    },
+    {
+      "caseId": "chapters-missing-book",
+      "endpointId": "WEB-API-034",
+      "path": "/api/v1/books/999999/chapters"
+    },
+    {
+      "caseId": "chapters-invalid-book-id",
+      "endpointId": "WEB-API-034",
+      "path": "/api/v1/books/not-a-number/chapters"
+    },
+    {
+      "caseId": "last-used-existing-book",
+      "endpointId": "WEB-API-035",
+      "path": "/api/v1/books/554/chapters/last-used"
+    },
+    {
+      "caseId": "last-used-empty-book",
+      "endpointId": "WEB-API-035",
+      "path": "/api/v1/books/351/chapters/last-used"
+    },
+    {
+      "caseId": "last-used-deleted-book",
+      "endpointId": "WEB-API-035",
+      "path": "/api/v1/books/1/chapters/last-used"
+    },
+    {
+      "caseId": "last-used-missing-book",
+      "endpointId": "WEB-API-035",
+      "path": "/api/v1/books/999999/chapters/last-used"
+    },
+    {
+      "caseId": "last-used-invalid-book-id",
+      "endpointId": "WEB-API-035",
+      "path": "/api/v1/books/not-a-number/chapters/last-used"
+    },
+    {
+      "caseId": "starred-chapters-existing",
+      "endpointId": "WEB-API-036",
+      "path": "/api/v1/chapters/starred"
+    }
+  ]
+}

@@ -1,0 +1,123 @@
+{
+  "schemaVersion": 1,
+  "name": "local-chapter-write-success",
+  "cases": [
+    {
+      "caseId": "chapter-create-success",
+      "endpointId": "WEB-API-037",
+      "path": "/api/v1/books/351/chapters",
+      "jsonBody": {
+        "title": "  XMNote Web 对齐父章节  "
+      }
+    },
+    {
+      "caseId": "chapter-batch-create-success",
+      "endpointId": "WEB-API-046",
+      "path": "/api/v1/books/351/chapters/batch",
+      "jsonBody": {
+        "titles": [
+          "对齐子章节甲",
+          " ",
+          "对齐子章节乙"
+        ],
+        "parentId": 20775
+      }
+    },
+    {
+      "caseId": "chapter-update-success",
+      "endpointId": "WEB-API-038",
+      "path": "/api/v1/chapters/20775",
+      "jsonBody": {
+        "title": "  对齐父章节  "
+      }
+    },
+    {
+      "caseId": "chapter-star-success",
+      "endpointId": "WEB-API-039",
+      "path": "/api/v1/chapters/20775/starred",
+      "jsonBody": {
+        "isStarred": true
+      }
+    },
+    {
+      "caseId": "chapter-parent-order-success",
+      "endpointId": "WEB-API-042",
+      "path": "/api/v1/books/351/chapters/order",
+      "jsonBody": {
+        "ids": [
+          20775
+        ]
+      }
+    },
+    {
+      "caseId": "chapter-child-order-success",
+      "endpointId": "WEB-API-043",
+      "path": "/api/v1/chapters/20775/children/order",
+      "jsonBody": {
+        "ids": [
+          20777,
+          20776
+        ]
+      }
+    },
+    {
+      "caseId": "chapter-move-to-parent-success",
+      "endpointId": "WEB-API-044",
+      "path": "/api/v1/chapters/move-to-parent",
+      "jsonBody": {
+        "chapterIds": [
+          20776
+        ],
+        "parentId": 20777
+      }
+    },
+    {
+      "caseId": "chapter-move-out-success",
+      "endpointId": "WEB-API-045",
+      "path": "/api/v1/chapters/move-out",
+      "jsonBody": {
+        "chapterIds": [
+          20776
+        ]
+      }
+    },
+    {
+      "caseId": "chapter-import-preview-success",
+      "endpointId": "WEB-API-049",
+      "path": "/api/v1/books/351/chapters/import-preview",
+      "jsonBody": {
+        "catalog": "对齐父章节\n  导入子章节\n导入根章节"
+      }
+    },
+    {
+      "caseId": "chapter-import-commit-success",
+      "endpointId": "WEB-API-050",
+      "path": "/api/v1/books/351/chapters/import-commit",
+      "jsonBody": {
+        "catalog": "对齐父章节\n  导入子章节\n导入根章节",
+        "selectedKeys": [
+          "p-0-0",
+          "p-0-0-1-0",
+          "p-0-1"
+        ]
+      }
+    },
+    {
+      "caseId": "chapter-delete-detaches-note-success",
+      "endpointId": "WEB-API-040",
+      "path": "/api/v1/chapters/20"
+    },
+    {
+      "caseId": "chapter-batch-delete-recursive-success",
+      "endpointId": "WEB-API-041",
+      "path": "/api/v1/chapters/batch-delete",
+      "jsonBody": {
+        "ids": [
+          20775,
+          20776,
+          20779
+        ]
+      }
+    }
+  ]
+}

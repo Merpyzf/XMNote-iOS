@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "name": "official-wenqu-online-success",
+  "dataPolicy": "Only public Wenqu search terms and frozen local book identifiers are sent; response payloads are compared in memory and only hashes or difference categories are persisted.",
+  "cases": [
+    {
+      "caseId": "online-book-search-known-title",
+      "endpointId": "WEB-API-013",
+      "path": "/api/v1/books/search/online?keyword=%E6%B4%BB%E7%9D%80"
+    }
+  ]
+}

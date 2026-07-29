@@ -1,0 +1,52 @@
+{
+  "schemaVersion": 1,
+  "name": "local-source-read-boundaries",
+  "dataPolicy": "Only frozen numeric source identifiers and synthetic case labels are stored.",
+  "cases": [
+    {
+      "caseId": "source-visible-default",
+      "endpointId": "WEB-API-126",
+      "path": "/api/v1/sources"
+    },
+    {
+      "caseId": "source-show-all-lowercase",
+      "endpointId": "WEB-API-126",
+      "path": "/api/v1/sources?showAll=true"
+    },
+    {
+      "caseId": "source-show-all-uppercase",
+      "endpointId": "WEB-API-126",
+      "path": "/api/v1/sources?showAll=TRUE"
+    },
+    {
+      "caseId": "source-show-all-invalid-falls-back-false",
+      "endpointId": "WEB-API-126",
+      "path": "/api/v1/sources?showAll=unexpected"
+    },
+    {
+      "caseId": "source-visible-detail",
+      "endpointId": "WEB-API-127",
+      "path": "/api/v1/sources/1"
+    },
+    {
+      "caseId": "source-hidden-detail",
+      "endpointId": "WEB-API-127",
+      "path": "/api/v1/sources/20"
+    },
+    {
+      "caseId": "source-soft-deleted-detail",
+      "endpointId": "WEB-API-127",
+      "path": "/api/v1/sources/28"
+    },
+    {
+      "caseId": "source-missing-detail",
+      "endpointId": "WEB-API-127",
+      "path": "/api/v1/sources/999999"
+    },
+    {
+      "caseId": "source-invalid-detail-id",
+      "endpointId": "WEB-API-127",
+      "path": "/api/v1/sources/not-a-number"
+    }
+  ]
+}

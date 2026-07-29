@@ -1,0 +1,167 @@
+{
+  "schemaVersion": 1,
+  "name": "local-calendar-read-boundaries",
+  "dataPolicy": "Only synthetic epoch-millisecond parameters and case labels are stored; response payloads remain hash-only.",
+  "cases": [
+    {
+      "caseId": "calendar-month-active-july-2026",
+      "endpointId": "WEB-API-032",
+      "path": "/api/v1/calendar/month?month=1782835200000"
+    },
+    {
+      "caseId": "calendar-month-mid-month-spills-forward",
+      "endpointId": "WEB-API-032",
+      "path": "/api/v1/calendar/month?month=1783008000000"
+    },
+    {
+      "caseId": "calendar-month-leap-february-2024",
+      "endpointId": "WEB-API-032",
+      "path": "/api/v1/calendar/month?month=1706716800000"
+    },
+    {
+      "caseId": "calendar-month-epoch",
+      "endpointId": "WEB-API-032",
+      "path": "/api/v1/calendar/month?month=0"
+    },
+    {
+      "caseId": "calendar-month-negative-one",
+      "endpointId": "WEB-API-032",
+      "path": "/api/v1/calendar/month?month=-1"
+    },
+    {
+      "caseId": "calendar-month-int64-max",
+      "endpointId": "WEB-API-032",
+      "path": "/api/v1/calendar/month?month=9223372036854775807"
+    },
+    {
+      "caseId": "calendar-month-int64-min",
+      "endpointId": "WEB-API-032",
+      "path": "/api/v1/calendar/month?month=-9223372036854775808"
+    },
+    {
+      "caseId": "calendar-month-missing",
+      "endpointId": "WEB-API-032",
+      "path": "/api/v1/calendar/month"
+    },
+    {
+      "caseId": "calendar-month-empty",
+      "endpointId": "WEB-API-032",
+      "path": "/api/v1/calendar/month?month="
+    },
+    {
+      "caseId": "calendar-month-invalid-text",
+      "endpointId": "WEB-API-032",
+      "path": "/api/v1/calendar/month?month=bad"
+    },
+    {
+      "caseId": "calendar-month-int64-overflow",
+      "endpointId": "WEB-API-032",
+      "path": "/api/v1/calendar/month?month=9223372036854775808"
+    },
+    {
+      "caseId": "calendar-month-int64-underflow",
+      "endpointId": "WEB-API-032",
+      "path": "/api/v1/calendar/month?month=-9223372036854775809"
+    },
+    {
+      "caseId": "calendar-month-decimal",
+      "endpointId": "WEB-API-032",
+      "path": "/api/v1/calendar/month?month=1.0"
+    },
+    {
+      "caseId": "calendar-month-unescaped-plus",
+      "endpointId": "WEB-API-032",
+      "path": "/api/v1/calendar/month?month=+1"
+    },
+    {
+      "caseId": "calendar-month-encoded-plus",
+      "endpointId": "WEB-API-032",
+      "path": "/api/v1/calendar/month?month=%2B1"
+    },
+    {
+      "caseId": "calendar-month-duplicate",
+      "endpointId": "WEB-API-032",
+      "path": "/api/v1/calendar/month?month=1&month=2"
+    },
+    {
+      "caseId": "calendar-month-bare-then-valued",
+      "endpointId": "WEB-API-032",
+      "path": "/api/v1/calendar/month?month&month=2"
+    },
+    {
+      "caseId": "calendar-day-active-july-2026",
+      "endpointId": "WEB-API-033",
+      "path": "/api/v1/calendar/day?date=1783008000000"
+    },
+    {
+      "caseId": "calendar-day-epoch",
+      "endpointId": "WEB-API-033",
+      "path": "/api/v1/calendar/day?date=0"
+    },
+    {
+      "caseId": "calendar-day-negative-one",
+      "endpointId": "WEB-API-033",
+      "path": "/api/v1/calendar/day?date=-1"
+    },
+    {
+      "caseId": "calendar-day-int64-max",
+      "endpointId": "WEB-API-033",
+      "path": "/api/v1/calendar/day?date=9223372036854775807"
+    },
+    {
+      "caseId": "calendar-day-int64-min",
+      "endpointId": "WEB-API-033",
+      "path": "/api/v1/calendar/day?date=-9223372036854775808"
+    },
+    {
+      "caseId": "calendar-day-missing",
+      "endpointId": "WEB-API-033",
+      "path": "/api/v1/calendar/day"
+    },
+    {
+      "caseId": "calendar-day-empty",
+      "endpointId": "WEB-API-033",
+      "path": "/api/v1/calendar/day?date="
+    },
+    {
+      "caseId": "calendar-day-invalid-text",
+      "endpointId": "WEB-API-033",
+      "path": "/api/v1/calendar/day?date=bad"
+    },
+    {
+      "caseId": "calendar-day-int64-overflow",
+      "endpointId": "WEB-API-033",
+      "path": "/api/v1/calendar/day?date=9223372036854775808"
+    },
+    {
+      "caseId": "calendar-day-int64-underflow",
+      "endpointId": "WEB-API-033",
+      "path": "/api/v1/calendar/day?date=-9223372036854775809"
+    },
+    {
+      "caseId": "calendar-day-decimal",
+      "endpointId": "WEB-API-033",
+      "path": "/api/v1/calendar/day?date=1.0"
+    },
+    {
+      "caseId": "calendar-day-unescaped-plus",
+      "endpointId": "WEB-API-033",
+      "path": "/api/v1/calendar/day?date=+1"
+    },
+    {
+      "caseId": "calendar-day-encoded-plus",
+      "endpointId": "WEB-API-033",
+      "path": "/api/v1/calendar/day?date=%2B1"
+    },
+    {
+      "caseId": "calendar-day-duplicate",
+      "endpointId": "WEB-API-033",
+      "path": "/api/v1/calendar/day?date=1&date=2"
+    },
+    {
+      "caseId": "calendar-day-bare-then-valued",
+      "endpointId": "WEB-API-033",
+      "path": "/api/v1/calendar/day?date&date=2"
+    }
+  ]
+}

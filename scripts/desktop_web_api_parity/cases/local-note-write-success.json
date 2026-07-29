@@ -1,0 +1,201 @@
+{
+  "schemaVersion": 1,
+  "name": "local-note-write-success",
+  "cases": [
+    {
+      "caseId": "note-sort-rule-update-success",
+      "endpointId": "WEB-API-071",
+      "path": "/api/v1/books/351/notes/sort-rule",
+      "jsonBody": {
+        "sortBy": "position",
+        "sortOrder": "asc"
+      }
+    },
+    {
+      "caseId": "note-create-a-success",
+      "endpointId": "WEB-API-075",
+      "path": "/api/v1/notes",
+      "jsonBody": {
+        "bookId": 554,
+        "chapterId": 3801,
+        "content": "XMNote Web 对齐书摘 A",
+        "idea": "A 初始想法",
+        "position": "",
+        "tagIds": [
+          35
+        ],
+        "imageUrls": [],
+        "createdTime": 1700000001000
+      }
+    },
+    {
+      "caseId": "note-create-b-success",
+      "endpointId": "WEB-API-075",
+      "path": "/api/v1/notes",
+      "jsonBody": {
+        "bookId": 554,
+        "chapterId": 3801,
+        "content": "XMNote Web 对齐书摘 B",
+        "idea": "B 初始想法",
+        "position": "",
+        "tagIds": [
+          35
+        ],
+        "imageUrls": [],
+        "createdTime": 1700000002000
+      }
+    },
+    {
+      "caseId": "note-create-c-success",
+      "endpointId": "WEB-API-075",
+      "path": "/api/v1/notes",
+      "jsonBody": {
+        "bookId": 554,
+        "chapterId": 3802,
+        "content": "XMNote Web 对齐书摘 C",
+        "idea": "C 初始想法",
+        "position": "",
+        "tagIds": [
+          35
+        ],
+        "imageUrls": [],
+        "createdTime": 1700000003000
+      }
+    },
+    {
+      "caseId": "note-create-d-success",
+      "endpointId": "WEB-API-075",
+      "path": "/api/v1/notes",
+      "jsonBody": {
+        "bookId": 554,
+        "chapterId": 3802,
+        "content": "XMNote Web 对齐书摘 D",
+        "idea": "D 初始想法",
+        "position": "",
+        "tagIds": [
+          36
+        ],
+        "imageUrls": [],
+        "createdTime": 1700000004000
+      }
+    },
+    {
+      "caseId": "note-update-a-success",
+      "endpointId": "WEB-API-076",
+      "path": "/api/v1/notes/15233",
+      "jsonBody": {
+        "content": "XMNote Web 已更新书摘 A",
+        "idea": "A 更新后的想法",
+        "tagIds": [
+          35,
+          36
+        ],
+        "imageUrls": [],
+        "createdTime": 1700000011000
+      },
+      "responseNormalizations": [
+        {
+          "path": "$.data.updatedTime",
+          "strategy": "independent-epoch-millis",
+          "reason": "Android 与 iOS 依各自设备时钟生成书摘更新时间"
+        }
+      ]
+    },
+    {
+      "caseId": "note-move-a-to-chapter-success",
+      "endpointId": "WEB-API-079",
+      "path": "/api/v1/notes/batch-move-chapter",
+      "jsonBody": {
+        "ids": [
+          15233
+        ],
+        "chapterId": 3802
+      }
+    },
+    {
+      "caseId": "note-replace-a-b-tags-success",
+      "endpointId": "WEB-API-080",
+      "path": "/api/v1/notes/batch-set-tags",
+      "jsonBody": {
+        "ids": [
+          15233,
+          15234
+        ],
+        "tagIds": [
+          36
+        ],
+        "mode": "replace"
+      }
+    },
+    {
+      "caseId": "note-move-b-to-book-success",
+      "endpointId": "WEB-API-081",
+      "path": "/api/v1/notes/batch-move-book",
+      "jsonBody": {
+        "ids": [
+          15234,
+          999999
+        ],
+        "targetBookId": 351
+      }
+    },
+    {
+      "caseId": "note-merge-c-d-success",
+      "endpointId": "WEB-API-082",
+      "path": "/api/v1/notes/batch-merge",
+      "jsonBody": {
+        "ids": [
+          15235,
+          15236
+        ],
+        "contentOrderedIds": [
+          15236,
+          15235
+        ],
+        "ideaOrderedIds": [
+          15235,
+          15236
+        ],
+        "contentMergeRule": "new_one_line",
+        "ideaMergeRule": "new_one_line",
+        "merged": {
+          "content": "XMNote Web 对齐合并书摘",
+          "idea": "合并后的想法",
+          "position": "",
+          "positionUnit": 1,
+          "chapterId": 3802,
+          "tagIds": [
+            35,
+            36
+          ],
+          "imageUrls": [],
+          "createdTime": 1700000020000
+        }
+      },
+      "responseNormalizations": [
+        {
+          "path": "$.data.updatedTime",
+          "strategy": "independent-epoch-millis",
+          "reason": "Android 与 iOS 依各自设备时钟生成合并书摘更新时间"
+        }
+      ]
+    },
+    {
+      "caseId": "note-delete-a-success",
+      "endpointId": "WEB-API-077",
+      "path": "/api/v1/notes/15233"
+    },
+    {
+      "caseId": "note-batch-delete-b-merged-success",
+      "endpointId": "WEB-API-078",
+      "path": "/api/v1/notes/batch-delete",
+      "jsonBody": {
+        "ids": [
+          15234,
+          15237,
+          999999
+        ]
+      }
+    }
+  ]
+}

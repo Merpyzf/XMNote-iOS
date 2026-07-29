@@ -9,7 +9,7 @@ import Foundation
 
 nonisolated enum NoteImportDetection {
     static func detectWereadClipboard(data: Data) -> NoteImportParserID? {
-        guard let content = String(data: data, encoding: .utf8) else { return nil }
+        guard let content = try? NoteImportTextSupport.decodeUTF8(data) else { return nil }
         if content.range(of: ">[^> ]", options: .regularExpression) != nil { return .wereadOld }
         if content.components(separatedBy: "\n").filter({ !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }).contains(where: { $0.hasPrefix(">> ") }) { return .wereadPre830 }
         return content.contains("-- 来自微信读书") ? .weread830 : nil
@@ -17,7 +17,7 @@ nonisolated enum NoteImportDetection {
 
     /// 当前仅开放已迁移且通过 Golden 的来源；新增来源必须先补 Oracle case 再加入优先级。
     static func detect(data: Data, fileExtension: String?) -> NoteImportParserID? {
-        guard let content = String(data: data, encoding: .utf8) else { return nil }
+        guard let content = try? NoteImportTextSupport.decodeUTF8(data) else { return nil }
         if isBoox(content) {
             return isOldBoox(content) ? .booxOld : .booxNew
         }
