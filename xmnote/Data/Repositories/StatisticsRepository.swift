@@ -3,7 +3,7 @@ import GRDB
 
 /**
  * [INPUT]: 依赖 DatabaseManager 提供数据库连接，依赖 Heatmap 与阅读日历领域模型
- * [OUTPUT]: 对外提供 StatisticsRepository（StatisticsRepositoryProtocol 的 GRDB 实现，含阅读日历月度阅读时长排行与月度摘要聚合）
+ * [OUTPUT]: 对外提供 StatisticsRepository（StatisticsRepositoryProtocol 的 GRDB 实现，含 Android 对齐的跨日阅读时长拆分与阅读日历聚合）
  * [POS]: Data 层统计仓储实现，聚合热力图与阅读日历月视图数据
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -124,6 +124,74 @@ private struct ReadCalendarDurationAggregation {
     let bookMetaById: [Int64: (name: String, coverURL: String)]
     let totalReadSeconds: Int64
     let timeSlotReadSeconds: [ReadCalendarTimeSlot: Int]
+}
+
+/// 阅读计时按天拆分工具，对齐 Android `ReadTimeRecord.splitCrossDayRecords` 的统计口径。
+nonisolated enum ReadTimingDurationSplitter {
+    /// 将一条完成的阅读计时拆分到本地自然日；fuzzy 记录整条归属到 fuzzy 日期。
+    static func splitByDay(
+        startTime: Int64,
+        endTime: Int64,
+        elapsedSeconds: Int64,
+        fuzzyReadDate: Int64,
+        calendar: Calendar = .current
+    ) -> [(day: Date, seconds: Int64)] {
+        guard elapsedSeconds > 0 else { return [] }
+
+        if fuzzyReadDate != 0 {
+            let day = calendar.startOfDay(for: Date(timeIntervalSince1970: Double(fuzzyReadDate) / 1000))
+            return [(day, elapsedSeconds)]
+        }
+
+        let startMillis = startTime
+        let endMillis = endTime > startTime ? endTime : startTime + elapsedSeconds * 1000
+        let startDate = calendar.startOfDay(for: Date(timeIntervalSince1970: Double(startMillis) / 1000))
+        let endDate = calendar.startOfDay(for: Date(timeIntervalSince1970: Double(endMillis) / 1000))
+
+        if startDate == endDate {
+            return [(startDate, elapsedSeconds)]
+        }
+
+        let wallTimeTotalMs = max(1, endMillis - startMillis)
+        var allocatedSeconds: Int64 = 0
+        var result: [(day: Date, seconds: Int64)] = []
+        var currentMillis = startMillis
+        var cursorDate = startDate
+
+        while cursorDate <= endDate && allocatedSeconds < elapsedSeconds {
+            guard let nextDayStart = calendar.date(byAdding: .day, value: 1, to: cursorDate) else { break }
+
+            let startOfDayMs = Int64(cursorDate.timeIntervalSince1970 * 1000)
+            let endOfDayMs = Int64(nextDayStart.timeIntervalSince1970 * 1000) - 1
+            let segmentStart = max(currentMillis, startOfDayMs)
+            let segmentEnd = min(endMillis, endOfDayMs)
+            if segmentStart >= segmentEnd {
+                cursorDate = nextDayStart
+                continue
+            }
+
+            let segmentWallTimeMs = segmentEnd - segmentStart
+            let segmentRatio = Double(segmentWallTimeMs) / Double(wallTimeTotalMs)
+            var segmentSeconds = Int64((segmentRatio * Double(elapsedSeconds)).rounded())
+            if allocatedSeconds + segmentSeconds > elapsedSeconds {
+                segmentSeconds = elapsedSeconds - allocatedSeconds
+            }
+            if segmentSeconds > 0 {
+                allocatedSeconds += segmentSeconds
+                result.append((cursorDate, segmentSeconds))
+            }
+
+            currentMillis = segmentEnd + 1
+            cursorDate = nextDayStart
+        }
+
+        return result
+    }
+
+    /// 将本地自然日转为毫秒时间戳，供区间过滤复用。
+    static func dayMillis(_ day: Date) -> Int64 {
+        Int64(day.timeIntervalSince1970 * 1000)
+    }
 }
 
 private extension StatisticsRepository {
@@ -292,34 +360,31 @@ private extension StatisticsRepository {
 
     // MARK: - 阅读时长聚合
 
-    /// 按天 SUM(elapsed_seconds)，处理 fuzzyReadDate 双时间源。
+    /// 按天汇总阅读时长，处理 fuzzyReadDate 双时间源与精确记录跨日拆分。
     /// 时区约定：SQL 使用 SQLite 'localtime' 修饰符，与 Swift 侧 `Calendar.current.startOfDay` 保持一致——
     /// 两端均依赖设备时区，确保日期边界对齐。若设备时区在运行期变更，已缓存数据可能出现偏移。
     nonisolated func aggregateReadSeconds(_ db: Database, millisRange: ClosedRange<Int64>) -> [Date: Int] {
-        // SQL 目的：按“本地日”汇总阅读秒数，用于热力图阅读时长维度。
-        // 时间语义：fuzzy_read_date 非 0 时按补录日期归属，否则按 start_time；均以 localtime 分桶。
-        // 过滤条件：排除软删除、未完成计时与默认占位书，并限制在输入毫秒区间内。
-        let sql = """
-            SELECT DATE(
-                CASE WHEN fuzzy_read_date != 0
-                    THEN fuzzy_read_date / 1000
-                    ELSE start_time / 1000
-                END,
-                'unixepoch', 'localtime'
-            ) AS day,
-            SUM(elapsed_seconds) AS total
-            FROM read_time_record
-            WHERE is_deleted = 0
-              AND status = 3
-              AND book_id != 0
-              AND (CASE WHEN fuzzy_read_date != 0 THEN fuzzy_read_date ELSE start_time END) BETWEEN ? AND ?
-            GROUP BY day
-            """
-        return queryDayAggregation(
-            db,
-            sql: sql,
-            arguments: StatementArguments([millisRange.lowerBound, millisRange.upperBound])
-        )
+        // SQL 目的：读取区间内参与热力图阅读时长聚合的原始记录，随后在 Swift 侧按 Android 口径拆分跨日精确计时。
+        // 关联关系：JOIN book 排除已删除书籍，避免孤立记录进入统计。
+        // 时间语义：fuzzy 记录按 fuzzy_read_date 归属；非 fuzzy 记录按 [start_time, end_time] 与区间重叠读取。
+        // 过滤条件：status = 3、r.is_deleted = 0、book_id != 0、elapsed_seconds > 0，并限制在输入毫秒区间内。
+        let records = fetchReadDurationRows(db, millisRange: millisRange)
+        var result: [Date: Int] = [:]
+        for record in records {
+            let dayBuckets = ReadTimingDurationSplitter.splitByDay(
+                startTime: record.startTime,
+                endTime: record.endTime,
+                elapsedSeconds: record.elapsedSeconds,
+                fuzzyReadDate: record.fuzzyReadDate,
+                calendar: calendar
+            )
+            for (day, seconds) in dayBuckets {
+                let dayMs = ReadTimingDurationSplitter.dayMillis(day)
+                guard millisRange.contains(dayMs) else { continue }
+                result[day, default: 0] += Int(seconds)
+            }
+        }
+        return result
     }
 
     // MARK: - 笔记数聚合
@@ -812,6 +877,14 @@ private extension StatisticsRepository {
         return records
     }
 
+    /// 读取指定区间内所有可能贡献阅读秒数的原始记录，供跨日拆分统计复用。
+    nonisolated func fetchReadDurationRows(
+        _ db: Database,
+        millisRange: ClosedRange<Int64>
+    ) -> [ReadCalendarDurationRecordRow] {
+        fetchReadCalendarDurationRecords(db, millisRange: millisRange)
+    }
+
     /// 基于全年阅读时长聚合年度 Top 书籍列表。
     nonisolated func buildReadCalendarYearTopBooks(
         _ db: Database,
@@ -1007,57 +1080,14 @@ private extension StatisticsRepository {
         elapsedSeconds: Int64,
         fuzzyReadDate: Int64
     ) -> [(Date, Int64)] {
-        guard elapsedSeconds > 0 else { return [] }
-
-        if fuzzyReadDate != 0 {
-            let day = calendar.startOfDay(for: Date(timeIntervalSince1970: Double(fuzzyReadDate) / 1000))
-            return [(day, elapsedSeconds)]
-        }
-
-        let startMillis = startTime
-        let endMillis = endTime > startTime ? endTime : startTime + elapsedSeconds * 1000
-        let startDate = calendar.startOfDay(for: Date(timeIntervalSince1970: Double(startMillis) / 1000))
-        let endDate = calendar.startOfDay(for: Date(timeIntervalSince1970: Double(endMillis) / 1000))
-
-        if startDate == endDate {
-            return [(startDate, elapsedSeconds)]
-        }
-
-        let wallTimeTotalMs = max(1, endMillis - startMillis)
-        let elapsedSecondsTotal = elapsedSeconds
-        var allocatedSeconds: Int64 = 0
-        var result: [(Date, Int64)] = []
-        var currentMillis = startMillis
-        var cursorDate = startDate
-
-        while cursorDate <= endDate && allocatedSeconds < elapsedSecondsTotal {
-            guard let nextDayStart = calendar.date(byAdding: .day, value: 1, to: cursorDate) else { break }
-
-            let startOfDayMs = Int64(cursorDate.timeIntervalSince1970 * 1000)
-            let endOfDayMs = Int64(nextDayStart.timeIntervalSince1970 * 1000) - 1
-            let segmentStart = max(currentMillis, startOfDayMs)
-            let segmentEnd = min(endMillis, endOfDayMs)
-            if segmentStart >= segmentEnd {
-                cursorDate = nextDayStart
-                continue
-            }
-
-            let segmentWallTimeMs = segmentEnd - segmentStart
-            let segmentRatio = Double(segmentWallTimeMs) / Double(wallTimeTotalMs)
-            var segmentSeconds = Int64((segmentRatio * Double(elapsedSecondsTotal)).rounded())
-            if allocatedSeconds + segmentSeconds > elapsedSecondsTotal {
-                segmentSeconds = elapsedSecondsTotal - allocatedSeconds
-            }
-            if segmentSeconds > 0 {
-                allocatedSeconds += segmentSeconds
-                result.append((cursorDate, segmentSeconds))
-            }
-
-            currentMillis = segmentEnd + 1
-            cursorDate = nextDayStart
-        }
-
-        return result
+        ReadTimingDurationSplitter.splitByDay(
+            startTime: startTime,
+            endTime: endTime,
+            elapsedSeconds: elapsedSeconds,
+            fuzzyReadDate: fuzzyReadDate,
+            calendar: calendar
+        )
+        .map { ($0.day, $0.seconds) }
     }
 
     /// 按启用事件类型计算阅读日历最早日期，决定日历可回溯起点。

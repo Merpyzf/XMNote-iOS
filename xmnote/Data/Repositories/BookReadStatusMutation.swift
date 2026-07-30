@@ -3,7 +3,7 @@ import GRDB
 
 /**
  * [INPUT]: 依赖 GRDB Database、BookReadStatusRecordRecord 与 AnnualCollectionSync 执行阅读状态历史写入
- * [OUTPUT]: 对外提供 BookReadStatusMutation（新增书籍初始状态、单本阅读状态变更、读完进度与评分同步）
+ * [OUTPUT]: 对外提供 BookReadStatusMutation（新增书籍初始状态、单本阅读状态变更、读完进度与显式评分同步）
  * [POS]: Data 层书籍阅读状态写入协作者，封装状态历史、book 当前状态与年度书单副作用
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -28,7 +28,7 @@ nonisolated enum BookReadStatusMutation {
         try AnnualCollectionSync.syncAfterReadHistoryChanged(db, bookID: bookID)
     }
 
-    /// 按 Android `updateBookReadStatus` 语义更新单本书状态；读完状态会推进阅读位置并同步评分。
+    /// 按 Android `updateBookReadStatus` 语义更新单本书状态；读完状态会推进阅读位置，只有显式传入评分时才同步评分。
     static func updateBookReadStatus(
         _ db: Database,
         bookID: Int64,
@@ -74,12 +74,14 @@ nonisolated enum BookReadStatusMutation {
                 totalPagination: bookState.totalPagination,
                 updatedAt: updatedAt
             )
-            try updateBookRating(
-                db,
-                bookID: bookID,
-                ratingScore: max(0, min(finishedRatingScore ?? 0, 50)),
-                updatedAt: updatedAt
-            )
+            if let finishedRatingScore {
+                try updateBookRating(
+                    db,
+                    bookID: bookID,
+                    ratingScore: max(0, min(finishedRatingScore, 50)),
+                    updatedAt: updatedAt
+                )
+            }
         }
 
         try AnnualCollectionSync.syncAfterReadHistoryChanged(db, bookID: bookID)
@@ -242,18 +244,18 @@ nonisolated enum BookReadStatusMutation {
         try db.execute(sql: sql, arguments: [readPosition, updatedAt, bookID])
     }
 
-    /// 更新单本有效书籍评分。
+    /// 更新单本有效书籍评分，仅供显式评分入口调用。
     static func updateBookRating(
         _ db: Database,
         bookID: Int64,
         ratingScore: Int64,
         updatedAt: Int64
     ) throws {
-        // SQL 目的：读完状态写入时同步评分，允许 0 分保存。
+        // SQL 目的：显式评分入口同步书籍评分，允许 0 分保存。
         // 涉及表：book。
         // 关键过滤：id = ?、is_deleted = 0、id != 0。
         // 时间字段：updated_date 写入本次写入毫秒时间戳；score 为 0...50 的半星分值。
-        // 副作用用途：让评分排序、评分维度与详情展示和 Android 批量读完语义一致。
+        // 副作用用途：让评分排序、评分维度与详情展示保持一致；未显式评分的读完入口不得调用。
         let sql = """
             UPDATE book
             SET score = ?,

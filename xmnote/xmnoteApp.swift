@@ -1,7 +1,7 @@
 /**
- * [INPUT]: 依赖 SwiftUI App 生命周期、GRDB Database、RepositoryContainer、AppState 会员能力、XMToastCenter、桌面网页 App 级会话、DEBUG 隔离数据库启动参数与 App Group 分享导入 handoff
- * [OUTPUT]: 对外提供 xmnoteApp 完成数据库/仓储/根视图启动、网页会话前后台及实时会员调和、DEBUG Web API 一致性数据库装配、全局 Toast Host 与书单分享导入路由
- * [POS]: 应用启动编排层，负责组装全局依赖并持有不能随页面销毁的跨页面服务
+ * [INPUT]: 依赖 SwiftUI App 生命周期、GRDB Database、RepositoryContainer、AppState 会员能力、XMToastCenter、桌面网页 App 级会话、AliyunpanSDK、阅读计时深链路由、DEBUG 隔离数据库启动参数与 App Group 分享导入 handoff
+ * [OUTPUT]: 对外提供 xmnoteApp 完成数据库/仓储/根视图启动、网页会话前后台及实时会员调和、DEBUG Web API 一致性数据库装配、全局 Toast Host、书单分享导入与阅读计时深链分发
+ * [POS]: 应用启动编排层，负责组装全局依赖并持有不能随页面销毁的跨页面服务与系统 URL 入口
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
@@ -31,6 +31,7 @@ struct xmnoteApp: App {
     @State private var databaseManager: DatabaseManager?
     @State private var repositories: RepositoryContainer?
     @State private var bookCollectionImportRouter = BookCollectionImportRouter()
+    @State private var readingTimerDeepLinkRouter = ReadingTimerDeepLinkRouter()
     @State private var desktopWebSessionCoordinator = DesktopWebSessionCoordinator()
     @State private var initError: Error?
 
@@ -53,6 +54,7 @@ struct xmnoteApp: App {
                         .environment(databaseManager)
                         .environment(repositories)
                         .environment(bookCollectionImportRouter)
+                        .environment(readingTimerDeepLinkRouter)
                         .environment(desktopWebSessionCoordinator)
                         .transition(.opacity)
                 } else if let initError {
@@ -100,7 +102,12 @@ struct xmnoteApp: App {
                 }
             }
             .onOpenURL { url in
-                _ = Aliyunpan.handleOpenURL(url)
+                if Aliyunpan.handleOpenURL(url) {
+                    return
+                }
+                if readingTimerDeepLinkRouter.handle(url) {
+                    return
+                }
                 bookCollectionImportRouter.handle(url)
             }
             .onChange(of: scenePhase) { _, phase in

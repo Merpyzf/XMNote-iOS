@@ -3,7 +3,7 @@ import GRDB
 
 /**
  * [INPUT]: 依赖 DatabaseManager 提供数据库连接，依赖 TimelineEvent/TimelineSection/TimelineDayMarker 领域模型
- * [OUTPUT]: 对外提供 TimelineRepository（TimelineRepositoryProtocol 的 GRDB 实现，6 路事件查询 + 日历标记聚合）
+ * [OUTPUT]: 对外提供 TimelineRepository（TimelineRepositoryProtocol 的 GRDB 实现，6 路事件查询 + Android 对齐的日历标记聚合）
  * [POS]: Data 层时间线仓储实现，对齐 Android TimelineRepository.getTimelineDataList 与 getCalendarSchemeData
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -511,31 +511,30 @@ private extension TimelineRepository {
         return Set(rows.compactMap { $0["day"] as String? })
     }
 
-    /// 阅读计时活跃天查询（分精确与模糊两路）。
-    /// 精确: fuzzy_read_date=0 时用 start_time；模糊: fuzzy_read_date!=0 时用 fuzzy_read_date。
+    /// 阅读计时活跃天查询；精确记录按 Android 口径拆分跨日时长，fuzzy 记录归属到 fuzzy 日期。
     nonisolated func queryTimingActiveDays(_ db: Database, start: Int64, end: Int64) throws -> Set<String> {
-        // 精确时间记录
-        let exactSQL = """
-            SELECT DATE(start_time / 1000, 'unixepoch', 'localtime') AS day
-            FROM read_time_record
-            WHERE is_deleted = 0 AND status = 3 AND book_id != 0 AND fuzzy_read_date = 0
-              AND start_time BETWEEN ? AND ?
-            GROUP BY day
-            """
-        let exactRows = try Row.fetchAll(db, sql: exactSQL, arguments: [start, end])
-
-        // 模糊时间记录
-        let fuzzySQL = """
-            SELECT DATE(fuzzy_read_date / 1000, 'unixepoch', 'localtime') AS day
-            FROM read_time_record
-            WHERE is_deleted = 0 AND status = 3 AND book_id != 0 AND fuzzy_read_date != 0
-              AND fuzzy_read_date BETWEEN ? AND ?
-            GROUP BY day
-            """
-        let fuzzyRows = try Row.fetchAll(db, sql: fuzzySQL, arguments: [start, end])
-
-        var result = Set(exactRows.compactMap { $0["day"] as String? })
-        result.formUnion(fuzzyRows.compactMap { $0["day"] as String? })
+        let rows = try queryTimingDurationRows(db, start: start, end: end)
+        let range = start...end
+        var result = Set<String>()
+        for row in rows {
+            guard let startTime: Int64 = row["start_time"],
+                  let endTime: Int64 = row["end_time"],
+                  let elapsedSeconds: Int64 = row["elapsed_seconds"],
+                  let fuzzyReadDate: Int64 = row["fuzzy_read_date"] else {
+                continue
+            }
+            let buckets = ReadTimingDurationSplitter.splitByDay(
+                startTime: startTime,
+                endTime: endTime,
+                elapsedSeconds: elapsedSeconds,
+                fuzzyReadDate: fuzzyReadDate
+            )
+            for (day, seconds) in buckets where seconds > 0 {
+                let dayMs = ReadTimingDurationSplitter.dayMillis(day)
+                guard range.contains(dayMs) else { continue }
+                result.insert(Self.dayFormatter.string(from: day))
+            }
+        }
         return result
     }
 
@@ -555,41 +554,62 @@ private extension TimelineRepository {
         return Set(rows.compactMap { $0["day"] as String? })
     }
 
-    /// 按天聚合阅读时长（秒），精确与模糊两路合并。
+    /// 按天聚合阅读时长（秒），精确记录拆分跨日后与 fuzzy 记录合并。
     /// 返回 [dayKey: totalSeconds] 字典。
     nonisolated func aggregateReadSeconds(_ db: Database, start: Int64, end: Int64) throws -> [String: Int64] {
-        // 精确时间记录
-        let exactSQL = """
-            SELECT DATE(start_time / 1000, 'unixepoch', 'localtime') AS day,
-                   SUM(elapsed_seconds) AS total
-            FROM read_time_record
-            WHERE is_deleted = 0 AND status = 3 AND book_id != 0 AND fuzzy_read_date = 0
-              AND start_time BETWEEN ? AND ?
-            GROUP BY day
-            """
-        let exactRows = try Row.fetchAll(db, sql: exactSQL, arguments: [start, end])
-
-        // 模糊时间记录
-        let fuzzySQL = """
-            SELECT DATE(fuzzy_read_date / 1000, 'unixepoch', 'localtime') AS day,
-                   SUM(elapsed_seconds) AS total
-            FROM read_time_record
-            WHERE is_deleted = 0 AND status = 3 AND book_id != 0 AND fuzzy_read_date != 0
-              AND fuzzy_read_date BETWEEN ? AND ?
-            GROUP BY day
-            """
-        let fuzzyRows = try Row.fetchAll(db, sql: fuzzySQL, arguments: [start, end])
-
+        let rows = try queryTimingDurationRows(db, start: start, end: end)
+        let range = start...end
         var result: [String: Int64] = [:]
-        for row in exactRows {
-            guard let day = row["day"] as String? else { continue }
-            result[day, default: 0] += row["total"] as Int64? ?? 0
-        }
-        for row in fuzzyRows {
-            guard let day = row["day"] as String? else { continue }
-            result[day, default: 0] += row["total"] as Int64? ?? 0
+        for row in rows {
+            guard let startTime: Int64 = row["start_time"],
+                  let endTime: Int64 = row["end_time"],
+                  let elapsedSeconds: Int64 = row["elapsed_seconds"],
+                  let fuzzyReadDate: Int64 = row["fuzzy_read_date"] else {
+                continue
+            }
+            let buckets = ReadTimingDurationSplitter.splitByDay(
+                startTime: startTime,
+                endTime: endTime,
+                elapsedSeconds: elapsedSeconds,
+                fuzzyReadDate: fuzzyReadDate
+            )
+            for (day, seconds) in buckets {
+                let dayMs = ReadTimingDurationSplitter.dayMillis(day)
+                guard range.contains(dayMs) else { continue }
+                result[Self.dayFormatter.string(from: day), default: 0] += seconds
+            }
         }
         return result
+    }
+
+    /// 读取时间线日历标记所需的完成计时原始行，供活跃天和时长聚合共用同一跨日拆分源。
+    nonisolated func queryTimingDurationRows(_ db: Database, start: Int64, end: Int64) throws -> [Row] {
+        // SQL 目的：读取指定月份内可能贡献阅读时长的原始计时记录。
+        // 关联关系：JOIN book 排除已删除书籍，避免孤立记录进入时间线日历标记。
+        // 时间语义：fuzzy 记录按 fuzzy_read_date 命中；精确记录按 [start_time, end_time] 与查询区间重叠命中，随后 Swift 侧按本地自然日拆分。
+        // 返回字段用途：start/end/elapsed/fuzzy 共同用于构建 TimelineDayMarker 的活跃天与阅读秒数。
+        let sql = """
+            SELECT r.start_time AS start_time,
+                   r.end_time AS end_time,
+                   r.elapsed_seconds AS elapsed_seconds,
+                   r.fuzzy_read_date AS fuzzy_read_date
+            FROM read_time_record r
+            JOIN book b ON b.id = r.book_id AND b.is_deleted = 0
+            WHERE r.is_deleted = 0
+              AND r.status = 3
+              AND r.book_id != 0
+              AND r.elapsed_seconds > 0
+              AND (
+                (r.fuzzy_read_date != 0 AND r.fuzzy_read_date BETWEEN ? AND ?)
+                OR
+                (r.fuzzy_read_date = 0 AND r.end_time >= ? AND r.start_time <= ?)
+              )
+            """
+        return try Row.fetchAll(
+            db,
+            sql: sql,
+            arguments: [start, end, start, end]
+        )
     }
 }
 
@@ -693,7 +713,12 @@ private extension TimelineRepository {
                 TimelineSection(
                     id: key,
                     date: value.date,
-                    events: value.events.sorted { $0.timestamp > $1.timestamp }
+                    events: value.events.sorted { lhs, rhs in
+                        if lhs.timestamp != rhs.timestamp {
+                            return lhs.timestamp > rhs.timestamp
+                        }
+                        return lhs.id > rhs.id
+                    }
                 )
             }
             .sorted { $0.date > $1.date }

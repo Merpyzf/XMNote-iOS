@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 GRDB Record/FetchableRecord/PersistableRecord 协议与对应数据表字段映射
- * [OUTPUT]: 对外提供 ReadTimeRecordRecord（数据库 Record 实体）供 Repository 层完成持久化读写
+ * [OUTPUT]: 对外提供 ReadTimeRecordRecord（数据库 Record 实体，含 Android 对齐的暂停历史语义）供 Repository 层完成持久化读写
  * [POS]: Database/Records 层单表映射模型，负责 camelCase 与 snake_case 编解码契约收口
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -8,7 +8,7 @@
 import Foundation
 import GRDB
 
-/// 阅读时间记录表，对应 Android ReadTimeRecordEntity
+/// 阅读时间记录表，对应 Android ReadTimeRecordEntity，并保持暂停历史语义一致。
 /// 外键: book_id → book
 nonisolated struct ReadTimeRecordRecord: BaseRecord {
     static let databaseTableName = "read_time_record"
@@ -25,7 +25,7 @@ nonisolated struct ReadTimeRecordRecord: BaseRecord {
     var countdownSeconds: Int64 = 0
     /// 暂停累计毫秒数
     var pausedDurationMillis: Int64 = 0
-    /// 是否暂停中: 0=否, 1=是
+    /// 计时过程中是否曾暂停过: 0=否, 1=是
     var paused: Int64 = 0
     var position: Double = 0.0
     /// 记录状态

@@ -1,7 +1,7 @@
 import SwiftUI
 
 /**
- * [INPUT]: 依赖 TopSwitcher/AddMenuCircleButton 顶部交互组件，依赖 Reading 子页面与书籍/日历/内容查看路由回调
+ * [INPUT]: 依赖 TopSwitcher/AddMenuCircleButton 顶部交互组件，依赖 Reading 子页面与书籍/日历/计时/内容查看路由回调
  * [OUTPUT]: 对外提供 ReadingContainerView（在读 Tab 容器，管理子页切换与事件上抛）
  * [POS]: 在读模块根容器，负责“在读/时间线/统计”切换和首页事件上抛
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -23,7 +23,7 @@ enum ReadingSubTab: String, CaseIterable, Codable {
 
 // MARK: - Container
 
-/// 在读 Tab 容器，负责子页切换并上抛新增、书籍详情与阅读日历跳转事件。
+/// 在读 Tab 容器，负责子页切换并上抛新增、书籍详情、阅读计时与阅读日历跳转事件。
 struct ReadingContainerView: View {
     @Environment(RepositoryContainer.self) private var repositories
     @Environment(SceneStateStore.self) private var sceneStateStore
@@ -37,6 +37,7 @@ struct ReadingContainerView: View {
     let onOpenDebugCenter: (() -> Void)?
     let onOpenReadCalendar: (Date) -> Void
     let onOpenBookDetail: (Int64) -> Void
+    let onStartReading: (Int64) -> Void
     let onOpenContentViewer: (ContentViewerSourceContext, ContentViewerItemID) -> Void
 
     /// 注入新增书籍回调，连接阅读页顶栏操作入口。
@@ -46,6 +47,7 @@ struct ReadingContainerView: View {
         onOpenDebugCenter: (() -> Void)? = nil,
         onOpenReadCalendar: @escaping (Date) -> Void = { _ in },
         onOpenBookDetail: @escaping (Int64) -> Void = { _ in },
+        onStartReading: @escaping (Int64) -> Void = { _ in },
         onOpenContentViewer: @escaping (ContentViewerSourceContext, ContentViewerItemID) -> Void = { _, _ in }
     ) {
         self.onAddBook = onAddBook
@@ -53,6 +55,7 @@ struct ReadingContainerView: View {
         self.onOpenDebugCenter = onOpenDebugCenter
         self.onOpenReadCalendar = onOpenReadCalendar
         self.onOpenBookDetail = onOpenBookDetail
+        self.onStartReading = onStartReading
         self.onOpenContentViewer = onOpenContentViewer
     }
 
@@ -102,7 +105,10 @@ struct ReadingContainerView: View {
         .onChange(of: selectedSubTab) { _, newSelection in
             sceneStateStore.updateReadingSelectedSubTab(newSelection)
             guard newSelection == .timeline else { return }
-            warmTimelineIfNeeded(priority: .userInitiated)
+            refreshTimelineForPresentation(priority: .userInitiated)
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .readingTimerRecordsDidChange)) { _ in
+            refreshTimelineForPresentation(priority: .userInitiated)
         }
     }
 
@@ -122,7 +128,8 @@ struct ReadingContainerView: View {
             ReadingDashboardView(
                 onAddBook: onAddBook,
                 onOpenReadCalendar: onOpenReadCalendar,
-                onOpenBookDetail: onOpenBookDetail
+                onOpenBookDetail: onOpenBookDetail,
+                onStartReading: onStartReading
             )
         case .timeline:
             ReadingTimelineView(
@@ -139,6 +146,13 @@ struct ReadingContainerView: View {
         guard let timelineViewModel else { return }
         subtabBootstrapCoordinator.warm(.timeline, priority: priority) {
             await timelineViewModel.loadInitialData()
+        }
+    }
+
+    private func refreshTimelineForPresentation(priority: TaskPriority) {
+        guard let timelineViewModel else { return }
+        Task(priority: priority) {
+            await timelineViewModel.reloadAfterExternalMutation()
         }
     }
 }

@@ -6,9 +6,9 @@
 //
 
 /**
- * [INPUT]: 依赖 RepositoryContainer 注入仓储，依赖 BookDetailViewModel 驱动状态，依赖 ContentRoute 承接书摘查看路由
- * [OUTPUT]: 对外提供 BookDetailView，书籍详情与书摘列表页面
- * [POS]: Book 模块详情壳层，通过导航接收 bookId 参数，并把书摘点击转入专用书摘查看器
+ * [INPUT]: 依赖 RepositoryContainer 注入仓储，依赖 BookDetailViewModel 驱动状态，依赖 ContentRoute 承接书摘查看路由，依赖外层回调打开阅读计时与补录
+ * [OUTPUT]: 对外提供 BookDetailView，书籍详情、阅读入口与书摘列表页面
+ * [POS]: Book 模块详情壳层，通过导航接收 bookId 参数，并把阅读操作与书摘点击转给外层路由
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
@@ -17,16 +17,31 @@ import SwiftUI
 /// 书籍详情页入口，负责加载书籍信息并展示关联书摘列表。
 struct BookDetailView: View {
     let bookId: Int64
+    let onStartReading: (Int64) -> Void
+    let onSupplementReading: (Int64) -> Void
     @Environment(RepositoryContainer.self) private var repositories
     @State private var viewModel: BookDetailViewModel?
     @State private var bootstrapLoadingGate = LoadingGate()
+
+    /// 注入书籍详情 ID 与阅读计时相关路由回调，保持详情页不直接持有外层 NavigationPath。
+    init(
+        bookId: Int64,
+        onStartReading: @escaping (Int64) -> Void = { _ in },
+        onSupplementReading: @escaping (Int64) -> Void = { _ in }
+    ) {
+        self.bookId = bookId
+        self.onStartReading = onStartReading
+        self.onSupplementReading = onSupplementReading
+    }
 
     var body: some View {
         ZStack {
             if let viewModel {
                 BookDetailContentView(
                     bookId: bookId,
-                    viewModel: viewModel
+                    viewModel: viewModel,
+                    onStartReading: onStartReading,
+                    onSupplementReading: onSupplementReading
                 )
             } else {
                 Color.surfacePage.ignoresSafeArea()
@@ -60,6 +75,8 @@ struct BookDetailView: View {
 private struct BookDetailContentView: View {
     let bookId: Int64
     @Bindable var viewModel: BookDetailViewModel
+    let onStartReading: (Int64) -> Void
+    let onSupplementReading: (Int64) -> Void
     @State private var readLoadingGate = LoadingGate()
 
     private enum Layout {
@@ -130,9 +147,39 @@ private struct BookDetailContentView: View {
 
     private func bookHeader(_ book: BookDetail) -> some View {
         CardContainer {
-            HStack(alignment: .top, spacing: Spacing.base) {
-                coverImage(book.cover)
-                bookInfo(book)
+            VStack(alignment: .leading, spacing: Spacing.base) {
+                HStack(alignment: .top, spacing: Spacing.base) {
+                    coverImage(book.cover)
+                    bookInfo(book)
+                }
+
+                Divider()
+
+                HStack(spacing: Spacing.base) {
+                    Button {
+                        onStartReading(bookId)
+                    } label: {
+                        Label("开始阅读", systemImage: "play.fill")
+                            .font(AppTypography.bodyMedium)
+                            .foregroundStyle(Color.white)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, Spacing.cozy)
+                            .background(Color.brand, in: Capsule())
+                    }
+                    .buttonStyle(.plain)
+
+                    Button {
+                        onSupplementReading(bookId)
+                    } label: {
+                        Label("补录阅读", systemImage: "plus.circle")
+                            .font(AppTypography.bodyMedium)
+                            .foregroundStyle(Color.textPrimary)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, Spacing.cozy)
+                            .background(Color.controlFillSecondary, in: Capsule())
+                    }
+                    .buttonStyle(.plain)
+                }
             }
             .padding(Spacing.contentEdge)
         }

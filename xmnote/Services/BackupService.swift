@@ -1,5 +1,5 @@
 /**
- * [INPUT]: 依赖 Foundation、UIKit、SQLite3、ZIPFoundation 与 AppDatabase/DatabaseManager
+ * [INPUT]: 依赖 Foundation/UserDefaults、UIKit、SQLite3、ZIPFoundation 与 AppDatabase/DatabaseManager
  * [OUTPUT]: 对外提供云备份通用模型、BackupArchiveService 与 CloudBackupRemoteProvider 协议
  * [POS]: Services 模块的备份内核，负责本地备份包生成、数据库热切换恢复与跨 provider 的公共语义
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -182,6 +182,7 @@ struct BackupArchiveInspection: Sendable {
 /// 本地备份归档服务，负责数据库打包、解压、版本校验与恢复。
 struct BackupArchiveService {
     let database: AppDatabase
+    let userDefaults: UserDefaults
 
     static let maxHistoryCount = 20
 
@@ -190,6 +191,12 @@ struct BackupArchiveService {
         formatter.dateFormat = "yyyy-MM-dd-HH-mm-ss"
         return formatter
     }()
+
+    /// 注入数据库与偏好容器，偏好容器用于生成 Android 恢复所需的 SharedPreferences 快照。
+    init(database: AppDatabase, userDefaults: UserDefaults = .standard) {
+        self.database = database
+        self.userDefaults = userDefaults
+    }
 }
 
 extension BackupArchiveService {
@@ -234,7 +241,7 @@ extension BackupArchiveService {
         )
     }
 
-    /// 创建统一 zip 备份包，内容仅包含数据库文件集（db/wal/shm）。
+    /// 创建统一 zip 备份包，内容包含数据库文件集（db/wal/shm）与 Android SharedPreferences 兼容快照。
     func createBackupArchive(in directory: URL) throws -> BackupArchiveArtifact {
         let fileName = Self.makeBackupFileName()
         let archiveURL = directory.appendingPathComponent(fileName)
@@ -251,6 +258,7 @@ extension BackupArchiveService {
                     fileURL: databaseURL
                 )
             }
+            try addAndroidSharedPreferencesSnapshot(to: archive, in: directory)
         } catch {
             throw BackupError.zipFailed(underlying: error)
         }
@@ -421,6 +429,63 @@ private extension BackupArchiveService {
         database.databaseFiles
             .map { URL(fileURLWithPath: $0) }
             .filter { FileManager.default.fileExists(atPath: $0.path) }
+    }
+
+    /// 将 Android 端恢复代码依赖的 SharedPreferences XML 放入备份包，保证 Android 解包后可完成偏好文件搬移。
+    func addAndroidSharedPreferencesSnapshot(to archive: Archive, in directory: URL) throws {
+        let preferencesURL = directory.appendingPathComponent(AndroidSharedPreferencesCompat.fileName)
+        let pendingRecordId = androidRecoverableTimingRecordId()
+        let data = AndroidSharedPreferencesCompat.makeXMLData(
+            pendingTimingRecordId: pendingRecordId,
+            defaults: userDefaults
+        )
+        try data.write(to: preferencesURL, options: .atomic)
+        try archive.addEntry(
+            with: AndroidSharedPreferencesCompat.fileName,
+            fileURL: preferencesURL
+        )
+    }
+
+    /// 从当前数据库读取 Android 可冷启动恢复的最新计时记录；只选择 RUNNING/PAUSE，STOP 待保存按 Android 规则不恢复。
+    func androidRecoverableTimingRecordId() -> Int64 {
+        guard FileManager.default.fileExists(atPath: database.databasePath) else {
+            return 0
+        }
+
+        var databasePointer: OpaquePointer?
+        let openResult = sqlite3_open_v2(database.databasePath, &databasePointer, SQLITE_OPEN_READONLY, nil)
+        guard openResult == SQLITE_OK, let databasePointer else {
+            return AndroidSharedPreferencesCompat.pendingTimingRecordId(defaults: userDefaults)
+        }
+        defer { sqlite3_close(databasePointer) }
+
+        // SQL 目的：为 Android SharedPreferences 备份快照解析最新可恢复阅读计时记录 ID。
+        // 涉及表：read_time_record。
+        // 关键过滤：is_deleted = 0、book_id != 0、status IN (0,1)，严格对齐 Android 冷启动只恢复 RUNNING/PAUSE 的规则。
+        // 时间字段：updated_date/created_date 为 Android 毫秒时间戳，用于多条异常未完成记录时选择最新一条。
+        // 返回字段用途：写入 `pending_timing_record_id`，使 iOS 备份恢复到 Android 后可以触发计时恢复弹窗。
+        let sql = """
+            SELECT id
+            FROM read_time_record
+            WHERE is_deleted = 0
+              AND book_id != 0
+              AND status IN (0, 1)
+            ORDER BY CASE WHEN updated_date != 0 THEN updated_date ELSE created_date END DESC,
+                     id DESC
+            LIMIT 1
+            """
+
+        var statement: OpaquePointer?
+        guard sqlite3_prepare_v2(databasePointer, sql, -1, &statement, nil) == SQLITE_OK,
+              let statement else {
+            return AndroidSharedPreferencesCompat.pendingTimingRecordId(defaults: userDefaults)
+        }
+        defer { sqlite3_finalize(statement) }
+
+        guard sqlite3_step(statement) == SQLITE_ROW else {
+            return 0
+        }
+        return sqlite3_column_int64(statement, 0)
     }
 
     /// 基于 SQLite `PRAGMA user_version` 校验跨端数据库版本兼容性。

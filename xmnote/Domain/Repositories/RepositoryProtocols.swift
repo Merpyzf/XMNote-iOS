@@ -2,7 +2,7 @@ import Foundation
 
 /**
  * [INPUT]: 依赖 Models 与 Services 层的数据类型定义
- * [OUTPUT]: 对外提供 Book/Note/Content/GlobalSearch/BackupServer/Backup/S3/TagManagement/Statistics/ReadCalendarColor/Timeline/ReadingDashboard 及书籍搜索/录入等 Repository 协议，包含书架、书单显示设置与基础数据管理入口
+ * [OUTPUT]: 对外提供 Book/Note/Content/GlobalSearch/BackupServer/Backup/S3/TagManagement/Statistics/ReadCalendarColor/Timeline/ReadingDashboard/ReadingTimer 及书籍搜索/录入等 Repository 协议，包含书架、书单显示设置与基础数据管理入口
  * [POS]: Domain 层仓储契约，定义 Presentation 获取本地/网络数据的唯一入口
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -538,4 +538,24 @@ protocol NoteImportRepositoryProtocol {
         books: [NoteImportCommitBook],
         progress: @escaping (Int, Int) -> Void
     ) async throws
+}
+
+/// 阅读计时仓储契约，统一封装实时计时、结束保存、补录和恢复所需的数据读写。
+protocol ReadingTimerRepositoryProtocol {
+    /// 读取单本书的计时上下文，供入口、计时页和补录页初始化。
+    func fetchBookContext(bookId: Int64) async throws -> ReadingTimerBookContext
+    /// 读取全局最新可恢复计时，仅覆盖运行和暂停；停止待保存必须通过明确记录入口继续处理。
+    func fetchActiveSession() async throws -> ReadingTimerSession?
+    /// 按记录 ID 读取单段阅读计时。
+    func fetchSession(recordId: Int64) async throws -> ReadingTimerSession?
+    /// 创建新的运行中计时记录，并把书籍状态推进为在读；`countdownSeconds = 0` 表示正计时。
+    func createSession(bookId: Int64, startAt: Date, countdownSeconds: Int64) async throws -> ReadingTimerSession
+    /// 持久化运行中快照，用于暂停、继续、停止和后台校准。
+    func updateSessionSnapshot(_ input: ReadingTimerSnapshotInput) async throws -> ReadingTimerSession
+    /// 保存停止后的阅读记录，使其进入既有统计消费口径。
+    func finishSession(_ input: ReadingTimerFinishInput) async throws -> ReadingTimerSession
+    /// 放弃未完成计时，使用软删除避免进入统计并保持同步兼容。
+    func discardSession(recordId: Int64) async throws
+    /// 保存一条补录阅读记录，支持日期时长与精确起止两种模式。
+    func saveSupplement(_ input: ReadingTimerSupplementInput) async throws -> Int64
 }

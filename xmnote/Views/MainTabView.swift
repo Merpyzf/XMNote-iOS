@@ -8,9 +8,9 @@
 import SwiftUI
 
 /**
- * [INPUT]: 依赖 Reading/Book/Note/Content/Personal/Search 各模块容器视图与对应路由枚举，依赖 BookCollectionImportRouter 承接外部书单导入，依赖 DesktopWebSessionCoordinator 消费网页端原生动作，依赖 DebugRoute、openURL 与 SwiftUI search focus 状态
- * [OUTPUT]: 对外提供 MainTabView（五个主 Tab 的 NavigationStack 组织、书单分享导入与网页端高级版入口定位、普通目的地分发、搜索来源详情系统全屏覆盖与 DEBUG UI Test 路由）
- * [POS]: 应用根导航入口，负责跨模块路由承接（含书架聚合列表、在读阅读日历、内容查看/编辑、网页端原生导航与搜索来源详情根级 fullScreenCover）
+ * [INPUT]: 依赖 Reading/Book/Note/Content/Personal/Search 各模块容器视图与对应路由枚举，依赖 BookCollectionImportRouter、ReadingTimerDeepLinkRouter 与 DesktopWebSessionCoordinator 承接外部动作，依赖 DebugRoute、openURL 与 SwiftUI search focus 状态
+ * [OUTPUT]: 对外提供 MainTabView（五个主 Tab 的 NavigationStack 组织、书单分享导入、阅读计时深链与冲突回退、网页端高级版入口定位、搜索来源详情系统全屏覆盖与 DEBUG UI Test 路由）
+ * [POS]: 应用根导航入口，负责跨模块路由承接（含书架聚合列表、在读阅读日历与计时、内容查看/编辑、网页端原生导航与搜索来源详情根级 fullScreenCover）
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
@@ -60,6 +60,7 @@ private enum GlobalSearchCommitSource: Sendable {
 struct MainTabView: View {
     @Environment(\.openURL) private var openURL
     @Environment(BookCollectionImportRouter.self) private var bookCollectionImportRouter
+    @Environment(ReadingTimerDeepLinkRouter.self) private var readingTimerDeepLinkRouter
     @Environment(DesktopWebSessionCoordinator.self) private var desktopWebSessionCoordinator
     @State private var selectedTab: AppTab = .reading
     @State private var readingPath = NavigationPath()
@@ -96,6 +97,9 @@ struct MainTabView: View {
                         },
                         onOpenBookDetail: { bookId in
                             append(BookRoute.detail(bookId: bookId), to: .reading)
+                        },
+                        onStartReading: { bookId in
+                            readingPath.append(ReadingRoute.readingSession(bookId: bookId))
                         },
                         onOpenContentViewer: { source, initialItem in
                             append(contentRoute(for: source, initialItem: initialItem), to: .reading)
@@ -147,6 +151,10 @@ struct MainTabView: View {
                             bookDestination(for: route)
                                 .toolbar(.hidden, for: .tabBar)
                         }
+                        .navigationDestination(for: ReadingRoute.self) { route in
+                            readingDestination(for: route)
+                                .toolbar(.hidden, for: .tabBar)
+                        }
                         .navigationDestination(for: NoteRoute.self) { route in
                             noteDestination(for: route)
                                 .toolbar(.hidden, for: .tabBar)
@@ -177,6 +185,10 @@ struct MainTabView: View {
                             bookDestination(for: route)
                                 .toolbar(.hidden, for: .tabBar)
                         }
+                        .navigationDestination(for: ReadingRoute.self) { route in
+                            readingDestination(for: route)
+                                .toolbar(.hidden, for: .tabBar)
+                        }
                         .navigationDestination(for: NoteRoute.self) { route in
                             noteDestination(for: route)
                                 .toolbar(.hidden, for: .tabBar)
@@ -201,6 +213,10 @@ struct MainTabView: View {
                         }
                         .navigationDestination(for: BookRoute.self) { route in
                             bookDestination(for: route)
+                                .toolbar(.hidden, for: .tabBar)
+                        }
+                        .navigationDestination(for: ReadingRoute.self) { route in
+                            readingDestination(for: route)
                                 .toolbar(.hidden, for: .tabBar)
                         }
                         .navigationDestination(for: NoteRoute.self) { route in
@@ -238,6 +254,10 @@ struct MainTabView: View {
                             bookDestination(for: route)
                                 .toolbar(.hidden, for: .tabBar)
                         }
+                        .navigationDestination(for: ReadingRoute.self) { route in
+                            readingDestination(for: route)
+                                .toolbar(.hidden, for: .tabBar)
+                        }
                         .navigationDestination(for: NoteRoute.self) { route in
                             noteDestination(for: route)
                                 .toolbar(.hidden, for: .tabBar)
@@ -271,6 +291,10 @@ struct MainTabView: View {
             guard requestID != nil else { return }
             openPremiumUpgradeFromDesktopWeb()
         }
+        .onChange(of: readingTimerDeepLinkRouter.pendingRoute) { _, route in
+            guard let route else { return }
+            openReadingTimerDeepLink(route)
+        }
         .fullScreenCover(
             item: $searchResultCover,
             onDismiss: completeSearchResultCoverDismissal
@@ -280,6 +304,9 @@ struct MainTabView: View {
         .task {
             if let pendingImport = bookCollectionImportRouter.pendingImport {
                 prepareForBookCollectionImport(pendingImport)
+            }
+            if let pendingRoute = readingTimerDeepLinkRouter.pendingRoute {
+                openReadingTimerDeepLink(pendingRoute)
             }
             #if DEBUG
             await applyUITestLaunchRouteIfNeeded()
@@ -309,6 +336,10 @@ struct MainTabView: View {
             searchResultCoverDestination(for: cover.target)
                 .navigationDestination(for: BookRoute.self) { route in
                     searchResultBookDestination(for: route)
+                        .toolbar(.hidden, for: .tabBar)
+                }
+                .navigationDestination(for: ReadingRoute.self) { route in
+                    searchResultReadingDestination(for: route)
                         .toolbar(.hidden, for: .tabBar)
                 }
                 .navigationDestination(for: NoteRoute.self) { route in
@@ -355,7 +386,15 @@ struct MainTabView: View {
     private func searchResultBookDestination(for route: BookRoute) -> some View {
         switch route {
         case .detail(let bookId):
-            BookDetailView(bookId: bookId)
+            BookDetailView(
+                bookId: bookId,
+                onStartReading: { bookId in
+                    searchResultCoverPath.append(ReadingRoute.readingSession(bookId: bookId))
+                },
+                onSupplementReading: { bookId in
+                    searchResultCoverPath.append(ReadingRoute.readingSupplement(bookId: bookId))
+                }
+            )
         case .edit(let bookId):
             BookEditorView(mode: .edit(bookId: bookId))
         case .add:
@@ -387,10 +426,112 @@ struct MainTabView: View {
     @ViewBuilder
     private func readingDestination(for route: ReadingRoute) -> some View {
         switch route {
-        case .bookDetail:
-            Text("书籍详情")
-        case .readingSession:
-            Text("阅读计时")
+        case .bookDetail(let bookId):
+            BookDetailView(
+                bookId: bookId,
+                onStartReading: { bookId in
+                    append(ReadingRoute.readingSession(bookId: bookId), to: selectedTab)
+                },
+                onSupplementReading: { bookId in
+                    append(ReadingRoute.readingSupplement(bookId: bookId), to: selectedTab)
+                }
+            )
+        case .readingSession(let bookId):
+            ReadingTimerView(
+                bookId: bookId,
+                onReturnFromConflict: {
+                    popCurrentRoute(from: selectedTab)
+                },
+                onAddNote: { bookId in
+                    append(NoteRoute.create(seed: NoteEditorSeed(
+                        bookId: bookId,
+                        chapterId: nil,
+                        contentHTML: "",
+                        ideaHTML: ""
+                    )), to: selectedTab)
+                }
+            )
+            .id(readingTimerViewIdentity(bookId: bookId, recordId: nil))
+        case .readingSessionRecord(let recordId, let bookId):
+            ReadingTimerView(
+                bookId: bookId,
+                recordId: recordId,
+                onReturnFromConflict: {
+                    popCurrentRoute(from: selectedTab)
+                },
+                onAddNote: { bookId in
+                    append(NoteRoute.create(seed: NoteEditorSeed(
+                        bookId: bookId,
+                        chapterId: nil,
+                        contentHTML: "",
+                        ideaHTML: ""
+                    )), to: selectedTab)
+                }
+            )
+            .id(readingTimerViewIdentity(bookId: bookId, recordId: recordId))
+        case .readingSupplement(let bookId):
+            ReadingTimerSupplementView(bookId: bookId)
+        case .readCalendar(let date):
+            ReadCalendarView(date: date)
+        }
+    }
+
+    /// 为计时页生成随业务入口变化的视图身份，避免同层路由替换时复用旧 ViewModel。
+    private func readingTimerViewIdentity(bookId: Int64, recordId: Int64?) -> String {
+        if let recordId {
+            return "reading-timer-record-\(recordId)-book-\(bookId)"
+        }
+        return "reading-timer-book-\(bookId)"
+    }
+
+    @ViewBuilder
+    private func searchResultReadingDestination(for route: ReadingRoute) -> some View {
+        switch route {
+        case .bookDetail(let bookId):
+            BookDetailView(
+                bookId: bookId,
+                onStartReading: { bookId in
+                    searchResultCoverPath.append(ReadingRoute.readingSession(bookId: bookId))
+                },
+                onSupplementReading: { bookId in
+                    searchResultCoverPath.append(ReadingRoute.readingSupplement(bookId: bookId))
+                }
+            )
+        case .readingSession(let bookId):
+            ReadingTimerView(
+                bookId: bookId,
+                onReturnFromConflict: {
+                    popCurrentSearchResultRoute()
+                },
+                onAddNote: { bookId in
+                    searchResultCoverPath.append(NoteRoute.create(seed: NoteEditorSeed(
+                        bookId: bookId,
+                        chapterId: nil,
+                        contentHTML: "",
+                        ideaHTML: ""
+                    )))
+                }
+            )
+            .id(readingTimerViewIdentity(bookId: bookId, recordId: nil))
+        case .readingSessionRecord(let recordId, let bookId):
+            ReadingTimerView(
+                bookId: bookId,
+                recordId: recordId,
+                onReturnFromConflict: {
+                    popCurrentSearchResultRoute()
+                },
+                onAddNote: { bookId in
+                    searchResultCoverPath.append(NoteRoute.create(seed: NoteEditorSeed(
+                        bookId: bookId,
+                        chapterId: nil,
+                        contentHTML: "",
+                        ideaHTML: ""
+                    )))
+                }
+            )
+            .id(readingTimerViewIdentity(bookId: bookId, recordId: recordId))
+        case .readingSupplement(let bookId):
+            ReadingTimerSupplementView(bookId: bookId)
         case .readCalendar(let date):
             ReadCalendarView(date: date)
         }
@@ -402,7 +543,15 @@ struct MainTabView: View {
     private func bookDestination(for route: BookRoute) -> some View {
         switch route {
         case .detail(let bookId):
-            BookDetailView(bookId: bookId)
+            BookDetailView(
+                bookId: bookId,
+                onStartReading: { bookId in
+                    append(ReadingRoute.readingSession(bookId: bookId), to: selectedTab)
+                },
+                onSupplementReading: { bookId in
+                    append(ReadingRoute.readingSupplement(bookId: bookId), to: selectedTab)
+                }
+            )
         case .edit(let bookId):
             BookEditorView(mode: .edit(bookId: bookId))
         case .add:
@@ -536,6 +685,54 @@ struct MainTabView: View {
         }
     }
 
+    private func append(_ route: ReadingRoute, to tab: AppTab) {
+        switch tab {
+        case .reading:
+            readingPath.append(route)
+        case .books:
+            booksPath.append(route)
+        case .notes:
+            notesPath.append(route)
+        case .profile:
+            profilePath.append(route)
+        case .search:
+            searchPath.append(route)
+        }
+    }
+
+    private func replaceReadingPath(with route: ReadingRoute) {
+        var path = NavigationPath()
+        path.append(route)
+        readingPath = path
+    }
+
+    /// 移除当前 Tab 顶部路由，供阅读计时异书冲突“返回”稳定回到详情来源或深链根页。
+    private func popCurrentRoute(from tab: AppTab) {
+        switch tab {
+        case .reading:
+            guard !readingPath.isEmpty else { return }
+            readingPath.removeLast()
+        case .books:
+            guard !booksPath.isEmpty else { return }
+            booksPath.removeLast()
+        case .notes:
+            guard !notesPath.isEmpty else { return }
+            notesPath.removeLast()
+        case .profile:
+            guard !profilePath.isEmpty else { return }
+            profilePath.removeLast()
+        case .search:
+            guard !searchPath.isEmpty else { return }
+            searchPath.removeLast()
+        }
+    }
+
+    /// 移除搜索结果覆盖层顶部路由，避免覆盖层内的计时冲突返回依赖系统 dismiss 猜测。
+    private func popCurrentSearchResultRoute() {
+        guard !searchResultCoverPath.isEmpty else { return }
+        searchResultCoverPath.removeLast()
+    }
+
     private func append(_ route: NoteRoute, to tab: AppTab) {
         switch tab {
         case .reading:
@@ -645,6 +842,15 @@ struct MainTabView: View {
             }
             self.isSearchPresented = isPresented
         }
+    }
+
+    /// 消费 App 根层分发的计时深链，在当前 scene 内精确恢复目标记录并清空其他覆盖层。
+    private func openReadingTimerDeepLink(_ route: ReadingRoute) {
+        searchResultCoverPath = NavigationPath()
+        searchResultCover = nil
+        selectedTab = .reading
+        replaceReadingPath(with: route)
+        readingTimerDeepLinkRouter.consume(route)
     }
 
     /// 防御系统搜索框在覆盖层或焦点切换期间产生的瞬时文本回写，保留当前明确提交的关键词。
@@ -891,5 +1097,6 @@ private struct MainTabSearchHostModifier: ViewModifier {
 #Preview {
     MainTabView()
         .environment(AppState())
+        .environment(ReadingTimerDeepLinkRouter())
         .environment(DesktopWebSessionCoordinator())
 }

@@ -75,6 +75,29 @@ final class TimelineViewModel {
         applySections(await fetchSections())
     }
 
+    /// 阅读计时记录在其他页面完成写入后，刷新当前列表与当前月份标记缓存。
+    /// 并发语义：方法运行在 MainActor；并发读取期间只展示轻量刷新状态，取消后不会提交半截数据。
+    func reloadAfterExternalMutation() async {
+        guard hasResolvedInitialSnapshot else {
+            await loadInitialData()
+            return
+        }
+
+        isRefreshing = true
+        defer { isRefreshing = false }
+
+        let currentMonthStart = displayedMonthStart
+        async let sections = fetchSections()
+        async let markers = fetchMarkers(for: currentMonthStart, category: selectedCategory)
+        let resolvedSections = await sections
+        let resolvedMarkers = await markers
+
+        applySections(resolvedSections)
+        var nextMarkerCache = markerCache
+        nextMarkerCache[Self.monthKey(for: currentMonthStart, using: calendar)] = resolvedMarkers
+        replaceMarkerCache(with: nextMarkerCache)
+    }
+
     /// 选中日期变更：更新 selectedDate 并重新拉取事件。
     func selectDate(_ date: Date) async {
         let normalized = calendar.startOfDay(for: date)

@@ -199,7 +199,11 @@ private struct ReadingTrendMetricValueLabel: View {
                     }
                 }
             } else {
-                combinedLineText(for: pairs)
+                ReadingTrendMetricInlinePairsLine(
+                    pairs: pairs,
+                    numberFontSize: numberFontSize,
+                    unitFontSize: unitFontSize
+                )
                     .foregroundStyle(Color.textPrimary)
                     .lineLimit(1)
                     .minimumScaleFactor(0.68)
@@ -210,21 +214,24 @@ private struct ReadingTrendMetricValueLabel: View {
     }
 
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+}
 
-    private func combinedLineText(for pairs: [ReadingDashboardMetricValueDisplay.Pair]) -> Text {
-        pairs.enumerated().reduce(Text("")) { partial, item in
-            let spacingText = item.offset == 0 ? Text("") : Text(" ")
-            return partial + spacingText + pairText(item.element)
+/// ReadingTrendMetricInlinePairsLine 负责在常规字号下横向渲染多个“数字 + 单位”组合，避免使用 iOS 26 软弃用的 Text 拼接。
+private struct ReadingTrendMetricInlinePairsLine: View {
+    let pairs: [ReadingDashboardMetricValueDisplay.Pair]
+    let numberFontSize: CGFloat
+    let unitFontSize: CGFloat
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: Spacing.micro) {
+            ForEach(Array(pairs.enumerated()), id: \.offset) { _, pair in
+                ReadingTrendMetricPairLine(
+                    pair: pair,
+                    numberFontSize: numberFontSize,
+                    unitFontSize: unitFontSize
+                )
+            }
         }
-    }
-
-    private func pairText(_ pair: ReadingDashboardMetricValueDisplay.Pair) -> Text {
-        let numberText = Text(pair.number.text)
-            .font(AppTypography.brandDisplay(size: numberFontSize, relativeTo: .title3))
-            .monospacedDigit()
-        let unitText = Text(pair.unit.text)
-            .font(ReadingTrendMetricTypography.compactUnitFont(baseSize: unitFontSize))
-        return numberText + unitText
     }
 }
 

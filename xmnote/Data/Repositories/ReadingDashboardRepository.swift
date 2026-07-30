@@ -3,7 +3,7 @@ import GRDB
 
 /**
  * [INPUT]: 依赖 DatabaseManager 提供数据库连接，依赖 ObservationStream 桥接数据库观察流，依赖 ReadingDashboardSnapshot 领域模型
- * [OUTPUT]: 对外提供 ReadingDashboardRepository（ReadingDashboardRepositoryProtocol 的 GRDB 实现）
+ * [OUTPUT]: 对外提供 ReadingDashboardRepository（ReadingDashboardRepositoryProtocol 的 GRDB 实现，阅读时长统计按 Android 口径拆分跨日记录）
  * [POS]: Data 层在读首页聚合仓储实现，统一封装首页仪表盘读取与阅读目标写入
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -661,31 +661,58 @@ private extension ReadingDashboardRepository {
         ) ?? 0
     }
 
-    /// 读取某个时间区间内的阅读时长，兼容 fuzzy 与精确计时双时间源。
+    /// 读取某个时间区间内的阅读时长，兼容 fuzzy 与精确计时双时间源，并拆分跨日记录。
     nonisolated func fetchReadSeconds(_ db: Database, millisRange: ClosedRange<Int64>) throws -> Int {
-        // 汇总时间区间内的阅读秒数，兼容模糊阅读日和精确开始时间两套时间字段。
-        // 涉及表：`read_time_record`。
-        // 关键条件：`status = 3`、`is_deleted = 0`、`book_id != 0`；若 `fuzzy_read_date != 0` 则按模糊日期归档，否则按 `start_time` 落桶；时间字段均为毫秒时间戳。
+        // 读取时间区间内可能贡献阅读秒数的原始记录，随后按 Android splitCrossDayRecords 口径拆分跨日精确计时。
+        // 涉及表：`read_time_record` JOIN `book`。
+        // 关键条件：`status = 3`、`r.is_deleted = 0`、`book_id != 0`、`elapsed_seconds > 0`、书籍未删除；fuzzy 按日期命中，精确记录按 [start_time, end_time] 与区间重叠命中。
         // 返回用途：今日阅读卡、阅读时长趋势和其他需要区间计时聚合的首页口径。
-        let total = try Int64.fetchOne(
+        let rows = try Row.fetchAll(
             db,
             sql: """
-                SELECT COALESCE(SUM(elapsed_seconds), 0)
-                FROM read_time_record
-                WHERE is_deleted = 0
-                  AND status = 3
-                  AND book_id != 0
+                SELECT r.start_time AS start_time,
+                       r.end_time AS end_time,
+                       r.elapsed_seconds AS elapsed_seconds,
+                       r.fuzzy_read_date AS fuzzy_read_date
+                FROM read_time_record r
+                JOIN book b ON b.id = r.book_id AND b.is_deleted = 0
+                WHERE r.is_deleted = 0
+                  AND r.status = 3
+                  AND r.book_id != 0
+                  AND r.elapsed_seconds > 0
                   AND (
-                    (fuzzy_read_date != 0 AND fuzzy_read_date BETWEEN ? AND ?)
+                    (r.fuzzy_read_date != 0 AND r.fuzzy_read_date BETWEEN ? AND ?)
                     OR
-                    (fuzzy_read_date = 0 AND start_time BETWEEN ? AND ?)
+                    (r.fuzzy_read_date = 0 AND r.end_time >= ? AND r.start_time <= ?)
                   )
                 """,
             arguments: [
                 millisRange.lowerBound, millisRange.upperBound,
                 millisRange.lowerBound, millisRange.upperBound
             ]
-        ) ?? 0
+        )
+
+        var total: Int64 = 0
+        for row in rows {
+            guard let startTime: Int64 = row["start_time"],
+                  let endTime: Int64 = row["end_time"],
+                  let elapsedSeconds: Int64 = row["elapsed_seconds"],
+                  let fuzzyReadDate: Int64 = row["fuzzy_read_date"] else {
+                continue
+            }
+            let buckets = ReadTimingDurationSplitter.splitByDay(
+                startTime: startTime,
+                endTime: endTime,
+                elapsedSeconds: elapsedSeconds,
+                fuzzyReadDate: fuzzyReadDate,
+                calendar: calendar
+            )
+            for (day, seconds) in buckets {
+                let dayMs = ReadTimingDurationSplitter.dayMillis(day)
+                guard millisRange.contains(dayMs) else { continue }
+                total += seconds
+            }
+        }
         return Int(total)
     }
 

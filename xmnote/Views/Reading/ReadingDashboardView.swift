@@ -1,12 +1,12 @@
 import SwiftUI
 
 /**
- * [INPUT]: 依赖 RepositoryContainer 注入首页仓储，依赖 ReadingDashboardViewModel 驱动首页状态，依赖 ReadingHeatmapWidgetView 复用热力图卡
+ * [INPUT]: 依赖 RepositoryContainer 注入首页仓储，依赖 ReadingDashboardViewModel 驱动首页状态，依赖 ReadingHeatmapWidgetView 复用热力图卡，依赖外层回调打开书籍详情与阅读计时
  * [OUTPUT]: 对外提供 ReadingDashboardView（在读首页真实内容容器）
  * [POS]: Reading 模块首页入口，整合热力图、趋势卡、目标卡、继续阅读、最近在读与年度摘要
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
-/// ReadingDashboardView 是在读首页真实内容页，负责组装热力图、趋势卡、目标卡和年度摘要等主流程区块。
+/// ReadingDashboardView 是在读首页真实内容页，负责组装热力图、趋势卡、目标卡、阅读计时入口和年度摘要等主流程区块。
 struct ReadingDashboardView: View {
     @Environment(RepositoryContainer.self) private var repositories
     @Environment(\.scenePhase) private var scenePhase
@@ -18,16 +18,19 @@ struct ReadingDashboardView: View {
     let onAddBook: () -> Void
     let onOpenReadCalendar: (Date) -> Void
     let onOpenBookDetail: (Int64) -> Void
+    let onStartReading: (Int64) -> Void
 
     /// 注入首页对外回调，保证页面壳层不直接依赖具体导航实现。
     init(
         onAddBook: @escaping () -> Void = {},
         onOpenReadCalendar: @escaping (Date) -> Void = { _ in },
-        onOpenBookDetail: @escaping (Int64) -> Void = { _ in }
+        onOpenBookDetail: @escaping (Int64) -> Void = { _ in },
+        onStartReading: @escaping (Int64) -> Void = { _ in }
     ) {
         self.onAddBook = onAddBook
         self.onOpenReadCalendar = onOpenReadCalendar
         self.onOpenBookDetail = onOpenBookDetail
+        self.onStartReading = onStartReading
     }
 
     var body: some View {
@@ -38,6 +41,7 @@ struct ReadingDashboardView: View {
                     onAddBook: onAddBook,
                     onOpenReadCalendar: onOpenReadCalendar,
                     onOpenBookDetail: onOpenBookDetail,
+                    onStartReading: onStartReading,
                     isYearSummaryPresented: $isYearSummaryPresented
                 )
             } else {
@@ -71,6 +75,7 @@ private struct ReadingDashboardContent: View {
     let onAddBook: () -> Void
     let onOpenReadCalendar: (Date) -> Void
     let onOpenBookDetail: (Int64) -> Void
+    let onStartReading: (Int64) -> Void
     @Binding var isYearSummaryPresented: Bool
     @State private var readLoadingGate = LoadingGate()
 
@@ -96,7 +101,7 @@ private struct ReadingDashboardContent: View {
                     onEditDailyGoal: { viewModel.presentDailyGoalEditor() },
                     onResumeTap: {
                         if let resumeBook = viewModel.resumeBook {
-                            onOpenBookDetail(resumeBook.id)
+                            onStartReading(resumeBook.id)
                         } else {
                             onAddBook()
                         }

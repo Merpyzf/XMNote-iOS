@@ -63,6 +63,8 @@
 	<string>在使用百度 OCR 识别时会访问照片，用于选择待识别图片。</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>
 	<string>用于保存分享书单图片或微信读书登录二维码，便于继续分享或扫码授权导入。</string>
+	<key>NSSupportsLiveActivities</key>
+	<true/>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
 	<key>UILaunchScreen</key>
