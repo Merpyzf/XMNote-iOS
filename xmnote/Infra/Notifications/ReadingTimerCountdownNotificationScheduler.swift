@@ -4,7 +4,7 @@ import UserNotifications
 /**
  * [INPUT]: 依赖 UserNotifications 调度阅读倒计时完成提醒，依赖阅读计时记录 ID 做请求去重
  * [OUTPUT]: 对外提供 ReadingTimerCountdownNotificationScheduler，支持安排、取消单段阅读倒计时完成通知
- * [POS]: Infra/Notifications 系统通知桥接层，被 ReadingTimerViewModel 在倒计时运行、暂停、停止、保存与放弃时调用
+ * [POS]: Infra/Notifications 系统通知桥接层，被 ReadingTimerCoordinator 在倒计时运行、暂停、停止、保存与放弃时调用
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 

@@ -1,54 +1,58 @@
 import SwiftUI
 
 /**
- * [INPUT]: 依赖 ReadingTimerViewModel 驱动实时计时状态，依赖 ReadingTimerFinishSheet 收集结束确认字段，依赖外层 onReturnFromConflict 回退冲突来源，依赖 XMBookCover/TopBarBackButton/XMSystemAlert 复用系统级组件
- * [OUTPUT]: 对外提供 ReadingTimerView（阅读计时主页面，覆盖开始、暂停、继续、结束、保存与放弃入口）
- * [POS]: Reading 模块阅读计时任务页，由主导航 ReadingRoute.readingSession 与 readingSessionRecord 进入
+ * [INPUT]: 依赖环境注入的 ReadingTimerCoordinator 投影应用级计时状态，依赖 ReadingTimerFinishSheet 收集结束确认字段，依赖外层 onRequestDismiss 统一处理收起与后续导航，并依赖 XMBookCover/TopBarDismissButton/XMSystemAlert 复用系统级组件
+ * [OUTPUT]: 对外提供 ReadingTimerView 与 ReadingTimerDismissReason（全局阅读计时完整控制页及类型化关闭结果）
+ * [POS]: Reading 模块阅读计时模态控制页，只编排计时交互并将关闭原因交还呈现宿主，不拥有全局呈现生命周期
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
+
+/// 描述计时页结束当前模态任务的业务原因，供呈现宿主决定退场与后续导航。
+enum ReadingTimerDismissReason: Equatable {
+    case minimize
+    case completed
+    case discarded
+    case conflict
+    case openNote(bookId: Int64)
+}
 
 /// 阅读计时主页面，以书籍上下文、封面计时与单一主操作构成核心闭环。
 struct ReadingTimerView: View {
     let bookId: Int64
     let recordId: Int64?
-    let onReturnFromConflict: (() -> Void)?
-    let onAddNote: (Int64) -> Void
+    let onRequestDismiss: (ReadingTimerDismissReason) -> Void
 
-    @Environment(RepositoryContainer.self) private var repositories
-    @Environment(\.dismiss) private var dismiss
-    @Environment(\.scenePhase) private var scenePhase
-    @State private var viewModel: ReadingTimerViewModel?
-    @State private var bootstrapLoadingGate = LoadingGate()
+    @Environment(ReadingTimerCoordinator.self) private var coordinator
     @State private var shouldPresentStartSheet = false
-    @State private var shouldPresentExitConfirmation = false
     @State private var shouldReturnAfterRecoveryDismiss = false
+    @State private var pendingFinishDismissReason: ReadingTimerDismissReason?
 
-    /// 注入书籍 ID 与记书摘路由回调，避免计时页直接持有外层 NavigationPath。
+    /// 注入计时目标与单一关闭回调，避免计时页持有呈现状态或外层 NavigationPath。
     init(
         bookId: Int64,
         recordId: Int64? = nil,
-        onReturnFromConflict: (() -> Void)? = nil,
-        onAddNote: @escaping (Int64) -> Void = { _ in }
+        onRequestDismiss: @escaping (ReadingTimerDismissReason) -> Void
     ) {
         self.bookId = bookId
         self.recordId = recordId
-        self.onReturnFromConflict = onReturnFromConflict
-        self.onAddNote = onAddNote
+        self.onRequestDismiss = onRequestDismiss
     }
 
     var body: some View {
         ZStack {
             Color.surfacePage.ignoresSafeArea()
 
-            if let viewModel {
+            if coordinator.bookContext != nil || coordinator.activeSession != nil {
                 ReadingTimerContent(
-                    viewModel: viewModel,
-                    onMainAction: { handleMainAction(viewModel) },
-                    onStop: { Task { await viewModel.stopForSave() } },
-                    onAddNote: { onAddNote(bookId) }
+                    coordinator: coordinator,
+                    onMainAction: { handleMainAction(coordinator) },
+                    onStop: { Task { @MainActor in await coordinator.stopForSave() } },
+                    onAddNote: { onRequestDismiss(.openNote(bookId: bookId)) }
                 )
-            } else if bootstrapLoadingGate.isVisible {
+            } else if coordinator.isLoading {
                 LoadingStateView("正在准备阅读计时…", style: .card)
+            } else if let errorMessage = coordinator.errorMessage {
+                ReadingTimerUnavailableState(message: errorMessage)
             }
         }
         .navigationTitle("")
@@ -56,123 +60,94 @@ struct ReadingTimerView: View {
         .navigationBarBackButtonHidden(true)
         .toolbar {
             ToolbarItem(placement: .topBarLeading) {
-                TopBarBackButton {
-                    handleBack()
-                }
+                TopBarDismissButton(
+                    action: { onRequestDismiss(.minimize) },
+                    isEnabled: !coordinator.isWriting
+                )
             }
         }
-        .navigationPopGuard(
-            canPop: !(viewModel?.hasUnfinishedSession ?? false),
-            onBlockedAttempt: { shouldPresentExitConfirmation = true }
-        )
-        .task {
-            guard viewModel == nil else { return }
-            bootstrapLoadingGate.update(intent: .read)
-            let timerViewModel = ReadingTimerViewModel(repository: repositories.readingTimerRepository)
-            viewModel = timerViewModel
-            bootstrapLoadingGate.update(intent: .none)
+        .task(id: bootstrapIdentity) {
             if let recordId {
-                await timerViewModel.bootstrap(.record(recordId: recordId, fallbackBookId: bookId))
+                await coordinator.bootstrap(.record(recordId: recordId, fallbackBookId: bookId))
             } else {
-                await timerViewModel.bootstrap(.book(bookId))
+                await coordinator.bootstrap(.book(bookId))
             }
-        }
-        .onChange(of: scenePhase) { _, newValue in
-            guard let viewModel else { return }
-            switch newValue {
-            case .active:
-                Task { await viewModel.refreshAfterResume() }
-            case .inactive, .background:
-                Task { await viewModel.persistBeforeSuspension() }
-            @unknown default:
-                break
-            }
-        }
-        .onDisappear {
-            bootstrapLoadingGate.hideImmediately()
         }
         .sheet(
             isPresented: $shouldPresentStartSheet
         ) {
-            if let viewModel {
-                ReadingTimerStartSheet { draft in
-                    Task {
-                        await viewModel.start(countdownSeconds: draft.countdownSeconds)
-                    }
+            ReadingTimerStartSheet { draft in
+                Task { @MainActor in
+                    await coordinator.start(bookId: bookId, countdownSeconds: draft.countdownSeconds)
                 }
             }
         }
         .sheet(
             isPresented: Binding(
-                get: { viewModel?.shouldPresentFinishSheet ?? false },
+                get: { coordinator.shouldPresentFinishSheet },
                 set: { isPresented in
-                    guard let viewModel else { return }
-                    viewModel.shouldPresentFinishSheet = isPresented
+                    coordinator.shouldPresentFinishSheet = isPresented
+                }
+            ),
+            onDismiss: completePendingFinishDismissal
+        ) {
+            ReadingTimerFinishSheet(
+                coordinator: coordinator,
+                onSave: { draft in
+                    saveFinishDraft(draft, using: coordinator)
+                },
+                onDiscard: {
+                    Task { @MainActor in
+                        let didDiscard = await coordinator.discardCurrentSession()
+                        guard didDiscard else { return }
+                        pendingFinishDismissReason = .discarded
+                        coordinator.shouldPresentFinishSheet = false
+                    }
                 }
             )
-        ) {
-            if let viewModel {
-                ReadingTimerFinishSheet(
-                    viewModel: viewModel,
-                    onSave: { draft in
-                        saveFinishDraft(draft, using: viewModel)
-                    },
-                    onDiscard: {
-                        Task {
-                            let didDiscard = await viewModel.discardCurrentSession()
-                            guard didDiscard else { return }
-                            await MainActor.run {
-                                dismiss()
-                            }
-                        }
-                    }
-                )
-            }
         }
         .xmSystemAlert(
             isPresented: Binding(
-                get: { viewModel?.shouldPresentRecoveryPrompt ?? false },
+                get: { coordinator.shouldPresentRecoveryPrompt },
                 set: { isPresented in
                     guard !isPresented else { return }
-                    viewModel?.postponeRecoveryPrompt()
+                    coordinator.postponeRecoveryPrompt()
                 }
             ),
             descriptor: recoveryDescriptor,
             onDismiss: handleRecoveryPromptDismiss
         )
         .xmSystemAlert(
-            isPresented: $shouldPresentExitConfirmation,
-            descriptor: exitConfirmationDescriptor
-        )
-        .xmSystemAlert(
             isPresented: Binding(
-                get: { viewModel?.shouldPresentCountdownCompletionAlert ?? false },
+                get: { coordinator.shouldPresentCountdownCompletionAlert },
                 set: { isPresented in
                     guard !isPresented else { return }
-                    viewModel?.shouldPresentCountdownCompletionAlert = false
+                    coordinator.shouldPresentCountdownCompletionAlert = false
                 }
             ),
             descriptor: countdownCompletionDescriptor
         )
     }
 
+    private var bootstrapIdentity: String {
+        if let recordId {
+            return "record-\(recordId)-book-\(bookId)"
+        }
+        return "book-\(bookId)"
+    }
+
     private var recoveryDescriptor: XMSystemAlertDescriptor? {
-        guard let viewModel, let session = viewModel.pendingRecoverySession else { return nil }
+        guard let session = coordinator.pendingRecoverySession else { return nil }
         return XMSystemAlertDescriptor(
             title: recoveryTitle(for: session),
             message: recoveryMessage(for: session),
             actions: [
-                XMSystemAlertAction(title: "继续计时") {
-                    viewModel.acceptRecovery()
+                XMSystemAlertAction(title: "查看计时") {
+                    coordinator.acceptRecovery()
                 },
-                XMSystemAlertAction(title: "放弃本次", role: .destructive) {
-                    Task {
-                        await viewModel.discardCurrentSession()
-                    }
-                },
-                XMSystemAlertAction(title: "返回", role: .cancel) {
+                XMSystemAlertAction(title: "取消", role: .cancel) {
                     shouldReturnAfterRecoveryDismiss = true
-                    viewModel.clearRecoveryConflictBeforeReturn()
+                    coordinator.clearRecoveryConflictBeforeReturn()
                     Task { @MainActor in
                         await Task.yield()
                         performPendingRecoveryReturn()
@@ -213,49 +188,18 @@ struct ReadingTimerView: View {
         return session.elapsedSeconds + delta
     }
 
-    private var exitConfirmationDescriptor: XMSystemAlertDescriptor? {
-        guard let viewModel, viewModel.hasUnfinishedSession else { return nil }
-        return XMSystemAlertDescriptor(
-            title: "本次阅读尚未保存",
-            message: "离开前可以保存记录，或放弃这次计时。",
-            actions: [
-                XMSystemAlertAction(title: "继续阅读", role: .cancel) { },
-                XMSystemAlertAction(title: "保存记录") {
-                    presentFinishSheet(using: viewModel)
-                },
-                XMSystemAlertAction(title: "放弃本次", role: .destructive) {
-                    Task {
-                        let didDiscard = await viewModel.discardCurrentSession()
-                        guard didDiscard else { return }
-                        await MainActor.run {
-                            dismiss()
-                        }
-                    }
-                }
-            ]
-        )
-    }
-
     private var countdownCompletionDescriptor: XMSystemAlertDescriptor? {
-        guard let viewModel, viewModel.isStoppedPendingSave else { return nil }
+        guard coordinator.isStoppedPendingSave else { return nil }
         return XMSystemAlertDescriptor(
             title: "计时结束",
             message: "本次阅读倒计时已完成，可以保存这段阅读记录。",
             actions: [
                 XMSystemAlertAction(title: "保存记录") {
-                    viewModel.shouldPresentCountdownCompletionAlert = false
-                    viewModel.shouldPresentFinishSheet = true
+                    coordinator.shouldPresentCountdownCompletionAlert = false
+                    coordinator.shouldPresentFinishSheet = true
                 }
             ]
         )
-    }
-
-    private func handleBack() {
-        guard viewModel?.hasUnfinishedSession == true else {
-            dismiss()
-            return
-        }
-        shouldPresentExitConfirmation = true
     }
 
     private func handleRecoveryPromptDismiss() {
@@ -265,57 +209,75 @@ struct ReadingTimerView: View {
     private func performPendingRecoveryReturn() {
         guard shouldReturnAfterRecoveryDismiss else { return }
         shouldReturnAfterRecoveryDismiss = false
-        if let onReturnFromConflict {
-            onReturnFromConflict()
-        } else {
-            dismiss()
-        }
+        onRequestDismiss(.conflict)
     }
 
-    private func handleMainAction(_ viewModel: ReadingTimerViewModel) {
-        Task {
-            if viewModel.canStart {
+    /// 按当前状态分派开始、暂停、继续或保存；Task 继承 MainActor，由 Coordinator 串行处理并忽略失效状态。
+    private func handleMainAction(_ coordinator: ReadingTimerCoordinator) {
+        Task { @MainActor in
+            if coordinator.canStart {
                 shouldPresentStartSheet = true
-            } else if viewModel.canPause {
-                await viewModel.pause()
-            } else if viewModel.canResume {
-                await viewModel.resume()
-            } else if viewModel.isStoppedPendingSave {
-                viewModel.shouldPresentFinishSheet = true
+            } else if coordinator.canPause {
+                await coordinator.pause()
+            } else if coordinator.canResume {
+                await coordinator.resume()
+            } else if coordinator.isStoppedPendingSave {
+                coordinator.shouldPresentFinishSheet = true
             }
         }
     }
 
-    private func presentFinishSheet(using viewModel: ReadingTimerViewModel) {
-        if viewModel.isStoppedPendingSave {
-            viewModel.shouldPresentFinishSheet = true
-        } else {
-            Task { await viewModel.stopForSave() }
-        }
-    }
-
-    private func saveFinishDraft(_ draft: ReadingTimerFinishDraft, using viewModel: ReadingTimerViewModel) {
-        Task {
-            await viewModel.saveFinishedRecord(
+    /// 在 MainActor 发起保存，只有 Coordinator 确认进入 finished 后才请求宿主关闭，失败时保留当前 Sheet 重试。
+    private func saveFinishDraft(_ draft: ReadingTimerFinishDraft, using coordinator: ReadingTimerCoordinator) {
+        Task { @MainActor in
+            await coordinator.saveFinishedRecord(
                 position: draft.position,
                 insight: draft.insight,
                 markReadDone: draft.markReadDone
             )
-            guard viewModel.status == .finished else { return }
-            dismiss()
+            guard coordinator.status == .finished else { return }
+            pendingFinishDismissReason = .completed
+            coordinator.shouldPresentFinishSheet = false
         }
+    }
+
+    /// 等待结束确认 Sheet 完全退场后再关闭外层页面，避免嵌套模态与系统 Zoom 竞争。
+    private func completePendingFinishDismissal() {
+        guard let reason = pendingFinishDismissReason else { return }
+        pendingFinishDismissReason = nil
+        onRequestDismiss(reason)
     }
 }
 
-private extension ReadingTimerViewModel {
-    var hasUnfinishedSession: Bool {
-        activeSession?.status.isUnfinished == true || pendingRecoverySession != nil
+/// 在深链记录与兜底书籍均不可用时提供可感知反馈，并保留顶部收起出口。
+private struct ReadingTimerUnavailableState: View {
+    let message: String
+
+    var body: some View {
+        VStack(spacing: Spacing.base) {
+            Image(systemName: "clock.badge.exclamationmark")
+                .font(.title)
+                .foregroundStyle(Color.textSecondary)
+                .accessibilityHidden(true)
+
+            Text("无法打开阅读计时")
+                .font(AppTypography.title3Semibold)
+                .foregroundStyle(Color.textPrimary)
+
+            Text(message)
+                .font(AppTypography.body)
+                .foregroundStyle(Color.textSecondary)
+                .multilineTextAlignment(.center)
+        }
+        .padding(.horizontal, Spacing.screenEdge)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .accessibilityElement(children: .combine)
     }
 }
 
 /// ReadingTimerContent 负责主计时页面的视觉编排，隔离外层导航、弹窗和生命周期处理。
 private struct ReadingTimerContent: View {
-    @Bindable var viewModel: ReadingTimerViewModel
+    @Bindable var coordinator: ReadingTimerCoordinator
     let onMainAction: () -> Void
     let onStop: () -> Void
     let onAddNote: () -> Void
@@ -323,7 +285,7 @@ private struct ReadingTimerContent: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var book: ReadingTimerBookContext? {
-        viewModel.bookContext
+        coordinator.bookContext
     }
 
     var body: some View {
@@ -337,7 +299,7 @@ private struct ReadingTimerContent: View {
             ZStack(alignment: .top) {
                 ReadingTimerMinimalBackground(
                     book: book,
-                    status: viewModel.status,
+                    status: coordinator.status,
                     reduceMotion: reduceMotion
                 )
 
@@ -362,8 +324,8 @@ private struct ReadingTimerContent: View {
             }
             .frame(width: proxy.size.width, height: proxy.size.height, alignment: .top)
         }
-        .animation(reduceMotion ? nil : .smooth(duration: 0.28), value: viewModel.status)
-        .animation(reduceMotion ? nil : .snappy(duration: 0.18), value: viewModel.isWriting)
+        .animation(reduceMotion ? nil : .smooth(duration: 0.28), value: coordinator.status)
+        .animation(reduceMotion ? nil : .snappy(duration: 0.18), value: coordinator.isWriting)
     }
 
     private func contentStack(coverSize: CGSize) -> some View {
@@ -371,9 +333,9 @@ private struct ReadingTimerContent: View {
             ReadingTimerMinimalStage(
                 book: book,
                 coverSize: coverSize,
-                displayTitle: viewModel.timerDisplayTitle,
-                displaySeconds: viewModel.displaySeconds,
-                secondaryTimerText: viewModel.secondaryTimerText,
+                displayTitle: coordinator.timerDisplayTitle,
+                displaySeconds: coordinator.displaySeconds,
+                secondaryTimerText: coordinator.secondaryTimerText,
                 reduceMotion: reduceMotion
             )
             .padding(.horizontal, Spacing.screenEdge)
@@ -381,10 +343,10 @@ private struct ReadingTimerContent: View {
             ReadingTimerGlassControlDock(
                 mainActionTitle: mainActionTitle,
                 mainActionIcon: mainActionIcon,
-                isMainActionEnabled: mainActionEnabled && !viewModel.isWriting,
-                isWriting: viewModel.isWriting,
-                canStop: viewModel.canStop && !viewModel.isWriting,
-                isPendingSave: viewModel.isStoppedPendingSave,
+                isMainActionEnabled: mainActionEnabled && !coordinator.isWriting,
+                isWriting: coordinator.isWriting,
+                canStop: coordinator.canStop && !coordinator.isWriting,
+                isPendingSave: coordinator.isStoppedPendingSave,
                 onMainAction: onMainAction,
                 onStop: onStop,
                 onAddNote: onAddNote
@@ -395,12 +357,12 @@ private struct ReadingTimerContent: View {
 
     @ViewBuilder
     private var errorBanner: some View {
-        if let errorMessage = viewModel.errorMessage {
+        if let errorMessage = coordinator.errorMessage {
             VStack {
                 ReadingDashboardInlineBanner(
                     message: errorMessage,
                     actionTitle: "关闭",
-                    onAction: { viewModel.errorMessage = nil }
+                    onAction: { coordinator.errorMessage = nil }
                 )
                 .padding(.horizontal, Spacing.screenEdge)
                 .padding(.top, Spacing.base)
@@ -413,23 +375,23 @@ private struct ReadingTimerContent: View {
     }
 
     private var mainActionTitle: String {
-        if viewModel.isWriting { return "处理中" }
-        if viewModel.isStoppedPendingSave { return "保存记录" }
-        if viewModel.canStart { return "开始" }
-        if viewModel.canPause { return "暂停" }
-        if viewModel.canResume { return "继续" }
+        if coordinator.isWriting { return "处理中" }
+        if coordinator.isStoppedPendingSave { return "保存记录" }
+        if coordinator.canStart { return "开始" }
+        if coordinator.canPause { return "暂停" }
+        if coordinator.canResume { return "继续" }
         return "开始"
     }
 
     private var mainActionIcon: String {
-        if viewModel.isWriting { return "hourglass" }
-        if viewModel.canPause { return "pause.fill" }
-        if viewModel.isStoppedPendingSave { return "checkmark" }
+        if coordinator.isWriting { return "hourglass" }
+        if coordinator.canPause { return "pause.fill" }
+        if coordinator.isStoppedPendingSave { return "checkmark" }
         return "play.fill"
     }
 
     private var mainActionEnabled: Bool {
-        viewModel.canStart || viewModel.canPause || viewModel.canResume || viewModel.isStoppedPendingSave
+        coordinator.canStart || coordinator.canPause || coordinator.canResume || coordinator.isStoppedPendingSave
     }
 }
 
@@ -451,7 +413,6 @@ private enum ReadingTimerLayout {
         bottomTrailing: CornerRadius.blockLarge,
         topTrailing: CornerRadius.blockLarge
     )
-
     static func contentBottomPadding(bottomSafeArea: CGFloat) -> CGFloat {
         max(bottomSafeArea, Spacing.base) + Spacing.section * 2
     }

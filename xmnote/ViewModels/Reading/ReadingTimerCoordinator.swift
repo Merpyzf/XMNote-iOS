@@ -2,16 +2,35 @@ import Foundation
 import Observation
 
 /**
- * [INPUT]: 依赖 ReadingTimerRepositoryProtocol 提供阅读计时记录读写，依赖 ReadingTimerSession 领域模型承接恢复与保存状态
- * [OUTPUT]: 对外提供 ReadingTimerViewModel（实时计时、暂停/继续/停止、保存/放弃与恢复编排）
- * [POS]: ViewModels/Reading 的阅读计时状态中枢，被 ReadingTimerView、结束确认 Sheet 与场景生命周期回调消费
+ * [INPUT]: 依赖 ReadingTimerRepositoryProtocol 提供阅读计时记录读写，依赖 ReadingTimerSession 领域模型与 UserDefaults 当前记录锚点承接跨页面、跨冷启动恢复
+ * [OUTPUT]: 对外提供 ReadingTimerCoordinator 与 ReadingTimerPresentationState（应用级实时计时、暂停/继续/停止、保存/放弃与数据库调和）
+ * [POS]: ViewModels/Reading 的应用级阅读计时状态中枢，由 App 根层持有并被计时页、全局迷你条、结束确认 Sheet 与场景生命周期共同消费
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
+/// 应用内阅读计时的统一展示状态，所有界面只投影此状态，不各自维护业务状态机。
+enum ReadingTimerPresentationState: Equatable {
+    case idle
+    case reconciling
+    case running(ReadingTimerSession)
+    case paused(ReadingTimerSession)
+    case stoppedPendingSave(ReadingTimerSession)
+    case recoverableError(ReadingTimerSession?, message: String)
+}
+
+/// 触发数据库调和的来源，便于把生命周期、外部控制与数据源切换收口到同一入口。
+enum ReadingTimerRefreshReason: Equatable {
+    case appLaunch
+    case foreground
+    case dataSourceChanged
+    case externalMutation(recordId: Int64?)
+    case staleWrite
+}
+
 @MainActor
 @Observable
-/// 阅读计时状态中枢，负责 App 内计时展示、状态持久化和未完成记录恢复。
-final class ReadingTimerViewModel {
+/// 应用级阅读计时状态中枢，负责跨页面计时、状态持久化和数据库调和。
+final class ReadingTimerCoordinator {
     /// 计时页加载模式，区分普通书籍入口、精确记录入口与全局恢复入口。
     enum BootstrapMode: Equatable {
         case book(Int64)
@@ -31,12 +50,15 @@ final class ReadingTimerViewModel {
     var shouldPresentRecoveryPrompt = false
     var shouldPresentFinishSheet = false
     var shouldPresentCountdownCompletionAlert = false
+    var backgroundCountdownCompletionEvent: UUID?
+    var longDurationReminderEvent: UUID?
+    var isTimerInterfacePresented = false
 
     private let repository: any ReadingTimerRepositoryProtocol
     private let notificationScheduler: ReadingTimerCountdownNotificationScheduler
+    private let persistenceStore: ReadingTimerPersistenceStore
     private let tickIntervalNanoseconds: UInt64 = 1_000_000_000
     private let snapshotPersistInterval: TimeInterval = 15
-    private var bootstrapMode: BootstrapMode?
     private var baseElapsedSeconds: Int64 = 0
     private var runningAnchorDate: Date?
     private var pauseAnchorDate: Date?
@@ -44,14 +66,48 @@ final class ReadingTimerViewModel {
     private var snapshotPersistTask: Task<Void, Never>?
     private var lastSnapshotPersistDate: Date?
     private var isCompletingCountdown = false
+    private var longDurationReminderRecordId: Int64?
 
     /// 注入阅读计时仓储，等待页面触发 bootstrap 后再读取或创建计时记录。
     init(
         repository: any ReadingTimerRepositoryProtocol,
-        notificationScheduler: ReadingTimerCountdownNotificationScheduler? = nil
+        notificationScheduler: ReadingTimerCountdownNotificationScheduler? = nil,
+        userDefaults: UserDefaults = .standard
     ) {
         self.repository = repository
         self.notificationScheduler = notificationScheduler ?? .shared
+        self.persistenceStore = ReadingTimerPersistenceStore(userDefaults: userDefaults)
+    }
+
+    var presentationState: ReadingTimerPresentationState {
+        if isLoading {
+            return .reconciling
+        }
+        if let errorMessage {
+            return .recoverableError(activeSession, message: errorMessage)
+        }
+        guard let activeSession else {
+            return .idle
+        }
+        switch activeSession.status {
+        case .running:
+            return .running(activeSession)
+        case .paused:
+            return .paused(activeSession)
+        case .stoppedPendingSave:
+            return .stoppedPendingSave(activeSession)
+        case .finished:
+            return .idle
+        }
+    }
+
+    var hasUnfinishedSession: Bool {
+        activeSession?.status.isUnfinished == true || pendingRecoverySession != nil
+    }
+
+    var activeRecordId: Int64? {
+        guard activeSession?.status.isUnfinished == true else { return nil }
+        return activeSession?.id
     }
 
     var isIdle: Bool {
@@ -111,10 +167,28 @@ final class ReadingTimerViewModel {
         return "已阅读 \(ReadDurationFormatter.format(seconds: elapsedSeconds))"
     }
 
+    /// 返回指定时刻应展示的已读秒数；运行态由时间戳锚点推导，不要求界面持有独立 ticker。
+    func elapsedSeconds(at date: Date = Date()) -> Int64 {
+        currentElapsedSeconds(at: date)
+    }
+
+    /// 返回指定时刻的主计时数字；倒计时模式展示剩余时间，正计时模式展示已读时间。
+    func displaySeconds(at date: Date = Date()) -> Int64 {
+        guard let session = activeSession, session.countdownSeconds > 0 else {
+            return elapsedSeconds(at: date)
+        }
+        return max(0, session.countdownSeconds - min(elapsedSeconds(at: date), session.countdownSeconds))
+    }
+
+    /// 用户首次离开运行中或暂停中的计时页时消费一次全局继续提示。
+    func consumeGlobalContinuationTipIfNeeded() -> Bool {
+        guard status == .running || status == .paused else { return false }
+        return persistenceStore.consumeGlobalContinuationTip()
+    }
+
     /// 初始化指定入口；同书未完成记录直接恢复，异书未完成记录才进入冲突提示。
     /// 并发语义：方法运行在 MainActor；Repository 异步读取可被任务取消，取消后不写回状态。
     func bootstrap(_ mode: BootstrapMode) async {
-        bootstrapMode = mode
         isLoading = true
         errorMessage = nil
         defer { isLoading = false }
@@ -123,6 +197,54 @@ final class ReadingTimerViewModel {
             try await resolveBootstrap(mode, at: Date())
         } catch {
             errorMessage = "阅读计时加载失败：\(error.localizedDescription)"
+        }
+    }
+
+    /// 按触发来源重新读取数据库真相；优先精确恢复当前记录或持久化锚点，再回退到 Android 对齐的运行/暂停查询。
+    /// 并发语义：方法运行在 MainActor；多次触发允许串行覆盖，最终状态始终来自最后一次成功读取的数据库快照。
+    func refresh(reason: ReadingTimerRefreshReason) async {
+        let shouldExposeReconciling = reason == .appLaunch || reason == .dataSourceChanged
+        if shouldExposeReconciling {
+            isLoading = true
+        }
+        errorMessage = nil
+        defer {
+            if shouldExposeReconciling {
+                isLoading = false
+            }
+        }
+
+        do {
+            if let session = try await fetchGlobalUnfinishedSession() {
+                applyRecoveredSession(session, at: Date())
+                await syncRecoveredLiveActivity(session)
+            } else {
+                clearActiveSession(keepingBookContext: false)
+            }
+        } catch {
+            errorMessage = "计时状态恢复失败：\(error.localizedDescription)"
+        }
+    }
+
+    /// 以书籍 ID 作为统一命令入口开始计时；若已有全局未完成会话，只展示冲突并拒绝创建第二段记录。
+    /// 并发语义：先在 MainActor 调和书籍上下文与现有会话，再复用单写入入口创建记录。
+    func start(bookId: Int64, countdownSeconds: Int64 = 0) async {
+        do {
+            let context = try await repository.fetchBookContext(bookId: bookId)
+            if let unfinished = try await fetchGlobalUnfinishedSession() {
+                if unfinished.book.id == bookId {
+                    applyRecoveredSession(unfinished, at: Date())
+                } else {
+                    bookContext = context
+                    presentRecoveryConflict(unfinished)
+                }
+                return
+            }
+            clearActiveSession(keepingBookContext: false)
+            bookContext = context
+            await start(countdownSeconds: countdownSeconds)
+        } catch {
+            errorMessage = "开始阅读失败：\(error.localizedDescription)"
         }
     }
 
@@ -150,6 +272,7 @@ final class ReadingTimerViewModel {
                 session: session,
                 elapsedSeconds: elapsedSeconds
             )
+            postSessionDidChange(recordId: session.id)
         } catch {
             errorMessage = "开始阅读失败：\(error.localizedDescription)"
         }
@@ -241,6 +364,7 @@ final class ReadingTimerViewModel {
             applyFinishedSession(finished)
             notificationScheduler.cancelCompletion(recordId: session.id)
             NotificationCenter.default.post(name: .readingTimerRecordsDidChange, object: nil)
+            postSessionDidChange(recordId: session.id)
             await ReadingTimerLiveActivityController.shared.end(
                 recordId: session.id,
                 finalSession: finished,
@@ -267,6 +391,8 @@ final class ReadingTimerViewModel {
             try await repository.discardSession(recordId: recordId)
             clearActiveSession(keepingBookContext: true)
             notificationScheduler.cancelCompletion(recordId: recordId)
+            NotificationCenter.default.post(name: .readingTimerRecordsDidChange, object: nil)
+            postSessionDidChange(recordId: recordId)
             Task {
                 await ReadingTimerLiveActivityController.shared.end(recordId: recordId)
             }
@@ -290,10 +416,12 @@ final class ReadingTimerViewModel {
         )
         let syncedElapsedSeconds = elapsedSeconds
         Task {
-            await ReadingTimerLiveActivityController.shared.start(
-                session: session,
-                elapsedSeconds: syncedElapsedSeconds
-            )
+            if session.status == .running || session.status == .paused {
+                await ReadingTimerLiveActivityController.shared.start(
+                    session: session,
+                    elapsedSeconds: syncedElapsedSeconds
+                )
+            }
         }
     }
 
@@ -309,7 +437,7 @@ final class ReadingTimerViewModel {
     }
 
     /// App 即将进入后台或非活跃状态时持久化当前运行快照。
-    /// 并发语义：该方法由场景生命周期调用；只写当前 ViewModel 管理的未完成记录，失败时保留错误给前台恢复后展示。
+    /// 并发语义：该方法由场景生命周期调用；只写全局 Coordinator 管理的未完成记录，失败时保留错误给前台恢复后展示。
     func persistBeforeSuspension() async {
         guard let session = activeSession, status?.isUnfinished == true else { return }
         let now = Date()
@@ -326,10 +454,14 @@ final class ReadingTimerViewModel {
                 )
             )
             applyActiveSession(snapshot, calibratedAt: now)
-            await ReadingTimerLiveActivityController.shared.update(
-                session: snapshot,
-                elapsedSeconds: elapsedSeconds
-            )
+            if snapshot.status == .stoppedPendingSave {
+                await ReadingTimerLiveActivityController.shared.end(recordId: snapshot.id)
+            } else {
+                await ReadingTimerLiveActivityController.shared.update(
+                    session: snapshot,
+                    elapsedSeconds: elapsedSeconds
+                )
+            }
         } catch ReadingTimerError.staleSessionState {
             await refreshSessionAfterStaleWrite(recordId: session.id)
         } catch {
@@ -338,34 +470,13 @@ final class ReadingTimerViewModel {
     }
 
     /// App 回到前台后重新读取数据库中的记录并做时间戳校准。
-    /// 并发语义：优先恢复当前 recordId；新深链页尚无 activeSession 时，会按 bootstrapMode 重新解析入口。
+    /// 并发语义：统一委托全局调和入口，避免页面入口模式覆盖根级未完成记录。
     func refreshAfterResume() async {
-        do {
-            if let recordId = activeSession?.id {
-                try await refreshActiveSession(recordId: recordId, at: Date())
-                return
-            }
-            if let pendingRecordId = pendingRecoverySession?.id {
-                if let session = try await repository.fetchSession(recordId: pendingRecordId),
-                   session.status.isUnfinished {
-                    pendingRecoverySession = session
-                    shouldPresentRecoveryPrompt = true
-                } else {
-                    pendingRecoverySession = nil
-                    shouldPresentRecoveryPrompt = false
-                }
-                return
-            }
-            if let bootstrapMode {
-                try await resolveBootstrap(bootstrapMode, at: Date())
-            }
-        } catch {
-            errorMessage = "计时状态恢复失败：\(error.localizedDescription)"
-        }
+        await refresh(reason: .foreground)
     }
 }
 
-private extension ReadingTimerViewModel {
+private extension ReadingTimerCoordinator {
     /// 解析计时页入口并把 UI 对齐到数据库中唯一真实的未完成记录。
     /// 并发语义：运行在 MainActor；Repository 读取完成前若外层任务取消，后续状态写回由调用任务自然终止。
     func resolveBootstrap(_ mode: BootstrapMode, at date: Date) async throws {
@@ -373,7 +484,7 @@ private extension ReadingTimerViewModel {
         case .book(let bookId):
             let context = try await repository.fetchBookContext(bookId: bookId)
             bookContext = context
-            if let active = try await repository.fetchActiveSession() {
+            if let active = try await fetchGlobalUnfinishedSession() {
                 if active.book.id == bookId {
                     applyRecoveredSession(
                         active,
@@ -388,6 +499,11 @@ private extension ReadingTimerViewModel {
                 clearActiveSession(keepingBookContext: true)
             }
         case .record(let recordId, let fallbackBookId):
+            if let globalSession = try await fetchGlobalUnfinishedSession(),
+               globalSession.id != recordId {
+                presentRecoveryConflict(globalSession)
+                return
+            }
             if let session = try await repository.fetchSession(recordId: recordId),
                session.status.isUnfinished {
                 applyRecoveredSession(
@@ -401,17 +517,37 @@ private extension ReadingTimerViewModel {
                 errorMessage = "这段计时已结束或不可用"
             }
         case .recoverLatest:
-            if let active = try await repository.fetchActiveSession() {
+            if let active = try await fetchGlobalUnfinishedSession() {
                 applyRecoveredSession(
                     active,
                     at: date,
-                    presentsPendingSave: active.status == .stoppedPendingSave
+                    presentsPendingSave: false
                 )
                 await syncRecoveredLiveActivity(active)
             } else {
                 clearActiveSession(keepingBookContext: false)
             }
         }
+    }
+
+    /// 精确读取应用持久化的当前未完成记录，锚点失效后才回退到 Android 对齐的 running/paused 查询。
+    /// 并发语义：Repository 读取在其数据库队列执行；锚点清理由 MainActor 串行完成，不改变数据库数据。
+    func fetchGlobalUnfinishedSession() async throws -> ReadingTimerSession? {
+        if let activeSession, activeSession.status.isUnfinished,
+           let refreshed = try await repository.fetchSession(recordId: activeSession.id),
+           refreshed.status.isUnfinished {
+            return refreshed
+        }
+
+        if let anchoredRecordId = persistenceStore.unfinishedRecordId {
+            if let anchored = try await repository.fetchSession(recordId: anchoredRecordId),
+               anchored.status.isUnfinished {
+                return anchored
+            }
+            persistenceStore.clearUnfinishedRecordId(ifMatches: anchoredRecordId)
+        }
+
+        return try await repository.fetchActiveSession()
     }
 
     /// 精确记录入口失效时回退到书籍 idle 态，避免重新创建 0 秒假会话。
@@ -428,22 +564,9 @@ private extension ReadingTimerViewModel {
 
     /// 展示异书计时冲突，不接管当前页面书籍上下文。
     func presentRecoveryConflict(_ session: ReadingTimerSession) {
-        let currentBook = bookContext
-        stopTicker()
-        snapshotPersistTask?.cancel()
-        snapshotPersistTask = nil
-        activeSession = nil
         pendingRecoverySession = session
         shouldPresentRecoveryPrompt = true
         shouldPresentFinishSheet = false
-        status = nil
-        elapsedSeconds = 0
-        pausedDurationMillis = 0
-        baseElapsedSeconds = 0
-        runningAnchorDate = nil
-        pauseAnchorDate = nil
-        lastSnapshotPersistDate = nil
-        bookContext = currentBook
     }
 
     /// 将未完成记录应用到页面，并根据时间戳校准运行中时长。
@@ -470,6 +593,9 @@ private extension ReadingTimerViewModel {
         status = session.status
         pausedDurationMillis = session.pausedDurationMillis
         shouldPresentCountdownCompletionAlert = false
+        if session.status.isUnfinished {
+            persistenceStore.saveUnfinishedRecordId(session.id)
+        }
 
         switch session.status {
         case .running:
@@ -525,11 +651,14 @@ private extension ReadingTimerViewModel {
         pausedDurationMillis = session.pausedDurationMillis
         runningAnchorDate = nil
         pauseAnchorDate = nil
+        persistenceStore.clearUnfinishedRecordId(ifMatches: session.id)
+        longDurationReminderRecordId = nil
     }
 
     /// 清空当前会话；保留书籍上下文可让用户立即重新开始同一本书。
     func clearActiveSession(keepingBookContext: Bool) {
         let currentBook = bookContext
+        let recordId = activeSession?.id
         stopTicker()
         snapshotPersistTask?.cancel()
         snapshotPersistTask = nil
@@ -546,6 +675,8 @@ private extension ReadingTimerViewModel {
         pauseAnchorDate = nil
         lastSnapshotPersistDate = nil
         bookContext = keepingBookContext ? currentBook : nil
+        persistenceStore.clearUnfinishedRecordId(ifMatches: recordId)
+        longDurationReminderRecordId = nil
     }
 
     /// 写入暂停/继续/停止等用户触发的即时快照。
@@ -578,10 +709,15 @@ private extension ReadingTimerViewModel {
             )
             applyActiveSession(snapshot, calibratedAt: interruptAt)
             lastSnapshotPersistDate = interruptAt
-            await ReadingTimerLiveActivityController.shared.update(
-                session: snapshot,
-                elapsedSeconds: targetElapsedSeconds
-            )
+            if snapshot.status == .stoppedPendingSave {
+                await ReadingTimerLiveActivityController.shared.end(recordId: snapshot.id)
+            } else {
+                await ReadingTimerLiveActivityController.shared.update(
+                    session: snapshot,
+                    elapsedSeconds: targetElapsedSeconds
+                )
+            }
+            postSessionDidChange(recordId: snapshot.id)
         } catch ReadingTimerError.staleSessionState {
             await refreshSessionAfterStaleWrite(recordId: recordId)
         } catch {
@@ -594,6 +730,7 @@ private extension ReadingTimerViewModel {
     func refreshSessionAfterStaleWrite(recordId: Int64) async {
         do {
             try await refreshActiveSession(recordId: recordId, at: Date())
+            postSessionDidChange(recordId: recordId)
         } catch {
             errorMessage = "计时状态刷新失败：\(error.localizedDescription)"
         }
@@ -605,10 +742,14 @@ private extension ReadingTimerViewModel {
         if let session = try await repository.fetchSession(recordId: recordId),
            session.status.isUnfinished {
             applyRecoveredSession(session, at: date)
-            await ReadingTimerLiveActivityController.shared.update(
-                session: session,
-                elapsedSeconds: elapsedSeconds
-            )
+            if session.status == .stoppedPendingSave {
+                await ReadingTimerLiveActivityController.shared.end(recordId: session.id)
+            } else {
+                await ReadingTimerLiveActivityController.shared.update(
+                    session: session,
+                    elapsedSeconds: elapsedSeconds
+                )
+            }
         } else {
             clearActiveSession(keepingBookContext: true)
             await ReadingTimerLiveActivityController.shared.end(recordId: recordId)
@@ -618,7 +759,12 @@ private extension ReadingTimerViewModel {
     /// 恢复入口成功接管会话后同步系统展示；Activity 不存在时允许重建，但数据库仍是唯一真相。
     /// 并发语义：运行在 MainActor；ActivityKit 失败会在控制器内吞掉，不回滚 ViewModel 状态。
     func syncRecoveredLiveActivity(_ session: ReadingTimerSession) async {
-        guard session.status.isUnfinished else { return }
+        guard session.status == .running || session.status == .paused else {
+            if session.status == .stoppedPendingSave {
+                await ReadingTimerLiveActivityController.shared.end(recordId: session.id)
+            }
+            return
+        }
         await ReadingTimerLiveActivityController.shared.start(
             session: session,
             elapsedSeconds: elapsedSeconds
@@ -656,6 +802,11 @@ private extension ReadingTimerViewModel {
                 await self?.completeCountdownIfNeeded(for: session, at: now)
             }
             return
+        }
+        if elapsedSeconds >= 8 * 60 * 60,
+           longDurationReminderRecordId != session.id {
+            longDurationReminderRecordId = session.id
+            longDurationReminderEvent = UUID()
         }
         persistRunningSnapshotIfNeeded(at: now)
     }
@@ -774,7 +925,11 @@ private extension ReadingTimerViewModel {
             failureMessage: "倒计时结束处理失败"
         )
         if status == .stoppedPendingSave {
-            shouldPresentCountdownCompletionAlert = true
+            if isTimerInterfacePresented {
+                shouldPresentCountdownCompletionAlert = true
+            } else {
+                backgroundCountdownCompletionEvent = UUID()
+            }
             notificationScheduler.cancelCompletion(recordId: session.id)
         }
     }
@@ -796,5 +951,53 @@ private extension ReadingTimerViewModel {
             bookTitle: session.book.name,
             remainingSeconds: remainingSeconds
         )
+    }
+
+    /// 通知根层与 Live Activity 外部写入使用同一条刷新事件；对象携带精确记录 ID。
+    func postSessionDidChange(recordId: Int64) {
+        NotificationCenter.default.post(
+            name: .readingTimerSessionDidChange,
+            object: NSNumber(value: recordId)
+        )
+    }
+}
+
+/// iOS 侧仅持久化当前未完成记录的精确 ID 与一次性引导，不改变 Android 对齐的数据库结构和状态值。
+private struct ReadingTimerPersistenceStore {
+    private enum Key {
+        static let unfinishedRecordId = "xmnote.readingTimer.currentUnfinishedRecordId"
+        static let didShowGlobalContinuationTip = "xmnote.readingTimer.didShowGlobalContinuationTip"
+    }
+
+    let userDefaults: UserDefaults
+
+    var unfinishedRecordId: Int64? {
+        guard let value = userDefaults.object(forKey: Key.unfinishedRecordId) as? NSNumber else {
+            return nil
+        }
+        let recordId = value.int64Value
+        return recordId > 0 ? recordId : nil
+    }
+
+    /// 记录当前需要跨冷启动精确恢复的未完成计时。
+    func saveUnfinishedRecordId(_ recordId: Int64) {
+        userDefaults.set(NSNumber(value: recordId), forKey: Key.unfinishedRecordId)
+    }
+
+    /// 仅在清理的是当前锚点时移除，避免旧异步结果误删新会话锚点。
+    func clearUnfinishedRecordId(ifMatches recordId: Int64? = nil) {
+        if let recordId, unfinishedRecordId != recordId {
+            return
+        }
+        userDefaults.removeObject(forKey: Key.unfinishedRecordId)
+    }
+
+    /// 返回是否应展示首次“返回后仍在计时”的轻提示，并以 newest-wins 语义立即消费。
+    func consumeGlobalContinuationTip() -> Bool {
+        guard !userDefaults.bool(forKey: Key.didShowGlobalContinuationTip) else {
+            return false
+        }
+        userDefaults.set(true, forKey: Key.didShowGlobalContinuationTip)
+        return true
     }
 }

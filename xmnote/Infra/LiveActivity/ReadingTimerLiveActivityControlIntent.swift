@@ -4,8 +4,8 @@ import OSLog
 
 /**
  * [INPUT]: 依赖 AppIntents/ActivityKit 的 LiveActivityIntent，依赖 ReadingTimerRepository 写入未完成计时快照
- * [OUTPUT]: 对外提供 ReadingTimerLiveActivityControlIntent，让灵动岛按钮暂停、继续或停止当前阅读计时
- * [POS]: Infra/LiveActivity 的系统交互入口，被阅读计时 Live Activity 的 Widget 按钮触发并在 App 进程内落库
+ * [OUTPUT]: 对外提供 ReadingTimerLiveActivityControlIntent，让灵动岛按钮暂停、继续或停止当前阅读计时，并在提交后通知根 Coordinator 调和
+ * [POS]: Infra/LiveActivity 的系统交互入口，被阅读计时 Live Activity 的 Widget 按钮触发并在 App 进程内落库、结束状态面
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
@@ -238,20 +238,28 @@ private enum ReadingTimerLiveActivityControlPerformer {
                 )
             )
             logger.notice("Live Activity control database committed. recordId=\(recordId, privacy: .public), action=\(action.rawValue, privacy: .public), status=\(target.status.rawValue, privacy: .public), elapsedMs=\(millisecondsString(since: startedAt), privacy: .public)")
-            if let immediateVisualUpdate,
-               shouldSkipCommitVisualUpdate(
-                appliedState: immediateVisualUpdate.applied,
-                session: snapshot,
-                elapsedSeconds: target.elapsedSeconds
-               ) {
-                logger.notice("Skip commit Live Activity update because immediate visual state already matches committed state. recordId=\(recordId, privacy: .public), action=\(action.rawValue, privacy: .public), status=\(target.status.rawValue, privacy: .public), elapsedMs=\(millisecondsString(since: startedAt), privacy: .public)")
+            if snapshot.status == .stoppedPendingSave {
+                await ReadingTimerLiveActivityController.shared.end(recordId: recordId)
             } else {
-                await ReadingTimerLiveActivityController.shared.updateForControl(
+                if let immediateVisualUpdate,
+                   shouldSkipCommitVisualUpdate(
+                    appliedState: immediateVisualUpdate.applied,
                     session: snapshot,
-                    elapsedSeconds: target.elapsedSeconds,
-                    reason: "commit-\(action.rawValue)"
-                )
+                    elapsedSeconds: target.elapsedSeconds
+                   ) {
+                    logger.notice("Skip commit Live Activity update because immediate visual state already matches committed state. recordId=\(recordId, privacy: .public), action=\(action.rawValue, privacy: .public), status=\(target.status.rawValue, privacy: .public), elapsedMs=\(millisecondsString(since: startedAt), privacy: .public)")
+                } else {
+                    await ReadingTimerLiveActivityController.shared.updateForControl(
+                        session: snapshot,
+                        elapsedSeconds: target.elapsedSeconds,
+                        reason: "commit-\(action.rawValue)"
+                    )
+                }
             }
+            NotificationCenter.default.post(
+                name: .readingTimerSessionDidChange,
+                object: NSNumber(value: recordId)
+            )
             logger.notice("Applied Live Activity control. recordId=\(recordId, privacy: .public), action=\(action.rawValue, privacy: .public), status=\(target.status.rawValue, privacy: .public), totalMs=\(millisecondsString(since: startedAt), privacy: .public)")
         } catch {
             logger.error("Failed to perform Live Activity control. recordId=\(recordId, privacy: .public), action=\(action.rawValue, privacy: .public), immediateApplied=\(immediateVisualUpdate != nil, privacy: .public), elapsedMs=\(millisecondsString(since: startedAt), privacy: .public), error=\(error.localizedDescription, privacy: .public)")

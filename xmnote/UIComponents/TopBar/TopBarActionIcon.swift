@@ -1,7 +1,7 @@
 /**
  * [INPUT]: 依赖 SwiftUI 图标与字体渲染能力
- * [OUTPUT]: 对外提供 TopBarActionIcon 顶部栏统一图标组件、TopBarActionHitShape 热区形态，以及 TopBarBackButton 导航返回按钮
- * [POS]: UIComponents/TopBar 的原子级按钮图标与导航返回组件，被顶部操作区域与返回入口复用
+ * [OUTPUT]: 对外提供 TopBarActionIcon 顶部栏统一图标组件、TopBarActionHitShape 热区形态、TopBarBackButton 导航返回按钮与 TopBarDismissButton 模态收起按钮
+ * [POS]: UIComponents/TopBar 的原子级按钮图标、导航返回与模态收起组件，被顶部操作区域和层级退出入口复用
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
@@ -64,5 +64,29 @@ struct TopBarBackButton: View {
         .disabled(!isEnabled)
         .opacity(opacity)
         .accessibilityLabel("返回")
+    }
+}
+
+/// 顶部模态收起按钮，以明确的向下语义关闭当前业务层级。
+struct TopBarDismissButton: View {
+    let action: () -> Void
+    var foregroundColor: Color = .primary
+    var isEnabled: Bool = true
+    var opacity: Double = 1
+
+    var body: some View {
+        Button(action: action) {
+            TopBarActionIcon(
+                systemName: "chevron.down",
+                iconSize: 16,
+                containerSize: 44,
+                weight: .semibold,
+                foregroundColor: foregroundColor
+            )
+        }
+        .buttonStyle(.plain)
+        .disabled(!isEnabled)
+        .opacity(opacity)
+        .accessibilityLabel("收起阅读计时")
     }
 }

@@ -1,7 +1,7 @@
 /**
  * [INPUT]: 依赖 Foundation 值类型与 Android 对齐的 read_time_record 状态语义
- * [OUTPUT]: 对外提供 ReadingTimerRecordStatus、ReadingTimerSession、ReadingTimerBookContext 与计时保存/补录输入模型
- * [POS]: Domain/Models 层阅读计时领域模型，被 Repository、ViewModel、页面与 Live Activity 状态编排共同消费
+ * [OUTPUT]: 对外提供 ReadingTimerRecordStatus、ReadingTimerSession、ReadingTimerBookContext、计时保存/补录输入模型与会话变更事件
+ * [POS]: Domain/Models 层阅读计时领域模型，被 Repository、Coordinator、页面与 Live Activity 状态编排共同消费
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
@@ -205,6 +205,9 @@ nonisolated enum ReadingTimerError: LocalizedError, Equatable, Sendable {
 }
 
 extension Notification.Name {
+    /// 任一计时控制入口完成数据库写入后发出，根 Coordinator 据此精确调和应用内状态。
+    static let readingTimerSessionDidChange = Notification.Name("readingTimerSessionDidChange")
+
     /// 阅读计时记录完成、补录或放弃后发出，供 KeepAlive 页面刷新统计消费视图。
     static let readingTimerRecordsDidChange = Notification.Name("readingTimerRecordsDidChange")
 }

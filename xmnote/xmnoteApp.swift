@@ -1,7 +1,7 @@
 /**
- * [INPUT]: 依赖 SwiftUI App 生命周期、GRDB Database、RepositoryContainer、AppState 会员能力、XMToastCenter、桌面网页 App 级会话、AliyunpanSDK、阅读计时深链路由、DEBUG 隔离数据库启动参数与 App Group 分享导入 handoff
- * [OUTPUT]: 对外提供 xmnoteApp 完成数据库/仓储/根视图启动、网页会话前后台及实时会员调和、DEBUG Web API 一致性数据库装配、全局 Toast Host、书单分享导入与阅读计时深链分发
- * [POS]: 应用启动编排层，负责组装全局依赖并持有不能随页面销毁的跨页面服务与系统 URL 入口
+ * [INPUT]: 依赖 SwiftUI App 生命周期、GRDB Database、RepositoryContainer、ReadingTimerCoordinator、AppState 会员能力、XMToastCenter、桌面网页 App 级会话、AliyunpanSDK、阅读计时深链路由、DEBUG 隔离数据库启动参数与 App Group 分享导入 handoff
+ * [OUTPUT]: 对外提供 xmnoteApp 完成数据库/仓储/根视图启动、应用级阅读计时调和、网页会话前后台及实时会员调和、全局 Toast Host、书单分享导入与阅读计时深链分发
+ * [POS]: 应用启动编排层，负责组装全局依赖并持有不能随页面销毁的计时任务、跨页面服务与系统 URL 入口
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
@@ -30,6 +30,7 @@ struct xmnoteApp: App {
     @State private var toastCenter = XMToastCenter()
     @State private var databaseManager: DatabaseManager?
     @State private var repositories: RepositoryContainer?
+    @State private var readingTimerCoordinator: ReadingTimerCoordinator?
     @State private var bookCollectionImportRouter = BookCollectionImportRouter()
     @State private var readingTimerDeepLinkRouter = ReadingTimerDeepLinkRouter()
     @State private var desktopWebSessionCoordinator = DesktopWebSessionCoordinator()
@@ -46,13 +47,14 @@ struct xmnoteApp: App {
     var body: some Scene {
         WindowGroup {
             Group {
-                if let databaseManager, let repositories {
+                if let databaseManager, let repositories, let readingTimerCoordinator {
                     ContentView()
                         .id(appState.dataEpoch)
                         .environment(appState)
                         .environment(sceneStateStore)
                         .environment(databaseManager)
                         .environment(repositories)
+                        .environment(readingTimerCoordinator)
                         .environment(bookCollectionImportRouter)
                         .environment(readingTimerDeepLinkRouter)
                         .environment(desktopWebSessionCoordinator)
@@ -65,7 +67,10 @@ struct xmnoteApp: App {
             }
             .environment(toastCenter)
             .xmToastHost(center: toastCenter)
-            .animation(.smooth(duration: 0.35), value: repositories != nil)
+            .animation(
+                .smooth(duration: 0.35),
+                value: repositories != nil && readingTimerCoordinator != nil
+            )
             .task {
                 bookCollectionImportRouter.consumePendingShareImport()
                 #if DEBUG
@@ -90,12 +95,17 @@ struct xmnoteApp: App {
                     }.value
                     let manager = DatabaseManager(database: database)
                     let repositoryContainer = RepositoryContainer(databaseManager: manager)
+                    let timerCoordinator = ReadingTimerCoordinator(
+                        repository: repositoryContainer.readingTimerRepository
+                    )
                     desktopWebSessionCoordinator.configure(
                         database: database,
                         repositories: repositoryContainer
                     )
                     databaseManager = manager
                     repositories = repositoryContainer
+                    readingTimerCoordinator = timerCoordinator
+                    await timerCoordinator.refresh(reason: .appLaunch)
                     await desktopWebSessionCoordinator.handleScenePhase(scenePhase)
                 } catch {
                     initError = error
@@ -116,6 +126,20 @@ struct xmnoteApp: App {
                 }
                 Task {
                     await desktopWebSessionCoordinator.handleScenePhase(phase)
+                    guard let readingTimerCoordinator else { return }
+                    switch phase {
+                    case .active:
+                        await readingTimerCoordinator.refresh(reason: .foreground)
+                    case .inactive, .background:
+                        await readingTimerCoordinator.persistBeforeSuspension()
+                    @unknown default:
+                        break
+                    }
+                }
+            }
+            .onChange(of: appState.dataEpoch) { _, _ in
+                Task {
+                    await readingTimerCoordinator?.refresh(reason: .dataSourceChanged)
                 }
             }
             .onChange(of: appState.isPremium) { _, isPremium in

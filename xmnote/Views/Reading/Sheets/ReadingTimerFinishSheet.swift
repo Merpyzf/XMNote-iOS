@@ -2,13 +2,13 @@ import SwiftUI
 import UIKit
 
 /**
- * [INPUT]: 依赖 ReadingTimerViewModel 提供本次计时、书籍与保存状态，依赖 ReadingTimerFinishDraft 输出结束确认字段
+ * [INPUT]: 依赖应用级 ReadingTimerCoordinator 提供本次计时、书籍与保存状态，依赖 ReadingTimerFinishDraft 输出结束确认字段
  * [OUTPUT]: 对外提供 ReadingTimerFinishSheet 与 ReadingTimerFinishDraft，承接停止后的保存确认交互
  * [POS]: Reading/Sheets 业务弹层，负责阅读计时结束后的时长确认、位置、感悟与读完状态补充
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
-/// 结束确认 Sheet 输出草稿，供父级在长时长确认后提交给 ViewModel。
+/// 结束确认 Sheet 输出草稿，供父级在长时长确认后提交给 Coordinator。
 struct ReadingTimerFinishDraft {
     let position: Double?
     let insight: String
@@ -17,7 +17,7 @@ struct ReadingTimerFinishDraft {
 
 /// 阅读计时结束确认弹层，保持保存前的必要字段补充，不把表单堆回主计时页。
 struct ReadingTimerFinishSheet: View {
-    @Bindable var viewModel: ReadingTimerViewModel
+    @Bindable var coordinator: ReadingTimerCoordinator
     let onSave: (ReadingTimerFinishDraft) -> Void
     let onDiscard: () -> Void
 
@@ -28,7 +28,7 @@ struct ReadingTimerFinishSheet: View {
     @State private var pendingLongDurationDraft: ReadingTimerFinishDraft?
 
     private var book: ReadingTimerBookContext? {
-        viewModel.bookContext
+        coordinator.bookContext
     }
 
     private var positionValue: Double? {
@@ -42,7 +42,7 @@ struct ReadingTimerFinishSheet: View {
             Form {
                 Section {
                     VStack(alignment: .leading, spacing: Spacing.cozy) {
-                        Text(ReadDurationFormatter.format(seconds: viewModel.elapsedSeconds))
+                        Text(ReadDurationFormatter.format(seconds: coordinator.elapsedSeconds))
                             .font(AppTypography.title3Semibold)
                             .foregroundStyle(Color.textPrimary)
                             .contentTransition(.numericText())
@@ -54,7 +54,7 @@ struct ReadingTimerFinishSheet: View {
                                 .lineLimit(2)
                         }
 
-                        if let session = viewModel.activeSession {
+                        if let session = coordinator.activeSession {
                             Text(timeRangeText(for: session))
                                 .font(AppTypography.caption)
                                 .foregroundStyle(Color.textSecondary)
@@ -76,7 +76,7 @@ struct ReadingTimerFinishSheet: View {
                     Toggle("标记为读完", isOn: $markReadDone)
                 }
 
-                if let errorMessage = viewModel.errorMessage {
+                if let errorMessage = coordinator.errorMessage {
                     Section {
                         Text(errorMessage)
                             .font(AppTypography.footnote)
@@ -124,7 +124,7 @@ struct ReadingTimerFinishSheet: View {
             } label: {
                 HStack(spacing: Spacing.cozy) {
                     Spacer(minLength: 0)
-                    if viewModel.isWriting {
+                    if coordinator.isWriting {
                         LoadingStateView(style: .inline)
                             .controlSize(.small)
                     } else {
@@ -141,7 +141,7 @@ struct ReadingTimerFinishSheet: View {
                 )
             }
             .buttonStyle(.plain)
-            .disabled(viewModel.isWriting)
+            .disabled(coordinator.isWriting)
 
             Button(role: .destructive) {
                 onDiscard()
@@ -156,7 +156,7 @@ struct ReadingTimerFinishSheet: View {
                     )
             }
             .buttonStyle(.plain)
-            .disabled(viewModel.isWriting)
+            .disabled(coordinator.isWriting)
         }
         .padding(.horizontal, Spacing.screenEdge)
         .padding(.top, Spacing.base)
@@ -202,7 +202,7 @@ struct ReadingTimerFinishSheet: View {
     private func submit() {
         if !positionText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
            positionValue == nil {
-            viewModel.errorMessage = "阅读位置格式不正确"
+            coordinator.errorMessage = "阅读位置格式不正确"
             return
         }
         let draft = ReadingTimerFinishDraft(
@@ -210,7 +210,7 @@ struct ReadingTimerFinishSheet: View {
             insight: insight,
             markReadDone: markReadDone
         )
-        if viewModel.needsLongDurationConfirmation {
+        if coordinator.needsLongDurationConfirmation {
             pendingLongDurationDraft = draft
         } else {
             onSave(draft)
@@ -221,7 +221,7 @@ struct ReadingTimerFinishSheet: View {
         guard let pendingLongDurationDraft else { return nil }
         return XMSystemAlertDescriptor(
             title: "确认保存长时长记录",
-            message: "这次阅读记录为 \(ReadDurationFormatter.format(seconds: viewModel.elapsedSeconds))，是否保存？",
+            message: "这次阅读记录为 \(ReadDurationFormatter.format(seconds: coordinator.elapsedSeconds))，是否保存？",
             actions: [
                 XMSystemAlertAction(title: "取消", role: .cancel) {
                     self.pendingLongDurationDraft = nil

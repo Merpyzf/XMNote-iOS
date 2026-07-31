@@ -5,7 +5,7 @@ import OSLog
 /**
  * [INPUT]: 依赖 ActivityKit 管理 ReadingTimerActivityAttributes，依赖 ReadingTimerSession 提供计时状态快照
  * [OUTPUT]: 对外提供 ReadingTimerLiveActivityController，封装阅读计时 Live Activity 的开始、更新与结束
- * [POS]: Infra/LiveActivity 系统桥接层，被 ReadingTimerViewModel 调用以同步锁屏与灵动岛状态
+ * [POS]: Infra/LiveActivity 系统桥接层，被 ReadingTimerCoordinator 与 Live Activity Intent 调用以同步锁屏与灵动岛状态
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
