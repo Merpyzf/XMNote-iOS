@@ -23,6 +23,9 @@ final class RelevantEditorViewModel {
     var errorMessage: String?
 
     private let repository: any ContentRepositoryProtocol
+    private var baselineTitle = ""
+    private var baselineURL = ""
+    private var baselineContentText = NSAttributedString()
 
     /// 注入相关内容 ID 与内容仓储，初始化编辑页上下文。
     init(contentId: Int64, repository: any ContentRepositoryProtocol) {
@@ -32,6 +35,14 @@ final class RelevantEditorViewModel {
 
     var imageURLs: [String] {
         draft?.imageURLs ?? []
+    }
+
+    /// 标识当前编辑内容是否偏离最近一次加载或保存基线，用于阻止误退出。
+    var hasUnsavedChanges: Bool {
+        guard draft != nil else { return false }
+        return title != baselineTitle
+            || url != baselineURL
+            || !contentText.isEqual(to: baselineContentText)
     }
 
     /// 加载相关内容草稿并转换成编辑器可消费的状态。
@@ -49,6 +60,7 @@ final class RelevantEditorViewModel {
             title = draft.title
             url = draft.url
             contentText = RichTextBridge.htmlToAttributed(draft.contentHTML)
+            updateBaseline()
         } catch {
             errorMessage = "加载失败：\(error.localizedDescription)"
         }
@@ -72,10 +84,18 @@ final class RelevantEditorViewModel {
         do {
             try await repository.saveRelevantEditorDraft(draft)
             self.draft = draft
+            updateBaseline()
             return true
         } catch {
             errorMessage = "保存失败：\(error.localizedDescription)"
             return false
         }
+    }
+
+    /// 将当前表单状态记录为已保存基线。
+    private func updateBaseline() {
+        baselineTitle = title
+        baselineURL = url
+        baselineContentText = contentText.copy() as? NSAttributedString ?? NSAttributedString()
     }
 }

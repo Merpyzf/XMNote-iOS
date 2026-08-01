@@ -1,6 +1,6 @@
 /**
- * [INPUT]: 依赖 RepositoryContainer 注入本地书仓储与在线搜索仓储，依赖 BookPickerViewModel 驱动本地/远端混合选择状态机，依赖 BookEditorView 与 BookSearchView 承接页内创建与搜索回填
- * [OUTPUT]: 对外提供 BookPickerView，承载通用书籍选择流的本地/在线/新增入口、远端直返与多选交互
+ * [INPUT]: 依赖 RepositoryContainer 注入本地书仓储与在线搜索仓储，依赖 BookPickerViewModel 驱动本地/远端混合选择状态机
+ * [OUTPUT]: 对外提供 BookPickerView，承载通用书籍选择流的本地/在线/新增任务请求、远端直返与多选交互
  * [POS]: Book 模块业务 Sheet，负责统一书籍选择流，不承担具体业务页保存逻辑
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -16,8 +16,6 @@ struct BookPickerView: View {
     @Environment(\.dismiss) private var dismiss
 
     @State private var viewModel: BookPickerViewModel?
-    @State private var activeSeed: BookEditorSeed?
-    @State private var showsNestedSearchPage = false
     @State private var isPreparingSeed = false
     @State private var didComplete = false
     @State private var pendingScrollBookID: Int64?
@@ -61,24 +59,6 @@ struct BookPickerView: View {
                         .accessibilityLabel(creationEntryLabel)
                     }
                 }
-            }
-            .navigationDestination(item: $activeSeed) { seed in
-                BookEditorView(
-                    seed: seed,
-                    onSavedBookID: { bookId in
-                        Task {
-                            await handleCreatedBook(bookId)
-                        }
-                    }
-                )
-            }
-            .navigationDestination(isPresented: $showsNestedSearchPage) {
-                BookSearchView(
-                    onCompletedBookSelection: { book in
-                        finish(.single(.local(book)))
-                    },
-                    completionDismissBehavior: .handledByParent
-                )
             }
         }
         .task {
@@ -508,19 +488,8 @@ struct BookPickerView: View {
         return "双击补全书籍信息并进入编辑页"
     }
 
-    private func presentManualCreate() {
-        activeSeed = .manual
-    }
-
     private func openCreationFlow() {
-        switch configuration.creationAction {
-        case .inlineManualEditor:
-            presentManualCreate()
-        case .separateSearchPage:
-            finish(.addFlowRequested)
-        case .nestedSearchPage:
-            showsNestedSearchPage = true
-        }
+        finish(.addFlowRequested)
     }
 
     private func handleRemoteResultTap(
@@ -538,23 +507,11 @@ struct BookPickerView: View {
 
         switch outcome {
         case .presentEditor(let seed):
-            activeSeed = seed
+            finish(.editorRequested(seed))
         case .complete(let result):
             finish(result)
         case nil:
             break
-        }
-    }
-
-    private func handleCreatedBook(_ bookId: Int64) async {
-        guard let viewModel else { return }
-        if let result = await viewModel.handleCreatedBook(bookId: bookId) {
-            finish(result)
-            return
-        }
-        if viewModel.visibleScope == .local {
-            pendingScrollBookID = bookId
-            await viewModel.refreshLocalBooks()
         }
     }
 

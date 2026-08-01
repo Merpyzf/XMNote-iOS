@@ -6,9 +6,9 @@
 //
 
 /**
- * [INPUT]: 依赖 RepositoryContainer 注入仓储，依赖 BookDetailViewModel 驱动状态，依赖 ContentRoute 承接书摘查看路由，依赖外层回调打开阅读计时与补录
+ * [INPUT]: 依赖 RepositoryContainer、AppNavigationCoordinator、BookDetailViewModel 与外层阅读计时路由配置
  * [OUTPUT]: 对外提供 BookDetailView，书籍详情、阅读入口与书摘列表页面
- * [POS]: Book 模块详情壳层，通过导航接收 bookId 参数，并把阅读操作与书摘点击转给外层路由
+ * [POS]: Book 模块详情壳层，通过导航接收 bookId，并把计时、补录与书摘查看交给对应根导航 owner
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
@@ -83,6 +83,7 @@ private struct BookDetailContentView: View {
     let onSupplementReading: (Int64) -> Void
     let readingTimerZoomConfiguration: ReadingTimerZoomSourceConfiguration?
     @State private var readLoadingGate = LoadingGate()
+    @Environment(AppNavigationCoordinator.self) private var navigationCoordinator
 
     private enum Layout {
         static let attributeTitleWidth: CGFloat = 76
@@ -357,12 +358,15 @@ private struct BookDetailContentView: View {
 
             if viewModel.hasNotes {
                 ForEach(viewModel.notes) { note in
-                    NavigationLink(
-                        value: ContentRoute.contentViewer(
+                    Button {
+                        navigationCoordinator.present(
+                            .contentViewer(
                             source: .bookNotes(bookId: bookId),
-                            initialItemID: .note(note.id)
+                            initialItemID: .note(note.id),
+                            keyword: ""
+                            )
                         )
-                    ) {
+                    } label: {
                         noteCard(note)
                     }
                     .buttonStyle(.plain)

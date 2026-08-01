@@ -459,6 +459,12 @@ final class BookSelectionTestViewModel {
                 message: "当前实现请求跳转到独立新增书籍页。",
                 details: []
             )
+        case .editorRequested:
+            return BookSelectionScenarioPreview(
+                title: "结果预览",
+                message: "当前实现请求打开独立书籍编辑任务。",
+                details: []
+            )
         case .single(let selection):
             return makeSelectionPreview(selections: [selection], scenario: scenario)
         case .multiple(let selections):

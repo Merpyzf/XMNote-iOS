@@ -13,10 +13,6 @@ import PhotosUI
 import SwiftUI
 import UIKit
 
-private enum OCRFlowRoute: Hashable {
-    case crop
-}
-
 struct NotePhotoOCRFlowView: View {
     let target: NoteEditorComposerTarget
     let onComplete: (NotePhotoOCRCompletionPayload) -> Void
@@ -24,7 +20,7 @@ struct NotePhotoOCRFlowView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var viewModel: NotePhotoOCRFlowViewModel
     @StateObject private var cameraController = OCRCameraSessionController()
-    @State private var path: [OCRFlowRoute] = []
+    @State private var isCropPresented = false
 
     init(
         target: NoteEditorComposerTarget,
@@ -37,36 +33,31 @@ struct NotePhotoOCRFlowView: View {
     }
 
     var body: some View {
-        NavigationStack(path: $path) {
-            OCRCameraScreen(
+        OCRCameraScreen(
+            viewModel: viewModel,
+            cameraController: cameraController,
+            onClose: { dismiss() },
+            onSelectedImage: handleSelectedImage(_:sourceTitle:)
+        )
+        .toolbarVisibility(.hidden, for: .navigationBar)
+        .navigationDestination(isPresented: $isCropPresented) {
+            OCRCropRecognitionScreen(
                 viewModel: viewModel,
-                cameraController: cameraController,
-                onClose: { dismiss() },
-                onSelectedImage: handleSelectedImage(_:sourceTitle:)
+                onBack: popCropScreen,
+                onRecognized: handleRecognitionCompleted(_:)
             )
-            .toolbarVisibility(.hidden, for: .navigationBar)
-            .navigationDestination(for: OCRFlowRoute.self) { route in
-                switch route {
-                case .crop:
-                    OCRCropRecognitionScreen(
-                        viewModel: viewModel,
-                        onBack: popCropScreen,
-                        onRecognized: handleRecognitionCompleted(_:)
-                    )
-                }
-            }
+            .toolbarVisibility(.visible, for: .navigationBar)
         }
         .background(Color.black.ignoresSafeArea())
     }
 
     private func handleSelectedImage(_ image: UIImage, sourceTitle: String) {
         viewModel.selectImage(image, sourceTitle: sourceTitle)
-        path.append(.crop)
+        isCropPresented = true
     }
 
     private func popCropScreen() {
-        guard path.last == .crop else { return }
-        path.removeLast()
+        isCropPresented = false
     }
 
     private func handleRecognitionCompleted(_ payload: NotePhotoOCRCompletionPayload) {

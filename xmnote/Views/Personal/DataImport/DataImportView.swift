@@ -1,5 +1,5 @@
 /**
- * [INPUT]: 依赖 RepositoryContainer、AppState、微信读书导入 ViewModel、WebView、BookPickerView、Photos 与统一反馈组件
+ * [INPUT]: 依赖 AppNavigationCoordinator、微信读书导入 ViewModel、WebView、BookPickerView、Photos 与统一反馈组件
  * [OUTPUT]: 对外提供数据导入入口、授权、分批、导入预览和单书内容预览页面
  * [POS]: Views/Personal/DataImport 的完整微信读书扫码授权导入交互流
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -10,15 +10,12 @@ import SwiftUI
 import UIKit
 
 struct DataImportView: View {
-    @Environment(RepositoryContainer.self) private var repositories
-    @Environment(AppState.self) private var appState
-    let onOpenPremium: () -> Void
+    @Environment(AppNavigationCoordinator.self) private var navigationCoordinator
     @State private var quickOrder: [String]
     @State private var fileOrder: [String]
     @State private var clipboardOrder: [String]
 
-    init(onOpenPremium: @escaping () -> Void) {
-        self.onOpenPremium = onOpenPremium
+    init() {
         _quickOrder = State(initialValue: Self.savedOrder(key: "noteImportQuickOrder", defaults: Self.defaultQuickOrder))
         _fileOrder = State(initialValue: Self.savedOrder(key: "noteImportFileOrder", defaults: Self.defaultFileOrder))
         _clipboardOrder = State(initialValue: Self.savedOrder(key: "noteImportClipboardOrder", defaults: Self.defaultClipboardOrder))
@@ -30,7 +27,7 @@ struct DataImportView: View {
                 ForEach(quickOrder, id: \.self) { sourceRow($0) }.onMove { move(&quickOrder, from: $0, to: $1, key: "noteImportQuickOrder") }
             }
             Section("API 导入") {
-                NavigationLink("API 导入") { ApiNoteImportView(repository: repositories.noteImportRepository, isPremium: appState.isPremium, onOpenPremium: onOpenPremium) }
+                taskButton("API 导入", destination: .api)
             }
             Section("本地文件") {
                 ForEach(fileOrder, id: \.self) { sourceRow($0) }.onMove { move(&fileOrder, from: $0, to: $1, key: "noteImportFileOrder") }
@@ -47,21 +44,21 @@ struct DataImportView: View {
     }
 
     private func fileLink(_ title: String, _ parserID: NoteImportParserID) -> some View {
-        NavigationLink(title) { NoteImportSourceScreen(title: title, input: .file(parserID: parserID)) }
+        taskButton(title, destination: .file(title: title, parserID: parserID))
     }
 
     private func clipboardLink(_ title: String, _ parserID: NoteImportParserID) -> some View {
-        NavigationLink(title) { NoteImportSourceScreen(title: title, input: .clipboard(parserID: parserID)) }
+        taskButton(title, destination: .clipboard(title: title, parserID: parserID))
     }
 
     @ViewBuilder private func sourceRow(_ id: String) -> some View {
         switch id {
-        case "computer": NavigationLink("从电脑导入") { DesktopWebView(mode: .computerImport) }
-        case "lifeweek": NavigationLink("三联生活周刊") { LifeWeekImportView(repository: repositories.noteImportRepository) }
-        case "weread-auth": NavigationLink("微信读书授权导入") { WereadImportAuthView(repository: repositories.wereadImportRepository, onOpenPremium: onOpenPremium) }
-        case "kindle": NavigationLink("Kindle") { NoteImportSourceScreen(title: "Kindle", input: .fileCandidates([.kindle, .kindleApp])) }
+        case "computer": taskButton("从电脑导入", destination: .desktopComputer)
+        case "lifeweek": taskButton("三联生活周刊", destination: .lifeWeek)
+        case "weread-auth": taskButton("微信读书授权导入", destination: .wereadAuthorization)
+        case "kindle": taskButton("Kindle", destination: .fileCandidates(title: "Kindle", parserIDs: [.kindle, .kindleApp]))
         case "koreader": fileLink("KOReader", .koreader)
-        case "boox": NavigationLink("BOOX") { NoteImportSourceScreen(title: "BOOX", input: .fileCandidates([.booxOld, .booxNew])) }
+        case "boox": taskButton("BOOX", destination: .fileCandidates(title: "BOOX", parserIDs: [.booxOld, .booxNew]))
         case "legado": fileLink("阅读", .legado)
         case "apple-books": fileLink("Apple Books", .appleBooks)
         case "douban-read": fileLink("豆瓣阅读", .doubanRead)
@@ -70,10 +67,10 @@ struct DataImportView: View {
         case "ireader-epub": fileLink("iReader 笔记成书", .ireaderEpub)
         case "neat": fileLink("Neat Reader", .neatReader)
         case "koodo": fileLink("Koodo Reader", .koodo)
-        case "hanwang": NavigationLink("汉王") { HanWangImportView(repository: repositories.noteImportRepository) }
+        case "hanwang": taskButton("汉王", destination: .hanwang)
         case "dimo": fileLink("滴墨", .dimo)
         case "reeden": fileLink("Reeden", .reeden)
-        case "weread-clipboard": NavigationLink("微信读书") { NoteImportSourceScreen(title: "微信读书", input: .clipboardCandidates([.wereadOld, .wereadPre830, .weread830])) }
+        case "weread-clipboard": taskButton("微信读书", destination: .clipboardCandidates(title: "微信读书", parserIDs: [.wereadOld, .wereadPre830, .weread830]))
         case "dedao": clipboardLink("得到", .dedao)
         case "ireader-selected": clipboardLink("掌阅精选", .ireaderSelected)
         case "moon": clipboardLink("静读天下", .moonReader)
@@ -85,6 +82,29 @@ struct DataImportView: View {
         case "readingo": clipboardLink("Readingo", .readingo)
         default: EmptyView()
         }
+    }
+
+    /// 以列表行样式启动独立导入任务，保留目录页与 Tab 的浏览现场。
+    private func taskButton(
+        _ title: String,
+        destination: DataImportTaskDestination
+    ) -> some View {
+        Button {
+            navigationCoordinator.present(.dataImport(destination))
+        } label: {
+            HStack {
+                Text(title)
+                    .foregroundStyle(Color.textPrimary)
+                Spacer()
+                Image(systemName: "chevron.forward")
+                    .font(AppTypography.caption)
+                    .foregroundStyle(Color.iconSecondary)
+                    .accessibilityHidden(true)
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityHint("打开导入任务")
     }
 
     private func move(_ order: inout [String], from source: IndexSet, to destination: Int, key: String) {
@@ -102,7 +122,7 @@ struct DataImportView: View {
     private static let defaultClipboardOrder = ["weread-clipboard", "dedao", "ireader-selected", "moon", "duokan", "dangdang", "douban-app", "reader163", "fanqie", "readingo"]
 }
 
-private struct WereadImportAuthView: View {
+struct WereadImportAuthView: View {
     @Environment(AppState.self) private var appState
     @Environment(XMToastCenter.self) private var toastCenter
     @State private var viewModel: WereadImportAuthViewModel
@@ -275,7 +295,7 @@ private struct WereadBatchView: View {
 }
 
 private struct WereadImportPreviewView: View {
-    @Environment(\.dismiss) private var dismiss
+    @Environment(AppNavigationCoordinator.self) private var navigationCoordinator
     @State private var viewModel: WereadPreviewViewModel
     @State private var contentBook: WereadImportBook?
     @State private var mappingBook: WereadImportBook?
@@ -310,7 +330,11 @@ private struct WereadImportPreviewView: View {
             }
         }
         .onChange(of: viewModel.errorMessage) { _, value in showsError = value != nil }
-        .onChange(of: viewModel.didCommit) { _, done in if done { dismiss() } }
+        .onChange(of: viewModel.didCommit) { _, done in
+            if done {
+                navigationCoordinator.dismissTask()
+            }
+        }
         .onDisappear { viewModel.cancel() }
         .xmSystemAlert(isPresented: $showsError, descriptor: viewModel.errorMessage.map { message in .init(title: "无法导入", message: message, actions: [.init(title: "知道了") { viewModel.errorMessage = nil }]) })
         .xmSystemAlert(item: $editingBook) { book in

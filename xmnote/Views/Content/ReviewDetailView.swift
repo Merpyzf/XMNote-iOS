@@ -1,5 +1,5 @@
 /**
- * [INPUT]: 依赖 RepositoryContainer 注入内容仓储，依赖 ReviewDetailViewModel 驱动书评详情状态
+ * [INPUT]: 依赖 RepositoryContainer、AppNavigationCoordinator 与 ReviewDetailViewModel
  * [OUTPUT]: 对外提供 ReviewDetailView，承接书评单页查看与顶部操作
  * [POS]: Content 模块书评查看壳层，被时间线点击链路推入
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -58,6 +58,7 @@ private struct ReviewDetailLoadedView: View {
     @Bindable var viewModel: ReviewDetailViewModel
     @Binding var showsDeleteDialog: Bool
     @State private var readLoadingGate = LoadingGate()
+    @Environment(AppNavigationCoordinator.self) private var navigationCoordinator
 
     var body: some View {
         ScrollView {
@@ -107,7 +108,9 @@ private struct ReviewDetailLoadedView: View {
     private var toolbarContent: some ToolbarContent {
         ToolbarItemGroup(placement: .topBarTrailing) {
             if let detail = viewModel.detail {
-                NavigationLink(value: ContentRoute.reviewEditor(reviewId: detail.reviewId)) {
+                Button {
+                    navigationCoordinator.present(.reviewEditor(reviewID: detail.reviewId))
+                } label: {
                     Image(systemName: "square.and.pencil")
                 }
 

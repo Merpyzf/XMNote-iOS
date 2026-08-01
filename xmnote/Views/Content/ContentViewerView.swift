@@ -1,5 +1,5 @@
 /**
- * [INPUT]: 依赖 RepositoryContainer 注入内容仓储，依赖 ContentViewerViewModel 驱动分页与详情状态
+ * [INPUT]: 依赖 RepositoryContainer、AppNavigationCoordinator 与 ContentViewerViewModel
  * [OUTPUT]: 对外提供 ContentViewerView，统一承接书摘/书评/相关内容的分页查看与基础操作栏
  * [POS]: Content 模块查看页壳层，被时间线与书籍详情共同复用
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -13,18 +13,30 @@ struct ContentViewerView: View {
     let source: ContentViewerSourceContext
     let initialItemID: ContentViewerItemID
     let keyword: String
+    let navigationContext: AppTaskNavigationContext
 
     @Environment(RepositoryContainer.self) private var repositories
-    @Environment(SceneStateStore.self) private var sceneStateStore
     @Environment(\.dismiss) private var dismiss
 
     @State private var viewModel: ContentViewerViewModel?
     @State private var showsDeleteDialog = false
-    @State private var didBootstrapFromScene = false
+    @State private var didBootstrap = false
     @State private var bootstrapLoadingGate = LoadingGate()
 
     private var presentationStyle: ContentViewerPresentationStyle {
         ContentViewerPresentationStyle(source: source)
+    }
+
+    init(
+        source: ContentViewerSourceContext,
+        initialItemID: ContentViewerItemID,
+        keyword: String,
+        navigationContext: AppTaskNavigationContext = .taskChild
+    ) {
+        self.source = source
+        self.initialItemID = initialItemID
+        self.keyword = keyword
+        self.navigationContext = navigationContext
     }
 
     var body: some View {
@@ -32,7 +44,8 @@ struct ContentViewerView: View {
             if let viewModel {
                 ContentViewerLoadedView(
                     viewModel: viewModel,
-                    showsDeleteDialog: $showsDeleteDialog
+                    showsDeleteDialog: $showsDeleteDialog,
+                    navigationContext: navigationContext
                 )
                 .onChange(of: viewModel.dismissalRequestToken) { _, newToken in
                     guard newToken > 0 else { return }
@@ -45,23 +58,15 @@ struct ContentViewerView: View {
                 }
             }
         }
-        .task(id: sceneStateStore.isRestored) {
-            guard sceneStateStore.isRestored else { return }
-            guard !didBootstrapFromScene else { return }
-            didBootstrapFromScene = true
+        .task {
+            guard !didBootstrap else { return }
+            didBootstrap = true
             guard viewModel == nil else { return }
             bootstrapLoadingGate.update(intent: .read)
-            let restoredSelectedItemID: ContentViewerItemID? = {
-                guard let snapshot = sceneStateStore.snapshot.contentViewer,
-                      snapshot.source == source else {
-                    return nil
-                }
-                return snapshot.selectedItemID
-            }()
             let newViewModel = ContentViewerViewModel(
                 source: source,
                 initialItemID: initialItemID,
-                restoredSelectedItemID: restoredSelectedItemID,
+                restoredSelectedItemID: nil,
                 keyword: keyword,
                 defaultTitle: presentationStyle.defaultTitle,
                 missingItemMessage: presentationStyle.missingItemMessage,
@@ -70,12 +75,6 @@ struct ContentViewerView: View {
             viewModel = newViewModel
             bootstrapLoadingGate.update(intent: .none)
             newViewModel.startObservation()
-        }
-        .onChange(of: viewModel?.selectedItemID) { _, newValue in
-            guard let newValue else { return }
-            sceneStateStore.updateContentViewer(
-                ContentViewerSceneSnapshot(source: source, selectedItemID: newValue)
-            )
         }
         .onDisappear {
             bootstrapLoadingGate.hideImmediately()
@@ -86,8 +85,10 @@ struct ContentViewerView: View {
 private struct ContentViewerLoadedView: View {
     @Bindable var viewModel: ContentViewerViewModel
     @Binding var showsDeleteDialog: Bool
+    let navigationContext: AppTaskNavigationContext
 
     @Environment(\.openURL) private var openURL
+    @Environment(AppNavigationCoordinator.self) private var navigationCoordinator
 
     @State private var bottomOrnamentHeight: CGFloat = 0
     @State private var showsTagSheet = false
@@ -146,6 +147,7 @@ private struct ContentViewerLoadedView: View {
             )
             .navigationTitle("")
             .navigationBarTitleDisplayMode(.inline)
+            .navigationBarBackButtonHidden(navigationContext == .modalRoot)
             .toolbar { toolbarContent }
             .overlay {
                 if viewModel.isDeleting {
@@ -213,10 +215,22 @@ private struct ContentViewerLoadedView: View {
 
     @ToolbarContentBuilder
     private var toolbarContent: some ToolbarContent {
+        if navigationContext == .modalRoot {
+            ToolbarItem(placement: .cancellationAction) {
+                Button("关闭") {
+                    navigationCoordinator.dismissTask()
+                }
+            }
+        }
+
         ToolbarItem(placement: .principal) {
             ContentViewerNavigationTitle(pageProgress: viewModel.selectedPageProgress) {
                 if let selectedBookID = viewModel.selectedBookID {
-                    NavigationLink(value: BookRoute.detail(bookId: selectedBookID)) {
+                    Button {
+                        navigationCoordinator.exitTask(
+                            to: .book(.detail(bookId: selectedBookID))
+                        )
+                    } label: {
                         contentViewerTitleLabel(viewModel.selectedBookTitle)
                     }
                     .buttonStyle(.plain)
@@ -278,7 +292,11 @@ private struct ContentViewerLoadedView: View {
 
                 noteAPISendMenu
 
-                NavigationLink(value: NoteRoute.edit(noteId: noteID)) {
+                Button {
+                    navigationCoordinator.present(
+                        .noteEditor(mode: .edit(noteId: noteID), seed: nil)
+                    )
+                } label: {
                     ImmersiveBottomChromeIcon(systemName: "square.and.pencil")
                 }
                 .buttonStyle(.plain)
@@ -290,7 +308,9 @@ private struct ContentViewerLoadedView: View {
                 noteAIMenu
 
             case .review(let reviewID)?:
-                NavigationLink(value: ContentRoute.reviewEditor(reviewId: reviewID)) {
+                Button {
+                    navigationCoordinator.present(.reviewEditor(reviewID: reviewID))
+                } label: {
                     ImmersiveBottomChromeIcon(systemName: "square.and.pencil")
                 }
                 .buttonStyle(.plain)
@@ -314,7 +334,9 @@ private struct ContentViewerLoadedView: View {
                 .accessibilityLabel("书评 AI")
 
             case .relevant(let contentID)?:
-                NavigationLink(value: ContentRoute.relevantEditor(contentId: contentID)) {
+                Button {
+                    navigationCoordinator.present(.relevantEditor(contentID: contentID))
+                } label: {
                     ImmersiveBottomChromeIcon(systemName: "square.and.pencil")
                 }
                 .buttonStyle(.plain)

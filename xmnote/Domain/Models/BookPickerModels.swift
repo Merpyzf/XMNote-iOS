@@ -144,4 +144,5 @@ enum BookPickerResult: Hashable, Sendable {
     case single(BookPickerSelection)
     case multiple([BookPickerSelection])
     case addFlowRequested
+    case editorRequested(BookEditorSeed)
 }

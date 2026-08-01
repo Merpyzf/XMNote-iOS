@@ -1,5 +1,5 @@
 /**
- * [INPUT]: 依赖 RepositoryContainer 注入录入仓储，依赖 BookEditorViewModel 驱动完整录入页状态，依赖 BookEditorMode 区分新增与编辑入口
+ * [INPUT]: 依赖 RepositoryContainer、BookEditorViewModel、BookEditorMode 与 AppTaskNavigationContext
  * [OUTPUT]: 对外提供 BookEditorView，承载搜索结果确认、手动创建与既有书籍编辑的完整录入页
  * [POS]: Book 模块录入页壳层，负责完整字段编辑、未保存拦截与保存动作
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -11,6 +11,7 @@ import SwiftUI
 struct BookEditorView: View {
     let mode: BookEditorMode
     let onSavedBookID: ((Int64) -> Void)?
+    let navigationContext: AppTaskNavigationContext
 
     @Environment(RepositoryContainer.self) private var repositories
     @Environment(\.dismiss) private var dismiss
@@ -20,18 +21,22 @@ struct BookEditorView: View {
 
     init(
         seed: BookEditorSeed?,
-        onSavedBookID: ((Int64) -> Void)? = nil
+        onSavedBookID: ((Int64) -> Void)? = nil,
+        navigationContext: AppTaskNavigationContext = .taskChild
     ) {
         self.mode = .create(seed: seed)
         self.onSavedBookID = onSavedBookID
+        self.navigationContext = navigationContext
     }
 
     init(
         mode: BookEditorMode,
-        onSavedBookID: ((Int64) -> Void)? = nil
+        onSavedBookID: ((Int64) -> Void)? = nil,
+        navigationContext: AppTaskNavigationContext = .taskChild
     ) {
         self.mode = mode
         self.onSavedBookID = onSavedBookID
+        self.navigationContext = navigationContext
     }
 
     var body: some View {
@@ -103,8 +108,14 @@ struct BookEditorView: View {
         )
         .toolbar {
             ToolbarItem(placement: .topBarLeading) {
-                TopBarBackButton {
-                    handleDismissAttempt(using: viewModel)
+                if navigationContext == .modalRoot {
+                    Button("取消") {
+                        handleDismissAttempt(using: viewModel)
+                    }
+                } else {
+                    TopBarBackButton {
+                        handleDismissAttempt(using: viewModel)
+                    }
                 }
             }
         }

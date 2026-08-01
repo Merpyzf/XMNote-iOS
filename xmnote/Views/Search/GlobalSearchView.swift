@@ -1,7 +1,7 @@
 /**
- * [INPUT]: 依赖 MainTabView 提供搜索 query 绑定、搜索提交事件、历史词按下/取消/提交协调回调、清空确认前焦点稳定回调、详情全屏覆盖打开回调与覆盖呈现状态，依赖 RepositoryContainer 注入全局搜索仓储，依赖 GlobalSearchViewModel 驱动本地搜索状态
+ * [INPUT]: 依赖 MainTabView 提供搜索 query、提交/历史词协调与结果导航回调，依赖 RepositoryContainer 和 GlobalSearchViewModel
  * [OUTPUT]: 对外提供 GlobalSearchView，渲染 iOS 原生搜索 Tab 下的固定范围栏、全局搜索结果、搜索历史、分类筛选、空态、加载态、错误态与搜索来源详情打开入口
- * [POS]: Search 模块根视图，被 MainTabView 的搜索 Tab NavigationStack 消费；搜索结果通过 route-only target 交给根级 fullScreenCover 呈现
+ * [POS]: Search 模块根视图，被 Search Tab NavigationStack 消费；普通详情 push，沉浸查看目标交给根级全屏任务呈现
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
@@ -14,22 +14,26 @@ struct GlobalSearchSubmitRequest: Equatable, Identifiable {
     let query: String
 }
 
-/// 搜索来源详情覆盖层可承载的导航目标，避免搜索页直接写入外层 NavigationPath 或动画状态。
-enum SearchResultViewerTarget: Hashable {
+/// 搜索结果导航意图，由 MainTabView 按浏览层级或沉浸任务分流。
+enum GlobalSearchNavigationTarget: Hashable {
     case book(BookRoute)
     case content(ContentRoute)
+    case contentViewer(
+        source: ContentViewerSourceContext,
+        initialItemID: ContentViewerItemID,
+        keyword: String
+    )
 }
 
 /// 全局搜索 Tab 根视图，承接系统搜索框 query 并在 iOS 原生搜索语境内展示四类本地结果。
 struct GlobalSearchView: View {
     @Binding private var query: String
     private let submitRequest: GlobalSearchSubmitRequest?
-    private let isSearchResultCoverPresented: Bool
     private let onBeginSearchSuggestion: (String) -> Void
     private let onCancelSearchSuggestion: (String) -> Void
     private let onCommitSearchSuggestion: (String) -> Void
     private let onPrepareHistoryClearConfirmation: () -> Void
-    private let onOpenSearchResultCover: (SearchResultViewerTarget) -> Void
+    private let onOpenResult: (GlobalSearchNavigationTarget) -> Void
 
     @Environment(RepositoryContainer.self) private var repositories
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
@@ -50,21 +54,19 @@ struct GlobalSearchView: View {
     init(
         query: Binding<String>,
         submitRequest: GlobalSearchSubmitRequest?,
-        isSearchResultCoverPresented: Bool,
         onBeginSearchSuggestion: @escaping (String) -> Void,
         onCancelSearchSuggestion: @escaping (String) -> Void,
         onCommitSearchSuggestion: @escaping (String) -> Void,
         onPrepareHistoryClearConfirmation: @escaping () -> Void,
-        onOpenSearchResultCover: @escaping (SearchResultViewerTarget) -> Void
+        onOpenResult: @escaping (GlobalSearchNavigationTarget) -> Void
     ) {
         self._query = query
         self.submitRequest = submitRequest
-        self.isSearchResultCoverPresented = isSearchResultCoverPresented
         self.onBeginSearchSuggestion = onBeginSearchSuggestion
         self.onCancelSearchSuggestion = onCancelSearchSuggestion
         self.onCommitSearchSuggestion = onCommitSearchSuggestion
         self.onPrepareHistoryClearConfirmation = onPrepareHistoryClearConfirmation
-        self.onOpenSearchResultCover = onOpenSearchResultCover
+        self.onOpenResult = onOpenResult
     }
 
     var body: some View {
@@ -75,7 +77,6 @@ struct GlobalSearchView: View {
                 GlobalSearchLoadedContent(
                     query: trimmedQuery,
                     viewModel: viewModel,
-                    isSearchResultCoverPresented: isSearchResultCoverPresented,
                     historyManagementResetID: historyManagementResetID,
                     onOpenResult: openResult,
                     onBeginSuggestion: beginSuggestion,
@@ -118,35 +119,31 @@ struct GlobalSearchView: View {
             viewModel?.submit(query: submitRequest.query)
         }
         .onDisappear {
-            guard !isSearchResultCoverPresented else { return }
             bootstrapLoadingGate.hideImmediately()
-            viewModel?.cancelSearch()
         }
     }
 
     private func openResult(_ result: GlobalSearchResult) {
         let keyword = trimmedQuery
         viewModel?.recordConfirmedQuery(keyword)
-        guard let target = searchResultCoverTarget(for: result.target, keyword: keyword) else {
+        guard let target = navigationTarget(for: result.target, keyword: keyword) else {
             return
         }
-        onOpenSearchResultCover(target)
+        onOpenResult(target)
     }
 
-    private func searchResultCoverTarget(
+    private func navigationTarget(
         for target: GlobalSearchTarget,
         keyword: String
-    ) -> SearchResultViewerTarget? {
+    ) -> GlobalSearchNavigationTarget? {
         switch target {
         case .bookDetail(let bookId):
             return .book(.detail(bookId: bookId))
         case .noteViewer(let noteId, let bookId):
-            return .content(
-                .contentViewer(
-                    source: .bookNotes(bookId: bookId),
-                    initialItemID: .note(noteId),
-                    keyword: keyword
-                )
+            return .contentViewer(
+                source: .bookNotes(bookId: bookId),
+                initialItemID: .note(noteId),
+                keyword: keyword
             )
         case .relevantDetail(let contentId):
             return .content(.relevantDetail(contentId: contentId))
@@ -243,7 +240,6 @@ private extension UIViewController {
 private struct GlobalSearchLoadedContent: View {
     let query: String
     @Bindable var viewModel: GlobalSearchViewModel
-    let isSearchResultCoverPresented: Bool
     let historyManagementResetID: UUID
     let onOpenResult: (GlobalSearchResult) -> Void
     let onBeginSuggestion: (String) -> Void
@@ -315,7 +311,6 @@ private struct GlobalSearchLoadedContent: View {
             handleScopeChange(from: oldValue, to: newValue)
         }
         .onDisappear {
-            guard !isSearchResultCoverPresented else { return }
             loadingGate.hideImmediately()
         }
     }

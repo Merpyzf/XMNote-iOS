@@ -42,12 +42,16 @@ final class GlobalSearchViewModel {
     private let repository: any GlobalSearchRepositoryProtocol
     @ObservationIgnored
     private var derivedState: GlobalSearchDerivedState = .empty
-    private var searchTask: Task<Void, Never>?
+    nonisolated(unsafe) private var searchTask: Task<Void, Never>?
 
     /// 注入全局搜索仓储；ViewModel 不持有数据库或网络客户端，保持数据访问统一经 Repository。
     init(repository: any GlobalSearchRepositoryProtocol) {
         self.repository = repository
         self.recentQueries = repository.fetchRecentQueries()
+    }
+
+    deinit {
+        searchTask?.cancel()
     }
 
     var availableScopes: [GlobalSearchScope] {
@@ -162,12 +166,6 @@ final class GlobalSearchViewModel {
     /// 返回主范围结果数量，供范围选择控件展示从属 metadata。
     func scopeCount(for scope: GlobalSearchScope) -> Int {
         derivedState.scopeCount(for: scope)
-    }
-
-    /// 页面离场或搜索关闭时取消读取任务，避免释放后仍回写主线程状态。
-    func cancelSearch() {
-        searchTask?.cancel()
-        searchTask = nil
     }
 
     private var activeKeyword: String? {

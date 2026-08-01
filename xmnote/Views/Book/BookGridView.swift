@@ -6,7 +6,7 @@
 //
 
 /**
- * [INPUT]: 依赖 BookViewModel 提供书架快照、维度状态、搜索状态、显示设置、编辑态与 UICollectionView 排序状态，依赖页面可见态驱动 UIKit 滚动观察与二级页切换禁动画边界，依赖 LoadingGate 约束读取加载反馈，依赖容器注入路由、搜索 drawer 回调、进入编辑态回调、维度工具回调与底部滚动余量
+ * [INPUT]: 依赖 BookViewModel、AppNavigationCoordinator、页面可见态、LoadingGate 与容器注入的浏览/搜索/编辑回调
  * [OUTPUT]: 对外提供 BookGridView，展示书籍子页维度工具行、书架内容区、集合顶部搜索 drawer、多维度 UICollectionView 聚合入口、选择覆盖层、搜索空态、写入错误浮层与拖拽排序交互
  * [POS]: Book 模块网格展示层，被 BookContainerView 嵌入
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -104,6 +104,7 @@ struct BookGridView: View {
     @State private var hasPresentedInitialContent = false
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(AppNavigationCoordinator.self) private var navigationCoordinator
 
     var body: some View {
         ZStack(alignment: .top) {
@@ -489,19 +490,24 @@ struct BookGridView: View {
         switch action {
         case .addNote:
             guard case .book(let bookID) = itemID else { return }
-            onOpenNoteRoute(.create(seed: NoteEditorSeed(
-                bookId: bookID,
-                chapterId: nil,
-                contentHTML: "",
-                ideaHTML: ""
-            )))
+            navigationCoordinator.present(
+                .noteEditor(
+                    mode: .create,
+                    seed: NoteEditorSeed(
+                        bookId: bookID,
+                        chapterId: nil,
+                        contentHTML: "",
+                        ideaHTML: ""
+                    )
+                )
+            )
         case .pin:
             viewModel.pinItem(itemID)
         case .unpin:
             viewModel.unpinItem(itemID)
         case .editBook:
             guard case .book(let bookID) = itemID else { return }
-            onOpenRoute(.edit(bookId: bookID))
+            navigationCoordinator.present(.bookEditor(.edit(bookId: bookID)))
         case .showReadingDetail:
             viewModel.presentContextPlaceholder("阅读详情将在阅读模块迁移后开放")
         case .startReadTiming:

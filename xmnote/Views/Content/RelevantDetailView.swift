@@ -1,5 +1,5 @@
 /**
- * [INPUT]: 依赖 RepositoryContainer 注入内容仓储，依赖 RelevantDetailViewModel 驱动相关详情状态
+ * [INPUT]: 依赖 RepositoryContainer、AppNavigationCoordinator 与 RelevantDetailViewModel
  * [OUTPUT]: 对外提供 RelevantDetailView，承接相关内容单页查看与顶部操作
  * [POS]: Content 模块相关查看壳层，被时间线点击链路推入
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -58,6 +58,7 @@ private struct RelevantDetailLoadedView: View {
     @Bindable var viewModel: RelevantDetailViewModel
     @Binding var showsDeleteDialog: Bool
     @State private var readLoadingGate = LoadingGate()
+    @Environment(AppNavigationCoordinator.self) private var navigationCoordinator
 
     var body: some View {
         ScrollView {
@@ -113,7 +114,9 @@ private struct RelevantDetailLoadedView: View {
     private var toolbarContent: some ToolbarContent {
         ToolbarItemGroup(placement: .topBarTrailing) {
             if let detail = viewModel.detail {
-                NavigationLink(value: ContentRoute.relevantEditor(contentId: detail.contentId)) {
+                Button {
+                    navigationCoordinator.present(.relevantEditor(contentID: detail.contentId))
+                } label: {
                     Image(systemName: "square.and.pencil")
                 }
 

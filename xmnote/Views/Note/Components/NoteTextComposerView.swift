@@ -1,5 +1,5 @@
 /**
- * [INPUT]: 依赖 RichTextEditor 浮动挂饰模式与 SwiftUI safeAreaBar/glassEffect，承接书摘正文/想法的全屏编辑
+ * [INPUT]: 依赖 RichTextEditor 浮动挂饰模式与 SwiftUI safeAreaBar/glassEffect，承接书摘正文/想法的辅助编辑与 OCR 请求回流
  * [OUTPUT]: 对外提供 NoteTextComposerView，服务 NoteEditorView 的正文与想法全屏编辑入口
  * [POS]: Views/Note/Components 的页面私有子视图，负责液态玻璃挂饰工具栏、系统 OCR 选择与键盘联动
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -12,13 +12,12 @@ struct NoteTextComposerView: View {
     let composerTarget: NoteEditorComposerTarget
     let title: String
     @Binding var text: NSAttributedString
-    let ocrRepository: any OCRRepositoryProtocol
+    let onRequestPhotoOCR: () -> Void
 
     @Environment(\.dismiss) private var dismiss
     @State private var activeFormats: Set<RichTextFormat> = []
     @State private var ornamentController = RichTextOrnamentController()
     @State private var showsOCRChooser = false
-    @State private var showsPhotoOCRFlow = false
     @State private var errorMessage: String?
 
     var body: some View {
@@ -47,18 +46,10 @@ struct NoteTextComposerView: View {
             }
             if supportsPhotoOCR {
                 Button("拍照 OCR") {
-                    showsPhotoOCRFlow = true
+                    onRequestPhotoOCR()
                 }
             }
             Button("取消", role: .cancel) { }
-        }
-        .fullScreenCover(isPresented: $showsPhotoOCRFlow) {
-            NotePhotoOCRFlowView(
-                target: composerTarget,
-                repository: ocrRepository
-            ) { payload in
-                ornamentController.send(.insertText(payload.summary.combinedText))
-            }
         }
         .xmSystemAlert(
             isPresented: $errorMessage.isPresented(),

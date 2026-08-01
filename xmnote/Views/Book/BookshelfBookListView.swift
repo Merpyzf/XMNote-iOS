@@ -6,7 +6,7 @@
 //
 
 /**
- * [INPUT]: 依赖 BookshelfBookListRoute 提供聚合上下文，依赖 RepositoryContainer 注入书架仓储，依赖外层 BookRoute/NoteRoute 闭包承接书籍与书摘导航
+ * [INPUT]: 依赖 BookshelfBookListRoute、RepositoryContainer、AppNavigationCoordinator 与外层普通浏览路由闭包
  * [OUTPUT]: 对外提供 BookshelfBookListView，组合本地顶部 chrome、搜索抽屉、BookshelfBookListCollectionView、底部安全区沉浸滚动、编辑选择顶部 chrome、底部玻璃批量工具栏与批量编辑 Sheet 容器
  * [POS]: Book 模块二级列表页，被 BookRoute.bookshelfList 导航目标消费
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -89,6 +89,7 @@ private struct BookshelfBookListContentView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(AppNavigationCoordinator.self) private var navigationCoordinator
     @Bindable var viewModel: BookshelfBookListViewModel
     let onOpenRoute: (BookRoute) -> Void
     let onOpenNoteRoute: (NoteRoute) -> Void
@@ -743,18 +744,23 @@ private struct BookshelfBookListContentView: View {
     private func handleContextAction(_ action: BookshelfBookContextAction, bookID: Int64) {
         switch action {
         case .addNote:
-            onOpenNoteRoute(.create(seed: NoteEditorSeed(
-                bookId: bookID,
-                chapterId: nil,
-                contentHTML: "",
-                ideaHTML: ""
-            )))
+            navigationCoordinator.present(
+                .noteEditor(
+                    mode: .create,
+                    seed: NoteEditorSeed(
+                        bookId: bookID,
+                        chapterId: nil,
+                        contentHTML: "",
+                        ideaHTML: ""
+                    )
+                )
+            )
         case .pin:
             viewModel.pinBook(bookID)
         case .unpin:
             viewModel.unpinBook(bookID)
         case .editBook:
-            onOpenRoute(.edit(bookId: bookID))
+            navigationCoordinator.present(.bookEditor(.edit(bookId: bookID)))
         case .showReadingDetail:
             viewModel.presentContextPlaceholder("阅读详情将在阅读模块迁移后开放")
         case .startReadTiming:

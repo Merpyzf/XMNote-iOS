@@ -1,5 +1,5 @@
 /**
- * [INPUT]: 依赖 RepositoryContainer 注入内容仓储，依赖 ReviewEditorViewModel 驱动书评最小编辑状态
+ * [INPUT]: 依赖 RepositoryContainer、ReviewEditorViewModel 与 AppTaskNavigationContext
  * [OUTPUT]: 对外提供 ReviewEditorView，承接书评标题/正文的最小编辑与保存
  * [POS]: Content 模块书评编辑壳层，被通用 viewer 的编辑动作推入
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -10,6 +10,7 @@ import SwiftUI
 /// 书评最小编辑页，只提供标题与正文的修改能力，图片保持只读展示。
 struct ReviewEditorView: View {
     let reviewId: Int64
+    let navigationContext: AppTaskNavigationContext
 
     @Environment(RepositoryContainer.self) private var repositories
     @Environment(\.dismiss) private var dismiss
@@ -17,12 +18,22 @@ struct ReviewEditorView: View {
     @State private var viewModel: ReviewEditorViewModel?
     @State private var bootstrapLoadingGate = LoadingGate()
 
+    init(
+        reviewId: Int64,
+        navigationContext: AppTaskNavigationContext = .taskChild
+    ) {
+        self.reviewId = reviewId
+        self.navigationContext = navigationContext
+    }
+
     var body: some View {
         ZStack {
             if let viewModel {
-                ReviewEditorLoadedView(viewModel: viewModel) {
-                    dismiss()
-                }
+                ReviewEditorLoadedView(
+                    viewModel: viewModel,
+                    navigationContext: navigationContext,
+                    onDismiss: { dismiss() }
+                )
             } else {
                 Color.surfacePage.ignoresSafeArea()
                 if bootstrapLoadingGate.isVisible {
@@ -49,7 +60,10 @@ struct ReviewEditorView: View {
 
 private struct ReviewEditorLoadedView: View {
     @Bindable var viewModel: ReviewEditorViewModel
-    let onSaved: () -> Void
+    let navigationContext: AppTaskNavigationContext
+    let onDismiss: () -> Void
+
+    @State private var showsDiscardDialog = false
 
     var body: some View {
         ZStack {
@@ -142,7 +156,19 @@ private struct ReviewEditorLoadedView: View {
         }
         .navigationTitle("编辑书评")
         .navigationBarTitleDisplayMode(.inline)
+        .navigationBarBackButtonHidden(true)
+        .navigationPopGuard(
+            canPop: !viewModel.hasUnsavedChanges && !viewModel.isSaving,
+            onBlockedAttempt: requestDismiss
+        )
         .toolbar {
+            ToolbarItem(placement: .topBarLeading) {
+                if navigationContext == .modalRoot {
+                    Button("取消", action: requestDismiss)
+                } else {
+                    TopBarBackButton(action: requestDismiss)
+                }
+            }
             ToolbarItem(placement: .topBarTrailing) {
                 if viewModel.isSaving {
                     ProgressView()
@@ -150,13 +176,27 @@ private struct ReviewEditorLoadedView: View {
                     Button("保存") {
                         Task {
                             if await viewModel.save() {
-                                onSaved()
+                                onDismiss()
                             }
                         }
                     }
                     .disabled(viewModel.isLoading)
                 }
             }
+        }
+        .confirmationDialog("放弃未保存的更改？", isPresented: $showsDiscardDialog) {
+            Button("放弃更改", role: .destructive, action: onDismiss)
+            Button("继续编辑", role: .cancel) { }
+        }
+    }
+
+    /// 根据保存状态与脏数据决定直接退出或先确认放弃。
+    private func requestDismiss() {
+        guard !viewModel.isSaving else { return }
+        if viewModel.hasUnsavedChanges {
+            showsDiscardDialog = true
+        } else {
+            onDismiss()
         }
     }
 }

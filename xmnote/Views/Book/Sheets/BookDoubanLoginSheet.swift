@@ -1,41 +1,39 @@
 /**
  * [INPUT]: 依赖 DoubanWebLoginService 提供共享豆瓣会话与登录请求，依赖 WKWebView 承载豆瓣登录流程
  * [OUTPUT]: 对外提供 BookDoubanLoginScreen，承接豆瓣风控后的登录页与登录成功回流
- * [POS]: Book/Sheets 业务弹层，负责搜索页豆瓣登录入口与登录回流的统一承载
+ * [POS]: Book/Sheets 任务子页面，负责搜索页豆瓣登录入口与登录回流的统一承载
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
 import SwiftUI
 import WebKit
 
-/// 豆瓣登录全屏页，承接真正的网页登录流程并将成功回流给业务页面。
+/// 豆瓣登录任务子页面，承接真正的网页登录流程并将成功回流给业务页面。
 struct BookDoubanLoginScreen: View {
     let title: String
     let onClose: () -> Void
     let onLoginDetected: () -> Void
 
     var body: some View {
-        NavigationStack {
-            BookDoubanLoginWebView(onLoginDetected: onLoginDetected)
-                .background(Color.surfacePage)
-                .navigationTitle("登录豆瓣")
-                .navigationBarTitleDisplayMode(.inline)
-                .toolbar {
-                    ToolbarItem(placement: .topBarLeading) {
-                        Button("关闭", action: onClose)
-                    }
-                    ToolbarItem(placement: .principal) {
-                        VStack(spacing: 2) {
-                            Text("登录豆瓣")
-                                .font(AppTypography.headline)
-                            Text(title)
-                                .font(AppTypography.caption2)
-                                .foregroundStyle(Color.textSecondary)
-                        }
+        BookDoubanLoginWebView(onLoginDetected: onLoginDetected)
+            .background(Color.surfacePage)
+            .navigationTitle("登录豆瓣")
+            .navigationBarTitleDisplayMode(.inline)
+            .navigationBarBackButtonHidden(true)
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    TopBarBackButton(action: onClose)
+                }
+                ToolbarItem(placement: .principal) {
+                    VStack(spacing: 2) {
+                        Text("登录豆瓣")
+                            .font(AppTypography.headline)
+                        Text(title)
+                            .font(AppTypography.caption2)
+                            .foregroundStyle(Color.textSecondary)
                     }
                 }
-        }
-        .interactiveDismissDisabled()
+            }
     }
 }
 

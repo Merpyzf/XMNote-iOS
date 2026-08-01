@@ -124,7 +124,7 @@ final class BookCollectionDetailViewModel {
     func addPickerResult(_ result: BookPickerResult) {
         let selections: [BookCollectionBookSelectionInput]
         switch result {
-        case .cancelled, .addFlowRequested:
+        case .cancelled, .addFlowRequested, .editorRequested:
             selections = []
         case .single(let selection):
             selections = Self.selectionInput(from: selection).map { [$0] } ?? []

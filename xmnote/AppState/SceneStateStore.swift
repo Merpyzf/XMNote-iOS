@@ -30,7 +30,7 @@ final class SceneStateStore {
         isRestored = true
     }
 
-    /// 从 SceneStorage 恢复快照；当数据 epoch 不匹配时丢弃旧快照。
+    /// 从 SceneStorage 恢复快照；当快照版本或数据 epoch 不匹配时安全回到对应数据世界的默认根入口。
     func restore(from data: Data?, currentDataEpoch: Int) {
         guard let data else {
             replaceSnapshot(AppSceneSnapshot.empty(dataEpoch: currentDataEpoch), persist: true)
@@ -39,6 +39,7 @@ final class SceneStateStore {
         }
 
         guard let restored = try? Self.decoder.decode(AppSceneSnapshot.self, from: data),
+              restored.snapshotVersion == AppSceneSnapshot.currentVersion,
               restored.dataEpoch == currentDataEpoch else {
             replaceSnapshot(AppSceneSnapshot.empty(dataEpoch: currentDataEpoch), persist: true)
             isRestored = true
@@ -119,10 +120,6 @@ final class SceneStateStore {
         mutate { $0.books.search = bookSearch }
     }
 
-    func updateContentViewer(_ contentViewer: ContentViewerSceneSnapshot?) {
-        mutate { $0.contentViewer = contentViewer }
-    }
-
     private func mutate(_ mutate: (inout AppSceneSnapshot) -> Void) {
         var next = snapshot
         mutate(&next)
@@ -157,6 +154,8 @@ final class SceneStateStore {
 
 /// AppSceneSnapshot 是单个 scene 的轻量恢复快照，只保存高价值语义锚点。
 struct AppSceneSnapshot: Codable, Equatable {
+    static let currentVersion = 2
+
     var snapshotVersion: Int
     var dataEpoch: Int
     var selectedTab: AppTab
@@ -165,19 +164,17 @@ struct AppSceneSnapshot: Codable, Equatable {
     var reading: ReadingSceneSnapshot
     var books: BooksSceneSnapshot
     var notes: NotesSceneSnapshot
-    var contentViewer: ContentViewerSceneSnapshot?
 
     static func empty(dataEpoch: Int) -> AppSceneSnapshot {
         AppSceneSnapshot(
-            snapshotVersion: 1,
+            snapshotVersion: currentVersion,
             dataEpoch: dataEpoch,
             selectedTab: .reading,
             searchQuery: "",
             navigation: NavigationSceneSnapshot(),
             reading: ReadingSceneSnapshot(),
             books: BooksSceneSnapshot(),
-            notes: NotesSceneSnapshot(),
-            contentViewer: nil
+            notes: NotesSceneSnapshot()
         )
     }
 }
@@ -221,9 +218,4 @@ struct ReadCalendarSceneSnapshot: Codable, Equatable {
 struct BookSearchSceneSnapshot: Codable, Equatable {
     var query: String
     var selectedSource: BookSearchSource
-}
-
-struct ContentViewerSceneSnapshot: Codable, Equatable {
-    var source: ContentViewerSourceContext
-    var selectedItemID: ContentViewerItemID
 }

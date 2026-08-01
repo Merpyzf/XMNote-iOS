@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 Foundation（Date/URL）与 Observation，解析 App 根层接收的阅读计时深链
- * [OUTPUT]: 对外提供 ReadingRoute 枚举与 ReadingTimerDeepLinkRouter，定义在读模块导航目的地并桥接系统深链
+ * [OUTPUT]: 对外提供 ReadingRoute 枚举与 ReadingTimerDeepLinkRouter，定义在读模块可恢复的书籍详情、计时与阅读日历目的地
  * [POS]: Navigation 模块的在读路由，被 xmnoteApp、ReadingContainerView 与 MainTabView 消费
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */

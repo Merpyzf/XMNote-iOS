@@ -22,6 +22,8 @@ final class ReviewEditorViewModel {
     var errorMessage: String?
 
     private let repository: any ContentRepositoryProtocol
+    private var baselineTitle = ""
+    private var baselineContentText = NSAttributedString()
 
     /// 注入书评 ID 与内容仓储，初始化编辑页上下文。
     init(reviewId: Int64, repository: any ContentRepositoryProtocol) {
@@ -31,6 +33,12 @@ final class ReviewEditorViewModel {
 
     var imageURLs: [String] {
         draft?.imageURLs ?? []
+    }
+
+    /// 标识当前编辑内容是否偏离最近一次加载或保存基线，用于阻止误退出。
+    var hasUnsavedChanges: Bool {
+        guard draft != nil else { return false }
+        return title != baselineTitle || !contentText.isEqual(to: baselineContentText)
     }
 
     /// 加载书评草稿并转换成富文本编辑器可消费的状态。
@@ -47,6 +55,7 @@ final class ReviewEditorViewModel {
             self.draft = draft
             title = draft.title
             contentText = RichTextBridge.htmlToAttributed(draft.contentHTML)
+            updateBaseline()
         } catch {
             errorMessage = "加载失败：\(error.localizedDescription)"
         }
@@ -69,10 +78,17 @@ final class ReviewEditorViewModel {
         do {
             try await repository.saveReviewEditorDraft(draft)
             self.draft = draft
+            updateBaseline()
             return true
         } catch {
             errorMessage = "保存失败：\(error.localizedDescription)"
             return false
         }
+    }
+
+    /// 将当前表单状态记录为已保存基线。
+    private func updateBaseline() {
+        baselineTitle = title
+        baselineContentText = contentText.copy() as? NSAttributedString ?? NSAttributedString()
     }
 }

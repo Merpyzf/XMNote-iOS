@@ -1,5 +1,5 @@
 /**
- * [INPUT]: 依赖 RepositoryContainer 注入书架与封面上传仓储，依赖 BookCollectionDetailViewModel 驱动书单详情、添加书籍、移除、排序、relation 文本编辑、书籍元信息编辑、导出占位与删除确认
+ * [INPUT]: 依赖 RepositoryContainer、AppNavigationCoordinator 与 BookCollectionDetailViewModel
  * [OUTPUT]: 对外提供 BookCollectionDetailView，承载手动书单与年度书单详情、自动同步边界、导出入口、书籍行操作、书籍元信息编辑、收藏理由/年度点评编辑和系统弹窗
  * [POS]: Views/Book 的书单详情页面壳层，被 BookRoute.collectionDetail 导航目标消费
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -57,13 +57,16 @@ private struct BookCollectionDetailLoadingScaffold: View {
 
 /// 书单详情内容视图，集中承载系统工具栏入口、详情头、书籍列表和业务弹窗。
 private struct BookCollectionDetailContentView: View {
+    @Environment(RepositoryContainer.self) private var repositories
     @Environment(\.dismiss) private var dismiss
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(AppNavigationCoordinator.self) private var navigationCoordinator
     @Bindable var viewModel: BookCollectionDetailViewModel
     let onOpenRoute: (BookRoute) -> Void
     @State private var editMode: EditMode = .inactive
     @State private var loadingGate = LoadingGate()
     @State private var showsBookPicker = false
+    @State private var pendingBookPickerTask: BookCollectionPickerTask?
     @State private var showsCollectionSummary = false
     @State private var contentTrayTop: CGFloat = .nan
     @State private var floatingAddBookOrnamentHeight: CGFloat = .zero
@@ -108,10 +111,20 @@ private struct BookCollectionDetailContentView: View {
             guard shouldDismiss else { return }
             dismiss()
         }
-        .sheet(isPresented: $showsBookPicker) {
+        .sheet(
+            isPresented: $showsBookPicker,
+            onDismiss: presentPendingBookPickerTask
+        ) {
             BookPickerView(configuration: pickerConfiguration) { result in
+                switch result {
+                case .addFlowRequested:
+                    pendingBookPickerTask = .bookEditor(.manual)
+                case .editorRequested(let seed):
+                    pendingBookPickerTask = .bookEditor(seed)
+                default:
+                    viewModel.addPickerResult(result)
+                }
                 showsBookPicker = false
-                viewModel.addPickerResult(result)
             }
         }
         .sheet(isPresented: $showsCollectionSummary) {
@@ -279,7 +292,9 @@ private struct BookCollectionDetailContentView: View {
                                         }
                                     },
                                     onEditBook: {
-                                        onOpenRoute(.edit(bookId: item.book.id))
+                                        navigationCoordinator.present(
+                                            .bookEditor(.edit(bookId: item.book.id))
+                                        )
                                     },
                                     onEditMetadata: {
                                         viewModel.presentMetadataEdit(for: item)
@@ -637,6 +652,23 @@ private struct BookCollectionDetailContentView: View {
         )
     }
 
+    private func presentPendingBookPickerTask() {
+        guard let pendingBookPickerTask else { return }
+        self.pendingBookPickerTask = nil
+
+        switch pendingBookPickerTask {
+        case .bookEditor(let seed):
+            navigationCoordinator.presentBookEditor(mode: .create(seed: seed)) { bookID in
+                Task { @MainActor in
+                    guard let book = try? await repositories.bookRepository.fetchPickerBook(bookId: bookID) else {
+                        return
+                    }
+                    viewModel.addPickerResult(.single(.local(book)))
+                }
+            }
+        }
+    }
+
     private func syncLoadingGate() {
         if case .loading = viewModel.contentState {
             loadingGate.update(intent: .read)
@@ -676,6 +708,10 @@ private struct BookCollectionDetailContentView: View {
             ]
         )
     }
+}
+
+private enum BookCollectionPickerTask: Hashable {
+    case bookEditor(BookEditorSeed)
 }
 
 private enum BookCollectionContentTrayCoordinateSpace {

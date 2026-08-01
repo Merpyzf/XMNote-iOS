@@ -1,5 +1,5 @@
 /**
- * [INPUT]: 依赖 RepositoryContainer 注入仓储，依赖 NoteDetailViewModel 驱动状态
+ * [INPUT]: 依赖 RepositoryContainer、AppNavigationCoordinator 与 NoteDetailViewModel
  * [OUTPUT]: 对外提供 NoteDetailView，笔记详情阅读与编辑页面
  * [POS]: Note 模块详情壳层，通过导航接收 noteId 参数
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -12,6 +12,7 @@ struct NoteDetailView: View {
     let noteId: Int64
 
     @Environment(RepositoryContainer.self) private var repositories
+    @Environment(AppNavigationCoordinator.self) private var navigationCoordinator
     @State private var viewModel: NoteDetailViewModel?
     @State private var bootstrapLoadingGate = LoadingGate()
 
@@ -50,7 +51,11 @@ struct NoteDetailView: View {
     private var toolbarContent: some ToolbarContent {
         ToolbarItem(placement: .topBarTrailing) {
             if let viewModel {
-                NavigationLink(value: NoteRoute.edit(noteId: noteId)) {
+                Button {
+                    navigationCoordinator.present(
+                        .noteEditor(mode: .edit(noteId: noteId), seed: nil)
+                    )
+                } label: {
                     Text("编辑")
                 }
                 .disabled(viewModel.isLoading)

@@ -12,7 +12,7 @@ import UIKit
  */
 
 /// 全屏富文本编辑目标，区分正文与想法两块输入区。
-enum NoteEditorComposerTarget: String, Identifiable {
+enum NoteEditorComposerTarget: String, Identifiable, Hashable {
     case content
     case idea
 

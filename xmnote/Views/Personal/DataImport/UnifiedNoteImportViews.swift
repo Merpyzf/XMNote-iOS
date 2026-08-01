@@ -278,7 +278,7 @@ private final class UnifiedNoteImportPreviewModel {
 }
 
 struct UnifiedNoteImportPreviewView: View {
-    @Environment(\.dismiss) private var dismiss
+    @Environment(AppNavigationCoordinator.self) private var navigationCoordinator
     @State private var model: UnifiedNoteImportPreviewModel
     @State private var contentBook: UnifiedNoteImportPreviewModel.Book?
     @State private var mappingBook: UnifiedNoteImportPreviewModel.Book?
@@ -328,7 +328,11 @@ struct UnifiedNoteImportPreviewView: View {
         }
         .task { await model.prepareMatches() }
         .onDisappear { model.cancel() }
-        .onChange(of: model.didCommit) { _, value in if value { dismiss() } }
+        .onChange(of: model.didCommit) { _, value in
+            if value {
+                navigationCoordinator.dismissTask()
+            }
+        }
         .navigationDestination(isPresented: Binding(get: { contentBook != nil }, set: { if !$0 { contentBook = nil } })) {
             if let book = contentBook { UnifiedNoteImportContentView(book: binding(for: book.id)) }
         }

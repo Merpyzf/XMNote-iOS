@@ -137,14 +137,7 @@ struct BookSearchView: View {
             isPresented: $isClearHistoryConfirmationPresented,
             descriptor: clearHistoryDescriptor
         )
-        .fullScreenCover(
-            item: $activeDoubanLoginPresentation,
-            onDismiss: {
-                Task {
-                    await handleDoubanLoginDismissed()
-                }
-            }
-        ) { presentation in
+        .navigationDestination(item: $activeDoubanLoginPresentation) { presentation in
             BookDoubanLoginScreen(
                 title: presentation.title,
                 onClose: {
@@ -156,14 +149,7 @@ struct BookSearchView: View {
                 }
             )
         }
-        .fullScreenCover(
-            item: $activeFanqieVerificationPresentation,
-            onDismiss: {
-                Task {
-                    await handleFanqieVerificationDismissed()
-                }
-            }
-        ) { presentation in
+        .navigationDestination(item: $activeFanqieVerificationPresentation) { presentation in
             BookFanqieVerificationScreen(
                 title: presentation.title,
                 searchURL: presentation.searchURL,
@@ -175,6 +161,18 @@ struct BookSearchView: View {
                     activeFanqieVerificationPresentation = nil
                 }
             )
+        }
+        .onChange(of: activeDoubanLoginPresentation?.id) { oldValue, newValue in
+            guard oldValue != nil, newValue == nil else { return }
+            Task {
+                await handleDoubanLoginDismissed()
+            }
+        }
+        .onChange(of: activeFanqieVerificationPresentation?.id) { oldValue, newValue in
+            guard oldValue != nil, newValue == nil else { return }
+            Task {
+                await handleFanqieVerificationDismissed()
+            }
         }
         .onAppear {
             syncSceneSnapshot()
@@ -227,9 +225,7 @@ struct BookSearchView: View {
         .toolbar {
             if let onDismissRequested {
                 ToolbarItem(placement: .topBarLeading) {
-                    TopBarBackButton {
-                        onDismissRequested()
-                    }
+                    Button("取消", action: onDismissRequested)
                 }
             }
             ToolbarItem(placement: .topBarTrailing) {
@@ -888,7 +884,7 @@ private extension BookSearchView {
         let action: PendingRecoveryAction
     }
 
-    struct DoubanLoginPresentation: Identifiable {
+    struct DoubanLoginPresentation: Identifiable, Hashable {
         let id = UUID()
         let title: String
     }
@@ -898,7 +894,7 @@ private extension BookSearchView {
         let action: FanqieVerificationRecoveryAction
     }
 
-    struct FanqieVerificationPresentation: Identifiable {
+    struct FanqieVerificationPresentation: Identifiable, Hashable {
         let id = UUID()
         let title: String
         let searchURL: URL

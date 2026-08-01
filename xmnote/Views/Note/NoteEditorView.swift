@@ -1,5 +1,5 @@
 /**
- * [INPUT]: 依赖 RepositoryContainer 注入 NoteRepository，依赖 NoteEditorViewModel 驱动完整书摘编辑状态，依赖 NoteTextComposerView 与 BookPickerView 承接富文本输入和书籍选择
+ * [INPUT]: 依赖 RepositoryContainer、NoteEditorViewModel、AppTaskNavigationContext、NoteTextComposerView 与 BookPickerView
  * [OUTPUT]: 对外提供 NoteEditorView，承载书摘新建/编辑、草稿恢复、附图、章节/标签与保存动作
  * [POS]: Note 模块书摘编辑页壳层，对齐 Android 编辑流程并采用 iOS 原生页面组织
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -14,8 +14,10 @@ import os
 struct NoteEditorView: View {
     let mode: NoteEditorMode
     let seed: NoteEditorSeed?
+    let navigationContext: AppTaskNavigationContext
 
     @Environment(RepositoryContainer.self) private var repositories
+    @Environment(AppNavigationCoordinator.self) private var navigationCoordinator
     @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var scenePhase
     @State private var viewModel: NoteEditorViewModel?
@@ -24,13 +26,15 @@ struct NoteEditorView: View {
     @State private var closeFlowState: NoteEditorCloseFlowState = .idle
     @State private var activeComposer: NoteEditorComposerTarget?
     @State private var activeSheet: NoteEditorSheet?
+    @State private var pendingBookPickerTask: NoteEditorBookPickerTask?
     @State private var activeEditorTarget: NoteEditorComposerTarget?
     @State private var isContentFocused = false
     @State private var isIdeaFocused = false
     @State private var contentOrnamentController = RichTextOrnamentController()
     @State private var ideaOrnamentController = RichTextOrnamentController()
     @State private var showsOCRChooser = false
-    @State private var showsPhotoOCRFlow = false
+    @State private var pendingPhotoOCRTarget: NoteEditorComposerTarget?
+    @State private var activePhotoOCRTarget: NoteEditorComposerTarget?
     @State private var toolbarPromptMessage: String?
     @State private var attachmentPhotoItems: [PhotosPickerItem] = []
     @State private var showsAttachmentPicker = false
@@ -56,9 +60,14 @@ struct NoteEditorView: View {
     )
 #endif
 
-    init(mode: NoteEditorMode, seed: NoteEditorSeed? = nil) {
+    init(
+        mode: NoteEditorMode,
+        seed: NoteEditorSeed? = nil,
+        navigationContext: AppTaskNavigationContext = .taskChild
+    ) {
         self.mode = mode
         self.seed = seed
+        self.navigationContext = navigationContext
     }
 
     var body: some View {
@@ -329,12 +338,18 @@ private extension NoteEditorView {
         )
         .toolbar {
             ToolbarItem(placement: .topBarLeading) {
-                TopBarBackButton(
-                    action: {
+                if navigationContext == .modalRoot {
+                    Button("取消") {
                         requestClose(using: viewModel, source: .toolbarButton)
-                    },
-                    foregroundColor: .textPrimary
-                )
+                    }
+                } else {
+                    TopBarBackButton(
+                        action: {
+                            requestClose(using: viewModel, source: .toolbarButton)
+                        },
+                        foregroundColor: .textPrimary
+                    )
+                }
             }
             ToolbarItem(placement: .topBarTrailing) {
                 Button {
@@ -355,15 +370,16 @@ private extension NoteEditorView {
             editorToolbar(viewModel)
                 .noteEditorReportHeight(.toolbar)
         }
-        .sheet(item: $activeComposer, onDismiss: {
-            restoreEditorFocusAfterComposerDismiss()
-        }) { target in
+        .sheet(item: $activeComposer, onDismiss: handleComposerDismissed) { target in
             NavigationStack {
                 NoteTextComposerView(
                     composerTarget: target,
                     title: target.title,
                     text: viewModel.binding(for: target),
-                    ocrRepository: repositories.ocrRepository
+                    onRequestPhotoOCR: {
+                        pendingPhotoOCRTarget = target
+                        activeComposer = nil
+                    }
                 )
             }
         }
@@ -373,7 +389,7 @@ private extension NoteEditorView {
             maxSelectionCount: 9,
             matching: .images
         )
-        .sheet(item: $activeSheet) { sheet in
+        .sheet(item: $activeSheet, onDismiss: presentPendingBookPickerTask) { sheet in
             switch sheet {
             case .book:
                 BookPickerView(
@@ -395,7 +411,9 @@ private extension NoteEditorView {
                         case .multiple:
                             break
                         case .addFlowRequested:
-                            break
+                            pendingBookPickerTask = .addBook
+                        case .editorRequested(let seed):
+                            pendingBookPickerTask = .bookEditor(seed)
                         }
                         activeSheet = nil
                     }
@@ -443,13 +461,12 @@ private extension NoteEditorView {
             }
             if supportsPhotoOCR {
                 Button("拍照 OCR") {
-                    showsPhotoOCRFlow = true
+                    activePhotoOCRTarget = activeEditorTarget ?? .content
                 }
             }
             Button("取消", role: .cancel) { }
         }
-        .fullScreenCover(isPresented: $showsPhotoOCRFlow) {
-            let target = activeEditorTarget ?? .content
+        .navigationDestination(item: $activePhotoOCRTarget) { target in
             NotePhotoOCRFlowView(
                 target: target,
                 repository: repositories.ocrRepository
@@ -1789,6 +1806,40 @@ private extension NoteEditorView {
         }
     }
 
+    func handleComposerDismissed() {
+        guard let target = pendingPhotoOCRTarget else {
+            restoreEditorFocusAfterComposerDismiss()
+            return
+        }
+
+        pendingPhotoOCRTarget = nil
+        activeEditorTarget = target
+        DispatchQueue.main.async {
+            activePhotoOCRTarget = target
+        }
+    }
+
+    func presentPendingBookPickerTask() {
+        guard let request = pendingBookPickerTask, let viewModel else { return }
+        pendingBookPickerTask = nil
+
+        switch request {
+        case .addBook:
+            navigationCoordinator.presentAddBook { book in
+                viewModel.selectBook(book)
+            }
+        case .bookEditor(let seed):
+            navigationCoordinator.presentBookEditor(mode: .create(seed: seed)) { bookID in
+                Task { @MainActor in
+                    guard let book = try? await repositories.bookRepository.fetchPickerBook(bookId: bookID) else {
+                        return
+                    }
+                    viewModel.selectBook(book)
+                }
+            }
+        }
+    }
+
     func consumeAttachmentPhotoItems(_ items: [PhotosPickerItem], viewModel: NoteEditorViewModel) async {
         for item in items {
             do {
@@ -2221,6 +2272,11 @@ private struct NoteEditorFloatingToolbar: View {
         .buttonStyle(.plain)
         .disabled(!enabled)
     }
+}
+
+private enum NoteEditorBookPickerTask: Hashable {
+    case addBook
+    case bookEditor(BookEditorSeed)
 }
 
 private enum NoteEditorSheet: String, Identifiable {

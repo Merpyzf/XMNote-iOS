@@ -7,7 +7,7 @@
 
 import Foundation
 
-nonisolated enum NoteImportParserID: String, Codable, CaseIterable, Sendable {
+nonisolated enum NoteImportParserID: String, Codable, CaseIterable, Hashable, Sendable {
     case booxOld = "boox-old"
     case booxNew = "boox-new"
     case doubanRead = "douban-read"
