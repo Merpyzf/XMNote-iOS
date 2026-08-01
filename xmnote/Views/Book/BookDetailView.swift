@@ -19,6 +19,7 @@ struct BookDetailView: View {
     let bookId: Int64
     let onStartReading: (Int64) -> Void
     let onSupplementReading: (Int64) -> Void
+    let readingTimerZoomConfiguration: ReadingTimerZoomSourceConfiguration?
     @Environment(RepositoryContainer.self) private var repositories
     @State private var viewModel: BookDetailViewModel?
     @State private var bootstrapLoadingGate = LoadingGate()
@@ -27,11 +28,13 @@ struct BookDetailView: View {
     init(
         bookId: Int64,
         onStartReading: @escaping (Int64) -> Void = { _ in },
-        onSupplementReading: @escaping (Int64) -> Void = { _ in }
+        onSupplementReading: @escaping (Int64) -> Void = { _ in },
+        readingTimerZoomConfiguration: ReadingTimerZoomSourceConfiguration? = nil
     ) {
         self.bookId = bookId
         self.onStartReading = onStartReading
         self.onSupplementReading = onSupplementReading
+        self.readingTimerZoomConfiguration = readingTimerZoomConfiguration
     }
 
     var body: some View {
@@ -41,7 +44,8 @@ struct BookDetailView: View {
                     bookId: bookId,
                     viewModel: viewModel,
                     onStartReading: onStartReading,
-                    onSupplementReading: onSupplementReading
+                    onSupplementReading: onSupplementReading,
+                    readingTimerZoomConfiguration: readingTimerZoomConfiguration
                 )
             } else {
                 Color.surfacePage.ignoresSafeArea()
@@ -77,6 +81,7 @@ private struct BookDetailContentView: View {
     @Bindable var viewModel: BookDetailViewModel
     let onStartReading: (Int64) -> Void
     let onSupplementReading: (Int64) -> Void
+    let readingTimerZoomConfiguration: ReadingTimerZoomSourceConfiguration?
     @State private var readLoadingGate = LoadingGate()
 
     private enum Layout {
@@ -118,7 +123,13 @@ private struct BookDetailContentView: View {
     private func scrollContent(_ book: BookDetail) -> some View {
         ScrollView {
             LazyVStack(spacing: Spacing.base) {
-                bookHeader(book)
+                if let readingTimerZoomConfiguration {
+                    ReadingTimerNormalZoomSource(configuration: readingTimerZoomConfiguration) { open in
+                        bookHeader(book, onStartReading: { _ in open() })
+                    }
+                } else {
+                    bookHeader(book)
+                }
 
                 if !book.attributes.isEmpty {
                     attributesSection(book.attributes)
@@ -145,7 +156,10 @@ private struct BookDetailContentView: View {
 
     // MARK: - Header
 
-    private func bookHeader(_ book: BookDetail) -> some View {
+    private func bookHeader(
+        _ book: BookDetail,
+        onStartReading: ((Int64) -> Void)? = nil
+    ) -> some View {
         CardContainer {
             VStack(alignment: .leading, spacing: Spacing.base) {
                 HStack(alignment: .top, spacing: Spacing.base) {
@@ -157,7 +171,7 @@ private struct BookDetailContentView: View {
 
                 HStack(spacing: Spacing.base) {
                     Button {
-                        onStartReading(bookId)
+                        (onStartReading ?? self.onStartReading)(bookId)
                     } label: {
                         Label("开始阅读", systemImage: "play.fill")
                             .font(AppTypography.bodyMedium)

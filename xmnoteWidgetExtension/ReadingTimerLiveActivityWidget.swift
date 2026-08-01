@@ -373,11 +373,8 @@ private enum ReadingTimerIslandExpandedMetrics {
     static let contentVerticalMargin: CGFloat = 0
 
     static let coverFrameSize = CGSize(width: 80, height: 120)
-    static let coverArtSize = CGSize(width: 69, height: 107)
     static let coverTop: CGFloat = 22
     static let coverFrameCornerRadius: CGFloat = 5
-    static let coverArtCornerRadius: CGFloat = 4
-    static let coverFrameFill = Color(white: 0.58)
 
     static let textColumnWidth: CGFloat = 163
     static let titleAuthorSpacing: CGFloat = 0
@@ -568,30 +565,18 @@ private struct ReadingTimerIslandCover: View {
     }
 
     private var expandedCover: some View {
-        ZStack {
-            RoundedRectangle(
-                cornerRadius: ReadingTimerIslandExpandedMetrics.coverFrameCornerRadius,
-                style: .continuous
+        coverSurface
+            .frame(
+                width: ReadingTimerIslandExpandedMetrics.coverFrameSize.width,
+                height: ReadingTimerIslandExpandedMetrics.coverFrameSize.height
             )
-            .fill(ReadingTimerIslandExpandedMetrics.coverFrameFill)
-
-            coverSurface
-                .frame(
-                    width: ReadingTimerIslandExpandedMetrics.coverArtSize.width,
-                    height: ReadingTimerIslandExpandedMetrics.coverArtSize.height
+            .compositingGroup()
+            .clipShape(
+                .rect(
+                    cornerRadius: ReadingTimerIslandExpandedMetrics.coverFrameCornerRadius,
+                    style: .continuous
                 )
-                .compositingGroup()
-                .clipShape(
-                    .rect(
-                        cornerRadius: ReadingTimerIslandExpandedMetrics.coverArtCornerRadius,
-                        style: .continuous
-                    )
-                )
-        }
-        .frame(
-            width: ReadingTimerIslandExpandedMetrics.coverFrameSize.width,
-            height: ReadingTimerIslandExpandedMetrics.coverFrameSize.height
-        )
+            )
     }
 
     @ViewBuilder

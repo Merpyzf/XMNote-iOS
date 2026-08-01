@@ -67,6 +67,7 @@ final class ReadingTimerCoordinator {
     private var lastSnapshotPersistDate: Date?
     private var isCompletingCountdown = false
     private var longDurationReminderRecordId: Int64?
+    private var refreshGeneration: UInt64 = 0
 
     /// 注入阅读计时仓储，等待页面触发 bootstrap 后再读取或创建计时记录。
     init(
@@ -200,28 +201,33 @@ final class ReadingTimerCoordinator {
         }
     }
 
-    /// 按触发来源重新读取数据库真相；优先精确恢复当前记录或持久化锚点，再回退到 Android 对齐的运行/暂停查询。
-    /// 并发语义：方法运行在 MainActor；多次触发允许串行覆盖，最终状态始终来自最后一次成功读取的数据库快照。
+    /// 按触发来源重新读取数据库真相；优先精确恢复当前记录或持久化锚点，再回退到全局未完成查询。
+    /// 并发语义：方法运行在 MainActor；每次刷新递增 generation，较早返回的异步结果不得覆盖较新的调和结果。
     func refresh(reason: ReadingTimerRefreshReason) async {
+        refreshGeneration &+= 1
+        let generation = refreshGeneration
         let shouldExposeReconciling = reason == .appLaunch || reason == .dataSourceChanged
         if shouldExposeReconciling {
             isLoading = true
         }
         errorMessage = nil
         defer {
-            if shouldExposeReconciling {
+            if generation == refreshGeneration {
                 isLoading = false
             }
         }
 
         do {
-            if let session = try await fetchGlobalUnfinishedSession() {
+            let session = try await fetchGlobalUnfinishedSession()
+            guard generation == refreshGeneration else { return }
+            if let session {
                 applyRecoveredSession(session, at: Date())
                 await syncRecoveredLiveActivity(session)
             } else {
                 clearActiveSession(keepingBookContext: false)
             }
         } catch {
+            guard generation == refreshGeneration else { return }
             errorMessage = "计时状态恢复失败：\(error.localizedDescription)"
         }
     }
@@ -315,6 +321,39 @@ final class ReadingTimerCoordinator {
         )
     }
 
+    /// 从停止待保存状态继续计时；已完成的倒计时不能继续，避免越过用户设定的目标时长。
+    /// 并发语义：Repository 以 status = 2 作为比较并交换前置条件；成功后才恢复 ticker 与 Live Activity。
+    func resumeStoppedForContinue() async {
+        guard let session = activeSession,
+              status == .stoppedPendingSave,
+              session.countdownSeconds == 0 || session.elapsedSeconds < session.countdownSeconds,
+              !isWriting else {
+            return
+        }
+        isWriting = true
+        errorMessage = nil
+        defer { isWriting = false }
+
+        do {
+            let now = Date()
+            let resumed = try await repository.resumeStoppedSession(
+                recordId: session.id,
+                resumedAt: now
+            )
+            shouldPresentFinishSheet = false
+            applyActiveSession(resumed, calibratedAt: now)
+            await ReadingTimerLiveActivityController.shared.start(
+                session: resumed,
+                elapsedSeconds: elapsedSeconds
+            )
+            postSessionDidChange(recordId: resumed.id)
+        } catch ReadingTimerError.staleSessionState {
+            await refreshSessionAfterStaleWrite(recordId: session.id)
+        } catch {
+            errorMessage = "继续计时失败：\(error.localizedDescription)"
+        }
+    }
+
     /// 结束当前计时并进入待保存状态；记录不会进入统计，直到用户保存确认。
     /// 并发语义：停止时会计算当前阅读时长和暂停累计，再写入 `status = 2`；成功后停止 tick 并拉起保存 Sheet。
     func stopForSave() async {
@@ -339,10 +378,17 @@ final class ReadingTimerCoordinator {
 
     /// 保存结束确认信息，将记录推进为完成状态并进入现有统计消费口径。
     /// 并发语义：保存期间关闭 tick 并禁用重复提交；Repository 负责事务内更新记录、位置和读完状态。
-    func saveFinishedRecord(position: Double?, insight: String, markReadDone: Bool) async {
+    func saveFinishedRecord(
+        targetBookId: Int64,
+        startAt: Date,
+        endAt: Date,
+        didEditTimeRange: Bool,
+        position: Double?,
+        insight: String,
+        markReadDone: Bool
+    ) async {
         guard let session = activeSession else { return }
-        let now = session.endTime ?? Date()
-        let finalElapsed = max(1, elapsedSeconds)
+        let finalElapsed = elapsedSeconds
         let finalPaused = currentPausedDurationMillis(at: Date())
         isWriting = true
         errorMessage = nil
@@ -353,9 +399,12 @@ final class ReadingTimerCoordinator {
             snapshotPersistTask?.cancel()
             let input = ReadingTimerFinishInput(
                 recordId: session.id,
-                endAt: now,
-                elapsedSeconds: finalElapsed,
-                pausedDurationMillis: finalPaused,
+                targetBookId: targetBookId,
+                startAt: startAt,
+                endAt: endAt,
+                measuredElapsedSeconds: finalElapsed,
+                measuredPausedDurationMillis: finalPaused,
+                didEditTimeRange: didEditTimeRange,
                 position: position,
                 insight: insight,
                 markReadDone: markReadDone
@@ -368,7 +417,7 @@ final class ReadingTimerCoordinator {
             await ReadingTimerLiveActivityController.shared.end(
                 recordId: session.id,
                 finalSession: finished,
-                elapsedSeconds: finalElapsed
+                elapsedSeconds: finished.elapsedSeconds
             )
             shouldPresentFinishSheet = false
         } catch {
@@ -416,7 +465,7 @@ final class ReadingTimerCoordinator {
         )
         let syncedElapsedSeconds = elapsedSeconds
         Task {
-            if session.status == .running || session.status == .paused {
+            if session.status.isUnfinished {
                 await ReadingTimerLiveActivityController.shared.start(
                     session: session,
                     elapsedSeconds: syncedElapsedSeconds
@@ -454,14 +503,10 @@ final class ReadingTimerCoordinator {
                 )
             )
             applyActiveSession(snapshot, calibratedAt: now)
-            if snapshot.status == .stoppedPendingSave {
-                await ReadingTimerLiveActivityController.shared.end(recordId: snapshot.id)
-            } else {
-                await ReadingTimerLiveActivityController.shared.update(
-                    session: snapshot,
-                    elapsedSeconds: elapsedSeconds
-                )
-            }
+            await ReadingTimerLiveActivityController.shared.update(
+                session: snapshot,
+                elapsedSeconds: elapsedSeconds
+            )
         } catch ReadingTimerError.staleSessionState {
             await refreshSessionAfterStaleWrite(recordId: session.id)
         } catch {
@@ -709,14 +754,10 @@ private extension ReadingTimerCoordinator {
             )
             applyActiveSession(snapshot, calibratedAt: interruptAt)
             lastSnapshotPersistDate = interruptAt
-            if snapshot.status == .stoppedPendingSave {
-                await ReadingTimerLiveActivityController.shared.end(recordId: snapshot.id)
-            } else {
-                await ReadingTimerLiveActivityController.shared.update(
-                    session: snapshot,
-                    elapsedSeconds: targetElapsedSeconds
-                )
-            }
+            await ReadingTimerLiveActivityController.shared.update(
+                session: snapshot,
+                elapsedSeconds: targetElapsedSeconds
+            )
             postSessionDidChange(recordId: snapshot.id)
         } catch ReadingTimerError.staleSessionState {
             await refreshSessionAfterStaleWrite(recordId: recordId)
@@ -742,14 +783,10 @@ private extension ReadingTimerCoordinator {
         if let session = try await repository.fetchSession(recordId: recordId),
            session.status.isUnfinished {
             applyRecoveredSession(session, at: date)
-            if session.status == .stoppedPendingSave {
-                await ReadingTimerLiveActivityController.shared.end(recordId: session.id)
-            } else {
-                await ReadingTimerLiveActivityController.shared.update(
-                    session: session,
-                    elapsedSeconds: elapsedSeconds
-                )
-            }
+            await ReadingTimerLiveActivityController.shared.update(
+                session: session,
+                elapsedSeconds: elapsedSeconds
+            )
         } else {
             clearActiveSession(keepingBookContext: true)
             await ReadingTimerLiveActivityController.shared.end(recordId: recordId)
@@ -759,10 +796,7 @@ private extension ReadingTimerCoordinator {
     /// 恢复入口成功接管会话后同步系统展示；Activity 不存在时允许重建，但数据库仍是唯一真相。
     /// 并发语义：运行在 MainActor；ActivityKit 失败会在控制器内吞掉，不回滚 ViewModel 状态。
     func syncRecoveredLiveActivity(_ session: ReadingTimerSession) async {
-        guard session.status == .running || session.status == .paused else {
-            if session.status == .stoppedPendingSave {
-                await ReadingTimerLiveActivityController.shared.end(recordId: session.id)
-            }
+        guard session.status.isUnfinished else {
             return
         }
         await ReadingTimerLiveActivityController.shared.start(
@@ -948,6 +982,7 @@ private extension ReadingTimerCoordinator {
         }
         await notificationScheduler.scheduleCompletion(
             recordId: session.id,
+            bookId: session.book.id,
             bookTitle: session.book.name,
             remainingSeconds: remainingSeconds
         )

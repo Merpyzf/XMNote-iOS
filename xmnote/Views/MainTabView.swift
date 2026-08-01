@@ -9,8 +9,8 @@ import SwiftUI
 
 /**
  * [INPUT]: 依赖 Reading/Book/Note/Content/Personal/Search 各模块容器视图与对应路由枚举，依赖 ReadingTimerCoordinator、BookCollectionImportRouter、ReadingTimerDeepLinkRouter、XMToastCenter 与 DesktopWebSessionCoordinator 承接全局状态和外部动作
- * [OUTPUT]: 对外提供 MainTabView（五个主 Tab 的 NavigationStack、系统底部计时状态条、Accessory 全屏 Zoom、普通入口阅读计时系统全屏覆盖、书单分享导入、网页端入口、搜索来源详情覆盖与 DEBUG UI Test 路由）
- * [POS]: 应用根导航入口，统一协调阅读计时的 SwiftUI Full Screen Cover 与 UIKit Accessory Zoom、关闭原因及关闭后路由，同时保留各 Tab 导航现场
+ * [OUTPUT]: 对外提供 MainTabView（五个主 Tab 的 NavigationStack、系统底部计时状态条、阅读计时 UIKit Zoom、书单分享导入、网页端入口、搜索来源详情覆盖与 DEBUG UI Test 路由）
+ * [POS]: 应用根导航入口，统一协调阅读计时的 UIKit Zoom、关闭原因及关闭后路由，同时保留各 Tab 导航现场
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
@@ -20,7 +20,7 @@ enum AppTab: String, CaseIterable, Codable {
 }
 
 /// 描述计时页需要加载的业务对象，避免呈现层改写计时会话身份。
-private enum ReadingTimerPresentationRequest: Equatable {
+enum ReadingTimerPresentationRequest: Equatable {
     case book(Int64)
     case record(recordId: Int64, bookId: Int64)
 
@@ -44,25 +44,48 @@ private enum ReadingTimerPresentationRequest: Equatable {
 }
 
 /// 标识实际承载计时全屏页的可见层级，搜索覆盖层与根 Tab 共用同一呈现状态。
-private enum ReadingTimerPresentationHost: Equatable {
+enum ReadingTimerPresentationHost: Equatable {
     case mainTab
     case bottomAccessory
     case searchResultCover(UUID)
 }
 
 /// 记录计时页打开时的导航来源，确保关闭后动作回到原宿主而非读取易变的当前 Tab。
-private enum ReadingTimerPresentationOrigin: Equatable {
+enum ReadingTimerPresentationOrigin: Equatable {
     case tab(AppTab)
     case searchResultCover(UUID)
 }
 
 /// 阅读计时全屏页的稳定呈现票据，统一携带请求、宿主、来源与转场身份。
-private struct ReadingTimerPresentation: Identifiable, Equatable {
+enum ReadingTimerPresentationSource: Equatable {
+    case registered(AnyHashable)
+    case rootFallback
+}
+
+struct ReadingTimerPresentation: Identifiable, Equatable {
     let id = UUID()
     let request: ReadingTimerPresentationRequest
     let host: ReadingTimerPresentationHost
     let origin: ReadingTimerPresentationOrigin
+    let source: ReadingTimerPresentationSource
 }
+
+/// 普通页面来源只携带呈现桥接所需的显式依赖，不把计时业务状态塞进子页面环境。
+struct ReadingTimerZoomSourceConfiguration {
+    let owner: ReadingTimerZoomPresentationOwner
+    let sourceID: AnyHashable
+    let dismissalRequest: ReadingTimerZoomDismissalRequest?
+    let isInteractiveDismissEnabled: Bool
+    let preparePresentation: () -> ReadingTimerPresentation?
+    let onDismissalRequested: (ReadingTimerPresentation, ReadingTimerDismissReason) -> Void
+    let onDismissalCompleted: (ReadingTimerPresentation, ReadingTimerDismissReason) -> Void
+}
+
+/// 由根容器预配置宿主与来源，供在读首页卡片创建稳定的 Zoom 来源票据。
+typealias ReadingTimerZoomConfigurationFactory = (
+    _ sourceID: AnyHashable,
+    _ request: ReadingTimerPresentationRequest
+) -> ReadingTimerZoomSourceConfiguration
 
 /// 描述计时全屏页完成关闭后才可执行的导航动作，避免导航与系统退场竞争。
 private enum ReadingTimerPostDismissAction: Equatable {
@@ -119,7 +142,9 @@ struct MainTabView: View {
     @Environment(BookCollectionImportRouter.self) private var bookCollectionImportRouter
     @Environment(ReadingTimerDeepLinkRouter.self) private var readingTimerDeepLinkRouter
     @Environment(DesktopWebSessionCoordinator.self) private var desktopWebSessionCoordinator
+    @Environment(RepositoryContainer.self) private var repositories
     @Environment(ReadingTimerCoordinator.self) private var readingTimerCoordinator
+    @Environment(ReadingTimerSettingsStore.self) private var readingTimerSettingsStore
     @Environment(XMToastCenter.self) private var toastCenter
     @Environment(\.scenePhase) private var scenePhase
     @State private var selectedTab: AppTab = .reading
@@ -133,7 +158,7 @@ struct MainTabView: View {
     @State private var readingTimerPresentation: ReadingTimerPresentation?
     @State private var pendingReadingTimerDismissal: ReadingTimerPendingDismissal?
     @State private var retainedReadingTimerTransitionSource: ReadingTimerSession?
-    @State private var readingTimerAccessoryZoomOwner = ReadingTimerAccessoryZoomPresentationOwner()
+    @State private var readingTimerZoomOwner = ReadingTimerZoomPresentationOwner()
     @State private var pendingReadingTimerDeepLinkRequest: ReadingTimerPresentationRequest?
     @State private var isSearchResultCoverDismissing = false
     @State private var shouldRestoreSearchPresentationAfterCover = false
@@ -167,6 +192,15 @@ struct MainTabView: View {
                         onStartReading: { bookId in
                             presentReadingTimer(
                                 request: .book(bookId),
+                                host: .mainTab,
+                                origin: .tab(.reading),
+                                source: .rootFallback
+                            )
+                        },
+                        readingTimerZoomConfigurationFactory: { sourceID, request in
+                            makeReadingTimerZoomConfiguration(
+                                sourceID: sourceID,
+                                request: request,
                                 host: .mainTab,
                                 origin: .tab(.reading)
                             )
@@ -343,10 +377,12 @@ struct MainTabView: View {
         .tabViewBottomAccessory(isEnabled: shouldShowReadingTimerAccessory) {
             if let session = readingTimerAccessorySession {
                 ReadingTimerAccessoryZoomSource(
-                    owner: readingTimerAccessoryZoomOwner,
+                    owner: readingTimerZoomOwner,
                     session: session,
+                    repositories: repositories,
+                    timerSettings: readingTimerSettingsStore,
                     isWriting: readingTimerCoordinator.isWriting,
-                    dismissalRequest: readingTimerAccessoryDismissalRequest,
+                    dismissalRequest: readingTimerZoomDismissalRequest,
                     preparePresentation: {
                         prepareReadingTimerAccessoryPresentation(session: session)
                     },
@@ -354,7 +390,7 @@ struct MainTabView: View {
                         requestReadingTimerDismissal(reason, for: presentation)
                     },
                     onDismissalCompleted: { presentation, reason in
-                        completeReadingTimerAccessoryDismissal(
+                        completeReadingTimerZoomDismissal(
                             reason,
                             for: presentation
                         )
@@ -410,11 +446,8 @@ struct MainTabView: View {
         ) { cover in
             searchResultCoverContent(for: cover)
         }
-        .fullScreenCover(
-            item: rootReadingTimerPresentationBinding,
-            onDismiss: completeReadingTimerDismissal
-        ) { presentation in
-            readingTimerFullScreen(for: presentation)
+        .overlay {
+            readingTimerMainRootZoomSource
         }
         .task {
             if let pendingImport = bookCollectionImportRouter.pendingImport {
@@ -433,15 +466,136 @@ struct MainTabView: View {
         readingTimerPresentation != nil || pendingReadingTimerDismissal != nil
     }
 
-    /// 只把 Bottom Accessory 当前票据的程序化关闭请求交给 UIKit Zoom owner。
-    private var readingTimerAccessoryDismissalRequest: ReadingTimerAccessoryZoomDismissalRequest? {
+    /// 根 Tab 没有具体业务卡片来源时，使用当前可见根容器作为系统 Zoom 来源。
+    private var readingTimerMainRootZoomSource: some View {
+        ReadingTimerZoomPresenter(
+            owner: readingTimerZoomOwner,
+            sourceID: mainReadingTimerRootSourceID,
+            dismissalRequest: readingTimerZoomDismissalRequest,
+            isInteractiveDismissEnabled: !readingTimerCoordinator.isWriting,
+            shouldAutoPresent: shouldAutoPresentMainRootZoom,
+            preparePresentation: { readingTimerPresentation },
+            onDismissalRequested: { presentation, reason in
+                requestReadingTimerDismissal(reason, for: presentation)
+            },
+            onDismissalCompleted: { presentation, reason in
+                completeReadingTimerZoomDismissal(reason, for: presentation)
+            }
+        ) { _ in
+            Color.clear
+                .ignoresSafeArea()
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        } destination: { presentation, requestDismiss in
+            readingTimerZoomDestination(
+                presentation: presentation,
+                requestDismiss: requestDismiss
+            )
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
+    }
+
+    /// 搜索结果覆盖层有独立 UIKit 宿主，历史路由也从该覆盖层根容器进入 Zoom。
+    @ViewBuilder
+    private func readingTimerSearchRootZoomSource(for cover: SearchResultCover) -> some View {
+        ReadingTimerZoomPresenter(
+            owner: readingTimerZoomOwner,
+            sourceID: searchReadingTimerRootSourceID(for: cover.id),
+            dismissalRequest: readingTimerZoomDismissalRequest,
+            isInteractiveDismissEnabled: !readingTimerCoordinator.isWriting,
+            shouldAutoPresent: shouldAutoPresentSearchRootZoom(for: cover.id),
+            preparePresentation: { readingTimerPresentation },
+            onDismissalRequested: { presentation, reason in
+                requestReadingTimerDismissal(reason, for: presentation)
+            },
+            onDismissalCompleted: { presentation, reason in
+                completeReadingTimerZoomDismissal(reason, for: presentation)
+            }
+        ) { _ in
+            Color.clear
+                .ignoresSafeArea()
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        } destination: { presentation, requestDismiss in
+            readingTimerZoomDestination(
+                presentation: presentation,
+                requestDismiss: requestDismiss
+            )
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
+    }
+
+    private var mainReadingTimerRootSourceID: AnyHashable {
+        AnyHashable("reading-timer-root-main")
+    }
+
+    private func searchReadingTimerRootSourceID(for coverID: UUID) -> AnyHashable {
+        AnyHashable("reading-timer-root-search-\(coverID.uuidString)")
+    }
+
+    private var shouldAutoPresentMainRootZoom: Bool {
+        guard let presentation = readingTimerPresentation else { return false }
+        return presentation.host == .mainTab && presentation.source == .rootFallback
+    }
+
+    private func shouldAutoPresentSearchRootZoom(for coverID: UUID) -> Bool {
+        guard let presentation = readingTimerPresentation else { return false }
+        return presentation.host == .searchResultCover(coverID) && presentation.source == .rootFallback
+    }
+
+    /// 普通页面来源与根容器共用同一 destination，确保计时页状态和环境注入只有一个实现。
+    private func readingTimerZoomDestination(
+        presentation: ReadingTimerPresentation,
+        requestDismiss: @escaping (ReadingTimerDismissReason) -> Void
+    ) -> some View {
+        ReadingTimerFullScreenHost(
+            presentation: presentation,
+            onRequestDismiss: requestDismiss
+        )
+        .environment(readingTimerCoordinator)
+        .environment(repositories)
+        .environment(readingTimerSettingsStore)
+    }
+
+    /// 为页面卡片生成显式 Zoom 配置；业务票据在来源真正打开时才创建。
+    private func makeReadingTimerZoomConfiguration(
+        sourceID: AnyHashable,
+        request: ReadingTimerPresentationRequest,
+        host: ReadingTimerPresentationHost,
+        origin: ReadingTimerPresentationOrigin
+    ) -> ReadingTimerZoomSourceConfiguration {
+        ReadingTimerZoomSourceConfiguration(
+            owner: readingTimerZoomOwner,
+            sourceID: sourceID,
+            dismissalRequest: readingTimerZoomDismissalRequest,
+            isInteractiveDismissEnabled: !readingTimerCoordinator.isWriting,
+            preparePresentation: {
+                presentReadingTimer(
+                    request: request,
+                    host: host,
+                    origin: origin,
+                    source: .registered(sourceID)
+                )
+            },
+            onDismissalRequested: { presentation, reason in
+                requestReadingTimerDismissal(reason, for: presentation)
+            },
+            onDismissalCompleted: { presentation, reason in
+                completeReadingTimerZoomDismissal(reason, for: presentation)
+            }
+        )
+    }
+
+    /// 把当前计时票据的程序化关闭请求交给同一个 UIKit Zoom owner。
+    private var readingTimerZoomDismissalRequest: ReadingTimerZoomDismissalRequest? {
         guard let presentation = readingTimerPresentation,
-              presentation.host == .bottomAccessory,
               let dismissal = pendingReadingTimerDismissal,
               dismissal.presentationID == presentation.id else {
             return nil
         }
-        return ReadingTimerAccessoryZoomDismissalRequest(
+        return ReadingTimerZoomDismissalRequest(
             presentationID: presentation.id,
             reason: dismissal.reason
         )
@@ -515,30 +669,28 @@ struct MainTabView: View {
 
     @ViewBuilder
     private func searchResultCoverContent(for cover: SearchResultCover) -> some View {
-        NavigationStack(path: $searchResultCoverPath) {
-            searchResultCoverDestination(for: cover.target)
-                .navigationDestination(for: BookRoute.self) { route in
-                    searchResultBookDestination(for: route)
-                        .toolbar(.hidden, for: .tabBar)
-                }
-                .navigationDestination(for: ReadingRoute.self) { route in
-                    searchResultReadingDestination(for: route)
-                        .toolbar(.hidden, for: .tabBar)
-                }
-                .navigationDestination(for: NoteRoute.self) { route in
-                    noteDestination(for: route)
-                        .toolbar(.hidden, for: .tabBar)
-                }
-                .navigationDestination(for: ContentRoute.self) { route in
-                    contentDestination(for: route)
-                        .toolbar(.hidden, for: .tabBar)
-                }
-        }
-        .fullScreenCover(
-            item: searchReadingTimerPresentationBinding(for: cover.id),
-            onDismiss: completeReadingTimerDismissal
-        ) { presentation in
-            readingTimerFullScreen(for: presentation)
+        ZStack {
+            NavigationStack(path: $searchResultCoverPath) {
+                searchResultCoverDestination(for: cover.target)
+                    .navigationDestination(for: BookRoute.self) { route in
+                        searchResultBookDestination(for: route)
+                            .toolbar(.hidden, for: .tabBar)
+                    }
+                    .navigationDestination(for: ReadingRoute.self) { route in
+                        searchResultReadingDestination(for: route)
+                            .toolbar(.hidden, for: .tabBar)
+                    }
+                    .navigationDestination(for: NoteRoute.self) { route in
+                        noteDestination(for: route)
+                            .toolbar(.hidden, for: .tabBar)
+                    }
+                    .navigationDestination(for: ContentRoute.self) { route in
+                        contentDestination(for: route)
+                            .toolbar(.hidden, for: .tabBar)
+                    }
+            }
+
+            readingTimerSearchRootZoomSource(for: cover)
         }
     }
 
@@ -582,7 +734,10 @@ struct MainTabView: View {
                 },
                 onSupplementReading: { bookId in
                     searchResultCoverPath.append(ReadingRoute.readingSupplement(bookId: bookId))
-                }
+                },
+                readingTimerZoomConfiguration: searchResultReadingTimerZoomConfiguration(
+                    bookId: bookId
+                )
             )
         case .edit(let bookId):
             BookEditorView(mode: .edit(bookId: bookId))
@@ -610,66 +765,19 @@ struct MainTabView: View {
         }
     }
 
+    private func searchResultReadingTimerZoomConfiguration(
+        bookId: Int64
+    ) -> ReadingTimerZoomSourceConfiguration? {
+        guard let coverID = searchResultCover?.id else { return nil }
+        return makeReadingTimerZoomConfiguration(
+            sourceID: AnyHashable("reading-timer-search-book-detail-\(coverID.uuidString)-\(bookId)"),
+            request: .book(bookId),
+            host: .searchResultCover(coverID),
+            origin: .searchResultCover(coverID)
+        )
+    }
+
     // MARK: - Reading Destinations
-
-    /// 根 TabView 只承载普通计时入口；Bottom Accessory 由独立 UIKit Zoom owner 呈现。
-    private var rootReadingTimerPresentationBinding: Binding<ReadingTimerPresentation?> {
-        Binding(
-            get: {
-                guard let presentation = readingTimerPresentation else { return nil }
-                switch presentation.host {
-                case .mainTab:
-                    return presentation
-                case .bottomAccessory, .searchResultCover:
-                    return nil
-                }
-            },
-            set: { presentation in
-                if let presentation {
-                    readingTimerPresentation = presentation
-                } else if let host = readingTimerPresentation?.host {
-                    switch host {
-                    case .mainTab:
-                        dismissReadingTimerFromSystem(host: host)
-                    case .bottomAccessory, .searchResultCover:
-                        break
-                    }
-                }
-            }
-        )
-    }
-
-    /// 为当前搜索结果覆盖层生成宿主隔离的计时票据，避免被遮挡的根视图抢先呈现全屏页。
-    private func searchReadingTimerPresentationBinding(
-        for coverID: UUID
-    ) -> Binding<ReadingTimerPresentation?> {
-        let host = ReadingTimerPresentationHost.searchResultCover(coverID)
-        return Binding(
-            get: {
-                guard readingTimerPresentation?.host == host else { return nil }
-                return readingTimerPresentation
-            },
-            set: { presentation in
-                if let presentation {
-                    readingTimerPresentation = presentation
-                } else {
-                    dismissReadingTimerFromSystem(host: host)
-                }
-            }
-        )
-    }
-
-    /// 使用同一不透明容器构建所有计时全屏页，确保入口差异只影响宿主和转场来源。
-    private func readingTimerFullScreen(
-        for presentation: ReadingTimerPresentation
-    ) -> some View {
-        ReadingTimerFullScreenHost(
-            presentation: presentation,
-            onRequestDismiss: { reason in
-                requestReadingTimerDismissal(reason, for: presentation)
-            }
-        )
-    }
 
     /// 创建唯一计时呈现票据；Accessory 来源会话保留到 UIKit 确认退场完成。
     @discardableResult
@@ -677,6 +785,7 @@ struct MainTabView: View {
         request: ReadingTimerPresentationRequest,
         host: ReadingTimerPresentationHost,
         origin: ReadingTimerPresentationOrigin,
+        source: ReadingTimerPresentationSource = .rootFallback,
         transitionSourceSession: ReadingTimerSession? = nil
     ) -> ReadingTimerPresentation? {
         guard readingTimerPresentation == nil,
@@ -691,7 +800,8 @@ struct MainTabView: View {
         let presentation = ReadingTimerPresentation(
             request: request,
             host: host,
-            origin: origin
+            origin: origin,
+            source: source
         )
         readingTimerPresentation = presentation
         return presentation
@@ -703,7 +813,8 @@ struct MainTabView: View {
         presentReadingTimer(
             request: .book(bookId),
             host: .searchResultCover(coverID),
-            origin: .searchResultCover(coverID)
+            origin: .searchResultCover(coverID),
+            source: .rootFallback
         )
     }
 
@@ -723,6 +834,7 @@ struct MainTabView: View {
             ),
             host: .bottomAccessory,
             origin: .tab(selectedTab),
+            source: .registered(session.id),
             transitionSourceSession: activeSession
         )
     }
@@ -738,56 +850,25 @@ struct MainTabView: View {
         }
     }
 
-    /// 接收计时页的显式关闭原因；终止分支在 MainActor 让出一帧，并以票据 id 防止旧任务关闭新全屏页。
+    /// 接收计时页的显式关闭原因；业务票据保持到 UIKit Zoom 确认退场完成。
     private func requestReadingTimerDismissal(
         _ reason: ReadingTimerDismissReason,
         for presentation: ReadingTimerPresentation
     ) {
         guard readingTimerPresentation?.id == presentation.id else { return }
         prepareReadingTimerDismissal(reason, for: presentation)
-        if presentation.host == .bottomAccessory {
-            return
-        }
-        switch reason {
-        case .completed, .discarded:
-            Task { @MainActor in
-                await Task.yield()
-                guard readingTimerPresentation?.id == presentation.id else { return }
-                dismissReadingTimerPresentation(presentation)
-            }
-        case .minimize, .conflict, .openNote:
-            dismissReadingTimerPresentation(presentation)
-        }
     }
 
     /// UIKit 确认 Zoom 已完成后再清空票据与来源；交互取消不会调用本方法。
-    private func completeReadingTimerAccessoryDismissal(
+    private func completeReadingTimerZoomDismissal(
         _ reason: ReadingTimerDismissReason,
         for presentation: ReadingTimerPresentation
     ) {
-        guard presentation.host == .bottomAccessory,
-              readingTimerPresentation?.id == presentation.id else {
+        guard readingTimerPresentation?.id == presentation.id else {
             return
         }
         prepareReadingTimerDismissal(reason, for: presentation)
         completeReadingTimerDismissal()
-    }
-
-    /// 清空系统呈现票据并保留来源会话到 onDismiss，保证退场期间 Accessory 身份稳定。
-    private func dismissReadingTimerPresentation(
-        _ presentation: ReadingTimerPresentation
-    ) {
-        readingTimerPresentation = nil
-    }
-
-    /// 把系统手势完成的关闭归类为普通收起；半程取消不会写回 Binding，因此不会触发生命周期副作用。
-    private func dismissReadingTimerFromSystem(host: ReadingTimerPresentationHost) {
-        guard let presentation = readingTimerPresentation,
-              presentation.host == host else {
-            return
-        }
-        prepareReadingTimerDismissal(.minimize, for: presentation)
-        readingTimerPresentation = nil
     }
 
     /// 冻结本次退场原因与后续动作，防止全屏页退场期间读取已变化的当前 Tab 或搜索覆盖层。
@@ -869,7 +950,8 @@ struct MainTabView: View {
             presentReadingTimer(
                 request: request,
                 host: .mainTab,
-                origin: .tab(tab)
+                origin: .tab(tab),
+                source: .rootFallback
             )
         }
     }
@@ -885,7 +967,8 @@ struct MainTabView: View {
             presentReadingTimer(
                 request: request,
                 host: .searchResultCover(coverID),
-                origin: .searchResultCover(coverID)
+                origin: .searchResultCover(coverID),
+                source: .rootFallback
             )
         }
     }
@@ -900,12 +983,19 @@ struct MainTabView: View {
                     presentReadingTimer(
                         request: .book(bookId),
                         host: .mainTab,
-                        origin: .tab(selectedTab)
+                        origin: .tab(selectedTab),
+                        source: .rootFallback
                     )
                 },
                 onSupplementReading: { bookId in
                     append(ReadingRoute.readingSupplement(bookId: bookId), to: selectedTab)
-                }
+                },
+                readingTimerZoomConfiguration: makeReadingTimerZoomConfiguration(
+                    sourceID: AnyHashable("reading-timer-book-detail-\(selectedTab.rawValue)-\(bookId)"),
+                    request: .book(bookId),
+                    host: .mainTab,
+                    origin: .tab(selectedTab)
+                )
             )
         case .readingSession(let bookId):
             ReadingTimerLegacyRouteRelay {
@@ -939,7 +1029,10 @@ struct MainTabView: View {
                 },
                 onSupplementReading: { bookId in
                     searchResultCoverPath.append(ReadingRoute.readingSupplement(bookId: bookId))
-                }
+                },
+                readingTimerZoomConfiguration: searchResultReadingTimerZoomConfiguration(
+                    bookId: bookId
+                )
             )
         case .readingSession(let bookId):
             ReadingTimerLegacyRouteRelay {
@@ -970,12 +1063,19 @@ struct MainTabView: View {
                     presentReadingTimer(
                         request: .book(bookId),
                         host: .mainTab,
-                        origin: .tab(selectedTab)
+                        origin: .tab(selectedTab),
+                        source: .rootFallback
                     )
                 },
                 onSupplementReading: { bookId in
                     append(ReadingRoute.readingSupplement(bookId: bookId), to: selectedTab)
-                }
+                },
+                readingTimerZoomConfiguration: makeReadingTimerZoomConfiguration(
+                    sourceID: AnyHashable("reading-timer-book-detail-\(selectedTab.rawValue)-\(bookId)"),
+                    request: .book(bookId),
+                    host: .mainTab,
+                    origin: .tab(selectedTab)
+                )
             )
         case .edit(let bookId):
             BookEditorView(mode: .edit(bookId: bookId))
@@ -1043,7 +1143,9 @@ struct MainTabView: View {
     private func personalDestination(for route: PersonalRoute) -> some View {
         switch route {
         case .settings:
-            Text("设置")
+            PersonalSettingsView()
+        case .readingTimerSettings:
+            ReadingTimerSettingsView()
         case .premium:
             Text("会员")
         case .readCalendar:
@@ -1336,7 +1438,8 @@ struct MainTabView: View {
         presentReadingTimer(
             request: request,
             host: .mainTab,
-            origin: .tab(.reading)
+            origin: .tab(.reading),
+            source: .rootFallback
         )
     }
 
@@ -1543,7 +1646,7 @@ private struct SearchResultCover: Identifiable {
 }
 
 /// 以不透明根表面统一承载计时全屏页，不介入 Coordinator 的业务读写。
-private struct ReadingTimerFullScreenHost: View {
+struct ReadingTimerFullScreenHost: View {
     let presentation: ReadingTimerPresentation
     let onRequestDismiss: (ReadingTimerDismissReason) -> Void
 
@@ -1567,15 +1670,26 @@ private struct ReadingTimerFullScreenHost: View {
         .onAppear {
             coordinator.isTimerInterfacePresented = true
         }
+        .overlay(alignment: .topLeading) {
+            TopBarDismissButton(
+                action: { onRequestDismiss(.minimize) },
+                isEnabled: !coordinator.isWriting
+            )
+            .glassEffect(.regular.interactive(), in: .circle)
+            .padding(.leading, Spacing.base)
+            .zIndex(1)
+        }
     }
 }
 
 /// 在系统 Bottom Accessory 环境中解析形态，再把同一 SwiftUI 计时条交给稳定 UIKit 来源宿主。
 private struct ReadingTimerAccessoryZoomSource: View {
-    let owner: ReadingTimerAccessoryZoomPresentationOwner
+    let owner: ReadingTimerZoomPresentationOwner
     let session: ReadingTimerSession
+    let repositories: RepositoryContainer
+    let timerSettings: ReadingTimerSettingsStore
     let isWriting: Bool
-    let dismissalRequest: ReadingTimerAccessoryZoomDismissalRequest?
+    let dismissalRequest: ReadingTimerZoomDismissalRequest?
     let preparePresentation: () -> ReadingTimerPresentation?
     let onDismissalRequested: (ReadingTimerPresentation, ReadingTimerDismissReason) -> Void
     let onDismissalCompleted: (ReadingTimerPresentation, ReadingTimerDismissReason) -> Void
@@ -1585,7 +1699,7 @@ private struct ReadingTimerAccessoryZoomSource: View {
     @Environment(ReadingTimerCoordinator.self) private var coordinator
 
     var body: some View {
-        ReadingTimerAccessoryZoomPresenter(
+        ReadingTimerZoomPresenter(
             owner: owner,
             sourceID: session.id,
             dismissalRequest: dismissalRequest,
@@ -1621,8 +1735,60 @@ private struct ReadingTimerAccessoryZoomSource: View {
                 onRequestDismiss: requestDismiss
             )
             .environment(coordinator)
+            .environment(repositories)
+            .environment(timerSettings)
         }
         .frame(maxWidth: placement == .inline ? nil : .infinity)
+    }
+}
+
+/// 普通入口把真实业务卡片注册为 Zoom 来源，目标页仍复用同一计时全屏宿主。
+struct ReadingTimerNormalZoomSource<Source: View>: View {
+    let configuration: ReadingTimerZoomSourceConfiguration
+    let sourceBuilder: (@escaping () -> Void) -> Source
+    @State private var isPresentationRequested = false
+
+    @Environment(ReadingTimerCoordinator.self) private var coordinator
+    @Environment(RepositoryContainer.self) private var repositories
+    @Environment(ReadingTimerSettingsStore.self) private var timerSettings
+
+    init(
+        configuration: ReadingTimerZoomSourceConfiguration,
+        @ViewBuilder source: @escaping (@escaping () -> Void) -> Source
+    ) {
+        self.configuration = configuration
+        sourceBuilder = source
+    }
+
+    var body: some View {
+        ReadingTimerZoomPresenter(
+            owner: configuration.owner,
+            sourceID: configuration.sourceID,
+            dismissalRequest: configuration.dismissalRequest,
+            isInteractiveDismissEnabled: configuration.isInteractiveDismissEnabled,
+            shouldAutoPresent: isPresentationRequested,
+            preparePresentation: {
+                guard isPresentationRequested else { return nil }
+                return configuration.preparePresentation()
+            },
+            onDismissalRequested: configuration.onDismissalRequested,
+            onDismissalCompleted: { presentation, reason in
+                isPresentationRequested = false
+                configuration.onDismissalCompleted(presentation, reason)
+            }
+        ) { _ in
+            sourceBuilder {
+                isPresentationRequested = true
+            }
+        } destination: { presentation, requestDismiss in
+            ReadingTimerFullScreenHost(
+                presentation: presentation,
+                onRequestDismiss: requestDismiss
+            )
+            .environment(coordinator)
+            .environment(repositories)
+            .environment(timerSettings)
+        }
     }
 }
 

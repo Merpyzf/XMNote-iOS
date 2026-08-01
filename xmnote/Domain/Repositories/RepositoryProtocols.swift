@@ -544,7 +544,7 @@ protocol NoteImportRepositoryProtocol {
 protocol ReadingTimerRepositoryProtocol {
     /// 读取单本书的计时上下文，供入口、计时页和补录页初始化。
     func fetchBookContext(bookId: Int64) async throws -> ReadingTimerBookContext
-    /// 读取全局最新可恢复计时，仅覆盖运行和暂停；停止待保存必须通过明确记录入口继续处理。
+    /// 读取全局最新未完成计时，覆盖运行、暂停和停止待保存，供启动恢复和新建互斥检查。
     func fetchActiveSession() async throws -> ReadingTimerSession?
     /// 按记录 ID 读取单段阅读计时。
     func fetchSession(recordId: Int64) async throws -> ReadingTimerSession?
@@ -552,6 +552,8 @@ protocol ReadingTimerRepositoryProtocol {
     func createSession(bookId: Int64, startAt: Date, countdownSeconds: Int64) async throws -> ReadingTimerSession
     /// 持久化运行中快照，用于暂停、继续、停止和后台校准。
     func updateSessionSnapshot(_ input: ReadingTimerSnapshotInput) async throws -> ReadingTimerSession
+    /// 继续停止待保存的计时，保留原始开始时间，并把停止间隔累计为暂停时长。
+    func resumeStoppedSession(recordId: Int64, resumedAt: Date) async throws -> ReadingTimerSession
     /// 保存停止后的阅读记录，使其进入既有统计消费口径。
     func finishSession(_ input: ReadingTimerFinishInput) async throws -> ReadingTimerSession
     /// 放弃未完成计时，使用软删除避免进入统计并保持同步兼容。

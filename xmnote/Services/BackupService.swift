@@ -446,7 +446,7 @@ private extension BackupArchiveService {
         )
     }
 
-    /// 从当前数据库读取 Android 可冷启动恢复的最新计时记录；只选择 RUNNING/PAUSE，STOP 待保存按 Android 规则不恢复。
+    /// 从当前数据库读取最新未完成计时记录；RUNNING/PAUSE/STOP 都必须保留精确恢复锚点。
     func androidRecoverableTimingRecordId() -> Int64 {
         guard FileManager.default.fileExists(atPath: database.databasePath) else {
             return 0
@@ -461,7 +461,7 @@ private extension BackupArchiveService {
 
         // SQL 目的：为 Android SharedPreferences 备份快照解析最新可恢复阅读计时记录 ID。
         // 涉及表：read_time_record。
-        // 关键过滤：is_deleted = 0、book_id != 0、status IN (0,1)，严格对齐 Android 冷启动只恢复 RUNNING/PAUSE 的规则。
+        // 关键过滤：is_deleted = 0、book_id != 0、status IN (0,1,2)，覆盖运行、暂停与停止待保存。
         // 时间字段：updated_date/created_date 为 Android 毫秒时间戳，用于多条异常未完成记录时选择最新一条。
         // 返回字段用途：写入 `pending_timing_record_id`，使 iOS 备份恢复到 Android 后可以触发计时恢复弹窗。
         let sql = """
@@ -469,7 +469,7 @@ private extension BackupArchiveService {
             FROM read_time_record
             WHERE is_deleted = 0
               AND book_id != 0
-              AND status IN (0, 1)
+              AND status IN (0, 1, 2)
             ORDER BY CASE WHEN updated_date != 0 THEN updated_date ELSE created_date END DESC,
                      id DESC
             LIMIT 1

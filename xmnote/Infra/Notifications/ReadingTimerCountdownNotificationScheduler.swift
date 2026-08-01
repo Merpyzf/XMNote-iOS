@@ -21,7 +21,12 @@ final class ReadingTimerCountdownNotificationScheduler {
 
     /// 安排倒计时完成通知；如果用户尚未授权，会先请求 alert/sound/badge 权限。
     /// 并发语义：方法运行在 MainActor，由 UserNotifications 异步完成权限读取与请求写入；调用方取消任务时不会改变计时数据库状态。
-    func scheduleCompletion(recordId: Int64, bookTitle: String, remainingSeconds: Int64) async {
+    func scheduleCompletion(
+        recordId: Int64,
+        bookId: Int64,
+        bookTitle: String,
+        remainingSeconds: Int64
+    ) async {
         guard remainingSeconds > 0 else { return }
         let identifier = notificationIdentifier(recordId: recordId)
         center.removePendingNotificationRequests(withIdentifiers: [identifier])
@@ -32,7 +37,10 @@ final class ReadingTimerCountdownNotificationScheduler {
         content.title = String(localized: "计时结束")
         content.body = String(localized: "《\(bookTitle)》本次阅读计时已完成，请保存阅读记录。")
         content.sound = .default
-        content.userInfo = ["readTimeRecordId": recordId]
+        content.userInfo = [
+            ReadingTimerSystemHandoff.recordIdUserInfoKey: recordId,
+            ReadingTimerSystemHandoff.bookIdUserInfoKey: bookId
+        ]
 
         let trigger = UNTimeIntervalNotificationTrigger(
             timeInterval: max(1, TimeInterval(remainingSeconds)),

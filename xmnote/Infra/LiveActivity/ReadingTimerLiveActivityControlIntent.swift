@@ -131,7 +131,7 @@ struct ReadingTimerStopLiveActivityIntent: LiveActivityIntent {
     static var title: LocalizedStringResource = "结束阅读计时"
     static var description = IntentDescription("结束当前阅读计时并等待保存。")
     static var isDiscoverable: Bool = false
-    static var openAppWhenRun: Bool = false
+    static var openAppWhenRun: Bool = true
 
     @Parameter(title: "记录 ID")
     var recordId: String
@@ -238,23 +238,25 @@ private enum ReadingTimerLiveActivityControlPerformer {
                 )
             )
             logger.notice("Live Activity control database committed. recordId=\(recordId, privacy: .public), action=\(action.rawValue, privacy: .public), status=\(target.status.rawValue, privacy: .public), elapsedMs=\(millisecondsString(since: startedAt), privacy: .public)")
-            if snapshot.status == .stoppedPendingSave {
-                await ReadingTimerLiveActivityController.shared.end(recordId: recordId)
+            if let immediateVisualUpdate,
+               shouldSkipCommitVisualUpdate(
+                appliedState: immediateVisualUpdate.applied,
+                session: snapshot,
+                elapsedSeconds: target.elapsedSeconds
+               ) {
+                logger.notice("Skip commit Live Activity update because immediate visual state already matches committed state. recordId=\(recordId, privacy: .public), action=\(action.rawValue, privacy: .public), status=\(target.status.rawValue, privacy: .public), elapsedMs=\(millisecondsString(since: startedAt), privacy: .public)")
             } else {
-                if let immediateVisualUpdate,
-                   shouldSkipCommitVisualUpdate(
-                    appliedState: immediateVisualUpdate.applied,
+                await ReadingTimerLiveActivityController.shared.updateForControl(
                     session: snapshot,
-                    elapsedSeconds: target.elapsedSeconds
-                   ) {
-                    logger.notice("Skip commit Live Activity update because immediate visual state already matches committed state. recordId=\(recordId, privacy: .public), action=\(action.rawValue, privacy: .public), status=\(target.status.rawValue, privacy: .public), elapsedMs=\(millisecondsString(since: startedAt), privacy: .public)")
-                } else {
-                    await ReadingTimerLiveActivityController.shared.updateForControl(
-                        session: snapshot,
-                        elapsedSeconds: target.elapsedSeconds,
-                        reason: "commit-\(action.rawValue)"
-                    )
-                }
+                    elapsedSeconds: target.elapsedSeconds,
+                    reason: "commit-\(action.rawValue)"
+                )
+            }
+            if snapshot.status == .stoppedPendingSave {
+                ReadingTimerSystemHandoff.save(
+                    recordId: snapshot.id,
+                    bookId: snapshot.book.id
+                )
             }
             NotificationCenter.default.post(
                 name: .readingTimerSessionDidChange,

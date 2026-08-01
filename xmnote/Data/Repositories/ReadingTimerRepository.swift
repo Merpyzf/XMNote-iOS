@@ -200,33 +200,92 @@ nonisolated struct ReadingTimerRepository: ReadingTimerRepositoryProtocol {
         return session
     }
 
+    /// 继续停止待保存的计时；停止到继续之间的间隔按暂停处理，避免恢复后把离场时间计入阅读。
+    nonisolated func resumeStoppedSession(recordId: Int64, resumedAt: Date) async throws -> ReadingTimerSession {
+        let resumedMillis = Self.timestampMillis(from: resumedAt)
+        let dbPool = await currentDatabasePool()
+        let session = try await dbPool.write { db in
+            guard let current = try fetchSession(db, recordId: recordId),
+                  current.status == .stoppedPendingSave,
+                  current.startTime != nil,
+                  current.countdownSeconds == 0 || current.elapsedSeconds < current.countdownSeconds else {
+                throw ReadingTimerError.staleSessionState
+            }
+
+            let stoppedAt = current.endTime ?? current.interruptTime ?? resumedAt
+            let stoppedGapMillis = max(0, resumedMillis - Self.timestampMillis(from: stoppedAt))
+            let resumedPausedDurationMillis = current.pausedDurationMillis + stoppedGapMillis
+
+            // SQL 目的：把停止待保存记录恢复为运行态，同时把停止间隔计入暂停累计。
+            // 涉及表：read_time_record。
+            // 关键过滤：id 精确命中、is_deleted = 0、status = 2，确保完成或已恢复记录不会被旧操作覆盖。
+            // 时间字段：保留原 start_time；end_time 清零；interrupt_time/updated_date 写恢复时刻毫秒时间戳；paused_duration_millis 累加停止间隔。
+            // 副作用用途：进程恢复后仍能按原开始时间继续计时，且离场时段不进入有效阅读时长。
+            let sql = """
+                UPDATE read_time_record
+                SET status = ?,
+                    end_time = 0,
+                    interrupt_time = ?,
+                    paused_duration_millis = ?,
+                    paused = 1,
+                    updated_date = ?
+                WHERE id = ?
+                  AND is_deleted = 0
+                  AND status = ?
+                """
+            try db.execute(
+                sql: sql,
+                arguments: [
+                    ReadingTimerRecordStatus.running.rawValue,
+                    resumedMillis,
+                    resumedPausedDurationMillis,
+                    resumedMillis,
+                    recordId,
+                    ReadingTimerRecordStatus.stoppedPendingSave.rawValue
+                ]
+            )
+            let changedRows = try Int.fetchOne(db, sql: "SELECT changes()") ?? 0
+            guard changedRows > 0,
+                  let resumed = try fetchSession(db, recordId: recordId),
+                  resumed.status == .running else {
+                throw ReadingTimerError.staleSessionState
+            }
+            return resumed
+        }
+        syncAndroidPendingTimingRecordId(for: session)
+        return session
+    }
+
     /// 保存停止后的计时记录，使记录进入 `status = 3` 的既有统计消费口径。
     nonisolated func finishSession(_ input: ReadingTimerFinishInput) async throws -> ReadingTimerSession {
-        guard input.elapsedSeconds > 0, input.pausedDurationMillis >= 0 else {
+        guard input.measuredElapsedSeconds >= 0, input.measuredPausedDurationMillis >= 0 else {
             throw ReadingTimerError.invalidDuration
         }
 
         let dbPool = await currentDatabasePool()
-        let session = try await dbPool.write { db in
+        let result = try await dbPool.write { db in
             guard let current = try fetchSession(db, recordId: input.recordId),
                   current.status.isUnfinished else {
                 throw ReadingTimerError.sessionNotFound
             }
-            if let startTime = current.startTime, input.endAt < startTime {
+            guard input.targetBookId > 0,
+                  let targetBook = try fetchBookContext(db, bookId: input.targetBookId) else {
+                throw ReadingTimerError.bookNotFound
+            }
+            guard input.endAt > input.startAt, input.endAt <= Date() else {
                 throw ReadingTimerError.invalidTimeRange
             }
 
-            let book = current.book
             let recordedPositionUnit: Int64?
             let storedPosition: Double
             if let position = input.position {
                 try validateReadPosition(
                     position,
-                    positionUnit: book.positionUnit,
-                    totalPosition: book.totalPosition,
-                    totalPagination: book.totalPagination
+                    positionUnit: targetBook.positionUnit,
+                    totalPosition: targetBook.totalPosition,
+                    totalPagination: targetBook.totalPagination
                 )
-                recordedPositionUnit = book.positionUnit
+                recordedPositionUnit = targetBook.positionUnit
                 storedPosition = position
             } else {
                 recordedPositionUnit = nil
@@ -234,19 +293,38 @@ nonisolated struct ReadingTimerRepository: ReadingTimerRepositoryProtocol {
             }
 
             let now = Self.currentTimestampMillis
+            let startMillis = Self.timestampMillis(from: input.startAt)
             let endMillis = Self.timestampMillis(from: input.endAt)
             let insight = Self.normalizedInsight(input.insight)
-            let storedPausedDurationMillis = max(input.pausedDurationMillis, current.pausedDurationMillis)
-            let pausedFlag = try resolvedPausedFlag(
-                db,
-                recordId: input.recordId,
-                incomingStatus: current.status,
-                incomingPausedDurationMillis: storedPausedDurationMillis
-            )
+            let storedElapsedSeconds: Int64
+            let storedPausedDurationMillis: Int64
+            let pausedFlag: Int64
+            if input.didEditTimeRange {
+                storedElapsedSeconds = Int64(input.endAt.timeIntervalSince(input.startAt))
+                storedPausedDurationMillis = 0
+                pausedFlag = 0
+            } else {
+                storedElapsedSeconds = input.measuredElapsedSeconds
+                storedPausedDurationMillis = max(
+                    input.measuredPausedDurationMillis,
+                    current.pausedDurationMillis
+                )
+                pausedFlag = try resolvedPausedFlag(
+                    db,
+                    recordId: input.recordId,
+                    incomingStatus: current.status,
+                    incomingPausedDurationMillis: storedPausedDurationMillis
+                )
+            }
+            guard storedElapsedSeconds > 0 else {
+                throw ReadingTimerError.invalidDuration
+            }
             let arguments: StatementArguments = [
                 ReadingTimerRecordStatus.finished.rawValue,
+                input.targetBookId,
+                startMillis,
                 endMillis,
-                input.elapsedSeconds,
+                storedElapsedSeconds,
                 storedPausedDurationMillis,
                 pausedFlag,
                 storedPosition,
@@ -265,6 +343,8 @@ nonisolated struct ReadingTimerRepository: ReadingTimerRepositoryProtocol {
             let sql = """
                 UPDATE read_time_record
                 SET status = ?,
+                    book_id = ?,
+                    start_time = ?,
                     end_time = ?,
                     elapsed_seconds = ?,
                     paused_duration_millis = ?,
@@ -278,13 +358,17 @@ nonisolated struct ReadingTimerRepository: ReadingTimerRepositoryProtocol {
                 WHERE id = ?
                   AND is_deleted = 0
                   AND status IN (0, 1, 2)
-                """
+            """
             try db.execute(sql: sql, arguments: arguments)
+            let changedRows = try Int.fetchOne(db, sql: "SELECT changes()") ?? 0
+            guard changedRows > 0 else {
+                throw ReadingTimerError.staleSessionState
+            }
 
             if input.position != nil {
                 try updateBookReadPositionIfNeeded(
                     db,
-                    book: book,
+                    book: targetBook,
                     position: storedPosition,
                     updatedAt: now
                 )
@@ -292,8 +376,17 @@ nonisolated struct ReadingTimerRepository: ReadingTimerRepositoryProtocol {
             if input.markReadDone {
                 try BookReadStatusMutation.updateBookReadStatus(
                     db,
-                    bookID: book.id,
+                    bookID: targetBook.id,
                     statusID: BookEntryReadingStatus.finished.rawValue,
+                    changedAt: endMillis,
+                    updatedAt: now,
+                    finishedRatingScore: nil
+                )
+            } else if targetBook.readStatusId != BookEntryReadingStatus.reading.rawValue {
+                try BookReadStatusMutation.updateBookReadStatus(
+                    db,
+                    bookID: targetBook.id,
+                    statusID: BookEntryReadingStatus.reading.rawValue,
                     changedAt: endMillis,
                     updatedAt: now,
                     finishedRatingScore: nil
@@ -304,19 +397,23 @@ nonisolated struct ReadingTimerRepository: ReadingTimerRepositoryProtocol {
                   session.status == .finished else {
                 throw ReadingTimerError.sessionNotFound
             }
-            return session
+            return (session, try fetchActiveSession(db))
         }
-        AndroidSharedPreferencesCompat.clearPendingTimingRecordId(
-            expectedRecordId: input.recordId,
-            defaults: userDefaults
-        )
-        return session
+        if let nextUnfinished = result.1 {
+            syncAndroidPendingTimingRecordId(for: nextUnfinished)
+        } else {
+            AndroidSharedPreferencesCompat.clearPendingTimingRecordId(
+                expectedRecordId: input.recordId,
+                defaults: userDefaults
+            )
+        }
+        return result.0
     }
 
     /// 软删除未完成计时记录，使放弃行为不进入统计且保持同步兼容。
     nonisolated func discardSession(recordId: Int64) async throws {
         let dbPool = await currentDatabasePool()
-        try await dbPool.write { db in
+        let nextUnfinished = try await dbPool.write { db in
             let now = Self.currentTimestampMillis
             // SQL 目的：放弃未完成阅读计时，使用软删除保留同步语义并排除统计。
             // 涉及表：read_time_record。
@@ -332,11 +429,20 @@ nonisolated struct ReadingTimerRepository: ReadingTimerRepositoryProtocol {
                   AND status IN (0, 1, 2)
                 """
             try db.execute(sql: sql, arguments: [now, recordId])
+            let changedRows = try Int.fetchOne(db, sql: "SELECT changes()") ?? 0
+            guard changedRows > 0 else {
+                throw ReadingTimerError.staleSessionState
+            }
+            return try fetchActiveSession(db)
         }
-        AndroidSharedPreferencesCompat.clearPendingTimingRecordId(
-            expectedRecordId: recordId,
-            defaults: userDefaults
-        )
+        if let nextUnfinished {
+            syncAndroidPendingTimingRecordId(for: nextUnfinished)
+        } else {
+            AndroidSharedPreferencesCompat.clearPendingTimingRecordId(
+                expectedRecordId: recordId,
+                defaults: userDefaults
+            )
+        }
     }
 
     /// 保存一条补录阅读记录，日期时长模式写 fuzzy_read_date，精确模式写 start_time/end_time。
@@ -440,17 +546,17 @@ private extension ReadingTimerRepository {
         return mapBookContext(row)
     }
 
-    /// 读取全局最新可恢复计时。
+    /// 读取全局最新未完成计时。
     nonisolated func fetchActiveSession(_ db: Database) throws -> ReadingTimerSession? {
-        // SQL 目的：读取全局最新可恢复阅读计时，覆盖运行、暂停两类 Android 冷启动恢复状态。
+        // SQL 目的：读取全局最新未完成阅读计时，覆盖运行、暂停和停止待保存三类状态。
         // 涉及表：read_time_record r JOIN book b。
-        // 关键过滤：r.is_deleted = 0、r.status IN (0,1)、r.book_id != 0、b.is_deleted = 0；status = 2 停止待保存只允许通过 recordId 明确入口恢复。
+        // 关键过滤：r.is_deleted = 0、r.status IN (0,1,2)、r.book_id != 0、b.is_deleted = 0。
         // 时间字段：updated_date/created_date 为 Android 毫秒时间戳，用于恢复多条异常未完成记录时选择最新一条。
         // 返回字段用途：冷启动和回前台恢复 ReadingTimerSession。
         let sql = sessionSelectSQL + """
 
             WHERE r.is_deleted = 0
-              AND r.status IN (0, 1)
+              AND r.status IN (0, 1, 2)
               AND r.book_id != 0
               AND b.is_deleted = 0
             ORDER BY CASE WHEN r.updated_date != 0 THEN r.updated_date ELSE r.created_date END DESC,
@@ -713,15 +819,15 @@ private extension ReadingTimerRepository {
         return Date(timeIntervalSince1970: Double(millis) / 1000)
     }
 
-    /// 同步 Android 冷启动恢复所依赖的 pending id；仅 RUNNING/PAUSE 可恢复，STOP 待保存不写入。
+    /// 同步 Android 冷启动恢复所依赖的 pending id；三种未完成状态均必须保留精确记录锚点。
     nonisolated func syncAndroidPendingTimingRecordId(for session: ReadingTimerSession) {
         switch session.status {
-        case .running, .paused:
+        case .running, .paused, .stoppedPendingSave:
             AndroidSharedPreferencesCompat.setPendingTimingRecordId(
                 session.id,
                 defaults: userDefaults
             )
-        case .stoppedPendingSave, .finished:
+        case .finished:
             AndroidSharedPreferencesCompat.clearPendingTimingRecordId(
                 expectedRecordId: session.id,
                 defaults: userDefaults

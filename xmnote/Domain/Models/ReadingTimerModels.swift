@@ -108,27 +108,36 @@ nonisolated struct ReadingTimerSnapshotInput: Sendable {
 /// 结束计时后的保存输入，负责把待保存记录推进到完成状态并写入补充信息。
 nonisolated struct ReadingTimerFinishInput: Sendable {
     let recordId: Int64
+    let targetBookId: Int64
+    let startAt: Date
     let endAt: Date
-    let elapsedSeconds: Int64
-    let pausedDurationMillis: Int64
+    let measuredElapsedSeconds: Int64
+    let measuredPausedDurationMillis: Int64
+    let didEditTimeRange: Bool
     let position: Double?
     let insight: String
     let markReadDone: Bool
 
-    /// 收口结束确认 Sheet 的保存字段，位置为空时不会修改书籍阅读位置。
+    /// 收口结束确认 Sheet 的保存字段；编辑时间后按新起止时间重算时长并清除暂停历史。
     init(
         recordId: Int64,
+        targetBookId: Int64,
+        startAt: Date,
         endAt: Date,
-        elapsedSeconds: Int64,
-        pausedDurationMillis: Int64,
+        measuredElapsedSeconds: Int64,
+        measuredPausedDurationMillis: Int64,
+        didEditTimeRange: Bool,
         position: Double?,
         insight: String,
         markReadDone: Bool
     ) {
         self.recordId = recordId
+        self.targetBookId = targetBookId
+        self.startAt = startAt
         self.endAt = endAt
-        self.elapsedSeconds = elapsedSeconds
-        self.pausedDurationMillis = pausedDurationMillis
+        self.measuredElapsedSeconds = measuredElapsedSeconds
+        self.measuredPausedDurationMillis = measuredPausedDurationMillis
+        self.didEditTimeRange = didEditTimeRange
         self.position = position
         self.insight = insight
         self.markReadDone = markReadDone

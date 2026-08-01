@@ -343,6 +343,7 @@ struct ReadingFeatureCardsSection: View {
     let isLoading: Bool
     let onEditDailyGoal: () -> Void
     let onResumeTap: () -> Void
+    let readingTimerZoomConfiguration: ReadingTimerZoomSourceConfiguration?
 
     var body: some View {
         HStack(spacing: Spacing.base) {
@@ -357,7 +358,8 @@ struct ReadingFeatureCardsSection: View {
             ReadingResumeBookCard(
                 book: resumeBook,
                 isLoading: isLoading,
-                onTap: onResumeTap
+                onTap: onResumeTap,
+                readingTimerZoomConfiguration: readingTimerZoomConfiguration
             )
             .frame(maxWidth: .infinity)
             .aspectRatio(ReadingFeatureCardsStyle.cardAspectRatio, contentMode: .fit)
@@ -630,11 +632,30 @@ private struct ReadingResumeBookCard: View {
     let book: ReadingResumeBook?
     let isLoading: Bool
     let onTap: () -> Void
+    let readingTimerZoomConfiguration: ReadingTimerZoomSourceConfiguration?
 
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var body: some View {
-        Button(action: onTap) {
+        Group {
+            if let book, let readingTimerZoomConfiguration {
+                ReadingTimerNormalZoomSource(configuration: readingTimerZoomConfiguration) { open in
+                    Button(action: open) {
+                        cardContent(book: book)
+                    }
+                    .buttonStyle(.plain)
+                }
+            } else {
+                Button(action: onTap) {
+                    cardContent(book: book)
+                }
+                .buttonStyle(.plain)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func cardContent(book: ReadingResumeBook?) -> some View {
             CardContainer(cornerRadius: CornerRadius.containerMedium, showsBorder: false) {
                 GeometryReader { proxy in
                     let layout = ReadingResumeBookCardLayout(cardSize: proxy.size)
@@ -657,8 +678,6 @@ private struct ReadingResumeBookCard: View {
                     }
                 }
             }
-        }
-        .buttonStyle(.plain)
     }
 
     /// 生成继续阅读状态副标题；有进度时恢复百分比与动作语义，缺省时仅保留继续阅读提示。

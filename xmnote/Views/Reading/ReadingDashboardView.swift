@@ -19,18 +19,21 @@ struct ReadingDashboardView: View {
     let onOpenReadCalendar: (Date) -> Void
     let onOpenBookDetail: (Int64) -> Void
     let onStartReading: (Int64) -> Void
+    let readingTimerZoomConfigurationFactory: ReadingTimerZoomConfigurationFactory?
 
     /// 注入首页对外回调，保证页面壳层不直接依赖具体导航实现。
     init(
         onAddBook: @escaping () -> Void = {},
         onOpenReadCalendar: @escaping (Date) -> Void = { _ in },
         onOpenBookDetail: @escaping (Int64) -> Void = { _ in },
-        onStartReading: @escaping (Int64) -> Void = { _ in }
+        onStartReading: @escaping (Int64) -> Void = { _ in },
+        readingTimerZoomConfigurationFactory: ReadingTimerZoomConfigurationFactory? = nil
     ) {
         self.onAddBook = onAddBook
         self.onOpenReadCalendar = onOpenReadCalendar
         self.onOpenBookDetail = onOpenBookDetail
         self.onStartReading = onStartReading
+        self.readingTimerZoomConfigurationFactory = readingTimerZoomConfigurationFactory
     }
 
     var body: some View {
@@ -42,6 +45,7 @@ struct ReadingDashboardView: View {
                     onOpenReadCalendar: onOpenReadCalendar,
                     onOpenBookDetail: onOpenBookDetail,
                     onStartReading: onStartReading,
+                    readingTimerZoomConfigurationFactory: readingTimerZoomConfigurationFactory,
                     isYearSummaryPresented: $isYearSummaryPresented
                 )
             } else {
@@ -76,6 +80,7 @@ private struct ReadingDashboardContent: View {
     let onOpenReadCalendar: (Date) -> Void
     let onOpenBookDetail: (Int64) -> Void
     let onStartReading: (Int64) -> Void
+    let readingTimerZoomConfigurationFactory: ReadingTimerZoomConfigurationFactory?
     @Binding var isYearSummaryPresented: Bool
     @State private var readLoadingGate = LoadingGate()
 
@@ -105,6 +110,12 @@ private struct ReadingDashboardContent: View {
                         } else {
                             onAddBook()
                         }
+                    },
+                    readingTimerZoomConfiguration: viewModel.resumeBook.flatMap { resumeBook in
+                        readingTimerZoomConfigurationFactory?(
+                            AnyHashable("reading-timer-resume-\(resumeBook.id)"),
+                            .book(resumeBook.id)
+                        )
                     }
                 )
 

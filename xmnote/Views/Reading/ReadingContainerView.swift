@@ -38,6 +38,7 @@ struct ReadingContainerView: View {
     let onOpenReadCalendar: (Date) -> Void
     let onOpenBookDetail: (Int64) -> Void
     let onStartReading: (Int64) -> Void
+    let readingTimerZoomConfigurationFactory: ReadingTimerZoomConfigurationFactory?
     let onOpenContentViewer: (ContentViewerSourceContext, ContentViewerItemID) -> Void
 
     /// 注入新增书籍回调，连接阅读页顶栏操作入口。
@@ -48,6 +49,7 @@ struct ReadingContainerView: View {
         onOpenReadCalendar: @escaping (Date) -> Void = { _ in },
         onOpenBookDetail: @escaping (Int64) -> Void = { _ in },
         onStartReading: @escaping (Int64) -> Void = { _ in },
+        readingTimerZoomConfigurationFactory: ReadingTimerZoomConfigurationFactory? = nil,
         onOpenContentViewer: @escaping (ContentViewerSourceContext, ContentViewerItemID) -> Void = { _, _ in }
     ) {
         self.onAddBook = onAddBook
@@ -56,6 +58,7 @@ struct ReadingContainerView: View {
         self.onOpenReadCalendar = onOpenReadCalendar
         self.onOpenBookDetail = onOpenBookDetail
         self.onStartReading = onStartReading
+        self.readingTimerZoomConfigurationFactory = readingTimerZoomConfigurationFactory
         self.onOpenContentViewer = onOpenContentViewer
     }
 
@@ -129,7 +132,8 @@ struct ReadingContainerView: View {
                 onAddBook: onAddBook,
                 onOpenReadCalendar: onOpenReadCalendar,
                 onOpenBookDetail: onOpenBookDetail,
-                onStartReading: onStartReading
+                onStartReading: onStartReading,
+                readingTimerZoomConfigurationFactory: readingTimerZoomConfigurationFactory
             )
         case .timeline:
             ReadingTimelineView(

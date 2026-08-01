@@ -1,7 +1,7 @@
 import SwiftUI
 
 /**
- * [INPUT]: 依赖环境注入的 ReadingTimerCoordinator 投影应用级计时状态，依赖 ReadingTimerFinishSheet 收集结束确认字段，依赖外层 onRequestDismiss 统一处理收起与后续导航，并依赖 XMBookCover/TopBarDismissButton/XMSystemAlert 复用系统级组件
+ * [INPUT]: 依赖环境注入的 ReadingTimerCoordinator 投影应用级计时状态，依赖 ReadingTimerFinishSheet 收集结束确认字段，依赖外层 onRequestDismiss 统一处理收起与后续导航，并依赖 XMBookCover/XMSystemAlert 复用系统级组件
  * [OUTPUT]: 对外提供 ReadingTimerView 与 ReadingTimerDismissReason（全局阅读计时完整控制页及类型化关闭结果）
  * [POS]: Reading 模块阅读计时模态控制页，只编排计时交互并将关闭原因交还呈现宿主，不拥有全局呈现生命周期
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -23,6 +23,7 @@ struct ReadingTimerView: View {
     let onRequestDismiss: (ReadingTimerDismissReason) -> Void
 
     @Environment(ReadingTimerCoordinator.self) private var coordinator
+    @Environment(ReadingTimerSettingsStore.self) private var timerSettings
     @State private var shouldPresentStartSheet = false
     @State private var shouldReturnAfterRecoveryDismiss = false
     @State private var pendingFinishDismissReason: ReadingTimerDismissReason?
@@ -58,14 +59,6 @@ struct ReadingTimerView: View {
         .navigationTitle("")
         .navigationBarTitleDisplayMode(.inline)
         .navigationBarBackButtonHidden(true)
-        .toolbar {
-            ToolbarItem(placement: .topBarLeading) {
-                TopBarDismissButton(
-                    action: { onRequestDismiss(.minimize) },
-                    isEnabled: !coordinator.isWriting
-                )
-            }
-        }
         .task(id: bootstrapIdentity) {
             if let recordId {
                 await coordinator.bootstrap(.record(recordId: recordId, fallbackBookId: bookId))
@@ -102,6 +95,11 @@ struct ReadingTimerView: View {
                         guard didDiscard else { return }
                         pendingFinishDismissReason = .discarded
                         coordinator.shouldPresentFinishSheet = false
+                    }
+                },
+                onContinue: {
+                    Task { @MainActor in
+                        await coordinator.resumeStoppedForContinue()
                     }
                 }
             )
@@ -216,7 +214,14 @@ struct ReadingTimerView: View {
     private func handleMainAction(_ coordinator: ReadingTimerCoordinator) {
         Task { @MainActor in
             if coordinator.canStart {
-                shouldPresentStartSheet = true
+                switch timerSettings.preference {
+                case .askEveryTime:
+                    shouldPresentStartSheet = true
+                case .countUp:
+                    await coordinator.start(bookId: bookId, countdownSeconds: 0)
+                case .countdown(let seconds):
+                    await coordinator.start(bookId: bookId, countdownSeconds: seconds)
+                }
             } else if coordinator.canPause {
                 await coordinator.pause()
             } else if coordinator.canResume {
@@ -231,6 +236,10 @@ struct ReadingTimerView: View {
     private func saveFinishDraft(_ draft: ReadingTimerFinishDraft, using coordinator: ReadingTimerCoordinator) {
         Task { @MainActor in
             await coordinator.saveFinishedRecord(
+                targetBookId: draft.targetBookId,
+                startAt: draft.startAt,
+                endAt: draft.endAt,
+                didEditTimeRange: draft.didEditTimeRange,
                 position: draft.position,
                 insight: draft.insight,
                 markReadDone: draft.markReadDone

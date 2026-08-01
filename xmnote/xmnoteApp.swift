@@ -24,6 +24,7 @@ import AliyunpanSDK
 @main
 /// 应用入口，负责初始化全局依赖并挂载根界面。
 struct xmnoteApp: App {
+    @UIApplicationDelegateAdaptor(ReadingTimerNotificationDelegate.self) private var notificationDelegate
     @Environment(\.scenePhase) private var scenePhase
     @State private var appState = AppState()
     @State private var sceneStateStore = SceneStateStore()
@@ -31,6 +32,7 @@ struct xmnoteApp: App {
     @State private var databaseManager: DatabaseManager?
     @State private var repositories: RepositoryContainer?
     @State private var readingTimerCoordinator: ReadingTimerCoordinator?
+    @State private var readingTimerSettingsStore = ReadingTimerSettingsStore()
     @State private var bookCollectionImportRouter = BookCollectionImportRouter()
     @State private var readingTimerDeepLinkRouter = ReadingTimerDeepLinkRouter()
     @State private var desktopWebSessionCoordinator = DesktopWebSessionCoordinator()
@@ -55,6 +57,7 @@ struct xmnoteApp: App {
                         .environment(databaseManager)
                         .environment(repositories)
                         .environment(readingTimerCoordinator)
+                        .environment(readingTimerSettingsStore)
                         .environment(bookCollectionImportRouter)
                         .environment(readingTimerDeepLinkRouter)
                         .environment(desktopWebSessionCoordinator)
@@ -73,6 +76,7 @@ struct xmnoteApp: App {
             )
             .task {
                 bookCollectionImportRouter.consumePendingShareImport()
+                consumeReadingTimerSystemHandoffIfNeeded()
                 #if DEBUG
                 if ProcessInfo.processInfo.environment["XMNOTE_WEB_PARITY_PREMIUM"] == "1" {
                     appState.isPremium = true
@@ -120,9 +124,13 @@ struct xmnoteApp: App {
                 }
                 bookCollectionImportRouter.handle(url)
             }
+            .onReceive(NotificationCenter.default.publisher(for: .readingTimerSystemHandoffDidChange)) { _ in
+                consumeReadingTimerSystemHandoffIfNeeded()
+            }
             .onChange(of: scenePhase) { _, phase in
                 if phase == .active {
                     bookCollectionImportRouter.consumePendingShareImport()
+                    consumeReadingTimerSystemHandoffIfNeeded()
                 }
                 Task {
                     await desktopWebSessionCoordinator.handleScenePhase(phase)
@@ -148,6 +156,12 @@ struct xmnoteApp: App {
                 }
             }
         }
+    }
+
+    /// 消费通知或 Live Activity 写入的持久化交接，转成与普通深链一致的精确计时路由。
+    private func consumeReadingTimerSystemHandoffIfNeeded() {
+        guard let url = ReadingTimerSystemHandoff.consumeURL() else { return }
+        _ = readingTimerDeepLinkRouter.handle(url)
     }
 
     // MARK: - Error View

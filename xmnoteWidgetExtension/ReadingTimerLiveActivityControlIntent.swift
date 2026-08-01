@@ -112,7 +112,7 @@ struct ReadingTimerStopLiveActivityIntent: LiveActivityIntent {
     static var title: LocalizedStringResource = "结束阅读计时"
     static var description = IntentDescription("结束当前阅读计时并等待保存。")
     static var isDiscoverable: Bool = false
-    static var openAppWhenRun: Bool = false
+    static var openAppWhenRun: Bool = true
 
     @Parameter(title: "记录 ID")
     var recordId: String

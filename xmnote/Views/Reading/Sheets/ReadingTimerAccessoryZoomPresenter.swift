@@ -4,22 +4,25 @@ import UIKit
 
 /**
  * [INPUT]: 依赖 UIKit UIViewController.Transition.zoom、UIHostingController 与 SwiftUI UIViewControllerRepresentable，接收稳定来源 ID、计时呈现票据和类型化关闭回调
- * [OUTPUT]: 对外提供 ReadingTimerAccessoryZoomPresentationOwner、ReadingTimerAccessoryZoomPresenter 与关闭请求，以完整 Bottom Accessory 为来源呈现系统全屏 Zoom
+ * [OUTPUT]: 对外提供阅读计时通用 Zoom owner、Presenter 与关闭请求，以 Bottom Accessory、页面卡片或根容器为来源呈现系统全屏 Zoom
  * [POS]: Reading 模块生产转场窄桥接；稳定 owner 归属 MainTabView，Representable 仅承载当前来源 UIView，不读写计时业务或自定义动画参数
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
 /// 把 MainTabView 已冻结的关闭原因传给 UIKit 呈现 owner，避免桥接层读取业务状态。
-struct ReadingTimerAccessoryZoomDismissalRequest: Equatable {
+struct ReadingTimerZoomDismissalRequest: Equatable {
     let presentationID: UUID
     let reason: ReadingTimerDismissReason
 }
 
+/// 保留旧名称作为兼容别名，保证 Bottom Accessory 的调用点不产生第二套生命周期实现。
+typealias ReadingTimerAccessoryZoomDismissalRequest = ReadingTimerZoomDismissalRequest
+
 /// 只在调试构建记录生产桥接生命周期，不向用户界面叠加诊断信息。
-private enum ReadingTimerAccessoryZoomLog {
+private enum ReadingTimerZoomLog {
     static let logger = Logger(
         subsystem: Bundle.main.bundleIdentifier ?? "com.merpyzf.xmnote",
-        category: "ReadingTimerAccessoryZoom"
+        category: "ReadingTimerZoom"
     )
 
     /// 写入一次公开级调试事件，便于模拟器录屏与系统日志对齐。
@@ -30,9 +33,12 @@ private enum ReadingTimerAccessoryZoomLog {
     }
 }
 
-/// 跨 SwiftUI Accessory 重建保持稳定的 UIKit 呈现 owner，完整生命周期与 MainTabView 对齐。
+/// 保留旧 owner 名称作为兼容别名；所有入口实际共享同一个通用 Zoom owner。
+typealias ReadingTimerAccessoryZoomPresentationOwner = ReadingTimerZoomPresentationOwner
+
+/// 跨 SwiftUI 来源重建保持稳定的 UIKit 呈现 owner，完整生命周期与 MainTabView 对齐。
 @MainActor
-final class ReadingTimerAccessoryZoomPresentationOwner {
+final class ReadingTimerZoomPresentationOwner {
     private enum Phase {
         case idle
         case presenting
@@ -40,7 +46,7 @@ final class ReadingTimerAccessoryZoomPresentationOwner {
         case dismissing
     }
 
-    private let sourceRegistry = ReadingTimerAccessoryZoomSourceRegistry()
+    private let sourceRegistry = ReadingTimerZoomSourceRegistry()
     private weak var presentedController: UIViewController?
     private weak var appearanceOwner: UIViewController?
     private var previousBackgroundColor: UIColor?
@@ -56,7 +62,7 @@ final class ReadingTimerAccessoryZoomPresentationOwner {
     private var isInteractiveDismissEnabled = true
     private var phase: Phase = .idle
 
-    /// 注册系统当前持有的完整 Accessory UIView；新来源会覆盖相同 record ID 的旧弱引用。
+    /// 注册系统当前持有的完整来源 UIView；新来源会覆盖相同 record ID 的旧弱引用。
     func registerSource(_ view: UIView, sourceID: AnyHashable) {
         sourceRegistry.register(view, for: sourceID)
     }
@@ -69,7 +75,7 @@ final class ReadingTimerAccessoryZoomPresentationOwner {
     /// 同步写入门闩与外部关闭请求；来源重建不会改变当前 presentation phase。
     func update(
         isInteractiveDismissEnabled: Bool,
-        dismissalRequest: ReadingTimerAccessoryZoomDismissalRequest?
+        dismissalRequest: ReadingTimerZoomDismissalRequest?
     ) {
         self.isInteractiveDismissEnabled = isInteractiveDismissEnabled
         guard let dismissalRequest,
@@ -94,37 +100,37 @@ final class ReadingTimerAccessoryZoomPresentationOwner {
             Presentation,
             @escaping (ReadingTimerDismissReason) -> Void
         ) -> Destination
-    ) where Presentation.ID == UUID {
-        ReadingTimerAccessoryZoomLog.event("Accessory open requested")
+    ) -> Bool where Presentation.ID == UUID {
+        ReadingTimerZoomLog.event("Reading timer open requested")
         guard phase == .idle else {
-            ReadingTimerAccessoryZoomLog.event("Open ignored: phase is not idle")
-            return
+            ReadingTimerZoomLog.event("Open ignored: phase is not idle")
+            return false
         }
         guard presentedController == nil else {
-            ReadingTimerAccessoryZoomLog.event("Open ignored: target is already retained")
-            return
+            ReadingTimerZoomLog.event("Open ignored: target is already retained")
+            return false
         }
         guard sourceRegistry.sourceView(for: sourceID) != nil else {
-            ReadingTimerAccessoryZoomLog.event(
+            ReadingTimerZoomLog.event(
                 "Open ignored: source view is not visible in a window"
             )
-            return
+            return false
         }
         guard let presenter = topViewController(in: sourceWindow) else {
-            ReadingTimerAccessoryZoomLog.event("Open ignored: presenter unavailable")
-            return
+            ReadingTimerZoomLog.event("Open ignored: presenter unavailable")
+            return false
         }
         guard presenter.presentedViewController == nil else {
-            ReadingTimerAccessoryZoomLog.event(
+            ReadingTimerZoomLog.event(
                 "Open ignored: presenter already owns another modal"
             )
-            return
+            return false
         }
         guard let presentation = preparePresentation() else {
-            ReadingTimerAccessoryZoomLog.event(
+            ReadingTimerZoomLog.event(
                 "Open ignored: MainTabView rejected the presentation ticket"
             )
-            return
+            return false
         }
 
         let dismiss: (ReadingTimerDismissReason) -> Void = { [weak self] reason in
@@ -133,7 +139,7 @@ final class ReadingTimerAccessoryZoomPresentationOwner {
                 presentationID: presentation.id
             )
         }
-        let target = ReadingTimerAccessoryZoomDestinationController(
+        let target = ReadingTimerZoomDestinationController(
             rootView: destinationBuilder(presentation, dismiss)
         )
         target.modalPresentationStyle = .overFullScreen
@@ -181,7 +187,7 @@ final class ReadingTimerAccessoryZoomPresentationOwner {
         activePresentationID = presentation.id
         activeSourceID = sourceID
         presentedController = target
-        ReadingTimerAccessoryZoomLog.event("Presenting system overFullScreen zoom")
+        ReadingTimerZoomLog.event("Presenting system overFullScreen zoom")
         presenter.present(target, animated: true) { [weak self, weak target] in
             guard let self,
                   let target,
@@ -191,10 +197,11 @@ final class ReadingTimerAccessoryZoomPresentationOwner {
             }
             if self.phase == .presenting {
                 self.phase = .presented
-                ReadingTimerAccessoryZoomLog.event("Presentation completed")
+                ReadingTimerZoomLog.event("Presentation completed")
                 self.performQueuedDismissalIfNeeded()
             }
         }
+        return true
     }
 
     /// 把完整页内部关闭动作交给 MainTabView 冻结语义，再由同一 owner 立即启动系统退场。
@@ -203,7 +210,7 @@ final class ReadingTimerAccessoryZoomPresentationOwner {
         presentationID: UUID
     ) {
         guard activePresentationID == presentationID else { return }
-        ReadingTimerAccessoryZoomLog.event(
+        ReadingTimerZoomLog.event(
             "Destination requested dismissal: \(String(describing: reason))"
         )
         onDismissalRequested?(reason)
@@ -237,7 +244,7 @@ final class ReadingTimerAccessoryZoomPresentationOwner {
         }
         phase = .dismissing
         activeDismissalReason = reason
-        ReadingTimerAccessoryZoomLog.event(
+        ReadingTimerZoomLog.event(
             "Beginning programmatic dismissal: \(String(describing: reason))"
         )
         target.dismiss(animated: true) { [weak self, weak target] in
@@ -260,7 +267,7 @@ final class ReadingTimerAccessoryZoomPresentationOwner {
         }
         if phase == .presenting || phase == .presented {
             phase = .dismissing
-            ReadingTimerAccessoryZoomLog.event("System dismissal lifecycle began")
+            ReadingTimerZoomLog.event("System dismissal lifecycle began")
         }
     }
 
@@ -277,7 +284,7 @@ final class ReadingTimerAccessoryZoomPresentationOwner {
         if isCancelled {
             phase = .presented
             activeDismissalReason = nil
-            ReadingTimerAccessoryZoomLog.event("Interactive dismissal cancelled")
+            ReadingTimerZoomLog.event("Interactive dismissal cancelled")
         } else {
             finishDismissal(target: target, presentationID: presentationID)
         }
@@ -307,7 +314,7 @@ final class ReadingTimerAccessoryZoomPresentationOwner {
             source == nil
 
         guard !shouldCrossFade else {
-            ReadingTimerAccessoryZoomLog.event(
+            ReadingTimerZoomLog.event(
                 "Using cross dissolve fallback; reduceMotion=\(UIAccessibility.isReduceMotionEnabled), prefersCrossFade=\(UIAccessibility.prefersCrossFadeTransitions), sourceAvailable=\(source != nil)"
             )
             target.preferredTransition = .crossDissolve
@@ -338,7 +345,7 @@ final class ReadingTimerAccessoryZoomPresentationOwner {
         }
         let reason = activeDismissalReason ?? .minimize
         let completion = onDismissalCompleted
-        ReadingTimerAccessoryZoomLog.event(
+        ReadingTimerZoomLog.event(
             "Dismissal completed: \(String(describing: reason))"
         )
         restorePresenterAppearance()
@@ -410,19 +417,20 @@ final class ReadingTimerAccessoryZoomPresentationOwner {
     }
 }
 
-/// 以稳定 UIKit 来源承载完整 SwiftUI Accessory；呈现 owner 由 MainTabView 注入并跨重建保留。
+/// 以稳定 UIKit 来源承载完整 SwiftUI 内容；呈现 owner 由 MainTabView 注入并跨重建保留。
 @MainActor
-struct ReadingTimerAccessoryZoomPresenter<Presentation: Identifiable, Source: View, Destination: View>: UIViewControllerRepresentable where Presentation.ID == UUID {
+struct ReadingTimerZoomPresenter<Presentation: Identifiable, Source: View, Destination: View>: UIViewControllerRepresentable where Presentation.ID == UUID {
     typealias SourceBuilder = (@escaping () -> Void) -> Source
     typealias DestinationBuilder = (
         Presentation,
         @escaping (ReadingTimerDismissReason) -> Void
     ) -> Destination
 
-    let owner: ReadingTimerAccessoryZoomPresentationOwner
+    let owner: ReadingTimerZoomPresentationOwner
     let sourceID: AnyHashable
-    let dismissalRequest: ReadingTimerAccessoryZoomDismissalRequest?
+    let dismissalRequest: ReadingTimerZoomDismissalRequest?
     let isInteractiveDismissEnabled: Bool
+    let shouldAutoPresent: Bool
     let preparePresentation: () -> Presentation?
     let onDismissalRequested: (Presentation, ReadingTimerDismissReason) -> Void
     let onDismissalCompleted: (Presentation, ReadingTimerDismissReason) -> Void
@@ -433,10 +441,11 @@ struct ReadingTimerAccessoryZoomPresenter<Presentation: Identifiable, Source: Vi
 
     /// 注入稳定 owner、生产票据与来源/目标内容；Representable 不拥有转场 phase。
     init(
-        owner: ReadingTimerAccessoryZoomPresentationOwner,
+        owner: ReadingTimerZoomPresentationOwner,
         sourceID: AnyHashable,
-        dismissalRequest: ReadingTimerAccessoryZoomDismissalRequest?,
+        dismissalRequest: ReadingTimerZoomDismissalRequest?,
         isInteractiveDismissEnabled: Bool,
+        shouldAutoPresent: Bool = false,
         preparePresentation: @escaping () -> Presentation?,
         onDismissalRequested: @escaping (Presentation, ReadingTimerDismissReason) -> Void,
         onDismissalCompleted: @escaping (Presentation, ReadingTimerDismissReason) -> Void,
@@ -447,6 +456,7 @@ struct ReadingTimerAccessoryZoomPresenter<Presentation: Identifiable, Source: Vi
         self.sourceID = sourceID
         self.dismissalRequest = dismissalRequest
         self.isInteractiveDismissEnabled = isInteractiveDismissEnabled
+        self.shouldAutoPresent = shouldAutoPresent
         self.preparePresentation = preparePresentation
         self.onDismissalRequested = onDismissalRequested
         self.onDismissalCompleted = onDismissalCompleted
@@ -460,20 +470,21 @@ struct ReadingTimerAccessoryZoomPresenter<Presentation: Identifiable, Source: Vi
 
     func makeUIViewController(
         context: Context
-    ) -> ReadingTimerAccessoryZoomSourceController<Source> {
+    ) -> ReadingTimerZoomSourceController<Source> {
         let coordinator = context.coordinator
-        let controller = ReadingTimerAccessoryZoomSourceController(
+        let controller = ReadingTimerZoomSourceController(
             rootView: sourceBuilder { [weak coordinator] in
                 coordinator?.presentDestination()
             }
         )
         coordinator.update(configuration: self)
         coordinator.connect(sourceController: controller)
+        coordinator.presentIfRequested()
         return controller
     }
 
     func updateUIViewController(
-        _ uiViewController: ReadingTimerAccessoryZoomSourceController<Source>,
+        _ uiViewController: ReadingTimerZoomSourceController<Source>,
         context: Context
     ) {
         let coordinator = context.coordinator
@@ -484,18 +495,19 @@ struct ReadingTimerAccessoryZoomPresenter<Presentation: Identifiable, Source: Vi
             }
         )
         coordinator.connect(sourceController: uiViewController)
+        coordinator.presentIfRequested()
     }
 
     func sizeThatFits(
         _ proposal: ProposedViewSize,
-        uiViewController: ReadingTimerAccessoryZoomSourceController<Source>,
+        uiViewController: ReadingTimerZoomSourceController<Source>,
         context: Context
     ) -> CGSize? {
         uiViewController.sizeThatFits(proposal)
     }
 
     static func dismantleUIViewController(
-        _ uiViewController: ReadingTimerAccessoryZoomSourceController<Source>,
+        _ uiViewController: ReadingTimerZoomSourceController<Source>,
         coordinator: Coordinator
     ) {
         coordinator.dismantle(sourceController: uiViewController)
@@ -504,16 +516,20 @@ struct ReadingTimerAccessoryZoomPresenter<Presentation: Identifiable, Source: Vi
     /// 保存当前 SwiftUI builders，并把 UIView 注册转交给 MainTabView 持有的稳定 owner。
     @MainActor
     final class Coordinator {
-        private var configuration: ReadingTimerAccessoryZoomPresenter
+        private var configuration: ReadingTimerZoomPresenter
         private var registeredSourceID: AnyHashable?
+        private var hasConsumedAutoPresentationRequest = false
 
         /// 保存首次配置；后续 SwiftUI 重绘会通过 update 覆盖为最新闭包。
-        init(configuration: ReadingTimerAccessoryZoomPresenter) {
+        init(configuration: ReadingTimerZoomPresenter) {
             self.configuration = configuration
         }
 
         /// 同步 owner 的交互门闩与关闭请求，不改变当前来源 UIView 身份。
-        func update(configuration: ReadingTimerAccessoryZoomPresenter) {
+        func update(configuration: ReadingTimerZoomPresenter) {
+            if !configuration.shouldAutoPresent {
+                hasConsumedAutoPresentationRequest = false
+            }
             self.configuration = configuration
             configuration.owner.update(
                 isInteractiveDismissEnabled: configuration.isInteractiveDismissEnabled,
@@ -523,7 +539,7 @@ struct ReadingTimerAccessoryZoomPresenter<Presentation: Identifiable, Source: Vi
 
         /// 注册当前 Hosting Controller 的完整内容 UIView。
         func connect(
-            sourceController: ReadingTimerAccessoryZoomSourceController<Source>
+            sourceController: ReadingTimerZoomSourceController<Source>
         ) {
             sourceController.loadViewIfNeeded()
             if let registeredSourceID,
@@ -541,13 +557,14 @@ struct ReadingTimerAccessoryZoomPresenter<Presentation: Identifiable, Source: Vi
         }
 
         /// 来源按钮触发时把泛型内容交给稳定 owner 建立一次系统呈现。
-        func presentDestination() {
+        @discardableResult
+        func presentDestination() -> Bool {
             guard let sourceView = configuration.owner.ownerSourceViewFallback(
                 sourceID: configuration.sourceID
             ) else {
-                return
+                return false
             }
-            configuration.owner.present(
+            let didPresent = configuration.owner.present(
                 sourceID: configuration.sourceID,
                 sourceWindow: sourceView.window,
                 surfaceColor: configuration.surfaceColor,
@@ -556,14 +573,27 @@ struct ReadingTimerAccessoryZoomPresenter<Presentation: Identifiable, Source: Vi
                 onDismissalCompleted: configuration.onDismissalCompleted,
                 destinationBuilder: configuration.destinationBuilder
             )
+            if didPresent {
+                hasConsumedAutoPresentationRequest = true
+            }
+            return didPresent
+        }
+
+        /// 根容器没有具体业务卡片时由状态票据自动触发一次同样的系统 Zoom 呈现。
+        func presentIfRequested() {
+            guard configuration.shouldAutoPresent,
+                  !hasConsumedAutoPresentationRequest else {
+                return
+            }
+            presentDestination()
         }
 
         /// 只解除旧 UIView 注册；稳定 owner 与在场目标不随 representable 重建销毁。
         func dismantle(
-            sourceController: ReadingTimerAccessoryZoomSourceController<Source>
+            sourceController: ReadingTimerZoomSourceController<Source>
         ) {
             guard let registeredSourceID else { return }
-            ReadingTimerAccessoryZoomLog.event("Source representable dismantled")
+            ReadingTimerZoomLog.event("Source representable dismantled")
             configuration.owner.unregisterSource(
                 sourceController.transitionSourceView,
                 sourceID: registeredSourceID
@@ -573,7 +603,10 @@ struct ReadingTimerAccessoryZoomPresenter<Presentation: Identifiable, Source: Vi
     }
 }
 
-private extension ReadingTimerAccessoryZoomPresentationOwner {
+/// 保留旧 Presenter 名称作为兼容别名；Accessory 与普通页面不会分叉转场生命周期。
+typealias ReadingTimerAccessoryZoomPresenter<Presentation, Source, Destination> = ReadingTimerZoomPresenter<Presentation, Source, Destination> where Presentation: Identifiable, Source: View, Destination: View, Presentation.ID == UUID
+
+private extension ReadingTimerZoomPresentationOwner {
     /// 为 Representable 获取当前来源 window；正式几何校验仍由 present 内部再次完成。
     func ownerSourceViewFallback(sourceID: AnyHashable) -> UIView? {
         sourceRegistry.sourceView(for: sourceID)
@@ -582,14 +615,14 @@ private extension ReadingTimerAccessoryZoomPresentationOwner {
 
 /// 用不会随 SwiftUI placement 更新而替换内部 Hosting Controller 的 UIViewController 持有来源像素。
 @MainActor
-final class ReadingTimerAccessoryZoomSourceController<Content: View>: UIViewController {
+final class ReadingTimerZoomSourceController<Content: View>: UIViewController {
     private let hostingController: UIHostingController<Content>
 
     var transitionSourceView: UIView {
         hostingController.view
     }
 
-    /// 创建透明 UIKit 容器，实际来源边界由 SwiftUI Accessory 内容决定。
+    /// 创建透明 UIKit 容器，实际来源边界由 SwiftUI 来源内容决定。
     init(rootView: Content) {
         hostingController = UIHostingController(rootView: rootView)
         super.init(nibName: nil, bundle: nil)
@@ -625,9 +658,14 @@ final class ReadingTimerAccessoryZoomSourceController<Content: View>: UIViewCont
         hostingController.didMove(toParent: self)
     }
 
-    /// 同步计时秒数、状态与 placement，不替换内部 UIKit 来源控制器。
+    /// 原地同步计时状态与 placement，并请求系统重新测量而不替换 UIKit 来源身份。
     func update(rootView: Content) {
         hostingController.rootView = rootView
+        hostingController.view.invalidateIntrinsicContentSize()
+        hostingController.view.setNeedsLayout()
+        view.invalidateIntrinsicContentSize()
+        view.setNeedsLayout()
+        view.superview?.setNeedsLayout()
     }
 
     /// 把 SwiftUI 内容的理想尺寸反馈给 tabViewBottomAccessory。
@@ -642,7 +680,7 @@ final class ReadingTimerAccessoryZoomSourceController<Content: View>: UIViewCont
 
 /// 观察系统退场的完成与取消，不在生命周期回调中改变 preferredTransition。
 @MainActor
-private final class ReadingTimerAccessoryZoomDestinationController<Content: View>: UIHostingController<Content> {
+private final class ReadingTimerZoomDestinationController<Content: View>: UIHostingController<Content> {
     var onDismissalWillBegin: (() -> Void)?
     var onDismissalTransitionFinished: ((Bool) -> Void)?
     var onDetachedAfterDismissal: (() -> Void)?
@@ -652,7 +690,7 @@ private final class ReadingTimerAccessoryZoomDestinationController<Content: View
     /// 绑定当前系统 transition coordinator，交互取消由 context.isCancelled 作为唯一真相。
     override func viewWillDisappear(_ animated: Bool) {
         super.viewWillDisappear(animated)
-        ReadingTimerAccessoryZoomLog.event(
+        ReadingTimerZoomLog.event(
             "Target viewWillDisappear; interactive=\(transitionCoordinator?.isInteractive == true)"
         )
         guard !isObservingDismissal else { return }
@@ -680,7 +718,7 @@ private final class ReadingTimerAccessoryZoomDestinationController<Content: View
     override func viewDidDisappear(_ animated: Bool) {
         super.viewDidDisappear(animated)
         if presentingViewController == nil {
-            ReadingTimerAccessoryZoomLog.event("Target detached from presenter")
+            ReadingTimerZoomLog.event("Target detached from presenter")
             onDetachedAfterDismissal?()
         }
     }
@@ -688,7 +726,7 @@ private final class ReadingTimerAccessoryZoomDestinationController<Content: View
 
 /// provider 每次按稳定 record ID 查询当前来源，避免闭包捕获已复用或卸载的 UIView。
 @MainActor
-private final class ReadingTimerAccessoryZoomSourceRegistry {
+private final class ReadingTimerZoomSourceRegistry {
     private final class WeakView {
         weak var value: UIView?
 
@@ -699,7 +737,7 @@ private final class ReadingTimerAccessoryZoomSourceRegistry {
 
     private var sources: [AnyHashable: WeakView] = [:]
 
-    /// 注册当前完整 Accessory UIView。
+    /// 注册当前完整来源 UIView。
     func register(_ view: UIView, for sourceID: AnyHashable) {
         sources[sourceID] = WeakView(view)
     }
