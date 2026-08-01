@@ -372,7 +372,7 @@ struct MainTabView: View {
     private var configuredTabContent: some View {
         tabContent
         .tabBarMinimizeBehavior(.onScrollDown)
-        .tabViewBottomAccessory(isEnabled: shouldShowReadingTimerAccessory) {
+        .tabViewBottomAccessory(isEnabled: isReadingTimerAccessoryEnabled) {
             if let session = readingTimerAccessorySession {
                 ReadingTimerAccessoryZoomSource(
                     owner: readingTimerZoomOwner,
@@ -612,22 +612,9 @@ struct MainTabView: View {
         return activeSession
     }
 
-    private var shouldShowReadingTimerAccessory: Bool {
-        guard readingTimerAccessorySession != nil else {
-            return false
-        }
-        switch selectedTab {
-        case .reading:
-            return readingPath.isEmpty
-        case .books:
-            return booksPath.isEmpty
-        case .notes:
-            return notesPath.isEmpty
-        case .profile:
-            return profilePath.isEmpty
-        case .search:
-            return searchPath.isEmpty
-        }
+    // 未完成计时是应用级任务；普通 Tab 内导航不得改变底部计时控制的可达性。
+    private var isReadingTimerAccessoryEnabled: Bool {
+        readingTimerAccessorySession != nil
     }
 
     private var searchHostTextBinding: Binding<String> {
