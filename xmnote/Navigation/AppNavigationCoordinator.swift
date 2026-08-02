@@ -1,7 +1,7 @@
 /**
- * [INPUT]: 依赖 SwiftUI NavigationPath、AppTab、各业务编辑/查看/导入路由参数
- * [OUTPUT]: 对外提供 AppNavigationCoordinator、AppFullScreenTaskDestination 与浏览回流目标
- * [POS]: Navigation 模块的根级任务呈现协调器，统一隔离可恢复浏览路径与临时全屏任务路径
+ * [INPUT]: 依赖 SwiftUI NavigationPath、AppTab、各业务编辑/查看/导入路由参数与阅读日历初始日期
+ * [OUTPUT]: 对外提供 AppNavigationCoordinator、AppFullScreenTaskDestination 与浏览回流目标，统一承载沉浸内容和任务
+ * [POS]: Navigation 模块的根级沉浸内容与任务呈现协调器，统一隔离可恢复浏览路径与临时全屏路径
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
@@ -27,7 +27,7 @@ enum DataImportTaskDestination: Hashable {
     case clipboardCandidates(title: String, parserIDs: [NoteImportParserID])
 }
 
-/// 不参与 scene 恢复的全屏任务目标；所有目标由 MainTabView 的单一 cover 呈现。
+/// 不参与 scene 恢复的全屏内容与任务目标；所有目标由 MainTabView 的单一 cover 呈现。
 enum AppFullScreenTaskDestination: Hashable {
     case addBook
     case bookEditor(BookEditorMode)
@@ -39,6 +39,7 @@ enum AppFullScreenTaskDestination: Hashable {
         initialItemID: ContentViewerItemID,
         keyword: String
     )
+    case readCalendar(initialDate: Date?)
     case readingSession(bookID: UUID)
     case dataImport(DataImportTaskDestination)
 }
@@ -71,7 +72,7 @@ struct PendingBrowseNavigation: Hashable {
     let destination: AppBrowseDestination
 }
 
-/// 根级导航协调器，只管理低频全屏任务状态，不承载业务数据或页面高频交互状态。
+/// 根级导航协调器，只管理低频全屏内容与任务状态，不承载业务数据或页面高频交互状态。
 @MainActor
 @Observable
 final class AppNavigationCoordinator {
@@ -88,7 +89,7 @@ final class AppNavigationCoordinator {
         currentTab = tab
     }
 
-    /// 打开任务；若已经处于全屏任务中，则沿用当前任务栈继续深入，避免叠加模态。
+    /// 打开全屏内容或任务；若已经处于全屏任务中，则沿用当前任务栈继续深入，避免叠加模态。
     func present(_ destination: AppFullScreenTaskDestination) {
         switch destination {
         case .addBook:

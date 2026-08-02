@@ -17,12 +17,12 @@ struct ReadCalendarView: View {
     @State private var displayMode: ReadCalendarContentView.DisplayMode = .activityEvent
     @State private var settings: ReadCalendarSettings
     @State private var settingsRefreshTask: Task<Void, Never>?
+    @State private var settingsSheetHeight: CGFloat?
+    @State private var isSettingsPresentationPending = false
     @State private var isSettingsPresented = false
-    @State private var settingsSheetHeight: CGFloat = 0
     @State private var isBookCoverFullscreenPresented = false
     @State private var didBootstrapFromScene = false
     @State private var canPersistSceneSnapshot = false
-    @ScaledMetric(relativeTo: .subheadline) private var settingsIconSize = 15
 
     /// 注入初始日期并创建阅读日历页面入口。
     init(date: Date?) {
@@ -84,18 +84,35 @@ struct ReadCalendarView: View {
         .toolbarBackground(Color.surfacePage, for: .navigationBar)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
-                Button { isSettingsPresented = true } label: {
-                    Image(systemName: "gearshape")
-                        .font(.system(size: settingsIconSize, weight: .semibold))
-                        .foregroundStyle(Color.readCalendarTopAction)
+                Button(action: requestSettingsPresentation) {
+                    Label("阅读日历设置", systemImage: "ellipsis")
                 }
-                .accessibilityLabel("阅读日历设置")
+                .labelStyle(.iconOnly)
+                .tint(.primary)
             }
         }
-        .sheet(isPresented: $isSettingsPresented) {
-            ReadCalendarSettingsSheet(settings: settings)
-                .onPreferenceChange(SheetHeightKey.self) { settingsSheetHeight = $0 }
-                .presentationDetents([.height(settingsSheetHeight)])
+        .background {
+            if !isSettingsPresented {
+                ReadCalendarSettingsContent(settings: settings, onClose: nil)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .hidden()
+                    .allowsHitTesting(false)
+                    .accessibilityHidden(true)
+                    .onGeometryChange(for: CGFloat.self) { geometry in
+                        ceil(geometry.size.height)
+                    } action: { height in
+                        updateSettingsSheetHeight(height)
+                    }
+            }
+        }
+        .sheet(isPresented: $isSettingsPresented, onDismiss: {
+            isSettingsPresentationPending = false
+        }) {
+            ReadCalendarSettingsSheet(
+                settings: settings,
+                onContentHeightChange: updateSettingsSheetHeight
+            )
+            .presentationDetents(settingsSheetDetents)
         }
         .onChange(of: settings.excludedEventTypes) { _, _ in
             scheduleSettingsRefresh()
@@ -140,6 +157,7 @@ struct ReadCalendarView: View {
             }
         }
         .onDisappear {
+            isSettingsPresentationPending = false
             pagerSelectionTask?.cancel()
             pagerSelectionTask = nil
             yearSelectionTask?.cancel()
@@ -169,6 +187,33 @@ struct ReadCalendarView: View {
 // MARK: - Settings Refresh
 
 private extension ReadCalendarView {
+    var settingsSheetDetents: Set<PresentationDetent> {
+        guard let settingsSheetHeight else { return [.medium] }
+        return [.height(settingsSheetHeight)]
+    }
+
+    /// 等待设置内容获得有效自然高度后再呈现，避免首次以占位高度启动系统转场。
+    func requestSettingsPresentation() {
+        guard settingsSheetHeight != nil else {
+            isSettingsPresentationPending = true
+            return
+        }
+        isSettingsPresented = true
+    }
+
+    /// 接收预布局或已呈现内容的自然高度，并在首次测量完成后继续待处理的呈现请求。
+    func updateSettingsSheetHeight(_ height: CGFloat) {
+        guard height.isFinite, height > 0 else { return }
+        let normalizedHeight = ceil(height)
+        if settingsSheetHeight != normalizedHeight {
+            settingsSheetHeight = normalizedHeight
+        }
+
+        guard isSettingsPresentationPending else { return }
+        isSettingsPresentationPending = false
+        isSettingsPresented = true
+    }
+
     func syncSceneSnapshot() {
         guard canPersistSceneSnapshot else { return }
         sceneStateStore.updateReadCalendar(

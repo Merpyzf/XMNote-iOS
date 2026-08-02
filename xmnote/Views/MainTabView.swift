@@ -8,9 +8,9 @@
 import SwiftUI
 
 /**
- * [INPUT]: 依赖五个主业务 Tab、可恢复浏览路由、AppNavigationCoordinator、ReadingTimerCoordinator、外部导入与网页端动作
- * [OUTPUT]: 对外提供 MainTabView（五个独立 NavigationStack、单一根级任务 cover、阅读计时 UIKit Zoom、底部计时条与跨模块浏览回流）
- * [POS]: 应用根导航 owner，统一隔离普通浏览、沉浸任务与阅读计时呈现，同时保留各 Tab 导航现场
+ * [INPUT]: 依赖五个主业务 Tab、可恢复浏览路由、AppNavigationCoordinator、ReadingTimerCoordinator、阅读日历、外部导入与网页端动作
+ * [OUTPUT]: 对外提供 MainTabView（五个独立 NavigationStack、单一根级沉浸内容/任务 cover、阅读计时 UIKit Zoom、底部计时条与跨模块浏览回流）
+ * [POS]: 应用根导航 owner，统一隔离普通浏览、沉浸内容、独立任务与阅读计时呈现，同时保留各 Tab 导航现场
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
@@ -189,7 +189,9 @@ struct MainTabView: View {
                         },
                         onOpenDebugCenter: { append(DebugRoute.debugCenter, to: .reading) },
                         onOpenReadCalendar: { date in
-                            readingPath.append(ReadingRoute.readCalendar(date: date))
+                            navigationCoordinator.present(
+                                .readCalendar(initialDate: date)
+                            )
                         },
                         onOpenBookDetail: { bookId in
                             append(BookRoute.detail(bookId: bookId), to: .reading)
@@ -225,7 +227,7 @@ struct MainTabView: View {
                             debugDestination(for: route)
                         }
                         .navigationDestination(for: ReadingRoute.self) { route in
-                            readingDestination(for: route)
+                            readingDestination(for: route, hostTab: .reading)
                         }
                         .navigationDestination(for: BookRoute.self) { route in
                             bookDestination(for: route)
@@ -262,7 +264,7 @@ struct MainTabView: View {
                             bookDestination(for: route)
                         }
                         .navigationDestination(for: ReadingRoute.self) { route in
-                            readingDestination(for: route)
+                            readingDestination(for: route, hostTab: .books)
                                 .toolbar(.hidden, for: .tabBar)
                         }
                         .navigationDestination(for: NoteRoute.self) { route in
@@ -272,7 +274,7 @@ struct MainTabView: View {
                             contentDestination(for: route)
                         }
                         .navigationDestination(for: PersonalRoute.self) { route in
-                            personalDestination(for: route)
+                            personalDestination(for: route, hostTab: .books)
                         }
                 }
             }
@@ -293,7 +295,7 @@ struct MainTabView: View {
                             bookDestination(for: route)
                         }
                         .navigationDestination(for: ReadingRoute.self) { route in
-                            readingDestination(for: route)
+                            readingDestination(for: route, hostTab: .notes)
                                 .toolbar(.hidden, for: .tabBar)
                         }
                         .navigationDestination(for: NoteRoute.self) { route in
@@ -312,6 +314,11 @@ struct MainTabView: View {
                         onAddNote: {
                             navigationCoordinator.present(.noteEditor(mode: .create, seed: .empty))
                         },
+                        onOpenReadCalendar: {
+                            navigationCoordinator.present(
+                                .readCalendar(initialDate: nil)
+                            )
+                        },
                         onOpenDebugCenter: { append(DebugRoute.debugCenter, to: .profile) }
                     )
                         .navigationDestination(for: DebugRoute.self) { route in
@@ -321,7 +328,7 @@ struct MainTabView: View {
                             bookDestination(for: route)
                         }
                         .navigationDestination(for: ReadingRoute.self) { route in
-                            readingDestination(for: route)
+                            readingDestination(for: route, hostTab: .profile)
                                 .toolbar(.hidden, for: .tabBar)
                         }
                         .navigationDestination(for: NoteRoute.self) { route in
@@ -331,7 +338,7 @@ struct MainTabView: View {
                             contentDestination(for: route)
                         }
                         .navigationDestination(for: PersonalRoute.self) { route in
-                            personalDestination(for: route)
+                            personalDestination(for: route, hostTab: .profile)
                         }
                 }
             }
@@ -354,7 +361,7 @@ struct MainTabView: View {
                             bookDestination(for: route)
                         }
                         .navigationDestination(for: ReadingRoute.self) { route in
-                            readingDestination(for: route)
+                            readingDestination(for: route, hostTab: .search)
                                 .toolbar(.hidden, for: .tabBar)
                         }
                         .navigationDestination(for: NoteRoute.self) { route in
@@ -466,9 +473,10 @@ struct MainTabView: View {
         }
     }
 
-    /// 根级呈现层只承载统一任务 cover、计时 Zoom 与 scene 恢复启动流程。
+    /// 根级呈现层只承载统一 cover、计时 Zoom 与 scene 恢复，并在全屏内容活跃时隔离底层可访问性。
     private var presentedTabContent: some View {
         observedTabContent
+        .accessibilityHidden(navigationCoordinator.activeTask != nil)
         .fullScreenCover(
             item: $navigationCoordinator.activeTask,
             onDismiss: completeFullScreenTaskDismissal
@@ -633,6 +641,7 @@ struct MainTabView: View {
         )
     }
 
+    /// 为根级全屏呈现建立独立导航栈，并将辅助技术焦点约束在当前模态内容内。
     @ViewBuilder
     private func fullScreenTaskContent(for presentation: AppFullScreenTaskPresentation) -> some View {
         NavigationStack(path: $navigationCoordinator.taskPath) {
@@ -654,6 +663,7 @@ struct MainTabView: View {
             }
         }
         .environment(navigationCoordinator)
+        .accessibilityAddTraits(.isModal)
     }
 
     @ViewBuilder
@@ -704,13 +714,19 @@ struct MainTabView: View {
                 keyword: keyword,
                 navigationContext: navigationContext
             )
+        case .readCalendar(let initialDate):
+            ReadCalendarView(date: initialDate)
+                .appTaskRootDismissControl(
+                    isVisible: navigationContext == .modalRoot,
+                    style: .collapse(accessibilityLabel: "关闭阅读日历")
+                )
         case .readingSession:
             ReadingSessionTaskPlaceholder(navigationContext: navigationContext)
         case .dataImport(let destination):
             dataImportTaskDestination(destination)
                 .appTaskRootDismissControl(
                     isVisible: navigationContext == .modalRoot,
-                    title: "取消"
+                    style: .text("取消")
                 )
         }
     }
@@ -912,8 +928,30 @@ struct MainTabView: View {
         }
     }
 
+    /// 把历史 NavigationPath 中的阅读日历 case 转交给根级全屏呈现；单帧 MainActor 任务无需持有取消句柄，恢复后会复核当前 Tab 与呈现门闩，避免过期请求和多旧栈竞态叠加 cover。
+    private func relayReadCalendarRoute(
+        initialDate: Date?,
+        from tab: AppTab
+    ) {
+        popCurrentRoute(from: tab)
+        guard selectedTab == tab else { return }
+
+        Task { @MainActor in
+            await Task.yield()
+            guard selectedTab == tab else { return }
+            guard navigationCoordinator.activeTask == nil else { return }
+            navigationCoordinator.updateCurrentTab(tab)
+            navigationCoordinator.present(
+                .readCalendar(initialDate: initialDate)
+            )
+        }
+    }
+
     @ViewBuilder
-    private func readingDestination(for route: ReadingRoute) -> some View {
+    private func readingDestination(
+        for route: ReadingRoute,
+        hostTab: AppTab
+    ) -> some View {
         switch route {
         case .bookDetail(let bookId):
             BookDetailView(
@@ -937,23 +975,28 @@ struct MainTabView: View {
                 )
             )
         case .readingSession(let bookId):
-            ReadingTimerLegacyRouteRelay {
+            LegacyFullScreenRouteRelay {
                 relayReadingTimerRoute(
                     request: .book(bookId),
-                    from: selectedTab
+                    from: hostTab
                 )
             }
         case .readingSessionRecord(let recordId, let bookId):
-            ReadingTimerLegacyRouteRelay {
+            LegacyFullScreenRouteRelay {
                 relayReadingTimerRoute(
                     request: .record(recordId: recordId, bookId: bookId),
-                    from: selectedTab
+                    from: hostTab
                 )
             }
         case .readingSupplement(let bookId):
             ReadingTimerSupplementView(bookId: bookId)
         case .readCalendar(let date):
-            ReadCalendarView(date: date)
+            LegacyFullScreenRouteRelay {
+                relayReadCalendarRoute(
+                    initialDate: date,
+                    from: hostTab
+                )
+            }
         }
     }
 
@@ -1030,7 +1073,10 @@ struct MainTabView: View {
     // MARK: - Personal Destinations
 
     @ViewBuilder
-    private func personalDestination(for route: PersonalRoute) -> some View {
+    private func personalDestination(
+        for route: PersonalRoute,
+        hostTab: AppTab
+    ) -> some View {
         switch route {
         case .settings:
             PersonalSettingsView()
@@ -1039,7 +1085,12 @@ struct MainTabView: View {
         case .premium:
             Text("会员")
         case .readCalendar:
-            ReadCalendarView(date: nil)
+            LegacyFullScreenRouteRelay {
+                relayReadCalendarRoute(
+                    initialDate: nil,
+                    from: hostTab
+                )
+            }
         case .readReminder:
             Text("阅读提醒")
         case .dataImport:
@@ -1121,7 +1172,7 @@ struct MainTabView: View {
         readingPath = path
     }
 
-    /// 移除当前 Tab 顶部路由，供历史计时 route 中继先恢复真实来源页面。
+    /// 移除当前 Tab 顶部路由，供历史全屏 route 中继先恢复真实来源页面。
     private func popCurrentRoute(from tab: AppTab) {
         switch tab {
         case .reading:
@@ -1720,8 +1771,8 @@ struct ReadingTimerNormalZoomSource<Source: View>: View {
     }
 }
 
-/// 兼容历史 Codable 路径的瞬时中继页，每个视图身份只把旧 route 转发一次。
-private struct ReadingTimerLegacyRouteRelay: View {
+/// 兼容历史 Codable 路径的瞬时中继页，每个视图身份只把旧全屏 route 转发一次。
+private struct LegacyFullScreenRouteRelay: View {
     let onRelay: () -> Void
 
     @State private var didRelay = false
@@ -1754,9 +1805,15 @@ private struct ReadingSessionTaskPlaceholder: View {
             .navigationBarTitleDisplayMode(.inline)
             .appTaskRootDismissControl(
                 isVisible: navigationContext == .modalRoot,
-                title: "关闭"
+                style: .text("关闭")
             )
     }
+}
+
+/// 根级全屏页面的退出控件样式，区分文字取消操作与垂直收起语义。
+private enum AppTaskRootDismissControlStyle {
+    case text(LocalizedStringKey)
+    case collapse(accessibilityLabel: LocalizedStringKey)
 }
 
 /// 为没有自带未保存拦截的任务根页提供系统取消/关闭入口。
@@ -1764,7 +1821,7 @@ private struct AppTaskRootDismissControlModifier: ViewModifier {
     @Environment(AppNavigationCoordinator.self) private var navigationCoordinator
 
     let isVisible: Bool
-    let title: LocalizedStringKey
+    let style: AppTaskRootDismissControlStyle
 
     func body(content: Content) -> some View {
         content
@@ -1772,8 +1829,19 @@ private struct AppTaskRootDismissControlModifier: ViewModifier {
             .toolbar {
                 if isVisible {
                     ToolbarItem(placement: .cancellationAction) {
-                        Button(title) {
-                            navigationCoordinator.dismissTask()
+                        switch style {
+                        case .text(let title):
+                            Button(title) {
+                                navigationCoordinator.dismissTask()
+                            }
+                        case .collapse(let accessibilityLabel):
+                            Button {
+                                navigationCoordinator.dismissTask()
+                            } label: {
+                                Label(accessibilityLabel, systemImage: "chevron.down")
+                            }
+                            .labelStyle(.iconOnly)
+                            .tint(.primary)
                         }
                     }
                 }
@@ -1785,12 +1853,12 @@ private extension View {
     /// 在全屏任务根页显示取消/关闭，任务子步骤继续使用系统返回。
     func appTaskRootDismissControl(
         isVisible: Bool,
-        title: LocalizedStringKey
+        style: AppTaskRootDismissControlStyle
     ) -> some View {
         modifier(
             AppTaskRootDismissControlModifier(
                 isVisible: isVisible,
-                title: title
+                style: style
             )
         )
     }

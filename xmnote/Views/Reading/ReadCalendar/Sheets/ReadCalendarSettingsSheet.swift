@@ -2,8 +2,8 @@ import SwiftUI
 
 /**
  * [INPUT]: 依赖 ReadCalendarSettings 提供可绑定设置状态，依赖 DesignTokens 提供视觉语义令牌
- * [OUTPUT]: 对外提供 ReadCalendarSettingsSheet（阅读日历设置弹层）
- * [POS]: ReadCalendar 业务模块 Sheet，负责阅读事件筛选与交互反馈设置
+ * [OUTPUT]: 对外提供 ReadCalendarSettingsSheet，并提供同模块预布局复用的 ReadCalendarSettingsContent
+ * [POS]: ReadCalendar 业务模块 Sheet，负责阅读事件筛选、交互反馈设置与自然内容高度回传
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
@@ -11,7 +11,44 @@ import SwiftUI
 struct ReadCalendarSettingsSheet: View {
     @Environment(\.dismiss) private var dismiss
     @Bindable var settings: ReadCalendarSettings
+    let onContentHeightChange: (CGFloat) -> Void
     @State private var showInvalidCloseAlert = false
+
+    var body: some View {
+        ReadCalendarSettingsContent(settings: settings, onClose: handleClose)
+            .fixedSize(horizontal: false, vertical: true)
+            .onGeometryChange(for: CGFloat.self) { geometry in
+                ceil(geometry.size.height)
+            } action: { height in
+                onContentHeightChange(height)
+            }
+            .interactiveDismissDisabled(!settings.isReadBehaviorRuleValid)
+            .xmSystemAlert(
+                isPresented: $showInvalidCloseAlert,
+                descriptor: XMSystemAlertDescriptor(
+                    title: "无法关闭设置",
+                    message: "判定阅读行为的规则至少要选一个",
+                    actions: [
+                        XMSystemAlertAction(title: "我知道了", role: .cancel) { }
+                    ]
+                )
+            )
+    }
+
+    /// 校验阅读行为规则并关闭设置；无有效规则时保留弹层并给出系统提示。
+    private func handleClose() {
+        guard settings.isReadBehaviorRuleValid else {
+            showInvalidCloseAlert = true
+            return
+        }
+        dismiss()
+    }
+}
+
+/// 阅读日历设置的自然内容布局，供正式 Sheet 与呈现前高度测量共用。
+struct ReadCalendarSettingsContent: View {
+    @Bindable var settings: ReadCalendarSettings
+    let onClose: (() -> Void)?
 
     var body: some View {
         ZStack(alignment: .topTrailing) {
@@ -23,35 +60,15 @@ struct ReadCalendarSettingsSheet: View {
                 dayEventCountSection
             }
             .padding(Spacing.double)
-            .background(
-                GeometryReader { proxy in
-                    Color.clear.preference(key: SheetHeightKey.self, value: proxy.size.height)
-                }
-            )
 
-            closeButton
+            if let onClose {
+                closeButton(action: onClose)
+            }
         }
-        .interactiveDismissDisabled(!settings.isReadBehaviorRuleValid)
-        .xmSystemAlert(
-            isPresented: $showInvalidCloseAlert,
-            descriptor: XMSystemAlertDescriptor(
-                title: "无法关闭设置",
-                message: "判定阅读行为的规则至少要选一个",
-                actions: [
-                    XMSystemAlertAction(title: "我知道了", role: .cancel) { }
-                ]
-            )
-        )
     }
 
-    private var closeButton: some View {
-        Button {
-            guard settings.isReadBehaviorRuleValid else {
-                showInvalidCloseAlert = true
-                return
-            }
-            dismiss()
-        } label: {
+    private func closeButton(action: @escaping () -> Void) -> some View {
+        Button(action: action) {
             Image(systemName: "xmark")
                 .font(.system(size: 13, weight: .bold))
                 .foregroundStyle(.secondary)

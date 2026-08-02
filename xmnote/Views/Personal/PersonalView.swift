@@ -6,8 +6,8 @@
 //
 
 /**
- * [INPUT]: 依赖 AppState、DesktopWebSessionCoordinator 环境状态与 PersonalRoute 导航路由
- * [OUTPUT]: 对外提供 PersonalView，我的 Tab 核心入口与独立网页端入口状态
+ * [INPUT]: 依赖 AppState、DesktopWebSessionCoordinator 环境状态、PersonalRoute 导航路由与阅读日历根级呈现回调
+ * [OUTPUT]: 对外提供 PersonalView，我的 Tab 核心入口、阅读日历独立入口与网页端入口状态
  * [POS]: Personal 模块容器壳层，承载设置列表、网页端与备份入口
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -30,16 +30,19 @@ struct PersonalView: View {
     private let topBarHeight: CGFloat = 56
     let onAddBook: () -> Void
     let onAddNote: () -> Void
+    let onOpenReadCalendar: () -> Void
     let onOpenDebugCenter: (() -> Void)?
 
-    /// 注入新增书籍回调，连接个人页快捷操作入口。
+    /// 注入新增书籍、笔记、阅读日历与调试入口回调，连接个人页跨层级动作。
     init(
         onAddBook: @escaping () -> Void = {},
         onAddNote: @escaping () -> Void = {},
+        onOpenReadCalendar: @escaping () -> Void = {},
         onOpenDebugCenter: (() -> Void)? = nil
     ) {
         self.onAddBook = onAddBook
         self.onAddNote = onAddNote
+        self.onOpenReadCalendar = onOpenReadCalendar
         self.onOpenDebugCenter = onOpenDebugCenter
     }
 
@@ -125,7 +128,7 @@ extension PersonalView {
 
     private var readingAndDataSection: some View {
         groupedPanel {
-            settingsRow("calendar", "阅读日历", route: .readCalendar)
+            actionRow("calendar", "阅读日历", action: onOpenReadCalendar)
             settingsRow("bell", "阅读提醒", route: .readReminder)
             settingsRow(
                 "desktopcomputer",
