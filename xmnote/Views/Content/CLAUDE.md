@@ -16,5 +16,6 @@
 - `ReviewEditorView.swift`: 书评最小编辑页
 - `RelevantDetailView.swift`: 相关内容单页详情页
 - `RelevantEditorView.swift`: 相关内容最小编辑页
+- `Sheets/RelatedBookRelationEditorSheet.swift`: 阅读日历与单书工作台复用的相关书籍关系编辑业务 Sheet
 
 [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md

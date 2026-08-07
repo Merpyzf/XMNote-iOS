@@ -6,7 +6,16 @@
 ## Repositories/
 
 - `BookRepository.swift`: BookRepositoryProtocol 实现，书籍列表/详情/书摘查询
-- `ContentRepository.swift`: ContentRepositoryProtocol 实现，书摘/书评/相关内容的查看、编辑与硬删除事务
+- `ContentRepository.swift`: ContentRepositoryProtocol 实现，书摘/书评/相关内容的查看、编辑与 Android v45 `is_deleted` 软删除事务
+- `AIRepository.swift`: AIRepositoryProtocol 实现，配置读取、提示组装、流式/非流式生成与结果解析
+- `BookContentSortQuery.swift`: 单书四域持久化排序规则读取与 SQL 片段映射
+- `BookGroupManagementRepository.swift`: BookGroupManagementRepositoryProtocol 实现，分组增改删、关系维护与手动排序事务
+- `BookReadingDetailRepository.swift`: BookReadingDetailRepositoryProtocol 实现，单书阅读详情观察与写入
+- `ChapterManagementRepository.swift`: ChapterManagementRepositoryProtocol 实现，五层目录、移动、排序和批量导入事务
+- `ReadCalendarRepository.swift`: ReadCalendarRepositoryProtocol 实现，月历与每日轨迹聚合读写
+- `SourceManagementRepository.swift`: SourceManagementRepositoryProtocol 实现，来源增改删、迁移与排序事务
+- `NoteImageUploadQuotaRepository.swift`: 书摘图片上传配额观察与消费事务
+- `S3UploadRepository.swift`: 图片对象上传、票据与清理能力实现
 - `GlobalSearchRepository.swift`: GlobalSearchRepositoryProtocol 实现，书籍/书摘/相关/书评四类本地全局搜索
 - `NoteRepository.swift`: NoteRepositoryProtocol 实现，标签分组与笔记详情读写
 - `NoteReviewSettingStore.swift`: 书摘回顾设置本地存储与变更广播

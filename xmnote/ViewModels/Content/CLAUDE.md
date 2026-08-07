@@ -11,5 +11,7 @@
 - `ReviewEditorViewModel.swift`: 书评最小编辑页状态中枢（草稿加载、富文本回填与保存）
 - `RelevantDetailViewModel.swift`: 相关内容单页详情状态中枢（加载、刷新与删除）
 - `RelevantEditorViewModel.swift`: 相关内容最小编辑页状态中枢（草稿加载、链接编辑与保存）
+- `AIInteractionViewModel.swift`: AI 文本生成与自动标签的取消、流式结果和应用状态编排
+- `ContentEditorImageController.swift`: 书摘/相关内容图片选择、配额、上传、排序与清理编排
 
 [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md

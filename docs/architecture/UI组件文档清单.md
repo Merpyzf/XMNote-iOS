@@ -11,9 +11,11 @@
 | XMRemoteImage | UI-复用关键 | xmnote/UIComponents/Foundation/XMRemoteImage.swift | docs/component-guides/XMRemoteImage使用说明.md | 新增/重大重构 |
 | XMGIFImageView | UI-复用关键 | xmnote/UIComponents/Foundation/XMGIFImageView.swift | docs/component-guides/XMGIFImageView使用说明.md | 新增/重大重构 |
 | XMBookCover | UI-复用关键 | xmnote/UIComponents/Foundation/XMBookCover.swift | docs/component-guides/XMBookCover使用说明.md | 新增/重大重构 |
+| XMBookGroupCover | UI-复用关键 | xmnote/UIComponents/Foundation/XMBookGroupCover.swift | docs/component-guides/XMBookGroupCover使用说明.md | 新增/重大重构 |
 | XMActivityShareSheet | UI-复用关键 | xmnote/UIComponents/Foundation/XMActivityShareSheet.swift | docs/component-guides/XMActivityShareSheet使用说明.md | 新增/重大重构 |
 | XMYearMonthPickerSheet | UI-复用关键 | xmnote/UIComponents/Foundation/XMYearMonthPickerSheet.swift | docs/component-guides/XMYearMonthPickerSheet使用说明.md | 新增/重大重构 |
 | XMRatingBar | UI-复用关键 | xmnote/UIComponents/Foundation/XMRatingBar.swift | docs/component-guides/XMRatingBar使用说明.md | 新增/重大重构 |
+| XMBookRatingSheet | UI-复用关键 | xmnote/UIComponents/Foundation/XMBookRatingSheet.swift | docs/component-guides/XMRatingBar使用说明.md | 新增/重大重构 |
 | XMScopeSelector | UI-复用关键 | xmnote/UIComponents/Foundation/XMScopeSelector.swift | docs/component-guides/XMScopeSelector使用说明.md | 新增/重大重构 |
 | XMSearchHistorySection | UI-复用关键 | xmnote/UIComponents/Foundation/XMSearchHistorySection.swift | docs/component-guides/XMSearchHistorySection使用说明.md | 新增/重大重构 |
 | XMScrollEdgeChrome | UI-复用关键 | xmnote/UIComponents/Foundation/XMScrollEdgeChrome.swift | docs/component-guides/XMScrollEdgeChrome使用说明.md | 新增/重大重构 |
@@ -27,6 +29,7 @@
 | XMSettingsSheetComponents | UI-复用关键 | xmnote/UIComponents/Foundation/XMSettingsSheetComponents.swift | docs/component-guides/XMSettingsSheetComponents使用说明.md | 新增/重大重构 |
 | NoteReviewPagingDeck | UI-复用关键 | xmnote/UIComponents/Foundation/NoteReviewPaging/NoteReviewPagingDeck.swift | docs/component-guides/NoteReviewPagingDeck使用说明.md | 新增/重大重构 |
 | TopSwitcher | UI-复用关键 | xmnote/UIComponents/Tabs/TopSwitcher.swift | docs/component-guides/TopSwitcher使用说明.md | 新增/重大重构 |
+| XMInlineTabBar | UI-复用关键 | xmnote/UIComponents/Tabs/XMInlineTabBar.swift | docs/component-guides/XMInlineTabBar使用说明.md | 新增/重大重构 |
 | KeepAliveSwitcherHost | UI-复用关键 | xmnote/UIComponents/Tabs/KeepAliveSwitcherHost.swift | docs/component-guides/KeepAliveSwitcherHost使用说明.md | 新增/重大重构 |
 | HomeSubtabScaffold | UI-复用关键 | xmnote/UIComponents/Tabs/HomeSubtabScaffold.swift | docs/component-guides/HomeSubtabScaffold使用说明.md | 新增/重大重构 |
 | HorizontalPagingHost | UI-复用关键 | xmnote/UIComponents/Tabs/HorizontalPagingHost.swift | docs/component-guides/HorizontalPagingHost使用说明.md | 新增/重大重构 |
@@ -37,6 +40,7 @@
 | BookGridView | UI-核心页面关键 | xmnote/Views/Book/BookGridView.swift | docs/component-guides/BookGridView使用说明.md | 新增/重大重构 |
 | BookGridItemView | UI-核心页面关键 | xmnote/Views/Book/BookGridItemView.swift | docs/component-guides/BookGridItemView使用说明.md | 新增/重大重构 |
 | BookDetailView | UI-核心页面关键 | xmnote/Views/Book/BookDetailView.swift | docs/component-guides/BookDetailView使用说明.md | 新增/重大重构 |
+| ChapterManagerView | UI-核心页面关键 | xmnote/Views/Book/ChapterManagerView.swift | docs/component-guides/ChapterManagerView使用说明.md | 新增/重大重构 |
 | BookCollectionListView | UI-核心页面关键 | xmnote/Views/Book/BookCollectionListView.swift | docs/component-guides/BookCollectionListView使用说明.md | 新增/重大重构 |
 | BookCollectionDetailView | UI-核心页面关键 | xmnote/Views/Book/BookCollectionDetailView.swift | docs/component-guides/BookCollectionDetailView使用说明.md | 新增/重大重构 |
 | BookCollectionCoverSearchSheet | UI-核心页面关键 | xmnote/Views/Book/Sheets/BookCollectionCoverSearchSheet.swift | docs/component-guides/BookCollectionCoverSearchSheet使用说明.md | 新增/重大重构 |
@@ -55,5 +59,7 @@
 | ReadCalendarView | UI-核心页面关键 | xmnote/Views/Reading/ReadCalendar/ReadCalendarView.swift | docs/component-guides/ReadCalendar使用说明.md | 新增/重大重构 |
 | ReadingTimelineView | UI-核心页面关键 | xmnote/Views/Reading/Timeline/ReadingTimelineView.swift | docs/component-guides/ReadingTimelineView使用说明.md | 新增/重大重构 |
 | PersonalView | UI-核心页面关键 | xmnote/Views/Personal/PersonalView.swift | docs/component-guides/PersonalView使用说明.md | 新增/重大重构 |
+| BookGroupManagementView | UI-核心页面关键 | xmnote/Views/Personal/BookGroupManagementView.swift | docs/component-guides/BookGroupManagementView使用说明.md | 新增/重大重构 |
+| SourceManagementView | UI-核心页面关键 | xmnote/Views/Personal/SourceManagementView.swift | docs/component-guides/SourceManagementView使用说明.md | 新增/重大重构 |
 
 [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md

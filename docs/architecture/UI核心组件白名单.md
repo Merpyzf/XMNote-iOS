@@ -14,6 +14,7 @@
 - xmnote/Views/Book/BookGridView.swift
 - xmnote/Views/Book/BookGridItemView.swift
 - xmnote/Views/Book/BookDetailView.swift
+- xmnote/Views/Book/ChapterManagerView.swift
 - xmnote/Views/Book/BookCollectionListView.swift
 - xmnote/Views/Book/BookCollectionDetailView.swift
 - xmnote/Views/Book/Sheets/BookCollectionCoverSearchSheet.swift
@@ -32,5 +33,7 @@
 - xmnote/Views/Reading/ReadCalendar/ReadCalendarView.swift
 - xmnote/Views/Reading/Timeline/ReadingTimelineView.swift
 - xmnote/Views/Personal/PersonalView.swift
+- xmnote/Views/Personal/BookGroupManagementView.swift
+- xmnote/Views/Personal/SourceManagementView.swift
 
 [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md

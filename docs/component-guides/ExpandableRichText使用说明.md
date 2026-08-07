@@ -1,14 +1,16 @@
 # ExpandableRichText 使用说明
 
 ## 组件定位
-- 源码路径：
-  - `xmnote/UIComponents/Foundation/ExpandableRichText.swift`
-  - `xmnote/UIComponents/Foundation/RichText.swift`
-  - `xmnote/UIComponents/Foundation/CollapsedRichTextPreview.swift`
-- 角色：列表 / 卡片中的 HTML 富文本展示组件。
-- 设计目标：在保留完整 HTML 展示能力的前提下，优先降低长文本在滚动列表中的测量和绘制成本。
+
+- `ExpandableRichText`：展开/收起交互与状态边界。
+- `CollapsedRichTextPreview`：基于 `UILabel` 的轻量收起态、原生尾部截断与布局快照缓存。
+- `RichText`：基于 `UITextView` 的完整 HTML 展示、链接点击与排版缓存。
+- 三者共同服务阅读日历和单书工作台；不得删除收起态预览后让长列表全部回退到完整 `UITextView`。
 
 ## 快速接入
+
+普通卡片可以让组件自管理展开状态：
+
 ```swift
 ExpandableRichText(
     html: event.content,
@@ -17,91 +19,67 @@ ExpandableRichText(
 )
 ```
 
-如果需要完整富文本、不需要展开收起，可直接使用低层 `RichText`：
+可复用列表必须由外部按稳定内容 ID 保存展开状态：
 
 ```swift
-RichText(
-    html: html,
-    baseFont: .preferredFont(forTextStyle: .body),
-    textColor: .label,
-    lineSpacing: 4,
-    maxLines: 0
+ExpandableRichText(
+    html: row.note.content,
+    isExpanded: $rowState.isContentExpanded,
+    accessibilitySubject: "书摘正文",
+    previewTapIdentity: row.note.id,
+    animatesExpansionInternally: false,
+    onContentTap: openDetail
 )
 ```
 
 ## 参数说明
 
-### ExpandableRichText
-| 参数 | 类型 | 默认值 | 说明 |
-| --- | --- | --- | --- |
-| `html` | `String` | 无 | 需要展示的 HTML 字符串。 |
-| `baseFont` | `UIFont` | `.preferredFont(forTextStyle: .body)` | 正文基准字体。 |
-| `textColor` | `UIColor` | `.label` | 正文主色。 |
-| `lineSpacing` | `CGFloat` | `4` | 段内行距。 |
-| `maxLines` | `Int` | `3` | 收起态最大显示行数。 |
+| 参数 | 说明 |
+| --- | --- |
+| `html` | HTML 源文本。 |
+| `isExpanded` | 可选外部绑定；列表复用场景必须提供。 |
+| `baseFont` / `textColor` / `lineSpacing` | 渲染与测量必须共用的排版输入。 |
+| `maxLines` | 收起态最大行数，默认 3。 |
+| `actionColor` | 展开/收起操作颜色。 |
+| `quoteColor` | 完整富文本引用语义色。 |
+| `accessibilitySubject` | 组成“展开书摘正文”等无障碍标签。 |
+| `previewTapIdentity` | 参与 Equatable 身份比较，防止复用行沿用错误点击对象。 |
+| `animatesExpansionInternally` | 外层已有 snapshot 动画时应设为 `false`，避免双重动画。 |
+| `onContentTap` | 正文点击回调；`onPreviewTap` 仅为兼容旧调用保留。 |
 
-### RichText
-| 参数 | 类型 | 默认值 | 说明 |
-| --- | --- | --- | --- |
-| `html` | `String` | 无 | 需要展示的 HTML 字符串。 |
-| `baseFont` | `UIFont` | `.preferredFont(forTextStyle: .body)` | 正文字体。 |
-| `textColor` | `UIColor` | `.label` | 文本颜色。 |
-| `lineSpacing` | `CGFloat` | `4` | 行距。 |
-| `maxLines` | `Int` | `0` | `0` 表示不限制；大于 `0` 时启用原生尾部省略号截断。 |
-| `onTruncationChanged` | `((Bool) -> Void)?` | `nil` | 截断状态变化回调。 |
-
-### CollapsedRichTextPreview
-| 参数 | 类型 | 默认值 | 说明 |
-| --- | --- | --- | --- |
-| `html` | `String` | 无 | 预览态 HTML 文本。 |
-| `baseFont` | `UIFont` | 无 | 预览态基准字体。 |
-| `textColor` | `UIColor` | 无 | 预览态文本颜色。 |
-| `lineSpacing` | `CGFloat` | 无 | 预览态行距。 |
-| `maxLines` | `Int` | 无 | 收起态最大显示行数。 |
-| `onExpand` | `() -> Void` | 无 | 点击“展开”后的回调。 |
+`RichText` 额外支持 `maxLines`、`onTruncationChanged` 与 `onContentTap`；`CollapsedRichTextPreview` 只负责预览、测量和上报截断，不拥有展开按钮。
 
 ## 示例
 
-### 示例 1：时间线书摘卡片接入
-```swift
-ExpandableRichText(
-    html: event.content,
-    baseFont: TimelineTypography.eventRichTextBaseFont,
-    lineSpacing: TimelineTypography.eventRichTextLineSpacing
-)
-.equatable()
-```
+### 完整富文本
 
-### 示例 2：引用色较浅的附加说明
-```swift
-ExpandableRichText(
-    html: event.idea,
-    baseFont: TimelineTypography.eventRichTextBaseFont,
-    textColor: .secondaryLabel,
-    lineSpacing: TimelineTypography.eventRichTextLineSpacing,
-    maxLines: 3
-)
-```
-
-### 示例 3：只用低层 `RichText` 做完整展示
 ```swift
 RichText(
-    html: noteDetailHTML,
-    baseFont: .preferredFont(forTextStyle: .body),
+    html: noteHTML,
+    baseFont: NoteExcerptTypography.bodyUIFont,
     textColor: .label,
-    lineSpacing: 6,
+    lineSpacing: 7,
     maxLines: 0,
-    onTruncationChanged: nil
+    onContentTap: nil
 )
 ```
+
+### 预热收起态布局
+
+当展示 Store 已知最终宽度时，可调用 `RichText.prewarmPreviewLayoutSnapshot(...)` 提前建立缓存；预热参数必须与真实渲染字体、行距、行数和屏幕 scale 完全一致。
 
 ## 常见问题
 
-### 1. 为什么收起态不用完整 `UITextView`？
-完整 `UITextView + NSLayoutManager` 在长列表里会带来更高的测量和绘制成本。当前收起态改用 `UILabel`，并复用共享缓存，目标是优先保证滚动流畅度。
+### 为什么收起态不直接使用 RichText？
 
-### 2. 为什么收起态没有引用竖线和自定义列表圆点？
-这是有意的性能取舍。用户当前不需要这两类视觉元素，去掉后可以直接使用系统级别的尾部省略号截断，并显著降低列表场景的排版成本。
+长列表中的完整 `UITextView` 测量与绘制成本更高。`CollapsedRichTextPreview` 用 `UILabel` 和共享布局快照降低重复排版成本。
 
-### 3. 省略号是手工拼接的吗？
-不是。收起态和 `RichText(maxLines > 0)` 都依赖系统原生的尾部截断能力，省略号由系统文本排版提供。
+### 省略号和截断状态可靠吗？
+
+省略号由系统尾部截断生成；组件根据相同宽度和字体的布局快照上报真实溢出状态，不手工拼接字符。
+
+### 为什么外部 Binding 很重要？
+
+原生或懒加载列表会回收承载视图。若状态只存在视图内部，复用或快照更新后可能丢失；按内容 ID 保存才能稳定恢复。
+
+[PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md

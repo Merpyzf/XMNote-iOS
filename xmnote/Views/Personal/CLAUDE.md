@@ -8,6 +8,11 @@
 - `PersonalView.swift`: 我的 Tab 核心入口
 - `ApiIntegrationView.swift`: API 集成设置页面
 - `TagManagementView.swift`: 标签管理页面
+- `BookGroupManagementView.swift`: 书籍分组新增、搜索、重命名、排序与删除页面
+- `SourceManagementView.swift`: 用户/默认书籍来源的搜索、增改删与排序页面
+- `Components/BookGroupManagementRowView.swift`: 分组管理页面私有行与组合封面接入
+- `Components/SourceManagementListView.swift`: 来源管理页面私有列表与拖拽排序承载
+- `Sheets/BookGroupNameEditSheet.swift`: 分组新增与重命名业务 Sheet
 - `Components/TagManagementCollectionView.swift`: 标签管理页面私有集合视图
 
 ## 子目录

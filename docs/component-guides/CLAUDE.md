@@ -10,8 +10,10 @@
 - `XMRemoteImage使用说明.md`: XMRemoteImage 统一远程图片组件接入指南与参数说明。
 - `XMGIFImageView使用说明.md`: XMGIFImageView GIF 动画承载组件接入指南与参数说明。
 - `XMBookCover使用说明.md`: XMBookCover 统一书籍封面组件接入指南与参数说明。
+- `XMBookGroupCover使用说明.md`: XMBookGroupCover 书籍分组组合封面接入指南与参数说明。
+- `XMActivityShareSheet使用说明.md`: XMActivityShareSheet 稳定系统分享宿主接入指南与参数说明。
 - `XMYearMonthPickerSheet使用说明.md`: XMYearMonthPickerSheet 年月/年份选择 Sheet 接入指南与参数说明。
-- `XMRatingBar使用说明.md`: XMRatingBar 统一评分条组件接入指南与参数说明。
+- `XMRatingBar使用说明.md`: XMRatingBar 与 XMBookRatingSheet 评分展示、编辑和异步保存接入指南。
 - `XMScopeSelector使用说明.md`: XMScopeSelector 范围选择控件接入指南与参数说明。
 - `XMSearchHistorySection使用说明.md`: XMSearchHistorySection 搜索历史区块接入指南与参数说明。
 - `XMScrollEdgeChrome使用说明.md`: XMScrollEdgeChrome / XMScrollEdgeWash 滚动边缘容器与柔化层接入指南与参数说明。
@@ -22,6 +24,7 @@
 - `XMSettingsSheetComponents使用说明.md`: XMSettingsSheetComponents 通用设置 Sheet 组件组接入指南与参数说明。
 - `NoteReviewPagingDeck使用说明.md`: NoteReviewPagingDeck 书摘回顾分页卡组组件接入指南与参数说明。
 - `TopSwitcher使用说明.md`: TopSwitcher 顶部标题/标签切换组件接入指南与参数说明。
+- `XMInlineTabBar使用说明.md`: XMInlineTabBar 内容区子页面切换组件接入指南与参数说明。
 - `KeepAliveSwitcherHost使用说明.md`: KeepAliveSwitcherHost 懒激活保活切换容器接入指南与参数说明。
 - `HomeSubtabScaffold使用说明.md`: HomeSubtabScaffold 首页二级页壳层接入指南与参数说明。
 - `XMJXImageWall使用说明.md`: XMJXImageWall 图片墙组件接入指南与参数说明。
@@ -30,6 +33,7 @@
 - `BookGridView使用说明.md`: BookGridView 页面组件接入指南与参数说明。
 - `BookGridItemView使用说明.md`: BookGridItemView 页面组件接入指南与参数说明。
 - `BookDetailView使用说明.md`: BookDetailView 页面组件接入指南与参数说明。
+- `ChapterManagerView使用说明.md`: ChapterManagerView 五层目录管理页面接入指南与参数说明。
 - `BookCollectionListView使用说明.md`: BookCollectionListView 书单列表页接入指南与参数说明。
 - `BookCollectionDetailView使用说明.md`: BookCollectionDetailView 书单详情页接入指南与参数说明。
 - `BookCollectionCoverSearchSheet使用说明.md`: BookCollectionCoverSearchSheet 书单封面搜索 Sheet 接入指南与参数说明。
@@ -48,6 +52,8 @@
 - `ReadCalendar使用说明.md`: ReadCalendarView 页面组件接入指南与参数说明。
 - `ReadingTimelineView使用说明.md`: ReadingTimelineView 页面组件接入指南与参数说明。
 - `PersonalView使用说明.md`: PersonalView 页面组件接入指南与参数说明。
+- `BookGroupManagementView使用说明.md`: BookGroupManagementView 分组管理页面接入指南与参数说明。
+- `SourceManagementView使用说明.md`: SourceManagementView 来源管理页面接入指南与参数说明。
 
 执行约束
 - 重要 UI 组件（UI 核心白名单组件 + `xmnote/UIComponents` 下新增/重大重构组件）开发完成后，必须新增或更新本目录使用说明文档。

@@ -18,9 +18,22 @@
 - `ReadCalendarModels.swift`: ReadCalendarDay/ReadCalendarMonthData/ReadCalendarEventRun/ReadCalendarEventSegment/ReadCalendarWeekLayout + ReadCalendarSegmentColor（三态：pending/resolved/failed）阅读日历领域模型
 - `TimelineModels.swift`: TimelineEvent、TimelineSection、TimelineEventCategory、TimelineDayMarker 等时间线领域模型
 - `ReadingDashboardModels.swift`: BookReadingStatus、ReadingDashboardSnapshot、ReadingTrendMetric、ReadingDailyGoal、ReadingResumeBook、ReadingRecentBook、ReadingYearSummary 在读首页领域模型
+- `AIModels.swift`: AI 供应商配置、生成请求、流式事件与标签候选领域模型
+- `BookContentWorkspaceModels.swift`: 单书目录/书摘/相关/书评四域、持久化排序与展示快照输入模型
+- `BookGroupManagementModels.swift`: 书籍分组管理快照、条目和写入输入模型
+- `BookReadingDetailModels.swift`: 阅读详情记录、汇总与编辑草稿模型
+- `ChapterBatchImportModels.swift`: 章节文本解析、预览和批量导入结果模型
+- `ChapterManagementModels.swift`: 五层章节树、可见节点、移动目标与结构写入模型
+- `NoteBatchModels.swift`: 书摘批量选择、合并与批量操作模型
+- `NoteImageUploadQuotaModels.swift`: 图片配额快照、消费结果与失败语义
+- `ReadCalendarShareModels.swift`: 阅读日历分享卡内容和临时文件模型
+- `SourceManagementModels.swift`: 用户/默认来源范围、快照和排序输入模型
 
 ## Repositories/
 
-- `RepositoryProtocols.swift`: BookRepositoryProtocol、NoteRepositoryProtocol、TagManagementRepositoryProtocol、ExternalAppIntegrationRepositoryProtocol、ContentRepositoryProtocol、GlobalSearchRepositoryProtocol、BackupServerRepositoryProtocol、BackupRepositoryProtocol、StatisticsRepositoryProtocol、ReadCalendarColorRepositoryProtocol、TimelineRepositoryProtocol、ReadingDashboardRepositoryProtocol 等仓储契约
+- `RepositoryProtocols.swift`: Book、Note、Content、AI、分组、来源、计时器、图片上传等仓储契约集合
+- `BookReadingDetailRepositoryProtocol.swift`: 单书阅读详情观察与写入契约
+- `ChapterManagementRepositoryProtocol.swift`: 章节树观察、结构写入与导入契约
+- `ReadCalendarRepositoryProtocol.swift`: 月历、每日轨迹、设置与分享数据契约
 
 [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
