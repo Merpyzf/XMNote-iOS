@@ -3,7 +3,7 @@ import GRDB
 
 /**
  * [INPUT]: 依赖 AppDatabase 提供本地数据库连接，依赖 ObservationStream 提供观察流桥接，依赖 UserDefaults/FileManager/S3UploadRepository 承接草稿、暂存图与上传事务
- * [OUTPUT]: 对外提供 NoteRepository（NoteRepositoryProtocol 的 GRDB 实现）
+ * [OUTPUT]: 对外提供 NoteRepository（NoteRepositoryProtocol 的 GRDB 实现）及跳过首个观察基线的回顾变化信号
  * [POS]: Data 层笔记仓储实现，统一封装标签分组查询、书摘编辑 bootstrap、自动草稿与保存事务
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -14,6 +14,7 @@ struct NoteRepository: NoteRepositoryProtocol {
     private let userDefaults: UserDefaults
     private let s3UploadRepository: any S3UploadRepositoryProtocol
     private let fileManager: FileManager
+    private let noteReviewSettingStore: NoteReviewSettingStore
     private let jsonEncoder = JSONEncoder()
     private let jsonDecoder = JSONDecoder()
 
@@ -22,18 +23,141 @@ struct NoteRepository: NoteRepositoryProtocol {
         databaseManager: DatabaseManager,
         userDefaults: UserDefaults = .standard,
         s3UploadRepository: any S3UploadRepositoryProtocol,
-        fileManager: FileManager = .default
+        fileManager: FileManager = .default,
+        noteReviewSettingStore: NoteReviewSettingStore = .shared
     ) {
         self.databaseManager = databaseManager
         self.userDefaults = userDefaults
         self.s3UploadRepository = s3UploadRepository
         self.fileManager = fileManager
+        self.noteReviewSettingStore = noteReviewSettingStore
     }
 
     /// 为笔记主页提供标签分组订阅流，标签或标签关联变更后自动刷新分组计数。
     func observeTagSections() -> AsyncThrowingStream<[TagSection], Error> {
         ObservationStream.make(in: databaseManager.database.dbPool) { db in
             try fetchTagSections(db)
+        }
+    }
+
+    /// 读取书摘回顾设置，供回顾页恢复筛选范围与外观偏好。
+    func fetchNoteReviewSettings() -> NoteReviewSettings {
+        noteReviewSettingStore.fetchSettings()
+    }
+
+    /// 保存书摘回顾设置，并通过设置存储广播变更事件。
+    func saveNoteReviewSettings(_ settings: NoteReviewSettings) {
+        noteReviewSettingStore.save(settings)
+    }
+
+    /// 观察书摘回顾设置变更，供页面在外部设置入口写入后同步刷新。
+    func observeNoteReviewSettingChanges() -> AsyncStream<Void> {
+        noteReviewSettingStore.observeChanges()
+    }
+
+    /// 将回顾依赖的数据库表变化桥接为无载荷事件；观察任务由调用方取消，避免保活页面释放后继续占用数据库观察资源。
+    func observeNoteReviewDataChanges() -> AsyncThrowingStream<Void, Error> {
+        ObservationStream.makeChangeSignal(in: databaseManager.database.dbPool) { db in
+            try noteReviewDataFingerprint(db)
+        }
+    }
+
+    /// 使用当前 S3 配置上传回顾背景图；对象键由统一上传仓储生成，避免 ViewModel 直接依赖网络客户端。
+    func uploadNoteReviewBackground(localURL: URL) async throws -> S3UploadResult {
+        try await s3UploadRepository.uploadFile(localURL: localURL, prefix: "note_review_background", progress: nil)
+    }
+
+    /// 下载回顾背景图；网络响应必须是成功状态，避免把错误页面当作图片交给分享渲染器。
+    func fetchNoteReviewBackgroundData(remoteURL: URL) async throws -> Data {
+        let (data, response) = try await URLSession.shared.data(from: remoteURL)
+        if let httpResponse = response as? HTTPURLResponse,
+           !(200..<300).contains(httpResponse.statusCode) {
+            throw URLError(.badServerResponse)
+        }
+        return data
+    }
+
+    /// 按当前筛选与排序读取一页书摘回顾卡片。
+    func fetchNoteReviewPage(request: NoteReviewPageRequest) async throws -> [NoteReviewCardItem] {
+        try await databaseManager.database.dbPool.read { db in
+            try fetchNoteReviewPage(db, request: request)
+        }
+    }
+
+    /// 按主键读取单个书摘操作上下文，避免当日记录页为定位一条书摘加载整页回顾数据。
+    func fetchNoteReviewItem(noteID: Int64) async throws -> NoteReviewCardItem? {
+        try await databaseManager.database.dbPool.read { db in
+            try fetchNoteReviewItem(db, noteID: noteID)
+        }
+    }
+
+    /// 批量读取书摘操作上下文，在一个读事务内补齐标签、图片与微信读书跳转信息。
+    func fetchNoteReviewItems(noteIDs: [Int64]) async throws -> [NoteReviewCardItem] {
+        try await databaseManager.database.dbPool.read { db in
+            try fetchNoteReviewItems(db, noteIDs: noteIDs)
+        }
+    }
+
+    /// 读取书摘标签筛选选项，附带有效书摘数量。
+    func fetchNoteReviewTagOptions() async throws -> [NoteReviewTagOption] {
+        try await databaseManager.database.dbPool.read { db in
+            try fetchNoteReviewTagOptions(db)
+        }
+    }
+
+    /// 读取当前回顾卡片标签编辑所需的全部标签与已选标签。
+    func fetchNoteReviewTagEditSnapshot(noteID: Int64) async throws -> NoteReviewTagEditSnapshot {
+        try await databaseManager.database.dbPool.read { db in
+            NoteReviewTagEditSnapshot(
+                availableTags: try fetchNoteEditorTags(db),
+                selectedTags: try fetchSelectedTags(db, noteId: noteID)
+            )
+        }
+    }
+
+    /// 替换当前回顾卡片的书摘标签，并返回数据库确认后的最新选中标签。
+    func replaceNoteReviewTags(noteID: Int64, tags: [NoteEditorTagOption]) async throws -> [NoteEditorTagOption] {
+        try await databaseManager.database.dbPool.write { db in
+            // SQL 目的：确认目标书摘仍存在且未被软删除，避免给已删除书摘写入标签关系。
+            // 涉及表：note。
+            // 关键过滤：按 note.id 精确命中，并排除 note.is_deleted=1 的记录。
+            // 时间字段：不读取时间字段；后续 tag_note 写入使用当前本地毫秒时间戳。
+            // 返回字段用途：仅作为写入前存在性门闩，不参与 UI 展示。
+            let existsSQL = """
+                SELECT id
+                FROM note
+                WHERE id = ? AND is_deleted = 0
+                LIMIT 1
+                """
+            guard try Int64.fetchOne(db, sql: existsSQL, arguments: [noteID]) != nil else {
+                throw NoteEditorError.noteNotFound
+            }
+
+            let availableByID = Dictionary(
+                uniqueKeysWithValues: try fetchNoteEditorTags(db).map { ($0.id, $0) }
+            )
+            var seen = Set<Int64>()
+            let validTags = tags.compactMap { tag -> NoteEditorTagOption? in
+                guard tag.id > 0, !seen.contains(tag.id), let available = availableByID[tag.id] else {
+                    return nil
+                }
+                seen.insert(tag.id)
+                return available
+            }
+            try replaceNoteTagAssociations(
+                db,
+                noteId: noteID,
+                tags: validTags,
+                timestamp: Self.currentTimestampMillis
+            )
+            return try fetchSelectedTags(db, noteId: noteID)
+        }
+    }
+
+    /// 按设置中保存的书籍 ID 读取回显书籍，输出顺序跟随设置保存顺序。
+    func fetchNoteReviewSelectedBooks(bookIDs: [Int64]) async throws -> [BookPickerBook] {
+        try await databaseManager.database.dbPool.read { db in
+            try fetchNoteReviewSelectedBooks(db, bookIDs: bookIDs)
         }
     }
 
@@ -314,9 +438,35 @@ struct NoteRepository: NoteRepositoryProtocol {
 }
 
 private extension NoteRepository {
+    /// SQL 目的：追踪会影响书摘回顾卡片内容、书籍来源、标签与附图的全部本地表变更。
+    /// 涉及表：note、book、chapter、tag_note、tag、attach_image；通过各表记录数、更新时间与文本长度聚合形成观察指纹。
+    /// 关键过滤：仅用于变化检测，不改变回顾查询的 is_deleted 语义；所有软删除和有效记录变化都必须触发刷新。
+    /// 时间字段：updated_date 沿用 Android 毫秒时间戳，仅参与变化比较，不做时区转换。
+    /// 返回字段用途：ValueObservation 仅在指纹变化时向 ViewModel 发出外部数据变更事件。
+    nonisolated func noteReviewDataFingerprint(_ db: Database) throws -> String {
+        let sql = """
+            SELECT
+                (SELECT COUNT(*) || ':' || COALESCE(MAX(updated_date), 0) || ':' || COALESCE(SUM(LENGTH(content) + LENGTH(idea)), 0) FROM note)
+                || '|' ||
+                (SELECT COUNT(*) || ':' || COALESCE(MAX(updated_date), 0) || ':' || COALESCE(SUM(LENGTH(name) + LENGTH(author) + LENGTH(cover)), 0) FROM book)
+                || '|' ||
+                (SELECT COUNT(*) || ':' || COALESCE(MAX(updated_date), 0) || ':' || COALESCE(SUM(LENGTH(title) + LENGTH(source_uid)), 0) FROM chapter)
+                || '|' ||
+                (SELECT COUNT(*) || ':' || COALESCE(MAX(updated_date), 0) || ':' || COALESCE(SUM(note_id + tag_id), 0) FROM tag_note)
+                || '|' ||
+                (SELECT COUNT(*) || ':' || COALESCE(MAX(updated_date), 0) || ':' || COALESCE(SUM(LENGTH(name)), 0) FROM tag)
+                || '|' ||
+                (SELECT COUNT(*) || ':' || COALESCE(MAX(updated_date), 0) || ':' || COALESCE(SUM(LENGTH(image_url)), 0) FROM attach_image)
+                AS fingerprint
+            """
+        return try String.fetchOne(db, sql: sql) ?? ""
+    }
+
     nonisolated static var currentTimestampMillis: Int64 {
         Int64(Date().timeIntervalSince1970 * 1000)
     }
+
+    nonisolated static let weReadChapterSourceType: Int64 = 1
 
     nonisolated static func noteDraftStorageKey(bookId: Int64, noteId: Int64) -> String {
         "note_draft_\(bookId)_\(noteId)"
@@ -334,6 +484,383 @@ private extension NoteRepository {
             .lowercased()
             .replacingOccurrences(of: ".", with: "")
         return normalized.isEmpty ? "jpg" : normalized
+    }
+
+    /// 按 Android WeReadUrlSchema.bestbookmark 语义构造微信读书原文深链。
+    nonisolated static func buildWeReadBestBookmarkURL(
+        bookID: String,
+        chapterSourceType: Int64,
+        chapterUID: String,
+        range: String
+    ) -> String? {
+        guard chapterSourceType == weReadChapterSourceType else { return nil }
+
+        let normalizedBookID = bookID.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalizedBookID.isEmpty else { return nil }
+
+        let normalizedChapterUID = chapterUID.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let chapterUIDValue = Int64(normalizedChapterUID), chapterUIDValue > 0 else { return nil }
+        guard let rangeBounds = parseWeReadRange(range) else { return nil }
+
+        return "weread://bestbookmark?bookId=\(normalizedBookID)"
+            + "&chapterUid=\(normalizedChapterUID)"
+            + "&rangeStart=\(rangeBounds.start)"
+            + "&rangeEnd=\(rangeBounds.end)"
+    }
+
+    /// 解析 Android note.weread_range 的 start-end 范围，非法范围不生成跳转能力。
+    nonisolated static func parseWeReadRange(_ range: String) -> (start: Int64, end: Int64)? {
+        let parts = range.trimmingCharacters(in: .whitespacesAndNewlines).components(separatedBy: "-")
+        guard parts.count == 2 else { return nil }
+
+        let startText = parts[0].trimmingCharacters(in: .whitespacesAndNewlines)
+        let endText = parts[1].trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let start = Int64(startText), let end = Int64(endText) else { return nil }
+        guard start >= 0, end > start else { return nil }
+
+        return (start, end)
+    }
+
+    nonisolated func fetchNoteReviewPage(_ db: Database, request: NoteReviewPageRequest) throws -> [NoteReviewCardItem] {
+        let limit = max(1, request.limit)
+        let settings = request.settings
+        var predicates = ["n.is_deleted = 0"]
+        var arguments: [Int64] = []
+
+        if !settings.selectedBookIDs.isEmpty {
+            predicates.append("n.book_id IN (\(Self.placeholders(count: settings.selectedBookIDs.count)))")
+            arguments.append(contentsOf: settings.selectedBookIDs)
+        }
+
+        if !settings.selectedTagIDs.isEmpty {
+            predicates.append(noteReviewTagPredicate(settings: settings))
+            arguments.append(contentsOf: settings.selectedTagIDs)
+            if settings.tagMatchRule == .all {
+                arguments.append(Int64(settings.selectedTagIDs.count))
+            }
+        }
+
+        if settings.sortRule == .random, !request.excludedNoteIDs.isEmpty {
+            predicates.append("n.id NOT IN (\(Self.placeholders(count: request.excludedNoteIDs.count)))")
+            arguments.append(contentsOf: request.excludedNoteIDs)
+        }
+
+        let orderClause: String
+        switch settings.sortRule {
+        case .random:
+            orderClause = "ORDER BY RANDOM()"
+        case .ordered:
+            orderClause = "ORDER BY n.book_id DESC, n.id ASC"
+        }
+
+        let pagingClause: String
+        switch settings.sortRule {
+        case .random:
+            pagingClause = "LIMIT ?"
+            arguments.append(Int64(limit))
+        case .ordered:
+            pagingClause = "LIMIT ? OFFSET ?"
+            arguments.append(Int64(limit))
+            arguments.append(Int64(max(0, request.offset)))
+        }
+
+        // SQL 目的：按书摘回顾设置读取一页书摘卡片基础字段，并携带微信读书原文跳转参数。
+        // 涉及表：note 为主表，book/chapter 补充展示信息与 weread_book_id、source_type、source_uid；标签/图片由后续批量查询补齐。
+        // 关键过滤：始终排除 note.is_deleted=1；书籍范围使用 note.book_id IN；标签范围通过 tag_note 子查询支持任一/全部标签；
+        //          随机模式额外排除已加载 note.id，避免同一轮卡堆重复出现。
+        // 排序：随机模式使用 SQLite RANDOM()；顺序模式按 Android NoteReview DAO 的 book_id DESC、note.id ASC。
+        // 分页：顺序模式使用 LIMIT/OFFSET；随机模式仅 LIMIT。
+        // 时间字段：created_date 为 Android 毫秒时间戳，读取阶段不做时区转换；weread_range 为 Android 原始 start-end 字符串。
+        // 返回字段用途：构建 NoteReviewCardItem 的正文、书籍/章节、位置、创建时间与 weReadOriginalURL 数据能力。
+        let sql = """
+            SELECT n.id, n.book_id, n.content, n.idea, n.position, n.position_unit, n.include_time, n.created_date,
+                   COALESCE(n.weread_range, '') AS weread_range,
+                   COALESCE(b.name, '') AS book_name,
+                   COALESCE(b.author, '') AS book_author,
+                   COALESCE(b.cover, '') AS book_cover,
+                   COALESCE(b.weread_book_id, '') AS weread_book_id,
+                   COALESCE(c.title, '') AS chapter_title,
+                   COALESCE(c.source_type, 0) AS chapter_source_type,
+                   COALESCE(c.source_uid, '') AS chapter_source_uid
+            FROM note n
+            LEFT JOIN book b ON b.id = n.book_id
+            LEFT JOIN chapter c ON c.id = n.chapter_id AND c.is_deleted = 0
+            WHERE \(predicates.joined(separator: "\n              AND "))
+            \(orderClause)
+            \(pagingClause)
+            """
+
+        let rows = try Row.fetchAll(db, sql: sql, arguments: StatementArguments(arguments))
+        let noteIDs: [Int64] = rows.map { $0["id"] }
+        let tagsByNoteID = try batchFetchNoteReviewTags(db, noteIDs: noteIDs)
+        let imageURLsByNoteID = try batchFetchNoteReviewImages(db, noteIDs: noteIDs)
+
+        return rows.map { row in
+            let noteID: Int64 = row["id"]
+            return NoteReviewCardItem(
+                id: noteID,
+                bookID: row["book_id"],
+                bookTitle: row["book_name"] ?? "",
+                bookAuthor: row["book_author"] ?? "",
+                bookCoverURL: row["book_cover"] ?? "",
+                chapterTitle: row["chapter_title"] ?? "",
+                contentHTML: Self.trimTrailingWhitespaceAndNewlines(row["content"] ?? ""),
+                ideaHTML: Self.trimTrailingWhitespaceAndNewlines(row["idea"] ?? ""),
+                position: row["position"] ?? "",
+                positionUnit: row["position_unit"] ?? 0,
+                includeTime: (row["include_time"] as Int64? ?? 1) != 0,
+                createdDate: row["created_date"] ?? 0,
+                imageURLs: imageURLsByNoteID[noteID] ?? [],
+                tags: tagsByNoteID[noteID] ?? [],
+                weReadOriginalURL: Self.buildWeReadBestBookmarkURL(
+                    bookID: row["weread_book_id"] ?? "",
+                    chapterSourceType: row["chapter_source_type"] ?? 0,
+                    chapterUID: row["chapter_source_uid"] ?? "",
+                    range: row["weread_range"] ?? ""
+                )
+            )
+        }
+    }
+
+    /// 读取单个有效书摘及其标签、图片与微信读书原文地址，字段口径与批量读取完全一致。
+    nonisolated func fetchNoteReviewItem(_ db: Database, noteID: Int64) throws -> NoteReviewCardItem? {
+        try fetchNoteReviewItems(db, noteIDs: [noteID]).first
+    }
+
+    /// 批量读取有效书摘及操作上下文，保持输入主键顺序并去除重复项。
+    nonisolated func fetchNoteReviewItems(
+        _ db: Database,
+        noteIDs: [Int64]
+    ) throws -> [NoteReviewCardItem] {
+        let orderedIDs = noteIDs.reduce(into: [Int64]()) { result, noteID in
+            guard noteID > 0, !result.contains(noteID) else { return }
+            result.append(noteID)
+        }
+        guard !orderedIDs.isEmpty else { return [] }
+
+        // SQL 目的：批量读取指定书摘的回顾卡片基础字段，并携带微信读书原文跳转参数。
+        // 涉及表：note 为主表，book/chapter 补充书籍展示与微信读书来源字段；标签/图片由后续批量查询补齐。
+        // 关键过滤：note.id 位于输入主键集合且 note.is_deleted=0；chapter 仅连接有效记录。
+        // 时间字段：created_date 保持 Android 毫秒时间戳；weread_range 保留原始 start-end 字符串。
+        // 返回字段用途：一次构建重度日期全部书摘的标签、复制、原文、分享卡片和外部发送上下文。
+        let sql = """
+            SELECT n.id, n.book_id, n.content, n.idea, n.position, n.position_unit, n.include_time, n.created_date,
+                   COALESCE(n.weread_range, '') AS weread_range,
+                   COALESCE(b.name, '') AS book_name,
+                   COALESCE(b.author, '') AS book_author,
+                   COALESCE(b.cover, '') AS book_cover,
+                   COALESCE(b.weread_book_id, '') AS weread_book_id,
+                   COALESCE(c.title, '') AS chapter_title,
+                   COALESCE(c.source_type, 0) AS chapter_source_type,
+                   COALESCE(c.source_uid, '') AS chapter_source_uid
+            FROM note n
+            LEFT JOIN book b ON b.id = n.book_id
+            LEFT JOIN chapter c ON c.id = n.chapter_id AND c.is_deleted = 0
+            WHERE n.id IN (\(Self.placeholders(count: orderedIDs.count)))
+              AND n.is_deleted = 0
+            """
+        let rows = try Row.fetchAll(
+            db,
+            sql: sql,
+            arguments: StatementArguments(orderedIDs)
+        )
+        let tagsByNoteID = try batchFetchNoteReviewTags(db, noteIDs: orderedIDs)
+        let imageURLsByNoteID = try batchFetchNoteReviewImages(db, noteIDs: orderedIDs)
+        let itemsByID = rows.reduce(into: [Int64: NoteReviewCardItem]()) { result, row in
+            let noteID: Int64 = row["id"]
+            result[noteID] = NoteReviewCardItem(
+                id: noteID,
+                bookID: row["book_id"],
+                bookTitle: row["book_name"] ?? "",
+                bookAuthor: row["book_author"] ?? "",
+                bookCoverURL: row["book_cover"] ?? "",
+                chapterTitle: row["chapter_title"] ?? "",
+                contentHTML: Self.trimTrailingWhitespaceAndNewlines(row["content"] ?? ""),
+                ideaHTML: Self.trimTrailingWhitespaceAndNewlines(row["idea"] ?? ""),
+                position: row["position"] ?? "",
+                positionUnit: row["position_unit"] ?? 0,
+                includeTime: (row["include_time"] as Int64? ?? 1) != 0,
+                createdDate: row["created_date"] ?? 0,
+                imageURLs: imageURLsByNoteID[noteID] ?? [],
+                tags: tagsByNoteID[noteID] ?? [],
+                weReadOriginalURL: Self.buildWeReadBestBookmarkURL(
+                    bookID: row["weread_book_id"] ?? "",
+                    chapterSourceType: row["chapter_source_type"] ?? 0,
+                    chapterUID: row["chapter_source_uid"] ?? "",
+                    range: row["weread_range"] ?? ""
+                )
+            )
+        }
+        return orderedIDs.compactMap { itemsByID[$0] }
+    }
+
+    nonisolated func fetchNoteReviewTagOptions(_ db: Database) throws -> [NoteReviewTagOption] {
+        // SQL 目的：读取书摘回顾可选标签，并统计每个标签关联的有效书摘数量。
+        // 涉及表：tag LEFT JOIN tag_note LEFT JOIN note。
+        // 关键过滤：仅保留 tag.type=1 的书摘标签，排除 tag/tag_note/note 软删除记录。
+        // 排序：按 tag_order ASC、tag.id ASC，和书摘编辑页标签顺序保持一致。
+        // 返回字段用途：构建设置 Sheet 的标签多选项与右侧数量辅助信息。
+        let sql = """
+            SELECT t.id, t.name, COUNT(DISTINCT n.id) AS note_count
+            FROM tag t
+            LEFT JOIN tag_note tn ON tn.tag_id = t.id AND tn.is_deleted = 0
+            LEFT JOIN note n ON n.id = tn.note_id AND n.is_deleted = 0
+            WHERE t.type = 1 AND t.is_deleted = 0
+            GROUP BY t.id
+            ORDER BY t.tag_order ASC, t.id ASC
+            """
+        return try Row.fetchAll(db, sql: sql).compactMap { row in
+            guard let title: String = row["name"], !title.isEmpty else { return nil }
+            return NoteReviewTagOption(
+                id: row["id"],
+                title: title,
+                noteCount: row["note_count"] ?? 0
+            )
+        }
+    }
+
+    nonisolated func fetchNoteReviewSelectedBooks(_ db: Database, bookIDs: [Int64]) throws -> [BookPickerBook] {
+        let ids = Self.uniquePositiveIDs(bookIDs)
+        guard !ids.isEmpty else { return [] }
+
+        // SQL 目的：按回顾设置保存的 book_id 列表读取书籍回显数据。
+        // 涉及表：book。
+        // 关键过滤：限定 id IN 已选书籍，排除软删除书籍与默认占位书 id=0。
+        // 时间字段：不读取时间字段；输出顺序在内存侧恢复为用户保存的选择顺序。
+        // 返回字段用途：构建 BookPicker 预选项与设置行摘要。
+        let sql = """
+            SELECT id, name, author, press, cover, position_unit, total_position, total_pagination
+            FROM book
+            WHERE id IN (\(Self.placeholders(count: ids.count)))
+              AND is_deleted = 0
+              AND id != 0
+            """
+        let rows = try Row.fetchAll(db, sql: sql, arguments: StatementArguments(ids))
+        let booksByID: [Int64: BookPickerBook] = Dictionary(
+            uniqueKeysWithValues: rows.map { row in
+                let book = BookPickerBook(
+                    id: row["id"],
+                    title: row["name"] ?? "",
+                    author: row["author"] ?? "",
+                    press: row["press"] ?? "",
+                    coverURL: row["cover"] ?? "",
+                    positionUnit: row["position_unit"] ?? 0,
+                    totalPosition: row["total_position"] ?? 0,
+                    totalPagination: row["total_pagination"] ?? 0
+                )
+                return (book.id, book)
+            }
+        )
+        return ids.compactMap { booksByID[$0] }
+    }
+
+    nonisolated func noteReviewTagPredicate(settings: NoteReviewSettings) -> String {
+        let placeholders = Self.placeholders(count: settings.selectedTagIDs.count)
+        switch settings.tagMatchRule {
+        case .any:
+            return """
+                n.id IN (
+                    SELECT tn.note_id
+                    FROM tag_note tn
+                    JOIN tag t ON t.id = tn.tag_id AND t.is_deleted = 0 AND t.type = 1
+                    WHERE tn.is_deleted = 0 AND tn.tag_id IN (\(placeholders))
+                )
+                """
+        case .all:
+            return """
+                n.id IN (
+                    SELECT tn.note_id
+                    FROM tag_note tn
+                    JOIN tag t ON t.id = tn.tag_id AND t.is_deleted = 0 AND t.type = 1
+                    WHERE tn.is_deleted = 0 AND tn.tag_id IN (\(placeholders))
+                    GROUP BY tn.note_id
+                    HAVING COUNT(DISTINCT tn.tag_id) = ?
+                )
+                """
+        }
+    }
+
+    nonisolated func batchFetchNoteReviewTags(
+        _ db: Database,
+        noteIDs: [Int64]
+    ) throws -> [Int64: [NoteEditorTagOption]] {
+        guard !noteIDs.isEmpty else { return [:] }
+        // SQL 目的：批量读取回顾卡片关联的书摘标签对象。
+        // 涉及表：tag_note INNER JOIN tag。
+        // 关键过滤：限定当前页 note_id 集合，排除 tag_note/tag 软删除记录，并限制 tag.type=1。
+        // 排序：按 tag_order ASC、tag_note.id ASC 对齐 Android 标签展示顺序。
+        // 返回字段用途：按 note_id 分组后渲染当前卡标签 rail，并为回顾卡片标签编辑提供本地回写模型。
+        let sql = """
+            SELECT tn.note_id, t.id, t.name
+            FROM tag_note tn
+            JOIN tag t ON t.id = tn.tag_id AND t.is_deleted = 0 AND t.type = 1
+            WHERE tn.is_deleted = 0 AND tn.note_id IN (\(Self.placeholders(count: noteIDs.count)))
+            ORDER BY t.tag_order ASC, tn.id ASC
+            """
+        let rows = try Row.fetchAll(db, sql: sql, arguments: StatementArguments(noteIDs))
+        var result: [Int64: [NoteEditorTagOption]] = [:]
+        for row in rows {
+            let noteID: Int64 = row["note_id"]
+            guard let name: String = row["name"], !name.isEmpty else { continue }
+            result[noteID, default: []].append(NoteEditorTagOption(id: row["id"], title: name))
+        }
+        return result
+    }
+
+    nonisolated func batchFetchNoteReviewImages(
+        _ db: Database,
+        noteIDs: [Int64]
+    ) throws -> [Int64: [String]] {
+        guard !noteIDs.isEmpty else { return [:] }
+        // SQL 目的：批量读取回顾卡片关联的书摘附图 URL。
+        // 涉及表：attach_image。
+        // 关键过滤：限定当前页 note_id 集合，排除已软删除图片。
+        // 排序：按 id ASC 保持 Android 附图展示顺序。
+        // 返回字段用途：按 note_id 分组后渲染卡片图片墙。
+        let sql = """
+            SELECT note_id, image_url
+            FROM attach_image
+            WHERE is_deleted = 0 AND note_id IN (\(Self.placeholders(count: noteIDs.count)))
+            ORDER BY id ASC
+            """
+        let rows = try Row.fetchAll(db, sql: sql, arguments: StatementArguments(noteIDs))
+        var result: [Int64: [String]] = [:]
+        for row in rows {
+            let noteID: Int64 = row["note_id"]
+            guard let url: String = row["image_url"], !url.isEmpty else { continue }
+            result[noteID, default: []].append(url)
+        }
+        return result
+    }
+
+    nonisolated static func placeholders(count: Int) -> String {
+        Array(repeating: "?", count: count).joined(separator: ", ")
+    }
+
+    nonisolated static func uniquePositiveIDs(_ ids: [Int64]) -> [Int64] {
+        var seen = Set<Int64>()
+        var result: [Int64] = []
+        result.reserveCapacity(ids.count)
+        for id in ids where id > 0 && !seen.contains(id) {
+            seen.insert(id)
+            result.append(id)
+        }
+        return result
+    }
+
+    /// 读取阶段统一清理尾部空白与换行，避免卡片底部出现额外空段。
+    nonisolated static func trimTrailingWhitespaceAndNewlines(_ text: String) -> String {
+        guard !text.isEmpty else { return text }
+        var endIndex = text.endIndex
+        while endIndex > text.startIndex {
+            let previousIndex = text.index(before: endIndex)
+            let scalar = text[previousIndex]
+            guard scalar.unicodeScalars.allSatisfy({ CharacterSet.whitespacesAndNewlines.contains($0) }) else {
+                break
+            }
+            endIndex = previousIndex
+        }
+        return String(text[..<endIndex])
     }
 
     func stagedImageDirectory() throws -> URL {

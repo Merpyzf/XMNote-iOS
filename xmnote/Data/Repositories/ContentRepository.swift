@@ -4,12 +4,14 @@ import GRDB
 /**
  * [INPUT]: 依赖 DatabaseManager 提供数据库连接，依赖 ObservationStream 提供数据库观察流桥接，依赖通用内容查看领域模型完成跨类型映射
  * [OUTPUT]: 对外提供 ContentRepository（ContentRepositoryProtocol 的 GRDB 实现）
- * [POS]: Data 层通用内容查看仓储实现，统一封装书摘/书评/相关内容的查看、编辑与硬删除事务
+ * [POS]: Data 层通用内容查看仓储实现，统一封装书摘/书评/相关内容的查看、编辑与硬删除事务，并对齐 Android 的相关书籍固定分类语义
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
 /// 通用内容查看仓储实现，负责 viewer feed、详情读取、编辑保存与硬删除事务。
 struct ContentRepository: ContentRepositoryProtocol {
+    private nonisolated static let relatedBookCategoryID: Int64 = 1
+
     private let databaseManager: DatabaseManager
 
     /// 注入数据库管理器，供内容查看与编辑链路复用同一数据源。
@@ -30,6 +32,8 @@ struct ContentRepository: ContentRepositoryProtocol {
                 )
             case .bookNotes(let bookId):
                 try fetchBookNoteViewerItems(db, bookId: bookId)
+            case .noteReview(let noteIDs):
+                try fetchNoteReviewViewerItems(db, noteIDs: noteIDs)
             }
         }
     }
@@ -116,6 +120,77 @@ struct ContentRepository: ContentRepositoryProtocol {
                 """,
                 arguments: [draft.title, draft.contentHTML, draft.url, now, draft.contentId]
             )
+        }
+    }
+
+    /// 读取相关书籍关系与关联目标书。
+    func fetchRelatedBookRelationDraft(relationID: Int64) async throws -> RelatedBookRelationDraft? {
+        try await databaseManager.database.dbPool.read { db in
+            // SQL 目的：读取一条有效相关书籍关系及关联书籍的选书器回显字段。
+            // 涉及表：category_content INNER JOIN book。
+            // 关键过滤：relation 主键命中、is_deleted=0、content_book_id!=0，关联书籍也必须有效。
+            // 时间字段：不读取时间字段；返回字段只用于构造编辑草稿。
+            // 返回字段用途：回显来源书与关联目标书。
+            let relationSQL = """
+                SELECT cc.id, cc.book_id,
+                       b.id AS content_book_id, b.name, b.author, b.press, b.cover,
+                       b.position_unit, b.total_position, b.total_pagination
+                FROM category_content cc
+                JOIN book b ON b.id = cc.content_book_id AND b.is_deleted = 0
+                WHERE cc.id = ? AND cc.is_deleted = 0 AND cc.content_book_id != 0
+                LIMIT 1
+                """
+            guard let row = try Row.fetchOne(db, sql: relationSQL, arguments: [relationID]) else { return nil }
+            let sourceBookID: Int64 = row["book_id"]
+            return RelatedBookRelationDraft(
+                id: row["id"],
+                sourceBookID: sourceBookID,
+                contentBook: BookPickerBook(
+                    id: row["content_book_id"],
+                    title: row["name"] ?? "",
+                    author: row["author"] ?? "",
+                    press: row["press"] ?? "",
+                    coverURL: row["cover"] ?? "",
+                    positionUnit: row["position_unit"] ?? 0,
+                    totalPosition: row["total_position"] ?? 0,
+                    totalPagination: row["total_pagination"] ?? 0
+                )
+            )
+        }
+    }
+
+    /// 保存相关书籍关系；按 Android AppConstant.Categories.BOOK 固定写入分类 ID 1。
+    func saveRelatedBookRelationDraft(_ draft: RelatedBookRelationDraft) async throws {
+        let now = Int64(Date().timeIntervalSince1970 * 1_000)
+        try await databaseManager.database.dbPool.write { db in
+            // SQL 目的：更新相关书籍关系的目标书，并固定写入 Android 定义的“书籍”分类 ID 1。
+            // 涉及表：category_content；book/category 由子查询完成有效性校验。
+            // 关键过滤：relation 主键、来源书、is_deleted=0，目标书与固定分类都必须有效。
+            // 时间字段：updated_date 写当前毫秒时间戳。
+            // 副作用用途：让时间线、当日记录和相关列表观察流同步关系变更。
+            let sql = """
+                UPDATE category_content
+                SET content_book_id = ?, category_id = ?, updated_date = ?
+                WHERE id = ? AND book_id = ? AND is_deleted = 0
+                  AND EXISTS (SELECT 1 FROM book WHERE id = ? AND is_deleted = 0)
+                  AND EXISTS (SELECT 1 FROM category WHERE id = ? AND is_deleted = 0)
+                """
+            try db.execute(
+                sql: sql,
+                arguments: [
+                    draft.contentBook.id, Self.relatedBookCategoryID, now,
+                    draft.id, draft.sourceBookID,
+                    draft.contentBook.id,
+                    Self.relatedBookCategoryID
+                ]
+            )
+        }
+    }
+
+    /// 物理删除普通相关内容或相关书籍关系，并在最后引用移除后清理占位书。
+    func deleteRelatedRelation(relationID: Int64) async throws {
+        try await databaseManager.database.dbPool.write { db in
+            try deleteRelevant(db, contentId: relationID)
         }
     }
 
@@ -376,6 +451,42 @@ private extension ContentRepository {
             )
         }
     }
+
+    /// 查询书摘回顾来源下的 viewer 列表，按卡堆当前顺序输出。
+    nonisolated func fetchNoteReviewViewerItems(_ db: Database, noteIDs: [Int64]) throws -> [ContentViewerListItem] {
+        let ids = Self.uniquePositiveIDs(noteIDs)
+        guard !ids.isEmpty else { return [] }
+
+        // SQL 目的：按回顾卡堆当前 note_id 集合读取通用查看器分页项。
+        // 涉及表：note LEFT JOIN book。
+        // 关键过滤：限定 note.id IN 当前卡堆列表，并排除已软删除书摘；book 仅用于展示书名。
+        // 排序：数据库仅批量取数，最终顺序在内存侧恢复为卡堆传入顺序。
+        // 时间字段：created_date 为 Android 毫秒时间戳，读取阶段不做时区转换。
+        // 返回字段用途：构建 ContentViewerListItem，让详情页继续复用 fetchViewerDetail 读取完整内容。
+        let sql = """
+            SELECT n.id, n.book_id, n.created_date, COALESCE(b.name, '') AS book_name
+            FROM note n
+            LEFT JOIN book b ON b.id = n.book_id
+            WHERE n.id IN (\(Self.placeholders(count: ids.count)))
+              AND n.is_deleted = 0
+            """
+        let rows = try Row.fetchAll(db, sql: sql, arguments: StatementArguments(ids))
+        let itemsByID: [Int64: ContentViewerListItem] = Dictionary(
+            uniqueKeysWithValues: rows.map { row in
+                let noteID: Int64 = row["id"]
+                return (
+                    noteID,
+                    ContentViewerListItem(
+                        id: .note(noteID),
+                        sourceBookId: row["book_id"],
+                        bookTitle: row["book_name"] ?? "",
+                        timestamp: row["created_date"]
+                    )
+                )
+            }
+        )
+        return ids.compactMap { itemsByID[$0] }
+    }
 }
 
 // MARK: - Detail Queries
@@ -552,6 +663,16 @@ private extension ContentRepository {
 
     /// 硬删除相关内容及其附图。
     nonisolated func deleteRelevant(_ db: Database, contentId: Int64) throws {
+        // SQL 目的：在删除相关关系前读取可能引用的业务占位书 ID。
+        // 涉及表：category_content。
+        // 关键过滤：按关系主键精确命中；普通内容返回 0，相关书籍返回 content_book_id。
+        // 时间字段：不读取时间字段。
+        // 返回字段用途：关系删除后判断是否需要清理最后一个无引用占位书。
+        let relatedBookID = try Int64.fetchOne(
+            db,
+            sql: "SELECT content_book_id FROM category_content WHERE id = ? LIMIT 1",
+            arguments: [contentId]
+        ) ?? 0
         try db.execute(
             // SQL 目的：物理删除指定相关内容关联的全部附图记录。
             // 涉及表：category_image。
@@ -566,6 +687,22 @@ private extension ContentRepository {
             sql: "DELETE FROM category_content WHERE id = ?",
             arguments: [contentId]
         )
+        if relatedBookID > 0 {
+            try db.execute(
+                // SQL 目的：物理删除失去最后一个真实引用的业务占位书。
+                // 涉及表：book，反查 category_content 与 collection_book。
+                // 关键过滤：仅处理 is_deleted=1 占位书；任一物理关系仍存在时保留。
+                // 时间字段：不读取时间字段。
+                // 副作用：最后引用移除后删除 book 主记录，不影响有效书籍。
+                sql: """
+                    DELETE FROM book
+                    WHERE id = ? AND id != 0 AND is_deleted = 1
+                      AND NOT EXISTS (SELECT 1 FROM category_content WHERE content_book_id = book.id)
+                      AND NOT EXISTS (SELECT 1 FROM collection_book WHERE book_id = book.id)
+                    """,
+                arguments: [relatedBookID]
+            )
+        }
     }
 }
 
@@ -623,5 +760,20 @@ private extension ContentRepository {
             endIndex = previousIndex
         }
         return String(text[..<endIndex])
+    }
+
+    nonisolated static func placeholders(count: Int) -> String {
+        Array(repeating: "?", count: count).joined(separator: ", ")
+    }
+
+    nonisolated static func uniquePositiveIDs(_ ids: [Int64]) -> [Int64] {
+        var seen = Set<Int64>()
+        var result: [Int64] = []
+        result.reserveCapacity(ids.count)
+        for id in ids where id > 0 && !seen.contains(id) {
+            seen.insert(id)
+            result.append(id)
+        }
+        return result
     }
 }

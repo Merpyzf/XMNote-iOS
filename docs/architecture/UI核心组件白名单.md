@@ -21,6 +21,7 @@
 - xmnote/Views/Note/NoteCollectionView.swift
 - xmnote/Views/Note/NoteTagsView.swift
 - xmnote/Views/Note/NoteDetailView.swift
+- xmnote/Views/Note/NoteReviewView.swift
 - xmnote/Views/Personal/Backup/DataBackupView.swift
 - xmnote/Views/Personal/Backup/WebDAVServerListView.swift
 - xmnote/Views/Personal/Backup/WebDAVServerFormView.swift

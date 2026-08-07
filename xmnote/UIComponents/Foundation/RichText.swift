@@ -1,16 +1,43 @@
 /**
  * [INPUT]: 依赖 RichTextEditor/HTMLParser（HTML→NSAttributedString）与 RichTextLayoutManager（引用块/列表绘制）
- * [OUTPUT]: 对外提供 RichText（只读 HTML 富文本展示组件，支持 maxLines 截断与截断状态回调）
+ * [OUTPUT]: 对外提供 RichText（只读 HTML 富文本展示组件，支持 maxLines 截断、文本对齐与截断状态回调）
  * [POS]: UIComponents/Foundation 的跨模块复用展示组件，供时间线卡片与未来笔记预览等场景使用
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
 import SwiftUI
 import UIKit
-/// RichTextLayoutSnapshot 缓存单次富文本测量结果，避免滚动中重复做 UIKit 版面计算。
+/// 富文本布局快照同时承载普通展示与可披露文本的测量结果，避免列表滚动中重复做 TextKit 排版。
 struct RichTextLayoutSnapshot: Equatable {
     let size: CGSize
     let isTruncated: Bool
+    let expandedSize: CGSize
+    let lastLineBaseline: CGFloat
+    let lastLineRect: CGRect
+    let visibleCharacterRange: NSRange
+    let actionRect: CGRect
+    let collapseActionRect: CGRect
+
+    /// 创建布局快照；普通富文本调用只需提供原有尺寸与截断状态。
+    init(
+        size: CGSize,
+        isTruncated: Bool,
+        expandedSize: CGSize? = nil,
+        lastLineBaseline: CGFloat = 0,
+        lastLineRect: CGRect = .zero,
+        visibleCharacterRange: NSRange = NSRange(location: 0, length: 0),
+        actionRect: CGRect = .zero,
+        collapseActionRect: CGRect = .zero
+    ) {
+        self.size = size
+        self.isTruncated = isTruncated
+        self.expandedSize = expandedSize ?? size
+        self.lastLineBaseline = lastLineBaseline
+        self.lastLineRect = lastLineRect
+        self.visibleCharacterRange = visibleCharacterRange
+        self.actionRect = actionRect
+        self.collapseActionRect = collapseActionRect
+    }
 }
 
 /// RichTextLayoutSnapshotBox 把值语义快照包成 NSCache 可存储的对象引用类型。
@@ -44,6 +71,7 @@ final class RichTextRenderCache {
             return cached
         }
 
+        ExpandableRichTextDiagnostics.record(.htmlParse)
         let attributed = builder()
         let cachedValue = attributed.copy() as? NSAttributedString ?? attributed
         attributedCache.setObject(cachedValue, forKey: nsKey)
@@ -74,6 +102,7 @@ struct RichText: UIViewRepresentable {
     var baseFont: UIFont = .preferredFont(forTextStyle: .body)
     var textColor: UIColor = .label
     var lineSpacing: CGFloat = 4
+    var textAlignment: NSTextAlignment = .natural
     /// 最大显示行数，0 = 无限制（默认），正数启用原生省略号截断
     var maxLines: Int = 0
     /// 截断状态变更回调，仅在 maxLines > 0 时有意义
@@ -114,6 +143,7 @@ struct RichText: UIViewRepresentable {
             baseFont: baseFont,
             textColor: textColor,
             lineSpacing: lineSpacing,
+            textAlignment: textAlignment,
             traitCollection: traitCollection
         )
         let needsContentUpdate = context.coordinator.lastContentKey != contentKey
@@ -129,6 +159,7 @@ struct RichText: UIViewRepresentable {
                 baseFont: baseFont,
                 textColor: textColor,
                 lineSpacing: lineSpacing,
+                textAlignment: textAlignment,
                 traitCollection: traitCollection
             )
             textView.textStorage.setAttributedString(attributed)
@@ -151,6 +182,7 @@ struct RichText: UIViewRepresentable {
             baseFont: baseFont,
             textColor: textColor,
             lineSpacing: lineSpacing,
+            textAlignment: textAlignment,
             traitCollection: traitCollection
         )
         let scale = uiView.window?.screen.scale ?? max(uiView.traitCollection.displayScale, 1)
@@ -285,6 +317,7 @@ struct RichText: UIViewRepresentable {
         baseFont: UIFont,
         textColor: UIColor,
         lineSpacing: CGFloat,
+        textAlignment: NSTextAlignment = .natural,
         traitCollection: UITraitCollection
     ) -> NSAttributedString {
         let contentKey = contentCacheKey(
@@ -292,6 +325,7 @@ struct RichText: UIViewRepresentable {
             baseFont: baseFont,
             textColor: textColor,
             lineSpacing: lineSpacing,
+            textAlignment: textAlignment,
             traitCollection: traitCollection
         )
         return resolveAttributedString(contentKey: contentKey) {
@@ -300,6 +334,7 @@ struct RichText: UIViewRepresentable {
                 baseFont: baseFont,
                 textColor: textColor,
                 lineSpacing: lineSpacing,
+                textAlignment: textAlignment,
                 traitCollection: traitCollection
             )
         }
@@ -311,6 +346,7 @@ struct RichText: UIViewRepresentable {
         baseFont: UIFont,
         textColor: UIColor,
         lineSpacing: CGFloat,
+        textAlignment: NSTextAlignment = .natural,
         traitCollection: UITraitCollection
     ) -> NSAttributedString {
         let previewKey = previewContentKey(
@@ -318,6 +354,7 @@ struct RichText: UIViewRepresentable {
             baseFont: baseFont,
             textColor: textColor,
             lineSpacing: lineSpacing,
+            textAlignment: textAlignment,
             traitCollection: traitCollection
         )
         return resolveAttributedString(contentKey: previewKey) {
@@ -326,6 +363,7 @@ struct RichText: UIViewRepresentable {
                 baseFont: baseFont,
                 textColor: textColor,
                 lineSpacing: lineSpacing,
+                textAlignment: textAlignment,
                 traitCollection: traitCollection
             )
             let previewAttributed = NSMutableAttributedString(attributedString: baseAttributed)
@@ -339,6 +377,7 @@ struct RichText: UIViewRepresentable {
         baseFont: UIFont,
         textColor: UIColor,
         lineSpacing: CGFloat,
+        textAlignment: NSTextAlignment,
         traitCollection: UITraitCollection
     ) -> NSAttributedString {
         let mutable = HTMLParser.parse(html, baseFont: baseFont, traitCollection: traitCollection)
@@ -352,10 +391,12 @@ struct RichText: UIViewRepresentable {
 
         let style = NSMutableParagraphStyle()
         style.lineSpacing = lineSpacing
+        style.alignment = textAlignment
         mutable.enumerateAttribute(.paragraphStyle, in: fullRange, options: []) { value, range, _ in
             if let existing = value as? NSParagraphStyle {
                 let merged = existing.mutableCopy() as! NSMutableParagraphStyle
                 merged.lineSpacing = lineSpacing
+                merged.alignment = textAlignment
                 mutable.addAttribute(.paragraphStyle, value: merged, range: range)
             } else {
                 mutable.addAttribute(.paragraphStyle, value: style, range: range)
@@ -434,57 +475,13 @@ struct RichText: UIViewRepresentable {
         return cachedLayoutSnapshot(for: layoutKey)
     }
 
-    @MainActor
-    /// 在后台空闲时提前测量收起态布局，降低首次进入长列表时的卡顿峰值。
-    static func prewarmPreviewLayoutSnapshot(
-        html: String,
-        baseFont: UIFont,
-        textColor: UIColor,
-        lineSpacing: CGFloat,
-        maxLines: Int,
-        width: CGFloat,
-        traitCollection: UITraitCollection,
-        screenScale: CGFloat
-    ) {
-        guard width > 0, width.isFinite else { return }
-
-        let contentKey = previewContentKey(
-            html: html,
-            baseFont: baseFont,
-            textColor: textColor,
-            lineSpacing: lineSpacing,
-            traitCollection: traitCollection
-        )
-        let layoutKey = layoutCacheKey(
-            contentKey: contentKey,
-            maxLines: maxLines,
-            width: width,
-            screenScale: screenScale
-        )
-        guard cachedLayoutSnapshot(for: layoutKey) == nil else { return }
-
-        let attributed = resolvedPreviewAttributedString(
-            html: html,
-            baseFont: baseFont,
-            textColor: textColor,
-            lineSpacing: lineSpacing,
-            traitCollection: traitCollection
-        )
-        let measurementView = CollapsedRichTextPreviewView()
-        let snapshot = measurementView.measureLayoutSnapshot(
-            attributedText: attributed,
-            width: width,
-            maxLines: maxLines
-        )
-        storeLayoutSnapshot(snapshot, for: layoutKey)
-    }
-
     /// 生成预览态内容签名，避免和完整富文本缓存键相互污染。
     static func previewContentKey(
         html: String,
         baseFont: UIFont,
         textColor: UIColor,
         lineSpacing: CGFloat,
+        textAlignment: NSTextAlignment = .natural,
         traitCollection: UITraitCollection
     ) -> String {
         let baseKey = contentCacheKey(
@@ -492,6 +489,7 @@ struct RichText: UIViewRepresentable {
             baseFont: baseFont,
             textColor: textColor,
             lineSpacing: lineSpacing,
+            textAlignment: textAlignment,
             traitCollection: traitCollection
         )
         return "preview|\(baseKey)"
@@ -518,12 +516,13 @@ struct RichText: UIViewRepresentable {
         RichTextRenderCache.shared.storeLayoutSnapshot(snapshot, for: layoutKey)
     }
 
-    /// 把 HTML、字体、颜色、行距和系统环境折叠成稳定内容签名。
+    /// 把 HTML、字体、颜色、行距、对齐方式和系统环境折叠成稳定内容签名。
     static func contentCacheKey(
         html: String,
         baseFont: UIFont,
         textColor: UIColor,
         lineSpacing: CGFloat,
+        textAlignment: NSTextAlignment = .natural,
         traitCollection: UITraitCollection
     ) -> String {
         [
@@ -532,6 +531,7 @@ struct RichText: UIViewRepresentable {
             Self.roundedToken(baseFont.pointSize),
             Self.colorToken(textColor, traitCollection: traitCollection),
             Self.roundedToken(lineSpacing),
+            String(textAlignment.rawValue),
             String(traitCollection.userInterfaceStyle.rawValue),
             traitCollection.preferredContentSizeCategory.rawValue,
         ].joined(separator: "|")
@@ -546,6 +546,29 @@ struct RichText: UIViewRepresentable {
     ) -> String {
         let bucket = Int((width * max(screenScale, 1)).rounded())
         return "\(contentKey)|lines:\(maxLines)|width:\(bucket)"
+    }
+
+    /// 生成可披露富文本专用布局键，确保操作字体与书写方向变化时不会复用旧基线。
+    static func expandableLayoutCacheKey(
+        contentKey: String,
+        maxLines: Int,
+        width: CGFloat,
+        screenScale: CGFloat,
+        actionFont: UIFont,
+        layoutDirection: UIUserInterfaceLayoutDirection
+    ) -> String {
+        [
+            "expandable",
+            layoutCacheKey(
+                contentKey: contentKey,
+                maxLines: maxLines,
+                width: width,
+                screenScale: screenScale
+            ),
+            actionFont.fontName,
+            roundedToken(actionFont.pointSize),
+            String(layoutDirection.rawValue),
+        ].joined(separator: "|")
     }
 
     private static func roundedToken(_ value: CGFloat) -> String {

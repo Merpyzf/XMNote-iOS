@@ -8,7 +8,7 @@
 import Foundation
 
 /// 书籍选择流的本地书籍结果模型，统一承接本地查询、已选回显与创建成功回填。
-struct BookPickerBook: Identifiable, Hashable, Codable, Sendable {
+nonisolated struct BookPickerBook: Identifiable, Hashable, Codable, Sendable {
     let id: Int64
     let title: String
     let author: String

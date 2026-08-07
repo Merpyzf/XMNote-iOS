@@ -123,6 +123,7 @@ struct ReadCalendarCoverFanStack: View {
         static let placeholderOpacity: CGFloat = 0.52
         static let animationDuration: CGFloat = 0.22
         static let transitionScale: CGFloat = 0.94
+        static let collapsedVerticalOffsetScale: CGFloat = 0.88
         static let goldenAngle = 2.399963229728653
         static let fullscreenXRadiusUnit: CGFloat = 0.62
         static let fullscreenYRadiusUnit: CGFloat = 0.52
@@ -241,7 +242,7 @@ private extension ReadCalendarCoverFanStack {
                 scale: 0.9,
                 rotation: -11,
                 offsetX: -coverSize.width * 0.58,
-                offsetY: coverSize.height * 0.18,
+                offsetY: coverSize.height * 0.18 * Layout.collapsedVerticalOffsetScale,
                 opacity: 0.34,
                 zIndex: 88
             )
@@ -249,7 +250,7 @@ private extension ReadCalendarCoverFanStack {
                 scale: 0.84,
                 rotation: -18,
                 offsetX: -coverSize.width * 0.86,
-                offsetY: coverSize.height * 0.28,
+                offsetY: coverSize.height * 0.28 * Layout.collapsedVerticalOffsetScale,
                 opacity: 0.24,
                 zIndex: 87
             )
@@ -294,6 +295,17 @@ private extension ReadCalendarCoverFanStack {
     private func transform(for depth: Int, total: Int) -> FanTransform {
         switch presentationMode {
         case .collapsed:
+            if total == 1 {
+                let template = collapsedTemplate(depth: depth)
+                return FanTransform(
+                    rotation: template.rotation,
+                    offsetX: template.offsetX,
+                    offsetY: template.offsetY,
+                    zIndex: Double(220 - depth),
+                    scale: max(0.78, template.scale),
+                    opacity: max(0.78, template.opacity)
+                )
+            }
             return collapsedTransform(for: depth)
         case .fullscreen:
             return fullscreenTransform(for: depth, total: total)
@@ -303,14 +315,15 @@ private extension ReadCalendarCoverFanStack {
     /// 折叠态：在模板基础上叠加稳定抖动，打破规则扇形。
     private func collapsedTransform(for depth: Int) -> FanTransform {
         let template = collapsedTemplate(depth: depth)
-        let jitterRotation = Double(jitter(depth: depth, channel: 11)) * style.jitterDegree
-        let jitterX = jitter(depth: depth, channel: 23) * style.jitterOffsetRatio * coverSize.width
-        let jitterY = jitter(depth: depth, channel: 31) * style.jitterOffsetRatio * coverSize.height
+        let layoutJitter = androidSignedJitter(depth: depth)
+        let jitterRotation = Double(layoutJitter) * style.jitterDegree
+        let jitterX = layoutJitter * style.jitterOffsetRatio * coverSize.width
+        let jitterY = layoutJitter * style.jitterOffsetRatio * coverSize.height
 
         return FanTransform(
             rotation: template.rotation + jitterRotation,
             offsetX: template.offsetX + jitterX,
-            offsetY: template.offsetY + jitterY,
+            offsetY: (template.offsetY + jitterY) * Layout.collapsedVerticalOffsetScale,
             zIndex: Double(220 - depth),
             scale: max(0.78, template.scale),
             opacity: max(0.78, template.opacity)
@@ -390,6 +403,15 @@ private extension ReadCalendarCoverFanStack {
         return CGFloat(unit * 2 - 1)
     }
 
+    /// 复刻 Android 折叠堆叠的无符号移位抖动，同一日期和条目顺序得到完全稳定的偏移。
+    func androidSignedJitter(depth: Int) -> CGFloat {
+        let shift = UInt64((max(0, depth) % 8) * 8)
+        let shifted = resolvedSeed.rawValue >> shift
+        let mixed = shifted &+ UInt64(max(0, depth)) &* 1_103_515_245
+        let value = mixed & 0xFFFF
+        return min(1, max(-1, CGFloat(Double(value) / 32_767.5 - 1)))
+    }
+
     /// 执行 splitMix64 变换，生成分布更均匀的伪随机序列用于堆叠抖动。
     func splitMix64(_ x: UInt64) -> UInt64 {
         var z = x &+ 0x9E37_79B9_7F4A_7C15
@@ -421,19 +443,20 @@ extension ReadCalendarCoverFanStack {
     static func makeLayoutSeed(
         date: Date,
         items: [Item],
-        mode: PresentationMode
+        mode _: PresentationMode
     ) -> LayoutSeed {
-        let dayKey = Int64(floor(date.timeIntervalSince1970 / 86_400))
-        let ids = items.map(\.id).joined(separator: "|")
-        let source = "\(dayKey)|\(mode.rawValue)|\(ids)"
-        return LayoutSeed(rawValue: fnv1a64(source))
+        var result = Int64(date.timeIntervalSince1970 * 1_000)
+        for item in items {
+            result = result &* 31 &+ Int64(javaStringHashCode(item.id))
+        }
+        return LayoutSeed(rawValue: UInt64(bitPattern: result))
     }
 
-    private static func fnv1a64(_ text: String) -> UInt64 {
-        var hash: UInt64 = 0xCBF2_9CE4_8422_2325
-        for byte in text.utf8 {
-            hash ^= UInt64(byte)
-            hash = hash &* 0x0000_0100_0000_01B3
+    /// 复刻 Java String.hashCode，使用 UTF-16 code unit 参与 31 倍滚动哈希。
+    private static func javaStringHashCode(_ text: String) -> Int32 {
+        var hash: Int32 = 0
+        for codeUnit in text.utf16 {
+            hash = hash &* 31 &+ Int32(codeUnit)
         }
         return hash
     }

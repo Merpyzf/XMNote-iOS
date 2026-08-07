@@ -2,7 +2,7 @@ import SwiftUI
 
 /**
  * [INPUT]: 依赖月份/年份与显示模式状态，依赖回调驱动页面壳层打开年月/年份选择 Sheet 或切换显示模式
- * [OUTPUT]: 对外提供 ReadCalendarTopControlBar（阅读日历顶部控制区）
+ * [OUTPUT]: 对外提供 ReadCalendarTopControlBar（稳定图标、系统选择反馈的阅读日历顶部控制区）
  * [POS]: ReadCalendar 业务内复用组件，承载月份或年份切换与显示模式切换
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -97,8 +97,9 @@ private extension ReadCalendarTopControlBar {
     var modeSwitcher: some View {
         Picker("阅读日历显示模式", selection: displayModeBinding) {
             ForEach(ReadCalendarContentView.DisplayMode.allCases, id: \.self) { mode in
-                Image(systemName: mode.iconName(isSelected: mode == displayMode))
+                Image(systemName: mode.iconName)
                     .font(.system(size: modeSymbolSize, weight: .medium))
+                    .environment(\.symbolVariants, .none)
                     .tag(mode)
                     .accessibilityLabel(mode.title)
             }
@@ -116,9 +117,7 @@ private extension ReadCalendarTopControlBar {
             set: { newValue in
                 // 重入保护：Picker 在 SwiftUI 内部可能对同一值多次调用 setter
                 guard newValue != displayMode else { return }
-                withAnimation(.snappy(duration: 0.26)) {
-                    onDisplayModeChanged(newValue)
-                }
+                onDisplayModeChanged(newValue)
             }
         )
     }

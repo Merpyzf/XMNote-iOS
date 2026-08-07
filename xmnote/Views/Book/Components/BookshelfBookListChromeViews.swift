@@ -31,6 +31,9 @@ struct BookshelfBookListBrowsingChrome: View {
             GlassEffectContainer(spacing: Spacing.double) {
                 HStack(spacing: Spacing.cozy) {
                     TopBarBackButton(action: onBack, foregroundColor: Color.textPrimary)
+                        .buttonStyle(.plain)
+                        .frame(width: Spacing.actionReserved, height: Spacing.actionReserved)
+                        .contentShape(Circle())
 
                     Spacer(minLength: Spacing.compact)
 

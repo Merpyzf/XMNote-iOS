@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 BookshelfPendingAction、BookshelfBookListEditAction 与 SwiftUI 按钮、图标、横向滚动、ImmersiveBottomChrome 和动画能力
- * [OUTPUT]: 对外提供书架编辑态顶部 chrome、统一搜索 surface、整理态双态上下文检索入口、选择态封面/行遮罩、底部浮动玻璃操作栏与管理模式转场参数
+ * [OUTPUT]: 对外提供书架编辑态顶部 chrome、统一搜索 surface、整理态双态上下文检索入口、选择态封面/行遮罩、支持短内容横向回弹的底部浮动玻璃操作栏与管理模式转场参数
  * [POS]: Book 模块页面私有编辑态与搜索组件集合，服务默认书架与二级书籍列表的整理模式选择、检索、置顶、移动、横向平铺批量操作与删除入口
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -1132,7 +1132,7 @@ struct BookshelfGlassEditActionCluster<Content: View>: View {
                 .padding(.horizontal, BookshelfGlassEditBarMetrics.horizontalPadding)
                 .padding(.vertical, BookshelfGlassEditBarMetrics.verticalPadding)
         }
-        .scrollBounceBehavior(.basedOnSize, axes: .horizontal)
+        .scrollBounceBehavior(.always, axes: .horizontal)
         .frame(maxWidth: .infinity)
         .frame(height: BookshelfGlassEditBarMetrics.clusterHeight)
         .compositingGroup()

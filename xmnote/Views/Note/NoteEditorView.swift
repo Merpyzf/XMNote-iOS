@@ -2342,8 +2342,8 @@ private struct NoteEditorChapterPickerSheet: View {
             .navigationTitle("章节")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    TopBarBackButton {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("取消") {
                         dismiss()
                     }
                 }
@@ -2414,8 +2414,8 @@ private struct NoteEditorTagPickerSheet: View {
             .navigationTitle("标签")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    TopBarBackButton {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("完成") {
                         dismiss()
                     }
                 }
@@ -2444,8 +2444,8 @@ private struct NoteEditorDateSheet: View {
             .navigationTitle("创建时间")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    TopBarBackButton {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("完成") {
                         dismiss()
                     }
                 }

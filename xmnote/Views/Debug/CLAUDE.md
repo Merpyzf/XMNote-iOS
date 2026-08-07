@@ -9,6 +9,7 @@
 - `HeatmapTestView.swift`: 热力图组件可视化调试页面
 - `ImageLoadingTestView.swift`: 图片加载测试页面（静态图/GIF/失败链路与缓存来源观测）
 - `ReadCalendarCoverStackTestView.swift`: 阅读日历封面堆栈可视化调试页面
+- `NoteReviewPagingTestView.swift`: 书摘回顾分页卡组可视化调试页面
 - `RichTextTestView.swift`: 富文本编辑器调试页面
 - `SystemColorsTestView.swift`: 系统语义色与自定义语义色调试页面
 

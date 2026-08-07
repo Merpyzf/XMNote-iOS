@@ -2,7 +2,7 @@
 import SwiftUI
 
 /**
- * [INPUT]: 依赖 RichTextTestView、HeatmapTestView、SystemAlertTestView、PopupViewToastTestView、RatingBarTestView、BookSelectionTestView、SelectionMotionTestView、AppleMusicTransitionLabView、XMScopeSelectorTestView、SearchHistoryTestView、SearchableSystemBugReproView、XMScrollEdgeChromeTestView、BookReorderSandboxTestView、ImageLoadingTestView、WebHTMLFetchTestView、CameraTextCaptureTestView、BaiduOCRTestView、JXPhotoBrowserTestView、ReadCalendarCoverStackTestView、BookCoverStyleTestView、BookCoverProgressBarTestView、BookCoverBadgeEffectTestView、TopBarActionStyleLabTestView、LiquidGlassLabTestView、SystemColorsTestView、TimelineCardsTestView、TimelineCalendarHorizonTestView 作为导航目的地
+ * [INPUT]: 依赖 RichText、FadeOverflowText、Heatmap、SystemAlert、Toast、Rating、BookSelection、SelectionMotion、AppleMusicTransition、ScopeSelector、Search、ScrollEdge、BookReorder、ImageLoading、Web、OCR、JXPhotoBrowser、ReadCalendar、NoteReview、BookCover、TopBar、LiquidGlass、SystemColors 与 Timeline 调试页面
  * [OUTPUT]: 对外提供 DebugCenterView（测试中心列表页）
  * [POS]: Debug 测试入口页，集中展示所有控件测试项，由 PersonalView 跳转进入
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -26,6 +26,12 @@ struct DebugCenterView: View {
             title: "富文本编辑器",
             subtitle: "格式能力与 HTML 往返一致性",
             destination: AnyView(RichTextTestView())
+        ),
+        DebugItem(
+            icon: "text.alignleft",
+            title: "长文本披露",
+            subtitle: "正式末行内联展开组件的主题、行数与富文本验收",
+            destination: AnyView(FadeOverflowTextTestView())
         ),
         DebugItem(
             icon: "chart.dots.scatter",
@@ -134,6 +140,12 @@ struct DebugCenterView: View {
             title: "阅读日历封面堆叠",
             subtitle: "扇形层级、阴影分离与网格溢出效果验证",
             destination: AnyView(ReadCalendarCoverStackTestView())
+        ),
+        DebugItem(
+            icon: "rectangle.stack",
+            title: "书摘回顾卡堆",
+            subtitle: "BigUIPaging Core + XMNote 自定义卡堆动效与长文滚动仲裁",
+            destination: AnyView(NoteReviewPagingTestView())
         ),
         DebugItem(
             icon: "book.closed",

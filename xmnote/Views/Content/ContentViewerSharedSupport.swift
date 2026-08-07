@@ -15,7 +15,7 @@ enum ContentViewerPresentationStyle {
 
     init(source: ContentViewerSourceContext) {
         switch source {
-        case .bookNotes:
+        case .bookNotes, .noteReview:
             self = .noteOnly
         case .timeline(_, _, let filter):
             self = filter == .note ? .noteOnly : .general

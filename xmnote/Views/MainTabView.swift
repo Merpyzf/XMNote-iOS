@@ -661,6 +661,9 @@ struct MainTabView: View {
             .navigationDestination(for: ContentRoute.self) { route in
                 contentDestination(for: route)
             }
+            .navigationDestination(for: ReadCalendarRoute.self) { route in
+                readCalendarTaskDestination(for: route)
+            }
         }
         .environment(navigationCoordinator)
         .accessibilityAddTraits(.isModal)
@@ -715,7 +718,15 @@ struct MainTabView: View {
                 navigationContext: navigationContext
             )
         case .readCalendar(let initialDate):
-            ReadCalendarView(date: initialDate)
+            ReadCalendarView(
+                date: initialDate,
+                onOpenRoute: { route in
+                    navigationCoordinator.taskPath.append(route)
+                },
+                onOpenPremium: {
+                    navigationCoordinator.exitTask(to: .personal(.premium))
+                }
+            )
                 .appTaskRootDismissControl(
                     isVisible: navigationContext == .modalRoot,
                     style: .collapse(accessibilityLabel: "关闭阅读日历")
@@ -1002,6 +1013,28 @@ struct MainTabView: View {
 
     // MARK: - Book Destinations
 
+    /// 在阅读日历的独立全屏任务栈内继续打开日期详情或分享页，并把后续业务路由留在同一现场。
+    @ViewBuilder
+    private func readCalendarTaskDestination(for route: ReadCalendarRoute) -> some View {
+        switch route {
+        case .daily(let date):
+            DailyReadingView(
+                date: date,
+                onOpenBookRoute: { navigationCoordinator.taskPath.append($0) },
+                onOpenNoteRoute: { navigationCoordinator.taskPath.append($0) },
+                onOpenContentRoute: { navigationCoordinator.taskPath.append($0) }
+            )
+        case .share(let monthStart, let initialType):
+            ReadCalendarShareView(
+                monthStart: monthStart,
+                initialType: initialType,
+                onOpenPremium: {
+                    navigationCoordinator.exitTask(to: .personal(.premium))
+                }
+            )
+        }
+    }
+
     @ViewBuilder
     private func bookDestination(for route: BookRoute) -> some View {
         switch route {
@@ -1026,6 +1059,19 @@ struct MainTabView: View {
                     origin: .tab(selectedTab)
                 )
             )
+        case .readingDetail(let bookId):
+            BookReadingDetailView(
+                bookID: bookId,
+                onOpenBookRoute: { route in
+                    append(route, to: selectedTab)
+                }
+            )
+        case .edit(let bookId):
+            BookEditorView(mode: .edit(bookId: bookId))
+        case .add:
+            BookSearchView()
+        case .create(let seed):
+            BookEditorView(seed: seed)
         case .bookshelfList(let route):
             BookshelfBookListView(
                 route: route,
@@ -1053,6 +1099,10 @@ struct MainTabView: View {
         switch route {
         case .detail(let noteId):
             NoteDetailView(noteId: noteId)
+        case .edit(let noteId):
+            NoteEditorView(mode: .edit(noteId: noteId))
+        case .create(let seed):
+            NoteEditorView(mode: .create, seed: seed)
         case .notesByTag:
             Text("标签笔记")
         }
@@ -1063,10 +1113,20 @@ struct MainTabView: View {
     @ViewBuilder
     private func contentDestination(for route: ContentRoute) -> some View {
         switch route {
+        case .contentViewer(let source, let initialItemID, let keyword):
+            ContentViewerView(
+                source: source,
+                initialItemID: initialItemID,
+                keyword: keyword
+            )
         case .reviewDetail(let reviewId):
             ReviewDetailView(reviewId: reviewId)
         case .relevantDetail(let contentId):
             RelevantDetailView(contentId: contentId)
+        case .reviewEditor(let reviewId):
+            ReviewEditorView(reviewId: reviewId)
+        case .relevantEditor(let contentId):
+            RelevantEditorView(contentId: contentId)
         }
     }
 

@@ -23,6 +23,8 @@
 | CollapsedRichTextPreview | UI-复用关键 | xmnote/UIComponents/Foundation/CollapsedRichTextPreview.swift | docs/component-guides/ExpandableRichText使用说明.md | 新增/重大重构 |
 | ImmersiveBottomChrome | UI-复用关键 | xmnote/UIComponents/Foundation/ImmersiveBottomChrome.swift | docs/component-guides/ImmersiveBottomChrome使用说明.md | 新增/重大重构 |
 | XMToast | UI-复用关键 | xmnote/UIComponents/Foundation/XMToast.swift | docs/component-guides/XMToast使用说明.md | 新增/重大重构 |
+| XMSettingsSheetComponents | UI-复用关键 | xmnote/UIComponents/Foundation/XMSettingsSheetComponents.swift | docs/component-guides/XMSettingsSheetComponents使用说明.md | 新增/重大重构 |
+| NoteReviewPagingDeck | UI-复用关键 | xmnote/UIComponents/Foundation/NoteReviewPaging/NoteReviewPagingDeck.swift | docs/component-guides/NoteReviewPagingDeck使用说明.md | 新增/重大重构 |
 | TopSwitcher | UI-复用关键 | xmnote/UIComponents/Tabs/TopSwitcher.swift | docs/component-guides/TopSwitcher使用说明.md | 新增/重大重构 |
 | KeepAliveSwitcherHost | UI-复用关键 | xmnote/UIComponents/Tabs/KeepAliveSwitcherHost.swift | docs/component-guides/KeepAliveSwitcherHost使用说明.md | 新增/重大重构 |
 | HomeSubtabScaffold | UI-复用关键 | xmnote/UIComponents/Tabs/HomeSubtabScaffold.swift | docs/component-guides/HomeSubtabScaffold使用说明.md | 新增/重大重构 |
@@ -41,6 +43,7 @@
 | NoteCollectionView | UI-核心页面关键 | xmnote/Views/Note/NoteCollectionView.swift | docs/component-guides/NoteCollectionView使用说明.md | 新增/重大重构 |
 | NoteTagsView | UI-核心页面关键 | xmnote/Views/Note/NoteTagsView.swift | docs/component-guides/NoteTagsView使用说明.md | 新增/重大重构 |
 | NoteDetailView | UI-核心页面关键 | xmnote/Views/Note/NoteDetailView.swift | docs/component-guides/NoteDetailView使用说明.md | 新增/重大重构 |
+| NoteReviewView | UI-核心页面关键 | xmnote/Views/Note/NoteReviewView.swift | docs/component-guides/NoteReviewView使用说明.md | 新增/重大重构 |
 | DataBackupView | UI-核心页面关键 | xmnote/Views/Personal/Backup/DataBackupView.swift | docs/component-guides/DataBackupView使用说明.md | 新增/重大重构 |
 | WebDAVServerListView | UI-核心页面关键 | xmnote/Views/Personal/Backup/WebDAVServerListView.swift | docs/component-guides/WebDAVServerListView使用说明.md | 新增/重大重构 |
 | WebDAVServerFormView | UI-核心页面关键 | xmnote/Views/Personal/Backup/WebDAVServerFormView.swift | docs/component-guides/WebDAVServerFormView使用说明.md | 新增/重大重构 |

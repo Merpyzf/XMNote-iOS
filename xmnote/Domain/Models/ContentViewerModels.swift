@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 Foundation 提供标识、时间戳与 URL 等跨层基础类型
- * [OUTPUT]: 对外提供 ContentViewerSourceContext、ContentViewerItemID、ContentViewerListItem、ContentViewerDetail、ReviewEditorDraft、RelevantEditorDraft
+ * [OUTPUT]: 对外提供 ContentViewerSourceContext、ContentViewerItemID、ContentViewerListItem、ContentViewerDetail 与各内容编辑草稿
  * [POS]: Domain/Models 的通用内容查看领域模型，供 Repository、ViewModel 与 Viewer/Editor 页面共享
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -19,6 +19,7 @@ nonisolated enum TimelineContentFilter: Hashable, Sendable, Codable {
 nonisolated enum ContentViewerSourceContext: Hashable, Sendable, Codable {
     case timeline(startTimestamp: Int64, endTimestamp: Int64, filter: TimelineContentFilter)
     case bookNotes(bookId: Int64)
+    case noteReview(noteIDs: [Int64])
 }
 
 /// 通用查看器单项身份，保证分页选择与详情查询使用统一 ID。
@@ -143,4 +144,11 @@ nonisolated struct RelevantEditorDraft: Equatable, Sendable {
     var contentHTML: String
     var url: String
     let imageURLs: [String]
+}
+
+/// 相关书籍编辑草稿，只允许更换关联目标书，分类由 Android 业务常量固定为“书籍”。
+nonisolated struct RelatedBookRelationDraft: Identifiable, Hashable, Sendable {
+    let id: Int64
+    let sourceBookID: Int64
+    var contentBook: BookPickerBook
 }

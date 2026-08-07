@@ -20,6 +20,8 @@
 - `ExpandableRichText.swift`: 可展开/收起 HTML 富文本组件（完整态 RichText + 收起态轻量预览双通道）
 - `ImmersiveBottomChrome.swift`: 底部沉浸遮罩与悬浮 ornament 组件（统一渐变托底、安全区延展、滚动补偿与图标热区）
 - `XMToast.swift`: 全局轻量消息提示基建（统一 Toast 角色、时长、位置、动效、布局与 PopupView 封装）
+- `XMSettingsSheetComponents.swift`: 通用设置 Sheet 组件组（标题栏、分组卡片、跳转行、菜单行与开关行）
+- `NoteReviewPaging/`: 书摘回顾分页卡组组件（BigUIPaging 封装、卡组动效规格、后层内容预览与堆叠露出约束）
 
 ## TopBar/
 

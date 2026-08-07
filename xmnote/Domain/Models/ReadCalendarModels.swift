@@ -2,8 +2,8 @@ import Foundation
 
 /**
  * [INPUT]: 依赖 Foundation 提供 Date 与集合类型
- * [OUTPUT]: 对外提供阅读日历领域模型（ReadCalendarDayBook/ReadCalendarDay/ReadCalendarMonthData/ReadCalendarMonthSummary/ReadCalendarTimeSlot/ReadCalendarMonthlyDurationBook/ReadCalendarEventRun/ReadCalendarEventSegment/ReadCalendarWeekLayout/ReadCalendarRenderMode/ReadCalendarSegmentColor）
- * [POS]: Domain 层阅读日历数据结构定义，供 StatisticsRepository 产出、ReadCalendarViewModel 与视图层消费
+ * [OUTPUT]: 对外提供阅读日历、全量书籍贡献、月度摘要、同期比较、当日阅读汇总及编辑领域模型
+ * [POS]: Domain 层阅读日历数据结构定义，供 ReadCalendarRepository 产出、ViewModel 与视图层消费
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
@@ -13,20 +13,23 @@ nonisolated struct ReadCalendarDayBook: Identifiable, Hashable {
     let name: String
     let coverURL: String
     let firstEventTime: Int64
+    let lastEventTime: Int64
     let isReadDoneOnThisDay: Bool
 
-    /// 创建单日书籍事件模型，写入书籍基础信息、首个事件时间与读完标记。
+    /// 创建单日书籍事件模型，写入书籍基础信息、首末事件时间与读完标记。
     init(
         id: Int64,
         name: String,
         coverURL: String,
         firstEventTime: Int64,
+        lastEventTime: Int64? = nil,
         isReadDoneOnThisDay: Bool = false
     ) {
         self.id = id
         self.name = name
         self.coverURL = coverURL
         self.firstEventTime = firstEventTime
+        self.lastEventTime = lastEventTime ?? firstEventTime
         self.isReadDoneOnThisDay = isReadDoneOnThisDay
     }
 }
@@ -38,20 +41,71 @@ nonisolated struct ReadCalendarDay: Hashable {
     let readDoneCount: Int
     let readSeconds: Int
     let noteCount: Int
+    let contentActivityCount: Int
     let checkInCount: Int
+    let checkInAmount: Int
     let checkInSeconds: Int
+
+    /// 构造单日聚合结果；新增字段提供默认值以兼容旧调用方逐步迁移。
+    init(
+        date: Date,
+        books: [ReadCalendarDayBook],
+        readDoneCount: Int,
+        readSeconds: Int,
+        noteCount: Int,
+        contentActivityCount: Int = 0,
+        checkInCount: Int,
+        checkInAmount: Int = 0,
+        checkInSeconds: Int
+    ) {
+        self.date = date
+        self.books = books
+        self.readDoneCount = readDoneCount
+        self.readSeconds = readSeconds
+        self.noteCount = noteCount
+        self.contentActivityCount = contentActivityCount
+        self.checkInCount = checkInCount
+        self.checkInAmount = checkInAmount
+        self.checkInSeconds = checkInSeconds
+    }
 
     var isReadDoneDay: Bool {
         readDoneCount > 0
     }
 
-    /// 对齐在读页热力图：阅读时长/书摘数/打卡时长三者取最大档位
+    /// 对齐 Android 阅读日历：时长、内容活动、打卡量与读完标记取最大档位。
     var heatmapLevel: HeatmapLevel {
-        let readLevel = HeatmapLevel.from(readSeconds: readSeconds)
-        let noteLevel = HeatmapLevel.from(noteCount: noteCount)
-        let checkInLevel = HeatmapLevel.from(checkInSeconds: checkInSeconds)
-        let maxRaw = max(max(readLevel.rawValue, noteLevel.rawValue), checkInLevel.rawValue)
+        let readLevel = Self.readHeatmapLevel(seconds: readSeconds)
+        let contentLevel = Self.countHeatmapLevel(count: noteCount + contentActivityCount)
+        let checkInLevel = Self.countHeatmapLevel(count: max(checkInCount, checkInAmount))
+        let readDoneLevel = readDoneCount > 0 ? HeatmapLevel.less : .none
+        let maxRaw = max(
+            max(readLevel.rawValue, contentLevel.rawValue),
+            max(checkInLevel.rawValue, readDoneLevel.rawValue)
+        )
         return HeatmapLevel(rawValue: maxRaw) ?? .none
+    }
+
+    /// 把阅读秒数映射为 Android 阅读日历的 15/30/60 分钟五级阈值。
+    private static func readHeatmapLevel(seconds: Int) -> HeatmapLevel {
+        switch seconds {
+        case ...0: .none
+        case 1..<900: .veryLess
+        case 900..<1_800: .less
+        case 1_800..<3_600: .more
+        default: .veryMore
+        }
+    }
+
+    /// 把内容数或打卡量映射为 Android 阅读日历的 1/2/3-4/5+ 五级阈值。
+    private static func countHeatmapLevel(count: Int) -> HeatmapLevel {
+        switch count {
+        case ...0: .none
+        case 1: .veryLess
+        case 2: .less
+        case 3...4: .more
+        default: .veryMore
+        }
     }
 }
 
@@ -60,7 +114,23 @@ nonisolated struct ReadCalendarMonthData: Hashable {
     let monthStart: Date
     let days: [Date: ReadCalendarDay]
     let readingDurationTopBooks: [ReadCalendarMonthlyDurationBook]
+    let bookContributions: [ReadCalendarBookContribution]
     let summary: ReadCalendarMonthSummary
+
+    /// 构造单月完整聚合；书籍贡献保留所有活跃书籍，不能由截断后的排行榜反推。
+    init(
+        monthStart: Date,
+        days: [Date: ReadCalendarDay],
+        readingDurationTopBooks: [ReadCalendarMonthlyDurationBook],
+        bookContributions: [ReadCalendarBookContribution] = [],
+        summary: ReadCalendarMonthSummary
+    ) {
+        self.monthStart = monthStart
+        self.days = days
+        self.readingDurationTopBooks = readingDurationTopBooks
+        self.bookContributions = bookContributions
+        self.summary = summary
+    }
 
     /// 构造空月份默认数据，保证无记录月份也可稳定渲染。
     static func empty(for monthStart: Date) -> ReadCalendarMonthData {
@@ -68,6 +138,7 @@ nonisolated struct ReadCalendarMonthData: Hashable {
             monthStart: monthStart,
             days: [:],
             readingDurationTopBooks: [],
+            bookContributions: [],
             summary: .empty
         )
     }
@@ -83,6 +154,27 @@ nonisolated struct ReadCalendarMonthlyDurationBook: Identifiable, Hashable {
     var id: Int64 { bookId }
 }
 
+/// 阅读日历周期内单本书的完整贡献，用于分享排除与全量排行重算。
+nonisolated struct ReadCalendarBookContribution: Identifiable, Hashable {
+    let bookId: Int64
+    let name: String
+    let coverURL: String
+    let readSeconds: Int
+    let activeDays: Int
+
+    var id: Int64 { bookId }
+
+    /// 转换为现有排行展示模型，避免页面层重复拼装书籍元数据。
+    var durationBook: ReadCalendarMonthlyDurationBook {
+        ReadCalendarMonthlyDurationBook(
+            bookId: bookId,
+            name: name,
+            coverURL: coverURL,
+            readSeconds: readSeconds
+        )
+    }
+}
+
 /// 月度阅读时段（按本地时间小时段）
 nonisolated enum ReadCalendarTimeSlot: String, CaseIterable, Hashable {
     case morning
@@ -93,16 +185,68 @@ nonisolated enum ReadCalendarTimeSlot: String, CaseIterable, Hashable {
 
 /// 阅读日历月度摘要（供总结 Sheet 展示）
 nonisolated struct ReadCalendarMonthSummary: Hashable {
+    let activeDays: Int
+    let totalDays: Int
+    let longestStreak: Int
     let uniqueReadBookCount: Int
     let finishedBookCount: Int
     let noteCount: Int
+    let checkInCount: Int
     let totalReadSeconds: Int
     let timeSlotReadSeconds: [ReadCalendarTimeSlot: Int]
+    let peakTimeSlot: ReadCalendarTimeSlot?
+    let peakTimeSlotRatio: Int?
+    let activeDaysDelta: Int?
+    let readSecondsDelta: Int?
+    let uniqueReadBookCountDelta: Int?
+    let finishedBookCountDelta: Int?
+    let noteCountDelta: Int?
+
+    /// 构造月度摘要；缺少有效上一周期时比较字段保持为空，避免伪造零值环比。
+    init(
+        activeDays: Int = 0,
+        totalDays: Int = 0,
+        longestStreak: Int = 0,
+        uniqueReadBookCount: Int,
+        finishedBookCount: Int,
+        noteCount: Int,
+        checkInCount: Int = 0,
+        totalReadSeconds: Int,
+        timeSlotReadSeconds: [ReadCalendarTimeSlot: Int],
+        peakTimeSlot: ReadCalendarTimeSlot? = nil,
+        peakTimeSlotRatio: Int? = nil,
+        activeDaysDelta: Int? = nil,
+        readSecondsDelta: Int? = nil,
+        uniqueReadBookCountDelta: Int? = nil,
+        finishedBookCountDelta: Int? = nil,
+        noteCountDelta: Int? = nil
+    ) {
+        self.activeDays = activeDays
+        self.totalDays = totalDays
+        self.longestStreak = longestStreak
+        self.uniqueReadBookCount = uniqueReadBookCount
+        self.finishedBookCount = finishedBookCount
+        self.noteCount = noteCount
+        self.checkInCount = checkInCount
+        self.totalReadSeconds = totalReadSeconds
+        self.timeSlotReadSeconds = timeSlotReadSeconds
+        self.peakTimeSlot = peakTimeSlot
+        self.peakTimeSlotRatio = peakTimeSlotRatio
+        self.activeDaysDelta = activeDaysDelta
+        self.readSecondsDelta = readSecondsDelta
+        self.uniqueReadBookCountDelta = uniqueReadBookCountDelta
+        self.finishedBookCountDelta = finishedBookCountDelta
+        self.noteCountDelta = noteCountDelta
+    }
 
     static let empty = ReadCalendarMonthSummary(
+        activeDays: 0,
+        totalDays: 0,
+        longestStreak: 0,
         uniqueReadBookCount: 0,
         finishedBookCount: 0,
         noteCount: 0,
+        checkInCount: 0,
         totalReadSeconds: 0,
         timeSlotReadSeconds: [:]
     )
@@ -110,6 +254,124 @@ nonisolated struct ReadCalendarMonthSummary: Hashable {
     /// 读取指定时段的阅读秒数；缺省时返回 0。
     func readSeconds(in slot: ReadCalendarTimeSlot) -> Int {
         timeSlotReadSeconds[slot] ?? 0
+    }
+
+    /// 合并上一周期快照并生成五类可选环比；上一周期无有效行为时保持无对比状态。
+    func applyingComparison(_ previous: ReadCalendarSummaryComparisonSnapshot?) -> ReadCalendarMonthSummary {
+        let comparablePrevious = previous?.hasActivity == true ? previous : nil
+        return ReadCalendarMonthSummary(
+            activeDays: activeDays,
+            totalDays: totalDays,
+            longestStreak: longestStreak,
+            uniqueReadBookCount: uniqueReadBookCount,
+            finishedBookCount: finishedBookCount,
+            noteCount: noteCount,
+            checkInCount: checkInCount,
+            totalReadSeconds: totalReadSeconds,
+            timeSlotReadSeconds: timeSlotReadSeconds,
+            peakTimeSlot: peakTimeSlot,
+            peakTimeSlotRatio: peakTimeSlotRatio,
+            activeDaysDelta: comparablePrevious.map { activeDays - $0.activeDays },
+            readSecondsDelta: comparablePrevious.map { totalReadSeconds - $0.totalReadSeconds },
+            uniqueReadBookCountDelta: comparablePrevious.map { uniqueReadBookCount - $0.uniqueReadBookCount },
+            finishedBookCountDelta: comparablePrevious.map { finishedBookCount - $0.finishedBookCount },
+            noteCountDelta: comparablePrevious.map { noteCount - $0.noteCount }
+        )
+    }
+}
+
+/// 阅读日历统计对比快照，集中承载月度与年度同期比较所需的五类指标。
+nonisolated struct ReadCalendarSummaryComparisonSnapshot: Hashable {
+    let activeDays: Int
+    let totalReadSeconds: Int
+    let uniqueReadBookCount: Int
+    let finishedBookCount: Int
+    let noteCount: Int
+
+    var hasActivity: Bool {
+        activeDays > 0
+            || totalReadSeconds > 0
+            || uniqueReadBookCount > 0
+            || finishedBookCount > 0
+            || noteCount > 0
+    }
+
+    /// 从 Repository 产出的每日快照聚合比较指标，可按截止日裁切当前周期的同期范围。
+    static func make(
+        days: [Date: ReadCalendarDay],
+        through cutoff: Date? = nil,
+        calendar: Calendar = .current
+    ) -> ReadCalendarSummaryComparisonSnapshot {
+        let normalizedCutoff = cutoff.map { calendar.startOfDay(for: $0) }
+        let includedDays = days.filter { date, _ in
+            guard let normalizedCutoff else { return true }
+            return calendar.startOfDay(for: date) <= normalizedCutoff
+        }
+        let values = includedDays.map(\.value)
+        let uniqueBookIDs = Set(values.flatMap { $0.books.map(\.id) })
+        let finishedBookIDs = Set(values.flatMap { day in
+            day.books.filter(\.isReadDoneOnThisDay).map(\.id)
+        })
+        return ReadCalendarSummaryComparisonSnapshot(
+            activeDays: values.count { !$0.books.isEmpty || $0.isReadDoneDay },
+            totalReadSeconds: values.reduce(0) { $0 + $1.readSeconds },
+            uniqueReadBookCount: uniqueBookIDs.count,
+            finishedBookCount: finishedBookIDs.count,
+            noteCount: values.reduce(0) { $0 + $1.noteCount }
+        )
+    }
+}
+
+/// 阅读日历同期边界计算器，负责短月与闰年日期的安全收口。
+nonisolated enum ReadCalendarSummaryComparison {
+    /// 当前月返回上月同日截止日期，历史月返回 nil 表示比较完整上月。
+    static func previousMonthCutoff(
+        selectedMonthStart: Date,
+        now: Date = Date(),
+        calendar: Calendar = .current
+    ) -> Date? {
+        guard calendar.isDate(selectedMonthStart, equalTo: now, toGranularity: .month),
+              let previousMonthStart = calendar.date(byAdding: .month, value: -1, to: selectedMonthStart) else {
+            return nil
+        }
+        let requestedDay = calendar.component(.day, from: now)
+        return clampedDate(
+            year: calendar.component(.year, from: previousMonthStart),
+            month: calendar.component(.month, from: previousMonthStart),
+            day: requestedDay,
+            calendar: calendar
+        )
+    }
+
+    /// 当前年返回上年同月同日截止日期，历史年返回 nil 表示比较完整上一年。
+    static func previousYearCutoff(
+        selectedYear: Int,
+        now: Date = Date(),
+        calendar: Calendar = .current
+    ) -> Date? {
+        guard selectedYear == calendar.component(.year, from: now) else { return nil }
+        return clampedDate(
+            year: selectedYear - 1,
+            month: calendar.component(.month, from: now),
+            day: calendar.component(.day, from: now),
+            calendar: calendar
+        )
+    }
+
+    /// 将目标年月日收口到该月最后一个有效自然日。
+    private static func clampedDate(
+        year: Int,
+        month: Int,
+        day: Int,
+        calendar: Calendar
+    ) -> Date? {
+        guard let monthStart = calendar.date(from: DateComponents(year: year, month: month, day: 1)),
+              let dayRange = calendar.range(of: .day, in: .month, for: monthStart) else {
+            return nil
+        }
+        let clampedDay = min(max(day, dayRange.lowerBound), dayRange.upperBound - 1)
+        return calendar.date(from: DateComponents(year: year, month: month, day: clampedDay))
+            .map { calendar.startOfDay(for: $0) }
     }
 }
 
@@ -270,4 +532,142 @@ nonisolated enum ReadCalendarEventType: CaseIterable, Hashable {
     case review       // review（书评）
     case readDone     // book_read_status_record
     case checkIn      // check_in_record
+}
+
+// MARK: - 当日阅读
+
+/// 当日单书聚合，供二级页面按书展示阅读行为摘要。
+nonisolated struct DailyReadingBookSummary: Identifiable, Hashable {
+    let book: ReadCalendarDayBook
+    let readSeconds: Int
+    let noteCount: Int
+    let relevantCount: Int
+    let reviewCount: Int
+    let checkInCount: Int
+    let readDoneCount: Int
+
+    var id: Int64 { book.id }
+
+    var hasActivity: Bool {
+        readSeconds > 0 || noteCount > 0 || relevantCount > 0 || reviewCount > 0 || checkInCount > 0 || readDoneCount > 0
+    }
+}
+
+/// 当日阅读汇总，保存二级页面标题与指标计算所需的完整原始计数。
+nonisolated struct DailyReadingSummary: Hashable {
+    let date: Date
+    let books: [DailyReadingBookSummary]
+    let readSeconds: Int
+    let noteCount: Int
+    let relevantCount: Int
+    let reviewCount: Int
+    let checkInCount: Int
+    let finishedBookCount: Int
+
+    static func empty(for date: Date) -> DailyReadingSummary {
+        DailyReadingSummary(
+            date: date,
+            books: [],
+            readSeconds: 0,
+            noteCount: 0,
+            relevantCount: 0,
+            reviewCount: 0,
+            checkInCount: 0,
+            finishedBookCount: 0
+        )
+    }
+}
+
+/// 当日阅读轨迹筛选；读完只展示完成里程碑，不混入其他阅读状态变化。
+nonisolated enum DailyReadingTimelineFilter: String, CaseIterable, Identifiable, Hashable, Codable {
+    case all
+    case note
+    case relevant
+    case review
+    case checkIn
+    case readTiming
+    case readDone
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .all: "全部"
+        case .note: "书摘"
+        case .relevant: "相关"
+        case .review: "书评"
+        case .checkIn: "打卡"
+        case .readTiming: "计时"
+        case .readDone: "读完"
+        }
+    }
+}
+
+/// 单书当日时间线排序方向。
+nonisolated enum DailyReadingSortOrder: String, CaseIterable, Identifiable, Hashable, Codable {
+    case descending
+    case ascending
+
+    var id: String { rawValue }
+
+    var title: String { self == .descending ? "从新到旧" : "从旧到新" }
+}
+
+/// 当日阅读轨迹记录；读完里程碑没有可写主键，其余记录保留主键以支持编辑与物理删除。
+nonisolated struct DailyReadingRecord: Identifiable, Equatable {
+    let recordID: Int64?
+    let event: TimelineEvent
+
+    var id: String { event.id }
+
+    var isFuzzyTiming: Bool {
+        guard case .readTiming(let timing) = event.kind else { return false }
+        return timing.fuzzyReadDate != 0
+    }
+}
+
+/// 当日阅读轨迹快照，同时提供稳定书籍筛选项和当前条件下的全部记录。
+nonisolated struct DailyReadingTrajectory: Equatable {
+    let date: Date
+    let books: [DailyReadingBookSummary]
+    let records: [DailyReadingRecord]
+
+    static func empty(for date: Date) -> DailyReadingTrajectory {
+        DailyReadingTrajectory(
+            date: Calendar.current.startOfDay(for: date),
+            books: [],
+            records: []
+        )
+    }
+}
+
+/// 打卡新增/编辑草稿；recordID 为空表示按“同书同日”规则新增或更新。
+nonisolated struct ReadCalendarCheckInDraft: Hashable {
+    let recordID: Int64?
+    let bookID: Int64
+    let amount: Int
+    let date: Date
+}
+
+/// 阅读计时记录类型，对齐 Android 精确时间与模糊时间两种补录方式。
+nonisolated enum ReadCalendarTimingKind: String, CaseIterable, Identifiable, Hashable, Codable {
+    case accurate
+    case fuzzy
+
+    var id: String { rawValue }
+}
+
+/// 计时编辑草稿，包含 Android 阅读时间记录页允许修改的业务字段。
+nonisolated struct ReadCalendarTimingDraft: Hashable {
+    let recordID: Int64
+    let bookID: Int64
+    let kind: ReadCalendarTimingKind
+    let startDate: Date?
+    let endDate: Date?
+    let fuzzyDate: Date?
+    let elapsedSeconds: Int64
+    let position: Double
+    let recordedPositionUnit: Int64?
+    let insight: String
+    let shouldMarkReadDone: Bool
 }
