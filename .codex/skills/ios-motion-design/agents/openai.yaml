@@ -1,0 +1,7 @@
+interface:
+  display_name: "iOS Motion Design"
+  short_description: "为 XMNote 提供原生、克制且可访问的 SwiftUI 动效指导"
+  default_prompt: "Use $ios-motion-design to design or review this XMNote SwiftUI interaction with purposeful, interruptible, and accessible motion."
+
+policy:
+  allow_implicit_invocation: true
