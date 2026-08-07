@@ -41,6 +41,7 @@ enum S3StorageError: LocalizedError, Equatable {
     case cancelled
     case serviceError(code: Int?, message: String)
     case invalidResponse
+    case invalidImageData
 
     var errorDescription: String? {
         switch self {
@@ -58,6 +59,8 @@ enum S3StorageError: LocalizedError, Equatable {
             return message
         case .invalidResponse:
             return "S3 响应格式异常"
+        case .invalidImageData:
+            return "图片数据无效"
         }
     }
 }

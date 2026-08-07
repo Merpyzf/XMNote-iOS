@@ -8,8 +8,8 @@
 import SwiftUI
 
 /**
- * [INPUT]: 依赖可选 AppRuntimeContext、五个业务根容器与路由枚举，依赖 SceneStateStore、BookCollectionImportRouter、openURL 与 SwiftUI search focus
- * [OUTPUT]: 对外提供 MainTabView，常驻五 Tab 导航骨架，在运行时依赖未就绪时展示静态结构壳层，就绪后原位接入生产页面并在栈内稳定注册 scene/深链/搜索路由
+ * [INPUT]: 依赖可选 AppRuntimeContext、五个业务根容器与含稳定页面标题上下文的路由枚举，依赖 SceneStateStore、BookCollectionImportRouter、openURL 与 SwiftUI search focus
+ * [OUTPUT]: 对外提供 MainTabView，常驻五 Tab 导航骨架，在运行时依赖未就绪时展示静态结构壳层，就绪后原位接入生产页面并在栈内稳定注册 scene/深链/搜索路由及章节真实标题
  * [POS]: 应用根导航入口，负责启动期壳层与生产内容切换、跨模块路由、五栈恢复写回和搜索结果独立导航现场
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -158,8 +158,8 @@ struct MainTabView: View {
                         }
                     }
                     .navigationDestination(for: NoteRoute.self) { route in
-                        readingRuntimeDestination { _ in
-                            noteDestination(for: route)
+                        readingRuntimeDestination { runtime in
+                            noteDestination(for: route, repositories: runtime.repositories)
                                 .toolbar(.hidden, for: .tabBar)
                         }
                     }
@@ -194,32 +194,31 @@ struct MainTabView: View {
                                 onOpenPressManagement: { append(PersonalRoute.pressManagement, to: .books) },
                                 onOpenGuide: openBookManagementGuide
                             )
-                                .navigationDestination(for: DebugRoute.self) { route in
-                                    debugDestination(for: route)
-                                        .toolbar(.hidden, for: .tabBar)
-                                }
-                                .navigationDestination(for: BookRoute.self) { route in
-                                    bookDestination(for: route)
-                                        .toolbar(.hidden, for: .tabBar)
-                                }
-                                .navigationDestination(for: NoteRoute.self) { route in
-                                    noteDestination(for: route)
-                                        .toolbar(.hidden, for: .tabBar)
-                                }
-                                .navigationDestination(for: ContentRoute.self) { route in
-                                    contentDestination(for: route)
-                                        .toolbar(.hidden, for: .tabBar)
-                                }
-                                .navigationDestination(for: PersonalRoute.self) { route in
-                                    personalDestination(for: route)
-                                        .toolbar(.hidden, for: .tabBar)
-                                }
-                                .navigationDestination(for: ReadCalendarRoute.self) { route in
-                                    readCalendarDestination(for: route)
-                                        .toolbar(.hidden, for: .tabBar)
-                                }
+                            .navigationDestination(for: DebugRoute.self) { route in
+                                debugDestination(for: route)
+                                    .toolbar(.hidden, for: .tabBar)
+                            }
+                            .navigationDestination(for: BookRoute.self) { route in
+                                bookDestination(for: route)
+                                    .toolbar(.hidden, for: .tabBar)
+                            }
+                            .navigationDestination(for: NoteRoute.self) { route in
+                                noteDestination(for: route, repositories: runtime.repositories)
+                                    .toolbar(.hidden, for: .tabBar)
+                            }
+                            .navigationDestination(for: ContentRoute.self) { route in
+                                contentDestination(for: route)
+                                    .toolbar(.hidden, for: .tabBar)
+                            }
+                            .navigationDestination(for: PersonalRoute.self) { route in
+                                personalDestination(for: route)
+                                    .toolbar(.hidden, for: .tabBar)
+                            }
+                            .navigationDestination(for: ReadCalendarRoute.self) { route in
+                                readCalendarDestination(for: route)
+                                    .toolbar(.hidden, for: .tabBar)
+                            }
                         }
-
                         .environment(runtime.databaseManager)
                         .environment(runtime.repositories)
                         .transition(.opacity)
@@ -242,29 +241,31 @@ struct MainTabView: View {
                             NoteContainerView(
                                 onAddBook: { append(BookRoute.add, to: .notes) },
                                 onAddNote: { append(NoteRoute.create(seed: .empty), to: .notes) },
+                                onOpenNoteRoute: { append($0, to: .notes) },
+                                onOpenBookRoute: { append($0, to: selectedTab) },
+                                onOpenContentRoute: { append($0, to: selectedTab) },
                                 onOpenContentViewer: { source, initialItem in
                                     append(contentRoute(for: source, initialItem: initialItem), to: .notes)
                                 },
                                 onOpenDebugCenter: { append(DebugRoute.debugCenter, to: .notes) }
                             )
-                                .navigationDestination(for: DebugRoute.self) { route in
-                                    debugDestination(for: route)
-                                        .toolbar(.hidden, for: .tabBar)
-                                }
-                                .navigationDestination(for: BookRoute.self) { route in
-                                    bookDestination(for: route)
-                                        .toolbar(.hidden, for: .tabBar)
-                                }
-                                .navigationDestination(for: NoteRoute.self) { route in
-                                    noteDestination(for: route)
-                                        .toolbar(.hidden, for: .tabBar)
-                                }
-                                .navigationDestination(for: ContentRoute.self) { route in
-                                    contentDestination(for: route)
-                                        .toolbar(.hidden, for: .tabBar)
-                                }
+                            .navigationDestination(for: DebugRoute.self) { route in
+                                debugDestination(for: route)
+                                    .toolbar(.hidden, for: .tabBar)
+                            }
+                            .navigationDestination(for: BookRoute.self) { route in
+                                bookDestination(for: route)
+                                    .toolbar(.hidden, for: .tabBar)
+                            }
+                            .navigationDestination(for: NoteRoute.self) { route in
+                                noteDestination(for: route, repositories: runtime.repositories)
+                                    .toolbar(.hidden, for: .tabBar)
+                            }
+                            .navigationDestination(for: ContentRoute.self) { route in
+                                contentDestination(for: route)
+                                    .toolbar(.hidden, for: .tabBar)
+                            }
                         }
-
                         .environment(runtime.databaseManager)
                         .environment(runtime.repositories)
                         .transition(.opacity)
@@ -289,32 +290,31 @@ struct MainTabView: View {
                                 onAddNote: { append(NoteRoute.create(seed: .empty), to: .profile) },
                                 onOpenDebugCenter: { append(DebugRoute.debugCenter, to: .profile) }
                             )
-                                .navigationDestination(for: DebugRoute.self) { route in
-                                    debugDestination(for: route)
-                                        .toolbar(.hidden, for: .tabBar)
-                                }
-                                .navigationDestination(for: BookRoute.self) { route in
-                                    bookDestination(for: route)
-                                        .toolbar(.hidden, for: .tabBar)
-                                }
-                                .navigationDestination(for: NoteRoute.self) { route in
-                                    noteDestination(for: route)
-                                        .toolbar(.hidden, for: .tabBar)
-                                }
-                                .navigationDestination(for: ContentRoute.self) { route in
-                                    contentDestination(for: route)
-                                        .toolbar(.hidden, for: .tabBar)
-                                }
-                                .navigationDestination(for: PersonalRoute.self) { route in
-                                    personalDestination(for: route)
-                                        .toolbar(.hidden, for: .tabBar)
-                                }
-                                .navigationDestination(for: ReadCalendarRoute.self) { route in
-                                    readCalendarDestination(for: route)
-                                        .toolbar(.hidden, for: .tabBar)
-                                }
+                            .navigationDestination(for: DebugRoute.self) { route in
+                                debugDestination(for: route)
+                                    .toolbar(.hidden, for: .tabBar)
+                            }
+                            .navigationDestination(for: BookRoute.self) { route in
+                                bookDestination(for: route)
+                                    .toolbar(.hidden, for: .tabBar)
+                            }
+                            .navigationDestination(for: NoteRoute.self) { route in
+                                noteDestination(for: route, repositories: runtime.repositories)
+                                    .toolbar(.hidden, for: .tabBar)
+                            }
+                            .navigationDestination(for: ContentRoute.self) { route in
+                                contentDestination(for: route)
+                                    .toolbar(.hidden, for: .tabBar)
+                            }
+                            .navigationDestination(for: PersonalRoute.self) { route in
+                                personalDestination(for: route)
+                                    .toolbar(.hidden, for: .tabBar)
+                            }
+                            .navigationDestination(for: ReadCalendarRoute.self) { route in
+                                readCalendarDestination(for: route)
+                                    .toolbar(.hidden, for: .tabBar)
+                            }
                         }
-
                         .environment(runtime.databaseManager)
                         .environment(runtime.repositories)
                         .transition(.opacity)
@@ -344,24 +344,23 @@ struct MainTabView: View {
                                 onPrepareHistoryClearConfirmation: dismissGlobalSearchKeyboard,
                                 onOpenSearchResultCover: openSearchResultCover
                             )
-                                .navigationDestination(for: DebugRoute.self) { route in
-                                    debugDestination(for: route)
-                                        .toolbar(.hidden, for: .tabBar)
-                                }
-                                .navigationDestination(for: BookRoute.self) { route in
-                                    bookDestination(for: route)
-                                        .toolbar(.hidden, for: .tabBar)
-                                }
-                                .navigationDestination(for: NoteRoute.self) { route in
-                                    noteDestination(for: route)
-                                        .toolbar(.hidden, for: .tabBar)
-                                }
-                                .navigationDestination(for: ContentRoute.self) { route in
-                                    contentDestination(for: route)
-                                        .toolbar(.hidden, for: .tabBar)
+                            .navigationDestination(for: DebugRoute.self) { route in
+                                debugDestination(for: route)
+                                    .toolbar(.hidden, for: .tabBar)
+                            }
+                            .navigationDestination(for: BookRoute.self) { route in
+                                bookDestination(for: route)
+                                    .toolbar(.hidden, for: .tabBar)
+                            }
+                            .navigationDestination(for: NoteRoute.self) { route in
+                                noteDestination(for: route, repositories: runtime.repositories)
+                                    .toolbar(.hidden, for: .tabBar)
+                            }
+                            .navigationDestination(for: ContentRoute.self) { route in
+                                contentDestination(for: route)
+                                    .toolbar(.hidden, for: .tabBar)
                             }
                         }
-
                         .environment(runtime.databaseManager)
                         .environment(runtime.repositories)
                         .transition(.opacity)
@@ -436,7 +435,7 @@ struct MainTabView: View {
             onDismiss: completeSearchResultCoverDismissal
         ) { cover in
             if let runtime {
-                searchResultCoverContent(for: cover)
+                searchResultCoverContent(for: cover, repositories: runtime.repositories)
                     .environment(runtime.databaseManager)
                     .environment(runtime.repositories)
             }
@@ -496,7 +495,10 @@ struct MainTabView: View {
     }
 
     @ViewBuilder
-    private func searchResultCoverContent(for cover: SearchResultCover) -> some View {
+    private func searchResultCoverContent(
+        for cover: SearchResultCover,
+        repositories: RepositoryContainer
+    ) -> some View {
         NavigationStack(path: $searchResultCoverPath) {
             searchResultCoverDestination(for: cover.target)
                 .navigationDestination(for: BookRoute.self) { route in
@@ -504,7 +506,7 @@ struct MainTabView: View {
                         .toolbar(.hidden, for: .tabBar)
                 }
                 .navigationDestination(for: NoteRoute.self) { route in
-                    noteDestination(for: route)
+                    searchResultNoteDestination(for: route, repositories: repositories)
                         .toolbar(.hidden, for: .tabBar)
                 }
                 .navigationDestination(for: ContentRoute.self) { route in
@@ -547,9 +549,24 @@ struct MainTabView: View {
     private func searchResultBookDestination(for route: BookRoute) -> some View {
         switch route {
         case .detail(let bookId):
-            BookDetailView(bookId: bookId)
+            BookDetailView(
+                bookId: bookId,
+                onOpenContentRoute: { route in
+                    searchResultCoverPath.append(route)
+                },
+                onOpenBookRoute: { route in
+                    searchResultCoverPath.append(route)
+                }
+            )
+        case .chapterManager(let bookID, let focusChapterID):
+            ChapterManagerView(bookID: bookID, focusChapterID: focusChapterID)
         case .edit(let bookId):
             BookEditorView(mode: .edit(bookId: bookId))
+        case .editRelatedPlaceholder(let bookId, let sourceBookId):
+            BookEditorView(mode: .editRelatedPlaceholder(
+                bookId: bookId,
+                sourceBookId: sourceBookId
+            ))
         case .add:
             BookSearchView()
         case .create(let seed):
@@ -570,6 +587,100 @@ struct MainTabView: View {
                 onOpenRoute: { route in
                     searchResultCoverPath.append(route)
                 }
+            )
+        }
+    }
+
+    /// 搜索结果覆盖层内的笔记目的地只写入 cover path，避免下一级内容被追加到底层搜索 Tab 而不可见。
+    @ViewBuilder
+    private func searchResultNoteDestination(
+        for route: NoteRoute,
+        repositories: RepositoryContainer
+    ) -> some View {
+        switch route {
+        case .detail(let noteId):
+            NoteDetailView(noteId: noteId)
+        case .edit(let noteId):
+            NoteEditorView(mode: .edit(noteId: noteId))
+        case .create(let seed):
+            NoteEditorView(mode: .create, seed: seed)
+        case .noteExcerpts(let scope):
+            NoteExcerptListView(
+                context: NoteExcerptListContext(scope: scope, displayTitle: "书摘"),
+                repository: repositories.noteRepository,
+                externalAppIntegrationRepository: repositories.externalAppIntegrationRepository,
+                onOpenViewer: { source, itemID in
+                    searchResultCoverPath.append(contentRoute(for: source, initialItem: itemID))
+                },
+                onOpenNoteRoute: { searchResultCoverPath.append($0) }
+            )
+        case .noteExcerptList(let context):
+            NoteExcerptListView(
+                context: context,
+                repository: repositories.noteRepository,
+                externalAppIntegrationRepository: repositories.externalAppIntegrationRepository,
+                onOpenViewer: { source, itemID in
+                    searchResultCoverPath.append(contentRoute(for: source, initialItem: itemID))
+                },
+                onOpenNoteRoute: { searchResultCoverPath.append($0) }
+            )
+        case .chapterNotes(let bookID, let chapterID, let includeDescendants):
+            ChapterNotesView(
+                context: ChapterNoteListContext(
+                    bookID: bookID,
+                    chapterID: chapterID,
+                    includeDescendants: includeDescendants,
+                    displayTitle: "章节书摘"
+                ),
+                onOpenViewer: { source, itemID in
+                    searchResultCoverPath.append(contentRoute(for: source, initialItem: itemID))
+                },
+                onOpenNoteRoute: { searchResultCoverPath.append($0) }
+            )
+        case .chapterNoteList(let context):
+            ChapterNotesView(
+                context: context,
+                onOpenViewer: { source, itemID in
+                    searchResultCoverPath.append(contentRoute(for: source, initialItem: itemID))
+                },
+                onOpenNoteRoute: { searchResultCoverPath.append($0) }
+            )
+        case .mergeNotes(let bookID, let noteIDs):
+            NoteMergeView(bookID: bookID, noteIDs: noteIDs) { source, itemID in
+                replaceSearchCoverTopWithMergedViewer(source: source, itemID: itemID)
+            }
+        case .relatedCategory(let scope):
+            RelatedCategoryListView(
+                scope: scope,
+                onOpenViewer: { source, itemID in
+                    searchResultCoverPath.append(contentRoute(for: source, initialItem: itemID))
+                },
+                onOpenContentRoute: { searchResultCoverPath.append($0) },
+                onOpenBookRoute: { searchResultCoverPath.append($0) }
+            )
+        case .relatedCategoryManagement:
+            RelatedCategoryListView(
+                scope: .all,
+                onOpenViewer: { source, itemID in
+                    searchResultCoverPath.append(contentRoute(for: source, initialItem: itemID))
+                },
+                onOpenContentRoute: { searchResultCoverPath.append($0) },
+                onOpenBookRoute: { searchResultCoverPath.append($0) }
+            )
+        case .tagManagement:
+            TagManagementView()
+        case .notesByTag(let tagId):
+            NoteExcerptListView(
+                context: NoteExcerptListContext(
+                    scope: NoteExcerptScope(legacyTagID: tagId),
+                    displayTitle: "书摘"
+                ),
+                repository: repositories.noteRepository,
+                externalAppIntegrationRepository: repositories.externalAppIntegrationRepository,
+                onOpenViewer: { source, itemID in
+                    searchResultCoverPath.append(contentRoute(for: source, initialItem: itemID))
+                },
+                onOpenNoteRoute: { searchResultCoverPath.append($0) }
             )
         }
     }
@@ -626,9 +737,24 @@ struct MainTabView: View {
     private func bookDestination(for route: BookRoute) -> some View {
         switch route {
         case .detail(let bookId):
-            BookDetailView(bookId: bookId)
+            BookDetailView(
+                bookId: bookId,
+                onOpenContentRoute: { route in
+                    append(route, to: selectedTab)
+                },
+                onOpenBookRoute: { route in
+                    append(route, to: selectedTab)
+                }
+            )
+        case .chapterManager(let bookID, let focusChapterID):
+            ChapterManagerView(bookID: bookID, focusChapterID: focusChapterID)
         case .edit(let bookId):
             BookEditorView(mode: .edit(bookId: bookId))
+        case .editRelatedPlaceholder(let bookId, let sourceBookId):
+            BookEditorView(mode: .editRelatedPlaceholder(
+                bookId: bookId,
+                sourceBookId: sourceBookId
+            ))
         case .add:
             BookSearchView()
         case .create(let seed):
@@ -656,7 +782,10 @@ struct MainTabView: View {
     // MARK: - Note Destinations
 
     @ViewBuilder
-    private func noteDestination(for route: NoteRoute) -> some View {
+    private func noteDestination(
+        for route: NoteRoute,
+        repositories: RepositoryContainer
+    ) -> some View {
         switch route {
         case .detail(let noteId):
             NoteDetailView(noteId: noteId)
@@ -664,8 +793,88 @@ struct MainTabView: View {
             NoteEditorView(mode: .edit(noteId: noteId))
         case .create(let seed):
             NoteEditorView(mode: .create, seed: seed)
-        case .notesByTag:
-            Text("标签笔记")
+        case .noteExcerpts(let scope):
+            NoteExcerptListView(
+                context: NoteExcerptListContext(scope: scope, displayTitle: "书摘"),
+                repository: repositories.noteRepository,
+                externalAppIntegrationRepository: repositories.externalAppIntegrationRepository,
+                onOpenViewer: { source, itemID in
+                    append(contentRoute(for: source, initialItem: itemID), to: selectedTab)
+                },
+                onOpenNoteRoute: { append($0, to: selectedTab) }
+            )
+        case .noteExcerptList(let context):
+            NoteExcerptListView(
+                context: context,
+                repository: repositories.noteRepository,
+                externalAppIntegrationRepository: repositories.externalAppIntegrationRepository,
+                onOpenViewer: { source, itemID in
+                    append(contentRoute(for: source, initialItem: itemID), to: selectedTab)
+                },
+                onOpenNoteRoute: { append($0, to: selectedTab) }
+            )
+        case .chapterNotes(let bookID, let chapterID, let includeDescendants):
+            ChapterNotesView(
+                context: ChapterNoteListContext(
+                    bookID: bookID,
+                    chapterID: chapterID,
+                    includeDescendants: includeDescendants,
+                    displayTitle: "章节书摘"
+                ),
+                onOpenViewer: { source, itemID in
+                    append(contentRoute(for: source, initialItem: itemID), to: selectedTab)
+                },
+                onOpenNoteRoute: { append($0, to: selectedTab) }
+            )
+        case .chapterNoteList(let context):
+            ChapterNotesView(
+                context: context,
+                onOpenViewer: { source, itemID in
+                    append(contentRoute(for: source, initialItem: itemID), to: selectedTab)
+                },
+                onOpenNoteRoute: { append($0, to: selectedTab) }
+            )
+        case .mergeNotes(let bookID, let noteIDs):
+            NoteMergeView(bookID: bookID, noteIDs: noteIDs) { source, itemID in
+                replaceCurrentTopWithMergedViewer(
+                    source: source,
+                    itemID: itemID,
+                    in: selectedTab
+                )
+            }
+        case .relatedCategory(let scope):
+            RelatedCategoryListView(
+                scope: scope,
+                onOpenViewer: { source, itemID in
+                    append(contentRoute(for: source, initialItem: itemID), to: selectedTab)
+                },
+                onOpenContentRoute: { append($0, to: selectedTab) },
+                onOpenBookRoute: { append($0, to: selectedTab) }
+            )
+        case .relatedCategoryManagement:
+            RelatedCategoryListView(
+                scope: .all,
+                onOpenViewer: { source, itemID in
+                    append(contentRoute(for: source, initialItem: itemID), to: selectedTab)
+                },
+                onOpenContentRoute: { append($0, to: selectedTab) },
+                onOpenBookRoute: { append($0, to: selectedTab) }
+            )
+        case .tagManagement:
+            TagManagementView()
+        case .notesByTag(let tagId):
+            NoteExcerptListView(
+                context: NoteExcerptListContext(
+                    scope: NoteExcerptScope(legacyTagID: tagId),
+                    displayTitle: "书摘"
+                ),
+                repository: repositories.noteRepository,
+                externalAppIntegrationRepository: repositories.externalAppIntegrationRepository,
+                onOpenViewer: { source, itemID in
+                    append(contentRoute(for: source, initialItem: itemID), to: selectedTab)
+                },
+                onOpenNoteRoute: { append($0, to: selectedTab) }
+            )
         }
     }
 
@@ -682,8 +891,12 @@ struct MainTabView: View {
             RelevantDetailView(contentId: contentId)
         case .reviewEditor(let reviewId):
             ReviewEditorView(reviewId: reviewId)
+        case .reviewEditorCreate(let bookId):
+            ReviewEditorView(bookId: bookId)
         case .relevantEditor(let contentId):
             RelevantEditorView(contentId: contentId)
+        case .relevantEditorCreate(let bookId, let categoryId):
+            RelevantEditorView(bookId: bookId, categoryId: categoryId)
         }
     }
 
@@ -715,7 +928,7 @@ struct MainTabView: View {
         case .apiIntegration:
             ApiIntegrationView()
         case .aiConfiguration:
-            Text("AI 配置")
+            AIConfigurationView()
         case .tagManagement:
             TagManagementView()
         case .groupManagement:
@@ -834,6 +1047,47 @@ struct MainTabView: View {
         case .search:
             searchPath.append(route)
         }
+    }
+
+    /// 合并事务完成后原位替换当前合并 route，返回时直接回到来源列表而不会重建已失效页面。
+    private func replaceCurrentTopWithMergedViewer(
+        source: ContentViewerSourceContext,
+        itemID: ContentViewerItemID,
+        in tab: AppTab
+    ) {
+        let route = contentRoute(for: source, initialItem: itemID)
+        withAnimation(reduceMotion ? nil : .snappy) {
+            switch tab {
+            case .reading:
+                replaceTop(of: &readingPath, with: route)
+            case .books:
+                replaceTop(of: &booksPath, with: route)
+            case .notes:
+                replaceTop(of: &notesPath, with: route)
+            case .profile:
+                replaceTop(of: &profilePath, with: route)
+            case .search:
+                replaceTop(of: &searchPath, with: route)
+            }
+        }
+    }
+
+    /// 搜索结果覆盖层拥有独立栈；合并成功时只替换 cover 顶层，不触碰底层搜索 Tab 的现场。
+    private func replaceSearchCoverTopWithMergedViewer(
+        source: ContentViewerSourceContext,
+        itemID: ContentViewerItemID
+    ) {
+        let route = contentRoute(for: source, initialItem: itemID)
+        withAnimation(reduceMotion ? nil : .snappy) {
+            replaceTop(of: &searchResultCoverPath, with: route)
+        }
+    }
+
+    private func replaceTop(of path: inout NavigationPath, with route: ContentRoute) {
+        if !path.isEmpty {
+            path.removeLast()
+        }
+        path.append(route)
     }
 
     /// 搜索结果详情以系统全屏覆盖打开，底层 TabView 与搜索页保持原有身份和状态。
@@ -1121,6 +1375,7 @@ struct MainTabView: View {
     }
     #endif
 }
+
 /// 搜索结果系统全屏覆盖的根级呈现项，保持底层 TabView 与搜索状态不参与导航栈变化。
 private struct SearchResultCover: Identifiable {
     let id = UUID()

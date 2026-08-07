@@ -2,8 +2,8 @@ import Foundation
 import GRDB
 
 /**
- * [INPUT]: 依赖 GRDB Database 与 book、note、chapter、read_status、source 表读取书籍展示数据
- * [OUTPUT]: 对外提供 BookReadQuery（书籍卡片、书籍选择、书籍详情、目录与书摘只读查询）
+ * [INPUT]: 依赖 GRDB Database、BookContentSortQuery 与 book/note/chapter/read_status/source/sort 表读取书籍展示数据
+ * [OUTPUT]: 对外提供 BookReadQuery（书籍卡片、书籍选择、书籍详情、目录与持久化排序书摘查询）
  * [POS]: Data 层书籍只读查询协作者，承接 BookRepository 的无副作用读取映射逻辑
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -107,7 +107,7 @@ nonisolated enum BookReadQuery {
         // 时间字段：pub_date 为 Android 原始文本字段，仅展示不转时区；note.created_date 不在此查询排序。
         // 返回字段用途：构建头部、资料属性、简介、作者简介与书摘数量。
         let sql = """
-            SELECT b.id, b.name, b.author, b.cover, b.press,
+            SELECT b.id, b.name, b.author, b.cover, b.press, b.score,
                    b.author_intro, b.translator, b.isbn, b.pub_date,
                    b.summary, b.source_id,
                    COALESCE(rs.name, '') AS read_status_name,
@@ -146,6 +146,7 @@ nonisolated enum BookReadQuery {
             author: author,
             cover: row["cover"] ?? "",
             press: press,
+            score: row["score"] ?? 0,
             noteCount: row["note_count"] ?? 0,
             readStatusName: readStatusName,
             summary: row["summary"] ?? "",
@@ -189,24 +190,28 @@ nonisolated enum BookReadQuery {
         }
     }
 
-    /// 查询书籍下的书摘列表，供详情页“书摘时间线”模块展示。
+    /// 查询书籍下的书摘列表，按 `sort(book_id, type=NOTE)` 当前规则提供稳定顺序。
     /// - Throws: 数据库查询失败时抛出错误。
     static func fetchNotes(_ db: Database, bookId: Int64) throws -> [NoteExcerpt] {
-        // SQL 目的：拉取书籍下的书摘列表（详情页时间倒序）。
-        // 涉及表：note。
-        // 关键过滤：限定 book_id 且排除软删除 note。
-        // 时间字段：created_date 为 Android 毫秒时间戳，按 DESC 排序；不做时区转换。
-        // 返回字段用途：保留富文本内容、想法、位置与 include_time，供详情页渲染。
+        // SQL 目的：拉取书籍下全部有效书摘及 Android 排序所需的来源、位置和微信读书范围字段。
+        // 涉及表：note INNER JOIN book。
+        // 关键过滤：note.book_id 精确命中，书籍与书摘均有效且排除系统根书。
+        // 时间字段：created_date 为 Android 毫秒时间戳，不在 SQL 层转换；最终升降序由 sort.order 决定。
+        // 返回字段用途：BookContentSortQuery 稳定排序后构建详情页 NoteExcerpt。
         let sql = """
-            SELECT id, content, idea, position, position_unit,
-                   include_time, created_date
-            FROM note
-            WHERE book_id = ? AND is_deleted = 0
-            ORDER BY created_date DESC
+            SELECT n.id, n.content, n.idea, n.position, n.position_unit,
+                   n.include_time, n.created_date,
+                   COALESCE(n.weread_range, '') AS weread_range,
+                   b.source_id
+            FROM note n
+            JOIN book b ON b.id = n.book_id AND b.is_deleted = 0 AND b.id != 0
+            WHERE n.book_id = ? AND n.is_deleted = 0
             """
         let rows = try Row.fetchAll(db, sql: sql, arguments: [bookId])
+        let rule = try BookContentSortQuery.fetchRule(db, bookID: bookId, type: .notes)
+        let sortedRows = BookContentSortQuery.sortedNoteRows(rows, rule: rule)
 
-        return rows.map { row in
+        return sortedRows.map { row in
             NoteExcerpt(
                 id: row["id"],
                 content: row["content"] ?? "",

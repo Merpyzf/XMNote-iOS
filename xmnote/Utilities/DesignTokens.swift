@@ -5,7 +5,7 @@
 //  Created by 王珂 on 2026/2/10.
 //
 //  [INPUT]: 无外部依赖，仅依赖 SwiftUI 框架
-//  [OUTPUT]: Color 语义扩展（含阅读日历主题/事件条 pending 态/月总结图标渐变语义、菜单前景语义、Dialog 表层语义）、Spacing / CornerRadius / CardStyle 常量、Color(hex:) / Color(light:dark:) / Color(rgbaHex:) 构造器
+//  [OUTPUT]: Color 语义扩展（含阅读日历主题/事件条 pending 态/月总结图标渐变语义、菜单前景语义、Dialog/批注表层与弱分隔线语义）、Spacing / CornerRadius / CardStyle 常量、全局与组件组合排版令牌、Color 构造器
 //  [POS]: Utilities 模块的设计令牌中枢，全局 UI 一致性的单一真相源
 //  [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
 
@@ -63,6 +63,8 @@ extension Color {
     static let surfaceSheet = Color(uiColor: .systemGroupedBackground)
     /// 次级弱填充，承接圆形选项、轻量按钮与弱控件底。
     static let controlFillSecondary = Color(uiColor: .tertiarySystemFill)
+    /// 批注与个人想法的弱中性表层，在内容卡片内建立分组但不抢占正文层级。
+    static let surfaceAnnotation = controlFillSecondary.opacity(0.46)
 }
 
 // MARK: - Text
@@ -108,6 +110,8 @@ extension Color {
     static let surfaceBorderDefault = Color(uiColor: .separator)
     /// 三级弱边框（弱化层级、避免与主信息竞争）
     static let surfaceBorderSubtle = Color(uiColor: .separator).opacity(0.72)
+    /// 卡片内部弱分隔线，仅表达内容分组，不与卡片边框竞争。
+    static let surfaceDividerSubtle = Color(uiColor: .separator).opacity(0.28)
     /// 图表背景轨道色（柱图零值占位 / 背景 bar），避免与容器边框争抢视觉语义。
     static let chartBarTrack = Color(light: Color(hex: 0xC7CCD3).opacity(0.22),
                                      dark: Color.white.opacity(0.06))
@@ -537,6 +541,21 @@ enum AppTypography {
         guard !text.xmContainsCJK else { return .zero }
         return brandTrim(size: size, textStyle: .headline)
     }
+}
+
+/// 内容区 Inline Tab 的固定视觉层级，在辅助导航与正文之间保持 14pt 中间档。
+enum XMInlineTabTypography {
+    static let label: Font = AppTypography.fixed(
+        baseSize: 14,
+        relativeTo: .footnote,
+        minimumPointSize: 14
+    )
+    static let selectedLabel: Font = AppTypography.fixed(
+        baseSize: 14,
+        relativeTo: .footnote,
+        weight: .semibold,
+        minimumPointSize: 14
+    )
 }
 
 private extension Font.TextStyle {

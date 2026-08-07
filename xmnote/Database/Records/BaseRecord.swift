@@ -1,7 +1,7 @@
 /**
  * [INPUT]: 依赖 GRDB Record/FetchableRecord/PersistableRecord 协议与对应数据表字段映射
- * [OUTPUT]: 对外提供 BaseRecord（数据库 Record 实体）供 Repository 层完成持久化读写
- * [POS]: Database/Records 层单表映射模型，负责 camelCase 与 snake_case 编解码契约收口
+ * [OUTPUT]: 对外提供 BaseRecord 字段合同与禁止软删除的编译期兼容哨兵
+ * [POS]: Database/Records 层单表映射模型，负责字段编解码与硬删除治理边界收口
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
@@ -12,9 +12,9 @@ import GRDB
 // 对应 Android BaseEntity，所有表共享的 4 个公共字段
 // created_date / updated_date: 记录创建和修改时间戳（毫秒）
 // last_sync_date: 最后同步时间戳
-// is_deleted: 软删除标记（0=正常, 1=已删除）
+// is_deleted: Android Room v44 与旧备份兼容字段；生产 Repository 不得写入 1
 
-/// 统一数据库基础字段契约，约束所有 Record 具备时间戳与软删除语义。
+/// 统一数据库基础字段合同；`isDeleted` 仅用于读取跨端历史数据和引用占位书状态。
 nonisolated protocol BaseRecord: Codable, FetchableRecord, MutablePersistableRecord, Sendable {
     var createdDate: Int64 { get set }
     var updatedDate: Int64 { get set }
@@ -23,10 +23,10 @@ nonisolated protocol BaseRecord: Codable, FetchableRecord, MutablePersistableRec
 }
 
 extension BaseRecord {
-    /// 标记为已删除（软删除）
+    /// 阻断旧 Repository 继续写 tombstone；删除应调用 GRDB `delete` 或精确 `DELETE`。
+    @available(*, unavailable, message: "禁止软删除；请在事务内执行物理 DELETE")
     nonisolated mutating func markAsDeleted() {
-        isDeleted = 1
-        updatedDate = Int64(Date().timeIntervalSince1970 * 1000)
+        fatalError("禁止软删除；请在事务内执行物理 DELETE")
     }
 
     /// 更新修改时间戳

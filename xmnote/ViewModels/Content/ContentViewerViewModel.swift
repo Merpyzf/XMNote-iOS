@@ -1,11 +1,26 @@
 /**
- * [INPUT]: 依赖 ContentRepositoryProtocol 提供 viewer feed、详情读取与硬删除事务
- * [OUTPUT]: 对外提供 ContentViewerViewModel，驱动通用内容查看器的分页、详情缓存与删除流程
+ * [INPUT]: 依赖 ContentRepositoryProtocol 提供 viewer feed/详情/硬删除，依赖 NoteRepositoryProtocol 与 ExternalAppIntegrationRepositoryProtocol 提供标签和外部发送
+ * [OUTPUT]: 对外提供 ContentViewerViewModel、ContentViewerActionFeedback，驱动分页、详情缓存、删除、标签编辑与外部发送
  * [POS]: Content 模块查看页状态中枢，负责时间线/书籍详情来源的统一内容查看体验
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
 import Foundation
+
+/// Viewer 写操作反馈角色；View 将其映射到项目统一 Toast，状态层不直接依赖 UI 组件。
+nonisolated enum ContentViewerActionFeedbackRole: Equatable, Sendable {
+    case processing
+    case success
+    case warning
+    case error
+}
+
+/// Viewer 一次性动作反馈；独立 ID 保证相同文案的连续失败仍能被界面消费。
+nonisolated struct ContentViewerActionFeedback: Identifiable, Equatable, Sendable {
+    let id = UUID()
+    let role: ContentViewerActionFeedbackRole
+    let message: String
+}
 
 @MainActor
 @Observable
@@ -27,6 +42,11 @@ final class ContentViewerViewModel {
     var selectedItemID: ContentViewerItemID?
     var isLoadingList = false
     var isDeleting = false
+    var isLoadingTagEditor = false
+    var isSavingTags = false
+    var sendingDestination: ExternalAppDestination?
+    var configuredExternalAppDestinations: Set<ExternalAppDestination> = []
+    var actionFeedback: ContentViewerActionFeedback?
     var listErrorMessage: String?
     private(set) var dismissalRequestToken: Int = 0
 
@@ -36,12 +56,15 @@ final class ContentViewerViewModel {
     private var hasAppliedInitialSelection = false
     private var pendingDeletedSelection: PendingDeletedSelection?
     private var listObservationTask: Task<Void, Never>?
+    private var externalAppObservationTask: Task<Void, Never>?
     private let restoredSelectedItemID: ContentViewerItemID?
 
     private let initialItemID: ContentViewerItemID
     private let defaultTitle: String
     private let missingItemMessage: String
     private let repository: any ContentRepositoryProtocol
+    private let noteRepository: any NoteRepositoryProtocol
+    private let externalAppIntegrationRepository: any ExternalAppIntegrationRepositoryProtocol
 
     /// 注入 viewer 来源、初始项与仓储，建立分页状态初始化上下文。
     init(
@@ -51,7 +74,9 @@ final class ContentViewerViewModel {
         keyword: String,
         defaultTitle: String,
         missingItemMessage: String,
-        repository: any ContentRepositoryProtocol
+        repository: any ContentRepositoryProtocol,
+        noteRepository: any NoteRepositoryProtocol,
+        externalAppIntegrationRepository: any ExternalAppIntegrationRepositoryProtocol
     ) {
         self.source = source
         self.initialItemID = initialItemID
@@ -60,6 +85,14 @@ final class ContentViewerViewModel {
         self.defaultTitle = defaultTitle
         self.missingItemMessage = missingItemMessage
         self.repository = repository
+        self.noteRepository = noteRepository
+        self.externalAppIntegrationRepository = externalAppIntegrationRepository
+    }
+
+    /// 释放 Viewer 时取消数据库和配置观察流；在途网络发送遵循调用 View Task 的结构化取消。
+    isolated deinit {
+        listObservationTask?.cancel()
+        externalAppObservationTask?.cancel()
     }
 
     var selectedListItem: ContentViewerListItem? {
@@ -104,28 +137,119 @@ final class ContentViewerViewModel {
         listErrorMessage = nil
         let repository = self.repository
         let source = self.source
+        let stream = repository.observeViewerItems(source: source)
 
         listObservationTask = Task { [weak self] in
             do {
-                for try await observedItems in repository.observeViewerItems(source: source) {
+                for try await observedItems in stream {
                     guard !Task.isCancelled else { return }
-                    await MainActor.run {
-                        guard let self else { return }
-                        self.listErrorMessage = nil
-                        self.applyObservedItems(observedItems)
-                    }
+                    self?.listErrorMessage = nil
+                    self?.applyObservedItems(observedItems)
                 }
+            } catch is CancellationError {
+                return
             } catch {
                 guard !Task.isCancelled else { return }
-                await MainActor.run {
-                    guard let self else { return }
-                    self.isLoadingList = false
-                    if self.items.isEmpty {
-                        self.listErrorMessage = "加载失败：\(error.localizedDescription)"
-                    }
+                guard let self else { return }
+                self.isLoadingList = false
+                if self.items.isEmpty {
+                    self.listErrorMessage = "加载失败：\(error.localizedDescription)"
                 }
             }
         }
+        startExternalAppObservation()
+    }
+
+    /// 读取当前书摘的标签编辑快照；只允许 note 类型调用，失败通过一次性反馈交给页面。
+    func fetchTagEditSnapshot(noteID: Int64) async -> NoteReviewTagEditSnapshot? {
+        guard !isLoadingTagEditor else { return nil }
+        isLoadingTagEditor = true
+        defer { isLoadingTagEditor = false }
+        do {
+            let snapshot = try await noteRepository.fetchNoteReviewTagEditSnapshot(noteID: noteID)
+            guard !Task.isCancelled else { return nil }
+            return snapshot
+        } catch {
+            guard !Task.isCancelled else { return nil }
+            actionFeedback = ContentViewerActionFeedback(
+                role: .error,
+                message: "读取标签失败：\(error.localizedDescription)"
+            )
+            return nil
+        }
+    }
+
+    /// 新建书摘标签并返回可立即选中的真实标签对象。
+    func createTag(named name: String) async -> NoteEditorTagOption? {
+        do {
+            let tag = try await noteRepository.createNoteTag(named: name)
+            guard !Task.isCancelled else { return nil }
+            return tag
+        } catch {
+            guard !Task.isCancelled else { return nil }
+            actionFeedback = ContentViewerActionFeedback(
+                role: .error,
+                message: "创建标签失败：\(error.localizedDescription)"
+            )
+            return nil
+        }
+    }
+
+    /// 物理替换指定书摘标签关系，成功后强刷当前详情缓存以同步标签 rail。
+    func replaceTags(_ tags: [NoteEditorTagOption], noteID: Int64) async -> Bool {
+        guard !isSavingTags else { return false }
+        isSavingTags = true
+        defer { isSavingTags = false }
+        do {
+            _ = try await noteRepository.replaceNoteReviewTags(noteID: noteID, tags: tags)
+            guard !Task.isCancelled else { return false }
+            await refreshDetail(itemID: .note(noteID))
+            return true
+        } catch {
+            guard !Task.isCancelled else { return false }
+            actionFeedback = ContentViewerActionFeedback(
+                role: .error,
+                message: "保存标签失败：\(error.localizedDescription)"
+            )
+            return false
+        }
+    }
+
+    /// 发送当前书摘到已配置目标；写操作即时发布 processing 并阻止重复触发。
+    func send(noteID: Int64, to destination: ExternalAppDestination) async {
+        guard sendingDestination == nil else { return }
+        guard configuredExternalAppDestinations.contains(destination) else {
+            actionFeedback = ContentViewerActionFeedback(
+                role: .warning,
+                message: "请先在“我的 > 关联应用”配置 \(destination.displayName)"
+            )
+            return
+        }
+        sendingDestination = destination
+        actionFeedback = ContentViewerActionFeedback(
+            role: .processing,
+            message: "正在发送到 \(destination.displayName)…"
+        )
+        defer { sendingDestination = nil }
+        do {
+            _ = try await externalAppIntegrationRepository.send(noteID: noteID, to: destination)
+            guard !Task.isCancelled else { return }
+            actionFeedback = ContentViewerActionFeedback(
+                role: .success,
+                message: "已发送到 \(destination.displayName)"
+            )
+        } catch {
+            guard !Task.isCancelled else { return }
+            actionFeedback = ContentViewerActionFeedback(
+                role: .error,
+                message: "发送到 \(destination.displayName) 失败：\(error.localizedDescription)"
+            )
+        }
+    }
+
+    /// 清空已由页面映射到 Toast 的事件，避免 Observation 重绘重复展示。
+    func consumeActionFeedback() {
+        actionFeedback = nil
     }
 
     /// 更新当前分页选择，并按需读取所选页详情，避免切页过程重复强刷新。
@@ -200,6 +324,20 @@ final class ContentViewerViewModel {
 }
 
 private extension ContentViewerViewModel {
+    /// 观察关联应用配置变化；流在任务外创建，循环每次只短暂获取 weak self，避免 ViewModel/Task 强环。
+    func startExternalAppObservation() {
+        guard externalAppObservationTask == nil else { return }
+        configuredExternalAppDestinations = Set(externalAppIntegrationRepository.configuredDestinations())
+        let repository = externalAppIntegrationRepository
+        let stream = repository.observeConfigurationChanges()
+        externalAppObservationTask = Task { [weak self] in
+            for await _ in stream {
+                guard !Task.isCancelled else { return }
+                self?.configuredExternalAppDestinations = Set(repository.configuredDestinations())
+            }
+        }
+    }
+
     func applyObservedItems(_ newItems: [ContentViewerListItem]) {
         let previousItems = items
         let previousSelectedItemID = selectedItemID

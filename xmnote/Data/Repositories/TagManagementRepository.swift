@@ -81,14 +81,11 @@ struct TagManagementRepository: TagManagementRepositoryProtocol {
                 guard try fetchActiveTag(db, tagID: tagID, scope: scope) != nil else {
                     throw TagManagementRepositoryError.invalidTag
                 }
-                let now = timestampMillis()
-                switch scope {
-                case .note:
-                    try softDeleteTagNoteRelations(db, tagID: tagID, updatedAt: now)
-                case .book:
-                    try softDeleteTagBookRelations(db, tagID: tagID, updatedAt: now)
-                }
-                try softDeleteTag(db, tagID: tagID, updatedAt: now)
+                // 物理删除父标签前必须解除两个关系表的全部外键；scope 只用于校验用户当前管理的标签类型，
+                // 历史导入若留下跨类型脏关系也必须一并清理，不能让单条异常关系阻断整个删除事务。
+                try deleteTagNoteRelations(db, tagID: tagID)
+                try deleteTagBookRelations(db, tagID: tagID)
+                try deleteTagRow(db, tagID: tagID)
             }
         }
         try await normalizeTagOrder(scope: scope)
@@ -254,49 +251,43 @@ private extension TagManagementRepository {
         )
     }
 
-    nonisolated func softDeleteTagNoteRelations(_ db: Database, tagID: Int64, updatedAt: Int64) throws {
-        // SQL 目的：软删除指定书摘标签的全部 tag_note 关联。
+    nonisolated func deleteTagNoteRelations(_ db: Database, tagID: Int64) throws {
+        // SQL 目的：物理删除指定书摘标签的全部 tag_note 关联。
         // 涉及表：tag_note。
-        // 关键过滤：tag_id = ?；Android DAO 不额外过滤 is_deleted，重复执行仍会刷新 updated_date。
-        // 时间字段：updated_date 写入当前毫秒时间戳；last_sync_date 保持不变。
+        // 关键过滤：tag_id = ?；同时清理历史有效关系和 tombstone。
+        // 时间字段：物理删除不更新时间字段。
         // 副作用用途：删除 NOTE 标签前解除其与书摘的关系。
         let sql = """
-            UPDATE tag_note
-            SET updated_date = ?,
-                is_deleted = 1
+            DELETE FROM tag_note
             WHERE tag_id = ?
             """
-        try db.execute(sql: sql, arguments: [updatedAt, tagID])
+        try db.execute(sql: sql, arguments: [tagID])
     }
 
-    nonisolated func softDeleteTagBookRelations(_ db: Database, tagID: Int64, updatedAt: Int64) throws {
-        // SQL 目的：软删除指定书籍标签的全部 tag_book 关联。
+    nonisolated func deleteTagBookRelations(_ db: Database, tagID: Int64) throws {
+        // SQL 目的：物理删除指定书籍标签的全部 tag_book 关联。
         // 涉及表：tag_book。
-        // 关键过滤：tag_id = ?；Android DAO 不额外过滤 is_deleted，重复执行仍会刷新 updated_date。
-        // 时间字段：updated_date 写入当前毫秒时间戳；last_sync_date 保持不变。
+        // 关键过滤：tag_id = ?；同时清理历史有效关系和 tombstone。
+        // 时间字段：物理删除不更新时间字段。
         // 副作用用途：删除 BOOK 标签前解除其与书籍的关系。
         let sql = """
-            UPDATE tag_book
-            SET updated_date = ?,
-                is_deleted = 1
+            DELETE FROM tag_book
             WHERE tag_id = ?
             """
-        try db.execute(sql: sql, arguments: [updatedAt, tagID])
+        try db.execute(sql: sql, arguments: [tagID])
     }
 
-    nonisolated func softDeleteTag(_ db: Database, tagID: Int64, updatedAt: Int64) throws {
-        // SQL 目的：软删除标签主记录。
+    nonisolated func deleteTagRow(_ db: Database, tagID: Int64) throws {
+        // SQL 目的：在全部关系已清理后物理删除标签主记录。
         // 涉及表：tag。
-        // 关键过滤：id = ?；对齐 Android TagDao.deleteSync。
-        // 时间字段：updated_date 写入当前毫秒时间戳；last_sync_date 保持不变。
-        // 副作用用途：将标签从管理列表移除，并留给同步层识别删除状态。
+        // 关键过滤：id = ?；scope 已由上层 fetchActiveTag 校验，避免跨类型误删。
+        // 时间字段：物理删除不更新时间字段。
+        // 副作用用途：将标签从管理列表永久移除。
         let sql = """
-            UPDATE tag
-            SET updated_date = ?,
-                is_deleted = 1
+            DELETE FROM tag
             WHERE id = ?
             """
-        try db.execute(sql: sql, arguments: [updatedAt, tagID])
+        try db.execute(sql: sql, arguments: [tagID])
     }
 
     nonisolated func updateTagOrder(

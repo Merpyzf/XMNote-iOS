@@ -1,13 +1,13 @@
 /**
  * [INPUT]: 依赖 RepositoryContainer 注入录入仓储，依赖 BookEditorViewModel 驱动完整录入页状态，依赖 BookEditorMode 区分新增与编辑入口
- * [OUTPUT]: 对外提供 BookEditorView，承载搜索结果确认、手动创建与既有书籍编辑的完整录入页
- * [POS]: Book 模块录入页壳层，负责完整字段编辑、未保存拦截与保存动作
+ * [OUTPUT]: 对外提供 BookEditorView，承载搜索结果确认、手动创建、有效书编辑与相关占位书资料编辑
+ * [POS]: Book 模块录入页壳层，负责按模式展示字段、未保存拦截与保存动作
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
 import SwiftUI
 
-/// 书籍完整录入页入口，支持搜索结果预填、手动创建与既有书籍编辑。
+/// 书籍完整录入页入口，支持搜索结果预填、手动创建、既有书籍编辑与不恢复占位书的资料编辑。
 struct BookEditorView: View {
     let mode: BookEditorMode
     let onSavedBookID: ((Int64) -> Void)?
@@ -66,11 +66,15 @@ struct BookEditorView: View {
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: Spacing.base) {
                         headerSection(draft)
-                        baseInfoSection(viewModel, draft: draft)
-                        readingInfoSection(viewModel, draft: draft)
-                        progressSection(viewModel, draft: draft)
-                        relationSection(viewModel, draft: draft)
-                        extraInfoSection(viewModel, draft: draft)
+                        if isRelatedPlaceholderEditing {
+                            relatedPlaceholderInfoSection(viewModel, draft: draft)
+                        } else {
+                            baseInfoSection(viewModel, draft: draft)
+                            readingInfoSection(viewModel, draft: draft)
+                            progressSection(viewModel, draft: draft)
+                            relationSection(viewModel, draft: draft)
+                            extraInfoSection(viewModel, draft: draft)
+                        }
                     }
                     .padding(.horizontal, Spacing.screenEdge)
                     .padding(.top, Spacing.base)
@@ -181,6 +185,8 @@ struct BookEditorView: View {
         switch mode {
         case .edit:
             return "编辑书籍"
+        case .editRelatedPlaceholder:
+            return "编辑相关书籍"
         case .create(let seed) where seed?.searchSource == nil:
             return "手动创建"
         case .create:
@@ -206,6 +212,29 @@ struct BookEditorView: View {
             editorTextField("出版社", text: binding(viewModel, \.press))
             editorTextField("ISBN", text: binding(viewModel, \.isbn), keyboardType: .asciiCapable)
             editorTextField("出版日期", text: binding(viewModel, \.pubDate))
+            editorTextEditor("作者简介", text: binding(viewModel, \.authorIntro), minHeight: 96)
+            editorTextEditor("摘要", text: binding(viewModel, \.summary), minHeight: 120)
+            editorTextEditor("目录", text: binding(viewModel, \.catalog), minHeight: 120)
+        }
+    }
+
+    /// 相关占位书只开放 Android 对应的资料字段，不展示会暗示已加入书架的阅读、分组、标签与购买信息。
+    private func relatedPlaceholderInfoSection(
+        _ viewModel: BookEditorViewModel,
+        draft: BookEditorDraft
+    ) -> some View {
+        editorSection(title: "书籍资料") {
+            Text("修改会同步到所有引用这本相关书籍的位置，但不会将它加入书架。")
+                .font(AppTypography.caption)
+                .foregroundStyle(Color.textSecondary)
+
+            editorTextField("书名", text: binding(viewModel, \.title))
+            editorTextField("作者", text: binding(viewModel, \.author))
+            editorTextField("译者", text: binding(viewModel, \.translator))
+            editorTextField("出版社", text: binding(viewModel, \.press))
+            editorTextField("ISBN", text: binding(viewModel, \.isbn), keyboardType: .asciiCapable)
+            editorTextField("出版日期", text: binding(viewModel, \.pubDate))
+            editorTextField("封面链接", text: binding(viewModel, \.coverURL))
             editorTextEditor("作者简介", text: binding(viewModel, \.authorIntro), minHeight: 96)
             editorTextEditor("摘要", text: binding(viewModel, \.summary), minHeight: 120)
             editorTextEditor("目录", text: binding(viewModel, \.catalog), minHeight: 120)
@@ -378,7 +407,14 @@ struct BookEditorView: View {
             return "保存入库"
         case .edit:
             return "保存修改"
+        case .editRelatedPlaceholder:
+            return "保存资料"
         }
+    }
+
+    private var isRelatedPlaceholderEditing: Bool {
+        if case .editRelatedPlaceholder = mode { return true }
+        return false
     }
 
     private func editorSection<Content: View>(title: String, @ViewBuilder content: () -> Content) -> some View {

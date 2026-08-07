@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 NoteRepositoryProtocol 提供书摘回顾设置、分页卡片、标签与书籍回显数据，依赖 ExternalAppIntegrationRepositoryProtocol 提供外部应用配置与书摘发送能力，并向页面私有换组宿主提供候选页准备与无动画提交能力
- * [OUTPUT]: 对外提供 NoteReviewViewModel，驱动书摘回顾分页卡组、设置 Sheet、分页刷新、随机换组交接与外部应用发送反馈状态
+ * [OUTPUT]: 对外提供 NoteReviewViewModel，驱动书摘回顾分页卡组、设置 Sheet、分页刷新、随机换组交接、可取消分享图与外部应用发送反馈状态
  * [POS]: ViewModels/Note 的书摘回顾状态编排器，被 NoteReviewView 与 NoteContainerView 消费
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -84,6 +84,7 @@ final class NoteReviewViewModel {
     private var dataObservationTask: Task<Void, Never>?
     private var externalDataRefreshTask: Task<Void, Never>?
     private var externalAppObservationTask: Task<Void, Never>?
+    private var shareImageGenerationID: UUID?
 
     /// 注入笔记与外部应用仓储并启动设置变更观察；观察任务只在主线程回写 UI 状态，释放时会取消。
     init(
@@ -478,27 +479,55 @@ final class NoteReviewViewModel {
         shareImageActionNoteID == item.id
     }
 
-    /// 使用触发时的显式亮暗外观生成当前回顾卡片分享图，保存到相册后交给 View 打开系统分享面板。
+    /// 在主线程编排分享图与相册写入；调用任务取消或 generation 失效后丢弃迟到结果，并由匹配 generation 的 defer 复位入口。
     func shareImage(for item: NoteReviewCardItem, isDarkAppearance: Bool) async {
         guard shareImageActionNoteID == nil else { return }
+        let generationID = UUID()
+        shareImageGenerationID = generationID
         shareImageActionNoteID = item.id
         externalAppFeedback = NoteReviewExternalAppFeedback(role: .processing, message: "正在生成分享图…")
         defer {
-            shareImageActionNoteID = nil
+            if shareImageGenerationID == generationID {
+                shareImageGenerationID = nil
+                shareImageActionNoteID = nil
+            }
         }
 
+        var renderedFile: NoteReviewGeneratedShareFile?
         do {
             let file = try await renderShareImage(for: item, isDarkAppearance: isDarkAppearance)
+            renderedFile = file
+            try Task.checkCancellation()
+            guard shareImageGenerationID == generationID else {
+                Self.discardTemporaryShareFile(file.fileURL)
+                return
+            }
             try await Self.saveImageToPhotoLibrary(fileURL: file.fileURL)
-            guard !Task.isCancelled else { return }
+            guard !Task.isCancelled, shareImageGenerationID == generationID else {
+                Self.discardTemporaryShareFile(file.fileURL)
+                return
+            }
             generatedShareFile = file
             externalAppFeedback = NoteReviewExternalAppFeedback(role: .success, message: "分享图已保存")
         } catch {
-            guard !Task.isCancelled else { return }
+            if let renderedFile {
+                Self.discardTemporaryShareFile(renderedFile.fileURL)
+            }
+            guard !Task.isCancelled, shareImageGenerationID == generationID else { return }
             externalAppFeedback = NoteReviewExternalAppFeedback(
                 role: .error,
                 message: "生成分享图失败：\(error.localizedDescription)"
             )
+        }
+    }
+
+    /// 在主线程立即失效当前分享 generation；页面托管任务随后取消，旧响应与旧 defer 均无法覆盖下一次分享状态。
+    func cancelShareImageGeneration() {
+        shareImageGenerationID = nil
+        shareImageActionNoteID = nil
+        if externalAppFeedback?.role == .processing,
+           externalAppFeedback?.message == "正在生成分享图…" {
+            externalAppFeedback = nil
         }
     }
 
@@ -572,7 +601,7 @@ private extension NoteReviewViewModel {
             backgroundImageData = nil
         }
 
-        return try NoteReviewShareImageRenderer().renderPNG(
+        return try await NoteReviewShareImageRenderer().renderPNG(
             for: item,
             settings: settings,
             isDarkAppearance: isDarkAppearance,
@@ -651,6 +680,11 @@ private extension NoteReviewViewModel {
         try await PHPhotoLibrary.shared().performChanges {
             PHAssetChangeRequest.creationRequestForAssetFromImage(atFileURL: fileURL)
         }
+    }
+
+    /// 仅移除本次尚未交给系统分享面板的临时 PNG；文件已被渲染器清理时静默忽略。
+    static func discardTemporaryShareFile(_ fileURL: URL) {
+        try? FileManager.default.removeItem(at: fileURL)
     }
 
     func observeSettingChanges() {

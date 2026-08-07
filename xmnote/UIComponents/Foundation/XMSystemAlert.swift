@@ -1,7 +1,7 @@
 /**
- * [INPUT]: 依赖 SwiftUI 的 UIViewControllerRepresentable 桥接与 UIKit 的 UIAlertController，统一承接系统型中心弹窗的标题、正文、动作与轻输入
- * [OUTPUT]: 对外提供 XMSystemAlertDescriptor、XMSystemAlertAction、XMSystemAlertTextField、XMSystemAlertController 与 View.xmSystemAlert(...)，覆盖 SwiftUI/ UIKit 双调用路径
- * [POS]: UIComponents/Foundation 的系统中心弹窗基础设施，负责用 UIKit 原生 Alert 表达系统型业务提示与轻输入场景
+ * [INPUT]: 依赖 SwiftUI 的 UIViewControllerRepresentable 桥接与 UIKit 的 UIAlertController，统一承接系统型中心弹窗的标题、正文、动作、轻输入与呈现通道协调
+ * [OUTPUT]: 对外提供 XMSystemAlertDescriptor、XMSystemAlertAction、XMSystemAlertTextField、XMSystemAlertController 与 View.xmSystemAlert(...)，覆盖 SwiftUI/UIKit 双调用路径及可取消延迟重试
+ * [POS]: UIComponents/Foundation 的系统中心弹窗基础设施，负责用 UIKit 原生 Alert 表达业务提示，并在菜单或转场占用 presentation 通道时保留请求直至真正展示
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
@@ -427,7 +427,10 @@ private extension XMSystemAlertHostPresenter {
         private var lastDismissedRequestID: UUID?
         private var didNotifyDismiss = false
         private var isDismissInFlight = false
-        private var isReconcileScheduled = false
+        private var presentationAttemptState: XMSystemAlertPresentationState?
+        private var presentationAttemptAlertController: UIAlertController?
+        private var presentationVerificationWorkItem: DispatchWorkItem?
+        private var reconcileWorkItem: DispatchWorkItem?
 
         func syncPresentation(
             for viewController: UIViewController,
@@ -435,8 +438,14 @@ private extension XMSystemAlertHostPresenter {
             onDismiss: (() -> Void)?
         ) {
             hostViewController = viewController
+            if presentationAttemptState?.requestID != state?.requestID {
+                cancelPresentationAttemptIfNeeded()
+            }
             desiredState = state
             self.onDismiss = onDismiss
+            if state == nil {
+                cancelScheduledReconcile()
+            }
             reconcilePresentation(from: viewController)
         }
 
@@ -450,6 +459,8 @@ private extension XMSystemAlertHostPresenter {
             onDismiss = nil
             dismissPresentation = nil
             hostViewController = nil
+            cancelScheduledReconcile()
+            cancelPresentationAttemptIfNeeded()
         }
 
         func dismissIfNeeded(notify: Bool) {
@@ -479,16 +490,21 @@ private extension XMSystemAlertHostPresenter {
             }
 
             guard let desiredState else {
+                cancelScheduledReconcile()
+                cancelPresentationAttemptIfNeeded()
                 dismissIfNeeded(notify: true)
                 return
             }
             guard desiredState.descriptor.actions.isEmpty == false else {
                 self.desiredState = nil
+                cancelScheduledReconcile()
+                cancelPresentationAttemptIfNeeded()
                 dismissIfNeeded(notify: true)
                 return
             }
             guard desiredState.requestID != activeRequestID else { return }
             guard desiredState.requestID != lastDismissedRequestID else { return }
+            guard presentationAttemptState == nil else { return }
 
             guard presentedAlertController == nil else {
                 dismissIfNeeded(notify: true)
@@ -502,20 +518,18 @@ private extension XMSystemAlertHostPresenter {
             from viewController: UIViewController,
             state: XMSystemAlertPresentationState
         ) {
-            guard viewController.viewIfLoaded?.window != nil else {
+            let presenter = presentationHost(from: viewController)
+            guard presenter.viewIfLoaded?.window != nil else {
                 scheduleReconcileIfNeeded(from: viewController)
                 return
             }
-            guard viewController.presentedViewController == nil else {
+            guard !presenter.isBeingDismissed,
+                  !presenter.isBeingPresented,
+                  presenter.presentedViewController == nil else {
                 scheduleReconcileIfNeeded(from: viewController)
                 return
             }
 
-            dismissPresentation = state.dismiss
-            didNotifyDismiss = false
-            isDismissInFlight = false
-            lastDismissedRequestID = nil
-            activeRequestID = state.requestID
             let alertController = XMSystemAlertController.makeAlertController(
                 descriptor: state.descriptor,
                 dismiss: { [weak self] in
@@ -523,8 +537,89 @@ private extension XMSystemAlertHostPresenter {
                     self.beginDismissTransitionAfterAction(shouldNotify: true)
                 }
             )
+            presentationAttemptState = state
+            presentationAttemptAlertController = alertController
+
+            presenter.present(alertController, animated: true) { [weak self, weak presenter, weak alertController] in
+                guard let presenter, let alertController else { return }
+                self?.verifyPresentationAttempt(
+                    requestID: state.requestID,
+                    alertController: alertController,
+                    presenter: presenter,
+                    fallbackViewController: viewController
+                )
+            }
+            schedulePresentationVerification(
+                requestID: state.requestID,
+                alertController: alertController,
+                presenter: presenter,
+                fallbackViewController: viewController
+            )
+        }
+
+        /// 沿 UIKit containment 找到实际占用窗口的顶层宿主，避免从零尺寸桥接子控制器直接发起 presentation。
+        private func presentationHost(from viewController: UIViewController) -> UIViewController {
+            var presenter = viewController
+            while let parent = presenter.parent {
+                presenter = parent
+            }
+            return presenter
+        }
+
+        /// 主线程延迟确认 UIKit 是否真正接纳本次请求；被菜单退场拒绝的尝试不会污染 active 状态。
+        private func schedulePresentationVerification(
+            requestID: UUID,
+            alertController: UIAlertController,
+            presenter: UIViewController,
+            fallbackViewController: UIViewController
+        ) {
+            presentationVerificationWorkItem?.cancel()
+            let workItem = DispatchWorkItem {
+                [weak self, weak alertController, weak presenter, weak fallbackViewController] in
+                guard let self, let alertController, let presenter else { return }
+                self.verifyPresentationAttempt(
+                    requestID: requestID,
+                    alertController: alertController,
+                    presenter: presenter,
+                    fallbackViewController: fallbackViewController
+                )
+            }
+            presentationVerificationWorkItem = workItem
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.08, execute: workItem)
+        }
+
+        /// 仅在 UIAlertController 已进入 presenting hierarchy 后提交 active 状态，否则保留原请求等待下一次呈现机会。
+        private func verifyPresentationAttempt(
+            requestID: UUID,
+            alertController: UIAlertController,
+            presenter: UIViewController,
+            fallbackViewController: UIViewController?
+        ) {
+            guard presentationAttemptState?.requestID == requestID,
+                  presentationAttemptAlertController === alertController else { return }
+
+            let didPresent = alertController.presentingViewController != nil
+                || presenter.presentedViewController === alertController
+            guard didPresent else {
+                clearPresentationAttempt()
+                guard let viewController = hostViewController ?? fallbackViewController else { return }
+                scheduleReconcileIfNeeded(from: viewController)
+                return
+            }
+
+            guard let attemptedState = presentationAttemptState else { return }
+            clearPresentationAttempt()
+            cancelScheduledReconcile()
+            dismissPresentation = attemptedState.dismiss
+            didNotifyDismiss = false
+            isDismissInFlight = false
+            lastDismissedRequestID = nil
+            activeRequestID = attemptedState.requestID
             presentedAlertController = alertController
-            viewController.present(alertController, animated: true)
+
+            if desiredState?.requestID != attemptedState.requestID {
+                dismissIfNeeded(notify: true)
+            }
         }
 
         private func beginDismissTransitionAfterAction(shouldNotify: Bool) {
@@ -565,15 +660,42 @@ private extension XMSystemAlertHostPresenter {
             onDismiss?()
         }
 
+        /// 仅保留一项主线程重试；新状态、宿主销毁或成功展示都会取消它，避免请求重放和忙循环。
         private func scheduleReconcileIfNeeded(from viewController: UIViewController) {
-            guard !isReconcileScheduled else { return }
-            isReconcileScheduled = true
-            DispatchQueue.main.async { [weak self, weak viewController] in
+            guard desiredState != nil, reconcileWorkItem == nil else { return }
+            let workItem = DispatchWorkItem { [weak self, weak viewController] in
                 guard let self else { return }
-                self.isReconcileScheduled = false
+                self.reconcileWorkItem = nil
                 guard let viewController else { return }
                 self.reconcilePresentation(from: viewController)
             }
+            reconcileWorkItem = workItem
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.08, execute: workItem)
+        }
+
+        /// 清理尚未被 UIKit 接纳的尝试；若它恰好已进入层级则静默关闭，避免宿主销毁后留下游离弹窗。
+        private func cancelPresentationAttemptIfNeeded() {
+            presentationVerificationWorkItem?.cancel()
+            presentationVerificationWorkItem = nil
+            let alertController = presentationAttemptAlertController
+            clearPresentationAttempt()
+            if alertController?.presentingViewController != nil {
+                alertController?.dismiss(animated: false)
+            }
+        }
+
+        /// 释放尝试期强引用，但不影响已经提交到 active 状态的弹窗。
+        private func clearPresentationAttempt() {
+            presentationVerificationWorkItem?.cancel()
+            presentationVerificationWorkItem = nil
+            presentationAttemptState = nil
+            presentationAttemptAlertController = nil
+        }
+
+        /// 取消尚未执行的呈现协调任务，确保请求清空后不会从旧闭包重放。
+        private func cancelScheduledReconcile() {
+            reconcileWorkItem?.cancel()
+            reconcileWorkItem = nil
         }
     }
 }

@@ -19,8 +19,11 @@
 - 本仓库是 Android → iOS 迁移项目，优先做“业务意图对齐”，禁止机械翻译实现。
 - Android 参考工程路径：`/Users/wangke/Workspace/AndroidProjects/XMNote`。
 - 迁移对齐边界（强制）：Android 或其他平台经验只能帮助理解业务意图，不能直接当作当前平台事实；涉及平台行为判断时，必须回到 iOS 端实际代码、最小实验或官方文档。
+- iOS 设计真相源（强制）：涉及迁移、新页面或组件扩展时，以当前 iOS 项目已有生产页面、导航模式、设计令牌与公共组件为视觉和交互真相源；Android 界面仅用于理解信息结构与业务意图，未经用户明确批准禁止自行引入新的视觉语言。
 - 数据库对齐铁律（强制）：凡属于 Android → iOS 功能对齐/迁移需求，iOS 端数据库实现必须与 Android 端严格一致；覆盖范围至少包括 schema、migration 版本与执行顺序、seed 数据、外键与级联策略、事务边界、冲突策略、读写 SQL 条件（含 `is_deleted` 语义）。
 - 偏离审批（强制）：如确需偏离 Android 数据库实现，必须先提交双端对照（Android/iOS 代码路径、行为差异、风险评估、回滚方案），并获得用户明确确认后方可落地。
+- 全局硬删除铁律（用户已明确批准的跨端偏离，强制）：用户删除、批量删除以及业务关系的移除/替换必须在事务内执行物理 `DELETE`；除下一条列明的兼容例外外，禁止业务代码新增 `is_deleted = 1` 写入或创建 tombstone。`is_deleted` 字段与读取过滤仅为 Android Room v44 物理 schema、旧备份和恢复前兼容保留。
+- 硬删除兼容例外（强制）：系统根记录，以及仍被有效 `collection_book` 或 `category_content.content_book_id` 引用的引用占位书允许保留；最后一个有效引用移除后必须物理清理对应占位书。Android 历史 Room migration 可按原版顺序瞬时写入删除标记，但紧随其后的 iOS 数据整理迁移必须完成物理清理，并保持 `user_version` 与 Room identity 不变。
 - 数据访问铁律（强制）：所有本地/网络数据获取必须经 Repository；`ViewModel` 禁止直接访问 `AppDatabase`、`WebDAVClient`、`NetworkClient`。
 - Apple 开发文档 MCP（强制触发）：涉及 Apple API/框架行为、可用性、弃用、参数语义、平台差异、官方推荐实现路径时，必须使用 `apple-doc-mcp` 查证。
 - Apple 文档查询优先级：
@@ -80,6 +83,7 @@
 - 导航栏玻璃禁令（强制）：已处于系统导航栏上下文的按钮，禁止再显式增加 `.glassEffect(...)`、`.buttonStyle(.glass)`、`.buttonStyle(.glassProminent)` 或等价 glass/material 包装。
 - 弹窗实现约束（强制）：生产路径中心弹窗统一使用 `XMSystemAlert`（UIKit `UIAlertController` 桥接），禁止新增 SwiftUI `.alert` 作为中心弹窗实现。
 - 弹窗按钮颜色规范（强制）：仅 warning/destructive 操作使用警告语义颜色，其余按钮必须使用系统默认语义颜色，禁止使用品牌色按钮。
+- 弹出菜单颜色规范（强制）：上下文菜单、长按菜单、更多菜单等各类弹出菜单应克制使用品牌色；普通操作使用系统默认色或 `menuActionForeground` 等中性色，只有删除、警告等具有明确语义的操作才使用对应的语义色，禁止用品牌色强调普通菜单项的可点击性。
 - 书籍封面渲染约束（强制）：所有书籍封面渲染必须使用 `XMBookCover`（`xmnote/UIComponents/Foundation/XMBookCover.swift`），禁止手写重复封面渲染组合。
 - 结构性 UI 变化必须带过渡动画，优先 `.snappy`、`.smooth`、`.spring`。
 - 异步操作必须提供可感知反馈，避免点击无响应。

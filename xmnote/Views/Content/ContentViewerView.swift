@@ -1,6 +1,6 @@
 /**
- * [INPUT]: 依赖 RepositoryContainer 注入内容仓储，依赖 ContentViewerViewModel 驱动分页与详情状态
- * [OUTPUT]: 对外提供 ContentViewerView，统一承接书摘/书评/相关内容的分页查看与基础操作栏
+ * [INPUT]: 依赖 RepositoryContainer 注入内容/AI 仓储，依赖 ContentViewerViewModel 驱动分页与详情状态
+ * [OUTPUT]: 对外提供 ContentViewerView，以首帧稳定导航标题统一承接分页查看、微信读书原文跳转、书摘朗读、页面级系统分享、AI 解读/释义/标签与内容操作反馈
  * [POS]: Content 模块查看页壳层，被时间线与书籍详情共同复用
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -45,6 +45,9 @@ struct ContentViewerView: View {
                 }
             }
         }
+        .navigationTitle("")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar { toolbarContent }
         .task(id: sceneStateStore.isRestored) {
             guard sceneStateStore.isRestored else { return }
             guard !didBootstrapFromScene else { return }
@@ -65,7 +68,9 @@ struct ContentViewerView: View {
                 keyword: keyword,
                 defaultTitle: presentationStyle.defaultTitle,
                 missingItemMessage: presentationStyle.missingItemMessage,
-                repository: repositories.contentRepository
+                repository: repositories.contentRepository,
+                noteRepository: repositories.noteRepository,
+                externalAppIntegrationRepository: repositories.externalAppIntegrationRepository
             )
             viewModel = newViewModel
             bootstrapLoadingGate.update(intent: .none)
@@ -81,6 +86,22 @@ struct ContentViewerView: View {
             bootstrapLoadingGate.hideImmediately()
         }
     }
+
+    @ToolbarContentBuilder
+    private var toolbarContent: some ToolbarContent {
+        ToolbarItem(placement: .principal) {
+            ContentViewerNavigationTitle(pageProgress: viewModel?.selectedPageProgress) {
+                if let viewModel, let selectedBookID = viewModel.selectedBookID {
+                    NavigationLink(value: BookRoute.detail(bookId: selectedBookID)) {
+                        contentViewerTitleLabel(viewModel.selectedBookTitle)
+                    }
+                    .buttonStyle(.plain)
+                } else {
+                    contentViewerTitleLabel(viewModel?.selectedBookTitle ?? presentationStyle.defaultTitle)
+                }
+            }
+        }
+    }
 }
 
 private struct ContentViewerLoadedView: View {
@@ -88,16 +109,39 @@ private struct ContentViewerLoadedView: View {
     @Binding var showsDeleteDialog: Bool
 
     @Environment(\.openURL) private var openURL
+    @Environment(XMToastCenter.self) private var toastCenter
+    @Environment(RepositoryContainer.self) private var repositories
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.colorScheme) private var colorScheme
 
     @State private var bottomOrnamentHeight: CGFloat = 0
     @State private var showsTagSheet = false
-    @State private var sharePayload: ContentViewerSharePayload?
+    @State private var tagEditSession: ContentViewerTagEditSession?
+    @State private var sharePayload: XMActivitySharePayload?
     @State private var pendingPresentation: PendingCapabilityPresentation?
+    @State private var aiTextPresentation: AITextResultPresentation?
+    @State private var autoTagPresentation: AIAutoTagPresentation?
     @State private var listLoadingGate = LoadingGate()
     @State private var searchMatchIndex = 0
+    @State private var speechController = NoteSpeechController()
+    @State private var shareGenerationTask: Task<Void, Never>?
+    @State private var isGeneratingShareImage = false
 
     private var presentationStyle: ContentViewerPresentationStyle {
         ContentViewerPresentationStyle(source: viewModel.source)
+    }
+
+    private var deleteAlertDescriptor: XMSystemAlertDescriptor {
+        XMSystemAlertDescriptor(
+            title: presentationStyle.deleteDialogTitle,
+            message: "主记录和从属记录会被永久删除，此操作无法撤销。",
+            actions: [
+                XMSystemAlertAction(title: "取消", role: .cancel) { },
+                XMSystemAlertAction(title: "删除", role: .destructive) {
+                    Task { await viewModel.deleteCurrentItem() }
+                },
+            ]
+        )
     }
 
     var body: some View {
@@ -137,16 +181,14 @@ private struct ContentViewerLoadedView: View {
                     },
                     onRefreshDetail: { itemID in
                         await viewModel.loadDetailIfNeeded(itemID: itemID)
-                    }
+                    },
+                    onAISelection: presentTextLookup
                 )
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
             .background(
                 Color.surfacePage.ignoresSafeArea(edges: .bottom)
             )
-            .navigationTitle("")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar { toolbarContent }
             .overlay {
                 if viewModel.isDeleting {
                     Color.overlay.ignoresSafeArea()
@@ -159,14 +201,10 @@ private struct ContentViewerLoadedView: View {
                 }
             }
         }
-        .confirmationDialog(presentationStyle.deleteDialogTitle, isPresented: $showsDeleteDialog) {
-            Button("删除", role: .destructive) {
-                Task { await viewModel.deleteCurrentItem() }
-            }
-            Button("取消", role: .cancel) {}
-        } message: {
-            Text("iOS 端当前按硬删除实现，主记录和子记录会一起删除。")
-        }
+        .xmSystemAlert(
+            isPresented: $showsDeleteDialog,
+            descriptor: deleteAlertDescriptor
+        )
         .xmSystemAlert(item: $pendingPresentation) { presentation in
             XMSystemAlertDescriptor(
                 title: presentation.title,
@@ -184,8 +222,45 @@ private struct ContentViewerLoadedView: View {
             .presentationDetents([.height(220)])
             .presentationDragIndicator(.visible)
         }
+        .sheet(item: $tagEditSession) { session in
+            NoteReviewTagEditSheet(
+                contextTitle: session.bookTitle,
+                snapshot: session.snapshot,
+                onCreateTag: { name in
+                    await viewModel.createTag(named: name)
+                },
+                onSave: { tags in
+                    await viewModel.replaceTags(tags, noteID: session.noteID)
+                }
+            )
+            .presentationDetents([.medium, .large])
+            .presentationDragIndicator(.visible)
+        }
         .sheet(item: $sharePayload) { payload in
-            ActivityShareSheet(activityItems: [payload.text])
+            XMActivityShareSheet(activityItems: payload.activityItems)
+        }
+        .sheet(item: $aiTextPresentation) { presentation in
+            AITextResultSheet(
+                presentation: presentation,
+                repository: repositories.aiRepository,
+                onIdeaAppended: {
+                    guard let noteID = presentation.request.noteIDForAppending else { return }
+                    await viewModel.refreshDetail(itemID: .note(noteID))
+                }
+            )
+            .presentationDetents([.medium, .large])
+            .presentationDragIndicator(.visible)
+        }
+        .sheet(item: $autoTagPresentation) { presentation in
+            AIAutoTagSheet(
+                presentation: presentation,
+                repository: repositories.aiRepository,
+                onTagsApplied: {
+                    await viewModel.refreshDetail(itemID: .note(presentation.noteID))
+                }
+            )
+            .presentationDetents([.medium, .large])
+            .presentationDragIndicator(.visible)
         }
         .onAppear {
             syncListLoadingVisibility()
@@ -198,6 +273,13 @@ private struct ContentViewerLoadedView: View {
         }
         .onChange(of: viewModel.selectedItemID) { _, _ in
             searchMatchIndex = 0
+            speechController.stop()
+            shareGenerationTask?.cancel()
+        }
+        .onChange(of: viewModel.actionFeedback) { _, feedback in
+            guard let feedback else { return }
+            showActionFeedback(feedback)
+            viewModel.consumeActionFeedback()
         }
         .onPreferenceChange(ImmersiveBottomChromeHeightPreferenceKey.self) { height in
             bottomOrnamentHeight = height
@@ -207,23 +289,10 @@ private struct ContentViewerLoadedView: View {
             await viewModel.prefetchDetails(around: selectedItemID, radius: 1)
         }
         .onDisappear {
+            shareGenerationTask?.cancel()
+            shareGenerationTask = nil
+            speechController.release()
             listLoadingGate.hideImmediately()
-        }
-    }
-
-    @ToolbarContentBuilder
-    private var toolbarContent: some ToolbarContent {
-        ToolbarItem(placement: .principal) {
-            ContentViewerNavigationTitle(pageProgress: viewModel.selectedPageProgress) {
-                if let selectedBookID = viewModel.selectedBookID {
-                    NavigationLink(value: BookRoute.detail(bookId: selectedBookID)) {
-                        contentViewerTitleLabel(viewModel.selectedBookTitle)
-                    }
-                    .buttonStyle(.plain)
-                } else {
-                    contentViewerTitleLabel(viewModel.selectedBookTitle)
-                }
-            }
         }
     }
 
@@ -305,14 +374,6 @@ private struct ContentViewerLoadedView: View {
                 .disabled(selectedReviewDetail == nil)
                 .accessibilityLabel("复制书评")
 
-                Button {
-                    presentPending(.aiAssistant)
-                } label: {
-                    ImmersiveBottomChromeIcon(systemName: "sparkles")
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("书评 AI")
-
             case .relevant(let contentID)?:
                 NavigationLink(value: ContentRoute.relevantEditor(contentId: contentID)) {
                     ImmersiveBottomChromeIcon(systemName: "square.and.pencil")
@@ -339,14 +400,6 @@ private struct ContentViewerLoadedView: View {
                 .disabled(selectedRelevantDetail == nil)
                 .accessibilityLabel("复制相关内容")
 
-                Button {
-                    presentPending(.aiAssistant)
-                } label: {
-                    ImmersiveBottomChromeIcon(systemName: "sparkles")
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("相关内容 AI")
-
             case .none:
                 ImmersiveBottomChromeIcon(systemName: "square.and.pencil")
                     .opacity(0.4)
@@ -367,10 +420,11 @@ private struct ContentViewerLoadedView: View {
             }
 
             Button {
-                presentPending(.editTags)
+                openTagEditor()
             } label: {
                 XMMenuLabel("编辑标签", systemImage: "pencil")
             }
+            .disabled(viewModel.isLoadingTagEditor || viewModel.isSavingTags)
         } label: {
             ImmersiveBottomChromeIcon(systemName: "tag")
         }
@@ -381,58 +435,140 @@ private struct ContentViewerLoadedView: View {
 
     private var noteAPISendMenu: some View {
         Menu {
-            Button {
-                presentPending(.apiSend)
-            } label: {
-                XMMenuLabel("发送到 Flomo", systemImage: "paperplane")
-            }
-            Button {
-                presentPending(.apiSend)
-            } label: {
-                XMMenuLabel("发送到 Writeathon", systemImage: "paperplane")
-            }
-            Button {
-                presentPending(.apiSend)
-            } label: {
-                XMMenuLabel("发送到 Inbox", systemImage: "tray.and.arrow.down")
+            if viewModel.configuredExternalAppDestinations.isEmpty {
+                Button {
+                    presentPending(.apiConfiguration)
+                } label: {
+                    XMMenuLabel("尚未配置关联应用", systemImage: "gearshape")
+                }
+            } else {
+                ForEach(ExternalAppDestination.allCases) { destination in
+                    if viewModel.configuredExternalAppDestinations.contains(destination) {
+                        Button {
+                            sendCurrentNote(to: destination)
+                        } label: {
+                            XMMenuLabel(destination.viewerMenuTitle, systemImage: destination.viewerMenuSystemImage)
+                        }
+                        .disabled(viewModel.sendingDestination != nil)
+                    }
+                }
             }
         } label: {
-            ImmersiveBottomChromeIcon(systemName: "paperplane")
+            ImmersiveBottomChromeIcon(
+                systemName: viewModel.sendingDestination == nil ? "paperplane" : "hourglass"
+            )
         }
         .buttonStyle(.plain)
         .xmMenuNeutralTint()
         .accessibilityLabel("API 外发")
     }
 
+    /// 在菜单关闭后读取当前书摘真实标签快照，成功才展示业务 Sheet。
+    private func openTagEditor() {
+        guard case .note(let noteID)? = viewModel.selectedItemID else { return }
+        let bookTitle = selectedNoteDetail?.bookTitle ?? viewModel.selectedBookTitle
+        Task {
+            toastCenter.processing("正在读取标签…")
+            let processingToastID = toastCenter.current?.id
+            let snapshot = await viewModel.fetchTagEditSnapshot(noteID: noteID)
+            toastCenter.dismiss(id: processingToastID)
+            guard let snapshot else { return }
+            tagEditSession = ContentViewerTagEditSession(
+                noteID: noteID,
+                bookTitle: bookTitle,
+                snapshot: snapshot
+            )
+        }
+    }
+
+    /// 将明确选择的外部目标交给 ViewModel，避免菜单状态变化后发送到错误书摘。
+    private func sendCurrentNote(to destination: ExternalAppDestination) {
+        guard case .note(let noteID)? = viewModel.selectedItemID else { return }
+        Task { await viewModel.send(noteID: noteID, to: destination) }
+    }
+
     private var noteShareMenu: some View {
         Menu {
+            if weReadOriginalURL != nil {
+                Button(action: openWeReadOriginal) {
+                    XMMenuLabel("在微信读书中查看原文", systemImage: "book")
+                }
+                Divider()
+            }
+
+            noteSpeechActions
+
+            Divider()
+
             Button {
                 shareCurrentNote()
             } label: {
                 XMMenuLabel("系统分享", systemImage: "square.and.arrow.up")
             }
             Button {
-                presentPending(.shareCard)
+                generateShareCard()
             } label: {
-                XMMenuLabel("分享卡片", systemImage: "rectangle.portrait.on.rectangle.portrait")
+                XMMenuLabel(
+                    isGeneratingShareImage ? "正在生成分享图…" : "分享卡片",
+                    systemImage: isGeneratingShareImage
+                        ? "hourglass"
+                        : "rectangle.portrait.on.rectangle.portrait"
+                )
             }
+            .disabled(isGeneratingShareImage)
         } label: {
-            ImmersiveBottomChromeIcon(systemName: "square.and.arrow.up")
+            ImmersiveBottomChromeIcon(systemName: noteOutputSystemImage)
         }
         .buttonStyle(.plain)
         .xmMenuNeutralTint()
-        .accessibilityLabel("分享书摘")
+        .animation(reduceMotion ? nil : .snappy(duration: 0.18), value: speechController.state)
+        .accessibilityLabel("原文、朗读与分享书摘")
+    }
+
+    private var noteOutputSystemImage: String {
+        switch speechController.state {
+        case .idle:
+            "square.and.arrow.up"
+        case .speaking:
+            "waveform"
+        case .paused:
+            "pause.fill"
+        }
+    }
+
+    @ViewBuilder
+    private var noteSpeechActions: some View {
+        switch speechController.state {
+        case .idle:
+            Button(action: startSpeakingCurrentNote) {
+                XMMenuLabel("朗读书摘", systemImage: "waveform")
+            }
+        case .speaking:
+            Button(action: speechController.pause) {
+                XMMenuLabel("暂停朗读", systemImage: "pause.fill")
+            }
+            Button(action: speechController.stop) {
+                XMMenuLabel("停止朗读", systemImage: "stop.fill")
+            }
+        case .paused:
+            Button(action: speechController.resume) {
+                XMMenuLabel("继续朗读", systemImage: "play.fill")
+            }
+            Button(action: speechController.stop) {
+                XMMenuLabel("停止朗读", systemImage: "stop.fill")
+            }
+        }
     }
 
     private var noteAIMenu: some View {
         Menu {
             Button {
-                presentPending(.aiExplain)
+                presentNoteExplanation()
             } label: {
                 XMMenuLabel("AI 解读", systemImage: "sparkles")
             }
             Button {
-                presentPending(.autoTag)
+                presentAutoTag()
             } label: {
                 XMMenuLabel("自动标签", systemImage: "tag")
             }
@@ -528,8 +664,65 @@ private struct ContentViewerLoadedView: View {
         return normalizedURL(selectedRelevantDetail.url)
     }
 
+    private var weReadOriginalURL: URL? {
+        guard let rawValue = selectedNoteDetail?.weReadOriginalURL else { return nil }
+        return URL(string: rawValue)
+    }
+
     private func presentPending(_ capability: ContentViewerPendingCapability) {
         pendingPresentation = PendingCapabilityPresentation(capability: capability)
+    }
+
+    /// 锁定当前书摘主键与书名后呈现流式解读，横向翻页不会改变本次写回目标。
+    private func presentNoteExplanation() {
+        guard case .note(let noteID)? = viewModel.selectedItemID else { return }
+        aiTextPresentation = AITextResultPresentation(
+            request: .noteExplanation(
+                noteID: noteID,
+                bookTitle: selectedNoteDetail?.bookTitle ?? viewModel.selectedBookTitle
+            )
+        )
+    }
+
+    /// 锁定 RichText 系统选区回调提供的文本与上下文后呈现释义结果。
+    private func presentTextLookup(_ input: AITextLookupInput) {
+        aiTextPresentation = AITextResultPresentation(request: .textLookup(input))
+    }
+
+    /// 锁定当前书摘主键后呈现自动标签建议，确认写入时不会受翻页状态影响。
+    private func presentAutoTag() {
+        guard case .note(let noteID)? = viewModel.selectedItemID else { return }
+        autoTagPresentation = AIAutoTagPresentation(
+            noteID: noteID,
+            bookTitle: selectedNoteDetail?.bookTitle ?? viewModel.selectedBookTitle
+        )
+    }
+
+    /// 使用系统 URL 分发打开微信读书深链；系统拒绝或目标 App 不可用时通过统一 Toast 明确反馈。
+    private func openWeReadOriginal() {
+        guard let weReadOriginalURL else {
+            toastCenter.warning("当前书摘缺少微信读书原文位置")
+            return
+        }
+        openURL(weReadOriginalURL) { accepted in
+            if !accepted {
+                toastCenter.error("未能打开微信读书")
+            }
+        }
+    }
+
+    /// 把状态层动作事件映射到统一 Toast；processing 会由后续 success/error newest-wins 替换。
+    private func showActionFeedback(_ feedback: ContentViewerActionFeedback) {
+        switch feedback.role {
+        case .processing:
+            toastCenter.processing(feedback.message)
+        case .success:
+            toastCenter.success(feedback.message)
+        case .warning:
+            toastCenter.warning(feedback.message)
+        case .error:
+            toastCenter.error(feedback.message)
+        }
     }
 
     private func selectPreviousSearchMatch() {
@@ -550,7 +743,63 @@ private struct ContentViewerLoadedView: View {
 
     private func shareCurrentNote() {
         guard let detail = selectedNoteDetail else { return }
-        sharePayload = ContentViewerSharePayload(text: shareText(from: detail))
+        sharePayload = XMActivitySharePayload(activityItems: [shareText(from: detail)])
+    }
+
+    /// 将当前富文本转换为系统朗读所需纯文本；状态变化直接反馈在原菜单入口，不额外弹成功提示。
+    private func startSpeakingCurrentNote() {
+        guard let detail = selectedNoteDetail else { return }
+        let content = RichTextBridge.htmlToAttributed(detail.contentHTML).string
+        let idea = RichTextBridge.htmlToAttributed(detail.ideaHTML).string
+        guard speechController.start(content: content, idea: idea) else {
+            toastCenter.warning("当前书摘没有可朗读内容")
+            return
+        }
+    }
+
+    /// 立即展示处理中反馈并串行生成 PNG；离场取消会清理尚未交给系统分享面板的本次临时文件。
+    private func generateShareCard() {
+        guard !isGeneratingShareImage, let detail = selectedNoteDetail else { return }
+
+        withAnimation(reduceMotion ? nil : .snappy(duration: 0.18)) {
+            isGeneratingShareImage = true
+        }
+        toastCenter.processing("正在生成分享图…")
+        let processingToastID = toastCenter.current?.id ?? UUID()
+        let isDarkAppearance = colorScheme == .dark
+
+        shareGenerationTask = Task { @MainActor in
+            await Task.yield()
+            defer {
+                toastCenter.dismiss(id: processingToastID)
+                withAnimation(reduceMotion ? nil : .snappy(duration: 0.18)) {
+                    isGeneratingShareImage = false
+                }
+                shareGenerationTask = nil
+            }
+
+            var generatedFileURL: URL?
+            do {
+                try Task.checkCancellation()
+                let file = try await NoteReviewShareImageRenderer().renderPNG(
+                    for: detail,
+                    isDarkAppearance: isDarkAppearance
+                )
+                generatedFileURL = file.fileURL
+                try Task.checkCancellation()
+                sharePayload = XMActivitySharePayload(activityItems: [file.fileURL])
+            } catch is CancellationError {
+                if let generatedFileURL {
+                    try? FileManager.default.removeItem(at: generatedFileURL)
+                }
+                return
+            } catch {
+                if let generatedFileURL {
+                    try? FileManager.default.removeItem(at: generatedFileURL)
+                }
+                toastCenter.error("生成分享图失败：\(error.localizedDescription)")
+            }
+        }
     }
 
     private func copyCurrentDetail() {
@@ -766,6 +1015,32 @@ private struct ContentViewerSearchContextCard: View {
     }
 }
 
+/// 标签 Sheet 的稳定会话载荷，锁定触发时书摘主键，避免横向翻页后写错记录。
+private struct ContentViewerTagEditSession: Identifiable {
+    let noteID: Int64
+    let bookTitle: String
+    let snapshot: NoteReviewTagEditSnapshot
+
+    var id: Int64 { noteID }
+}
+
+private extension ExternalAppDestination {
+    var viewerMenuTitle: String {
+        switch self {
+        case .flomo: "发送到 Flomo"
+        case .writeathon: "发送到 Writeathon"
+        case .inbox: "发送到 Inbox"
+        }
+    }
+
+    var viewerMenuSystemImage: String {
+        switch self {
+        case .flomo, .writeathon: "paperplane"
+        case .inbox: "tray.and.arrow.down"
+        }
+    }
+}
+
 struct ContentViewerHeroCard<Accessory: View>: View {
     let title: String
     let subtitle: String
@@ -810,4 +1085,6 @@ private extension String {
         )
     }
     .environment(RepositoryContainer(databaseManager: DatabaseManager(database: try! .empty())))
+    .environment(SceneStateStore())
+    .environment(XMToastCenter())
 }

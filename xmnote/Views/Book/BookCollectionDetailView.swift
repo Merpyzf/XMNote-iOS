@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 RepositoryContainer 注入书架与封面上传仓储，依赖 BookCollectionDetailViewModel 驱动书单详情、添加书籍、移除、排序、relation 文本编辑、书籍元信息编辑、导出占位与删除确认
- * [OUTPUT]: 对外提供 BookCollectionDetailView，承载手动书单与年度书单详情、自动同步边界、导出入口、书籍行操作、书籍元信息编辑、收藏理由/年度点评编辑和系统弹窗
+ * [OUTPUT]: 对外提供 BookCollectionDetailView，承载手动书单与年度书单详情、自动同步边界、导出与系统分享、书籍行操作、书籍元信息编辑、收藏理由/年度点评编辑和系统弹窗
  * [POS]: Views/Book 的书单详情页面壳层，被 BookRoute.collectionDetail 导航目标消费
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -161,7 +161,7 @@ private struct BookCollectionDetailContentView: View {
             }
         }
         .sheet(item: $viewModel.generatedFile) { file in
-            ActivityShareSheet(activityItems: file.urls)
+            XMActivityShareSheet(activityItems: file.urls)
                 .presentationDetents([.medium, .large])
         }
         .xmSystemAlert(item: $viewModel.removeConfirmation) { confirmation in

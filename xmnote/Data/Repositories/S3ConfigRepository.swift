@@ -91,10 +91,7 @@ struct S3ConfigRepository: S3ConfigRepositoryProtocol {
         }
 
         try await databaseManager.database.dbPool.write { db in
-            guard var record = try CosConfigRecord.fetchOne(db, key: config.id) else { return }
-            record.markAsDeleted()
-            record.isUsing = 0
-            try record.update(db)
+            _ = try CosConfigRecord.deleteOne(db, key: config.id)
         }
     }
 

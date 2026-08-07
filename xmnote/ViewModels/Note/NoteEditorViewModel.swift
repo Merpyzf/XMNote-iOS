@@ -5,7 +5,7 @@ import SwiftUI
 import UIKit
 
 /**
- * [INPUT]: 依赖 NoteRepositoryProtocol 提供 bootstrap、草稿、暂存图、OCR 与保存事务，依赖 RichTextBridge 处理 HTML 与富文本互转
+ * [INPUT]: 依赖 NoteRepositoryProtocol 提供 bootstrap、草稿、暂存图与保存事务，依赖 NoteImageUploadQuotaRepositoryProtocol 管理每日图片额度，依赖 RichTextBridge 处理 HTML 与富文本互转
  * [OUTPUT]: 对外提供 NoteEditorViewModel、NoteEditorComposerTarget，驱动书摘编辑页与全屏正文编辑页
  * [POS]: ViewModels/Note 的书摘编辑状态编排器，被 NoteEditorView 消费
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -135,14 +135,18 @@ final class NoteEditorViewModel {
     var isLoading = false
     var isSaving = false
     var errorMessage: String?
+    var imageQuotaAlertMessage: String?
     var didSave = false
     var pendingRecoveredDraft: NoteEditorDraft?
     var lastAutoSaveTime: Int64 = 0
+    var imageQuotaState: NoteImageUploadQuotaState?
     var ideaInputState: IdeaInputState = .collapsed
 
     private let mode: NoteEditorMode
     private let seed: NoteEditorSeed?
     private let repository: any NoteRepositoryProtocol
+    private let quotaRepository: any NoteImageUploadQuotaRepositoryProtocol
+    private var isPremium: Bool
     private var hasLoaded = false
     private var initialDraft: NoteEditorDraft?
     private var initialPerceivedDirtyTrackingSnapshot: NoteEditorPerceivedDirtyTrackingSnapshot?
@@ -152,15 +156,22 @@ final class NoteEditorViewModel {
     private var autoSaveTask: Task<Void, Never>?
     private var createdDateAutoUpdateTask: Task<Void, Never>?
     private var imageUploadTasks: [String: Task<Void, Never>] = [:]
+    private var imageQuotaReservationID = UUID().uuidString
+    private var isImageQuotaReservationBackedByDraft = false
+    private var isStagingImages = false
 
     init(
         mode: NoteEditorMode,
         seed: NoteEditorSeed?,
-        repository: any NoteRepositoryProtocol
+        repository: any NoteRepositoryProtocol,
+        quotaRepository: any NoteImageUploadQuotaRepositoryProtocol,
+        isPremium: Bool
     ) {
         self.mode = mode
         self.seed = seed
         self.repository = repository
+        self.quotaRepository = quotaRepository
+        self.isPremium = isPremium
     }
 
     var hasUnsavedChanges: Bool {
@@ -218,6 +229,11 @@ final class NoteEditorViewModel {
         selectedChapterTitle.isEmpty ? "不设置章节" : selectedChapterTitle
     }
 
+    var availableImageSelectionCount: Int {
+        let componentRemaining = max(0, 9 - imageItems.count)
+        return min(componentRemaining, imageQuotaState?.remainingCount ?? componentRemaining)
+    }
+
     var contentPreviewText: String {
         previewText(from: contentText, placeholder: "点击进入全屏编辑书摘内容")
     }
@@ -249,6 +265,7 @@ final class NoteEditorViewModel {
                recoveredDraft != bootstrap.baseDraft {
                 pendingRecoveredDraft = mergeMissingSelections(in: recoveredDraft)
             }
+            await refreshImageQuota()
             syncCreatedDateAutoUpdateState()
 #if DEBUG
             Self.bootstrapLogger.debug(
@@ -266,22 +283,28 @@ final class NoteEditorViewModel {
     }
 
     /// 恢复自动保存草稿，并保留恢复时间显示。
-    func restoreRecoveredDraft() {
+    func restoreRecoveredDraft() async {
         guard let pendingRecoveredDraft else { return }
         applyDraft(mergeMissingSelections(in: pendingRecoveredDraft), resetInitialDraft: false)
+        isImageQuotaReservationBackedByDraft = true
         lastAutoSaveTime = pendingRecoveredDraft.lastAutoSaveTime
         self.pendingRecoveredDraft = nil
+        await refreshImageQuota()
         syncCreatedDateAutoUpdateState()
     }
 
     /// 丢弃自动保存草稿，并清理对应缓存。
-    func discardRecoveredDraft() {
+    func discardRecoveredDraft() async {
         guard let pendingRecoveredDraft else { return }
         repository.deleteNoteEditorDraft(
             bookId: pendingRecoveredDraft.bookId,
             noteId: pendingRecoveredDraft.noteId
         )
+        if let recoveredReservationID = pendingRecoveredDraft.imageQuotaReservationID {
+            await quotaRepository.releaseReservation(id: recoveredReservationID)
+        }
         self.pendingRecoveredDraft = nil
+        await refreshImageQuota()
     }
 
     /// 选中一本书，并同步当前页码单位与章节列表。
@@ -338,20 +361,72 @@ final class NoteEditorViewModel {
         }
     }
 
-    /// 将相册/拍照得到的图片暂存进编辑目录，并更新附图条。
-    func stageImage(data: Data, fileExtension: String) async {
+    /// 批量接收相册图片，先按当前日额度和页面上限裁剪，再逐张经仓储暂存与上传。
+    func stageImages(_ inputs: [(data: Data, fileExtension: String)]) async {
+        guard !inputs.isEmpty, !isStagingImages else { return }
+        isStagingImages = true
+        defer { isStagingImages = false }
         errorMessage = nil
-        do {
-            let stagedItem = try await repository.stageNoteEditorImage(
-                data: data,
-                preferredFileExtension: fileExtension
-            )
-            let uploadingItem = stagedItem.updatingUploadState(.uploading)
-            imageItems.append(uploadingItem)
-            startImageUpload(for: uploadingItem)
-        } catch {
-            errorMessage = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+        let componentAcceptedCount = min(inputs.count, max(0, 9 - imageItems.count))
+        guard componentAcceptedCount > 0 else {
+            errorMessage = "最多只能添加 9 张图片"
+            return
         }
+        let reservation = await quotaRepository.reserveImages(
+            id: imageQuotaReservationID,
+            owner: imageQuotaOwner,
+            currentDraftNewImageCount: imageItems.count { $0.origin == .newInDraft },
+            requestedCount: componentAcceptedCount,
+            isPremium: isPremium
+        )
+        imageQuotaState = reservation.state
+        let acceptedCount = reservation.acceptedCount
+        guard acceptedCount > 0 else {
+            let message = reservation.state.isBlocked
+                ? reservation.state.blockedMessage
+                : "最多只能添加 9 张图片"
+            if reservation.state.isBlocked {
+                imageQuotaAlertMessage = message
+            } else {
+                errorMessage = message
+            }
+            return
+        }
+        if acceptedCount < inputs.count {
+            if acceptedCount < componentAcceptedCount {
+                imageQuotaAlertMessage = "已超出今日额度，保留前 \(acceptedCount) 张。"
+            } else {
+                errorMessage = "最多只能添加 9 张图片，已保留前 \(acceptedCount) 张"
+            }
+        }
+
+        for input in inputs.prefix(acceptedCount) {
+            guard !Task.isCancelled else { break }
+            await stageImageWithoutQuotaCheck(data: input.data, fileExtension: input.fileExtension)
+        }
+        persistAutoSaveDraftImmediatelyIfNeeded()
+        isImageQuotaReservationBackedByDraft = imageItems.contains { $0.origin == .newInDraft }
+        await refreshImageQuota()
+    }
+
+    /// 单图入口兼容拍照等调用，实际仍复用批量额度门闩。
+    func stageImage(data: Data, fileExtension: String) async {
+        await stageImages([(data: data, fileExtension: fileExtension)])
+    }
+
+    /// 图片入口被额度前置阻断时复用当前快照生成标准系统弹窗文案。
+    func showImageQuotaBlockedMessage() {
+        if let imageQuotaState, imageQuotaState.isBlocked {
+            imageQuotaAlertMessage = imageQuotaState.blockedMessage
+        } else {
+            errorMessage = "最多只能添加 9 张图片"
+        }
+    }
+
+    /// 会员状态变化时立即重算选择额度；MainActor 保证状态刷新不会与编辑器选择回写交错。
+    func updatePremiumStatus(_ isPremium: Bool) async {
+        self.isPremium = isPremium
+        await refreshImageQuota()
     }
 
     /// 删除一张附图；本地暂存图会同步清理缓存文件。
@@ -373,6 +448,22 @@ final class NoteEditorViewModel {
         )
         #endif
         await repository.removeStagedNoteEditorImage(item)
+        await refreshImageQuota()
+    }
+
+    /// 将已通过额度门闩的单张图片写入仓储并启动上传；取消后不再继续追加后续图片。
+    private func stageImageWithoutQuotaCheck(data: Data, fileExtension: String) async {
+        do {
+            let stagedItem = try await repository.stageNoteEditorImage(
+                data: data,
+                preferredFileExtension: fileExtension
+            )
+            let uploadingItem = stagedItem.updatingUploadState(.uploading)
+            imageItems.append(uploadingItem)
+            startImageUpload(for: uploadingItem)
+        } catch {
+            errorMessage = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+        }
     }
 
     /// 重试失败附图上传。
@@ -465,7 +556,19 @@ final class NoteEditorViewModel {
         autoSaveTask?.cancel()
 
         do {
-            let noteId = try await repository.saveNoteEditor(makeDraftSnapshot(includeAutoSaveTime: false))
+            let snapshot = makeDraftSnapshot(includeAutoSaveTime: false)
+            let newImageCount = snapshot.imageItems.count { $0.origin == .newInDraft }
+            let noteId = try await repository.saveNoteEditor(snapshot)
+            await quotaRepository.commitReservation(
+                id: imageQuotaReservationID,
+                savedImageCount: newImageCount,
+                isPremium: isPremium
+            )
+            isImageQuotaReservationBackedByDraft = false
+            isHydratingState = true
+            imageItems = imageItems.map { $0.markingPersisted() }
+            isHydratingState = false
+            await refreshImageQuota()
             didSave = true
             initialDraft = makeDraftSnapshot(includeAutoSaveTime: false, overridingNoteID: noteId)
             initialPerceivedDirtyTrackingSnapshot = makePerceivedDirtyTrackingSnapshot()
@@ -490,6 +593,12 @@ final class NoteEditorViewModel {
             await repository.removeStagedNoteEditorImage(item)
         }
         repository.deleteNoteEditorDraft(bookId: currentDraft.bookId, noteId: currentDraft.noteId)
+        await quotaRepository.releaseReservation(id: imageQuotaReservationID)
+        isImageQuotaReservationBackedByDraft = false
+        if let recoveredReservationID = pendingRecoveredDraft?.imageQuotaReservationID,
+           recoveredReservationID != imageQuotaReservationID {
+            await quotaRepository.releaseReservation(id: recoveredReservationID)
+        }
 
         pendingRecoveredDraft = nil
     }
@@ -499,6 +608,8 @@ final class NoteEditorViewModel {
         didSave = false
         errorMessage = nil
         pendingRecoveredDraft = nil
+        imageQuotaReservationID = UUID().uuidString
+        isImageQuotaReservationBackedByDraft = false
 
         let seed = NoteEditorSeed(
             bookId: preferredBookID,
@@ -514,6 +625,7 @@ final class NoteEditorViewModel {
             availableChapters = bootstrap.chapters
             applyDraft(bootstrap.baseDraft, resetInitialDraft: true)
             lastAutoSaveTime = 0
+            await refreshImageQuota()
             syncCreatedDateAutoUpdateState()
         } catch {
             errorMessage = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
@@ -522,6 +634,22 @@ final class NoteEditorViewModel {
 }
 
 private extension NoteEditorViewModel {
+    /// 通过额度仓储读取当前自然日状态；草稿预占只统计显式 newInDraft 图片。
+    func refreshImageQuota() async {
+        imageQuotaState = await quotaRepository.reconcileReservation(
+            id: imageQuotaReservationID,
+            owner: imageQuotaOwner,
+            draftNewImageCount: imageItems.count { $0.origin == .newInDraft },
+            isPersistedDraft: isImageQuotaReservationBackedByDraft,
+            isPremium: isPremium
+        )
+    }
+
+    /// 额度 owner 与书摘自动草稿 `(book_id, note_id)` 身份一致，切书后新草稿会接管当前 ticket。
+    var imageQuotaOwner: NoteImageUploadReservationOwner {
+        .note(bookID: selectedBook?.id ?? 0, noteID: mode.noteID)
+    }
+
     nonisolated static var currentTimestampMillis: Int64 {
         Int64(Date().timeIntervalSince1970 * 1000)
     }
@@ -543,6 +671,11 @@ private extension NoteEditorViewModel {
         imageUploadTasks.removeAll()
         isHydratingState = true
         defer { isHydratingState = false }
+
+        if let reservationID = draft.imageQuotaReservationID,
+           !reservationID.isEmpty {
+            imageQuotaReservationID = reservationID
+        }
 
         let resolvedBook = availableBooks.first(where: { $0.id == draft.bookId }) ?? fallbackBookOption(from: draft)
         selectedBook = resolvedBook
@@ -615,11 +748,18 @@ private extension NoteEditorViewModel {
             guard let self else { return }
             try? await Task.sleep(for: .seconds(2))
             guard !Task.isCancelled else { return }
-            let snapshot = self.makeDraftSnapshot(includeAutoSaveTime: true)
-            guard snapshot != self.initialDraft else { return }
-            self.repository.saveNoteEditorDraft(snapshot)
-            self.lastAutoSaveTime = snapshot.lastAutoSaveTime
+            self.persistAutoSaveDraftImmediatelyIfNeeded()
         }
+    }
+
+    /// 图片预占完成后立即持久化 ticket 与附件快照，缩短进程退出造成孤立预占的窗口。
+    func persistAutoSaveDraftImmediatelyIfNeeded() {
+        autoSaveTask?.cancel()
+        autoSaveTask = nil
+        let snapshot = makeDraftSnapshot(includeAutoSaveTime: true)
+        guard snapshot != initialDraft else { return }
+        repository.saveNoteEditorDraft(snapshot)
+        lastAutoSaveTime = snapshot.lastAutoSaveTime
     }
 
     /// 仅新建书摘在未手动选择时间前保持“当前时间”自动走时。
@@ -681,7 +821,8 @@ private extension NoteEditorViewModel {
             chapterTitle: selectedChapterTitle,
             selectedTags: selectedTags,
             imageItems: imageItems,
-            lastAutoSaveTime: timestamp
+            lastAutoSaveTime: timestamp,
+            imageQuotaReservationID: imageQuotaReservationID
         )
     }
 

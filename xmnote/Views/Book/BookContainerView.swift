@@ -894,7 +894,7 @@ private struct BookCollectionTopActionPill: View {
 
     private enum Style {
         static let hitSize: CGFloat = Spacing.actionReserved
-        static let iconColor = Color.textPrimary.opacity(0.80)
+        static let iconColor = Color.iconPrimary.opacity(0.88)
     }
 
     var body: some View {
@@ -951,6 +951,7 @@ private struct BookCollectionTopActionPill: View {
         Button(action: action) {
             TopBarActionIcon(
                 systemName: systemImage,
+                iconSize: 14,
                 foregroundColor: isDisabled ? Color.textHint : tint,
                 hitShape: presentation == .pillSegment ? .rectangle : .circle
             )

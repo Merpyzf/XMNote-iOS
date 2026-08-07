@@ -149,41 +149,47 @@ extension BookRepository {
         )
     }
 
-    /// 删除手动书单；collection 本体不更新时间戳，relation 按 Android deleteByCollectionId 更新时间戳。
+    /// 物理删除手动书单及其全部关系，并清理失去最后引用的占位书。
     nonisolated func deleteBookCollection(_ db: Database, collectionID: Int64) throws {
         guard try isActiveManualCollection(db, collectionID: collectionID) else {
             throw BookshelfBatchWriteError.invalidCollection
         }
-        let now = timestampMillis()
-        // SQL 目的：软删除手动书单本体，保持 Android CollectionDao.delete 不刷新 updated_date 的语义。
-        // 涉及表：collection。
-        // 关键过滤：id 精确匹配、is_deleted = 0、is_annual = 0。
-        // 时间字段：不更新 updated_date。
+        // SQL 目的：在删除书单关系前读取其引用书籍，供关系删除后清理无引用占位书。
+        // 涉及表：collection_book。
+        // 关键过滤：collection_id 精确匹配；同时覆盖历史 tombstone 关系。
+        // 时间字段：不参与查询。
+        // 返回字段用途：候选 book.id 仅用于占位书引用闭包清理。
+        let referencedBookIDs = try Int64.fetchAll(
+            db,
+            sql: "SELECT DISTINCT book_id FROM collection_book WHERE collection_id = ? AND book_id > 0",
+            arguments: [collectionID]
+        )
+
+        // SQL 目的：物理删除该书单下全部关系，为删除 collection 父记录解除外键约束。
+        // 涉及表：collection_book。
+        // 关键过滤：collection_id 精确匹配；同时清理历史 tombstone。
+        // 时间字段：物理删除不更新时间字段。
         try db.execute(
             sql: """
-                UPDATE collection
-                SET is_deleted = 1
-                WHERE id = ?
-                  AND is_deleted = 0
-                  AND is_annual = 0
+                DELETE FROM collection_book
+                WHERE collection_id = ?
                 """,
             arguments: [collectionID]
         )
 
-        // SQL 目的：软删除该书单下全部有效关系，复刻 Android deleteByCollectionId 会刷新 relation updated_date 的语义。
-        // 涉及表：collection_book。
-        // 关键过滤：collection_id 精确匹配且 is_deleted = 0。
-        // 时间字段：updated_date 写入当前毫秒。
+        // SQL 目的：在关系已清理后物理删除目标手动书单。
+        // 涉及表：collection。
+        // 关键过滤：id 精确匹配且 is_annual = 0；年度书单仍受保护。
+        // 时间字段：物理删除不更新时间字段。
+        // 副作用用途：完成手动书单不可恢复删除。
         try db.execute(
-            sql: """
-                UPDATE collection_book
-                SET is_deleted = 1,
-                    updated_date = ?
-                WHERE collection_id = ?
-                  AND is_deleted = 0
-                """,
-            arguments: [now, collectionID]
+            sql: "DELETE FROM collection WHERE id = ? AND is_annual = 0",
+            arguments: [collectionID]
         )
+
+        for bookID in referencedBookIDs {
+            try deleteReferencePlaceholderIfUnreferenced(db, bookID: bookID)
+        }
     }
 
     /// 按传入顺序更新手动书单 order，更新时间戳与 Android updateCollectionOrder 保持一致。
@@ -216,25 +222,34 @@ extension BookRepository {
         }
     }
 
-    /// 从书单内移除 relation，保持 Android deleteSync 不更新时间戳的语义。
+    /// 从书单内物理移除 relation，并清理失去最后引用的占位书。
     nonisolated func removeBooksFromCollection(
         _ db: Database,
         collectionBookIDs: [Int64]
     ) throws {
         for id in normalizedPositiveIDs(collectionBookIDs) {
-            // SQL 目的：软删除单条书单关系，复刻 Android deleteSync(id) 不刷新 updated_date。
+            // SQL 目的：读取待删除书单关系的 book_id，供删除后清理无引用占位书。
             // 涉及表：collection_book。
-            // 关键过滤：id 精确匹配且 is_deleted = 0。
-            // 时间字段：不更新 updated_date。
-            try db.execute(
-                sql: """
-                    UPDATE collection_book
-                    SET is_deleted = 1
-                    WHERE id = ?
-                      AND is_deleted = 0
-                    """,
+            // 关键过滤：id 精确匹配。
+            // 时间字段：不参与查询。
+            // 返回字段用途：候选 book.id 只用于引用闭包清理。
+            let bookID = try Int64.fetchOne(
+                db,
+                sql: "SELECT book_id FROM collection_book WHERE id = ? LIMIT 1",
                 arguments: [id]
             )
+
+            // SQL 目的：物理删除单条书单关系。
+            // 涉及表：collection_book。
+            // 关键过滤：id 精确匹配；同时允许清理历史 tombstone 关系。
+            // 时间字段：物理删除不更新时间字段。
+            try db.execute(
+                sql: "DELETE FROM collection_book WHERE id = ?",
+                arguments: [id]
+            )
+            if let bookID {
+                try deleteReferencePlaceholderIfUnreferenced(db, bookID: bookID)
+            }
         }
     }
 

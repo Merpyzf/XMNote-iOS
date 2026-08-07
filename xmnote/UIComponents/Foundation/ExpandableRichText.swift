@@ -1,7 +1,7 @@
 /**
- * [INPUT]: 依赖 RichText 完整富文本展示、CollapsedRichTextPreview 收起态轻量预览、DesignTokens 设计令牌
- * [OUTPUT]: 对外提供 ExpandableRichText（可展开/收起的 HTML 富文本组件）
- * [POS]: UIComponents/Foundation 的跨模块复用展示组件，包装完整富文本与轻量预览提供 3 行截断 + 展开/收起切换
+ * [INPUT]: 依赖 RichText 完整富文本展示、CollapsedRichTextPreview 收起态轻量预览、DesignTokens 设计令牌，可选接收稳定预览交互标识与点击回调
+ * [OUTPUT]: 对外提供 ExpandableRichText（可展开/收起并可让收起态正文承担主导航的 HTML 富文本组件）
+ * [POS]: UIComponents/Foundation 的跨模块复用展示组件，包装完整富文本与轻量预览提供行数截断、展开/收起与可选预览点击
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
@@ -17,13 +17,16 @@ struct ExpandableRichText: View, Equatable {
     var textColor: UIColor = .label
     var lineSpacing: CGFloat = 4
     var maxLines: Int = 3
+    var previewTapIdentity: AnyHashable? = nil
+    var onPreviewTap: (() -> Void)? = nil
 
     static func == (lhs: ExpandableRichText, rhs: ExpandableRichText) -> Bool {
         lhs.html == rhs.html &&
         lhs.baseFont == rhs.baseFont &&
         lhs.textColor == rhs.textColor &&
         lhs.lineSpacing == rhs.lineSpacing &&
-        lhs.maxLines == rhs.maxLines
+        lhs.maxLines == rhs.maxLines &&
+        lhs.previewTapIdentity == rhs.previewTapIdentity
     }
 
     var body: some View {
@@ -32,7 +35,8 @@ struct ExpandableRichText: View, Equatable {
             baseFont: baseFont,
             textColor: textColor,
             lineSpacing: lineSpacing,
-            maxLines: maxLines
+            maxLines: maxLines,
+            onPreviewTap: onPreviewTap
         )
     }
 }
@@ -43,7 +47,9 @@ private struct ExpandableRichTextCore: View {
     let textColor: UIColor
     let lineSpacing: CGFloat
     let maxLines: Int
+    let onPreviewTap: (() -> Void)?
 
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var isExpanded = false
 
     var body: some View {
@@ -76,7 +82,8 @@ private struct ExpandableRichTextCore: View {
                         textColor: textColor,
                         lineSpacing: lineSpacing,
                         maxLines: maxLines,
-                        onExpand: expand
+                        onExpand: expand,
+                        onPreviewTap: onPreviewTap
                     )
                 }
             }
@@ -87,13 +94,13 @@ private struct ExpandableRichTextCore: View {
     }
 
     private func expand() {
-        withAnimation(.snappy) {
+        withAnimation(reduceMotion ? nil : .snappy) {
             isExpanded = true
         }
     }
 
     private func collapse() {
-        withAnimation(.snappy) {
+        withAnimation(reduceMotion ? nil : .snappy) {
             isExpanded = false
         }
     }

@@ -1,12 +1,11 @@
 /**
- * [INPUT]: 依赖 ContentViewerSourceContext、SwiftUI/UIKit 与 DesignTokens 提供通用查看器共享支撑能力
- * [OUTPUT]: 对外提供 ContentViewerPresentationStyle、占位能力模型、标签弹层、分享面板与共享辅助视图
- * [POS]: Content 模块查看页共享 support，统一书摘/书评/相关内容 viewer 的展示语义与辅助弹层
+ * [INPUT]: 依赖 ContentViewerSourceContext、SwiftUI 与 DesignTokens 提供通用查看器共享支撑能力
+ * [OUTPUT]: 对外提供 ContentViewerPresentationStyle、关联应用配置提示与标签弹层
+ * [POS]: Content 模块查看页共享 support，统一书摘/书评/相关内容 viewer 的展示语义与页面私有辅助弹层；系统分享复用 UIComponents
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
 import SwiftUI
-import UIKit
 
 /// 通用内容查看器展示风格，按入口来源决定文案与局部交互语义。
 enum ContentViewerPresentationStyle {
@@ -15,8 +14,10 @@ enum ContentViewerPresentationStyle {
 
     init(source: ContentViewerSourceContext) {
         switch source {
-        case .bookNotes, .noteReview:
+        case .bookNotes, .noteReview, .noteExcerpts, .chapterNotes:
             self = .noteOnly
+        case .relatedCategory, .allReviews, .bookReviews, .bookRelated:
+            self = .general
         case .timeline(_, _, let filter):
             self = filter == .note ? .noteOnly : .general
         }
@@ -86,51 +87,26 @@ enum ContentViewerPresentationStyle {
     }
 }
 
-/// 通用内容查看未开放能力枚举，统一管理入口提示文案与占位语义。
+/// 通用内容查看需要先完成配置的能力枚举，统一管理入口提示文案。
 enum ContentViewerPendingCapability {
-    case editTags
-    case apiSend
-    case aiAssistant
-    case aiExplain
-    case autoTag
-    case shareCard
+    case apiConfiguration
 
     var title: String {
         switch self {
-        case .editTags:
-            "标签编辑"
-        case .apiSend:
-            "API 外发"
-        case .aiAssistant:
-            "AI 助手"
-        case .aiExplain:
-            "AI 解读"
-        case .autoTag:
-            "自动标签"
-        case .shareCard:
-            "分享卡片"
+        case .apiConfiguration:
+            "尚未配置关联应用"
         }
     }
 
     var message: String {
         switch self {
-        case .editTags:
-            "标签编辑能力已预留，后续版本开放。"
-        case .apiSend:
-            "API 外发能力已预留，后续版本开放。"
-        case .aiAssistant:
-            "AI 助手能力已预留，后续版本开放。"
-        case .aiExplain:
-            "AI 解读能力已预留，后续版本开放。"
-        case .autoTag:
-            "自动标签能力已预留，后续版本开放。"
-        case .shareCard:
-            "书摘分享卡片能力已预留，后续版本开放。"
+        case .apiConfiguration:
+            "请先前往“我的 > 关联应用”，配置至少一个发送目标后再试。"
         }
     }
 }
 
-/// 通用内容查看占位提示载体，供 `.alert(item:)` 统一承接。
+/// 通用内容查看待办提示载体，供 `XMSystemAlert` 统一承接。
 struct PendingCapabilityPresentation: Identifiable {
     let capability: ContentViewerPendingCapability
     let id = UUID()
@@ -196,21 +172,4 @@ struct FlowTagWrap: View {
             Array(tags[index..<min(index + 3, tags.count)])
         }
     }
-}
-
-/// 分享弹层 payload，统一作为 `.sheet(item:)` 身份载体。
-struct ContentViewerSharePayload: Identifiable {
-    let text: String
-    let id = UUID()
-}
-
-/// UIKit 分享面板桥接，供 viewer 分享与复制扩展复用。
-struct ActivityShareSheet: UIViewControllerRepresentable {
-    let activityItems: [Any]
-
-    func makeUIViewController(context: Context) -> UIActivityViewController {
-        UIActivityViewController(activityItems: activityItems, applicationActivities: nil)
-    }
-
-    func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
 }

@@ -1,7 +1,7 @@
 /**
- * [INPUT]: 依赖 GRDB DatabaseMigrator、RoomCanonicalSchemaV40/RoomCanonicalSchemaV41/RoomCanonicalSchemaV42/RoomCanonicalSchemaV43/RoomCanonicalSchemaV44、RoomCanonicalSchemaCompatibility 与 DatabaseSchema+Seed
- * [OUTPUT]: 对外提供 AppDatabase.migrator 与 Room canonical 迁移标识
- * [POS]: Database/Core 的迁移入口，被 AppDatabase.init 调用执行 Schema 创建
+ * [INPUT]: 依赖 GRDB DatabaseMigrator、RoomCanonicalSchemaV40...V44、RoomCanonicalSchemaCompatibility、HardDeleteCanonicalizer 与 DatabaseSchema+Seed
+ * [OUTPUT]: 对外提供 AppDatabase.migrator、Room canonical 迁移标识与 iOS 硬删除整理迁移
+ * [POS]: Database/Core 的迁移入口，被 AppDatabase.init 调用执行 Schema 创建和数据语义整理
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
@@ -18,6 +18,7 @@ extension AppDatabase {
     nonisolated static let roomV42MigrationIdentifier = "room-v42-schema"
     nonisolated static let roomV43MigrationIdentifier = "room-v43-schema"
     nonisolated static let roomV44MigrationIdentifier = "room-v44-schema"
+    nonisolated static let hardDeleteMigrationIdentifier = "ios-hard-delete-v1"
 
     nonisolated static var migrator: DatabaseMigrator {
         var migrator = DatabaseMigrator()
@@ -44,6 +45,10 @@ extension AppDatabase {
 
         migrator.registerMigration(roomV44MigrationIdentifier) { db in
             try RoomCanonicalSchemaV44.migrateFromV43(db)
+        }
+
+        migrator.registerMigration(hardDeleteMigrationIdentifier) { db in
+            try HardDeleteCanonicalizer.canonicalize(db)
         }
 
         return migrator

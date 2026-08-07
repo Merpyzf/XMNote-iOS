@@ -16,7 +16,7 @@ nonisolated enum AnnualCollectionSync {
         let readDoneYears = try fetchCompletedReadDoneYears(db, bookID: bookID)
 
         for collection in linkedCollections where !readDoneYears.contains(collection.year) {
-            try softDeleteAnnualRelation(db, bookID: bookID, collectionID: collection.id)
+            try deleteAnnualRelation(db, bookID: bookID, collectionID: collection.id)
         }
 
         let linkedYears = Set(linkedCollections.map(\.year))
@@ -33,7 +33,7 @@ nonisolated enum AnnualCollectionSync {
         // SQL 目的：查询指定书籍当前有效年度书单关系，用于移除不再属于读完年份的关系。
         // 涉及表：collection_book cb 与 collection c；cb.collection_id -> c.id。
         // 关键过滤：cb.book_id 精确匹配、两表 is_deleted = 0、c.is_annual = 1。
-        // 返回字段用途：collection.id 用于软删关系，year 用于与读完年份集合比对；时间字段不参与。
+        // 返回字段用途：collection.id 用于物理删除关系，year 用于与读完年份集合比对；时间字段不参与。
         let sql = """
             SELECT c.id, c.year
             FROM collection_book cb
@@ -99,23 +99,21 @@ nonisolated enum AnnualCollectionSync {
         return timestamps
     }
 
-    /// 软删除指定书籍与指定年度书单的关系，保持 Android 状态变更路径不更新时间戳的语义。
-    static func softDeleteAnnualRelation(
+    /// 物理删除指定书籍与指定年度书单的关系。
+    static func deleteAnnualRelation(
         _ db: Database,
         bookID: Int64,
         collectionID: Int64
     ) throws {
         // SQL 目的：移除书籍不再属于的年度书单关系。
         // 涉及表：collection_book。
-        // 关键过滤：book_id 与 collection_id 精确匹配，且关系仍有效。
-        // 时间字段：Android deleteByBookAndCollectionId 不更新 updated_date，iOS 保持一致。
+        // 关键过滤：book_id 与 collection_id 精确匹配；同时清理历史 tombstone 关系。
+        // 时间字段：物理删除不更新时间字段。
         // 副作用用途：当读完年份变化或取消读完时，年度书单不再显示该书。
         let sql = """
-            UPDATE collection_book
-            SET is_deleted = 1
+            DELETE FROM collection_book
             WHERE book_id = ?
               AND collection_id = ?
-              AND is_deleted = 0
             """
         try db.execute(sql: sql, arguments: [bookID, collectionID])
     }

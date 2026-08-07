@@ -249,7 +249,7 @@ nonisolated enum BookReadStatusMutation {
         ratingScore: Int64,
         updatedAt: Int64
     ) throws {
-        // SQL 目的：读完状态写入时同步评分，允许 0 分保存。
+        // SQL 目的：更新单本书评分，供读完状态同步与独立评分入口共同复用，允许 0 分保存。
         // 涉及表：book。
         // 关键过滤：id = ?、is_deleted = 0、id != 0。
         // 时间字段：updated_date 写入本次写入毫秒时间戳；score 为 0...50 的半星分值。

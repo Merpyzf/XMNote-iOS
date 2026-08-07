@@ -67,13 +67,11 @@ nonisolated struct BackupServerRepository: BackupServerRepositoryProtocol {
         }
     }
 
-    /// 软删除指定服务器配置，供服务器管理页执行“移除”操作。
+    /// 物理删除指定服务器配置，供服务器管理页执行“移除”操作。
     /// - Throws: 数据库写入失败时抛出错误。
     func delete(_ server: BackupServerRecord) async throws {
         try await databaseManager.database.dbPool.write { db in
-            var record = server
-            record.markAsDeleted()
-            try record.update(db)
+            _ = try BackupServerRecord.deleteOne(db, key: server.id)
         }
     }
 

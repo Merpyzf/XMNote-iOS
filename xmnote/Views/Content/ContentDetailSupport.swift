@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 SwiftUI 与 XMJXImageWall 提供内容详情公共展示能力
- * [OUTPUT]: 对外提供 ContentImageWall、ContentViewerNavigationTitle 与 ContentDetailDateFormatter 等查看页支撑组件
+ * [OUTPUT]: 对外提供 ContentImageWall、首帧结构稳定的 ContentViewerNavigationTitle 与 ContentDetailDateFormatter 等查看页支撑组件
  * [POS]: Content 模块查看页共享支撑视图，供书摘/书评/相关详情页复用
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -31,16 +31,33 @@ struct ContentViewerNavigationTitle<TitleContent: View>: View {
         VStack(spacing: Spacing.tiny) {
             titleContent
 
-            if let pageProgress {
-                ContentViewerPageProgressLabel(pageProgress: pageProgress)
-            }
+            ContentViewerPageProgressSlot(pageProgress: pageProgress)
         }
         .frame(maxWidth: 220)
         .multilineTextAlignment(.center)
     }
 }
 
-/// 内容查看器页码副行，按整段 `N/N` 文本驱动 numericText 转场。
+/// 内容查看器页码槽始终保留一行高度，隐藏占位与真实数字分离，避免首次加载播放 `0/0` 转场。
+private struct ContentViewerPageProgressSlot: View {
+    let pageProgress: ContentViewerPageProgress?
+
+    var body: some View {
+        ZStack {
+            Text("0/0")
+                .font(AppTypography.caption)
+                .monospacedDigit()
+                .hidden()
+                .accessibilityHidden(true)
+
+            if let pageProgress {
+                ContentViewerPageProgressLabel(pageProgress: pageProgress)
+            }
+        }
+    }
+}
+
+/// 内容查看器页码副行，仅在真实分页存在后按整段 `N/N` 文本驱动 numericText 转场。
 private struct ContentViewerPageProgressLabel: View {
     let pageProgress: ContentViewerPageProgress
 

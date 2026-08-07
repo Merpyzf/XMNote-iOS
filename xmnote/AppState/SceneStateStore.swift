@@ -107,6 +107,11 @@ final class SceneStateStore {
         mutate { $0.notes.selectedSubTab = tab }
     }
 
+    /// 更新笔记首页完整语义快照；与当前值一致时由 mutate 阻止重复编码和落盘。
+    func updateNotes(_ notes: NotesSceneSnapshot) {
+        mutate { $0.notes = notes }
+    }
+
     func updateTimeline(_ timeline: TimelineSceneSnapshot?) {
         mutate { $0.reading.timeline = timeline }
     }
@@ -201,8 +206,70 @@ struct BooksSceneSnapshot: Codable, Equatable {
     var search: BookSearchSceneSnapshot?
 }
 
+/// 笔记首页 scene 快照，只保存分类、各分类搜索词与排序等高价值语义状态。
 struct NotesSceneSnapshot: Codable, Equatable {
-    var selectedSubTab: NoteSubTab = .notes
+    var selectedSubTab: NoteSubTab
+    var selectedCategory: NoteCategory
+    var excerptSearchText: String
+    var starredChapterSearchText: String
+    var relatedSearchText: String
+    var reviewSearchText: String
+    var excerptSort: NoteExcerptGroupSort
+    var starredSort: StarredChapterSort
+    var relatedSort: RelatedCategorySort
+    var reviewSort: BookReviewSortRule
+
+    init(
+        selectedSubTab: NoteSubTab = .notes,
+        selectedCategory: NoteCategory = .excerpts,
+        excerptSearchText: String = "",
+        starredChapterSearchText: String = "",
+        relatedSearchText: String = "",
+        reviewSearchText: String = "",
+        excerptSort: NoteExcerptGroupSort = .defaultOrder,
+        starredSort: StarredChapterSort = .recentlyChanged,
+        relatedSort: RelatedCategorySort = .countDescending,
+        reviewSort: BookReviewSortRule = .createdDescending
+    ) {
+        self.selectedSubTab = selectedSubTab
+        self.selectedCategory = selectedCategory
+        self.excerptSearchText = excerptSearchText
+        self.starredChapterSearchText = starredChapterSearchText
+        self.relatedSearchText = relatedSearchText
+        self.reviewSearchText = reviewSearchText
+        self.excerptSort = excerptSort
+        self.starredSort = starredSort
+        self.relatedSort = relatedSort
+        self.reviewSort = reviewSort
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case selectedSubTab
+        case selectedCategory
+        case excerptSearchText
+        case starredChapterSearchText
+        case relatedSearchText
+        case reviewSearchText
+        case excerptSort
+        case starredSort
+        case relatedSort
+        case reviewSort
+    }
+
+    /// 旧快照只有 selectedSubTab；所有新增字段缺失或出现未知稳定码时回退到当前默认值。
+    init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        selectedSubTab = (try? container.decodeIfPresent(NoteSubTab.self, forKey: .selectedSubTab)) ?? .notes
+        selectedCategory = (try? container.decodeIfPresent(NoteCategory.self, forKey: .selectedCategory)) ?? .excerpts
+        excerptSearchText = (try? container.decodeIfPresent(String.self, forKey: .excerptSearchText)) ?? ""
+        starredChapterSearchText = (try? container.decodeIfPresent(String.self, forKey: .starredChapterSearchText)) ?? ""
+        relatedSearchText = (try? container.decodeIfPresent(String.self, forKey: .relatedSearchText)) ?? ""
+        reviewSearchText = (try? container.decodeIfPresent(String.self, forKey: .reviewSearchText)) ?? ""
+        excerptSort = (try? container.decodeIfPresent(NoteExcerptGroupSort.self, forKey: .excerptSort)) ?? .defaultOrder
+        starredSort = (try? container.decodeIfPresent(StarredChapterSort.self, forKey: .starredSort)) ?? .recentlyChanged
+        relatedSort = (try? container.decodeIfPresent(RelatedCategorySort.self, forKey: .relatedSort)) ?? .countDescending
+        reviewSort = (try? container.decodeIfPresent(BookReviewSortRule.self, forKey: .reviewSort)) ?? .createdDescending
+    }
 }
 
 struct TimelineSceneSnapshot: Codable, Equatable {
@@ -226,4 +293,114 @@ struct BookSearchSceneSnapshot: Codable, Equatable {
 struct ContentViewerSceneSnapshot: Codable, Equatable {
     var source: ContentViewerSourceContext
     var selectedItemID: ContentViewerItemID
+}
+
+extension AppSceneSnapshot {
+    private enum CodingKeys: String, CodingKey {
+        case snapshotVersion
+        case dataEpoch
+        case selectedTab
+        case searchQuery
+        case navigation
+        case reading
+        case books
+        case notes
+        case contentViewer
+    }
+
+    /// 兼容早期缺少后续模块字段的 scene 快照；未知或损坏的单个可选锚点降级为当前默认值。
+    init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let dataEpoch = (try? container.decodeIfPresent(Int.self, forKey: .dataEpoch)) ?? 0
+        let defaults = Self.empty(dataEpoch: dataEpoch)
+        snapshotVersion = (try? container.decodeIfPresent(Int.self, forKey: .snapshotVersion))
+            ?? defaults.snapshotVersion
+        self.dataEpoch = dataEpoch
+        selectedTab = (try? container.decodeIfPresent(AppTab.self, forKey: .selectedTab))
+            ?? defaults.selectedTab
+        searchQuery = (try? container.decodeIfPresent(String.self, forKey: .searchQuery))
+            ?? defaults.searchQuery
+        navigation = (try? container.decodeIfPresent(NavigationSceneSnapshot.self, forKey: .navigation))
+            ?? defaults.navigation
+        reading = (try? container.decodeIfPresent(ReadingSceneSnapshot.self, forKey: .reading))
+            ?? defaults.reading
+        books = (try? container.decodeIfPresent(BooksSceneSnapshot.self, forKey: .books))
+            ?? defaults.books
+        notes = (try? container.decodeIfPresent(NotesSceneSnapshot.self, forKey: .notes))
+            ?? defaults.notes
+        contentViewer = try? container.decodeIfPresent(
+            ContentViewerSceneSnapshot.self,
+            forKey: .contentViewer
+        )
+    }
+}
+
+extension NavigationSceneSnapshot {
+    private enum CodingKeys: String, CodingKey {
+        case reading
+        case books
+        case notes
+        case profile
+        case search
+    }
+
+    /// 导航快照按 Tab 独立容错，旧版本缺少搜索路径时仍可恢复其余四个根栈。
+    init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        reading = try? container.decodeIfPresent(
+            NavigationPath.CodableRepresentation.self,
+            forKey: .reading
+        )
+        books = try? container.decodeIfPresent(
+            NavigationPath.CodableRepresentation.self,
+            forKey: .books
+        )
+        notes = try? container.decodeIfPresent(
+            NavigationPath.CodableRepresentation.self,
+            forKey: .notes
+        )
+        profile = try? container.decodeIfPresent(
+            NavigationPath.CodableRepresentation.self,
+            forKey: .profile
+        )
+        search = try? container.decodeIfPresent(
+            NavigationPath.CodableRepresentation.self,
+            forKey: .search
+        )
+    }
+}
+
+extension ReadingSceneSnapshot {
+    private enum CodingKeys: String, CodingKey {
+        case selectedSubTab
+        case timeline
+        case readCalendar
+    }
+
+    /// 阅读模块早期快照缺少高价值页面锚点时保留其可解码的二级 Tab。
+    init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        selectedSubTab = (try? container.decodeIfPresent(ReadingSubTab.self, forKey: .selectedSubTab))
+            ?? .reading
+        timeline = try? container.decodeIfPresent(TimelineSceneSnapshot.self, forKey: .timeline)
+        readCalendar = try? container.decodeIfPresent(
+            ReadCalendarSceneSnapshot.self,
+            forKey: .readCalendar
+        )
+    }
+}
+
+extension BooksSceneSnapshot {
+    private enum CodingKeys: String, CodingKey {
+        case selectedSubTab
+        case search
+    }
+
+    /// 书籍模块旧快照没有搜索锚点时恢复到书籍根页，避免整份 scene 数据解码失败。
+    init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        selectedSubTab = (try? container.decodeIfPresent(BookSubTab.self, forKey: .selectedSubTab))
+            ?? .books
+        search = try? container.decodeIfPresent(BookSearchSceneSnapshot.self, forKey: .search)
+    }
 }

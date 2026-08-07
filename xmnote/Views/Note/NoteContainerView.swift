@@ -6,9 +6,9 @@
 //
 
 /**
- * [INPUT]: 依赖 RepositoryContainer 注入笔记与外部应用仓储，依赖 NoteViewModel/NoteReviewViewModel 驱动状态
- * [OUTPUT]: 对外提供 NoteContainerView 与 NoteSubTab 枚举，并承接回顾内容查看路由
- * [POS]: Note 模块容器壳层，承载笔记/回顾二级切换
+ * [INPUT]: 依赖 RepositoryContainer 注入笔记、内容、书籍与外部应用仓储，依赖 SceneStateStore 恢复首页语义快照，依赖 NoteViewModel/NoteReviewViewModel 驱动状态
+ * [OUTPUT]: 对外提供 NoteContainerView 与 NoteSubTab 枚举，并上抛携带真实章节标题的笔记路由、书籍/目录定位、内容编辑及统一内容查看路由，同时为首页单本评分提供仓储能力
+ * [POS]: Note 模块容器壳层，承载笔记/回顾二级切换、四分类首页状态保持与下拉搜索入口
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
@@ -38,8 +38,12 @@ struct NoteContainerView: View {
     @State private var reviewViewModel: NoteReviewViewModel?
     @State private var selectedSubTab: NoteSubTab = .notes
     @State private var didBootstrapFromScene = false
+    @State private var canPersistSceneSnapshot = false
     let onAddBook: () -> Void
     let onAddNote: () -> Void
+    let onOpenNoteRoute: (NoteRoute) -> Void
+    let onOpenBookRoute: (BookRoute) -> Void
+    let onOpenContentRoute: (ContentRoute) -> Void
     let onOpenContentViewer: (ContentViewerSourceContext, ContentViewerItemID) -> Void
     let onOpenDebugCenter: (() -> Void)?
 
@@ -47,11 +51,17 @@ struct NoteContainerView: View {
     init(
         onAddBook: @escaping () -> Void = {},
         onAddNote: @escaping () -> Void = {},
+        onOpenNoteRoute: @escaping (NoteRoute) -> Void = { _ in },
+        onOpenBookRoute: @escaping (BookRoute) -> Void = { _ in },
+        onOpenContentRoute: @escaping (ContentRoute) -> Void = { _ in },
         onOpenContentViewer: @escaping (ContentViewerSourceContext, ContentViewerItemID) -> Void = { _, _ in },
         onOpenDebugCenter: (() -> Void)? = nil
     ) {
         self.onAddBook = onAddBook
         self.onAddNote = onAddNote
+        self.onOpenNoteRoute = onOpenNoteRoute
+        self.onOpenBookRoute = onOpenBookRoute
+        self.onOpenContentRoute = onOpenContentRoute
         self.onOpenContentViewer = onOpenContentViewer
         self.onOpenDebugCenter = onOpenDebugCenter
     }
@@ -65,6 +75,9 @@ struct NoteContainerView: View {
                     selectedSubTab: $selectedSubTab,
                     onAddBook: onAddBook,
                     onAddNote: onAddNote,
+                    onOpenNoteRoute: onOpenNoteRoute,
+                    onOpenBookRoute: onOpenBookRoute,
+                    onOpenContentRoute: onOpenContentRoute,
                     onOpenContentViewer: onOpenContentViewer,
                     onOpenDebugCenter: onOpenDebugCenter
                 )
@@ -76,22 +89,43 @@ struct NoteContainerView: View {
             guard sceneStateStore.isRestored else { return }
             guard !didBootstrapFromScene else { return }
             didBootstrapFromScene = true
-            selectedSubTab = sceneStateStore.snapshot.notes.selectedSubTab
-        }
-        .task {
-            if viewModel == nil {
-                viewModel = NoteViewModel(repository: repositories.noteRepository)
-            }
+            canPersistSceneSnapshot = false
+
+            let snapshot = sceneStateStore.snapshot.notes
+            let noteViewModel = NoteViewModel(
+                repository: repositories.noteRepository,
+                contentRepository: repositories.contentRepository,
+                bookRepository: repositories.bookRepository,
+                startsObserving: false
+            )
+            noteViewModel.applySceneSnapshot(snapshot)
+            selectedSubTab = snapshot.selectedSubTab
+            noteViewModel.restartObservations()
+            viewModel = noteViewModel
+
             if reviewViewModel == nil {
                 reviewViewModel = NoteReviewViewModel(
                     repository: repositories.noteRepository,
                     externalAppIntegrationRepository: repositories.externalAppIntegrationRepository
                 )
             }
+
+            canPersistSceneSnapshot = true
+            syncSceneSnapshot()
         }
-        .onChange(of: selectedSubTab) { _, newValue in
-            sceneStateStore.updateNoteSelectedSubTab(newValue)
+        .onChange(of: currentSceneSnapshot) { _, _ in
+            syncSceneSnapshot()
         }
+    }
+
+    private var currentSceneSnapshot: NotesSceneSnapshot? {
+        viewModel?.sceneSnapshot(selectedSubTab: selectedSubTab)
+    }
+
+    /// 仅在恢复完成后写回首页语义状态；相同快照由 SceneStateStore 自动过滤。
+    private func syncSceneSnapshot() {
+        guard canPersistSceneSnapshot, let currentSceneSnapshot else { return }
+        sceneStateStore.updateNotes(currentSceneSnapshot)
     }
 }
 
@@ -105,6 +139,9 @@ private struct NoteContentView: View {
     private let topBarHeight: CGFloat = 56
     let onAddBook: () -> Void
     let onAddNote: () -> Void
+    let onOpenNoteRoute: (NoteRoute) -> Void
+    let onOpenBookRoute: (BookRoute) -> Void
+    let onOpenContentRoute: (ContentRoute) -> Void
     let onOpenContentViewer: (ContentViewerSourceContext, ContentViewerItemID) -> Void
     let onOpenDebugCenter: (() -> Void)?
 
@@ -125,7 +162,7 @@ private struct NoteContentView: View {
                 titleProvider: \.title
             ) {
                 TopBarActionPill {
-                    noteActionButton(presentation: .pillSegment)
+                    noteActionControl(presentation: .pillSegment)
                 } trailing: {
                     AddMenuCircleButton(
                         onAddBook: onAddBook,
@@ -152,7 +189,8 @@ private struct NoteContentView: View {
     private var segmentedContent: some View {
         KeepAliveSwitcherHost(
             selection: selectedSubTab,
-            tabs: NoteSubTab.allCases
+            tabs: NoteSubTab.allCases,
+            transitionPolicy: .contextual
         ) { tab in
             segmentedPage(for: tab)
         }
@@ -162,12 +200,48 @@ private struct NoteContentView: View {
     private func segmentedPage(for tab: NoteSubTab) -> some View {
         switch tab {
         case .notes:
-            VStack(spacing: Spacing.none) {
-                noteSearchBar
-                ScrollView {
-                    NoteCollectionView(viewModel: viewModel)
-                }
-            }
+            NoteCollectionView(
+                viewModel: viewModel,
+                onOpenExcerptScope: { context in
+                    onOpenNoteRoute(.noteExcerptList(context: context))
+                },
+                onOpenStarredChapter: { chapter in
+                    onOpenNoteRoute(
+                        .chapterNoteList(
+                            context: ChapterNoteListContext(
+                                bookID: chapter.bookID,
+                                chapterID: chapter.id,
+                                includeDescendants: true,
+                                displayTitle: chapter.title
+                            )
+                        )
+                    )
+                },
+                onLocateStarredChapter: { chapter in
+                    onOpenBookRoute(
+                        .chapterManager(
+                            bookID: chapter.bookID,
+                            focusChapterID: chapter.id
+                        )
+                    )
+                },
+                onOpenRelatedCategory: { scope in
+                    onOpenNoteRoute(.relatedCategory(scope: scope))
+                },
+                onOpenReview: { review in
+                    onOpenContentViewer(
+                        .allReviews(
+                            query: viewModel.normalizedSearchText,
+                            sort: viewModel.reviewSort
+                        ),
+                        .review(review.id)
+                    )
+                },
+                onOpenBook: { onOpenBookRoute(.detail(bookId: $0)) },
+                onOpenTagManagement: { onOpenNoteRoute(.tagManagement) },
+                onEditReview: { onOpenContentRoute(.reviewEditor(reviewId: $0)) }
+            )
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         case .review:
             NoteReviewView(
                 viewModel: reviewViewModel,
@@ -178,51 +252,123 @@ private struct NoteContentView: View {
         }
     }
     
-    private var noteSearchBar: some View {
-        HStack(spacing: Spacing.cozy) {
-            Image(systemName: "magnifyingglass")
-                .font(.system(size: 14, weight: .medium))
-                .foregroundStyle(.secondary)
-
-            TextField("搜索标签", text: $viewModel.searchText)
-                .font(AppTypography.subheadline)
-                .textInputAutocapitalization(.never)
-                .autocorrectionDisabled()
-
-            if !viewModel.searchText.isEmpty {
-                Button {
-                    viewModel.searchText = ""
-                } label: {
-                    Image(systemName: "xmark.circle.fill")
-                        .foregroundStyle(.tertiary)
-                }
-                .buttonStyle(.plain)
+    @ViewBuilder
+    private func noteActionControl(presentation: TopBarActionPresentation) -> some View {
+        if selectedSubTab == .notes {
+            Menu {
+                noteSortMenu
+            } label: {
+                TopBarActionIcon(
+                    systemName: "arrow.up.arrow.down",
+                    iconSize: NoteTopBarMetrics.actionIconSize,
+                    foregroundColor: Color.iconPrimary.opacity(0.88),
+                    hitShape: presentation == .pillSegment ? .rectangle : .circle
+                )
             }
+            .topBarActionPresentationStyle(presentation)
+            .accessibilityLabel("排序")
+        } else {
+            Button {
+                isReviewSettingsPresented = true
+            } label: {
+                TopBarActionIcon(
+                    systemName: "gearshape",
+                    iconSize: NoteTopBarMetrics.actionIconSize,
+                    foregroundColor: Color.iconPrimary.opacity(0.88),
+                    hitShape: presentation == .pillSegment ? .rectangle : .circle
+                )
+            }
+            .topBarActionPresentationStyle(presentation)
+            .accessibilityLabel("回顾设置")
         }
-        .padding(.horizontal, Spacing.base)
-        .frame(height: 36)
-        .background(Color.surfaceCard, in: RoundedRectangle(cornerRadius: CornerRadius.blockMedium, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: CornerRadius.blockMedium, style: .continuous)
-                .stroke(Color.surfaceBorderDefault, lineWidth: CardStyle.borderWidth)
-        )
-        .padding(.horizontal, Spacing.screenEdge)
-        .padding(.bottom, Spacing.half)
     }
 
-    private func noteActionButton(presentation: TopBarActionPresentation) -> some View {
-        Button {
-            if selectedSubTab == .review {
-                isReviewSettingsPresented = true
+    @ViewBuilder
+    private var noteSortMenu: some View {
+        switch viewModel.selectedCategory {
+        case .excerpts:
+            ForEach(NoteExcerptGroupSort.allCases) { option in
+                sortMenuButton(
+                    title: option.title,
+                    isSelected: viewModel.excerptSort == option
+                ) {
+                    viewModel.excerptSort = option
+                }
             }
-        } label: {
-            TopBarActionIcon(
-                systemName: selectedSubTab == .notes ? "arrow.up.arrow.down" : "gearshape",
-                iconSize: NoteTopBarMetrics.actionIconSize,
-                hitShape: presentation == .pillSegment ? .rectangle : .circle
-            )
+        case .starredChapters:
+            ForEach(StarredChapterSort.allCases, id: \.self) { option in
+                sortMenuButton(
+                    title: option.noteMenuTitle,
+                    isSelected: viewModel.starredSort == option
+                ) {
+                    viewModel.starredSort = option
+                }
+            }
+        case .related:
+            ForEach(RelatedCategorySort.allCases, id: \.self) { option in
+                sortMenuButton(
+                    title: option.noteMenuTitle,
+                    isSelected: viewModel.relatedSort == option
+                ) {
+                    viewModel.relatedSort = option
+                }
+            }
+        case .reviews:
+            ForEach(BookReviewSortRule.allCases, id: \.self) { option in
+                sortMenuButton(
+                    title: option.noteMenuTitle,
+                    isSelected: viewModel.reviewSort == option
+                ) {
+                    viewModel.reviewSort = option
+                }
+            }
         }
-        .topBarActionPresentationStyle(presentation)
+    }
+
+    private func sortMenuButton(
+        title: String,
+        isSelected: Bool,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            if isSelected {
+                Label(title, systemImage: "checkmark")
+            } else {
+                Text(title)
+            }
+        }
+    }
+
+}
+
+private extension StarredChapterSort {
+    var noteMenuTitle: String {
+        switch self {
+        case .recentlyChanged: "最近变更"
+        case .noteCountDescending: "笔记数量 • 由多到少"
+        }
+    }
+}
+
+private extension RelatedCategorySort {
+    var noteMenuTitle: String {
+        switch self {
+        case .countAscending: "数量从少到多"
+        case .countDescending: "数量从多到少"
+        case .createdAscending: "最早创建"
+        case .createdDescending: "最近创建"
+        }
+    }
+}
+
+private extension BookReviewSortRule {
+    var noteMenuTitle: String {
+        switch self {
+        case .wordCountAscending: "字数从少到多"
+        case .wordCountDescending: "字数从多到少"
+        case .createdAscending: "最早创建"
+        case .createdDescending: "最近创建"
+        }
     }
 }
 

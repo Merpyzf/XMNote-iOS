@@ -16,6 +16,31 @@ enum ContentRoute: Hashable, Codable {
     )
     case reviewDetail(reviewId: Int64)
     case relevantDetail(contentId: Int64)
+    /// 兼容既有编辑调用；等价于 `ReviewEditorMode.edit`。
     case reviewEditor(reviewId: Int64)
+    /// 新建书评入口；与既有编辑 case 分离以保证历史 NavigationPath 可解码。
+    case reviewEditorCreate(bookId: Int64)
+    /// 兼容既有编辑调用；等价于 `RelevantEditorMode.edit`。
     case relevantEditor(contentId: Int64)
+    /// 新建相关内容入口；与既有编辑 case 分离以保证历史 NavigationPath 可解码。
+    case relevantEditorCreate(bookId: Int64, categoryId: Int64)
+
+    /// 将新旧书评路由统一映射为编辑器模式。
+    var reviewEditorMode: ReviewEditorMode? {
+        switch self {
+        case .reviewEditor(let reviewId): .edit(reviewID: reviewId)
+        case .reviewEditorCreate(let bookId): .create(bookID: bookId)
+        default: nil
+        }
+    }
+
+    /// 将新旧相关内容路由统一映射为编辑器模式。
+    var relevantEditorMode: RelevantEditorMode? {
+        switch self {
+        case .relevantEditor(let contentId): .edit(contentID: contentId)
+        case .relevantEditorCreate(let bookId, let categoryId):
+            .create(bookID: bookId, categoryID: categoryId)
+        default: nil
+        }
+    }
 }

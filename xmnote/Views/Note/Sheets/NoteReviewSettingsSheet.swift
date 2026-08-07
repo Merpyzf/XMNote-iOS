@@ -488,7 +488,10 @@ private struct NoteReviewTagSelectionSheet: View {
                         .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
-                    .accessibilityLabel("\(option.title)，\(draftIDs.contains(option.id) ? "已选择" : "未选择")")
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel(option.title)
+                    .accessibilityValue(draftIDs.contains(option.id) ? "已选择" : "未选择")
+                    .accessibilityAddTraits(draftIDs.contains(option.id) ? .isSelected : [])
                 }
             }
         }

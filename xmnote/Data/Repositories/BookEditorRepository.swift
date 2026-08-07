@@ -110,34 +110,30 @@ struct BookEditorRepository: BookEditorRepositoryProtocol {
             let sourceName = try fetchSourceName(sourceId: book.sourceId, db: db)
             let groupName = try fetchPrimaryGroupName(bookId: bookId, db: db)
             let tagNames = try fetchBookTagNames(bookId: bookId, db: db)
-
-            return BookEditorDraft(
-                title: book.name,
-                rawTitle: book.rawName,
-                author: book.author,
-                authorIntro: book.authorIntro,
-                translator: book.translator,
-                press: book.press,
-                isbn: book.isbn,
-                pubDate: book.pubDate,
-                summary: book.summary,
-                catalog: book.catalog,
-                coverURL: book.cover,
-                doubanId: book.doubanId > 0 ? Int(book.doubanId) : nil,
-                totalPagesText: formatPositiveInteger(book.totalPagination),
-                totalPositionText: formatPositiveInteger(book.totalPosition),
-                currentProgressText: formatProgress(book.readPosition, unit: book.positionUnit),
-                wordCount: book.wordCount.map(Int.init),
+            return makeEditableDraft(
+                book: book,
                 sourceName: sourceName,
                 groupName: groupName,
-                tagNames: tagNames,
-                purchaseDate: dateFromMillis(book.purchaseDate),
-                priceText: formatPositiveDecimal(book.price),
-                readStatusChangedDate: dateFromMillis(book.readStatusChangedDate) ?? .now,
-                bookType: BookEntryBookType(rawValue: book.type) ?? .paper,
-                progressUnit: BookEntryProgressUnit(rawValue: book.positionUnit) ?? .pagination,
-                readingStatus: BookEntryReadingStatus(rawValue: book.readStatusId) ?? .reading,
-                searchSource: nil
+                tagNames: tagNames
+            )
+        }
+    }
+
+    /// 读取引用占位书的原始记录；读取前验证它仍由有效相关/书单关系持有，避免编辑孤儿 tombstone。
+    func fetchEditableRelatedPlaceholder(bookId: Int64) async throws -> BookEditorDraft {
+        try await databaseManager.database.dbPool.read { db in
+            guard let book = try BookRecord.fetchOne(db, key: bookId),
+                  bookId != 0,
+                  book.isDeleted == 1,
+                  try isReferencedPlaceholder(bookId: bookId, db: db) else {
+                throw BookEditorError.relatedPlaceholderNotFound
+            }
+
+            return makeEditableDraft(
+                book: book,
+                sourceName: try fetchSourceName(sourceId: book.sourceId, db: db),
+                groupName: "",
+                tagNames: []
             )
         }
     }
@@ -236,6 +232,12 @@ struct BookEditorRepository: BookEditorRepositoryProtocol {
             return try await saveBook(draft)
         case .edit(let bookId):
             return try await updateBook(draft, bookId: bookId)
+        case .editRelatedPlaceholder(let bookId, let sourceBookId):
+            return try await updateRelatedPlaceholder(
+                draft,
+                bookId: bookId,
+                sourceBookId: sourceBookId
+            )
         }
     }
 }
@@ -243,6 +245,43 @@ struct BookEditorRepository: BookEditorRepositoryProtocol {
 private extension BookEditorRepository {
     nonisolated static var currentTimestampMillis: Int64 {
         Int64(Date().timeIntervalSince1970 * 1000)
+    }
+
+    /// 将数据库书籍转换为统一编辑草稿；占位模式会传入空分组与标签，避免页面暗示其已加入书架。
+    nonisolated func makeEditableDraft(
+        book: BookRecord,
+        sourceName: String,
+        groupName: String,
+        tagNames: [String]
+    ) -> BookEditorDraft {
+        BookEditorDraft(
+            title: book.name,
+            rawTitle: book.rawName,
+            author: book.author,
+            authorIntro: book.authorIntro,
+            translator: book.translator,
+            press: book.press,
+            isbn: book.isbn,
+            pubDate: book.pubDate,
+            summary: book.summary,
+            catalog: book.catalog,
+            coverURL: book.cover,
+            doubanId: book.doubanId > 0 ? Int(book.doubanId) : nil,
+            totalPagesText: formatPositiveInteger(book.totalPagination),
+            totalPositionText: formatPositiveInteger(book.totalPosition),
+            currentProgressText: formatProgress(book.readPosition, unit: book.positionUnit),
+            wordCount: book.wordCount.map(Int.init),
+            sourceName: sourceName,
+            groupName: groupName,
+            tagNames: tagNames,
+            purchaseDate: dateFromMillis(book.purchaseDate),
+            priceText: formatPositiveDecimal(book.price),
+            readStatusChangedDate: dateFromMillis(book.readStatusChangedDate) ?? .now,
+            bookType: BookEntryBookType(rawValue: book.type) ?? .paper,
+            progressUnit: BookEntryProgressUnit(rawValue: book.positionUnit) ?? .pagination,
+            readingStatus: BookEntryReadingStatus(rawValue: book.readStatusId) ?? .reading,
+            searchSource: nil
+        )
     }
 
     /// 保存成功后按 Android 规则异步转存外部封面；失败时保留原始 URL，不回滚新书保存。
@@ -724,6 +763,156 @@ private extension BookEditorRepository {
         return bookId
     }
 
+    /// 只更新相关占位书的资料字段；事务会重新校验来源关系，且原始删除标记、阅读状态与书架关系保持不变。
+    func updateRelatedPlaceholder(
+        _ draft: BookEditorDraft,
+        bookId: Int64,
+        sourceBookId: Int64
+    ) async throws -> Int64 {
+        let normalizedDraft = normalizeDraft(draft)
+        guard !normalizedDraft.trimmedTitle.isEmpty else {
+            throw BookEditorError.emptyTitle
+        }
+
+        try await databaseManager.database.dbPool.write { db in
+            guard var book = try BookRecord.fetchOne(db, key: bookId),
+                  bookId != 0,
+                  book.isDeleted == 1,
+                  try isRelatedPlaceholderReferenced(
+                    bookId: bookId,
+                    sourceBookId: sourceBookId,
+                    db: db
+                  ) else {
+                throw BookEditorError.relatedPlaceholderNotFound
+            }
+
+            guard try !isDuplicateRelatedPlaceholder(
+                normalizedDraft,
+                sourceBookId: sourceBookId,
+                excludingBookId: bookId,
+                db: db
+            ) else {
+                throw BookEditorError.duplicateBook
+            }
+
+            applyRelatedPlaceholderMetadata(
+                normalizedDraft,
+                to: &book,
+                updatedAt: Self.currentTimestampMillis
+            )
+            try book.update(db)
+        }
+        return bookId
+    }
+
+    /// 判断占位书是否仍被任一有效相关关系或书单关系持有；最后引用清理后编辑入口立即失效。
+    nonisolated func isReferencedPlaceholder(bookId: Int64, db: Database) throws -> Bool {
+        // SQL 目的：验证 is_deleted=1 的引用占位书是否仍有有效业务 owner，禁止编辑孤儿兼容记录。
+        // 涉及表：category_content、collection_book；两表分别通过 content_book_id/book_id 指向 book.id。
+        // 关键过滤：关系 is_deleted=0 且外键精确命中；系统根书 id=0 由调用者提前排除。
+        // 时间字段：不参与；返回布尔值只作为占位书编辑读写门闩，不产生副作用。
+        let sql = """
+            SELECT CASE WHEN
+                EXISTS (
+                    SELECT 1
+                    FROM category_content cc
+                    WHERE cc.content_book_id = ? AND cc.is_deleted = 0
+                )
+                OR EXISTS (
+                    SELECT 1
+                    FROM collection_book cb
+                    WHERE cb.book_id = ? AND cb.is_deleted = 0
+                )
+            THEN 1 ELSE 0 END
+            """
+        return (try Int.fetchOne(db, sql: sql, arguments: [bookId, bookId]) ?? 0) != 0
+    }
+
+    /// 写入时再次核对触发编辑的来源书关系，避免列表刷新后把已移除关系对应的占位书继续改写。
+    nonisolated func isRelatedPlaceholderReferenced(
+        bookId: Int64,
+        sourceBookId: Int64,
+        db: Database
+    ) throws -> Bool {
+        // SQL 目的：确认当前来源书仍通过有效 category_content 关系引用目标占位书。
+        // 涉及表：category_content；book_id 是来源书，content_book_id 是被引用占位书。
+        // 关键过滤：精确来源/目标主键且 is_deleted=0；硬删除后记录不存在会自然返回 false。
+        // 时间字段：不参与；返回布尔值用于占位书元数据更新事务的竞态保护。
+        let sql = """
+            SELECT EXISTS (
+                SELECT 1
+                FROM category_content cc
+                WHERE cc.book_id = ?
+                  AND cc.content_book_id = ?
+                  AND cc.is_deleted = 0
+            )
+            """
+        return (try Int.fetchOne(db, sql: sql, arguments: [sourceBookId, bookId]) ?? 0) != 0
+    }
+
+    /// 对齐 Android relevantBookIsExists，以来源书范围的六字段组合阻止编辑后出现重复相关书。
+    nonisolated func isDuplicateRelatedPlaceholder(
+        _ draft: BookEditorDraft,
+        sourceBookId: Int64,
+        excludingBookId: Int64,
+        db: Database
+    ) throws -> Bool {
+        // SQL 目的：按 Android CategoryContentDao.queryBookCount 的六字段规则检查同一来源书下重复相关书。
+        // 涉及表：category_content INNER JOIN book；content_book_id -> book.id。
+        // 关键过滤：来源书精确命中、关系有效、排除当前占位书，并精确匹配 name/author/translator/press/pub_date/isbn。
+        // 时间字段：不参与；返回计数只用于保存前业务判重，不写数据库。
+        let sql = """
+            SELECT COUNT(*)
+            FROM category_content cc
+            JOIN book related_book ON related_book.id = cc.content_book_id
+            WHERE cc.book_id = ?
+              AND cc.content_book_id != ?
+              AND cc.is_deleted = 0
+              AND related_book.name = ?
+              AND related_book.author = ?
+              AND related_book.translator = ?
+              AND related_book.press = ?
+              AND related_book.pub_date = ?
+              AND related_book.isbn = ?
+            """
+        let count = try Int.fetchOne(
+            db,
+            sql: sql,
+            arguments: [
+                sourceBookId,
+                excludingBookId,
+                draft.title,
+                draft.author,
+                draft.translator,
+                draft.press,
+                draft.pubDate,
+                draft.isbn
+            ]
+        ) ?? 0
+        return count > 0
+    }
+
+    /// 应用 Android 相关书编辑页可见的资料字段，刻意不触碰 is_deleted、书架排序、阅读状态、来源和关系。
+    nonisolated func applyRelatedPlaceholderMetadata(
+        _ draft: BookEditorDraft,
+        to book: inout BookRecord,
+        updatedAt: Int64
+    ) {
+        book.doubanId = Int64(draft.doubanId ?? 0)
+        book.name = draft.title
+        book.rawName = draft.title
+        book.cover = draft.coverURL
+        book.author = draft.author
+        book.authorIntro = draft.authorIntro
+        book.translator = draft.translator
+        book.isbn = draft.isbn
+        book.pubDate = draft.pubDate
+        book.press = draft.press
+        book.summary = draft.summary
+        book.catalog = draft.catalog
+        book.updatedDate = updatedAt
+    }
+
     nonisolated func applyDraft(
         _ draft: BookEditorDraft,
         to book: inout BookRecord,
@@ -929,14 +1118,16 @@ private extension BookEditorRepository {
     }
 
     nonisolated func replaceGroupRelation(groupId: Int64?, for bookId: Int64, updatedAt: Int64, db: Database) throws {
-        // SQL 目的：编辑分组时替换书籍有效分组关系，保持单书唯一有效分组语义。
-        // 副作用：先软删除 group_book 中当前书籍的有效关系，再按草稿分组插入新关系。
+        // SQL 目的：编辑分组时物理替换书籍全部分组关系，保持单书唯一分组语义且不积累 tombstone。
+        // 涉及表：group_book。
+        // 关键过滤：book_id 精确匹配；同时清理历史有效关系与软删除关系。
+        // 时间字段：物理删除不更新时间字段；新关系 created_date 使用本次保存毫秒时间戳。
+        // 副作用用途：先清空旧关系，再按草稿分组插入唯一新关系。
         let sql = """
-            UPDATE group_book
-            SET updated_date = ?, is_deleted = 1
-            WHERE book_id = ? AND is_deleted = 0
+            DELETE FROM group_book
+            WHERE book_id = ?
             """
-        try db.execute(sql: sql, arguments: [updatedAt, bookId])
+        try db.execute(sql: sql, arguments: [bookId])
 
         guard let groupId else { return }
         var relation = GroupBookRecord(
@@ -952,14 +1143,16 @@ private extension BookEditorRepository {
     }
 
     nonisolated func replaceTagRelations(tagIds: [Int64], for bookId: Int64, updatedAt: Int64, db: Database) throws {
-        // SQL 目的：编辑标签时替换书籍有效标签关系，和 Android 单书编辑保存的全量覆盖意图一致。
-        // 副作用：先软删除 tag_book 中当前书籍的有效关系，再插入当前草稿标签集合。
+        // SQL 目的：编辑标签时物理替换书籍全部标签关系，保持单书全量覆盖语义且不积累 tombstone。
+        // 涉及表：tag_book。
+        // 关键过滤：book_id 精确匹配；同时清理历史有效关系与软删除关系。
+        // 时间字段：物理删除不更新时间字段；新关系 created_date 使用本次保存毫秒时间戳。
+        // 副作用用途：先清空旧关系，再插入当前草稿标签集合。
         let sql = """
-            UPDATE tag_book
-            SET updated_date = ?, is_deleted = 1
-            WHERE book_id = ? AND is_deleted = 0
+            DELETE FROM tag_book
+            WHERE book_id = ?
             """
-        try db.execute(sql: sql, arguments: [updatedAt, bookId])
+        try db.execute(sql: sql, arguments: [bookId])
 
         for tagId in tagIds {
             var relation = TagBookRecord(

@@ -1,6 +1,6 @@
 /**
- * [INPUT]: 依赖 SwiftUI ScrollView paging 能力，接收稳定 ID、选中态绑定与页面内容构建闭包
- * [OUTPUT]: 对外提供 HorizontalPagingHost（横向分页 + 窗口化懒挂载 + 页级生命周期回调）
+ * [INPUT]: 依赖 SwiftUI ScrollView paging 与 ScrollGeometry，接收稳定 ID、选中态绑定、连续页进度回调与页面内容构建闭包
+ * [OUTPUT]: 对外提供 HorizontalPagingHost（横向分页 + 窗口化懒挂载 + 连续逻辑页进度 + 页级生命周期回调）
  * [POS]: UIComponents/Tabs 的通用横向分页宿主，被阅读日历与内容查看页复用
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -22,10 +22,12 @@ struct HorizontalPagingHost<ID: Hashable & Sendable, PageContent: View>: View {
     var showsIndicators = false
     var pageAlignment: Alignment = .top
     var programmaticScrollAnimation: Animation = .snappy(duration: 0.24)
+    var onPageProgressChange: (@MainActor @Sendable (CGFloat?) -> Void)? = nil
     var onPageTask: (@MainActor @Sendable (ID) async -> Void)? = nil
     var onPageDidBecomeSelected: (@MainActor @Sendable (ID) async -> Void)? = nil
     private let content: (ID) -> PageContent
 
+    @Environment(\.layoutDirection) private var layoutDirection
     @State private var horizontalPagerPosition: ID?
     @State private var isHorizontalPagerInteractionActive = false
     @State private var pendingPagerSelectionCommit: ID?
@@ -40,6 +42,7 @@ struct HorizontalPagingHost<ID: Hashable & Sendable, PageContent: View>: View {
         showsIndicators: Bool = false,
         pageAlignment: Alignment = .top,
         programmaticScrollAnimation: Animation = .snappy(duration: 0.24),
+        onPageProgressChange: (@MainActor @Sendable (CGFloat?) -> Void)? = nil,
         onPageTask: (@MainActor @Sendable (ID) async -> Void)? = nil,
         onPageDidBecomeSelected: (@MainActor @Sendable (ID) async -> Void)? = nil,
         @ViewBuilder content: @escaping (ID) -> PageContent
@@ -51,6 +54,7 @@ struct HorizontalPagingHost<ID: Hashable & Sendable, PageContent: View>: View {
         self.showsIndicators = showsIndicators
         self.pageAlignment = pageAlignment
         self.programmaticScrollAnimation = programmaticScrollAnimation
+        self.onPageProgressChange = onPageProgressChange
         self.onPageTask = onPageTask
         self.onPageDidBecomeSelected = onPageDidBecomeSelected
         self.content = content
@@ -60,10 +64,18 @@ struct HorizontalPagingHost<ID: Hashable & Sendable, PageContent: View>: View {
         GeometryReader { proxy in
             let pageWidth = max(1, proxy.size.width)
             let pageHeight = max(1, proxy.size.height)
+            let visiblePageIDs = visibleIDs
+            let progressContext = HorizontalPagingProgressContext(
+                isEnabled: onPageProgressChange != nil,
+                totalPageCount: ids.count,
+                visiblePageCount: visiblePageIDs.count,
+                visibleStartIndex: visiblePageIDs.first.flatMap(ids.firstIndex(of:)) ?? 0,
+                isRightToLeft: layoutDirection == .rightToLeft
+            )
 
             ScrollView(.horizontal, showsIndicators: showsIndicators) {
                 LazyHStack(spacing: Spacing.none) {
-                    ForEach(visibleIDs, id: \.self) { id in
+                    ForEach(visiblePageIDs, id: \.self) { id in
                         HorizontalPagingLifecycleContainer(
                             id: id,
                             isSelected: id == settledSelectionID,
@@ -80,6 +92,11 @@ struct HorizontalPagingHost<ID: Hashable & Sendable, PageContent: View>: View {
             }
             .scrollTargetBehavior(.paging)
             .scrollPosition(id: $horizontalPagerPosition, anchor: .topLeading)
+            .onScrollGeometryChange(for: HorizontalPagingProgressSnapshot.self) { [progressContext] geometry in
+                progressContext.snapshot(for: geometry)
+            } action: { _, snapshot in
+                onPageProgressChange?(snapshot.logicalPage)
+            }
             .onAppear {
                 normalizeState(syncPositionIfNeeded: true)
             }
@@ -271,6 +288,52 @@ private extension HorizontalPagingHost {
         isHorizontalPagerInteractionActive = false
         pendingPagerSelectionCommit = nil
         settledSelectionID = nil
+        onPageProgressChange?(nil)
+    }
+}
+
+/// 连续页进度快照只保留指示器需要的标量，避免滚动热路径向外传播完整几何状态。
+private struct HorizontalPagingProgressSnapshot: Equatable, Sendable {
+    let logicalPage: CGFloat?
+}
+
+/// 连续页进度上下文把物理滚动偏移转换为原始 ID 列表中的逻辑索引，并统一处理窗口化与 RTL。
+private struct HorizontalPagingProgressContext: Sendable {
+    let isEnabled: Bool
+    let totalPageCount: Int
+    let visiblePageCount: Int
+    let visibleStartIndex: Int
+    let isRightToLeft: Bool
+
+    /// 根据当前滚动几何生成已收敛的逻辑页进度；回弹不会越过首尾有效页。
+    nonisolated func snapshot(for geometry: ScrollGeometry) -> HorizontalPagingProgressSnapshot {
+        guard isEnabled else { return HorizontalPagingProgressSnapshot(logicalPage: nil) }
+        guard totalPageCount > 0, visiblePageCount > 0 else {
+            return HorizontalPagingProgressSnapshot(logicalPage: nil)
+        }
+
+        let pageWidth = geometry.containerSize.width
+        guard pageWidth.isFinite, pageWidth > 0 else {
+            return HorizontalPagingProgressSnapshot(logicalPage: nil)
+        }
+
+        let localPageOffset: CGFloat
+        if isRightToLeft {
+            let maximumOffset = CGFloat(max(0, visiblePageCount - 1)) * pageWidth
+                + geometry.contentInsets.trailing
+            localPageOffset = maximumOffset - geometry.contentOffset.x
+        } else {
+            localPageOffset = geometry.contentOffset.x + geometry.contentInsets.leading
+        }
+
+        guard localPageOffset.isFinite else {
+            return HorizontalPagingProgressSnapshot(logicalPage: nil)
+        }
+
+        let rawLogicalPage = CGFloat(visibleStartIndex) + localPageOffset / pageWidth
+        let lastLogicalPage = CGFloat(totalPageCount - 1)
+        let logicalPage = min(lastLogicalPage, max(0, rawLogicalPage))
+        return HorizontalPagingProgressSnapshot(logicalPage: logicalPage)
     }
 }
 

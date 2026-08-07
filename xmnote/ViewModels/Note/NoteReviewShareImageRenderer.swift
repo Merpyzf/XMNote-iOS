@@ -1,7 +1,7 @@
 /**
- * [INPUT]: 接收 NoteReviewCardItem，复用 AppTypography、NotePositionUnitFormatter 与 RichText HTML 解析能力
- * [OUTPUT]: 对外提供 NoteReviewShareImageRenderer，将书摘回顾卡片数据离屏渲染为临时 PNG 文件
- * [POS]: ViewModels/Note 的书摘回顾分享图基础能力，供 NoteReviewViewModel 后续编排分享/保存流程
+ * [INPUT]: 接收 NoteReviewCardItem 或 NoteContentDetail，复用 AppTypography、NotePositionUnitFormatter 与 RichText HTML 解析能力
+ * [OUTPUT]: 对外提供 NoteReviewShareImageRenderer，将回顾卡片或查看器书摘离屏渲染为临时 PNG 文件
+ * [POS]: ViewModels/Note 的共享书摘分享图基础能力，供回顾与 ContentViewer 复用同一视觉语言
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
@@ -11,8 +11,40 @@ import UIKit
 
 /// 书摘回顾分享图生成器，使用 UIKit 离屏绘制生成固定宽度、自适应高度的高分辨率 PNG。
 @MainActor
-struct NoteReviewShareImageRenderer {
-    private enum Layout {
+struct NoteReviewShareImageRenderer: @unchecked Sendable {
+    private enum Presentation: Equatable {
+        case noteReview
+        case contentViewer
+
+        var eyebrowText: String {
+            switch self {
+            case .noteReview:
+                "书摘回顾"
+            case .contentViewer:
+                "书摘分享"
+            }
+        }
+
+        var footerText: String {
+            switch self {
+            case .noteReview:
+                "XMNote · 书摘回顾分享图"
+            case .contentViewer:
+                "XMNote · 书摘分享图"
+            }
+        }
+
+        var fileNameLabel: String {
+            switch self {
+            case .noteReview:
+                "书摘回顾"
+            case .contentViewer:
+                "书摘分享"
+            }
+        }
+    }
+
+    private nonisolated enum Layout {
         static let canvasWidth: CGFloat = 1240
         static let maxCanvasHeight: CGFloat = 12_000
         static let outerInset: CGFloat = 72
@@ -34,7 +66,7 @@ struct NoteReviewShareImageRenderer {
         static let dividerHeight: CGFloat = 1
     }
 
-    private enum Palette {
+    private nonisolated enum Palette {
         static let background = UIColor(red: 0.957, green: 0.969, blue: 0.953, alpha: 1)
         static let accent = UIColor(red: 0.176, green: 0.580, blue: 0.322, alpha: 1)
         static let shadow = UIColor.black.withAlphaComponent(0.12)
@@ -91,30 +123,121 @@ struct NoteReviewShareImageRenderer {
         )
     }
 
-    /// 在主线程完成 UIKit 绘制与 PNG 编码；方法本身不启动 Task，调用取消策略由集成方在 ViewModel 中控制。
+    /// 在主线程准备不可变视觉快照，再把测量、离屏绘制、PNG 编码与文件写入交给独立任务，避免长书摘阻塞交互。
     func renderPNG(
         for item: NoteReviewCardItem,
         settings: NoteReviewSettings,
         isDarkAppearance: Bool,
         backgroundImageData: Data? = nil,
         outputDirectory: URL = FileManager.default.temporaryDirectory
-    ) throws -> NoteReviewGeneratedShareFile {
+    ) async throws -> NoteReviewGeneratedShareFile {
+        try await renderPNG(
+            for: item,
+            settings: settings,
+            isDarkAppearance: isDarkAppearance,
+            backgroundImageData: backgroundImageData,
+            outputDirectory: outputDirectory,
+            presentation: .noteReview
+        )
+    }
+
+    /// 使用回顾分享图的稳定版式和默认设计令牌渲染查看器书摘，不读取回顾页的个性化外观设置。
+    func renderPNG(
+        for detail: NoteContentDetail,
+        isDarkAppearance: Bool,
+        outputDirectory: URL = FileManager.default.temporaryDirectory
+    ) async throws -> NoteReviewGeneratedShareFile {
+        let item = NoteReviewCardItem(
+            id: detail.noteId,
+            bookID: detail.sourceBookId,
+            bookTitle: detail.bookTitle,
+            bookAuthor: "",
+            bookCoverURL: "",
+            chapterTitle: detail.chapterTitle,
+            contentHTML: detail.contentHTML,
+            ideaHTML: detail.ideaHTML,
+            position: detail.position,
+            positionUnit: detail.positionUnit,
+            includeTime: detail.includeTime,
+            createdDate: detail.createdDate,
+            imageURLs: detail.imageURLs,
+            tags: [],
+            weReadOriginalURL: nil
+        )
+        return try await renderPNG(
+            for: item,
+            settings: .defaultValue,
+            isDarkAppearance: isDarkAppearance,
+            backgroundImageData: nil,
+            outputDirectory: outputDirectory,
+            presentation: .contentViewer
+        )
+    }
+
+    private func renderPNG(
+        for item: NoteReviewCardItem,
+        settings: NoteReviewSettings,
+        isDarkAppearance: Bool,
+        backgroundImageData: Data?,
+        outputDirectory: URL,
+        presentation: Presentation
+    ) async throws -> NoteReviewGeneratedShareFile {
         let payload = try makePayload(
             from: item,
             settings: settings,
             isDarkAppearance: isDarkAppearance,
-            backgroundImageData: backgroundImageData
+            backgroundImageData: backgroundImageData,
+            presentation: presentation
         )
+        let itemID = item.id
+        let worker = Task.detached(priority: .userInitiated) {
+            try renderPreparedPNG(
+                itemID: itemID,
+                payload: payload,
+                outputDirectory: outputDirectory
+            )
+        }
+        var generatedFile: NoteReviewGeneratedShareFile?
+        do {
+            let completedFile = try await withTaskCancellationHandler {
+                try await worker.value
+            } onCancel: {
+                worker.cancel()
+            }
+            generatedFile = completedFile
+            try Task.checkCancellation()
+            return completedFile
+        } catch is CancellationError {
+            if let fileURL = generatedFile?.fileURL {
+                try? FileManager.default.removeItem(at: fileURL)
+            }
+            throw CancellationError()
+        }
+    }
+
+    /// 后台任务独占不可变渲染快照；父任务显式传播取消，并在测量、编码和写盘阶段间终止且清理本次临时输出。
+    private nonisolated func renderPreparedPNG(
+        itemID: Int64,
+        payload: RenderPayload,
+        outputDirectory: URL
+    ) throws -> NoteReviewGeneratedShareFile {
+        try Task.checkCancellation()
         let measuredLayout = try measureLayout(for: payload)
+        try Task.checkCancellation()
         let data = try renderPNGData(payload: payload, measuredLayout: measuredLayout)
         guard !data.isEmpty else {
             throw NoteReviewShareImageRendererError.imageEncodingFailed
         }
 
+        try Task.checkCancellation()
         let fileName = makeFileName(for: payload)
         let fileURL = outputDirectory.appendingPathComponent(fileName)
         do {
             try data.write(to: fileURL, options: .atomic)
+            try Task.checkCancellation()
+        } catch is CancellationError {
+            try? FileManager.default.removeItem(at: fileURL)
+            throw CancellationError()
         } catch {
             throw NoteReviewShareImageRendererError.fileWriteFailed(
                 fileURL: fileURL,
@@ -123,7 +246,7 @@ struct NoteReviewShareImageRenderer {
         }
 
         return NoteReviewGeneratedShareFile(
-            noteID: item.id,
+            noteID: itemID,
             title: payload.bookTitle,
             fileURL: fileURL,
             fileName: fileName,
@@ -137,7 +260,8 @@ struct NoteReviewShareImageRenderer {
         from item: NoteReviewCardItem,
         settings: NoteReviewSettings,
         isDarkAppearance: Bool,
-        backgroundImageData: Data?
+        backgroundImageData: Data?,
+        presentation: Presentation
     ) throws -> RenderPayload {
         let cardSurfaceColor = color(from: settings.cardSurfaceHex(isDarkAppearance: isDarkAppearance))
         let onSurfaceColor = color(from: settings.cardTextHex(isDarkAppearance: isDarkAppearance))
@@ -172,7 +296,9 @@ struct NoteReviewShareImageRenderer {
         return RenderPayload(
             noteID: item.id,
             bookTitle: fallbackText(item.bookTitle, fallback: "未知书籍"),
-            bookAuthor: fallbackText(item.bookAuthor, fallback: "作者未知"),
+            bookAuthor: presentation == .noteReview
+                ? fallbackText(item.bookAuthor, fallback: "作者未知")
+                : item.bookAuthor.trimmingCharacters(in: .whitespacesAndNewlines),
             chapter: fallbackText(item.chapterTitle, fallback: "未记录"),
             position: positionText(position: item.position, unit: item.positionUnit),
             createdDate: createdDateText(item.createdDate),
@@ -191,7 +317,10 @@ struct NoteReviewShareImageRenderer {
             ideaFillColor: onSurfaceColor.withAlphaComponent(0.06),
             cardSurfaceColor: cardSurfaceColor,
             backgroundImage: backgroundImageData.flatMap { UIImage(data: $0) },
-            textAlignment: settings.textAlignment
+            textAlignment: settings.textAlignment.nsTextAlignment,
+            eyebrowText: presentation.eyebrowText,
+            footerText: presentation.footerText,
+            fileNameLabel: presentation.fileNameLabel
         )
     }
 
@@ -205,21 +334,21 @@ struct NoteReviewShareImageRenderer {
         )
     }
 
-    private func measureLayout(for payload: RenderPayload) throws -> MeasuredLayout {
+    private nonisolated func measureLayout(for payload: RenderPayload) throws -> MeasuredLayout {
         let contentWidth = Layout.canvasWidth - Layout.outerInset * 2 - Layout.cardInset * 2
         let titleHeight = attributedText(
             payload.bookTitle,
             font: payload.titleFont,
             color: payload.primaryTextColor,
             lineSpacing: 4,
-            textAlignment: payload.textAlignment.nsTextAlignment
+            textAlignment: payload.textAlignment
         ).height(constrainedTo: contentWidth)
         let authorHeight = attributedText(
             payload.bookAuthor,
             font: payload.authorFont,
             color: payload.secondaryTextColor,
             lineSpacing: 3,
-            textAlignment: payload.textAlignment.nsTextAlignment
+            textAlignment: payload.textAlignment
         ).height(constrainedTo: contentWidth)
         let contentHeight = payload.content.height(constrainedTo: contentWidth)
         let ideaHeight = payload.idea.length > 0
@@ -229,14 +358,16 @@ struct NoteReviewShareImageRenderer {
             : 0
         let metadataHeight = metadataHeight(for: payload, width: contentWidth)
         let footerBlockHeight = Layout.dividerHeight + Layout.footerHeight
+        let authorBlockHeight = payload.bookAuthor.isEmpty
+            ? 0
+            : 12 + authorHeight
 
         let contentBlockSpacing = payload.idea.length > 0 ? Layout.sectionSpacing : 0
         let cardHeight = Layout.topPadding
             + 34
             + Layout.headerSpacing
             + titleHeight
-            + 12
-            + authorHeight
+            + authorBlockHeight
             + Layout.sectionSpacing
             + contentHeight
             + contentBlockSpacing
@@ -267,7 +398,7 @@ struct NoteReviewShareImageRenderer {
         )
     }
 
-    private func renderPNGData(payload: RenderPayload, measuredLayout: MeasuredLayout) throws -> Data {
+    private nonisolated func renderPNGData(payload: RenderPayload, measuredLayout: MeasuredLayout) throws -> Data {
         let size = CGSize(width: Layout.canvasWidth, height: measuredLayout.canvasHeight)
         guard size.width > 0, size.height > 0 else {
             throw NoteReviewShareImageRendererError.invalidCanvasSize
@@ -283,7 +414,7 @@ struct NoteReviewShareImageRenderer {
         }
     }
 
-    private func drawBackground(in rect: CGRect, context: UIGraphicsImageRendererContext) {
+    private nonisolated func drawBackground(in rect: CGRect, context: UIGraphicsImageRendererContext) {
         let cg = context.cgContext
         Palette.background.setFill()
         cg.fill(rect)
@@ -293,7 +424,7 @@ struct NoteReviewShareImageRenderer {
         cg.fill(accentRect)
     }
 
-    private func drawAspectFill(_ image: UIImage, in rect: CGRect) {
+    private nonisolated func drawAspectFill(_ image: UIImage, in rect: CGRect) {
         guard image.size.width > 0, image.size.height > 0 else { return }
         let scale = max(rect.width / image.size.width, rect.height / image.size.height)
         let size = CGSize(width: image.size.width * scale, height: image.size.height * scale)
@@ -304,7 +435,7 @@ struct NoteReviewShareImageRenderer {
         image.draw(in: CGRect(origin: origin, size: size))
     }
 
-    private func drawCard(
+    private nonisolated func drawCard(
         payload: RenderPayload,
         measuredLayout: MeasuredLayout,
         context: UIGraphicsImageRendererContext
@@ -346,18 +477,22 @@ struct NoteReviewShareImageRenderer {
             font: payload.titleFont,
             color: payload.primaryTextColor,
             lineSpacing: 4,
-            textAlignment: payload.textAlignment.nsTextAlignment
+            textAlignment: payload.textAlignment
         ).draw(in: CGRect(x: contentX, y: y, width: contentWidth, height: measuredLayout.titleHeight))
-        y += measuredLayout.titleHeight + 12
+        y += measuredLayout.titleHeight
 
-        attributedText(
-            payload.bookAuthor,
-            font: payload.authorFont,
-            color: payload.secondaryTextColor,
-            lineSpacing: 3,
-            textAlignment: payload.textAlignment.nsTextAlignment
-        ).draw(in: CGRect(x: contentX, y: y, width: contentWidth, height: measuredLayout.authorHeight))
-        y += measuredLayout.authorHeight + Layout.sectionSpacing
+        if !payload.bookAuthor.isEmpty {
+            y += 12
+            attributedText(
+                payload.bookAuthor,
+                font: payload.authorFont,
+                color: payload.secondaryTextColor,
+                lineSpacing: 3,
+                textAlignment: payload.textAlignment
+            ).draw(in: CGRect(x: contentX, y: y, width: contentWidth, height: measuredLayout.authorHeight))
+            y += measuredLayout.authorHeight
+        }
+        y += Layout.sectionSpacing
 
         payload.content.draw(in: CGRect(x: contentX, y: y, width: contentWidth, height: measuredLayout.contentHeight))
         y += measuredLayout.contentHeight
@@ -375,22 +510,22 @@ struct NoteReviewShareImageRenderer {
         drawFooter(payload: payload, in: CGRect(x: contentX, y: y, width: contentWidth, height: Layout.dividerHeight + Layout.footerHeight))
     }
 
-    private func drawEyebrow(payload: RenderPayload, at point: CGPoint, width: CGFloat) {
+    private nonisolated func drawEyebrow(payload: RenderPayload, at point: CGPoint, width: CGFloat) {
         let markerRect = CGRect(x: point.x, y: point.y + 3, width: 10, height: 26)
         payload.accentColor.setFill()
         UIBezierPath(roundedRect: markerRect, cornerRadius: 5).fill()
 
         attributedText(
-            "书摘回顾",
+            payload.eyebrowText,
             font: payload.eyebrowFont,
             color: payload.accentColor,
             lineSpacing: 0,
             letterSpacing: 1.8,
-            textAlignment: payload.textAlignment.nsTextAlignment
+            textAlignment: payload.textAlignment
         ).draw(in: CGRect(x: markerRect.maxX + 16, y: point.y, width: width - 26, height: 34))
     }
 
-    private func drawIdea(payload: RenderPayload, in rect: CGRect) {
+    private nonisolated func drawIdea(payload: RenderPayload, in rect: CGRect) {
         payload.ideaFillColor.setFill()
         UIBezierPath(roundedRect: rect, cornerRadius: Layout.ideaCornerRadius).fill()
 
@@ -407,7 +542,7 @@ struct NoteReviewShareImageRenderer {
         payload.idea.draw(in: textRect)
     }
 
-    private func drawMetadata(payload: RenderPayload, in rect: CGRect) {
+    private nonisolated func drawMetadata(payload: RenderPayload, in rect: CGRect) {
         let columns = metadataColumns(in: rect)
         let rows = metadataRows(for: payload)
         var y = rect.minY
@@ -435,13 +570,13 @@ struct NoteReviewShareImageRenderer {
         }
     }
 
-    private func drawMetadataItem(payload: RenderPayload, label: String, value: String, in rect: CGRect) {
+    private nonisolated func drawMetadataItem(payload: RenderPayload, label: String, value: String, in rect: CGRect) {
         let labelAttributed = attributedText(
             label,
             font: payload.metadataLabelFont,
             color: payload.accentColor,
             lineSpacing: 0,
-            textAlignment: payload.textAlignment.nsTextAlignment
+            textAlignment: payload.textAlignment
         )
         let labelWidth = labelAttributed.width(constrainedTo: rect.width)
         let labelRect = CGRect(x: rect.minX, y: rect.minY + 2, width: labelWidth, height: rect.height)
@@ -453,20 +588,20 @@ struct NoteReviewShareImageRenderer {
             font: payload.metadataValueFont,
             color: payload.secondaryTextColor,
             lineSpacing: 3,
-            textAlignment: payload.textAlignment.nsTextAlignment
+            textAlignment: payload.textAlignment
         ).draw(in: CGRect(x: valueX, y: rect.minY, width: rect.maxX - valueX, height: rect.height))
     }
 
-    private func drawFooter(payload: RenderPayload, in rect: CGRect) {
+    private nonisolated func drawFooter(payload: RenderPayload, in rect: CGRect) {
         payload.dividerColor.setFill()
         UIBezierPath(rect: CGRect(x: rect.minX, y: rect.minY, width: rect.width, height: Layout.dividerHeight)).fill()
 
         attributedText(
-            "XMNote · 书摘回顾分享图",
+            payload.footerText,
             font: payload.footerFont,
             color: payload.secondaryTextColor,
             lineSpacing: 0,
-            textAlignment: payload.textAlignment.nsTextAlignment
+            textAlignment: payload.textAlignment
         ).draw(in: CGRect(x: rect.minX, y: rect.minY + 22, width: rect.width, height: 34))
     }
 
@@ -595,7 +730,7 @@ struct NoteReviewShareImageRenderer {
         return UIFont(descriptor: descriptor, size: baseFont.pointSize)
     }
 
-    private func metadataHeight(for payload: RenderPayload, width: CGFloat) -> CGFloat {
+    private nonisolated func metadataHeight(for payload: RenderPayload, width: CGFloat) -> CGFloat {
         let columns = metadataColumns(in: CGRect(x: 0, y: 0, width: width, height: 1))
         let rows = metadataRows(for: payload)
         var heights: [CGFloat] = []
@@ -612,7 +747,7 @@ struct NoteReviewShareImageRenderer {
         return heights.reduce(0, +) + CGFloat(max(0, heights.count - 1)) * Layout.metadataRowSpacing
     }
 
-    private func metadataColumns(in rect: CGRect) -> [CGRect] {
+    private nonisolated func metadataColumns(in rect: CGRect) -> [CGRect] {
         guard rect.width >= 720 else { return [rect] }
         let columnWidth = (rect.width - Layout.metadataColumnGap) / 2
         return [
@@ -621,7 +756,7 @@ struct NoteReviewShareImageRenderer {
         ]
     }
 
-    private func metadataRows(for payload: RenderPayload) -> [(label: String, value: String)] {
+    private nonisolated func metadataRows(for payload: RenderPayload) -> [(label: String, value: String)] {
         [
             ("章节", payload.chapter),
             ("位置", payload.position),
@@ -629,13 +764,13 @@ struct NoteReviewShareImageRenderer {
         ]
     }
 
-    private func metadataItemHeight(payload: RenderPayload, label: String, value: String, width: CGFloat) -> CGFloat {
+    private nonisolated func metadataItemHeight(payload: RenderPayload, label: String, value: String, width: CGFloat) -> CGFloat {
         let labelAttributed = attributedText(
             label,
             font: payload.metadataLabelFont,
             color: payload.accentColor,
             lineSpacing: 0,
-            textAlignment: payload.textAlignment.nsTextAlignment
+            textAlignment: payload.textAlignment
         )
         let labelWidth = min(labelAttributed.width(constrainedTo: width), width)
         let valueWidth = max(0, width - labelWidth - Layout.metadataValueGap)
@@ -645,7 +780,7 @@ struct NoteReviewShareImageRenderer {
             font: payload.metadataValueFont,
             color: payload.secondaryTextColor,
             lineSpacing: 3,
-            textAlignment: payload.textAlignment.nsTextAlignment
+            textAlignment: payload.textAlignment
         ).height(constrainedTo: valueWidth)
         return max(labelHeight, valueHeight) + 4
     }
@@ -668,12 +803,12 @@ struct NoteReviewShareImageRenderer {
         return trimmed.isEmpty ? fallback : trimmed
     }
 
-    private func makeFileName(for payload: RenderPayload) -> String {
+    private nonisolated func makeFileName(for payload: RenderPayload) -> String {
         let safeTitle = safeFileName(payload.bookTitle)
-        return "\(safeTitle)-书摘回顾-\(payload.noteID).png"
+        return "\(safeTitle)-\(payload.fileNameLabel)-\(payload.noteID).png"
     }
 
-    private func safeFileName(_ rawValue: String) -> String {
+    private nonisolated func safeFileName(_ rawValue: String) -> String {
         let invalidCharacters = CharacterSet(charactersIn: "/\\?%*|\"<>:")
             .union(.newlines)
             .union(.controlCharacters)
@@ -684,7 +819,7 @@ struct NoteReviewShareImageRenderer {
         return sanitized.isEmpty ? "未命名书籍" : String(sanitized.prefix(48))
     }
 
-    private func attributedText(
+    private nonisolated func attributedText(
         _ string: String,
         font: UIFont,
         color: UIColor,
@@ -787,7 +922,7 @@ private enum RichTextRole {
     }
 }
 
-private struct RenderPayload {
+private nonisolated struct RenderPayload: @unchecked Sendable {
     let noteID: Int64
     let bookTitle: String
     let bookAuthor: String
@@ -809,10 +944,13 @@ private struct RenderPayload {
     let ideaFillColor: UIColor
     let cardSurfaceColor: UIColor
     let backgroundImage: UIImage?
-    let textAlignment: NoteReviewTextAlignment
+    let textAlignment: NSTextAlignment
+    let eyebrowText: String
+    let footerText: String
+    let fileNameLabel: String
 }
 
-private struct MeasuredLayout {
+private nonisolated struct MeasuredLayout: Sendable {
     let canvasHeight: CGFloat
     let cardHeight: CGFloat
     let contentWidth: CGFloat
@@ -824,7 +962,7 @@ private struct MeasuredLayout {
 }
 
 private extension NSAttributedString {
-    func height(constrainedTo width: CGFloat) -> CGFloat {
+    nonisolated func height(constrainedTo width: CGFloat) -> CGFloat {
         guard length > 0, width > 0 else { return 0 }
         let size = boundingRect(
             with: CGSize(width: width, height: .greatestFiniteMagnitude),
@@ -834,7 +972,7 @@ private extension NSAttributedString {
         return ceil(size.height)
     }
 
-    func width(constrainedTo width: CGFloat) -> CGFloat {
+    nonisolated func width(constrainedTo width: CGFloat) -> CGFloat {
         guard length > 0, width > 0 else { return 0 }
         let size = boundingRect(
             with: CGSize(width: width, height: .greatestFiniteMagnitude),
