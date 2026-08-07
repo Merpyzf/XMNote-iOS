@@ -1260,7 +1260,7 @@ struct MainTabView: View {
                 onOpenBookRoute: { append($0, to: selectedTab) }
             )
         case .bookSource:
-            Text("书籍来源")
+            SourceManagementView()
         case .authorManagement:
             BookContributorManagementView(kind: .author)
         case .pressManagement:

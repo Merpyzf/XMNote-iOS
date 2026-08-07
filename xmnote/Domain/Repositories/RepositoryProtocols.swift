@@ -2,7 +2,7 @@ import Foundation
 
 /**
  * [INPUT]: 依赖 Models 与 Services 层的数据类型定义
- * [OUTPUT]: 对外提供 Book/Note/Content/GlobalSearch/Backup/S3/AI/图片额度/TagManagement/BookGroupManagement/ExternalAppIntegration/Statistics/ReadCalendar/Timeline/ReadingDashboard/ReadingTimer 及书籍搜索录入协议
+ * [OUTPUT]: 对外提供 Book/Note/Content/GlobalSearch/Backup/S3/AI/图片额度/TagManagement/BookGroupManagement/SourceManagement/ExternalAppIntegration/Statistics/ReadCalendar/Timeline/ReadingDashboard/ReadingTimer 及书籍搜索录入协议
  * [POS]: Domain 层仓储契约，定义 Presentation 获取本地/网络数据的唯一入口
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -333,6 +333,20 @@ protocol BookGroupManagementRepositoryProtocol {
     func deleteGroups(groupIDs: [Int64], placement: GroupBooksPlacement) async throws
     /// 按当前展示顺序写入 group_order，并更新 updated_date。
     func updateGroupOrder(groupIDs: [Int64]) async throws
+}
+
+/// 书籍来源管理仓储契约，统一封装“我的 > 书籍来源”的来源读写语义。
+protocol SourceManagementRepositoryProtocol {
+    /// 持续观察我的来源与默认来源管理快照，供分段数量与当前列表同步刷新。
+    func observeSourceManagementSnapshot() -> AsyncThrowingStream<SourceManagementSnapshot, Error>
+    /// 新建我的来源，按 Android 来源管理语义写入默认字段。
+    func createSource(named name: String) async throws
+    /// 编辑指定我的来源名称，按 Android SourceRepository.update 的 @Update 全列语义提交。
+    func updateSource(sourceID: Int64, name: String) async throws
+    /// 删除指定我的来源；删除前将关联书籍迁移到未知来源。
+    func deleteSources(sourceIDs: [Int64]) async throws
+    /// 按当前展示顺序写入 source_order，并更新 updated_date。
+    func updateSourceOrder(sourceIDs: [Int64], scope: SourceManagementScope) async throws
 }
 
 /// 通用内容查看仓储契约，统一封装书摘/书评/相关内容的查看、编辑与删除入口。

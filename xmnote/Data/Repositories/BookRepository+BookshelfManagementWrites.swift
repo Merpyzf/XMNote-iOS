@@ -1338,14 +1338,16 @@ extension BookRepository {
         // SQL 目的：写入书籍来源在书架来源维度中的手动排序下标。
         // 涉及表：source。
         // 关键过滤：按 id 精确命中，且排除软删除来源。
-        // 副作用用途：仅更新 source_order，不更新 updated_date / last_sync_date。
+        // 时间字段：updated_date 写当前毫秒，对齐 Android SourceDao.updateOrderSync；last_sync_date 不更新。
+        // 副作用用途：更新来源维度排序，并让同步层可感知来源顺序变更。
         let sql = """
             UPDATE source
-            SET source_order = ?
+            SET source_order = ?,
+                updated_date = ?
             WHERE id = ?
               AND is_deleted = 0
             """
-        try db.execute(sql: sql, arguments: [order, id])
+        try db.execute(sql: sql, arguments: [order, timestampMillis(), id])
     }
 
     /// 查询 Book/Group 已置顶项的全局最大 pin_order。
@@ -2275,7 +2277,7 @@ extension BookRepository {
     ) throws {
         // SQL 目的：删除来源前把有效书籍迁移到未知来源。
         // 涉及表：book。
-        // 关键过滤：source_id = ?、is_deleted = 0、id != 0。
+        // 关键过滤：source_id = ?、is_deleted = 0；Android BookDao.updateOldSourceToNew 不额外排除 book.id = 0。
         // 时间字段：Android updateOldSourceToNew 不更新 updated_date，iOS 保持一致不改时间字段。
         // 副作用用途：对齐 Android BookDao.updateOldSourceToNew，避免书籍引用已删除来源。
         let sql = """
@@ -2283,7 +2285,6 @@ extension BookRepository {
             SET source_id = ?
             WHERE source_id = ?
               AND is_deleted = 0
-              AND id != 0
             """
         try db.execute(sql: sql, arguments: [newSourceID, oldSourceID])
     }
