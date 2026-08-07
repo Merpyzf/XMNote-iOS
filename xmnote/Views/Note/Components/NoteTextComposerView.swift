@@ -30,8 +30,8 @@ struct NoteTextComposerView: View {
         .navigationTitle(title)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
-            ToolbarItem(placement: .topBarLeading) {
-                TopBarBackButton {
+            ToolbarItem(placement: .confirmationAction) {
+                Button("完成") {
                     dismiss()
                 }
             }

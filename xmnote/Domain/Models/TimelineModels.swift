@@ -19,7 +19,7 @@ nonisolated struct TimelineNoteEvent: Equatable {
     let tagNames: [String]
 }
 
-/// 阅读计时事件，携带时长与时间范围
+/// 阅读计时事件，携带时长、时间范围与可选补录创建时刻。
 nonisolated struct TimelineReadTimingEvent: Equatable {
     let elapsedSeconds: Int64
     let startTime: Int64
@@ -28,8 +28,9 @@ nonisolated struct TimelineReadTimingEvent: Equatable {
     let position: Double
     let recordedPositionUnit: Int64?
     let insight: String
+    let supplementedAt: Int64?
 
-    /// 创建计时事件；进度和感想提供默认值以兼容普通时间线的既有调用。
+    /// 创建计时事件；补录时刻、进度和感想提供默认值以兼容普通时间线的既有调用。
     init(
         elapsedSeconds: Int64,
         startTime: Int64,
@@ -37,7 +38,8 @@ nonisolated struct TimelineReadTimingEvent: Equatable {
         fuzzyReadDate: Int64,
         position: Double = 0,
         recordedPositionUnit: Int64? = nil,
-        insight: String = ""
+        insight: String = "",
+        supplementedAt: Int64? = nil
     ) {
         self.elapsedSeconds = elapsedSeconds
         self.startTime = startTime
@@ -46,6 +48,7 @@ nonisolated struct TimelineReadTimingEvent: Equatable {
         self.position = position
         self.recordedPositionUnit = recordedPositionUnit
         self.insight = insight
+        self.supplementedAt = supplementedAt
     }
 }
 
@@ -81,13 +84,12 @@ nonisolated struct TimelineRelevantEvent: Equatable {
     let imageURLs: [String]
 }
 
-/// 相关书籍事件，携带被关联书籍信息与分类标签
+/// 相关书籍事件，携带被关联书籍信息；业务类型固定为“书籍”。
 nonisolated struct TimelineRelevantBookEvent: Equatable {
     let contentBookId: Int64
     let contentBookName: String
     let contentBookAuthor: String
     let contentBookCover: String
-    let categoryTitle: String
 }
 
 // MARK: - 事件类型

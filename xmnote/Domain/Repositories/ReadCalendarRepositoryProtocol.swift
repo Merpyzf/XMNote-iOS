@@ -28,6 +28,9 @@ enum ReadCalendarRepositoryError: LocalizedError {
 
 /// 阅读日历仓储契约，确保日历、摘要、时间线与分享复用同一业务口径。
 protocol ReadCalendarRepositoryProtocol {
+    /// 观察所有会影响日历、当日汇总与单书记录的本地数据变化。
+    @MainActor func observeDailyReadingChanges() -> AsyncThrowingStream<Void, Error>
+
     /// 按 Android 全局统计来源读取最早业务日期；展示筛选不改变日历可回溯下界。
     func fetchEarliestDate(excludedEventTypes: Set<ReadCalendarEventType>) async throws -> Date?
 
@@ -53,13 +56,13 @@ protocol ReadCalendarRepositoryProtocol {
         excludedEventTypes: Set<ReadCalendarEventType>
     ) async throws -> DailyReadingSummary
 
-    /// 读取某书在指定自然日内的可管理记录，按过滤类型与排序方向返回。
-    func fetchDailyBookRecords(
+    /// 读取指定自然日的完整阅读轨迹；bookID 为空时返回全部书籍记录，日历展示筛选不影响结果。
+    func fetchDailyTrajectory(
         for date: Date,
-        bookID: Int64,
+        selectedBookID: Int64?,
         filter: DailyReadingTimelineFilter,
         sortOrder: DailyReadingSortOrder
-    ) async throws -> [DailyReadingRecord]
+    ) async throws -> DailyReadingTrajectory
 
     /// 新增或更新打卡；recordID 为空时按 Android 的“同书同日覆盖”语义保存。
     func saveCheckIn(_ draft: ReadCalendarCheckInDraft) async throws

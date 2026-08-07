@@ -4,12 +4,14 @@ import GRDB
 /**
  * [INPUT]: 依赖 DatabaseManager 提供数据库连接，依赖 ObservationStream 提供数据库观察流桥接，依赖通用内容查看领域模型完成跨类型映射
  * [OUTPUT]: 对外提供 ContentRepository（ContentRepositoryProtocol 的 GRDB 实现）
- * [POS]: Data 层通用内容查看仓储实现，统一封装书摘/书评/相关内容的查看、编辑与硬删除事务
+ * [POS]: Data 层通用内容查看仓储实现，统一封装书摘/书评/相关内容的查看、编辑与硬删除事务，并对齐 Android 的相关书籍固定分类语义
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
 /// 通用内容查看仓储实现，负责 viewer feed、详情读取、编辑保存与硬删除事务。
 struct ContentRepository: ContentRepositoryProtocol {
+    private nonisolated static let relatedBookCategoryID: Int64 = 1
+
     private let databaseManager: DatabaseManager
 
     /// 注入数据库管理器，供内容查看与编辑链路复用同一数据源。
@@ -117,6 +119,70 @@ struct ContentRepository: ContentRepositoryProtocol {
                     WHERE id = ? AND is_deleted = 0
                 """,
                 arguments: [draft.title, draft.contentHTML, draft.url, now, draft.contentId]
+            )
+        }
+    }
+
+    /// 读取相关书籍关系与关联目标书。
+    func fetchRelatedBookRelationDraft(relationID: Int64) async throws -> RelatedBookRelationDraft? {
+        try await databaseManager.database.dbPool.read { db in
+            // SQL 目的：读取一条有效相关书籍关系及关联书籍的选书器回显字段。
+            // 涉及表：category_content INNER JOIN book。
+            // 关键过滤：relation 主键命中、is_deleted=0、content_book_id!=0，关联书籍也必须有效。
+            // 时间字段：不读取时间字段；返回字段只用于构造编辑草稿。
+            // 返回字段用途：回显来源书与关联目标书。
+            let relationSQL = """
+                SELECT cc.id, cc.book_id,
+                       b.id AS content_book_id, b.name, b.author, b.press, b.cover,
+                       b.position_unit, b.total_position, b.total_pagination
+                FROM category_content cc
+                JOIN book b ON b.id = cc.content_book_id AND b.is_deleted = 0
+                WHERE cc.id = ? AND cc.is_deleted = 0 AND cc.content_book_id != 0
+                LIMIT 1
+                """
+            guard let row = try Row.fetchOne(db, sql: relationSQL, arguments: [relationID]) else { return nil }
+            let sourceBookID: Int64 = row["book_id"]
+            return RelatedBookRelationDraft(
+                id: row["id"],
+                sourceBookID: sourceBookID,
+                contentBook: BookPickerBook(
+                    id: row["content_book_id"],
+                    title: row["name"] ?? "",
+                    author: row["author"] ?? "",
+                    press: row["press"] ?? "",
+                    coverURL: row["cover"] ?? "",
+                    positionUnit: row["position_unit"] ?? 0,
+                    totalPosition: row["total_position"] ?? 0,
+                    totalPagination: row["total_pagination"] ?? 0
+                )
+            )
+        }
+    }
+
+    /// 保存相关书籍关系；按 Android AppConstant.Categories.BOOK 固定写入分类 ID 1。
+    func saveRelatedBookRelationDraft(_ draft: RelatedBookRelationDraft) async throws {
+        let now = Int64(Date().timeIntervalSince1970 * 1_000)
+        try await databaseManager.database.dbPool.write { db in
+            // SQL 目的：更新相关书籍关系的目标书，并固定写入 Android 定义的“书籍”分类 ID 1。
+            // 涉及表：category_content；book/category 由子查询完成有效性校验。
+            // 关键过滤：relation 主键、来源书、is_deleted=0，目标书与固定分类都必须有效。
+            // 时间字段：updated_date 写当前毫秒时间戳。
+            // 副作用用途：让时间线、当日记录和相关列表观察流同步关系变更。
+            let sql = """
+                UPDATE category_content
+                SET content_book_id = ?, category_id = ?, updated_date = ?
+                WHERE id = ? AND book_id = ? AND is_deleted = 0
+                  AND EXISTS (SELECT 1 FROM book WHERE id = ? AND is_deleted = 0)
+                  AND EXISTS (SELECT 1 FROM category WHERE id = ? AND is_deleted = 0)
+                """
+            try db.execute(
+                sql: sql,
+                arguments: [
+                    draft.contentBook.id, Self.relatedBookCategoryID, now,
+                    draft.id, draft.sourceBookID,
+                    draft.contentBook.id,
+                    Self.relatedBookCategoryID
+                ]
             )
         }
     }

@@ -71,6 +71,13 @@
 ### UI 与交互
 - 遵循 iOS Human Interface Guidelines，保证业务一致，但采用 iOS 原生表达。
 
+#### 滚动回弹与系统边缘效果
+- 全轴回弹约束（强制）：应用自有的 SwiftUI `ScrollView`、`List`、`Form` 等滚动容器，无论内容是否超过一屏，都必须继承全局或显式使用 `.scrollBounceBehavior(.always)`；禁止使用 `.basedOnSize`。
+- UIKit 回弹约束（强制）：应用自有的 UIKit 滚动容器必须按实际滚动轴设置 `alwaysBounceVertical = true` 或 `alwaysBounceHorizontal = true`，禁止显式关闭有效轴向的 `bounces` / `alwaysBounce…`。
+- 例外边界：图片缩放画布、明确禁用滚动的静态骨架视图与第三方 Vendor 组件不按列表处理，不得为了满足本规范改变其缩放或静态展示物理。
+- 系统边缘效果约束（强制）：顶部与底部渐进模糊必须依赖 iOS 原生 scroll-edge effect，可使用系统自动策略或 `.scrollEdgeEffectStyle(...)` 明确语义；禁止用自定义 blur、gradient、material 遮罩模拟，禁止额外添加 toolbar 常驻背景干扰系统效果。
+- 主滚动视图识别约束（强制）：需要系统 scroll-edge effect 的页面，内容状态下的主滚动容器必须保持为页面根内容的直接滚动主体；固定反馈优先通过 `safeAreaBar` 等系统安全区 API 接入，禁止用额外布局容器隔断系统对主滚动视图的识别。
+
 #### 导航 API 选择
 - 导航实现前必须先判定页面关系，再选择 API：当前 Tab 内继续深入，用该 Tab 的 `NavigationStack + route enum + NavigationPath`；需要覆盖 `TabView` 且返回时保留底层现场，用根视图 `.fullScreenCover(item:)`，cover 内如需二级跳转再放独立 `NavigationStack`；只为当前页面补充参数、选择、确认或短信息展示，才用 `sheet` / `popover` / `alert`。
 - 判定口诀：属于当前 Tab 浏览路径就 push；必须保住底层现场就 cover；只是辅助当前任务就 sheet/popover/alert。三者都不匹配时，先重审交互关系，禁止直接自造 overlay/navigation 动画系统。
@@ -201,3 +208,4 @@
 - `bash scripts/verify_l3_protocol_headers.sh`
 - `bash scripts/verify_arch_docs_sync.sh`
 - `bash scripts/verify_component_guides.sh`
+- `bash scripts/verify_scroll_ux.sh`

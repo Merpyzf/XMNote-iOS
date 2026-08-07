@@ -1,5 +1,5 @@
 /**
- * [INPUT]: 依赖 TimelineEvent/TimelineSection 领域模型、7 种 Card 组件、DesignTokens 设计令牌，以及内容查看/书籍详情点击回调
+ * [INPUT]: 依赖 TimelineEvent/TimelineSection 领域模型、7 种 Card 组件、DesignTokens 时间线尺寸与共享配色令牌，以及内容查看/书籍详情点击回调
  * [OUTPUT]: 对外提供 TimelineEventRow（时间线单事件行）、TimelineSectionHeader（粘性日期头 + 右侧筛选占位）与 TimelineSectionView（按日分组渲染）
  * [POS]: Reading/Timeline 页面私有子视图，整合左侧虚线装饰列、右侧事件卡片与点击跳转分发
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -18,8 +18,11 @@ struct TimelineSectionHeader: View, Equatable {
     var body: some View {
         HStack(spacing: Spacing.cozy) {
             Circle()
-                .fill(Color.brand)
-                .frame(width: dotSize, height: dotSize)
+                .fill(TimelineCalendarStyle.connectorDotColor)
+                .frame(
+                    width: TimelineCalendarStyle.connectorDotSize,
+                    height: TimelineCalendarStyle.connectorDotSize
+                )
 
             HStack(alignment: .lastTextBaseline, spacing: Spacing.base) {
                 Text(monthDayString)
@@ -125,8 +128,14 @@ struct TimelineEventRow: View, Equatable {
     var body: some View {
         HStack(alignment: .top, spacing: Spacing.none) {
             TimelineConnectorShape(isLastEvent: isLastEvent)
-                .stroke(style: StrokeStyle(lineWidth: 1.5, dash: [4, 3]))
-                .foregroundStyle(Color.textHint.opacity(0.35))
+                .stroke(
+                    style: StrokeStyle(
+                        lineWidth: TimelineCalendarStyle.connectorLineWidth,
+                        lineCap: .round,
+                        dash: TimelineCalendarStyle.connectorDashPattern
+                    )
+                )
+                .foregroundStyle(TimelineCalendarStyle.connectorLineColor)
                 .frame(width: decoratorWidth)
 
             Button(action: handleTap) {
@@ -225,7 +234,7 @@ private struct TimelineConnectorShape: Shape {
     /// 按是否为最后一条事件绘制时间线装饰虚线，避免分组尾部继续向下延伸。
     func path(in rect: CGRect) -> Path {
         var path = Path()
-        let x = dotSize / 2
+        let x = TimelineCalendarStyle.connectorDotSize / 2
         let endY = isLastEvent ? rect.height * 0.5 : rect.height
         path.move(to: CGPoint(x: x, y: 0))
         path.addLine(to: CGPoint(x: x, y: endY))
@@ -234,9 +243,6 @@ private struct TimelineConnectorShape: Shape {
 }
 
 // MARK: - Shared Constants
-
-/// 绿色圆点直径，section header 与装饰列共用
-private let dotSize: CGFloat = 8
 
 /// SectionHeader 右侧筛选入口占位高度
 private let sectionHeaderTrailingPlaceholderHeight: CGFloat = 24
@@ -255,12 +261,12 @@ struct TimelineCardMetaLine: View {
         HStack(spacing: Spacing.compact) {
             Text(timeString)
                 .font(AppTypography.caption)
-                .foregroundStyle(Color.textHint)
+                .foregroundStyle(TimelineCalendarStyle.eventTimeColor)
 
             if !bookName.isEmpty {
                 Text("·")
                     .font(AppTypography.caption)
-                    .foregroundStyle(Color.textHint)
+                    .foregroundStyle(TimelineCalendarStyle.eventTimeColor)
 
                 Text("《\(bookName)》")
                     .font(AppTypography.caption)

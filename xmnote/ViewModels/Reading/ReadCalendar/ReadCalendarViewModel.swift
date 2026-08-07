@@ -4,8 +4,8 @@ import SwiftUI
 
 /**
  * [INPUT]: 依赖 ReadCalendarRepositoryProtocol 提供月历聚合数据，依赖 ReadCalendarColorRepositoryProtocol 提供封面取色，依赖 ReadCalendarEventLayoutEngine 生成事件条布局
- * [OUTPUT]: 对外提供 ReadCalendarViewModel（阅读日历页面状态、月度摘要、十二月贡献、有效月份年度排行与同期比较）
- * [POS]: ReadCalendar 子功能状态中枢，负责数据加载、分页状态、选中态、周布局构建、快速跳月与封面取色任务编排
+ * [OUTPUT]: 对外提供 ReadCalendarViewModel（阅读日历页面状态、可恢复且默认不预选的日期聚焦、月度摘要、十二月贡献、有效月份年度排行与同期比较）
+ * [POS]: ReadCalendar 子功能状态中枢，负责数据加载、分页与日期聚焦状态、周布局构建、快速跳月与封面取色任务编排
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 /// ReadCalendarViewModel 是阅读日历的状态中枢，统一处理月份分页、选中态、事件布局与异步取色回填。
@@ -175,11 +175,13 @@ final class ReadCalendarViewModel {
         self.calendar = cal
 
         let today = cal.startOfDay(for: Date())
-        let monthStart = Self.monthStart(of: today, using: cal)
-        let defaultYear = cal.component(.year, from: initialDate ?? today)
+        let initialDay = initialDate.map { cal.startOfDay(for: $0) }
+        let initialAnchor = initialDay ?? today
+        let monthStart = Self.monthStart(of: initialAnchor, using: cal)
+        let defaultYear = cal.component(.year, from: initialAnchor)
         self.displayedMonthStart = monthStart
         self.pagerSelection = monthStart
-        self.selectedDate = today
+        self.selectedDate = initialDay
         self.selectedYear = defaultYear
     }
 
@@ -260,11 +262,13 @@ final class ReadCalendarViewModel {
             rebuildMonthRange(from: earliest, to: current)
             rebuildYearRange(from: earliest, to: current)
 
-            let preferredSelectedDate = clampSelectedDate(
-                calendar.startOfDay(for: initialDate ?? today),
-                earliestMonthStart: earliest,
-                latestDate: today
-            )
+            let preferredSelectedDate = initialDate.map {
+                clampSelectedDate(
+                    calendar.startOfDay(for: $0),
+                    earliestMonthStart: earliest,
+                    latestDate: today
+                )
+            }
             let restoredSelection = resolveRestoredSelection(
                 fallbackSelectedDate: preferredSelectedDate,
                 earliestMonthStart: earliest,
@@ -603,6 +607,7 @@ final class ReadCalendarViewModel {
         using repository: any ReadCalendarRepositoryProtocol,
         colorRepository: any ReadCalendarColorRepositoryProtocol
     ) async {
+        pendingSceneSnapshot = sceneSnapshot
         hasLoaded = false
         monthCache = [:]
         pageStates = [:]
@@ -1816,21 +1821,22 @@ private extension ReadCalendarViewModel {
 
     /// 将 scene 快照折叠为安全的月份/年份/日期三元组，避免旧快照越界到当前数据边界。
     func resolveRestoredSelection(
-        fallbackSelectedDate: Date,
+        fallbackSelectedDate: Date?,
         earliestMonthStart: Date,
         latestMonthStart: Date,
         latestDate: Date
     ) -> (selectedDate: Date?, monthStart: Date, selectedYear: Int) {
         guard let snapshot = pendingSceneSnapshot else {
+            let fallbackAnchor = fallbackSelectedDate ?? calendar.startOfDay(for: latestDate)
             let fallbackMonth = clampMonthStart(
-                Self.monthStart(of: fallbackSelectedDate, using: calendar),
+                Self.monthStart(of: fallbackAnchor, using: calendar),
                 earliest: earliestMonthStart,
                 latest: latestMonthStart
             )
             return (
                 selectedDate: fallbackSelectedDate,
                 monthStart: fallbackMonth,
-                selectedYear: clampYear(calendar.component(.year, from: fallbackSelectedDate))
+                selectedYear: clampYear(calendar.component(.year, from: fallbackAnchor))
             )
         }
 

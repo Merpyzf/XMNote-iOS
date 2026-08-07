@@ -578,7 +578,7 @@ nonisolated struct DailyReadingSummary: Hashable {
     }
 }
 
-/// 单书当日时间线筛选；读完状态只参与汇总，不进入 Android 的三级记录流。
+/// 当日阅读轨迹筛选；读完只展示完成里程碑，不混入其他阅读状态变化。
 nonisolated enum DailyReadingTimelineFilter: String, CaseIterable, Identifiable, Hashable, Codable {
     case all
     case note
@@ -586,6 +586,7 @@ nonisolated enum DailyReadingTimelineFilter: String, CaseIterable, Identifiable,
     case review
     case checkIn
     case readTiming
+    case readDone
 
     var id: String { rawValue }
 
@@ -597,6 +598,7 @@ nonisolated enum DailyReadingTimelineFilter: String, CaseIterable, Identifiable,
         case .review: "书评"
         case .checkIn: "打卡"
         case .readTiming: "计时"
+        case .readDone: "读完"
         }
     }
 }
@@ -611,12 +613,32 @@ nonisolated enum DailyReadingSortOrder: String, CaseIterable, Identifiable, Hash
     var title: String { self == .descending ? "从新到旧" : "从旧到新" }
 }
 
-/// 单书当日时间线记录，补充底层主键以支持编辑与物理删除。
+/// 当日阅读轨迹记录；读完里程碑没有可写主键，其余记录保留主键以支持编辑与物理删除。
 nonisolated struct DailyReadingRecord: Identifiable, Equatable {
-    let recordID: Int64
+    let recordID: Int64?
     let event: TimelineEvent
 
     var id: String { event.id }
+
+    var isFuzzyTiming: Bool {
+        guard case .readTiming(let timing) = event.kind else { return false }
+        return timing.fuzzyReadDate != 0
+    }
+}
+
+/// 当日阅读轨迹快照，同时提供稳定书籍筛选项和当前条件下的全部记录。
+nonisolated struct DailyReadingTrajectory: Equatable {
+    let date: Date
+    let books: [DailyReadingBookSummary]
+    let records: [DailyReadingRecord]
+
+    static func empty(for date: Date) -> DailyReadingTrajectory {
+        DailyReadingTrajectory(
+            date: Calendar.current.startOfDay(for: date),
+            books: [],
+            records: []
+        )
+    }
 }
 
 /// 打卡新增/编辑草稿；recordID 为空表示按“同书同日”规则新增或更新。

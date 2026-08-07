@@ -2,8 +2,8 @@ import Foundation
 import GRDB
 
 /**
- * [INPUT]: 依赖 DatabaseManager、StatisticsRepository、TimelineRepository 与阅读日历领域模型
- * [OUTPUT]: 对外提供 ReadCalendarRepository，统一日历筛选、分享排除、当日汇总、跨日计时分段及打卡/计时写入
+ * [INPUT]: 依赖 DatabaseManager、ObservationStream、StatisticsRepository、TimelineRepository 与阅读日历领域模型
+ * [OUTPUT]: 对外提供 ReadCalendarRepository，统一日历筛选、变化信号、当日汇总、补录时间线映射、跨日计时分段及打卡/计时写入
  * [POS]: Data 层阅读日历业务真相源，被阅读日历相关 ViewModel 通过协议依赖
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -21,6 +21,13 @@ nonisolated struct ReadCalendarRepository: ReadCalendarRepositoryProtocol {
         self.statisticsRepository = StatisticsRepository(databaseManager: databaseManager)
         self.timelineRepository = TimelineRepository(databaseManager: databaseManager)
         self.calendar = Calendar.current
+    }
+
+    /// 将影响阅读日历和当日记录的数据库表变化桥接为无载荷事件，页面生命周期结束后由调用方取消。
+    @MainActor func observeDailyReadingChanges() -> AsyncThrowingStream<Void, Error> {
+        ObservationStream.makeChangeSignal(in: databaseManager.database.dbPool) { db in
+            try dailyReadingDataFingerprint(db)
+        }
     }
 
     /// 读取启用事件源中的最早日期。
@@ -78,17 +85,18 @@ nonisolated struct ReadCalendarRepository: ReadCalendarRepositoryProtocol {
         }
     }
 
-    /// 读取某书在指定自然日内的可管理事件，并按用户选择排序。
-    nonisolated func fetchDailyBookRecords(
+    /// 读取指定自然日的完整阅读轨迹；书籍候选始终来自全部事件，不继承月历展示筛选。
+    nonisolated func fetchDailyTrajectory(
         for date: Date,
-        bookID: Int64,
+        selectedBookID: Int64?,
         filter: DailyReadingTimelineFilter,
         sortOrder: DailyReadingSortOrder
-    ) async throws -> [DailyReadingRecord] {
+    ) async throws -> DailyReadingTrajectory {
         let dayRange = dayMillisRange(for: date)
+        async let summaryTask = fetchDailySummary(for: date, excludedEventTypes: [])
         var events: [TimelineEvent] = []
 
-        if filter != .readTiming {
+        if filter != .readTiming, filter != .readDone {
             let category = timelineCategory(for: filter)
             let sections = try await timelineRepository.fetchTimelineEvents(
                 startTimestamp: dayRange.lowerBound,
@@ -98,7 +106,7 @@ nonisolated struct ReadCalendarRepository: ReadCalendarRepositoryProtocol {
             events = sections
                 .flatMap(\.events)
                 .filter { event in
-                    guard event.sourceBookId == bookID else { return false }
+                    if let selectedBookID, event.sourceBookId != selectedBookID { return false }
                     if case .readStatus = event.kind { return false }
                     if case .readTiming = event.kind { return false }
                     return true
@@ -107,24 +115,33 @@ nonisolated struct ReadCalendarRepository: ReadCalendarRepositoryProtocol {
 
         if filter == .all || filter == .readTiming {
             let timingEvents = try await databaseManager.database.dbPool.read { db in
-                try queryDailyTimingEvents(db, bookID: bookID, dayRange: dayRange)
+                try queryDailyTimingEvents(db, bookID: selectedBookID, dayRange: dayRange)
             }
             events.append(contentsOf: timingEvents)
         }
 
-        let ordered = events.sorted {
-            if $0.timestamp != $1.timestamp {
-                return sortOrder == .descending
-                    ? $0.timestamp > $1.timestamp
-                    : $0.timestamp < $1.timestamp
+        if filter == .all || filter == .readDone {
+            let readDoneEvents = try await databaseManager.database.dbPool.read { db in
+                try queryDailyReadDoneEvents(db, bookID: selectedBookID, dayRange: dayRange)
             }
-            return sortOrder == .descending ? $0.id > $1.id : $0.id < $1.id
+            events.append(contentsOf: readDoneEvents)
         }
 
-        return ordered.compactMap { event in
-            guard let recordID = recordID(for: event) else { return nil }
-            return DailyReadingRecord(recordID: recordID, event: event)
+        let ordered = orderedDailyEvents(events, sortOrder: sortOrder)
+        let summary = try await summaryTask
+        let books = summary.books.sorted {
+            if $0.book.firstEventTime != $1.book.firstEventTime {
+                return $0.book.firstEventTime < $1.book.firstEventTime
+            }
+            return $0.id < $1.id
         }
+        return DailyReadingTrajectory(
+            date: calendar.startOfDay(for: date),
+            books: books,
+            records: ordered.map { event in
+                DailyReadingRecord(recordID: recordID(for: event), event: event)
+            }
+        )
     }
 
     /// 保存打卡；新增路径按同书同日覆盖，编辑路径保留原打卡日期。
@@ -305,6 +322,39 @@ nonisolated struct ReadCalendarRepository: ReadCalendarRepositoryProtocol {
 // MARK: - 当日聚合
 
 private extension ReadCalendarRepository {
+    /// SQL 目的：追踪会影响阅读日历、当日汇总、单书记录及其操作上下文的全部本地表变更。
+    /// 涉及表：note、book、chapter、tag_note、tag、attach_image、category、category_content、category_image、review、review_image、read_time_record、check_in_record、book_read_status_record。
+    /// 关键过滤：仅用于变化检测，不提前过滤 is_deleted；有效、软删除和物理删除变化均必须触发重新按 Android 口径查询。
+    /// 时间字段：updated_date 沿用 Android 毫秒时间戳，仅参与指纹比较，不执行日期或时区转换。
+    /// 返回字段用途：ValueObservation 发现指纹变化后通知二级、三级页面重查，避免子页面修改后显示旧快照。
+    nonisolated func dailyReadingDataFingerprint(_ db: Database) throws -> String {
+        let trackedTables = [
+            NoteRecord.databaseTableName,
+            BookRecord.databaseTableName,
+            ChapterRecord.databaseTableName,
+            TagNoteRecord.databaseTableName,
+            TagRecord.databaseTableName,
+            AttachImageRecord.databaseTableName,
+            CategoryRecord.databaseTableName,
+            CategoryContentRecord.databaseTableName,
+            CategoryImageRecord.databaseTableName,
+            ReviewRecord.databaseTableName,
+            ReviewImageRecord.databaseTableName,
+            ReadTimeRecordRecord.databaseTableName,
+            CheckInRecordRecord.databaseTableName,
+            BookReadStatusRecordRecord.databaseTableName
+        ]
+        let components = trackedTables.map { tableName in
+            """
+            (SELECT COUNT(*) || ':' || COALESCE(MAX(updated_date), 0) || ':' ||
+                COALESCE(SUM(id + is_deleted), 0)
+             FROM \(tableName.quotedDatabaseIdentifier))
+            """
+        }
+        let sql = "SELECT \(components.joined(separator: " || '|' || ")) AS fingerprint"
+        return try String.fetchOne(db, sql: sql) ?? ""
+    }
+
     nonisolated struct BookActivityAggregate {
         var firstEventTime: Int64 = .max
         var lastEventTime: Int64 = .min
@@ -340,6 +390,7 @@ private extension ReadCalendarRepository {
         let endTime: Int64
         let elapsedSeconds: Int64
         let fuzzyReadDate: Int64
+        let createdDate: Int64
         let position: Double
         let recordedPositionUnit: Int64?
         let insight: String
@@ -549,7 +600,7 @@ private extension ReadCalendarRepository {
     }
 }
 
-// MARK: - 单书时间线
+// MARK: - 当日阅读轨迹
 
 private extension ReadCalendarRepository {
     /// 把阅读日历筛选映射为现有 Timeline 查询类别。
@@ -563,13 +614,14 @@ private extension ReadCalendarRepository {
         case .review: .review
         case .checkIn: .checkIn
         case .readTiming: .readTiming
+        case .readDone: .readStatus
         }
     }
 
-    /// 读取并切分指定书籍在目标自然日内的精确/模糊计时记录。
+    /// 读取并切分目标自然日内的精确/模糊计时记录；bookID 为空时保留全部书籍。
     nonisolated func queryDailyTimingEvents(
         _ db: Database,
-        bookID: Int64,
+        bookID: Int64?,
         dayRange: ClosedRange<Int64>
     ) throws -> [TimelineEvent] {
         try queryDailyTimingRows(db, bookID: bookID, dayRange: dayRange).compactMap { row in
@@ -583,13 +635,101 @@ private extension ReadCalendarRepository {
                     fuzzyReadDate: row.fuzzyReadDate,
                     position: row.position,
                     recordedPositionUnit: row.recordedPositionUnit,
-                    insight: row.insight
+                    insight: row.insight,
+                    supplementedAt: row.fuzzyReadDate != 0 && row.createdDate > 0
+                        ? row.createdDate
+                        : nil
                 )),
                 timestamp: segment.timelineTime,
                 sourceBookId: row.bookID,
                 bookName: row.bookName,
                 bookAuthor: row.bookAuthor,
                 bookCover: row.bookCover
+            )
+        }
+    }
+
+    /// 读取目标自然日的读完里程碑，并用 book 当前快照补齐缺失的历史记录。
+    nonisolated func queryDailyReadDoneEvents(
+        _ db: Database,
+        bookID: Int64?,
+        dayRange: ClosedRange<Int64>
+    ) throws -> [TimelineEvent] {
+        let bookClause = bookID == nil ? "" : "AND completed.book_id = ?"
+        // SQL 目的：合并读完历史与 book 当前快照，构建当天只读读完里程碑。
+        // 涉及表：book_read_status_record、book；快照仅在同书同时间缺少历史记录时补入。
+        // 关键过滤：有效书籍、read_status_id=3、changed_date/read_status_changed_date 位于目标自然日；可选限定单书。
+        // 时间字段：全部保持 Android 毫秒时间戳，不在 SQL 内执行时区转换。
+        // 返回字段用途：生成不可编辑、不可删除的读完时间线记录，并展示累计读完次数与评分。
+        let sql = """
+            WITH completed AS (
+                SELECT r.id AS record_id, r.book_id, r.changed_date AS event_time
+                FROM book_read_status_record r
+                JOIN book b ON b.id = r.book_id AND b.is_deleted = 0
+                WHERE r.is_deleted = 0
+                  AND r.read_status_id = 3
+                  AND r.changed_date BETWEEN ? AND ?
+                UNION ALL
+                SELECT NULL AS record_id, b.id AS book_id, b.read_status_changed_date AS event_time
+                FROM book b
+                WHERE b.is_deleted = 0
+                  AND b.id != 0
+                  AND b.read_status_id = 3
+                  AND b.read_status_changed_date BETWEEN ? AND ?
+                  AND NOT EXISTS (
+                      SELECT 1
+                      FROM book_read_status_record r
+                      WHERE r.is_deleted = 0
+                        AND r.book_id = b.id
+                        AND r.read_status_id = 3
+                        AND r.changed_date = b.read_status_changed_date
+                  )
+            )
+            SELECT completed.record_id, completed.book_id, completed.event_time,
+                   b.name, b.author, b.cover, b.score,
+                   MAX(1, (
+                       SELECT COUNT(*)
+                       FROM book_read_status_record history
+                       WHERE history.is_deleted = 0
+                         AND history.book_id = completed.book_id
+                         AND history.read_status_id = 3
+                         AND history.changed_date <= completed.event_time
+                   )) AS read_done_count
+            FROM completed
+            JOIN book b ON b.id = completed.book_id AND b.is_deleted = 0
+            WHERE 1 = 1
+              \(bookClause)
+            """
+        var arguments: [(any DatabaseValueConvertible)?] = [
+            dayRange.lowerBound,
+            dayRange.upperBound,
+            dayRange.lowerBound,
+            dayRange.upperBound
+        ]
+        if let bookID { arguments.append(bookID) }
+        let rows = try Row.fetchAll(
+            db,
+            sql: sql,
+            arguments: StatementArguments(arguments)
+        )
+        return rows.map { row in
+            let eventBookID: Int64 = row["book_id"]
+            let eventTime: Int64 = row["event_time"]
+            let recordID: Int64? = row["record_id"]
+            let eventID = recordID.map { "status-\($0)" }
+                ?? "status-snapshot-\(eventBookID)-\(eventTime)"
+            return TimelineEvent(
+                id: eventID,
+                kind: .readStatus(TimelineReadStatusEvent(
+                    statusId: 3,
+                    readDoneCount: row["read_done_count"] ?? 1,
+                    bookScore: row["score"] ?? 0
+                )),
+                timestamp: eventTime,
+                sourceBookId: eventBookID,
+                bookName: row["name"] ?? "",
+                bookAuthor: row["author"] ?? "",
+                bookCover: row["cover"] ?? ""
             )
         }
     }
@@ -603,12 +743,12 @@ private extension ReadCalendarRepository {
         // SQL 目的：读取目标自然日内的模糊计时，以及与该日发生区间重叠的精确计时。
         // 涉及表：read_time_record JOIN book。
         // 关键过滤：记录/书籍 is_deleted=0、status=3、book_id!=0；可选限定单书。
-        // 时间字段：fuzzy_read_date 按日闭区间；精确记录按 end_time >= dayStart 且 start_time <= dayEnd。
-        // 返回字段用途：按日切分时长并构建当日汇总/三级时间线。
+        // 时间字段：fuzzy_read_date 按日闭区间；精确记录按 end_time >= dayStart 且 start_time <= dayEnd；created_date 提供补录排序时刻。
+        // 返回字段用途：按日切分时长，并以补录时分构建模糊记录的当日时间线位置。
         let bookClause = bookID == nil ? "" : "AND r.book_id = ?"
         let sql = """
             SELECT r.id, r.book_id, r.start_time, r.end_time, r.elapsed_seconds, r.fuzzy_read_date,
-                   r.position, r.recorded_position_unit, r.insight,
+                   r.created_date, r.position, r.recorded_position_unit, r.insight,
                    b.name, b.author, b.cover
             FROM read_time_record r
             JOIN book b ON b.id = r.book_id AND b.is_deleted = 0
@@ -643,6 +783,7 @@ private extension ReadCalendarRepository {
                 endTime: row["end_time"] ?? 0,
                 elapsedSeconds: row["elapsed_seconds"] ?? 0,
                 fuzzyReadDate: row["fuzzy_read_date"] ?? 0,
+                createdDate: row["created_date"] ?? 0,
                 position: row["position"] ?? 0,
                 recordedPositionUnit: row["recorded_position_unit"],
                 insight: row["insight"] ?? "",
@@ -653,7 +794,7 @@ private extension ReadCalendarRepository {
         }
     }
 
-    /// 按 Android splitCrossDayRecords 生成目标自然日的精确计时分段；模糊记录保持原值。
+    /// 按 Android splitCrossDayRecords 生成精确计时分段；模糊记录以补录时分映射到目标自然日。
     nonisolated func dailyTimingSegment(
         _ row: DailyTimingRow,
         in dayRange: ClosedRange<Int64>
@@ -665,7 +806,10 @@ private extension ReadCalendarRepository {
                 startTime: row.startTime,
                 endTime: row.endTime,
                 activityTime: row.fuzzyReadDate,
-                timelineTime: row.fuzzyReadDate
+                timelineTime: normalizedSupplementedTimelineTime(
+                    row.createdDate,
+                    in: dayRange
+                ) ?? dayRange.upperBound
             )
         }
 
@@ -717,6 +861,55 @@ private extension ReadCalendarRepository {
             cursorDay = nextDay
         }
         return nil
+    }
+
+    /// 将补录创建时刻的本地时分映射到当前阅读日，避免改变模糊记录的日期归属。
+    nonisolated func normalizedSupplementedTimelineTime(
+        _ createdDate: Int64,
+        in dayRange: ClosedRange<Int64>
+    ) -> Int64? {
+        guard createdDate > 0 else { return nil }
+
+        let targetDate = Date(timeIntervalSince1970: Double(dayRange.lowerBound) / 1_000)
+        let sourceDate = Date(timeIntervalSince1970: Double(createdDate) / 1_000)
+        var components = calendar.dateComponents([.year, .month, .day], from: targetDate)
+        let sourceTime = calendar.dateComponents([.hour, .minute, .second], from: sourceDate)
+        components.hour = sourceTime.hour
+        components.minute = sourceTime.minute
+        components.second = sourceTime.second
+
+        guard let normalizedDate = calendar.date(from: components) else { return nil }
+        let normalizedMilliseconds = Self.milliseconds(normalizedDate)
+        return min(dayRange.upperBound, max(dayRange.lowerBound, normalizedMilliseconds))
+    }
+
+    /// 按时间轴时刻排序，并让缺少补录创建时间的历史模糊记录稳定停留在列表末尾。
+    nonisolated func orderedDailyEvents(
+        _ events: [TimelineEvent],
+        sortOrder: DailyReadingSortOrder
+    ) -> [TimelineEvent] {
+        events.sorted { lhs, rhs in
+            let isLeftUnknown = hasUnknownSupplementedTime(lhs)
+            let isRightUnknown = hasUnknownSupplementedTime(rhs)
+            if isLeftUnknown != isRightUnknown {
+                return !isLeftUnknown
+            }
+            if lhs.timestamp != rhs.timestamp {
+                return sortOrder == .descending
+                    ? lhs.timestamp > rhs.timestamp
+                    : lhs.timestamp < rhs.timestamp
+            }
+            return sortOrder == .descending ? lhs.id > rhs.id : lhs.id < rhs.id
+        }
+    }
+
+    /// 判断模糊计时是否缺少可用于时间线定位的真实补录创建时刻。
+    nonisolated func hasUnknownSupplementedTime(_ event: TimelineEvent) -> Bool {
+        guard case .readTiming(let timing) = event.kind,
+              timing.fuzzyReadDate != 0 else {
+            return false
+        }
+        return timing.supplementedAt == nil
     }
 
     /// 提取不同事件类型的真实数据库主键。

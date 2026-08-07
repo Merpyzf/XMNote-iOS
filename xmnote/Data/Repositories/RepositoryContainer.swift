@@ -3,7 +3,7 @@ import Observation
 
 /**
  * [INPUT]: 依赖 DatabaseManager 提供数据库实例，依赖各 Repository 实现完成组装
- * [OUTPUT]: 对外提供 RepositoryContainer，集中暴露业务可用的仓储入口（含全局搜索、书籍搜索与录入仓储、S3 配置与上传仓储、标签管理、阅读首页、阅读日历数据/封面取色与时间线仓储）
+ * [OUTPUT]: 对外提供 RepositoryContainer，集中暴露业务可用的仓储入口（含全局搜索、书籍搜索与录入仓储、S3 配置与上传仓储、标签管理、阅读首页、阅读日历与单书阅读详情仓储）
  * [POS]: App 级依赖注入容器，被视图层通过 Environment 获取并创建 ViewModel
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -26,6 +26,7 @@ final class RepositoryContainer {
     let externalAppIntegrationRepository: any ExternalAppIntegrationRepositoryProtocol
     let statisticsRepository: any StatisticsRepositoryProtocol
     let readCalendarRepository: any ReadCalendarRepositoryProtocol
+    let bookReadingDetailRepository: any BookReadingDetailRepositoryProtocol
     let readingDashboardRepository: any ReadingDashboardRepositoryProtocol
     let coverImageLoader: any XMCoverImageLoading
     let readCalendarColorRepository: any ReadCalendarColorRepositoryProtocol
@@ -71,6 +72,7 @@ final class RepositoryContainer {
         self.s3UploadRepository = s3UploadRepository
         self.statisticsRepository = StatisticsRepository(databaseManager: databaseManager)
         self.readCalendarRepository = ReadCalendarRepository(databaseManager: databaseManager)
+        self.bookReadingDetailRepository = BookReadingDetailRepository(databaseManager: databaseManager)
         self.readingDashboardRepository = ReadingDashboardRepository(databaseManager: databaseManager)
         self.coverImageLoader = coverImageLoader
         self.readCalendarColorRepository = ReadCalendarColorRepository(imageLoader: coverImageLoader)

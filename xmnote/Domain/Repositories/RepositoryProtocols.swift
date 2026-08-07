@@ -2,7 +2,7 @@ import Foundation
 
 /**
  * [INPUT]: 依赖 Models 与 Services 层的数据类型定义
- * [OUTPUT]: 对外提供 Book/Note/Content/GlobalSearch/BackupServer/Backup/S3/TagManagement/ExternalAppIntegration/Statistics/ReadCalendarColor/Timeline/ReadingDashboard 及书籍搜索/录入等 Repository 协议，包含书架、书单显示设置与基础数据管理入口
+ * [OUTPUT]: 对外提供 Book/Note/Content/GlobalSearch/BackupServer/Backup/S3/TagManagement/ExternalAppIntegration/Statistics/ReadCalendarColor/Timeline/ReadingDashboard 及书籍搜索/录入等 Repository 协议，包含相关书籍固定分类语义
  * [POS]: Domain 层仓储契约，定义 Presentation 获取本地/网络数据的唯一入口
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -231,6 +231,10 @@ protocol NoteRepositoryProtocol {
     func fetchNoteReviewBackgroundData(remoteURL: URL) async throws -> Data
     /// 按当前回顾设置读取一页书摘卡片，统一承接顺序分页与随机排除语义。
     func fetchNoteReviewPage(request: NoteReviewPageRequest) async throws -> [NoteReviewCardItem]
+    /// 按书摘主键读取单个只读操作上下文，供当日记录菜单复用标签、微信读书、分享和外部发送能力。
+    func fetchNoteReviewItem(noteID: Int64) async throws -> NoteReviewCardItem?
+    /// 批量读取书摘只读操作上下文，避免重度阅读日期逐条访问数据库。
+    func fetchNoteReviewItems(noteIDs: [Int64]) async throws -> [NoteReviewCardItem]
     /// 读取回顾设置可选标签，供标签筛选 Sheet 展示。
     func fetchNoteReviewTagOptions() async throws -> [NoteReviewTagOption]
     /// 读取当前回顾卡片的标签编辑快照，供操作菜单进入标签 Sheet。
@@ -293,6 +297,10 @@ protocol ContentRepositoryProtocol {
     func fetchRelevantEditorDraft(contentId: Int64) async throws -> RelevantEditorDraft?
     /// 保存相关内容编辑草稿。
     func saveRelevantEditorDraft(_ draft: RelevantEditorDraft) async throws
+    /// 读取相关书籍关系及目标书信息，供当日记录菜单编辑关联。
+    func fetchRelatedBookRelationDraft(relationID: Int64) async throws -> RelatedBookRelationDraft?
+    /// 以单事务保存相关书籍关系，并按 Android 语义固定写入“书籍”分类。
+    func saveRelatedBookRelationDraft(_ draft: RelatedBookRelationDraft) async throws
     /// 物理删除普通相关内容或相关书籍关系，并清理失去最后引用的业务占位书。
     func deleteRelatedRelation(relationID: Int64) async throws
     /// 删除指定内容，按 iOS 当前约定执行主记录与子记录的硬删除事务。

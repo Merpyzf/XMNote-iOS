@@ -1,7 +1,7 @@
 /**
  * [INPUT]: 依赖 SwiftUI 图标与字体渲染能力
- * [OUTPUT]: 对外提供 TopBarActionIcon 顶部栏统一图标组件、TopBarActionHitShape 热区形态，以及 TopBarBackButton 导航返回按钮
- * [POS]: UIComponents/TopBar 的原子级按钮图标与导航返回组件，被顶部操作区域与返回入口复用
+ * [OUTPUT]: 对外提供 TopBarActionIcon 顶部栏统一图标组件、TopBarActionHitShape 热区形态，以及采用系统自适应标签的 TopBarBackButton
+ * [POS]: UIComponents/TopBar 的原子级按钮图标与特殊场景返回组件，被自定义顶部操作区域与需拦截退出的返回入口复用
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
@@ -44,25 +44,18 @@ private struct TopBarActionHitShapeModifier: ViewModifier {
     }
 }
 
-/// 顶部栏导航返回按钮，统一返回图标尺寸、热区与基础交互语义。
+/// 特殊场景导航返回按钮，保留业务拦截能力并交由系统工具栏决定视觉规格。
 struct TopBarBackButton: View {
     let action: () -> Void
-    var foregroundColor: Color = .primary
+    var foregroundColor: Color? = nil
     var isEnabled: Bool = true
     var opacity: Double = 1
 
     var body: some View {
-        Button(action: action) {
-            TopBarActionIcon(
-                systemName: "chevron.left",
-                iconSize: 16,
-                weight: .semibold,
-                foregroundColor: foregroundColor
-            )
-        }
-        .buttonStyle(.plain)
-        .disabled(!isEnabled)
-        .opacity(opacity)
-        .accessibilityLabel("返回")
+        Button("返回", systemImage: "chevron.left", action: action)
+            .labelStyle(.iconOnly)
+            .tint(foregroundColor)
+            .disabled(!isEnabled)
+            .opacity(opacity)
     }
 }

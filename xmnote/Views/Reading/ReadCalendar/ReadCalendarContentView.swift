@@ -1,7 +1,7 @@
 /**
- * [INPUT]: 依赖 CalendarMonthStepperBar/ReadCalendarMonthGrid/ReadCalendarCoverFanStack 页面私有组件、ReadCalendarDay/ReadCalendarMonthlyDurationBook 领域模型与 DesignTokens 视觉令牌
- * [OUTPUT]: 对外提供 ReadCalendarContentView（含月/年切换、统计设置过滤态、同期摘要弹层、年度热力图与书封浮层）
- * [POS]: ReadCalendar 业务页面壳层组件，负责日历主内容组合、封面全量展开与业务内弹层触发
+ * [INPUT]: 依赖 CalendarMonthStepperBar/ReadCalendarMonthGrid/ReadCalendarCoverFanStack/ReadCalendarSelectedDaySummaryBar 页面私有组件、ReadCalendarDay/ReadCalendarMonthlyDurationBook 领域模型与 DesignTokens 视觉令牌
+ * [OUTPUT]: 对外提供 ReadCalendarContentView（含短内容回弹的月/年视图、事件模式选中日摘要、统计设置过滤态、同期摘要弹层、年度热力图、书封浮层与按模式区分的日期交互）
+ * [POS]: ReadCalendar 业务页面壳层组件，负责日历主内容组合、选中日安全区摘要、封面全量展开、日期选择/详情导航分流与业务内弹层触发
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
@@ -331,6 +331,20 @@ private extension ReadCalendarContentView {
 
     var bodyContainer: some View {
         baseCalendarStack
+            .safeAreaBar(edge: .bottom, spacing: Spacing.none) {
+                if let selectedActivityDaySummary {
+                    ReadCalendarSelectedDaySummaryBar(
+                        summary: selectedActivityDaySummary,
+                        onOpenDetail: {
+                            onOpenDay(selectedActivityDaySummary.date)
+                        }
+                    )
+                    .padding(.horizontal, Spacing.screenEdge)
+                    .padding(.vertical, Spacing.half)
+                    .transition(selectedDaySummaryTransition)
+                }
+            }
+            .animation(selectedDaySummaryAnimation, value: selectedActivityDaySummary)
             .animation(.spring(response: 0.38, dampingFraction: 0.86), value: props.errorMessage)
             .onAppear {
                 onBookCoverFullscreenPresentationChanged(isBookCoverFullscreenPresented)
@@ -635,6 +649,7 @@ private extension ReadCalendarContentView {
             && !isSummarySheetPresented
             && !isYearSummarySheetPresented
             && !isBookCoverFullscreenPresented
+            && selectedActivityDaySummary == nil
     }
 
     var shouldShowSummaryFloatingButton: Bool {
@@ -647,6 +662,40 @@ private extension ReadCalendarContentView {
 
     var activeSelectedDate: Date? {
         activeMonthPage?.selectedDate
+    }
+
+    /// 仅为事件模式当前月份的有效选中日构建摘要，避免切月或切模式后残留错误信息。
+    var selectedActivityDaySummary: ReadCalendarSelectedDaySummary? {
+        guard props.rootContentState == .content,
+              props.displayMode == .activityEvent,
+              let page = activeMonthPage,
+              !page.isLocked,
+              let selectedDate = page.selectedDate else {
+            return nil
+        }
+
+        let calendar = Calendar.current
+        let normalizedDate = calendar.startOfDay(for: selectedDate)
+        guard normalizedDate <= page.todayStart,
+              calendar.isDate(normalizedDate, equalTo: page.monthStart, toGranularity: .month) else {
+            return nil
+        }
+        return ReadCalendarSelectedDaySummary.make(
+            date: normalizedDate,
+            day: page.dayMap[normalizedDate]
+        )
+    }
+
+    var selectedDaySummaryTransition: AnyTransition {
+        accessibilityReduceMotion
+            ? .opacity
+            : .move(edge: .bottom).combined(with: .opacity)
+    }
+
+    var selectedDaySummaryAnimation: Animation? {
+        accessibilityReduceMotion
+            ? .easeOut(duration: 0.16)
+            : .snappy(duration: 0.26)
     }
 
     var heatmapYearMonthPages: [MonthPage] {
@@ -1208,7 +1257,7 @@ private extension ReadCalendarContentView {
                     protectedFor: Layout.summaryFloatingButtonScrollInteractionProtection
                 )
             }
-            .scrollBounceBehavior(.basedOnSize)
+            .scrollBounceBehavior(.always)
             .readCalendarBottomImmersiveStyle()
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
             .animation(.snappy(duration: 0.24), value: props.selectedYear)
@@ -1303,7 +1352,7 @@ private extension ReadCalendarContentView {
                 protectedFor: Layout.summaryFloatingButtonScrollInteractionProtection
             )
         }
-        .scrollBounceBehavior(.basedOnSize)
+        .scrollBounceBehavior(.always)
         .readCalendarBottomImmersiveStyle()
         .animation(.smooth(duration: 0.24), value: pageState.loadState)
     }
@@ -1366,36 +1415,36 @@ private extension ReadCalendarContentView {
                     readDoneBookCount: readDoneBookCount
                 )
             },
+            onOpenDay: { date in
+                guard allowsDateSelection else { return }
+                onOpenDay(Calendar.current.startOfDay(for: date))
+            },
             onReadDoneEventSelected: { date in
                 guard allowsDateSelection else { return }
                 markSummaryFloatingButtonInteraction()
-                withAnimation(.smooth(duration: 0.22)) {
-                    if let selectedDate = page.selectedDate,
-                       Calendar.current.isDate(selectedDate, inSameDayAs: date) {
-                        onSelectDate(nil)
-                    } else {
-                        onSelectDate(date)
-                    }
-                }
+                let normalizedDate = Calendar.current.startOfDay(for: date)
+                toggleDateSelection(normalizedDate, currentSelection: page.selectedDate)
             },
             onSelectDay: { date in
                 guard allowsDateSelection else { return }
                 markSummaryFloatingButtonInteraction()
-                let payload = page.payload(for: date)
-                withAnimation(.smooth(duration: 0.22)) {
-                    if let selectedDate = page.selectedDate,
-                       Calendar.current.isDate(selectedDate, inSameDayAs: date) {
-                        onSelectDate(nil)
-                    } else {
-                        onSelectDate(date)
-                    }
-                }
-                if !payload.isFuture, (payload.bookCount > 0 || payload.isReadDoneDay) {
-                    onOpenDay(date)
-                }
+                let normalizedDate = Calendar.current.startOfDay(for: date)
+                toggleDateSelection(normalizedDate, currentSelection: page.selectedDate)
             }
         )
         .coordinateSpace(name: Layout.bookCoverGridCoordinateSpaceName)
+    }
+
+    /// 切换当前日期聚焦；活动事件模式依赖该状态突出经过所选日期的事件条。
+    func toggleDateSelection(_ date: Date, currentSelection: Date?) {
+        withAnimation(.smooth(duration: 0.22)) {
+            if let currentSelection,
+               Calendar.current.isDate(currentSelection, inSameDayAs: date) {
+                onSelectDate(nil)
+            } else {
+                onSelectDate(date)
+            }
+        }
     }
 
     var emptyState: some View {

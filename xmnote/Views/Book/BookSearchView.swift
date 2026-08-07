@@ -226,8 +226,8 @@ struct BookSearchView: View {
         }
         .toolbar {
             if let onDismissRequested {
-                ToolbarItem(placement: .topBarLeading) {
-                    TopBarBackButton {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("取消") {
                         onDismissRequested()
                     }
                 }

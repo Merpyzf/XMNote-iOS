@@ -29,7 +29,6 @@ struct ReadCalendarView: View {
     @State private var isBookCoverFullscreenPresented = false
     @State private var didBootstrapFromScene = false
     @State private var canPersistSceneSnapshot = false
-    @ScaledMetric(relativeTo: .subheadline) private var settingsIconSize = 15
 
     /// 注入初始日期并创建阅读日历页面入口。
     init(
@@ -127,10 +126,10 @@ struct ReadCalendarView: View {
                         Label("日历设置", systemImage: "gearshape")
                     }
                 } label: {
-                    Image(systemName: "ellipsis")
-                        .font(.system(size: settingsIconSize, weight: .semibold))
-                        .foregroundStyle(Color.readCalendarTopAction)
+                    Label("更多", systemImage: "ellipsis")
+                        .labelStyle(.iconOnly)
                 }
+                .xmToolbarNeutralTint()
                 .accessibilityLabel("阅读日历操作")
             }
         }

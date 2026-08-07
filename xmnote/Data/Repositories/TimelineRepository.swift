@@ -3,7 +3,7 @@ import GRDB
 
 /**
  * [INPUT]: 依赖 DatabaseManager 提供数据库连接，依赖 TimelineEvent/TimelineSection/TimelineDayMarker 领域模型
- * [OUTPUT]: 对外提供 TimelineRepository（TimelineRepositoryProtocol 的 GRDB 实现，6 路事件查询 + 日历标记聚合）
+ * [OUTPUT]: 对外提供 TimelineRepository（TimelineRepositoryProtocol 的 GRDB 实现，6 路事件查询、固定类型相关书籍映射与日历标记聚合）
  * [POS]: Data 层时间线仓储实现，对齐 Android TimelineRepository.getTimelineDataList 与 getCalendarSchemeData
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -271,8 +271,7 @@ private extension TimelineRepository {
                         contentBookId: contentBookId,
                         contentBookName: contentBook?.name ?? "",
                         contentBookAuthor: contentBook?.author ?? "",
-                        contentBookCover: contentBook?.cover ?? "",
-                        categoryTitle: catTitle
+                        contentBookCover: contentBook?.cover ?? ""
                     )),
                     timestamp: row["created_date"] as Int64,
                     sourceBookId: row["book_id"] as Int64? ?? 0,

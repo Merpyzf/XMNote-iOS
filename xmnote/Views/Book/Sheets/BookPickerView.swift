@@ -41,10 +41,9 @@ struct BookPickerView: View {
             }
             .navigationTitle(configuration.title)
             .navigationBarTitleDisplayMode(.inline)
-            .navigationBarBackButtonHidden(true)
             .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    TopBarBackButton {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("取消") {
                         handleCancel()
                     }
                 }

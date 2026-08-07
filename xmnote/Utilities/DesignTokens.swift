@@ -5,7 +5,7 @@
 //  Created by 王珂 on 2026/2/10.
 //
 //  [INPUT]: 无外部依赖，仅依赖 SwiftUI 框架
-//  [OUTPUT]: Color 语义扩展（含阅读日历主题、统计趋势与月份分布语义）、全局语义排版与阅读日历字体令牌、Spacing / CornerRadius / CardStyle 常量、Color 构造器
+//  [OUTPUT]: Color 语义扩展、SwiftUI/UIKit 同源阅读排版、阅读日历摘要与时间线连接样式、共享配色、Spacing / CornerRadius / CardStyle 常量与 Color 构造器
 //  [POS]: Utilities 模块的设计令牌中枢，全局 UI 一致性的单一真相源
 //  [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
 
@@ -634,6 +634,19 @@ enum AppTypography {
         )
     }
 
+    /// 返回与 `captionMedium` 同源的 UIKit 字体，供基线测量与内联操作渲染复用。
+    static func uiCaptionMedium(
+        compatibleWith traitCollection: UITraitCollection? = nil
+    ) -> UIFont {
+        SemanticTypography.uiFont(
+            baseSize: SemanticTypography.defaultPointSize(for: .caption1),
+            textStyle: .caption1,
+            weight: .medium,
+            minimumPointSize: SemanticTypography.defaultPointSize(for: .caption1),
+            compatibleWith: traitCollection
+        )
+    }
+
     static func brandDisplay(
         size: CGFloat,
         relativeTo textStyle: Font.TextStyle = .title2
@@ -807,10 +820,20 @@ enum NoteExcerptTypography {
         relativeTo: .subheadline,
         minimumPointSize: 15
     )
+    static let uiBody: UIFont = AppTypography.uiFixed(
+        baseSize: 15,
+        textStyle: .subheadline,
+        minimumPointSize: 15
+    )
     static let bodyLineSpacing: CGFloat = 7
     static let idea: Font = AppTypography.fixed(
         baseSize: 13,
         relativeTo: .footnote,
+        minimumPointSize: 13
+    )
+    static let uiIdea: UIFont = AppTypography.uiFixed(
+        baseSize: 13,
+        textStyle: .footnote,
         minimumPointSize: 13
     )
     static let ideaLineSpacing: CGFloat = 4
@@ -823,11 +846,59 @@ enum NoteExcerptTypography {
 
 /// 阅读日历字体令牌，集中维护日期相关文本层级。
 enum ReadCalendarTypography {
+    private static let denseGridMaximumTraits = UITraitCollection(
+        preferredContentSizeCategory: .extraExtraExtraLarge
+    )
+
     static let topControlTitleFont: Font = AppTypography.fixed(baseSize: 18, relativeTo: .headline, weight: .semibold, design: .rounded)
     static let weekdayHeaderFont: Font = AppTypography.fixed(baseSize: 13, relativeTo: .caption, weight: .medium, design: .rounded)
+    static let weekdayHeaderAccessibilityFont: Font = SemanticTypography.font(
+        baseSize: 13,
+        relativeTo: .caption,
+        weight: .medium,
+        design: .rounded,
+        minimumPointSize: 13,
+        compatibleWith: denseGridMaximumTraits
+    )
     static let monthGridDayNumberFont: Font = AppTypography.fixed(baseSize: 13, relativeTo: .caption, weight: .medium, design: .rounded)
+    static let monthGridDayNumberAccessibilityFont: Font = SemanticTypography.font(
+        baseSize: 13,
+        relativeTo: .caption,
+        weight: .medium,
+        design: .rounded,
+        minimumPointSize: 13,
+        compatibleWith: denseGridMaximumTraits
+    )
     static let monthGridDayNumberSelectedFont: Font = AppTypography.fixed(baseSize: 13, relativeTo: .caption, weight: .semibold, design: .rounded)
+    static let monthGridDayNumberSelectedAccessibilityFont: Font = SemanticTypography.font(
+        baseSize: 13,
+        relativeTo: .caption,
+        weight: .semibold,
+        design: .rounded,
+        minimumPointSize: 13,
+        compatibleWith: denseGridMaximumTraits
+    )
     static let monthGridEventTitleFont: Font = AppTypography.fixed(baseSize: 10, relativeTo: .caption2, weight: .semibold, design: .rounded, minimumPointSize: 10)
+    static let monthGridEventTitleAccessibilityFont: Font = SemanticTypography.font(
+        baseSize: 10,
+        relativeTo: .caption2,
+        weight: .semibold,
+        design: .rounded,
+        minimumPointSize: 10,
+        compatibleWith: denseGridMaximumTraits
+    )
+    static let monthGridOverflowFont: Font = AppTypography.fixed(baseSize: 10, relativeTo: .caption2, weight: .medium, design: .rounded, minimumPointSize: 10)
+    static let monthGridOverflowAccessibilityFont: Font = SemanticTypography.font(
+        baseSize: 10,
+        relativeTo: .caption2,
+        weight: .medium,
+        design: .rounded,
+        minimumPointSize: 10,
+        compatibleWith: denseGridMaximumTraits
+    )
+    static let selectedDayTitleFont: Font = AppTypography.subheadlineSemibold
+    static let selectedDayFactsFont: Font = AppTypography.caption
+    static let selectedDayActionFont: Font = AppTypography.subheadlineSemibold
     static let yearHeatmapMonthTitleFont: Font = AppTypography.semantic(.callout, weight: .semibold)
 }
 
@@ -876,6 +947,13 @@ enum TimelineCalendarStyle {
     static let progressRingLineWidth: CGFloat = 1.6
     static let markerDotSize: CGFloat = 4
     static let markerDotOffsetY: CGFloat = 12
+    static let connectorDotSize: CGFloat = 8
+    static let connectorLineWidth: CGFloat = 1.5
+    static let connectorDashPattern: [CGFloat] = [4, 3]
+    static let connectorLineOpacity: Double = 0.35
+    static let connectorDotColor: Color = .brand
+    static let connectorLineColor: Color = Color.textHint.opacity(connectorLineOpacity)
+    static let eventTimeColor: Color = .textHint
 
     static let monthNumberColor: Color = .textPrimary
     static let monthUnitColor: Color = .textSecondary

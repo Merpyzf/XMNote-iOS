@@ -523,7 +523,7 @@ struct MainTabView: View {
             .toolbar(.visible, for: .navigationBar)
             .toolbar(.hidden, for: .tabBar)
             .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
+                ToolbarItem(placement: .navigation) {
                     TopBarBackButton(
                         action: dismissSearchResultCover,
                         foregroundColor: Color.textPrimary
@@ -548,6 +548,13 @@ struct MainTabView: View {
         switch route {
         case .detail(let bookId):
             BookDetailView(bookId: bookId)
+        case .readingDetail(let bookId):
+            BookReadingDetailView(
+                bookID: bookId,
+                onOpenBookRoute: { route in
+                    searchResultCoverPath.append(route)
+                }
+            )
         case .edit(let bookId):
             BookEditorView(mode: .edit(bookId: bookId))
         case .add:
@@ -600,13 +607,6 @@ struct MainTabView: View {
         case .daily(let date):
             DailyReadingView(
                 date: date,
-                onOpenRoute: { append($0, to: selectedTab) },
-                onOpenBookRoute: { append($0, to: selectedTab) }
-            )
-        case .dailyBook(let date, let summary):
-            DailyReadingBookView(
-                date: date,
-                summary: summary,
                 onOpenBookRoute: { append($0, to: selectedTab) },
                 onOpenNoteRoute: { append($0, to: selectedTab) },
                 onOpenContentRoute: { append($0, to: selectedTab) }
@@ -627,6 +627,13 @@ struct MainTabView: View {
         switch route {
         case .detail(let bookId):
             BookDetailView(bookId: bookId)
+        case .readingDetail(let bookId):
+            BookReadingDetailView(
+                bookID: bookId,
+                onOpenBookRoute: { route in
+                    append(route, to: selectedTab)
+                }
+            )
         case .edit(let bookId):
             BookEditorView(mode: .edit(bookId: bookId))
         case .add:

@@ -1,7 +1,7 @@
 /**
- * [INPUT]: 依赖 SwiftUI App 生命周期、GRDB Database、RepositoryContainer、XMToastCenter、App Group 书单分享导入 handoff 与全局服务初始化流程
- * [OUTPUT]: 对外提供 xmnoteApp（应用入口）常驻挂载 ContentView、原子发布数据库运行时依赖、承接全局 Toast 与书单分享导入，并在 DEBUG UI Test 下提供隔离书架 fixture
- * [POS]: 应用启动编排层，负责异步组装运行时依赖但不阻塞首页导航壳层建立
+ * [INPUT]: 依赖 SwiftUI App 生命周期、GRDB Database、RepositoryContainer、XMToastCenter、App Group 书单分享导入 handoff、全局滚动回弹规范与服务初始化流程
+ * [OUTPUT]: 对外提供 xmnoteApp（应用入口）常驻挂载 ContentView、全轴短内容回弹环境、原子发布数据库运行时依赖、全局 Toast 与书单分享导入，并在 DEBUG UI Test 下提供隔离书架 fixture
+ * [POS]: 应用启动编排层，负责建立全局交互环境并异步组装运行时依赖，不阻塞首页导航壳层建立
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
@@ -46,6 +46,7 @@ struct xmnoteApp: App {
     var body: some Scene {
         WindowGroup {
             ContentView(runtime: runtime, initializationError: initError)
+                .scrollBounceBehavior(.always, axes: [.vertical, .horizontal])
                 .environment(appState)
                 .environment(sceneStateStore)
                 .environment(bookCollectionImportRouter)

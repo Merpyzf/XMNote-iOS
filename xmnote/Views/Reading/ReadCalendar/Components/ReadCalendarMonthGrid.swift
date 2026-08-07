@@ -1,7 +1,7 @@
 /**
- * [INPUT]: 依赖 DesignTokens 视觉令牌、ReadCalendarCoverFanStack 与周网格输入（WeekData/EventSegment/DayPayload，含显示模式与事件条颜色三态），可选依赖全屏封面展开与读完事件选择回调
- * [OUTPUT]: 对外提供 ReadCalendarMonthGrid（月视图周网格组件，支持热力图/活动事件/书籍封面三种展示模式，并提供事件标题渐隐与读完庆祝反馈）
- * [POS]: ReadCalendar 页面私有月网格组件，承载日期格展示、选中态与多模式内容渲染
+ * [INPUT]: 依赖 DesignTokens 视觉令牌、ReadCalendarCoverFanStack 与周网格输入（WeekData/EventSegment/DayPayload，含显示模式与事件条颜色三态），可选依赖全屏封面、当日详情与读完事件回调
+ * [OUTPUT]: 对外提供 ReadCalendarMonthGrid（月视图周网格组件，支持热力图/活动事件/书籍封面三种展示模式、周级溢出行、日期按钮命中，并提供大字体受控的事件标题渐隐与读完庆祝反馈）
+ * [POS]: ReadCalendar 页面私有月网格组件，承载日期格按钮、事件展示层、周级溢出布局、选中态与多模式内容渲染
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
@@ -125,6 +125,7 @@ struct ReadCalendarMonthGrid: View {
     let frameCoordinateSpaceName: String?
     let onBookCoverStackFramesChange: (([Date: CGRect]) -> Void)?
     let onOpenBookCoverFullscreen: ((Date) -> Void)?
+    let onOpenDay: ((Date) -> Void)?
     let onReadDoneEventSelected: ((Date) -> Void)?
     let onSelectDay: (Date) -> Void
 
@@ -147,6 +148,7 @@ struct ReadCalendarMonthGrid: View {
         frameCoordinateSpaceName: String? = nil,
         onBookCoverStackFramesChange: (([Date: CGRect]) -> Void)? = nil,
         onOpenBookCoverFullscreen: ((Date) -> Void)? = nil,
+        onOpenDay: ((Date) -> Void)? = nil,
         onReadDoneEventSelected: ((Date) -> Void)? = nil,
         onSelectDay: @escaping (Date) -> Void
     ) {
@@ -167,6 +169,7 @@ struct ReadCalendarMonthGrid: View {
         self.frameCoordinateSpaceName = frameCoordinateSpaceName
         self.onBookCoverStackFramesChange = onBookCoverStackFramesChange
         self.onOpenBookCoverFullscreen = onOpenBookCoverFullscreen
+        self.onOpenDay = onOpenDay
         self.onReadDoneEventSelected = onReadDoneEventSelected
         self.onSelectDay = onSelectDay
     }
@@ -197,6 +200,7 @@ struct ReadCalendarMonthGrid: View {
                     coverEntryCueProgress: coverEntryCueProgress,
                     frameCoordinateSpaceName: frameCoordinateSpaceName,
                     onOpenBookCoverFullscreen: onOpenBookCoverFullscreen,
+                    onOpenDay: onOpenDay,
                     onReadDoneEventSelected: onReadDoneEventSelected,
                     onSelectDay: onSelectDay
                 )
@@ -266,17 +270,20 @@ private struct ReadCalendarMonthGridWeekRow: View {
     let coverEntryCueProgress: CGFloat
     let frameCoordinateSpaceName: String?
     let onOpenBookCoverFullscreen: ((Date) -> Void)?
+    let onOpenDay: ((Date) -> Void)?
     let onReadDoneEventSelected: ((Date) -> Void)?
     let onSelectDay: (Date) -> Void
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.accessibilityReduceMotion) private var accessibilityReduceMotion
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @ScaledMetric(relativeTo: .caption) private var selectedDayCircleSize = 24
     @ScaledMetric(relativeTo: .caption2) private var readDoneIndicatorSize = 8
-    @ScaledMetric(relativeTo: .caption2) private var overflowBadgeBackgroundWidth = 24
-    @ScaledMetric(relativeTo: .caption2) private var overflowBadgeBackgroundHeight = 12
+    @ScaledMetric(relativeTo: .caption2) private var activityOverflowRowHeight = 18
+    @ScaledMetric(relativeTo: .caption2) private var overflowBadgeMinimumHeight = 16
     @ScaledMetric(relativeTo: .caption2) private var readDoneBadgeCircleSize = 14
     @ScaledMetric(relativeTo: .caption2) private var readDoneBadgeEmojiSize = 12
     @ScaledMetric(relativeTo: .caption2) private var readDoneBadgeCheckmarkSize = 9
+    @ScaledMetric(relativeTo: .caption2) private var readDoneBadgeHitWidth = 28
     @State private var doneCelebrationSegmentID: String?
     @State private var doneCelebrationTrigger = 0
 
@@ -302,10 +309,66 @@ private struct ReadCalendarMonthGridWeekRow: View {
         }
     }
 
+    private var overflowRowHeight: CGFloat {
+        hasOverflowRow ? min(activityOverflowRowHeight, 28) : 0
+    }
+
+    private var resolvedSelectedDayCircleSize: CGFloat {
+        min(selectedDayCircleSize, 30)
+    }
+
+    private var resolvedReadDoneIndicatorSize: CGFloat {
+        min(readDoneIndicatorSize, 12)
+    }
+
+    private var resolvedOverflowBadgeMinimumHeight: CGFloat {
+        min(overflowBadgeMinimumHeight, 24)
+    }
+
+    private var resolvedReadDoneBadgeCircleSize: CGFloat {
+        min(readDoneBadgeCircleSize, 14)
+    }
+
+    private var resolvedReadDoneBadgeEmojiSize: CGFloat {
+        min(readDoneBadgeEmojiSize, 12)
+    }
+
+    private var resolvedReadDoneBadgeCheckmarkSize: CGFloat {
+        min(readDoneBadgeCheckmarkSize, 9)
+    }
+
+    private var resolvedReadDoneBadgeHitWidth: CGFloat {
+        min(readDoneBadgeHitWidth, 44)
+    }
+
+    private func dayNumberFont(isSelected: Bool) -> Font {
+        if dynamicTypeSize.isAccessibilitySize {
+            return isSelected
+                ? ReadCalendarTypography.monthGridDayNumberSelectedAccessibilityFont
+                : ReadCalendarTypography.monthGridDayNumberAccessibilityFont
+        }
+        return isSelected
+            ? ReadCalendarTypography.monthGridDayNumberSelectedFont
+            : ReadCalendarTypography.monthGridDayNumberFont
+    }
+
+    private var hasOverflowRow: Bool {
+        guard displayMode == .activityEvent else { return false }
+        return week.days.compactMap { $0 }.contains { day in
+            overflowCount(for: dayPayloadProvider(day), day: day) > 0
+        }
+    }
+
     private var rowHeight: CGFloat {
         switch displayMode {
         case .bookCover:
             return dayHeaderHeight + modeContentHeight
+        case .activityEvent:
+            return dayHeaderHeight
+                + laneTopInset
+                + laneBottomInset
+                + modeContentHeight
+                + overflowRowHeight
         default:
             return dayHeaderHeight + laneTopInset + laneBottomInset + modeContentHeight
         }
@@ -367,77 +430,76 @@ private struct ReadCalendarMonthGridWeekRow: View {
         let dayOverflowCount = day.map { overflowCount(for: payload, day: $0) } ?? 0
         let readDone = payload.isReadDoneDay
 
-        ZStack(alignment: .topLeading) {
-            Color.clear
+        Button {
+            guard let day else { return }
+            activateDay(day, payload: payload)
+        } label: {
+            ZStack(alignment: .topLeading) {
+                Color.clear
 
-            if let day {
-                let today = payload.isToday
-                let selected = payload.isSelected
-                let dayNum = Calendar.current.component(.day, from: day)
+                if let day {
+                    let today = payload.isToday
+                    let selected = payload.isSelected
+                    let dayNum = Calendar.current.component(.day, from: day)
 
-                VStack(spacing: Spacing.hairline) {
-                    ZStack {
-                        Circle()
-                            .fill(Color.readCalendarSelectedDayFill)
-                            .frame(width: selectedDayCircleSize, height: selectedDayCircleSize)
-                            .scaleEffect(selected ? 1 : 0.84)
-                            .opacity(selected ? 1 : 0)
-                            .animation(
-                                accessibilityReduceMotion ? nil : .snappy(duration: 0.18),
-                                value: selected
-                            )
+                    VStack(spacing: Spacing.hairline) {
+                        ZStack {
+                            Circle()
+                                .fill(Color.readCalendarSelectedDayFill)
+                                .frame(
+                                    width: resolvedSelectedDayCircleSize,
+                                    height: resolvedSelectedDayCircleSize
+                                )
+                                .scaleEffect(selected ? 1 : 0.84)
+                                .opacity(selected ? 1 : 0)
+                                .animation(
+                                    accessibilityReduceMotion ? nil : .snappy(duration: 0.18),
+                                    value: selected
+                                )
 
-                        Text("\(dayNum)")
-                            .font(
-                                selected
-                                ? ReadCalendarTypography.monthGridDayNumberSelectedFont
-                                : ReadCalendarTypography.monthGridDayNumberFont
-                            )
-                            .foregroundStyle(
-                                payload.isFuture ? Color.textHint :
-                                selected ? Color.readCalendarSelectedDayText : Color.textPrimary
-                            )
-                    }
-                    .frame(height: dayHeaderHeight)
-                    .frame(maxWidth: .infinity, alignment: .center)
-                    .overlay(alignment: .topTrailing) {
-                        if readDone && displayMode != .activityEvent {
-                            readDoneMarker(size: readDoneIndicatorSize)
-                                .offset(x: -2, y: 4)
+                            Text("\(dayNum)")
+                                .font(dayNumberFont(isSelected: selected))
+                                .foregroundStyle(
+                                    payload.isFuture ? Color.textHint :
+                                    selected ? Color.readCalendarSelectedDayText : Color.textPrimary
+                                )
                         }
-                    }
+                        .frame(height: dayHeaderHeight)
+                        .frame(maxWidth: .infinity, alignment: .center)
+                        .overlay(alignment: .topTrailing) {
+                            if readDone && displayMode != .activityEvent {
+                                readDoneMarker(size: resolvedReadDoneIndicatorSize)
+                                    .offset(x: -2, y: 4)
+                            }
+                        }
 
-                    if today && !selected {
-                        Capsule(style: .continuous)
-                            .fill(Color.readCalendarTodayMark)
-                            .frame(width: 6, height: 4)
-                            .offset(y: -2)
-                    }
+                        if today && !selected {
+                            Capsule(style: .continuous)
+                                .fill(Color.readCalendarTodayMark)
+                                .frame(width: 6, height: 4)
+                                .offset(y: -2)
+                        }
 
-                    modeContent(for: day, payload: payload)
+                        modeContent(for: day, payload: payload)
 
-                    Spacer(minLength: 0)
+                        Spacer(minLength: 0)
 
-                    if displayMode == .activityEvent, dayOverflowCount > 0 {
-                        overflowBadge(dayOverflowCount)
+                        if displayMode == .activityEvent, dayOverflowCount > 0 {
+                            overflowBadge(dayOverflowCount)
+                        }
                     }
                 }
             }
+            .contentShape(Rectangle())
         }
-        .contentShape(Rectangle())
-        .onTapGesture {
-            guard let day else { return }
-            activateDay(day, payload: payload)
-        }
+        .buttonStyle(.plain)
+        .disabled(day == nil || payload.isFuture)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(dayAccessibilityLabel(day, payload: payload))
         .accessibilityAddTraits(day != nil && !payload.isFuture ? .isButton : [])
         .accessibilityAddTraits(payload.isSelected ? .isSelected : [])
+        .accessibilityHint(displayMode == .activityEvent ? "选择日期并查看当日摘要" : "选择日期")
         .accessibilityHidden(day == nil)
-        .accessibilityAction {
-            guard let day else { return }
-            activateDay(day, payload: payload)
-        }
         .overlay {
             if let day,
                displayMode == .bookCover,
@@ -448,7 +510,7 @@ private struct ReadCalendarMonthGridWeekRow: View {
         .opacity(payload.isFuture ? 0.55 : 1)
     }
 
-    /// 统一触摸与辅助功能激活路径，避免读屏用户无法进入当日阅读。
+    /// 统一日期按钮激活路径，并优先把有内容的封面日交给堆叠封面浮层。
     private func activateDay(_ day: Date, payload: ReadCalendarMonthGrid.DayPayload) {
         guard !payload.isFuture else { return }
         if displayMode == .bookCover,
@@ -464,6 +526,10 @@ private struct ReadCalendarMonthGridWeekRow: View {
             ReadCalendarHaptics.selection()
         }
         onSelectDay(day)
+        if displayMode == .heatmap,
+           payload.bookCount > 0 || payload.isReadDoneDay {
+            onOpenDay?(day)
+        }
     }
 
     /// 生成日期格的完整读屏描述，包含活动书数、热度和读完状态。
@@ -475,7 +541,10 @@ private struct ReadCalendarMonthGridWeekRow: View {
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "zh_Hans_CN")
         formatter.dateFormat = "M月d日"
-        var parts = [formatter.string(from: day), "\(payload.bookCount)本书", payload.heatmapLevel.accessibilityText]
+        var parts = [formatter.string(from: day), "共\(payload.bookCount)本书", payload.heatmapLevel.accessibilityText]
+        if displayMode == .activityEvent, payload.overflowCount > 0 {
+            parts.append("其中\(payload.overflowCount)本未展示")
+        }
         if payload.isReadDoneDay { parts.append("有读完记录") }
         if payload.isToday { parts.append("今天") }
         return parts.joined(separator: "，")
@@ -541,28 +610,23 @@ private struct ReadCalendarMonthGridWeekRow: View {
     }
 
     private func overflowBadge(_ count: Int) -> some View {
-        Text("+\(count)")
+        Text("+\(count)本")
             .font(
-                AppTypography.fixed(
-                    baseSize: 9,
-                    relativeTo: .caption2,
-                    weight: .semibold,
-                    design: .rounded,
-                    minimumPointSize: 9
-                )
+                dynamicTypeSize.isAccessibilitySize
+                    ? ReadCalendarTypography.monthGridOverflowAccessibilityFont
+                    : ReadCalendarTypography.monthGridOverflowFont
             )
-            .foregroundStyle(Color.readCalendarSubtleText)
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .foregroundStyle(Color.textSecondary)
+            .monospacedDigit()
+            .lineLimit(1)
+            .minimumScaleFactor(0.72)
             .padding(.horizontal, Layout.overflowBadgeHPadding)
+            .frame(minHeight: resolvedOverflowBadgeMinimumHeight)
+            .background(Color.controlFillSecondary, in: Capsule(style: .continuous))
+            .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.bottom, Layout.overflowBadgeBottomPadding)
             .padding(.leading, Layout.overflowBadgeLeading)
-            .background(alignment: .bottomLeading) {
-                RoundedRectangle(cornerRadius: CornerRadius.inlayMedium, style: .continuous)
-                    .fill(Color.readCalendarSelectionFill.opacity(0.72))
-                    .frame(width: overflowBadgeBackgroundWidth, height: overflowBadgeBackgroundHeight)
-                    .padding(.leading, Spacing.compact)
-                    .padding(.bottom, Spacing.tiny)
-            }
+            .accessibilityHidden(true)
     }
 
     private func heatmapColor(for payload: ReadCalendarMonthGrid.DayPayload) -> Color {
@@ -710,7 +774,7 @@ private struct ReadCalendarMonthGridWeekRow: View {
             topTrailingRadius: rightRadius
         )
         let textTrailingInset: CGFloat = showBadge
-            ? readDoneBadgeCircleSize + 2
+            ? resolvedReadDoneBadgeCircleSize + 2
             : (segment.continuesToNextWeek ? 4 : 0)
 
         return ZStack(alignment: .leading) {
@@ -756,43 +820,58 @@ private struct ReadCalendarMonthGridWeekRow: View {
                 }
             }
             .clipShape(segmentShape)
+            .allowsHitTesting(false)
 
             if showBadge {
-                ReadCalendarEventDoneBadge(
-                    badgeSize: readDoneBadgeCircleSize,
-                    emojiSize: readDoneBadgeEmojiSize,
-                    checkmarkSize: readDoneBadgeCheckmarkSize,
-                    markerStyle: doneMarkerStyle,
-                    emojiAssetName: doneEmojiAssetName,
-                    visualStyle: visualStyle,
-                    celebrationTrigger: doneCelebrationSegmentID == segment.id
-                        ? doneCelebrationTrigger
-                        : 0
-                )
-                    .padding(.trailing, 2)
+                if isInteractive {
+                    Button {
+                        activateReadDoneEvent(segment)
+                    } label: {
+                        eventDoneBadge(segment, visualStyle: visualStyle)
+                            .padding(.trailing, 2)
+                            .frame(
+                                width: min(segmentWidth, resolvedReadDoneBadgeHitWidth),
+                                height: laneBarHeight,
+                                alignment: .trailing
+                            )
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("\(segment.bookName)，读完事件")
+                    .accessibilityHint("选择读完日期")
                     .frame(maxWidth: .infinity, alignment: .trailing)
-            }
-
-            if isInteractive {
-                Button {
-                    activateReadDoneEvent(segment)
-                } label: {
-                    Color.clear
-                        .contentShape(segmentShape)
+                } else {
+                    eventDoneBadge(segment, visualStyle: visualStyle)
+                        .padding(.trailing, 2)
+                        .frame(maxWidth: .infinity, alignment: .trailing)
+                        .allowsHitTesting(false)
                 }
-                .buttonStyle(.plain)
-                .accessibilityLabel("\(segment.bookName)，读完事件")
-                .accessibilityHint("选择读完日期")
             }
         }
         .frame(width: max(0, segmentWidth), height: laneBarHeight)
-        .contentShape(segmentShape)
         .offset(x: x, y: y)
         .opacity(segmentOpacity)
         .scaleEffect(x: 1, y: isFocused ? 1.08 : 1)
         .animation(.snappy(duration: 0.22), value: isFocused)
         .animation(.easeInOut(duration: 0.18), value: isPending)
-        .allowsHitTesting(isInteractive)
+    }
+
+    /// 构建事件条尾部读完徽标，使静态展示与独立按钮共享同一庆祝状态。
+    private func eventDoneBadge(
+        _ segment: ReadCalendarMonthGrid.EventSegment,
+        visualStyle: ReadCalendarEventVisualStyle
+    ) -> some View {
+        ReadCalendarEventDoneBadge(
+            badgeSize: resolvedReadDoneBadgeCircleSize,
+            emojiSize: resolvedReadDoneBadgeEmojiSize,
+            checkmarkSize: resolvedReadDoneBadgeCheckmarkSize,
+            markerStyle: doneMarkerStyle,
+            emojiAssetName: doneEmojiAssetName,
+            visualStyle: visualStyle,
+            celebrationTrigger: doneCelebrationSegmentID == segment.id
+                ? doneCelebrationTrigger
+                : 0
+        )
     }
 
     private func dayOffset(for date: Date, weekStart: Date) -> Int {
@@ -886,6 +965,7 @@ private struct ReadCalendarEventTitle: View {
     let trailingInset: CGFloat
     let fadeWidth: CGFloat
     let topMaskHeight: CGFloat
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var textWidth: CGFloat = 0
 
     var body: some View {
@@ -897,7 +977,11 @@ private struct ReadCalendarEventTitle: View {
 
             ZStack(alignment: .topLeading) {
                 Text(text)
-                    .font(ReadCalendarTypography.monthGridEventTitleFont)
+                    .font(
+                        dynamicTypeSize.isAccessibilitySize
+                            ? ReadCalendarTypography.monthGridEventTitleAccessibilityFont
+                            : ReadCalendarTypography.monthGridEventTitleFont
+                    )
                     .foregroundStyle(textColor)
                     .lineLimit(1)
                     .fixedSize(horizontal: true, vertical: false)

@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 RepositoryContainer/AppState 及其会员限制开关、ReadCalendarShareViewModel、分享卡与系统年月选择/弹窗/分享组件
- * [OUTPUT]: 对外提供 ReadCalendarShareView，完成三类预览、48 模板、书籍排除重算、会员拦截、保存与分享
+ * [OUTPUT]: 对外提供 ReadCalendarShareView，完成支持短内容回弹的三类预览、48 模板、书籍排除重算、会员拦截、保存与分享
  * [POS]: ReadCalendar 分享页面壳层，采用 iOS 原生 push、Sheet 与系统分享/相册能力表达 Android 业务规则
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -13,7 +13,6 @@ struct ReadCalendarShareView: View {
 
     @Environment(RepositoryContainer.self) private var repositories
     @Environment(AppState.self) private var appState
-    @Environment(\.dismiss) private var dismiss
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var viewModel: ReadCalendarShareViewModel
     @State private var loadingGate = LoadingGate()
@@ -42,16 +41,8 @@ struct ReadCalendarShareView: View {
             Color.surfacePage.ignoresSafeArea()
             content
         }
-        .navigationBarBackButtonHidden(true)
-        .toolbar {
-            ToolbarItem(placement: .topBarLeading) {
-                TopBarBackButton { dismiss() }
-            }
-            ToolbarItem(placement: .principal) {
-                Text("分享阅读日历")
-                    .font(AppTypography.headline)
-            }
-        }
+        .navigationTitle("分享阅读日历")
+        .navigationBarTitleDisplayMode(.inline)
         .safeAreaInset(edge: .bottom) { exportBar }
         .sheet(item: $activeSheet, onDismiss: handleSheetDismiss) { destination in
             sheetContent(destination)
@@ -99,7 +90,7 @@ struct ReadCalendarShareView: View {
                 .padding(.top, Spacing.base)
                 .padding(.bottom, Spacing.double)
             }
-            .scrollBounceBehavior(.basedOnSize)
+            .scrollBounceBehavior(.always)
         } else if viewModel.isLoading {
             if loadingGate.isVisible {
                 LoadingStateView("正在生成日历预览…", style: .card)

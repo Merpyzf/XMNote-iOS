@@ -984,13 +984,8 @@ private struct TimelineListContainer: View {
     @Bindable var viewModel: TimelineViewModel
     let onOpenContentViewer: (ContentViewerSourceContext, ContentViewerItemID) -> Void
     let onOpenBookDetail: (Int64) -> Void
-    @Environment(\.colorScheme) private var colorScheme
-    @Environment(\.displayScale) private var displayScale
-    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     @State private var timelineListMinY: CGFloat = .zero
-    @State private var prewarmWidthBucket: Int = 0
-    @State private var prewarmTask: Task<Void, Never>?
 
     var body: some View {
         TimelineListContent(
@@ -1021,131 +1016,6 @@ private struct TimelineListContainer: View {
             guard abs(minY - timelineListMinY) > 0.5 else { return }
             timelineListMinY = minY
         }
-        .onGeometryChange(for: Int.self) { geometry in
-            Int((geometry.size.width * max(displayScale, 1)).rounded())
-        } action: { widthBucket in
-            guard widthBucket != prewarmWidthBucket else { return }
-            prewarmWidthBucket = widthBucket
-        }
-        .onAppear {
-            schedulePrewarm(for: prewarmRequest)
-        }
-        .onChange(of: prewarmRequest) { _, request in
-            schedulePrewarm(for: request)
-        }
-        .onDisappear {
-            prewarmTask?.cancel()
-            prewarmTask = nil
-        }
-    }
-}
-
-private extension TimelineListContainer {
-    var prewarmEntries: [TimelineRichTextPrewarmEntry] {
-        var entries: [TimelineRichTextPrewarmEntry] = []
-        entries.reserveCapacity(8)
-
-        for section in viewModel.sections {
-            for event in section.events {
-                switch event.kind {
-                case .note(let note):
-                    appendPrewarmEntry(
-                        html: note.content,
-                        style: .primary,
-                        into: &entries
-                    )
-                    appendPrewarmEntry(
-                        html: note.idea,
-                        style: .secondary,
-                        into: &entries
-                    )
-                case .review(let review):
-                    appendPrewarmEntry(
-                        html: review.content,
-                        style: .primary,
-                        into: &entries
-                    )
-                case .relevant(let relevant):
-                    appendPrewarmEntry(
-                        html: relevant.content,
-                        style: .primary,
-                        into: &entries
-                    )
-                default:
-                    break
-                }
-
-                if entries.count >= 8 {
-                    return entries
-                }
-            }
-        }
-
-        return entries
-    }
-
-    var prewarmRequest: TimelineRichTextPrewarmRequest? {
-        guard viewModel.bootstrapPhase == .ready else { return nil }
-        guard !viewModel.isRefreshing else { return nil }
-        guard prewarmWidthBucket > 0 else { return nil }
-        guard !prewarmEntries.isEmpty else { return nil }
-
-        return TimelineRichTextPrewarmRequest(
-            entries: prewarmEntries,
-            widthBucket: prewarmWidthBucket,
-            displayScale: max(displayScale, 1),
-            userInterfaceStyle: colorScheme.userInterfaceStyle,
-            preferredContentSizeCategory: dynamicTypeSize.uiContentSizeCategory
-        )
-    }
-
-    /// 异步预热时间线富文本收起态布局，降低首次滚入笔记/书评卡时的排版抖动。
-    func schedulePrewarm(for request: TimelineRichTextPrewarmRequest?) {
-        prewarmTask?.cancel()
-        guard let request else {
-            prewarmTask = nil
-            return
-        }
-
-        prewarmTask = Task {
-            try? await Task.sleep(nanoseconds: 50_000_000)
-            guard !Task.isCancelled else { return }
-
-            let traitCollection = UITraitCollection { mutableTraits in
-                mutableTraits.userInterfaceStyle = request.userInterfaceStyle
-                mutableTraits.preferredContentSizeCategory = request.preferredContentSizeCategory
-            }
-            let width = CGFloat(request.widthBucket) / request.displayScale
-
-            for entry in request.entries {
-                guard !Task.isCancelled else { return }
-                await MainActor.run {
-                    RichText.prewarmPreviewLayoutSnapshot(
-                        html: entry.html,
-                        baseFont: TimelineTypography.eventRichTextBaseFont,
-                        textColor: entry.style.textColor,
-                        lineSpacing: TimelineTypography.eventRichTextLineSpacing,
-                        maxLines: TimelineRichTextPrewarmRequest.defaultMaxLines,
-                        width: width,
-                        traitCollection: traitCollection,
-                        screenScale: request.displayScale
-                    )
-                }
-                await Task.yield()
-            }
-        }
-    }
-
-    /// 过滤空白 HTML 并追加到预热队列，控制单次预热数量避免抢占首屏资源。
-    func appendPrewarmEntry(
-        html: String,
-        style: TimelineRichTextPrewarmStyle,
-        into entries: inout [TimelineRichTextPrewarmEntry]
-    ) {
-        guard entries.count < 8 else { return }
-        let trimmed = html.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return }
-        entries.append(TimelineRichTextPrewarmEntry(html: trimmed, style: style))
     }
 }
 
@@ -1410,35 +1280,6 @@ private struct TimelineMarkerPreloadRequest: Equatable {
     let category: TimelineEventCategory
 }
 
-private struct TimelineRichTextPrewarmEntry: Equatable {
-    let html: String
-    let style: TimelineRichTextPrewarmStyle
-}
-
-private struct TimelineRichTextPrewarmRequest: Equatable {
-    static let defaultMaxLines = 3
-
-    let entries: [TimelineRichTextPrewarmEntry]
-    let widthBucket: Int
-    let displayScale: CGFloat
-    let userInterfaceStyle: UIUserInterfaceStyle
-    let preferredContentSizeCategory: UIContentSizeCategory
-}
-
-private enum TimelineRichTextPrewarmStyle: Int, Equatable {
-    case primary
-    case secondary
-
-    var textColor: UIColor {
-        switch self {
-        case .primary:
-            return .label
-        case .secondary:
-            return .secondaryLabel
-        }
-    }
-}
-
 /// 时间线筛选入口样式常量，约束占位宽度与胶囊最小宽度保持一致。
 private enum TimelineFilterHostStyle {
     static let controlWidth: CGFloat = 76
@@ -1488,50 +1329,6 @@ private struct TimelineCategoryFilterMenu: View {
                 onCategorySelected(newValue)
             }
         )
-    }
-}
-
-private extension ColorScheme {
-    var userInterfaceStyle: UIUserInterfaceStyle {
-        switch self {
-        case .dark:
-            return .dark
-        default:
-            return .light
-        }
-    }
-}
-
-private extension DynamicTypeSize {
-    var uiContentSizeCategory: UIContentSizeCategory {
-        switch self {
-        case .xSmall:
-            return .extraSmall
-        case .small:
-            return .small
-        case .medium:
-            return .medium
-        case .large:
-            return .large
-        case .xLarge:
-            return .extraLarge
-        case .xxLarge:
-            return .extraExtraLarge
-        case .xxxLarge:
-            return .extraExtraExtraLarge
-        case .accessibility1:
-            return .accessibilityMedium
-        case .accessibility2:
-            return .accessibilityLarge
-        case .accessibility3:
-            return .accessibilityExtraLarge
-        case .accessibility4:
-            return .accessibilityExtraExtraLarge
-        case .accessibility5:
-            return .accessibilityExtraExtraExtraLarge
-        @unknown default:
-            return .large
-        }
     }
 }
 

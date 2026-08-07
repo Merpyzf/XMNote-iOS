@@ -3,7 +3,7 @@ import GRDB
 
 /**
  * [INPUT]: 依赖 AppDatabase 提供本地数据库连接，依赖 ObservationStream 提供观察流桥接，依赖 UserDefaults/FileManager/S3UploadRepository 承接草稿、暂存图与上传事务
- * [OUTPUT]: 对外提供 NoteRepository（NoteRepositoryProtocol 的 GRDB 实现）
+ * [OUTPUT]: 对外提供 NoteRepository（NoteRepositoryProtocol 的 GRDB 实现）及跳过首个观察基线的回顾变化信号
  * [POS]: Data 层笔记仓储实现，统一封装标签分组查询、书摘编辑 bootstrap、自动草稿与保存事务
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -57,29 +57,8 @@ struct NoteRepository: NoteRepositoryProtocol {
 
     /// 将回顾依赖的数据库表变化桥接为无载荷事件；观察任务由调用方取消，避免保活页面释放后继续占用数据库观察资源。
     func observeNoteReviewDataChanges() -> AsyncThrowingStream<Void, Error> {
-        let source = ObservationStream.make(in: databaseManager.database.dbPool) { db in
+        ObservationStream.makeChangeSignal(in: databaseManager.database.dbPool) { db in
             try noteReviewDataFingerprint(db)
-        }
-        return AsyncThrowingStream { continuation in
-            let task = Task {
-                var lastFingerprint: String?
-                do {
-                    for try await fingerprint in source {
-                        guard !Task.isCancelled else { return }
-                        guard fingerprint != lastFingerprint else { continue }
-                        lastFingerprint = fingerprint
-                        continuation.yield(())
-                    }
-                    continuation.finish()
-                } catch {
-                    if !Task.isCancelled {
-                        continuation.finish(throwing: error)
-                    }
-                }
-            }
-            continuation.onTermination = { _ in
-                task.cancel()
-            }
         }
     }
 
@@ -102,6 +81,20 @@ struct NoteRepository: NoteRepositoryProtocol {
     func fetchNoteReviewPage(request: NoteReviewPageRequest) async throws -> [NoteReviewCardItem] {
         try await databaseManager.database.dbPool.read { db in
             try fetchNoteReviewPage(db, request: request)
+        }
+    }
+
+    /// 按主键读取单个书摘操作上下文，避免当日记录页为定位一条书摘加载整页回顾数据。
+    func fetchNoteReviewItem(noteID: Int64) async throws -> NoteReviewCardItem? {
+        try await databaseManager.database.dbPool.read { db in
+            try fetchNoteReviewItem(db, noteID: noteID)
+        }
+    }
+
+    /// 批量读取书摘操作上下文，在一个读事务内补齐标签、图片与微信读书跳转信息。
+    func fetchNoteReviewItems(noteIDs: [Int64]) async throws -> [NoteReviewCardItem] {
+        try await databaseManager.database.dbPool.read { db in
+            try fetchNoteReviewItems(db, noteIDs: noteIDs)
         }
     }
 
@@ -627,6 +620,78 @@ private extension NoteRepository {
                 )
             )
         }
+    }
+
+    /// 读取单个有效书摘及其标签、图片与微信读书原文地址，字段口径与批量读取完全一致。
+    nonisolated func fetchNoteReviewItem(_ db: Database, noteID: Int64) throws -> NoteReviewCardItem? {
+        try fetchNoteReviewItems(db, noteIDs: [noteID]).first
+    }
+
+    /// 批量读取有效书摘及操作上下文，保持输入主键顺序并去除重复项。
+    nonisolated func fetchNoteReviewItems(
+        _ db: Database,
+        noteIDs: [Int64]
+    ) throws -> [NoteReviewCardItem] {
+        let orderedIDs = noteIDs.reduce(into: [Int64]()) { result, noteID in
+            guard noteID > 0, !result.contains(noteID) else { return }
+            result.append(noteID)
+        }
+        guard !orderedIDs.isEmpty else { return [] }
+
+        // SQL 目的：批量读取指定书摘的回顾卡片基础字段，并携带微信读书原文跳转参数。
+        // 涉及表：note 为主表，book/chapter 补充书籍展示与微信读书来源字段；标签/图片由后续批量查询补齐。
+        // 关键过滤：note.id 位于输入主键集合且 note.is_deleted=0；chapter 仅连接有效记录。
+        // 时间字段：created_date 保持 Android 毫秒时间戳；weread_range 保留原始 start-end 字符串。
+        // 返回字段用途：一次构建重度日期全部书摘的标签、复制、原文、分享卡片和外部发送上下文。
+        let sql = """
+            SELECT n.id, n.book_id, n.content, n.idea, n.position, n.position_unit, n.include_time, n.created_date,
+                   COALESCE(n.weread_range, '') AS weread_range,
+                   COALESCE(b.name, '') AS book_name,
+                   COALESCE(b.author, '') AS book_author,
+                   COALESCE(b.cover, '') AS book_cover,
+                   COALESCE(b.weread_book_id, '') AS weread_book_id,
+                   COALESCE(c.title, '') AS chapter_title,
+                   COALESCE(c.source_type, 0) AS chapter_source_type,
+                   COALESCE(c.source_uid, '') AS chapter_source_uid
+            FROM note n
+            LEFT JOIN book b ON b.id = n.book_id
+            LEFT JOIN chapter c ON c.id = n.chapter_id AND c.is_deleted = 0
+            WHERE n.id IN (\(Self.placeholders(count: orderedIDs.count)))
+              AND n.is_deleted = 0
+            """
+        let rows = try Row.fetchAll(
+            db,
+            sql: sql,
+            arguments: StatementArguments(orderedIDs)
+        )
+        let tagsByNoteID = try batchFetchNoteReviewTags(db, noteIDs: orderedIDs)
+        let imageURLsByNoteID = try batchFetchNoteReviewImages(db, noteIDs: orderedIDs)
+        let itemsByID = rows.reduce(into: [Int64: NoteReviewCardItem]()) { result, row in
+            let noteID: Int64 = row["id"]
+            result[noteID] = NoteReviewCardItem(
+                id: noteID,
+                bookID: row["book_id"],
+                bookTitle: row["book_name"] ?? "",
+                bookAuthor: row["book_author"] ?? "",
+                bookCoverURL: row["book_cover"] ?? "",
+                chapterTitle: row["chapter_title"] ?? "",
+                contentHTML: Self.trimTrailingWhitespaceAndNewlines(row["content"] ?? ""),
+                ideaHTML: Self.trimTrailingWhitespaceAndNewlines(row["idea"] ?? ""),
+                position: row["position"] ?? "",
+                positionUnit: row["position_unit"] ?? 0,
+                includeTime: (row["include_time"] as Int64? ?? 1) != 0,
+                createdDate: row["created_date"] ?? 0,
+                imageURLs: imageURLsByNoteID[noteID] ?? [],
+                tags: tagsByNoteID[noteID] ?? [],
+                weReadOriginalURL: Self.buildWeReadBestBookmarkURL(
+                    bookID: row["weread_book_id"] ?? "",
+                    chapterSourceType: row["chapter_source_type"] ?? 0,
+                    chapterUID: row["chapter_source_uid"] ?? "",
+                    range: row["weread_range"] ?? ""
+                )
+            )
+        }
+        return orderedIDs.compactMap { itemsByID[$0] }
     }
 
     nonisolated func fetchNoteReviewTagOptions(_ db: Database) throws -> [NoteReviewTagOption] {
