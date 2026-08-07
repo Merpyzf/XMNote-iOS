@@ -297,7 +297,7 @@ protocol NoteRepositoryProtocol {
     func saveNoteEditor(_ draft: NoteEditorDraft) async throws -> Int64
     /// 读取批量编辑所需书摘、可选书籍与标签；并发删除的 ID 通过 unavailableNoteIDs 返回。
     func fetchNoteBatchEditBootstrap(noteIDs: [Int64]) async throws -> NoteBatchEditBootstrap
-    /// 在单一事务内按附图、标签关系、书摘的顺序物理删除选中书摘。
+    /// 在单一事务内软删除附图、标签关系与选中书摘，并物理清理 Android 定义的导入 Hash。
     func deleteNotes(noteIDs: [Int64]) async throws
     /// 将原书摘移动到目标书籍，并按祖先标题路径在目标书中复用或重建章节。
     func moveNotes(noteIDs: [Int64], toBookID bookID: Int64) async throws
@@ -305,11 +305,11 @@ protocol NoteRepositoryProtocol {
     func moveNotes(noteIDs: [Int64], toChapterID chapterID: Int64) async throws
     /// 在章节选择现场新建手动章节；parentID=0 表示根章节。
     func createChapter(bookID: Int64, parentID: Int64, title: String) async throws -> NoteEditorChapterOption
-    /// 对每条选中书摘物理替换全部标签关系；空 tagIDs 表示清空标签。
+    /// 对每条选中书摘事务替换全部标签关系；旧关系软删除，空 tagIDs 表示清空标签。
     func replaceTagsForNotes(noteIDs: [Int64], tagIDs: [Int64]) async throws
     /// 按正文/想法各自的排序与换行规则生成合并预览草稿。
     func fetchNoteMergeDraft(request: NoteMergePreviewRequest) async throws -> NoteMergeDraft
-    /// 在单一事务内物理删除全部来源书摘并创建合并结果，返回新书摘主键。
+    /// 在单一事务内软删除全部来源书摘并创建合并结果，返回新书摘主键。
     func mergeNotes(_ draft: NoteMergeDraft) async throws -> Int64
 }
 

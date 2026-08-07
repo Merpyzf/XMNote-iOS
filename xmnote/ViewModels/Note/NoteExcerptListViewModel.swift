@@ -251,7 +251,7 @@ final class NoteExcerptListViewModel {
         return bootstrap
     }
 
-    /// 物理删除指定书摘；写入期间入口禁用，成功后由观察流刷新并收缩选择。
+    /// 软删除指定书摘；写入期间入口禁用，成功后由观察流刷新并收缩选择。
     func deleteNotes(_ noteIDs: [Int64]) async throws {
         guard !noteIDs.isEmpty else { throw NoteBatchMutationError.emptySelection }
         try await performWrite {

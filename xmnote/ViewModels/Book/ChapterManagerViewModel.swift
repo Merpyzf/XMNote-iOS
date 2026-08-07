@@ -463,7 +463,7 @@ final class ChapterManagerViewModel {
         deletionRequest = ChapterDeletionRequest(
             scope: .subtrees(chapterIDs: roots.map(\.id)),
             title: title,
-            message: "将物理删除 \(deletedChapterCount) 个章节（含后代）。\(affectedNoteCount) 条书摘会保留并移到未分章节，此操作不可撤销。"
+            message: "将把 \(deletedChapterCount) 个章节（含后代）标记为删除。\(affectedNoteCount) 条书摘会保留并移到未分章节。"
         )
     }
 
@@ -484,7 +484,7 @@ final class ChapterManagerViewModel {
         deletionRequest = ChapterDeletionRequest(
             scope: .descendants(parentID: parentID),
             title: "删除子章节",
-            message: "将保留“\(parent.item.displayTitle)”，并物理删除其下 \(descendants.count) 个子章节。\(affectedNoteCount) 条子章节书摘会移到未分章节，此操作不可撤销。"
+            message: "将保留“\(parent.item.displayTitle)”，并把其下 \(descendants.count) 个子章节标记为删除。\(affectedNoteCount) 条子章节书摘会移到未分章节。"
         )
     }
 

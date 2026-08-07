@@ -335,7 +335,7 @@ final class NoteMergeViewModel {
     }
 
     /// 真实提交合并事务并返回新书摘主键；成功立即进入不可逆 terminal 状态，避免二次提交。
-    /// - Note: Repository 返回即代表物理删除事务已提交；此后不再执行取消检查，确保调用方能收到新主键并替换失效路由。
+    /// - Note: Repository 返回即代表来源软删除与合并插入事务已提交；此后不再执行取消检查，确保调用方能收到新主键并替换失效路由。
     func submit() async throws -> Int64 {
         guard case .content = phase,
               let draft else { throw NoteBatchMutationError.invalidMergeDraft }

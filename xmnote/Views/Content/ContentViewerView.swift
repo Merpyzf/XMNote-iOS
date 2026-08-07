@@ -135,7 +135,7 @@ private struct ContentViewerLoadedView: View {
     private var deleteAlertDescriptor: XMSystemAlertDescriptor {
         XMSystemAlertDescriptor(
             title: presentationStyle.deleteDialogTitle,
-            message: "主记录和从属记录会被永久删除，此操作无法撤销。",
+            message: "删除后将从当前内容中移除。",
             actions: [
                 XMSystemAlertAction(title: "取消", role: .cancel) { },
                 XMSystemAlertAction(title: "删除", role: .destructive) {

@@ -486,11 +486,11 @@ struct DailyReadingView: View {
         self.generatedShareFile = nil
     }
 
-    /// 构建物理删除确认弹窗，明确记录及子资源不可恢复。
+    /// 按记录类型构建删除确认弹窗；具体物理/软删除语义由 Android 对齐的 Repository 负责。
     private func deleteDescriptor(for record: DailyReadingRecord) -> XMSystemAlertDescriptor {
         XMSystemAlertDescriptor(
             title: "删除这条记录？",
-            message: "记录及其附图或关系会被物理删除，此操作无法撤销。",
+            message: "删除后将从当天阅读轨迹中移除。",
             actions: [
                 XMSystemAlertAction(title: "取消", role: .cancel) { },
                 XMSystemAlertAction(title: "删除", role: .destructive) {

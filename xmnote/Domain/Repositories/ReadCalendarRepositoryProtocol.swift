@@ -70,10 +70,10 @@ protocol ReadCalendarRepositoryProtocol {
     /// 更新阅读计时，并可在同一事务内追加读完状态记录。
     func updateTiming(_ draft: ReadCalendarTimingDraft) async throws
 
-    /// 物理删除指定打卡记录。
+    /// 按 Android CheckInRecordDao.delete 语义物理删除指定打卡记录。
     func deleteCheckIn(recordID: Int64) async throws
 
-    /// 物理删除指定阅读计时记录。
+    /// 按 Android ReadTimeRecordDao.delete 语义写入指定阅读计时记录的删除 tombstone。
     func deleteTiming(recordID: Int64) async throws
 }
 

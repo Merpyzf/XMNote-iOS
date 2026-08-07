@@ -1,5 +1,5 @@
 /**
- * [INPUT]: 依赖 ContentRepositoryProtocol 读取相关详情并执行硬删除事务
+ * [INPUT]: 依赖 ContentRepositoryProtocol 读取相关详情并执行 Android v45 对齐的软删除事务
  * [OUTPUT]: 对外提供 RelevantDetailViewModel，驱动相关单页详情查看与删除流程
  * [POS]: Content 模块相关查看状态源，承接时间线进入的相关内容全屏详情页
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md

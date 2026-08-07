@@ -85,7 +85,7 @@ private struct ReviewDetailLoadedView: View {
             }
             Button("取消", role: .cancel) {}
         } message: {
-            Text("iOS 端当前按硬删除实现，主记录和子记录会一起删除。")
+            Text("删除后将从当前内容中移除。")
         }
         .overlay {
             if viewModel.isDeleting {

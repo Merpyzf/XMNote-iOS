@@ -569,7 +569,7 @@ struct NoteExcerptListView: View {
         case .delete(let noteIDs, let count):
             XMSystemAlertDescriptor(
                 title: count == 1 ? "删除这条书摘？" : "删除所选 \(count) 条书摘？",
-                message: "书摘、附图和标签关系将被物理删除，此操作无法撤销。",
+                message: "书摘、附图和标签关系将标记为删除，并从当前列表中移除。",
                 actions: [
                     XMSystemAlertAction(title: "取消", role: .cancel) { },
                     XMSystemAlertAction(title: "删除", role: .destructive) {

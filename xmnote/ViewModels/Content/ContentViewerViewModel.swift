@@ -1,5 +1,5 @@
 /**
- * [INPUT]: 依赖 ContentRepositoryProtocol 提供 viewer feed/详情/硬删除，依赖 NoteRepositoryProtocol 与 ExternalAppIntegrationRepositoryProtocol 提供标签和外部发送
+ * [INPUT]: 依赖 ContentRepositoryProtocol 提供 viewer feed/详情/Android v45 软删除，依赖 NoteRepositoryProtocol 与 ExternalAppIntegrationRepositoryProtocol 提供标签和外部发送
  * [OUTPUT]: 对外提供 ContentViewerViewModel、ContentViewerActionFeedback，驱动分页、详情缓存、删除、标签编辑与外部发送
  * [POS]: Content 模块查看页状态中枢，负责时间线/书籍详情来源的统一内容查看体验
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md

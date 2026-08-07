@@ -304,7 +304,7 @@ final class DailyReadingViewModel {
         await reload(using: repository)
     }
 
-    /// 按事件真实类型执行物理删除；读完里程碑保持只读，不进入删除路径。
+    /// 按事件真实类型执行 Android 对齐的删除；读完里程碑保持只读，不进入删除路径。
     func delete(
         _ record: DailyReadingRecord,
         readCalendarRepository: any ReadCalendarRepositoryProtocol,

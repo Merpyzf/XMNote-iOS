@@ -405,9 +405,9 @@ struct BookRelatedCategoryManagementSheet: View {
 
     private func deleteMessage(_ category: BookContentCategoryOption) -> String {
         if category.isGlobal {
-            return "“\(category.title)”用于全部书籍。删除后，其在所有书籍下的内容和图片都会被物理删除，此操作不可撤销。"
+            return "“\(category.title)”用于全部书籍。删除后，其在所有书籍下的内容和图片都会标记为删除。"
         }
-        return "将物理删除“\(category.title)”及其中 \(category.contentCount) 条内容和图片，此操作不可撤销。"
+        return "将把“\(category.title)”及其中 \(category.contentCount) 条内容和图片标记为删除。"
     }
 }
 

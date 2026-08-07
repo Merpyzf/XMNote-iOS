@@ -613,7 +613,7 @@ nonisolated enum DailyReadingSortOrder: String, CaseIterable, Identifiable, Hash
     var title: String { self == .descending ? "从新到旧" : "从旧到新" }
 }
 
-/// 当日阅读轨迹记录；读完里程碑没有可写主键，其余记录保留主键以支持编辑与物理删除。
+/// 当日阅读轨迹记录；读完里程碑没有可写主键，其余记录保留主键以支持编辑及各自的 Android 对齐删除语义。
 nonisolated struct DailyReadingRecord: Identifiable, Equatable {
     let recordID: Int64?
     let event: TimelineEvent

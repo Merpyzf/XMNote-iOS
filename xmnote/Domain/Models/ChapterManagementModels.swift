@@ -190,7 +190,7 @@ nonisolated struct ChapterMoveTarget: Identifiable, Hashable, Sendable {
     var isRoot: Bool { id == 0 }
 }
 
-/// 章节物理删除结果，供页面在失败或无可见变化时补足关联影响说明。
+/// 章节软删除结果，供页面在失败或无可见变化时补足关联影响说明。
 nonisolated struct ChapterDeletionResult: Hashable, Sendable {
     let deletedChapterCount: Int
     let unassignedNoteCount: Int

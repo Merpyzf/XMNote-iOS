@@ -302,20 +302,14 @@ nonisolated struct ReadCalendarRepository: ReadCalendarRepositoryProtocol {
         }
     }
 
-    /// 物理删除指定打卡记录。
+    /// 按 Android CheckInRecordDao.delete 语义物理删除指定打卡记录。
     nonisolated func deleteCheckIn(recordID: Int64) async throws {
-        try await physicallyDelete(
-            table: CheckInRecordRecord.databaseTableName,
-            recordID: recordID
-        )
+        try await physicallyDeleteCheckIn(recordID: recordID)
     }
 
-    /// 物理删除指定阅读计时记录。
+    /// 按 Android ReadTimeRecordDao.delete 语义软删除指定阅读计时记录。
     nonisolated func deleteTiming(recordID: Int64) async throws {
-        try await physicallyDelete(
-            table: ReadTimeRecordRecord.databaseTableName,
-            recordID: recordID
-        )
+        try await softDeleteTiming(recordID: recordID)
     }
 }
 
@@ -999,16 +993,35 @@ private extension ReadCalendarRepository {
         try AnnualCollectionSync.syncAfterReadHistoryChanged(db, bookID: bookID)
     }
 
-    /// 执行限定表名的物理删除；表名只由内部常量传入，不接受外部输入。
-    nonisolated func physicallyDelete(table: String, recordID: Int64) async throws {
+    /// 物理删除打卡记录；Android 的按 ID 删除同样不生成 tombstone。
+    nonisolated func physicallyDeleteCheckIn(recordID: Int64) async throws {
         try await databaseManager.database.dbPool.write { db in
-            // SQL 目的：物理删除指定阅读日历记录，遵守 iOS 已批准的硬删除规则。
-            // 涉及表：调用方限定为 check_in_record 或 read_time_record。
+            // SQL 目的：按 Android CheckInRecordDao.delete 语义物理删除指定打卡记录。
+            // 涉及表：check_in_record。
             // 关键过滤：id 精确匹配；不创建 is_deleted tombstone。
             // 时间字段：无。
-            // 副作用用途：立即移除日历、汇总与时间线中的记录。
-            let sql = "DELETE FROM \(table) WHERE id = ?"
-            try db.execute(sql: sql, arguments: [recordID])
+            // 副作用用途：立即移除日历、汇总与时间线中的打卡记录。
+            try db.execute(
+                sql: "DELETE FROM check_in_record WHERE id = ?",
+                arguments: [recordID]
+            )
+            guard db.changesCount > 0 else { throw ReadCalendarRepositoryError.recordNotFound }
+        }
+    }
+
+    /// 软删除阅读计时记录，保留同步链路消费的 is_deleted tombstone。
+    nonisolated func softDeleteTiming(recordID: Int64) async throws {
+        try await databaseManager.database.dbPool.write { db in
+            let now = Self.currentMilliseconds()
+            // SQL 目的：按 Android ReadTimeRecordDao.delete 语义软删除指定阅读计时记录。
+            // 涉及表：read_time_record。
+            // 关键过滤：id 精确匹配；重复请求仍更新同一记录，与 Android DAO 条件一致。
+            // 时间字段：updated_date 写当前 Unix 毫秒时间戳。
+            // 副作用用途：从有效日历、汇总和时间线查询移除记录，同时保留同步 tombstone。
+            try db.execute(
+                sql: "UPDATE read_time_record SET updated_date = ?, is_deleted = 1 WHERE id = ?",
+                arguments: [now, recordID]
+            )
             guard db.changesCount > 0 else { throw ReadCalendarRepositoryError.recordNotFound }
         }
     }

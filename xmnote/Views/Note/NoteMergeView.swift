@@ -100,7 +100,7 @@ struct NoteMergeView: View {
             isPresented: $pendingSubmitConfirmation,
             descriptor: XMSystemAlertDescriptor(
                 title: "合并所选书摘？",
-                message: "将创建一条合并书摘，并物理删除 \(noteIDs.count) 条来源书摘。此操作无法撤销。",
+                message: "将创建一条合并书摘，并把 \(noteIDs.count) 条来源书摘标记为删除。",
                 actions: [
                     XMSystemAlertAction(title: "取消", role: .cancel) { },
                     XMSystemAlertAction(title: "合并", role: .destructive) {

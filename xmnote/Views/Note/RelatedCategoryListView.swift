@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 RepositoryContainer 注入 NoteRepository/ContentRepository，依赖 RelatedCategoryListViewModel 与 RelatedListRow
- * [OUTPUT]: 对外提供 RelatedCategoryListView，覆盖相关内容混排、局部搜索排序分页、内容/相关书编辑、复制/分享与物理删除
+ * [OUTPUT]: 对外提供 RelatedCategoryListView，覆盖相关内容混排、局部搜索排序分页、内容/相关书编辑、复制/分享与软删除
  * [POS]: Note 模块相关分类二级页面壳层，由 NoteRoute.relatedCategory 进入
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -103,8 +103,8 @@ struct RelatedCategoryListView: View {
             XMSystemAlertDescriptor(
                 title: request.isBook ? "移除相关书籍？" : "删除相关内容？",
                 message: request.isBook
-                    ? "只会删除这条书籍关联；若占位书不再被引用，也会一并物理清理。"
-                    : "内容及附图会被物理删除，此操作无法撤销。",
+                    ? "只会把这条书籍关联标记为删除，不会删除书架中的书籍。"
+                    : "内容及附图将标记为删除，并从当前列表中移除。",
                 actions: [
                     XMSystemAlertAction(title: "取消", role: .cancel) { },
                     XMSystemAlertAction(title: request.isBook ? "移除" : "删除", role: .destructive) {

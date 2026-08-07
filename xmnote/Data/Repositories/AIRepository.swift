@@ -185,7 +185,7 @@ final class AIRepository: AIRepositoryProtocol, @unchecked Sendable {
         return try parseAutoTagResponse(response, existingTagNames: Set(existingNames))
     }
 
-    /// 创建缺失标签并与书摘现有标签取并集；关系替换复用 NoteRepository 的硬删除事务语义。
+    /// 创建缺失标签并与书摘现有标签取并集；关系替换复用 NoteRepository 的完整关系集事务语义。
     func applyAutoTags(noteID: Int64, suggestions: [AIAutoTagSuggestion]) async throws {
         let selectedNames = Self.uniqueNormalizedNames(
             suggestions.filter(\.isSelected).map(\.name)

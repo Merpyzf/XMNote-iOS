@@ -1,7 +1,7 @@
 /**
- * [INPUT]: 依赖 NoteRepositoryProtocol 的相关分类/内容观察流与 ContentRepositoryProtocol 的关系硬删除接口
+ * [INPUT]: 依赖 NoteRepositoryProtocol 的相关分类/内容观察流与 ContentRepositoryProtocol 的关系软删除接口
  * [OUTPUT]: 对外提供 RelatedCategoryListPhase 与 RelatedCategoryListViewModel
- * [POS]: ViewModels/Note 的相关内容状态层，隔离列表搜索分页与关系物理删除事务
+ * [POS]: ViewModels/Note 的相关内容状态层，隔离列表搜索分页与关系软删除事务
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
@@ -94,7 +94,7 @@ final class RelatedCategoryListViewModel {
         restartObservation(resetsPagination: true)
     }
 
-    /// 物理删除普通相关内容或相关书籍关系；占位书清理由 Repository 统一保证。
+    /// 软删除普通相关内容或相关书籍关系；书籍实体始终由 Book Repository 管理。
     func deleteRelation(_ item: RelatedListItem) async throws {
         guard !isWriting else { return }
         isWriting = true

@@ -1,7 +1,7 @@
 /**
  * [INPUT]: 依赖 DatabaseManager/GRDB/ObservationStream、BookRemoteSearchService、AppBackendConfigRepository 与 chapter/note/book Room v44 表
- * [OUTPUT]: 对外提供 ChapterManagementRepository（完整章节树观察、文曲/手工目录事务导入、新增、编辑、星标、可撤销重排移动与硬删除）
- * [POS]: Data/Repositories 的书内目录管理实现，对齐 Android ChapterRepository 并应用项目全局硬删除规则
+ * [OUTPUT]: 对外提供 ChapterManagementRepository（完整章节树观察、文曲/手工目录事务导入、新增、编辑、星标、可撤销重排移动与软删除）
+ * [POS]: Data/Repositories 的书内目录管理实现，对齐 Android ChapterRepository 的章节 tombstone 与书摘处置事务
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
