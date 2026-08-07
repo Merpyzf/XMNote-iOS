@@ -115,7 +115,7 @@ private struct RelevantDetailLoadedView: View {
         ToolbarItemGroup(placement: .topBarTrailing) {
             if let detail = viewModel.detail {
                 Button {
-                    navigationCoordinator.present(.relevantEditor(contentID: detail.contentId))
+                    navigationCoordinator.present(.relevantEditor(.edit(contentID: detail.contentId)))
                 } label: {
                     Image(systemName: "square.and.pencil")
                 }

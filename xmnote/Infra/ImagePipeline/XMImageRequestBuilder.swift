@@ -11,7 +11,7 @@ import Nuke
 /// 图片请求构造器，统一下载头、缓存策略与优先级映射。
 enum XMImageRequestBuilder {
     /// 图片加载优先级，映射到 Nuke 请求优先级。
-    enum Priority {
+    enum Priority: Hashable, Sendable {
         case low
         case normal
         case high
@@ -54,15 +54,33 @@ enum XMImageRequestBuilder {
         url: URL,
         priority: Priority = .normal,
         timeout: TimeInterval = 12,
-        cachePolicy: URLRequest.CachePolicy = .returnCacheDataElseLoad
+        cachePolicy: URLRequest.CachePolicy = .returnCacheDataElseLoad,
+        targetSizeInPoints: CGSize? = nil
     ) -> ImageRequest {
         let urlRequest = makeURLRequest(
             url: url,
             timeout: timeout,
             cachePolicy: cachePolicy
         )
+        let processors: [any ImageProcessing]
+        if let targetSizeInPoints,
+           targetSizeInPoints.width > 0,
+           targetSizeInPoints.height > 0 {
+            processors = [
+                ImageProcessors.Resize(
+                    size: targetSizeInPoints,
+                    unit: .points,
+                    contentMode: .aspectFill,
+                    crop: true,
+                    upscale: false
+                )
+            ]
+        } else {
+            processors = []
+        }
         return ImageRequest(
             urlRequest: urlRequest,
+            processors: processors,
             priority: priority.nukePriority
         )
     }

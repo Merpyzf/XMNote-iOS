@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 SwiftUI NavigationPath、AppTab、各业务编辑/查看/导入路由参数与阅读日历初始日期
- * [OUTPUT]: 对外提供 AppNavigationCoordinator、AppFullScreenTaskDestination 与浏览回流目标，统一承载沉浸内容和任务
+ * [OUTPUT]: 对外提供 AppNavigationCoordinator、AppFullScreenTaskDestination、浏览回流目标与沉浸页 Tab chrome 抑制票据
  * [POS]: Navigation 模块的根级沉浸内容与任务呈现协调器，统一隔离可恢复浏览路径与临时全屏路径
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -32,8 +32,8 @@ enum AppFullScreenTaskDestination: Hashable {
     case addBook
     case bookEditor(BookEditorMode)
     case noteEditor(mode: NoteEditorMode, seed: NoteEditorSeed?)
-    case reviewEditor(reviewID: Int64)
-    case relevantEditor(contentID: Int64)
+    case reviewEditor(ReviewEditorMode)
+    case relevantEditor(RelevantEditorMode)
     case contentViewer(
         source: ContentViewerSourceContext,
         initialItemID: ContentViewerItemID,
@@ -72,7 +72,7 @@ struct PendingBrowseNavigation: Hashable {
     let destination: AppBrowseDestination
 }
 
-/// 根级导航协调器，只管理低频全屏内容与任务状态，不承载业务数据或页面高频交互状态。
+/// 根级导航协调器，管理低频全屏任务、浏览回流与沉浸页对根 Tab chrome 的成对抑制票据。
 @MainActor
 @Observable
 final class AppNavigationCoordinator {
@@ -83,6 +83,22 @@ final class AppNavigationCoordinator {
     private var pendingBrowseNavigation: PendingBrowseNavigation?
     private var addBookCompletion: ((BookPickerBook) -> Void)?
     private var bookEditorCompletion: ((Int64) -> Void)?
+    private var tabChromeSuppressionTokens: Set<UUID> = []
+
+    /// 只要任一可见沉浸页仍持有票据，根 Tab Bar 与底部附件就保持收起。
+    var isTabChromeSuppressed: Bool {
+        !tabChromeSuppressionTokens.isEmpty
+    }
+
+    /// 登记沉浸页票据；使用集合去重，避免重复 appear 导致无法恢复根 Tab chrome。
+    func suppressTabChrome(for token: UUID) {
+        tabChromeSuppressionTokens.insert(token)
+    }
+
+    /// 释放离场页面票据；多层导航交叠期间其他页面票据仍可继续维持沉浸状态。
+    func restoreTabChrome(for token: UUID) {
+        tabChromeSuppressionTokens.remove(token)
+    }
 
     /// 同步当前顶层 Tab，供新的全屏任务记录准确来路。
     func updateCurrentTab(_ tab: AppTab) {

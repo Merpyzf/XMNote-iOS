@@ -309,7 +309,7 @@ private struct ContentViewerLoadedView: View {
 
             case .review(let reviewID)?:
                 Button {
-                    navigationCoordinator.present(.reviewEditor(reviewID: reviewID))
+                    navigationCoordinator.present(.reviewEditor(.edit(reviewID: reviewID)))
                 } label: {
                     ImmersiveBottomChromeIcon(systemName: "square.and.pencil")
                 }
@@ -335,7 +335,7 @@ private struct ContentViewerLoadedView: View {
 
             case .relevant(let contentID)?:
                 Button {
-                    navigationCoordinator.present(.relevantEditor(contentID: contentID))
+                    navigationCoordinator.present(.relevantEditor(.edit(contentID: contentID)))
                 } label: {
                     ImmersiveBottomChromeIcon(systemName: "square.and.pencil")
                 }

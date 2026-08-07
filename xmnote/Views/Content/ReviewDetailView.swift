@@ -109,7 +109,7 @@ private struct ReviewDetailLoadedView: View {
         ToolbarItemGroup(placement: .topBarTrailing) {
             if let detail = viewModel.detail {
                 Button {
-                    navigationCoordinator.present(.reviewEditor(reviewID: detail.reviewId))
+                    navigationCoordinator.present(.reviewEditor(.edit(reviewID: detail.reviewId)))
                 } label: {
                     Image(systemName: "square.and.pencil")
                 }

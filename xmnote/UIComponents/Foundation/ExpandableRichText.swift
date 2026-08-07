@@ -7,23 +7,80 @@
 
 import SwiftUI
 
-/// 可展开/收起的 HTML 富文本组件。
-/// 收起态截断到 maxLines 行 + 省略号，底部右对齐品牌色文字按钮切换展开/收起。
-/// 内容不足 maxLines 时不显示按钮。
-/// 展开状态为组件内部 @State，滚出屏幕回收后重置为收起态（与 Android 行为一致）。
+/// 可展开/收起的 HTML 富文本组件；调用方可保留内部状态，也可传入 Binding 管理列表级展开状态。
 struct ExpandableRichText: View, Equatable {
     let html: String
     var baseFont: UIFont = .preferredFont(forTextStyle: .body)
     var textColor: UIColor = .label
     var lineSpacing: CGFloat = 4
     var maxLines: Int = 3
+    var actionColor: Color = .brand
+    var accessibilitySubject: String = "内容"
+    var onContentTap: (() -> Void)?
+    var animatesExpansionInternally = true
 
+    private let externalIsExpanded: Binding<Bool>?
+    @State private var internalIsExpanded = false
+
+    /// 旧时间线卡片依赖 equatable() 跳过重复 HTML 渲染；外部状态变化必须参与比较，避免列表沿用旧展开态。
     static func == (lhs: ExpandableRichText, rhs: ExpandableRichText) -> Bool {
-        lhs.html == rhs.html &&
-        lhs.baseFont == rhs.baseFont &&
-        lhs.textColor == rhs.textColor &&
-        lhs.lineSpacing == rhs.lineSpacing &&
-        lhs.maxLines == rhs.maxLines
+        lhs.html == rhs.html
+            && lhs.baseFont == rhs.baseFont
+            && lhs.textColor == rhs.textColor
+            && lhs.lineSpacing == rhs.lineSpacing
+            && lhs.maxLines == rhs.maxLines
+            && lhs.accessibilitySubject == rhs.accessibilitySubject
+            && lhs.animatesExpansionInternally == rhs.animatesExpansionInternally
+            && lhs.externalIsExpanded?.wrappedValue == rhs.externalIsExpanded?.wrappedValue
+    }
+
+    /// 构建自管理展开状态的富文本，保持原有调用行为不变。
+    init(
+        html: String,
+        baseFont: UIFont = .preferredFont(forTextStyle: .body),
+        textColor: UIColor = .label,
+        lineSpacing: CGFloat = 4,
+        maxLines: Int = 3,
+        actionColor: Color = .brand,
+        accessibilitySubject: String = "内容",
+        animatesExpansionInternally: Bool = true,
+        onContentTap: (() -> Void)? = nil
+    ) {
+        self.html = html
+        self.baseFont = baseFont
+        self.textColor = textColor
+        self.lineSpacing = lineSpacing
+        self.maxLines = maxLines
+        self.actionColor = actionColor
+        self.accessibilitySubject = accessibilitySubject
+        self.animatesExpansionInternally = animatesExpansionInternally
+        self.onContentTap = onContentTap
+        externalIsExpanded = nil
+    }
+
+    /// 构建由外部状态源控制的富文本，适合懒加载列表在回收后恢复展开状态。
+    init(
+        html: String,
+        isExpanded: Binding<Bool>,
+        baseFont: UIFont = .preferredFont(forTextStyle: .body),
+        textColor: UIColor = .label,
+        lineSpacing: CGFloat = 4,
+        maxLines: Int = 3,
+        actionColor: Color = .brand,
+        accessibilitySubject: String = "内容",
+        animatesExpansionInternally: Bool = true,
+        onContentTap: (() -> Void)? = nil
+    ) {
+        self.html = html
+        self.baseFont = baseFont
+        self.textColor = textColor
+        self.lineSpacing = lineSpacing
+        self.maxLines = maxLines
+        self.actionColor = actionColor
+        self.accessibilitySubject = accessibilitySubject
+        self.animatesExpansionInternally = animatesExpansionInternally
+        self.onContentTap = onContentTap
+        externalIsExpanded = isExpanded
     }
 
     var body: some View {
@@ -32,7 +89,12 @@ struct ExpandableRichText: View, Equatable {
             baseFont: baseFont,
             textColor: textColor,
             lineSpacing: lineSpacing,
-            maxLines: maxLines
+            maxLines: maxLines,
+            actionColor: actionColor,
+            accessibilitySubject: accessibilitySubject,
+            animatesExpansionInternally: animatesExpansionInternally,
+            onContentTap: onContentTap,
+            isExpanded: externalIsExpanded ?? $internalIsExpanded
         )
     }
 }
@@ -43,8 +105,14 @@ private struct ExpandableRichTextCore: View {
     let textColor: UIColor
     let lineSpacing: CGFloat
     let maxLines: Int
+    let actionColor: Color
+    let accessibilitySubject: String
+    let animatesExpansionInternally: Bool
+    let onContentTap: (() -> Void)?
 
-    @State private var isExpanded = false
+    @Binding var isExpanded: Bool
+    @State private var isCollapsedContentTruncated = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         VStack(alignment: .leading, spacing: Spacing.half) {
@@ -55,20 +123,11 @@ private struct ExpandableRichTextCore: View {
                         baseFont: baseFont,
                         textColor: textColor,
                         lineSpacing: lineSpacing,
-                        maxLines: 0
+                        maxLines: 0,
+                        onContentTap: onContentTap
                     )
 
-                    HStack {
-                        Spacer()
-                        Button {
-                            collapse()
-                        } label: {
-                            Text("收起")
-                                .font(AppTypography.caption2Medium)
-                                .foregroundStyle(Color.brand)
-                        }
-                        .buttonStyle(.plain)
-                    }
+                    expansionAction(title: "收起", accessibilityLabel: "收起\(accessibilitySubject)", action: collapse)
                 } else {
                     CollapsedRichTextPreview(
                         html: html,
@@ -76,8 +135,19 @@ private struct ExpandableRichTextCore: View {
                         textColor: textColor,
                         lineSpacing: lineSpacing,
                         maxLines: maxLines,
-                        onExpand: expand
+                        onContentTap: onContentTap,
+                        onTruncationChanged: { isTruncated in
+                            isCollapsedContentTruncated = isTruncated
+                        }
                     )
+
+                    if isCollapsedContentTruncated {
+                        expansionAction(
+                            title: "展开",
+                            accessibilityLabel: "展开\(accessibilitySubject)",
+                            action: expand
+                        )
+                    }
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -86,14 +156,42 @@ private struct ExpandableRichTextCore: View {
         }
     }
 
+    /// 将展开与收起作为独立 SwiftUI 控件承载，避免和 UIKit 正文点击或链接手势竞争。
+    private func expansionAction(
+        title: String,
+        accessibilityLabel: String,
+        action: @escaping () -> Void
+    ) -> some View {
+        HStack {
+            Spacer()
+            Button(action: action) {
+                Text(title)
+                    .font(AppTypography.caption2Medium)
+                    .foregroundStyle(actionColor)
+                    .frame(minWidth: Spacing.actionReserved, minHeight: Spacing.actionReserved)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(accessibilityLabel)
+        }
+    }
+
     private func expand() {
-        withAnimation(.snappy) {
+        guard !reduceMotion, animatesExpansionInternally else {
+            isExpanded = true
+            return
+        }
+        withAnimation(.smooth(duration: 0.24)) {
             isExpanded = true
         }
     }
 
     private func collapse() {
-        withAnimation(.snappy) {
+        guard !reduceMotion, animatesExpansionInternally else {
+            isExpanded = false
+            return
+        }
+        withAnimation(.smooth(duration: 0.24)) {
             isExpanded = false
         }
     }

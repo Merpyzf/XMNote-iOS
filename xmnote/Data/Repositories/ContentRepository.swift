@@ -30,6 +30,10 @@ struct ContentRepository: ContentRepositoryProtocol {
                 )
             case .bookNotes(let bookId):
                 try fetchBookNoteViewerItems(db, bookId: bookId)
+            case .bookRelated(let bookId):
+                try fetchBookRelevantViewerItems(db, bookId: bookId)
+            case .bookReviews(let bookId):
+                try fetchBookReviewViewerItems(db, bookId: bookId)
             }
         }
     }
@@ -48,29 +52,57 @@ struct ContentRepository: ContentRepositoryProtocol {
         }
     }
 
-    /// 读取书评编辑草稿。
-    func fetchReviewEditorDraft(reviewId: Int64) async throws -> ReviewEditorDraft? {
+    /// 按创建或编辑模式读取书评编辑草稿。
+    func fetchReviewEditorDraft(mode: ReviewEditorMode) async throws -> ReviewEditorDraft? {
         try await databaseManager.database.dbPool.read { db in
-            guard let detail = try fetchReviewDetail(db, reviewId: reviewId) else { return nil }
-            return ReviewEditorDraft(
-                reviewId: detail.reviewId,
-                sourceBookId: detail.sourceBookId,
-                bookTitle: detail.bookTitle,
-                title: detail.title,
-                contentHTML: detail.contentHTML,
-                imageURLs: detail.imageURLs
-            )
+            switch mode {
+            case .create(let bookID):
+                guard let bookTitle = try fetchActiveBookTitle(db, bookID: bookID) else { return nil }
+                return ReviewEditorDraft(
+                    reviewId: 0,
+                    sourceBookId: bookID,
+                    bookTitle: bookTitle,
+                    title: "",
+                    contentHTML: "",
+                    imageURLs: []
+                )
+            case .edit(let reviewID):
+                guard let detail = try fetchReviewDetail(db, reviewId: reviewID) else { return nil }
+                return ReviewEditorDraft(
+                    reviewId: detail.reviewId,
+                    sourceBookId: detail.sourceBookId,
+                    bookTitle: detail.bookTitle,
+                    title: detail.title,
+                    contentHTML: detail.contentHTML,
+                    imageURLs: detail.imageURLs
+                )
+            }
         }
     }
 
-    /// 保存书评编辑草稿。
-    func saveReviewEditorDraft(_ draft: ReviewEditorDraft) async throws {
+    /// 新增或更新书评编辑草稿，并返回最终主键。
+    func saveReviewEditorDraft(_ draft: ReviewEditorDraft) async throws -> Int64 {
         let now = Int64(Date().timeIntervalSince1970 * 1000)
-        try await databaseManager.database.dbPool.write { db in
+        return try await databaseManager.database.dbPool.write { db in
+            if draft.reviewId == 0 {
+                var record = ReviewRecord(
+                    bookId: draft.sourceBookId,
+                    title: draft.title,
+                    content: draft.contentHTML,
+                    createdDate: now,
+                    updatedDate: now,
+                    lastSyncDate: 0,
+                    isDeleted: 0
+                )
+                try record.insert(db)
+                return record.id ?? 0
+            }
+
             try db.execute(
                 // SQL 目的：更新单条书评的标题、HTML 正文与更新时间。
                 // 涉及表：review。
                 // 关键过滤：按 review.id 精确命中，且只更新 iOS/Android 共同定义的有效记录（is_deleted = 0）。
+                // 时间字段：updated_date 写入当前毫秒时间戳，created_date 与 last_sync_date 保持不变。
                 // 副作用：不改动图片、book_id 与同步字段。
                 sql: """
                     UPDATE review
@@ -79,35 +111,74 @@ struct ContentRepository: ContentRepositoryProtocol {
                 """,
                 arguments: [draft.title, draft.contentHTML, now, draft.reviewId]
             )
+            return draft.reviewId
         }
     }
 
-    /// 读取相关内容编辑草稿。
-    func fetchRelevantEditorDraft(contentId: Int64) async throws -> RelevantEditorDraft? {
+    /// 按创建或编辑模式读取相关内容编辑草稿。
+    func fetchRelevantEditorDraft(mode: RelevantEditorMode) async throws -> RelevantEditorDraft? {
         try await databaseManager.database.dbPool.read { db in
-            guard let detail = try fetchRelevantDetail(db, contentId: contentId) else { return nil }
-            return RelevantEditorDraft(
-                contentId: detail.contentId,
-                sourceBookId: detail.sourceBookId,
-                categoryId: detail.categoryId,
-                bookTitle: detail.bookTitle,
-                categoryTitle: detail.categoryTitle,
-                title: detail.title,
-                contentHTML: detail.contentHTML,
-                url: detail.url,
-                imageURLs: detail.imageURLs
-            )
+            switch mode {
+            case .create(let bookID, let categoryID):
+                guard let context = try fetchRelevantCreateContext(
+                    db,
+                    bookID: bookID,
+                    categoryID: categoryID
+                ) else { return nil }
+                return RelevantEditorDraft(
+                    contentId: 0,
+                    sourceBookId: bookID,
+                    categoryId: categoryID,
+                    bookTitle: context.bookTitle,
+                    categoryTitle: context.categoryTitle,
+                    title: "",
+                    contentHTML: "",
+                    url: "",
+                    imageURLs: []
+                )
+            case .edit(let contentID):
+                guard let detail = try fetchRelevantDetail(db, contentId: contentID) else { return nil }
+                return RelevantEditorDraft(
+                    contentId: detail.contentId,
+                    sourceBookId: detail.sourceBookId,
+                    categoryId: detail.categoryId,
+                    bookTitle: detail.bookTitle,
+                    categoryTitle: detail.categoryTitle,
+                    title: detail.title,
+                    contentHTML: detail.contentHTML,
+                    url: detail.url,
+                    imageURLs: detail.imageURLs
+                )
+            }
         }
     }
 
-    /// 保存相关内容编辑草稿。
-    func saveRelevantEditorDraft(_ draft: RelevantEditorDraft) async throws {
+    /// 新增或更新相关内容编辑草稿，并返回最终主键。
+    func saveRelevantEditorDraft(_ draft: RelevantEditorDraft) async throws -> Int64 {
         let now = Int64(Date().timeIntervalSince1970 * 1000)
-        try await databaseManager.database.dbPool.write { db in
+        return try await databaseManager.database.dbPool.write { db in
+            if draft.contentId == 0 {
+                var record = CategoryContentRecord(
+                    categoryId: draft.categoryId,
+                    bookId: draft.sourceBookId,
+                    title: draft.title,
+                    content: draft.contentHTML,
+                    contentBookId: 0,
+                    url: draft.url,
+                    createdDate: now,
+                    updatedDate: now,
+                    lastSyncDate: 0,
+                    isDeleted: 0
+                )
+                try record.insert(db)
+                return record.id ?? 0
+            }
+
             try db.execute(
                 // SQL 目的：更新单条相关内容的标题、HTML 正文、链接与更新时间。
                 // 涉及表：category_content。
                 // 关键过滤：按主键精确命中，且排除 Android 已软删除记录（is_deleted = 0）。
+                // 时间字段：updated_date 写入当前毫秒时间戳，created_date 与 last_sync_date 保持不变。
                 // 副作用：不触碰 category_id、content_book_id 与图片子表。
                 sql: """
                     UPDATE category_content
@@ -116,6 +187,7 @@ struct ContentRepository: ContentRepositoryProtocol {
                 """,
                 arguments: [draft.title, draft.contentHTML, draft.url, now, draft.contentId]
             )
+            return draft.contentId
         }
     }
 
@@ -376,11 +448,105 @@ private extension ContentRepository {
             )
         }
     }
+
+    /// 查询单书相关域下可进入查看器的普通相关内容，关联书籍由工作台继续进入目标书籍。
+    nonisolated func fetchBookRelevantViewerItems(_ db: Database, bookId: Int64) throws -> [ContentViewerListItem] {
+        // SQL 目的：提取指定书籍下全部有效普通相关内容，供单书工作台进入通用查看器后分页。
+        // 涉及表：category_content cc INNER JOIN book b。
+        // 关键过滤：限定 cc.book_id、cc.is_deleted=0、b.is_deleted=0，并排除 content_book_id != 0 的关联书籍。
+        // 时间字段：created_date 为 Android 毫秒时间戳，不做时区转换；按分类与主键倒序保持工作台邻接关系。
+        // 返回字段用途：构建 viewer 的稳定相关内容 ID、所属书与时间。
+        let sql = """
+            SELECT cc.id, cc.book_id, cc.created_date, b.name
+            FROM category_content cc
+            JOIN book b ON b.id = cc.book_id AND b.is_deleted = 0
+            WHERE cc.book_id = ?
+              AND cc.is_deleted = 0
+              AND cc.content_book_id = 0
+            ORDER BY cc.category_id ASC, cc.id DESC
+        """
+        return try Row.fetchAll(db, sql: sql, arguments: [bookId]).map { row in
+            ContentViewerListItem(
+                id: .relevant(row["id"]),
+                sourceBookId: row["book_id"],
+                bookTitle: row["name"] ?? "",
+                timestamp: row["created_date"]
+            )
+        }
+    }
+
+    /// 查询单书书评域的全部有效内容，供通用查看器横向分页。
+    nonisolated func fetchBookReviewViewerItems(_ db: Database, bookId: Int64) throws -> [ContentViewerListItem] {
+        // SQL 目的：提取指定书籍下全部有效书评，供单书工作台进入通用查看器后分页。
+        // 涉及表：review rv INNER JOIN book b。
+        // 关键过滤：限定 rv.book_id，并排除 review/book 软删除记录。
+        // 时间字段：created_date 为 Android 毫秒时间戳，不做时区转换；按 created_date/id 倒序。
+        // 返回字段用途：构建 viewer 的稳定书评 ID、所属书与时间。
+        let sql = """
+            SELECT rv.id, rv.book_id, rv.created_date, b.name
+            FROM review rv
+            JOIN book b ON b.id = rv.book_id AND b.is_deleted = 0
+            WHERE rv.book_id = ? AND rv.is_deleted = 0
+            ORDER BY rv.created_date DESC, rv.id DESC
+        """
+        return try Row.fetchAll(db, sql: sql, arguments: [bookId]).map { row in
+            ContentViewerListItem(
+                id: .review(row["id"]),
+                sourceBookId: row["book_id"],
+                bookTitle: row["name"] ?? "",
+                timestamp: row["created_date"]
+            )
+        }
+    }
 }
 
 // MARK: - Detail Queries
 
 private extension ContentRepository {
+    /// 读取有效书籍名称，供创建态编辑器建立最小上下文。
+    nonisolated func fetchActiveBookTitle(_ db: Database, bookID: Int64) throws -> String? {
+        // SQL 目的：读取创建书评或相关内容时的目标书名。
+        // 涉及表：book。
+        // 关键过滤：按 book.id 精确命中，排除软删除与占位书。
+        // 时间字段：不读取时间字段。
+        // 返回字段用途：创建态编辑器头部回显所属书籍。
+        try String.fetchOne(
+            db,
+            sql: "SELECT name FROM book WHERE id = ? AND is_deleted = 0 AND id != 0",
+            arguments: [bookID]
+        )
+    }
+
+    /// 读取相关内容创建态所需的有效书籍与分类名称。
+    nonisolated func fetchRelevantCreateContext(
+        _ db: Database,
+        bookID: Int64,
+        categoryID: Int64
+    ) throws -> (bookTitle: String, categoryTitle: String)? {
+        // SQL 目的：校验相关内容创建目标，并读取所属书与分类标题。
+        // 涉及表：book b INNER JOIN category cat。
+        // 关键过滤：book/category 均未软删除，分类必须是全局分类 book_id=0 或当前书籍私有分类。
+        // 时间字段：不读取时间字段。
+        // 返回字段用途：防止向无效分类写入，并构建创建态编辑器上下文。
+        let sql = """
+            SELECT b.name AS book_title, COALESCE(cat.title, '') AS category_title
+            FROM book b
+            JOIN category cat ON cat.id = ? AND cat.is_deleted = 0
+            WHERE b.id = ?
+              AND b.is_deleted = 0
+              AND b.id != 0
+              AND (cat.book_id = 0 OR cat.book_id = b.id)
+            LIMIT 1
+            """
+        guard let row = try Row.fetchOne(db, sql: sql, arguments: [categoryID, bookID]) else {
+            return nil
+        }
+        return (
+            bookTitle: row["book_title"] ?? "",
+            categoryTitle: row["category_title"] ?? ""
+        )
+    }
+
     /// 读取单条书摘详情，并补齐章节、附图与标签。
     nonisolated func fetchNoteDetail(_ db: Database, noteId: Int64) throws -> NoteContentDetail? {
         // SQL 目的：按主键读取单条书摘完整详情。

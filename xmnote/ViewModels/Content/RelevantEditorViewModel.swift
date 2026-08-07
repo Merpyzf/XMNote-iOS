@@ -1,7 +1,7 @@
 /**
  * [INPUT]: 依赖 ContentRepositoryProtocol 读取/保存相关内容草稿，依赖 RichTextBridge 完成 HTML 与富文本互转
- * [OUTPUT]: 对外提供 RelevantEditorViewModel，驱动相关内容最小编辑页的加载与保存
- * [POS]: Content 模块相关内容编辑状态源，承接 viewer → editor 的最小可用编辑链路
+ * [OUTPUT]: 对外提供 RelevantEditorViewModel，驱动相关内容创建/编辑页的加载与保存
+ * [POS]: Content 模块相关内容编辑状态源，承接工作台创建与 viewer 编辑链路
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
@@ -11,7 +11,7 @@ import Foundation
 @Observable
 /// 相关内容编辑状态源，负责标题/正文/URL 的加载、保存与错误反馈。
 final class RelevantEditorViewModel {
-    let contentId: Int64
+    let mode: RelevantEditorMode
 
     var draft: RelevantEditorDraft?
     var title = ""
@@ -27,9 +27,9 @@ final class RelevantEditorViewModel {
     private var baselineURL = ""
     private var baselineContentText = NSAttributedString()
 
-    /// 注入相关内容 ID 与内容仓储，初始化编辑页上下文。
-    init(contentId: Int64, repository: any ContentRepositoryProtocol) {
-        self.contentId = contentId
+    /// 注入相关内容创建/编辑模式与内容仓储，初始化编辑页上下文。
+    init(mode: RelevantEditorMode, repository: any ContentRepositoryProtocol) {
+        self.mode = mode
         self.repository = repository
     }
 
@@ -52,8 +52,8 @@ final class RelevantEditorViewModel {
         defer { isLoading = false }
 
         do {
-            guard let draft = try await repository.fetchRelevantEditorDraft(contentId: contentId) else {
-                errorMessage = "相关内容不存在或已删除"
+            guard let draft = try await repository.fetchRelevantEditorDraft(mode: mode) else {
+                errorMessage = mode.isCreating ? "无法在当前分类创建相关内容" : "相关内容不存在或已删除"
                 return
             }
             self.draft = draft
@@ -82,8 +82,18 @@ final class RelevantEditorViewModel {
         draft.contentHTML = RichTextBridge.attributedToHtml(contentText)
 
         do {
-            try await repository.saveRelevantEditorDraft(draft)
-            self.draft = draft
+            let savedID = try await repository.saveRelevantEditorDraft(draft)
+            self.draft = RelevantEditorDraft(
+                contentId: savedID,
+                sourceBookId: draft.sourceBookId,
+                categoryId: draft.categoryId,
+                bookTitle: draft.bookTitle,
+                categoryTitle: draft.categoryTitle,
+                title: draft.title,
+                contentHTML: draft.contentHTML,
+                url: draft.url,
+                imageURLs: draft.imageURLs
+            )
             updateBaseline()
             return true
         } catch {

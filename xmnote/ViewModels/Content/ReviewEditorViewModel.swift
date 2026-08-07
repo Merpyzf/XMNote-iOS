@@ -1,7 +1,7 @@
 /**
  * [INPUT]: 依赖 ContentRepositoryProtocol 读取/保存书评草稿，依赖 RichTextBridge 完成 HTML 与富文本互转
- * [OUTPUT]: 对外提供 ReviewEditorViewModel，驱动书评最小编辑页的加载与保存
- * [POS]: Content 模块书评编辑状态源，承接 viewer → editor 的最小可用编辑链路
+ * [OUTPUT]: 对外提供 ReviewEditorViewModel，驱动书评创建/编辑页的加载与保存
+ * [POS]: Content 模块书评编辑状态源，承接工作台创建与 viewer 编辑链路
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
@@ -11,7 +11,7 @@ import Foundation
 @Observable
 /// 书评编辑状态源，负责标题/正文富文本的加载、保存与错误反馈。
 final class ReviewEditorViewModel {
-    let reviewId: Int64
+    let mode: ReviewEditorMode
 
     var draft: ReviewEditorDraft?
     var title = ""
@@ -25,9 +25,9 @@ final class ReviewEditorViewModel {
     private var baselineTitle = ""
     private var baselineContentText = NSAttributedString()
 
-    /// 注入书评 ID 与内容仓储，初始化编辑页上下文。
-    init(reviewId: Int64, repository: any ContentRepositoryProtocol) {
-        self.reviewId = reviewId
+    /// 注入书评创建/编辑模式与内容仓储，初始化编辑页上下文。
+    init(mode: ReviewEditorMode, repository: any ContentRepositoryProtocol) {
+        self.mode = mode
         self.repository = repository
     }
 
@@ -48,8 +48,8 @@ final class ReviewEditorViewModel {
         defer { isLoading = false }
 
         do {
-            guard let draft = try await repository.fetchReviewEditorDraft(reviewId: reviewId) else {
-                errorMessage = "书评不存在或已删除"
+            guard let draft = try await repository.fetchReviewEditorDraft(mode: mode) else {
+                errorMessage = mode.isCreating ? "无法为当前书籍创建书评" : "书评不存在或已删除"
                 return
             }
             self.draft = draft
@@ -76,8 +76,15 @@ final class ReviewEditorViewModel {
         draft.contentHTML = RichTextBridge.attributedToHtml(contentText)
 
         do {
-            try await repository.saveReviewEditorDraft(draft)
-            self.draft = draft
+            let savedID = try await repository.saveReviewEditorDraft(draft)
+            self.draft = ReviewEditorDraft(
+                reviewId: savedID,
+                sourceBookId: draft.sourceBookId,
+                bookTitle: draft.bookTitle,
+                title: draft.title,
+                contentHTML: draft.contentHTML,
+                imageURLs: draft.imageURLs
+            )
             updateBaseline()
             return true
         } catch {

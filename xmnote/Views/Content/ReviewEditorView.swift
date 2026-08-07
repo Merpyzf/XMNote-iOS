@@ -1,15 +1,15 @@
 /**
  * [INPUT]: 依赖 RepositoryContainer、ReviewEditorViewModel 与 AppTaskNavigationContext
- * [OUTPUT]: 对外提供 ReviewEditorView，承接书评标题/正文的最小编辑与保存
- * [POS]: Content 模块书评编辑壳层，被通用 viewer 的编辑动作推入
+ * [OUTPUT]: 对外提供 ReviewEditorView，承接书评创建/编辑、保存与脏数据退出保护
+ * [POS]: Content 模块书评编辑壳层，被单书工作台创建或通用 viewer 编辑动作推入
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
 import SwiftUI
 
-/// 书评最小编辑页，只提供标题与正文的修改能力，图片保持只读展示。
+/// 书评创建与编辑页，提供标题、正文、保存与脏数据退出保护，既有图片保持只读展示。
 struct ReviewEditorView: View {
-    let reviewId: Int64
+    let mode: ReviewEditorMode
     let navigationContext: AppTaskNavigationContext
 
     @Environment(RepositoryContainer.self) private var repositories
@@ -19,10 +19,10 @@ struct ReviewEditorView: View {
     @State private var bootstrapLoadingGate = LoadingGate()
 
     init(
-        reviewId: Int64,
+        mode: ReviewEditorMode,
         navigationContext: AppTaskNavigationContext = .taskChild
     ) {
-        self.reviewId = reviewId
+        self.mode = mode
         self.navigationContext = navigationContext
     }
 
@@ -37,7 +37,7 @@ struct ReviewEditorView: View {
             } else {
                 Color.surfacePage.ignoresSafeArea()
                 if bootstrapLoadingGate.isVisible {
-                    LoadingStateView("正在准备书评编辑页…", style: .card)
+                    LoadingStateView("正在准备书评…", style: .card)
                 }
             }
         }
@@ -45,7 +45,7 @@ struct ReviewEditorView: View {
             guard viewModel == nil else { return }
             bootstrapLoadingGate.update(intent: .read)
             let newViewModel = ReviewEditorViewModel(
-                reviewId: reviewId,
+                mode: mode,
                 repository: repositories.contentRepository
             )
             viewModel = newViewModel
@@ -74,9 +74,13 @@ private struct ReviewEditorLoadedView: View {
                     if let draft = viewModel.draft {
                         ContentViewerHeroCard(
                             title: draft.bookTitle,
-                            subtitle: "编辑书评"
+                            subtitle: viewModel.mode.isCreating ? "记录书评" : "编辑书评"
                         ) {
-                            Text("图片先保留只读展示，正文和标题支持修改。")
+                            Text(
+                                viewModel.mode.isCreating
+                                    ? "写下书评标题与正文，完成后保存到当前书籍。"
+                                    : "图片先保留只读展示，正文和标题支持修改。"
+                            )
                                 .font(AppTypography.caption)
                                 .foregroundStyle(.secondary)
                         }
@@ -154,7 +158,7 @@ private struct ReviewEditorLoadedView: View {
                     )
             }
         }
-        .navigationTitle("编辑书评")
+        .navigationTitle(viewModel.mode.isCreating ? "写书评" : "编辑书评")
         .navigationBarTitleDisplayMode(.inline)
         .navigationBarBackButtonHidden(true)
         .navigationPopGuard(
@@ -203,7 +207,7 @@ private struct ReviewEditorLoadedView: View {
 
 #Preview {
     NavigationStack {
-        ReviewEditorView(reviewId: 1)
+        ReviewEditorView(mode: .edit(reviewID: 1))
     }
     .environment(RepositoryContainer(databaseManager: DatabaseManager(database: try! .empty())))
 }

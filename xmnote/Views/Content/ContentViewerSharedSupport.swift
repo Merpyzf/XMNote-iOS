@@ -17,6 +17,8 @@ enum ContentViewerPresentationStyle {
         switch source {
         case .bookNotes:
             self = .noteOnly
+        case .bookRelated, .bookReviews:
+            self = .general
         case .timeline(_, _, let filter):
             self = filter == .note ? .noteOnly : .general
         }

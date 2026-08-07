@@ -378,8 +378,14 @@ struct MainTabView: View {
     /// 为 Tab 树挂载底部计时条、系统搜索宿主与统一导航环境。
     private var configuredTabContent: some View {
         tabContent
+        .toolbarVisibility(
+            navigationCoordinator.isTabChromeSuppressed ? .hidden : .automatic,
+            for: .tabBar
+        )
         .tabBarMinimizeBehavior(.onScrollDown)
-        .tabViewBottomAccessory(isEnabled: isReadingTimerAccessoryEnabled) {
+        .tabViewBottomAccessory(
+            isEnabled: isReadingTimerAccessoryEnabled && !navigationCoordinator.isTabChromeSuppressed
+        ) {
             if let session = readingTimerAccessorySession {
                 ReadingTimerAccessoryZoomSource(
                     owner: readingTimerZoomOwner,
@@ -697,14 +703,14 @@ struct MainTabView: View {
                 seed: seed,
                 navigationContext: navigationContext
             )
-        case .reviewEditor(let reviewID):
+        case .reviewEditor(let mode):
             ReviewEditorView(
-                reviewId: reviewID,
+                mode: mode,
                 navigationContext: navigationContext
             )
-        case .relevantEditor(let contentID):
+        case .relevantEditor(let mode):
             RelevantEditorView(
-                contentId: contentID,
+                mode: mode,
                 navigationContext: navigationContext
             )
         case .contentViewer(let source, let initialItemID, let keyword):
@@ -967,6 +973,18 @@ struct MainTabView: View {
                 onSupplementReading: { bookId in
                     append(ReadingRoute.readingSupplement(bookId: bookId), to: selectedTab)
                 },
+                onOpenReadingDetail: { bookId in
+                    append(BookRoute.readingDetail(bookId: bookId), to: selectedTab)
+                },
+                onOpenChapterNotes: { bookId, chapterId, title in
+                    append(
+                        BookRoute.chapterNotes(bookId: bookId, chapterId: chapterId, title: title),
+                        to: selectedTab
+                    )
+                },
+                onOpenBook: { bookId in
+                    append(BookRoute.detail(bookId: bookId), to: selectedTab)
+                },
                 readingTimerZoomConfiguration: makeReadingTimerZoomConfiguration(
                     sourceID: AnyHashable("reading-timer-book-detail-\(selectedTab.rawValue)-\(bookId)"),
                     request: .book(bookId),
@@ -1019,12 +1037,45 @@ struct MainTabView: View {
                 onSupplementReading: { bookId in
                     append(ReadingRoute.readingSupplement(bookId: bookId), to: selectedTab)
                 },
+                onOpenReadingDetail: { bookId in
+                    append(BookRoute.readingDetail(bookId: bookId), to: selectedTab)
+                },
+                onOpenChapterNotes: { bookId, chapterId, title in
+                    append(
+                        BookRoute.chapterNotes(bookId: bookId, chapterId: chapterId, title: title),
+                        to: selectedTab
+                    )
+                },
+                onOpenBook: { bookId in
+                    append(BookRoute.detail(bookId: bookId), to: selectedTab)
+                },
                 readingTimerZoomConfiguration: makeReadingTimerZoomConfiguration(
                     sourceID: AnyHashable("reading-timer-book-detail-\(selectedTab.rawValue)-\(bookId)"),
                     request: .book(bookId),
                     host: .mainTab,
                     origin: .tab(selectedTab)
                 )
+            )
+        case .readingDetail(let bookId):
+            BookReadingDetailView(
+                bookId: bookId,
+                onStartReading: { targetBookID in
+                    presentReadingTimer(
+                        request: .book(targetBookID),
+                        host: .mainTab,
+                        origin: .tab(selectedTab),
+                        source: .rootFallback
+                    )
+                },
+                onSupplementReading: { targetBookID in
+                    append(ReadingRoute.readingSupplement(bookId: targetBookID), to: selectedTab)
+                }
+            )
+        case .chapterNotes(let bookId, let chapterId, let title):
+            BookChapterNotesView(
+                bookId: bookId,
+                chapterId: chapterId,
+                title: title
             )
         case .bookshelfList(let route):
             BookshelfBookListView(

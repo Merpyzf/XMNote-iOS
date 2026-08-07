@@ -1,15 +1,15 @@
 /**
  * [INPUT]: 依赖 RepositoryContainer、RelevantEditorViewModel 与 AppTaskNavigationContext
- * [OUTPUT]: 对外提供 RelevantEditorView，承接相关内容标题/正文/URL 的最小编辑与保存
- * [POS]: Content 模块相关内容编辑壳层，被通用 viewer 的编辑动作推入
+ * [OUTPUT]: 对外提供 RelevantEditorView，承接相关内容创建/编辑、保存与脏数据退出保护
+ * [POS]: Content 模块相关内容编辑壳层，被单书工作台创建或通用 viewer 编辑动作推入
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
 import SwiftUI
 
-/// 相关内容最小编辑页，只提供标题、正文与 URL 的修改能力，图片保持只读展示。
+/// 相关内容创建与编辑页，提供标题、正文、URL、保存与脏数据退出保护，既有图片保持只读展示。
 struct RelevantEditorView: View {
-    let contentId: Int64
+    let mode: RelevantEditorMode
     let navigationContext: AppTaskNavigationContext
 
     @Environment(RepositoryContainer.self) private var repositories
@@ -19,10 +19,10 @@ struct RelevantEditorView: View {
     @State private var bootstrapLoadingGate = LoadingGate()
 
     init(
-        contentId: Int64,
+        mode: RelevantEditorMode,
         navigationContext: AppTaskNavigationContext = .taskChild
     ) {
-        self.contentId = contentId
+        self.mode = mode
         self.navigationContext = navigationContext
     }
 
@@ -37,7 +37,7 @@ struct RelevantEditorView: View {
             } else {
                 Color.surfacePage.ignoresSafeArea()
                 if bootstrapLoadingGate.isVisible {
-                    LoadingStateView("正在准备相关内容编辑页…", style: .card)
+                    LoadingStateView("正在准备相关内容…", style: .card)
                 }
             }
         }
@@ -45,7 +45,7 @@ struct RelevantEditorView: View {
             guard viewModel == nil else { return }
             bootstrapLoadingGate.update(intent: .read)
             let newViewModel = RelevantEditorViewModel(
-                contentId: contentId,
+                mode: mode,
                 repository: repositories.contentRepository
             )
             viewModel = newViewModel
@@ -76,7 +76,11 @@ private struct RelevantEditorLoadedView: View {
                             title: draft.bookTitle,
                             subtitle: draft.categoryTitle.isEmpty ? "编辑相关内容" : draft.categoryTitle
                         ) {
-                            Text("图片先保留只读展示，正文、标题和链接支持修改。")
+                            Text(
+                                viewModel.mode.isCreating
+                                    ? "整理标题、链接与正文，完成后保存到当前分类。"
+                                    : "图片先保留只读展示，正文、标题和链接支持修改。"
+                            )
                                 .font(AppTypography.caption)
                                 .foregroundStyle(.secondary)
                         }
@@ -169,7 +173,7 @@ private struct RelevantEditorLoadedView: View {
                     )
             }
         }
-        .navigationTitle("编辑相关内容")
+        .navigationTitle(viewModel.mode.isCreating ? "记相关" : "编辑相关内容")
         .navigationBarTitleDisplayMode(.inline)
         .navigationBarBackButtonHidden(true)
         .navigationPopGuard(
@@ -218,7 +222,7 @@ private struct RelevantEditorLoadedView: View {
 
 #Preview {
     NavigationStack {
-        RelevantEditorView(contentId: 1)
+        RelevantEditorView(mode: .edit(contentID: 1))
     }
     .environment(RepositoryContainer(databaseManager: DatabaseManager(database: try! .empty())))
 }

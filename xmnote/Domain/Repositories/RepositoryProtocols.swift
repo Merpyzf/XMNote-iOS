@@ -141,12 +141,18 @@ protocol BookshelfRepositoryProtocol {
     func saveBookCollectionDisplaySetting(_ setting: BookCollectionDisplaySetting)
 }
 
-/// 书籍详情数据访问契约，定义详情页所需的书籍与书摘观察入口。
+/// 单本书内容工作台数据访问契约，定义书籍资料与四个内容域的观察入口。
 protocol BookDetailRepositoryProtocol {
     /// 持续监听指定书籍详情变化，供详情页实时更新。
     func observeBookDetail(bookId: Int64) -> AsyncThrowingStream<BookDetail?, Error>
     /// 持续监听指定书籍下的书摘列表变化。
     func observeBookNotes(bookId: Int64) -> AsyncThrowingStream<[NoteExcerpt], Error>
+    /// 持续监听指定书籍下的相关分类变化。
+    func observeBookRelatedCategories(bookId: Int64) -> AsyncThrowingStream<[BookRelatedCategory], Error>
+    /// 持续监听指定书籍下的相关内容变化。
+    func observeBookRelated(bookId: Int64) -> AsyncThrowingStream<[BookRelatedExcerpt], Error>
+    /// 持续监听指定书籍下的书评变化。
+    func observeBookReviews(bookId: Int64) -> AsyncThrowingStream<[BookReviewExcerpt], Error>
 }
 
 /// 本地选书数据访问契约，定义通用选书器需要的最小书籍查询能力。
@@ -263,14 +269,14 @@ protocol ContentRepositoryProtocol {
     func observeViewerItems(source: ContentViewerSourceContext) -> AsyncThrowingStream<[ContentViewerListItem], Error>
     /// 按统一 itemID 拉取查看页完整详情。
     func fetchViewerDetail(itemID: ContentViewerItemID) async throws -> ContentViewerDetail?
-    /// 读取书评编辑草稿。
-    func fetchReviewEditorDraft(reviewId: Int64) async throws -> ReviewEditorDraft?
-    /// 保存书评编辑草稿。
-    func saveReviewEditorDraft(_ draft: ReviewEditorDraft) async throws
-    /// 读取相关内容编辑草稿。
-    func fetchRelevantEditorDraft(contentId: Int64) async throws -> RelevantEditorDraft?
-    /// 保存相关内容编辑草稿。
-    func saveRelevantEditorDraft(_ draft: RelevantEditorDraft) async throws
+    /// 按创建或编辑模式读取书评草稿。
+    func fetchReviewEditorDraft(mode: ReviewEditorMode) async throws -> ReviewEditorDraft?
+    /// 新增或更新书评草稿，并返回最终主键。
+    func saveReviewEditorDraft(_ draft: ReviewEditorDraft) async throws -> Int64
+    /// 按创建或编辑模式读取相关内容草稿。
+    func fetchRelevantEditorDraft(mode: RelevantEditorMode) async throws -> RelevantEditorDraft?
+    /// 新增或更新相关内容草稿，并返回最终主键。
+    func saveRelevantEditorDraft(_ draft: RelevantEditorDraft) async throws -> Int64
     /// 删除指定内容，按 iOS 当前约定执行主记录与子记录的硬删除事务。
     func delete(itemID: ContentViewerItemID) async throws
 }
