@@ -1,5 +1,5 @@
 /**
- * [INPUT]: 依赖 RepositoryContainer 注入 TagManagementRepositoryProtocol，依赖 TagManagementViewModel 驱动标签管理与搜索状态，依赖 XMScopeSelector/XMSystemAlert/XMToastCenter/LoadingGate 渲染 iOS 原生管理交互
+ * [INPUT]: 依赖 RepositoryContainer 注入 TagManagementRepositoryProtocol，依赖 TagManagementViewModel 驱动标签管理与搜索标签状态，依赖 XMScopeSelector/XMSystemAlert/XMToastCenter/LoadingGate 渲染 iOS 原生管理交互
  * [OUTPUT]: 对外提供 TagManagementView，承接“我的 > 标签管理”入口的真实管理页
  * [POS]: Views/Personal 的标签管理页面壳层，被 PersonalRoute.tagManagement 导航消费
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -59,7 +59,7 @@ private struct TagManagementContentView: View {
         .searchable(
             text: $viewModel.searchText,
             isPresented: $isSearchPresented,
-            prompt: "搜索"
+            prompt: "搜索标签"
         )
         .searchFocused($isSearchFocused)
         .searchPresentationToolbarBehavior(.avoidHidingContent)

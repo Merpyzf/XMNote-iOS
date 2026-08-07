@@ -646,6 +646,7 @@ private extension BookshelfAggregateCollectionHostView {
             return
         }
         ensureSearchDrawerHiddenScrollRange()
+        collectionView.layoutIfNeeded()
         let targetY = clampedContentOffsetY(hiddenOffsetY)
         guard targetY >= hiddenOffsetY - 0.5 else {
             return
@@ -686,11 +687,9 @@ private extension BookshelfAggregateCollectionHostView {
             0,
             collectionView.adjustedContentInset.bottom - collectionView.contentInset.bottom
         )
-        let minimumY = -collectionView.adjustedContentInset.top
-        let maximumYWithoutCustomBottomInset = max(
-            minimumY,
-            collectionView.contentSize.height - collectionView.bounds.height + systemAdjustedBottomInset
-        )
+        let maximumYWithoutCustomBottomInset = collectionView.contentSize.height
+            - collectionView.bounds.height
+            + systemAdjustedBottomInset
         let missingRange = hiddenOffsetY - maximumYWithoutCustomBottomInset
         return max(0, ceil(missingRange + 1))
     }

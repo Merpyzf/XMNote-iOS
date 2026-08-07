@@ -3,7 +3,7 @@ import Observation
 
 /**
  * [INPUT]: 依赖 DatabaseManager 提供数据库实例，依赖各 Repository 实现完成组装
- * [OUTPUT]: 对外提供 RepositoryContainer，集中暴露目录管理、搜索录入、AI、S3、图片额度、备份、标签、阅读首页、阅读计时、阅读日历、单书阅读详情与外部应用集成仓储
+ * [OUTPUT]: 对外提供 RepositoryContainer，集中暴露目录、搜索录入、AI、S3、图片额度、备份、标签、书籍分组、阅读首页/计时/日历/单书详情与外部应用集成仓储
  * [POS]: App 级依赖注入容器，被视图层通过 Environment 获取并创建 ViewModel
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -28,6 +28,7 @@ final class RepositoryContainer {
     let noteImageUploadQuotaRepository: any NoteImageUploadQuotaRepositoryProtocol
     let tagManagementRepository: any TagManagementRepositoryProtocol
     let externalAppIntegrationRepository: any ExternalAppIntegrationRepositoryProtocol
+    let bookGroupManagementRepository: any BookGroupManagementRepositoryProtocol
     let statisticsRepository: any StatisticsRepositoryProtocol
     let readCalendarRepository: any ReadCalendarRepositoryProtocol
     let bookReadingDetailRepository: any BookReadingDetailRepositoryProtocol
@@ -54,7 +55,7 @@ final class RepositoryContainer {
             appBackendConfigRepository: appBackendConfigRepository
         )
         let coverImageLoader = NukeCoverImageLoader()
-        let bookSearchRepository = BookSearchRepository()
+        let bookSearchRepository = BookSearchRepository(service: bookRemoteSearchService)
         let defaultOCRPreferences = OCRRepository.androidAlignedDebugDefaults
 
         let noteRepository = NoteRepository(
@@ -76,7 +77,8 @@ final class RepositoryContainer {
         self.globalSearchRepository = GlobalSearchRepository(databaseManager: databaseManager)
         self.tagManagementRepository = TagManagementRepository(databaseManager: databaseManager)
         self.externalAppIntegrationRepository = ExternalAppIntegrationRepository(databaseManager: databaseManager)
-        self.bookSearchRepository = BookSearchRepository(service: bookRemoteSearchService)
+        self.bookGroupManagementRepository = BookGroupManagementRepository(databaseManager: databaseManager)
+        self.bookSearchRepository = bookSearchRepository
         self.bookEditorRepository = BookEditorRepository(
             databaseManager: databaseManager,
             s3UploadRepository: s3UploadRepository,

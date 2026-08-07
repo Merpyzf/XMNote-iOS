@@ -8,8 +8,8 @@
 import SwiftUI
 
 /**
- * [INPUT]: 依赖五个主业务 Tab、可恢复浏览路由、AppNavigationCoordinator、ReadingTimerCoordinator、阅读日历、外部导入与网页端动作
- * [OUTPUT]: 对外提供 MainTabView（五个独立 NavigationStack、单一根级沉浸内容/任务 cover、阅读计时 UIKit Zoom、底部计时条与跨模块浏览回流）
+ * [INPUT]: 依赖五个主业务 Tab、可恢复浏览路由、AppNavigationCoordinator、ReadingTimerCoordinator、阅读日历、外部导入/网页动作、个人基础数据管理与调试路由
+ * [OUTPUT]: 对外提供 MainTabView（五个独立 NavigationStack、单一根级沉浸内容/任务 cover、阅读计时 UIKit Zoom、底部计时条与跨模块浏览/管理回流）
  * [POS]: 应用根导航 owner，统一隔离普通浏览、沉浸内容、独立任务与阅读计时呈现，同时保留各 Tab 导航现场
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -1256,7 +1256,9 @@ struct MainTabView: View {
         case .tagManagement:
             TagManagementView()
         case .groupManagement:
-            Text("书籍分组")
+            BookGroupManagementView(
+                onOpenBookRoute: { append($0, to: selectedTab) }
+            )
         case .bookSource:
             Text("书籍来源")
         case .authorManagement:

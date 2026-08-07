@@ -1033,8 +1033,10 @@ private extension BookshelfBookListCollectionHostView {
             return
         }
         ensureSearchDrawerHiddenScrollRange()
+        collectionView.layoutIfNeeded()
         let targetY = clampedContentOffsetY(hiddenOffsetY)
         guard targetY >= hiddenOffsetY - 0.5 else {
+            revealCollectionIfInitialSearchHideCannotSettle()
             return
         }
         setSearchDrawerHidden(animated: false)
@@ -1088,13 +1090,28 @@ private extension BookshelfBookListCollectionHostView {
             0,
             collectionView.adjustedContentInset.bottom - collectionView.contentInset.bottom
         )
-        let minimumY = -collectionView.adjustedContentInset.top
-        let maximumYWithoutCustomBottomInset = max(
-            minimumY,
-            collectionView.contentSize.height - collectionView.bounds.height + systemAdjustedBottomInset
-        )
+        let maximumYWithoutCustomBottomInset = collectionView.contentSize.height
+            - collectionView.bounds.height
+            + systemAdjustedBottomInset
         let missingRange = hiddenOffsetY - maximumYWithoutCustomBottomInset
         return max(0, ceil(missingRange + 1))
+    }
+
+    /// 滚动范围仍无法稳定隐藏搜索抽屉时，优先展示结果区，避免短列表永久停留在透明预备态。
+    func revealCollectionIfInitialSearchHideCannotSettle() {
+        guard hasDisplayableResultSection else { return }
+        isPendingInitialSearchDrawerOffset = false
+        didApplyInitialSearchDrawerOffset = true
+        updateCollectionVisibilityForSearchDrawerPreparation()
+    }
+
+    private var hasDisplayableResultSection: Bool {
+        switch BookshelfBookListCollectionSectionBuilder.resultState(in: sections) {
+        case .content, .empty, .error:
+            return true
+        case .loading, .other:
+            return false
+        }
     }
 
     /// 将列表滚动到搜索 surface 完整可见的位置，不改变搜索所属的 collection 层级。
