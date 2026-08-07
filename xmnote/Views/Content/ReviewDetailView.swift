@@ -1,6 +1,6 @@
 /**
- * [INPUT]: 依赖 RepositoryContainer、AppNavigationCoordinator 与 ReviewDetailViewModel
- * [OUTPUT]: 对外提供 ReviewDetailView，承接书评单页查看与顶部操作
+ * [INPUT]: 依赖 RepositoryContainer 注入内容/AI 仓储，依赖 ReviewDetailViewModel 驱动书评详情状态
+ * [OUTPUT]: 对外提供 ReviewDetailView，承接书评单页查看、选区 AI 释义与顶部操作
  * [POS]: Content 模块书评查看壳层，被时间线点击链路推入
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -57,8 +57,9 @@ struct ReviewDetailView: View {
 private struct ReviewDetailLoadedView: View {
     @Bindable var viewModel: ReviewDetailViewModel
     @Binding var showsDeleteDialog: Bool
+    @Environment(RepositoryContainer.self) private var repositories
     @State private var readLoadingGate = LoadingGate()
-    @Environment(AppNavigationCoordinator.self) private var navigationCoordinator
+    @State private var aiTextPresentation: AITextResultPresentation?
 
     var body: some View {
         ScrollView {
@@ -92,6 +93,14 @@ private struct ReviewDetailLoadedView: View {
                 LoadingStateView("正在加载…")
             }
         }
+        .sheet(item: $aiTextPresentation) { presentation in
+            AITextResultSheet(
+                presentation: presentation,
+                repository: repositories.aiRepository
+            )
+            .presentationDetents([.medium, .large])
+            .presentationDragIndicator(.visible)
+        }
         .onAppear {
             syncReadLoadingVisibility()
             Task { await viewModel.load() }
@@ -108,9 +117,7 @@ private struct ReviewDetailLoadedView: View {
     private var toolbarContent: some ToolbarContent {
         ToolbarItemGroup(placement: .topBarTrailing) {
             if let detail = viewModel.detail {
-                Button {
-                    navigationCoordinator.present(.reviewEditor(reviewID: detail.reviewId))
-                } label: {
+                NavigationLink(value: ContentRoute.reviewEditor(reviewId: detail.reviewId)) {
                     Image(systemName: "square.and.pencil")
                 }
 
@@ -136,39 +143,10 @@ private struct ReviewDetailLoadedView: View {
     }
 
     private func reviewContent(_ detail: ReviewContentDetail) -> some View {
-        VStack(alignment: .leading, spacing: Spacing.base) {
-            if let dateText = formattedDate(detail.createdDate) {
-                Text(dateText)
-                    .font(AppTypography.caption)
-                    .foregroundStyle(Color.textSecondary)
-            }
-
-            if !trimmed(detail.title).isEmpty {
-                Text(detail.title)
-                    .font(AppTypography.subheadlineSemibold)
-                    .foregroundStyle(Color.textPrimary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            }
-
-            if TimelineMeaningfulPreview.hasMeaningfulHTML(detail.contentHTML) {
-                RichText(
-                    html: detail.contentHTML,
-                    baseFont: AppTypography.uiSemantic(.body),
-                    textColor: UIColor.label,
-                    lineSpacing: 5
-                )
-                .frame(maxWidth: .infinity, alignment: .leading)
-            }
-
-            if !detail.imageURLs.isEmpty {
-                ContentImageWall(
-                    imageURLs: detail.imageURLs,
-                    prefix: "review"
-                )
-                .padding(.top, Spacing.half)
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
+        ReviewContentDetailBody(
+            detail: detail,
+            onAISelection: presentTextLookup
+        )
     }
 
     private func copyText(from detail: ReviewContentDetail) -> String {
@@ -180,15 +158,8 @@ private struct ReviewDetailLoadedView: View {
             .joined(separator: "\n\n")
     }
 
-    private func trimmed(_ text: String) -> String {
-        text.trimmingCharacters(in: .whitespacesAndNewlines)
-    }
-
-    private func formattedDate(_ timestamp: Int64) -> String? {
-        guard timestamp > 0 else { return nil }
-        return ContentDetailDateFormatter.full.string(
-            from: Date(timeIntervalSince1970: TimeInterval(timestamp) / 1000)
-        )
+    private func presentTextLookup(_ input: AITextLookupInput) {
+        aiTextPresentation = AITextResultPresentation(request: .textLookup(input))
     }
 
     private func syncReadLoadingVisibility() {

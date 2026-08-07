@@ -1,6 +1,6 @@
 /**
- * [INPUT]: 依赖 RepositoryContainer、NoteEditorViewModel、AppTaskNavigationContext、NoteTextComposerView 与 BookPickerView
- * [OUTPUT]: 对外提供 NoteEditorView，承载书摘新建/编辑、草稿恢复、附图、章节/标签与保存动作
+ * [INPUT]: 依赖 RepositoryContainer、AppState、NoteEditorViewModel、AppTaskNavigationContext、NoteTextComposerView 与 BookPickerView
+ * [OUTPUT]: 对外提供 NoteEditorView，承载书摘新建/编辑、草稿恢复、图片额度、附图、层级章节/标签与保存动作
  * [POS]: Note 模块书摘编辑页壳层，对齐 Android 编辑流程并采用 iOS 原生页面组织
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -18,6 +18,7 @@ struct NoteEditorView: View {
 
     @Environment(RepositoryContainer.self) private var repositories
     @Environment(AppNavigationCoordinator.self) private var navigationCoordinator
+    @Environment(AppState.self) private var appState
     @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var scenePhase
     @State private var viewModel: NoteEditorViewModel?
@@ -87,7 +88,9 @@ struct NoteEditorView: View {
             let newViewModel = NoteEditorViewModel(
                 mode: mode,
                 seed: seed,
-                repository: repositories.noteRepository
+                repository: repositories.noteRepository,
+                quotaRepository: repositories.noteImageUploadQuotaRepository,
+                isPremium: appState.isPremium
             )
             viewModel = newViewModel
             bootstrapLoadingGate.update(intent: .none)
@@ -170,19 +173,34 @@ private extension NoteEditorView {
         Color.clear
             .xmSystemAlert(
                 isPresented: recoveredDraftBinding.isPresented {
-                    viewModel.discardRecoveredDraft()
+                    Task { await viewModel.discardRecoveredDraft() }
                 },
                 descriptor: XMSystemAlertDescriptor(
                     title: "发现自动保存草稿",
                     message: "检测到这条书摘有未提交的自动保存内容，是否恢复继续编辑？",
                     actions: [
                         XMSystemAlertAction(title: "恢复") {
-                            viewModel.restoreRecoveredDraft()
+                            Task { await viewModel.restoreRecoveredDraft() }
                         },
                         XMSystemAlertAction(title: "丢弃", role: .destructive) {
-                            viewModel.discardRecoveredDraft()
+                            Task { await viewModel.discardRecoveredDraft() }
                         }
                     ]
+                )
+            )
+            .xmSystemAlert(
+                isPresented: Binding(
+                    get: { viewModel.imageQuotaAlertMessage != nil },
+                    set: { isPresented in
+                        if !isPresented {
+                            viewModel.imageQuotaAlertMessage = nil
+                        }
+                    }
+                ),
+                descriptor: XMSystemAlertDescriptor(
+                    title: "今日图片额度",
+                    message: viewModel.imageQuotaAlertMessage ?? "今日图片额度已用完。",
+                    actions: [XMSystemAlertAction(title: "知道了", role: .cancel) { }]
                 )
             )
             .xmSystemAlert(
@@ -386,7 +404,7 @@ private extension NoteEditorView {
         .photosPicker(
             isPresented: $showsAttachmentPicker,
             selection: $attachmentPhotoItems,
-            maxSelectionCount: 9,
+            maxSelectionCount: max(1, viewModel.availableImageSelectionCount),
             matching: .images
         )
         .sheet(item: $activeSheet, onDismiss: presentPendingBookPickerTask) { sheet in
@@ -516,6 +534,9 @@ private extension NoteEditorView {
         }
         .onChange(of: editorSettings.layoutModeRawValue) { _, _ in
             handleLayoutModeStateChange(animated: isLayoutStateInitialized)
+        }
+        .onChange(of: appState.isPremium) { _, isPremium in
+            Task { await viewModel.updatePremiumStatus(isPremium) }
         }
         .onChange(of: viewModel.didSave) { _, didSave in
             guard didSave else { return }
@@ -1091,6 +1112,10 @@ private extension NoteEditorView {
             onChooseImage: {
                 registerEditorInteraction(force: true)
                 toolbarPromptMessage = nil
+                guard viewModel.availableImageSelectionCount > 0 else {
+                    viewModel.showImageQuotaBlockedMessage()
+                    return
+                }
                 showsAttachmentPicker = true
             },
             onSave: {
@@ -1841,15 +1866,17 @@ private extension NoteEditorView {
     }
 
     func consumeAttachmentPhotoItems(_ items: [PhotosPickerItem], viewModel: NoteEditorViewModel) async {
+        var inputs: [(data: Data, fileExtension: String)] = []
         for item in items {
             do {
                 guard let data = try await item.loadTransferable(type: Data.self) else { continue }
                 let fileExtension = item.supportedContentTypes.first?.preferredFilenameExtension ?? "jpg"
-                await viewModel.stageImage(data: data, fileExtension: fileExtension)
+                inputs.append((data: data, fileExtension: fileExtension))
             } catch {
                 viewModel.errorMessage = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
             }
         }
+        await viewModel.stageImages(inputs)
     }
 
     func mergeMeasuredHeights(_ incoming: [NoteEditorMeasuredPart: CGFloat]) {
@@ -2295,38 +2322,27 @@ private struct NoteEditorChapterPickerSheet: View {
     let onSelect: (NoteEditorChapterOption?) -> Void
 
     @Environment(\.dismiss) private var dismiss
+    @State private var searchText = ""
+
+    private var visibleChapters: [NoteEditorChapterOption] {
+        let keyword = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !keyword.isEmpty else { return chapters }
+        return chapters.filter { $0.title.localizedCaseInsensitiveContains(keyword) }
+    }
 
     var body: some View {
         NavigationStack {
             List {
-                Button {
-                    onSelect(nil)
-                } label: {
-                    HStack {
-                        Text("不设置章节")
-                            .foregroundStyle(Color.textPrimary)
-                        Spacer()
-                        if selectedChapterID == 0 {
-                            XMSelectionIndicator(
-                                style: .checkmarkOnly,
-                                isSelected: true,
-                                font: AppTypography.body,
-                                showsUnselectedBase: false
-                            )
-                        }
-                    }
-                }
-                .buttonStyle(.plain)
-
-                ForEach(chapters) { chapter in
+                if searchText.isEmpty {
                     Button {
-                        onSelect(chapter)
+                        onSelect(nil)
                     } label: {
                         HStack {
-                            Text(chapter.title)
+                            Text("不设置章节")
+                                .font(AppTypography.body)
                                 .foregroundStyle(Color.textPrimary)
                             Spacer()
-                            if selectedChapterID == chapter.id {
+                            if selectedChapterID == 0 {
                                 XMSelectionIndicator(
                                     style: .checkmarkOnly,
                                     isSelected: true,
@@ -2337,10 +2353,70 @@ private struct NoteEditorChapterPickerSheet: View {
                         }
                     }
                     .buttonStyle(.plain)
+                    .accessibilityValue(selectedChapterID == 0 ? "已选择" : "未选择")
+                }
+
+                if visibleChapters.isEmpty {
+                    if searchText.isEmpty {
+                        ContentUnavailableView(
+                            "暂无章节",
+                            systemImage: "text.book.closed",
+                            description: Text("可以先不设置章节，或到目录管理中新增。")
+                        )
+                    } else {
+                        ContentUnavailableView.search(text: searchText)
+                    }
+                } else {
+                    ForEach(visibleChapters) { chapter in
+                        Button {
+                            onSelect(chapter)
+                        } label: {
+                            HStack(spacing: Spacing.base) {
+                                VStack(alignment: .leading, spacing: Spacing.compact) {
+                                    HStack(spacing: Spacing.compact) {
+                                        Text(chapter.title)
+                                            .font(chapter.displayLevel == 1 ? AppTypography.bodyMedium : AppTypography.body)
+                                            .foregroundStyle(Color.textPrimary)
+                                            .lineLimit(2)
+                                        if chapter.isStarred == true {
+                                            Image(systemName: "star.fill")
+                                                .imageScale(.small)
+                                                .foregroundStyle(Color.ratingActive)
+                                                .accessibilityHidden(true)
+                                        }
+                                    }
+                                    if !searchText.isEmpty, !chapter.parentPathText.isEmpty {
+                                        Text(chapter.parentPathText)
+                                            .font(AppTypography.caption)
+                                            .foregroundStyle(Color.textSecondary)
+                                            .lineLimit(1)
+                                    }
+                                }
+                                Spacer(minLength: Spacing.compact)
+                                if selectedChapterID == chapter.id {
+                                    XMSelectionIndicator(
+                                        style: .checkmarkOnly,
+                                        isSelected: true,
+                                        font: AppTypography.body,
+                                        showsUnselectedBase: false
+                                    )
+                                }
+                            }
+                            .padding(.leading, CGFloat(chapter.displayLevel - 1) * Spacing.base)
+                            .frame(minHeight: Spacing.actionReserved)
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityElement(children: .ignore)
+                        .accessibilityLabel(chapter.pathText ?? chapter.title)
+                        .accessibilityValue(selectedChapterID == chapter.id ? "已选择" : "未选择")
+                        .accessibilityAddTraits(selectedChapterID == chapter.id ? .isSelected : [])
+                    }
                 }
             }
             .navigationTitle("章节")
             .navigationBarTitleDisplayMode(.inline)
+            .searchable(text: $searchText, prompt: "搜索章节")
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("取消") {

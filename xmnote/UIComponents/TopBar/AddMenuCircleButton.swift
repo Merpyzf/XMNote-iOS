@@ -24,7 +24,7 @@ struct AddMenuCircleButton: View {
         onOpenDebugCenter: (() -> Void)? = nil,
         usesGlassStyle: Bool = false,
         presentation: TopBarActionPresentation = .standalone,
-        iconSize: CGFloat = 12
+        iconSize: CGFloat = 14
     ) {
         self.onAddBook = onAddBook
         self.onAddNote = onAddNote
@@ -56,6 +56,8 @@ struct AddMenuCircleButton: View {
             TopBarActionIcon(
                 systemName: "plus",
                 iconSize: iconSize,
+                weight: .medium,
+                foregroundColor: Color.iconPrimary.opacity(0.88),
                 hitShape: presentation == .pillSegment ? .rectangle : .circle
             )
         }

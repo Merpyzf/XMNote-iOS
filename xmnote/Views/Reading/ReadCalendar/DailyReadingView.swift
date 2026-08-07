@@ -122,7 +122,7 @@ struct DailyReadingView: View {
             )
         }
         .sheet(item: $generatedShareFile, onDismiss: discardGeneratedShareFile) { file in
-            ActivityShareSheet(activityItems: [file.fileURL])
+            XMActivityShareSheet(activityItems: [file.fileURL])
                 .presentationDetents([.medium, .large])
         }
         .xmSystemAlert(item: $pendingDelete) { record in
@@ -454,7 +454,7 @@ struct DailyReadingView: View {
             } else {
                 backgroundData = nil
             }
-            generatedShareFile = try NoteReviewShareImageRenderer().renderPNG(
+            generatedShareFile = try await NoteReviewShareImageRenderer().renderPNG(
                 for: item,
                 settings: settings,
                 isDarkAppearance: colorScheme == .dark,

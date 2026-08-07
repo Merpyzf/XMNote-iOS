@@ -1,6 +1,6 @@
 /**
- * [INPUT]: 依赖 RepositoryContainer/AppState 及其会员限制开关、ReadCalendarShareViewModel、分享卡与系统年月选择/弹窗/分享组件
- * [OUTPUT]: 对外提供 ReadCalendarShareView，完成支持短内容回弹的三类预览、48 模板、书籍排除重算、会员拦截、保存与分享
+ * [INPUT]: 依赖 RepositoryContainer/AppState、ReadCalendarShareViewModel、分享卡与系统年月选择/弹窗/XMActivityShareSheet
+ * [OUTPUT]: 对外提供 ReadCalendarShareView，完成支持短内容回弹的三类预览、48 模板、排行、书籍排除重算、会员拦截、保存与分享
  * [POS]: ReadCalendar 分享页面壳层，采用 iOS 原生 push、Sheet 与系统分享/相册能力表达 Android 业务规则
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -463,7 +463,7 @@ struct ReadCalendarShareView: View {
         case .bookFilter:
             bookFilter
         case .activity(let payload):
-            ActivityShareSheet(activityItems: [payload.fileURL])
+            XMActivityShareSheet(activityItems: [payload.fileURL])
                 .presentationDetents([.medium, .large])
         }
     }

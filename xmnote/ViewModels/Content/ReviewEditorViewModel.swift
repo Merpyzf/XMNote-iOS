@@ -1,7 +1,7 @@
 /**
- * [INPUT]: 依赖 ContentRepositoryProtocol 读取/保存书评草稿，依赖 RichTextBridge 完成 HTML 与富文本互转
- * [OUTPUT]: 对外提供 ReviewEditorViewModel，驱动书评最小编辑页的加载与保存
- * [POS]: Content 模块书评编辑状态源，承接 viewer → editor 的最小可用编辑链路
+ * [INPUT]: 依赖 ReviewEditorMode 描述新建/编辑上下文，依赖 Content/S3/NoteImageUploadQuota Repository 完成草稿、图片与额度读写，依赖 RichTextBridge 完成 HTML 与富文本互转
+ * [OUTPUT]: 对外提供 ReviewEditorViewModel，驱动书评 create/edit、自动草稿恢复、附图缓存、OCR、校验与真实主键保存
+ * [POS]: Content 模块书评编辑状态源，承接书籍/书评入口到统一编辑器、自动草稿与共享图片控制器的状态编排
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
@@ -11,84 +11,487 @@ import Foundation
 @Observable
 /// 书评编辑状态源，负责标题/正文富文本的加载、保存与错误反馈。
 final class ReviewEditorViewModel {
-    let reviewId: Int64
+    let mode: ReviewEditorMode
 
     var draft: ReviewEditorDraft?
-    var title = ""
-    var contentText = NSAttributedString()
+    var title = "" {
+        didSet { scheduleAutoSave() }
+    }
+    var contentText = NSAttributedString() {
+        didSet { scheduleAutoSave() }
+    }
     var activeFormats = Set<RichTextFormat>()
     var isLoading = false
     var isSaving = false
     var errorMessage: String?
+    var pendingRecoveredDraft: ReviewEditorAutoSaveDraft?
+    var lastAutoSaveTime: Int64 = 0
+    var imageQuotaState: NoteImageUploadQuotaState?
+    let imageController: ContentEditorImageController
 
     private let repository: any ContentRepositoryProtocol
+    private let quotaRepository: any NoteImageUploadQuotaRepositoryProtocol
+    private var isPremium: Bool
     private var baselineTitle = ""
     private var baselineContentText = NSAttributedString()
+    private var baselineImageItems: [ContentEditorImageItem] = []
+    private var isHydratingState = false
+    private var autoSaveTask: Task<Void, Never>?
+    private var imageQuotaReservationID = UUID().uuidString
+    private var isImageQuotaReservationBackedByDraft = false
+    private var isStagingImages = false
 
-    /// 注入书评 ID 与内容仓储，初始化编辑页上下文。
-    init(reviewId: Int64, repository: any ContentRepositoryProtocol) {
-        self.reviewId = reviewId
+    /// 注入内容与上传仓储，建立不直接访问数据库、文件系统或网络客户端的编辑上下文。
+    init(
+        mode: ReviewEditorMode,
+        repository: any ContentRepositoryProtocol,
+        s3UploadRepository: any S3UploadRepositoryProtocol,
+        quotaRepository: any NoteImageUploadQuotaRepositoryProtocol,
+        isPremium: Bool
+    ) {
+        self.mode = mode
         self.repository = repository
+        self.quotaRepository = quotaRepository
+        self.isPremium = isPremium
+        let imageController = ContentEditorImageController(
+            repository: s3UploadRepository,
+            uploadPrefix: "review_image"
+        )
+        self.imageController = imageController
+        imageController.setItemsChangedHandler { [weak self] in
+            self?.scheduleAutoSave()
+        }
     }
 
-    var imageURLs: [String] {
-        draft?.imageURLs ?? []
+    /// 兼容既有只传书评主键的编辑入口。
+    convenience init(
+        reviewId: Int64,
+        repository: any ContentRepositoryProtocol,
+        s3UploadRepository: any S3UploadRepositoryProtocol,
+        quotaRepository: any NoteImageUploadQuotaRepositoryProtocol,
+        isPremium: Bool
+    ) {
+        self.init(
+            mode: .edit(reviewID: reviewId),
+            repository: repository,
+            s3UploadRepository: s3UploadRepository,
+            quotaRepository: quotaRepository,
+            isPremium: isPremium
+        )
     }
 
-    /// 标识当前编辑内容是否偏离最近一次加载或保存基线，用于阻止误退出。
+    var navigationTitle: String {
+        switch mode {
+        case .create: "新建书评"
+        case .edit: "编辑书评"
+        }
+    }
+
+    var contextSubtitle: String {
+        switch mode {
+        case .create: "新建书评"
+        case .edit: "编辑书评"
+        }
+    }
+
+    var imageItems: [ContentEditorImageItem] {
+        imageController.items
+    }
+
+    var imageErrorMessage: String? {
+        imageController.errorMessage
+    }
+
+    var availableImageSelectionCount: Int {
+        let componentRemaining = max(0, ContentEditorImageItem.maximumCount - imageItems.count)
+        return min(componentRemaining, imageQuotaState?.remainingCount ?? componentRemaining)
+    }
+
+    var autoSaveDescription: String? {
+        guard lastAutoSaveTime > 0 else { return nil }
+        let date = Date(timeIntervalSince1970: Double(lastAutoSaveTime) / 1_000)
+        return "已自动保存于 \(Self.timeFormatter.string(from: date))"
+    }
+
     var hasUnsavedChanges: Bool {
         guard draft != nil else { return false }
-        return title != baselineTitle || !contentText.isEqual(to: baselineContentText)
+        return title != baselineTitle ||
+            !contentText.isEqual(to: baselineContentText) ||
+            imageItems != baselineImageItems
     }
 
-    /// 加载书评草稿并转换成富文本编辑器可消费的状态。
+    /// 按入口模式加载书评草稿并转换为富文本状态；任务取消后不会覆盖当前页面内容。
     func load() async {
+        guard !isLoading else { return }
         isLoading = true
         errorMessage = nil
         defer { isLoading = false }
 
         do {
-            guard let draft = try await repository.fetchReviewEditorDraft(reviewId: reviewId) else {
+            guard let draft = try await repository.fetchReviewEditorDraft(mode: mode) else {
                 errorMessage = "书评不存在或已删除"
                 return
             }
+            guard !Task.isCancelled else { return }
+            isHydratingState = true
             self.draft = draft
             title = draft.title
             contentText = RichTextBridge.htmlToAttributed(draft.contentHTML)
-            updateBaseline()
+            imageController.loadExistingItems(draft.imageItems)
+            isHydratingState = false
+            captureBaseline()
+
+            let candidate = fetchRecoveredDraftCandidate(
+                sourceBookId: draft.sourceBookId,
+                reviewId: draft.reviewId
+            )
+            if let candidate,
+               candidate.matches(
+                sourceBookId: draft.sourceBookId,
+                reviewId: draft.reviewId
+               ) {
+                pendingRecoveredDraft = candidate
+            }
+            await refreshImageQuota()
         } catch {
+            isHydratingState = false
+            guard !Task.isCancelled else { return }
             errorMessage = "加载失败：\(error.localizedDescription)"
         }
     }
 
-    /// 保存当前书评标题与正文 HTML。
-    func save() async -> Bool {
+    /// 恢复严格匹配的自动草稿，并经图片仓储校验本地缓存后保留可重试项。
+    func restoreRecoveredDraft() async {
+        guard let recoveredDraft = pendingRecoveredDraft,
+              let baseDraft = draft,
+              recoveredDraft.matches(
+                sourceBookId: baseDraft.sourceBookId,
+                reviewId: baseDraft.reviewId
+              ) else {
+            pendingRecoveredDraft = nil
+            return
+        }
+
+        if let reservationID = recoveredDraft.imageQuotaReservationID,
+           !reservationID.isEmpty {
+            imageQuotaReservationID = reservationID
+        }
+        isImageQuotaReservationBackedByDraft = true
+        isHydratingState = true
+        title = recoveredDraft.title
+        contentText = RichTextBridge.htmlToAttributed(recoveredDraft.contentHTML)
+        await imageController.loadRecoveredItems(recoveredDraft.imageItems)
+        lastAutoSaveTime = recoveredDraft.savedTime
+        pendingRecoveredDraft = nil
+        isHydratingState = false
+        await refreshImageQuota()
+    }
+
+    /// 丢弃待恢复草稿并清理其本地暂存图；成功远端 URL 始终只移除草稿引用。
+    func discardRecoveredDraft() async {
+        guard let recoveredDraft = pendingRecoveredDraft else { return }
+        await imageController.discardStagedFiles(in: recoveredDraft.imageItems)
+        repository.deleteReviewEditorAutoSaveDraft(
+            sourceBookId: recoveredDraft.sourceBookId,
+            reviewId: recoveredDraft.reviewId
+        )
+        if let recoveredReservationID = recoveredDraft.imageQuotaReservationID {
+            await quotaRepository.releaseReservation(id: recoveredReservationID)
+        }
+        pendingRecoveredDraft = nil
+        lastAutoSaveTime = 0
+        await refreshImageQuota()
+    }
+
+    /// 在 MainActor 校验并保存标题与正文，成功时返回真实主键；重复提交被前置阻断，任务取消后不再改写页面基线。
+    func save() async -> Int64? {
+        guard !isSaving else { return nil }
         guard var draft else {
             errorMessage = "书评不存在或已删除"
-            return false
+            return nil
+        }
+        guard hasMeaningfulContent else {
+            errorMessage = "请至少填写书评标题或正文"
+            return nil
+        }
+        guard !imageController.hasUploadingImage else {
+            errorMessage = "请等待所有图片上传成功后再保存"
+            return nil
+        }
+        guard !imageController.hasFailedImage else {
+            errorMessage = "仍有图片上传失败，请重试或删除后再保存"
+            return nil
         }
 
         isSaving = true
         errorMessage = nil
         defer { isSaving = false }
 
-        draft.title = title
+        autoSaveTask?.cancel()
+        autoSaveTask = nil
+
+        draft.title = title.trimmingCharacters(in: .whitespacesAndNewlines)
         draft.contentHTML = RichTextBridge.attributedToHtml(contentText)
+        draft.imageItems = imageItems
+        let newImageCount = imageController.newDraftImageCount
 
         do {
-            try await repository.saveReviewEditorDraft(draft)
+            persistAutoSaveDraftIfNeeded()
+            let reviewID = try await repository.saveReviewEditorDraft(draft, mode: mode)
+            await quotaRepository.commitReservation(
+                id: imageQuotaReservationID,
+                savedImageCount: newImageCount,
+                isPremium: isPremium
+            )
+            isImageQuotaReservationBackedByDraft = false
+            imageController.markDraftImagesAsPersisted()
+            draft.imageItems = imageItems
             self.draft = draft
-            updateBaseline()
+            captureBaseline()
+            pendingRecoveredDraft = nil
+            lastAutoSaveTime = 0
+            await refreshImageQuota()
+            return reviewID
+        } catch {
+            guard !Task.isCancelled else { return nil }
+            errorMessage = "保存失败：\(error.localizedDescription)"
+            return nil
+        }
+    }
+
+    /// 清空已经被界面消费的错误，允许后续同文案错误再次触发展示。
+    func clearError() {
+        errorMessage = nil
+    }
+
+    /// 将相册图片交给共享图片控制器暂存并上传，ViewModel 不直接执行文件或网络操作。
+    func stageImages(_ inputs: [(data: Data, fileExtension: String)]) async {
+        guard !inputs.isEmpty, !isStagingImages else { return }
+        isStagingImages = true
+        defer { isStagingImages = false }
+        let componentAcceptedCount = min(
+            inputs.count,
+            max(0, ContentEditorImageItem.maximumCount - imageItems.count)
+        )
+        guard componentAcceptedCount > 0 else {
+            errorMessage = "最多只能添加 \(ContentEditorImageItem.maximumCount) 张图片"
+            return
+        }
+        let reservation = await quotaRepository.reserveImages(
+            id: imageQuotaReservationID,
+            owner: imageQuotaOwner,
+            currentDraftNewImageCount: imageController.newDraftImageCount,
+            requestedCount: componentAcceptedCount,
+            isPremium: isPremium
+        )
+        imageQuotaState = reservation.state
+        let acceptedCount = reservation.acceptedCount
+        guard acceptedCount > 0 else {
+            errorMessage = reservation.state.blockedMessage
+            return
+        }
+        if acceptedCount < inputs.count {
+            errorMessage = acceptedCount < componentAcceptedCount
+                ? "已超出今日额度，保留前 \(acceptedCount) 张。"
+                : "最多只能添加 \(ContentEditorImageItem.maximumCount) 张图片，已保留前 \(acceptedCount) 张"
+        }
+        await imageController.stageImages(Array(inputs.prefix(acceptedCount)))
+        autoSaveTask?.cancel()
+        autoSaveTask = nil
+        if persistAutoSaveDraftIfNeeded() {
+            isImageQuotaReservationBackedByDraft = imageController.newDraftImageCount > 0
+        }
+        await refreshImageQuota()
+    }
+
+    /// 删除指定附图并清理未保存缓存，既有远端对象保持不变。
+    func removeImage(id: String) async {
+        await imageController.removeImage(id: id)
+        await refreshImageQuota()
+    }
+
+    /// 重试一张失败附图的真实上传。
+    func retryImage(id: String) {
+        imageController.retryImage(id: id)
+    }
+
+    /// 更新附图拖拽顺序，供保存事务写入连续 order。
+    func moveImage(sourceID: String, destinationID: String) {
+        imageController.moveImage(sourceID: sourceID, destinationID: destinationID)
+    }
+
+    /// 将 OCR 识别结果追加到书评正文，保留原正文并用换行分隔。
+    func appendRecognizedText(_ text: String) {
+        let normalized = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalized.isEmpty else { return }
+        let mutable = NSMutableAttributedString(attributedString: contentText)
+        if mutable.length > 0 {
+            mutable.append(NSAttributedString(string: "\n"))
+        }
+        mutable.append(NSAttributedString(string: normalized))
+        contentText = mutable
+    }
+
+    /// 放弃编辑时取消图片任务并清理本会话暂存文件。
+    func discardEditingSession() async {
+        autoSaveTask?.cancel()
+        autoSaveTask = nil
+        if let pendingRecoveredDraft {
+            await imageController.discardStagedFiles(in: pendingRecoveredDraft.imageItems)
+        }
+        await imageController.discardEditingSession()
+        deleteCurrentAutoSaveDraft()
+        await quotaRepository.releaseReservation(id: imageQuotaReservationID)
+        isImageQuotaReservationBackedByDraft = false
+        if let recoveredReservationID = pendingRecoveredDraft?.imageQuotaReservationID,
+           recoveredReservationID != imageQuotaReservationID {
+            await quotaRepository.releaseReservation(id: recoveredReservationID)
+        }
+        pendingRecoveredDraft = nil
+        lastAutoSaveTime = 0
+    }
+
+    /// 保留草稿退出时停止上传并立即落下最新快照，不清理仍有效的本地缓存。
+    func preserveDraftForExit() -> Bool {
+        autoSaveTask?.cancel()
+        autoSaveTask = nil
+        imageController.pauseUploadsPreservingStagedFiles()
+        autoSaveTask?.cancel()
+        autoSaveTask = nil
+        return persistAutoSaveDraftIfNeeded()
+    }
+
+    /// 清空已被界面消费的图片错误。
+    func clearImageError() {
+        imageController.clearError()
+    }
+
+    /// 图片入口被额度前置阻断时复用当前快照生成标准系统弹窗文案。
+    func showImageQuotaBlockedMessage() {
+        if let imageQuotaState, imageQuotaState.isBlocked {
+            errorMessage = imageQuotaState.blockedMessage
+        } else {
+            errorMessage = "最多只能添加 \(ContentEditorImageItem.maximumCount) 张图片"
+        }
+    }
+
+    /// 会员状态变化时立即重算选择额度；MainActor 保证状态刷新不会与编辑器选择回写交错。
+    func updatePremiumStatus(_ isPremium: Bool) async {
+        self.isPremium = isPremium
+        await refreshImageQuota()
+    }
+
+    private var hasMeaningfulContent: Bool {
+        !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ||
+            !contentText.string.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    /// 通过额度仓储读取当前自然日状态；草稿预占只统计显式 newInDraft 图片。
+    private func refreshImageQuota() async {
+        imageQuotaState = await quotaRepository.reconcileReservation(
+            id: imageQuotaReservationID,
+            owner: imageQuotaOwner,
+            draftNewImageCount: imageController.newDraftImageCount,
+            isPersistedDraft: isImageQuotaReservationBackedByDraft,
+            isPremium: isPremium
+        )
+    }
+
+    /// 额度 owner 与书评自动草稿 `(book_id, review_id)` 身份一致，用于恢复时清理同 owner 旧 ticket。
+    private var imageQuotaOwner: NoteImageUploadReservationOwner {
+        if let draft {
+            return .review(bookID: draft.sourceBookId, reviewID: draft.reviewId)
+        }
+        switch mode {
+        case .create(let bookID):
+            return .review(bookID: bookID, reviewID: 0)
+        case .edit(let reviewID):
+            return .review(bookID: 0, reviewID: reviewID)
+        }
+    }
+
+    /// 复刻 Android 优先精确、再兼容查询新建草稿的查找顺序；最终由调用方严格校验身份。
+    private func fetchRecoveredDraftCandidate(
+        sourceBookId: Int64,
+        reviewId: Int64
+    ) -> ReviewEditorAutoSaveDraft? {
+        if let exactDraft = repository.fetchReviewEditorAutoSaveDraft(
+            sourceBookId: sourceBookId,
+            reviewId: reviewId
+        ) {
+            return exactDraft
+        }
+        guard reviewId > 0 else { return nil }
+        return repository.fetchReviewEditorAutoSaveDraft(
+            sourceBookId: sourceBookId,
+            reviewId: 0
+        )
+    }
+
+    /// 标题、富文本或任一附件状态变化后重置两秒任务；取消时不会写入过期快照。
+    private func scheduleAutoSave() {
+        guard !isHydratingState, draft != nil, !isSaving else { return }
+        autoSaveTask?.cancel()
+        autoSaveTask = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(2))
+            guard !Task.isCancelled, let self else { return }
+            self.persistAutoSaveDraftIfNeeded()
+            self.autoSaveTask = nil
+        }
+    }
+
+    /// 只为相对数据库基线发生变化的状态写草稿；空白且未变化的新建页不会产生恢复噪音。
+    @discardableResult
+    private func persistAutoSaveDraftIfNeeded() -> Bool {
+        guard let draft else { return false }
+        guard hasUnsavedChanges else {
+            deleteCurrentAutoSaveDraft()
+            lastAutoSaveTime = 0
+            return true
+        }
+        let timestamp = Self.currentTimestampMillis
+        let autoSaveDraft = ReviewEditorAutoSaveDraft(
+            sourceBookId: draft.sourceBookId,
+            reviewId: draft.reviewId,
+            title: title,
+            contentHTML: RichTextBridge.attributedToHtml(contentText),
+            imageItems: imageItems,
+            savedTime: timestamp,
+            imageQuotaReservationID: imageQuotaReservationID
+        )
+        do {
+            try repository.saveReviewEditorAutoSaveDraft(autoSaveDraft)
+            lastAutoSaveTime = timestamp
             return true
         } catch {
-            errorMessage = "保存失败：\(error.localizedDescription)"
+            errorMessage = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
             return false
         }
     }
 
-    /// 将当前表单状态记录为已保存基线。
-    private func updateBaseline() {
+    /// 删除当前模式的精确自动草稿键，不影响同一本书的其他新建或编辑草稿。
+    private func deleteCurrentAutoSaveDraft() {
+        guard let draft else { return }
+        repository.deleteReviewEditorAutoSaveDraft(
+            sourceBookId: draft.sourceBookId,
+            reviewId: draft.reviewId
+        )
+    }
+
+    /// 复制当前富文本快照作为脏状态基线，避免后续可变文本引用互相影响。
+    private func captureBaseline() {
         baselineTitle = title
         baselineContentText = contentText.copy() as? NSAttributedString ?? NSAttributedString()
+        baselineImageItems = imageItems
     }
+
+    nonisolated private static var currentTimestampMillis: Int64 {
+        Int64(Date().timeIntervalSince1970 * 1_000)
+    }
+
+    nonisolated private static let timeFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "HH:mm"
+        return formatter
+    }()
 }

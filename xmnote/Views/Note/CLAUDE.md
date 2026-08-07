@@ -9,6 +9,7 @@
 - `NoteCollectionView.swift`: 笔记分类切换与内容分发
 - `NoteTagsView.swift`: 标签分组网格展示
 - `NoteDetailView.swift`: 笔记详情阅读与编辑
+- `NoteExcerptListView.swift`: 书摘二级列表（底部系统搜索、上下文菜单、分享/删除与批量操作）
 - `NoteReviewPlaceholderView.swift`: 书评空态占位
 - `NoteReviewView.swift`: 书摘回顾分页卡组主界面
 - `Components/NoteReviewCardView.swift`: 书摘回顾卡片页面私有内容视图

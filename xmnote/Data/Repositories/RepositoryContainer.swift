@@ -3,7 +3,7 @@ import Observation
 
 /**
  * [INPUT]: 依赖 DatabaseManager 提供数据库实例，依赖各 Repository 实现完成组装
- * [OUTPUT]: 对外提供 RepositoryContainer，集中暴露微信读书、全局搜索、书籍录入、S3、标签、阅读首页、阅读计时、阅读日历、单书阅读详情与外部应用集成仓储
+ * [OUTPUT]: 对外提供 RepositoryContainer，集中暴露目录管理、搜索录入、AI、S3、图片额度、备份、标签、阅读首页、阅读计时、阅读日历、单书阅读详情与外部应用集成仓储
  * [POS]: App 级依赖注入容器，被视图层通过 Environment 获取并创建 ViewModel
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -14,6 +14,8 @@ final class RepositoryContainer {
     let bookRepository: any BookRepositoryProtocol
     let noteRepository: any NoteRepositoryProtocol
     let contentRepository: any ContentRepositoryProtocol
+    let aiRepository: any AIRepositoryProtocol
+    let chapterManagementRepository: any ChapterManagementRepositoryProtocol
     let globalSearchRepository: any GlobalSearchRepositoryProtocol
     let bookSearchRepository: any BookSearchRepositoryProtocol
     let bookEditorRepository: any BookEditorRepositoryProtocol
@@ -22,6 +24,8 @@ final class RepositoryContainer {
     let backupRepository: any BackupRepositoryProtocol
     let s3ConfigRepository: any S3ConfigRepositoryProtocol
     let s3UploadRepository: any S3UploadRepositoryProtocol
+    let appBackendConfigRepository: any AppBackendConfigRepositoryProtocol
+    let noteImageUploadQuotaRepository: any NoteImageUploadQuotaRepositoryProtocol
     let tagManagementRepository: any TagManagementRepositoryProtocol
     let externalAppIntegrationRepository: any ExternalAppIntegrationRepositoryProtocol
     let statisticsRepository: any StatisticsRepositoryProtocol
@@ -43,20 +47,36 @@ final class RepositoryContainer {
         )
         let s3ConfigRepository = S3ConfigRepository(databaseManager: databaseManager)
         let s3UploadRepository = S3UploadRepository(configRepository: s3ConfigRepository)
+        let appBackendConfigRepository = AppBackendConfigRepository()
+        let bookRemoteSearchService = BookRemoteSearchService()
+        let noteImageUploadQuotaRepository = NoteImageUploadQuotaRepository(
+            configRepository: s3ConfigRepository,
+            appBackendConfigRepository: appBackendConfigRepository
+        )
         let coverImageLoader = NukeCoverImageLoader()
         let bookSearchRepository = BookSearchRepository()
         let defaultOCRPreferences = OCRRepository.androidAlignedDebugDefaults
 
-        self.bookRepository = BookRepository(databaseManager: databaseManager)
-        self.noteRepository = NoteRepository(
+        let noteRepository = NoteRepository(
             databaseManager: databaseManager,
             s3UploadRepository: s3UploadRepository
         )
+        self.bookRepository = BookRepository(databaseManager: databaseManager)
+        self.noteRepository = noteRepository
         self.contentRepository = ContentRepository(databaseManager: databaseManager)
+        self.aiRepository = AIRepository(
+            databaseManager: databaseManager,
+            noteRepository: noteRepository
+        )
+        self.chapterManagementRepository = ChapterManagementRepository(
+            databaseManager: databaseManager,
+            remoteSearchService: bookRemoteSearchService,
+            appBackendConfigRepository: appBackendConfigRepository
+        )
         self.globalSearchRepository = GlobalSearchRepository(databaseManager: databaseManager)
         self.tagManagementRepository = TagManagementRepository(databaseManager: databaseManager)
         self.externalAppIntegrationRepository = ExternalAppIntegrationRepository(databaseManager: databaseManager)
-        self.bookSearchRepository = bookSearchRepository
+        self.bookSearchRepository = BookSearchRepository(service: bookRemoteSearchService)
         self.bookEditorRepository = BookEditorRepository(
             databaseManager: databaseManager,
             s3UploadRepository: s3UploadRepository,
@@ -74,6 +94,8 @@ final class RepositoryContainer {
         )
         self.s3ConfigRepository = s3ConfigRepository
         self.s3UploadRepository = s3UploadRepository
+        self.appBackendConfigRepository = appBackendConfigRepository
+        self.noteImageUploadQuotaRepository = noteImageUploadQuotaRepository
         self.statisticsRepository = StatisticsRepository(databaseManager: databaseManager)
         self.readCalendarRepository = ReadCalendarRepository(databaseManager: databaseManager)
         self.bookReadingDetailRepository = BookReadingDetailRepository(databaseManager: databaseManager)

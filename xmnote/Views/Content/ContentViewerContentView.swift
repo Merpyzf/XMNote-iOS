@@ -1,6 +1,6 @@
 /**
- * [INPUT]: 依赖内容分页 Props 快照、加载/刷新/切页回调与 DesignTokens 视觉令牌
- * [OUTPUT]: 对外提供 ContentViewerContentView，承接书摘/书评/相关内容的统一横向分页与单页纵向滚动
+ * [INPUT]: 依赖内容分页 Props 快照、加载/刷新/切页/选区 AI 回调与 DesignTokens 视觉令牌
+ * [OUTPUT]: 对外提供 ContentViewerContentView，承接书摘/书评/相关内容的统一横向分页、单页纵向滚动与选词入口
  * [POS]: Content 模块通用内容查看业务内容壳层，对齐阅读日历与书摘查看的自建 paging 架构
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -38,6 +38,7 @@ struct ContentViewerContentView: View {
     let pageStateProvider: (ContentViewerItemID) -> Props.PageState
     let onLoadDetail: @MainActor @Sendable (ContentViewerItemID) async -> Void
     let onRefreshDetail: @MainActor @Sendable (ContentViewerItemID) async -> Void
+    let onAISelection: @MainActor @Sendable (AITextLookupInput) -> Void
 
     var body: some View {
         LoadPhaseHost(
@@ -93,7 +94,10 @@ private extension ContentViewerContentView {
             ContentViewerPageView(
                 state: pageStateProvider(itemID),
                 presentationStyle: presentationStyle,
-                bottomChromeMetrics: bottomChromeMetrics
+                bottomChromeMetrics: bottomChromeMetrics,
+                onAISelection: { @MainActor @Sendable input in
+                    onAISelection(input)
+                }
             )
         }
     }
@@ -123,6 +127,7 @@ private struct ContentViewerPageView: View {
     let state: ContentViewerContentView.Props.PageState
     let presentationStyle: ContentViewerPresentationStyle
     let bottomChromeMetrics: ImmersiveBottomChromeMetrics
+    let onAISelection: @MainActor @Sendable (AITextLookupInput) -> Void
 
     var body: some View {
         let readableTailBuffer = max(Spacing.base, bottomChromeMetrics.readableInset)
@@ -155,11 +160,11 @@ private struct ContentViewerPageView: View {
     private func detailBody(_ detail: ContentViewerDetail) -> some View {
         switch detail {
         case .note(let note):
-            NoteContentDetailBody(detail: note)
+            NoteContentDetailBody(detail: note, onAISelection: onAISelection)
         case .review(let review):
-            ReviewContentDetailBody(detail: review)
+            ReviewContentDetailBody(detail: review, onAISelection: onAISelection)
         case .relevant(let relevant):
-            RelevantContentDetailBody(detail: relevant)
+            RelevantContentDetailBody(detail: relevant, onAISelection: onAISelection)
         }
     }
 }

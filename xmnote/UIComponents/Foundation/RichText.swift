@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 RichTextEditor/HTMLParser（HTML→NSAttributedString）与 RichTextLayoutManager（引用块/列表绘制）
- * [OUTPUT]: 对外提供 RichText（只读 HTML 富文本展示组件，支持 maxLines 截断、文本对齐与截断状态回调）
+ * [OUTPUT]: 对外提供 RichText（只读 HTML 富文本展示组件，支持 maxLines 截断、文本对齐、截断回调与可选选区菜单动作）
  * [POS]: UIComponents/Foundation 的跨模块复用展示组件，供时间线卡片与未来笔记预览等场景使用
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -107,6 +107,10 @@ struct RichText: UIViewRepresentable {
     var maxLines: Int = 0
     /// 截断状态变更回调，仅在 maxLines > 0 时有意义
     var onTruncationChanged: ((Bool) -> Void)?
+    /// 可选的选区菜单动作标题；与回调同时提供时追加到系统复制/查询菜单。
+    var selectionActionTitle: String?
+    /// 用户确认自定义选区菜单动作后返回纯文本，不改变原富文本内容。
+    var onSelectionAction: ((String) -> Void)?
 
     /// 创建只读 `UITextView` 和自定义 layout manager，承接完整富文本展示语义。
     func makeUIView(context: Context) -> UITextView {
@@ -126,10 +130,12 @@ struct RichText: UIViewRepresentable {
 
         let textView = UITextView(frame: CGRect.zero, textContainer: textContainer)
         textView.isEditable = false
+        textView.isSelectable = true
         textView.isScrollEnabled = false
         textView.textContainerInset = UIEdgeInsets.zero
         textView.textContainer.lineFragmentPadding = 0
         textView.backgroundColor = UIColor.clear
+        textView.delegate = context.coordinator
         textView.setContentCompressionResistancePriority(UILayoutPriority.required, for: NSLayoutConstraint.Axis.vertical)
         textView.setContentHuggingPriority(UILayoutPriority.required, for: NSLayoutConstraint.Axis.vertical)
         return textView
@@ -137,6 +143,7 @@ struct RichText: UIViewRepresentable {
 
     /// 仅在内容签名变化时回写富文本，避免列表滚动时每次刷新都重建 `NSAttributedString`。
     func updateUIView(_ textView: UITextView, context: Context) {
+        context.coordinator.parent = self
         let traitCollection = textView.traitCollection
         let contentKey = Self.contentCacheKey(
             html: html,
@@ -236,14 +243,49 @@ struct RichText: UIViewRepresentable {
     }
 
     /// 创建测量过程使用的本地缓存协调器，避免同一轮布局里重复命中共享缓存。
-    func makeCoordinator() -> Coordinator { Coordinator() }
+    func makeCoordinator() -> Coordinator { Coordinator(parent: self) }
 
     /// Coordinator 保存当前视图实例最近一次内容与布局命中结果，缩小单实例重复计算范围。
-    final class Coordinator {
+    final class Coordinator: NSObject, UITextViewDelegate {
+        var parent: RichText
         var lastContentKey: String = ""
         var lastLayoutKey: String = ""
         var lastLayoutSnapshot: RichTextLayoutSnapshot?
         var lastReportedTruncation: Bool?
+
+        init(parent: RichText) {
+            self.parent = parent
+        }
+
+        /// 在系统文本编辑菜单中追加业务动作；未配置回调时完整保留系统建议动作。
+        func textView(
+            _ textView: UITextView,
+            editMenuForTextIn range: NSRange,
+            suggestedActions: [UIMenuElement]
+        ) -> UIMenu? {
+            guard range.length > 0,
+                  NSMaxRange(range) <= textView.textStorage.length,
+                  let title = parent.selectionActionTitle,
+                  let callback = parent.onSelectionAction else {
+                return UIMenu(children: suggestedActions)
+            }
+
+            let selectedText = textView.textStorage
+                .attributedSubstring(from: range)
+                .string
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !selectedText.isEmpty else {
+                return UIMenu(children: suggestedActions)
+            }
+
+            let action = UIAction(
+                title: title,
+                image: UIImage(systemName: "sparkles")
+            ) { _ in
+                callback(selectedText)
+            }
+            return UIMenu(children: [action] + suggestedActions)
+        }
     }
 
     private var lineBreakMode: NSLineBreakMode {

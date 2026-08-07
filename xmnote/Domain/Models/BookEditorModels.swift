@@ -79,10 +79,11 @@ enum BookEntryReadingStatus: Int64, CaseIterable, Identifiable, Hashable, Sendab
     }
 }
 
-/// 书籍录入页模式，区分搜索/手动新增与既有书籍编辑两条保存路径。
+/// 书籍录入页模式，区分新增、有效书编辑与保持引用占位状态的相关书资料编辑。
 enum BookEditorMode: Hashable, Sendable {
     case create(seed: BookEditorSeed?)
     case edit(bookId: Int64)
+    case editRelatedPlaceholder(bookId: Int64, sourceBookId: Int64)
 }
 
 /// 录入页可复用的命名选项，统一表示来源/分组/标签。
@@ -164,6 +165,7 @@ enum BookEditorError: LocalizedError {
     case emptyTitle
     case duplicateBook
     case bookNotFound
+    case relatedPlaceholderNotFound
 
     var errorDescription: String? {
         switch self {
@@ -173,6 +175,8 @@ enum BookEditorError: LocalizedError {
             return "该书已存在"
         case .bookNotFound:
             return "书籍不存在或已删除"
+        case .relatedPlaceholderNotFound:
+            return "相关书籍不存在或已失去有效引用"
         }
     }
 }

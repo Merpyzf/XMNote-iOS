@@ -68,7 +68,12 @@ struct PersonalView: View {
             TopSwitcher(title: "我的") {
                 TopBarActionPill {
                     NavigationLink(value: PersonalRoute.settings) {
-                        TopBarActionIcon(systemName: "gearshape", hitShape: .rectangle)
+                        TopBarActionIcon(
+                            systemName: "gearshape",
+                            iconSize: 14,
+                            foregroundColor: Color.iconPrimary.opacity(0.88),
+                            hitShape: .rectangle
+                        )
                     }
                     .topBarActionPillSegmentStyle(true)
                 } trailing: {
@@ -143,11 +148,8 @@ extension PersonalView {
             settingsRow("square.and.arrow.down", "数据导入", route: .dataImport)
             settingsRow("externaldrive", "数据备份", route: .dataBackup)
             settingsRow("square.and.arrow.up.on.square", "批量导出", route: .batchExport)
-            settingsRow("link", "API 集成", route: .apiIntegration,
-                        isLast: !shouldShowAIConfiguration)
-            if shouldShowAIConfiguration {
-                settingsRow("brain", "AI 配置", route: .aiConfiguration, isLast: true)
-            }
+            settingsRow("link", "API 集成", route: .apiIntegration)
+            settingsRow("brain", "AI 配置", route: .aiConfiguration, isLast: true)
         }
     }
 

@@ -1548,6 +1548,7 @@ nonisolated struct BookDetail: Identifiable, Sendable {
     let author: String
     let cover: String
     let press: String
+    let score: Int64
     let noteCount: Int
     let readStatusName: String
     let summary: String
@@ -1564,6 +1565,7 @@ nonisolated struct BookDetail: Identifiable, Sendable {
         author: String,
         cover: String,
         press: String,
+        score: Int64,
         noteCount: Int,
         readStatusName: String,
         summary: String,
@@ -1578,6 +1580,7 @@ nonisolated struct BookDetail: Identifiable, Sendable {
         self.author = author
         self.cover = cover
         self.press = press
+        self.score = min(max(score, 0), 50)
         self.noteCount = noteCount
         self.readStatusName = readStatusName
         self.summary = summary

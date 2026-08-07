@@ -752,7 +752,7 @@ private struct BookReadingDetailShareSheet: View {
             set: { if !$0 { discardGeneratedFile() } }
         )) {
             if let generatedURL {
-                ActivityShareSheet(activityItems: [generatedURL])
+                XMActivityShareSheet(activityItems: [generatedURL])
             }
         }
         .onDisappear { discardGeneratedFile() }

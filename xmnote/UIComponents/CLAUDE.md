@@ -8,6 +8,8 @@
 - `SurfaceComponents.swift`: CardContainer（圆角/描边可配置）、EmptyStateView、HomeTopHeaderGradient 通用容器组件
 - `HighlightColorPicker.swift`: 高亮 ARGB 色值网格选择组件
 - `XMBookCover.swift`: 统一书籍封面组件（固定宽高比 0.7 + `.fill` Crop 裁切 + 占位图 + 可配边框，支持 responsive/fixedWidth/fixedHeight/fixedSize 四种尺寸模式）
+- `XMActivityShareSheet.swift`: 系统分享会话 payload 与 `UIActivityViewController` 页面级 Sheet 桥接
+- `XMSystemAlert.swift`: UIKit 系统中心弹窗桥接（descriptor、轻输入、菜单/转场占用时的可取消呈现重试）
 - `XMYearMonthPickerSheet.swift`: 项目级年月/年份选择 Sheet（固定标题栏、年月/年份两种模式、动态字体自适应）
 - `XMRemoteImage.swift`: 统一远程图片组件（静态图 + GIF 探测/降级 + 占位）
 - `XMGIFImageView.swift`: GIF 动画承载桥接组件（基于 Gifu）

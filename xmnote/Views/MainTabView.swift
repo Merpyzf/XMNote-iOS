@@ -714,8 +714,7 @@ struct MainTabView: View {
             ContentViewerView(
                 source: source,
                 initialItemID: initialItemID,
-                keyword: keyword,
-                navigationContext: navigationContext
+                keyword: keyword
             )
         case .readCalendar(let initialDate):
             ReadCalendarView(
@@ -1057,7 +1056,13 @@ struct MainTabView: View {
                     request: .book(bookId),
                     host: .mainTab,
                     origin: .tab(selectedTab)
-                )
+                ),
+                onOpenContentRoute: { route in
+                    append(route, to: selectedTab)
+                },
+                onOpenBookRoute: { route in
+                    append(route, to: selectedTab)
+                }
             )
         case .readingDetail(let bookId):
             BookReadingDetailView(
@@ -1066,8 +1071,17 @@ struct MainTabView: View {
                     append(route, to: selectedTab)
                 }
             )
+        case .chapterManager(let bookID, let focusChapterID):
+            ChapterManagerView(bookID: bookID, focusChapterID: focusChapterID)
         case .edit(let bookId):
             BookEditorView(mode: .edit(bookId: bookId))
+        case .editRelatedPlaceholder(let bookId, let sourceBookId):
+            BookEditorView(
+                mode: .editRelatedPlaceholder(
+                    bookId: bookId,
+                    sourceBookId: sourceBookId
+                )
+            )
         case .add:
             BookSearchView()
         case .create(let seed):
@@ -1103,9 +1117,77 @@ struct MainTabView: View {
             NoteEditorView(mode: .edit(noteId: noteId))
         case .create(let seed):
             NoteEditorView(mode: .create, seed: seed)
-        case .notesByTag:
-            Text("标签笔记")
+        case .noteExcerpts(let scope):
+            noteExcerptListDestination(
+                context: NoteExcerptListContext(scope: scope, displayTitle: "书摘")
+            )
+        case .noteExcerptList(let context):
+            noteExcerptListDestination(context: context)
+        case .chapterNotes(let bookID, let chapterID, let includeDescendants):
+            chapterNotesDestination(
+                context: ChapterNoteListContext(
+                    bookID: bookID,
+                    chapterID: chapterID,
+                    includeDescendants: includeDescendants,
+                    displayTitle: "章节书摘"
+                )
+            )
+        case .chapterNoteList(let context):
+            chapterNotesDestination(context: context)
+        case .mergeNotes(let bookID, let noteIDs):
+            NoteMergeView(bookID: bookID, noteIDs: noteIDs) { source, itemID in
+                append(.contentViewer(source: source, initialItemID: itemID), to: selectedTab)
+            }
+        case .relatedCategory(let scope):
+            relatedCategoryDestination(scope: scope)
+        case .relatedCategoryManagement:
+            relatedCategoryDestination(scope: .all)
+        case .tagManagement:
+            TagManagementView()
+        case .notesByTag(let tagId):
+            noteExcerptListDestination(
+                context: NoteExcerptListContext(
+                    scope: NoteExcerptScope(legacyTagID: tagId),
+                    displayTitle: "书摘"
+                )
+            )
         }
+    }
+
+    /// 构造统一书摘列表目的地，并把查看器及后续笔记路由留在当前 Tab。
+    private func noteExcerptListDestination(context: NoteExcerptListContext) -> some View {
+        NoteExcerptListView(
+            context: context,
+            repository: repositories.noteRepository,
+            externalAppIntegrationRepository: repositories.externalAppIntegrationRepository,
+            onOpenViewer: { source, itemID in
+                append(.contentViewer(source: source, initialItemID: itemID), to: selectedTab)
+            },
+            onOpenNoteRoute: { append($0, to: selectedTab) }
+        )
+    }
+
+    /// 构造章节书摘目的地，复用当前 Tab 的 Viewer 与笔记导航现场。
+    private func chapterNotesDestination(context: ChapterNoteListContext) -> some View {
+        ChapterNotesView(
+            context: context,
+            onOpenViewer: { source, itemID in
+                append(.contentViewer(source: source, initialItemID: itemID), to: selectedTab)
+            },
+            onOpenNoteRoute: { append($0, to: selectedTab) }
+        )
+    }
+
+    /// 构造相关分类列表，统一路由普通内容、书籍与通用查看器。
+    private func relatedCategoryDestination(scope: RelatedCategoryScope) -> some View {
+        RelatedCategoryListView(
+            scope: scope,
+            onOpenViewer: { source, itemID in
+                append(.contentViewer(source: source, initialItemID: itemID), to: selectedTab)
+            },
+            onOpenContentRoute: { append($0, to: selectedTab) },
+            onOpenBookRoute: { append($0, to: selectedTab) }
+        )
     }
 
     // MARK: - Content Destinations
@@ -1125,8 +1207,12 @@ struct MainTabView: View {
             RelevantDetailView(contentId: contentId)
         case .reviewEditor(let reviewId):
             ReviewEditorView(reviewId: reviewId)
+        case .reviewEditorCreate(let bookId):
+            ReviewEditorView(bookId: bookId)
         case .relevantEditor(let contentId):
             RelevantEditorView(contentId: contentId)
+        case .relevantEditorCreate(let bookId, let categoryId):
+            RelevantEditorView(bookId: bookId, categoryId: categoryId)
         }
     }
 
@@ -1164,9 +1250,9 @@ struct MainTabView: View {
         case .desktopWeb:
             DesktopWebView()
         case .apiIntegration:
-            Text("API 集成")
+            ApiIntegrationView()
         case .aiConfiguration:
-            Text("AI 配置")
+            AIConfigurationView()
         case .tagManagement:
             TagManagementView()
         case .groupManagement:

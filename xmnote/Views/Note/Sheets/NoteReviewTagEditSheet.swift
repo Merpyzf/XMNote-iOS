@@ -9,7 +9,7 @@ import SwiftUI
 
 /// 回顾卡片标签编辑 Sheet，负责本地草稿选择、新建标签与保存反馈。
 struct NoteReviewTagEditSheet: View {
-    let item: NoteReviewCardItem
+    let contextTitle: String
     let snapshot: NoteReviewTagEditSnapshot
     let onCreateTag: (String) async -> NoteEditorTagOption?
     let onSave: ([NoteEditorTagOption]) async -> Bool
@@ -28,7 +28,23 @@ struct NoteReviewTagEditSheet: View {
         onCreateTag: @escaping (String) async -> NoteEditorTagOption?,
         onSave: @escaping ([NoteEditorTagOption]) async -> Bool
     ) {
-        self.item = item
+        self.contextTitle = item.bookTitle.isEmpty ? "当前书摘" : item.bookTitle
+        self.snapshot = snapshot
+        self.onCreateTag = onCreateTag
+        self.onSave = onSave
+        _availableTags = State(initialValue: snapshot.availableTags)
+        _selectedTags = State(initialValue: snapshot.selectedTags)
+    }
+
+    /// 供通用书摘详情页复用相同标签编辑交互，不要求构造回顾卡片展示模型。
+    init(
+        contextTitle: String,
+        snapshot: NoteReviewTagEditSnapshot,
+        onCreateTag: @escaping (String) async -> NoteEditorTagOption?,
+        onSave: @escaping ([NoteEditorTagOption]) async -> Bool
+    ) {
+        let normalizedTitle = contextTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        self.contextTitle = normalizedTitle.isEmpty ? "当前书摘" : normalizedTitle
         self.snapshot = snapshot
         self.onCreateTag = onCreateTag
         self.onSave = onSave
@@ -117,7 +133,10 @@ struct NoteReviewTagEditSheet: View {
                         }
                         .buttonStyle(.plain)
                         .disabled(isSaving || isCreating)
-                        .accessibilityLabel("\(tag.title)，\(isSelected(tag) ? "已选择" : "未选择")")
+                        .accessibilityElement(children: .ignore)
+                        .accessibilityLabel(tag.title)
+                        .accessibilityValue(isSelected(tag) ? "已选择" : "未选择")
+                        .accessibilityAddTraits(isSelected(tag) ? .isSelected : [])
                     }
                 }
             }
@@ -157,9 +176,8 @@ struct NoteReviewTagEditSheet: View {
     }
 
     private var subtitle: String {
-        let title = item.bookTitle.isEmpty ? "当前书摘" : item.bookTitle
-        guard !selectedTags.isEmpty else { return "\(title) · 未选择标签" }
-        return "\(title) · \(selectedTags.count) 个标签"
+        guard !selectedTags.isEmpty else { return "\(contextTitle) · 未选择标签" }
+        return "\(contextTitle) · \(selectedTags.count) 个标签"
     }
 
     private var trimmedInput: String {

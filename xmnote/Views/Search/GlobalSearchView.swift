@@ -912,7 +912,7 @@ private struct GlobalSearchIdeaBlock: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(Spacing.cozy)
         .background(
-            Color.controlFillSecondary.opacity(0.46),
+            Color.surfaceAnnotation,
             in: RoundedRectangle(cornerRadius: CornerRadius.inlaySmall, style: .continuous)
         )
     }

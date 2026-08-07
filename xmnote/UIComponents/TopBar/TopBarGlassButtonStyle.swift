@@ -1,16 +1,22 @@
 /**
- * [INPUT]: 依赖 SwiftUI buttonStyle、系统 Material、动态无障碍与 DesignTokens 语义色能力
+ * [INPUT]: 依赖 SwiftUI buttonStyle 与 iOS 26 原生 Liquid Glass 能力
  * [OUTPUT]: 对外提供 View.topBarActionButtonStyle、topBarGlassButtonStyle 与 topBarGlassCapsuleStyle 扩展
- * [POS]: UIComponents/TopBar 的交互样式扩展，为顶部栏圆形按钮提供模糊材质底与轻量按压反馈，并保留胶囊操作组玻璃样式
+ * [POS]: UIComponents/TopBar 的交互样式扩展，为顶部栏圆形按钮提供统一原生玻璃外观，并保留胶囊操作组玻璃样式
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
 import SwiftUI
 
 extension View {
-    /// 为顶部圆形 action 附加轻量模糊材质底与统一按压反馈。
+    /// 为顶部圆形 action 附加 36pt 原生交互玻璃，同时保留 44pt 点击热区。
     func topBarActionButtonStyle(_ enabled: Bool, showsBackground: Bool = true) -> some View {
-        buttonStyle(TopBarActionPressFeedbackStyle(isEnabled: enabled, showsBackground: showsBackground))
+        buttonStyle(.plain)
+            .modifier(
+                TopBarStandaloneGlassModifier(
+                    isEnabled: enabled,
+                    showsBackground: showsBackground
+                )
+            )
     }
 
     /// 为顶部圆形 action 附加统一样式，保留旧命名以兼容现有调用点。
@@ -35,65 +41,28 @@ extension View {
     }
 }
 
-/// 顶部 action icon 的轻量材质底与按压反馈，只在交互瞬间呈现中性反馈层。
-private struct TopBarActionPressFeedbackStyle: ButtonStyle {
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+/// 顶部独立 action 的原生玻璃承载层，视觉尺寸与触控尺寸彼此独立。
+private struct TopBarStandaloneGlassModifier: ViewModifier {
     let isEnabled: Bool
     let showsBackground: Bool
 
     private enum Metrics {
-        static let visualSize: CGFloat = 32
-        static let borderWidth: CGFloat = 1
-        static let whiteWashOpacity = 0.32
-        static let borderOpacity = 0.30
-        static let pressedBorderOpacity = 0.36
-        static let innerHighlightOpacity = 0.28
-        static let pressedScale = 0.95
-        static let pressedNeutralOpacity = 0.08
+        static let visualSize: CGFloat = 36
+        static let hitSize: CGFloat = Spacing.actionReserved
     }
 
-    func makeBody(configuration: Configuration) -> some View {
-        let isPressed = isEnabled && configuration.isPressed
-
-        configuration.label
-            .background {
-                if showsBackground || isPressed {
-                    Circle()
-                        .fill(.regularMaterial)
-                        .overlay {
-                            Circle()
-                                .fill(Color.white.opacity(Metrics.whiteWashOpacity))
-                        }
-                        .overlay {
-                            Circle()
-                                .fill(
-                                    LinearGradient(
-                                        colors: [
-                                            Color.white.opacity(Metrics.innerHighlightOpacity),
-                                            Color.white.opacity(0)
-                                        ],
-                                        startPoint: .topLeading,
-                                        endPoint: .bottomTrailing
-                                    )
-                                )
-                        }
-                        .overlay {
-                            if isPressed {
-                                Circle()
-                                    .fill(Color.textPrimary.opacity(Metrics.pressedNeutralOpacity))
-                            }
-                        }
-                        .overlay {
-                            Circle()
-                                .stroke(
-                                    Color.white.opacity(isPressed ? Metrics.pressedBorderOpacity : Metrics.borderOpacity),
-                                    lineWidth: Metrics.borderWidth
-                                )
-                        }
-                        .frame(width: Metrics.visualSize, height: Metrics.visualSize)
-                }
-            }
-            .scaleEffect(!reduceMotion && isPressed ? Metrics.pressedScale : 1)
-            .animation(reduceMotion ? nil : .snappy(duration: 0.12), value: configuration.isPressed)
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if showsBackground {
+            content
+                .frame(width: Metrics.visualSize, height: Metrics.visualSize)
+                .glassEffect(.clear.interactive(isEnabled), in: .circle)
+                .frame(width: Metrics.hitSize, height: Metrics.hitSize)
+                .contentShape(Circle())
+        } else {
+            content
+                .frame(width: Metrics.hitSize, height: Metrics.hitSize)
+                .contentShape(Circle())
+        }
     }
 }

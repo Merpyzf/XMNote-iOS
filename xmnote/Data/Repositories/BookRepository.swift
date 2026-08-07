@@ -3,7 +3,7 @@ import GRDB
 
 /**
  * [INPUT]: 依赖 AppDatabase 提供本地数据库连接，依赖 ObservationStream 提供观察流桥接
- * [OUTPUT]: 对外提供 BookRepository（BookRepositoryProtocol 的 GRDB 实现，含书架列表读写、书架/书单显示设置、分组移入移出、书单加入、书单书籍元信息编辑、批量编辑、删除与重命名管理）
+ * [OUTPUT]: 对外提供 BookRepository（BookRepositoryProtocol 的 GRDB 实现，含书架列表读写、单本评分、书架/书单显示设置、分组移入移出、书单加入、书单书籍元信息编辑、批量编辑、删除与重命名管理）
  * [POS]: Data 层书籍仓储实现，统一封装书架列表/详情/书摘数据读取、默认书架分组预览排序与默认书架排序置顶写入
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -547,6 +547,25 @@ struct BookRepository: BookRepositoryProtocol {
         }
     }
 
+    /// 更新单本有效书籍评分；参数必须是 0...50 范围内的半星刻度，写入后详情与书评观察流会自动刷新。
+    func updateBookRating(bookId: Int64, score: Int64) async throws {
+        guard (0...50).contains(score), score.isMultiple(of: 5) else {
+            throw BookRatingWriteError.invalidScore
+        }
+        let updatedAt = Int64(Date().timeIntervalSince1970 * 1_000)
+        try await databaseManager.database.dbPool.write { db in
+            try BookReadStatusMutation.updateBookRating(
+                db,
+                bookID: bookId,
+                ratingScore: score,
+                updatedAt: updatedAt
+            )
+            guard db.changesCount > 0 else {
+                throw BookRatingWriteError.bookUnavailable
+            }
+        }
+    }
+
     /// 读取本地书籍选择结果，支持标题/作者/ISBN 关键字筛选。
     func fetchPickerBooks(matching query: String) async throws -> [BookPickerBook] {
         try await databaseManager.database.dbPool.read { db in
@@ -558,6 +577,21 @@ struct BookRepository: BookRepositoryProtocol {
     func fetchPickerBook(bookId: Int64) async throws -> BookPickerBook? {
         try await databaseManager.database.dbPool.read { db in
             try BookReadQuery.fetchPickerBook(db, bookId: bookId)
+        }
+    }
+}
+
+/// 单本评分写入的可行动错误，避免无效刻度或失效书籍被静默忽略。
+private nonisolated enum BookRatingWriteError: LocalizedError {
+    case invalidScore
+    case bookUnavailable
+
+    var errorDescription: String? {
+        switch self {
+        case .invalidScore:
+            return "评分必须在 0 到 5 星之间，并以半星为步进"
+        case .bookUnavailable:
+            return "书籍不存在、已被删除，或暂时无法评分"
         }
     }
 }

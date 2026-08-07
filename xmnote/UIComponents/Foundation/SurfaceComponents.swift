@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 xmnote/Utilities/DesignTokens.swift 的颜色、间距、圆角设计令牌
- * [OUTPUT]: 对外提供 CardContainer（支持圆角/描边颜色可配置）、EmptyStateView、HomeTopHeaderGradient 三个通用表层组件
+ * [OUTPUT]: 对外提供 CardContainer（支持圆角/描边颜色可配置）、中性紧凑 EmptyStateView、HomeTopHeaderGradient 三个通用表层组件
  * [POS]: UIComponents/Foundation 的基础表层组件集合，被各业务页面直接复用
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -47,22 +47,31 @@ struct CardContainer<Content: View>: View {
 
 // MARK: - Empty State View
 
-/// 通用占位视图，品牌绿图标 + 灰色文字
+/// 通用空状态以中性图标和辅助文字表达无内容，不与页面主操作争夺视觉焦点。
 struct EmptyStateView: View {
     let icon: String
     let message: String
+    @ScaledMetric(relativeTo: .footnote) private var iconSize = EmptyStateMetrics.iconSize
 
     var body: some View {
-        VStack(spacing: Spacing.base) {
+        VStack(spacing: Spacing.cozy) {
             Image(systemName: icon)
-                .font(.system(size: 48))
-                .foregroundStyle(Color.brand.opacity(0.3))
+                .font(.system(size: iconSize, weight: .regular))
+                .foregroundStyle(Color.textHint)
             Text(message)
-                .font(AppTypography.title3)
-                .foregroundStyle(.secondary)
+                .font(AppTypography.footnote)
+                .foregroundStyle(Color.textSecondary)
+                .multilineTextAlignment(.center)
+                .lineLimit(2)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(message)
     }
+}
+
+private enum EmptyStateMetrics {
+    static let iconSize: CGFloat = 32
 }
 
 // MARK: - Loading State View

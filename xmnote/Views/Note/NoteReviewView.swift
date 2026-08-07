@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 NoteReviewViewModel、页面私有 NoteReviewRefreshDeckHost、NoteReviewCardView 与外部导航/设置闭包
- * [OUTPUT]: 对外提供 NoteReviewView，承载 iOS 端书摘回顾分页卡组主界面、随机换组交接、原尺寸卡片菜单与外部应用发送反馈
+ * [OUTPUT]: 对外提供 NoteReviewView，承载 iOS 端书摘回顾分页卡组主界面、随机换组交接、原尺寸卡片菜单、可取消分享图任务、系统分享面板与外部应用发送反馈
  * [POS]: Note 模块回顾 Tab 页面入口，被 NoteContainerView 托管
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -22,6 +22,8 @@ struct NoteReviewView: View {
     @State private var tagEditSession: NoteReviewTagEditSession?
     @State private var menuGalleryHost = XMJXPhotoBrowserHost(initialItems: [])
     @State private var menuGalleryTapSequence = 0
+    @State private var shareImageTask: Task<Void, Never>?
+    @State private var shareImageRequestID: UUID?
 
     var body: some View {
         ZStack {
@@ -71,11 +73,15 @@ struct NoteReviewView: View {
             .presentationDragIndicator(.visible)
         }
         .sheet(item: $viewModel.generatedShareFile) { file in
-            ActivityShareSheet(activityItems: [file.fileURL])
+            XMActivityShareSheet(activityItems: [file.fileURL])
                 .presentationDetents([.medium, .large])
         }
         .onDisappear {
             loadingGate.hideImmediately()
+            shareImageTask?.cancel()
+            shareImageTask = nil
+            shareImageRequestID = nil
+            viewModel.cancelShareImageGeneration()
         }
     }
 
@@ -229,10 +235,19 @@ struct NoteReviewView: View {
         }
     }
 
-    /// 生成并分享高质量回顾图片；实际渲染与相册保存由 ViewModel 编排。
+    /// 在主线程托管单次分享图任务；页面离场会取消任务，request ID 防止旧任务迟到清空新任务句柄。
     private func shareImage(for item: NoteReviewCardItem) {
         let isDarkAppearance = colorScheme == .dark
-        Task {
+        shareImageTask?.cancel()
+        let requestID = UUID()
+        shareImageRequestID = requestID
+        shareImageTask = Task { @MainActor in
+            defer {
+                if shareImageRequestID == requestID {
+                    shareImageTask = nil
+                    shareImageRequestID = nil
+                }
+            }
             await viewModel.shareImage(for: item, isDarkAppearance: isDarkAppearance)
         }
     }

@@ -1,7 +1,7 @@
 /**
- * [INPUT]: 依赖 RichText 的共享 HTML 缓存/预览富文本构建能力、DesignTokens 设计令牌
- * [OUTPUT]: 对外提供 CollapsedRichTextPreview（收起态轻量富文本预览组件）
- * [POS]: UIComponents/Foundation 的内部轻量展示组件，服务 ExpandableRichText 的列表收起态性能优化
+ * [INPUT]: 依赖 RichText 的共享 HTML 缓存/预览富文本构建能力、DesignTokens 设计令牌，接收展开与可选正文点击回调
+ * [OUTPUT]: 对外提供 CollapsedRichTextPreview（收起态轻量富文本预览组件），区分正文主导航与展开操作
+ * [POS]: UIComponents/Foundation 的内部轻量展示组件，服务 ExpandableRichText 的列表收起态性能与原生可访问交互
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
@@ -17,11 +17,13 @@ struct CollapsedRichTextPreview: UIViewRepresentable {
     let lineSpacing: CGFloat
     let maxLines: Int
     let onExpand: () -> Void
+    let onPreviewTap: (() -> Void)?
 
     /// 创建收起态预览承载视图，列表阶段只保留轻量文本和“展开”按钮。
     func makeUIView(context: Context) -> CollapsedRichTextPreviewView {
         let view = CollapsedRichTextPreviewView()
         view.updateExpandAction(onExpand)
+        view.updatePreviewTapAction(onPreviewTap)
         return view
     }
 
@@ -52,7 +54,8 @@ struct CollapsedRichTextPreview: UIViewRepresentable {
 
         uiView.updateConfiguration(
             maxLines: maxLines,
-            onExpand: onExpand
+            onExpand: onExpand,
+            onPreviewTap: onPreviewTap
         )
     }
 
@@ -135,6 +138,11 @@ final class CollapsedRichTextPreviewView: UIView {
     private var snapshot: RichTextLayoutSnapshot = .init(size: .zero, isTruncated: false)
     private var currentContentKey: String = ""
     private var onExpand: (() -> Void)?
+    private var onPreviewTap: (() -> Void)?
+    private lazy var previewTapRecognizer = UITapGestureRecognizer(
+        target: self,
+        action: #selector(handlePreviewTapped)
+    )
 
     var currentAttributedText: NSAttributedString? {
         label.attributedText
@@ -192,17 +200,29 @@ final class CollapsedRichTextPreviewView: UIView {
     /// 收起态配置独立更新，避免每次 SwiftUI 刷新都重设 attributedText。
     func updateConfiguration(
         maxLines: Int,
-        onExpand: @escaping () -> Void
+        onExpand: @escaping () -> Void,
+        onPreviewTap: (() -> Void)?
     ) {
         if label.numberOfLines != maxLines {
             label.numberOfLines = maxLines
         }
         updateExpandAction(onExpand)
+        updatePreviewTapAction(onPreviewTap)
     }
 
     /// 更新展开回调，保持 SwiftUI 闭包和 UIKit 按钮目标一致。
     func updateExpandAction(_ onExpand: @escaping () -> Void) {
         self.onExpand = onExpand
+    }
+
+    /// 更新正文主导航回调；没有回调时 UILabel 继续保持普通静态文本语义。
+    func updatePreviewTapAction(_ onPreviewTap: (() -> Void)?) {
+        self.onPreviewTap = onPreviewTap
+        let isInteractive = onPreviewTap != nil
+        label.isUserInteractionEnabled = isInteractive
+        previewTapRecognizer.isEnabled = isInteractive
+        label.accessibilityTraits = isInteractive ? [.staticText, .button] : .staticText
+        label.accessibilityHint = isInteractive ? "打开完整内容" : nil
     }
 
     /// 测量正文和“展开”按钮组合后的总高度，供列表收起态直接复用。
@@ -255,6 +275,7 @@ final class CollapsedRichTextPreviewView: UIView {
             label.lineBreakStrategy = .standard
         }
         label.isUserInteractionEnabled = false
+        label.addGestureRecognizer(previewTapRecognizer)
         addSubview(label)
 
         sizingLabel.backgroundColor = .clear
@@ -296,6 +317,11 @@ final class CollapsedRichTextPreviewView: UIView {
     @objc
     private func handleExpandTapped() {
         onExpand?()
+    }
+
+    @objc
+    private func handlePreviewTapped() {
+        onPreviewTap?()
     }
 }
 

@@ -1,5 +1,5 @@
 /**
- * [INPUT]: 依赖 RichText 的正式 HTML 解析/共享缓存、RichTextLayoutManager、DesignTokens 与 TextKit 字形几何、SwiftUI/UIKit 动画和无障碍能力
+ * [INPUT]: 依赖 RichText 的正式 HTML 解析/共享缓存、RichTextLayoutManager、DesignTokens 与 TextKit 字形几何，可选接收稳定预览交互标识与点击回调
  * [OUTPUT]: 对外提供 ExpandableRichText，以及供正式组件和调试验证共享的 ExpandableRichTextLayoutEngine
  * [POS]: UIComponents/Foundation 的跨模块长文本披露组件，以末行有效字形为锚点实现内联「… 展开」微过渡与正文末尾收起
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -20,6 +20,8 @@ struct ExpandableRichText: View, Equatable {
     var maxLines: Int = 3
     var actionColor: Color = .textSecondary
     var quoteColor: UIColor = .systemGreen
+    var previewTapIdentity: AnyHashable? = nil
+    var onPreviewTap: (() -> Void)? = nil
 #if DEBUG
     var debugTargetExpanded: Bool?
 #endif
@@ -32,7 +34,8 @@ struct ExpandableRichText: View, Equatable {
         lhs.lineSpacing == rhs.lineSpacing &&
         lhs.maxLines == rhs.maxLines &&
         lhs.actionColor == rhs.actionColor &&
-        lhs.quoteColor == rhs.quoteColor
+        lhs.quoteColor == rhs.quoteColor &&
+        lhs.previewTapIdentity == rhs.previewTapIdentity
 #if DEBUG
         return sharedInputsMatch &&
             lhs.debugTargetExpanded == rhs.debugTargetExpanded
@@ -51,6 +54,7 @@ struct ExpandableRichText: View, Equatable {
             maxLines: max(1, maxLines),
             actionColor: actionColor,
             quoteColor: quoteColor,
+            onPreviewTap: onPreviewTap,
             debugTargetExpanded: debugTargetExpanded
         )
 #else
@@ -61,7 +65,8 @@ struct ExpandableRichText: View, Equatable {
             lineSpacing: lineSpacing,
             maxLines: max(1, maxLines),
             actionColor: actionColor,
-            quoteColor: quoteColor
+            quoteColor: quoteColor,
+            onPreviewTap: onPreviewTap
         )
 #endif
     }
@@ -113,6 +118,7 @@ private struct ExpandableRichTextCore: View {
     let maxLines: Int
     let actionColor: Color
     let quoteColor: UIColor
+    let onPreviewTap: (() -> Void)?
 #if DEBUG
     let debugTargetExpanded: Bool?
 #endif
@@ -131,7 +137,8 @@ private struct ExpandableRichTextCore: View {
             quoteColor: quoteColor,
             presentation: phase.presentation,
             reduceMotion: accessibilityReduceMotion,
-            onToggle: toggleDisclosure
+            onToggle: toggleDisclosure,
+            onPreviewTap: onPreviewTap
         )
         .frame(maxWidth: .infinity, alignment: .leading)
         .clipped()
@@ -219,6 +226,7 @@ private struct ExpandableRichTextRepresentable: UIViewRepresentable {
     let presentation: ExpandableRichTextPresentation
     let reduceMotion: Bool
     let onToggle: () -> Void
+    let onPreviewTap: (() -> Void)?
 
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
@@ -275,7 +283,8 @@ private struct ExpandableRichTextRepresentable: UIViewRepresentable {
             layoutDirection: uiLayoutDirection,
             presentation: presentation,
             reduceMotion: reduceMotion,
-            onToggle: onToggle
+            onToggle: onToggle,
+            onPreviewTap: onPreviewTap
         )
     }
 }
@@ -308,6 +317,7 @@ private final class ExpandableRichTextCarrierView: UIView {
     private let disclosureTailLabel = UILabel()
     private let expandButton = UIButton(type: .custom)
     private let collapseButton = UIButton(type: .custom)
+    private let previewButton = UIButton(type: .custom)
     private let textMaskRootLayer = CALayer()
     private let textMaskTopLayer = CALayer()
     private let textMaskBottomLayer = CALayer()
@@ -335,6 +345,7 @@ private final class ExpandableRichTextCarrierView: UIView {
     private var collapseHitRect = CGRect.zero
     private var collapseActionRange = NSRange(location: NSNotFound, length: 0)
     private var onToggle: (() -> Void)?
+    private var onPreviewTap: (() -> Void)?
     private var disclosureTailAnimator: UIViewPropertyAnimator?
     private var lastDisclosureTailAnimationKey: DisclosureTailAnimationKey?
     private var lastAccessibilityPresentation: ExpandableRichTextPresentation?
@@ -363,10 +374,12 @@ private final class ExpandableRichTextCarrierView: UIView {
         layoutDirection: UIUserInterfaceLayoutDirection,
         presentation: ExpandableRichTextPresentation,
         reduceMotion: Bool,
-        onToggle: @escaping () -> Void
+        onToggle: @escaping () -> Void,
+        onPreviewTap: (() -> Void)?
     ) {
         ExpandableRichTextDiagnostics.record(.configurationUpdate)
         self.onToggle = onToggle
+        self.onPreviewTap = onPreviewTap
         let normalizedMaxLines = max(1, maxLines)
         let resolvedActionFont = AppTypography.uiCaptionMedium(compatibleWith: traitCollection)
 
@@ -507,13 +520,16 @@ private final class ExpandableRichTextCarrierView: UIView {
         return measured
     }
 
-    /// 只把展开/收起的透明按钮作为命中结果，保留外层卡片点击和长按语义。
+    /// 优先命中展开/收起操作；仅在调用方提供主导航回调时让收起态正文承担点击。
     override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
         if expandButton.isUserInteractionEnabled, expandHitRect.contains(point) {
             return expandButton
         }
         if collapseButton.isUserInteractionEnabled, collapseHitRect.contains(point) {
             return collapseButton
+        }
+        if previewButton.isUserInteractionEnabled, bounds.contains(point) {
+            return previewButton
         }
         return nil
     }
@@ -552,6 +568,8 @@ private final class ExpandableRichTextCarrierView: UIView {
         layoutCollapseAction()
         layoutTextMask()
         updateDisclosureTailTransition()
+        previewButton.frame = bounds
+        previewButton.isUserInteractionEnabled = onPreviewTap != nil && presentation == .collapsed
     }
 
     private func setupTextSystem() {
@@ -595,6 +613,11 @@ private final class ExpandableRichTextCarrierView: UIView {
         configureActionButton(collapseButton)
         collapseButton.addTarget(self, action: #selector(handleToggleTapped), for: .touchUpInside)
         addSubview(collapseButton)
+
+        previewButton.backgroundColor = .clear
+        previewButton.isAccessibilityElement = false
+        previewButton.addTarget(self, action: #selector(handlePreviewTapped), for: .touchUpInside)
+        insertSubview(previewButton, aboveSubview: textView)
 
         isAccessibilityElement = true
         accessibilityTraits = .staticText
@@ -934,6 +957,11 @@ private final class ExpandableRichTextCarrierView: UIView {
     @objc
     private func handleToggleTapped() {
         onToggle?()
+    }
+
+    @objc
+    private func handlePreviewTapped() {
+        onPreviewTap?()
     }
 
     @objc

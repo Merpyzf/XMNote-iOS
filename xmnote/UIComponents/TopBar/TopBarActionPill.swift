@@ -1,7 +1,7 @@
 /**
- * [INPUT]: 依赖 SwiftUI ButtonStyle、系统 Material、动态无障碍与 DesignTokens 语义色能力
+ * [INPUT]: 依赖 SwiftUI ButtonStyle、iOS 26 原生 Liquid Glass、动态无障碍与 DesignTokens 语义色能力
  * [OUTPUT]: 对外提供 TopBarActionPill、TopBarActionPresentation 与顶部工具按钮展示样式扩展
- * [POS]: UIComponents/TopBar 的顶部右侧双按钮胶囊组件，为一级页面 action 组提供统一材质底与分段按压反馈
+ * [POS]: UIComponents/TopBar 的顶部右侧双按钮胶囊组件，以单层原生玻璃承载同权重 action 并提供分段按压反馈
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
@@ -59,7 +59,7 @@ struct TopBarActionPill<Leading: View, Trailing: View>: View {
 
     private var divider: some View {
         Rectangle()
-            .fill(Color.white.opacity(TopBarActionPillMetrics.dividerOpacity))
+            .fill(Color.primary.opacity(TopBarActionPillMetrics.dividerOpacity))
             .frame(
                 width: TopBarActionPillMetrics.borderWidth,
                 height: TopBarActionPillMetrics.dividerHeight
@@ -68,35 +68,10 @@ struct TopBarActionPill<Leading: View, Trailing: View>: View {
     }
 
     private var pillBackground: some View {
-        let shape = RoundedRectangle(
-            cornerRadius: TopBarActionPillMetrics.cornerRadius,
-            style: .continuous
-        )
-
-        return shape
-            .fill(.regularMaterial)
-            .overlay {
-                shape.fill(Color.white.opacity(TopBarActionPillMetrics.whiteWashOpacity))
-            }
-            .overlay {
-                shape.fill(
-                    LinearGradient(
-                        colors: [
-                            Color.white.opacity(TopBarActionPillMetrics.innerHighlightOpacity),
-                            Color.white.opacity(0)
-                        ],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                )
-            }
-            .overlay {
-                shape.stroke(
-                    Color.white.opacity(TopBarActionPillMetrics.borderOpacity),
-                    lineWidth: TopBarActionPillMetrics.borderWidth
-                )
-            }
+        Color.clear
             .frame(height: TopBarActionPillMetrics.height)
+            .glassEffect(.clear, in: .capsule)
+            .allowsHitTesting(false)
     }
 }
 
@@ -107,14 +82,11 @@ private enum TopBarActionPillMetrics {
     static let horizontalPadding: CGFloat = 2
     static let buttonSpacing: CGFloat = 0
     static let cornerRadius: CGFloat = 18
-    static let dividerOpacity = 0.16
-    static let dividerHeight: CGFloat = 18
+    static let dividerOpacity = 0.10
+    static let dividerHeight: CGFloat = 16
     static let borderWidth: CGFloat = 1
-    static let whiteWashOpacity = 0.32
-    static let borderOpacity = 0.30
     static let pressedScale = 0.95
     static let pressedNeutralOpacity = 0.08
-    static let innerHighlightOpacity = 0.28
 }
 
 /// 胶囊内 segment 的按压反馈，只反馈当前按钮，不缩放整组胶囊。
@@ -129,7 +101,7 @@ private struct TopBarActionPillSegmentPressFeedbackStyle: ButtonStyle {
             .background {
                 if isPressed {
                     RoundedRectangle(cornerRadius: segmentCornerRadius, style: .continuous)
-                        .fill(Color.textPrimary.opacity(TopBarActionPillMetrics.pressedNeutralOpacity))
+                        .fill(Color.primary.opacity(TopBarActionPillMetrics.pressedNeutralOpacity))
                         .frame(
                             width: max(TopBarActionPillMetrics.hitSize - 4, TopBarActionPillMetrics.visualSize),
                             height: max(TopBarActionPillMetrics.height - 4, TopBarActionPillMetrics.visualSize)
