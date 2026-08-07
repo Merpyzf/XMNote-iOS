@@ -141,7 +141,7 @@ protocol BookshelfRepositoryProtocol {
     func saveBookCollectionDisplaySetting(_ setting: BookCollectionDisplaySetting)
 }
 
-/// 书籍详情数据访问契约，定义详情页所需的书籍与书摘观察入口。
+/// 单本书内容工作台数据访问契约，定义书籍资料与四个内容域的观察入口。
 protocol BookDetailRepositoryProtocol {
     /// 持续监听指定书籍详情变化，供详情页实时更新。
     func observeBookDetail(bookId: Int64) -> AsyncThrowingStream<BookDetail?, Error>
@@ -149,6 +149,12 @@ protocol BookDetailRepositoryProtocol {
     func observeBookNotes(bookId: Int64) -> AsyncThrowingStream<[NoteExcerpt], Error>
     /// 按 0...50 半星步进更新单本有效书籍评分，并同步 Android 毫秒更新时间。
     func updateBookRating(bookId: Int64, score: Int64) async throws
+    /// 持续监听指定书籍下的相关分类变化。
+    func observeBookRelatedCategories(bookId: Int64) -> AsyncThrowingStream<[BookRelatedCategory], Error>
+    /// 持续监听指定书籍下的相关内容变化。
+    func observeBookRelated(bookId: Int64) -> AsyncThrowingStream<[BookRelatedExcerpt], Error>
+    /// 持续监听指定书籍下的书评变化。
+    func observeBookReviews(bookId: Int64) -> AsyncThrowingStream<[BookReviewExcerpt], Error>
 }
 
 /// 本地选书数据访问契约，定义通用选书器需要的最小书籍查询能力。
@@ -235,7 +241,7 @@ protocol NoteRepositoryProtocol {
     func observeRelatedCategories(request: RelatedCategoryRequest) -> AsyncThrowingStream<RelatedCategorySnapshot, Error>
     /// 持续监听指定相关分类作用域内的混排内容页。
     func observeRelatedContentList(request: RelatedContentPageRequest) -> AsyncThrowingStream<RelatedContentListSnapshot, Error>
-    /// 删除首页同名聚合分类；系统默认分类只清空内容并保留分类根，自定义分类跨书物理删除定义、内容和附图。
+    /// 删除首页同名聚合分类；系统默认分类只清空内容并保留分类根，自定义分类跨书软删除定义、内容和附图。
     func deleteRelatedCategory(scope: RelatedCategoryScope) async throws
     /// 持续监听全量书评页，搜索和排序由请求集中描述。
     func observeBookReviewList(request: BookReviewPageRequest) -> AsyncThrowingStream<BookReviewListSnapshot, Error>
@@ -371,7 +377,7 @@ protocol ContentRepositoryProtocol {
     func createBookRelatedCategory(bookID: Int64, title: String, scope: BookContentCategoryScope) async throws
     /// 重命名当前书可管理的私有或全局自定义分类；六个固定默认分类始终只读。
     func renameBookRelatedCategory(bookID: Int64, categoryID: Int64, title: String) async throws
-    /// 物理删除当前书可管理的私有或全局自定义分类、其内容与附图，并清理失去最后引用的占位书。
+    /// 软删除当前书可管理的私有或全局自定义分类、其内容与附图，保留同步删除状态。
     func deleteBookRelatedCategory(bookID: Int64, categoryID: Int64) async throws
     /// 切换六个固定默认分类的隐藏状态；隐藏设置会影响所有书籍。
     func setDefaultBookRelatedCategoryHidden(categoryID: Int64, isHidden: Bool) async throws
@@ -415,9 +421,9 @@ protocol ContentRepositoryProtocol {
     func saveRelevantEditorAutoSaveDraft(_ draft: RelevantEditorAutoSaveDraft) throws
     /// 删除精确身份下的相关内容自动保存草稿，不触碰任何远端图片。
     func deleteRelevantEditorAutoSaveDraft(sourceBookId: Int64, categoryId: Int64, contentId: Int64)
-    /// 物理删除普通相关内容或相关书籍关系，并清理失去最后引用的业务占位书。
+    /// 按 Android 语义软删除普通相关内容或相关书籍关系及其附图。
     func deleteRelatedRelation(relationID: Int64) async throws
-    /// 删除指定内容，按 iOS 当前约定执行主记录与子记录的硬删除事务。
+    /// 删除指定内容，按 Android 当前约定软删除主记录与子记录；书摘导入哈希按 Android 物理清理。
     func delete(itemID: ContentViewerItemID) async throws
 }
 

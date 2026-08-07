@@ -72,7 +72,7 @@ struct RelevantEditorView: View {
             } else {
                 Color.surfacePage.ignoresSafeArea()
                 if bootstrapLoadingGate.isVisible {
-                    LoadingStateView("正在准备相关内容编辑页…", style: .card)
+                    LoadingStateView("正在准备相关内容…", style: .card)
                 }
             }
         }
@@ -433,7 +433,7 @@ private enum RelevantEditorAlert: Identifiable {
 
 #Preview("编辑相关内容") {
     NavigationStack {
-        RelevantEditorView(contentId: 1)
+        RelevantEditorView(mode: .edit(contentID: 1))
     }
     .environment(RepositoryContainer(databaseManager: DatabaseManager(database: try! .empty())))
     .environment(AppState())

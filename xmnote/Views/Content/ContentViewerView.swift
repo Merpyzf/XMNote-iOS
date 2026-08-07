@@ -111,6 +111,7 @@ private struct ContentViewerLoadedView: View {
     @Environment(\.openURL) private var openURL
     @Environment(XMToastCenter.self) private var toastCenter
     @Environment(RepositoryContainer.self) private var repositories
+    @Environment(AppNavigationCoordinator.self) private var navigationCoordinator
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.colorScheme) private var colorScheme
 
@@ -359,7 +360,9 @@ private struct ContentViewerLoadedView: View {
                 noteAIMenu
 
             case .review(let reviewID)?:
-                NavigationLink(value: ContentRoute.reviewEditor(reviewId: reviewID)) {
+                Button {
+                    navigationCoordinator.present(.reviewEditor(.edit(reviewID: reviewID)))
+                } label: {
                     ImmersiveBottomChromeIcon(systemName: "square.and.pencil")
                 }
                 .buttonStyle(.plain)
@@ -375,7 +378,9 @@ private struct ContentViewerLoadedView: View {
                 .accessibilityLabel("复制书评")
 
             case .relevant(let contentID)?:
-                NavigationLink(value: ContentRoute.relevantEditor(contentId: contentID)) {
+                Button {
+                    navigationCoordinator.present(.relevantEditor(.edit(contentID: contentID)))
+                } label: {
                     ImmersiveBottomChromeIcon(systemName: "square.and.pencil")
                 }
                 .buttonStyle(.plain)

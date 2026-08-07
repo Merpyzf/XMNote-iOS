@@ -1,7 +1,7 @@
 #if DEBUG
 /**
  * [INPUT]: 依赖正式 ExpandableRichText、NoteExcerptTypography 阅读排版令牌与 CardContainer
- * [OUTPUT]: 对外提供 FadeOverflowTextTestView，用于验证方案 A 正式长文本披露组件与性能计数
+ * [OUTPUT]: 对外提供 FadeOverflowTextTestView，用于验证方案 A 正式长文本披露组件
  * [POS]: Debug 测试页面，覆盖正式组件的行数、主题、富文本、压力实例、快速反转与双向文字场景
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -17,7 +17,6 @@ struct FadeOverflowTextTestView: View {
         FadeOverflowStressTarget()
     }
     @State private var isStressRunning = false
-    @State private var diagnostics = ExpandableRichTextDiagnostics.snapshot()
     @State private var stressTask: Task<Void, Never>?
 
     private let samples = FadeOverflowTextSample.samples
@@ -32,7 +31,6 @@ struct FadeOverflowTextTestView: View {
                 }
 
                 stressSection
-                diagnosticsSection
             }
             .padding(.horizontal, Spacing.screenEdge)
             .padding(.vertical, Spacing.base)
@@ -174,47 +172,8 @@ struct FadeOverflowTextTestView: View {
         }
     }
 
-    private var diagnosticsSection: some View {
-        CardContainer {
-            VStack(alignment: .leading, spacing: Spacing.base) {
-                HStack {
-                    Text("性能计数")
-                        .font(AppTypography.headline)
-                        .foregroundStyle(Color.textPrimary)
-
-                    Spacer()
-
-                    Button("重置") {
-                        ExpandableRichTextDiagnostics.reset()
-                        diagnostics = ExpandableRichTextDiagnostics.snapshot()
-                    }
-
-                    Button("刷新") {
-                        diagnostics = ExpandableRichTextDiagnostics.snapshot()
-                    }
-                }
-
-                ForEach(ExpandableRichTextDiagnosticEvent.allCases, id: \.self) { event in
-                    HStack {
-                        Text(event.rawValue)
-                            .font(AppTypography.caption)
-                            .foregroundStyle(Color.textSecondary)
-                        Spacer()
-                        Text(diagnostics.count(for: event), format: .number)
-                            .font(AppTypography.captionMedium)
-                            .foregroundStyle(Color.textPrimary)
-                            .monospacedDigit()
-                    }
-                }
-            }
-            .padding(Spacing.contentEdge)
-        }
-    }
-
     private func runStress() {
         stressTask?.cancel()
-        ExpandableRichTextDiagnostics.reset()
-        diagnostics = ExpandableRichTextDiagnostics.snapshot()
         isStressRunning = true
         stressTask = Task { @MainActor in
             for index in 0..<100 {
@@ -225,7 +184,6 @@ struct FadeOverflowTextTestView: View {
             }
             try? await Task.sleep(for: .milliseconds(350))
             isStressRunning = false
-            diagnostics = ExpandableRichTextDiagnostics.snapshot()
             stressTask = nil
         }
     }
@@ -239,17 +197,17 @@ private final class FadeOverflowStressTarget {
 
 /// 将独立压力目标接入正式组件，避免父级数组变化无效刷新全部实例。
 private struct FadeOverflowStressItem: View {
-    let target: FadeOverflowStressTarget
+    @Bindable var target: FadeOverflowStressTarget
     let maxVisibleLines: Int
 
     var body: some View {
         ExpandableRichText(
             html: FadeOverflowTextSample.stressHTML,
+            isExpanded: $target.isExpanded,
             baseFont: NoteExcerptTypography.uiBody,
             textColor: .label,
             lineSpacing: NoteExcerptTypography.bodyLineSpacing,
-            maxLines: maxVisibleLines,
-            debugTargetExpanded: target.isExpanded
+            maxLines: maxVisibleLines
         )
     }
 }

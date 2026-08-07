@@ -58,6 +58,7 @@ private struct RelevantDetailLoadedView: View {
     @Bindable var viewModel: RelevantDetailViewModel
     @Binding var showsDeleteDialog: Bool
     @Environment(RepositoryContainer.self) private var repositories
+    @Environment(AppNavigationCoordinator.self) private var navigationCoordinator
     @State private var readLoadingGate = LoadingGate()
     @State private var aiTextPresentation: AITextResultPresentation?
 
@@ -123,7 +124,9 @@ private struct RelevantDetailLoadedView: View {
     private var toolbarContent: some ToolbarContent {
         ToolbarItemGroup(placement: .topBarTrailing) {
             if let detail = viewModel.detail {
-                NavigationLink(value: ContentRoute.relevantEditor(contentId: detail.contentId)) {
+                Button {
+                    navigationCoordinator.present(.relevantEditor(.edit(contentID: detail.contentId)))
+                } label: {
                     Image(systemName: "square.and.pencil")
                 }
 

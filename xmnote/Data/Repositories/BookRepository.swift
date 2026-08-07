@@ -3,8 +3,8 @@ import GRDB
 
 /**
  * [INPUT]: 依赖 AppDatabase 提供本地数据库连接，依赖 ObservationStream 提供观察流桥接
- * [OUTPUT]: 对外提供 BookRepository（BookRepositoryProtocol 的 GRDB 实现，含书架列表读写、单本评分、书架/书单显示设置、分组移入移出、书单加入、书单书籍元信息编辑、批量编辑、删除与重命名管理）
- * [POS]: Data 层书籍仓储实现，统一封装书架列表/详情/书摘数据读取、默认书架分组预览排序与默认书架排序置顶写入
+ * [OUTPUT]: 对外提供 BookRepository（BookRepositoryProtocol 的 GRDB 实现，含书架列表读写、单书评分与四域观察、书架/书单显示设置、分组移入移出、书单加入、批量编辑、删除与重命名管理）
+ * [POS]: Data 层书籍仓储实现，统一封装书架列表/详情/四域内容数据读取、默认书架分组预览排序与默认书架排序置顶写入
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
@@ -563,6 +563,27 @@ struct BookRepository: BookRepositoryProtocol {
             guard db.changesCount > 0 else {
                 throw BookRatingWriteError.bookUnavailable
             }
+        }
+    }
+
+    /// 为单书工作台提供相关分类订阅，分类显隐或顺序变化后实时刷新。
+    func observeBookRelatedCategories(bookId: Int64) -> AsyncThrowingStream<[BookRelatedCategory], Error> {
+        ObservationStream.make(in: databaseManager.database.dbPool) { db in
+            try BookReadQuery.fetchRelatedCategories(db, bookId: bookId)
+        }
+    }
+
+    /// 为单书工作台提供相关内容订阅，兼容普通内容与关联书籍两类 Android 记录。
+    func observeBookRelated(bookId: Int64) -> AsyncThrowingStream<[BookRelatedExcerpt], Error> {
+        ObservationStream.make(in: databaseManager.database.dbPool) { db in
+            try BookReadQuery.fetchRelated(db, bookId: bookId)
+        }
+    }
+
+    /// 为单书工作台提供书评订阅，新增、编辑或删除后实时刷新。
+    func observeBookReviews(bookId: Int64) -> AsyncThrowingStream<[BookReviewExcerpt], Error> {
+        ObservationStream.make(in: databaseManager.database.dbPool) { db in
+            try BookReadQuery.fetchReviews(db, bookId: bookId)
         }
     }
 

@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 Foundation 提供标识、时间戳与 URL 等跨层基础类型
- * [OUTPUT]: 对外提供 ContentViewerSourceContext、ContentViewerItemID、ContentViewerDetail、WeReadOriginalURLBuilder、相关书籍草稿及含图片额度票据的内容编辑草稿
+ * [OUTPUT]: 对外提供 ContentViewerSourceContext、ContentViewerItemID/ListItem/Detail、编辑模式、相关书籍草稿及含图片额度票据的内容编辑草稿
  * [POS]: Domain/Models 的通用内容查看领域模型，供 Repository、ViewModel 与 Viewer/Editor 页面共享
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -41,8 +41,8 @@ nonisolated enum ContentViewerSourceContext: Hashable, Sendable, Codable {
         randomSeed: Int64
     )
     case allReviews(query: String, sort: BookReviewSortRule)
+    case bookRelated(bookId: Int64)
     case bookReviews(bookId: Int64)
-    case bookRelated(bookId: Int64, categoryId: Int64)
 }
 
 /// 通用查看器单项身份，保证分页选择与详情查询使用统一 ID。
@@ -191,12 +191,22 @@ nonisolated struct RelevantContentDetail: Equatable, Sendable {
 nonisolated enum ReviewEditorMode: Hashable, Sendable, Codable {
     case create(bookID: Int64)
     case edit(reviewID: Int64)
+
+    var isCreating: Bool {
+        if case .create = self { return true }
+        return false
+    }
 }
 
 /// 相关内容编辑入口模式；新建时携带书籍与分类，编辑时由内容主键定位。
 nonisolated enum RelevantEditorMode: Hashable, Sendable, Codable {
     case create(bookID: Int64, categoryID: Int64)
     case edit(contentID: Int64)
+
+    var isCreating: Bool {
+        if case .create = self { return true }
+        return false
+    }
 }
 
 /// 内容编辑器附图上传状态，统一承接上传等待、成功与可重试失败语义。

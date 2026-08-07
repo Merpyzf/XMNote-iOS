@@ -55,7 +55,7 @@ struct NoteCollectionView: View {
         .xmSystemAlert(item: $pendingReviewDelete) { review in
             XMSystemAlertDescriptor(
                 title: "删除这篇书评？",
-                message: "书评和附图会被物理删除，此操作无法撤销。",
+                message: "书评和附图会从当前列表移除，并同步保留删除状态。",
                 actions: [
                     XMSystemAlertAction(title: "取消", role: .cancel) { },
                     XMSystemAlertAction(title: "删除", role: .destructive) {
@@ -223,8 +223,8 @@ struct NoteCollectionView: View {
         XMSystemAlertDescriptor(
             title: item.isDefault ? "清空“\(item.title)”中的相关内容？" : "删除“\(item.title)”分类？",
             message: item.isDefault
-                ? "系统分类会保留；该聚合范围内的相关内容、附图和书籍关联会被物理删除，无法撤销。"
-                : "所有书籍中同名分类及其相关内容、附图和书籍关联都会被物理删除，无法撤销。",
+                ? "系统分类会保留；该聚合范围内的相关内容、附图和书籍关联会被软删除。"
+                : "所有书籍中同名分类及其相关内容、附图和书籍关联都会被软删除。",
             actions: [
                 XMSystemAlertAction(title: "取消", role: .cancel) { },
                 XMSystemAlertAction(title: item.isDefault ? "清空" : "删除", role: .destructive) {

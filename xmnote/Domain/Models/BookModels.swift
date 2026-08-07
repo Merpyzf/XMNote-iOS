@@ -2,7 +2,7 @@ import Foundation
 
 /**
  * [INPUT]: 依赖 Foundation 的 Date/DateFormatter 进行时间格式化
- * [OUTPUT]: 对外提供 BookItem、BookshelfSnapshot、BookshelfItem、BookshelfOrderItem、BookshelfListContext、BookshelfBatchEditOptions、BookshelfMoveGroupOption、BookCollectionSummary、BookCollectionDisplaySetting（含书单首页分组偏好）、BookCollectionBookMetadataEditInput、BookDetail、NoteExcerpt 等书籍域展示模型
+ * [OUTPUT]: 对外提供 BookItem、BookshelfSnapshot、BookshelfItem、BookshelfOrderItem、BookshelfListContext、BookshelfBatchEditOptions、BookshelfMoveGroupOption、BookCollectionSummary、BookCollectionDisplaySetting（含书单首页分组偏好）、BookCollectionBookMetadataEditInput、BookDetail 与单书四域内容模型
  * [POS]: Domain/Models 的书籍聚合模型定义，被 BookViewModel 与 BookRepository 实现共同消费
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -1536,13 +1536,44 @@ nonisolated struct BookDetailAttribute: Identifiable, Hashable, Sendable {
 /// 书籍详情页目录条目，按 Android v41 章节层级字段展示缩进。
 nonisolated struct BookDetailChapter: Identifiable, Hashable, Sendable {
     let id: Int64
+    let parentID: Int64
     let title: String
     let level: Int64
     let order: Int64
+    let isStarred: Bool
+    let noteCount: Int
 }
 
-/// 书籍详情页模型，聚合资料字段、目录、书摘数量与阅读状态。
-nonisolated struct BookDetail: Identifiable, Sendable {
+/// 单本书内容工作台的四个内容域，默认从书摘进入并支持 scene 恢复。
+nonisolated enum BookWorkspaceSection: String, CaseIterable, Hashable, Codable, Sendable {
+    case catalog
+    case notes
+    case related
+    case reviews
+
+    var title: String {
+        switch self {
+        case .catalog:
+            return "目录"
+        case .notes:
+            return "书摘"
+        case .related:
+            return "相关"
+        case .reviews:
+            return "书评"
+        }
+    }
+}
+
+/// 书摘域的加载阶段，区分尚未收到观察流、已确认内容与读取失败。
+nonisolated enum BookNotesLoadState: String, Hashable, Sendable {
+    case loading
+    case loaded
+    case failed
+}
+
+/// 书籍详情页模型，聚合资料字段、目录、书摘数量与阅读状态，并承载首屏阅读概览。
+nonisolated struct BookDetail: Identifiable, Hashable, Sendable {
     let id: Int64
     let name: String
     let author: String
@@ -1550,7 +1581,13 @@ nonisolated struct BookDetail: Identifiable, Sendable {
     let press: String
     let score: Int64
     let noteCount: Int
+    let relatedCount: Int
+    let reviewCount: Int
     let readStatusName: String
+    let totalReadingSeconds: Int64
+    let readingProgressFraction: Double?
+    let readingProgressText: String
+    let bookmarkText: String
     let summary: String
     let summaryPlainText: String
     let authorIntro: String
@@ -1567,7 +1604,13 @@ nonisolated struct BookDetail: Identifiable, Sendable {
         press: String,
         score: Int64,
         noteCount: Int,
+        relatedCount: Int,
+        reviewCount: Int,
         readStatusName: String,
+        totalReadingSeconds: Int64,
+        readingProgressFraction: Double?,
+        readingProgressText: String,
+        bookmarkText: String,
         summary: String,
         summaryPlainText: String = "",
         authorIntro: String,
@@ -1582,7 +1625,13 @@ nonisolated struct BookDetail: Identifiable, Sendable {
         self.press = press
         self.score = min(max(score, 0), 50)
         self.noteCount = noteCount
+        self.relatedCount = relatedCount
+        self.reviewCount = reviewCount
         self.readStatusName = readStatusName
+        self.totalReadingSeconds = totalReadingSeconds
+        self.readingProgressFraction = readingProgressFraction
+        self.readingProgressText = readingProgressText
+        self.bookmarkText = bookmarkText
         self.summary = summary
         self.summaryPlainText = summaryPlainText
         self.authorIntro = authorIntro
@@ -1592,13 +1641,19 @@ nonisolated struct BookDetail: Identifiable, Sendable {
     }
 }
 
-/// 书籍详情中的书摘条目，包含正文、感想、位置与时间信息。
-nonisolated struct NoteExcerpt: Identifiable, Sendable {
+/// 书籍详情中的书摘条目，包含正文、感想、附图、标签、位置与时间信息。
+nonisolated struct NoteExcerpt: Identifiable, Hashable, Sendable {
     let id: Int64
+    let chapterID: Int64
+    let chapterTitle: String
+    let chapterOrder: Int64
+    let chapterLevel: Int64
     let content: String
     let contentPlainText: String
     let idea: String
     let ideaPlainText: String
+    let imageURLs: [String]
+    let tagNames: [String]
     let position: String
     let positionUnit: Int64
     let includeTime: Bool
@@ -1607,20 +1662,32 @@ nonisolated struct NoteExcerpt: Identifiable, Sendable {
     /// 构建书摘展示模型；纯文本预览由页面状态源按需预处理，Repository 可只提供原始 HTML 字段。
     init(
         id: Int64,
+        chapterID: Int64 = 0,
+        chapterTitle: String = "",
+        chapterOrder: Int64 = 0,
+        chapterLevel: Int64 = 0,
         content: String,
         contentPlainText: String = "",
         idea: String,
         ideaPlainText: String = "",
+        imageURLs: [String] = [],
+        tagNames: [String] = [],
         position: String,
         positionUnit: Int64,
         includeTime: Bool,
         createdDate: Int64
     ) {
         self.id = id
+        self.chapterID = chapterID
+        self.chapterTitle = chapterTitle
+        self.chapterOrder = chapterOrder
+        self.chapterLevel = chapterLevel
         self.content = content
         self.contentPlainText = contentPlainText
         self.idea = idea
         self.ideaPlainText = ideaPlainText
+        self.imageURLs = imageURLs
+        self.tagNames = tagNames
         self.position = position
         self.positionUnit = positionUnit
         self.includeTime = includeTime
@@ -1638,10 +1705,105 @@ nonisolated struct NoteExcerpt: Identifiable, Sendable {
         return parts.joined(separator: " | ")
     }
 
+    var hasSourceContent: Bool {
+        !content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    var hasSourceIdea: Bool {
+        !idea.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    var searchableContentText: String {
+        contentPlainText.isEmpty ? content : contentPlainText
+    }
+
+    var searchableIdeaText: String {
+        ideaPlainText.isEmpty ? idea : ideaPlainText
+    }
+
     private static func formatDate(_ timestamp: Int64) -> String {
         let date = Date(timeIntervalSince1970: Double(timestamp) / 1000.0)
         let formatter = DateFormatter()
         formatter.dateFormat = "yyyy/MM/dd"
         return formatter.string(from: date)
+    }
+}
+
+/// 单本书“相关”域的类别，用于筛选与创建前的真实类别选择。
+nonisolated struct BookRelatedCategory: Identifiable, Hashable, Sendable {
+    let id: Int64
+    let title: String
+    let order: Int64
+}
+
+/// 单本书“相关”域列表项，同时覆盖普通内容与关联书籍两类 Android 记录。
+nonisolated struct BookRelatedExcerpt: Identifiable, Hashable, Sendable {
+    let id: Int64
+    let categoryID: Int64
+    let categoryTitle: String
+    let title: String
+    let content: String
+    let contentPlainText: String
+    let url: String
+    let linkedBookID: Int64
+    let linkedBookTitle: String
+    let linkedBookAuthor: String
+    let linkedBookCover: String
+    let isLinkedBookPlaceholder: Bool
+    let createdDate: Int64
+
+    /// 构建相关内容列表项；纯文本预览由页面状态源在后台统一预处理。
+    init(
+        id: Int64,
+        categoryID: Int64,
+        categoryTitle: String,
+        title: String,
+        content: String,
+        contentPlainText: String = "",
+        url: String,
+        linkedBookID: Int64,
+        linkedBookTitle: String,
+        linkedBookAuthor: String,
+        linkedBookCover: String,
+        isLinkedBookPlaceholder: Bool = false,
+        createdDate: Int64
+    ) {
+        self.id = id
+        self.categoryID = categoryID
+        self.categoryTitle = categoryTitle
+        self.title = title
+        self.content = content
+        self.contentPlainText = contentPlainText
+        self.url = url
+        self.linkedBookID = linkedBookID
+        self.linkedBookTitle = linkedBookTitle
+        self.linkedBookAuthor = linkedBookAuthor
+        self.linkedBookCover = linkedBookCover
+        self.isLinkedBookPlaceholder = isLinkedBookPlaceholder
+        self.createdDate = createdDate
+    }
+}
+
+/// 单本书“书评”域列表项，标题优先并保留正文 HTML 与稳定纯文本预览。
+nonisolated struct BookReviewExcerpt: Identifiable, Hashable, Sendable {
+    let id: Int64
+    let title: String
+    let content: String
+    let contentPlainText: String
+    let createdDate: Int64
+
+    /// 构建书评列表项；纯文本预览由页面状态源在后台统一预处理。
+    init(
+        id: Int64,
+        title: String,
+        content: String,
+        contentPlainText: String = "",
+        createdDate: Int64
+    ) {
+        self.id = id
+        self.title = title
+        self.content = content
+        self.contentPlainText = contentPlainText
+        self.createdDate = createdDate
     }
 }

@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 Foundation
- * [OUTPUT]: 对外提供 BookRoute 枚举，定义书籍详情、阅读数据、目录管理、有效书/相关占位书录入、书架二级列表与书单详情目的地
+ * [OUTPUT]: 对外提供 BookRoute 枚举，定义书籍详情、阅读数据、目录管理、章节书摘、有效书/相关占位书录入、书架二级列表与书单详情目的地
  * [POS]: Navigation 模块的书籍路由，被 BookContainerView 的 NavigationStack 消费
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -16,6 +16,7 @@ enum BookRoute: Hashable, Codable {
     case editRelatedPlaceholder(bookId: Int64, sourceBookId: Int64)
     case add
     case create(seed: BookEditorSeed?)
+    case chapterNotes(bookId: Int64, chapterId: Int64, title: String)
     case bookshelfList(BookshelfBookListRoute)
     case collectionDetail(collectionID: Int64)
 }

@@ -1,5 +1,5 @@
 /**
- * [INPUT]: 依赖 NoteRepositoryProtocol 提供笔记首页四分类聚合观察流，依赖 ContentRepositoryProtocol/BookDetailRepositoryProtocol 承接书评硬删除与单本评分，依赖 NoteCategory 与 NoteCollectionModels 描述筛选/排序语义
+ * [INPUT]: 依赖 NoteRepositoryProtocol 提供笔记首页四分类聚合观察流，依赖 ContentRepositoryProtocol/BookDetailRepositoryProtocol 承接书评软删除与单本评分，依赖 NoteCategory 与 NoteCollectionModels 描述筛选/排序语义
  * [OUTPUT]: 对外提供 NoteViewModel 与 NoteHomeSectionState，输出四分类独立搜索/排序、书评增量分页状态及星标/相关分类/书评写入动作
  * [POS]: Note 模块首页状态编排器，被 NoteContainerView、NoteCollectionView 与 NoteTagsView 消费
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -198,14 +198,14 @@ final class NoteViewModel {
         }
     }
 
-    /// 删除首页相关分类聚合项；默认分类仅清空内容，自定义分类按精确标题跨书物理删除。
+    /// 删除首页相关分类聚合项；默认分类仅清空内容，自定义分类按精确标题跨书软删除。
     func deleteRelatedCategory(scope: RelatedCategoryScope) async throws {
         try await performWrite {
             try await repository.deleteRelatedCategory(scope: scope)
         }
     }
 
-    /// 物理删除首页书评及其附图；生产环境必须注入 ContentRepository。
+    /// 按 Android 语义软删除首页书评及其附图；生产环境必须注入 ContentRepository。
     func deleteReview(reviewID: Int64) async throws {
         guard let contentRepository else { return }
         try await performWrite {

@@ -55,10 +55,26 @@ final class RichTextRenderCache {
 
     private let attributedCache = NSCache<NSString, NSAttributedString>()
     private let layoutCache = NSCache<NSString, RichTextLayoutSnapshotBox>()
+    private var memoryWarningObserver: NSObjectProtocol?
 
     private init() {
         attributedCache.countLimit = 256
+        attributedCache.totalCostLimit = 32 * 1024 * 1024
         layoutCache.countLimit = 1024
+        layoutCache.totalCostLimit = 4 * 1024 * 1024
+        memoryWarningObserver = NotificationCenter.default.addObserver(
+            forName: UIApplication.didReceiveMemoryWarningNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            self?.removeAll()
+        }
+    }
+
+    deinit {
+        if let memoryWarningObserver {
+            NotificationCenter.default.removeObserver(memoryWarningObserver)
+        }
     }
 
     /// 命中缓存时直接复用已解析富文本，避免相同 HTML 在多个卡片里反复走解析链路。
@@ -71,10 +87,10 @@ final class RichTextRenderCache {
             return cached
         }
 
-        ExpandableRichTextDiagnostics.record(.htmlParse)
         let attributed = builder()
         let cachedValue = attributed.copy() as? NSAttributedString ?? attributed
-        attributedCache.setObject(cachedValue, forKey: nsKey)
+        let estimatedCost = max(1, cachedValue.length * MemoryLayout<UInt16>.stride * 8)
+        attributedCache.setObject(cachedValue, forKey: nsKey, cost: estimatedCost)
         return cachedValue
     }
 
@@ -85,7 +101,12 @@ final class RichTextRenderCache {
 
     /// 写入布局快照，减少滚动过程中的重复测量。
     func storeLayoutSnapshot(_ snapshot: RichTextLayoutSnapshot, for key: String) {
-        layoutCache.setObject(RichTextLayoutSnapshotBox(snapshot: snapshot), forKey: key as NSString)
+        let estimatedCost = max(1, key.utf8.count + MemoryLayout<RichTextLayoutSnapshot>.stride)
+        layoutCache.setObject(
+            RichTextLayoutSnapshotBox(snapshot: snapshot),
+            forKey: key as NSString,
+            cost: estimatedCost
+        )
     }
 
     /// 清空解析与布局缓存，供调试或主题切换场景强制失效。
@@ -103,6 +124,8 @@ struct RichText: UIViewRepresentable {
     var textColor: UIColor = .label
     var lineSpacing: CGFloat = 4
     var textAlignment: NSTextAlignment = .natural
+    /// 引用块侧边线颜色，供阅读日历与单书工作台按主题保持一致。
+    var quoteColor: UIColor = .systemGreen
     /// 最大显示行数，0 = 无限制（默认），正数启用原生省略号截断
     var maxLines: Int = 0
     /// 截断状态变更回调，仅在 maxLines > 0 时有意义
@@ -111,12 +134,14 @@ struct RichText: UIViewRepresentable {
     var selectionActionTitle: String?
     /// 用户确认自定义选区菜单动作后返回纯文本，不改变原富文本内容。
     var onSelectionAction: ((String) -> Void)?
+    /// 普通正文区域点击回调；链接继续交给 UITextView 自身处理。
+    var onContentTap: (() -> Void)?
 
     /// 创建只读 `UITextView` 和自定义 layout manager，承接完整富文本展示语义。
     func makeUIView(context: Context) -> UITextView {
         let layoutManager = RichTextLayoutManager()
         layoutManager.bulletColor = UIColor.label
-        layoutManager.quoteColor = UIColor.systemGreen
+        layoutManager.quoteColor = quoteColor
 
         let textStorage = NSTextStorage()
         textStorage.addLayoutManager(layoutManager)
@@ -138,12 +163,25 @@ struct RichText: UIViewRepresentable {
         textView.delegate = context.coordinator
         textView.setContentCompressionResistancePriority(UILayoutPriority.required, for: NSLayoutConstraint.Axis.vertical)
         textView.setContentHuggingPriority(UILayoutPriority.required, for: NSLayoutConstraint.Axis.vertical)
+
+        let contentTapGesture = UITapGestureRecognizer(
+            target: context.coordinator,
+            action: #selector(Coordinator.handleContentTap(_:))
+        )
+        contentTapGesture.cancelsTouchesInView = false
+        contentTapGesture.delegate = context.coordinator
+        textView.addGestureRecognizer(contentTapGesture)
+        context.coordinator.textView = textView
         return textView
     }
 
     /// 仅在内容签名变化时回写富文本，避免列表滚动时每次刷新都重建 `NSAttributedString`。
     func updateUIView(_ textView: UITextView, context: Context) {
         context.coordinator.parent = self
+        context.coordinator.onContentTap = onContentTap
+        if let layoutManager = textView.layoutManager as? RichTextLayoutManager {
+            layoutManager.quoteColor = quoteColor
+        }
         let traitCollection = textView.traitCollection
         let contentKey = Self.contentCacheKey(
             html: html,
@@ -246,7 +284,7 @@ struct RichText: UIViewRepresentable {
     func makeCoordinator() -> Coordinator { Coordinator(parent: self) }
 
     /// Coordinator 保存当前视图实例最近一次内容与布局命中结果，缩小单实例重复计算范围。
-    final class Coordinator: NSObject, UITextViewDelegate {
+    final class Coordinator: NSObject, UITextViewDelegate, UIGestureRecognizerDelegate {
         var parent: RichText
         var lastContentKey: String = ""
         var lastLayoutKey: String = ""
@@ -285,6 +323,58 @@ struct RichText: UIViewRepresentable {
                 callback(selectedText)
             }
             return UIMenu(children: [action] + suggestedActions)
+        }
+
+        var onContentTap: (() -> Void)?
+        weak var textView: UITextView?
+
+        /// 普通正文点击由调用方处理；链接命中由手势代理提前排除。
+        @objc
+        func handleContentTap(_ gestureRecognizer: UITapGestureRecognizer) {
+            guard gestureRecognizer.state == .ended else { return }
+            onContentTap?()
+        }
+
+        /// 仅允许正文 glyph 命中触发查看，避免空白区和 HTML 链接被父级动作截获。
+        func gestureRecognizer(
+            _ gestureRecognizer: UIGestureRecognizer,
+            shouldReceive touch: UITouch
+        ) -> Bool {
+            guard let textView, onContentTap != nil else { return false }
+            let point = touch.location(in: textView)
+            let layoutManager = textView.layoutManager
+            let textContainer = textView.textContainer
+            guard layoutManager.numberOfGlyphs > 0 else { return false }
+
+            let glyphIndex = layoutManager.glyphIndex(
+                for: point,
+                in: textContainer,
+                fractionOfDistanceThroughGlyph: nil
+            )
+            guard glyphIndex < layoutManager.numberOfGlyphs else { return false }
+            let glyphRect = layoutManager.boundingRect(
+                forGlyphRange: NSRange(location: glyphIndex, length: 1),
+                in: textContainer
+            )
+            guard glyphRect.insetBy(dx: -Spacing.half, dy: -Spacing.half).contains(point) else {
+                return false
+            }
+
+            let characterIndex = layoutManager.characterIndexForGlyph(at: glyphIndex)
+            guard characterIndex < textView.textStorage.length else { return false }
+            return textView.textStorage.attribute(
+                .link,
+                at: characterIndex,
+                effectiveRange: nil
+            ) == nil
+        }
+
+        /// 保留 UITextView 内建选择与链接手势，使富文本链接不因列表查看动作失效。
+        func gestureRecognizer(
+            _ gestureRecognizer: UIGestureRecognizer,
+            shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer
+        ) -> Bool {
+            true
         }
     }
 
@@ -515,6 +605,51 @@ struct RichText: UIViewRepresentable {
             screenScale: screenScale ?? max(traitCollection.displayScale, 1)
         )
         return cachedLayoutSnapshot(for: layoutKey)
+    }
+
+    @MainActor
+    /// 在主线程空闲阶段预热收起态布局；UIKit 测量对象不跨线程，缓存键覆盖字号、主题、宽度与行数。
+    static func prewarmPreviewLayoutSnapshot(
+        html: String,
+        baseFont: UIFont,
+        textColor: UIColor,
+        lineSpacing: CGFloat,
+        maxLines: Int,
+        width: CGFloat,
+        traitCollection: UITraitCollection,
+        screenScale: CGFloat
+    ) {
+        guard width > 0, width.isFinite else { return }
+
+        let contentKey = previewContentKey(
+            html: html,
+            baseFont: baseFont,
+            textColor: textColor,
+            lineSpacing: lineSpacing,
+            traitCollection: traitCollection
+        )
+        let layoutKey = layoutCacheKey(
+            contentKey: contentKey,
+            maxLines: maxLines,
+            width: width,
+            screenScale: screenScale
+        )
+        guard cachedLayoutSnapshot(for: layoutKey) == nil else { return }
+
+        let attributed = resolvedPreviewAttributedString(
+            html: html,
+            baseFont: baseFont,
+            textColor: textColor,
+            lineSpacing: lineSpacing,
+            traitCollection: traitCollection
+        )
+        let measurementView = CollapsedRichTextPreviewView()
+        let snapshot = measurementView.measureLayoutSnapshot(
+            attributedText: attributed,
+            width: width,
+            maxLines: maxLines
+        )
+        storeLayoutSnapshot(snapshot, for: layoutKey)
     }
 
     /// 生成预览态内容签名，避免和完整富文本缓存键相互污染。

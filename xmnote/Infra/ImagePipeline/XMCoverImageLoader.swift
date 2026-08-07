@@ -15,18 +15,21 @@ struct XMImageLoadRequest {
     let priority: XMImageRequestBuilder.Priority
     let timeout: TimeInterval
     let cachePolicy: URLRequest.CachePolicy
+    let targetSizeInPoints: CGSize?
 
     /// 组装封面加载请求参数，统一超时、优先级与缓存策略。
     init(
         url: URL,
         priority: XMImageRequestBuilder.Priority = .normal,
         timeout: TimeInterval = 12,
-        cachePolicy: URLRequest.CachePolicy = .returnCacheDataElseLoad
+        cachePolicy: URLRequest.CachePolicy = .returnCacheDataElseLoad,
+        targetSizeInPoints: CGSize? = nil
     ) {
         self.url = url
         self.priority = priority
         self.timeout = timeout
         self.cachePolicy = cachePolicy
+        self.targetSizeInPoints = targetSizeInPoints
     }
 
     var imageRequest: ImageRequest {
@@ -34,7 +37,8 @@ struct XMImageLoadRequest {
             url: url,
             priority: priority,
             timeout: timeout,
-            cachePolicy: cachePolicy
+            cachePolicy: cachePolicy,
+            targetSizeInPoints: targetSizeInPoints
         )
     }
 }

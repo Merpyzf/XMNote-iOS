@@ -58,6 +58,7 @@ private struct ReviewDetailLoadedView: View {
     @Bindable var viewModel: ReviewDetailViewModel
     @Binding var showsDeleteDialog: Bool
     @Environment(RepositoryContainer.self) private var repositories
+    @Environment(AppNavigationCoordinator.self) private var navigationCoordinator
     @State private var readLoadingGate = LoadingGate()
     @State private var aiTextPresentation: AITextResultPresentation?
 
@@ -117,7 +118,9 @@ private struct ReviewDetailLoadedView: View {
     private var toolbarContent: some ToolbarContent {
         ToolbarItemGroup(placement: .topBarTrailing) {
             if let detail = viewModel.detail {
-                NavigationLink(value: ContentRoute.reviewEditor(reviewId: detail.reviewId)) {
+                Button {
+                    navigationCoordinator.present(.reviewEditor(.edit(reviewID: detail.reviewId)))
+                } label: {
                     Image(systemName: "square.and.pencil")
                 }
 

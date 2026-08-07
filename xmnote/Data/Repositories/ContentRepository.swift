@@ -8,7 +8,7 @@ import GRDB
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
-/// 通用内容查看仓储实现，负责 viewer feed、详情读取、编辑保存与硬删除事务。
+/// 通用内容查看仓储实现，负责 viewer feed、详情读取、编辑保存与 Android 对齐的软删除事务。
 struct ContentRepository: ContentRepositoryProtocol {
     private nonisolated static let relatedBookCategoryID: Int64 = 1
 
@@ -73,8 +73,8 @@ struct ContentRepository: ContentRepositoryProtocol {
                 try fetchAllReviewViewerItems(db, query: query, sort: sort)
             case .bookReviews(let bookId):
                 try fetchBookReviewViewerItems(db, bookID: bookId)
-            case .bookRelated(let bookId, let categoryId):
-                try fetchBookRelatedViewerItems(db, bookID: bookId, categoryID: categoryId)
+            case .bookRelated(let bookId):
+                try fetchBookRelevantViewerItems(db, bookID: bookId)
             }
         }
     }
@@ -578,7 +578,7 @@ struct ContentRepository: ContentRepositoryProtocol {
         }
     }
 
-    /// 读取书评编辑草稿。
+    /// 按书评主键读取已有编辑草稿，供编辑态恢复正文与图片。
     func fetchReviewEditorDraft(reviewId: Int64) async throws -> ReviewEditorDraft? {
         try await databaseManager.database.dbPool.read { db in
             guard let detail = try fetchReviewDetail(db, reviewId: reviewId) else { return nil }
@@ -753,7 +753,7 @@ struct ContentRepository: ContentRepositoryProtocol {
         return savedReviewID
     }
 
-    /// 读取相关内容编辑草稿。
+    /// 按相关内容主键读取已有编辑草稿，供编辑态恢复正文与图片。
     func fetchRelevantEditorDraft(contentId: Int64) async throws -> RelevantEditorDraft? {
         try await databaseManager.database.dbPool.read { db in
             guard let detail = try fetchRelevantDetail(db, contentId: contentId) else { return nil }
@@ -981,7 +981,7 @@ struct ContentRepository: ContentRepositoryProtocol {
                        b.id AS content_book_id, b.name, b.author, b.press, b.cover,
                        b.position_unit, b.total_position, b.total_pagination
                 FROM category_content cc
-                JOIN book b ON b.id = cc.content_book_id AND b.is_deleted = 0
+                JOIN book b ON b.id = cc.content_book_id
                 WHERE cc.id = ? AND cc.is_deleted = 0 AND cc.content_book_id != 0
                 LIMIT 1
                 """
@@ -1032,7 +1032,7 @@ struct ContentRepository: ContentRepositoryProtocol {
         }
     }
 
-    /// 物理删除普通相关内容或相关书籍关系，并在最后引用移除后清理占位书。
+    /// 按 Android 语义软删除普通相关内容或相关书籍关系及其附图。
     func deleteRelatedRelation(relationID: Int64) async throws {
         guard relationID > 0 else { throw ContentRepositoryError.relevantNotFound }
         try await databaseManager.database.dbPool.write { db in
@@ -1040,7 +1040,7 @@ struct ContentRepository: ContentRepositoryProtocol {
         }
     }
 
-    /// 删除指定内容，按 iOS 当前约定执行主记录与子记录的硬删除事务。
+    /// 删除指定内容，在单一事务内按 Android 语义软删除主记录与子记录。
     func delete(itemID: ContentViewerItemID) async throws {
         try await databaseManager.database.dbPool.write { db in
             switch itemID {
@@ -1525,6 +1525,40 @@ private extension ContentRepository {
         }
     }
 
+    /// 查询单本书全部可见分类下的普通相关内容，顺序与原生工作台的持久化排序语义一致。
+    nonisolated func fetchBookRelevantViewerItems(_ db: Database, bookID: Int64) throws -> [ContentViewerListItem] {
+        guard bookID > 0 else { return [] }
+        let rule = try BookContentSortQuery.fetchRule(db, bookID: bookID, type: .related)
+        let direction = rule == .createdDateAscending ? "ASC" : "DESC"
+        // SQL 目的：读取指定书籍全部可见分类下的普通相关内容，供原生工作台进入通用 Viewer 后分页。
+        // 涉及表：category_content INNER JOIN category INNER JOIN book。
+        // 关键过滤：来源书精确匹配；关系、分类与书籍均有效；分类未隐藏；排除 content_book_id != 0 的相关书籍关系。
+        // 排序：分类按 Android `order`/id 稳定分区，分类内严格使用 sort(book_id,type=RELEVANT) 的持久化时间方向。
+        // 时间字段：created_date 为 Android 毫秒时间戳，不做时区转换。
+        // 返回字段用途：构建与工作台相邻顺序一致的相关内容 Viewer 列表。
+        let sql = """
+            SELECT cc.id, cc.book_id, cc.created_date, COALESCE(b.name, '') AS book_title
+            FROM category_content cc
+            JOIN category cat ON cat.id = cc.category_id
+                             AND cat.is_deleted = 0
+                             AND cat.is_hide = 0
+            JOIN book b ON b.id = cc.book_id AND b.is_deleted = 0 AND b.id != 0
+            WHERE cc.book_id = ?
+              AND cc.content_book_id = 0
+              AND cc.is_deleted = 0
+            ORDER BY cat."order" ASC, cat.id ASC,
+                     cc.created_date \(direction), cc.id \(direction)
+            """
+        return try Row.fetchAll(db, sql: sql, arguments: [bookID]).map { row in
+            ContentViewerListItem(
+                id: .relevant(row["id"]),
+                sourceBookId: row["book_id"],
+                bookTitle: row["book_title"] ?? "",
+                timestamp: row["created_date"] ?? 0
+            )
+        }
+    }
+
     /// 查询单本书指定分类下的普通相关内容；相关书籍始终由 BookRoute 进入详情。
     nonisolated func fetchBookRelatedViewerItems(
         _ db: Database,
@@ -1872,6 +1906,50 @@ private extension ContentRepository {
 // MARK: - Detail Queries
 
 private extension ContentRepository {
+    /// 读取有效书籍名称，供创建态编辑器建立最小上下文。
+    nonisolated func fetchActiveBookTitle(_ db: Database, bookID: Int64) throws -> String? {
+        // SQL 目的：读取创建书评或相关内容时的目标书名。
+        // 涉及表：book。
+        // 关键过滤：按 book.id 精确命中，排除软删除与占位书。
+        // 时间字段：不读取时间字段。
+        // 返回字段用途：创建态编辑器头部回显所属书籍。
+        try String.fetchOne(
+            db,
+            sql: "SELECT name FROM book WHERE id = ? AND is_deleted = 0 AND id != 0",
+            arguments: [bookID]
+        )
+    }
+
+    /// 读取相关内容创建态所需的有效书籍与分类名称。
+    nonisolated func fetchRelevantCreateContext(
+        _ db: Database,
+        bookID: Int64,
+        categoryID: Int64
+    ) throws -> (bookTitle: String, categoryTitle: String)? {
+        // SQL 目的：校验相关内容创建目标，并读取所属书与分类标题。
+        // 涉及表：book b INNER JOIN category cat。
+        // 关键过滤：book/category 均未软删除，分类必须是全局分类 book_id=0 或当前书籍私有分类。
+        // 时间字段：不读取时间字段。
+        // 返回字段用途：防止向无效分类写入，并构建创建态编辑器上下文。
+        let sql = """
+            SELECT b.name AS book_title, COALESCE(cat.title, '') AS category_title
+            FROM book b
+            JOIN category cat ON cat.id = ? AND cat.is_deleted = 0
+            WHERE b.id = ?
+              AND b.is_deleted = 0
+              AND b.id != 0
+              AND (cat.book_id = 0 OR cat.book_id = b.id)
+            LIMIT 1
+            """
+        guard let row = try Row.fetchOne(db, sql: sql, arguments: [categoryID, bookID]) else {
+            return nil
+        }
+        return (
+            bookTitle: row["book_title"] ?? "",
+            categoryTitle: row["category_title"] ?? ""
+        )
+    }
+
     /// 读取单条书摘详情，并补齐章节、附图与标签。
     nonisolated func fetchNoteDetail(_ db: Database, noteId: Int64) throws -> NoteContentDetail? {
         // SQL 目的：按主键读取单条书摘完整详情。
@@ -2106,64 +2184,90 @@ private extension ContentRepository {
 // MARK: - Delete Transactions
 
 private extension ContentRepository {
-    /// 硬删除书摘及其附图、标签关系。
+    /// 书摘删除对齐 Android NoteDeletionManager：物理删除导入哈希，软删除主记录、附图与标签关系。
     nonisolated func deleteNote(_ db: Database, noteId: Int64) throws {
+        let updatedAt = Int64(Date().timeIntervalSince1970 * 1_000)
         try db.execute(
-            // SQL 目的：物理删除指定书摘关联的全部附图记录。
-            // 涉及表：attach_image。
-            // 关键过滤：按 note_id 精确命中；不追加 is_deleted 条件，确保 Android 遗留软删除子记录也被一并清理。
-            sql: "DELETE FROM attach_image WHERE note_id = ?",
+            // SQL 目的：删除指定书摘的本地导入去重哈希；Android NoteDeletionManager 唯一物理删除的关联数据。
+            // 涉及表：note_import_hash。
+            // 关键过滤：按 note_id 精确命中，不触碰其他书摘哈希。
+            // 时间字段：该表不维护删除时间。
+            // 副作用：后续重新导入时不再把已删除书摘误判为仍存在。
+            sql: "DELETE FROM note_import_hash WHERE note_id = ?",
             arguments: [noteId]
         )
         try db.execute(
-            // SQL 目的：物理删除指定书摘关联的全部标签关系。
-            // 涉及表：tag_note。
-            // 关键过滤：按 note_id 精确命中；不追加 is_deleted 条件，避免残留 tombstone 关系记录。
-            sql: "DELETE FROM tag_note WHERE note_id = ?",
-            arguments: [noteId]
-        )
-        try db.execute(
-            // SQL 目的：物理删除指定书摘主记录。
+            // SQL 目的：软删除指定书摘主记录，对齐 NoteDao.delete。
             // 涉及表：note。
-            // 关键过滤：按 id 精确命中；不追加 is_deleted 条件，允许清理 Android 端已软删除但仍驻留本地的主记录。
-            sql: "DELETE FROM note WHERE id = ?",
-            arguments: [noteId]
+            // 关键过滤：按 id 精确命中且仅更新有效记录。
+            // 时间字段：updated_date 写同一删除事务的当前毫秒时间戳。
+            // 副作用：保留同步 tombstone。
+            sql: "UPDATE note SET updated_date = ?, is_deleted = 1 WHERE id = ? AND is_deleted = 0",
+            arguments: [updatedAt, noteId]
+        )
+        try db.execute(
+            // SQL 目的：软删除指定书摘全部有效附图，对齐 AttachImageDao.deleteImagesFromNote。
+            // 涉及表：attach_image。
+            // 关键过滤：按 note_id 精确命中有效记录。
+            // 时间字段：updated_date 与主记录使用同一毫秒时间戳。
+            // 副作用：保留图片关系 tombstone 供同步。
+            sql: "UPDATE attach_image SET updated_date = ?, is_deleted = 1 WHERE note_id = ? AND is_deleted = 0",
+            arguments: [updatedAt, noteId]
+        )
+        try db.execute(
+            // SQL 目的：软删除指定书摘全部有效标签关系，对齐 TagNoteDao.deleteByNoteIdSync。
+            // 涉及表：tag_note。
+            // 关键过滤：按 note_id 精确命中有效记录。
+            // 时间字段：updated_date 与主记录使用同一毫秒时间戳。
+            // 副作用：保留标签关系 tombstone 供同步。
+            sql: "UPDATE tag_note SET updated_date = ?, is_deleted = 1 WHERE note_id = ? AND is_deleted = 0",
+            arguments: [updatedAt, noteId]
         )
     }
 
-    /// 硬删除书评及其附图。
+    /// 书评删除对齐 Android ReviewRepository：同事务软删除主记录与附图。
     nonisolated func deleteReview(_ db: Database, reviewId: Int64) throws {
+        let updatedAt = Int64(Date().timeIntervalSince1970 * 1_000)
         try db.execute(
-            // SQL 目的：物理删除指定书评关联的全部附图记录。
-            // 涉及表：review_image。
-            // 关键过滤：按 review_id 精确命中；不追加 is_deleted 条件，统一清理活跃与 tombstone 子记录。
-            sql: "DELETE FROM review_image WHERE review_id = ?",
-            arguments: [reviewId]
+            // SQL 目的：软删除指定书评主记录，对齐 ReviewDao.delete。
+            // 涉及表：review。
+            // 关键过滤：按 id 精确命中有效记录。
+            // 时间字段：updated_date 写当前毫秒时间戳。
+            // 副作用：保留书评 tombstone。
+            sql: "UPDATE review SET updated_date = ?, is_deleted = 1 WHERE id = ? AND is_deleted = 0",
+            arguments: [updatedAt, reviewId]
         )
         try db.execute(
-            // SQL 目的：物理删除指定书评主记录。
-            // 涉及表：review。
-            // 关键过滤：按 id 精确命中；不追加 is_deleted 条件，允许清理 Android 软删除残留记录。
-            sql: "DELETE FROM review WHERE id = ?",
-            arguments: [reviewId]
+            // SQL 目的：软删除指定书评全部有效附图，对齐 ReviewImageDao.deleteImagesOfReview。
+            // 涉及表：review_image。
+            // 关键过滤：按 review_id 精确命中有效记录。
+            // 时间字段：updated_date 与主记录使用同一毫秒时间戳。
+            // 副作用：保留图片关系 tombstone。
+            sql: "UPDATE review_image SET updated_date = ?, is_deleted = 1 WHERE review_id = ? AND is_deleted = 0",
+            arguments: [updatedAt, reviewId]
         )
     }
 
-    /// 硬删除相关内容及其附图。
+    /// 相关内容删除对齐 Android RelevantRepository：软删除主记录与附图。
     nonisolated func deleteRelevant(_ db: Database, contentId: Int64) throws {
+        let updatedAt = Int64(Date().timeIntervalSince1970 * 1_000)
         try db.execute(
-            // SQL 目的：物理删除指定相关内容关联的全部附图记录。
-            // 涉及表：category_image。
-            // 关键过滤：按 category_content_id 精确命中；不追加 is_deleted 条件，确保 tombstone 附图同步清理。
-            sql: "DELETE FROM category_image WHERE category_content_id = ?",
+            // SQL 目的：软删除指定普通相关内容或相关书籍关系，对齐 CategoryContentDao.update 路径。
+            // 涉及表：category_content。
+            // 关键过滤：按 id 精确命中有效记录。
+            // 时间字段：Android mapper 保留原 updated_date，iOS 不额外改写。
+            // 副作用：保留相关关系 tombstone。
+            sql: "UPDATE category_content SET is_deleted = 1 WHERE id = ? AND is_deleted = 0",
             arguments: [contentId]
         )
         try db.execute(
-            // SQL 目的：物理删除指定相关内容主记录。
-            // 涉及表：category_content。
-            // 关键过滤：按 id 精确命中；不追加 is_deleted 条件，允许清理 Android 软删除残留主记录。
-            sql: "DELETE FROM category_content WHERE id = ?",
-            arguments: [contentId]
+            // SQL 目的：软删除指定相关内容全部有效附图，对齐 CategoryImageDao.deleteFromContent。
+            // 涉及表：category_image。
+            // 关键过滤：按 category_content_id 精确命中有效记录。
+            // 时间字段：updated_date 写当前毫秒时间戳。
+            // 副作用：保留图片关系 tombstone。
+            sql: "UPDATE category_image SET updated_date = ?, is_deleted = 1 WHERE category_content_id = ? AND is_deleted = 0",
+            arguments: [updatedAt, contentId]
         )
     }
 }

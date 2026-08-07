@@ -71,7 +71,7 @@ struct ReviewEditorView: View {
             } else {
                 Color.surfacePage.ignoresSafeArea()
                 if bootstrapLoadingGate.isVisible {
-                    LoadingStateView("正在准备书评编辑页…", style: .card)
+                    LoadingStateView("正在准备书评…", style: .card)
                 }
             }
         }
@@ -414,7 +414,7 @@ private enum ReviewEditorAlert: Identifiable {
 
 #Preview("编辑书评") {
     NavigationStack {
-        ReviewEditorView(reviewId: 1)
+        ReviewEditorView(mode: .edit(reviewID: 1))
     }
     .environment(RepositoryContainer(databaseManager: DatabaseManager(database: try! .empty())))
     .environment(AppState())

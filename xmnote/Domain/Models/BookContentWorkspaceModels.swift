@@ -30,6 +30,20 @@ nonisolated enum BookContentSortRule: Int64, CaseIterable, Hashable, Sendable {
             [.createdDateAscending, .createdDateDescending]
         }
     }
+
+    /// 返回排序菜单文案；位置规则只会出现在书摘域，时间规则可被三类内容复用。
+    func title(for type: BookContentSortType) -> String {
+        switch self {
+        case .createdDateAscending:
+            "最早记录优先"
+        case .createdDateDescending:
+            "最近记录优先"
+        case .positionAscending:
+            type == .notes ? "位置从前到后" : "最早记录优先"
+        case .positionDescending:
+            type == .notes ? "位置从后到前" : "最近记录优先"
+        }
+    }
 }
 
 /// 单本书三个内容类型互不串值的持久化排序快照。

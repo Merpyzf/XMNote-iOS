@@ -6,24 +6,45 @@
 //
 
 import Foundation
+#if DEBUG
+import os
+#endif
 
 /**
- * [INPUT]: 依赖 BookDetailRepositoryProtocol 提供书籍详情、书摘观察流与单本评分写入，依赖 ContentRepositoryProtocol 提供工作区快照与单书内容排序写入
- * [OUTPUT]: 对外提供 BookDetailViewModel，输出 book/notes/workspace、持久化排序与单本评分门闩及对应加载、错误状态
- * [POS]: Book 模块书籍详情状态编排器，被 BookDetailView 消费
+ * [INPUT]: 依赖 BookDetailRepositoryProtocol 提供书籍详情与四域观察流，依赖 ContentRepositoryProtocol 提供排序/分类/相关写入，依赖 ReadCalendarColorRepositoryProtocol 提取头部色彩
+ * [OUTPUT]: 对外提供 BookDetailViewModel，输出 book、目录、书摘、相关、书评、分类、持久化排序、头部色彩及可显式启停的观察与写入生命周期
+ * [POS]: Book 模块单书内容工作台状态编排器，被 BookDetailView 与阅读详情页消费
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
 // MARK: - BookDetailViewModel
 
-/// 书籍详情状态源，负责详情、书摘与笔记工作区三通道订阅；所有 UI 状态均在主线程更新。
+/// 标识一条书摘已完成纯文本派生时对应的源内容，避免数据库无关字段更新后重复解析 HTML。
+nonisolated private struct BookNoteContentSignature: Hashable, Sendable {
+    let content: String
+    let idea: String
+}
+
+/// 单书内容工作台状态源，负责资料与四域内容订阅；所有 UI 状态均在主线程更新。
 @MainActor
 @Observable
 final class BookDetailViewModel {
+#if DEBUG
+    private static let notesLogger = Logger(
+        subsystem: Bundle.main.bundleIdentifier ?? "xmnote",
+        category: "BookWorkspaceNotes"
+    )
+#endif
+
     var book: BookDetail?
     var notes: [NoteExcerpt] = []
-    var isDetailLoading = true
-    var detailErrorMessage: String?
+    var notesLoadState: BookNotesLoadState = .loading
+    var loadedNotesCount: Int?
+    var relatedCategories: [BookRelatedCategory] = []
+    var related: [BookRelatedExcerpt] = []
+    var reviews: [BookReviewExcerpt] = []
+    var headerTintRGBAHex: UInt32?
+    var errorMessage: String?
     var workspace: BookContentWorkspaceSnapshot = .empty
     var isWorkspaceLoading = true
     var workspaceErrorMessage: String?
@@ -34,86 +55,89 @@ final class BookDetailViewModel {
     private let bookId: Int64
     private let repository: any BookDetailRepositoryProtocol
     private let contentRepository: any ContentRepositoryProtocol
-    private var detailTask: Task<Void, Never>?
-    private var notesTask: Task<Void, Never>?
+    private let colorRepository: any ReadCalendarColorRepositoryProtocol
+    private var observationTasks: [Task<Void, Never>] = []
+    private var notesPreparationTask: Task<Void, Never>?
+    private var notesPreparationRevision: UInt64 = 0
+    private var preparedNoteSignatures: [Int64: BookNoteContentSignature] = [:]
+    private var colorTask: Task<Void, Never>?
+    private var resolvedColorSignature: String?
     private var workspaceTask: Task<Void, Never>?
     private var workspaceWriteTask: Task<Void, Never>?
 
-    /// 注入目标书籍 ID、详情仓储与内容仓储，初始化三个彼此独立的数据库观察通道。
+    /// 注入目标书籍 ID、内容仓储与封面取色仓储，初始化工作台数据观察。
     init(
         bookId: Int64,
         repository: any BookDetailRepositoryProtocol,
-        contentRepository: any ContentRepositoryProtocol
+        contentRepository: any ContentRepositoryProtocol,
+        colorRepository: any ReadCalendarColorRepositoryProtocol
     ) {
         self.bookId = bookId
         self.repository = repository
         self.contentRepository = contentRepository
+        self.colorRepository = colorRepository
     }
 
     var hasNotes: Bool { !notes.isEmpty }
 
-    /// 建立详情、书摘与内容工作区观察任务；重复调用只补建缺失通道，所有回写统一回到主线程。
+    /// 建立详情、书摘、相关分类、相关内容与书评观察任务；取消页面任务时所有子流同步结束。
     func startObservation() {
-        startDetailObservation()
-
-        if notesTask == nil {
-            let stream = repository.observeBookNotes(bookId: bookId)
-            notesTask = Task { [weak self] in
-                do {
-                    for try await items in stream {
-                        guard !Task.isCancelled else { return }
-                        let preparedNotes = try await Self.preparedNotesOffMain(items)
-                        guard !Task.isCancelled else { return }
-                        self?.notes = preparedNotes
-                    }
-                } catch is CancellationError {
-                    return
-                } catch {
-                    print("BookDetailViewModel notes observation error: \(error)")
-                }
-            }
-        }
+        guard observationTasks.isEmpty else { return }
+        observationTasks = [
+            Task { await observeDetail() },
+            Task { await observeNotes() },
+            Task { await observeRelatedCategories() },
+            Task { await observeRelated() },
+            Task { await observeReviews() }
+        ]
         startWorkspaceObservation()
     }
 
-    /// 取消失效的详情订阅并重新读取；对象不存在与读取失败都会退出加载态并提供可感知结果。
-    func retryDetailObservation() {
-        detailTask?.cancel()
-        detailTask = nil
-        startDetailObservation()
-    }
-
-    /// 取消失败或陈旧的工作区订阅并重新观察；新任务会立即恢复读取态，旧任务取消后不再回写。
-    func retryWorkspaceObservation() {
+    /// 停止当前页面建立的全部观察与展示派生；重复调用安全，重新出现时可再次启动。
+    func stopObservation() {
+        observationTasks.forEach { $0.cancel() }
+        observationTasks.removeAll()
         workspaceTask?.cancel()
         workspaceTask = nil
-        startWorkspaceObservation()
+        workspaceWriteTask?.cancel()
+        workspaceWriteTask = nil
+        isWorkspaceWriting = false
+
+        notesPreparationRevision &+= 1
+        if notesPreparationTask != nil {
+#if DEBUG
+            Self.notesLogger.debug(
+                "[book.workspace.notes.projection.cancel.requested] bookID=\(self.bookId) revision=\(self.notesPreparationRevision)"
+            )
+#endif
+        }
+        notesPreparationTask?.cancel()
+        notesPreparationTask = nil
+
+        colorTask?.cancel()
+        colorTask = nil
+        resolvedColorSignature = nil
     }
 
-    /// 更新当前书籍评分；写入期间拒绝重复提交，成功结果由详情观察流刷新，不额外制造成功提示。
+    /// 更新当前书籍评分；写入期间拒绝重复提交，成功结果由详情观察流刷新。
     func updateBookRating(score: Int64) async throws {
-        guard !isRatingWriting else {
-            throw BookDetailRatingError.operationInProgress
-        }
+        guard !isRatingWriting else { throw BookDetailRatingError.operationInProgress }
         isRatingWriting = true
         defer { isRatingWriting = false }
         try await repository.updateBookRating(bookId: bookId, score: score)
         try Task.checkCancellation()
     }
 
-    /// 添加一本本地相关书；写入期间即时禁用重复操作，成功结果由数据库观察流表达。
+    /// 添加一本有效本地书作为当前书籍的相关书。
     func addRelatedBook(bookID relatedBookID: Int64) {
         let repository = contentRepository
         let sourceBookID = bookId
         performWorkspaceWrite {
-            try await repository.addRelatedBook(
-                sourceBookID: sourceBookID,
-                relatedBookID: relatedBookID
-            )
+            try await repository.addRelatedBook(sourceBookID: sourceBookID, relatedBookID: relatedBookID)
         }
     }
 
-    /// 将在线候选作为引用占位书加入相关内容，不改变书架有效书集合。
+    /// 将在线候选保存为引用占位书并建立相关关系，不改变有效书架集合。
     func addRelatedBook(remoteSelection: BookPickerRemoteSelection) {
         let repository = contentRepository
         let sourceBookID = bookId
@@ -123,7 +147,7 @@ final class BookDetailViewModel {
         }
     }
 
-    /// 将用户确认的相关书占位记录恢复到书架，观察流随后把卡片切换为正常详情入口。
+    /// 将相关书占位记录恢复到有效书架。
     func restoreRelatedBookPlaceholder(bookID: Int64) {
         let repository = contentRepository
         performWorkspaceWrite {
@@ -131,7 +155,7 @@ final class BookDetailViewModel {
         }
     }
 
-    /// 物理移除单条相关内容或相关书籍关系；占位书清理由 ContentRepository 事务统一处理。
+    /// 按 Android 软删除语义移除一条普通相关内容或相关书籍关系。
     func deleteRelatedRelation(relationID: Int64) {
         let repository = contentRepository
         performWorkspaceWrite {
@@ -139,87 +163,88 @@ final class BookDetailViewModel {
         }
     }
 
-    /// 新建书内私有相关分类，业务校验与事务均由 ContentRepository 完成。
+    /// 软删除指定书评及其附图，结果由书评观察流从当前工作台移除。
+    func deleteReview(reviewID: Int64) {
+        let repository = contentRepository
+        performWorkspaceWrite {
+            try await repository.delete(itemID: .review(reviewID))
+        }
+    }
+
+    /// 读取相关书籍关系编辑草稿；读取任务由调用方持有并响应页面取消。
+    func fetchRelatedBookRelationDraft(relationID: Int64) async throws -> RelatedBookRelationDraft? {
+        try await contentRepository.fetchRelatedBookRelationDraft(relationID: relationID)
+    }
+
+    /// 保存相关书籍关系并维持写入门闩；失败由编辑 Sheet 原位展示，不吞掉错误。
+    func saveRelatedBookRelationDraft(_ draft: RelatedBookRelationDraft) async throws {
+        guard !isWorkspaceWriting else { throw BookDetailWorkspaceError.operationInProgress }
+        isWorkspaceWriting = true
+        defer { isWorkspaceWriting = false }
+        try await contentRepository.saveRelatedBookRelationDraft(draft)
+        try Task.checkCancellation()
+    }
+
+    /// 新建当前书私有或全部书共享的相关分类。
     func createRelatedCategory(title: String, scope: BookContentCategoryScope) {
         let repository = contentRepository
         let sourceBookID = bookId
         performWorkspaceWrite {
-            try await repository.createBookRelatedCategory(
-                bookID: sourceBookID,
-                title: title,
-                scope: scope
-            )
+            try await repository.createBookRelatedCategory(bookID: sourceBookID, title: title, scope: scope)
         }
     }
 
-    /// 重命名书内私有相关分类；系统默认分类不会通过 Repository 所有权门闩。
+    /// 重命名当前书可管理的相关分类。
     func renameRelatedCategory(categoryID: Int64, title: String) {
         let repository = contentRepository
         let sourceBookID = bookId
         performWorkspaceWrite {
-            try await repository.renameBookRelatedCategory(
-                bookID: sourceBookID,
-                categoryID: categoryID,
-                title: title
-            )
+            try await repository.renameBookRelatedCategory(bookID: sourceBookID, categoryID: categoryID, title: title)
         }
     }
 
-    /// 物理删除书内私有相关分类及子内容，完成后依赖观察流刷新分区。
+    /// 删除当前书可管理的相关分类及其关联内容。
     func deleteRelatedCategory(categoryID: Int64) {
         let repository = contentRepository
         let sourceBookID = bookId
         performWorkspaceWrite {
-            try await repository.deleteBookRelatedCategory(
-                bookID: sourceBookID,
-                categoryID: categoryID
-            )
+            try await repository.deleteBookRelatedCategory(bookID: sourceBookID, categoryID: categoryID)
         }
     }
 
-    /// 切换固定默认分类隐藏状态；全局影响由管理 Sheet 的说明提前告知用户。
+    /// 切换固定默认分类的全局隐藏状态。
     func setDefaultRelatedCategoryHidden(categoryID: Int64, isHidden: Bool) {
         let repository = contentRepository
         performWorkspaceWrite {
-            try await repository.setDefaultBookRelatedCategoryHidden(
-                categoryID: categoryID,
-                isHidden: isHidden
-            )
+            try await repository.setDefaultBookRelatedCategoryHidden(categoryID: categoryID, isHidden: isHidden)
         }
     }
 
-    /// 按管理 Sheet 的最终顺序写入全部私有分类；失败时页面保留错误供回滚说明。
+    /// 按管理页最终顺序写入相关分类排序。
     func reorderRelatedCategories(categoryIDs: [Int64]) {
         let repository = contentRepository
         let sourceBookID = bookId
         performWorkspaceWrite {
-            try await repository.updateBookRelatedCategoryOrder(
-                bookID: sourceBookID,
-                categoryIDs: categoryIDs
-            )
+            try await repository.updateBookRelatedCategoryOrder(bookID: sourceBookID, categoryIDs: categoryIDs)
         }
     }
 
-    /// 写入当前书指定内容类型的排序规则；成功后由 sort 表观察驱动列表重排，失败保持旧偏好并展示系统错误。
+    /// 写入当前书指定内容类型的唯一持久化排序规则。
     func updateContentSort(type: BookContentSortType, rule: BookContentSortRule) {
         guard workspace.sortPreferences.rule(for: type) != rule else { return }
         let repository = contentRepository
         let sourceBookID = bookId
         performWorkspaceWrite {
-            try await repository.updateBookContentSortRule(
-                bookID: sourceBookID,
-                type: type,
-                rule: rule
-            )
+            try await repository.updateBookContentSortRule(bookID: sourceBookID, type: type, rule: rule)
         }
     }
 
-    /// 清除已向用户展示的工作区写入错误，避免同一系统弹窗重复出现。
+    /// 清除已展示的工作区写入错误。
     func consumeWorkspaceActionError() {
         workspaceActionErrorMessage = nil
     }
 
-    /// 串行执行单个工作区写操作；Task 仅弱持有 ViewModel，页面退出后不会形成自持有环。
+    /// 串行执行单个工作区写操作；页面离场取消任务，避免旧结果回写新现场。
     private func performWorkspaceWrite(_ operation: @escaping () async throws -> Void) {
         guard !isWorkspaceWriting else { return }
         workspaceActionErrorMessage = nil
@@ -239,7 +264,7 @@ final class BookDetailViewModel {
         }
     }
 
-    /// 建立书评与相关内容观察；流失败时保留已加载快照并向页面暴露可重试错误。
+    /// 观察内容工作区元数据，向原生展示壳提供持久化排序与分类管理真值。
     private func startWorkspaceObservation() {
         guard workspaceTask == nil else { return }
         isWorkspaceLoading = true
@@ -249,9 +274,7 @@ final class BookDetailViewModel {
             do {
                 for try await snapshot in stream {
                     guard !Task.isCancelled else { return }
-                    let preparedSnapshot = try await Self.preparedWorkspaceOffMain(snapshot)
-                    guard !Task.isCancelled else { return }
-                    self?.workspace = preparedSnapshot
+                    self?.workspace = snapshot
                     self?.workspaceErrorMessage = nil
                     self?.isWorkspaceLoading = false
                 }
@@ -265,34 +288,224 @@ final class BookDetailViewModel {
         }
     }
 
-    /// 建立单书详情观察；nil 表示对象已不存在或不再属于有效书架，错误则保留底层可读信息。
-    private func startDetailObservation() {
-        guard detailTask == nil else { return }
-        if book == nil {
-            isDetailLoading = true
+    /// 订阅书籍身份与阅读状态，并在封面变化时重新提取低饱和头部基色。
+    private func observeDetail() async {
+        do {
+            for try await detail in repository.observeBookDetail(bookId: bookId) {
+                guard !Task.isCancelled else { return }
+                let preparedBook = try await Self.preparedBookOffMain(detail)
+                guard !Task.isCancelled else { return }
+                self.book = preparedBook
+                resolveHeaderTintIfNeeded(for: preparedBook)
+            }
+        } catch is CancellationError {
+            return
+        } catch {
+            recordObservationError(error)
         }
-        detailErrorMessage = nil
-        let stream = repository.observeBookDetail(bookId: bookId)
-        detailTask = Task { [weak self] in
-            do {
-                for try await detail in stream {
-                    guard !Task.isCancelled else { return }
-                    let preparedBook = try await Self.preparedBookOffMain(detail)
-                    guard !Task.isCancelled else { return }
-                    self?.book = preparedBook
-                    self?.detailErrorMessage = preparedBook == nil
-                        ? "书籍不存在、已被删除，或尚未加入书架"
-                        : nil
-                    self?.isDetailLoading = false
+    }
+
+    /// 订阅章节化书摘；数据库首值立即结束 loading，纯文本仅作为可取消的后续展示派生。
+    private func observeNotes() async {
+        var didReceiveValue = false
+
+        do {
+            for try await items in repository.observeBookNotes(bookId: bookId) {
+                guard !Task.isCancelled else { return }
+                let isFirstValue = !didReceiveValue
+                didReceiveValue = true
+#if DEBUG
+                if isFirstValue {
+                    Self.notesLogger.debug(
+                        "[book.workspace.notes.stream.first] bookID=\(self.bookId) count=\(items.count)"
+                    )
                 }
-            } catch is CancellationError {
+#endif
+                acceptLoadedNotes(items)
+            }
+
+            guard didReceiveValue || Task.isCancelled else {
+                notesLoadState = .failed
+                errorMessage = "部分内容加载失败：书摘数据流未返回内容。"
+#if DEBUG
+                Self.notesLogger.error(
+                    "[book.workspace.notes.stream.finished_without_value] bookID=\(self.bookId)"
+                )
+#endif
                 return
+            }
+        } catch is CancellationError {
+            return
+        } catch {
+            notesLoadState = .failed
+#if DEBUG
+            Self.notesLogger.error(
+                "[book.workspace.notes.stream.failed] bookID=\(self.bookId) error=\(error.localizedDescription, privacy: .public)"
+            )
+#endif
+            recordObservationError(error)
+        }
+    }
+
+    /// 立即提交 Repository 真值，并为新增或内容发生变化的条目启动独立纯文本派生。
+    private func acceptLoadedNotes(_ items: [NoteExcerpt]) {
+        notesPreparationTask?.cancel()
+        notesPreparationTask = nil
+        notesPreparationRevision &+= 1
+        let revision = notesPreparationRevision
+
+        let validIDs = Set(items.map(\.id))
+        preparedNoteSignatures = preparedNoteSignatures.filter { validIDs.contains($0.key) }
+
+        let previousByID = Dictionary(uniqueKeysWithValues: notes.map { ($0.id, $0) })
+        var pendingItems: [NoteExcerpt] = []
+        let immediatelyVisibleItems = items.map { item in
+            let signature = Self.contentSignature(for: item)
+            guard preparedNoteSignatures[item.id] == signature,
+                  let previous = previousByID[item.id] else {
+                pendingItems.append(item)
+                return item
+            }
+            return Self.copyingPlainText(from: previous, to: item)
+        }
+
+        applyLoadedNotes(immediatelyVisibleItems)
+#if DEBUG
+        Self.notesLogger.debug(
+            "[book.workspace.notes.raw.committed] bookID=\(self.bookId) count=\(immediatelyVisibleItems.count) pending=\(pendingItems.count) revision=\(revision)"
+        )
+#endif
+        scheduleNotesPreparation(pendingItems, revision: revision)
+    }
+
+    /// 在主线程一次性提交书摘数组与其加载阶段，避免列表把初始空数组误判成真实空态。
+    private func applyLoadedNotes(_ items: [NoteExcerpt]) {
+        notes = items
+        loadedNotesCount = items.count
+        notesLoadState = .loaded
+    }
+
+    /// 派生待处理书摘的纯文本；只允许最新 revision 回写，失败不会逆转已完成的数据加载状态。
+    private func scheduleNotesPreparation(_ items: [NoteExcerpt], revision: UInt64) {
+        guard !items.isEmpty else { return }
+        let bookID = bookId
+#if DEBUG
+        Self.notesLogger.debug(
+            "[book.workspace.notes.projection.started] bookID=\(bookID) count=\(items.count) revision=\(revision)"
+        )
+#endif
+        notesPreparationTask = Task { [weak self] in
+            do {
+                let preparedItems = try await Self.preparedNotesOffMain(items)
+                guard !Task.isCancelled else { throw CancellationError() }
+                guard let self else { return }
+                guard self.notesPreparationRevision == revision else {
+#if DEBUG
+                    Self.notesLogger.debug(
+                        "[book.workspace.notes.projection.discarded] bookID=\(bookID) revision=\(revision) current=\(self.notesPreparationRevision)"
+                    )
+#endif
+                    return
+                }
+                self.applyPreparedNotes(preparedItems)
+                self.notesPreparationTask = nil
+#if DEBUG
+                Self.notesLogger.debug(
+                    "[book.workspace.notes.projection.completed] bookID=\(bookID) count=\(preparedItems.count) revision=\(revision)"
+                )
+#endif
+            } catch is CancellationError {
+#if DEBUG
+                Self.notesLogger.debug(
+                    "[book.workspace.notes.projection.cancelled] bookID=\(bookID) revision=\(revision)"
+                )
+#endif
             } catch {
-                self?.detailErrorMessage = error.localizedDescription
-                self?.isDetailLoading = false
-                self?.detailTask = nil
+#if DEBUG
+                Self.notesLogger.error(
+                    "[book.workspace.notes.projection.failed] bookID=\(bookID) revision=\(revision) error=\(error.localizedDescription, privacy: .public)"
+                )
+#endif
             }
         }
+    }
+
+    /// 将纯文本结果合并进当前同 revision 列表，保持条目身份与顺序不变。
+    private func applyPreparedNotes(_ preparedItems: [NoteExcerpt]) {
+        let preparedByID = Dictionary(uniqueKeysWithValues: preparedItems.map { ($0.id, $0) })
+        notes = notes.map { preparedByID[$0.id] ?? $0 }
+        for item in preparedItems {
+            preparedNoteSignatures[item.id] = Self.contentSignature(for: item)
+        }
+    }
+
+    /// 订阅相关分类，供工作台筛选与创建前分类选择使用。
+    private func observeRelatedCategories() async {
+        do {
+            for try await items in repository.observeBookRelatedCategories(bookId: bookId) {
+                guard !Task.isCancelled else { return }
+                relatedCategories = items
+            }
+        } catch is CancellationError {
+            return
+        } catch {
+            recordObservationError(error)
+        }
+    }
+
+    /// 订阅相关内容并在后台生成普通相关笔记的稳定纯文本预览。
+    private func observeRelated() async {
+        do {
+            for try await items in repository.observeBookRelated(bookId: bookId) {
+                guard !Task.isCancelled else { return }
+                let preparedItems = try await Self.preparedRelatedOffMain(items)
+                guard !Task.isCancelled else { return }
+                related = preparedItems
+            }
+        } catch is CancellationError {
+            return
+        } catch {
+            recordObservationError(error)
+        }
+    }
+
+    /// 订阅书评并在后台生成正文的稳定纯文本预览。
+    private func observeReviews() async {
+        do {
+            for try await items in repository.observeBookReviews(bookId: bookId) {
+                guard !Task.isCancelled else { return }
+                let preparedItems = try await Self.preparedReviewsOffMain(items)
+                guard !Task.isCancelled else { return }
+                reviews = preparedItems
+            }
+        } catch is CancellationError {
+            return
+        } catch {
+            recordObservationError(error)
+        }
+    }
+
+    /// 仅在书名或封面来源变化时启动一次封面取色；新请求会取消旧请求，避免竞态覆盖。
+    private func resolveHeaderTintIfNeeded(for book: BookDetail?) {
+        guard let book else { return }
+        let signature = "\(book.id)|\(book.name)|\(book.cover)"
+        guard resolvedColorSignature != signature else { return }
+        resolvedColorSignature = signature
+        colorTask?.cancel()
+        colorTask = Task {
+            let color = await colorRepository.resolveEventColor(
+                bookId: book.id,
+                bookName: book.name,
+                coverURL: book.cover
+            )
+            guard !Task.isCancelled else { return }
+            headerTintRGBAHex = color.backgroundRGBAHex
+        }
+    }
+
+    /// 收敛观察流失败为页面级可感知错误，不因单个域失败终止其余内容展示。
+    private func recordObservationError(_ error: Error) {
+        errorMessage = "部分内容加载失败：\(error.localizedDescription)"
     }
 
     /// 在非主线程预处理书籍详情纯文本；父任务取消时同步取消后台解析任务。
@@ -319,20 +532,6 @@ final class BookDetailViewModel {
         }
     }
 
-    /// 在非主线程为书评与普通相关内容生成纯文本预览；取消父任务时同步停止批量转换。
-    nonisolated private static func preparedWorkspaceOffMain(
-        _ snapshot: BookContentWorkspaceSnapshot
-    ) async throws -> BookContentWorkspaceSnapshot {
-        let task = Task.detached(priority: .userInitiated) {
-            try preparedWorkspace(snapshot)
-        }
-        return try await withTaskCancellationHandler {
-            try await task.value
-        } onCancel: {
-            task.cancel()
-        }
-    }
-
     /// 为详情页生成稳定纯文本预览，避免 SwiftUI 渲染路径重复解析富文本 HTML。
     nonisolated private static func preparedBook(_ detail: BookDetail?) throws -> BookDetail? {
         guard let detail else { return nil }
@@ -345,7 +544,13 @@ final class BookDetailViewModel {
             press: detail.press,
             score: detail.score,
             noteCount: detail.noteCount,
+            relatedCount: detail.relatedCount,
+            reviewCount: detail.reviewCount,
             readStatusName: detail.readStatusName,
+            totalReadingSeconds: detail.totalReadingSeconds,
+            readingProgressFraction: detail.readingProgressFraction,
+            readingProgressText: detail.readingProgressText,
+            bookmarkText: detail.bookmarkText,
             summary: detail.summary,
             summaryPlainText: plainTextPreview(from: detail.summary),
             authorIntro: detail.authorIntro,
@@ -359,57 +564,104 @@ final class BookDetailViewModel {
     nonisolated private static func preparedNotes(_ items: [NoteExcerpt]) throws -> [NoteExcerpt] {
         try items.map { note in
             try Task.checkCancellation()
-            return NoteExcerpt(
-                id: note.id,
-                content: note.content,
+            return copying(
+                note,
                 contentPlainText: plainTextPreview(from: note.content),
-                idea: note.idea,
-                ideaPlainText: plainTextPreview(from: note.idea),
-                position: note.position,
-                positionUnit: note.positionUnit,
-                includeTime: note.includeTime,
-                createdDate: note.createdDate
+                ideaPlainText: plainTextPreview(from: note.idea)
             )
         }
     }
 
-    /// 预计算工作区长文本的可见摘要，避免列表滚动期间重复解析富文本 HTML。
-    nonisolated private static func preparedWorkspace(
-        _ snapshot: BookContentWorkspaceSnapshot
-    ) throws -> BookContentWorkspaceSnapshot {
-        let reviews = try snapshot.reviews.map { item in
-            try Task.checkCancellation()
-            return BookContentReviewItem(
-                id: item.id,
-                title: item.title,
-                contentHTML: item.contentHTML,
-                contentPlainText: plainTextPreview(from: item.contentHTML),
-                createdDate: item.createdDate
-            )
-        }
-        let relatedSections = try snapshot.relatedSections.map { section in
-            let items = try section.items.map { item in
+    /// 返回书摘源内容签名，展示元信息变化不会触发 HTML 重解析。
+    nonisolated private static func contentSignature(for note: NoteExcerpt) -> BookNoteContentSignature {
+        BookNoteContentSignature(content: note.content, idea: note.idea)
+    }
+
+    /// 把既有纯文本移植到同源的新记录上，同时保留数据库刚返回的其它最新字段。
+    nonisolated private static func copyingPlainText(
+        from prepared: NoteExcerpt,
+        to current: NoteExcerpt
+    ) -> NoteExcerpt {
+        copying(
+            current,
+            contentPlainText: prepared.contentPlainText,
+            ideaPlainText: prepared.ideaPlainText
+        )
+    }
+
+    /// 复制书摘并替换展示纯文本，集中维护 NoteExcerpt 的完整值语义。
+    nonisolated private static func copying(
+        _ note: NoteExcerpt,
+        contentPlainText: String,
+        ideaPlainText: String
+    ) -> NoteExcerpt {
+        NoteExcerpt(
+            id: note.id,
+            chapterID: note.chapterID,
+            chapterTitle: note.chapterTitle,
+            chapterOrder: note.chapterOrder,
+            chapterLevel: note.chapterLevel,
+            content: note.content,
+            contentPlainText: contentPlainText,
+            idea: note.idea,
+            ideaPlainText: ideaPlainText,
+            imageURLs: note.imageURLs,
+            tagNames: note.tagNames,
+            position: note.position,
+            positionUnit: note.positionUnit,
+            includeTime: note.includeTime,
+            createdDate: note.createdDate
+        )
+    }
+
+    /// 在非主线程预处理相关内容纯文本；父任务取消时同步取消后台解析任务。
+    nonisolated private static func preparedRelatedOffMain(_ items: [BookRelatedExcerpt]) async throws -> [BookRelatedExcerpt] {
+        let task = Task.detached(priority: .userInitiated) {
+            try items.map { item in
                 try Task.checkCancellation()
-                return BookContentRelatedItem(
+                return BookRelatedExcerpt(
                     id: item.id,
-                    destination: item.destination,
+                    categoryID: item.categoryID,
+                    categoryTitle: item.categoryTitle,
                     title: item.title,
-                    subtitle: item.subtitle,
-                    contentHTML: item.contentHTML,
-                    contentPlainText: plainTextPreview(from: item.contentHTML),
-                    coverURL: item.coverURL,
-                    createdDate: item.createdDate,
-                    isPlaceholder: item.isPlaceholder
+                    content: item.content,
+                    contentPlainText: plainTextPreview(from: item.content),
+                    url: item.url,
+                    linkedBookID: item.linkedBookID,
+                    linkedBookTitle: item.linkedBookTitle,
+                    linkedBookAuthor: item.linkedBookAuthor,
+                    linkedBookCover: item.linkedBookCover,
+                    isLinkedBookPlaceholder: item.isLinkedBookPlaceholder,
+                    createdDate: item.createdDate
                 )
             }
-            return BookContentRelatedSection(id: section.id, title: section.title, items: items)
         }
-        return BookContentWorkspaceSnapshot(
-            reviews: reviews,
-            relatedSections: relatedSections,
-            categories: snapshot.categories,
-            sortPreferences: snapshot.sortPreferences
-        )
+        return try await withTaskCancellationHandler {
+            try await task.value
+        } onCancel: {
+            task.cancel()
+        }
+    }
+
+    /// 在非主线程预处理书评正文纯文本；父任务取消时同步取消后台解析任务。
+    nonisolated private static func preparedReviewsOffMain(_ items: [BookReviewExcerpt]) async throws -> [BookReviewExcerpt] {
+        let task = Task.detached(priority: .userInitiated) {
+            try items.map { item in
+                try Task.checkCancellation()
+                return BookReviewExcerpt(
+                    id: item.id,
+                    title: item.title,
+                    content: item.content,
+                    contentPlainText: plainTextPreview(from: item.content),
+                    createdDate: item.createdDate
+                )
+            }
+        }
+        return try await withTaskCancellationHandler {
+            try await task.value
+        } onCancel: {
+            task.cancel()
+        }
     }
 
     /// 使用轻量纯文本解析器生成预览文案，不触碰 UIKit/TextKit 主线程路径。
@@ -420,18 +672,28 @@ final class BookDetailViewModel {
 
     /// 释放书籍模块运行过程持有的资源与观察任务。
     isolated deinit {
-        detailTask?.cancel()
-        notesTask?.cancel()
+        observationTasks.forEach { $0.cancel() }
+        notesPreparationTask?.cancel()
+        colorTask?.cancel()
         workspaceTask?.cancel()
         workspaceWriteTask?.cancel()
     }
 }
 
-/// 详情页评分并发门闩错误，供评分 Sheet 转换为系统失败反馈。
+/// 详情页评分并发门闩错误，供评分面板转换为系统失败反馈。
 private nonisolated enum BookDetailRatingError: LocalizedError {
     case operationInProgress
 
     var errorDescription: String? {
         "评分正在保存，请稍后再试"
+    }
+}
+
+/// 单书内容写入互斥门闩错误，防止两个编辑 Sheet 同时覆盖关系或排序状态。
+private nonisolated enum BookDetailWorkspaceError: LocalizedError {
+    case operationInProgress
+
+    var errorDescription: String? {
+        "另一项内容操作正在保存，请稍后再试"
     }
 }

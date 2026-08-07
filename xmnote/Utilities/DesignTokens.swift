@@ -834,33 +834,43 @@ enum BookshelfTypography {
 
 /// 书摘列表的阅读排版令牌，统一正文、想法与辅助信息的字号和行距。
 enum NoteExcerptTypography {
-    static let body: Font = AppTypography.fixed(
-        baseSize: 15,
-        relativeTo: .subheadline,
-        minimumPointSize: 15
-    )
-    static let uiBody: UIFont = AppTypography.uiFixed(
-        baseSize: 15,
-        textStyle: .subheadline,
-        minimumPointSize: 15
-    )
+    static var body: Font {
+        AppTypography.fixed(
+            baseSize: 15,
+            relativeTo: .subheadline,
+            minimumPointSize: 15
+        )
+    }
     static let bodyLineSpacing: CGFloat = 7
-    static let idea: Font = AppTypography.fixed(
-        baseSize: 13,
-        relativeTo: .footnote,
-        minimumPointSize: 13
-    )
-    static let uiIdea: UIFont = AppTypography.uiFixed(
-        baseSize: 13,
-        textStyle: .footnote,
-        minimumPointSize: 13
-    )
+    static var uiBody: UIFont {
+        AppTypography.uiFixed(
+            baseSize: 15,
+            textStyle: .subheadline,
+            minimumPointSize: 15
+        )
+    }
+    static var idea: Font {
+        AppTypography.fixed(
+            baseSize: 13,
+            relativeTo: .footnote,
+            minimumPointSize: 13
+        )
+    }
     static let ideaLineSpacing: CGFloat = 4
-    static let footer: Font = AppTypography.fixed(
-        baseSize: 11,
-        relativeTo: .caption2,
-        minimumPointSize: 11
-    )
+    static var uiIdea: UIFont {
+        AppTypography.uiFixed(
+            baseSize: 13,
+            textStyle: .footnote,
+            minimumPointSize: 13
+        )
+    }
+    static var footer: Font {
+        AppTypography.fixed(
+            baseSize: 11,
+            relativeTo: .caption2,
+            minimumPointSize: 11
+        )
+    }
 }
 
 /// 阅读日历字体令牌，集中维护日期相关文本层级。

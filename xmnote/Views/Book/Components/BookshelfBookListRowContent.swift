@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 BookshelfBookListItem、BookshelfSortCriteria、BookshelfTitleText、XMBookCover 与书架封面角标组件
- * [OUTPUT]: 对外提供 BookshelfBookListRowContent 及列表行内封面、信息、阅读元信息、标签、排序辅助展示组件
+ * [OUTPUT]: 对外提供 BookshelfBookListRowContent 及复用共享封面状态语义的列表行信息、阅读元信息、标签、排序辅助展示组件
  * [POS]: Book 模块页面私有列表行展示组件，被默认书架与二级书籍列表复用
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -116,7 +116,7 @@ struct BookshelfBookCoverBadgeLayer: View {
         let title = book.readStatusBadgeTitle.trimmingCharacters(in: .whitespacesAndNewlines)
         return BookshelfBookListStatusBadge(
             title: title.isEmpty ? status.title : title,
-            color: status.bookListStatusBadgeColor
+            color: status.coverBadgeColor
         )
     }
 }
@@ -325,22 +325,5 @@ extension BookshelfBookListItem {
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
             .filter { !$0.isEmpty }
             .joined(separator: "，")
-    }
-}
-
-private extension BookEntryReadingStatus {
-    var bookListStatusBadgeColor: Color {
-        switch self {
-        case .wantRead:
-            return .statusWish
-        case .reading:
-            return .statusReading
-        case .finished:
-            return .statusDone
-        case .abandoned:
-            return .statusAbandoned
-        case .onHold:
-            return .statusOnHold
-        }
     }
 }
