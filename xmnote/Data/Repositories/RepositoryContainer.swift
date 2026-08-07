@@ -3,7 +3,7 @@ import Observation
 
 /**
  * [INPUT]: 依赖 DatabaseManager 提供数据库实例，依赖各 Repository 实现完成组装
- * [OUTPUT]: 对外提供 RepositoryContainer，集中暴露业务可用的仓储入口（含全局搜索、书籍搜索与录入仓储、S3 配置与上传仓储、标签管理、阅读首页、阅读日历封面取色与时间线仓储）
+ * [OUTPUT]: 对外提供 RepositoryContainer，集中暴露业务可用的仓储入口（含全局搜索、书籍搜索与录入仓储、S3 配置与上传仓储、标签管理、书籍分组管理、阅读首页、阅读日历封面取色与时间线仓储）
  * [POS]: App 级依赖注入容器，被视图层通过 Environment 获取并创建 ViewModel
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -23,6 +23,7 @@ final class RepositoryContainer {
     let s3ConfigRepository: any S3ConfigRepositoryProtocol
     let s3UploadRepository: any S3UploadRepositoryProtocol
     let tagManagementRepository: any TagManagementRepositoryProtocol
+    let bookGroupManagementRepository: any BookGroupManagementRepositoryProtocol
     let statisticsRepository: any StatisticsRepositoryProtocol
     let readingDashboardRepository: any ReadingDashboardRepositoryProtocol
     let coverImageLoader: any XMCoverImageLoading
@@ -48,6 +49,7 @@ final class RepositoryContainer {
         self.contentRepository = ContentRepository(databaseManager: databaseManager)
         self.globalSearchRepository = GlobalSearchRepository(databaseManager: databaseManager)
         self.tagManagementRepository = TagManagementRepository(databaseManager: databaseManager)
+        self.bookGroupManagementRepository = BookGroupManagementRepository(databaseManager: databaseManager)
         self.bookSearchRepository = BookSearchRepository()
         self.bookEditorRepository = BookEditorRepository(
             databaseManager: databaseManager,

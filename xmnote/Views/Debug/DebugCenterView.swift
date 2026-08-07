@@ -2,7 +2,7 @@
 import SwiftUI
 
 /**
- * [INPUT]: 依赖 RichTextTestView、HeatmapTestView、SystemAlertTestView、PopupViewToastTestView、RatingBarTestView、BookSelectionTestView、SelectionMotionTestView、XMScopeSelectorTestView、SearchHistoryTestView、SearchableSystemBugReproView、XMScrollEdgeChromeTestView、BookReorderSandboxTestView、ImageLoadingTestView、WebHTMLFetchTestView、CameraTextCaptureTestView、BaiduOCRTestView、JXPhotoBrowserTestView、ReadCalendarCoverStackTestView、BookCoverStyleTestView、BookCoverProgressBarTestView、BookCoverBadgeEffectTestView、TopBarActionStyleLabTestView、LiquidGlassLabTestView、SystemColorsTestView、TimelineCardsTestView、TimelineCalendarHorizonTestView 作为导航目的地
+ * [INPUT]: 依赖 RichTextTestView、HeatmapTestView、SystemAlertTestView、PopupViewToastTestView、RatingBarTestView、BookSelectionTestView、SelectionMotionTestView、XMScopeSelectorTestView、SearchHistoryTestView、SearchableSystemBugReproView、XMScrollEdgeChromeTestView、BookReorderSandboxTestView、ImageLoadingTestView、WebHTMLFetchTestView、CameraTextCaptureTestView、BaiduOCRTestView、JXPhotoBrowserTestView、ReadCalendarCoverStackTestView、BookCoverStyleTestView、BookGroupCoverTestView、BookCoverProgressBarTestView、BookCoverBadgeEffectTestView、TopBarActionStyleLabTestView、LiquidGlassLabTestView、SystemColorsTestView、TimelineCardsTestView、TimelineCalendarHorizonTestView 作为导航目的地
  * [OUTPUT]: 对外提供 DebugCenterView（测试中心列表页）
  * [POS]: Debug 测试入口页，集中展示所有控件测试项，由 PersonalView 跳转进入
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -134,6 +134,12 @@ struct DebugCenterView: View {
             title: "书籍封面样式",
             subtitle: "薄厚边样式、尺寸降级阈值与浅深色对照验证",
             destination: AnyView(BookCoverStyleTestView())
+        ),
+        DebugItem(
+            icon: "rectangle.stack",
+            title: "书籍分组封面",
+            subtitle: "书盒候选样式、多/单/空封面与列表行浅深色验证",
+            destination: AnyView(BookGroupCoverTestView())
         ),
         DebugItem(
             icon: "books.vertical.fill",

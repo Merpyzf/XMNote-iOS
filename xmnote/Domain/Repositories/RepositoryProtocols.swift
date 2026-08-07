@@ -2,7 +2,7 @@ import Foundation
 
 /**
  * [INPUT]: 依赖 Models 与 Services 层的数据类型定义
- * [OUTPUT]: 对外提供 Book/Note/Content/GlobalSearch/BackupServer/Backup/S3/TagManagement/Statistics/ReadCalendarColor/Timeline/ReadingDashboard 及书籍搜索/录入等 Repository 协议，包含书架、书单显示设置与基础数据管理入口
+ * [OUTPUT]: 对外提供 Book/Note/Content/GlobalSearch/BackupServer/Backup/S3/TagManagement/BookGroupManagement/Statistics/ReadCalendarColor/Timeline/ReadingDashboard 及书籍搜索/录入等 Repository 协议，包含书架、书单显示设置与基础数据管理入口
  * [POS]: Domain 层仓储契约，定义 Presentation 获取本地/网络数据的唯一入口
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -255,6 +255,20 @@ protocol TagManagementRepositoryProtocol {
     func deleteTags(tagIDs: [Int64], scope: TagManagementScope) async throws
     /// 按当前展示顺序写入 tag_order，并更新 updated_date。
     func updateTagOrder(tagIDs: [Int64], scope: TagManagementScope) async throws
+}
+
+/// 书籍分组管理仓储契约，统一封装“我的 > 书籍分组”的分组读写语义。
+protocol BookGroupManagementRepositoryProtocol {
+    /// 持续观察书籍分组管理快照，供列表数量、封面预览与操作状态同步刷新。
+    func observeBookGroupManagementSnapshot() -> AsyncThrowingStream<BookGroupManagementSnapshot, Error>
+    /// 新建书籍分组，按 Android GroupManage 语义写入默认字段。
+    func createGroup(named name: String) async throws
+    /// 编辑指定分组名称，按 Android GroupDao.updateName 语义提交。
+    func updateGroup(groupID: Int64, name: String) async throws
+    /// 删除指定分组；含书分组先按用户选择把书籍移回默认书架开头或末尾。
+    func deleteGroups(groupIDs: [Int64], placement: GroupBooksPlacement) async throws
+    /// 按当前展示顺序写入 group_order，并更新 updated_date。
+    func updateGroupOrder(groupIDs: [Int64]) async throws
 }
 
 /// 通用内容查看仓储契约，统一封装书摘/书评/相关内容的查看、编辑与删除入口。

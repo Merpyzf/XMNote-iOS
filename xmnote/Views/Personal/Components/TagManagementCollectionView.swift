@@ -846,9 +846,9 @@ private struct TagManagementCollectionItemView: View {
         .padding(.leading, Spacing.tight)
         .padding(.trailing, shouldReserveTrailingAccessory ? Spacing.none : Spacing.tight)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
-        .background(Color.surfaceCard, in: RoundedRectangle(cornerRadius: CornerRadius.blockSmall, style: .continuous))
+        .background(Color.surfaceCard, in: RoundedRectangle(cornerRadius: CornerRadius.blockLarge, style: .continuous))
         .overlay {
-            RoundedRectangle(cornerRadius: CornerRadius.blockSmall, style: .continuous)
+            RoundedRectangle(cornerRadius: CornerRadius.blockLarge, style: .continuous)
                 .stroke(Color.surfaceBorderSubtle, lineWidth: CardStyle.borderWidth)
         }
         .contextMenu {

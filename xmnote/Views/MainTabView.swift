@@ -9,7 +9,7 @@ import SwiftUI
 
 /**
  * [INPUT]: 依赖 Reading/Book/Note/Content/Personal/Search 各模块容器视图与对应路由枚举，依赖 BookCollectionImportRouter 承接外部书单导入，依赖 DebugRoute 提供调试页面跳转，依赖 openURL 打开外部帮助文档，依赖 SwiftUI search focus 状态协调全局搜索输入
- * [OUTPUT]: 对外提供 MainTabView（五个主 Tab 的 NavigationStack 组织、书单分享导入入口定位、普通目的地分发、搜索来源详情系统全屏覆盖与 DEBUG UI Test 书架首页/二级列表直达路由）
+ * [OUTPUT]: 对外提供 MainTabView（五个主 Tab 的 NavigationStack 组织、书单分享导入入口定位、普通目的地分发、个人管理页分发、搜索来源详情系统全屏覆盖与 DEBUG UI Test 书架首页/二级列表直达路由）
  * [POS]: 应用根导航入口，负责跨模块路由承接（含书架聚合列表、书架管理入口、在读页热力图点击进入阅读日历、内容查看与内容编辑、搜索来源详情根级 fullScreenCover）
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -486,7 +486,9 @@ struct MainTabView: View {
         case .tagManagement:
             TagManagementView()
         case .groupManagement:
-            Text("书籍分组")
+            BookGroupManagementView(
+                onOpenBookRoute: { append($0, to: selectedTab) }
+            )
         case .bookSource:
             Text("书籍来源")
         case .authorManagement:
