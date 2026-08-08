@@ -1,7 +1,7 @@
 /**
  * [INPUT]: 依赖 SwiftUI App 生命周期、GRDB Database、RepositoryContainer、ReadingTimerCoordinator、AppState 会员能力、XMToastCenter、桌面网页 App 级会话、AliyunpanSDK、阅读计时深链路由、DEBUG 隔离数据库启动参数与 App Group 分享导入 handoff
- * [OUTPUT]: 对外提供 xmnoteApp 完成数据库/仓储/根视图启动、应用级阅读计时调和、网页会话前后台及实时会员调和、全局 Toast Host、书单分享导入与阅读计时深链分发
- * [POS]: 应用启动编排层，负责组装全局依赖并持有不能随页面销毁的计时任务、跨页面服务与系统 URL 入口
+ * [OUTPUT]: 对外提供 xmnoteApp 常驻挂载 ContentView、原子发布数据库运行时依赖、完成应用级阅读计时调和、网页会话前后台及实时会员调和、全局 Toast Host、书单分享导入与阅读计时深链分发
+ * [POS]: 应用启动编排层，负责先建立首页导航壳层，再异步组装全局依赖，并持有不能随页面销毁的计时任务、跨页面服务与系统 URL 入口
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
@@ -17,21 +17,22 @@ import GRDB
 import Nuke
 import AliyunpanSDK
 
-/// 应用入口，异步初始化数据库后注入环境并渲染主界面。
-///
-/// 数据库 I/O（DatabasePool 创建 + 迁移 + seed）通过 `Task.detached` 脱离主线程，
-/// 消除首次启动 300-1200ms 的主线程阻塞。复用项目 Optional State + `.task` 延迟初始化模式。
+/// 启动期一次性发布的运行时依赖，避免数据库、仓储与计时器分步写入产生不可用中间态。
+struct AppRuntimeContext {
+    let databaseManager: DatabaseManager
+    let repositories: RepositoryContainer
+    let readingTimerCoordinator: ReadingTimerCoordinator
+}
+
 @main
-/// 应用入口，负责初始化全局依赖并挂载根界面。
+/// 应用入口，常驻挂载根界面并在后台完成数据库、仓储与阅读计时依赖组装。
 struct xmnoteApp: App {
     @UIApplicationDelegateAdaptor(ReadingTimerNotificationDelegate.self) private var notificationDelegate
     @Environment(\.scenePhase) private var scenePhase
     @State private var appState = AppState()
     @State private var sceneStateStore = SceneStateStore()
     @State private var toastCenter = XMToastCenter()
-    @State private var databaseManager: DatabaseManager?
-    @State private var repositories: RepositoryContainer?
-    @State private var readingTimerCoordinator: ReadingTimerCoordinator?
+    @State private var runtime: AppRuntimeContext?
     @State private var readingTimerSettingsStore = ReadingTimerSettingsStore()
     @State private var bookCollectionImportRouter = BookCollectionImportRouter()
     @State private var readingTimerDeepLinkRouter = ReadingTimerDeepLinkRouter()
@@ -48,113 +49,98 @@ struct xmnoteApp: App {
 
     var body: some Scene {
         WindowGroup {
-            Group {
-                if let databaseManager, let repositories, let readingTimerCoordinator {
-                    ContentView()
-                        .id(appState.dataEpoch)
-                        .environment(appState)
-                        .environment(sceneStateStore)
-                        .environment(databaseManager)
-                        .environment(repositories)
-                        .environment(readingTimerCoordinator)
-                        .environment(readingTimerSettingsStore)
-                        .environment(bookCollectionImportRouter)
-                        .environment(readingTimerDeepLinkRouter)
-                        .environment(desktopWebSessionCoordinator)
-                        .transition(.opacity)
-                } else if let initError {
-                    databaseErrorView(initError)
-                } else {
-                    LaunchSplashView()
-                }
-            }
-            .environment(toastCenter)
-            .xmToastHost(center: toastCenter)
-            .animation(
-                .smooth(duration: 0.35),
-                value: repositories != nil && readingTimerCoordinator != nil
-            )
-            .task {
-                bookCollectionImportRouter.consumePendingShareImport()
-                consumeReadingTimerSystemHandoffIfNeeded()
-                #if DEBUG
-                if ProcessInfo.processInfo.environment["XMNOTE_WEB_PARITY_PREMIUM"] == "1" {
-                    appState.isPremium = true
-                }
-                #endif
-                await desktopWebSessionCoordinator.updatePremiumStatus(appState.isPremium)
-                if databaseManager != nil {
-                    await desktopWebSessionCoordinator.handleScenePhase(scenePhase)
-                    return
-                }
-                guard databaseManager == nil, initError == nil else { return }
-                do {
-                    let database = try await Task.detached(priority: .userInitiated) {
-                        #if DEBUG
-                        if let uiTestDatabase = try UITestLaunchConfiguration.makeDatabaseIfNeeded() {
-                            return uiTestDatabase
-                        }
-                        #endif
-                        return try AppDatabase()
-                    }.value
-                    let manager = DatabaseManager(database: database)
-                    let repositoryContainer = RepositoryContainer(databaseManager: manager)
-                    let timerCoordinator = ReadingTimerCoordinator(
-                        repository: repositoryContainer.readingTimerRepository
-                    )
-                    desktopWebSessionCoordinator.configure(
-                        database: database,
-                        repositories: repositoryContainer
-                    )
-                    databaseManager = manager
-                    repositories = repositoryContainer
-                    readingTimerCoordinator = timerCoordinator
-                    await timerCoordinator.refresh(reason: .appLaunch)
-                    await desktopWebSessionCoordinator.handleScenePhase(scenePhase)
-                } catch {
-                    initError = error
-                }
-            }
-            .onOpenURL { url in
-                if Aliyunpan.handleOpenURL(url) {
-                    return
-                }
-                if readingTimerDeepLinkRouter.handle(url) {
-                    return
-                }
-                bookCollectionImportRouter.handle(url)
-            }
-            .onReceive(NotificationCenter.default.publisher(for: .readingTimerSystemHandoffDidChange)) { _ in
-                consumeReadingTimerSystemHandoffIfNeeded()
-            }
-            .onChange(of: scenePhase) { _, phase in
-                if phase == .active {
+            ContentView(runtime: runtime, initializationError: initError)
+                .environment(appState)
+                .environment(sceneStateStore)
+                .environment(readingTimerSettingsStore)
+                .environment(bookCollectionImportRouter)
+                .environment(readingTimerDeepLinkRouter)
+                .environment(desktopWebSessionCoordinator)
+                .environment(toastCenter)
+                .xmToastHost(center: toastCenter)
+                .task {
                     bookCollectionImportRouter.consumePendingShareImport()
                     consumeReadingTimerSystemHandoffIfNeeded()
-                }
-                Task {
-                    await desktopWebSessionCoordinator.handleScenePhase(phase)
-                    guard let readingTimerCoordinator else { return }
-                    switch phase {
-                    case .active:
-                        await readingTimerCoordinator.refresh(reason: .foreground)
-                    case .inactive, .background:
-                        await readingTimerCoordinator.persistBeforeSuspension()
-                    @unknown default:
-                        break
+                    #if DEBUG
+                    if ProcessInfo.processInfo.environment["XMNOTE_WEB_PARITY_PREMIUM"] == "1" {
+                        appState.isPremium = true
+                    }
+                    #endif
+                    await desktopWebSessionCoordinator.updatePremiumStatus(appState.isPremium)
+                    if runtime != nil {
+                        await desktopWebSessionCoordinator.handleScenePhase(scenePhase)
+                        return
+                    }
+                    guard runtime == nil, initError == nil else { return }
+                    do {
+                        let database = try await Task.detached(priority: .userInitiated) {
+                            #if DEBUG
+                            if let uiTestDatabase = try UITestLaunchConfiguration.makeDatabaseIfNeeded() {
+                                return uiTestDatabase
+                            }
+                            #endif
+                            return try AppDatabase()
+                        }.value
+                        let manager = DatabaseManager(database: database)
+                        let repositoryContainer = RepositoryContainer(databaseManager: manager)
+                        let timerCoordinator = ReadingTimerCoordinator(
+                            repository: repositoryContainer.readingTimerRepository
+                        )
+                        desktopWebSessionCoordinator.configure(
+                            database: database,
+                            repositories: repositoryContainer
+                        )
+                        runtime = AppRuntimeContext(
+                            databaseManager: manager,
+                            repositories: repositoryContainer,
+                            readingTimerCoordinator: timerCoordinator
+                        )
+                        await timerCoordinator.refresh(reason: .appLaunch)
+                        await desktopWebSessionCoordinator.handleScenePhase(scenePhase)
+                    } catch {
+                        initError = error
                     }
                 }
-            }
-            .onChange(of: appState.dataEpoch) { _, _ in
-                Task {
-                    await readingTimerCoordinator?.refresh(reason: .dataSourceChanged)
+                .onOpenURL { url in
+                    if Aliyunpan.handleOpenURL(url) {
+                        return
+                    }
+                    if readingTimerDeepLinkRouter.handle(url) {
+                        return
+                    }
+                    bookCollectionImportRouter.handle(url)
                 }
-            }
-            .onChange(of: appState.isPremium) { _, isPremium in
-                Task {
-                    await desktopWebSessionCoordinator.updatePremiumStatus(isPremium)
+                .onReceive(NotificationCenter.default.publisher(for: .readingTimerSystemHandoffDidChange)) { _ in
+                    consumeReadingTimerSystemHandoffIfNeeded()
                 }
-            }
+                .onChange(of: scenePhase) { _, phase in
+                    if phase == .active {
+                        bookCollectionImportRouter.consumePendingShareImport()
+                        consumeReadingTimerSystemHandoffIfNeeded()
+                    }
+                    Task {
+                        await desktopWebSessionCoordinator.handleScenePhase(phase)
+                        guard let readingTimerCoordinator = runtime?.readingTimerCoordinator else { return }
+                        switch phase {
+                        case .active:
+                            await readingTimerCoordinator.refresh(reason: .foreground)
+                        case .inactive, .background:
+                            await readingTimerCoordinator.persistBeforeSuspension()
+                        @unknown default:
+                            break
+                        }
+                    }
+                }
+                .onChange(of: appState.dataEpoch) { _, _ in
+                    Task {
+                        await runtime?.readingTimerCoordinator.refresh(reason: .dataSourceChanged)
+                    }
+                }
+                .onChange(of: appState.isPremium) { _, isPremium in
+                    Task {
+                        await desktopWebSessionCoordinator.updatePremiumStatus(isPremium)
+                    }
+                }
         }
     }
 
@@ -164,22 +150,6 @@ struct xmnoteApp: App {
         _ = readingTimerDeepLinkRouter.handle(url)
     }
 
-    // MARK: - Error View
-
-    private func databaseErrorView(_ error: Error) -> some View {
-        VStack(spacing: Spacing.base) {
-            Image(systemName: "exclamationmark.triangle")
-                .font(AppTypography.largeTitle)
-                .foregroundStyle(Color.feedbackError)
-            Text("数据库初始化失败")
-                .font(AppTypography.headline)
-            Text(error.localizedDescription)
-                .font(AppTypography.caption)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-                .padding(.horizontal, Spacing.double)
-        }
-    }
 }
 
 /// 书单导入请求，区分手动深链预览与系统分享自动导入两条消费路径。
