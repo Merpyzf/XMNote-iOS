@@ -5,7 +5,7 @@
 //  Created by 王珂 on 2026/2/10.
 //
 //  [INPUT]: 无外部依赖，仅依赖 SwiftUI 框架
-//  [OUTPUT]: Color 语义扩展（含阅读日历主题/事件条 pending 态/月总结图标渐变语义、菜单前景语义、Dialog 表层语义）、Spacing / CornerRadius / CardStyle 常量、Color(hex:) / Color(light:dark:) / Color(rgbaHex:) 构造器
+//  [OUTPUT]: Color 语义扩展（含阅读日历主题/事件条 pending 态/月总结图标渐变语义、菜单前景语义、Dialog 表层语义）、Spacing / CornerRadius / CardStyle 常量、AppTypography 与 MonthlyReadingChartTypography 排版令牌、Color(hex:) / Color(light:dark:) / Color(rgbaHex:) 构造器
 //  [POS]: Utilities 模块的设计令牌中枢，全局 UI 一致性的单一真相源
 //  [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
 
@@ -537,6 +537,53 @@ enum AppTypography {
         guard !text.xmContainsCJK else { return .zero }
         return brandTrim(size: size, textStyle: .headline)
     }
+}
+
+/// 月度阅读图表排版令牌，确保 SwiftUI 渲染字体与 UIKit 宽高测量使用同一来源。
+enum MonthlyReadingChartTypography {
+    static let collapsedSummary: Font = AppTypography.fixed(
+        baseSize: 12,
+        relativeTo: .caption,
+        minimumPointSize: 12
+    )
+    static let expandedSummary: Font = AppTypography.fixed(
+        baseSize: 10.8,
+        relativeTo: .caption2,
+        minimumPointSize: 10.8
+    )
+    static let dailyDate: Font = AppTypography.fixed(
+        baseSize: 12,
+        relativeTo: .caption,
+        minimumPointSize: 12
+    )
+    static let dailyDuration: Font = AppTypography.fixed(
+        baseSize: 12,
+        relativeTo: .caption,
+        weight: .medium,
+        minimumPointSize: 12
+    )
+
+    static let uiCollapsedSummary: UIFont = AppTypography.uiFixed(
+        baseSize: 12,
+        textStyle: .caption1,
+        minimumPointSize: 12
+    )
+    static let uiExpandedSummary: UIFont = AppTypography.uiFixed(
+        baseSize: 10.8,
+        textStyle: .caption2,
+        minimumPointSize: 10.8
+    )
+    static let uiDailyDate: UIFont = AppTypography.uiFixed(
+        baseSize: 12,
+        textStyle: .caption1,
+        minimumPointSize: 12
+    )
+    static let uiDailyDuration: UIFont = AppTypography.uiFixed(
+        baseSize: 12,
+        textStyle: .caption1,
+        weight: .medium,
+        minimumPointSize: 12
+    )
 }
 
 private extension Font.TextStyle {
