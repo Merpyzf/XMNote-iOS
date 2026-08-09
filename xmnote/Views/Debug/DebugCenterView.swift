@@ -30,7 +30,7 @@ struct DebugCenterView: View {
         DebugItem(
             icon: "chart.dots.scatter",
             title: "阅读热力图",
-            subtitle: "8 个场景的渲染、交互与颜色适配",
+            subtitle: "周热力图与 Android 阅读详情月历的渲染、定位和配色验收",
             destination: AnyView(HeatmapTestView())
         ),
         DebugItem(
