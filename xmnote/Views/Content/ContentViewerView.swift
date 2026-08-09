@@ -348,7 +348,9 @@ private struct ContentViewerLoadedView: View {
 
                 noteAPISendMenu
 
-                NavigationLink(value: NoteRoute.edit(noteId: noteID)) {
+                Button {
+                    navigationCoordinator.present(.noteEditor(mode: .edit(noteId: noteID), seed: nil))
+                } label: {
                     ImmersiveBottomChromeIcon(systemName: "square.and.pencil")
                 }
                 .buttonStyle(.plain)

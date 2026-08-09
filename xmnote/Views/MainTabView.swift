@@ -9,7 +9,7 @@ import SwiftUI
 
 /**
  * [INPUT]: 依赖可选 AppRuntimeContext、五个主业务 Tab、可恢复浏览路由、AppNavigationCoordinator、阅读日历、外部导入/网页动作、个人基础数据管理与调试路由
- * [OUTPUT]: 对外提供 MainTabView（首帧真实结构骨架、五个独立 NavigationStack、单一根级沉浸内容/任务 cover、阅读计时 UIKit Zoom、底部计时条与跨模块浏览/管理回流）
+ * [OUTPUT]: 对外提供 MainTabView（五个独立浏览栈、创作与内容查看的单一根级全屏任务、旧编辑路由兼容中继、阅读计时 UIKit Zoom、底部计时条与跨模块回流）
  * [POS]: 应用根导航 owner，在运行时依赖就绪前后保持同一 Tab 与导航状态，并统一隔离普通浏览、独立任务及阅读计时呈现
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -132,6 +132,12 @@ private enum GlobalSearchCommitSource: Sendable {
     var defersQueryWriteUntilFocusSettles: Bool {
         self == .suggestion
     }
+}
+
+/// 标识业务路由当前属于根 Tab 浏览栈还是全屏任务栈，确保同一入口按宿主关系分流。
+private enum AppRouteHost: Hashable {
+    case tab(AppTab)
+    case task
 }
 
 /// 应用主导航容器，组织五个主 Tab 及跨模块路由跳转。
@@ -266,17 +272,17 @@ struct MainTabView: View {
                     }
                     .navigationDestination(for: BookRoute.self) { route in
                         runtimeDestination {
-                            bookDestination(for: route)
+                            bookDestination(for: route, host: .tab(.reading))
                         }
                     }
                     .navigationDestination(for: NoteRoute.self) { route in
                         runtimeDestination {
-                            noteDestination(for: route)
+                            noteDestination(for: route, host: .tab(.reading))
                         }
                     }
                     .navigationDestination(for: ContentRoute.self) { route in
                         runtimeDestination {
-                            contentDestination(for: route)
+                            contentDestination(for: route, host: .tab(.reading))
                         }
                     }
                 }
@@ -292,8 +298,8 @@ struct MainTabView: View {
                                     navigationCoordinator.present(.noteEditor(mode: .create, seed: .empty))
                                 },
                                 onOpenDebugCenter: { append(DebugRoute.debugCenter, to: .books) },
-                                onOpenBookRoute: { append($0, to: .books) },
-                                onOpenNoteRoute: { append($0, to: .books) },
+                                onOpenBookRoute: { openBookRoute($0, from: .tab(.books)) },
+                                onOpenNoteRoute: { openNoteRoute($0, from: .tab(.books)) },
                                 onOpenTagManagement: { append(PersonalRoute.tagManagement, to: .books) },
                                 onOpenSourceManagement: { append(PersonalRoute.bookSource, to: .books) },
                                 onOpenAuthorManagement: { append(PersonalRoute.authorManagement, to: .books) },
@@ -318,7 +324,7 @@ struct MainTabView: View {
                         runtimeDestination { debugDestination(for: route) }
                     }
                     .navigationDestination(for: BookRoute.self) { route in
-                        runtimeDestination { bookDestination(for: route) }
+                        runtimeDestination { bookDestination(for: route, host: .tab(.books)) }
                     }
                     .navigationDestination(for: ReadingRoute.self) { route in
                         runtimeDestination {
@@ -327,10 +333,10 @@ struct MainTabView: View {
                         }
                     }
                     .navigationDestination(for: NoteRoute.self) { route in
-                        runtimeDestination { noteDestination(for: route) }
+                        runtimeDestination { noteDestination(for: route, host: .tab(.books)) }
                     }
                     .navigationDestination(for: ContentRoute.self) { route in
-                        runtimeDestination { contentDestination(for: route) }
+                        runtimeDestination { contentDestination(for: route, host: .tab(.books)) }
                     }
                     .navigationDestination(for: PersonalRoute.self) { route in
                         runtimeDestination { personalDestination(for: route, hostTab: .books) }
@@ -346,6 +352,15 @@ struct MainTabView: View {
                                 onAddBook: { navigationCoordinator.present(.addBook) },
                                 onAddNote: {
                                     navigationCoordinator.present(.noteEditor(mode: .create, seed: .empty))
+                                },
+                                onOpenNoteRoute: { openNoteRoute($0, from: .tab(.notes)) },
+                                onOpenBookRoute: { openBookRoute($0, from: .tab(.notes)) },
+                                onOpenContentRoute: { openContentRoute($0, from: .tab(.notes)) },
+                                onOpenContentViewer: { source, itemID in
+                                    openContentRoute(
+                                        .contentViewer(source: source, initialItemID: itemID),
+                                        from: .tab(.notes)
+                                    )
                                 },
                                 onOpenDebugCenter: { append(DebugRoute.debugCenter, to: .notes) }
                             )
@@ -367,7 +382,7 @@ struct MainTabView: View {
                         runtimeDestination { debugDestination(for: route) }
                     }
                     .navigationDestination(for: BookRoute.self) { route in
-                        runtimeDestination { bookDestination(for: route) }
+                        runtimeDestination { bookDestination(for: route, host: .tab(.notes)) }
                     }
                     .navigationDestination(for: ReadingRoute.self) { route in
                         runtimeDestination {
@@ -376,10 +391,10 @@ struct MainTabView: View {
                         }
                     }
                     .navigationDestination(for: NoteRoute.self) { route in
-                        runtimeDestination { noteDestination(for: route) }
+                        runtimeDestination { noteDestination(for: route, host: .tab(.notes)) }
                     }
                     .navigationDestination(for: ContentRoute.self) { route in
-                        runtimeDestination { contentDestination(for: route) }
+                        runtimeDestination { contentDestination(for: route, host: .tab(.notes)) }
                     }
                 }
             }
@@ -418,7 +433,7 @@ struct MainTabView: View {
                         runtimeDestination { debugDestination(for: route) }
                     }
                     .navigationDestination(for: BookRoute.self) { route in
-                        runtimeDestination { bookDestination(for: route) }
+                        runtimeDestination { bookDestination(for: route, host: .tab(.profile)) }
                     }
                     .navigationDestination(for: ReadingRoute.self) { route in
                         runtimeDestination {
@@ -427,10 +442,10 @@ struct MainTabView: View {
                         }
                     }
                     .navigationDestination(for: NoteRoute.self) { route in
-                        runtimeDestination { noteDestination(for: route) }
+                        runtimeDestination { noteDestination(for: route, host: .tab(.profile)) }
                     }
                     .navigationDestination(for: ContentRoute.self) { route in
-                        runtimeDestination { contentDestination(for: route) }
+                        runtimeDestination { contentDestination(for: route, host: .tab(.profile)) }
                     }
                     .navigationDestination(for: PersonalRoute.self) { route in
                         runtimeDestination { personalDestination(for: route, hostTab: .profile) }
@@ -469,7 +484,7 @@ struct MainTabView: View {
                         runtimeDestination { debugDestination(for: route) }
                     }
                     .navigationDestination(for: BookRoute.self) { route in
-                        runtimeDestination { bookDestination(for: route) }
+                        runtimeDestination { bookDestination(for: route, host: .tab(.search)) }
                     }
                     .navigationDestination(for: ReadingRoute.self) { route in
                         runtimeDestination {
@@ -478,10 +493,10 @@ struct MainTabView: View {
                         }
                     }
                     .navigationDestination(for: NoteRoute.self) { route in
-                        runtimeDestination { noteDestination(for: route) }
+                        runtimeDestination { noteDestination(for: route, host: .tab(.search)) }
                     }
                     .navigationDestination(for: ContentRoute.self) { route in
-                        runtimeDestination { contentDestination(for: route) }
+                        runtimeDestination { contentDestination(for: route, host: .tab(.search)) }
                     }
                 }
             }
@@ -850,13 +865,13 @@ struct MainTabView: View {
                 )
             }
             .navigationDestination(for: BookRoute.self) { route in
-                bookDestination(for: route)
+                bookDestination(for: route, host: .task)
             }
             .navigationDestination(for: NoteRoute.self) { route in
-                noteDestination(for: route)
+                noteDestination(for: route, host: .task)
             }
             .navigationDestination(for: ContentRoute.self) { route in
-                contentDestination(for: route)
+                contentDestination(for: route, host: .task)
             }
             .navigationDestination(for: ReadCalendarRoute.self) { route in
                 readCalendarTaskDestination(for: route)
@@ -1166,6 +1181,107 @@ struct MainTabView: View {
         }
     }
 
+    /// 将书籍旧路由中的创作意图映射为不参与 Scene 恢复的根级全屏任务。
+    private func fullScreenTaskDestination(for route: BookRoute) -> AppFullScreenTaskDestination? {
+        switch route {
+        case .edit(let bookId):
+            return .bookEditor(.edit(bookId: bookId))
+        case .editRelatedPlaceholder(let bookId, let sourceBookId):
+            return .bookEditor(
+                .editRelatedPlaceholder(bookId: bookId, sourceBookId: sourceBookId)
+            )
+        case .add:
+            return .addBook
+        case .create(let seed):
+            return .bookEditor(.create(seed: seed))
+        default:
+            return nil
+        }
+    }
+
+    /// 将笔记旧路由中的创作意图映射为统一全屏编辑任务。
+    private func fullScreenTaskDestination(for route: NoteRoute) -> AppFullScreenTaskDestination? {
+        switch route {
+        case .edit(let noteId):
+            return .noteEditor(mode: .edit(noteId: noteId), seed: nil)
+        case .create(let seed):
+            return .noteEditor(mode: .create, seed: seed)
+        default:
+            return nil
+        }
+    }
+
+    /// 将内容查看与编辑旧路由映射到根级全屏任务，普通详情继续留在浏览栈。
+    private func fullScreenTaskDestination(for route: ContentRoute) -> AppFullScreenTaskDestination? {
+        switch route {
+        case .contentViewer(let source, let initialItemID, let keyword):
+            return .contentViewer(source: source, initialItemID: initialItemID, keyword: keyword)
+        case .reviewEditor(let reviewId):
+            return .reviewEditor(.edit(reviewID: reviewId))
+        case .reviewEditorCreate(let bookId):
+            return .reviewEditor(.create(bookID: bookId))
+        case .relevantEditor(let contentId):
+            return .relevantEditor(.edit(contentID: contentId))
+        case .relevantEditorCreate(let bookId, let categoryId):
+            return .relevantEditor(.create(bookID: bookId, categoryID: categoryId))
+        default:
+            return nil
+        }
+    }
+
+    /// 按当前宿主打开书籍路由；创作任务覆盖 Tab，浏览路由留在原 NavigationStack。
+    private func openBookRoute(_ route: BookRoute, from host: AppRouteHost) {
+        if let destination = fullScreenTaskDestination(for: route) {
+            navigationCoordinator.present(destination)
+        } else {
+            append(route, to: host)
+        }
+    }
+
+    /// 按当前宿主打开笔记路由；编辑任务统一进入根级全屏协调器。
+    private func openNoteRoute(_ route: NoteRoute, from host: AppRouteHost) {
+        if let destination = fullScreenTaskDestination(for: route) {
+            navigationCoordinator.present(destination)
+        } else {
+            append(route, to: host)
+        }
+    }
+
+    /// 按当前宿主打开内容路由；查看器和编辑器进入全屏任务，普通详情继续 push。
+    private func openContentRoute(_ route: ContentRoute, from host: AppRouteHost) {
+        if let destination = fullScreenTaskDestination(for: route) {
+            navigationCoordinator.present(destination)
+        } else {
+            append(route, to: host)
+        }
+    }
+
+    /// 将恢复出的旧编辑 route 先从原宿主出栈，再在下一次 MainActor 调度中幂等转交全屏任务。
+    private func relayLegacyFullScreenRoute(
+        _ destination: AppFullScreenTaskDestination,
+        from host: AppRouteHost
+    ) {
+        switch host {
+        case .tab(let tab):
+            guard selectedTab == tab, navigationCoordinator.activeTask == nil else { return }
+        case .task:
+            guard navigationCoordinator.activeTask != nil else { return }
+        }
+
+        popCurrentRoute(from: host)
+        Task { @MainActor in
+            await Task.yield()
+            switch host {
+            case .tab(let tab):
+                guard selectedTab == tab, navigationCoordinator.activeTask == nil else { return }
+                navigationCoordinator.updateCurrentTab(tab)
+            case .task:
+                guard navigationCoordinator.activeTask != nil else { return }
+            }
+            navigationCoordinator.present(destination)
+        }
+    }
+
     @ViewBuilder
     private func readingDestination(
         for route: ReadingRoute,
@@ -1184,19 +1300,19 @@ struct MainTabView: View {
                     )
                 },
                 onSupplementReading: { bookId in
-                    append(ReadingRoute.readingSupplement(bookId: bookId), to: selectedTab)
+                    append(ReadingRoute.readingSupplement(bookId: bookId), to: hostTab)
                 },
                 onOpenReadingDetail: { bookId in
-                    append(BookRoute.readingDetail(bookId: bookId), to: selectedTab)
+                    openBookRoute(.readingDetail(bookId: bookId), from: .tab(hostTab))
                 },
                 onOpenChapterNotes: { bookId, chapterId, title in
-                    append(
-                        BookRoute.chapterNotes(bookId: bookId, chapterId: chapterId, title: title),
-                        to: selectedTab
+                    openBookRoute(
+                        .chapterNotes(bookId: bookId, chapterId: chapterId, title: title),
+                        from: .tab(hostTab)
                     )
                 },
                 onOpenBook: { bookId in
-                    append(BookRoute.detail(bookId: bookId), to: selectedTab)
+                    openBookRoute(.detail(bookId: bookId), from: .tab(hostTab))
                 },
                 readingTimerZoomConfiguration: makeReadingTimerZoomConfiguration(
                     sourceID: AnyHashable("reading-timer-book-detail-\(selectedTab.rawValue)-\(bookId)"),
@@ -1240,9 +1356,9 @@ struct MainTabView: View {
         case .daily(let date):
             DailyReadingView(
                 date: date,
-                onOpenBookRoute: { navigationCoordinator.taskPath.append($0) },
-                onOpenNoteRoute: { navigationCoordinator.taskPath.append($0) },
-                onOpenContentRoute: { navigationCoordinator.taskPath.append($0) }
+                onOpenBookRoute: { openBookRoute($0, from: .task) },
+                onOpenNoteRoute: { openNoteRoute($0, from: .task) },
+                onOpenContentRoute: { openContentRoute($0, from: .task) }
             )
         case .share(let monthStart, let initialType):
             ReadCalendarShareView(
@@ -1256,7 +1372,7 @@ struct MainTabView: View {
     }
 
     @ViewBuilder
-    private func bookDestination(for route: BookRoute) -> some View {
+    private func bookDestination(for route: BookRoute, host: AppRouteHost) -> some View {
         switch route {
         case .detail(let bookId):
             BookDetailView(
@@ -1270,19 +1386,19 @@ struct MainTabView: View {
                     )
                 },
                 onSupplementReading: { bookId in
-                    append(ReadingRoute.readingSupplement(bookId: bookId), to: selectedTab)
+                    append(ReadingRoute.readingSupplement(bookId: bookId), to: host)
                 },
                 onOpenReadingDetail: { bookId in
-                    append(BookRoute.readingDetail(bookId: bookId), to: selectedTab)
+                    openBookRoute(.readingDetail(bookId: bookId), from: host)
                 },
                 onOpenChapterNotes: { bookId, chapterId, title in
-                    append(
+                    openBookRoute(
                         BookRoute.chapterNotes(bookId: bookId, chapterId: chapterId, title: title),
-                        to: selectedTab
+                        from: host
                     )
                 },
                 onOpenBook: { bookId in
-                    append(BookRoute.detail(bookId: bookId), to: selectedTab)
+                    openBookRoute(.detail(bookId: bookId), from: host)
                 },
                 readingTimerZoomConfiguration: makeReadingTimerZoomConfiguration(
                     sourceID: AnyHashable("reading-timer-book-detail-\(selectedTab.rawValue)-\(bookId)"),
@@ -1291,31 +1407,48 @@ struct MainTabView: View {
                     origin: .tab(selectedTab)
                 ),
                 onOpenBookRoute: { route in
-                    append(route, to: selectedTab)
+                    openBookRoute(route, from: host)
                 }
             )
         case .readingDetail(let bookId):
             BookReadingDetailView(
                 bookID: bookId,
                 onOpenBookRoute: { route in
-                    append(route, to: selectedTab)
+                    openBookRoute(route, from: host)
                 }
             )
         case .chapterManager(let bookID, let focusChapterID):
             ChapterManagerView(bookID: bookID, focusChapterID: focusChapterID)
         case .edit(let bookId):
-            BookEditorView(mode: .edit(bookId: bookId))
-        case .editRelatedPlaceholder(let bookId, let sourceBookId):
-            BookEditorView(
-                mode: .editRelatedPlaceholder(
-                    bookId: bookId,
-                    sourceBookId: sourceBookId
+            LegacyFullScreenRouteRelay {
+                relayLegacyFullScreenRoute(
+                    .bookEditor(.edit(bookId: bookId)),
+                    from: host
                 )
-            )
+            }
+        case .editRelatedPlaceholder(let bookId, let sourceBookId):
+            LegacyFullScreenRouteRelay {
+                relayLegacyFullScreenRoute(
+                    .bookEditor(
+                        .editRelatedPlaceholder(
+                            bookId: bookId,
+                            sourceBookId: sourceBookId
+                        )
+                    ),
+                    from: host
+                )
+            }
         case .add:
-            BookSearchView()
+            LegacyFullScreenRouteRelay {
+                relayLegacyFullScreenRoute(.addBook, from: host)
+            }
         case .create(let seed):
-            BookEditorView(seed: seed)
+            LegacyFullScreenRouteRelay {
+                relayLegacyFullScreenRoute(
+                    .bookEditor(.create(seed: seed)),
+                    from: host
+                )
+            }
         case .chapterNotes(let bookId, let chapterId, let title):
             BookChapterNotesView(
                 bookId: bookId,
@@ -1326,17 +1459,17 @@ struct MainTabView: View {
             BookshelfBookListView(
                 route: route,
                 onOpenRoute: { route in
-                    append(route, to: selectedTab)
+                    openBookRoute(route, from: host)
                 },
                 onOpenNoteRoute: { route in
-                    append(route, to: selectedTab)
+                    openNoteRoute(route, from: host)
                 }
             )
         case .collectionDetail(let collectionID):
             BookCollectionDetailView(
                 collectionID: collectionID,
                 onOpenRoute: { route in
-                    append(route, to: selectedTab)
+                    openBookRoute(route, from: host)
                 }
             )
         }
@@ -1345,20 +1478,31 @@ struct MainTabView: View {
     // MARK: - Note Destinations
 
     @ViewBuilder
-    private func noteDestination(for route: NoteRoute) -> some View {
+    private func noteDestination(for route: NoteRoute, host: AppRouteHost) -> some View {
         switch route {
         case .detail(let noteId):
             NoteDetailView(noteId: noteId)
         case .edit(let noteId):
-            NoteEditorView(mode: .edit(noteId: noteId))
+            LegacyFullScreenRouteRelay {
+                relayLegacyFullScreenRoute(
+                    .noteEditor(mode: .edit(noteId: noteId), seed: nil),
+                    from: host
+                )
+            }
         case .create(let seed):
-            NoteEditorView(mode: .create, seed: seed)
+            LegacyFullScreenRouteRelay {
+                relayLegacyFullScreenRoute(
+                    .noteEditor(mode: .create, seed: seed),
+                    from: host
+                )
+            }
         case .noteExcerpts(let scope):
             noteExcerptListDestination(
-                context: NoteExcerptListContext(scope: scope, displayTitle: "书摘")
+                context: NoteExcerptListContext(scope: scope, displayTitle: "书摘"),
+                host: host
             )
         case .noteExcerptList(let context):
-            noteExcerptListDestination(context: context)
+            noteExcerptListDestination(context: context, host: host)
         case .chapterNotes(let bookID, let chapterID, let includeDescendants):
             chapterNotesDestination(
                 context: ChapterNoteListContext(
@@ -1366,18 +1510,22 @@ struct MainTabView: View {
                     chapterID: chapterID,
                     includeDescendants: includeDescendants,
                     displayTitle: "章节书摘"
-                )
+                ),
+                host: host
             )
         case .chapterNoteList(let context):
-            chapterNotesDestination(context: context)
+            chapterNotesDestination(context: context, host: host)
         case .mergeNotes(let bookID, let noteIDs):
             NoteMergeView(bookID: bookID, noteIDs: noteIDs) { source, itemID in
-                append(.contentViewer(source: source, initialItemID: itemID), to: selectedTab)
+                openContentRoute(
+                    .contentViewer(source: source, initialItemID: itemID),
+                    from: host
+                )
             }
         case .relatedCategory(let scope):
-            relatedCategoryDestination(scope: scope)
+            relatedCategoryDestination(scope: scope, host: host)
         case .relatedCategoryManagement:
-            relatedCategoryDestination(scope: .all)
+            relatedCategoryDestination(scope: .all, host: host)
         case .tagManagement:
             TagManagementView()
         case .notesByTag(let tagId):
@@ -1385,23 +1533,30 @@ struct MainTabView: View {
                 context: NoteExcerptListContext(
                     scope: NoteExcerptScope(legacyTagID: tagId),
                     displayTitle: "书摘"
-                )
+                ),
+                host: host
             )
         }
     }
 
     /// 构造统一书摘列表目的地，并把查看器及后续笔记路由留在当前 Tab。
     @ViewBuilder
-    private func noteExcerptListDestination(context: NoteExcerptListContext) -> some View {
+    private func noteExcerptListDestination(
+        context: NoteExcerptListContext,
+        host: AppRouteHost
+    ) -> some View {
         if let repositories = runtime?.repositories {
             NoteExcerptListView(
                 context: context,
                 repository: repositories.noteRepository,
                 externalAppIntegrationRepository: repositories.externalAppIntegrationRepository,
                 onOpenViewer: { source, itemID in
-                    append(.contentViewer(source: source, initialItemID: itemID), to: selectedTab)
+                    openContentRoute(
+                        .contentViewer(source: source, initialItemID: itemID),
+                        from: host
+                    )
                 },
-                onOpenNoteRoute: { append($0, to: selectedTab) }
+                onOpenNoteRoute: { openNoteRoute($0, from: host) }
             )
         } else {
             Color.surfacePage.ignoresSafeArea()
@@ -1409,51 +1564,88 @@ struct MainTabView: View {
     }
 
     /// 构造章节书摘目的地，复用当前 Tab 的 Viewer 与笔记导航现场。
-    private func chapterNotesDestination(context: ChapterNoteListContext) -> some View {
+    private func chapterNotesDestination(
+        context: ChapterNoteListContext,
+        host: AppRouteHost
+    ) -> some View {
         ChapterNotesView(
             context: context,
             onOpenViewer: { source, itemID in
-                append(.contentViewer(source: source, initialItemID: itemID), to: selectedTab)
+                openContentRoute(
+                    .contentViewer(source: source, initialItemID: itemID),
+                    from: host
+                )
             },
-            onOpenNoteRoute: { append($0, to: selectedTab) }
+            onOpenNoteRoute: { openNoteRoute($0, from: host) }
         )
     }
 
     /// 构造相关分类列表，统一路由普通内容、书籍与通用查看器。
-    private func relatedCategoryDestination(scope: RelatedCategoryScope) -> some View {
+    private func relatedCategoryDestination(
+        scope: RelatedCategoryScope,
+        host: AppRouteHost
+    ) -> some View {
         RelatedCategoryListView(
             scope: scope,
             onOpenViewer: { source, itemID in
-                append(.contentViewer(source: source, initialItemID: itemID), to: selectedTab)
+                openContentRoute(
+                    .contentViewer(source: source, initialItemID: itemID),
+                    from: host
+                )
             },
-            onOpenContentRoute: { append($0, to: selectedTab) },
-            onOpenBookRoute: { append($0, to: selectedTab) }
+            onOpenContentRoute: { openContentRoute($0, from: host) },
+            onOpenBookRoute: { openBookRoute($0, from: host) }
         )
     }
 
     // MARK: - Content Destinations
 
     @ViewBuilder
-    private func contentDestination(for route: ContentRoute) -> some View {
+    private func contentDestination(for route: ContentRoute, host: AppRouteHost) -> some View {
         switch route {
         case .contentViewer(let source, let initialItemID, let keyword):
-            ContentViewerView(
-                source: source,
-                initialItemID: initialItemID,
-                keyword: keyword
-            )
+            LegacyFullScreenRouteRelay {
+                relayLegacyFullScreenRoute(
+                    .contentViewer(
+                        source: source,
+                        initialItemID: initialItemID,
+                        keyword: keyword
+                    ),
+                    from: host
+                )
+            }
         case .reviewDetail(let reviewId):
             ReviewDetailView(reviewId: reviewId)
         case .relevantDetail(let contentId):
             RelevantDetailView(contentId: contentId)
         case .reviewEditor(let reviewId):
-            ReviewEditorView(reviewId: reviewId)
+            LegacyFullScreenRouteRelay {
+                relayLegacyFullScreenRoute(
+                    .reviewEditor(.edit(reviewID: reviewId)),
+                    from: host
+                )
+            }
         case .reviewEditorCreate(let bookId):
-            ReviewEditorView(bookId: bookId)
+            LegacyFullScreenRouteRelay {
+                relayLegacyFullScreenRoute(
+                    .reviewEditor(.create(bookID: bookId)),
+                    from: host
+                )
+            }
         case .relevantEditor(let contentId):
-            RelevantEditorView(contentId: contentId)
+            LegacyFullScreenRouteRelay {
+                relayLegacyFullScreenRoute(
+                    .relevantEditor(.edit(contentID: contentId)),
+                    from: host
+                )
+            }
         case .relevantEditorCreate(let bookId, let categoryId):
-            RelevantEditorView(bookId: bookId, categoryId: categoryId)
+            LegacyFullScreenRouteRelay {
+                relayLegacyFullScreenRoute(
+                    .relevantEditor(.create(bookID: bookId, categoryID: categoryId)),
+                    from: host
+                )
+            }
         }
     }
 
@@ -1498,7 +1690,7 @@ struct MainTabView: View {
             TagManagementView()
         case .groupManagement:
             BookGroupManagementView(
-                onOpenBookRoute: { append($0, to: selectedTab) }
+                onOpenBookRoute: { openBookRoute($0, from: .tab(hostTab)) }
             )
         case .bookSource:
             SourceManagementView()
@@ -1540,6 +1732,16 @@ struct MainTabView: View {
         }
     }
 
+    /// 把书籍浏览路由写入当前宿主拥有的路径。
+    private func append(_ route: BookRoute, to host: AppRouteHost) {
+        switch host {
+        case .tab(let tab):
+            append(route, to: tab)
+        case .task:
+            navigationCoordinator.taskPath.append(route)
+        }
+    }
+
     private func append(_ route: ReadingRoute, to tab: AppTab) {
         switch tab {
         case .reading:
@@ -1552,6 +1754,16 @@ struct MainTabView: View {
             profilePath.append(route)
         case .search:
             searchPath.append(route)
+        }
+    }
+
+    /// 把阅读浏览路由写入当前宿主拥有的路径。
+    private func append(_ route: ReadingRoute, to host: AppRouteHost) {
+        switch host {
+        case .tab(let tab):
+            append(route, to: tab)
+        case .task:
+            navigationCoordinator.taskPath.append(route)
         }
     }
 
@@ -1582,6 +1794,17 @@ struct MainTabView: View {
         }
     }
 
+    /// 移除当前宿主路径顶部的旧兼容 route，为全屏任务转交恢复真实来源现场。
+    private func popCurrentRoute(from host: AppRouteHost) {
+        switch host {
+        case .tab(let tab):
+            popCurrentRoute(from: tab)
+        case .task:
+            guard !navigationCoordinator.taskPath.isEmpty else { return }
+            navigationCoordinator.taskPath.removeLast()
+        }
+    }
+
     private func append(_ route: NoteRoute, to tab: AppTab) {
         switch tab {
         case .reading:
@@ -1594,6 +1817,16 @@ struct MainTabView: View {
             profilePath.append(route)
         case .search:
             searchPath.append(route)
+        }
+    }
+
+    /// 把笔记浏览路由写入当前宿主拥有的路径。
+    private func append(_ route: NoteRoute, to host: AppRouteHost) {
+        switch host {
+        case .tab(let tab):
+            append(route, to: tab)
+        case .task:
+            navigationCoordinator.taskPath.append(route)
         }
     }
 
@@ -1624,6 +1857,16 @@ struct MainTabView: View {
             profilePath.append(route)
         case .search:
             searchPath.append(route)
+        }
+    }
+
+    /// 把普通内容详情路由写入当前宿主拥有的路径。
+    private func append(_ route: ContentRoute, to host: AppRouteHost) {
+        switch host {
+        case .tab(let tab):
+            append(route, to: tab)
+        case .task:
+            navigationCoordinator.taskPath.append(route)
         }
     }
 
@@ -1674,9 +1917,9 @@ struct MainTabView: View {
         dismissGlobalSearchKeyboard()
         switch target {
         case .book(let route):
-            searchPath.append(route)
+            openBookRoute(route, from: .tab(.search))
         case .content(let route):
-            searchPath.append(route)
+            openContentRoute(route, from: .tab(.search))
         case .contentViewer(let source, let initialItemID, let keyword):
             navigationCoordinator.present(
                 .contentViewer(
