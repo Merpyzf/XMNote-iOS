@@ -2,7 +2,7 @@
 import SwiftUI
 
 /**
- * [INPUT]: 依赖 RichTextTestView、HeatmapTestView、MonthlyReadingChartTestView、SystemAlertTestView、PopupViewToastTestView、RatingBarTestView、BookSelectionTestView、SelectionMotionTestView、AppleMusicTransitionLabView、XMScopeSelectorTestView、SearchHistoryTestView、SearchableSystemBugReproView、XMScrollEdgeChromeTestView、BookReorderSandboxTestView、ImageLoadingTestView、WebHTMLFetchTestView、CameraTextCaptureTestView、BaiduOCRTestView、JXPhotoBrowserTestView、ReadCalendarCoverStackTestView、BookCoverStyleTestView、BookCoverProgressBarTestView、BookCoverBadgeEffectTestView、TopBarActionStyleLabTestView、LiquidGlassLabTestView、SystemColorsTestView、TimelineCardsTestView、TimelineCalendarHorizonTestView 作为导航目的地
+ * [INPUT]: 依赖 RichTextTestView、HeatmapTestView、MonthlyReadingChartTestView、ReadingStatusTimelineTestView、SystemAlertTestView、PopupViewToastTestView、RatingBarTestView、BookSelectionTestView、SelectionMotionTestView、AppleMusicTransitionLabView、XMScopeSelectorTestView、SearchHistoryTestView、SearchableSystemBugReproView、XMScrollEdgeChromeTestView、BookReorderSandboxTestView、ImageLoadingTestView、WebHTMLFetchTestView、CameraTextCaptureTestView、BaiduOCRTestView、JXPhotoBrowserTestView、ReadCalendarCoverStackTestView、BookCoverStyleTestView、BookCoverProgressBarTestView、BookCoverBadgeEffectTestView、TopBarActionStyleLabTestView、LiquidGlassLabTestView、SystemColorsTestView、TimelineCardsTestView、TimelineCalendarHorizonTestView 作为导航目的地
  * [OUTPUT]: 对外提供 DebugCenterView（测试中心列表页）
  * [POS]: Debug 测试入口页，集中展示所有控件测试项，由 PersonalView 跳转进入
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -38,6 +38,12 @@ struct DebugCenterView: View {
             title: "月度阅读图表",
             subtitle: "Android 同款展开/收起、全局比例与文本对齐验收",
             destination: AnyView(MonthlyReadingChartTestView())
+        ),
+        DebugItem(
+            icon: "clock.arrow.circlepath",
+            title: "阅读历程组件",
+            subtitle: "状态节点、时间间隔、动态字体与交互权限验收",
+            destination: AnyView(ReadingStatusTimelineTestView())
         ),
         DebugItem(
             icon: "rectangle.center.inset.filled.badge.plus",
