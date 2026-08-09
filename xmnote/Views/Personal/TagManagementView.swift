@@ -1,6 +1,6 @@
 /**
- * [INPUT]: 依赖 RepositoryContainer 注入 TagManagementRepositoryProtocol，依赖 TagManagementViewModel 驱动标签管理状态，依赖 XMScopeSelector、TagManagementCollectionView、系统 Toolbar/safeAreaBar 与范围栏真实几何高度，并由页面壳层稳定承载导航命令
- * [OUTPUT]: 对外提供 TagManagementView，以首帧稳定的顶部上下文命令、固定范围选择、延伸至导航层下方的 UIKit 主滚动视图、系统自动顶部边缘过渡、可滚动系统搜索和底部安全区延伸的两列标签承接管理任务
+ * [INPUT]: 依赖 RepositoryContainer 注入 TagManagementRepositoryProtocol，依赖 TagManagementViewModel 驱动标签管理状态，依赖系统 segmented Picker/Toolbar、TagManagementCollectionView、safeAreaBar 与范围栏真实几何高度，并由页面壳层稳定承载导航命令
+ * [OUTPUT]: 对外提供 TagManagementView，以几何居中的动态标题、满宽原生范围选择、集合内下拉搜索、延伸至导航层下方的 UIKit 主滚动视图、系统自动顶部边缘过渡和响应式标签直接内容平面承接管理任务
  * [POS]: Views/Personal 的标签管理页面壳层，被 PersonalRoute.tagManagement 导航消费
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -70,6 +70,13 @@ struct TagManagementView: View {
 
     @ToolbarContentBuilder
     private var toolbarContent: some ToolbarContent {
+        ToolbarItem(placement: .principal) {
+            Text(navigationTitle)
+                .font(AppTypography.headline)
+                .lineLimit(1)
+                .accessibilityAddTraits(.isHeader)
+        }
+
         if isReordering {
             ToolbarItemGroup(placement: .topBarTrailing) {
                 Button("完成") {
@@ -241,37 +248,25 @@ private struct TagManagementContentView: View {
         reduceMotion ? nil : .snappy(duration: 0.16)
     }
 
-    private var scopeItems: [XMScopeSelectorItem<TagManagementScope>] {
-        [
-            XMScopeSelectorItem(
-                id: TagManagementScope.note,
-                title: TagManagementScope.note.title,
-                count: viewModel.snapshot.noteTags.count,
-                accessibilityTitle: TagManagementScope.note.tagTitle
-            ),
-            XMScopeSelectorItem(
-                id: TagManagementScope.book,
-                title: TagManagementScope.book.title,
-                count: viewModel.snapshot.bookTags.count,
-                accessibilityTitle: TagManagementScope.book.tagTitle
-            )
-        ]
-    }
-
     private var isScopeLocked: Bool {
         viewModel.isSelectionMode || isReordering || viewModel.activeWriteAction != nil
     }
 
     private var scopeSelector: some View {
-        XMScopeSelector(
-            items: scopeItems,
-            selection: $viewModel.selectedScope,
-            style: .content,
-            accessibilityLabel: "标签范围"
-        )
+        Picker("标签范围", selection: $viewModel.selectedScope) {
+            ForEach(TagManagementScope.allCases) { scope in
+                Text(scope.title)
+                    .tag(scope)
+                    .accessibilityLabel(scopeAccessibilityLabel(for: scope))
+            }
+        }
+        .pickerStyle(.segmented)
+        .frame(maxWidth: .infinity)
         .disabled(isScopeLocked)
+        .accessibilityLabel("标签范围")
+        .accessibilityValue(scopeAccessibilityLabel(for: viewModel.selectedScope))
         .accessibilityHint(isScopeLocked ? "完成当前操作后可切换范围" : "")
-        .padding(.horizontal, Spacing.screenEdge)
+        .padding(.horizontal, Spacing.double)
         .padding(.vertical, Spacing.half)
         .onGeometryChange(for: CGFloat.self) { proxy in
             proxy.size.height
@@ -306,7 +301,7 @@ private struct TagManagementContentView: View {
             scope: viewModel.selectedScope,
             searchText: viewModel.searchText,
             isSearchActive: isInlineSearchActive,
-            searchPrompt: searchPrompt,
+            searchPrompt: "搜索标签",
             isSearchVisible: !isReordering,
             isSearchEnabled: viewModel.activeWriteAction == nil,
             emptyState: collectionEmptyState,
@@ -333,13 +328,8 @@ private struct TagManagementContentView: View {
             ?? (defaultScopeSelectorTouchHeight + Spacing.half * 2)
     }
 
-    private var searchPrompt: String {
-        switch viewModel.selectedScope {
-        case .note:
-            return "搜索书摘标签"
-        case .book:
-            return "搜索书籍标签"
-        }
+    private func scopeAccessibilityLabel(for scope: TagManagementScope) -> String {
+        "\(scope.tagTitle)，\(viewModel.snapshot.tags(for: scope).count) 项"
     }
 
     private func syncLoadingGate() {

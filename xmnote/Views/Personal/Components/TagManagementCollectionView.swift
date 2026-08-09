@@ -1,15 +1,15 @@
 /**
- * [INPUT]: 依赖 TagManagementItem/TagManagementScope、PersonalManagementSearchBar、XMSelectionIndicator/XMKeywordHighlighting、iOS 26 UIScrollEdgeEffect、UIViewController 顶部滚动观察、范围栏实测高度与页面传入的标签状态和操作回调
- * [OUTPUT]: 对外提供 TagManagementCollectionView，封装带可滚动系统搜索头的 UICollectionView、系统顶部自动边缘过渡、动态顶部内边距、底部 Chrome 避让、常规双列/辅助字号单列布局、长按管理、选择态、排序态与滚动边缘状态上报
+ * [INPUT]: 依赖 TagManagementItem/TagManagementScope、XMInlineSearchField、XMSelectionIndicator/XMKeywordHighlighting、iOS 26 UIScrollEdgeEffect、UIViewController 顶部滚动观察、范围栏实测高度与页面传入的标签及搜索状态和操作回调
+ * [OUTPUT]: 对外提供 TagManagementCollectionView，封装保持系统回弹的下拉搜索、动态顶部内边距、底部 Chrome 避让、iPhone 单列/宽屏响应式双列的直接内容平面、长按管理、选择态、排序态与滚动边缘状态上报
  * [POS]: Views/Personal/Components 的标签管理页面私有集合组件，被 TagManagementView 用作标签主体内容区
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
+import Combine
 import SwiftUI
 import UIKit
-import Combine
 
-/// 标签管理两列集合视图，负责普通态、选择态和排序态的布局与本地拖拽预览。
+/// 标签管理集合视图，负责下拉搜索、响应式直接内容平面、选择态和排序态的本地拖拽预览。
 struct TagManagementCollectionView: UIViewRepresentable {
     let items: [TagManagementItem]
     let scope: TagManagementScope
@@ -91,6 +91,13 @@ final class TagManagementCollectionHostView: UICollectionView {
     private var didReceiveDropInCurrentSession = false
     private var lastReportedScrollEdgeWashEdges = XMScrollEdgeWashEdges.hidden
     private var lastPreferredContentSizeCategory: UIContentSizeCategory?
+    private var currentColumnCount = TagManagementCollectionMetrics.singleColumnCount
+    private var hasPositionedInitialSearchHeader = false
+    private var isInitialSearchPositionScheduled = false
+    private var isSearchPinReleasePending = false
+    private var isReturningSearchHeaderForPinRelease = false
+    private var shouldActivateSearchAfterReveal = false
+    private weak var searchHeaderView: TagManagementCollectionHeaderView?
     private var emptyContentView: (UIView & UIContentView)?
     private weak var observedTopContentScrollController: UIViewController?
     private weak var enclosingTabBarController: UITabBarController?
@@ -108,7 +115,10 @@ final class TagManagementCollectionHostView: UICollectionView {
 
     override init(frame: CGRect, collectionViewLayout layout: UICollectionViewLayout) {
         super.init(frame: frame, collectionViewLayout: layout)
-        collectionViewLayout = makeLayout(for: configuration)
+        collectionViewLayout = makeLayout(
+            for: configuration,
+            columnCount: currentColumnCount
+        )
         backgroundColor = .clear
         alwaysBounceVertical = true
         showsVerticalScrollIndicator = false
@@ -138,27 +148,34 @@ final class TagManagementCollectionHostView: UICollectionView {
         fatalError("init(coder:) has not been implemented")
     }
 
-    /// 布局时维持顶部滚动观察与底部避让，并在字号类别变化后重建自适应布局。
+    /// 布局时维持顶部滚动观察与底部避让，并在字号或有效宽度跨过列阈值后重建布局。
     override func layoutSubviews() {
         super.layoutSubviews()
         updateTopContentScrollObservation()
         updateTopChromeInsets()
         updateBottomChromeInsets()
+
         let preferredContentSizeCategory = traitCollection.preferredContentSizeCategory
-        guard lastPreferredContentSizeCategory != preferredContentSizeCategory else { return }
         let previousContentSizeCategory = lastPreferredContentSizeCategory
         lastPreferredContentSizeCategory = preferredContentSizeCategory
+        let resolvedColumnCount = resolvedColumnCount()
+        let didChangeAccessibilityLayout = previousContentSizeCategory?.isAccessibilityCategory
+            != preferredContentSizeCategory.isAccessibilityCategory
+        let didChangeColumnCount = resolvedColumnCount != currentColumnCount
 
-        if previousContentSizeCategory?.isAccessibilityCategory
-            != preferredContentSizeCategory.isAccessibilityCategory {
+        if didChangeAccessibilityLayout || didChangeColumnCount {
+            currentColumnCount = resolvedColumnCount
             collectionView.setCollectionViewLayout(
-                makeLayout(for: configuration),
+                makeLayout(for: configuration, columnCount: currentColumnCount),
                 animated: false
             )
-        } else {
+            updateVisibleCells(animated: false)
+        } else if previousContentSizeCategory != preferredContentSizeCategory {
             collectionView.collectionViewLayout.invalidateLayout()
+            updateVisibleCells(animated: false)
         }
-        updateVisibleCells(animated: false)
+
+        positionInitialSearchHeaderIfNeeded()
     }
 
     /// 进入或离开窗口时登记/释放顶部滚动 owner，并重算系统底部 Chrome 的实际遮挡。
@@ -171,6 +188,7 @@ final class TagManagementCollectionHostView: UICollectionView {
         }
         updateTopChromeInsets()
         updateBottomChromeInsets()
+        positionInitialSearchHeaderIfNeeded()
     }
 
     /// 安全区变化时同步滚动末端避让，不缓存设备或方向相关的固定高度。
@@ -189,11 +207,24 @@ final class TagManagementCollectionHostView: UICollectionView {
 
         let previousConfiguration = self.configuration
         let displayedItems = items
-        let needsLayoutUpdate = abs(previousConfiguration.headerHeight - configuration.headerHeight) > 0.5
+        let needsLayoutUpdate = previousConfiguration.layoutSignature != configuration.layoutSignature
         let needsDataUpdate = displayedItems != configuration.items
         let needsVisibleCellUpdate = previousConfiguration.presentationSignature != configuration.presentationSignature
         let needsHeaderUpdate = previousConfiguration.headerPresentationSignature
             != configuration.headerPresentationSignature
+        let didChangeSearchPinning = previousConfiguration.isSearchPinned != configuration.isSearchPinned
+        if previousConfiguration.isSearchPinned,
+           !configuration.isSearchPinned,
+           configuration.isSearchVisible,
+           normalizedSearchOffset > Spacing.hairline {
+            isSearchPinReleasePending = true
+        } else if configuration.isSearchPinned || !configuration.isSearchVisible {
+            isSearchPinReleasePending = false
+            isReturningSearchHeaderForPinRelease = false
+        }
+        if !configuration.isSearchVisible {
+            shouldActivateSearchAfterReveal = false
+        }
         self.configuration = configuration
         collectionView.dragInteractionEnabled = configuration.canReorder
         collectionView.isUserInteractionEnabled = !configuration.isDisabled || configuration.canReorder
@@ -220,6 +251,16 @@ final class TagManagementCollectionHostView: UICollectionView {
         if needsHeaderUpdate {
             updateVisibleHeader()
         }
+        if didChangeSearchPinning {
+            collectionView.collectionViewLayout.invalidateLayout()
+            updateVisibleSearchHeaderRevealProgress()
+        }
+        updateSearchAccessibilityAction()
+        if isSearchPinReleasePending {
+            returnSearchHeaderToExpandedOffsetBeforeReleasingPin()
+        } else {
+            positionInitialSearchHeaderIfNeeded()
+        }
         updateScrollEdgeWashEdges()
     }
 
@@ -231,9 +272,16 @@ final class TagManagementCollectionHostView: UICollectionView {
         isInteractiveReordering = false
         didChangeOrderInCurrentSession = false
         didReceiveDropInCurrentSession = false
+        hasPositionedInitialSearchHeader = false
+        isInitialSearchPositionScheduled = false
+        isSearchPinReleasePending = false
+        isReturningSearchHeaderForPinRelease = false
+        shouldActivateSearchAfterReveal = false
+        searchHeaderView = nil
         items = []
         emptyContentView = nil
         collectionView.backgroundView = nil
+        collectionView.accessibilityCustomActions = nil
         lastReportedScrollEdgeWashEdges = .hidden
         let onScrollEdgeWashEdgesChange = configuration.onScrollEdgeWashEdgesChange
         DispatchQueue.main.async {
@@ -293,7 +341,7 @@ private extension TagManagementCollectionHostView {
             0
         )
         let previousAdjustedTopInset = adjustedContentInset.top
-        let wasAtTop = contentOffset.y <= -previousAdjustedTopInset + Spacing.hairline
+        let logicalContentOffset = contentOffset.y + previousAdjustedTopInset
         let needsContentInset = abs(contentInset.top - targetTopInset) > Spacing.hairline
         let needsIndicatorInset = abs(
             verticalScrollIndicatorInsets.top - targetTopInset
@@ -307,9 +355,7 @@ private extension TagManagementCollectionHostView {
         UIView.performWithoutAnimation {
             contentInset = nextContentInset
             verticalScrollIndicatorInsets = nextIndicatorInsets
-            if wasAtTop {
-                contentOffset.y = -adjustedContentInset.top
-            }
+            contentOffset.y = logicalContentOffset - adjustedContentInset.top
         }
     }
 
@@ -380,68 +426,134 @@ private extension TagManagementCollectionHostView {
         return nil
     }
 
-    /// 创建常规双列、辅助字号单列布局，保持搜索头和卡片共享 16pt 视觉边界。
-    func makeLayout(for configuration: TagManagementCollectionConfiguration) -> UICollectionViewLayout {
+    /// 根据设备、字号和 readable content 的有效宽度决定当前列数。
+    func resolvedColumnCount() -> Int {
+        guard traitCollection.userInterfaceIdiom != .phone,
+              traitCollection.horizontalSizeClass == .regular,
+              !traitCollection.preferredContentSizeCategory.isAccessibilityCategory else {
+            return TagManagementCollectionMetrics.singleColumnCount
+        }
+        let readableWidth = readableContentGuide.layoutFrame.width
+        let effectiveWidth = readableWidth > 0 ? readableWidth : bounds.width
+        let availableColumnWidth = (
+            effectiveWidth - TagManagementCollectionMetrics.itemHorizontalGap
+        ) / 2
+        return availableColumnWidth >= TagManagementCollectionMetrics.minimumWideColumnWidth
+            ? TagManagementCollectionMetrics.wideColumnCount
+            : TagManagementCollectionMetrics.singleColumnCount
+    }
+
+    /// 创建 iPhone 单列、宽屏条件双列的直接内容平面，并让搜索头参与同一原生滚动容器。
+    func makeLayout(
+        for configuration: TagManagementCollectionConfiguration,
+        columnCount: Int
+    ) -> UICollectionViewLayout {
         let isAccessibilityLayout = traitCollection.preferredContentSizeCategory.isAccessibilityCategory
-        let columnCount = isAccessibilityLayout
-            ? TagManagementCollectionMetrics.accessibilityColumnCount
-            : TagManagementCollectionMetrics.regularColumnCount
         let itemHeightDimension: NSCollectionLayoutDimension = isAccessibilityLayout
             ? .estimated(TagManagementCollectionMetrics.accessibilityMinimumItemHeight)
             : .fractionalHeight(1)
         let groupHeightDimension: NSCollectionLayoutDimension = isAccessibilityLayout
             ? .estimated(TagManagementCollectionMetrics.accessibilityMinimumItemHeight)
             : .absolute(TagManagementCollectionMetrics.normalItemHeight)
-        let itemSize = NSCollectionLayoutSize(
-            widthDimension: .fractionalWidth(1 / CGFloat(columnCount)),
-            heightDimension: itemHeightDimension
-        )
-        let item = NSCollectionLayoutItem(layoutSize: itemSize)
-        item.contentInsets = NSDirectionalEdgeInsets(
-            top: 0,
-            leading: TagManagementCollectionMetrics.itemHorizontalGap / 2,
-            bottom: 0,
-            trailing: TagManagementCollectionMetrics.itemHorizontalGap / 2
-        )
-
         let groupSize = NSCollectionLayoutSize(
             widthDimension: .fractionalWidth(1),
             heightDimension: groupHeightDimension
         )
-        let group = NSCollectionLayoutGroup.horizontal(
-            layoutSize: groupSize,
-            repeatingSubitem: item,
-            count: columnCount
-        )
+        let group: NSCollectionLayoutGroup
+        if columnCount == TagManagementCollectionMetrics.wideColumnCount {
+            group = NSCollectionLayoutGroup.custom(layoutSize: groupSize) { environment in
+                let gap = TagManagementCollectionMetrics.itemHorizontalGap
+                let columnWidth = max((environment.container.effectiveContentSize.width - gap) / 2, 0)
+                return [
+                    NSCollectionLayoutGroupCustomItem(
+                        frame: CGRect(
+                            x: 0,
+                            y: 0,
+                            width: columnWidth,
+                            height: TagManagementCollectionMetrics.normalItemHeight
+                        )
+                    ),
+                    NSCollectionLayoutGroupCustomItem(
+                        frame: CGRect(
+                            x: columnWidth + gap,
+                            y: 0,
+                            width: columnWidth,
+                            height: TagManagementCollectionMetrics.normalItemHeight
+                        )
+                    )
+                ]
+            }
+        } else {
+            let itemSize = NSCollectionLayoutSize(
+                widthDimension: .fractionalWidth(1),
+                heightDimension: itemHeightDimension
+            )
+            let item = NSCollectionLayoutItem(layoutSize: itemSize)
+            group = NSCollectionLayoutGroup.horizontal(
+                layoutSize: groupSize,
+                subitems: [item]
+            )
+        }
 
         let section = NSCollectionLayoutSection(group: group)
         section.interGroupSpacing = TagManagementCollectionMetrics.rowSpacing
         section.contentInsets = NSDirectionalEdgeInsets(
             top: TagManagementCollectionMetrics.dataTopInset,
-            leading: TagManagementCollectionMetrics.horizontalInset - TagManagementCollectionMetrics.itemHorizontalGap / 2,
+            leading: TagManagementCollectionMetrics.sectionHorizontalInset,
             bottom: TagManagementCollectionMetrics.bottomInset,
-            trailing: TagManagementCollectionMetrics.horizontalInset - TagManagementCollectionMetrics.itemHorizontalGap / 2
+            trailing: TagManagementCollectionMetrics.sectionHorizontalInset
         )
         if configuration.isSearchVisible {
             let headerSize = NSCollectionLayoutSize(
                 widthDimension: .fractionalWidth(1),
-                heightDimension: .estimated(configuration.headerHeight)
+                heightDimension: .absolute(TagManagementCollectionMetrics.searchHeaderHeight)
             )
             let header = NSCollectionLayoutBoundarySupplementaryItem(
                 layoutSize: headerSize,
                 elementKind: UICollectionView.elementKindSectionHeader,
                 alignment: .top
             )
-            header.pinToVisibleBounds = false
+            header.pinToVisibleBounds = true
             section.boundarySupplementaryItems = [header]
+            section.visibleItemsInvalidationHandler = { [weak self] visibleItems, contentOffset, _ in
+                guard let self else { return }
+                let collapseDistance = self.searchHeaderCollapseDistance(
+                    forContentOffsetY: contentOffset.y
+                )
+                let revealProgress = 1 - collapseDistance
+                    / TagManagementCollectionMetrics.searchHeaderHeight
+                for visibleItem in visibleItems where visibleItem.representedElementCategory
+                    == .supplementaryView {
+                    visibleItem.transform = CGAffineTransform(
+                        translationX: 0,
+                        y: -collapseDistance
+                    )
+                    visibleItem.alpha = revealProgress
+                    guard visibleItem.representedElementKind
+                            == UICollectionView.elementKindSectionHeader,
+                          let searchHeader = self.supplementaryView(
+                            forElementKind: UICollectionView.elementKindSectionHeader,
+                            at: visibleItem.indexPath
+                          ) as? TagManagementCollectionHeaderView else {
+                        continue
+                    }
+                    searchHeader.applyLayoutPresentation(
+                        collapseDistance: collapseDistance,
+                        revealProgress: revealProgress
+                    )
+                }
+            }
         }
 
         let layoutConfiguration = UICollectionViewCompositionalLayoutConfiguration()
         layoutConfiguration.scrollDirection = .vertical
+        layoutConfiguration.contentInsetsReference = traitCollection.userInterfaceIdiom == .phone
+            ? .none
+            : .readableContent
         return UICollectionViewCompositionalLayout(section: section, configuration: layoutConfiguration)
     }
 
-    /// 替换搜索头布局时补偿 header 高度变化，避免进出排序态让首个可见标签跳动。
+    /// 替换搜索头或固定策略时补偿内容坐标，避免排序切换和搜索聚焦导致首项跳动。
     func updateLayout(
         from previousConfiguration: TagManagementCollectionConfiguration,
         to nextConfiguration: TagManagementCollectionConfiguration,
@@ -453,32 +565,25 @@ private extension TagManagementCollectionHostView {
 
         let previousHeaderHeight = previousConfiguration.headerHeight
         let nextHeaderHeight = nextConfiguration.headerHeight
-        let headerHeightDelta = nextHeaderHeight - previousHeaderHeight
-        let previousOffset = collectionView.contentOffset
-        let distanceFromTop = previousOffset.y + collectionView.adjustedContentInset.top
-        let shouldPreserveFirstVisibleItem = distanceFromTop > previousHeaderHeight
+        let previousLogicalOffset = normalizedSearchOffset
+        let nextLogicalOffset = max(
+            TagManagementCollectionMetrics.searchExpandedOffset,
+            previousLogicalOffset + nextHeaderHeight - previousHeaderHeight
+        )
 
         collectionView.setCollectionViewLayout(
-            makeLayout(for: nextConfiguration),
+            makeLayout(for: nextConfiguration, columnCount: currentColumnCount),
             animated: animated
         ) { [weak self] _ in
             guard let self else { return }
             self.collectionView.layoutIfNeeded()
-            guard abs(headerHeightDelta) > 0.5 else { return }
-
-            let minimumOffsetY = -self.collectionView.adjustedContentInset.top
-            let targetOffsetY = shouldPreserveFirstVisibleItem
-                ? max(minimumOffsetY, previousOffset.y + headerHeightDelta)
-                : minimumOffsetY
-            self.collectionView.setContentOffset(
-                CGPoint(x: previousOffset.x, y: targetOffsetY),
-                animated: false
-            )
+            self.setNormalizedSearchOffset(nextLogicalOffset, animated: false)
+            self.updateVisibleHeader()
             self.updateScrollEdgeWashEdges()
         }
     }
 
-    /// 使用系统内容不可用视图承载加载、空结果和错误，collection 头部因此始终保留清除查询的入口。
+    /// 使用系统内容不可用视图承载加载、空结果和错误，并为已展开搜索保留顶部阅读空间。
     func updateEmptyState() {
         guard configuration.emptyState != .none else {
             emptyContentView = nil
@@ -489,7 +594,7 @@ private extension TagManagementCollectionHostView {
         let hostedConfiguration = UIHostingConfiguration {
             TagManagementCollectionEmptyStateView(
                 state: configuration.emptyState,
-                headerHeight: configuration.headerHeight
+                headerHeight: isSearchEffectivelyPinned ? configuration.headerHeight : 0
             )
         }
         .margins(.all, 0)
@@ -613,7 +718,7 @@ private extension TagManagementCollectionHostView {
         return true
     }
 
-    /// 对不适合 item diff 的范围切换做受控刷新；逐字搜索只更新 item，避免重建输入头。
+    /// 对不适合 item diff 的范围切换做受控刷新；逐字搜索只更新 item，保持系统搜索输入连续。
     func reloadCollection(animated: Bool) {
         let updates = {
             self.collectionView.reloadData()
@@ -692,6 +797,194 @@ private extension TagManagementCollectionHostView {
         }
     }
 
+    /// 当前以可视内容顶部为零点的纵向位置，用于只在搜索头区间内做端点判断。
+    var normalizedSearchOffset: CGFloat {
+        collectionView.contentOffset.y + collectionView.adjustedContentInset.top
+    }
+
+    /// 搜索输入或取消回位期间维持 Header 固定，避免状态切换先于系统滚动落位。
+    var isSearchEffectivelyPinned: Bool {
+        configuration.isSearchVisible
+            && (configuration.isSearchPinned || isSearchPinReleasePending)
+    }
+
+    /// 把原生滚动位置映射为 Header 的单一视觉位移，由 compositional layout 逐帧消费。
+    func searchHeaderCollapseDistance(forContentOffsetY contentOffsetY: CGFloat) -> CGFloat {
+        guard !isSearchEffectivelyPinned else { return 0 }
+        let normalizedOffset = contentOffsetY + collectionView.adjustedContentInset.top
+        return min(
+            max(normalizedOffset, TagManagementCollectionMetrics.searchExpandedOffset),
+            TagManagementCollectionMetrics.searchCollapsedOffset
+        )
+    }
+
+    /// 将搜索头逻辑位置转换为 UIScrollView 实际坐标；该方法仅用于初始化、状态切换和无障碍动作。
+    func setNormalizedSearchOffset(_ offset: CGFloat, animated: Bool) {
+        let target = CGPoint(
+            x: collectionView.contentOffset.x,
+            y: offset - collectionView.adjustedContentInset.top
+        )
+        collectionView.setContentOffset(target, animated: animated)
+    }
+
+    /// 首次空查询默认越过搜索头；短内容仍依靠 alwaysBounceVertical 保留向下揭示能力。
+    func positionInitialSearchHeaderIfNeeded() {
+        guard !hasPositionedInitialSearchHeader,
+              !isInitialSearchPositionScheduled,
+              window != nil,
+              bounds.height > 0,
+              configuration.isSearchVisible,
+              !isSearchEffectivelyPinned else {
+            return
+        }
+        isInitialSearchPositionScheduled = true
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            self.isInitialSearchPositionScheduled = false
+            guard !self.hasPositionedInitialSearchHeader,
+                  self.window != nil,
+                  self.configuration.isSearchVisible,
+                  !self.isSearchEffectivelyPinned else {
+                return
+            }
+            self.collectionView.layoutIfNeeded()
+            self.setNormalizedSearchOffset(
+                TagManagementCollectionMetrics.searchCollapsedOffset,
+                animated: false
+            )
+            self.hasPositionedInitialSearchHeader = true
+            self.updateVisibleSearchHeaderRevealProgress()
+            self.updateScrollEdgeWashEdges()
+        }
+    }
+
+    /// 聚焦、有效查询或无障碍动作触发时把搜索头放回完整可见端点。
+    func revealSearchHeader(animated: Bool) {
+        guard configuration.isSearchVisible else { return }
+        collectionView.layoutIfNeeded()
+        let needsReveal = abs(
+            normalizedSearchOffset - TagManagementCollectionMetrics.searchExpandedOffset
+        ) > Spacing.hairline
+        guard needsReveal else {
+            hasPositionedInitialSearchHeader = true
+            return
+        }
+        setNormalizedSearchOffset(
+            TagManagementCollectionMetrics.searchExpandedOffset,
+            animated: animated && !configuration.reducesMotion
+        )
+        hasPositionedInitialSearchHeader = true
+    }
+
+    /// 取消搜索后先沿系统滚动动画回到展开端点，再解除临时固定，避免 Header 瞬间离场。
+    func returnSearchHeaderToExpandedOffsetBeforeReleasingPin() {
+        guard isSearchPinReleasePending,
+              !isReturningSearchHeaderForPinRelease else {
+            return
+        }
+        collectionView.layoutIfNeeded()
+        let needsReveal = abs(
+            normalizedSearchOffset - TagManagementCollectionMetrics.searchExpandedOffset
+        ) > Spacing.hairline
+        guard needsReveal, !configuration.reducesMotion else {
+            revealSearchHeader(animated: false)
+            finishSearchPinRelease()
+            return
+        }
+        isReturningSearchHeaderForPinRelease = true
+        revealSearchHeader(animated: true)
+    }
+
+    /// 在系统滚动完成点释放临时固定；此时固定与非固定 Header 的几何位置完全一致。
+    func finishSearchPinRelease() {
+        guard isSearchPinReleasePending else { return }
+        isSearchPinReleasePending = false
+        isReturningSearchHeaderForPinRelease = false
+        collectionView.collectionViewLayout.invalidateLayout()
+        updateVisibleSearchHeaderRevealProgress()
+    }
+
+    /// 为 collection 容器补充等价的 VoiceOver 搜索入口，避免隐藏头只能依赖视觉下拉发现。
+    func updateSearchAccessibilityAction() {
+        guard configuration.isSearchVisible else {
+            collectionView.accessibilityCustomActions = nil
+            return
+        }
+        collectionView.accessibilityCustomActions = [
+            UIAccessibilityCustomAction(name: "显示搜索") { [weak self] _ in
+                guard let self else { return false }
+                self.revealSearchHeaderAndActivateForAccessibility()
+                return true
+            }
+        ]
+    }
+
+    /// VoiceOver 先完成空间揭示，再把焦点交给输入框，避免 Header 在滚动途中改变固定状态。
+    func revealSearchHeaderAndActivateForAccessibility() {
+        collectionView.layoutIfNeeded()
+        let needsReveal = abs(
+            normalizedSearchOffset - TagManagementCollectionMetrics.searchExpandedOffset
+        ) > Spacing.hairline
+        guard needsReveal, !configuration.reducesMotion else {
+            revealSearchHeader(animated: false)
+            configuration.onSearchActiveChange(true)
+            return
+        }
+        shouldActivateSearchAfterReveal = true
+        revealSearchHeader(animated: true)
+    }
+
+    /// 更新当前可见的稳定搜索头宿主，逐字输入时不替换 SwiftUI Hosting 身份。
+    func updateVisibleHeader() {
+        for case let header as TagManagementCollectionHeaderView
+            in collectionView.visibleSupplementaryViews(
+                ofKind: UICollectionView.elementKindSectionHeader
+            ) {
+            configure(header)
+        }
+    }
+
+    /// 把页面持有的唯一搜索状态同步到 supplementary header 的稳定模型。
+    func configure(_ header: TagManagementCollectionHeaderView) {
+        searchHeaderView = header
+        header.configure(
+            searchText: configuration.searchText,
+            isSearchActive: configuration.isSearchActive,
+            prompt: configuration.searchPrompt,
+            isEnabled: configuration.isSearchEnabled,
+            onSearchTextChange: configuration.onSearchTextChange,
+            onSearchActiveChange: configuration.onSearchActiveChange
+        )
+        let collapseDistance = searchHeaderCollapseDistance(
+            forContentOffsetY: collectionView.contentOffset.y
+        )
+        header.applyLayoutPresentation(
+            collapseDistance: collapseDistance,
+            revealProgress: searchHeaderRevealProgress
+        )
+    }
+
+    /// 将搜索头在两个停靠端点间的真实位移映射为视觉揭示比例，不写入滚动位置。
+    var searchHeaderRevealProgress: CGFloat {
+        guard configuration.isSearchVisible else { return 0 }
+        if isSearchEffectivelyPinned { return 1 }
+        let normalizedProgress = normalizedSearchOffset
+            / TagManagementCollectionMetrics.searchCollapsedOffset
+        return 1 - min(max(normalizedProgress, 0), 1)
+    }
+
+    /// 仅同步已存在搜索头的透明度与无障碍可见性，避免收起内容透过系统材质留下轮廓。
+    func updateVisibleSearchHeaderRevealProgress() {
+        guard let searchHeaderView else { return }
+        let collapseDistance = searchHeaderCollapseDistance(
+            forContentOffsetY: collectionView.contentOffset.y
+        )
+        searchHeaderView.applyLayoutPresentation(
+            collapseDistance: collapseDistance,
+            revealProgress: searchHeaderRevealProgress
+        )
+    }
+
     /// 读取指定位置的标签项。
     func item(at indexPath: IndexPath) -> TagManagementItem? {
         guard indexPath.section == 0, items.indices.contains(indexPath.item) else { return nil }
@@ -706,33 +999,13 @@ private extension TagManagementCollectionHostView {
         }
     }
 
-    /// 更新当前可见控制头的 Binding 与计数，不重载标签 cell 或改变滚动位置。
-    func updateVisibleHeader() {
-        for case let header as TagManagementCollectionHeaderView in collectionView.visibleSupplementaryViews(
-            ofKind: UICollectionView.elementKindSectionHeader
-        ) {
-            configure(header)
-        }
-    }
-
-    /// 更新稳定控制头模型，让逐字搜索不会替换 SwiftUI 宿主或第一响应者。
-    func configure(_ header: TagManagementCollectionHeaderView) {
-        header.configure(
-            searchText: configuration.searchText,
-            isSearchActive: configuration.isSearchActive,
-            prompt: configuration.searchPrompt,
-            isEnabled: configuration.isSearchEnabled,
-            onSearchTextChange: { [weak self] in self?.configuration.onSearchTextChange($0) },
-            onSearchActiveChange: { [weak self] in self?.configuration.onSearchActiveChange($0) }
-        )
-    }
-
     /// 统一组装 cell 的展示配置和操作闭包，避免 data source 与局部刷新路径行为分叉。
     func configure(_ cell: TagManagementCollectionCell, at indexPath: IndexPath, animated: Bool) {
         guard let item = item(at: indexPath) else { return }
         cell.configure(
             with: item,
             configuration: configuration,
+            showsBottomDivider: shouldShowBottomDivider(at: indexPath),
             animated: animated,
             onRename: { [weak self] in
                 guard let self else { return }
@@ -743,6 +1016,16 @@ private extension TagManagementCollectionHostView {
                 self.configuration.onDelete(self.currentItem(matching: item))
             }
         )
+    }
+
+    /// 判断当前项是否为所在列的末项，兼容双列奇数数据。
+    func isLastItemInColumn(at indexPath: IndexPath) -> Bool {
+        indexPath.item + currentColumnCount >= items.count
+    }
+
+    /// 仅在同列仍有下一项时显示底部分隔，避免列表末端留下悬空线条。
+    func shouldShowBottomDivider(at indexPath: IndexPath) -> Bool {
+        !isLastItemInColumn(at: indexPath)
     }
 
     /// 按标签 ID 回读当前数据源中的展示项，让复用 cell 的菜单动作始终使用最新配置分发。
@@ -877,12 +1160,47 @@ extension TagManagementCollectionHostView: UICollectionViewDataSource {
     ) {
         guard let destination = normalizedDestinationIndexPath(for: destinationIndexPath) else { return }
         applyLocalMove(from: sourceIndexPath, to: destination)
+        updateVisibleCells(animated: false)
     }
 }
 
 extension TagManagementCollectionHostView: UICollectionViewDelegate {
     func scrollViewDidScroll(_ scrollView: UIScrollView) {
         updateScrollEdgeWashEdges()
+    }
+
+    /// 用户接管滚动时取消尚未完成的无障碍聚焦请求，避免稍后意外抢占键盘焦点。
+    func scrollViewWillBeginDragging(_ scrollView: UIScrollView) {
+        shouldActivateSearchAfterReveal = false
+    }
+
+    /// 在 UIKit 原生程序化滚动落位后提交搜索固定或 VoiceOver 聚焦状态。
+    func scrollViewDidEndScrollingAnimation(_ scrollView: UIScrollView) {
+        if isReturningSearchHeaderForPinRelease {
+            finishSearchPinRelease()
+        }
+        guard shouldActivateSearchAfterReveal else { return }
+        shouldActivateSearchAfterReveal = false
+        configuration.onSearchActiveChange(true)
+    }
+
+    /// 仅修正系统预测的搜索头停靠端点，不接管拖动期间的 offset、减速率或回弹动画。
+    func scrollViewWillEndDragging(
+        _ scrollView: UIScrollView,
+        withVelocity velocity: CGPoint,
+        targetContentOffset: UnsafeMutablePointer<CGPoint>
+    ) {
+        guard configuration.isSearchVisible,
+              !isSearchEffectivelyPinned,
+              !configuration.isReordering else {
+            return
+        }
+        let projectedOffset = targetContentOffset.pointee.y + adjustedContentInset.top
+        guard projectedOffset <= TagManagementCollectionMetrics.searchCollapsedOffset else { return }
+        let endpoint = projectedOffset < TagManagementCollectionMetrics.searchSnapMidpoint
+            ? TagManagementCollectionMetrics.searchExpandedOffset
+            : TagManagementCollectionMetrics.searchCollapsedOffset
+        targetContentOffset.pointee.y = endpoint - adjustedContentInset.top
     }
 
     func collectionView(_ collectionView: UICollectionView, didSelectItemAt indexPath: IndexPath) {
@@ -893,6 +1211,24 @@ extension TagManagementCollectionHostView: UICollectionViewDelegate {
 
     func collectionView(_ collectionView: UICollectionView, shouldSelectItemAt indexPath: IndexPath) -> Bool {
         !configuration.isDisabled && !configuration.isReordering && item(at: indexPath) != nil
+    }
+
+    /// 仅在拖拽抬起期间提供系统内容表面，让直接平面中的标签获得明确空间反馈。
+    func collectionView(
+        _ collectionView: UICollectionView,
+        dragPreviewParametersForItemAt indexPath: IndexPath
+    ) -> UIDragPreviewParameters? {
+        guard canBeginReorder(at: indexPath),
+              let cell = collectionView.cellForItem(at: indexPath) else {
+            return nil
+        }
+        let parameters = UIDragPreviewParameters()
+        parameters.backgroundColor = .secondarySystemGroupedBackground
+        parameters.visiblePath = UIBezierPath(
+            roundedRect: cell.bounds,
+            cornerRadius: CornerRadius.containerMedium
+        )
+        return parameters
     }
 
     func collectionView(
@@ -956,6 +1292,7 @@ extension TagManagementCollectionHostView: UICollectionViewDropDelegate {
                 collectionView.moveItem(at: sourceIndexPath, to: destination)
             } completion: { [weak self] _ in
                 self?.selectionFeedback.selectionChanged()
+                self?.updateVisibleCells(animated: false)
             }
         }
         coordinator.drop(dropItem.dragItem, toItemAt: destination)
@@ -994,6 +1331,16 @@ struct TagManagementCollectionConfiguration {
         isSearchVisible ? TagManagementCollectionMetrics.searchHeaderHeight : 0
     }
 
+    var isSearchPinned: Bool {
+        isSearchVisible && (isSearchActive || !searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+    }
+
+    var layoutSignature: TagManagementCollectionLayoutSignature {
+        TagManagementCollectionLayoutSignature(
+            isSearchVisible: isSearchVisible
+        )
+    }
+
     var headerPresentationSignature: TagManagementCollectionHeaderPresentationSignature {
         TagManagementCollectionHeaderPresentationSignature(
             searchText: searchText,
@@ -1022,8 +1369,8 @@ struct TagManagementCollectionConfiguration {
         scope: .note,
         searchText: "",
         isSearchActive: false,
-        searchPrompt: "搜索书摘标签",
-        isSearchVisible: true,
+        searchPrompt: "搜索标签",
+        isSearchVisible: false,
         isSearchEnabled: true,
         emptyState: .none,
         searchKeyword: "",
@@ -1052,7 +1399,12 @@ enum TagManagementCollectionEmptyState: Hashable {
     case error(message: String)
 }
 
-/// 聚合控制头的可见输入与模式，用于只刷新 supplementary header。
+/// 聚合会触发 compositional layout 重建的搜索头结构状态。
+struct TagManagementCollectionLayoutSignature: Hashable {
+    let isSearchVisible: Bool
+}
+
+/// 聚合搜索头可见输入与焦点状态，用于只刷新稳定 supplementary host。
 struct TagManagementCollectionHeaderPresentationSignature: Hashable {
     let searchText: String
     let isSearchActive: Bool
@@ -1074,23 +1426,26 @@ struct TagManagementCollectionPresentationSignature: Hashable {
 }
 
 private enum TagManagementCollectionMetrics {
-    static let regularColumnCount = 2
-    static let accessibilityColumnCount = 1
-    static let normalItemHeight: CGFloat = 48
+    static let singleColumnCount = 1
+    static let wideColumnCount = 2
+    static let minimumWideColumnWidth: CGFloat = 300
+    static let normalItemHeight: CGFloat = 52
     static let accessibilityMinimumItemHeight: CGFloat = 56
-    static let horizontalInset: CGFloat = Spacing.screenEdge
-    static let dataTopInset: CGFloat = 0
+    static let sectionHorizontalInset: CGFloat = Spacing.none
+    static let dataTopInset: CGFloat = Spacing.cozy
     static let bottomInset: CGFloat = Spacing.double
-    static let searchHeaderHeight: CGFloat = 56
-    static let itemHorizontalGap: CGFloat = Spacing.cozy
-    static let searchHeaderHorizontalInset: CGFloat = -(itemHorizontalGap / 2)
-    static let rowSpacing: CGFloat = Spacing.cozy
+    static let searchHeaderHeight: CGFloat = 52
+    static let searchExpandedOffset: CGFloat = 0
+    static let searchCollapsedOffset: CGFloat = searchHeaderHeight
+    static let searchSnapMidpoint: CGFloat = searchHeaderHeight / 2
+    static let itemHorizontalGap: CGFloat = Spacing.base
+    static let rowSpacing: CGFloat = Spacing.none
     static let reorderHitWidth: CGFloat = Spacing.actionReserved
     static let reorderHitHeight: CGFloat = Spacing.actionReserved
     static let reloadCrossfadeDuration: TimeInterval = 0.16
 }
 
-/// 标签 collection 的边界搜索头，保持系统搜索栏与标签内容的滚动关系。
+/// 标签 collection 的边界搜索头；宿主身份稳定，避免逐字输入重建并丢失键盘焦点。
 private final class TagManagementCollectionHeaderView: UICollectionReusableView {
     static let reuseIdentifier = "TagManagementCollectionHeaderView"
     private var hostedContentView: (UIView & UIContentView)?
@@ -1106,29 +1461,7 @@ private final class TagManagementCollectionHeaderView: UICollectionReusableView 
         fatalError("init(coder:) has not been implemented")
     }
 
-    /// 使用宿主内容的压缩尺寸修正 estimated header，支持系统搜索栏随辅助功能字号增高。
-    override func preferredLayoutAttributesFitting(
-        _ layoutAttributes: UICollectionViewLayoutAttributes
-    ) -> UICollectionViewLayoutAttributes {
-        guard let attributes = layoutAttributes.copy() as? UICollectionViewLayoutAttributes,
-              let hostedContentView else {
-            return layoutAttributes
-        }
-
-        let fittingSize = CGSize(
-            width: layoutAttributes.size.width,
-            height: UIView.layoutFittingCompressedSize.height
-        )
-        let measuredHeight = hostedContentView.systemLayoutSizeFitting(
-            fittingSize,
-            withHorizontalFittingPriority: .required,
-            verticalFittingPriority: .fittingSizeLevel
-        ).height
-        attributes.frame.size.height = ceil(max(measuredHeight, 1))
-        return attributes
-    }
-
-    /// 只更新可观察模型；宿主在首次展示后保持身份稳定，保证输入焦点与键盘连续。
+    /// 只更新可观察模型；首次创建后保持 Hosting 内容身份稳定。
     func configure(
         searchText: String,
         isSearchActive: Bool,
@@ -1163,14 +1496,37 @@ private final class TagManagementCollectionHeaderView: UICollectionReusableView 
             contentView.bottomAnchor.constraint(equalTo: bottomAnchor)
         ])
     }
+
+    /// 呈现布局层给出的唯一运动结果；自身不读取滚动位置或推导动画状态。
+    func applyLayoutPresentation(collapseDistance: CGFloat, revealProgress: CGFloat) {
+        let clampedDistance = min(
+            max(collapseDistance, 0),
+            TagManagementCollectionMetrics.searchHeaderHeight
+        )
+        hostedContentView?.transform = CGAffineTransform(
+            translationX: 0,
+            y: -clampedDistance
+        )
+        hostedContentView?.alpha = min(max(revealProgress, 0), 1)
+
+        let clampedProgress = min(max(revealProgress, 0), 1)
+        let isFullyRevealed = clampedProgress >= 1 - Spacing.hairline
+        model.setFullyRevealed(isFullyRevealed)
+        isUserInteractionEnabled = isFullyRevealed
+        accessibilityElementsHidden = !isFullyRevealed
+        hostedContentView?.accessibilityElementsHidden = !isFullyRevealed
+        accessibilityElements = isFullyRevealed ? nil : []
+        hostedContentView?.accessibilityElements = isFullyRevealed ? nil : []
+    }
 }
 
-/// UIKit supplementary view 持有的稳定状态模型，区分外部同步与用户输入回调。
+/// UIKit supplementary view 持有的稳定搜索状态，区分页面同步与用户输入回写。
 private final class TagManagementCollectionHeaderModel: ObservableObject {
     @Published var searchText = ""
     @Published var isSearchActive = false
-    @Published var prompt = "搜索书摘标签"
+    @Published var prompt = "搜索标签"
     @Published var isEnabled = true
+    @Published var isFullyRevealed = false
 
     private var onSearchTextChange: (String) -> Void = { _ in }
     private var onSearchActiveChange: (Bool) -> Void = { _ in }
@@ -1192,22 +1548,28 @@ private final class TagManagementCollectionHeaderModel: ObservableObject {
         if self.isEnabled != isEnabled { self.isEnabled = isEnabled }
     }
 
-    /// 接收搜索文本变化并回写 TagManagementView。
+    /// 接收输入变化并回写页面持有的唯一搜索词。
     func setSearchText(_ value: String) {
         guard searchText != value else { return }
         searchText = value
         onSearchTextChange(value)
     }
 
-    /// 接收焦点变化并回写 TagManagementView。
+    /// 接收焦点变化并回写页面搜索激活态。
     func setSearchActive(_ value: Bool) {
         guard isSearchActive != value else { return }
         isSearchActive = value
         onSearchActiveChange(value)
     }
+
+    /// 只在搜索头跨过完全展开端点时更新无障碍可见性，避免随滚动逐帧发布状态。
+    func setFullyRevealed(_ value: Bool) {
+        guard isFullyRevealed != value else { return }
+        isFullyRevealed = value
+    }
 }
 
-/// 标签搜索的 SwiftUI 宿主，所有写入通过 Binding 回到 TagManagementView。
+/// 搜索头 SwiftUI 内容；视觉与触控高度由 XMInlineSearchField 的既有规范承担。
 private struct TagManagementCollectionHeaderContent: View {
     @ObservedObject var model: TagManagementCollectionHeaderModel
 
@@ -1220,17 +1582,19 @@ private struct TagManagementCollectionHeaderContent: View {
     }
 
     var body: some View {
-        PersonalManagementSearchBar(
+        XMInlineSearchField(
             text: searchText,
             isActive: isSearchActive,
-            prompt: model.prompt,
-            isEnabled: model.isEnabled
+            prompt: model.prompt
         )
-        .padding(.horizontal, TagManagementCollectionMetrics.searchHeaderHorizontalInset)
+        .disabled(!model.isEnabled)
+        .padding(.horizontal, Spacing.double)
+        .padding(.vertical, Spacing.compact)
+        .accessibilityHidden(!model.isFullyRevealed)
     }
 }
 
-/// 标签 collection 的系统内容不可用宿主，空结果时不替换滚动控制头。
+/// 标签 collection 的系统内容不可用宿主，搜索固定时为输入区保留阅读空间。
 private struct TagManagementCollectionEmptyStateView: View {
     let state: TagManagementCollectionEmptyState
     let headerHeight: CGFloat
@@ -1260,14 +1624,29 @@ private struct TagManagementCollectionEmptyStateView: View {
     }
 }
 
-/// 标签 collection cell，通过 UIHostingConfiguration 复用 SwiftUI 卡片视觉。
+/// 标签 collection cell，通过 UIHostingConfiguration 承载直接内容平面与瞬时按压反馈。
 private final class TagManagementCollectionCell: UICollectionViewCell {
     static let reuseIdentifier = "TagManagementCollectionCell"
+    private let highlightView = UIView()
 
     override init(frame: CGRect) {
         super.init(frame: frame)
         backgroundColor = .clear
         contentView.backgroundColor = .clear
+        highlightView.backgroundColor = .tertiarySystemFill
+        highlightView.alpha = 0
+        highlightView.isUserInteractionEnabled = false
+        highlightView.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(highlightView)
+        NSLayoutConstraint.activate([
+            highlightView.leadingAnchor.constraint(equalTo: leadingAnchor),
+            highlightView.trailingAnchor.constraint(equalTo: trailingAnchor),
+            highlightView.topAnchor.constraint(equalTo: topAnchor),
+            highlightView.bottomAnchor.constraint(equalTo: bottomAnchor)
+        ])
+        configurationUpdateHandler = { [weak self] _, state in
+            self?.highlightView.alpha = state.isHighlighted ? 1 : 0
+        }
     }
 
     @available(*, unavailable)
@@ -1278,12 +1657,14 @@ private final class TagManagementCollectionCell: UICollectionViewCell {
     override func prepareForReuse() {
         super.prepareForReuse()
         contentConfiguration = nil
+        highlightView.alpha = 0
     }
 
     /// 渲染当前标签项。
     func configure(
         with item: TagManagementItem,
         configuration: TagManagementCollectionConfiguration,
+        showsBottomDivider: Bool,
         animated: Bool,
         onRename: @escaping () -> Void,
         onDelete: @escaping () -> Void
@@ -1300,12 +1681,14 @@ private final class TagManagementCollectionCell: UICollectionViewCell {
                 isSelected: configuration.selectedTagIDs.contains(item.id),
                 isReordering: configuration.isReordering,
                 isDisabled: configuration.isDisabled,
+                showsBottomDivider: showsBottomDivider,
                 allowsMotion: animated && !configuration.reducesMotion,
                 onRename: onRename,
                 onDelete: onDelete
             )
         }
         .margins(.all, 0)
+        .background(Color.clear)
 
         if animated {
             contentConfiguration = nextContentConfiguration
@@ -1315,11 +1698,13 @@ private final class TagManagementCollectionCell: UICollectionViewCell {
             }
         }
     }
+
 }
 
 private struct TagManagementCollectionItemView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.displayScale) private var displayScale
     let item: TagManagementItem
     let scope: TagManagementScope
     let searchKeyword: String
@@ -1327,6 +1712,7 @@ private struct TagManagementCollectionItemView: View {
     let isSelected: Bool
     let isReordering: Bool
     let isDisabled: Bool
+    let showsBottomDivider: Bool
     let allowsMotion: Bool
     let onRename: () -> Void
     let onDelete: () -> Void
@@ -1355,12 +1741,16 @@ private struct TagManagementCollectionItemView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .layoutPriority(1)
 
+            if item.associatedCount > 0 {
+                associatedCountText
+            }
+
             if isReordering {
                 reorderHandle
                     .transition(trailingSlotTransition)
             }
         }
-        .padding(.horizontal, Spacing.base)
+        .padding(.horizontal, Spacing.double)
         .padding(.vertical, isAccessibilityLayout ? Spacing.cozy : Spacing.none)
         .frame(
             maxWidth: .infinity,
@@ -1368,11 +1758,16 @@ private struct TagManagementCollectionItemView: View {
             maxHeight: .infinity,
             alignment: .leading
         )
-        .contentShape(.interaction, RoundedRectangle(cornerRadius: CornerRadius.blockLarge, style: .continuous))
-        .background(Color.surfaceCard, in: RoundedRectangle(cornerRadius: CornerRadius.blockLarge, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: CornerRadius.blockLarge, style: .continuous)
-                .stroke(Color.surfaceBorderSubtle, lineWidth: CardStyle.borderWidth)
+        .contentShape(.interaction, Rectangle())
+        .background(selectionBackground)
+        .overlay(alignment: .bottom) {
+            if shouldShowBottomDivider {
+                Rectangle()
+                    .fill(Color.surfaceBorderDefault)
+                    .frame(height: dividerThickness)
+                    .padding(.horizontal, Spacing.double)
+                    .accessibilityHidden(true)
+            }
         }
         .modifier(TagManagementItemManagementModifier(
             isEnabled: shouldShowManagementMenu,
@@ -1406,6 +1801,28 @@ private struct TagManagementCollectionItemView: View {
             )
             .contentShape(Rectangle())
             .accessibilityHidden(true)
+    }
+
+    private var associatedCountText: some View {
+        Text(verbatim: String(item.associatedCount))
+            .font(AppTypography.caption2Medium)
+            .foregroundStyle(Color.textSecondary)
+            .monospacedDigit()
+            .lineLimit(1)
+            .fixedSize(horizontal: true, vertical: false)
+            .accessibilityHidden(true)
+    }
+
+    private var selectionBackground: Color {
+        isSelectionMode && isSelected ? Color.brand.opacity(0.10) : Color.clear
+    }
+
+    private var shouldShowBottomDivider: Bool {
+        showsBottomDivider && !(isSelectionMode && isSelected)
+    }
+
+    private var dividerThickness: CGFloat {
+        1 / max(displayScale, 1)
     }
 
     private var shouldShowManagementMenu: Bool {
@@ -1460,9 +1877,9 @@ private struct TagManagementCollectionItemView: View {
             return "\(item.name)，\(associatedText)"
         }
         if isReordering {
-            return "\(item.name)，可拖动调整顺序"
+            return "\(item.name)，\(associatedText)，可拖动调整顺序"
         }
-        return item.name
+        return "\(item.name)，\(associatedText)"
     }
 
     private var accessibilityHint: String {
@@ -1487,7 +1904,7 @@ private struct TagManagementCollectionItemView: View {
     }
 }
 
-/// 仅在普通可交互状态提供整卡长按菜单及等价 VoiceOver 操作。
+/// 仅在普通可交互状态提供长按菜单、系统浮层预览及等价 VoiceOver 操作。
 private struct TagManagementItemManagementModifier: ViewModifier {
     let isEnabled: Bool
     let onRename: () -> Void
@@ -1499,7 +1916,7 @@ private struct TagManagementItemManagementModifier: ViewModifier {
             content
                 .contentShape(
                     .contextMenuPreview,
-                    RoundedRectangle(cornerRadius: CornerRadius.blockLarge, style: .continuous)
+                    RoundedRectangle(cornerRadius: CornerRadius.containerMedium, style: .continuous)
                 )
                 .contextMenu {
                     Button(action: onRename) {

@@ -16,6 +16,8 @@ struct XMInlineSearchField: View {
     private let onCancel: () -> Void
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @ScaledMetric(relativeTo: .subheadline) private var cancelButtonWidth = Spacing.actionReserved
+    @State private var cancelPresentationProgress: CGFloat = 0
     @FocusState private var isFocused: Bool
 
     /// 注入搜索文本、焦点状态和操作回调，保持清除、取消与提交行为在页面之间一致。
@@ -34,22 +36,21 @@ struct XMInlineSearchField: View {
     }
 
     var body: some View {
-        HStack(spacing: Spacing.cozy) {
+        ZStack(alignment: .trailing) {
             searchSurface
+                .padding(.trailing, cancelReservedWidth * cancelPresentationProgress)
 
-            if showsCancelButton {
-                Button("取消", action: cancelSearch)
-                    .font(AppTypography.subheadline)
-                    .foregroundStyle(Color.textSecondary)
-                    .frame(minWidth: Spacing.actionReserved, minHeight: Spacing.actionReserved)
-                    .contentShape(Rectangle())
-                    .transition(.opacity)
-                    .accessibilityHint("清空当前搜索并关闭键盘")
-            }
+            cancelButton
         }
-        .frame(minHeight: Spacing.actionReserved)
-        .animation(reduceMotion ? nil : .smooth(duration: 0.18), value: showsCancelButton)
-        .onAppear(perform: synchronizeFocusFromExternalState)
+        .frame(maxWidth: .infinity, minHeight: Spacing.actionReserved)
+        .onAppear(perform: synchronizeInitialPresentation)
+        .onChange(of: showsCancelButton) { _, isVisible in
+            updateCancelPresentation(isVisible: isVisible, animated: true)
+        }
+        .onChange(of: reduceMotion) { _, isEnabled in
+            guard isEnabled else { return }
+            updateCancelPresentation(isVisible: showsCancelButton, animated: false)
+        }
         .onChange(of: isFocused) { _, newValue in
             guard isActive != newValue else { return }
             isActive = newValue
@@ -63,6 +64,24 @@ struct XMInlineSearchField: View {
     /// 查询存在时即使键盘已收起也保留取消入口，避免焦点变化先于按钮点击完成。
     private var showsCancelButton: Bool {
         isFocused || !text.isEmpty
+    }
+
+    private var cancelReservedWidth: CGFloat {
+        cancelButtonWidth + Spacing.cozy
+    }
+
+    /// 以稳定的尾部坐标承载取消操作，透明度与搜索表面宽度共享同一个视觉进度。
+    private var cancelButton: some View {
+        Button("取消", action: cancelSearch)
+            .font(AppTypography.subheadline)
+            .foregroundStyle(Color.textSecondary)
+            .frame(width: cancelButtonWidth)
+            .frame(minHeight: Spacing.actionReserved)
+            .contentShape(Rectangle())
+            .opacity(cancelPresentationProgress)
+            .accessibilityHint("清空当前搜索并关闭键盘")
+            .allowsHitTesting(showsCancelButton)
+            .accessibilityHidden(!showsCancelButton)
     }
 
     private var searchSurface: some View {
@@ -134,10 +153,39 @@ struct XMInlineSearchField: View {
         guard isFocused != isActive else { return }
         isFocused = isActive
     }
+
+    /// 首次挂载或复用时无动画同步焦点与视觉端点，避免页面恢复产生无来源动效。
+    private func synchronizeInitialPresentation() {
+        synchronizeFocusFromExternalState()
+        updateCancelPresentation(
+            isVisible: isActive || !text.isEmpty,
+            animated: false
+        )
+    }
+
+    /// 将取消入口的显示意图映射为可中断视觉进度；Reduce Motion 下立即落到目标端点。
+    private func updateCancelPresentation(isVisible: Bool, animated: Bool) {
+        let targetProgress: CGFloat = isVisible ? 1 : 0
+        guard cancelPresentationProgress != targetProgress else { return }
+
+        if reduceMotion || !animated {
+            var transaction = Transaction(animation: nil)
+            transaction.disablesAnimations = true
+            withTransaction(transaction) {
+                cancelPresentationProgress = targetProgress
+            }
+            return
+        }
+
+        withAnimation(.smooth(duration: XMInlineSearchFieldMetrics.cancelTransitionDuration)) {
+            cancelPresentationProgress = targetProgress
+        }
+    }
 }
 
 private enum XMInlineSearchFieldMetrics {
     static let visualHeight: CGFloat = 40
     static let touchHeight: CGFloat = 44
     static let cornerRadius: CGFloat = 12
+    static let cancelTransitionDuration = 0.22
 }
