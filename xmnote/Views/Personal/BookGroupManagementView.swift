@@ -1,6 +1,6 @@
 /**
- * [INPUT]: 依赖 RepositoryContainer 注入 BookGroupManagementRepositoryProtocol，依赖 BookGroupManagementViewModel 驱动分组管理与搜索状态，依赖外部 BookRoute 导航回调进入组内书籍列表
- * [OUTPUT]: 对外提供 BookGroupManagementView，承接“我的 > 书籍分组”入口的真实管理、搜索与长按操作页面
+ * [INPUT]: 依赖 RepositoryContainer 注入 BookGroupManagementRepositoryProtocol，依赖 BookGroupManagementViewModel 驱动分组管理状态，依赖 PersonalManagementSearchBar、系统分组 List/Toolbar 与外部 BookRoute 回调，并由页面壳层稳定承载导航命令和排序草稿
+ * [OUTPUT]: 对外提供 BookGroupManagementView，以首帧稳定的顶部命令、可滚动系统搜索和单一数据容器承接分组管理、选择与排序
  * [POS]: Views/Personal 的书籍分组管理页面壳层，被 PersonalRoute.groupManagement 导航消费
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -10,8 +10,12 @@ import SwiftUI
 /// 书籍分组管理页面，提供新增、重命名、排序、删除和进入分组书籍列表能力。
 struct BookGroupManagementView: View {
     @Environment(RepositoryContainer.self) private var repositories
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var viewModel: BookGroupManagementViewModel?
     @State private var bootstrapLoadingGate = LoadingGate()
+    @State private var isReordering = false
+    @State private var isInlineSearchActive = false
+    @State private var reorderGroups: [BookGroupManagementItem] = []
     private let onOpenBookRoute: (BookRoute) -> Void
 
     /// 注入组内书籍列表导航回调，保持个人页所在 NavigationStack 的路由所有权。
@@ -20,19 +24,29 @@ struct BookGroupManagementView: View {
     }
 
     var body: some View {
-        ZStack {
-            Color.surfacePage.ignoresSafeArea()
+        Group {
             if let viewModel {
                 BookGroupManagementContentView(
                     viewModel: viewModel,
+                    isReordering: $isReordering,
+                    isInlineSearchActive: $isInlineSearchActive,
+                    reorderGroups: $reorderGroups,
                     onOpenBookRoute: onOpenBookRoute
                 )
             } else if bootstrapLoadingGate.isVisible {
                 LoadingStateView("正在加载分组…", style: .card)
+            } else {
+                Color.clear
             }
         }
-        .navigationTitle("分组管理")
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color.surfacePage.ignoresSafeArea())
+        .tint(Color.iconPrimary)
+        .navigationTitle(
+            navigationTitle
+        )
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar { toolbarContent }
         .task {
             guard viewModel == nil else { return }
             bootstrapLoadingGate.update(intent: .read)
@@ -41,7 +55,168 @@ struct BookGroupManagementView: View {
         }
         .onDisappear {
             bootstrapLoadingGate.hideImmediately()
+            clearAndDeactivateSearch()
         }
+    }
+
+    private var navigationTitle: String {
+        if viewModel?.isSelectionMode == true {
+            return "已选择 \(viewModel?.selectedCount ?? 0) 个"
+        }
+        if isReordering {
+            return "调整分组顺序"
+        }
+        return "分组管理"
+    }
+
+    private var isToolbarReady: Bool {
+        viewModel != nil
+    }
+
+    private var selectionToggleAnimation: Animation? {
+        reduceMotion ? nil : .snappy(duration: 0.16)
+    }
+
+    @ToolbarContentBuilder
+    private var toolbarContent: some ToolbarContent {
+        if isReordering {
+            ToolbarItemGroup(placement: .topBarTrailing) {
+                Button("完成", action: finishReorderMode)
+                    .disabled(viewModel?.activeWriteAction == .reorder)
+                    .allowsHitTesting(isToolbarReady)
+                    .accessibilityHidden(!isToolbarReady)
+            }
+        } else if viewModel?.isSelectionMode == true {
+            ToolbarItemGroup(placement: .topBarTrailing) {
+                selectionActionMenu
+
+                Button("完成") {
+                    viewModel?.exitSelectionMode()
+                }
+                .disabled(viewModel?.activeWriteAction != nil)
+                .allowsHitTesting(isToolbarReady)
+                .accessibilityHidden(!isToolbarReady)
+            }
+        } else {
+            ToolbarItemGroup(placement: .topBarTrailing) {
+                Button {
+                    viewModel?.presentCreateSheet()
+                } label: {
+                    Image(systemName: "plus")
+                }
+                .disabled(viewModel?.activeWriteAction != nil)
+                .allowsHitTesting(isToolbarReady)
+                .accessibilityHidden(!isToolbarReady)
+                .accessibilityLabel("添加分组")
+
+                Menu {
+                    Button("选择分组", systemImage: "checklist") {
+                        guard viewModel?.canEnterSelectionMode == true else { return }
+                        deactivateSearch()
+                        viewModel?.enterSelectionMode()
+                    }
+                    .disabled(viewModel?.canEnterSelectionMode != true)
+
+                    Button("调整顺序", systemImage: "arrow.up.arrow.down") {
+                        enterReorderMode()
+                    }
+                    .disabled(viewModel?.canEnterReorder != true)
+                    .accessibilityHint(viewModel?.reorderActionAccessibilityHint ?? "")
+                } label: {
+                    Image(systemName: "ellipsis")
+                }
+                .disabled(viewModel?.activeWriteAction != nil)
+                .allowsHitTesting(isToolbarReady)
+                .accessibilityHidden(!isToolbarReady)
+                .accessibilityLabel("更多操作")
+            }
+        }
+    }
+
+    private var selectionActionMenu: some View {
+        Menu {
+            Button(selectionToggleTitle, systemImage: "checkmark.circle") {
+                toggleSelection()
+            }
+            .disabled((viewModel?.visibleGroups.isEmpty ?? true) || viewModel?.activeWriteAction != nil)
+
+            Button("重命名", systemImage: "pencil") {
+                renameSelectedGroup()
+            }
+            .disabled(selectedSingleGroup == nil || viewModel?.activeWriteAction != nil)
+
+            Divider()
+
+            Button("删除", systemImage: "trash", role: .destructive) {
+                viewModel?.presentDeleteConfirmationForSelection()
+            }
+            .disabled((viewModel?.selectedCount ?? 0) == 0 || viewModel?.activeWriteAction != nil)
+        } label: {
+            Image(systemName: "ellipsis")
+        }
+        .allowsHitTesting(isToolbarReady)
+        .accessibilityHidden(!isToolbarReady)
+        .accessibilityLabel("批量操作")
+    }
+
+    private var selectedSingleGroup: BookGroupManagementItem? {
+        guard let selectedGroups = viewModel?.selectedGroups,
+              selectedGroups.count == 1 else {
+            return nil
+        }
+        return selectedGroups.first
+    }
+
+    private var selectionToggleTitle: String {
+        guard let viewModel else { return "全选" }
+        if viewModel.isSearchFiltering {
+            return viewModel.isAllVisibleSelected ? "取消选择搜索结果" : "选择全部搜索结果"
+        }
+        return viewModel.isAllVisibleSelected ? "取消全选" : "全选"
+    }
+
+    private func deactivateSearch(disablesAnimations: Bool = true) {
+        var transaction = Transaction(animation: nil)
+        transaction.disablesAnimations = disablesAnimations || reduceMotion
+        withTransaction(transaction) {
+            isInlineSearchActive = false
+        }
+    }
+
+    private func clearAndDeactivateSearch() {
+        deactivateSearch()
+        viewModel?.clearSearchText()
+    }
+
+    private func enterReorderMode() {
+        guard let viewModel, viewModel.canEnterReorder else { return }
+        deactivateSearch()
+        viewModel.exitSelectionMode()
+        reorderGroups = viewModel.groups
+        isReordering = true
+    }
+
+    private func finishReorderMode() {
+        guard isReordering, let viewModel else { return }
+        let orderedIDs = reorderGroups.map(\.id)
+        isReordering = false
+        viewModel.commitGroupOrder(orderedIDs)
+    }
+
+    private func toggleSelection() {
+        guard let viewModel else { return }
+        withAnimation(selectionToggleAnimation) {
+            if viewModel.isAllVisibleSelected {
+                viewModel.clearVisibleSelection()
+            } else {
+                viewModel.selectAllVisible()
+            }
+        }
+    }
+
+    private func renameSelectedGroup() {
+        guard let viewModel, let group = selectedSingleGroup else { return }
+        viewModel.presentRenameSheet(for: group)
     }
 }
 
@@ -49,35 +224,14 @@ private struct BookGroupManagementContentView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(XMToastCenter.self) private var toastCenter
     @Bindable var viewModel: BookGroupManagementViewModel
+    @Binding var isReordering: Bool
+    @Binding var isInlineSearchActive: Bool
+    @Binding var reorderGroups: [BookGroupManagementItem]
     let onOpenBookRoute: (BookRoute) -> Void
     @State private var readLoadingGate = LoadingGate()
-    @State private var isSearchPresented = false
-    @State private var isReordering = false
-    @State private var reorderGroups: [BookGroupManagementItem] = []
-    @FocusState private var isSearchFocused: Bool
 
     var body: some View {
-        content
-            .id(contentTransitionKey)
-            .transition(.opacity)
-            .animation(contentTransitionAnimation, value: contentTransitionKey)
-            .searchable(
-                text: $viewModel.searchText,
-                isPresented: $isSearchPresented,
-                prompt: "搜索分组"
-            )
-            .searchFocused($isSearchFocused)
-            .searchPresentationToolbarBehavior(.avoidHidingContent)
-            .textInputAutocapitalization(.never)
-            .autocorrectionDisabled()
-            .toolbar(removing: isNormalMode ? nil : .search)
-            .toolbar { toolbarContent }
-            .safeAreaBar(edge: .bottom, spacing: Spacing.none) {
-                if viewModel.isSelectionMode {
-                    selectionBottomChrome
-                        .transition(.move(edge: .bottom).combined(with: .opacity))
-                }
-            }
+        groupList
             .animation(modeTransitionAnimation, value: viewModel.isSelectionMode)
             .animation(modeTransitionAnimation, value: isReordering)
             .sheet(item: $viewModel.activeNameEdit) { edit in
@@ -105,101 +259,85 @@ private struct BookGroupManagementContentView: View {
                     isReordering = false
                 }
             }
-            .onChange(of: isNormalMode) { _, isNormalMode in
-                guard !isNormalMode else { return }
-                dismissSearch()
-            }
             .onDisappear {
                 readLoadingGate.hideImmediately()
-                dismissSearch()
             }
-    }
-
-    private var isNormalMode: Bool {
-        !viewModel.isSelectionMode && !isReordering
-    }
-
-    private var isSearchActive: Bool {
-        isSearchPresented || isSearchFocused || viewModel.isSearchFiltering
-    }
-
-    private var searchControlAnimation: Animation? {
-        reduceMotion ? nil : .smooth(duration: 0.14)
     }
 
     private var modeTransitionAnimation: Animation? {
         reduceMotion ? nil : .smooth(duration: 0.22)
     }
 
-    private var contentTransitionAnimation: Animation? {
-        reduceMotion ? .easeOut(duration: 0.12) : .smooth(duration: 0.18)
-    }
-
     private var selectionToggleAnimation: Animation? {
         reduceMotion ? nil : .snappy(duration: 0.16)
     }
 
-    private var contentTransitionKey: String {
-        switch viewModel.contentState {
-        case .loading:
-            return readLoadingGate.isVisible ? "loading-visible" : "loading-hidden"
-        case .empty:
-            return "empty"
-        case .error:
-            return "error"
-        case .content:
-            if viewModel.isSearchResultEmpty {
-                return "search-empty"
-            }
-            return isReordering ? "reorder" : "content"
-        }
-    }
-
-    private var topTrailingMode: BookGroupManagementTopTrailingMode {
-        if isReordering {
-            return .reordering
-        }
-        if viewModel.isSelectionMode {
-            return .selecting
-        }
-        return .normal
-    }
-
     @ViewBuilder
-    private var content: some View {
+    private var groupSectionContent: some View {
         switch viewModel.contentState {
         case .loading:
             if readLoadingGate.isVisible {
                 LoadingStateView("正在加载分组…", style: .inline)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .bookGroupManagementStateRow()
             } else {
-                Color.clear
+                Color.clear.bookGroupManagementStateRow()
             }
         case .empty:
             ContentUnavailableView(
                 "暂无书籍分组",
                 systemImage: "folder"
             )
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .bookGroupManagementStateRow()
         case .error(let message):
             ContentUnavailableView(
                 "分组加载失败",
                 systemImage: "exclamationmark.triangle",
                 description: Text(message)
             )
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .bookGroupManagementStateRow()
         case .content:
             if viewModel.isSearchResultEmpty {
                 ContentUnavailableView.search(text: viewModel.normalizedSearchText)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .bookGroupManagementStateRow()
             } else {
-                groupList
+                groupRows
             }
         }
     }
 
     private var groupList: some View {
         List {
+            if !isReordering {
+                Section {
+                    PersonalManagementSearchListRow(
+                        text: $viewModel.searchText,
+                        isActive: $isInlineSearchActive,
+                        prompt: "搜索分组",
+                        isEnabled: viewModel.activeWriteAction == nil
+                    )
+                }
+                .listSectionMargins(.horizontal, 0)
+            }
+
+            Section {
+                groupSectionContent
+            }
+        }
+        .listStyle(.insetGrouped)
+        .listSectionSpacing(Spacing.base)
+        .scrollContentBackground(.hidden)
+        .contentMargins(.top, Spacing.tight, for: .scrollContent)
+        .contentMargins(.bottom, Spacing.double, for: .scrollContent)
+        .scrollBounceBehavior(.always)
+        .scrollDismissesKeyboard(.interactively)
+        .scrollEdgeEffectStyle(.soft, for: [.top, .bottom])
+        .environment(\.defaultMinListRowHeight, 1)
+        .environment(\.editMode, .constant(isReordering ? .active : .inactive))
+        .background(Color.surfacePage)
+    }
+
+    @ViewBuilder
+    private var groupRows: some View {
             if isReordering {
                 ForEach(reorderGroups) { item in
                     BookGroupManagementRowView(
@@ -250,80 +388,6 @@ private struct BookGroupManagementContentView: View {
                     }
                 }
             }
-        }
-        .listStyle(.plain)
-        .scrollContentBackground(.hidden)
-        .contentMargins(.top, Spacing.tight, for: .scrollContent)
-        .contentMargins(.bottom, Spacing.double, for: .scrollContent)
-        .scrollEdgeEffectStyle(.soft, for: .top)
-        .environment(\.defaultMinListRowHeight, 1)
-        .environment(\.editMode, .constant(isReordering ? .active : .inactive))
-        .background(Color.surfacePage)
-    }
-
-    @ToolbarContentBuilder
-    private var toolbarContent: some ToolbarContent {
-        ToolbarItem(placement: .topBarTrailing) {
-            BookGroupManagementTopTrailingControl(
-                mode: topTrailingMode,
-                isBusy: viewModel.activeWriteAction != nil,
-                isReorderBusy: viewModel.activeWriteAction == .reorder,
-                canEnterSelectionMode: viewModel.canEnterSelectionMode,
-                canEnterReorder: viewModel.canEnterReorder,
-                reorderAccessibilityHint: viewModel.reorderActionAccessibilityHint,
-                onEnterSelectionMode: {
-                    dismissSearch()
-                    viewModel.enterSelectionMode()
-                },
-                onEnterReorder: {
-                    dismissSearch()
-                    enterReorderMode()
-                },
-                onCompleteSelection: { viewModel.exitSelectionMode() },
-                onFinishReorder: finishReorderMode
-            )
-            .xmToolbarNeutralTint()
-        }
-
-        if isNormalMode {
-            DefaultToolbarItem(kind: .search, placement: .bottomBar)
-
-            ToolbarSpacer(placement: .bottomBar)
-
-            ToolbarItem(placement: .bottomBar) {
-                Button {
-                    viewModel.presentCreateSheet()
-                } label: {
-                    Image(systemName: "plus")
-                }
-                .disabled(viewModel.activeWriteAction != nil || isSearchActive)
-                .opacity(isSearchActive ? 0 : 1)
-                .animation(searchControlAnimation, value: isSearchActive)
-                .xmToolbarNeutralTint()
-                .accessibilityHidden(isSearchActive)
-                .accessibilityLabel("添加分组")
-            }
-        }
-    }
-
-    private var selectionBottomChrome: some View {
-        BookGroupManagementSelectionBottomBar(
-            selectedCount: viewModel.selectedCount,
-            isAllSelected: viewModel.isAllSelected,
-            isBusy: viewModel.activeWriteAction != nil,
-            canRename: selectedSingleGroup != nil,
-            onToggleSelectAll: toggleSelection,
-            onRename: renameSelectedGroup,
-            onDelete: { viewModel.presentDeleteConfirmationForSelection() }
-        )
-        .padding(.horizontal, Spacing.screenEdge)
-        .padding(.bottom, Spacing.base)
-    }
-
-    private var selectedSingleGroup: BookGroupManagementItem? {
-        let selected = viewModel.selectedGroups
-        guard selected.count == 1 else { return nil }
-        return selected.first
     }
 
     private func bookRoute(for item: BookGroupManagementItem) -> BookRoute {
@@ -338,47 +402,8 @@ private struct BookGroupManagementContentView: View {
         readLoadingGate.update(intent: viewModel.contentState == .loading ? .read : .none)
     }
 
-    private func dismissSearch(disablesAnimations: Bool = true) {
-        var transaction = Transaction(animation: nil)
-        transaction.disablesAnimations = disablesAnimations || reduceMotion
-        withTransaction(transaction) {
-            isSearchFocused = false
-            isSearchPresented = false
-            viewModel.clearSearchText()
-        }
-    }
-
-    private func enterReorderMode() {
-        guard viewModel.canEnterReorder else { return }
-        viewModel.exitSelectionMode()
-        reorderGroups = viewModel.groups
-        isReordering = true
-    }
-
-    private func finishReorderMode() {
-        guard isReordering else { return }
-        let orderedIDs = reorderGroups.map(\.id)
-        isReordering = false
-        viewModel.commitGroupOrder(orderedIDs)
-    }
-
     private func moveReorderGroups(from source: IndexSet, to destination: Int) {
         reorderGroups.move(fromOffsets: source, toOffset: destination)
-    }
-
-    private func toggleSelection() {
-        withAnimation(selectionToggleAnimation) {
-            if viewModel.isAllSelected {
-                viewModel.clearSelection()
-            } else {
-                viewModel.selectAll()
-            }
-        }
-    }
-
-    private func renameSelectedGroup() {
-        guard let group = selectedSingleGroup else { return }
-        viewModel.presentRenameSheet(for: group)
     }
 
     private func presentToastFeedback(_ feedback: BookGroupManagementToastFeedback?) {
@@ -434,264 +459,24 @@ private struct BookGroupManagementContentView: View {
     }
 }
 
-private enum BookGroupManagementBottomBarMetrics {
-    static let controlHeight: CGFloat = 52
-    static let actionButtonWidth: CGFloat = 72
-    static let selectionToggleButtonWidth: CGFloat = 92
-    static let ornamentMinWidth: CGFloat = 86
-    static let ornamentMaxWidth: CGFloat = 128
-    static let ornamentHorizontalPadding: CGFloat = Spacing.tight
-    static let groupSpacing: CGFloat = Spacing.cozy
-}
-
 private extension View {
+    /// 让分组数据行共享系统分组容器与分隔线，不再为每行创建独立卡片。
     func bookGroupManagementListRowChrome() -> some View {
         listRowInsets(EdgeInsets(
-            top: Spacing.half,
-            leading: Spacing.screenEdge,
-            bottom: Spacing.half,
-            trailing: Spacing.screenEdge
+            top: 0,
+            leading: Spacing.cozy,
+            bottom: 0,
+            trailing: Spacing.tight
         ))
-        .listRowSeparator(.hidden)
-        .listRowBackground(Color.clear)
-    }
-}
-
-/// 书籍分组管理顶部右侧操作区模式，让系统 toolbar slot 在模式切换时保持稳定身份。
-private enum BookGroupManagementTopTrailingMode: Hashable {
-    case normal
-    case selecting
-    case reordering
-}
-
-/// 书籍分组管理顶部右侧操作区，在同一个 44pt toolbar slot 内完成模式 icon 的局部过渡。
-private struct BookGroupManagementTopTrailingControl: View {
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    let mode: BookGroupManagementTopTrailingMode
-    let isBusy: Bool
-    let isReorderBusy: Bool
-    let canEnterSelectionMode: Bool
-    let canEnterReorder: Bool
-    let reorderAccessibilityHint: String
-    let onEnterSelectionMode: () -> Void
-    let onEnterReorder: () -> Void
-    let onCompleteSelection: () -> Void
-    let onFinishReorder: () -> Void
-
-    var body: some View {
-        ZStack(alignment: .trailing) {
-            switch mode {
-            case .normal:
-                normalMenu
-                    .transition(modeTransition)
-            case .selecting:
-                toolbarIconButton(
-                    systemName: "checkmark",
-                    foregroundColor: isBusy ? Color.textHint : Color.brand,
-                    isEnabled: !isBusy,
-                    accessibilityLabel: "完成选择",
-                    action: onCompleteSelection
-                )
-                .transition(modeTransition)
-            case .reordering:
-                toolbarIconButton(
-                    systemName: "checkmark",
-                    foregroundColor: isReorderBusy ? Color.textHint : Color.brand,
-                    isEnabled: !isReorderBusy,
-                    accessibilityLabel: "完成排序",
-                    action: onFinishReorder
-                )
-                .transition(modeTransition)
-            }
-        }
-        .fixedSize()
-        .animation(modeAnimation, value: mode)
+        .listRowBackground(Color.surfaceCard)
     }
 
-    private var normalMenu: some View {
-        Menu {
-            Button {
-                onEnterSelectionMode()
-            } label: {
-                XMMenuLabel("选择分组", systemImage: "checklist")
-            }
-            .disabled(!canEnterSelectionMode)
-
-            Button {
-                onEnterReorder()
-            } label: {
-                XMMenuLabel("调整顺序", systemImage: "arrow.up.arrow.down")
-            }
-            .disabled(!canEnterReorder)
-            .accessibilityHint(reorderAccessibilityHint)
-        } label: {
-            toolbarGlyph(
-                systemName: "ellipsis",
-                foregroundColor: isBusy ? Color.textHint : Color.iconPrimary
-            )
-        }
-        .disabled(isBusy)
-        .accessibilityLabel("更多操作")
-    }
-
-    private var modeAnimation: Animation? {
-        reduceMotion ? .easeOut(duration: 0.12) : .smooth(duration: 0.18)
-    }
-
-    private var modeTransition: AnyTransition {
-        guard !reduceMotion else { return .opacity }
-        return .opacity.combined(with: .scale(scale: 0.94))
-    }
-
-    private func toolbarIconButton(
-        systemName: String,
-        foregroundColor: Color,
-        isEnabled: Bool,
-        accessibilityLabel: String,
-        action: @escaping () -> Void
-    ) -> some View {
-        Button(action: action) {
-            toolbarGlyph(systemName: systemName, foregroundColor: foregroundColor)
-        }
-        .buttonStyle(.plain)
-        .disabled(!isEnabled)
-        .accessibilityLabel(accessibilityLabel)
-    }
-
-    private func toolbarGlyph(
-        systemName: String,
-        foregroundColor: Color
-    ) -> some View {
-        Image(systemName: systemName)
-            .font(AppTypography.bodyMedium)
-            .foregroundStyle(foregroundColor)
-    }
-}
-
-/// 书籍分组选择态底部浮层，提供单选重命名、全选切换、只读选择状态与删除入口。
-private struct BookGroupManagementSelectionBottomBar: View {
-    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    let selectedCount: Int
-    let isAllSelected: Bool
-    let isBusy: Bool
-    let canRename: Bool
-    let onToggleSelectAll: () -> Void
-    let onRename: () -> Void
-    let onDelete: () -> Void
-
-    private var selectionToggleTitle: String {
-        isAllSelected ? "取消全选" : "全选"
-    }
-
-    private var leadingActionTitle: String {
-        canRename ? "重命名" : selectionToggleTitle
-    }
-
-    private var statusText: String {
-        guard selectedCount > 0 else { return "未选择" }
-        if dynamicTypeSize.isAccessibilitySize {
-            return "\(selectedCount) 个"
-        }
-        return "已选 \(selectedCount) 个"
-    }
-
-    private var statusAccessibilityLabel: String {
-        selectedCount > 0 ? "已选择 \(selectedCount) 个分组" : "未选择分组"
-    }
-
-    private var canDelete: Bool {
-        selectedCount > 0 && !isBusy
-    }
-
-    private var canToggleSelection: Bool {
-        !isBusy
-    }
-
-    private var canUseLeadingAction: Bool {
-        canRename ? !isBusy : canToggleSelection
-    }
-
-    var body: some View {
-        GlassEffectContainer(spacing: BookGroupManagementBottomBarMetrics.groupSpacing) {
-            HStack(spacing: BookGroupManagementBottomBarMetrics.groupSpacing) {
-                leadingActionButton
-
-                selectionOrnament
-                    .layoutPriority(1)
-
-                deleteButton
-            }
-        }
-        .frame(maxWidth: .infinity)
-        .accessibilityElement(children: .contain)
-    }
-
-    private var leadingActionButton: some View {
-        Button(action: handleLeadingAction) {
-            Text(leadingActionTitle)
-                .font(AppTypography.subheadlineMedium)
-                .foregroundStyle(canUseLeadingAction ? Color.textPrimary : Color.textHint)
-                .lineLimit(1)
-                .minimumScaleFactor(0.82)
-                .frame(width: BookGroupManagementBottomBarMetrics.selectionToggleButtonWidth)
-                .frame(minHeight: BookGroupManagementBottomBarMetrics.controlHeight)
-                .contentTransition(.opacity)
-                .animation(selectionCountAnimation, value: leadingActionTitle)
-        }
-        .buttonStyle(.plain)
-        .disabled(!canUseLeadingAction)
-        .glassEffect(.regular.interactive(), in: .capsule)
-        .accessibilityLabel(leadingActionTitle)
-    }
-
-    private func handleLeadingAction() {
-        if canRename {
-            onRename()
-        } else {
-            onToggleSelectAll()
-        }
-    }
-
-    private var selectionOrnament: some View {
-        Text(statusText)
-            .font(AppTypography.subheadlineMedium)
-            .foregroundStyle(Color.textPrimary)
-            .lineLimit(1)
-            .minimumScaleFactor(0.82)
-            .frame(
-                minWidth: BookGroupManagementBottomBarMetrics.ornamentMinWidth,
-                maxWidth: BookGroupManagementBottomBarMetrics.ornamentMaxWidth,
-                minHeight: BookGroupManagementBottomBarMetrics.controlHeight
-            )
-            .padding(.horizontal, BookGroupManagementBottomBarMetrics.ornamentHorizontalPadding)
-            .contentTransition(selectionCountTransition)
-            .animation(selectionCountAnimation, value: selectedCount)
-            .glassEffect(.regular, in: .capsule)
-            .accessibilityElement(children: .ignore)
-            .accessibilityLabel(statusAccessibilityLabel)
-    }
-
-    private var selectionCountTransition: ContentTransition {
-        reduceMotion ? .opacity : .numericText(value: Double(selectedCount))
-    }
-
-    private var selectionCountAnimation: Animation? {
-        reduceMotion ? .easeOut(duration: 0.12) : .snappy(duration: 0.16)
-    }
-
-    private var deleteButton: some View {
-        Button(role: .destructive, action: onDelete) {
-            Image(systemName: "trash")
-                .font(AppTypography.subheadlineMedium)
-                .foregroundStyle(canDelete ? Color.feedbackError : Color.textHint)
-                .frame(width: BookGroupManagementBottomBarMetrics.actionButtonWidth)
-                .frame(minHeight: BookGroupManagementBottomBarMetrics.controlHeight)
-        }
-        .buttonStyle(.plain)
-        .disabled(!canDelete)
-        .glassEffect(.regular.interactive(), in: .capsule)
-        .accessibilityLabel(canDelete ? "删除" : "删除，当前不可用")
+    /// 统一分组加载、空态和失败态的列表占位，保证内容区搜索始终可达。
+    func bookGroupManagementStateRow() -> some View {
+        frame(maxWidth: .infinity, minHeight: 260)
+            .listRowInsets(EdgeInsets())
+            .listRowSeparator(.hidden)
+            .listRowBackground(Color.clear)
     }
 }
 

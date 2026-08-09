@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 BookGroupManagementRepositoryProtocol 提供书籍分组管理观察流与写入能力，依赖 BookGroupManagementModels 表达列表项、搜索筛选与错误
- * [OUTPUT]: 对外提供 BookGroupManagementViewModel 及分组搜索、编辑、删除状态，驱动“我的 > 书籍分组”页面
+ * [OUTPUT]: 对外提供 BookGroupManagementViewModel 及分组搜索、可见结果多选、编辑与删除状态，驱动“我的 > 书籍分组”页面
  * [POS]: ViewModels/Personal 的书籍分组管理状态编排器，被 Personal/BookGroupManagementView 消费
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -132,6 +132,11 @@ final class BookGroupManagementViewModel {
 
     var isAllSelected: Bool {
         !groups.isEmpty && Set(groups.map(\.id)).isSubset(of: selectedGroupIDs)
+    }
+
+    /// 判断当前搜索结果是否均已选中，不受筛选外已选项影响。
+    var isAllVisibleSelected: Bool {
+        !visibleGroups.isEmpty && Set(visibleGroups.map(\.id)).isSubset(of: selectedGroupIDs)
     }
 
     var canEnterSelectionMode: Bool {
@@ -295,6 +300,20 @@ final class BookGroupManagementViewModel {
     func clearSelection() {
         guard isSelectionMode else { return }
         selectedGroupIDs.removeAll()
+        clearTransientMessages()
+    }
+
+    /// 在多选模式中选中当前搜索可见的所有分组，保留筛选外的已选项。
+    func selectAllVisible() {
+        guard isSelectionMode else { return }
+        selectedGroupIDs.formUnion(Set(visibleGroups.map(\.id)))
+        clearTransientMessages()
+    }
+
+    /// 在多选模式中取消当前搜索可见的选择，保留筛选外的已选项。
+    func clearVisibleSelection() {
+        guard isSelectionMode else { return }
+        selectedGroupIDs.subtract(Set(visibleGroups.map(\.id)))
         clearTransientMessages()
     }
 

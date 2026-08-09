@@ -1,13 +1,13 @@
 /**
  * [INPUT]: 依赖 BookGroupManagementItem、XMBookGroupCover、XMSelectionIndicator 与 DesignTokens，接收页面传入的选择态、搜索关键字、导航提示与管理动作
- * [OUTPUT]: 对外提供 BookGroupManagementRowView，以自适应分组封面、轻卡片、长按菜单和搜索高亮渲染书籍分组管理页的一项分组信息
+ * [OUTPUT]: 对外提供 BookGroupManagementRowView，以自适应分组封面、系统分组行、长按菜单和搜索高亮渲染书籍分组管理页的一项分组信息
  * [POS]: Views/Personal/Components 的书籍分组管理页面私有子视图，被 BookGroupManagementView 消费
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
 import SwiftUI
 
-/// 书籍分组管理卡片，展示自适应代表封面、名称、书籍数量与管理入口。
+/// 书籍分组管理行，展示自适应代表封面、名称、书籍数量与管理入口。
 struct BookGroupManagementRowView: View {
     let item: BookGroupManagementItem
     let isSelectionMode: Bool
@@ -49,19 +49,11 @@ struct BookGroupManagementRowView: View {
     }
 
     private var cardContent: some View {
-        let cardShape = RoundedRectangle(cornerRadius: CornerRadius.blockLarge, style: .continuous)
-
         return primaryContent
-            .padding(.leading, Layout.leadingPadding)
-            .padding(.trailing, Layout.trailingPadding)
             .padding(.vertical, Layout.verticalPadding)
             .frame(minHeight: Layout.cardHeight)
-            .background(Color.surfaceCard, in: cardShape)
-            .overlay {
-                cardShape.stroke(Color.surfaceBorderSubtle.opacity(0.56), lineWidth: CardStyle.borderWidth)
-            }
-            .contentShape(.interaction, cardShape)
-            .contentShape(.contextMenuPreview, cardShape)
+            .contentShape(.interaction, Rectangle())
+            .contentShape(.contextMenuPreview, Rectangle())
             .contextMenu {
                 if shouldShowManagementMenu {
                     managementMenuItems
@@ -161,15 +153,13 @@ struct BookGroupManagementRowView: View {
 }
 
 private enum Layout {
-    static let cardHeight: CGFloat = 78
+    static let cardHeight: CGFloat = 72
     static let coverWidth: CGFloat = 48
     static let coverHeight: CGFloat = 56
     static let selectionWidth: CGFloat = 34
     static let disclosureWidth: CGFloat = 16
     static let minimumHitArea: CGFloat = 44
-    static let leadingPadding: CGFloat = Spacing.cozy
-    static let trailingPadding: CGFloat = Spacing.tight
-    static let verticalPadding: CGFloat = Spacing.cozy
+    static let verticalPadding: CGFloat = Spacing.tight
 }
 
 private struct BookGroupManagementRowAccessibilityActions: ViewModifier {
