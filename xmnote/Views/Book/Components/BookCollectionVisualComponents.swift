@@ -1908,68 +1908,6 @@ struct BookCollectionContentHeader: View {
     }
 }
 
-/// 书单详情底部悬浮添加入口，作为手动书单的高频操作控件承接 Liquid Glass 反馈。
-struct BookCollectionFloatingAddBookButton: View {
-    let isEnabled: Bool
-    let action: () -> Void
-
-    var body: some View {
-        Group {
-            if #available(iOS 26, *) {
-                baseButton
-                    .glassEffect(.regular.interactive(), in: .capsule)
-            } else {
-                baseButton
-                    .background(.ultraThinMaterial, in: Capsule())
-                    .overlay {
-                        Capsule()
-                            .stroke(Color.surfaceBorderSubtle.opacity(0.30), lineWidth: CardStyle.borderWidth)
-                    }
-            }
-        }
-        .shadow(
-            color: Color.bookCoverDropShadow.opacity(isEnabled ? 0.06 : 0.03),
-            radius: 10,
-            x: Spacing.none,
-            y: 4
-        )
-    }
-
-    private var baseButton: some View {
-        Button(action: action) {
-            HStack(alignment: .center, spacing: Spacing.half) {
-                Image(systemName: "plus")
-                    .font(AppTypography.subheadlineSemibold)
-
-                Text("添加书籍")
-                    .font(AppTypography.footnoteSemibold)
-            }
-            .foregroundStyle(isEnabled ? Color.textPrimary.opacity(0.78) : Color.textSecondary.opacity(0.56))
-            .padding(.horizontal, Spacing.base)
-            .frame(height: ImmersiveBottomChromeStyle.controlHeight)
-            .contentShape(Capsule())
-        }
-        .buttonStyle(BookCollectionFloatingAddBookButtonStyle(isEnabled: isEnabled))
-        .disabled(!isEnabled)
-        .opacity(isEnabled ? 1 : 0.48)
-        .accessibilityLabel("添加书籍到书单")
-    }
-}
-
-/// 为底部悬浮添加入口提供克制按压缩放，Reduce Motion 下自动取消形变。
-private struct BookCollectionFloatingAddBookButtonStyle: ButtonStyle {
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    let isEnabled: Bool
-
-    func makeBody(configuration: Configuration) -> some View {
-        let isPressed = isEnabled && configuration.isPressed
-
-        configuration.label
-            .scaleEffect(!reduceMotion && isPressed ? 0.97 : 1)
-            .animation(reduceMotion ? nil : .snappy(duration: 0.12), value: configuration.isPressed)
-    }
-}
-
 /// 空书单在内容容器内部的轻量说明，保持和非空书单一致的页面重心。
 struct BookCollectionEmptyBooksRow: View {
     let isManual: Bool
