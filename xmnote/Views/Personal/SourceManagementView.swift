@@ -1,6 +1,6 @@
 /**
- * [INPUT]: 依赖 RepositoryContainer 注入 SourceManagementRepositoryProtocol，依赖 SourceManagementViewModel 驱动书籍来源管理与搜索状态，依赖 XMScopeSelector/XMSystemAlert/XMToastCenter/LoadingGate 渲染 iOS 原生管理交互
- * [OUTPUT]: 对外提供 SourceManagementView，承接“我的 > 书籍来源”入口的真实管理页
+ * [INPUT]: 依赖 RepositoryContainer 注入 SourceManagementRepositoryProtocol，依赖 SourceManagementViewModel 驱动来源管理状态，依赖 PersonalManagementSearchBar、XMScopeSelector 与系统分组 List/Toolbar/scroll-edge，并由页面壳层稳定承载导航命令
+ * [OUTPUT]: 对外提供 SourceManagementView，以首帧稳定的顶部命令、固定来源范围、可滚动系统搜索、自动顶部边缘过渡和单一数据容器承接来源管理
  * [POS]: Views/Personal 的书籍来源管理页面壳层，被 PersonalRoute.bookSource 导航消费
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -10,20 +10,32 @@ import SwiftUI
 /// 书籍来源管理页面，按我的来源/默认来源两个范围提供搜索、增改删和排序能力。
 struct SourceManagementView: View {
     @Environment(RepositoryContainer.self) private var repositories
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var viewModel: SourceManagementViewModel?
     @State private var bootstrapLoadingGate = LoadingGate()
+    @State private var isReordering = false
+    @State private var isInlineSearchActive = false
 
     var body: some View {
-        ZStack {
-            Color.surfacePage.ignoresSafeArea()
+        Group {
             if let viewModel {
-                SourceManagementContentView(viewModel: viewModel)
+                SourceManagementContentView(
+                    viewModel: viewModel,
+                    isReordering: $isReordering,
+                    isInlineSearchActive: $isInlineSearchActive
+                )
             } else if bootstrapLoadingGate.isVisible {
                 LoadingStateView("正在加载来源…", style: .card)
+            } else {
+                Color.clear
             }
         }
-        .navigationTitle("书籍来源")
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color.surfacePage.ignoresSafeArea())
+        .tint(Color.iconPrimary)
+        .navigationTitle(isReordering ? "调整来源顺序" : "书籍来源")
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar { toolbarContent }
         .task {
             guard viewModel == nil else { return }
             bootstrapLoadingGate.update(intent: .read)
@@ -32,7 +44,67 @@ struct SourceManagementView: View {
         }
         .onDisappear {
             bootstrapLoadingGate.hideImmediately()
+            clearAndDeactivateSearch()
         }
+    }
+
+    private var isToolbarReady: Bool {
+        viewModel != nil
+    }
+
+    @ToolbarContentBuilder
+    private var toolbarContent: some ToolbarContent {
+        if isReordering {
+            ToolbarItemGroup(placement: .topBarTrailing) {
+                Button("完成") {
+                    isReordering = false
+                }
+                .disabled(viewModel?.activeWriteAction == .reorder)
+                .allowsHitTesting(isToolbarReady)
+                .accessibilityHidden(!isToolbarReady)
+            }
+        } else if viewModel?.selectedScope != .appDefault {
+            ToolbarItemGroup(placement: .topBarTrailing) {
+                Button {
+                    viewModel?.presentCreateSheet()
+                } label: {
+                    Image(systemName: "plus")
+                }
+                .disabled(viewModel.map { !$0.canCreateSource } ?? false)
+                .allowsHitTesting(isToolbarReady)
+                .accessibilityHidden(!isToolbarReady)
+                .accessibilityLabel("添加来源")
+
+                Menu {
+                    Button("调整顺序", systemImage: "arrow.up.arrow.down") {
+                        guard viewModel?.canEnterReorder == true else { return }
+                        deactivateSearch()
+                        isReordering = true
+                    }
+                    .disabled(viewModel?.canEnterReorder != true)
+                    .accessibilityHint(viewModel?.reorderActionAccessibilityHint ?? "")
+                } label: {
+                    Image(systemName: "ellipsis")
+                }
+                .disabled(viewModel?.activeWriteAction != nil)
+                .allowsHitTesting(isToolbarReady)
+                .accessibilityHidden(!isToolbarReady)
+                .accessibilityLabel("更多操作")
+            }
+        }
+    }
+
+    private func deactivateSearch(disablesAnimations: Bool = true) {
+        var transaction = Transaction(animation: nil)
+        transaction.disablesAnimations = disablesAnimations || reduceMotion
+        withTransaction(transaction) {
+            isInlineSearchActive = false
+        }
+    }
+
+    private func clearAndDeactivateSearch() {
+        deactivateSearch()
+        viewModel?.clearSearchText()
     }
 }
 
@@ -40,32 +112,17 @@ private struct SourceManagementContentView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(XMToastCenter.self) private var toastCenter
     @Bindable var viewModel: SourceManagementViewModel
+    @Binding var isReordering: Bool
+    @Binding var isInlineSearchActive: Bool
     @State private var readLoadingGate = LoadingGate()
-    @State private var isSearchPresented = false
-    @State private var isReordering = false
-    @FocusState private var isSearchFocused: Bool
 
     var body: some View {
-        VStack(spacing: Spacing.base) {
+        sourceList
+        .safeAreaBar(edge: .top, spacing: 0) {
             scopeSelector
                 .padding(.horizontal, Spacing.screenEdge)
-                .padding(.top, Spacing.base)
-            content
-                .id(contentTransitionKey)
-                .transition(.opacity)
-                .animation(contentTransitionAnimation, value: contentTransitionKey)
+                .padding(.vertical, Spacing.half)
         }
-        .searchable(
-            text: $viewModel.searchText,
-            isPresented: $isSearchPresented,
-            prompt: "搜索来源"
-        )
-        .searchFocused($isSearchFocused)
-        .searchPresentationToolbarBehavior(.avoidHidingContent)
-        .textInputAutocapitalization(.never)
-        .autocorrectionDisabled()
-        .toolbar(removing: isNormalMode ? nil : .search)
-        .toolbar { toolbarContent }
         .sheet(item: $viewModel.activeNameEdit) { edit in
             SourceNameEditSheet(viewModel: viewModel, edit: edit)
         }
@@ -84,47 +141,13 @@ private struct SourceManagementContentView: View {
         .onChange(of: viewModel.selectedScope) { _, _ in
             isReordering = false
         }
-        .onChange(of: isNormalMode) { _, isNormalMode in
-            guard !isNormalMode else { return }
-            dismissSearch()
-        }
         .onDisappear {
             readLoadingGate.hideImmediately()
-            dismissSearch()
         }
-    }
-
-    private var isNormalMode: Bool {
-        !isReordering
-    }
-
-    private var isSearchActive: Bool {
-        isSearchPresented || isSearchFocused || viewModel.isSearchFiltering
-    }
-
-    private var searchControlAnimation: Animation? {
-        reduceMotion ? nil : .smooth(duration: 0.14)
     }
 
     private var modeTransitionAnimation: Animation? {
         reduceMotion ? nil : .smooth(duration: 0.22)
-    }
-
-    private var contentTransitionAnimation: Animation? {
-        reduceMotion ? .easeOut(duration: 0.12) : .smooth(duration: 0.18)
-    }
-
-    private var contentTransitionKey: String {
-        switch viewModel.contentState {
-        case .loading:
-            return readLoadingGate.isVisible ? "loading-visible" : "loading-hidden"
-        case .empty:
-            return "empty-\(viewModel.selectedScope.rawValue)"
-        case .error:
-            return "error"
-        case .content:
-            return viewModel.isSearchResultEmpty ? "search-empty" : "content-\(viewModel.selectedScope.rawValue)"
-        }
     }
 
     private var scopeSelector: some View {
@@ -147,18 +170,19 @@ private struct SourceManagementContentView: View {
             style: .content,
             accessibilityLabel: "来源范围"
         )
-        .disabled(viewModel.activeWriteAction != nil)
+        .disabled(viewModel.activeWriteAction != nil || isReordering)
+        .accessibilityHint(isReordering ? "完成排序后可切换来源范围" : "")
     }
 
     @ViewBuilder
-    private var content: some View {
+    private var sourceSectionContent: some View {
         switch viewModel.contentState {
         case .loading:
             if readLoadingGate.isVisible {
                 LoadingStateView("正在加载来源…", style: .inline)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .sourceManagementStateRow()
             } else {
-                Color.clear
+                Color.clear.sourceManagementStateRow()
             }
         case .empty:
             ContentUnavailableView(
@@ -166,81 +190,64 @@ private struct SourceManagementContentView: View {
                 systemImage: emptySystemImage,
                 description: Text(emptyDescription)
             )
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .sourceManagementStateRow()
         case .error(let message):
             ContentUnavailableView(
                 "来源加载失败",
                 systemImage: "exclamationmark.triangle",
                 description: Text(message)
             )
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .sourceManagementStateRow()
         case .content:
             if viewModel.isSearchResultEmpty {
                 ContentUnavailableView.search(text: viewModel.normalizedSearchText)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .sourceManagementStateRow()
             } else {
-                sourceList
+                SourceManagementListView(
+                    items: isReordering ? viewModel.currentSources : viewModel.visibleSources,
+                    scope: viewModel.selectedScope,
+                    searchKeyword: viewModel.normalizedSearchText,
+                    isReordering: isReordering,
+                    isDisabled: viewModel.activeWriteAction != nil,
+                    onPrimaryAction: { item in viewModel.presentRenameSheet(for: item) },
+                    onRename: { item in viewModel.presentRenameSheet(for: item) },
+                    onDelete: { item in viewModel.presentDeleteConfirmation(for: item) },
+                    onCommitOrder: { orderedIDs in viewModel.commitSourceOrder(orderedIDs) }
+                )
             }
         }
     }
 
     private var sourceList: some View {
-        SourceManagementListView(
-            items: isReordering ? viewModel.currentSources : viewModel.visibleSources,
-            scope: viewModel.selectedScope,
-            searchKeyword: viewModel.normalizedSearchText,
-            isReordering: isReordering,
-            isDisabled: viewModel.activeWriteAction != nil,
-            onPrimaryAction: { item in viewModel.presentRenameSheet(for: item) },
-            onRename: { item in viewModel.presentRenameSheet(for: item) },
-            onDelete: { item in viewModel.presentDeleteConfirmation(for: item) },
-            onCommitOrder: { orderedIDs in viewModel.commitSourceOrder(orderedIDs) }
-        )
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .animation(modeTransitionAnimation, value: isReordering)
-    }
-
-    @ToolbarContentBuilder
-    private var toolbarContent: some ToolbarContent {
-        ToolbarItem(placement: .topBarTrailing) {
-            SourceManagementTopTrailingControl(
-                isReordering: isReordering,
-                isBusy: viewModel.activeWriteAction != nil,
-                isReorderBusy: viewModel.activeWriteAction == .reorder,
-                canEnterReorder: viewModel.canEnterReorder,
-                reorderAccessibilityHint: viewModel.reorderActionAccessibilityHint,
-                onEnterReorder: {
-                    dismissSearch()
-                    isReordering = true
-                },
-                onFinishReorder: { isReordering = false }
-            )
-            .xmToolbarNeutralTint()
-        }
-
-        if isNormalMode {
-            DefaultToolbarItem(kind: .search, placement: .bottomBar)
-
-            ToolbarSpacer(placement: .bottomBar)
-
-            ToolbarItem(placement: .bottomBar) {
-                Button {
-                    viewModel.presentCreateSheet()
-                } label: {
-                    Image(systemName: "plus")
+        List {
+            if !isReordering {
+                Section {
+                    PersonalManagementSearchListRow(
+                        text: $viewModel.searchText,
+                        isActive: $isInlineSearchActive,
+                        prompt: searchPrompt,
+                        isEnabled: viewModel.activeWriteAction == nil
+                    )
                 }
-                .disabled(!viewModel.canCreateSource || isSearchActive)
-                .opacity(shouldShowCreateButton ? 1 : 0)
-                .animation(searchControlAnimation, value: shouldShowCreateButton)
-                .xmToolbarNeutralTint()
-                .accessibilityHidden(!shouldShowCreateButton)
-                .accessibilityLabel("添加来源")
+                .listSectionMargins(.horizontal, 0)
+            }
+
+            Section {
+                sourceSectionContent
             }
         }
-    }
-
-    private var shouldShowCreateButton: Bool {
-        viewModel.selectedScope == .mine && !isSearchActive
+        .listStyle(.insetGrouped)
+        .listSectionSpacing(Spacing.base)
+        .scrollContentBackground(.hidden)
+        .contentMargins(.top, Spacing.compact, for: .scrollContent)
+        .contentMargins(.bottom, Spacing.double, for: .scrollContent)
+        .scrollBounceBehavior(.always)
+        .scrollDismissesKeyboard(.interactively)
+        .scrollEdgeEffectStyle(.automatic, for: .top)
+        .scrollEdgeEffectStyle(.soft, for: .bottom)
+        .environment(\.editMode, .constant(isReordering ? EditMode.active : EditMode.inactive))
+        .background(Color.surfacePage)
+        .animation(modeTransitionAnimation, value: isReordering)
     }
 
     private var emptyTitle: String {
@@ -249,6 +256,15 @@ private struct SourceManagementContentView: View {
             return "暂无我的来源"
         case .appDefault:
             return "暂无默认来源"
+        }
+    }
+
+    private var searchPrompt: String {
+        switch viewModel.selectedScope {
+        case .mine:
+            return "搜索我的来源"
+        case .appDefault:
+            return "搜索默认来源"
         }
     }
 
@@ -272,16 +288,6 @@ private struct SourceManagementContentView: View {
 
     private func syncLoadingGate() {
         readLoadingGate.update(intent: viewModel.contentState == .loading ? .read : .none)
-    }
-
-    private func dismissSearch(disablesAnimations: Bool = true) {
-        var transaction = Transaction(animation: nil)
-        transaction.disablesAnimations = disablesAnimations || reduceMotion
-        withTransaction(transaction) {
-            isSearchFocused = false
-            isSearchPresented = false
-            viewModel.clearSearchText()
-        }
     }
 
     private func presentToastFeedback(_ feedback: SourceManagementToastFeedback?) {
@@ -317,95 +323,12 @@ private struct SourceManagementContentView: View {
     }
 }
 
-/// 来源管理顶部右侧操作区，在同一个 toolbar slot 内完成普通态和排序态切换。
-private struct SourceManagementTopTrailingControl: View {
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    let isReordering: Bool
-    let isBusy: Bool
-    let isReorderBusy: Bool
-    let canEnterReorder: Bool
-    let reorderAccessibilityHint: String
-    let onEnterReorder: () -> Void
-    let onFinishReorder: () -> Void
-
-    var body: some View {
-        ZStack(alignment: .trailing) {
-            if isReordering {
-                toolbarIconButton(
-                    systemName: "checkmark",
-                    foregroundColor: isReorderBusy ? Color.textHint : Color.brand,
-                    isEnabled: !isReorderBusy,
-                    accessibilityLabel: "完成排序",
-                    action: onFinishReorder
-                )
-                .transition(modeTransition)
-            } else {
-                normalMenu
-                    .transition(modeTransition)
-            }
-        }
-        .fixedSize()
-        .animation(modeAnimation, value: isReordering)
+private extension View {
+    /// 统一来源加载、空态和失败态的列表占位，保证控制区在状态变化时保持可见。
+    func sourceManagementStateRow() -> some View {
+        frame(maxWidth: .infinity, minHeight: 260)
+            .listRowInsets(EdgeInsets())
+            .listRowSeparator(.hidden)
+            .listRowBackground(Color.clear)
     }
-
-    private var normalMenu: some View {
-        Menu {
-            Button {
-                onEnterReorder()
-            } label: {
-                XMMenuLabel("调整顺序", systemImage: "arrow.up.arrow.down")
-            }
-            .disabled(!canEnterReorder)
-            .accessibilityHint(reorderAccessibilityHint)
-        } label: {
-            toolbarGlyph(
-                systemName: "ellipsis",
-                foregroundColor: isBusy ? Color.textHint : Color.iconPrimary
-            )
-        }
-        .disabled(isBusy)
-        .accessibilityLabel("更多操作")
-    }
-
-    private var modeAnimation: Animation? {
-        if reduceMotion {
-            return .easeOut(duration: SourceManagementTopTrailingMetrics.reducedMotionDuration)
-        }
-        return .smooth(duration: SourceManagementTopTrailingMetrics.transitionDuration)
-    }
-
-    private var modeTransition: AnyTransition {
-        guard !reduceMotion else { return .opacity }
-        return .opacity.combined(with: .scale(scale: SourceManagementTopTrailingMetrics.hiddenScale))
-    }
-
-    private func toolbarIconButton(
-        systemName: String,
-        foregroundColor: Color,
-        isEnabled: Bool,
-        accessibilityLabel: String,
-        action: @escaping () -> Void
-    ) -> some View {
-        Button(action: action) {
-            toolbarGlyph(systemName: systemName, foregroundColor: foregroundColor)
-        }
-        .buttonStyle(.plain)
-        .disabled(!isEnabled)
-        .accessibilityLabel(accessibilityLabel)
-    }
-
-    private func toolbarGlyph(
-        systemName: String,
-        foregroundColor: Color
-    ) -> some View {
-        Image(systemName: systemName)
-            .font(AppTypography.subheadlineSemibold)
-            .foregroundStyle(foregroundColor)
-    }
-}
-
-private enum SourceManagementTopTrailingMetrics {
-    static let hiddenScale: CGFloat = 0.94
-    static let transitionDuration: TimeInterval = 0.18
-    static let reducedMotionDuration: TimeInterval = 0.12
 }

@@ -1,13 +1,13 @@
 /**
  * [INPUT]: 依赖 SourceManagementItem/SourceManagementScope、XMKeywordHighlighting 与页面传入的搜索关键词和来源操作回调，承接书籍来源管理页的一列展示与本地拖拽排序
- * [OUTPUT]: 对外提供 SourceManagementListView，封装页面私有来源列表、只读默认来源、上下文菜单与排序提交
- * [POS]: Views/Personal/Components 的书籍来源管理页面私有列表组件，被 SourceManagementView 用作来源主体内容区
+ * [OUTPUT]: 对外提供 SourceManagementListView，向页面的系统分组 List 输出无显式编辑附件的来源行、只读默认来源、滑动/上下文/无障碍操作与排序提交
+ * [POS]: Views/Personal/Components 的书籍来源管理页面私有行集合，被 SourceManagementView 的单一分组容器消费
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
 import SwiftUI
 
-/// 书籍来源管理列表，负责普通态、默认来源只读态和排序态的布局与本地拖拽预览。
+/// 书籍来源管理行集合，由页面持有唯一 List，以便搜索、空态和数据行共享同一滚动上下文。
 struct SourceManagementListView: View {
     let items: [SourceManagementItem]
     let scope: SourceManagementScope
@@ -20,42 +20,33 @@ struct SourceManagementListView: View {
     let onCommitOrder: ([Int64]) -> Void
 
     var body: some View {
-        List {
-            ForEach(items) { item in
-                SourceManagementRowView(
-                    item: item,
-                    scope: scope,
-                    searchKeyword: searchKeyword,
-                    isReordering: isReordering,
-                    isDisabled: isDisabled,
-                    onPrimaryAction: { onPrimaryAction(item) },
-                    onRename: { onRename(item) },
-                    onDelete: { onDelete(item) }
+        ForEach(items) { item in
+            SourceManagementRowView(
+                item: item,
+                scope: scope,
+                searchKeyword: searchKeyword,
+                isReordering: isReordering,
+                isDisabled: isDisabled,
+                onPrimaryAction: { onPrimaryAction(item) },
+                onRename: { onRename(item) },
+                onDelete: { onDelete(item) }
+            )
+            .listRowInsets(
+                EdgeInsets(
+                    top: 0,
+                    leading: Spacing.base,
+                    bottom: 0,
+                    trailing: Spacing.cozy
                 )
-                .listRowInsets(
-                    EdgeInsets(
-                        top: Spacing.cozy,
-                        leading: Spacing.screenEdge,
-                        bottom: Spacing.cozy,
-                        trailing: Spacing.screenEdge
-                    )
-                )
-                .listRowSeparator(.hidden)
-                .listRowBackground(Color.clear)
-            }
-            .onMove { offsets, destination in
-                guard canReorder else { return }
-                var nextItems = items
-                nextItems.move(fromOffsets: offsets, toOffset: destination)
-                onCommitOrder(nextItems.map(\.id))
-            }
+            )
+            .listRowBackground(Color.surfaceCard)
         }
-        .listStyle(.plain)
-        .scrollContentBackground(.hidden)
-        .background(Color.surfacePage)
-        .environment(\.editMode, .constant(isReordering ? EditMode.active : EditMode.inactive))
-        .disabled(isDisabled && !isReordering)
-        .scrollEdgeEffectStyle(.soft, for: .bottom)
+        .onMove { offsets, destination in
+            guard canReorder else { return }
+            var nextItems = items
+            nextItems.move(fromOffsets: offsets, toOffset: destination)
+            onCommitOrder(nextItems.map(\.id))
+        }
     }
 
     private var canReorder: Bool {
@@ -94,11 +85,29 @@ private struct SourceManagementRowView: View {
                 }
             }
         }
+        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+            if shouldShowContextMenu {
+                Button(role: .destructive, action: onDelete) {
+                    Label("删除", systemImage: "trash")
+                }
+                Button(action: onRename) {
+                    Label("编辑", systemImage: "pencil")
+                }
+                .tint(Color.iconSecondary)
+            }
+        }
         .xmMenuNeutralTint()
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(accessibilityLabel)
         .accessibilityHint(accessibilityHint)
         .accessibilityAddTraits(shouldActAsButton ? .isButton : AccessibilityTraits())
+        .modifier(
+            SourceManagementRowAccessibilityActions(
+                isEnabled: shouldShowContextMenu,
+                onRename: onRename,
+                onDelete: onDelete
+            )
+        )
     }
 
     private var rowContent: some View {
@@ -139,22 +148,16 @@ private struct SourceManagementRowView: View {
 
             trailingAccessory
         }
-        .padding(.horizontal, Spacing.base)
         .padding(.vertical, Spacing.tight)
         .frame(minHeight: SourceManagementRowMetrics.minHeight, alignment: .center)
-        .background(Color.surfaceCard, in: RoundedRectangle(cornerRadius: CornerRadius.blockSmall, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: CornerRadius.blockSmall, style: .continuous)
-                .stroke(Color.surfaceBorderSubtle, lineWidth: CardStyle.borderWidth)
-        }
-        .contentShape(RoundedRectangle(cornerRadius: CornerRadius.blockSmall, style: .continuous))
+        .contentShape(Rectangle())
         .opacity(isDisabled && !isReordering ? 0.58 : 1)
     }
 
     private var sourceIcon: some View {
         Image(systemName: item.isAppDefault ? "building.columns" : "books.vertical")
             .font(AppTypography.subheadlineSemibold)
-            .foregroundStyle(item.isAppDefault ? Color.textSecondary : Color.brand)
+            .foregroundStyle(Color.iconSecondary)
             .frame(width: SourceManagementRowMetrics.iconBoxSize, height: SourceManagementRowMetrics.iconBoxSize)
             .background(Color.surfaceNested, in: RoundedRectangle(cornerRadius: CornerRadius.inlayMedium, style: .continuous))
             .accessibilityHidden(true)
@@ -165,12 +168,6 @@ private struct SourceManagementRowView: View {
         if isReordering && scope == .mine {
             Image(systemName: "line.3.horizontal")
                 .font(AppTypography.subheadlineSemibold)
-                .foregroundStyle(Color.iconSecondary)
-                .frame(width: Spacing.actionReserved, height: Spacing.actionReserved)
-                .accessibilityHidden(true)
-        } else if !item.isAppDefault {
-            Image(systemName: "chevron.right")
-                .font(AppTypography.captionSemibold)
                 .foregroundStyle(Color.iconSecondary)
                 .frame(width: Spacing.actionReserved, height: Spacing.actionReserved)
                 .accessibilityHidden(true)
@@ -212,6 +209,22 @@ private struct SourceManagementRowView: View {
             return "可拖动调整顺序"
         }
         return "轻点编辑，长按查看更多操作"
+    }
+}
+
+private struct SourceManagementRowAccessibilityActions: ViewModifier {
+    let isEnabled: Bool
+    let onRename: () -> Void
+    let onDelete: () -> Void
+
+    func body(content: Content) -> some View {
+        if isEnabled {
+            content
+                .accessibilityAction(named: "编辑来源", onRename)
+                .accessibilityAction(named: "删除来源", onDelete)
+        } else {
+            content
+        }
     }
 }
 
