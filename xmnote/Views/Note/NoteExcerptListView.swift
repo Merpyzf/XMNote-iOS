@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖调用方注入 NoteRepository 与外部应用仓储，依赖 NoteExcerptListViewModel 的已提交查询和快照变更语义、列表组件、BookPicker 与批量 Sheet
- * [OUTPUT]: 对外提供 NoteExcerptListView，以系统底部搜索、关键字高亮、语义列表动效、首帧稳定的导航数量副标题与中性菜单承载渐进分页、查看/编辑/复制反馈、页面级分享、删除确认及批量操作
+ * [OUTPUT]: 对外提供 NoteExcerptListView，以内容区搜索和顶部上下文命令承载渐进分页、查看/编辑/复制反馈、页面级分享、删除确认及批量操作
  * [POS]: Note 模块书摘二级页面壳层，由 NoteRoute.noteExcerpts 与旧标签路由进入
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -16,8 +16,7 @@ struct NoteExcerptListView: View {
     @Environment(XMToastCenter.self) private var toastCenter
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var viewModel: NoteExcerptListViewModel
-    @State private var isSearchPresented = false
-    @FocusState private var isSearchFocused: Bool
+    @State private var isInlineSearchActive = false
     @State private var pendingAlert: NoteExcerptListAlert?
     @State private var presentedSheet: NoteBatchSheet?
     @State private var sharePayload: XMActivitySharePayload?
@@ -75,16 +74,6 @@ struct NoteExcerptListView: View {
             .background(Color.surfacePage)
             .navigationTitle(navigationTitle(viewModel))
             .navigationBarTitleDisplayMode(.inline)
-            .searchable(
-                text: $viewModel.searchText,
-                isPresented: $isSearchPresented,
-                prompt: "搜索当前列表"
-            )
-            .searchFocused($isSearchFocused)
-            .searchPresentationToolbarBehavior(.avoidHidingContent)
-            .textInputAutocapitalization(.never)
-            .autocorrectionDisabled()
-            .toolbar(removing: viewModel.isEditing ? .search : nil)
             .toolbar { toolbarContent(viewModel) }
             .sheet(item: $sharePayload) { payload in
                 XMActivityShareSheet(activityItems: payload.activityItems)
@@ -95,7 +84,7 @@ struct NoteExcerptListView: View {
         @Bindable var viewModel = viewModel
         return NoteListPhaseHost(
             isLoading: viewModel.phase == .loading,
-            isEmpty: viewModel.phase == .empty,
+            isEmpty: false,
             errorMessage: failureMessage(viewModel.phase),
             loadingMessage: "正在加载书摘…",
             emptyMessage: viewModel.appliedSearchText.isEmpty ? "这里还没有书摘" : "没有匹配的书摘",
@@ -105,20 +94,6 @@ struct NoteExcerptListView: View {
         ) {
             noteList(viewModel)
         }
-        .safeAreaInset(edge: .bottom, spacing: Spacing.none) {
-            if viewModel.isEditing {
-                batchBar(viewModel)
-                    .transition(
-                        reduceMotion
-                            ? .opacity
-                            : .move(edge: .bottom).combined(with: .opacity)
-                    )
-            }
-        }
-        .animation(
-            reduceMotion ? .smooth(duration: 0.12) : .smooth(duration: 0.28),
-            value: viewModel.isEditing
-        )
         .sheet(item: $presentedSheet) { sheet in
             batchSheet(sheet, viewModel: viewModel)
         }
@@ -129,6 +104,37 @@ struct NoteExcerptListView: View {
 
     private func noteList(_ viewModel: NoteExcerptListViewModel) -> some View {
         List {
+            if !viewModel.isEditing {
+                Section {
+                    XMInlineSearchField(
+                        text: $viewModel.searchText,
+                        isActive: $isInlineSearchActive,
+                        prompt: "搜索当前列表"
+                    )
+                    .listRowInsets(
+                        EdgeInsets(
+                            top: Spacing.base,
+                            leading: Spacing.screenEdge,
+                            bottom: Spacing.tight,
+                            trailing: Spacing.screenEdge
+                        )
+                    )
+                    .listRowSeparator(.hidden)
+                    .listRowBackground(Color.clear)
+                }
+            }
+
+            if viewModel.phase == .empty {
+                ContentUnavailableView(
+                    viewModel.appliedSearchText.isEmpty ? "这里还没有书摘" : "没有匹配的书摘",
+                    systemImage: "text.quote"
+                )
+                .frame(maxWidth: .infinity, minHeight: 280)
+                .listRowInsets(EdgeInsets())
+                .listRowSeparator(.hidden)
+                .listRowBackground(Color.clear)
+            }
+
             ForEach(viewModel.items) { item in
                 noteRow(item, viewModel: viewModel)
                     .transition(.opacity)
@@ -156,7 +162,10 @@ struct NoteExcerptListView: View {
         }
         .listStyle(.plain)
         .scrollBounceBehavior(.always)
+        .scrollDismissesKeyboard(.interactively)
         .scrollContentBackground(.hidden)
+        .contentMargins(.bottom, Spacing.double, for: .scrollContent)
+        .scrollEdgeEffectStyle(.soft, for: .bottom)
         .background(Color.surfacePage)
         .animation(
             listChangeAnimation(for: viewModel.snapshotChange.kind),
@@ -229,7 +238,7 @@ struct NoteExcerptListView: View {
                 } label: {
                     Label("编辑", systemImage: "square.and.pencil")
                 }
-                .tint(Color.brand)
+                .tint(Color.iconSecondary)
             }
         }
     }
@@ -249,15 +258,26 @@ struct NoteExcerptListView: View {
             )
         }
 
-        ToolbarItem(placement: .topBarTrailing) {
-            if viewModel.isEditing {
+        if viewModel.isEditing {
+            ToolbarItemGroup(placement: .topBarTrailing) {
+                batchActionMenu(viewModel)
                 Button("完成") {
                     withAnimation(reduceMotion ? .smooth(duration: 0.12) : .snappy(duration: 0.18)) {
                         viewModel.setEditing(false)
                     }
                 }
                 .disabled(viewModel.isWriting)
-            } else {
+            }
+        } else {
+            ToolbarItemGroup(placement: .topBarTrailing) {
+                Button {
+                    onOpenNoteRoute(.create(seed: createSeed))
+                } label: {
+                    Image(systemName: "square.and.pencil")
+                }
+                .disabled(isSearchActive)
+                .accessibilityLabel("新建书摘")
+
                 Menu {
                     Menu {
                         ForEach(NoteExcerptSortRule.allCases, id: \.self) { rule in
@@ -299,40 +319,15 @@ struct NoteExcerptListView: View {
                     }
                 } label: {
                     Image(systemName: "ellipsis")
-                        .foregroundStyle(Color.iconPrimary)
                 }
-                .xmMenuNeutralTint()
+                .disabled(isSearchActive || viewModel.isWriting)
                 .accessibilityLabel("更多操作")
-            }
-        }
-
-        if !viewModel.isEditing {
-            DefaultToolbarItem(kind: .search, placement: .bottomBar)
-
-            ToolbarSpacer(placement: .bottomBar)
-
-            ToolbarItem(placement: .bottomBar) {
-                Button {
-                    onOpenNoteRoute(.create(seed: createSeed))
-                } label: {
-                    Image(systemName: "square.and.pencil")
-                }
-                .disabled(isSearchActive)
-                .opacity(isSearchActive ? 0 : 1)
-                .animation(searchControlAnimation, value: isSearchActive)
-                .xmToolbarNeutralTint()
-                .accessibilityHidden(isSearchActive)
-                .accessibilityLabel("新建书摘")
             }
         }
     }
 
     private var isSearchActive: Bool {
-        isSearchPresented || isSearchFocused || !viewModel.normalizedSearchText.isEmpty
-    }
-
-    private var searchControlAnimation: Animation? {
-        reduceMotion ? nil : .smooth(duration: 0.14)
+        isInlineSearchActive || !viewModel.normalizedSearchText.isEmpty
     }
 
     private func navigationTitle(_ viewModel: NoteExcerptListViewModel) -> String {
@@ -392,60 +387,57 @@ struct NoteExcerptListView: View {
         var transaction = Transaction(animation: nil)
         transaction.disablesAnimations = true
         withTransaction(transaction) {
-            isSearchFocused = false
+            isInlineSearchActive = false
         }
         withAnimation(reduceMotion ? .smooth(duration: 0.12) : .snappy(duration: 0.18)) {
             viewModel.setEditing(true)
         }
     }
 
-    private func batchBar(_ viewModel: NoteExcerptListViewModel) -> some View {
-        HStack(spacing: Spacing.base) {
+    private func batchActionMenu(_ viewModel: NoteExcerptListViewModel) -> some View {
+        Menu {
             Button(viewModel.isSelectingAll ? "取消" : (viewModel.isAllSelected ? "取消全选" : "全选")) {
                 withAnimation(reduceMotion ? .smooth(duration: 0.12) : .snappy(duration: 0.18)) {
                     viewModel.toggleSelectAll()
                 }
             }
-            .font(AppTypography.subheadline)
+            .disabled(viewModel.isWriting)
 
-            Text("已选 \(viewModel.selectedCount) 条")
-                .font(AppTypography.subheadlineMedium)
-                .foregroundStyle(Color.textSecondary)
-                .contentTransition(.numericText())
+            Button("移动到书籍", systemImage: "books.vertical") {
+                presentedSheet = .moveBook
+            }
+            .disabled(viewModel.selectedNoteIDs.isEmpty || viewModel.isWriting)
 
-            Spacer(minLength: Spacing.compact)
+            Button("移动到章节", systemImage: "text.book.closed") {
+                prepareChapterSheet(viewModel)
+            }
+            .disabled(!viewModel.canMoveToChapter || viewModel.isWriting)
 
-            Menu {
-                Button("移动到书籍", systemImage: "books.vertical") {
-                    presentedSheet = .moveBook
-                }
-                Button("移动到章节", systemImage: "text.book.closed") {
-                    prepareChapterSheet(viewModel)
-                }
-                .disabled(!viewModel.canMoveToChapter)
-                Button("设置标签", systemImage: "tag") {
-                    prepareTagSheet(viewModel)
-                }
-                Menu("发送到", systemImage: "paperplane") {
-                    if viewModel.configuredExternalDestinations.isEmpty {
-                        Button("请先在“我的 > 关联应用”中配置") { }
-                            .disabled(true)
-                    } else {
-                        ForEach(viewModel.configuredExternalDestinations) { destination in
-                            Button(destination.displayName, systemImage: destination.systemImageName) {
-                                sendSelectedNotes(to: destination, viewModel: viewModel)
-                            }
+            Button("设置标签", systemImage: "tag") {
+                prepareTagSheet(viewModel)
+            }
+            .disabled(viewModel.selectedNoteIDs.isEmpty || viewModel.isWriting)
+
+            Menu("发送到", systemImage: "paperplane") {
+                if viewModel.configuredExternalDestinations.isEmpty {
+                    Button("请先在“我的 > 关联应用”中配置") { }
+                        .disabled(true)
+                } else {
+                    ForEach(viewModel.configuredExternalDestinations) { destination in
+                        Button(destination.displayName, systemImage: destination.systemImageName) {
+                            sendSelectedNotes(to: destination, viewModel: viewModel)
                         }
                     }
                 }
-                Button("合并书摘", systemImage: "arrow.triangle.merge") {
-                    openMerge(viewModel)
-                }
-                .disabled(!viewModel.canMerge)
-            } label: {
-                Label("批量操作", systemImage: "ellipsis.circle")
             }
             .disabled(viewModel.selectedNoteIDs.isEmpty || viewModel.isWriting)
+
+            Button("合并书摘", systemImage: "arrow.triangle.merge") {
+                openMerge(viewModel)
+            }
+            .disabled(!viewModel.canMerge || viewModel.isWriting)
+
+            Divider()
 
             Button(role: .destructive) {
                 pendingAlert = .delete(
@@ -456,12 +448,11 @@ struct NoteExcerptListView: View {
                 Image(systemName: "trash")
             }
             .disabled(viewModel.selectedNoteIDs.isEmpty || viewModel.isWriting)
-            .accessibilityLabel("删除所选书摘")
+        } label: {
+            Image(systemName: "ellipsis")
         }
-        .padding(.horizontal, Spacing.screenEdge)
-        .frame(minHeight: 56)
-        .background(.bar)
-        .overlay(alignment: .top) { Divider() }
+        .xmMenuNeutralTint()
+        .accessibilityLabel("批量操作")
     }
 
     @ViewBuilder
