@@ -1,6 +1,6 @@
 /**
- * [INPUT]: 依赖 RichTextEditor 模块格式定义与 UIKit/TextKit 能力，承接富文本解析/渲染/编辑链路
- * [OUTPUT]: 对外提供 RichTextToolbar 能力，用于富文本编辑器的序列化、交互或样式支持
+ * [INPUT]: 依赖 RichTextEditor 模块格式定义、UIKit/TextKit 能力与横向短内容回弹规范，承接富文本解析/渲染/编辑链路
+ * [OUTPUT]: 对外提供 RichTextToolbar 能力，用于富文本编辑器的序列化、交互、样式支持及全宽场景下的横向回弹
  * [POS]: RichTextEditor 功能模块内部构件，服务 Note 编辑场景的 Android 业务意图对齐
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -72,6 +72,7 @@ final class RichTextToolbar: UIView {
         // 滚动容器
         let scrollView = UIScrollView()
         scrollView.showsHorizontalScrollIndicator = false
+        scrollView.alwaysBounceHorizontal = true
         scrollView.translatesAutoresizingMaskIntoConstraints = false
         addSubview(scrollView)
 

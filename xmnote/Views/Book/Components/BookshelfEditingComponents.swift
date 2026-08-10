@@ -1,7 +1,7 @@
 /**
- * [INPUT]: 依赖 BookshelfPendingAction、BookshelfBookListEditAction 与 SwiftUI 按钮、图标、横向滚动、ImmersiveBottomChrome 和动画能力
- * [OUTPUT]: 对外提供书架编辑态顶部 chrome、统一搜索 surface、整理态双态上下文检索入口、选择态封面/行遮罩、底部浮动玻璃操作栏与管理模式转场参数
- * [POS]: Book 模块页面私有编辑态与搜索组件集合，服务默认书架与二级书籍列表的整理模式选择、检索、置顶、移动、横向平铺批量操作与删除入口
+ * [INPUT]: 依赖 SwiftUI/UIKit 按钮、图标、搜索输入与动画能力
+ * [OUTPUT]: 对外提供书架编辑态顶部 chrome、统一搜索 surface、整理态双态上下文检索入口、选择态封面/行遮罩与管理模式转场参数
+ * [POS]: Book 模块页面私有编辑态与搜索组件集合，服务默认书架与二级书籍列表的整理模式选择、检索和顶部批量命令
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
@@ -588,8 +588,8 @@ enum BookshelfEditChromeSearchState: Equatable {
     }
 }
 
-/// 书架编辑态顶部 chrome，复用浏览态顶部高度表达当前批量管理上下文。
-struct BookshelfEditChrome: View {
+/// 书架编辑态顶部 chrome，复用浏览态顶部高度表达当前批量管理上下文与批量命令。
+struct BookshelfEditChrome<BatchActions: View>: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let selectedBookCount: Int
@@ -598,10 +598,12 @@ struct BookshelfEditChrome: View {
     let isAllVisibleSelected: Bool
     let isSelectionToggleEnabled: Bool
     let searchState: BookshelfEditChromeSearchState
+    let statusText: String?
     let drawsSurfaceBackground: Bool
     let showsBottomDivider: Bool
     let onToggleSelectAll: () -> Void
     let onCancel: () -> Void
+    let batchActions: BatchActions
 
     /// 创建整理态顶部 chrome，并按使用场景决定选择摘要是否包含分组。
     init(
@@ -611,10 +613,12 @@ struct BookshelfEditChrome: View {
         isAllVisibleSelected: Bool,
         isSelectionToggleEnabled: Bool = true,
         searchState: BookshelfEditChromeSearchState = .inactive,
+        statusText: String? = nil,
         drawsSurfaceBackground: Bool = true,
         showsBottomDivider: Bool = true,
         onToggleSelectAll: @escaping () -> Void,
-        onCancel: @escaping () -> Void
+        onCancel: @escaping () -> Void,
+        @ViewBuilder batchActions: () -> BatchActions
     ) {
         self.selectedBookCount = selectedBookCount
         self.selectedGroupCount = selectedGroupCount
@@ -622,10 +626,12 @@ struct BookshelfEditChrome: View {
         self.isAllVisibleSelected = isAllVisibleSelected
         self.isSelectionToggleEnabled = isSelectionToggleEnabled
         self.searchState = searchState
+        self.statusText = statusText
         self.drawsSurfaceBackground = drawsSurfaceBackground
         self.showsBottomDivider = showsBottomDivider
         self.onToggleSelectAll = onToggleSelectAll
         self.onCancel = onCancel
+        self.batchActions = batchActions()
     }
 
     var body: some View {
@@ -649,7 +655,7 @@ struct BookshelfEditChrome: View {
                     .lineLimit(1)
                     .truncationMode(.tail)
 
-                Text(selectionSummaryText)
+                Text(effectiveStatusText)
                     .font(AppTypography.caption)
                     .foregroundStyle(Color.textSecondary)
                     .lineLimit(1)
@@ -705,7 +711,9 @@ struct BookshelfEditChrome: View {
 
     private var rightActions: some View {
         HStack(spacing: 6) {
-            Button("取消", action: onCancel)
+            batchActions
+
+            Button("完成", action: onCancel)
                 .font(AppTypography.body)
                 .foregroundStyle(Color.textPrimary)
                 .lineLimit(1)
@@ -713,6 +721,11 @@ struct BookshelfEditChrome: View {
                 .frame(minWidth: 50, minHeight: Spacing.actionReserved, alignment: .trailing)
                 .accessibilityLabel("退出整理模式")
         }
+    }
+
+    private var effectiveStatusText: String {
+        guard let statusText, !statusText.isEmpty else { return selectionSummaryText }
+        return statusText
     }
 
     private var selectionToggleTitle: String {
@@ -1054,278 +1067,5 @@ struct BookshelfSelectionRowOverlay: View {
         return isSelected
             ? .easeOut(duration: 0.10).delay(0.02)
             : .easeIn(duration: 0.07)
-    }
-}
-
-/// 书架玻璃底栏的局部尺寸令牌，统一默认书架与二级书籍列表的触控密度。
-enum BookshelfGlassEditBarMetrics {
-    static let clusterHeight: CGFloat = 56
-    static let destructiveButtonSize: CGFloat = 56
-    static let actionWidth: CGFloat = 58
-    static let bookListActionWidth: CGFloat = 64
-    static let actionMinHeight: CGFloat = 44
-    static let horizontalPadding: CGFloat = 14
-    static let verticalPadding: CGFloat = 5
-    static let itemSpacing: CGFloat = 10
-    static let iconTextSpacing: CGFloat = 3
-    static let actionIconFont: Font = AppTypography.fixed(
-        baseSize: 15,
-        relativeTo: .caption,
-        weight: .medium
-    )
-}
-
-/// 玻璃底栏状态提示，承接写入中、加载中与操作反馈，不参与常态说明占位。
-struct BookshelfGlassEditStatusText: View {
-    let text: String
-
-    var body: some View {
-        Text(text)
-            .font(AppTypography.caption)
-            .foregroundStyle(Color.textSecondary)
-            .lineLimit(2)
-            .multilineTextAlignment(.center)
-            .padding(.horizontal, Spacing.base)
-            .padding(.vertical, Spacing.tiny)
-            .background(Color.surfaceCard.opacity(0.92), in: Capsule())
-            .accessibilityLabel(text)
-    }
-}
-
-/// 玻璃底栏内的图标加短标题按钮内容，保持批量操作可发现性。
-struct BookshelfGlassEditActionLabel: View {
-    let title: String
-    let systemImage: String
-    let foregroundStyle: Color
-    var width: CGFloat = BookshelfGlassEditBarMetrics.actionWidth
-
-    var body: some View {
-        VStack(spacing: BookshelfGlassEditBarMetrics.iconTextSpacing) {
-            Image(systemName: systemImage)
-                .font(BookshelfGlassEditBarMetrics.actionIconFont)
-
-            Text(title)
-                .font(AppTypography.caption2Medium)
-                .lineLimit(1)
-                .truncationMode(.tail)
-        }
-        .foregroundStyle(foregroundStyle)
-        .frame(width: width)
-        .frame(minHeight: BookshelfGlassEditBarMetrics.actionMinHeight)
-        .padding(.vertical, BookshelfGlassEditBarMetrics.verticalPadding)
-        .contentShape(Rectangle())
-    }
-}
-
-/// 书架底部玻璃操作组，负责横向滚动内容的胶囊裁切与统一玻璃材质。
-struct BookshelfGlassEditActionCluster<Content: View>: View {
-    private let content: Content
-
-    /// 注入横向排列的批量操作内容；裁切和玻璃材质由组件统一处理。
-    init(@ViewBuilder content: () -> Content) {
-        self.content = content()
-    }
-
-    var body: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            content
-                .padding(.horizontal, BookshelfGlassEditBarMetrics.horizontalPadding)
-                .padding(.vertical, BookshelfGlassEditBarMetrics.verticalPadding)
-        }
-        .scrollBounceBehavior(.basedOnSize, axes: .horizontal)
-        .frame(maxWidth: .infinity)
-        .frame(height: BookshelfGlassEditBarMetrics.clusterHeight)
-        .compositingGroup()
-        .clipShape(Capsule())
-        .contentShape(Capsule())
-        .glassEffect(.regular.interactive(), in: .capsule)
-    }
-}
-
-/// 默认书架编辑态底部浮动操作栏，承载与 Android 横向工具栏对齐的平铺批量操作入口。
-struct BookshelfEditBottomBar: View {
-    let selectedCount: Int
-    let canPin: Bool
-    let canMoveBoundary: Bool
-    let canBatchAction: Bool
-    let canDelete: Bool
-    let activeAction: BookshelfPendingAction?
-    let actions: [BookshelfBookListEditAction]
-    let isLoadingOptions: Bool
-    let notice: String?
-    let onPin: () -> Void
-    let onAction: (BookshelfBookListEditAction) -> Void
-    let onDelete: () -> Void
-
-    var body: some View {
-        VStack(spacing: statusText == nil ? Spacing.none : Spacing.tight) {
-            if let statusText {
-                BookshelfGlassEditStatusText(text: statusText)
-            }
-
-            GlassEffectContainer(spacing: Spacing.base) {
-                HStack(spacing: Spacing.base) {
-                    actionCluster
-                        .layoutPriority(1)
-                        .opacity(waitingForSelection ? 0.72 : 1)
-
-                    deleteActionButton
-                        .opacity(deleteActionOpacity)
-                }
-            }
-        }
-        .background {
-            GeometryReader { proxy in
-                Color.clear
-                    .preference(key: ImmersiveBottomChromeHeightPreferenceKey.self, value: proxy.size.height)
-            }
-        }
-    }
-
-    private var statusText: String? {
-        if let notice, !notice.isEmpty {
-            return notice
-        }
-        if let activeAction {
-            return "正在\(activeAction.title)"
-        }
-        if isLoadingOptions {
-            return "正在加载选项"
-        }
-        return nil
-    }
-
-    private var actionCluster: some View {
-        BookshelfGlassEditActionCluster {
-            HStack(spacing: BookshelfGlassEditBarMetrics.itemSpacing) {
-                editActionButton(
-                    action: .pin,
-                    icon: "pin",
-                    isEnabled: canPin,
-                    onTap: onPin
-                )
-
-                ForEach(actions) { action in
-                    editActionButton(
-                        action: action,
-                        isEnabled: isEnabled(action),
-                        onTap: { onAction(action) }
-                    )
-                }
-            }
-        }
-    }
-
-    private var deleteActionButton: some View {
-        Button(role: .destructive, action: onDelete) {
-            ImmersiveBottomChromeIcon(
-                systemName: "trash",
-                foregroundStyle: foregroundColor(for: .delete, isEnabled: canDelete && !isBusy)
-            )
-        }
-        .buttonStyle(.plain)
-        .disabled(!canDelete || isBusy)
-        .frame(
-            width: BookshelfGlassEditBarMetrics.destructiveButtonSize,
-            height: BookshelfGlassEditBarMetrics.destructiveButtonSize
-        )
-        .glassEffect(.regular.interactive(), in: .circle)
-        .accessibilityLabel(canDelete && !isBusy ? "删除" : "删除，当前不可用")
-    }
-
-    private var isBusy: Bool {
-        activeAction != nil || isLoadingOptions
-    }
-
-    private var waitingForSelection: Bool {
-        selectedCount == 0 && !isBusy
-    }
-
-    private var deleteActionOpacity: Double {
-        if canDelete && !isBusy {
-            return 1
-        }
-        return waitingForSelection ? 0.42 : 0.72
-    }
-
-    private func isEnabled(_ action: BookshelfBookListEditAction) -> Bool {
-        switch action {
-        case .moveToStart, .moveToEnd:
-            return canMoveBoundary
-        case .moveToGroup, .addToBookList, .setTag, .setSource, .setReadStatus, .exportNote, .exportBook:
-            return canBatchAction
-        case .pin, .unpin, .reorder, .moveOut, .renameGroup, .deleteGroup, .renameTag, .deleteTag, .renameSource, .deleteSource, .deleteBooks:
-            return canBatchAction
-        }
-    }
-
-    private func editActionButton(
-        action: BookshelfPendingAction,
-        icon: String,
-        isEnabled: Bool,
-        onTap: @escaping () -> Void
-    ) -> some View {
-        Button(action: onTap) {
-            editActionLabel(action: action, icon: icon, isEnabled: isEnabled && !isBusy)
-        }
-        .buttonStyle(.plain)
-        .disabled(!isEnabled || isBusy)
-        .accessibilityLabel(isEnabled && !isBusy ? action.title : "\(action.title)，当前不可用")
-    }
-
-    private func editActionButton(
-        action: BookshelfBookListEditAction,
-        isEnabled: Bool,
-        onTap: @escaping () -> Void
-    ) -> some View {
-        Button(action: onTap) {
-            editActionLabel(action: action, isEnabled: isEnabled && !isBusy)
-        }
-        .buttonStyle(.plain)
-        .disabled(!isEnabled || isBusy)
-        .accessibilityLabel(isEnabled && !isBusy ? action.title : "\(action.title)，当前不可用")
-    }
-
-    private func editActionLabel(
-        action: BookshelfPendingAction,
-        icon: String,
-        isEnabled: Bool
-    ) -> some View {
-        BookshelfGlassEditActionLabel(
-            title: action.title,
-            systemImage: icon,
-            foregroundStyle: foregroundColor(for: action, isEnabled: isEnabled)
-        )
-    }
-
-    private func editActionLabel(
-        action: BookshelfBookListEditAction,
-        isEnabled: Bool
-    ) -> some View {
-        BookshelfGlassEditActionLabel(
-            title: action.title,
-            systemImage: action.systemImage,
-            foregroundStyle: foregroundColor(for: action, isEnabled: isEnabled)
-        )
-    }
-
-    private func foregroundColor(
-        for action: BookshelfPendingAction,
-        isEnabled: Bool
-    ) -> Color {
-        guard isEnabled else {
-            return Color.textSecondary.opacity(waitingForSelection ? 0.42 : 0.55)
-        }
-        return action == .delete ? Color.feedbackError : Color.textPrimary
-    }
-
-    private func foregroundColor(
-        for action: BookshelfBookListEditAction,
-        isEnabled: Bool
-    ) -> Color {
-        guard isEnabled else {
-            return Color.textSecondary.opacity(waitingForSelection ? 0.42 : 0.55)
-        }
-        return action.isDestructive ? Color.feedbackError : Color.textPrimary
     }
 }

@@ -1,7 +1,7 @@
 /**
- * [INPUT]: 依赖 DesignTokens 视觉令牌、ReadCalendarCoverFanStack 与周网格输入（WeekData/EventSegment/DayPayload，含显示模式与事件条颜色三态），可选依赖全屏封面展开回调
- * [OUTPUT]: 对外提供 ReadCalendarMonthGrid（月视图周网格组件，支持热力图/活动事件/书籍封面三种展示模式）
- * [POS]: ReadCalendar 页面私有月网格组件，承载日期格展示、选中态与多模式内容渲染
+ * [INPUT]: 依赖 DesignTokens 视觉令牌、ReadCalendarCoverFanStack 与周网格输入（WeekData/EventSegment/DayPayload，含显示模式与事件条颜色三态），可选依赖全屏封面、当日详情与读完事件回调
+ * [OUTPUT]: 对外提供 ReadCalendarMonthGrid（月视图周网格组件，支持热力图/活动事件/书籍封面三种展示模式、周级溢出行、日期按钮命中，并提供大字体受控的事件标题渐隐与读完庆祝反馈）
+ * [POS]: ReadCalendar 页面私有月网格组件，承载日期格按钮、事件展示层、周级溢出布局、选中态与多模式内容渲染
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
@@ -67,13 +67,12 @@ struct ReadCalendarMonthGrid: View {
         var id: Date { weekStart }
     }
 
-    /// 单日渲染数据，聚合热力图等级、书籍数、连读状态与选中状态。
+    /// 单日渲染数据，聚合热力图等级、书籍数与选中状态。
     struct DayPayload: Hashable {
         let bookCount: Int
         let isReadDoneDay: Bool
         let heatmapLevel: HeatmapLevel
         let overflowCount: Int
-        let isStreakDay: Bool
         let isToday: Bool
         let isSelected: Bool
         let isFuture: Bool
@@ -83,7 +82,6 @@ struct ReadCalendarMonthGrid: View {
             isReadDoneDay: false,
             heatmapLevel: .none,
             overflowCount: 0,
-            isStreakDay: false,
             isToday: false,
             isSelected: false,
             isFuture: false
@@ -115,6 +113,8 @@ struct ReadCalendarMonthGrid: View {
     let displayMode: DisplayMode
     let selectedDate: Date?
     let isHapticsEnabled: Bool
+    let doneMarkerStyle: ReadCalendarDoneMarkerStyle
+    let doneEmojiAssetName: String
     let dayPayloadProvider: (Date) -> DayPayload
     let coverItemsProvider: ((Date) -> [ReadCalendarCoverFanStack.Item])?
     let bookCoverStyleProvider: ((Date) -> ReadCalendarCoverFanStack.Style)?
@@ -125,6 +125,8 @@ struct ReadCalendarMonthGrid: View {
     let frameCoordinateSpaceName: String?
     let onBookCoverStackFramesChange: (([Date: CGRect]) -> Void)?
     let onOpenBookCoverFullscreen: ((Date) -> Void)?
+    let onOpenDay: ((Date) -> Void)?
+    let onReadDoneEventSelected: ((Date) -> Void)?
     let onSelectDay: (Date) -> Void
 
     /// 注入周数据与回调，构建阅读日历月网格（支持可选封面条目与样式覆写）。
@@ -134,6 +136,8 @@ struct ReadCalendarMonthGrid: View {
         displayMode: DisplayMode,
         selectedDate: Date?,
         isHapticsEnabled: Bool,
+        doneMarkerStyle: ReadCalendarDoneMarkerStyle = .checkmark,
+        doneEmojiAssetName: String = "ReadCalendarDonePartyPopper",
         dayPayloadProvider: @escaping (Date) -> DayPayload,
         coverItemsProvider: ((Date) -> [ReadCalendarCoverFanStack.Item])? = nil,
         bookCoverStyleProvider: ((Date) -> ReadCalendarCoverFanStack.Style)? = nil,
@@ -144,6 +148,8 @@ struct ReadCalendarMonthGrid: View {
         frameCoordinateSpaceName: String? = nil,
         onBookCoverStackFramesChange: (([Date: CGRect]) -> Void)? = nil,
         onOpenBookCoverFullscreen: ((Date) -> Void)? = nil,
+        onOpenDay: ((Date) -> Void)? = nil,
+        onReadDoneEventSelected: ((Date) -> Void)? = nil,
         onSelectDay: @escaping (Date) -> Void
     ) {
         self.weeks = weeks
@@ -151,6 +157,8 @@ struct ReadCalendarMonthGrid: View {
         self.displayMode = displayMode
         self.selectedDate = selectedDate
         self.isHapticsEnabled = isHapticsEnabled
+        self.doneMarkerStyle = doneMarkerStyle
+        self.doneEmojiAssetName = doneEmojiAssetName
         self.dayPayloadProvider = dayPayloadProvider
         self.coverItemsProvider = coverItemsProvider
         self.bookCoverStyleProvider = bookCoverStyleProvider
@@ -161,6 +169,8 @@ struct ReadCalendarMonthGrid: View {
         self.frameCoordinateSpaceName = frameCoordinateSpaceName
         self.onBookCoverStackFramesChange = onBookCoverStackFramesChange
         self.onOpenBookCoverFullscreen = onOpenBookCoverFullscreen
+        self.onOpenDay = onOpenDay
+        self.onReadDoneEventSelected = onReadDoneEventSelected
         self.onSelectDay = onSelectDay
     }
 
@@ -179,6 +189,8 @@ struct ReadCalendarMonthGrid: View {
                     segmentHorizontalInset: Layout.segmentHorizontalInset,
                     selectedDate: selectedDate,
                     isHapticsEnabled: isHapticsEnabled,
+                    doneMarkerStyle: doneMarkerStyle,
+                    doneEmojiAssetName: doneEmojiAssetName,
                     dayPayloadProvider: dayPayloadProvider,
                     coverItemsProvider: coverItemsProvider,
                     bookCoverStyleProvider: bookCoverStyleProvider,
@@ -188,6 +200,8 @@ struct ReadCalendarMonthGrid: View {
                     coverEntryCueProgress: coverEntryCueProgress,
                     frameCoordinateSpaceName: frameCoordinateSpaceName,
                     onOpenBookCoverFullscreen: onOpenBookCoverFullscreen,
+                    onOpenDay: onOpenDay,
+                    onReadDoneEventSelected: onReadDoneEventSelected,
                     onSelectDay: onSelectDay
                 )
                 .background {
@@ -245,6 +259,8 @@ private struct ReadCalendarMonthGridWeekRow: View {
     let segmentHorizontalInset: CGFloat
     let selectedDate: Date?
     let isHapticsEnabled: Bool
+    let doneMarkerStyle: ReadCalendarDoneMarkerStyle
+    let doneEmojiAssetName: String
     let dayPayloadProvider: (Date) -> ReadCalendarMonthGrid.DayPayload
     let coverItemsProvider: ((Date) -> [ReadCalendarCoverFanStack.Item])?
     let bookCoverStyleProvider: ((Date) -> ReadCalendarCoverFanStack.Style)?
@@ -254,16 +270,22 @@ private struct ReadCalendarMonthGridWeekRow: View {
     let coverEntryCueProgress: CGFloat
     let frameCoordinateSpaceName: String?
     let onOpenBookCoverFullscreen: ((Date) -> Void)?
+    let onOpenDay: ((Date) -> Void)?
+    let onReadDoneEventSelected: ((Date) -> Void)?
     let onSelectDay: (Date) -> Void
-    @ScaledMetric(relativeTo: .caption) private var selectedDayCircleSize = 22
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.accessibilityReduceMotion) private var accessibilityReduceMotion
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @ScaledMetric(relativeTo: .caption) private var selectedDayCircleSize = 24
     @ScaledMetric(relativeTo: .caption2) private var readDoneIndicatorSize = 8
-    @ScaledMetric(relativeTo: .caption2) private var overflowBadgeBackgroundWidth = 24
-    @ScaledMetric(relativeTo: .caption2) private var overflowBadgeBackgroundHeight = 12
-    @ScaledMetric(relativeTo: .caption2) private var readDoneBadgeCircleSize = 11
-    @ScaledMetric(relativeTo: .caption2) private var readDoneBadgeCheckmarkSize = 6
-    @State private var flowPhase: CGFloat = 0
-    @State private var badgePulseIDs: Set<String> = []
-    @State private var badgePulseToken = 0
+    @ScaledMetric(relativeTo: .caption2) private var activityOverflowRowHeight = 18
+    @ScaledMetric(relativeTo: .caption2) private var overflowBadgeMinimumHeight = 16
+    @ScaledMetric(relativeTo: .caption2) private var readDoneBadgeCircleSize = 14
+    @ScaledMetric(relativeTo: .caption2) private var readDoneBadgeEmojiSize = 12
+    @ScaledMetric(relativeTo: .caption2) private var readDoneBadgeCheckmarkSize = 9
+    @ScaledMetric(relativeTo: .caption2) private var readDoneBadgeHitWidth = 28
+    @State private var doneCelebrationSegmentID: String?
+    @State private var doneCelebrationTrigger = 0
 
     private var isYearCompactMode: Bool {
         displayMode == .heatmapYearCompact
@@ -287,10 +309,66 @@ private struct ReadCalendarMonthGridWeekRow: View {
         }
     }
 
+    private var overflowRowHeight: CGFloat {
+        hasOverflowRow ? min(activityOverflowRowHeight, 28) : 0
+    }
+
+    private var resolvedSelectedDayCircleSize: CGFloat {
+        min(selectedDayCircleSize, 30)
+    }
+
+    private var resolvedReadDoneIndicatorSize: CGFloat {
+        min(readDoneIndicatorSize, 12)
+    }
+
+    private var resolvedOverflowBadgeMinimumHeight: CGFloat {
+        min(overflowBadgeMinimumHeight, 24)
+    }
+
+    private var resolvedReadDoneBadgeCircleSize: CGFloat {
+        min(readDoneBadgeCircleSize, 14)
+    }
+
+    private var resolvedReadDoneBadgeEmojiSize: CGFloat {
+        min(readDoneBadgeEmojiSize, 12)
+    }
+
+    private var resolvedReadDoneBadgeCheckmarkSize: CGFloat {
+        min(readDoneBadgeCheckmarkSize, 9)
+    }
+
+    private var resolvedReadDoneBadgeHitWidth: CGFloat {
+        min(readDoneBadgeHitWidth, 44)
+    }
+
+    private func dayNumberFont(isSelected: Bool) -> Font {
+        if dynamicTypeSize.isAccessibilitySize {
+            return isSelected
+                ? ReadCalendarTypography.monthGridDayNumberSelectedAccessibilityFont
+                : ReadCalendarTypography.monthGridDayNumberAccessibilityFont
+        }
+        return isSelected
+            ? ReadCalendarTypography.monthGridDayNumberSelectedFont
+            : ReadCalendarTypography.monthGridDayNumberFont
+    }
+
+    private var hasOverflowRow: Bool {
+        guard displayMode == .activityEvent else { return false }
+        return week.days.compactMap { $0 }.contains { day in
+            overflowCount(for: dayPayloadProvider(day), day: day) > 0
+        }
+    }
+
     private var rowHeight: CGFloat {
         switch displayMode {
         case .bookCover:
             return dayHeaderHeight + modeContentHeight
+        case .activityEvent:
+            return dayHeaderHeight
+                + laneTopInset
+                + laneBottomInset
+                + modeContentHeight
+                + overflowRowHeight
         default:
             return dayHeaderHeight + laneTopInset + laneBottomInset + modeContentHeight
         }
@@ -321,7 +399,6 @@ private struct ReadCalendarMonthGridWeekRow: View {
                         if displayMode == .activityEvent {
                             ForEach(week.segments) { segment in
                                 segmentView(segment, cellWidth: cellWidth)
-                                    .allowsHitTesting(false)
                             }
                         }
                     }
@@ -329,20 +406,14 @@ private struct ReadCalendarMonthGridWeekRow: View {
             }
         }
         .frame(height: isYearCompactMode ? nil : rowHeight)
-        .onAppear {
-            startFlowAnimationIfNeeded()
-        }
-        .onChange(of: selectedDate) { _, newValue in
-            triggerBadgePulseIfNeeded(for: newValue)
-        }
     }
 
     @ViewBuilder
     private func yearCompactDayCell(_ day: Date?) -> some View {
         let payload = day.map(dayPayloadProvider) ?? .empty
         let fillColor = day == nil
-            ? HeatmapLevel.none.color.opacity(0.42)
-            : yearCompactHeatmapColor(for: payload)
+            ? Color.readCalendarHeatmapNone.opacity(0.42)
+            : yearCompactHeatmapColor(for: payload).opacity(payload.isFuture ? 0.32 : 1)
 
         RoundedRectangle(
             cornerRadius: Layout.yearCompactCellCornerRadius,
@@ -359,92 +430,76 @@ private struct ReadCalendarMonthGridWeekRow: View {
         let dayOverflowCount = day.map { overflowCount(for: payload, day: $0) } ?? 0
         let readDone = payload.isReadDoneDay
 
-        ZStack(alignment: .topLeading) {
-            Color.clear
+        Button {
+            guard let day else { return }
+            activateDay(day, payload: payload)
+        } label: {
+            ZStack(alignment: .topLeading) {
+                Color.clear
 
-            if let day {
-                let today = payload.isToday
-                let selected = payload.isSelected
-                let dayNum = Calendar.current.component(.day, from: day)
+                if let day {
+                    let today = payload.isToday
+                    let selected = payload.isSelected
+                    let dayNum = Calendar.current.component(.day, from: day)
 
-                VStack(spacing: Spacing.hairline) {
-                    ZStack {
-                        if selected {
+                    VStack(spacing: Spacing.hairline) {
+                        ZStack {
                             Circle()
-                                .fill(Color.brand.opacity(0.18))
-                                .overlay {
-                                    Circle()
-                                        .stroke(Color.brand.opacity(0.62), lineWidth: 0.95)
-                                }
-                                .frame(width: selectedDayCircleSize, height: selectedDayCircleSize)
+                                .fill(Color.readCalendarSelectedDayFill)
+                                .frame(
+                                    width: resolvedSelectedDayCircleSize,
+                                    height: resolvedSelectedDayCircleSize
+                                )
+                                .scaleEffect(selected ? 1 : 0.84)
+                                .opacity(selected ? 1 : 0)
+                                .animation(
+                                    accessibilityReduceMotion ? nil : .snappy(duration: 0.18),
+                                    value: selected
+                                )
+
+                            Text("\(dayNum)")
+                                .font(dayNumberFont(isSelected: selected))
+                                .foregroundStyle(
+                                    payload.isFuture ? Color.textHint :
+                                    selected ? Color.readCalendarSelectedDayText : Color.textPrimary
+                                )
                         }
-                        Text("\(dayNum)")
-                            .font(
-                                selected
-                                ? ReadCalendarTypography.monthGridDayNumberSelectedFont
-                                : ReadCalendarTypography.monthGridDayNumberFont
-                            )
-                            .foregroundStyle(
-                                payload.isFuture ? Color.textHint :
-                                selected ? Color.brand : Color.textPrimary
-                            )
-                    }
-                    .frame(height: dayHeaderHeight)
-                    .frame(maxWidth: .infinity, alignment: .center)
-                    .overlay(alignment: .topTrailing) {
-                        if readDone && displayMode != .activityEvent {
-                            Image(systemName: "checkmark.circle.fill")
-                                .font(.system(size: readDoneIndicatorSize))
-                                .foregroundStyle(Color.readCalendarTodayMark)
-                                .offset(x: -2, y: 4)
+                        .frame(height: dayHeaderHeight)
+                        .frame(maxWidth: .infinity, alignment: .center)
+                        .overlay(alignment: .topTrailing) {
+                            if readDone && displayMode != .activityEvent {
+                                readDoneMarker(size: resolvedReadDoneIndicatorSize)
+                                    .offset(x: -2, y: 4)
+                            }
                         }
-                    }
 
-                    if payload.isStreakDay && displayMode == .activityEvent {
-                        Capsule(style: .continuous)
-                            .fill(
-                                selected
-                                ? Color.brand.opacity(0.82)
-                                : Color.brand.opacity(0.56)
-                            )
-                            .frame(width: selected ? 12 : 10, height: 2)
-                            .offset(y: -1)
-                    }
+                        if today && !selected {
+                            Capsule(style: .continuous)
+                                .fill(Color.readCalendarTodayMark)
+                                .frame(width: 6, height: 4)
+                                .offset(y: -2)
+                        }
 
-                    if today && !selected {
-                        Capsule(style: .continuous)
-                            .fill(Color.readCalendarTodayMark)
-                            .frame(width: 6, height: 4)
-                            .offset(y: -2)
-                    }
+                        modeContent(for: day, payload: payload)
 
-                    modeContent(for: day, payload: payload)
+                        Spacer(minLength: 0)
 
-                    Spacer(minLength: 0)
-
-                    if displayMode == .activityEvent, dayOverflowCount > 0 {
-                        overflowBadge(dayOverflowCount)
+                        if displayMode == .activityEvent, dayOverflowCount > 0 {
+                            overflowBadge(dayOverflowCount)
+                        }
                     }
                 }
             }
+            .contentShape(Rectangle())
         }
-        .contentShape(Rectangle())
-        .onTapGesture {
-            guard let day, !payload.isFuture else { return }
-            if displayMode == .bookCover,
-               payload.bookCount > 0,
-               let onOpenBookCoverFullscreen {
-                if isHapticsEnabled {
-                    ReadCalendarHaptics.selection()
-                }
-                onOpenBookCoverFullscreen(day)
-                return
-            }
-            if !payload.isSelected, isHapticsEnabled {
-                ReadCalendarHaptics.selection()
-            }
-            onSelectDay(day)
-        }
+        .buttonStyle(.plain)
+        .disabled(day == nil || payload.isFuture)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(dayAccessibilityLabel(day, payload: payload))
+        .accessibilityAddTraits(day != nil && !payload.isFuture ? .isButton : [])
+        .accessibilityAddTraits(payload.isSelected ? .isSelected : [])
+        .accessibilityHint(displayMode == .activityEvent ? "选择日期并查看当日摘要" : "选择日期")
+        .accessibilityHidden(day == nil)
         .overlay {
             if let day,
                displayMode == .bookCover,
@@ -453,6 +508,46 @@ private struct ReadCalendarMonthGridWeekRow: View {
             }
         }
         .opacity(payload.isFuture ? 0.55 : 1)
+    }
+
+    /// 统一日期按钮激活路径，并优先把有内容的封面日交给堆叠封面浮层。
+    private func activateDay(_ day: Date, payload: ReadCalendarMonthGrid.DayPayload) {
+        guard !payload.isFuture else { return }
+        if displayMode == .bookCover,
+           payload.bookCount > 0,
+           let onOpenBookCoverFullscreen {
+            if isHapticsEnabled {
+                ReadCalendarHaptics.selection()
+            }
+            onOpenBookCoverFullscreen(day)
+            return
+        }
+        if !payload.isSelected, isHapticsEnabled {
+            ReadCalendarHaptics.selection()
+        }
+        onSelectDay(day)
+        if displayMode == .heatmap,
+           payload.bookCount > 0 || payload.isReadDoneDay {
+            onOpenDay?(day)
+        }
+    }
+
+    /// 生成日期格的完整读屏描述，包含活动书数、热度和读完状态。
+    private func dayAccessibilityLabel(
+        _ day: Date?,
+        payload: ReadCalendarMonthGrid.DayPayload
+    ) -> String {
+        guard let day else { return "" }
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "zh_Hans_CN")
+        formatter.dateFormat = "M月d日"
+        var parts = [formatter.string(from: day), "共\(payload.bookCount)本书", payload.heatmapLevel.accessibilityText]
+        if displayMode == .activityEvent, payload.overflowCount > 0 {
+            parts.append("其中\(payload.overflowCount)本未展示")
+        }
+        if payload.isReadDoneDay { parts.append("有读完记录") }
+        if payload.isToday { parts.append("今天") }
+        return parts.joined(separator: "，")
     }
 
     @ViewBuilder
@@ -515,36 +610,31 @@ private struct ReadCalendarMonthGridWeekRow: View {
     }
 
     private func overflowBadge(_ count: Int) -> some View {
-        Text("+\(count)")
+        Text("+\(count)本")
             .font(
-                AppTypography.fixed(
-                    baseSize: 9,
-                    relativeTo: .caption2,
-                    weight: .semibold,
-                    design: .rounded,
-                    minimumPointSize: 9
-                )
+                dynamicTypeSize.isAccessibilitySize
+                    ? ReadCalendarTypography.monthGridOverflowAccessibilityFont
+                    : ReadCalendarTypography.monthGridOverflowFont
             )
-            .foregroundStyle(Color.readCalendarSubtleText)
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .foregroundStyle(Color.textSecondary)
+            .monospacedDigit()
+            .lineLimit(1)
+            .minimumScaleFactor(0.72)
             .padding(.horizontal, Layout.overflowBadgeHPadding)
+            .frame(minHeight: resolvedOverflowBadgeMinimumHeight)
+            .background(Color.controlFillSecondary, in: Capsule(style: .continuous))
+            .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.bottom, Layout.overflowBadgeBottomPadding)
             .padding(.leading, Layout.overflowBadgeLeading)
-            .background(alignment: .bottomLeading) {
-                RoundedRectangle(cornerRadius: CornerRadius.inlayMedium, style: .continuous)
-                    .fill(Color.readCalendarSelectionFill.opacity(0.72))
-                    .frame(width: overflowBadgeBackgroundWidth, height: overflowBadgeBackgroundHeight)
-                    .padding(.leading, Spacing.compact)
-                    .padding(.bottom, Spacing.tiny)
-            }
+            .accessibilityHidden(true)
     }
 
     private func heatmapColor(for payload: ReadCalendarMonthGrid.DayPayload) -> Color {
-        payload.heatmapLevel.color
+        Color.readCalendarHeatmapColor(for: payload.heatmapLevel)
     }
 
     private func yearCompactHeatmapColor(for payload: ReadCalendarMonthGrid.DayPayload) -> Color {
-        payload.heatmapLevel.color
+        Color.readCalendarHeatmapColor(for: payload.heatmapLevel)
     }
 
     /// 返回封面堆叠数据：优先使用外部注入，未注入时回落到内置占位生成逻辑。
@@ -553,9 +643,9 @@ private struct ReadCalendarMonthGridWeekRow: View {
         payload: ReadCalendarMonthGrid.DayPayload
     ) -> [ReadCalendarCoverFanStack.Item] {
         if let provided = coverItemsProvider?(day) {
-            return provided
+            return Array(provided.prefix(14))
         }
-        return fallbackCoverStackItems(for: day, payload: payload)
+        return Array(fallbackCoverStackItems(for: day, payload: payload).prefix(14))
     }
 
     /// 基于日期和当日读书数量生成封面堆叠数据；无书时返回空集合避免误导点击。
@@ -658,14 +748,22 @@ private struct ReadCalendarMonthGridWeekRow: View {
         let x = CGFloat(startOffset) * cellWidth + segmentHorizontalInset
         let y = dayHeaderHeight + laneTopInset + CGFloat(segment.laneIndex) * (laneBarHeight + laneSpacing)
 
-        let fillColor = fillColor(for: segment.color)
-        let textColor = textColor(for: segment.color)
         let isPending = segment.color.state == .pending
-        let showBadge = !isPending && segment.showsReadDoneBadge && segmentWidth >= 20
-        let showText = !isPending && segmentWidth >= 42
+        let showBadge = !isPending && segment.showsReadDoneBadge && segmentWidth >= 44
+        let showText = !isPending
+        let isInteractive = showBadge && onReadDoneEventSelected != nil
         let isFocused = isSegmentFocused(segment)
         let shouldDefocus = shouldDefocusSegment(segment)
-        let segmentOpacity: CGFloat = shouldDefocus ? 0.5 : 1
+        let segmentOpacity: CGFloat = shouldDefocus ? 0.42 : (isFocused ? 1 : 0.92)
+        let daySpan = endOffset - startOffset + 1
+        let backgroundBlendOpacity: CGFloat = (segment.continuesFromPrevWeek || segment.continuesToNextWeek)
+            ? 0.09
+            : (daySpan >= 3 ? 0.06 : 0)
+        let visualStyle = eventVisualStyle(
+            for: segment.color,
+            backgroundBlendOpacity: backgroundBlendOpacity,
+            isFocused: isFocused
+        )
 
         let leftRadius: CGFloat = segment.continuesFromPrevWeek ? CornerRadius.inlayTiny : CornerRadius.blockSmall
         let rightRadius: CGFloat = segment.continuesToNextWeek ? CornerRadius.inlayTiny : CornerRadius.blockSmall
@@ -675,97 +773,105 @@ private struct ReadCalendarMonthGridWeekRow: View {
             bottomTrailingRadius: rightRadius,
             topTrailingRadius: rightRadius
         )
+        let textTrailingInset: CGFloat = showBadge
+            ? resolvedReadDoneBadgeCircleSize + 2
+            : (segment.continuesToNextWeek ? 4 : 0)
 
         return ZStack(alignment: .leading) {
-            if isPending {
-                segmentShape
-                    .fill(Color.clear)
-                segmentShape
-                    .stroke(Color.readCalendarSelectionStroke.opacity(0.55), lineWidth: 0.7)
-            } else {
-                segmentShape
-                    .fill(fillColor.opacity(isFocused ? 0.97 : 0.92))
-                    .saturation(isFocused ? 1.06 : 0.92)
-                    .brightness(isFocused ? 0.025 : -0.01)
-                segmentShape
-                    .stroke(fillColor.opacity(isFocused ? 0.74 : 0.44), lineWidth: isFocused ? 0.62 : 0.45)
+            ZStack(alignment: .leading) {
+                if isPending {
+                    segmentShape
+                        .fill(Color.clear)
+                    segmentShape
+                        .stroke(Color.readCalendarSelectionStroke.opacity(0.55), lineWidth: 0.7)
+                } else {
+                    segmentShape
+                        .fill(visualStyle.displayBackground.color)
+                    segmentShape
+                        .stroke(visualStyle.borderColor.color, lineWidth: 0.5)
 
-                if segment.continuesFromPrevWeek {
-                    LinearGradient(
-                        colors: [fillColor.opacity(0.0), fillColor.opacity(0.55)],
-                        startPoint: .leading,
-                        endPoint: .trailing
-                    )
-                    .frame(width: 9)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                    if segment.continuesFromPrevWeek {
+                        Capsule(style: .continuous)
+                            .fill(visualStyle.continuationColor.color)
+                            .frame(width: 2, height: laneBarHeight * 0.68)
+                            .padding(.leading, 1)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+
+                    if segment.continuesToNextWeek && !showBadge {
+                        Capsule(style: .continuous)
+                            .fill(visualStyle.continuationColor.color)
+                            .frame(width: 2, height: laneBarHeight * 0.68)
+                            .padding(.trailing, 1)
+                            .frame(maxWidth: .infinity, alignment: .trailing)
+                    }
                 }
 
-                if segment.continuesToNextWeek {
-                    LinearGradient(
-                        colors: [fillColor.opacity(0.55), fillColor.opacity(0.0)],
-                        startPoint: .leading,
-                        endPoint: .trailing
+                if showText {
+                    ReadCalendarEventTitle(
+                        text: segment.bookName,
+                        textColor: visualStyle.textColor.color,
+                        fadeColor: visualStyle.visibleBackground.color,
+                        leadingInset: 5,
+                        trailingInset: textTrailingInset,
+                        fadeWidth: 14,
+                        topMaskHeight: 3
                     )
-                    .frame(width: 9)
-                    .frame(maxWidth: .infinity, alignment: .trailing)
-                }
-
-                if isFocused && (segment.continuesFromPrevWeek || segment.continuesToNextWeek) {
-                    LinearGradient(
-                        colors: [
-                            Color.white.opacity(0.0),
-                            Color.white.opacity(0.14),
-                            Color.white.opacity(0.0)
-                        ],
-                        startPoint: .leading,
-                        endPoint: .trailing
-                    )
-                    .frame(width: 12, height: laneBarHeight)
-                    .offset(x: flowingHighlightOffset(segmentWidth: segmentWidth))
-                    .blendMode(.plusLighter)
                 }
             }
-
-            if showText {
-                Text(segment.bookName)
-                    .font(
-                        AppTypography.fixed(
-                            baseSize: 9,
-                            relativeTo: .caption2,
-                            weight: .semibold,
-                            design: .rounded,
-                            minimumPointSize: 9
-                        )
-                    )
-                    .foregroundStyle(textColor.opacity(isPending ? 0.86 : 0.92))
-                    .lineLimit(1)
-                    .padding(.leading, Spacing.compact)
-                    .padding(.trailing, showBadge ? Spacing.comfortable : Spacing.compact)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            }
+            .clipShape(segmentShape)
+            .allowsHitTesting(false)
 
             if showBadge {
-                let style = readDoneBadgeStyle(for: segment.color)
-                Circle()
-                    .fill(style.background)
-                    .frame(width: readDoneBadgeCircleSize, height: readDoneBadgeCircleSize)
-                    .scaleEffect(badgePulseIDs.contains(segment.id) ? 1.15 : 1)
-                    .overlay {
-                        Image(systemName: "checkmark")
-                            .font(.system(size: readDoneBadgeCheckmarkSize, weight: .bold))
-                            .foregroundStyle(style.foreground)
+                if isInteractive {
+                    Button {
+                        activateReadDoneEvent(segment)
+                    } label: {
+                        eventDoneBadge(segment, visualStyle: visualStyle)
+                            .padding(.trailing, 2)
+                            .frame(
+                                width: min(segmentWidth, resolvedReadDoneBadgeHitWidth),
+                                height: laneBarHeight,
+                                alignment: .trailing
+                            )
+                            .contentShape(Rectangle())
                     }
-                    .padding(.trailing, Spacing.micro)
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("\(segment.bookName)，读完事件")
+                    .accessibilityHint("选择读完日期")
                     .frame(maxWidth: .infinity, alignment: .trailing)
+                } else {
+                    eventDoneBadge(segment, visualStyle: visualStyle)
+                        .padding(.trailing, 2)
+                        .frame(maxWidth: .infinity, alignment: .trailing)
+                        .allowsHitTesting(false)
+                }
             }
         }
-        .clipShape(segmentShape)
         .frame(width: max(0, segmentWidth), height: laneBarHeight)
         .offset(x: x, y: y)
         .opacity(segmentOpacity)
+        .scaleEffect(x: 1, y: isFocused ? 1.08 : 1)
         .animation(.snappy(duration: 0.22), value: isFocused)
         .animation(.easeInOut(duration: 0.18), value: isPending)
-        .animation(.spring(response: 0.2, dampingFraction: 0.62), value: badgePulseIDs.contains(segment.id))
+    }
+
+    /// 构建事件条尾部读完徽标，使静态展示与独立按钮共享同一庆祝状态。
+    private func eventDoneBadge(
+        _ segment: ReadCalendarMonthGrid.EventSegment,
+        visualStyle: ReadCalendarEventVisualStyle
+    ) -> some View {
+        ReadCalendarEventDoneBadge(
+            badgeSize: resolvedReadDoneBadgeCircleSize,
+            emojiSize: resolvedReadDoneBadgeEmojiSize,
+            checkmarkSize: resolvedReadDoneBadgeCheckmarkSize,
+            markerStyle: doneMarkerStyle,
+            emojiAssetName: doneEmojiAssetName,
+            visualStyle: visualStyle,
+            celebrationTrigger: doneCelebrationSegmentID == segment.id
+                ? doneCelebrationTrigger
+                : 0
+        )
     }
 
     private func dayOffset(for date: Date, weekStart: Date) -> Int {
@@ -775,52 +881,51 @@ private struct ReadCalendarMonthGridWeekRow: View {
         return min(6, max(0, offset))
     }
 
-    private func fillColor(for color: ReadCalendarMonthGrid.EventColor) -> Color {
-        switch color.state {
-        case .pending:
-            return Color.readCalendarEventPendingBase
-        case .resolved, .failed:
-            return Color(rgbaHex: color.backgroundRGBAHex)
+    /// 依据用户设置渲染日格读完标记；图案直接使用 Android 同源资源。
+    @ViewBuilder
+    private func readDoneMarker(size: CGFloat) -> some View {
+        if doneMarkerStyle == .emoji {
+            Image(doneEmojiAssetName)
+                .resizable()
+                .scaledToFit()
+                .frame(width: size + 3, height: size + 3)
+        } else {
+            Image(systemName: "checkmark.circle.fill")
+                .font(.system(size: size))
+                .foregroundStyle(Color.readCalendarTodayMark)
         }
     }
 
-    private func textColor(for color: ReadCalendarMonthGrid.EventColor) -> Color {
-        switch color.state {
-        case .pending:
-            return Color.readCalendarEventPendingText
-        case .resolved, .failed:
-            return Color(rgbaHex: color.textRGBAHex)
-        }
-    }
-
-    private func readDoneBadgeStyle(for color: ReadCalendarMonthGrid.EventColor) -> (background: Color, foreground: Color) {
-        let isDark = isDarkBackground(color)
-        if isDark {
-            return (
-                background: Color.white.opacity(0.9),
-                foreground: Color.black.opacity(0.76)
+    /// 对长段混色和聚焦修正后的实际可见背景重新计算文字、边缘与徽标颜色。
+    private func eventVisualStyle(
+        for color: ReadCalendarMonthGrid.EventColor,
+        backgroundBlendOpacity: CGFloat,
+        isFocused: Bool
+    ) -> ReadCalendarEventVisualStyle {
+        guard color.state != .pending else {
+            let page = ReadCalendarEventRGBA.pageBackground(for: colorScheme)
+            let background = ReadCalendarEventRGBA(
+                red: 0.52,
+                green: 0.56,
+                blue: 0.60,
+                alpha: 0.18
+            )
+            return ReadCalendarEventVisualStyle.make(
+                baseBackground: background,
+                rawText: .init(red: 0.34, green: 0.38, blue: 0.42, alpha: 0.86),
+                pageBackground: page,
+                backgroundBlendOpacity: Double(backgroundBlendOpacity),
+                isFocused: isFocused
             )
         }
-        return (
-            background: Color.black.opacity(0.34),
-            foreground: Color.white.opacity(0.96)
+
+        return ReadCalendarEventVisualStyle.make(
+            baseBackground: .init(rgbaHex: color.backgroundRGBAHex),
+            rawText: .init(rgbaHex: color.textRGBAHex),
+            pageBackground: .pageBackground(for: colorScheme),
+            backgroundBlendOpacity: Double(backgroundBlendOpacity),
+            isFocused: isFocused
         )
-    }
-
-    private func isDarkBackground(_ color: ReadCalendarMonthGrid.EventColor) -> Bool {
-        let hex: UInt32
-        switch color.state {
-        case .pending:
-            return false
-        case .resolved, .failed:
-            hex = color.backgroundRGBAHex
-        }
-
-        let red = Double((hex >> 24) & 0xFF) / 255.0
-        let green = Double((hex >> 16) & 0xFF) / 255.0
-        let blue = Double((hex >> 8) & 0xFF) / 255.0
-        let luminance = 0.299 * red + 0.587 * green + 0.114 * blue
-        return luminance < 0.55
     }
 
     private func shouldDefocusSegment(_ segment: ReadCalendarMonthGrid.EventSegment) -> Bool {
@@ -840,50 +945,310 @@ private struct ReadCalendarMonthGridWeekRow: View {
         return normalized >= start && normalized <= end
     }
 
-    private func flowingHighlightOffset(segmentWidth: CGFloat) -> CGFloat {
-        let distance = max(12, segmentWidth + 16)
-        return -12 + distance * flowPhase
-    }
-
-    private func startFlowAnimationIfNeeded() {
-        guard displayMode == .activityEvent else { return }
-        guard flowPhase == 0 else { return }
-        withAnimation(.linear(duration: 2.2).repeatForever(autoreverses: false)) {
-            flowPhase = 1
-        }
-    }
-
-    private func triggerBadgePulseIfNeeded(for selected: Date?) {
-        guard displayMode == .activityEvent else { return }
-        guard let selected else {
-            badgePulseIDs.removeAll()
-            return
-        }
-
-        let normalized = Calendar.current.startOfDay(for: selected)
-        let focusedWithBadge = week.segments.filter { segment in
-            guard segment.showsReadDoneBadge else { return false }
-            let start = Calendar.current.startOfDay(for: segment.segmentStartDate)
-            let end = Calendar.current.startOfDay(for: segment.segmentEndDate)
-            return normalized >= start && normalized <= end
-        }
-        let ids = Set(focusedWithBadge.map(\.id))
-        guard !ids.isEmpty else {
-            badgePulseIDs.removeAll()
-            return
-        }
-
-        badgePulseToken += 1
-        let token = badgePulseToken
-        badgePulseIDs = ids
+    /// 触发指定读完事件的独立庆祝反馈，并将交互日期切换到事件结束日。
+    private func activateReadDoneEvent(_ segment: ReadCalendarMonthGrid.EventSegment) {
         if isHapticsEnabled {
-            ReadCalendarHaptics.rigid()
+            ReadCalendarHaptics.selection()
         }
-        Task {
-            try? await Task.sleep(for: .milliseconds(200))
-            guard !Task.isCancelled, token == badgePulseToken else { return }
-            badgePulseIDs.removeAll()
+        doneCelebrationSegmentID = segment.id
+        doneCelebrationTrigger &+= 1
+        onReadDoneEventSelected?(segment.segmentEndDate)
+    }
+}
+
+/// 在单行标题进入尾部保护区时绘制 Android 同口径的背景色渐隐，不生成省略号。
+private struct ReadCalendarEventTitle: View {
+    let text: String
+    let textColor: Color
+    let fadeColor: Color
+    let leadingInset: CGFloat
+    let trailingInset: CGFloat
+    let fadeWidth: CGFloat
+    let topMaskHeight: CGFloat
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @State private var textWidth: CGFloat = 0
+
+    var body: some View {
+        GeometryReader { proxy in
+            let viewportWidth = max(0, proxy.size.width - leadingInset - trailingInset)
+            let resolvedFadeWidth = min(fadeWidth, viewportWidth)
+            let shouldFade = textWidth > 0 &&
+                textWidth >= max(0, viewportWidth - resolvedFadeWidth - 1)
+
+            ZStack(alignment: .topLeading) {
+                Text(text)
+                    .font(
+                        dynamicTypeSize.isAccessibilitySize
+                            ? ReadCalendarTypography.monthGridEventTitleAccessibilityFont
+                            : ReadCalendarTypography.monthGridEventTitleFont
+                    )
+                    .foregroundStyle(textColor)
+                    .lineLimit(1)
+                    .fixedSize(horizontal: true, vertical: false)
+                    .onGeometryChange(for: CGFloat.self) { geometry in
+                        geometry.size.width
+                    } action: { newWidth in
+                        guard abs(textWidth - newWidth) > 0.5 else { return }
+                        textWidth = newWidth
+                    }
+                    .frame(width: viewportWidth, height: proxy.size.height, alignment: .leading)
+                    .clipped()
+                    .offset(x: leadingInset)
+
+                if shouldFade, resolvedFadeWidth > 0 {
+                    LinearGradient(
+                        stops: [
+                            .init(color: fadeColor.opacity(0.04), location: 0),
+                            .init(color: fadeColor.opacity(0.18), location: 0.42),
+                            .init(color: fadeColor.opacity(0.72), location: 0.78),
+                            .init(color: fadeColor, location: 1)
+                        ],
+                        startPoint: .leading,
+                        endPoint: .trailing
+                    )
+                    .frame(width: resolvedFadeWidth, height: proxy.size.height)
+                    .offset(x: proxy.size.width - trailingInset - resolvedFadeWidth)
+                    .accessibilityHidden(true)
+
+                    LinearGradient(
+                        colors: [fadeColor.opacity(0.86), fadeColor.opacity(0)],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                    .frame(width: resolvedFadeWidth, height: topMaskHeight)
+                    .offset(x: proxy.size.width - trailingInset - resolvedFadeWidth)
+                    .accessibilityHidden(true)
+                }
+            }
         }
+        .accessibilityLabel(text)
+    }
+}
+
+/// 在事件条末端绘制读完徽标，并按触发值重播 Android 同节奏的庆祝反馈。
+private struct ReadCalendarEventDoneBadge: View {
+    let badgeSize: CGFloat
+    let emojiSize: CGFloat
+    let checkmarkSize: CGFloat
+    let markerStyle: ReadCalendarDoneMarkerStyle
+    let emojiAssetName: String
+    let visualStyle: ReadCalendarEventVisualStyle
+    let celebrationTrigger: Int
+
+    var body: some View {
+        ReadCalendarDoneCelebrationEffect(
+            trigger: celebrationTrigger,
+            badgeSize: badgeSize,
+            maximumRotation: markerStyle == .emoji ? 5 : 3,
+            eventBackground: visualStyle.visibleBackground,
+            eventText: visualStyle.textColor,
+            badgeBackground: visualStyle.doneBadgeBackground
+        ) {
+            marker
+        }
+    }
+
+    /// 绘制静态徽标本体；动画仅作用于该对象的变换，不改变布局尺寸。
+    @ViewBuilder
+    private var marker: some View {
+        ZStack {
+            Circle()
+                .fill(visualStyle.doneBadgeBackground.color)
+
+            if markerStyle == .emoji {
+                Image(emojiAssetName)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: emojiSize, height: emojiSize)
+            } else {
+                Image(systemName: "checkmark")
+                    .font(.system(size: checkmarkSize, weight: .bold))
+                    .foregroundStyle(visualStyle.doneBadgeGlyph.color)
+            }
+        }
+        .frame(width: badgeSize, height: badgeSize)
+    }
+}
+
+private struct ReadCalendarEventVisualStyle {
+    let displayBackground: ReadCalendarEventRGBA
+    let visibleBackground: ReadCalendarEventRGBA
+    let textColor: ReadCalendarEventRGBA
+    let borderColor: ReadCalendarEventRGBA
+    let continuationColor: ReadCalendarEventRGBA
+    let doneBadgeBackground: ReadCalendarEventRGBA
+    let doneBadgeGlyph: ReadCalendarEventRGBA
+
+    /// 复刻 Android 事件条的背景混色、可见色合成和二次文字对比度校正。
+    static func make(
+        baseBackground: ReadCalendarEventRGBA,
+        rawText: ReadCalendarEventRGBA,
+        pageBackground: ReadCalendarEventRGBA,
+        backgroundBlendOpacity: Double,
+        isFocused: Bool
+    ) -> ReadCalendarEventVisualStyle {
+        let eventBackground = baseBackground.lerp(
+            to: pageBackground,
+            amount: backgroundBlendOpacity
+        )
+        let focusedBackground = baseBackground.lerp(
+            to: .white,
+            amount: baseBackground.isDark ? 0.08 : 0.18
+        )
+        let displayBackground = isFocused ? focusedBackground : eventBackground
+        let visibleBackground = displayBackground.composite(over: pageBackground)
+        let normalizedText = rawText.withAlpha(max(rawText.alpha, 0.88))
+        let textColor: ReadCalendarEventRGBA
+        if visibleBackground.compositeContrast(with: normalizedText) >= 3.2 {
+            textColor = normalizedText
+        } else {
+            let darkText = ReadCalendarEventRGBA.black.withAlpha(
+                visibleBackground.simpleLuminance > 0.72 ? 0.72 : 0.64
+            )
+            let lightText = ReadCalendarEventRGBA.white.withAlpha(
+                visibleBackground.isDark ? 0.96 : 0.90
+            )
+            textColor = visibleBackground.compositeContrast(with: darkText)
+                > visibleBackground.compositeContrast(with: lightText)
+                ? darkText
+                : lightText
+        }
+
+        let borderAlpha: Double
+        if visibleBackground.isDark {
+            borderAlpha = isFocused ? 0.20 : 0.08
+        } else {
+            borderAlpha = isFocused ? 0.24 : 0.10
+        }
+        let borderColor = textColor.withAlpha(borderAlpha)
+
+        var continuationColor = textColor.withAlpha(visibleBackground.isDark ? 0.48 : 0.36)
+        if visibleBackground.compositeContrast(with: continuationColor) < 1.28 {
+            continuationColor = visibleBackground.isDark
+                ? .white.withAlpha(0.46)
+                : .black.withAlpha(0.32)
+        }
+
+        let badgeOverlay = visibleBackground.isDark
+            ? ReadCalendarEventRGBA.white.withAlpha(0.16)
+            : textColor.withAlpha(0.12)
+        let badgeBackground = badgeOverlay.composite(over: visibleBackground)
+
+        return ReadCalendarEventVisualStyle(
+            displayBackground: displayBackground,
+            visibleBackground: visibleBackground,
+            textColor: textColor,
+            borderColor: borderColor,
+            continuationColor: continuationColor,
+            doneBadgeBackground: badgeBackground,
+            doneBadgeGlyph: textColor.withAlpha(0.96)
+        )
+    }
+}
+
+/// 统一事件条与读完庆祝动效的 RGBA 颜色计算，避免 SwiftUI 动态颜色参与离线对比度运算。
+struct ReadCalendarEventRGBA {
+    let red: Double
+    let green: Double
+    let blue: Double
+    let alpha: Double
+
+    static let black = ReadCalendarEventRGBA(red: 0, green: 0, blue: 0, alpha: 1)
+    static let white = ReadCalendarEventRGBA(red: 1, green: 1, blue: 1, alpha: 1)
+
+    /// 从领域层 RRGGBBAA 表示构造颜色分量。
+    init(rgbaHex: UInt32) {
+        self.init(
+            red: Double((rgbaHex >> 24) & 0xFF) / 255,
+            green: Double((rgbaHex >> 16) & 0xFF) / 255,
+            blue: Double((rgbaHex >> 8) & 0xFF) / 255,
+            alpha: Double(rgbaHex & 0xFF) / 255
+        )
+    }
+
+    init(red: Double, green: Double, blue: Double, alpha: Double) {
+        self.red = min(1, max(0, red))
+        self.green = min(1, max(0, green))
+        self.blue = min(1, max(0, blue))
+        self.alpha = min(1, max(0, alpha))
+    }
+
+    var color: Color {
+        Color(red: red, green: green, blue: blue, opacity: alpha)
+    }
+
+    var simpleLuminance: Double {
+        0.299 * red + 0.587 * green + 0.114 * blue
+    }
+
+    var isDark: Bool {
+        simpleLuminance < 0.5
+    }
+
+    var relativeLuminance: Double {
+        func channel(_ value: Double) -> Double {
+            value <= 0.03928
+                ? value / 12.92
+                : pow((value + 0.055) / 1.055, 2.4)
+        }
+        return 0.2126 * channel(red) + 0.7152 * channel(green) + 0.0722 * channel(blue)
+    }
+
+    /// 解析 iOS 当前外观下的页面底色，保持平台设计令牌同时复用 Android 合成规则。
+    static func pageBackground(for colorScheme: ColorScheme) -> ReadCalendarEventRGBA {
+#if canImport(UIKit)
+        let style: UIUserInterfaceStyle = colorScheme == .dark ? .dark : .light
+        let resolved = UIColor.systemGroupedBackground.resolvedColor(
+            with: UITraitCollection(userInterfaceStyle: style)
+        )
+        var red: CGFloat = 0
+        var green: CGFloat = 0
+        var blue: CGFloat = 0
+        var alpha: CGFloat = 0
+        if resolved.getRed(&red, green: &green, blue: &blue, alpha: &alpha) {
+            return ReadCalendarEventRGBA(
+                red: Double(red),
+                green: Double(green),
+                blue: Double(blue),
+                alpha: Double(alpha)
+            )
+        }
+#endif
+        return colorScheme == .dark
+            ? .black
+            : ReadCalendarEventRGBA(red: 0.949, green: 0.949, blue: 0.969, alpha: 1)
+    }
+
+    func withAlpha(_ value: Double) -> ReadCalendarEventRGBA {
+        ReadCalendarEventRGBA(red: red, green: green, blue: blue, alpha: value)
+    }
+
+    func lerp(to other: ReadCalendarEventRGBA, amount: Double) -> ReadCalendarEventRGBA {
+        let progress = min(1, max(0, amount))
+        return ReadCalendarEventRGBA(
+            red: red + (other.red - red) * progress,
+            green: green + (other.green - green) * progress,
+            blue: blue + (other.blue - blue) * progress,
+            alpha: alpha + (other.alpha - alpha) * progress
+        )
+    }
+
+    func composite(over background: ReadCalendarEventRGBA) -> ReadCalendarEventRGBA {
+        let outputAlpha = alpha + background.alpha * (1 - alpha)
+        guard outputAlpha > 0 else { return .init(red: 0, green: 0, blue: 0, alpha: 0) }
+        return ReadCalendarEventRGBA(
+            red: (red * alpha + background.red * background.alpha * (1 - alpha)) / outputAlpha,
+            green: (green * alpha + background.green * background.alpha * (1 - alpha)) / outputAlpha,
+            blue: (blue * alpha + background.blue * background.alpha * (1 - alpha)) / outputAlpha,
+            alpha: outputAlpha
+        )
+    }
+
+    func compositeContrast(with foreground: ReadCalendarEventRGBA) -> Double {
+        let visibleForeground = foreground.composite(over: self)
+        let lighter = max(relativeLuminance, visibleForeground.relativeLuminance)
+        let darker = min(relativeLuminance, visibleForeground.relativeLuminance)
+        return (lighter + 0.05) / (darker + 0.05)
     }
 }
 
@@ -896,7 +1261,7 @@ private struct ReadCalendarMonthGridCoverStackFramePreferenceKey: PreferenceKey 
     }
 }
 
-private enum ReadCalendarHaptics {
+enum ReadCalendarHaptics {
     /// 触发轻量选择触感，用于日期切换反馈。
     static func selection() {
 #if canImport(UIKit)

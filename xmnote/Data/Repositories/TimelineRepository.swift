@@ -3,7 +3,7 @@ import GRDB
 
 /**
  * [INPUT]: 依赖 DatabaseManager 提供数据库连接，依赖 TimelineEvent/TimelineSection/TimelineDayMarker 领域模型
- * [OUTPUT]: 对外提供 TimelineRepository（TimelineRepositoryProtocol 的 GRDB 实现，6 路事件查询 + Android 对齐的日历标记聚合）
+ * [OUTPUT]: 对外提供 TimelineRepository，完成 6 路事件查询、固定类型相关书籍映射与 Android 对齐的日历标记聚合
  * [POS]: Data 层时间线仓储实现，对齐 Android TimelineRepository.getTimelineDataList 与 getCalendarSchemeData
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -146,6 +146,7 @@ private extension TimelineRepository {
     nonisolated func queryReadTimingEvents(_ db: Database, start: Int64, end: Int64) throws -> [TimelineEvent] {
         let sql = """
             SELECT r.id, r.book_id, r.start_time, r.end_time, r.elapsed_seconds, r.fuzzy_read_date,
+                   r.position, r.recorded_position_unit, r.insight,
                    b.name, b.author, b.cover
             FROM read_time_record r
             JOIN book b ON b.id = r.book_id AND b.is_deleted = 0
@@ -164,7 +165,10 @@ private extension TimelineRepository {
                     elapsedSeconds: row["elapsed_seconds"] as Int64,
                     startTime: startTime,
                     endTime: row["end_time"] as Int64,
-                    fuzzyReadDate: fuzzy
+                    fuzzyReadDate: fuzzy,
+                    position: row["position"] as Double? ?? 0,
+                    recordedPositionUnit: row["recorded_position_unit"] as Int64?,
+                    insight: row["insight"] as String? ?? ""
                 )),
                 timestamp: effectiveTimestamp,
                 sourceBookId: row["book_id"] as Int64? ?? 0,
@@ -267,8 +271,7 @@ private extension TimelineRepository {
                         contentBookId: contentBookId,
                         contentBookName: contentBook?.name ?? "",
                         contentBookAuthor: contentBook?.author ?? "",
-                        contentBookCover: contentBook?.cover ?? "",
-                        categoryTitle: catTitle
+                        contentBookCover: contentBook?.cover ?? ""
                     )),
                     timestamp: row["created_date"] as Int64,
                     sourceBookId: row["book_id"] as Int64? ?? 0,

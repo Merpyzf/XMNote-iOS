@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 SwiftUI、DesignTokens 状态色/排版/间距令牌与 CardContainer 内容表层
- * [OUTPUT]: 对外提供 ReadingStatusTimeline 核心时间线、Status/Item 输入模型与 ReadingStatusTimelineCard 卡片封装
+ * [OUTPUT]: 对外提供 ReadingStatusTimeline 核心时间线、Status/Item 输入模型与 ReadingStatusTimelineCard 卡片封装，并以单一虚线路径绘制相邻状态连接边
  * [POS]: UIComponents/Foundation 的跨模块阅读历程基础组件，供后续阅读详情与只读分享场景复用
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -109,7 +109,6 @@ struct ReadingStatusTimeline: View {
                         ReadingStatusTimelineEntry(
                             item: item,
                             nextItem: items[safe: index + 1],
-                            hasPreviousItem: index > 0,
                             isCurrent: index == 0,
                             usesAccessibilityLayout: usesExpandedLayout,
                             calendar: calendar,
@@ -202,8 +201,11 @@ struct ReadingStatusTimelineCard: View {
 private enum ReadingStatusTimelineMetrics {
     static let railColumnWidth: CGFloat = 20
     static let maximumRailColumnWidth: CGFloat = 24
-    static let connectorHeight: CGFloat = 48
-    static let maximumConnectorHeight: CGFloat = 64
+    static let connectorSlotHeight: CGFloat = 72
+    static let connectorLineHeight: CGFloat = 62
+    static let connectorLineWidth: CGFloat = 2
+    static let connectorDashLength: CGFloat = 4
+    static let connectorDashGap: CGFloat = 4
     static let nodeDiameter: CGFloat = 16
     static let maximumNodeDiameter: CGFloat = 20
     static let nodeBorderWidth: CGFloat = 2
@@ -214,7 +216,6 @@ private enum ReadingStatusTimelineMetrics {
 private struct ReadingStatusTimelineEntry: View {
     let item: ReadingStatusTimeline.Item
     let nextItem: ReadingStatusTimeline.Item?
-    let hasPreviousItem: Bool
     let isCurrent: Bool
     let usesAccessibilityLayout: Bool
     let calendar: Calendar
@@ -222,8 +223,6 @@ private struct ReadingStatusTimelineEntry: View {
 
     @ScaledMetric(relativeTo: .body) private var scaledRailColumnWidth =
         ReadingStatusTimelineMetrics.railColumnWidth
-    @ScaledMetric(relativeTo: .body) private var scaledConnectorHeight =
-        ReadingStatusTimelineMetrics.connectorHeight
 
     var body: some View {
         VStack(spacing: Spacing.none) {
@@ -256,7 +255,7 @@ private struct ReadingStatusTimelineEntry: View {
     private var statusRowContent: some View {
         if usesAccessibilityLayout {
             HStack(alignment: .center, spacing: Spacing.base) {
-                nodeColumn(hasNextItem: nextItem != nil)
+                nodeColumn
                     .frame(width: railColumnWidth)
 
                 VStack(alignment: .leading, spacing: Spacing.compact) {
@@ -265,20 +264,20 @@ private struct ReadingStatusTimelineEntry: View {
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .frame(maxWidth: .infinity, minHeight: Spacing.actionReserved, alignment: .leading)
+            .frame(maxWidth: .infinity, alignment: .leading)
             .contentShape(Rectangle())
         } else {
             HStack(alignment: .center, spacing: Spacing.base) {
                 timestampText(alignment: .trailing)
                     .frame(maxWidth: .infinity, alignment: .trailing)
 
-                nodeColumn(hasNextItem: nextItem != nil)
+                nodeColumn
                     .frame(width: railColumnWidth)
 
                 statusText
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .frame(maxWidth: .infinity, minHeight: Spacing.actionReserved, alignment: .leading)
+            .frame(maxWidth: .infinity, alignment: .leading)
             .contentShape(Rectangle())
         }
     }
@@ -306,18 +305,10 @@ private struct ReadingStatusTimelineEntry: View {
         .fixedSize(horizontal: false, vertical: true)
     }
 
-    /// 在常规和辅助功能布局间复用同一节点与上下轨道关系。
-    private func nodeColumn(hasNextItem: Bool) -> some View {
-        ZStack {
-            VStack(spacing: Spacing.none) {
-                ReadingStatusTimelineRailSegment(isVisible: hasPreviousItem)
-                ReadingStatusTimelineRailSegment(isVisible: hasNextItem)
-            }
-
-            ReadingStatusTimelineNode(status: item.status)
-        }
-        .frame(minHeight: Spacing.actionReserved)
-        .accessibilityHidden(true)
+    /// 在常规和辅助功能布局间复用同一节点；连接边由相邻事件对独立持有。
+    private var nodeColumn: some View {
+        ReadingStatusTimelineNode(status: item.status)
+            .accessibilityHidden(true)
     }
 
     /// 渲染两个状态之间的间隔和完整虚线轨道。
@@ -327,7 +318,7 @@ private struct ReadingStatusTimelineEntry: View {
         return Group {
             if usesAccessibilityLayout {
                 HStack(alignment: .center, spacing: Spacing.base) {
-                    ReadingStatusTimelineRailSegment(isVisible: true, isDashed: true)
+                    ReadingStatusTimelineConnector(tint: item.status.tint)
                         .frame(width: railColumnWidth)
 
                     Text(intervalText)
@@ -338,7 +329,7 @@ private struct ReadingStatusTimelineEntry: View {
                     Text(intervalText)
                         .frame(maxWidth: .infinity, alignment: .trailing)
 
-                    ReadingStatusTimelineRailSegment(isVisible: true, isDashed: true)
+                    ReadingStatusTimelineConnector(tint: item.status.tint)
                         .frame(width: railColumnWidth)
 
                     Spacer(minLength: Spacing.none)
@@ -348,7 +339,8 @@ private struct ReadingStatusTimelineEntry: View {
         }
         .font(AppTypography.captionMedium)
         .foregroundStyle(Color.textSecondary)
-        .frame(maxWidth: .infinity, minHeight: connectorHeight, alignment: .leading)
+        .frame(height: ReadingStatusTimelineMetrics.connectorSlotHeight)
+        .frame(maxWidth: .infinity, alignment: .leading)
         .accessibilityElement(children: .combine)
     }
 
@@ -356,13 +348,6 @@ private struct ReadingStatusTimelineEntry: View {
         min(
             scaledRailColumnWidth,
             ReadingStatusTimelineMetrics.maximumRailColumnWidth
-        )
-    }
-
-    private var connectorHeight: CGFloat {
-        min(
-            scaledConnectorHeight,
-            ReadingStatusTimelineMetrics.maximumConnectorHeight
         )
     }
 
@@ -387,20 +372,20 @@ private struct ReadingStatusTimelineEntry: View {
         onSelectItem?(item)
     }
 
-    /// 按用户本地日历生成 Android 对齐的“同时 / 当日 / N天后”。
+    /// 按 Android 的绝对毫秒差生成“同时 / 当日 / N天后”，不把跨零点但未满 24 小时误算为一天。
     private func intervalDescription(to nextItem: ReadingStatusTimeline.Item) -> String {
-        if calendar.compare(item.date, to: nextItem.date, toGranularity: .minute) == .orderedSame {
+        let differenceMilliseconds = Int64(
+            (abs(item.date.timeIntervalSince(nextItem.date)) * 1_000).rounded(.down)
+        )
+        if differenceMilliseconds == 0 {
             return String(localized: "同时")
         }
 
-        if calendar.isDate(item.date, inSameDayAs: nextItem.date) {
+        let dayCount = differenceMilliseconds / 86_400_000
+        if dayCount == 0 {
             return String(localized: "当日")
         }
-
-        let olderDay = calendar.startOfDay(for: nextItem.date)
-        let newerDay = calendar.startOfDay(for: item.date)
-        let dayCount = calendar.dateComponents([.day], from: olderDay, to: newerDay).day ?? 0
-        return String(localized: "\(max(dayCount, 1))天后")
+        return String(localized: "\(dayCount)天后")
     }
 
     /// 判断事件是否落在用户本地时区的零点，决定是否隐藏时间行。
@@ -444,28 +429,32 @@ private struct ReadingStatusTimelineNode: View {
     }
 }
 
-/// 绘制节点之间的中性轨道；节点行使用实线保证连接连续，间隔区使用虚线弱化进度感。
-private struct ReadingStatusTimelineRailSegment: View {
-    let isVisible: Bool
-    var isDashed = false
+/// 由当前事件独占相邻连接边，使用固定几何保证虚线密度和端点稳定。
+private struct ReadingStatusTimelineConnector: View {
+    let tint: Color
 
     var body: some View {
-        ReadingStatusTimelineRailShape()
+        ReadingStatusTimelineConnectorShape()
             .stroke(
-                Color.surfaceBorderDefault,
+                tint,
                 style: StrokeStyle(
-                    lineWidth: Spacing.hairline,
-                    lineCap: .round,
-                    dash: isDashed ? [Spacing.compact, Spacing.half] : []
+                    lineWidth: ReadingStatusTimelineMetrics.connectorLineWidth,
+                    lineCap: .butt,
+                    dash: [
+                        ReadingStatusTimelineMetrics.connectorDashLength,
+                        ReadingStatusTimelineMetrics.connectorDashGap,
+                    ],
+                    dashPhase: 0
                 )
             )
-            .opacity(isVisible ? 1 : 0)
+            .frame(height: ReadingStatusTimelineMetrics.connectorLineHeight)
+            .frame(height: ReadingStatusTimelineMetrics.connectorSlotHeight)
             .accessibilityHidden(true)
     }
 }
 
-/// 生成不参与业务状态的竖向轨道路经。
-private struct ReadingStatusTimelineRailShape: Shape {
+/// 生成不参与业务状态的单一竖向连接路径。
+private struct ReadingStatusTimelineConnectorShape: Shape {
     nonisolated func path(in rect: CGRect) -> Path {
         var path = Path()
         path.move(to: CGPoint(x: rect.midX, y: rect.minY))

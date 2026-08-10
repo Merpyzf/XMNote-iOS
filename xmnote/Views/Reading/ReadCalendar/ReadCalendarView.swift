@@ -1,31 +1,43 @@
 import SwiftUI
 
 /**
- * [INPUT]: 依赖 RepositoryContainer 注入统计与取色仓储，依赖 ReadCalendarViewModel 提供月历状态与事件布局数据
- * [OUTPUT]: 对外提供 ReadCalendarView（阅读日历页面壳层，负责挂载 ReadCalendarContentView）
+ * [INPUT]: 依赖 RepositoryContainer/AppState 注入统计、取色仓储与会员限制开关，依赖 ReadCalendarViewModel 提供月历状态与事件布局数据
+ * [OUTPUT]: 对外提供 ReadCalendarView（挂载内容页、透传统计过滤设置并映射领域层年度同期摘要）
  * [POS]: Reading 模块核心页面入口，承接导航与数据加载，具体日历 UI 由业务内壳层组件负责（含设置入口与显示模式切换）
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
 /// 阅读日历页面入口，负责创建 ViewModel、挂载设置态并衔接内容壳层。
 struct ReadCalendarView: View {
+    let onOpenRoute: (ReadCalendarRoute) -> Void
+    let onOpenPremium: () -> Void
     @Environment(RepositoryContainer.self) private var repositories
+    @Environment(AppState.self) private var appState
     @Environment(SceneStateStore.self) private var sceneStateStore
+    @Environment(\.scenePhase) private var scenePhase
     @State private var viewModel: ReadCalendarViewModel
     @State private var pagerSelectionTask: Task<Void, Never>?
     @State private var yearSelectionTask: Task<Void, Never>?
-    @State private var displayMode: ReadCalendarContentView.DisplayMode = .activityEvent
+    @State private var displayMode: ReadCalendarContentView.DisplayMode = .bookCover
     @State private var settings: ReadCalendarSettings
     @State private var settingsRefreshTask: Task<Void, Never>?
+    @State private var lifecycleRefreshTask: Task<Void, Never>?
     @State private var isSettingsPresented = false
-    @State private var settingsSheetHeight: CGFloat = 0
+    @State private var isCheckInPresented = false
+    @State private var isCheckInSaving = false
+    @State private var isPremiumMonthAlertPresented = false
     @State private var isBookCoverFullscreenPresented = false
     @State private var didBootstrapFromScene = false
     @State private var canPersistSceneSnapshot = false
-    @ScaledMetric(relativeTo: .subheadline) private var settingsIconSize = 15
 
     /// 注入初始日期并创建阅读日历页面入口。
-    init(date: Date?) {
+    init(
+        date: Date?,
+        onOpenRoute: @escaping (ReadCalendarRoute) -> Void = { _ in },
+        onOpenPremium: @escaping () -> Void = { }
+    ) {
+        self.onOpenRoute = onOpenRoute
+        self.onOpenPremium = onOpenPremium
         let s = ReadCalendarSettings()
         _settings = State(initialValue: s)
         _viewModel = State(initialValue: ReadCalendarViewModel(initialDate: date, settings: s))
@@ -49,26 +61,36 @@ struct ReadCalendarView: View {
                     yearSelectionTask?.cancel()
                     yearSelectionTask = Task {
                         await viewModel.prepareHeatmapYearIfNeeded(
-                            using: repositories.statisticsRepository,
+                            using: repositories.readCalendarRepository,
                             colorRepository: repositories.readCalendarColorRepository
                         )
                     }
                 },
                 onPagerSelectionChanged: { monthStart in
-                    viewModel.pagerSelection = monthStart
+                    handleRequestedMonth(monthStart)
                 },
                 onYearSelectionChanged: { year in
                     yearSelectionTask?.cancel()
                     yearSelectionTask = Task {
                         await viewModel.handleYearSelectionChange(
                             to: year,
-                            using: repositories.statisticsRepository,
+                            using: repositories.readCalendarRepository,
                             colorRepository: repositories.readCalendarColorRepository
                         )
                     }
                 },
                 onSelectDate: { date in
                     viewModel.selectDate(date)
+                },
+                onOpenDay: { date in
+                    onOpenRoute(.daily(date: date))
+                },
+                onLockedMonthSelected: { _ in
+                    guard appState.shouldEnforcePremiumRestrictions else { return }
+                    if settings.isHapticsEnabled {
+                        ReadCalendarHaptics.selection()
+                    }
+                    isPremiumMonthAlertPresented = true
                 },
                 onRetry: {
                     retryCurrentContext()
@@ -84,19 +106,59 @@ struct ReadCalendarView: View {
         .toolbarBackground(Color.surfacePage, for: .navigationBar)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
-                Button { isSettingsPresented = true } label: {
-                    Image(systemName: "gearshape")
-                        .font(.system(size: settingsIconSize, weight: .semibold))
-                        .foregroundStyle(Color.readCalendarTopAction)
+                Menu {
+                    Button {
+                        isCheckInPresented = true
+                    } label: {
+                        Label("今天打卡", systemImage: "checkmark.circle")
+                    }
+                    Button {
+                        onOpenRoute(.share(
+                            monthStart: viewModel.pagerSelection,
+                            initialType: shareTypeForDisplayMode
+                        ))
+                    } label: {
+                        Label("分享日历", systemImage: "square.and.arrow.up")
+                    }
+                    Button {
+                        isSettingsPresented = true
+                    } label: {
+                        Label("日历设置", systemImage: "gearshape")
+                    }
+                } label: {
+                    Label("更多", systemImage: "ellipsis")
+                        .labelStyle(.iconOnly)
                 }
-                .accessibilityLabel("阅读日历设置")
+                .xmToolbarNeutralTint()
+                .accessibilityLabel("阅读日历操作")
             }
         }
         .sheet(isPresented: $isSettingsPresented) {
             ReadCalendarSettingsSheet(settings: settings)
-                .onPreferenceChange(SheetHeightKey.self) { settingsSheetHeight = $0 }
-                .presentationDetents([.height(settingsSheetHeight)])
         }
+        .sheet(isPresented: $isCheckInPresented) {
+            ReadCalendarCheckInSheet(
+                date: Date(),
+                initialBook: todayInitialBook,
+                isSaving: isCheckInSaving,
+                onSave: { bookID, amount in
+                    try await saveTodayCheckIn(bookID: bookID, amount: amount)
+                }
+            )
+            .presentationDetents([.medium, .large])
+            .presentationDragIndicator(.visible)
+        }
+        .xmSystemAlert(
+            isPresented: $isPremiumMonthAlertPresented,
+            descriptor: XMSystemAlertDescriptor(
+                title: "查看更早的阅读日历",
+                message: "免费版可查看最近 6 个自然月，会员可访问全部历史阅读记录。",
+                actions: [
+                    XMSystemAlertAction(title: "取消", role: .cancel) { },
+                    XMSystemAlertAction(title: "了解会员") { onOpenPremium() }
+                ]
+            )
+        )
         .onChange(of: settings.excludedEventTypes) { _, _ in
             scheduleSettingsRefresh()
         }
@@ -112,8 +174,16 @@ struct ReadCalendarView: View {
                 viewModel.applySceneSnapshot(snapshot)
                 displayMode = snapshot.displayMode
             }
+            viewModel.updateAccessBoundary(minimumAccessibleMonthStart: minimumAccessibleMonthStart)
+            if isPremiumMonthLocked(viewModel.pagerSelection) {
+                let calendar = Calendar.current
+                viewModel.pagerSelection = calendar.date(
+                    from: calendar.dateComponents([.year, .month], from: Date())
+                ) ?? Date()
+                isPremiumMonthAlertPresented = true
+            }
             await viewModel.loadIfNeeded(
-                using: repositories.statisticsRepository,
+                using: repositories.readCalendarRepository,
                 colorRepository: repositories.readCalendarColorRepository
             )
             canPersistSceneSnapshot = true
@@ -126,7 +196,7 @@ struct ReadCalendarView: View {
             pagerSelectionTask = Task {
                 await viewModel.handlePagerSelectionChange(
                     to: monthStart,
-                    using: repositories.statisticsRepository,
+                    using: repositories.readCalendarRepository,
                     colorRepository: repositories.readCalendarColorRepository
                 )
 
@@ -134,7 +204,7 @@ struct ReadCalendarView: View {
                 guard displayMode == .heatmap else { return }
 
                 await viewModel.prepareHeatmapYearIfNeeded(
-                    using: repositories.statisticsRepository,
+                    using: repositories.readCalendarRepository,
                     colorRepository: repositories.readCalendarColorRepository
                 )
             }
@@ -146,10 +216,17 @@ struct ReadCalendarView: View {
             yearSelectionTask = nil
             settingsRefreshTask?.cancel()
             settingsRefreshTask = nil
+            lifecycleRefreshTask?.cancel()
+            lifecycleRefreshTask = nil
             viewModel.cancelAsyncTasks()
         }
         .onAppear {
             syncSceneSnapshot()
+            guard canPersistSceneSnapshot else { return }
+            scheduleLifecycleRefresh()
+        }
+        .onChange(of: scenePhase) { _, phase in
+            handleScenePhaseChange(phase)
         }
         .onChange(of: viewModel.pagerSelection) { _, _ in
             syncSceneSnapshot()
@@ -163,12 +240,98 @@ struct ReadCalendarView: View {
         .onChange(of: displayMode) { _, _ in
             syncSceneSnapshot()
         }
+        .onChange(of: appState.shouldEnforcePremiumRestrictions) { _, shouldEnforce in
+            if !shouldEnforce {
+                isPremiumMonthAlertPresented = false
+            }
+            viewModel.updateAccessBoundary(minimumAccessibleMonthStart: minimumAccessibleMonthStart)
+            scheduleSettingsRefresh()
+        }
     }
 }
 
 // MARK: - Settings Refresh
 
 private extension ReadCalendarView {
+    /// 回到前台后失效并刷新当前范围；未完成现场恢复时忽略生命周期回调。
+    func handleScenePhaseChange(_ phase: ScenePhase) {
+        guard phase == .active, canPersistSceneSnapshot else { return }
+        scheduleLifecycleRefresh()
+    }
+
+    /// 在分页写入前执行免费月份边界判断，拒绝后保持原页现场不变。
+    func handleRequestedMonth(_ monthStart: Date) {
+        guard !isPremiumMonthLocked(monthStart) else {
+            isPremiumMonthAlertPresented = true
+            return
+        }
+        viewModel.pagerSelection = monthStart
+    }
+
+    /// 免费版只开放当前自然月及向前连续五个月。
+    func isPremiumMonthLocked(_ date: Date) -> Bool {
+        guard let minimumAccessibleMonthStart else { return false }
+        let calendar = Calendar.current
+        let normalized = calendar.date(from: calendar.dateComponents([.year, .month], from: date)) ?? date
+        return normalized < minimumAccessibleMonthStart
+    }
+
+    /// 免费版当前自然月及向前五个月可访问；会员不设置历史下界。
+    var minimumAccessibleMonthStart: Date? {
+        guard appState.shouldEnforcePremiumRestrictions else { return nil }
+        let calendar = Calendar.current
+        let current = calendar.date(from: calendar.dateComponents([.year, .month], from: Date())) ?? Date()
+        return calendar.date(byAdding: .month, value: -5, to: current) ?? current
+    }
+
+    /// 写入今天的打卡后跳到本月并强制刷新，确保网格、摘要和后续详情口径同步。
+    func saveTodayCheckIn(bookID: Int64, amount: Int) async throws {
+        guard !isCheckInSaving else { return }
+        isCheckInSaving = true
+        defer { isCheckInSaving = false }
+        try await repositories.readCalendarRepository.saveCheckIn(
+            ReadCalendarCheckInDraft(
+                recordID: nil,
+                bookID: bookID,
+                amount: amount,
+                date: Date()
+            )
+        )
+        let calendar = Calendar.current
+        let currentMonth = calendar.date(from: calendar.dateComponents([.year, .month], from: Date())) ?? Date()
+        viewModel.pagerSelection = currentMonth
+        await viewModel.handlePagerSelectionChange(
+            to: currentMonth,
+            using: repositories.readCalendarRepository,
+            colorRepository: repositories.readCalendarColorRepository
+        )
+        await viewModel.retryDisplayedMonth(
+            using: repositories.readCalendarRepository,
+            colorRepository: repositories.readCalendarColorRepository
+        )
+        if displayMode == .heatmap {
+            await viewModel.prepareHeatmapYearIfNeeded(
+                using: repositories.readCalendarRepository,
+                colorRepository: repositories.readCalendarColorRepository
+            )
+        }
+    }
+
+    var todayInitialBook: ReadCalendarDayBook? {
+        let calendar = Calendar.current
+        let today = calendar.startOfDay(for: Date())
+        let month = calendar.date(from: calendar.dateComponents([.year, .month], from: today)) ?? today
+        return viewModel.monthState(for: month).dayMap[today]?.books.first
+    }
+
+    var shareTypeForDisplayMode: ReadCalendarShareType {
+        switch displayMode {
+        case .heatmap: .yearHeatmap
+        case .activityEvent: .monthEvent
+        case .bookCover: .monthCover
+        }
+    }
+
     func syncSceneSnapshot() {
         guard canPersistSceneSnapshot else { return }
         sceneStateStore.updateReadCalendar(
@@ -188,7 +351,30 @@ private extension ReadCalendarView {
             try? await Task.sleep(for: .milliseconds(300))
             guard !Task.isCancelled else { return }
             await viewModel.applySettingsChange(
-                using: repositories.statisticsRepository,
+                using: repositories.readCalendarRepository,
+                colorRepository: repositories.readCalendarColorRepository
+            )
+            guard !Task.isCancelled, displayMode == .heatmap else { return }
+            await viewModel.prepareHeatmapYearIfNeeded(
+                using: repositories.readCalendarRepository,
+                colorRepository: repositories.readCalendarColorRepository
+            )
+        }
+    }
+
+    /// 页面重新可见或 App 回到前台时刷新当前范围，并同步使年度派生数据重新计算。
+    func scheduleLifecycleRefresh() {
+        viewModel.updateAccessBoundary(minimumAccessibleMonthStart: minimumAccessibleMonthStart)
+        lifecycleRefreshTask?.cancel()
+        lifecycleRefreshTask = Task {
+            await viewModel.refreshVisibleRange(
+                using: repositories.readCalendarRepository,
+                colorRepository: repositories.readCalendarColorRepository
+            )
+            viewModel.updateAccessBoundary(minimumAccessibleMonthStart: minimumAccessibleMonthStart)
+            guard !Task.isCancelled, displayMode == .heatmap else { return }
+            await viewModel.refreshHeatmapYear(
+                using: repositories.readCalendarRepository,
                 colorRepository: repositories.readCalendarColorRepository
             )
         }
@@ -218,7 +404,13 @@ private extension ReadCalendarView {
             displayMode: displayMode,
             laneLimit: viewModel.laneLimit,
             isHapticsEnabled: settings.isHapticsEnabled,
-            isStreakHintEnabled: settings.isStreakHintEnabled,
+            summaryFilterState: .init(
+                excludeReadTime: settings.excludeReadTiming,
+                excludeNote: settings.excludeNote,
+                excludeReadDone: settings.excludeReadDone
+            ),
+            doneMarkerStyle: settings.doneMarkerStyle,
+            doneEmojiAssetName: settings.doneEmojiAssetName,
             rootContentState: mapRootContentState(viewModel.rootContentState),
             errorMessage: viewModel.errorMessage,
             heatmapYearMonthPages: heatmapYearPages,
@@ -235,26 +427,29 @@ private extension ReadCalendarView {
     /// 把 ViewModel 月状态转换为 ContentView 可渲染的页面模型。
     func makeContentMonthPage(for monthStart: Date, todayStart: Date) -> ReadCalendarContentView.MonthPage {
         let state = viewModel.monthState(for: monthStart)
+        let isLocked = viewModel.isMonthLocked(monthStart)
+        let visibleDayMap = isLocked ? [:] : state.dayMap
 
         let weeks = state.weeks.map { week in
             ReadCalendarMonthGrid.WeekData(
                 weekStart: week.weekStart,
                 days: week.days,
-                segments: week.segments.map(mapEventSegment)
+                segments: isLocked ? [] : week.segments.map(mapEventSegment)
             )
         }
 
         return ReadCalendarContentView.MonthPage(
             monthStart: state.monthStart,
             weeks: weeks,
-            dayMap: state.dayMap,
-            readingDurationTopBooks: state.readingDurationTopBooks,
-            summary: state.summary,
-            rankingBarColorsByBookId: state.rankingBarColorsByBookId,
+            dayMap: visibleDayMap,
+            readingDurationTopBooks: isLocked ? [] : state.readingDurationTopBooks,
+            summary: isLocked ? .empty : state.summary,
+            rankingBarColorsByBookId: isLocked ? [:] : state.rankingBarColorsByBookId,
             selectedDate: viewModel.selectedDate,
             todayStart: todayStart,
             laneLimit: viewModel.laneLimit,
-            isDayMapEmpty: state.dayMap.isEmpty,
+            isLocked: isLocked,
+            isDayMapEmpty: visibleDayMap.isEmpty,
             loadState: mapMonthLoadState(state.loadState),
             errorMessage: state.errorMessage
         )
@@ -335,24 +530,17 @@ private extension ReadCalendarView {
         }
     }
 
-    /// 组装年度总结弹层数据，并补齐与上一年的同比指标。
+    /// 组装年度总结弹层数据，直接透传领域层已按同期边界计算的同比指标。
     func mapYearSummary(_ state: ReadCalendarViewModel.YearSummaryState) -> ReadCalendarContentView.YearSummarySheetData {
-        let previousYear = state.year - 1
-        let previousSummary: ReadCalendarViewModel.YearSummaryState? = {
-            guard viewModel.availableYears.contains(previousYear) else { return nil }
-            guard viewModel.yearLoadState(for: previousYear) == .loaded else { return nil }
-            return viewModel.yearSummaryState(for: previousYear)
-        }()
-
         return ReadCalendarContentView.YearSummarySheetData(
             year: state.year,
             activeDays: state.activeDays,
             totalReadSeconds: state.totalReadSeconds,
             noteCount: state.noteCount,
             finishedBookCount: state.finishedBookCount,
-            activeDaysDelta: previousSummary.map { state.activeDays - $0.activeDays },
-            readSecondsDelta: previousSummary.map { state.totalReadSeconds - $0.totalReadSeconds },
-            noteCountDelta: previousSummary.map { state.noteCount - $0.noteCount },
+            activeDaysDelta: state.activeDaysDelta,
+            readSecondsDelta: state.readSecondsDelta,
+            noteCountDelta: state.noteCountDelta,
             topBooks: state.topBooks,
             rankingBarColorsByBookId: state.rankingBarColorsByBookId,
             monthContributions: state.monthContributions.map { item in
@@ -372,18 +560,18 @@ private extension ReadCalendarView {
         Task {
             if viewModel.availableMonths.isEmpty {
                 await viewModel.reload(
-                    using: repositories.statisticsRepository,
+                    using: repositories.readCalendarRepository,
                     colorRepository: repositories.readCalendarColorRepository
                 )
             } else if displayMode == .heatmap {
                 await viewModel.handleYearSelectionChange(
                     to: viewModel.selectedYear,
-                    using: repositories.statisticsRepository,
+                    using: repositories.readCalendarRepository,
                     colorRepository: repositories.readCalendarColorRepository
                 )
             } else {
                 await viewModel.retryDisplayedMonth(
-                    using: repositories.statisticsRepository,
+                    using: repositories.readCalendarRepository,
                     colorRepository: repositories.readCalendarColorRepository
                 )
             }
@@ -395,5 +583,6 @@ private extension ReadCalendarView {
     NavigationStack {
         ReadCalendarView(date: Date())
             .environment(RepositoryContainer(databaseManager: try! DatabaseManager()))
+            .environment(AppState())
     }
 }

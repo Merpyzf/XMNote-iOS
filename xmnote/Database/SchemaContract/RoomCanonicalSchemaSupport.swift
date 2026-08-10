@@ -1,7 +1,7 @@
 /**
  * [INPUT]: 依赖 Android Room 导出的 schema JSON、GRDB Database 与 RoomSchemaDiagnostic
  * [OUTPUT]: 对外提供 Room canonical schema 加载、建表、identity hash 与物理结构校验的共享实现
- * [POS]: Database/SchemaContract 的内部辅助层，被 v42/v43 Room schema 合同复用
+ * [POS]: Database/SchemaContract 的内部辅助层，被 v42/v43/v44 Room schema 合同复用
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 

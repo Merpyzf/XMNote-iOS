@@ -15,6 +15,7 @@ struct AddMenuCircleButton: View {
     /// 兼容旧玻璃样式调用参数，当前视觉统一由 topBarActionButtonStyle 承接。
     let usesGlassStyle: Bool
     let presentation: TopBarActionPresentation
+    let iconSize: CGFloat
 
     /// 注入新增书籍/笔记操作回调，配置顶部加号入口行为。
     init(
@@ -22,13 +23,15 @@ struct AddMenuCircleButton: View {
         onAddNote: @escaping () -> Void,
         onOpenDebugCenter: (() -> Void)? = nil,
         usesGlassStyle: Bool = false,
-        presentation: TopBarActionPresentation = .standalone
+        presentation: TopBarActionPresentation = .standalone,
+        iconSize: CGFloat = 14
     ) {
         self.onAddBook = onAddBook
         self.onAddNote = onAddNote
         self.onOpenDebugCenter = onOpenDebugCenter
         self.usesGlassStyle = usesGlassStyle
         self.presentation = presentation
+        self.iconSize = iconSize
     }
 
     var body: some View {
@@ -52,6 +55,9 @@ struct AddMenuCircleButton: View {
         } label: {
             TopBarActionIcon(
                 systemName: "plus",
+                iconSize: iconSize,
+                weight: .medium,
+                foregroundColor: Color.iconPrimary.opacity(0.88),
                 hitShape: presentation == .pillSegment ? .rectangle : .circle
             )
         }

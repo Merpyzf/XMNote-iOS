@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 XMRemoteImage 与 DesignTokens，依赖封面条目、容器尺寸、阶段状态与稳定随机种子
- * [OUTPUT]: 对外提供 ReadCalendarCoverFullscreenDeckStage（封面全屏容器：堆叠态 + 纵向网格态）
+ * [OUTPUT]: 对外提供 ReadCalendarCoverFullscreenDeckStage（封面全屏容器：堆叠态 + 支持短内容回弹的纵向网格态）
  * [POS]: ReadCalendar 页面私有子视图，用于浮层内“情绪化堆叠”向“可浏览列表”过渡的统一渲染
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -402,7 +402,7 @@ private extension ReadCalendarCoverFullscreenDeckStage {
         let cardSize = gridCardSize
         let columns = gridColumns(for: cardSize.width)
 
-        return ScrollView(.vertical, showsIndicators: true) {
+        return ScrollView(.vertical) {
             LazyVGrid(columns: columns, spacing: resolvedGridSpacing) {
                 ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
                     if stackedItemIDSet.contains(item.id) {
@@ -440,6 +440,8 @@ private extension ReadCalendarCoverFullscreenDeckStage {
             .frame(maxWidth: .infinity, alignment: .center)
             .padding(.vertical, Spacing.base)
         }
+        .scrollIndicators(.hidden, axes: .vertical)
+        .scrollBounceBehavior(.always)
     }
 
     /// 折叠态：与日格封面组件使用同源算法，保证打开首帧摆放一致。

@@ -1,15 +1,28 @@
 # XMRatingBar 使用说明
 
 ## 组件定位
-- 源码路径：`xmnote/UIComponents/Foundation/XMRatingBar.swift`
+- 源码路径：
+  - `xmnote/UIComponents/Foundation/XMRatingBar.swift`
+  - `xmnote/UIComponents/Foundation/XMBookRatingSheet.swift`
 - 角色：统一书籍评分展示与评分输入组件，对齐 Android `FluentRatingBar` 的圆润星形与半星/整星步进语义。
 - 边界：组件只负责评分星形、步进、触摸写回和无障碍调整；不负责业务保存、表单校验、提示文案或评分来源转换之外的业务解释。
+- `XMBookRatingSheet` 在此基础上统一单本书异步保存门闩、失败弹窗和成功后关闭行为。
 
 ## 快速接入
 ```swift
 XMRatingBar(
     score: book.score,
     preset: .listSmall
+)
+```
+
+需要直接编辑单本书评分时使用统一 Sheet：
+
+```swift
+XMBookRatingSheet(
+    bookTitle: book.name,
+    initialScore: book.score,
+    onSubmit: viewModel.updateBookScore
 )
 ```
 
@@ -38,6 +51,14 @@ XMRatingBar(
 | --- | --- | --- |
 | `XMRatingBarStep` | `.one` / `.half` | 整星或半星步进。 |
 | `XMRatingBarPreset` | `.listSmall` / `.capsule` / `.form` / `.dialog` | 分别用于列表、胶囊信息位、表单与中心弹窗。 |
+
+### XMBookRatingSheet
+
+| 参数 | 说明 |
+| --- | --- |
+| `bookTitle` | Sheet 顶部显示的书名。 |
+| `initialScore` | Android 对齐的 `0...50` 初始分值，异常历史值会在展示层收敛。 |
+| `onSubmit` | `@MainActor async throws` 保存闭包；执行期间禁止重复提交和交互关闭。 |
 
 ## 示例
 ### 示例 1：列表只读评分
@@ -91,5 +112,9 @@ XMRatingBar(
 
 ### 4) 组件会自动限制异常值吗？
 会。`value` 会被限制在 `0...starCount`，`starCount` 至少为 1；拖动位置也会被限制在组件宽度范围内。
+
+### 5) 保存失败后谁负责反馈？
+
+使用 `XMBookRatingSheet` 时由 Sheet 通过 `XMSystemAlert` 展示失败并保留草稿；只使用 `XMRatingBar` 时由业务 owner 负责写入、回滚和反馈。
 
 [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md

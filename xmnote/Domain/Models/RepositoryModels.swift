@@ -1,8 +1,8 @@
 import Foundation
 
 /**
- * [INPUT]: 依赖 Foundation 提供跨层数据结构
- * [OUTPUT]: 对外提供 NoteDetailPayload、NoteEditor* 编辑模型族、BackupServerFormInput
+ * [INPUT]: 依赖 Foundation 与 ChapterManagementPolicy 提供跨层值语义、章节深度与路径规则
+ * [OUTPUT]: 对外提供 NoteDetailPayload、含层级路径的 NoteEditorChapterOption、图片额度编辑模型族、BackupServerFormInput
  * [POS]: Domain 层仓储输入输出模型，隔离 ViewModel 与 Infra 细节
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -47,10 +47,45 @@ struct NoteEditorSeed: Hashable, Codable, Sendable {
     )
 }
 
-/// 书摘编辑页的章节候选项。
+/// 书摘编辑页的章节候选项；标题保持原值，层级与路径用于在平铺选择器中消除同名歧义。
 struct NoteEditorChapterOption: Identifiable, Hashable, Codable, Sendable {
     let id: Int64
     let title: String
+    let parentID: Int64?
+    let level: Int?
+    let pathText: String?
+    let isStarred: Bool?
+
+    /// 兼容旧调用方仅有 id/title 的候选项，新读取路径会补齐树结构语义。
+    init(
+        id: Int64,
+        title: String,
+        parentID: Int64? = nil,
+        level: Int? = nil,
+        pathText: String? = nil,
+        isStarred: Bool? = nil
+    ) {
+        self.id = id
+        self.title = title
+        self.parentID = parentID
+        self.level = level
+        self.pathText = pathText
+        self.isStarred = isStarred
+    }
+
+    var displayLevel: Int {
+        min(
+            ChapterManagementPolicy.maximumDepth,
+            max(1, level ?? (parentID == nil || parentID == 0 ? 1 : 2))
+        )
+    }
+
+    var parentPathText: String {
+        guard let pathText, !pathText.isEmpty else { return "" }
+        let components = pathText.components(separatedBy: ChapterManagementPolicy.pathSeparator)
+        guard components.count > 1 else { return "" }
+        return components.dropLast().joined(separator: ChapterManagementPolicy.pathSeparator)
+    }
 }
 
 /// 书摘编辑页的标签候选项。
@@ -66,6 +101,12 @@ enum NoteEditorImageUploadState: String, Codable, Sendable {
     case failed
 }
 
+/// 编辑器图片来源，区分数据库既有图片与本次尚未计入每日额度的新图片。
+nonisolated enum EditorImageOrigin: String, Codable, Hashable, Sendable {
+    case persisted
+    case newInDraft
+}
+
 /// 书摘附图条目的统一模型，兼容远端已保存图与本地暂存图。
 struct NoteEditorImageItem: Identifiable, Hashable, Codable, Sendable {
     let id: String
@@ -73,18 +114,21 @@ struct NoteEditorImageItem: Identifiable, Hashable, Codable, Sendable {
     let localFilePath: String?
     let createdDate: Int64
     let uploadState: NoteEditorImageUploadState
+    let origin: EditorImageOrigin
 
     nonisolated init(
         id: String,
         remoteURL: String?,
         localFilePath: String?,
         createdDate: Int64,
-        uploadState: NoteEditorImageUploadState? = nil
+        uploadState: NoteEditorImageUploadState? = nil,
+        origin: EditorImageOrigin = .persisted
     ) {
         self.id = id
         self.remoteURL = remoteURL
         self.localFilePath = localFilePath
         self.createdDate = createdDate
+        self.origin = origin
         if let uploadState {
             self.uploadState = uploadState
         } else if let remoteURL, !remoteURL.isEmpty {
@@ -100,6 +144,7 @@ struct NoteEditorImageItem: Identifiable, Hashable, Codable, Sendable {
         case localFilePath
         case createdDate
         case uploadState
+        case origin
     }
 
     nonisolated init(from decoder: any Decoder) throws {
@@ -109,12 +154,16 @@ struct NoteEditorImageItem: Identifiable, Hashable, Codable, Sendable {
         let localFilePath = try container.decodeIfPresent(String.self, forKey: .localFilePath)
         let createdDate = try container.decode(Int64.self, forKey: .createdDate)
         let uploadState = try container.decodeIfPresent(NoteEditorImageUploadState.self, forKey: .uploadState)
+        // 兼容旧自动草稿：本地缓存只会由编辑会话新建，因此可作为结构化回退；不依赖易变 ID 前缀。
+        let origin = try container.decodeIfPresent(EditorImageOrigin.self, forKey: .origin)
+            ?? (localFilePath?.isEmpty == false ? .newInDraft : .persisted)
         self.init(
             id: id,
             remoteURL: remoteURL,
             localFilePath: localFilePath,
             createdDate: createdDate,
-            uploadState: uploadState
+            uploadState: uploadState,
+            origin: origin
         )
     }
 
@@ -125,6 +174,7 @@ struct NoteEditorImageItem: Identifiable, Hashable, Codable, Sendable {
         try container.encodeIfPresent(localFilePath, forKey: .localFilePath)
         try container.encode(createdDate, forKey: .createdDate)
         try container.encode(uploadState, forKey: .uploadState)
+        try container.encode(origin, forKey: .origin)
     }
 
     var previewPath: String? {
@@ -145,7 +195,8 @@ struct NoteEditorImageItem: Identifiable, Hashable, Codable, Sendable {
             remoteURL: remoteURL,
             localFilePath: localFilePath,
             createdDate: createdDate,
-            uploadState: uploadState
+            uploadState: uploadState,
+            origin: origin
         )
     }
 
@@ -155,7 +206,20 @@ struct NoteEditorImageItem: Identifiable, Hashable, Codable, Sendable {
             remoteURL: remoteURL,
             localFilePath: localFilePath,
             createdDate: createdDate,
-            uploadState: .success
+            uploadState: .success,
+            origin: origin
+        )
+    }
+
+    /// 内容保存成功并完成额度登记后，把新图转换为数据库既有语义，避免同一会话重复计数。
+    nonisolated func markingPersisted() -> NoteEditorImageItem {
+        NoteEditorImageItem(
+            id: id,
+            remoteURL: remoteURL,
+            localFilePath: remoteURL?.isEmpty == false ? nil : localFilePath,
+            createdDate: createdDate,
+            uploadState: uploadState,
+            origin: .persisted
         )
     }
 }
@@ -181,6 +245,7 @@ struct NoteEditorDraft: Equatable, Codable, Sendable {
     var selectedTags: [NoteEditorTagOption]
     var imageItems: [NoteEditorImageItem]
     var lastAutoSaveTime: Int64
+    var imageQuotaReservationID: String? = nil
 }
 
 /// 书摘编辑页首屏引导数据，聚合基础草稿、恢复草稿与可选项。

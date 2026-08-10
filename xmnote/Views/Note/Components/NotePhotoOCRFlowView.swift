@@ -582,7 +582,7 @@ private struct OCRCropRecognitionScreen: View {
         .navigationBarTitleDisplayMode(.inline)
         .navigationBarBackButtonHidden(true)
         .toolbar {
-            ToolbarItem(placement: .topBarLeading) {
+            ToolbarItem(placement: .navigation) {
                 TopBarBackButton(
                     action: handleBackAction,
                     foregroundColor: Self.darkForegroundPrimary,

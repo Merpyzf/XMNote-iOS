@@ -94,6 +94,7 @@ struct CalendarHeatmap: View {
     private let maximumRowCount: Int
     private let statisticsDataType: HeatmapStatisticsDataType
     private let style: CalendarHeatmapStyle
+    private let isScrollEnabled: Bool
 
     @Environment(\.displayScale) private var displayScale
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
@@ -102,49 +103,52 @@ struct CalendarHeatmap: View {
     init(
         months: [CalendarHeatmapMonth],
         statisticsDataType: HeatmapStatisticsDataType = .all,
-        style: CalendarHeatmapStyle = .readingDetail
+        style: CalendarHeatmapStyle = .readingDetail,
+        isScrollEnabled: Bool = true
     ) {
         let layouts = months.map(CalendarHeatmapMonthLayout.init(month:))
         self.monthLayouts = layouts
         self.maximumRowCount = layouts.map(\.rowCount).max() ?? 0
         self.statisticsDataType = statisticsDataType
         self.style = style
+        self.isScrollEnabled = isScrollEnabled
     }
 
+    @ViewBuilder
     var body: some View {
         if !monthLayouts.isEmpty {
-            ScrollViewReader { proxy in
-                ScrollView(.horizontal, showsIndicators: false) {
-                    LazyHStack(alignment: .top, spacing: style.monthSpacing) {
-                        ForEach(monthLayouts) { layout in
-                            CalendarHeatmapMonthView(
-                                layout: layout,
-                                maximumRowCount: maximumRowCount,
-                                cellSize: cellSize,
-                                statisticsDataType: statisticsDataType,
-                                style: style,
-                                typographyTraits: typographyTraits
+            if isScrollEnabled {
+                ScrollViewReader { proxy in
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        LazyHStack(alignment: .top, spacing: style.monthSpacing) {
+                            ForEach(monthLayouts) { layout in
+                                monthView(for: layout)
+                                    .id(layout.id)
+                            }
+                        }
+                        .environment(\.layoutDirection, .leftToRight)
+                    }
+                    .id(initialScrollRequest)
+                    .frame(height: contentHeight, alignment: .top)
+                    .scrollBounceBehavior(.basedOnSize)
+                    // SwiftUI 在主线程执行滚动任务；月份策略变化会取消旧任务，request 身份保证仅最新请求定位，热度与配色刷新不会触发竞态式回跳。
+                    .task(id: initialScrollRequest) {
+                        guard let target = initialScrollRequest.target else { return }
+                        var transaction = Transaction()
+                        transaction.animation = nil
+                        withTransaction(transaction) {
+                            proxy.scrollTo(
+                                target,
+                                anchor: initialScrollRequest.shouldShowEarliest ? .leading : .trailing
                             )
-                            .id(layout.id)
                         }
                     }
+                }
+            } else if let staticLayout {
+                monthView(for: staticLayout)
                     .environment(\.layoutDirection, .leftToRight)
-                }
-                .id(initialScrollRequest)
-                .frame(height: contentHeight, alignment: .top)
-                .scrollBounceBehavior(.basedOnSize)
-                // SwiftUI 在主线程执行滚动任务；月份策略变化会取消旧任务，request 身份保证仅最新请求定位，热度与配色刷新不会触发竞态式回跳。
-                .task(id: initialScrollRequest) {
-                    guard let target = initialScrollRequest.target else { return }
-                    var transaction = Transaction()
-                    transaction.animation = nil
-                    withTransaction(transaction) {
-                        proxy.scrollTo(
-                            target,
-                            anchor: initialScrollRequest.shouldShowEarliest ? .leading : .trailing
-                        )
-                    }
-                }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .frame(height: contentHeight, alignment: .top)
             }
         }
     }
@@ -187,6 +191,22 @@ private extension CalendarHeatmap {
         return CalendarHeatmapScrollRequest(
             monthIDs: monthLayouts.map(\.id),
             shouldShowEarliest: shouldShowEarliest
+        )
+    }
+
+    var staticLayout: CalendarHeatmapMonthLayout? {
+        initialScrollRequest.shouldShowEarliest ? monthLayouts.first : monthLayouts.last
+    }
+
+    /// 创建单月内容；静态长图绕开 ScrollView/LazyHStack 的离屏快照空白，同时保持与交互页相同的格子算法。
+    func monthView(for layout: CalendarHeatmapMonthLayout) -> some View {
+        CalendarHeatmapMonthView(
+            layout: layout,
+            maximumRowCount: maximumRowCount,
+            cellSize: cellSize,
+            statisticsDataType: statisticsDataType,
+            style: style,
+            typographyTraits: typographyTraits
         )
     }
 }

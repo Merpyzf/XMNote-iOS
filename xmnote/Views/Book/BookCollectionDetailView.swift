@@ -1,6 +1,6 @@
 /**
- * [INPUT]: 依赖 RepositoryContainer、AppNavigationCoordinator 与 BookCollectionDetailViewModel
- * [OUTPUT]: 对外提供 BookCollectionDetailView，承载手动书单与年度书单详情、自动同步边界、导出入口、书籍行操作、书籍元信息编辑、收藏理由/年度点评编辑和系统弹窗
+ * [INPUT]: 依赖 RepositoryContainer、AppNavigationCoordinator 与 BookCollectionDetailViewModel，注入书架与封面上传仓储
+ * [OUTPUT]: 对外提供 BookCollectionDetailView，承载书单详情、顶部添加、自动同步、导出分享、书籍行操作、元信息与收藏理由/年度点评编辑
  * [POS]: Views/Book 的书单详情页面壳层，被 BookRoute.collectionDetail 导航目标消费
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -69,8 +69,6 @@ private struct BookCollectionDetailContentView: View {
     @State private var pendingBookPickerTask: BookCollectionPickerTask?
     @State private var showsCollectionSummary = false
     @State private var contentTrayTop: CGFloat = .nan
-    @State private var floatingAddBookOrnamentHeight: CGFloat = .zero
-    @State private var floatingAddBookContentInset: CGFloat = .zero
     #if DEBUG
     @State private var headerVisualStyle: BookCollectionHeaderVisualStyle = .editorialDesk
     #endif
@@ -85,6 +83,17 @@ private struct BookCollectionDetailContentView: View {
         .navigationTitle("")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
+            if showsAddBookButton {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button(action: presentBookPicker) {
+                        Image(systemName: "plus")
+                    }
+                    .disabled(!canUseAddBookButton)
+                    .accessibilityLabel("添加书籍")
+                    .accessibilityIdentifier("book.collection.detail.add")
+                }
+            }
+
             if shouldShowMoreMenu {
                 ToolbarItem(placement: .topBarTrailing) {
                     Menu {
@@ -174,7 +183,7 @@ private struct BookCollectionDetailContentView: View {
             }
         }
         .sheet(item: $viewModel.generatedFile) { file in
-            ActivityShareSheet(activityItems: file.urls)
+            XMActivityShareSheet(activityItems: file.urls)
                 .presentationDetents([.medium, .large])
         }
         .xmSystemAlert(item: $viewModel.removeConfirmation) { confirmation in
@@ -328,26 +337,11 @@ private struct BookCollectionDetailContentView: View {
             .listStyle(.plain)
             .scrollContentBackground(.hidden)
             .contentMargins(.top, Spacing.none, for: .scrollContent)
-            .contentMargins(.bottom, floatingAddBookContentInset, for: .scrollContent)
             .scrollEdgeEffectStyle(.soft, for: .top)
             .environment(\.defaultMinListRowHeight, 1)
             .environment(\.editMode, $editMode)
             .coordinateSpace(.named(BookCollectionContentTrayCoordinateSpace.name))
             .accessibilityIdentifier("book.collection.detail.list")
-        }
-        .overlay(alignment: .bottom) {
-            floatingAddBookOverlay
-        }
-        .onPreferenceChange(BookCollectionFloatingAddBookContentInsetPreferenceKey.self) { inset in
-            updateFloatingAddBookContentInset(inset)
-        }
-        .onPreferenceChange(ImmersiveBottomChromeHeightPreferenceKey.self) { height in
-            updateFloatingAddBookOrnamentHeight(height)
-        }
-        .onChange(of: showsFloatingAddBookButton) { _, isVisible in
-            guard !isVisible else { return }
-            updateFloatingAddBookOrnamentHeight(.zero)
-            updateFloatingAddBookContentInset(.zero)
         }
     }
 
@@ -358,85 +352,17 @@ private struct BookCollectionDetailContentView: View {
         }
     }
 
-    /// 同步底部悬浮添加入口的滚动避让高度，避免长书单最后一项被遮挡。
-    private func updateFloatingAddBookContentInset(_ inset: CGFloat) {
-        guard inset.isFinite, abs(floatingAddBookContentInset - inset) > 0.5 else { return }
-        floatingAddBookContentInset = inset
-    }
-
-    /// 同步底部悬浮按钮实测高度，用于下一帧计算沉浸托底尺寸。
-    private func updateFloatingAddBookOrnamentHeight(_ height: CGFloat) {
-        guard height.isFinite, abs(floatingAddBookOrnamentHeight - height) > 0.5 else { return }
-        floatingAddBookOrnamentHeight = height
-    }
-
-    @ViewBuilder
-    private var floatingAddBookOverlay: some View {
-        GeometryReader { proxy in
-            let metrics = floatingAddBookMetrics(safeAreaBottomInset: proxy.safeAreaInsets.bottom)
-            let ornamentWidth = max(proxy.size.width - Spacing.screenEdge * 2, .zero)
-
-            if showsFloatingAddBookButton {
-                ImmersiveBottomChromeOverlay(
-                    metrics: metrics,
-                    surfaceColor: Color.surfaceCard.opacity(0.78),
-                    horizontalPadding: Spacing.screenEdge
-                ) {
-                    HStack {
-                        Spacer(minLength: Spacing.none)
-
-                        BookCollectionFloatingAddBookButton(
-                            isEnabled: canUseFloatingAddBookButton,
-                            action: presentBookPicker
-                        )
-                    }
-                    .frame(width: ornamentWidth, alignment: .trailing)
-                    .background {
-                        GeometryReader { ornamentProxy in
-                            Color.clear
-                                .preference(
-                                    key: ImmersiveBottomChromeHeightPreferenceKey.self,
-                                    value: ornamentProxy.size.height
-                                )
-                        }
-                    }
-                }
-                .preference(
-                    key: BookCollectionFloatingAddBookContentInsetPreferenceKey.self,
-                    value: metrics.readableInset
-                )
-                .transition(.opacity.combined(with: .move(edge: .bottom)))
-            } else {
-                Color.clear
-                    .preference(key: BookCollectionFloatingAddBookContentInsetPreferenceKey.self, value: .zero)
-            }
-        }
-        .allowsHitTesting(showsFloatingAddBookButton)
-        .animation(reduceMotion ? nil : .smooth(duration: 0.18), value: showsFloatingAddBookButton)
-    }
-
-    /// 依据安全区和按钮实测高度计算底部浮层的渐变托底与滚动补偿。
-    private func floatingAddBookMetrics(safeAreaBottomInset: CGFloat) -> ImmersiveBottomChromeMetrics {
-        ImmersiveBottomChromeMetrics.make(
-            measuredOrnamentHeight: floatingAddBookOrnamentHeight,
-            safeAreaBottomInset: safeAreaBottomInset,
-            ornamentMinimumTouchHeight: ImmersiveBottomChromeStyle.controlHeight,
-            ornamentTopPadding: Spacing.tight,
-            readableInsetExtra: Spacing.double
-        )
-    }
-
-    private var showsFloatingAddBookButton: Bool {
+    private var showsAddBookButton: Bool {
         viewModel.isManual && viewModel.detail != nil && !isReordering
     }
 
-    private var canUseFloatingAddBookButton: Bool {
+    private var canUseAddBookButton: Bool {
         viewModel.activeAction == nil
     }
 
     /// 展示现有书籍选择器，保持添加入口和业务流程解耦。
     private func presentBookPicker() {
-        guard canUseFloatingAddBookButton else { return }
+        guard canUseAddBookButton else { return }
         showsBookPicker = true
     }
 
@@ -716,15 +642,6 @@ private enum BookCollectionPickerTask: Hashable {
 
 private enum BookCollectionContentTrayCoordinateSpace {
     static let name = "book.collection.detail.contentTray"
-}
-
-/// 书单详情底部悬浮添加入口的可读底距偏好，驱动 `List` 底部内容避让。
-private struct BookCollectionFloatingAddBookContentInsetPreferenceKey: PreferenceKey {
-    static var defaultValue: CGFloat = .zero
-
-    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
-        value = max(value, nextValue())
-    }
 }
 
 private enum BookCollectionContentRowPosition {

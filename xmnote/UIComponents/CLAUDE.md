@@ -8,7 +8,11 @@
 - `SurfaceComponents.swift`: CardContainer（圆角/描边可配置）、EmptyStateView、HomeTopHeaderGradient 通用容器组件
 - `HighlightColorPicker.swift`: 高亮 ARGB 色值网格选择组件
 - `XMBookCover.swift`: 统一书籍封面组件（固定宽高比 0.7 + `.fill` Crop 裁切 + 占位图 + 可配边框，支持 responsive/fixedWidth/fixedHeight/fixedSize 四种尺寸模式）
+- `XMBookGroupCover.swift`: 书籍分组组合封面组件（按 0/1/2/3/4+ 封面数量选择管理态布局，并提供列表、书盒与规整网格样式）
+- `XMActivityShareSheet.swift`: 系统分享会话 payload 与 `UIActivityViewController` 页面级 Sheet 桥接
+- `XMSystemAlert.swift`: UIKit 系统中心弹窗桥接（descriptor、轻输入、菜单/转场占用时的可取消呈现重试）
 - `XMYearMonthPickerSheet.swift`: 项目级年月/年份选择 Sheet（固定标题栏、年月/年份两种模式、动态字体自适应）
+- `XMRatingBar.swift` / `XMBookRatingSheet.swift` / `XMFluentStarIcon.swift`: 评分展示输入、单书异步评分 Sheet 与星形绘制组件组
 - `XMRemoteImage.swift`: 统一远程图片组件（静态图 + GIF 探测/降级 + 占位）
 - `XMGIFImageView.swift`: GIF 动画承载桥接组件（基于 Gifu）
 - `XMScopeSelector.swift`: 范围选择控件（2-5 项等宽同屏、6+ 内部横向滚动、数量 badge、跟手拖拽、内容流/浮层玻璃两种样式）
@@ -20,6 +24,8 @@
 - `ExpandableRichText.swift`: 可展开/收起 HTML 富文本组件（完整态 RichText + 收起态轻量预览双通道）
 - `ImmersiveBottomChrome.swift`: 底部沉浸遮罩与悬浮 ornament 组件（统一渐变托底、安全区延展、滚动补偿与图标热区）
 - `XMToast.swift`: 全局轻量消息提示基建（统一 Toast 角色、时长、位置、动效、布局与 PopupView 封装）
+- `XMSettingsSheetComponents.swift`: 通用设置 Sheet 组件组（标题栏、分组卡片、跳转行、菜单行与开关行）
+- `NoteReviewPaging/`: 书摘回顾分页卡组组件（BigUIPaging 封装、卡组动效规格、后层内容预览与堆叠露出约束）
 
 ## TopBar/
 
@@ -35,6 +41,7 @@
 - `HorizontalPagingHost.swift`: 通用横向分页宿主（分页吸附、选中同步、窗口化懒挂载与页级生命周期）
 - `SubtabBootstrapCoordinator.swift`: 通用二级页启动协调器（warmup 去重、启动阶段跟踪）
 - `TopSwitcher.swift`: 顶部标题/标签切换组件（hardSwitch 下路由 selection 与视觉 selection 同帧无动画写入）
+- `XMInlineTabBar.swift`: 内容区 2-5 项互斥子页面切换组件（业务内容硬切、选中胶囊独立动效、Reduce Motion 降级）
 
 ## Charts/
 

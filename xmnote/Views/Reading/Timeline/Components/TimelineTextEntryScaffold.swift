@@ -1,14 +1,21 @@
 /**
  * [INPUT]: 依赖 DesignTokens 设计令牌、SwiftSoup HTML 文本提取、SwiftUI openURL 环境
- * [OUTPUT]: 对外提供 TimelineCardHeaderBar、TimelineCardDivider、TimelineInlineTag、TimelineCardFooterRow 与 TimelineMeaningfulText
- * [POS]: Reading/Timeline 页面私有共享骨架，统一书摘/书评/相关内容类文本卡片的头部、分割线、尾部标签行与空字段判定
+ * [OUTPUT]: 对外提供 TimelineCardPresentationStyle、TimelineCardHeaderBar、TimelineBookSourceFooter、TimelineCardDivider、TimelineInlineTag、TimelineCardFooterRow 与 TimelineMeaningfulText
+ * [POS]: Reading/Timeline 页面私有共享骨架，统一文本卡片的首页头部、每日详情来源尾注、分割线、标签行与空字段判定
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
 import SwiftUI
 import SwiftSoup
 
-/// 时间线文本类卡片共享头部，统一图标、书名与时间排布节奏。
+/// 文本卡片上下文展示方式；首页保留完整头部，每日详情将来源书名置于内容之后。
+enum TimelineCardPresentationStyle: Equatable {
+    case standard
+    case contentFirst
+    case hidden
+}
+
+/// 首页时间线文本卡片共享头部，保持事件类型、来源书籍和时间的既有排布。
 struct TimelineCardHeaderBar: View {
     let iconSystemName: String
     let timestamp: Int64
@@ -22,10 +29,7 @@ struct TimelineCardHeaderBar: View {
                 .foregroundStyle(Color.brand)
 
             if let displayBookName {
-                Text("《\(displayBookName)》")
-                    .font(AppTypography.caption)
-                    .foregroundStyle(Color.textHint)
-                    .lineLimit(1)
+                bookTitle(displayBookName, color: .textHint)
             }
 
             Spacer(minLength: Spacing.cozy)
@@ -35,6 +39,15 @@ struct TimelineCardHeaderBar: View {
                 .monospacedDigit()
                 .foregroundStyle(Color.textHint)
         }
+        .accessibilityElement(children: .combine)
+    }
+
+    /// 书名统一使用中文书名号，不附加作者、封面或跳转暗示。
+    private func bookTitle(_ title: String, color: Color) -> some View {
+        Text("《\(title)》")
+            .font(AppTypography.caption)
+            .foregroundStyle(color)
+            .lineLimit(1)
     }
 
     private var displayBookName: String? {
@@ -59,6 +72,33 @@ struct TimelineCardHeaderBar: View {
     }()
 }
 
+/// 每日阅读详情的书籍来源尾注；只保留书名号语义，并确保辅助功能读取完整来源。
+struct TimelineBookSourceFooter: View {
+    let bookName: String
+    var fallbackBookTitle: String? = nil
+
+    var body: some View {
+        Text("《\(displayBookName)》")
+            .font(NoteExcerptTypography.footer)
+            .foregroundStyle(Color.textSecondary)
+            .lineLimit(1)
+            .truncationMode(.tail)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel("来源书籍，《\(displayBookName)》")
+    }
+
+    private var displayBookName: String {
+        let primaryName = TimelineMeaningfulText.trimmedText(bookName)
+        if !primaryName.isEmpty {
+            return primaryName
+        }
+
+        let fallbackName = TimelineMeaningfulText.trimmedText(fallbackBookTitle ?? "")
+        return fallbackName.isEmpty ? "未命名书籍" : fallbackName
+    }
+}
+
 /// 时间线文本类卡片共享分割线，对齐书摘头部与正文之间的视觉节奏。
 struct TimelineCardDivider: View {
     var body: some View {
@@ -68,7 +108,7 @@ struct TimelineCardDivider: View {
     }
 }
 
-/// 时间线内联标签，对齐书摘标签的间距与胶囊样式。
+/// 时间线内联标签，以系统中性填充承接分类语义，避免品牌色或带色背景制造脏感。
 struct TimelineInlineTag: View {
     let text: String
 
@@ -78,7 +118,7 @@ struct TimelineInlineTag: View {
             .foregroundStyle(Color.textSecondary)
             .padding(.horizontal, Spacing.cozy)
             .padding(.vertical, Spacing.compact)
-            .background(Color.tagBackground, in: Capsule())
+            .background(Color.controlFillSecondary, in: Capsule())
     }
 }
 
@@ -128,7 +168,7 @@ struct TimelineCardFooterRow: View {
 }
 
 /// 时间线文本有效性辅助，负责 trim、HTML 去标签与 URL 字符串清洗。
-enum TimelineMeaningfulText {
+nonisolated enum TimelineMeaningfulText {
 
     /// 统一处理空白字符，避免标题、标签、URL 仅包含空格时被误判为有内容。
     static func trimmedText(_ text: String) -> String {

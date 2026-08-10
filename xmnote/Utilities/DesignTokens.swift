@@ -5,7 +5,7 @@
 //  Created by 王珂 on 2026/2/10.
 //
 //  [INPUT]: 无外部依赖，仅依赖 SwiftUI 框架
-//  [OUTPUT]: Color 语义扩展（含阅读日历主题/事件条 pending 态/月总结图标渐变语义、菜单前景语义、Dialog 表层语义）、Spacing / CornerRadius / CardStyle 常量、AppTypography、CalendarHeatmapTypography 与 MonthlyReadingChartTypography 排版令牌、Color(hex:) / Color(light:dark:) / Color(rgbaHex:) 构造器
+//  [OUTPUT]: Color 语义扩展、SwiftUI/UIKit 同源阅读排版、阅读日历与内容编辑语义、Spacing / CornerRadius / CardStyle 常量、CalendarHeatmapTypography、MonthlyReadingChartTypography 与组件组合令牌
 //  [POS]: Utilities 模块的设计令牌中枢，全局 UI 一致性的单一真相源
 //  [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
 
@@ -13,7 +13,7 @@ import SwiftUI
 import UIKit
 
 /// 阅读日历月总结图标的渐变角色枚举，不同角色对应不同色相方案。
-enum ReadCalendarSummaryGradientRole {
+enum ReadCalendarSummaryGradientRole: Hashable {
     case activity
     case completion
     case momentum
@@ -63,6 +63,8 @@ extension Color {
     static let surfaceSheet = Color(uiColor: .systemGroupedBackground)
     /// 次级弱填充，承接圆形选项、轻量按钮与弱控件底。
     static let controlFillSecondary = Color(uiColor: .tertiarySystemFill)
+    /// 批注与个人想法的弱中性表层，在内容卡片内建立分组但不抢占正文层级。
+    static let surfaceAnnotation = controlFillSecondary.opacity(0.46)
 }
 
 // MARK: - Text
@@ -108,6 +110,8 @@ extension Color {
     static let surfaceBorderDefault = Color(uiColor: .separator)
     /// 三级弱边框（弱化层级、避免与主信息竞争）
     static let surfaceBorderSubtle = Color(uiColor: .separator).opacity(0.72)
+    /// 卡片内部弱分隔线，仅表达内容分组，不与卡片边框竞争。
+    static let surfaceDividerSubtle = Color(uiColor: .separator).opacity(0.28)
     /// 图表背景轨道色（柱图零值占位 / 背景 bar），避免与容器边框争抢视觉语义。
     static let chartBarTrack = Color(light: Color(hex: 0xC7CCD3).opacity(0.22),
                                      dark: Color.white.opacity(0.06))
@@ -209,6 +213,24 @@ extension Color {
         dark: Color(hex: 0xA6B3C2)
     )
 
+    /// 阅读日历统计中的正向变化，只用于变化数字，不用于标签和单位。
+    static let readCalendarSummaryDeltaUp = Color(hex: 0x4CAF50, alpha: 0.86)
+
+    /// 阅读日历统计中的负向变化，使用低刺激橙色避免和破坏性操作混淆。
+    static let readCalendarSummaryDeltaDown = Color(
+        light: Color(hex: 0xD4821B, alpha: 0.92),
+        dark: Color(hex: 0xDE8E28, alpha: 0.92)
+    )
+
+    /// 阅读日历统计中的持平变化，维持次级信息层级。
+    static let readCalendarSummaryDeltaFlat = Color.textSecondary.opacity(0.72)
+
+    /// 阅读时长累计数字的强调色，区别于趋势和可交互品牌色。
+    static let readCalendarSummaryDurationAccent = Color(
+        light: Color(hex: 0xB96040, alpha: 0.96),
+        dark: Color(hex: 0xE79A7C, alpha: 0.96)
+    )
+
     /// 阅读日历选中日背景
     static let readCalendarSelectionFill = Color(
         light: Color(hex: 0xE7EDF7),
@@ -221,11 +243,64 @@ extension Color {
         dark: Color(hex: 0x4C617A)
     )
 
+    /// 阅读日历日期选中态背景，以品牌色透明状态层适配所在表面，避免预混灰绿产生脏色块。
+    static let readCalendarSelectedDayFill = Color(
+        light: Color.brand.opacity(0.18),
+        dark: Color.brand.opacity(0.24)
+    )
+
+    /// 阅读日历日期选中态数字色，复用品牌深浅语义以避免纯黑并保证双主题对比度。
+    static let readCalendarSelectedDayText = Color(
+        light: Color.brandDarkest,
+        dark: Color.brand
+    )
+
     /// 阅读日历“今天”标记色
     static let readCalendarTodayMark = Color(
         light: Color(hex: 0x4FAF82),
         dark: Color(hex: 0x77D6A9)
     )
+
+    /// 阅读日历年度热力图空白层级（与 Android 日历语义色一致）。
+    static let readCalendarHeatmapNone = Color(
+        light: Color(hex: 0xEFF0F4),
+        dark: Color(hex: 0x1B1D1B)
+    )
+
+    /// 阅读日历年度热力图一级强度。
+    static let readCalendarHeatmapVeryLess = Color(
+        light: Color(hex: 0x9BE9A8),
+        dark: Color(hex: 0x1F5E39)
+    )
+
+    /// 阅读日历年度热力图二级强度。
+    static let readCalendarHeatmapLess = Color(
+        light: Color(hex: 0x41C462),
+        dark: Color(hex: 0x2D8A4E)
+    )
+
+    /// 阅读日历年度热力图三级强度。
+    static let readCalendarHeatmapMore = Color(
+        light: Color(hex: 0x2FA04F),
+        dark: Color(hex: 0x3DBB68)
+    )
+
+    /// 阅读日历年度热力图四级强度。
+    static let readCalendarHeatmapVeryMore = Color(
+        light: Color(hex: 0x226E39),
+        dark: Color(hex: 0x7AE08F)
+    )
+
+    /// 按阅读日历年度热力等级返回模块专用颜色，不改变其他统计热力图的品牌色体系。
+    static func readCalendarHeatmapColor(for level: HeatmapLevel) -> Color {
+        switch level {
+        case .none: readCalendarHeatmapNone
+        case .veryLess: readCalendarHeatmapVeryLess
+        case .less: readCalendarHeatmapLess
+        case .more: readCalendarHeatmapMore
+        case .veryMore: readCalendarHeatmapVeryMore
+        }
+    }
 
     /// 阅读日历事件条文本色
     static let readCalendarEventText = Color(
@@ -291,6 +366,67 @@ extension Color {
                 end: Color(light: Color(hex: 0x376DCC), dark: Color(hex: 0x5483DC))
             )
         }
+    }
+
+    /// 年度阅读分布的月份颜色，与 Android 统计树图保持同一语义色板。
+    static func readCalendarMonthContributionColor(for month: Int) -> Color {
+        guard let colorValue = readCalendarMonthContributionColorValue(for: month) else {
+            return .textSecondary
+        }
+        return Color(hex: colorValue)
+    }
+
+    /// 年度阅读分布的月份渐变，亮暗轨迹与 Android 树图保持一致。
+    static func readCalendarMonthContributionGradientSpec(for month: Int) -> ReadCalendarSummaryGradientSpec {
+        guard let colorValue = readCalendarMonthContributionColorValue(for: month) else {
+            return ReadCalendarSummaryGradientSpec(
+                start: .textSecondary,
+                mid: .textSecondary,
+                end: .textSecondary
+            )
+        }
+        return ReadCalendarSummaryGradientSpec(
+            start: readCalendarMonthContributionMixedColor(
+                colorValue,
+                targetComponent: 1,
+                fraction: 0.18
+            ),
+            mid: Color(hex: colorValue),
+            end: readCalendarMonthContributionMixedColor(
+                colorValue,
+                targetComponent: 0,
+                fraction: 0.16
+            )
+        )
+    }
+
+    /// 返回 Android 月份色板中的 RGB 值，供纯色与渐变共享同一颜色来源。
+    private static func readCalendarMonthContributionColorValue(for month: Int) -> UInt? {
+        let palette: [UInt] = [
+            0xA85662, 0x8C79B8, 0x5FAEBA, 0x9DB1BB,
+            0x6EA77B, 0xD8A8B0, 0xC86872, 0x91AD69,
+            0x5F82BE, 0xC47A99, 0xC39A52, 0x62A6A3
+        ]
+        guard (1...palette.count).contains(month) else { return nil }
+        return palette[month - 1]
+    }
+
+    /// 按 sRGB 分量线性插值月份基础色，复现 Android `lerp` 的亮部与暗部色阶。
+    private static func readCalendarMonthContributionMixedColor(
+        _ colorValue: UInt,
+        targetComponent: Double,
+        fraction: Double
+    ) -> Color {
+        let red = Double((colorValue >> 16) & 0xFF) / 255
+        let green = Double((colorValue >> 8) & 0xFF) / 255
+        let blue = Double(colorValue & 0xFF) / 255
+        return Color(
+            .sRGB,
+            red: red + (targetComponent - red) * fraction,
+            green: green + (targetComponent - green) * fraction,
+            blue: blue + (targetComponent - blue) * fraction,
+            opacity: 1
+        )
     }
 }
 
@@ -418,6 +554,7 @@ enum AppTypography {
     static let bodyMedium: Font = .body.weight(.medium)
     static let callout: Font = .callout
     static let footnote: Font = .footnote
+    static let footnoteMedium: Font = .footnote.weight(.medium)
     static let footnoteSemibold: Font = .footnote.weight(.semibold)
     static let caption: Font = .caption
     static let captionMedium: Font = .caption.weight(.medium)
@@ -498,6 +635,19 @@ enum AppTypography {
             weight: weight,
             design: design,
             minimumPointSize: minimumPointSize ?? baseSize
+        )
+    }
+
+    /// 返回与 `captionMedium` 同源的 UIKit 字体，供基线测量与内联操作渲染复用。
+    static func uiCaptionMedium(
+        compatibleWith traitCollection: UITraitCollection? = nil
+    ) -> UIFont {
+        SemanticTypography.uiFont(
+            baseSize: SemanticTypography.defaultPointSize(for: .caption1),
+            textStyle: .caption1,
+            weight: .medium,
+            minimumPointSize: SemanticTypography.defaultPointSize(for: .caption1),
+            compatibleWith: traitCollection
         )
     }
 
@@ -640,6 +790,21 @@ enum MonthlyReadingChartTypography {
     )
 }
 
+/// 内容区 Inline Tab 的固定视觉层级，在辅助导航与正文之间保持 14pt 中间档。
+enum XMInlineTabTypography {
+    static let label: Font = AppTypography.fixed(
+        baseSize: 14,
+        relativeTo: .footnote,
+        minimumPointSize: 14
+    )
+    static let selectedLabel: Font = AppTypography.fixed(
+        baseSize: 14,
+        relativeTo: .footnote,
+        weight: .semibold,
+        minimumPointSize: 14
+    )
+}
+
 private extension Font.TextStyle {
     var uiFontTextStyle: UIFont.TextStyle {
         switch self {
@@ -770,32 +935,121 @@ enum BookshelfTypography {
 
 /// 书摘列表的阅读排版令牌，统一正文、想法与辅助信息的字号和行距。
 enum NoteExcerptTypography {
-    static let body: Font = AppTypography.fixed(
-        baseSize: 15,
-        relativeTo: .subheadline,
-        minimumPointSize: 15
-    )
+    static var body: Font {
+        AppTypography.fixed(
+            baseSize: 15,
+            relativeTo: .subheadline,
+            minimumPointSize: 15
+        )
+    }
     static let bodyLineSpacing: CGFloat = 7
-    static let idea: Font = AppTypography.fixed(
-        baseSize: 13,
-        relativeTo: .footnote,
-        minimumPointSize: 13
-    )
+    static var uiBody: UIFont {
+        AppTypography.uiFixed(
+            baseSize: 15,
+            textStyle: .subheadline,
+            minimumPointSize: 15
+        )
+    }
+    static var idea: Font {
+        AppTypography.fixed(
+            baseSize: 13,
+            relativeTo: .footnote,
+            minimumPointSize: 13
+        )
+    }
     static let ideaLineSpacing: CGFloat = 4
-    static let footer: Font = AppTypography.fixed(
-        baseSize: 11,
-        relativeTo: .caption2,
-        minimumPointSize: 11
-    )
+    static var uiIdea: UIFont {
+        AppTypography.uiFixed(
+            baseSize: 13,
+            textStyle: .footnote,
+            minimumPointSize: 13
+        )
+    }
+    static var footer: Font {
+        AppTypography.fixed(
+            baseSize: 11,
+            relativeTo: .caption2,
+            minimumPointSize: 11
+        )
+    }
 }
 
 /// 阅读日历字体令牌，集中维护日期相关文本层级。
 enum ReadCalendarTypography {
+    private static let denseGridMaximumTraits = UITraitCollection(
+        preferredContentSizeCategory: .extraExtraExtraLarge
+    )
+
     static let topControlTitleFont: Font = AppTypography.fixed(baseSize: 18, relativeTo: .headline, weight: .semibold, design: .rounded)
     static let weekdayHeaderFont: Font = AppTypography.fixed(baseSize: 13, relativeTo: .caption, weight: .medium, design: .rounded)
+    static let weekdayHeaderAccessibilityFont: Font = SemanticTypography.font(
+        baseSize: 13,
+        relativeTo: .caption,
+        weight: .medium,
+        design: .rounded,
+        minimumPointSize: 13,
+        compatibleWith: denseGridMaximumTraits
+    )
     static let monthGridDayNumberFont: Font = AppTypography.fixed(baseSize: 13, relativeTo: .caption, weight: .medium, design: .rounded)
-    static let monthGridDayNumberSelectedFont: Font = AppTypography.fixed(baseSize: 13, relativeTo: .caption, weight: .bold, design: .rounded)
+    static let monthGridDayNumberAccessibilityFont: Font = SemanticTypography.font(
+        baseSize: 13,
+        relativeTo: .caption,
+        weight: .medium,
+        design: .rounded,
+        minimumPointSize: 13,
+        compatibleWith: denseGridMaximumTraits
+    )
+    static let monthGridDayNumberSelectedFont: Font = AppTypography.fixed(baseSize: 13, relativeTo: .caption, weight: .semibold, design: .rounded)
+    static let monthGridDayNumberSelectedAccessibilityFont: Font = SemanticTypography.font(
+        baseSize: 13,
+        relativeTo: .caption,
+        weight: .semibold,
+        design: .rounded,
+        minimumPointSize: 13,
+        compatibleWith: denseGridMaximumTraits
+    )
+    static let monthGridEventTitleFont: Font = AppTypography.fixed(baseSize: 10, relativeTo: .caption2, weight: .semibold, design: .rounded, minimumPointSize: 10)
+    static let monthGridEventTitleAccessibilityFont: Font = SemanticTypography.font(
+        baseSize: 10,
+        relativeTo: .caption2,
+        weight: .semibold,
+        design: .rounded,
+        minimumPointSize: 10,
+        compatibleWith: denseGridMaximumTraits
+    )
+    static let monthGridOverflowFont: Font = AppTypography.fixed(baseSize: 10, relativeTo: .caption2, weight: .medium, design: .rounded, minimumPointSize: 10)
+    static let monthGridOverflowAccessibilityFont: Font = SemanticTypography.font(
+        baseSize: 10,
+        relativeTo: .caption2,
+        weight: .medium,
+        design: .rounded,
+        minimumPointSize: 10,
+        compatibleWith: denseGridMaximumTraits
+    )
+    static let selectedDayTitleFont: Font = AppTypography.subheadlineSemibold
+    static let selectedDayFactsFont: Font = AppTypography.caption
+    static let selectedDayActionFont: Font = AppTypography.subheadlineSemibold
     static let yearHeatmapMonthTitleFont: Font = AppTypography.semantic(.callout, weight: .semibold)
+}
+
+/// 阅读日历统计排版令牌，统一指标、洞察、排行与树图中的文本层级。
+enum ReadCalendarSummaryTypography {
+    static let sectionTitle: Font = AppTypography.headlineSemibold
+    static let metricTitle: Font = AppTypography.captionMedium
+    static let metricNumber: Font = AppTypography.title3Semibold
+    static let metricUnit: Font = AppTypography.caption2Medium
+    static let metricText: Font = AppTypography.subheadlineSemibold
+    static let metricSubtitle: Font = AppTypography.caption
+    static let insightLabel: Font = AppTypography.caption2Semibold
+    static let insightMeta: Font = AppTypography.footnote
+    static let insightNumber: Font = AppTypography.subheadlineSemibold
+    static let insightUnit: Font = AppTypography.captionMedium
+    static let rankingTitle: Font = AppTypography.captionMedium
+    static let rankingNumber: Font = AppTypography.captionMedium
+    static let rankingUnit: Font = AppTypography.caption2Medium
+    static let treemapMonth: Font = AppTypography.captionSemibold
+    static let treemapPercent: Font = AppTypography.caption2Semibold
+    static let treemapDetail: Font = AppTypography.caption2
 }
 
 // MARK: - Timeline Calendar Style
@@ -823,6 +1077,13 @@ enum TimelineCalendarStyle {
     static let progressRingLineWidth: CGFloat = 1.6
     static let markerDotSize: CGFloat = 4
     static let markerDotOffsetY: CGFloat = 12
+    static let connectorDotSize: CGFloat = 8
+    static let connectorLineWidth: CGFloat = 1.5
+    static let connectorDashPattern: [CGFloat] = [4, 3]
+    static let connectorLineOpacity: Double = 0.35
+    static let connectorDotColor: Color = .brand
+    static let connectorLineColor: Color = Color.textHint.opacity(connectorLineOpacity)
+    static let eventTimeColor: Color = .textHint
 
     static let monthNumberColor: Color = .textPrimary
     static let monthUnitColor: Color = .textSecondary

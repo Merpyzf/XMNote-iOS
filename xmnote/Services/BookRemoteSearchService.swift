@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 Foundation URLSession 执行 JSON 请求，依赖 BookSearchWebScenarioService、FanqieDOMSearchService 与 WebHTMLFetchService 处理网页抓取，依赖 SwiftSoup 解析站点 HTML
- * [OUTPUT]: 对外提供 BookRemoteSearchService，统一封装远端书源搜索、番茄 DOM 抓取与豆瓣详情补抓
+ * [OUTPUT]: 对外提供 BookRemoteSearchService，统一封装远端书源搜索、文曲目录发现、番茄 DOM 抓取与豆瓣详情补抓
  * [POS]: Services 模块的书籍远端搜索业务层，负责把各站点协议差异翻译为统一搜索结果与录入预填种子
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -90,6 +90,43 @@ final class BookRemoteSearchService {
         return try await fetchFanqieDetailResults(detailPageURLs)
     }
 
+    /// 按 Android 目录同步规则读取文曲原始目录；豆瓣 ID 存在时只采用精确查询的首条结果。
+    func fetchWenquCatalogCandidates(
+        doubanID: Int?,
+        bookTitle: String
+    ) async throws -> [ChapterRemoteCatalogCandidate] {
+        let normalizedTitle = bookTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        let query: WenquQuery
+        let shouldUseFirstResultOnly: Bool
+        if let doubanID, doubanID > 0 {
+            query = .doubanId(doubanID)
+            shouldUseFirstResultOnly = true
+        } else {
+            guard !normalizedTitle.isEmpty else { throw BookSearchError.emptyKeyword }
+            query = .query(normalizedTitle)
+            shouldUseFirstResultOnly = false
+        }
+
+        let response = try await fetchWenquResponse(by: query)
+        guard response.count > 0 else { return [] }
+        let books = shouldUseFirstResultOnly ? Array(response.books.prefix(1)) : response.books
+        return books.enumerated().map { index, item in
+            let title = item.title?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            let stableID = item.id.map { "wenqu-\($0)" }
+                ?? item.doubanId.map { "wenqu-douban-\($0)" }
+                ?? "wenqu-result-\(index)-\(title)"
+            return ChapterRemoteCatalogCandidate(
+                id: stableID,
+                remoteBookID: item.id,
+                doubanID: item.doubanId,
+                title: title,
+                author: item.author ?? "",
+                press: item.press ?? "",
+                catalogTitles: catalogTitles(from: item.catalog ?? "")
+            )
+        }
+    }
+
 }
 
 private extension BookRemoteSearchService {
@@ -106,29 +143,7 @@ private extension BookRemoteSearchService {
     }
 
     func searchWenqu(by query: WenquQuery) async throws -> [BookSearchResult] {
-        var components = URLComponents(string: "https://wenqu.annatarhe.cn/api/v1/books/search")
-        switch query {
-        case .query(let keyword):
-            components?.queryItems = [
-                .init(name: "page", value: "1"),
-                .init(name: "limit", value: "50"),
-                .init(name: "query", value: keyword)
-            ]
-        case .isbn(let isbn):
-            components?.queryItems = [.init(name: "isbn", value: isbn)]
-        case .doubanId(let doubanId):
-            components?.queryItems = [.init(name: "dbId", value: String(doubanId))]
-        }
-        guard let url = components?.url else {
-            throw BookSearchError.sourceUnavailable(message: "Wenqu 请求地址无效")
-        }
-
-        let response: WenquResponse = try await requestJSON(
-            url: url,
-            additionalHeaders: [
-                "X-Simple-Check": "500ae25e22b5de1b6c44a7d78908e7b7cc63f97b55ea9cdc50aa8fcd84b1fcba"
-            ]
-        )
+        let response = try await fetchWenquResponse(by: query)
 
         return response.books.map { item in
             let seed = BookEditorSeed(
@@ -171,6 +186,41 @@ private extension BookRemoteSearchService {
                 detailPageURL: item.url
             )
         }
+    }
+
+    /// 构造文曲检索请求并复用统一 JSON 校验；URLSession 任务会随调用方 Task 取消。
+    func fetchWenquResponse(by query: WenquQuery) async throws -> WenquResponse {
+        var components = URLComponents(string: "https://wenqu.annatarhe.cn/api/v1/books/search")
+        switch query {
+        case .query(let keyword):
+            components?.queryItems = [
+                .init(name: "page", value: "1"),
+                .init(name: "limit", value: "50"),
+                .init(name: "query", value: keyword)
+            ]
+        case .isbn(let isbn):
+            components?.queryItems = [.init(name: "isbn", value: isbn)]
+        case .doubanId(let doubanId):
+            components?.queryItems = [.init(name: "dbId", value: String(doubanId))]
+        }
+        guard let url = components?.url else {
+            throw BookSearchError.sourceUnavailable(message: "Wenqu 请求地址无效")
+        }
+
+        return try await requestJSON(
+            url: url,
+            additionalHeaders: [
+                "X-Simple-Check": "500ae25e22b5de1b6c44a7d78908e7b7cc63f97b55ea9cdc50aa8fcd84b1fcba"
+            ]
+        )
+    }
+
+    /// 将文曲的换行目录清洗为一级标题；只移除空行，不合并重复标题或改变原始顺序。
+    func catalogTitles(from rawValue: String) -> [String] {
+        rawValue
+            .components(separatedBy: .newlines)
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
     }
 
     func searchDouban(keyword: String, pageCount: Int) async throws -> [BookSearchResult] {
@@ -1140,6 +1190,17 @@ private extension BookRemoteSearchService {
 private struct WenquResponse: Decodable {
     let count: Int
     let books: [WenquBook]
+
+    /// Android DTO 对缺失或 null 字段使用 count=0/空列表；iOS 同样降级为空结果而非解析崩溃。
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        count = try container.decodeIfPresent(Int.self, forKey: .count) ?? 0
+        books = try container.decodeIfPresent([WenquBook].self, forKey: .books) ?? []
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case count, books
+    }
 }
 
 private struct WenquBook: Decodable {

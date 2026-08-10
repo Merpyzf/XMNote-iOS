@@ -1,7 +1,7 @@
 /**
- * [INPUT]: 依赖 TimelineRelevantEvent 数据模型、TimelineCardHeaderBar/TimelineCardDivider/TimelineCardFooterRow 共享骨架、CardContainer 容器、DesignTokens 设计令牌、ExpandableRichText 可展开富文本、XMJXImageWall/XMJXGalleryItem 图片墙
- * [OUTPUT]: 对外提供 TimelineRelevantCard（时间线相关内容卡片）
- * [POS]: Reading/Timeline 页面私有子视图，按书摘骨架渲染相关内容标题、HTML 正文、图片墙与分类/链接尾部行
+ * [INPUT]: 依赖 TimelineRelevantEvent、TimelineCardPresentationStyle/TimelineBookSourceFooter、共享骨架、CardContainer、DesignTokens、ExpandableRichText 与图片墙
+ * [OUTPUT]: 对外提供 TimelineRelevantCard，支持首页标准头部与每日详情内容优先/来源置底两种排版
+ * [POS]: Reading/Timeline 页面私有相关内容卡片，渲染标题、正文、图片、分类/链接与上下文来源
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
@@ -12,17 +12,20 @@ struct TimelineRelevantCard: View {
     let event: TimelineRelevantEvent
     let timestamp: Int64
     let bookName: String
+    var presentationStyle: TimelineCardPresentationStyle = .standard
+    var actionColor: Color = .textSecondary
 
     var body: some View {
         CardContainer(cornerRadius: TimelineCalendarStyle.eventCardCornerRadius) {
             VStack(alignment: .leading, spacing: Spacing.base) {
-                TimelineCardHeaderBar(
-                    iconSystemName: "tray.full",
-                    timestamp: timestamp,
-                    bookName: bookName
-                )
-
-                TimelineCardDivider()
+                if presentationStyle == .standard {
+                    TimelineCardHeaderBar(
+                        iconSystemName: "tray.full",
+                        timestamp: timestamp,
+                        bookName: bookName
+                    )
+                    TimelineCardDivider()
+                }
 
                 if hasTitle {
                     Text(trimmedTitle)
@@ -45,6 +48,10 @@ struct TimelineRelevantCard: View {
                         linkURLString: showsLinkButton ? trimmedURL : nil,
                         linkAccessibilityLabel: "打开相关内容链接"
                     )
+                }
+
+                if presentationStyle == .contentFirst {
+                    TimelineBookSourceFooter(bookName: bookName)
                 }
             }
             .padding(Spacing.contentEdge)
@@ -98,18 +105,37 @@ struct TimelineRelevantCard: View {
     private var contentView: some View {
         if contentFallbackToURL {
             Text(trimmedURL)
-                .font(TimelineTypography.eventFallbackTextFont)
+                .font(contentFallbackFont)
                 .foregroundStyle(Color.textPrimary)
-                .lineSpacing(TimelineTypography.eventRichTextLineSpacing)
+                .lineSpacing(contentBodyLineSpacing)
                 .fixedSize(horizontal: false, vertical: true)
         } else {
             ExpandableRichText(
                 html: event.content,
-                baseFont: TimelineTypography.eventRichTextBaseFont,
-                lineSpacing: TimelineTypography.eventRichTextLineSpacing
+                baseFont: contentBodyFont,
+                lineSpacing: contentBodyLineSpacing,
+                actionColor: actionColor
             )
             .equatable()
         }
+    }
+
+    private var contentBodyFont: UIFont {
+        presentationStyle == .contentFirst
+            ? NoteExcerptTypography.uiBody
+            : TimelineTypography.eventRichTextBaseFont
+    }
+
+    private var contentFallbackFont: Font {
+        presentationStyle == .contentFirst
+            ? NoteExcerptTypography.body
+            : TimelineTypography.eventFallbackTextFont
+    }
+
+    private var contentBodyLineSpacing: CGFloat {
+        presentationStyle == .contentFirst
+            ? NoteExcerptTypography.bodyLineSpacing
+            : TimelineTypography.eventRichTextLineSpacing
     }
 
     // MARK: - Image Wall

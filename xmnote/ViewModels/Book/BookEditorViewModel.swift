@@ -8,7 +8,7 @@
 import Foundation
 import Observation
 
-/// 书籍录入状态源，负责新增与编辑两类草稿、建议选项和保存事务的页面编排；所有 UI 状态均在主线程更新。
+/// 书籍录入状态源，负责新增、有效书编辑与相关占位书资料编辑的页面编排；所有 UI 状态均在主线程更新。
 @MainActor
 @Observable
 final class BookEditorViewModel {
@@ -93,6 +93,8 @@ final class BookEditorViewModel {
                 draft = repository.makeDraft(from: seed)
             case .edit(let bookId):
                 draft = try await repository.fetchEditableBook(bookId: bookId)
+            case .editRelatedPlaceholder(let bookId, _):
+                draft = try await repository.fetchEditableRelatedPlaceholder(bookId: bookId)
             }
             self.options = options
             self.draft = draft

@@ -6,6 +6,7 @@
 ## 成员清单
 
 - `ContentDetailSupport.swift`: 查看页共享辅助类型与标题/卡片基础视图
+- `ContentViewerSharedSupport.swift`: 通用 Viewer 展示语义、能力提示与页面私有辅助弹层
 - `ContentViewerView.swift`: 通用内容查看页壳层（混合 feed viewer）
 - `ContentViewerContentView.swift`: 通用内容分页内容壳层（自建 horizontal paging + 单页纵向滚动）
 - `ContentViewerDetailBodies.swift`: 书摘/书评/相关内容共享正文 body 组件
@@ -15,5 +16,6 @@
 - `ReviewEditorView.swift`: 书评最小编辑页
 - `RelevantDetailView.swift`: 相关内容单页详情页
 - `RelevantEditorView.swift`: 相关内容最小编辑页
+- `Sheets/RelatedBookRelationEditorSheet.swift`: 阅读日历与单书工作台复用的相关书籍关系编辑业务 Sheet
 
 [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md

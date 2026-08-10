@@ -14,7 +14,7 @@ struct XMJXThumbnailView: UIViewRepresentable {
     let registry: XMJXThumbnailRegistry
     let priority: XMImageRequestBuilder.Priority
 
-    /// 初始化缩略图桥接视图，默认使用高优先级以提升首帧可用性。
+    /// 初始化缩略图桥接视图，默认保持既有高优先级；长列表可显式降为普通优先级。
     init(
         item: XMJXGalleryItem,
         registry: XMJXThumbnailRegistry,
@@ -32,10 +32,13 @@ struct XMJXThumbnailView: UIViewRepresentable {
 
     /// 创建缩略图承载 `UIImageView`，并在首次挂载时建立 registry 绑定。
     func makeUIView(context: Context) -> UIImageView {
-        let imageView = UIImageView()
+        let imageView = XMJXThumbnailImageView()
         imageView.clipsToBounds = true
         imageView.contentMode = .scaleAspectFill
         imageView.backgroundColor = UIColor(Color.surfaceCard)
+        imageView.onBoundsSizeChange = { [weak coordinator = context.coordinator] size in
+            coordinator?.updateTargetSize(size)
+        }
 
         context.coordinator.bind(imageView)
         context.coordinator.update(item: item, priority: priority)
@@ -60,13 +63,7 @@ struct XMJXThumbnailView: UIViewRepresentable {
             resolved = nil
         }
         if let resolved {
-            XMJXGalleryLogger.verbose(
-                "thumbnail.sizeThatFits itemID=\(item.id) proposal=(w:\(proposal.width.map { String(Int($0.rounded())) } ?? "nil"),h:\(proposal.height.map { String(Int($0.rounded())) } ?? "nil")) resolved=(w:\(Int(resolved.width.rounded())),h:\(Int(resolved.height.rounded())))"
-            )
-        } else {
-            XMJXGalleryLogger.verbose(
-                "thumbnail.sizeThatFits itemID=\(item.id) proposal=(w:\(proposal.width.map { String(Int($0.rounded())) } ?? "nil"),h:\(proposal.height.map { String(Int($0.rounded())) } ?? "nil")) resolved=nil"
-            )
+            context.coordinator.updateTargetSize(resolved)
         }
         return resolved
     }
@@ -74,6 +71,25 @@ struct XMJXThumbnailView: UIViewRepresentable {
     /// 解绑 UIKit 视图与 registry 映射，避免复用后残留旧引用。
     static func dismantleUIView(_ uiView: UIImageView, coordinator: Coordinator) {
         coordinator.unbind(uiView)
+    }
+}
+
+/// 仅在实际布局尺寸档位变化时通知加载器，避免 SwiftUI 更新阶段用零尺寸解码原图。
+private final class XMJXThumbnailImageView: UIImageView {
+    var onBoundsSizeChange: ((CGSize) -> Void)?
+    private var lastReportedSize: CGSize = .zero
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        let size = bounds.size
+        guard size.width > 0,
+              size.height > 0,
+              abs(size.width - lastReportedSize.width) >= 1
+                || abs(size.height - lastReportedSize.height) >= 1 else {
+            return
+        }
+        lastReportedSize = size
+        onBoundsSizeChange?(size)
     }
 }
 
@@ -85,8 +101,17 @@ extension XMJXThumbnailView {
         private weak var imageView: UIImageView?
         private var currentItemID: String?
         private var currentURLString: String?
+        private var currentPriority = XMImageRequestBuilder.Priority.high
+        private var currentTargetSize: CGSize = .zero
+        private var currentRequestKey: RequestKey?
         private var loadingTask: Task<Void, Never>?
         private let pipeline: ImagePipeline
+
+        private struct RequestKey: Equatable {
+            let urlString: String
+            let priority: XMImageRequestBuilder.Priority
+            let targetSize: CGSize
+        }
 
         init(
             registry: XMJXThumbnailRegistry,
@@ -106,9 +131,7 @@ extension XMJXThumbnailView {
             if let currentItemID {
                 registry.register(itemID: currentItemID, view: imageView)
             }
-            XMJXGalleryLogger.verbose(
-                "thumbnail.bind itemID=\(currentItemID ?? "nil") bounds=(w:\(Int(imageView.bounds.width.rounded())),h:\(Int(imageView.bounds.height.rounded())))"
-            )
+            updateTargetSize(imageView.bounds.size)
         }
 
         /// 解除视图绑定并清理注册表状态。
@@ -130,34 +153,59 @@ extension XMJXThumbnailView {
 
             currentItemID = item.id
             registry.register(itemID: item.id, view: imageView)
-            XMJXGalleryLogger.verbose(
-                "thumbnail.update itemID=\(item.id) bounds=(w:\(Int(imageView.bounds.width.rounded())),h:\(Int(imageView.bounds.height.rounded())))"
-            )
+            currentURLString = resolvedURLString(for: item)
+            currentPriority = priority
+            reloadIfNeeded(itemID: item.id)
+        }
 
-            let nextURL = resolvedURLString(for: item)
-            if currentURLString == nextURL {
+        /// 接收真实显示尺寸并量化到 8pt 档位，微小布局误差不会制造新的图片缓存键。
+        func updateTargetSize(_ size: CGSize) {
+            guard size.width > 0, size.height > 0 else { return }
+            let bucket: CGFloat = 8
+            let target = CGSize(
+                width: ceil(size.width / bucket) * bucket,
+                height: ceil(size.height / bucket) * bucket
+            )
+            guard target != currentTargetSize else { return }
+            currentTargetSize = target
+            if let currentItemID {
+                reloadIfNeeded(itemID: currentItemID)
+            }
+        }
+
+        /// URL 或目标尺寸档位变化时才创建新请求，复用和离屏都会取消旧任务。
+        private func reloadIfNeeded(itemID: String) {
+            guard let imageView,
+                  let urlString = currentURLString,
+                  let url = XMImageRequestBuilder.normalizedURL(from: urlString),
+                  currentTargetSize.width > 0,
+                  currentTargetSize.height > 0 else {
                 return
             }
-
-            currentURLString = nextURL
+            let key = RequestKey(
+                urlString: urlString,
+                priority: currentPriority,
+                targetSize: currentTargetSize
+            )
+            guard key != currentRequestKey else { return }
+            currentRequestKey = key
             imageView.image = nil
             loadingTask?.cancel()
 
-            guard let urlString = nextURL,
-                  let url = XMImageRequestBuilder.normalizedURL(from: urlString) else {
-                return
-            }
-
             loadingTask = Task {
-                let request = XMImageLoadRequest(url: url, priority: priority)
+                let request = XMImageLoadRequest(
+                    url: url,
+                    priority: currentPriority,
+                    targetSizeInPoints: currentTargetSize
+                )
                 do {
                     let image = try await pipeline.image(for: request.imageRequest)
-                    guard !Task.isCancelled else { return }
+                    guard !Task.isCancelled, key == currentRequestKey else { return }
                     imageView.image = image
                 } catch {
                     guard !Task.isCancelled else { return }
                     XMJXGalleryLogger.error(
-                        "thumbnail.load.failed itemID=\(item.id) error=\(error.localizedDescription)"
+                        "thumbnail.load.failed itemID=\(itemID) error=\(error.localizedDescription)"
                     )
                 }
             }

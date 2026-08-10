@@ -1,7 +1,7 @@
 #if DEBUG
 /**
  * [INPUT]: 依赖 TimelineEventRow/TimelineSectionView/TimelineSectionHeader、7 种 Card 组件、TimelineModels 领域模型
- * [OUTPUT]: 对外提供 TimelineCardsTestView（时间线卡片测试页面）
+ * [OUTPUT]: 对外提供 TimelineCardsTestView（含固定类型相关书籍的时间线卡片测试页面）
  * [POS]: Debug 测试页，可视化验证 7 种事件卡片样式与时间线装饰器
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -265,8 +265,7 @@ enum TimelineCardsMockData {
                         contentBookId: 2001,
                         contentBookName: "思考快与慢",
                         contentBookAuthor: "丹尼尔·卡尼曼",
-                        contentBookCover: "",
-                        categoryTitle: "书"
+                        contentBookCover: ""
                     )),
                     timestamp: base + 43200000,
                     sourceBookId: 1007,

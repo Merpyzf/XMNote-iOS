@@ -1,7 +1,7 @@
 /**
  * [INPUT]: 依赖 XMBookCover、BookshelfBookPayload、编辑选择状态与封面角标语义 token 渲染书籍/分组网格封面
- * [OUTPUT]: 对外提供 BookshelfGridBookCoverView、BookshelfGridGroupCoverView、选择态封面遮罩与轻量毛玻璃/纯色角标基础视图
- * [POS]: Book 模块页面私有封面展示基础组件，被默认书架与聚合入口网格复用
+ * [OUTPUT]: 对外提供 BookshelfGridBookCoverView、BookshelfGridGroupCoverView、选择态封面遮罩、纯色状态角标及其共享语义映射
+ * [POS]: Book 模块页面私有封面展示基础组件，被默认书架、聚合入口网格与单书工作台复用
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
@@ -511,7 +511,14 @@ private struct BookshelfCoverReadingStatus {
     }
 }
 
-private extension BookEntryReadingStatus {
+extension BookEntryReadingStatus {
+    /// 按详情页已有状态文案匹配标准阅读状态，避免视觉层重复维护文案到颜色的分支。
+    static func matchingCoverBadgeTitle(_ title: String) -> BookEntryReadingStatus? {
+        let normalizedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        return allCases.first { $0.title == normalizedTitle }
+    }
+
+    /// 返回书架与详情封面共用的状态语义色。
     var coverBadgeColor: Color {
         switch self {
         case .wantRead:

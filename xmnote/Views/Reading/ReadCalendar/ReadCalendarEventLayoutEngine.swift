@@ -9,6 +9,13 @@ import Foundation
 
 /// 阅读日历事件布局引擎，负责把原始日数据转换为可跨周渲染的布局结果。
 struct ReadCalendarEventLayoutEngine {
+    private struct DraftBookDay {
+        let name: String
+        let cover: String
+        let firstEventTime: Int64
+        let isReadDone: Bool
+    }
+
     private struct DraftRun {
         let bookId: Int64
         let bookName: String
@@ -42,64 +49,58 @@ struct ReadCalendarEventLayoutEngine {
 
     /// 将日事件序列切分为连续 run，供后续车道排布。
     func buildRuns(days: [Date: ReadCalendarDay]) -> [ReadCalendarEventRun] {
-        var dateBookMap: [Int64: (name: String, cover: String, firstEventTime: Int64, dates: Set<Date>, readDoneDates: Set<Date>)] = [:]
+        var dateBookMap: [Int64: [Date: DraftBookDay]] = [:]
 
         for (day, payload) in days {
             let normalizedDay = calendar.startOfDay(for: day)
             for book in payload.books {
-                if var item = dateBookMap[book.id] {
-                    item.dates.insert(normalizedDay)
-                    item.firstEventTime = min(item.firstEventTime, book.firstEventTime)
-                    if book.isReadDoneOnThisDay {
-                        item.readDoneDates.insert(normalizedDay)
-                    }
-                    dateBookMap[book.id] = item
-                } else {
-                    dateBookMap[book.id] = (
-                        name: book.name,
-                        cover: book.coverURL,
-                        firstEventTime: book.firstEventTime,
-                        dates: [normalizedDay],
-                        readDoneDates: book.isReadDoneOnThisDay ? [normalizedDay] : []
-                    )
-                }
+                dateBookMap[book.id, default: [:]][normalizedDay] = DraftBookDay(
+                    name: book.name,
+                    cover: book.coverURL,
+                    firstEventTime: book.firstEventTime,
+                    isReadDone: book.isReadDoneOnThisDay
+                )
             }
         }
 
         var draftRuns: [DraftRun] = []
-        for (bookId, item) in dateBookMap {
-            let sortedDates = item.dates.sorted()
+        for (bookId, dayItems) in dateBookMap {
+            let sortedDates = dayItems.keys.sorted()
             guard var runStart = sortedDates.first else { continue }
             var runEnd = runStart
+            var runFirstEventTime = dayItems[runStart]?.firstEventTime ?? .max
 
             for date in sortedDates.dropFirst() {
                 guard let nextExpected = calendar.date(byAdding: .day, value: 1, to: runEnd) else { continue }
                 let isContinuousDate = calendar.isDate(date, inSameDayAs: nextExpected)
-                let shouldBreakAfterReadDoneDay = item.readDoneDates.contains(runEnd)
+                let shouldBreakAfterReadDoneDay = dayItems[runEnd]?.isReadDone == true
                 if isContinuousDate && !shouldBreakAfterReadDoneDay {
                     runEnd = date
                 } else {
+                    let runBook = dayItems[runStart]
                     draftRuns.append(DraftRun(
                         bookId: bookId,
-                        bookName: item.name,
-                        bookCoverURL: item.cover,
-                        firstEventTime: item.firstEventTime,
+                        bookName: runBook?.name ?? "",
+                        bookCoverURL: runBook?.cover ?? "",
+                        firstEventTime: runFirstEventTime,
                         startDate: runStart,
                         endDate: runEnd,
-                        readDoneDates: readDoneDates(in: item.readDoneDates, from: runStart, to: runEnd)
+                        readDoneDates: readDoneDates(in: dayItems, from: runStart, to: runEnd)
                     ))
                     runStart = date
                     runEnd = date
+                    runFirstEventTime = dayItems[date]?.firstEventTime ?? .max
                 }
             }
+            let runBook = dayItems[runStart]
             draftRuns.append(DraftRun(
                 bookId: bookId,
-                bookName: item.name,
-                bookCoverURL: item.cover,
-                firstEventTime: item.firstEventTime,
+                bookName: runBook?.name ?? "",
+                bookCoverURL: runBook?.cover ?? "",
+                firstEventTime: runFirstEventTime,
                 startDate: runStart,
                 endDate: runEnd,
-                readDoneDates: readDoneDates(in: item.readDoneDates, from: runStart, to: runEnd)
+                readDoneDates: readDoneDates(in: dayItems, from: runStart, to: runEnd)
             ))
         }
 
@@ -285,12 +286,17 @@ private extension ReadCalendarEventLayoutEngine {
         return max(1, distance + 1)
     }
 
-    private func readDoneDates(in source: Set<Date>, from start: Date, to end: Date) -> Set<Date> {
+    private func readDoneDates(
+        in dayItems: [Date: DraftBookDay],
+        from start: Date,
+        to end: Date
+    ) -> Set<Date> {
         let startDay = calendar.startOfDay(for: start)
         let endDay = calendar.startOfDay(for: end)
-        return Set(source.filter { date in
+        return Set(dayItems.compactMap { date, item in
+            guard item.isReadDone else { return nil }
             let normalized = calendar.startOfDay(for: date)
-            return normalized >= startDay && normalized <= endDay
+            return normalized >= startDay && normalized <= endDay ? normalized : nil
         })
     }
 

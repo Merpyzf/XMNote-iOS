@@ -10,5 +10,9 @@
 - `HTTPMethod+WebDAV.swift`: Alamofire HTTPMethod 扩展，添加 PROPFIND/MKCOL 方法
 - `WebDAVClient.swift`: WebDAV 协议操作客户端（PROPFIND/MKCOL/PUT/GET/DELETE）
 - `BackupService.swift`: 数据备份与恢复业务逻辑编排
+- `AIConfigurationStore.swift`: UserDefaults 非敏感 AI 设置与 Keychain 密钥的 Actor 存储边界
+- `OpenAICompatibleClient.swift`: OpenAI-compatible SSE 与非流式文本生成客户端
+- `BookRemoteSearchService.swift`: 在线书籍检索与结果映射服务
+- `NoteSpeechController.swift`: 书摘编辑语音识别会话控制器
 
 [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md

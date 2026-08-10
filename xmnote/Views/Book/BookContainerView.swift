@@ -7,7 +7,7 @@
 
 /**
  * [INPUT]: 依赖 RepositoryContainer 注入仓储，依赖 BookCollectionImportRouter 承接外部书单导入，依赖 HomeSubtabScaffold 承载首页二级页硬切，依赖 BookViewModel 与 BookCollectionListViewModel 驱动书架浏览、书单列表、显示设置与顶部操作
- * [OUTPUT]: 对外提供 BookContainerView 与 BookSubTab 枚举，承载书籍/书单二级页切换、外部导入入口定位、TabBar 显隐协调、底部玻璃编辑工具栏、批量 Sheet、删除确认、书单入口与书单更多菜单
+ * [OUTPUT]: 对外提供 BookContainerView 与 BookSubTab 枚举，承载书籍/书单二级页切换、外部导入入口定位、顶部批量菜单、批量 Sheet、删除确认、书单入口与书单更多菜单
  * [POS]: Book 模块容器壳层，承载书籍页与书架管理模式编排
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -32,15 +32,6 @@ enum BookSubTab: String, CaseIterable, Hashable, Codable {
 
     var productionValue: BookSubTab {
         self
-    }
-}
-
-/// 记录编辑底部浮动栏换算出的滚动余量，避免集合内容被底部玻璃控件遮挡。
-private struct BookshelfEditBottomBarHeightPreferenceKey: PreferenceKey {
-    static var defaultValue: CGFloat = 0
-
-    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
-        value = max(value, nextValue())
     }
 }
 
@@ -179,16 +170,6 @@ private struct BookContentView: View {
         nonmutating set { editingPresentation.isChoreographyActive = newValue }
     }
 
-    private var editBottomBarHeight: CGFloat {
-        get { editingPresentation.bottomContentInset }
-        nonmutating set { editingPresentation.bottomContentInset = newValue }
-    }
-
-    private var editBottomBarOrnamentHeight: CGFloat {
-        get { editingPresentation.bottomOrnamentHeight }
-        nonmutating set { editingPresentation.bottomOrnamentHeight = newValue }
-    }
-
     private var browseSearchPresentation: BookshelfSearchDrawerPresentation {
         get { browseSearch.presentation }
         nonmutating set { browseSearch.presentation = newValue }
@@ -225,10 +206,6 @@ private struct BookContentView: View {
         .overlay(alignment: .top) {
             editHeaderOverlay
         }
-        .overlay(alignment: .bottom) {
-            editBottomBarOverlay
-        }
-        .toolbar(tabBarVisibility, for: .tabBar)
         .sheet(isPresented: $showsDisplaySettingSheet) {
             BookshelfDisplaySettingSheet(
                 dimension: viewModel.selectedDimension,
@@ -344,41 +321,9 @@ private struct BookContentView: View {
         .onChange(of: viewModel.selectedDimension) { _, _ in
             collapseBrowseSearchIfUnsupported()
         }
-        .onPreferenceChange(BookshelfEditBottomBarHeightPreferenceKey.self) { height in
-            guard reservesEditBottomBarSpace, editBottomBarHeight != height else { return }
-            editBottomBarHeight = height
-        }
-        .onPreferenceChange(ImmersiveBottomChromeHeightPreferenceKey.self) { height in
-            guard showsEditBottomBar, abs(editBottomBarOrnamentHeight - height) > 0.5 else { return }
-            editBottomBarOrnamentHeight = height
-        }
         .onDisappear {
             resetEditingPresentationForContextLoss()
         }
-    }
-
-    @ViewBuilder
-    private var editBottomBarOverlay: some View {
-        GeometryReader { proxy in
-            let metrics = editBottomBarMetrics(safeAreaBottomInset: proxy.safeAreaInsets.bottom)
-
-            if reservesEditBottomBarSpace {
-                if showsEditBottomBar {
-                    ImmersiveBottomChromeOverlay(metrics: metrics) {
-                        editBottomBar
-                    }
-                    .preference(key: BookshelfEditBottomBarHeightPreferenceKey.self, value: metrics.readableInset)
-                    .transition(BookshelfManagementMotion.editBarRevealTransition(reduceMotion: reduceMotion))
-                } else {
-                    Color.clear
-                        .preference(key: BookshelfEditBottomBarHeightPreferenceKey.self, value: metrics.readableInset)
-                }
-            } else {
-                Color.clear
-                    .preference(key: BookshelfEditBottomBarHeightPreferenceKey.self, value: 0)
-            }
-        }
-        .allowsHitTesting(showsEditBottomBar)
     }
 
     @ViewBuilder
@@ -391,9 +336,12 @@ private struct BookContentView: View {
                     isAllVisibleSelected: viewModel.isAllVisibleSelected,
                     isSelectionToggleEnabled: !viewModel.visibleDefaultItemIDs.isEmpty,
                     searchState: editSearchState,
+                    statusText: editStatusText,
                     onToggleSelectAll: toggleVisibleSelection,
                     onCancel: exitEditingWithChoreography
-                )
+                ) {
+                    editBatchMenu
+                }
                 .frame(height: topBarRowHeight)
             }
             .frame(height: topBarRowHeight, alignment: .top)
@@ -402,21 +350,56 @@ private struct BookContentView: View {
         }
     }
 
-    private var editBottomBar: some View {
-        BookshelfEditBottomBar(
-            selectedCount: viewModel.selectedCount,
-            canPin: viewModel.canSubmitSelectedPin,
-            canMoveBoundary: viewModel.canMoveSelectedItems,
-            canBatchAction: viewModel.canMoreSelectedItems,
-            canDelete: viewModel.canDeleteSelectedItems,
-            activeAction: viewModel.activeWriteAction,
-            actions: viewModel.defaultBottomActions,
-            isLoadingOptions: viewModel.isLoadingBatchOptions,
-            notice: editBottomBarNotice,
-            onPin: viewModel.pinSelectedItems,
-            onAction: viewModel.performBottomAction,
-            onDelete: viewModel.presentDeleteConfirmation
-        )
+    private var editBatchMenu: some View {
+        Menu {
+            Section {
+                Button(action: viewModel.pinSelectedItems) {
+                    Label("置顶", systemImage: "pin")
+                }
+                .disabled(!viewModel.canSubmitSelectedPin || isEditBatchActionBusy)
+            }
+
+            Section {
+                ForEach(viewModel.defaultBottomActions) { action in
+                    Button {
+                        viewModel.performBottomAction(action)
+                    } label: {
+                        Label(action.title, systemImage: action.systemImage)
+                    }
+                    .disabled(!isEditBatchActionEnabled(action))
+                }
+            }
+
+            Section {
+                Button(role: .destructive, action: viewModel.presentDeleteConfirmation) {
+                    Label("删除", systemImage: "trash")
+                }
+                .disabled(!viewModel.canDeleteSelectedItems || isEditBatchActionBusy)
+            }
+        } label: {
+            Image(systemName: "ellipsis.circle")
+                .font(AppTypography.body)
+                .foregroundStyle(Color.textPrimary)
+                .frame(width: Spacing.actionReserved, height: Spacing.actionReserved)
+                .contentShape(Rectangle())
+        }
+        .accessibilityLabel("批量操作")
+    }
+
+    private var isEditBatchActionBusy: Bool {
+        viewModel.activeWriteAction != nil || viewModel.isLoadingBatchOptions
+    }
+
+    private func isEditBatchActionEnabled(_ action: BookshelfBookListEditAction) -> Bool {
+        guard !isEditBatchActionBusy else { return false }
+        switch action {
+        case .moveToStart, .moveToEnd:
+            return viewModel.canMoveSelectedItems
+        case .moveToGroup, .addToBookList, .setTag, .setSource, .setReadStatus, .exportNote, .exportBook,
+                .pin, .unpin, .reorder, .moveOut, .renameGroup, .deleteGroup, .renameTag, .deleteTag,
+                .renameSource, .deleteSource, .deleteBooks:
+            return viewModel.canMoreSelectedItems
+        }
     }
 
     @ViewBuilder
@@ -455,15 +438,6 @@ private struct BookContentView: View {
         }
     }
 
-    private func editBottomBarMetrics(safeAreaBottomInset: CGFloat) -> ImmersiveBottomChromeMetrics {
-        ImmersiveBottomChromeMetrics.make(
-            measuredOrnamentHeight: editBottomBarOrnamentHeight,
-            safeAreaBottomInset: safeAreaBottomInset,
-            ornamentMinimumTouchHeight: BookshelfGlassEditBarMetrics.clusterHeight,
-            ornamentTopPadding: Spacing.tight
-        )
-    }
-
     private var showsBrowsingChrome: Bool {
         selectedSubTab != .books || chromePhase == .normal
     }
@@ -472,24 +446,21 @@ private struct BookContentView: View {
         selectedSubTab == .books && chromePhase.showsEditHeader
     }
 
-    private var showsEditBottomBar: Bool {
-        selectedSubTab == .books && chromePhase.showsEditBottomBar
-    }
-
     private var editSearchState: BookshelfEditChromeSearchState {
         viewModel.hasSearchKeyword ? .active(resultCount: viewModel.visibleDefaultItemIDs.count) : .inactive
     }
 
-    private var editBottomBarNotice: String? {
+    private var editStatusText: String? {
         if let notice = viewModel.actionNotice, !notice.isEmpty {
             return notice
         }
+        if let activeAction = viewModel.activeWriteAction {
+            return "正在\(activeAction.title)"
+        }
+        if viewModel.isLoadingBatchOptions {
+            return "正在加载选项"
+        }
         return viewModel.searchReorderDisabledNotice
-    }
-
-    private var reservesEditBottomBarSpace: Bool {
-        selectedSubTab == .books
-            && editingPresentation.reservesChromeBottomBarSpace(policy: .mainBookshelf)
     }
 
     private var canSearchCurrentDimension: Bool {
@@ -525,10 +496,6 @@ private struct BookContentView: View {
         selectedSubTab == .books && chromePhase == .normal && !viewModel.isEditing
     }
 
-    private var tabBarVisibility: Visibility {
-        selectedSubTab == .books && chromePhase.hidesTabBar ? .hidden : .automatic
-    }
-
     private var topBarRowHeight: CGFloat {
         BookshelfEditChromeMetrics.topBarHeight(for: dynamicTypeSize)
     }
@@ -539,7 +506,7 @@ private struct BookContentView: View {
         }
     }
 
-    /// 进入书架管理模式，并为菜单收口、顶部 chrome 和底部面板保留清晰的分层节奏。
+    /// 进入书架管理模式，并为菜单收口与顶部 chrome 切换保留清晰节奏。
     /// - Note: 所有 SwiftUI 状态都在 MainActor 上修改；延迟任务会被后续进入/退出请求取消，避免旧阶段覆盖新阶段。
     private func enterEditingWithChoreography(initialSelection: BookshelfItemID? = nil) {
         guard selectedSubTab == .books, viewModel.canEditCurrentDimension else {
@@ -556,7 +523,6 @@ private struct BookContentView: View {
 
         guard viewModel.isEditing else {
             chromePhase = .normal
-            releaseEditBottomBarSpace()
             isEditingChoreographyActive = false
             chromeTransitionTask = nil
             return
@@ -567,7 +533,6 @@ private struct BookContentView: View {
             guard !Task.isCancelled else { return }
             guard selectedSubTab == .books, viewModel.isEditing else {
                 chromePhase = .normal
-                releaseEditBottomBarSpace()
                 isEditingChoreographyActive = false
                 chromeTransitionTask = nil
                 return
@@ -580,7 +545,7 @@ private struct BookContentView: View {
         }
     }
 
-    /// 退出书架管理模式并先收起编辑 chrome，再恢复系统 TabBar。
+    /// 退出书架管理模式并恢复普通浏览 chrome，系统 Tab Bar 在整个过程中保持可见。
     /// - Note: 方法只编排本地展示阶段；真正的选择清理仍交给 `BookViewModel.exitEditing()`，延迟任务可取消以处理快速反复切换。
     private func exitEditingWithChoreography() {
         guard viewModel.isEditing || chromePhase != .normal else { return }
@@ -598,10 +563,6 @@ private struct BookContentView: View {
                 viewModel.exitEditing()
                 chromePhase = .normal
             }
-
-            try? await Task.sleep(for: BookshelfManagementMotion.editBottomInsetReleaseDelay(reduceMotion: reduceMotion))
-            guard !Task.isCancelled else { return }
-            releaseEditBottomBarSpace()
             isEditingChoreographyActive = false
             chromeTransitionTask = nil
         }
@@ -614,12 +575,6 @@ private struct BookContentView: View {
             } else {
                 viewModel.selectAllVisible()
             }
-        }
-    }
-
-    private func invertVisibleSelection() {
-        withAnimation(BookshelfManagementMotion.modeAnimation(reduceMotion: reduceMotion)) {
-            viewModel.invertVisibleSelection()
         }
     }
 
@@ -642,13 +597,7 @@ private struct BookContentView: View {
             chromeTransitionTask?.cancel()
             chromePhase = .normal
             collapseBrowseSearchIfUnsupported()
-            releaseEditBottomBarSpace()
         }
-    }
-
-    /// 释放编辑底栏的滚动避让。正常退出会在 TabBar 恢复稳定后调用，页面失活路径则立即调用。
-    private func releaseEditBottomBarSpace() {
-        editingPresentation.releaseBottomInsetMeasurements()
     }
 
     /// 打开集合顶部搜索 drawer；输入焦点由 collection 在 drawer 稳定后回调触发。
@@ -823,7 +772,6 @@ private struct BookContentView: View {
         BookGridView(
             viewModel: viewModel,
             isPageActive: selectedSubTab == .books,
-            bottomContentInset: editBottomBarHeight,
             hasSearchKeyword: viewModel.hasSearchKeyword,
             searchDrawerHeight: browseSearchDrawerHeight,
             searchPresentation: browseSearchPresentation,
@@ -894,7 +842,7 @@ private struct BookCollectionTopActionPill: View {
 
     private enum Style {
         static let hitSize: CGFloat = Spacing.actionReserved
-        static let iconColor = Color.textPrimary.opacity(0.80)
+        static let iconColor = Color.iconPrimary.opacity(0.88)
     }
 
     var body: some View {
@@ -951,6 +899,7 @@ private struct BookCollectionTopActionPill: View {
         Button(action: action) {
             TopBarActionIcon(
                 systemName: systemImage,
+                iconSize: 14,
                 foregroundColor: isDisabled ? Color.textHint : tint,
                 hitShape: presentation == .pillSegment ? .rectangle : .circle
             )

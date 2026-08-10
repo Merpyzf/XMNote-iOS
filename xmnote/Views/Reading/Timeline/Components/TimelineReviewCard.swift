@@ -1,7 +1,7 @@
 /**
- * [INPUT]: 依赖 TimelineReviewEvent 数据模型、TimelineCardHeaderBar/TimelineCardDivider 共享骨架、CardContainer 容器、DesignTokens 设计令牌、ExpandableRichText 可展开富文本、XMRatingBar、XMJXImageWall/XMJXGalleryItem 图片墙
- * [OUTPUT]: 对外提供 TimelineReviewCard（时间线书评卡片）
- * [POS]: Reading/Timeline 页面私有子视图，按书摘骨架渲染书评头部、标题、HTML 正文、图片墙与星级评分
+ * [INPUT]: 依赖 TimelineReviewEvent、TimelineCardPresentationStyle/TimelineBookSourceFooter、CardContainer、DesignTokens、ExpandableRichText、评分与图片墙
+ * [OUTPUT]: 对外提供 TimelineReviewCard，支持首页标准头部与每日详情内容优先/来源置底两种排版
+ * [POS]: Reading/Timeline 页面私有书评卡片，渲染标题、正文、图片、评分与上下文来源
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
@@ -12,17 +12,20 @@ struct TimelineReviewCard: View {
     let event: TimelineReviewEvent
     let timestamp: Int64
     let bookName: String
+    var presentationStyle: TimelineCardPresentationStyle = .standard
+    var actionColor: Color = .textSecondary
 
     var body: some View {
         CardContainer(cornerRadius: TimelineCalendarStyle.eventCardCornerRadius) {
             VStack(alignment: .leading, spacing: Spacing.base) {
-                TimelineCardHeaderBar(
-                    iconSystemName: "bubble.and.pencil",
-                    timestamp: timestamp,
-                    bookName: bookName
-                )
-
-                TimelineCardDivider()
+                if presentationStyle == .standard {
+                    TimelineCardHeaderBar(
+                        iconSystemName: "bubble.and.pencil",
+                        timestamp: timestamp,
+                        bookName: bookName
+                    )
+                    TimelineCardDivider()
+                }
 
                 if hasTitle {
                     Text(trimmedTitle)
@@ -34,8 +37,9 @@ struct TimelineReviewCard: View {
                 if hasContent {
                     ExpandableRichText(
                         html: event.content,
-                        baseFont: TimelineTypography.eventRichTextBaseFont,
-                        lineSpacing: TimelineTypography.eventRichTextLineSpacing
+                        baseFont: contentBodyFont,
+                        lineSpacing: contentBodyLineSpacing,
+                        actionColor: actionColor
                     )
                     .equatable()
                 }
@@ -46,6 +50,10 @@ struct TimelineReviewCard: View {
 
                 if event.bookScore > 0 {
                     starRating
+                }
+
+                if presentationStyle == .contentFirst {
+                    TimelineBookSourceFooter(bookName: bookName)
                 }
             }
             .padding(Spacing.contentEdge)
@@ -62,6 +70,18 @@ struct TimelineReviewCard: View {
 
     private var hasContent: Bool {
         TimelineMeaningfulText.hasMeaningfulHTML(event.content)
+    }
+
+    private var contentBodyFont: UIFont {
+        presentationStyle == .contentFirst
+            ? NoteExcerptTypography.uiBody
+            : TimelineTypography.eventRichTextBaseFont
+    }
+
+    private var contentBodyLineSpacing: CGFloat {
+        presentationStyle == .contentFirst
+            ? NoteExcerptTypography.bodyLineSpacing
+            : TimelineTypography.eventRichTextLineSpacing
     }
 
     // MARK: - Image Wall

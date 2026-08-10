@@ -1,13 +1,13 @@
 /**
  * [INPUT]: 依赖 TimelineCheckInEvent/CheckInAmountLevel 数据模型、TimelineCardMetaLine、XMBookCover 封面、CardContainer 容器、DesignTokens 设计令牌
- * [OUTPUT]: 对外提供 TimelineCheckInCard（时间线打卡卡片）
- * [POS]: Reading/Timeline 页面私有子视图，渲染书籍封面+阅读量级别徽章
+ * [OUTPUT]: 对外提供 TimelineCheckInCard 与 ReadingCheckInLevelIndicator，统一时间线和当日轨迹的书籍身份与四级阅读量表达
+ * [POS]: Reading/Timeline 页面共享子视图，渲染书籍封面、信息与仅点亮当前档位的四格热力指示器
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
 import SwiftUI
 
-/// 时间线打卡卡片，展示书籍封面、书名/作者与 4 级阅读量胶囊徽章。
+/// 时间线打卡卡片，展示书籍封面、书名/作者与只点亮当前等级的四格阅读量指示器。
 struct TimelineCheckInCard: View {
     let event: TimelineCheckInEvent
     let timestamp: Int64
@@ -15,62 +15,120 @@ struct TimelineCheckInCard: View {
     let bookAuthor: String
     let bookCover: String
 
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
     var body: some View {
         CardContainer(cornerRadius: TimelineCalendarStyle.eventCardCornerRadius) {
             VStack(alignment: .leading, spacing: Spacing.base) {
                 TimelineCardMetaLine(timestamp: timestamp, bookName: "")
 
-                HStack(alignment: .top, spacing: Spacing.screenEdge) {
-                    XMBookCover.fixedWidth(
-                        54,
-                        urlString: bookCover,
-                        border: .init(color: .surfaceBorderDefault, width: CardStyle.borderWidth)
-                    )
-
-                    VStack(alignment: .leading, spacing: Spacing.compact) {
-                        Text(bookName)
-                            .font(AppTypography.subheadlineMedium)
-                            .foregroundStyle(Color.textPrimary)
-                            .lineLimit(1)
-
-                        Text(bookAuthor)
-                            .font(AppTypography.caption)
-                            .foregroundStyle(Color.textSecondary)
-                            .lineLimit(1)
+                if dynamicTypeSize.isAccessibilitySize {
+                    VStack(alignment: .leading, spacing: Spacing.cozy) {
+                        bookIdentity
+                        levelIndicator
+                            .frame(maxWidth: .infinity, alignment: .trailing)
                     }
-
-                    Spacer(minLength: 0)
-
-                    amountBadge
+                } else {
+                    HStack(alignment: .center, spacing: Spacing.base) {
+                        bookIdentity
+                            .frame(minWidth: 64, maxWidth: .infinity, alignment: .leading)
+                        levelIndicator
+                            .fixedSize(horizontal: true, vertical: false)
+                            .layoutPriority(1)
+                    }
                 }
             }
             .padding(Spacing.contentEdge)
         }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("阅读打卡，阅读量\(level.label)，来源书籍《\(displayBookName)》")
     }
-
-    // MARK: - Amount Badge
 
     private var level: CheckInAmountLevel {
-        CheckInAmountLevel(amount: event.amount)
+        CheckInAmountLevel(amount: Int64(selectedLevel))
     }
 
-    private var amountBadge: some View {
-        Text(level.label)
-            .font(AppTypography.caption2Medium)
-            .foregroundStyle(.white)
-            .padding(.horizontal, Spacing.cozy)
-            .padding(.vertical, Spacing.compact)
-            .background(amountColor, in: Capsule())
+    private var selectedLevel: Int {
+        min(4, max(1, Int(event.amount)))
     }
 
-    /// 4 级绿色梯度，对齐 Android ChartHelper.getColorsForDataLevel
-    private var amountColor: Color {
-        switch level {
-        case .veryLess: Color(hex: 0x9BE9A8)
-        case .less: Color(hex: 0x40C463)
-        case .more: Color(hex: 0x30A14F)
-        case .veryMore: Color(hex: 0x226E39)
+    private var bookIdentity: some View {
+        HStack(alignment: .top, spacing: Spacing.base) {
+            XMBookCover.fixedWidth(
+                48,
+                urlString: bookCover,
+                border: .init(color: .surfaceBorderDefault, width: CardStyle.borderWidth),
+                placeholderIconSize: .small
+            )
+            .accessibilityHidden(true)
+
+            VStack(alignment: .leading, spacing: Spacing.tiny) {
+                Text(displayBookName)
+                    .font(AppTypography.subheadlineMedium)
+                    .foregroundStyle(Color.textPrimary)
+                    .lineLimit(2)
+                    .truncationMode(.tail)
+
+                if !displayBookAuthor.isEmpty {
+                    Text(displayBookAuthor)
+                        .font(AppTypography.caption)
+                        .foregroundStyle(Color.textSecondary)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                }
+            }
         }
+    }
+
+    private var levelIndicator: some View {
+        ReadingCheckInLevelIndicator(selectedLevel: selectedLevel, label: level.label)
+            .accessibilityHidden(true)
+    }
+
+    private var displayBookName: String {
+        let trimmed = TimelineMeaningfulText.trimmedText(bookName)
+        return trimmed.isEmpty ? "未命名书籍" : trimmed
+    }
+
+    private var displayBookAuthor: String {
+        TimelineMeaningfulText.trimmedText(bookAuthor)
+    }
+}
+
+/// 四枚热力格仅点亮当前阅读量等级，文字标签确保颜色不是唯一的信息通道。
+struct ReadingCheckInLevelIndicator: View {
+    let selectedLevel: Int
+    let label: String
+
+    @ScaledMetric(relativeTo: .caption) private var cellSize = 14.0
+
+    var body: some View {
+        VStack(alignment: .trailing, spacing: Spacing.half) {
+            HStack(spacing: Spacing.compact) {
+                ForEach(1...4, id: \.self) { index in
+                    RoundedRectangle(cornerRadius: CornerRadius.inlayTiny)
+                        .fill(color(for: index))
+                        .frame(
+                            width: min(cellSize, 20),
+                            height: min(cellSize, 20)
+                        )
+                }
+            }
+
+            Text(label)
+                .font(AppTypography.captionMedium)
+                .foregroundStyle(Color.textSecondary)
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("阅读量\(label)")
+    }
+
+    private func color(for index: Int) -> Color {
+        guard index == min(4, max(1, selectedLevel)),
+              let heatmapLevel = HeatmapLevel(rawValue: index) else {
+            return .heatmapNone
+        }
+        return heatmapLevel.color
     }
 }
 
