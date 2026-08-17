@@ -1525,7 +1525,7 @@ nonisolated enum BookDetailAttributeKind: Hashable, Sendable {
     }
 }
 
-/// 书籍详情页资料属性，属性值保留原始展示文本。
+/// 书籍工作台资料属性，属性值保留原始展示文本。
 nonisolated struct BookDetailAttribute: Identifiable, Hashable, Sendable {
     let kind: BookDetailAttributeKind
     let value: String
@@ -1533,7 +1533,7 @@ nonisolated struct BookDetailAttribute: Identifiable, Hashable, Sendable {
     var id: String { "\(kind)-\(value)" }
 }
 
-/// 书籍详情页目录条目，按 Android v41 章节层级字段展示缩进。
+/// 书籍工作台目录条目，按 Android v41 章节层级字段展示缩进。
 nonisolated struct BookDetailChapter: Identifiable, Hashable, Sendable {
     let id: Int64
     let parentID: Int64
@@ -1572,7 +1572,7 @@ nonisolated enum BookNotesLoadState: String, Hashable, Sendable {
     case failed
 }
 
-/// 书籍详情页模型，聚合资料字段、目录、书摘数量与阅读状态，并承载首屏阅读概览。
+/// 书籍工作台模型，聚合资料字段、目录、四域数量与阅读状态，并承载首屏阅读概览。
 nonisolated struct BookDetail: Identifiable, Hashable, Sendable {
     let id: Int64
     let name: String
@@ -1582,7 +1582,9 @@ nonisolated struct BookDetail: Identifiable, Hashable, Sendable {
     let noteCount: Int
     let relatedCount: Int
     let reviewCount: Int
+    let readStatusID: Int64
     let readStatusName: String
+    let readStatusBadgeTitle: String
     let score: Int64
     let totalReadingSeconds: Int64
     let readingProgressFraction: Double?
@@ -1595,7 +1597,7 @@ nonisolated struct BookDetail: Identifiable, Hashable, Sendable {
     let attributes: [BookDetailAttribute]
     let chapters: [BookDetailChapter]
 
-    /// 构建详情页展示模型；纯文本预览由页面状态源按需预处理，Repository 可只提供原始 HTML 字段。
+    /// 构建书籍工作台展示模型；纯文本预览由页面状态源按需预处理，Repository 可只提供原始 HTML 字段。
     init(
         id: Int64,
         name: String,
@@ -1605,7 +1607,9 @@ nonisolated struct BookDetail: Identifiable, Hashable, Sendable {
         noteCount: Int,
         relatedCount: Int,
         reviewCount: Int,
+        readStatusID: Int64,
         readStatusName: String,
+        readStatusBadgeTitle: String,
         score: Int64,
         totalReadingSeconds: Int64,
         readingProgressFraction: Double?,
@@ -1626,7 +1630,9 @@ nonisolated struct BookDetail: Identifiable, Hashable, Sendable {
         self.noteCount = noteCount
         self.relatedCount = relatedCount
         self.reviewCount = reviewCount
+        self.readStatusID = readStatusID
         self.readStatusName = readStatusName
+        self.readStatusBadgeTitle = readStatusBadgeTitle
         self.score = score
         self.totalReadingSeconds = totalReadingSeconds
         self.readingProgressFraction = readingProgressFraction

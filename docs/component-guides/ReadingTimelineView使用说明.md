@@ -34,7 +34,7 @@ ReadingTimelineView(
 | --- | --- | --- | --- |
 | `viewModel` | `TimelineViewModel?` | `nil` | 时间线状态源。为 `nil` 时展示首开静态壳层；有值时进入正式内容树。 |
 | `onOpenContentViewer` | `(ContentViewerSourceContext, ContentViewerItemID) -> Void` | 空实现 | 事件点击后上抛到内容查看页。 |
-| `onOpenBookDetail` | `(Int64) -> Void` | 空实现 | 书籍类事件点击后上抛到书籍详情页。 |
+| `onOpenBookDetail` | `(Int64) -> Void` | 空实现 | 书籍类事件点击后上抛到书籍工作台。 |
 
 ## 示例
 

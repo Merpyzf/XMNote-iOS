@@ -27,7 +27,7 @@
 - `BookContainerView使用说明.md`: BookContainerView 页面组件接入指南与参数说明。
 - `BookGridView使用说明.md`: BookGridView 页面组件接入指南与参数说明。
 - `BookGridItemView使用说明.md`: BookGridItemView 页面组件接入指南与参数说明。
-- `BookDetailView使用说明.md`: BookDetailView 页面组件接入指南与参数说明。
+- `BookDetailView使用说明.md`: BookDetailView（书籍工作台）页面壳层、数据边界、共享分页与参数接入指南。
 - `BookCollectionListView使用说明.md`: BookCollectionListView 书单列表页接入指南与参数说明。
 - `BookCollectionDetailView使用说明.md`: BookCollectionDetailView 书单详情页接入指南与参数说明。
 - `BookCollectionCoverSearchSheet使用说明.md`: BookCollectionCoverSearchSheet 书单封面搜索 Sheet 接入指南与参数说明。

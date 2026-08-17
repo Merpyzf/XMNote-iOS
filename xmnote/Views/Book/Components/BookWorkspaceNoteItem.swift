@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 NoteExcerpt、ExpandableRichText、XMJXImageWall 与 DesignTokens 展示单书工作台章节及书摘
- * [OUTPUT]: 对 BookDetailView 提供头部呼吸与轻量 Tab 布局刻度、共享主题画布的粘性章节头，以及带不透明阅读表面和清晰轻描边的独立书摘卡片
+ * [OUTPUT]: 对 BookDetailView 提供统一 16pt 页面结构轴、紧凑 Hero 与内容宽度 Tab 布局刻度、共享主题画布的粘性章节头，以及带主题不透明阅读表面的独立书摘卡片
  * [POS]: Views/Book/Components 的页面私有内容组件，承接主题头部节奏、章节分组和具备清晰信息亲密性的书摘列表项
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -10,35 +10,34 @@ import UIKit
 
 /// 单书工作台专用布局刻度；把 Android 的紧凑节奏转换为当前 iOS 设计系统，不影响全局间距令牌。
 enum BookWorkspaceLayoutMetrics {
-    static let pageHorizontalInset: CGFloat = 12
-    static let headerHorizontalInset: CGFloat = 16
-    static let cardContentInset: CGFloat = 16
-    static let itemSpacing: CGFloat = 10
-    static let chapterToFirstItemSpacing: CGFloat = 8
-    static let sectionSpacing: CGFloat = 12
+    static let pageHorizontalInset: CGFloat = Spacing.screenEdge
+    static let headerHorizontalInset: CGFloat = pageHorizontalInset
+    static let cardContentInset: CGFloat = Spacing.screenEdge
+    static let itemSpacing: CGFloat = Spacing.tight
+    static let chapterToFirstItemSpacing: CGFloat = Spacing.cozy
+    static let sectionSpacing: CGFloat = Spacing.section
+    static let headerBlockSpacing: CGFloat = Spacing.base
     static let contentBlockSpacing: CGFloat = 10
     static let metadataSpacing: CGFloat = 8
     static let minimumControlHeight: CGFloat = 44
-    static let headerTopInset: CGFloat = 16
-    static let headerBottomInset: CGFloat = 24
+    static let headerTopInset: CGFloat = Spacing.base
+    static let headerBottomInset: CGFloat = Spacing.section
     static let identityPrimarySpacing: CGFloat = 6
     static let identitySecondarySpacing: CGFloat = 4
-    static let metricsSpacing: CGFloat = 12
-    static let headerMetricsSpacing: CGFloat = 8
-    static var headerMetricsReservedHeight: CGFloat {
-        minimumControlHeight + headerMetricsSpacing
-    }
+    static let metricsSpacing: CGFloat = Spacing.base
+    static let scopeItemSpacing: CGFloat = Spacing.double
+    static let scopeTitleCountSpacing: CGFloat = Spacing.compact
+    static let scopeIndicatorWidth: CGFloat = 24
+    static let scopeIndicatorHeight: CGFloat = 3
+    static let scopeIndicatorOffset: CGFloat = Spacing.tight
+    static let scopeAccessibilityIndicatorSpacing: CGFloat = Spacing.cozy
     static let scopeBarEstimatedHeight: CGFloat = 44
 }
 
-/// 单书工作台内容表面的页面私有样式，统一不透明阅读填充与不抢正文的语义描边。
+/// 单书工作台内容表面的页面私有样式，只保留不抢正文的弱语义描边。
 enum BookWorkspaceCardSurfaceStyle {
-    static var fill: Color {
-        Color.surfaceCard
-    }
-
     static var border: Color {
-        Color.surfaceBorderSubtle
+        Color.surfaceBorderSubtle.opacity(0.55)
     }
 }
 
@@ -56,7 +55,7 @@ struct BookWorkspaceChapterHeader: View {
     var body: some View {
         HStack(spacing: Spacing.cozy) {
             Text(title)
-                .font(AppTypography.headline)
+                .font(AppTypography.subheadlineMedium)
                 .foregroundStyle(Color.textPrimary)
                 .lineLimit(dynamicTypeSize.isAccessibilitySize ? 2 : 1)
                 .multilineTextAlignment(.leading)
@@ -96,6 +95,7 @@ struct BookWorkspaceChapterHeader: View {
 struct BookWorkspaceNoteItem: View {
     let note: NoteExcerpt
     let footerText: String
+    let surfaceColor: Color
     @Binding var isContentExpanded: Bool
     @Binding var isIdeaExpanded: Bool
     let onOpen: () -> Void
@@ -134,7 +134,7 @@ struct BookWorkspaceNoteItem: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(BookWorkspaceLayoutMetrics.cardContentInset)
-        .background(BookWorkspaceCardSurfaceStyle.fill, in: shape)
+        .background(surfaceColor, in: shape)
         .overlay {
             shape.strokeBorder(
                 BookWorkspaceCardSurfaceStyle.border,
@@ -281,6 +281,7 @@ struct BookWorkspaceNoteItem: View {
 struct BookWorkspaceStatefulNoteItem: View {
     let row: BookWorkspaceNoteRow
     @Bindable var state: BookWorkspaceNoteRowState
+    let surfaceColor: Color
     let onOpen: () -> Void
     let onEdit: () -> Void
 
@@ -288,6 +289,7 @@ struct BookWorkspaceStatefulNoteItem: View {
         BookWorkspaceNoteItem(
             note: row.note,
             footerText: row.footerText,
+            surfaceColor: surfaceColor,
             isContentExpanded: $state.isContentExpanded,
             isIdeaExpanded: $state.isIdeaExpanded,
             onOpen: onOpen,

@@ -1,7 +1,7 @@
 /**
  * [INPUT]: 依赖 RepositoryContainer、AppNavigationCoordinator、BookDetailViewModel、XMBookCover、XMRatingBar 与外层书籍/阅读路由回调
- * [OUTPUT]: 对外提供首帧结构稳定的 BookDetailView、BookReadingDetailView、BookChapterNotesView，形成搜索工具栏与四域内容常驻的单书工作台
- * [POS]: Book 模块单书内容工作台壳层，通过单一滚动直驱顶部主题表面、原子吸顶、独立滚动状态与单一更多菜单承接目录/书摘/相关/书评
+ * [OUTPUT]: 对外提供首帧结构稳定的 BookDetailView、BookReadingDetailView、BookChapterNotesView，形成贯穿导航栏的主题背景、共享可收起书籍概览、吸顶 Tab 与纯内容 Pager
+ * [POS]: Book 模块单书内容工作台壳层，以背景/内容分层的共享 Chrome 和独立内容滚动承接目录/书摘/相关/书评
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
@@ -141,83 +141,51 @@ private struct BookRelatedGroup: Identifiable {
     let items: [BookRelatedExcerpt]
 }
 
-/// 保存单个内容域实测出的书籍头部高度，供封面取色氛围随滚动连续收起。
-private struct BookWorkspaceHeaderAnchors: Equatable {
-    var pinOffset: CGFloat = 0
-}
-
-/// 从系统滚动几何中提取渲染氛围所需的最小连续指标，避免把完整 ScrollGeometry 写入状态。
-private struct BookWorkspaceScrollMetrics: Equatable, Sendable {
-    var effectiveOffset: CGFloat = 0
-    var viewportTop: CGFloat = 0
-}
-
-/// 隔离单个内容域的高频滚动指标，只有氛围背景订阅其变化，书摘列表不参与逐帧刷新。
-@Observable
-@MainActor
-private final class BookWorkspaceScrollVisualState {
-    var effectiveOffset: CGFloat = 0
-    var viewportTop: CGFloat = 0
-
-    /// 在主线程接收系统滚动回调；数值未变化时不写入，避免无效观察通知。
-    func update(_ metrics: BookWorkspaceScrollMetrics) {
-        if effectiveOffset != metrics.effectiveOffset {
-            effectiveOffset = metrics.effectiveOffset
-        }
-        if viewportTop != metrics.viewportTop {
-            viewportTop = metrics.viewportTop
-        }
-    }
-}
-
-/// 为四个常驻内容域保存稳定的视觉状态引用，切换 Tab 不会重建或串用滚动位置。
-@MainActor
-private final class BookWorkspaceScrollVisualStates {
-    private let catalog = BookWorkspaceScrollVisualState()
-    private let notes = BookWorkspaceScrollVisualState()
-    private let related = BookWorkspaceScrollVisualState()
-    private let reviews = BookWorkspaceScrollVisualState()
-
-    /// 返回指定内容域唯一的视觉状态 owner。
-    func state(for section: BookWorkspaceSection) -> BookWorkspaceScrollVisualState {
-        switch section {
-        case .catalog:
-            return catalog
-        case .notes:
-            return notes
-        case .related:
-            return related
-        case .reviews:
-            return reviews
-        }
-    }
-}
-
-/// 从封面取色生成不透明页面画布，并以正文对比度为上限约束主题色强度。
+/// 从封面取色生成不透明页面画布与内容表面，并以正文对比度为上限约束主题色强度。
 struct BookWorkspaceThemePalette {
     let identifier: UInt64
     let canvasColor: Color
+    let contentSurfaceColor: Color
     let headerLeadingColor: Color
     let headerTrailingColor: Color
 
-    /// 用封面色和当前外观的系统分组底色生成正文、文字侧 Header 与封面侧 Header 三档不透明背景。
+    /// 用封面色和当前外观的系统分组底色生成画布、内容表面与两档 Header 不透明背景。
     init(tintRGBAHex: UInt32?, colorScheme: ColorScheme) {
         let isDark = colorScheme == .dark
         let interfaceStyle: UIUserInterfaceStyle = isDark ? .dark : .light
         let traits = UITraitCollection(userInterfaceStyle: interfaceStyle)
         let resolvedBaseColor = UIColor.systemGroupedBackground.resolvedColor(with: traits)
+        let resolvedSurfaceColor = UIColor.secondarySystemGroupedBackground.resolvedColor(with: traits)
         let base = RGBComponents(uiColor: resolvedBaseColor)
             ?? (isDark
                 ? RGBComponents(red8: 0x1C, green8: 0x1C, blue8: 0x1E)
                 : RGBComponents(red8: 0xF2, green8: 0xF2, blue8: 0xF7))
+        let surface = RGBComponents(uiColor: resolvedSurfaceColor)
+            ?? (isDark
+                ? RGBComponents(red8: 0x2C, green8: 0x2C, blue8: 0x2E)
+                : RGBComponents(red8: 0xFF, green8: 0xFF, blue8: 0xFF))
         let fallback = base.color
         let fallbackIdentifier = UInt64(isDark ? 1 : 0)
+        let primaryText = isDark
+            ? RGBComponents(red8: 0xC6, green8: 0xC8, blue8: 0xCB)
+            : RGBComponents(red8: 0x33, green8: 0x33, blue8: 0x33)
+        let secondaryText = isDark
+            ? RGBComponents(red8: 0x8C, green8: 0x92, blue8: 0x9B)
+            : RGBComponents(red8: 0x66, green8: 0x66, blue8: 0x66)
+        let fallbackContentSurface = Self.accessibleBlend(
+            source: surface,
+            base: base,
+            maximumStrength: 0.7,
+            primaryText: primaryText,
+            secondaryText: secondaryText
+        )
 
         guard let tintRGBAHex,
               tintRGBAHex != 0,
               tintRGBAHex & 0xFF > 0 else {
             identifier = fallbackIdentifier
             canvasColor = fallback
+            contentSurfaceColor = fallbackContentSurface.color
             headerLeadingColor = fallback
             headerTrailingColor = fallback
             return
@@ -227,17 +195,12 @@ struct BookWorkspaceThemePalette {
         guard source.saturation >= 0.12 else {
             identifier = fallbackIdentifier
             canvasColor = fallback
+            contentSurfaceColor = fallbackContentSurface.color
             headerLeadingColor = fallback
             headerTrailingColor = fallback
             return
         }
 
-        let primaryText = isDark
-            ? RGBComponents(red8: 0xC6, green8: 0xC8, blue8: 0xCB)
-            : RGBComponents(red8: 0x33, green8: 0x33, blue8: 0x33)
-        let secondaryText = isDark
-            ? RGBComponents(red8: 0x8C, green8: 0x92, blue8: 0x9B)
-            : RGBComponents(red8: 0x66, green8: 0x66, blue8: 0x66)
         let canvasSaturationDamping = Self.saturationDamping(
             for: source.saturation,
             maximumReduction: 0.25
@@ -251,6 +214,13 @@ struct BookWorkspaceThemePalette {
             source: source,
             base: base,
             maximumStrength: (isDark ? 0.015 : 0.01) * canvasSaturationDamping,
+            primaryText: primaryText,
+            secondaryText: secondaryText
+        )
+        let contentSurface = Self.accessibleBlend(
+            source: surface,
+            base: canvas,
+            maximumStrength: 0.7,
             primaryText: primaryText,
             secondaryText: secondaryText
         )
@@ -271,6 +241,7 @@ struct BookWorkspaceThemePalette {
 
         identifier = (UInt64(tintRGBAHex) << 1) | UInt64(isDark ? 1 : 0)
         canvasColor = canvas.color
+        contentSurfaceColor = contentSurface.color
         headerLeadingColor = headerLeading.color
         headerTrailingColor = headerTrailing.color
     }
@@ -387,60 +358,6 @@ struct BookWorkspaceThemePalette {
     }
 }
 
-/// 绘制贯穿全页的封面主题画布，滚动收起只使用位置变换。
-private struct BookWorkspaceAtmosphere: View {
-    let palette: BookWorkspaceThemePalette
-    let headerHeight: CGFloat
-    let visualState: BookWorkspaceScrollVisualState
-
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-
-    var body: some View {
-        GeometryReader { geometry in
-            let viewportTop = max(visualState.viewportTop, geometry.safeAreaInsets.top)
-            let restingExtent = max(viewportTop + headerHeight, 1)
-            let collapseDistance = min(max(visualState.effectiveOffset, 0), headerHeight)
-            let overscrollDistance = max(-visualState.effectiveOffset, 0)
-            let stretchScale = (restingExtent + overscrollDistance) / restingExtent
-
-            ZStack(alignment: .top) {
-                palette.canvasColor
-
-                if headerHeight > 0 {
-                    LinearGradient(
-                        colors: [palette.headerLeadingColor, palette.headerTrailingColor],
-                        startPoint: .leading,
-                        endPoint: .trailing
-                    )
-                    .mask {
-                        LinearGradient(
-                            stops: [
-                                .init(color: .black, location: 0),
-                                .init(color: .black, location: 0.42),
-                                .init(color: .black.opacity(0.25), location: 0.72),
-                                .init(color: .clear, location: 1)
-                            ],
-                            startPoint: .top,
-                            endPoint: .bottom
-                        )
-                    }
-                    .frame(maxWidth: .infinity)
-                    .frame(height: restingExtent)
-                    .scaleEffect(x: 1, y: stretchScale, anchor: .top)
-                    .offset(y: -collapseDistance)
-                }
-            }
-            .animation(
-                reduceMotion ? nil : .easeInOut(duration: 0.18),
-                value: palette.identifier
-            )
-        }
-        .ignoresSafeArea(.container, edges: .top)
-        .allowsHitTesting(false)
-        .accessibilityHidden(true)
-    }
-}
-
 /// 单书四域工作台主体；四个滚动容器常驻，保证切换后恢复各自滚动位置。
 private struct BookWorkspaceContentView: View {
 #if DEBUG
@@ -465,8 +382,6 @@ private struct BookWorkspaceContentView: View {
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
     @State private var selectedSection = BookWorkspaceSection.notes
     @State private var presentationStore = BookWorkspacePresentationStore()
-    @State private var scrollVisualStates = BookWorkspaceScrollVisualStates()
-    @State private var headerAnchors: [BookWorkspaceSection: BookWorkspaceHeaderAnchors] = [:]
     @State private var searchQueries: [BookWorkspaceSection: String] = [:]
     @State private var isSearchPresented = false
     @State private var catalogFilter = CatalogFilter.all
@@ -675,7 +590,7 @@ private struct BookWorkspaceContentView: View {
             .accessibilityLabel(accessibilityLabel)
     }
 
-    /// 组合四个常驻滚动域，隐藏域不参与点击或辅助技术导航。
+    /// 组合唯一固定书籍头部、固定 Tab 与四个常驻纯内容页。
     private func workspace(_ book: BookDetail) -> some View {
         let coordinator = navigationCoordinator
         let palette = themePalette
@@ -683,32 +598,24 @@ private struct BookWorkspaceContentView: View {
         let relatedKeyword = searchQuery(.related)
         let reviewsKeyword = searchQuery(.reviews)
 
-        return ZStack {
-            ForEach(BookWorkspaceSection.allCases, id: \.self) { section in
-                BookWorkspaceAtmosphere(
-                    palette: palette,
-                    headerHeight: (headerAnchors[section] ?? BookWorkspaceHeaderAnchors()).pinOffset,
-                    visualState: scrollVisualStates.state(for: section)
-                )
-                    .opacity(selectedSection == section ? 1 : 0)
-                    .allowsHitTesting(false)
-                    .accessibilityHidden(selectedSection != section)
-            }
-
-            BookWorkspaceCollectionView(
+        return BookWorkspaceCollectionView(
                 book: book,
                 snapshots: Dictionary(
                     uniqueKeysWithValues: BookWorkspaceSection.allCases.map {
                         ($0, presentationStore.snapshot(for: $0))
                     }
                 ),
-                selectedSection: selectedSection,
+                committedSection: selectedSection,
                 notesCount: workspaceNotesCount(for: book),
                 notesLoadState: viewModel.notesLoadState,
                 reduceMotion: reduceMotion,
                 canvasColor: palette.canvasColor,
+                contentSurfaceColor: palette.contentSurfaceColor,
+                headerLeadingColor: palette.headerLeadingColor,
+                headerTrailingColor: palette.headerTrailingColor,
                 canvasPaletteID: palette.identifier,
-                onSelectSection: switchSection,
+                onSectionCommit: commitSection,
+                onNavigationBarSurfaceChange: updateNavigationBarSurfaceVisibility,
                 onOpenReadingDetail: {
                     onOpenReadingDetail(bookId)
                 },
@@ -750,58 +657,24 @@ private struct BookWorkspaceContentView: View {
                             keyword: reviewsKeyword
                         )
                     )
-                },
-                onScrollMetricsChange: handleCollectionScrollMetrics
+                }
             )
-            .ignoresSafeArea(.container, edges: [.top, .bottom])
-            .zIndex(1)
-        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .ignoresSafeArea(.container, edges: [.top, .bottom])
         .background(palette.canvasColor.ignoresSafeArea())
     }
 
-    /// 接收 UIKit 的真实滚动几何；连续指标只写入氛围状态，Tab 吸附完全由 UIKit frame 驱动。
-    private func handleCollectionScrollMetrics(
-        _ section: BookWorkspaceSection,
-        _ metrics: BookWorkspaceCollectionScrollMetrics
-    ) {
-        let visualState = scrollVisualStates.state(for: section)
-        visualState.update(
-            BookWorkspaceScrollMetrics(
-                effectiveOffset: metrics.effectiveOffset,
-                viewportTop: metrics.viewportTop
-            )
-        )
-        if metrics.pinOffset > 0 {
-            var anchors = headerAnchors[section] ?? BookWorkspaceHeaderAnchors()
-            if abs(anchors.pinOffset - metrics.pinOffset) >= 0.5 {
-                anchors.pinOffset = metrics.pinOffset
-                headerAnchors[section] = anchors
-            }
-        }
-        if section == selectedSection {
-            updateNavigationBarSurface(
-                effectiveOffset: metrics.effectiveOffset,
-                pinOffset: metrics.pinOffset
-            )
-        }
-    }
-
-    /// 切换四个常驻内容域；Tab 指示器在自身内部响应，列表与布局不进入动画事务。
-    private func switchSection(_ section: BookWorkspaceSection) {
+    /// 接收原生 Pager 最终落定域；拖动中途不会提前切换搜索、菜单或底部操作语义。
+    private func commitSection(_ section: BookWorkspaceSection) {
         guard selectedSection != section else { return }
         selectedSection = section
-        updateNavigationBarSurface(
-            effectiveOffset: scrollVisualStates.state(for: section).effectiveOffset,
-            pinOffset: (headerAnchors[section] ?? BookWorkspaceHeaderAnchors()).pinOffset
-        )
     }
 
-    /// Tab 吸附后启用同色导航表面，避免正文继续透过浮动导航栏；展开态仍允许 Hero 进入其下方。
-    private func updateNavigationBarSurface(effectiveOffset: CGFloat, pinOffset: CGFloat) {
-        let shouldShowSurface = pinOffset > 0 && effectiveOffset >= pinOffset - 0.5
-        guard shouldShowSurface != isNavigationBarSurfaceVisible else { return }
+    /// Header 完全收起时才切换导航栏不透明表面；连续滚动位置不进入 SwiftUI 状态。
+    private func updateNavigationBarSurfaceVisibility(_ isVisible: Bool) {
+        guard isNavigationBarSurfaceVisible != isVisible else { return }
         withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.16)) {
-            isNavigationBarSurfaceVisible = shouldShowSurface
+            isNavigationBarSurfaceVisible = isVisible
         }
     }
 
@@ -1026,6 +899,7 @@ private struct BookWorkspaceContentView: View {
             BookWorkspaceStatefulNoteItem(
                 row: BookWorkspaceNoteRow(note: note, footerText: note.footerText),
                 state: presentationStore.rowState(for: note.id),
+                surfaceColor: themePalette.contentSurfaceColor,
                 onOpen: { openNote(note) },
                 onEdit: { editNote(note) }
             )

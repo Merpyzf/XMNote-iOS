@@ -1,7 +1,7 @@
 /**
  * [INPUT]: 依赖 BookWorkspacePresentationSnapshot、SwiftUI 行内容构建器与 UIKit UICollectionView
- * [OUTPUT]: 对外提供 BookWorkspaceCollectionView，使用四个常驻原生 Collection 承接主题画布、轻量 Tab、内容表面，并在 DEBUG 记录书摘快照实际应用
- * [POS]: Views/Book/Components 的页面私有 UIKit 混合列表，负责复用、diff、主题画布固定层、粘性推离和视口稳定
+ * [OUTPUT]: 对外提供贯穿顶部安全区的主题背景、共享可收起书籍头部、几何稳定且主题动画隔离的吸顶 Tab 与纯内容原生 Pager
+ * [POS]: Views/Book/Components 的页面私有 UIKit 混合列表，负责背景/内容分层、分页、共享 Chrome、diff、章节吸顶和视口稳定
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
@@ -17,24 +17,21 @@ private func bookWorkspacePixelAligned(_ value: CGFloat, scale: CGFloat) -> CGFl
     return ceil(value * scale) / scale
 }
 
-/// 从 UIKit 滚动层向 SwiftUI 氛围层发布的最小连续几何数据。
-struct BookWorkspaceCollectionScrollMetrics: Equatable, Sendable {
-    let effectiveOffset: CGFloat
-    let viewportTop: CGFloat
-    let pinOffset: CGFloat
-}
-
 /// 四域常驻 UIKit 混合列表；SwiftUI 只提供可复用 Cell 的视觉内容。
 struct BookWorkspaceCollectionView: UIViewRepresentable {
     let book: BookDetail
     let snapshots: [BookWorkspaceSection: BookWorkspacePresentationSnapshot]
-    let selectedSection: BookWorkspaceSection
+    let committedSection: BookWorkspaceSection
     let notesCount: Int
     let notesLoadState: BookNotesLoadState
     let reduceMotion: Bool
     let canvasColor: Color
+    let contentSurfaceColor: Color
+    let headerLeadingColor: Color
+    let headerTrailingColor: Color
     let canvasPaletteID: UInt64
-    let onSelectSection: (BookWorkspaceSection) -> Void
+    let onSectionCommit: (BookWorkspaceSection) -> Void
+    let onNavigationBarSurfaceChange: (Bool) -> Void
     let onOpenReadingDetail: () -> Void
     let onEditBook: () -> Void
     let onToggleChapter: (Int64) -> Void
@@ -43,7 +40,6 @@ struct BookWorkspaceCollectionView: UIViewRepresentable {
     let onEditNote: (NoteExcerpt) -> Void
     let onOpenRelated: (BookRelatedExcerpt) -> Void
     let onOpenReview: (BookReviewExcerpt) -> Void
-    let onScrollMetricsChange: (BookWorkspaceSection, BookWorkspaceCollectionScrollMetrics) -> Void
 
     /// 创建四个常驻 UICollectionView 的唯一宿主。
     func makeUIView(context: Context) -> BookWorkspaceCollectionHostView {
@@ -66,13 +62,17 @@ struct BookWorkspaceCollectionView: UIViewRepresentable {
         BookWorkspaceCollectionConfiguration(
             book: book,
             snapshots: snapshots,
-            selectedSection: selectedSection,
+            committedSection: committedSection,
             notesCount: notesCount,
             notesLoadState: notesLoadState,
             reduceMotion: reduceMotion,
             canvasColor: canvasColor,
+            contentSurfaceColor: contentSurfaceColor,
+            headerLeadingColor: headerLeadingColor,
+            headerTrailingColor: headerTrailingColor,
             canvasPaletteID: canvasPaletteID,
-            onSelectSection: onSelectSection,
+            onSectionCommit: onSectionCommit,
+            onNavigationBarSurfaceChange: onNavigationBarSurfaceChange,
             onOpenReadingDetail: onOpenReadingDetail,
             onEditBook: onEditBook,
             onToggleChapter: onToggleChapter,
@@ -80,8 +80,7 @@ struct BookWorkspaceCollectionView: UIViewRepresentable {
             onOpenNote: onOpenNote,
             onEditNote: onEditNote,
             onOpenRelated: onOpenRelated,
-            onOpenReview: onOpenReview,
-            onScrollMetricsChange: onScrollMetricsChange
+            onOpenReview: onOpenReview
         )
     }
 }
@@ -91,13 +90,17 @@ struct BookWorkspaceCollectionView: UIViewRepresentable {
 private struct BookWorkspaceCollectionConfiguration {
     let book: BookDetail?
     let snapshots: [BookWorkspaceSection: BookWorkspacePresentationSnapshot]
-    let selectedSection: BookWorkspaceSection
+    let committedSection: BookWorkspaceSection
     let notesCount: Int
     let notesLoadState: BookNotesLoadState
     let reduceMotion: Bool
     let canvasColor: Color
+    let contentSurfaceColor: Color
+    let headerLeadingColor: Color
+    let headerTrailingColor: Color
     let canvasPaletteID: UInt64
-    let onSelectSection: (BookWorkspaceSection) -> Void
+    let onSectionCommit: (BookWorkspaceSection) -> Void
+    let onNavigationBarSurfaceChange: (Bool) -> Void
     let onOpenReadingDetail: () -> Void
     let onEditBook: () -> Void
     let onToggleChapter: (Int64) -> Void
@@ -106,7 +109,6 @@ private struct BookWorkspaceCollectionConfiguration {
     let onEditNote: (NoteExcerpt) -> Void
     let onOpenRelated: (BookRelatedExcerpt) -> Void
     let onOpenReview: (BookReviewExcerpt) -> Void
-    let onScrollMetricsChange: (BookWorkspaceSection, BookWorkspaceCollectionScrollMetrics) -> Void
 
     static let empty = BookWorkspaceCollectionConfiguration(
         book: nil,
@@ -115,13 +117,17 @@ private struct BookWorkspaceCollectionConfiguration {
                 ($0, BookWorkspacePresentationSnapshot.initial(for: $0))
             }
         ),
-        selectedSection: .notes,
+        committedSection: .notes,
         notesCount: 0,
         notesLoadState: .loading,
         reduceMotion: false,
         canvasColor: Color.surfacePage,
+        contentSurfaceColor: Color.surfaceCard,
+        headerLeadingColor: Color.surfacePage,
+        headerTrailingColor: Color.surfacePage,
         canvasPaletteID: 0,
-        onSelectSection: { _ in },
+        onSectionCommit: { _ in },
+        onNavigationBarSurfaceChange: { _ in },
         onOpenReadingDetail: {},
         onEditBook: {},
         onToggleChapter: { _ in },
@@ -129,22 +135,13 @@ private struct BookWorkspaceCollectionConfiguration {
         onOpenNote: { _ in },
         onEditNote: { _ in },
         onOpenRelated: { _ in },
-        onOpenReview: { _ in },
-        onScrollMetricsChange: { _, _ in }
+        onOpenReview: { _ in }
     )
 }
 
 /// 向宿主暴露 automatic inset 与布局周期，便于安全区变更时保持同一业务 Item 的视觉位置。
 private final class BookWorkspaceViewportStableCollectionView: UICollectionView {
-    var onBeforeLayout: (() -> Void)?
-    var onAfterLayout: (() -> Void)?
     var onAdjustedInsetChange: (() -> Void)?
-
-    override func layoutSubviews() {
-        onBeforeLayout?()
-        super.layoutSubviews()
-        onAfterLayout?()
-    }
 
     override func adjustedContentInsetDidChange() {
         super.adjustedContentInsetDidChange()
@@ -152,7 +149,7 @@ private final class BookWorkspaceViewportStableCollectionView: UICollectionView 
     }
 }
 
-/// 在 UIKit 原生 section pin/push-off 结果上移动吸附线，使章节标题自然停在唯一 Tab 下方。
+/// 在 UIKit 原生 section pin/push-off 结果上校准物理像素，保持章节标题稳定贴合内容视口顶部。
 private final class BookWorkspacePinnedHeaderCompositionalLayout: UICollectionViewCompositionalLayout {
     private let scopeBarHeightProvider: () -> CGFloat
     private let isPinnedHeaderProvider: (IndexPath) -> Bool
@@ -206,7 +203,7 @@ private final class BookWorkspacePinnedHeaderCompositionalLayout: UICollectionVi
         return adjustedHeaderAttributes(attributes)
     }
 
-    /// 复用系统原生 header frame，只把其可见顶边改成 Tab 底边；下一 Header 仍逐点推出当前 Header。
+    /// 复用系统原生 header frame，把可见顶边对齐到独立内容视口；下一 Header 仍逐点推出当前 Header。
     private func adjustedHeaderAttributes(
         _ source: UICollectionViewLayoutAttributes
     ) -> UICollectionViewLayoutAttributes {
@@ -223,7 +220,7 @@ private final class BookWorkspacePinnedHeaderCompositionalLayout: UICollectionVi
         )
         let pinnedLine = collectionView.contentOffset.y
             + alignedTopInset
-            + max(scopeBarHeightProvider(), 0)
+            + scopeBarHeightProvider()
         var targetY = max(result.frame.minY, pinnedLine)
 
         if let nextIndexPath = nextPinnedHeaderProvider(source.indexPath),
@@ -327,15 +324,13 @@ private final class BookWorkspaceHostingHeaderView: UICollectionReusableView {
     }
 }
 
-/// 页面唯一的 Tab 宿主；复用同一个 UIContentView，只由 Collection 的实时几何更新位置。
-@MainActor
-private final class BookWorkspaceScopeBarHostView: UIView {
+/// 页面唯一的 SwiftUI 书籍头部宿主；四个列表只保留等高占位，不各自创建头部实例。
+private final class BookWorkspaceBookHeaderHostView: UIView {
     private var hostedContentView: (UIView & UIContentView)?
 
     override init(frame: CGRect) {
         super.init(frame: frame)
-        backgroundColor = UIColor(Color.surfacePage)
-        isOpaque = true
+        backgroundColor = .clear
         clipsToBounds = true
     }
 
@@ -344,56 +339,539 @@ private final class BookWorkspaceScopeBarHostView: UIView {
         fatalError("init(coder:) has not been implemented")
     }
 
-    /// 保持 UIKit 宿主身份不变，并让 Tab 内容与宿主同步切换不透明主题画布。
-    func configure(content: AnyView, canvasColor: Color, animated: Bool) {
-        let applyConfiguration = { [self] in
-            backgroundColor = UIColor(canvasColor)
-            let configuration = UIHostingConfiguration {
-                content
-            }
-            .margins(.all, 0)
-            .background(canvasColor)
-            if let hostedContentView {
-                hostedContentView.configuration = configuration
-                setNeedsLayout()
-                return
-            }
-            let contentView = configuration.makeContentView()
-            hostedContentView = contentView
-            addSubview(contentView)
-            setNeedsLayout()
+    /// 复用同一个 UIContentView 更新书籍信息与主题，避免切页创建新的 Header Hosting 树。
+    func configure(content: AnyView) {
+        let configuration = UIHostingConfiguration {
+            content
         }
-        guard animated, hostedContentView != nil else {
-            applyConfiguration()
+        .margins(.all, 0)
+        .background(Color.clear)
+        if let hostedContentView {
+            hostedContentView.configuration = configuration
             return
         }
-        UIView.transition(
-            with: self,
-            duration: 0.18,
-            options: [.transitionCrossDissolve, .beginFromCurrentState, .allowUserInteraction],
-            animations: applyConfiguration
-        )
+        let contentView = configuration.makeContentView()
+        contentView.translatesAutoresizingMaskIntoConstraints = false
+        hostedContentView = contentView
+        addSubview(contentView)
+        NSLayoutConstraint.activate([
+            contentView.leadingAnchor.constraint(equalTo: leadingAnchor),
+            contentView.trailingAnchor.constraint(equalTo: trailingAnchor),
+            contentView.topAnchor.constraint(equalTo: topAnchor),
+            contentView.bottomAnchor.constraint(equalTo: bottomAnchor)
+        ])
     }
 
-    /// 按当前容器宽度测量真实高度，保证 Dynamic Type 不被固定高度裁切。
+    /// 在给定页面宽度下读取 SwiftUI Header 的真实动态高度。
     func fittingHeight(for width: CGFloat) -> CGFloat {
-        guard let hostedContentView, width > 0 else {
-            return BookWorkspaceLayoutMetrics.scopeBarEstimatedHeight
-        }
-        let targetSize = CGSize(
-            width: width,
-            height: UIView.layoutFittingCompressedSize.height
-        )
+        guard let hostedContentView, width > 0 else { return 0 }
         return hostedContentView.systemLayoutSizeFitting(
-            targetSize,
+            CGSize(width: width, height: UIView.layoutFittingCompressedSize.height),
             withHorizontalFittingPriority: .required,
             verticalFittingPriority: .fittingSizeLevel
         ).height
     }
+}
+
+/// 只绘制可越过顶部安全区的封面主题氛围；交互内容由独立裁切层限制在导航栏下方。
+private final class BookWorkspaceHeaderBackdropView: UIView {
+    private let colorGradientLayer = CAGradientLayer()
+    private let verticalFadeMaskLayer = CAGradientLayer()
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        isUserInteractionEnabled = false
+        accessibilityElementsHidden = true
+        clipsToBounds = true
+
+        colorGradientLayer.startPoint = CGPoint(x: 0, y: 0.5)
+        colorGradientLayer.endPoint = CGPoint(x: 1, y: 0.5)
+        verticalFadeMaskLayer.startPoint = CGPoint(x: 0.5, y: 0)
+        verticalFadeMaskLayer.endPoint = CGPoint(x: 0.5, y: 1)
+        verticalFadeMaskLayer.colors = [
+            UIColor.black.cgColor,
+            UIColor.black.cgColor,
+            UIColor.black.withAlphaComponent(0.25).cgColor,
+            UIColor.clear.cgColor
+        ]
+        verticalFadeMaskLayer.locations = [0, 0.42, 0.72, 1]
+        colorGradientLayer.mask = verticalFadeMaskLayer
+        layer.addSublayer(colorGradientLayer)
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    /// 更新不透明画布和主题色；仅主题切换使用淡入淡出，滚动过程只改变外层 Frame。
+    func configure(
+        canvasColor: Color,
+        leadingColor: Color,
+        trailingColor: Color,
+        animated: Bool
+    ) {
+        let resolvedCanvasColor = UIColor(canvasColor).resolvedColor(with: traitCollection)
+        let resolvedLeadingColor = UIColor(leadingColor).resolvedColor(with: traitCollection)
+        let resolvedTrailingColor = UIColor(trailingColor).resolvedColor(with: traitCollection)
+
+        if animated {
+            let transition = CATransition()
+            transition.type = .fade
+            transition.duration = 0.18
+            transition.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+            layer.add(transition, forKey: "bookWorkspaceBackdropPalette")
+            colorGradientLayer.add(transition, forKey: "bookWorkspaceBackdropGradient")
+        }
+
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        layer.backgroundColor = resolvedCanvasColor.cgColor
+        colorGradientLayer.colors = [
+            resolvedLeadingColor.cgColor,
+            resolvedTrailingColor.cgColor
+        ]
+        CATransaction.commit()
+    }
 
     override func layoutSubviews() {
         super.layoutSubviews()
-        hostedContentView?.frame = bounds
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        colorGradientLayer.frame = bounds
+        verticalFadeMaskLayer.frame = colorGradientLayer.bounds
+        CATransaction.commit()
+    }
+}
+
+/// 原生 Tab 的稳定展示载荷；数量变化不会改变标题锚点语义。
+private struct BookWorkspaceScopeBarItem: Equatable {
+    let section: BookWorkspaceSection
+    let title: String
+    let count: Int
+}
+
+/// 单个 Tab 控件，使用系统字体缩放并把标题与数量组合为一个辅助技术元素。
+@MainActor
+private final class BookWorkspaceScopeTabControl: UIControl {
+    let section: BookWorkspaceSection
+    let titleLabel = UILabel()
+    private let countLabel = UILabel()
+    private let stackView = UIStackView()
+    private var traitRegistration: (any UITraitChangeRegistration)?
+
+    init(item: BookWorkspaceScopeBarItem) {
+        section = item.section
+        super.init(frame: .zero)
+        translatesAutoresizingMaskIntoConstraints = false
+        isAccessibilityElement = true
+        accessibilityTraits = .button
+
+        titleLabel.font = AppTypography.uiSemantic(.subheadline, weight: .semibold)
+        titleLabel.adjustsFontForContentSizeCategory = true
+        titleLabel.numberOfLines = 1
+        titleLabel.setContentCompressionResistancePriority(.required, for: .horizontal)
+
+        countLabel.font = AppTypography.uiSemantic(.caption1)
+        countLabel.adjustsFontForContentSizeCategory = true
+        countLabel.textColor = UIColor(Color.textSecondary)
+        countLabel.numberOfLines = 1
+        countLabel.setContentCompressionResistancePriority(.required, for: .horizontal)
+
+        stackView.translatesAutoresizingMaskIntoConstraints = false
+        stackView.isUserInteractionEnabled = false
+        stackView.spacing = BookWorkspaceLayoutMetrics.scopeTitleCountSpacing
+        stackView.addArrangedSubview(titleLabel)
+        stackView.addArrangedSubview(countLabel)
+        addSubview(stackView)
+        NSLayoutConstraint.activate([
+            widthAnchor.constraint(greaterThanOrEqualToConstant: BookWorkspaceLayoutMetrics.minimumControlHeight),
+            heightAnchor.constraint(greaterThanOrEqualToConstant: BookWorkspaceLayoutMetrics.minimumControlHeight),
+            stackView.leadingAnchor.constraint(equalTo: leadingAnchor),
+            stackView.trailingAnchor.constraint(equalTo: trailingAnchor),
+            stackView.topAnchor.constraint(greaterThanOrEqualTo: topAnchor),
+            stackView.bottomAnchor.constraint(lessThanOrEqualTo: bottomAnchor),
+            stackView.centerYAnchor.constraint(equalTo: centerYAnchor)
+        ])
+        configure(item: item)
+        updateAxis()
+        traitRegistration = registerForTraitChanges(
+            [UITraitPreferredContentSizeCategory.self]
+        ) { (control: BookWorkspaceScopeTabControl, _) in
+            control.updateAxis()
+        }
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    /// 更新文案与无障碍值，控件身份和点击行为保持不变。
+    func configure(item: BookWorkspaceScopeBarItem) {
+        titleLabel.text = item.title
+        countLabel.text = String(item.count)
+        accessibilityLabel = "\(item.title)，\(item.count) 项"
+    }
+
+    /// 只在页面落定后提交 selected trait，避免 VoiceOver 在拖动过程中反复播报。
+    func setCommitted(_ isCommitted: Bool) {
+        var traits: UIAccessibilityTraits = .button
+        if isCommitted {
+            traits.insert(.selected)
+        }
+        accessibilityTraits = traits
+    }
+
+    override func accessibilityActivate() -> Bool {
+        sendActions(for: .touchUpInside)
+        return true
+    }
+
+    /// 辅助功能字号改为纵向排列，并为标题下方的指示线保留稳定间距。
+    private func updateAxis() {
+        let isAccessibility = traitCollection.preferredContentSizeCategory.isAccessibilityCategory
+        stackView.axis = isAccessibility ? .vertical : .horizontal
+        stackView.alignment = isAccessibility ? .leading : .firstBaseline
+        stackView.spacing = isAccessibility
+            ? BookWorkspaceLayoutMetrics.scopeIndicatorHeight + Spacing.base
+            : BookWorkspaceLayoutMetrics.scopeTitleCountSpacing
+        invalidateIntrinsicContentSize()
+    }
+}
+
+/// 页面唯一的原生 Tab Bar；分页热路径直接更新标签颜色、指示线和最小可见范围。
+@MainActor
+private final class BookWorkspaceScopeBarView: UIView {
+    var onSelectSection: ((BookWorkspaceSection) -> Void)?
+
+    private let scrollView = UIScrollView()
+    private let stackView = UIStackView()
+    private let indicatorView = UIView()
+    private var controls: [BookWorkspaceScopeTabControl] = []
+    private var items: [BookWorkspaceScopeBarItem] = []
+    private var reduceMotion = false
+    private var committedSection = BookWorkspaceSection.notes
+    private var displayedPagePosition: CGFloat = 0
+    private var lastRevealedIndex: Int?
+    private var lastRevealBoundsSize = CGSize.zero
+    private var pendingImmediateRevealIndex: Int?
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        backgroundColor = UIColor(Color.surfacePage)
+        isOpaque = true
+        clipsToBounds = true
+
+        scrollView.translatesAutoresizingMaskIntoConstraints = false
+        scrollView.showsHorizontalScrollIndicator = false
+        scrollView.showsVerticalScrollIndicator = false
+        scrollView.alwaysBounceHorizontal = false
+        scrollView.isDirectionalLockEnabled = true
+        scrollView.contentInsetAdjustmentBehavior = .never
+
+        stackView.translatesAutoresizingMaskIntoConstraints = false
+        stackView.axis = .horizontal
+        stackView.alignment = .fill
+        stackView.spacing = BookWorkspaceLayoutMetrics.scopeItemSpacing
+
+        indicatorView.backgroundColor = UIColor(Color.textPrimary).withAlphaComponent(0.72)
+        indicatorView.layer.cornerRadius = BookWorkspaceLayoutMetrics.scopeIndicatorHeight / 2
+        indicatorView.isUserInteractionEnabled = false
+        indicatorView.isHidden = true
+
+        addSubview(scrollView)
+        scrollView.addSubview(stackView)
+        scrollView.addSubview(indicatorView)
+        NSLayoutConstraint.activate([
+            scrollView.leadingAnchor.constraint(equalTo: leadingAnchor),
+            scrollView.trailingAnchor.constraint(equalTo: trailingAnchor),
+            scrollView.topAnchor.constraint(equalTo: topAnchor),
+            scrollView.bottomAnchor.constraint(equalTo: bottomAnchor),
+            stackView.leadingAnchor.constraint(
+                equalTo: scrollView.contentLayoutGuide.leadingAnchor,
+                constant: BookWorkspaceLayoutMetrics.pageHorizontalInset
+            ),
+            stackView.trailingAnchor.constraint(
+                equalTo: scrollView.contentLayoutGuide.trailingAnchor,
+                constant: -BookWorkspaceLayoutMetrics.pageHorizontalInset
+            ),
+            stackView.topAnchor.constraint(equalTo: scrollView.contentLayoutGuide.topAnchor),
+            stackView.bottomAnchor.constraint(equalTo: scrollView.contentLayoutGuide.bottomAnchor),
+            stackView.heightAnchor.constraint(equalTo: scrollView.frameLayoutGuide.heightAnchor)
+        ])
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    /// 同步 Tab 文案与主题；只有内容集合变化时才重建轻量控件。
+    func configure(
+        items: [BookWorkspaceScopeBarItem],
+        committedSection: BookWorkspaceSection,
+        reduceMotion: Bool,
+        canvasColor: Color,
+        animatedCanvasChange: Bool
+    ) {
+        self.reduceMotion = reduceMotion
+        self.committedSection = committedSection
+        let applyCanvas = { [self] in
+            backgroundColor = UIColor(canvasColor)
+        }
+        if animatedCanvasChange && !reduceMotion {
+            UIView.animate(
+                withDuration: 0.18,
+                delay: 0,
+                options: [.beginFromCurrentState, .allowUserInteraction, .curveEaseInOut],
+                animations: applyCanvas,
+                completion: nil
+            )
+        } else {
+            UIView.performWithoutAnimation {
+                applyCanvas()
+            }
+        }
+
+        if self.items.map(\.section) != items.map(\.section) {
+            rebuildControls(with: items)
+        } else {
+            for (control, item) in zip(controls, items) {
+                control.configure(item: item)
+            }
+        }
+        self.items = items
+        setCommittedSection(committedSection)
+        setNeedsLayout()
+    }
+
+    /// 根据原生 Pager 的连续页位置更新指示器和标题选中强度。
+    func updatePagePosition(_ position: CGFloat, revealsTarget: Bool) {
+        guard !controls.isEmpty else {
+            displayedPagePosition = 0
+            setIndicatorHidden(true)
+            return
+        }
+        let clamped = min(max(position, 0), CGFloat(controls.count - 1))
+        displayedPagePosition = clamped
+        for (index, control) in controls.enumerated() {
+            let weight = max(0, 1 - abs(clamped - CGFloat(index)))
+            control.titleLabel.textColor = interpolatedTitleColor(progress: weight)
+        }
+
+        layoutIfNeeded()
+        layoutIndicatorIfPossible()
+
+        if revealsTarget {
+            let lowerIndex = min(max(Int(floor(clamped)), 0), controls.count - 1)
+            let fraction = clamped - CGFloat(lowerIndex)
+            let upperIndex = min(lowerIndex + 1, controls.count - 1)
+            let targetIndex = fraction > 0.001 ? upperIndex : lowerIndex
+            _ = revealControlIfNeeded(at: targetIndex, animated: true)
+        }
+    }
+
+    /// 页面落定后更新辅助技术选中态并保证目标完整可见。
+    func setCommittedSection(_ section: BookWorkspaceSection) {
+        committedSection = section
+        let selectedIndex = items.firstIndex { $0.section == section } ?? 0
+        for (index, control) in controls.enumerated() {
+            control.setCommitted(index == selectedIndex)
+        }
+        pendingImmediateRevealIndex = selectedIndex
+        updatePagePosition(CGFloat(selectedIndex), revealsTarget: false)
+    }
+
+    /// 按容器宽度测量真实高度，保证 Dynamic Type 不被固定高度裁切。
+    func fittingHeight(for width: CGFloat) -> CGFloat {
+        guard width > 0 else { return BookWorkspaceLayoutMetrics.scopeBarEstimatedHeight }
+        layoutIfNeeded()
+        let controlHeight = controls.map { control in
+            control.systemLayoutSizeFitting(
+                UIView.layoutFittingCompressedSize,
+                withHorizontalFittingPriority: .fittingSizeLevel,
+                verticalFittingPriority: .fittingSizeLevel
+            ).height
+        }.max() ?? 0
+        return max(BookWorkspaceLayoutMetrics.minimumControlHeight, controlHeight)
+    }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        if lastRevealBoundsSize != scrollView.bounds.size {
+            lastRevealBoundsSize = scrollView.bounds.size
+            lastRevealedIndex = nil
+            pendingImmediateRevealIndex = items.firstIndex { $0.section == committedSection }
+        }
+        layoutIndicatorIfPossible()
+        if let pendingImmediateRevealIndex,
+           revealControlIfNeeded(at: pendingImmediateRevealIndex, animated: false) {
+            self.pendingImmediateRevealIndex = nil
+        }
+    }
+
+    private func rebuildControls(with items: [BookWorkspaceScopeBarItem]) {
+        controls.forEach { control in
+            stackView.removeArrangedSubview(control)
+            control.removeFromSuperview()
+        }
+        controls = items.map { item in
+            let control = BookWorkspaceScopeTabControl(item: item)
+            control.addAction(
+                UIAction { [weak self] _ in
+                    self?.onSelectSection?(item.section)
+                },
+                for: .touchUpInside
+            )
+            stackView.addArrangedSubview(control)
+            return control
+        }
+        displayedPagePosition = 0
+        lastRevealedIndex = nil
+        lastRevealBoundsSize = .zero
+        pendingImmediateRevealIndex = nil
+        setIndicatorHidden(true)
+    }
+
+    private func titleAnchor(for control: BookWorkspaceScopeTabControl) -> CGRect {
+        control.titleLabel.convert(control.titleLabel.bounds, to: scrollView)
+    }
+
+    /// 仅在标题完成有效布局后落位指示线；连续分页通过逐帧无动画写入保持跟手。
+    private func layoutIndicatorIfPossible() {
+        guard !controls.isEmpty,
+              bounds.width.isFinite,
+              bounds.height.isFinite,
+              bounds.width > 0,
+              bounds.height > 0,
+              scrollView.bounds.width.isFinite,
+              scrollView.bounds.height.isFinite,
+              scrollView.bounds.width > 0,
+              scrollView.bounds.height > 0 else {
+            setIndicatorHidden(true)
+            return
+        }
+
+        let clamped = min(max(displayedPagePosition, 0), CGFloat(controls.count - 1))
+        let lowerIndex = min(max(Int(floor(clamped)), 0), controls.count - 1)
+        let upperIndex = min(lowerIndex + 1, controls.count - 1)
+        let fraction = clamped - CGFloat(lowerIndex)
+        let lowerAnchor = titleAnchor(for: controls[lowerIndex])
+        let upperAnchor = titleAnchor(for: controls[upperIndex])
+        guard isValidTitleAnchor(lowerAnchor), isValidTitleAnchor(upperAnchor) else {
+            setIndicatorHidden(true)
+            return
+        }
+
+        let centerX = lowerAnchor.midX + (upperAnchor.midX - lowerAnchor.midX) * fraction
+        let indicatorY = lowerAnchor.maxY + (upperAnchor.maxY - lowerAnchor.maxY) * fraction
+            + Spacing.half
+        let nextFrame = CGRect(
+            x: centerX - BookWorkspaceLayoutMetrics.scopeIndicatorWidth / 2,
+            y: indicatorY,
+            width: BookWorkspaceLayoutMetrics.scopeIndicatorWidth,
+            height: BookWorkspaceLayoutMetrics.scopeIndicatorHeight
+        )
+        guard isFiniteNonEmpty(nextFrame),
+              nextFrame.minY >= -0.5,
+              nextFrame.maxY <= scrollView.bounds.height + 0.5 else {
+            setIndicatorHidden(true)
+            return
+        }
+
+        UIView.performWithoutAnimation {
+            indicatorView.frame = nextFrame
+            indicatorView.isHidden = false
+            scrollView.bringSubviewToFront(indicatorView)
+        }
+    }
+
+    /// 校验标题锚点已位于当前 Tab 的有效纵向布局范围内。
+    private func isValidTitleAnchor(_ frame: CGRect) -> Bool {
+        isFiniteNonEmpty(frame)
+            && frame.minY >= -0.5
+            && frame.maxY <= scrollView.bounds.height + 0.5
+    }
+
+    /// 拒绝零尺寸、空值或无限值几何，避免把布局中间态写入可见 Frame。
+    private func isFiniteNonEmpty(_ frame: CGRect) -> Bool {
+        !frame.isNull
+            && !frame.isInfinite
+            && frame.origin.x.isFinite
+            && frame.origin.y.isFinite
+            && frame.width.isFinite
+            && frame.height.isFinite
+            && frame.width > 0
+            && frame.height > 0
+    }
+
+    /// 无动画切换指示线显隐，避免继承主题或导航转场事务。
+    private func setIndicatorHidden(_ isHidden: Bool) {
+        guard indicatorView.isHidden != isHidden else { return }
+        UIView.performWithoutAnimation {
+            indicatorView.isHidden = isHidden
+        }
+    }
+
+    /// 在几何有效时保证目标 Tab 可见；外部同步立即落位，用户分页才允许滚动动画。
+    @discardableResult
+    private func revealControlIfNeeded(at index: Int, animated: Bool) -> Bool {
+        guard controls.indices.contains(index),
+              scrollView.bounds.width.isFinite,
+              scrollView.bounds.height.isFinite,
+              scrollView.bounds.width > 0,
+              scrollView.bounds.height > 0 else {
+            return false
+        }
+        guard lastRevealedIndex != index else { return true }
+        let target = controls[index].convert(controls[index].bounds, to: scrollView)
+        guard isFiniteNonEmpty(target) else { return false }
+        let horizontalInset = BookWorkspaceLayoutMetrics.pageHorizontalInset
+        let visible = CGRect(
+            x: scrollView.contentOffset.x + horizontalInset,
+            y: 0,
+            width: max(scrollView.bounds.width - horizontalInset * 2, 1),
+            height: scrollView.bounds.height
+        )
+        lastRevealedIndex = index
+        guard !visible.contains(target) else { return true }
+        var nextX = scrollView.contentOffset.x
+        if target.minX < visible.minX {
+            nextX = target.minX - horizontalInset
+        } else if target.maxX > visible.maxX {
+            nextX = target.maxX - scrollView.bounds.width + horizontalInset
+        }
+        let maximumX = max(scrollView.contentSize.width - scrollView.bounds.width, 0)
+        nextX = min(max(nextX, 0), maximumX)
+        scrollView.setContentOffset(
+            CGPoint(x: nextX, y: 0),
+            animated: animated && !reduceMotion && window != nil
+        )
+        return true
+    }
+
+    private func interpolatedTitleColor(progress: CGFloat) -> UIColor {
+        let from = UIColor(Color.textSecondary).resolvedColor(with: traitCollection)
+        let to = UIColor(Color.textPrimary).resolvedColor(with: traitCollection)
+        var fromRed: CGFloat = 0
+        var fromGreen: CGFloat = 0
+        var fromBlue: CGFloat = 0
+        var fromAlpha: CGFloat = 0
+        var toRed: CGFloat = 0
+        var toGreen: CGFloat = 0
+        var toBlue: CGFloat = 0
+        var toAlpha: CGFloat = 0
+        guard from.getRed(&fromRed, green: &fromGreen, blue: &fromBlue, alpha: &fromAlpha),
+              to.getRed(&toRed, green: &toGreen, blue: &toBlue, alpha: &toAlpha) else {
+            return progress >= 0.5 ? to : from
+        }
+        return UIColor(
+            red: fromRed + (toRed - fromRed) * progress,
+            green: fromGreen + (toGreen - fromGreen) * progress,
+            blue: fromBlue + (toBlue - fromBlue) * progress,
+            alpha: fromAlpha + (toAlpha - fromAlpha) * progress
+        )
     }
 }
 
@@ -408,7 +886,6 @@ private final class BookWorkspaceCollectionDomainContext {
     >?
     var snapshot: BookWorkspacePresentationSnapshot
     var appliedRevision = -1
-    var lastPublishedMetrics: BookWorkspaceCollectionScrollMetrics?
     var viewportAnchor: ViewportAnchor?
     var fallbackOffsetY: CGFloat = 0
     var lastAdjustedInset: UIEdgeInsets = .zero
@@ -436,14 +913,34 @@ private final class BookWorkspaceCollectionDomainContext {
 
 /// 用纯值判断 Tab 视觉是否真正变化，滚动过程不会触发 SwiftUI 配置重建。
 private struct BookWorkspaceScopeBarContentState: Equatable {
-    let book: BookDetail
-    let selectedSection: BookWorkspaceSection
-    let notesCount: Int
+    let items: [BookWorkspaceScopeBarItem]
+    let committedSection: BookWorkspaceSection
     let reduceMotion: Bool
     let canvasPaletteID: UInt64
 }
 
-/// 四域原生列表宿主，负责 Collection 生命周期、diff、原生粘性头和受控预热。
+/// 原生 Pager 的连续位置快照；所有索引都基于稳定的 BookWorkspaceSection 顺序。
+private struct BookWorkspacePagerPosition {
+    let rawValue: CGFloat
+    let lowerIndex: Int
+    let upperIndex: Int
+    let fraction: CGFloat
+    let nearestIndex: Int
+
+    init(offsetX: CGFloat, pageWidth: CGFloat, pageCount: Int) {
+        let maximumIndex = max(pageCount - 1, 0)
+        let raw = pageWidth > 0 && offsetX.isFinite
+            ? offsetX / pageWidth
+            : 0
+        rawValue = min(max(raw, 0), CGFloat(maximumIndex))
+        lowerIndex = min(max(Int(floor(rawValue)), 0), maximumIndex)
+        upperIndex = min(lowerIndex + 1, maximumIndex)
+        fraction = rawValue - CGFloat(lowerIndex)
+        nearestIndex = min(max(Int(rawValue.rounded()), 0), maximumIndex)
+    }
+}
+
+/// 四域原生列表宿主，负责原生横向分页、Collection 生命周期、diff、粘性头和受控预热。
 @MainActor
 final class BookWorkspaceCollectionHostView: UIView, UICollectionViewDelegate, UICollectionViewDataSourcePrefetching {
 #if DEBUG
@@ -456,20 +953,38 @@ final class BookWorkspaceCollectionHostView: UIView, UICollectionViewDelegate, U
 
     private var configuration = BookWorkspaceCollectionConfiguration.empty
     private var contexts: [BookWorkspaceSection: BookWorkspaceCollectionDomainContext] = [:]
-    private let scopeBarHostView = BookWorkspaceScopeBarHostView()
+    private let pagerScrollView = UIScrollView()
+    private let headerBackdropView = BookWorkspaceHeaderBackdropView()
+    private let sharedChromeContentClipView = UIView()
+    private let bookHeaderHostView = BookWorkspaceBookHeaderHostView()
+    private let scopeBarHostView = BookWorkspaceScopeBarView()
+    private var pageConstraints: [NSLayoutConstraint] = []
+    private var bookHeaderHeight: CGFloat = 180
     private var scopeBarHeight = BookWorkspaceLayoutMetrics.scopeBarEstimatedHeight
     private var scopeBarContentState: BookWorkspaceScopeBarContentState?
-    private var isScopeBarPlaceholderRefreshScheduled = false
     private var noteRowStates: [Int64: BookWorkspaceNoteRowState] = [:]
-    private var pendingMetrics: [BookWorkspaceSection: BookWorkspaceCollectionScrollMetrics] = [:]
-    private var isMetricsDeliveryScheduled = false
+    private var committedSection = BookWorkspaceSection.notes
+    private var pendingCommitEcho: BookWorkspaceSection?
+    private var requestedSection: BookWorkspaceSection?
+    private var isRetargetingProgrammaticScroll = false
+    private var lastPagerWidth: CGFloat = 0
+    private var isPagerPositionInitialized = false
+    private var transitionSections: Set<BookWorkspaceSection> = [.notes]
+    private weak var prioritizedNavigationPopGestureRecognizer: UIGestureRecognizer?
+    private weak var prioritizedNavigationContentPopGestureRecognizer: UIGestureRecognizer?
+    private var wasNavigationContentPopGestureEnabled: Bool?
+    private var navigationGesturePriorityAttempts = 0
+    private var isNavigationGesturePriorityRefreshScheduled = false
+    private var lastNavigationBarSurfaceVisibility: Bool?
 
     override init(frame: CGRect) {
         super.init(frame: frame)
         backgroundColor = .clear
+        clipsToBounds = true
+        configurePager()
         BookWorkspaceSection.allCases.forEach(makeDomainContext)
-        scopeBarHostView.isHidden = true
-        addSubview(scopeBarHostView)
+        installPageConstraints()
+        configureSharedChrome()
     }
 
     @available(*, unavailable)
@@ -477,52 +992,37 @@ final class BookWorkspaceCollectionHostView: UIView, UICollectionViewDelegate, U
         fatalError("init(coder:) has not been implemented")
     }
 
-    /// 同步四域快照；隐藏域不销毁，只暂停交互、滚动回调和预取。
+    /// 同步四域快照；所有页面常驻，只把业务选中态限制在分页落定时提交。
     fileprivate func update(with configuration: BookWorkspaceCollectionConfiguration) {
         let previousConfiguration = self.configuration
-        let previousSelectedSection = previousConfiguration.selectedSection
+        let previousCommittedSection = previousConfiguration.committedSection
         let canvasChanged = previousConfiguration.canvasPaletteID != configuration.canvasPaletteID
         let animatesCanvasChange = canvasChanged
             && previousConfiguration.book != nil
             && !configuration.reduceMotion
         self.configuration = configuration
+        synchronizeExternalCommit(configuration.committedSection)
+        updateHeaderBackdropContent(animatedCanvasChange: animatesCanvasChange)
+        updateBookHeaderContent()
         updateScopeBarContent(animatedCanvasChange: animatesCanvasChange)
         pruneNoteRowStates()
 
         for section in BookWorkspaceSection.allCases {
             guard let context = contexts[section] else { continue }
-            let isActive = section == configuration.selectedSection
-            context.collectionView.isHidden = !isActive
-            context.collectionView.isUserInteractionEnabled = isActive
-            context.collectionView.accessibilityElementsHidden = !isActive
-            context.collectionView.prefetchDataSource = isActive ? self : nil
-            if !isActive {
-                cancelPrewarming(in: context)
-            }
-
             let nextSnapshot = configuration.snapshots[section]
                 ?? BookWorkspacePresentationSnapshot.initial(for: section)
-            apply(
-                nextSnapshot,
-                to: context,
-                forceReconfigureIDs: chromeItemIDsChanged(
-                    in: section,
-                    from: previousConfiguration,
-                    to: configuration
-                )
-            )
+            apply(nextSnapshot, to: context)
             if canvasChanged {
                 refreshVisibleContent(in: context, animatedCanvasChange: animatesCanvasChange)
             }
         }
 
+        updatePageResourcePolicy()
         updateBottomContentInsets()
 
-        if previousSelectedSection != configuration.selectedSection,
-           let active = contexts[configuration.selectedSection] {
+        if previousCommittedSection != configuration.committedSection,
+           let active = contexts[committedSection] {
             active.collectionView.layoutIfNeeded()
-            layoutScopeBar(for: active)
-            publishMetrics(for: active)
         }
     }
 
@@ -535,36 +1035,334 @@ final class BookWorkspaceCollectionHostView: UIView, UICollectionViewDelegate, U
             context.dataSource = nil
         }
         contexts.removeAll()
+        pagerScrollView.delegate = nil
         noteRowStates.removeAll()
-        pendingMetrics.removeAll()
         scopeBarContentState = nil
+        restoreNavigationContentPopGestureAvailability()
+        bookHeaderHostView.removeFromSuperview()
         scopeBarHostView.removeFromSuperview()
-        isScopeBarPlaceholderRefreshScheduled = false
-        isMetricsDeliveryScheduled = false
+        sharedChromeContentClipView.removeFromSuperview()
+        headerBackdropView.removeFromSuperview()
+        pagerScrollView.removeFromSuperview()
     }
 
     override func layoutSubviews() {
         super.layoutSubviews()
         updateBottomContentInsets()
-        guard let active = contexts[configuration.selectedSection] else { return }
-        if active.lastBoundsSize != active.collectionView.bounds.size {
-            active.lastBoundsSize = active.collectionView.bounds.size
-            active.collectionView.collectionViewLayout.invalidateLayout()
-            publishMetrics(for: active)
+        let pageWidth = pagerScrollView.bounds.width
+        if pageWidth > 0, abs(pageWidth - lastPagerWidth) >= 0.5 {
+            let previousPosition = currentPagerPosition.rawValue
+            lastPagerWidth = pageWidth
+            pagerScrollView.layoutIfNeeded()
+            let targetPosition = isPagerMoving
+                ? previousPosition
+                : CGFloat(index(for: committedSection))
+            pagerScrollView.setContentOffset(
+                CGPoint(x: targetPosition * pageWidth, y: 0),
+                animated: false
+            )
+            isPagerPositionInitialized = true
+        } else if !isPagerPositionInitialized, pageWidth > 0 {
+            alignPager(to: committedSection, animated: false)
+            isPagerPositionInitialized = true
         }
-        updateScopeBarHeightIfNeeded()
-        layoutScopeBar(for: active)
-        bringSubviewToFront(scopeBarHostView)
+
+        for context in contexts.values where context.lastBoundsSize != context.collectionView.bounds.size {
+            context.lastBoundsSize = context.collectionView.bounds.size
+            context.collectionView.collectionViewLayout.invalidateLayout()
+        }
+        updateSharedChromeMetricsIfNeeded()
+        layoutSharedChrome(at: currentPagerPosition)
     }
 
     override func didMoveToWindow() {
         super.didMoveToWindow()
+        if window == nil {
+            restoreNavigationContentPopGestureAvailability()
+            prioritizedNavigationPopGestureRecognizer = nil
+            navigationGesturePriorityAttempts = 0
+            isNavigationGesturePriorityRefreshScheduled = false
+        }
+        prioritizeNavigationPopGestureIfNeeded()
         updateBottomContentInsets()
     }
 
     override func safeAreaInsetsDidChange() {
         super.safeAreaInsetsDidChange()
         updateBottomContentInsets()
+        setNeedsLayout()
+    }
+
+    /// 配置页面唯一的背景、书籍头部与 Tab；背景越过安全区，内容始终裁切在导航栏下方。
+    private func configureSharedChrome() {
+        sharedChromeContentClipView.backgroundColor = .clear
+        sharedChromeContentClipView.clipsToBounds = true
+        bookHeaderHostView.isHidden = true
+        scopeBarHostView.isHidden = true
+        scopeBarHostView.onSelectSection = { [weak self] section in
+            self?.requestPage(section)
+        }
+        insertSubview(headerBackdropView, belowSubview: pagerScrollView)
+        addSubview(sharedChromeContentClipView)
+        sharedChromeContentClipView.addSubview(bookHeaderHostView)
+        sharedChromeContentClipView.addSubview(scopeBarHostView)
+        accessibilityElements = [bookHeaderHostView, scopeBarHostView, pagerScrollView]
+    }
+
+    /// 配置系统原生分页容器；拖动、减速、取消和程序化滚动全部由 UIScrollView 负责。
+    private func configurePager() {
+        pagerScrollView.translatesAutoresizingMaskIntoConstraints = false
+        pagerScrollView.backgroundColor = .clear
+        pagerScrollView.isPagingEnabled = true
+        pagerScrollView.isDirectionalLockEnabled = true
+        pagerScrollView.showsHorizontalScrollIndicator = false
+        pagerScrollView.showsVerticalScrollIndicator = false
+        pagerScrollView.alwaysBounceHorizontal = true
+        pagerScrollView.alwaysBounceVertical = false
+        pagerScrollView.contentInsetAdjustmentBehavior = .never
+        pagerScrollView.scrollsToTop = false
+        pagerScrollView.delegate = self
+        addSubview(pagerScrollView)
+        NSLayoutConstraint.activate([
+            pagerScrollView.leadingAnchor.constraint(equalTo: leadingAnchor),
+            pagerScrollView.trailingAnchor.constraint(equalTo: trailingAnchor),
+            pagerScrollView.topAnchor.constraint(equalTo: safeAreaLayoutGuide.topAnchor),
+            pagerScrollView.bottomAnchor.constraint(equalTo: bottomAnchor)
+        ])
+    }
+
+    /// 让系统左边缘返回优先于横向分页；非边缘拖动会在返回手势失败后立即交还 Pager。
+    private func prioritizeNavigationPopGestureIfNeeded() {
+        guard window != nil else { return }
+        var responder: UIResponder? = self
+        while let current = responder {
+            if let viewController = current as? UIViewController,
+               let navigationController = viewController.navigationController,
+               let popGestureRecognizer = navigationController.interactivePopGestureRecognizer {
+                if prioritizedNavigationPopGestureRecognizer !== popGestureRecognizer {
+                    pagerScrollView.panGestureRecognizer.require(toFail: popGestureRecognizer)
+                    for context in contexts.values {
+                        context.collectionView.panGestureRecognizer.require(toFail: popGestureRecognizer)
+                    }
+                    prioritizedNavigationPopGestureRecognizer = popGestureRecognizer
+                }
+                if #available(iOS 26.0, *),
+                   let contentPopGestureRecognizer = navigationController.interactiveContentPopGestureRecognizer,
+                   prioritizedNavigationContentPopGestureRecognizer !== contentPopGestureRecognizer {
+                    restoreNavigationContentPopGestureAvailability()
+                    wasNavigationContentPopGestureEnabled = contentPopGestureRecognizer.isEnabled
+                    pagerScrollView.panGestureRecognizer.require(toFail: contentPopGestureRecognizer)
+                    for context in contexts.values {
+                        context.collectionView.panGestureRecognizer.require(toFail: contentPopGestureRecognizer)
+                    }
+                    prioritizedNavigationContentPopGestureRecognizer = contentPopGestureRecognizer
+                }
+                navigationGesturePriorityAttempts = 0
+                isNavigationGesturePriorityRefreshScheduled = false
+                updateNavigationContentPopGestureAvailability()
+                return
+            }
+            responder = current.next
+        }
+
+        guard navigationGesturePriorityAttempts < 3,
+              !isNavigationGesturePriorityRefreshScheduled else { return }
+        navigationGesturePriorityAttempts += 1
+        isNavigationGesturePriorityRefreshScheduled = true
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            self.isNavigationGesturePriorityRefreshScheduled = false
+            self.prioritizeNavigationPopGestureIfNeeded()
+        }
+    }
+
+    /// 仅在目录第一页开放 iOS 26 的页面内容返回，避免它抢占后续页面向右翻页。
+    private func updateNavigationContentPopGestureAvailability() {
+        guard let contentPopGestureRecognizer = prioritizedNavigationContentPopGestureRecognizer,
+              let wasEnabled = wasNavigationContentPopGestureEnabled else { return }
+        let firstSection = BookWorkspaceSection.allCases.first
+        contentPopGestureRecognizer.isEnabled = wasEnabled && committedSection == firstSection
+    }
+
+    /// 离开工作台时恢复导航容器原本的内容返回开关，不把页面私有策略泄漏到后续路由。
+    private func restoreNavigationContentPopGestureAvailability() {
+        if let contentPopGestureRecognizer = prioritizedNavigationContentPopGestureRecognizer,
+           let wasEnabled = wasNavigationContentPopGestureEnabled {
+            contentPopGestureRecognizer.isEnabled = wasEnabled
+        }
+        prioritizedNavigationContentPopGestureRecognizer = nil
+        wasNavigationContentPopGestureEnabled = nil
+    }
+
+    /// 用 content/frame layout guide 把所有常驻列表串成等宽页面，不手工维护 contentSize。
+    private func installPageConstraints() {
+        NSLayoutConstraint.deactivate(pageConstraints)
+        pageConstraints.removeAll(keepingCapacity: true)
+        var previousView: UIView?
+        for section in BookWorkspaceSection.allCases {
+            guard let collectionView = contexts[section]?.collectionView else { continue }
+            pageConstraints.append(contentsOf: [
+                collectionView.topAnchor.constraint(equalTo: pagerScrollView.contentLayoutGuide.topAnchor),
+                collectionView.bottomAnchor.constraint(equalTo: pagerScrollView.contentLayoutGuide.bottomAnchor),
+                collectionView.widthAnchor.constraint(equalTo: pagerScrollView.frameLayoutGuide.widthAnchor),
+                collectionView.heightAnchor.constraint(equalTo: pagerScrollView.frameLayoutGuide.heightAnchor)
+            ])
+            if let previousView {
+                pageConstraints.append(collectionView.leadingAnchor.constraint(equalTo: previousView.trailingAnchor))
+            } else {
+                pageConstraints.append(
+                    collectionView.leadingAnchor.constraint(equalTo: pagerScrollView.contentLayoutGuide.leadingAnchor)
+                )
+            }
+            previousView = collectionView
+        }
+        if let previousView {
+            pageConstraints.append(
+                previousView.trailingAnchor.constraint(equalTo: pagerScrollView.contentLayoutGuide.trailingAnchor)
+            )
+        }
+        NSLayoutConstraint.activate(pageConstraints)
+    }
+
+    private var currentPagerPosition: BookWorkspacePagerPosition {
+        BookWorkspacePagerPosition(
+            offsetX: pagerScrollView.contentOffset.x,
+            pageWidth: max(pagerScrollView.bounds.width, lastPagerWidth),
+            pageCount: BookWorkspaceSection.allCases.count
+        )
+    }
+
+    private var isPagerMoving: Bool {
+        pagerScrollView.isTracking
+            || pagerScrollView.isDragging
+            || pagerScrollView.isDecelerating
+            || pagerScrollView.isScrollAnimating
+            || requestedSection != nil
+    }
+
+    private func index(for section: BookWorkspaceSection) -> Int {
+        BookWorkspaceSection.allCases.firstIndex(of: section) ?? 0
+    }
+
+    private func section(at index: Int) -> BookWorkspaceSection {
+        let sections = BookWorkspaceSection.allCases
+        guard sections.indices.contains(index) else { return sections.first ?? .notes }
+        return sections[index]
+    }
+
+    /// 消费 SwiftUI 的落定态回声；外部状态不会在一次交互尚未结束时把 Pager 拉回旧页。
+    private func synchronizeExternalCommit(_ section: BookWorkspaceSection) {
+        if pendingCommitEcho == section {
+            pendingCommitEcho = nil
+            committedSection = section
+            updateNavigationContentPopGestureAvailability()
+            return
+        }
+        guard pendingCommitEcho == nil, section != committedSection else { return }
+        committedSection = section
+        requestedSection = nil
+        transitionSections = [section]
+        if isPagerPositionInitialized {
+            alignPager(to: section, animated: false)
+        }
+        scopeBarHostView.setCommittedSection(section)
+        updateNavigationContentPopGestureAvailability()
+        layoutSharedChrome(at: currentPagerPosition)
+    }
+
+    /// Tab 点击只驱动原生 Pager；业务选中态等待系统滚动真正落定后再提交。
+    private func requestPage(_ section: BookWorkspaceSection) {
+        guard configuration.book != nil, pagerScrollView.bounds.width > 0 else { return }
+        let targetX = CGFloat(index(for: section)) * pagerScrollView.bounds.width
+        guard abs(pagerScrollView.contentOffset.x - targetX) > 0.5 else {
+            settlePager()
+            return
+        }
+        isRetargetingProgrammaticScroll = true
+        pagerScrollView.stopScrollingAndZooming()
+        requestedSection = section
+        updateTransitionSections(including: section)
+        if configuration.reduceMotion {
+            alignPager(to: section, animated: false)
+            isRetargetingProgrammaticScroll = false
+            settlePager()
+        } else {
+            alignPager(to: section, animated: true)
+            isRetargetingProgrammaticScroll = false
+        }
+    }
+
+    private func alignPager(to section: BookWorkspaceSection, animated: Bool) {
+        guard pagerScrollView.bounds.width > 0 else { return }
+        pagerScrollView.setContentOffset(
+            CGPoint(x: CGFloat(index(for: section)) * pagerScrollView.bounds.width, y: 0),
+            animated: animated
+        )
+    }
+
+    /// 页面停止后收敛到最近页，并且只在业务值真实变化时回写一次。
+    private func settlePager() {
+        let position = currentPagerPosition
+        let settled = section(at: position.nearestIndex)
+        let targetX = CGFloat(position.nearestIndex) * pagerScrollView.bounds.width
+        if abs(pagerScrollView.contentOffset.x - targetX) > 0.5 {
+            pagerScrollView.setContentOffset(CGPoint(x: targetX, y: 0), animated: false)
+        }
+        requestedSection = nil
+        committedSection = settled
+        transitionSections = [settled]
+        scopeBarHostView.setCommittedSection(settled)
+        updateNavigationContentPopGestureAvailability()
+        layoutSharedChrome(at: currentPagerPosition)
+        updatePageResourcePolicy()
+        guard configuration.committedSection != settled else { return }
+        pendingCommitEcho = settled
+        configuration.onSectionCommit(settled)
+    }
+
+    /// 忽略被新目标打断的旧结束回调；只有最新目标真正到达后才允许提交业务选中态。
+    private func settlePagerIfReady() {
+        guard !isRetargetingProgrammaticScroll else { return }
+        if let requestedSection {
+            let targetX = CGFloat(index(for: requestedSection)) * pagerScrollView.bounds.width
+            guard abs(pagerScrollView.contentOffset.x - targetX) <= 0.5 else {
+                if !pagerScrollView.isScrollAnimating {
+                    alignPager(to: requestedSection, animated: !configuration.reduceMotion)
+                }
+                return
+            }
+        }
+        settlePager()
+    }
+
+    /// 仅起始页与当前目标页参与交互和预取，页面对象及其滚动状态始终保留。
+    private func updateTransitionSections(including requested: BookWorkspaceSection? = nil) {
+        let position = currentPagerPosition
+        var sections: Set<BookWorkspaceSection> = [
+            section(at: position.lowerIndex),
+            section(at: position.upperIndex)
+        ]
+        if let requested {
+            sections.insert(requested)
+        }
+        guard sections != transitionSections else { return }
+        transitionSections = sections
+        updatePageResourcePolicy()
+    }
+
+    private func updatePageResourcePolicy() {
+        let activeSections = isPagerMoving ? transitionSections : [committedSection]
+        for (section, context) in contexts {
+            let participates = activeSections.contains(section)
+            context.collectionView.isHidden = false
+            context.collectionView.isUserInteractionEnabled = participates
+            context.collectionView.accessibilityElementsHidden = section != committedSection
+            context.collectionView.scrollsToTop = section == committedSection
+            context.collectionView.prefetchDataSource = participates ? self : nil
+            if !participates {
+                cancelPrewarming(in: context)
+            }
+        }
     }
 
     /// 只补足系统未自动提供的底部安全区；系统 Toolbar 高度完全由 adjustedContentInset 承担。
@@ -596,17 +1394,55 @@ final class BookWorkspaceCollectionHostView: UIView, UICollectionViewDelegate, U
         }
     }
 
-    /// 只在书籍、选中域或动态设置变化时更新 Tab 内容，滚动吸附不进入配置链路。
+    /// 只在主题或书籍变化时更新顶部氛围，连续滚动仅修改 Frame 与拉伸高度。
+    private func updateHeaderBackdropContent(animatedCanvasChange: Bool) {
+        guard configuration.book != nil else {
+            headerBackdropView.isHidden = true
+            publishNavigationBarSurfaceVisibility(false)
+            return
+        }
+        headerBackdropView.isHidden = false
+        headerBackdropView.configure(
+            canvasColor: configuration.canvasColor,
+            leadingColor: configuration.headerLeadingColor,
+            trailingColor: configuration.headerTrailingColor,
+            animated: animatedCanvasChange
+        )
+    }
+
+    /// 只在书籍或动态设置变化时更新 Header 内容，连续分页不进入 SwiftUI 配置链路。
+    private func updateBookHeaderContent() {
+        guard let book = configuration.book else {
+            bookHeaderHostView.isHidden = true
+            return
+        }
+        bookHeaderHostView.isHidden = false
+        bookHeaderHostView.configure(
+            content: AnyView(
+                BookWorkspaceBookHeader(
+                    book: book,
+                    onOpenReadingDetail: { [weak self] in
+                        self?.configuration.onOpenReadingDetail()
+                    },
+                    onEditBook: { [weak self] in
+                        self?.configuration.onEditBook()
+                    }
+                )
+            )
+        )
+        setNeedsLayout()
+    }
+
     private func updateScopeBarContent(animatedCanvasChange: Bool) {
         guard let book = configuration.book else {
             scopeBarContentState = nil
             scopeBarHostView.isHidden = true
             return
         }
+        let items = scopeBarItems(for: book)
         let nextState = BookWorkspaceScopeBarContentState(
-            book: book,
-            selectedSection: configuration.selectedSection,
-            notesCount: configuration.notesCount,
+            items: items,
+            committedSection: committedSection,
             reduceMotion: configuration.reduceMotion,
             canvasPaletteID: configuration.canvasPaletteID
         )
@@ -614,85 +1450,142 @@ final class BookWorkspaceCollectionHostView: UIView, UICollectionViewDelegate, U
         guard nextState != scopeBarContentState else { return }
         scopeBarContentState = nextState
         scopeBarHostView.configure(
-            content: AnyView(
-                BookWorkspaceCollectionScopeBar(
-                    book: book,
-                    selectedSection: configuration.selectedSection,
-                    notesCount: configuration.notesCount,
-                    reduceMotion: configuration.reduceMotion,
-                    canvasColor: configuration.canvasColor,
-                    canvasPaletteID: configuration.canvasPaletteID,
-                    onSelectSection: { [weak self] selected in
-                        self?.configuration.onSelectSection(selected)
-                    }
-                )
-            ),
+            items: items,
+            committedSection: committedSection,
+            reduceMotion: configuration.reduceMotion,
             canvasColor: configuration.canvasColor,
-            animated: animatedCanvasChange
+            animatedCanvasChange: animatedCanvasChange
         )
+        scopeBarHostView.updatePagePosition(currentPagerPosition.rawValue, revealsTarget: false)
         setNeedsLayout()
     }
 
-    /// 以唯一 Tab 宿主的真实内容高度刷新透明占位；该路径只在选中值、动态字体或尺寸变化时执行。
-    private func updateScopeBarHeightIfNeeded() {
-        guard configuration.book != nil, bounds.width > 0 else { return }
-        let measuredHeight = scopeBarHostView.fittingHeight(for: bounds.width)
-        guard measuredHeight.isFinite, measuredHeight > 0 else { return }
-        let displayScale = window?.screen.scale ?? max(traitCollection.displayScale, 1)
-        let roundedHeight = ceil(measuredHeight * displayScale) / displayScale
-        let nextHeight = max(BookWorkspaceLayoutMetrics.minimumControlHeight, roundedHeight)
-        guard abs(nextHeight - scopeBarHeight) >= 0.5 else { return }
-        scopeBarHeight = nextHeight
-        scheduleScopeBarPlaceholderRefresh()
-    }
-
-    /// 延后一帧刷新四域等高占位，避免在 UICollectionView 当前布局事务中提交 diff。
-    private func scheduleScopeBarPlaceholderRefresh() {
-        guard !isScopeBarPlaceholderRefreshScheduled else { return }
-        isScopeBarPlaceholderRefreshScheduled = true
-        DispatchQueue.main.async { [weak self] in
-            guard let self else { return }
-            self.isScopeBarPlaceholderRefreshScheduled = false
-            for context in self.contexts.values {
-                guard var snapshot = context.dataSource?.snapshot(),
-                      snapshot.indexOfItem(.scopeBar) != nil else { continue }
-                snapshot.reconfigureItems([.scopeBar])
-                context.dataSource?.apply(snapshot, animatingDifferences: false)
-                context.collectionView.collectionViewLayout.invalidateLayout()
+    private func scopeBarItems(for book: BookDetail) -> [BookWorkspaceScopeBarItem] {
+        BookWorkspaceSection.allCases.map { section in
+            let count: Int
+            switch section {
+            case .catalog:
+                count = book.chapters.count
+            case .notes:
+                count = configuration.notesCount
+            case .related:
+                count = book.relatedCount
+            case .reviews:
+                count = book.reviewCount
             }
-            self.setNeedsLayout()
+            return BookWorkspaceScopeBarItem(section: section, title: section.title, count: count)
         }
     }
 
-    /// 把唯一 Tab 放到占位项或顶部吸附线中的较低位置；滚动每帧只更新 frame。
-    private func layoutScopeBar(for context: BookWorkspaceCollectionDomainContext) {
-        guard context.section == configuration.selectedSection,
-              configuration.book != nil,
-              let indexPath = context.dataSource?.indexPath(for: .scopeBar),
-              let attributes = context.collectionView.layoutAttributesForItem(at: indexPath) else {
-            scopeBarHostView.isHidden = true
-            return
-        }
-        let collectionView = context.collectionView
-        let inlineFrame = collectionView.convert(attributes.frame, to: self)
-        let visibleTop = collectionView.contentOffset.y + collectionView.adjustedContentInset.top
-        let pinnedPoint = collectionView.convert(
-            CGPoint(x: attributes.frame.minX, y: visibleTop),
-            to: self
-        )
+    /// 以唯一共享 Chrome 的真实高度同步四页滚动占位；只在宽度或动态字体变化时刷新布局。
+    private func updateSharedChromeMetricsIfNeeded() {
+        guard configuration.book != nil, bounds.width > 0 else { return }
         let displayScale = window?.screen.scale ?? max(traitCollection.displayScale, 1)
-        let alignedPinnedY = bookWorkspacePixelAligned(pinnedPoint.y, scale: displayScale)
-        let targetFrame = CGRect(
-            x: inlineFrame.minX,
-            y: max(inlineFrame.minY, alignedPinnedY),
-            width: inlineFrame.width,
+        let measuredHeaderHeight = bookHeaderHostView.fittingHeight(for: bounds.width)
+        let measuredScopeHeight = scopeBarHostView.fittingHeight(for: bounds.width)
+        let nextHeaderHeight = measuredHeaderHeight.isFinite && measuredHeaderHeight > 0
+            ? ceil(measuredHeaderHeight * displayScale) / displayScale
+            : bookHeaderHeight
+        let nextScopeHeight = measuredScopeHeight.isFinite && measuredScopeHeight > 0
+            ? max(
+                BookWorkspaceLayoutMetrics.minimumControlHeight,
+                ceil(measuredScopeHeight * displayScale) / displayScale
+            )
+            : scopeBarHeight
+        let headerChanged = abs(nextHeaderHeight - bookHeaderHeight) >= 0.5
+        let scopeChanged = abs(nextScopeHeight - scopeBarHeight) >= 0.5
+        guard headerChanged || scopeChanged else { return }
+        bookHeaderHeight = nextHeaderHeight
+        scopeBarHeight = nextScopeHeight
+        refreshChromeSpacers()
+    }
+
+    /// 只刷新四页当前可见的透明占位，并让离屏页在复用时读取最新高度。
+    private func refreshChromeSpacers() {
+        for context in contexts.values {
+            if let indexPath = context.dataSource?.indexPath(for: .chromeSpacer),
+               let cell = context.collectionView.cellForItem(at: indexPath)
+                    as? BookWorkspaceHostingCell {
+                cell.configure(content: content(for: .chromeSpacer))
+            }
+            context.collectionView.collectionViewLayout.invalidateLayout()
+        }
+    }
+
+    /// 把相邻页面滚动量插值为背景、Header 与 Tab 的唯一位置，连续值始终停留在 UIKit。
+    private func layoutSharedChrome(at position: BookWorkspacePagerPosition) {
+        guard bounds.width > 0 else { return }
+        let lowerOffset = min(
+            effectiveScrollOffset(for: section(at: position.lowerIndex)),
+            bookHeaderHeight
+        )
+        let upperOffset = min(
+            effectiveScrollOffset(for: section(at: position.upperIndex)),
+            bookHeaderHeight
+        )
+        let offset = lowerOffset + (upperOffset - lowerOffset) * position.fraction
+        let collapseDistance = min(max(offset, 0), bookHeaderHeight)
+        let overscrollDistance = max(-offset, 0)
+        let chromeTopInset = min(
+            max(pagerScrollView.frame.minY, safeAreaInsets.top, 0),
+            bounds.height
+        )
+        let nextBackdropFrame = CGRect(
+            x: 0,
+            y: -collapseDistance,
+            width: bounds.width,
+            height: chromeTopInset + bookHeaderHeight + overscrollDistance
+        )
+        let nextHeaderFrame = CGRect(
+            x: 0,
+            y: -offset,
+            width: bounds.width,
+            height: bookHeaderHeight
+        )
+        let nextScopeFrame = CGRect(
+            x: 0,
+            y: max(bookHeaderHeight - offset, 0),
+            width: bounds.width,
             height: scopeBarHeight
         )
-        scopeBarHostView.isHidden = false
-        UIView.performWithoutAnimation {
-            scopeBarHostView.frame = targetFrame
-            scopeBarHostView.layoutIfNeeded()
+        let visibleChromeHeight = min(
+            max(nextHeaderFrame.maxY, nextScopeFrame.maxY, 0),
+            max(bounds.height - chromeTopInset, 0)
+        )
+        let nextContentClipFrame = CGRect(
+            x: 0,
+            y: chromeTopInset,
+            width: bounds.width,
+            height: visibleChromeHeight
+        )
+        if sharedChromeContentClipView.frame != nextContentClipFrame {
+            sharedChromeContentClipView.frame = nextContentClipFrame
         }
+        if headerBackdropView.frame != nextBackdropFrame {
+            headerBackdropView.frame = nextBackdropFrame
+        }
+        if bookHeaderHostView.frame != nextHeaderFrame {
+            bookHeaderHostView.frame = nextHeaderFrame
+        }
+        if scopeBarHostView.frame != nextScopeFrame {
+            scopeBarHostView.frame = nextScopeFrame
+        }
+        publishNavigationBarSurfaceVisibility(
+            bookHeaderHeight > 0 && collapseDistance >= bookHeaderHeight - 0.5
+        )
+    }
+
+    /// 只在完全收起阈值跨越时通知 SwiftUI，避免把逐帧滚动位置写入页面状态。
+    private func publishNavigationBarSurfaceVisibility(_ isVisible: Bool) {
+        guard lastNavigationBarSurfaceVisibility != isVisible else { return }
+        lastNavigationBarSurfaceVisibility = isVisible
+        configuration.onNavigationBarSurfaceChange(isVisible)
+    }
+
+    private func effectiveScrollOffset(for section: BookWorkspaceSection) -> CGFloat {
+        guard let collectionView = contexts[section]?.collectionView else { return 0 }
+        let value = collectionView.contentOffset.y + collectionView.adjustedContentInset.top
+        return value.isFinite ? value : 0
     }
 
     private func makeDomainContext(_ section: BookWorkspaceSection) {
@@ -722,13 +1615,9 @@ final class BookWorkspaceCollectionHostView: UIView, UICollectionViewDelegate, U
             forSupplementaryViewOfKind: UICollectionView.elementKindSectionHeader,
             withReuseIdentifier: BookWorkspaceHostingHeaderView.reuseIdentifier
         )
-        addSubview(collectionView)
-        NSLayoutConstraint.activate([
-            collectionView.leadingAnchor.constraint(equalTo: leadingAnchor),
-            collectionView.trailingAnchor.constraint(equalTo: trailingAnchor),
-            collectionView.topAnchor.constraint(equalTo: topAnchor),
-            collectionView.bottomAnchor.constraint(equalTo: bottomAnchor)
-        ])
+        collectionView.isDirectionalLockEnabled = true
+        collectionView.transfersHorizontalScrollingToParent = true
+        pagerScrollView.addSubview(collectionView)
 
         let context = BookWorkspaceCollectionDomainContext(
             section: section,
@@ -739,17 +1628,6 @@ final class BookWorkspaceCollectionHostView: UIView, UICollectionViewDelegate, U
         collectionView.setCollectionViewLayout(makeLayout(for: section), animated: false)
         configureDataSource(for: context)
 
-        collectionView.onBeforeLayout = { [weak self, weak context] in
-            guard let self, let context else { return }
-            self.captureViewport(in: context)
-        }
-        collectionView.onAfterLayout = { [weak self, weak context] in
-            guard let self, let context else { return }
-            if context.section == self.configuration.selectedSection {
-                self.layoutScopeBar(for: context)
-            }
-            self.publishMetrics(for: context)
-        }
         collectionView.onAdjustedInsetChange = { [weak self, weak context] in
             guard let self, let context else { return }
             self.handleAdjustedInsetChange(in: context)
@@ -770,7 +1648,7 @@ final class BookWorkspaceCollectionHostView: UIView, UICollectionViewDelegate, U
                   let item = self.contexts[section]?.snapshot.itemsByID[itemID] else {
                 return nil
             }
-            cell.configure(content: self.content(for: item, in: section))
+            cell.configure(content: self.content(for: item))
             return cell
         }
         dataSource.supplementaryViewProvider = { [weak self] collectionView, kind, indexPath in
@@ -806,41 +1684,19 @@ final class BookWorkspaceCollectionHostView: UIView, UICollectionViewDelegate, U
     }
 
     /// 从不可变载荷构建独立 Cell 视觉；这里不读取父 SwiftUI View 的 State 或 Environment。
-    private func content(
-        for item: BookWorkspaceCollectionItem,
-        in section: BookWorkspaceSection
-    ) -> AnyView {
+    private func content(for item: BookWorkspaceCollectionItem) -> AnyView {
         switch item {
-        case .bookHeader:
-            guard let book = configuration.book else {
-                return AnyView(EmptyView())
-            }
-            return AnyView(
-                BookWorkspaceCollectionBookHeader(
-                    book: book,
-                    notesCount: configuration.notesCount,
-                    onOpenReadingDetail: { [weak self] in
-                        self?.configuration.onOpenReadingDetail()
-                    },
-                    onEditBook: { [weak self] in
-                        self?.configuration.onEditBook()
-                    },
-                    onSelectNotes: { [weak self] in
-                        self?.configuration.onSelectSection(.notes)
-                    }
-                )
-            )
-        case .scopeBar:
+        case .chromeSpacer:
             return AnyView(
                 Color.clear
-                    .frame(maxWidth: .infinity)
-                    .frame(height: scopeBarHeight)
+                    .frame(height: max(bookHeaderHeight + scopeBarHeight, 1))
                     .accessibilityHidden(true)
             )
         case .catalog(let row):
             return AnyView(
                 BookWorkspaceCatalogCollectionRow(
                     row: row,
+                    surfaceColor: configuration.contentSurfaceColor,
                     onToggleExpansion: { [weak self] in
                         self?.configuration.onToggleChapter(row.chapter.id)
                     },
@@ -855,6 +1711,7 @@ final class BookWorkspaceCollectionHostView: UIView, UICollectionViewDelegate, U
                 BookWorkspaceStatefulNoteItem(
                     row: row,
                     state: state,
+                    surfaceColor: configuration.contentSurfaceColor,
                     onOpen: { [weak self] in
                         self?.configuration.onOpenNote(row.note)
                     },
@@ -865,13 +1722,19 @@ final class BookWorkspaceCollectionHostView: UIView, UICollectionViewDelegate, U
             )
         case .related(let row):
             return AnyView(
-                BookWorkspaceRelatedCollectionRow(row: row) { [weak self] in
+                BookWorkspaceRelatedCollectionRow(
+                    row: row,
+                    surfaceColor: configuration.contentSurfaceColor
+                ) { [weak self] in
                     self?.configuration.onOpenRelated(row.item)
                 }
             )
         case .review(let row):
             return AnyView(
-                BookWorkspaceReviewCollectionRow(row: row) { [weak self] in
+                BookWorkspaceReviewCollectionRow(
+                    row: row,
+                    surfaceColor: configuration.contentSurfaceColor
+                ) { [weak self] in
                     self?.configuration.onOpenReview(row.item)
                 }
             )
@@ -933,24 +1796,15 @@ final class BookWorkspaceCollectionHostView: UIView, UICollectionViewDelegate, U
 
     private func apply(
         _ snapshot: BookWorkspacePresentationSnapshot,
-        to context: BookWorkspaceCollectionDomainContext,
-        forceReconfigureIDs: Set<BookWorkspaceCollectionItemID>
+        to context: BookWorkspaceCollectionDomainContext
     ) {
         let revisionChanged = snapshot.revision != context.appliedRevision
-        guard revisionChanged || !forceReconfigureIDs.isEmpty else { return }
+        guard revisionChanged else { return }
+        captureViewport(in: context)
         let previousItems = context.snapshot.itemsByID
         let previousDiffable = context.dataSource?.snapshot()
         context.snapshot = snapshot
         context.appliedRevision = snapshot.revision
-
-        guard revisionChanged else {
-            guard var diffable = previousDiffable else { return }
-            let existing = forceReconfigureIDs.filter { diffable.indexOfItem($0) != nil }
-            guard !existing.isEmpty else { return }
-            diffable.reconfigureItems(Array(existing))
-            context.dataSource?.apply(diffable, animatingDifferences: false)
-            return
-        }
 
         context.collectionView.collectionViewLayout.invalidateLayout()
 
@@ -965,8 +1819,7 @@ final class BookWorkspaceCollectionHostView: UIView, UICollectionViewDelegate, U
         if let previousDiffable, !previousDiffable.itemIdentifiers.isEmpty {
             let changed = diffable.itemIdentifiers.filter { itemID in
                 guard previousDiffable.indexOfItem(itemID) != nil else { return false }
-                return forceReconfigureIDs.contains(itemID)
-                    || previousItems[itemID] != snapshot.itemsByID[itemID]
+                return previousItems[itemID] != snapshot.itemsByID[itemID]
             }
             diffable.reconfigureItems(changed)
         }
@@ -985,20 +1838,7 @@ final class BookWorkspaceCollectionHostView: UIView, UICollectionViewDelegate, U
 #endif
     }
 
-    /// 比较纯值配置，只刷新真正变化的书籍头部，普通父视图刷新不会触碰内容 Cell。
-    private func chromeItemIDsChanged(
-        in _: BookWorkspaceSection,
-        from previous: BookWorkspaceCollectionConfiguration,
-        to next: BookWorkspaceCollectionConfiguration
-    ) -> Set<BookWorkspaceCollectionItemID> {
-        var result: Set<BookWorkspaceCollectionItemID> = []
-        if previous.book != next.book || previous.notesCount != next.notesCount {
-            result.insert(.bookHeader)
-        }
-        return result
-    }
-
-    /// 只刷新屏幕内章节固定层的主题画布，不触碰普通内容 Cell 或 Diffable Snapshot。
+    /// 只重建屏幕内 Cell 与章节固定层的主题视觉；离屏 Cell 复用时自然读取最新配置。
     private func refreshVisibleContent(
         in context: BookWorkspaceCollectionDomainContext,
         animatedCanvasChange: Bool
@@ -1028,6 +1868,16 @@ final class BookWorkspaceCollectionHostView: UIView, UICollectionViewDelegate, U
                 canvasColor: configuration.canvasColor,
                 animated: animatedCanvasChange
             )
+        }
+
+        for indexPath in context.collectionView.indexPathsForVisibleItems {
+            guard let itemID = context.dataSource?.itemIdentifier(for: indexPath),
+                  let item = context.snapshot.itemsByID[itemID],
+                  let cell = context.collectionView.cellForItem(at: indexPath)
+                    as? BookWorkspaceHostingCell else {
+                continue
+            }
+            cell.configure(content: content(for: item))
         }
     }
 
@@ -1072,7 +1922,7 @@ final class BookWorkspaceCollectionHostView: UIView, UICollectionViewDelegate, U
         let insets: NSDirectionalEdgeInsets
         switch model.style {
         case .chrome:
-            estimatedHeight = 160
+            estimatedHeight = max(bookHeaderHeight + scopeBarHeight, 1)
             interItemSpacing = 0
             insets = .zero
         case .groupedRows:
@@ -1157,50 +2007,63 @@ final class BookWorkspaceCollectionHostView: UIView, UICollectionViewDelegate, U
     }
 
     func scrollViewDidScroll(_ scrollView: UIScrollView) {
-        guard let context = context(for: scrollView), context.section == configuration.selectedSection else {
+        if scrollView === pagerScrollView {
+            let position = currentPagerPosition
+            scopeBarHostView.updatePagePosition(position.rawValue, revealsTarget: true)
+            updateTransitionSections(including: requestedSection)
+            layoutSharedChrome(at: position)
             return
         }
-        captureViewport(in: context)
-        layoutScopeBar(for: context)
-        publishMetrics(for: context)
+        guard let context = context(for: scrollView), context.section == committedSection else { return }
+        layoutSharedChrome(at: currentPagerPosition)
     }
 
-    private func publishMetrics(for context: BookWorkspaceCollectionDomainContext) {
-        guard context.section == configuration.selectedSection else { return }
-        let collectionView = context.collectionView
-        let rawOffset = collectionView.contentOffset.y + collectionView.adjustedContentInset.top
-        let effectiveOffset = rawOffset.isFinite ? rawOffset : 0
-        let viewportTop = collectionView.window.map { window in
-            let frameTop = collectionView.convert(collectionView.bounds.origin, to: window).y
-            return frameTop + max(collectionView.adjustedContentInset.top, 0)
-        } ?? 0
-        let scopeIndexPath = context.dataSource?.indexPath(for: .scopeBar)
-        let scopeAttributes = scopeIndexPath.flatMap { collectionView.layoutAttributesForItem(at: $0) }
-        let pinOffset = scopeAttributes?.frame.minY ?? 0
-        let metrics = BookWorkspaceCollectionScrollMetrics(
-            effectiveOffset: effectiveOffset,
-            viewportTop: viewportTop.isFinite ? max(viewportTop, 0) : 0,
-            pinOffset: pinOffset
+    func scrollViewWillBeginDragging(_ scrollView: UIScrollView) {
+        guard scrollView === pagerScrollView else { return }
+        requestedSection = nil
+        updateTransitionSections()
+    }
+
+    func scrollViewWillEndDragging(
+        _ scrollView: UIScrollView,
+        withVelocity velocity: CGPoint,
+        targetContentOffset: UnsafeMutablePointer<CGPoint>
+    ) {
+        guard scrollView === pagerScrollView else { return }
+        let target = BookWorkspacePagerPosition(
+            offsetX: targetContentOffset.pointee.x,
+            pageWidth: pagerScrollView.bounds.width,
+            pageCount: BookWorkspaceSection.allCases.count
         )
-        guard metrics != context.lastPublishedMetrics else { return }
-        context.lastPublishedMetrics = metrics
-        pendingMetrics[context.section] = metrics
-        scheduleMetricsDeliveryIfNeeded()
+        updateTransitionSections(including: section(at: target.nearestIndex))
     }
 
-    /// 将 UIKit 布局回调延后到当前 SwiftUI 更新事务结束后再发布，避免 updateUIView 内同步回写父状态。
-    private func scheduleMetricsDeliveryIfNeeded() {
-        guard !isMetricsDeliveryScheduled else { return }
-        isMetricsDeliveryScheduled = true
-        DispatchQueue.main.async { [weak self] in
-            guard let self else { return }
-            self.isMetricsDeliveryScheduled = false
-            let deliveries = self.pendingMetrics
-            self.pendingMetrics.removeAll(keepingCapacity: true)
-            for (section, metrics) in deliveries {
-                self.configuration.onScrollMetricsChange(section, metrics)
-            }
+    func scrollViewDidEndDragging(_ scrollView: UIScrollView, willDecelerate decelerate: Bool) {
+        if scrollView === pagerScrollView {
+            guard !decelerate else { return }
+            settlePagerIfReady()
+            return
         }
+        guard !decelerate, let context = context(for: scrollView) else { return }
+        captureViewport(in: context)
+    }
+
+    func scrollViewDidEndDecelerating(_ scrollView: UIScrollView) {
+        if scrollView === pagerScrollView {
+            settlePagerIfReady()
+            return
+        }
+        guard let context = context(for: scrollView) else { return }
+        captureViewport(in: context)
+    }
+
+    func scrollViewDidEndScrollingAnimation(_ scrollView: UIScrollView) {
+        if scrollView === pagerScrollView {
+            settlePagerIfReady()
+            return
+        }
+        guard let context = context(for: scrollView) else { return }
+        captureViewport(in: context)
     }
 
     private func context(for scrollView: UIScrollView) -> BookWorkspaceCollectionDomainContext? {
@@ -1243,8 +2106,8 @@ final class BookWorkspaceCollectionHostView: UIView, UICollectionViewDelegate, U
             restoreViewport(in: context)
             context.lastAdjustedInset = nextInset
             captureViewport(in: context)
-            if context.section == configuration.selectedSection {
-                layoutScopeBar(for: context)
+            if context.section == committedSection {
+                layoutSharedChrome(at: currentPagerPosition)
             }
         }
     }
@@ -1278,7 +2141,7 @@ final class BookWorkspaceCollectionHostView: UIView, UICollectionViewDelegate, U
 
     func collectionView(_ collectionView: UICollectionView, prefetchItemsAt indexPaths: [IndexPath]) {
         guard let context = context(for: collectionView),
-              context.section == configuration.selectedSection else { return }
+              transitionSections.contains(context.section) else { return }
         let noteIDs = indexPaths.compactMap { indexPath -> Int64? in
             guard let itemID = context.dataSource?.itemIdentifier(for: indexPath),
                   case .note(let noteID) = itemID else { return nil }
@@ -1310,7 +2173,7 @@ final class BookWorkspaceCollectionHostView: UIView, UICollectionViewDelegate, U
         guard context.prewarmTask == nil else { return }
         context.prewarmTask = Task { [weak self, weak context] in
             guard let self, let context else { return }
-            while !Task.isCancelled, context.section == self.configuration.selectedSection {
+            while !Task.isCancelled, self.transitionSections.contains(context.section) {
                 guard !context.pendingPrewarmIDs.isEmpty else { break }
                 let noteID = context.pendingPrewarmIDs.removeFirst()
                 await Task.yield()
@@ -1364,47 +2227,44 @@ final class BookWorkspaceCollectionHostView: UIView, UICollectionViewDelegate, U
     }
 }
 
-/// 在 Collection 自己的 Hosting 图中重建书籍头部，避免复用父页面 View 值导致跨 AttributeGraph 访问。
-private struct BookWorkspaceCollectionBookHeader: View {
+/// 页面唯一的书籍信息头部；它不参与横向分页，但随当前纵向列表连续收起。
+struct BookWorkspaceBookHeader: View {
     let book: BookDetail
-    let notesCount: Int
     let onOpenReadingDetail: () -> Void
     let onEditBook: () -> Void
-    let onSelectNotes: () -> Void
 
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.verticalSizeClass) private var verticalSizeClass
 
     private enum Layout {
-        static let coverWidth: CGFloat = 104
+        static let regularCoverWidth: CGFloat = 92
+        static let accessibilityCoverWidth: CGFloat = 72
+        static let landscapeCoverWidth: CGFloat = 56
+    }
+
+    private enum Presentation: Equatable {
+        case regular
+        case accessibilityPortrait
+        case landscape
     }
 
     var body: some View {
-        Group {
-            if dynamicTypeSize.isAccessibilitySize {
-                VStack(alignment: .leading, spacing: BookWorkspaceLayoutMetrics.sectionSpacing) {
-                    identity
-                    HStack(alignment: .bottom, spacing: BookWorkspaceLayoutMetrics.sectionSpacing) {
-                        cover
-                        Spacer(minLength: Spacing.base)
-                    }
-                    metricsVertical
-                }
-            } else {
-                HStack(alignment: .top, spacing: BookWorkspaceLayoutMetrics.sectionSpacing) {
-                    identity
-                        .padding(.bottom, BookWorkspaceLayoutMetrics.headerMetricsReservedHeight)
-                    Spacer(minLength: Spacing.base)
-                    cover
-                }
-                .overlay(alignment: .bottomLeading) {
-                    metrics
-                        .padding(.trailing, Layout.coverWidth + BookWorkspaceLayoutMetrics.sectionSpacing)
-                }
+        HStack(alignment: .top, spacing: BookWorkspaceLayoutMetrics.headerBlockSpacing) {
+            VStack(
+                alignment: .leading,
+                spacing: BookWorkspaceLayoutMetrics.headerBlockSpacing
+            ) {
+                identity
+                metrics
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            cover
         }
         .padding(.horizontal, BookWorkspaceLayoutMetrics.headerHorizontalInset)
         .padding(.top, BookWorkspaceLayoutMetrics.headerTopInset)
         .padding(.bottom, BookWorkspaceLayoutMetrics.headerBottomInset)
+        .accessibilityElement(children: .contain)
     }
 
     private var identity: some View {
@@ -1412,7 +2272,7 @@ private struct BookWorkspaceCollectionBookHeader: View {
             Text(book.name)
                 .font(AppTypography.title2)
                 .foregroundStyle(Color.textPrimary)
-                .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
+                .lineLimit(2)
                 .fixedSize(horizontal: false, vertical: true)
                 .accessibilityHeading(.h1)
 
@@ -1425,14 +2285,14 @@ private struct BookWorkspaceCollectionBookHeader: View {
                         Text(book.author)
                             .font(AppTypography.subheadline)
                             .foregroundStyle(Color.textSecondary)
-                            .lineLimit(2)
+                            .lineLimit(isCompactPresentation ? 1 : 2)
                     }
 
                     if !publishingLine.isEmpty {
                         Text(publishingLine)
                             .font(AppTypography.footnote)
                             .foregroundStyle(Color.textSecondary)
-                            .lineLimit(2)
+                            .lineLimit(presentation == .regular ? 2 : 1)
                     }
                 }
             }
@@ -1444,7 +2304,7 @@ private struct BookWorkspaceCollectionBookHeader: View {
         ZStack(alignment: .topTrailing) {
             Button(action: onOpenReadingDetail) {
                 XMBookCover.fixedWidth(
-                    Layout.coverWidth,
+                    coverWidth,
                     urlString: book.cover,
                     cornerRadius: CornerRadius.inlaySmall,
                     border: .init(color: .surfaceBorderSubtle, width: CardStyle.borderWidth),
@@ -1478,82 +2338,102 @@ private struct BookWorkspaceCollectionBookHeader: View {
         }
     }
 
-    private var readStatusTitle: String {
-        book.readStatusName.trimmingCharacters(in: .whitespacesAndNewlines)
-    }
-
-    private var readStatusColor: Color {
-        BookEntryReadingStatus.matchingCoverBadgeTitle(readStatusTitle)?.coverBadgeColor
-            ?? Color.textSecondary
-    }
-
-    private var metricsVertical: some View {
-        VStack(alignment: .leading, spacing: Spacing.none) {
-            readingMetric
-            notesMetric
-            ratingMetric
-            optionalProgressMetric
+    private var coverWidth: CGFloat {
+        switch presentation {
+        case .regular:
+            return Layout.regularCoverWidth
+        case .accessibilityPortrait:
+            return Layout.accessibilityCoverWidth
+        case .landscape:
+            return Layout.landscapeCoverWidth
         }
     }
 
+    private var presentation: Presentation {
+        if verticalSizeClass == .compact {
+            return .landscape
+        }
+        if dynamicTypeSize.isAccessibilitySize {
+            return .accessibilityPortrait
+        }
+        return .regular
+    }
+
+    private var isCompactPresentation: Bool {
+        presentation != .regular
+    }
+
+    private var readStatusTitle: String {
+        book.readStatusBadgeTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var readStatusColor: Color {
+        BookEntryReadingStatus(rawValue: book.readStatusID)?.coverBadgeColor
+            ?? Color.textSecondary
+    }
+
+    @ViewBuilder
     private var metrics: some View {
-        HStack(spacing: BookWorkspaceLayoutMetrics.metricsSpacing) {
-            readingMetric
-            notesMetric
-            ratingMetric
-            optionalProgressMetric
-            Spacer(minLength: 0)
+        if hasVisibleMetrics {
+            ScrollView(.horizontal) {
+                HStack(spacing: BookWorkspaceLayoutMetrics.metricsSpacing) {
+                    if hasReadingDuration {
+                        readingMetric
+                    }
+                    if hasRating {
+                        ratingMetric
+                    }
+                    if hasBookmark {
+                        bookmarkMetric
+                    }
+                    if hasReadingProgress {
+                        readingProgressMetric
+                    }
+                }
+            }
+            .scrollIndicators(.hidden)
+            .scrollBounceBehavior(.basedOnSize, axes: .horizontal)
+            .accessibilityElement(children: .contain)
         }
     }
 
     private var readingMetric: some View {
         metricButton(
             icon: "clock",
-            title: durationText,
-            accessibilityLabel: "阅读时长，\(durationText)",
+            title: durationDisplayText,
+            accessibilityLabel: "阅读时长，\(durationAccessibilityText)",
             action: onOpenReadingDetail
         )
-    }
-
-    private var notesMetric: some View {
-        metricButton(
-            icon: "text.quote",
-            title: "\(notesCount) 条",
-            accessibilityLabel: "书摘 \(notesCount) 条",
-            action: onSelectNotes
-        )
+        .layoutPriority(1)
     }
 
     private var ratingMetric: some View {
         metricButton(
-            icon: book.score > 0 ? "star.fill" : "star",
-            title: book.score > 0
-                ? String(format: "%.1f", Double(book.score) / 10)
-                : "未评分",
+            icon: "star.fill",
+            title: String(format: "%.1f", Double(book.score) / 10),
             accessibilityLabel: ratingAccessibilityLabel,
-            iconColor: book.score > 0 ? Color.ratingActive : Color.textSecondary,
+            iconColor: Color.ratingActive,
             textColor: Color.textSecondary,
             action: onEditBook
         )
     }
 
-    @ViewBuilder
-    private var optionalProgressMetric: some View {
-        if !book.readingProgressText.isEmpty {
-            metricButton(
-                icon: "chart.line.uptrend.xyaxis",
-                title: book.readingProgressText,
-                accessibilityLabel: "阅读进度 \(book.readingProgressText)",
-                action: onEditBook
-            )
-        } else if !book.bookmarkText.isEmpty {
-            metricButton(
-                icon: "bookmark",
-                title: book.bookmarkText,
-                accessibilityLabel: "书签 \(book.bookmarkText)",
-                action: onEditBook
-            )
-        }
+    private var bookmarkMetric: some View {
+        metricButton(
+            icon: "bookmark",
+            title: book.bookmarkText,
+            accessibilityLabel: "书签 \(book.bookmarkText)",
+            action: onEditBook
+        )
+    }
+
+    private var readingProgressMetric: some View {
+        metricButton(
+            icon: "chart.line.uptrend.xyaxis",
+            title: book.readingProgressText,
+            accessibilityLabel: "阅读进度 \(book.readingProgressText)",
+            action: onEditBook
+        )
     }
 
     /// 构建保持 44pt 热区的指标入口，不增加额外视觉容器。
@@ -1583,24 +2463,58 @@ private struct BookWorkspaceCollectionBookHeader: View {
 
     private var publishingLine: String {
         var parts: [String] = []
-        if !book.press.isEmpty {
-            parts.append(book.press)
+        let press = book.press.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !press.isEmpty {
+            parts.append(press)
         }
-        if let pubDate = book.attributes.first(where: { $0.kind == .pubDate })?.value,
-           !pubDate.isEmpty {
+        let pubDate = book.attributes
+            .first(where: { $0.kind == .pubDate })?
+            .value
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if !pubDate.isEmpty, pubDate != "1970-01-01" {
             parts.append(pubDate)
         }
         return parts.joined(separator: " · ")
     }
 
-    private var durationText: String {
+    private var hasVisibleMetrics: Bool {
+        hasReadingDuration || hasRating || hasBookmark || hasReadingProgress
+    }
+
+    private var hasReadingDuration: Bool {
+        book.totalReadingSeconds > 0
+    }
+
+    private var hasRating: Bool {
+        book.score > 0
+    }
+
+    private var hasBookmark: Bool {
+        !book.bookmarkText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    private var hasReadingProgress: Bool {
+        !book.readingProgressText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    private var durationDisplayText: String {
         let seconds = max(0, book.totalReadingSeconds)
         let hours = seconds / 3600
         let minutes = (seconds % 3600) / 60
+        let remainingSeconds = seconds % 60
         if hours > 0 {
-            return minutes > 0 ? "\(hours)小时\(minutes)分" : "\(hours)小时"
+            return minutes > 0 ? "\(hours)小时\(minutes)分钟" : "\(hours)小时"
         }
-        return "\(minutes)分钟"
+        if minutes > 0 {
+            return remainingSeconds > 0
+                ? "\(minutes)分钟\(remainingSeconds)秒"
+                : "\(minutes)分钟"
+        }
+        return "\(remainingSeconds)秒"
+    }
+
+    private var durationAccessibilityText: String {
+        durationDisplayText
     }
 
     private var ratingAccessibilityLabel: String {
@@ -1609,103 +2523,12 @@ private struct BookWorkspaceCollectionBookHeader: View {
     }
 }
 
-/// 在 Collection 的唯一 Hosting 图中构建四域内容导航，搜索由页面系统 Toolbar 独立承载。
-private struct BookWorkspaceCollectionScopeBar: View {
-    let book: BookDetail
-    let selectedSection: BookWorkspaceSection
-    let notesCount: Int
-    let reduceMotion: Bool
-    let canvasColor: Color
-    let canvasPaletteID: UInt64
-    let onSelectSection: (BookWorkspaceSection) -> Void
-
-    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
-
-    var body: some View {
-        tabs
-            .background(canvasColor)
-            .animation(
-                reduceMotion ? nil : .easeInOut(duration: 0.18),
-                value: canvasPaletteID
-            )
-    }
-
-    private var tabs: some View {
-        HStack(spacing: Spacing.none) {
-            ForEach(BookWorkspaceSection.allCases, id: \.self) { item in
-                Button {
-                    onSelectSection(item)
-                } label: {
-                    tabLabel(for: item)
-                        .frame(
-                            maxWidth: .infinity,
-                            minHeight: BookWorkspaceLayoutMetrics.minimumControlHeight
-                        )
-                        .overlay(alignment: .bottom) {
-                            Capsule()
-                                .fill(Color.textPrimary.opacity(0.52))
-                                .frame(width: 24, height: 3)
-                                .padding(.bottom, Spacing.compact)
-                                .opacity(item == selectedSection ? 1 : 0)
-                                .animation(
-                                    reduceMotion ? nil : .snappy(duration: 0.16),
-                                    value: selectedSection
-                                )
-                        }
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .accessibilityElement(children: .ignore)
-                .accessibilityLabel("\(item.title)，\(count(for: item)) 项")
-                .accessibilityAddTraits(item == selectedSection ? .isSelected : [])
-            }
-        }
-        .padding(.horizontal, BookWorkspaceLayoutMetrics.pageHorizontalInset)
-    }
-
-    @ViewBuilder
-    private func tabLabel(for item: BookWorkspaceSection) -> some View {
-        let titleColor = item == selectedSection ? Color.textPrimary : Color.textSecondary
-
-        if dynamicTypeSize.isAccessibilitySize {
-            VStack(spacing: Spacing.half) {
-                Text(item.title)
-                    .font(AppTypography.subheadlineMedium)
-                    .foregroundStyle(titleColor)
-                Text("\(count(for: item))")
-                    .font(AppTypography.caption)
-                    .foregroundStyle(Color.textSecondary)
-            }
-            .lineLimit(1)
-        } else {
-            HStack(alignment: .firstTextBaseline, spacing: Spacing.compact) {
-                Text(item.title)
-                    .font(AppTypography.subheadlineMedium)
-                    .foregroundStyle(titleColor)
-                Text("\(count(for: item))")
-                    .font(AppTypography.caption)
-                    .foregroundStyle(Color.textSecondary)
-            }
-            .lineLimit(1)
-        }
-    }
-
-    private func count(for section: BookWorkspaceSection) -> Int {
-        switch section {
-        case .catalog: book.chapters.count
-        case .notes: notesCount
-        case .related: book.relatedCount
-        case .reviews: book.reviewCount
-        }
-    }
-
-}
-
 /// 为分组型 Cell 绘制外层连续圆角与内部轻分隔，Cell 本身仍可独立回收。
 private struct BookWorkspaceGroupedCollectionSurface<Content: View>: View {
     let isFirst: Bool
     let isLast: Bool
     let dividerLeading: CGFloat
+    let surfaceColor: Color
     @ViewBuilder let content: Content
 
     var body: some View {
@@ -1723,7 +2546,8 @@ private struct BookWorkspaceGroupedCollectionSurface<Content: View>: View {
                     .padding(.leading, dividerLeading)
             }
         }
-        .background(BookWorkspaceCardSurfaceStyle.fill)
+        .background(surfaceColor)
+        .compositingGroup()
         .clipShape(shape)
         .overlay {
             shape
@@ -1780,6 +2604,7 @@ private struct BookWorkspaceGroupedSurfaceBorderMask: View {
 /// 目录 Cell，保持层级缩进、收藏与书摘数量，同时把展开和打开动作交给页面 owner。
 private struct BookWorkspaceCatalogCollectionRow: View {
     let row: BookWorkspaceCatalogRow
+    let surfaceColor: Color
     let onToggleExpansion: () -> Void
     let onOpen: () -> Void
 
@@ -1790,7 +2615,8 @@ private struct BookWorkspaceCatalogCollectionRow: View {
             isFirst: row.isFirst,
             isLast: row.isLast,
             dividerLeading: BookWorkspaceLayoutMetrics.cardContentInset
-                + CGFloat(max(0, row.chapter.level - 1)) * chapterIndent
+                + CGFloat(max(0, row.chapter.level - 1)) * chapterIndent,
+            surfaceColor: surfaceColor
         ) {
             HStack(spacing: Spacing.cozy) {
                 if row.hasChildren {
@@ -1848,13 +2674,15 @@ private struct BookWorkspaceCatalogCollectionRow: View {
 /// 相关内容 Cell，覆盖普通内容和关联书籍两类真实记录。
 private struct BookWorkspaceRelatedCollectionRow: View {
     let row: BookWorkspaceRelatedRow
+    let surfaceColor: Color
     let onOpen: () -> Void
 
     var body: some View {
         BookWorkspaceGroupedCollectionSurface(
             isFirst: row.isFirst,
             isLast: row.isLast,
-            dividerLeading: BookWorkspaceLayoutMetrics.cardContentInset
+            dividerLeading: BookWorkspaceLayoutMetrics.cardContentInset,
+            surfaceColor: surfaceColor
         ) {
             Button(action: onOpen) {
                 if row.item.linkedBookID > 0 {
@@ -1932,13 +2760,15 @@ private struct BookWorkspaceRelatedCollectionRow: View {
 /// 书评 Cell，标题优先、正文摘要次之，并保持一整行可点击。
 private struct BookWorkspaceReviewCollectionRow: View {
     let row: BookWorkspaceReviewRow
+    let surfaceColor: Color
     let onOpen: () -> Void
 
     var body: some View {
         BookWorkspaceGroupedCollectionSurface(
             isFirst: row.isFirst,
             isLast: row.isLast,
-            dividerLeading: BookWorkspaceLayoutMetrics.cardContentInset
+            dividerLeading: BookWorkspaceLayoutMetrics.cardContentInset,
+            surfaceColor: surfaceColor
         ) {
             Button(action: onOpen) {
                 VStack(alignment: .leading, spacing: Spacing.cozy) {
