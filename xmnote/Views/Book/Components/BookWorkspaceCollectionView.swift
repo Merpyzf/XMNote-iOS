@@ -1,6 +1,6 @@
 /**
- * [INPUT]: 依赖 BookWorkspacePresentationSnapshot、SwiftUI 行内容构建器与 UIKit UICollectionView
- * [OUTPUT]: 对外提供贯穿顶部安全区的主题背景、共享可收起书籍头部、几何稳定且主题动画隔离的吸顶 Tab 与纯内容原生 Pager
+ * [INPUT]: 依赖 BookWorkspacePresentationSnapshot、书籍工作台主题色板、SwiftUI 行内容构建器与 UIKit UICollectionView
+ * [OUTPUT]: 对外提供贯穿顶部安全区和完整 Header、在 Tab 内延迟衰减并于吸顶后归中性的沉浸主题背景，自适应书名状态行、无遮挡书脊封面、分行出版元数据、按有效评分收放的封面胶囊、与 Android 数据语义对齐且带动态边缘渐隐的三项阅读指标 Chip、共享可收起书籍头部、几何稳定的吸顶 Tab 与纯内容原生 Pager
  * [POS]: Views/Book/Components 的页面私有 UIKit 混合列表，负责背景/内容分层、分页、共享 Chrome、diff、章节吸顶和视口稳定
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -377,6 +377,7 @@ private final class BookWorkspaceBookHeaderHostView: UIView {
 private final class BookWorkspaceHeaderBackdropView: UIView {
     private let colorGradientLayer = CAGradientLayer()
     private let verticalFadeMaskLayer = CAGradientLayer()
+    private var fadeHeight = BookWorkspaceLayoutMetrics.scopeBarEstimatedHeight
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -391,10 +392,11 @@ private final class BookWorkspaceHeaderBackdropView: UIView {
         verticalFadeMaskLayer.colors = [
             UIColor.black.cgColor,
             UIColor.black.cgColor,
-            UIColor.black.withAlphaComponent(0.25).cgColor,
+            UIColor.black.withAlphaComponent(
+                BookWorkspaceLayoutMetrics.scopeBackdropFadeKneeOpacity
+            ).cgColor,
             UIColor.clear.cgColor
         ]
-        verticalFadeMaskLayer.locations = [0, 0.42, 0.72, 1]
         colorGradientLayer.mask = verticalFadeMaskLayer
         layer.addSublayer(colorGradientLayer)
     }
@@ -434,12 +436,31 @@ private final class BookWorkspaceHeaderBackdropView: UIView {
         CATransaction.commit()
     }
 
+    /// 使用 Tab 的真实高度定义主题色衰减区，Header 内容高度变化不会移动视觉边界。
+    func updateFadeHeight(_ value: CGFloat) {
+        let nextValue = max(value, 0)
+        guard abs(nextValue - fadeHeight) >= Spacing.hairline else { return }
+        fadeHeight = nextValue
+        setNeedsLayout()
+    }
+
     override func layoutSubviews() {
         super.layoutSubviews()
+        let height = max(bounds.height, 1)
+        let resolvedFadeHeight = min(max(fadeHeight, 0), height)
+        let fadeStart = 1 - resolvedFadeHeight / height
+        let fadeKnee = fadeStart
+            + (1 - fadeStart) * BookWorkspaceLayoutMetrics.scopeBackdropFadeKneeProgress
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         colorGradientLayer.frame = bounds
         verticalFadeMaskLayer.frame = colorGradientLayer.bounds
+        verticalFadeMaskLayer.locations = [
+            0,
+            NSNumber(value: Double(fadeStart)),
+            NSNumber(value: Double(fadeKnee)),
+            1
+        ]
         CATransaction.commit()
     }
 }
@@ -556,11 +577,13 @@ private final class BookWorkspaceScopeBarView: UIView {
     private var lastRevealedIndex: Int?
     private var lastRevealBoundsSize = CGSize.zero
     private var pendingImmediateRevealIndex: Int?
+    private var resolvedCanvasColor = UIColor(Color.surfacePage)
+    private var canvasOverlayAlpha: CGFloat = 0
 
     override init(frame: CGRect) {
         super.init(frame: frame)
-        backgroundColor = UIColor(Color.surfacePage)
-        isOpaque = true
+        backgroundColor = .clear
+        isOpaque = false
         clipsToBounds = true
 
         scrollView.translatesAutoresizingMaskIntoConstraints = false
@@ -607,7 +630,7 @@ private final class BookWorkspaceScopeBarView: UIView {
         fatalError("init(coder:) has not been implemented")
     }
 
-    /// 同步 Tab 文案与主题；只有内容集合变化时才重建轻量控件。
+    /// 同步 Tab 文案与画布色；展开态保持透明，吸顶时由滚动进度恢复不透明画布。
     func configure(
         items: [BookWorkspaceScopeBarItem],
         committedSection: BookWorkspaceSection,
@@ -617,8 +640,10 @@ private final class BookWorkspaceScopeBarView: UIView {
     ) {
         self.reduceMotion = reduceMotion
         self.committedSection = committedSection
+        let nextCanvasColor = UIColor(canvasColor).resolvedColor(with: traitCollection)
+        resolvedCanvasColor = nextCanvasColor
         let applyCanvas = { [self] in
-            backgroundColor = UIColor(canvasColor)
+            backgroundColor = nextCanvasColor.withAlphaComponent(canvasOverlayAlpha)
         }
         if animatedCanvasChange && !reduceMotion {
             UIView.animate(
@@ -644,6 +669,22 @@ private final class BookWorkspaceScopeBarView: UIView {
         self.items = items
         setCommittedSection(committedSection)
         setNeedsLayout()
+    }
+
+    /// 在收起末段用 smoothstep 叠加中性画布；更新留在 UIKit 滚动热路径且不启动独立动画。
+    func updateCollapseProgress(_ progress: CGFloat) {
+        let clampedProgress = min(max(progress, 0), 1)
+        let start = BookWorkspaceLayoutMetrics.scopeNeutralizationStartProgress
+        let normalizedProgress = min(
+            max((clampedProgress - start) / max(1 - start, CGFloat.ulpOfOne), 0),
+            1
+        )
+        let nextAlpha = normalizedProgress * normalizedProgress * (3 - 2 * normalizedProgress)
+        guard abs(nextAlpha - canvasOverlayAlpha) >= 0.001 else { return }
+        canvasOverlayAlpha = nextAlpha
+        UIView.performWithoutAnimation { [self] in
+            backgroundColor = resolvedCanvasColor.withAlphaComponent(nextAlpha)
+        }
     }
 
     /// 根据原生 Pager 的连续页位置更新指示器和标题选中强度。
@@ -1525,6 +1566,9 @@ final class BookWorkspaceCollectionHostView: UIView, UICollectionViewDelegate, U
         )
         let offset = lowerOffset + (upperOffset - lowerOffset) * position.fraction
         let collapseDistance = min(max(offset, 0), bookHeaderHeight)
+        let collapseProgress = bookHeaderHeight > 0
+            ? collapseDistance / bookHeaderHeight
+            : 1
         let overscrollDistance = max(-offset, 0)
         let chromeTopInset = min(
             max(pagerScrollView.frame.minY, safeAreaInsets.top, 0),
@@ -1534,7 +1578,10 @@ final class BookWorkspaceCollectionHostView: UIView, UICollectionViewDelegate, U
             x: 0,
             y: -collapseDistance,
             width: bounds.width,
-            height: chromeTopInset + bookHeaderHeight + overscrollDistance
+            height: chromeTopInset
+                + bookHeaderHeight
+                + scopeBarHeight
+                + overscrollDistance
         )
         let nextHeaderFrame = CGRect(
             x: 0,
@@ -1564,12 +1611,14 @@ final class BookWorkspaceCollectionHostView: UIView, UICollectionViewDelegate, U
         if headerBackdropView.frame != nextBackdropFrame {
             headerBackdropView.frame = nextBackdropFrame
         }
+        headerBackdropView.updateFadeHeight(scopeBarHeight)
         if bookHeaderHostView.frame != nextHeaderFrame {
             bookHeaderHostView.frame = nextHeaderFrame
         }
         if scopeBarHostView.frame != nextScopeFrame {
             scopeBarHostView.frame = nextScopeFrame
         }
+        scopeBarHostView.updateCollapseProgress(collapseProgress)
         publishNavigationBarSurfaceVisibility(
             bookHeaderHeight > 0 && collapseDistance >= bookHeaderHeight - 0.5
         )
@@ -2228,6 +2277,453 @@ final class BookWorkspaceCollectionHostView: UIView, UICollectionViewDelegate, U
 }
 
 /// 页面唯一的书籍信息头部；它不参与横向分页，但随当前纵向列表连续收起。
+private enum BookWorkspaceHeaderMetricKind: Int, Identifiable {
+    case readingDuration
+    case bookmark
+    case readingProgress
+
+    var id: Int { rawValue }
+
+    var systemImage: String {
+        switch self {
+        case .readingDuration:
+            return "clock"
+        case .bookmark:
+            return "bookmark"
+        case .readingProgress:
+            return "arrow.right.circle"
+        }
+    }
+}
+
+/// 书籍工作台头部的一项排版数据；动作按稳定种类在数据行内部映射。
+private struct BookWorkspaceHeaderMetric: Identifiable {
+    let kind: BookWorkspaceHeaderMetricKind
+    let value: String
+    let accessibilityLabel: String
+
+    var id: BookWorkspaceHeaderMetricKind { kind }
+}
+
+/// 记录横向数据带两侧是否仍有未展示内容，只在跨过边界时触发视图更新。
+private struct BookWorkspaceMetricScrollEdges: Equatable {
+    static let hidden = BookWorkspaceMetricScrollEdges()
+
+    let leading: Bool
+    let trailing: Bool
+
+    /// 配置两侧边缘是否需要显示渐进遮罩。
+    init(leading: Bool = false, trailing: Bool = false) {
+        self.leading = leading
+        self.trailing = trailing
+    }
+
+    /// 根据滚动内容、视口和当前位置解析两侧剩余内容，回弹区间不会误点亮边缘。
+    init(geometry: ScrollGeometry) {
+        let maximumOffset = max(
+            geometry.contentSize.width - geometry.containerSize.width,
+            0
+        )
+        let clampedOffset = min(max(geometry.contentOffset.x, 0), maximumOffset)
+        let threshold = Spacing.hairline
+        leading = maximumOffset > threshold && clampedOffset > threshold
+        trailing = maximumOffset > threshold
+            && maximumOffset - clampedOffset > threshold
+    }
+}
+
+/// 使用透明度渐变柔化横向滚动视口的真实裁切边缘，不覆盖内容或参与交互。
+private struct BookWorkspaceMetricEdgeFadeMask: View {
+    let activeEdges: BookWorkspaceMetricScrollEdges
+
+    var body: some View {
+        HStack(spacing: Spacing.none) {
+            Group {
+                if activeEdges.leading {
+                    LinearGradient(
+                        colors: [.clear, .black],
+                        startPoint: .leading,
+                        endPoint: .trailing
+                    )
+                } else {
+                    Color.black
+                }
+            }
+            .frame(width: BookWorkspaceLayoutMetrics.metricsEdgeFadeWidth)
+
+            Color.black
+
+            Group {
+                if activeEdges.trailing {
+                    LinearGradient(
+                        colors: [.black, .clear],
+                        startPoint: .leading,
+                        endPoint: .trailing
+                    )
+                } else {
+                    Color.black
+                }
+            }
+            .frame(width: BookWorkspaceLayoutMetrics.metricsEdgeFadeWidth)
+        }
+    }
+}
+
+/// 用同源字体测量真实溢出，仅在需要时绘制无往返的单行书名跑马灯。
+private struct BookWorkspaceMarqueeTitleText: View {
+    let text: String
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var isScrolling = false
+    @State private var animationToken = UUID()
+
+    var body: some View {
+        GeometryReader { proxy in
+            let containerWidth = max(proxy.size.width, 0)
+            let textWidth = measuredTextWidth
+            let shouldScroll = !reduceMotion && textWidth > containerWidth + Spacing.tiny
+
+            Group {
+                if shouldScroll {
+                    scrollingTitle(textWidth: textWidth, containerWidth: containerWidth)
+                } else {
+                    titleLabel
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                        .frame(width: containerWidth, alignment: .leading)
+                }
+            }
+            .clipped()
+        }
+        .frame(height: BookWorkspaceTypography.titleLineHeight)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .clipped()
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(text)
+    }
+
+    /// 在身份栏视窗内绘制首尾相接的标题；静止时首字保持完整，滚动后才弱化左侧裁切。
+    private func scrollingTitle(textWidth: CGFloat, containerWidth: CGFloat) -> some View {
+        let edgeWidth = min(
+            BookWorkspaceLayoutMetrics.marqueeEdgeFadeWidth,
+            max(containerWidth / 4, 0)
+        )
+        return ZStack(alignment: .leading) {
+            HStack(spacing: BookWorkspaceLayoutMetrics.marqueeGap) {
+                titleLabel
+                    .fixedSize(horizontal: true, vertical: false)
+                titleLabel
+                    .fixedSize(horizontal: true, vertical: false)
+                    .accessibilityHidden(true)
+            }
+            .offset(
+                x: isScrolling
+                    ? -(textWidth + BookWorkspaceLayoutMetrics.marqueeGap)
+                    : 0
+            )
+        }
+        .frame(
+            width: containerWidth,
+            height: BookWorkspaceTypography.titleLineHeight,
+            alignment: .leading
+        )
+        .clipped()
+        .mask {
+            HStack(spacing: Spacing.none) {
+                Group {
+                    if isScrolling {
+                        LinearGradient(
+                            colors: [.clear, .black],
+                            startPoint: .leading,
+                            endPoint: .trailing
+                        )
+                    } else {
+                        Color.black
+                    }
+                }
+                .frame(width: edgeWidth)
+                Color.black
+                LinearGradient(
+                    colors: [.black, .clear],
+                    startPoint: .leading,
+                    endPoint: .trailing
+                )
+                .frame(width: edgeWidth)
+            }
+        }
+        .onAppear {
+            restartAnimation(containerWidth: containerWidth, textWidth: textWidth)
+        }
+        .onChange(of: containerWidth) { _, newWidth in
+            restartAnimation(containerWidth: newWidth, textWidth: textWidth)
+        }
+        .onChange(of: text) {
+            restartAnimation(containerWidth: containerWidth, textWidth: measuredTextWidth)
+        }
+        .onDisappear {
+            animationToken = UUID()
+            isScrolling = false
+        }
+    }
+
+    private var titleLabel: some View {
+        Text(text)
+            .font(BookWorkspaceTypography.title)
+            .foregroundStyle(Color.textPrimary)
+            .lineLimit(1)
+    }
+
+    private var measuredTextWidth: CGFloat {
+        ceil((text as NSString).size(
+            withAttributes: [.font: BookWorkspaceTypography.uiTitle]
+        ).width)
+    }
+
+    /// 在主队列延迟启动动画；令牌会让尺寸或文本变化前创建的回调失效，避免旧动画竞态覆盖。
+    private func restartAnimation(containerWidth: CGFloat, textWidth: CGFloat) {
+        let token = UUID()
+        animationToken = token
+        var transaction = Transaction(animation: nil)
+        transaction.disablesAnimations = true
+        withTransaction(transaction) {
+            isScrolling = false
+        }
+        guard textWidth > containerWidth + Spacing.tiny else { return }
+        let distance = textWidth + BookWorkspaceLayoutMetrics.marqueeGap
+        let duration = Double(distance / BookWorkspaceLayoutMetrics.marqueePointsPerSecond)
+        DispatchQueue.main.asyncAfter(
+            deadline: .now() + BookWorkspaceLayoutMetrics.marqueeInitialDelay
+        ) {
+            guard animationToken == token else { return }
+            withAnimation(.linear(duration: duration).repeatForever(autoreverses: false)) {
+                isScrolling = true
+            }
+        }
+    }
+}
+
+/// 在同一标题行内协调书名与阅读状态：短标题自然跟随，长标题为状态保留稳定行末空间。
+private struct BookWorkspaceTitleStatusRow: View {
+    let title: String
+    let statusTitle: String
+    let statusColor: Color
+    let onEditBook: () -> Void
+
+    var body: some View {
+        Group {
+            if statusTitle.isEmpty {
+                marqueeTitle
+            } else {
+                ViewThatFits(in: .horizontal) {
+                    naturalWidthContent
+                        .fixedSize(horizontal: true, vertical: false)
+                    constrainedContent
+                }
+            }
+        }
+        .frame(
+            maxWidth: .infinity,
+            minHeight: BookWorkspaceLayoutMetrics.titleStatusRowHeight,
+            maxHeight: BookWorkspaceLayoutMetrics.titleStatusRowHeight,
+            alignment: .leading
+        )
+    }
+
+    private var naturalWidthContent: some View {
+        HStack(spacing: BookWorkspaceLayoutMetrics.titleStatusSpacing) {
+            Text(title)
+                .font(BookWorkspaceTypography.title)
+                .foregroundStyle(Color.textPrimary)
+                .lineLimit(1)
+                .fixedSize(horizontal: true, vertical: false)
+                .accessibilityHeading(.h1)
+            statusButton
+        }
+    }
+
+    private var constrainedContent: some View {
+        HStack(spacing: BookWorkspaceLayoutMetrics.titleStatusSpacing) {
+            marqueeTitle
+                .layoutPriority(1)
+            statusButton
+                .fixedSize(horizontal: true, vertical: false)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var marqueeTitle: some View {
+        BookWorkspaceMarqueeTitleText(text: title)
+            .accessibilityHeading(.h1)
+    }
+
+    private var statusButton: some View {
+        Button(action: onEditBook) {
+            Text(statusTitle)
+                .font(AppTypography.caption2Medium)
+                .foregroundStyle(statusColor)
+                .lineLimit(1)
+                .padding(.horizontal, Spacing.half)
+                .frame(minWidth: BookWorkspaceLayoutMetrics.minimumControlHeight)
+                .frame(height: BookWorkspaceLayoutMetrics.readStatusBadgeVisualHeight)
+                .background(
+                    statusColor.opacity(BookWorkspaceLayoutMetrics.readStatusBadgeFillOpacity),
+                    in: Capsule()
+                )
+                .overlay {
+                    Capsule().strokeBorder(
+                        statusColor.opacity(
+                            BookWorkspaceLayoutMetrics.readStatusBadgeBorderOpacity
+                        ),
+                        lineWidth: CardStyle.borderWidth
+                    )
+                }
+                .frame(minHeight: BookWorkspaceLayoutMetrics.minimumControlHeight)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(BookWorkspaceMetricButtonStyle())
+        .accessibilityLabel("阅读状态\(statusTitle)")
+        .accessibilityHint("点按修改")
+    }
+}
+
+/// 以统一字号、字重和颜色绘制完整数据值，避免数字与单位产生非必要的光学重量差。
+private struct BookWorkspaceMetricValueText: View {
+    private let value: String
+
+    init(_ value: String) {
+        self.value = value
+    }
+
+    var body: some View {
+        Text(value)
+            .font(BookWorkspaceTypography.metricValue)
+            .foregroundStyle(Color.textSecondary)
+            .lineLimit(1)
+    }
+}
+
+/// 用独立图标和弱表面建立阅读指标的语义边界，视觉高度与点击高度分别控制。
+private struct BookWorkspaceMetricChipLabel: View {
+    let metric: BookWorkspaceHeaderMetric
+
+    var body: some View {
+        HStack(spacing: BookWorkspaceLayoutMetrics.metricChipIconSpacing) {
+            Image(systemName: metric.kind.systemImage)
+                .font(BookWorkspaceTypography.metricIcon)
+                .foregroundStyle(Color.iconSecondary)
+                .accessibilityHidden(true)
+
+            BookWorkspaceMetricValueText(metric.value)
+        }
+        .padding(.horizontal, BookWorkspaceLayoutMetrics.metricChipHorizontalInset)
+        .frame(minWidth: BookWorkspaceLayoutMetrics.minimumControlHeight)
+        .frame(height: BookWorkspaceLayoutMetrics.metricChipVisualHeight)
+        .frame(minHeight: BookWorkspaceLayoutMetrics.minimumControlHeight)
+        .fixedSize(horizontal: true, vertical: false)
+        .contentShape(Rectangle())
+    }
+}
+
+/// 仅为阅读指标 Chip 提供非位移式按压反馈，避免影响状态 Badge 与评分胶囊。
+private struct BookWorkspaceMetricChipButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .opacity(
+                configuration.isPressed
+                    ? BookWorkspaceLayoutMetrics.metricChipPressedContentOpacity
+                    : 1
+            )
+            .background {
+                Capsule()
+                    .fill(
+                        Color.surfaceCard.opacity(
+                            configuration.isPressed
+                                ? BookWorkspaceLayoutMetrics.metricChipPressedFillOpacity
+                                : BookWorkspaceLayoutMetrics.metricChipFillOpacity
+                        )
+                    )
+                    .frame(height: BookWorkspaceLayoutMetrics.metricChipVisualHeight)
+            }
+            .overlay {
+                Capsule()
+                    .strokeBorder(
+                        Color.surfaceBorderSubtle.opacity(
+                            configuration.isPressed
+                                ? BookWorkspaceLayoutMetrics.metricChipPressedBorderOpacity
+                                : BookWorkspaceLayoutMetrics.metricChipBorderOpacity
+                        ),
+                        lineWidth: CardStyle.borderWidth
+                    )
+                    .frame(height: BookWorkspaceLayoutMetrics.metricChipVisualHeight)
+            }
+    }
+}
+
+/// 阅读数据列的轻量按压反馈，不引入独立卡片、缩放或额外动效。
+private struct BookWorkspaceMetricButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .opacity(configuration.isPressed ? 0.68 : 1)
+    }
+}
+
+/// 以独立弱表面 Chip 承载三项阅读数据；自然宽度不足时由用户手动横向浏览。
+private struct BookWorkspaceMetricsStrip: View {
+    let metrics: [BookWorkspaceHeaderMetric]
+    let onOpenReadingDetail: () -> Void
+    let onEditBook: () -> Void
+
+    @State private var activeScrollEdges = BookWorkspaceMetricScrollEdges.hidden
+
+    var body: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(
+                alignment: .center,
+                spacing: BookWorkspaceLayoutMetrics.metricChipSpacing
+            ) {
+                ForEach(metrics) { metric in
+                    metricButton(metric)
+                }
+            }
+            .fixedSize(horizontal: true, vertical: false)
+        }
+        .scrollBounceBehavior(.basedOnSize, axes: .horizontal)
+        .onScrollGeometryChange(for: BookWorkspaceMetricScrollEdges.self) { geometry in
+            BookWorkspaceMetricScrollEdges(geometry: geometry)
+        } action: { _, newValue in
+            guard activeScrollEdges != newValue else { return }
+            activeScrollEdges = newValue
+        }
+        .mask {
+            BookWorkspaceMetricEdgeFadeMask(activeEdges: activeScrollEdges)
+        }
+        .frame(minHeight: BookWorkspaceLayoutMetrics.minimumControlHeight)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .accessibilityElement(children: .contain)
+    }
+
+    /// 构建单行自然宽度指标；三种数据各自保持完整的图标、点击与无障碍语义。
+    private func metricButton(_ metric: BookWorkspaceHeaderMetric) -> some View {
+        Button {
+            performAction(for: metric.kind)
+        } label: {
+            BookWorkspaceMetricChipLabel(metric: metric)
+        }
+        .buttonStyle(BookWorkspaceMetricChipButtonStyle())
+        .accessibilityLabel(metric.accessibilityLabel)
+    }
+
+    /// 保持既有业务入口：累计阅读进入阅读详情，书签与进度进入书籍编辑。
+    private func performAction(for kind: BookWorkspaceHeaderMetricKind) {
+        switch kind {
+        case .readingDuration:
+            onOpenReadingDetail()
+        case .bookmark, .readingProgress:
+            onEditBook()
+        }
+    }
+}
+
 struct BookWorkspaceBookHeader: View {
     let book: BookDetail
     let onOpenReadingDetail: () -> Void
@@ -2249,17 +2745,12 @@ struct BookWorkspaceBookHeader: View {
     }
 
     var body: some View {
-        HStack(alignment: .top, spacing: BookWorkspaceLayoutMetrics.headerBlockSpacing) {
-            VStack(
-                alignment: .leading,
-                spacing: BookWorkspaceLayoutMetrics.headerBlockSpacing
-            ) {
-                identity
-                metrics
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-
-            cover
+        HStack(alignment: .top, spacing: BookWorkspaceLayoutMetrics.identityCoverSpacing) {
+            identityColumn
+                .clipped()
+                .layoutPriority(1)
+            coverColumn
+                .fixedSize(horizontal: true, vertical: true)
         }
         .padding(.horizontal, BookWorkspaceLayoutMetrics.headerHorizontalInset)
         .padding(.top, BookWorkspaceLayoutMetrics.headerTopInset)
@@ -2267,32 +2758,60 @@ struct BookWorkspaceBookHeader: View {
         .accessibilityElement(children: .contain)
     }
 
+    private var identityColumn: some View {
+        VStack(alignment: .leading, spacing: BookWorkspaceLayoutMetrics.identityToMetricsSpacing) {
+            identity
+
+            if !visibleMetrics.isEmpty {
+                metricsStrip
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var metricsStrip: some View {
+        BookWorkspaceMetricsStrip(
+            metrics: visibleMetrics,
+            onOpenReadingDetail: onOpenReadingDetail,
+            onEditBook: onEditBook
+        )
+    }
+
     private var identity: some View {
         VStack(alignment: .leading, spacing: BookWorkspaceLayoutMetrics.identityPrimarySpacing) {
-            Text(book.name)
-                .font(AppTypography.title2)
-                .foregroundStyle(Color.textPrimary)
-                .lineLimit(2)
-                .fixedSize(horizontal: false, vertical: true)
-                .accessibilityHeading(.h1)
+            BookWorkspaceTitleStatusRow(
+                title: book.name,
+                statusTitle: readStatusTitle,
+                statusColor: readStatusColor,
+                onEditBook: onEditBook
+            )
 
-            if !book.author.isEmpty || !publishingLine.isEmpty {
+            if hasMetadata {
                 VStack(
                     alignment: .leading,
                     spacing: BookWorkspaceLayoutMetrics.identitySecondarySpacing
                 ) {
                     if !book.author.isEmpty {
                         Text(book.author)
-                            .font(AppTypography.subheadline)
+                            .font(BookWorkspaceTypography.secondaryInformation)
                             .foregroundStyle(Color.textSecondary)
                             .lineLimit(isCompactPresentation ? 1 : 2)
                     }
 
-                    if !publishingLine.isEmpty {
-                        Text(publishingLine)
-                            .font(AppTypography.footnote)
+                    if !publisherText.isEmpty {
+                        Text(publisherText)
+                            .font(BookWorkspaceTypography.secondaryInformation)
                             .foregroundStyle(Color.textSecondary)
-                            .lineLimit(presentation == .regular ? 2 : 1)
+                            .lineLimit(1)
+                            .truncationMode(.tail)
+                    }
+
+                    if !publicationDateText.isEmpty {
+                        Text(publicationDateText)
+                            .font(BookWorkspaceTypography.secondaryInformation)
+                            .foregroundStyle(Color.textSecondary)
+                            .lineLimit(1)
+                            .truncationMode(.tail)
                     }
                 }
             }
@@ -2301,40 +2820,71 @@ struct BookWorkspaceBookHeader: View {
     }
 
     private var cover: some View {
-        ZStack(alignment: .topTrailing) {
-            Button(action: onOpenReadingDetail) {
-                XMBookCover.fixedWidth(
-                    coverWidth,
-                    urlString: book.cover,
-                    cornerRadius: CornerRadius.inlaySmall,
-                    border: .init(color: .surfaceBorderSubtle, width: CardStyle.borderWidth),
-                    placeholderIconSize: .large,
-                    surfaceStyle: .spine
-                )
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel("查看《\(book.name)》阅读详情")
+        Button(action: onOpenReadingDetail) {
+            XMBookCover.fixedWidth(
+                coverWidth,
+                urlString: book.cover,
+                cornerRadius: CornerRadius.inlaySmall,
+                border: .init(color: .surfaceBorderSubtle, width: CardStyle.borderWidth),
+                placeholderIconSize: .large,
+                surfaceStyle: .spine
+            )
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("查看《\(book.name)》阅读详情")
+    }
 
-            if !readStatusTitle.isEmpty {
-                Button(action: onEditBook) {
-                    BookshelfCoverTextBadge(
-                        text: readStatusTitle,
-                        placement: .topTrailing,
-                        tone: .status(readStatusColor),
-                        cornerRadius: CornerRadius.inlaySmall,
-                        accessibilityLabel: "阅读状态\(readStatusTitle)"
-                    )
-                    .frame(
-                        minWidth: BookWorkspaceLayoutMetrics.minimumControlHeight,
-                        minHeight: BookWorkspaceLayoutMetrics.minimumControlHeight,
-                        alignment: .topTrailing
-                    )
-                    .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("阅读状态\(readStatusTitle)")
-                .accessibilityHint("打开书籍编辑页修改阅读状态")
+    /// 将有效评分作为封面附属信息独立承载；零评分不制造不可见的纵向占位。
+    private var coverColumn: some View {
+        VStack(spacing: Spacing.none) {
+            cover
+                .frame(width: coverColumnWidth, alignment: .center)
+
+            if book.score > 0 {
+                ratingSlot
             }
+        }
+        .frame(width: coverColumnWidth)
+    }
+
+    private var ratingSlot: some View {
+        Button(action: onEditBook) {
+            ratingCapsule
+                .frame(
+                    width: BookWorkspaceLayoutMetrics.ratingCapsuleVisualWidth,
+                    height: BookWorkspaceLayoutMetrics.ratingCapsuleHeight
+                )
+                .frame(
+                    width: coverColumnWidth,
+                    height: BookWorkspaceLayoutMetrics.ratingSlotHeight
+                )
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(BookWorkspaceMetricButtonStyle())
+        .accessibilityLabel("我的评分，\(ratingValueText) 分")
+        .accessibilityHint("点按修改")
+    }
+
+    private var ratingCapsule: some View {
+        let shape = Capsule()
+        return XMRatingBar(
+            value: .constant(Double(book.score) / 10.0),
+            starCount: BookWorkspaceLayoutMetrics.ratingStarCount,
+            size: BookWorkspaceLayoutMetrics.ratingStarSize,
+            spacing: BookWorkspaceLayoutMetrics.ratingStarSpacing,
+            step: .half,
+            isIndicator: true
+        )
+        .dynamicTypeSize(...DynamicTypeSize.large)
+        .accessibilityHidden(true)
+        .padding(.horizontal, BookWorkspaceLayoutMetrics.ratingCapsuleHorizontalInset)
+        .frame(height: BookWorkspaceLayoutMetrics.ratingCapsuleHeight)
+        .background(Color.surfaceCard.opacity(0.12), in: shape)
+        .overlay {
+            shape.strokeBorder(
+                Color.surfaceCard.opacity(0.28),
+                lineWidth: CardStyle.borderWidth
+            )
         }
     }
 
@@ -2347,6 +2897,10 @@ struct BookWorkspaceBookHeader: View {
         case .landscape:
             return Layout.landscapeCoverWidth
         }
+    }
+
+    private var coverColumnWidth: CGFloat {
+        max(coverWidth, BookWorkspaceLayoutMetrics.ratingCapsuleVisualWidth)
     }
 
     private var presentation: Presentation {
@@ -2372,129 +2926,67 @@ struct BookWorkspaceBookHeader: View {
             ?? Color.textSecondary
     }
 
-    @ViewBuilder
-    private var metrics: some View {
-        if hasVisibleMetrics {
-            ScrollView(.horizontal) {
-                HStack(spacing: BookWorkspaceLayoutMetrics.metricsSpacing) {
-                    if hasReadingDuration {
-                        readingMetric
-                    }
-                    if hasRating {
-                        ratingMetric
-                    }
-                    if hasBookmark {
-                        bookmarkMetric
-                    }
-                    if hasReadingProgress {
-                        readingProgressMetric
-                    }
-                }
-            }
-            .scrollIndicators(.hidden)
-            .scrollBounceBehavior(.basedOnSize, axes: .horizontal)
-            .accessibilityElement(children: .contain)
+    private var visibleMetrics: [BookWorkspaceHeaderMetric] {
+        var result: [BookWorkspaceHeaderMetric] = []
+        if book.totalReadingSeconds > 0 {
+            result.append(
+                BookWorkspaceHeaderMetric(
+                    kind: .readingDuration,
+                    value: durationDisplayText,
+                    accessibilityLabel: "累计阅读，\(durationDisplayText)"
+                )
+            )
         }
-    }
-
-    private var readingMetric: some View {
-        metricButton(
-            icon: "clock",
-            title: durationDisplayText,
-            accessibilityLabel: "阅读时长，\(durationAccessibilityText)",
-            action: onOpenReadingDetail
-        )
-        .layoutPriority(1)
-    }
-
-    private var ratingMetric: some View {
-        metricButton(
-            icon: "star.fill",
-            title: String(format: "%.1f", Double(book.score) / 10),
-            accessibilityLabel: ratingAccessibilityLabel,
-            iconColor: Color.ratingActive,
-            textColor: Color.textSecondary,
-            action: onEditBook
-        )
-    }
-
-    private var bookmarkMetric: some View {
-        metricButton(
-            icon: "bookmark",
-            title: book.bookmarkText,
-            accessibilityLabel: "书签 \(book.bookmarkText)",
-            action: onEditBook
-        )
-    }
-
-    private var readingProgressMetric: some View {
-        metricButton(
-            icon: "chart.line.uptrend.xyaxis",
-            title: book.readingProgressText,
-            accessibilityLabel: "阅读进度 \(book.readingProgressText)",
-            action: onEditBook
-        )
-    }
-
-    /// 构建保持 44pt 热区的指标入口，不增加额外视觉容器。
-    private func metricButton(
-        icon: String,
-        title: String,
-        accessibilityLabel: String,
-        iconColor: Color = Color.textSecondary,
-        textColor: Color = Color.textSecondary,
-        action: @escaping () -> Void
-    ) -> some View {
-        Button(action: action) {
-            HStack(spacing: Spacing.half) {
-                Image(systemName: icon)
-                    .foregroundStyle(iconColor)
-                Text(title)
-                    .foregroundStyle(textColor)
-                    .lineLimit(1)
-            }
-            .font(AppTypography.caption)
-            .frame(minHeight: BookWorkspaceLayoutMetrics.minimumControlHeight)
-            .contentShape(Rectangle())
+        if !bookmarkPositionText.isEmpty {
+            result.append(
+                BookWorkspaceHeaderMetric(
+                    kind: .bookmark,
+                    value: bookmarkPositionText,
+                    accessibilityLabel: "书签页码，\(bookmarkPositionText)"
+                )
+            )
         }
-        .buttonStyle(.plain)
-        .accessibilityLabel(accessibilityLabel)
+        if !readingProgressText.isEmpty {
+            result.append(
+                BookWorkspaceHeaderMetric(
+                    kind: .readingProgress,
+                    value: readingProgressText,
+                    accessibilityLabel: "阅读进度，\(readingProgressText)"
+                )
+            )
+        }
+        return result
     }
 
-    private var publishingLine: String {
-        var parts: [String] = []
-        let press = book.press.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !press.isEmpty {
-            parts.append(press)
-        }
-        let pubDate = book.attributes
+    private var ratingValueText: String {
+        String(format: "%.1f", Double(book.score) / 10.0)
+    }
+
+    private var bookmarkPositionText: String {
+        book.bookmarkText
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .replacingOccurrences(of: " 页", with: "页")
+    }
+
+    private var readingProgressText: String {
+        book.readingProgressText.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var hasMetadata: Bool {
+        !book.author.isEmpty || !publisherText.isEmpty || !publicationDateText.isEmpty
+    }
+
+    private var publisherText: String {
+        book.press.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var publicationDateText: String {
+        let value = book.attributes
             .first(where: { $0.kind == .pubDate })?
             .value
             .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        if !pubDate.isEmpty, pubDate != "1970-01-01" {
-            parts.append(pubDate)
-        }
-        return parts.joined(separator: " · ")
-    }
-
-    private var hasVisibleMetrics: Bool {
-        hasReadingDuration || hasRating || hasBookmark || hasReadingProgress
-    }
-
-    private var hasReadingDuration: Bool {
-        book.totalReadingSeconds > 0
-    }
-
-    private var hasRating: Bool {
-        book.score > 0
-    }
-
-    private var hasBookmark: Bool {
-        !book.bookmarkText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-    }
-
-    private var hasReadingProgress: Bool {
-        !book.readingProgressText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        guard !value.isEmpty, value != "1970-01-01" else { return "" }
+        return value
     }
 
     private var durationDisplayText: String {
@@ -2511,15 +3003,6 @@ struct BookWorkspaceBookHeader: View {
                 : "\(minutes)分钟"
         }
         return "\(remainingSeconds)秒"
-    }
-
-    private var durationAccessibilityText: String {
-        durationDisplayText
-    }
-
-    private var ratingAccessibilityLabel: String {
-        guard book.score > 0 else { return "我的评分，未评分" }
-        return "我的评分，\(String(format: "%.1f", Double(book.score) / 10))"
     }
 }
 

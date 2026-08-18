@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 NoteExcerpt、ExpandableRichText、XMJXImageWall 与 DesignTokens 展示单书工作台章节及书摘
- * [OUTPUT]: 对 BookDetailView 提供统一 16pt 页面结构轴、紧凑 Hero 与内容宽度 Tab 布局刻度、共享主题画布的粘性章节头，以及带主题不透明阅读表面的独立书摘卡片
+ * [OUTPUT]: 对 BookDetailView 提供统一结构轴、带自适应书名状态行与独立封面评分胶囊的沉浸式 Hero、可横向滚动且按 Android 语义拆分的三项阅读指标 Chip、Tab 内主题衰减与吸顶中性化布局刻度，以及共享主题画布的章节和书摘内容
  * [POS]: Views/Book/Components 的页面私有内容组件，承接主题头部节奏、章节分组和具备清晰信息亲密性的书摘列表项
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -16,15 +16,43 @@ enum BookWorkspaceLayoutMetrics {
     static let itemSpacing: CGFloat = Spacing.tight
     static let chapterToFirstItemSpacing: CGFloat = Spacing.cozy
     static let sectionSpacing: CGFloat = Spacing.section
-    static let headerBlockSpacing: CGFloat = Spacing.base
     static let contentBlockSpacing: CGFloat = 10
     static let metadataSpacing: CGFloat = 8
     static let minimumControlHeight: CGFloat = 44
-    static let headerTopInset: CGFloat = Spacing.base
-    static let headerBottomInset: CGFloat = Spacing.section
-    static let identityPrimarySpacing: CGFloat = 6
-    static let identitySecondarySpacing: CGFloat = 4
-    static let metricsSpacing: CGFloat = Spacing.base
+    static let headerTopInset: CGFloat = Spacing.screenEdge
+    static let headerBottomInset: CGFloat = Spacing.base
+    static let identityCoverSpacing: CGFloat = Spacing.screenEdge
+    static let identityPrimarySpacing: CGFloat = Spacing.compact
+    static let identitySecondarySpacing: CGFloat = Spacing.compact
+    static let identityToMetricsSpacing: CGFloat = Spacing.compact
+    static let titleStatusSpacing: CGFloat = Spacing.half
+    static let titleStatusRowHeight: CGFloat = minimumControlHeight
+    static let readStatusBadgeVisualHeight: CGFloat = 24
+    static let readStatusBadgeFillOpacity = 0.07
+    static let readStatusBadgeBorderOpacity = 0.10
+    static let metricChipSpacing: CGFloat = Spacing.cozy
+    static let metricChipIconSpacing: CGFloat = Spacing.half
+    static let metricChipHorizontalInset: CGFloat = Spacing.tight
+    static let metricChipVisualHeight: CGFloat = 32
+    static let metricChipFillOpacity = 0.26
+    static let metricChipPressedFillOpacity = 0.34
+    static let metricChipBorderOpacity = 0.22
+    static let metricChipPressedBorderOpacity = 0.28
+    static let metricChipPressedContentOpacity = 0.82
+    static let metricsEdgeFadeWidth: CGFloat = Spacing.screenEdge
+    static let ratingSlotHeight: CGFloat = 48
+    static let ratingCapsuleHeight: CGFloat = 26
+    static let ratingCapsuleHorizontalInset: CGFloat = 8
+    static let ratingStarSize: CGFloat = 13
+    static let ratingStarSpacing: CGFloat = 1
+    static let ratingStarCount = 5
+    static let ratingCapsuleVisualWidth = CGFloat(ratingStarCount) * ratingStarSize
+        + CGFloat(ratingStarCount - 1) * ratingStarSpacing
+        + ratingCapsuleHorizontalInset * 2
+    static let marqueeGap: CGFloat = 32
+    static let marqueeEdgeFadeWidth: CGFloat = Spacing.base
+    static let marqueeInitialDelay: Double = 1.2
+    static let marqueePointsPerSecond: CGFloat = 24
     static let scopeItemSpacing: CGFloat = Spacing.double
     static let scopeTitleCountSpacing: CGFloat = Spacing.compact
     static let scopeIndicatorWidth: CGFloat = 24
@@ -32,6 +60,22 @@ enum BookWorkspaceLayoutMetrics {
     static let scopeIndicatorOffset: CGFloat = Spacing.tight
     static let scopeAccessibilityIndicatorSpacing: CGFloat = Spacing.cozy
     static let scopeBarEstimatedHeight: CGFloat = 44
+    static let scopeBackdropFadeKneeProgress: CGFloat = 0.68
+    static let scopeBackdropFadeKneeOpacity: CGFloat = 0.28
+    static let scopeNeutralizationStartProgress: CGFloat = 0.60
+}
+
+/// 单书工作台头部排版令牌；保证书名跑马灯的测量字体与实际渲染字体同源。
+enum BookWorkspaceTypography {
+    static let title: Font = AppTypography.semantic(.title3, weight: .medium)
+    static let uiTitle: UIFont = AppTypography.uiSemantic(.title3, weight: .medium)
+    static let secondaryInformation: Font = AppTypography.callout
+    static let metricValue: Font = AppTypography.subheadline
+    static let metricIcon: Font = AppTypography.caption
+
+    static var titleLineHeight: CGFloat {
+        ceil(uiTitle.lineHeight + Spacing.tiny)
+    }
 }
 
 /// 单书工作台内容表面的页面私有样式，只保留不抢正文的弱语义描边。

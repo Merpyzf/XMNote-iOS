@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 RepositoryContainer、AppNavigationCoordinator、BookDetailViewModel、XMBookCover、XMRatingBar 与外层书籍/阅读路由回调
- * [OUTPUT]: 对外提供首帧结构稳定的 BookDetailView、BookReadingDetailView、BookChapterNotesView，形成贯穿导航栏的主题背景、共享可收起书籍概览、吸顶 Tab 与纯内容 Pager
+ * [OUTPUT]: 对外提供首帧结构稳定的 BookDetailView、BookReadingDetailView、BookChapterNotesView，形成贯穿导航栏的沉浸主题背景、共享可收起书籍概览、左锚定阅读数据行、吸顶 Tab 与纯内容 Pager
  * [POS]: Book 模块单书内容工作台壳层，以背景/内容分层的共享 Chrome 和独立内容滚动承接目录/书摘/相关/书评
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -149,7 +149,7 @@ struct BookWorkspaceThemePalette {
     let headerLeadingColor: Color
     let headerTrailingColor: Color
 
-    /// 用封面色和当前外观的系统分组底色生成画布、内容表面与两档 Header 不透明背景。
+    /// 用封面色和当前外观的系统分组底色生成画布、内容表面与非对称 Header 色场。
     init(tintRGBAHex: UInt32?, colorScheme: ColorScheme) {
         let isDark = colorScheme == .dark
         let interfaceStyle: UIUserInterfaceStyle = isDark ? .dark : .light
@@ -213,7 +213,7 @@ struct BookWorkspaceThemePalette {
         let canvas = Self.accessibleBlend(
             source: source,
             base: base,
-            maximumStrength: (isDark ? 0.015 : 0.01) * canvasSaturationDamping,
+            maximumStrength: 0.02 * canvasSaturationDamping,
             primaryText: primaryText,
             secondaryText: secondaryText
         )
@@ -227,14 +227,14 @@ struct BookWorkspaceThemePalette {
         let headerLeading = Self.accessibleBlend(
             source: source,
             base: base,
-            maximumStrength: 0.05 * headerSaturationDamping,
+            maximumStrength: (isDark ? 0.10 : 0.12) * headerSaturationDamping,
             primaryText: primaryText,
             secondaryText: secondaryText
         )
         let headerTrailing = Self.accessibleBlend(
             source: source,
             base: base,
-            maximumStrength: 0.08 * headerSaturationDamping,
+            maximumStrength: (isDark ? 0.20 : 0.26) * headerSaturationDamping,
             primaryText: primaryText,
             secondaryText: secondaryText
         )
