@@ -1,6 +1,6 @@
 /**
- * [INPUT]: 依赖 NotePullDownSearchBar 与 NoteScrollBoundaryCoordinator，接收分类独立搜索 Binding、页面激活态与分类内容
- * [OUTPUT]: 对 NoteCollectionView 提供单滚动坐标搜索抽屉，以透明揭示轨道承接原生滚动、端点 Snap、搜索固定、彻底裁剪收起与轨道外有效视口计算
+ * [INPUT]: 依赖 NotePullDownSearchBar 与 SwiftUI 原生滚动几何/目标 API，接收分类独立搜索 Binding、页面激活态与分类内容
+ * [OUTPUT]: 对 NoteCollectionView 提供单一系统滚动坐标的下拉搜索页，以固定 Section Header 承载揭示、搜索固定与端点吸附
  * [POS]: Note 模块首页页面私有滚动容器，仅被 NoteCollectionView 消费
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -13,7 +13,7 @@ struct NoteCollapsibleSearchMetrics {
     let emptyStateOffset: CGFloat
 }
 
-/// 搜索抽屉以滚动内容顶部的透明轨道提供真实行程，搜索像素只在 sibling overlay 中硬裁剪显示。
+/// 分类搜索与内容共享同一个 SwiftUI ScrollView，系统完整拥有拖动、减速、橡皮筋和回弹。
 struct NoteCollapsibleSearchPage<Content: View>: View {
     @Binding var searchText: String
     let placeholder: String
@@ -22,11 +22,13 @@ struct NoteCollapsibleSearchPage<Content: View>: View {
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var isSearchActive = false
-    @State private var visibleSearchHeight: CGFloat
-    @State private var searchPhase: NoteSearchSessionPhase
-    @State private var boundaryController = NoteScrollBoundaryController()
+    @State private var normalizedSearchOffset: CGFloat
+    @State private var scrollPhase: ScrollPhase = .idle
+    @State private var scrollPosition: ScrollPosition
+    @State private var searchPhase: NoteSearchPresentationPhase
+    @State private var pendingScrollAction: NoteSearchPendingScrollAction?
 
-    /// 以分类已恢复的查询决定首帧高度，避免有效搜索先显示为收起状态。
+    /// 以分类已恢复的查询决定首帧搜索状态与原生滚动位置，避免空查询闪现搜索头。
     init(
         searchText: Binding<String>,
         placeholder: String,
@@ -41,9 +43,11 @@ struct NoteCollapsibleSearchPage<Content: View>: View {
         let hasQuery = !searchText.wrappedValue
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .isEmpty
-        self._visibleSearchHeight = State(
-            initialValue: hasQuery ? NoteCollapsibleSearchLayout.headerHeight : 0
-        )
+        let initialOffset = hasQuery
+            ? NoteCollapsibleSearchLayout.expandedOffset
+            : NoteCollapsibleSearchLayout.collapsedOffset
+        self._normalizedSearchOffset = State(initialValue: initialOffset)
+        self._scrollPosition = State(initialValue: ScrollPosition(y: initialOffset))
         self._searchPhase = State(initialValue: hasQuery ? .searching : .browsing)
     }
 
@@ -55,50 +59,69 @@ struct NoteCollapsibleSearchPage<Content: View>: View {
         searchPhase != .browsing || isSearchActive || hasQuery
     }
 
-    private var isSearchInteractable: Bool {
-        isSearchPinned
-            || visibleSearchHeight >= NoteCollapsibleSearchLayout.headerHeight
-                - NoteCollapsibleSearchLayout.interactionTolerance
+    private var collapseDistance: CGFloat {
+        isSearchPinned ? 0 : normalizedSearchOffset
     }
 
-    private var isSearchFullyHidden: Bool {
-        visibleSearchHeight <= NoteCollapsibleSearchLayout.interactionTolerance
+    private var revealProgress: CGFloat {
+        isSearchPinned
+            ? 1
+            : 1 - normalizedSearchOffset / NoteCollapsibleSearchLayout.headerHeight
+    }
+
+    private var visibleSearchHeight: CGFloat {
+        NoteCollapsibleSearchLayout.headerHeight * revealProgress
+    }
+
+    private var isSearchInteractable: Bool {
+        isSearchPinned
+            || normalizedSearchOffset <= NoteCollapsibleSearchLayout.interactionTolerance
+    }
+
+    private var isSearchSnapEnabled: Bool {
+        isPageActive && searchPhase == .browsing && !isSearchActive && !hasQuery
     }
 
     var body: some View {
         GeometryReader { proxy in
-            let contentViewportHeight = max(
-                proxy.size.height - NoteCollapsibleSearchLayout.headerHeight,
-                0
-            )
-
-            ZStack(alignment: .top) {
-                ScrollView {
-                    LazyVStack(
-                        alignment: .leading,
-                        spacing: Spacing.none
-                    ) {
-                        searchRevealTrack
-
+            ScrollView {
+                LazyVStack(
+                    alignment: .leading,
+                    spacing: Spacing.none,
+                    pinnedViews: [.sectionHeaders]
+                ) {
+                    Section {
                         content(
                             NoteCollapsibleSearchMetrics(
-                                viewportHeight: contentViewportHeight,
+                                viewportHeight: proxy.size.height,
                                 emptyStateOffset: -visibleSearchHeight / 2
                             )
                         )
                         .frame(
                             maxWidth: .infinity,
-                            minHeight: contentViewportHeight,
+                            minHeight: proxy.size.height,
                             alignment: .top
                         )
-                    }
-                    .background(alignment: .topLeading) {
-                        boundaryBridge
+                    } header: {
+                        searchHeader
                     }
                 }
-                .scrollBounceBehavior(.always)
-
-                searchDrawer
+            }
+            .scrollPosition($scrollPosition)
+            .scrollTargetBehavior(
+                NoteSearchRevealTargetBehavior(isEnabled: isSearchSnapEnabled)
+            )
+            .scrollBounceBehavior(.always)
+            .scrollDismissesKeyboard(.interactively)
+            .onScrollGeometryChange(for: CGFloat.self) { geometry in
+                NoteCollapsibleSearchLayout.clampedOffset(
+                    geometry.contentOffset.y + geometry.contentInsets.top
+                )
+            } action: { _, newOffset in
+                updateNormalizedSearchOffset(newOffset)
+            }
+            .onScrollPhaseChange { _, newPhase in
+                handleScrollPhaseChange(newPhase)
             }
             .accessibilityAction(named: "显示搜索") {
                 revealSearchForAccessibility()
@@ -107,76 +130,17 @@ struct NoteCollapsibleSearchPage<Content: View>: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .onAppear(perform: synchronizeRestoredQuery)
         .onChange(of: hasQuery) { _, newValue in
-            guard newValue else { return }
-            searchPhase = .searching
-            revealSearch(animated: false)
+            handleQueryChange(hasQuery: newValue)
         }
         .onChange(of: isSearchActive) { _, newValue in
-            if newValue {
-                searchPhase = .searching
-                revealSearch(animated: false)
-            } else if !hasQuery, searchPhase == .searching {
-                searchPhase = .browsing
-            }
+            handleSearchActivationChange(isActive: newValue)
         }
         .onChange(of: isPageActive) { _, newValue in
-            guard !newValue else { return }
-            boundaryController.cancelProgrammaticMovement()
-            isSearchActive = false
-            if searchPhase == .dismissing {
-                finalizeCancelSearch()
-            }
+            handlePageActivationChange(isActive: newValue)
         }
     }
 
-    /// 透明轨道只提供 0...52pt 的原生滚动行程，不渲染搜索像素，也不暴露无障碍语义。
-    private var searchRevealTrack: some View {
-        Color.clear
-            .frame(height: NoteCollapsibleSearchLayout.headerHeight)
-            .allowsHitTesting(false)
-            .accessibilityHidden(true)
-    }
-
-    private var boundaryBridge: some View {
-        NoteScrollBoundaryBridge(
-            controller: boundaryController,
-            maximumRevealHeight: NoteCollapsibleSearchLayout.headerHeight,
-            isEnabled: isPageActive && !isSearchPinned,
-            isPinned: isSearchPinned,
-            reduceMotion: reduceMotion,
-            onRevealHeightChange: updateVisibleSearchHeight
-        )
-        .frame(width: 0, height: 0)
-        .accessibilityHidden(true)
-    }
-
-    private var searchDrawer: some View {
-        ZStack(alignment: .bottom) {
-            if !isSearchFullyHidden {
-                searchHeaderContent
-                    .padding(.vertical, NoteCollapsibleSearchLayout.verticalBreathing)
-                    .padding(.horizontal, Spacing.screenEdge)
-                    .frame(
-                        maxWidth: .infinity,
-                        minHeight: NoteCollapsibleSearchLayout.headerHeight,
-                        maxHeight: NoteCollapsibleSearchLayout.headerHeight,
-                        alignment: .top
-                    )
-                    .background(Color.surfacePage)
-            }
-        }
-        .frame(maxWidth: .infinity)
-        .frame(height: visibleSearchHeight, alignment: .top)
-        .clipped()
-        .allowsHitTesting(isSearchInteractable)
-        .accessibilityHidden(!isSearchInteractable)
-        .zIndex(1)
-        .transaction { transaction in
-            transaction.animation = nil
-        }
-    }
-
-    private var searchHeaderContent: some View {
+    private var searchHeader: some View {
         NotePullDownSearchBar(
             text: $searchText,
             isActive: $isSearchActive,
@@ -184,80 +148,203 @@ struct NoteCollapsibleSearchPage<Content: View>: View {
             isAccessibilityVisible: isSearchInteractable,
             onCancel: cancelSearch
         )
+        .padding(.vertical, NoteCollapsibleSearchLayout.verticalBreathing)
+        .padding(.horizontal, Spacing.screenEdge)
+        .frame(
+            maxWidth: .infinity,
+            minHeight: NoteCollapsibleSearchLayout.headerHeight,
+            maxHeight: NoteCollapsibleSearchLayout.headerHeight,
+            alignment: .top
+        )
+        .background(Color.surfacePage)
+        .offset(y: -collapseDistance)
+        .opacity(revealProgress)
+        .allowsHitTesting(isSearchInteractable)
+        .accessibilityHidden(!isSearchInteractable)
+        .zIndex(1)
     }
 
-    /// UIKit 只回传抽屉的真实显示高度；相同高度不重复写入 SwiftUI 状态。
-    private func updateVisibleSearchHeight(_ height: CGFloat) {
-        guard abs(visibleSearchHeight - height) >= NoteCollapsibleSearchLayout.geometryEpsilon else {
+    /// 把原生滚动几何限制在搜索头区间，只在真实值变化时刷新搜索头展示。
+    private func updateNormalizedSearchOffset(_ offset: CGFloat) {
+        guard abs(normalizedSearchOffset - offset)
+                >= NoteCollapsibleSearchLayout.geometryEpsilon else {
             return
         }
         var transaction = Transaction(animation: nil)
         transaction.disablesAnimations = true
         withTransaction(transaction) {
-            visibleSearchHeight = height
+            normalizedSearchOffset = offset
         }
+        completePendingScrollActionIfPossible()
     }
 
-    /// Scene 恢复的有效查询必须从首帧保持搜索抽屉完整展开。
+    /// 页面恢复有效查询时保持搜索头固定；空查询的首帧位置已由 ScrollPosition 初始化。
     private func synchronizeRestoredQuery() {
         guard hasQuery else { return }
         searchPhase = .searching
-        revealSearch(animated: false)
     }
 
-    /// VoiceOver 不依赖下拉手势即可显示搜索；展开后恢复完整命中与可访问性语义。
+    /// 查询出现时进入固定搜索态；查询清空后的最终阶段由焦点或取消流程决定。
+    private func handleQueryChange(hasQuery: Bool) {
+        if hasQuery {
+            pendingScrollAction = nil
+            searchPhase = .searching
+            revealSearch(animated: false)
+        } else if !isSearchActive, searchPhase == .searching {
+            searchPhase = .browsing
+        }
+    }
+
+    /// 焦点只管理搜索呈现，不重建列表；普通点击发生在完整揭示端点，因此无需额外运动。
+    private func handleSearchActivationChange(isActive: Bool) {
+        if isActive {
+            pendingScrollAction = nil
+            searchPhase = .searching
+            revealSearch(animated: false)
+        } else if !hasQuery, searchPhase == .searching {
+            searchPhase = .browsing
+        }
+    }
+
+    /// 隐藏分类结束输入与待提交动作，保留该分类已经形成的搜索词和系统滚动现场。
+    private func handlePageActivationChange(isActive: Bool) {
+        guard !isActive else { return }
+        pendingScrollAction = nil
+        isSearchActive = false
+        searchPhase = hasQuery ? .searching : .browsing
+    }
+
+    /// 记录系统滚动阶段；用户重新触摸时立即获得控制权，程序化收口不再争夺滚动位置。
+    private func handleScrollPhaseChange(_ newPhase: ScrollPhase) {
+        scrollPhase = newPhase
+        if newPhase == .tracking || newPhase == .interacting {
+            interruptPendingScrollActionForUserInteraction()
+        } else if newPhase == .idle {
+            completePendingScrollActionIfPossible()
+        }
+    }
+
+    /// 用户中断无障碍揭示或取消回位后，只收口搜索头视觉，不追加第二次滚动。
+    private func interruptPendingScrollActionForUserInteraction() {
+        guard let pendingScrollAction else { return }
+        self.pendingScrollAction = nil
+        guard pendingScrollAction == .finishCancellation else { return }
+
+        if reduceMotion {
+            searchPhase = .browsing
+        } else {
+            withAnimation(.smooth(duration: NoteCollapsibleSearchLayout.interruptionDuration)) {
+                searchPhase = .browsing
+            }
+        }
+    }
+
+    /// VoiceOver 先沿系统滚动到完整揭示端点，再把焦点交给稳定存在的输入框。
     private func revealSearchForAccessibility() {
-        guard !isSearchInteractable else { return }
+        guard isPageActive, !isSearchActive else { return }
+        guard normalizedSearchOffset
+                > NoteCollapsibleSearchLayout.interactionTolerance else {
+            searchPhase = .searching
+            isSearchActive = true
+            return
+        }
+
+        pendingScrollAction = .activateSearch
         revealSearch(animated: true)
     }
 
-    /// 聚焦、查询恢复和无障碍动作统一交给 UIKit 协调器，不创建第二套转场动画。
+    /// 聚焦、查询恢复和无障碍动作只通过官方 ScrollPosition 提交明确端点，不参与手势减速。
     private func revealSearch(animated: Bool) {
-        boundaryController.setExpandedWhenAvailable(
-            true,
-            animated: animated && !reduceMotion
-        )
-    }
+        guard normalizedSearchOffset
+                > NoteCollapsibleSearchLayout.interactionTolerance else {
+            completePendingScrollActionIfPossible()
+            return
+        }
 
-    /// 取消先稳定失焦并恢复展开端点，再清空查询，避免键盘与内容在同一帧改变几何。
-    private func cancelSearch() {
-        guard searchPhase != .dismissing else { return }
-        searchPhase = .dismissing
-        isSearchActive = false
-
-        boundaryController.setExpanded(
-            true,
-            animated: !reduceMotion
-        ) { _ in
-            guard isPageActive else { return }
-            finalizeCancelSearch()
+        if reduceMotion || !animated {
+            var transaction = Transaction(animation: nil)
+            transaction.disablesAnimations = true
+            withTransaction(transaction) {
+                scrollPosition.scrollTo(y: NoteCollapsibleSearchLayout.expandedOffset)
+            }
+        } else {
+            withAnimation(.smooth(duration: NoteCollapsibleSearchLayout.programmaticScrollDuration)) {
+                scrollPosition.scrollTo(y: NoteCollapsibleSearchLayout.expandedOffset)
+            }
         }
     }
 
-    /// 在搜索抽屉已稳定的位置提交清词并回到普通浏览态，等待下一次上划自然收起。
-    private func finalizeCancelSearch() {
-        var transaction = Transaction(animation: nil)
-        transaction.disablesAnimations = true
-        withTransaction(transaction) {
-            searchText = ""
-            isSearchActive = false
+    /// 共享搜索组件已完成清词和失焦；页面只维持固定搜索头并请求一次系统位置回归。
+    private func cancelSearch() {
+        guard searchPhase != .returningAfterCancel else { return }
+        searchPhase = .returningAfterCancel
+        pendingScrollAction = .finishCancellation
+        revealSearch(animated: true)
+    }
+
+    /// 只有系统滚动真正空闲且到达展开端点后，才提交焦点或解除取消期间的临时固定。
+    private func completePendingScrollActionIfPossible() {
+        guard scrollPhase == .idle,
+              normalizedSearchOffset <= NoteCollapsibleSearchLayout.interactionTolerance,
+              let pendingScrollAction else {
+            return
+        }
+        self.pendingScrollAction = nil
+
+        switch pendingScrollAction {
+        case .activateSearch:
+            searchPhase = .searching
+            isSearchActive = true
+        case .finishCancellation:
             searchPhase = .browsing
-            visibleSearchHeight = NoteCollapsibleSearchLayout.headerHeight
         }
     }
 }
 
-/// 搜索阶段把普通浏览、固定搜索和取消收口分离，避免焦点布尔值同时承担布局语义。
-private enum NoteSearchSessionPhase {
+/// 搜索头的展示阶段独立于查询业务状态，避免焦点、清词和滚动位置互相覆盖。
+private enum NoteSearchPresentationPhase {
     case browsing
     case searching
-    case dismissing
+    case returningAfterCancel
 }
 
-/// 搜索抽屉固定几何与高频更新容差，沿用既有首页搜索区域高度。
+/// 程序化滚动完成后需要提交的单一页面动作；用户触摸可以随时取消它。
+private enum NoteSearchPendingScrollAction {
+    case activateSearch
+    case finishCancellation
+}
+
+/// 仅在搜索头区间修正 SwiftUI 已预测的落点，让系统继续负责实际减速与回弹。
+private struct NoteSearchRevealTargetBehavior: ScrollTargetBehavior {
+    let isEnabled: Bool
+
+    /// 在系统 proposed target 仍位于 0...52pt 时选择展开或收起端点，内容区目标保持不变。
+    func updateTarget(_ target: inout ScrollTarget, context: TargetContext) {
+        guard isEnabled,
+              context.axes.contains(.vertical),
+              target.rect.minY <= NoteCollapsibleSearchLayout.collapsedOffset else {
+            return
+        }
+        target.rect.origin.y = target.rect.minY < NoteCollapsibleSearchLayout.snapMidpoint
+            ? NoteCollapsibleSearchLayout.expandedOffset
+            : NoteCollapsibleSearchLayout.collapsedOffset
+    }
+}
+
+/// 搜索头固定几何、滚动端点和低频状态过渡参数。
 private enum NoteCollapsibleSearchLayout {
     static let headerHeight: CGFloat = 52
+    static let expandedOffset: CGFloat = 0
+    static let collapsedOffset = headerHeight
+    static let snapMidpoint = headerHeight / 2
     static let verticalBreathing: CGFloat = 4
     static let interactionTolerance: CGFloat = 0.5
     static let geometryEpsilon: CGFloat = 0.25
+    static let interruptionDuration = 0.18
+    static let programmaticScrollDuration = 0.22
+
+    /// 将任意系统滚动位置映射到搜索头关心的稳定区间，内容区滚动不再触发状态刷新。
+    static func clampedOffset(_ offset: CGFloat) -> CGFloat {
+        min(max(offset, expandedOffset), collapsedOffset)
+    }
 }
