@@ -204,6 +204,7 @@ nonisolated struct BookWorkspacePresentationInput: Hashable, Sendable {
     let relatedQuery: String
     let reviewsQuery: String
     let catalogFilter: CatalogFilter
+    let catalogSort: BookContentSortRule
     let notesSort: BookContentSortRule
     let notesWithIdeasOnly: Bool
     let selectedRelatedCategoryID: Int64?
@@ -502,7 +503,11 @@ final class BookWorkspacePresentationStore {
             }
             return matchesKeyword && matchesFilter
         }
-        let visible = visibleChapters(filtered, expandedIDs: input.expandedChapterIDs)
+        let visible = BookWorkspaceChapterOrdering.visiblePreorder(
+            filtered,
+            rule: input.catalogSort,
+            expandedIDs: input.expandedChapterIDs
+        )
         var items: [BookWorkspaceCollectionItemID: BookWorkspaceCollectionItem] = [
             .chromeSpacer: .chromeSpacer
         ]

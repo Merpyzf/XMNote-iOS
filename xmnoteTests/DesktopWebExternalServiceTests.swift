@@ -583,7 +583,7 @@ private final class UploadRepositoryStub: S3UploadRepositoryProtocol, @unchecked
     func stageImageData(_ data: Data, preferredFileExtension: String) async throws -> URL {
         _ = data
         return FileManager.default.temporaryDirectory
-            .appendingPathComponent("desktop-web-upload-stub")
+            .appendingPathComponent("desktop-web-upload-repository-stub")
             .appendingPathExtension(preferredFileExtension)
     }
 

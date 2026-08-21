@@ -30,7 +30,7 @@ enum AppRoute: Hashable, Codable {
     var establishesImmersiveBrowseBranch: Bool {
         guard case let .book(route) = self else { return false }
         switch route {
-        case .detail, .readingDetail, .chapterManager, .chapterNotes:
+        case .detail, .chapterCatalog, .readingDetail, .chapterManager, .chapterNotes:
             return true
         case .bookshelfList, .collectionDetail:
             return false

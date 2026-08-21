@@ -67,6 +67,7 @@ struct ChapterDeletionRequest: Identifiable, Hashable {
     let scope: Scope
     let title: String
     let message: String
+    let affectedNoteCount: Int
 }
 
 /// 目录管理状态源；Observation 状态与所有 UI 写入统一由 MainActor 串行维护。
@@ -74,6 +75,8 @@ struct ChapterDeletionRequest: Identifiable, Hashable {
 @Observable
 final class ChapterManagerViewModel {
     let bookID: Int64
+    let bookName: String
+    let doubanID: Int?
     let focusChapterID: Int64?
 
     var snapshot: ChapterManagementSnapshot
@@ -104,10 +107,14 @@ final class ChapterManagerViewModel {
     /// 注入书籍路由参数与仓储；观察由页面完成依赖注入后显式启动。
     init(
         bookID: Int64,
+        bookName: String = "",
+        doubanID: Int? = nil,
         focusChapterID: Int64? = nil,
         repository: any ChapterManagementRepositoryProtocol
     ) {
         self.bookID = bookID
+        self.bookName = bookName
+        self.doubanID = doubanID
         self.focusChapterID = focusChapterID
         self.repository = repository
         snapshot = .empty(bookID: bookID)
@@ -463,7 +470,8 @@ final class ChapterManagerViewModel {
         deletionRequest = ChapterDeletionRequest(
             scope: .subtrees(chapterIDs: roots.map(\.id)),
             title: title,
-            message: "将把 \(deletedChapterCount) 个章节（含后代）标记为删除。\(affectedNoteCount) 条书摘会保留并移到未分章节。"
+            message: "将删除 \(deletedChapterCount) 个章节（含后代）。请选择 \(affectedNoteCount) 条关联书摘的处理方式。",
+            affectedNoteCount: affectedNoteCount
         )
     }
 
@@ -484,18 +492,23 @@ final class ChapterManagerViewModel {
         deletionRequest = ChapterDeletionRequest(
             scope: .descendants(parentID: parentID),
             title: "删除子章节",
-            message: "将保留“\(parent.item.displayTitle)”，并把其下 \(descendants.count) 个子章节标记为删除。\(affectedNoteCount) 条子章节书摘会移到未分章节。"
+            message: "将保留“\(parent.item.displayTitle)”，并删除其下 \(descendants.count) 个子章节。请选择 \(affectedNoteCount) 条关联书摘的处理方式。",
+            affectedNoteCount: affectedNoteCount
         )
     }
 
     /// 执行已经确认的删除请求；写入期间禁止重复触发。
-    func confirmDeletion() {
+    func confirmDeletion(noteDisposition: ChapterNoteDisposition) {
         guard let request = deletionRequest else { return }
         deletionRequest = nil
         switch request.scope {
         case .subtrees(let chapterIDs):
             performWrite(title: "正在删除章节…") { [repository, bookID] in
-                _ = try await repository.deleteChapters(bookID: bookID, chapterIDs: chapterIDs)
+                _ = try await repository.deleteChapters(
+                    bookID: bookID,
+                    chapterIDs: chapterIDs,
+                    noteDisposition: noteDisposition
+                )
                 return { [weak self] in
                     self?.selectedIDs.removeAll()
                     self?.editModeDismissalToken += 1
@@ -503,7 +516,11 @@ final class ChapterManagerViewModel {
             }
         case .descendants(let parentID):
             performWrite(title: "正在删除子章节…") { [repository, bookID] in
-                _ = try await repository.deleteDescendants(bookID: bookID, parentID: parentID)
+                _ = try await repository.deleteDescendants(
+                    bookID: bookID,
+                    parentID: parentID,
+                    noteDisposition: noteDisposition
+                )
                 return { [weak self] in
                     self?.expandedIDs.remove(parentID)
                     self?.pendingScrollTargetID = parentID

@@ -1,7 +1,7 @@
 /**
- * [INPUT]: 依赖 DatabaseManager/GRDB/ObservationStream、BookRemoteSearchService、AppBackendConfigRepository 与 chapter/note/book Room v44 表
- * [OUTPUT]: 对外提供 ChapterManagementRepository（完整章节树观察、文曲/手工目录事务导入、新增、编辑、星标、可撤销重排移动与软删除）
- * [POS]: Data/Repositories 的书内目录管理实现，对齐 Android ChapterRepository 的章节 tombstone 与书摘处置事务
+ * [INPUT]: 依赖 DatabaseManager/GRDB/ObservationStream、可注入毫秒时钟、BookRemoteSearchService、AppBackendConfigRepository 与 chapter/note/book Room v44 表
+ * [OUTPUT]: 对外提供 ChapterManagementRepository（完整章节树观察、目录事务导入、新增、编辑、星标、可撤销重排移动与物理删除）
+ * [POS]: Data/Repositories 的书内目录管理实现，对齐 Android 可观察数据语义并遵守 iOS 物理删除规则
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
@@ -13,16 +13,19 @@ struct ChapterManagementRepository: ChapterManagementRepositoryProtocol {
     private let databaseManager: DatabaseManager
     private let remoteSearchService: BookRemoteSearchService
     private let appBackendConfigRepository: any AppBackendConfigRepositoryProtocol
+    private let now: @Sendable () -> Int64
 
-    /// 注入数据库、远端书源与动态配置仓储，避免 ViewModel 直接访问网络或持久层。
+    /// 注入数据库、远端书源、动态配置仓储与时钟；时钟闭包可跨数据库执行上下文调用，测试以固定值消除时间竞态。
     init(
         databaseManager: DatabaseManager,
         remoteSearchService: BookRemoteSearchService = .init(),
-        appBackendConfigRepository: any AppBackendConfigRepositoryProtocol = AppBackendConfigRepository()
+        appBackendConfigRepository: any AppBackendConfigRepositoryProtocol = AppBackendConfigRepository(),
+        now: @escaping @Sendable () -> Int64 = { Self.timestampMillis() }
     ) {
         self.databaseManager = databaseManager
         self.remoteSearchService = remoteSearchService
         self.appBackendConfigRepository = appBackendConfigRepository
+        self.now = now
     }
 
     /// 观察完整目录树；任一 chapter/note/book 变化都会重新生成同一快照。
@@ -178,7 +181,7 @@ struct ChapterManagementRepository: ChapterManagementRepositoryProtocol {
                 }
             }
 
-            let now = Self.timestampMillis()
+            let now = now()
             var databaseIDByEntryID: [Int: Int64] = [:]
             var importedChapterIDs: [Int64] = []
             var createdCount = 0
@@ -299,7 +302,7 @@ struct ChapterManagementRepository: ChapterManagementRepositoryProtocol {
                 """,
                 arguments: [bookID, parentID]
             ) ?? 0
-            let now = Self.timestampMillis()
+            let now = now()
             var record = ChapterRecord(
                 id: nil,
                 bookId: bookID,
@@ -333,7 +336,12 @@ struct ChapterManagementRepository: ChapterManagementRepositoryProtocol {
         let normalizedTitle = try Self.validatedTitle(title)
         try await databaseManager.database.dbPool.write { db in
             try Self.ensureActiveBook(db, bookID: bookID)
-            let now = Self.timestampMillis()
+            try Self.protectImportedChapterIdentities(
+                db,
+                bookID: bookID,
+                rootChapterIDs: [chapterID]
+            )
+            let now = now()
             // SQL 目的：按主键重命名当前书中的有效章节。
             // 涉及表：chapter。
             // 关键过滤：同时限定 id、book_id 与 is_deleted = 0，阻止并发删除或跨书误写。
@@ -356,7 +364,8 @@ struct ChapterManagementRepository: ChapterManagementRepositoryProtocol {
     func setChapterStarred(bookID: Int64, chapterID: Int64, isStarred: Bool) async throws {
         guard chapterID > 0 else { throw ChapterManagementError.chapterNotFound }
         try await databaseManager.database.dbPool.write { db in
-            let now = Self.timestampMillis()
+            try Self.ensureActiveBook(db, bookID: bookID)
+            let now = now()
             // SQL 目的：切换指定章节的星标状态，供首页星标章节聚合立即刷新。
             // 涉及表：chapter。
             // 关键过滤：限定 id、book_id、非系统根记录与有效状态。
@@ -393,7 +402,12 @@ struct ChapterManagementRepository: ChapterManagementRepositoryProtocol {
                 throw ChapterManagementError.invalidSiblingOrder
             }
             let restorePositions = try Self.fetchStructurePositions(db, bookID: bookID)
-            let now = Self.timestampMillis()
+            try Self.protectImportedChapterIdentities(
+                db,
+                bookID: bookID,
+                rootChapterIDs: Set(uniqueIDs)
+            )
+            let now = now()
             try Self.updateSiblingOrder(
                 db,
                 bookID: bookID,
@@ -418,9 +432,10 @@ struct ChapterManagementRepository: ChapterManagementRepositoryProtocol {
     ) async throws -> ChapterStructureRestoreSnapshot {
         try await databaseManager.database.dbPool.write { db in
             let snapshot = try Self.fetchSnapshot(db, bookID: bookID)
-            let requestedIDs = Set(Self.uniquePositiveIDs(chapterIDs))
+            let uniqueIDs = Self.uniquePositiveIDs(chapterIDs)
+            let requestedIDs = Set(uniqueIDs)
             guard !requestedIDs.isEmpty,
-                  requestedIDs.count == Set(chapterIDs).count,
+                  uniqueIDs.count == chapterIDs.count,
                   requestedIDs.isSubset(of: Set(snapshot.flattened.map(\.id))) else {
                 throw ChapterManagementError.invalidSelection
             }
@@ -445,13 +460,18 @@ struct ChapterManagementRepository: ChapterManagementRepositoryProtocol {
             }
 
             let restorePositions = try Self.fetchStructurePositions(db, bookID: bookID)
+            try Self.protectImportedChapterIdentities(
+                db,
+                bookID: bookID,
+                rootChapterIDs: requestedIDs
+            )
             let movingRootIDs = movingRoots.map(\.id)
             let movingRootIDSet = Set(movingRootIDs)
             let oldParentIDs = Set(movingRoots.map { $0.item.parentID })
             let targetSurvivors = snapshot.directChildren(parentID: targetParentID)
                 .map(\.id)
                 .filter { !movingRootIDSet.contains($0) }
-            let now = Self.timestampMillis()
+            let now = now()
             try Self.updateSiblingOrder(
                 db,
                 bookID: bookID,
@@ -491,7 +511,12 @@ struct ChapterManagementRepository: ChapterManagementRepositoryProtocol {
                 throw ChapterManagementError.undoConflict
             }
 
-            let now = Self.timestampMillis()
+            try Self.protectImportedChapterIdentities(
+                db,
+                bookID: snapshot.bookID,
+                rootChapterIDs: Set(snapshot.restorePositions.map(\.chapterID))
+            )
+            let now = now()
             for position in snapshot.restorePositions {
                 // SQL 目的：恢复结构写入前的 parent_id 与 chapter_order，形成真实持久化 Undo。
                 // 涉及表：chapter。
@@ -518,13 +543,18 @@ struct ChapterManagementRepository: ChapterManagementRepositoryProtocol {
         }
     }
 
-    /// 删除选中章节及后代；先解除 note 外键，再写入可同步的章节删除标记。
-    func deleteChapters(bookID: Int64, chapterIDs: [Int64]) async throws -> ChapterDeletionResult {
+    /// 删除选中章节及后代；按用户选择解绑或物理删除书摘，再物理删除完整章节闭包。
+    func deleteChapters(
+        bookID: Int64,
+        chapterIDs: [Int64],
+        noteDisposition: ChapterNoteDisposition
+    ) async throws -> ChapterDeletionResult {
         try await databaseManager.database.dbPool.write { db in
             let snapshot = try Self.fetchSnapshot(db, bookID: bookID)
-            let requestedIDs = Set(Self.uniquePositiveIDs(chapterIDs))
+            let uniqueIDs = Self.uniquePositiveIDs(chapterIDs)
+            let requestedIDs = Set(uniqueIDs)
             guard !requestedIDs.isEmpty,
-                  requestedIDs.count == Set(chapterIDs).count,
+                  uniqueIDs.count == chapterIDs.count,
                   requestedIDs.isSubset(of: Set(snapshot.flattened.map(\.id))) else {
                 throw ChapterManagementError.invalidSelection
             }
@@ -532,12 +562,22 @@ struct ChapterManagementRepository: ChapterManagementRepositoryProtocol {
             let deleteIDs = selectedRoots.reduce(into: Set<Int64>()) { result, node in
                 result.formUnion(node.subtreeIDs())
             }
-            return try Self.softDeleteChapters(db, bookID: bookID, chapterIDs: deleteIDs)
+            return try Self.physicallyDeleteChapters(
+                db,
+                bookID: bookID,
+                chapterIDs: deleteIDs,
+                noteDisposition: noteDisposition,
+                updatedAt: now()
+            )
         }
     }
 
     /// 清空指定父级的全部后代；父章节及其直接书摘保持不变。
-    func deleteDescendants(bookID: Int64, parentID: Int64) async throws -> ChapterDeletionResult {
+    func deleteDescendants(
+        bookID: Int64,
+        parentID: Int64,
+        noteDisposition: ChapterNoteDisposition
+    ) async throws -> ChapterDeletionResult {
         try await databaseManager.database.dbPool.write { db in
             let snapshot = try Self.fetchSnapshot(db, bookID: bookID)
             guard let parent = snapshot.node(id: parentID) else {
@@ -547,9 +587,20 @@ struct ChapterManagementRepository: ChapterManagementRepositoryProtocol {
                 result.formUnion(child.subtreeIDs())
             }
             guard !deleteIDs.isEmpty else {
-                return ChapterDeletionResult(deletedChapterCount: 0, unassignedNoteCount: 0)
+                return ChapterDeletionResult(
+                    deletedChapterCount: 0,
+                    affectedNoteCount: 0,
+                    unassignedNoteCount: 0,
+                    deletedNoteCount: 0
+                )
             }
-            return try Self.softDeleteChapters(db, bookID: bookID, chapterIDs: deleteIDs)
+            return try Self.physicallyDeleteChapters(
+                db,
+                bookID: bookID,
+                chapterIDs: deleteIDs,
+                noteDisposition: noteDisposition,
+                updatedAt: now()
+            )
         }
     }
 }
@@ -859,6 +910,97 @@ private extension ChapterManagementRepository {
         return ids.filter { $0 > 0 && seen.insert($0).inserted }
     }
 
+    /// 在重命名、移动、排序或删除前，按旧树路径为缺失来源键的导入章节补齐稳定同步身份。
+    nonisolated static func protectImportedChapterIdentities(
+        _ db: Database,
+        bookID: Int64,
+        rootChapterIDs: Set<Int64>? = nil
+    ) throws {
+        let snapshot = try fetchSnapshot(db, bookID: bookID)
+        let targetIDs: Set<Int64>
+        if let rootChapterIDs {
+            guard rootChapterIDs.isSubset(of: Set(snapshot.flattened.map(\.id))) else {
+                throw ChapterManagementError.chapterNotFound
+            }
+            targetIDs = snapshot.topLevelSelection(from: rootChapterIDs).reduce(into: []) { result, node in
+                result.formUnion(node.subtreeIDs())
+            }
+        } else {
+            targetIDs = Set(snapshot.flattened.map(\.id))
+        }
+        guard !targetIDs.isEmpty else { return }
+
+        let orderedIDs = targetIDs.sorted()
+        for chunk in orderedIDs.chunked(into: 500) {
+            let placeholders = Array(repeating: "?", count: chunk.count).joined(separator: ",")
+            // SQL 目的：读取结构变更前可能缺少同步身份的导入章节来源字段。
+            // 涉及表：chapter。
+            // 关键过滤：限定当前书、完整目标子树、有效记录；路径从同一事务旧快照计算。
+            // 时间字段：不读写时间字段，后续业务写统一更新时间。
+            // 返回字段用途：仅为空来源键补齐 Android ImportedChapterIdentityProtector 语义。
+            let rows = try Row.fetchAll(
+                db,
+                sql: """
+                    SELECT id, is_import, source_type,
+                           COALESCE(source_uid, '') AS source_uid,
+                           COALESCE(source_anchor, '') AS source_anchor
+                    FROM chapter
+                    WHERE book_id = ? AND is_deleted = 0
+                      AND id IN (\(placeholders))
+                """,
+                arguments: StatementArguments([bookID] + chunk)
+            )
+            for row in rows {
+                let chapterID = row["id"] as Int64
+                let isImported = (row["is_import"] as Int64? ?? 0) == 1
+                let originalSourceType = row["source_type"] as Int64? ?? 0
+                let sourceUID = (row["source_uid"] as String? ?? "")
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                let sourceAnchor = (row["source_anchor"] as String? ?? "")
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                guard sourceUID.isEmpty,
+                      sourceAnchor.isEmpty,
+                      isImported || originalSourceType != 0,
+                      let item = snapshot.node(id: chapterID)?.item else {
+                    continue
+                }
+                let protectedSourceType = originalSourceType == 0
+                    ? ChapterBatchImportParser.catalogImportSourceType
+                    : originalSourceType
+                let pathKey = item.pathTitles
+                    .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                    .filter { !$0.isEmpty }
+                    .joined(separator: "$")
+                guard !pathKey.isEmpty else { continue }
+                let protectedSourceUID: String
+                switch protectedSourceType {
+                case 1:
+                    protectedSourceUID = "weread_path:\(pathKey)"
+                case ChapterBatchImportParser.catalogImportSourceType:
+                    protectedSourceUID = "api_import_catalog:\(pathKey)"
+                default:
+                    continue
+                }
+
+                // SQL 目的：按旧路径补齐导入章节来源键，防止本地结构变更后跨端同步重复建章。
+                // 涉及表：chapter。
+                // 关键过滤：限定章节、书籍、有效状态，且 source_uid/source_anchor 仍为空以防并发覆盖。
+                // 时间字段：不改变时间字段；随后同事务的业务写负责 updated_date。
+                // 副作用：手工导入来源从 manual(0) 提升为 catalog import(2)，其他来源类型保持不变。
+                try db.execute(
+                    sql: """
+                        UPDATE chapter
+                        SET source_type = ?, source_uid = ?
+                        WHERE id = ? AND book_id = ? AND is_deleted = 0
+                          AND TRIM(COALESCE(source_uid, '')) = ''
+                          AND TRIM(COALESCE(source_anchor, '')) = ''
+                    """,
+                    arguments: [protectedSourceType, protectedSourceUID, chapterID, bookID]
+                )
+            }
+        }
+    }
+
     /// 在一个写事务内更新完整同级顺序与 parent_id；目标列表可为空。
     nonisolated static func updateSiblingOrder(
         _ db: Database,
@@ -916,73 +1058,144 @@ private extension ChapterManagementRepository {
         }
     }
 
-    /// 解除书摘章节关系后软删除章节；500 条分块与 Android deleteChaptersSync 保持同级规模控制。
-    nonisolated static func softDeleteChapters(
+    /// 按 Android 两种书摘处置完成跨表写入，并按已批准兼容规则物理删除章节与书摘。
+    nonisolated static func physicallyDeleteChapters(
         _ db: Database,
         bookID: Int64,
-        chapterIDs: Set<Int64>
+        chapterIDs: Set<Int64>,
+        noteDisposition: ChapterNoteDisposition,
+        updatedAt: Int64
     ) throws -> ChapterDeletionResult {
         let orderedIDs = chapterIDs.sorted()
         guard !orderedIDs.isEmpty else {
-            return ChapterDeletionResult(deletedChapterCount: 0, unassignedNoteCount: 0)
+            return ChapterDeletionResult(
+                deletedChapterCount: 0,
+                affectedNoteCount: 0,
+                unassignedNoteCount: 0,
+                deletedNoteCount: 0
+            )
         }
-        var affectedActiveNoteCount = 0
-        var deletedChapterCount = 0
-        let now = timestampMillis()
+        var affectedActiveNoteIDs: [Int64] = []
+        var allReferencingNoteIDs: [Int64] = []
         for chunk in orderedIDs.chunked(into: 500) {
             let placeholders = Array(repeating: "?", count: chunk.count).joined(separator: ",")
-
-            // SQL 目的：统计即将被移出目录的有效书摘数量，供页面解释关联影响。
+            // SQL 目的：同时读取删除闭包内全部书摘主键及有效状态，分离 Android 可见计数与 iOS 物理清理集合。
             // 涉及表：note。
-            // 关键过滤：限定同一本书、chapter_id 位于当前删除分块且 note.is_deleted = 0。
+            // 关键过滤：限定同一本书与 chapter_id 分块，不过滤 is_deleted 以满足 Room 章节外键。
             // 时间字段：不读取时间字段。
-            // 返回字段用途：累加 ChapterDeletionResult.unassignedNoteCount。
-            affectedActiveNoteCount += try Int.fetchOne(
+            // 返回字段用途：有效行决定 Android noteCount；全部行决定 note 及三张依赖表的物理清理范围。
+            let rows = try Row.fetchAll(
                 db,
                 sql: """
-                    SELECT COUNT(*)
+                    SELECT id, is_deleted
                     FROM note
-                    WHERE book_id = ? AND chapter_id IN (\(placeholders)) AND is_deleted = 0
+                    WHERE book_id = ? AND chapter_id IN (\(placeholders))
+                    ORDER BY id ASC
                 """,
                 arguments: StatementArguments([bookID] + chunk)
-            ) ?? 0
-
-            // SQL 目的：在软删除章节前解除所有 note.chapter_id 关系，包括旧备份残留的兼容删除行。
-            // 涉及表：note。
-            // 关键过滤：限定同一本书且 chapter_id 位于删除分块；不按 note.is_deleted 过滤以保证外键完整性。
-            // 时间字段：updated_date 写本次事务统一毫秒时间戳。
-            // 副作用：书摘正文保留，chapter_id 归零进入“未分章节”。
-            try db.execute(
-                sql: """
-                    UPDATE note
-                    SET chapter_id = 0, updated_date = ?
-                    WHERE book_id = ? AND chapter_id IN (\(placeholders))
-                """,
-                arguments: StatementArguments([now, bookID] + chunk)
             )
+            for row in rows {
+                let noteID = row["id"] as Int64
+                allReferencingNoteIDs.append(noteID)
+                if (row["is_deleted"] as Int64? ?? 0) == 0 {
+                    affectedActiveNoteIDs.append(noteID)
+                }
+            }
+        }
+        affectedActiveNoteIDs = Array(Set(affectedActiveNoteIDs)).sorted()
+        allReferencingNoteIDs = Array(Set(allReferencingNoteIDs)).sorted()
 
-            // SQL 目的：软删除已完成书摘解绑的章节行，与 Android ChapterDao.deleteChaptersSync 一致。
+        switch noteDisposition {
+        case .detach:
+            for chunk in orderedIDs.chunked(into: 500) {
+                let placeholders = Array(repeating: "?", count: chunk.count).joined(separator: ",")
+                // SQL 目的：在删除章节前解除所有书摘的章节关系，包括旧备份中的兼容删除行。
+                // 涉及表：note。
+                // 关键过滤：限定同一本书及删除闭包 chapter_id，不过滤 note.is_deleted。
+                // 时间字段：updated_date 写本次事务统一 Unix 毫秒值。
+                // 副作用：书摘保留并进入未分章节，不触碰正文、标签、图片或导入 Hash。
+                try db.execute(
+                    sql: """
+                        UPDATE note
+                        SET chapter_id = 0, updated_date = ?
+                        WHERE book_id = ? AND chapter_id IN (\(placeholders))
+                    """,
+                    arguments: StatementArguments([updatedAt, bookID] + chunk)
+                )
+            }
+        case .delete:
+            for chunk in allReferencingNoteIDs.chunked(into: 500) {
+                let placeholders = Array(repeating: "?", count: chunk.count).joined(separator: ",")
+                let arguments = StatementArguments(chunk)
+                // SQL 目的：物理清理待删除书摘的导入去重键。
+                // 涉及表：note_import_hash -> note（逻辑引用，无物理外键）。
+                // 关键过滤：note_id 位于当前有效书摘分块。
+                // 时间字段：无。
+                // 副作用：防止书摘物理删除后残留导入 Hash。
+                try db.execute(
+                    sql: "DELETE FROM note_import_hash WHERE note_id IN (\(placeholders))",
+                    arguments: arguments
+                )
+                // SQL 目的：物理清理待删除书摘的标签关系。
+                // 涉及表：tag_note -> note/tag。
+                // 关键过滤：note_id 位于当前有效书摘分块，包含兼容删除关系。
+                // 时间字段：物理删除不写时间。
+                // 副作用：标签本体保持不变。
+                try db.execute(
+                    sql: "DELETE FROM tag_note WHERE note_id IN (\(placeholders))",
+                    arguments: arguments
+                )
+                // SQL 目的：物理清理待删除书摘的图片关系。
+                // 涉及表：attach_image -> note。
+                // 关键过滤：note_id 位于当前有效书摘分块，包含兼容删除图片。
+                // 时间字段：物理删除不写时间。
+                // 副作用：仅删除数据库图片记录，不扩大到文件系统清理。
+                try db.execute(
+                    sql: "DELETE FROM attach_image WHERE note_id IN (\(placeholders))",
+                    arguments: arguments
+                )
+                // SQL 目的：按已批准硬删除规则物理删除目录操作明确选择的书摘及历史兼容删除行。
+                // 涉及表：note。
+                // 关键过滤：id 位于同一章节闭包的预读书摘分块；有效性只影响结果计数，不影响外键清理。
+                // 时间字段：物理删除不写时间。
+                // 副作用：依赖关系已在同一事务前序步骤清理。
+                try db.execute(
+                    sql: "DELETE FROM note WHERE id IN (\(placeholders))",
+                    arguments: arguments
+                )
+                guard db.changesCount == chunk.count else {
+                    throw ChapterManagementError.invalidSelection
+                }
+            }
+        }
+
+        var deletedChapterCount = 0
+        for chunk in orderedIDs.chunked(into: 500) {
+            let placeholders = Array(repeating: "?", count: chunk.count).joined(separator: ",")
+            // SQL 目的：按 iOS 已批准硬删除规则物理删除完整章节后代闭包。
             // 涉及表：chapter。
-            // 关键过滤：限定同一本书、id 位于完整后代闭包分块、排除系统根 id = 0，且只处理有效记录。
-            // 时间字段：updated_date 写本次事务统一 Unix 毫秒时间戳。
-            // 副作用：写入 is_deleted = 1 tombstone；调用方已经把所有后代纳入闭包。
+            // 关键过滤：限定同一本书、完整后代闭包分块、排除系统根，且仅允许有效章节。
+            // 时间字段：物理删除不写时间字段。
+            // 副作用：不收敛剩余同级顺序，与 Android 删除后的可观察顺序一致。
             try db.execute(
                 sql: """
-                    UPDATE chapter
-                    SET updated_date = ?, is_deleted = 1
+                    DELETE FROM chapter
                     WHERE book_id = ? AND id != 0 AND is_deleted = 0
                       AND id IN (\(placeholders))
                 """,
-                arguments: StatementArguments([now, bookID] + chunk)
+                arguments: StatementArguments([bookID] + chunk)
             )
             deletedChapterCount += db.changesCount
         }
         guard deletedChapterCount == orderedIDs.count else {
             throw ChapterManagementError.chapterNotFound
         }
+        let affectedNoteCount = affectedActiveNoteIDs.count
         return ChapterDeletionResult(
             deletedChapterCount: deletedChapterCount,
-            unassignedNoteCount: affectedActiveNoteCount
+            affectedNoteCount: affectedNoteCount,
+            unassignedNoteCount: noteDisposition == .detach ? affectedNoteCount : 0,
+            deletedNoteCount: noteDisposition == .delete ? affectedNoteCount : 0
         )
     }
 

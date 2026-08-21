@@ -1578,6 +1578,7 @@ nonisolated enum BookNotesLoadState: String, Hashable, Sendable {
 /// 书籍工作台模型，聚合资料字段、目录、四域数量与阅读状态，并承载首屏阅读概览。
 nonisolated struct BookDetail: Identifiable, Hashable, Sendable {
     let id: Int64
+    let doubanID: Int?
     let name: String
     let author: String
     let cover: String
@@ -1603,6 +1604,7 @@ nonisolated struct BookDetail: Identifiable, Hashable, Sendable {
     /// 构建书籍工作台展示模型；纯文本预览由页面状态源按需预处理，Repository 可只提供原始 HTML 字段。
     init(
         id: Int64,
+        doubanID: Int? = nil,
         name: String,
         author: String,
         cover: String,
@@ -1626,6 +1628,7 @@ nonisolated struct BookDetail: Identifiable, Hashable, Sendable {
         chapters: [BookDetailChapter]
     ) {
         self.id = id
+        self.doubanID = doubanID
         self.name = name
         self.author = author
         self.cover = cover

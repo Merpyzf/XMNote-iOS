@@ -33,6 +33,7 @@ struct BookWorkspaceCollectionView: UIViewRepresentable {
     let canvasColor: Color
     let contentSurfaceColor: Color
     let appearanceID: UInt64
+    let catalogFocusPlan: BookWorkspaceCatalogFocusPlan?
     let onSectionCommit: (BookWorkspaceSection) -> Void
     let onBookHeaderFullyCollapsedChange: (Bool) -> Void
     let onOpenReadingDetail: () -> Void
@@ -80,6 +81,7 @@ struct BookWorkspaceCollectionView: UIViewRepresentable {
             canvasColor: canvasColor,
             contentSurfaceColor: contentSurfaceColor,
             appearanceID: appearanceID,
+            catalogFocusPlan: catalogFocusPlan,
             onSectionCommit: onSectionCommit,
             onBookHeaderFullyCollapsedChange: onBookHeaderFullyCollapsedChange,
             onOpenReadingDetail: onOpenReadingDetail,
@@ -114,6 +116,7 @@ private struct BookWorkspaceCollectionConfiguration {
     let canvasColor: Color
     let contentSurfaceColor: Color
     let appearanceID: UInt64
+    let catalogFocusPlan: BookWorkspaceCatalogFocusPlan?
     let onSectionCommit: (BookWorkspaceSection) -> Void
     let onBookHeaderFullyCollapsedChange: (Bool) -> Void
     let onOpenReadingDetail: () -> Void
@@ -147,6 +150,7 @@ private struct BookWorkspaceCollectionConfiguration {
         canvasColor: Color.surfacePage,
         contentSurfaceColor: Color.surfaceCard,
         appearanceID: 0,
+        catalogFocusPlan: nil,
         onSectionCommit: { _ in },
         onBookHeaderFullyCollapsedChange: { _ in },
         onOpenReadingDetail: {},
@@ -1295,6 +1299,7 @@ final class BookWorkspaceCollectionHostView: UIView, UICollectionViewDelegate, U
     private var wasNavigationContentPopGestureEnabled: Bool?
     private var navigationGesturePriorityAttempts = 0
     private var isNavigationGesturePriorityRefreshScheduled = false
+    private var pendingCatalogFocusPlan: BookWorkspaceCatalogFocusPlan?
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -1317,6 +1322,10 @@ final class BookWorkspaceCollectionHostView: UIView, UICollectionViewDelegate, U
         let previousCommittedSection = previousConfiguration.committedSection
         let appearanceChanged = previousConfiguration.appearanceID != configuration.appearanceID
         self.configuration = configuration
+        if previousConfiguration.book?.id != configuration.book?.id
+            || previousConfiguration.catalogFocusPlan != configuration.catalogFocusPlan {
+            pendingCatalogFocusPlan = configuration.catalogFocusPlan
+        }
         synchronizeExternalCommit(configuration.committedSection)
         updateHeaderBackdropContent()
         updateBookHeaderContent()
@@ -1340,6 +1349,7 @@ final class BookWorkspaceCollectionHostView: UIView, UICollectionViewDelegate, U
            let active = contexts[committedSection] {
             active.collectionView.layoutIfNeeded()
         }
+        applyInitialCatalogFocusIfPossible()
     }
 
     /// 清理所有 UIKit 数据源与异步预热工作。
@@ -1354,6 +1364,7 @@ final class BookWorkspaceCollectionHostView: UIView, UICollectionViewDelegate, U
         pagerScrollView.delegate = nil
         noteRowStates.removeAll()
         bookHeaderContentState = nil
+        pendingCatalogFocusPlan = nil
         scopeBarContentState = nil
         restoreNavigationContentPopGestureAvailability()
         headerBackdropView.prepareForReuse()
@@ -2121,6 +2132,7 @@ final class BookWorkspaceCollectionHostView: UIView, UICollectionViewDelegate, U
                 BookWorkspaceCatalogCollectionRow(
                     row: row,
                     surfaceColor: configuration.contentSurfaceColor,
+                    isHighlighted: configuration.catalogFocusPlan?.targetChapterID == row.chapter.id,
                     onToggleExpansion: { [weak self] in
                         self?.configuration.onToggleChapter(row.chapter.id)
                     },
@@ -2249,7 +2261,9 @@ final class BookWorkspaceCollectionHostView: UIView, UICollectionViewDelegate, U
             }
             diffable.reconfigureItems(changed)
         }
-        context.dataSource?.apply(diffable, animatingDifferences: false)
+        context.dataSource?.apply(diffable, animatingDifferences: false) { [weak self] in
+            self?.applyInitialCatalogFocusIfPossible()
+        }
 #if DEBUG
         if context.section == .notes {
             let noteItemCount = snapshot.itemsByID.keys.reduce(into: 0) { count, itemID in
@@ -2262,6 +2276,42 @@ final class BookWorkspaceCollectionHostView: UIView, UICollectionViewDelegate, U
             )
         }
 #endif
+    }
+
+    /// 在 diff 完成且目标已有 indexPath 后执行一次定位，并把书籍头部至少收至 Tab 吸附线。
+    private func applyInitialCatalogFocusIfPossible() {
+        guard configuration.committedSection == .catalog,
+              let plan = pendingCatalogFocusPlan,
+              let context = contexts[.catalog],
+              let indexPath = context.dataSource?.indexPath(for: .catalog(plan.targetChapterID)) else {
+            return
+        }
+        let collectionView = context.collectionView
+        collectionView.layoutIfNeeded()
+        guard let attributes = collectionView.layoutAttributesForItem(at: indexPath) else { return }
+        let minimumOffsetY = -collectionView.adjustedContentInset.top
+        let maximumOffsetY = max(
+            minimumOffsetY,
+            collectionView.contentSize.height
+                - collectionView.bounds.height
+                + collectionView.adjustedContentInset.bottom
+        )
+        let centeredOffsetY = attributes.frame.midY - collectionView.bounds.height / 2
+        let collapsedHeaderOffsetY = bookHeaderHeight - collectionView.adjustedContentInset.top
+        let proposedOffsetY = plan.initiallyCollapsesHeader
+            ? max(centeredOffsetY, collapsedHeaderOffsetY)
+            : centeredOffsetY
+        let targetOffsetY = min(max(proposedOffsetY, minimumOffsetY), maximumOffsetY)
+        pendingCatalogFocusPlan = nil
+        collectionView.setContentOffset(
+            CGPoint(x: collectionView.contentOffset.x, y: targetOffsetY),
+            animated: plan.animated
+        )
+        if !plan.animated {
+            collectionView.layoutIfNeeded()
+            captureViewport(in: context)
+            layoutSharedChrome(at: currentPagerPosition)
+        }
     }
 
     /// 只重建屏幕内 Cell 与章节固定层的主题视觉；离屏 Cell 复用时自然读取最新配置。
@@ -3367,6 +3417,7 @@ private struct BookWorkspaceGroupedSurfaceBorderMask: View {
 private struct BookWorkspaceCatalogCollectionRow: View {
     let row: BookWorkspaceCatalogRow
     let surfaceColor: Color
+    let isHighlighted: Bool
     let onToggleExpansion: () -> Void
     let onOpen: () -> Void
 
@@ -3430,6 +3481,8 @@ private struct BookWorkspaceCatalogCollectionRow: View {
             .padding(.trailing, BookWorkspaceLayoutMetrics.cardContentInset)
             .padding(.vertical, Spacing.compact)
         }
+        .background(isHighlighted ? Color.brand.opacity(0.12) : Color.clear)
+        .accessibilityValue(isHighlighted ? "当前定位章节" : "")
     }
 }
 

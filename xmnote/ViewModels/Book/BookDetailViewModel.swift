@@ -538,6 +538,7 @@ final class BookDetailViewModel {
         try Task.checkCancellation()
         return BookDetail(
             id: detail.id,
+            doubanID: detail.doubanID,
             name: detail.name,
             author: detail.author,
             cover: detail.cover,

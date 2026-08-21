@@ -190,10 +190,18 @@ nonisolated struct ChapterMoveTarget: Identifiable, Hashable, Sendable {
     var isRoot: Bool { id == 0 }
 }
 
-/// 章节软删除结果，供页面在失败或无可见变化时补足关联影响说明。
+/// 删除章节时对其有效书摘采取的处置方式，与 Android ChapterNoteDisposition 一致。
+nonisolated enum ChapterNoteDisposition: Hashable, Sendable {
+    case detach
+    case delete
+}
+
+/// 章节删除结果，分别报告章节数、受影响书摘数、解绑数与物理删除数。
 nonisolated struct ChapterDeletionResult: Hashable, Sendable {
     let deletedChapterCount: Int
+    let affectedNoteCount: Int
     let unassignedNoteCount: Int
+    let deletedNoteCount: Int
 }
 
 /// 目录管理数据损坏或写入冲突错误，向页面提供可行动的中文说明。

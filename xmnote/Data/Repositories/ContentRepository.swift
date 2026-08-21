@@ -14,11 +14,19 @@ struct ContentRepository: ContentRepositoryProtocol {
 
     private let databaseManager: DatabaseManager
     private let userDefaults: UserDefaults
+    private let now: @Sendable () -> Int64
 
     /// 注入数据库与草稿存储，供内容查看、编辑恢复及最终保存复用同一仓储边界。
-    init(databaseManager: DatabaseManager, userDefaults: UserDefaults = .standard) {
+    init(
+        databaseManager: DatabaseManager,
+        userDefaults: UserDefaults = .standard,
+        now: @escaping @Sendable () -> Int64 = {
+            Int64(Date().timeIntervalSince1970 * 1_000)
+        }
+    ) {
         self.databaseManager = databaseManager
         self.userDefaults = userDefaults
+        self.now = now
     }
 
     /// 持续监听指定来源下的分页内容列表。
@@ -96,7 +104,7 @@ struct ContentRepository: ContentRepositoryProtocol {
         guard BookContentSortQuery.isRuleAllowed(rule, for: type) else {
             throw ContentRepositoryError.invalidContentSortRule
         }
-        let now = Int64(Date().timeIntervalSince1970 * 1_000)
+        let now = now()
         try await databaseManager.database.dbPool.write { db in
                 // SQL 目的：确认排序偏好的所属书仍是有效书架书，避免为占位书或失效主键制造孤立设置。
                 // 涉及表：book。

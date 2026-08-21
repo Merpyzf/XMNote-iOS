@@ -107,7 +107,7 @@ nonisolated enum BookReadQuery {
         // 时间字段：pub_date 为 Android 原始文本字段，仅展示不转时区；read_time_record.elapsed_seconds 为秒，直接聚合且不做时区换算。
         // 返回字段用途：构建首屏书籍身份、阅读概览、资料属性、简介、作者简介与书摘数量。
         let sql = """
-            SELECT b.id, b.name, b.author, b.cover, b.press, b.score,
+            SELECT b.id, b.douban_id, b.name, b.author, b.cover, b.press, b.score,
                    b.author_intro, b.translator, b.isbn, b.pub_date,
                    b.summary, b.source_id, b.score, b.read_status_id,
                    b.read_position, b.current_position_unit,
@@ -176,6 +176,10 @@ nonisolated enum BookReadQuery {
 
         return BookDetail(
             id: row["id"],
+            doubanID: {
+                let value = row["douban_id"] as Int64? ?? 0
+                return value > 0 && value <= Int64(Int.max) ? Int(value) : nil
+            }(),
             name: row["name"] ?? "",
             author: author,
             cover: row["cover"] ?? "",

@@ -568,7 +568,7 @@ private extension xmnoteTests {
     }
 }
 
-private struct StubStatisticsRepository: ReadCalendarRepositoryProtocol {
+private struct StubStatisticsRepository: StatisticsRepositoryProtocol, ReadCalendarRepositoryProtocol {
     let earliestDate: Date?
 
     @MainActor
@@ -595,6 +595,72 @@ private struct StubStatisticsRepository: ReadCalendarRepositoryProtocol {
         let components = calendar.dateComponents([.year, .month], from: monthStart)
         let normalized = calendar.date(from: DateComponents(year: components.year, month: components.month, day: 1)) ?? monthStart
         return .empty(for: calendar.startOfDay(for: normalized))
+    }
+
+    func fetchYearTopBooks(
+        year: Int,
+        excludedEventTypes: Set<ReadCalendarEventType>,
+        limit: Int,
+        includedMonthStarts: Set<Date>?,
+        excludedBookIDs: Set<Int64>
+    ) async throws -> [ReadCalendarMonthlyDurationBook] {
+        _ = (year, excludedEventTypes, limit, includedMonthStarts, excludedBookIDs)
+        return []
+    }
+
+    func fetchDailySummary(
+        for date: Date,
+        excludedEventTypes: Set<ReadCalendarEventType>
+    ) async throws -> DailyReadingSummary {
+        _ = excludedEventTypes
+        return .empty(for: date)
+    }
+
+    func fetchDailyTrajectory(
+        for date: Date,
+        selectedBookID: Int64?,
+        filter: DailyReadingTimelineFilter,
+        sortOrder: DailyReadingSortOrder
+    ) async throws -> DailyReadingTrajectory {
+        _ = (selectedBookID, filter, sortOrder)
+        return .empty(for: date)
+    }
+
+    func saveCheckIn(_ draft: ReadCalendarCheckInDraft) async throws {
+        _ = draft
+    }
+
+    func updateTiming(_ draft: ReadCalendarTimingDraft) async throws {
+        _ = draft
+    }
+
+    func deleteCheckIn(recordID: Int64) async throws {
+        _ = recordID
+    }
+
+    func deleteTiming(recordID: Int64) async throws {
+        _ = recordID
+    }
+
+    @MainActor
+    func observeDailyReadingChanges() -> AsyncThrowingStream<Void, Error> {
+        AsyncThrowingStream { continuation in
+            continuation.finish()
+        }
+    }
+
+    func fetchEarliestDate(excludedEventTypes: Set<ReadCalendarEventType>) async throws -> Date? {
+        _ = excludedEventTypes
+        return earliestDate
+    }
+
+    func fetchMonthData(
+        monthStart: Date,
+        excludedEventTypes: Set<ReadCalendarEventType>,
+        excludedBookIDs: Set<Int64>
+    ) async throws -> ReadCalendarMonthData {
+        _ = (excludedEventTypes, excludedBookIDs)
+        return .empty(for: monthStart)
     }
 
     func fetchYearTopBooks(

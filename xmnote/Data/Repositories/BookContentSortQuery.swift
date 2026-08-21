@@ -13,10 +13,11 @@ nonisolated enum BookContentSortQuery {
     private static let weReadSourceID: Int64 = 4
     private static let iReaderEBookSourceID: Int64 = 24
 
-    /// 读取同一本书三个内容类型互不共享的排序规则；未落库的书摘规则会按全书 weread_range 判定。
+    /// 读取同一本书四个内容类型互不共享的排序规则；未落库的书摘规则会按全书 weread_range 判定。
     static func fetchPreferences(_ db: Database, bookID: Int64) throws -> BookContentSortPreferences {
         guard bookID > 0 else { return .fallback }
         return BookContentSortPreferences(
+            chapters: try fetchRule(db, bookID: bookID, type: .chapters),
             notes: try fetchRule(db, bookID: bookID, type: .notes),
             related: try fetchRule(db, bookID: bookID, type: .related),
             reviews: try fetchRule(db, bookID: bookID, type: .reviews)
