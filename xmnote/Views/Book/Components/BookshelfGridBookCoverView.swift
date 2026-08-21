@@ -1,6 +1,6 @@
 /**
- * [INPUT]: 依赖 XMBookCover、BookshelfBookPayload、编辑选择状态与封面角标语义 token 渲染书籍/分组网格封面
- * [OUTPUT]: 对外提供 BookshelfGridBookCoverView、BookshelfGridGroupCoverView、选择态封面遮罩、纯色状态角标及其共享语义映射
+ * [INPUT]: 依赖 XMBookCover、BookshelfBookPayload、编辑选择状态与封面角标语义/视觉 token 渲染书籍和分组网格封面
+ * [OUTPUT]: 对外提供 BookshelfGridBookCoverView、BookshelfGridGroupCoverView、选择态封面遮罩、纯色状态角标及供书籍工作台复用的背景浓度与语义映射
  * [POS]: Book 模块页面私有封面展示基础组件，被默认书架、聚合入口网格与单书工作台复用
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -334,15 +334,19 @@ private struct BookshelfCoverSolidBadgeBackground: View {
             )
         )
 
-        shape.fill(color.opacity(BookshelfCoverBadgeMetrics.statusOpacity))
+        shape.fill(color.opacity(BookshelfCoverStatusBadgeStyle.backgroundOpacity))
     }
+}
+
+/// 统一书架封面与书籍工作台的阅读状态背景浓度，避免同一状态跨场景出现色差。
+enum BookshelfCoverStatusBadgeStyle {
+    static let backgroundOpacity = 0.92
 }
 
 private enum BookshelfCoverBadgeMetrics {
     static let blurStyle: UIBlurEffect.Style = .systemUltraThinMaterial
     static let innerCornerRadius: CGFloat = CornerRadius.inlayMedium
     static let pinSize: CGFloat = 22
-    static let statusOpacity = 0.92
     static let contentShadowRadius: CGFloat = 0.6
     static let contentShadowY: CGFloat = 0.4
 }

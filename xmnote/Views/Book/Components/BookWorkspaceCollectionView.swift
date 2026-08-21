@@ -1,10 +1,12 @@
 /**
- * [INPUT]: 依赖 BookWorkspacePresentationSnapshot、书籍工作台主题色板、XMMarqueeText、SwiftUI 行内容构建器与 UIKit UICollectionView
- * [OUTPUT]: 对外提供贯穿顶部安全区和完整 Header、在 Tab 内延迟衰减并于吸顶后归中性的沉浸主题背景、接入公共连续跑马灯的书名状态行、无遮挡书脊封面、分行出版元数据、按有效评分收放的封面胶囊、与 Android 数据语义对齐且带动态边缘渐隐的三项阅读指标 Chip、共享可收起书籍头部、几何稳定的吸顶 Tab 与纯内容原生 Pager
- * [POS]: Views/Book/Components 的页面私有 UIKit 混合列表，负责背景/内容分层、分页、共享 Chrome、diff、章节吸顶和视口稳定
+ * [INPUT]: 依赖 BookWorkspacePresentationSnapshot、Nuke/Core Image 封面处理管线、XMMarqueeText、SwiftUI 普通胶囊行内容构建器与 UIKit UICollectionView
+ * [OUTPUT]: 对外提供背景与前景同步折叠及回弹、下拉时整幅等比填充且共同穿过状态栏/导航栏的无边缘光晕封面影像 Hero、Android 等效模糊、中性圆角 Tab 台阶、折叠末段整体导航中和、接入公共连续跑马灯的书名状态行、书脊封面、单行出版元数据、轻量色点状态、普通轻透评分与三项精致阅读指标 Chip、与系统标题互斥联动的共享可收起书籍头部、几何稳定的吸顶 Tab 与纯内容原生 Pager
+ * [POS]: Views/Book/Components 的页面私有 UIKit 混合列表，负责影像 Hero/中性内容分层、分页、共享 Chrome、diff、章节吸顶和视口稳定
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
+import CoreImage
+import Nuke
 import SwiftUI
 import UIKit
 #if DEBUG
@@ -25,13 +27,14 @@ struct BookWorkspaceCollectionView: UIViewRepresentable {
     let notesCount: Int
     let notesLoadState: BookNotesLoadState
     let reduceMotion: Bool
+    let colorScheme: ColorScheme
+    let dynamicTypeSize: DynamicTypeSize
+    let verticalSizeClass: UserInterfaceSizeClass?
     let canvasColor: Color
     let contentSurfaceColor: Color
-    let headerLeadingColor: Color
-    let headerTrailingColor: Color
-    let canvasPaletteID: UInt64
+    let appearanceID: UInt64
     let onSectionCommit: (BookWorkspaceSection) -> Void
-    let onNavigationBarSurfaceChange: (Bool) -> Void
+    let onBookHeaderFullyCollapsedChange: (Bool) -> Void
     let onOpenReadingDetail: () -> Void
     let onEditBook: () -> Void
     let onToggleChapter: (Int64) -> Void
@@ -66,13 +69,14 @@ struct BookWorkspaceCollectionView: UIViewRepresentable {
             notesCount: notesCount,
             notesLoadState: notesLoadState,
             reduceMotion: reduceMotion,
+            colorScheme: colorScheme,
+            dynamicTypeSize: dynamicTypeSize,
+            verticalSizeClass: verticalSizeClass,
             canvasColor: canvasColor,
             contentSurfaceColor: contentSurfaceColor,
-            headerLeadingColor: headerLeadingColor,
-            headerTrailingColor: headerTrailingColor,
-            canvasPaletteID: canvasPaletteID,
+            appearanceID: appearanceID,
             onSectionCommit: onSectionCommit,
-            onNavigationBarSurfaceChange: onNavigationBarSurfaceChange,
+            onBookHeaderFullyCollapsedChange: onBookHeaderFullyCollapsedChange,
             onOpenReadingDetail: onOpenReadingDetail,
             onEditBook: onEditBook,
             onToggleChapter: onToggleChapter,
@@ -94,13 +98,14 @@ private struct BookWorkspaceCollectionConfiguration {
     let notesCount: Int
     let notesLoadState: BookNotesLoadState
     let reduceMotion: Bool
+    let colorScheme: ColorScheme
+    let dynamicTypeSize: DynamicTypeSize
+    let verticalSizeClass: UserInterfaceSizeClass?
     let canvasColor: Color
     let contentSurfaceColor: Color
-    let headerLeadingColor: Color
-    let headerTrailingColor: Color
-    let canvasPaletteID: UInt64
+    let appearanceID: UInt64
     let onSectionCommit: (BookWorkspaceSection) -> Void
-    let onNavigationBarSurfaceChange: (Bool) -> Void
+    let onBookHeaderFullyCollapsedChange: (Bool) -> Void
     let onOpenReadingDetail: () -> Void
     let onEditBook: () -> Void
     let onToggleChapter: (Int64) -> Void
@@ -121,13 +126,14 @@ private struct BookWorkspaceCollectionConfiguration {
         notesCount: 0,
         notesLoadState: .loading,
         reduceMotion: false,
+        colorScheme: .light,
+        dynamicTypeSize: .large,
+        verticalSizeClass: .regular,
         canvasColor: Color.surfacePage,
         contentSurfaceColor: Color.surfaceCard,
-        headerLeadingColor: Color.surfacePage,
-        headerTrailingColor: Color.surfacePage,
-        canvasPaletteID: 0,
+        appearanceID: 0,
         onSectionCommit: { _ in },
-        onNavigationBarSurfaceChange: { _ in },
+        onBookHeaderFullyCollapsedChange: { _ in },
         onOpenReadingDetail: {},
         onEditBook: {},
         onToggleChapter: { _ in },
@@ -373,11 +379,73 @@ private final class BookWorkspaceBookHeaderHostView: UIView {
     }
 }
 
-/// 只绘制可越过顶部安全区的封面主题氛围；交互内容由独立裁切层限制在导航栏下方。
+/// 为 Hero 执行边缘安全的高斯模糊；处理发生在 Nuke 后台队列，延展与回裁避免透明像素形成白边。
+private struct BookWorkspaceEdgeSafeGaussianBlur: ImageProcessing, Hashable {
+    let radius: Int
+
+    var identifier: String {
+        "com.xmnote.book-workspace.edge-safe-gaussian-blur?radius=\(radius)"
+    }
+
+    /// 延展原图边缘后模糊并裁回原范围；无可渲染像素时交回原图，避免封面加载链路失败。
+    func process(_ image: UIImage) -> UIImage? {
+        let inputImage: CIImage
+        if let ciImage = image.ciImage {
+            inputImage = ciImage
+        } else if let cgImage = image.cgImage {
+            inputImage = CIImage(cgImage: cgImage)
+        } else {
+            return image
+        }
+
+        let originalExtent = inputImage.extent
+        guard originalExtent.width > 0, originalExtent.height > 0 else { return image }
+        let outputImage = inputImage
+            .clampedToExtent()
+            .applyingFilter(
+                "CIGaussianBlur",
+                parameters: [kCIInputRadiusKey: radius]
+            )
+            .cropped(to: originalExtent)
+        guard let outputCGImage = ImageProcessors.CoreImageFilter.context.createCGImage(
+            outputImage,
+            from: originalExtent
+        ) else {
+            return image
+        }
+        return UIImage(
+            cgImage: outputCGImage,
+            scale: image.scale,
+            orientation: image.imageOrientation
+        )
+    }
+}
+
+/// 绘制一次性处理的封面影像 Hero；滚动只更新整幅影像的等比填充几何，前景中和由上层统一负责。
 private final class BookWorkspaceHeaderBackdropView: UIView {
-    private let colorGradientLayer = CAGradientLayer()
-    private let verticalFadeMaskLayer = CAGradientLayer()
-    private var fadeHeight = BookWorkspaceLayoutMetrics.scopeBarEstimatedHeight
+    private enum Appearance {
+        static let overscanScale: CGFloat = 1.04
+        static let downsampleFactor: CGFloat = 8
+        static let blurRadius = 6
+        static let crossfadeDuration: TimeInterval = 0.25
+        static let lightGlobalVeilAlpha: CGFloat = 0.235
+        static let lightTextProtectionAlpha: CGFloat = 0.196
+        static let darkGlobalVeilAlpha: CGFloat = 0.48
+        static let darkTextProtectionAlpha: CGFloat = 0.23
+    }
+
+    private let imageView = UIImageView()
+    private let globalReadabilityVeilLayer = CALayer()
+    private let textProtectionVeilLayer = CAGradientLayer()
+    private var imageLoadTask: Task<Void, Never>?
+    private var requestIdentity = UUID()
+    private var coverURL: URL?
+    private var renderSize = CGSize.zero
+    private var lastRequestedRenderSize = CGSize.zero
+    private var hasIssuedImageRequest = false
+    private var reduceMotion = false
+    private var colorScheme = ColorScheme.light
+    private var resolvedCanvasColor = UIColor.systemGroupedBackground
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -385,20 +453,14 @@ private final class BookWorkspaceHeaderBackdropView: UIView {
         accessibilityElementsHidden = true
         clipsToBounds = true
 
-        colorGradientLayer.startPoint = CGPoint(x: 0, y: 0.5)
-        colorGradientLayer.endPoint = CGPoint(x: 1, y: 0.5)
-        verticalFadeMaskLayer.startPoint = CGPoint(x: 0.5, y: 0)
-        verticalFadeMaskLayer.endPoint = CGPoint(x: 0.5, y: 1)
-        verticalFadeMaskLayer.colors = [
-            UIColor.black.cgColor,
-            UIColor.black.cgColor,
-            UIColor.black.withAlphaComponent(
-                BookWorkspaceLayoutMetrics.scopeBackdropFadeKneeOpacity
-            ).cgColor,
-            UIColor.clear.cgColor
-        ]
-        colorGradientLayer.mask = verticalFadeMaskLayer
-        layer.addSublayer(colorGradientLayer)
+        imageView.contentMode = .scaleAspectFill
+        imageView.clipsToBounds = true
+        imageView.alpha = 0
+        imageView.layer.magnificationFilter = .linear
+        addSubview(imageView)
+
+        layer.addSublayer(globalReadabilityVeilLayer)
+        layer.addSublayer(textProtectionVeilLayer)
     }
 
     @available(*, unavailable)
@@ -406,62 +468,179 @@ private final class BookWorkspaceHeaderBackdropView: UIView {
         fatalError("init(coder:) has not been implemented")
     }
 
-    /// 更新不透明画布和主题色；仅主题切换使用淡入淡出，滚动过程只改变外层 Frame。
+    /// 同步封面来源与辅助功能输入；URL 变化立即清除旧书影像，防止快速切书串图。
     func configure(
+        coverURLString: String,
         canvasColor: Color,
-        leadingColor: Color,
-        trailingColor: Color,
-        animated: Bool
+        colorScheme: ColorScheme,
+        reduceMotion: Bool
     ) {
-        let resolvedCanvasColor = UIColor(canvasColor).resolvedColor(with: traitCollection)
-        let resolvedLeadingColor = UIColor(leadingColor).resolvedColor(with: traitCollection)
-        let resolvedTrailingColor = UIColor(trailingColor).resolvedColor(with: traitCollection)
-
-        if animated {
-            let transition = CATransition()
-            transition.type = .fade
-            transition.duration = 0.18
-            transition.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
-            layer.add(transition, forKey: "bookWorkspaceBackdropPalette")
-            colorGradientLayer.add(transition, forKey: "bookWorkspaceBackdropGradient")
-        }
+        self.reduceMotion = reduceMotion
+        self.colorScheme = colorScheme
+        let interfaceStyle: UIUserInterfaceStyle = colorScheme == .dark ? .dark : .light
+        let traits = UITraitCollection(userInterfaceStyle: interfaceStyle)
+        resolvedCanvasColor = UIColor(canvasColor).resolvedColor(with: traits)
+        let nextCoverURL = XMImageRequestBuilder.normalizedURL(from: coverURLString)
+        let didChangeCover = nextCoverURL != coverURL
+        coverURL = nextCoverURL
 
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         layer.backgroundColor = resolvedCanvasColor.cgColor
-        colorGradientLayer.colors = [
-            resolvedLeadingColor.cgColor,
-            resolvedTrailingColor.cgColor
-        ]
+        updateReadabilityVeilColors()
         CATransaction.commit()
+
+        if didChangeCover {
+            cancelImageLoad()
+            imageView.layer.removeAllAnimations()
+            imageView.image = nil
+            imageView.alpha = 0
+            lastRequestedRenderSize = .zero
+            hasIssuedImageRequest = false
+        }
+        loadBackdropIfNeeded()
     }
 
-    /// 使用 Tab 的真实高度定义主题色衰减区，Header 内容高度变化不会移动视觉边界。
-    func updateFadeHeight(_ value: CGFloat) {
-        let nextValue = max(value, 0)
-        guard abs(nextValue - fadeHeight) >= Spacing.hairline else { return }
-        fadeHeight = nextValue
-        setNeedsLayout()
+    /// 使用展开态真实几何构造下采样请求；折叠与回弹不会反复触发图片处理。
+    func updateRenderSize(_ value: CGSize) {
+        let nextSize = CGSize(width: max(value.width, 0), height: max(value.height, 0))
+        guard abs(nextSize.width - renderSize.width) >= 0.5
+                || abs(nextSize.height - renderSize.height) >= 0.5 else { return }
+        renderSize = nextSize
+        loadBackdropIfNeeded()
+    }
+
+    /// 页面销毁时取消封面任务；请求身份同时失效，旧回调无法写入复用后的视图。
+    func prepareForReuse() {
+        cancelImageLoad()
+        coverURL = nil
+        renderSize = .zero
+        lastRequestedRenderSize = .zero
+        hasIssuedImageRequest = false
+        imageView.image = nil
+        imageView.alpha = 0
+    }
+
+    deinit {
+        imageLoadTask?.cancel()
     }
 
     override func layoutSubviews() {
         super.layoutSubviews()
-        let height = max(bounds.height, 1)
-        let resolvedFadeHeight = min(max(fadeHeight, 0), height)
-        let fadeStart = 1 - resolvedFadeHeight / height
-        let fadeKnee = fadeStart
-            + (1 - fadeStart) * BookWorkspaceLayoutMetrics.scopeBackdropFadeKneeProgress
+        let overscanInsetX = bounds.width * (Appearance.overscanScale - 1) / 2
+        let overscanInsetY = bounds.height * (Appearance.overscanScale - 1) / 2
         CATransaction.begin()
         CATransaction.setDisableActions(true)
-        colorGradientLayer.frame = bounds
-        verticalFadeMaskLayer.frame = colorGradientLayer.bounds
-        verticalFadeMaskLayer.locations = [
-            0,
-            NSNumber(value: Double(fadeStart)),
-            NSNumber(value: Double(fadeKnee)),
-            1
-        ]
+        imageView.frame = bounds.insetBy(
+            dx: -overscanInsetX,
+            dy: -overscanInsetY
+        )
+        globalReadabilityVeilLayer.frame = bounds
+        textProtectionVeilLayer.frame = bounds
         CATransaction.commit()
+    }
+
+    /// 以全局弱遮罩控制画面刺激度，再用文字列保护层补足对比度而不形成可见色块。
+    private func updateReadabilityVeilColors() {
+        let isDark = colorScheme == .dark
+        let globalAlpha = isDark
+            ? Appearance.darkGlobalVeilAlpha
+            : Appearance.lightGlobalVeilAlpha
+        let textProtectionAlpha = isDark
+            ? Appearance.darkTextProtectionAlpha
+            : Appearance.lightTextProtectionAlpha
+        let veilColor = isDark ? UIColor.black : resolvedCanvasColor
+        globalReadabilityVeilLayer.backgroundColor = veilColor
+            .withAlphaComponent(globalAlpha)
+            .cgColor
+
+        let protectedColor = veilColor.withAlphaComponent(textProtectionAlpha).cgColor
+        let clearColor = veilColor.withAlphaComponent(0).cgColor
+        let isRightToLeft = effectiveUserInterfaceLayoutDirection == .rightToLeft
+        textProtectionVeilLayer.startPoint = CGPoint(
+            x: isRightToLeft ? 1 : 0,
+            y: 0.5
+        )
+        textProtectionVeilLayer.endPoint = CGPoint(
+            x: isRightToLeft ? 0 : 1,
+            y: 0.5
+        )
+        textProtectionVeilLayer.colors = [protectedColor, clearColor, clearColor]
+        textProtectionVeilLayer.locations = [0, 0.65, 1]
+    }
+
+    /// 复用 Nuke 共享缓存执行 Android 等效的八倍下采样与 6px 模糊；Task 取消与请求身份共同防止竞态写入。
+    private func loadBackdropIfNeeded() {
+        guard let coverURL,
+              renderSize.width > 0,
+              renderSize.height > 0 else { return }
+        guard !hasIssuedImageRequest
+                || abs(renderSize.width - lastRequestedRenderSize.width) >= 0.5
+                || abs(renderSize.height - lastRequestedRenderSize.height) >= 0.5
+        else { return }
+
+        cancelImageLoad()
+        hasIssuedImageRequest = true
+        let requestedRenderSize = renderSize
+        lastRequestedRenderSize = requestedRenderSize
+        let identity = UUID()
+        requestIdentity = identity
+        var request = XMImageRequestBuilder.makeImageRequest(
+            url: coverURL,
+            priority: .high,
+            targetSizeInPoints: CGSize(
+                width: renderSize.width * Appearance.overscanScale
+                    / Appearance.downsampleFactor,
+                height: renderSize.height * Appearance.overscanScale
+                    / Appearance.downsampleFactor
+            )
+        )
+        request.processors.append(
+            BookWorkspaceEdgeSafeGaussianBlur(radius: Appearance.blurRadius)
+        )
+
+        imageLoadTask = Task { [weak self] in
+            do {
+                let loadedImage = try await ImagePipeline.shared.image(for: request)
+                guard !Task.isCancelled,
+                      let self,
+                      self.requestIdentity == identity,
+                      self.coverURL == coverURL else { return }
+                let stillImage = loadedImage.images?.first ?? loadedImage
+                self.applyLoadedImage(stillImage)
+            } catch {
+                guard !Task.isCancelled,
+                      let self,
+                      self.requestIdentity == identity else { return }
+                self.imageView.image = nil
+                self.imageView.alpha = 0
+            }
+        }
+    }
+
+    /// 只在封面真正完成处理后以整幅位图淡入；减少动态效果时立即切换。
+    private func applyLoadedImage(_ image: UIImage) {
+        imageView.layer.removeAllAnimations()
+        imageView.image = image
+        if reduceMotion {
+            imageView.alpha = 1
+        } else {
+            imageView.alpha = 0
+            UIView.animate(
+                withDuration: Appearance.crossfadeDuration,
+                delay: 0,
+                options: [.beginFromCurrentState, .allowUserInteraction, .curveEaseInOut],
+                animations: { [imageView] in imageView.alpha = 1 },
+                completion: nil
+            )
+        }
+    }
+
+    /// 取消在途图片工作并使其回调身份失效。
+    private func cancelImageLoad() {
+        imageLoadTask?.cancel()
+        imageLoadTask = nil
+        requestIdentity = UUID()
     }
 }
 
@@ -577,14 +756,19 @@ private final class BookWorkspaceScopeBarView: UIView {
     private var lastRevealedIndex: Int?
     private var lastRevealBoundsSize = CGSize.zero
     private var pendingImmediateRevealIndex: Int?
-    private var resolvedCanvasColor = UIColor(Color.surfacePage)
-    private var canvasOverlayAlpha: CGFloat = 0
+    private let topBoundaryLayer = CAShapeLayer()
 
     override init(frame: CGRect) {
         super.init(frame: frame)
-        backgroundColor = .clear
-        isOpaque = false
+        backgroundColor = UIColor(Color.surfacePage)
+        isOpaque = true
         clipsToBounds = true
+        layer.cornerRadius = BookWorkspaceLayoutMetrics.contentStepTopCornerRadius
+        layer.cornerCurve = .continuous
+        layer.maskedCorners = [.layerMinXMinYCorner, .layerMaxXMinYCorner]
+
+        topBoundaryLayer.fillColor = UIColor.clear.cgColor
+        topBoundaryLayer.lineWidth = CardStyle.borderWidth
 
         scrollView.translatesAutoresizingMaskIntoConstraints = false
         scrollView.showsHorizontalScrollIndicator = false
@@ -623,6 +807,7 @@ private final class BookWorkspaceScopeBarView: UIView {
             stackView.bottomAnchor.constraint(equalTo: scrollView.contentLayoutGuide.bottomAnchor),
             stackView.heightAnchor.constraint(equalTo: scrollView.frameLayoutGuide.heightAnchor)
         ])
+        layer.addSublayer(topBoundaryLayer)
     }
 
     @available(*, unavailable)
@@ -630,33 +815,22 @@ private final class BookWorkspaceScopeBarView: UIView {
         fatalError("init(coder:) has not been implemented")
     }
 
-    /// 同步 Tab 文案与画布色；展开态保持透明，吸顶时由滚动进度恢复不透明画布。
+    /// 同步 Tab 文案与中性画布；Tab 从首帧起就是 Hero 与正文之间的不透明内容台阶。
     func configure(
         items: [BookWorkspaceScopeBarItem],
         committedSection: BookWorkspaceSection,
         reduceMotion: Bool,
-        canvasColor: Color,
-        animatedCanvasChange: Bool
+        canvasColor: Color
     ) {
         self.reduceMotion = reduceMotion
         self.committedSection = committedSection
         let nextCanvasColor = UIColor(canvasColor).resolvedColor(with: traitCollection)
-        resolvedCanvasColor = nextCanvasColor
-        let applyCanvas = { [self] in
-            backgroundColor = nextCanvasColor.withAlphaComponent(canvasOverlayAlpha)
-        }
-        if animatedCanvasChange && !reduceMotion {
-            UIView.animate(
-                withDuration: 0.18,
-                delay: 0,
-                options: [.beginFromCurrentState, .allowUserInteraction, .curveEaseInOut],
-                animations: applyCanvas,
-                completion: nil
-            )
-        } else {
-            UIView.performWithoutAnimation {
-                applyCanvas()
-            }
+        UIView.performWithoutAnimation { [self] in
+            backgroundColor = nextCanvasColor
+            topBoundaryLayer.strokeColor = UIColor(Color.surfaceBorderSubtle)
+                .resolvedColor(with: traitCollection)
+                .withAlphaComponent(0.42)
+                .cgColor
         }
 
         if self.items.map(\.section) != items.map(\.section) {
@@ -669,22 +843,6 @@ private final class BookWorkspaceScopeBarView: UIView {
         self.items = items
         setCommittedSection(committedSection)
         setNeedsLayout()
-    }
-
-    /// 在收起末段用 smoothstep 叠加中性画布；更新留在 UIKit 滚动热路径且不启动独立动画。
-    func updateCollapseProgress(_ progress: CGFloat) {
-        let clampedProgress = min(max(progress, 0), 1)
-        let start = BookWorkspaceLayoutMetrics.scopeNeutralizationStartProgress
-        let normalizedProgress = min(
-            max((clampedProgress - start) / max(1 - start, CGFloat.ulpOfOne), 0),
-            1
-        )
-        let nextAlpha = normalizedProgress * normalizedProgress * (3 - 2 * normalizedProgress)
-        guard abs(nextAlpha - canvasOverlayAlpha) >= 0.001 else { return }
-        canvasOverlayAlpha = nextAlpha
-        UIView.performWithoutAnimation { [self] in
-            backgroundColor = resolvedCanvasColor.withAlphaComponent(nextAlpha)
-        }
     }
 
     /// 根据原生 Pager 的连续页位置更新指示器和标题选中强度。
@@ -740,6 +898,7 @@ private final class BookWorkspaceScopeBarView: UIView {
 
     override func layoutSubviews() {
         super.layoutSubviews()
+        layoutTopBoundary()
         if lastRevealBoundsSize != scrollView.bounds.size {
             lastRevealBoundsSize = scrollView.bounds.size
             lastRevealedIndex = nil
@@ -750,6 +909,37 @@ private final class BookWorkspaceScopeBarView: UIView {
            revealControlIfNeeded(at: pendingImmediateRevealIndex, animated: false) {
             self.pendingImmediateRevealIndex = nil
         }
+    }
+
+    /// 沿 20pt 连续圆角绘制唯一顶部 hairline，明确 Hero 与内容层边界而不增加阴影。
+    private func layoutTopBoundary() {
+        let radius = min(
+            BookWorkspaceLayoutMetrics.contentStepTopCornerRadius,
+            bounds.width / 2,
+            bounds.height
+        )
+        let path = UIBezierPath()
+        path.move(to: CGPoint(x: 0, y: radius))
+        path.addArc(
+            withCenter: CGPoint(x: radius, y: radius),
+            radius: radius,
+            startAngle: .pi,
+            endAngle: -.pi / 2,
+            clockwise: true
+        )
+        path.addLine(to: CGPoint(x: bounds.width - radius, y: 0))
+        path.addArc(
+            withCenter: CGPoint(x: bounds.width - radius, y: radius),
+            radius: radius,
+            startAngle: -.pi / 2,
+            endAngle: 0,
+            clockwise: true
+        )
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        topBoundaryLayer.frame = bounds
+        topBoundaryLayer.path = path.cgPath
+        CATransaction.commit()
     }
 
     private func rebuildControls(with items: [BookWorkspaceScopeBarItem]) {
@@ -928,11 +1118,12 @@ private final class BookWorkspaceCollectionDomainContext {
     var snapshot: BookWorkspacePresentationSnapshot
     var appliedRevision = -1
     var viewportAnchor: ViewportAnchor?
-    var fallbackOffsetY: CGFloat = 0
+    var fallbackVisibleTop: CGFloat = 0
     var lastAdjustedInset: UIEdgeInsets = .zero
     var lastBoundsSize: CGSize = .zero
     var isRestoringViewport = false
     var isCapturingViewportSuspended = false
+    var hasPendingAdjustedInsetRestoration = false
     var pendingPrewarmIDs: [Int64] = []
     var prewarmTask: Task<Void, Never>?
 
@@ -952,12 +1143,72 @@ private final class BookWorkspaceCollectionDomainContext {
     }
 }
 
+/// 只记录会改变书籍头部渲染结果的输入，列表与导航状态变化不会重建 Hosting 树。
+private struct BookWorkspaceBookHeaderContentState: Equatable {
+    let name: String
+    let author: String
+    let cover: String
+    let press: String
+    let publicationDateText: String
+    let readStatusID: Int64
+    let readStatusBadgeTitle: String
+    let score: Int64
+    let totalReadingSeconds: Int64
+    let bookmarkText: String
+    let readingProgressText: String
+    let colorScheme: ColorScheme
+    let reduceMotion: Bool
+    let dynamicTypeSize: DynamicTypeSize
+    let verticalSizeClass: UserInterfaceSizeClass?
+
+    /// 从当前书籍与显示环境提取真正参与头部渲染的稳定签名。
+    init(
+        book: BookDetail,
+        colorScheme: ColorScheme,
+        reduceMotion: Bool,
+        dynamicTypeSize: DynamicTypeSize,
+        verticalSizeClass: UserInterfaceSizeClass?
+    ) {
+        name = book.name
+        author = book.author
+        cover = book.cover
+        press = book.press
+        publicationDateText = book.attributes
+            .first(where: { $0.kind == .pubDate })?
+            .value ?? ""
+        readStatusID = book.readStatusID
+        readStatusBadgeTitle = book.readStatusBadgeTitle
+        score = book.score
+        totalReadingSeconds = book.totalReadingSeconds
+        bookmarkText = book.bookmarkText
+        readingProgressText = book.readingProgressText
+        self.colorScheme = colorScheme
+        self.reduceMotion = reduceMotion
+        self.dynamicTypeSize = dynamicTypeSize
+        self.verticalSizeClass = verticalSizeClass
+    }
+}
+
 /// 用纯值判断 Tab 视觉是否真正变化，滚动过程不会触发 SwiftUI 配置重建。
 private struct BookWorkspaceScopeBarContentState: Equatable {
     let items: [BookWorkspaceScopeBarItem]
     let committedSection: BookWorkspaceSection
     let reduceMotion: Bool
-    let canvasPaletteID: UInt64
+    let appearanceID: UInt64
+}
+
+/// 把连续滚动偏移归一为 Hero 唯一的折叠与回弹位移，避免背景和前景各自解释弹性区间。
+private struct BookWorkspaceHeroMotionState {
+    let scrollOffset: CGFloat
+    let collapseDistance: CGFloat
+    let overscrollDistance: CGFloat
+
+    init(scrollOffset: CGFloat, collapseLimit: CGFloat) {
+        let resolvedOffset = scrollOffset.isFinite ? scrollOffset : 0
+        self.scrollOffset = resolvedOffset
+        collapseDistance = min(max(resolvedOffset, 0), max(collapseLimit, 0))
+        overscrollDistance = max(-resolvedOffset, 0)
+    }
 }
 
 /// 原生 Pager 的连续位置快照；所有索引都基于稳定的 BookWorkspaceSection 顺序。
@@ -996,13 +1247,17 @@ final class BookWorkspaceCollectionHostView: UIView, UICollectionViewDelegate, U
     private var contexts: [BookWorkspaceSection: BookWorkspaceCollectionDomainContext] = [:]
     private let pagerScrollView = UIScrollView()
     private let headerBackdropView = BookWorkspaceHeaderBackdropView()
-    private let sharedChromeContentClipView = UIView()
+    private let sharedHeroContentView = UIView()
+    private let navigationNeutralizationView = UIView()
     private let bookHeaderHostView = BookWorkspaceBookHeaderHostView()
     private let scopeBarHostView = BookWorkspaceScopeBarView()
     private var pageConstraints: [NSLayoutConstraint] = []
     private var bookHeaderHeight: CGFloat = 180
     private var scopeBarHeight = BookWorkspaceLayoutMetrics.scopeBarEstimatedHeight
+    private var bookHeaderContentState: BookWorkspaceBookHeaderContentState?
     private var scopeBarContentState: BookWorkspaceScopeBarContentState?
+    private var needsSharedChromeMeasurement = true
+    private var lastSharedChromeMeasurementWidth: CGFloat = 0
     private var noteRowStates: [Int64: BookWorkspaceNoteRowState] = [:]
     private var committedSection = BookWorkspaceSection.notes
     private var pendingCommitEcho: BookWorkspaceSection?
@@ -1011,12 +1266,12 @@ final class BookWorkspaceCollectionHostView: UIView, UICollectionViewDelegate, U
     private var lastPagerWidth: CGFloat = 0
     private var isPagerPositionInitialized = false
     private var transitionSections: Set<BookWorkspaceSection> = [.notes]
+    private var lastPublishedBookHeaderCollapseState: Bool?
     private weak var prioritizedNavigationPopGestureRecognizer: UIGestureRecognizer?
     private weak var prioritizedNavigationContentPopGestureRecognizer: UIGestureRecognizer?
     private var wasNavigationContentPopGestureEnabled: Bool?
     private var navigationGesturePriorityAttempts = 0
     private var isNavigationGesturePriorityRefreshScheduled = false
-    private var lastNavigationBarSurfaceVisibility: Bool?
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -1037,15 +1292,12 @@ final class BookWorkspaceCollectionHostView: UIView, UICollectionViewDelegate, U
     fileprivate func update(with configuration: BookWorkspaceCollectionConfiguration) {
         let previousConfiguration = self.configuration
         let previousCommittedSection = previousConfiguration.committedSection
-        let canvasChanged = previousConfiguration.canvasPaletteID != configuration.canvasPaletteID
-        let animatesCanvasChange = canvasChanged
-            && previousConfiguration.book != nil
-            && !configuration.reduceMotion
+        let appearanceChanged = previousConfiguration.appearanceID != configuration.appearanceID
         self.configuration = configuration
         synchronizeExternalCommit(configuration.committedSection)
-        updateHeaderBackdropContent(animatedCanvasChange: animatesCanvasChange)
+        updateHeaderBackdropContent()
         updateBookHeaderContent()
-        updateScopeBarContent(animatedCanvasChange: animatesCanvasChange)
+        updateScopeBarContent()
         pruneNoteRowStates()
 
         for section in BookWorkspaceSection.allCases {
@@ -1053,8 +1305,8 @@ final class BookWorkspaceCollectionHostView: UIView, UICollectionViewDelegate, U
             let nextSnapshot = configuration.snapshots[section]
                 ?? BookWorkspacePresentationSnapshot.initial(for: section)
             apply(nextSnapshot, to: context)
-            if canvasChanged {
-                refreshVisibleContent(in: context, animatedCanvasChange: animatesCanvasChange)
+            if appearanceChanged {
+                refreshVisibleContent(in: context, animatedCanvasChange: false)
             }
         }
 
@@ -1078,11 +1330,14 @@ final class BookWorkspaceCollectionHostView: UIView, UICollectionViewDelegate, U
         contexts.removeAll()
         pagerScrollView.delegate = nil
         noteRowStates.removeAll()
+        bookHeaderContentState = nil
         scopeBarContentState = nil
         restoreNavigationContentPopGestureAvailability()
+        headerBackdropView.prepareForReuse()
         bookHeaderHostView.removeFromSuperview()
         scopeBarHostView.removeFromSuperview()
-        sharedChromeContentClipView.removeFromSuperview()
+        navigationNeutralizationView.removeFromSuperview()
+        sharedHeroContentView.removeFromSuperview()
         headerBackdropView.removeFromSuperview()
         pagerScrollView.removeFromSuperview()
     }
@@ -1134,19 +1389,23 @@ final class BookWorkspaceCollectionHostView: UIView, UICollectionViewDelegate, U
         setNeedsLayout()
     }
 
-    /// 配置页面唯一的背景、书籍头部与 Tab；背景越过安全区，内容始终裁切在导航栏下方。
+    /// 配置页面唯一的 Hero 与 Tab；背景和书籍前景共享跨越导航区的空间，Tab 独立承接中性内容。
     private func configureSharedChrome() {
-        sharedChromeContentClipView.backgroundColor = .clear
-        sharedChromeContentClipView.clipsToBounds = true
+        sharedHeroContentView.backgroundColor = .clear
+        sharedHeroContentView.clipsToBounds = true
+        navigationNeutralizationView.backgroundColor = .clear
+        navigationNeutralizationView.isUserInteractionEnabled = false
+        navigationNeutralizationView.accessibilityElementsHidden = true
         bookHeaderHostView.isHidden = true
         scopeBarHostView.isHidden = true
         scopeBarHostView.onSelectSection = { [weak self] section in
             self?.requestPage(section)
         }
         insertSubview(headerBackdropView, belowSubview: pagerScrollView)
-        addSubview(sharedChromeContentClipView)
-        sharedChromeContentClipView.addSubview(bookHeaderHostView)
-        sharedChromeContentClipView.addSubview(scopeBarHostView)
+        addSubview(sharedHeroContentView)
+        sharedHeroContentView.addSubview(bookHeaderHostView)
+        addSubview(navigationNeutralizationView)
+        addSubview(scopeBarHostView)
         accessibilityElements = [bookHeaderHostView, scopeBarHostView, pagerScrollView]
     }
 
@@ -1436,28 +1695,44 @@ final class BookWorkspaceCollectionHostView: UIView, UICollectionViewDelegate, U
     }
 
     /// 只在主题或书籍变化时更新顶部氛围，连续滚动仅修改 Frame 与拉伸高度。
-    private func updateHeaderBackdropContent(animatedCanvasChange: Bool) {
-        guard configuration.book != nil else {
+    private func updateHeaderBackdropContent() {
+        guard let book = configuration.book else {
             headerBackdropView.isHidden = true
-            publishNavigationBarSurfaceVisibility(false)
+            navigationNeutralizationView.isHidden = true
             return
         }
         headerBackdropView.isHidden = false
+        navigationNeutralizationView.isHidden = false
+        let interfaceStyle: UIUserInterfaceStyle = configuration.colorScheme == .dark
+            ? .dark
+            : .light
+        navigationNeutralizationView.backgroundColor = UIColor(configuration.canvasColor)
+            .resolvedColor(with: UITraitCollection(userInterfaceStyle: interfaceStyle))
         headerBackdropView.configure(
+            coverURLString: book.cover,
             canvasColor: configuration.canvasColor,
-            leadingColor: configuration.headerLeadingColor,
-            trailingColor: configuration.headerTrailingColor,
-            animated: animatedCanvasChange
+            colorScheme: configuration.colorScheme,
+            reduceMotion: configuration.reduceMotion
         )
     }
 
     /// 只在书籍或动态设置变化时更新 Header 内容，连续分页不进入 SwiftUI 配置链路。
     private func updateBookHeaderContent() {
         guard let book = configuration.book else {
+            bookHeaderContentState = nil
             bookHeaderHostView.isHidden = true
             return
         }
+        let nextState = BookWorkspaceBookHeaderContentState(
+            book: book,
+            colorScheme: configuration.colorScheme,
+            reduceMotion: configuration.reduceMotion,
+            dynamicTypeSize: configuration.dynamicTypeSize,
+            verticalSizeClass: configuration.verticalSizeClass
+        )
         bookHeaderHostView.isHidden = false
+        guard nextState != bookHeaderContentState else { return }
+        bookHeaderContentState = nextState
         bookHeaderHostView.configure(
             content: AnyView(
                 BookWorkspaceBookHeader(
@@ -1469,12 +1744,15 @@ final class BookWorkspaceCollectionHostView: UIView, UICollectionViewDelegate, U
                         self?.configuration.onEditBook()
                     }
                 )
+                .environment(\.colorScheme, configuration.colorScheme)
+                .environment(\.dynamicTypeSize, configuration.dynamicTypeSize)
+                .environment(\.verticalSizeClass, configuration.verticalSizeClass)
             )
         )
-        setNeedsLayout()
+        invalidateSharedChromeMeasurement()
     }
 
-    private func updateScopeBarContent(animatedCanvasChange: Bool) {
+    private func updateScopeBarContent() {
         guard let book = configuration.book else {
             scopeBarContentState = nil
             scopeBarHostView.isHidden = true
@@ -1485,7 +1763,7 @@ final class BookWorkspaceCollectionHostView: UIView, UICollectionViewDelegate, U
             items: items,
             committedSection: committedSection,
             reduceMotion: configuration.reduceMotion,
-            canvasPaletteID: configuration.canvasPaletteID
+            appearanceID: configuration.appearanceID
         )
         scopeBarHostView.isHidden = false
         guard nextState != scopeBarContentState else { return }
@@ -1494,8 +1772,7 @@ final class BookWorkspaceCollectionHostView: UIView, UICollectionViewDelegate, U
             items: items,
             committedSection: committedSection,
             reduceMotion: configuration.reduceMotion,
-            canvasColor: configuration.canvasColor,
-            animatedCanvasChange: animatedCanvasChange
+            canvasColor: configuration.canvasColor
         )
         scopeBarHostView.updatePagePosition(currentPagerPosition.rawValue, revealsTarget: false)
         setNeedsLayout()
@@ -1518,9 +1795,19 @@ final class BookWorkspaceCollectionHostView: UIView, UICollectionViewDelegate, U
         }
     }
 
-    /// 以唯一共享 Chrome 的真实高度同步四页滚动占位；只在宽度或动态字体变化时刷新布局。
+    /// 标记真实内容或环境导致的尺寸变化；滚动位置与导航绘制状态不会进入测量链路。
+    private func invalidateSharedChromeMeasurement() {
+        needsSharedChromeMeasurement = true
+        setNeedsLayout()
+    }
+
+    /// 以唯一共享 Chrome 的真实高度同步四页滚动占位；拖动、减速和回弹期间冻结几何。
     private func updateSharedChromeMetricsIfNeeded() {
         guard configuration.book != nil, bounds.width > 0 else { return }
+        let widthChanged = abs(bounds.width - lastSharedChromeMeasurementWidth) >= 0.5
+        guard needsSharedChromeMeasurement || widthChanged else { return }
+        guard !isAnyVerticalScrollActive else { return }
+
         let displayScale = window?.screen.scale ?? max(traitCollection.displayScale, 1)
         let measuredHeaderHeight = bookHeaderHostView.fittingHeight(for: bounds.width)
         let measuredScopeHeight = scopeBarHostView.fittingHeight(for: bounds.width)
@@ -1533,6 +1820,8 @@ final class BookWorkspaceCollectionHostView: UIView, UICollectionViewDelegate, U
                 ceil(measuredScopeHeight * displayScale) / displayScale
             )
             : scopeBarHeight
+        needsSharedChromeMeasurement = false
+        lastSharedChromeMeasurementWidth = bounds.width
         let headerChanged = abs(nextHeaderHeight - bookHeaderHeight) >= 0.5
         let scopeChanged = abs(nextScopeHeight - scopeBarHeight) >= 0.5
         guard headerChanged || scopeChanged else { return }
@@ -1541,15 +1830,44 @@ final class BookWorkspaceCollectionHostView: UIView, UICollectionViewDelegate, U
         refreshChromeSpacers()
     }
 
+    private var isAnyVerticalScrollActive: Bool {
+        contexts.values.contains { context in
+            let collectionView = context.collectionView
+            return collectionView.isTracking
+                || collectionView.isDragging
+                || collectionView.isDecelerating
+                || collectionView.isScrollAnimating
+        }
+    }
+
     /// 只刷新四页当前可见的透明占位，并让离屏页在复用时读取最新高度。
     private func refreshChromeSpacers() {
         for context in contexts.values {
-            if let indexPath = context.dataSource?.indexPath(for: .chromeSpacer),
-               let cell = context.collectionView.cellForItem(at: indexPath)
-                    as? BookWorkspaceHostingCell {
-                cell.configure(content: content(for: .chromeSpacer))
+            captureViewport(in: context)
+            context.isCapturingViewportSuspended = true
+        }
+
+        defer {
+            for context in contexts.values {
+                context.isCapturingViewportSuspended = false
+                captureViewport(in: context)
             }
-            context.collectionView.collectionViewLayout.invalidateLayout()
+        }
+
+        UIView.performWithoutAnimation {
+            for context in contexts.values {
+                if let indexPath = context.dataSource?.indexPath(for: .chromeSpacer),
+                   let cell = context.collectionView.cellForItem(at: indexPath)
+                        as? BookWorkspaceHostingCell {
+                    cell.configure(content: content(for: .chromeSpacer))
+                }
+                context.collectionView.collectionViewLayout.invalidateLayout()
+                context.collectionView.layoutIfNeeded()
+            }
+
+            for context in contexts.values {
+                restoreViewport(in: context)
+            }
         }
     }
 
@@ -1565,70 +1883,96 @@ final class BookWorkspaceCollectionHostView: UIView, UICollectionViewDelegate, U
             bookHeaderHeight
         )
         let offset = lowerOffset + (upperOffset - lowerOffset) * position.fraction
-        let collapseDistance = min(max(offset, 0), bookHeaderHeight)
-        let collapseProgress = bookHeaderHeight > 0
-            ? collapseDistance / bookHeaderHeight
-            : 1
-        let overscrollDistance = max(-offset, 0)
+        let motion = BookWorkspaceHeroMotionState(
+            scrollOffset: offset,
+            collapseLimit: bookHeaderHeight
+        )
         let chromeTopInset = min(
             max(pagerScrollView.frame.minY, safeAreaInsets.top, 0),
             bounds.height
         )
-        let nextBackdropFrame = CGRect(
-            x: 0,
-            y: -collapseDistance,
+        let backdropRenderSize = CGSize(
             width: bounds.width,
             height: chromeTopInset
                 + bookHeaderHeight
-                + scopeBarHeight
-                + overscrollDistance
+                + BookWorkspaceLayoutMetrics.contentStepTopCornerRadius
+        )
+        let nextBackdropFrame = CGRect(
+            x: 0,
+            y: -motion.collapseDistance,
+            width: bounds.width,
+            height: backdropRenderSize.height + motion.overscrollDistance
         )
         let nextHeaderFrame = CGRect(
             x: 0,
-            y: -offset,
+            y: chromeTopInset - motion.scrollOffset,
             width: bounds.width,
             height: bookHeaderHeight
         )
         let nextScopeFrame = CGRect(
             x: 0,
-            y: max(bookHeaderHeight - offset, 0),
+            y: chromeTopInset + max(bookHeaderHeight - motion.scrollOffset, 0),
             width: bounds.width,
             height: scopeBarHeight
         )
-        let visibleChromeHeight = min(
-            max(nextHeaderFrame.maxY, nextScopeFrame.maxY, 0),
-            max(bounds.height - chromeTopInset, 0)
-        )
-        let nextContentClipFrame = CGRect(
+        let nextHeroContentFrame = CGRect(
             x: 0,
-            y: chromeTopInset,
+            y: 0,
             width: bounds.width,
-            height: visibleChromeHeight
+            height: min(max(nextHeaderFrame.maxY, 0), bounds.height)
         )
-        if sharedChromeContentClipView.frame != nextContentClipFrame {
-            sharedChromeContentClipView.frame = nextContentClipFrame
-        }
-        if headerBackdropView.frame != nextBackdropFrame {
-            headerBackdropView.frame = nextBackdropFrame
-        }
-        headerBackdropView.updateFadeHeight(scopeBarHeight)
-        if bookHeaderHostView.frame != nextHeaderFrame {
-            bookHeaderHostView.frame = nextHeaderFrame
-        }
-        if scopeBarHostView.frame != nextScopeFrame {
-            scopeBarHostView.frame = nextScopeFrame
-        }
-        scopeBarHostView.updateCollapseProgress(collapseProgress)
-        publishNavigationBarSurfaceVisibility(
-            bookHeaderHeight > 0 && collapseDistance >= bookHeaderHeight - 0.5
+        let remainingDistance = max(bookHeaderHeight - motion.collapseDistance, 0)
+        let normalizedNeutralization = min(
+            max(
+                (BookWorkspaceLayoutMetrics.navigationNeutralizationDistance - remainingDistance)
+                    / max(
+                        BookWorkspaceLayoutMetrics.navigationNeutralizationDistance,
+                        CGFloat.ulpOfOne
+                    ),
+                0
+            ),
+            1
         )
+        let neutralizationProgress = normalizedNeutralization
+            * normalizedNeutralization
+            * (3 - 2 * normalizedNeutralization)
+        headerBackdropView.updateRenderSize(backdropRenderSize)
+        let nextNavigationNeutralizationFrame = CGRect(
+            x: 0,
+            y: 0,
+            width: bounds.width,
+            height: chromeTopInset + BookWorkspaceLayoutMetrics.contentStepTopCornerRadius
+        )
+        UIView.performWithoutAnimation {
+            if sharedHeroContentView.frame != nextHeroContentFrame {
+                sharedHeroContentView.frame = nextHeroContentFrame
+            }
+            if headerBackdropView.frame != nextBackdropFrame {
+                headerBackdropView.frame = nextBackdropFrame
+            }
+            if bookHeaderHostView.frame != nextHeaderFrame {
+                bookHeaderHostView.frame = nextHeaderFrame
+            }
+            if navigationNeutralizationView.frame != nextNavigationNeutralizationFrame {
+                navigationNeutralizationView.frame = nextNavigationNeutralizationFrame
+            }
+            navigationNeutralizationView.alpha = neutralizationProgress
+            if scopeBarHostView.frame != nextScopeFrame {
+                scopeBarHostView.frame = nextScopeFrame
+            }
+        }
+        bringSubviewToFront(navigationNeutralizationView)
+        bringSubviewToFront(scopeBarHostView)
+        let displayScale = window?.screen.scale ?? max(traitCollection.displayScale, 1)
+        let collapseTolerance = 0.5 / displayScale
+        publishBookHeaderFullyCollapsed(remainingDistance <= collapseTolerance)
     }
 
-    /// 只在完全收起阈值跨越时通知 SwiftUI，避免把逐帧滚动位置写入页面状态。
-    private func publishNavigationBarSurfaceVisibility(_ isVisible: Bool) {
-        guard lastNavigationBarSurfaceVisibility != isVisible else { return }
-        lastNavigationBarSurfaceVisibility = isVisible
-        configuration.onNavigationBarSurfaceChange(isVisible)
+    /// 只在完全收起边界发生变化时通知 SwiftUI，连续滚动几何始终由 UIKit 独占。
+    private func publishBookHeaderFullyCollapsed(_ isFullyCollapsed: Bool) {
+        guard lastPublishedBookHeaderCollapseState != isFullyCollapsed else { return }
+        lastPublishedBookHeaderCollapseState = isFullyCollapsed
+        configuration.onBookHeaderFullyCollapsedChange(isFullyCollapsed)
     }
 
     private func effectiveScrollOffset(for section: BookWorkspaceSection) -> CGFloat {
@@ -1720,7 +2064,7 @@ final class BookWorkspaceCollectionHostView: UIView, UICollectionViewDelegate, U
                         count: header.count,
                         isStarred: header.isStarred,
                         canvasColor: self.configuration.canvasColor,
-                        canvasPaletteID: self.configuration.canvasPaletteID,
+                        canvasPaletteID: self.configuration.appearanceID,
                         reduceMotion: self.configuration.reduceMotion
                     )
                 ),
@@ -1910,7 +2254,7 @@ final class BookWorkspaceCollectionHostView: UIView, UICollectionViewDelegate, U
                         count: header.count,
                         isStarred: header.isStarred,
                         canvasColor: configuration.canvasColor,
-                        canvasPaletteID: configuration.canvasPaletteID,
+                        canvasPaletteID: configuration.appearanceID,
                         reduceMotion: configuration.reduceMotion
                     )
                 ),
@@ -2094,7 +2438,7 @@ final class BookWorkspaceCollectionHostView: UIView, UICollectionViewDelegate, U
             return
         }
         guard !decelerate, let context = context(for: scrollView) else { return }
-        captureViewport(in: context)
+        finishVerticalScrolling(in: context)
     }
 
     func scrollViewDidEndDecelerating(_ scrollView: UIScrollView) {
@@ -2103,7 +2447,7 @@ final class BookWorkspaceCollectionHostView: UIView, UICollectionViewDelegate, U
             return
         }
         guard let context = context(for: scrollView) else { return }
-        captureViewport(in: context)
+        finishVerticalScrolling(in: context)
     }
 
     func scrollViewDidEndScrollingAnimation(_ scrollView: UIScrollView) {
@@ -2112,7 +2456,7 @@ final class BookWorkspaceCollectionHostView: UIView, UICollectionViewDelegate, U
             return
         }
         guard let context = context(for: scrollView) else { return }
-        captureViewport(in: context)
+        finishVerticalScrolling(in: context)
     }
 
     private func context(for scrollView: UIScrollView) -> BookWorkspaceCollectionDomainContext? {
@@ -2122,8 +2466,8 @@ final class BookWorkspaceCollectionHostView: UIView, UICollectionViewDelegate, U
     private func captureViewport(in context: BookWorkspaceCollectionDomainContext) {
         guard !context.isRestoringViewport, !context.isCapturingViewportSuspended else { return }
         let collectionView = context.collectionView
-        context.fallbackOffsetY = collectionView.contentOffset.y
         let visibleTop = collectionView.contentOffset.y + collectionView.adjustedContentInset.top
+        context.fallbackVisibleTop = visibleTop
         let candidate = collectionView.indexPathsForVisibleItems.compactMap { indexPath -> (IndexPath, CGRect)? in
             guard let attributes = collectionView.layoutAttributesForItem(at: indexPath),
                   attributes.frame.maxY >= visibleTop - 1 else {
@@ -2151,9 +2495,43 @@ final class BookWorkspaceCollectionHostView: UIView, UICollectionViewDelegate, U
         }
         let nextInset = context.collectionView.adjustedContentInset
         guard nextInset != context.lastAdjustedInset else { return }
+        context.lastAdjustedInset = nextInset
+        context.hasPendingAdjustedInsetRestoration = true
+        guard !isVerticalScrollActive(in: context) else { return }
+        flushPendingAdjustedInsetRestoration(in: context)
+    }
+
+    /// 用户手势结束后一次性处理被推迟的 inset/几何校准，避免与手势同时写入 contentOffset。
+    private func finishVerticalScrolling(in context: BookWorkspaceCollectionDomainContext) {
+        flushPendingAdjustedInsetRestoration(in: context)
+        updateSharedChromeMetricsIfNeeded()
+        layoutSharedChrome(at: currentPagerPosition)
+        captureViewport(in: context)
+        if needsSharedChromeMeasurement {
+            setNeedsLayout()
+        }
+    }
+
+    /// 判断指定内容域是否仍由手势、惯性或程序化动画持有滚动位置。
+    private func isVerticalScrollActive(in context: BookWorkspaceCollectionDomainContext) -> Bool {
+        let collectionView = context.collectionView
+        return collectionView.isTracking
+            || collectionView.isDragging
+            || collectionView.isDecelerating
+            || collectionView.isScrollAnimating
+    }
+
+    /// 仅在滚动静止时恢复原业务锚点；同一轮多次安全区变化会合并为一次无动画校准。
+    private func flushPendingAdjustedInsetRestoration(
+        in context: BookWorkspaceCollectionDomainContext
+    ) {
+        guard context.hasPendingAdjustedInsetRestoration,
+              !context.isRestoringViewport,
+              !context.isCapturingViewportSuspended,
+              !isVerticalScrollActive(in: context) else { return }
+        context.hasPendingAdjustedInsetRestoration = false
         UIView.performWithoutAnimation {
             restoreViewport(in: context)
-            context.lastAdjustedInset = nextInset
             captureViewport(in: context)
             if context.section == committedSection {
                 layoutSharedChrome(at: currentPagerPosition)
@@ -2172,7 +2550,7 @@ final class BookWorkspaceCollectionHostView: UIView, UICollectionViewDelegate, U
             let visibleTop = attributes.frame.minY - anchor.distanceFromVisibleTop
             targetY = visibleTop - collectionView.adjustedContentInset.top
         } else {
-            targetY = context.fallbackOffsetY
+            targetY = context.fallbackVisibleTop - collectionView.adjustedContentInset.top
         }
         let minimumY = -collectionView.adjustedContentInset.top
         let maximumY = max(
@@ -2431,29 +2809,27 @@ private struct BookWorkspaceTitleStatusRow: View {
 
     private var statusButton: some View {
         Button(action: onEditBook) {
-            Text(statusTitle)
-                .font(AppTypography.caption2Medium)
-                .foregroundStyle(statusColor)
-                .lineLimit(1)
-                .padding(.horizontal, Spacing.half)
-                .frame(minWidth: BookWorkspaceLayoutMetrics.minimumControlHeight)
-                .frame(height: BookWorkspaceLayoutMetrics.readStatusBadgeVisualHeight)
-                .background(
-                    statusColor.opacity(BookWorkspaceLayoutMetrics.readStatusBadgeFillOpacity),
-                    in: Capsule()
-                )
-                .overlay {
-                    Capsule().strokeBorder(
-                        statusColor.opacity(
-                            BookWorkspaceLayoutMetrics.readStatusBadgeBorderOpacity
-                        ),
-                        lineWidth: CardStyle.borderWidth
+            HStack(spacing: BookWorkspaceLayoutMetrics.readStatusContentSpacing) {
+                Circle()
+                    .fill(statusColor)
+                    .frame(
+                        width: BookWorkspaceLayoutMetrics.readStatusDotSize,
+                        height: BookWorkspaceLayoutMetrics.readStatusDotSize
                     )
-                }
-                .frame(minHeight: BookWorkspaceLayoutMetrics.minimumControlHeight)
-                .contentShape(Rectangle())
+                    .accessibilityHidden(true)
+
+                Text(statusTitle)
+                    .font(AppTypography.caption2Medium)
+                    .foregroundStyle(Color.textPrimary)
+                    .lineLimit(1)
+            }
+            .padding(.horizontal, BookWorkspaceLayoutMetrics.readStatusHorizontalInset)
+            .frame(minWidth: BookWorkspaceLayoutMetrics.minimumControlHeight)
+            .frame(height: BookWorkspaceLayoutMetrics.readStatusBadgeVisualHeight)
         }
-        .buttonStyle(BookWorkspaceMetricButtonStyle())
+        .buttonStyle(BookWorkspaceHeaderCapsuleButtonStyle())
+        .frame(minHeight: BookWorkspaceLayoutMetrics.minimumControlHeight)
+        .contentShape(Rectangle())
         .accessibilityLabel("阅读状态\(statusTitle)")
         .accessibilityHint("点按修改")
     }
@@ -2470,12 +2846,12 @@ private struct BookWorkspaceMetricValueText: View {
     var body: some View {
         Text(value)
             .font(BookWorkspaceTypography.metricValue)
-            .foregroundStyle(Color.textSecondary)
+            .foregroundStyle(Color.textPrimary)
             .lineLimit(1)
     }
 }
 
-/// 用独立图标和弱表面建立阅读指标的语义边界，视觉高度与点击高度分别控制。
+/// 用独立图标和普通轻透胶囊建立阅读指标的语义边界，视觉高度与点击高度分别控制。
 private struct BookWorkspaceMetricChipLabel: View {
     let metric: BookWorkspaceHeaderMetric
 
@@ -2483,7 +2859,7 @@ private struct BookWorkspaceMetricChipLabel: View {
         HStack(spacing: BookWorkspaceLayoutMetrics.metricChipIconSpacing) {
             Image(systemName: metric.kind.systemImage)
                 .font(BookWorkspaceTypography.metricIcon)
-                .foregroundStyle(Color.iconSecondary)
+                .foregroundStyle(Color.textPrimary)
                 .accessibilityHidden(true)
 
             BookWorkspaceMetricValueText(metric.value)
@@ -2491,56 +2867,48 @@ private struct BookWorkspaceMetricChipLabel: View {
         .padding(.horizontal, BookWorkspaceLayoutMetrics.metricChipHorizontalInset)
         .frame(minWidth: BookWorkspaceLayoutMetrics.minimumControlHeight)
         .frame(height: BookWorkspaceLayoutMetrics.metricChipVisualHeight)
-        .frame(minHeight: BookWorkspaceLayoutMetrics.minimumControlHeight)
         .fixedSize(horizontal: true, vertical: false)
-        .contentShape(Rectangle())
     }
 }
 
-/// 仅为阅读指标 Chip 提供非位移式按压反馈，避免影响状态 Badge 与评分胶囊。
-private struct BookWorkspaceMetricChipButtonStyle: ButtonStyle {
+/// 为 Header 的可点击胶囊提供无模糊、无阴影的普通表面，并只通过底面浓度反馈按压。
+private struct BookWorkspaceHeaderCapsuleButtonStyle: ButtonStyle {
+    @Environment(\.colorScheme) private var colorScheme
+
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .opacity(
-                configuration.isPressed
-                    ? BookWorkspaceLayoutMetrics.metricChipPressedContentOpacity
-                    : 1
-            )
             .background {
-                Capsule()
-                    .fill(
-                        Color.surfaceCard.opacity(
-                            configuration.isPressed
-                                ? BookWorkspaceLayoutMetrics.metricChipPressedFillOpacity
-                                : BookWorkspaceLayoutMetrics.metricChipFillOpacity
-                        )
-                    )
-                    .frame(height: BookWorkspaceLayoutMetrics.metricChipVisualHeight)
+                Capsule().fill(neutralFillColor(isPressed: configuration.isPressed))
             }
             .overlay {
-                Capsule()
-                    .strokeBorder(
-                        Color.surfaceBorderSubtle.opacity(
-                            configuration.isPressed
-                                ? BookWorkspaceLayoutMetrics.metricChipPressedBorderOpacity
-                                : BookWorkspaceLayoutMetrics.metricChipBorderOpacity
-                        ),
-                        lineWidth: CardStyle.borderWidth
-                    )
-                    .frame(height: BookWorkspaceLayoutMetrics.metricChipVisualHeight)
+                Capsule().strokeBorder(
+                    neutralBorderColor,
+                    lineWidth: CardStyle.borderWidth
+                )
             }
+            .contentShape(Capsule())
+    }
+
+    /// 轻透中性底面保持 Hero 氛围，同时避免 Liquid Glass 的折射与白色高光。
+    private func neutralFillColor(isPressed: Bool) -> Color {
+        let opacity = isPressed
+            ? BookWorkspaceLayoutMetrics.headerChipPressedFillOpacity
+            : BookWorkspaceLayoutMetrics.headerChipFillOpacity
+        return colorScheme == .dark
+            ? Color.black.opacity(opacity)
+            : Color.white.opacity(opacity)
+    }
+
+    private var neutralBorderColor: Color {
+        Color.white.opacity(
+            colorScheme == .dark
+                ? BookWorkspaceLayoutMetrics.headerChipDarkBorderOpacity
+                : BookWorkspaceLayoutMetrics.headerChipLightBorderOpacity
+        )
     }
 }
 
-/// 阅读数据列的轻量按压反馈，不引入独立卡片、缩放或额外动效。
-private struct BookWorkspaceMetricButtonStyle: ButtonStyle {
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .opacity(configuration.isPressed ? 0.68 : 1)
-    }
-}
-
-/// 以独立弱表面 Chip 承载三项阅读数据；自然宽度不足时由用户手动横向浏览。
+/// 以独立普通胶囊承载三项阅读数据；自然宽度不足时由用户手动横向浏览。
 private struct BookWorkspaceMetricsStrip: View {
     let metrics: [BookWorkspaceHeaderMetric]
     let onOpenReadingDetail: () -> Void
@@ -2582,7 +2950,9 @@ private struct BookWorkspaceMetricsStrip: View {
         } label: {
             BookWorkspaceMetricChipLabel(metric: metric)
         }
-        .buttonStyle(BookWorkspaceMetricChipButtonStyle())
+        .buttonStyle(BookWorkspaceHeaderCapsuleButtonStyle())
+        .frame(minHeight: BookWorkspaceLayoutMetrics.minimumControlHeight)
+        .contentShape(Rectangle())
         .accessibilityLabel(metric.accessibilityLabel)
     }
 
@@ -2667,14 +3037,15 @@ struct BookWorkspaceBookHeader: View {
                     if !book.author.isEmpty {
                         Text(book.author)
                             .font(BookWorkspaceTypography.secondaryInformation)
-                            .foregroundStyle(Color.textSecondary)
-                            .lineLimit(isCompactPresentation ? 1 : 2)
+                            .foregroundStyle(Color.textPrimary)
+                            .lineLimit(1)
+                            .truncationMode(.tail)
                     }
 
                     if !publisherText.isEmpty {
                         Text(publisherText)
                             .font(BookWorkspaceTypography.secondaryInformation)
-                            .foregroundStyle(Color.textSecondary)
+                            .foregroundStyle(Color.textPrimary)
                             .lineLimit(1)
                             .truncationMode(.tail)
                     }
@@ -2682,7 +3053,7 @@ struct BookWorkspaceBookHeader: View {
                     if !publicationDateText.isEmpty {
                         Text(publicationDateText)
                             .font(BookWorkspaceTypography.secondaryInformation)
-                            .foregroundStyle(Color.textSecondary)
+                            .foregroundStyle(Color.textPrimary)
                             .lineLimit(1)
                             .truncationMode(.tail)
                     }
@@ -2723,24 +3094,19 @@ struct BookWorkspaceBookHeader: View {
     private var ratingSlot: some View {
         Button(action: onEditBook) {
             ratingCapsule
-                .frame(
-                    width: BookWorkspaceLayoutMetrics.ratingCapsuleVisualWidth,
-                    height: BookWorkspaceLayoutMetrics.ratingCapsuleHeight
-                )
-                .frame(
-                    width: coverColumnWidth,
-                    height: BookWorkspaceLayoutMetrics.ratingSlotHeight
-                )
-                .contentShape(Rectangle())
         }
-        .buttonStyle(BookWorkspaceMetricButtonStyle())
+        .buttonStyle(BookWorkspaceHeaderCapsuleButtonStyle())
+        .frame(
+            width: coverColumnWidth,
+            height: BookWorkspaceLayoutMetrics.ratingSlotHeight
+        )
+        .contentShape(Rectangle())
         .accessibilityLabel("我的评分，\(ratingValueText) 分")
         .accessibilityHint("点按修改")
     }
 
     private var ratingCapsule: some View {
-        let shape = Capsule()
-        return XMRatingBar(
+        XMRatingBar(
             value: .constant(Double(book.score) / 10.0),
             starCount: BookWorkspaceLayoutMetrics.ratingStarCount,
             size: BookWorkspaceLayoutMetrics.ratingStarSize,
@@ -2751,14 +3117,8 @@ struct BookWorkspaceBookHeader: View {
         .dynamicTypeSize(...DynamicTypeSize.large)
         .accessibilityHidden(true)
         .padding(.horizontal, BookWorkspaceLayoutMetrics.ratingCapsuleHorizontalInset)
+        .frame(width: BookWorkspaceLayoutMetrics.ratingCapsuleVisualWidth)
         .frame(height: BookWorkspaceLayoutMetrics.ratingCapsuleHeight)
-        .background(Color.surfaceCard.opacity(0.12), in: shape)
-        .overlay {
-            shape.strokeBorder(
-                Color.surfaceCard.opacity(0.28),
-                lineWidth: CardStyle.borderWidth
-            )
-        }
     }
 
     private var coverWidth: CGFloat {
@@ -2786,17 +3146,13 @@ struct BookWorkspaceBookHeader: View {
         return .regular
     }
 
-    private var isCompactPresentation: Bool {
-        presentation != .regular
-    }
-
     private var readStatusTitle: String {
         book.readStatusBadgeTitle.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     private var readStatusColor: Color {
         BookEntryReadingStatus(rawValue: book.readStatusID)?.coverBadgeColor
-            ?? Color.textSecondary
+            ?? Color.statusAbandoned
     }
 
     private var visibleMetrics: [BookWorkspaceHeaderMetric] {

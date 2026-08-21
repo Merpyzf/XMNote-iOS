@@ -5,7 +5,7 @@
 //  Created by 王珂 on 2026/2/10.
 //
 //  [INPUT]: 无外部依赖，仅依赖 SwiftUI 框架
-//  [OUTPUT]: Color 语义扩展（含阅读日历主题/事件条 pending 态/月总结图标渐变语义、菜单前景语义、Dialog 表层语义）、Spacing / CornerRadius / CardStyle 常量、Color(hex:) / Color(light:dark:) / Color(rgbaHex:) 构造器
+//  [OUTPUT]: Color 语义扩展（含阅读日历主题/事件条 pending 态/月总结图标渐变语义、菜单前景语义、Dialog 表层语义）、AppTypography 与书摘阅读排版语义、Spacing / CornerRadius / CardStyle 常量、Color(hex:) / Color(light:dark:) / Color(rgbaHex:) 构造器
 //  [POS]: Utilities 模块的设计令牌中枢，全局 UI 一致性的单一真相源
 //  [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
 
@@ -671,32 +671,32 @@ enum BookshelfTypography {
 enum NoteExcerptTypography {
     static var body: Font {
         AppTypography.fixed(
-            baseSize: 15,
-            relativeTo: .subheadline,
-            minimumPointSize: 15
+            baseSize: 16,
+            relativeTo: .body,
+            minimumPointSize: 16
         )
     }
     static let bodyLineSpacing: CGFloat = 7
     static var uiBody: UIFont {
         AppTypography.uiFixed(
-            baseSize: 15,
-            textStyle: .subheadline,
-            minimumPointSize: 15
+            baseSize: 16,
+            textStyle: .body,
+            minimumPointSize: 16
         )
     }
     static var idea: Font {
         AppTypography.fixed(
-            baseSize: 13,
-            relativeTo: .footnote,
-            minimumPointSize: 13
+            baseSize: 14,
+            relativeTo: .subheadline,
+            minimumPointSize: 14
         )
     }
-    static let ideaLineSpacing: CGFloat = 4
+    static let ideaLineSpacing: CGFloat = 5
     static var uiIdea: UIFont {
         AppTypography.uiFixed(
-            baseSize: 13,
-            textStyle: .footnote,
-            minimumPointSize: 13
+            baseSize: 14,
+            textStyle: .subheadline,
+            minimumPointSize: 14
         )
     }
     static var footer: Font {

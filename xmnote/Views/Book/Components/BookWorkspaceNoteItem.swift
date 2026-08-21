@@ -1,7 +1,7 @@
 /**
- * [INPUT]: 依赖 NoteExcerpt、ExpandableRichText、XMJXImageWall 与 DesignTokens 展示单书工作台章节及书摘
- * [OUTPUT]: 对 BookDetailView 提供统一结构轴、带自适应书名状态行与独立封面评分胶囊的沉浸式 Hero、可横向滚动且按 Android 语义拆分的三项阅读指标 Chip、Tab 内主题衰减与吸顶中性化布局刻度，以及共享主题画布的章节和书摘内容
- * [POS]: Views/Book/Components 的页面私有内容组件，承接主题头部节奏、章节分组和具备清晰信息亲密性的书摘列表项
+ * [INPUT]: 依赖 NoteExcerpt、ExpandableRichText、XMJXImageWall 与 DesignTokens 展示单书工作台章节、书摘和头部排版令牌
+ * [OUTPUT]: 对 BookDetailView 提供统一结构轴、具备对称边界呼吸并带无缝连续书名、色点中性状态与独立普通评分胶囊的无边缘光晕封面影像 Hero、低于书摘正文的统一出版元数据层级、三项轻透阅读指标 Chip、中性内容台阶与折叠导航中和布局刻度，以及共享中性画布的章节和书摘内容
+ * [POS]: Views/Book/Components 的页面私有内容组件，承接影像 Hero 头部节奏、中性内容层、章节分组和具备清晰信息亲密性的书摘列表项
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
@@ -19,31 +19,31 @@ enum BookWorkspaceLayoutMetrics {
     static let contentBlockSpacing: CGFloat = 10
     static let metadataSpacing: CGFloat = 8
     static let minimumControlHeight: CGFloat = 44
-    static let headerTopInset: CGFloat = Spacing.screenEdge
-    static let headerBottomInset: CGFloat = Spacing.base
+    static let headerTopInset: CGFloat = Spacing.double
+    static let headerBottomInset: CGFloat = Spacing.double
     static let identityCoverSpacing: CGFloat = Spacing.screenEdge
     static let identityPrimarySpacing: CGFloat = Spacing.compact
     static let identitySecondarySpacing: CGFloat = Spacing.compact
     static let identityToMetricsSpacing: CGFloat = Spacing.compact
-    static let titleStatusSpacing: CGFloat = Spacing.half
+    static let titleStatusSpacing: CGFloat = Spacing.cozy
     static let titleStatusRowHeight: CGFloat = minimumControlHeight
-    static let readStatusBadgeVisualHeight: CGFloat = 24
-    static let readStatusBadgeFillOpacity = 0.07
-    static let readStatusBadgeBorderOpacity = 0.10
+    static let readStatusBadgeVisualHeight: CGFloat = 22
+    static let readStatusDotSize: CGFloat = 6
+    static let readStatusContentSpacing: CGFloat = Spacing.compact
+    static let readStatusHorizontalInset: CGFloat = Spacing.cozy
     static let metricChipSpacing: CGFloat = Spacing.cozy
-    static let metricChipIconSpacing: CGFloat = Spacing.half
-    static let metricChipHorizontalInset: CGFloat = Spacing.tight
-    static let metricChipVisualHeight: CGFloat = 32
-    static let metricChipFillOpacity = 0.26
-    static let metricChipPressedFillOpacity = 0.34
-    static let metricChipBorderOpacity = 0.22
-    static let metricChipPressedBorderOpacity = 0.28
-    static let metricChipPressedContentOpacity = 0.82
+    static let metricChipIconSpacing: CGFloat = 5
+    static let metricChipHorizontalInset: CGFloat = 9
+    static let metricChipVisualHeight: CGFloat = 26
+    static let headerChipFillOpacity = 0.18
+    static let headerChipPressedFillOpacity = 0.24
+    static let headerChipLightBorderOpacity = 0.30
+    static let headerChipDarkBorderOpacity = 0.14
     static let metricsEdgeFadeWidth: CGFloat = Spacing.screenEdge
     static let ratingSlotHeight: CGFloat = 48
     static let ratingCapsuleHeight: CGFloat = 26
-    static let ratingCapsuleHorizontalInset: CGFloat = 8
-    static let ratingStarSize: CGFloat = 13
+    static let ratingCapsuleHorizontalInset: CGFloat = 7
+    static let ratingStarSize: CGFloat = 12
     static let ratingStarSpacing: CGFloat = 1
     static let ratingStarCount = 5
     static let ratingCapsuleVisualWidth = CGFloat(ratingStarCount) * ratingStarSize
@@ -56,18 +56,21 @@ enum BookWorkspaceLayoutMetrics {
     static let scopeIndicatorOffset: CGFloat = Spacing.tight
     static let scopeAccessibilityIndicatorSpacing: CGFloat = Spacing.cozy
     static let scopeBarEstimatedHeight: CGFloat = 44
-    static let scopeBackdropFadeKneeProgress: CGFloat = 0.68
-    static let scopeBackdropFadeKneeOpacity: CGFloat = 0.28
-    static let scopeNeutralizationStartProgress: CGFloat = 0.60
+    static let contentStepTopCornerRadius: CGFloat = 20
+    static let navigationNeutralizationDistance: CGFloat = 64
 }
 
 /// 单书工作台头部排版令牌；保证公共书名跑马灯接收同源渲染字体与行高。
 enum BookWorkspaceTypography {
     static let title: Font = AppTypography.semantic(.title3, weight: .medium)
     static let uiTitle: UIFont = AppTypography.uiSemantic(.title3, weight: .medium)
-    static let secondaryInformation: Font = AppTypography.callout
-    static let metricValue: Font = AppTypography.subheadline
-    static let metricIcon: Font = AppTypography.caption
+    static let secondaryInformation: Font = AppTypography.fixed(
+        baseSize: 14,
+        relativeTo: .subheadline,
+        minimumPointSize: 14
+    )
+    static let metricValue: Font = AppTypography.footnote
+    static let metricIcon: Font = AppTypography.caption2
 
     static var titleLineHeight: CGFloat {
         ceil(uiTitle.lineHeight + Spacing.tiny)

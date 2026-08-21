@@ -1,7 +1,7 @@
 /**
  * [INPUT]: 依赖 RepositoryContainer、AppNavigationCoordinator、BookDetailViewModel、XMBookCover、XMRatingBar 与外层书籍/阅读路由回调
- * [OUTPUT]: 对外提供首帧结构稳定的 BookDetailView、BookReadingDetailView、BookChapterNotesView，形成贯穿导航栏的沉浸主题背景、共享可收起书籍概览、左锚定阅读数据行、吸顶 Tab 与纯内容 Pager
- * [POS]: Book 模块单书内容工作台壳层，以背景/内容分层的共享 Chrome 和独立内容滚动承接目录/书摘/相关/书评
+ * [OUTPUT]: 对外提供首帧结构稳定的 BookDetailView、BookReadingDetailView、BookChapterNotesView，形成覆盖状态栏与导航栏的封面影像 Hero、与可收起书籍概览互斥且带透明度过渡的工具栏书名、中性内容台阶、吸顶 Tab 与纯内容 Pager
+ * [POS]: Book 模块单书内容工作台壳层，以影像 Hero/中性内容分层的共享 Chrome 和独立内容滚动承接目录/书摘/相关/书评
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
@@ -141,223 +141,6 @@ private struct BookRelatedGroup: Identifiable {
     let items: [BookRelatedExcerpt]
 }
 
-/// 从封面取色生成不透明页面画布与内容表面，并以正文对比度为上限约束主题色强度。
-struct BookWorkspaceThemePalette {
-    let identifier: UInt64
-    let canvasColor: Color
-    let contentSurfaceColor: Color
-    let headerLeadingColor: Color
-    let headerTrailingColor: Color
-
-    /// 用封面色和当前外观的系统分组底色生成画布、内容表面与非对称 Header 色场。
-    init(tintRGBAHex: UInt32?, colorScheme: ColorScheme) {
-        let isDark = colorScheme == .dark
-        let interfaceStyle: UIUserInterfaceStyle = isDark ? .dark : .light
-        let traits = UITraitCollection(userInterfaceStyle: interfaceStyle)
-        let resolvedBaseColor = UIColor.systemGroupedBackground.resolvedColor(with: traits)
-        let resolvedSurfaceColor = UIColor.secondarySystemGroupedBackground.resolvedColor(with: traits)
-        let base = RGBComponents(uiColor: resolvedBaseColor)
-            ?? (isDark
-                ? RGBComponents(red8: 0x1C, green8: 0x1C, blue8: 0x1E)
-                : RGBComponents(red8: 0xF2, green8: 0xF2, blue8: 0xF7))
-        let surface = RGBComponents(uiColor: resolvedSurfaceColor)
-            ?? (isDark
-                ? RGBComponents(red8: 0x2C, green8: 0x2C, blue8: 0x2E)
-                : RGBComponents(red8: 0xFF, green8: 0xFF, blue8: 0xFF))
-        let fallback = base.color
-        let fallbackIdentifier = UInt64(isDark ? 1 : 0)
-        let primaryText = isDark
-            ? RGBComponents(red8: 0xC6, green8: 0xC8, blue8: 0xCB)
-            : RGBComponents(red8: 0x33, green8: 0x33, blue8: 0x33)
-        let secondaryText = isDark
-            ? RGBComponents(red8: 0x8C, green8: 0x92, blue8: 0x9B)
-            : RGBComponents(red8: 0x66, green8: 0x66, blue8: 0x66)
-        let fallbackContentSurface = Self.accessibleBlend(
-            source: surface,
-            base: base,
-            maximumStrength: 0.7,
-            primaryText: primaryText,
-            secondaryText: secondaryText
-        )
-
-        guard let tintRGBAHex,
-              tintRGBAHex != 0,
-              tintRGBAHex & 0xFF > 0 else {
-            identifier = fallbackIdentifier
-            canvasColor = fallback
-            contentSurfaceColor = fallbackContentSurface.color
-            headerLeadingColor = fallback
-            headerTrailingColor = fallback
-            return
-        }
-
-        let source = RGBComponents(rgbaHex: tintRGBAHex)
-        guard source.saturation >= 0.12 else {
-            identifier = fallbackIdentifier
-            canvasColor = fallback
-            contentSurfaceColor = fallbackContentSurface.color
-            headerLeadingColor = fallback
-            headerTrailingColor = fallback
-            return
-        }
-
-        let canvasSaturationDamping = Self.saturationDamping(
-            for: source.saturation,
-            maximumReduction: 0.25
-        )
-        let headerSaturationDamping = Self.saturationDamping(
-            for: source.saturation,
-            maximumReduction: 0.25
-        )
-
-        let canvas = Self.accessibleBlend(
-            source: source,
-            base: base,
-            maximumStrength: 0.02 * canvasSaturationDamping,
-            primaryText: primaryText,
-            secondaryText: secondaryText
-        )
-        let contentSurface = Self.accessibleBlend(
-            source: surface,
-            base: canvas,
-            maximumStrength: 0.7,
-            primaryText: primaryText,
-            secondaryText: secondaryText
-        )
-        let headerLeading = Self.accessibleBlend(
-            source: source,
-            base: base,
-            maximumStrength: (isDark ? 0.10 : 0.12) * headerSaturationDamping,
-            primaryText: primaryText,
-            secondaryText: secondaryText
-        )
-        let headerTrailing = Self.accessibleBlend(
-            source: source,
-            base: base,
-            maximumStrength: (isDark ? 0.20 : 0.26) * headerSaturationDamping,
-            primaryText: primaryText,
-            secondaryText: secondaryText
-        )
-
-        identifier = (UInt64(tintRGBAHex) << 1) | UInt64(isDark ? 1 : 0)
-        canvasColor = canvas.color
-        contentSurfaceColor = contentSurface.color
-        headerLeadingColor = headerLeading.color
-        headerTrailingColor = headerTrailing.color
-    }
-
-    /// 按区域控制高饱和封面色的抑制幅度，让 Hero 可辨识而正文保持克制。
-    private static func saturationDamping(
-        for saturation: Double,
-        maximumReduction: Double
-    ) -> Double {
-        let normalizedHighSaturation = min(max((saturation - 0.55) / 0.45, 0), 1)
-        return 1 - normalizedHighSaturation * maximumReduction
-    }
-
-    /// 在目标强度内寻找同时满足主要文字 7:1、次要文字 4.5:1 的最高主题色占比。
-    private static func accessibleBlend(
-        source: RGBComponents,
-        base: RGBComponents,
-        maximumStrength: Double,
-        primaryText: RGBComponents,
-        secondaryText: RGBComponents
-    ) -> RGBComponents {
-        var strength = maximumStrength
-        while strength > 0 {
-            let candidate = source.blended(over: base, strength: strength)
-            if contrastRatio(primaryText, candidate) >= 7,
-               contrastRatio(secondaryText, candidate) >= 4.5 {
-                return candidate
-            }
-            strength -= 0.005
-        }
-        return base
-    }
-
-    /// 计算两种不透明 sRGB 颜色的 WCAG 对比度。
-    private static func contrastRatio(_ lhs: RGBComponents, _ rhs: RGBComponents) -> Double {
-        let lighter = max(lhs.relativeLuminance, rhs.relativeLuminance)
-        let darker = min(lhs.relativeLuminance, rhs.relativeLuminance)
-        return (lighter + 0.05) / (darker + 0.05)
-    }
-
-    /// 表达页面私有的不透明 sRGB 分量，并提供混色与亮度计算。
-    private struct RGBComponents {
-        let red: Double
-        let green: Double
-        let blue: Double
-
-        /// 从 RGBA Hex 读取 RGB，来源 alpha 仅由外层用于有效性判断。
-        init(rgbaHex: UInt32) {
-            red = Double((rgbaHex >> 24) & 0xFF) / 255
-            green = Double((rgbaHex >> 16) & 0xFF) / 255
-            blue = Double((rgbaHex >> 8) & 0xFF) / 255
-        }
-
-        /// 从已按外观解析的 UIKit 语义色读取不透明 sRGB 分量。
-        init?(uiColor: UIColor) {
-            var red: CGFloat = 0
-            var green: CGFloat = 0
-            var blue: CGFloat = 0
-            var alpha: CGFloat = 0
-            guard uiColor.getRed(&red, green: &green, blue: &blue, alpha: &alpha) else {
-                return nil
-            }
-            self.init(red: Double(red), green: Double(green), blue: Double(blue))
-        }
-
-        /// 从 0...1 浮点分量构造颜色。
-        init(red: Double, green: Double, blue: Double) {
-            self.red = red
-            self.green = green
-            self.blue = blue
-        }
-
-        /// 从 8bit 分量构造颜色，和现有文字语义令牌保持同源。
-        init(red8: UInt8, green8: UInt8, blue8: UInt8) {
-            self.init(
-                red: Double(red8) / 255,
-                green: Double(green8) / 255,
-                blue: Double(blue8) / 255
-            )
-        }
-
-        var color: Color {
-            Color(.sRGB, red: red, green: green, blue: blue, opacity: 1)
-        }
-
-        var saturation: Double {
-            let maximum = max(red, green, blue)
-            let minimum = min(red, green, blue)
-            return maximum == 0 ? 0 : (maximum - minimum) / maximum
-        }
-
-        var relativeLuminance: Double {
-            0.2126 * Self.linearized(red)
-                + 0.7152 * Self.linearized(green)
-                + 0.0722 * Self.linearized(blue)
-        }
-
-        /// 将封面色以指定占比预混入不透明系统底色。
-        func blended(over base: RGBComponents, strength: Double) -> RGBComponents {
-            let resolvedStrength = min(max(strength, 0), 1)
-            return RGBComponents(
-                red: red * resolvedStrength + base.red * (1 - resolvedStrength),
-                green: green * resolvedStrength + base.green * (1 - resolvedStrength),
-                blue: blue * resolvedStrength + base.blue * (1 - resolvedStrength)
-            )
-        }
-
-        /// 将 sRGB 分量转换为线性亮度分量。
-        private static func linearized(_ component: Double) -> Double {
-            component <= 0.04045
-                ? component / 12.92
-                : pow((component + 0.055) / 1.055, 2.4)
-        }
-    }
-}
-
 /// 单书四域工作台主体；四个滚动容器常驻，保证切换后恢复各自滚动位置。
 private struct BookWorkspaceContentView: View {
 #if DEBUG
@@ -378,8 +161,9 @@ private struct BookWorkspaceContentView: View {
 
     @Environment(AppNavigationCoordinator.self) private var navigationCoordinator
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.verticalSizeClass) private var verticalSizeClass
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
     @State private var selectedSection = BookWorkspaceSection.notes
     @State private var presentationStore = BookWorkspacePresentationStore()
     @State private var searchQueries: [BookWorkspaceSection: String] = [:]
@@ -391,7 +175,7 @@ private struct BookWorkspaceContentView: View {
     @State private var reviewSort = ReviewSort.newest
     @State private var expandedChapterIDs: Set<Int64> = []
     @State private var showsRelatedCategoryPicker = false
-    @State private var isNavigationBarSurfaceVisible = false
+    @State private var isBookHeaderFullyCollapsed = false
     @State private var readLoadingGate = LoadingGate()
     @State private var notesLoadingGate = LoadingGate()
 #if DEBUG
@@ -420,8 +204,9 @@ private struct BookWorkspaceContentView: View {
         }
         .navigationTitle("")
         .navigationBarTitleDisplayMode(.inline)
-        .toolbarBackground(themePalette.canvasColor, for: .navigationBar)
-        .toolbarBackground(navigationBarBackgroundVisibility, for: .navigationBar)
+        .toolbarBackground(Color.surfacePage, for: .navigationBar)
+        .toolbarBackgroundVisibility(.hidden, for: .navigationBar)
+        .toolbarColorScheme(colorScheme, for: .navigationBar)
         .tint(Color.iconPrimary)
         .searchable(
             text: activeSearchQuery,
@@ -431,6 +216,7 @@ private struct BookWorkspaceContentView: View {
         )
         .searchToolbarBehavior(.automatic)
         .toolbar {
+            workspaceNavigationTitle
             toolbarActions
             workspaceToolbar
         }
@@ -442,8 +228,11 @@ private struct BookWorkspaceContentView: View {
             syncReadLoadingVisibility()
             syncNotesLoadingVisibility()
         }
-        .onChange(of: viewModel.book == nil) { _, _ in
+        .onChange(of: viewModel.book == nil) { _, isBookUnavailable in
             syncReadLoadingVisibility()
+            if isBookUnavailable {
+                isBookHeaderFullyCollapsed = false
+            }
         }
         .onChange(of: isSearchPresented) { wasPresented, isPresented in
             guard wasPresented, !isPresented else { return }
@@ -475,6 +264,30 @@ private struct BookWorkspaceContentView: View {
             isSearchPresented = false
             searchQueries.removeAll()
         }
+    }
+
+    /// 常驻工具栏主标题，仅在书籍概览完全收起且搜索未展开时淡入，避免条件插入导致导航栏重排。
+    @ToolbarContentBuilder
+    private var workspaceNavigationTitle: some ToolbarContent {
+        ToolbarItem(placement: .principal) {
+            Text(viewModel.book?.name ?? "")
+                .font(AppTypography.headline)
+                .foregroundStyle(Color.textPrimary)
+                .lineLimit(1)
+                .truncationMode(.tail)
+                .opacity(isWorkspaceNavigationTitleVisible ? 1 : 0)
+                .animation(
+                    reduceMotion ? nil : .easeInOut(duration: 0.16),
+                    value: isWorkspaceNavigationTitleVisible
+                )
+                .accessibilityHidden(!isWorkspaceNavigationTitleVisible)
+                .accessibilityAddTraits(.isHeader)
+        }
+    }
+
+    /// 收敛标题显隐条件；搜索展开时让位给系统搜索框，关闭后按当前折叠状态恢复。
+    private var isWorkspaceNavigationTitleVisible: Bool {
+        isBookHeaderFullyCollapsed && !isSearchPresented && viewModel.book != nil
     }
 
     @ToolbarContentBuilder
@@ -593,7 +406,6 @@ private struct BookWorkspaceContentView: View {
     /// 组合唯一固定书籍头部、固定 Tab 与四个常驻纯内容页。
     private func workspace(_ book: BookDetail) -> some View {
         let coordinator = navigationCoordinator
-        let palette = themePalette
         let notesKeyword = searchQuery(.notes)
         let relatedKeyword = searchQuery(.related)
         let reviewsKeyword = searchQuery(.reviews)
@@ -609,13 +421,14 @@ private struct BookWorkspaceContentView: View {
                 notesCount: workspaceNotesCount(for: book),
                 notesLoadState: viewModel.notesLoadState,
                 reduceMotion: reduceMotion,
-                canvasColor: palette.canvasColor,
-                contentSurfaceColor: palette.contentSurfaceColor,
-                headerLeadingColor: palette.headerLeadingColor,
-                headerTrailingColor: palette.headerTrailingColor,
-                canvasPaletteID: palette.identifier,
+                colorScheme: colorScheme,
+                dynamicTypeSize: dynamicTypeSize,
+                verticalSizeClass: verticalSizeClass,
+                canvasColor: Color.surfacePage,
+                contentSurfaceColor: Color.surfaceCard,
+                appearanceID: workspaceAppearanceID,
                 onSectionCommit: commitSection,
-                onNavigationBarSurfaceChange: updateNavigationBarSurfaceVisibility,
+                onBookHeaderFullyCollapsedChange: updateBookHeaderCollapseState,
                 onOpenReadingDetail: {
                     onOpenReadingDetail(bookId)
                 },
@@ -661,7 +474,7 @@ private struct BookWorkspaceContentView: View {
             )
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .ignoresSafeArea(.container, edges: [.top, .bottom])
-        .background(palette.canvasColor.ignoresSafeArea())
+        .background(Color.surfacePage.ignoresSafeArea())
     }
 
     /// 接收原生 Pager 最终落定域；拖动中途不会提前切换搜索、菜单或底部操作语义。
@@ -670,12 +483,10 @@ private struct BookWorkspaceContentView: View {
         selectedSection = section
     }
 
-    /// Header 完全收起时才切换导航栏不透明表面；连续滚动位置不进入 SwiftUI 状态。
-    private func updateNavigationBarSurfaceVisibility(_ isVisible: Bool) {
-        guard isNavigationBarSurfaceVisible != isVisible else { return }
-        withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.16)) {
-            isNavigationBarSurfaceVisible = isVisible
-        }
+    /// 只接收 Header 完全收起边界的离散变化，避免连续滚动偏移进入 SwiftUI 状态树。
+    private func updateBookHeaderCollapseState(_ isFullyCollapsed: Bool) {
+        guard isBookHeaderFullyCollapsed != isFullyCollapsed else { return }
+        isBookHeaderFullyCollapsed = isFullyCollapsed
     }
 
     @ViewBuilder
@@ -844,7 +655,6 @@ private struct BookWorkspaceContentView: View {
     @ViewBuilder
     private func notesWorkspaceContent(_ book: BookDetail) -> some View {
         let groups = noteGroups(for: book)
-        let palette = themePalette
         if groups.isEmpty {
             contentUnavailable(
                 title: normalizedSearchQuery(.notes).isEmpty ? "还没有书摘" : "没有匹配的书摘",
@@ -859,8 +669,8 @@ private struct BookWorkspaceContentView: View {
                 title: group.title,
                 count: group.notes.count,
                 isStarred: false,
-                canvasColor: palette.canvasColor,
-                canvasPaletteID: palette.identifier,
+                canvasColor: Color.surfacePage,
+                canvasPaletteID: workspaceAppearanceID,
                 reduceMotion: reduceMotion
             )
             .padding(.top, Spacing.section)
@@ -879,8 +689,8 @@ private struct BookWorkspaceContentView: View {
                         title: group.title,
                         count: group.notes.count,
                         isStarred: group.isStarred,
-                        canvasColor: palette.canvasColor,
-                        canvasPaletteID: palette.identifier,
+                        canvasColor: Color.surfacePage,
+                        canvasPaletteID: workspaceAppearanceID,
                         reduceMotion: reduceMotion
                     )
                 } footer: {
@@ -899,7 +709,7 @@ private struct BookWorkspaceContentView: View {
             BookWorkspaceStatefulNoteItem(
                 row: BookWorkspaceNoteRow(note: note, footerText: note.footerText),
                 state: presentationStore.rowState(for: note.id),
-                surfaceColor: themePalette.contentSurfaceColor,
+                surfaceColor: Color.surfaceCard,
                 onOpen: { openNote(note) },
                 onEdit: { editNote(note) }
             )
@@ -1432,17 +1242,9 @@ private struct BookWorkspaceContentView: View {
         )
     }
 
-    /// 普通状态让导航栏浮在主题画布上；减少透明度时使用同色不透明表面保证可读性。
-    private var navigationBarBackgroundVisibility: Visibility {
-        reduceTransparency || isNavigationBarSurfaceVisible ? .visible : .hidden
-    }
-
-    /// 将当前封面取色与系统外观收敛为工作台唯一页面色板。
-    private var themePalette: BookWorkspaceThemePalette {
-        BookWorkspaceThemePalette(
-            tintRGBAHex: viewModel.headerTintRGBAHex,
-            colorScheme: colorScheme
-        )
+    /// 为中性内容表面的深浅外观提供稳定刷新身份，不再与封面取色耦合。
+    private var workspaceAppearanceID: UInt64 {
+        UInt64(colorScheme == .dark ? 1 : 0)
     }
 
     /// 将 Android 毫秒时间戳转换为列表级日期文案。
