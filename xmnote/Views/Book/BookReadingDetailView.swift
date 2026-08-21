@@ -1,6 +1,6 @@
 /**
- * [INPUT]: 依赖 RepositoryContainer、BookReadingDetailViewModel、BookReadingDetailContent、业务 Sheet、LoadingGate 与完成庆祝层
- * [OUTPUT]: 对外提供 BookReadingDetailView，承载单一封面色沉浸背景、单书阅读详情加载、编辑、同构长图分享和一次性读完庆祝
+ * [INPUT]: 依赖 RepositoryContainer、AppNavigationCoordinator、BookReadingDetailViewModel、BookReadingDetailContent、业务 Sheet、LoadingGate 与完成庆祝层
+ * [OUTPUT]: 对外提供 BookReadingDetailView，承载单书阅读详情、全屏书籍编辑、同构长图分享和一次性读完庆祝
  * [POS]: Views/Book 独立二级页面壳层，页面内容归位到 Components，业务弹层归位到 Sheets
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -9,9 +9,8 @@ import SwiftUI
 
 /// 单书阅读详情页面；只拥有页面级呈现状态，数据事实与写入统一委托给 ViewModel/Repository。
 struct BookReadingDetailView: View {
-    let onOpenBookRoute: (BookRoute) -> Void
-
     @Environment(RepositoryContainer.self) private var repositories
+    @Environment(AppNavigationCoordinator.self) private var navigationCoordinator
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.accessibilityReduceMotion) private var accessibilityReduceMotion
     @Environment(\.accessibilityReduceTransparency) private var accessibilityReduceTransparency
@@ -20,18 +19,18 @@ struct BookReadingDetailView: View {
     @State private var presentedSheet: PresentedSheet?
     @State private var expandedMonthIDs: Set<MonthlyReadingChart.MonthID> = []
     @State private var didApplyMonthlyDefault = false
+    @State private var resolvedVisualTheme: BookReadingDetailTheme?
     @State private var toastCenter = XMToastCenter()
 
-    /// 注入书籍主键与书籍模块路由回调。
-    init(bookID: Int64, onOpenBookRoute: @escaping (BookRoute) -> Void) {
-        self.onOpenBookRoute = onOpenBookRoute
+    /// 注入书籍主键；浏览路径由外层持有，编辑任务交给环境协调器。
+    init(bookID: Int64) {
         _viewModel = State(initialValue: BookReadingDetailViewModel(bookID: bookID))
     }
 
     var body: some View {
         ZStack {
-            BookReadingDetailAtmosphere(theme: visualTheme, topPlateau: 0.20)
-                .ignoresSafeArea(.container, edges: [.top, .bottom])
+            visualTheme.neutralBackground
+                .ignoresSafeArea()
             pageContent
 
             if let tracker = viewModel.completionTracker {
@@ -43,11 +42,8 @@ struct BookReadingDetailView: View {
                 .transition(.opacity)
             }
         }
+        .accessibilityIdentifier("book.reading-detail.\(viewModel.bookID)")
         .animation(.smooth, value: viewModel.completionTracker)
-        .animation(
-            accessibilityReduceMotion ? .easeOut(duration: 0.12) : .easeInOut(duration: 0.8),
-            value: visualTheme.identity
-        )
         .navigationTitle("")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar { toolbarContent }
@@ -63,6 +59,9 @@ struct BookReadingDetailView: View {
             await viewModel.resolveCoverThemeColor(using: repositories.readCalendarColorRepository)
         }
         .onChange(of: viewModel.loadPhase) { _, _ in syncLoadingGate() }
+        .onChange(of: themeInput, initial: true) { _, input in
+            updateVisualTheme(input)
+        }
         .onChange(of: viewModel.snapshot?.book.id) { _, newValue in
             guard newValue != nil, !didApplyMonthlyDefault else { return }
             didApplyMonthlyDefault = true
@@ -105,18 +104,18 @@ private extension BookReadingDetailView {
                 presentedSheet = .share
             } label: {
                 Image(systemName: "square.and.arrow.up")
+                    .foregroundStyle(Color.primary)
             }
-            .tint(Color.textPrimary)
             .accessibilityLabel("分享阅读详情")
             .disabled(viewModel.snapshot == nil || viewModel.isWriting)
 
             Button {
-                onOpenBookRoute(.edit(bookId: viewModel.bookID))
+                navigationCoordinator.presentBookEditor(mode: .edit(bookId: viewModel.bookID))
             } label: {
                 Image(systemName: "pencil")
                     .font(AppTypography.headlineSemibold)
+                    .foregroundStyle(Color.primary)
             }
-            .tint(Color.textPrimary)
             .accessibilityLabel("编辑书籍")
             .disabled(viewModel.isWriting)
 
@@ -127,9 +126,9 @@ private extension BookReadingDetailView {
             } label: {
                 Image(systemName: "ellipsis")
                     .font(AppTypography.bodyMedium)
+                    .foregroundStyle(Color.primary)
                     .frame(width: Spacing.actionReserved, height: Spacing.actionReserved)
             }
-            .tint(Color.textPrimary)
             .accessibilityLabel("阅读详情更多操作")
             .disabled(viewModel.isWriting)
         }
@@ -138,40 +137,53 @@ private extension BookReadingDetailView {
     @ViewBuilder
     var pageContent: some View {
         if let snapshot = viewModel.snapshot {
-            ScrollView {
-                BookReadingDetailContent(
-                    snapshot: snapshot,
-                    mode: .interactive,
-                    theme: visualTheme,
-                    ratingValue: Binding(
-                        get: { viewModel.ratingValue },
-                        set: { viewModel.ratingValue = $0 }
-                    ),
-                    expandedMonthIDs: $expandedMonthIDs,
-                    onOpenCover: { presentedSheet = .cover },
-                    onOpenBookInfo: { onOpenBookRoute(.edit(bookId: viewModel.bookID)) },
-                    onRatingChanged: { value in
-                        Task {
-                            await viewModel.updateRating(
-                                value,
-                                using: repositories.bookReadingDetailRepository
+            GeometryReader { geometry in
+                let topSafeAreaExtent = max(geometry.safeAreaInsets.top, 0)
+
+                ScrollView {
+                    BookReadingDetailContent(
+                        snapshot: snapshot,
+                        mode: .interactive,
+                        theme: visualTheme,
+                        ratingValue: Binding(
+                            get: { viewModel.ratingValue },
+                            set: { viewModel.ratingValue = $0 }
+                        ),
+                        expandedMonthIDs: $expandedMonthIDs,
+                        onOpenCover: { presentedSheet = .cover },
+                        onOpenBookInfo: {
+                            navigationCoordinator.presentBookEditor(
+                                mode: .edit(bookId: viewModel.bookID)
                             )
-                        }
-                    },
-                    onChangeReadingStatus: { presentedSheet = .addStatus },
-                    onEditReadingStatus: { item in
-                        guard let recordID = item.recordID else { return }
-                        presentedSheet = .editStatus(recordID)
-                    },
-                    onUpdateReadingProgress: { presentedSheet = .progress }
-                )
-                .padding(.horizontal, Spacing.screenEdge)
-                .padding(.top, Spacing.contentEdge)
-                .padding(.bottom, Spacing.base)
-                .frame(maxWidth: .infinity)
+                        },
+                        onRatingChanged: { value in
+                            Task {
+                                await viewModel.updateRating(
+                                    value,
+                                    using: repositories.bookReadingDetailRepository
+                                )
+                            }
+                        },
+                        onChangeReadingStatus: { presentedSheet = .addStatus },
+                        onEditReadingStatus: { item in
+                            guard let recordID = item.recordID else { return }
+                            presentedSheet = .editStatus(recordID)
+                        },
+                        onUpdateReadingProgress: { presentedSheet = .progress }
+                    )
+                    .padding(.horizontal, Spacing.screenEdge)
+                    .padding(.top, Spacing.contentEdge + topSafeAreaExtent)
+                    .padding(.bottom, Spacing.base)
+                    .frame(maxWidth: .infinity)
+                    .background(alignment: .top) {
+                        BookReadingDetailAtmosphere(theme: visualTheme)
+                    }
+                }
+                .scrollBounceBehavior(.always)
+                .ignoresSafeArea(.container, edges: [.top, .bottom])
+                .scrollEdgeEffectStyle(.soft, for: .bottom)
+                .scrollEdgeEffectHidden(true, for: .top)
             }
-            .scrollBounceBehavior(.always)
-            .scrollEdgeEffectStyle(.soft, for: [.top, .bottom])
         } else if viewModel.loadPhase == .failed {
             ContentUnavailableView(
                 "无法加载阅读详情",
@@ -284,12 +296,49 @@ private extension BookReadingDetailView {
     }
 
     var visualTheme: BookReadingDetailTheme {
-        BookReadingDetailTheme(
+        resolvedVisualTheme ?? BookReadingDetailTheme(
+            coverColor: .pending,
+            isEnabled: false,
+            colorScheme: colorScheme,
+            reducesTransparency: accessibilityReduceTransparency
+        )
+    }
+
+    struct ThemeInput: Equatable {
+        let coverColor: BookCoverThemeColor
+        let isEnabled: Bool
+        let colorScheme: ColorScheme
+        let reducesTransparency: Bool
+    }
+
+    var themeInput: ThemeInput {
+        ThemeInput(
             coverColor: viewModel.coverThemeColor,
             isEnabled: viewModel.setting.isCoverBackgroundEnabled,
             colorScheme: colorScheme,
             reducesTransparency: accessibilityReduceTransparency
         )
+    }
+
+    /// 仅在主题输入组合变化时计算一次，并用同一状态提交同步切换背景、卡面、文字与图表色。
+    func updateVisualTheme(_ input: ThemeInput) {
+        let nextTheme = BookReadingDetailTheme(
+            coverColor: input.coverColor,
+            isEnabled: input.isEnabled,
+            colorScheme: input.colorScheme,
+            reducesTransparency: input.reducesTransparency
+        )
+        guard !accessibilityReduceMotion else {
+            var transaction = Transaction()
+            transaction.disablesAnimations = true
+            withTransaction(transaction) {
+                resolvedVisualTheme = nextTheme
+            }
+            return
+        }
+        withAnimation(.easeInOut(duration: 0.22)) {
+            resolvedVisualTheme = nextTheme
+        }
     }
 
     /// 设置首次月图状态；默认收起时保持空集合，否则一次性展开当前全部月份。

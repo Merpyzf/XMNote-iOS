@@ -755,6 +755,11 @@ enum MonthlyReadingChartTypography {
         relativeTo: .caption2,
         minimumPointSize: 10.8
     )
+    static let arrow: Font = AppTypography.fixed(
+        baseSize: 14,
+        relativeTo: .caption,
+        minimumPointSize: 14
+    )
     static let dailyDate: Font = AppTypography.fixed(
         baseSize: 12,
         relativeTo: .caption,

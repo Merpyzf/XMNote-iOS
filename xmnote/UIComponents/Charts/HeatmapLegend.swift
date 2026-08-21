@@ -89,6 +89,19 @@ struct HeatmapLegendStyle {
         self.textColor = textColor
     }
 
+    /// 保留热力图布局规格，仅替换当前页面的图例文字语义色。
+    func replacing(textColor: Color) -> HeatmapLegendStyle {
+        HeatmapLegendStyle(
+            arrangement: arrangement,
+            squareSize: squareSize,
+            squareSpacing: squareSpacing,
+            labelSpacing: labelSpacing,
+            cornerRadius: cornerRadius,
+            textSize: textSize,
+            textColor: textColor
+        )
+    }
+
     static let chart = HeatmapLegendStyle(
         arrangement: .separated,
         squareSize: 10,

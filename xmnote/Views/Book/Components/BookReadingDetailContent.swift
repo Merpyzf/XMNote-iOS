@@ -1,22 +1,37 @@
 /**
  * [INPUT]: 依赖单书阅读详情领域快照、CalendarHeatmap、MonthlyReadingChart、ReadingStatusTimeline、XMBookCover 与 XMRatingBar
- * [OUTPUT]: 对外提供 BookReadingDetailTheme、单一载体沉浸背景、BookReadingDetailContent 与内容模式，统一生产页面和长图分享
+ * [OUTPUT]: 对外提供一次计算的 BookReadingDetailTheme、单向沉浸背景、Android 同源半透明内容表面、BookReadingDetailContent 与内容模式
  * [POS]: Views/Book/Components 阅读详情页面私有内容组件，不拥有数据查询、写入或导航状态
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
 import SwiftUI
 
-/// 页面私有视觉主题，把 Android 封面代表色/强调色映射为整页氛围、半透明内容层和图表色阶。
+/// 页面私有视觉主题，把封面颜色种子映射为单向沉浸画布、半透明内容表面和可读图表色阶。
 struct BookReadingDetailTheme {
-    let identity: UInt64
     let isCoverDerived: Bool
-    let representative: Color
-    let background: Color
+    let neutralBackground: Color
+    let gradientStartColor: Color
+    let gradientEndColor: Color
+    let cardSurface: Color
+    let onCardPrimary: Color
+    let onCardSecondary: Color
+    let onCardPrimaryUIColor: UIColor
+    let nestedBackground: Color
+    let attributeBackground: Color
     let accent: Color
-    let onRepresentative: Color
+    let onAccent: Color
     let colorScheme: ColorScheme
     let reducesTransparency: Bool
+
+    private let accentVeryLess: Color
+    private let accentLess: Color
+    private let accentMore: Color
+    private let monthTrackColor: Color
+    private let monthBarColors: [Color]
+    private let monthBarForeground: Color
+    private let dailyBarColors: [Color]
+    private let dailyBarForeground: Color
 
     /// 仅在真实封面取色成功且用户开启渐变时启用主题；失败结果不使用哈希色伪造封面氛围。
     init(
@@ -25,117 +40,547 @@ struct BookReadingDetailTheme {
         colorScheme: ColorScheme,
         reducesTransparency: Bool
     ) {
-        let isResolved = isEnabled && coverColor.state == .resolved
-        self.identity = isResolved
-            ? (UInt64(coverColor.backgroundRGBAHex) << 32) | UInt64(coverColor.accentRGBAHex)
-            : 0
+        let isResolved = isEnabled
+            && coverColor.state == .resolved
+            && coverColor.backgroundRGBAHex != 0
+            && coverColor.backgroundRGBAHex & 0xFF > 0
+        let systemPalette = SystemPalette(colorScheme: colorScheme)
+        let immersivePalette = ImmersivePalette(
+            tintRGBAHex: isResolved ? coverColor.backgroundRGBAHex : nil,
+            colorScheme: colorScheme,
+            reducesTransparency: reducesTransparency,
+            systemPalette: systemPalette
+        )
+        let fallbackAccentRGBAHex: UInt32 = colorScheme == .dark ? 0x8C929BFF : 0x666666FF
+        let resolvedAccentRGBAHex = isResolved
+            ? coverColor.accentRGBAHex
+            : fallbackAccentRGBAHex
+        let accentPalette = AccentPalette(
+            rgbaHex: resolvedAccentRGBAHex
+        )
+        let readingChartPalette = ReadingChartPalette(
+            rgbaHex: resolvedAccentRGBAHex,
+            surface: systemPalette.card,
+            preferredForegroundRGBAHex: isResolved && coverColor.onRepresentativeRGBAHex != 0
+                ? coverColor.onRepresentativeRGBAHex
+                : nil
+        )
         self.isCoverDerived = isResolved
-        self.representative = isResolved
-            ? Self.opaqueColor(coverColor.representativeRGBAHex)
-            : .clear
-        self.background = isResolved
-            ? Self.opaqueColor(coverColor.backgroundRGBAHex)
-            : .clear
-        self.accent = isResolved
-            ? Self.opaqueColor(coverColor.accentRGBAHex)
-            : .textSecondary
-        self.onRepresentative = isResolved
-            ? Self.opaqueColor(coverColor.onRepresentativeRGBAHex)
-            : .textPrimary
+        self.neutralBackground = immersivePalette.neutralBackground
+        self.gradientStartColor = immersivePalette.gradientStartColor
+        self.gradientEndColor = immersivePalette.gradientEndColor
+        self.cardSurface = immersivePalette.cardSurface
+        self.onCardPrimary = immersivePalette.onCardPrimary
+        self.onCardSecondary = immersivePalette.onCardSecondary
+        self.onCardPrimaryUIColor = immersivePalette.onCardPrimaryUIColor
+        self.nestedBackground = immersivePalette.nestedBackground
+        self.attributeBackground = immersivePalette.attributeBackground
+        self.accent = accentPalette.strong
+        self.onAccent = accentPalette.foreground
         self.colorScheme = colorScheme
         self.reducesTransparency = reducesTransparency
-    }
-
-    var cardBackground: Color {
-        Color.surfaceCard.opacity(reducesTransparency ? 0.94 : (colorScheme == .dark ? 0.62 : 0.30))
-    }
-
-    var nestedBackground: Color {
-        Color.surfaceCard.opacity(reducesTransparency ? 0.98 : (colorScheme == .dark ? 0.48 : 0.30))
-    }
-
-    var attributeBackground: Color {
-        Color.surfaceCard.opacity(reducesTransparency ? 0.98 : (colorScheme == .dark ? 0.68 : 0.45))
+        self.accentVeryLess = accentPalette.veryLess
+        self.accentLess = accentPalette.less
+        self.accentMore = accentPalette.more
+        self.monthTrackColor = readingChartPalette.monthTrack
+        self.monthBarColors = readingChartPalette.monthColors
+        self.monthBarForeground = readingChartPalette.monthForeground
+        self.dailyBarColors = readingChartPalette.dailyColors
+        self.dailyBarForeground = readingChartPalette.dailyForeground
     }
 
     var border: Color {
-        colorScheme == .dark ? Color.white.opacity(0.12) : Color.white.opacity(0.64)
+        colorScheme == .dark ? Color.white.opacity(0.12) : Color.black.opacity(0.06)
     }
 
     var heatmapPalette: HeatmapColorPalette {
         HeatmapColorPalette(
             none: nestedBackground,
-            veryLess: accent.opacity(colorScheme == .dark ? 0.42 : 0.34),
-            less: accent.opacity(colorScheme == .dark ? 0.58 : 0.52),
-            more: accent.opacity(colorScheme == .dark ? 0.76 : 0.72),
-            veryMore: accent.opacity(0.96)
+            veryLess: accentVeryLess,
+            less: accentLess,
+            more: accentMore,
+            veryMore: accent
         )
     }
 
     var calendarStyle: CalendarHeatmapStyle {
         CalendarHeatmapStyle(
             palette: heatmapPalette,
-            monthTitleColor: .textSecondary,
-            emptyDayTextColor: .textSecondary,
-            activeDayTextColor: .white
+            monthTitleColor: onCardSecondary,
+            emptyDayTextColor: onCardSecondary,
+            activeDayTextColor: onAccent
         )
+    }
+
+    var heatmapLegendStyle: HeatmapLegendStyle {
+        .calendarReadingDetail.replacing(textColor: onCardSecondary)
     }
 
     var monthlyChartStyle: MonthlyReadingChartStyle {
         MonthlyReadingChartStyle(
-            monthTrackColor: nestedBackground,
-            monthBarColors: [accent.opacity(0.48), accent.opacity(0.94)],
-            collapsedSummaryColor: .white,
-            expandedSummaryColor: .textSecondary,
-            collapsedArrowColor: .white,
-            expandedArrowColor: .iconSecondary,
-            dailyBarColors: [accent.opacity(0.56), accent],
-            dailyDateColor: .white,
-            dailyDurationColor: .white
+            monthTrackColor: monthTrackColor,
+            monthBarColors: monthBarColors,
+            collapsedSummaryColor: monthBarForeground,
+            expandedSummaryColor: onCardSecondary,
+            collapsedArrowColor: monthBarForeground,
+            expandedArrowColor: onCardSecondary,
+            dailyBarColors: dailyBarColors,
+            dailyDateColor: dailyBarForeground,
+            dailyDurationColor: dailyBarForeground
         )
     }
 
-    /// 忽略领域值中的 alpha，以不透明 RGB 作为后续 SwiftUI 分层混合的稳定输入。
-    private static func opaqueColor(_ rgbaHex: UInt32) -> Color {
-        Color(
-            red: Double((rgbaHex >> 24) & 0xFF) / 255,
-            green: Double((rgbaHex >> 16) & 0xFF) / 255,
-            blue: Double((rgbaHex >> 8) & 0xFF) / 255
+    var timelineStyle: ReadingStatusTimeline.Style {
+        ReadingStatusTimeline.Style(
+            primaryTextColor: onCardPrimary,
+            secondaryTextColor: onCardSecondary
         )
     }
-}
 
-/// 从 Android `#F9F9F9` 起点过渡到封面背景色；每个页面或长图载体只实例化一层以保持连续。
-struct BookReadingDetailAtmosphere: View {
-    let theme: BookReadingDetailTheme
-    var topPlateau: CGFloat = 0
+    /// 阅读详情专用沉浸色板；Android 同源背景色负责单向画布，系统语义色负责半透明内容表面。
+    private struct ImmersivePalette {
+        let neutralBackground: Color
+        let gradientStartColor: Color
+        let gradientEndColor: Color
+        let cardSurface: Color
+        let onCardPrimary: Color
+        let onCardSecondary: Color
+        let onCardPrimaryUIColor: UIColor
+        let nestedBackground: Color
+        let attributeBackground: Color
 
-    var body: some View {
-        ZStack {
-            Color.surfacePage
-
-            if theme.isCoverDerived {
-                LinearGradient(
-                    stops: [
-                        .init(color: atmosphereTopColor, location: 0),
-                        .init(color: atmosphereTopColor, location: topPlateau),
-                        .init(color: theme.background, location: 1),
-                    ],
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
-
-                if theme.colorScheme == .dark {
-                    Color.black.opacity(0.30)
-                }
+        /// 将封面色映射为整页渐变，并以 Android 的 30% 卡面为起点完成 AA 可读性校准。
+        init(
+            tintRGBAHex: UInt32?,
+            colorScheme: ColorScheme,
+            reducesTransparency: Bool,
+            systemPalette: SystemPalette
+        ) {
+            let isDark = colorScheme == .dark
+            let source: RGBComponents?
+            if let tintRGBAHex {
+                source = RGBComponents(rgbaHex: tintRGBAHex)
+            } else {
+                source = nil
             }
+            let canvas = source.map {
+                isDark ? $0.blended(toward: .black, amount: 0.30) : $0
+            } ?? systemPalette.page
+            let gradientStart = source.map {
+                Self.accessibleTint(
+                    source: $0,
+                    base: systemPalette.page,
+                    maximumStrength: isDark ? 0.14 : 0.18,
+                    primaryText: systemPalette.primaryText
+                )
+            } ?? systemPalette.page
+            let usesTransparentTheme = source != nil && !reducesTransparency
+            neutralBackground = systemPalette.page.color
+            gradientStartColor = gradientStart.color
+            gradientEndColor = canvas.color
+            if usesTransparentTheme {
+                let cardPresentation = Self.readableCardPresentation(
+                    overlay: systemPalette.card,
+                    substrates: [gradientStart, canvas],
+                    colorScheme: colorScheme,
+                    secondaryTextPole: systemPalette.primaryText
+                )
+                cardSurface = systemPalette.card.color(opacity: cardPresentation.surfaceOpacity)
+                onCardPrimary = cardPresentation.primary.color
+                onCardSecondary = cardPresentation.secondaryPole.color(
+                    opacity: cardPresentation.secondaryOpacity
+                )
+                onCardPrimaryUIColor = cardPresentation.primary.uiColor
+                nestedBackground = isDark
+                    ? RGBComponents.white.color(opacity: 0.05)
+                    : systemPalette.nested.color(opacity: 0.30)
+                attributeBackground = systemPalette.card.color(opacity: 0.45)
+            } else {
+                cardSurface = systemPalette.card.color
+                onCardPrimary = systemPalette.primaryText.color
+                onCardSecondary = systemPalette.secondaryText.color
+                onCardPrimaryUIColor = systemPalette.primaryText.uiColor
+                nestedBackground = systemPalette.nested.color
+                attributeBackground = systemPalette.nested.color
+            }
+        }
+
+        private struct CardPresentation {
+            let surfaceOpacity: Double
+            let primary: RGBComponents
+            let secondaryPole: RGBComponents
+            let secondaryOpacity: Double
+        }
+
+        /// 先增强卡内文字，再以 0.5% 步进增强卡面；卡面强度被硬性限制在 60%。
+        private static func readableCardPresentation(
+            overlay: RGBComponents,
+            substrates: [RGBComponents],
+            colorScheme: ColorScheme,
+            secondaryTextPole: RGBComponents
+        ) -> CardPresentation {
+            let textPole: RGBComponents = colorScheme == .dark ? .white : .black
+            var surfaceOpacity = 0.30
+            while surfaceOpacity <= 0.600_001 {
+                let composites = substrates.map {
+                    $0.blended(toward: overlay, amount: surfaceOpacity)
+                }
+                let hasPrimaryContrast = composites.allSatisfy {
+                    textPole.contrastRatio(with: $0) >= 4.5
+                }
+                if hasPrimaryContrast,
+                   let secondaryOpacity = readableSecondaryOpacity(
+                       pole: secondaryTextPole,
+                       surfaces: composites
+                   ) {
+                    return CardPresentation(
+                        surfaceOpacity: surfaceOpacity,
+                        primary: textPole,
+                        secondaryPole: secondaryTextPole,
+                        secondaryOpacity: secondaryOpacity
+                    )
+                }
+                surfaceOpacity += 0.005
+            }
+
+            return CardPresentation(
+                surfaceOpacity: 0.60,
+                primary: textPole,
+                secondaryPole: secondaryTextPole,
+                secondaryOpacity: 1
+            )
+        }
+
+        /// 从 Android 的 60% 次要文字强度开始，仅提高前景强度直到普通文字达到 AA。
+        private static func readableSecondaryOpacity(
+            pole: RGBComponents,
+            surfaces: [RGBComponents]
+        ) -> Double? {
+            var opacity = 0.60
+            while opacity <= 1.000_001 {
+                let isReadable = surfaces.allSatisfy { surface in
+                    let renderedText = surface.blended(toward: pole, amount: opacity)
+                    return renderedText.contrastRatio(with: surface) >= 4.5
+                }
+                if isReadable {
+                    return min(opacity, 1)
+                }
+                opacity += 0.005
+            }
+            return nil
+        }
+
+        /// 在顶部允许的弱主题占比内寻找满足主要文字对比度的最大混色。
+        private static func accessibleTint(
+            source: RGBComponents,
+            base: RGBComponents,
+            maximumStrength: Double,
+            primaryText: RGBComponents
+        ) -> RGBComponents {
+            var strength = maximumStrength
+            while strength > 0 {
+                let candidate = base.blended(toward: source, amount: strength)
+                let hasPrimaryContrast = primaryText.contrastRatio(with: candidate) >= 7
+                if hasPrimaryContrast {
+                    return candidate
+                }
+                strength -= 0.005
+            }
+            return base
         }
     }
 
-    private var atmosphereTopColor: Color {
-        theme.colorScheme == .dark
-            ? Color.surfacePage
-            : Color(red: 249 / 255, green: 249 / 255, blue: 249 / 255)
+    /// 按当前外观解析系统语义表面和项目文字色，供不透明混色与对比度计算使用。
+    private struct SystemPalette {
+        let page: RGBComponents
+        let card: RGBComponents
+        let nested: RGBComponents
+        let primaryText: RGBComponents
+        let secondaryText: RGBComponents
+
+        /// 将 UIKit 动态语义色解析到指定浅深色外观，避免渲染时再次叠加透明度。
+        init(colorScheme: ColorScheme) {
+            let isDark = colorScheme == .dark
+            let traits = UITraitCollection(userInterfaceStyle: isDark ? .dark : .light)
+            let fallbackPage = isDark
+                ? RGBComponents(red8: 0x1C, green8: 0x1C, blue8: 0x1E)
+                : RGBComponents(red8: 0xF2, green8: 0xF2, blue8: 0xF7)
+            let fallbackCard = isDark
+                ? RGBComponents(red8: 0x1C, green8: 0x1C, blue8: 0x1E)
+                : .white
+            let fallbackNested = isDark
+                ? RGBComponents(red8: 0x2C, green8: 0x2C, blue8: 0x2E)
+                : RGBComponents(red8: 0xF2, green8: 0xF2, blue8: 0xF7)
+
+            page = RGBComponents(
+                uiColor: UIColor.systemGroupedBackground.resolvedColor(with: traits)
+            ) ?? fallbackPage
+            card = RGBComponents(
+                uiColor: UIColor.secondarySystemGroupedBackground.resolvedColor(with: traits)
+            ) ?? fallbackCard
+            nested = RGBComponents(
+                uiColor: UIColor.tertiarySystemGroupedBackground.resolvedColor(with: traits)
+            ) ?? fallbackNested
+            primaryText = isDark
+                ? RGBComponents(red8: 0xC6, green8: 0xC8, blue8: 0xCB)
+                : RGBComponents(red8: 0x33, green8: 0x33, blue8: 0x33)
+            secondaryText = isDark
+                ? RGBComponents(red8: 0x8C, green8: 0x92, blue8: 0x9B)
+                : RGBComponents(red8: 0x66, green8: 0x66, blue8: 0x66)
+        }
+    }
+
+    /// 把图表强调色转换为同一前景下均可读的四级色阶，避免低透明色块再次透出页面底色。
+    private struct AccentPalette {
+        let strong: Color
+        let veryLess: Color
+        let less: Color
+        let more: Color
+        let foreground: Color
+
+        /// 选择黑白中对比度更高的一侧，并朝该侧的对立底色生成不透明色阶。
+        init(rgbaHex: UInt32) {
+            let source = RGBComponents(rgbaHex: rgbaHex)
+            let blackContrast = source.contrastRatio(with: .black)
+            let whiteContrast = source.contrastRatio(with: .white)
+            let usesDarkForeground = blackContrast >= whiteContrast
+            let contrastPole: RGBComponents = usesDarkForeground ? .white : .black
+
+            strong = source.color
+            veryLess = source.blended(toward: contrastPole, amount: 0.34).color
+            less = source.blended(toward: contrastPole, amount: 0.22).color
+            more = source.blended(toward: contrastPole, amount: 0.10).color
+            foreground = usesDarkForeground ? .black : .white
+        }
+    }
+
+    /// 月度与每日 Bar 使用独立柔化色板，避免热力图色阶的高识别度直接污染长条图。
+    private struct ReadingChartPalette {
+        let monthTrack: Color
+        let monthColors: [Color]
+        let monthForeground: Color
+        let dailyColors: [Color]
+        let dailyForeground: Color
+
+        /// 复刻 Android 的 HSL 去饱和与不透明卡面混色参数，并优先使用 Android Palette 产出的图表前景色。
+        init(
+            rgbaHex: UInt32,
+            surface: RGBComponents,
+            preferredForegroundRGBAHex: UInt32?
+        ) {
+            let source = RGBComponents(rgbaHex: rgbaHex)
+            let preferredForeground = preferredForegroundRGBAHex.map {
+                RGBComponents(rgbaHex: $0)
+            }
+            let monthEnd = source
+                .desaturated(by: 0.14)
+                .blended(toward: surface, amount: 0.16)
+            let monthStart = monthEnd.blended(toward: surface, amount: 0.42)
+            let dailyEnd = source
+                .desaturated(by: 0.18)
+                .blended(toward: surface, amount: 0.22)
+            let dailyStart = dailyEnd.blended(toward: surface, amount: 0.48)
+
+            monthTrack = source.blended(toward: surface, amount: 0.84).color
+            monthColors = [monthStart.color, monthEnd.color]
+            monthForeground = Self.readableForeground(
+                preferred: preferredForeground,
+                for: [monthStart, monthEnd]
+            )
+            dailyColors = [dailyStart.color, dailyEnd.color]
+            dailyForeground = Self.readableForeground(
+                preferred: preferredForeground,
+                for: [dailyStart, dailyEnd]
+            )
+        }
+
+        /// 优先复用 Android 的前景色；失去可读性时回退到当前 iOS 的黑白对比度策略。
+        private static func readableForeground(
+            preferred: RGBComponents?,
+            for backgrounds: [RGBComponents]
+        ) -> Color {
+            if let preferred,
+               backgrounds.allSatisfy({ preferred.contrastRatio(with: $0) >= 3.2 }) {
+                return preferred.color
+            }
+
+            let minimumBlackContrast = backgrounds
+                .map { RGBComponents.black.contrastRatio(with: $0) }
+                .min() ?? 1
+            let minimumWhiteContrast = backgrounds
+                .map { RGBComponents.white.contrastRatio(with: $0) }
+                .min() ?? 1
+
+            if minimumBlackContrast >= 4.5 {
+                return .black
+            }
+            if minimumWhiteContrast >= 4.5 {
+                return .white
+            }
+            return minimumBlackContrast >= minimumWhiteContrast ? .black : .white
+        }
+    }
+
+    /// 页面私有的不透明 sRGB 分量，负责图表色阶混合与 WCAG 相对亮度计算。
+    private struct RGBComponents {
+        let red: Double
+        let green: Double
+        let blue: Double
+
+        static let black = RGBComponents(red: 0, green: 0, blue: 0)
+        static let white = RGBComponents(red: 1, green: 1, blue: 1)
+
+        /// 忽略领域值中的 alpha，只读取封面算法已经归一化的 RGB。
+        init(rgbaHex: UInt32) {
+            red = Double((rgbaHex >> 24) & 0xFF) / 255
+            green = Double((rgbaHex >> 16) & 0xFF) / 255
+            blue = Double((rgbaHex >> 8) & 0xFF) / 255
+        }
+
+        /// 从已按外观解析的 UIKit 语义色读取不透明 sRGB 分量。
+        init?(uiColor: UIColor) {
+            var red: CGFloat = 0
+            var green: CGFloat = 0
+            var blue: CGFloat = 0
+            var alpha: CGFloat = 0
+            guard uiColor.getRed(&red, green: &green, blue: &blue, alpha: &alpha) else {
+                return nil
+            }
+            self.init(red: Double(red), green: Double(green), blue: Double(blue))
+        }
+
+        /// 从标准化 RGB 分量构造颜色组件。
+        init(red: Double, green: Double, blue: Double) {
+            self.red = red
+            self.green = green
+            self.blue = blue
+        }
+
+        /// 从 8bit 分量构造颜色，和项目固定文字语义色保持同源。
+        init(red8: UInt8, green8: UInt8, blue8: UInt8) {
+            self.init(
+                red: Double(red8) / 255,
+                green: Double(green8) / 255,
+                blue: Double(blue8) / 255
+            )
+        }
+
+        var color: Color {
+            color(opacity: 1)
+        }
+
+        /// 以当前 RGB 和指定透明度生成 SwiftUI 颜色，供半透明卡面与嵌套表面复用。
+        func color(opacity: Double) -> Color {
+            Color(
+                .sRGB,
+                red: red,
+                green: green,
+                blue: blue,
+                opacity: min(max(opacity, 0), 1)
+            )
+        }
+
+        var uiColor: UIColor {
+            UIColor(
+                red: CGFloat(red),
+                green: CGFloat(green),
+                blue: CGFloat(blue),
+                alpha: 1
+            )
+        }
+
+        var relativeLuminance: Double {
+            0.2126 * linearized(red) + 0.7152 * linearized(green) + 0.0722 * linearized(blue)
+        }
+
+        /// 沿 sRGB 分量向对比度安全极点混合，保持生成色完全不透明。
+        func blended(toward target: RGBComponents, amount: Double) -> RGBComponents {
+            let clampedAmount = min(max(amount, 0), 1)
+            return RGBComponents(
+                red: red + (target.red - red) * clampedAmount,
+                green: green + (target.green - green) * clampedAmount,
+                blue: blue + (target.blue - blue) * clampedAmount
+            )
+        }
+
+        /// 按 Android ColorUtils 的 HSL 规则降低饱和度，同时保持色相与明度不变。
+        func desaturated(by amount: Double) -> RGBComponents {
+            let maximum = max(red, green, blue)
+            let minimum = min(red, green, blue)
+            let delta = maximum - minimum
+            guard delta > 0 else { return self }
+
+            let lightness = (maximum + minimum) / 2
+            let saturation = delta / (1 - abs(2 * lightness - 1))
+            let reducedSaturation = saturation * (1 - min(max(amount, 0), 1))
+            let hueSector: Double
+            if maximum == red {
+                hueSector = ((green - blue) / delta).truncatingRemainder(dividingBy: 6)
+            } else if maximum == green {
+                hueSector = ((blue - red) / delta) + 2
+            } else {
+                hueSector = ((red - green) / delta) + 4
+            }
+            let normalizedHueSector = hueSector < 0 ? hueSector + 6 : hueSector
+            let chroma = (1 - abs(2 * lightness - 1)) * reducedSaturation
+            let secondary = chroma * (1 - abs(normalizedHueSector.truncatingRemainder(dividingBy: 2) - 1))
+            let matched = lightness - chroma / 2
+            let components: (Double, Double, Double)
+
+            switch normalizedHueSector {
+            case 0..<1:
+                components = (chroma, secondary, 0)
+            case 1..<2:
+                components = (secondary, chroma, 0)
+            case 2..<3:
+                components = (0, chroma, secondary)
+            case 3..<4:
+                components = (0, secondary, chroma)
+            case 4..<5:
+                components = (secondary, 0, chroma)
+            default:
+                components = (chroma, 0, secondary)
+            }
+
+            return RGBComponents(
+                red: components.0 + matched,
+                green: components.1 + matched,
+                blue: components.2 + matched
+            )
+        }
+
+        /// 返回当前颜色与另一不透明颜色的 WCAG 对比度。
+        func contrastRatio(with other: RGBComponents) -> Double {
+            let lighter = max(relativeLuminance, other.relativeLuminance)
+            let darker = min(relativeLuminance, other.relativeLuminance)
+            return (lighter + 0.05) / (darker + 0.05)
+        }
+
+        /// 把 sRGB 分量转换为 WCAG 相对亮度使用的线性分量。
+        private func linearized(_ component: Double) -> Double {
+            component <= 0.04045
+                ? component / 12.92
+                : pow((component + 0.055) / 1.055, 2.4)
+        }
+    }
+}
+
+/// 以内容完整高度承载同一次主题状态提交产生的单向封面渐变。
+struct BookReadingDetailAtmosphere: View {
+    let theme: BookReadingDetailTheme
+
+    var body: some View {
+        ZStack {
+            theme.neutralBackground
+
+            if theme.isCoverDerived {
+                LinearGradient(
+                    colors: [theme.gradientStartColor, theme.gradientEndColor],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+            }
+        }
     }
 }
 
@@ -236,7 +681,7 @@ private extension BookReadingDetailContent {
                     cornerRadius: CornerRadius.inlayMedium,
                     border: .init(color: theme.border, width: CardStyle.borderWidth)
                 )
-                .shadow(color: Color.black.opacity(0.14), radius: 12, y: 7)
+                .shadow(color: Color.black.opacity(0.12), radius: 10, y: 5)
             }
             .accessibilityLabel("预览《\(snapshot.book.name)》封面")
 
@@ -361,7 +806,7 @@ private extension BookReadingDetailContent {
             VStack(alignment: .leading, spacing: Spacing.base) {
                 Text("书籍简介")
                     .font(BookReadingDetailTypography.summaryTitle)
-                    .foregroundStyle(Color.textPrimary)
+                    .foregroundStyle(theme.onCardPrimary)
 
                 summaryContent
             }
@@ -378,13 +823,15 @@ private extension BookReadingDetailContent {
             ExpandableRichText(
                 html: snapshot.book.summary,
                 baseFont: BookReadingDetailTypography.summaryBodyUIFont,
-                lineSpacing: Spacing.half
+                textColor: theme.onCardPrimaryUIColor,
+                lineSpacing: Spacing.half,
+                actionColor: theme.onCardSecondary
             )
             .equatable()
         } else {
             Text(TimelineMeaningfulText.strippedHTML(snapshot.book.summary))
                 .font(BookReadingDetailTypography.summaryBody)
-                .foregroundStyle(Color.textPrimary)
+                .foregroundStyle(theme.onCardPrimary)
                 .lineLimit(3)
                 .truncationMode(.tail)
         }
@@ -401,7 +848,10 @@ private extension BookReadingDetailContent {
                             style: theme.calendarStyle,
                             isScrollEnabled: mode.isInteractive
                         )
-                        HeatmapLegend(palette: theme.heatmapPalette, style: .calendarReadingDetail)
+                        HeatmapLegend(
+                            palette: theme.heatmapPalette,
+                            style: theme.heatmapLegendStyle
+                        )
                     }
                     .dynamicTypeSize(.large)
                     .padding(Spacing.base)
@@ -437,6 +887,8 @@ private extension BookReadingDetailContent {
     var analyticsGrid: some View {
         BookReadingDetailAnalyticsGrid(
             metrics: analyticsMetrics,
+            primaryTextColor: theme.onCardPrimary,
+            secondaryTextColor: theme.onCardSecondary,
             onSelectProgress: mode.isInteractive ? onUpdateReadingProgress : nil
         )
         .padding(.horizontal, Spacing.base)
@@ -494,20 +946,21 @@ private extension BookReadingDetailContent {
                 HStack(spacing: Spacing.base) {
                     Text("阅读历程")
                         .font(BookReadingDetailTypography.sectionTitle)
-                        .foregroundStyle(Color.textPrimary)
+                        .foregroundStyle(theme.onCardPrimary)
                         .frame(maxWidth: .infinity, alignment: .leading)
 
                     if mode.isInteractive, let onChangeReadingStatus {
                         Button("修改状态", action: onChangeReadingStatus)
                             .font(BookReadingDetailTypography.timelineAction)
                             .buttonStyle(.plain)
-                            .foregroundStyle(Color.textPrimary)
+                            .foregroundStyle(theme.onCardPrimary)
                             .accessibilityHint("新增一条阅读状态记录")
                     }
                 }
 
                 ReadingStatusTimeline(
                     items: timelineItems,
+                    style: theme.timelineStyle,
                     onSelectItem: mode.isInteractive ? { item in
                         guard let source = snapshot.statusHistory.first(where: { $0.id == item.id }),
                               source.recordID != nil else { return }
@@ -533,10 +986,10 @@ private extension BookReadingDetailContent {
                 VStack(alignment: .leading, spacing: Spacing.compact) {
                     Text("XMNote")
                         .font(AppTypography.headlineSemibold)
-                        .foregroundStyle(Color.textPrimary)
+                        .foregroundStyle(theme.onCardPrimary)
                     Text("记录那些打动过你的文字")
                         .font(AppTypography.caption)
-                        .foregroundStyle(Color.textSecondary)
+                        .foregroundStyle(theme.onCardSecondary)
                 }
                 Spacer(minLength: Spacing.cozy)
                 Image("AppQRCode")
@@ -558,7 +1011,7 @@ private extension BookReadingDetailContent {
             VStack(alignment: .leading, spacing: Spacing.base) {
                 Text(title)
                     .font(BookReadingDetailTypography.sectionTitle)
-                    .foregroundStyle(Color.textPrimary)
+                    .foregroundStyle(theme.onCardPrimary)
                 content()
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -566,16 +1019,17 @@ private extension BookReadingDetailContent {
         }
     }
 
-    /// 复用 Android 内容卡的半透明底和细边界，使整页背景连续透过而不牺牲正文可读性。
+    /// 外层主卡使用 Android 同源半透明纸面；主题无效或降低透明度时由主题提供不透明表面。
     func themedCard<Content: View>(@ViewBuilder content: () -> Content) -> some View {
-        content()
+        let shape = RoundedRectangle(
+            cornerRadius: CornerRadius.containerLarge,
+            style: .continuous
+        )
+        return content()
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(theme.cardBackground, in: RoundedRectangle(
-                cornerRadius: CornerRadius.containerLarge,
-                style: .continuous
-            ))
+            .background(theme.cardSurface, in: shape)
             .overlay {
-                RoundedRectangle(cornerRadius: CornerRadius.containerLarge, style: .continuous)
+                shape
                     .stroke(theme.border, lineWidth: CardStyle.borderWidth)
             }
     }
@@ -763,6 +1217,8 @@ private enum BookReadingDetailAnalyticsValuePart: Equatable {
 /// 以统一字体行盒约束四项指标；每个标题、值和副说明都占一行，从结构上保证同排基线一致。
 private struct BookReadingDetailAnalyticsGrid: View {
     let metrics: [BookReadingDetailAnalyticsMetric]
+    let primaryTextColor: Color
+    let secondaryTextColor: Color
     let onSelectProgress: (() -> Void)?
 
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
@@ -807,7 +1263,7 @@ private struct BookReadingDetailAnalyticsGrid: View {
         VStack(alignment: .leading, spacing: Spacing.half) {
             Text(metric.title)
                 .font(ReadCalendarSummaryTypography.metricTitle)
-                .foregroundStyle(Color.textSecondary)
+                .foregroundStyle(secondaryTextColor)
                 .lineLimit(1)
 
             HStack(alignment: .firstTextBaseline, spacing: Spacing.none) {
@@ -823,15 +1279,15 @@ private struct BookReadingDetailAnalyticsGrid: View {
             }
             .foregroundStyle(
                 metric.valueParts.contains(where: \.isEmpty)
-                    ? Color.textSecondary
-                    : Color.textPrimary
+                    ? secondaryTextColor
+                    : primaryTextColor
             )
             .lineLimit(1)
             .minimumScaleFactor(0.76)
 
             Text(metric.subtitle.isEmpty ? "\u{00A0}" : metric.subtitle)
                 .font(ReadCalendarSummaryTypography.metricSubtitle)
-                .foregroundStyle(Color.textSecondary)
+                .foregroundStyle(secondaryTextColor)
                 .lineLimit(1)
                 .allowsTightening(true)
                 .minimumScaleFactor(0.76)

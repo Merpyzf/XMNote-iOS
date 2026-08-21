@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 BookReadingDetailContent、七项分享设置、ReadCalendarShareImageRenderer 与 XMActivityShareSheet
- * [OUTPUT]: 对外提供单一氛围背景的 BookReadingDetailShareSheet 和 BookReadingDetailShareContent，预览并生成同构阅读详情长图
+ * [OUTPUT]: 对外提供随内容滚动的单向氛围背景 BookReadingDetailShareSheet 和 BookReadingDetailShareContent，预览并生成同构阅读详情长图
  * [POS]: Views/Book/Sheets 阅读详情分享业务 Sheet，临时文件生命周期在此收口
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -39,31 +39,41 @@ struct BookReadingDetailShareSheet: View {
     var body: some View {
         NavigationStack {
             ZStack {
-                BookReadingDetailAtmosphere(theme: theme, topPlateau: 0.20)
+                theme.neutralBackground
                     .ignoresSafeArea()
 
-                ScrollView {
-                    BookReadingDetailContent(
-                        snapshot: snapshot,
-                        mode: .share(setting),
-                        theme: theme,
-                        ratingValue: .constant(Double(snapshot.book.score) / 10),
-                        expandedMonthIDs: $expandedMonthIDs
-                    )
-                    .padding(.horizontal, Spacing.screenEdge)
-                    .padding(.top, Spacing.cozy)
-                    .padding(.bottom, Spacing.double)
-                    .frame(maxWidth: .infinity)
+                GeometryReader { geometry in
+                    let topSafeAreaExtent = max(geometry.safeAreaInsets.top, 0)
 
-                    if let errorMessage {
-                        Text(errorMessage)
-                            .font(AppTypography.footnote)
-                            .foregroundStyle(Color.feedbackError)
+                    ScrollView {
+                        VStack(spacing: Spacing.none) {
+                            BookReadingDetailContent(
+                                snapshot: snapshot,
+                                mode: .share(setting),
+                                theme: theme,
+                                ratingValue: .constant(Double(snapshot.book.score) / 10),
+                                expandedMonthIDs: $expandedMonthIDs
+                            )
                             .padding(.horizontal, Spacing.screenEdge)
-                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.top, Spacing.cozy + topSafeAreaExtent)
+                            .padding(.bottom, Spacing.double)
+                            .frame(maxWidth: .infinity)
+
+                            if let errorMessage {
+                                Text(errorMessage)
+                                    .font(AppTypography.footnote)
+                                    .foregroundStyle(Color.feedbackError)
+                                    .padding(.horizontal, Spacing.screenEdge)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                            }
+                        }
+                        .background(alignment: .top) {
+                            BookReadingDetailAtmosphere(theme: theme)
+                        }
                     }
+                    .scrollBounceBehavior(.always)
+                    .ignoresSafeArea(.container, edges: [.top, .bottom])
                 }
-                .scrollBounceBehavior(.always)
             }
             .safeAreaInset(edge: .bottom, spacing: Spacing.none) {
                 bottomBar
@@ -210,18 +220,17 @@ struct BookReadingDetailShareContent: View {
     let expandedMonthIDs: Set<MonthlyReadingChart.MonthID>
 
     var body: some View {
-        ZStack(alignment: .top) {
-            BookReadingDetailAtmosphere(theme: theme)
-
-            BookReadingDetailContent(
-                snapshot: snapshot,
-                mode: .share(setting),
-                theme: theme,
-                ratingValue: .constant(Double(snapshot.book.score) / 10),
-                expandedMonthIDs: .constant(expandedMonthIDs)
-            )
-            .padding(Spacing.double)
-        }
+        BookReadingDetailContent(
+            snapshot: snapshot,
+            mode: .share(setting),
+            theme: theme,
+            ratingValue: .constant(Double(snapshot.book.score) / 10),
+            expandedMonthIDs: .constant(expandedMonthIDs)
+        )
+        .padding(Spacing.double)
         .frame(width: 390, alignment: .top)
+        .background(alignment: .top) {
+            BookReadingDetailAtmosphere(theme: theme)
+        }
     }
 }

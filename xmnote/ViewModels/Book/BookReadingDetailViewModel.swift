@@ -66,7 +66,7 @@ final class BookReadingDetailViewModel {
         }
     }
 
-    /// 读取封面代表色与强调色；无封面或取色失败保持中性背景，成功结果延迟 300ms 后交给页面渐显。
+    /// 读取封面代表色与强调色；无封面或取色失败保持中性背景，成功结果立即原子交给页面主题状态。
     func resolveCoverThemeColor(using repository: any ReadCalendarColorRepositoryProtocol) async {
         guard let book = snapshot?.book else { return }
         guard !book.coverURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
@@ -78,14 +78,6 @@ final class BookReadingDetailViewModel {
             bookName: book.name,
             coverURL: book.coverURL
         )
-        guard !Task.isCancelled else { return }
-        if resolved.state == .resolved {
-            do {
-                try await Task.sleep(for: .milliseconds(300))
-            } catch {
-                return
-            }
-        }
         guard !Task.isCancelled else { return }
         coverThemeColor = resolved
     }

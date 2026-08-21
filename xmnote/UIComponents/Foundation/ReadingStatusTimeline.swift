@@ -9,6 +9,17 @@ import SwiftUI
 
 /// 以“最新在上”的顺序展示阅读状态事件、绝对时间与相邻事件间隔。
 struct ReadingStatusTimeline: View {
+    /// 允许主题页面覆盖时间线文字色；默认值维持组件在其他页面的既有语义色。
+    struct Style {
+        let primaryTextColor: Color
+        let secondaryTextColor: Color
+
+        static let `default` = Style(
+            primaryTextColor: .textPrimary,
+            secondaryTextColor: .textSecondary
+        )
+    }
+
     /// 阅读历程支持的状态语义，数值与 Android `BookReadingStatus` 保持一致。
     enum Status: Int64, CaseIterable, Hashable, Sendable {
         case addedToShelf = -1
@@ -82,6 +93,7 @@ struct ReadingStatusTimeline: View {
     }
 
     let items: [Item]
+    let style: Style
     let calendar: Calendar
     let onSelectItem: ((Item) -> Void)?
 
@@ -91,10 +103,12 @@ struct ReadingStatusTimeline: View {
     /// 注入已排序事件和可选编辑回调；组件不查询、排序或写入业务数据。
     init(
         items: [Item],
+        style: Style = .default,
         calendar: Calendar = .autoupdatingCurrent,
         onSelectItem: ((Item) -> Void)? = nil
     ) {
         self.items = items
+        self.style = style
         self.calendar = calendar
         self.onSelectItem = onSelectItem
     }
@@ -102,7 +116,7 @@ struct ReadingStatusTimeline: View {
     var body: some View {
         Group {
             if items.isEmpty {
-                ReadingStatusTimelineEmptyView()
+                ReadingStatusTimelineEmptyView(style: style)
             } else {
                 LazyVStack(spacing: Spacing.none) {
                     ForEach(items.enumerated(), id: \.element.id) { index, item in
@@ -112,6 +126,7 @@ struct ReadingStatusTimeline: View {
                             isCurrent: index == 0,
                             usesAccessibilityLayout: usesExpandedLayout,
                             calendar: calendar,
+                            style: style,
                             onSelectItem: onSelectItem
                         )
                         .transition(itemTransition)
@@ -219,6 +234,7 @@ private struct ReadingStatusTimelineEntry: View {
     let isCurrent: Bool
     let usesAccessibilityLayout: Bool
     let calendar: Calendar
+    let style: ReadingStatusTimeline.Style
     let onSelectItem: ((ReadingStatusTimeline.Item) -> Void)?
 
     @ScaledMetric(relativeTo: .body) private var scaledRailColumnWidth =
@@ -285,7 +301,11 @@ private struct ReadingStatusTimelineEntry: View {
     private var statusText: some View {
         Text(item.status.title)
             .font(isCurrent ? AppTypography.headlineSemibold : AppTypography.bodyMedium)
-            .foregroundStyle(item.status == .addedToShelf ? Color.textSecondary : Color.textPrimary)
+            .foregroundStyle(
+                item.status == .addedToShelf
+                    ? style.secondaryTextColor
+                    : style.primaryTextColor
+            )
             .fixedSize(horizontal: false, vertical: true)
     }
 
@@ -300,7 +320,7 @@ private struct ReadingStatusTimelineEntry: View {
             }
         }
         .font(AppTypography.caption)
-        .foregroundStyle(Color.textSecondary)
+        .foregroundStyle(style.secondaryTextColor)
         .monospacedDigit()
         .fixedSize(horizontal: false, vertical: true)
     }
@@ -338,7 +358,7 @@ private struct ReadingStatusTimelineEntry: View {
             }
         }
         .font(AppTypography.captionMedium)
-        .foregroundStyle(Color.textSecondary)
+        .foregroundStyle(style.secondaryTextColor)
         .frame(height: ReadingStatusTimelineMetrics.connectorSlotHeight)
         .frame(maxWidth: .infinity, alignment: .leading)
         .accessibilityElement(children: .combine)
@@ -474,6 +494,8 @@ private struct ReadingStatusTimelineRowButtonStyle: ButtonStyle {
 
 /// 在没有任何事件时保持卡片节奏稳定，并明确说明当前无阅读历程。
 private struct ReadingStatusTimelineEmptyView: View {
+    let style: ReadingStatusTimeline.Style
+
     var body: some View {
         HStack(spacing: Spacing.cozy) {
             Image(systemName: "clock.arrow.circlepath")
@@ -482,7 +504,7 @@ private struct ReadingStatusTimelineEmptyView: View {
 
             Text("暂无阅读历程")
                 .font(AppTypography.subheadline)
-                .foregroundStyle(Color.textSecondary)
+                .foregroundStyle(style.secondaryTextColor)
         }
         .frame(maxWidth: .infinity, minHeight: Spacing.actionReserved, alignment: .center)
         .accessibilityElement(children: .combine)

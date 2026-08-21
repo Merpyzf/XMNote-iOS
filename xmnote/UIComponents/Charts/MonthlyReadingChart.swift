@@ -477,14 +477,7 @@ private extension MonthlyReadingMonthHeader {
     /// 渲染覆盖在头部最右侧的箭头，两套 Crossfade 图层共享同一旋转目标以保留 Android 重影。
     func arrow(color: Color) -> some View {
         Image(systemName: "chevron.right")
-            .font(
-                AppTypography.fixed(
-                    baseSize: 16,
-                    relativeTo: .body,
-                    weight: .medium,
-                    minimumPointSize: 16
-                )
-            )
+            .font(MonthlyReadingChartTypography.arrow)
             .foregroundStyle(color)
             .frame(
                 width: MonthlyReadingChartLayout.arrowSize,
