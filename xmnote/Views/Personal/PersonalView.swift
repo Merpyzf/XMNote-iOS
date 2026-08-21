@@ -67,7 +67,7 @@ struct PersonalView: View {
 
             TopSwitcher(title: "我的") {
                 TopBarActionPill {
-                    NavigationLink(value: PersonalRoute.settings) {
+                    NavigationLink(value: AppRoute.personal(.settings)) {
                         TopBarActionIcon(
                             systemName: "gearshape",
                             iconSize: 14,
@@ -102,7 +102,7 @@ extension PersonalView {
     private var premiumSection: some View {
         if !appState.isPremium {
             PersonalSettingsPanel(cornerRadius: Layout.panelCornerRadius) {
-                NavigationLink(value: PersonalRoute.premium) {
+                NavigationLink(value: AppRoute.personal(.premium)) {
                     HStack(spacing: Spacing.base) {
                         Image(systemName: "crown.fill")
                             .font(AppTypography.title3Semibold)
@@ -232,7 +232,7 @@ extension PersonalView {
         isLast: Bool = false
     ) -> some View {
         VStack(spacing: Spacing.none) {
-            NavigationLink(value: route) {
+            NavigationLink(value: AppRoute.personal(route)) {
                 rowContent(
                     icon: icon,
                     title: title,

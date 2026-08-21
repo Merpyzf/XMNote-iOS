@@ -1,5 +1,5 @@
 /**
- * [INPUT]: 依赖调用方注入 NoteRepository 与外部应用仓储，依赖 NoteExcerptListViewModel 的已提交查询和快照变更语义、列表组件、BookPicker 与批量 Sheet
+ * [INPUT]: 依赖调用方注入 NoteRepository/外部应用仓储、AppNavigationCoordinator、NoteExcerptListViewModel、列表组件、BookPicker 与批量 Sheet
  * [OUTPUT]: 对外提供 NoteExcerptListView，以内容区搜索和顶部上下文命令承载渐进分页、查看/编辑/复制反馈、页面级分享、删除确认及批量操作
  * [POS]: Note 模块书摘二级页面壳层，由 NoteRoute.noteExcerpts 与旧标签路由进入
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -14,6 +14,7 @@ struct NoteExcerptListView: View {
     let onOpenNoteRoute: (NoteRoute) -> Void
 
     @Environment(XMToastCenter.self) private var toastCenter
+    @Environment(AppNavigationCoordinator.self) private var navigationCoordinator
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var viewModel: NoteExcerptListViewModel
     @State private var isInlineSearchActive = false
@@ -208,7 +209,9 @@ struct NoteExcerptListView: View {
                     XMMenuLabel("查看", systemImage: "doc.text.magnifyingglass")
                 }
                 Button {
-                    onOpenNoteRoute(.edit(noteId: item.id))
+                    navigationCoordinator.present(
+                        .noteEditor(mode: .edit(noteId: item.id), seed: nil)
+                    )
                 } label: {
                     XMMenuLabel("编辑", systemImage: "square.and.pencil")
                 }
@@ -234,7 +237,9 @@ struct NoteExcerptListView: View {
                     Label("删除", systemImage: "trash")
                 }
                 Button {
-                    onOpenNoteRoute(.edit(noteId: item.id))
+                    navigationCoordinator.present(
+                        .noteEditor(mode: .edit(noteId: item.id), seed: nil)
+                    )
                 } label: {
                     Label("编辑", systemImage: "square.and.pencil")
                 }
@@ -271,7 +276,9 @@ struct NoteExcerptListView: View {
         } else {
             ToolbarItemGroup(placement: .topBarTrailing) {
                 Button {
-                    onOpenNoteRoute(.create(seed: createSeed))
+                    navigationCoordinator.present(
+                        .noteEditor(mode: .create, seed: createSeed)
+                    )
                 } label: {
                     Image(systemName: "square.and.pencil")
                 }

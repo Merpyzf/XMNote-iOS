@@ -6,7 +6,7 @@
 //
 
 /**
- * [INPUT]: 依赖 RepositoryContainer 注入笔记、内容、书籍与外部应用仓储，依赖 SceneStateStore 恢复首页语义快照，依赖 NoteViewModel/NoteReviewViewModel 驱动状态
+ * [INPUT]: 依赖 RepositoryContainer、AppNavigationCoordinator、SceneStateStore 与 NoteViewModel/NoteReviewViewModel
  * [OUTPUT]: 对外提供 NoteContainerView 与 NoteSubTab 枚举，并上抛携带真实章节标题的笔记路由、书籍/目录定位、内容编辑及统一内容查看路由，同时为首页单本评分提供仓储能力
  * [POS]: Note 模块容器壳层，承载笔记/回顾二级切换、四分类首页状态保持与下拉搜索入口
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -132,6 +132,7 @@ struct NoteContainerView: View {
 // MARK: - Content View
 
 private struct NoteContentView: View {
+    @Environment(AppNavigationCoordinator.self) private var navigationCoordinator
     @Bindable var viewModel: NoteViewModel
     @Bindable var reviewViewModel: NoteReviewViewModel
     @Binding var selectedSubTab: NoteSubTab
@@ -239,7 +240,9 @@ private struct NoteContentView: View {
                 },
                 onOpenBook: { onOpenBookRoute(.detail(bookId: $0)) },
                 onOpenTagManagement: { onOpenNoteRoute(.tagManagement) },
-                onEditReview: { onOpenContentRoute(.reviewEditor(reviewId: $0)) }
+                onEditReview: {
+                    navigationCoordinator.present(.reviewEditor(.edit(reviewID: $0)))
+                }
             )
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         case .review:

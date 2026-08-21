@@ -348,7 +348,7 @@ private extension DataBackupContentView {
     }
 
     var webdavContent: some View {
-        NavigationLink(value: PersonalRoute.webdavServers) {
+        NavigationLink(value: AppRoute.personal(.webdavServers)) {
             HStack(spacing: Spacing.base) {
                 Image(systemName: "externaldrive")
                     .font(AppTypography.body)

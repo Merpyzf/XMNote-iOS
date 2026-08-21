@@ -1,5 +1,5 @@
 /**
- * [INPUT]: 依赖 RepositoryContainer 注入 NoteRepository/ContentRepository，依赖 RelatedCategoryListViewModel 与 RelatedListRow
+ * [INPUT]: 依赖 RepositoryContainer、AppNavigationCoordinator、RelatedCategoryListViewModel 与 RelatedListRow
  * [OUTPUT]: 对外提供 RelatedCategoryListView，覆盖相关内容混排、局部搜索排序分页、内容/相关书编辑、复制/分享与软删除
  * [POS]: Note 模块相关分类二级页面壳层，由 NoteRoute.relatedCategory 进入
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -16,6 +16,7 @@ struct RelatedCategoryListView: View {
     let onOpenBookRoute: (BookRoute) -> Void
 
     @Environment(RepositoryContainer.self) private var repositories
+    @Environment(AppNavigationCoordinator.self) private var navigationCoordinator
     @Environment(XMToastCenter.self) private var toastCenter
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var viewModel: RelatedCategoryListViewModel?
@@ -167,7 +168,9 @@ struct RelatedCategoryListView: View {
             }
             if case .content(let content) = item {
                 Button("编辑", systemImage: "square.and.pencil") {
-                    onOpenContentRoute(.relevantEditor(contentId: content.relationID))
+                    navigationCoordinator.present(
+                        .relevantEditor(.edit(contentID: content.relationID))
+                    )
                 }
             } else if case .book(let book) = item {
                 Button("编辑书籍资料", systemImage: "square.and.pencil") {
@@ -193,7 +196,9 @@ struct RelatedCategoryListView: View {
             }
             if case .content(let content) = item {
                 Button {
-                    onOpenContentRoute(.relevantEditor(contentId: content.relationID))
+                    navigationCoordinator.present(
+                        .relevantEditor(.edit(contentID: content.relationID))
+                    )
                 } label: {
                     Label("编辑", systemImage: "square.and.pencil")
                 }
@@ -228,12 +233,14 @@ struct RelatedCategoryListView: View {
     /// 有效书沿用完整书籍编辑；占位书携带来源书上下文，供 Repository 做关系竞态校验与范围判重。
     private func openBookEditor(_ book: RelatedBookListItem) {
         if book.isPlaceholder {
-            onOpenBookRoute(.editRelatedPlaceholder(
-                bookId: book.relatedBookID,
-                sourceBookId: book.sourceBookID
-            ))
+            navigationCoordinator.presentBookEditor(
+                mode: .editRelatedPlaceholder(
+                    bookId: book.relatedBookID,
+                    sourceBookId: book.sourceBookID
+                )
+            )
         } else {
-            onOpenBookRoute(.edit(bookId: book.relatedBookID))
+            navigationCoordinator.presentBookEditor(mode: .edit(bookId: book.relatedBookID))
         }
     }
 

@@ -12,7 +12,6 @@ enum PersonalRoute: Hashable, Codable {
     case settings
     case readingTimerSettings
     case premium
-    case readCalendar
     case readReminder
     case dataImport
     case dataBackup

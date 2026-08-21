@@ -1,10 +1,11 @@
 import Foundation
+import OSLog
 import SwiftUI
 
 /**
- * [INPUT]: 依赖 SwiftUI NavigationPath/SceneStorage 语义与各模块可编码路由/状态快照
- * [OUTPUT]: 对外提供 SceneStateStore 与 AppSceneSnapshot，承接 scene 级轻量恢复
- * [POS]: AppState 模块的 scene 状态容器，统一管理根导航、根容器与高价值页面的恢复锚点
+ * [INPUT]: 依赖 SceneStorage 数据、AppRoute 类型安全路径与各模块可编码语义状态
+ * [OUTPUT]: 对外提供 SceneStateStore、AppSceneSnapshot v3 迁移、原子导航更新与路径净化
+ * [POS]: AppState 模块的 scene 独立恢复容器，在交互页面挂载前一次性产出完整状态
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
@@ -14,40 +15,86 @@ import SwiftUI
 final class SceneStateStore {
     private static let encoder = JSONEncoder()
     private static let decoder = JSONDecoder()
+    private static let logger = Logger(
+        subsystem: Bundle.main.bundleIdentifier ?? "XMNote",
+        category: "SceneState"
+    )
 
     private(set) var snapshot: AppSceneSnapshot
     private(set) var persistedData: Data?
     private(set) var isRestored = false
+    private var persistenceSink: ((Data) -> Void)?
 
     init() {
         snapshot = AppSceneSnapshot.empty(dataEpoch: 0)
     }
 
-    /// 以当前数据版本创建空白 scene 会话；用于冷启动固定回到默认根入口，不读取历史 UI 快照。
-    func startFreshSession(dataEpoch: Int) {
-        replaceSnapshot(AppSceneSnapshot.empty(dataEpoch: dataEpoch), persist: false)
-        persistedData = nil
-        isRestored = true
+    /// 连接当前 scene 的系统存储写入端；编码完成后同步提交，避免持久化依赖外层视图重算时机。
+    func connectPersistenceSink(_ sink: @escaping (Data) -> Void) {
+        persistenceSink = sink
+        if let persistedData {
+            sink(persistedData)
+        }
     }
 
-    /// 从 SceneStorage 恢复快照；当快照版本或数据 epoch 不匹配时安全回到对应数据世界的默认根入口。
+    /// 场景根视图离场时断开系统存储，防止失效的动态属性位置继续接收写入。
+    func disconnectPersistenceSink() {
+        persistenceSink = nil
+    }
+
+    /// 从 SceneStorage 原子恢复当前 scene；v2 只迁移语义状态并一次性清空不可检查的旧导航表示。
     func restore(from data: Data?, currentDataEpoch: Int) {
         guard let data else {
             replaceSnapshot(AppSceneSnapshot.empty(dataEpoch: currentDataEpoch), persist: true)
             isRestored = true
+            Self.logger.info("Created empty scene snapshot epoch=\(currentDataEpoch)")
             return
         }
 
-        guard let restored = try? Self.decoder.decode(AppSceneSnapshot.self, from: data),
-              restored.snapshotVersion == AppSceneSnapshot.currentVersion,
-              restored.dataEpoch == currentDataEpoch else {
+        let restored: AppSceneSnapshot
+        do {
+            restored = try Self.decoder.decode(AppSceneSnapshot.self, from: data)
+        } catch {
             replaceSnapshot(AppSceneSnapshot.empty(dataEpoch: currentDataEpoch), persist: true)
             isRestored = true
+            Self.logger.error("Scene snapshot decode failed; reset reason=\(error.localizedDescription, privacy: .public)")
             return
         }
 
-        replaceSnapshot(restored, persist: false)
-        persistedData = data
+        guard restored.dataEpoch == currentDataEpoch else {
+            replaceSnapshot(AppSceneSnapshot.empty(dataEpoch: currentDataEpoch), persist: true)
+            isRestored = true
+            Self.logger.notice(
+                "Scene snapshot epoch mismatch stored=\(restored.dataEpoch) current=\(currentDataEpoch); reset"
+            )
+            return
+        }
+
+        switch restored.snapshotVersion {
+        case AppSceneSnapshot.currentVersion:
+            var sanitized = restored
+            sanitized.navigation = restored.navigation.sanitized()
+            let didSanitize = sanitized.navigation != restored.navigation
+            replaceSnapshot(sanitized, persist: didSanitize)
+            if didSanitize {
+                Self.logger.warning("Sanitized restored v3 navigation paths")
+            }
+            if !didSanitize {
+                publishPersistedData(data)
+            }
+            Self.logger.info(
+                "Restored scene v3 depths reading=\(sanitized.navigation.reading.count) books=\(sanitized.navigation.books.count) notes=\(sanitized.navigation.notes.count) profile=\(sanitized.navigation.profile.count) search=\(sanitized.navigation.search.count)"
+            )
+        case 2:
+            var migrated = restored
+            migrated.snapshotVersion = AppSceneSnapshot.currentVersion
+            migrated.navigation = NavigationSceneSnapshot()
+            replaceSnapshot(migrated, persist: true)
+            Self.logger.notice("Migrated scene snapshot v2 to v3; preserved semantic state and cleared opaque paths")
+        default:
+            replaceSnapshot(AppSceneSnapshot.empty(dataEpoch: currentDataEpoch), persist: true)
+            Self.logger.error("Unsupported scene snapshot version=\(restored.snapshotVersion); reset")
+        }
         isRestored = true
     }
 
@@ -61,39 +108,20 @@ final class SceneStateStore {
         mutate { $0.selectedTab = tab }
     }
 
+    /// 一次提交当前 Tab 与五组浏览路径，避免恢复文件出现跨字段的中间状态。
+    func updateNavigation(
+        selectedTab: AppTab,
+        navigation: NavigationSceneSnapshot
+    ) {
+        let sanitized = navigation.sanitized()
+        mutate {
+            $0.selectedTab = selectedTab
+            $0.navigation = sanitized
+        }
+    }
+
     func updateSearchQuery(_ query: String) {
         mutate { $0.searchQuery = query }
-    }
-
-    func updatePath(_ path: NavigationPath, for tab: AppTab) {
-        if let representation = path.codable {
-            updatePathRepresentation(representation, for: tab)
-            return
-        }
-
-        if path.isEmpty {
-            updatePathRepresentation(nil, for: tab)
-            return
-        }
-
-#if DEBUG
-        print("[SceneStateStore] skip persist non-codable path tab=\(tab.rawValue)")
-#endif
-    }
-
-    func pathRepresentation(for tab: AppTab) -> NavigationPath.CodableRepresentation? {
-        switch tab {
-        case .reading:
-            snapshot.navigation.reading
-        case .books:
-            snapshot.navigation.books
-        case .notes:
-            snapshot.navigation.notes
-        case .profile:
-            snapshot.navigation.profile
-        case .search:
-            snapshot.navigation.search
-        }
     }
 
     func updateReadingSelectedSubTab(_ tab: ReadingSubTab) {
@@ -137,34 +165,28 @@ final class SceneStateStore {
         replaceSnapshot(next, persist: true)
     }
 
-    private func updatePathRepresentation(_ representation: NavigationPath.CodableRepresentation?, for tab: AppTab) {
-        mutate {
-            switch tab {
-            case .reading:
-                $0.navigation.reading = representation
-            case .books:
-                $0.navigation.books = representation
-            case .notes:
-                $0.navigation.notes = representation
-            case .profile:
-                $0.navigation.profile = representation
-            case .search:
-                $0.navigation.search = representation
+    private func replaceSnapshot(_ newSnapshot: AppSceneSnapshot, persist: Bool) {
+        snapshot = newSnapshot
+        if persist {
+            do {
+                publishPersistedData(try Self.encoder.encode(newSnapshot))
+            } catch {
+                Self.logger.error(
+                    "Scene snapshot encode failed reason=\(error.localizedDescription, privacy: .public)"
+                )
             }
         }
     }
 
-    private func replaceSnapshot(_ newSnapshot: AppSceneSnapshot, persist: Bool) {
-        snapshot = newSnapshot
-        if persist {
-            persistedData = try? Self.encoder.encode(newSnapshot)
-        }
+    private func publishPersistedData(_ data: Data) {
+        persistedData = data
+        persistenceSink?(data)
     }
 }
 
 /// AppSceneSnapshot 是单个 scene 的轻量恢复快照，只保存高价值语义锚点。
 struct AppSceneSnapshot: Codable, Equatable {
-    static let currentVersion = 2
+    static let currentVersion = 3
 
     var snapshotVersion: Int
     var dataEpoch: Int
@@ -191,12 +213,45 @@ struct AppSceneSnapshot: Codable, Equatable {
     }
 }
 
-struct NavigationSceneSnapshot: Codable, Equatable {
-    var reading: NavigationPath.CodableRepresentation?
-    var books: NavigationPath.CodableRepresentation?
-    var notes: NavigationPath.CodableRepresentation?
-    var profile: NavigationPath.CodableRepresentation?
-    var search: NavigationPath.CodableRepresentation?
+struct NavigationSceneSnapshot: Codable, Hashable {
+    var reading: [AppRoute] = []
+    var books: [AppRoute] = []
+    var notes: [AppRoute] = []
+    var profile: [AppRoute] = []
+    var search: [AppRoute] = []
+
+    /// 返回指定 Tab 的类型安全路径。
+    func path(for tab: AppTab) -> [AppRoute] {
+        switch tab {
+        case .reading: reading
+        case .books: books
+        case .notes: notes
+        case .profile: profile
+        case .search: search
+        }
+    }
+
+    /// 修改指定 Tab 路径；调用方负责先执行统一净化规则。
+    mutating func setPath(_ path: [AppRoute], for tab: AppTab) {
+        switch tab {
+        case .reading: reading = path
+        case .books: books = path
+        case .notes: notes = path
+        case .profile: profile = path
+        case .search: search = path
+        }
+    }
+
+    /// 对五个 Tab 应用相同的深度、去重、去环和非法路由截断规则。
+    func sanitized() -> NavigationSceneSnapshot {
+        NavigationSceneSnapshot(
+            reading: AppRoute.sanitizedBrowsePath(reading),
+            books: AppRoute.sanitizedBrowsePath(books),
+            notes: AppRoute.sanitizedBrowsePath(notes),
+            profile: AppRoute.sanitizedBrowsePath(profile),
+            search: AppRoute.sanitizedBrowsePath(search)
+        )
+    }
 }
 
 struct ReadingSceneSnapshot: Codable, Equatable {
@@ -347,29 +402,33 @@ extension NavigationSceneSnapshot {
         case search
     }
 
-    /// 导航快照按 Tab 独立容错，旧版本缺少搜索路径时仍可恢复其余四个根栈。
+    /// 导航快照按 Tab 独立逐节点容错；坏节点只截断当前 Tab 的后续历史，其他 Tab 与合法前缀不受影响。
     init(from decoder: any Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
-        reading = try? container.decodeIfPresent(
-            NavigationPath.CodableRepresentation.self,
-            forKey: .reading
-        )
-        books = try? container.decodeIfPresent(
-            NavigationPath.CodableRepresentation.self,
-            forKey: .books
-        )
-        notes = try? container.decodeIfPresent(
-            NavigationPath.CodableRepresentation.self,
-            forKey: .notes
-        )
-        profile = try? container.decodeIfPresent(
-            NavigationPath.CodableRepresentation.self,
-            forKey: .profile
-        )
-        search = try? container.decodeIfPresent(
-            NavigationPath.CodableRepresentation.self,
-            forKey: .search
-        )
+        reading = Self.decodePath(from: container, forKey: .reading)
+        books = Self.decodePath(from: container, forKey: .books)
+        notes = Self.decodePath(from: container, forKey: .notes)
+        profile = Self.decodePath(from: container, forKey: .profile)
+        search = Self.decodePath(from: container, forKey: .search)
+    }
+
+    /// 逐元素解码以保留坏节点之前的有效浏览链；旧版类型擦除对象不是数组时直接返回空路径。
+    private static func decodePath(
+        from container: KeyedDecodingContainer<CodingKeys>,
+        forKey key: CodingKeys
+    ) -> [AppRoute] {
+        guard var pathContainer = try? container.nestedUnkeyedContainer(forKey: key) else {
+            return []
+        }
+
+        var routes: [AppRoute] = []
+        while !pathContainer.isAtEnd {
+            guard let route = try? pathContainer.decode(AppRoute.self) else {
+                break
+            }
+            routes.append(route)
+        }
+        return routes
     }
 }
 

@@ -92,7 +92,7 @@ struct ContentViewerView: View {
         ToolbarItem(placement: .principal) {
             ContentViewerNavigationTitle(pageProgress: viewModel?.selectedPageProgress) {
                 if let viewModel, let selectedBookID = viewModel.selectedBookID {
-                    NavigationLink(value: BookRoute.detail(bookId: selectedBookID)) {
+                    NavigationLink(value: AppRoute.book(.detail(bookId: selectedBookID))) {
                         contentViewerTitleLabel(viewModel.selectedBookTitle)
                     }
                     .buttonStyle(.plain)

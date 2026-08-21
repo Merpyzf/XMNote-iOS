@@ -56,6 +56,7 @@ struct ReadingTimerView: View {
                 ReadingTimerUnavailableState(message: errorMessage)
             }
         }
+        .accessibilityIdentifier("reading.timer.\(bookId)")
         .navigationTitle("")
         .navigationBarTitleDisplayMode(.inline)
         .navigationBarBackButtonHidden(true)
