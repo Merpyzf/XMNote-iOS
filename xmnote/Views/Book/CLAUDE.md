@@ -8,10 +8,10 @@
 - `BookContainerView.swift`: 书籍 Tab 容器与二级切换入口
 - `BookGridView.swift`: 书籍网格展示与筛选
 - `BookGridItemView.swift`: 单本书籍卡片渲染
-- `BookDetailView.swift`: 原生四域单书工作台壳层，承接目录、书摘、相关与书评
+- `BookDetailView.swift`: 书籍工作台核心页面壳层，聚合共享书籍头部、目录/书摘/相关/书评四域与路由入口
 - `ChapterManagerView.swift`: 五层书内目录管理、导入、星标、移动、排序与删除页面
-- `Components/BookWorkspaceCollectionView.swift`: 单书工作台四域常驻 UIKit Collection 桥接与 diffable snapshot 应用
-- `Components/BookWorkspaceNoteItem.swift`: 单书工作台章节头与富文本书摘卡片
+- `Components/BookWorkspaceCollectionView.swift`: 书籍工作台页面私有原生分页、共享 Chrome、吸顶与视口稳定宿主
+- `Components/BookWorkspaceNoteItem.swift`: 书籍工作台页面私有章节标题、书摘卡片与布局刻度
 - `Components/BookSearchChipButtonStyle.swift`: 书籍搜索页面私有胶囊按压样式
 - `Components/BookSearchRecentQueriesSection.swift`: 书籍搜索最近查询区块
 - `Components/BookSearchResultRow.swift`: 书籍搜索结果行

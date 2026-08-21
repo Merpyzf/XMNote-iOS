@@ -2,7 +2,7 @@ import Foundation
 
 /**
  * [INPUT]: 依赖 Foundation 的 Date/DateFormatter 进行时间格式化
- * [OUTPUT]: 对外提供 BookItem、BookshelfSnapshot、BookshelfItem、BookshelfOrderItem、BookshelfListContext、BookshelfBatchEditOptions、BookshelfMoveGroupOption、BookCollectionSummary、BookCollectionDisplaySetting（含书单首页分组偏好）、BookCollectionBookMetadataEditInput、BookDetail 与单书四域内容模型
+ * [OUTPUT]: 对外提供 BookItem、BookshelfSnapshot、BookshelfItem、BookshelfOrderItem、BookshelfListContext、BookshelfBatchEditOptions、BookshelfMoveGroupOption、含旧书名滚动值兼容迁移的书架显示设置、BookCollectionSummary、BookCollectionDisplaySetting（含书单首页分组偏好）、BookCollectionBookMetadataEditInput、BookDetail 与单书四域内容模型
  * [POS]: Domain/Models 的书籍聚合模型定义，被 BookViewModel 与 BookRepository 实现共同消费
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -319,18 +319,18 @@ nonisolated enum BookshelfSortOrder: String, CaseIterable, Codable, Hashable, Se
     }
 }
 
-/// 书名在书架卡片上的展示策略，先作为设置语义沉淀，后续视觉细化继续复用。
+/// 书名在书架卡片上的展示策略；保留 compact 原始值只用于旧设置解码兼容。
 nonisolated enum BookshelfTitleDisplayMode: String, CaseIterable, Codable, Hashable, Sendable {
     case standard
     case compact
     case full
 
+    nonisolated static let allCases: [BookshelfTitleDisplayMode] = [.standard, .full]
+
     var title: String {
         switch self {
-        case .standard:
+        case .standard, .compact:
             return "默认显示"
-        case .compact:
-            return "滚动显示"
         case .full:
             return "两行显示"
         }
@@ -338,13 +338,16 @@ nonisolated enum BookshelfTitleDisplayMode: String, CaseIterable, Codable, Hasha
 
     var subtitle: String {
         switch self {
-        case .standard:
+        case .standard, .compact:
             return "单行显示，超出省略"
-        case .compact:
-            return "单行显示，超出时自动滚动"
         case .full:
             return "最多显示两行，超出省略"
         }
+    }
+
+    /// 将历史滚动显示值规范化为当前默认单行省略语义。
+    var normalized: BookshelfTitleDisplayMode {
+        self == .compact ? .standard : self
     }
 }
 
@@ -395,7 +398,7 @@ nonisolated struct BookshelfDisplaySetting: Codable, Hashable, Sendable {
         self.sortOrder = sortOrder
         self.isSectionEnabled = isSectionEnabled
         self.pinnedInAllSorts = pinnedInAllSorts
-        self.titleDisplayMode = titleDisplayMode
+        self.titleDisplayMode = titleDisplayMode.normalized
     }
 
     /// 从本地轻量设置解码；新增字段缺失时按 Android 默认显示语义补齐。
@@ -1525,7 +1528,7 @@ nonisolated enum BookDetailAttributeKind: Hashable, Sendable {
     }
 }
 
-/// 书籍详情页资料属性，属性值保留原始展示文本。
+/// 书籍工作台资料属性，属性值保留原始展示文本。
 nonisolated struct BookDetailAttribute: Identifiable, Hashable, Sendable {
     let kind: BookDetailAttributeKind
     let value: String
@@ -1533,7 +1536,7 @@ nonisolated struct BookDetailAttribute: Identifiable, Hashable, Sendable {
     var id: String { "\(kind)-\(value)" }
 }
 
-/// 书籍详情页目录条目，按 Android v41 章节层级字段展示缩进。
+/// 书籍工作台目录条目，按 Android v41 章节层级字段展示缩进。
 nonisolated struct BookDetailChapter: Identifiable, Hashable, Sendable {
     let id: Int64
     let parentID: Int64
@@ -1572,7 +1575,7 @@ nonisolated enum BookNotesLoadState: String, Hashable, Sendable {
     case failed
 }
 
-/// 书籍详情页模型，聚合资料字段、目录、书摘数量与阅读状态，并承载首屏阅读概览。
+/// 书籍工作台模型，聚合资料字段、目录、四域数量与阅读状态，并承载首屏阅读概览。
 nonisolated struct BookDetail: Identifiable, Hashable, Sendable {
     let id: Int64
     let name: String
@@ -1583,7 +1586,9 @@ nonisolated struct BookDetail: Identifiable, Hashable, Sendable {
     let noteCount: Int
     let relatedCount: Int
     let reviewCount: Int
+    let readStatusID: Int64
     let readStatusName: String
+    let readStatusBadgeTitle: String
     let totalReadingSeconds: Int64
     let readingProgressFraction: Double?
     let readingProgressText: String
@@ -1595,7 +1600,7 @@ nonisolated struct BookDetail: Identifiable, Hashable, Sendable {
     let attributes: [BookDetailAttribute]
     let chapters: [BookDetailChapter]
 
-    /// 构建详情页展示模型；纯文本预览由页面状态源按需预处理，Repository 可只提供原始 HTML 字段。
+    /// 构建书籍工作台展示模型；纯文本预览由页面状态源按需预处理，Repository 可只提供原始 HTML 字段。
     init(
         id: Int64,
         name: String,
@@ -1606,7 +1611,9 @@ nonisolated struct BookDetail: Identifiable, Hashable, Sendable {
         noteCount: Int,
         relatedCount: Int,
         reviewCount: Int,
+        readStatusID: Int64,
         readStatusName: String,
+        readStatusBadgeTitle: String,
         totalReadingSeconds: Int64,
         readingProgressFraction: Double?,
         readingProgressText: String,
@@ -1627,7 +1634,9 @@ nonisolated struct BookDetail: Identifiable, Hashable, Sendable {
         self.noteCount = noteCount
         self.relatedCount = relatedCount
         self.reviewCount = reviewCount
+        self.readStatusID = readStatusID
         self.readStatusName = readStatusName
+        self.readStatusBadgeTitle = readStatusBadgeTitle
         self.totalReadingSeconds = totalReadingSeconds
         self.readingProgressFraction = readingProgressFraction
         self.readingProgressText = readingProgressText

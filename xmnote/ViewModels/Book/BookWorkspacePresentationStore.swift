@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 BookDetail 与单书四域内容模型，接收工作台搜索、加载门闩、筛选、排序和目录展开状态
- * [OUTPUT]: 对外提供可取消的 BookWorkspacePresentationStore、静默首帧占位与稳定的 collection section/item 展示快照
+ * [OUTPUT]: 对外提供可取消的 BookWorkspacePresentationStore、共享 Chrome 占位与稳定业务内容 collection 快照
  * [POS]: Book 模块单书工作台展示派生层，把分组排序移出 SwiftUI/UIKit 热渲染路径，并以 revision 保证最新输入优先
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -38,8 +38,7 @@ nonisolated enum BookWorkspaceCollectionSectionID: Hashable, Sendable {
 
 /// Collection item 的稳定业务身份；禁止使用数组下标参与身份。
 nonisolated enum BookWorkspaceCollectionItemID: Hashable, Sendable {
-    case bookHeader
-    case scopeBar
+    case chromeSpacer
     case catalog(Int64)
     case note(Int64)
     case related(Int64)
@@ -103,8 +102,7 @@ nonisolated struct BookWorkspaceEmptyRow: Hashable, Sendable {
 
 /// 单条 Collection item 的不可变展示载荷。
 nonisolated enum BookWorkspaceCollectionItem: Hashable, Sendable {
-    case bookHeader
-    case scopeBar
+    case chromeSpacer
     case catalog(BookWorkspaceCatalogRow)
     case note(BookWorkspaceNoteRow)
     case related(BookWorkspaceRelatedRow)
@@ -132,13 +130,7 @@ nonisolated struct BookWorkspacePresentationSnapshot: Sendable {
         }
         return Self(
             revision: 0,
-            sections: [
-                BookWorkspaceCollectionSectionModel(
-                    id: .chrome,
-                    style: .chrome,
-                    header: nil,
-                    itemIDs: [.bookHeader, .scopeBar]
-                ),
+            sections: [chromeSection(),
                 BookWorkspaceCollectionSectionModel(
                     id: .empty(section),
                     style: .empty,
@@ -147,8 +139,7 @@ nonisolated struct BookWorkspacePresentationSnapshot: Sendable {
                 )
             ],
             itemsByID: [
-                .bookHeader: .bookHeader,
-                .scopeBar: .scopeBar,
+                .chromeSpacer: .chromeSpacer,
                 .empty(section): .empty(
                     BookWorkspaceEmptyRow(
                         title: "正在整理内容",
@@ -160,22 +151,22 @@ nonisolated struct BookWorkspacePresentationSnapshot: Sendable {
         )
     }
 
-    /// 为尚未达到读取反馈阈值的内容域保留稳定 chrome，不提前显示伪 loading 文案。
+    /// 为尚未达到读取反馈阈值的内容域只保留共享 Chrome 占位，不提前显示伪 loading 文案。
     static func placeholder(for section: BookWorkspaceSection) -> Self {
         Self(
             revision: 0,
-            sections: [
-                BookWorkspaceCollectionSectionModel(
-                    id: .chrome,
-                    style: .chrome,
-                    header: nil,
-                    itemIDs: [.bookHeader, .scopeBar]
-                )
-            ],
-            itemsByID: [
-                .bookHeader: .bookHeader,
-                .scopeBar: .scopeBar
-            ]
+            sections: [chromeSection()],
+            itemsByID: [.chromeSpacer: .chromeSpacer]
+        )
+    }
+
+    /// 只为共享头部与 Tab 提供滚动空间；实际 Chrome 由 Pager 宿主唯一渲染。
+    nonisolated static func chromeSection() -> BookWorkspaceCollectionSectionModel {
+        BookWorkspaceCollectionSectionModel(
+            id: .chrome,
+            style: .chrome,
+            header: nil,
+            itemIDs: [.chromeSpacer]
         )
     }
 }
@@ -492,19 +483,6 @@ final class BookWorkspacePresentationStore {
         noteRowStates = noteRowStates.filter { validIDs.contains($0.key) }
     }
 
-    nonisolated private static func chromeSection() -> BookWorkspaceCollectionSectionModel {
-        BookWorkspaceCollectionSectionModel(
-            id: .chrome,
-            style: .chrome,
-            header: nil,
-            itemIDs: [.bookHeader, .scopeBar]
-        )
-    }
-
-    nonisolated private static func baseItems() -> [BookWorkspaceCollectionItemID: BookWorkspaceCollectionItem] {
-        [.bookHeader: .bookHeader, .scopeBar: .scopeBar]
-    }
-
     nonisolated private static func normalized(_ value: String) -> String {
         value.trimmingCharacters(in: .whitespacesAndNewlines)
     }
@@ -525,7 +503,9 @@ final class BookWorkspacePresentationStore {
             return matchesKeyword && matchesFilter
         }
         let visible = visibleChapters(filtered, expandedIDs: input.expandedChapterIDs)
-        var items = baseItems()
+        var items: [BookWorkspaceCollectionItemID: BookWorkspaceCollectionItem] = [
+            .chromeSpacer: .chromeSpacer
+        ]
         let contentIDs: [BookWorkspaceCollectionItemID]
         let contentSection: BookWorkspaceCollectionSectionModel
 
@@ -560,7 +540,7 @@ final class BookWorkspacePresentationStore {
         }
         return BookWorkspacePresentationSnapshot(
             revision: 0,
-            sections: [chromeSection(), contentSection],
+            sections: [BookWorkspacePresentationSnapshot.chromeSection(), contentSection],
             itemsByID: items
         )
     }
@@ -607,7 +587,9 @@ final class BookWorkspacePresentationStore {
             return matchesKeyword && (!input.notesWithIdeasOnly || note.hasSourceIdea)
         }
 
-        var items = baseItems()
+        var items: [BookWorkspaceCollectionItemID: BookWorkspaceCollectionItem] = [
+            .chromeSpacer: .chromeSpacer
+        ]
         guard !notes.isEmpty else {
             return makeEmptySnapshot(
                 for: .notes,
@@ -626,8 +608,7 @@ final class BookWorkspacePresentationStore {
             }
             return BookWorkspacePresentationSnapshot(
                 revision: 0,
-                sections: [
-                    chromeSection(),
+                sections: [BookWorkspacePresentationSnapshot.chromeSection(),
                     BookWorkspaceCollectionSectionModel(
                         id: .notesChapter(-1),
                         style: .noteCards,
@@ -679,7 +660,7 @@ final class BookWorkspacePresentationStore {
         }
         return BookWorkspacePresentationSnapshot(
             revision: 0,
-            sections: [chromeSection()] + sections,
+            sections: [BookWorkspacePresentationSnapshot.chromeSection()] + sections,
             itemsByID: items
         )
     }
@@ -690,7 +671,9 @@ final class BookWorkspacePresentationStore {
         systemImage: String,
         description: String
     ) -> BookWorkspacePresentationSnapshot {
-        var items = baseItems()
+        var items: [BookWorkspaceCollectionItemID: BookWorkspaceCollectionItem] = [
+            .chromeSpacer: .chromeSpacer
+        ]
         items[.empty(section)] = .empty(
             BookWorkspaceEmptyRow(
                 title: title,
@@ -700,8 +683,7 @@ final class BookWorkspacePresentationStore {
         )
         return BookWorkspacePresentationSnapshot(
             revision: 0,
-            sections: [
-                chromeSection(),
+            sections: [BookWorkspacePresentationSnapshot.chromeSection(),
                 BookWorkspaceCollectionSectionModel(
                     id: .empty(section), style: .empty, header: nil, itemIDs: [.empty(section)]
                 )
@@ -724,7 +706,9 @@ final class BookWorkspacePresentationStore {
                 || item.linkedBookAuthor.localizedCaseInsensitiveContains(keyword)
             return matchesCategory && matchesKeyword
         }
-        var items = baseItems()
+        var items: [BookWorkspaceCollectionItemID: BookWorkspaceCollectionItem] = [
+            .chromeSpacer: .chromeSpacer
+        ]
         guard !filtered.isEmpty else {
             items[.empty(.related)] = .empty(
                 BookWorkspaceEmptyRow(
@@ -735,8 +719,7 @@ final class BookWorkspacePresentationStore {
             )
             return BookWorkspacePresentationSnapshot(
                 revision: 0,
-                sections: [
-                    chromeSection(),
+                sections: [BookWorkspacePresentationSnapshot.chromeSection(),
                     BookWorkspaceCollectionSectionModel(
                         id: .empty(.related), style: .empty, header: nil, itemIDs: [.empty(.related)]
                     )
@@ -781,7 +764,7 @@ final class BookWorkspacePresentationStore {
         }
         return BookWorkspacePresentationSnapshot(
             revision: 0,
-            sections: [chromeSection()] + sections,
+            sections: [BookWorkspacePresentationSnapshot.chromeSection()] + sections,
             itemsByID: items
         )
     }
@@ -795,7 +778,9 @@ final class BookWorkspacePresentationStore {
                 || item.title.localizedCaseInsensitiveContains(keyword)
                 || item.contentPlainText.localizedCaseInsensitiveContains(keyword)
         }
-        var items = baseItems()
+        var items: [BookWorkspaceCollectionItemID: BookWorkspaceCollectionItem] = [
+            .chromeSpacer: .chromeSpacer
+        ]
         guard !filtered.isEmpty else {
             items[.empty(.reviews)] = .empty(
                 BookWorkspaceEmptyRow(
@@ -806,8 +791,7 @@ final class BookWorkspacePresentationStore {
             )
             return BookWorkspacePresentationSnapshot(
                 revision: 0,
-                sections: [
-                    chromeSection(),
+                sections: [BookWorkspacePresentationSnapshot.chromeSection(),
                     BookWorkspaceCollectionSectionModel(
                         id: .empty(.reviews), style: .empty, header: nil, itemIDs: [.empty(.reviews)]
                     )
@@ -831,8 +815,7 @@ final class BookWorkspacePresentationStore {
         }
         return BookWorkspacePresentationSnapshot(
             revision: 0,
-            sections: [
-                chromeSection(),
+            sections: [BookWorkspacePresentationSnapshot.chromeSection(),
                 BookWorkspaceCollectionSectionModel(
                     id: .reviews, style: .groupedRows, header: nil, itemIDs: ids
                 )

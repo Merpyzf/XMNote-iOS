@@ -5,7 +5,7 @@
 //  Created by 王珂 on 2026/2/10.
 //
 //  [INPUT]: 无外部依赖，仅依赖 SwiftUI 框架
-//  [OUTPUT]: Color 语义扩展、SwiftUI/UIKit 同源阅读排版、阅读日历与内容编辑语义、Spacing / CornerRadius / CardStyle 常量及组件组合令牌
+//  [OUTPUT]: Color 语义扩展、SwiftUI/UIKit 同源阅读排版、阅读日历与内容编辑语义、菜单/Dialog 表层语义、Spacing / CornerRadius / CardStyle 常量及颜色构造器
 //  [POS]: Utilities 模块的设计令牌中枢，全局 UI 一致性的单一真相源
 //  [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
 
@@ -836,32 +836,32 @@ enum BookshelfTypography {
 enum NoteExcerptTypography {
     static var body: Font {
         AppTypography.fixed(
-            baseSize: 15,
-            relativeTo: .subheadline,
-            minimumPointSize: 15
+            baseSize: 16,
+            relativeTo: .body,
+            minimumPointSize: 16
         )
     }
     static let bodyLineSpacing: CGFloat = 7
     static var uiBody: UIFont {
         AppTypography.uiFixed(
-            baseSize: 15,
-            textStyle: .subheadline,
-            minimumPointSize: 15
+            baseSize: 16,
+            textStyle: .body,
+            minimumPointSize: 16
         )
     }
     static var idea: Font {
         AppTypography.fixed(
-            baseSize: 13,
-            relativeTo: .footnote,
-            minimumPointSize: 13
+            baseSize: 14,
+            relativeTo: .subheadline,
+            minimumPointSize: 14
         )
     }
-    static let ideaLineSpacing: CGFloat = 4
+    static let ideaLineSpacing: CGFloat = 5
     static var uiIdea: UIFont {
         AppTypography.uiFixed(
-            baseSize: 13,
-            textStyle: .footnote,
-            minimumPointSize: 13
+            baseSize: 14,
+            textStyle: .subheadline,
+            minimumPointSize: 14
         )
     }
     static var footer: Font {

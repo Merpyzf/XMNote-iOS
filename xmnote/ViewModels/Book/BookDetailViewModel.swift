@@ -11,7 +11,7 @@ import os
 #endif
 
 /**
- * [INPUT]: 依赖 BookDetailRepositoryProtocol 提供书籍详情与四域观察流，依赖 ContentRepositoryProtocol 提供排序/分类/相关写入，依赖 ReadCalendarColorRepositoryProtocol 提取头部色彩
+ * [INPUT]: 依赖 BookDetailRepositoryProtocol 提供书籍详情与四域观察流，依赖 ContentRepositoryProtocol 提供排序/分类/相关写入，依赖 ReadCalendarColorRepositoryProtocol 提取克制头部色彩
  * [OUTPUT]: 对外提供 BookDetailViewModel，输出 book、目录、书摘、相关、书评、分类、持久化排序、头部色彩及可显式启停的观察与写入生命周期
  * [POS]: Book 模块单书内容工作台状态编排器，被 BookDetailView 与阅读详情页消费
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -532,7 +532,7 @@ final class BookDetailViewModel {
         }
     }
 
-    /// 为详情页生成稳定纯文本预览，避免 SwiftUI 渲染路径重复解析富文本 HTML。
+    /// 为书籍工作台生成稳定纯文本预览，避免 SwiftUI 渲染路径重复解析富文本 HTML。
     nonisolated private static func preparedBook(_ detail: BookDetail?) throws -> BookDetail? {
         guard let detail else { return nil }
         try Task.checkCancellation()
@@ -546,7 +546,9 @@ final class BookDetailViewModel {
             noteCount: detail.noteCount,
             relatedCount: detail.relatedCount,
             reviewCount: detail.reviewCount,
+            readStatusID: detail.readStatusID,
             readStatusName: detail.readStatusName,
+            readStatusBadgeTitle: detail.readStatusBadgeTitle,
             totalReadingSeconds: detail.totalReadingSeconds,
             readingProgressFraction: detail.readingProgressFraction,
             readingProgressText: detail.readingProgressText,

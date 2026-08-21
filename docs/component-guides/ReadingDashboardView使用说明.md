@@ -20,7 +20,7 @@ ReadingDashboardView(
 - `onOpenReadCalendar: (Date) -> Void`
   - 作用：承接热力图点击后的阅读日历跳转。
 - `onOpenBookDetail: (Int64) -> Void`
-  - 作用：承接继续阅读、最近在读、年度已读列表等书籍详情跳转。
+  - 作用：承接继续阅读、最近在读、年度已读列表等书籍工作台跳转。
 
 ## 依赖关系
 - 通过 `@Environment(RepositoryContainer.self)` 读取 `readingDashboardRepository`。

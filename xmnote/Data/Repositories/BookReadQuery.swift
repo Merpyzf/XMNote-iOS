@@ -2,13 +2,13 @@ import Foundation
 import GRDB
 
 /**
- * [INPUT]: 依赖 GRDB Database、BookContentSortQuery 与 book/note/chapter/attach_image/tag/tag_note/category/category_content/review/read_status/source/sort/read_time_record 表读取书籍展示数据
- * [OUTPUT]: 对外提供 BookReadQuery（书籍卡片、选择、详情、目录及按持久化规则排序的单书四域只读查询）
+ * [INPUT]: 依赖 GRDB Database、BookContentSortQuery 与 book/note/chapter/attach_image/tag/tag_note/category/category_content/review/read_status/book_read_status_record/source/sort/read_time_record 表读取书籍展示数据
+ * [OUTPUT]: 对外提供 BookReadQuery（书籍卡片、选择、工作台详情、目录及按持久化规则排序的单书四域只读查询）
  * [POS]: Data 层书籍只读查询协作者，承接 BookRepository 的无副作用读取映射逻辑
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
-/// 书籍只读查询助手，隔离列表、选择器、详情页和书摘读取映射。
+/// 书籍只读查询助手，隔离列表、选择器、书籍工作台和书摘读取映射。
 nonisolated enum BookReadQuery {
     /// 查询书架页需要的书籍卡片数据，并补齐每本书的有效笔记数量。
     /// - Throws: 数据库查询失败时抛出错误。
@@ -98,23 +98,27 @@ nonisolated enum BookReadQuery {
         return mapPickerBook(row)
     }
 
-    /// 查询指定书籍详情数据，供详情页头部信息区、资料分区与目录分区渲染。
+    /// 查询指定书籍详情数据，供书籍工作台头部信息区与四域内容渲染。
     /// - Throws: 数据库查询失败时抛出错误。
     static func fetchBook(_ db: Database, bookId: Int64) throws -> BookDetail? {
-        // SQL 目的：读取单本书资料详情，并补充阅读状态、来源、评分、进度、四域内容数量与累计阅读时长。
-        // 涉及表：book b LEFT JOIN read_status rs LEFT JOIN source s；note/category_content/review 子查询统计有效内容，read_time_record 子查询按 book_id 聚合阅读秒数。
-        // 关键过滤：按 bookId 精确命中，排除软删除书籍与占位书 b.id = 0；阅读记录严格使用 Android 已完成口径 status = 3、is_deleted = 0、book_id != 0。
+        // SQL 目的：读取单本书资料详情，并补充阅读状态、读完次数、来源、评分、进度、四域内容数量与累计阅读时长。
+        // 涉及表：book b LEFT JOIN read_status rs LEFT JOIN source s；book_read_status_record/note/category_content/review 子查询统计有效状态记录与内容，read_time_record 子查询按 book_id 聚合阅读秒数。
+        // 关键过滤：按 bookId 精确命中，排除软删除书籍与占位书 b.id = 0；读完次数与阅读记录严格使用 Android 已完成口径 read_status_id/status = 3、is_deleted = 0、book_id 匹配。
         // 时间字段：pub_date 为 Android 原始文本字段，仅展示不转时区；read_time_record.elapsed_seconds 为秒，直接聚合且不做时区换算。
         // 返回字段用途：构建首屏书籍身份、阅读概览、资料属性、简介、作者简介与书摘数量。
         let sql = """
             SELECT b.id, b.name, b.author, b.cover, b.press, b.score,
                    b.author_intro, b.translator, b.isbn, b.pub_date,
-                   b.summary, b.source_id, b.score,
+                   b.summary, b.source_id, b.score, b.read_status_id,
                    b.read_position, b.current_position_unit,
                    b.total_position, b.total_pagination,
                    COALESCE(rs.name, '') AS read_status_name,
                    COALESCE(s.name, '') AS source_name,
                    COALESCE(rt.total_reading_time, 0) AS total_reading_time,
+                   (SELECT COUNT(*) FROM book_read_status_record bsr
+                    WHERE bsr.book_id = b.id
+                      AND bsr.is_deleted = 0
+                      AND bsr.read_status_id = 3) AS read_done_count,
                    (SELECT COUNT(*) FROM note n
                     WHERE n.book_id = b.id AND n.is_deleted = 0) AS note_count,
                    (SELECT COUNT(*) FROM category_content cc
@@ -142,7 +146,14 @@ nonisolated enum BookReadQuery {
         let pubDate: String = row["pub_date"] ?? ""
         let isbn: String = row["isbn"] ?? ""
         let sourceName: String = row["source_name"] ?? ""
+        let readStatusID: Int64 = row["read_status_id"] ?? 0
         let readStatusName: String = row["read_status_name"] ?? ""
+        let readDoneCount: Int64 = row["read_done_count"] ?? 0
+        let readStatusBadgeTitle = BookshelfBookPresentationFormatter.readStatusBadgeTitle(
+            readStatusID: readStatusID,
+            readStatusName: readStatusName,
+            readDoneCount: readDoneCount
+        )
         let readPosition: Double = row["read_position"] ?? 0
         let currentPositionUnit: Int64 = row["current_position_unit"] ?? 0
         let totalPosition: Int64 = row["total_position"] ?? 0
@@ -173,7 +184,9 @@ nonisolated enum BookReadQuery {
             noteCount: row["note_count"] ?? 0,
             relatedCount: row["related_count"] ?? 0,
             reviewCount: row["review_count"] ?? 0,
+            readStatusID: readStatusID,
             readStatusName: readStatusName,
+            readStatusBadgeTitle: readStatusBadgeTitle,
             totalReadingSeconds: row["total_reading_time"] ?? 0,
             readingProgressFraction: progress.map { min(max($0 / 100, 0), 1) },
             readingProgressText: BookshelfBookPresentationFormatter.readingProgressText(from: progress),
@@ -188,14 +201,14 @@ nonisolated enum BookReadQuery {
         )
     }
 
-    /// 查询书籍目录条目，供详情页资料区按层级展示。
+    /// 查询书籍目录条目，供书籍工作台目录域按层级展示。
     /// - Throws: 数据库查询失败时抛出错误。
     static func fetchBookDetailChapters(_ db: Database, bookId: Int64) throws -> [BookDetailChapter] {
         // SQL 目的：读取指定书籍下的有效目录章节，并保留 Android v41 章节层级、收藏与有效书摘数量。
         // 涉及表：chapter c LEFT JOIN note n；c.id -> n.chapter_id。
         // 关键过滤：book_id 精确命中，chapter.is_deleted = 0；空标题不在 SQL 层过滤，交给映射阶段丢弃。
         // 时间字段：不参与排序；排序按 parent_id/chapter_order/source_order/id 保持 Android 章节组织顺序。
-        // 返回字段用途：构建详情页目录分区的标题、缩进层级与稳定 ID。
+        // 返回字段用途：构建书籍工作台目录域的标题、缩进层级与稳定 ID。
         let sql = """
             SELECT c.id,
                    COALESCE(c.title, '') AS title,
@@ -443,7 +456,7 @@ nonisolated enum BookReadQuery {
         }
     }
 
-    /// 组装详情页资料属性，空字段不生成空壳。
+    /// 组装书籍工作台资料属性，空字段不生成空壳。
     private static func makeBookDetailAttributes(
         author: String,
         translator: String,

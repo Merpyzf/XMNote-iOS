@@ -1,7 +1,7 @@
 /**
  * [INPUT]: 依赖 RepositoryContainer、AppNavigationCoordinator、BookDetailViewModel、XMBookCover、XMRatingBar 与外层书籍/阅读路由回调
- * [OUTPUT]: 对外提供首帧结构稳定的 BookDetailView 与 BookChapterNotesView，形成搜索工具栏、持久化排序与四域内容常驻的单书工作台
- * [POS]: Book 模块单书内容工作台壳层，通过单一滚动直驱顶部主题表面、原子吸顶、独立滚动状态与单一更多菜单承接目录/书摘/相关/书评
+ * [OUTPUT]: 对外提供首帧结构稳定的 BookDetailView 与 BookChapterNotesView，形成封面影像 Hero、可收起概览、搜索工具栏、持久化排序与四域内容常驻的单书工作台
+ * [POS]: Book 模块单书内容工作台壳层，以共享 Chrome、独立内容滚动与单一更多菜单承接目录/书摘/相关/书评
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
@@ -486,12 +486,11 @@ private struct BookWorkspaceContentView: View {
 
     @Environment(AppNavigationCoordinator.self) private var navigationCoordinator
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.verticalSizeClass) private var verticalSizeClass
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
     @State private var selectedSection = BookWorkspaceSection.notes
     @State private var presentationStore = BookWorkspacePresentationStore()
-    @State private var scrollVisualStates = BookWorkspaceScrollVisualStates()
-    @State private var headerAnchors: [BookWorkspaceSection: BookWorkspaceHeaderAnchors] = [:]
     @State private var searchQueries: [BookWorkspaceSection: String] = [:]
     @State private var isSearchPresented = false
     @State private var catalogFilter = CatalogFilter.all
@@ -503,7 +502,7 @@ private struct BookWorkspaceContentView: View {
     @State private var relatedBookDraft: RelatedBookRelationDraft?
     @State private var pendingDeletion: BookWorkspaceDeletionRequest?
     @State private var relationLoadErrorMessage: String?
-    @State private var isNavigationBarSurfaceVisible = false
+    @State private var isBookHeaderFullyCollapsed = false
     @State private var readLoadingGate = LoadingGate()
     @State private var notesLoadingGate = LoadingGate()
 #if DEBUG
@@ -532,8 +531,9 @@ private struct BookWorkspaceContentView: View {
         }
         .navigationTitle("")
         .navigationBarTitleDisplayMode(.inline)
-        .toolbarBackground(themePalette.canvasColor, for: .navigationBar)
-        .toolbarBackground(navigationBarBackgroundVisibility, for: .navigationBar)
+        .toolbarBackground(Color.surfacePage, for: .navigationBar)
+        .toolbarBackgroundVisibility(.hidden, for: .navigationBar)
+        .toolbarColorScheme(colorScheme, for: .navigationBar)
         .tint(Color.iconPrimary)
         .searchable(
             text: activeSearchQuery,
@@ -543,6 +543,7 @@ private struct BookWorkspaceContentView: View {
         )
         .searchToolbarBehavior(.automatic)
         .toolbar {
+            workspaceNavigationTitle
             toolbarActions
             workspaceToolbar
         }
@@ -579,8 +580,11 @@ private struct BookWorkspaceContentView: View {
             syncReadLoadingVisibility()
             syncNotesLoadingVisibility()
         }
-        .onChange(of: viewModel.book == nil) { _, _ in
+        .onChange(of: viewModel.book == nil) { _, isBookUnavailable in
             syncReadLoadingVisibility()
+            if isBookUnavailable {
+                isBookHeaderFullyCollapsed = false
+            }
         }
         .onChange(of: isSearchPresented) { wasPresented, isPresented in
             guard wasPresented, !isPresented else { return }
@@ -612,6 +616,30 @@ private struct BookWorkspaceContentView: View {
             isSearchPresented = false
             searchQueries.removeAll()
         }
+    }
+
+    /// 常驻工具栏主标题，仅在书籍概览完全收起且搜索未展开时淡入，避免条件插入导致导航栏重排。
+    @ToolbarContentBuilder
+    private var workspaceNavigationTitle: some ToolbarContent {
+        ToolbarItem(placement: .principal) {
+            Text(viewModel.book?.name ?? "")
+                .font(AppTypography.headline)
+                .foregroundStyle(Color.textPrimary)
+                .lineLimit(1)
+                .truncationMode(.tail)
+                .opacity(isWorkspaceNavigationTitleVisible ? 1 : 0)
+                .animation(
+                    reduceMotion ? nil : .easeInOut(duration: 0.16),
+                    value: isWorkspaceNavigationTitleVisible
+                )
+                .accessibilityHidden(!isWorkspaceNavigationTitleVisible)
+                .accessibilityAddTraits(.isHeader)
+        }
+    }
+
+    /// 收敛标题显隐条件；搜索展开时让位给系统搜索框，关闭后按当前折叠状态恢复。
+    private var isWorkspaceNavigationTitleVisible: Bool {
+        isBookHeaderFullyCollapsed && !isSearchPresented && viewModel.book != nil
     }
 
     @ToolbarContentBuilder
@@ -747,40 +775,32 @@ private struct BookWorkspaceContentView: View {
             .accessibilityLabel(accessibilityLabel)
     }
 
-    /// 组合四个常驻滚动域，隐藏域不参与点击或辅助技术导航。
+    /// 组合唯一固定书籍头部、固定 Tab 与四个常驻纯内容页。
     private func workspace(_ book: BookDetail) -> some View {
         let coordinator = navigationCoordinator
-        let palette = themePalette
         let notesKeyword = searchQuery(.notes)
         let relatedKeyword = searchQuery(.related)
         let reviewsKeyword = searchQuery(.reviews)
 
-        return ZStack {
-            ForEach(BookWorkspaceSection.allCases, id: \.self) { section in
-                BookWorkspaceAtmosphere(
-                    palette: palette,
-                    headerHeight: (headerAnchors[section] ?? BookWorkspaceHeaderAnchors()).pinOffset,
-                    visualState: scrollVisualStates.state(for: section)
-                )
-                    .opacity(selectedSection == section ? 1 : 0)
-                    .allowsHitTesting(false)
-                    .accessibilityHidden(selectedSection != section)
-            }
-
-            BookWorkspaceCollectionView(
+        return BookWorkspaceCollectionView(
                 book: book,
                 snapshots: Dictionary(
                     uniqueKeysWithValues: BookWorkspaceSection.allCases.map {
                         ($0, presentationStore.snapshot(for: $0))
                     }
                 ),
-                selectedSection: selectedSection,
+                committedSection: selectedSection,
                 notesCount: workspaceNotesCount(for: book),
                 notesLoadState: viewModel.notesLoadState,
                 reduceMotion: reduceMotion,
-                canvasColor: palette.canvasColor,
-                canvasPaletteID: palette.identifier,
-                onSelectSection: switchSection,
+                colorScheme: colorScheme,
+                dynamicTypeSize: dynamicTypeSize,
+                verticalSizeClass: verticalSizeClass,
+                canvasColor: Color.surfacePage,
+                contentSurfaceColor: Color.surfaceCard,
+                appearanceID: workspaceAppearanceID,
+                onSectionCommit: commitSection,
+                onBookHeaderFullyCollapsedChange: updateBookHeaderCollapseState,
                 onOpenReadingDetail: {
                     onOpenReadingDetail(bookId)
                 },
@@ -844,59 +864,23 @@ private struct BookWorkspaceContentView: View {
                 },
                 onDeleteReview: { item in
                     pendingDeletion = .review(item)
-                },
-                onScrollMetricsChange: handleCollectionScrollMetrics
+                }
             )
-            .ignoresSafeArea(.container, edges: [.top, .bottom])
-            .zIndex(1)
-        }
-        .background(palette.canvasColor.ignoresSafeArea())
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .ignoresSafeArea(.container, edges: [.top, .bottom])
+        .background(Color.surfacePage.ignoresSafeArea())
     }
 
-    /// 接收 UIKit 的真实滚动几何；连续指标只写入氛围状态，Tab 吸附完全由 UIKit frame 驱动。
-    private func handleCollectionScrollMetrics(
-        _ section: BookWorkspaceSection,
-        _ metrics: BookWorkspaceCollectionScrollMetrics
-    ) {
-        let visualState = scrollVisualStates.state(for: section)
-        visualState.update(
-            BookWorkspaceScrollMetrics(
-                effectiveOffset: metrics.effectiveOffset,
-                viewportTop: metrics.viewportTop
-            )
-        )
-        if metrics.pinOffset > 0 {
-            var anchors = headerAnchors[section] ?? BookWorkspaceHeaderAnchors()
-            if abs(anchors.pinOffset - metrics.pinOffset) >= 0.5 {
-                anchors.pinOffset = metrics.pinOffset
-                headerAnchors[section] = anchors
-            }
-        }
-        if section == selectedSection {
-            updateNavigationBarSurface(
-                effectiveOffset: metrics.effectiveOffset,
-                pinOffset: metrics.pinOffset
-            )
-        }
-    }
-
-    /// 切换四个常驻内容域；Tab 指示器在自身内部响应，列表与布局不进入动画事务。
-    private func switchSection(_ section: BookWorkspaceSection) {
+    /// 接收原生 Pager 最终落定域；拖动中途不会提前切换搜索、菜单或底部操作语义。
+    private func commitSection(_ section: BookWorkspaceSection) {
         guard selectedSection != section else { return }
         selectedSection = section
-        updateNavigationBarSurface(
-            effectiveOffset: scrollVisualStates.state(for: section).effectiveOffset,
-            pinOffset: (headerAnchors[section] ?? BookWorkspaceHeaderAnchors()).pinOffset
-        )
     }
 
-    /// Tab 吸附后启用同色导航表面，避免正文继续透过浮动导航栏；展开态仍允许 Hero 进入其下方。
-    private func updateNavigationBarSurface(effectiveOffset: CGFloat, pinOffset: CGFloat) {
-        let shouldShowSurface = pinOffset > 0 && effectiveOffset >= pinOffset - 0.5
-        guard shouldShowSurface != isNavigationBarSurfaceVisible else { return }
-        withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.16)) {
-            isNavigationBarSurfaceVisible = shouldShowSurface
-        }
+    /// 只接收 Header 完全收起边界的离散变化，避免连续滚动偏移进入 SwiftUI 状态树。
+    private func updateBookHeaderCollapseState(_ isFullyCollapsed: Bool) {
+        guard isBookHeaderFullyCollapsed != isFullyCollapsed else { return }
+        isBookHeaderFullyCollapsed = isFullyCollapsed
     }
 
     @ViewBuilder
@@ -1065,7 +1049,6 @@ private struct BookWorkspaceContentView: View {
     @ViewBuilder
     private func notesWorkspaceContent(_ book: BookDetail) -> some View {
         let groups = noteGroups(for: book)
-        let palette = themePalette
         if groups.isEmpty {
             contentUnavailable(
                 title: normalizedSearchQuery(.notes).isEmpty ? "还没有书摘" : "没有匹配的书摘",
@@ -1080,8 +1063,8 @@ private struct BookWorkspaceContentView: View {
                 title: group.title,
                 count: group.notes.count,
                 isStarred: false,
-                canvasColor: palette.canvasColor,
-                canvasPaletteID: palette.identifier,
+                canvasColor: Color.surfacePage,
+                canvasPaletteID: workspaceAppearanceID,
                 reduceMotion: reduceMotion
             )
             .padding(.top, Spacing.section)
@@ -1100,8 +1083,8 @@ private struct BookWorkspaceContentView: View {
                         title: group.title,
                         count: group.notes.count,
                         isStarred: group.isStarred,
-                        canvasColor: palette.canvasColor,
-                        canvasPaletteID: palette.identifier,
+                        canvasColor: Color.surfacePage,
+                        canvasPaletteID: workspaceAppearanceID,
                         reduceMotion: reduceMotion
                     )
                 } footer: {
@@ -1120,6 +1103,7 @@ private struct BookWorkspaceContentView: View {
             BookWorkspaceStatefulNoteItem(
                 row: BookWorkspaceNoteRow(note: note, footerText: note.footerText),
                 state: presentationStore.rowState(for: note.id),
+                surfaceColor: Color.surfaceCard,
                 onOpen: { openNote(note) },
                 onEdit: { editNote(note) }
             )
@@ -1746,17 +1730,9 @@ private struct BookWorkspaceContentView: View {
         )
     }
 
-    /// 普通状态让导航栏浮在主题画布上；减少透明度时使用同色不透明表面保证可读性。
-    private var navigationBarBackgroundVisibility: Visibility {
-        reduceTransparency || isNavigationBarSurfaceVisible ? .visible : .hidden
-    }
-
-    /// 将当前封面取色与系统外观收敛为工作台唯一页面色板。
-    private var themePalette: BookWorkspaceThemePalette {
-        BookWorkspaceThemePalette(
-            tintRGBAHex: viewModel.headerTintRGBAHex,
-            colorScheme: colorScheme
-        )
+    /// 为中性内容表面的深浅外观提供稳定刷新身份，不再与封面取色耦合。
+    private var workspaceAppearanceID: UInt64 {
+        UInt64(colorScheme == .dark ? 1 : 0)
     }
 
     /// 将 Android 毫秒时间戳转换为列表级日期文案。

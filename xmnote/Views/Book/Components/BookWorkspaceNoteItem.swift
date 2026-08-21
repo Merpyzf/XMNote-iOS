@@ -1,7 +1,7 @@
 /**
- * [INPUT]: 依赖 NoteExcerpt、ExpandableRichText、XMJXImageWall 与 DesignTokens 展示单书工作台章节及书摘
- * [OUTPUT]: 对 BookDetailView 提供头部呼吸与轻量 Tab 布局刻度、共享主题画布的粘性章节头，以及带不透明阅读表面和清晰轻描边的独立书摘卡片
- * [POS]: Views/Book/Components 的页面私有内容组件，承接主题头部节奏、章节分组和具备清晰信息亲密性的书摘列表项
+ * [INPUT]: 依赖 NoteExcerpt、ExpandableRichText、XMJXImageWall 与 DesignTokens 展示单书工作台章节、书摘和头部排版令牌
+ * [OUTPUT]: 对 BookDetailView 提供统一结构轴、具备对称边界呼吸并带无缝连续书名、色点中性状态与独立普通评分胶囊的无边缘光晕封面影像 Hero、低于书摘正文的统一出版元数据层级、三项轻透阅读指标 Chip、中性内容台阶与折叠导航中和布局刻度，以及共享中性画布的章节和书摘内容
+ * [POS]: Views/Book/Components 的页面私有内容组件，承接影像 Hero 头部节奏、中性内容层、章节分组和具备清晰信息亲密性的书摘列表项
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
@@ -10,35 +10,77 @@ import UIKit
 
 /// 单书工作台专用布局刻度；把 Android 的紧凑节奏转换为当前 iOS 设计系统，不影响全局间距令牌。
 enum BookWorkspaceLayoutMetrics {
-    static let pageHorizontalInset: CGFloat = 12
-    static let headerHorizontalInset: CGFloat = 16
-    static let cardContentInset: CGFloat = 16
-    static let itemSpacing: CGFloat = 10
-    static let chapterToFirstItemSpacing: CGFloat = 8
-    static let sectionSpacing: CGFloat = 12
+    static let pageHorizontalInset: CGFloat = Spacing.screenEdge
+    static let headerHorizontalInset: CGFloat = pageHorizontalInset
+    static let cardContentInset: CGFloat = Spacing.screenEdge
+    static let itemSpacing: CGFloat = Spacing.tight
+    static let chapterToFirstItemSpacing: CGFloat = Spacing.cozy
+    static let sectionSpacing: CGFloat = Spacing.section
     static let contentBlockSpacing: CGFloat = 10
     static let metadataSpacing: CGFloat = 8
     static let minimumControlHeight: CGFloat = 44
-    static let headerTopInset: CGFloat = 16
-    static let headerBottomInset: CGFloat = 24
-    static let identityPrimarySpacing: CGFloat = 6
-    static let identitySecondarySpacing: CGFloat = 4
-    static let metricsSpacing: CGFloat = 12
-    static let headerMetricsSpacing: CGFloat = 8
-    static var headerMetricsReservedHeight: CGFloat {
-        minimumControlHeight + headerMetricsSpacing
-    }
+    static let headerTopInset: CGFloat = Spacing.double
+    static let headerBottomInset: CGFloat = Spacing.double
+    static let identityCoverSpacing: CGFloat = Spacing.screenEdge
+    static let identityPrimarySpacing: CGFloat = Spacing.compact
+    static let identitySecondarySpacing: CGFloat = Spacing.compact
+    static let identityToMetricsSpacing: CGFloat = Spacing.compact
+    static let titleStatusSpacing: CGFloat = Spacing.cozy
+    static let titleStatusRowHeight: CGFloat = minimumControlHeight
+    static let readStatusBadgeVisualHeight: CGFloat = 22
+    static let readStatusDotSize: CGFloat = 6
+    static let readStatusContentSpacing: CGFloat = Spacing.compact
+    static let readStatusHorizontalInset: CGFloat = Spacing.cozy
+    static let metricChipSpacing: CGFloat = Spacing.cozy
+    static let metricChipIconSpacing: CGFloat = 5
+    static let metricChipHorizontalInset: CGFloat = 9
+    static let metricChipVisualHeight: CGFloat = 26
+    static let headerChipFillOpacity = 0.18
+    static let headerChipPressedFillOpacity = 0.24
+    static let headerChipLightBorderOpacity = 0.30
+    static let headerChipDarkBorderOpacity = 0.14
+    static let metricsEdgeFadeWidth: CGFloat = Spacing.screenEdge
+    static let ratingSlotHeight: CGFloat = 48
+    static let ratingCapsuleHeight: CGFloat = 26
+    static let ratingCapsuleHorizontalInset: CGFloat = 7
+    static let ratingStarSize: CGFloat = 12
+    static let ratingStarSpacing: CGFloat = 1
+    static let ratingStarCount = 5
+    static let ratingCapsuleVisualWidth = CGFloat(ratingStarCount) * ratingStarSize
+        + CGFloat(ratingStarCount - 1) * ratingStarSpacing
+        + ratingCapsuleHorizontalInset * 2
+    static let scopeItemSpacing: CGFloat = Spacing.double
+    static let scopeTitleCountSpacing: CGFloat = Spacing.compact
+    static let scopeIndicatorWidth: CGFloat = 24
+    static let scopeIndicatorHeight: CGFloat = 3
+    static let scopeIndicatorOffset: CGFloat = Spacing.tight
+    static let scopeAccessibilityIndicatorSpacing: CGFloat = Spacing.cozy
     static let scopeBarEstimatedHeight: CGFloat = 44
+    static let contentStepTopCornerRadius: CGFloat = 20
+    static let navigationNeutralizationDistance: CGFloat = 64
 }
 
-/// 单书工作台内容表面的页面私有样式，统一不透明阅读填充与不抢正文的语义描边。
-enum BookWorkspaceCardSurfaceStyle {
-    static var fill: Color {
-        Color.surfaceCard
-    }
+/// 单书工作台头部排版令牌；保证公共书名跑马灯接收同源渲染字体与行高。
+enum BookWorkspaceTypography {
+    static let title: Font = AppTypography.semantic(.title3, weight: .medium)
+    static let uiTitle: UIFont = AppTypography.uiSemantic(.title3, weight: .medium)
+    static let secondaryInformation: Font = AppTypography.fixed(
+        baseSize: 14,
+        relativeTo: .subheadline,
+        minimumPointSize: 14
+    )
+    static let metricValue: Font = AppTypography.footnote
+    static let metricIcon: Font = AppTypography.caption2
 
+    static var titleLineHeight: CGFloat {
+        ceil(uiTitle.lineHeight + Spacing.tiny)
+    }
+}
+
+/// 单书工作台内容表面的页面私有样式，只保留不抢正文的弱语义描边。
+enum BookWorkspaceCardSurfaceStyle {
     static var border: Color {
-        Color.surfaceBorderSubtle
+        Color.surfaceBorderSubtle.opacity(0.55)
     }
 }
 
@@ -56,7 +98,7 @@ struct BookWorkspaceChapterHeader: View {
     var body: some View {
         HStack(spacing: Spacing.cozy) {
             Text(title)
-                .font(AppTypography.headline)
+                .font(AppTypography.subheadlineMedium)
                 .foregroundStyle(Color.textPrimary)
                 .lineLimit(dynamicTypeSize.isAccessibilitySize ? 2 : 1)
                 .multilineTextAlignment(.leading)
@@ -96,6 +138,7 @@ struct BookWorkspaceChapterHeader: View {
 struct BookWorkspaceNoteItem: View {
     let note: NoteExcerpt
     let footerText: String
+    let surfaceColor: Color
     @Binding var isContentExpanded: Bool
     @Binding var isIdeaExpanded: Bool
     let onOpen: () -> Void
@@ -134,7 +177,7 @@ struct BookWorkspaceNoteItem: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(BookWorkspaceLayoutMetrics.cardContentInset)
-        .background(BookWorkspaceCardSurfaceStyle.fill, in: shape)
+        .background(surfaceColor, in: shape)
         .overlay {
             shape.strokeBorder(
                 BookWorkspaceCardSurfaceStyle.border,
@@ -281,6 +324,7 @@ struct BookWorkspaceNoteItem: View {
 struct BookWorkspaceStatefulNoteItem: View {
     let row: BookWorkspaceNoteRow
     @Bindable var state: BookWorkspaceNoteRowState
+    let surfaceColor: Color
     let onOpen: () -> Void
     let onEdit: () -> Void
 
@@ -288,6 +332,7 @@ struct BookWorkspaceStatefulNoteItem: View {
         BookWorkspaceNoteItem(
             note: row.note,
             footerText: row.footerText,
+            surfaceColor: surfaceColor,
             isContentExpanded: $state.isContentExpanded,
             isIdeaExpanded: $state.isIdeaExpanded,
             onOpen: onOpen,

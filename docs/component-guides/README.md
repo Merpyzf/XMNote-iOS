@@ -33,7 +33,7 @@
 | BookContainerView | `xmnote/Views/Book/BookContainerView.swift` | `docs/component-guides/BookContainerView使用说明.md` | 已完成 |
 | BookGridView | `xmnote/Views/Book/BookGridView.swift` | `docs/component-guides/BookGridView使用说明.md` | 已完成 |
 | BookGridItemView | `xmnote/Views/Book/BookGridItemView.swift` | `docs/component-guides/BookGridItemView使用说明.md` | 已完成 |
-| BookDetailView | `xmnote/Views/Book/BookDetailView.swift` | `docs/component-guides/BookDetailView使用说明.md` | 已完成 |
+| BookDetailView | `xmnote/Views/Book/BookDetailView.swift` | `docs/component-guides/BookDetailView使用说明.md` | 已完善（书籍工作台） |
 | ChapterManagerView | `xmnote/Views/Book/ChapterManagerView.swift` | `docs/component-guides/ChapterManagerView使用说明.md` | 已完成 |
 | BookCollectionListView | `xmnote/Views/Book/BookCollectionListView.swift` | `docs/component-guides/BookCollectionListView使用说明.md` | 已完成 |
 | BookCollectionDetailView | `xmnote/Views/Book/BookCollectionDetailView.swift` | `docs/component-guides/BookCollectionDetailView使用说明.md` | 已完成 |

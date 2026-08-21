@@ -21,7 +21,7 @@ BookCollectionDetailView(
 ## 参数说明
 
 - `collectionID`：目标书单 ID，必须来自有效 `collection` 记录。
-- `onOpenRoute`：打开书籍详情、书籍编辑等外层路由的回调。
+- `onOpenRoute`：打开书籍工作台、书籍编辑等外层路由的回调。
 
 ## 示例
 
@@ -41,7 +41,7 @@ BookCollectionDetailView(collectionID: id) { route in
 }
 ```
 
-非占位书会进入书籍详情；占位书会执行恢复到书架的写操作。
+非占位书会进入书籍工作台；占位书会执行恢复到书架的写操作。
 
 ## 常见问题
 

@@ -6,7 +6,7 @@
 - 边界：
   - 负责创建并托管 `TimelineViewModel`。
   - 负责通过 `SubtabBootstrapCoordinator<ReadingSubTab>` 调度时间线 warmup。
-  - 负责把内容查看、阅读日历、书籍详情等事件继续上抛给更外层导航。
+  - 负责把内容查看、阅读日历、书籍工作台等事件继续上抛给更外层导航。
   - 不负责时间线内部日历与列表的具体渲染细节。
 
 ## 快速接入
@@ -33,7 +33,7 @@ ReadingContainerView(
 | `onAddNote` | `() -> Void` | 空实现 | 顶部新增笔记入口回调。 |
 | `onOpenDebugCenter` | `(() -> Void)?` | `nil` | 调试入口回调。 |
 | `onOpenReadCalendar` | `(Date) -> Void` | 空实现 | 在读页打开阅读日历。 |
-| `onOpenBookDetail` | `(Int64) -> Void` | 空实现 | 打开书籍详情。 |
+| `onOpenBookDetail` | `(Int64) -> Void` | 空实现 | 打开书籍工作台。 |
 | `onOpenContentViewer` | `(ContentViewerSourceContext, ContentViewerItemID) -> Void` | 空实现 | 打开内容查看页。 |
 
 ## 示例
