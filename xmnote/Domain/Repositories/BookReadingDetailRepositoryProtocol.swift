@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 Foundation 与 BookReadingDetailModels
- * [OUTPUT]: 对外提供 BookReadingDetailRepositoryProtocol，约束单书阅读详情观察、评分/进度/状态写入与偏好持久化
+ * [OUTPUT]: 对外提供 BookReadingDetailRepositoryProtocol，约束单书阅读详情观察、评分/进度/状态 CRUD、庆祝追踪与偏好持久化
  * [POS]: Domain/Repositories 层窄职责契约，被阅读详情 ViewModel 依赖
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -15,8 +15,14 @@ protocol BookReadingDetailRepositoryProtocol {
     func updateRating(bookID: Int64, score: Int64) async throws
     /// 按书籍既有进度单位更新当前值及可选总值。
     func updateProgress(bookID: Int64, input: BookReadingProgressInput) async throws
-    /// 按 Android 状态历史合并规则更新当前阅读状态。
-    func updateReadingStatus(bookID: Int64, statusID: Int64, changedAt: Date) async throws
+    /// 追加一条新阅读状态；同状态也保留为独立历史，并执行时间单调性校验。
+    func addReadingStatus(bookID: Int64, statusID: Int64, changedAt: Date) async throws
+    /// 精确更新一条现有阅读状态，并按 created_date 最新记录重算书籍当前状态。
+    func updateReadingStatus(bookID: Int64, recordID: Int64, statusID: Int64, changedAt: Date) async throws
+    /// 软删除一条现有阅读状态；仅剩一条有效历史时拒绝删除。
+    func deleteReadingStatus(bookID: Int64, recordID: Int64) async throws
+    /// 查询累计读完书数、本年读完书数和本年目标；目标缺失时按 Android 默认值 12 落库。
+    func fetchCompletionTracker() async throws -> BookReadingCompletionTracker
     /// 读取阅读详情页面偏好。
     func fetchSetting() -> BookReadingDetailSetting
     /// 保存阅读详情页面偏好。

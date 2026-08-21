@@ -479,7 +479,7 @@ private struct ChapterManagementRow: View {
             primaryControl
 
             if visibleItem.hasChildren {
-                NavigationLink(value: chapterNotesRoute) {
+                NavigationLink(value: AppRoute.note(chapterNotesRoute)) {
                     Image(systemName: "note.text")
                         .foregroundStyle(Color.textSecondary)
                         .frame(width: Spacing.actionReserved, height: Spacing.actionReserved)
@@ -521,7 +521,7 @@ private struct ChapterManagementRow: View {
             .accessibilityHint(primaryAccessibilityHint)
             .accessibilityAddTraits(isEditing && isSelected ? .isSelected : [])
         } else {
-            NavigationLink(value: chapterNotesRoute) {
+            NavigationLink(value: AppRoute.note(chapterNotesRoute)) {
                 rowLabel
             }
             .buttonStyle(.plain)

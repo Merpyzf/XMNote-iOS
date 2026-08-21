@@ -1,7 +1,7 @@
 /**
- * [INPUT]: 依赖 SwiftUI App 生命周期、GRDB Database、RepositoryContainer、ReadingTimerCoordinator、AppState 会员能力、XMToastCenter、桌面网页 App 级会话、AliyunpanSDK、阅读计时深链路由、DEBUG 隔离数据库启动参数与 App Group 分享导入 handoff
- * [OUTPUT]: 对外提供 xmnoteApp 常驻挂载 ContentView、原子发布数据库运行时依赖、完成应用级阅读计时调和、网页会话前后台及实时会员调和、全局 Toast Host、书单分享导入与阅读计时深链分发
- * [POS]: 应用启动编排层，负责先建立首页导航壳层，再异步组装全局依赖，并持有不能随页面销毁的计时任务、跨页面服务与系统 URL 入口
+ * [INPUT]: 依赖 SwiftUI App/WindowGroup 生命周期、GRDB Database、RepositoryContainer、ReadingTimerCoordinator、AppState、桌面网页会话、AliyunpanSDK 与 scene 级外部路由
+ * [OUTPUT]: 对外提供 xmnoteApp 与 AppSceneRoot，原子发布应用运行时，并为每个 window 隔离 SceneStateStore、书单导入和阅读计时深链
+ * [POS]: 应用启动与多 scene 编排层；应用服务保持全局，导航恢复及外部页面请求下沉到各自场景
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
@@ -30,12 +30,9 @@ struct xmnoteApp: App {
     @UIApplicationDelegateAdaptor(ReadingTimerNotificationDelegate.self) private var notificationDelegate
     @Environment(\.scenePhase) private var scenePhase
     @State private var appState = AppState()
-    @State private var sceneStateStore = SceneStateStore()
     @State private var toastCenter = XMToastCenter()
     @State private var runtime: AppRuntimeContext?
     @State private var readingTimerSettingsStore = ReadingTimerSettingsStore()
-    @State private var bookCollectionImportRouter = BookCollectionImportRouter()
-    @State private var readingTimerDeepLinkRouter = ReadingTimerDeepLinkRouter()
     @State private var desktopWebSessionCoordinator = DesktopWebSessionCoordinator()
     @State private var initError: Error?
 
@@ -49,18 +46,13 @@ struct xmnoteApp: App {
 
     var body: some Scene {
         WindowGroup {
-            ContentView(runtime: runtime, initializationError: initError)
+            AppSceneRoot(runtime: runtime, initializationError: initError)
                 .environment(appState)
-                .environment(sceneStateStore)
                 .environment(readingTimerSettingsStore)
-                .environment(bookCollectionImportRouter)
-                .environment(readingTimerDeepLinkRouter)
                 .environment(desktopWebSessionCoordinator)
                 .environment(toastCenter)
                 .xmToastHost(center: toastCenter)
                 .task {
-                    bookCollectionImportRouter.consumePendingShareImport()
-                    consumeReadingTimerSystemHandoffIfNeeded()
                     #if DEBUG
                     if ProcessInfo.processInfo.environment["XMNOTE_WEB_PARITY_PREMIUM"] == "1" {
                         appState.isPremium = true
@@ -101,23 +93,7 @@ struct xmnoteApp: App {
                         initError = error
                     }
                 }
-                .onOpenURL { url in
-                    if Aliyunpan.handleOpenURL(url) {
-                        return
-                    }
-                    if readingTimerDeepLinkRouter.handle(url) {
-                        return
-                    }
-                    bookCollectionImportRouter.handle(url)
-                }
-                .onReceive(NotificationCenter.default.publisher(for: .readingTimerSystemHandoffDidChange)) { _ in
-                    consumeReadingTimerSystemHandoffIfNeeded()
-                }
                 .onChange(of: scenePhase) { _, phase in
-                    if phase == .active {
-                        bookCollectionImportRouter.consumePendingShareImport()
-                        consumeReadingTimerSystemHandoffIfNeeded()
-                    }
                     Task {
                         await desktopWebSessionCoordinator.handleScenePhase(phase)
                         guard let readingTimerCoordinator = runtime?.readingTimerCoordinator else { return }
@@ -144,12 +120,53 @@ struct xmnoteApp: App {
         }
     }
 
-    /// 消费通知或 Live Activity 写入的持久化交接，转成与普通深链一致的精确计时路由。
+}
+
+/// 每个 WindowGroup 场景独立持有恢复状态与外部路由，避免多窗口共享返回栈或重复消费页面请求。
+private struct AppSceneRoot: View {
+    @Environment(\.scenePhase) private var scenePhase
+    @State private var sceneStateStore = SceneStateStore()
+    @State private var bookCollectionImportRouter = BookCollectionImportRouter()
+    @State private var readingTimerDeepLinkRouter = ReadingTimerDeepLinkRouter()
+
+    let runtime: AppRuntimeContext?
+    let initializationError: Error?
+
+    var body: some View {
+        ContentView(runtime: runtime, initializationError: initializationError)
+            .environment(sceneStateStore)
+            .environment(bookCollectionImportRouter)
+            .environment(readingTimerDeepLinkRouter)
+            .task {
+                bookCollectionImportRouter.consumePendingShareImport()
+                consumeReadingTimerSystemHandoffIfNeeded()
+            }
+            .onOpenURL { url in
+                if Aliyunpan.handleOpenURL(url) {
+                    return
+                }
+                if readingTimerDeepLinkRouter.handle(url) {
+                    return
+                }
+                bookCollectionImportRouter.handle(url)
+            }
+            .onReceive(
+                NotificationCenter.default.publisher(for: .readingTimerSystemHandoffDidChange)
+            ) { _ in
+                consumeReadingTimerSystemHandoffIfNeeded()
+            }
+            .onChange(of: scenePhase) { _, phase in
+                guard phase == .active else { return }
+                bookCollectionImportRouter.consumePendingShareImport()
+                consumeReadingTimerSystemHandoffIfNeeded()
+            }
+    }
+
+    /// 读取通知或 Live Activity 的进程级一次性交接，并只写入成功消费它的场景路由器。
     private func consumeReadingTimerSystemHandoffIfNeeded() {
         guard let url = ReadingTimerSystemHandoff.consumeURL() else { return }
         _ = readingTimerDeepLinkRouter.handle(url)
     }
-
 }
 
 /// 书单导入请求，区分手动深链预览与系统分享自动导入两条消费路径。
@@ -242,6 +259,9 @@ enum UITestLaunchConfiguration {
     nonisolated static let openDefaultBookshelfArgument = "-XMNoteUITestOpenDefaultBookshelf"
     nonisolated static let openWantReadListArgument = "-XMNoteUITestOpenWantReadList"
     nonisolated static let openReorderGroupListArgument = "-XMNoteUITestOpenReorderGroupList"
+    nonisolated static let resetSceneStateArgument = "-XMNoteUITestResetSceneState"
+    nonisolated static let exerciseTimerDeepLinkConflictArgument =
+        "-XMNoteUITestExerciseTimerDeepLinkConflict"
     nonisolated static let reorderGroupID: Int64 = 9_001
     nonisolated static let manualCollectionID: Int64 = 9_101
     nonisolated static let annualCollectionID: Int64 = 9_102
@@ -267,6 +287,16 @@ enum UITestLaunchConfiguration {
         ProcessInfo.processInfo.arguments.contains(openDefaultBookshelfArgument)
     }
 
+    /// 导航 UI Test 首次启动时忽略旧 SceneStorage，随后仍允许同一测试重启并验证新快照恢复。
+    nonisolated static var shouldResetSceneState: Bool {
+        ProcessInfo.processInfo.arguments.contains(resetSceneStateArgument)
+    }
+
+    /// 导航 UI Test 是否注入“已有全屏任务 + 连续计时深链”的 newest-wins 场景。
+    nonisolated static var shouldExerciseTimerDeepLinkConflict: Bool {
+        ProcessInfo.processInfo.arguments.contains(exerciseTimerDeepLinkConflictArgument)
+    }
+
     /// 需要隔离书架数据的 UI Test 启动参数集合。
     nonisolated static var shouldSeedBookshelfFixture: Bool {
         let arguments = ProcessInfo.processInfo.arguments
@@ -274,6 +304,7 @@ enum UITestLaunchConfiguration {
             || arguments.contains(openDefaultBookshelfArgument)
             || arguments.contains(openWantReadListArgument)
             || arguments.contains(openReorderGroupListArgument)
+            || arguments.contains(exerciseTimerDeepLinkConflictArgument)
     }
 
     /// UI Test 直达二级列表的路由，避免测试依赖首页聚合卡视觉排序。
@@ -320,6 +351,16 @@ enum UITestLaunchConfiguration {
                 )
                 try book.insert(db)
             }
+
+            var note = NoteRecord()
+            note.id = 5_001
+            note.bookId = 1_001
+            note.content = "UI 测试书摘"
+            note.idea = "用于验证从笔记进入书籍后的沉浸导航"
+            note.positionUnit = 1
+            note.createdDate = now
+            note.updatedDate = now
+            try note.insert(db)
 
             for index in 1...4 {
                 let bookID = Int64(2_000 + index)

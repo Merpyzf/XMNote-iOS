@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 XMNoteWeb.DesktopWebServer、Web API Adapter/设置仓储、AppState 同步的会员状态、LocalNetworkEndpointProvider、固定域名 BonjourServicePublisher、UIKit 与 App scenePhase
- * [OUTPUT]: 对外提供当前会话/自动启动独立开关、带恢复语义的六态会话状态、访问安全状态、实时会员裁决、原生高级版导航请求、固定局域网域名、IP 回退端点和有限后台收尾
+ * [OUTPUT]: 对外提供当前会话/自动启动独立开关、六态会话状态、访问安全状态、实时会员裁决、可一次消费的原生高级版请求、固定局域网域名与有限后台收尾
  * [POS]: Services 的桌面网页会话唯一 owner，页面离开后仍由 App 根层持有
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -216,6 +216,13 @@ final class DesktopWebSessionCoordinator {
     /// 从 AppState 同步实时会员能力；更新由 actor 串行，已开始的请求保留进入门禁时读取的单次快照。
     func updatePremiumStatus(_ isPremium: Bool) async {
         await premiumState.update(isPremium)
+    }
+
+    /// 原子消费网页端高级版跳转请求，确保共享会话被多个 scene 观察时最多只有一个场景响应。
+    func consumePremiumUpgradeRequest(_ requestID: UUID) -> Bool {
+        guard premiumUpgradeRequestID == requestID else { return false }
+        premiumUpgradeRequestID = nil
+        return true
     }
 
     /// 在数据库与 App Repository 完成组装后安装全部 Web 能力，确保自动启动前路由已有真实数据源。

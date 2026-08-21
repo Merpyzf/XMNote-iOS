@@ -3,8 +3,8 @@ import SwiftUI
 
 /**
  * [INPUT]: 依赖 DesignTokens 的 Color 语义扩展（heatmapNone/brandLight/brand/brandDeep/brandDarkest/status*）
- * [OUTPUT]: 对外提供 HeatmapDay（单日热力数据，含书籍状态分段）、HeatmapLevel（五级强度枚举）、HeatmapStatisticsDataType（统计类型）
- * [POS]: Domain 层热力图领域模型，供 StatisticsRepository 产出、HeatmapChart 消费
+ * [OUTPUT]: 对外提供 HeatmapDay（单日热力数据，含可注入阅读量颜色的状态分段）、HeatmapLevel（五级强度枚举）、HeatmapStatisticsDataType（统计类型）
+ * [POS]: Domain 层热力图领域模型，供 StatisticsRepository 产出、HeatmapChart 与 CalendarHeatmap 消费
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
@@ -129,11 +129,21 @@ nonisolated struct HeatmapDay: Identifiable, Sendable {
 
     /// 对齐 Android Mark.getColors：先绘制状态色，再按统计类型补充阅读量色。
     @MainActor func segmentColors(for dataType: HeatmapStatisticsDataType) -> [Color] {
+        segmentColors(for: dataType) { level in
+            level.color
+        }
+    }
+
+    /// 对齐 Android Mark.getColors，并允许视图层仅替换阅读量色阶；书籍状态仍使用固定语义色。
+    @MainActor func segmentColors(
+        for dataType: HeatmapStatisticsDataType,
+        amountColor: (HeatmapLevel) -> Color
+    ) -> [Color] {
         let stateColors = HeatmapBookState.renderOrder.compactMap { state in
             bookStates.contains(state) ? state.color : nil
         }
 
-        let amountColor = amountLevel(for: dataType).color
+        let amountColor = amountColor(amountLevel(for: dataType))
         if stateColors.isEmpty {
             return [amountColor]
         }

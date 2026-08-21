@@ -2,7 +2,7 @@ import Foundation
 
 /**
  * [INPUT]: 依赖 Models 与 Services 层的数据类型定义
- * [OUTPUT]: 对外提供 Book/Note/Content/GlobalSearch/Backup/S3/AI/图片额度/TagManagement/BookGroupManagement/SourceManagement/ExternalAppIntegration/Statistics/ReadCalendar/Timeline/ReadingDashboard/ReadingTimer 及书籍搜索录入协议
+ * [OUTPUT]: 对外提供 Book/Note/Content/GlobalSearch/Backup/S3/AI/图片额度/TagManagement/BookGroupManagement/SourceManagement/ExternalAppIntegration/Statistics/ReadCalendar/封面主题/Timeline/ReadingDashboard/ReadingTimer 及书籍搜索录入协议
  * [POS]: Domain 层仓储契约，定义 Presentation 获取本地/网络数据的唯一入口
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -608,6 +608,13 @@ protocol ReadCalendarColorRepositoryProtocol {
         coverURL: String,
         forceRefresh: Bool
     ) async -> ReadCalendarSegmentColor
+
+    /// 返回同一次封面量化得到的背景代表色、图表强调色与可读前景色，供沉浸式书籍页面消费。
+    func resolveCoverThemeColor(
+        bookId: Int64,
+        bookName: String,
+        coverURL: String
+    ) async -> BookCoverThemeColor
 }
 
 extension ReadCalendarColorRepositoryProtocol {
@@ -622,6 +629,26 @@ extension ReadCalendarColorRepositoryProtocol {
             bookId: bookId,
             bookName: bookName,
             coverURL: coverURL
+        )
+    }
+
+    /// 为既有替身提供兼容实现；生产仓储会覆写并返回完整的代表色与强调色。
+    func resolveCoverThemeColor(
+        bookId: Int64,
+        bookName: String,
+        coverURL: String
+    ) async -> BookCoverThemeColor {
+        let eventColor = await resolveEventColor(
+            bookId: bookId,
+            bookName: bookName,
+            coverURL: coverURL
+        )
+        return BookCoverThemeColor(
+            state: eventColor.state,
+            representativeRGBAHex: eventColor.backgroundRGBAHex,
+            backgroundRGBAHex: eventColor.backgroundRGBAHex,
+            accentRGBAHex: eventColor.backgroundRGBAHex,
+            onRepresentativeRGBAHex: eventColor.textRGBAHex
         )
     }
 }

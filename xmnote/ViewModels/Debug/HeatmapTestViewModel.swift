@@ -2,9 +2,9 @@
 import Foundation
 
 /**
- * [INPUT]: 依赖 HeatmapDay/HeatmapLevel 领域模型
- * [OUTPUT]: 对外提供 HeatmapTestViewModel（测试数据生成与场景切换）
- * [POS]: Debug 测试页状态编排，供 HeatmapTestView 消费；支持真实仓储数据集成测试
+ * [INPUT]: 依赖 HeatmapDay/HeatmapLevel 领域模型与 CalendarHeatmapMonth 月历输入
+ * [OUTPUT]: 对外提供 HeatmapTestViewModel（周热力图随机场景、月历固定场景与配色切换）
+ * [POS]: Debug 测试页状态编排，供 HeatmapTestView 消费；支持真实仓储数据集成测试和 Android 月历视觉验收
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
@@ -25,6 +25,34 @@ enum HeatmapTestScenario: String, CaseIterable, Identifiable {
     var id: String { rawValue }
 }
 
+enum CalendarHeatmapTestScenario: String, CaseIterable, Identifiable {
+    case screenshot = "截图复刻"
+    case reading = "在读定位"
+    case terminal = "读完/弃读定位"
+    case longSequence = "长月份序列"
+    case empty = "空数据"
+
+    var id: String { rawValue }
+
+    var positioningDescription: String {
+        switch self {
+        case .terminal:
+            "包含读完/弃读状态，首次展示最早月份"
+        case .empty:
+            "月份数组为空，组件不输出内建空态"
+        case .screenshot, .reading, .longSequence:
+            "没有终止状态，首次展示最新月份"
+        }
+    }
+}
+
+enum CalendarHeatmapTestPalette: String, CaseIterable, Identifiable {
+    case coverRed = "封面红色"
+    case appDefault = "默认绿色"
+
+    var id: String { rawValue }
+}
+
 // MARK: - ViewModel
 
 @MainActor
@@ -40,9 +68,16 @@ class HeatmapTestViewModel {
     var realDataYear: Int = 0
     var isLoadingRealData = false
     var realDataError: String? = nil
+    var calendarScenario: CalendarHeatmapTestScenario = .screenshot
+    var calendarPalette: CalendarHeatmapTestPalette = .coverRed
+    var calendarMonths: [CalendarHeatmapMonth] = []
 
     private let calendar = Calendar.current
     private var today: Date { calendar.startOfDay(for: Date()) }
+
+    init() {
+        loadCalendarScenario(.screenshot)
+    }
 
     func loadScenario(_ scenario: HeatmapTestScenario) {
         currentScenario = scenario
@@ -95,6 +130,37 @@ class HeatmapTestViewModel {
     var candidateYears: [Int] {
         let currentYear = calendar.component(.year, from: Date())
         return [0, currentYear, currentYear - 1, currentYear - 2]
+    }
+
+    func loadCalendarScenario(_ scenario: CalendarHeatmapTestScenario) {
+        calendarScenario = scenario
+        switch scenario {
+        case .screenshot:
+            calendarMonths = makeScreenshotMonths()
+        case .reading:
+            calendarMonths = makeMonthSequence(
+                startYear: 2025,
+                startMonth: 9,
+                count: 6,
+                terminalStates: [:]
+            )
+        case .terminal:
+            calendarMonths = makeMonthSequence(
+                startYear: 2025,
+                startMonth: 9,
+                count: 6,
+                terminalStates: [0: .readDone, 1: .abandon]
+            )
+        case .longSequence:
+            calendarMonths = makeMonthSequence(
+                startYear: 2024,
+                startMonth: 9,
+                count: 18,
+                terminalStates: [:]
+            )
+        case .empty:
+            calendarMonths = []
+        }
     }
 }
 
@@ -195,6 +261,99 @@ private extension HeatmapTestViewModel {
         }
         days = result
         earliestDate = start
+    }
+}
+
+// MARK: - 月历固定场景
+
+private extension HeatmapTestViewModel {
+    func makeScreenshotMonths() -> [CalendarHeatmapMonth] {
+        let januaryValues: [(Int, Int, Set<HeatmapBookState>)] = [
+            (4, 900, []),
+            (6, 1_800, []),
+            (8, 3_000, [.reading]),
+            (11, 1_800, []),
+            (12, 5_000, []),
+            (13, 3_000, []),
+            (14, 2_300, []),
+            (19, 900, [])
+        ]
+        let januaryDays = Dictionary(uniqueKeysWithValues: januaryValues.map { day, seconds, states in
+            let date = fixedDate(year: 2026, month: 1, day: day)
+            return (
+                date,
+                HeatmapDay(
+                    id: date,
+                    readSeconds: seconds,
+                    noteCount: 0,
+                    checkInCount: 0,
+                    checkInSeconds: 0,
+                    bookStates: states
+                )
+            )
+        })
+
+        let januaryStart = fixedDate(year: 2026, month: 1, day: 1)
+        let februaryStart = fixedDate(year: 2026, month: 2, day: 1)
+        return [
+            CalendarHeatmapMonth(monthStart: januaryStart, days: januaryDays),
+            CalendarHeatmapMonth(monthStart: februaryStart, days: [:])
+        ]
+    }
+
+    func makeMonthSequence(
+        startYear: Int,
+        startMonth: Int,
+        count: Int,
+        terminalStates: [Int: HeatmapBookState]
+    ) -> [CalendarHeatmapMonth] {
+        let start = fixedDate(year: startYear, month: startMonth, day: 1)
+        return (0..<count).compactMap { index in
+            guard let monthStart = calendar.date(byAdding: .month, value: index, to: start) else {
+                return nil
+            }
+
+            let dayNumbers = [3 + index % 4, 8 + index % 5, 12 + index % 6, 20 + index % 7]
+            let levels = [900, 1_800, 3_000, 5_000]
+            var monthDays: [Date: HeatmapDay] = [:]
+            for (offset, dayNumber) in dayNumbers.enumerated() {
+                guard let date = calendar.date(
+                    byAdding: .day,
+                    value: dayNumber - 1,
+                    to: monthStart
+                ) else {
+                    continue
+                }
+                let normalizedDate = calendar.startOfDay(for: date)
+                let states: Set<HeatmapBookState> = offset == 1 ? [.reading] : []
+                monthDays[normalizedDate] = HeatmapDay(
+                    id: normalizedDate,
+                    readSeconds: levels[offset],
+                    noteCount: offset,
+                    checkInCount: offset == 2 ? 1 : 0,
+                    checkInSeconds: offset == 2 ? 20 * 60 : 0,
+                    bookStates: states
+                )
+            }
+
+            if let terminalState = terminalStates[index] {
+                let statusDate = calendar.startOfDay(for: monthStart)
+                monthDays[statusDate] = HeatmapDay(
+                    id: statusDate,
+                    readSeconds: 1_800,
+                    noteCount: 0,
+                    checkInCount: 0,
+                    checkInSeconds: 0,
+                    bookStates: [terminalState]
+                )
+            }
+
+            return CalendarHeatmapMonth(monthStart: monthStart, days: monthDays)
+        }
+    }
+
+    func fixedDate(year: Int, month: Int, day: Int) -> Date {
+        calendar.date(from: DateComponents(year: year, month: month, day: day))!
     }
 }
 

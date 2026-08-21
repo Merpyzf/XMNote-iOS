@@ -8,16 +8,11 @@
 import SwiftUI
 
 /**
- * [INPUT]: 依赖可选 AppRuntimeContext、五个主业务 Tab、可恢复浏览路由、AppNavigationCoordinator、阅读日历、外部导入/网页动作、个人基础数据管理与调试路由
- * [OUTPUT]: 对外提供 MainTabView（五个独立浏览栈、创作与内容查看的单一根级全屏任务、旧编辑路由兼容中继、阅读计时 UIKit Zoom、底部计时条与跨模块回流）
- * [POS]: 应用根导航 owner，在运行时依赖就绪前后保持同一 Tab 与导航状态，并统一隔离普通浏览、独立任务及阅读计时呈现
+ * [INPUT]: 依赖可选 AppRuntimeContext、已原子恢复的 AppSceneSnapshot、scene 级 AppNavigationCoordinator、阅读日历、外部导入/网页动作与各业务目的页
+ * [OUTPUT]: 对外提供 MainTabView（五个类型安全浏览栈、单一全屏任务栈、恢复表面门控、阅读计时 UIKit Zoom、底部计时条与退场后一次性回流）
+ * [POS]: 应用根导航宿主，只消费协调器状态并使用系统 push/cover；恢复目的页提交前不暴露底层根页
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
-
-/// 应用主 Tab 枚举，统一根级导航页签身份。
-enum AppTab: String, CaseIterable, Codable {
-    case reading, books, notes, profile, search
-}
 
 /// 描述计时页需要加载的业务对象，避免呈现层改写计时会话身份。
 enum ReadingTimerPresentationRequest: Equatable {
@@ -140,6 +135,12 @@ private enum AppRouteHost: Hashable {
     case task
 }
 
+/// 标识冷启动恢复时必须先完成挂载的最终浏览表面，防止系统栈协调期间短暂暴露根页。
+private struct RestoredNavigationSurface: Hashable {
+    let tab: AppTab
+    let route: AppRoute
+}
+
 /// 应用主导航容器，组织五个主 Tab 及跨模块路由跳转。
 struct MainTabView: View {
     @Environment(\.openURL) private var openURL
@@ -154,13 +155,8 @@ struct MainTabView: View {
     @Environment(\.scenePhase) private var scenePhase
     let runtime: AppRuntimeContext?
     let initialSceneSnapshot: AppSceneSnapshot
-    @State private var navigationCoordinator = AppNavigationCoordinator()
-    @State private var selectedTab: AppTab = .reading
-    @State private var readingPath = NavigationPath()
-    @State private var booksPath = NavigationPath()
-    @State private var notesPath = NavigationPath()
-    @State private var profilePath = NavigationPath()
-    @State private var searchPath = NavigationPath()
+    @State private var navigationCoordinator: AppNavigationCoordinator
+    @State private var pendingRestoredNavigationSurface: RestoredNavigationSurface?
     @State private var readingTimerPresentation: ReadingTimerPresentation?
     @State private var pendingReadingTimerDismissal: ReadingTimerPendingDismissal?
     @State private var retainedReadingTimerTransitionSource: ReadingTimerSession?
@@ -175,7 +171,6 @@ struct MainTabView: View {
     @State private var pendingGlobalSearchSubmitTask: Task<Void, Never>?
     @State private var protectedGlobalSearchQuery: String?
     @State private var globalSearchCommitToken: UUID?
-    @State private var didBootstrapFromScene = false
     #if DEBUG
     @State private var didApplyUITestLaunchRoute = false
     #endif
@@ -184,24 +179,46 @@ struct MainTabView: View {
     init(runtime: AppRuntimeContext?, initialSceneSnapshot: AppSceneSnapshot) {
         self.runtime = runtime
         self.initialSceneSnapshot = initialSceneSnapshot
-        _selectedTab = State(initialValue: initialSceneSnapshot.selectedTab)
-        _readingPath = State(initialValue: Self.navigationPath(from: initialSceneSnapshot.navigation.reading))
-        _booksPath = State(initialValue: Self.navigationPath(from: initialSceneSnapshot.navigation.books))
-        _notesPath = State(initialValue: Self.navigationPath(from: initialSceneSnapshot.navigation.notes))
-        _profilePath = State(initialValue: Self.navigationPath(from: initialSceneSnapshot.navigation.profile))
-        _searchPath = State(initialValue: Self.navigationPath(from: initialSceneSnapshot.navigation.search))
+        let restoredTab = initialSceneSnapshot.selectedTab
+        let restoredSurface = initialSceneSnapshot.navigation
+            .path(for: restoredTab)
+            .last
+            .map { RestoredNavigationSurface(tab: restoredTab, route: $0) }
+        _navigationCoordinator = State(
+            initialValue: AppNavigationCoordinator(snapshot: initialSceneSnapshot)
+        )
+        _pendingRestoredNavigationSurface = State(initialValue: restoredSurface)
         _searchQuery = State(initialValue: initialSceneSnapshot.searchQuery)
     }
 
     var body: some View {
         presentedTabContent
+            .allowsHitTesting(pendingRestoredNavigationSurface == nil)
+            .accessibilityHidden(pendingRestoredNavigationSurface != nil)
+            .overlay {
+                if pendingRestoredNavigationSurface != nil {
+                    RestoredNavigationSurfaceGate()
+                }
+            }
     }
+
+    /// 页面内部只通过协调器读写当前 Tab；保留短名称以减少计时与搜索业务中的噪声。
+    private var selectedTab: AppTab {
+        get { navigationCoordinator.selectedTab }
+        nonmutating set { navigationCoordinator.selectedTab = newValue }
+    }
+
+    private var readingPath: [AppRoute] { navigationCoordinator.path(for: .reading) }
+    private var booksPath: [AppRoute] { navigationCoordinator.path(for: .books) }
+    private var notesPath: [AppRoute] { navigationCoordinator.path(for: .notes) }
+    private var profilePath: [AppRoute] { navigationCoordinator.path(for: .profile) }
+    private var searchPath: [AppRoute] { navigationCoordinator.path(for: .search) }
 
     /// 构建五个彼此独立的浏览栈；这里只描述页面树，不附加根级状态监听与呈现器。
     private var tabContent: some View {
-        TabView(selection: $selectedTab) {
+        TabView(selection: $navigationCoordinator.selectedTab) {
             Tab("在读", systemImage: "calendar", value: .reading) {
-                NavigationStack(path: $readingPath) {
+                NavigationStack(path: navigationCoordinator.pathBinding(for: .reading)) {
                     Group {
                         if let runtime {
                             ReadingContainerView(
@@ -260,36 +277,14 @@ struct MainTabView: View {
                     }
                     .animation(runtimeTransitionAnimation, value: isRuntimeReady)
                     .toolbar(.hidden, for: .navigationBar)
-                    .navigationDestination(for: DebugRoute.self) { route in
-                        runtimeDestination {
-                            debugDestination(for: route)
-                        }
-                    }
-                    .navigationDestination(for: ReadingRoute.self) { route in
-                        runtimeDestination {
-                            readingDestination(for: route, hostTab: .reading)
-                        }
-                    }
-                    .navigationDestination(for: BookRoute.self) { route in
-                        runtimeDestination {
-                            bookDestination(for: route, host: .tab(.reading))
-                        }
-                    }
-                    .navigationDestination(for: NoteRoute.self) { route in
-                        runtimeDestination {
-                            noteDestination(for: route, host: .tab(.reading))
-                        }
-                    }
-                    .navigationDestination(for: ContentRoute.self) { route in
-                        runtimeDestination {
-                            contentDestination(for: route, host: .tab(.reading))
-                        }
+                    .navigationDestination(for: AppRoute.self) { route in
+                        appDestination(for: route, hostTab: .reading)
                     }
                 }
             }
 
             Tab("书籍", systemImage: "book", value: .books) {
-                NavigationStack(path: $booksPath) {
+                NavigationStack(path: navigationCoordinator.pathBinding(for: .books)) {
                     Group {
                         if let runtime {
                             BookContainerView(
@@ -320,32 +315,14 @@ struct MainTabView: View {
                         }
                     }
                     .animation(runtimeTransitionAnimation, value: isRuntimeReady)
-                    .navigationDestination(for: DebugRoute.self) { route in
-                        runtimeDestination { debugDestination(for: route) }
-                    }
-                    .navigationDestination(for: BookRoute.self) { route in
-                        runtimeDestination { bookDestination(for: route, host: .tab(.books)) }
-                    }
-                    .navigationDestination(for: ReadingRoute.self) { route in
-                        runtimeDestination {
-                            readingDestination(for: route, hostTab: .books)
-                                .toolbar(.hidden, for: .tabBar)
-                        }
-                    }
-                    .navigationDestination(for: NoteRoute.self) { route in
-                        runtimeDestination { noteDestination(for: route, host: .tab(.books)) }
-                    }
-                    .navigationDestination(for: ContentRoute.self) { route in
-                        runtimeDestination { contentDestination(for: route, host: .tab(.books)) }
-                    }
-                    .navigationDestination(for: PersonalRoute.self) { route in
-                        runtimeDestination { personalDestination(for: route, hostTab: .books) }
+                    .navigationDestination(for: AppRoute.self) { route in
+                        appDestination(for: route, hostTab: .books)
                     }
                 }
             }
 
             Tab("笔记", systemImage: "archivebox", value: .notes) {
-                NavigationStack(path: $notesPath) {
+                NavigationStack(path: navigationCoordinator.pathBinding(for: .notes)) {
                     Group {
                         if let runtime {
                             NoteContainerView(
@@ -357,9 +334,12 @@ struct MainTabView: View {
                                 onOpenBookRoute: { openBookRoute($0, from: .tab(.notes)) },
                                 onOpenContentRoute: { openContentRoute($0, from: .tab(.notes)) },
                                 onOpenContentViewer: { source, itemID in
-                                    openContentRoute(
-                                        .contentViewer(source: source, initialItemID: itemID),
-                                        from: .tab(.notes)
+                                    navigationCoordinator.present(
+                                        .contentViewer(
+                                            source: source,
+                                            initialItemID: itemID,
+                                            keyword: ""
+                                        )
                                     )
                                 },
                                 onOpenDebugCenter: { append(DebugRoute.debugCenter, to: .notes) }
@@ -378,29 +358,14 @@ struct MainTabView: View {
                         }
                     }
                     .animation(runtimeTransitionAnimation, value: isRuntimeReady)
-                    .navigationDestination(for: DebugRoute.self) { route in
-                        runtimeDestination { debugDestination(for: route) }
-                    }
-                    .navigationDestination(for: BookRoute.self) { route in
-                        runtimeDestination { bookDestination(for: route, host: .tab(.notes)) }
-                    }
-                    .navigationDestination(for: ReadingRoute.self) { route in
-                        runtimeDestination {
-                            readingDestination(for: route, hostTab: .notes)
-                                .toolbar(.hidden, for: .tabBar)
-                        }
-                    }
-                    .navigationDestination(for: NoteRoute.self) { route in
-                        runtimeDestination { noteDestination(for: route, host: .tab(.notes)) }
-                    }
-                    .navigationDestination(for: ContentRoute.self) { route in
-                        runtimeDestination { contentDestination(for: route, host: .tab(.notes)) }
+                    .navigationDestination(for: AppRoute.self) { route in
+                        appDestination(for: route, hostTab: .notes)
                     }
                 }
             }
 
             Tab("我的", systemImage: "person", value: .profile) {
-                NavigationStack(path: $profilePath) {
+                NavigationStack(path: navigationCoordinator.pathBinding(for: .profile)) {
                     Group {
                         if let runtime {
                             PersonalView(
@@ -429,32 +394,14 @@ struct MainTabView: View {
                         }
                     }
                     .animation(runtimeTransitionAnimation, value: isRuntimeReady)
-                    .navigationDestination(for: DebugRoute.self) { route in
-                        runtimeDestination { debugDestination(for: route) }
-                    }
-                    .navigationDestination(for: BookRoute.self) { route in
-                        runtimeDestination { bookDestination(for: route, host: .tab(.profile)) }
-                    }
-                    .navigationDestination(for: ReadingRoute.self) { route in
-                        runtimeDestination {
-                            readingDestination(for: route, hostTab: .profile)
-                                .toolbar(.hidden, for: .tabBar)
-                        }
-                    }
-                    .navigationDestination(for: NoteRoute.self) { route in
-                        runtimeDestination { noteDestination(for: route, host: .tab(.profile)) }
-                    }
-                    .navigationDestination(for: ContentRoute.self) { route in
-                        runtimeDestination { contentDestination(for: route, host: .tab(.profile)) }
-                    }
-                    .navigationDestination(for: PersonalRoute.self) { route in
-                        runtimeDestination { personalDestination(for: route, hostTab: .profile) }
+                    .navigationDestination(for: AppRoute.self) { route in
+                        appDestination(for: route, hostTab: .profile)
                     }
                 }
             }
 
             Tab("搜索", systemImage: "magnifyingglass", value: .search, role: .search) {
-                NavigationStack(path: $searchPath) {
+                NavigationStack(path: navigationCoordinator.pathBinding(for: .search)) {
                     Group {
                         if let runtime {
                             GlobalSearchView(
@@ -480,23 +427,8 @@ struct MainTabView: View {
                         }
                     }
                     .animation(runtimeTransitionAnimation, value: isRuntimeReady)
-                    .navigationDestination(for: DebugRoute.self) { route in
-                        runtimeDestination { debugDestination(for: route) }
-                    }
-                    .navigationDestination(for: BookRoute.self) { route in
-                        runtimeDestination { bookDestination(for: route, host: .tab(.search)) }
-                    }
-                    .navigationDestination(for: ReadingRoute.self) { route in
-                        runtimeDestination {
-                            readingDestination(for: route, hostTab: .search)
-                                .toolbar(.hidden, for: .tabBar)
-                        }
-                    }
-                    .navigationDestination(for: NoteRoute.self) { route in
-                        runtimeDestination { noteDestination(for: route, host: .tab(.search)) }
-                    }
-                    .navigationDestination(for: ContentRoute.self) { route in
-                        runtimeDestination { contentDestination(for: route, host: .tab(.search)) }
+                    .navigationDestination(for: AppRoute.self) { route in
+                        appDestination(for: route, hostTab: .search)
                     }
                 }
             }
@@ -560,27 +492,16 @@ struct MainTabView: View {
     private var observedTabContent: some View {
         configuredTabContent
         .onChange(of: selectedTab) { _, newTab in
-            navigationCoordinator.updateCurrentTab(newTab)
-            sceneStateStore.updateSelectedTab(newTab)
             syncSearchPresentationForCurrentState()
+        }
+        .onChange(of: navigationCoordinator.browseState) { _, state in
+            sceneStateStore.updateNavigation(
+                selectedTab: state.selectedTab,
+                navigation: state.navigation
+            )
         }
         .onChange(of: searchQuery) { _, newQuery in
             sceneStateStore.updateSearchQuery(newQuery)
-        }
-        .onChange(of: pathSignature(for: readingPath)) { _, _ in
-            sceneStateStore.updatePath(readingPath, for: .reading)
-        }
-        .onChange(of: pathSignature(for: booksPath)) { _, _ in
-            sceneStateStore.updatePath(booksPath, for: .books)
-        }
-        .onChange(of: pathSignature(for: notesPath)) { _, _ in
-            sceneStateStore.updatePath(notesPath, for: .notes)
-        }
-        .onChange(of: pathSignature(for: profilePath)) { _, _ in
-            sceneStateStore.updatePath(profilePath, for: .profile)
-        }
-        .onChange(of: pathSignature(for: searchPath)) { _, _ in
-            sceneStateStore.updatePath(searchPath, for: .search)
         }
         .onChange(of: searchPath.count) { _, _ in
             syncSearchPresentationForCurrentState()
@@ -590,12 +511,17 @@ struct MainTabView: View {
             prepareForBookCollectionImport(request)
         }
         .onChange(of: desktopWebSessionCoordinator.premiumUpgradeRequestID) { _, requestID in
-            guard runtime != nil, requestID != nil else { return }
+            guard runtime != nil,
+                  scenePhase == .active,
+                  let requestID,
+                  desktopWebSessionCoordinator.consumePremiumUpgradeRequest(requestID) else {
+                return
+            }
             openPremiumUpgradeFromDesktopWeb()
         }
-        .onChange(of: readingTimerDeepLinkRouter.pendingRoute) { _, route in
-            guard runtime != nil, let route else { return }
-            openReadingTimerDeepLink(route)
+        .onChange(of: readingTimerDeepLinkRouter.pendingRequest) { _, request in
+            guard runtime != nil, let request else { return }
+            openReadingTimerDeepLink(request)
         }
         .onChange(of: runtime?.readingTimerCoordinator.backgroundCountdownCompletionEvent) { _, event in
             guard event != nil else { return }
@@ -617,9 +543,9 @@ struct MainTabView: View {
     /// 根级呈现层只承载统一 cover、计时 Zoom 与 scene 恢复，并在全屏内容活跃时隔离底层可访问性。
     private var presentedTabContent: some View {
         observedTabContent
-        .accessibilityHidden(navigationCoordinator.activeTask != nil)
+        .accessibilityHidden(navigationCoordinator.isTaskPresentationActiveOrDismissing)
         .fullScreenCover(
-            item: $navigationCoordinator.activeTask,
+            item: navigationCoordinator.taskPresentationBinding,
             onDismiss: completeFullScreenTaskDismissal
         ) { presentation in
             if let runtime {
@@ -632,12 +558,7 @@ struct MainTabView: View {
         .overlay {
             readingTimerMainRootZoomSource
         }
-        .task(id: sceneStateStore.isRestored) {
-            guard sceneStateStore.isRestored else { return }
-            guard !didBootstrapFromScene else { return }
-            didBootstrapFromScene = true
-            restoreBrowseNavigationFromSceneSnapshot()
-            navigationCoordinator.updateCurrentTab(selectedTab)
+        .task {
             consumePendingRuntimeRequestsIfNeeded()
             #if DEBUG
             if runtime != nil {
@@ -665,10 +586,10 @@ struct MainTabView: View {
     }
 
     private var bootstrapSceneSnapshot: AppSceneSnapshot {
-        sceneStateStore.isRestored ? sceneStateStore.snapshot : initialSceneSnapshot
+        initialSceneSnapshot
     }
 
-    /// 为恢复路径中的目的页延迟注入运行时依赖；未就绪时保留静态表面和现有 NavigationPath。
+    /// 为恢复路径中的目的页延迟注入运行时依赖；未就绪时保留静态表面和现有类型安全浏览路径。
     @ViewBuilder
     private func runtimeDestination<Destination: View>(
         @ViewBuilder destination: () -> Destination
@@ -683,14 +604,6 @@ struct MainTabView: View {
                 .ignoresSafeArea()
                 .toolbar(.hidden, for: .tabBar)
         }
-    }
-
-    /// 将 SceneStorage 中的可编码表示转换为首帧 NavigationPath；缺失表示时保持根页面。
-    private static func navigationPath(
-        from representation: NavigationPath.CodableRepresentation?
-    ) -> NavigationPath {
-        guard let representation else { return NavigationPath() }
-        return NavigationPath(representation)
     }
 
     private var isReadingTimerAccessoryInteractionSuppressed: Bool {
@@ -857,24 +770,8 @@ struct MainTabView: View {
                 navigationContext: .modalRoot,
                 runtime: runtime
             )
-            .navigationDestination(for: AppFullScreenTaskDestination.self) { destination in
-                fullScreenTaskDestination(
-                    destination,
-                    navigationContext: .taskChild,
-                    runtime: runtime
-                )
-            }
-            .navigationDestination(for: BookRoute.self) { route in
-                bookDestination(for: route, host: .task)
-            }
-            .navigationDestination(for: NoteRoute.self) { route in
-                noteDestination(for: route, host: .task)
-            }
-            .navigationDestination(for: ContentRoute.self) { route in
-                contentDestination(for: route, host: .task)
-            }
-            .navigationDestination(for: ReadCalendarRoute.self) { route in
-                readCalendarTaskDestination(for: route)
+            .navigationDestination(for: AppTaskRoute.self) { route in
+                appTaskDestination(for: route, runtime: runtime)
             }
         }
         .environment(navigationCoordinator)
@@ -933,7 +830,7 @@ struct MainTabView: View {
             ReadCalendarView(
                 date: initialDate,
                 onOpenRoute: { route in
-                    navigationCoordinator.taskPath.append(route)
+                    navigationCoordinator.taskPath.append(.readCalendar(route))
                 },
                 onOpenPremium: {
                     navigationCoordinator.exitTask(to: .personal(.premium))
@@ -943,14 +840,38 @@ struct MainTabView: View {
                     isVisible: navigationContext == .modalRoot,
                     style: .collapse(accessibilityLabel: "关闭阅读日历")
                 )
-        case .readingSession:
-            ReadingSessionTaskPlaceholder(navigationContext: navigationContext)
         case .dataImport(let destination):
             dataImportTaskDestination(destination, repositories: runtime.repositories)
                 .appTaskRootDismissControl(
                     isVisible: navigationContext == .modalRoot,
                     style: .text("取消")
                 )
+        }
+    }
+
+    /// 全屏任务内部只注册 AppTaskRoute，避免临时目的地被写入可持久化浏览路径。
+    @ViewBuilder
+    private func appTaskDestination(
+        for route: AppTaskRoute,
+        runtime: AppRuntimeContext
+    ) -> some View {
+        switch route {
+        case .destination(let destination):
+            fullScreenTaskDestination(
+                destination,
+                navigationContext: .taskChild,
+                runtime: runtime
+            )
+        case .book(let route):
+            bookDestination(for: route, host: .task)
+        case .reading(let route):
+            readingDestination(for: route, hostTab: selectedTab)
+        case .note(let route):
+            noteDestination(for: route, host: .task)
+        case .content(let route):
+            contentDestination(for: route, host: .task)
+        case .readCalendar(let route):
+            readCalendarTaskDestination(for: route)
         }
     }
 
@@ -1145,141 +1066,73 @@ struct MainTabView: View {
         }
     }
 
-    /// 把历史 NavigationPath 中的计时 case 幂等转交给统一全屏呈现；MainActor 让出一帧等待旧页面出栈，呈现门闩防止竞态重复。
-    private func relayReadingTimerRoute(
-        request: ReadingTimerPresentationRequest,
-        from tab: AppTab
-    ) {
-        popCurrentRoute(from: tab)
-        Task { @MainActor in
-            await Task.yield()
-            presentReadingTimer(
-                request: request,
-                host: .mainTab,
-                origin: .tab(tab),
-                source: .rootFallback
-            )
-        }
-    }
-
-    /// 把历史 NavigationPath 中的阅读日历 case 转交给根级全屏呈现；单帧 MainActor 任务无需持有取消句柄，恢复后会复核当前 Tab 与呈现门闩，避免过期请求和多旧栈竞态叠加 cover。
-    private func relayReadCalendarRoute(
-        initialDate: Date?,
-        from tab: AppTab
-    ) {
-        popCurrentRoute(from: tab)
-        guard selectedTab == tab else { return }
-
-        Task { @MainActor in
-            await Task.yield()
-            guard selectedTab == tab else { return }
-            guard navigationCoordinator.activeTask == nil else { return }
-            navigationCoordinator.updateCurrentTab(tab)
-            navigationCoordinator.present(
-                .readCalendar(initialDate: initialDate)
-            )
-        }
-    }
-
-    /// 将书籍旧路由中的创作意图映射为不参与 Scene 恢复的根级全屏任务。
-    private func fullScreenTaskDestination(for route: BookRoute) -> AppFullScreenTaskDestination? {
-        switch route {
-        case .edit(let bookId):
-            return .bookEditor(.edit(bookId: bookId))
-        case .editRelatedPlaceholder(let bookId, let sourceBookId):
-            return .bookEditor(
-                .editRelatedPlaceholder(bookId: bookId, sourceBookId: sourceBookId)
-            )
-        case .add:
-            return .addBook
-        case .create(let seed):
-            return .bookEditor(.create(seed: seed))
-        default:
-            return nil
-        }
-    }
-
-    /// 将笔记旧路由中的创作意图映射为统一全屏编辑任务。
-    private func fullScreenTaskDestination(for route: NoteRoute) -> AppFullScreenTaskDestination? {
-        switch route {
-        case .edit(let noteId):
-            return .noteEditor(mode: .edit(noteId: noteId), seed: nil)
-        case .create(let seed):
-            return .noteEditor(mode: .create, seed: seed)
-        default:
-            return nil
-        }
-    }
-
-    /// 将内容查看与编辑旧路由映射到根级全屏任务，普通详情继续留在浏览栈。
-    private func fullScreenTaskDestination(for route: ContentRoute) -> AppFullScreenTaskDestination? {
-        switch route {
-        case .contentViewer(let source, let initialItemID, let keyword):
-            return .contentViewer(source: source, initialItemID: initialItemID, keyword: keyword)
-        case .reviewEditor(let reviewId):
-            return .reviewEditor(.edit(reviewID: reviewId))
-        case .reviewEditorCreate(let bookId):
-            return .reviewEditor(.create(bookID: bookId))
-        case .relevantEditor(let contentId):
-            return .relevantEditor(.edit(contentID: contentId))
-        case .relevantEditorCreate(let bookId, let categoryId):
-            return .relevantEditor(.create(bookID: bookId, categoryID: categoryId))
-        default:
-            return nil
-        }
-    }
-
-    /// 按当前宿主打开书籍路由；创作任务覆盖 Tab，浏览路由留在原 NavigationStack。
+    /// 按当前宿主打开可恢复的书籍浏览路由。
     private func openBookRoute(_ route: BookRoute, from host: AppRouteHost) {
-        if let destination = fullScreenTaskDestination(for: route) {
-            navigationCoordinator.present(destination)
-        } else {
-            append(route, to: host)
-        }
+        append(route, to: host)
     }
 
-    /// 按当前宿主打开笔记路由；编辑任务统一进入根级全屏协调器。
+    /// 按当前宿主打开可恢复的笔记浏览路由。
     private func openNoteRoute(_ route: NoteRoute, from host: AppRouteHost) {
-        if let destination = fullScreenTaskDestination(for: route) {
-            navigationCoordinator.present(destination)
-        } else {
-            append(route, to: host)
-        }
+        append(route, to: host)
     }
 
-    /// 按当前宿主打开内容路由；查看器和编辑器进入全屏任务，普通详情继续 push。
+    /// 按当前宿主打开可恢复的内容详情路由。
     private func openContentRoute(_ route: ContentRoute, from host: AppRouteHost) {
-        if let destination = fullScreenTaskDestination(for: route) {
-            navigationCoordinator.present(destination)
-        } else {
-            append(route, to: host)
+        append(route, to: host)
+    }
+
+    /// 五个 Tab 只消费统一 AppRoute；业务枚举不再直接成为根栈的数据元素。
+    @ViewBuilder
+    private func appDestination(
+        for route: AppRoute,
+        hostTab: AppTab
+    ) -> some View {
+        runtimeDestination {
+            switch route {
+            case .book(let route):
+                bookDestination(for: route, host: .tab(hostTab))
+            case .reading(let route):
+                if hostTab == .reading {
+                    readingDestination(for: route, hostTab: hostTab)
+                } else {
+                    readingDestination(for: route, hostTab: hostTab)
+                        .toolbar(.hidden, for: .tabBar)
+                }
+            case .note(let route):
+                noteDestination(for: route, host: .tab(hostTab))
+            case .content(let route):
+                contentDestination(for: route, host: .tab(hostTab))
+            case .personal(let route):
+                personalDestination(for: route, hostTab: hostTab)
+            case .debug(let route):
+                debugDestination(for: route)
+            }
+        }
+        .toolbarVisibility(
+            navigationCoordinator.isTabChromeSuppressed ? .hidden : .automatic,
+            for: .tabBar
+        )
+        .onAppear {
+            completeRestoredNavigationSurfaceIfReady(route: route, hostTab: hostTab)
+        }
+        .onChange(of: isRuntimeReady, initial: true) { _, _ in
+            completeRestoredNavigationSurfaceIfReady(route: route, hostTab: hostTab)
         }
     }
 
-    /// 将恢复出的旧编辑 route 先从原宿主出栈，再在下一次 MainActor 调度中幂等转交全屏任务。
-    private func relayLegacyFullScreenRoute(
-        _ destination: AppFullScreenTaskDestination,
-        from host: AppRouteHost
+    /// 仅在恢复栈的最终目的页已经进入视图树且运行时可用后揭开页面，避免展示中间根页或半成品目的页。
+    private func completeRestoredNavigationSurfaceIfReady(
+        route: AppRoute,
+        hostTab: AppTab
     ) {
-        switch host {
-        case .tab(let tab):
-            guard selectedTab == tab, navigationCoordinator.activeTask == nil else { return }
-        case .task:
-            guard navigationCoordinator.activeTask != nil else { return }
+        guard isRuntimeReady,
+              pendingRestoredNavigationSurface == RestoredNavigationSurface(
+                  tab: hostTab,
+                  route: route
+              ) else {
+            return
         }
-
-        popCurrentRoute(from: host)
-        Task { @MainActor in
-            await Task.yield()
-            switch host {
-            case .tab(let tab):
-                guard selectedTab == tab, navigationCoordinator.activeTask == nil else { return }
-                navigationCoordinator.updateCurrentTab(tab)
-            case .task:
-                guard navigationCoordinator.activeTask != nil else { return }
-            }
-            navigationCoordinator.present(destination)
-        }
+        pendingRestoredNavigationSurface = nil
     }
 
     @ViewBuilder
@@ -1321,29 +1174,8 @@ struct MainTabView: View {
                     origin: .tab(selectedTab)
                 )
             )
-        case .readingSession(let bookId):
-            LegacyFullScreenRouteRelay {
-                relayReadingTimerRoute(
-                    request: .book(bookId),
-                    from: hostTab
-                )
-            }
-        case .readingSessionRecord(let recordId, let bookId):
-            LegacyFullScreenRouteRelay {
-                relayReadingTimerRoute(
-                    request: .record(recordId: recordId, bookId: bookId),
-                    from: hostTab
-                )
-            }
         case .readingSupplement(let bookId):
             ReadingTimerSupplementView(bookId: bookId)
-        case .readCalendar(let date):
-            LegacyFullScreenRouteRelay {
-                relayReadCalendarRoute(
-                    initialDate: date,
-                    from: hostTab
-                )
-            }
         }
     }
 
@@ -1411,44 +1243,9 @@ struct MainTabView: View {
                 }
             )
         case .readingDetail(let bookId):
-            BookReadingDetailView(
-                bookID: bookId,
-                onOpenBookRoute: { route in
-                    openBookRoute(route, from: host)
-                }
-            )
+            BookReadingDetailView(bookID: bookId)
         case .chapterManager(let bookID, let focusChapterID):
             ChapterManagerView(bookID: bookID, focusChapterID: focusChapterID)
-        case .edit(let bookId):
-            LegacyFullScreenRouteRelay {
-                relayLegacyFullScreenRoute(
-                    .bookEditor(.edit(bookId: bookId)),
-                    from: host
-                )
-            }
-        case .editRelatedPlaceholder(let bookId, let sourceBookId):
-            LegacyFullScreenRouteRelay {
-                relayLegacyFullScreenRoute(
-                    .bookEditor(
-                        .editRelatedPlaceholder(
-                            bookId: bookId,
-                            sourceBookId: sourceBookId
-                        )
-                    ),
-                    from: host
-                )
-            }
-        case .add:
-            LegacyFullScreenRouteRelay {
-                relayLegacyFullScreenRoute(.addBook, from: host)
-            }
-        case .create(let seed):
-            LegacyFullScreenRouteRelay {
-                relayLegacyFullScreenRoute(
-                    .bookEditor(.create(seed: seed)),
-                    from: host
-                )
-            }
         case .chapterNotes(let bookId, let chapterId, let title):
             BookChapterNotesView(
                 bookId: bookId,
@@ -1482,20 +1279,6 @@ struct MainTabView: View {
         switch route {
         case .detail(let noteId):
             NoteDetailView(noteId: noteId)
-        case .edit(let noteId):
-            LegacyFullScreenRouteRelay {
-                relayLegacyFullScreenRoute(
-                    .noteEditor(mode: .edit(noteId: noteId), seed: nil),
-                    from: host
-                )
-            }
-        case .create(let seed):
-            LegacyFullScreenRouteRelay {
-                relayLegacyFullScreenRoute(
-                    .noteEditor(mode: .create, seed: seed),
-                    from: host
-                )
-            }
         case .noteExcerpts(let scope):
             noteExcerptListDestination(
                 context: NoteExcerptListContext(scope: scope, displayTitle: "书摘"),
@@ -1517,15 +1300,12 @@ struct MainTabView: View {
             chapterNotesDestination(context: context, host: host)
         case .mergeNotes(let bookID, let noteIDs):
             NoteMergeView(bookID: bookID, noteIDs: noteIDs) { source, itemID in
-                openContentRoute(
-                    .contentViewer(source: source, initialItemID: itemID),
-                    from: host
+                navigationCoordinator.present(
+                    .contentViewer(source: source, initialItemID: itemID, keyword: "")
                 )
             }
         case .relatedCategory(let scope):
             relatedCategoryDestination(scope: scope, host: host)
-        case .relatedCategoryManagement:
-            relatedCategoryDestination(scope: .all, host: host)
         case .tagManagement:
             TagManagementView()
         case .notesByTag(let tagId):
@@ -1551,9 +1331,8 @@ struct MainTabView: View {
                 repository: repositories.noteRepository,
                 externalAppIntegrationRepository: repositories.externalAppIntegrationRepository,
                 onOpenViewer: { source, itemID in
-                    openContentRoute(
-                        .contentViewer(source: source, initialItemID: itemID),
-                        from: host
+                    navigationCoordinator.present(
+                        .contentViewer(source: source, initialItemID: itemID, keyword: "")
                     )
                 },
                 onOpenNoteRoute: { openNoteRoute($0, from: host) }
@@ -1571,9 +1350,8 @@ struct MainTabView: View {
         ChapterNotesView(
             context: context,
             onOpenViewer: { source, itemID in
-                openContentRoute(
-                    .contentViewer(source: source, initialItemID: itemID),
-                    from: host
+                navigationCoordinator.present(
+                    .contentViewer(source: source, initialItemID: itemID, keyword: "")
                 )
             },
             onOpenNoteRoute: { openNoteRoute($0, from: host) }
@@ -1588,9 +1366,8 @@ struct MainTabView: View {
         RelatedCategoryListView(
             scope: scope,
             onOpenViewer: { source, itemID in
-                openContentRoute(
-                    .contentViewer(source: source, initialItemID: itemID),
-                    from: host
+                navigationCoordinator.present(
+                    .contentViewer(source: source, initialItemID: itemID, keyword: "")
                 )
             },
             onOpenContentRoute: { openContentRoute($0, from: host) },
@@ -1603,49 +1380,10 @@ struct MainTabView: View {
     @ViewBuilder
     private func contentDestination(for route: ContentRoute, host: AppRouteHost) -> some View {
         switch route {
-        case .contentViewer(let source, let initialItemID, let keyword):
-            LegacyFullScreenRouteRelay {
-                relayLegacyFullScreenRoute(
-                    .contentViewer(
-                        source: source,
-                        initialItemID: initialItemID,
-                        keyword: keyword
-                    ),
-                    from: host
-                )
-            }
         case .reviewDetail(let reviewId):
             ReviewDetailView(reviewId: reviewId)
         case .relevantDetail(let contentId):
             RelevantDetailView(contentId: contentId)
-        case .reviewEditor(let reviewId):
-            LegacyFullScreenRouteRelay {
-                relayLegacyFullScreenRoute(
-                    .reviewEditor(.edit(reviewID: reviewId)),
-                    from: host
-                )
-            }
-        case .reviewEditorCreate(let bookId):
-            LegacyFullScreenRouteRelay {
-                relayLegacyFullScreenRoute(
-                    .reviewEditor(.create(bookID: bookId)),
-                    from: host
-                )
-            }
-        case .relevantEditor(let contentId):
-            LegacyFullScreenRouteRelay {
-                relayLegacyFullScreenRoute(
-                    .relevantEditor(.edit(contentID: contentId)),
-                    from: host
-                )
-            }
-        case .relevantEditorCreate(let bookId, let categoryId):
-            LegacyFullScreenRouteRelay {
-                relayLegacyFullScreenRoute(
-                    .relevantEditor(.create(bookID: bookId, categoryID: categoryId)),
-                    from: host
-                )
-            }
         }
     }
 
@@ -1663,13 +1401,6 @@ struct MainTabView: View {
             ReadingTimerSettingsView()
         case .premium:
             Text("会员")
-        case .readCalendar:
-            LegacyFullScreenRouteRelay {
-                relayReadCalendarRoute(
-                    initialDate: nil,
-                    from: hostTab
-                )
-            }
         case .readReminder:
             Text("阅读提醒")
         case .dataImport:
@@ -1718,18 +1449,7 @@ struct MainTabView: View {
     }
 
     private func append(_ route: BookRoute, to tab: AppTab) {
-        switch tab {
-        case .reading:
-            readingPath.append(route)
-        case .books:
-            booksPath.append(route)
-        case .notes:
-            notesPath.append(route)
-        case .profile:
-            profilePath.append(route)
-        case .search:
-            searchPath.append(route)
-        }
+        navigationCoordinator.push(.book(route), in: tab)
     }
 
     /// 把书籍浏览路由写入当前宿主拥有的路径。
@@ -1738,23 +1458,12 @@ struct MainTabView: View {
         case .tab(let tab):
             append(route, to: tab)
         case .task:
-            navigationCoordinator.taskPath.append(route)
+            navigationCoordinator.taskPath.append(.book(route))
         }
     }
 
     private func append(_ route: ReadingRoute, to tab: AppTab) {
-        switch tab {
-        case .reading:
-            readingPath.append(route)
-        case .books:
-            booksPath.append(route)
-        case .notes:
-            notesPath.append(route)
-        case .profile:
-            profilePath.append(route)
-        case .search:
-            searchPath.append(route)
-        }
+        navigationCoordinator.push(.reading(route), in: tab)
     }
 
     /// 把阅读浏览路由写入当前宿主拥有的路径。
@@ -1763,61 +1472,12 @@ struct MainTabView: View {
         case .tab(let tab):
             append(route, to: tab)
         case .task:
-            navigationCoordinator.taskPath.append(route)
-        }
-    }
-
-    private func replaceReadingPath(with route: ReadingRoute) {
-        var path = NavigationPath()
-        path.append(route)
-        readingPath = path
-    }
-
-    /// 移除当前 Tab 顶部路由，供历史全屏 route 中继先恢复真实来源页面。
-    private func popCurrentRoute(from tab: AppTab) {
-        switch tab {
-        case .reading:
-            guard !readingPath.isEmpty else { return }
-            readingPath.removeLast()
-        case .books:
-            guard !booksPath.isEmpty else { return }
-            booksPath.removeLast()
-        case .notes:
-            guard !notesPath.isEmpty else { return }
-            notesPath.removeLast()
-        case .profile:
-            guard !profilePath.isEmpty else { return }
-            profilePath.removeLast()
-        case .search:
-            guard !searchPath.isEmpty else { return }
-            searchPath.removeLast()
-        }
-    }
-
-    /// 移除当前宿主路径顶部的旧兼容 route，为全屏任务转交恢复真实来源现场。
-    private func popCurrentRoute(from host: AppRouteHost) {
-        switch host {
-        case .tab(let tab):
-            popCurrentRoute(from: tab)
-        case .task:
-            guard !navigationCoordinator.taskPath.isEmpty else { return }
-            navigationCoordinator.taskPath.removeLast()
+            navigationCoordinator.taskPath.append(.reading(route))
         }
     }
 
     private func append(_ route: NoteRoute, to tab: AppTab) {
-        switch tab {
-        case .reading:
-            readingPath.append(route)
-        case .books:
-            booksPath.append(route)
-        case .notes:
-            notesPath.append(route)
-        case .profile:
-            profilePath.append(route)
-        case .search:
-            searchPath.append(route)
-        }
+        navigationCoordinator.push(.note(route), in: tab)
     }
 
     /// 把笔记浏览路由写入当前宿主拥有的路径。
@@ -1826,38 +1486,16 @@ struct MainTabView: View {
         case .tab(let tab):
             append(route, to: tab)
         case .task:
-            navigationCoordinator.taskPath.append(route)
+            navigationCoordinator.taskPath.append(.note(route))
         }
     }
 
     private func append(_ route: DebugRoute, to tab: AppTab) {
-        switch tab {
-        case .reading:
-            readingPath.append(route)
-        case .books:
-            booksPath.append(route)
-        case .notes:
-            notesPath.append(route)
-        case .profile:
-            profilePath.append(route)
-        case .search:
-            searchPath.append(route)
-        }
+        navigationCoordinator.push(.debug(route), in: tab)
     }
 
     private func append(_ route: ContentRoute, to tab: AppTab) {
-        switch tab {
-        case .reading:
-            readingPath.append(route)
-        case .books:
-            booksPath.append(route)
-        case .notes:
-            notesPath.append(route)
-        case .profile:
-            profilePath.append(route)
-        case .search:
-            searchPath.append(route)
-        }
+        navigationCoordinator.push(.content(route), in: tab)
     }
 
     /// 把普通内容详情路由写入当前宿主拥有的路径。
@@ -1866,50 +1504,17 @@ struct MainTabView: View {
         case .tab(let tab):
             append(route, to: tab)
         case .task:
-            navigationCoordinator.taskPath.append(route)
+            navigationCoordinator.taskPath.append(.content(route))
         }
     }
 
     private func append(_ route: PersonalRoute, to tab: AppTab) {
-        switch tab {
-        case .reading:
-            readingPath.append(route)
-        case .books:
-            booksPath.append(route)
-        case .notes:
-            notesPath.append(route)
-        case .profile:
-            profilePath.append(route)
-        case .search:
-            searchPath.append(route)
-        }
+        navigationCoordinator.push(.personal(route), in: tab)
     }
 
     /// 将全屏任务的回流目标写入指定 Tab 的普通浏览栈。
     private func append(_ destination: AppBrowseDestination, to tab: AppTab) {
-        switch destination {
-        case .book(let route):
-            append(route, to: tab)
-        case .note(let route):
-            append(route, to: tab)
-        case .content(let route):
-            append(route, to: tab)
-        case .personal(let route):
-            append(route, to: tab)
-        case .reading(let route):
-            switch tab {
-            case .reading:
-                readingPath.append(route)
-            case .books:
-                booksPath.append(route)
-            case .notes:
-                notesPath.append(route)
-            case .profile:
-                profilePath.append(route)
-            case .search:
-                searchPath.append(route)
-            }
-        }
+        navigationCoordinator.push(destination, in: tab)
     }
 
     /// 搜索结果按页面关系分流：普通详情进入 Search 栈，沉浸查看器进入根级全屏任务。
@@ -1971,27 +1576,17 @@ struct MainTabView: View {
     }
 
     /// 消费 App 根层分发的计时深链；普通路由交给浏览栈，计时路由等待当前全屏任务退场后呈现。
-    private func openReadingTimerDeepLink(_ route: ReadingRoute) {
+    private func openReadingTimerDeepLink(_ request: ReadingTimerDeepLinkRequest) {
         guard runtime != nil else { return }
-        switch route {
-        case .readingSession(let bookId):
+        switch request {
+        case .book(let bookId):
             presentReadingTimerDeepLink(request: .book(bookId))
-        case .readingSessionRecord(let recordId, let bookId):
+        case .record(let recordId, let bookId):
             presentReadingTimerDeepLink(
                 request: .record(recordId: recordId, bookId: bookId)
             )
-        default:
-            if navigationCoordinator.activeTask != nil {
-                navigationCoordinator.exitTask(
-                    to: .reading(route),
-                    targetTab: .reading
-                )
-            } else {
-                selectedTab = .reading
-                replaceReadingPath(with: route)
-            }
         }
-        readingTimerDeepLinkRouter.consume(route)
+        readingTimerDeepLinkRouter.consume(request)
     }
 
     /// 深链始终采用无来源标准入场；已有计时或全屏任务时，先等待其系统退场完成。
@@ -2021,8 +1616,10 @@ struct MainTabView: View {
               let request = pendingReadingTimerDeepLinkRequest else {
             return
         }
-        if navigationCoordinator.activeTask != nil {
-            navigationCoordinator.dismissTask()
+        if navigationCoordinator.isTaskPresentationActiveOrDismissing {
+            if navigationCoordinator.activeTask != nil {
+                navigationCoordinator.dismissTask()
+            }
             return
         }
 
@@ -2196,41 +1793,14 @@ struct MainTabView: View {
         if let pendingImport = bookCollectionImportRouter.pendingImport {
             prepareForBookCollectionImport(pendingImport)
         }
-        if desktopWebSessionCoordinator.premiumUpgradeRequestID != nil {
+        if scenePhase == .active,
+           let requestID = desktopWebSessionCoordinator.premiumUpgradeRequestID,
+           desktopWebSessionCoordinator.consumePremiumUpgradeRequest(requestID) {
             openPremiumUpgradeFromDesktopWeb()
         }
-        if let pendingRoute = readingTimerDeepLinkRouter.pendingRoute {
-            openReadingTimerDeepLink(pendingRoute)
+        if let pendingRequest = readingTimerDeepLinkRouter.pendingRequest {
+            openReadingTimerDeepLink(pendingRequest)
         }
-    }
-
-    /// 恢复五个 Tab 的普通浏览路径；全屏任务路径不进入 scene 快照。
-    private func restoreBrowseNavigationFromSceneSnapshot() {
-        let snapshot = sceneStateStore.snapshot
-        selectedTab = snapshot.selectedTab
-        searchQuery = snapshot.searchQuery
-        readingPath = restoredPath(for: .reading)
-        booksPath = restoredPath(for: .books)
-        notesPath = restoredPath(for: .notes)
-        profilePath = restoredPath(for: .profile)
-        searchPath = restoredPath(for: .search)
-    }
-
-    /// 将指定 Tab 的可编码路径还原为 SwiftUI NavigationPath。
-    private func restoredPath(for tab: AppTab) -> NavigationPath {
-        guard let representation = sceneStateStore.pathRepresentation(for: tab) else {
-            return NavigationPath()
-        }
-        return NavigationPath(representation)
-    }
-
-    /// 为路径变化生成稳定签名，仅在浏览栈语义变化时写回 scene 快照。
-    private func pathSignature(for path: NavigationPath) -> String {
-        guard let representation = path.codable,
-              let data = try? JSONEncoder().encode(representation) else {
-            return "empty"
-        }
-        return data.base64EncodedString()
     }
 
     /// 消费网页端原生高级版动作，切换到“我的”并沿用该 Tab 的既有导航栈继续 push。
@@ -2243,21 +1813,36 @@ struct MainTabView: View {
             return
         }
         selectedTab = .profile
-        profilePath.append(PersonalRoute.premium)
+        navigationCoordinator.push(.personal(.premium), in: .profile)
     }
 
     private func prepareForBookCollectionImport(_ request: BookCollectionImportRequest) {
         selectedTab = .books
         if request.source == .systemShare {
-            booksPath = NavigationPath()
+            navigationCoordinator.replacePath(for: .books, with: [])
         }
     }
 
     #if DEBUG
-    /// UI Test 启动后直达书籍首页或目标二级列表，减少测试对真实恢复状态与首页聚合入口布局的依赖。
+    /// UI Test 启动后在 MainActor 串行注入目标场景；等待全屏挂载期间响应取消，避免失效视图继续写路由。
     @MainActor
     private func applyUITestLaunchRouteIfNeeded() async {
         guard !didApplyUITestLaunchRoute else {
+            return
+        }
+        if UITestLaunchConfiguration.shouldExerciseTimerDeepLinkConflict {
+            didApplyUITestLaunchRoute = true
+            selectedTab = .reading
+            navigationCoordinator.present(.readCalendar(initialDate: nil))
+            do {
+                try await Task.sleep(for: .milliseconds(350))
+                try Task.checkCancellation()
+            } catch {
+                return
+            }
+            readingTimerDeepLinkRouter.pendingRequest = .book(bookId: 1_001)
+            await Task.yield()
+            readingTimerDeepLinkRouter.pendingRequest = .book(bookId: 1_002)
             return
         }
         let requestedRoute = UITestLaunchConfiguration.requestedBookRoute
@@ -2273,7 +1858,7 @@ struct MainTabView: View {
 }
 
 /// 运行时依赖未就绪时的根 Tab 内容；只保留真实页面结构，不暴露伪内容或可操作元素。
-private struct MainTabBootstrapPage: View {
+struct MainTabBootstrapPage: View {
     let tab: AppTab
     let snapshot: AppSceneSnapshot
     let hasRestoredNavigation: Bool
@@ -2290,6 +1875,16 @@ private struct MainTabBootstrapPage: View {
         }
         .allowsHitTesting(false)
         .accessibilityHidden(true)
+    }
+}
+
+/// 初始恢复目的页尚未提交时覆盖整个 Tab 树，阻断视觉泄漏和误触，不参与任何导航状态。
+private struct RestoredNavigationSurfaceGate: View {
+    var body: some View {
+        Color.surfacePage
+            .ignoresSafeArea()
+            .accessibilityElement(children: .ignore)
+            .accessibilityIdentifier("app.navigation-restoration-gate")
     }
 }
 
@@ -2873,43 +2468,10 @@ struct ReadingTimerNormalZoomSource<Source: View>: View {
     }
 }
 
-/// 兼容历史 Codable 路径的瞬时中继页，每个视图身份只把旧全屏 route 转发一次。
-private struct LegacyFullScreenRouteRelay: View {
-    let onRelay: () -> Void
-
-    @State private var didRelay = false
-
-    var body: some View {
-        Color.surfacePage
-            .ignoresSafeArea()
-            .task {
-                guard !didRelay else { return }
-                didRelay = true
-                onRelay()
-            }
-    }
-}
 /// 最近搜索词按下阶段的待消费意图，用独立 id 区分连续点击同一个关键词的不同交互。
 private struct PendingGlobalSearchSuggestion: Identifiable, Equatable {
     let id = UUID()
     let keyword: String
-}
-
-/// 阅读计时尚未接入生产页时的全屏任务占位；关闭语义与未来正式任务保持一致。
-private struct ReadingSessionTaskPlaceholder: View {
-    let navigationContext: AppTaskNavigationContext
-
-    var body: some View {
-        Text("阅读计时")
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(Color.surfacePage)
-            .navigationTitle("阅读计时")
-            .navigationBarTitleDisplayMode(.inline)
-            .appTaskRootDismissControl(
-                isVisible: navigationContext == .modalRoot,
-                style: .text("关闭")
-            )
-    }
 }
 
 /// 根级全屏页面的退出控件样式，区分文字取消操作与垂直收起语义。

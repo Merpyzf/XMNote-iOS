@@ -13,6 +13,7 @@ final class BookshelfBookListSearchDrawerUITests: XCTestCase {
     private let defaultBookshelfArgument = "-XMNoteUITestOpenDefaultBookshelf"
     private let wantReadArgument = "-XMNoteUITestOpenWantReadList"
     private let reorderGroupArgument = "-XMNoteUITestOpenReorderGroupList"
+    private let resetSceneStateArgument = "-XMNoteUITestResetSceneState"
 
     override func setUpWithError() throws {
         continueAfterFailure = false
@@ -324,14 +325,14 @@ final class BookshelfBookListSearchDrawerUITests: XCTestCase {
 
     private func launchBookList(argument: String) -> XCUIApplication {
         let app = XCUIApplication()
-        app.launchArguments = [seedArgument, argument]
+        app.launchArguments = [seedArgument, argument, resetSceneStateArgument]
         app.launch()
         return app
     }
 
     private func launchDefaultBookshelf() -> XCUIApplication {
         let app = XCUIApplication()
-        app.launchArguments = [defaultBookshelfArgument]
+        app.launchArguments = [defaultBookshelfArgument, resetSceneStateArgument]
         app.launch()
         return app
     }

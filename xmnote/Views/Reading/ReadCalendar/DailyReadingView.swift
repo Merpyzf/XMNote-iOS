@@ -1,5 +1,5 @@
 /**
- * [INPUT]: 依赖 RepositoryContainer、DailyReadingViewModel、轨迹私有组件与 Book/Note/Content 导航回调
+ * [INPUT]: 依赖 RepositoryContainer、AppNavigationCoordinator、DailyReadingViewModel、轨迹私有组件与浏览导航回调
  * [OUTPUT]: 对外提供 DailyReadingView，以主滚动视图展示指定自然日轨迹，并承接筛选、打卡、记录管理、固定类型相关书籍编辑与可重试刷新告警
  * [POS]: ReadCalendar 日期点击后的唯一二级页面，内容态由系统主滚动视图直接承载，取代独立汇总页与单书三级页
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -17,6 +17,7 @@ struct DailyReadingView: View {
     let onOpenContentRoute: (ContentRoute) -> Void
 
     @Environment(RepositoryContainer.self) private var repositories
+    @Environment(AppNavigationCoordinator.self) private var navigationCoordinator
     @Environment(\.openURL) private var openURL
     @Environment(\.colorScheme) private var colorScheme
     @State private var viewModel: DailyReadingViewModel
@@ -355,11 +356,11 @@ struct DailyReadingView: View {
     private func edit(_ record: DailyReadingRecord) {
         switch record.event.kind {
         case .note(let note):
-            onOpenNoteRoute(.edit(noteId: note.noteId))
+            navigationCoordinator.present(.noteEditor(mode: .edit(noteId: note.noteId), seed: nil))
         case .review(let review):
-            onOpenContentRoute(.reviewEditor(reviewId: review.reviewId))
+            navigationCoordinator.present(.reviewEditor(.edit(reviewID: review.reviewId)))
         case .relevant(let relevant):
-            onOpenContentRoute(.relevantEditor(contentId: relevant.contentId))
+            navigationCoordinator.present(.relevantEditor(.edit(contentID: relevant.contentId)))
         case .readTiming, .checkIn:
             guard record.recordID != nil else { return }
             editingRecord = record
@@ -380,10 +381,11 @@ struct DailyReadingView: View {
         case .review: filter = .review
         case .relevant: filter = .relevant
         }
-        onOpenContentRoute(
+        navigationCoordinator.present(
             .contentViewer(
                 source: .timeline(startTimestamp: start, endTimestamp: end, filter: filter),
-                initialItemID: itemID
+                initialItemID: itemID,
+                keyword: ""
             )
         )
     }

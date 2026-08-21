@@ -580,6 +580,22 @@ private final class UploadRepositoryStub: S3UploadRepositoryProtocol, @unchecked
         self.result = result
     }
 
+    func stageImageData(_ data: Data, preferredFileExtension: String) async throws -> URL {
+        _ = data
+        return FileManager.default.temporaryDirectory
+            .appendingPathComponent("desktop-web-upload-stub")
+            .appendingPathExtension(preferredFileExtension)
+    }
+
+    func discardStagedFile(at localURL: URL) async {
+        _ = localURL
+    }
+
+    func isStagedFileAvailable(at localURL: URL) async -> Bool {
+        _ = localURL
+        return false
+    }
+
     func uploadFile(
         localURL _: URL,
         prefix: String,

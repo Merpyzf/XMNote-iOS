@@ -3,7 +3,7 @@ import UIKit
 
 /**
  * [INPUT]: 依赖 XMCoverImageLoading 加载封面，依赖 ReadCalendarSegmentColor 表达事件条颜色结果
- * [OUTPUT]: 对外提供 ReadCalendarColorRepository（Android Palette 等价量化、事件色修正、内存缓存与稳定哈希回退）
+ * [OUTPUT]: 对外提供 ReadCalendarColorRepository（Android Palette 等价量化、封面主题/事件色修正、内存缓存与稳定哈希回退）
  * [POS]: Data 层阅读日历颜色仓储，隔离封面解码、取色算法、并发合并与刷新语义
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -40,9 +40,41 @@ struct ReadCalendarColorRepository: ReadCalendarColorRepositoryProtocol {
         coverURL: String,
         forceRefresh: Bool
     ) async -> ReadCalendarSegmentColor {
+        await resolveColors(
+            bookId: bookId,
+            bookName: bookName,
+            coverURL: coverURL,
+            forceRefresh: forceRefresh,
+            paletteProfile: .readCalendar
+        ).eventColor
+    }
+
+    /// 返回完整封面主题；背景代表色与图表强调色来自同一次量化和同一份成功缓存。
+    func resolveCoverThemeColor(
+        bookId: Int64,
+        bookName: String,
+        coverURL: String
+    ) async -> BookCoverThemeColor {
+        await resolveColors(
+            bookId: bookId,
+            bookName: bookName,
+            coverURL: coverURL,
+            forceRefresh: false,
+            paletteProfile: .readingDetail
+        ).themeColor
+    }
+
+    /// 合并事件条与沉浸页面对同一封面的并发请求，避免重复下载和重复量化。
+    private func resolveColors(
+        bookId: Int64,
+        bookName: String,
+        coverURL: String,
+        forceRefresh: Bool,
+        paletteProfile: CoverPaletteProfile
+    ) async -> ResolvedCoverColors {
         let normalizedName = bookName.trimmingCharacters(in: .whitespacesAndNewlines)
         let normalizedCoverURL = coverURL.trimmingCharacters(in: .whitespacesAndNewlines)
-        let cacheKey = Self.cacheKey(bookId: bookId)
+        let cacheKey = Self.cacheKey(bookId: bookId, paletteProfile: paletteProfile)
         let sourceSignature = Self.sourceSignature(
             bookName: normalizedName,
             coverURL: normalizedCoverURL
@@ -59,9 +91,10 @@ struct ReadCalendarColorRepository: ReadCalendarColorRepositoryProtocol {
             break
         }
 
-        let result = await resolveUncachedColor(
+        let result = await resolveUncachedColors(
             bookName: bookName,
-            normalizedCoverURL: normalizedCoverURL
+            normalizedCoverURL: normalizedCoverURL,
+            paletteProfile: paletteProfile
         )
         await cacheStore.finish(
             result,
@@ -72,28 +105,50 @@ struct ReadCalendarColorRepository: ReadCalendarColorRepositoryProtocol {
     }
 
     /// 所有异步图片与量化工作均可随调用任务取消；失败结果只返回、不写入跨请求缓存。
-    private func resolveUncachedColor(
+    private func resolveUncachedColors(
         bookName: String,
-        normalizedCoverURL: String
-    ) async -> ReadCalendarSegmentColor {
-        let fallback = Self.resolveEventColor(swatches: [], fallbackSeed: bookName)
+        normalizedCoverURL: String,
+        paletteProfile: CoverPaletteProfile
+    ) async -> ResolvedCoverColors {
+        let fallbackScheme = Self.resolveCoverScheme(swatches: [], fallbackSeed: bookName)
+        let fallbackEventColor = Self.resolveEventColor(
+            scheme: fallbackScheme,
+            swatches: []
+        )
         guard let url = XMImageRequestBuilder.normalizedURL(from: normalizedCoverURL) else {
-            return fallback.asDomainColor(state: .failed)
+            return ResolvedCoverColors(
+                scheme: fallbackScheme,
+                eventColor: fallbackEventColor,
+                state: .failed
+            )
         }
 
         do {
             let image = try await imageLoader.loadImage(for: XMImageLoadRequest(url: url))
             try Task.checkCancellation()
-            guard let swatches = await Self.extractPaletteAsync(from: image), !swatches.isEmpty else {
-                return fallback.asDomainColor(state: .failed)
+            guard let swatches = await Self.extractPaletteAsync(
+                from: image,
+                paletteProfile: paletteProfile
+            ), !swatches.isEmpty else {
+                return ResolvedCoverColors(
+                    scheme: fallbackScheme,
+                    eventColor: fallbackEventColor,
+                    state: .failed
+                )
             }
             try Task.checkCancellation()
-            return Self.resolveEventColor(
-                swatches: swatches,
-                fallbackSeed: bookName
-            ).asDomainColor(state: .resolved)
+            let scheme = Self.resolveCoverScheme(swatches: swatches, fallbackSeed: bookName)
+            return ResolvedCoverColors(
+                scheme: scheme,
+                eventColor: Self.resolveEventColor(scheme: scheme, swatches: swatches),
+                state: .resolved
+            )
         } catch {
-            return fallback.asDomainColor(state: .failed)
+            return ResolvedCoverColors(
+                scheme: fallbackScheme,
+                eventColor: fallbackEventColor,
+                state: .failed
+            )
         }
     }
 }
@@ -101,18 +156,36 @@ struct ReadCalendarColorRepository: ReadCalendarColorRepositoryProtocol {
 // MARK: - Android Palette Equivalent
 
 private extension ReadCalendarColorRepository {
-    /// 在后台线程将封面缩放为 Android 同尺寸位图并执行 5-bit median-cut 量化。
-    nonisolated static func extractPaletteAsync(from image: UIImage) async -> [PaletteSwatch]? {
+    /// 在后台线程按消费场景的 Android Palette 配置执行 5-bit median-cut 量化。
+    nonisolated static func extractPaletteAsync(
+        from image: UIImage,
+        paletteProfile: CoverPaletteProfile
+    ) async -> [PaletteSwatch]? {
         await Task.detached(priority: .utility) {
             guard !Task.isCancelled else { return nil }
-            return extractPalette(from: image)
+            return extractPalette(from: image, paletteProfile: paletteProfile)
         }.value
     }
 
-    /// 固定使用 64×96 像素与最多 24 个色板，匹配 Android 阅读日历专用 Palette 配置。
-    nonisolated static func extractPalette(from image: UIImage) -> [PaletteSwatch] {
-        let targetWidth = 64
-        let targetHeight = 96
+    /// 阅读日历保留 64×96/24 色策略；详情页复制 Android Palette 默认 12544px/16 色与自定义黑白过滤器。
+    nonisolated static func extractPalette(
+        from image: UIImage,
+        paletteProfile: CoverPaletteProfile = .readCalendar
+    ) -> [PaletteSwatch] {
+        let sourceWidth = max(
+            1,
+            image.cgImage?.width ?? Int((image.size.width * image.scale).rounded())
+        )
+        let sourceHeight = max(
+            1,
+            image.cgImage?.height ?? Int((image.size.height * image.scale).rounded())
+        )
+        let renderSpec = paletteProfile.renderSpec(
+            sourceWidth: sourceWidth,
+            sourceHeight: sourceHeight
+        )
+        let targetWidth = renderSpec.width
+        let targetHeight = renderSpec.height
         let bytesPerPixel = 4
         let bytesPerRow = targetWidth * bytesPerPixel
         let bitmapInfo = CGImageAlphaInfo.premultipliedLast.rawValue
@@ -149,7 +222,11 @@ private extension ReadCalendarColorRepository {
             index += bytesPerPixel
         }
 
-        var quantizer = AndroidPaletteQuantizer(pixels: quantizedPixels, maxColors: 24)
+        var quantizer = AndroidPaletteQuantizer(
+            pixels: quantizedPixels,
+            maxColors: renderSpec.maxColors,
+            filter: renderSpec.filter
+        )
         return quantizer.quantize()
     }
 
@@ -159,26 +236,76 @@ private extension ReadCalendarColorRepository {
     }
 }
 
+nonisolated private enum CoverPaletteProfile {
+    case readCalendar
+    case readingDetail
+
+    /// 详情页使用 AndroidX Palette 默认面积上限等比缩放，日历则继续使用已对齐的固定位图。
+    func renderSpec(sourceWidth: Int, sourceHeight: Int) -> CoverPaletteRenderSpec {
+        switch self {
+        case .readCalendar:
+            return CoverPaletteRenderSpec(
+                width: 64,
+                height: 96,
+                maxColors: 24,
+                filter: .readCalendar
+            )
+        case .readingDetail:
+            let maximumArea = 112 * 112
+            let sourceArea = sourceWidth * sourceHeight
+            guard sourceArea > maximumArea else {
+                return CoverPaletteRenderSpec(
+                    width: sourceWidth,
+                    height: sourceHeight,
+                    maxColors: 16,
+                    filter: .readingDetail
+                )
+            }
+            let scale = sqrt(Double(maximumArea) / Double(sourceArea))
+            return CoverPaletteRenderSpec(
+                width: max(1, Int(ceil(Double(sourceWidth) * scale))),
+                height: max(1, Int(ceil(Double(sourceHeight) * scale))),
+                maxColors: 16,
+                filter: .readingDetail
+            )
+        }
+    }
+}
+
+nonisolated private struct CoverPaletteRenderSpec {
+    let width: Int
+    let height: Int
+    let maxColors: Int
+    let filter: CoverPaletteFilter
+}
+
+nonisolated private enum CoverPaletteFilter: Equatable {
+    case readCalendar
+    case readingDetail
+}
+
 /// AndroidX Palette 1.0.0 ColorCutQuantizer 的等价实现。
 nonisolated private struct AndroidPaletteQuantizer {
     private var colors: [Int]
     private var histogram: [Int]
     private let maxColors: Int
+    private let filter: CoverPaletteFilter
 
-    /// 构建 RGB555 直方图，并应用 Android Palette 默认的黑、白与红色 I 线过滤。
-    init(pixels: [Int], maxColors: Int) {
+    /// 构建 RGB555 直方图，并应用对应 Android 消费场景的 Palette 过滤器。
+    init(pixels: [Int], maxColors: Int, filter: CoverPaletteFilter) {
         var histogram = Array(repeating: 0, count: 1 << 15)
         for pixel in pixels {
             histogram[pixel] += 1
         }
         for color in histogram.indices where histogram[color] > 0 {
-            if Self.shouldIgnore(color: Self.approximateToRGB888(color)) {
+            if Self.shouldIgnore(color: Self.approximateToRGB888(color), filter: filter) {
                 histogram[color] = 0
             }
         }
         self.colors = histogram.indices.filter { histogram[$0] > 0 }
         self.histogram = histogram
         self.maxColors = maxColors
+        self.filter = filter
     }
 
     /// 返回最多 24 个色板；颜色较多时按最大体积优先切分色彩空间。
@@ -207,7 +334,8 @@ nonisolated private struct AndroidPaletteQuantizer {
         }
 
         return boxes.compactMap { box in
-            guard let swatch = averageColor(in: box), !Self.shouldIgnore(color: swatch.rgb) else {
+            guard let swatch = averageColor(in: box),
+                  !Self.shouldIgnore(color: swatch.rgb, filter: filter) else {
                 return nil
             }
             return swatch
@@ -326,10 +454,15 @@ nonisolated private struct AndroidPaletteQuantizer {
         )
     }
 
-    private static func shouldIgnore(color: RGBColor) -> Bool {
+    private static func shouldIgnore(color: RGBColor, filter: CoverPaletteFilter) -> Bool {
         let hsl = color.hsl
         let isBlack = hsl.lightness <= 0.05
         let isWhite = hsl.lightness >= 0.95
+        if filter == .readingDetail {
+            let isNearWhite = color.red > 245 && color.green > 245 && color.blue > 245
+            let isNearBlack = color.red < 10 && color.green < 10 && color.blue < 10
+            return isNearWhite || isNearBlack || isWhite || isBlack
+        }
         let isNearRedILine = hsl.hue >= 10 && hsl.hue <= 37 && hsl.saturation <= 0.82
         return isBlack || isWhite || isNearRedILine
     }
@@ -375,6 +508,14 @@ private extension ReadCalendarColorRepository {
         fallbackSeed: String
     ) -> ResolvedEventColor {
         let scheme = resolveCoverScheme(swatches: swatches, fallbackSeed: fallbackSeed)
+        return resolveEventColor(scheme: scheme, swatches: swatches)
+    }
+
+    /// 从已完成的封面主题继续生成事件条颜色，避免页面与日历重复选择色板。
+    nonisolated static func resolveEventColor(
+        scheme: CoverColorScheme,
+        swatches: [PaletteSwatch]
+    ) -> ResolvedEventColor {
         let baseColor = resolveEventBaseColor(scheme: scheme, swatches: swatches)
         let background = normalizeEventBackground(baseColor.withAlpha(204))
         let text = resolveEventTextColor(background: background, rawText: scheme.onRepresentative)
@@ -389,6 +530,7 @@ private extension ReadCalendarColorRepository {
             let seed = normalizeRepresentative(androidGeneratedColor(from: fallbackSeed))
             return CoverColorScheme(
                 representative: seed,
+                background: backgroundColor(from: seed),
                 accent: normalizeAccent(seed),
                 onRepresentative: readableTextColor(for: seed)
             )
@@ -416,6 +558,7 @@ private extension ReadCalendarColorRepository {
         }?.rgb ?? representativeColor
         return CoverColorScheme(
             representative: representativeColor,
+            background: backgroundColor(from: representativeColor),
             accent: normalizeAccent(accent),
             onRepresentative: readableTextColor(for: representativeColor)
         )
@@ -450,6 +593,19 @@ private extension ReadCalendarColorRepository {
         } else {
             hsl.saturation = hsl.saturation.clamped(to: 0.22...0.78)
             hsl.lightness = hsl.lightness.clamped(to: 0.24...0.76)
+        }
+        return RGBColor(hsl: hsl)
+    }
+
+    /// 复刻 Android `backgroundColorFrom`：背景色与代表色职责分离，彩色封面降饱和，明度限制在可读区间。
+    nonisolated static func backgroundColor(from color: RGBColor) -> RGBColor {
+        var hsl = color.hsl
+        if hsl.saturation < 0.08 {
+            hsl.saturation = 0
+            hsl.lightness = hsl.lightness.clamped(to: 0.34...0.84)
+        } else {
+            hsl.saturation = (hsl.saturation * 0.72).clamped(to: 0.08...0.48)
+            hsl.lightness = hsl.lightness.clamped(to: 0.34...0.84)
         }
         return RGBColor(hsl: hsl)
     }
@@ -597,6 +753,7 @@ private extension ReadCalendarColorRepository {
 
 nonisolated private struct CoverColorScheme {
     let representative: RGBColor
+    let background: RGBColor
     let accent: RGBColor
     let onRepresentative: RGBColor
 }
@@ -626,6 +783,28 @@ nonisolated private struct ResolvedEventColor {
             state: state,
             backgroundRGBAHex: background.rgbaHex,
             textRGBAHex: text.rgbaHex
+        )
+    }
+}
+
+/// 同一次封面计算的双消费结果；事件条使用不透明度修正色，详情页保留代表色与强调色职责分离。
+nonisolated private struct ResolvedCoverColors {
+    let eventColor: ReadCalendarSegmentColor
+    let themeColor: BookCoverThemeColor
+
+    /// 把内部 RGB 结果一次性转换为两个领域模型，保证缓存命中时语义完全一致。
+    init(
+        scheme: CoverColorScheme,
+        eventColor: ResolvedEventColor,
+        state: ReadCalendarSegmentColorState
+    ) {
+        self.eventColor = eventColor.asDomainColor(state: state)
+        self.themeColor = BookCoverThemeColor(
+            state: state,
+            representativeRGBAHex: scheme.representative.withAlpha(255).rgbaHex,
+            backgroundRGBAHex: scheme.background.withAlpha(255).rgbaHex,
+            accentRGBAHex: scheme.accent.withAlpha(255).rgbaHex,
+            onRepresentativeRGBAHex: scheme.onRepresentative.withAlpha(255).rgbaHex
         )
     }
 }
@@ -781,10 +960,24 @@ nonisolated private struct RGBColor: Hashable {
 
 private extension ReadCalendarColorRepository {
     nonisolated static let colorAlgorithmVersion = "android-palette-64x96-v1"
+    nonisolated static let readingDetailColorAlgorithmVersion = "android-palette-reading-detail-v1"
 
     /// 缓存键稳定绑定书籍与算法版本，来源签名单独识别书名/封面变化。
     nonisolated static func cacheKey(bookId: Int64) -> String {
         "book:\(bookId)|algo:\(colorAlgorithmVersion)"
+    }
+
+    /// 为阅读详情建立独立缓存命名空间，避免与日历事件色串用量化结果。
+    nonisolated static func cacheKey(
+        bookId: Int64,
+        paletteProfile: CoverPaletteProfile
+    ) -> String {
+        switch paletteProfile {
+        case .readCalendar:
+            cacheKey(bookId: bookId)
+        case .readingDetail:
+            "book:\(bookId)|algo:\(readingDetailColorAlgorithmVersion)"
+        }
     }
 
     /// 来源签名确保同一书籍更换书名或封面后不会沿用旧颜色。
@@ -841,15 +1034,15 @@ extension ReadCalendarColorRepository {
 #endif
 
 nonisolated private enum ReadCalendarColorCacheLookup {
-    case cached(ReadCalendarSegmentColor)
-    case joined(ReadCalendarSegmentColor)
+    case cached(ResolvedCoverColors)
+    case joined(ResolvedCoverColors)
     case owner
 }
 
 /// 有界成功结果缓存；Actor 同时把相同书籍与封面来源的并发请求合并为一次计算。
 private actor ReadCalendarColorCacheStore {
     private struct CacheRecord {
-        let color: ReadCalendarSegmentColor
+        let colors: ResolvedCoverColors
         let sourceSignature: String
         let updatedAt: Int64
     }
@@ -859,7 +1052,7 @@ private actor ReadCalendarColorCacheStore {
     private let maxEntries = 1200
     private var memory: [String: CacheRecord] = [:]
     private var inFlightKeys: Set<String> = []
-    private var waiters: [String: [CheckedContinuation<ReadCalendarSegmentColor, Never>]] = [:]
+    private var waiters: [String: [CheckedContinuation<ResolvedCoverColors, Never>]] = [:]
 
     /// 初始化时清理旧版 v3 近似色落盘文件，后续只维护进程内成功结果。
     init(fileManager: FileManager = .default) {
@@ -879,13 +1072,13 @@ private actor ReadCalendarColorCacheStore {
         if !forceRefresh,
            let record = memory[key],
            record.sourceSignature == sourceSignature {
-            return .cached(record.color)
+            return .cached(record.colors)
         }
         if inFlightKeys.contains(requestKey) {
-            let color = await withCheckedContinuation { continuation in
+            let colors = await withCheckedContinuation { continuation in
                 waiters[requestKey, default: []].append(continuation)
             }
-            return .joined(color)
+            return .joined(colors)
         }
         inFlightKeys.insert(requestKey)
         return .owner
@@ -893,22 +1086,22 @@ private actor ReadCalendarColorCacheStore {
 
     /// 唤醒同源等待者；只有真实封面取色成功结果进入有界内存缓存。
     func finish(
-        _ color: ReadCalendarSegmentColor,
+        _ colors: ResolvedCoverColors,
         for key: String,
         sourceSignature: String
     ) {
         let requestKey = "\(key)|source:\(sourceSignature)"
         inFlightKeys.remove(requestKey)
-        if color.state == .resolved {
+        if colors.themeColor.state == .resolved {
             memory[key] = CacheRecord(
-                color: color,
+                colors: colors,
                 sourceSignature: sourceSignature,
                 updatedAt: Int64(Date().timeIntervalSince1970 * 1000)
             )
             trimIfNeeded()
         }
         let continuations = waiters.removeValue(forKey: requestKey) ?? []
-        continuations.forEach { $0.resume(returning: color) }
+        continuations.forEach { $0.resume(returning: colors) }
     }
 
     private func trimIfNeeded() {

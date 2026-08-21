@@ -5,8 +5,8 @@ import os
 #endif
 
 /**
- * [INPUT]: 依赖 HeatmapDay/HeatmapLevel/HeatmapStatisticsDataType 领域模型，依赖 DesignTokens 颜色令牌，依赖 ScrollViewReader 程序化滚动，依赖 displayScale 做像素对齐，DEBUG 下依赖 os.Logger 输出布局诊断日志
- * [OUTPUT]: 对外提供 HeatmapChart（支持样式参数配置的 GitHub 风格阅读热力图组件）与 HeatmapChartStyle（方格尺寸/间距/圆角/自适应防裁切等视觉配置）
+ * [INPUT]: 依赖 HeatmapDay/HeatmapLevel/HeatmapStatisticsDataType 领域模型、HeatmapLegend 共享图例、DesignTokens 颜色令牌、ScrollViewReader 程序化滚动与 displayScale 像素对齐，DEBUG 下依赖 os.Logger 输出布局诊断日志
+ * [OUTPUT]: 对外提供 HeatmapChart（支持样式参数配置的 GitHub 风格阅读热力图组件）与 HeatmapChartStyle（方格尺寸/间距/圆角/自适应防裁切等视觉配置），并转发现有图例接口
  * [POS]: UIComponents/Charts 的热力图组件，供在读页/统计页消费
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -647,44 +647,33 @@ extension HeatmapChart {
 
     /// 渲染热力图图例（少到多）。
     static func legend(style: HeatmapChartStyle) -> some View {
-        HStack(spacing: Spacing.compact) {
-            Text("少")
-                .font(legendFont(baseSize: 9))
-                .foregroundStyle(Color.textHint)
-            ForEach(HeatmapLevel.allCases.filter { $0 != .none }, id: \.rawValue) { level in
-                RoundedRectangle(cornerRadius: style.squareRadius, style: .continuous)
-                    .fill(level.color)
-                    .frame(width: 10, height: 10)
-            }
-            Text("多")
-                .font(legendFont(baseSize: 9))
-                .foregroundStyle(Color.textHint)
-        }
+        HeatmapLegend(
+            palette: .appDefault,
+            style: HeatmapLegendStyle(
+                arrangement: .separated,
+                squareSize: 10,
+                squareSpacing: Spacing.compact,
+                labelSpacing: Spacing.compact,
+                cornerRadius: style.squareRadius,
+                textSize: 9,
+                textColor: .textHint
+            )
+        )
     }
 
     /// 参数化图例：供说明弹层等需要放大尺寸的场景使用
     static func legend(squareSize: CGFloat, fontSize: CGFloat) -> some View {
-        HStack(spacing: Spacing.compact) {
-            Text("少")
-                .font(legendFont(baseSize: fontSize))
-                .foregroundStyle(Color.textHint)
-            ForEach(HeatmapLevel.allCases.filter { $0 != .none }, id: \.rawValue) { level in
-                RoundedRectangle(cornerRadius: CornerRadius.inlayTiny, style: .continuous)
-                    .fill(level.color)
-                    .frame(width: squareSize, height: squareSize)
-            }
-            Text("多")
-                .font(legendFont(baseSize: fontSize))
-                .foregroundStyle(Color.textHint)
-        }
-    }
-
-    /// 图例文本统一走 caption2 语义字体，并固定默认态视觉字号不被抬高。
-    private static func legendFont(baseSize: CGFloat) -> Font {
-        AppTypography.fixed(
-            baseSize: baseSize,
-            relativeTo: .caption2,
-            minimumPointSize: baseSize
+        HeatmapLegend(
+            palette: .appDefault,
+            style: HeatmapLegendStyle(
+                arrangement: .separated,
+                squareSize: squareSize,
+                squareSpacing: Spacing.compact,
+                labelSpacing: Spacing.compact,
+                cornerRadius: CornerRadius.inlayTiny,
+                textSize: fontSize,
+                textColor: .textHint
+            )
         )
     }
 }

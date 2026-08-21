@@ -2,7 +2,7 @@
 import SwiftUI
 
 /**
- * [INPUT]: 依赖 RichText、FadeOverflowText、Heatmap、SystemAlert、Toast、Rating、BookSelection、SelectionMotion、ScopeSelector、Search、ScrollEdge、BookReorder、ImageLoading、Web、OCR、JXPhotoBrowser、ReadCalendar、NoteReview、BookCover/BookGroupCover、TopBar、LiquidGlass、SystemColors 与 Timeline 调试页面
+ * [INPUT]: 依赖 RichText、FadeOverflowText、Heatmap、MonthlyReadingChart、ReadingStatusTimeline、SystemAlert、Toast、Rating、BookSelection、SelectionMotion、ScopeSelector、Search、ScrollEdge、BookReorder、ImageLoading、Web、OCR、JXPhotoBrowser、ReadCalendar、NoteReview、BookCover/BookGroupCover、TopBar、LiquidGlass、SystemColors 与 Timeline 调试页面
  * [OUTPUT]: 对外提供 DebugCenterView（测试中心列表页）
  * [POS]: Debug 测试入口页，集中展示所有控件测试项，由 PersonalView 跳转进入
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -36,8 +36,20 @@ struct DebugCenterView: View {
         DebugItem(
             icon: "chart.dots.scatter",
             title: "阅读热力图",
-            subtitle: "8 个场景的渲染、交互与颜色适配",
+            subtitle: "周热力图与 Android 阅读详情月历的渲染、定位和配色验收",
             destination: AnyView(HeatmapTestView())
+        ),
+        DebugItem(
+            icon: "chart.bar.xaxis",
+            title: "月度阅读图表",
+            subtitle: "Android 同款展开/收起、全局比例与文本对齐验收",
+            destination: AnyView(MonthlyReadingChartTestView())
+        ),
+        DebugItem(
+            icon: "clock.arrow.circlepath",
+            title: "阅读历程组件",
+            subtitle: "状态节点、时间间隔、动态字体与交互权限验收",
+            destination: AnyView(ReadingStatusTimelineTestView())
         ),
         DebugItem(
             icon: "rectangle.center.inset.filled.badge.plus",

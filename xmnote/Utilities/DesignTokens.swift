@@ -5,7 +5,7 @@
 //  Created by 王珂 on 2026/2/10.
 //
 //  [INPUT]: 无外部依赖，仅依赖 SwiftUI 框架
-//  [OUTPUT]: Color 语义扩展、SwiftUI/UIKit 同源阅读排版、阅读日历与内容编辑语义、菜单/Dialog 表层语义、Spacing / CornerRadius / CardStyle 常量及颜色构造器
+//  [OUTPUT]: Color 语义扩展、SwiftUI/UIKit 同源阅读排版、阅读日历与内容编辑语义、菜单/Dialog 表层语义、CalendarHeatmapTypography、MonthlyReadingChartTypography、Spacing / CornerRadius / CardStyle 常量及颜色构造器
 //  [POS]: Utilities 模块的设计令牌中枢，全局 UI 一致性的单一真相源
 //  [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
 
@@ -687,6 +687,112 @@ enum AppTypography {
         guard !text.xmContainsCJK else { return .zero }
         return brandTrim(size: size, textStyle: .headline)
     }
+}
+
+/// 月历热力图排版令牌，统一 Android 对齐字号与 SwiftUI/UIKit 测量字体来源。
+enum CalendarHeatmapTypography {
+    /// 返回月标题字体，使 SwiftUI 渲染跟随调用环境的 Dynamic Type。
+    static func monthTitle(compatibleWith traitCollection: UITraitCollection? = nil) -> Font {
+        SemanticTypography.font(
+            baseSize: 12,
+            relativeTo: .caption,
+            weight: .bold,
+            minimumPointSize: 12,
+            compatibleWith: traitCollection
+        )
+    }
+
+    /// 返回日期数字字体，与 uiDay 使用同一字号、语义曲线和辅助功能环境。
+    static func day(compatibleWith traitCollection: UITraitCollection? = nil) -> Font {
+        SemanticTypography.font(
+            baseSize: 10,
+            relativeTo: .caption2,
+            minimumPointSize: 10,
+            compatibleWith: traitCollection
+        )
+    }
+
+    /// 返回图例文本字体，让不同使用场景保留各自视觉字号并共享语义缩放曲线。
+    static func legend(baseSize: CGFloat) -> Font {
+        AppTypography.fixed(
+            baseSize: baseSize,
+            relativeTo: .caption2,
+            minimumPointSize: baseSize
+        )
+    }
+
+    /// 返回日期数字的 UIKit 同源字体，供单元格尺寸测量使用。
+    static func uiDay(compatibleWith traitCollection: UITraitCollection? = nil) -> UIFont {
+        SemanticTypography.uiFont(
+            baseSize: 10,
+            textStyle: .caption2,
+            minimumPointSize: 10,
+            compatibleWith: traitCollection
+        )
+    }
+
+    /// 返回月标题的 UIKit 同源字体，供横向滚动视口锁定最大月份高度。
+    static func uiMonthTitle(compatibleWith traitCollection: UITraitCollection? = nil) -> UIFont {
+        SemanticTypography.uiFont(
+            baseSize: 12,
+            textStyle: .caption1,
+            weight: .bold,
+            minimumPointSize: 12,
+            compatibleWith: traitCollection
+        )
+    }
+}
+
+/// 月度阅读图表排版令牌，确保 SwiftUI 渲染字体与 UIKit 宽高测量使用同一来源。
+enum MonthlyReadingChartTypography {
+    static let collapsedSummary: Font = AppTypography.fixed(
+        baseSize: 12,
+        relativeTo: .caption,
+        minimumPointSize: 12
+    )
+    static let expandedSummary: Font = AppTypography.fixed(
+        baseSize: 10.8,
+        relativeTo: .caption2,
+        minimumPointSize: 10.8
+    )
+    static let arrow: Font = AppTypography.fixed(
+        baseSize: 14,
+        relativeTo: .caption,
+        minimumPointSize: 14
+    )
+    static let dailyDate: Font = AppTypography.fixed(
+        baseSize: 12,
+        relativeTo: .caption,
+        minimumPointSize: 12
+    )
+    static let dailyDuration: Font = AppTypography.fixed(
+        baseSize: 12,
+        relativeTo: .caption,
+        weight: .medium,
+        minimumPointSize: 12
+    )
+
+    static let uiCollapsedSummary: UIFont = AppTypography.uiFixed(
+        baseSize: 12,
+        textStyle: .caption1,
+        minimumPointSize: 12
+    )
+    static let uiExpandedSummary: UIFont = AppTypography.uiFixed(
+        baseSize: 10.8,
+        textStyle: .caption2,
+        minimumPointSize: 10.8
+    )
+    static let uiDailyDate: UIFont = AppTypography.uiFixed(
+        baseSize: 12,
+        textStyle: .caption1,
+        minimumPointSize: 12
+    )
+    static let uiDailyDuration: UIFont = AppTypography.uiFixed(
+        baseSize: 12,
+        textStyle: .caption1,
+        weight: .medium,
+        minimumPointSize: 12
+    )
 }
 
 /// 内容区 Inline Tab 的固定视觉层级，在辅助导航与正文之间保持 14pt 中间档。

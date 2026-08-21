@@ -568,38 +568,78 @@ private extension xmnoteTests {
     }
 }
 
-private struct StubStatisticsRepository: StatisticsRepositoryProtocol {
+private struct StubStatisticsRepository: ReadCalendarRepositoryProtocol {
     let earliestDate: Date?
 
-    func fetchHeatmapData(
-        year: Int,
-        dataType: HeatmapStatisticsDataType
-    ) async throws -> (days: [Date: HeatmapDay], earliestDate: Date?, latestDate: Date?) {
-        ([:], nil, nil)
+    @MainActor
+    func observeDailyReadingChanges() -> AsyncThrowingStream<Void, Error> {
+        AsyncThrowingStream { continuation in
+            continuation.finish()
+        }
     }
 
-    func fetchReadCalendarEarliestDate(
+    func fetchEarliestDate(
         excludedEventTypes: Set<ReadCalendarEventType>
     ) async throws -> Date? {
-        earliestDate
+        _ = excludedEventTypes
+        return earliestDate
     }
 
-    func fetchReadCalendarMonthData(
+    func fetchMonthData(
         monthStart: Date,
-        excludedEventTypes: Set<ReadCalendarEventType>
+        excludedEventTypes: Set<ReadCalendarEventType>,
+        excludedBookIDs: Set<Int64>
     ) async throws -> ReadCalendarMonthData {
+        _ = (excludedEventTypes, excludedBookIDs)
         let calendar = Calendar.current
         let components = calendar.dateComponents([.year, .month], from: monthStart)
         let normalized = calendar.date(from: DateComponents(year: components.year, month: components.month, day: 1)) ?? monthStart
         return .empty(for: calendar.startOfDay(for: normalized))
     }
 
-    func fetchReadCalendarYearTopBooks(
+    func fetchYearTopBooks(
         year: Int,
         excludedEventTypes: Set<ReadCalendarEventType>,
-        limit: Int
+        limit: Int,
+        includedMonthStarts: Set<Date>?,
+        excludedBookIDs: Set<Int64>
     ) async throws -> [ReadCalendarMonthlyDurationBook] {
-        []
+        _ = (year, excludedEventTypes, limit, includedMonthStarts, excludedBookIDs)
+        return []
+    }
+
+    func fetchDailySummary(
+        for date: Date,
+        excludedEventTypes: Set<ReadCalendarEventType>
+    ) async throws -> DailyReadingSummary {
+        _ = excludedEventTypes
+        return .empty(for: date)
+    }
+
+    func fetchDailyTrajectory(
+        for date: Date,
+        selectedBookID: Int64?,
+        filter: DailyReadingTimelineFilter,
+        sortOrder: DailyReadingSortOrder
+    ) async throws -> DailyReadingTrajectory {
+        _ = (selectedBookID, filter, sortOrder)
+        return .empty(for: date)
+    }
+
+    func saveCheckIn(_ draft: ReadCalendarCheckInDraft) async throws {
+        _ = draft
+    }
+
+    func updateTiming(_ draft: ReadCalendarTimingDraft) async throws {
+        _ = draft
+    }
+
+    func deleteCheckIn(recordID: Int64) async throws {
+        _ = recordID
+    }
+
+    func deleteTiming(recordID: Int64) async throws {
+        _ = recordID
     }
 }
 

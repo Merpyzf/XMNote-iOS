@@ -2,9 +2,9 @@
 import SwiftUI
 
 /**
- * [INPUT]: 依赖 HeatmapTestViewModel 提供测试数据，依赖 HeatmapChart 组件，依赖 RepositoryContainer 提供真实仓储数据
- * [OUTPUT]: 对外提供 HeatmapTestView（热力图测试页面）
- * [POS]: Debug 测试页，验证热力图 9 个场景的渲染、交互与颜色适配，并支持真实数据集成测试
+ * [INPUT]: 依赖 HeatmapTestViewModel 提供测试数据，依赖 HeatmapChart/CalendarHeatmap/HeatmapLegend 组件，依赖 RepositoryContainer 提供真实仓储数据
+ * [OUTPUT]: 对外提供 HeatmapTestView（周热力图与 Android 阅读详情月历热力图测试页面）
+ * [POS]: Debug 测试页，验证两类热力图的渲染、交互、初始定位、分段颜色与配色适配，并支持真实数据集成测试
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
@@ -30,6 +30,7 @@ private struct HeatmapTestContentView: View {
                 scenarioPickerSection
                 realDataControlSection
                 heatmapSection
+                calendarHeatmapSection
                 selectedDaySection
                 colorLegendSection
             }
@@ -163,6 +164,126 @@ private extension HeatmapTestContentView {
             .padding(Spacing.base)
             .background(Color.surfaceCard)
             .clipShape(RoundedRectangle(cornerRadius: CornerRadius.blockLarge, style: .continuous))
+        }
+    }
+}
+
+// MARK: - Android 阅读详情月历
+
+private extension HeatmapTestContentView {
+    var calendarHeatmapSection: some View {
+        VStack(alignment: .leading, spacing: Spacing.half) {
+            Text("Android 阅读详情月历热力图")
+                .font(.headline)
+                .foregroundStyle(Color.textPrimary)
+
+            HStack(spacing: Spacing.base) {
+                HStack(spacing: Spacing.compact) {
+                    Text("场景")
+                        .font(.caption)
+                        .foregroundStyle(Color.textSecondary)
+                    Picker(
+                        "月历场景",
+                        selection: Binding(
+                            get: { viewModel.calendarScenario },
+                            set: { scenario in
+                                withAnimation(.snappy) {
+                                    viewModel.loadCalendarScenario(scenario)
+                                }
+                            }
+                        )
+                    ) {
+                        ForEach(CalendarHeatmapTestScenario.allCases) { scenario in
+                            Text(scenario.rawValue).tag(scenario)
+                        }
+                    }
+                    .pickerStyle(.menu)
+                }
+
+                Spacer(minLength: Spacing.compact)
+
+                HStack(spacing: Spacing.compact) {
+                    Text("配色")
+                        .font(.caption)
+                        .foregroundStyle(Color.textSecondary)
+                    Picker("月历配色", selection: $viewModel.calendarPalette) {
+                        ForEach(CalendarHeatmapTestPalette.allCases) { palette in
+                            Text(palette.rawValue).tag(palette)
+                        }
+                    }
+                    .pickerStyle(.menu)
+                }
+            }
+
+            Text(viewModel.calendarScenario.positioningDescription)
+                .font(.caption)
+                .foregroundStyle(Color.textSecondary)
+
+            VStack(spacing: Spacing.cozy) {
+                if viewModel.calendarMonths.isEmpty {
+                    Text("测试中心提示：CalendarHeatmap 自身未输出内容")
+                        .font(.caption)
+                        .foregroundStyle(Color.textHint)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                } else {
+                    CalendarHeatmap(
+                        months: viewModel.calendarMonths,
+                        statisticsDataType: .all,
+                        style: calendarStyle
+                    )
+                    .transition(.opacity)
+                }
+
+                HeatmapLegend(
+                    palette: calendarColorPalette,
+                    style: .calendarReadingDetail
+                )
+                .frame(maxWidth: .infinity, alignment: .trailing)
+            }
+            .padding(Spacing.base)
+            .background(calendarCardBackground)
+            .clipShape(
+                RoundedRectangle(cornerRadius: CornerRadius.blockLarge, style: .continuous)
+            )
+        }
+    }
+
+    var calendarColorPalette: HeatmapColorPalette {
+        switch viewModel.calendarPalette {
+        case .appDefault:
+            .appDefault
+        case .coverRed:
+            HeatmapColorPalette(
+                none: Color(
+                    light: Color(hex: 0xF9EAE8),
+                    dark: Color(hex: 0x3D2928)
+                ),
+                veryLess: Color(hex: 0xE4AAA5),
+                less: Color(hex: 0xD27C75),
+                more: Color(hex: 0xB64138),
+                veryMore: Color(hex: 0x8E100D)
+            )
+        }
+    }
+
+    var calendarStyle: CalendarHeatmapStyle {
+        CalendarHeatmapStyle(
+            palette: calendarColorPalette,
+            monthTitleColor: .textSecondary,
+            emptyDayTextColor: .textSecondary,
+            activeDayTextColor: .white
+        )
+    }
+
+    var calendarCardBackground: Color {
+        switch viewModel.calendarPalette {
+        case .appDefault:
+            .surfaceCard
+        case .coverRed:
+            Color(
+                light: Color(hex: 0xF2D5D2),
+                dark: Color(hex: 0x312120)
+            )
         }
     }
 }

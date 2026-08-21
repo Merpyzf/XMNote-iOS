@@ -63,6 +63,7 @@ struct BookDetailView: View {
             readingTimerZoomConfiguration: readingTimerZoomConfiguration
         )
         .id(bookId)
+        .accessibilityIdentifier("book.detail.\(bookId)")
         .background(Color.surfacePage.ignoresSafeArea())
         .toolbarVisibility(.hidden, for: .tabBar)
         .onAppear {
@@ -827,8 +828,8 @@ private struct BookWorkspaceContentView: View {
                 onOpenRelated: { item in
                     if item.linkedBookID > 0 {
                         if item.isLinkedBookPlaceholder {
-                            onOpenBookRoute(
-                                .editRelatedPlaceholder(
+                            coordinator.presentBookEditor(
+                                mode: .editRelatedPlaceholder(
                                     bookId: item.linkedBookID,
                                     sourceBookId: bookId
                                 )

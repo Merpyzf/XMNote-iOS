@@ -24,6 +24,7 @@
 		89NUKE0012F3D000000000003 /* NukeUI in Frameworks */ = {isa = PBXBuildFile; productRef = 89NUKE0012F3D000000000005 /* NukeUI */; };
 		89POPV0012F600000000002 /* PopupView in Frameworks */ = {isa = PBXBuildFile; productRef = 89POPV0012F600000000004 /* PopupView */; };
 		89SOUP0012F3D000000000002 /* SwiftSoup in Frameworks */ = {isa = PBXBuildFile; productRef = 89SOUP0012F3D000000000004 /* SwiftSoup */; };
+		89VORT0012FA0000000000002 /* Vortex in Frameworks */ = {isa = PBXBuildFile; productRef = 89VORT0012FA0000000000004 /* Vortex */; };
 		89ZIP0012F3D000000000002 /* ZIPFoundation in Frameworks */ = {isa = PBXBuildFile; productRef = 89ZIP0012F3D000000000004 /* ZIPFoundation */; };
 		8ACCED43ABCD66D13B6BD021 /* libresolv.tbd in Frameworks */ = {isa = PBXBuildFile; fileRef = 19696D8CA8AA0D3676516DC3 /* libresolv.tbd */; };
 		8F053895DF208544572BAAEE /* SystemConfiguration.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = E3BFCA3A45C9EFF4B56C97C7 /* SystemConfiguration.framework */; };
@@ -172,6 +173,7 @@
 				89HZCAL12F3D000000000002 /* HorizonCalendar in Frameworks */,
 				89JXPB0012F3D000000000002 /* JXPhotoBrowser in Frameworks */,
 				89SOUP0012F3D000000000002 /* SwiftSoup in Frameworks */,
+				89VORT0012FA0000000000002 /* Vortex in Frameworks */,
 				89ZIP0012F3D000000000002 /* ZIPFoundation in Frameworks */,
 				89HUMM0012F8000000000002 /* Hummingbird in Frameworks */,
 				D35B00032FA0000000000003 /* XMNoteWeb in Frameworks */,
@@ -319,6 +321,7 @@
 				89HZCAL12F3D000000000004 /* HorizonCalendar */,
 				89JXPB0012F3D000000000004 /* JXPhotoBrowser */,
 				89SOUP0012F3D000000000004 /* SwiftSoup */,
+				89VORT0012FA0000000000004 /* Vortex */,
 				89ZIP0012F3D000000000004 /* ZIPFoundation */,
 				89HUMM0012F8000000000004 /* Hummingbird */,
 				D35B00022FA0000000000002 /* XMNoteWeb */,
@@ -467,6 +470,7 @@
 				89HZCAL12F3D000000000001 /* XCLocalSwiftPackageReference "Vendor/HorizonCalendar" */,
 				89JXPB0012F3D000000000001 /* XCLocalSwiftPackageReference "Vendor/PhotoBrowser" */,
 				89SOUP0012F3D000000000001 /* XCRemoteSwiftPackageReference "SwiftSoup" */,
+				89VORT0012FA0000000000001 /* XCRemoteSwiftPackageReference "Vortex" */,
 				89ZIP0012F3D000000000001 /* XCRemoteSwiftPackageReference "ZIPFoundation" */,
 				89HUMM0012F8000000000001 /* XCRemoteSwiftPackageReference "hummingbird" */,
 				D35B00012FA0000000000001 /* XCLocalSwiftPackageReference "Packages/XMNoteWeb" */,
@@ -1177,6 +1181,14 @@
 				minimumVersion = 2.13.0;
 			};
 		};
+		89VORT0012FA0000000000001 /* XCRemoteSwiftPackageReference "Vortex" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/twostraws/Vortex.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 1.0.4;
+			};
+		};
 		89ZIP0012F3D000000000001 /* XCRemoteSwiftPackageReference "ZIPFoundation" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/weichsel/ZIPFoundation.git";
@@ -1255,6 +1267,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 89SOUP0012F3D000000000001 /* XCRemoteSwiftPackageReference "SwiftSoup" */;
 			productName = SwiftSoup;
+		};
+		89VORT0012FA0000000000004 /* Vortex */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 89VORT0012FA0000000000001 /* XCRemoteSwiftPackageReference "Vortex" */;
+			productName = Vortex;
 		};
 		89ZIP0012F3D000000000004 /* ZIPFoundation */ = {
 			isa = XCSwiftPackageProductDependency;

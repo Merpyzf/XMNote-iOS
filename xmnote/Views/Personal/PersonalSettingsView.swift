@@ -12,7 +12,7 @@ struct PersonalSettingsView: View {
     var body: some View {
         Form {
             Section("阅读") {
-                NavigationLink(value: PersonalRoute.readingTimerSettings) {
+                NavigationLink(value: AppRoute.personal(.readingTimerSettings)) {
                     Label("阅读计时", systemImage: "timer")
                         .font(AppTypography.body)
                 }
