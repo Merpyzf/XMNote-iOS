@@ -267,24 +267,48 @@ nonisolated struct ReedenNoteImportParser: NoteImportParser {
 
     func parse(data: Data, fileExtension _: String?) async throws -> [NoteImportDraftBook] {
         do {
-            let object = try JSONSerialization.jsonObject(with: data)
+            var source = try NoteImportTextSupport.decodeUTF8(data)
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            if source.hasPrefix("\u{FEFF}") { source.removeFirst() }
+            source = source.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard let normalizedData = source.data(using: .utf8) else {
+                throw NoteImportParserError.noteFormat
+            }
+            let object = try JSONSerialization.jsonObject(with: normalizedData)
             let values: [[String: Any]]
-            if let array = object as? [[String: Any]] { values = array }
-            else if let item = object as? [String: Any] { values = [item] }
-            else { throw NoteImportParserError.noteFormat }
-            return values.map { value in
+            if let array = object as? [Any] {
+                values = try array.map { item in
+                    guard let value = item as? [String: Any] else {
+                        throw NoteImportParserError.noteFormat
+                    }
+                    return value
+                }
+            } else if let item = object as? [String: Any] {
+                values = [item]
+            } else {
+                throw NoteImportParserError.noteFormat
+            }
+            guard !values.isEmpty else { throw NoteImportParserError.bookNotFound }
+
+            return try values.map { value in
+                let title = NoteImportTextSupport.trimmed(value.string("title"))
+                guard !NoteImportTextSupport.isBlank(title) else {
+                    throw NoteImportParserError.bookNotFound
+                }
                 var book = structuredEBook(
-                    name: NoteImportTextSupport.trimmed(value.string("title")),
+                    name: title,
                     author: NoteImportTextSupport.trimmed(value.string("author"))
                 )
-                let description = value.string("description")
-                book.summary = description == "UnKnown" ? "" : NoteImportTextSupport.trimmed(description)
+                let description = NoteImportTextSupport.trimmed(value.string("description"))
+                book.summary = description == "UnKnown" ? "" : description
                 book.source = 26
                 if let statistics = value["readingStatistics"] as? [String: Any],
-                   let records = statistics["readingRecords"] as? [[String: Any]]
+                   let records = statistics["readingRecords"] as? [Any]
                 {
-                    let durations = records.compactMap { record -> NoteImportFuzzyReadingDuration? in
-                        let seconds = record.int64("readSeconds")
+                    let durations = records.compactMap { rawRecord -> NoteImportFuzzyReadingDuration? in
+                        guard let record = rawRecord as? [String: Any],
+                              let seconds = reedenInt64(record["readSeconds"])
+                        else { return nil }
                         guard seconds > 0 else { return nil }
                         let date = NoteImportTextSupport.dateMilliseconds(record.string("date"), format: "yyyy-MM-dd")
                         guard date != 0 else { return nil }
@@ -292,10 +316,16 @@ nonisolated struct ReedenNoteImportParser: NoteImportParser {
                     }
                     book.fuzzyReadingDurations = durations.isEmpty ? nil : durations
                 }
-                for note in value["notes"] as? [[String: Any]] ?? [] {
-                    let timestamp = note.string("timestamp")
+                let rawNotes = value["notes"] as? [Any] ?? []
+                for rawNote in rawNotes {
+                    guard let note = rawNote as? [String: Any] else { continue }
+                    let content = trimEndWhitespace(note.string("content"))
+                    let idea = trimEndWhitespace(note.string("comment"))
+                    guard !NoteImportTextSupport.isBlank(content) || !NoteImportTextSupport.isBlank(idea) else {
+                        continue
+                    }
                     let created: Int64
-                    if let raw = Int64(NoteImportTextSupport.trimmed(timestamp)) {
+                    if let raw = reedenInt64(note["timestamp"]) {
                         created = (1 ... 9_999_999_999).contains(raw) ? raw * 1_000 : raw
                     } else {
                         created = NoteImportTextSupport.dateMilliseconds(
@@ -304,19 +334,18 @@ nonisolated struct ReedenNoteImportParser: NoteImportParser {
                         )
                     }
                     book.notes.append(NoteImportDraftNote(
-                        content: trimEndWhitespace(note.string("content")),
-                        idea: trimEndWhitespace(note.string("comment")),
+                        content: content,
+                        idea: idea,
                         createdTime: created,
                         chapter: NoteImportDraftChapter(
                             title: NoteImportTextSupport.trimmed(note.string("sectionName")),
-                            order: note.int64("sectionIndex")
+                            order: reedenInt64(note["sectionIndex"]) ?? 0
                         )
                     ))
                 }
+                guard !book.notes.isEmpty else { throw NoteImportParserError.noteNotFound }
                 return book
             }
-        } catch let error as NoteImportParserError {
-            throw error
         } catch {
             throw NoteImportParserError.noteFormat
         }
@@ -335,6 +364,8 @@ private nonisolated func structuredEBook(name: String, author: String = "") -> N
 }
 
 private nonisolated func parseCSV(_ source: String) -> [[String]] {
+    // Swift 会把 CRLF 视为一个扩展字符簇；先还原为 FastCSV 与 Android 等价的换行语义。
+    let source = source.replacingOccurrences(of: "\r\n", with: "\n")
     var rows: [[String]] = []
     var row: [String] = []
     var field = ""
@@ -374,6 +405,16 @@ private nonisolated func trimEndWhitespace(_ value: String) -> String {
     var result = value
     while result.last?.isWhitespace == true { result.removeLast() }
     return result
+}
+
+private nonisolated func reedenInt64(_ value: Any?) -> Int64? {
+    if let string = value as? String {
+        return Int64(NoteImportTextSupport.trimmed(string))
+    }
+    if let number = value as? NSNumber, String(cString: number.objCType) != "c" {
+        return Int64(number.stringValue.trimmingCharacters(in: .whitespacesAndNewlines))
+    }
+    return nil
 }
 
 private extension Dictionary where Key == String, Value == Any {

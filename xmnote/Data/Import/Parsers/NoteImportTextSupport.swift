@@ -9,12 +9,13 @@ import Foundation
 
 nonisolated enum NoteImportTextSupport {
     static func decodeUTF8(_ data: Data) throws -> String {
-        guard let content = String(data: data, encoding: .utf8) else {
-            throw NoteImportParserError.noteFormat
+        // Kotlin `String(bytes, UTF_8)` 会用 U+FFFD 替换损坏的尾部字节，而不是让整份导入失败。
+        // `String(decoding:as:)` 复刻同一容错语义；同时确保 UTF-8 BOM 像 Android 一样留在文本中。
+        let content = String(decoding: data, as: UTF8.self)
+        guard data.starts(with: [0xEF, 0xBB, 0xBF]), !content.hasPrefix("\u{FEFF}") else {
+            return content
         }
-        // Foundation 会自动移除 UTF-8 BOM，而 Android String(bytes, UTF_8) 会保留 U+FEFF。
-        // 解析器依赖首行格式时，这个差异会改变成功/失败合同，因此显式恢复 BOM。
-        return data.starts(with: [0xEF, 0xBB, 0xBF]) ? "\u{FEFF}\(content)" : content
+        return "\u{FEFF}\(content)"
     }
 
     static func isBlank(_ value: String) -> Bool {

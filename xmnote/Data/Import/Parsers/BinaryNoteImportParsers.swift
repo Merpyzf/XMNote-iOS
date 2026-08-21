@@ -14,8 +14,9 @@ nonisolated struct IReaderEBookNoteImportParser: NoteImportParser {
     let id: NoteImportParserID = .ireaderEpub
 
     func parse(data: Data, fileExtension _: String?) async throws -> [NoteImportDraftBook] {
-        try withExtractedArchive(data, extension: "epub") { root in
-            let oebps = try locateOEBPS(in: root)
+        do {
+            return try withExtractedArchive(data, extension: "epub") { root in
+                let oebps = try locateOEBPS(in: root)
             let opf = oebps.appendingPathComponent("content.opf")
             let source = try String(contentsOf: opf, encoding: .utf8)
             guard let rawTitle = NoteImportTextSupport.firstCapture(
@@ -49,7 +50,11 @@ nonisolated struct IReaderEBookNoteImportParser: NoteImportParser {
                     ))
                 }
             }
-            return [book]
+                return [book]
+            }
+        } catch {
+            // Android EPUB 路径把损坏压缩包、缺 OEBPS 与缺书名统一映射为“未找到书籍”。
+            throw NoteImportParserError.bookNotFound
         }
     }
 
@@ -76,8 +81,9 @@ nonisolated struct AppleBooksNoteImportParser: NoteImportParser {
     let id: NoteImportParserID = .appleBooks
 
     func parse(data: Data, fileExtension _: String?) async throws -> [NoteImportDraftBook] {
-        try withExtractedArchive(data, extension: "zip") { root in
-            let files = try flattenedRootFiles(in: root)
+        do {
+            return try withExtractedArchive(data, extension: "zip") { root in
+                let files = try flattenedRootFiles(in: root)
             guard let bookDB = files.first(where: { $0.lastPathComponent.hasPrefix("BKLibrary") && $0.pathExtension == "sqlite" }),
                   let noteDB = files.first(where: { $0.lastPathComponent.hasPrefix("AEAnnotation") && $0.pathExtension == "sqlite" })
             else { throw NoteImportParserError.invalidDatabase }
@@ -121,7 +127,11 @@ nonisolated struct AppleBooksNoteImportParser: NoteImportParser {
                 }
                 if !book.notes.isEmpty { books.append(book) }
             }
-            return books
+                return books
+            }
+        } catch {
+            // Android Apple Books 导入将损坏 ZIP、缺库文件及无法打开数据库统一视为数据库无效。
+            throw NoteImportParserError.invalidDatabase
         }
     }
 }

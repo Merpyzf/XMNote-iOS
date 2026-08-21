@@ -4,7 +4,7 @@ import GRDB
 /**
  * [INPUT]: 依赖 AppDatabase 提供本地数据库连接，依赖 ObservationStream 提供观察流桥接，依赖 UserDefaults/FileManager/S3UploadRepository 承接草稿、暂存图与上传事务
  * [OUTPUT]: 对外提供 NoteRepository（NoteRepositoryProtocol 的 GRDB 实现）及跳过首个观察基线的回顾变化信号，覆盖聚合列表、章节范围、批量写入、合并、编辑草稿与保存事务
- * [POS]: Data 层笔记仓储实现，统一收口书摘读取、Android 软删除、关系替换、跨书章节迁移与合并原子事务
+ * [POS]: Data 层笔记仓储实现，统一收口书摘读取、iOS 已批准硬删除、关系替换、跨书章节迁移与合并原子事务
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
@@ -275,6 +275,9 @@ struct NoteRepository: NoteRepositoryProtocol {
     func saveNoteDetail(noteId: Int64, contentHTML: String, ideaHTML: String) async throws {
         let now = Self.currentTimestampMillis
         try await databaseManager.database.dbPool.write { db in
+            if let existing = try NoteRecord.fetchOne(db, key: noteId), existing.isDeleted == 0 {
+                _ = try ensureImportHashes(db, note: existing)
+            }
             try db.execute(
                 // SQL 目的：更新笔记内容与更新时间戳（毫秒）。
                 // 过滤条件：按 id 精确更新，且仅对未删除记录生效。
@@ -460,6 +463,11 @@ struct NoteRepository: NoteRepositoryProtocol {
                     throw NoteEditorError.noteNotFound
                 }
 
+                if existing.bookId == validatedDraft.bookId {
+                    _ = try ensureImportHashes(db, note: existing)
+                } else {
+                    try moveImportHashes(db, note: existing, targetBookID: validatedDraft.bookId)
+                }
                 existing.bookId = validatedDraft.bookId
                 existing.chapterId = validatedDraft.chapterId
                 existing.content = validatedDraft.contentHTML
@@ -2622,7 +2630,7 @@ extension NoteRepository {
         }
     }
 
-    /// 软删除批量书摘及关联数据；调用任务在事务开始前可取消，事务开始后原子完成。
+    /// 物理删除批量书摘及关联数据；调用任务在事务开始前可取消，事务开始后原子完成。
     func deleteNotes(noteIDs: [Int64]) async throws {
         try Task.checkCancellation()
         let ids = Self.normalizedPositiveIDs(noteIDs)
@@ -2630,7 +2638,7 @@ extension NoteRepository {
 
         try await databaseManager.database.dbPool.write { db in
             _ = try requireActiveNoteRecords(db, noteIDs: ids)
-            try softDeleteNotes(db, noteIDs: ids)
+            try hardDeleteNotes(db, noteIDs: ids)
         }
     }
 
@@ -2657,6 +2665,7 @@ extension NoteRepository {
                     pathTitles: pathTitles,
                     timestamp: now
                 )
+                try moveImportHashes(db, note: records[index], targetBookID: bookID)
                 records[index].bookId = bookID
                 records[index].chapterId = targetChapterID
                 records[index].updatedDate = now
@@ -2897,7 +2906,10 @@ extension NoteRepository {
                 )
             }
 
-            try softDeleteNotes(db, noteIDs: sourceIDs)
+            let sourceImportHashes = try sourceRecords.reduce(into: Set<String>()) { result, note in
+                result.formUnion(try ensureImportHashes(db, note: note))
+            }
+            try hardDeleteNotes(db, noteIDs: sourceIDs)
 
             var mergedRecord = NoteRecord(
                 id: nil,
@@ -2918,6 +2930,13 @@ extension NoteRepository {
             guard let mergedNoteID = mergedRecord.id else {
                 throw NoteBatchMutationError.invalidMergeDraft
             }
+            for contentHash in sourceImportHashes {
+                try NoteImportHashRecord(
+                    bookId: draft.book.id,
+                    contentHash: contentHash,
+                    noteId: mergedNoteID
+                ).insert(db)
+            }
 
             if let numericPosition = Double(position), !position.isEmpty {
                 if book.currentPositionUnit == book.positionUnit {
@@ -2936,6 +2955,58 @@ extension NoteRepository {
 }
 
 private extension NoteRepository {
+    /// 在任何正文/想法/归属变更前固化导入身份；无存量 Hash 时按 Android v1 文本规则补建。
+    nonisolated func ensureImportHashes(
+        _ db: Database,
+        note: NoteRecord
+    ) throws -> Set<String> {
+        guard let noteID = note.id else { return [] }
+        let existing = Set(try NoteImportHashRecord
+            .filter(Column("note_id") == noteID)
+            .fetchAll(db)
+            .map(\.contentHash))
+        if !existing.isEmpty { return existing }
+        guard let contentHash = NoteImportContentHash.calculate(
+            content: note.content,
+            idea: note.idea
+        ) else { return [] }
+        try NoteImportHashRecord(
+            bookId: note.bookId,
+            contentHash: contentHash,
+            noteId: noteID
+        ).insert(db)
+        return [contentHash]
+    }
+
+    /// 跨书移动时在同一事务内迁移 Hash 复合主键，避免原书残留身份或目标书重复导入。
+    nonisolated func moveImportHashes(
+        _ db: Database,
+        note: NoteRecord,
+        targetBookID: Int64
+    ) throws {
+        guard let noteID = note.id, note.bookId != targetBookID else {
+            _ = try ensureImportHashes(db, note: note)
+            return
+        }
+        let hashes = try ensureImportHashes(db, note: note)
+        try db.execute(
+            // SQL 目的：移除书摘原书归属下的全部导入身份，随后以目标书复合主键重建。
+            // 涉及表：note_import_hash -> note。
+            // 关键过滤：按 note_id 精确命中。
+            // 时间字段：派生身份表无时间字段。
+            // 副作用：调用者仍处于跨书移动事务，失败会与 note 更新共同回滚。
+            sql: "DELETE FROM note_import_hash WHERE note_id = ?",
+            arguments: [noteID]
+        )
+        for contentHash in hashes {
+            try NoteImportHashRecord(
+                bookId: targetBookID,
+                contentHash: contentHash,
+                noteId: noteID
+            ).insert(db)
+        }
+    }
+
     nonisolated static let protectedDefaultRelatedCategoryIDs: ClosedRange<Int64> = 1...6
     nonisolated static let protectedDefaultRelatedCategoryTitles: Set<String> = [
         "书籍", "电影", "音乐", "地点", "人物", "事件"
@@ -3029,29 +3100,27 @@ private extension NoteRepository {
         return tags
     }
 
-    /// 软删除书摘及关联附图、标签，仅物理清理 Android v45 定义的导入 Hash 派生数据。
-    nonisolated func softDeleteNotes(_ db: Database, noteIDs: [Int64]) throws {
+    /// 按外键依赖顺序物理删除书摘、附图、标签和导入 Hash，全部副作用与业务写入共享事务。
+    nonisolated func hardDeleteNotes(_ db: Database, noteIDs: [Int64]) throws {
         guard !noteIDs.isEmpty else { return }
         let placeholders = Self.placeholders(count: noteIDs.count)
-        let now = Self.currentTimestampMillis
-        let mutationArguments = StatementArguments([now] + noteIDs)
         try db.execute(
-            // SQL 目的：软删除选中书摘的有效附图。
+            // SQL 目的：物理删除选中书摘的全部附图，先解除 attach_image -> note 外键引用。
             // 涉及表：attach_image -> note。
-            // 关键过滤：按 note_id 集合精确命中且 is_deleted = 0。
-            // 时间字段：updated_date 写本次事务的 Unix 毫秒时间戳。
-            // 副作用：与 Android AttachImageDao.deleteByNoteIds 保持一致。
-            sql: "UPDATE attach_image SET updated_date = ?, is_deleted = 1 WHERE note_id IN (\(placeholders)) AND is_deleted = 0",
-            arguments: mutationArguments
+            // 关键过滤：按 note_id 集合精确命中，兼容清理历史 tombstone。
+            // 时间字段：物理删除不写时间字段。
+            // 副作用：解除主记录硬删除前的外键约束。
+            sql: "DELETE FROM attach_image WHERE note_id IN (\(placeholders))",
+            arguments: StatementArguments(noteIDs)
         )
         try db.execute(
-            // SQL 目的：软删除选中书摘的有效标签关系。
+            // SQL 目的：物理删除选中书摘的全部标签关系，先解除 tag_note -> note 外键引用。
             // 涉及表：tag_note -> note/tag。
-            // 关键过滤：按 note_id 集合精确命中且 is_deleted = 0。
-            // 时间字段：updated_date 写本次事务的 Unix 毫秒时间戳。
-            // 副作用：与 Android TagNoteDao.deleteByNoteIds 保持一致。
-            sql: "UPDATE tag_note SET updated_date = ?, is_deleted = 1 WHERE note_id IN (\(placeholders)) AND is_deleted = 0",
-            arguments: mutationArguments
+            // 关键过滤：按 note_id 集合精确命中，兼容清理历史 tombstone。
+            // 时间字段：物理删除不写时间字段。
+            // 副作用：解除主记录硬删除前的外键约束。
+            sql: "DELETE FROM tag_note WHERE note_id IN (\(placeholders))",
+            arguments: StatementArguments(noteIDs)
         )
         try db.execute(
             // SQL 目的：物理清理选中书摘的导入去重 Hash，这是 Android v45 删除管理器的特例。
@@ -3063,13 +3132,13 @@ private extension NoteRepository {
             arguments: StatementArguments(noteIDs)
         )
         try db.execute(
-            // SQL 目的：软删除选中书摘主记录。
+            // SQL 目的：在所有依赖关系清理后物理删除选中书摘主记录。
             // 涉及表：note。
-            // 关键过滤：按 id 集合精确命中且 is_deleted = 0。
-            // 时间字段：updated_date 写本次事务的 Unix 毫秒时间戳。
-            // 副作用：观察流在事务提交时刷新，tombstone 供同步链路消费。
-            sql: "UPDATE note SET updated_date = ?, is_deleted = 1 WHERE id IN (\(placeholders)) AND is_deleted = 0",
-            arguments: mutationArguments
+            // 关键过滤：按 id 集合精确命中，兼容清理历史 tombstone。
+            // 时间字段：物理删除不写时间字段。
+            // 副作用：观察流在事务提交时刷新；失败与关联关系、Hash 清理共同回滚。
+            sql: "DELETE FROM note WHERE id IN (\(placeholders))",
+            arguments: StatementArguments(noteIDs)
         )
     }
 

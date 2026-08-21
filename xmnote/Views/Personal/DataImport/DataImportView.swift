@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 AppNavigationCoordinator、微信读书导入 ViewModel、WebView、BookPickerView、Photos 与统一反馈组件
- * [OUTPUT]: 对外提供数据导入入口、授权、分批、导入预览和单书内容预览页面
+ * [OUTPUT]: 对外提供书摘导入入口、授权、分批、导入预览和单书内容预览页面
  * [POS]: Views/Personal/DataImport 的完整微信读书扫码授权导入交互流
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -38,7 +38,7 @@ struct DataImportView: View {
         }
         .scrollContentBackground(.hidden)
         .background(Color.surfacePage)
-        .navigationTitle("数据导入")
+        .navigationTitle("书摘导入")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar { ToolbarItem(placement: .topBarTrailing) { EditButton() } }
     }
@@ -56,7 +56,7 @@ struct DataImportView: View {
         case "computer": taskButton("从电脑导入", destination: .desktopComputer)
         case "lifeweek": taskButton("三联生活周刊", destination: .lifeWeek)
         case "weread-auth": taskButton("微信读书授权导入", destination: .wereadAuthorization)
-        case "kindle": taskButton("Kindle", destination: .fileCandidates(title: "Kindle", parserIDs: [.kindle, .kindleApp]))
+        case "kindle": taskButton("Kindle", destination: .kindle)
         case "koreader": fileLink("KOReader", .koreader)
         case "boox": taskButton("BOOX", destination: .fileCandidates(title: "BOOX", parserIDs: [.booxOld, .booxNew]))
         case "legado": fileLink("阅读", .legado)

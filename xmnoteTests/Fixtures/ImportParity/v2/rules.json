@@ -1,0 +1,304 @@
+{
+  "schemaVersion": 2,
+  "corpusVersion": 9,
+  "rules": [
+    {
+      "id": "boox-old-first-line-author",
+      "androidLocation": "BooxParser.kt#getBook",
+      "behavior": "旧版首行书名尾部非空时作为作者",
+      "fixtureCases": [
+        "boox-old-minimal"
+      ],
+      "iosLocation": "BooxNoteImportParsers.swift#BooxOldNoteImportParser"
+    },
+    {
+      "id": "boox-new-multiple-notes",
+      "androidLocation": "NewBooxParser.kt#getNoteItems",
+      "behavior": "新版分隔符内保持书摘顺序并继承章节",
+      "fixtureCases": [
+        "boox-new-multiple"
+      ],
+      "iosLocation": "BooxNoteImportParsers.swift#BooxNewNoteImportParser"
+    },
+    {
+      "id": "boox-invalid-format",
+      "androidLocation": "BooxParser.kt#doYourParse",
+      "behavior": "非 BOOX 首行返回笔记格式错误",
+      "fixtureCases": [
+        "boox-invalid"
+      ],
+      "iosLocation": "BooxNoteImportParsers.swift#BooxOldNoteImportParser"
+    },
+    {
+      "id": "douban-chapter-prefix",
+      "androidLocation": "DoubanReadParser.kt#normalizeDoubanChapterTitle",
+      "behavior": "只移除章节标题开头的章节前缀",
+      "fixtureCases": [
+        "douban-read-minimal"
+      ],
+      "iosLocation": "DoubanReadNoteImportParser.swift#normalizeChapter"
+    },
+    {
+      "id": "dedao-reverse-note-order",
+      "androidLocation": "DedaoParser.kt#getNoteList",
+      "behavior": "得到章节内解析完成后反转书摘顺序并移除不换行空格",
+      "fixtureCases": [
+        "dedao-minimal"
+      ],
+      "iosLocation": "DedaoNoteImportParser.swift#parse"
+    },
+    {
+      "id": "dangdang-date-before-note",
+      "androidLocation": "DangDangReadParser.kt#doYourParse",
+      "behavior": "当当以正文前一行作为书摘时间并读取紧随正文的注释",
+      "fixtureCases": [
+        "dangdang-minimal"
+      ],
+      "iosLocation": "DangdangNoteImportParser.swift#parse"
+    },
+    {
+      "id": "dimo-stable-attachment-identity",
+      "androidLocation": "DimoParser.kt#saveImageToCos",
+      "behavior": "Oracle 固定附件传输成功，验证生产 Parser 保留附件顺序、稳定 URL 与 SHA-256 digest；失败跳过语义由专项测试覆盖",
+      "fixtureCases": [
+        "dimo-attachment"
+      ],
+      "iosLocation": "DimoNoteImportParser.swift#parse"
+    },
+    {
+      "id": "weread-old-idea-before-original",
+      "androidLocation": "WeReadOldVersionParser.kt#getNote",
+      "behavior": "旧微信格式以单大于号分隔想法和原文，且所有书摘不包含时间",
+      "fixtureCases": [
+        "weread-old"
+      ],
+      "iosLocation": "WereadClipboardNoteImportParsers.swift#WereadOldNoteImportParser"
+    },
+    {
+      "id": "weread-pre-830-multiline-note",
+      "androidLocation": "WeReadParser.kt#doYourParse",
+      "behavior": "8.3 前格式合并连续原文行并忽略发表想法日期标记",
+      "fixtureCases": [
+        "weread-pre-830"
+      ],
+      "iosLocation": "WereadClipboardNoteImportParsers.swift#WereadPre830NoteImportParser"
+    },
+    {
+      "id": "weread-830-section-layout",
+      "androidLocation": "WeReadParserV830.kt#doYourParse",
+      "behavior": "8.3 后格式按空行数识别章节并保留 Note 默认位置单位",
+      "fixtureCases": [
+        "weread-830"
+      ],
+      "iosLocation": "WereadClipboardNoteImportParsers.swift#Weread830NoteImportParser"
+    },
+    {
+      "id": "duokan-date-and-annotation",
+      "androidLocation": "DuoKanReadParser.kt#doYourParse",
+      "behavior": "多看以日期切分书摘，并用注冒号切分原文与想法",
+      "fixtureCases": [
+        "duokan"
+      ],
+      "iosLocation": "ClipboardNoteImportParsers.swift#DuokanNoteImportParser"
+    },
+    {
+      "id": "ireader-pending-idea",
+      "androidLocation": "IReaderParser.kt#doYourParse",
+      "behavior": "掌阅精选把原文前的普通行累积为下一条书摘想法",
+      "fixtureCases": [
+        "ireader-selected"
+      ],
+      "iosLocation": "ClipboardNoteImportParsers.swift#IReaderSelectedNoteImportParser"
+    },
+    {
+      "id": "moon-reader-trailing-parenthesized-idea",
+      "androidLocation": "MoonReadParser.kt#getNote",
+      "behavior": "静读天下把书摘末尾 ASCII 括号内容拆为想法",
+      "fixtureCases": [
+        "moon-reader"
+      ],
+      "iosLocation": "ClipboardNoteImportParsers.swift#MoonReaderNoteImportParser"
+    },
+    {
+      "id": "douban-app-date-and-comment",
+      "androidLocation": "DoubanReadAppParser.kt#getNote",
+      "behavior": "豆瓣阅读 App 从同一块文本提取原文、批注与日期",
+      "fixtureCases": [
+        "douban-app"
+      ],
+      "iosLocation": "ClipboardNoteImportParsers.swift#DoubanAppNoteImportParser"
+    },
+    {
+      "id": "reader-163-content-and-idea",
+      "androidLocation": "Reader163Parser.kt#getNote",
+      "behavior": "网易蜗牛以菱形章节、双大于号原文及中间文本想法解析",
+      "fixtureCases": [
+        "reader-163"
+      ],
+      "iosLocation": "ClipboardNoteImportParsers.swift#Reader163NoteImportParser"
+    },
+    {
+      "id": "fanqie-note-kinds",
+      "androidLocation": "FanQieParser.kt#getNote",
+      "behavior": "番茄分别生成划线与笔记记录，并保留章节标题空格",
+      "fixtureCases": [
+        "fanqie"
+      ],
+      "iosLocation": "FanqieReadingoNoteImportParsers.swift#FanqieNoteImportParser"
+    },
+    {
+      "id": "readingo-state-machine",
+      "androidLocation": "ReadingoParser.kt#doYourParse",
+      "behavior": "Readingo 按书名、章节、时间、原文和想法状态机保留多行内容",
+      "fixtureCases": [
+        "readingo"
+      ],
+      "iosLocation": "FanqieReadingoNoteImportParsers.swift#ReadingoNoteImportParser"
+    },
+    {
+      "id": "kindle-app-html-div-order",
+      "androidLocation": "KindleAppParser.kt#doYourParse",
+      "behavior": "Kindle App 按 div 文档顺序绑定章节、位置、原文与紧随的笔记",
+      "fixtureCases": [
+        "kindle-app"
+      ],
+      "iosLocation": "StructuredNoteImportParsers.swift#KindleAppNoteImportParser"
+    },
+    {
+      "id": "koreader-version-branches",
+      "androidLocation": "KOReaderParser.kt#doYourParse",
+      "behavior": "KOReader 以 documents 字段区分新旧版本，并保留页码类型与秒级时间戳转换",
+      "fixtureCases": [
+        "koreader-old",
+        "koreader-new"
+      ],
+      "iosLocation": "StructuredNoteImportParsers.swift#KOReaderNoteImportParser"
+    },
+    {
+      "id": "legado-book-grouping",
+      "androidLocation": "LegadoParser.kt#doYourParse",
+      "behavior": "阅读按书名聚合记录并按最新书摘时间倒序输出书籍",
+      "fixtureCases": [
+        "legado"
+      ],
+      "iosLocation": "StructuredNoteImportParsers.swift#LegadoNoteImportParser"
+    },
+    {
+      "id": "neat-reader-direct-mapping",
+      "androidLocation": "NeatReaderParser.kt#doYourParse",
+      "behavior": "Neat Reader 直接映射 noteList，并使用位置单位位置",
+      "fixtureCases": [
+        "neat-reader"
+      ],
+      "iosLocation": "StructuredNoteImportParsers.swift#NeatReaderNoteImportParser"
+    },
+    {
+      "id": "koodo-csv-merge",
+      "androidLocation": "KoodoParser.kt#parse",
+      "behavior": "Koodo 按 rawName 合并多 CSV，并按 key 合并同一书摘想法",
+      "fixtureCases": [
+        "koodo"
+      ],
+      "iosLocation": "StructuredNoteImportParsers.swift#KoodoNoteImportParser"
+    },
+    {
+      "id": "reeden-wrapper-and-duration",
+      "androidLocation": "ReedenParser.kt#doYourParse",
+      "behavior": "Reeden 单对象包装为数组，转换时间戳并过滤非正阅读时长",
+      "fixtureCases": [
+        "reeden"
+      ],
+      "iosLocation": "StructuredNoteImportParsers.swift#ReedenNoteImportParser"
+    },
+    {
+      "id": "kindle-highlight-note-linking",
+      "androidLocation": "KindleParser.kt#doYourParse",
+      "behavior": "Kindle 先解析标注和笔记，再按位置范围把想法绑定到对应标注",
+      "fixtureCases": [
+        "kindle-clippings"
+      ],
+      "iosLocation": "KindleClippingsNoteImportParser.swift#KindleClippingsNoteImportParser"
+    },
+    {
+      "id": "jd-reader-chapter-as-note",
+      "androidLocation": "JDReaderParser.kt#doYourParse",
+      "behavior": "京东读书把章节行作为普通书摘导入，并将想法绑定到前一条记录",
+      "fixtureCases": [
+        "jd-reader"
+      ],
+      "iosLocation": "FileTextNoteImportParsers.swift#JDReaderNoteImportParser"
+    },
+    {
+      "id": "ireader-file-name-book-title",
+      "androidLocation": "IReaderFreeNoteParser.kt#getBookName",
+      "behavior": "掌阅文件优先从文件名书名号提取书名，并按日期、原文、想法解析",
+      "fixtureCases": [
+        "ireader-file"
+      ],
+      "iosLocation": "FileTextNoteImportParsers.swift#IReaderFileNoteImportParser"
+    },
+    {
+      "id": "ireader-epub-title-and-position",
+      "androidLocation": "IReaderEBookParser.kt#getBook/getNoteList",
+      "behavior": "iReader 笔记成书清理书名附加信息，并从章节 HTML 提取章节、正文、想法和位置",
+      "fixtureCases": [
+        "ireader-epub"
+      ],
+      "iosLocation": "BinaryNoteImportParsers.swift#IReaderEBookNoteImportParser"
+    },
+    {
+      "id": "apple-books-two-database-join",
+      "androidLocation": "AppleBooksParser.kt#doYourParse",
+      "behavior": "Apple Books 按 assetId 关联书库和标注数据库，使用代表文本回退并转换 Apple 时间",
+      "fixtureCases": [
+        "apple-books"
+      ],
+      "iosLocation": "BinaryNoteImportParsers.swift#AppleBooksNoteImportParser"
+    },
+    {
+      "id": "hanwang-progress-and-idea",
+      "androidLocation": "HanWangParser.kt#doYourParse",
+      "behavior": "汉王按双空行拆分书摘，从括号百分比提取进度，并以笔记：拆分原文和想法",
+      "fixtureCases": [
+        "hanwang"
+      ],
+      "iosLocation": "HanWangNoteImportParser.swift#HanWangNoteImportParser"
+    },
+    {
+      "id": "all-parsers-invalid-format",
+      "androidLocation": "各生产 Parser 的格式校验与异常分支（Oracle 只读调用）",
+      "behavior": "每个正式 iOS Parser 都使用 Android 生产实现生成的稳定失败结果；临时 fixture 根路径是唯一允许的错误文案路径归一化",
+      "fixtureCases": [
+        "invalid-apple-books",
+        "invalid-boox-new",
+        "invalid-boox-old",
+        "invalid-dangdang",
+        "invalid-dedao",
+        "invalid-dimo",
+        "invalid-douban-app",
+        "invalid-douban-read",
+        "invalid-duokan",
+        "invalid-fanqie",
+        "invalid-hanwang",
+        "invalid-ireader-epub",
+        "invalid-ireader-file",
+        "invalid-ireader-selected",
+        "invalid-jd-reader",
+        "invalid-kindle",
+        "invalid-kindle-app",
+        "invalid-koodo",
+        "invalid-koreader",
+        "invalid-legado",
+        "invalid-moon-reader",
+        "invalid-neat-reader",
+        "invalid-reader-163",
+        "invalid-readingo",
+        "invalid-reeden",
+        "invalid-weread-830",
+        "invalid-weread-old",
+        "invalid-weread-pre-830"
+      ],
+      "iosLocation": "ImportParserParityTests.swift#all manifest failure cases"
+    }
+  ]
+}

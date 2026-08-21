@@ -1,0 +1,857 @@
+{
+  "androidCommit": "6f0d6d80aa734e4ea36dcd580f78e1e440dc8a9c",
+  "cases": [
+    {
+      "baseCaseId": "boox-old-minimal",
+      "expected": "expected/boox-old-minimal--utf8-bom.expected.json",
+      "expectedSHA256": "8f5de3a0c05433f0140111beb7ec2a29f0e429d838ce06e0049f301208687846",
+      "id": "boox-old-minimal--utf8-bom",
+      "input": "inputs/boox-old-minimal--utf8-bom.txt",
+      "inputSHA256": "7a867ce0536cb580257ac71f1c02a1c9f08ccbe4c2113efcc46413e32771653a",
+      "parserId": "boox-old",
+      "transformation": "utf8-bom"
+    },
+    {
+      "baseCaseId": "boox-old-minimal",
+      "expected": "expected/boox-old-minimal--crlf.expected.json",
+      "expectedSHA256": "f49fca8a990f492e15ca43ac4742681fb48eb5eacd22dffb5933af2a14b46183",
+      "id": "boox-old-minimal--crlf",
+      "input": "inputs/boox-old-minimal--crlf.txt",
+      "inputSHA256": "4712217363b2e1e3c9be4eb7acc9585b8286d7db27771a6bbda093375eedf613",
+      "parserId": "boox-old",
+      "transformation": "crlf"
+    },
+    {
+      "baseCaseId": "boox-old-minimal",
+      "expected": "expected/boox-old-minimal--truncate-half.expected.json",
+      "expectedSHA256": "a25b383fb440e3c1f9343ce884c98674d33657e1333e686fc037b0206602af4f",
+      "id": "boox-old-minimal--truncate-half",
+      "input": "inputs/boox-old-minimal--truncate-half.txt",
+      "inputSHA256": "dac86d8cea9939134a5c926682db620d596810795e7c6a640ebbd78366da3cc0",
+      "parserId": "boox-old",
+      "transformation": "truncate-half"
+    },
+    {
+      "baseCaseId": "boox-new-multiple",
+      "expected": "expected/boox-new-multiple--utf8-bom.expected.json",
+      "expectedSHA256": "8f5de3a0c05433f0140111beb7ec2a29f0e429d838ce06e0049f301208687846",
+      "id": "boox-new-multiple--utf8-bom",
+      "input": "inputs/boox-new-multiple--utf8-bom.txt",
+      "inputSHA256": "03472f509745b81df7c56c94ac22ae0220b934fae4d5597e6407b342649dfb64",
+      "parserId": "boox-new",
+      "transformation": "utf8-bom"
+    },
+    {
+      "baseCaseId": "boox-new-multiple",
+      "expected": "expected/boox-new-multiple--crlf.expected.json",
+      "expectedSHA256": "0f2462c28a36cab30373b3aad9892ac30f2eca247fc20c33793227fbad826560",
+      "id": "boox-new-multiple--crlf",
+      "input": "inputs/boox-new-multiple--crlf.txt",
+      "inputSHA256": "a479ca6af858215b210329e9b65d3292910e026e955f5451d6ee4bac0c326b42",
+      "parserId": "boox-new",
+      "transformation": "crlf"
+    },
+    {
+      "baseCaseId": "boox-new-multiple",
+      "expected": "expected/boox-new-multiple--truncate-half.expected.json",
+      "expectedSHA256": "641737859a7c3595ae4612c120ffa68a9ef3e3555c4cf40d97fc0a48e53d59b8",
+      "id": "boox-new-multiple--truncate-half",
+      "input": "inputs/boox-new-multiple--truncate-half.txt",
+      "inputSHA256": "7636414587acf9b8d017b2e337c2d167858f78bf608dd29d4d8311065742c624",
+      "parserId": "boox-new",
+      "transformation": "truncate-half"
+    },
+    {
+      "baseCaseId": "douban-read-minimal",
+      "expected": "expected/douban-read-minimal--utf8-bom.expected.json",
+      "expectedSHA256": "d1f1d94a482a83ca17ae68337b76e55b44f89d745be812867a30ae3f9958e05d",
+      "id": "douban-read-minimal--utf8-bom",
+      "input": "inputs/douban-read-minimal--utf8-bom.txt",
+      "inputSHA256": "27c2f5139780e44e406e137338c573f935e6efa96a9ea98f8fd4eefef2043197",
+      "parserId": "douban-read",
+      "transformation": "utf8-bom"
+    },
+    {
+      "baseCaseId": "douban-read-minimal",
+      "expected": "expected/douban-read-minimal--crlf.expected.json",
+      "expectedSHA256": "3f7520ab34cc11311c3f6804f66e50bc5e5fbe2e3cd5e31ab4f780477ca4a1d7",
+      "id": "douban-read-minimal--crlf",
+      "input": "inputs/douban-read-minimal--crlf.txt",
+      "inputSHA256": "b8ba46071ceacf95e812ab3e1f70c46ca1c7e776480e96a773878d6ad56dfe56",
+      "parserId": "douban-read",
+      "transformation": "crlf"
+    },
+    {
+      "baseCaseId": "douban-read-minimal",
+      "expected": "expected/douban-read-minimal--truncate-half.expected.json",
+      "expectedSHA256": "d8ed5606fb3f1cf165aa9f46a3a6083250680a767f2fff15d74153d451e96c23",
+      "id": "douban-read-minimal--truncate-half",
+      "input": "inputs/douban-read-minimal--truncate-half.txt",
+      "inputSHA256": "d7b293b819808a3e8deb77eba16f4e320d57c80b3d8c18e2d0ac5a4df3ea5c64",
+      "parserId": "douban-read",
+      "transformation": "truncate-half"
+    },
+    {
+      "baseCaseId": "dedao-minimal",
+      "expected": "expected/dedao-minimal--utf8-bom.expected.json",
+      "expectedSHA256": "d9e610de9e2bd9053444cc71e58a64a85b78bda51f64a9c47acab8122851965d",
+      "id": "dedao-minimal--utf8-bom",
+      "input": "inputs/dedao-minimal--utf8-bom.txt",
+      "inputSHA256": "9520b86626929f5d4b96591369f2cd2d84a37ae1a4aa37067487781cf73adf19",
+      "parserId": "dedao",
+      "transformation": "utf8-bom"
+    },
+    {
+      "baseCaseId": "dedao-minimal",
+      "expected": "expected/dedao-minimal--crlf.expected.json",
+      "expectedSHA256": "e8f006ca2af985ff22ebb6677d41c51ae7b7ec42ad8c8b6ab2bf851352399428",
+      "id": "dedao-minimal--crlf",
+      "input": "inputs/dedao-minimal--crlf.txt",
+      "inputSHA256": "ea2de56ee4792c964698d667b67deb380c13c78b098f2787b710fa0d259f1d9e",
+      "parserId": "dedao",
+      "transformation": "crlf"
+    },
+    {
+      "baseCaseId": "dedao-minimal",
+      "expected": "expected/dedao-minimal--truncate-half.expected.json",
+      "expectedSHA256": "8f5de3a0c05433f0140111beb7ec2a29f0e429d838ce06e0049f301208687846",
+      "id": "dedao-minimal--truncate-half",
+      "input": "inputs/dedao-minimal--truncate-half.txt",
+      "inputSHA256": "4690d9f1324e80459a39e15d4ddd5847ce10420e237593a39fb1c09a10e80507",
+      "parserId": "dedao",
+      "transformation": "truncate-half"
+    },
+    {
+      "baseCaseId": "dangdang-minimal",
+      "expected": "expected/dangdang-minimal--utf8-bom.expected.json",
+      "expectedSHA256": "0aed412453d942cfab2b32e793ba0c150faf1e6dd2011e41f99afdb0b96607b1",
+      "id": "dangdang-minimal--utf8-bom",
+      "input": "inputs/dangdang-minimal--utf8-bom.txt",
+      "inputSHA256": "56e41983fb1565f76ac824bfd01392d3ef89f8fb06b02d97c84a19be0021c645",
+      "parserId": "dangdang",
+      "transformation": "utf8-bom"
+    },
+    {
+      "baseCaseId": "dangdang-minimal",
+      "expected": "expected/dangdang-minimal--crlf.expected.json",
+      "expectedSHA256": "7f390d9b941fdedcf791507acc1b22907bebeeb78cac327dc4d8cd9f5b145304",
+      "id": "dangdang-minimal--crlf",
+      "input": "inputs/dangdang-minimal--crlf.txt",
+      "inputSHA256": "0099f8b4a093124016ee4caed2095fda720e05e922fc68ccd83c714b1d786f40",
+      "parserId": "dangdang",
+      "transformation": "crlf"
+    },
+    {
+      "baseCaseId": "dangdang-minimal",
+      "expected": "expected/dangdang-minimal--truncate-half.expected.json",
+      "expectedSHA256": "8f5de3a0c05433f0140111beb7ec2a29f0e429d838ce06e0049f301208687846",
+      "id": "dangdang-minimal--truncate-half",
+      "input": "inputs/dangdang-minimal--truncate-half.txt",
+      "inputSHA256": "cb7f69ea81b59222cb0048a1bfc44606dc9bbe2b8ca4dbff853fb6a03fb4c125",
+      "parserId": "dangdang",
+      "transformation": "truncate-half"
+    },
+    {
+      "baseCaseId": "dimo-attachment",
+      "expected": "expected/dimo-attachment--utf8-bom.expected.json",
+      "expectedSHA256": "0d78be8b43b63c2a281febf2e6f1aaf08da56b5bff4f9855c29df5106e3f6676",
+      "id": "dimo-attachment--utf8-bom",
+      "input": "inputs/dimo-attachment--utf8-bom.txt",
+      "inputSHA256": "f72e8902f1c32168743016acf1efa481c39b11c5d343b9bab61aee65bcff3482",
+      "parserId": "dimo",
+      "transformation": "utf8-bom"
+    },
+    {
+      "baseCaseId": "dimo-attachment",
+      "expected": "expected/dimo-attachment--crlf.expected.json",
+      "expectedSHA256": "0d78be8b43b63c2a281febf2e6f1aaf08da56b5bff4f9855c29df5106e3f6676",
+      "id": "dimo-attachment--crlf",
+      "input": "inputs/dimo-attachment--crlf.txt",
+      "inputSHA256": "c47611df9f18566202944002a762a92e08e1102d1c87186f5b99a0632f1fcbd8",
+      "parserId": "dimo",
+      "transformation": "crlf"
+    },
+    {
+      "baseCaseId": "dimo-attachment",
+      "expected": "expected/dimo-attachment--truncate-half.expected.json",
+      "expectedSHA256": "e8f006ca2af985ff22ebb6677d41c51ae7b7ec42ad8c8b6ab2bf851352399428",
+      "id": "dimo-attachment--truncate-half",
+      "input": "inputs/dimo-attachment--truncate-half.txt",
+      "inputSHA256": "d617dc9c2dd75e0237b41420984847dfc80b1d2d699cddc54d56f20225778dc3",
+      "parserId": "dimo",
+      "transformation": "truncate-half"
+    },
+    {
+      "baseCaseId": "weread-old",
+      "expected": "expected/weread-old--utf8-bom.expected.json",
+      "expectedSHA256": "df58fb7b688a65459efbc4b00a6a3508ea2064a86c63c180a12ec6df37410e4d",
+      "id": "weread-old--utf8-bom",
+      "input": "inputs/weread-old--utf8-bom.txt",
+      "inputSHA256": "7803775d350ec34c1c8007c780959a0d11881a1d1950c1fbd362e6950fd17784",
+      "parserId": "weread-old",
+      "transformation": "utf8-bom"
+    },
+    {
+      "baseCaseId": "weread-old",
+      "expected": "expected/weread-old--crlf.expected.json",
+      "expectedSHA256": "2da0c717f564741b1a0f44bd38c92da46ad59bec998be0920e1270856d2b3ae9",
+      "id": "weread-old--crlf",
+      "input": "inputs/weread-old--crlf.txt",
+      "inputSHA256": "8972213d1baee8fe434d7e3c54395d97359a54e735ae15ab9660eb3b19fdfe29",
+      "parserId": "weread-old",
+      "transformation": "crlf"
+    },
+    {
+      "baseCaseId": "weread-old",
+      "expected": "expected/weread-old--truncate-half.expected.json",
+      "expectedSHA256": "0e85d63e37786fbece6d49adcee2b52e6c949e0c84991501150c7a62da1e2abf",
+      "id": "weread-old--truncate-half",
+      "input": "inputs/weread-old--truncate-half.txt",
+      "inputSHA256": "83de313a42a03ce8411fa763eeb5180c720ccc119848d8cff6e4bc3813deb7f5",
+      "parserId": "weread-old",
+      "transformation": "truncate-half"
+    },
+    {
+      "baseCaseId": "weread-pre-830",
+      "expected": "expected/weread-pre-830--utf8-bom.expected.json",
+      "expectedSHA256": "21fdf8fcf40f8d336c8cf717eb76d7cb427230ec1ad634d9065e4ee9540fc338",
+      "id": "weread-pre-830--utf8-bom",
+      "input": "inputs/weread-pre-830--utf8-bom.txt",
+      "inputSHA256": "0b61b580c5afebbb67eb31abec46be5adc9da7e630edabe0f415bfa8605fcaf3",
+      "parserId": "weread-pre-830",
+      "transformation": "utf8-bom"
+    },
+    {
+      "baseCaseId": "weread-pre-830",
+      "expected": "expected/weread-pre-830--crlf.expected.json",
+      "expectedSHA256": "d1f1d94a482a83ca17ae68337b76e55b44f89d745be812867a30ae3f9958e05d",
+      "id": "weread-pre-830--crlf",
+      "input": "inputs/weread-pre-830--crlf.txt",
+      "inputSHA256": "15aee6c49f33a14c135bac12d141ba3d92d76462a10aad7f240ad35579f94990",
+      "parserId": "weread-pre-830",
+      "transformation": "crlf"
+    },
+    {
+      "baseCaseId": "weread-pre-830",
+      "expected": "expected/weread-pre-830--truncate-half.expected.json",
+      "expectedSHA256": "d051e9825bd34cc445b1ba9931c2a5c977bdc4e5742ac4cd733a6ddbf4aba0da",
+      "id": "weread-pre-830--truncate-half",
+      "input": "inputs/weread-pre-830--truncate-half.txt",
+      "inputSHA256": "3555ce652e3d700738b39577332e3305434b86842f574d003ab42645265c7413",
+      "parserId": "weread-pre-830",
+      "transformation": "truncate-half"
+    },
+    {
+      "baseCaseId": "weread-830",
+      "expected": "expected/weread-830--utf8-bom.expected.json",
+      "expectedSHA256": "885ea28ad14801de8c7787165f816d34f27573568613a3a1a5b50ae623c4a0e6",
+      "id": "weread-830--utf8-bom",
+      "input": "inputs/weread-830--utf8-bom.txt",
+      "inputSHA256": "801f64780b9878fbefc6a8fb8594006523a34ee1ecbc33fb4a32438e7f9362f0",
+      "parserId": "weread-830",
+      "transformation": "utf8-bom"
+    },
+    {
+      "baseCaseId": "weread-830",
+      "expected": "expected/weread-830--crlf.expected.json",
+      "expectedSHA256": "603aeee678d9d999240a8b33253730d4de54a6e8bb98ff5e1b4e7714f18bbf0a",
+      "id": "weread-830--crlf",
+      "input": "inputs/weread-830--crlf.txt",
+      "inputSHA256": "3524ca2da1e8c6e1b74251a78ff042a194171eb0b41c2fd6d770e7aaf3319ffa",
+      "parserId": "weread-830",
+      "transformation": "crlf"
+    },
+    {
+      "baseCaseId": "weread-830",
+      "expected": "expected/weread-830--truncate-half.expected.json",
+      "expectedSHA256": "dff8d7152b03cd3d0d5783024f0985d99ef159acd5bc0f5b7f7586373825cd18",
+      "id": "weread-830--truncate-half",
+      "input": "inputs/weread-830--truncate-half.txt",
+      "inputSHA256": "1d28217a693579e3e8ebbfb56e52f5983ccad1d1a7c01fe9b88618f339f5e146",
+      "parserId": "weread-830",
+      "transformation": "truncate-half"
+    },
+    {
+      "baseCaseId": "duokan",
+      "expected": "expected/duokan--utf8-bom.expected.json",
+      "expectedSHA256": "b43f2cdaf77ebd5161df73e149ff4f9c08b0f19a1f97cdc0c73efded97032123",
+      "id": "duokan--utf8-bom",
+      "input": "inputs/duokan--utf8-bom.txt",
+      "inputSHA256": "b273c7c8f21c9ad8f5b00c42beff37b8fd98a1b3574adabf09c6459aaafc056b",
+      "parserId": "duokan",
+      "transformation": "utf8-bom"
+    },
+    {
+      "baseCaseId": "duokan",
+      "expected": "expected/duokan--crlf.expected.json",
+      "expectedSHA256": "8f5de3a0c05433f0140111beb7ec2a29f0e429d838ce06e0049f301208687846",
+      "id": "duokan--crlf",
+      "input": "inputs/duokan--crlf.txt",
+      "inputSHA256": "a3dd625dd529b72adb23f8f1946c6f79252d0f70f8296c235c2033a589cf3e6a",
+      "parserId": "duokan",
+      "transformation": "crlf"
+    },
+    {
+      "baseCaseId": "duokan",
+      "expected": "expected/duokan--truncate-half.expected.json",
+      "expectedSHA256": "43be6b9d0f37d9c98048d4fa3a25367f853943c216abfb82abfbb9500c8d0ce9",
+      "id": "duokan--truncate-half",
+      "input": "inputs/duokan--truncate-half.txt",
+      "inputSHA256": "77e6db545d71291c0f34498a829d64bd6d2a33a8030527bde1778369e180be5d",
+      "parserId": "duokan",
+      "transformation": "truncate-half"
+    },
+    {
+      "baseCaseId": "ireader-selected",
+      "expected": "expected/ireader-selected--utf8-bom.expected.json",
+      "expectedSHA256": "55b2f094f300f633f55a8a34f3da81caf3ea9472bbabbc0166936ca5f3d28a3d",
+      "id": "ireader-selected--utf8-bom",
+      "input": "inputs/ireader-selected--utf8-bom.txt",
+      "inputSHA256": "0d1ee2d61f82847c34b4e0707437566ffad0eff5f25b4b5a7b96656cb362c24c",
+      "parserId": "ireader-selected",
+      "transformation": "utf8-bom"
+    },
+    {
+      "baseCaseId": "ireader-selected",
+      "expected": "expected/ireader-selected--crlf.expected.json",
+      "expectedSHA256": "8f5de3a0c05433f0140111beb7ec2a29f0e429d838ce06e0049f301208687846",
+      "id": "ireader-selected--crlf",
+      "input": "inputs/ireader-selected--crlf.txt",
+      "inputSHA256": "c84b4b64f61fa81816e73d8a0a445f595edff0a2c3428b8746a7902c2a08fb56",
+      "parserId": "ireader-selected",
+      "transformation": "crlf"
+    },
+    {
+      "baseCaseId": "ireader-selected",
+      "expected": "expected/ireader-selected--truncate-half.expected.json",
+      "expectedSHA256": "3d812381460763587dace065a8e22fbd7c58639fec21bea5636ee7d1c2f488f3",
+      "id": "ireader-selected--truncate-half",
+      "input": "inputs/ireader-selected--truncate-half.txt",
+      "inputSHA256": "a205b0ce9f3f24b23ac65102c040775fcb23676a4741ebc045e04066fa7e4010",
+      "parserId": "ireader-selected",
+      "transformation": "truncate-half"
+    },
+    {
+      "baseCaseId": "moon-reader",
+      "expected": "expected/moon-reader--utf8-bom.expected.json",
+      "expectedSHA256": "c4bf035c20e2a5cd247e6e957d4810fa750f3bc834d5821d9a5e0a50bc39a262",
+      "id": "moon-reader--utf8-bom",
+      "input": "inputs/moon-reader--utf8-bom.txt",
+      "inputSHA256": "c0b0f22b0fa4da70cbca0d9158a536b9b9ebfd2c41db77ef603af32bf2f3a5c1",
+      "parserId": "moon-reader",
+      "transformation": "utf8-bom"
+    },
+    {
+      "baseCaseId": "moon-reader",
+      "expected": "expected/moon-reader--crlf.expected.json",
+      "expectedSHA256": "8f5de3a0c05433f0140111beb7ec2a29f0e429d838ce06e0049f301208687846",
+      "id": "moon-reader--crlf",
+      "input": "inputs/moon-reader--crlf.txt",
+      "inputSHA256": "34350b63c9fda5741bd3459c4f48b8d0e4eeb038e07fcf619b48eaa5413e8212",
+      "parserId": "moon-reader",
+      "transformation": "crlf"
+    },
+    {
+      "baseCaseId": "moon-reader",
+      "expected": "expected/moon-reader--truncate-half.expected.json",
+      "expectedSHA256": "8f5de3a0c05433f0140111beb7ec2a29f0e429d838ce06e0049f301208687846",
+      "id": "moon-reader--truncate-half",
+      "input": "inputs/moon-reader--truncate-half.txt",
+      "inputSHA256": "74d5093ceec10e5054cdec3044f8bd950eb03f8e321105479577e0df80989537",
+      "parserId": "moon-reader",
+      "transformation": "truncate-half"
+    },
+    {
+      "baseCaseId": "douban-app",
+      "expected": "expected/douban-app--utf8-bom.expected.json",
+      "expectedSHA256": "3ee6810d41ac0adcd487409324fb1ea25d81da92c7c468f3cda26bd597007cda",
+      "id": "douban-app--utf8-bom",
+      "input": "inputs/douban-app--utf8-bom.txt",
+      "inputSHA256": "64561d66506227382b604d75b5cc38e207ec9833a38f5bc65dd000cb6b1f9171",
+      "parserId": "douban-app",
+      "transformation": "utf8-bom"
+    },
+    {
+      "baseCaseId": "douban-app",
+      "expected": "expected/douban-app--crlf.expected.json",
+      "expectedSHA256": "e8f006ca2af985ff22ebb6677d41c51ae7b7ec42ad8c8b6ab2bf851352399428",
+      "id": "douban-app--crlf",
+      "input": "inputs/douban-app--crlf.txt",
+      "inputSHA256": "83f946a151159f6c3fbf0f7389651d5edd09906e8f9550b732eb9918c5b77824",
+      "parserId": "douban-app",
+      "transformation": "crlf"
+    },
+    {
+      "baseCaseId": "douban-app",
+      "expected": "expected/douban-app--truncate-half.expected.json",
+      "expectedSHA256": "46de69386b3c88fb6403ce95f8ae9df052d2bf9da7a329a01701480fe7c0c295",
+      "id": "douban-app--truncate-half",
+      "input": "inputs/douban-app--truncate-half.txt",
+      "inputSHA256": "0e91223b387e088b780f9306be9919a7cbb54bf44bf04a2c382fcd578c261775",
+      "parserId": "douban-app",
+      "transformation": "truncate-half"
+    },
+    {
+      "baseCaseId": "reader-163",
+      "expected": "expected/reader-163--utf8-bom.expected.json",
+      "expectedSHA256": "76891c4cb2febfe35645da2eeab1d9fdd0518b83dad053b071623d921b433e69",
+      "id": "reader-163--utf8-bom",
+      "input": "inputs/reader-163--utf8-bom.txt",
+      "inputSHA256": "ad5987ae66378903114d6a2bf8d11fd8eb20b1ef9abed80929d78a50922de281",
+      "parserId": "reader-163",
+      "transformation": "utf8-bom"
+    },
+    {
+      "baseCaseId": "reader-163",
+      "expected": "expected/reader-163--crlf.expected.json",
+      "expectedSHA256": "e8f006ca2af985ff22ebb6677d41c51ae7b7ec42ad8c8b6ab2bf851352399428",
+      "id": "reader-163--crlf",
+      "input": "inputs/reader-163--crlf.txt",
+      "inputSHA256": "d889f2db87a2196b0acb5e78fda75212f1d42c916b73625b972e17952b19be70",
+      "parserId": "reader-163",
+      "transformation": "crlf"
+    },
+    {
+      "baseCaseId": "reader-163",
+      "expected": "expected/reader-163--truncate-half.expected.json",
+      "expectedSHA256": "0743496e9ded78c759db19b1f2e8e0e6a01d4eb3d80f2a5d12a66df265280cb9",
+      "id": "reader-163--truncate-half",
+      "input": "inputs/reader-163--truncate-half.txt",
+      "inputSHA256": "64692220968df96b0f1d74d4654a7b21b533303e8a7e49c3693c974984890d0b",
+      "parserId": "reader-163",
+      "transformation": "truncate-half"
+    },
+    {
+      "baseCaseId": "fanqie",
+      "expected": "expected/fanqie--utf8-bom.expected.json",
+      "expectedSHA256": "0dedc1eecd7e471ac3efdcc3510ccaf615ee05b268dec38ed2887148607fbce5",
+      "id": "fanqie--utf8-bom",
+      "input": "inputs/fanqie--utf8-bom.txt",
+      "inputSHA256": "fa2a83e6dbfa8f1d77c6996535c67a904f940fb86fd969391fd1bb677293f5e0",
+      "parserId": "fanqie",
+      "transformation": "utf8-bom"
+    },
+    {
+      "baseCaseId": "fanqie",
+      "expected": "expected/fanqie--crlf.expected.json",
+      "expectedSHA256": "d1f1d94a482a83ca17ae68337b76e55b44f89d745be812867a30ae3f9958e05d",
+      "id": "fanqie--crlf",
+      "input": "inputs/fanqie--crlf.txt",
+      "inputSHA256": "790e9fe0a240c6689c7dc57dde91fec0bb48e2bceee31264fae614de8bbebae6",
+      "parserId": "fanqie",
+      "transformation": "crlf"
+    },
+    {
+      "baseCaseId": "fanqie",
+      "expected": "expected/fanqie--truncate-half.expected.json",
+      "expectedSHA256": "2d8ac27edf5a1937d07aa5f74e242a0306769bc47403929227be22a44375f330",
+      "id": "fanqie--truncate-half",
+      "input": "inputs/fanqie--truncate-half.txt",
+      "inputSHA256": "b99c63a715a69f51212ee3da11aad5740c4c155540545dcbe68aec6e1abe7226",
+      "parserId": "fanqie",
+      "transformation": "truncate-half"
+    },
+    {
+      "baseCaseId": "readingo",
+      "expected": "expected/readingo--utf8-bom.expected.json",
+      "expectedSHA256": "24b077dd4aaf9fee8b8fb6658333bb22e71c51cb29246a1fcbae37ee4d29f8ab",
+      "id": "readingo--utf8-bom",
+      "input": "inputs/readingo--utf8-bom.txt",
+      "inputSHA256": "70be630947ede2e17c8cd37aa6d13f8cbc3bdc1d445eecf76cab839e05809072",
+      "parserId": "readingo",
+      "transformation": "utf8-bom"
+    },
+    {
+      "baseCaseId": "readingo",
+      "expected": "expected/readingo--crlf.expected.json",
+      "expectedSHA256": "05266f2bc52f3d52b8ec0788f5b6480ffdcd7717ad3f2be1f10a8a59da6a9928",
+      "id": "readingo--crlf",
+      "input": "inputs/readingo--crlf.txt",
+      "inputSHA256": "a6e0f4c31fb35572facb586dfa7b2542e60b4c0f21ca90b515fab9d7f5a6f90a",
+      "parserId": "readingo",
+      "transformation": "crlf"
+    },
+    {
+      "baseCaseId": "readingo",
+      "expected": "expected/readingo--truncate-half.expected.json",
+      "expectedSHA256": "e8f006ca2af985ff22ebb6677d41c51ae7b7ec42ad8c8b6ab2bf851352399428",
+      "id": "readingo--truncate-half",
+      "input": "inputs/readingo--truncate-half.txt",
+      "inputSHA256": "988e9bb31ba54702d79d99628b0a1a7e1e743c1f10df9a57deb06b165e64af00",
+      "parserId": "readingo",
+      "transformation": "truncate-half"
+    },
+    {
+      "baseCaseId": "kindle-app",
+      "expected": "expected/kindle-app--utf8-bom.expected.json",
+      "expectedSHA256": "b1e9bea2ec964f13ce75630a81a19166c5e2cfcfaf58a45611810ed64f369daf",
+      "id": "kindle-app--utf8-bom",
+      "input": "inputs/kindle-app--utf8-bom.html",
+      "inputSHA256": "d30f2ae9c97878cad7860c8a041a532fb839362e7c3ea5af385661361d2f0517",
+      "parserId": "kindle-app",
+      "transformation": "utf8-bom"
+    },
+    {
+      "baseCaseId": "kindle-app",
+      "expected": "expected/kindle-app--crlf.expected.json",
+      "expectedSHA256": "b1e9bea2ec964f13ce75630a81a19166c5e2cfcfaf58a45611810ed64f369daf",
+      "id": "kindle-app--crlf",
+      "input": "inputs/kindle-app--crlf.html",
+      "inputSHA256": "bb03ddd507232ff5a979b8d874ab9f22531bdf0917df3721260c7aa09a870f79",
+      "parserId": "kindle-app",
+      "transformation": "crlf"
+    },
+    {
+      "baseCaseId": "kindle-app",
+      "expected": "expected/kindle-app--truncate-half.expected.json",
+      "expectedSHA256": "7d3b08f39a8aeafb6c925ef94db83ed3a8efebbdf696e8962364b8f33f19a2dc",
+      "id": "kindle-app--truncate-half",
+      "input": "inputs/kindle-app--truncate-half.html",
+      "inputSHA256": "4ccdb6c9cba4fd2fee2faa12b103f7faba6ddb849cbd8684ca7e658e9f3b1d55",
+      "parserId": "kindle-app",
+      "transformation": "truncate-half"
+    },
+    {
+      "baseCaseId": "koreader-old",
+      "expected": "expected/koreader-old--utf8-bom.expected.json",
+      "expectedSHA256": "ddde5704f2f30bf924f904f4444d31a1c3e1d93958251fd7ac175bb66b5c8a48",
+      "id": "koreader-old--utf8-bom",
+      "input": "inputs/koreader-old--utf8-bom.json",
+      "inputSHA256": "b5be9f7bbc994c8b5d948fb3c891e6f6c64cc0d9f8c4eaaf6e6d7ed772a60dca",
+      "parserId": "koreader",
+      "transformation": "utf8-bom"
+    },
+    {
+      "baseCaseId": "koreader-old",
+      "expected": "expected/koreader-old--crlf.expected.json",
+      "expectedSHA256": "ddde5704f2f30bf924f904f4444d31a1c3e1d93958251fd7ac175bb66b5c8a48",
+      "id": "koreader-old--crlf",
+      "input": "inputs/koreader-old--crlf.json",
+      "inputSHA256": "0beb235a70a9f9caa4455d3b0c48a83f2aea27b6447936e2f9504bc6d255fa33",
+      "parserId": "koreader",
+      "transformation": "crlf"
+    },
+    {
+      "baseCaseId": "koreader-old",
+      "expected": "expected/koreader-old--truncate-half.expected.json",
+      "expectedSHA256": "8f5de3a0c05433f0140111beb7ec2a29f0e429d838ce06e0049f301208687846",
+      "id": "koreader-old--truncate-half",
+      "input": "inputs/koreader-old--truncate-half.json",
+      "inputSHA256": "8f41722d48f4108a478848ce2e524c75cb958c6ecee895feb5ef537ecf2bd4ab",
+      "parserId": "koreader",
+      "transformation": "truncate-half"
+    },
+    {
+      "baseCaseId": "koreader-new",
+      "expected": "expected/koreader-new--utf8-bom.expected.json",
+      "expectedSHA256": "2de901533b177eb92523b310524d135b0bb17259bb257a3dffd52038f58ffec1",
+      "id": "koreader-new--utf8-bom",
+      "input": "inputs/koreader-new--utf8-bom.json",
+      "inputSHA256": "8898092512deed04d2fbcd333bd02261b44012e4cc000aede8c4a961268a9964",
+      "parserId": "koreader",
+      "transformation": "utf8-bom"
+    },
+    {
+      "baseCaseId": "koreader-new",
+      "expected": "expected/koreader-new--crlf.expected.json",
+      "expectedSHA256": "2de901533b177eb92523b310524d135b0bb17259bb257a3dffd52038f58ffec1",
+      "id": "koreader-new--crlf",
+      "input": "inputs/koreader-new--crlf.json",
+      "inputSHA256": "cf615684ed527c13aca92825dceff9864b487e7e0dfc322c4ee62e0e726ecec1",
+      "parserId": "koreader",
+      "transformation": "crlf"
+    },
+    {
+      "baseCaseId": "koreader-new",
+      "expected": "expected/koreader-new--truncate-half.expected.json",
+      "expectedSHA256": "8f5de3a0c05433f0140111beb7ec2a29f0e429d838ce06e0049f301208687846",
+      "id": "koreader-new--truncate-half",
+      "input": "inputs/koreader-new--truncate-half.json",
+      "inputSHA256": "7b001c5b1ac0ef46e056827f74b52fa1740b47799fd910cf581c92d8e7e2d7d6",
+      "parserId": "koreader",
+      "transformation": "truncate-half"
+    },
+    {
+      "baseCaseId": "legado",
+      "expected": "expected/legado--utf8-bom.expected.json",
+      "expectedSHA256": "db1f86f8dd733867eb9f60d8680ca9295eab7bca842a36978599d08a16348e8c",
+      "id": "legado--utf8-bom",
+      "input": "inputs/legado--utf8-bom.json",
+      "inputSHA256": "63136a0195207755ac4105c49b14b345e1fa78990d608b59e4d4b5a2fc3c7cb1",
+      "parserId": "legado",
+      "transformation": "utf8-bom"
+    },
+    {
+      "baseCaseId": "legado",
+      "expected": "expected/legado--crlf.expected.json",
+      "expectedSHA256": "db1f86f8dd733867eb9f60d8680ca9295eab7bca842a36978599d08a16348e8c",
+      "id": "legado--crlf",
+      "input": "inputs/legado--crlf.json",
+      "inputSHA256": "54f1fe9a76e390c623faee4cffc8d303e0b7c5c6290905008edb569ce295c8bd",
+      "parserId": "legado",
+      "transformation": "crlf"
+    },
+    {
+      "baseCaseId": "legado",
+      "expected": "expected/legado--truncate-half.expected.json",
+      "expectedSHA256": "8f5de3a0c05433f0140111beb7ec2a29f0e429d838ce06e0049f301208687846",
+      "id": "legado--truncate-half",
+      "input": "inputs/legado--truncate-half.json",
+      "inputSHA256": "c53d29a23a55d111f16262dc1b9ba77ccf71ccd9de9980165cabfe8e6fc36c71",
+      "parserId": "legado",
+      "transformation": "truncate-half"
+    },
+    {
+      "baseCaseId": "neat-reader",
+      "expected": "expected/neat-reader--utf8-bom.expected.json",
+      "expectedSHA256": "71f98e05fd13671ac1e05672baccef5e414b06ffedd58430cc58e92f07e76f67",
+      "id": "neat-reader--utf8-bom",
+      "input": "inputs/neat-reader--utf8-bom.json",
+      "inputSHA256": "487fbfd4adc52b73de563b037e7da2ff399835a547715cef4d1291e58fd99a11",
+      "parserId": "neat-reader",
+      "transformation": "utf8-bom"
+    },
+    {
+      "baseCaseId": "neat-reader",
+      "expected": "expected/neat-reader--crlf.expected.json",
+      "expectedSHA256": "71f98e05fd13671ac1e05672baccef5e414b06ffedd58430cc58e92f07e76f67",
+      "id": "neat-reader--crlf",
+      "input": "inputs/neat-reader--crlf.json",
+      "inputSHA256": "bdf4e274e95df95e587602275e24f73a593bd6acc2df6e0fc8e426134fe2d022",
+      "parserId": "neat-reader",
+      "transformation": "crlf"
+    },
+    {
+      "baseCaseId": "neat-reader",
+      "expected": "expected/neat-reader--truncate-half.expected.json",
+      "expectedSHA256": "8f5de3a0c05433f0140111beb7ec2a29f0e429d838ce06e0049f301208687846",
+      "id": "neat-reader--truncate-half",
+      "input": "inputs/neat-reader--truncate-half.json",
+      "inputSHA256": "231aac69ab3c802549f6fe50f1bdb956a9ef47e037a2c52c5f0f1f03177423ae",
+      "parserId": "neat-reader",
+      "transformation": "truncate-half"
+    },
+    {
+      "baseCaseId": "koodo",
+      "expected": "expected/koodo--utf8-bom.expected.json",
+      "expectedSHA256": "388eab1f97e72e2224e608f611c8617ad32d9d669493b115257f23561aad24c9",
+      "id": "koodo--utf8-bom",
+      "input": "inputs/koodo--utf8-bom.csv",
+      "inputSHA256": "bd572b7d922dc375e4efd71b8da02367332c9ee9585c96b748bfabb458070455",
+      "parserId": "koodo",
+      "transformation": "utf8-bom"
+    },
+    {
+      "baseCaseId": "koodo",
+      "expected": "expected/koodo--crlf.expected.json",
+      "expectedSHA256": "388eab1f97e72e2224e608f611c8617ad32d9d669493b115257f23561aad24c9",
+      "id": "koodo--crlf",
+      "input": "inputs/koodo--crlf.csv",
+      "inputSHA256": "bab3bf7f18899969895f286039c0de035b07f031944f30d7acbc702ee43c4ef7",
+      "parserId": "koodo",
+      "transformation": "crlf"
+    },
+    {
+      "baseCaseId": "koodo",
+      "expected": "expected/koodo--truncate-half.expected.json",
+      "expectedSHA256": "d1f1d94a482a83ca17ae68337b76e55b44f89d745be812867a30ae3f9958e05d",
+      "id": "koodo--truncate-half",
+      "input": "inputs/koodo--truncate-half.csv",
+      "inputSHA256": "dcd768a7dd742e131475d3844e9020728e0773037574b8509998b250b7b6654d",
+      "parserId": "koodo",
+      "transformation": "truncate-half"
+    },
+    {
+      "baseCaseId": "reeden",
+      "expected": "expected/reeden--utf8-bom.expected.json",
+      "expectedSHA256": "b901a01489d0d1796d1e26907c61a7246b932c0c06db0f5cf524cb114f414ab1",
+      "id": "reeden--utf8-bom",
+      "input": "inputs/reeden--utf8-bom.json",
+      "inputSHA256": "aa5edc334ede4e4007fcc8bb134d903a29a3575dd898caaf66a0ddfaf0c8aae2",
+      "parserId": "reeden",
+      "transformation": "utf8-bom"
+    },
+    {
+      "baseCaseId": "reeden",
+      "expected": "expected/reeden--crlf.expected.json",
+      "expectedSHA256": "b901a01489d0d1796d1e26907c61a7246b932c0c06db0f5cf524cb114f414ab1",
+      "id": "reeden--crlf",
+      "input": "inputs/reeden--crlf.json",
+      "inputSHA256": "759a79d037db211262f38af342869865966b12564aab39de6f1f4d50d712e6ab",
+      "parserId": "reeden",
+      "transformation": "crlf"
+    },
+    {
+      "baseCaseId": "reeden",
+      "expected": "expected/reeden--truncate-half.expected.json",
+      "expectedSHA256": "8f5de3a0c05433f0140111beb7ec2a29f0e429d838ce06e0049f301208687846",
+      "id": "reeden--truncate-half",
+      "input": "inputs/reeden--truncate-half.json",
+      "inputSHA256": "af3c6751d03a2b2d9f2baf4278655c43e835d3da2599e295954d8be460cd5883",
+      "parserId": "reeden",
+      "transformation": "truncate-half"
+    },
+    {
+      "baseCaseId": "kindle-clippings",
+      "expected": "expected/kindle-clippings--utf8-bom.expected.json",
+      "expectedSHA256": "b25ce0072d4736bca3ba1f4a111a9558d63d0cb160568675673ae7deb2bcd13f",
+      "id": "kindle-clippings--utf8-bom",
+      "input": "inputs/kindle-clippings--utf8-bom.txt",
+      "inputSHA256": "b402699090f92222f29b41f75e411473b09072e662d7d462376bf38b158f6d92",
+      "parserId": "kindle",
+      "transformation": "utf8-bom"
+    },
+    {
+      "baseCaseId": "kindle-clippings",
+      "expected": "expected/kindle-clippings--crlf.expected.json",
+      "expectedSHA256": "b25ce0072d4736bca3ba1f4a111a9558d63d0cb160568675673ae7deb2bcd13f",
+      "id": "kindle-clippings--crlf",
+      "input": "inputs/kindle-clippings--crlf.txt",
+      "inputSHA256": "8a61790ee0f539428fc03a3870778326bda4102726b2b79a3bcc6e50fa9684e4",
+      "parserId": "kindle",
+      "transformation": "crlf"
+    },
+    {
+      "baseCaseId": "kindle-clippings",
+      "expected": "expected/kindle-clippings--truncate-half.expected.json",
+      "expectedSHA256": "a19cabc04865d3df1fa26c7cdfca141fcedc6600f4170d43c6648430ddfda125",
+      "id": "kindle-clippings--truncate-half",
+      "input": "inputs/kindle-clippings--truncate-half.txt",
+      "inputSHA256": "d5996a57e605f3c4caced17b3bf6c6be991e1d6e921159b4b5f222957630f9f1",
+      "parserId": "kindle",
+      "transformation": "truncate-half"
+    },
+    {
+      "baseCaseId": "jd-reader",
+      "expected": "expected/jd-reader--utf8-bom.expected.json",
+      "expectedSHA256": "2dadf367dad46320739a1055cc46a9f12381260b265b947c3b809ed192459373",
+      "id": "jd-reader--utf8-bom",
+      "input": "inputs/jd-reader--utf8-bom.txt",
+      "inputSHA256": "ed4991792b0c685547d45da039689ee41346eb56cc212ed4e81806d4af58fb37",
+      "parserId": "jd-reader",
+      "transformation": "utf8-bom"
+    },
+    {
+      "baseCaseId": "jd-reader",
+      "expected": "expected/jd-reader--crlf.expected.json",
+      "expectedSHA256": "2008eeb23dd0ffe34dd78447793630724e9d01c4b90858bb3ac0f6097de3ba9a",
+      "id": "jd-reader--crlf",
+      "input": "inputs/jd-reader--crlf.txt",
+      "inputSHA256": "d94f25ac471c236d7e47945586f3eeb9a2c2f8f1db4a0094ca001804fa4627bc",
+      "parserId": "jd-reader",
+      "transformation": "crlf"
+    },
+    {
+      "baseCaseId": "jd-reader",
+      "expected": "expected/jd-reader--truncate-half.expected.json",
+      "expectedSHA256": "8f5de3a0c05433f0140111beb7ec2a29f0e429d838ce06e0049f301208687846",
+      "id": "jd-reader--truncate-half",
+      "input": "inputs/jd-reader--truncate-half.txt",
+      "inputSHA256": "86e73a5880f4127d4a117b972174b37a13b95e8f71898502bb27321b17d7c890",
+      "parserId": "jd-reader",
+      "transformation": "truncate-half"
+    },
+    {
+      "baseCaseId": "ireader-file",
+      "expected": "expected/ireader-file--utf8-bom.expected.json",
+      "expectedSHA256": "30e3e4313beeb96d3946bdc3509ebc95de21692ca7697ff83b46482cca6d8bc9",
+      "id": "ireader-file--utf8-bom",
+      "input": "inputs/ireader-file--utf8-bom.txt",
+      "inputSHA256": "8a064c87bdceb42464e63cff5b108d4609de441be2e1cff46187568ee881d1f1",
+      "parserId": "ireader-file",
+      "transformation": "utf8-bom"
+    },
+    {
+      "baseCaseId": "ireader-file",
+      "expected": "expected/ireader-file--crlf.expected.json",
+      "expectedSHA256": "05c82c7027bf587f168437d82e46c54929311140123efe1483e4a06850666267",
+      "id": "ireader-file--crlf",
+      "input": "inputs/ireader-file--crlf.txt",
+      "inputSHA256": "f4078f098f3b006323e6f4f6211a93aee836fc1afc7aad17b35558063bcbbe5f",
+      "parserId": "ireader-file",
+      "transformation": "crlf"
+    },
+    {
+      "baseCaseId": "ireader-file",
+      "expected": "expected/ireader-file--truncate-half.expected.json",
+      "expectedSHA256": "a1ed1c30c70a2641ddefc3530e91ae3e119f1aea51a438f01eaf529b3358ac15",
+      "id": "ireader-file--truncate-half",
+      "input": "inputs/ireader-file--truncate-half.txt",
+      "inputSHA256": "58e858a60235c07e6ca3c8ecdadb45bbaf7b8cb69d2cc700e69af50c11ec789f",
+      "parserId": "ireader-file",
+      "transformation": "truncate-half"
+    },
+    {
+      "baseCaseId": "ireader-epub",
+      "expected": "expected/ireader-epub--append-zero.expected.json",
+      "expectedSHA256": "6770f863ae78c75ad8d939d1fb805da0d6461bdfc7c235a8db9e7b6afb39bee0",
+      "id": "ireader-epub--append-zero",
+      "input": "inputs/ireader-epub--append-zero.epub",
+      "inputSHA256": "6c87270fe6976ad6916e2c0b67ce91f13b321e57ef96fdcbe7babb91fb090c8e",
+      "parserId": "ireader-epub",
+      "transformation": "append-zero"
+    },
+    {
+      "baseCaseId": "ireader-epub",
+      "expected": "expected/ireader-epub--truncate-half.expected.json",
+      "expectedSHA256": "d1f1d94a482a83ca17ae68337b76e55b44f89d745be812867a30ae3f9958e05d",
+      "id": "ireader-epub--truncate-half",
+      "input": "inputs/ireader-epub--truncate-half.epub",
+      "inputSHA256": "bdc62937b4cf2d3ed76c83607931dde2c5bf33e3d0a14651c7bed9f66c39410a",
+      "parserId": "ireader-epub",
+      "transformation": "truncate-half"
+    },
+    {
+      "baseCaseId": "apple-books",
+      "expected": "expected/apple-books--append-zero.expected.json",
+      "expectedSHA256": "0478105c958ddc23c664eb9ff8c96c0faa0380e6918941458b04a73fa9f1fa3c",
+      "id": "apple-books--append-zero",
+      "input": "inputs/apple-books--append-zero.zip",
+      "inputSHA256": "92a4704d7db9321c4830073ce339697a8c0ea7fab6d078bde4017c77905e470f",
+      "parserId": "apple-books",
+      "transformation": "append-zero"
+    },
+    {
+      "baseCaseId": "apple-books",
+      "expected": "expected/apple-books--truncate-half.expected.json",
+      "expectedSHA256": "498c0c6e34771864c769062a9b552a0bb418e1322d235f0d40290353a439ca9d",
+      "id": "apple-books--truncate-half",
+      "input": "inputs/apple-books--truncate-half.zip",
+      "inputSHA256": "d3ede5e3a0737beb19c27a89e1a5073a164bf9f9002dafd69bc2b0b3ae7806c2",
+      "parserId": "apple-books",
+      "transformation": "truncate-half"
+    },
+    {
+      "baseCaseId": "hanwang",
+      "expected": "expected/hanwang--utf8-bom.expected.json",
+      "expectedSHA256": "2458860a06bc52a07c4ecd74db477808aebad497ff374b14aff810f5cb26e0bb",
+      "id": "hanwang--utf8-bom",
+      "input": "inputs/hanwang--utf8-bom.txt",
+      "inputSHA256": "3a426af631c41e94813ad127fffe1165235e314cf3d2d1ac09502abab4fb6897",
+      "parserId": "hanwang",
+      "transformation": "utf8-bom"
+    },
+    {
+      "baseCaseId": "hanwang",
+      "expected": "expected/hanwang--crlf.expected.json",
+      "expectedSHA256": "8e1fbf4d5d070819ddf153c6432e5eccae241b1ea9c0da8aa020625c3cf6b5e7",
+      "id": "hanwang--crlf",
+      "input": "inputs/hanwang--crlf.txt",
+      "inputSHA256": "3afbb7ec3ecc1705c162208662d786f8228ef90b880fb90926ec3dfcc2da880d",
+      "parserId": "hanwang",
+      "transformation": "crlf"
+    },
+    {
+      "baseCaseId": "hanwang",
+      "expected": "expected/hanwang--truncate-half.expected.json",
+      "expectedSHA256": "00d841125df529f7b6843567a64abc272d79238cf9cfd24e1a85e0c6d283e703",
+      "id": "hanwang--truncate-half",
+      "input": "inputs/hanwang--truncate-half.txt",
+      "inputSHA256": "bb1bc943b81227c0794689ed47529efeb3f60db5862144dae12e129fd777e758",
+      "parserId": "hanwang",
+      "transformation": "truncate-half"
+    }
+  ],
+  "corpusVersion": 2,
+  "schemaVersion": 2
+}

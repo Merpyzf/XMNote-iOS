@@ -581,19 +581,19 @@ private final class UploadRepositoryStub: S3UploadRepositoryProtocol, @unchecked
     }
 
     func stageImageData(_ data: Data, preferredFileExtension: String) async throws -> URL {
-        _ = data
-        return FileManager.default.temporaryDirectory
-            .appendingPathComponent("desktop-web-upload-repository-stub")
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString)
             .appendingPathExtension(preferredFileExtension)
+        try data.write(to: url)
+        return url
     }
 
     func discardStagedFile(at localURL: URL) async {
-        _ = localURL
+        try? FileManager.default.removeItem(at: localURL)
     }
 
     func isStagedFileAvailable(at localURL: URL) async -> Bool {
-        _ = localURL
-        return false
+        FileManager.default.fileExists(atPath: localURL.path)
     }
 
     func uploadFile(
@@ -602,6 +602,16 @@ private final class UploadRepositoryStub: S3UploadRepositoryProtocol, @unchecked
         progress: (@Sendable (Double) -> Void)?
     ) async throws -> S3UploadResult {
         prefixes.append(prefix)
+        progress?(1)
+        return result
+    }
+
+    func uploadFile(
+        localURL _: URL,
+        objectKey: String,
+        progress: (@Sendable (Double) -> Void)?
+    ) async throws -> S3UploadResult {
+        prefixes.append(objectKey)
         progress?(1)
         return result
     }

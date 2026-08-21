@@ -121,6 +121,21 @@ private final class ImportRepositoryStub: NoteImportRepositoryProtocol {
         self.existingTargetIDs = existingTargetIDs
     }
 
+    func loadKindleClippingsFile(from url: URL) async throws -> Data {
+        try Data(contentsOf: url)
+    }
+
+    func fetchHanWangShareContent(from _: String) async throws -> String {
+        ""
+    }
+
+    func fetchLifeWeekBooks(
+        phoneNumber _: String,
+        password _: String
+    ) async throws -> [NoteImportDraftBook] {
+        []
+    }
+
     func matchLocalBook(for _: NoteImportDraftBook) async throws -> BookPickerBook? {
         nil
     }

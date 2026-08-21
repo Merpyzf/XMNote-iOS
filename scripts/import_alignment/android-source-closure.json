@@ -1,0 +1,466 @@
+{
+  "schemaVersion": 1,
+  "androidCommit": "6f0d6d80aa734e4ea36dcd580f78e1e440dc8a9c",
+  "files": [
+    {
+      "path": "app/src/main/java/com/merpyzf/xmnote/helper/WeReadBatchImportBookIdsStore.kt",
+      "sha256": "a74927c08692b1bca2e5aab297d328ac63224d8826cd73329061683f7ca3066e"
+    },
+    {
+      "path": "app/src/main/java/com/merpyzf/xmnote/helper/WeReadOriginalLauncher.kt",
+      "sha256": "631f6ba8a983e148fb341e12d7f390cd4bd6e6fc694f1441a83aee4a663f48e0"
+    },
+    {
+      "path": "app/src/main/java/com/merpyzf/xmnote/mvp/contract/data/WeReadImportAuthContract.kt",
+      "sha256": "4674a39c4fda3ef31911cd70c3580bb1b46618553e95c5a6515bda2b573819c0"
+    },
+    {
+      "path": "app/src/main/java/com/merpyzf/xmnote/mvp/presenter/data/NotesLoadPresenter.kt",
+      "sha256": "7050d0e6cab460c2dc7ad9387b67d6888834cd59f0f155f0563b8d10440f1dff"
+    },
+    {
+      "path": "app/src/main/java/com/merpyzf/xmnote/mvp/presenter/data/WeReadImportAuthPresenter.kt",
+      "sha256": "baec77701fd4b74219bdc4792acdb0b5d6fef65d072fc4d20a207bbad5605806"
+    },
+    {
+      "path": "app/src/main/java/com/merpyzf/xmnote/ui/data/activity/import_note/KindleImportParseGateway.kt",
+      "sha256": "8849fa6da6427dfb28b9fa811733abda48186d49e94bcee9686226d84323ab82"
+    },
+    {
+      "path": "app/src/main/java/com/merpyzf/xmnote/ui/data/activity/import_note/NotesLoadActivity.kt",
+      "sha256": "cad04ce307c45ff5f6ead3b0a0bd6fe0d4969d3b80876d682cf14dc637b7540b"
+    },
+    {
+      "path": "app/src/main/java/com/merpyzf/xmnote/ui/data/activity/import_note/kindle/KindleDocumentTreeSearch.kt",
+      "sha256": "c130d5cf17441d80a0dce8d2e667ab7705fe46199e59a551a58ff71fce93b2e9"
+    },
+    {
+      "path": "app/src/main/java/com/merpyzf/xmnote/ui/data/activity/import_note/kindle/KindleImportMethodBottomSheet.kt",
+      "sha256": "98d5fd86d39cc0c19a780d1c8fd3b87d0cbc3cd3e3f5f21ab28d24d41e8d3548"
+    },
+    {
+      "path": "app/src/main/java/com/merpyzf/xmnote/ui/data/activity/import_note/kindle/KindleMtpTreeSearch.kt",
+      "sha256": "636078e1a70307278af4597a93d36c87d9a7736670d9391d8ff5ec0e4797ab60"
+    },
+    {
+      "path": "app/src/main/java/com/merpyzf/xmnote/ui/data/activity/import_note/kindle/KindleOtgActivity.kt",
+      "sha256": "181911259231a8bbfe8a7bbf6f2c7442f058f936bd74299761b66bbb0f8fd76b"
+    },
+    {
+      "path": "app/src/main/java/com/merpyzf/xmnote/ui/data/activity/import_note/kindle/KindleOtgFileCopy.kt",
+      "sha256": "18e0b59842181aaec4d4dda865acfb03289dc9104a8243ec89ef528b49183c9f"
+    },
+    {
+      "path": "app/src/main/java/com/merpyzf/xmnote/ui/data/activity/import_note/kindle/KindleOtgModels.kt",
+      "sha256": "10258e6b63335b5099f9d101c6eee1498fc984ae05cb0d3147d3c2dd4fd07e99"
+    },
+    {
+      "path": "app/src/main/java/com/merpyzf/xmnote/ui/data/activity/import_note/kindle/KindleOtgScanGateway.kt",
+      "sha256": "2dd9527f2d2c5815c4d12a08942ad4d50f366b20fbfe4c9399ea7bfa95f2e193"
+    },
+    {
+      "path": "app/src/main/java/com/merpyzf/xmnote/ui/data/activity/import_note/kindle/KindleOtgScanner.kt",
+      "sha256": "d4b60d3e85f1a1f0f659904c239ed38650eeae209b7c61c7dded59e7aca83b4b"
+    },
+    {
+      "path": "app/src/main/java/com/merpyzf/xmnote/ui/data/activity/import_note/kindle/KindleOtgScreen.kt",
+      "sha256": "fcf0c38b1f7f2d2f69e6a2929e2a8cfe19fb3c8e70052266033c575c22d234e0"
+    },
+    {
+      "path": "app/src/main/java/com/merpyzf/xmnote/ui/data/activity/import_note/kindle/KindleOtgViewModel.kt",
+      "sha256": "6f8f65e2e2d929faa9086f3e49d5ff6d51e57a6d34c48e009626ea40d75747fc"
+    },
+    {
+      "path": "app/src/main/java/com/merpyzf/xmnote/ui/data/activity/import_note/weread/WeReadBatchImportActivity.kt",
+      "sha256": "677e5ef473f278159814677cf84d847fc91a67af7b17207b04ed1ab7aeee726a"
+    },
+    {
+      "path": "app/src/main/java/com/merpyzf/xmnote/ui/data/activity/import_note/weread/WeReadImportAuthActivity.kt",
+      "sha256": "c4bd4dccdf8692ae89e064903f35c5cd59a5b22f12a7739cef6d412eb1dacc5a"
+    },
+    {
+      "path": "app/src/main/java/com/merpyzf/xmnote/viewmodel/data/WeReadBatchImportViewModel.kt",
+      "sha256": "866ffd122496b7a0dc34e48cfa5a5edaa4278a0a56540ea451b4b27093fb9ffe"
+    },
+    {
+      "path": "app/src/main/java/com/merpyzf/xmnote/viewmodel/data/WeReadImportAuthViewModel.kt",
+      "sha256": "4152fe4c696c76af5192ea988357865d3990b51d2d6838f0084436e2da889a82"
+    },
+    {
+      "path": "common/src/main/java/com/merpyzf/common/constant/AppConstant.java",
+      "sha256": "eab0afa61a8355847186885f4ba7fee36b8ae4fef1f5c97c1ce8e60742d874b4"
+    },
+    {
+      "path": "common/src/main/java/com/merpyzf/common/helper/setting/SpSettingHelper.kt",
+      "sha256": "2f011770f3469613a8688b25a1adb7b2b051d5e1ccc5f8e59ea7ad82f6f6b925"
+    },
+    {
+      "path": "common/src/main/java/com/merpyzf/common/model/dto/api/SendBookDto.kt",
+      "sha256": "c980cffd47d64ad895eab982665ab244101ab777c53e28844d250fe980416572"
+    },
+    {
+      "path": "common/src/main/java/com/merpyzf/common/model/dto/note_import/KOReaderNoteDto.kt",
+      "sha256": "3c4854d433718940505a420786dcf2155116c0d830bffaaf8e749e6e1c387c3e"
+    },
+    {
+      "path": "common/src/main/java/com/merpyzf/common/model/dto/note_import/NeatReaderDto.kt",
+      "sha256": "8b1a8da7f9d75ee70c38518a2c7d943c21f18aa15323767fcd45d694438c8362"
+    },
+    {
+      "path": "common/src/main/java/com/merpyzf/common/model/dto/note_import/NewKOReaderNoteDto.kt",
+      "sha256": "b0f0aea6a19d6914a4a7b2c23f9ea822047fbd5b3f931ca01cf19704755c8413"
+    },
+    {
+      "path": "common/src/main/java/com/merpyzf/common/model/dto/note_import/ReedenDto.kt",
+      "sha256": "47fa863bad69cc13d27ab78e29270953725e502e6279393cfa5f9c7179e84645"
+    },
+    {
+      "path": "common/src/main/java/com/merpyzf/common/model/dto/weread/WeReadBookDto.kt",
+      "sha256": "f33c00b066f55d08384c925b36e6b879f1d9ed8aae2e051b1674abe7033e47a1"
+    },
+    {
+      "path": "common/src/main/java/com/merpyzf/common/model/dto/weread/WeReadChapterDto.kt",
+      "sha256": "a84008cc2c704be78ba1309503cce1420921dbb76285de367fd495889ccb91e6"
+    },
+    {
+      "path": "common/src/main/java/com/merpyzf/common/model/dto/weread/WeReadNoteDto.kt",
+      "sha256": "d822604531d020f2e49697210ec4b4c3663f64d70964f5b6cf86eaf12d4e3f8a"
+    },
+    {
+      "path": "common/src/main/java/com/merpyzf/common/model/dto/weread/WeReadNoteWithIdeaDto.kt",
+      "sha256": "5503439180994fdfdb3999e0023c46efd24783cbadaee0de36a39bbf9a575dc8"
+    },
+    {
+      "path": "common/src/main/java/com/merpyzf/common/model/dto/weread/WeReadShelfDto.kt",
+      "sha256": "48b1110f907c71e21663a37c5afc3c9c98ff369aec96cbae8eb708dff2ff540a"
+    },
+    {
+      "path": "common/src/main/java/com/merpyzf/common/model/dto/weread_web/BaseWereadDto.kt",
+      "sha256": "a9b2a4075345f903bad0fc6191280f7d4a2a2cc60d481c58f04b2a4ad8039602"
+    },
+    {
+      "path": "common/src/main/java/com/merpyzf/common/model/dto/weread_web/BookInfo.kt",
+      "sha256": "3e15fe354e5c81c309003d6a20259f03092a25f9054db52a758360e5ac177306"
+    },
+    {
+      "path": "common/src/main/java/com/merpyzf/common/model/dto/weread_web/ChapterInfosDto.kt",
+      "sha256": "eb31e38bc00f5c7a5493c54551486cf7eabcea0e9f175312c8329de7a6be10d4"
+    },
+    {
+      "path": "common/src/main/java/com/merpyzf/common/model/dto/weread_web/MarkListDto.kt",
+      "sha256": "4650782cfaa943203e92963f21e485582b20d72e2dbcdeeede912ee013beb31c"
+    },
+    {
+      "path": "common/src/main/java/com/merpyzf/common/model/dto/weread_web/RawIndex.kt",
+      "sha256": "bf5607d4327e35f0feaec698e99c2eb677b542304791579e21b52ab3e13789af"
+    },
+    {
+      "path": "common/src/main/java/com/merpyzf/common/model/dto/weread_web/ReadingInfoDto.kt",
+      "sha256": "1b4cc3c1bb348d68b58075d65071f71333b8c5e7b5693513fc2f782fb2fa16dd"
+    },
+    {
+      "path": "common/src/main/java/com/merpyzf/common/model/dto/weread_web/ReviewListDto.kt",
+      "sha256": "b5f0234030b5b89528a2bc0efc27946e44d10069e80117b09e322d5c25655496"
+    },
+    {
+      "path": "common/src/main/java/com/merpyzf/common/model/dto/weread_web/SyncBookDto.kt",
+      "sha256": "5653a6ffa3adbdfc25cbba584c9131e0d62f99df13ef1ffeaf002863f9bdb6db"
+    },
+    {
+      "path": "common/src/main/java/com/merpyzf/common/model/dto/weread_web/WeReadCookieRenewalDto.kt",
+      "sha256": "073c4fd34f07ac6871f5f3082653a1a9d68579f06c280cb529847697a3fd8e70"
+    },
+    {
+      "path": "common/src/main/java/com/merpyzf/common/model/http/WeReadCookieRefreshResult.kt",
+      "sha256": "5943a61ca963b1a380ce2cff12287e8ee7e592e6c6c08dfcb7efb6c7e9f36d61"
+    },
+    {
+      "path": "common/src/main/java/com/merpyzf/common/model/http/WeReadCookieRenewalHelper.kt",
+      "sha256": "06a312db90b7295f1169808d67b66d084d00877dda0028f246032ddb633e75a6"
+    },
+    {
+      "path": "common/src/main/java/com/merpyzf/common/model/http/WeReadService.kt",
+      "sha256": "f9b1092366f939af2e2105c19288ec18c6e8d235c7a85a78faec4445beae352b"
+    },
+    {
+      "path": "common/src/main/java/com/merpyzf/common/model/http/WeReadWebService.kt",
+      "sha256": "ef876f12c2412a64396c734faf5ba93bb03e1aa7908b9a8d0e5c91df08080fe5"
+    },
+    {
+      "path": "common/src/main/java/com/merpyzf/common/model/vo/AttachImage.kt",
+      "sha256": "c3f780523271acb0e990f887ef0c5a7a0bf450e8ad247ff2f2192fee1d397eab"
+    },
+    {
+      "path": "common/src/main/java/com/merpyzf/common/model/vo/Book.kt",
+      "sha256": "eae03fd2652a20e936b35e1a3ba83150a11442698a46bd07598464ecbfcc8f20"
+    },
+    {
+      "path": "common/src/main/java/com/merpyzf/common/model/vo/Chapter.kt",
+      "sha256": "036d9167bc798bba72e8ab08aaaa50b8c9e35b0488339c459b41265e5c33f99a"
+    },
+    {
+      "path": "common/src/main/java/com/merpyzf/common/model/vo/Group.kt",
+      "sha256": "2af327252011c73c388f36e708b50a56fcefe466af7f048af4a9a905ab1460d9"
+    },
+    {
+      "path": "common/src/main/java/com/merpyzf/common/model/vo/Note.kt",
+      "sha256": "af9636d4ad1d44b271ef0589283358708a612d536b98ab5a736d79e1758575e0"
+    },
+    {
+      "path": "common/src/main/java/com/merpyzf/common/model/vo/Review.kt",
+      "sha256": "a6f9c00a26c95331e88d3570b19c47a2acc76664a256f7051c8d72db210259b8"
+    },
+    {
+      "path": "common/src/main/java/com/merpyzf/common/model/vo/ReviewImage.kt",
+      "sha256": "0b5d4494a0099cbce05e8ed5f1a3c48dad56ba622693bf1972f0b95e347e285a"
+    },
+    {
+      "path": "common/src/main/java/com/merpyzf/common/model/vo/Tag.kt",
+      "sha256": "bc3d6418bbfee6f4e15cdf58480ac926330a8ea69cac79e8bc27069253fc7e13"
+    },
+    {
+      "path": "common/src/main/java/com/merpyzf/common/model/vo/WeReadImportBatch.kt",
+      "sha256": "0b74e5899364f8673fdab6a1b6e8134fd156fab2756ca8464b33cf3a71833b43"
+    },
+    {
+      "path": "common/src/main/java/com/merpyzf/common/model/widget/WeReadAuthCookieParser.kt",
+      "sha256": "705007dd7a1b634f02f580880d9ed3944ff4637f770e4aa961314792883a25b2"
+    },
+    {
+      "path": "common/src/main/java/com/merpyzf/common/model/widget/WeReadPageLoadCallback.kt",
+      "sha256": "7c0d1df45de11fb0b19f4817b9c8fbbf1e541bdfea733ea9420c81c58b0eb4b9"
+    },
+    {
+      "path": "common/src/main/java/com/merpyzf/common/model/widget/WeReadWebViewClient.kt",
+      "sha256": "fd54f0273d21f5a5ff568e076f8ad6a018dccd82156a27294a2be7e461845200"
+    },
+    {
+      "path": "common/src/main/java/com/merpyzf/common/service/weread/WeReadApiData.kt",
+      "sha256": "29b106a5d4d688d27664fed8e78842988b117a19a28ffebd2d54fe48f8ab4465"
+    },
+    {
+      "path": "common/src/main/java/com/merpyzf/common/service/weread/WeReadUrlSchema.kt",
+      "sha256": "d4197814dd7a0d07adb74789aa1d38ece18d629bed7564f99a9818bab6c84ef6"
+    },
+    {
+      "path": "common/src/main/java/com/merpyzf/common/utils/DateUtil.kt",
+      "sha256": "393ec9bc83e2a4aeac8f89b05c8a912bc4f5820033cbb6bad7d3bd497e77fb8b"
+    },
+    {
+      "path": "common/src/main/java/com/merpyzf/common/utils/DateUtils.java",
+      "sha256": "d0104c4a4ec419e34c1009321f814e6d7e30f6875beb48599321193fc9d6d8e3"
+    },
+    {
+      "path": "common/src/main/java/com/merpyzf/common/utils/RegexHelper.kt",
+      "sha256": "ea90f162c2ce4aae0bc53dc431a777cc487c6968296949dde8b48e1337decffc"
+    },
+    {
+      "path": "common/src/main/java/com/merpyzf/common/utils/extensions/StringExtensions.kt",
+      "sha256": "83e08a4fc2426beddb09f7bf0df8417b034425c4a9ceae8b9b5d60bb2a329be8"
+    },
+    {
+      "path": "common/src/main/java/com/merpyzf/common/utils/extensions/UriExt.kt",
+      "sha256": "5e3ff21abee8989de547dc493106f9857a78e84e9ece60811f04f1f7f2e1a339"
+    },
+    {
+      "path": "data/src/main/java/com/merpyzf/data/entity/query/note/WeReadChapterBackfillNoteCandidate.kt",
+      "sha256": "d1f8535c8a2a5f4479ae83d66ab06f9b7d05ffd937e32909a4bdc6a1cd92c095"
+    },
+    {
+      "path": "data/src/main/java/com/merpyzf/data/entity/query/note/WeReadNoteUrlParams.kt",
+      "sha256": "0d42f3134f7324b9c8b47f06f3751361b8c9df8fb6f9c16c4c75ad021a344bb9"
+    },
+    {
+      "path": "data/src/main/java/com/merpyzf/data/helper/NoteContentHashHelper.kt",
+      "sha256": "6a8d4145ecbf06e5c40d7a907a7bb9857302b10eee755ca35c9c21f12b55874f"
+    },
+    {
+      "path": "data/src/main/java/com/merpyzf/data/helper/NoteImportHashManager.kt",
+      "sha256": "0ad4a5b9cc02e8b3bcee14760485305365585eb90696f1d1926e6f85d4e14371"
+    },
+    {
+      "path": "data/src/main/java/com/merpyzf/data/helper/note_parse_helper/AppleBooksParser.kt",
+      "sha256": "27a7d72b80a53761b524d2de25208cb1ab074d442101a53d8de63b8a49a726a1"
+    },
+    {
+      "path": "data/src/main/java/com/merpyzf/data/helper/note_parse_helper/BooxBookInfoParser.kt",
+      "sha256": "72f4b7a570860b0e7d4c09de81a17010c492e510b895d181fca4c688c8455a45"
+    },
+    {
+      "path": "data/src/main/java/com/merpyzf/data/helper/note_parse_helper/BooxNoteLabels.kt",
+      "sha256": "623adb6c966291b1f63470fca90f84dccff93c6261af9bbf876d63c2fa71026e"
+    },
+    {
+      "path": "data/src/main/java/com/merpyzf/data/helper/note_parse_helper/BooxParser.kt",
+      "sha256": "ac03d32d4fbb1026b4d72a423a6de4fda5d3c0ed033a4f3e6710f16cd5cd6a36"
+    },
+    {
+      "path": "data/src/main/java/com/merpyzf/data/helper/note_parse_helper/DangDangReadParser.kt",
+      "sha256": "4e99ee57c874c4ca054e1b525d6ac39ff45abea49c784a9c6c0a8341cd096d65"
+    },
+    {
+      "path": "data/src/main/java/com/merpyzf/data/helper/note_parse_helper/DedaoParser.kt",
+      "sha256": "25470954738d2f8d8bf1c674ebca615b27256e2201e13707e6bb9b197399b92e"
+    },
+    {
+      "path": "data/src/main/java/com/merpyzf/data/helper/note_parse_helper/DimoParser.kt",
+      "sha256": "be59df1c6a585e61802f1a633560ecf858f5ff43a61429a9c65344b8a9d5f839"
+    },
+    {
+      "path": "data/src/main/java/com/merpyzf/data/helper/note_parse_helper/DoubanReadAppParser.kt",
+      "sha256": "20e0e3c3355a75d58d429203ad1df191c21b4dfd0cdf372918c2f7c2617ee0d2"
+    },
+    {
+      "path": "data/src/main/java/com/merpyzf/data/helper/note_parse_helper/DoubanReadParser.kt",
+      "sha256": "dbe8af17bc899de8b54ebc6ffa5b12dabc530543db4d850fd108785590ce01f4"
+    },
+    {
+      "path": "data/src/main/java/com/merpyzf/data/helper/note_parse_helper/DuoKanReadParser.kt",
+      "sha256": "b97b7bb1d8d3d397c8cd8aee6faaf2318d80e2c60a4d3a60954bd33f693e948f"
+    },
+    {
+      "path": "data/src/main/java/com/merpyzf/data/helper/note_parse_helper/FanQieParser.kt",
+      "sha256": "986319210656ff8db859cab6e6aff6649044155abd2e1bd8725914217f3ddd1f"
+    },
+    {
+      "path": "data/src/main/java/com/merpyzf/data/helper/note_parse_helper/HanWangParser.kt",
+      "sha256": "1b1f82acf2e910ec21fe2baf510b8ddaf17cb9cfb6756304a40fbfbcf6bf1545"
+    },
+    {
+      "path": "data/src/main/java/com/merpyzf/data/helper/note_parse_helper/IReaderEBookParser.kt",
+      "sha256": "cd5b4eaa53820e38fc8c4a522489a36bfe55cfff80da36d4e0ae8f3a60751503"
+    },
+    {
+      "path": "data/src/main/java/com/merpyzf/data/helper/note_parse_helper/IReaderFreeNoteParser.kt",
+      "sha256": "751195ce2ed319b721ca471aa0dcc17532bd68d6fd429d6321f275c6567330b8"
+    },
+    {
+      "path": "data/src/main/java/com/merpyzf/data/helper/note_parse_helper/IReaderParser.kt",
+      "sha256": "338d39c5dbd461855b6140da1b8787d29f03f9da45a05d78408bf40519dc1161"
+    },
+    {
+      "path": "data/src/main/java/com/merpyzf/data/helper/note_parse_helper/JDReaderParser.kt",
+      "sha256": "996c1ccab8193e1a3ee0a2bab6748a9b2075f09da8fba859e86f378f568a025e"
+    },
+    {
+      "path": "data/src/main/java/com/merpyzf/data/helper/note_parse_helper/KOReaderParser.kt",
+      "sha256": "656e634612d54259e8f2728e41195b367e2a11f47f3bda611b387db463b663b4"
+    },
+    {
+      "path": "data/src/main/java/com/merpyzf/data/helper/note_parse_helper/KindleAppParser.kt",
+      "sha256": "66e9118befce889e7f75ae8960de218a82e827c1584defd558c624106e5fad1c"
+    },
+    {
+      "path": "data/src/main/java/com/merpyzf/data/helper/note_parse_helper/KindleClippingRecordParser.kt",
+      "sha256": "2e2f58e93eb9ef77085191546687f8c0d83a5bc66d1276ecd631b4a577916544"
+    },
+    {
+      "path": "data/src/main/java/com/merpyzf/data/helper/note_parse_helper/KindleParser.kt",
+      "sha256": "d56ece6ce0ad94cc422fb2e11f7d15906092a26a54f1f6c330746626233fa4b9"
+    },
+    {
+      "path": "data/src/main/java/com/merpyzf/data/helper/note_parse_helper/KoodoParser.kt",
+      "sha256": "5eab3eb010bb33785b56db9bac10dc1393fc8a3db1f84aeb5204c2d677b46f65"
+    },
+    {
+      "path": "data/src/main/java/com/merpyzf/data/helper/note_parse_helper/LegadoParser.kt",
+      "sha256": "19e21caadc423e61756cc18ebf500715b0cd3d47d25c817387d247bbceb4f17c"
+    },
+    {
+      "path": "data/src/main/java/com/merpyzf/data/helper/note_parse_helper/MoonReadParser.kt",
+      "sha256": "2f8754adf0757d9393d11fb3b275516d69d27ea5cf8f72b84d9c0daefe6e6c80"
+    },
+    {
+      "path": "data/src/main/java/com/merpyzf/data/helper/note_parse_helper/NeatReaderParser.kt",
+      "sha256": "8b67787ddd0ae3a5a2dbea961c7cdc9a24e5b4a88e3b56337c9d538bfdd2d4b3"
+    },
+    {
+      "path": "data/src/main/java/com/merpyzf/data/helper/note_parse_helper/NewBooxParser.kt",
+      "sha256": "489a354aff384d5f4c834626284ae7ca8382196745a5d17eb9b49216e1a6d11d"
+    },
+    {
+      "path": "data/src/main/java/com/merpyzf/data/helper/note_parse_helper/Reader163Parser.kt",
+      "sha256": "156675c1fb80032cc8060d29706705a154e5c6dcf314d42ba5d85250eee4344b"
+    },
+    {
+      "path": "data/src/main/java/com/merpyzf/data/helper/note_parse_helper/ReadingoParser.kt",
+      "sha256": "895b465f5b7184f21a9ab7ab9ec322dfe574da8527fbfd4a7dd8b54b81225a3d"
+    },
+    {
+      "path": "data/src/main/java/com/merpyzf/data/helper/note_parse_helper/ReedenParser.kt",
+      "sha256": "55c2b5f8144b4ddf020e810cacf4d0bc528efe48c01e3458ab4cd7e595cbf2cc"
+    },
+    {
+      "path": "data/src/main/java/com/merpyzf/data/helper/note_parse_helper/WeReadHackParser.kt",
+      "sha256": "f0f3d9950f62d966cb165f3c456a63bd097810dc92c2ebf0ae461182a0e69864"
+    },
+    {
+      "path": "data/src/main/java/com/merpyzf/data/helper/note_parse_helper/WeReadOldVersionParser.kt",
+      "sha256": "04abb4fe80f764c31a4f9ae90a2ab36668f33360cc2d2c482fd55e66e25c11c2"
+    },
+    {
+      "path": "data/src/main/java/com/merpyzf/data/helper/note_parse_helper/WeReadParser.kt",
+      "sha256": "f73741d805e148ed774385f81cc35aeebfaaa7aa5bd4ed7b68fff776b45be248"
+    },
+    {
+      "path": "data/src/main/java/com/merpyzf/data/helper/note_parse_helper/WeReadParserV830.kt",
+      "sha256": "00d616676feeb48c33b4808a62fed53804eb20e96ae6f9ab49d30cb7b0b2d087"
+    },
+    {
+      "path": "data/src/main/java/com/merpyzf/data/helper/note_parse_helper/base/NoteParser.kt",
+      "sha256": "cb1740e8528cd7fbb2399633de4daaac184168aca79dff1b94e60eb2cf662824"
+    },
+    {
+      "path": "data/src/main/java/com/merpyzf/data/repository/BookRepository.kt",
+      "sha256": "c2557a24a15e60f3dd6d938be1d2c9e0b4e460022b0be0bb2a67050605be0b1c"
+    },
+    {
+      "path": "data/src/main/java/com/merpyzf/data/repository/ChapterImportSession.kt",
+      "sha256": "f1ec4c97a49f663671f04e4ea7160350907dd61f1c514acb57edd2d9239d54ed"
+    },
+    {
+      "path": "data/src/main/java/com/merpyzf/data/repository/ImportedChapterIdentity.kt",
+      "sha256": "a4142fe0d0e5890442fc04a8abcf8e813c182121c2636d59918483b9bb113145"
+    },
+    {
+      "path": "data/src/main/java/com/merpyzf/data/repository/ImportedChapterIdentityProtector.kt",
+      "sha256": "3146a4214e0c27a32c984f1123c54842376960001aaa60ac0531defe685afe49"
+    },
+    {
+      "path": "data/src/main/java/com/merpyzf/data/repository/KindleImportMergePolicy.kt",
+      "sha256": "6e08bd3518f5532ed2d8b14265230b5696aed165dcf637c1c1123808c066eb8e"
+    },
+    {
+      "path": "data/src/main/java/com/merpyzf/data/repository/NoteRepository.kt",
+      "sha256": "c12c5827ec7bd804e38ac62268c62219aff43e03d9fcc4b74b59c86efa70c9bd"
+    },
+    {
+      "path": "data/src/main/java/com/merpyzf/data/repository/WeReadBookIdBackfillMatcher.kt",
+      "sha256": "a108e7230858224b3fc6d552f3bbac0bcdd96562ab27dab36b68e6a6b4ffe0f2"
+    },
+    {
+      "path": "data/src/main/java/com/merpyzf/data/repository/WeReadBookIdBackfillProgress.kt",
+      "sha256": "071658871f55ed382a478b6d2f842a0f2f029d884b464193be359dd26d28e4a1"
+    },
+    {
+      "path": "data/src/main/java/com/merpyzf/data/repository/WeReadBookIdBackfillPromptState.kt",
+      "sha256": "214197490073c511005a61a17ebc4402a42d04227e360fe181a7be744749918c"
+    },
+    {
+      "path": "data/src/main/java/com/merpyzf/data/repository/WeReadBookIdBackfillResult.kt",
+      "sha256": "567fbd4b2316a6c8b16711b463dfaa70a5982a7337147ba1e0942441d386afd1"
+    },
+    {
+      "path": "data/src/main/java/com/merpyzf/data/repository/WeReadChapterBatchSaver.kt",
+      "sha256": "b32eb340d131e0f568451fb3cfbb317bc730c8b0802ff47ea966102763b648c0"
+    },
+    {
+      "path": "data/src/main/java/com/merpyzf/data/repository/WeReadChapterIdBackfillMatcher.kt",
+      "sha256": "8dd952f1ebd0c87954915ec5e99617af071470f107f3d0366d42513205898f69"
+    },
+    {
+      "path": "data/src/main/java/com/merpyzf/data/repository/WeReadRepository.kt",
+      "sha256": "30f2c329d4fae6b1b29f6ef1d70477a7b379964433d594bbc22ca998f0f3ddc1"
+    }
+  ]
+}

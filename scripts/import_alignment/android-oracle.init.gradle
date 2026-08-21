@@ -1,0 +1,17 @@
+/*
+ * [INPUT]: IMPORT_ALIGNMENT_ORACLE_SOURCE 指向 iOS 仓库内的只读 Oracle 测试源码目录
+ * [OUTPUT]: 仅把外部 Kotlin 测试源码注入 Android :data 的本地单测 source set
+ * [POS]: 书摘导入对齐门禁的临时 Gradle 注入层，不修改 Android 参考仓库
+ */
+
+allprojects {
+    afterEvaluate { project ->
+        if (project.path == ":data") {
+            def oracleSource = System.getenv("IMPORT_ALIGNMENT_ORACLE_SOURCE")
+            if (oracleSource == null || oracleSource.trim().isEmpty()) {
+                throw new GradleException("IMPORT_ALIGNMENT_ORACLE_SOURCE 未设置")
+            }
+            project.android.sourceSets.test.java.srcDir(oracleSource)
+        }
+    }
+}

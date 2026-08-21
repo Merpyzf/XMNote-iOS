@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 DatabaseManager、WereadImportAPIClient、WereadWebAuthorizationService、UserDefaults 与微信读书领域模型
- * [OUTPUT]: 对外提供 WereadImportRepository，完成授权恢复、远端抓取、本地匹配、历史回填与 GRDB 增量导入
+ * [OUTPUT]: 对外提供 WereadImportRepository，完成授权恢复、远端抓取、本地匹配、历史回填并把写入统一交给 NoteImportRepository
  * [POS]: Data/Repositories 的微信读书扫码导入实现，是 ViewModel 唯一的数据与业务入口
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -11,6 +11,56 @@ import GRDB
 
 @MainActor
 final class WereadImportRepository: WereadImportRepositoryProtocol {
+    private enum DetailLoadResult: Sendable {
+        case success(Int, WereadImportBook)
+        case failure(Int)
+    }
+
+    fileprivate struct BackfillLocalBook {
+        let record: BookRecord
+        let chapterSourceUIDs: Set<String>
+        let hasMissingChapterSourceUID: Bool
+    }
+
+    fileprivate struct BackfillRemoteBook {
+        var book: WereadImportBook
+        var chapterUIDs: Set<String> = []
+    }
+
+    fileprivate struct BackfillRemoteLoadResult {
+        let books: [BackfillRemoteBook]
+        let failedTitleKeys: Set<String>
+        let partialFailureCount: Int
+    }
+
+    fileprivate struct BackfillLocalNote {
+        let id: Int64
+        let chapterID: Int64
+        let range: String
+        let content: String
+        let idea: String
+    }
+
+    fileprivate struct BackfillChapterUpdate {
+        let chapterID: Int64
+        let sourceUID: String
+        let sourceOrder: Int64
+    }
+
+    fileprivate struct BackfillNoteKey: Hashable {
+        let rangeStart: Int64
+        let rangeEnd: Int64
+        let content: String
+        let idea: String
+    }
+
+    fileprivate struct BackfillChapterStats {
+        var updatedCount = 0
+        var skippedCount = 0
+        var partialFailureCount = 0
+        var shouldRetry = false
+    }
+
     private enum Keys {
         static let cookie = "wereadCookie"
         static let userID = "wereadUserId"
@@ -25,25 +75,38 @@ final class WereadImportRepository: WereadImportRepositoryProtocol {
 
     private let databaseManager: DatabaseManager
     private let defaults: UserDefaults
-    private let api: WereadImportAPIClient
+    private let api: any WereadImportAPIClientProtocol
     private let webAuthorization: WereadWebAuthorizationService
     private let bookSearchRepository: any BookSearchRepositoryProtocol
     private let s3UploadRepository: (any S3UploadRepositoryProtocol)?
+    private let noteImportRepository: any NoteImportRepositoryProtocol
+    private let nowMillis: @Sendable () -> Int64
 
     init(
         databaseManager: DatabaseManager,
         defaults: UserDefaults = .standard,
-        api: WereadImportAPIClient? = nil,
+        api: (any WereadImportAPIClientProtocol)? = nil,
         webAuthorization: WereadWebAuthorizationService? = nil,
         bookSearchRepository: (any BookSearchRepositoryProtocol)? = nil,
-        s3UploadRepository: (any S3UploadRepositoryProtocol)? = nil
+        s3UploadRepository: (any S3UploadRepositoryProtocol)? = nil,
+        noteImportRepository: (any NoteImportRepositoryProtocol)? = nil,
+        nowMillis: @escaping @Sendable () -> Int64 = {
+            Int64(Date().timeIntervalSince1970 * 1_000)
+        }
     ) {
+        let resolvedBookSearchRepository = bookSearchRepository ?? BookSearchRepository()
         self.databaseManager = databaseManager
         self.defaults = defaults
         self.api = api ?? WereadImportAPIClient()
         self.webAuthorization = webAuthorization ?? .shared
-        self.bookSearchRepository = bookSearchRepository ?? BookSearchRepository()
+        self.bookSearchRepository = resolvedBookSearchRepository
         self.s3UploadRepository = s3UploadRepository
+        self.noteImportRepository = noteImportRepository ?? NoteImportRepository(
+            databaseManager: databaseManager,
+            defaults: defaults,
+            bookSearchRepository: resolvedBookSearchRepository
+        )
+        self.nowMillis = nowMillis
     }
 
     func fetchPreferences() -> WereadImportPreferences {
@@ -69,8 +132,10 @@ final class WereadImportRepository: WereadImportRepositoryProtocol {
             try await verify(renewed)
             await webAuthorization.replaceCookies(with: renewed.cookieHeader)
             return renewed
+        } catch WereadImportError.authorizationExpired {
+            await clearAuthorization(ifMatches: authorization.cookieHeader)
+            return nil
         } catch {
-            await clearAuthorization()
             return nil
         }
     }
@@ -78,7 +143,12 @@ final class WereadImportRepository: WereadImportRepositoryProtocol {
     func validateAuthorization(cookieHeader: String) async throws -> WereadAuthorization {
         guard let authorization = parseAuthorization(cookieHeader) else { throw WereadImportError.authorizationExpired }
         let renewed = try await renewedAuthorization(authorization, force: true)
-        try await verify(renewed)
+        do {
+            try await verify(renewed)
+        } catch WereadImportError.authorizationExpired {
+            await clearAuthorization(ifMatches: renewed.cookieHeader)
+            throw WereadImportError.authorizationExpired
+        }
         persist(renewed)
         await webAuthorization.replaceCookies(with: renewed.cookieHeader)
         return renewed
@@ -90,7 +160,7 @@ final class WereadImportRepository: WereadImportRepositoryProtocol {
     }
 
     func fetchImportBookIDs(authorization: WereadAuthorization, preferences: WereadImportPreferences) async throws -> [String] {
-        let authorization = try await renewedAuthorization(authorization, force: true)
+        let authorization = try await currentAuthorization(fallback: authorization, force: true)
         let ids = preferences.onlyBooksWithNotes
             ? try await notebookBookIDs(cookie: authorization.cookieHeader)
             : try await shelfBookIDs(cookie: authorization.cookieHeader)
@@ -105,26 +175,65 @@ final class WereadImportRepository: WereadImportRepositoryProtocol {
         warning: @escaping (String) -> Void
     ) async throws -> [WereadImportBook] {
         let ids = try await fetchImportBookIDs(authorization: authorization, preferences: preferences)
+        return try await fetchImportBooks(
+            authorization: authorization,
+            bookIDs: ids,
+            importsReadingTime: preferences.importsReadingTime,
+            progress: progress,
+            warning: warning
+        )
+    }
+
+    func fetchImportBooks(
+        authorization: WereadAuthorization,
+        bookIDs: [String],
+        importsReadingTime: Bool,
+        progress: @escaping (Int, Int) -> Void,
+        warning: @escaping (String) -> Void
+    ) async throws -> [WereadImportBook] {
+        let ids = bookIDs
         guard !ids.isEmpty else { throw WereadImportError.emptyImport }
-        let books = try await syncBooks(ids: ids, cookie: authorization.cookieHeader)
+        var effectiveAuthorization = try await currentAuthorization(fallback: authorization, force: false)
+        let books = try await syncBooks(ids: ids, cookie: effectiveAuthorization.cookieHeader)
         let total = books.count
         var completed = Array<WereadImportBook?>(repeating: nil, count: total)
         var current = 0
         for chunkStart in stride(from: 0, to: total, by: 10) {
             try Task.checkCancellation()
             let chunkEnd = min(chunkStart + 10, total)
-            await withTaskGroup(of: (Int, WereadImportBook?).self) { group in
+            effectiveAuthorization = try await currentAuthorization(fallback: effectiveAuthorization, force: false)
+            let groupCookie = effectiveAuthorization.cookieHeader
+            try await withThrowingTaskGroup(of: DetailLoadResult.self) { group in
                 for index in chunkStart..<chunkEnd {
                     let book = books[index]
                     group.addTask { [weak self] in
-                        guard let self else { return (index, nil) }
-                        do { return (index, try await self.fillDetails(book, cookie: authorization.cookieHeader, importsReadingTime: preferences.importsReadingTime)) }
-                        catch { return (index, nil) }
+                        guard let self else { throw CancellationError() }
+                        do {
+                            return .success(
+                                index,
+                                try await self.fillDetails(
+                                    book,
+                                    cookie: groupCookie,
+                                    importsReadingTime: importsReadingTime
+                                )
+                            )
+                        } catch is CancellationError {
+                            throw CancellationError()
+                        } catch {
+                            return .failure(index)
+                        }
                     }
                 }
-                for await (index, book) in group {
-                    completed[index] = book
-                    if book == nil { warning("《\(books[index].title)》加载失败，已跳过") }
+                for try await result in group {
+                    let index: Int
+                    switch result {
+                    case .success(let valueIndex, let book):
+                        index = valueIndex
+                        completed[index] = book
+                    case .failure(let valueIndex):
+                        index = valueIndex
+                        warning("《\(books[index].title)》加载失败，已跳过")
+                    }
                     current += 1
                     progress(current, total)
                 }
@@ -142,18 +251,22 @@ final class WereadImportRepository: WereadImportRepositoryProtocol {
         importsReadingTime: Bool,
         progress: @escaping (Int, Int) -> Void
     ) async throws -> [WereadImportBook] {
-        let books = try await syncBooks(ids: bookIDs, cookie: authorization.cookieHeader)
+        guard !bookIDs.isEmpty else { return [] }
+        var effectiveAuthorization = try await currentAuthorization(fallback: authorization, force: false)
+        let books = try await syncBooks(ids: bookIDs, cookie: effectiveAuthorization.cookieHeader)
         var completed = Array<WereadImportBook?>(repeating: nil, count: books.count)
         var current = 0
         for chunkStart in stride(from: 0, to: books.count, by: 2) {
             try Task.checkCancellation()
             let chunkEnd = min(chunkStart + 2, books.count)
+            effectiveAuthorization = try await currentAuthorization(fallback: effectiveAuthorization, force: false)
+            let groupCookie = effectiveAuthorization.cookieHeader
             try await withThrowingTaskGroup(of: (Int, WereadImportBook).self) { group in
                 for index in chunkStart..<chunkEnd {
                     let book = books[index]
                     group.addTask { [weak self] in
                         guard let self else { throw CancellationError() }
-                        return (index, try await self.fillDetails(book, cookie: authorization.cookieHeader, importsReadingTime: importsReadingTime))
+                        return (index, try await self.fillDetails(book, cookie: groupCookie, importsReadingTime: importsReadingTime))
                     }
                 }
                 for try await (index, book) in group {
@@ -189,23 +302,13 @@ final class WereadImportRepository: WereadImportRepositoryProtocol {
     func commitImport(books: [WereadImportBook], progress: @escaping (Int, Int) -> Void) async throws {
         let selected = await enrichNewBooks(books.filter(\.isSelected))
         guard !selected.isEmpty else { throw WereadImportError.emptyImport }
-        let newBookPlacement = defaults.object(forKey: Keys.newBookPosition) as? Int ?? 0
-        for (index, source) in selected.enumerated() {
-            try Task.checkCancellation()
-            try await databaseManager.database.dbPool.write { db in
-                let now = Int64(Date().timeIntervalSince1970 * 1000)
-                let ownerID = try DatabaseOwnerResolver.resolveOwnerID(in: db)
-                let bookID = try self.upsertBook(source, ownerID: ownerID, placement: newBookPlacement, now: now, db: db)
-                var chapterMap: [Int64: Int64] = [:]
-                try self.upsertChapters(source.chapters, bookID: bookID, parentID: 0, now: now, db: db, map: &chapterMap)
-                try self.upsertNotes(source.notes.filter(\.isSelected), bookID: bookID, chapters: chapterMap, now: now, db: db)
-                try self.cleanupStaleChapters(bookID: bookID, preservedIDs: Set(chapterMap.values), now: now, db: db)
-                try self.upsertReviews(source.reviews, bookID: bookID, now: now, db: db)
-                try self.upsertReadingDays(source.readingDays, bookID: bookID, now: now, db: db)
-                try self.mergeReadStatus(source, bookID: bookID, now: now, db: db)
-            }
-            progress(index + 1, selected.count)
+        let commits = selected.map { source in
+            NoteImportCommitBook(
+                draft: noteImportDraft(from: source),
+                targetBookID: source.targetBookID
+            )
         }
+        try await noteImportRepository.commitImport(books: commits, progress: progress)
     }
 
     func enrichNewBooks(_ books: [WereadImportBook]) async -> [WereadImportBook] {
@@ -263,7 +366,7 @@ final class WereadImportRepository: WereadImportRepositoryProtocol {
     func fetchBackfillPrompt() async throws -> WereadBackfillPrompt {
         let candidates = try await fetchBackfillBooks()
         let handled = Set(defaults.stringArray(forKey: Keys.handledBackfill) ?? [])
-        let keys = Set(candidates.compactMap { book in book.id.map { candidateKey(id: $0, title: book.rawName, author: book.author) } }).subtracting(handled)
+        let keys = Set(candidates.map(candidateKey)).subtracting(handled)
         return WereadBackfillPrompt(pendingCount: keys.count, candidateKeys: keys)
     }
 
@@ -273,52 +376,102 @@ final class WereadImportRepository: WereadImportRepositoryProtocol {
     ) async throws -> WereadBackfillResult {
         progress(.init(stage: .preparing, current: 0, total: 0, bookName: ""))
         let prompt = try await fetchBackfillPrompt()
-        progress(.init(stage: .syncingRemoteBooks, current: 0, total: prompt.pendingCount, bookName: ""))
-        let ids = try await shelfBookIDs(cookie: authorization.cookieHeader)
-        let remote = try await syncBooks(ids: ids, cookie: authorization.cookieHeader)
-        progress(.init(stage: .matchingBooks, current: 0, total: prompt.pendingCount, bookName: ""))
-        let local = try await fetchBackfillBooks()
-        var matched = 0, chapterUIDs = 0, skipped = 0, partialFailures = 0
-        var handled = Set<String>()
-        for (index, book) in local.enumerated() {
-            try Task.checkCancellation()
-            guard let bookID = book.id else { continue }
-            let key = candidateKey(id: bookID, title: book.rawName, author: book.author)
-            guard prompt.candidateKeys.contains(key) else { continue }
-            progress(.init(stage: .processingBooks, current: index + 1, total: local.count, bookName: book.name))
-            let matches = remote.filter { source in
-                !book.wereadBookId.isEmpty
-                    ? source.wereadBookID == book.wereadBookId
-                    : normalized(source.rawTitle) == normalized(book.rawName) && normalized(source.author) == normalized(book.author)
-            }
-            guard matches.count == 1, let source = matches.first else { skipped += 1; handled.insert(key); continue }
-            do {
-                let chapterObject = try await api.post("/web/book/chapterInfos", cookie: authorization.cookieHeader, json: ["bookIds": [source.wereadBookID]]).object
-                let remoteChapters = flattenChapters(buildChapters(from: chapterObject))
-                let updated = try await databaseManager.database.dbPool.write { db -> Int in
-                    if book.wereadBookId.isEmpty {
-                        try db.execute(sql: "UPDATE book SET weread_book_id = ? WHERE id = ? AND weread_book_id = ''", arguments: [source.wereadBookID, bookID])
-                    }
-                    let localChapters = try ChapterRecord.filter(Column("book_id") == bookID && Column("is_deleted") == 0).fetchAll(db)
-                    var count = 0
-                    for chapter in localChapters where chapter.sourceUid?.isEmpty != false {
-                        let candidates = remoteChapters.filter { self.normalized($0.title) == self.normalized(chapter.title) }
-                        if candidates.count == 1, let target = candidates.first, let chapterID = chapter.id {
-                            try db.execute(sql: "UPDATE chapter SET source_type = 1, source_uid = ?, source_order = ?, source_path = ? WHERE id = ?", arguments: [String(target.uid), target.order, target.sourcePath, chapterID])
-                            count += 1
-                        }
-                    }
-                    return count
-                }
-                if book.wereadBookId.isEmpty { matched += 1 }
-                chapterUIDs += updated
-                handled.insert(key)
-            } catch is CancellationError { throw CancellationError() }
-            catch { partialFailures += 1 }
+        guard prompt.pendingCount > 0 else {
+            return .init(
+                bookIDMatchedCount: 0,
+                chapterUIDUpdatedCount: 0,
+                skippedCount: 0,
+                partialFailureCount: 0,
+                handledCandidateKeys: []
+            )
         }
-        let merged = Set(defaults.stringArray(forKey: Keys.handledBackfill) ?? []).union(handled)
+        let authorization = try await currentAuthorization(fallback: authorization, force: true)
+        progress(.init(stage: .syncingRemoteBooks, current: 0, total: prompt.pendingCount, bookName: ""))
+        let remoteLoad = try await loadBackfillRemoteBooks(cookie: authorization.cookieHeader)
+        progress(.init(stage: .matchingBooks, current: 0, total: prompt.pendingCount, bookName: ""))
+        let local = try await fetchBackfillBooks().filter { prompt.candidateKeys.contains(candidateKey($0)) }
+        let matches = matchBackfillBooks(local: local, remote: remoteLoad.books)
+        var matched = 0
+        var chapterUIDs = 0
+        var skipped = 0
+        var partialFailures = remoteLoad.partialFailureCount
+        var retryCandidateKeys = Set<String>()
+        var handledCandidateKeys = Set<String>()
+
+        for localBook in local where localBook.record.wereadBookId.isEmpty {
+            let key = candidateKey(localBook)
+            guard matches[localBook.record.id ?? 0] == nil else { continue }
+            let titleKeys = normalizedBackfillTitleKeys(localBook)
+            if remoteLoad.partialFailureCount > 0 || !titleKeys.isDisjoint(with: remoteLoad.failedTitleKeys) {
+                retryCandidateKeys.insert(key)
+            }
+        }
+
+        let resolved = local.compactMap { localBook -> (BackfillLocalBook, String, String)? in
+            guard let localID = localBook.record.id else { return nil }
+            let key = candidateKey(localBook)
+            let matchedID = matches[localID] ?? ""
+            let remoteID = localBook.record.wereadBookId.isEmpty ? matchedID : localBook.record.wereadBookId
+            if localBook.record.wereadBookId.isEmpty && matchedID.isEmpty { skipped += 1 }
+            return remoteID.isEmpty ? nil : (localBook, remoteID, key)
+        }
+
+        for (index, item) in resolved.enumerated() {
+            try Task.checkCancellation()
+            let (localBook, remoteID, key) = item
+            guard let bookID = localBook.record.id else { continue }
+            progress(.init(
+                stage: .processingBooks,
+                current: index + 1,
+                total: resolved.count,
+                bookName: localBook.record.name
+            ))
+            do {
+                if localBook.record.wereadBookId.isEmpty {
+                    let changed = try await databaseManager.database.dbPool.write { db in
+                        try db.execute(
+                            // SQL 目的：只为尚未建立微信关联的历史书籍回填远端 ID。
+                            // 涉及表：book。
+                            // 关键过滤：按主键命中且 weread_book_id 去空白后仍为空，避免覆盖并发写入。
+                            // 时间字段：关联修复不改变业务更新时间。
+                            // 副作用：返回实际更新行数，用于区分已被其他任务抢先处理的情况。
+                            sql: "UPDATE book SET weread_book_id = ? WHERE id = ? AND TRIM(COALESCE(weread_book_id, '')) = ''",
+                            arguments: [remoteID, bookID]
+                        )
+                        return db.changesCount
+                    }
+                    if changed > 0 { matched += 1 }
+                }
+
+                if localBook.hasMissingChapterSourceUID {
+                    let stats = try await backfillChapterSourceUIDs(
+                        localBook: localBook,
+                        remoteBookID: remoteID,
+                        cookie: authorization.cookieHeader
+                    )
+                    chapterUIDs += stats.updatedCount
+                    partialFailures += stats.partialFailureCount
+                    if stats.shouldRetry { retryCandidateKeys.insert(key) }
+                }
+            } catch is CancellationError {
+                throw CancellationError()
+            } catch {
+                if isAuthorizationFailure(error) { throw WereadImportError.authorizationExpired }
+                partialFailures += 1
+                retryCandidateKeys.insert(key)
+            }
+        }
+
+        handledCandidateKeys = Set(local.map(candidateKey)).subtracting(retryCandidateKeys)
+        let merged = Set(defaults.stringArray(forKey: Keys.handledBackfill) ?? []).union(handledCandidateKeys)
         defaults.set(Array(merged), forKey: Keys.handledBackfill)
-        return .init(bookIDMatchedCount: matched, chapterUIDUpdatedCount: chapterUIDs, skippedCount: skipped, partialFailureCount: partialFailures, handledCandidateKeys: handled)
+        return .init(
+            bookIDMatchedCount: matched,
+            chapterUIDUpdatedCount: chapterUIDs,
+            skippedCount: skipped,
+            partialFailureCount: partialFailures,
+            handledCandidateKeys: handledCandidateKeys
+        )
     }
 }
 
@@ -347,11 +500,44 @@ private extension WereadImportRepository {
     func renewedAuthorization(_ authorization: WereadAuthorization, force: Bool) async throws -> WereadAuthorization {
         let last = defaults.double(forKey: Keys.renewedAt)
         guard force || Date().timeIntervalSince1970 - last >= 3600 else { return authorization }
-        let response = try await api.post("/web/login/renewal", cookie: authorization.cookieHeader, json: ["rq": "%2Fweb%2Fbook%2Fread", "ql": false])
+        let response: WereadImportAPIClient.Response
+        do {
+            response = try await api.post(
+                "/web/login/renewal",
+                cookie: authorization.cookieHeader,
+                json: ["rq": "%2Fweb%2Fbook%2Fread", "ql": false]
+            )
+        } catch {
+            if isAuthorizationFailure(error), await confirmsAuthorizationExpired(authorization) {
+                await clearAuthorization(ifMatches: authorization.cookieHeader)
+                throw WereadImportError.authorizationExpired
+            }
+            throw error
+        }
+        let success = WereadImportAPIClient.int(response.object["succ"]) == 1
+        guard success else {
+            let code = WereadImportAPIClient.int(response.object["errCode"])
+                ?? WereadImportAPIClient.int(response.object["errcode"])
+                ?? 0
+            let message = WereadImportAPIClient.string(response.object["errMsg"])
+                ?? WereadImportAPIClient.string(response.object["errmsg"])
+                ?? ""
+            let error = WereadImportError.remote(code: code, message: message)
+            if isAuthorizationFailure(error), await confirmsAuthorizationExpired(authorization) {
+                await clearAuthorization(ifMatches: authorization.cookieHeader)
+                throw WereadImportError.authorizationExpired
+            }
+            throw error
+        }
         var values = cookieDictionary(authorization.cookieHeader)
-        for cookie in HTTPCookie.cookies(withResponseHeaderFields: response.httpResponse.allHeaderFields.reduce(into: [:]) { result, pair in
+        let responseCookies = HTTPCookie.cookies(withResponseHeaderFields: response.httpResponse.allHeaderFields.reduce(into: [:]) { result, pair in
             if let key = pair.key as? String, let value = pair.value as? String { result[key] = value }
-        }, for: URL(string: "https://weread.qq.com")!) { values[cookie.name] = cookie.value }
+        }, for: URL(string: "https://weread.qq.com/web/login/renewal")!)
+            .filter { !$0.value.isEmpty && ($0.expiresDate == nil || $0.expiresDate! > Date()) }
+        guard responseCookies.contains(where: { $0.name == "wr_skey" && !$0.value.isEmpty }) else {
+            throw WereadImportError.invalidResponse
+        }
+        for cookie in responseCookies { values[cookie.name] = cookie.value }
         let header = values.map { "\($0.key)=\($0.value)" }.sorted().joined(separator: "; ")
         guard let renewed = parseAuthorization(header) else { throw WereadImportError.authorizationExpired }
         persist(renewed)
@@ -359,7 +545,49 @@ private extension WereadImportRepository {
     }
 
     func verify(_ authorization: WereadAuthorization) async throws {
-        _ = try await api.post("/web/shelf/syncBook", cookie: authorization.cookieHeader, json: ["bookIds": ["39980421"], "count": 1, "isArchive": NSNull(), "currentArchiveId": NSNull(), "loadMore": true])
+        do {
+            _ = try await api.post("/web/shelf/syncBook", cookie: authorization.cookieHeader, json: ["bookIds": ["39980421"], "count": 1, "isArchive": NSNull(), "currentArchiveId": NSNull(), "loadMore": true])
+        } catch {
+            if isAuthorizationFailure(error) { throw WereadImportError.authorizationExpired }
+            throw error
+        }
+    }
+
+    func currentAuthorization(
+        fallback: WereadAuthorization,
+        force: Bool
+    ) async throws -> WereadAuthorization {
+        let stored = defaults.string(forKey: Keys.cookie)
+            .flatMap { parseAuthorization($0) }
+        let candidate = stored.flatMap { value in
+            value.userID == fallback.userID ? value : nil
+        } ?? fallback
+        return try await renewedAuthorization(candidate, force: force)
+    }
+
+    func confirmsAuthorizationExpired(_ authorization: WereadAuthorization) async -> Bool {
+        do {
+            try await verify(authorization)
+            return false
+        } catch WereadImportError.authorizationExpired {
+            return true
+        } catch {
+            return false
+        }
+    }
+
+    func isAuthorizationFailure(_ error: Error) -> Bool {
+        if case WereadImportError.authorizationExpired = error { return true }
+        if case WereadImportError.remote(let code, _) = error {
+            return code == 401 || code == 403 || code == -2012 || code == -2013
+        }
+        return false
+    }
+
+    func clearAuthorization(ifMatches checkedCookie: String) async {
+        guard defaults.string(forKey: Keys.cookie) == nil
+                || defaults.string(forKey: Keys.cookie) == checkedCookie else { return }
+        await clearAuthorization()
     }
 
     func notebookBookIDs(cookie: String) async throws -> [String] {
@@ -408,7 +636,12 @@ private extension WereadImportRepository {
         var source = source
         let marks = try await api.get("/web/book/bookmarklist?bookId=\(source.wereadBookID)", cookie: cookie).object
         source.notes = WereadImportAPIClient.array(marks["updated"]).filter { WereadImportAPIClient.int($0["type"]) == 1 }.map {
-            .init(content: (WereadImportAPIClient.string($0["markText"]) ?? "").trimmingCharacters(in: .whitespacesAndNewlines), range: WereadImportAPIClient.string($0["range"]) ?? "", chapterUID: WereadImportAPIClient.int64($0["chapterUid"]) ?? 0, createdAt: (WereadImportAPIClient.int64($0["createTime"]) ?? Int64(Date().timeIntervalSince1970)) * 1000)
+            .init(
+                content: trimEnd(WereadImportAPIClient.string($0["markText"]) ?? ""),
+                range: WereadImportAPIClient.string($0["range"]) ?? "",
+                chapterUID: WereadImportAPIClient.int64($0["chapterUid"]) ?? 0,
+                createdAt: WereadImportAPIClient.int64($0["createTime"]).map { $0 * 1_000 } ?? nowMillis()
+            )
         }
         let reviewObject = try await api.get("/web/review/list?bookId=\(source.wereadBookID)&listType=11&mine=1", cookie: cookie).object
         let wrappers = WereadImportAPIClient.array(reviewObject["reviews"])
@@ -416,31 +649,64 @@ private extension WereadImportRepository {
             let review = WereadImportAPIClient.dictionary(wrapper["review"]) ?? wrapper
             let type = WereadImportAPIClient.int(review["type"]) ?? 0
             if type == 1 {
-                source.notes.append(.init(content: (WereadImportAPIClient.string(review["abstract"]) ?? "").trimmingCharacters(in: .whitespacesAndNewlines), idea: (WereadImportAPIClient.string(review["content"]) ?? "").trimmingCharacters(in: .whitespacesAndNewlines), range: WereadImportAPIClient.string(review["range"]) ?? "", chapterUID: WereadImportAPIClient.int64(review["chapterUid"]) ?? 0, createdAt: (WereadImportAPIClient.int64(review["createTime"]) ?? Int64(Date().timeIntervalSince1970)) * 1000))
-            } else if type == 4, let content = WereadImportAPIClient.string(review["content"]), !content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                source.reviews.append(.init(title: WereadImportAPIClient.string(review["title"]) ?? "", content: content, createdAt: (WereadImportAPIClient.int64(review["createTime"]) ?? Int64(Date().timeIntervalSince1970)) * 1000))
+                source.notes.append(.init(
+                    content: trimEnd(WereadImportAPIClient.string(review["abstract"]) ?? ""),
+                    idea: trimEnd(WereadImportAPIClient.string(review["content"]) ?? ""),
+                    range: WereadImportAPIClient.string(review["range"]) ?? "",
+                    chapterUID: WereadImportAPIClient.int64(review["chapterUid"]) ?? 0,
+                    createdAt: WereadImportAPIClient.int64(review["createTime"]).map { $0 * 1_000 } ?? nowMillis()
+                ))
+            } else if type == 4 {
+                let content = trimEnd(WereadImportAPIClient.string(review["content"]) ?? "")
+                guard !content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { continue }
+                source.reviews.append(.init(
+                    content: content,
+                    createdAt: WereadImportAPIClient.int64(review["createTime"]).map { $0 * 1_000 } ?? nowMillis()
+                ))
             }
         }
-        let chapterObject = try await api.post("/web/book/chapterInfos", cookie: cookie, json: ["bookIds": [source.wereadBookID]]).object
-        source.chapters = buildChapters(from: chapterObject)
+        do {
+            let chapterObject = try await api.post("/web/book/chapterInfos", cookie: cookie, json: ["bookIds": [source.wereadBookID]]).object
+            source.chapters = buildChapters(from: chapterObject)
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch WereadImportError.authorizationExpired {
+            throw WereadImportError.authorizationExpired
+        } catch WereadImportError.remote(let code, let message) where [401, 403, -2012, -2013].contains(code) {
+            throw WereadImportError.remote(code: code, message: message)
+        } catch {
+            source.chapters = []
+        }
         let chapterOrder = chapterUIDOrder(source.chapters)
-        source.notes.sort {
+        source.notes = source.notes.filter { chapterOrder[$0.chapterUID] != nil }.sorted {
             let left = chapterOrder[$0.chapterUID] ?? Int.max
             let right = chapterOrder[$1.chapterUID] ?? Int.max
             return left == right ? rangeStart($0.range) < rangeStart($1.range) : left < right
         }
         if importsReadingTime || source.readStatusID == 3 {
-            let info = try await api.get("/web/book/readinfo?bookId=\(source.wereadBookID)&readingDetail=1&readingBookIndex=1&finishedDate=1", cookie: cookie).object
-            let readDetail = WereadImportAPIClient.dictionary(info["readDetail"])
-            let finished = WereadImportAPIClient.int64(info["finishedDate"]) ?? 0
-            let lastReading = WereadImportAPIClient.int64(readDetail?["lastReadingDate"]) ?? 0
-            let resolved = finished > 0 ? finished * 1000 : (lastReading > 0 ? lastReading * 1000 : source.wereadUpdatedAt)
-            if source.readStatusID == 3 { source.readStatusChangedAt = resolved }
-            if importsReadingTime {
-                source.readingDays = WereadImportAPIClient.array(readDetail?["data"]).compactMap { day in
-                    guard let date = WereadImportAPIClient.int64(day["readDate"]), let seconds = WereadImportAPIClient.int64(day["readTime"]), seconds > 0 else { return nil }
-                    return .init(date: date, seconds: seconds)
+            do {
+                let info = try await api.get("/web/book/readinfo?bookId=\(source.wereadBookID)&readingDetail=1&readingBookIndex=1&finishedDate=1", cookie: cookie).object
+                let readDetail = WereadImportAPIClient.dictionary(info["readDetail"])
+                let finished = WereadImportAPIClient.int64(info["finishedDate"]) ?? 0
+                let lastReading = WereadImportAPIClient.int64(readDetail?["lastReadingDate"]) ?? 0
+                let resolved = finished > 0 ? finished * 1_000 : (lastReading > 0 ? lastReading * 1_000 : source.wereadUpdatedAt)
+                if source.readStatusID == 3 { source.readStatusChangedAt = resolved }
+                if importsReadingTime {
+                    source.summary = WereadImportAPIClient.string(
+                        WereadImportAPIClient.dictionary(info["bookInfo"])?["intro"]
+                    ) ?? ""
+                    source.readingDays = WereadImportAPIClient.array(readDetail?["data"]).compactMap { day in
+                        guard let date = WereadImportAPIClient.int64(day["readDate"]),
+                              let seconds = WereadImportAPIClient.int64(day["readTime"]),
+                              seconds > 0 else { return nil }
+                        return .init(date: date, seconds: seconds)
+                    }
                 }
+            } catch is CancellationError {
+                throw CancellationError()
+            } catch {
+                if importsReadingTime { throw error }
+                if source.readStatusID == 3 { source.readStatusChangedAt = source.wereadUpdatedAt }
             }
         }
         return source
@@ -452,17 +718,30 @@ private extension WereadImportRepository {
         final class Node { var value: WereadImportChapter; var children: [Node] = []; init(_ value: WereadImportChapter) { self.value = value } }
         var roots: [Node] = []; var stack: [Int: Node] = [:]
         func add(_ node: Node, requestedLevel: Int) {
-            let level = requestedLevel > 1 && stack[requestedLevel - 1] == nil ? 1 : requestedLevel
-            node.value.level = Int64(level)
-            if level == 1 { roots.append(node) } else { stack[level - 1]?.children.append(node) }
-            stack[level] = node
-            stack.keys.filter { $0 > level }.forEach { stack.removeValue(forKey: $0) }
+            var actualLevel = requestedLevel
+            if actualLevel == 1 {
+                roots.append(node)
+            } else if let parent = stack[actualLevel - 1] {
+                parent.children.append(node)
+            } else {
+                actualLevel = 1
+                roots.append(node)
+            }
+            node.value.level = Int64(actualLevel)
+            stack[actualLevel] = node
+            stack.keys.filter { $0 > actualLevel }.forEach { stack.removeValue(forKey: $0) }
         }
-        func hasFollowingChild(after index: Int, parentLevel: Int) -> Bool {
+        func anchorLevel(_ anchor: [String: Any], chapterLevel: Int) -> Int {
+            var level = WereadImportAPIClient.int(anchor["level"]).flatMap { $0 > 0 ? $0 : nil }
+                ?? chapterLevel + 1
+            if level <= chapterLevel || stack[level - 1] == nil { level = chapterLevel + 1 }
+            return level
+        }
+        func hasFollowingChild(after index: Int, parentLevel: Int, childLevel: Int) -> Bool {
             for next in updated.dropFirst(index + 1) {
                 let nextLevel = max(WereadImportAPIClient.int(next["level"]) ?? 1, 1)
                 if nextLevel <= parentLevel { return false }
-                if nextLevel == parentLevel + 1 { return true }
+                if nextLevel == childLevel { return true }
             }
             return false
         }
@@ -474,18 +753,47 @@ private extension WereadImportRepository {
             let resolvedTitle = title.isEmpty ? "第\(uid)章" : title
             let order = WereadImportAPIClient.int64(item["chapterIdx"]) ?? 0
             let anchors = WereadImportAPIClient.array(item["anchors"])
-            let promoted = anchors.enumerated().first { _, anchor in
+            let firstValidAnchor = anchors.enumerated().first { _, anchor in
                 let anchorTitle = (WereadImportAPIClient.string(anchor["title"]) ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
                 let sourceAnchor = (WereadImportAPIClient.string(anchor["anchor"]) ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-                guard !anchorTitle.isEmpty, !sourceAnchor.isEmpty, normalized(anchorTitle) != normalized(resolvedTitle), level < 5 else { return false }
-                return hasFollowingChild(after: itemIndex, parentLevel: level)
+                return !anchorTitle.isEmpty
+                    && !sourceAnchor.isEmpty
+                    && normalized(anchorTitle) != normalized(resolvedTitle)
             }
-            let node = Node(.init(uid: promoted == nil ? uid : 0, title: resolvedTitle, order: order, level: Int64(level)))
+            let promoted = firstValidAnchor.flatMap { index, anchor -> (Int, [String: Any])? in
+                let resolvedLevel = anchorLevel(anchor, chapterLevel: level)
+                guard resolvedLevel <= 5,
+                      resolvedLevel == level + 1,
+                      hasFollowingChild(after: itemIndex, parentLevel: level, childLevel: resolvedLevel) else {
+                    return nil
+                }
+                return (index, anchor)
+            }
+            let node = Node(.init(
+                uid: promoted == nil ? uid : 0,
+                title: resolvedTitle,
+                order: order,
+                level: Int64(level)
+            ))
             add(node, requestedLevel: level)
-            if let (_, anchor) = promoted {
+            for (index, anchor) in anchors.enumerated() {
                 let anchorTitle = (WereadImportAPIClient.string(anchor["title"]) ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
                 let sourceAnchor = (WereadImportAPIClient.string(anchor["anchor"]) ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-                add(Node(.init(uid: uid, title: anchorTitle, order: order, level: Int64(level + 1), sourceAnchor: sourceAnchor)), requestedLevel: level + 1)
+                guard !anchorTitle.isEmpty,
+                      !sourceAnchor.isEmpty,
+                      normalized(anchorTitle) != normalized(resolvedTitle) else { continue }
+                let resolvedLevel = anchorLevel(anchor, chapterLevel: level)
+                guard resolvedLevel <= 5, index == promoted?.0 else { continue }
+                add(
+                    Node(.init(
+                        uid: uid,
+                        title: anchorTitle,
+                        order: order,
+                        level: Int64(resolvedLevel),
+                        sourceAnchor: sourceAnchor
+                    )),
+                    requestedLevel: resolvedLevel
+                )
             }
         }
         func value(_ node: Node, path: [String]) -> WereadImportChapter {
@@ -494,7 +802,18 @@ private extension WereadImportRepository {
         return roots.map { value($0, path: []) }
     }
 
-    func rangeStart(_ range: String) -> Int { Int(range.split(separator: "-").first ?? "0") ?? 0 }
+    func rangeStart(_ range: String) -> Int {
+        let parts = range.split(separator: "-", omittingEmptySubsequences: false)
+        return parts.count == 2 ? (Int(parts[0]) ?? 0) : 0
+    }
+    func trimEnd(_ value: String) -> String {
+        var result = value
+        while let last = result.unicodeScalars.last,
+              CharacterSet.whitespacesAndNewlines.contains(last) {
+            result.removeLast()
+        }
+        return result
+    }
     func chapterUIDOrder(_ chapters: [WereadImportChapter]) -> [Int64: Int] {
         var result: [Int64: Int] = [:]
         var index = 0
@@ -505,128 +824,558 @@ private extension WereadImportRepository {
         return result
     }
     nonisolated func normalized(_ value: String) -> String { value.lowercased().filter { !$0.isWhitespace } }
-    nonisolated func candidateKey(id: Int64, title: String, author: String) -> String {
-        let input = "v2|\(id)|\(normalized(title))|\(normalized(author))"
+    func candidateKey(_ localBook: BackfillLocalBook) -> String {
+        let record = localBook.record
+        let sourceUIDs = localBook.chapterSourceUIDs
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+            .sorted()
+            .joined(separator: ",")
+        let input = [
+            "v2",
+            String(record.id ?? 0),
+            record.wereadBookId.trimmingCharacters(in: .whitespacesAndNewlines),
+            record.name.trimmingCharacters(in: .whitespacesAndNewlines),
+            record.rawName.trimmingCharacters(in: .whitespacesAndNewlines),
+            record.author.trimmingCharacters(in: .whitespacesAndNewlines),
+            record.wordCount.map(String.init) ?? "",
+            sourceUIDs,
+            localBook.hasMissingChapterSourceUID ? "true" : "false"
+        ].joined(separator: "\u{001F}")
         return Insecure.MD5.hash(data: Data(input.utf8)).map { String(format: "%02x", $0) }.joined()
     }
+
     func flattenChapters(_ chapters: [WereadImportChapter]) -> [WereadImportChapter] {
         chapters.flatMap { [$0] + flattenChapters($0.children) }
     }
-    func fetchBackfillBooks() async throws -> [BookRecord] {
+
+    func fetchBackfillBooks() async throws -> [BackfillLocalBook] {
         try await databaseManager.database.dbPool.read { db in
-            try BookRecord.fetchAll(db, sql: """
+            // SQL 目的：筛出尚未建立微信书籍身份，或虽有书籍身份但章节 UID 仍缺失的历史候选书。
+            // 涉及表：book 为候选主体；chapter 判断微信来源章节；note 与 chapter 联查确认存在可用范围身份的书摘。
+            // 关键过滤：排除根记录和删除记录；缺书籍 ID 时只接受微信来源书/章节，缺章节 UID 时要求有效书摘包含 `start-end` 范围。
+            // 时间字段：本查询不读取或换算时间字段。
+            // 返回用途：按本地书籍主键倒序生成回填快照，后续候选键和远端唯一匹配都基于这份快照。
+            let books = try BookRecord.fetchAll(db, sql: """
                 SELECT b.* FROM book b
-                WHERE b.source_id = 4 AND b.is_deleted = 0
-                  AND (b.weread_book_id = '' OR EXISTS (
-                      SELECT 1 FROM chapter c
-                      WHERE c.book_id = b.id AND c.is_deleted = 0 AND c.source_type = 1
-                        AND COALESCE(c.source_uid, '') = ''
-                  ))
+                WHERE b.id != 0
+                  AND b.is_deleted = 0
+                  AND (
+                      (
+                          TRIM(COALESCE(b.weread_book_id, '')) = ''
+                          AND (
+                              b.source_id = 4
+                              OR b.id IN (
+                                  SELECT DISTINCT c.book_id
+                                  FROM chapter c
+                                  WHERE c.id != 0 AND c.is_deleted = 0 AND c.source_type = 1
+                              )
+                          )
+                      )
+                      OR (
+                          TRIM(COALESCE(b.weread_book_id, '')) != ''
+                          AND EXISTS (
+                              SELECT 1
+                              FROM note n
+                              INNER JOIN chapter c ON n.chapter_id = c.id
+                              WHERE n.book_id = b.id
+                                AND n.is_deleted = 0
+                                AND c.id != 0
+                                AND c.is_deleted = 0
+                                AND c.source_type IN (0, 1)
+                                AND TRIM(COALESCE(c.source_uid, '')) = ''
+                                AND INSTR(TRIM(COALESCE(n.weread_range, '')), '-') > 0
+                          )
+                      )
+                  )
+                ORDER BY b.id DESC
                 """)
-        }
-    }
-}
-
-private extension WereadImportRepository {
-    nonisolated func upsertBook(_ source: WereadImportBook, ownerID: Int64, placement: Int, now: Int64, db: Database) throws -> Int64 {
-        if let target = source.targetBookID, var book = try BookRecord.fetchOne(db, key: target) {
-            if book.wereadBookId.isEmpty { book.wereadBookId = source.wereadBookID }
-            book.rawName = source.rawTitle; book.wordCount = source.wordCount; book.updatedDate = now; try book.update(db); return target
-        }
-        let edge = placement == 1
-            ? (try Int64.fetchOne(db, sql: "SELECT COALESCE(MAX(book_order), -1) FROM book WHERE user_id = ? AND is_deleted = 0", arguments: [ownerID]) ?? -1) + 1
-            : (try Int64.fetchOne(db, sql: "SELECT COALESCE(MIN(book_order), 1) FROM book WHERE user_id = ? AND is_deleted = 0", arguments: [ownerID]) ?? 1) - 1
-        var book = BookRecord(); book.userId = ownerID; book.wereadBookId = source.wereadBookID; book.name = source.title; book.rawName = source.rawTitle; book.author = source.author; book.cover = source.coverURL; book.summary = source.summary; book.translator = source.translator; book.isbn = source.isbn; book.press = source.press; book.pubDate = source.publicationDate; book.wordCount = source.wordCount; book.type = 1; book.currentPositionUnit = 1; book.positionUnit = 1; book.sourceId = 4; book.bookOrder = edge; book.readStatusId = source.readStatusID; book.readStatusChangedDate = source.readStatusChangedAt; book.createdDate = now; book.updatedDate = now
-        try book.insert(db); guard let id = book.id else { throw WereadImportError.message("创建书籍失败") }; return id
-    }
-
-    nonisolated func upsertChapters(_ chapters: [WereadImportChapter], bookID: Int64, parentID: Int64, now: Int64, db: Database, map: inout [Int64: Int64]) throws {
-        for chapter in chapters {
-            let sourceMatch = chapter.uid > 0
-                ? try ChapterRecord.filter(Column("book_id") == bookID && Column("parent_id") == parentID && Column("source_type") == 1 && Column("source_uid") == String(chapter.uid) && Column("source_anchor") == chapter.sourceAnchor).fetchOne(db)
-                : nil
-            let titleMatch = try ChapterRecord.filter(Column("book_id") == bookID && Column("parent_id") == parentID && Column("title") == chapter.title && Column("is_deleted") == 0).fetchOne(db)
-            var record = sourceMatch ?? titleMatch ?? ChapterRecord()
-            let isNew = record.id == nil; record.bookId = bookID; record.parentId = parentID; record.title = chapter.title; record.chapterOrder = chapter.order; record.chapterLevel = chapter.level; record.isImport = 1; record.sourceType = 1; record.sourceUid = chapter.uid > 0 ? String(chapter.uid) : nil; record.sourceAnchor = chapter.sourceAnchor; record.sourceOrder = chapter.order; record.sourcePath = chapter.sourcePath; record.updatedDate = now; record.isDeleted = 0
-            if isNew { record.createdDate = now; try record.insert(db) } else { try record.update(db) }
-            if let id = record.id { if chapter.uid > 0 { map[chapter.uid] = id }; try upsertChapters(chapter.children, bookID: bookID, parentID: id, now: now, db: db, map: &map) }
-        }
-    }
-
-    nonisolated func upsertNotes(_ notes: [WereadImportNote], bookID: Int64, chapters: [Int64: Int64], now: Int64, db: Database) throws {
-        for note in notes where !note.content.isEmpty || !note.idea.isEmpty {
-            let existing: Int64? = try Int64.fetchOne(db, sql: "SELECT id FROM note WHERE book_id = ? AND content = ? AND idea = ? LIMIT 1", arguments: [bookID, note.content, note.idea])
-            let chapterID = chapters[note.chapterUID] ?? 0
-            if let existing { if chapterID > 0 { try db.execute(sql: "UPDATE note SET chapter_id = ?, weread_range = ?, is_deleted = 0 WHERE id = ?", arguments: [chapterID, note.range, existing]) }; continue }
-            var record = NoteRecord(); record.bookId = bookID; record.chapterId = chapterID; record.content = note.content; record.idea = note.idea; record.positionUnit = 1; record.wereadRange = note.range; record.createdDate = note.createdAt > 0 ? note.createdAt : now; record.updatedDate = now; try record.insert(db)
-        }
-    }
-
-    nonisolated func upsertReviews(_ reviews: [WereadImportReview], bookID: Int64, now: Int64, db: Database) throws {
-        var existing = try ReviewRecord.filter(Column("book_id") == bookID).fetchAll(db)
-        for review in reviews {
-            let title = review.title.trimmingCharacters(in: .whitespacesAndNewlines)
-            let plain = normalizedReviewHTML(review.content)
-            guard !existing.contains(where: { ($0.title ?? "").trimmingCharacters(in: .whitespacesAndNewlines) == title && normalizedReviewHTML($0.content ?? "") == plain }) else { continue }
-            var record = ReviewRecord(); record.bookId = bookID; record.title = review.title; record.content = review.content; record.createdDate = review.createdAt > 0 ? review.createdAt : now; record.updatedDate = now; try record.insert(db)
-            existing.append(record)
-        }
-    }
-
-    nonisolated func normalizedReviewHTML(_ value: String) -> String {
-        value.replacingOccurrences(of: "<[^>]+>", with: "", options: .regularExpression)
-            .replacingOccurrences(of: "&nbsp;", with: " ")
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-    }
-
-    nonisolated func cleanupStaleChapters(bookID: Int64, preservedIDs: Set<Int64>, now: Int64, db: Database) throws {
-        let candidates = try ChapterRecord
-            .filter(Column("book_id") == bookID && Column("source_type") == 1 && Column("is_deleted") == 0)
-            .fetchAll(db)
-            .compactMap(\.id)
-            .filter { !preservedIDs.contains($0) }
-        for candidate in candidates {
-            let noteCount: Int = try Int.fetchOne(db, sql: """
-                WITH RECURSIVE subtree(id) AS (
-                    SELECT ?
-                    UNION ALL
-                    SELECT c.id FROM chapter c JOIN subtree s ON c.parent_id = s.id
-                    WHERE c.book_id = ? AND c.is_deleted = 0
+            return try books.map { book in
+                let bookID = book.id ?? 0
+                // SQL 目的：收集候选书当前已绑定的全部微信章节 UID，作为远端书籍匹配的最高优先级证据。
+                // 涉及表：chapter。
+                // 关键过滤：限定当前书籍、有效微信来源章节，并排除空白 UID；DISTINCT 消除历史重复值。
+                // 时间字段：本查询不读取或换算时间字段。
+                // 返回用途：结果参与候选键计算，并用于远端章节集合的唯一交集匹配。
+                let sourceUIDs = try String.fetchAll(db, sql: """
+                    SELECT DISTINCT TRIM(COALESCE(source_uid, ''))
+                    FROM chapter
+                    WHERE book_id = ? AND is_deleted = 0 AND source_type = 1
+                      AND TRIM(COALESCE(source_uid, '')) != ''
+                    """, arguments: [bookID])
+                // SQL 目的：判断候选书是否仍有能够通过书摘范围反查、但缺少微信 UID 的章节。
+                // 涉及表：note 通过 chapter_id 内连接 chapter。
+                // 关键过滤：书摘和章节均有效、排除根记录、章节来源仅限手工/微信、UID 为空且 weread_range 含合法分隔符。
+                // 时间字段：本查询不读取或换算时间字段。
+                // 返回用途：布尔结果进入 v2 候选键，确保章节回填完成后提示身份随状态变化。
+                let hasMissing = try Bool.fetchOne(db, sql: """
+                    SELECT EXISTS (
+                        SELECT 1
+                        FROM note n
+                        INNER JOIN chapter c ON n.chapter_id = c.id
+                        WHERE n.book_id = ?
+                          AND n.is_deleted = 0
+                          AND n.chapter_id != 0
+                          AND c.id != 0
+                          AND c.is_deleted = 0
+                          AND c.source_type IN (0, 1)
+                          AND TRIM(COALESCE(c.source_uid, '')) = ''
+                          AND INSTR(TRIM(COALESCE(n.weread_range, '')), '-') > 0
+                    )
+                    """, arguments: [bookID]) ?? false
+                return BackfillLocalBook(
+                    record: book,
+                    chapterSourceUIDs: Set(sourceUIDs),
+                    hasMissingChapterSourceUID: hasMissing
                 )
-                SELECT COUNT(*) FROM note WHERE chapter_id IN (SELECT id FROM subtree)
-                """, arguments: [candidate, bookID]) ?? 0
-            guard noteCount == 0 else { continue }
-            try db.execute(sql: """
-                WITH RECURSIVE subtree(id) AS (
-                    SELECT ?
-                    UNION ALL
-                    SELECT c.id FROM chapter c JOIN subtree s ON c.parent_id = s.id
-                    WHERE c.book_id = ? AND c.is_deleted = 0
-                )
-                UPDATE chapter SET is_deleted = 1, updated_date = ? WHERE id IN (SELECT id FROM subtree)
-                """, arguments: [candidate, bookID, now])
-        }
-    }
-
-    nonisolated func upsertReadingDays(_ days: [WereadImportReadingDay], bookID: Int64, now: Int64, db: Database) throws {
-        let manual: Int = try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM read_time_record WHERE book_id = ? AND is_deleted = 0 AND weread_read_date = 0", arguments: [bookID]) ?? 0
-        guard manual == 0 else { return }
-        for day in days {
-            let readDateMillis = day.date * 1000
-            if let id: Int64 = try Int64.fetchOne(db, sql: "SELECT id FROM read_time_record WHERE book_id = ? AND weread_read_date = ? LIMIT 1", arguments: [bookID, readDateMillis]) {
-                try db.execute(sql: "UPDATE read_time_record SET elapsed_seconds = ?, updated_date = ?, is_deleted = 0 WHERE id = ?", arguments: [day.seconds, now, id])
-            } else {
-                var record = ReadTimeRecordRecord(); record.bookId = bookID; record.elapsedSeconds = day.seconds; record.status = 3; record.fuzzyReadDate = readDateMillis; record.wereadReadDate = readDateMillis; record.createdDate = now; record.updatedDate = now; try record.insert(db)
             }
         }
     }
 
-    nonisolated func mergeReadStatus(_ source: WereadImportBook, bookID: Int64, now: Int64, db: Database) throws {
-        guard source.readStatusID == 3, source.readStatusChangedAt > 0 else { return }
-        let latest: Int64 = try Int64.fetchOne(db, sql: "SELECT COALESCE(MAX(changed_date), 0) FROM book_read_status_record WHERE book_id = ? AND is_deleted = 0", arguments: [bookID]) ?? 0
-        guard source.readStatusChangedAt > latest else { return }
-        var record = BookReadStatusRecordRecord(); record.bookId = bookID; record.readStatusId = 3; record.changedDate = source.readStatusChangedAt; record.createdDate = now; record.updatedDate = now; try record.insert(db)
-        try db.execute(sql: "UPDATE book SET read_status_id = 3, read_status_changed_date = ?, updated_date = ? WHERE id = ?", arguments: [source.readStatusChangedAt, now, bookID])
+    func loadBackfillRemoteBooks(cookie: String) async throws -> BackfillRemoteLoadResult {
+        var IDs: [String] = []
+        var seen = Set<String>()
+        var failures: [Error] = []
+        for loader in [shelfBookIDs, notebookBookIDs] {
+            do {
+                for ID in try await loader(cookie) {
+                    let value = ID.trimmingCharacters(in: .whitespacesAndNewlines)
+                    if !value.isEmpty, seen.insert(value).inserted { IDs.append(value) }
+                }
+            } catch {
+                if isAuthorizationFailure(error) { throw WereadImportError.authorizationExpired }
+                failures.append(error)
+            }
+        }
+        if IDs.isEmpty, let failure = failures.first { throw failure }
+
+        var remote = try await syncBooks(ids: IDs, cookie: cookie).map {
+            BackfillRemoteBook(book: $0)
+        }
+        let local = try await fetchBackfillBooks()
+        let titlesNeedingChapterEvidence = Set(local
+            .filter { !$0.chapterSourceUIDs.isEmpty }
+            .flatMap { [$0.record.rawName, $0.record.name] }
+            .map(normalizedBackfillTitle)
+            .filter { !$0.isEmpty })
+        var failedTitleKeys = Set<String>()
+        for index in remote.indices {
+            let titleKey = normalizedBackfillTitle(remote[index].book.title)
+            guard titlesNeedingChapterEvidence.contains(titleKey) else { continue }
+            do {
+                let object = try await api.post(
+                    "/web/book/chapterInfos",
+                    cookie: cookie,
+                    json: ["bookIds": [remote[index].book.wereadBookID]]
+                ).object
+                remote[index].chapterUIDs = Set(flattenChapters(buildChapters(from: object))
+                    .map(\.uid)
+                    .filter { $0 > 0 }
+                    .map(String.init))
+            } catch {
+                if isAuthorizationFailure(error) { throw WereadImportError.authorizationExpired }
+                failedTitleKeys.insert(titleKey)
+            }
+        }
+        return BackfillRemoteLoadResult(
+            books: remote,
+            failedTitleKeys: failedTitleKeys,
+            partialFailureCount: failures.count + failedTitleKeys.count
+        )
+    }
+
+    func matchBackfillBooks(
+        local: [BackfillLocalBook],
+        remote: [BackfillRemoteBook]
+    ) -> [Int64: String] {
+        let grouped = Dictionary(grouping: remote.filter {
+            !$0.book.wereadBookID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        }) { normalizedBackfillTitle($0.book.title) }
+        var usedRemoteIDs = Set<String>()
+        var result: [Int64: String] = [:]
+        for localBook in local {
+            guard let localID = localBook.record.id else { continue }
+            let titleKeys = normalizedBackfillTitleKeys(localBook)
+            let candidates = titleKeys
+                .flatMap { grouped[$0] ?? [] }
+                .reduce(into: [BackfillRemoteBook]()) { values, item in
+                    guard !usedRemoteIDs.contains(item.book.wereadBookID),
+                          !values.contains(where: { $0.book.wereadBookID == item.book.wereadBookID }) else { return }
+                    values.append(item)
+                }
+            guard let matched = matchBackfillBook(localBook, candidates: candidates) else { continue }
+            let remoteID = matched.book.wereadBookID.trimmingCharacters(in: .whitespacesAndNewlines)
+            usedRemoteIDs.insert(remoteID)
+            result[localID] = remoteID
+        }
+        return result
+    }
+
+    func matchBackfillBook(
+        _ localBook: BackfillLocalBook,
+        candidates: [BackfillRemoteBook]
+    ) -> BackfillRemoteBook? {
+        guard !candidates.isEmpty else { return nil }
+        if !localBook.chapterSourceUIDs.isEmpty {
+            let chapterMatches = candidates.filter {
+                !$0.chapterUIDs.isEmpty && !$0.chapterUIDs.isDisjoint(with: localBook.chapterSourceUIDs)
+            }
+            if chapterMatches.count == 1 { return chapterMatches[0] }
+        }
+
+        let rawNameKey = normalizedBackfillTitle(localBook.record.rawName)
+        if !rawNameKey.isEmpty,
+           let matched = uniqueBackfillCandidate(
+               candidates.filter { normalizedBackfillTitle($0.book.title) == rawNameKey },
+               localAuthor: localBook.record.author
+           ) {
+            return matched
+        }
+
+        let titleKeys = normalizedBackfillTitleKeys(localBook)
+        let authorKey = normalizedBackfillText(localBook.record.author)
+        if !authorKey.isEmpty {
+            let authorMatches = candidates.filter {
+                titleKeys.contains(normalizedBackfillTitle($0.book.title))
+                    && normalizedBackfillText($0.book.author) == authorKey
+            }
+            if authorMatches.count == 1 { return authorMatches[0] }
+        }
+
+        if let localWordCount = localBook.record.wordCount, localWordCount > 0 {
+            let wordMatches = candidates.filter { remoteBook in
+                guard let remoteWordCount = remoteBook.book.wordCount, remoteWordCount > 0 else { return false }
+                let tolerance = max(1_000, Int64(Double(remoteWordCount) * 0.03))
+                return abs(localWordCount - remoteWordCount) <= tolerance
+            }
+            if wordMatches.count == 1 { return wordMatches[0] }
+        }
+        return nil
+    }
+
+    func uniqueBackfillCandidate(
+        _ candidates: [BackfillRemoteBook],
+        localAuthor: String
+    ) -> BackfillRemoteBook? {
+        if candidates.count == 1 { return candidates[0] }
+        let authorKey = normalizedBackfillText(localAuthor)
+        guard !authorKey.isEmpty else { return nil }
+        let matches = candidates.filter { normalizedBackfillText($0.book.author) == authorKey }
+        return matches.count == 1 ? matches[0] : nil
+    }
+
+    func normalizedBackfillTitleKeys(_ localBook: BackfillLocalBook) -> Set<String> {
+        Set([localBook.record.rawName, localBook.record.name]
+            .map(normalizedBackfillTitle)
+            .filter { !$0.isEmpty })
+    }
+
+    func normalizedBackfillTitle(_ value: String) -> String {
+        var result = normalizedBackfillText(value)
+        if result.hasPrefix("《") { result.removeFirst() }
+        if result.hasSuffix("》") { result.removeLast() }
+        return result
+    }
+
+    func normalizedBackfillText(_ value: String) -> String {
+        value.trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+            .filter { !$0.isWhitespace }
+    }
+
+    func backfillChapterSourceUIDs(
+        localBook: BackfillLocalBook,
+        remoteBookID: String,
+        cookie: String
+    ) async throws -> BackfillChapterStats {
+        guard let bookID = localBook.record.id else { return .init() }
+        let localState = try await databaseManager.database.dbPool.read { db -> ([ChapterRecord], [BackfillLocalNote]) in
+            // SQL 目的：读取候选书的完整有效章节集合，供路径、标题和来源身份联合匹配。
+            // 涉及表：chapter。
+            // 关键过滤：限定当前书籍并排除删除记录；保留根章节以便恢复完整父子路径语义。
+            // 时间字段：章节时间字段按数据库原值解码，本查询不做时区或单位转换。
+            // 返回用途：与远端章节树扁平结果比对，只生成唯一可证明的 UID 更新。
+            let chapters = try ChapterRecord.fetchAll(db, sql: """
+                SELECT * FROM chapter
+                WHERE book_id = ? AND is_deleted = 0
+                """, arguments: [bookID])
+            // SQL 目的：读取缺少章节 UID 的微信历史书摘身份，作为章节级精确回填证据。
+            // 涉及表：note 通过 chapter_id 内连接 chapter。
+            // 关键过滤：书摘/章节均有效、排除根记录、章节来源仅限手工/微信、UID 为空且 weread_range 含 `start-end`。
+            // 时间字段：本查询不读取或换算时间字段。
+            // 返回用途：返回书摘 ID、章节 ID、范围、正文和想法，用远端范围与内容组合反证章节唯一性。
+            let rows = try Row.fetchAll(db, sql: """
+                SELECT n.id AS note_id,
+                       n.chapter_id AS chapter_id,
+                       COALESCE(n.weread_range, '') AS weread_range,
+                       COALESCE(n.content, '') AS content,
+                       COALESCE(n.idea, '') AS idea
+                FROM note n
+                INNER JOIN chapter c ON n.chapter_id = c.id
+                WHERE n.book_id = ?
+                  AND n.is_deleted = 0
+                  AND n.chapter_id != 0
+                  AND c.id != 0
+                  AND c.is_deleted = 0
+                  AND c.source_type IN (0, 1)
+                  AND TRIM(COALESCE(c.source_uid, '')) = ''
+                  AND INSTR(TRIM(COALESCE(n.weread_range, '')), '-') > 0
+                ORDER BY n.id ASC
+                """, arguments: [bookID])
+            let notes = rows.map { row in
+                BackfillLocalNote(
+                    id: row["note_id"],
+                    chapterID: row["chapter_id"],
+                    range: row["weread_range"],
+                    content: row["content"],
+                    idea: row["idea"]
+                )
+            }
+            return (chapters, notes)
+        }
+        guard !localState.1.isEmpty else { return .init() }
+
+        let remoteDetails: (chapters: [WereadImportChapter], notes: [WereadImportNote])
+        do {
+            remoteDetails = try await loadBackfillRemoteDetails(bookID: remoteBookID, cookie: cookie)
+        } catch {
+            if isAuthorizationFailure(error) { throw WereadImportError.authorizationExpired }
+            return .init(
+                skippedCount: Set(localState.1.map(\.chapterID)).count,
+                partialFailureCount: 1,
+                shouldRetry: true
+            )
+        }
+
+        let remoteChapters = flattenChapters(remoteDetails.chapters)
+        let updates = matchBackfillChapters(
+            localChapters: localState.0,
+            localNotes: localState.1,
+            remoteChapters: remoteChapters,
+            remoteNotes: remoteDetails.notes
+        )
+        let candidateChapterCount = Set(localState.1.map(\.chapterID)).count
+        let updated = try await databaseManager.database.dbPool.write { db in
+            var count = 0
+            for update in updates {
+                try db.execute(
+                    // SQL 目的：用书摘原始身份唯一匹配后，为历史章节补齐微信 UID 与远端顺序。
+                    // 涉及表：chapter。
+                    // 关键过滤：章节有效、来源为手工/微信且 source_uid 仍为空，防止覆盖用户或并发任务已写身份。
+                    // 时间字段：身份修复不改变业务更新时间。
+                    // 副作用：source_type 统一为微信；所有更新在同一事务中提交。
+                    sql: """
+                        UPDATE chapter
+                        SET source_type = 1, source_uid = ?, source_order = ?
+                        WHERE id = ? AND is_deleted = 0 AND source_type IN (0, 1)
+                          AND TRIM(COALESCE(source_uid, '')) = ''
+                        """,
+                    arguments: [update.sourceUID, update.sourceOrder, update.chapterID]
+                )
+                count += db.changesCount
+            }
+            return count
+        }
+        return .init(
+            updatedCount: updated,
+            skippedCount: max(candidateChapterCount - updated, 0)
+        )
+    }
+
+    func loadBackfillRemoteDetails(
+        bookID: String,
+        cookie: String
+    ) async throws -> (chapters: [WereadImportChapter], notes: [WereadImportNote]) {
+        let marks = try await api.get("/web/book/bookmarklist?bookId=\(bookID)", cookie: cookie).object
+        var notes = WereadImportAPIClient.array(marks["updated"])
+            .filter { WereadImportAPIClient.int($0["type"]) == 1 }
+            .map {
+                WereadImportNote(
+                    content: trimEnd(WereadImportAPIClient.string($0["markText"]) ?? ""),
+                    range: WereadImportAPIClient.string($0["range"]) ?? "",
+                    chapterUID: WereadImportAPIClient.int64($0["chapterUid"]) ?? 0,
+                    createdAt: 0
+                )
+            }
+        let reviews = try await api.get(
+            "/web/review/list?bookId=\(bookID)&listType=11&mine=1",
+            cookie: cookie
+        ).object
+        for wrapper in WereadImportAPIClient.array(reviews["reviews"]) {
+            let review = WereadImportAPIClient.dictionary(wrapper["review"]) ?? wrapper
+            guard WereadImportAPIClient.int(review["type"]) == 1 else { continue }
+            notes.append(.init(
+                content: trimEnd(WereadImportAPIClient.string(review["abstract"]) ?? ""),
+                idea: trimEnd(WereadImportAPIClient.string(review["content"]) ?? ""),
+                range: WereadImportAPIClient.string(review["range"]) ?? "",
+                chapterUID: WereadImportAPIClient.int64(review["chapterUid"]) ?? 0,
+                createdAt: 0
+            ))
+        }
+        let chapterObject = try await api.post(
+            "/web/book/chapterInfos",
+            cookie: cookie,
+            json: ["bookIds": [bookID]]
+        ).object
+        return (buildChapters(from: chapterObject), notes)
+    }
+
+    func matchBackfillChapters(
+        localChapters: [ChapterRecord],
+        localNotes: [BackfillLocalNote],
+        remoteChapters: [WereadImportChapter],
+        remoteNotes: [WereadImportNote]
+    ) -> [BackfillChapterUpdate] {
+        let updateable: [Int64: ChapterRecord] = Dictionary(uniqueKeysWithValues: localChapters.compactMap { chapter in
+            guard let ID = chapter.id,
+                  (chapter.sourceUid ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                  chapter.sourceType == 0 || chapter.sourceType == 1 else { return nil }
+            return (ID, chapter)
+        })
+        guard !updateable.isEmpty else { return [] }
+        let remoteByUID: [String: WereadImportChapter] = Dictionary(uniqueKeysWithValues: remoteChapters.compactMap { chapter in
+            guard chapter.uid > 0 else { return nil }
+            return (String(chapter.uid), chapter)
+        })
+        var remoteNotesByKey: [BackfillNoteKey: [String]] = [:]
+        for note in remoteNotes {
+            guard note.chapterUID > 0, let key = backfillNoteKey(
+                range: note.range,
+                content: note.content,
+                idea: note.idea
+            ) else { continue }
+            remoteNotesByKey[key, default: []].append(String(note.chapterUID))
+        }
+        let localTitleCounts = Dictionary(grouping: updateable.values.map { normalizedBackfillText($0.title) }) { $0 }
+            .mapValues(\.count)
+        let remoteTitleCounts = Dictionary(grouping: remoteChapters.map { normalizedBackfillText($0.title) }) { $0 }
+            .mapValues(\.count)
+        var matchedUIDs: [Int64: Set<String>] = [:]
+        for note in localNotes where updateable[note.chapterID] != nil {
+            guard let key = backfillNoteKey(range: note.range, content: note.content, idea: note.idea) else { continue }
+            let UIDs = Set(remoteNotesByKey[key] ?? [])
+            guard UIDs.count == 1, let UID = UIDs.first, remoteByUID[UID] != nil else { continue }
+            matchedUIDs[note.chapterID, default: []].insert(UID)
+        }
+        return Set(localNotes.map(\.chapterID)).compactMap { chapterID in
+            guard let localChapter = updateable[chapterID],
+                  let UIDs = matchedUIDs[chapterID], UIDs.count == 1,
+                  let UID = UIDs.first,
+                  let remoteChapter = remoteByUID[UID],
+                  backfillChapterMatches(
+                      local: localChapter,
+                      remote: remoteChapter,
+                      localTitleCounts: localTitleCounts,
+                      remoteTitleCounts: remoteTitleCounts
+                  ) else { return nil }
+            return BackfillChapterUpdate(
+                chapterID: chapterID,
+                sourceUID: UID,
+                sourceOrder: remoteChapter.order
+            )
+        }
+    }
+
+    func backfillNoteKey(range: String, content: String, idea: String) -> BackfillNoteKey? {
+        let parts = range.trimmingCharacters(in: .whitespacesAndNewlines)
+            .split(separator: "-", omittingEmptySubsequences: false)
+        guard parts.count == 2,
+              let start = Int64(parts[0].trimmingCharacters(in: .whitespacesAndNewlines)),
+              let end = Int64(parts[1].trimmingCharacters(in: .whitespacesAndNewlines)),
+              start >= 0, end > start else { return nil }
+        return .init(
+            rangeStart: start,
+            rangeEnd: end,
+            content: trimEnd(content),
+            idea: trimEnd(idea)
+        )
+    }
+
+    func backfillChapterMatches(
+        local: ChapterRecord,
+        remote: WereadImportChapter,
+        localTitleCounts: [String: Int],
+        remoteTitleCounts: [String: Int]
+    ) -> Bool {
+        let localPath = normalizedBackfillPath(local.sourcePath ?? "")
+        let remotePath = normalizedBackfillPath(remote.sourcePath)
+        if !localPath.isEmpty, !remotePath.isEmpty { return localPath == remotePath }
+        let localTitle = normalizedBackfillText(local.title)
+        let remoteTitle = normalizedBackfillText(remote.title)
+        return !localTitle.isEmpty
+            && localTitle == remoteTitle
+            && localTitleCounts[localTitle] == 1
+            && remoteTitleCounts[remoteTitle] == 1
+    }
+
+    func normalizedBackfillPath(_ value: String) -> String {
+        value.components(separatedBy: " / ")
+            .map(normalizedBackfillText)
+            .filter { !$0.isEmpty }
+            .joined(separator: "/")
+    }
+
+    func noteImportDraft(from source: WereadImportBook) -> NoteImportDraftBook {
+        var draft = NoteImportDraftBook()
+        draft.name = source.title
+        draft.rawName = source.rawTitle
+        draft.author = source.author
+        draft.translator = source.translator
+        draft.press = source.press
+        draft.isbn = source.isbn
+        draft.summary = source.summary
+        draft.pubDate = source.publicationDate
+        draft.cover = source.coverURL
+        draft.type = 1
+        draft.source = 4
+        draft.sourceName = "微信读书"
+        draft.positionUnit = 1
+        draft.currentPositionUnit = 1
+        draft.wordCount = source.wordCount
+        draft.readStatusID = source.readStatusID
+        draft.readStatusChangedDate = source.readStatusChangedAt
+        draft.wereadBookID = source.wereadBookID
+        draft.wereadUpdateTime = source.wereadUpdatedAt
+        draft.chapters = source.chapters.map(noteImportChapter)
+        draft.notes = source.notes.filter(\.isSelected).map { note in
+            NoteImportDraftNote(
+                content: note.content,
+                idea: note.idea,
+                positionUnit: 1,
+                createdTime: note.createdAt,
+                wereadRange: note.range,
+                wereadChapterUID: note.chapterUID
+            )
+        }
+        draft.reviews = source.reviews.map { review in
+            NoteImportDraftReview(
+                title: review.title,
+                content: review.content,
+                createdTime: review.createdAt
+            )
+        }
+        draft.wereadReadingDurations = source.readingDays.map { day in
+            NoteImportFuzzyReadingDuration(
+                date: day.date * 1_000,
+                durationSeconds: day.seconds
+            )
+        }
+        return draft
+    }
+
+    func noteImportChapter(_ source: WereadImportChapter) -> NoteImportDraftChapter {
+        NoteImportDraftChapter(
+            title: source.title,
+            level: source.level,
+            order: source.order,
+            pathTitles: source.sourcePath.components(separatedBy: " / ").filter { !$0.isEmpty },
+            sourceType: 1,
+            sourceUID: source.uid > 0 ? String(source.uid) : "",
+            sourceAnchor: source.sourceAnchor,
+            sourceOrder: source.order,
+            sourcePath: source.sourcePath,
+            children: source.children.map(noteImportChapter)
+        )
     }
 }
 

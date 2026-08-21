@@ -10,6 +10,11 @@ import Foundation
 nonisolated struct NoteImportParserRegistry: Sendable {
     private let parsers: [NoteImportParserID: any NoteImportParser]
 
+    /// 正式注册清单供门禁核对；汉王依赖用户输入书名，由专用入口按会话创建。
+    nonisolated static var registeredParserIDs: Set<NoteImportParserID> {
+        Set(productionParsers.map(\.id))
+    }
+
     init(parsers: [any NoteImportParser] = Self.productionParsers) {
         self.parsers = Dictionary(uniqueKeysWithValues: parsers.map { ($0.id, $0) })
     }

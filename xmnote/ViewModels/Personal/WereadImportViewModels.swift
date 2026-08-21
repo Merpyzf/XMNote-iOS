@@ -32,6 +32,7 @@ final class WereadImportAuthViewModel {
     var backfillProgressText = ""
     @ObservationIgnored private var task: Task<Void, Never>?
     @ObservationIgnored private var didAutoImport = false
+    @ObservationIgnored private var taskGeneration = 0
     private let repository: any WereadImportRepositoryProtocol
 
     init(repository: any WereadImportRepositoryProtocol) { self.repository = repository }
@@ -60,8 +61,11 @@ final class WereadImportAuthViewModel {
     func markFailed(_ message: String) { phase = .failed(message: message); qrCodeData = nil }
     func beginRefresh() {
         task?.cancel()
+        taskGeneration += 1
+        let generation = taskGeneration
         task = Task {
             await repository.clearAuthorization()
+            guard generation == taskGeneration, !Task.isCancelled else { return }
             authorization = nil
             didAutoImport = false
             phase = .loading
@@ -74,48 +78,66 @@ final class WereadImportAuthViewModel {
     func receiveCookie(_ cookie: String) {
         guard authorization == nil, !isWorking else { return }
         task?.cancel()
+        taskGeneration += 1
+        let generation = taskGeneration
         task = Task {
             do {
                 let value = try await repository.validateAuthorization(cookieHeader: cookie)
-                guard !Task.isCancelled else { return }
+                guard generation == taskGeneration, !Task.isCancelled else { return }
                 authorization = value; phase = .authorized
                 if !didAutoImport { didAutoImport = true; requestsAutomaticImport = true }
             } catch is CancellationError { }
-            catch { }
+            catch {
+                guard generation == taskGeneration else { return }
+                errorMessage = error.localizedDescription
+                if case WereadImportError.authorizationExpired = error { phase = .expired }
+            }
         }
     }
 
-    func startImport() async {
+    private func startImport(generation: Int) async {
         guard let authorization, !isWorking else { return }
         isWorking = true; errorMessage = nil; progressText = "正在获取书籍…"
         do {
             let ids = try await repository.fetchImportBookIDs(authorization: authorization, preferences: preferences)
+            guard generation == taskGeneration, !Task.isCancelled else { return }
             if ids.count > 100 {
                 destination = .batches(.init(authorization: authorization, bookIDs: ids, importsReadingTime: preferences.importsReadingTime, repository: repository))
             } else {
                 var books = try await repository.fetchImportBooks(
                     authorization: authorization,
-                    preferences: preferences,
-                    progress: { [weak self] current, total in self?.progressText = "书籍加载中（\(current)/\(total)）" },
-                    warning: { [weak self] message in self?.errorMessage = message }
+                    bookIDs: ids,
+                    importsReadingTime: preferences.importsReadingTime,
+                    progress: { [weak self] current, total in
+                        guard let self, generation == self.taskGeneration else { return }
+                        self.progressText = "书籍加载中（\(current)/\(total)）"
+                    },
+                    warning: { [weak self] message in
+                        guard let self, generation == self.taskGeneration else { return }
+                        self.errorMessage = message
+                    }
                 )
                 books = try await repository.matchLocalBooks(books)
+                guard generation == taskGeneration, !Task.isCancelled else { return }
                 destination = .preview(.init(books: books, returnsToBatch: false, repository: repository))
             }
         } catch is CancellationError { }
         catch {
-            if isSuspectedAuthorizationError(error) {
-                do { self.authorization = try await repository.validateAuthorization(cookieHeader: authorization.cookieHeader) }
-                catch { await expireAuthorization() }
+            guard generation == taskGeneration else { return }
+            if case WereadImportError.authorizationExpired = error {
+                await expireAuthorization()
             }
             errorMessage = error.localizedDescription
         }
+        guard generation == taskGeneration else { return }
         isWorking = false; progressText = ""
     }
 
     func beginImport() {
         task?.cancel()
-        task = Task { await startImport() }
+        taskGeneration += 1
+        let generation = taskGeneration
+        task = Task { await startImport(generation: generation) }
     }
 
     func consumeAutomaticImportRequest() { requestsAutomaticImport = false }
@@ -140,16 +162,6 @@ final class WereadImportAuthViewModel {
         }
     }
 
-    private func isSuspectedAuthorizationError(_ error: Error) -> Bool {
-        if case WereadImportError.authorizationExpired = error { return true }
-        if case WereadImportError.remote(let code, let message) = error {
-            if code == -2012 || code == -2013 { return true }
-            let value = message.lowercased()
-            return ["登录", "授权", "cookie", "session", "skey"].contains { value.contains($0) }
-        }
-        return false
-    }
-
     private func expireAuthorization() async {
         await repository.clearAuthorization()
         authorization = nil
@@ -158,7 +170,7 @@ final class WereadImportAuthViewModel {
         webReloadToken = UUID()
     }
 
-    func cancel() { task?.cancel(); task = nil; isWorking = false }
+    func cancel() { task?.cancel(); task = nil; taskGeneration += 1; isWorking = false }
 }
 
 @MainActor
@@ -184,9 +196,16 @@ final class WereadBatchViewModel {
     var preview: WereadPreviewRoute?
     var errorMessage: String?
     var isLoading: Bool { batches.contains { if case .loading = $0.status { true } else { false } } }
-    var completedPercent: Int { batches.isEmpty ? 0 : Int(Double(batches.filter { $0.status == .success }.count) / Double(batches.count) * 100) }
+    var completedPercent: Int {
+        let total = batches.reduce(0) { $0 + $1.bookIDs.count }
+        let completed = batches.reduce(0) { value, batch in
+            value + (batch.status == .success ? batch.bookIDs.count : 0)
+        }
+        return total == 0 ? 0 : completed * 100 / total
+    }
     private let route: WereadBatchRoute
     @ObservationIgnored private var task: Task<Void, Never>?
+    @ObservationIgnored private var taskGeneration = 0
 
     init(route: WereadBatchRoute) {
         self.route = route
@@ -195,24 +214,54 @@ final class WereadBatchViewModel {
         }
     }
 
-    func open(_ id: UUID) async {
+    private func open(_ id: UUID, generation: Int) async {
         guard !isLoading, let index = batches.firstIndex(where: { $0.id == id }) else { return }
         if !batches[index].books.isEmpty { preview = .init(books: batches[index].books, returnsToBatch: true, repository: route.repository); return }
         batches[index].status = .loading(percent: 0); errorMessage = nil
         do {
             var books = try await route.repository.fetchImportBooks(
                 authorization: route.authorization, bookIDs: batches[index].bookIDs, importsReadingTime: route.importsReadingTime,
-                progress: { [weak self] current, total in self?.batches[index].status = .loading(percent: total == 0 ? 0 : current * 100 / total) }
+                progress: { [weak self] current, total in
+                    guard let self, generation == self.taskGeneration else { return }
+                    self.batches[index].status = .loading(percent: total == 0 ? 0 : current * 100 / total)
+                }
             )
             books = try await route.repository.matchLocalBooks(books)
+            guard generation == taskGeneration, !Task.isCancelled else { return }
             batches[index].books = books; batches[index].status = .success
             preview = .init(books: books, returnsToBatch: true, repository: route.repository)
-        } catch is CancellationError { batches[index].status = .notStarted }
-        catch { batches[index].status = .failed; errorMessage = error.localizedDescription }
+        } catch is CancellationError {
+            guard generation == taskGeneration else { return }
+            batches[index].status = .notStarted
+        } catch {
+            guard generation == taskGeneration else { return }
+            batches[index].status = .failed; errorMessage = error.localizedDescription
+        }
     }
 
-    func beginOpen(_ id: UUID) { task?.cancel(); task = Task { await open(id) } }
-    func cancel() { task?.cancel(); task = nil }
+    func beginOpen(_ id: UUID) {
+        // 一个批次加载期间忽略其他批次点击；失败/成功收口后才允许重试或打开下一批。
+        guard task == nil else { return }
+        taskGeneration += 1
+        let generation = taskGeneration
+        task = Task { [weak self] in
+            guard let self else { return }
+            await self.open(id, generation: generation)
+            if generation == self.taskGeneration {
+                self.task = nil
+            }
+        }
+    }
+    func cancel() {
+        task?.cancel()
+        task = nil
+        taskGeneration += 1
+        for index in batches.indices {
+            if case .loading = batches[index].status {
+                batches[index].status = .notStarted
+            }
+        }
+    }
 }
 
 @MainActor

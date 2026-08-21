@@ -7,8 +7,16 @@
 
 import Foundation
 
+/// 微信读书 Web API 的可替换边界；生产实现与测试桩共享同一请求、响应及授权错误语义。
 @MainActor
-final class WereadImportAPIClient {
+protocol WereadImportAPIClientProtocol: AnyObject {
+    func get(_ path: String, cookie: String) async throws -> WereadImportAPIClient.Response
+    func post(_ path: String, cookie: String, json: [String: Any]) async throws -> WereadImportAPIClient.Response
+    func shelfHTML(cookie: String) async throws -> String
+}
+
+@MainActor
+final class WereadImportAPIClient: WereadImportAPIClientProtocol {
     struct Response {
         let object: [String: Any]
         let httpResponse: HTTPURLResponse

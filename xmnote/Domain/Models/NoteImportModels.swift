@@ -66,6 +66,30 @@ nonisolated enum NoteImportParserError: LocalizedError, Equatable, Sendable {
     }
 }
 
+/// Kindle 系统文件入口的稳定错误语义，覆盖 Android OTG 同等的大小、空间和访问失败边界。
+nonisolated enum KindleImportFileError: LocalizedError, Equatable, Sendable {
+    case invalidFileName
+    case fileTooLarge
+    case insufficientStorage
+    case accessDenied
+    case readFailed
+
+    var errorDescription: String? {
+        switch self {
+        case .invalidFileName:
+            return "请选择 Kindle 的 Documents/My Clippings.txt"
+        case .fileTooLarge:
+            return "My Clippings.txt 不能超过 32 MiB"
+        case .insufficientStorage:
+            return "设备可用空间不足，无法暂存 Kindle 书摘文件"
+        case .accessDenied:
+            return "无法访问所选文件，请确认 Kindle 仍已连接并重新选择"
+        case .readFailed:
+            return "无法完整读取 Kindle 书摘文件，请检查连接后重试"
+        }
+    }
+}
+
 nonisolated protocol NoteImportParser: Sendable {
     var id: NoteImportParserID { get }
 
@@ -96,6 +120,7 @@ nonisolated struct NoteImportDraftBook: Equatable, Sendable {
     var positionUnit: Int64 = 2
     var currentPositionUnit: Int64 = 2
     var readPosition: Double = 0
+    var bookmarkModifiedTime: Int64 = 0
     var totalPosition: Int64 = 0
     var totalPagination: Int64 = 0
     var wordCount: Int64?
@@ -115,6 +140,7 @@ nonisolated struct NoteImportDraftBook: Equatable, Sendable {
     var reviews: [NoteImportDraftReview] = []
     var preciseReadingDurations: [NoteImportPreciseReadingDuration]?
     var fuzzyReadingDurations: [NoteImportFuzzyReadingDuration]?
+    var wereadReadingDurations: [NoteImportFuzzyReadingDuration]?
 }
 
 nonisolated struct NoteImportDraftNote: Equatable, Sendable {
@@ -154,6 +180,7 @@ nonisolated struct NoteImportDraftReview: Equatable, Sendable {
 
 nonisolated struct NoteImportDraftAttachment: Equatable, Sendable {
     var imageURL = ""
+    var digest = ""
     var order: Int64 = 0
 }
 

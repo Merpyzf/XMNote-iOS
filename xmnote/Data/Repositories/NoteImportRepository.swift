@@ -7,6 +7,7 @@
 
 import Foundation
 import GRDB
+import SwiftSoup
 
 @MainActor
 final class NoteImportRepository: NoteImportRepositoryProtocol {
@@ -24,18 +25,71 @@ final class NoteImportRepository: NoteImportRepositoryProtocol {
         self.bookSearchRepository = bookSearchRepository ?? BookSearchRepository()
     }
 
+    /// 在 security scope 有效期内把外部 Kindle 文件复制到仓储拥有的临时票据；取消会停止复制，所有退出路径都会清理临时文件。
+    func loadKindleClippingsFile(from url: URL) async throws -> Data {
+        let didAccess = url.startAccessingSecurityScopedResource()
+        defer { if didAccess { url.stopAccessingSecurityScopedResource() } }
+        guard didAccess || url.isFileURL else { throw KindleImportFileError.accessDenied }
+
+        let worker = Task.detached(priority: .userInitiated) {
+            try Self.copyKindleFileToOwnedTemporaryData(from: url)
+        }
+        return try await withTaskCancellationHandler {
+            try await worker.value
+        } onCancel: {
+            worker.cancel()
+        }
+    }
+
+    /// 在 MainActor 上编排汉王分享页请求；URLSession 在挂起期间不阻塞主线程，父任务取消会取消请求。
+    func fetchHanWangShareContent(from sharedURL: String) async throws -> String {
+        let url = try Self.hanWangContentURL(from: sharedURL)
+        var request = URLRequest(url: url)
+        request.timeoutInterval = 20
+        let (data, response) = try await URLSession.shared.data(for: request)
+        try Task.checkCancellation()
+        guard let http = response as? HTTPURLResponse,
+              (200..<300).contains(http.statusCode),
+              let html = String(data: data, encoding: .utf8) else {
+            throw NoteImportParserError.unexpected("未从二维码中找到书摘")
+        }
+        let document = try SwiftSoup.parse(html)
+        guard let paragraph = try document.getElementsByTag("p").first() else {
+            throw NoteImportParserError.unexpected("未从二维码中找到书摘")
+        }
+        let content = try paragraph.html().replacingOccurrences(of: "<br>", with: "\n")
+        guard !content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            throw NoteImportParserError.unexpected("未从二维码中找到书摘")
+        }
+        return content
+    }
+
+    /// 在统一仓储边界内调用三联中读网络 Service；父任务取消由 async 请求链路继续传播。
+    func fetchLifeWeekBooks(phoneNumber: String, password: String) async throws -> [NoteImportDraftBook] {
+        try await LifeWeekImportService().fetchBooks(phoneNumber: phoneNumber, password: password)
+    }
+
     func matchLocalBook(for draft: NoteImportDraftBook) async throws -> BookPickerBook? {
         try await databaseManager.database.dbPool.read { db in
-            let normalizedRawName = draft.rawName.isEmpty ? draft.name : draft.rawName
-            let record = try BookRecord.fetchOne(db, sql: """
-                SELECT * FROM book
-                WHERE is_deleted = 0 AND (
-                    raw_name = ? OR
-                    (name = ? AND (? = '' OR author = ?))
-                )
-                ORDER BY CASE WHEN raw_name = ? THEN 0 ELSE 1 END, id
-                LIMIT 1
-                """, arguments: [normalizedRawName, draft.name, draft.author, draft.author, normalizedRawName])
+            let exactRawName = draft.source == 2
+                ? Self.kindleCanonicalRawName(draft)
+                : draft.name
+            var record = try BookRecord
+                .filter(Column("raw_name") == exactRawName)
+                .filter(Column("is_deleted") == 0 && Column("id") != 0)
+                .order(Column("id"))
+                .fetchOne(db)
+            if record == nil, draft.source == 2 {
+                let candidates = Self.kindleLegacyRawNameCandidates(draft)
+                if !candidates.isEmpty {
+                    let records = try BookRecord
+                        .filter(candidates.contains(Column("raw_name")))
+                        .filter(Column("source_id") == 2 && Column("is_deleted") == 0 && Column("id") != 0)
+                        .order(Column("id"))
+                        .fetchAll(db)
+                    record = Self.uniqueKindleLegacyTarget(records, importedAuthor: draft.author)
+                }
+            }
             guard let record, let id = record.id else { return nil }
             return BookPickerBook(
                 id: id,
@@ -107,9 +161,34 @@ final class NoteImportRepository: NoteImportRepositoryProtocol {
                 let ownerID = try DatabaseOwnerResolver.resolveOwnerID(in: db)
                 let bookID = try self.upsertBook(item, ownerID: ownerID, placement: placement, now: now, db: db)
                 var chapterIndex = ChapterIndex()
-                try self.upsertChapters(item.draft.chapters, bookID: bookID, parentID: 0, parentPath: [], now: now, db: db, index: &chapterIndex)
-                try self.upsertFallbackNoteChapters(item.draft.notes, bookID: bookID, now: now, db: db, index: &chapterIndex)
-                try self.upsertNotes(item.draft.notes, bookID: bookID, chapterIndex: chapterIndex, ownerID: ownerID, now: now, db: db)
+                var chapterSession = try ChapterImportSession(bookID: bookID, db: db)
+                try self.upsertChapters(
+                    item.draft.chapters,
+                    bookID: bookID,
+                    parentID: 0,
+                    parentPath: [],
+                    now: now,
+                    db: db,
+                    session: &chapterSession,
+                    index: &chapterIndex
+                )
+                try self.upsertFallbackNoteChapters(
+                    item.draft.notes,
+                    bookID: bookID,
+                    now: now,
+                    db: db,
+                    session: &chapterSession,
+                    index: &chapterIndex
+                )
+                try self.upsertNotes(
+                    item.draft.notes,
+                    bookID: bookID,
+                    bookPositionUnit: item.draft.currentPositionUnit,
+                    chapterIndex: chapterIndex,
+                    ownerID: ownerID,
+                    now: now,
+                    db: db
+                )
                 try self.upsertReviews(item.draft.reviews, bookID: bookID, now: now, db: db)
                 try self.upsertBookMetadata(item.draft, bookID: bookID, ownerID: ownerID, now: now, db: db)
                 try self.upsertReadingTime(item.draft, bookID: bookID, now: now, db: db)
@@ -121,10 +200,113 @@ final class NoteImportRepository: NoteImportRepositoryProtocol {
 }
 
 private extension NoteImportRepository {
+    nonisolated static let kindleMaximumFileSize: Int64 = 32 * 1_024 * 1_024
+    nonisolated static let kindleStorageReserve: Int64 = 4 * 1_024 * 1_024
+    nonisolated static let kindleCopyBufferSize = 64 * 1_024
+
+    /// 从汉王二维码包装链接提取真实分享页 URL；兼容 fragment 与 query 两种 `path` 参数格式。
+    nonisolated static func hanWangContentURL(from raw: String) throws -> URL {
+        let candidate: String
+        if let hash = raw.firstIndex(of: "#") {
+            let fragment = raw[raw.index(after: hash)...]
+            if let range = fragment.range(of: "path=") {
+                let suffix = fragment[range.upperBound...]
+                candidate = String(suffix.prefix { $0 != "&" })
+            } else {
+                candidate = raw
+            }
+        } else if let components = URLComponents(string: raw),
+                  let path = components.queryItems?.first(where: { $0.name == "path" })?.value,
+                  !path.isEmpty {
+            candidate = path
+        } else {
+            candidate = raw
+        }
+        guard let url = URL(string: candidate.removingPercentEncoding ?? candidate) else {
+            throw NoteImportParserError.unexpected("二维码链接无效")
+        }
+        return url
+    }
+
+    /// 在非主 Actor 上流式复制外部文件并检查取消；临时文件名具备单次所有权，defer 只清理本次创建的精确路径。
+    nonisolated static func copyKindleFileToOwnedTemporaryData(from sourceURL: URL) throws -> Data {
+        try Task.checkCancellation()
+        let knownSize = try? sourceURL.resourceValues(forKeys: [.fileSizeKey]).fileSize
+        if let knownSize, Int64(knownSize) > kindleMaximumFileSize {
+            throw KindleImportFileError.fileTooLarge
+        }
+        try ensureKindleTemporaryStorage(payloadBytes: Int64(knownSize ?? 1))
+
+        let temporaryURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("xmnote-kindle-import-\(UUID().uuidString).txt")
+        guard FileManager.default.createFile(atPath: temporaryURL.path, contents: nil) else {
+            throw KindleImportFileError.insufficientStorage
+        }
+        defer { try? FileManager.default.removeItem(at: temporaryURL) }
+        guard let input = InputStream(url: sourceURL) else {
+            throw KindleImportFileError.accessDenied
+        }
+        let output: FileHandle
+        do {
+            output = try FileHandle(forWritingTo: temporaryURL)
+        } catch {
+            throw KindleImportFileError.insufficientStorage
+        }
+        input.open()
+        defer {
+            input.close()
+            try? output.close()
+        }
+
+        var buffer = [UInt8](repeating: 0, count: kindleCopyBufferSize)
+        var copiedBytes: Int64 = 0
+        while true {
+            try Task.checkCancellation()
+            let remaining = kindleMaximumFileSize - copiedBytes + 1
+            let requested = min(buffer.count, Int(remaining))
+            let readCount = input.read(&buffer, maxLength: requested)
+            try Task.checkCancellation()
+            if readCount < 0 { throw KindleImportFileError.readFailed }
+            if readCount == 0 { break }
+            if Int64(readCount) > remaining || copiedBytes + Int64(readCount) > kindleMaximumFileSize {
+                throw KindleImportFileError.fileTooLarge
+            }
+            try ensureKindleTemporaryStorage(payloadBytes: Int64(readCount))
+            do {
+                try output.write(contentsOf: Data(buffer[0..<readCount]))
+            } catch {
+                throw KindleImportFileError.insufficientStorage
+            }
+            copiedBytes += Int64(readCount)
+        }
+        do {
+            try output.synchronize()
+            return try Data(contentsOf: temporaryURL)
+        } catch let error as KindleImportFileError {
+            throw error
+        } catch {
+            throw KindleImportFileError.readFailed
+        }
+    }
+
+    nonisolated static func ensureKindleTemporaryStorage(payloadBytes: Int64) throws {
+        let attributes = try? FileManager.default.attributesOfFileSystem(
+            forPath: FileManager.default.temporaryDirectory.path
+        )
+        guard let free = (attributes?[.systemFreeSize] as? NSNumber)?.int64Value else { return }
+        if free - kindleStorageReserve < payloadBytes {
+            throw KindleImportFileError.insufficientStorage
+        }
+    }
+
     nonisolated struct ChapterIndex: Sendable {
         var uid: [String: Int64] = [:]
+        var anchor: [String: Int64] = [:]
         var path: [String: Int64] = [:]
         var title: [String: [Int64]] = [:]
+        var suppressedUIDs: Set<String> = []
+        var suppressedAnchors: Set<String> = []
+        var suppressedPaths: Set<String> = []
     }
 
     nonisolated func upsertBook(
@@ -138,10 +320,22 @@ private extension NoteImportRepository {
         if let targetID = item.targetBookID, var record = try BookRecord.fetchOne(db, key: targetID) {
             // Android `addBookForImport` 对显式目标只记录本次导入的原书名，不把导入元数据
             // 回填目标书，也不刷新 book.updated_date。
-            record.rawName = draft.source == 2
-                ? (draft.rawName.isEmpty ? draft.name : draft.rawName)
-                    .trimmingCharacters(in: .whitespacesAndNewlines)
-                : draft.name
+            record.rawName = draft.source == 2 ? Self.kindleCanonicalRawName(draft) : draft.name
+            if let wordCount = draft.wordCount { record.wordCount = wordCount }
+            if record.wereadBookId.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+               !draft.wereadBookID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                record.wereadBookId = draft.wereadBookID
+            }
+            if draft.source == 2,
+               draft.bookmarkModifiedTime > 0,
+               draft.readPosition > 0,
+               draft.bookmarkModifiedTime > record.bookMarkModifiedTime {
+                record.readPosition = draft.readPosition
+                record.currentPositionUnit = draft.currentPositionUnit
+                record.positionUnit = draft.currentPositionUnit
+                record.bookMarkModifiedTime = draft.bookmarkModifiedTime
+                record.updatedDate = now
+            }
             try record.update(db)
             return targetID
         }
@@ -168,9 +362,11 @@ private extension NoteImportRepository {
         record.positionUnit = draft.positionUnit
         record.currentPositionUnit = draft.currentPositionUnit
         record.readPosition = draft.readPosition
+        record.bookMarkModifiedTime = draft.bookmarkModifiedTime
         record.totalPosition = draft.totalPosition
         record.totalPagination = draft.totalPagination
         record.wordCount = draft.wordCount
+        record.wereadBookId = draft.wereadBookID
         record.score = draft.score
         record.purchaseDate = draft.purchaseDate
         record.price = draft.price
@@ -182,6 +378,52 @@ private extension NoteImportRepository {
         try record.insert(db)
         guard let id = record.id else { throw NoteImportParserError.unexpected("创建书籍失败") }
         return id
+    }
+
+    nonisolated static func kindleCanonicalRawName(_ draft: NoteImportDraftBook) -> String {
+        (draft.rawName.isEmpty ? draft.name : draft.rawName)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    nonisolated static func kindleLegacyRawNameCandidates(_ draft: NoteImportDraftBook) -> [String] {
+        guard draft.source == 2 else { return [] }
+        let canonical = kindleCanonicalRawName(draft)
+        guard !canonical.isEmpty else { return [] }
+        let noSpace = canonical.replacingOccurrences(of: " ", with: "")
+        let boundaries = [canonical.firstIndex(of: "("), canonical.firstIndex(of: "（")].compactMap { $0 }
+        let truncated = boundaries.min().map {
+            canonical[..<$0].replacingOccurrences(of: " ", with: "")
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+        } ?? ""
+        var values: [String] = []
+        if noSpace != canonical { values.append(noSpace) }
+        if !truncated.isEmpty, truncated != canonical { values.append(truncated) }
+        values.append("\u{FEFF}\(noSpace)")
+        if !truncated.isEmpty { values.append("\u{FEFF}\(truncated)") }
+        var seen = Set<String>()
+        return values.filter { !$0.isEmpty && seen.insert($0).inserted }
+    }
+
+    nonisolated static func uniqueKindleLegacyTarget(
+        _ candidates: [BookRecord],
+        importedAuthor: String
+    ) -> BookRecord? {
+        var seen = Set<Int64>()
+        let distinct = candidates.filter { record in
+            guard let id = record.id else { return false }
+            return seen.insert(id).inserted
+        }
+        if distinct.count == 1 { return distinct[0] }
+        let author = normalizeKindleAuthor(importedAuthor)
+        guard !author.isEmpty else { return nil }
+        let matches = distinct.filter { normalizeKindleAuthor($0.author) == author }
+        return matches.count == 1 ? matches[0] : nil
+    }
+
+    nonisolated static func normalizeKindleAuthor(_ author: String) -> String {
+        author.trimmingCharacters(in: .whitespacesAndNewlines)
+            .replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
+            .lowercased()
     }
 
     nonisolated static func cleanedBookName(_ name: String) -> String {
@@ -227,6 +469,251 @@ private extension NoteImportRepository {
         return result
     }
 
+    nonisolated struct ChapterSaveResult {
+        let id: Int64
+        let sourceType: Int64
+        let sourceUID: String
+        let sourceAnchor: String
+    }
+
+    nonisolated struct ChapterSourceKey: Hashable {
+        let sourceType: Int64
+        let value: String
+    }
+
+    nonisolated struct ChapterTitleKey: Hashable {
+        let parentID: Int64
+        let title: String
+    }
+
+    /// 单本书的一次章节导入会话；从含删除记录的完整快照匹配，确保重复导入不覆盖用户编辑或复活已删章节。
+    nonisolated struct ChapterImportSession {
+        private enum MatchKind {
+            case sourceUID
+            case sourceAnchor
+            case legacyTitle
+        }
+
+        private struct Match {
+            let id: Int64
+            let kind: MatchKind
+        }
+
+        private let bookID: Int64
+        private var recordsByID: [Int64: ChapterRecord]
+        private var sourceUIDIndex: [ChapterSourceKey: [Int64]] = [:]
+        private var sourceAnchorIndex: [ChapterSourceKey: [Int64]] = [:]
+        private var titleIndex: [ChapterTitleKey: [Int64]] = [:]
+        private var maximumOrderByParentID: [Int64: Int64] = [:]
+
+        init(bookID: Int64, db: Database) throws {
+            self.bookID = bookID
+            let records = try ChapterRecord
+                .filter(Column("book_id") == bookID)
+                .fetchAll(db)
+            recordsByID = Dictionary(uniqueKeysWithValues: records.compactMap { record in
+                record.id.map { ($0, record) }
+            })
+            rebuildIndexes()
+        }
+
+        /// 保存单个导入章节；匹配记录仅回填缺失身份，新记录才采用传入标题并计算本地顺序与层级。
+        mutating func save(
+            chapter: NoteImportDraftChapter,
+            parentID: Int64,
+            path: [String],
+            now: Int64,
+            db: Database
+        ) throws -> ChapterSaveResult {
+            let prepared = prepare(chapter: chapter, parentID: parentID, path: path)
+            if let match = find(prepared), var existing = recordsByID[match.id] {
+                guard existing.isDeleted == 0 else {
+                    return ChapterSaveResult(
+                        id: 0,
+                        sourceType: prepared.sourceType,
+                        sourceUID: prepared.sourceUid ?? "",
+                        sourceAnchor: prepared.sourceAnchor ?? ""
+                    )
+                }
+                let existingUID = existing.sourceUid?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                let incomingUID = prepared.sourceUid?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                let existingAnchor = existing.sourceAnchor?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                let incomingAnchor = prepared.sourceAnchor?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                let wasManual = existing.sourceType == 0
+                let replacesLegacyIdentity = match.kind == .legacyTitle
+                    && NoteImportRepository.isPathChapterUID(incomingUID)
+                    && existing.sourceType == prepared.sourceType
+                let upgradesPathIdentity = NoteImportRepository.isPathChapterUID(existingUID)
+                    && !incomingUID.isEmpty
+                    && !NoteImportRepository.isPathChapterUID(incomingUID)
+                let needsUpdate = wasManual
+                    || existingUID.isEmpty
+                    || (existingAnchor.isEmpty && !incomingAnchor.isEmpty)
+                    || replacesLegacyIdentity
+                    || upgradesPathIdentity
+                if needsUpdate {
+                    if wasManual { existing.sourceType = prepared.sourceType }
+                    if wasManual || existingUID.isEmpty || replacesLegacyIdentity || upgradesPathIdentity {
+                        existing.sourceUid = incomingUID
+                    }
+                    if (wasManual || existingAnchor.isEmpty), !incomingAnchor.isEmpty {
+                        existing.sourceAnchor = incomingAnchor
+                    }
+                    if existing.sourceOrder == 0, prepared.sourceOrder != 0 {
+                        existing.sourceOrder = prepared.sourceOrder
+                    }
+                    if prepared.isImport == 1 { existing.isImport = 1 }
+                    try existing.update(db)
+                    recordsByID[match.id] = existing
+                    rebuildIndexes()
+                }
+                return ChapterSaveResult(
+                    id: match.id,
+                    sourceType: prepared.sourceType,
+                    sourceUID: incomingUID,
+                    sourceAnchor: incomingAnchor
+                )
+            }
+
+            var created = prepared
+            created.chapterOrder = nextOrder(parentID: parentID)
+            created.chapterLevel = Int64(activeDepth(parentID: parentID) + 1)
+            created.createdDate = now
+            created.updatedDate = 0
+            try created.insert(db)
+            guard let id = created.id else {
+                throw NoteImportParserError.unexpected("创建章节失败")
+            }
+            recordsByID[id] = created
+            rebuildIndexes()
+            return ChapterSaveResult(
+                id: id,
+                sourceType: created.sourceType,
+                sourceUID: created.sourceUid ?? "",
+                sourceAnchor: created.sourceAnchor ?? ""
+            )
+        }
+
+        private func prepare(
+            chapter: NoteImportDraftChapter,
+            parentID: Int64,
+            path: [String]
+        ) -> ChapterRecord {
+            var sourceType = chapter.sourceType
+            var sourceUID = chapter.sourceUID.trimmingCharacters(in: .whitespacesAndNewlines)
+            let sourceAnchor = chapter.sourceAnchor.trimmingCharacters(in: .whitespacesAndNewlines)
+            if sourceType == 0 { sourceType = 2 }
+            if sourceUID.isEmpty, sourceAnchor.isEmpty {
+                sourceUID = NoteImportRepository.pathChapterUID(sourceType: sourceType, path: path)
+            }
+            var record = ChapterRecord()
+            record.bookId = bookID
+            record.parentId = parentID
+            record.title = chapter.title.trimmingCharacters(in: .whitespacesAndNewlines)
+            record.remark = chapter.remark
+            record.isImport = 1
+            record.sourceType = sourceType
+            record.sourceUid = sourceUID
+            record.sourceAnchor = sourceAnchor
+            record.sourceOrder = chapter.sourceOrder
+            record.sourcePath = path.joined(separator: " / ")
+            return record
+        }
+
+        private func find(_ incoming: ChapterRecord) -> Match? {
+            let sourceUID = incoming.sourceUid?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            let sourceAnchor = incoming.sourceAnchor?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            if incoming.sourceType != 0, !sourceUID.isEmpty,
+               let id = choose(sourceUIDIndex[ChapterSourceKey(sourceType: incoming.sourceType, value: sourceUID)]) {
+                return Match(id: id, kind: .sourceUID)
+            }
+            if incoming.sourceType != 0, !sourceAnchor.isEmpty,
+               let id = choose(sourceAnchorIndex[ChapterSourceKey(sourceType: incoming.sourceType, value: sourceAnchor)]) {
+                return Match(id: id, kind: .sourceAnchor)
+            }
+
+            let incomingHasIdentity = incoming.sourceType != 0 && (!sourceUID.isEmpty || !sourceAnchor.isEmpty)
+            let candidates = titleIndex[
+                ChapterTitleKey(
+                    parentID: incoming.parentId,
+                    title: incoming.title.trimmingCharacters(in: .whitespacesAndNewlines)
+                )
+            , default: []].filter { id in
+                guard let existing = recordsByID[id] else { return false }
+                return !hasIdentity(existing)
+                    || !incomingHasIdentity
+                    || NoteImportRepository.isPathChapterUID(sourceUID)
+            }
+            return choose(candidates).map { Match(id: $0, kind: .legacyTitle) }
+        }
+
+        private func choose(_ candidates: [Int64]?) -> Int64? {
+            let values = candidates ?? []
+            return values.filter { recordsByID[$0]?.isDeleted == 0 }.min() ?? values.min()
+        }
+
+        private func hasIdentity(_ record: ChapterRecord) -> Bool {
+            record.sourceType != 0 && (
+                !(record.sourceUid?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true)
+                    || !(record.sourceAnchor?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true)
+            )
+        }
+
+        private mutating func nextOrder(parentID: Int64) -> Int64 {
+            let value = (maximumOrderByParentID[parentID] ?? 0) + 1
+            maximumOrderByParentID[parentID] = value
+            return value
+        }
+
+        private func activeDepth(parentID: Int64) -> Int {
+            var depth = 0
+            var currentID = parentID
+            var visited = Set<Int64>()
+            while currentID != 0, visited.insert(currentID).inserted,
+                  let record = recordsByID[currentID], record.isDeleted == 0 {
+                depth += 1
+                currentID = record.parentId
+            }
+            return depth
+        }
+
+        private mutating func rebuildIndexes() {
+            sourceUIDIndex.removeAll(keepingCapacity: true)
+            sourceAnchorIndex.removeAll(keepingCapacity: true)
+            titleIndex.removeAll(keepingCapacity: true)
+            maximumOrderByParentID.removeAll(keepingCapacity: true)
+            for (id, record) in recordsByID {
+                let sourceUID = record.sourceUid?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                let sourceAnchor = record.sourceAnchor?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                if record.sourceType != 0, !sourceUID.isEmpty {
+                    sourceUIDIndex[
+                        ChapterSourceKey(sourceType: record.sourceType, value: sourceUID),
+                        default: []
+                    ].append(id)
+                }
+                if record.sourceType != 0, !sourceAnchor.isEmpty {
+                    sourceAnchorIndex[
+                        ChapterSourceKey(sourceType: record.sourceType, value: sourceAnchor),
+                        default: []
+                    ].append(id)
+                }
+                titleIndex[
+                    ChapterTitleKey(
+                        parentID: record.parentId,
+                        title: record.title.trimmingCharacters(in: .whitespacesAndNewlines)
+                    ),
+                    default: []
+                ].append(id)
+                if record.isDeleted == 0 {
+                    maximumOrderByParentID[record.parentId] = max(
+                        maximumOrderByParentID[record.parentId] ?? 0,
+                        record.chapterOrder
+                    )
+                }
+            }
+        }
+    }
+
     nonisolated func upsertChapters(
         _ chapters: [NoteImportDraftChapter],
         bookID: Int64,
@@ -234,71 +721,113 @@ private extension NoteImportRepository {
         parentPath: [String],
         now: Int64,
         db: Database,
+        session: inout ChapterImportSession,
         index: inout ChapterIndex
     ) throws {
-        for (offset, chapter) in chapters.enumerated() {
+        for chapter in chapters {
             let title = chapter.title.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !title.isEmpty else { continue }
-            let path = chapter.pathTitles.isEmpty ? parentPath + [title] : chapter.pathTitles
-            let sourceUID = chapter.sourceUID.isEmpty ? nil : chapter.sourceUID
-            var record: ChapterRecord?
-            if let sourceUID {
-                record = try ChapterRecord.fetchOne(db, sql: "SELECT * FROM chapter WHERE book_id = ? AND source_type = ? AND source_uid = ? LIMIT 1", arguments: [bookID, chapter.sourceType, sourceUID])
+            let path = (chapter.pathTitles.isEmpty ? parentPath + [title] : chapter.pathTitles)
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { !$0.isEmpty }
+            let result = try session.save(
+                chapter: chapter,
+                parentID: parentID,
+                path: path,
+                now: now,
+                db: db
+            )
+            let pathKey = Self.chapterPathKey(path)
+            let anchorKey = Self.chapterAnchorKey(sourceType: result.sourceType, anchor: result.sourceAnchor)
+            guard result.id != 0 else {
+                if !result.sourceUID.isEmpty { index.suppressedUIDs.insert(result.sourceUID) }
+                if !anchorKey.isEmpty { index.suppressedAnchors.insert(anchorKey) }
+                if !pathKey.isEmpty { index.suppressedPaths.insert(pathKey) }
+                continue
             }
-            if record == nil {
-                record = try ChapterRecord.fetchOne(db, sql: "SELECT * FROM chapter WHERE book_id = ? AND parent_id = ? AND title = ? AND is_deleted = 0 LIMIT 1", arguments: [bookID, parentID, title])
-            }
-            var value = record ?? ChapterRecord()
-            let isNew = value.id == nil
-            value.bookId = bookID
-            value.parentId = parentID
-            value.title = title
-            value.remark = chapter.remark
-            value.chapterOrder = chapter.order == 0 ? Int64(offset + 1) : chapter.order
-            value.chapterLevel = chapter.level == 0 ? Int64(path.count) : chapter.level
-            value.isImport = 1
-            value.sourceType = chapter.sourceType == 0 ? 2 : chapter.sourceType
-            value.sourceUid = sourceUID ?? Self.catalogUID(path)
-            value.sourceAnchor = chapter.sourceAnchor
-            value.sourceOrder = chapter.sourceOrder
-            value.sourcePath = chapter.sourcePath.isEmpty ? path.joined(separator: "$") : chapter.sourcePath
-            value.updatedDate = isNew ? 0 : now
-            value.isDeleted = 0
-            if isNew { value.createdDate = now; try value.insert(db) } else { try value.update(db) }
-            guard let chapterID = value.id else { continue }
-            if let sourceUID { index.uid[sourceUID] = chapterID }
-            index.uid[value.sourceUid ?? ""] = chapterID
-            index.path[path.joined(separator: "$")] = chapterID
-            index.title[title, default: []].append(chapterID)
-            try upsertChapters(chapter.children, bookID: bookID, parentID: chapterID, parentPath: path, now: now, db: db, index: &index)
+            if !result.sourceUID.isEmpty { index.uid[result.sourceUID] = result.id }
+            if !anchorKey.isEmpty { index.anchor[anchorKey] = result.id }
+            if !pathKey.isEmpty { index.path[pathKey] = result.id }
+            index.title[title, default: []].append(result.id)
+            try upsertChapters(
+                chapter.children,
+                bookID: bookID,
+                parentID: result.id,
+                parentPath: path,
+                now: now,
+                db: db,
+                session: &session,
+                index: &index
+            )
         }
     }
 
     nonisolated func upsertNotes(
         _ notes: [NoteImportDraftNote],
         bookID: Int64,
+        bookPositionUnit: Int64,
         chapterIndex: ChapterIndex,
         ownerID: Int64,
         now: Int64,
         db: Database
     ) throws {
-        for note in notes where !note.content.isEmpty || !note.idea.isEmpty {
-            let existingID: Int64? = try Int64.fetchOne(db, sql: "SELECT id FROM note WHERE book_id = ? AND content = ? AND idea = ? AND is_deleted = 0 LIMIT 1", arguments: [bookID, note.content, note.idea])
+        try backfillImportHashes(bookID: bookID, db: db)
+        var hashIndex = Dictionary(
+            uniqueKeysWithValues: try NoteImportHashRecord
+                .filter(Column("book_id") == bookID)
+                .fetchAll(db)
+                .map { ($0.contentHash, $0.noteId) }
+        )
+
+        for note in notes {
+            let persistedContent = note.content.replacingOccurrences(of: "<", with: "&lt;")
+            let persistedIdea = note.idea.replacingOccurrences(of: "<", with: "&lt;")
+            guard let contentHash = NoteImportContentHash.calculate(
+                content: persistedContent,
+                idea: persistedIdea,
+                attachmentDigests: note.attachments.map(\.digest)
+            ) else { continue }
+            if hashIndex[contentHash] != nil { continue }
+            if let hashMatched = try NoteImportHashRecord
+                .filter(Column("book_id") == bookID && Column("content_hash") == contentHash)
+                .fetchOne(db) {
+                hashIndex[contentHash] = hashMatched.noteId
+                continue
+            }
+
+            let existing = (!NoteImportTextSupport.isBlank(persistedContent) || !NoteImportTextSupport.isBlank(persistedIdea))
+                ? try NoteRecord
+                    .filter(
+                        Column("book_id") == bookID
+                            && Column("content") == persistedContent
+                            && Column("idea") == persistedIdea
+                            && Column("is_deleted") == 0
+                    )
+                    .order(Column("id"))
+                    .fetchOne(db)
+                : nil
+            if let existingID = existing?.id {
+                try bindImportHash(bookID: bookID, contentHash: contentHash, noteID: existingID, db: db)
+                hashIndex[contentHash] = existingID
+                continue
+            }
+
             let chapterID = resolveChapter(note.chapter, fallbackUID: note.wereadChapterUID, index: chapterIndex)
-            guard existingID == nil else { continue }
             var record = NoteRecord()
             record.bookId = bookID
             record.chapterId = chapterID
-            record.content = note.content.replacingOccurrences(of: "<", with: "&lt;")
-            record.idea = note.idea.replacingOccurrences(of: "<", with: "&lt;")
+            record.content = persistedContent
+            record.idea = persistedIdea
             record.position = note.position
-            record.positionUnit = note.positionUnit
+            record.positionUnit = bookPositionUnit
             record.wereadRange = note.wereadRange
-            record.includeTime = note.isIncludeTime ? 1 : 0
+            record.includeTime = note.createdTime == 0 ? 0 : (note.isIncludeTime ? 1 : 0)
             record.createdDate = note.createdTime == 0 ? now : note.createdTime
             record.updatedDate = 0
             try record.insert(db)
             guard let noteID = record.id else { continue }
+            try bindImportHash(bookID: bookID, contentHash: contentHash, noteID: noteID, db: db)
+            hashIndex[contentHash] = noteID
             for attachment in note.attachments where !attachment.imageURL.isEmpty {
                 var image = AttachImageRecord()
                 image.noteId = noteID
@@ -311,11 +840,47 @@ private extension NoteImportRepository {
         }
     }
 
+    /// 为同一本书尚无身份的存量有效文本书摘按主键顺序懒回填 Hash；调用者位于逐书事务内，不产生并发观察窗口。
+    nonisolated func backfillImportHashes(bookID: Int64, db: Database) throws {
+        let hashedNoteIDs = Set(try NoteImportHashRecord
+            .filter(Column("book_id") == bookID)
+            .fetchAll(db)
+            .map(\.noteId))
+        let candidates = try NoteRecord
+            .filter(Column("book_id") == bookID && Column("is_deleted") == 0)
+            .order(Column("id"))
+            .fetchAll(db)
+        for note in candidates {
+            guard let noteID = note.id,
+                  !hashedNoteIDs.contains(noteID),
+                  (!NoteImportTextSupport.isBlank(note.content) || !NoteImportTextSupport.isBlank(note.idea)),
+                  let contentHash = NoteImportContentHash.calculate(content: note.content, idea: note.idea)
+            else { continue }
+            try NoteImportHashRecord(bookId: bookID, contentHash: contentHash, noteId: noteID).insert(db)
+        }
+    }
+
+    /// 在当前逐书事务内绑定书摘与内容 Hash；复合主键冲突由 Record 的 IGNORE 策略保持首个身份。
+    nonisolated func bindImportHash(
+        bookID: Int64,
+        contentHash: String,
+        noteID: Int64,
+        db: Database
+    ) throws {
+        try NoteImportHashRecord(bookId: bookID, contentHash: contentHash, noteId: noteID).insert(db)
+        guard let bound = try NoteImportHashRecord
+            .filter(Column("book_id") == bookID && Column("content_hash") == contentHash)
+            .fetchOne(db), bound.noteId == noteID else {
+            throw NoteImportParserError.unexpected("绑定书摘导入身份失败")
+        }
+    }
+
     nonisolated func upsertFallbackNoteChapters(
         _ notes: [NoteImportDraftNote],
         bookID: Int64,
         now: Int64,
         db: Database,
+        session: inout ChapterImportSession,
         index: inout ChapterIndex
     ) throws {
         for note in notes {
@@ -325,37 +890,58 @@ private extension NoteImportRepository {
             guard !titles.isEmpty, index.path[titles.joined(separator: "$")] == nil else { continue }
             var parentID: Int64 = 0
             var currentPath: [String] = []
-            for (offset, title) in titles.enumerated() {
+            for title in titles {
                 currentPath.append(title)
-                let key = currentPath.joined(separator: "$")
+                let key = Self.chapterPathKey(currentPath)
+                if index.suppressedPaths.contains(key) { break }
                 if let existingID = index.path[key] { parentID = existingID; continue }
-                var record = try ChapterRecord.fetchOne(db, sql: "SELECT * FROM chapter WHERE book_id = ? AND parent_id = ? AND title = ? AND is_deleted = 0 LIMIT 1", arguments: [bookID, parentID, title]) ?? ChapterRecord()
-                let isNew = record.id == nil
-                record.bookId = bookID
-                record.parentId = parentID
-                record.title = title
-                record.chapterOrder = Int64(offset + 1)
-                record.chapterLevel = Int64(currentPath.count)
-                record.isImport = 1
-                record.sourceType = 2
-                record.sourceUid = ""
-                record.sourceAnchor = ""
-                record.sourcePath = key
-                record.updatedDate = isNew ? 0 : now
-                record.isDeleted = 0
-                if isNew { record.createdDate = now; try record.insert(db) } else { try record.update(db) }
-                guard let chapterID = record.id else { continue }
-                index.path[key] = chapterID; index.title[title, default: []].append(chapterID); parentID = chapterID
+                let result = try session.save(
+                    chapter: NoteImportDraftChapter(title: title),
+                    parentID: parentID,
+                    path: currentPath,
+                    now: now,
+                    db: db
+                )
+                guard result.id != 0 else {
+                    index.suppressedPaths.insert(key)
+                    if !result.sourceUID.isEmpty { index.suppressedUIDs.insert(result.sourceUID) }
+                    break
+                }
+                index.path[key] = result.id
+                if !result.sourceUID.isEmpty { index.uid[result.sourceUID] = result.id }
+                index.title[title, default: []].append(result.id)
+                parentID = result.id
             }
         }
     }
 
     nonisolated func resolveChapter(_ chapter: NoteImportDraftChapter?, fallbackUID: Int64, index: ChapterIndex) -> Int64 {
-        if fallbackUID != 0, let id = index.uid[String(fallbackUID)] { return id }
+        if fallbackUID != 0 {
+            let uid = String(fallbackUID)
+            if index.suppressedUIDs.contains(uid) { return 0 }
+            if let id = index.uid[uid] { return id }
+        }
         guard let chapter else { return 0 }
-        if !chapter.sourceUID.isEmpty, let id = index.uid[chapter.sourceUID] { return id }
-        if !chapter.pathTitles.isEmpty, let id = index.path[chapter.pathTitles.joined(separator: "$")] { return id }
-        let matches = index.title[chapter.title] ?? []
+        let sourceUID = chapter.sourceUID.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !sourceUID.isEmpty {
+            if index.suppressedUIDs.contains(sourceUID) { return 0 }
+            if let id = index.uid[sourceUID] { return id }
+        }
+        let anchorKey = Self.chapterAnchorKey(
+            sourceType: chapter.sourceType == 0 ? 2 : chapter.sourceType,
+            anchor: chapter.sourceAnchor
+        )
+        if !anchorKey.isEmpty {
+            if index.suppressedAnchors.contains(anchorKey) { return 0 }
+            if let id = index.anchor[anchorKey] { return id }
+        }
+        if !chapter.pathTitles.isEmpty {
+            let pathKey = Self.chapterPathKey(chapter.pathTitles)
+            if index.suppressedPaths.contains(pathKey) { return 0 }
+            if let id = index.path[pathKey] { return id }
+        }
+        let title = chapter.title.trimmingCharacters(in: .whitespacesAndNewlines)
+        let matches = Array(Set(index.title[title] ?? []))
         return matches.count == 1 ? matches[0] : 0
     }
 
@@ -419,6 +1005,47 @@ private extension NoteImportRepository {
     }
 
     nonisolated func upsertReadingTime(_ draft: NoteImportDraftBook, bookID: Int64, now: Int64, db: Database) throws {
+        let wereadDurations = draft.wereadReadingDurations ?? []
+        if !wereadDurations.isEmpty {
+            // SQL 目的：判断当前书籍是否存在用户手工阅读时长；微信导入不得覆盖或混入手工计时。
+            // 涉及表：read_time_record；weread_read_date = 0 表示非微信导入记录。
+            // 关键过滤：仅统计当前书籍的有效记录。
+            // 时间字段：weread_read_date 为毫秒时间戳，0 为来源标识而非日期。
+            // 返回字段用途：存在任意手工记录时跳过整批微信阅读时长。
+            let manualCount: Int = try Int.fetchOne(
+                db,
+                sql: "SELECT COUNT(*) FROM read_time_record WHERE book_id = ? AND is_deleted = 0 AND weread_read_date = 0",
+                arguments: [bookID]
+            ) ?? 0
+            if manualCount == 0 {
+                for duration in wereadDurations {
+                    guard let date = duration.date,
+                          let seconds = duration.durationSeconds,
+                          date > 0,
+                          seconds > 0 else { continue }
+                    if let id: Int64 = try Int64.fetchOne(
+                        db,
+                        sql: "SELECT id FROM read_time_record WHERE book_id = ? AND weread_read_date = ? AND is_deleted = 0 ORDER BY id LIMIT 1",
+                        arguments: [bookID, date]
+                    ) {
+                        try db.execute(
+                            sql: "UPDATE read_time_record SET elapsed_seconds = ?, updated_date = ? WHERE id = ?",
+                            arguments: [seconds, now, id]
+                        )
+                    } else {
+                        var record = ReadTimeRecordRecord()
+                        record.bookId = bookID
+                        record.elapsedSeconds = seconds
+                        record.status = 3
+                        record.fuzzyReadDate = date
+                        record.wereadReadDate = date
+                        record.createdDate = now
+                        record.updatedDate = now
+                        try record.insert(db)
+                    }
+                }
+            }
+        }
         for duration in draft.preciseReadingDurations ?? [] {
             guard let start = duration.startTime, let end = duration.endTime, end > start else { continue }
             let exists: Int = try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM read_time_record WHERE book_id = ? AND start_time = ? AND end_time = ? AND is_deleted = 0", arguments: [bookID, start, end]) ?? 0
@@ -451,8 +1078,27 @@ private extension NoteImportRepository {
         try db.execute(sql: "UPDATE book SET read_status_id = ?, read_status_changed_date = ?, updated_date = ? WHERE id = ?", arguments: [draft.readStatusID, changed, now, bookID])
     }
 
-    nonisolated static func catalogUID(_ path: [String]) -> String {
-        "catalog:" + path.joined(separator: "\0")
+    nonisolated static func chapterPathKey(_ path: [String]) -> String {
+        path.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+            .joined(separator: "$")
+    }
+
+    nonisolated static func pathChapterUID(sourceType: Int64, path: [String]) -> String {
+        let key = chapterPathKey(path)
+        guard !key.isEmpty else { return "" }
+        if sourceType == 1 { return "weread_path:\(key)" }
+        if sourceType == 2 { return "api_import_catalog:\(key)" }
+        return ""
+    }
+
+    nonisolated static func isPathChapterUID(_ sourceUID: String) -> Bool {
+        sourceUID.hasPrefix("weread_path:") || sourceUID.hasPrefix("api_import_catalog:")
+    }
+
+    nonisolated static func chapterAnchorKey(sourceType: Int64, anchor: String) -> String {
+        let normalized = anchor.trimmingCharacters(in: .whitespacesAndNewlines)
+        return normalized.isEmpty ? "" : "\(sourceType)\0\(normalized)"
     }
 
     nonisolated func derivedCreatedDate(_ draft: NoteImportDraftBook, fallback: Int64) -> Int64 {

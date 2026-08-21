@@ -582,12 +582,25 @@ protocol S3UploadRepositoryProtocol: AnyObject {
     func isStagedFileAvailable(at localURL: URL) async -> Bool
     /// 使用当前启用配置上传本地文件并返回对象键与远端地址。
     func uploadFile(localURL: URL, prefix: String, progress: (@Sendable (Double) -> Void)?) async throws -> S3UploadResult
+    /// 使用调用方提供的稳定对象键上传；仅用于来源内容摘要已经确定的幂等导入。
+    func uploadFile(localURL: URL, objectKey: String, progress: (@Sendable (Double) -> Void)?) async throws -> S3UploadResult
     /// 校验当前启用配置是否可访问 S3 兼容网关。
     func testCurrentConfiguration() async throws
     /// 删除指定对象键或完整 URL 对应的远端对象。
     func deleteObject(path: String) async throws
     /// 取消当前正在执行的上传请求。
     func cancelCurrentUpload()
+}
+
+extension S3UploadRepositoryProtocol {
+    /// 测试替身未关心对象键时沿用普通上传；生产实现覆盖此方法以保持稳定对象键。
+    func uploadFile(
+        localURL: URL,
+        objectKey: String,
+        progress: (@Sendable (Double) -> Void)?
+    ) async throws -> S3UploadResult {
+        try await uploadFile(localURL: localURL, prefix: objectKey, progress: progress)
+    }
 }
 
 /// 阅读日历事件条封面取色仓储
@@ -783,6 +796,13 @@ protocol WereadImportRepositoryProtocol {
         authorization: WereadAuthorization,
         bookIDs: [String],
         importsReadingTime: Bool,
+        progress: @escaping (Int, Int) -> Void,
+        warning: @escaping (String) -> Void
+    ) async throws -> [WereadImportBook]
+    func fetchImportBooks(
+        authorization: WereadAuthorization,
+        bookIDs: [String],
+        importsReadingTime: Bool,
         progress: @escaping (Int, Int) -> Void
     ) async throws -> [WereadImportBook]
     func matchLocalBooks(_ books: [WereadImportBook]) async throws -> [WereadImportBook]
@@ -800,6 +820,12 @@ protocol WereadImportRepositoryProtocol {
 /// 全来源书摘导入仓储契约；Parser、API 和特殊入口统一通过 Draft 进入此写入边界。
 @MainActor
 protocol NoteImportRepositoryProtocol {
+    /// 从系统文件选择器授予的 security-scoped URL 流式复制 Kindle 文件；32 MiB、4 MiB 空间预留和取消语义与 Android OTG 对齐。
+    func loadKindleClippingsFile(from url: URL) async throws -> Data
+    /// 通过仓储读取并解析汉王分享页正文；网络取消由调用任务向 URLSession 传播。
+    func fetchHanWangShareContent(from sharedURL: String) async throws -> String
+    /// 通过仓储封装三联中读登录与书摘获取，避免页面直接持有网络 Service。
+    func fetchLifeWeekBooks(phoneNumber: String, password: String) async throws -> [NoteImportDraftBook]
     func matchLocalBook(for draft: NoteImportDraftBook) async throws -> BookPickerBook?
     /// 按 Android `BookDao.queryByIdSuspend` 语义判断显式导入目标是否存在；软删除记录仍是可解析目标。
     func hasImportTargetBook(id: Int64) async throws -> Bool
