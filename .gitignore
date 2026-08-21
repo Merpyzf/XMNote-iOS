@@ -1,2 +1,5 @@
 /artifacts/
+/tmp/
 **/xcuserdata/
+**/__pycache__/
+*.py[cod]
