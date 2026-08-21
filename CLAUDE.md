@@ -1,4 +1,4 @@
-AGENTS.md
+@AGENTS.md
 
 ### 自动同步模块清单（脚本生成）
 <!-- AUTO_SYNC_MODULES_START -->

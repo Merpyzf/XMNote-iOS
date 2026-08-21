@@ -60,6 +60,18 @@
 - 危险操作审批边界（强制）：凡涉及删除或不可逆覆盖的操作，一律先获得用户批准再执行；包括 `rm`、`git rm`、`git reset --hard`、`git checkout --`、覆盖式移动/替换、批量清理目录，以及其他会隐式删除文件的命令。
 - 平台边界说明：仓库规则只约束协作默认行为；沙箱、系统服务、网络能力等平台级限制仍以运行环境的实际权限模型为准。
 
+### Parallel iOS 任务 worktree
+- 主 worktree 保持本仓库现有构建、测试和 Simulator 流程，禁止被 Parallel iOS 自动接管或销毁。
+- 非主任务 worktree 的依赖准备、构建、测试、运行和截图统一通过 `Makefile.parallel-ios` 的 `ai-prepare`、`ai-build`、`ai-test`、`ai-run`、`ai-screenshot` 执行；首次调用会接管当前 worktree 并分配专属 Simulator。
+- 只有用户明确要求创建独立任务 worktree 时，才执行 `make -f Makefile.parallel-ios ai-task-create TASK=<slug> BASE=<ref>`；工具创建的分支使用 `codex/` 前缀。
+- 外部工具或 Codex 已创建的非主 worktree 使用 `ai-task-init` 接管，禁止嵌套创建任务 worktree。
+- 构建、测试、安装、启动和截图只能使用 `.parallel-ios-env` 记录的精确 Simulator UDID；禁止使用 `booted` 选择器及任何 `simctl shutdown/erase/delete all`、`delete unavailable` 或 CoreSimulator `killall` 命令。
+- 未经任务需要不得修改 `Package.resolved`；有意调整依赖后，先运行 `ai-resolve` 再构建。
+- `ai-test` 仅在用户明确要求测试时执行，继续遵守本仓库开发阶段默认不运行测试的约束。
+- 只有用户明确要求清理且预检确认 worktree 无未提交、未跟踪内容后，才执行 `ai-task-destroy`；禁止直接删除任务 worktree、强制清理或自动销毁交付环境。
+- 任务分支、共享 Package 下载缓存和 Xcode CAS 始终保留；禁止自动归档、签名、上传或部署到真实设备。
+- 交付时报告 worktree、分支、Simulator 名称与 UDID、执行命令、`.xcresult`/截图路径、依赖锁或工程设置变化及未验证事项。
+
 ## 4. 架构 / UI / 编码硬约束
 ### 目录与组件归位
 - 页面壳层（`*View` 页面入口/容器）唯一归属目录：`xmnote/Views/<Feature>/`。

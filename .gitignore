@@ -3,3 +3,4 @@
 **/xcuserdata/
 **/__pycache__/
 *.py[cod]
+.parallel-ios-env

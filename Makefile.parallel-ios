@@ -1,0 +1,41 @@
+PARALLEL_IOS_SCRIPTS ?= scripts/parallel-ios
+
+.PHONY: ai-doctor ai-task-create ai-task-init ai-task-destroy ai-prepare ai-resolve ai-build \
+	ai-test ai-test-build ai-test-run ai-run ai-screenshot
+
+ai-doctor:
+	@$(PARALLEL_IOS_SCRIPTS)/doctor.zsh
+
+ai-task-create:
+	@test -n "$(TASK)" || (echo "Usage: make ai-task-create TASK=my-task [BASE=<ref>]" >&2; exit 2)
+	@$(PARALLEL_IOS_SCRIPTS)/task-create.zsh "$(TASK)" "$(BASE)"
+
+ai-task-init:
+	@$(PARALLEL_IOS_SCRIPTS)/task-init.zsh "$(TASK)"
+
+ai-task-destroy:
+	@$(PARALLEL_IOS_SCRIPTS)/task-destroy.zsh "$(TASK)"
+
+ai-prepare:
+	@$(PARALLEL_IOS_SCRIPTS)/prepare.zsh
+
+ai-resolve:
+	@$(PARALLEL_IOS_SCRIPTS)/resolve-packages.zsh
+
+ai-build:
+	@$(PARALLEL_IOS_SCRIPTS)/build.zsh
+
+ai-test:
+	@ONLY_TESTING="$(ONLY_TESTING)" $(PARALLEL_IOS_SCRIPTS)/test.zsh test
+
+ai-test-build:
+	@$(PARALLEL_IOS_SCRIPTS)/test.zsh build-for-testing
+
+ai-test-run:
+	@ONLY_TESTING="$(ONLY_TESTING)" $(PARALLEL_IOS_SCRIPTS)/test.zsh test-without-building
+
+ai-run:
+	@$(PARALLEL_IOS_SCRIPTS)/run.zsh
+
+ai-screenshot:
+	@$(PARALLEL_IOS_SCRIPTS)/screenshot.zsh "$(FILE)"
