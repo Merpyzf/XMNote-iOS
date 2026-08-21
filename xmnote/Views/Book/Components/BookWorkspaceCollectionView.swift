@@ -1,6 +1,6 @@
 /**
- * [INPUT]: 依赖 BookWorkspacePresentationSnapshot、书籍工作台主题色板、SwiftUI 行内容构建器与 UIKit UICollectionView
- * [OUTPUT]: 对外提供贯穿顶部安全区和完整 Header、在 Tab 内延迟衰减并于吸顶后归中性的沉浸主题背景，自适应书名状态行、无遮挡书脊封面、分行出版元数据、按有效评分收放的封面胶囊、与 Android 数据语义对齐且带动态边缘渐隐的三项阅读指标 Chip、共享可收起书籍头部、几何稳定的吸顶 Tab 与纯内容原生 Pager
+ * [INPUT]: 依赖 BookWorkspacePresentationSnapshot、书籍工作台主题色板、XMMarqueeText、SwiftUI 行内容构建器与 UIKit UICollectionView
+ * [OUTPUT]: 对外提供贯穿顶部安全区和完整 Header、在 Tab 内延迟衰减并于吸顶后归中性的沉浸主题背景、接入公共连续跑马灯的书名状态行、无遮挡书脊封面、分行出版元数据、按有效评分收放的封面胶囊、与 Android 数据语义对齐且带动态边缘渐隐的三项阅读指标 Chip、共享可收起书籍头部、几何稳定的吸顶 Tab 与纯内容原生 Pager
  * [POS]: Views/Book/Components 的页面私有 UIKit 混合列表，负责背景/内容分层、分页、共享 Chrome、diff、章节吸顶和视口稳定
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -2369,139 +2369,6 @@ private struct BookWorkspaceMetricEdgeFadeMask: View {
     }
 }
 
-/// 用同源字体测量真实溢出，仅在需要时绘制无往返的单行书名跑马灯。
-private struct BookWorkspaceMarqueeTitleText: View {
-    let text: String
-
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var isScrolling = false
-    @State private var animationToken = UUID()
-
-    var body: some View {
-        GeometryReader { proxy in
-            let containerWidth = max(proxy.size.width, 0)
-            let textWidth = measuredTextWidth
-            let shouldScroll = !reduceMotion && textWidth > containerWidth + Spacing.tiny
-
-            Group {
-                if shouldScroll {
-                    scrollingTitle(textWidth: textWidth, containerWidth: containerWidth)
-                } else {
-                    titleLabel
-                        .lineLimit(1)
-                        .truncationMode(.tail)
-                        .frame(width: containerWidth, alignment: .leading)
-                }
-            }
-            .clipped()
-        }
-        .frame(height: BookWorkspaceTypography.titleLineHeight)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .clipped()
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(text)
-    }
-
-    /// 在身份栏视窗内绘制首尾相接的标题；静止时首字保持完整，滚动后才弱化左侧裁切。
-    private func scrollingTitle(textWidth: CGFloat, containerWidth: CGFloat) -> some View {
-        let edgeWidth = min(
-            BookWorkspaceLayoutMetrics.marqueeEdgeFadeWidth,
-            max(containerWidth / 4, 0)
-        )
-        return ZStack(alignment: .leading) {
-            HStack(spacing: BookWorkspaceLayoutMetrics.marqueeGap) {
-                titleLabel
-                    .fixedSize(horizontal: true, vertical: false)
-                titleLabel
-                    .fixedSize(horizontal: true, vertical: false)
-                    .accessibilityHidden(true)
-            }
-            .offset(
-                x: isScrolling
-                    ? -(textWidth + BookWorkspaceLayoutMetrics.marqueeGap)
-                    : 0
-            )
-        }
-        .frame(
-            width: containerWidth,
-            height: BookWorkspaceTypography.titleLineHeight,
-            alignment: .leading
-        )
-        .clipped()
-        .mask {
-            HStack(spacing: Spacing.none) {
-                Group {
-                    if isScrolling {
-                        LinearGradient(
-                            colors: [.clear, .black],
-                            startPoint: .leading,
-                            endPoint: .trailing
-                        )
-                    } else {
-                        Color.black
-                    }
-                }
-                .frame(width: edgeWidth)
-                Color.black
-                LinearGradient(
-                    colors: [.black, .clear],
-                    startPoint: .leading,
-                    endPoint: .trailing
-                )
-                .frame(width: edgeWidth)
-            }
-        }
-        .onAppear {
-            restartAnimation(containerWidth: containerWidth, textWidth: textWidth)
-        }
-        .onChange(of: containerWidth) { _, newWidth in
-            restartAnimation(containerWidth: newWidth, textWidth: textWidth)
-        }
-        .onChange(of: text) {
-            restartAnimation(containerWidth: containerWidth, textWidth: measuredTextWidth)
-        }
-        .onDisappear {
-            animationToken = UUID()
-            isScrolling = false
-        }
-    }
-
-    private var titleLabel: some View {
-        Text(text)
-            .font(BookWorkspaceTypography.title)
-            .foregroundStyle(Color.textPrimary)
-            .lineLimit(1)
-    }
-
-    private var measuredTextWidth: CGFloat {
-        ceil((text as NSString).size(
-            withAttributes: [.font: BookWorkspaceTypography.uiTitle]
-        ).width)
-    }
-
-    /// 在主队列延迟启动动画；令牌会让尺寸或文本变化前创建的回调失效，避免旧动画竞态覆盖。
-    private func restartAnimation(containerWidth: CGFloat, textWidth: CGFloat) {
-        let token = UUID()
-        animationToken = token
-        var transaction = Transaction(animation: nil)
-        transaction.disablesAnimations = true
-        withTransaction(transaction) {
-            isScrolling = false
-        }
-        guard textWidth > containerWidth + Spacing.tiny else { return }
-        let distance = textWidth + BookWorkspaceLayoutMetrics.marqueeGap
-        let duration = Double(distance / BookWorkspaceLayoutMetrics.marqueePointsPerSecond)
-        DispatchQueue.main.asyncAfter(
-            deadline: .now() + BookWorkspaceLayoutMetrics.marqueeInitialDelay
-        ) {
-            guard animationToken == token else { return }
-            withAnimation(.linear(duration: duration).repeatForever(autoreverses: false)) {
-                isScrolling = true
-            }
-        }
-    }
-}
-
 /// 在同一标题行内协调书名与阅读状态：短标题自然跟随，长标题为状态保留稳定行末空间。
 private struct BookWorkspaceTitleStatusRow: View {
     let title: String
@@ -2552,7 +2419,13 @@ private struct BookWorkspaceTitleStatusRow: View {
     }
 
     private var marqueeTitle: some View {
-        BookWorkspaceMarqueeTitleText(text: title)
+        XMMarqueeText(
+            title,
+            font: BookWorkspaceTypography.title,
+            color: .textPrimary,
+            lineHeight: BookWorkspaceTypography.titleLineHeight,
+            style: .standard
+        )
             .accessibilityHeading(.h1)
     }
 

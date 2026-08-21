@@ -49,10 +49,6 @@ enum BookWorkspaceLayoutMetrics {
     static let ratingCapsuleVisualWidth = CGFloat(ratingStarCount) * ratingStarSize
         + CGFloat(ratingStarCount - 1) * ratingStarSpacing
         + ratingCapsuleHorizontalInset * 2
-    static let marqueeGap: CGFloat = 32
-    static let marqueeEdgeFadeWidth: CGFloat = Spacing.base
-    static let marqueeInitialDelay: Double = 1.2
-    static let marqueePointsPerSecond: CGFloat = 24
     static let scopeItemSpacing: CGFloat = Spacing.double
     static let scopeTitleCountSpacing: CGFloat = Spacing.compact
     static let scopeIndicatorWidth: CGFloat = 24
@@ -65,7 +61,7 @@ enum BookWorkspaceLayoutMetrics {
     static let scopeNeutralizationStartProgress: CGFloat = 0.60
 }
 
-/// 单书工作台头部排版令牌；保证书名跑马灯的测量字体与实际渲染字体同源。
+/// 单书工作台头部排版令牌；保证公共书名跑马灯接收同源渲染字体与行高。
 enum BookWorkspaceTypography {
     static let title: Font = AppTypography.semantic(.title3, weight: .medium)
     static let uiTitle: UIFont = AppTypography.uiSemantic(.title3, weight: .medium)

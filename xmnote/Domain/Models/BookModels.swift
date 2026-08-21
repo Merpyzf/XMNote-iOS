@@ -2,7 +2,7 @@ import Foundation
 
 /**
  * [INPUT]: 依赖 Foundation 的 Date/DateFormatter 进行时间格式化
- * [OUTPUT]: 对外提供 BookItem、BookshelfSnapshot、BookshelfItem、BookshelfOrderItem、BookshelfListContext、BookshelfBatchEditOptions、BookshelfMoveGroupOption、BookCollectionSummary、BookCollectionDisplaySetting（含书单首页分组偏好）、BookCollectionBookMetadataEditInput、BookDetail 与单书四域内容模型
+ * [OUTPUT]: 对外提供 BookItem、BookshelfSnapshot、BookshelfItem、BookshelfOrderItem、BookshelfListContext、BookshelfBatchEditOptions、BookshelfMoveGroupOption、含旧书名滚动值兼容迁移的书架显示设置、BookCollectionSummary、BookCollectionDisplaySetting（含书单首页分组偏好）、BookCollectionBookMetadataEditInput、BookDetail 与单书四域内容模型
  * [POS]: Domain/Models 的书籍聚合模型定义，被 BookViewModel 与 BookRepository 实现共同消费
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -319,18 +319,18 @@ nonisolated enum BookshelfSortOrder: String, CaseIterable, Codable, Hashable, Se
     }
 }
 
-/// 书名在书架卡片上的展示策略，先作为设置语义沉淀，后续视觉细化继续复用。
+/// 书名在书架卡片上的展示策略；保留 compact 原始值只用于旧设置解码兼容。
 nonisolated enum BookshelfTitleDisplayMode: String, CaseIterable, Codable, Hashable, Sendable {
     case standard
     case compact
     case full
 
+    nonisolated static let allCases: [BookshelfTitleDisplayMode] = [.standard, .full]
+
     var title: String {
         switch self {
-        case .standard:
+        case .standard, .compact:
             return "默认显示"
-        case .compact:
-            return "滚动显示"
         case .full:
             return "两行显示"
         }
@@ -338,13 +338,16 @@ nonisolated enum BookshelfTitleDisplayMode: String, CaseIterable, Codable, Hasha
 
     var subtitle: String {
         switch self {
-        case .standard:
+        case .standard, .compact:
             return "单行显示，超出省略"
-        case .compact:
-            return "单行显示，超出时自动滚动"
         case .full:
             return "最多显示两行，超出省略"
         }
+    }
+
+    /// 将历史滚动显示值规范化为当前默认单行省略语义。
+    var normalized: BookshelfTitleDisplayMode {
+        self == .compact ? .standard : self
     }
 }
 
@@ -395,7 +398,7 @@ nonisolated struct BookshelfDisplaySetting: Codable, Hashable, Sendable {
         self.sortOrder = sortOrder
         self.isSectionEnabled = isSectionEnabled
         self.pinnedInAllSorts = pinnedInAllSorts
-        self.titleDisplayMode = titleDisplayMode
+        self.titleDisplayMode = titleDisplayMode.normalized
     }
 
     /// 从本地轻量设置解码；新增字段缺失时按 Android 默认显示语义补齐。
