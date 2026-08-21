@@ -15,6 +15,7 @@ import os
 /// 单本书内容工作台入口，负责创建状态源并保留外层导航 owner 提供的路由能力。
 struct BookDetailView: View {
     let bookId: Int64
+    let launchConfiguration: BookDetailLaunchConfiguration
     let onStartReading: (Int64) -> Void
     let onSupplementReading: (Int64) -> Void
     let onOpenReadingDetail: (Int64) -> Void
@@ -30,6 +31,7 @@ struct BookDetailView: View {
     /// 注入当前书籍与外层路由回调，工作台自身不直接持有任一 Tab 的 NavigationPath。
     init(
         bookId: Int64,
+        launchConfiguration: BookDetailLaunchConfiguration? = nil,
         onStartReading: @escaping (Int64) -> Void = { _ in },
         onSupplementReading: @escaping (Int64) -> Void = { _ in },
         onOpenReadingDetail: @escaping (Int64) -> Void = { _ in },
@@ -39,6 +41,7 @@ struct BookDetailView: View {
         onOpenBookRoute: @escaping (BookRoute) -> Void = { _ in }
     ) {
         self.bookId = bookId
+        self.launchConfiguration = launchConfiguration ?? .standard(bookID: bookId)
         self.onStartReading = onStartReading
         self.onSupplementReading = onSupplementReading
         self.onOpenReadingDetail = onOpenReadingDetail
@@ -51,6 +54,7 @@ struct BookDetailView: View {
     var body: some View {
         BookDetailWorkspaceHost(
             bookId: bookId,
+            launchConfiguration: launchConfiguration,
             repository: repositories.bookRepository,
             contentRepository: repositories.contentRepository,
             colorRepository: repositories.readCalendarColorRepository,
@@ -77,6 +81,7 @@ struct BookDetailView: View {
 /// 在目标页首帧同步建立 ViewModel owner，避免数据观察与搜索工具栏在 push 过程中动态插入。
 private struct BookDetailWorkspaceHost: View {
     let bookId: Int64
+    let launchConfiguration: BookDetailLaunchConfiguration
     let onStartReading: (Int64) -> Void
     let onSupplementReading: (Int64) -> Void
     let onOpenReadingDetail: (Int64) -> Void
@@ -90,6 +95,7 @@ private struct BookDetailWorkspaceHost: View {
     /// 用环境提供的 Repository 构造页面唯一状态源；State 保证父视图刷新时不重建 owner。
     init(
         bookId: Int64,
+        launchConfiguration: BookDetailLaunchConfiguration,
         repository: any BookDetailRepositoryProtocol,
         contentRepository: any ContentRepositoryProtocol,
         colorRepository: any ReadCalendarColorRepositoryProtocol,
@@ -102,6 +108,7 @@ private struct BookDetailWorkspaceHost: View {
         readingTimerZoomConfiguration: ReadingTimerZoomSourceConfiguration?
     ) {
         self.bookId = bookId
+        self.launchConfiguration = launchConfiguration
         self.onStartReading = onStartReading
         self.onSupplementReading = onSupplementReading
         self.onOpenReadingDetail = onOpenReadingDetail
@@ -122,6 +129,7 @@ private struct BookDetailWorkspaceHost: View {
     var body: some View {
         BookWorkspaceContentView(
             bookId: bookId,
+            launchConfiguration: launchConfiguration,
             viewModel: viewModel,
             onStartReading: onStartReading,
             onSupplementReading: onSupplementReading,
@@ -475,6 +483,7 @@ private struct BookWorkspaceContentView: View {
 #endif
 
     let bookId: Int64
+    let launchConfiguration: BookDetailLaunchConfiguration
     @Bindable var viewModel: BookDetailViewModel
     let onStartReading: (Int64) -> Void
     let onSupplementReading: (Int64) -> Void
@@ -488,7 +497,7 @@ private struct BookWorkspaceContentView: View {
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
-    @State private var selectedSection = BookWorkspaceSection.notes
+    @State private var selectedSection: BookWorkspaceSection
     @State private var presentationStore = BookWorkspacePresentationStore()
     @State private var scrollVisualStates = BookWorkspaceScrollVisualStates()
     @State private var headerAnchors: [BookWorkspaceSection: BookWorkspaceHeaderAnchors] = [:]
@@ -506,6 +515,7 @@ private struct BookWorkspaceContentView: View {
     @State private var isNavigationBarSurfaceVisible = false
     @State private var readLoadingGate = LoadingGate()
     @State private var notesLoadingGate = LoadingGate()
+    @State private var hasAppliedCatalogFocus = false
 #if DEBUG
     @State private var debugIdentifier = UUID().uuidString
     @State private var debugInputRevision = 0
@@ -514,6 +524,32 @@ private struct BookWorkspaceContentView: View {
     private enum Layout {
         static let linkedCoverWidth: CGFloat = 48
         static let chapterIndent: CGFloat = 18
+    }
+
+    /// 以路由首帧参数初始化唯一选中域；指定章节入口不会先渲染书摘页再切换目录。
+    init(
+        bookId: Int64,
+        launchConfiguration: BookDetailLaunchConfiguration,
+        viewModel: BookDetailViewModel,
+        onStartReading: @escaping (Int64) -> Void,
+        onSupplementReading: @escaping (Int64) -> Void,
+        onOpenReadingDetail: @escaping (Int64) -> Void,
+        onOpenChapterNotes: @escaping (Int64, Int64, String) -> Void,
+        onOpenBook: @escaping (Int64) -> Void,
+        onOpenBookRoute: @escaping (BookRoute) -> Void,
+        readingTimerZoomConfiguration: ReadingTimerZoomSourceConfiguration?
+    ) {
+        self.bookId = bookId
+        self.launchConfiguration = launchConfiguration
+        self.viewModel = viewModel
+        self.onStartReading = onStartReading
+        self.onSupplementReading = onSupplementReading
+        self.onOpenReadingDetail = onOpenReadingDetail
+        self.onOpenChapterNotes = onOpenChapterNotes
+        self.onOpenBook = onOpenBook
+        self.onOpenBookRoute = onOpenBookRoute
+        self.readingTimerZoomConfiguration = readingTimerZoomConfiguration
+        _selectedSection = State(initialValue: launchConfiguration.initialSection)
     }
 
     var body: some View {
@@ -590,8 +626,7 @@ private struct BookWorkspaceContentView: View {
             syncNotesLoadingVisibility()
         }
         .onChange(of: viewModel.book?.chapters.map(\.id) ?? []) { _, ids in
-            guard expandedChapterIDs.isEmpty else { return }
-            expandedChapterIDs = Set(ids)
+            applyInitialCatalogExpansion(chapterIDs: ids)
         }
         .task(id: currentPresentationInput) {
             guard !Task.isCancelled else { return }
@@ -671,6 +706,13 @@ private struct BookWorkspaceContentView: View {
                     }
                 }
 
+                Picker("目录排序", selection: sortSelection(for: .chapters)) {
+                    ForEach(BookContentSortRule.allowedRules(for: .chapters), id: \.self) { option in
+                        Text(option.title(for: .chapters)).tag(option)
+                    }
+                }
+                .disabled(viewModel.isWorkspaceWriting)
+
                 Button("全部展开", systemImage: "rectangle.expand.vertical") {
                     expandedChapterIDs = Set(viewModel.book?.chapters.map(\.id) ?? [])
                 }
@@ -678,7 +720,15 @@ private struct BookWorkspaceContentView: View {
                     expandedChapterIDs.removeAll()
                 }
                 Button("管理目录", systemImage: "list.bullet.rectangle") {
-                    onOpenBookRoute(.chapterManager(bookID: bookId, focusChapterID: nil))
+                    guard let book = viewModel.book else { return }
+                    onOpenBookRoute(
+                        .chapterManager(
+                            bookID: bookId,
+                            bookName: book.name,
+                            doubanID: book.doubanID,
+                            focusChapterID: nil
+                        )
+                    )
                 }
             }
         case .notes:
@@ -780,6 +830,7 @@ private struct BookWorkspaceContentView: View {
                 reduceMotion: reduceMotion,
                 canvasColor: palette.canvasColor,
                 canvasPaletteID: palette.identifier,
+                catalogFocusPlan: launchConfiguration.catalogFocusPlan(chapters: book.chapters),
                 onSelectSection: switchSection,
                 onOpenReadingDetail: {
                     onOpenReadingDetail(bookId)
@@ -888,6 +939,18 @@ private struct BookWorkspaceContentView: View {
             effectiveOffset: scrollVisualStates.state(for: section).effectiveOffset,
             pinOffset: (headerAnchors[section] ?? BookWorkspaceHeaderAnchors()).pinOffset
         )
+    }
+
+    /// 普通入口沿用全展开；指定章节入口只展开目标祖先，避免无关分支改变首帧位置。
+    private func applyInitialCatalogExpansion(chapterIDs: [Int64]) {
+        guard !hasAppliedCatalogFocus, !chapterIDs.isEmpty, let book = viewModel.book else { return }
+        hasAppliedCatalogFocus = true
+        if let plan = launchConfiguration.catalogFocusPlan(chapters: book.chapters) {
+            catalogFilter = .all
+            expandedChapterIDs = plan.expandedAncestorIDs
+        } else if expandedChapterIDs.isEmpty {
+            expandedChapterIDs = Set(chapterIDs)
+        }
     }
 
     /// Tab 吸附后启用同色导航表面，避免正文继续透过浮动导航栏；展开态仍允许 Hero 进入其下方。
@@ -1512,6 +1575,7 @@ private struct BookWorkspaceContentView: View {
             relatedQuery: searchQuery(.related),
             reviewsQuery: searchQuery(.reviews),
             catalogFilter: catalogFilter,
+            catalogSort: catalogSort,
             notesSort: notesSort,
             notesWithIdeasOnly: notesWithIdeasOnly,
             selectedRelatedCategoryID: selectedRelatedCategoryID,
@@ -1523,6 +1587,10 @@ private struct BookWorkspaceContentView: View {
 
     private var notesSort: BookContentSortRule {
         viewModel.workspace.sortPreferences.notes
+    }
+
+    private var catalogSort: BookContentSortRule {
+        viewModel.workspace.sortPreferences.chapters
     }
 
     private var relatedSort: BookContentSortRule {

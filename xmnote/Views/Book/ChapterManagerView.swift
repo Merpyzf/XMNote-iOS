@@ -10,6 +10,8 @@ import SwiftUI
 /// 书内目录管理入口，完成 Repository 依赖注入和首屏延迟加载反馈。
 struct ChapterManagerView: View {
     let bookID: Int64
+    let bookName: String
+    let doubanID: Int?
     let focusChapterID: Int64?
 
     @Environment(RepositoryContainer.self) private var repositories
@@ -17,8 +19,15 @@ struct ChapterManagerView: View {
     @State private var bootstrapLoadingGate = LoadingGate()
 
     /// 从书籍详情或星标章节定位入口创建管理页；focusChapterID 为空时从目录顶部开始。
-    init(bookID: Int64, focusChapterID: Int64? = nil) {
+    init(
+        bookID: Int64,
+        bookName: String,
+        doubanID: Int?,
+        focusChapterID: Int64? = nil
+    ) {
         self.bookID = bookID
+        self.bookName = bookName
+        self.doubanID = doubanID
         self.focusChapterID = focusChapterID
     }
 
@@ -38,6 +47,8 @@ struct ChapterManagerView: View {
             bootstrapLoadingGate.update(intent: .read)
             let model = ChapterManagerViewModel(
                 bookID: bookID,
+                bookName: bookName,
+                doubanID: doubanID,
                 focusChapterID: focusChapterID,
                 repository: repositories.chapterManagementRepository
             )
@@ -350,7 +361,7 @@ private struct ChapterManagerContentView: View {
     }
 
     private func titleEditorDescriptor(_ request: ChapterTitleEditorRequest) -> XMSystemAlertDescriptor {
-        XMSystemAlertDescriptor(
+        return XMSystemAlertDescriptor(
             title: request.title,
             message: request.isCreating ? "最多支持 \(ChapterManagementPolicy.maximumDepth) 级目录。" : nil,
             actions: [
@@ -372,15 +383,27 @@ private struct ChapterManagerContentView: View {
     }
 
     private func deletionDescriptor(_ request: ChapterDeletionRequest) -> XMSystemAlertDescriptor {
-        XMSystemAlertDescriptor(
+        let destructiveActions: [XMSystemAlertAction]
+        if request.affectedNoteCount > 0 {
+            destructiveActions = [
+                XMSystemAlertAction(title: "保留书摘并删除章节", role: .destructive) {
+                    viewModel.confirmDeletion(noteDisposition: .detach)
+                },
+                XMSystemAlertAction(title: "连同书摘一起删除", role: .destructive) {
+                    viewModel.confirmDeletion(noteDisposition: .delete)
+                }
+            ]
+        } else {
+            destructiveActions = [
+                XMSystemAlertAction(title: "删除", role: .destructive) {
+                    viewModel.confirmDeletion(noteDisposition: .detach)
+                }
+            ]
+        }
+        return XMSystemAlertDescriptor(
             title: request.title,
             message: request.message,
-            actions: [
-                XMSystemAlertAction(title: "取消", role: .cancel) { },
-                XMSystemAlertAction(title: "删除", role: .destructive) {
-                    viewModel.confirmDeletion()
-                }
-            ],
+            actions: [XMSystemAlertAction(title: "取消", role: .cancel) { }] + destructiveActions,
             preferredActionID: nil
         )
     }

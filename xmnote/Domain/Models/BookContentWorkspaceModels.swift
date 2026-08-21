@@ -9,6 +9,7 @@ import Foundation
 
 /// Android 单书内容管理使用的持久化排序作用域；rawValue 与 ContentType 数据库协议保持一致。
 nonisolated enum BookContentSortType: Int64, CaseIterable, Hashable, Sendable {
+    case chapters = 1
     case notes = 2
     case related = 3
     case reviews = 4
@@ -26,18 +27,18 @@ nonisolated enum BookContentSortRule: Int64, CaseIterable, Hashable, Sendable {
         switch type {
         case .notes:
             [.createdDateAscending, .createdDateDescending, .positionAscending, .positionDescending]
-        case .related, .reviews:
+        case .chapters, .related, .reviews:
             [.createdDateAscending, .createdDateDescending]
         }
     }
 
-    /// 返回排序菜单文案；位置规则只会出现在书摘域，时间规则可被三类内容复用。
+    /// 返回排序菜单文案；位置规则只会出现在书摘域，创建规则可被四类内容复用。
     func title(for type: BookContentSortType) -> String {
         switch self {
         case .createdDateAscending:
-            "最早记录优先"
+            type == .chapters ? "创建顺序升序" : "最早记录优先"
         case .createdDateDescending:
-            "最近记录优先"
+            type == .chapters ? "创建顺序降序" : "最近记录优先"
         case .positionAscending:
             type == .notes ? "位置从前到后" : "最早记录优先"
         case .positionDescending:
@@ -46,14 +47,70 @@ nonisolated enum BookContentSortRule: Int64, CaseIterable, Hashable, Sendable {
     }
 }
 
-/// 单本书三个内容类型互不串值的持久化排序快照。
+/// 按 Android ChapterTreeHelper 的真实规则生成章节先序：同级使用 chapter_order，再以 id 稳定兜底。
+nonisolated enum BookWorkspaceChapterOrdering {
+    /// 构建完整树的先序结果；“创建顺序”标签实际对应同级 order/id 的升降序。
+    static func preorder(
+        _ chapters: [BookDetailChapter],
+        rule: BookContentSortRule
+    ) -> [BookDetailChapter] {
+        let ids = Set(chapters.map(\.id))
+        let childrenByParentID = Dictionary(grouping: chapters, by: \.parentID)
+        let roots = chapters.filter { $0.parentID == 0 || !ids.contains($0.parentID) }
+        let isDescending = rule == .createdDateDescending
+        var result: [BookDetailChapter] = []
+        var visited: Set<Int64> = []
+
+        func comesBefore(_ lhs: BookDetailChapter, _ rhs: BookDetailChapter) -> Bool {
+            if lhs.order != rhs.order {
+                return isDescending ? lhs.order > rhs.order : lhs.order < rhs.order
+            }
+            return isDescending ? lhs.id > rhs.id : lhs.id < rhs.id
+        }
+
+        func append(_ chapter: BookDetailChapter) {
+            guard visited.insert(chapter.id).inserted else { return }
+            result.append(chapter)
+            childrenByParentID[chapter.id, default: []]
+                .sorted(by: comesBefore)
+                .forEach(append)
+        }
+
+        roots.sorted(by: comesBefore).forEach(append)
+        chapters.sorted(by: comesBefore).forEach(append)
+        return result
+    }
+
+    /// 在完整先序基础上应用展开集合；孤立章节按根章节处理。
+    static func visiblePreorder(
+        _ chapters: [BookDetailChapter],
+        rule: BookContentSortRule,
+        expandedIDs: Set<Int64>
+    ) -> [BookDetailChapter] {
+        let ordered = preorder(chapters, rule: rule)
+        let itemsByID = Dictionary(uniqueKeysWithValues: chapters.map { ($0.id, $0) })
+        return ordered.filter { chapter in
+            var parentID = chapter.parentID
+            var visited: Set<Int64> = []
+            while let parent = itemsByID[parentID], visited.insert(parentID).inserted {
+                guard expandedIDs.contains(parentID) else { return false }
+                parentID = parent.parentID
+            }
+            return true
+        }
+    }
+}
+
+/// 单本书四个内容类型互不串值的持久化排序快照。
 nonisolated struct BookContentSortPreferences: Hashable, Sendable {
+    let chapters: BookContentSortRule
     let notes: BookContentSortRule
     let related: BookContentSortRule
     let reviews: BookContentSortRule
 
     /// Android 未持久化时的静态兜底；Repository 会进一步按全书 weread_range 决定书摘首次默认值。
     static let fallback = Self(
+        chapters: .createdDateAscending,
         notes: .positionAscending,
         related: .createdDateAscending,
         reviews: .createdDateAscending
@@ -62,6 +119,7 @@ nonisolated struct BookContentSortPreferences: Hashable, Sendable {
     /// 按当前工作区类型读取规则，供页面菜单与 Repository 查询共享同一值。
     func rule(for type: BookContentSortType) -> BookContentSortRule {
         switch type {
+        case .chapters: chapters
         case .notes: notes
         case .related: related
         case .reviews: reviews

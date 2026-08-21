@@ -219,9 +219,9 @@ private struct NoteContentView: View {
                 },
                 onLocateStarredChapter: { chapter in
                     onOpenBookRoute(
-                        .chapterManager(
+                        .chapterCatalog(
                             bookID: chapter.bookID,
-                            focusChapterID: chapter.id
+                            chapterID: chapter.id
                         )
                     )
                 },

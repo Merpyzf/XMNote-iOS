@@ -53,9 +53,17 @@ protocol ChapterManagementRepositoryProtocol {
     /// 当前结构仍匹配撤销令牌时，事务恢复移动或重排前的 parent/order 并重算派生元数据。
     func restoreChapterStructure(_ snapshot: ChapterStructureRestoreSnapshot) async throws
 
-    /// 软删除所选章节及其后代，并把受影响书摘移到未分章节。
-    func deleteChapters(bookID: Int64, chapterIDs: [Int64]) async throws -> ChapterDeletionResult
+    /// 物理删除所选章节及其后代，并按选择解绑或物理删除受影响书摘。
+    func deleteChapters(
+        bookID: Int64,
+        chapterIDs: [Int64],
+        noteDisposition: ChapterNoteDisposition
+    ) async throws -> ChapterDeletionResult
 
-    /// 保留父章节，软删除其全部后代，并把后代书摘移到未分章节。
-    func deleteDescendants(bookID: Int64, parentID: Int64) async throws -> ChapterDeletionResult
+    /// 保留父章节，物理删除其全部后代，并按选择处置后代书摘。
+    func deleteDescendants(
+        bookID: Int64,
+        parentID: Int64,
+        noteDisposition: ChapterNoteDisposition
+    ) async throws -> ChapterDeletionResult
 }

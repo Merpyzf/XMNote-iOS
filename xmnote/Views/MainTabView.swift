@@ -1410,6 +1410,30 @@ struct MainTabView: View {
                     openBookRoute(route, from: host)
                 }
             )
+        case .chapterCatalog(let bookID, let chapterID):
+            BookDetailView(
+                bookId: bookID,
+                launchConfiguration: BookDetailLaunchConfiguration(
+                    bookID: bookID,
+                    initialSection: .catalog,
+                    targetChapterID: chapterID,
+                    initiallyCollapsesHeader: true,
+                    animatesInitialHeaderTransition: false,
+                    showsOneShotCoverTip: false
+                ),
+                onOpenChapterNotes: { bookID, chapterID, title in
+                    openBookRoute(
+                        .chapterNotes(bookId: bookID, chapterId: chapterID, title: title),
+                        from: host
+                    )
+                },
+                onOpenBook: { nestedBookID in
+                    openBookRoute(.detail(bookId: nestedBookID), from: host)
+                },
+                onOpenBookRoute: { nestedRoute in
+                    openBookRoute(nestedRoute, from: host)
+                }
+            )
         case .readingDetail(let bookId):
             BookReadingDetailView(
                 bookID: bookId,
@@ -1417,8 +1441,13 @@ struct MainTabView: View {
                     openBookRoute(route, from: host)
                 }
             )
-        case .chapterManager(let bookID, let focusChapterID):
-            ChapterManagerView(bookID: bookID, focusChapterID: focusChapterID)
+        case .chapterManager(let bookID, let bookName, let doubanID, let focusChapterID):
+            ChapterManagerView(
+                bookID: bookID,
+                bookName: bookName,
+                doubanID: doubanID,
+                focusChapterID: focusChapterID
+            )
         case .edit(let bookId):
             LegacyFullScreenRouteRelay {
                 relayLegacyFullScreenRoute(
