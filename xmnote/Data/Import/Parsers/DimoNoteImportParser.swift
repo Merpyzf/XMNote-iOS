@@ -36,7 +36,7 @@ nonisolated struct DimoNoteImportParser: NoteImportParser {
         book.positionUnit = 2
         book.currentPositionUnit = 2
         if let coverSource = firstImageURL(in: info) {
-            book.cover = try await importedURLString(coverSource) ?? ""
+            book.cover = try await importedAttachment(coverSource)?.url.absoluteString ?? ""
         }
 
         for section in sections.dropFirst() {
@@ -53,11 +53,19 @@ nonisolated struct DimoNoteImportParser: NoteImportParser {
                 continue
             }
             var attachments: [NoteImportDraftAttachment] = []
+            var didFailAttachment = false
             for source in imageSources {
-                if let imported = try await importedURLString(source) {
-                    attachments.append(NoteImportDraftAttachment(imageURL: imported, order: Int64(attachments.count + 1)))
+                guard let imported = try await importedAttachment(source) else {
+                    didFailAttachment = true
+                    break
                 }
+                attachments.append(NoteImportDraftAttachment(
+                    imageURL: imported.url.absoluteString,
+                    digest: imported.digest,
+                    order: Int64(attachments.count + 1)
+                ))
             }
+            guard !didFailAttachment else { continue }
             let createdDate = NoteImportTextSupport.firstCapture(pattern: "(\\d{4}-\\d{2}-\\d{2})", in: section)
                 .map(dayMilliseconds) ?? 0
             book.notes.append(NoteImportDraftNote(
@@ -73,10 +81,11 @@ nonisolated struct DimoNoteImportParser: NoteImportParser {
         return [book]
     }
 
-    private func importedURLString(_ value: String) async throws -> String? {
+    /// 转存一个附件并保留内容摘要；上传取消向上传播，其他故障由调用点按封面回退或整条书摘跳过处理。
+    private func importedAttachment(_ value: String) async throws -> NoteImportAttachmentImportResult? {
         guard let url = URL(string: value) else { return nil }
         do {
-            return try await attachmentImporter.importAttachment(from: url)?.absoluteString
+            return try await attachmentImporter.importAttachment(from: url)
         } catch is CancellationError {
             throw CancellationError()
         } catch {

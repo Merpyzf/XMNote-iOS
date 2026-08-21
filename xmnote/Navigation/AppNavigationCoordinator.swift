@@ -14,11 +14,12 @@ enum AppTaskNavigationContext: Hashable {
     case taskChild
 }
 
-/// 数据导入目录选择后的独立任务目标；目录本身仍属于“我的”Tab 浏览路径。
+/// 书摘导入目录选择后的独立任务目标；目录本身仍属于“我的”Tab 浏览路径。
 enum DataImportTaskDestination: Hashable {
     case desktopComputer
     case lifeWeek
     case wereadAuthorization
+    case kindle
     case api
     case hanwang
     case file(title: String, parserID: NoteImportParserID?)

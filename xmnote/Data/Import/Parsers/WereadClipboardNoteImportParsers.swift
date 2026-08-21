@@ -72,6 +72,10 @@ nonisolated struct WereadPre830NoteImportParser: NoteImportParser {
 
     func parse(data: Data, fileExtension _: String?) async throws -> [NoteImportDraftBook] {
         let content = try NoteImportTextSupport.decodeUTF8(data)
+        // Android 生产 Parser 按字面量 `\n\n` 分块；CRLF 文本最终无法组成两行书籍信息。
+        if content.contains("\r\n"), !content.contains("\n\n") {
+            throw NoteImportParserError.bookNotFound
+        }
         let items = format(content)
         guard let first = items.first else { throw NoteImportParserError.bookNotFound }
         let info = first.components(separatedBy: "\n")
@@ -159,7 +163,10 @@ nonisolated struct Weread830NoteImportParser: NoteImportParser {
         let lines = content.components(separatedBy: "\n\n")
             .filter { !NoteImportTextSupport.isBlank($0) }
             .map { value in value.contains("◆") ? String(value.drop(while: { $0.isWhitespace })) : value }
-        guard lines.count >= 2 else { throw NoteImportParserError.bookNotFound }
+        guard lines.count >= 2 else {
+            // Android 在这里直接 `subList(0, 2)`，CRLF 导致单块输入并抛出该运行时错误。
+            throw Weread830RuntimeError.toIndexTwo
+        }
         let authorLines = lines[1].components(separatedBy: "\n")
         guard authorLines.count == 2 else { throw NoteImportParserError.bookNotFound }
         var book = wereadBook(name: lines[0], author: authorLines[0])
@@ -261,6 +268,12 @@ nonisolated struct Weread830NoteImportParser: NoteImportParser {
         }
         return count >= 3
     }
+}
+
+private nonisolated enum Weread830RuntimeError: LocalizedError {
+    case toIndexTwo
+
+    var errorDescription: String? { "toIndex = 2" }
 }
 
 private nonisolated func wereadBook(name: String, author: String) -> NoteImportDraftBook {

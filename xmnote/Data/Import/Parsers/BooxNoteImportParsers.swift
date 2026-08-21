@@ -11,7 +11,9 @@ nonisolated struct BooxOldNoteImportParser: NoteImportParser {
     let id: NoteImportParserID = .booxOld
 
     func parse(data: Data, fileExtension _: String?) async throws -> [NoteImportDraftBook] {
+        // Kotlin `String.lines()` 会移除 CRLF 的 `\r`；Swift 按 `\n` 切分前需显式复刻。
         let content = try NoteImportTextSupport.decodeUTF8(data)
+            .replacingOccurrences(of: "\r\n", with: "\n")
         guard NoteImportDetection.isBoox(content) else { throw NoteImportParserError.noteFormat }
         let lines = content.components(separatedBy: "\n")
         guard let firstLine = lines.first,

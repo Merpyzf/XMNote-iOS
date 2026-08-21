@@ -19,7 +19,7 @@ struct ImportParserParityTests {
             for testCase in try ImportParityFixture.cases() {
                 let importParser = try #require(makeParser(for: testCase.parserID, registry: registry))
                 let data = try Data(contentsOf: testCase.inputURL)
-                let actual = await ImportParserContractV1.execute(
+                let actual = await ImportParserContractV2.execute(
                     parser: importParser,
                     data: data,
                     fileName: testCase.inputURL.lastPathComponent
@@ -70,6 +70,24 @@ struct ImportParserParityTests {
     }
 
     @Test
+    func parserInventoryMatchesAndroidMatrixRegistryAndFixtureCorpus() throws {
+        let expected = Set(NoteImportParserID.allCases)
+        let registryExpected = expected.subtracting([.hanwang])
+        #expect(NoteImportParserRegistry.registeredParserIDs == registryExpected)
+
+        let fixtureIDs = Set(try ImportParityFixture.cases().map(\.parserID))
+        #expect(fixtureIDs == expected)
+
+        let matrixURL = ImportParityFixture.repositoryRoot
+            .appending(path: "scripts/import_alignment/source-matrix.json")
+        let matrixData = try Data(contentsOf: matrixURL)
+        let matrixObject = try #require(JSONSerialization.jsonObject(with: matrixData) as? [String: Any])
+        let sources = try #require(matrixObject["sources"] as? [[String: Any]])
+        let matrixIDs = Set(sources.compactMap { $0["id"] as? String })
+        #expect(matrixIDs == Set(expected.map(\.rawValue)))
+    }
+
+    @Test
     func deterministicMutationOutputsMatchAndroidOracle() async throws {
         try await ImportParityFixture.withFrozenEnvironment {
             let registry = NoteImportParserRegistry()
@@ -77,7 +95,7 @@ struct ImportParserParityTests {
                 #expect(try ImportParityFixture.sha256(testCase.inputURL) == testCase.inputSHA256)
                 #expect(try ImportParityFixture.sha256(testCase.expectedURL) == testCase.expectedSHA256)
                 let importParser = try #require(makeParser(for: testCase.parserID, registry: registry))
-                let actual = await ImportParserContractV1.execute(
+                let actual = await ImportParserContractV2.execute(
                     parser: importParser,
                     data: try Data(contentsOf: testCase.inputURL),
                     fileName: testCase.inputURL.lastPathComponent
@@ -98,13 +116,13 @@ struct ImportParserParityTests {
             for testCase in try ImportParityFixture.cases() {
                 let importParser = try #require(makeParser(for: testCase.parserID, registry: registry))
                 let data = try Data(contentsOf: testCase.inputURL)
-                let first = await ImportParserContractV1.execute(
+                let first = await ImportParserContractV2.execute(
                     parser: importParser,
                     data: data,
                     fileName: testCase.inputURL.lastPathComponent
                 )
                 for _ in 1 ..< 20 {
-                    #expect(await ImportParserContractV1.execute(
+                    #expect(await ImportParserContractV2.execute(
                         parser: importParser,
                         data: data,
                         fileName: testCase.inputURL.lastPathComponent
@@ -129,17 +147,25 @@ struct ImportParserParityTests {
 }
 
 private struct FixtureAttachmentImporter: NoteImportAttachmentImporter {
-    func importAttachment(from _: URL) async throws -> URL? {
-        nil
+    func importAttachment(from sourceURL: URL) async throws -> NoteImportAttachmentImportResult? {
+        // Android Oracle 只注入书摘附件转存；封面仍走真实网络并在离线夹具环境中回退为空。
+        if sourceURL.lastPathComponent == "cover.png" { return nil }
+        let digest = SHA256.hash(data: Data(sourceURL.absoluteString.utf8))
+            .map { String(format: "%02x", $0) }
+            .joined()
+        return NoteImportAttachmentImportResult(
+            url: URL(string: "fixture://uploaded/\(digest).png")!,
+            digest: digest
+        )
     }
 }
 
-private enum ImportParserContractV1 {
+private enum ImportParserContractV2 {
     static func execute(parser: any NoteImportParser, data: Data, fileName: String? = nil) async -> Data {
         let object: [String: Any]
         do {
             object = [
-                "schemaVersion": 1,
+                "schemaVersion": 2,
                 "status": "success",
                 "books": try await parse(parser: parser, data: data, fileName: fileName).map(book)
             ]
@@ -173,7 +199,7 @@ private enum ImportParserContractV1 {
 
     private static func failure(code: String, message: String) -> [String: Any] {
         [
-            "schemaVersion": 1,
+            "schemaVersion": 2,
             "status": "failure",
             "error": ["code": code, "message": message]
         ]
@@ -183,6 +209,7 @@ private enum ImportParserContractV1 {
         [
             "name": book.name,
             "rawName": book.rawName,
+            "doubanId": book.doubanID,
             "author": book.author,
             "authorIntro": book.authorIntro,
             "translator": book.translator,
@@ -197,6 +224,7 @@ private enum ImportParserContractV1 {
             "positionUnit": book.positionUnit,
             "currentPositionUnit": book.currentPositionUnit,
             "readPosition": decimal(book.readPosition),
+            "bookmarkModifiedTime": book.bookmarkModifiedTime,
             "totalPosition": book.totalPosition,
             "totalPagination": book.totalPagination,
             "wordCount": book.wordCount ?? NSNull(),
@@ -229,7 +257,7 @@ private enum ImportParserContractV1 {
             "chapter": note.chapter.map(chapter) ?? NSNull(),
             "tags": note.tags.map(tag),
             "attachments": note.attachments.map {
-                ["imageUrl": $0.imageURL, "order": $0.order] as [String: Any]
+                ["digest": $0.digest, "imageUrl": $0.imageURL, "order": $0.order] as [String: Any]
             }
         ]
     }
@@ -313,15 +341,19 @@ private struct ImportMutationCase {
 }
 
 private enum ImportParityFixture {
+    static let repositoryRoot = URL(fileURLWithPath: #filePath)
+        .deletingLastPathComponent()
+        .deletingLastPathComponent()
+
     static let root = URL(fileURLWithPath: #filePath)
         .deletingLastPathComponent()
-        .appending(path: "Fixtures/ImportParity/v1", directoryHint: .isDirectory)
+        .appending(path: "Fixtures/ImportParity/v2", directoryHint: .isDirectory)
 
     static func cases() throws -> [ImportParityCase] {
         let data = try Data(contentsOf: root.appending(path: "manifest.json"))
         let manifest = try JSONDecoder().decode(Manifest.self, from: data)
-        #expect(manifest.schemaVersion == 1)
-        #expect(manifest.androidCommit == "6bb279fdf74aed287fc93a12c3f3aab6a8f7ee29")
+        #expect(manifest.schemaVersion == 2)
+        #expect(manifest.androidCommit == "6f0d6d80aa734e4ea36dcd580f78e1e440dc8a9c")
         let selectedCases = ProcessInfo.processInfo.environment["IMPORT_PARITY_CASE"]
             .map { Set($0.split(separator: ",").map(String.init)) }
         return try manifest.cases.filter { selectedCases == nil || selectedCases?.contains($0.id) == true }.map { item in
@@ -342,8 +374,8 @@ private enum ImportParityFixture {
         let mutationRoot = root.appending(path: "mutations", directoryHint: .isDirectory)
         let data = try Data(contentsOf: mutationRoot.appending(path: "mutation-manifest.json"))
         let manifest = try JSONDecoder().decode(MutationManifest.self, from: data)
-        #expect(manifest.schemaVersion == 1)
-        #expect(manifest.androidCommit == "6bb279fdf74aed287fc93a12c3f3aab6a8f7ee29")
+        #expect(manifest.schemaVersion == 2)
+        #expect(manifest.androidCommit == "6f0d6d80aa734e4ea36dcd580f78e1e440dc8a9c")
         return try manifest.cases.map { item in
             ImportMutationCase(
                 id: item.id,

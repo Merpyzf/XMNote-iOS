@@ -969,6 +969,12 @@ struct MainTabView: View {
                 repository: repositories.wereadImportRepository,
                 onOpenPremium: openPremiumFromFullScreenTask
             )
+        case .kindle:
+            KindleImportView(
+                gateway: DefaultKindleImportGateway(
+                    repository: repositories.noteImportRepository
+                )
+            )
         case .api:
             ApiNoteImportView(
                 repository: repositories.noteImportRepository,

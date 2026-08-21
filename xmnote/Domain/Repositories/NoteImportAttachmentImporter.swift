@@ -5,16 +5,28 @@
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
+import CryptoKit
 import Foundation
+
+/// 附件转存结果同时保留稳定内容摘要，供纯图片书摘按 Android v2 Hash 幂等落库。
+nonisolated struct NoteImportAttachmentImportResult: Equatable, Sendable {
+    let url: URL
+    let digest: String
+}
 
 nonisolated protocol NoteImportAttachmentImporter: Sendable {
     /// 导入单个附件；调用方负责将失败按对应 Android Parser 的跳过语义处理，取消必须向上传播。
-    func importAttachment(from sourceURL: URL) async throws -> URL?
+    func importAttachment(from sourceURL: URL) async throws -> NoteImportAttachmentImportResult?
 }
 
 /// 生产兜底保留可访问的远端附件 URL；对象存储转存由导入提交阶段按配置尽力执行。
 nonisolated struct PassthroughNoteImportAttachmentImporter: NoteImportAttachmentImporter {
-    func importAttachment(from sourceURL: URL) async throws -> URL? { sourceURL }
+    func importAttachment(from sourceURL: URL) async throws -> NoteImportAttachmentImportResult? {
+        let digest = SHA256.hash(data: Data(sourceURL.absoluteString.utf8))
+            .map { String(format: "%02x", $0) }
+            .joined()
+        return NoteImportAttachmentImportResult(url: sourceURL, digest: digest)
+    }
 }
 
 /// 滴墨生产附件导入器：下载到临时目录后通过现有 S3 能力转存，任一步失败由 Parser 按 Android 语义跳过。
@@ -23,13 +35,19 @@ final class S3NoteImportAttachmentImporter: NoteImportAttachmentImporter, @unche
 
     init(repository: any S3UploadRepositoryProtocol) { self.repository = repository }
 
-    nonisolated func importAttachment(from sourceURL: URL) async throws -> URL? {
+    nonisolated func importAttachment(from sourceURL: URL) async throws -> NoteImportAttachmentImportResult? {
         let (data, response) = try await URLSession.shared.data(from: sourceURL)
         guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else { return nil }
+        let digest = SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
         let ext = sourceURL.pathExtension.isEmpty ? "jpg" : sourceURL.pathExtension
         let localURL = FileManager.default.temporaryDirectory.appendingPathComponent("dimo_\(UUID().uuidString).\(ext)")
         try data.write(to: localURL, options: .atomic)
         defer { try? FileManager.default.removeItem(at: localURL) }
-        return try await repository.uploadFile(localURL: localURL, prefix: "note_attach", progress: nil).remoteURL
+        let result = try await repository.uploadFile(
+            localURL: localURL,
+            objectKey: "dimo_note_\(digest).png",
+            progress: nil
+        )
+        return NoteImportAttachmentImportResult(url: result.remoteURL, digest: digest)
     }
 }

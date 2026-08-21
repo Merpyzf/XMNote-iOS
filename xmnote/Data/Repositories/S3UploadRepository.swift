@@ -72,6 +72,29 @@ final class S3UploadRepository: S3UploadRepositoryProtocol {
         return S3UploadResult(objectKey: objectKey, remoteURL: remoteURL)
     }
 
+    /// 稳定来源摘要已由上游计算时直接使用指定对象键，避免重复导入产生不同远端身份。
+    func uploadFile(
+        localURL: URL,
+        objectKey: String,
+        progress: (@Sendable (Double) -> Void)?
+    ) async throws -> S3UploadResult {
+        let normalizedKey = objectKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalizedKey.isEmpty else {
+            throw S3StorageError.invalidConfig(message: "对象键不可以为空")
+        }
+        let config = try await requireCurrentConfig()
+        let client = try makeClient(from: config)
+        setActiveClient(client)
+        defer { clearActiveClient(client) }
+
+        let remoteURL = try await client.uploadFile(
+            localURL: localURL,
+            objectKey: normalizedKey,
+            progress: progress
+        )
+        return S3UploadResult(objectKey: normalizedKey, remoteURL: remoteURL)
+    }
+
     /// 对当前启用配置执行联通性校验，用于真实功能测试与配置健康检查。
     func testCurrentConfiguration() async throws {
         let config = try await requireCurrentConfig()

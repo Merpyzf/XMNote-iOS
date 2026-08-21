@@ -1,0 +1,701 @@
+{
+  "schemaVersion": 2,
+  "corpusVersion": 9,
+  "androidCommit": "6f0d6d80aa734e4ea36dcd580f78e1e440dc8a9c",
+  "locale": "zh-CN",
+  "timeZone": "Asia/Shanghai",
+  "calendar": "gregorian",
+  "parserSources": {
+    "boox-old": {
+      "file": "data/src/main/java/com/merpyzf/data/helper/note_parse_helper/BooxParser.kt",
+      "sha256": "ac03d32d4fbb1026b4d72a423a6de4fda5d3c0ed033a4f3e6710f16cd5cd6a36"
+    },
+    "boox-new": {
+      "file": "data/src/main/java/com/merpyzf/data/helper/note_parse_helper/NewBooxParser.kt",
+      "sha256": "489a354aff384d5f4c834626284ae7ca8382196745a5d17eb9b49216e1a6d11d"
+    },
+    "douban-read": {
+      "file": "data/src/main/java/com/merpyzf/data/helper/note_parse_helper/DoubanReadParser.kt",
+      "sha256": "dbe8af17bc899de8b54ebc6ffa5b12dabc530543db4d850fd108785590ce01f4"
+    },
+    "dedao": {
+      "file": "data/src/main/java/com/merpyzf/data/helper/note_parse_helper/DedaoParser.kt",
+      "sha256": "25470954738d2f8d8bf1c674ebca615b27256e2201e13707e6bb9b197399b92e"
+    },
+    "dangdang": {
+      "file": "data/src/main/java/com/merpyzf/data/helper/note_parse_helper/DangDangReadParser.kt",
+      "sha256": "4e99ee57c874c4ca054e1b525d6ac39ff45abea49c784a9c6c0a8341cd096d65"
+    },
+    "dimo": {
+      "file": "data/src/main/java/com/merpyzf/data/helper/note_parse_helper/DimoParser.kt",
+      "sha256": "be59df1c6a585e61802f1a633560ecf858f5ff43a61429a9c65344b8a9d5f839"
+    },
+    "weread-old": {
+      "file": "data/src/main/java/com/merpyzf/data/helper/note_parse_helper/WeReadOldVersionParser.kt",
+      "sha256": "04abb4fe80f764c31a4f9ae90a2ab36668f33360cc2d2c482fd55e66e25c11c2"
+    },
+    "weread-pre-830": {
+      "file": "data/src/main/java/com/merpyzf/data/helper/note_parse_helper/WeReadParser.kt",
+      "sha256": "f73741d805e148ed774385f81cc35aeebfaaa7aa5bd4ed7b68fff776b45be248"
+    },
+    "weread-830": {
+      "file": "data/src/main/java/com/merpyzf/data/helper/note_parse_helper/WeReadParserV830.kt",
+      "sha256": "00d616676feeb48c33b4808a62fed53804eb20e96ae6f9ab49d30cb7b0b2d087"
+    },
+    "duokan": {
+      "file": "data/src/main/java/com/merpyzf/data/helper/note_parse_helper/DuoKanReadParser.kt",
+      "sha256": "b97b7bb1d8d3d397c8cd8aee6faaf2318d80e2c60a4d3a60954bd33f693e948f"
+    },
+    "ireader-selected": {
+      "file": "data/src/main/java/com/merpyzf/data/helper/note_parse_helper/IReaderParser.kt",
+      "sha256": "338d39c5dbd461855b6140da1b8787d29f03f9da45a05d78408bf40519dc1161"
+    },
+    "moon-reader": {
+      "file": "data/src/main/java/com/merpyzf/data/helper/note_parse_helper/MoonReadParser.kt",
+      "sha256": "2f8754adf0757d9393d11fb3b275516d69d27ea5cf8f72b84d9c0daefe6e6c80"
+    },
+    "douban-app": {
+      "file": "data/src/main/java/com/merpyzf/data/helper/note_parse_helper/DoubanReadAppParser.kt",
+      "sha256": "20e0e3c3355a75d58d429203ad1df191c21b4dfd0cdf372918c2f7c2617ee0d2"
+    },
+    "reader-163": {
+      "file": "data/src/main/java/com/merpyzf/data/helper/note_parse_helper/Reader163Parser.kt",
+      "sha256": "156675c1fb80032cc8060d29706705a154e5c6dcf314d42ba5d85250eee4344b"
+    },
+    "fanqie": {
+      "file": "data/src/main/java/com/merpyzf/data/helper/note_parse_helper/FanQieParser.kt",
+      "sha256": "986319210656ff8db859cab6e6aff6649044155abd2e1bd8725914217f3ddd1f"
+    },
+    "readingo": {
+      "file": "data/src/main/java/com/merpyzf/data/helper/note_parse_helper/ReadingoParser.kt",
+      "sha256": "895b465f5b7184f21a9ab7ab9ec322dfe574da8527fbfd4a7dd8b54b81225a3d"
+    },
+    "kindle-app": {
+      "file": "data/src/main/java/com/merpyzf/data/helper/note_parse_helper/KindleAppParser.kt",
+      "sha256": "66e9118befce889e7f75ae8960de218a82e827c1584defd558c624106e5fad1c"
+    },
+    "koreader": {
+      "file": "data/src/main/java/com/merpyzf/data/helper/note_parse_helper/KOReaderParser.kt",
+      "sha256": "656e634612d54259e8f2728e41195b367e2a11f47f3bda611b387db463b663b4"
+    },
+    "legado": {
+      "file": "data/src/main/java/com/merpyzf/data/helper/note_parse_helper/LegadoParser.kt",
+      "sha256": "19e21caadc423e61756cc18ebf500715b0cd3d47d25c817387d247bbceb4f17c"
+    },
+    "neat-reader": {
+      "file": "data/src/main/java/com/merpyzf/data/helper/note_parse_helper/NeatReaderParser.kt",
+      "sha256": "8b67787ddd0ae3a5a2dbea961c7cdc9a24e5b4a88e3b56337c9d538bfdd2d4b3"
+    },
+    "koodo": {
+      "file": "data/src/main/java/com/merpyzf/data/helper/note_parse_helper/KoodoParser.kt",
+      "sha256": "5eab3eb010bb33785b56db9bac10dc1393fc8a3db1f84aeb5204c2d677b46f65"
+    },
+    "reeden": {
+      "file": "data/src/main/java/com/merpyzf/data/helper/note_parse_helper/ReedenParser.kt",
+      "sha256": "55c2b5f8144b4ddf020e810cacf4d0bc528efe48c01e3458ab4cd7e595cbf2cc"
+    },
+    "kindle": {
+      "file": "data/src/main/java/com/merpyzf/data/helper/note_parse_helper/KindleParser.kt",
+      "sha256": "d56ece6ce0ad94cc422fb2e11f7d15906092a26a54f1f6c330746626233fa4b9"
+    },
+    "jd-reader": {
+      "file": "data/src/main/java/com/merpyzf/data/helper/note_parse_helper/JDReaderParser.kt",
+      "sha256": "996c1ccab8193e1a3ee0a2bab6748a9b2075f09da8fba859e86f378f568a025e"
+    },
+    "ireader-file": {
+      "file": "data/src/main/java/com/merpyzf/data/helper/note_parse_helper/IReaderFreeNoteParser.kt",
+      "sha256": "751195ce2ed319b721ca471aa0dcc17532bd68d6fd429d6321f275c6567330b8"
+    },
+    "ireader-epub": {
+      "file": "data/src/main/java/com/merpyzf/data/helper/note_parse_helper/IReaderEBookParser.kt",
+      "sha256": "cd5b4eaa53820e38fc8c4a522489a36bfe55cfff80da36d4e0ae8f3a60751503"
+    },
+    "apple-books": {
+      "file": "data/src/main/java/com/merpyzf/data/helper/note_parse_helper/AppleBooksParser.kt",
+      "sha256": "27a7d72b80a53761b524d2de25208cb1ab074d442101a53d8de63b8a49a726a1"
+    },
+    "hanwang": {
+      "file": "data/src/main/java/com/merpyzf/data/helper/note_parse_helper/HanWangParser.kt",
+      "sha256": "1b1f82acf2e910ec21fe2baf510b8ddaf17cb9cfb6756304a40fbfbcf6bf1545"
+    }
+  },
+  "cases": [
+    {
+      "id": "boox-old-minimal",
+      "parserId": "boox-old",
+      "input": "inputs/boox-old-minimal.txt",
+      "inputSHA256": "2394d1d3b149b7f2a8d996515ef639c34a4b7e8bd5428470f7de4193da048852",
+      "expected": "expected/boox-old-minimal.json",
+      "expectedSHA256": "f49fca8a990f492e15ca43ac4742681fb48eb5eacd22dffb5933af2a14b46183",
+      "expectedStatus": "success"
+    },
+    {
+      "id": "boox-new-multiple",
+      "parserId": "boox-new",
+      "input": "inputs/boox-new-multiple.txt",
+      "inputSHA256": "7a9051980442277db4d556771c0a2ef325b0e6310422a677ed489b04ac352bac",
+      "expected": "expected/boox-new-multiple.json",
+      "expectedSHA256": "b1d2fdaa1f070c014c020db0bb2df60b80620a6820a2036a6a26404520c10d28",
+      "expectedStatus": "success"
+    },
+    {
+      "id": "boox-invalid",
+      "parserId": "boox-old",
+      "input": "inputs/boox-invalid.txt",
+      "inputSHA256": "3a64077e886fb49e66f1f566c072e9cfc393d1a0545879346eebfc8afeb5c909",
+      "expected": "expected/boox-invalid.json",
+      "expectedSHA256": "8f5de3a0c05433f0140111beb7ec2a29f0e429d838ce06e0049f301208687846",
+      "expectedStatus": "failure"
+    },
+    {
+      "id": "douban-read-minimal",
+      "parserId": "douban-read",
+      "input": "inputs/douban-read-minimal.txt",
+      "inputSHA256": "cf8de4ea7044b9357d5a8ccd699d47b46c76fff35152efd551edb0333f8ec8fa",
+      "expected": "expected/douban-read-minimal.json",
+      "expectedSHA256": "3f7520ab34cc11311c3f6804f66e50bc5e5fbe2e3cd5e31ab4f780477ca4a1d7",
+      "expectedStatus": "success"
+    },
+    {
+      "id": "dedao-minimal",
+      "parserId": "dedao",
+      "input": "inputs/dedao-minimal.txt",
+      "inputSHA256": "945288b5b7e236080f3e062100fd0263ffa6de9eb82227c702cb82d74094b80f",
+      "expected": "expected/dedao-minimal.json",
+      "expectedSHA256": "6f1672280c0224d6b98258d245e34a991ae27371cc103365b61d684a9de5f6cf",
+      "expectedStatus": "success"
+    },
+    {
+      "id": "dangdang-minimal",
+      "parserId": "dangdang",
+      "input": "inputs/dangdang-minimal.txt",
+      "inputSHA256": "38dda6062438ad8fcb94ef359ce240913d759e82e0a81c2345e8f692988771d7",
+      "expected": "expected/dangdang-minimal.json",
+      "expectedSHA256": "7f390d9b941fdedcf791507acc1b22907bebeeb78cac327dc4d8cd9f5b145304",
+      "expectedStatus": "success"
+    },
+    {
+      "id": "dimo-attachment",
+      "parserId": "dimo",
+      "input": "inputs/dimo-attachment.txt",
+      "inputSHA256": "24c600c05737ffbe0d382aa58ec7a30de37029daae66fb26f56672fdce27935c",
+      "expected": "expected/dimo-attachment.json",
+      "expectedSHA256": "0d78be8b43b63c2a281febf2e6f1aaf08da56b5bff4f9855c29df5106e3f6676",
+      "expectedStatus": "success"
+    },
+    {
+      "id": "weread-old",
+      "parserId": "weread-old",
+      "input": "inputs/weread-old.txt",
+      "inputSHA256": "4aa3c9b5f65114dd8bd47b563dd09fc33ddf2f70970975585cf81bc677ce6fa2",
+      "expected": "expected/weread-old.json",
+      "expectedSHA256": "d753358d8944ebaeab481770bb71396477e23b38393e28b13cc547b93553382f",
+      "expectedStatus": "success",
+      "selectionMode": "explicit"
+    },
+    {
+      "id": "weread-pre-830",
+      "parserId": "weread-pre-830",
+      "input": "inputs/weread-pre-830.txt",
+      "inputSHA256": "84409de3bd3fb6c26565f8da59728ac1f1ac85ac8508d0020adc582834d49535",
+      "expected": "expected/weread-pre-830.json",
+      "expectedSHA256": "12f7cda8349f0e3f13a5405581c4287c676f773418ff8b1e9b43f0421b1ad60d",
+      "expectedStatus": "success",
+      "selectionMode": "explicit"
+    },
+    {
+      "id": "weread-830",
+      "parserId": "weread-830",
+      "input": "inputs/weread-830.txt",
+      "inputSHA256": "e9bec0726c6ffee5bc0ef9de11852730a640023e298d399421cb1b03b97f4924",
+      "expected": "expected/weread-830.json",
+      "expectedSHA256": "8b749b544fc649a91e57feecc8b3fc74f4f6d4ba3311806c32adb3dc96a95eb2",
+      "expectedStatus": "success",
+      "selectionMode": "explicit"
+    },
+    {
+      "id": "duokan",
+      "parserId": "duokan",
+      "input": "inputs/duokan.txt",
+      "inputSHA256": "d13c405615cfbcda203cea61ba20fff7eb2cf7896d1a1d280ce50d8d02f7fe40",
+      "expected": "expected/duokan.json",
+      "expectedSHA256": "3f5465f35076ff2e76844837b3fa9ba7541e7baf07094afd6638bed7eddd1651",
+      "expectedStatus": "success",
+      "selectionMode": "explicit"
+    },
+    {
+      "id": "ireader-selected",
+      "parserId": "ireader-selected",
+      "input": "inputs/ireader-selected.txt",
+      "inputSHA256": "43847ae83668a4b9df6f557833c0665d0e60c0f5ed09a1833e5bb23daa9881a5",
+      "expected": "expected/ireader-selected.json",
+      "expectedSHA256": "283f17fd94b333470f108181b17108bd2b9d81d288a29d85dfc8c2a14fe34c96",
+      "expectedStatus": "success",
+      "selectionMode": "explicit"
+    },
+    {
+      "id": "moon-reader",
+      "parserId": "moon-reader",
+      "input": "inputs/moon-reader.txt",
+      "inputSHA256": "5a439d1e696670a8aebc66c1a1696f2fbbf29f7de25a1a03126f5765abf3edcd",
+      "expected": "expected/moon-reader.json",
+      "expectedSHA256": "e404e353710e677b15fd0512811b5a77df8d0cdd00142b4538e09b4b40c72044",
+      "expectedStatus": "success",
+      "selectionMode": "explicit"
+    },
+    {
+      "id": "douban-app",
+      "parserId": "douban-app",
+      "input": "inputs/douban-app.txt",
+      "inputSHA256": "8f78a4b327da552d8f51404fa7aaf33469f706f7c4d2ba9d67b10d4f9c9dc430",
+      "expected": "expected/douban-app.json",
+      "expectedSHA256": "7c288010b7c95c71f21ed23567628b8ccd648b66de9af71748dd1472a884f4ee",
+      "expectedStatus": "success",
+      "selectionMode": "explicit"
+    },
+    {
+      "id": "reader-163",
+      "parserId": "reader-163",
+      "input": "inputs/reader-163.txt",
+      "inputSHA256": "1ca4cd480cda1c048635ccbd0e35827a073f9b70ea84fd89013e169c3aaa2462",
+      "expected": "expected/reader-163.json",
+      "expectedSHA256": "44f5bf5db10301f85d978de37a62933b95395565efe62d627d38f66a99c71deb",
+      "expectedStatus": "success",
+      "selectionMode": "explicit"
+    },
+    {
+      "id": "fanqie",
+      "parserId": "fanqie",
+      "input": "inputs/fanqie.txt",
+      "inputSHA256": "43b8f06c4649c8ade6ed69d655bd520f618e9bbe0c74564d7e09d910ecb7ab31",
+      "expected": "expected/fanqie.json",
+      "expectedSHA256": "0dedc1eecd7e471ac3efdcc3510ccaf615ee05b268dec38ed2887148607fbce5",
+      "expectedStatus": "success",
+      "selectionMode": "explicit"
+    },
+    {
+      "id": "readingo",
+      "parserId": "readingo",
+      "input": "inputs/readingo.txt",
+      "inputSHA256": "28fdabb43f93143f6deda577721fd99c9cde6616e74247862d6c11e95cf8b5d1",
+      "expected": "expected/readingo.json",
+      "expectedSHA256": "05266f2bc52f3d52b8ec0788f5b6480ffdcd7717ad3f2be1f10a8a59da6a9928",
+      "expectedStatus": "success",
+      "selectionMode": "explicit"
+    },
+    {
+      "id": "kindle-app",
+      "parserId": "kindle-app",
+      "input": "inputs/kindle-app.html",
+      "inputSHA256": "536e5d226b2559ecd69284693ca7154d53e47a501f3968988a3a21e1ad5f1ab1",
+      "expected": "expected/kindle-app.expected.json",
+      "expectedSHA256": "b1e9bea2ec964f13ce75630a81a19166c5e2cfcfaf58a45611810ed64f369daf",
+      "expectedStatus": "success",
+      "selectionMode": "explicit"
+    },
+    {
+      "id": "koreader-old",
+      "parserId": "koreader",
+      "input": "inputs/koreader-old.json",
+      "inputSHA256": "b8a16a3adf04f9ac9b1403a461441540c0fe8b36101e72329ea7b40f76235fcb",
+      "expected": "expected/koreader-old.expected.json",
+      "expectedSHA256": "ddde5704f2f30bf924f904f4444d31a1c3e1d93958251fd7ac175bb66b5c8a48",
+      "expectedStatus": "success",
+      "selectionMode": "explicit"
+    },
+    {
+      "id": "koreader-new",
+      "parserId": "koreader",
+      "input": "inputs/koreader-new.json",
+      "inputSHA256": "0217e72ed63cc5f5ff782606c284aa5d2870f6c9c6d281633e36b156883018bb",
+      "expected": "expected/koreader-new.expected.json",
+      "expectedSHA256": "2de901533b177eb92523b310524d135b0bb17259bb257a3dffd52038f58ffec1",
+      "expectedStatus": "success",
+      "selectionMode": "explicit"
+    },
+    {
+      "id": "legado",
+      "parserId": "legado",
+      "input": "inputs/legado.json",
+      "inputSHA256": "293ba145f1ddb63398ba2deced019688178bec96446c14c64a8e0543784d47ec",
+      "expected": "expected/legado.expected.json",
+      "expectedSHA256": "db1f86f8dd733867eb9f60d8680ca9295eab7bca842a36978599d08a16348e8c",
+      "expectedStatus": "success",
+      "selectionMode": "explicit"
+    },
+    {
+      "id": "neat-reader",
+      "parserId": "neat-reader",
+      "input": "inputs/neat-reader.json",
+      "inputSHA256": "006309b5dfa55374c121bc769387b33b05b53e7d6ba652a4ebbf7b7c79eb485a",
+      "expected": "expected/neat-reader.expected.json",
+      "expectedSHA256": "71f98e05fd13671ac1e05672baccef5e414b06ffedd58430cc58e92f07e76f67",
+      "expectedStatus": "success",
+      "selectionMode": "explicit"
+    },
+    {
+      "id": "koodo",
+      "parserId": "koodo",
+      "input": "inputs/koodo.csv",
+      "inputSHA256": "9532bb25680fabb84e2abca5e2e74816967406e463b2fe3c1795f80600d9cfbd",
+      "expected": "expected/koodo.expected.json",
+      "expectedSHA256": "388eab1f97e72e2224e608f611c8617ad32d9d669493b115257f23561aad24c9",
+      "expectedStatus": "success",
+      "selectionMode": "explicit"
+    },
+    {
+      "id": "reeden",
+      "parserId": "reeden",
+      "input": "inputs/reeden.json",
+      "inputSHA256": "8a1e456136afb902a7608cd411133dd178e4d6781c9365282b67c18a731a8673",
+      "expected": "expected/reeden.expected.json",
+      "expectedSHA256": "b901a01489d0d1796d1e26907c61a7246b932c0c06db0f5cf524cb114f414ab1",
+      "expectedStatus": "success",
+      "selectionMode": "explicit"
+    },
+    {
+      "id": "kindle-clippings",
+      "parserId": "kindle",
+      "input": "inputs/kindle-clippings.txt",
+      "inputSHA256": "8a61790ee0f539428fc03a3870778326bda4102726b2b79a3bcc6e50fa9684e4",
+      "expected": "expected/kindle-clippings.expected.json",
+      "expectedSHA256": "b25ce0072d4736bca3ba1f4a111a9558d63d0cb160568675673ae7deb2bcd13f",
+      "expectedStatus": "success",
+      "selectionMode": "explicit"
+    },
+    {
+      "id": "jd-reader",
+      "parserId": "jd-reader",
+      "input": "inputs/jd-reader.txt",
+      "inputSHA256": "550c7878de5b0b248ed4e70ee5eb14d8e43f03b958ce449d0b2c41135e638db1",
+      "expected": "expected/jd-reader.expected.json",
+      "expectedSHA256": "2dadf367dad46320739a1055cc46a9f12381260b265b947c3b809ed192459373",
+      "expectedStatus": "success",
+      "selectionMode": "explicit"
+    },
+    {
+      "id": "ireader-file",
+      "parserId": "ireader-file",
+      "input": "inputs/《掌阅文件书》笔记.txt",
+      "inputSHA256": "56dd717b93938fc69be0dead691595834c5e1fb035e66e9ce67136373e214bde",
+      "expected": "expected/ireader-file.expected.json",
+      "expectedSHA256": "04b793faa4da5711cb3961cbb03563de340cbf86532f341cc89f5779ffa138c7",
+      "expectedStatus": "success",
+      "selectionMode": "explicit"
+    },
+    {
+      "id": "ireader-epub",
+      "parserId": "ireader-epub",
+      "input": "inputs/ireader-notes.epub",
+      "inputSHA256": "4e8b13652d29cd649e8c2b709fc51901ef90c2cf3846c7a5d87bca5e8e547424",
+      "expected": "expected/ireader-epub.expected.json",
+      "expectedSHA256": "6770f863ae78c75ad8d939d1fb805da0d6461bdfc7c235a8db9e7b6afb39bee0",
+      "expectedStatus": "success",
+      "selectionMode": "explicit"
+    },
+    {
+      "id": "apple-books",
+      "parserId": "apple-books",
+      "input": "inputs/apple-books.zip",
+      "inputSHA256": "8067c225d5f5d428fd6ccb7dfd592594ac1f94642e65d328e9413c5428fc5af8",
+      "expected": "expected/apple-books.expected.json",
+      "expectedSHA256": "0478105c958ddc23c664eb9ff8c96c0faa0380e6918941458b04a73fa9f1fa3c",
+      "expectedStatus": "success",
+      "selectionMode": "explicit"
+    },
+    {
+      "id": "hanwang",
+      "parserId": "hanwang",
+      "input": "inputs/hanwang.txt",
+      "inputSHA256": "e55bcaa8849c8464c9c1c0337246127e0ae53abf8302bf991a01b24ecc74010f",
+      "expected": "expected/hanwang.json",
+      "expectedSHA256": "2458860a06bc52a07c4ecd74db477808aebad497ff374b14aff810f5cb26e0bb",
+      "expectedStatus": "success",
+      "selectionMode": "explicit"
+    },
+    {
+      "id": "invalid-apple-books",
+      "parserId": "apple-books",
+      "input": "inputs/invalid-apple-books.zip",
+      "inputSHA256": "796a8ac2183158bdc20e5cda1e10df502d61e7413c6eeb7bf5b25bf65de72ee3",
+      "expected": "expected/invalid-apple-books.json",
+      "expectedSHA256": "498c0c6e34771864c769062a9b552a0bb418e1322d235f0d40290353a439ca9d",
+      "expectedStatus": "failure",
+      "selectionMode": "explicit"
+    },
+    {
+      "id": "invalid-boox-new",
+      "parserId": "boox-new",
+      "input": "inputs/invalid-all.txt",
+      "inputSHA256": "43bf9aca18ead9847817f34707b021898b7c077d1f537b1f543a404f7f8f1240",
+      "expected": "expected/invalid-boox-new.json",
+      "expectedSHA256": "8f5de3a0c05433f0140111beb7ec2a29f0e429d838ce06e0049f301208687846",
+      "expectedStatus": "failure",
+      "selectionMode": "explicit"
+    },
+    {
+      "id": "invalid-boox-old",
+      "parserId": "boox-old",
+      "input": "inputs/invalid-all.txt",
+      "inputSHA256": "43bf9aca18ead9847817f34707b021898b7c077d1f537b1f543a404f7f8f1240",
+      "expected": "expected/invalid-boox-old.json",
+      "expectedSHA256": "8f5de3a0c05433f0140111beb7ec2a29f0e429d838ce06e0049f301208687846",
+      "expectedStatus": "failure",
+      "selectionMode": "explicit"
+    },
+    {
+      "id": "invalid-dangdang",
+      "parserId": "dangdang",
+      "input": "inputs/invalid-all.txt",
+      "inputSHA256": "43bf9aca18ead9847817f34707b021898b7c077d1f537b1f543a404f7f8f1240",
+      "expected": "expected/invalid-dangdang.json",
+      "expectedSHA256": "8f5de3a0c05433f0140111beb7ec2a29f0e429d838ce06e0049f301208687846",
+      "expectedStatus": "failure",
+      "selectionMode": "explicit"
+    },
+    {
+      "id": "invalid-dedao",
+      "parserId": "dedao",
+      "input": "inputs/invalid-all.txt",
+      "inputSHA256": "43bf9aca18ead9847817f34707b021898b7c077d1f537b1f543a404f7f8f1240",
+      "expected": "expected/invalid-dedao.json",
+      "expectedSHA256": "8f5de3a0c05433f0140111beb7ec2a29f0e429d838ce06e0049f301208687846",
+      "expectedStatus": "failure",
+      "selectionMode": "explicit"
+    },
+    {
+      "id": "invalid-dimo",
+      "parserId": "dimo",
+      "input": "inputs/invalid-all.txt",
+      "inputSHA256": "43bf9aca18ead9847817f34707b021898b7c077d1f537b1f543a404f7f8f1240",
+      "expected": "expected/invalid-dimo.json",
+      "expectedSHA256": "d1f1d94a482a83ca17ae68337b76e55b44f89d745be812867a30ae3f9958e05d",
+      "expectedStatus": "failure",
+      "selectionMode": "explicit"
+    },
+    {
+      "id": "invalid-douban-app",
+      "parserId": "douban-app",
+      "input": "inputs/invalid-all.txt",
+      "inputSHA256": "43bf9aca18ead9847817f34707b021898b7c077d1f537b1f543a404f7f8f1240",
+      "expected": "expected/invalid-douban-app.json",
+      "expectedSHA256": "e8f006ca2af985ff22ebb6677d41c51ae7b7ec42ad8c8b6ab2bf851352399428",
+      "expectedStatus": "failure",
+      "selectionMode": "explicit"
+    },
+    {
+      "id": "invalid-douban-read",
+      "parserId": "douban-read",
+      "input": "inputs/invalid-all.txt",
+      "inputSHA256": "43bf9aca18ead9847817f34707b021898b7c077d1f537b1f543a404f7f8f1240",
+      "expected": "expected/invalid-douban-read.json",
+      "expectedSHA256": "d1f1d94a482a83ca17ae68337b76e55b44f89d745be812867a30ae3f9958e05d",
+      "expectedStatus": "failure",
+      "selectionMode": "explicit"
+    },
+    {
+      "id": "invalid-duokan",
+      "parserId": "duokan",
+      "input": "inputs/invalid-all.txt",
+      "inputSHA256": "43bf9aca18ead9847817f34707b021898b7c077d1f537b1f543a404f7f8f1240",
+      "expected": "expected/invalid-duokan.json",
+      "expectedSHA256": "8f5de3a0c05433f0140111beb7ec2a29f0e429d838ce06e0049f301208687846",
+      "expectedStatus": "failure",
+      "selectionMode": "explicit"
+    },
+    {
+      "id": "invalid-fanqie",
+      "parserId": "fanqie",
+      "input": "inputs/invalid-all.txt",
+      "inputSHA256": "43bf9aca18ead9847817f34707b021898b7c077d1f537b1f543a404f7f8f1240",
+      "expected": "expected/invalid-fanqie.json",
+      "expectedSHA256": "d1f1d94a482a83ca17ae68337b76e55b44f89d745be812867a30ae3f9958e05d",
+      "expectedStatus": "failure",
+      "selectionMode": "explicit"
+    },
+    {
+      "id": "invalid-hanwang",
+      "parserId": "hanwang",
+      "input": "inputs/invalid-all.txt",
+      "inputSHA256": "43bf9aca18ead9847817f34707b021898b7c077d1f537b1f543a404f7f8f1240",
+      "expected": "expected/invalid-hanwang.json",
+      "expectedSHA256": "e8f006ca2af985ff22ebb6677d41c51ae7b7ec42ad8c8b6ab2bf851352399428",
+      "expectedStatus": "failure",
+      "selectionMode": "explicit"
+    },
+    {
+      "id": "invalid-ireader-epub",
+      "parserId": "ireader-epub",
+      "input": "inputs/invalid-ireader-epub.epub",
+      "inputSHA256": "29e009f120af8799054a2541a95ac06bfc01ccab345f849090e658b8eca19d8d",
+      "expected": "expected/invalid-ireader-epub.json",
+      "expectedSHA256": "d1f1d94a482a83ca17ae68337b76e55b44f89d745be812867a30ae3f9958e05d",
+      "expectedStatus": "failure",
+      "selectionMode": "explicit"
+    },
+    {
+      "id": "invalid-ireader-file",
+      "parserId": "ireader-file",
+      "input": "inputs/笔记.txt",
+      "inputSHA256": "43bf9aca18ead9847817f34707b021898b7c077d1f537b1f543a404f7f8f1240",
+      "expected": "expected/invalid-ireader-file.json",
+      "expectedSHA256": "8f5de3a0c05433f0140111beb7ec2a29f0e429d838ce06e0049f301208687846",
+      "expectedStatus": "failure",
+      "selectionMode": "explicit"
+    },
+    {
+      "id": "invalid-ireader-selected",
+      "parserId": "ireader-selected",
+      "input": "inputs/invalid-all.txt",
+      "inputSHA256": "43bf9aca18ead9847817f34707b021898b7c077d1f537b1f543a404f7f8f1240",
+      "expected": "expected/invalid-ireader-selected.json",
+      "expectedSHA256": "8f5de3a0c05433f0140111beb7ec2a29f0e429d838ce06e0049f301208687846",
+      "expectedStatus": "failure",
+      "selectionMode": "explicit"
+    },
+    {
+      "id": "invalid-jd-reader",
+      "parserId": "jd-reader",
+      "input": "inputs/invalid-all.txt",
+      "inputSHA256": "43bf9aca18ead9847817f34707b021898b7c077d1f537b1f543a404f7f8f1240",
+      "expected": "expected/invalid-jd-reader.json",
+      "expectedSHA256": "8f5de3a0c05433f0140111beb7ec2a29f0e429d838ce06e0049f301208687846",
+      "expectedStatus": "failure",
+      "selectionMode": "explicit"
+    },
+    {
+      "id": "invalid-kindle",
+      "parserId": "kindle",
+      "input": "inputs/invalid-all.txt",
+      "inputSHA256": "43bf9aca18ead9847817f34707b021898b7c077d1f537b1f543a404f7f8f1240",
+      "expected": "expected/invalid-kindle.json",
+      "expectedSHA256": "e8f006ca2af985ff22ebb6677d41c51ae7b7ec42ad8c8b6ab2bf851352399428",
+      "expectedStatus": "failure",
+      "selectionMode": "explicit"
+    },
+    {
+      "id": "invalid-kindle-app",
+      "parserId": "kindle-app",
+      "input": "inputs/invalid-all.txt",
+      "inputSHA256": "43bf9aca18ead9847817f34707b021898b7c077d1f537b1f543a404f7f8f1240",
+      "expected": "expected/invalid-kindle-app.json",
+      "expectedSHA256": "d1f1d94a482a83ca17ae68337b76e55b44f89d745be812867a30ae3f9958e05d",
+      "expectedStatus": "failure",
+      "selectionMode": "explicit"
+    },
+    {
+      "id": "invalid-koodo",
+      "parserId": "koodo",
+      "input": "inputs/invalid-all.txt",
+      "inputSHA256": "43bf9aca18ead9847817f34707b021898b7c077d1f537b1f543a404f7f8f1240",
+      "expected": "expected/invalid-koodo.json",
+      "expectedSHA256": "d1f1d94a482a83ca17ae68337b76e55b44f89d745be812867a30ae3f9958e05d",
+      "expectedStatus": "failure",
+      "selectionMode": "explicit"
+    },
+    {
+      "id": "invalid-koreader",
+      "parserId": "koreader",
+      "input": "inputs/invalid-all.txt",
+      "inputSHA256": "43bf9aca18ead9847817f34707b021898b7c077d1f537b1f543a404f7f8f1240",
+      "expected": "expected/invalid-koreader.json",
+      "expectedSHA256": "8f5de3a0c05433f0140111beb7ec2a29f0e429d838ce06e0049f301208687846",
+      "expectedStatus": "failure",
+      "selectionMode": "explicit"
+    },
+    {
+      "id": "invalid-legado",
+      "parserId": "legado",
+      "input": "inputs/invalid-all.txt",
+      "inputSHA256": "43bf9aca18ead9847817f34707b021898b7c077d1f537b1f543a404f7f8f1240",
+      "expected": "expected/invalid-legado.json",
+      "expectedSHA256": "8f5de3a0c05433f0140111beb7ec2a29f0e429d838ce06e0049f301208687846",
+      "expectedStatus": "failure",
+      "selectionMode": "explicit"
+    },
+    {
+      "id": "invalid-moon-reader",
+      "parserId": "moon-reader",
+      "input": "inputs/invalid-all.txt",
+      "inputSHA256": "43bf9aca18ead9847817f34707b021898b7c077d1f537b1f543a404f7f8f1240",
+      "expected": "expected/invalid-moon-reader.json",
+      "expectedSHA256": "8f5de3a0c05433f0140111beb7ec2a29f0e429d838ce06e0049f301208687846",
+      "expectedStatus": "failure",
+      "selectionMode": "explicit"
+    },
+    {
+      "id": "invalid-neat-reader",
+      "parserId": "neat-reader",
+      "input": "inputs/invalid-all.txt",
+      "inputSHA256": "43bf9aca18ead9847817f34707b021898b7c077d1f537b1f543a404f7f8f1240",
+      "expected": "expected/invalid-neat-reader.json",
+      "expectedSHA256": "8f5de3a0c05433f0140111beb7ec2a29f0e429d838ce06e0049f301208687846",
+      "expectedStatus": "failure",
+      "selectionMode": "explicit"
+    },
+    {
+      "id": "invalid-reader-163",
+      "parserId": "reader-163",
+      "input": "inputs/invalid-all.txt",
+      "inputSHA256": "43bf9aca18ead9847817f34707b021898b7c077d1f537b1f543a404f7f8f1240",
+      "expected": "expected/invalid-reader-163.json",
+      "expectedSHA256": "e8f006ca2af985ff22ebb6677d41c51ae7b7ec42ad8c8b6ab2bf851352399428",
+      "expectedStatus": "failure",
+      "selectionMode": "explicit"
+    },
+    {
+      "id": "invalid-readingo",
+      "parserId": "readingo",
+      "input": "inputs/invalid-all.txt",
+      "inputSHA256": "43bf9aca18ead9847817f34707b021898b7c077d1f537b1f543a404f7f8f1240",
+      "expected": "expected/invalid-readingo.json",
+      "expectedSHA256": "e8f006ca2af985ff22ebb6677d41c51ae7b7ec42ad8c8b6ab2bf851352399428",
+      "expectedStatus": "failure",
+      "selectionMode": "explicit"
+    },
+    {
+      "id": "invalid-reeden",
+      "parserId": "reeden",
+      "input": "inputs/invalid-all.txt",
+      "inputSHA256": "43bf9aca18ead9847817f34707b021898b7c077d1f537b1f543a404f7f8f1240",
+      "expected": "expected/invalid-reeden.json",
+      "expectedSHA256": "8f5de3a0c05433f0140111beb7ec2a29f0e429d838ce06e0049f301208687846",
+      "expectedStatus": "failure",
+      "selectionMode": "explicit"
+    },
+    {
+      "id": "invalid-weread-830",
+      "parserId": "weread-830",
+      "input": "inputs/invalid-weread-830.txt",
+      "inputSHA256": "528708c057bb9179ec348da48a981463a3df9214df4e4c3ef000ec1c3e81370b",
+      "expected": "expected/invalid-weread-830.json",
+      "expectedSHA256": "d1f1d94a482a83ca17ae68337b76e55b44f89d745be812867a30ae3f9958e05d",
+      "expectedStatus": "failure",
+      "selectionMode": "explicit"
+    },
+    {
+      "id": "invalid-weread-old",
+      "parserId": "weread-old",
+      "input": "inputs/invalid-weread-old.txt",
+      "inputSHA256": "94996747709e796775afa46fb6d260270687200997a1ed7b527079b27df53542",
+      "expected": "expected/invalid-weread-old.json",
+      "expectedSHA256": "d1f1d94a482a83ca17ae68337b76e55b44f89d745be812867a30ae3f9958e05d",
+      "expectedStatus": "failure",
+      "selectionMode": "explicit"
+    },
+    {
+      "id": "invalid-weread-pre-830",
+      "parserId": "weread-pre-830",
+      "input": "inputs/invalid-all.txt",
+      "inputSHA256": "43bf9aca18ead9847817f34707b021898b7c077d1f537b1f543a404f7f8f1240",
+      "expected": "expected/invalid-weread-pre-830.json",
+      "expectedSHA256": "d1f1d94a482a83ca17ae68337b76e55b44f89d745be812867a30ae3f9958e05d",
+      "expectedStatus": "failure",
+      "selectionMode": "explicit"
+    }
+  ],
+  "sourceClosure": {
+    "baseline": "scripts/import_alignment/android-source-closure.json",
+    "sha256": "ec17e591240b6537fdc07a801fcc1b04b2ccfb999d3221df98eeaef60b96095c"
+  }
+}

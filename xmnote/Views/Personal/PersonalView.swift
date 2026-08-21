@@ -145,7 +145,7 @@ extension PersonalView {
             )
             .animation(.smooth, value: desktopWebSessionCoordinator.state.isRunning)
             PersonalSettingsDivider(leadingInset: Layout.rowDividerLeading)
-            settingsRow("square.and.arrow.down", "数据导入", route: .dataImport)
+            settingsRow("square.and.arrow.down", "书摘导入", route: .dataImport)
             settingsRow("externaldrive", "数据备份", route: .dataBackup)
             settingsRow("square.and.arrow.up.on.square", "批量导出", route: .batchExport)
             settingsRow("link", "API 集成", route: .apiIntegration)

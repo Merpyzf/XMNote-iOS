@@ -50,7 +50,7 @@ struct DesktopWebView: View {
 
     let mode: DesktopWebEntryMode
 
-    /// 注入入口模式；个人页沿用设置模式，数据导入页使用电脑导入模式。
+    /// 注入入口模式；个人页沿用设置模式，书摘导入页使用电脑导入模式。
     init(mode: DesktopWebEntryMode = .settings) {
         self.mode = mode
     }

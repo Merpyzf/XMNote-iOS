@@ -68,9 +68,19 @@ struct NoteImportSourceScreen: View {
             UnifiedNoteImportPreviewView(books: parsedBooks, repository: repositories.noteImportRepository)
         }
         .onDisappear { task?.cancel() }
-        .alert("无法导入", isPresented: Binding(get: { errorMessage != nil }, set: { if !$0 { errorMessage = nil } })) {
-            Button("知道了") { errorMessage = nil }
-        } message: { Text(errorMessage ?? "") }
+        .xmSystemAlert(
+            isPresented: Binding(
+                get: { errorMessage != nil },
+                set: { if !$0 { errorMessage = nil } }
+            ),
+            descriptor: errorMessage.map { message in
+                .init(
+                    title: "无法导入",
+                    message: message,
+                    actions: [.init(title: "知道了") { errorMessage = nil }]
+                )
+            }
+        )
     }
 
     private var inputIcon: String {
@@ -342,18 +352,41 @@ struct UnifiedNoteImportPreviewView: View {
                 mappingBook = nil
             }
         }
-        .alert("无法导入", isPresented: Binding(get: { model.errorMessage != nil }, set: { if !$0 { model.errorMessage = nil } })) { Button("知道了") { model.errorMessage = nil } } message: { Text(model.errorMessage ?? "") }
-        .alert("编辑新书资料", isPresented: Binding(get: { editingBook != nil }, set: { if !$0 { editingBook = nil } })) {
-            TextField("书名", text: $editedTitle)
-            TextField("作者", text: $editedAuthor)
-            Button("取消", role: .cancel) { editingBook = nil }
-            Button("保存") {
-                guard var book = editingBook else { return }
-                let title = editedTitle.trimmingCharacters(in: .whitespacesAndNewlines)
-                guard !title.isEmpty else { return }
-                book.draft.name = title; book.draft.rawName = title; book.draft.author = editedAuthor.trimmingCharacters(in: .whitespacesAndNewlines)
-                model.update(book); editingBook = nil
+        .xmSystemAlert(
+            isPresented: Binding(
+                get: { model.errorMessage != nil },
+                set: { if !$0 { model.errorMessage = nil } }
+            ),
+            descriptor: model.errorMessage.map { message in
+                .init(
+                    title: "无法导入",
+                    message: message,
+                    actions: [.init(title: "知道了") { model.errorMessage = nil }]
+                )
             }
+        )
+        .xmSystemAlert(item: $editingBook) { book in
+            .init(
+                title: "编辑新书资料",
+                actions: [
+                    .init(title: "取消", role: .cancel) {},
+                    .init(
+                        title: "保存",
+                        isEnabled: !editedTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                    ) {
+                        var updated = book
+                        let title = editedTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+                        updated.draft.name = title
+                        updated.draft.rawName = title
+                        updated.draft.author = editedAuthor.trimmingCharacters(in: .whitespacesAndNewlines)
+                        model.update(updated)
+                    }
+                ],
+                textFields: [
+                    .init(text: $editedTitle, placeholder: "书名"),
+                    .init(text: $editedAuthor, placeholder: "作者")
+                ]
+            )
         }
     }
 
