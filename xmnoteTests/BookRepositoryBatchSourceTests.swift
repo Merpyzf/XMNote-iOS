@@ -6,6 +6,14 @@ import Testing
 @MainActor
 struct BookRepositoryBatchSourceTests {
     @Test
+    func readestBoundarySeparatesBuiltInAndCustomSources() throws {
+        let harness = try Self.makeHarness()
+
+        #expect(harness.repository.sourceCategory(for: 28) == .appDefault)
+        #expect(harness.repository.sourceCategory(for: 29) == .mine)
+    }
+
+    @Test
     func batchSetBooksSourceMatchesAndroidTimestampAndFilterSemantics() async throws {
         let harness = try Self.makeHarness()
         let sourceID: Int64 = 99_101

@@ -1,7 +1,7 @@
 import Foundation
 
 /**
- * [INPUT]: 依赖 BookRepository 首页书架快照与管理写入扩展的中间数据需求
+ * [INPUT]: 依赖 BookRepository 首页书架快照、Android v46 内置来源边界与管理写入扩展的中间数据需求
  * [OUTPUT]: 为 BookRepository 补充首页书架内部支撑类型、管理写入限制与局部字符串规范化 helper
  * [POS]: Data 层首页书架仓储内部支撑模型，避免 helper 类型散落在 BookRepository 主入口或全局命名空间
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -138,7 +138,7 @@ extension BookRepository {
         static let tagNameMaxLength = 100
         static let sourceNameMaxLength = 100
         static let collectionNameMaxLength = 100
-        static let defaultSourceIDRange: ClosedRange<Int64> = 1...27
+        static let defaultSourceIDRange: ClosedRange<Int64> = 1...28
     }
 
     struct BookshelfStatusKey: Hashable {

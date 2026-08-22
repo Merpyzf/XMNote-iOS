@@ -1,5 +1,5 @@
 /**
- * [INPUT]: 依赖 GRDB DatabaseMigrator、RoomCanonicalSchemaV40...V45、RoomCanonicalSchemaCompatibility 与 DatabaseSchema+Seed
+ * [INPUT]: 依赖 GRDB DatabaseMigrator、RoomCanonicalSchemaV40...V46、RoomCanonicalSchemaCompatibility 与 DatabaseSchema+Seed
  * [OUTPUT]: 对外提供 AppDatabase.migrator 与 Room canonical 迁移标识
  * [POS]: Database/Core 的迁移入口，被 AppDatabase.init 调用执行 Schema 创建
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -8,8 +8,8 @@
 import Foundation
 import GRDB
 
-// MARK: - Room canonical v45 迁移
-// iOS 新库先创建 Android Room v40 canonical schema，再逐步执行 Android 40→41→42→43→44→45 等价补丁，保证旧库与新库共用同一升级路径。
+// MARK: - Room canonical v46 迁移
+// iOS 新库先创建 Android Room v40 canonical schema，再逐步执行 Android 40→41→42→43→44→45→46 等价补丁，保证旧库与新库共用同一升级路径。
 
 extension AppDatabase {
     nonisolated static let roomSchemaMigrationIdentifier = "room-v40-schema"
@@ -19,6 +19,7 @@ extension AppDatabase {
     nonisolated static let roomV43MigrationIdentifier = "room-v43-schema"
     nonisolated static let roomV44MigrationIdentifier = "room-v44-data-cleanup"
     nonisolated static let roomV45MigrationIdentifier = "room-v45-notion-sync-schema"
+    nonisolated static let roomV46MigrationIdentifier = "room-v46-readest-source-data"
 
     nonisolated static var migrator: DatabaseMigrator {
         var migrator = DatabaseMigrator()
@@ -49,6 +50,10 @@ extension AppDatabase {
 
         migrator.registerMigration(roomV45MigrationIdentifier) { db in
             try RoomCanonicalSchemaV45.migrateFromV44(db)
+        }
+
+        migrator.registerMigration(roomV46MigrationIdentifier) { db in
+            try RoomCanonicalSchemaV46.migrateFromV45(db)
         }
 
         return migrator
@@ -88,6 +93,9 @@ extension AppDatabase {
         }
         if userVersion >= RoomCanonicalSchemaV45.databaseVersion {
             try markMigration(roomV45MigrationIdentifier, in: db)
+        }
+        if userVersion >= RoomCanonicalSchemaV46.databaseVersion {
+            try markMigration(roomV46MigrationIdentifier, in: db)
         }
     }
 

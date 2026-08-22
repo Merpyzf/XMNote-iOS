@@ -24,6 +24,8 @@ struct DesktopWebSourceRepositoryTests {
         #expect(detail.name == " 可见 ")
         #expect(detail.order == 50)
         #expect(detail.bookCount == 1)
+        let readest = try await repository.source(id: 28)
+        #expect(readest.isDefault)
     }
 
     @Test
@@ -34,7 +36,7 @@ struct DesktopWebSourceRepositoryTests {
 
         let created = try await repository.createSource(name: "  Calibre  ")
         #expect(created.name == "Calibre")
-        #expect(created.order == 27)
+        #expect(created.order == 28)
         #expect(!created.isHidden)
         #expect(!created.isDefault)
         #expect(created.createdTime == 7_000)
@@ -92,7 +94,7 @@ struct DesktopWebSourceRepositoryTests {
         try seedBook(database, id: 202, sourceID: 101, isDeleted: true)
 
         await expectCatalogError(.invalidArgument("预置来源不可删除，仅可隐藏")) {
-            try await repository.deleteSource(id: 1)
+            try await repository.deleteSource(id: 28)
         }
         try await repository.deleteSource(id: 101)
 

@@ -1,5 +1,5 @@
 /**
- * [INPUT]: 依赖 DatabaseManager、GRDB、ObservationStream 与 SourceRecord，按 Android SourceRepository/SourceDao 语义执行书籍来源管理读写
+ * [INPUT]: 依赖 DatabaseManager、GRDB、ObservationStream 与 SourceRecord，按 Android v46 内置来源边界执行书籍来源管理读写
  * [OUTPUT]: 对外提供 SourceManagementRepository（SourceManagementRepositoryProtocol 的 GRDB 实现）
  * [POS]: Data 层书籍来源管理仓储实现，统一封装“我的 > 书籍来源”的来源列表、增改删与排序写入
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -109,7 +109,7 @@ private extension SourceManagementRepository {
         static let sourceNameMaxLength = 100
         static let unknownSourceID: Int64 = 1
         static let unknownSourceName = "未知"
-        static let defaultSourceIDRange: ClosedRange<Int64> = 1...27
+        static let defaultSourceIDRange: ClosedRange<Int64> = 1...28
     }
 
     nonisolated func fetchSnapshot(_ db: Database) throws -> SourceManagementSnapshot {

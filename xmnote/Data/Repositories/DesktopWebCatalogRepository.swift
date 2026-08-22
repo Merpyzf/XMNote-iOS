@@ -1,5 +1,5 @@
 /**
- * [INPUT]: 依赖 AppDatabase/GRDB 的 V44 source、book、tag、tag_note、tag_book 表与可注入毫秒时钟
+ * [INPUT]: 依赖 AppDatabase/GRDB 的 v46 source、book、tag、tag_note、tag_book 表与可注入毫秒时钟
  * [OUTPUT]: 对外提供 Android Web SourceService/TagService 可观察语义的专用目录仓储
  * [POS]: Data 层网页目录仓储；与 App 标签管理业务隔离，由 DesktopWebAPIAdapter 映射为 Package DTO
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -49,7 +49,7 @@ struct DesktopWebTagMutationSnapshot: Equatable, Sendable {
 
 /// 使用独立 SQL 复刻 Android WebSourceRepository/WebTagRepository，避免污染 App 端既有业务规则。
 nonisolated struct DesktopWebCatalogRepository: Sendable {
-    private static let presetSourceMaxID: Int64 = 27
+    private static let presetSourceMaxID: Int64 = 28
     private static let unknownSourceID: Int64 = 1
 
     private let database: AppDatabase

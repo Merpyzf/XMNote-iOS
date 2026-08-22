@@ -2,7 +2,7 @@ import Foundation
 import GRDB
 
 /**
- * [INPUT]: 依赖 BookRepository 数据库连接、GRDB Database 与首页书籍管理相关 Record/Repository 模型
+ * [INPUT]: 依赖 BookRepository 数据库连接、GRDB Database、Android v46 来源边界与首页书籍管理相关 Record/Repository 模型
  * [OUTPUT]: 为 BookRepository 补充书架排序、置顶、批量编辑、移组、删除、重命名与上下文管理写入逻辑
  * [POS]: Data 层首页书架管理写入协作者，隔离 BookRepository 主文件中的复杂 SQL 写入与级联副作用
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -1500,7 +1500,7 @@ extension BookRepository {
         }
     }
 
-    /// 按 Android 常量范围识别来源分区：1...27 为默认来源，其余归“我的来源”。
+    /// 按 Android v46 常量范围识别来源分区：1...28 为默认来源，其余归“我的来源”。
     nonisolated func sourceCategory(for sourceID: Int64) -> BookshelfSourceCategory {
         if BookshelfManagementLimits.defaultSourceIDRange.contains(sourceID) {
             return .appDefault
