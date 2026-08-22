@@ -1,6 +1,6 @@
 /**
- * [INPUT]: 依赖 NoteRepositoryProtocol 提供书摘回顾设置、分页卡片、标签与书籍回显数据，依赖 ExternalAppIntegrationRepositoryProtocol 提供外部应用配置与书摘发送能力，并向页面私有换组宿主提供候选页准备与无动画提交能力
- * [OUTPUT]: 对外提供 NoteReviewViewModel，驱动书摘回顾分页卡组、设置 Sheet、分页刷新、随机换组交接、可取消分享图与外部应用发送反馈状态
+ * [INPUT]: 依赖 NoteRepositoryProtocol 提供书摘回顾设置、分页卡片、标签与书籍回显数据，依赖 ExternalAppIntegrationRepositoryProtocol/AIRepositoryProtocol 提供外部发送与 AI 配置预检，并向页面私有换组宿主提供候选页准备与无动画提交能力
+ * [OUTPUT]: 对外提供 NoteReviewViewModel，驱动书摘回顾分页卡组、设置 Sheet、分页刷新、随机换组交接、一级操作、可取消分享图与外部应用发送反馈状态
  * [POS]: ViewModels/Note 的书摘回顾状态编排器，被 NoteReviewView 与 NoteContainerView 消费
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -45,6 +45,14 @@ struct NoteReviewExternalAppSendAction: Equatable {
     let destination: ExternalAppDestination
 }
 
+/// 回顾页启动整条书摘 AI 释义前的配置检查结果，区分设置引导、读取失败与任务取消。
+nonisolated enum NoteReviewAIAvailabilityResult: Equatable, Sendable {
+    case available
+    case configurationRequired
+    case failed(String)
+    case cancelled
+}
+
 @MainActor
 @Observable
 /// 书摘回顾状态源，负责 Android 对齐筛选语义、卡堆分页、设置变更刷新与外部应用发送状态。
@@ -73,6 +81,7 @@ final class NoteReviewViewModel {
 
     private let repository: any NoteRepositoryProtocol
     private let externalAppIntegrationRepository: any ExternalAppIntegrationRepositoryProtocol
+    private let aiRepository: any AIRepositoryProtocol
     private var orderedOffset = 0
     private var canLoadMore = true
     private var hasLoadedOnce = false
@@ -86,13 +95,15 @@ final class NoteReviewViewModel {
     private var externalAppObservationTask: Task<Void, Never>?
     private var shareImageGenerationID: UUID?
 
-    /// 注入笔记与外部应用仓储并启动设置变更观察；观察任务只在主线程回写 UI 状态，释放时会取消。
+    /// 注入笔记、外部应用与 AI 仓储并启动设置变更观察；观察任务只在主线程回写 UI 状态，释放时会取消。
     init(
         repository: any NoteRepositoryProtocol,
-        externalAppIntegrationRepository: any ExternalAppIntegrationRepositoryProtocol
+        externalAppIntegrationRepository: any ExternalAppIntegrationRepositoryProtocol,
+        aiRepository: any AIRepositoryProtocol
     ) {
         self.repository = repository
         self.externalAppIntegrationRepository = externalAppIntegrationRepository
+        self.aiRepository = aiRepository
         observeSettingChanges()
         observeDataChanges()
         observeExternalAppConfigurationChanges()
@@ -451,6 +462,54 @@ final class NoteReviewViewModel {
             guard !Task.isCancelled else { return false }
             errorMessage = "保存标签失败：\(error.localizedDescription)"
             return false
+        }
+    }
+
+    /// 通过 AI Repository 读取安全配置快照；取消不产生反馈，配置不完整时由页面引导到 AI 设置。
+    func checkAIAvailability() async -> NoteReviewAIAvailabilityResult {
+        do {
+            let snapshot = try await aiRepository.fetchConfiguration()
+            try Task.checkCancellation()
+            let configuration = snapshot.configuration.normalized
+            let hasCompletePrompts = AIPromptKind.allCases.allSatisfy { kind in
+                let prompt = configuration.prompts.template(for: kind)
+                return !prompt.system.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                    && !prompt.user.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            }
+            guard configuration.isEnabled,
+                  snapshot.hasStoredKey(for: configuration.provider),
+                  hasCompletePrompts
+            else {
+                return .configurationRequired
+            }
+            return .available
+        } catch is CancellationError {
+            return .cancelled
+        } catch {
+            return .failed("读取 AI 配置失败：\(error.localizedDescription)")
+        }
+    }
+
+    /// 在 AI 追加想法前声明本地写入，使数据库观察仅消费本次事件而不随机重载整组卡片。
+    func beginLocalAIAppend() {
+        isApplyingLocalDataChange = true
+    }
+
+    /// AI 追加失败时撤销本地写入声明，避免吞掉下一次无关的数据变化事件。
+    func cancelLocalAIAppend() {
+        isApplyingLocalDataChange = false
+    }
+
+    /// AI 追加成功后按主键重读单张卡片；只替换原位置内容，保持当前卡组顺序与选中身份。
+    func reloadItemAfterAIAppend(noteID: Int64) async {
+        do {
+            guard let refreshedItem = try await repository.fetchNoteReviewItem(noteID: noteID),
+                  let index = items.firstIndex(where: { $0.id == noteID })
+            else { return }
+            items[index] = refreshedItem
+        } catch {
+            guard !Task.isCancelled else { return }
+            errorMessage = "刷新 AI 释义结果失败：\(error.localizedDescription)"
         }
     }
 

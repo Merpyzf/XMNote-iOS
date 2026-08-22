@@ -1,5 +1,5 @@
 /**
- * [INPUT]: 依赖 AIRepositoryProtocol 执行流式释义/书摘解读、自动标签建议及确认写回
+ * [INPUT]: 依赖 AIRepositoryProtocol 执行流式释义、自动标签建议及确认写回
  * [OUTPUT]: 对外提供 AITextResultRequest、AITextResultViewModel 与 AIAutoTagViewModel，驱动 Content 业务 Sheet
  * [POS]: ViewModels/Content 的 AI 交互状态层，被 viewer、书评详情与相关内容详情复用
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -15,7 +15,7 @@ nonisolated enum AITextResultRequest: Equatable, Sendable {
     var navigationTitle: String {
         switch self {
         case .noteExplanation:
-            "AI 解读"
+            "AI 释义"
         case .textLookup:
             "AI 释义"
         }
@@ -130,7 +130,7 @@ final class AITextResultViewModel {
         isGenerating = false
     }
 
-    /// 把书摘解读原子追加到最新想法；选词释义请求不开放此写入动作。
+    /// 把整条书摘释义原子追加到最新想法；选词释义请求不开放此写入动作。
     @discardableResult
     func appendToIdea() async -> Bool {
         guard let noteID = request.noteIDForAppending, canAppendToIdea else { return false }

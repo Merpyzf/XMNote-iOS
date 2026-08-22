@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 AITextResultViewModel/AIAutoTagViewModel、AIRepositoryProtocol 与现有卡片/加载/反馈组件
- * [OUTPUT]: 对外提供 AITextResultSheet 与 AIAutoTagSheet，承接流式结果、追加想法和标签确认写回
+ * [OUTPUT]: 对外提供 AITextResultSheet 与 AIAutoTagSheet，承接流式结果、追加想法生命周期和标签确认写回
  * [POS]: Views/Content/Sheets 的 AI 业务 Sheet，被通用 viewer 及单页详情入口复用
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -8,7 +8,7 @@
 import SwiftUI
 import UIKit
 
-/// 流式 AI 解读/释义 Sheet；书摘解读可由用户明确确认后追加到最新想法。
+/// 流式 AI 释义 Sheet；整条书摘释义可由用户明确确认后追加到最新想法。
 struct AITextResultSheet: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(XMToastCenter.self) private var toastCenter
@@ -17,12 +17,16 @@ struct AITextResultSheet: View {
     @State private var viewModel: AITextResultViewModel
     @State private var loadingGate = LoadingGate()
 
+    private let onIdeaAppendWillBegin: @MainActor () -> Void
+    private let onIdeaAppendFailed: @MainActor () -> Void
     private let onIdeaAppended: @MainActor () async -> Void
 
     /// 用稳定 presentation 建立状态源；网络只在 Sheet 出现后启动。
     init(
         presentation: AITextResultPresentation,
         repository: any AIRepositoryProtocol,
+        onIdeaAppendWillBegin: @escaping @MainActor () -> Void = { },
+        onIdeaAppendFailed: @escaping @MainActor () -> Void = { },
         onIdeaAppended: @escaping @MainActor () async -> Void = { }
     ) {
         _viewModel = State(
@@ -31,6 +35,8 @@ struct AITextResultSheet: View {
                 repository: repository
             )
         )
+        self.onIdeaAppendWillBegin = onIdeaAppendWillBegin
+        self.onIdeaAppendFailed = onIdeaAppendFailed
         self.onIdeaAppended = onIdeaAppended
     }
 
@@ -185,7 +191,11 @@ struct AITextResultSheet: View {
     /// 追加成功后先让来源页强刷详情，再关闭 Sheet，确保返回即看到最新想法。
     private func appendToIdea() {
         Task {
-            guard await viewModel.appendToIdea() else { return }
+            onIdeaAppendWillBegin()
+            guard await viewModel.appendToIdea() else {
+                onIdeaAppendFailed()
+                return
+            }
             await onIdeaAppended()
             toastCenter.success("已追加到想法")
             dismiss()

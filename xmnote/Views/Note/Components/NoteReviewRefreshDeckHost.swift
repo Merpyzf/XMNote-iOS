@@ -1,7 +1,7 @@
 /**
- * [INPUT]: 依赖 NoteReviewViewModel 的候选页准备/提交接口、NoteReviewPagingDeck 与页面注入的卡片内容闭包
- * [OUTPUT]: 对外提供页面私有的 NoteReviewRefreshDeckHost、随机换组 latest-wins 协调器与可测动效规格
- * [POS]: Note/Components 的回顾卡组交接宿主，以稳定 live deck 和预挂载新组完成连续替换，不作为跨模块组件
+ * [INPUT]: 依赖 NoteReviewViewModel 的候选页准备/提交与一级操作状态、NoteReviewPagingDeck，以及页面注入的卡片内容和业务动作闭包
+ * [OUTPUT]: 对外提供页面私有的 NoteReviewRefreshDeckHost、四项一级操作栏、随机换组 latest-wins 协调器与可测动效规格
+ * [POS]: Note/Components 的回顾卡组与底部操作宿主，以稳定 live deck 和预挂载新组完成连续替换，不作为跨模块组件
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
@@ -233,7 +233,15 @@ struct NoteReviewRefreshDeckHost<CardContent: View>: View {
     }
 
     @Bindable var viewModel: NoteReviewViewModel
+    let isTagActionInFlight: Bool
+    let isTagProgressVisible: Bool
+    let isAIActionInFlight: Bool
+    let isAIProgressVisible: Bool
     let onCardTapped: (NoteReviewCardItem) -> Void
+    let onSend: (NoteReviewCardItem, ExternalAppDestination) -> Void
+    let onRequestSendConfiguration: () -> Void
+    let onEditTags: (NoteReviewCardItem) -> Void
+    let onExplain: (NoteReviewCardItem) -> Void
     @ViewBuilder let cardContent: (NoteReviewCardItem) -> CardContent
 
     private let progressClock = ContinuousClock()
@@ -257,11 +265,23 @@ struct NoteReviewRefreshDeckHost<CardContent: View>: View {
         VStack(spacing: NoteReviewBottomLayout.actionRowSpacing) {
             deck
 
-            NoteReviewAuxiliaryActionRow(
-                title: viewModel.settings.sortRule == .random ? "换一组" : "刷新",
+            NoteReviewPrimaryActionBar(
+                item: viewModel.currentItem,
+                configuredDestinations: configuredDestinations,
+                refreshTitle: viewModel.settings.sortRule == .random ? "换一组" : "刷新",
                 isRefreshing: isShowingQueryProgress,
-                isDisabled: isRefreshButtonDisabled,
-                action: requestRefresh
+                isRefreshDisabled: isRefreshButtonDisabled,
+                areContentActionsDisabled: areContentActionsDisabled,
+                isSending: viewModel.externalAppSendAction != nil,
+                isTagActionInFlight: isTagActionInFlight,
+                isTagProgressVisible: isTagProgressVisible,
+                isAIActionInFlight: isAIActionInFlight,
+                isAIProgressVisible: isAIProgressVisible,
+                onSend: onSend,
+                onRequestSendConfiguration: onRequestSendConfiguration,
+                onEditTags: onEditTags,
+                onExplain: onExplain,
+                onRefresh: requestRefresh
             )
             .padding(.horizontal, Spacing.screenEdge)
             .padding(.bottom, NoteReviewBottomLayout.actionRowBottomPadding)
@@ -370,6 +390,19 @@ struct NoteReviewRefreshDeckHost<CardContent: View>: View {
     private var isRefreshButtonDisabled: Bool {
         viewModel.isInitialLoading
             || (viewModel.settings.sortRule == .ordered && isOrderedRefreshing)
+    }
+
+    private var areContentActionsDisabled: Bool {
+        viewModel.currentItem == nil
+            || viewModel.isInitialLoading
+            || viewModel.isRefreshing
+            || coordinator.phase != .idle
+            || incomingSnapshot != nil
+            || isOrderedRefreshing
+    }
+
+    private var configuredDestinations: [ExternalAppDestination] {
+        ExternalAppDestination.allCases.filter(viewModel.isExternalAppDestinationConfigured)
     }
 
     /// 接收刷新点击；顺序模式维持即时提交，随机模式只让协调器启动或合并最新意图，所有 Task 在主线程检查取消与 intent 身份。
@@ -651,63 +684,296 @@ private extension View {
 private enum NoteReviewBottomLayout {
     static let deckTopPadding = Spacing.base
     static let deckBottomPadding = Spacing.none
-    static let actionRowSpacing = Spacing.base
+    static let actionRowSpacing = Spacing.cozy
     static let actionRowBottomPadding = Spacing.section
-    static let actionRowMinHeight: CGFloat = 34
+    static let actionRowMinHeight: CGFloat = 44
 }
 
-private struct NoteReviewAuxiliaryActionRow: View {
-    let title: String
+/// 操作栏按整组选择横排或上下排列，避免单项独立折行造成视觉节奏混杂。
+private enum NoteReviewPrimaryActionLayout {
+    case inline
+    case stacked
+
+    var actionSpacing: CGFloat {
+        switch self {
+        case .inline:
+            NoteReviewPrimaryActionMetrics.inlineActionSpacing
+        case .stacked:
+            Spacing.none
+        }
+    }
+
+    var rowAlignment: VerticalAlignment {
+        switch self {
+        case .inline:
+            .center
+        case .stacked:
+            .top
+        }
+    }
+
+    var controlMaxWidth: CGFloat? {
+        switch self {
+        case .inline:
+            nil
+        case .stacked:
+            .infinity
+        }
+    }
+}
+
+/// 与既有“换一组”同层级的四项一级操作栏；只编排入口，不持有发送、标签或 AI 业务状态。
+private struct NoteReviewPrimaryActionBar: View {
+    let item: NoteReviewCardItem?
+    let configuredDestinations: [ExternalAppDestination]
+    let refreshTitle: String
     let isRefreshing: Bool
-    let isDisabled: Bool
-    let action: () -> Void
+    let isRefreshDisabled: Bool
+    let areContentActionsDisabled: Bool
+    let isSending: Bool
+    let isTagActionInFlight: Bool
+    let isTagProgressVisible: Bool
+    let isAIActionInFlight: Bool
+    let isAIProgressVisible: Bool
+    let onSend: (NoteReviewCardItem, ExternalAppDestination) -> Void
+    let onRequestSendConfiguration: () -> Void
+    let onEditTags: (NoteReviewCardItem) -> Void
+    let onExplain: (NoteReviewCardItem) -> Void
+    let onRefresh: () -> Void
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var arrowRotationDegrees = 0.0
 
     var body: some View {
-        HStack {
-            Spacer()
-            Button {
-                if !reduceMotion {
-                    withAnimation(.snappy(duration: 0.18, extraBounce: 0)) {
-                        arrowRotationDegrees += 120
-                    }
-                }
-                action()
-            } label: {
-                HStack(spacing: Spacing.tiny) {
-                    ZStack {
-                        Image(systemName: "arrow.clockwise")
-                            .font(AppTypography.captionMedium)
-                            .rotationEffect(.degrees(reduceMotion ? 0 : arrowRotationDegrees))
-                            .opacity(isRefreshing ? 0 : 1)
-                            .accessibilityHidden(true)
-                        ProgressView()
-                            .controlSize(.mini)
-                            .tint(Color.textSecondary.opacity(NoteReviewAuxiliaryActionMetrics.progressOpacity))
-                            .opacity(isRefreshing ? 1 : 0)
-                            .accessibilityHidden(true)
-                    }
-                    .frame(width: 14, height: 14)
+        ViewThatFits(in: .horizontal) {
+            actionRow(layout: .inline)
+                .fixedSize(horizontal: true, vertical: false)
 
-                    Text(title)
-                        .font(AppTypography.captionMedium)
-                }
-                .foregroundStyle(Color.textSecondary.opacity(isDisabled ? NoteReviewAuxiliaryActionMetrics.disabledOpacity : NoteReviewAuxiliaryActionMetrics.enabledOpacity))
-                .frame(minHeight: NoteReviewBottomLayout.actionRowMinHeight)
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(NoteReviewAuxiliaryActionButtonStyle(isEnabled: !isDisabled))
-            .disabled(isDisabled)
-            .accessibilityLabel(title == "换一组" ? "换一组书摘" : "刷新回顾")
-            .accessibilityHint("重新加载当前范围内的书摘卡片")
-            Spacer()
+            actionRow(layout: .stacked)
         }
+        .frame(maxWidth: .infinity)
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("回顾卡片操作")
+    }
+
+    private func actionRow(layout: NoteReviewPrimaryActionLayout) -> some View {
+        HStack(alignment: layout.rowAlignment, spacing: layout.actionSpacing) {
+            sendControl(layout: layout)
+
+            actionButton(
+                title: "标签",
+                systemImage: "tag",
+                showsProgress: isTagProgressVisible,
+                isDisabled: contentActionDisabled || isTagActionInFlight,
+                layout: layout,
+                accessibilityLabel: "设置当前书摘标签",
+                accessibilityHint: "打开标签编辑"
+            ) {
+                guard let item else { return }
+                onEditTags(item)
+            }
+
+            actionButton(
+                title: "AI 释义",
+                systemImage: "sparkles",
+                showsProgress: isAIProgressVisible,
+                isDisabled: contentActionDisabled || isAIActionInFlight,
+                layout: layout,
+                accessibilityLabel: "AI 释义当前书摘",
+                accessibilityHint: "让 AI 解释这段书摘的含义"
+            ) {
+                guard let item else { return }
+                onExplain(item)
+            }
+
+            actionButton(
+                title: refreshTitle,
+                systemImage: "arrow.clockwise",
+                showsProgress: isRefreshing,
+                isDisabled: isRefreshDisabled,
+                rotationDegrees: reduceMotion ? 0 : arrowRotationDegrees,
+                layout: layout,
+                accessibilityLabel: refreshTitle == "换一组" ? "换一组书摘" : "刷新回顾",
+                accessibilityHint: "重新加载当前范围内的书摘卡片",
+                action: performRefresh
+            )
+        }
+    }
+
+    private var contentActionDisabled: Bool {
+        item == nil || areContentActionsDisabled
+    }
+
+    private var sendActionDisabled: Bool {
+        contentActionDisabled || isSending
+    }
+
+    @ViewBuilder
+    private func sendControl(layout: NoteReviewPrimaryActionLayout) -> some View {
+        if configuredDestinations.count > 1 {
+            Menu {
+                ForEach(configuredDestinations) { destination in
+                    Button {
+                        guard let item else { return }
+                        onSend(item, destination)
+                    } label: {
+                        Label(
+                            destination.noteReviewMenuTitle,
+                            systemImage: destination.noteReviewMenuSystemImage
+                        )
+                    }
+                    .disabled(isSending)
+                }
+            } label: {
+                NoteReviewPrimaryActionLabel(
+                    title: "发送",
+                    systemImage: "paperplane",
+                    showsProgress: isSending,
+                    isDisabled: sendActionDisabled,
+                    layout: layout
+                )
+            }
+            .menuIndicator(.hidden)
+            .buttonStyle(NoteReviewPrimaryActionButtonStyle(isEnabled: !sendActionDisabled))
+            .disabled(sendActionDisabled)
+            .accessibilityLabel("发送当前书摘")
+            .accessibilityHint("选择一个已配置的发送目标")
+            .frame(maxWidth: layout.controlMaxWidth)
+        } else {
+            actionButton(
+                title: "发送",
+                systemImage: "paperplane",
+                showsProgress: isSending,
+                isDisabled: sendActionDisabled,
+                layout: layout,
+                accessibilityLabel: "发送当前书摘",
+                accessibilityHint: configuredDestinations.isEmpty
+                    ? "前往关联应用设置"
+                    : "发送到 \(configuredDestinations[0].noteReviewMenuTitle)"
+            ) {
+                guard let item else { return }
+                if let destination = configuredDestinations.first {
+                    onSend(item, destination)
+                } else {
+                    onRequestSendConfiguration()
+                }
+            }
+        }
+    }
+
+    private func actionButton(
+        title: String,
+        systemImage: String,
+        showsProgress: Bool,
+        isDisabled: Bool,
+        rotationDegrees: Double = 0,
+        layout: NoteReviewPrimaryActionLayout,
+        accessibilityLabel: String,
+        accessibilityHint: String,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            NoteReviewPrimaryActionLabel(
+                title: title,
+                systemImage: systemImage,
+                showsProgress: showsProgress,
+                isDisabled: isDisabled,
+                rotationDegrees: rotationDegrees,
+                layout: layout
+            )
+        }
+        .buttonStyle(NoteReviewPrimaryActionButtonStyle(isEnabled: !isDisabled))
+        .disabled(isDisabled)
+        .accessibilityLabel(accessibilityLabel)
+        .accessibilityHint(accessibilityHint)
+        .frame(maxWidth: layout.controlMaxWidth)
+    }
+
+    private func performRefresh() {
+        if !reduceMotion {
+            withAnimation(.snappy(duration: 0.18, extraBounce: 0)) {
+                arrowRotationDegrees += 120
+            }
+        }
+        onRefresh()
     }
 }
 
-private struct NoteReviewAuxiliaryActionButtonStyle: ButtonStyle {
+/// 按操作栏选定的统一形态排列图标与文案，并保持 44pt 点击区域和稳定加载图标槽。
+private struct NoteReviewPrimaryActionLabel: View {
+    let title: String
+    let systemImage: String
+    let showsProgress: Bool
+    let isDisabled: Bool
+    var rotationDegrees = 0.0
+    let layout: NoteReviewPrimaryActionLayout
+
+    @ScaledMetric(relativeTo: .caption) private var iconSlot: CGFloat = 16
+
+    var body: some View {
+        Group {
+            switch layout {
+            case .inline:
+                HStack(spacing: Spacing.half) {
+                    icon
+                    inlineTitleLabel
+                }
+            case .stacked:
+                VStack(spacing: Spacing.tiny) {
+                    icon
+                    stackedTitleLabel
+                }
+            }
+        }
+        .foregroundStyle(
+            Color.textSecondary.opacity(
+                isDisabled
+                    ? NoteReviewPrimaryActionMetrics.disabledOpacity
+                    : NoteReviewPrimaryActionMetrics.enabledOpacity
+            )
+        )
+        .frame(
+            minWidth: NoteReviewBottomLayout.actionRowMinHeight,
+            maxWidth: layout.controlMaxWidth,
+            minHeight: NoteReviewBottomLayout.actionRowMinHeight
+        )
+        .contentShape(Rectangle())
+    }
+
+    private var icon: some View {
+        ZStack {
+            Image(systemName: systemImage)
+                .font(AppTypography.captionMedium)
+                .rotationEffect(.degrees(rotationDegrees))
+                .opacity(showsProgress ? 0 : 1)
+                .accessibilityHidden(true)
+
+            ProgressView()
+                .controlSize(.mini)
+                .tint(Color.textSecondary.opacity(NoteReviewPrimaryActionMetrics.progressOpacity))
+                .opacity(showsProgress ? 1 : 0)
+                .accessibilityHidden(true)
+        }
+        .frame(width: iconSlot, height: iconSlot)
+    }
+
+    private var inlineTitleLabel: some View {
+        Text(title)
+            .font(AppTypography.captionMedium)
+            .lineLimit(1)
+            .fixedSize(horizontal: true, vertical: false)
+    }
+
+    private var stackedTitleLabel: some View {
+        Text(title)
+            .font(AppTypography.captionMedium)
+            .multilineTextAlignment(.center)
+            .lineLimit(2)
+            .fixedSize(horizontal: false, vertical: true)
+    }
+}
+
+private struct NoteReviewPrimaryActionButtonStyle: ButtonStyle {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     let isEnabled: Bool
@@ -720,18 +986,19 @@ private struct NoteReviewAuxiliaryActionButtonStyle: ButtonStyle {
             .background {
                 if isPressed {
                     Capsule()
-                        .fill(Color.controlFillSecondary.opacity(NoteReviewAuxiliaryActionMetrics.pressedFillOpacity))
+                        .fill(Color.controlFillSecondary.opacity(NoteReviewPrimaryActionMetrics.pressedFillOpacity))
                         .padding(.horizontal, -Spacing.half)
                         .padding(.vertical, Spacing.tiny)
                         .accessibilityHidden(true)
                 }
             }
-            .scaleEffect(!reduceMotion && isPressed ? NoteReviewAuxiliaryActionMetrics.pressedScale : 1)
-            .animation(reduceMotion ? nil : .snappy(duration: NoteReviewAuxiliaryActionMetrics.pressAnimationDuration), value: configuration.isPressed)
+            .scaleEffect(!reduceMotion && isPressed ? NoteReviewPrimaryActionMetrics.pressedScale : 1)
+            .animation(reduceMotion ? nil : .snappy(duration: NoteReviewPrimaryActionMetrics.pressAnimationDuration), value: configuration.isPressed)
     }
 }
 
-private enum NoteReviewAuxiliaryActionMetrics {
+private enum NoteReviewPrimaryActionMetrics {
+    static let inlineActionSpacing: CGFloat = 16
     static let enabledOpacity = 0.72
     static let disabledOpacity = 0.36
     static let progressOpacity = 0.68

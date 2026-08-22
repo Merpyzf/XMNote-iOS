@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 RepositoryContainer 注入内容/AI 仓储，依赖 ContentViewerViewModel 驱动分页与详情状态
- * [OUTPUT]: 对外提供 ContentViewerView，以首帧稳定导航标题统一承接分页查看、微信读书原文跳转、书摘朗读、页面级系统分享、AI 解读/释义/标签与内容操作反馈
+ * [OUTPUT]: 对外提供 ContentViewerView，以首帧稳定导航标题统一承接分页查看、微信读书原文跳转、书摘朗读、页面级系统分享、AI 释义/标签与内容操作反馈
  * [POS]: Content 模块查看页壳层，被时间线与书籍详情共同复用
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -572,7 +572,7 @@ private struct ContentViewerLoadedView: View {
             Button {
                 presentNoteExplanation()
             } label: {
-                XMMenuLabel("AI 解读", systemImage: "sparkles")
+                XMMenuLabel("AI 释义", systemImage: "sparkles")
             }
             Button {
                 presentAutoTag()
@@ -680,7 +680,7 @@ private struct ContentViewerLoadedView: View {
         pendingPresentation = PendingCapabilityPresentation(capability: capability)
     }
 
-    /// 锁定当前书摘主键与书名后呈现流式解读，横向翻页不会改变本次写回目标。
+    /// 锁定当前书摘主键与书名后呈现流式释义，横向翻页不会改变本次写回目标。
     private func presentNoteExplanation() {
         guard case .note(let noteID)? = viewModel.selectedItemID else { return }
         aiTextPresentation = AITextResultPresentation(

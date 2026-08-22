@@ -1,6 +1,6 @@
 /**
- * [INPUT]: 依赖 NoteReviewViewModel、页面私有 NoteReviewRefreshDeckHost、NoteReviewCardView 与外部导航/设置闭包
- * [OUTPUT]: 对外提供 NoteReviewView，承载 iOS 端书摘回顾分页卡组主界面、随机换组交接、原尺寸卡片菜单、可取消分享图任务、系统分享面板与外部应用发送反馈
+ * [INPUT]: 依赖 NoteReviewViewModel、RepositoryContainer、AppNavigationCoordinator、页面私有 NoteReviewRefreshDeckHost、NoteReviewCardView 与外部导航/设置闭包
+ * [OUTPUT]: 对外提供 NoteReviewView，承载 iOS 端书摘回顾分页卡组、底部一级操作、随机换组交接、卡片菜单、可取消分享与 AI 释义会话
  * [POS]: Note 模块回顾 Tab 页面入口，被 NoteContainerView 托管
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -14,16 +14,26 @@ struct NoteReviewView: View {
     let onOpenSettings: () -> Void
 
     @Environment(XMToastCenter.self) private var toastCenter
+    @Environment(RepositoryContainer.self) private var repositories
+    @Environment(AppNavigationCoordinator.self) private var navigationCoordinator
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.openURL) private var openURL
 
     @State private var loadingGate = LoadingGate()
+    @State private var tagLoadingGate = LoadingGate()
+    @State private var aiLoadingGate = LoadingGate()
     @State private var tagEditSession: NoteReviewTagEditSession?
+    @State private var aiTextPresentation: AITextResultPresentation?
+    @State private var pendingConfigurationPrompt: NoteReviewConfigurationPrompt?
+    @State private var tagLoadingNoteID: Int64?
+    @State private var aiPreparingNoteID: Int64?
     @State private var menuGalleryHost = XMJXPhotoBrowserHost(initialItems: [])
     @State private var menuGalleryTapSequence = 0
     @State private var shareImageTask: Task<Void, Never>?
     @State private var shareImageRequestID: UUID?
+    @State private var tagSnapshotTask: Task<Void, Never>?
+    @State private var aiPreparationTask: Task<Void, Never>?
 
     var body: some View {
         ZStack {
@@ -72,12 +82,41 @@ struct NoteReviewView: View {
             .presentationDetents([.medium, .large])
             .presentationDragIndicator(.visible)
         }
+        .sheet(item: $aiTextPresentation) { presentation in
+            AITextResultSheet(
+                presentation: presentation,
+                repository: repositories.aiRepository,
+                onIdeaAppendWillBegin: {
+                    viewModel.beginLocalAIAppend()
+                },
+                onIdeaAppendFailed: {
+                    viewModel.cancelLocalAIAppend()
+                },
+                onIdeaAppended: {
+                    guard let noteID = presentation.request.noteIDForAppending else { return }
+                    await viewModel.reloadItemAfterAIAppend(noteID: noteID)
+                }
+            )
+            .presentationDetents([.medium, .large])
+            .presentationDragIndicator(.visible)
+        }
         .sheet(item: $viewModel.generatedShareFile) { file in
             XMActivityShareSheet(activityItems: [file.fileURL])
                 .presentationDetents([.medium, .large])
         }
+        .xmSystemAlert(item: $pendingConfigurationPrompt) { prompt in
+            configurationAlertDescriptor(for: prompt)
+        }
         .onDisappear {
             loadingGate.hideImmediately()
+            tagLoadingGate.hideImmediately()
+            aiLoadingGate.hideImmediately()
+            tagSnapshotTask?.cancel()
+            tagSnapshotTask = nil
+            tagLoadingNoteID = nil
+            aiPreparationTask?.cancel()
+            aiPreparationTask = nil
+            aiPreparingNoteID = nil
             shareImageTask?.cancel()
             shareImageTask = nil
             shareImageRequestID = nil
@@ -99,7 +138,17 @@ struct NoteReviewView: View {
     private var cardStackContent: some View {
         NoteReviewRefreshDeckHost(
             viewModel: viewModel,
-            onCardTapped: openContentViewer
+            isTagActionInFlight: tagLoadingNoteID != nil,
+            isTagProgressVisible: tagLoadingGate.isVisible,
+            isAIActionInFlight: aiPreparingNoteID != nil,
+            isAIProgressVisible: aiLoadingGate.isVisible,
+            onCardTapped: openContentViewer,
+            onSend: send,
+            onRequestSendConfiguration: {
+                pendingConfigurationPrompt = .externalApp
+            },
+            onEditTags: openTagEditSheet,
+            onExplain: presentAIExplanation
         ) { item in
             NoteReviewCardView(item: item, settings: viewModel.settings)
                 .contentShape(
@@ -204,9 +253,48 @@ struct NoteReviewView: View {
     }
 
     private func openTagEditSheet(for item: NoteReviewCardItem) {
-        Task {
-            guard let snapshot = await viewModel.fetchTagEditSnapshot(for: item) else { return }
+        guard tagSnapshotTask == nil else { return }
+        tagLoadingNoteID = item.id
+        tagLoadingGate.update(intent: .read)
+        tagSnapshotTask = Task { @MainActor in
+            let snapshot = await viewModel.fetchTagEditSnapshot(for: item)
+            guard !Task.isCancelled else { return }
+            finishTagSnapshotPreparation()
+            guard let snapshot else { return }
             tagEditSession = NoteReviewTagEditSession(item: item, snapshot: snapshot)
+        }
+    }
+
+    private func finishTagSnapshotPreparation() {
+        tagLoadingGate.update(intent: .none)
+        tagLoadingNoteID = nil
+        tagSnapshotTask = nil
+    }
+
+    /// 锁定触发时卡片后预检 AI 配置；仅配置完整时建立整条书摘释义会话。
+    private func presentAIExplanation(for item: NoteReviewCardItem) {
+        guard aiPreparationTask == nil else { return }
+        aiPreparingNoteID = item.id
+        aiLoadingGate.update(intent: .read)
+        aiPreparationTask = Task { @MainActor in
+            let availability = await viewModel.checkAIAvailability()
+            guard !Task.isCancelled else { return }
+            aiLoadingGate.update(intent: .none)
+            aiPreparingNoteID = nil
+            aiPreparationTask = nil
+
+            switch availability {
+            case .available:
+                aiTextPresentation = AITextResultPresentation(
+                    request: .noteExplanation(noteID: item.id, bookTitle: item.bookTitle)
+                )
+            case .configurationRequired:
+                pendingConfigurationPrompt = .ai
+            case .failed(let message):
+                toastCenter.error(message)
+            case .cancelled:
+                break
+            }
         }
     }
 
@@ -233,6 +321,27 @@ struct NoteReviewView: View {
         Task {
             await viewModel.send(item: item, to: destination)
         }
+    }
+
+    /// 将配置引导切换到“我的”Tab 的对应原生浏览页面，笔记 Tab 的回顾现场由独立导航栈保留。
+    private func openConfiguration(_ prompt: NoteReviewConfigurationPrompt) {
+        navigationCoordinator.push(.personal(prompt.route), in: .profile)
+        navigationCoordinator.updateCurrentTab(.profile)
+    }
+
+    private func configurationAlertDescriptor(
+        for prompt: NoteReviewConfigurationPrompt
+    ) -> XMSystemAlertDescriptor {
+        XMSystemAlertDescriptor(
+            title: prompt.title,
+            message: prompt.message,
+            actions: [
+                XMSystemAlertAction(title: "取消", role: .cancel) { },
+                XMSystemAlertAction(title: "去配置") {
+                    openConfiguration(prompt)
+                }
+            ]
+        )
     }
 
     /// 在主线程托管单次分享图任务；页面离场会取消任务，request ID 防止旧任务迟到清空新任务句柄。
@@ -284,7 +393,7 @@ struct NoteReviewView: View {
     }
 }
 
-private extension ExternalAppDestination {
+extension ExternalAppDestination {
     var noteReviewMenuTitle: String {
         switch self {
         case .flomo:
@@ -302,6 +411,40 @@ private extension ExternalAppDestination {
             return "paperplane"
         case .inbox:
             return "tray.and.arrow.down"
+        }
+    }
+}
+
+private enum NoteReviewConfigurationPrompt: String, Identifiable {
+    case externalApp
+    case ai
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .externalApp:
+            "尚未配置关联应用"
+        case .ai:
+            "尚未配置 AI"
+        }
+    }
+
+    var message: String {
+        switch self {
+        case .externalApp:
+            "请先前往“我的 > API 集成”，配置至少一个发送目标后再试。"
+        case .ai:
+            "请先前往“我的 > AI 配置”，完成启用、模型与 API Key 配置后再试。"
+        }
+    }
+
+    var route: PersonalRoute {
+        switch self {
+        case .externalApp:
+            .apiIntegration
+        case .ai:
+            .aiConfiguration
         }
     }
 }

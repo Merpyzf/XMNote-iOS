@@ -67,7 +67,7 @@ nonisolated enum AIPromptKind: String, CaseIterable, Identifiable, Hashable, Sen
     var title: String {
         switch self {
         case .noteExplanation:
-            "书摘解读"
+            "AI 释义"
         case .wordLookup:
             "选词释义"
         case .autoTag:
@@ -78,7 +78,7 @@ nonisolated enum AIPromptKind: String, CaseIterable, Identifiable, Hashable, Sen
     var subtitle: String {
         switch self {
         case .noteExplanation:
-            "理解书摘并生成可记录到想法的解析"
+            "让 AI 解释这段书摘的含义"
         case .wordLookup:
             "解释正文中选中的字、词、短语或句子"
         case .autoTag:
