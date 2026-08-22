@@ -92,7 +92,14 @@ struct AppNavigationCoordinatorTests {
         let coordinator = AppNavigationCoordinator()
         let first = AppRoute.book(.detail(bookId: 1))
         let second = AppRoute.book(.readingDetail(bookId: 1))
-        let third = AppRoute.book(.chapterManager(bookID: 1, focusChapterID: nil))
+        let third = AppRoute.book(
+            .chapterManager(
+                bookID: 1,
+                bookName: "测试书籍",
+                doubanID: nil,
+                focusChapterID: nil
+            )
+        )
 
         coordinator.push(first, in: .books)
         coordinator.push(second, in: .books)
