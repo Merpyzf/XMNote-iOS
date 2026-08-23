@@ -149,7 +149,7 @@ extension PersonalView {
             settingsRow("externaldrive", "数据备份", route: .dataBackup)
             settingsRow("square.and.arrow.up.on.square", "批量导出", route: .batchExport)
             settingsRow("link", "API 集成", route: .apiIntegration)
-            settingsRow("brain", "AI 配置", route: .aiConfiguration, isLast: true)
+            settingsRow("sparkles", "AI 配置", route: .aiConfiguration, isLast: true)
         }
     }
 

@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 NoteReviewViewModel、RepositoryContainer、AppNavigationCoordinator、页面私有 NoteReviewRefreshDeckHost、NoteReviewCardView 与外部导航/设置闭包
- * [OUTPUT]: 对外提供 NoteReviewView，承载 iOS 端书摘回顾分页卡组、底部一级操作、随机换组交接、卡片菜单、可取消分享与 AI 释义会话
+ * [OUTPUT]: 对外提供 NoteReviewView，承载 iOS 端书摘回顾分页卡组、底部 AI 助手菜单、随机换组交接、卡片菜单、可取消分享与 AI 释义/标签会话
  * [POS]: Note 模块回顾 Tab 页面入口，被 NoteContainerView 托管
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -25,6 +25,7 @@ struct NoteReviewView: View {
     @State private var aiLoadingGate = LoadingGate()
     @State private var tagEditSession: NoteReviewTagEditSession?
     @State private var aiTextPresentation: AITextResultPresentation?
+    @State private var autoTagPresentation: AIAutoTagPresentation?
     @State private var pendingConfigurationPrompt: NoteReviewConfigurationPrompt?
     @State private var tagLoadingNoteID: Int64?
     @State private var aiPreparingNoteID: Int64?
@@ -87,14 +88,31 @@ struct NoteReviewView: View {
                 presentation: presentation,
                 repository: repositories.aiRepository,
                 onIdeaAppendWillBegin: {
-                    viewModel.beginLocalAIAppend()
+                    viewModel.beginLocalDataChange()
                 },
                 onIdeaAppendFailed: {
-                    viewModel.cancelLocalAIAppend()
+                    viewModel.cancelLocalDataChange()
                 },
                 onIdeaAppended: {
                     guard let noteID = presentation.request.noteIDForAppending else { return }
-                    await viewModel.reloadItemAfterAIAppend(noteID: noteID)
+                    await viewModel.reloadItemAfterLocalDataChange(noteID: noteID)
+                }
+            )
+            .presentationDetents([.medium, .large])
+            .presentationDragIndicator(.visible)
+        }
+        .sheet(item: $autoTagPresentation) { presentation in
+            AIAutoTagSheet(
+                presentation: presentation,
+                repository: repositories.aiRepository,
+                onApplyWillBegin: {
+                    viewModel.beginLocalDataChange()
+                },
+                onApplyFailed: {
+                    viewModel.cancelLocalDataChange()
+                },
+                onTagsApplied: {
+                    await viewModel.reloadItemAfterLocalDataChange(noteID: presentation.noteID)
                 }
             )
             .presentationDetents([.medium, .large])
@@ -148,7 +166,8 @@ struct NoteReviewView: View {
                 pendingConfigurationPrompt = .externalApp
             },
             onEditTags: openTagEditSheet,
-            onExplain: presentAIExplanation
+            onExplain: presentAIExplanation,
+            onAutoTag: presentAIAutoTag
         ) { item in
             NoteReviewCardView(item: item, settings: viewModel.settings)
                 .contentShape(
@@ -271,8 +290,18 @@ struct NoteReviewView: View {
         tagSnapshotTask = nil
     }
 
-    /// 锁定触发时卡片后预检 AI 配置；仅配置完整时建立整条书摘释义会话。
+    /// 锁定触发时卡片后启动 AI 释义配置预检；任务在页面离场时取消，迟到结果不会建立会话。
     private func presentAIExplanation(for item: NoteReviewCardItem) {
+        prepareAIAction(.explanation, for: item)
+    }
+
+    /// 锁定触发时卡片后启动 AI 标签配置预检；写回目标不受后续卡片翻页影响。
+    private func presentAIAutoTag(for item: NoteReviewCardItem) {
+        prepareAIAction(.autoTag, for: item)
+    }
+
+    /// 串行预检选定 AI 能力；页面只持有一个准备任务，并在主线程建立对应的稳定 Sheet 会话。
+    private func prepareAIAction(_ action: NoteReviewAIAction, for item: NoteReviewCardItem) {
         guard aiPreparationTask == nil else { return }
         aiPreparingNoteID = item.id
         aiLoadingGate.update(intent: .read)
@@ -285,9 +314,17 @@ struct NoteReviewView: View {
 
             switch availability {
             case .available:
-                aiTextPresentation = AITextResultPresentation(
-                    request: .noteExplanation(noteID: item.id, bookTitle: item.bookTitle)
-                )
+                switch action {
+                case .explanation:
+                    aiTextPresentation = AITextResultPresentation(
+                        request: .noteExplanation(noteID: item.id, bookTitle: item.bookTitle)
+                    )
+                case .autoTag:
+                    autoTagPresentation = AIAutoTagPresentation(
+                        noteID: item.id,
+                        bookTitle: item.bookTitle
+                    )
+                }
             case .configurationRequired:
                 pendingConfigurationPrompt = .ai
             case .failed(let message):
@@ -337,7 +374,7 @@ struct NoteReviewView: View {
             message: prompt.message,
             actions: [
                 XMSystemAlertAction(title: "取消", role: .cancel) { },
-                XMSystemAlertAction(title: "去配置") {
+                XMSystemAlertAction(title: prompt.actionTitle) {
                     openConfiguration(prompt)
                 }
             ]
@@ -426,7 +463,7 @@ private enum NoteReviewConfigurationPrompt: String, Identifiable {
         case .externalApp:
             "尚未配置关联应用"
         case .ai:
-            "尚未配置 AI"
+            "请先完成 AI 配置"
         }
     }
 
@@ -435,7 +472,16 @@ private enum NoteReviewConfigurationPrompt: String, Identifiable {
         case .externalApp:
             "请先前往“我的 > API 集成”，配置至少一个发送目标后再试。"
         case .ai:
-            "请先前往“我的 > AI 配置”，完成启用、模型与 API Key 配置后再试。"
+            "启用 AI 并配置模型与 API Key 后，即可使用 AI 释义和 AI 标签。"
+        }
+    }
+
+    var actionTitle: String {
+        switch self {
+        case .externalApp:
+            "去配置"
+        case .ai:
+            "前往设置"
         }
     }
 
@@ -447,6 +493,11 @@ private enum NoteReviewConfigurationPrompt: String, Identifiable {
             .aiConfiguration
         }
     }
+}
+
+private enum NoteReviewAIAction {
+    case explanation
+    case autoTag
 }
 
 private struct NoteReviewTagEditSession: Identifiable {

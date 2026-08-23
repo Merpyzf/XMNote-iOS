@@ -1,6 +1,6 @@
 /**
- * [INPUT]: 依赖 NoteReviewViewModel 的候选页准备/提交与一级操作状态、NoteReviewPagingDeck，以及页面注入的卡片内容和业务动作闭包
- * [OUTPUT]: 对外提供页面私有的 NoteReviewRefreshDeckHost、四项一级操作栏、随机换组 latest-wins 协调器与可测动效规格
+ * [INPUT]: 依赖 NoteReviewViewModel 的候选页准备/提交与一级操作状态、NoteReviewPagingDeck，以及页面注入的卡片内容、AI 助手与业务动作闭包
+ * [OUTPUT]: 对外提供页面私有的 NoteReviewRefreshDeckHost、含 AI 助手菜单的四项一级操作栏、随机换组 latest-wins 协调器与可测动效规格
  * [POS]: Note/Components 的回顾卡组与底部操作宿主，以稳定 live deck 和预挂载新组完成连续替换，不作为跨模块组件
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -242,6 +242,7 @@ struct NoteReviewRefreshDeckHost<CardContent: View>: View {
     let onRequestSendConfiguration: () -> Void
     let onEditTags: (NoteReviewCardItem) -> Void
     let onExplain: (NoteReviewCardItem) -> Void
+    let onAutoTag: (NoteReviewCardItem) -> Void
     @ViewBuilder let cardContent: (NoteReviewCardItem) -> CardContent
 
     private let progressClock = ContinuousClock()
@@ -281,6 +282,7 @@ struct NoteReviewRefreshDeckHost<CardContent: View>: View {
                 onRequestSendConfiguration: onRequestSendConfiguration,
                 onEditTags: onEditTags,
                 onExplain: onExplain,
+                onAutoTag: onAutoTag,
                 onRefresh: requestRefresh
             )
             .padding(.horizontal, Spacing.screenEdge)
@@ -739,6 +741,7 @@ private struct NoteReviewPrimaryActionBar: View {
     let onRequestSendConfiguration: () -> Void
     let onEditTags: (NoteReviewCardItem) -> Void
     let onExplain: (NoteReviewCardItem) -> Void
+    let onAutoTag: (NoteReviewCardItem) -> Void
     let onRefresh: () -> Void
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -773,18 +776,7 @@ private struct NoteReviewPrimaryActionBar: View {
                 onEditTags(item)
             }
 
-            actionButton(
-                title: "AI 释义",
-                systemImage: "sparkles",
-                showsProgress: isAIProgressVisible,
-                isDisabled: contentActionDisabled || isAIActionInFlight,
-                layout: layout,
-                accessibilityLabel: "AI 释义当前书摘",
-                accessibilityHint: "让 AI 解释这段书摘的含义"
-            ) {
-                guard let item else { return }
-                onExplain(item)
-            }
+            aiAssistantControl(layout: layout)
 
             actionButton(
                 title: refreshTitle,
@@ -806,6 +798,10 @@ private struct NoteReviewPrimaryActionBar: View {
 
     private var sendActionDisabled: Bool {
         contentActionDisabled || isSending
+    }
+
+    private var aiActionDisabled: Bool {
+        contentActionDisabled || isAIActionInFlight
     }
 
     @ViewBuilder
@@ -859,6 +855,39 @@ private struct NoteReviewPrimaryActionBar: View {
                 }
             }
         }
+    }
+
+    /// 使用系统菜单承载两项 AI 能力，入口保持与同层普通操作一致的中性色和 44pt 命中范围。
+    private func aiAssistantControl(layout: NoteReviewPrimaryActionLayout) -> some View {
+        Menu {
+            Button {
+                guard let item else { return }
+                onExplain(item)
+            } label: {
+                Label("AI 释义", systemImage: "sparkles")
+            }
+
+            Button {
+                guard let item else { return }
+                onAutoTag(item)
+            } label: {
+                Label("AI 标签", systemImage: "tag")
+            }
+        } label: {
+            NoteReviewPrimaryActionLabel(
+                title: "AI 助手",
+                systemImage: "sparkles",
+                showsProgress: isAIProgressVisible,
+                isDisabled: aiActionDisabled,
+                layout: layout
+            )
+        }
+        .menuIndicator(.hidden)
+        .buttonStyle(NoteReviewPrimaryActionButtonStyle(isEnabled: !aiActionDisabled))
+        .disabled(aiActionDisabled)
+        .accessibilityLabel("AI 助手")
+        .accessibilityHint("打开 AI 释义和 AI 标签菜单")
+        .frame(maxWidth: layout.controlMaxWidth)
     }
 
     private func actionButton(
