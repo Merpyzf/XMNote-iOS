@@ -7,7 +7,7 @@
 
 /**
  * [INPUT]: 依赖 RepositoryContainer 注入仓储，依赖 BookCollectionImportRouter 承接外部书单导入，依赖 HomeSubtabScaffold 承载首页二级页硬切，依赖 BookViewModel 与 BookCollectionListViewModel 驱动书架浏览、书单列表、显示设置与顶部操作
- * [OUTPUT]: 对外提供 BookContainerView 与 BookSubTab 枚举，承载书籍/书单二级页切换、外部导入入口定位、顶部批量菜单、批量 Sheet、删除确认、书单入口与书单更多菜单
+ * [OUTPUT]: 对外提供 BookContainerView 与 BookSubTab 枚举，承载书籍/书单二级页切换、外部导入入口定位、顶部批量菜单、批量 Sheet、删除确认、书单入口与系统横向三点更多菜单
  * [POS]: Book 模块容器壳层，承载书籍页与书架管理模式编排
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -929,7 +929,9 @@ private struct BookCollectionTopActionPill: View {
                 XMMenuLabel("显示设置", systemImage: "slider.horizontal.3")
             }
         } label: {
-            BookCollectionMoreIcon(
+            TopBarActionIcon(
+                systemName: "ellipsis",
+                iconSize: 14,
                 foregroundColor: Style.iconColor,
                 hitShape: presentation == .pillSegment ? .rectangle : .circle
             )
@@ -939,43 +941,6 @@ private struct BookCollectionTopActionPill: View {
         .menuOrder(.fixed)
         .accessibilityLabel("书单更多操作")
         .accessibilityIdentifier("book.collection.top.more")
-    }
-}
-
-/// 书单顶部更多按钮的竖向三点图标，保持与书架更多入口一致的轻量几何语言。
-private struct BookCollectionMoreIcon: View {
-    let foregroundColor: Color
-    let hitShape: TopBarActionHitShape
-
-    private enum Style {
-        static let dotSize: CGFloat = 3
-        static let dotSpacing: CGFloat = 2.5
-    }
-
-    var body: some View {
-        VStack(spacing: Style.dotSpacing) {
-            ForEach(0..<3, id: \.self) { _ in
-                Circle()
-                    .fill(foregroundColor)
-                    .frame(width: Style.dotSize, height: Style.dotSize)
-            }
-        }
-        .frame(width: Spacing.actionReserved, height: Spacing.actionReserved)
-        .modifier(TopBarActionHitShapeModifierForBookCollection(hitShape: hitShape))
-        .accessibilityHidden(true)
-    }
-}
-
-private struct TopBarActionHitShapeModifierForBookCollection: ViewModifier {
-    let hitShape: TopBarActionHitShape
-
-    func body(content: Content) -> some View {
-        switch hitShape {
-        case .circle:
-            content.contentShape(Circle())
-        case .rectangle:
-            content.contentShape(Rectangle())
-        }
     }
 }
 

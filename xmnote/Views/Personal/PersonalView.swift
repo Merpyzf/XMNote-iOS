@@ -6,8 +6,8 @@
 //
 
 /**
- * [INPUT]: 依赖 AppState、DesktopWebSessionCoordinator 环境状态、PersonalRoute 导航路由与阅读日历根级呈现回调
- * [OUTPUT]: 对外提供 PersonalView，我的 Tab 核心入口、阅读日历独立入口与网页端入口状态
+ * [INPUT]: 依赖 AppState、DesktopWebSessionCoordinator、AppNavigationCoordinator 环境状态、PersonalRoute 导航路由与阅读日历根级呈现回调
+ * [OUTPUT]: 对外提供 PersonalView，我的 Tab 核心入口、阅读日历独立入口、网页端入口状态与新增优先的顶部更多菜单
  * [POS]: Personal 模块容器壳层，承载设置列表、网页端与备份入口
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -27,6 +27,7 @@ struct PersonalView: View {
 
     @Environment(AppState.self) private var appState
     @Environment(DesktopWebSessionCoordinator.self) private var desktopWebSessionCoordinator
+    @Environment(AppNavigationCoordinator.self) private var navigationCoordinator
     private let topBarHeight: CGFloat = 56
     let onAddBook: () -> Void
     let onAddNote: () -> Void
@@ -67,16 +68,6 @@ struct PersonalView: View {
 
             TopSwitcher(title: "我的") {
                 TopBarActionPill {
-                    NavigationLink(value: AppRoute.personal(.settings)) {
-                        TopBarActionIcon(
-                            systemName: "gearshape",
-                            iconSize: 14,
-                            foregroundColor: Color.iconPrimary.opacity(0.88),
-                            hitShape: .rectangle
-                        )
-                    }
-                    .topBarActionPillSegmentStyle(true)
-                } trailing: {
                     AddMenuCircleButton(
                         onAddBook: onAddBook,
                         onAddNote: onAddNote,
@@ -84,6 +75,25 @@ struct PersonalView: View {
                         usesGlassStyle: true,
                         presentation: .pillSegment
                     )
+                } trailing: {
+                    Menu {
+                        Button {
+                            navigationCoordinator.push(.personal(.settings), in: .profile)
+                        } label: {
+                            XMMenuLabel("设置", systemImage: "slider.horizontal.3")
+                        }
+                    } label: {
+                        TopBarActionIcon(
+                            systemName: "ellipsis",
+                            iconSize: 14,
+                            foregroundColor: Color.iconPrimary.opacity(0.88),
+                            hitShape: .rectangle
+                        )
+                    }
+                    .topBarActionPillSegmentStyle(true)
+                    .xmMenuNeutralTint()
+                    .menuOrder(.fixed)
+                    .accessibilityLabel("我的更多操作")
                 }
             }
             .zIndex(1)
