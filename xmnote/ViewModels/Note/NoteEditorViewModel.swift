@@ -5,8 +5,8 @@ import SwiftUI
 import UIKit
 
 /**
- * [INPUT]: 依赖 NoteRepositoryProtocol 提供 bootstrap、草稿、暂存图与保存事务，依赖 NoteImageUploadQuotaRepositoryProtocol 管理每日图片额度，依赖 RichTextBridge 处理 HTML 与富文本互转
- * [OUTPUT]: 对外提供 NoteEditorViewModel、NoteEditorComposerTarget，驱动书摘编辑页与全屏正文编辑页
+ * [INPUT]: 依赖 NoteRepositoryProtocol 提供 bootstrap、草稿、暂存图与保存事务，依赖 NoteEditorSeed 注入一次性想法追加文本，依赖 NoteImageUploadQuotaRepositoryProtocol 与 RichTextBridge 管理图片额度及富文本互转
+ * [OUTPUT]: 对外提供 NoteEditorViewModel、NoteEditorComposerTarget，驱动书摘编辑页、全屏正文编辑页与未保存 AI 想法草稿
  * [POS]: ViewModels/Note 的书摘编辑状态编排器，被 NoteEditorView 消费
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -151,6 +151,7 @@ final class NoteEditorViewModel {
     private var initialDraft: NoteEditorDraft?
     private var initialPerceivedDirtyTrackingSnapshot: NoteEditorPerceivedDirtyTrackingSnapshot?
     private var isHydratingState = false
+    private var isAwaitingRecoveredDraftDecision = false
     private var isCreatedDateManuallyEdited = false
     private var isAutoUpdatingCreatedDate = false
     private var autoSaveTask: Task<Void, Never>?
@@ -261,9 +262,25 @@ final class NoteEditorViewModel {
             availableTags = bootstrap.tags
             availableChapters = bootstrap.chapters
             applyDraft(bootstrap.baseDraft, resetInitialDraft: true)
+
+            let ideaAppendText = launchIdeaAppendText
+            if let ideaAppendText {
+                applyIdeaAppendTextToCurrentDraft(ideaAppendText)
+            }
+
             if let recoveredDraft = bootstrap.recoveredDraft,
                recoveredDraft != bootstrap.baseDraft {
-                pendingRecoveredDraft = mergeMissingSelections(in: recoveredDraft)
+                var preparedRecoveredDraft = mergeMissingSelections(in: recoveredDraft)
+                if let ideaAppendText {
+                    preparedRecoveredDraft = draft(
+                        preparedRecoveredDraft,
+                        appendingIdeaText: ideaAppendText
+                    )
+                    isAwaitingRecoveredDraftDecision = true
+                }
+                pendingRecoveredDraft = preparedRecoveredDraft
+            } else if ideaAppendText != nil {
+                scheduleAutoSave()
             }
             await refreshImageQuota()
             syncCreatedDateAutoUpdateState()
@@ -289,6 +306,8 @@ final class NoteEditorViewModel {
         isImageQuotaReservationBackedByDraft = true
         lastAutoSaveTime = pendingRecoveredDraft.lastAutoSaveTime
         self.pendingRecoveredDraft = nil
+        isAwaitingRecoveredDraftDecision = false
+        scheduleAutoSave()
         await refreshImageQuota()
         syncCreatedDateAutoUpdateState()
     }
@@ -300,10 +319,12 @@ final class NoteEditorViewModel {
             bookId: pendingRecoveredDraft.bookId,
             noteId: pendingRecoveredDraft.noteId
         )
+        self.pendingRecoveredDraft = nil
+        isAwaitingRecoveredDraftDecision = false
         if let recoveredReservationID = pendingRecoveredDraft.imageQuotaReservationID {
             await quotaRepository.releaseReservation(id: recoveredReservationID)
         }
-        self.pendingRecoveredDraft = nil
+        scheduleAutoSave()
         await refreshImageQuota()
     }
 
@@ -601,6 +622,7 @@ final class NoteEditorViewModel {
         }
 
         pendingRecoveredDraft = nil
+        isAwaitingRecoveredDraftDecision = false
     }
 
     /// 连续编辑模式下，保存成功后重置为新的创建草稿，仅保留当前选中书籍。
@@ -608,6 +630,7 @@ final class NoteEditorViewModel {
         didSave = false
         errorMessage = nil
         pendingRecoveredDraft = nil
+        isAwaitingRecoveredDraftDecision = false
         imageQuotaReservationID = UUID().uuidString
         isImageQuotaReservationBackedByDraft = false
 
@@ -634,6 +657,13 @@ final class NoteEditorViewModel {
 }
 
 private extension NoteEditorViewModel {
+    /// 编辑模式才消费外部追加文本；归一化后为空的种子不会改变编辑器 dirty baseline。
+    var launchIdeaAppendText: String? {
+        guard case .edit = mode else { return nil }
+        let normalized = seed?.ideaAppendText?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return normalized.isEmpty ? nil : normalized
+    }
+
     /// 通过额度仓储读取当前自然日状态；草稿预占只统计显式 newInDraft 图片。
     func refreshImageQuota() async {
         imageQuotaState = await quotaRepository.reconcileReservation(
@@ -719,6 +749,49 @@ private extension NoteEditorViewModel {
 #endif
     }
 
+    /// 在数据库基础草稿建立初始基线后追加本轮 AI 文本，因此关闭编辑器时会被识别为未保存修改。
+    func applyIdeaAppendTextToCurrentDraft(_ text: String) {
+        isHydratingState = true
+        ideaText = attributedIdeaText(byAppending: text, to: ideaText)
+        isHydratingState = false
+        syncIdeaInputStateFromContent()
+    }
+
+    /// 为恢复候选制作独立追加版本；基础版本与恢复版本都只消费一次同一启动种子。
+    func draft(_ draft: NoteEditorDraft, appendingIdeaText text: String) -> NoteEditorDraft {
+        var updatedDraft = draft
+        let attributedIdea = RichTextBridge.htmlToAttributed(
+            draft.ideaHTML,
+            baseFont: Self.editorBaseUIFont
+        )
+        updatedDraft.ideaHTML = RichTextBridge.attributedToHtml(
+            attributedIdeaText(byAppending: text, to: attributedIdea)
+        )
+        return updatedDraft
+    }
+
+    /// 保留既有富文本，并按 Android 业务语义以两个换行追加“🔮 AI结果”。
+    func attributedIdeaText(
+        byAppending text: String,
+        to existingText: NSAttributedString
+    ) -> NSAttributedString {
+        let hasVisibleIdea = !normalizedVisibleText(from: existingText).isEmpty
+        let mutable = hasVisibleIdea
+            ? NSMutableAttributedString(attributedString: existingText)
+            : NSMutableAttributedString()
+        let attributes: [NSAttributedString.Key: Any] = [.font: Self.editorBaseUIFont]
+        if hasVisibleIdea {
+            mutable.append(NSAttributedString(string: "\n\n", attributes: attributes))
+        }
+        mutable.append(
+            NSAttributedString(
+                string: "🔮 \(text)",
+                attributes: attributes
+            )
+        )
+        return mutable
+    }
+
     func mergeMissingSelections(in draft: NoteEditorDraft) -> NoteEditorDraft {
         for tag in draft.selectedTags where !availableTags.contains(where: { $0.id == tag.id }) {
             availableTags.append(tag)
@@ -742,7 +815,7 @@ private extension NoteEditorViewModel {
     }
 
     func scheduleAutoSave() {
-        guard !isHydratingState else { return }
+        guard !isHydratingState, !isAwaitingRecoveredDraftDecision else { return }
         autoSaveTask?.cancel()
         autoSaveTask = Task { [weak self] in
             guard let self else { return }
@@ -754,6 +827,7 @@ private extension NoteEditorViewModel {
 
     /// 图片预占完成后立即持久化 ticket 与附件快照，缩短进程退出造成孤立预占的窗口。
     func persistAutoSaveDraftImmediatelyIfNeeded() {
+        guard !isAwaitingRecoveredDraftDecision else { return }
         autoSaveTask?.cancel()
         autoSaveTask = nil
         let snapshot = makeDraftSnapshot(includeAutoSaveTime: true)

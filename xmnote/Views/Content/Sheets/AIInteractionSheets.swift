@@ -1,14 +1,13 @@
 /**
- * [INPUT]: 依赖 AITextResultViewModel/AIAutoTagViewModel、AIRepositoryProtocol 与现有卡片/加载/反馈组件
- * [OUTPUT]: 对外提供 AITextResultSheet 与 AIAutoTagSheet，承接流式结果、追加想法生命周期和标签确认写回
+ * [INPUT]: 依赖 AITextResultViewModel/AIAutoTagViewModel、AIRepositoryProtocol、系统 Sheet/Liquid Glass、LoadingGate 与现有反馈组件
+ * [OUTPUT]: 对外提供 AITextResultSheet 与 AIAutoTagSheet，承接内容优先的流式释义、文字呼吸等待态、模型切换、编辑器请求交接和标签确认写回
  * [POS]: Views/Content/Sheets 的 AI 业务 Sheet，被通用 viewer 及单页详情入口复用
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
 import SwiftUI
-import UIKit
 
-/// 流式 AI 释义 Sheet；整条书摘释义可由用户明确确认后追加到最新想法。
+/// 流式 AI 释义 Sheet；整条书摘释义可由用户明确交给既有编辑器继续确认。
 struct AITextResultSheet: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(XMToastCenter.self) private var toastCenter
@@ -16,18 +15,16 @@ struct AITextResultSheet: View {
 
     @State private var viewModel: AITextResultViewModel
     @State private var loadingGate = LoadingGate()
+    @State private var markdownInteractionController = AIMarkdownInteractionController()
+    @State private var hasStartedGeneration = false
 
-    private let onIdeaAppendWillBegin: @MainActor () -> Void
-    private let onIdeaAppendFailed: @MainActor () -> Void
-    private let onIdeaAppended: @MainActor () async -> Void
+    private let onIdeaEditorRequested: @MainActor (AIExplanationIdeaEditRequest) -> Void
 
     /// 用稳定 presentation 建立状态源；网络只在 Sheet 出现后启动。
     init(
         presentation: AITextResultPresentation,
         repository: any AIRepositoryProtocol,
-        onIdeaAppendWillBegin: @escaping @MainActor () -> Void = { },
-        onIdeaAppendFailed: @escaping @MainActor () -> Void = { },
-        onIdeaAppended: @escaping @MainActor () async -> Void = { }
+        onIdeaEditorRequested: @escaping @MainActor (AIExplanationIdeaEditRequest) -> Void = { _ in }
     ) {
         _viewModel = State(
             initialValue: AITextResultViewModel(
@@ -35,169 +32,279 @@ struct AITextResultSheet: View {
                 repository: repository
             )
         )
-        self.onIdeaAppendWillBegin = onIdeaAppendWillBegin
-        self.onIdeaAppendFailed = onIdeaAppendFailed
-        self.onIdeaAppended = onIdeaAppended
+        self.onIdeaEditorRequested = onIdeaEditorRequested
     }
 
     var body: some View {
-        NavigationStack {
-            ZStack {
-                Color.surfaceSheet.ignoresSafeArea()
-
-                ScrollView {
-                    VStack(alignment: .leading, spacing: Spacing.section) {
-                        resultHeader
-                        resultContent
-                    }
-                    .padding(.horizontal, Spacing.screenEdge)
-                    .padding(.vertical, Spacing.section)
-                    .safeAreaPadding(.bottom, viewModel.request.noteIDForAppending == nil ? Spacing.none : Spacing.double)
-                }
-                .scrollIndicators(.hidden)
-
-                if viewModel.isAppending {
-                    Color.overlay.ignoresSafeArea()
-                    LoadingStateView("正在追加到想法…", style: .card)
-                        .transition(.opacity)
-                }
-            }
-            .navigationTitle(viewModel.request.navigationTitle)
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar { toolbarContent }
-            .safeAreaInset(edge: .bottom, spacing: Spacing.none) {
-                if viewModel.request.noteIDForAppending != nil {
-                    appendActionBar
-                }
-            }
+        ScrollView {
+            resultContent
+                .animation(
+                    reduceMotion ? nil : .smooth(duration: 0.18),
+                    value: viewModel.content.isEmpty
+                )
+                .padding(.horizontal, Spacing.screenEdge)
+                .padding(.top, Spacing.cozy)
+                .padding(.bottom, Spacing.double)
         }
-        .interactiveDismissDisabled(viewModel.isAppending)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .scrollIndicators(.hidden)
+        .scrollBounceBehavior(.always)
+        .scrollEdgeEffectStyle(.soft, for: [.top, .bottom])
+        .scrollPosition($markdownInteractionController.scrollPosition)
+        .safeAreaBar(edge: .top, spacing: Spacing.none) {
+            topChrome
+        }
+        .onScrollGeometryChange(for: Bool.self) { geometry in
+            let distanceFromBottom = geometry.contentSize.height
+                - geometry.contentOffset.y
+                - geometry.containerSize.height
+            return distanceFromBottom <= Spacing.double
+        } action: { _, isAtBottom in
+            markdownInteractionController.updateIsAtBottom(
+                isAtBottom,
+                isPositionedByUser: markdownInteractionController.scrollPosition.isPositionedByUser
+            )
+        }
+        .onChange(of: markdownInteractionController.scrollPosition.isPositionedByUser) { _, newValue in
+            markdownInteractionController.updateIsPositionedByUser(newValue)
+        }
+        .interactiveDismissDisabled(viewModel.isPreparingIdeaEditor)
         .onAppear {
+            markdownInteractionController.configure(
+                toastCenter: toastCenter,
+                reducesMotion: reduceMotion
+            )
+            guard !hasStartedGeneration else { return }
+            hasStartedGeneration = true
             viewModel.startGeneration()
             syncLoadingGate()
         }
-        .onChange(of: viewModel.isGenerating) { _, _ in
+        .onChange(of: viewModel.isGenerating) { wasGenerating, isGenerating in
+            if !wasGenerating, isGenerating {
+                markdownInteractionController.resetForNewGeneration()
+            }
             syncLoadingGate()
+        }
+        .onChange(of: viewModel.modelSwitchErrorMessage) { _, message in
+            guard let message else { return }
+            toastCenter.error(message)
+            viewModel.consumeModelSwitchError()
+        }
+        .onChange(of: reduceMotion) { _, newValue in
+            markdownInteractionController.updateReduceMotion(newValue)
         }
         .onDisappear {
             viewModel.cancelGeneration()
+            markdownInteractionController.discardPendingTableExport()
             loadingGate.hideImmediately()
+        }
+        .sheet(
+            item: $markdownInteractionController.pendingTableExport,
+            onDismiss: markdownInteractionController.discardPendingTableExport
+        ) { export in
+            XMActivityShareSheet(activityItems: [export.fileURL])
+                .presentationDetents([.medium, .large])
+                .onDisappear {
+                    export.discard()
+                }
         }
         .animation(
             reduceMotion ? nil : .smooth(duration: 0.2),
             value: viewModel.errorMessage
         )
+        .animation(
+            reduceMotion ? nil : .smooth(duration: 0.18),
+            value: viewModel.hasCompletedSuccessfully
+        )
     }
 
-    private var resultHeader: some View {
-        ContentViewerHeroCard(
-            title: viewModel.request.contextTitle,
-            subtitle: viewModel.modelDescription.isEmpty ? "正在连接模型…" : viewModel.modelDescription
-        ) {
-            Text(headerHint)
-                .font(AppTypography.caption)
-                .foregroundStyle(Color.textSecondary)
+    private var topChrome: some View {
+        ZStack {
+            HStack {
+                Color.clear
+                    .frame(width: Spacing.actionReserved, height: Spacing.actionReserved)
+
+                Spacer(minLength: Spacing.none)
+
+                closeButton
+            }
+            .frame(minHeight: XMSettingsSheetLayout.chromeMinHeight)
+
+            VStack(spacing: Spacing.micro) {
+                Text("AI 释义")
+                    .font(AppTypography.headlineSemibold)
+                    .foregroundStyle(Color.textPrimary)
+                    .lineLimit(1)
+
+                modelMenu
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.horizontal, XMSettingsSheetLayout.titleHorizontalReserve)
         }
+        .padding(.horizontal, Spacing.screenEdge)
+        .padding(.top, Spacing.double)
+        .padding(.bottom, Spacing.section)
+    }
+
+    private var modelMenu: some View {
+        Menu {
+            ForEach(viewModel.availableProviders) { provider in
+                Section(provider.displayName) {
+                    ForEach(provider.modelOptions) { model in
+                        Button {
+                            viewModel.switchModel(provider: provider, modelID: model.id)
+                        } label: {
+                            if viewModel.isCurrentModel(provider: provider, modelID: model.id) {
+                                Label(model.title, systemImage: "checkmark")
+                            } else {
+                                Text(model.title)
+                            }
+                        }
+                    }
+                }
+            }
+        } label: {
+            Text(modelMenuTitle)
+                .font(AppTypography.caption2)
+                .foregroundStyle(Color.textSecondary)
+                .lineLimit(1)
+                .truncationMode(.middle)
+                .contentShape(.interaction, ModelMenuHitShape())
+        }
+        .buttonStyle(.plain)
+        .disabled(viewModel.availableProviders.isEmpty || viewModel.isSwitchingModel)
+        .accessibilityLabel("当前模型，\(modelMenuTitle)")
+        .accessibilityHint("打开菜单切换 AI 模型")
+    }
+
+    private var modelMenuTitle: String {
+        if viewModel.isSwitchingModel {
+            return "正在切换模型…"
+        }
+        return viewModel.modelDescription.isEmpty ? "正在连接模型…" : viewModel.modelDescription
+    }
+
+    private var closeButton: some View {
+        Button {
+            viewModel.cancelGeneration()
+            dismiss()
+        } label: {
+            TopBarActionIcon(
+                systemName: "xmark",
+                iconSize: 13,
+                containerSize: XMSettingsSheetLayout.closeVisualSize,
+                weight: .bold,
+                foregroundColor: .textSecondary
+            )
+            .background(Color.controlFillSecondary.opacity(0.82), in: Circle())
+            .frame(width: Spacing.actionReserved, height: Spacing.actionReserved)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .disabled(viewModel.isPreparingIdeaEditor)
+        .accessibilityLabel("关闭")
     }
 
     @ViewBuilder
     private var resultContent: some View {
         if !viewModel.content.isEmpty {
-            CardContainer(cornerRadius: CornerRadius.containerMedium) {
+            VStack(alignment: .leading, spacing: Spacing.section) {
                 VStack(alignment: .leading, spacing: Spacing.base) {
-                    Text(viewModel.content)
-                        .font(AppTypography.body)
-                        .foregroundStyle(Color.textPrimary)
-                        .textSelection(.enabled)
-                        .frame(maxWidth: .infinity, alignment: .leading)
+                    AIMarkdownResultView(
+                        markdown: viewModel.content,
+                        isStreaming: viewModel.isGenerating,
+                        interactionController: markdownInteractionController
+                    )
 
-                    if viewModel.isGenerating {
-                        LoadingStateView("正在继续生成…", style: .inline)
+                    if viewModel.hasCompletedSuccessfully {
+                        aiDisclosure
+                            .transition(.opacity)
                     }
                 }
-                .padding(Spacing.contentEdge)
+
+                if let errorMessage = viewModel.errorMessage, !viewModel.isGenerating {
+                    resultError(message: errorMessage)
+                }
+
+                if viewModel.canRetryGeneration {
+                    retryButton
+                }
+
+                if viewModel.hasCompletedSuccessfully,
+                   viewModel.request.noteIDForIdeaEditor != nil {
+                    recordToIdeaAction
+                        .transition(.opacity)
+                }
             }
             .transition(.opacity)
         } else if let errorMessage = viewModel.errorMessage {
-            VStack(spacing: Spacing.base) {
-                viewerMessageCard(text: errorMessage)
-                Button("重新生成") {
-                    viewModel.startGeneration()
-                }
-                .buttonStyle(.bordered)
+            VStack(alignment: .leading, spacing: Spacing.base) {
+                resultError(message: errorMessage)
+                retryButton
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
             .transition(.opacity)
         } else if loadingGate.isVisible {
-            LoadingStateView("正在生成内容…", style: .card)
-                .frame(maxWidth: .infinity)
+            AIGenerationWaitingView(reduceMotion: reduceMotion)
+                .frame(maxWidth: .infinity, alignment: .leading)
                 .transition(.opacity)
         } else {
             Color.clear.frame(minHeight: Spacing.double)
         }
     }
 
-    @ToolbarContentBuilder
-    private var toolbarContent: some ToolbarContent {
-        ToolbarItem(placement: .topBarLeading) {
-            Button("关闭") {
-                viewModel.cancelGeneration()
-                dismiss()
-            }
-            .disabled(viewModel.isAppending)
-        }
-
-        ToolbarItem(placement: .topBarTrailing) {
-            if !viewModel.content.isEmpty {
-                Button {
-                    UIPasteboard.general.string = viewModel.content
-                    toastCenter.success("AI 结果已复制")
-                } label: {
-                    Image(systemName: "doc.on.doc")
-                }
-                .accessibilityLabel("复制 AI 结果")
-            }
-        }
+    private func resultError(message: String) -> some View {
+        Label(message, systemImage: "exclamationmark.circle")
+            .font(AppTypography.footnote)
+            .foregroundStyle(Color.feedbackError)
+            .fixedSize(horizontal: false, vertical: true)
     }
 
-    private var appendActionBar: some View {
-        VStack(spacing: Spacing.none) {
-            Divider()
+    private var retryButton: some View {
+        Button("重新生成") {
+            viewModel.startGeneration()
+        }
+        .font(AppTypography.subheadlineMedium)
+        .buttonStyle(.bordered)
+    }
+
+    private var aiDisclosure: some View {
+        Label("AI 生成内容，仅供参考", systemImage: "sparkles")
+            .font(AppTypography.caption)
+            .foregroundStyle(Color.textSecondary)
+            .fixedSize(horizontal: false, vertical: true)
+            .frame(maxWidth: .infinity, alignment: .trailing)
+    }
+
+    private var recordToIdeaAction: some View {
+        HStack(spacing: Spacing.none) {
+            Spacer(minLength: Spacing.none)
+
             Button {
-                appendToIdea()
+                requestIdeaEditor()
             } label: {
-                Label("追加到想法", systemImage: "text.badge.plus")
-                    .font(AppTypography.subheadlineSemibold)
-                    .frame(maxWidth: .infinity)
-                    .frame(height: Spacing.actionReserved)
+                Text(viewModel.isPreparingIdeaEditor ? "正在打开…" : "记录到想法")
+                    .font(AppTypography.subheadlineMedium)
+                    .foregroundStyle(Color.textPrimary)
             }
-            .buttonStyle(.borderedProminent)
-            .tint(Color.brand)
-            .disabled(!viewModel.canAppendToIdea)
-            .padding(.horizontal, Spacing.screenEdge)
-            .padding(.vertical, Spacing.cozy)
+            .buttonStyle(.glass)
+            .buttonBorderShape(.capsule)
+            .controlSize(.regular)
+            .frame(minHeight: Spacing.actionReserved)
+            .contentShape(.interaction, Capsule())
+            .disabled(!viewModel.canOpenIdeaEditor)
+            .accessibilityHint("打开书摘编辑器，将本次 AI 释义作为未保存想法继续编辑")
+
+            Spacer(minLength: Spacing.none)
         }
-        .background(Color.surfaceSheet)
+        .frame(maxWidth: .infinity)
     }
 
-    private var headerHint: String {
-        switch viewModel.request {
-        case .noteExplanation:
-            "结果不会自动修改书摘；确认后才会追加到想法。"
-        case .textLookup:
-            "释义基于触发时锁定的选中文本与上下文。"
-        }
-    }
-
-    /// 追加成功后先让来源页强刷详情，再关闭 Sheet，确保返回即看到最新想法。
-    private func appendToIdea() {
+    /// 转换任务继承当前主执行器；仅在请求准备成功后交给来源页，并由 Sheet 自己触发退场。
+    private func requestIdeaEditor() {
         Task {
-            onIdeaAppendWillBegin()
-            guard await viewModel.appendToIdea() else {
-                onIdeaAppendFailed()
-                return
-            }
-            await onIdeaAppended()
-            toastCenter.success("已追加到想法")
+            guard let request = await viewModel.prepareIdeaEditorRequest() else { return }
+            onIdeaEditorRequested(request)
             dismiss()
         }
     }
@@ -205,6 +312,51 @@ struct AITextResultSheet: View {
     private func syncLoadingGate() {
         let shouldShow = viewModel.isGenerating && viewModel.content.isEmpty
         loadingGate.update(intent: shouldShow ? .read : .none)
+    }
+}
+
+/// 首个可见 token 返回前，以低干扰文字呼吸表达生成中的页面私有等待态。
+private struct AIGenerationWaitingView: View {
+    let reduceMotion: Bool
+
+    var body: some View {
+        if reduceMotion {
+            waitingText
+                .opacity(0.82)
+        } else {
+            PhaseAnimator([0.90, 0.55]) { opacity in
+                waitingText
+                    .opacity(opacity)
+            } animation: { _ in
+                .easeInOut(duration: 0.7)
+            }
+        }
+    }
+
+    private var waitingText: some View {
+        Text("正在生成…")
+            .font(AppTypography.footnote)
+            .foregroundStyle(Color.textSecondary)
+            .fixedSize(horizontal: false, vertical: true)
+            .accessibilityLabel("正在生成 AI 释义")
+    }
+}
+
+/// 模型副标题的交互形状只向下补足命中高度，避免热区改变视觉排版或覆盖标题。
+private struct ModelMenuHitShape: Shape {
+    private let minimumSize = Spacing.actionReserved
+
+    /// 以文本顶部为锚点生成至少 44pt 的命中矩形，保持短文本可触达且不扩大布局尺寸。
+    func path(in rect: CGRect) -> Path {
+        let width = max(rect.width, minimumSize)
+        let height = max(rect.height, minimumSize)
+        let hitRect = CGRect(
+            x: rect.midX - width / 2,
+            y: rect.minY,
+            width: width,
+            height: height
+        )
+        return Path(hitRect)
     }
 }
 

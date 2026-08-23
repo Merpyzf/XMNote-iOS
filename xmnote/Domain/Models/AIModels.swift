@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 Foundation 提供 Codable、URL 与本地化错误语义
- * [OUTPUT]: 对外提供 AIProvider、AIConfiguration、三套 Prompt、选词释义输入、自动标签建议与统一错误模型
+ * [OUTPUT]: 对外提供 AIProvider 模型目录与展示名、AIConfiguration、三套 Prompt、选词释义输入、自动标签建议与统一错误模型
  * [POS]: Domain/Models 的 AI 业务模型，隔离设置页、Viewer、Repository 与 OpenAI-compatible 网络细节
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -35,7 +35,10 @@ nonisolated enum AIProvider: String, CaseIterable, Codable, Hashable, Identifiab
     var modelOptions: [AIModelOption] {
         switch self {
         case .deepSeek:
-            [AIModelOption(id: "deepseek-chat", title: "deepseek-chat")]
+            [
+                AIModelOption(id: "deepseek-v4-flash", title: "DeepSeek V4 Flash"),
+                AIModelOption(id: "deepseek-v4-pro", title: "DeepSeek V4 Pro"),
+            ]
         case .siliconFlow:
             [
                 AIModelOption(id: "deepseek-ai/DeepSeek-V3", title: "DeepSeek-V3"),
@@ -47,6 +50,13 @@ nonisolated enum AIProvider: String, CaseIterable, Codable, Hashable, Identifiab
 
     var defaultModelID: String {
         modelOptions.first?.id ?? ""
+    }
+
+    /// 将请求 ID 转为界面展示名；异常值按当前供应商默认模型降级展示。
+    func modelTitle(for modelID: String) -> String {
+        modelOptions.first(where: { $0.id == modelID })?.title
+            ?? modelOptions.first?.title
+            ?? modelID
     }
 }
 
@@ -93,7 +103,7 @@ nonisolated struct AIPromptTemplate: Codable, Equatable, Sendable {
     var user: String
 }
 
-/// Android 同源的三套 Prompt；占位符保持中文命名，便于设置页用户识别和编辑。
+/// Android 同源的三套业务 Prompt；文本任务补充标准 Markdown 输出契约，便于流式预览形成稳定阅读层级。
 nonisolated struct AIPromptConfiguration: Codable, Equatable, Sendable {
     var noteExplanation: AIPromptTemplate
     var wordLookup: AIPromptTemplate
@@ -129,11 +139,12 @@ nonisolated struct AIPromptConfiguration: Codable, Equatable, Sendable {
         noteExplanation: AIPromptTemplate(
             system: """
             你是一名书摘解析助手，用口语化中文生成一次性解析结果。严格遵循：
-            1. 解析结构：
-            - 核心观点（1句话概括）
-            - 复杂概念必须用「例如：...」说明
-            - 不同分析维度之间用空行分隔
-            - 不同部分用空行分隔，禁用任何符号/序号
+            1. 输出格式：
+            - 使用标准 Markdown，不输出一级标题、原始 HTML 或整篇代码围栏
+            - 固定先输出「## 核心观点」，用 1 句话概括
+            - 随后根据内容选用「## 解析」「## 不同理解」「## 延伸思考」中的 1–3 个二级标题，不输出空章节
+            - 并列观点使用无序列表，重点词可少量加粗；不要为了展示格式强行使用表格、代码块或引用
+            - 复杂概念用「例如：...」开头的普通段落说明
 
             2. 语言规范：
             - 每段不超过100字，用日常词汇代替术语
@@ -157,22 +168,28 @@ nonisolated struct AIPromptConfiguration: Codable, Equatable, Sendable {
             3. 对于涉及到的复杂概念举例说明
             4. 保持段落精简（每段≤3行）
             5. 让用户有更多阅读的收获
+            6. 遵循系统要求的 Markdown 层级，不重复输出书名或「AI 释义」标题
             """
         ),
         wordLookup: AIPromptTemplate(
             system: """
             你是一名语言助手，帮助用户用通俗易懂、口语化的中文解释查询内容，生成一次性解析结果。严格遵循：
 
-            1. 解析结构：
+            1. 输出格式：
+            - 使用标准 Markdown，不输出一级标题、原始 HTML 或整篇代码围栏
+            - 根据查询内容选用「## 基本信息」「## 释义」「## 用法示例」「## 补充说明」二级标题，不输出空章节
+            - 多个含义或用法使用无序列表，重点词可少量加粗；不要为了展示格式强行使用表格、代码块或引用
+
+            2. 解析结构：
             - 基本信息：中文生僻字整体附带拼音；英文单词附带英式或美式音标
-            - 中文释义：用简洁直白的语言解释含义
+            - 释义：用简洁直白的语言解释含义
             - 用法示例：用简单例子说明含义或常见使用场景
             - 补充说明：仅在必要时解释词源、搭配、语境差异或易混淆点
 
-            2. 输入兼容：查询内容可以是单字、单词、短语或完整句子，并按内容灵活调整解释范围。
-            3. 语言规范：自然简洁，多义词并列说明，用「例如：...」举例，可适度使用 Emoji。
-            4. 信息不完整时明确使用「可能」或「猜测」，禁止追问。
-            5. 书籍名和上下文只用于辅助理解，整体控制在 300 字以内。
+            3. 输入兼容：查询内容可以是单字、单词、短语或完整句子，并按内容灵活调整解释范围。
+            4. 语言规范：自然简洁，多义词并列说明，用「例如：...」举例，可适度使用 Emoji。
+            5. 信息不完整时明确使用「可能」或「猜测」，禁止追问。
+            6. 书籍名和上下文只用于辅助理解，整体控制在 300 字以内。
             """,
             user: """
             请帮助用户理解以下查询内容，必要时翻译、解释含义，若有用法差异、词源背景、常见误解也请补充：
@@ -187,6 +204,7 @@ nonisolated struct AIPromptConfiguration: Codable, Equatable, Sendable {
             3. 短语：解释整体含义，必要时拆分说明
             4. 句子：翻译整体意思，必要时解释关键词汇或表达
             5. 内容保持简洁实用，禁止追问
+            6. 遵循系统要求的 Markdown 层级，不重复输出查询内容作为一级标题
             """
         ),
         autoTag: AIPromptTemplate(
@@ -244,6 +262,10 @@ nonisolated struct AIConfiguration: Codable, Equatable, Sendable {
 
     var selectedModelID: String {
         modelID(for: provider)
+    }
+
+    var selectedModelTitle: String {
+        provider.modelTitle(for: selectedModelID)
     }
 
     var normalized: AIConfiguration {

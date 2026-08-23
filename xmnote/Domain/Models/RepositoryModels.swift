@@ -2,7 +2,7 @@ import Foundation
 
 /**
  * [INPUT]: 依赖 Foundation 与 ChapterManagementPolicy 提供跨层值语义、章节深度与路径规则
- * [OUTPUT]: 对外提供 NoteDetailPayload、含层级路径的 NoteEditorChapterOption、图片额度编辑模型族、BackupServerFormInput
+ * [OUTPUT]: 对外提供 NoteDetailPayload、支持编辑态想法追加的 NoteEditorSeed、含层级路径的 NoteEditorChapterOption、图片额度编辑模型族、BackupServerFormInput
  * [POS]: Domain 层仓储输入输出模型，隔离 ViewModel 与 Infra 细节
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -32,18 +32,20 @@ enum NoteEditorMode: Hashable, Codable, Sendable {
     }
 }
 
-/// 新建书摘时的外部种子，承接预选书籍、章节与正文预填场景。
+/// 书摘编辑器外部种子；新建态承接预选与正文预填，编辑态可附带一次性未保存想法追加文本。
 struct NoteEditorSeed: Hashable, Codable, Sendable {
     var bookId: Int64?
     var chapterId: Int64?
     var contentHTML: String
     var ideaHTML: String
+    var ideaAppendText: String? = nil
 
     static let empty = Self(
         bookId: nil,
         chapterId: nil,
         contentHTML: "",
-        ideaHTML: ""
+        ideaHTML: "",
+        ideaAppendText: nil
     )
 }
 

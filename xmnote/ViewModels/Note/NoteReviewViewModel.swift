@@ -490,29 +490,6 @@ final class NoteReviewViewModel {
         }
     }
 
-    /// 在 AI 追加想法前声明本地写入，使数据库观察仅消费本次事件而不随机重载整组卡片。
-    func beginLocalAIAppend() {
-        isApplyingLocalDataChange = true
-    }
-
-    /// AI 追加失败时撤销本地写入声明，避免吞掉下一次无关的数据变化事件。
-    func cancelLocalAIAppend() {
-        isApplyingLocalDataChange = false
-    }
-
-    /// AI 追加成功后按主键重读单张卡片；只替换原位置内容，保持当前卡组顺序与选中身份。
-    func reloadItemAfterAIAppend(noteID: Int64) async {
-        do {
-            guard let refreshedItem = try await repository.fetchNoteReviewItem(noteID: noteID),
-                  let index = items.firstIndex(where: { $0.id == noteID })
-            else { return }
-            items[index] = refreshedItem
-        } catch {
-            guard !Task.isCancelled else { return }
-            errorMessage = "刷新 AI 释义结果失败：\(error.localizedDescription)"
-        }
-    }
-
     /// 清除已展示的错误消息，避免 Toast 因同一状态重复出现。
     func consumeErrorMessage() {
         errorMessage = nil
