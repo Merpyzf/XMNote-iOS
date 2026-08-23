@@ -1,0 +1,53 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$(git rev-parse --show-toplevel)/scripts/ai-knowledge/kb.py\" hook session-start",
+            "timeout": 10,
+            "statusMessage": "检查本地 Bug 草稿与复审状态"
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$(git rev-parse --show-toplevel)/scripts/ai-knowledge/kb.py\" hook user-prompt",
+            "timeout": 10,
+            "statusMessage": "建立任务工作树基线"
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "^(apply_patch|Edit|Write|Bash)$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$(git rev-parse --show-toplevel)/scripts/ai-knowledge/kb.py\" hook pre-tool-use",
+            "timeout": 20,
+            "statusMessage": "检索相关 Bug 经验"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$(git rev-parse --show-toplevel)/scripts/ai-knowledge/kb.py\" hook stop",
+            "timeout": 10,
+            "statusMessage": "检查 Bug 事实闭环"
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -1,0 +1,76 @@
+{
+  "schema_version": 1,
+  "pilot": {
+    "mode": "warning",
+    "duration_days": 30,
+    "started_at": "2026-08-23"
+  },
+  "local_state_root": "artifacts/ai-knowledge",
+  "knowledge": {
+    "cases": "docs/knowledge/bugs/cases",
+    "patterns": "docs/knowledge/bugs/patterns",
+    "archive": "docs/knowledge/bugs/archive"
+  },
+  "protected_paths": [
+    "xmnote/**",
+    "xmnote.xcodeproj/project.pbxproj",
+    "Package.resolved",
+    "Makefile.parallel-ios",
+    "scripts/**"
+  ],
+  "excluded_paths": [
+    "artifacts/**",
+    "docs/**",
+    "Vendor/**",
+    "vendor/**",
+    "xmnoteTests/**",
+    "xmnoteUITests/**",
+    "xmnote/Views/Debug/**",
+    ".agents/**",
+    ".codex/**",
+    ".githooks/**",
+    "openspec/**",
+    "scripts/ai-knowledge/**",
+    "tmp/**"
+  ],
+  "index_sources": [
+    "AGENTS.md",
+    ".agents/skills/*/SKILL.md",
+    "docs/architecture/*.md",
+    "docs/learning/*.md",
+    "docs/踩坑记录.md",
+    "docs/feature/**/*复盘*.md"
+  ],
+  "case": {
+    "statuses": ["closed", "archived"],
+    "severities": ["low", "medium", "high", "critical"],
+    "review_days": 180
+  },
+  "pattern": {
+    "statuses": ["candidate", "active", "enforced", "superseded", "archived"],
+    "review_days": 120,
+    "minimum_independent_cases": 2,
+    "enforcement_types": ["test", "static-check", "build-gate", "git-hook"]
+  },
+  "search": {
+    "default_limit": 5,
+    "minimum_recall_at_5": 0.8,
+    "duplicate_similarity": 0.72
+  },
+  "bug_detection": {
+    "bug_markers": [
+      "bug", "崩溃", "闪退", "错误", "异常", "回归", "失效", "无法", "不能", "不生效",
+      "卡顿", "死锁", "竞态", "泄漏", "错位", "白屏", "黑屏", "重复请求", "数据丢失",
+      "复现", "crash", "exception", "incorrect", "regression", "freeze", "hang", "race"
+    ],
+    "concrete_evidence_markers": [
+      "复现步骤", "稳定复现", "错误日志", "堆栈", "日志", "发生在", "点击后", "启动后",
+      "退出后", "切换后", "只有在", "每次", "偶现", "必现", "预期", "实际", "trace", "stack"
+    ],
+    "meta_task_markers": [
+      "please implement this plan", "设计一套", "建设一套", "接入方案", "工作流", "知识库",
+      "问题库", "制定方案", "详细调研", "实现这套", "评估当前", "流程设计", "治理方案"
+    ],
+    "completion_markers": ["任务已完成"]
+  }
+}

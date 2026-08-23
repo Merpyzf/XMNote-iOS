@@ -11,9 +11,11 @@
 - `verify_arch_docs_sync.sh`: 校验 `AGENTS.md` 与 `CLAUDE.md` 模块清单块是否与实际目录一致。
 - `lint_warnings.sh`: 使用当前已启动的 iOS 模拟器执行 `xcodebuild clean build`，并过滤仓库源码 warning/error。
 - `parallel-ios/`: 管理非主任务 worktree 的专属 Simulator、DerivedData、测试结果与 Swift Package 隔离状态。
+- `ai-knowledge/`: 仅依赖 Python 标准库的 Bug 知识 CLI、策略、固定检索评测与工具测试；正式知识以 `docs/knowledge/bugs/` 为权威源，本地索引与草稿位于已忽略的 `artifacts/ai-knowledge/`。
+- `verify_ai_bug_knowledge.sh`: 依次执行知识格式校验、审计、固定检索评测与工具测试，不触发 App XCTest/UI Test。
 
 执行约束
-- 提交前执行：`bash scripts/verify_glossary.sh && bash scripts/verify_ui_glossary_scope.sh && bash scripts/verify_view_component_boundaries.sh && bash scripts/verify_l3_protocol_headers.sh && bash scripts/verify_arch_docs_sync.sh && bash scripts/verify_component_guides.sh`。
+- 提交前执行：`bash scripts/verify_glossary.sh && bash scripts/verify_ui_glossary_scope.sh && bash scripts/verify_view_component_boundaries.sh && bash scripts/verify_l3_protocol_headers.sh && bash scripts/verify_arch_docs_sync.sh && bash scripts/verify_component_guides.sh && bash scripts/verify_scroll_ux.sh && bash scripts/verify_ai_bug_knowledge.sh`。
 - 变更 `scripts/` 中的规则、扫描范围、输出格式时，必须同步更新本文件与根 `CLAUDE.md`。
 
 [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md

@@ -15,6 +15,15 @@
 - 抽象准入（强制）：只有同类问题在多个独立场景中被证明具备相同根因和相同修复模式后，才允许上升为公共方案或基础设施。
 - 止损机制（强制）：一旦发现最初前提可能错误，优先收缩问题定义并重建判断；禁止边怀疑前提边继续推进大方案。
 
+### AI Bug 经验闭环（强制）
+- 仅对存在可重复错误行为、日志或明确人工观察路径的“证据化生产缺陷”启用经验闭环；纯视觉微调、重构、功能增强和泛化优化不得仅因提交类型为 `fix` 自动入库。
+- 处理真实 Bug 时，首次修改相关生产范围前必须使用仓库 `xmnote-bug-knowledge` Skill，执行 `python3 scripts/ai-knowledge/kb.py search --query "<现象或错误>" --paths <相关路径>`，并核对案例、模式、项目规则、学习资料与 Git 历史。
+- 诊断必须确认最小复现、真实 owner、真实写入点、生命周期/触发时机和平台事实来源；开发期仅在已忽略的 `artifacts/ai-knowledge/` 维护草稿，不得绕过文档冻结写入正式案例。
+- 收到用户明确“任务已完成”后，符合准入条件的草稿才可发布到 `docs/knowledge/bugs/cases/`，并执行 `validate`、`audit`、`eval`、知识工具测试及仓库文档闸门；无法确认根因或验证结果的条目不得为凑数发布。
+- 模式晋升必须至少有两个独立案例证明根因指纹和修复策略一致，适用/不适用边界明确；用户批准后才可从 `candidate` 进入 `active`，只有被必执行测试、静态脚本或构建路径覆盖时才可标为 `enforced`。
+- `.codex/hooks.json` 只提供工作流护栏，项目 Hook 需用户审查并信任；Git Hook 在 30 天试运行期对缺少 `Knowledge-Case` trailer 的 `fix` 仅告警，严格阻断升级必须再次获得用户批准。
+- 权威模型、生命周期、命令和状态定义以 `docs/knowledge/bugs/问题库说明.md` 与 `docs/architecture/AI Bug经验闭环设计.md` 为准。
+
 ## 2. Android → iOS 迁移铁律
 - 本仓库是 Android → iOS 迁移项目，优先做“业务意图对齐”，禁止机械翻译实现。
 - Android 参考工程路径：`/Users/wangke/Workspace/AndroidProjects/XMNote`。
@@ -40,6 +49,7 @@
 - 默认仅允许代码实现与编译校验。
 - 未被明确要求时，不执行单元测试、不执行 UI Test、不主动编写测试用例。
 - 未收到用户明确“任务已完成”前，禁止写入任何仓库文档文件；包括 `docs/feature/`、`docs/component-guides/`、`docs/learning/`、`AGENTS.md` 等治理文档。
+- 证据化 Bug 可在已忽略的 `artifacts/ai-knowledge/` 中维护本地草稿与检索状态；该目录不属于仓库文档，正式案例仍受上一条冻结规则约束。
 - 未收到“任务已完成”前，禁止执行文档校验脚本。
 
 ### 收口阶段
@@ -215,6 +225,7 @@
 - 严禁使用 `提交本地全部改动`、`更新代码`、`修复问题` 等无信息标题。
 - 单次提交只做一个逻辑变更；跨模块且相互独立的改动必须拆分提交。
 - 当改动涉及多个文件，或包含配置/脚本/依赖变更时，提交正文必填，至少包含：`变更点`、`影响范围`、`验证命令与结果`。
+- 证据化缺陷修复在正式案例发布后，应在提交正文添加 `Knowledge-Case: IOS-BUG-YYYYMMDD-NNN` trailer；30 天试运行期缺少 trailer 只告警，案例/模式格式错误仍阻止提交。
 - 提交前必须先执行 `git status --short` 与 `git diff --stat` 自检；发现无关改动时需先和用户确认是否纳入本次提交。
 
 ### 提交前 / 收口后必须执行的脚本
@@ -225,3 +236,4 @@
 - `bash scripts/verify_arch_docs_sync.sh`
 - `bash scripts/verify_component_guides.sh`
 - `bash scripts/verify_scroll_ux.sh`
+- `bash scripts/verify_ai_bug_knowledge.sh`

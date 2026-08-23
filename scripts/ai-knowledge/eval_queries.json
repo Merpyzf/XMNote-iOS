@@ -1,0 +1,117 @@
+{
+  "schema_version": 1,
+  "queries": [
+    {
+      "query": "阅读首页 返回后 下拉 回弹提前终止",
+      "paths": ["xmnote/Views/MainTabView.swift"],
+      "expected_ids": ["IOS-BUG-20260412-001"]
+    },
+    {
+      "query": "searchable 宿主污染 非搜索 Tab",
+      "expected_ids": ["IOS-BUG-20260412-001"]
+    },
+    {
+      "query": "网络图片 WebP 解码缓存",
+      "negative": true,
+      "forbidden_ids": ["IOS-BUG-20260412-001"]
+    },
+    {
+      "query": "弹窗 presentation 通道占用 请求丢失",
+      "paths": ["xmnote/UIComponents/Foundation/XMSystemAlert.swift"],
+      "expected_ids": ["IOS-BUG-20260327-001"]
+    },
+    {
+      "query": "旧 dismiss 回调清空新 alert 请求",
+      "expected_ids": ["IOS-BUG-20260327-001"]
+    },
+    {
+      "query": "书架封面下载尺寸缓存",
+      "negative": true,
+      "forbidden_ids": ["IOS-BUG-20260327-001"]
+    },
+    {
+      "query": "日历左右翻月失效 DragGesture",
+      "paths": ["xmnote/Views/Reading/ReadCalendar/ReadCalendarContentView.swift"],
+      "expected_ids": ["IOS-BUG-20260301-001"]
+    },
+    {
+      "query": "全量月份重页面 颜色逐条回填 卡顿",
+      "expected_ids": ["IOS-BUG-20260301-001"]
+    },
+    {
+      "query": "WebDAV 上传分片校验失败",
+      "negative": true,
+      "forbidden_ids": ["IOS-BUG-20260301-001"]
+    },
+    {
+      "query": "时间线 长富文本 滚动卡顿",
+      "paths": ["xmnote/Views/Reading/Timeline/ReadingTimelineView.swift"],
+      "expected_ids": ["IOS-BUG-20260310-001"]
+    },
+    {
+      "query": "section 粘性头消失 观察边界",
+      "expected_ids": ["IOS-BUG-20260310-001"]
+    },
+    {
+      "query": "OCR 相机权限拒绝",
+      "negative": true,
+      "forbidden_ids": ["IOS-BUG-20260310-001"]
+    },
+    {
+      "query": "时间线打开混合内容 横向翻页崩溃",
+      "paths": ["xmnote/Views/Content/ContentViewerView.swift"],
+      "expected_ids": ["IOS-BUG-20260318-001"]
+    },
+    {
+      "query": "旧页面异步结果晚到 分页 selection 错乱",
+      "expected_ids": ["IOS-BUG-20260318-001"]
+    },
+    {
+      "query": "书籍 ISBN 在线搜索无结果",
+      "negative": true,
+      "forbidden_ids": ["IOS-BUG-20260318-001"]
+    },
+    {
+      "query": "Room v45 identity hash schema 不一致",
+      "paths": ["xmnote/Database/SchemaContract/RoomCanonicalSchemaV45.swift"],
+      "expected_ids": ["IOS-BUG-20260729-001"]
+    },
+    {
+      "query": "44 45 migration seed note_import_hash 缺失",
+      "expected_ids": ["IOS-BUG-20260729-001"]
+    },
+    {
+      "query": "CloudKit 账号登录超时",
+      "negative": true,
+      "forbidden_ids": ["IOS-BUG-20260729-001"]
+    },
+    {
+      "query": "中文环境 书籍显示 Books",
+      "paths": ["xmnote.xcodeproj/project.pbxproj"],
+      "expected_ids": ["IOS-BUG-20260608-001"]
+    },
+    {
+      "query": "developmentRegion en preferredLocalizations 普通 String",
+      "expected_ids": ["IOS-BUG-20260608-001"]
+    },
+    {
+      "query": "触感反馈震动强度",
+      "negative": true,
+      "forbidden_ids": ["IOS-BUG-20260608-001"]
+    },
+    {
+      "query": "热力图左侧圆角裁切 半像素",
+      "paths": ["xmnote/UIComponents/Charts/HeatmapChart.swift"],
+      "expected_ids": ["IOS-BUG-20260227-001"]
+    },
+    {
+      "query": "displayScale floor 单格行宽错位",
+      "expected_ids": ["IOS-BUG-20260227-001"]
+    },
+    {
+      "query": "音频播放中断 耳机切换",
+      "negative": true,
+      "forbidden_ids": ["IOS-BUG-20260227-001"]
+    }
+  ]
+}

@@ -8,12 +8,15 @@
 - 页面状态基建与开发模式：`docs/architecture/页面状态基建与开发模式.md`
 - 加载状态反馈基建设计：`docs/architecture/加载状态反馈基建设计.md`
 - 消息提示设计规范：`docs/architecture/消息提示设计规范.md`
+- AI Bug 经验闭环设计：`docs/architecture/AI Bug经验闭环设计.md`
+- Bug 问题库入口：`docs/knowledge/bugs/问题库说明.md`
 
 提交前校验
 - `bash scripts/verify_glossary.sh`
 - `bash scripts/verify_ui_glossary_scope.sh`
 - `bash scripts/verify_arch_docs_sync.sh`
 - `bash scripts/verify_component_guides.sh`
+- `bash scripts/verify_ai_bug_knowledge.sh`
 
 自动同步
 - `bash scripts/sync_arch_docs.sh`
@@ -24,5 +27,6 @@
 - 新增白名单内页面核心组件：必须更新术语表与白名单。
 - 重要 UI 组件（白名单组件 + `xmnote/UIComponents` 下新增/重大重构组件）：必须维护组件使用文档与清单。
 - `xmnote/` 顶层模块目录新增/删除：必须同步 `AGENTS.md` 与 `CLAUDE.md` 自动模块清单（可执行自动同步脚本）。
+- 证据化生产缺陷在用户确认任务完成后：发布正式案例，并执行知识校验、审计、固定检索评测与工具测试。
 
 [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md

@@ -1,0 +1,34 @@
+#!/bin/sh
+set -eu
+
+message_file=$1
+repository_root=$(git rev-parse --show-toplevel)
+
+PYTHONDONTWRITEBYTECODE=1 python3 "$repository_root/scripts/ai-knowledge/kb.py" validate >/dev/null
+
+subject=$(sed -n '1p' "$message_file")
+case_id=$(git interpret-trailers --parse "$message_file" | sed -n 's/^Knowledge-Case:[[:space:]]*//p' | tail -n 1)
+
+case "$subject" in
+    fix\(*|fix:*)
+        if [ -z "$case_id" ]; then
+            printf '%s\n' "warning: 30 天试运行期：fix 提交尚未关联 Knowledge-Case；本次不阻止提交。" >&2
+            exit 0
+        fi
+        ;;
+esac
+
+if [ -n "$case_id" ]; then
+    case "$case_id" in
+        IOS-BUG-[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]-[0-9][0-9][0-9])
+            ;;
+        *)
+            printf '%s\n' "error: Knowledge-Case 必须是 IOS-BUG-YYYYMMDD-NNN。" >&2
+            exit 1
+            ;;
+    esac
+    if ! PYTHONDONTWRITEBYTECODE=1 python3 "$repository_root/scripts/ai-knowledge/kb.py" case assess "$case_id" >/dev/null 2>&1; then
+        printf '%s\n' "error: Knowledge-Case 指向不存在或无效的正式案例：$case_id" >&2
+        exit 1
+    fi
+fi
