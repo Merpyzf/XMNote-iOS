@@ -1,6 +1,6 @@
 /**
- * [INPUT]: 依赖 AIRepositoryProtocol 执行流式释义、自动标签建议及标签确认写回，依赖 AIMarkdownPlainTextConverter 准备编辑器想法草稿
- * [OUTPUT]: 对外提供 AITextResultRequest、AIExplanationIdeaEditRequest、AITextResultViewModel 与 AIAutoTagViewModel，驱动 Content 业务 Sheet、编辑器交接、模型切换与生成完成态
+ * [INPUT]: 依赖 AIRepositoryProtocol 执行流式释义/AI 标签及标签确认写回，依赖 AIMarkdownPlainTextConverter 准备编辑器想法草稿
+ * [OUTPUT]: 对外提供 AITextResultRequest、AIExplanationIdeaEditRequest、AITextResultViewModel 与分阶段 AIAutoTagViewModel，驱动 Content 业务 Sheet、编辑器交接、模型切换与生成完成态
  * [POS]: ViewModels/Content 的 AI 交互状态层，被 viewer、书评详情与相关内容详情复用
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -248,18 +248,38 @@ final class AITextResultViewModel {
 
 @MainActor
 @Observable
-/// 自动标签状态源，负责建议加载、用户选择与确认写入；页面只消费业务状态，不接触数据库。
+/// AI 标签状态源，负责累计流消费、最终候选选择与确认写入；页面只消费业务阶段，不接触解析或数据库。
 final class AIAutoTagViewModel {
+    /// 单次 AI 标签会话阶段；流式失败保留最后快照，候选只在 Repository 完成解析后进入 ready。
+    enum Phase: Equatable {
+        case idle
+        case connecting
+        case streaming(String)
+        case ready([AIAutoTagSuggestion])
+        case empty
+        case failed(message: String, partialContent: String?)
+    }
+
+    /// 供页面绑定结构动画的稳定阶段分类，避免每个流式片段触发整页过渡。
+    enum PhaseKind: Equatable {
+        case idle
+        case connecting
+        case streaming
+        case ready
+        case empty
+        case failed
+    }
+
     let noteID: Int64
     let bookTitle: String
 
-    var suggestions: [AIAutoTagSuggestion] = []
-    var isLoading = false
+    var phase: Phase = .idle
     var isApplying = false
-    var errorMessage: String?
+    var applyErrorMessage: String?
 
     private let repository: any AIRepositoryProtocol
-    private var suggestionTask: Task<Void, Never>?
+    private var generationTask: Task<Void, Never>?
+    private var generationRevision = 0
 
     /// 注入书摘主键与 AI 仓储；建议在 Sheet 呈现后加载，避免未展示页面占用请求。
     init(noteID: Int64, bookTitle: String, repository: any AIRepositoryProtocol) {
@@ -269,51 +289,120 @@ final class AIAutoTagViewModel {
     }
 
     isolated deinit {
-        suggestionTask?.cancel()
+        generationTask?.cancel()
+    }
+
+    var phaseKind: PhaseKind {
+        switch phase {
+        case .idle:
+            .idle
+        case .connecting:
+            .connecting
+        case .streaming:
+            .streaming
+        case .ready:
+            .ready
+        case .empty:
+            .empty
+        case .failed:
+            .failed
+        }
+    }
+
+    var suggestions: [AIAutoTagSuggestion] {
+        guard case .ready(let suggestions) = phase else { return [] }
+        return suggestions
+    }
+
+    var streamingContent: String {
+        switch phase {
+        case .streaming(let content):
+            content
+        case .failed(_, let partialContent):
+            partialContent ?? ""
+        default:
+            ""
+        }
+    }
+
+    var generationErrorMessage: String? {
+        guard case .failed(let message, _) = phase else { return nil }
+        return message
+    }
+
+    var isGenerating: Bool {
+        phaseKind == .connecting || phaseKind == .streaming
     }
 
     var hasSelectedSuggestion: Bool {
         suggestions.contains(where: \.isSelected)
     }
 
-    /// 启动或重试标签建议；新任务取消旧任务并丢弃其迟到结果。
+    /// 启动或重试 AI 标签流；revision 隔离已取消任务，迟到内容和完成事件都不可覆盖新会话。
     func startLoading() {
-        suggestionTask?.cancel()
-        suggestions = []
-        errorMessage = nil
-        isLoading = true
+        generationTask?.cancel()
+        generationRevision &+= 1
+        let revision = generationRevision
+        phase = .connecting
+        applyErrorMessage = nil
         let repository = repository
         let noteID = noteID
-        suggestionTask = Task { [weak self] in
+        generationTask = Task { [weak self] in
+            var latestContent = ""
+            var didComplete = false
             do {
-                let suggestions = try await repository.suggestTags(noteID: noteID)
+                for try await event in repository.streamTagSuggestions(noteID: noteID) {
+                    try Task.checkCancellation()
+                    guard let self, self.generationRevision == revision else { return }
+                    switch event {
+                    case .content(let content):
+                        guard content != latestContent else { continue }
+                        latestContent = content
+                        self.phase = .streaming(content)
+                    case .completed(let suggestions):
+                        didComplete = true
+                        self.phase = suggestions.isEmpty ? .empty : .ready(suggestions)
+                    }
+                }
                 try Task.checkCancellation()
-                self?.suggestions = suggestions
-                self?.isLoading = false
-                self?.suggestionTask = nil
+                guard let self, self.generationRevision == revision else { return }
+                guard didComplete else { throw AIRepositoryError.emptyResponse }
+                self.generationTask = nil
             } catch is CancellationError {
-                self?.isLoading = false
-                self?.suggestionTask = nil
+                guard let self, self.generationRevision == revision else { return }
+                self.generationTask = nil
             } catch {
-                guard !Task.isCancelled else { return }
-                self?.isLoading = false
-                self?.suggestionTask = nil
-                self?.errorMessage = error.localizedDescription
+                guard let self,
+                      !Task.isCancelled,
+                      self.generationRevision == revision else { return }
+                let partialContent = latestContent.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                    ? nil
+                    : latestContent
+                self.phase = .failed(
+                    message: error.localizedDescription,
+                    partialContent: partialContent
+                )
+                self.generationTask = nil
             }
         }
     }
 
     /// 切换单个候选选择态，使用稳定 UUID 避免列表重排误操作。
     func toggleSuggestion(id: UUID) {
-        guard let index = suggestions.firstIndex(where: { $0.id == id }) else { return }
+        guard case .ready(var suggestions) = phase,
+              let index = suggestions.firstIndex(where: { $0.id == id }) else { return }
         suggestions[index].isSelected.toggle()
+        phase = .ready(suggestions)
+        applyErrorMessage = nil
     }
 
     /// 将已选建议提交给仓储；仓储负责创建缺失标签并与书摘现有标签取并集。
     @discardableResult
     func applySelectedSuggestions() async -> Bool {
-        guard !isApplying, hasSelectedSuggestion else { return false }
+        let suggestions = suggestions
+        guard !isApplying, suggestions.contains(where: \.isSelected) else { return false }
         isApplying = true
+        applyErrorMessage = nil
         defer { isApplying = false }
         do {
             try await repository.applyAutoTags(noteID: noteID, suggestions: suggestions)
@@ -322,15 +411,16 @@ final class AIAutoTagViewModel {
         } catch is CancellationError {
             return false
         } catch {
-            errorMessage = error.localizedDescription
+            applyErrorMessage = error.localizedDescription
             return false
         }
     }
 
-    /// 关闭 Sheet 时取消尚未结束的建议请求。
+    /// 关闭 Sheet 时终止当前会话并递增 revision，确保流取消后的任何迟到事件只能退出。
     func cancelLoading() {
-        suggestionTask?.cancel()
-        suggestionTask = nil
-        isLoading = false
+        generationRevision &+= 1
+        generationTask?.cancel()
+        generationTask = nil
+        phase = .idle
     }
 }

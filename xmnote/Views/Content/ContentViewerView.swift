@@ -580,7 +580,7 @@ private struct ContentViewerLoadedView: View {
             Button {
                 presentAutoTag()
             } label: {
-                XMMenuLabel("自动标签", systemImage: "tag")
+                XMMenuLabel("AI 标签", systemImage: "tag")
             }
         } label: {
             ImmersiveBottomChromeIcon(systemName: "sparkles")

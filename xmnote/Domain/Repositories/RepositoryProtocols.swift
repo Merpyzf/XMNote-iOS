@@ -467,8 +467,10 @@ nonisolated protocol AIRepositoryProtocol: Sendable {
     func streamNoteExplanation(noteID: Int64) -> AsyncThrowingStream<String, Error>
     /// 对 Viewer 中选中的文本执行 SSE 流式释义；取消消费流会取消网络请求。
     func streamTextLookup(input: AITextLookupInput) -> AsyncThrowingStream<String, Error>
-    /// 非流式生成并解析 0...3 个自动标签建议。
-    func suggestTags(noteID: Int64) async throws -> [AIAutoTagSuggestion]
+    /// 流式生成 AI 标签：先发送累计正文快照，结束后再解析并发送 0...3 个最终候选；取消消费会取消网络请求。
+    func streamTagSuggestions(
+        noteID: Int64
+    ) -> AsyncThrowingStream<AIAutoTagGenerationEvent, Error>
     /// 将已选建议与书摘现有标签取并集，创建缺失标签后提交关系。
     func applyAutoTags(noteID: Int64, suggestions: [AIAutoTagSuggestion]) async throws
 }

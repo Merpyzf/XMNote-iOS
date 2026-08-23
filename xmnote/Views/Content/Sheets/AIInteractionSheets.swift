@@ -1,6 +1,6 @@
 /**
- * [INPUT]: 依赖 AITextResultViewModel/AIAutoTagViewModel、AIRepositoryProtocol、系统 Sheet/Liquid Glass、LoadingGate 与现有反馈组件
- * [OUTPUT]: 对外提供 AITextResultSheet 与 AIAutoTagSheet，承接内容优先的流式释义、文字呼吸等待态、模型切换、编辑器请求交接和标签确认写回
+ * [INPUT]: 依赖 AITextResultViewModel/AIAutoTagViewModel、AIRepositoryProtocol、AIMarkdownResultView、系统 Sheet/Liquid Glass、LoadingGate 与现有反馈组件
+ * [OUTPUT]: 对外提供 AITextResultSheet 与 AIAutoTagSheet，承接流式 Markdown 结果、克制等待态、模型切换、编辑器请求交接和标签确认写回
  * [POS]: Views/Content/Sheets 的 AI 业务 Sheet，被通用 viewer 及单页详情入口复用
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -360,7 +360,7 @@ private struct ModelMenuHitShape: Shape {
     }
 }
 
-/// 自动标签 Sheet，保留用户对建议的最终选择权并在确认后刷新来源详情。
+/// AI 标签 Sheet，先展示实时 Markdown 输出，完成解析后再交给用户选择并确认写回。
 struct AIAutoTagSheet: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(XMToastCenter.self) private var toastCenter
@@ -368,6 +368,8 @@ struct AIAutoTagSheet: View {
 
     @State private var viewModel: AIAutoTagViewModel
     @State private var loadingGate = LoadingGate()
+    @State private var markdownInteractionController = AIMarkdownInteractionController()
+    @State private var hasStartedGeneration = false
 
     private let onTagsApplied: @MainActor () async -> Void
 
@@ -388,128 +390,259 @@ struct AIAutoTagSheet: View {
     }
 
     var body: some View {
-        NavigationStack {
-            ZStack {
-                Color.surfaceSheet.ignoresSafeArea()
-
-                ScrollView {
-                    VStack(alignment: .leading, spacing: Spacing.section) {
-                        ContentViewerHeroCard(
-                            title: normalizedBookTitle,
-                            subtitle: "自动标签"
-                        ) {
-                            Text("AI 最多推荐 3 个标签；已有标签会复用，确认前可以自由选择。")
-                                .font(AppTypography.caption)
-                                .foregroundStyle(Color.textSecondary)
-                        }
-
-                        suggestionContent
-                    }
-                    .padding(.horizontal, Spacing.screenEdge)
-                    .padding(.vertical, Spacing.section)
-                    .safeAreaPadding(.bottom, Spacing.double)
-                }
-                .scrollIndicators(.hidden)
-
-                if viewModel.isApplying {
-                    Color.overlay.ignoresSafeArea()
-                    LoadingStateView("正在应用标签…", style: .card)
-                        .transition(.opacity)
-                }
-            }
-            .navigationTitle("自动标签")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    Button("关闭") {
-                        viewModel.cancelLoading()
-                        dismiss()
-                    }
-                    .disabled(viewModel.isApplying)
-                }
-            }
-            .safeAreaInset(edge: .bottom, spacing: Spacing.none) {
-                applyActionBar
-            }
+        ScrollView {
+            suggestionContent
+                .padding(.horizontal, Spacing.screenEdge)
+                .padding(.top, Spacing.cozy)
+                .padding(.bottom, Spacing.double)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .scrollIndicators(.hidden)
+        .scrollBounceBehavior(.always)
+        .scrollEdgeEffectStyle(.soft, for: [.top, .bottom])
+        .scrollPosition($markdownInteractionController.scrollPosition)
+        .safeAreaBar(edge: .top, spacing: Spacing.none) {
+            topChrome
+        }
+        .onScrollGeometryChange(for: Bool.self) { geometry in
+            let distanceFromBottom = geometry.contentSize.height
+                - geometry.contentOffset.y
+                - geometry.containerSize.height
+            return distanceFromBottom <= Spacing.double
+        } action: { _, isAtBottom in
+            markdownInteractionController.updateIsAtBottom(
+                isAtBottom,
+                isPositionedByUser: markdownInteractionController.scrollPosition.isPositionedByUser
+            )
+        }
+        .onChange(of: markdownInteractionController.scrollPosition.isPositionedByUser) { _, newValue in
+            markdownInteractionController.updateIsPositionedByUser(newValue)
         }
         .interactiveDismissDisabled(viewModel.isApplying)
         .onAppear {
+            markdownInteractionController.configure(
+                toastCenter: toastCenter,
+                reducesMotion: reduceMotion
+            )
+            guard !hasStartedGeneration else { return }
+            hasStartedGeneration = true
             viewModel.startLoading()
             syncLoadingGate()
         }
-        .onChange(of: viewModel.isLoading) { _, _ in
+        .onChange(of: viewModel.phaseKind) { previousPhase, currentPhase in
+            if !isGenerating(previousPhase), isGenerating(currentPhase) {
+                markdownInteractionController.resetForNewGeneration()
+            } else if isGenerating(previousPhase), !isGenerating(currentPhase) {
+                markdownInteractionController.finishStreamingContent()
+            }
             syncLoadingGate()
+        }
+        .onChange(of: reduceMotion) { _, newValue in
+            markdownInteractionController.updateReduceMotion(newValue)
         }
         .onDisappear {
             viewModel.cancelLoading()
+            markdownInteractionController.discardPendingTableExport()
             loadingGate.hideImmediately()
+        }
+        .sheet(
+            item: $markdownInteractionController.pendingTableExport,
+            onDismiss: markdownInteractionController.discardPendingTableExport
+        ) { export in
+            XMActivityShareSheet(activityItems: [export.fileURL])
+                .presentationDetents([.medium, .large])
+                .onDisappear {
+                    export.discard()
+                }
         }
         .animation(
             reduceMotion ? nil : .smooth(duration: 0.2),
-            value: viewModel.suggestions
+            value: viewModel.phaseKind
         )
+        .animation(
+            reduceMotion ? nil : .smooth(duration: 0.18),
+            value: viewModel.applyErrorMessage
+        )
+    }
+
+    private var topChrome: some View {
+        ZStack {
+            HStack {
+                Color.clear
+                    .frame(width: Spacing.actionReserved, height: Spacing.actionReserved)
+
+                Spacer(minLength: Spacing.none)
+
+                closeButton
+            }
+            .frame(minHeight: XMSettingsSheetLayout.chromeMinHeight)
+
+            VStack(spacing: Spacing.micro) {
+                Text("AI 标签")
+                    .font(AppTypography.headlineSemibold)
+                    .foregroundStyle(Color.textPrimary)
+                    .lineLimit(1)
+
+                Text(normalizedBookTitle)
+                    .font(AppTypography.caption2)
+                    .foregroundStyle(Color.textSecondary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.horizontal, XMSettingsSheetLayout.titleHorizontalReserve)
+        }
+        .padding(.horizontal, Spacing.screenEdge)
+        .padding(.top, Spacing.double)
+        .padding(.bottom, Spacing.section)
+    }
+
+    private var closeButton: some View {
+        Button {
+            viewModel.cancelLoading()
+            dismiss()
+        } label: {
+            TopBarActionIcon(
+                systemName: "xmark",
+                iconSize: 13,
+                containerSize: XMSettingsSheetLayout.closeVisualSize,
+                weight: .bold,
+                foregroundColor: .textSecondary
+            )
+            .background(Color.controlFillSecondary.opacity(0.82), in: Circle())
+            .frame(width: Spacing.actionReserved, height: Spacing.actionReserved)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .disabled(viewModel.isApplying)
+        .accessibilityLabel("关闭")
     }
 
     @ViewBuilder
     private var suggestionContent: some View {
-        if !viewModel.suggestions.isEmpty {
-            XMSettingsGroupCard {
-                VStack(spacing: Spacing.none) {
-                    ForEach(viewModel.suggestions) { suggestion in
-                        Button {
-                            viewModel.toggleSuggestion(id: suggestion.id)
-                        } label: {
-                            AIAutoTagSuggestionRow(suggestion: suggestion)
-                        }
-                        .buttonStyle(.plain)
+        switch viewModel.phase {
+        case .idle, .connecting:
+            if loadingGate.isVisible {
+                AIAutoTagWaitingView()
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .transition(.opacity)
+            } else {
+                Color.clear.frame(minHeight: Spacing.double)
+            }
+        case .streaming(let content):
+            AIMarkdownResultView(
+                markdown: content,
+                isStreaming: true,
+                interactionController: markdownInteractionController
+            )
+            .transition(.opacity)
+        case .ready(let suggestions):
+            readyContent(suggestions: suggestions)
+                .transition(.opacity)
+        case .empty:
+            VStack(alignment: .leading, spacing: Spacing.base) {
+                Text("没有生成可用的标签建议。")
+                    .font(AppTypography.footnote)
+                    .foregroundStyle(Color.textSecondary)
+                retryButton
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .transition(.opacity)
+        case .failed(let message, let partialContent):
+            VStack(alignment: .leading, spacing: Spacing.section) {
+                if let partialContent {
+                    AIMarkdownResultView(
+                        markdown: partialContent,
+                        isStreaming: false,
+                        interactionController: markdownInteractionController
+                    )
+                }
 
-                        if suggestion.id != viewModel.suggestions.last?.id {
-                            Divider().padding(.leading, Spacing.double)
-                        }
-                    }
-                }
-                .padding(.horizontal, Spacing.contentEdge)
+                generationError(message: message)
+                retryButton
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
             .transition(.opacity)
-        } else if let errorMessage = viewModel.errorMessage {
-            VStack(spacing: Spacing.base) {
-                viewerMessageCard(text: errorMessage)
-                Button("重新推荐") {
-                    viewModel.startLoading()
-                }
-                .buttonStyle(.bordered)
-            }
-            .transition(.opacity)
-        } else if loadingGate.isVisible {
-            LoadingStateView("正在分析书摘…", style: .card)
-                .frame(maxWidth: .infinity)
-                .transition(.opacity)
-        } else if !viewModel.isLoading {
-            viewerMessageCard(text: "当前书摘没有适合长期知识管理的标签建议。")
-                .transition(.opacity)
-        } else {
-            Color.clear.frame(minHeight: Spacing.double)
         }
     }
 
-    private var applyActionBar: some View {
-        VStack(spacing: Spacing.none) {
-            Divider()
+    private func readyContent(suggestions: [AIAutoTagSuggestion]) -> some View {
+        VStack(alignment: .leading, spacing: Spacing.section) {
+            Text("最多 3 个标签；已有标签将直接复用。")
+                .font(AppTypography.caption)
+                .foregroundStyle(Color.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            VStack(spacing: Spacing.none) {
+                ForEach(suggestions) { suggestion in
+                    Button {
+                        viewModel.toggleSuggestion(id: suggestion.id)
+                    } label: {
+                        AIAutoTagSuggestionRow(suggestion: suggestion)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(suggestion.name)
+                    .accessibilityValue(accessibilityValue(for: suggestion))
+                    .accessibilityHint("双击切换选择")
+                    .accessibilityAddTraits(suggestion.isSelected ? [.isSelected] : [])
+
+                    if suggestion.id != suggestions.last?.id {
+                        Divider()
+                    }
+                }
+            }
+
+            if let errorMessage = viewModel.applyErrorMessage {
+                generationError(message: errorMessage)
+                    .transition(.opacity)
+            }
+
+            Label("AI 生成，请确认后应用", systemImage: "sparkles")
+                .font(AppTypography.caption)
+                .foregroundStyle(Color.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .trailing)
+
+            applyAction
+        }
+    }
+
+    private var applyAction: some View {
+        HStack(spacing: Spacing.none) {
+            Spacer(minLength: Spacing.none)
+
             Button {
                 applyTags()
             } label: {
-                Text(viewModel.isApplying ? "应用中…" : "应用所选标签")
-                    .font(AppTypography.subheadlineSemibold)
-                    .frame(maxWidth: .infinity)
-                    .frame(height: Spacing.actionReserved)
+                Text(viewModel.isApplying ? "应用中…" : "应用标签")
+                    .font(AppTypography.subheadlineMedium)
+                    .foregroundStyle(Color.textPrimary)
             }
-            .buttonStyle(.borderedProminent)
-            .tint(Color.brand)
-            .disabled(!viewModel.hasSelectedSuggestion || viewModel.isLoading || viewModel.isApplying)
-            .padding(.horizontal, Spacing.screenEdge)
-            .padding(.vertical, Spacing.cozy)
+            .buttonStyle(.glass)
+            .buttonBorderShape(.capsule)
+            .controlSize(.regular)
+            .frame(minHeight: Spacing.actionReserved)
+            .contentShape(.interaction, Capsule())
+            .disabled(!viewModel.hasSelectedSuggestion || viewModel.isApplying)
+
+            Spacer(minLength: Spacing.none)
         }
-        .background(Color.surfaceSheet)
+        .frame(maxWidth: .infinity)
+    }
+
+    private func generationError(message: String) -> some View {
+        Label(message, systemImage: "exclamationmark.circle")
+            .font(AppTypography.footnote)
+            .foregroundStyle(Color.feedbackError)
+            .fixedSize(horizontal: false, vertical: true)
+    }
+
+    private var retryButton: some View {
+        Button("重新生成") {
+            viewModel.startLoading()
+        }
+        .font(AppTypography.subheadlineMedium)
+        .buttonStyle(.bordered)
     }
 
     private var normalizedBookTitle: String {
@@ -528,49 +661,70 @@ struct AIAutoTagSheet: View {
     }
 
     private func syncLoadingGate() {
-        loadingGate.update(intent: viewModel.isLoading ? .read : .none)
+        loadingGate.update(intent: viewModel.phaseKind == .connecting ? .read : .none)
+    }
+
+    private func isGenerating(_ phase: AIAutoTagViewModel.PhaseKind) -> Bool {
+        phase == .connecting || phase == .streaming
+    }
+
+    private func accessibilityValue(for suggestion: AIAutoTagSuggestion) -> String {
+        let source = suggestion.isExisting ? "已有标签" : "将新建"
+        let selection = suggestion.isSelected ? "已选择" : "未选择"
+        let reason = suggestion.reason.trimmingCharacters(in: .whitespacesAndNewlines)
+        return reason.isEmpty
+            ? "\(source)，\(selection)"
+            : "\(source)，\(reason)，\(selection)"
     }
 }
 
-/// 单条自动标签候选，复用设置行密度并明确区分已有与新建标签。
+/// 单条 AI 标签候选，以两层中性文本承载来源和理由，仅用行尾小勾表达选择。
 private struct AIAutoTagSuggestionRow: View {
     let suggestion: AIAutoTagSuggestion
 
     var body: some View {
         HStack(alignment: .top, spacing: Spacing.base) {
-            Image(systemName: suggestion.isSelected ? "checkmark.circle.fill" : "circle")
-                .font(AppTypography.title3)
-                .foregroundStyle(suggestion.isSelected ? Color.brand : Color.iconSecondary)
-
             VStack(alignment: .leading, spacing: Spacing.compact) {
-                HStack(spacing: Spacing.cozy) {
-                    Text(suggestion.name)
-                        .font(AppTypography.subheadlineSemibold)
-                        .foregroundStyle(Color.textPrimary)
-                    Text(suggestion.isExisting ? "已有" : "新标签")
-                        .font(AppTypography.caption2Medium)
-                        .foregroundStyle(suggestion.isExisting ? Color.feedbackSuccess : Color.textSecondary)
-                        .padding(.horizontal, Spacing.cozy)
-                        .padding(.vertical, Spacing.compact)
-                        .background(Color.tagBackground, in: Capsule())
-                }
+                Text(suggestion.name)
+                    .font(AppTypography.bodyMedium)
+                    .foregroundStyle(Color.textPrimary)
+                    .fixedSize(horizontal: false, vertical: true)
 
-                if !suggestion.reason.isEmpty {
-                    Text(suggestion.reason)
-                        .font(AppTypography.caption)
-                        .foregroundStyle(Color.textSecondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
+                Text(detailText)
+                    .font(AppTypography.caption)
+                    .foregroundStyle(Color.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
 
             Spacer(minLength: Spacing.none)
+
+            Image(systemName: "checkmark")
+                .font(AppTypography.subheadlineSemibold)
+                .foregroundStyle(Color.brand)
+                .opacity(suggestion.isSelected ? 1 : 0)
+                .frame(width: Spacing.section, height: Spacing.actionReserved, alignment: .top)
+                .accessibilityHidden(true)
         }
-        .padding(.vertical, Spacing.base)
+        .frame(minHeight: Spacing.actionReserved)
+        .padding(.vertical, Spacing.cozy)
         .contentShape(Rectangle())
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("\(suggestion.name)，\(suggestion.isExisting ? "已有标签" : "新标签")")
-        .accessibilityValue(suggestion.isSelected ? "已选择" : "未选择")
-        .accessibilityHint("双击切换选择")
-        .accessibilityAddTraits(suggestion.isSelected ? [.isButton, .isSelected] : .isButton)
+    }
+
+    private var detailText: String {
+        let source = suggestion.isExisting ? "已有标签" : "将新建"
+        let reason = suggestion.reason.trimmingCharacters(in: .whitespacesAndNewlines)
+        return reason.isEmpty ? source : "\(source) · \(reason)"
+    }
+}
+
+/// 首段 AI 标签内容返回前的静态等待态，只说明当前任务，不使用品牌色或循环动效。
+private struct AIAutoTagWaitingView: View {
+    var body: some View {
+        Text("分析中…")
+            .font(AppTypography.footnote)
+            .foregroundStyle(Color.textSecondary)
+            .fixedSize(horizontal: false, vertical: true)
+            .accessibilityLabel("正在分析书摘")
     }
 }

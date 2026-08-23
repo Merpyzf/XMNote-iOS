@@ -1,7 +1,7 @@
 /**
  * [INPUT]: 依赖 SwiftStreamingMarkdown、AI Markdown 累积快照/生成状态、项目排版/颜色令牌与统一 Toast/分享组件
  * [OUTPUT]: 对外提供 AIMarkdownResultView、AIMarkdownInteractionController 与表格导出会话，完成按词流式渲染和交互路由
- * [POS]: Views/Content/Components 的页面私有 AI 结果组件，被 AITextResultSheet 作为唯一 Markdown 展示入口
+ * [POS]: Views/Content/Components 的页面私有 AI 结果组件，被 AITextResultSheet 与 AIAutoTagSheet 作为统一 Markdown 展示入口
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
@@ -126,7 +126,24 @@ final class AIMarkdownInteractionController: MarkdownListener {
         isAtBottom = true
         isProgrammaticScrollPending = false
         needsAnotherScroll = false
-        scrollPosition.scrollTo(edge: .top)
+        scrollToTopWithoutAnimation()
+    }
+
+    /// 流式正文退场前取消全部补滚并停止追随，无动画回到顶部，避免遗留任务干扰后续结构内容。
+    func finishStreamingContent() {
+        pendingScrollTask?.cancel()
+        pendingScrollTask = nil
+        isFollowingStreamingContent = false
+        isAtBottom = true
+        isProgrammaticScrollPending = false
+        needsAnotherScroll = false
+        scrollToTopWithoutAnimation()
+        pendingScrollTask = Task { @MainActor [weak self] in
+            await Task.yield()
+            guard let self, !Task.isCancelled else { return }
+            self.scrollToTopWithoutAnimation()
+            self.pendingScrollTask = nil
+        }
     }
 
     /// 接收底部阈值与滚动归属；内容自然增长不会误停跟随，只有用户主动离开底部才暂停。
@@ -252,6 +269,15 @@ final class AIMarkdownInteractionController: MarkdownListener {
             try? await Task.sleep(for: reducesMotion ? .milliseconds(24) : .milliseconds(180))
             guard !Task.isCancelled else { return }
             finishProgrammaticScroll()
+        }
+    }
+
+    /// 在当前事务中关闭动画并定位内容顶部，供流式内容切换前后复用。
+    private func scrollToTopWithoutAnimation() {
+        var transaction = Transaction()
+        transaction.animation = nil
+        withTransaction(transaction) {
+            scrollPosition.scrollTo(edge: .top)
         }
     }
 

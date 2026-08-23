@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 DatabaseManager 读取书摘上下文，依赖 NoteRepositoryProtocol/AIConfigurationStore/OpenAICompatibleClient 管理标签、凭据与请求
- * [OUTPUT]: 对外提供 AIRepository，实现配置、供应商请求参数、固定 Markdown 展示契约、流式释义、非流式自动标签及标签写回
+ * [OUTPUT]: 对外提供 AIRepository，实现配置、供应商请求参数、固定 Markdown 展示契约、流式释义/AI 标签及标签写回
  * [POS]: Data 层 AI 仓储实现，是 ViewModel 获取 AI/本地数据与提交业务结果的唯一入口
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -159,42 +159,69 @@ final class AIRepository: AIRepositoryProtocol, @unchecked Sendable {
         }
     }
 
-    /// 使用非流式 JSON 响应生成自动标签，并以数据库真实标签集合校准 isExisting。
-    func suggestTags(noteID: Int64) async throws -> [AIAutoTagSuggestion] {
-        async let noteContext = fetchNoteContext(noteID: noteID)
-        async let tagOptions = noteRepository.fetchNoteReviewTagOptions()
-        let (note, tags) = try await (noteContext, tagOptions)
-        try Task.checkCancellation()
+    /// 生成 AI 标签累计内容，并仅在 SSE 完成后解析 JSON、去重和校准已有标签状态。
+    func streamTagSuggestions(
+        noteID: Int64
+    ) -> AsyncThrowingStream<AIAutoTagGenerationEvent, Error> {
+        AsyncThrowingStream { continuation in
+            let task = Task {
+                do {
+                    async let noteContext = fetchNoteContext(noteID: noteID)
+                    async let tagOptions = noteRepository.fetchNoteReviewTagOptions()
+                    let (note, tags) = try await (noteContext, tagOptions)
+                    try Task.checkCancellation()
 
-        let credentials = try await requestCredentials()
-        let prompt = credentials.configuration.prompts.autoTag
-        let existingNames = tags.map(\.title)
-        let userPrompt = Self.render(
-            prompt.user,
-            replacements: [
-                "${书摘内容}": note.contentText,
-                "${书籍名}": note.bookTitle,
-                "${作者名}": note.bookAuthor,
-                "${章节}": note.chapterTitle,
-                "${已有标签}": existingNames.isEmpty ? "暂无已创建的标签" : existingNames.joined(separator: "、"),
-            ]
-        )
-        let request = makeRequest(
-            credentials: credentials,
-            messages: [
-                OpenAIChatMessage(role: "system", content: prompt.system),
-                OpenAIChatMessage(role: "user", content: userPrompt),
-            ],
-            responseFormat: .jsonObject,
-            isStreaming: false,
-            frequencyPenalty: 0,
-            presencePenalty: 0,
-            temperature: 0.7,
-            topP: 0.9
-        )
-        let response = try await client.completion(request)
-        try Task.checkCancellation()
-        return try parseAutoTagResponse(response, existingTagNames: Set(existingNames))
+                    let credentials = try await requestCredentials()
+                    let prompt = credentials.configuration.prompts.autoTag
+                    let existingNames = tags.map(\.title)
+                    let userPrompt = Self.render(
+                        prompt.user,
+                        replacements: [
+                            "${书摘内容}": note.contentText,
+                            "${书籍名}": note.bookTitle,
+                            "${作者名}": note.bookAuthor,
+                            "${章节}": note.chapterTitle,
+                            "${已有标签}": existingNames.isEmpty
+                                ? "暂无已创建的标签"
+                                : existingNames.joined(separator: "、"),
+                        ]
+                    )
+                    let request = makeRequest(
+                        credentials: credentials,
+                        messages: [
+                            OpenAIChatMessage(role: "system", content: prompt.system),
+                            OpenAIChatMessage(role: "user", content: userPrompt),
+                        ],
+                        responseFormat: .jsonObject,
+                        isStreaming: true,
+                        frequencyPenalty: 0,
+                        presencePenalty: 0,
+                        temperature: 0.7,
+                        topP: 0.9
+                    )
+
+                    var finalContent = ""
+                    for try await accumulated in client.streamCompletion(request) {
+                        try Task.checkCancellation()
+                        guard accumulated != finalContent else { continue }
+                        finalContent = accumulated
+                        continuation.yield(.content(accumulated))
+                    }
+                    try Task.checkCancellation()
+                    let suggestions = try parseAutoTagResponse(
+                        finalContent,
+                        existingTagNames: Set(existingNames)
+                    )
+                    continuation.yield(.completed(suggestions))
+                    continuation.finish()
+                } catch is CancellationError {
+                    continuation.finish(throwing: CancellationError())
+                } catch {
+                    continuation.finish(throwing: error)
+                }
+            }
+            continuation.onTermination = { @Sendable _ in task.cancel() }
+        }
     }
 
     /// 创建缺失标签并与书摘现有标签取并集；关系替换复用 NoteRepository 的完整关系集事务语义。

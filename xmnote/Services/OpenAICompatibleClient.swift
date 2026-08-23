@@ -96,7 +96,7 @@ nonisolated final class OpenAICompatibleClient: @unchecked Sendable {
         }
     }
 
-    /// 发起非流式请求并返回完整消息文本；自动标签使用此路径以保证 JSON 一次性解析。
+    /// 发起非流式请求并返回完整消息文本，供不需要 SSE 增量反馈的调用方复用。
     func completion(_ request: OpenAICompletionRequest) async throws -> String {
         do {
             let urlRequest = try makeURLRequest(from: request, streaming: false)

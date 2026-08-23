@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 Foundation 提供 Codable、URL 与本地化错误语义
- * [OUTPUT]: 对外提供 AIProvider 模型目录与展示名、AIConfiguration、三套 Prompt、选词释义输入、自动标签建议与统一错误模型
+ * [OUTPUT]: 对外提供 AIProvider 模型目录与展示名、AIConfiguration、三套 Prompt、选词释义输入、AI 标签流事件/建议与统一错误模型
  * [POS]: Domain/Models 的 AI 业务模型，隔离设置页、Viewer、Repository 与 OpenAI-compatible 网络细节
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -81,7 +81,7 @@ nonisolated enum AIPromptKind: String, CaseIterable, Identifiable, Hashable, Sen
         case .wordLookup:
             "选词释义"
         case .autoTag:
-            "自动标签"
+            "AI 标签"
         }
     }
 
@@ -328,6 +328,12 @@ nonisolated struct AIAutoTagSuggestion: Identifiable, Equatable, Sendable {
     }
 }
 
+/// AI 标签生成流的领域事件；正文快照供 Markdown 增量展示，完成事件只携带 Repository 校准后的最终候选。
+nonisolated enum AIAutoTagGenerationEvent: Equatable, Sendable {
+    case content(String)
+    case completed([AIAutoTagSuggestion])
+}
+
 /// AI 配置、网络和业务写入的统一用户可读错误。
 nonisolated enum AIRepositoryError: LocalizedError, Equatable, Sendable {
     case disabled
@@ -367,7 +373,7 @@ nonisolated enum AIRepositoryError: LocalizedError, Equatable, Sendable {
         case .emptyResponse:
             "AI 没有返回可用内容，请检查模型和密钥配置。"
         case .invalidAutoTagResponse:
-            "AI 返回的标签格式无法识别，请重试。"
+            "结果格式有误，请重试。"
         case .noTagsSelected:
             "请至少选择一个标签。"
         case .credentialStore(let message):
