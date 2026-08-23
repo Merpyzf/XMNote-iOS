@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 RepositoryContainer、AppState、NoteEditorViewModel、AppTaskNavigationContext、NoteTextComposerView 与 BookPickerView
- * [OUTPUT]: 对外提供 NoteEditorView，承载书摘新建/编辑、草稿恢复、图片额度、附图、层级章节及无冗余上下文的标签草稿操作
+ * [OUTPUT]: 对外提供 NoteEditorView，承载书摘新建/编辑、草稿恢复、图片额度、附图、层级章节、无冗余上下文的标签草稿操作、语义化编辑设置入口与保存动作
  * [POS]: Note 模块书摘编辑页壳层，对齐 Android 编辑流程并采用 iOS 原生页面组织
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -374,7 +374,7 @@ private extension NoteEditorView {
                     activeSheet = .settings
                     registerEditorInteraction(force: true)
                 } label: {
-                    Image(systemName: "gearshape")
+                    Image(systemName: "slider.horizontal.3")
                         .font(.system(size: 18, weight: .medium))
                         .foregroundStyle(Color.textPrimary)
                         .frame(width: 24, height: 24)

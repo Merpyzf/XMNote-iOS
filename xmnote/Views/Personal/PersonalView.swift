@@ -6,8 +6,8 @@
 //
 
 /**
- * [INPUT]: 依赖 AppState、DesktopWebSessionCoordinator 环境状态、PersonalRoute 导航路由与阅读日历根级呈现回调
- * [OUTPUT]: 对外提供 PersonalView，我的 Tab 核心入口、阅读日历独立入口与网页端入口状态
+ * [INPUT]: 依赖 AppState、DesktopWebSessionCoordinator、AppNavigationCoordinator 环境状态、PersonalRoute 导航路由与阅读日历根级呈现回调
+ * [OUTPUT]: 对外提供 PersonalView，我的 Tab 核心入口、阅读日历独立入口、网页端入口状态与方案 A 规格的新增优先顶部更多菜单
  * [POS]: Personal 模块容器壳层，承载设置列表、网页端与备份入口
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -23,10 +23,12 @@ struct PersonalView: View {
         static let settingsRowIconWidth: CGFloat = 24
         static let rowMinHeight: CGFloat = 44
         static let rowDividerLeading: CGFloat = Spacing.contentEdge + settingsRowIconWidth + Spacing.base
+        static let topBarTrailingIconSize: CGFloat = 15
     }
 
     @Environment(AppState.self) private var appState
     @Environment(DesktopWebSessionCoordinator.self) private var desktopWebSessionCoordinator
+    @Environment(AppNavigationCoordinator.self) private var navigationCoordinator
     private let topBarHeight: CGFloat = 56
     let onAddBook: () -> Void
     let onAddNote: () -> Void
@@ -67,16 +69,6 @@ struct PersonalView: View {
 
             TopSwitcher(title: "我的") {
                 TopBarActionPill {
-                    NavigationLink(value: AppRoute.personal(.settings)) {
-                        TopBarActionIcon(
-                            systemName: "gearshape",
-                            iconSize: 14,
-                            foregroundColor: Color.iconPrimary.opacity(0.88),
-                            hitShape: .rectangle
-                        )
-                    }
-                    .topBarActionPillSegmentStyle(true)
-                } trailing: {
                     AddMenuCircleButton(
                         onAddBook: onAddBook,
                         onAddNote: onAddNote,
@@ -84,6 +76,25 @@ struct PersonalView: View {
                         usesGlassStyle: true,
                         presentation: .pillSegment
                     )
+                } trailing: {
+                    Menu {
+                        Button {
+                            navigationCoordinator.push(.personal(.settings), in: .profile)
+                        } label: {
+                            XMMenuLabel("设置", systemImage: "slider.horizontal.3")
+                        }
+                    } label: {
+                        TopBarActionIcon(
+                            systemName: "ellipsis",
+                            iconSize: Layout.topBarTrailingIconSize,
+                            foregroundColor: Color.iconPrimary.opacity(0.88),
+                            hitShape: .rectangle
+                        )
+                    }
+                    .topBarActionPillSegmentStyle(true)
+                    .xmMenuNeutralTint()
+                    .menuOrder(.fixed)
+                    .accessibilityLabel("我的更多操作")
                 }
             }
             .zIndex(1)
@@ -149,7 +160,7 @@ extension PersonalView {
             settingsRow("externaldrive", "数据备份", route: .dataBackup)
             settingsRow("square.and.arrow.up.on.square", "批量导出", route: .batchExport)
             settingsRow("link", "API 集成", route: .apiIntegration)
-            settingsRow("brain", "AI 配置", route: .aiConfiguration, isLast: true)
+            settingsRow("sparkles", "AI 配置", route: .aiConfiguration, isLast: true)
         }
     }
 

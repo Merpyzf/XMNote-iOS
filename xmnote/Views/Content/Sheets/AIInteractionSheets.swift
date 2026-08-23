@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 AITextResultViewModel/AIAutoTagViewModel、AIRepositoryProtocol 与现有卡片/加载/反馈组件
- * [OUTPUT]: 对外提供 AITextResultSheet 与 AIAutoTagSheet，承接流式结果、追加想法生命周期和标签确认写回
+ * [OUTPUT]: 对外提供 AITextResultSheet 与 AIAutoTagSheet，承接流式结果、追加想法生命周期和 AI 标签写回生命周期
  * [POS]: Views/Content/Sheets 的 AI 业务 Sheet，被通用 viewer 及单页详情入口复用
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -211,18 +211,21 @@ struct AITextResultSheet: View {
 /// 自动标签 Sheet，保留用户对建议的最终选择权并在确认后刷新来源详情。
 struct AIAutoTagSheet: View {
     @Environment(\.dismiss) private var dismiss
-    @Environment(XMToastCenter.self) private var toastCenter
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     @State private var viewModel: AIAutoTagViewModel
     @State private var loadingGate = LoadingGate()
 
+    private let onApplyWillBegin: @MainActor () -> Void
+    private let onApplyFailed: @MainActor () -> Void
     private let onTagsApplied: @MainActor () async -> Void
 
     /// 用稳定书摘主键建立状态源；标签建议只在 Sheet 出现后请求。
     init(
         presentation: AIAutoTagPresentation,
         repository: any AIRepositoryProtocol,
+        onApplyWillBegin: @escaping @MainActor () -> Void = { },
+        onApplyFailed: @escaping @MainActor () -> Void = { },
         onTagsApplied: @escaping @MainActor () async -> Void = { }
     ) {
         _viewModel = State(
@@ -232,6 +235,8 @@ struct AIAutoTagSheet: View {
                 repository: repository
             )
         )
+        self.onApplyWillBegin = onApplyWillBegin
+        self.onApplyFailed = onApplyFailed
         self.onTagsApplied = onTagsApplied
     }
 
@@ -244,7 +249,7 @@ struct AIAutoTagSheet: View {
                     VStack(alignment: .leading, spacing: Spacing.section) {
                         ContentViewerHeroCard(
                             title: normalizedBookTitle,
-                            subtitle: "自动标签"
+                            subtitle: "AI 标签"
                         ) {
                             Text("AI 最多推荐 3 个标签；已有标签会复用，确认前可以自由选择。")
                                 .font(AppTypography.caption)
@@ -265,7 +270,7 @@ struct AIAutoTagSheet: View {
                         .transition(.opacity)
                 }
             }
-            .navigationTitle("自动标签")
+            .navigationTitle("AI 标签")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
@@ -368,9 +373,12 @@ struct AIAutoTagSheet: View {
     /// 写入成功后强刷来源详情，标签 rail 与列表观察流会同步获得数据库真实结果。
     private func applyTags() {
         Task {
-            guard await viewModel.applySelectedSuggestions() else { return }
+            onApplyWillBegin()
+            guard await viewModel.applySelectedSuggestions() else {
+                onApplyFailed()
+                return
+            }
             await onTagsApplied()
-            toastCenter.success("标签已更新")
             dismiss()
         }
     }

@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 RepositoryContainer 注入内容/AI 仓储，依赖 ContentViewerViewModel 驱动分页与详情状态
- * [OUTPUT]: 对外提供 ContentViewerView，以首帧稳定导航标题统一承接分页查看、原文跳转、朗读、系统分享、统一标签编辑、AI 操作与内容反馈
+ * [OUTPUT]: 对外提供 ContentViewerView，以首帧稳定导航标题统一承接分页查看、原文跳转、书摘朗读、页面级系统分享、关联应用配置引导、统一标签编辑、AI 释义/标签与内容操作反馈
  * [POS]: Content 模块查看页壳层，被时间线与书籍详情共同复用
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -453,7 +453,7 @@ private struct ContentViewerLoadedView: View {
                 Button {
                     presentPending(.apiConfiguration)
                 } label: {
-                    XMMenuLabel("尚未配置关联应用", systemImage: "gearshape")
+                    XMMenuLabel("尚未配置关联应用", systemImage: "link.badge.plus")
                 }
             } else {
                 ForEach(ExternalAppDestination.allCases) { destination in
@@ -582,7 +582,7 @@ private struct ContentViewerLoadedView: View {
             Button {
                 presentAutoTag()
             } label: {
-                XMMenuLabel("自动标签", systemImage: "tag")
+                XMMenuLabel("AI 标签", systemImage: "tag")
             }
         } label: {
             ImmersiveBottomChromeIcon(systemName: "sparkles")

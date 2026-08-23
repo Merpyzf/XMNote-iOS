@@ -2,7 +2,7 @@ import SwiftUI
 
 /**
  * [INPUT]: 依赖 RepositoryContainer/AppState 注入统计、取色仓储与会员限制开关，依赖 ReadCalendarViewModel 提供月历状态与事件布局数据
- * [OUTPUT]: 对外提供 ReadCalendarView（挂载内容页、透传统计过滤设置并映射领域层年度同期摘要）
+ * [OUTPUT]: 对外提供 ReadCalendarView（挂载内容页、透传统计过滤设置、提供语义化日历设置菜单并映射领域层年度同期摘要）
  * [POS]: Reading 模块核心页面入口，承接导航与数据加载，具体日历 UI 由业务内壳层组件负责（含设置入口与显示模式切换）
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -123,7 +123,7 @@ struct ReadCalendarView: View {
                     Button {
                         isSettingsPresented = true
                     } label: {
-                        Label("日历设置", systemImage: "gearshape")
+                        Label("日历设置", systemImage: "slider.horizontal.3")
                     }
                 } label: {
                     Label("更多", systemImage: "ellipsis")

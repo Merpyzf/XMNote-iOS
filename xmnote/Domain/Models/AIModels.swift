@@ -71,7 +71,7 @@ nonisolated enum AIPromptKind: String, CaseIterable, Identifiable, Hashable, Sen
         case .wordLookup:
             "选词释义"
         case .autoTag:
-            "自动标签"
+            "AI 标签"
         }
     }
 

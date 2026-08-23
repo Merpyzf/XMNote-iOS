@@ -9,7 +9,7 @@ import SwiftUI
 
 /**
  * [INPUT]: 依赖可选 AppRuntimeContext、已原子恢复的 AppSceneSnapshot、scene 级 AppNavigationCoordinator、阅读日历、外部导入/网页动作与各业务目的页
- * [OUTPUT]: 对外提供 MainTabView（五个类型安全浏览栈、带根级退出控件的单一全屏任务栈、恢复表面门控、阅读计时 UIKit Zoom、底部计时条与退场后一次性回流）
+ * [OUTPUT]: 对外提供 MainTabView（五个类型安全浏览栈、带根级退出控件的单一全屏任务栈、恢复表面门控及与方案 A 真实首页一致的顶部操作骨架、阅读计时 UIKit Zoom、底部计时条与退场后一次性回流）
  * [POS]: 应用根导航宿主，只消费协调器状态并使用系统 push/cover；恢复目的页提交前不暴露底层根页
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -1960,6 +1960,12 @@ private struct MainTabBootstrapTopBar: View {
     let tab: AppTab
     let snapshot: AppSceneSnapshot
 
+    private enum Metrics {
+        static let leadingIconSize: CGFloat = 14
+        static let trailingIconSize: CGFloat = 15
+        static let iconColor = Color.iconPrimary.opacity(0.88)
+    }
+
     @ViewBuilder
     var body: some View {
         switch tab {
@@ -1987,19 +1993,38 @@ private struct MainTabBootstrapTopBar: View {
             ) {
                 TopBarActionPill {
                     TopBarActionIcon(
-                        systemName: "arrow.up.arrow.down",
+                        systemName: "plus",
+                        iconSize: Metrics.leadingIconSize,
+                        foregroundColor: Metrics.iconColor,
                         hitShape: .rectangle
                     )
                 } trailing: {
-                    TopBarActionIcon(systemName: "plus", hitShape: .rectangle)
+                    TopBarActionIcon(
+                        systemName: snapshot.notes.selectedSubTab == .notes
+                            ? "arrow.up.arrow.down"
+                            : "ellipsis",
+                        iconSize: Metrics.trailingIconSize,
+                        foregroundColor: Metrics.iconColor,
+                        hitShape: .rectangle
+                    )
                 }
             }
         case .profile:
             TopSwitcher(title: "我的") {
                 TopBarActionPill {
-                    TopBarActionIcon(systemName: "gearshape", hitShape: .rectangle)
+                    TopBarActionIcon(
+                        systemName: "plus",
+                        iconSize: Metrics.leadingIconSize,
+                        foregroundColor: Metrics.iconColor,
+                        hitShape: .rectangle
+                    )
                 } trailing: {
-                    TopBarActionIcon(systemName: "plus", hitShape: .rectangle)
+                    TopBarActionIcon(
+                        systemName: "ellipsis",
+                        iconSize: Metrics.trailingIconSize,
+                        foregroundColor: Metrics.iconColor,
+                        hitShape: .rectangle
+                    )
                 }
             }
         case .search:
