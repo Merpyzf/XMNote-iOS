@@ -15,6 +15,7 @@ require_command() {
 }
 
 require_command git
+require_command rg
 require_command xcodebuild
 require_command xcrun
 require_command shasum
@@ -180,6 +181,36 @@ verify_shared_package_fingerprint() {
   [[ "$expected" == "$actual" ]] || die "Package.resolved differs from shared SourcePackages; use isolated mode or pause builds and run make ai-resolve"
 }
 
+configure_audited_macro_validation() {
+  local trusted_identity="equatable"
+  local trusted_revision="597c2bb34af0c51331eb3b5e705f942d8ee20daa"
+  local trusted_checkout="$CLONED_SOURCE_PACKAGES_PATH/checkouts/$trusted_identity"
+  local trusted_manifest="$trusted_checkout/Package.swift"
+  local macro_manifests=()
+  local manifest
+
+  for manifest in "$CLONED_SOURCE_PACKAGES_PATH"/checkouts/*/Package*.swift(N); do
+    rg -q '^[[:space:]]*\.macro\(' "$manifest" && macro_manifests+=("$manifest")
+  done
+
+  if (( ${#macro_manifests[@]} == 0 )); then
+    MACRO_VALIDATION_ARGS=()
+    return 0
+  fi
+
+  (( ${#macro_manifests[@]} == 1 )) || die "unreviewed Swift package macros detected; audit Package.resolved before building"
+  [[ "${macro_manifests[1]:A}" == "${trusted_manifest:A}" ]] || die "unreviewed Swift package macro detected: ${macro_manifests[1]}"
+  [[ -d "$trusted_checkout/.git" ]] || die "trusted macro checkout is missing Git metadata: $trusted_checkout"
+
+  local actual_revision="$(git -C "$trusted_checkout" rev-parse HEAD 2>/dev/null)"
+  [[ "$actual_revision" == "$trusted_revision" ]] || die "trusted macro revision changed: expected $trusted_revision, got $actual_revision"
+  [[ -z "$(git -C "$trusted_checkout" status --porcelain)" ]] || die "trusted macro checkout contains local modifications"
+
+  # xcodebuild 无法持久化 Xcode UI 的单宏授权。仅在上述唯一宏来源和提交均通过审计后，
+  # 为当前非交互构建跳过授权提示；Package.resolved 或宏源码变化都会在这里先失败。
+  MACRO_VALIDATION_ARGS=(-skipMacroValidation)
+}
+
 clear_stale_lock() {
   local lock_dir="$1"
   local pid_file="$lock_dir/pid"
@@ -282,6 +313,7 @@ result_bundle_path() {
 }
 
 common_build_args() {
+  configure_audited_macro_validation
   COMMON_BUILD_ARGS=(
     "${XCODE_CONTAINER_ARGS[@]}"
     -scheme "$IOS_SCHEME"
@@ -290,6 +322,7 @@ common_build_args() {
     "${PACKAGE_ARGS[@]}"
     -onlyUsePackageVersionsFromResolvedFile
     -skipPackageUpdates
+    "${MACRO_VALIDATION_ARGS[@]}"
     -jobs "${XCODEBUILD_JOBS:-4}"
     "COMPILATION_CACHE_ENABLE_CACHING=${IOS_COMPILATION_CACHE:-YES}"
     "COMPILATION_CACHE_ENABLE_DIAGNOSTIC_REMARKS=${IOS_COMPILATION_CACHE_DIAGNOSTICS:-NO}"
