@@ -54,6 +54,34 @@ final class NavigationFoundationUITests: XCTestCase {
         XCTAssertTrue(defaultBookshelf(in: app).waitForExistence(timeout: 6), app.debugDescription)
     }
 
+    func testContentViewerRootShowsCollapseControlAndPreservesBrowseStack() {
+        let app = launchDefaultBookshelf(resetSceneState: true)
+        openBookDetail(in: app)
+
+        let noteListTab = app.buttons.matching(
+            NSPredicate(format: "label BEGINSWITH %@", "书摘，")
+        ).firstMatch
+        XCTAssertTrue(noteListTab.waitForExistence(timeout: 4), app.debugDescription)
+        noteListTab.tap()
+
+        let noteButton = app.buttons["UI 测试书摘"]
+        XCTAssertTrue(noteButton.waitForExistence(timeout: 6), app.debugDescription)
+        noteButton.tap()
+
+        let collapseButton = app.buttons["关闭内容查看"]
+        XCTAssertTrue(collapseButton.waitForExistence(timeout: 8), app.debugDescription)
+        XCTAssertFalse(app.tabBars.firstMatch.waitForExistence(timeout: 1), app.debugDescription)
+        collapseButton.tap()
+
+        XCTAssertTrue(noteButton.waitForExistence(timeout: 6), app.debugDescription)
+        XCTAssertFalse(collapseButton.waitForExistence(timeout: 1), app.debugDescription)
+        XCTAssertFalse(app.tabBars.firstMatch.waitForExistence(timeout: 1), app.debugDescription)
+
+        tapSystemBack(in: app)
+        XCTAssertTrue(defaultBookshelf(in: app).waitForExistence(timeout: 6), app.debugDescription)
+        XCTAssertTrue(app.tabBars.firstMatch.waitForExistence(timeout: 6), app.debugDescription)
+    }
+
     func testBookListBrowseStackSurvivesOtherTabSwitches() {
         let app = XCUIApplication()
         app.launchArguments = [seedArgument, wantReadListArgument, resetSceneStateArgument]

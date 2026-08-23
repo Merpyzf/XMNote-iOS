@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 RepositoryContainer 注入内容/AI 仓储，依赖 ContentViewerViewModel 驱动分页与详情状态
- * [OUTPUT]: 对外提供 ContentViewerView，以首帧稳定导航标题统一承接分页查看、微信读书原文跳转、书摘朗读、页面级系统分享、AI 释义/标签与内容操作反馈
+ * [OUTPUT]: 对外提供 ContentViewerView，以首帧稳定导航标题统一承接分页查看、原文跳转、朗读、系统分享、统一标签编辑、AI 操作与内容反馈
  * [POS]: Content 模块查看页壳层，被时间线与书籍详情共同复用
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -225,10 +225,17 @@ private struct ContentViewerLoadedView: View {
         }
         .sheet(item: $tagEditSession) { session in
             NoteReviewTagEditSheet(
-                contextTitle: session.bookTitle,
                 snapshot: session.snapshot,
                 onCreateTag: { name in
-                    await viewModel.createTag(named: name)
+                    try await viewModel.createTag(named: name)
+                },
+                onTagCatalogMutation: { mutation in
+                    Task {
+                        await viewModel.applyTagCatalogMutation(
+                            mutation,
+                            noteID: session.noteID
+                        )
+                    }
                 },
                 onSave: { tags in
                     await viewModel.replaceTags(tags, noteID: session.noteID)
@@ -473,7 +480,6 @@ private struct ContentViewerLoadedView: View {
     /// 在菜单关闭后读取当前书摘真实标签快照，成功才展示业务 Sheet。
     private func openTagEditor() {
         guard case .note(let noteID)? = viewModel.selectedItemID else { return }
-        let bookTitle = selectedNoteDetail?.bookTitle ?? viewModel.selectedBookTitle
         Task {
             toastCenter.processing("正在读取标签…")
             let processingToastID = toastCenter.current?.id
@@ -482,7 +488,6 @@ private struct ContentViewerLoadedView: View {
             guard let snapshot else { return }
             tagEditSession = ContentViewerTagEditSession(
                 noteID: noteID,
-                bookTitle: bookTitle,
                 snapshot: snapshot
             )
         }
@@ -1025,7 +1030,6 @@ private struct ContentViewerSearchContextCard: View {
 /// 标签 Sheet 的稳定会话载荷，锁定触发时书摘主键，避免横向翻页后写错记录。
 private struct ContentViewerTagEditSession: Identifiable {
     let noteID: Int64
-    let bookTitle: String
     let snapshot: NoteReviewTagEditSnapshot
 
     var id: Int64 { noteID }

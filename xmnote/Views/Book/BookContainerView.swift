@@ -7,7 +7,7 @@
 
 /**
  * [INPUT]: 依赖 RepositoryContainer 注入仓储，依赖 BookCollectionImportRouter 承接外部书单导入，依赖 HomeSubtabScaffold 承载首页二级页硬切，依赖 BookViewModel 与 BookCollectionListViewModel 驱动书架浏览、书单列表、显示设置与顶部操作
- * [OUTPUT]: 对外提供 BookContainerView 与 BookSubTab 枚举，承载书籍/书单二级页切换、外部导入入口定位、顶部批量菜单、批量 Sheet、删除确认、书单入口与书单更多菜单
+ * [OUTPUT]: 对外提供 BookContainerView 与 BookSubTab 枚举，承载书籍/书单二级页切换、外部导入、顶部批量菜单、统一批量标签 Sheet、删除确认与书单菜单
  * [POS]: Book 模块容器壳层，承载书籍页与书架管理模式编排
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -244,7 +244,7 @@ private struct BookContentView: View {
                     isLoading: isLoading,
                     errorMessage: errorMessage,
                     onCreate: viewModel.createBatchTag(named:),
-                    onConfirm: viewModel.submitBatchTags
+                    onSave: viewModel.submitBatchTags
                 )
             case .source(options: let options, initialSelectedID: let initialSelectedID):
                 BookshelfBatchSourceSheet(

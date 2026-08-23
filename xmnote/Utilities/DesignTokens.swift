@@ -5,7 +5,7 @@
 //  Created by 王珂 on 2026/2/10.
 //
 //  [INPUT]: 无外部依赖，仅依赖 SwiftUI 框架
-//  [OUTPUT]: Color 语义扩展、SwiftUI/UIKit 同源阅读排版、阅读日历与内容编辑语义、菜单/Dialog 表层语义、CalendarHeatmapTypography、MonthlyReadingChartTypography、Spacing / CornerRadius / CardStyle 常量及颜色构造器
+//  [OUTPUT]: Color 语义扩展、主操作与选择状态色、SwiftUI/UIKit 同源阅读排版、阅读日历与内容编辑语义、菜单/Dialog 表层语义、CalendarHeatmapTypography、MonthlyReadingChartTypography、Spacing / CornerRadius / CardStyle 常量及颜色构造器
 //  [POS]: Utilities 模块的设计令牌中枢，全局 UI 一致性的单一真相源
 //  [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
 
@@ -79,8 +79,8 @@ extension Color {
     /// 提示文本
     static let textHint = Color(light: Color(hex: 0x999999),
                                  dark: Color(hex: 0x999999))
-    /// 搜索关键词命中色，使用品牌强调语义，避免与错误/删除红色混淆。
-    static let keywordHighlight = Color(light: Color(hex: 0x2DA44F),
+    /// 搜索关键词命中色，沿用品牌绿的色相与饱和度，并按表面亮度保证正文级可读性。
+    static let keywordHighlight = Color(light: Color(hex: 0x1C7C47),
                                         dark: Color(hex: 0x2ECF77))
 }
 
@@ -149,9 +149,14 @@ extension Color {
 // MARK: - Button & Overlay
 
 extension Color {
-    /// 主按钮禁用态
-    static let buttonDisabled = Color(light: Color(hex: 0xA6D6B8),
-                                       dark: Color(hex: 0x3A5C45))
+    /// 承载白色文案的主提交表面；直接跟随品牌主题色，避免局部主操作出现独立色阶。
+    static let primaryActionFill = Color.brand
+    /// 主提交表面的内容色，与 primaryActionFill 成对使用。
+    static let primaryActionForeground = Color.white
+    /// 主按钮禁用态背景，复用系统中性弱填充，不混入品牌色或状态色。
+    static let buttonDisabled = Color.controlFillSecondary
+    /// 主按钮禁用态内容色，复用中性提示文字并保持弱于可用状态。
+    static let buttonDisabledForeground = Color.textHint
     /// 遮罩层
     static let overlay = Color(light: Color.black.opacity(0.4),
                                 dark: Color.black.opacity(0.5))
@@ -163,6 +168,16 @@ extension Color {
     static let bookCoverBadgeInnerStroke = Color.white.opacity(0.08)
     /// 书籍封面角标文字与图标阴影，低强度兜底白色内容可读性。
     static let bookCoverBadgeContentShadow = Color.black.opacity(0.26)
+}
+
+// MARK: - Selection
+
+extension Color {
+    /// 选择控件激活色；直接跟随品牌主题色，保持跨页面选择反馈一致。
+    static let selectionAccent = Color.brand
+    /// 选择控件未激活描边；独立于提示文本，在深色模式下降低重复圆环的视觉竞争。
+    static let selectionInactive = Color(light: Color(hex: 0xA1A5A3),
+                                         dark: Color(hex: 0x696D6B))
 }
 
 // MARK: - Status

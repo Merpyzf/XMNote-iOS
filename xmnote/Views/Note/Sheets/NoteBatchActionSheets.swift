@@ -1,6 +1,6 @@
 /**
- * [INPUT]: 依赖 NoteEditorChapterOption/NoteEditorTagOption 批量候选模型与 DesignTokens
- * [OUTPUT]: 对外提供带层级/路径消歧的 NoteChapterSelectionSheet 与带无障碍选中语义的 NoteTagSelectionSheet
+ * [INPUT]: 依赖 RepositoryContainer、NoteEditorChapterOption/NoteEditorTagOption 批量候选模型与 DesignTokens
+ * [OUTPUT]: 对外提供带层级/路径消歧的 NoteChapterSelectionSheet，以及支持可选批量上下文的 NoteTagSelectionSheet
  * [POS]: Note/Sheets 的批量编辑辅助页面，由 NoteExcerptListView 和 NoteMergeView 以系统 Sheet 呈现
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -203,120 +203,58 @@ private struct NoteChapterSelectionRow: View {
     }
 }
 
-/// 标签多选 Sheet，确认后以完整 ID 集替换每条所选书摘的标签关系。
+/// 标签多选 Sheet 适配层，确认后以完整 ID 集替换每条所选书摘的标签关系。
 struct NoteTagSelectionSheet: View {
-    let title: String
-    let onConfirm: ([NoteEditorTagOption]) -> Void
-    let onCreate: @MainActor @Sendable (String) async throws -> NoteEditorTagOption
+    @Environment(RepositoryContainer.self) private var repositories
 
-    @Environment(\.dismiss) private var dismiss
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var selectedIDs: Set<Int64>
-    @State private var currentOptions: [NoteEditorTagOption]
-    @State private var tagName = ""
-    @State private var isCreating = false
-    @State private var errorMessage: String?
+    let title: String
+    let contextText: String?
+    let onCreate: @MainActor @Sendable (String) async throws -> NoteEditorTagOption
+    let onTagCatalogMutation: @MainActor @Sendable (TagCatalogMutation) -> Void
+    let onSave: @MainActor @Sendable ([NoteEditorTagOption]) async -> Bool
+    private let options: [NoteEditorTagOption]
+    private let initialIDs: Set<Int64>
 
     /// 初始 ID 用于单条编辑或合并草稿回显；批量多条可传空集合表达统一重选。
     init(
         title: String = "设置标签",
+        contextText: String? = nil,
         options: [NoteEditorTagOption],
         initialIDs: Set<Int64> = [],
         onCreate: @escaping @MainActor @Sendable (String) async throws -> NoteEditorTagOption,
-        onConfirm: @escaping ([NoteEditorTagOption]) -> Void
+        onTagCatalogMutation: @escaping @MainActor @Sendable (TagCatalogMutation) -> Void,
+        onSave: @escaping @MainActor @Sendable ([NoteEditorTagOption]) async -> Bool
     ) {
         self.title = title
+        self.contextText = contextText
+        self.options = options
+        self.initialIDs = initialIDs
         self.onCreate = onCreate
-        self.onConfirm = onConfirm
-        _selectedIDs = State(initialValue: initialIDs)
-        _currentOptions = State(initialValue: options)
+        self.onTagCatalogMutation = onTagCatalogMutation
+        self.onSave = onSave
     }
 
     var body: some View {
-        NavigationStack {
-            List {
-                Section("全部标签") {
-                    ForEach(currentOptions) { option in
-                        Button {
-                            withAnimation(reduceMotion ? nil : .snappy(duration: 0.18)) {
-                                if selectedIDs.contains(option.id) {
-                                    selectedIDs.remove(option.id)
-                                } else {
-                                    selectedIDs.insert(option.id)
-                                }
-                            }
-                        } label: {
-                            HStack(spacing: Spacing.base) {
-                                Text(option.title)
-                                    .font(AppTypography.body)
-                                    .foregroundStyle(Color.textPrimary)
-                                Spacer(minLength: Spacing.compact)
-                                Image(systemName: selectedIDs.contains(option.id) ? "checkmark.circle.fill" : "circle")
-                                    .font(AppTypography.title3)
-                                    .foregroundStyle(selectedIDs.contains(option.id) ? Color.brand : Color.textHint)
-                            }
-                            .frame(minHeight: Spacing.actionReserved)
-                            .contentShape(Rectangle())
-                        }
-                        .buttonStyle(.plain)
-                        .accessibilityElement(children: .ignore)
-                        .accessibilityLabel(option.title)
-                        .accessibilityValue(selectedIDs.contains(option.id) ? "已选择" : "未选择")
-                        .accessibilityAddTraits(selectedIDs.contains(option.id) ? .isSelected : [])
-                    }
-                }
-
-                Section("新增标签") {
-                    TextField("标签名称", text: $tagName)
-                    Button(isCreating ? "创建中…" : "创建并选中") {
-                        createTag()
-                    }
-                    .disabled(tagName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isCreating)
-                    if let errorMessage {
-                        Text(errorMessage)
-                            .font(AppTypography.caption)
-                            .foregroundStyle(Color.feedbackError)
-                    }
-                }
-            }
-            .listStyle(.plain)
-            .navigationTitle(title)
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("取消") { dismiss() }
-                }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("完成") {
-                        onConfirm(currentOptions.filter { selectedIDs.contains($0.id) })
-                        dismiss()
-                    }
-                }
-            }
-        }
-    }
-
-    /// 新建标签保持 Sheet 打开并立即选中，用户仍需点击完成确认最终关系集合。
-    private func createTag() {
-        let name = tagName.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !name.isEmpty, !isCreating else { return }
-        isCreating = true
-        errorMessage = nil
-        Task {
-            do {
+        XMTagSelectionSheet(
+            title: title,
+            contextText: contextText,
+            items: options.map { XMTagSelectionItem(id: $0.id, title: $0.title) },
+            initialSelectedIDs: initialIDs,
+            layoutPreferenceRepository: repositories.tagSelectionLayoutPreferenceRepository,
+            management: XMTagSelectionManagementConfiguration(
+                scope: .note,
+                repository: repositories.tagManagementRepository,
+                onMutation: onTagCatalogMutation
+            ),
+            onCreate: { name in
                 let option = try await onCreate(name)
-                try Task.checkCancellation()
-                withAnimation(reduceMotion ? nil : .smooth(duration: 0.28)) {
-                    currentOptions.append(option)
-                    selectedIDs.insert(option.id)
-                }
-                tagName = ""
-                isCreating = false
-            } catch {
-                guard !Task.isCancelled else { return }
-                errorMessage = error.localizedDescription
-                isCreating = false
+                return XMTagSelectionItem(id: option.id, title: option.title)
+            },
+            onSave: { selectedItems in
+                await onSave(
+                    selectedItems.map { NoteEditorTagOption(id: $0.id, title: $0.title) }
+                )
             }
-        }
+        )
     }
 }

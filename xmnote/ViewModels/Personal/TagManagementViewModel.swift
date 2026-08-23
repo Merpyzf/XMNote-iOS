@@ -351,7 +351,7 @@ final class TagManagementViewModel {
         clearTransientMessages()
     }
 
-    /// 提交删除确认，Repository 负责按 Android 类型语义清理关联并软删标签。
+    /// 提交删除确认，Repository 负责按标签范围物理清理全部关联及标签主记录。
     func submitDelete() {
         guard let confirmation = activeDeleteConfirmation, activeWriteAction == nil else { return }
         activeWriteAction = .delete

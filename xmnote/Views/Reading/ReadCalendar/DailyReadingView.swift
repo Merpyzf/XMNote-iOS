@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 RepositoryContainer、AppNavigationCoordinator、DailyReadingViewModel、轨迹私有组件与浏览导航回调
- * [OUTPUT]: 对外提供 DailyReadingView，以主滚动视图展示指定自然日轨迹，并承接筛选、打卡、记录管理、固定类型相关书籍编辑与可重试刷新告警
+ * [OUTPUT]: 对外提供 DailyReadingView，以主滚动视图展示指定自然日轨迹，并承接筛选、打卡、记录管理、统一书摘标签编辑、相关书籍编辑与可重试刷新告警
  * [POS]: ReadCalendar 日期点击后的唯一二级页面，内容态由系统主滚动视图直接承载，取代独立汇总页与单书三级页
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -100,11 +100,11 @@ struct DailyReadingView: View {
         }
         .sheet(item: $tagEditSession) { session in
             NoteReviewTagEditSheet(
-                item: session.item,
                 snapshot: session.snapshot,
                 onCreateTag: { name in
-                    await viewModel.createTag(named: name, using: repositories.noteRepository)
+                    try await viewModel.createTag(named: name, using: repositories.noteRepository)
                 },
+                onTagCatalogMutation: viewModel.applyTagCatalogMutation,
                 onSave: { tags in
                     await viewModel.replaceTags(tags, for: session.item, using: repositories.noteRepository)
                 }

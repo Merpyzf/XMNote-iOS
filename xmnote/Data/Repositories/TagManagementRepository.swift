@@ -1,7 +1,7 @@
 /**
- * [INPUT]: 依赖 DatabaseManager、GRDB、ObservationStream 与 TagRecord，按 Android TagRepository/TagDao 语义执行标签管理读写
+ * [INPUT]: 依赖 DatabaseManager、GRDB、ObservationStream 与 TagRecord，按 Android 标签业务语义和 iOS 全局硬删除约束执行标签管理读写
  * [OUTPUT]: 对外提供 TagManagementRepository（TagManagementRepositoryProtocol 的 GRDB 实现）
- * [POS]: Data 层标签管理仓储实现，统一封装“我的 > 标签管理”的书摘/书籍标签列表、增改删与排序写入
+ * [POS]: Data 层标签管理仓储实现，统一封装标签管理页与业务标签选择器共用的书摘/书籍标签列表、增改删与排序写入
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
@@ -53,7 +53,12 @@ struct TagManagementRepository: TagManagementRepositoryProtocol {
     func updateTag(tagID: Int64, name: String, scope: TagManagementScope) async throws {
         let normalizedName = try validatedName(name)
         try await databaseManager.database.dbPool.write { db in
-            guard try !isDuplicateTagName(db, name: normalizedName, scope: scope) else {
+            guard try !isDuplicateTagName(
+                db,
+                name: normalizedName,
+                scope: scope,
+                excludingTagID: tagID
+            ) else {
                 throw TagManagementRepositoryError.duplicateName
             }
             guard let existing = try fetchActiveTag(db, tagID: tagID, scope: scope) else {
@@ -71,7 +76,7 @@ struct TagManagementRepository: TagManagementRepositoryProtocol {
         try await normalizeTagOrder(scope: scope)
     }
 
-    /// 删除标签；批量删除保持 Android Completable.concat 语义，每个标签单独事务。
+    /// 物理删除标签及全部关系；批量删除保持每个标签单独事务，避免单项失败回滚其它已完成项。
     func deleteTags(tagIDs: [Int64], scope: TagManagementScope) async throws {
         let uniqueIDs = uniquePositiveIDs(tagIDs)
         guard !uniqueIDs.isEmpty else { throw TagManagementRepositoryError.emptySelection }
@@ -81,14 +86,8 @@ struct TagManagementRepository: TagManagementRepositoryProtocol {
                 guard try fetchActiveTag(db, tagID: tagID, scope: scope) != nil else {
                     throw TagManagementRepositoryError.invalidTag
                 }
-                let now = timestampMillis()
-                switch scope {
-                case .note:
-                    try softDeleteTagNoteRelations(db, tagID: tagID, updatedAt: now)
-                case .book:
-                    try softDeleteTagBookRelations(db, tagID: tagID, updatedAt: now)
-                }
-                try softDeleteTag(db, tagID: tagID, updatedAt: now)
+                try hardDeleteTagRelations(db, tagID: tagID)
+                try hardDeleteTag(db, tagID: tagID, scope: scope)
             }
         }
         try await normalizeTagOrder(scope: scope)
@@ -187,12 +186,34 @@ private extension TagManagementRepository {
         return trimmed
     }
 
-    nonisolated func isDuplicateTagName(_ db: Database, name: String, scope: TagManagementScope) throws -> Bool {
+    nonisolated func isDuplicateTagName(
+        _ db: Database,
+        name: String,
+        scope: TagManagementScope,
+        excludingTagID: Int64? = nil
+    ) throws -> Bool {
         // SQL 目的：按 Android TagDao.queryTagByTitle 判断指定类型标签名称是否已存在。
         // 涉及表：tag。
-        // 关键过滤：name 完全匹配、type = 当前范围、is_deleted = 0；Android 管理页未按 user_id 过滤，也未排除自身。
+        // 关键过滤：name 完全匹配、type = 当前范围、is_deleted = 0；编辑时额外排除当前标签自身。
         // 时间字段：不参与判重。
         // 返回字段用途：只需是否存在任意一条有效记录。
+        if let excludingTagID {
+            let sql = """
+                SELECT id
+                FROM tag
+                WHERE name = ?
+                  AND type = ?
+                  AND is_deleted = 0
+                  AND id != ?
+                LIMIT 1
+                """
+            return try Int64.fetchOne(
+                db,
+                sql: sql,
+                arguments: [name, scope.rawValue, excludingTagID]
+            ) != nil
+        }
+
         let sql = """
             SELECT id
             FROM tag
@@ -254,49 +275,35 @@ private extension TagManagementRepository {
         )
     }
 
-    nonisolated func softDeleteTagNoteRelations(_ db: Database, tagID: Int64, updatedAt: Int64) throws {
-        // SQL 目的：软删除指定书摘标签的全部 tag_note 关联。
+    nonisolated func hardDeleteTagRelations(_ db: Database, tagID: Int64) throws {
+        // SQL 目的：物理解除待删除标签与全部书摘的关系，先清子表以满足 NO ACTION 外键。
         // 涉及表：tag_note。
-        // 关键过滤：tag_id = ?；Android DAO 不额外过滤 is_deleted，重复执行仍会刷新 updated_date。
-        // 时间字段：updated_date 写入当前毫秒时间戳；last_sync_date 保持不变。
-        // 副作用用途：删除 NOTE 标签前解除其与书摘的关系。
-        let sql = """
-            UPDATE tag_note
-            SET updated_date = ?,
-                is_deleted = 1
-            WHERE tag_id = ?
-            """
-        try db.execute(sql: sql, arguments: [updatedAt, tagID])
-    }
+        // 关键过滤：tag_id = ?，同时清理有效关系与历史兼容记录。
+        // 时间字段：物理删除不写时间字段。
+        // 副作用用途：删除标签前解除其与书摘的全部关联。
+        try db.execute(sql: "DELETE FROM tag_note WHERE tag_id = ?", arguments: [tagID])
 
-    nonisolated func softDeleteTagBookRelations(_ db: Database, tagID: Int64, updatedAt: Int64) throws {
-        // SQL 目的：软删除指定书籍标签的全部 tag_book 关联。
+        // SQL 目的：物理解除待删除标签与全部书籍的关系，兼容恢复数据中可能存在的跨类型引用。
         // 涉及表：tag_book。
-        // 关键过滤：tag_id = ?；Android DAO 不额外过滤 is_deleted，重复执行仍会刷新 updated_date。
-        // 时间字段：updated_date 写入当前毫秒时间戳；last_sync_date 保持不变。
-        // 副作用用途：删除 BOOK 标签前解除其与书籍的关系。
-        let sql = """
-            UPDATE tag_book
-            SET updated_date = ?,
-                is_deleted = 1
-            WHERE tag_id = ?
-            """
-        try db.execute(sql: sql, arguments: [updatedAt, tagID])
+        // 关键过滤：tag_id = ?，同时清理有效关系与历史兼容记录。
+        // 时间字段：物理删除不写时间字段。
+        // 副作用用途：确保 tag 主记录可在 NO ACTION 外键约束下安全删除。
+        try db.execute(sql: "DELETE FROM tag_book WHERE tag_id = ?", arguments: [tagID])
     }
 
-    nonisolated func softDeleteTag(_ db: Database, tagID: Int64, updatedAt: Int64) throws {
-        // SQL 目的：软删除标签主记录。
+    nonisolated func hardDeleteTag(_ db: Database, tagID: Int64, scope: TagManagementScope) throws {
+        // SQL 目的：物理删除已经解除全部引用的标签主记录。
         // 涉及表：tag。
-        // 关键过滤：id = ?；对齐 Android TagDao.deleteSync。
-        // 时间字段：updated_date 写入当前毫秒时间戳；last_sync_date 保持不变。
-        // 副作用用途：将标签从管理列表移除，并留给同步层识别删除状态。
-        let sql = """
-            UPDATE tag
-            SET updated_date = ?,
-                is_deleted = 1
-            WHERE id = ?
-            """
-        try db.execute(sql: sql, arguments: [updatedAt, tagID])
+        // 关键过滤：id 与 type 同时精确匹配，避免错误范围删除同名或其它类型标签。
+        // 时间字段：物理删除不写时间字段。
+        // 副作用用途：彻底移除用户删除的标签，不创建 tombstone。
+        try db.execute(
+            sql: "DELETE FROM tag WHERE id = ? AND type = ?",
+            arguments: [tagID, scope.rawValue]
+        )
+        guard db.changesCount == 1 else {
+            throw TagManagementRepositoryError.invalidTag
+        }
     }
 
     nonisolated func updateTagOrder(

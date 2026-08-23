@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 BookshelfRepositoryProtocol 提供二级书籍列表观察流，依赖 BookshelfBookListRoute 描述当前聚合上下文
- * [OUTPUT]: 对外提供 BookshelfBookListViewModel，驱动二级书籍列表加载、空态、搜索、编辑选择、分组移动、批量写入与实时刷新
+ * [OUTPUT]: 对外提供 BookshelfBookListViewModel，驱动二级书籍列表加载、空态、搜索、编辑选择、分组移动、可等待批量标签保存与实时刷新
  * [POS]: Book 模块二级书籍列表状态编排器，被 BookshelfBookListView 消费
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -311,12 +311,32 @@ final class BookshelfBookListViewModel {
         }
     }
 
-    /// 提交批量标签写入；单本替换、多本追加的差异由 Repository 对齐 Android 语义。
-    func submitBatchTags(tagIDs: [Int64]) {
+    /// 提交批量标签写入；任务由标签 Sheet 等待，单本替换与多本追加仍由 Repository 对齐 Android 语义。
+    func submitBatchTags(tagIDs: [Int64]) async -> Bool {
         let bookIDs = selectedBookIDs
-        activeBatchSheet = nil
-        runWriteAction(.setTag, successMessage: "标签已更新") {
-            try await self.repository.batchSetBooksTags(bookIDs: bookIDs, tagIDs: tagIDs)
+        guard !bookIDs.isEmpty, activeWriteAction == nil else { return false }
+        batchOptionsTask?.cancel()
+        isLoadingBatchOptions = false
+        activeWriteAction = .setTag
+        writeError = nil
+        actionFeedback = nil
+
+        do {
+            try await repository.batchSetBooksTags(bookIDs: bookIDs, tagIDs: tagIDs)
+            try Task.checkCancellation()
+            selectedBookIDs.removeAll()
+            activeWriteAction = nil
+            actionFeedback = nil
+            restartObservation()
+            return true
+        } catch is CancellationError {
+            activeWriteAction = nil
+            actionFeedback = nil
+            return false
+        } catch {
+            writeActionState.finishFailure(error)
+            restartObservation()
+            return false
         }
     }
 

@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 NoteReviewViewModel、RepositoryContainer、AppNavigationCoordinator、页面私有 NoteReviewRefreshDeckHost、NoteReviewCardView 与外部导航/设置闭包
- * [OUTPUT]: 对外提供 NoteReviewView，承载 iOS 端书摘回顾分页卡组、底部一级操作、随机换组交接、卡片菜单、可取消分享与 AI 释义会话
+ * [OUTPUT]: 对外提供 NoteReviewView，承载 iOS 端书摘回顾分页卡组、底部一级操作、随机换组交接、统一标签编辑、可取消分享与 AI 释义会话
  * [POS]: Note 模块回顾 Tab 页面入口，被 NoteContainerView 托管
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -70,11 +70,11 @@ struct NoteReviewView: View {
         }
         .sheet(item: $tagEditSession) { session in
             NoteReviewTagEditSheet(
-                item: session.item,
                 snapshot: session.snapshot,
                 onCreateTag: { name in
-                    await viewModel.createTag(named: name)
+                    try await viewModel.createTag(named: name)
                 },
+                onTagCatalogMutation: viewModel.applyTagCatalogMutation,
                 onSave: { tags in
                     await viewModel.replaceTags(tags, for: session.item)
                 }

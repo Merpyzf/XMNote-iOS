@@ -1,17 +1,24 @@
 /**
- * [INPUT]: 依赖 SwiftUI Binding 同步搜索文本与焦点激活态，接收提示文案、提交和取消回调
- * [OUTPUT]: 对外提供 XMInlineSearchField，以中性内容表面统一搜索、清除、取消与键盘提交语义
+ * [INPUT]: 依赖 SwiftUI Binding 同步搜索文本与焦点激活态，接收提示文案、取消呈现模式、提交和取消回调
+ * [OUTPUT]: 对外提供 XMInlineSearchField 与 XMInlineSearchCancelPresentation，以中性内容表面统一搜索、清除、可选外部取消与键盘提交语义
  * [POS]: UIComponents/Foundation 的内容区搜索基础组件，被管理页与笔记页的可滚动搜索头复用
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
 import SwiftUI
 
+/// 行内搜索的外部取消呈现语义，区分完整搜索模式与常驻筛选工具。
+enum XMInlineSearchCancelPresentation: Hashable {
+    case automatic
+    case hidden
+}
+
 /// 内容区搜索输入框；搜索状态属于所在滚动内容，不占用导航栏或底部 Chrome。
 struct XMInlineSearchField: View {
     @Binding private var text: String
     @Binding private var isActive: Bool
     private let prompt: String
+    private let cancelPresentation: XMInlineSearchCancelPresentation
     private let onSubmit: () -> Void
     private let onCancel: () -> Void
 
@@ -25,12 +32,14 @@ struct XMInlineSearchField: View {
         text: Binding<String>,
         isActive: Binding<Bool>,
         prompt: String,
+        cancelPresentation: XMInlineSearchCancelPresentation = .automatic,
         onSubmit: @escaping () -> Void = { },
         onCancel: @escaping () -> Void = { }
     ) {
         self._text = text
         self._isActive = isActive
         self.prompt = prompt
+        self.cancelPresentation = cancelPresentation
         self.onSubmit = onSubmit
         self.onCancel = onCancel
     }
@@ -63,7 +72,7 @@ struct XMInlineSearchField: View {
 
     /// 查询存在时即使键盘已收起也保留取消入口，避免焦点变化先于按钮点击完成。
     private var showsCancelButton: Bool {
-        isFocused || !text.isEmpty
+        cancelPresentation == .automatic && (isFocused || !text.isEmpty)
     }
 
     private var cancelReservedWidth: CGFloat {
@@ -71,17 +80,20 @@ struct XMInlineSearchField: View {
     }
 
     /// 以稳定的尾部坐标承载取消操作，透明度与搜索表面宽度共享同一个视觉进度。
+    @ViewBuilder
     private var cancelButton: some View {
-        Button("取消", action: cancelSearch)
-            .font(AppTypography.subheadline)
-            .foregroundStyle(Color.textSecondary)
-            .frame(width: cancelButtonWidth)
-            .frame(minHeight: Spacing.actionReserved)
-            .contentShape(Rectangle())
-            .opacity(cancelPresentationProgress)
-            .accessibilityHint("清空当前搜索并关闭键盘")
-            .allowsHitTesting(showsCancelButton)
-            .accessibilityHidden(!showsCancelButton)
+        if cancelPresentation == .automatic {
+            Button("取消", action: cancelSearch)
+                .font(AppTypography.subheadline)
+                .foregroundStyle(Color.textSecondary)
+                .frame(width: cancelButtonWidth)
+                .frame(minHeight: Spacing.actionReserved)
+                .contentShape(Rectangle())
+                .opacity(cancelPresentationProgress)
+                .accessibilityHint("清空当前搜索并关闭键盘")
+                .allowsHitTesting(showsCancelButton)
+                .accessibilityHidden(!showsCancelButton)
+        }
     }
 
     private var searchSurface: some View {
@@ -158,7 +170,7 @@ struct XMInlineSearchField: View {
     private func synchronizeInitialPresentation() {
         synchronizeFocusFromExternalState()
         updateCancelPresentation(
-            isVisible: isActive || !text.isEmpty,
+            isVisible: showsCancelButton,
             animated: false
         )
     }

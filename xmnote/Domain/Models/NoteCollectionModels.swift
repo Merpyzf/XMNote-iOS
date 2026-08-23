@@ -129,6 +129,29 @@ nonisolated struct NoteExcerptListItem: Identifiable, Hashable, Sendable {
     let createdDate: Int64
     let imageURLs: [String]
     let tags: [NoteExcerptTagItem]
+
+    /// 返回仅替换标签快照的新列表项，供全局标签改名或删除后即时收敛当前页面缓存。
+    func replacingTags(_ nextTags: [NoteExcerptTagItem]) -> NoteExcerptListItem {
+        NoteExcerptListItem(
+            id: id,
+            bookID: bookID,
+            bookTitle: bookTitle,
+            bookAuthor: bookAuthor,
+            bookCoverURL: bookCoverURL,
+            chapterID: chapterID,
+            chapterTitle: chapterTitle,
+            contentHTML: contentHTML,
+            ideaHTML: ideaHTML,
+            plainContent: plainContent,
+            plainIdea: plainIdea,
+            position: position,
+            positionUnit: positionUnit,
+            includeTime: includeTime,
+            createdDate: createdDate,
+            imageURLs: imageURLs,
+            tags: nextTags
+        )
+    }
 }
 
 /// 书摘分页读取请求；搜索条件始终与 scope 做 AND 组合。

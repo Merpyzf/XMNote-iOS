@@ -1,7 +1,7 @@
 /**
- * [INPUT]: 依赖 DesignTokens、TopBarActionIcon 与 SwiftUI Menu/Toggle/Button 等系统控件
- * [OUTPUT]: 对外提供 XMSettingsPageScaffold、XMSettingsGroupCard、内容自适应选项胶囊、弱分割线与通用设置行组件
- * [POS]: UIComponents/Foundation 的通用设置 Sheet 组件，统一业务设置页标题栏、分组卡片与行样式
+ * [INPUT]: 依赖 DesignTokens、TopBarActionIcon、XMScrollEdgeChrome 与 SwiftUI Menu/Toggle/Button 等系统控件，接收可选关闭按钮视觉尺寸
+ * [OUTPUT]: 对外提供支持固定内容顶部栏、底部栏、局部关闭按钮尺寸和可配置系统滚动边缘语义的 XMSettingsPageScaffold，以及 XMSettingsGroupCard、内容自适应选项胶囊、弱分割线与通用设置行组件
+ * [POS]: UIComponents/Foundation 的通用设置 Sheet 组件，统一业务设置页标题栏、系统滚动边缘、固定操作区、分组卡片与行样式
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
@@ -19,37 +19,150 @@ enum XMSettingsSheetLayout {
     static let weakSeparatorOpacity = 0.42
 }
 
-/// 通用设置 Sheet 页面骨架，提供居中标题、可选副标题与右侧关闭按钮。
-struct XMSettingsPageScaffold<Content: View>: View {
+/// 通用设置 Sheet 页面骨架，提供居中标题、可选副标题、右侧关闭按钮与类型安全的可选内容顶部栏和底部栏。
+struct XMSettingsPageScaffold<Content: View, ContentTopBar: View, BottomBar: View>: View {
     let title: String
     let subtitle: String?
     let onClose: () -> Void
     let content: Content
+    let contentTopBar: ContentTopBar
+    let bottomBar: BottomBar
+    private let closeVisualSize: CGFloat
+    private let scrollEdgePresentation: XMScrollEdgeChromePresentation
+    private let showsContentTopBar: Bool
+    private let showsBottomBar: Bool
 
-    /// 注入标题、关闭动作与页面内容。
+    /// 注入标题、关闭动作与页面内容；未提供固定栏时保持现有纯滚动页面结构。
     init(
         title: String,
         subtitle: String? = nil,
         onClose: @escaping () -> Void,
+        closeVisualSize: CGFloat = XMSettingsSheetLayout.closeVisualSize,
+        @ViewBuilder content: () -> Content
+    ) where ContentTopBar == EmptyView, BottomBar == EmptyView {
+        self.title = title
+        self.subtitle = subtitle
+        self.onClose = onClose
+        self.content = content()
+        self.contentTopBar = EmptyView()
+        self.bottomBar = EmptyView()
+        self.closeVisualSize = closeVisualSize
+        self.scrollEdgePresentation = .contained
+        self.showsContentTopBar = false
+        self.showsBottomBar = false
+    }
+
+    /// 注入标题、关闭动作、滚动内容与固定底部操作区，底部栏由系统安全区和滚动边缘效果承载。
+    init(
+        title: String,
+        subtitle: String? = nil,
+        onClose: @escaping () -> Void,
+        closeVisualSize: CGFloat = XMSettingsSheetLayout.closeVisualSize,
+        scrollEdgePresentation: XMScrollEdgeChromePresentation = .overlaySoft,
+        @ViewBuilder bottomBar: () -> BottomBar,
+        @ViewBuilder content: () -> Content
+    ) where ContentTopBar == EmptyView {
+        self.title = title
+        self.subtitle = subtitle
+        self.onClose = onClose
+        self.content = content()
+        self.contentTopBar = EmptyView()
+        self.bottomBar = bottomBar()
+        self.closeVisualSize = closeVisualSize
+        self.scrollEdgePresentation = scrollEdgePresentation
+        self.showsContentTopBar = false
+        self.showsBottomBar = true
+    }
+
+    /// 注入标题、关闭动作、固定内容顶部栏与滚动内容，顶部栏通过系统安全区和指定滚动边缘语义固定在标题下方。
+    init(
+        title: String,
+        subtitle: String? = nil,
+        onClose: @escaping () -> Void,
+        closeVisualSize: CGFloat = XMSettingsSheetLayout.closeVisualSize,
+        scrollEdgePresentation: XMScrollEdgeChromePresentation = .overlaySoft,
+        @ViewBuilder contentTopBar: () -> ContentTopBar,
+        @ViewBuilder content: () -> Content
+    ) where BottomBar == EmptyView {
+        self.title = title
+        self.subtitle = subtitle
+        self.onClose = onClose
+        self.content = content()
+        self.contentTopBar = contentTopBar()
+        self.bottomBar = EmptyView()
+        self.closeVisualSize = closeVisualSize
+        self.scrollEdgePresentation = scrollEdgePresentation
+        self.showsContentTopBar = true
+        self.showsBottomBar = false
+    }
+
+    /// 注入标题、关闭动作、固定内容顶部栏、固定底部栏与滚动内容，由系统统一承载指定的双向滚动边缘语义。
+    init(
+        title: String,
+        subtitle: String? = nil,
+        onClose: @escaping () -> Void,
+        closeVisualSize: CGFloat = XMSettingsSheetLayout.closeVisualSize,
+        scrollEdgePresentation: XMScrollEdgeChromePresentation = .overlaySoft,
+        @ViewBuilder contentTopBar: () -> ContentTopBar,
+        @ViewBuilder bottomBar: () -> BottomBar,
         @ViewBuilder content: () -> Content
     ) {
         self.title = title
         self.subtitle = subtitle
         self.onClose = onClose
         self.content = content()
+        self.contentTopBar = contentTopBar()
+        self.bottomBar = bottomBar()
+        self.closeVisualSize = closeVisualSize
+        self.scrollEdgePresentation = scrollEdgePresentation
+        self.showsContentTopBar = true
+        self.showsBottomBar = true
     }
 
     var body: some View {
         VStack(spacing: Spacing.none) {
             topChrome
-
-            ScrollView {
-                content
-            }
-            .scrollIndicators(.hidden)
+            scrollContent
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color.surfaceSheet.ignoresSafeArea())
+    }
+
+    @ViewBuilder
+    private var scrollContent: some View {
+        if showsContentTopBar, showsBottomBar {
+            XMScrollEdgeChrome(
+                presentation: scrollEdgePresentation,
+                edges: [.top, .bottom],
+                topBar: { contentTopBar },
+                bottomBar: { bottomBar },
+                content: { baseScrollContent }
+            )
+        } else if showsContentTopBar {
+            XMScrollEdgeChrome(
+                presentation: scrollEdgePresentation,
+                edges: .top,
+                topBar: { contentTopBar },
+                content: { baseScrollContent }
+            )
+        } else if showsBottomBar {
+            XMScrollEdgeChrome(
+                presentation: scrollEdgePresentation,
+                edges: .bottom,
+                bottomBar: { bottomBar },
+                content: { baseScrollContent }
+            )
+        } else {
+            baseScrollContent
+        }
+    }
+
+    private var baseScrollContent: some View {
+        ScrollView {
+            content
+        }
+        .scrollIndicators(.hidden)
+        .scrollBounceBehavior(.always)
     }
 
     private var topChrome: some View {
@@ -90,7 +203,7 @@ struct XMSettingsPageScaffold<Content: View>: View {
             TopBarActionIcon(
                 systemName: "xmark",
                 iconSize: 13,
-                containerSize: XMSettingsSheetLayout.closeVisualSize,
+                containerSize: closeVisualSize,
                 weight: .bold,
                 foregroundColor: .textSecondary
             )

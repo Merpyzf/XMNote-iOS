@@ -1,231 +1,63 @@
 /**
- * [INPUT]: 依赖 NoteReviewCardItem、NoteReviewTagEditSnapshot 与外部异步闭包完成标签创建和保存
- * [OUTPUT]: 对外提供 NoteReviewTagEditSheet，承接书摘回顾卡片的当前书摘标签编辑
- * [POS]: Note 模块业务 Sheet，服务回顾卡片操作菜单，不直接访问数据库
+ * [INPUT]: 依赖 RepositoryContainer、NoteReviewTagEditSnapshot、XMTagSelectionSheet 与外部异步闭包完成标签创建和保存
+ * [OUTPUT]: 对外提供 NoteReviewTagEditSheet，以无冗余副标题的单条编辑体验接入统一标签选择基础组件
+ * [POS]: Note 模块业务 Sheet 适配层，服务多处书摘操作菜单，不直接访问数据库
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
 import SwiftUI
 
-/// 回顾卡片标签编辑 Sheet，负责本地草稿选择、新建标签与保存反馈。
+/// 书摘标签编辑 Sheet 适配层，把业务标签模型映射到统一标签选择基础组件。
 struct NoteReviewTagEditSheet: View {
-    let contextTitle: String
+    @Environment(RepositoryContainer.self) private var repositories
+
     let snapshot: NoteReviewTagEditSnapshot
-    let onCreateTag: (String) async -> NoteEditorTagOption?
-    let onSave: ([NoteEditorTagOption]) async -> Bool
+    let onCreateTag: @MainActor @Sendable (String) async throws -> NoteEditorTagOption
+    let onTagCatalogMutation: @MainActor @Sendable (TagCatalogMutation) -> Void
+    let onSave: @MainActor @Sendable ([NoteEditorTagOption]) async -> Bool
 
-    @Environment(\.dismiss) private var dismiss
-    @State private var availableTags: [NoteEditorTagOption]
-    @State private var selectedTags: [NoteEditorTagOption]
-    @State private var inputText = ""
-    @State private var isCreating = false
-    @State private var isSaving = false
-
-    /// 使用仓储快照初始化标签草稿；后续创建和勾选只修改 Sheet 本地状态。
+    /// 使用仓储快照初始化单条书摘标签草稿；后续创建和勾选只修改 Sheet 本地状态。
     init(
-        item: NoteReviewCardItem,
         snapshot: NoteReviewTagEditSnapshot,
-        onCreateTag: @escaping (String) async -> NoteEditorTagOption?,
-        onSave: @escaping ([NoteEditorTagOption]) async -> Bool
+        onCreateTag: @escaping @MainActor @Sendable (String) async throws -> NoteEditorTagOption,
+        onTagCatalogMutation: @escaping @MainActor @Sendable (TagCatalogMutation) -> Void,
+        onSave: @escaping @MainActor @Sendable ([NoteEditorTagOption]) async -> Bool
     ) {
-        self.contextTitle = item.bookTitle.isEmpty ? "当前书摘" : item.bookTitle
         self.snapshot = snapshot
         self.onCreateTag = onCreateTag
+        self.onTagCatalogMutation = onTagCatalogMutation
         self.onSave = onSave
-        _availableTags = State(initialValue: snapshot.availableTags)
-        _selectedTags = State(initialValue: snapshot.selectedTags)
-    }
-
-    /// 供通用书摘详情页复用相同标签编辑交互，不要求构造回顾卡片展示模型。
-    init(
-        contextTitle: String,
-        snapshot: NoteReviewTagEditSnapshot,
-        onCreateTag: @escaping (String) async -> NoteEditorTagOption?,
-        onSave: @escaping ([NoteEditorTagOption]) async -> Bool
-    ) {
-        let normalizedTitle = contextTitle.trimmingCharacters(in: .whitespacesAndNewlines)
-        self.contextTitle = normalizedTitle.isEmpty ? "当前书摘" : normalizedTitle
-        self.snapshot = snapshot
-        self.onCreateTag = onCreateTag
-        self.onSave = onSave
-        _availableTags = State(initialValue: snapshot.availableTags)
-        _selectedTags = State(initialValue: snapshot.selectedTags)
     }
 
     var body: some View {
-        XMSettingsPageScaffold(
+        XMTagSelectionSheet(
             title: "编辑标签",
-            subtitle: subtitle,
-            onClose: { dismiss() }
-        ) {
-            VStack(spacing: Spacing.comfortable) {
-                createTagGroup
-                tagSelectionGroup
-                actionBar
+            items: snapshot.availableTags.map(\.selectionItem),
+            initialSelectedIDs: Set(snapshot.selectedTags.map(\.id)),
+            layoutPreferenceRepository: repositories.tagSelectionLayoutPreferenceRepository,
+            management: XMTagSelectionManagementConfiguration(
+                scope: .note,
+                repository: repositories.tagManagementRepository,
+                onMutation: onTagCatalogMutation
+            ),
+            onCreate: { name in
+                try await onCreateTag(name).selectionItem
+            },
+            onSave: { selectedItems in
+                await onSave(selectedItems.map(\.noteTagOption))
             }
-            .padding(.horizontal, Spacing.screenEdge)
-            .padding(.bottom, Spacing.contentEdge)
-        }
-        .interactiveDismissDisabled(isSaving || isCreating)
+        )
     }
+}
 
-    private var createTagGroup: some View {
-        XMSettingsGroupCard {
-            VStack(alignment: .leading, spacing: Spacing.cozy) {
-                Text("新增标签")
-                    .font(AppTypography.subheadlineSemibold)
-                    .foregroundStyle(Color.textPrimary)
-
-                HStack(spacing: Spacing.cozy) {
-                    TextField("输入标签名称", text: $inputText)
-                        .font(AppTypography.subheadline)
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
-                        .submitLabel(.done)
-                        .disabled(isCreating || isSaving)
-                        .onSubmit(createTag)
-
-                    Button(action: createTag) {
-                        if isCreating {
-                            ProgressView()
-                                .controlSize(.small)
-                        } else {
-                            Image(systemName: "plus")
-                                .font(AppTypography.subheadlineSemibold)
-                        }
-                    }
-                    .buttonStyle(.bordered)
-                    .disabled(trimmedInput.isEmpty || isCreating || isSaving)
-                    .accessibilityLabel("创建标签")
-                }
-            }
-            .padding(.vertical, Spacing.half)
-        }
+private extension NoteEditorTagOption {
+    var selectionItem: XMTagSelectionItem {
+        XMTagSelectionItem(id: id, title: title)
     }
+}
 
-    private var tagSelectionGroup: some View {
-        XMSettingsGroupCard {
-            VStack(spacing: Spacing.none) {
-                if availableTags.isEmpty {
-                    Text("暂无可选标签")
-                        .font(AppTypography.subheadline)
-                        .foregroundStyle(Color.textHint)
-                        .frame(maxWidth: .infinity, minHeight: 96)
-                } else {
-                    ForEach(availableTags) { tag in
-                        Button {
-                            toggle(tag)
-                        } label: {
-                            HStack(spacing: Spacing.base) {
-                                Text(tag.title)
-                                    .font(AppTypography.subheadlineSemibold)
-                                    .foregroundStyle(Color.textPrimary)
-                                    .lineLimit(1)
-
-                                Spacer(minLength: Spacing.base)
-
-                                Image(systemName: isSelected(tag) ? "checkmark.circle.fill" : "circle")
-                                    .font(AppTypography.title3)
-                                    .foregroundStyle(isSelected(tag) ? Color.brand : Color.textHint)
-                            }
-                            .frame(minHeight: 52)
-                            .contentShape(Rectangle())
-                        }
-                        .buttonStyle(.plain)
-                        .disabled(isSaving || isCreating)
-                        .accessibilityElement(children: .ignore)
-                        .accessibilityLabel(tag.title)
-                        .accessibilityValue(isSelected(tag) ? "已选择" : "未选择")
-                        .accessibilityAddTraits(isSelected(tag) ? .isSelected : [])
-                    }
-                }
-            }
-        }
-    }
-
-    private var actionBar: some View {
-        HStack(spacing: Spacing.base) {
-            Button {
-                dismiss()
-            } label: {
-                Text("取消")
-                    .font(AppTypography.subheadlineSemibold)
-                    .frame(maxWidth: .infinity)
-                    .frame(height: Spacing.actionReserved)
-            }
-            .buttonStyle(.bordered)
-            .disabled(isSaving || isCreating)
-
-            Button(action: saveTags) {
-                if isSaving {
-                    ProgressView()
-                        .controlSize(.small)
-                        .frame(maxWidth: .infinity)
-                        .frame(height: Spacing.actionReserved)
-                } else {
-                    Text("保存")
-                        .font(AppTypography.subheadlineSemibold)
-                        .frame(maxWidth: .infinity)
-                        .frame(height: Spacing.actionReserved)
-                }
-            }
-            .buttonStyle(.borderedProminent)
-            .tint(Color.brand)
-            .disabled(isSaving || isCreating || !hasChanges)
-        }
-    }
-
-    private var subtitle: String {
-        guard !selectedTags.isEmpty else { return "\(contextTitle) · 未选择标签" }
-        return "\(contextTitle) · \(selectedTags.count) 个标签"
-    }
-
-    private var trimmedInput: String {
-        inputText.trimmingCharacters(in: .whitespacesAndNewlines)
-    }
-
-    private var hasChanges: Bool {
-        Set(selectedTags.map(\.id)) != Set(snapshot.selectedTags.map(\.id))
-    }
-
-    private func isSelected(_ tag: NoteEditorTagOption) -> Bool {
-        selectedTags.contains(where: { $0.id == tag.id })
-    }
-
-    private func toggle(_ tag: NoteEditorTagOption) {
-        if let index = selectedTags.firstIndex(where: { $0.id == tag.id }) {
-            selectedTags.remove(at: index)
-        } else {
-            selectedTags.append(tag)
-        }
-    }
-
-    private func createTag() {
-        let name = trimmedInput
-        guard !name.isEmpty, !isCreating, !isSaving else { return }
-        Task {
-            isCreating = true
-            defer { isCreating = false }
-            guard let tag = await onCreateTag(name) else { return }
-            if !availableTags.contains(where: { $0.id == tag.id }) {
-                availableTags.append(tag)
-            }
-            if !selectedTags.contains(where: { $0.id == tag.id }) {
-                selectedTags.append(tag)
-            }
-            inputText = ""
-        }
-    }
-
-    private func saveTags() {
-        guard !isSaving, !isCreating else { return }
-        Task {
-            isSaving = true
-            defer { isSaving = false }
-            let didSave = await onSave(selectedTags)
-            if didSave {
-                dismiss()
-            }
-        }
+private extension XMTagSelectionItem {
+    var noteTagOption: NoteEditorTagOption {
+        NoteEditorTagOption(id: id, title: title)
     }
 }

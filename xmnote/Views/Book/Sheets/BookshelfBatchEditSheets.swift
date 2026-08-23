@@ -1,6 +1,6 @@
 /**
- * [INPUT]: 依赖 BookshelfBatchEditOptions 中的标签、来源、阅读状态候选项、XMRatingBar、BookshelfMoveGroupOption 分组封面数据与 BookCollectionSummary 书单候选项，依赖外层 ViewModel 闭包提交批量写入意图
- * [OUTPUT]: 对外提供移组、加入书单、标签、来源与阅读状态等批量编辑 Sheet，并统一标签/移组/书单选择的轻量列表样式、分组封面预览与面板内读取反馈
+ * [INPUT]: 依赖 RepositoryContainer、BookshelfBatchEditOptions 中的标签、来源、阅读状态候选项、XMRatingBar、BookshelfMoveGroupOption 分组封面数据与 BookCollectionSummary 书单候选项，依赖外层 ViewModel 闭包提交批量写入意图
+ * [OUTPUT]: 对外提供移组、加入书单、标签、来源与阅读状态等批量编辑 Sheet；标签选择仅在多本操作时显示精简上下文
  * [POS]: Book 模块业务 Sheet，被 BookshelfBookListView 的编辑态批量操作入口唤起
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -421,16 +421,9 @@ struct BookshelfBookCollectionSheet: View {
     }
 }
 
-/// 二级列表批量标签 Sheet，支持空选择并由 Repository 区分单本替换与多本追加。
+/// 二级列表批量标签 Sheet 适配层，由公共组件承载草稿、搜索、创建、加载和异步保存反馈。
 struct BookshelfBatchTagsSheet: View {
-    @Environment(\.dismiss) private var dismiss
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var loadingGate = LoadingGate()
-    @State private var optionsState: [BookEditorNamedOption]
-    @State private var selectedIDs: Set<Int64>
-    @State private var searchKeyword = ""
-    @State private var createError: String?
-    @State private var isCreating = false
+    @Environment(RepositoryContainer.self) private var repositories
 
     let options: [BookEditorNamedOption]
     let initialSelectedIDs: [Int64]
@@ -438,8 +431,8 @@ struct BookshelfBatchTagsSheet: View {
     let allowsEmptySelection: Bool
     let isLoading: Bool
     let errorMessage: String?
-    let onCreate: (String) async throws -> BookEditorNamedOption
-    let onConfirm: ([Int64]) -> Void
+    let onCreate: @MainActor @Sendable (String) async throws -> BookEditorNamedOption
+    let onSave: @MainActor @Sendable ([Int64]) async -> Bool
 
     /// 构建批量标签 Sheet；支持面板内新增标签，提交语义由 Repository 区分单本替换与多本追加。
     init(
@@ -449,8 +442,8 @@ struct BookshelfBatchTagsSheet: View {
         allowsEmptySelection: Bool,
         isLoading: Bool,
         errorMessage: String?,
-        onCreate: @escaping (String) async throws -> BookEditorNamedOption,
-        onConfirm: @escaping ([Int64]) -> Void
+        onCreate: @escaping @MainActor @Sendable (String) async throws -> BookEditorNamedOption,
+        onSave: @escaping @MainActor @Sendable ([Int64]) async -> Bool
     ) {
         self.options = options
         self.initialSelectedIDs = initialSelectedIDs
@@ -459,185 +452,29 @@ struct BookshelfBatchTagsSheet: View {
         self.isLoading = isLoading
         self.errorMessage = errorMessage
         self.onCreate = onCreate
-        self.onConfirm = onConfirm
-        let validIDs = Set(options.map(\.id))
-        self._optionsState = State(initialValue: options)
-        self._selectedIDs = State(initialValue: Set(initialSelectedIDs.filter { validIDs.contains($0) }))
+        self.onSave = onSave
     }
 
     var body: some View {
-        BookshelfDisplaySettingPageScaffold(
+        XMTagSelectionSheet(
             title: "设置标签",
-            subtitle: "已选\(selectedCount)本",
-            onClose: { dismiss() },
-            leadingAction: {
-                BookshelfBatchTopTextActionButton(
-                    title: "取消",
-                    foregroundColor: .textSecondary,
-                    action: { dismiss() }
-                )
+            contextText: selectedCount > 1 ? "\(selectedCount) 本书" : nil,
+            items: options.map { XMTagSelectionItem(id: $0.id, title: $0.title) },
+            initialSelectedIDs: Set(initialSelectedIDs),
+            allowsEmptySelection: allowsEmptySelection,
+            isLoading: isLoading,
+            loadErrorMessage: errorMessage,
+            layoutPreferenceRepository: repositories.tagSelectionLayoutPreferenceRepository,
+            onCreate: { name in
+                let option = try await onCreate(name)
+                return XMTagSelectionItem(id: option.id, title: option.title)
             },
-            trailingAction: {
-                BookshelfBatchTopTextActionButton(
-                    title: "保存",
-                    foregroundColor: .brand.opacity(0.82),
-                    isDisabled: !canSubmit || isCreating || isLoading || hasLoadError,
-                    action: submitTags
-                )
+            onSave: { selectedItems in
+                await onSave(selectedItems.map(\.id))
             }
-        ) {
-            VStack(spacing: Spacing.base) {
-                BookshelfBatchSearchField(
-                    text: $searchKeyword,
-                    placeholder: "搜索标签",
-                    backgroundColor: .surfaceCard,
-                    minHeight: 50
-                )
-
-                BookshelfBatchNamedOptionListPanel(
-                    options: filteredOptions,
-                    selectedIDs: selectedIDs,
-                    createTitle: canCreateSearchedTag ? trimmedSearchKeyword : nil,
-                    optionName: "标签",
-                    isLoading: isLoading,
-                    isLoadingVisible: loadingGate.isVisible,
-                    loadErrorMessage: errorMessage,
-                    isCreating: isCreating,
-                    createError: createError,
-                    emptyText: tagEmptyText,
-                    onCreate: createTag,
-                    onToggle: toggle
-                ) { option, isSelected, showsDivider in
-                    BookshelfBatchNamedOptionRow(
-                        title: option.title,
-                        isSelected: isSelected,
-                        showsDivider: showsDivider
-                    )
-                }
-            }
-            .padding(.horizontal, Spacing.screenEdge)
-            .padding(.bottom, Spacing.contentEdge)
-            .animation(sheetAnimation, value: optionsState)
-            .animation(sheetAnimation, value: selectedIDs)
-            .animation(sheetAnimation, value: canCreateSearchedTag)
-        }
-        .background(Color.surfaceSheet.ignoresSafeArea())
+        )
         .presentationDetents([.large])
-        .presentationDragIndicator(.hidden)
-        .onAppear {
-            syncLoadingGate()
-        }
-        .onChange(of: searchKeyword) { _, _ in
-            if !isCreating {
-                createError = nil
-            }
-        }
-        .onChange(of: options.map(\.id)) { _, _ in
-            syncOptions(options, initialSelectedIDs: initialSelectedIDs)
-        }
-        .onChange(of: initialSelectedIDs) { _, newInitialSelectedIDs in
-            syncOptions(options, initialSelectedIDs: newInitialSelectedIDs)
-        }
-        .onChange(of: isLoading) { _, _ in
-            syncLoadingGate()
-        }
-        .onDisappear {
-            loadingGate.hideImmediately()
-        }
-    }
-
-    private var orderedSelectedIDs: [Int64] {
-        optionsState.map(\.id).filter { selectedIDs.contains($0) }
-    }
-
-    private var filteredOptions: [BookEditorNamedOption] {
-        let keyword = searchKeyword.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !keyword.isEmpty else { return optionsState }
-        return optionsState.filter { option in
-            option.title.localizedCaseInsensitiveContains(keyword)
-        }
-    }
-
-    private var trimmedSearchKeyword: String {
-        searchKeyword.trimmingCharacters(in: .whitespacesAndNewlines)
-    }
-
-    private var canCreateSearchedTag: Bool {
-        guard !isLoading, !hasLoadError else { return false }
-        guard !trimmedSearchKeyword.isEmpty else { return false }
-        return !optionsState.contains { option in
-            option.title.trimmingCharacters(in: .whitespacesAndNewlines)
-                .localizedCaseInsensitiveCompare(trimmedSearchKeyword) == .orderedSame
-        }
-    }
-
-    private var tagEmptyText: String {
-        trimmedSearchKeyword.isEmpty ? "暂无可用标签" : "没有匹配的标签"
-    }
-
-    private var canSubmit: Bool {
-        allowsEmptySelection || !orderedSelectedIDs.isEmpty
-    }
-
-    private var hasLoadError: Bool {
-        guard let errorMessage else { return false }
-        return !errorMessage.isEmpty
-    }
-
-    private var sheetAnimation: Animation {
-        reduceMotion ? .smooth(duration: 0.10) : .smooth(duration: 0.22)
-    }
-
-    private func submitTags() {
-        guard canSubmit, !isCreating, !isLoading, !hasLoadError else { return }
-        onConfirm(orderedSelectedIDs)
-        dismiss()
-    }
-
-    /// 切换单个标签选中状态。
-    private func toggle(_ id: Int64) {
-        guard !isLoading, !isCreating else { return }
-        if selectedIDs.contains(id) {
-            selectedIDs.remove(id)
-        } else {
-            selectedIDs.insert(id)
-        }
-    }
-
-    private func createTag() {
-        let draft = trimmedSearchKeyword
-        guard !isLoading, !isCreating, canCreateSearchedTag else { return }
-        isCreating = true
-        createError = nil
-        Task {
-            do {
-                let newOption = try await onCreate(draft)
-                await MainActor.run {
-                    optionsState.removeAll { $0.id == newOption.id }
-                    optionsState.insert(newOption, at: 0)
-                    selectedIDs.insert(newOption.id)
-                    searchKeyword = ""
-                    createError = nil
-                    isCreating = false
-                }
-            } catch {
-                await MainActor.run {
-                    createError = error.localizedDescription
-                    isCreating = false
-                }
-            }
-        }
-    }
-
-    /// 同步外部加载完成后的候选项快照，保留只属于当前有效选项集合的初始选中态。
-    private func syncOptions(_ options: [BookEditorNamedOption], initialSelectedIDs: [Int64]) {
-        let validIDs = Set(options.map(\.id))
-        optionsState = options
-        selectedIDs = Set(initialSelectedIDs.filter { validIDs.contains($0) })
-    }
-
-    private func syncLoadingGate() {
-        loadingGate.update(intent: isLoading ? .read : .none)
+        .presentationDragIndicator(.visible)
     }
 }
 

@@ -6,7 +6,7 @@ import UIKit
 
 /**
  * [INPUT]: 依赖 NoteRepositoryProtocol 提供 bootstrap、草稿、暂存图与保存事务，依赖 NoteImageUploadQuotaRepositoryProtocol 管理每日图片额度，依赖 RichTextBridge 处理 HTML 与富文本互转
- * [OUTPUT]: 对外提供 NoteEditorViewModel、NoteEditorComposerTarget，驱动书摘编辑页与全屏正文编辑页
+ * [OUTPUT]: 对外提供 NoteEditorViewModel、NoteEditorComposerTarget，驱动书摘编辑页、全屏正文编辑页与标签选择草稿回写
  * [POS]: ViewModels/Note 的书摘编辑状态编排器，被 NoteEditorView 消费
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -335,29 +335,39 @@ final class NoteEditorViewModel {
         createdDate = milliseconds
     }
 
-    /// 切换标签勾选状态。
-    func toggleTag(_ tag: NoteEditorTagOption) {
-        if selectedTags.contains(where: { $0.id == tag.id }) {
-            selectedTags.removeAll { $0.id == tag.id }
-        } else {
-            selectedTags.append(tag)
+    /// 一次性替换编辑器所选标签，确保 Sheet 关闭前的逐项勾选不会提前污染自动保存草稿。
+    func setSelectedTags(_ tags: [NoteEditorTagOption]) {
+        selectedTags = tags
+    }
+
+    /// 将全局标签改名或删除同步到编辑器候选项与当前草稿，避免关闭选择 Sheet 后恢复旧目录快照。
+    func applyTagCatalogMutation(_ mutation: TagCatalogMutation) {
+        guard mutation.scope == .note else { return }
+        let nextAvailableTags = mutation.applying(to: availableTags)
+        let nextSelectedTags = mutation.applying(to: selectedTags)
+        if nextAvailableTags != availableTags {
+            availableTags = nextAvailableTags
+        }
+        if nextSelectedTags != selectedTags {
+            selectedTags = nextSelectedTags
         }
     }
 
-    /// 新建 note 标签并立即加入选中列表。
-    func createTag(named name: String) async {
+    /// 新建 note 标签并返回真实对象；任务取消不回写错误，选中关系只由父 Sheet 保存时一次性替换。
+    func createTag(named name: String) async throws -> NoteEditorTagOption {
         errorMessage = nil
         do {
             let newTag = try await repository.createNoteTag(named: name)
+            try Task.checkCancellation()
             if !availableTags.contains(where: { $0.id == newTag.id }) {
                 availableTags.append(newTag)
-                availableTags.sort { $0.title.localizedCompare($1.title) == .orderedAscending }
             }
-            if !selectedTags.contains(where: { $0.id == newTag.id }) {
-                selectedTags.append(newTag)
-            }
+            return newTag
         } catch {
-            errorMessage = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+            if !Task.isCancelled {
+                errorMessage = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+            }
+            throw error
         }
     }
 

@@ -9,7 +9,7 @@ import Foundation
 
 /**
  * [INPUT]: 依赖 BookshelfRepositoryProtocol 提供书架快照数据流、显示设置变更流和排序置顶写入，依赖 BookshelfSnapshot 进行多维度状态编排
- * [OUTPUT]: 对外提供 BookViewModel，驱动书籍页维度浏览、搜索态、显示设置、默认书架编辑态、排序置顶、批量编辑、跨模块占位、删除与 UICollectionView 排序提交
+ * [OUTPUT]: 对外提供 BookViewModel，驱动书籍页维度浏览、搜索态、显示设置、默认书架编辑态、排序置顶、可等待批量标签保存、删除与 UICollectionView 排序提交
  * [POS]: Book 模块书籍列表状态编排器，被 BookContainerView/BookGridView 消费
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -850,16 +850,36 @@ final class BookViewModel {
         }
     }
 
-    /// 提交默认书架批量标签写入；仅作用于选中的 Book，Group 会被忽略。
-    func submitBatchTags(tagIDs: [Int64]) {
+    /// 提交默认书架批量标签写入；任务由标签 Sheet 等待，成功前保持页面，失败沿用书架错误反馈并返回 false。
+    func submitBatchTags(tagIDs: [Int64]) async -> Bool {
         let bookIDs = selectedBookIDs
-        activeBatchSheet = nil
         guard !bookIDs.isEmpty else {
             actionNotice = "分组不支持设置标签，请选择书籍"
-            return
+            return false
         }
-        runWriteAction(.setTag, successMessage: "标签已更新") {
-            try await self.repository.batchSetBooksTags(bookIDs: bookIDs, tagIDs: tagIDs)
+
+        guard activeWriteAction == nil else { return false }
+        cancelBatchOptionsLoading()
+        activeWriteAction = .setTag
+        writeError = nil
+        actionFeedback = nil
+
+        do {
+            try await repository.batchSetBooksTags(bookIDs: bookIDs, tagIDs: tagIDs)
+            try Task.checkCancellation()
+            selectedIDs.removeAll()
+            activeWriteAction = nil
+            actionFeedback = nil
+            restartObservation()
+            return true
+        } catch is CancellationError {
+            activeWriteAction = nil
+            actionFeedback = nil
+            return false
+        } catch {
+            writeActionState.finishFailure(error)
+            restartObservation()
+            return false
         }
     }
 

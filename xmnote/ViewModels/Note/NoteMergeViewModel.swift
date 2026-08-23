@@ -189,6 +189,20 @@ final class NoteMergeViewModel {
         self.draft = draft
     }
 
+    /// 将全局标签改名或删除同步到合并候选项与最终标签草稿，不触发预览内容重新生成。
+    func applyTagCatalogMutation(_ mutation: TagCatalogMutation) {
+        guard mutation.scope == .note else { return }
+        let nextAvailableTags = mutation.applying(to: availableTags)
+        if nextAvailableTags != availableTags {
+            availableTags = nextAvailableTags
+        }
+        guard var draft else { return }
+        let nextSelectedTags = mutation.applying(to: draft.selectedTags)
+        guard nextSelectedTags != draft.selectedTags else { return }
+        draft.selectedTags = nextSelectedTags
+        self.draft = draft
+    }
+
     var availableImageSelectionCount: Int {
         guard let draft else { return 0 }
         let componentRemaining = max(0, 9 - draft.imageItems.count)

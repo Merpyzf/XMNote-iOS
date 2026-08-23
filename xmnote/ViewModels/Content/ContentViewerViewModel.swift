@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 ContentRepositoryProtocol 提供 viewer feed/详情/Android v45 软删除，依赖 NoteRepositoryProtocol 与 ExternalAppIntegrationRepositoryProtocol 提供标签和外部发送
- * [OUTPUT]: 对外提供 ContentViewerViewModel、ContentViewerActionFeedback，驱动分页、详情缓存、删除、标签编辑与外部发送
+ * [OUTPUT]: 对外提供 ContentViewerViewModel、ContentViewerActionFeedback，驱动分页、详情缓存、删除、统一标签创建/保存与外部发送
  * [POS]: Content 模块查看页状态中枢，负责时间线/书籍详情来源的统一内容查看体验
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -179,19 +179,20 @@ final class ContentViewerViewModel {
         }
     }
 
-    /// 新建书摘标签并返回可立即选中的真实标签对象。
-    func createTag(named name: String) async -> NoteEditorTagOption? {
+    /// 新建书摘标签并返回可立即选中的真实标签对象；取消不发布反馈，失败同时交给既有反馈通道和创建 Sheet。
+    func createTag(named name: String) async throws -> NoteEditorTagOption {
         do {
             let tag = try await noteRepository.createNoteTag(named: name)
-            guard !Task.isCancelled else { return nil }
+            try Task.checkCancellation()
             return tag
         } catch {
-            guard !Task.isCancelled else { return nil }
-            actionFeedback = ContentViewerActionFeedback(
-                role: .error,
-                message: "创建标签失败：\(error.localizedDescription)"
-            )
-            return nil
+            if !Task.isCancelled {
+                actionFeedback = ContentViewerActionFeedback(
+                    role: .error,
+                    message: "创建标签失败：\(error.localizedDescription)"
+                )
+            }
+            throw error
         }
     }
 
@@ -213,6 +214,12 @@ final class ContentViewerViewModel {
             )
             return false
         }
+    }
+
+    /// 标签目录发生全局变化后强刷目标书摘详情；详情仅存名称数组，必须回到 Repository 重新确认关联结果。
+    func applyTagCatalogMutation(_ mutation: TagCatalogMutation, noteID: Int64) async {
+        guard mutation.scope == .note else { return }
+        await refreshDetail(itemID: .note(noteID))
     }
 
     /// 发送当前书摘到已配置目标；写操作即时发布 processing 并阻止重复触发。

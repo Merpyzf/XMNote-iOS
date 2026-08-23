@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 RepositoryContainer、AppState、NoteEditorViewModel、AppTaskNavigationContext、NoteTextComposerView 与 BookPickerView
- * [OUTPUT]: 对外提供 NoteEditorView，承载书摘新建/编辑、草稿恢复、图片额度、附图、层级章节/标签与保存动作
+ * [OUTPUT]: 对外提供 NoteEditorView，承载书摘新建/编辑、草稿恢复、图片额度、附图、层级章节及无冗余上下文的标签草稿操作
  * [POS]: Note 模块书摘编辑页壳层，对齐 Android 编辑流程并采用 iOS 原生页面组织
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -449,11 +449,13 @@ private extension NoteEditorView {
                 NoteEditorTagPickerSheet(
                     availableTags: viewModel.availableTags,
                     selectedTags: viewModel.selectedTags,
-                    onToggle: { tag in
-                        viewModel.toggleTag(tag)
-                    },
                     onCreate: { name in
-                        await viewModel.createTag(named: name)
+                        try await viewModel.createTag(named: name)
+                    },
+                    onTagCatalogMutation: viewModel.applyTagCatalogMutation,
+                    onSave: { tags in
+                        viewModel.setSelectedTags(tags)
+                        return true
                     }
                 )
             case .createdDate:
@@ -2288,11 +2290,11 @@ private struct NoteEditorFloatingToolbar: View {
         Button(action: action) {
             Text(title)
                 .font(AppTypography.semantic(.footnote, weight: .semibold))
-                .foregroundStyle(Color.white.opacity(enabled ? 1 : 0.86))
+                .foregroundStyle(enabled ? Color.primaryActionForeground : Color.buttonDisabledForeground)
                 .padding(.horizontal, Spacing.base)
                 .frame(height: 34)
                 .background(
-                    enabled ? Color.brand : Color.buttonDisabled,
+                    enabled ? Color.primaryActionFill : Color.buttonDisabled,
                     in: Capsule()
                 )
         }
@@ -2429,74 +2431,33 @@ private struct NoteEditorChapterPickerSheet: View {
 }
 
 private struct NoteEditorTagPickerSheet: View {
+    @Environment(RepositoryContainer.self) private var repositories
+
     let availableTags: [NoteEditorTagOption]
     let selectedTags: [NoteEditorTagOption]
-    let onToggle: (NoteEditorTagOption) -> Void
-    let onCreate: @MainActor @Sendable (String) async -> Void
-
-    @Environment(\.dismiss) private var dismiss
-    @State private var inputText = ""
+    let onCreate: @MainActor @Sendable (String) async throws -> NoteEditorTagOption
+    let onTagCatalogMutation: @MainActor @Sendable (TagCatalogMutation) -> Void
+    let onSave: @MainActor @Sendable ([NoteEditorTagOption]) async -> Bool
 
     var body: some View {
-        NavigationStack {
-            List {
-                Section("已选标签") {
-                    if selectedTags.isEmpty {
-                        Text("暂未选择标签")
-                            .foregroundStyle(Color.textHint)
-                    } else {
-                        ForEach(selectedTags) { tag in
-                            Text(tag.title)
-                                .foregroundStyle(Color.textPrimary)
-                        }
-                    }
-                }
-
-                Section("全部标签") {
-                    ForEach(availableTags) { tag in
-                        Button {
-                            onToggle(tag)
-                        } label: {
-                            HStack {
-                                Text(tag.title)
-                                    .foregroundStyle(Color.textPrimary)
-                                Spacer()
-                                if selectedTags.contains(where: { $0.id == tag.id }) {
-                                    XMSelectionIndicator(
-                                        style: .checkmarkOnly,
-                                        isSelected: true,
-                                        font: AppTypography.body,
-                                        showsUnselectedBase: false
-                                    )
-                                }
-                            }
-                        }
-                        .buttonStyle(.plain)
-                    }
-                }
-
-                Section("新增标签") {
-                    TextField("输入后创建并选中", text: $inputText)
-                    Button("创建标签") {
-                        let text = inputText.trimmingCharacters(in: .whitespacesAndNewlines)
-                        guard !text.isEmpty else { return }
-                        Task {
-                            await onCreate(text)
-                            inputText = ""
-                        }
-                    }
-                }
+        XMTagSelectionSheet(
+            title: "编辑标签",
+            items: availableTags.map { XMTagSelectionItem(id: $0.id, title: $0.title) },
+            initialSelectedIDs: Set(selectedTags.map(\.id)),
+            layoutPreferenceRepository: repositories.tagSelectionLayoutPreferenceRepository,
+            management: XMTagSelectionManagementConfiguration(
+                scope: .note,
+                repository: repositories.tagManagementRepository,
+                onMutation: onTagCatalogMutation
+            ),
+            onCreate: { name in
+                let tag = try await onCreate(name)
+                return XMTagSelectionItem(id: tag.id, title: tag.title)
+            },
+            onSave: { items in
+                await onSave(items.map { NoteEditorTagOption(id: $0.id, title: $0.title) })
             }
-            .navigationTitle("标签")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("完成") {
-                        dismiss()
-                    }
-                }
-            }
-        }
+        )
     }
 }
 

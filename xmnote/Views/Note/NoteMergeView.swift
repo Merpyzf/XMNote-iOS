@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 RepositoryContainer 注入 NoteRepository/OCRRepository，依赖 NoteMergeViewModel、NoteTextComposerView 与现有设计组件
- * [OUTPUT]: 对外提供 NoteMergeView，覆盖正文/想法独立排序与分隔、富文本编辑、标签/图片并集、元信息选择及真实事务合并
+ * [OUTPUT]: 对外提供 NoteMergeView，覆盖正文/想法独立排序与分隔、富文本编辑、统一标签草稿选择、图片并集、元信息选择及真实事务合并
  * [POS]: Note 模块书摘合并页面，由 NoteRoute.mergeNotes 进入
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -477,7 +477,11 @@ struct NoteMergeView: View {
                 options: viewModel.availableTags,
                 initialIDs: Set(viewModel.draft?.selectedTags.map(\.id) ?? []),
                 onCreate: viewModel.createTag,
-                onConfirm: viewModel.setSelectedTags
+                onTagCatalogMutation: viewModel.applyTagCatalogMutation,
+                onSave: { tags in
+                    viewModel.setSelectedTags(tags)
+                    return true
+                }
             )
         case .images:
             NoteMergeImageEditorSheet(

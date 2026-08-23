@@ -88,11 +88,11 @@ struct XMSelectionIndicator: View {
         case .checkbox, .radio:
             Image(systemName: "circle")
                 .fontWeight(.medium)
-                .foregroundStyle(isSelected ? Color.brand.opacity(0.24) : Color.textHint)
+                .foregroundStyle(isSelected ? Color.selectionAccent.opacity(0.24) : Color.selectionInactive)
         case .checkmarkOnly:
             Image(systemName: "circle.fill")
                 .fontWeight(.medium)
-                .foregroundStyle(isSelected ? Color.brand.opacity(0.12) : Color.controlFillSecondary)
+                .foregroundStyle(isSelected ? Color.selectionAccent.opacity(0.12) : Color.controlFillSecondary)
         }
     }
 
@@ -103,16 +103,16 @@ struct XMSelectionIndicator: View {
             Image(systemName: "checkmark.circle.fill")
                 .fontWeight(.semibold)
                 .symbolRenderingMode(.palette)
-                .foregroundStyle(Color.white, Color.brand)
+                .foregroundStyle(Color.white, Color.selectionAccent)
         case .radio:
             Image(systemName: "largecircle.fill.circle")
                 .fontWeight(.semibold)
                 .symbolRenderingMode(.palette)
-                .foregroundStyle(Color.brand, Color.brand.opacity(0.16))
+                .foregroundStyle(Color.selectionAccent, Color.selectionAccent.opacity(0.16))
         case .checkmarkOnly:
             Image(systemName: "checkmark")
                 .fontWeight(.bold)
-                .foregroundStyle(Color.brand)
+                .foregroundStyle(Color.selectionAccent)
         }
     }
 
@@ -157,26 +157,26 @@ struct XMSelectionIndicator: View {
     }
 
     private var replacementPrimaryStyle: Color {
-        guard isSelected else { return Color.textHint }
+        guard isSelected else { return Color.selectionInactive }
         switch style {
         case .checkbox:
             return Color.white
         case .radio:
-            return Color.brand
+            return Color.selectionAccent
         case .checkmarkOnly:
-            return Color.brand
+            return Color.selectionAccent
         }
     }
 
     private var replacementSecondaryStyle: Color {
-        guard isSelected else { return Color.textHint }
+        guard isSelected else { return Color.selectionInactive }
         switch style {
         case .checkbox:
-            return Color.brand
+            return Color.selectionAccent
         case .radio:
-            return Color.brand.opacity(0.16)
+            return Color.selectionAccent.opacity(0.16)
         case .checkmarkOnly:
-            return Color.brand
+            return Color.selectionAccent
         }
     }
 }

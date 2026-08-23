@@ -317,6 +317,15 @@ final class NoteExcerptListViewModel {
         return option
     }
 
+    /// 将全局标签目录写入投影到当前分页快照；观察流随后继续以数据库结果收敛列表。
+    func applyTagCatalogMutation(_ mutation: TagCatalogMutation) {
+        guard mutation.scope == .note else { return }
+        items = items.map { item in
+            let nextTags = mutation.applying(to: item.tags)
+            return nextTags == item.tags ? item : item.replacingTags(nextTags)
+        }
+    }
+
     /// 物理替换所选书摘的标签关系；空集合表示清空标签。
     func replaceTagsForSelectedNotes(tagIDs: [Int64]) async throws {
         let ids = try selectedIDsOrThrow()

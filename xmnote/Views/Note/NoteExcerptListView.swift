@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖调用方注入 NoteRepository/外部应用仓储、AppNavigationCoordinator、NoteExcerptListViewModel、列表组件、BookPicker 与批量 Sheet
- * [OUTPUT]: 对外提供 NoteExcerptListView，以内容区搜索和顶部上下文命令承载渐进分页、查看/编辑/复制反馈、页面级分享、删除确认及批量操作
+ * [OUTPUT]: 对外提供 NoteExcerptListView，以内容区搜索和顶部上下文命令承载渐进分页、查看/编辑/复制反馈、页面级分享、删除确认及带精简摘要的批量标签操作
  * [POS]: Note 模块书摘二级页面壳层，由 NoteRoute.noteExcerpts 与旧标签路由进入
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -499,13 +499,17 @@ struct NoteExcerptListView: View {
             )
         case .tags(let options, let initialIDs):
             NoteTagSelectionSheet(
+                contextText: viewModel.selectedCount > 1
+                    ? "\(viewModel.selectedCount) 条书摘"
+                    : nil,
                 options: options,
                 initialIDs: initialIDs,
                 onCreate: { title in
                     try await viewModel.createTag(named: title)
                 },
-                onConfirm: { tags in
-                    performWrite("正在更新标签…") {
+                onTagCatalogMutation: viewModel.applyTagCatalogMutation,
+                onSave: { tags in
+                    await performSheetWrite("正在更新标签…") {
                         try await viewModel.replaceTagsForSelectedNotes(tagIDs: tags.map(\.id))
                     }
                 }
@@ -612,6 +616,26 @@ struct NoteExcerptListView: View {
             } catch {
                 toastCenter.error(error.localizedDescription)
             }
+        }
+    }
+
+    /// Sheet 内写操作在当前任务中等待 Repository 完成；失败保留 Sheet 草稿并沿用页面错误 Toast，取消不伪报结果。
+    private func performSheetWrite(
+        _ message: String,
+        operation: @escaping () async throws -> Void
+    ) async -> Bool {
+        let toastID = showProcessing(message)
+        do {
+            try await operation()
+            try Task.checkCancellation()
+            toastCenter.dismiss(id: toastID)
+            return true
+        } catch is CancellationError {
+            toastCenter.dismiss(id: toastID)
+            return false
+        } catch {
+            toastCenter.error(error.localizedDescription)
+            return false
         }
     }
 

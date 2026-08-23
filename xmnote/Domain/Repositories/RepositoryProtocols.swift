@@ -2,7 +2,7 @@ import Foundation
 
 /**
  * [INPUT]: 依赖 Models 与 Services 层的数据类型定义
- * [OUTPUT]: 对外提供 Book/Note/Content/GlobalSearch/Backup/S3/AI/图片额度/TagManagement/BookGroupManagement/SourceManagement/ExternalAppIntegration/Statistics/ReadCalendar/封面主题/Timeline/ReadingDashboard/ReadingTimer 及书籍搜索录入协议
+ * [OUTPUT]: 对外提供 Book/Note/Content/GlobalSearch/Backup/S3/AI/图片额度/标签选择布局偏好/TagManagement/BookGroupManagement/SourceManagement/ExternalAppIntegration/Statistics/ReadCalendar/封面主题/Timeline/ReadingDashboard/ReadingTimer 及书籍搜索录入协议
  * [POS]: Domain 层仓储契约，定义 Presentation 获取本地/网络数据的唯一入口
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -313,7 +313,15 @@ protocol NoteRepositoryProtocol {
     func mergeNotes(_ draft: NoteMergeDraft) async throws -> Int64
 }
 
-/// 标签管理仓储契约，统一封装“我的 > 标签管理”的书摘/书籍标签读写语义。
+/// 通用标签选择布局偏好契约，隔离视图与具体持久化实现。
+protocol TagSelectionLayoutPreferenceRepositoryProtocol {
+    /// 读取全局标签选择布局；无有效偏好时由实现回退列表。
+    func fetchLayoutMode() -> TagSelectionLayoutMode
+    /// 保存全局标签选择布局，供全部复用场景和后续启动恢复。
+    func saveLayoutMode(_ layoutMode: TagSelectionLayoutMode)
+}
+
+/// 标签管理仓储契约，统一封装标签管理页与业务标签选择器共用的书摘/书籍标签读写语义。
 protocol TagManagementRepositoryProtocol {
     /// 持续观察书摘与书籍标签管理快照，供分段数量与当前列表同步刷新。
     func observeTagManagementSnapshot() -> AsyncThrowingStream<TagManagementSnapshot, Error>
@@ -321,7 +329,7 @@ protocol TagManagementRepositoryProtocol {
     func createTag(named name: String, scope: TagManagementScope) async throws
     /// 编辑指定标签名称，按 Android TagManage 的 @Update 全列语义提交。
     func updateTag(tagID: Int64, name: String, scope: TagManagementScope) async throws
-    /// 删除指定范围下的标签；批量删除时每个标签保持独立事务。
+    /// 物理删除指定范围下的标签及其关系；批量删除时每个标签保持独立事务。
     func deleteTags(tagIDs: [Int64], scope: TagManagementScope) async throws
     /// 按当前展示顺序写入 tag_order，并更新 updated_date。
     func updateTagOrder(tagIDs: [Int64], scope: TagManagementScope) async throws

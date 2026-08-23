@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 ReadCalendar/Content/Note/ExternalApp Repository 获取、筛选与管理指定自然日的完整阅读轨迹
- * [OUTPUT]: 对外提供 DailyReadingViewModel，以独立状态承接主读取阶段、自动刷新告警、筛选排序与记录写入
+ * [OUTPUT]: 对外提供 DailyReadingViewModel，以独立状态承接主读取阶段、自动刷新告警、筛选排序、书摘标签编辑与记录写入
  * [POS]: Reading/ReadCalendar 当日阅读轨迹状态中枢，不直接访问数据库
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -230,16 +230,18 @@ final class DailyReadingViewModel {
         noteActionItems = Dictionary(uniqueKeysWithValues: items.map { ($0.id, $0) })
     }
 
-    /// 新建书摘标签，校验和落库规则复用 NoteRepository。
+    /// 新建书摘标签；Repository 负责校验落库，任务取消不回写错误，失败继续交给页面既有错误通道。
     func createTag(
         named name: String,
         using repository: any NoteRepositoryProtocol
-    ) async -> NoteEditorTagOption? {
+    ) async throws -> NoteEditorTagOption {
         do {
             return try await repository.createNoteTag(named: name)
         } catch {
-            errorMessage = "创建标签失败：\(error.localizedDescription)"
-            return nil
+            if !Task.isCancelled {
+                errorMessage = "创建标签失败：\(error.localizedDescription)"
+            }
+            throw error
         }
     }
 
@@ -256,6 +258,15 @@ final class DailyReadingViewModel {
         } catch {
             errorMessage = "保存标签失败：\(error.localizedDescription)"
             return false
+        }
+    }
+
+    /// 将全局标签目录写入同步到当日已缓存的书摘操作上下文，避免菜单再次打开时短暂展示旧标签。
+    func applyTagCatalogMutation(_ mutation: TagCatalogMutation) {
+        guard mutation.scope == .note else { return }
+        noteActionItems = noteActionItems.mapValues { item in
+            let nextTags = mutation.applying(to: item.tags)
+            return nextTags == item.tags ? item : item.replacingTags(nextTags)
         }
     }
 

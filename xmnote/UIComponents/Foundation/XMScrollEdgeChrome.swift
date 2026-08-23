@@ -1,16 +1,17 @@
 /**
  * [INPUT]: 依赖 SwiftUI safeAreaBar / scrollEdgeEffectStyle、XMScrollEdgeWash 与项目 DesignTokens 间距令牌
- * [OUTPUT]: 对外提供 XMScrollEdgeChrome 与 XMScrollEdgeChromePresentation，统一承载固定滚动边缘栏、系统滚动边缘弱化效果与 contained 模式视口柔化层
+ * [OUTPUT]: 对外提供 XMScrollEdgeChrome 与 XMScrollEdgeChromePresentation，统一承载固定滚动边缘栏、系统 soft/hard 滚动边缘效果与 contained 模式视口柔化层
  * [POS]: UIComponents/Foundation 的滚动边缘基础组件，服务搜索、Sheet 与存在固定边缘控件的滚动页面
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
 import SwiftUI
 
-/// 滚动边缘 chrome 的呈现语义，区分占位式固定栏与系统浮层式软边缘。
+/// 滚动边缘 chrome 的呈现语义，区分占位式固定栏与系统浮层式软硬边缘。
 enum XMScrollEdgeChromePresentation: Hashable {
     case contained
     case overlaySoft
+    case overlayHard
 }
 
 /// 承载固定顶部/底部边缘栏的通用滚动容器，按页面语义决定内容是否允许进入固定栏下方。
@@ -26,7 +27,7 @@ struct XMScrollEdgeChrome<Content: View, TopBar: View, BottomBar: View>: View {
     private let topBar: TopBar
     private let bottomBar: BottomBar
 
-    /// 注入顶部与底部固定栏，按 presentation 决定固定栏参与布局或以系统 soft edge 覆盖滚动内容。
+    /// 注入顶部与底部固定栏，按 presentation 决定固定栏参与布局或使用指定的系统滚动边缘效果。
     init(
         presentation: XMScrollEdgeChromePresentation = .contained,
         edges: Edge.Set = [.top, .bottom],
@@ -111,7 +112,9 @@ struct XMScrollEdgeChrome<Content: View, TopBar: View, BottomBar: View>: View {
         case .contained:
             containedBody
         case .overlaySoft:
-            overlaySoftBody
+            overlayBody(style: .soft)
+        case .overlayHard:
+            overlayBody(style: .hard)
         }
     }
 
@@ -142,7 +145,7 @@ struct XMScrollEdgeChrome<Content: View, TopBar: View, BottomBar: View>: View {
         return result
     }
 
-    private var overlaySoftBody: some View {
+    private func overlayBody(style: ScrollEdgeEffectStyle) -> some View {
         content
             .modifier(
                 XMVerticalSafeAreaBarModifier(
@@ -160,7 +163,7 @@ struct XMScrollEdgeChrome<Content: View, TopBar: View, BottomBar: View>: View {
                     bar: bottomBar
                 )
             )
-            .scrollEdgeEffectStyle(.soft, for: edges)
+            .scrollEdgeEffectStyle(style, for: edges)
     }
 }
 

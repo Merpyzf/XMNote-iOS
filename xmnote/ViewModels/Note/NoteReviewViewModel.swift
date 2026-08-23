@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 NoteRepositoryProtocol 提供书摘回顾设置、分页卡片、标签与书籍回显数据，依赖 ExternalAppIntegrationRepositoryProtocol/AIRepositoryProtocol 提供外部发送与 AI 配置预检，并向页面私有换组宿主提供候选页准备与无动画提交能力
- * [OUTPUT]: 对外提供 NoteReviewViewModel，驱动书摘回顾分页卡组、设置 Sheet、分页刷新、随机换组交接、一级操作、可取消分享图与外部应用发送反馈状态
+ * [OUTPUT]: 对外提供 NoteReviewViewModel，驱动书摘回顾分页卡组、设置 Sheet、统一标签编辑、随机换组交接、可取消分享图与外部应用发送反馈状态
  * [POS]: ViewModels/Note 的书摘回顾状态编排器，被 NoteReviewView 与 NoteContainerView 消费
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -434,16 +434,17 @@ final class NoteReviewViewModel {
         }
     }
 
-    /// 新建书摘标签并返回可直接选中的标签对象；取消时不回写错误，失败时由页面统一提示。
-    func createTag(named name: String) async -> NoteEditorTagOption? {
+    /// 新建书摘标签并返回可直接选中的标签对象；任务随调用方取消，失败同时保留页面既有错误通道并向创建 Sheet 抛出。
+    func createTag(named name: String) async throws -> NoteEditorTagOption {
         do {
             let tag = try await repository.createNoteTag(named: name)
             await reloadTagOptionsAfterTagMutation()
             return tag
         } catch {
-            guard !Task.isCancelled else { return nil }
-            errorMessage = "创建标签失败：\(error.localizedDescription)"
-            return nil
+            if !Task.isCancelled {
+                errorMessage = "创建标签失败：\(error.localizedDescription)"
+            }
+            throw error
         }
     }
 
@@ -629,6 +630,19 @@ final class NoteReviewViewModel {
     /// 清除已消费的外部应用反馈，避免同一条 Toast 反复展示。
     func consumeExternalAppFeedback() {
         externalAppFeedback = nil
+    }
+
+    /// 将全局标签目录写入即时投影到筛选选项和已加载卡片，数据库观察后的刷新仍作为最终事实收敛。
+    func applyTagCatalogMutation(_ mutation: TagCatalogMutation) {
+        guard mutation.scope == .note else { return }
+        let nextOptions = mutation.applying(to: tagOptions)
+        if nextOptions != tagOptions {
+            tagOptions = nextOptions
+        }
+        items = items.map { item in
+            let nextTags = mutation.applying(to: item.tags)
+            return nextTags == item.tags ? item : item.replacingTags(nextTags)
+        }
     }
 }
 
