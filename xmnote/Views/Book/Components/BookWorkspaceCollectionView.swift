@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 BookWorkspacePresentationSnapshot、Nuke/Core Image 封面处理管线、XMMarqueeText、SwiftUI 普通胶囊行内容构建器与 UIKit UICollectionView
- * [OUTPUT]: 对外提供背景与前景同步折叠及回弹、下拉时整幅等比填充且共同穿过状态栏/导航栏的无边缘光晕封面影像 Hero、Android 等效模糊、中性圆角 Tab 台阶、折叠末段整体导航中和、接入公共连续跑马灯的书名状态行、书脊封面、单行出版元数据、轻量色点状态、普通轻透评分与三项精致阅读指标 Chip、与系统标题互斥联动的共享可收起书籍头部、几何稳定的吸顶 Tab 与纯内容原生 Pager
+ * [OUTPUT]: 对外提供背景与前景同步折叠及回弹、下拉时整幅等比填充且共同穿过状态栏/导航栏的无边缘光晕封面影像 Hero、Android 等效模糊、随折叠末段淡出并拉平的中性圆角 Tab 台阶、整体导航中和、接入公共连续跑马灯的书名状态行、书脊封面、单行出版元数据、轻量色点状态、与缺席态共享等距底部呼吸的普通轻透评分与三项精致阅读指标 Chip、与系统标题互斥联动的共享可收起书籍头部、几何稳定的吸顶 Tab 与纯内容原生 Pager
  * [POS]: Views/Book/Components 的页面私有 UIKit 混合列表，负责影像 Hero/中性内容分层、分页、共享 Chrome、diff、章节吸顶和视口稳定
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -780,6 +780,7 @@ private final class BookWorkspaceScopeBarView: UIView {
     private var lastRevealedIndex: Int?
     private var lastRevealBoundsSize = CGSize.zero
     private var pendingImmediateRevealIndex: Int?
+    private var neutralizationProgress: CGFloat = 0
     private let topBoundaryLayer = CAShapeLayer()
 
     override init(frame: CGRect) {
@@ -853,7 +854,7 @@ private final class BookWorkspaceScopeBarView: UIView {
             backgroundColor = nextCanvasColor
             topBoundaryLayer.strokeColor = UIColor(Color.surfaceBorderSubtle)
                 .resolvedColor(with: traitCollection)
-                .withAlphaComponent(0.42)
+                .withAlphaComponent(BookWorkspaceLayoutMetrics.contentStepBoundaryOpacity)
                 .cgColor
         }
 
@@ -867,6 +868,14 @@ private final class BookWorkspaceScopeBarView: UIView {
         self.items = items
         setCommittedSection(committedSection)
         setNeedsLayout()
+    }
+
+    /// 让内容台阶在 Hero 折叠末段直接跟随滚动淡出并拉平，不引入额外动画状态。
+    func updateContentStep(neutralizationProgress progress: CGFloat) {
+        let resolvedProgress = progress.isFinite ? min(max(progress, 0), 1) : 0
+        guard abs(resolvedProgress - neutralizationProgress) > CGFloat.ulpOfOne else { return }
+        neutralizationProgress = resolvedProgress
+        layoutContentStepBoundary()
     }
 
     /// 根据原生 Pager 的连续页位置更新指示器和标题选中强度。
@@ -922,7 +931,7 @@ private final class BookWorkspaceScopeBarView: UIView {
 
     override func layoutSubviews() {
         super.layoutSubviews()
-        layoutTopBoundary()
+        layoutContentStepBoundary()
         if lastRevealBoundsSize != scrollView.bounds.size {
             lastRevealBoundsSize = scrollView.bounds.size
             lastRevealedIndex = nil
@@ -935,33 +944,43 @@ private final class BookWorkspaceScopeBarView: UIView {
         }
     }
 
-    /// 沿 20pt 连续圆角绘制唯一顶部 hairline，明确 Hero 与内容层边界而不增加阴影。
-    private func layoutTopBoundary() {
-        let radius = min(
+    /// 使用同一动态圆角绘制顶部 hairline，保证边界与容器在折叠过程中保持重合。
+    private func layoutContentStepBoundary() {
+        guard bounds.width > 0, bounds.height > 0 else { return }
+        let visibility = 1 - neutralizationProgress
+        let maximumRadius = min(
             BookWorkspaceLayoutMetrics.contentStepTopCornerRadius,
             bounds.width / 2,
             bounds.height
         )
+        let radius = maximumRadius * visibility
         let path = UIBezierPath()
-        path.move(to: CGPoint(x: 0, y: radius))
-        path.addArc(
-            withCenter: CGPoint(x: radius, y: radius),
-            radius: radius,
-            startAngle: .pi,
-            endAngle: -.pi / 2,
-            clockwise: true
-        )
-        path.addLine(to: CGPoint(x: bounds.width - radius, y: 0))
-        path.addArc(
-            withCenter: CGPoint(x: bounds.width - radius, y: radius),
-            radius: radius,
-            startAngle: -.pi / 2,
-            endAngle: 0,
-            clockwise: true
-        )
+        if radius > 0 {
+            path.move(to: CGPoint(x: 0, y: radius))
+            path.addArc(
+                withCenter: CGPoint(x: radius, y: radius),
+                radius: radius,
+                startAngle: .pi,
+                endAngle: -.pi / 2,
+                clockwise: true
+            )
+            path.addLine(to: CGPoint(x: bounds.width - radius, y: 0))
+            path.addArc(
+                withCenter: CGPoint(x: bounds.width - radius, y: radius),
+                radius: radius,
+                startAngle: -.pi / 2,
+                endAngle: 0,
+                clockwise: true
+            )
+        } else {
+            path.move(to: .zero)
+            path.addLine(to: CGPoint(x: bounds.width, y: 0))
+        }
         CATransaction.begin()
         CATransaction.setDisableActions(true)
+        layer.cornerRadius = radius
         topBoundaryLayer.frame = bounds
+        topBoundaryLayer.opacity = Float(visibility)
         topBoundaryLayer.path = path.cgPath
         CATransaction.commit()
     }
@@ -2002,6 +2021,9 @@ final class BookWorkspaceCollectionHostView: UIView, UICollectionViewDelegate, U
             if scopeBarHostView.frame != nextScopeFrame {
                 scopeBarHostView.frame = nextScopeFrame
             }
+            scopeBarHostView.updateContentStep(
+                neutralizationProgress: neutralizationProgress
+            )
         }
         bringSubviewToFront(navigationNeutralizationView)
         bringSubviewToFront(scopeBarHostView)
@@ -3171,7 +3193,7 @@ struct BookWorkspaceBookHeader: View {
         .accessibilityLabel("查看《\(book.name)》阅读详情")
     }
 
-    /// 将有效评分作为封面附属信息独立承载；零评分不制造不可见的纵向占位。
+    /// 将有效评分作为封面附属信息独立承载；零评分仅补齐胶囊槽底部留白。
     private var coverColumn: some View {
         VStack(spacing: Spacing.none) {
             cover
@@ -3181,6 +3203,10 @@ struct BookWorkspaceBookHeader: View {
                 ratingSlot
             }
         }
+        .padding(
+            .bottom,
+            book.score > 0 ? 0 : BookWorkspaceLayoutMetrics.ratingCapsuleVerticalInset
+        )
         .frame(width: coverColumnWidth)
     }
 
