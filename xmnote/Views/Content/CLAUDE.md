@@ -16,6 +16,8 @@
 - `ReviewEditorView.swift`: 书评最小编辑页
 - `RelevantDetailView.swift`: 相关内容单页详情页
 - `RelevantEditorView.swift`: 相关内容最小编辑页
+- `Components/AIMarkdownResultView.swift`: AI Markdown 流式渲染、跨区块文本选择与表格交互的页面私有组件
+- `Sheets/AIInteractionSheets.swift`: AI 释义与自动标签业务 Sheet
 - `Sheets/RelatedBookRelationEditorSheet.swift`: 阅读日历与单书工作台复用的相关书籍关系编辑业务 Sheet
 
 [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md

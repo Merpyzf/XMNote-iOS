@@ -1,6 +1,6 @@
 /**
- * [INPUT]: 依赖 RepositoryContainer 注入内容/AI 仓储，依赖 ContentViewerViewModel 驱动分页与详情状态
- * [OUTPUT]: 对外提供 ContentViewerView，以首帧稳定导航标题统一承接分页查看、原文跳转、书摘朗读、页面级系统分享、关联应用配置引导、统一标签编辑、AI 释义/标签与内容操作反馈
+ * [INPUT]: 依赖 RepositoryContainer 注入内容/AI 仓储，依赖 AppNavigationCoordinator 交接 AI 想法编辑请求，依赖 ContentViewerViewModel 驱动分页与详情状态
+ * [OUTPUT]: 对外提供 ContentViewerView，以首帧稳定导航标题统一承接分页查看、原文跳转、书摘朗读、页面级系统分享、关联应用配置引导、统一标签编辑、AI 释义/标签、编辑器交接与内容操作反馈
  * [POS]: Content 模块查看页壳层，被时间线与书籍详情共同复用
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -121,6 +121,7 @@ private struct ContentViewerLoadedView: View {
     @State private var sharePayload: XMActivitySharePayload?
     @State private var pendingPresentation: PendingCapabilityPresentation?
     @State private var aiTextPresentation: AITextResultPresentation?
+    @State private var pendingAIExplanationIdeaEditRequest: AIExplanationIdeaEditRequest?
     @State private var autoTagPresentation: AIAutoTagPresentation?
     @State private var listLoadingGate = LoadingGate()
     @State private var searchMatchIndex = 0
@@ -247,13 +248,15 @@ private struct ContentViewerLoadedView: View {
         .sheet(item: $sharePayload) { payload in
             XMActivityShareSheet(activityItems: payload.activityItems)
         }
-        .sheet(item: $aiTextPresentation) { presentation in
+        .sheet(
+            item: $aiTextPresentation,
+            onDismiss: openPendingAIExplanationIdeaEditor
+        ) { presentation in
             AITextResultSheet(
                 presentation: presentation,
                 repository: repositories.aiRepository,
-                onIdeaAppended: {
-                    guard let noteID = presentation.request.noteIDForAppending else { return }
-                    await viewModel.refreshDetail(itemID: .note(noteID))
+                onIdeaEditorRequested: { request in
+                    pendingAIExplanationIdeaEditRequest = request
                 }
             )
             .presentationDetents([.medium, .large])
@@ -708,6 +711,25 @@ private struct ContentViewerLoadedView: View {
             noteID: noteID,
             bookTitle: selectedNoteDetail?.bookTitle ?? viewModel.selectedBookTitle
         )
+    }
+
+    /// 等 AI Sheet 完全退场后沿当前全屏任务栈打开编辑器，避免在系统 Sheet 动画中叠加新呈现。
+    private func openPendingAIExplanationIdeaEditor() {
+        guard let request = pendingAIExplanationIdeaEditRequest else { return }
+        pendingAIExplanationIdeaEditRequest = nil
+        let seed = NoteEditorSeed(
+            bookId: nil,
+            chapterId: nil,
+            contentHTML: "",
+            ideaHTML: "",
+            ideaAppendText: request.explanationText
+        )
+        guard navigationCoordinator.present(
+            .noteEditor(mode: .edit(noteId: request.noteID), seed: seed)
+        ) else {
+            toastCenter.error("暂时无法打开编辑页，请稍后重试")
+            return
+        }
     }
 
     /// 使用系统 URL 分发打开微信读书深链；系统拒绝或目标 App 不可用时通过统一 Toast 明确反馈。

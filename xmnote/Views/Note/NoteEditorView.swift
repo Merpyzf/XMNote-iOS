@@ -166,15 +166,13 @@ private extension NoteEditorView {
 
     @ViewBuilder
     func noteEditorAlertPresenter(_ viewModel: NoteEditorViewModel) -> some View {
-        let recoveredDraftBinding = Binding(
-            get: { viewModel.pendingRecoveredDraft },
-            set: { viewModel.pendingRecoveredDraft = $0 }
+        let recoveredDraftPresentation = Binding(
+            get: { viewModel.pendingRecoveredDraft != nil },
+            set: { _ in }
         )
         Color.clear
             .xmSystemAlert(
-                isPresented: recoveredDraftBinding.isPresented {
-                    Task { await viewModel.discardRecoveredDraft() }
-                },
+                isPresented: recoveredDraftPresentation,
                 descriptor: XMSystemAlertDescriptor(
                     title: "发现自动保存草稿",
                     message: "检测到这条书摘有未提交的自动保存内容，是否恢复继续编辑？",

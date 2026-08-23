@@ -1,6 +1,6 @@
 /**
- * [INPUT]: 依赖 DatabaseManager 读取书摘并原子追加想法，依赖 NoteRepositoryProtocol 复用标签事务，依赖 AIConfigurationStore/OpenAICompatibleClient 管理凭据与请求
- * [OUTPUT]: 对外提供 AIRepository，实现配置、书摘流式解读、选词流式释义、非流式自动标签及业务写回
+ * [INPUT]: 依赖 DatabaseManager 读取书摘上下文，依赖 NoteRepositoryProtocol/AIConfigurationStore/OpenAICompatibleClient 管理标签、凭据与请求
+ * [OUTPUT]: 对外提供 AIRepository，实现配置、供应商请求参数、固定 Markdown 展示契约、流式释义/AI 标签及标签写回
  * [POS]: Data 层 AI 仓储实现，是 ViewModel 获取 AI/本地数据与提交业务结果的唯一入口
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -75,7 +75,13 @@ final class AIRepository: AIRepositoryProtocol, @unchecked Sendable {
                     let request = makeRequest(
                         credentials: credentials,
                         messages: [
-                            OpenAIChatMessage(role: "system", content: prompt.system),
+                            OpenAIChatMessage(
+                                role: "system",
+                                content: Self.markdownSystemPrompt(
+                                    editablePrompt: prompt.system,
+                                    kind: .noteExplanation
+                                )
+                            ),
                             OpenAIChatMessage(role: "user", content: userPrompt),
                         ],
                         responseFormat: .text,
@@ -122,7 +128,13 @@ final class AIRepository: AIRepositoryProtocol, @unchecked Sendable {
                     let request = makeRequest(
                         credentials: credentials,
                         messages: [
-                            OpenAIChatMessage(role: "system", content: prompt.system),
+                            OpenAIChatMessage(
+                                role: "system",
+                                content: Self.markdownSystemPrompt(
+                                    editablePrompt: prompt.system,
+                                    kind: .wordLookup
+                                )
+                            ),
                             OpenAIChatMessage(role: "user", content: userPrompt),
                         ],
                         responseFormat: .text,
@@ -147,42 +159,69 @@ final class AIRepository: AIRepositoryProtocol, @unchecked Sendable {
         }
     }
 
-    /// 使用非流式 JSON 响应生成自动标签，并以数据库真实标签集合校准 isExisting。
-    func suggestTags(noteID: Int64) async throws -> [AIAutoTagSuggestion] {
-        async let noteContext = fetchNoteContext(noteID: noteID)
-        async let tagOptions = noteRepository.fetchNoteReviewTagOptions()
-        let (note, tags) = try await (noteContext, tagOptions)
-        try Task.checkCancellation()
+    /// 生成 AI 标签累计内容，并仅在 SSE 完成后解析 JSON、去重和校准已有标签状态。
+    func streamTagSuggestions(
+        noteID: Int64
+    ) -> AsyncThrowingStream<AIAutoTagGenerationEvent, Error> {
+        AsyncThrowingStream { continuation in
+            let task = Task {
+                do {
+                    async let noteContext = fetchNoteContext(noteID: noteID)
+                    async let tagOptions = noteRepository.fetchNoteReviewTagOptions()
+                    let (note, tags) = try await (noteContext, tagOptions)
+                    try Task.checkCancellation()
 
-        let credentials = try await requestCredentials()
-        let prompt = credentials.configuration.prompts.autoTag
-        let existingNames = tags.map(\.title)
-        let userPrompt = Self.render(
-            prompt.user,
-            replacements: [
-                "${书摘内容}": note.contentText,
-                "${书籍名}": note.bookTitle,
-                "${作者名}": note.bookAuthor,
-                "${章节}": note.chapterTitle,
-                "${已有标签}": existingNames.isEmpty ? "暂无已创建的标签" : existingNames.joined(separator: "、"),
-            ]
-        )
-        let request = makeRequest(
-            credentials: credentials,
-            messages: [
-                OpenAIChatMessage(role: "system", content: prompt.system),
-                OpenAIChatMessage(role: "user", content: userPrompt),
-            ],
-            responseFormat: .jsonObject,
-            isStreaming: false,
-            frequencyPenalty: 0,
-            presencePenalty: 0,
-            temperature: 0.7,
-            topP: 0.9
-        )
-        let response = try await client.completion(request)
-        try Task.checkCancellation()
-        return try parseAutoTagResponse(response, existingTagNames: Set(existingNames))
+                    let credentials = try await requestCredentials()
+                    let prompt = credentials.configuration.prompts.autoTag
+                    let existingNames = tags.map(\.title)
+                    let userPrompt = Self.render(
+                        prompt.user,
+                        replacements: [
+                            "${书摘内容}": note.contentText,
+                            "${书籍名}": note.bookTitle,
+                            "${作者名}": note.bookAuthor,
+                            "${章节}": note.chapterTitle,
+                            "${已有标签}": existingNames.isEmpty
+                                ? "暂无已创建的标签"
+                                : existingNames.joined(separator: "、"),
+                        ]
+                    )
+                    let request = makeRequest(
+                        credentials: credentials,
+                        messages: [
+                            OpenAIChatMessage(role: "system", content: prompt.system),
+                            OpenAIChatMessage(role: "user", content: userPrompt),
+                        ],
+                        responseFormat: .jsonObject,
+                        isStreaming: true,
+                        frequencyPenalty: 0,
+                        presencePenalty: 0,
+                        temperature: 0.7,
+                        topP: 0.9
+                    )
+
+                    var finalContent = ""
+                    for try await accumulated in client.streamCompletion(request) {
+                        try Task.checkCancellation()
+                        guard accumulated != finalContent else { continue }
+                        finalContent = accumulated
+                        continuation.yield(.content(accumulated))
+                    }
+                    try Task.checkCancellation()
+                    let suggestions = try parseAutoTagResponse(
+                        finalContent,
+                        existingTagNames: Set(existingNames)
+                    )
+                    continuation.yield(.completed(suggestions))
+                    continuation.finish()
+                } catch is CancellationError {
+                    continuation.finish(throwing: CancellationError())
+                } catch {
+                    continuation.finish(throwing: error)
+                }
+            }
+            continuation.onTermination = { @Sendable _ in task.cancel() }
+        }
     }
 
     /// 创建缺失标签并与书摘现有标签取并集；关系替换复用 NoteRepository 的完整关系集事务语义。
@@ -227,45 +266,6 @@ final class AIRepository: AIRepositoryProtocol, @unchecked Sendable {
         _ = try await noteRepository.replaceNoteReviewTags(noteID: noteID, tags: finalTags)
     }
 
-    /// 在单一写事务中读取最新想法并追加 AI HTML 块，避免覆盖 AI 生成期间发生的正文编辑。
-    func appendExplanationToIdea(noteID: Int64, explanation: String) async throws {
-        let normalized = explanation.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !normalized.isEmpty else { throw AIRepositoryError.emptyResponse }
-        try await databaseManager.database.dbPool.write { db in
-            // SQL 目的：读取追加动作发生时书摘的最新想法，避免使用 AI 请求启动时的陈旧快照覆盖用户编辑。
-            // 涉及表：note。
-            // 关键过滤：按 note.id 精确命中并排除 is_deleted=1。
-            // 时间字段：读取不转换时间；后续 UPDATE 写入本地当前 Android 毫秒时间戳。
-            // 返回字段用途：在同一事务中构造“原想法 + AI 解读”HTML。
-            let readSQL = """
-                SELECT idea
-                FROM note
-                WHERE id = ? AND is_deleted = 0
-                LIMIT 1
-                """
-            guard let currentIdea = try String.fetchOne(db, sql: readSQL, arguments: [noteID]) else {
-                throw AIRepositoryError.noteNotFound
-            }
-
-            let aiBlock = Self.aiExplanationHTML(normalized)
-            let updatedIdea = currentIdea.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                ? aiBlock
-                : "\(currentIdea)\n\(aiBlock)"
-            let now = Int64(Date().timeIntervalSince1970 * 1000)
-            // SQL 目的：把明确确认的 AI 解读追加到书摘想法，并刷新更新时间。
-            // 涉及表：note。
-            // 关键过滤：按同一 note.id 精确更新且再次排除 is_deleted=1，防止事务期间写入失效记录。
-            // 时间字段：updated_date 使用本地当前 Android 毫秒时间戳，不做时区换算。
-            // 副作用：只更新 idea/updated_date，不改正文、标签、章节或附图。
-            let updateSQL = """
-                UPDATE note
-                SET idea = ?, updated_date = ?
-                WHERE id = ? AND is_deleted = 0
-                """
-            try db.execute(sql: updateSQL, arguments: [updatedIdea, now, noteID])
-            guard db.changesCount > 0 else { throw AIRepositoryError.noteNotFound }
-        }
-    }
 }
 
 private extension AIRepository {
@@ -333,6 +333,7 @@ private extension AIRepository {
             apiKey: credentials.apiKey,
             modelID: credentials.configuration.selectedModelID,
             messages: messages,
+            thinkingMode: credentials.configuration.provider == .deepSeek ? .disabled : nil,
             responseFormat: responseFormat,
             isStreaming: isStreaming,
             frequencyPenalty: frequencyPenalty,
@@ -406,6 +407,35 @@ private extension AIRepository {
         }
     }
 
+    /// 在可编辑业务提示词之后追加不可移除的预览格式契约，避免旧配置或自定义文案让 Markdown 结果退化为纯段落。
+    nonisolated static func markdownSystemPrompt(
+        editablePrompt: String,
+        kind: AIPromptKind
+    ) -> String {
+        let contract: String
+        switch kind {
+        case .noteExplanation:
+            contract = """
+                以下为应用固定的展示格式，若与前文格式要求冲突，以此处为准：
+                - 使用标准 Markdown，不输出一级标题、原始 HTML 或整篇代码围栏。
+                - 必须先输出「## 核心观点」，再输出「## 解析」。
+                - 只有存在多个并列观点时才使用无序列表；重点词可少量加粗。
+                - 「## 不同理解」和「## 延伸思考」仅在内容确有需要时输出，不输出空章节。
+                """
+        case .wordLookup:
+            contract = """
+                以下为应用固定的展示格式，若与前文格式要求冲突，以此处为准：
+                - 使用标准 Markdown，不输出一级标题、原始 HTML 或整篇代码围栏。
+                - 必须输出「## 释义」和「## 用法示例」。
+                - 「## 基本信息」和「## 补充说明」仅在内容确有需要时输出，不输出空章节。
+                - 多个含义或用法使用无序列表，重点词可少量加粗。
+                """
+        case .autoTag:
+            return editablePrompt
+        }
+        return "\(editablePrompt)\n\n\(contract)"
+    }
+
     nonisolated static func plainText(_ html: String) -> String {
         RichTextPlainTextExtractor
             .plainText(from: html)
@@ -431,14 +461,4 @@ private extension AIRepository {
         return String(trimmed[first...last])
     }
 
-    nonisolated static func aiExplanationHTML(_ explanation: String) -> String {
-        let escaped = explanation
-            .replacingOccurrences(of: "&", with: "&amp;")
-            .replacingOccurrences(of: "<", with: "&lt;")
-            .replacingOccurrences(of: ">", with: "&gt;")
-            .replacingOccurrences(of: "\"", with: "&quot;")
-            .replacingOccurrences(of: "'", with: "&#39;")
-            .replacingOccurrences(of: "\n", with: "<br>")
-        return "<p>🔮 \(escaped)</p>"
-    }
 }

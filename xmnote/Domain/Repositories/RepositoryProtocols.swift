@@ -463,7 +463,7 @@ protocol ExternalAppIntegrationRepositoryProtocol {
     func send(noteID: Int64, to destination: ExternalAppDestination) async throws -> ExternalAppIntegrationSendResult
 }
 
-/// AI 仓储契约，统一封装非敏感配置、Keychain 凭据、OpenAI-compatible 请求与书摘写库结果。
+/// AI 仓储契约，统一封装非敏感配置、Keychain 凭据、OpenAI-compatible 请求与自动标签写回。
 nonisolated protocol AIRepositoryProtocol: Sendable {
     /// 读取配置与各供应商密钥存在状态；明文密钥不会离开 Repository/Service 边界。
     func fetchConfiguration() async throws -> AIConfigurationSnapshot
@@ -475,12 +475,12 @@ nonisolated protocol AIRepositoryProtocol: Sendable {
     func streamNoteExplanation(noteID: Int64) -> AsyncThrowingStream<String, Error>
     /// 对 Viewer 中选中的文本执行 SSE 流式释义；取消消费流会取消网络请求。
     func streamTextLookup(input: AITextLookupInput) -> AsyncThrowingStream<String, Error>
-    /// 非流式生成并解析 0...3 个自动标签建议。
-    func suggestTags(noteID: Int64) async throws -> [AIAutoTagSuggestion]
+    /// 流式生成 AI 标签：先发送累计正文快照，结束后再解析并发送 0...3 个最终候选；取消消费会取消网络请求。
+    func streamTagSuggestions(
+        noteID: Int64
+    ) -> AsyncThrowingStream<AIAutoTagGenerationEvent, Error>
     /// 将已选建议与书摘现有标签取并集，创建缺失标签后提交关系。
     func applyAutoTags(noteID: Int64, suggestions: [AIAutoTagSuggestion]) async throws
-    /// 原子读取当前想法并追加 AI 解读块，只更新 idea 与 updated_date。
-    func appendExplanationToIdea(noteID: Int64, explanation: String) async throws
 }
 
 /// 备份服务器配置契约，覆盖服务器列表、当前选择、增删改与连通性校验。

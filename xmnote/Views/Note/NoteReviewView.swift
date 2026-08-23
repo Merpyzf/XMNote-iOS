@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 NoteReviewViewModel、RepositoryContainer、AppNavigationCoordinator、页面私有 NoteReviewRefreshDeckHost、NoteReviewCardView 与外部导航/设置闭包
- * [OUTPUT]: 对外提供 NoteReviewView，承载 iOS 端书摘回顾分页卡组、底部一级操作与 AI 助手菜单、随机换组交接、卡片菜单、统一标签编辑、可取消分享与 AI 释义/标签会话
+ * [OUTPUT]: 对外提供 NoteReviewView，承载 iOS 端书摘回顾分页卡组、底部一级操作与 AI 助手菜单、随机换组交接、卡片菜单、统一标签编辑、可取消分享、AI 释义/标签会话与编辑器交接
  * [POS]: Note 模块回顾 Tab 页面入口，被 NoteContainerView 托管
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -26,6 +26,7 @@ struct NoteReviewView: View {
     @State private var tagEditSession: NoteReviewTagEditSession?
     @State private var aiTextPresentation: AITextResultPresentation?
     @State private var autoTagPresentation: AIAutoTagPresentation?
+    @State private var pendingAIExplanationIdeaEditRequest: AIExplanationIdeaEditRequest?
     @State private var pendingConfigurationPrompt: NoteReviewConfigurationPrompt?
     @State private var tagLoadingNoteID: Int64?
     @State private var aiPreparingNoteID: Int64?
@@ -83,19 +84,15 @@ struct NoteReviewView: View {
             .presentationDetents([.medium, .large])
             .presentationDragIndicator(.visible)
         }
-        .sheet(item: $aiTextPresentation) { presentation in
+        .sheet(
+            item: $aiTextPresentation,
+            onDismiss: openPendingAIExplanationIdeaEditor
+        ) { presentation in
             AITextResultSheet(
                 presentation: presentation,
                 repository: repositories.aiRepository,
-                onIdeaAppendWillBegin: {
-                    viewModel.beginLocalDataChange()
-                },
-                onIdeaAppendFailed: {
-                    viewModel.cancelLocalDataChange()
-                },
-                onIdeaAppended: {
-                    guard let noteID = presentation.request.noteIDForAppending else { return }
-                    await viewModel.reloadItemAfterLocalDataChange(noteID: noteID)
+                onIdeaEditorRequested: { request in
+                    pendingAIExplanationIdeaEditRequest = request
                 }
             )
             .presentationDetents([.medium, .large])
@@ -332,6 +329,25 @@ struct NoteReviewView: View {
             case .cancelled:
                 break
             }
+        }
+    }
+
+    /// 等 AI Sheet 完全退场后打开根级书摘编辑任务；协调器拒绝时清除请求并给出可感知反馈。
+    private func openPendingAIExplanationIdeaEditor() {
+        guard let request = pendingAIExplanationIdeaEditRequest else { return }
+        pendingAIExplanationIdeaEditRequest = nil
+        let seed = NoteEditorSeed(
+            bookId: nil,
+            chapterId: nil,
+            contentHTML: "",
+            ideaHTML: "",
+            ideaAppendText: request.explanationText
+        )
+        guard navigationCoordinator.present(
+            .noteEditor(mode: .edit(noteId: request.noteID), seed: seed)
+        ) else {
+            toastCenter.error("暂时无法打开编辑页，请稍后重试")
+            return
         }
     }
 

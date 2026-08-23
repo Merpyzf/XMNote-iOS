@@ -1,5 +1,5 @@
 /**
- * [INPUT]: 依赖 Foundation URLSession，接收供应商地址、模型、短生命周期 API Key、消息与生成参数
+ * [INPUT]: 依赖 Foundation URLSession，接收供应商地址、模型、短生命周期 API Key、消息、思考模式与生成参数
  * [OUTPUT]: 对外提供 OpenAICompatibleClient 的 SSE 累积文本流与非流式完整文本请求
  * [POS]: Services 层 OpenAI-compatible 网络适配器，被 AIRepository 使用，不持久化凭据或访问数据库
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -20,10 +20,15 @@ nonisolated struct OpenAICompletionRequest: Sendable {
         case jsonObject = "json_object"
     }
 
+    enum ThinkingMode: String, Sendable {
+        case disabled
+    }
+
     let baseURLString: String
     let apiKey: String
     let modelID: String
     let messages: [OpenAIChatMessage]
+    let thinkingMode: ThinkingMode?
     let responseFormat: ResponseFormat
     let isStreaming: Bool
     let frequencyPenalty: Double
@@ -91,7 +96,7 @@ nonisolated final class OpenAICompatibleClient: @unchecked Sendable {
         }
     }
 
-    /// 发起非流式请求并返回完整消息文本；自动标签使用此路径以保证 JSON 一次性解析。
+    /// 发起非流式请求并返回完整消息文本，供不需要 SSE 增量反馈的调用方复用。
     func completion(_ request: OpenAICompletionRequest) async throws -> String {
         do {
             let urlRequest = try makeURLRequest(from: request, streaming: false)
@@ -129,6 +134,7 @@ nonisolated final class OpenAICompatibleClient: @unchecked Sendable {
             stream: streaming,
             frequencyPenalty: request.frequencyPenalty,
             presencePenalty: request.presencePenalty,
+            thinking: request.thinkingMode.map { .init(type: $0.rawValue) },
             responseFormat: .init(type: request.responseFormat.rawValue),
             temperature: request.temperature,
             topP: request.topP
@@ -201,17 +207,22 @@ nonisolated private struct ChatCompletionPayload: Encodable {
         let type: String
     }
 
+    nonisolated struct Thinking: Encodable {
+        let type: String
+    }
+
     let model: String
     let messages: [OpenAIChatMessage]
     let stream: Bool
     let frequencyPenalty: Double
     let presencePenalty: Double
+    let thinking: Thinking?
     let responseFormat: ResponseFormat
     let temperature: Double
     let topP: Double
 
     enum CodingKeys: String, CodingKey {
-        case model, messages, stream, temperature
+        case model, messages, stream, thinking, temperature
         case frequencyPenalty = "frequency_penalty"
         case presencePenalty = "presence_penalty"
         case responseFormat = "response_format"
