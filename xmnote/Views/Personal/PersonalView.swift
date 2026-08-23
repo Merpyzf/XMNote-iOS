@@ -7,7 +7,7 @@
 
 /**
  * [INPUT]: 依赖 AppState、DesktopWebSessionCoordinator、AppNavigationCoordinator 环境状态、PersonalRoute 导航路由与阅读日历根级呈现回调
- * [OUTPUT]: 对外提供 PersonalView，我的 Tab 核心入口、阅读日历独立入口、网页端入口状态与新增优先的顶部更多菜单
+ * [OUTPUT]: 对外提供 PersonalView，我的 Tab 核心入口、阅读日历独立入口、网页端入口状态与方案 A 规格的新增优先顶部更多菜单
  * [POS]: Personal 模块容器壳层，承载设置列表、网页端与备份入口
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -23,6 +23,7 @@ struct PersonalView: View {
         static let settingsRowIconWidth: CGFloat = 24
         static let rowMinHeight: CGFloat = 44
         static let rowDividerLeading: CGFloat = Spacing.contentEdge + settingsRowIconWidth + Spacing.base
+        static let topBarTrailingIconSize: CGFloat = 15
     }
 
     @Environment(AppState.self) private var appState
@@ -85,7 +86,7 @@ struct PersonalView: View {
                     } label: {
                         TopBarActionIcon(
                             systemName: "ellipsis",
-                            iconSize: 14,
+                            iconSize: Layout.topBarTrailingIconSize,
                             foregroundColor: Color.iconPrimary.opacity(0.88),
                             hitShape: .rectangle
                         )

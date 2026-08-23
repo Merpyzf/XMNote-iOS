@@ -7,7 +7,7 @@
 
 /**
  * [INPUT]: 依赖 RepositoryContainer、AppNavigationCoordinator、SceneStateStore 与 NoteViewModel/NoteReviewViewModel，并向回顾页注入关联应用与 AI 仓储
- * [OUTPUT]: 对外提供 NoteContainerView 与 NoteSubTab 枚举，并上抛携带真实章节标题的笔记路由、书籍/目录定位、内容编辑及统一内容查看路由，同时提供新增优先、排序/回顾更多收尾的首页顶部操作
+ * [OUTPUT]: 对外提供 NoteContainerView 与 NoteSubTab 枚举，并上抛携带真实章节标题的笔记路由、书籍/目录定位、内容编辑及统一内容查看路由，同时提供方案 A 规格的新增、排序与回顾更多顶部操作
  * [POS]: Note 模块容器壳层，承载笔记/回顾二级切换、四分类首页状态保持与下拉搜索入口
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -170,7 +170,7 @@ private struct NoteContentView: View {
                         onOpenDebugCenter: onOpenDebugCenter,
                         usesGlassStyle: true,
                         presentation: .pillSegment,
-                        iconSize: NoteTopBarMetrics.actionIconSize
+                        iconSize: NoteTopBarMetrics.leadingIconSize
                     )
                 } trailing: {
                     noteActionControl(presentation: .pillSegment)
@@ -264,7 +264,7 @@ private struct NoteContentView: View {
             } label: {
                 TopBarActionIcon(
                     systemName: "arrow.up.arrow.down",
-                    iconSize: NoteTopBarMetrics.actionIconSize,
+                    iconSize: NoteTopBarMetrics.trailingIconSize,
                     foregroundColor: Color.iconPrimary.opacity(0.88),
                     hitShape: presentation == .pillSegment ? .rectangle : .circle
                 )
@@ -281,7 +281,7 @@ private struct NoteContentView: View {
             } label: {
                 TopBarActionIcon(
                     systemName: "ellipsis",
-                    iconSize: NoteTopBarMetrics.actionIconSize,
+                    iconSize: NoteTopBarMetrics.trailingIconSize,
                     foregroundColor: Color.iconPrimary.opacity(0.88),
                     hitShape: presentation == .pillSegment ? .rectangle : .circle
                 )
@@ -383,7 +383,8 @@ private extension BookReviewSortRule {
 }
 
 private enum NoteTopBarMetrics {
-    static let actionIconSize: CGFloat = 14
+    static let leadingIconSize: CGFloat = 14
+    static let trailingIconSize: CGFloat = 15
 }
 
 #Preview {

@@ -2,7 +2,7 @@
 import SwiftUI
 
 /**
- * [INPUT]: 依赖 RichText、FadeOverflowText、Heatmap、MonthlyReadingChart、ReadingStatusTimeline、SystemAlert、Toast、Rating、BookSelection、SelectionMotion、ScopeSelector、Search、ScrollEdge、BookReorder、ImageLoading、Web、OCR、JXPhotoBrowser、ReadCalendar、NoteReview、BookCover/BookGroupCover、TopBar、LiquidGlass、SystemColors 与 Timeline 调试页面
+ * [INPUT]: 依赖 RichText、FadeOverflowText、Heatmap、MonthlyReadingChart、ReadingStatusTimeline、SystemAlert、Toast、Rating、BookSelection、SelectionMotion、ScopeSelector、Search、ScrollEdge、BookReorder、ImageLoading、Web、OCR、JXPhotoBrowser、ReadCalendar、NoteReview、BookCover/BookGroupCover、TopBar 胶囊候选、LiquidGlass、SystemColors 与 Timeline 调试页面
  * [OUTPUT]: 对外提供 DebugCenterView（测试中心列表页）
  * [POS]: Debug 测试入口页，集中展示所有控件测试项，由 PersonalView 跳转进入
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -185,8 +185,8 @@ struct DebugCenterView: View {
         ),
         DebugItem(
             icon: "slider.horizontal.2.square",
-            title: "顶部工具按钮",
-            subtitle: "同款首页渐变背景上的右上角 action icon 层级与按压反馈调参",
+            title: "首页顶部胶囊",
+            subtitle: "正式基线与 A/B/C 原生 Liquid Glass 候选的真实首页上下文对比",
             destination: AnyView(TopBarActionStyleLabTestView())
         ),
         DebugItem(
