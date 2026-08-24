@@ -184,7 +184,11 @@ struct NoteReviewView: View {
 
     private var emptyOrFailureContent: some View {
         VStack(spacing: Spacing.base) {
-            EmptyStateView(icon: "text.quote", message: "暂无可回顾书摘")
+            XMContentStateView(
+                role: .empty,
+                title: "暂无可回顾书摘",
+                systemImage: "text.quote"
+            )
                 .frame(maxHeight: 260)
 
             Button {

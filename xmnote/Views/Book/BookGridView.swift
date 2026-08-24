@@ -238,11 +238,11 @@ struct BookGridView: View {
                 emptyStateView
             }
         case .error(let message):
-            BookshelfContextualEmptyStateView(
-                icon: "exclamationmark.triangle",
+            XMContentStateView(
+                role: .failure,
                 title: "书架加载失败",
                 message: message.isEmpty ? "请稍后重试" : message,
-                iconColor: Color.feedbackWarning.opacity(0.42)
+                systemImage: "exclamationmark.triangle"
             )
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         case .content:
@@ -253,14 +253,19 @@ struct BookGridView: View {
     @ViewBuilder
     private var emptyStateView: some View {
         if hasSearchKeyword {
-            BookshelfContextualEmptyStateView(
-                icon: "books.vertical",
+            XMContentStateView(
+                role: .noResults,
                 title: "没有匹配的书籍",
-                message: viewModel.isEditing ? "已选书籍仍保留，清除搜索可继续整理" : "清除搜索后查看全部书籍"
+                message: viewModel.isEditing ? "已选书籍仍保留，清除搜索可继续整理" : "清除搜索后查看全部书籍",
+                systemImage: "books.vertical"
             )
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else {
-            EmptyStateView(icon: "book", message: "暂无书籍")
+            XMContentStateView(
+                role: .empty,
+                title: "暂无书籍",
+                systemImage: "book"
+            )
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
     }
@@ -324,25 +329,14 @@ struct BookGridView: View {
     }
 
     private func writeErrorHint(_ message: String) -> some View {
-        HStack(alignment: .top, spacing: Spacing.cozy) {
-            Image(systemName: "exclamationmark.triangle.fill")
-                .font(AppTypography.caption)
-                .foregroundStyle(Color.feedbackWarning)
-                .padding(.top, 2)
-
-            Text(message)
-                .font(AppTypography.caption)
-                .foregroundStyle(Color.textSecondary)
-                .fixedSize(horizontal: false, vertical: true)
-        }
+        XMInlineStatusBanner(
+            message,
+            tone: .warning,
+            systemImage: "exclamationmark.triangle.fill"
+        )
         .padding(.horizontal, Spacing.screenEdge)
-        .padding(.vertical, Spacing.tight)
+        .padding(.vertical, Spacing.cozy)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color.feedbackWarning.opacity(0.10))
-        .overlay(alignment: .bottom) {
-            Divider()
-                .overlay(Color.feedbackWarning.opacity(0.28))
-        }
         .transition(.opacity)
         .zIndex(2)
     }

@@ -552,6 +552,28 @@ enum CardStyle {
     static let borderWidth: CGFloat = 0.5
 }
 
+// MARK: - State Presentation
+
+/// 通用状态呈现的尺寸、表层透明度与切换节奏，供完整状态、紧凑状态和局部提示条共同复用。
+enum StatePresentationMetrics {
+    static let centeredIconSize: CGFloat = 32
+    static let cardIconSize: CGFloat = 18
+    static let cardIconContainerSize: CGFloat = 40
+    static let bannerIconSize: CGFloat = 16
+    static let toneBackgroundOpacity: Double = 0.10
+    static let toneBorderOpacity: Double = 0.24
+    static let phaseTransitionDuration: TimeInterval = 0.16
+}
+
+/// 通用状态呈现的文字层级，避免状态组件之间重复组合字体语义。
+enum StatePresentationTypography {
+    static let compactTitle = AppTypography.headlineSemibold
+    static let compactMessage = AppTypography.subheadline
+    static let compactAction = AppTypography.subheadlineSemibold
+    static let bannerMessage = AppTypography.footnote
+    static let bannerAction = AppTypography.footnoteSemibold
+}
+
 // MARK: - Reading Calendar Typography
 
 /// 全局文本语义入口，统一生产路径字体出口，并尽量保持当前默认视觉基线不变。

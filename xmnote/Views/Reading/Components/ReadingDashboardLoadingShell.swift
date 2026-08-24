@@ -96,10 +96,10 @@ struct ReadingDashboardLoadingShell: View {
     }
 
     private func failureOverlay(message: String) -> some View {
-        ReadingDashboardInlineBanner(
-            message: message,
-            actionTitle: "重试",
-            onAction: onRetry
+        XMInlineStatusBanner(
+            message,
+            tone: .error,
+            action: XMStateAction("重试", systemImage: "arrow.clockwise", perform: onRetry)
         )
         .padding(.horizontal, Spacing.screenEdge)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)

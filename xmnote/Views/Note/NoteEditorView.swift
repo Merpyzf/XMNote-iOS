@@ -2358,13 +2358,18 @@ private struct NoteEditorChapterPickerSheet: View {
 
                 if visibleChapters.isEmpty {
                     if searchText.isEmpty {
-                        ContentUnavailableView(
-                            "暂无章节",
-                            systemImage: "text.book.closed",
-                            description: Text("可以先不设置章节，或到目录管理中新增。")
+                        XMContentStateView(
+                            role: .empty,
+                            title: "暂无章节",
+                            message: "可以先不设置章节，或到目录管理中新增。",
+                            systemImage: "text.book.closed"
                         )
                     } else {
-                        ContentUnavailableView.search(text: searchText)
+                        XMContentStateView(
+                            role: .noResults,
+                            title: "没有匹配的章节",
+                            message: "未找到与“\(searchText)”匹配的章节。"
+                        )
                     }
                 } else {
                     ForEach(visibleChapters) { chapter in

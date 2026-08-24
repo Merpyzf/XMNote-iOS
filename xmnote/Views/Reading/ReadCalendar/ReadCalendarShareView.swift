@@ -98,16 +98,15 @@ struct ReadCalendarShareView: View {
                 Color.clear
             }
         } else {
-            ContentUnavailableView {
-                Label("无法生成预览", systemImage: "photo.badge.exclamationmark")
-            } description: {
-                Text(viewModel.errorMessage ?? "请稍后重试")
-            } actions: {
-                Button("重试") {
+            XMContentStateView(
+                role: .failure,
+                title: "无法生成预览",
+                message: viewModel.errorMessage ?? "请稍后重试",
+                systemImage: "photo.badge.exclamationmark",
+                action: XMStateAction("重试", systemImage: "arrow.clockwise") {
                     Task { await viewModel.reload(using: repositories.readCalendarRepository) }
                 }
-                .buttonStyle(.bordered)
-            }
+            )
         }
     }
 

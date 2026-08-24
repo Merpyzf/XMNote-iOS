@@ -16,7 +16,11 @@ struct BackupHistorySheetView: View {
         NavigationStack {
             Group {
                 if viewModel.backupList.isEmpty {
-                    EmptyStateView(icon: "clock.arrow.circlepath", message: "暂无备份记录")
+                    XMCompactStateView(
+                        role: .empty,
+                        title: "暂无备份记录",
+                        systemImage: "clock.arrow.circlepath"
+                    )
                 } else {
                     backupListView
                 }

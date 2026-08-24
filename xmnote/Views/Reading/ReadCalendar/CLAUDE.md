@@ -16,7 +16,6 @@
 - `Components/ReadCalendarTopControlBar.swift`: 页面私有顶部控制区组件（月份/年份选择触发、统计入口、模式切换）
 - `Components/ReadCalendarWeekdayHeader.swift`: 页面私有星期标题行组件
 - `Components/ReadCalendarStreakHintBanner.swift`: 页面私有连续阅读提示横幅组件
-- `Components/ReadCalendarInlineErrorBanner.swift`: 页面私有内联错误提示组件
 - `Components/ReadCalendarSummaryFloatingButton.swift`: 页面私有月总结悬浮入口组件
 - `Components/DailyReadingComponents.swift`: 每日轨迹更多菜单、筛选与提示组件组
 - `Components/DailyReadingRecordRow.swift`: 每日轨迹记录行与上下文动作
@@ -31,5 +30,7 @@
 - `Sheets/ReadCalendarCheckInSheet.swift`: 阅读打卡 Sheet
 - `Sheets/ReadCalendarTimingEditorSheet.swift`: 阅读记录编辑 Sheet
 - `Sheets/ReadCalendarYearSummarySheet.swift`: 年度总结 Sheet
+
+阅读日历空态、无内容失败和保留内容时的局部失败分别复用 `XMContentStateView`/`XMCompactStateView` 与 `XMInlineStatusBanner`；连续阅读提示、打卡庆祝和领域记录状态仍由本模块组件负责。
 
 [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md

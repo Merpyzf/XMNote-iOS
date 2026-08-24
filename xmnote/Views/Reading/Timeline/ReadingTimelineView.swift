@@ -1041,7 +1041,11 @@ private struct TimelineListContent: View, Equatable {
                 TimelineBootstrapListPlaceholder()
                     .padding(.vertical, Spacing.cozy)
             } else if sections.isEmpty {
-                EmptyStateView(icon: "clock.arrow.circlepath", message: "当日没有匹配事件")
+                XMCompactStateView(
+                    role: .noResults,
+                    title: "当日没有匹配事件",
+                    systemImage: "clock.arrow.circlepath"
+                )
                     .padding(.vertical, Spacing.double)
             } else {
                 ZStack(alignment: .topTrailing) {

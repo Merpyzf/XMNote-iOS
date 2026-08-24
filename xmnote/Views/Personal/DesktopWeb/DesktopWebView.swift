@@ -521,48 +521,17 @@ struct DesktopWebView: View {
 
     /// 将可重试故障贴近当前会话开关，并在窄宽度或大字体下切换为纵向操作布局。
     private func retryableFailureRow(_ failure: DesktopWebSessionFailure) -> some View {
-        ViewThatFits(in: .horizontal) {
-            HStack(alignment: .top, spacing: Spacing.base) {
-                retryableFailureMessage(failure.message)
-
-                Spacer(minLength: Spacing.cozy)
-
-                retryButton
-            }
-
-            VStack(alignment: .leading, spacing: Spacing.compact) {
-                retryableFailureMessage(failure.message)
-
-                retryButton
-                    .frame(maxWidth: .infinity, alignment: .trailing)
-            }
-        }
+        XMInlineStatusBanner(
+            failure.message,
+            tone: .error,
+            action: XMStateAction("重新尝试", systemImage: "arrow.clockwise", perform: coordinator.retry)
+        )
         .padding(.horizontal, Layout.cardContentInset)
         .transition(
             reduceMotion
                 ? .opacity
                 : .move(edge: .top).combined(with: .opacity)
         )
-    }
-
-    private func retryableFailureMessage(_ message: String) -> some View {
-        Text(message)
-            .font(AppTypography.caption)
-            .foregroundStyle(Color.feedbackError)
-            .fixedSize(horizontal: false, vertical: true)
-    }
-
-    private var retryButton: some View {
-        Button {
-            coordinator.retry()
-        } label: {
-            Text("重新尝试")
-                .font(AppTypography.captionSemibold)
-                .foregroundStyle(Color.textPrimary)
-                .frame(minHeight: Spacing.actionReserved, alignment: .top)
-                .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
     }
 
     /// 异步保存访问安全设置；任务固定在 MainActor 回写，Repository actor 串行保护持久化顺序。

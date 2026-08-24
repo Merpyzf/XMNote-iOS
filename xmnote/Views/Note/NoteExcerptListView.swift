@@ -126,8 +126,9 @@ struct NoteExcerptListView: View {
             }
 
             if viewModel.phase == .empty {
-                ContentUnavailableView(
-                    viewModel.appliedSearchText.isEmpty ? "这里还没有书摘" : "没有匹配的书摘",
+                XMContentStateView(
+                    role: viewModel.appliedSearchText.isEmpty ? .empty : .noResults,
+                    title: viewModel.appliedSearchText.isEmpty ? "这里还没有书摘" : "没有匹配的书摘",
                     systemImage: "text.quote"
                 )
                 .frame(maxWidth: .infinity, minHeight: 280)

@@ -185,10 +185,11 @@ private extension BookReadingDetailView {
                 .scrollEdgeEffectHidden(true, for: .top)
             }
         } else if viewModel.loadPhase == .failed {
-            ContentUnavailableView(
-                "无法加载阅读详情",
-                systemImage: "exclamationmark.triangle",
-                description: Text(viewModel.errorMessage ?? "书籍不存在或已被删除")
+            XMContentStateView(
+                role: .failure,
+                title: "无法加载阅读详情",
+                message: viewModel.errorMessage ?? "书籍不存在或已被删除",
+                systemImage: "exclamationmark.triangle"
             )
         } else if loadingGate.isVisible {
             LoadingStateView("正在整理阅读数据…", style: .card)

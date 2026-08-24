@@ -44,7 +44,13 @@ ReadingTimelineView(
 private func segmentedPage(for tab: ReadingSubTab) -> some View {
     switch tab {
     case .reading:
-        ReadingListPlaceholderView(onOpenReadCalendar: onOpenReadCalendar)
+        ReadingDashboardView(
+            onAddBook: onAddBook,
+            onOpenReadCalendar: onOpenReadCalendar,
+            onOpenBookDetail: onOpenBookDetail,
+            onStartReading: onStartReading,
+            readingTimerZoomConfigurationFactory: readingTimerZoomConfigurationFactory
+        )
     case .timeline:
         ReadingTimelineView(
             viewModel: timelineViewModel,
@@ -52,7 +58,11 @@ private func segmentedPage(for tab: ReadingSubTab) -> some View {
             onOpenBookDetail: onOpenBookDetail
         )
     case .statistics:
-        StatisticsPlaceholderView()
+        XMContentStateView(
+            role: .empty,
+            title: "暂无统计数据",
+            systemImage: "chart.bar"
+        )
     }
 }
 ```

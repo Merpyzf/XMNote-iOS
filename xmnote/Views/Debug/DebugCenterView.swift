@@ -2,7 +2,7 @@
 import SwiftUI
 
 /**
- * [INPUT]: 依赖 RichText、FadeOverflowText、Heatmap、MonthlyReadingChart、ReadingStatusTimeline、SystemAlert、Toast、Rating、BookSelection、SelectionMotion、ScopeSelector、Search、ScrollEdge、BookReorder、ImageLoading、Web、OCR、JXPhotoBrowser、ReadCalendar、NoteReview、BookCover/BookGroupCover、TopBar 胶囊候选、LiquidGlass、SystemColors 与 Timeline 调试页面
+ * [INPUT]: 依赖 RichText、FadeOverflowText、Heatmap、MonthlyReadingChart、ReadingStatusTimeline、StatePresentation、SystemAlert、Toast、Rating、BookSelection、SelectionMotion、ScopeSelector、Search、ScrollEdge、BookReorder、ImageLoading、Web、OCR、JXPhotoBrowser、ReadCalendar、NoteReview、BookCover/BookGroupCover、TopBar 胶囊候选、LiquidGlass、SystemColors 与 Timeline 调试页面
  * [OUTPUT]: 对外提供 DebugCenterView（测试中心列表页）
  * [POS]: Debug 测试入口页，集中展示所有控件测试项，由 PersonalView 跳转进入
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -50,6 +50,12 @@ struct DebugCenterView: View {
             title: "阅读历程组件",
             subtitle: "状态节点、时间间隔、动态字体与交互权限验收",
             destination: AnyView(ReadingStatusTimelineTestView())
+        ),
+        DebugItem(
+            icon: "rectangle.stack",
+            title: "通用状态展示",
+            subtitle: "完整、紧凑、Inline、加载与五阶段的浅深色和动态字体验收",
+            destination: AnyView(StatePresentationTestView())
         ),
         DebugItem(
             icon: "rectangle.center.inset.filled.badge.plus",

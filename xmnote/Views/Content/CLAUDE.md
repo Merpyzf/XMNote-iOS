@@ -20,4 +20,6 @@
 - `Sheets/AIInteractionSheets.swift`: AI 释义与自动标签业务 Sheet
 - `Sheets/RelatedBookRelationEditorSheet.swift`: 阅读日历与单书工作台复用的相关书籍关系编辑业务 Sheet
 
+Viewer 无内容与无可用内容失败使用 `XMContentStateView`；已有正文时的局部错误卡由页面适配器委托给 `XMInlineStatusBanner`，不得覆盖可信内容。
+
 [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md

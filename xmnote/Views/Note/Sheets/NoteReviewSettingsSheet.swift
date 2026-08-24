@@ -447,7 +447,11 @@ private struct NoteReviewTagSelectionSheet: View {
         ) {
             VStack(spacing: Spacing.comfortable) {
                 if options.isEmpty {
-                    EmptyStateView(icon: "tag", message: "暂无书摘标签")
+                    XMCompactStateView(
+                        role: .empty,
+                        title: "暂无书摘标签",
+                        systemImage: "tag"
+                    )
                         .frame(minHeight: 220)
                 } else {
                     tagGroup

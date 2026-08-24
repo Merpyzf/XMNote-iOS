@@ -1913,26 +1913,12 @@ struct BookCollectionEmptyBooksRow: View {
     let isManual: Bool
 
     var body: some View {
-        VStack(spacing: Spacing.cozy) {
-            Image(systemName: isManual ? "book.badge.plus" : "calendar")
-                .font(AppTypography.title3)
-                .foregroundStyle(Color.textHint)
-
-            Text("书单里还没有书")
-                .font(AppTypography.subheadlineSemibold)
-                .foregroundStyle(Color.textPrimary)
-                .multilineTextAlignment(.center)
-
-            Text(isManual ? "添加书籍后，会在这里按顺序显示。" : "读完记录会在这里同步显示。")
-                .font(AppTypography.caption)
-                .foregroundStyle(Color.textSecondary)
-                .multilineTextAlignment(.center)
-                .fixedSize(horizontal: false, vertical: true)
-        }
-        .padding(.horizontal, Spacing.base)
-        .padding(.vertical, Spacing.section)
-        .frame(maxWidth: .infinity)
-        .accessibilityElement(children: .combine)
+        XMCompactStateView(
+            role: .empty,
+            title: "书单里还没有书",
+            message: isManual ? "添加书籍后，会在这里按顺序显示。" : "读完记录会在这里同步显示。",
+            systemImage: isManual ? "book.badge.plus" : "calendar"
+        )
     }
 }
 

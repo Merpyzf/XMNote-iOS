@@ -185,22 +185,28 @@ private struct SourceManagementContentView: View {
                 Color.clear.sourceManagementStateRow()
             }
         case .empty:
-            ContentUnavailableView(
-                emptyTitle,
-                systemImage: emptySystemImage,
-                description: Text(emptyDescription)
+            XMContentStateView(
+                role: .empty,
+                title: emptyTitle,
+                message: emptyDescription,
+                systemImage: emptySystemImage
             )
             .sourceManagementStateRow()
         case .error(let message):
-            ContentUnavailableView(
-                "来源加载失败",
-                systemImage: "exclamationmark.triangle",
-                description: Text(message)
+            XMContentStateView(
+                role: .failure,
+                title: "来源加载失败",
+                message: message,
+                systemImage: "exclamationmark.triangle"
             )
             .sourceManagementStateRow()
         case .content:
             if viewModel.isSearchResultEmpty {
-                ContentUnavailableView.search(text: viewModel.normalizedSearchText)
+                XMContentStateView(
+                    role: .noResults,
+                    title: "没有匹配的来源",
+                    message: "未找到与“\(viewModel.normalizedSearchText)”匹配的来源。"
+                )
                     .sourceManagementStateRow()
             } else {
                 SourceManagementListView(

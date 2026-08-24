@@ -142,14 +142,14 @@ enum BookshelfBookListEmptyState: Hashable {
         }
     }
 
-    var iconColor: Color {
+    var stateRole: XMStateRole {
         switch self {
         case .contentEmpty:
-            return Color.brand.opacity(0.32)
+            return .empty
         case .searchEmpty:
-            return Color.brand.opacity(0.40)
+            return .noResults
         case .error:
-            return Color.feedbackWarning.opacity(0.42)
+            return .failure
         }
     }
 }

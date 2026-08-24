@@ -53,7 +53,12 @@ struct ReadingTimerView: View {
             } else if coordinator.isLoading {
                 LoadingStateView("正在准备阅读计时…", style: .card)
             } else if let errorMessage = coordinator.errorMessage {
-                ReadingTimerUnavailableState(message: errorMessage)
+                XMContentStateView(
+                    role: .failure,
+                    title: "无法打开阅读计时",
+                    message: errorMessage,
+                    systemImage: "clock.badge.exclamationmark"
+                )
             }
         }
         .accessibilityIdentifier("reading.timer.\(bookId)")
@@ -259,32 +264,6 @@ struct ReadingTimerView: View {
     }
 }
 
-/// 在深链记录与兜底书籍均不可用时提供可感知反馈，并保留顶部收起出口。
-private struct ReadingTimerUnavailableState: View {
-    let message: String
-
-    var body: some View {
-        VStack(spacing: Spacing.base) {
-            Image(systemName: "clock.badge.exclamationmark")
-                .font(.title)
-                .foregroundStyle(Color.textSecondary)
-                .accessibilityHidden(true)
-
-            Text("无法打开阅读计时")
-                .font(AppTypography.title3Semibold)
-                .foregroundStyle(Color.textPrimary)
-
-            Text(message)
-                .font(AppTypography.body)
-                .foregroundStyle(Color.textSecondary)
-                .multilineTextAlignment(.center)
-        }
-        .padding(.horizontal, Spacing.screenEdge)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .accessibilityElement(children: .combine)
-    }
-}
-
 /// ReadingTimerContent 负责主计时页面的视觉编排，隔离外层导航、弹窗和生命周期处理。
 private struct ReadingTimerContent: View {
     @Bindable var coordinator: ReadingTimerCoordinator
@@ -326,7 +305,7 @@ private struct ReadingTimerContent: View {
                             .frame(maxWidth: .infinity)
                     }
                     .scrollIndicators(.hidden)
-                    .scrollBounceBehavior(.basedOnSize)
+                    .scrollBounceBehavior(.always)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
 
@@ -369,10 +348,10 @@ private struct ReadingTimerContent: View {
     private var errorBanner: some View {
         if let errorMessage = coordinator.errorMessage {
             VStack {
-                ReadingDashboardInlineBanner(
-                    message: errorMessage,
-                    actionTitle: "关闭",
-                    onAction: { coordinator.errorMessage = nil }
+                XMInlineStatusBanner(
+                    errorMessage,
+                    tone: .error,
+                    action: XMStateAction("关闭") { coordinator.errorMessage = nil }
                 )
                 .padding(.horizontal, Spacing.screenEdge)
                 .padding(.top, Spacing.base)

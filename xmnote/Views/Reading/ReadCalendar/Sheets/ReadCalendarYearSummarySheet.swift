@@ -33,7 +33,11 @@ struct ReadCalendarYearSummarySheet: View {
                 )
 
                 if let errorMessage = sheet.errorMessage {
-                    ReadCalendarInlineErrorBanner(message: errorMessage, onRetry: onRetry)
+                    XMInlineStatusBanner(
+                        errorMessage,
+                        tone: .warning,
+                        action: XMStateAction("重试", systemImage: "arrow.clockwise", perform: onRetry)
+                    )
                 }
 
                 annualRanking

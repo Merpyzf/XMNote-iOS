@@ -492,7 +492,11 @@ private extension ReadCalendarContentView {
 
             if let errorMessage = props.errorMessage,
                props.rootContentState == .content {
-                ReadCalendarInlineErrorBanner(message: errorMessage, onRetry: onRetry)
+                XMInlineStatusBanner(
+                    errorMessage,
+                    tone: .warning,
+                    action: XMStateAction("重试", systemImage: "arrow.clockwise", perform: onRetry)
+                )
                     .transition(.move(edge: .top).combined(with: .opacity))
             }
         }
@@ -1229,9 +1233,10 @@ private extension ReadCalendarContentView {
                 VStack(spacing: Layout.yearHeatmapGridSpacing) {
                     if let selectedYearErrorMessage = props.selectedYearErrorMessage,
                        props.selectedYearLoadState == .failed {
-                        ReadCalendarInlineErrorBanner(
-                            message: selectedYearErrorMessage,
-                            onRetry: onRetry
+                        XMInlineStatusBanner(
+                            selectedYearErrorMessage,
+                            tone: .warning,
+                            action: XMStateAction("重试", systemImage: "arrow.clockwise", perform: onRetry)
                         )
                         .padding(.horizontal, Layout.yearHeatmapErrorBannerHorizontalInset)
                         .padding(.bottom, Layout.yearHeatmapErrorBannerBottomInset)
@@ -1448,27 +1453,17 @@ private extension ReadCalendarContentView {
     }
 
     var emptyState: some View {
-        VStack(spacing: Spacing.base) {
-            Image(systemName: "calendar.badge.clock")
-                .font(.system(size: 26, weight: .semibold))
-                .foregroundStyle(Color.brand.opacity(0.8))
-
-            if let errorMessage = props.errorMessage {
-                Text(errorMessage)
-                    .font(AppTypography.subheadline)
-                    .foregroundStyle(Color.feedbackWarning)
-                    .multilineTextAlignment(.center)
-
-                Button("重试", action: onRetry)
-                    .font(AppTypography.subheadlineSemibold)
-                    .foregroundStyle(Color.brand)
-            } else {
-                Text(isHeatmapMode ? "暂无可展示的年度数据" : "暂无可展示的阅读月份")
-                    .font(AppTypography.subheadline)
-                    .foregroundStyle(Color.textSecondary)
-                    .multilineTextAlignment(.center)
-            }
-        }
+        XMCompactStateView(
+            role: props.errorMessage == nil ? .empty : .failure,
+            title: props.errorMessage == nil
+                ? (isHeatmapMode ? "暂无可展示的年度数据" : "暂无可展示的阅读月份")
+                : "日历数据暂时无法显示",
+            message: props.errorMessage,
+            systemImage: "calendar.badge.clock",
+            action: props.errorMessage == nil
+                ? nil
+                : XMStateAction("重试", systemImage: "arrow.clockwise", perform: onRetry)
+        )
         .frame(maxWidth: .infinity, minHeight: Layout.pageMinHeight)
     }
 

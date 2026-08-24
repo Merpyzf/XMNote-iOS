@@ -944,40 +944,6 @@ struct BookshelfEditSearchContextBar: View {
     }
 }
 
-/// 书架整理与检索上下文里的说明型空态，支持补充状态说明以避免搜索空态被误读为真实空书架。
-struct BookshelfContextualEmptyStateView: View {
-    let icon: String
-    let title: String
-    let message: String?
-    var iconColor: Color = Color.brand.opacity(0.30)
-
-    var body: some View {
-        VStack(spacing: Spacing.base) {
-            Image(systemName: icon)
-                .font(AppTypography.fixed(baseSize: 48, relativeTo: .title, weight: .regular))
-                .foregroundStyle(iconColor)
-
-            VStack(spacing: Spacing.tiny) {
-                Text(title)
-                    .font(AppTypography.title3)
-                    .foregroundStyle(Color.textSecondary)
-                    .multilineTextAlignment(.center)
-
-                if let message, !message.isEmpty {
-                    Text(message)
-                        .font(AppTypography.caption)
-                        .foregroundStyle(Color.textHint)
-                        .multilineTextAlignment(.center)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-            }
-        }
-        .padding(.horizontal, Spacing.contentEdge)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .accessibilityElement(children: .combine)
-    }
-}
-
 /// 书架网格封面的选中遮罩，用中性复合层表达稳定选择态。
 struct BookshelfSelectionCoverOverlay: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion

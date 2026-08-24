@@ -6,6 +6,12 @@
 - 标准库工具与校验：`scripts/ai-knowledge/`、`scripts/verify_ai_bug_knowledge.sh`；Git 渐进门禁：`.githooks/`。
 - 正式案例与模式：`docs/knowledge/bugs/`；本地索引、会话与草稿：已忽略的 `artifacts/ai-knowledge/`。
 
+### 通用状态展示兼容入口
+- 设计规范：`docs/architecture/通用状态展示设计规范.md`；组件接入：`docs/component-guides/XMStatePresentation使用说明.md`。
+- 生产组件：`xmnote/UIComponents/Foundation/StatePresentation/`；静态闸门：`scripts/verify_state_presentations.sh`。
+- 页面、Sheet 与列表背景使用 `XMContentStateView`，卡片/局部容器使用 `XMCompactStateView`，保留内容时的失败提示使用 `XMInlineStatusBanner`。
+- 现有组件不能满足新 UI 时，优先配置参数或扩展既有 `Style`；只有两个独立生产场景证明相同语义与结构后，才允许新增公共状态组件，并同步测试目录与治理登记。
+
 ### 自动同步模块清单（脚本生成）
 <!-- AUTO_SYNC_MODULES_START -->
 - 由 `scripts/sync_arch_docs.sh` 自动维护，请勿手工修改。

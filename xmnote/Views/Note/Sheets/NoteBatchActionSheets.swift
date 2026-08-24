@@ -62,11 +62,17 @@ struct NoteChapterSelectionSheet: View {
                     }
                     if visibleOptions.isEmpty {
                         if searchText.isEmpty {
-                            Text("当前书籍还没有章节")
-                                .font(AppTypography.callout)
-                                .foregroundStyle(Color.textHint)
+                            XMCompactStateView(
+                                role: .empty,
+                                title: "当前书籍还没有章节",
+                                systemImage: "text.book.closed"
+                            )
                         } else {
-                            ContentUnavailableView.search(text: searchText)
+                            XMCompactStateView(
+                                role: .noResults,
+                                title: "没有匹配的章节",
+                                message: "未找到与“\(searchText)”匹配的章节。"
+                            )
                         }
                     } else {
                         ForEach(visibleOptions) { option in

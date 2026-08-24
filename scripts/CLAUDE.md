@@ -6,6 +6,7 @@
 - `verify_ui_glossary_scope.sh`: 校验 `xmnote/UIComponents` 可复用 UI 与白名单核心页面组件是否完整登记且类别正确。
 - `verify_view_component_boundaries.sh`: 校验页面壳层、页面私有子视图、业务 Sheet、ViewModel 与跨模块复用组件的目录边界。
 - `verify_component_guides.sh`: 校验重要 UI 组件使用文档清单、白名单覆盖、路径与文档必备章节是否完整。
+- `verify_state_presentations.sh`: 校验生产路径的 ContentUnavailableView 唯一入口、旧状态组件回流和未审查状态型 View，并强制公共状态视觉具备测试目录样例、术语/组件登记、组件指南消费证据与至少两个生产消费者；容器/领域例外必须带原因白名单。
 - `verify_l3_protocol_headers.sh`: 校验 `xmnote/**/*.swift` 是否具备 L3 头部协议语句。
 - `sync_arch_docs.sh`: 根据 `xmnote/` 顶层目录自动同步 `AGENTS.md` 与 `CLAUDE.md` 的模块清单块。
 - `verify_arch_docs_sync.sh`: 校验 `AGENTS.md` 与 `CLAUDE.md` 模块清单块是否与实际目录一致。
@@ -15,7 +16,7 @@
 - `verify_ai_bug_knowledge.sh`: 依次执行知识格式校验、审计、固定检索评测与工具测试，不触发 App XCTest/UI Test。
 
 执行约束
-- 提交前执行：`bash scripts/verify_glossary.sh && bash scripts/verify_ui_glossary_scope.sh && bash scripts/verify_view_component_boundaries.sh && bash scripts/verify_l3_protocol_headers.sh && bash scripts/verify_arch_docs_sync.sh && bash scripts/verify_component_guides.sh && bash scripts/verify_scroll_ux.sh && bash scripts/verify_ai_bug_knowledge.sh`。
+- 提交前执行：`bash scripts/verify_glossary.sh && bash scripts/verify_ui_glossary_scope.sh && bash scripts/verify_view_component_boundaries.sh && bash scripts/verify_l3_protocol_headers.sh && bash scripts/verify_arch_docs_sync.sh && bash scripts/verify_component_guides.sh && bash scripts/verify_state_presentations.sh && bash scripts/verify_scroll_ux.sh && bash scripts/verify_ai_bug_knowledge.sh`。
 - 变更 `scripts/` 中的规则、扫描范围、输出格式时，必须同步更新本文件与根 `CLAUDE.md`。
 
 [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md

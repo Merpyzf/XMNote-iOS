@@ -277,17 +277,23 @@ private struct GlobalSearchLoadedContent: View {
                 }
             case .loaded:
                 if viewModel.snapshot.isEmpty {
-                    GlobalSearchPlaceholderView(
+                    XMContentStateView(
+                        role: .noResults,
                         title: "没有找到内容",
-                        subtitle: "换个关键词再试"
+                        message: "换个关键词再试"
                     )
                 } else {
                     resultsContent
                 }
             case .failed(_, let message):
-                GlobalSearchErrorView(message: message) {
-                    viewModel.retry(query: query)
-                }
+                XMContentStateView(
+                    role: .failure,
+                    title: "搜索失败",
+                    message: message,
+                    action: XMStateAction("重新搜索", systemImage: "arrow.clockwise") {
+                        viewModel.retry(query: query)
+                    }
+                )
             }
         }
         .onAppear(perform: syncLoadingGate)
@@ -357,10 +363,18 @@ private struct GlobalSearchLoadedContent: View {
 
                 if visibleResults.isEmpty {
                     if showsFieldScopeFilter {
-                        GlobalSearchInlineEmptyView(title: "没有找到内容", subtitle: "换个范围试试")
+                        XMCompactStateView(
+                            role: .noResults,
+                            title: "没有找到内容",
+                            message: "换个范围试试"
+                        )
                     } else {
                         topAnchoredContent {
-                            GlobalSearchInlineEmptyView(title: "没有找到内容", subtitle: "换个范围试试")
+                            XMCompactStateView(
+                                role: .noResults,
+                                title: "没有找到内容",
+                                message: "换个范围试试"
+                            )
                         }
                     }
                 } else {
@@ -609,48 +623,6 @@ struct GlobalSearchResultSourcePreview: View {
         case .review(let review):
             GlobalSearchReviewRow(review: review, keyword: keyword)
         }
-    }
-}
-
-private struct GlobalSearchInlineEmptyView: View {
-    let title: String
-    let subtitle: String
-
-    var body: some View {
-        VStack(spacing: Spacing.half) {
-            Text(title)
-                .font(AppTypography.subheadlineSemibold)
-                .foregroundStyle(Color.textPrimary)
-
-            Text(subtitle)
-                .font(AppTypography.caption)
-                .foregroundStyle(Color.textHint)
-        }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, Spacing.section * 2)
-    }
-}
-
-private struct GlobalSearchPlaceholderView: View {
-    let title: String
-    var subtitle: String?
-
-    var body: some View {
-        VStack(spacing: Spacing.half) {
-            Text(title)
-                .font(AppTypography.bodyMedium)
-                .foregroundStyle(Color.textPrimary)
-                .multilineTextAlignment(.center)
-
-            if let subtitle, !subtitle.isEmpty {
-                Text(subtitle)
-                    .font(AppTypography.subheadline)
-                    .foregroundStyle(Color.textHint)
-                    .multilineTextAlignment(.center)
-            }
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .padding(.horizontal, Spacing.screenEdge)
     }
 }
 
@@ -1025,35 +997,6 @@ private struct GlobalSearchFooter: View {
                 }
             }
         }
-    }
-}
-
-private struct GlobalSearchErrorView: View {
-    let message: String
-    let onRetry: () -> Void
-
-    var body: some View {
-        VStack(spacing: Spacing.base) {
-            Image(systemName: "exclamationmark.circle")
-                .font(AppTypography.title2)
-                .foregroundStyle(Color.feedbackWarning)
-                .accessibilityHidden(true)
-
-            Text(message)
-                .font(AppTypography.body)
-                .foregroundStyle(Color.textSecondary)
-                .multilineTextAlignment(.center)
-
-            Button(action: onRetry) {
-                Label("重新搜索", systemImage: "arrow.clockwise")
-                    .font(AppTypography.subheadlineSemibold)
-                    .padding(.horizontal, Spacing.base)
-                    .frame(minHeight: Spacing.actionReserved)
-            }
-            .buttonStyle(.bordered)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .padding(.horizontal, Spacing.screenEdge)
     }
 }
 

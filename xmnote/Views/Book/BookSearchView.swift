@@ -1,5 +1,5 @@
 /**
- * [INPUT]: 依赖 RepositoryContainer 注入搜索仓储与本地书仓储，依赖 BookSearchViewModel 驱动远端查询状态，依赖 BookSearchResultRow、BookSearchStatusCard 与登录/验证弹层承接搜索与回流
+ * [INPUT]: 依赖 RepositoryContainer 注入搜索仓储与本地书仓储，依赖 BookSearchViewModel 驱动远端查询状态，依赖统一状态组件、搜索结果行与登录/验证弹层承接搜索和回流
  * [OUTPUT]: 对外提供 BookSearchView，承载完整书籍搜索体验、豆瓣登录恢复、番茄风控恢复与可选的新书回填
  * [POS]: Book 模块搜索页壳层，负责在线来源切换、最近搜索、豆瓣/番茄风控回流与结果进入录入页
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -202,9 +202,10 @@ struct BookSearchView: View {
 
             if isPreparingSeed || isCompletingCreatedBook {
                 Color.overlay.ignoresSafeArea()
-                ProgressView(isCompletingCreatedBook ? "正在回填书籍…" : "正在补全书籍信息…")
-                    .padding(Spacing.contentEdge)
-                    .background(Color.surfaceCard, in: RoundedRectangle(cornerRadius: CornerRadius.blockLarge, style: .continuous))
+                LoadingStateView(
+                    isCompletingCreatedBook ? "正在回填书籍…" : "正在补全书籍信息…",
+                    style: .card
+                )
             }
         }
         .navigationTitle("添加书籍")
@@ -444,68 +445,69 @@ struct BookSearchView: View {
     }
 
     private func genericErrorCard(_ errorMessage: String, viewModel: BookSearchViewModel) -> some View {
-        BookSearchStatusCard(
-            systemImage: "wifi.exclamationmark",
-            tint: .feedbackError,
+        XMCompactStateView(
+            role: .failure,
             title: "搜索失败",
             message: "\(viewModel.selectedSource.title) 暂时无法完成搜索。\(errorMessage)",
-            actionTitle: "重新搜索"
-        ) {
-            Task {
-                await performSearch(using: viewModel)
-            }
-        }
+            systemImage: "wifi.exclamationmark",
+            action: XMStateAction("重新搜索", systemImage: "arrow.clockwise") {
+                Task {
+                    await performSearch(using: viewModel)
+                }
+            },
+            style: .card
+        )
     }
 
     private func inlineFeedbackCard(_ feedback: InlineFeedback) -> some View {
-        BookSearchStatusCard(
-            systemImage: "exclamationmark.circle",
-            tint: .feedbackWarning,
+        XMCompactStateView(
+            role: .failure,
             title: feedback.title,
-            message: feedback.message
+            message: feedback.message,
+            systemImage: "exclamationmark.circle",
+            style: .card
         )
     }
 
     private func doubanRecoveryCard(_ action: PendingRecoveryAction) -> some View {
-        BookSearchStatusCard(
-            systemImage: "person.crop.circle.badge.exclamationmark",
-            tint: .brand,
+        XMCompactStateView(
+            role: .instruction,
             title: action.recoveryTitle,
             message: action.recoveryMessage,
-            actionTitle: action.recoveryButtonTitle
-        ) {
-            Task {
-                await openDoubanLogin(for: action)
-            }
-        }
+            systemImage: "person.crop.circle.badge.exclamationmark",
+            action: XMStateAction(action.recoveryButtonTitle) {
+                Task {
+                    await openDoubanLogin(for: action)
+                }
+            },
+            style: .card
+        )
     }
 
     private func fanqieRecoveryCard(_ action: FanqieVerificationRecoveryAction) -> some View {
-        BookSearchStatusCard(
-            systemImage: "checkmark.shield",
-            tint: .brand,
+        XMCompactStateView(
+            role: .instruction,
             title: action.recoveryTitle,
             message: action.recoveryMessage,
-            actionTitle: action.recoveryButtonTitle
-        ) {
-            Task {
-                await openFanqieVerification(for: action)
-            }
-        }
+            systemImage: "checkmark.shield",
+            action: XMStateAction(action.recoveryButtonTitle) {
+                Task {
+                    await openFanqieVerification(for: action)
+                }
+            },
+            style: .card
+        )
     }
 
     private func emptyResultsCard(_ viewModel: BookSearchViewModel) -> some View {
-        CardContainer(cornerRadius: CornerRadius.containerMedium) {
-            VStack(spacing: Spacing.base) {
-                ContentUnavailableView.search(text: viewModel.trimmedQuery)
-
-                Text("当前搜索源：\(viewModel.selectedSource.title)")
-                    .font(AppTypography.semantic(.footnote, weight: .medium))
-                    .foregroundStyle(Color.textSecondary)
-            }
-            .frame(maxWidth: .infinity, minHeight: 220)
-            .padding(Spacing.contentEdge)
-        }
+        XMCompactStateView(
+            role: .noResults,
+            title: "没有匹配的书籍",
+            message: "当前搜索源：\(viewModel.selectedSource.title)",
+            systemImage: "magnifyingglass",
+            style: .card
+        )
+        .frame(maxWidth: .infinity, minHeight: 220)
     }
 
     private func queryBinding(for viewModel: BookSearchViewModel) -> Binding<String> {

@@ -980,6 +980,7 @@ private struct BookWorkspaceContentView: View {
         return Group {
             if chapters.isEmpty {
                 contentUnavailable(
+                    role: searchQuery(.catalog).isEmpty ? .empty : .noResults,
                     title: searchQuery(.catalog).isEmpty ? "暂无目录" : "没有匹配的目录",
                     systemImage: "list.bullet.indent",
                     description: "目录同步或创建后会显示在这里。"
@@ -1115,6 +1116,7 @@ private struct BookWorkspaceContentView: View {
         let groups = noteGroups(for: book)
         if groups.isEmpty {
             contentUnavailable(
+                role: normalizedSearchQuery(.notes).isEmpty ? .empty : .noResults,
                 title: normalizedSearchQuery(.notes).isEmpty ? "还没有书摘" : "没有匹配的书摘",
                 systemImage: "text.quote",
                 description: "记录一句触动你的内容，稍后会按章节整理在这里。"
@@ -1276,6 +1278,7 @@ private struct BookWorkspaceContentView: View {
         return Group {
             if groups.isEmpty {
                 contentUnavailable(
+                    role: normalizedSearchQuery(.related).isEmpty ? .empty : .noResults,
                     title: normalizedSearchQuery(.related).isEmpty ? "还没有相关内容" : "没有匹配的相关内容",
                     systemImage: "link",
                     description: "把文章、观点或关联书籍整理到当前书中。"
@@ -1421,6 +1424,7 @@ private struct BookWorkspaceContentView: View {
         return Group {
             if items.isEmpty {
                 contentUnavailable(
+                    role: normalizedSearchQuery(.reviews).isEmpty ? .empty : .noResults,
                     title: normalizedSearchQuery(.reviews).isEmpty ? "还没有书评" : "没有匹配的书评",
                     systemImage: "text.bubble",
                     description: "写下对整本书的判断、收获与推荐理由。"
@@ -1485,16 +1489,18 @@ private struct BookWorkspaceContentView: View {
         .buttonStyle(.plain)
     }
 
-    /// 使用系统 ContentUnavailableView 生成一致的空态，不在列表内追加装饰性大插画。
+    /// 使用通用紧凑状态生成一致的局部空态，不在列表内追加装饰性大插画。
     private func contentUnavailable(
+        role: XMStateRole,
         title: String,
         systemImage: String,
         description: String
     ) -> some View {
-        ContentUnavailableView(
-            title,
-            systemImage: systemImage,
-            description: Text(description)
+        XMCompactStateView(
+            role: role,
+            title: title,
+            message: description,
+            systemImage: systemImage
         )
         .frame(maxWidth: .infinity)
         .padding(.vertical, Spacing.double)
@@ -1748,10 +1754,11 @@ private struct BookWorkspaceContentView: View {
         NavigationStack {
             Group {
                 if viewModel.relatedCategories.isEmpty {
-                    ContentUnavailableView(
-                        "暂无可用分类",
-                        systemImage: "square.grid.2x2",
-                        description: Text("请先在 Android 端或后续分类管理能力中创建相关分类。")
+                    XMContentStateView(
+                        role: .empty,
+                        title: "暂无可用分类",
+                        message: "请先在 Android 端或后续分类管理能力中创建相关分类。",
+                        systemImage: "square.grid.2x2"
                     )
                 } else {
                     List(viewModel.relatedCategories) { category in
@@ -1833,10 +1840,11 @@ struct BookChapterNotesView: View {
             if let viewModel {
                 let notes = viewModel.notes.filter { $0.chapterID == chapterId }
                 if notes.isEmpty {
-                    ContentUnavailableView(
-                        "本章暂无书摘",
-                        systemImage: "text.quote",
-                        description: Text("从阅读中记录的内容会出现在这里。")
+                    XMContentStateView(
+                        role: .empty,
+                        title: "本章暂无书摘",
+                        message: "从阅读中记录的内容会出现在这里。",
+                        systemImage: "text.quote"
                     )
                 } else {
                     ScrollView {

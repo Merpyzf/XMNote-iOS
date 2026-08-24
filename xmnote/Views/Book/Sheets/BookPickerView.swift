@@ -244,10 +244,12 @@ struct BookPickerView: View {
 
     private func localEmptyLibrarySection(_ viewModel: BookPickerViewModel) -> some View {
         VStack(alignment: .leading, spacing: Spacing.base) {
-            BookSearchStatusCard(
-                systemImage: "books.vertical",
+            XMCompactStateView(
+                role: .empty,
                 title: "还没有书籍",
-                message: "先创建一本书，后续书摘才能关联到阅读对象。"
+                message: "先创建一本书，后续书摘才能关联到阅读对象。",
+                systemImage: "books.vertical",
+                style: .card
             )
             stateActionGroup(
                 primaryTitle: viewModel.supportsOnline ? "在线搜索" : nil,
@@ -260,10 +262,12 @@ struct BookPickerView: View {
 
     private func localNoResultsSection(_ viewModel: BookPickerViewModel) -> some View {
         VStack(alignment: .leading, spacing: Spacing.base) {
-            BookSearchStatusCard(
-                systemImage: "magnifyingglass",
+            XMCompactStateView(
+                role: .noResults,
                 title: "没有找到匹配的书",
-                message: localNoResultsMessage
+                message: localNoResultsMessage,
+                systemImage: "magnifyingglass",
+                style: .card
             )
             stateActionGroup(
                 primaryTitle: viewModel.supportsOnline ? "在线搜索" : nil,
@@ -276,10 +280,12 @@ struct BookPickerView: View {
 
     private func onlineIdleSection(_ viewModel: BookPickerViewModel) -> some View {
         VStack(alignment: .leading, spacing: Spacing.base) {
-            BookSearchStatusCard(
-                systemImage: "text.magnifyingglass",
+            XMCompactStateView(
+                role: .instruction,
                 title: "输入关键词开始搜索",
-                message: "输入书名、作者或 ISBN 后，将在当前在线来源中搜索。"
+                message: "输入书名、作者或 ISBN 后，将在当前在线来源中搜索。",
+                systemImage: "text.magnifyingglass",
+                style: .card
             )
             if viewModel.supportsCreationFlow {
                 secondaryActionButton(creationEntryLabel) {
@@ -320,17 +326,17 @@ struct BookPickerView: View {
 
     private func onlineFailureSection(_ viewModel: BookPickerViewModel, message: String) -> some View {
         VStack(alignment: .leading, spacing: Spacing.base) {
-            BookSearchStatusCard(
-                systemImage: "wifi.exclamationmark",
-                tint: .feedbackWarning,
+            XMCompactStateView(
+                role: .failure,
                 title: "当前来源搜索失败",
                 message: message,
-                actionTitle: "重试",
-                action: {
+                systemImage: "wifi.exclamationmark",
+                action: XMStateAction("重试", systemImage: "arrow.clockwise") {
                     Task {
                         await viewModel.submitOnlineSearch()
                     }
-                }
+                },
+                style: .card
             )
             if viewModel.supportsCreationFlow {
                 secondaryActionButton(creationEntryLabel) {
@@ -342,10 +348,12 @@ struct BookPickerView: View {
 
     private func onlineNoResultsSection(_ viewModel: BookPickerViewModel) -> some View {
         VStack(alignment: .leading, spacing: Spacing.base) {
-            BookSearchStatusCard(
-                systemImage: "magnifyingglass",
+            XMCompactStateView(
+                role: .noResults,
                 title: "没有找到匹配的书",
-                message: onlineNoResultsMessage
+                message: onlineNoResultsMessage,
+                systemImage: "magnifyingglass",
+                style: .card
             )
             if viewModel.supportsCreationFlow {
                 secondaryActionButton(creationEntryLabel) {

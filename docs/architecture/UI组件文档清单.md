@@ -27,6 +27,11 @@
 | ImmersiveBottomChrome | UI-复用关键 | xmnote/UIComponents/Foundation/ImmersiveBottomChrome.swift | docs/component-guides/ImmersiveBottomChrome使用说明.md | 新增/重大重构 |
 | XMToast | UI-复用关键 | xmnote/UIComponents/Foundation/XMToast.swift | docs/component-guides/XMToast使用说明.md | 新增/重大重构 |
 | XMSettingsSheetComponents | UI-复用关键 | xmnote/UIComponents/Foundation/XMSettingsSheetComponents.swift | docs/component-guides/XMSettingsSheetComponents使用说明.md | 新增/重大重构 |
+| XMContentStateView | UI-复用关键 | xmnote/UIComponents/Foundation/StatePresentation/XMContentStateView.swift | docs/component-guides/XMStatePresentation使用说明.md | 新增/重大重构 |
+| XMCompactStateView | UI-复用关键 | xmnote/UIComponents/Foundation/StatePresentation/XMCompactStateView.swift | docs/component-guides/XMStatePresentation使用说明.md | 新增/重大重构 |
+| XMInlineStatusBanner | UI-复用关键 | xmnote/UIComponents/Foundation/StatePresentation/XMInlineStatusBanner.swift | docs/component-guides/XMStatePresentation使用说明.md | 新增/重大重构 |
+| LoadingStateView | UI-复用关键 | xmnote/UIComponents/Foundation/StatePresentation/LoadingStateView.swift | docs/component-guides/XMStatePresentation使用说明.md | 迁移/重大重构 |
+| LoadPhaseHost | UI-复用关键 | xmnote/UIComponents/Foundation/StatePresentation/LoadingFeedbackKit.swift | docs/component-guides/XMStatePresentation使用说明.md | 迁移/重大重构 |
 | NoteReviewPagingDeck | UI-复用关键 | xmnote/UIComponents/Foundation/NoteReviewPaging/NoteReviewPagingDeck.swift | docs/component-guides/NoteReviewPagingDeck使用说明.md | 新增/重大重构 |
 | TopSwitcher | UI-复用关键 | xmnote/UIComponents/Tabs/TopSwitcher.swift | docs/component-guides/TopSwitcher使用说明.md | 新增/重大重构 |
 | XMInlineTabBar | UI-复用关键 | xmnote/UIComponents/Tabs/XMInlineTabBar.swift | docs/component-guides/XMInlineTabBar使用说明.md | 新增/重大重构 |

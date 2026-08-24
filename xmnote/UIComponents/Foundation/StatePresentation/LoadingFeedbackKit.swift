@@ -1,7 +1,7 @@
 /**
  * [INPUT]: 依赖 SwiftUI 动画与并发语义，依赖 DesignTokens 设计节奏约束页面加载反馈
  * [OUTPUT]: 对外提供 LoadingIntent、LoadingPolicy、LoadingGate、LoadPhase 与 LoadPhaseHost
- * [POS]: UIComponents/Foundation 的加载反馈基础设施，统一“延迟显示 + 最短驻留 + 阶段承载”模式
+ * [POS]: UIComponents/Foundation/StatePresentation 的加载反馈基础设施，统一“延迟显示 + 最短驻留 + 阶段承载”模式
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
@@ -166,6 +166,8 @@ struct LoadPhaseHost<
     Empty: View,
     Failure: View
 >: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     let phase: LoadPhase
     let content: () -> Content
     let placeholder: () -> Placeholder
@@ -204,5 +206,10 @@ struct LoadPhaseHost<
                 failure(message)
             }
         }
+        .transition(.opacity)
+        .animation(
+            reduceMotion ? nil : .smooth(duration: StatePresentationMetrics.phaseTransitionDuration),
+            value: phase
+        )
     }
 }

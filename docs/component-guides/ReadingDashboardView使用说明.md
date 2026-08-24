@@ -26,11 +26,12 @@ ReadingDashboardView(
 - 通过 `@Environment(RepositoryContainer.self)` 读取 `readingDashboardRepository`。
 - 内部创建并持有 `ReadingDashboardViewModel`，消费首页 observation。
 - 复用 `ReadingHeatmapWidgetView`、`ReadingTrendMetricsSection`、`ReadingFeatureCardsSection`、`ReadingRecentBooksCard`、`ReadingYearSummaryCard`。
+- 复用 `XMInlineStatusBanner` 展示不阻断已有内容的仪表盘错误。
 - 复用 `ReadingGoalEditorSheet` 与 `ReadingYearSummarySheet` 承接业务弹层。
 
 ## 页面结构
 1. 顶部 `ReadingHeatmapWidgetView`
-2. 错误态 `ReadingDashboardInlineBanner`
+2. 错误态 `XMInlineStatusBanner(tone: .error)`
 3. `ReadingTrendMetricsSection` 三栏趋势总卡
 4. `ReadingFeatureCardsSection` 双功能卡（今日阅读 / 继续阅读）
 5. `ReadingRecentBooksCard` 横向书籍列表

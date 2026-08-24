@@ -5,7 +5,8 @@
 
 ## Foundation/
 
-- `SurfaceComponents.swift`: CardContainer（圆角/描边可配置）、EmptyStateView、HomeTopHeaderGradient 通用容器组件
+- `SurfaceComponents.swift`: CardContainer（圆角/描边可配置）、HomeTopHeaderGradient 通用表层组件
+- `StatePresentation/`: 通用状态展示组件族；`XMContentStateView` 承接页面/Sheet/列表背景完整状态，`XMCompactStateView` 承接卡片/局部容器，`XMInlineStatusBanner` 承接保留内容时的局部提示，`LoadingStateView` 与 `LoadingFeedbackKit` 统一加载视觉和时序
 - `HighlightColorPicker.swift`: 高亮 ARGB 色值网格选择组件
 - `XMBookCover.swift`: 统一书籍封面组件（固定宽高比 0.7 + `.fill` Crop 裁切 + 占位图 + 可配边框，支持 responsive/fixedWidth/fixedHeight/fixedSize 四种尺寸模式）
 - `XMBookGroupCover.swift`: 书籍分组组合封面组件（按 0/1/2/3/4+ 封面数量选择管理态布局，并提供列表、书盒与规整网格样式）
@@ -26,6 +27,15 @@
 - `XMToast.swift`: 全局轻量消息提示基建（统一 Toast 角色、时长、位置、动效、布局与 PopupView 封装）
 - `XMSettingsSheetComponents.swift`: 通用设置 Sheet 组件组（标题栏、分组卡片、跳转行、菜单行与开关行）
 - `NoteReviewPaging/`: 书摘回顾分页卡组组件（BigUIPaging 封装、卡组动效规格、后层内容预览与堆叠露出约束）
+
+### StatePresentation 约束
+
+- 生产路径的完整空态、无搜索结果和无内容失败统一使用 `XMContentStateView`；禁止在该目录外直接构造 `ContentUnavailableView`。
+- 卡片、分区和局部容器使用 `XMCompactStateView`；已有可信内容的刷新或写入失败使用 `XMInlineStatusBanner`。
+- `StatePresentation` 只统一展示，不持有 Repository、ViewModel 或全局业务状态机；容器适配器可以保留，但通用视觉必须委托给组件族。
+- 新 UI 与现有组件不完全贴合时，先配置现有参数，再判断是否扩展既有 `Style`；只有两个独立生产场景具备相同语义、结构和修复模式时才允许新增公共组件。
+- 新公共组件使用 `XM…StateView` 或 `XM…StatusBanner` 通用命名，只依赖展示语义与设计令牌；不得依赖业务模型、Repository、ViewModel 或网络状态，适用时复用 `XMStateRole`、`XMStateAction`。
+- 新公共组件必须加入 `StatePresentationCatalogView`，并同步术语表、UI 组件文档清单、组件指南及两个生产消费路径；例外类型必须在 `scripts/verify_state_presentations.sh` 中登记精确路径、类型和原因。
 
 ## TopBar/
 

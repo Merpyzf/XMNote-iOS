@@ -856,7 +856,10 @@ struct BookCollectionWereadImportSheet: View {
                     }
 
                 if let errorMessage {
-                    BookCollectionWereadImportErrorMessage(message: errorMessage)
+                    XMInlineStatusBanner(
+                        errorMessage.isEmpty ? "导入失败，请稍后重试" : errorMessage,
+                        tone: .warning
+                    )
                 }
 
                 if isLoading {
@@ -923,7 +926,10 @@ struct BookCollectionWereadImportPreviewSheet: View {
                     previewHeader
 
                     if let errorMessage {
-                        BookCollectionWereadImportErrorMessage(message: errorMessage)
+                        XMInlineStatusBanner(
+                            errorMessage.isEmpty ? "导入失败，请稍后重试" : errorMessage,
+                            tone: .warning
+                        )
                     }
 
                     VStack(spacing: Spacing.tight) {
@@ -1024,28 +1030,6 @@ struct BookCollectionWereadImportPreviewSheet: View {
     private func submit() {
         guard !isSaving else { return }
         onConfirm(preview)
-    }
-}
-
-private struct BookCollectionWereadImportErrorMessage: View {
-    let message: String
-
-    var body: some View {
-        HStack(alignment: .top, spacing: Spacing.tight) {
-            Image(systemName: "exclamationmark.triangle")
-                .font(AppTypography.captionMedium)
-                .foregroundStyle(Color.feedbackWarning)
-
-            Text(message.isEmpty ? "导入失败，请稍后重试" : message)
-                .font(AppTypography.caption)
-                .foregroundStyle(Color.feedbackWarning)
-                .fixedSize(horizontal: false, vertical: true)
-        }
-        .padding(Spacing.tight)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color.feedbackWarning.opacity(0.08), in: RoundedRectangle(cornerRadius: CornerRadius.blockSmall, style: .continuous))
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel("导入失败，\(message.isEmpty ? "请稍后重试" : message)")
     }
 }
 

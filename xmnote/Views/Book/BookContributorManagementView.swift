@@ -81,16 +81,18 @@ private struct BookContributorManagementContentView: View {
                 Color.clear
             }
         case .empty:
-            ContentUnavailableView(
-                "暂无\(viewModel.kind.itemTitle)",
+            XMContentStateView(
+                role: .empty,
+                title: "暂无\(viewModel.kind.itemTitle)",
                 systemImage: viewModel.kind == .author ? "person.text.rectangle" : "building.2"
             )
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         case .error(let message):
-            ContentUnavailableView(
-                "\(viewModel.kind.title)加载失败",
-                systemImage: "exclamationmark.triangle",
-                description: Text(message)
+            XMContentStateView(
+                role: .failure,
+                title: "\(viewModel.kind.title)加载失败",
+                message: message,
+                systemImage: "exclamationmark.triangle"
             )
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         case .content:

@@ -293,10 +293,24 @@ private struct NoteHomeStateHost<Content: View>: View {
                 case .content:
                     content
                 case .empty:
-                    EmptyStateView(icon: emptyIcon, message: emptyMessage)
+                    XMContentStateView(
+                        role: .empty,
+                        title: emptyMessage,
+                        systemImage: emptyIcon
+                    )
                         .offset(y: emptyStateOffset)
                 case .error(let message):
-                    NoteHomeFailureView(message: message, onRetry: onRetry)
+                    XMCompactStateView(
+                        role: .failure,
+                        title: "暂时无法加载",
+                        message: message,
+                        systemImage: "exclamationmark.triangle",
+                        action: XMStateAction("重试", systemImage: "arrow.clockwise", perform: onRetry),
+                        style: .card
+                    )
+                    .padding(.horizontal, Spacing.screenEdge)
+                    .padding(.top, Spacing.double)
+                    .frame(minHeight: NoteHomeLayout.stateMinHeight, alignment: .top)
                 }
             }
         }
@@ -313,34 +327,6 @@ private struct NoteHomeStateHost<Content: View>: View {
 
     private func syncLoadingGate() {
         loadingGate.update(intent: state == .loading ? .read : .none)
-    }
-}
-
-/// 数据读取失败时提供明确错误和重试动作，不使用短暂 Toast 隐藏失败事实。
-private struct NoteHomeFailureView: View {
-    let message: String
-    let onRetry: () -> Void
-
-    var body: some View {
-        CardContainer(showsBorder: false) {
-            VStack(alignment: .leading, spacing: Spacing.base) {
-                Label("暂时无法加载", systemImage: "exclamationmark.triangle")
-                    .font(AppTypography.headline)
-                    .foregroundStyle(Color.textPrimary)
-
-                Text(message)
-                    .font(AppTypography.subheadline)
-                    .foregroundStyle(Color.textSecondary)
-
-                Button("重试", action: onRetry)
-                    .font(AppTypography.subheadline)
-                    .buttonStyle(.bordered)
-            }
-            .padding(Spacing.contentEdge)
-        }
-        .padding(.horizontal, Spacing.screenEdge)
-        .padding(.top, Spacing.double)
-        .frame(minHeight: NoteHomeLayout.stateMinHeight, alignment: .top)
     }
 }
 

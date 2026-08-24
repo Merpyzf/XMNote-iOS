@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 xmnote/Utilities/DesignTokens.swift 的颜色、间距、圆角设计令牌
- * [OUTPUT]: 对外提供 CardContainer（支持圆角/描边颜色可配置）、中性紧凑 EmptyStateView、HomeTopHeaderGradient 三个通用表层组件
+ * [OUTPUT]: 对外提供 CardContainer（支持圆角/描边颜色可配置）、HomeTopHeaderGradient 与导航返回手势桥接
  * [POS]: UIComponents/Foundation 的基础表层组件集合，被各业务页面直接复用
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -42,79 +42,6 @@ struct CardContainer<Content: View>: View {
                         .stroke(borderColor, lineWidth: CardStyle.borderWidth)
                 }
             }
-    }
-}
-
-// MARK: - Empty State View
-
-/// 通用空状态以中性图标和辅助文字表达无内容，不与页面主操作争夺视觉焦点。
-struct EmptyStateView: View {
-    let icon: String
-    let message: String
-    @ScaledMetric(relativeTo: .footnote) private var iconSize = EmptyStateMetrics.iconSize
-
-    var body: some View {
-        VStack(spacing: Spacing.cozy) {
-            Image(systemName: icon)
-                .font(.system(size: iconSize, weight: .regular))
-                .foregroundStyle(Color.textHint)
-            Text(message)
-                .font(AppTypography.footnote)
-                .foregroundStyle(Color.textSecondary)
-                .multilineTextAlignment(.center)
-                .lineLimit(2)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(message)
-    }
-}
-
-private enum EmptyStateMetrics {
-    static let iconSize: CGFloat = 32
-}
-
-// MARK: - Loading State View
-
-/// 通用加载视图，支持轻量 inline 与卡片两种表达。
-struct LoadingStateView: View {
-    enum Style {
-        case inline
-        case card
-    }
-
-    let message: String?
-    let style: Style
-
-    init(_ message: String? = nil, style: Style = .inline) {
-        self.message = message
-        self.style = style
-    }
-
-    var body: some View {
-        Group {
-            switch style {
-            case .inline:
-                progressContent
-            case .card:
-                progressContent
-                    .padding(Spacing.contentEdge)
-                    .background(
-                        Color.surfaceCard,
-                        in: RoundedRectangle(cornerRadius: CornerRadius.blockLarge, style: .continuous)
-                    )
-            }
-        }
-    }
-
-    @ViewBuilder
-    private var progressContent: some View {
-        if let message, !message.isEmpty {
-            ProgressView(message)
-                .font(AppTypography.body)
-        } else {
-            ProgressView()
-        }
     }
 }
 
@@ -291,5 +218,9 @@ private struct NavigationPopGuardBridge: UIViewControllerRepresentable {
 }
 
 #Preview("EmptyState") {
-    EmptyStateView(icon: "book.pages", message: "暂无在读书籍")
+    XMCompactStateView(
+        role: .empty,
+        title: "暂无在读书籍",
+        systemImage: "book.pages"
+    )
 }

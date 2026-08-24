@@ -163,10 +163,12 @@ struct BookCollectionCoverSearchSheet: View {
     private func resultsSection(_ viewModel: BookCollectionCoverSearchViewModel) -> some View {
         switch viewModel.status {
         case .idle:
-            BookCollectionCoverSearchStatusCard(
-                systemImage: "photo.on.rectangle",
+            XMCompactStateView(
+                role: .instruction,
                 title: "输入书名开始匹配",
-                message: "会从当前在线来源查找有封面的候选结果。"
+                message: "会从当前在线来源查找有封面的候选结果。",
+                systemImage: "photo.on.rectangle",
+                style: .card
             )
         case .loading:
             loadingSection
@@ -186,16 +188,20 @@ struct BookCollectionCoverSearchSheet: View {
                 }
             }
         case .empty:
-            BookCollectionCoverSearchStatusCard(
-                systemImage: "photo.badge.exclamationmark",
+            XMCompactStateView(
+                role: .noResults,
                 title: "没有匹配到封面",
-                message: "可以换一个来源，或回到编辑页手动粘贴封面链接。"
+                message: "可以换一个来源，或回到编辑页手动粘贴封面链接。",
+                systemImage: "photo.badge.exclamationmark",
+                style: .card
             )
         case .failure(let message):
-            BookCollectionCoverSearchStatusCard(
-                systemImage: "wifi.exclamationmark",
+            XMCompactStateView(
+                role: .failure,
                 title: "搜索失败",
-                message: message
+                message: message,
+                systemImage: "wifi.exclamationmark",
+                style: .card
             )
         }
     }
@@ -302,36 +308,6 @@ private struct BookCollectionCoverSearchResultRow: View {
             return press
         case (true, true):
             return "暂无作者信息"
-        }
-    }
-}
-
-private struct BookCollectionCoverSearchStatusCard: View {
-    let systemImage: String
-    let title: String
-    let message: String
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: Spacing.cozy) {
-            Image(systemName: systemImage)
-                .font(AppTypography.title3)
-                .foregroundStyle(Color.textHint)
-
-            Text(title)
-                .font(AppTypography.subheadlineSemibold)
-                .foregroundStyle(Color.textPrimary)
-
-            Text(message)
-                .font(AppTypography.callout)
-                .foregroundStyle(Color.textSecondary)
-                .fixedSize(horizontal: false, vertical: true)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(Spacing.base)
-        .background(Color.surfaceCard, in: RoundedRectangle(cornerRadius: CornerRadius.blockLarge, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: CornerRadius.blockLarge, style: .continuous)
-                .stroke(Color.surfaceBorderSubtle, lineWidth: CardStyle.borderWidth)
         }
     }
 }

@@ -42,6 +42,7 @@
 - iOS26 参考入口：涉及液态玻璃与 iOS26 新特性时，优先查阅 `docs/learning/iOS26液态玻璃与高相关新特性开发参考.md`。
 - 页面状态参考入口：涉及页面状态恢复、导航路径恢复、scene 级状态持久化时，优先查阅 `docs/architecture/页面状态基建与开发模式.md`。
 - 加载状态参考入口：涉及加载态策略、读写反馈分级、Loading 门闩接入时，优先查阅 `docs/architecture/加载状态反馈基建设计.md`。
+- 通用状态展示参考入口：涉及空态、无搜索结果、无内容失败、卡片状态或保留内容时的局部错误提示，优先查阅 `docs/architecture/通用状态展示设计规范.md`。
 - 消息提示参考入口：涉及 Toast、Banner、Alert、Undo、删除反馈、手动排序反馈时，优先查阅 `docs/architecture/消息提示设计规范.md`。
 
 ## 3. 开发阶段与收口阶段
@@ -114,6 +115,18 @@
 - 弹窗按钮颜色规范（强制）：仅 warning/destructive 操作使用警告语义颜色，其余按钮必须使用系统默认语义颜色，禁止使用品牌色按钮。
 - 弹出菜单颜色规范（强制）：上下文菜单、长按菜单、更多菜单等各类弹出菜单应克制使用品牌色；普通操作使用系统默认色或 `menuActionForeground` 等中性色，只有删除、警告等具有明确语义的操作才使用对应的语义色，禁止用品牌色强调普通菜单项的可点击性。
 - 书籍封面渲染约束（强制）：所有书籍封面渲染必须使用 `XMBookCover`（`xmnote/UIComponents/Foundation/XMBookCover.swift`），禁止手写重复封面渲染组合。
+
+#### 通用状态展示
+- 状态组件唯一归属（强制）：跨模块状态展示统一位于 `xmnote/UIComponents/Foundation/StatePresentation/`；该目录只是 Foundation 内源码分组，不得另建 Swift Package、Framework 或 Target。
+- 完整状态入口（强制）：页面、Sheet 与列表背景的 instruction、empty、noResults、failure 统一使用 `XMContentStateView`；`StatePresentation/` 外禁止直接构造 `ContentUnavailableView`，禁止重新引入 `EmptyStateView` 或页面私有通用空态样式。
+- 紧凑与 Inline 边界（强制）：卡片、分区和局部容器使用 `XMCompactStateView`；已有可信内容的刷新、分页或写入失败必须保留内容并使用 `XMInlineStatusBanner`，禁止覆盖为阻断失败页。
+- 状态映射（强制）：数据尚未返回使用 placeholder/loading；数据源确认为空使用 `.empty`；搜索或筛选无匹配使用 `.noResults`；无可用内容且加载失败使用 `.failure`；等待用户前置选择使用 `.instruction`。
+- 抽象边界（强制）：通用状态组件只承接展示语义，不持有 Repository、ViewModel 或全局业务状态机；根启动失败、业务骨架、上传/导入百分比、扫描、AI 流式状态和领域时间线可以保留业务实现。
+- 容器适配（强制）：UIKit 列表背景、UICollectionView cell 和页面私有 StateHost 可以保留布局、生命周期和状态映射，但通用图标、文字、间距、颜色与动作视觉必须委托给 StatePresentation 组件族。
+- 状态组件扩展决策（强制）：现有组件与新 UI 不完全贴合时，依次判断：文案、图标或业务映射差异继续配置现有组件；相同容器结构下被多个场景稳定复用的视觉差异优先扩展现有 `Style`；只有至少两个独立生产源码文件证明相同语义、相同结构需求和相同修复模式时，才允许新增高抽象层级的公共状态组件；单一工作流或领域结构继续保留页面私有实现。
+- 新公共状态组件合同（强制）：新组件必须位于 `StatePresentation/`，采用可被闸门发现的通用命名（`XM…StateView` 或 `XM…StatusBanner`），只依赖设计令牌和展示语义，不得依赖业务模型、Repository、ViewModel 或网络状态；适用时复用 `XMStateRole`、`XMStateAction`，不得为单一业务扩大全局角色。
+- 新公共状态组件登记（强制）：新增组件必须同步加入测试中心 `StatePresentationCatalogView`，登记术语表、UI 组件文档清单和组件指南，并在指南中列出两个真实生产消费路径；`scripts/verify_state_presentations.sh` 必须通过。确属容器或领域例外时，仍须登记精确路径、类型和原因。
+
 - 结构性 UI 变化必须带过渡动画，优先 `.snappy`、`.smooth`、`.spring`。
 - 异步操作必须提供可感知反馈，避免点击无响应。
 - 加载反馈分级（强制）：读取类加载采用“延迟显示 + 最短驻留”策略，默认阈值 `delay=150ms`、`minimumVisible=200ms`；写操作反馈必须即时显示并禁用重复触发入口。
@@ -235,5 +248,6 @@
 - `bash scripts/verify_l3_protocol_headers.sh`
 - `bash scripts/verify_arch_docs_sync.sh`
 - `bash scripts/verify_component_guides.sh`
+- `bash scripts/verify_state_presentations.sh`
 - `bash scripts/verify_scroll_ux.sh`
 - `bash scripts/verify_ai_bug_knowledge.sh`

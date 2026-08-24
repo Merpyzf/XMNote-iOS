@@ -33,7 +33,11 @@ struct ChapterMoveSheet: View {
         NavigationStack {
             Group {
                 if visibleTargets.isEmpty {
-                    ContentUnavailableView.search(text: searchText)
+                    XMContentStateView(
+                        role: .noResults,
+                        title: "没有匹配的目录",
+                        message: searchText.isEmpty ? nil : "未找到与“\(searchText)”匹配的目录。"
+                    )
                 } else {
                     List(visibleTargets) { target in
                         Button {
@@ -797,12 +801,14 @@ struct ChapterRemoteSyncSheet: View {
             catalogList
         case .empty(let message):
             unavailableContent(
+                role: .empty,
                 title: viewModel.selectedCandidate == nil ? "未找到目录" : "暂无目录",
                 message: message,
                 systemImage: "list.bullet.indent"
             )
         case .error(let message):
             unavailableContent(
+                role: .failure,
                 title: "目录暂时无法获取",
                 message: message,
                 systemImage: "exclamationmark.triangle"
@@ -815,7 +821,11 @@ struct ChapterRemoteSyncSheet: View {
             configurationSection
             Section {
                 if visibleCandidates.isEmpty {
-                    ContentUnavailableView.search(text: viewModel.searchText)
+                    XMCompactStateView(
+                        role: .noResults,
+                        title: "没有匹配的候选书籍",
+                        message: viewModel.searchText.isEmpty ? nil : "未找到与“\(viewModel.searchText)”匹配的候选书籍。"
+                    )
                 } else {
                     ForEach(visibleCandidates) { candidate in
                         Button {
@@ -865,7 +875,11 @@ struct ChapterRemoteSyncSheet: View {
 
             Section {
                 if viewModel.visibleCatalogItems.isEmpty {
-                    ContentUnavailableView.search(text: viewModel.searchText)
+                    XMCompactStateView(
+                        role: .noResults,
+                        title: "没有匹配的目录",
+                        message: viewModel.searchText.isEmpty ? nil : "未找到与“\(viewModel.searchText)”匹配的目录。"
+                    )
                 } else {
                     ForEach(viewModel.visibleCatalogItems) { item in
                         Button {
@@ -922,23 +936,20 @@ struct ChapterRemoteSyncSheet: View {
     }
 
     private func unavailableContent(
+        role: XMStateRole,
         title: String,
         message: String,
         systemImage: String
     ) -> some View {
-        ContentUnavailableView {
-            Label(title, systemImage: systemImage)
-        } description: {
-            Text(message)
-        } actions: {
-            if viewModel.canReturnToCandidates {
-                Button("返回候选书籍", action: viewModel.returnToCandidates)
-                    .buttonStyle(.bordered)
-            } else {
-                Button("重新获取", action: viewModel.load)
-                    .buttonStyle(.bordered)
-            }
-        }
+        XMContentStateView(
+            role: role,
+            title: title,
+            message: message,
+            systemImage: systemImage,
+            action: viewModel.canReturnToCandidates
+                ? XMStateAction("返回候选书籍", systemImage: "chevron.backward", perform: viewModel.returnToCandidates)
+                : XMStateAction("重新获取", systemImage: "arrow.clockwise", perform: viewModel.load)
+        )
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 

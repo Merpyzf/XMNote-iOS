@@ -798,7 +798,7 @@ private final class BookWorkspaceScopeBarView: UIView {
         scrollView.translatesAutoresizingMaskIntoConstraints = false
         scrollView.showsHorizontalScrollIndicator = false
         scrollView.showsVerticalScrollIndicator = false
-        scrollView.alwaysBounceHorizontal = false
+        scrollView.alwaysBounceHorizontal = true
         scrollView.isDirectionalLockEnabled = true
         scrollView.contentInsetAdjustmentBehavior = .never
 
@@ -1471,7 +1471,6 @@ final class BookWorkspaceCollectionHostView: UIView, UICollectionViewDelegate, U
         pagerScrollView.showsHorizontalScrollIndicator = false
         pagerScrollView.showsVerticalScrollIndicator = false
         pagerScrollView.alwaysBounceHorizontal = true
-        pagerScrollView.alwaysBounceVertical = false
         pagerScrollView.contentInsetAdjustmentBehavior = .never
         pagerScrollView.scrollsToTop = false
         pagerScrollView.delegate = self
@@ -3662,10 +3661,11 @@ private struct BookWorkspaceCollectionEmptyRow: View {
     let row: BookWorkspaceEmptyRow
 
     var body: some View {
-        ContentUnavailableView(
-            row.title,
-            systemImage: row.systemImage,
-            description: Text(row.description)
+        XMCompactStateView(
+            role: .empty,
+            title: row.title,
+            message: row.description,
+            systemImage: row.systemImage
         )
         .frame(maxWidth: .infinity)
         .padding(.vertical, Spacing.double)

@@ -308,13 +308,13 @@ struct NoteListPhaseHost<Content: View>: View {
             } else if isLoading {
                 Color.clear
             } else if let errorMessage {
-                ContentUnavailableView {
-                    Label("暂时无法加载", systemImage: "exclamationmark.triangle")
-                } description: {
-                    Text(errorMessage)
-                } actions: {
-                    Button("重试", action: onRetry)
-                }
+                XMContentStateView(
+                    role: .failure,
+                    title: "暂时无法加载",
+                    message: errorMessage,
+                    systemImage: "exclamationmark.triangle",
+                    action: XMStateAction("重试", systemImage: "arrow.clockwise", perform: onRetry)
+                )
             } else {
                 successContent
             }
@@ -335,14 +335,22 @@ struct NoteListPhaseHost<Content: View>: View {
                     .allowsHitTesting(!isEmpty)
                     .accessibilityHidden(isEmpty)
 
-                EmptyStateView(icon: emptyIcon, message: emptyMessage)
+                XMContentStateView(
+                    role: .noResults,
+                    title: emptyMessage,
+                    systemImage: emptyIcon
+                )
                     .opacity(isEmpty ? 1 : 0)
                     .allowsHitTesting(isEmpty)
                     .accessibilityHidden(!isEmpty)
             }
             .animation(emptyContentAnimation, value: isEmpty)
         } else if isEmpty {
-            EmptyStateView(icon: emptyIcon, message: emptyMessage)
+            XMContentStateView(
+                role: .empty,
+                title: emptyMessage,
+                systemImage: emptyIcon
+            )
         } else {
             content
         }

@@ -154,24 +154,22 @@ private struct ChapterManagerContentView: View {
                 Color.clear
             }
         case .empty:
-            ContentUnavailableView {
-                Label("暂无目录", systemImage: "list.bullet.indent")
-            } description: {
-                Text("可以新增一级章节，再逐步整理书摘结构。")
-            } actions: {
-                Button("新增章节", action: viewModel.presentCreateRoot)
-                    .buttonStyle(.borderedProminent)
-            }
+            XMContentStateView(
+                role: .empty,
+                title: "暂无目录",
+                message: "可以新增一级章节，再逐步整理书摘结构。",
+                systemImage: "list.bullet.indent",
+                action: XMStateAction("新增章节", systemImage: "plus", perform: viewModel.presentCreateRoot)
+            )
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         case .error(let message):
-            ContentUnavailableView {
-                Label("目录暂时无法显示", systemImage: "exclamationmark.triangle")
-            } description: {
-                Text(message)
-            } actions: {
-                Button("重新读取", action: viewModel.retryObservation)
-                    .buttonStyle(.bordered)
-            }
+            XMContentStateView(
+                role: .failure,
+                title: "目录暂时无法显示",
+                message: message,
+                systemImage: "exclamationmark.triangle",
+                action: XMStateAction("重新读取", systemImage: "arrow.clockwise", perform: viewModel.retryObservation)
+            )
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         case .content:
             chapterList

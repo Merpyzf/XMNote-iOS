@@ -32,31 +32,6 @@ private enum ReadingRecentBooksCardLayout {
     static let progressFontSize: CGFloat = 10
 }
 
-/// ReadingDashboardInlineBanner 承接首页内联错误或提示文案，提供轻量动作出口而不打断滚动流。
-struct ReadingDashboardInlineBanner: View {
-    let message: String
-    let actionTitle: String
-    let onAction: () -> Void
-
-    var body: some View {
-        CardContainer(cornerRadius: CornerRadius.blockLarge, showsBorder: false) {
-            HStack(spacing: Spacing.base) {
-                Text(message)
-                    .font(AppTypography.footnote)
-                    .foregroundStyle(Color.textSecondary)
-                    .lineLimit(2)
-
-                Spacer(minLength: 0)
-
-                Button(actionTitle, action: onAction)
-                    .font(AppTypography.footnoteSemibold)
-                    .foregroundStyle(Color.brand)
-            }
-            .padding(Spacing.base)
-        }
-    }
-}
-
 /// ReadingTrendMetricsSection 把三项趋势指标收口为单张卡片，并统一处理分栏与分割线布局。
 struct ReadingTrendMetricsSection: View {
     let presentation: ReadingDashboardPresentation<[ReadingTrendMetric]>
@@ -1192,7 +1167,11 @@ struct ReadingRecentBooksCard: View {
                         .accessibilityHidden(true)
                 case .content(let books):
                     if books.isEmpty {
-                        EmptyStateView(icon: "books.vertical", message: "最近没有在读记录")
+                        XMCompactStateView(
+                            role: .empty,
+                            title: "最近没有在读记录",
+                            systemImage: "books.vertical"
+                        )
                             .frame(height: 160)
                     } else {
                         ScrollView(.horizontal, showsIndicators: false) {

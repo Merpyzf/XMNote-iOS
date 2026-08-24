@@ -58,7 +58,11 @@ NoteReviewPagingDeck(
     NoteReviewCardView(item: item, settings: settings)
         .padding(.horizontal, NoteReviewPagingLayoutSpec.iOSReviewDefault.cardHorizontalPadding)
 } emptyContent: {
-    EmptyStateView(icon: "text.quote", message: "暂无可回顾书摘")
+    XMCompactStateView(
+        role: .empty,
+        title: "暂无可回顾书摘",
+        systemImage: "text.quote"
+    )
 }
 ```
 

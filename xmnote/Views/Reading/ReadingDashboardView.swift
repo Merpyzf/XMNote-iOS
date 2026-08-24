@@ -123,10 +123,10 @@ private struct ReadingDashboardContent: View {
             ReadingHeatmapWidgetView(onOpenReadCalendar: onOpenReadCalendar)
 
             if let errorMessage = viewModel.errorMessage {
-                ReadingDashboardInlineBanner(
-                    message: errorMessage,
-                    actionTitle: "关闭",
-                    onAction: { viewModel.errorMessage = nil }
+                XMInlineStatusBanner(
+                    errorMessage,
+                    tone: .error,
+                    action: XMStateAction("关闭") { viewModel.errorMessage = nil }
                 )
             }
 

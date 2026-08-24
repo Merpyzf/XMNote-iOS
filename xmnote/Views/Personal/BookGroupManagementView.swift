@@ -283,21 +283,27 @@ private struct BookGroupManagementContentView: View {
                 Color.clear.bookGroupManagementStateRow()
             }
         case .empty:
-            ContentUnavailableView(
-                "暂无书籍分组",
+            XMContentStateView(
+                role: .empty,
+                title: "暂无书籍分组",
                 systemImage: "folder"
             )
             .bookGroupManagementStateRow()
         case .error(let message):
-            ContentUnavailableView(
-                "分组加载失败",
-                systemImage: "exclamationmark.triangle",
-                description: Text(message)
+            XMContentStateView(
+                role: .failure,
+                title: "分组加载失败",
+                message: message,
+                systemImage: "exclamationmark.triangle"
             )
             .bookGroupManagementStateRow()
         case .content:
             if viewModel.isSearchResultEmpty {
-                ContentUnavailableView.search(text: viewModel.normalizedSearchText)
+                XMContentStateView(
+                    role: .noResults,
+                    title: "没有匹配的分组",
+                    message: "未找到与“\(viewModel.normalizedSearchText)”匹配的分组。"
+                )
                     .bookGroupManagementStateRow()
             } else {
                 groupRows

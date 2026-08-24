@@ -48,18 +48,11 @@ struct ReadingHeatmapWidgetCard: View {
                     .padding(.vertical, ReadingHeatmapWidgetLayout.contentInset)
 
                     if let errorMessage {
-                        HStack(spacing: Spacing.half) {
-                            Text(errorMessage)
-                                .font(AppTypography.caption)
-                                .foregroundStyle(Color.feedbackWarning)
-                                .lineLimit(1)
-
-                            Spacer(minLength: 0)
-
-                            Button("重试", action: onRetry)
-                                .font(AppTypography.caption)
-                                .foregroundStyle(Color.brand)
-                        }
+                        XMInlineStatusBanner(
+                            errorMessage,
+                            tone: .warning,
+                            action: XMStateAction("重试", systemImage: "arrow.clockwise", perform: onRetry)
+                        )
                         .padding(.horizontal, ReadingHeatmapWidgetLayout.contentInset)
                         .padding(.bottom, ReadingHeatmapWidgetLayout.contentInset)
                     }

@@ -116,11 +116,11 @@ struct BookshelfBookListEmptyStateContainer: View {
     }
 
     var body: some View {
-        BookshelfContextualEmptyStateView(
-            icon: emptyState.icon,
+        XMContentStateView(
+            role: emptyState.stateRole,
             title: emptyState.title,
             message: emptyState.message,
-            iconColor: emptyState.iconColor
+            systemImage: emptyState.icon
         )
         .frame(maxWidth: .infinity)
         .frame(minHeight: BookshelfBookListLayoutMetrics.emptyHeight)

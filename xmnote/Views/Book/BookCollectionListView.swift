@@ -357,10 +357,10 @@ struct BookCollectionListView: View {
 
     private func emptyState(title: String) -> some View {
         VStack(spacing: Spacing.section) {
-            BookshelfContextualEmptyStateView(
-                icon: selectedKind == .manual ? "rectangle.stack.badge.plus" : "calendar",
+            XMCompactStateView(
+                role: .empty,
                 title: title,
-                message: nil
+                systemImage: selectedKind == .manual ? "rectangle.stack.badge.plus" : "calendar"
             )
             .frame(maxHeight: 260)
 
@@ -381,11 +381,11 @@ struct BookCollectionListView: View {
     }
 
     private func failureState(message: String) -> some View {
-        BookshelfContextualEmptyStateView(
-            icon: "exclamationmark.triangle",
+        XMContentStateView(
+            role: .failure,
             title: "书单加载失败",
             message: message.isEmpty ? "请稍后重试" : message,
-            iconColor: Color.feedbackWarning.opacity(0.42)
+            systemImage: "exclamationmark.triangle"
         )
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }

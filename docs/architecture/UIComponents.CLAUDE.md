@@ -1,6 +1,7 @@
 # UIComponents/
 成员清单
-- Foundation/SurfaceComponents.swift: 提供通用表层组件（CardContainer、EmptyStateView、HomeTopHeaderGradient）。
+- Foundation/SurfaceComponents.swift: 提供通用表层组件（CardContainer、HomeTopHeaderGradient）。
+- Foundation/StatePresentation/: 提供完整状态、紧凑状态、Inline Banner 与加载反馈组件族；生产路径的 ContentUnavailableView 唯一入口位于 XMContentStateView；新公共视觉需由两个独立生产场景证明相同结构并同步测试目录与组件治理登记。
 - Foundation/XMRemoteImage.swift: 提供统一远程图片组件（静态图 + GIF 探测/降级）。
 - Foundation/XMGIFImageView.swift: 提供 GIF 动画桥接组件（Gifu）。
 - Foundation/XMYearMonthPickerSheet.swift: 提供项目级年月/年份随机访问选择 Sheet（固定标题栏、两种选择模式、动态字体自适应）。

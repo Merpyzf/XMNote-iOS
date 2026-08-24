@@ -96,7 +96,11 @@ struct BookRelatedCategoryPickerSheet<ManagementDestination: View>: View {
         NavigationStack(path: $path) {
             Group {
                 if categories.isEmpty {
-                    EmptyStateView(icon: "square.grid.2x2", message: "没有可用分类")
+                    XMContentStateView(
+                        role: .empty,
+                        title: "没有可用分类",
+                        systemImage: "square.grid.2x2"
+                    )
                         .padding(Spacing.screenEdge)
                 } else {
                     ScrollView {
