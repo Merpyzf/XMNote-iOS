@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 DesignTokens、TopBarActionIcon、XMScrollEdgeChrome 与 SwiftUI Menu/Toggle/Button 等系统控件，接收可选关闭按钮视觉尺寸
- * [OUTPUT]: 对外提供支持固定内容顶部栏、底部栏、局部关闭按钮尺寸和可配置系统滚动边缘语义的 XMSettingsPageScaffold，以及 XMSettingsGroupCard、内容自适应选项胶囊、弱分割线与通用设置行组件
+ * [OUTPUT]: 对外提供支持固定内容顶部栏、底部栏、局部关闭按钮尺寸和可配置系统滚动边缘语义的 XMSettingsPageScaffold，以及支持分组/单项形态的 XMSettingsGroupCard、内容自适应选项胶囊、弱分割线与通用设置行组件
  * [POS]: UIComponents/Foundation 的通用设置 Sheet 组件，统一业务设置页标题栏、系统滚动边缘、固定操作区、分组卡片与行样式
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -216,21 +216,73 @@ struct XMSettingsPageScaffold<Content: View, ContentTopBar: View, BottomBar: Vie
     }
 }
 
-/// 设置分组卡片，统一业务设置页的表层、圆角与内部边距。
-struct XMSettingsGroupCard<Content: View>: View {
-    let content: Content
+/// 设置卡片的内容组织形态；单项形态只用于没有附属输入、提示或错误内容的唯一顶层设置行。
+enum XMSettingsGroupCardPresentation: Equatable {
+    case grouped
+    case singleItem
+}
 
-    /// 注入设置行内容，构造无描边分组卡片。
-    init(@ViewBuilder content: () -> Content) {
+/// 设置分组卡片，统一业务设置页的表层、圆角与内部边距，并为真正的单项设置提供 Capsule 语义。
+struct XMSettingsGroupCard<Content: View>: View {
+    let presentation: XMSettingsGroupCardPresentation
+    let groupedCornerRadius: CGFloat
+    let horizontalPadding: CGFloat
+    let verticalPadding: CGFloat
+    let content: Content
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    /// 注入设置行内容；默认保持既有分组规格，页面可显式选择单项形态及现有设计令牌中的分组圆角。
+    init(
+        presentation: XMSettingsGroupCardPresentation = .grouped,
+        groupedCornerRadius: CGFloat = CornerRadius.containerMedium,
+        horizontalPadding: CGFloat = Spacing.contentEdge,
+        verticalPadding: CGFloat = Spacing.half,
+        @ViewBuilder content: () -> Content
+    ) {
+        self.presentation = presentation
+        self.groupedCornerRadius = groupedCornerRadius
+        self.horizontalPadding = horizontalPadding
+        self.verticalPadding = verticalPadding
         self.content = content()
     }
 
     var body: some View {
         content
             .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, Spacing.contentEdge)
-            .padding(.vertical, Spacing.half)
-            .background(Color.surfaceCard, in: RoundedRectangle(cornerRadius: CornerRadius.containerMedium, style: .continuous))
+            .padding(.horizontal, horizontalPadding)
+            .padding(.vertical, verticalPadding)
+            .background(
+                Color.surfaceCard,
+                in: XMSettingsGroupCardShape(
+                    singleItemProgress: presentation == .singleItem ? 1 : 0,
+                    groupedCornerRadius: groupedCornerRadius
+                )
+            )
+            .animation(presentationAnimation, value: presentation)
+    }
+
+    private var presentationAnimation: Animation? {
+        reduceMotion ? nil : .smooth(duration: 0.18)
+    }
+}
+
+/// 在真实容器高度内计算 Capsule 半径，使单项与分组圆角可连续插值且无需伪造超大圆角令牌。
+private struct XMSettingsGroupCardShape: Shape {
+    var singleItemProgress: CGFloat
+    let groupedCornerRadius: CGFloat
+
+    var animatableData: CGFloat {
+        get { singleItemProgress }
+        set { singleItemProgress = newValue }
+    }
+
+    /// 根据当前布局尺寸生成连续圆角路径，展开过程中保持边缘稳定。
+    func path(in rect: CGRect) -> Path {
+        let capsuleRadius = min(rect.width, rect.height) / 2
+        let resolvedRadius = groupedCornerRadius
+            + (capsuleRadius - groupedCornerRadius) * singleItemProgress
+        return RoundedRectangle(cornerRadius: resolvedRadius, style: .continuous)
+            .path(in: rect)
     }
 }
 
@@ -323,6 +375,7 @@ struct XMSettingsValueMenuRow<Option: Hashable>: View {
     let optionImage: (Option) -> String?
     let onSelect: (Option) -> Void
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var body: some View {
         HStack(spacing: Spacing.base) {
@@ -355,15 +408,16 @@ struct XMSettingsValueMenuRow<Option: Hashable>: View {
         HStack(spacing: Spacing.half) {
             Text(value)
                 .font(AppTypography.subheadlineMedium)
-                .foregroundStyle(Color.textHint)
-                .lineLimit(1)
-                .minimumScaleFactor(0.82)
+                .foregroundStyle(Color.textSecondary)
+                .lineLimit(valueLineLimit)
+                .minimumScaleFactor(dynamicTypeSize.isAccessibilitySize ? 1 : 0.82)
+                .multilineTextAlignment(.trailing)
+                .fixedSize(horizontal: false, vertical: true)
                 .contentTransition(.opacity)
 
             Image(systemName: "chevron.down")
                 .font(AppTypography.caption)
-                .fontWeight(.semibold)
-                .foregroundStyle(Color.textHint)
+                .foregroundStyle(Color.iconSecondary)
         }
         .padding(.leading, Spacing.base)
         .frame(
@@ -387,6 +441,10 @@ struct XMSettingsValueMenuRow<Option: Hashable>: View {
 
     private var menuValueAnimation: Animation? {
         reduceMotion ? nil : .smooth(duration: 0.13)
+    }
+
+    private var valueLineLimit: Int? {
+        dynamicTypeSize.isAccessibilitySize ? nil : 1
     }
 
     @ViewBuilder

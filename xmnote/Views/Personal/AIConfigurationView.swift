@@ -1,6 +1,6 @@
 /**
- * [INPUT]: 依赖 RepositoryContainer 注入 AIRepositoryProtocol，依赖 AIConfigurationViewModel、项目设置卡片与统一反馈组件
- * [OUTPUT]: 对外提供 AIConfigurationView，承载供应商、固定 Base URL、模型、Keychain 密钥和三类 Prompt 配置入口
+ * [INPUT]: 依赖 RepositoryContainer 注入 AIRepositoryProtocol，依赖 AIConfigurationViewModel、设置分组卡片与统一反馈组件
+ * [OUTPUT]: 对外提供 AIConfigurationView，承载模型服务、按需展开的 API 凭证管理和三类 Prompt 配置入口
  * [POS]: Views/Personal 的 AI 配置页面壳层，被 PersonalRoute.aiConfiguration 导航消费
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -58,26 +58,32 @@ private struct AIConfigurationContentView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var activePromptKind: AIPromptKind?
     @State private var showsDeleteKeyAlert = false
+    @State private var isEditingAPIKey = false
+    @FocusState private var isAPIKeyFocused: Bool
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: Spacing.section) {
-                basicConfigurationSection
+            VStack(alignment: .leading, spacing: AIConfigurationLayout.sectionSpacing) {
+                modelServiceSection
+                credentialsSection
                 promptSection
-                privacyNotice
             }
             .padding(.horizontal, Spacing.screenEdge)
-            .padding(.top, Spacing.section)
+            .padding(.top, Spacing.base)
             .padding(.bottom, Spacing.contentEdge)
+            .frame(maxWidth: AIConfigurationLayout.contentMaxWidth)
+            .frame(maxWidth: .infinity)
         }
+        .scrollBounceBehavior(.always)
         .scrollIndicators(.hidden)
         .scrollDismissesKeyboard(.interactively)
         .background(Color.surfacePage)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Button(viewModel.isSaving ? "保存中…" : "保存") {
-                    Task { await viewModel.save() }
+                    saveConfiguration()
                 }
+                .tint(Color.brand)
                 .disabled(!viewModel.canSave)
             }
         }
@@ -103,27 +109,76 @@ private struct AIConfigurationContentView: View {
         )
     }
 
-    private var basicConfigurationSection: some View {
-        VStack(alignment: .leading, spacing: Spacing.cozy) {
+    private var modelServiceSection: some View {
+        VStack(alignment: .leading, spacing: Spacing.base) {
             sectionTitle("模型服务")
 
-            XMSettingsGroupCard {
+            XMSettingsGroupCard(
+                groupedCornerRadius: CornerRadius.containerXL,
+                horizontalPadding: Spacing.screenEdge,
+                verticalPadding: Spacing.none
+            ) {
                 VStack(spacing: Spacing.none) {
-                    Toggle("启用 AI 功能", isOn: $viewModel.configuration.isEnabled)
-                        .font(AppTypography.subheadline)
-                        .tint(Color.brand)
-                        .frame(minHeight: AIConfigurationLayout.rowHeight)
+                    Toggle(isOn: $viewModel.configuration.isEnabled) {
+                        VStack(alignment: .leading, spacing: Spacing.compact) {
+                            Text("启用 AI 功能")
+                                .font(AppTypography.subheadlineMedium)
+                                .foregroundStyle(Color.textPrimary)
+
+                            Text("用于书摘释义、选词解释与标签推荐")
+                                .font(AppTypography.caption)
+                                .foregroundStyle(Color.textSecondary)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                    }
+                    .tint(Color.brand)
+                    .frame(minHeight: AIConfigurationLayout.detailRowHeight)
 
                     settingsDivider
                     providerPicker
                     settingsDivider
                     modelPicker
-                    settingsDivider
-                    baseURLRow
-                    settingsDivider
-                    apiKeyRow
                 }
-                .padding(.horizontal, Spacing.contentEdge)
+            }
+        }
+    }
+
+    private var credentialsSection: some View {
+        VStack(alignment: .leading, spacing: Spacing.base) {
+            sectionTitle("访问凭证")
+
+            XMSettingsGroupCard(
+                presentation: credentialCardPresentation,
+                groupedCornerRadius: CornerRadius.containerXL,
+                horizontalPadding: Spacing.screenEdge,
+                verticalPadding: Spacing.none
+            ) {
+                VStack(spacing: Spacing.none) {
+                    HStack(spacing: Spacing.base) {
+                        Text("API Key")
+                            .font(AppTypography.subheadlineMedium)
+                            .foregroundStyle(Color.textPrimary)
+
+                        Spacer(minLength: Spacing.base)
+
+                        apiKeyTrailingAction
+                    }
+                    .frame(
+                        minHeight: shouldShowAPIKeyInput
+                            ? Spacing.actionReserved
+                            : AIConfigurationLayout.detailRowHeight
+                    )
+
+                    if shouldShowAPIKeyInput {
+                        settingsDivider
+
+                        apiKeyInput
+                            .padding(.top, Spacing.cozy)
+                            .padding(.bottom, Spacing.base)
+                            .transition(.opacity)
+                    }
+                }
+                .animation(credentialAnimation, value: shouldShowAPIKeyInput)
             }
 
             if let validationMessage = viewModel.validationMessage {
@@ -131,16 +186,21 @@ private struct AIConfigurationContentView: View {
                     .font(AppTypography.caption)
                     .foregroundStyle(Color.feedbackWarning)
                     .fixedSize(horizontal: false, vertical: true)
+                    .padding(.horizontal, Spacing.screenEdge)
                     .transition(.opacity)
             }
         }
     }
 
     private var promptSection: some View {
-        VStack(alignment: .leading, spacing: Spacing.cozy) {
+        VStack(alignment: .leading, spacing: Spacing.base) {
             sectionTitle("提示词")
 
-            XMSettingsGroupCard {
+            XMSettingsGroupCard(
+                groupedCornerRadius: CornerRadius.containerXL,
+                horizontalPadding: Spacing.screenEdge,
+                verticalPadding: Spacing.none
+            ) {
                 VStack(spacing: Spacing.none) {
                     ForEach(AIPromptKind.allCases) { kind in
                         Button {
@@ -150,7 +210,8 @@ private struct AIConfigurationContentView: View {
                                 Image(systemName: kind.systemImage)
                                     .font(AppTypography.bodyMedium)
                                     .foregroundStyle(Color.iconSecondary)
-                                    .frame(width: Spacing.section)
+                                    .frame(width: Spacing.double)
+                                    .accessibilityHidden(true)
 
                                 VStack(alignment: .leading, spacing: Spacing.compact) {
                                     Text(kind.title)
@@ -167,6 +228,7 @@ private struct AIConfigurationContentView: View {
                                 Image(systemName: "chevron.right")
                                     .font(AppTypography.captionSemibold)
                                     .foregroundStyle(Color.textHint)
+                                    .accessibilityHidden(true)
                             }
                             .frame(minHeight: AIConfigurationLayout.promptRowHeight)
                             .contentShape(Rectangle())
@@ -176,106 +238,46 @@ private struct AIConfigurationContentView: View {
 
                         if kind != AIPromptKind.allCases.last {
                             settingsDivider
-                                .padding(.leading, Spacing.section + Spacing.base)
+                                .padding(.leading, Spacing.double + Spacing.base)
                         }
                     }
                 }
-                .padding(.horizontal, Spacing.contentEdge)
             }
         }
-    }
-
-    private var privacyNotice: some View {
-        Label {
-            Text("API Key 仅保存在本机 Keychain，不写入数据库、UserDefaults 或备份。模型请求会直接发送到所选服务商。")
-                .font(AppTypography.caption)
-                .foregroundStyle(Color.textSecondary)
-                .fixedSize(horizontal: false, vertical: true)
-        } icon: {
-            Image(systemName: "lock.shield")
-                .foregroundStyle(Color.iconSecondary)
-        }
-        .accessibilityElement(children: .combine)
     }
 
     private var providerPicker: some View {
-        HStack(spacing: Spacing.base) {
-            Text("服务商")
-                .font(AppTypography.subheadline)
-                .foregroundStyle(Color.textPrimary)
-            Spacer(minLength: Spacing.base)
-            Picker("服务商", selection: providerBinding) {
-                ForEach(AIProvider.allCases) { provider in
-                    Text(provider.displayName).tag(provider)
-                }
-            }
-            .labelsHidden()
-            .pickerStyle(.menu)
-        }
+        XMSettingsValueMenuRow(
+            title: "服务商",
+            value: viewModel.selectedProvider.displayName,
+            options: AIProvider.allCases,
+            selection: viewModel.selectedProvider,
+            optionTitle: { $0.displayName },
+            optionImage: { _ in nil },
+            onSelect: selectProvider
+        )
         .frame(minHeight: AIConfigurationLayout.rowHeight)
     }
 
     private var modelPicker: some View {
-        HStack(spacing: Spacing.base) {
-            Text("模型")
-                .font(AppTypography.subheadline)
-                .foregroundStyle(Color.textPrimary)
-            Spacer(minLength: Spacing.base)
-            Picker("模型", selection: modelBinding) {
-                ForEach(viewModel.selectedProvider.modelOptions) { model in
-                    Text(model.title).tag(model.id)
-                }
-            }
-            .labelsHidden()
-            .pickerStyle(.menu)
-        }
+        XMSettingsValueMenuRow(
+            title: "模型",
+            value: viewModel.selectedProvider.modelTitle(for: viewModel.selectedModelID),
+            options: viewModel.selectedProvider.modelOptions.map(\.id),
+            selection: viewModel.selectedModelID,
+            optionTitle: { viewModel.selectedProvider.modelTitle(for: $0) },
+            optionImage: { _ in nil },
+            onSelect: viewModel.selectModel
+        )
         .frame(minHeight: AIConfigurationLayout.rowHeight)
     }
 
-    private var baseURLRow: some View {
-        VStack(alignment: .leading, spacing: Spacing.compact) {
-            Text("Base URL")
-                .font(AppTypography.captionMedium)
-                .foregroundStyle(Color.textSecondary)
-            Text(viewModel.selectedBaseURL)
+    private var apiKeyInput: some View {
+        VStack(alignment: .leading, spacing: Spacing.cozy) {
+            SecureField("输入新的 \(viewModel.selectedProvider.displayName) API Key", text: $viewModel.apiKeyDraft)
                 .font(AppTypography.subheadline)
                 .foregroundStyle(Color.textPrimary)
-                .textSelection(.enabled)
-                .lineLimit(2)
-        }
-        .frame(maxWidth: .infinity, minHeight: AIConfigurationLayout.rowHeight, alignment: .leading)
-        .accessibilityElement(children: .combine)
-    }
-
-    private var apiKeyRow: some View {
-        VStack(alignment: .leading, spacing: Spacing.cozy) {
-            HStack(spacing: Spacing.base) {
-                VStack(alignment: .leading, spacing: Spacing.compact) {
-                    Text("API Key")
-                        .font(AppTypography.captionMedium)
-                        .foregroundStyle(Color.textSecondary)
-                    Text(viewModel.selectedProviderHasStoredKey ? "Keychain 中已有密钥" : "尚未配置")
-                        .font(AppTypography.caption)
-                        .foregroundStyle(
-                            viewModel.selectedProviderHasStoredKey
-                                ? Color.feedbackSuccess
-                                : Color.textHint
-                        )
-                }
-
-                Spacer(minLength: Spacing.base)
-
-                if viewModel.selectedProviderHasStoredKey {
-                    Button("移除", role: .destructive) {
-                        showsDeleteKeyAlert = true
-                    }
-                    .font(AppTypography.captionMedium)
-                    .disabled(viewModel.isSaving)
-                }
-            }
-
-            SecureField("输入新的 \(viewModel.selectedProvider.displayName) API Key", text: $viewModel.apiKeyDraft)
-                .font(AppTypography.body)
+                .focused($isAPIKeyFocused)
                 .privacySensitive()
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
@@ -286,48 +288,133 @@ private struct AIConfigurationContentView: View {
                     Color.surfaceNested,
                     in: RoundedRectangle(cornerRadius: CornerRadius.blockMedium, style: .continuous)
                 )
+                .onAppear {
+                    guard isEditingAPIKey else { return }
+                    isAPIKeyFocused = true
+                }
 
-            Text(viewModel.selectedProviderHasStoredKey ? "留空会保留现有密钥；输入内容只用于本次更新。" : "密钥保存后不会再次回填显示。")
-                .font(AppTypography.caption)
-                .foregroundStyle(Color.textSecondary)
-                .fixedSize(horizontal: false, vertical: true)
+            if viewModel.selectedProviderHasStoredKey {
+                Text("保存后将替换当前 API Key")
+                    .font(AppTypography.caption)
+                    .foregroundStyle(Color.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
         }
-        .padding(.vertical, Spacing.cozy)
     }
 
-    private var providerBinding: Binding<AIProvider> {
-        Binding(
-            get: { viewModel.selectedProvider },
-            set: { viewModel.selectProvider($0) }
-        )
+    @ViewBuilder
+    private var apiKeyTrailingAction: some View {
+        if viewModel.selectedProviderHasStoredKey, isEditingAPIKey {
+            Button("取消") {
+                cancelAPIKeyEditing()
+            }
+            .font(AppTypography.subheadline)
+            .foregroundStyle(Color.textPrimary)
+            .frame(minHeight: Spacing.actionReserved)
+            .disabled(viewModel.isSaving)
+        } else if viewModel.selectedProviderHasStoredKey {
+            Menu {
+                Button {
+                    beginAPIKeyEditing()
+                } label: {
+                    XMMenuLabel("更换密钥", systemImage: "key")
+                }
+
+                Button(role: .destructive) {
+                    showsDeleteKeyAlert = true
+                } label: {
+                    Label("移除", systemImage: "trash")
+                }
+                .tint(Color.feedbackError)
+            } label: {
+                HStack(spacing: Spacing.compact) {
+                    Text("管理")
+                        .font(AppTypography.subheadline)
+                    Image(systemName: "chevron.down")
+                        .font(AppTypography.captionSemibold)
+                        .accessibilityHidden(true)
+                }
+                .foregroundStyle(Color.textPrimary)
+                .frame(minHeight: Spacing.actionReserved)
+            }
+            .xmMenuNeutralTint()
+            .disabled(viewModel.isSaving)
+            .accessibilityLabel("管理 API Key")
+        }
     }
 
-    private var modelBinding: Binding<String> {
-        Binding(
-            get: { viewModel.selectedModelID },
-            set: { viewModel.selectModel($0) }
-        )
+    private var shouldShowAPIKeyInput: Bool {
+        !viewModel.selectedProviderHasStoredKey || isEditingAPIKey
+    }
+
+    private var credentialCardPresentation: XMSettingsGroupCardPresentation {
+        shouldShowAPIKeyInput || viewModel.validationMessage != nil
+            ? .grouped
+            : .singleItem
+    }
+
+    private var credentialAnimation: Animation? {
+        reduceMotion ? nil : .smooth(duration: 0.18)
     }
 
     private var settingsDivider: some View {
-        Divider()
+        XMSettingsDivider()
     }
 
     private func sectionTitle(_ title: String) -> some View {
         Text(title)
-            .font(AppTypography.captionMedium)
+            .font(AppTypography.footnoteSemibold)
             .foregroundStyle(Color.textSecondary)
-            .padding(.horizontal, Spacing.contentEdge)
+            .padding(.horizontal, Spacing.screenEdge)
+    }
+
+    private func beginAPIKeyEditing() {
+        withAnimation(credentialAnimation) {
+            isEditingAPIKey = true
+        }
+    }
+
+    private func selectProvider(_ provider: AIProvider) {
+        resetAPIKeyEditing(animated: false)
+        viewModel.selectProvider(provider)
+    }
+
+    private func cancelAPIKeyEditing() {
+        viewModel.apiKeyDraft = ""
+        resetAPIKeyEditing(animated: true)
+    }
+
+    private func resetAPIKeyEditing(animated: Bool) {
+        isAPIKeyFocused = false
+        withAnimation(animated ? credentialAnimation : nil) {
+            isEditingAPIKey = false
+        }
+    }
+
+    /// 在主 Actor 上启动现有保存流程；非结构化任务不随页面消失自动取消，并由 ViewModel 防止重复写入。
+    private func saveConfiguration() {
+        Task { @MainActor in
+            guard await viewModel.save() else { return }
+            resetAPIKeyEditing(animated: true)
+        }
+    }
+
+    /// 在主 Actor 上启动密钥删除；非结构化任务不随警告收起自动取消，失败时保留当前凭证界面状态。
+    private func deleteSelectedProviderKey() {
+        Task { @MainActor in
+            guard await viewModel.deleteSelectedProviderKey() else { return }
+            resetAPIKeyEditing(animated: true)
+        }
     }
 
     private var deleteKeyAlertDescriptor: XMSystemAlertDescriptor {
         XMSystemAlertDescriptor(
             title: "移除 \(viewModel.selectedProvider.displayName) API Key？",
-            message: "密钥会从本机 Keychain 永久移除，AI 功能同时关闭。",
+            message: "移除后，当前服务商将无法继续使用，AI 功能会同时关闭",
             actions: [
                 XMSystemAlertAction(title: "取消", role: .cancel) { },
                 XMSystemAlertAction(title: "移除", role: .destructive) {
-                    Task { await viewModel.deleteSelectedProviderKey() }
+                    deleteSelectedProviderKey()
                 },
             ]
         )
@@ -336,7 +423,10 @@ private struct AIConfigurationContentView: View {
 
 /// AI 设置页局部布局只复用现有间距并固定最小触控高度，不定义新的视觉 token。
 private enum AIConfigurationLayout {
-    static let rowHeight: CGFloat = 52
+    static let contentMaxWidth: CGFloat = 640
+    static let sectionSpacing: CGFloat = Spacing.double + Spacing.cozy
+    static let rowHeight: CGFloat = 56
+    static let detailRowHeight: CGFloat = 64
     static let promptRowHeight: CGFloat = 64
     static let inputHeight: CGFloat = 48
 }
@@ -345,7 +435,7 @@ private extension AIPromptKind {
     var systemImage: String {
         switch self {
         case .noteExplanation:
-            "sparkles"
+            "quote.bubble"
         case .wordLookup:
             "text.magnifyingglass"
         case .autoTag:
