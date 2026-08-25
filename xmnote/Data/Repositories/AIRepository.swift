@@ -33,7 +33,7 @@ final class AIRepository: AIRepositoryProtocol, @unchecked Sendable {
         try await configurationStore.fetchSnapshot()
     }
 
-    /// 校验模型、Prompt 与启用态凭据后保存配置，空密钥输入保留 Keychain 现值。
+    /// 校验模型、Prompt 与启用态凭据后保存配置，空密钥输入保留当前供应商已有值。
     func saveConfiguration(_ configuration: AIConfiguration, apiKey: String?) async throws {
         let normalized = configuration.normalized
         try validate(normalized)

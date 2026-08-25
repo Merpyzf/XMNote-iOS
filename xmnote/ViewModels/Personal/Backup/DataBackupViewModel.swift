@@ -110,6 +110,7 @@ final class DataBackupViewModel {
     var localExportTicket: LocalBackupExportTicket?
     var restoreTarget: BackupRestoreTarget?
     var showRestoreSuccess = false
+    var restoreSuccessMessage = "数据已恢复。"
     var errorMessage: String?
     var showError = false
     var blockingAction: BackupBlockingAction?
@@ -430,9 +431,10 @@ extension DataBackupViewModel {
         self.restoreTarget = nil
 
         do {
+            let restoreResult: BackupRestoreResult
             switch restoreTarget.source {
             case .local(let ticket):
-                try await backupRepository.restoreLocalBackup(using: ticket) { progress in
+                restoreResult = try await backupRepository.restoreLocalBackup(using: ticket) { progress in
                     Task { @MainActor [weak self] in
                         guard let self else { return }
                         guard case .restoring = self.operationState else { return }
@@ -440,7 +442,7 @@ extension DataBackupViewModel {
                     }
                 }
             case .cloud(let backup):
-                try await backupRepository.restore(backup) { progress in
+                restoreResult = try await backupRepository.restore(backup) { progress in
                     Task { @MainActor [weak self] in
                         guard let self else { return }
                         guard case .restoring = self.operationState else { return }
@@ -450,6 +452,7 @@ extension DataBackupViewModel {
             }
 
             operationState = .idle
+            restoreSuccessMessage = restoreResult.successMessage
             showRestoreSuccess = true
             await refreshLatestBackupDate(showLoading: false)
         } catch {
@@ -521,6 +524,7 @@ private extension DataBackupViewModel {
         restoreTarget = nil
         localExportTicket = nil
         showRestoreSuccess = false
+        restoreSuccessMessage = "数据已恢复。"
         isShowingRestoreConfirmation = false
         errorMessage = nil
         showError = false

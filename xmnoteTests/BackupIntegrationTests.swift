@@ -503,7 +503,9 @@ private final class SlowBackupRepository: BackupRepositoryProtocol {
     func restoreLocalBackup(
         using ticket: LocalBackupImportTicket,
         progress: (@Sendable (RestoreProgress) -> Void)?
-    ) async throws {}
+    ) async throws -> BackupRestoreResult {
+        BackupRestoreResult(preferencesStatus: .notIncluded)
+    }
 
     func discardLocalImport(_ ticket: LocalBackupImportTicket) async {}
 
@@ -528,7 +530,12 @@ private final class SlowBackupRepository: BackupRepositoryProtocol {
         ]
     }
 
-    func restore(_ backup: BackupFileInfo, progress: (@Sendable (RestoreProgress) -> Void)?) async throws {}
+    func restore(
+        _ backup: BackupFileInfo,
+        progress: (@Sendable (RestoreProgress) -> Void)?
+    ) async throws -> BackupRestoreResult {
+        BackupRestoreResult(preferencesStatus: .notIncluded)
+    }
 }
 
 private extension BackupIntegrationTests {
