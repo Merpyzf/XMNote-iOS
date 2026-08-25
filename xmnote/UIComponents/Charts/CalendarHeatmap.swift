@@ -130,7 +130,7 @@ struct CalendarHeatmap: View {
                     }
                     .id(initialScrollRequest)
                     .frame(height: contentHeight, alignment: .top)
-                    .scrollBounceBehavior(.basedOnSize)
+                    .scrollBounceBehavior(.always)
                     // SwiftUI 在主线程执行滚动任务；月份策略变化会取消旧任务，request 身份保证仅最新请求定位，热度与配色刷新不会触发竞态式回跳。
                     .task(id: initialScrollRequest) {
                         guard let target = initialScrollRequest.target else { return }

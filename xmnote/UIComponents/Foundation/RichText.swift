@@ -853,7 +853,7 @@ extension RichText {
 #endif
 
 #Preview {
-    VStack(alignment: .leading, spacing: 16) {
+    VStack(alignment: .leading, spacing: Spacing.screenEdge) {
         RichText(html: "这是<b>加粗</b>和<i>斜体</i>与<mark style=\"background-color:-394337\">高亮</mark>文本")
         RichText(
             html: "引用块测试文本",

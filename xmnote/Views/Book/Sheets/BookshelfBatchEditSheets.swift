@@ -45,7 +45,7 @@ struct BookshelfMoveGroupSheet: View {
     }
 
     var body: some View {
-        BookshelfDisplaySettingPageScaffold(
+        XMSheetScaffold(
             title: "移入分组",
             subtitle: "已选\(selectedCount)本",
             onClose: { dismiss() },
@@ -255,7 +255,7 @@ struct BookshelfBookCollectionSheet: View {
     }
 
     var body: some View {
-        BookshelfDisplaySettingPageScaffold(
+        XMSheetScaffold(
             title: "加入书单",
             subtitle: "已选\(selectedCount)本",
             onClose: { dismiss() },
@@ -511,20 +511,20 @@ struct BookshelfBatchSourceSheet: View {
     }
 
     var body: some View {
-        BookshelfDisplaySettingPageScaffold(
+        XMSheetScaffold(
             title: "设置来源",
             subtitle: "已选\(selectedCount)本",
             onClose: { dismiss() }
         ) {
             VStack(spacing: Spacing.comfortable) {
-                BookshelfSettingsGroupCard {
+                XMSettingsGroup {
                     BookshelfBatchSearchField(
                         text: $searchKeyword,
                         placeholder: "搜索来源"
                     )
                 }
 
-                BookshelfSettingsGroupCard {
+                XMSettingsGroup {
                     BookshelfBatchCreateField(
                         text: $createName,
                         placeholder: "输入新来源",
@@ -536,7 +536,7 @@ struct BookshelfBatchSourceSheet: View {
                 }
 
                 if !mineOptions.isEmpty {
-                    BookshelfSettingsGroupCard {
+                    XMSettingsGroup {
                         VStack(spacing: Spacing.none) {
                             BookshelfBatchSectionTitle(title: BookshelfSourceCategory.mine.title)
                             ForEach(mineOptions) { option in
@@ -555,7 +555,7 @@ struct BookshelfBatchSourceSheet: View {
                 }
 
                 if !defaultOptions.isEmpty {
-                    BookshelfSettingsGroupCard {
+                    XMSettingsGroup {
                         VStack(spacing: Spacing.none) {
                             BookshelfBatchSectionTitle(title: BookshelfSourceCategory.appDefault.title)
                             ForEach(defaultOptions) { option in
@@ -574,7 +574,7 @@ struct BookshelfBatchSourceSheet: View {
                 }
 
                 if mineOptions.isEmpty && defaultOptions.isEmpty {
-                    BookshelfSettingsGroupCard {
+                    XMSettingsGroup {
                         BookshelfBatchEmptyHint(text: "没有匹配的来源")
                     }
                 }

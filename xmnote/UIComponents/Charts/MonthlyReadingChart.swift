@@ -65,7 +65,7 @@ struct MonthlyReadingChart: View {
         let maximumMonthDuration = maximumMonthDuration
         let maximumExpandedDayDuration = maximumExpandedDayDuration
 
-        VStack(spacing: 0) {
+        VStack(spacing: Spacing.none) {
             ForEach(Array(months.enumerated()), id: \.element.id) { index, month in
                 MonthlyReadingMonthSection(
                     month: month,
@@ -171,7 +171,7 @@ private struct MonthlyReadingMonthSection: View {
     }
 
     var body: some View {
-        VStack(spacing: 0) {
+        VStack(spacing: Spacing.none) {
             MonthlyReadingMonthHeader(
                 summaryText: month.summaryText,
                 isExpanded: isExpanded,
@@ -550,7 +550,7 @@ private struct MonthlyReadingDailyBar: View {
         GeometryReader { proxy in
             let targetBarWidth = targetBarWidth(containerWidth: proxy.size.width)
 
-            HStack(spacing: 0) {
+            HStack(spacing: Spacing.none) {
                 Text(day.dateText)
                     .font(MonthlyReadingChartTypography.dailyDate)
                     .foregroundStyle(style.dailyDateColor)

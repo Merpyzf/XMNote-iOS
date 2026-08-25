@@ -373,7 +373,7 @@ struct BookWorkspaceThemePalette {
         }
 
         var color: Color {
-            Color(.sRGB, red: red, green: green, blue: blue, opacity: 1)
+            Color.xmSRGB(red: red, green: green, blue: blue, opacity: 1)
         }
 
         var saturation: Double {
@@ -1171,7 +1171,7 @@ private struct BookWorkspaceContentView: View {
                 onOpen: { openNote(note) },
                 onEdit: { editNote(note) }
             )
-            .padding(.top, index == 0 ? Spacing.cozy : Spacing.base)
+            .padding(.top, index == .zero ? Spacing.cozy : Spacing.base)
         }
     }
 
@@ -1908,7 +1908,7 @@ struct BookChapterNotesView: View {
                     CollapsedRichTextPreview(
                         html: note.content,
                         baseFont: NoteExcerptTypography.uiBody,
-                        textColor: UIColor(Color.textPrimary),
+                        textColor: UIColor.xmResolved(Color.textPrimary),
                         lineSpacing: NoteExcerptTypography.bodyLineSpacing,
                         maxLines: 6
                     )
@@ -1922,7 +1922,7 @@ struct BookChapterNotesView: View {
                         CollapsedRichTextPreview(
                             html: note.idea,
                             baseFont: NoteExcerptTypography.uiIdea,
-                            textColor: UIColor(Color.textSecondary),
+                            textColor: UIColor.xmResolved(Color.textSecondary),
                             lineSpacing: NoteExcerptTypography.ideaLineSpacing,
                             maxLines: 4
                         )

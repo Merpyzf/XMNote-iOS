@@ -3,3 +3,4 @@ set -eu
 
 repository_root=$(git rev-parse --show-toplevel)
 PYTHONDONTWRITEBYTECODE=1 python3 "$repository_root/scripts/ai-knowledge/kb.py" validate
+PYTHONDONTWRITEBYTECODE=1 python3 "$repository_root/scripts/design-system/ds.py" lint --staged

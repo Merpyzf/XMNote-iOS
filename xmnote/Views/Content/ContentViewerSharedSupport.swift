@@ -1,5 +1,5 @@
 /**
- * [INPUT]: 依赖 ContentViewerSourceContext、SwiftUI 与 DesignTokens 提供通用查看器共享支撑能力
+ * [INPUT]: 依赖 ContentViewerSourceContext、XMTagLabel、SwiftUI 与 DesignTokens 提供通用查看器共享支撑能力
  * [OUTPUT]: 对外提供 ContentViewerPresentationStyle、关联应用配置提示与标签弹层
  * [POS]: Content 模块查看页共享 support，统一书摘/书评/相关内容 viewer 的展示语义与页面私有辅助弹层；系统分享复用 UIComponents
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -154,12 +154,7 @@ struct FlowTagWrap: View {
             ForEach(chunkedTags, id: \.self) { row in
                 HStack(spacing: Spacing.cozy) {
                     ForEach(row, id: \.self) { tag in
-                        Text(tag)
-                            .font(AppTypography.subheadline)
-                            .foregroundStyle(Color.textPrimary)
-                            .padding(.horizontal, Spacing.cozy)
-                            .padding(.vertical, Spacing.compact)
-                            .background(Color.tagBackground, in: Capsule())
+                        XMTagLabel(tag)
                     }
                     Spacer(minLength: 0)
                 }

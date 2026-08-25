@@ -1,0 +1,83 @@
+{
+  "schemaVersion": 1,
+  "sourceRoots": [
+    "xmnote"
+  ],
+  "excludedGlobs": [
+    "xmnote/Views/Debug/**",
+    "**/Vendor/**",
+    "**/*.generated.swift"
+  ],
+  "rules": [
+    {
+      "id": "DS001",
+      "title": "生产字体必须使用排版 token",
+      "enforcement": "enforced",
+      "reason": "固定系统字号绕过 Dynamic Type 与 XMNote 排版层级。",
+      "correctPath": "生产文本使用 AppTypography 或由它组合出的 feature typography token；SF Symbol 等 Image glyph 按图标语义管理"
+    },
+    {
+      "id": "DS002",
+      "title": "布局间距必须具有语义",
+      "enforcement": "enforced",
+      "reason": "散落的 padding、stack spacing 与 line spacing 无法稳定复用或审计。",
+      "correctPath": "Spacing；仅已证明跨场景的尺寸才晋升为公共 token"
+    },
+    {
+      "id": "DS003",
+      "title": "颜色构造集中管理",
+      "enforcement": "enforced",
+      "reason": "直接构造颜色会绕过浅色/深色、对比度与语义状态。",
+      "correctPath": "Color 语义成员或 DesignSystem/ColorConstruction.swift"
+    },
+    {
+      "id": "DS004",
+      "title": "表面圆角必须使用 token",
+      "enforcement": "enforced",
+      "reason": "数字圆角会造成相似页面的轮廓漂移。",
+      "correctPath": "CornerRadius，并为 RoundedRectangle 保留 continuous style"
+    },
+    {
+      "id": "DS005",
+      "title": "应用滚动容器始终回弹",
+      "enforcement": "enforced",
+      "reason": "短内容与长内容应保持一致的 iOS 物理反馈。",
+      "correctPath": ".scrollBounceBehavior(.always) 或 UIKit 对应轴 alwaysBounce… = true"
+    },
+    {
+      "id": "DS006",
+      "title": "中心弹窗使用 XMSystemAlert",
+      "enforcement": "enforced",
+      "reason": "多套中心弹窗实现会分裂按钮语义、颜色与行为。",
+      "correctPath": "XMSystemAlert"
+    },
+    {
+      "id": "DS007",
+      "title": "Domain 不依赖 UI 框架",
+      "enforcement": "enforced",
+      "reason": "领域模型承载 Color 或 UIKit 类型会形成反向依赖。",
+      "correctPath": "领域层保留纯值；颜色与图标映射放在 UIComponents 或 Views"
+    },
+    {
+      "id": "DSR001",
+      "title": "字面量 SF Symbol 语义审查",
+      "enforcement": "report",
+      "reason": "图标名称本身不一定构成债务，但重复语义需要集中 owner。",
+      "correctPath": "优先复用已存在的图标组件；独立单点可保留局部字面量"
+    },
+    {
+      "id": "DSR002",
+      "title": "动画时长语义审查",
+      "enforcement": "report",
+      "reason": "局部时长可以合理，但跨场景重复值需要 motion owner。",
+      "correctPath": "先证明相同结构变化与时序，再提取运动 token"
+    },
+    {
+      "id": "DSR003",
+      "title": "裸 ProgressView 使用审查",
+      "enforcement": "report",
+      "reason": "读取主态受 LoadingGate 约束，局部进度或写入反馈可能仍合理。",
+      "correctPath": "根据读取、写入或局部进度语义选择 LoadingGate、LoadingStateView 或保留局部 ProgressView"
+    }
+  ]
+}

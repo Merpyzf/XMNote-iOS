@@ -40,6 +40,15 @@ struct HeatmapColorPalette {
         veryMore: .brandDarkest
     )
 
+    /// 阅读日历年度热力图的模块调色板，不改变通用统计热力图的品牌色阶。
+    static let readCalendar = HeatmapColorPalette(
+        none: .readCalendarHeatmapNone,
+        veryLess: .readCalendarHeatmapVeryLess,
+        less: .readCalendarHeatmapLess,
+        more: .readCalendarHeatmapMore,
+        veryMore: .readCalendarHeatmapVeryMore
+    )
+
     /// 返回指定强度对应的颜色，供方格和图例共享同一映射。
     func color(for level: HeatmapLevel) -> Color {
         switch level {
@@ -178,7 +187,7 @@ private extension HeatmapLegend {
                 .frame(width: style.squareSize, height: style.squareSize)
                 .clipShape(
                     RoundedRectangle(
-                        cornerRadius: style.arrangement == .separated ? style.cornerRadius : 0,
+                        cornerRadius: style.arrangement == .separated ? style.cornerRadius : CornerRadius.none,
                         style: .continuous
                     )
                 )

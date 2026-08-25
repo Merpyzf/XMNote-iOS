@@ -99,7 +99,7 @@ struct DailyReadingRecordRow: View {
                 bookName: record.event.bookName,
                 presentationStyle: .contentFirst,
                 actionColor: .textSecondary,
-                quoteColor: UIColor(Color.textSecondary)
+                quoteColor: UIColor.xmResolved(Color.textSecondary)
             )
         case .readTiming(let event):
             DailyReadingTimingCard(
@@ -497,7 +497,7 @@ private struct DailyReadingTimingCard: View {
                         ExpandableRichText(
                             html: event.insight,
                             baseFont: NoteExcerptTypography.uiIdea,
-                            textColor: UIColor(Color.textSecondary),
+                            textColor: UIColor.xmResolved(Color.textSecondary),
                             lineSpacing: NoteExcerptTypography.ideaLineSpacing,
                             actionColor: .textSecondary
                         )

@@ -6,6 +6,11 @@
 - 标准库工具与校验：`scripts/ai-knowledge/`、`scripts/verify_ai_bug_knowledge.sh`；Git 渐进门禁：`.githooks/`。
 - 正式案例与模式：`docs/knowledge/bugs/`；本地索引、会话与草稿：已忽略的 `artifacts/ai-knowledge/`。
 
+### iOS 设计系统兼容入口
+- 唯一执行规范：`AGENTS.md` 的“设计系统工程入口”；架构说明：`docs/architecture/iOS设计系统工程规范.md`。
+- 令牌真相源：`xmnote/Utilities/DesignSystem/`；配置页与 Sheet 组件：`xmnote/UIComponents/Settings/`、`xmnote/UIComponents/Sheet/`。
+- AI 上下文、组件查询与规则检查统一通过 `python3 scripts/design-system/ds.py context|catalog|lint|audit|explain`，禁止新增旁路脚本或扩大 baseline 掩盖违规。
+
 ### 自动同步模块清单（脚本生成）
 <!-- AUTO_SYNC_MODULES_START -->
 - 由 `scripts/sync_arch_docs.sh` 自动维护，请勿手工修改。

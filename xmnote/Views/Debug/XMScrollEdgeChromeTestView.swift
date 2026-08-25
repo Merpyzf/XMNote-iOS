@@ -398,7 +398,7 @@ private enum XMScrollEdgeDemoSurface: CaseIterable, Identifiable {
         case .sheet:
             return Color.surfaceSheet
         case .custom:
-            return Color(light: Color(hex: 0xEEF4F1), dark: Color(hex: 0x17201C))
+            return Color.xmAdaptive(light: Color.xmHex(0xEEF4F1), dark: Color.xmHex(0x17201C))
         }
     }
 
@@ -411,7 +411,7 @@ private enum XMScrollEdgeDemoSurface: CaseIterable, Identifiable {
         case .sheet:
             return Color.surfaceCard
         case .custom:
-            return Color(light: Color.white.opacity(0.74), dark: Color.white.opacity(0.08))
+            return Color.xmAdaptive(light: Color.white.opacity(0.74), dark: Color.white.opacity(0.08))
         }
     }
 }

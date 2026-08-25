@@ -46,7 +46,7 @@ struct BookCoverProgressBar: View {
             )
             let barWidth = max(0, size.width - horizontalInset * 2)
 
-            VStack(spacing: 0) {
+            VStack(spacing: Spacing.none) {
                 Spacer(minLength: 0)
 
                 progressBar(width: barWidth, height: barHeight)

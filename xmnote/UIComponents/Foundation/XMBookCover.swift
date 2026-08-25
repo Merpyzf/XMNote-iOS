@@ -426,7 +426,7 @@ private extension XMBookCover {
         }
 
         private var edgeBand: some View {
-            HStack(spacing: 0) {
+            HStack(spacing: Spacing.none) {
                 LinearGradient(
                     stops: [
                         .init(color: .bookCoverSpineDark.opacity(tier == .depthEdge ? 0.96 : 0.86), location: 0),
@@ -442,7 +442,7 @@ private extension XMBookCover {
         }
 
         private var foldShadow: some View {
-            HStack(spacing: 0) {
+            HStack(spacing: Spacing.none) {
                 Color.clear
                     .frame(width: edgeWidth)
 

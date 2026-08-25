@@ -1,5 +1,5 @@
 /**
- * [INPUT]: 依赖 XMSettingsPageScaffold、XMInlineSearchField、XMKeywordHighlighting、XMSelectionIndicator、XMSystemAlert、LoadingGate、标签管理/布局偏好 Repository 与外部标签创建/保存闭包
+ * [INPUT]: 依赖 XMSheetScaffold、XMInlineSearchField、XMKeywordHighlighting、XMSelectionIndicator、XMSystemAlert、LoadingGate、标签管理/布局偏好 Repository 与外部标签创建/保存闭包
  * [OUTPUT]: 对外提供 XMTagSelectionItem、XMTagSelectionManagementConfiguration 与 XMTagSelectionSheet，以分层搜索工具区、共用选择逻辑、列表/紧凑双列网格切换和可选长按管理承载标签关联编辑
  * [POS]: UIComponents/Foundation 的跨模块标签选择基础组件，被书摘、回顾、详情、每日阅读与书架批量编辑 Sheet 复用
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -113,7 +113,7 @@ struct XMTagSelectionSheet: View {
     }
 
     var body: some View {
-        XMSettingsPageScaffold(
+        XMSheetScaffold(
             title: title,
             subtitle: subtitle,
             onClose: closeSheet,
@@ -1015,7 +1015,7 @@ private struct XMTagNameSheet: View {
     }
 
     var body: some View {
-        XMSettingsPageScaffold(
+        XMSheetScaffold(
             title: mode.title,
             onClose: closeSheet,
             closeVisualSize: XMTagSelectionLayout.closeButtonVisualSize,
@@ -1024,7 +1024,7 @@ private struct XMTagNameSheet: View {
                 submitBar
             }
         ) {
-            XMSettingsGroupCard {
+            XMSettingsGroup {
                 VStack(alignment: .leading, spacing: Spacing.cozy) {
                     TextField("输入标签名称", text: $name)
                         .font(AppTypography.body)

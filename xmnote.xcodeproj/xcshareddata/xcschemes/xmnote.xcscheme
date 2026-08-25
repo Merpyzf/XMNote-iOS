@@ -18,7 +18,7 @@
                BlueprintIdentifier = "8911149B2F39AC2F00D99384"
                BuildableName = "xmnote.app"
                BlueprintName = "xmnote"
-               ReferencedContainer = "container:XMNote.xcodeproj">
+               ReferencedContainer = "container:xmnote.xcodeproj">
             </BuildableReference>
          </BuildActionEntry>
       </BuildActionEntries>
@@ -38,7 +38,7 @@
                BlueprintIdentifier = "891114A82F39AC3200D99384"
                BuildableName = "xmnoteTests.xctest"
                BlueprintName = "xmnoteTests"
-               ReferencedContainer = "container:XMNote.xcodeproj">
+               ReferencedContainer = "container:xmnote.xcodeproj">
             </BuildableReference>
          </TestableReference>
          <TestableReference
@@ -49,7 +49,7 @@
                BlueprintIdentifier = "891114B22F39AC3200D99384"
                BuildableName = "xmnoteUITests.xctest"
                BlueprintName = "xmnoteUITests"
-               ReferencedContainer = "container:XMNote.xcodeproj">
+               ReferencedContainer = "container:xmnote.xcodeproj">
             </BuildableReference>
          </TestableReference>
       </Testables>
@@ -71,7 +71,7 @@
             BlueprintIdentifier = "8911149B2F39AC2F00D99384"
             BuildableName = "xmnote.app"
             BlueprintName = "xmnote"
-            ReferencedContainer = "container:XMNote.xcodeproj">
+            ReferencedContainer = "container:xmnote.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
    </LaunchAction>
@@ -88,7 +88,7 @@
             BlueprintIdentifier = "8911149B2F39AC2F00D99384"
             BuildableName = "xmnote.app"
             BlueprintName = "xmnote"
-            ReferencedContainer = "container:XMNote.xcodeproj">
+            ReferencedContainer = "container:xmnote.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
    </ProfileAction>

@@ -96,6 +96,15 @@
 ### UI 与交互
 - 遵循 iOS Human Interface Guidelines，保证业务一致，但采用 iOS 原生表达。
 
+#### 设计系统工程入口（强制）
+- 设计系统架构、依赖方向、组件边界与例外流程以 `docs/architecture/iOS设计系统工程规范.md` 为权威说明；代码真相源位于 `xmnote/Utilities/DesignSystem/`、`xmnote/UIComponents/Settings/` 与 `xmnote/UIComponents/Sheet/`。
+- 修改生产 UI 前，先执行 `python3 scripts/design-system/ds.py context --paths <相关 Swift 路径>` 获取当前规则与正确入口；查找公共组件使用 `python3 scripts/design-system/ds.py catalog [--symbol <名称>]`，禁止仅凭文件名猜测或新建同类实现。
+- 开发中执行 `python3 scripts/design-system/ds.py lint --changed`；规则不清楚时执行 `python3 scripts/design-system/ds.py explain <规则ID>`；收口执行 `python3 scripts/design-system/ds.py audit`。`Makefile.parallel-ios` 的 `ai-build` 与 Git pre-commit 已接入变更范围检查，不得绕过。
+- `DS001`–`DS007` 为阻断规则；`DSR001`–`DSR003` 为需结合上下文判断的观察项。当前 enforced 基线必须保持 0；禁止用扩大排除范围、降级规则或写入新 baseline 的方式消除失败。规则误报必须以最小复现补充工具测试后修正规则。
+- 配置类页面使用 `XMSettingsPage + XMSettingsSection + XMSettingsGroup` 组合，已证明复用的行仅使用 `XMSettingsToggleRow` 与 `XMSettingsValueMenuRow`；业务差异保留在页面私有组合中，禁止新增参数膨胀的万能设置行。
+- 通用业务 Sheet 使用 `XMSheetScaffold`；标题栏、滚动回弹、固定顶栏/底栏由 scaffold 统一，业务状态与业务控件仍由功能模块持有，禁止 `AnyView` 类型擦除。
+- 新增全局 token 或跨模块组件前，必须证明至少两个独立生产场景具有相同语义、相同根因与相同复用方式；单页差异优先使用页面级组合常量或私有子视图。
+
 #### 产品文案与标点（强制）
 - 规范依据：组件语义与写作原则以 Apple Human Interface Guidelines 的 [Writing](https://developer.apple.com/design/human-interface-guidelines/writing)、[Buttons](https://developer.apple.com/design/human-interface-guidelines/buttons)、[Alerts](https://developer.apple.com/design/human-interface-guidelines/alerts)、[Notifications](https://developer.apple.com/design/human-interface-guidelines/notifications) 为平台基线，简体中文标点以现行 [GB/T 15834-2011](https://openstd.samr.gov.cn/bzgk/std/newGbInfo?hcno=22EA6D162E4110E752259661E1A0D0A8) 为语言基线；组件专项规则优先于通用短文案规则。
 - 适用范围：所有用户可见文本均须遵守本节，包括生产与 Debug 界面、字符串目录、可访问性文案，以及 Domain、Repository、Service 中最终会展示给用户的错误或状态信息。
@@ -138,7 +147,7 @@
 - 底部沉浸滚动约束（强制）：涉及 `ScrollView`、`safeArea` 与底部导航/手势区时，内容在底部圆角区域必须平滑过渡，禁止生硬裁切。
 
 ### 字体与设计令牌
-- 生产文本统一走 `xmnote/Utilities/DesignTokens.swift` 中的 `AppTypography` 或页面级组合 token；`SemanticTypography` 与 `BrandTypography` 仅作为底层排版基础设施存在，不作为页面层默认入口。
+- 生产文本统一走 `xmnote/Utilities/DesignSystem/AppTypography.swift` 中的 `AppTypography` 或页面级组合 token；`SemanticTypography` 与 `BrandTypography` 仅作为底层排版基础设施存在，不作为页面层默认入口。
 - 生产路径禁止直接新增 `.font(.system(size: ...))`、`UIFont.systemFont(ofSize:)`、`UIFont.boldSystemFont(ofSize:)` 等固定字号写法；禁止在页面层随手 `.weight(...)` 或散落 `lineSpacing(...)` 魔法数字。
 - 新增文本前先判定对象是 `生产文本 / 品牌数字与品牌标题 / 图标或装饰 glyph`；生产文本优先使用 `AppTypography`，品牌强调位使用 `AppTypography.brandDisplay(...)` 与相关裁切能力，书架首页优先使用 `BookshelfTypography`，书摘列表优先使用 `NoteExcerptTypography`。
 - 文字层级必须遵循以下已定稿 token，不得因单个功能迭代随意改变字号、字重、行距或使用场景：
@@ -158,7 +167,7 @@
 - 书摘列表文本层级规则：正文是第一阅读层级，保持 15pt regular 并通过 7pt 行距形成稳定阅读节奏；想法区低于正文一层；footer 必须可读但不抢正文，主要辅助信息禁止使用过淡的 `.tertiary`。
 - 标题、正文、辅助信息、按钮文案边界：标题优先使用页面专用 token 或 `AppTypography.headline/title*`，不得为了强调直接加粗或放大；正文优先使用 `AppTypography.body/callout/subheadline` 或专用阅读 token，长文本必须同时明确行距与截断策略；辅助信息优先 11-12pt 并使用 `Color.textSecondary` / `Color.textHint` 等语义色；按钮文案使用所在页面 token，普通按钮不得默认使用品牌展示字体或自定义固定字号。
 - 涉及文本宽度、行高、baseline、截断测量时，测量字体必须与渲染字体同源；例如书架标题跑马灯必须同步使用 `BookshelfTypography.gridTitle` 与对应 UIKit 测量字体。
-- 跨组件重复出现的文本层级必须沉淀到 `DesignTokens.swift` 的 `AppTypography` 或其组合 token；禁止散落魔法数字。
+- 跨组件重复出现的文本层级必须沉淀到 `DesignSystem/AppTypography.swift` 的 `AppTypography` 或其组合 token；禁止散落魔法数字。
 - 后续新增页面或功能必须优先复用现有设计 token；如确需新增文本样式，必须在代码变更说明中写明新增原因、目标场景、与现有 token 的差异，并保持字号、字重、行距和阅读舒适度与当前文字系统一致。
 
 ### 编码与注释
@@ -243,6 +252,8 @@
 - 提交前必须先执行 `git status --short` 与 `git diff --stat` 自检；发现无关改动时需先和用户确认是否纳入本次提交。
 
 ### 提交前 / 收口后必须执行的脚本
+- `python3 scripts/design-system/ds.py audit`
+- `make -f Makefile.parallel-ios ai-ui-lint-test`
 - `bash scripts/verify_glossary.sh`
 - `bash scripts/verify_ui_glossary_scope.sh`
 - `bash scripts/verify_view_component_boundaries.sh`

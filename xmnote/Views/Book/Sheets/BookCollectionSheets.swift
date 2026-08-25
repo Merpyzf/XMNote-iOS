@@ -15,7 +15,7 @@ struct BookCollectionSummarySheet: View {
     let detail: BookCollectionDetail
 
     var body: some View {
-        BookshelfDisplaySettingPageScaffold(
+        XMSheetScaffold(
             title: "书单简介",
             subtitle: kindSubtitle,
             onClose: { dismiss() },
@@ -151,7 +151,7 @@ struct BookCollectionFormSheet: View {
     }
 
     var body: some View {
-        BookshelfDisplaySettingPageScaffold(
+        XMSheetScaffold(
             title: presentation.title,
             subtitle: "标题与简介",
             onClose: { dismiss() },
@@ -283,7 +283,7 @@ struct BookCollectionRecommendSheet: View {
     }
 
     var body: some View {
-        BookshelfDisplaySettingPageScaffold(
+        XMSheetScaffold(
             title: presentation.editActionTitle(hasText: !edit.item.recommend.isEmpty),
             subtitle: presentation.title,
             onClose: { dismiss() },
@@ -431,7 +431,7 @@ struct BookCollectionBookMetadataEditSheet: View {
     }
 
     var body: some View {
-        BookshelfDisplaySettingPageScaffold(
+        XMSheetScaffold(
             title: "编辑书籍信息",
             subtitle: edit.item.isPlaceholder ? "未加入书架" : "书单内书籍",
             onClose: { dismiss() },
@@ -729,7 +729,7 @@ struct BookCollectionAnnualDescriptionSheet: View {
     }
 
     var body: some View {
-        BookshelfDisplaySettingPageScaffold(
+        XMSheetScaffold(
             title: "编辑年度说明",
             subtitle: subtitle,
             onClose: { dismiss() },
@@ -816,7 +816,7 @@ struct BookCollectionWereadImportSheet: View {
     let onParse: (String) -> Void
 
     var body: some View {
-        BookshelfDisplaySettingPageScaffold(
+        XMSheetScaffold(
             title: "导入微信读书书单",
             subtitle: "粘贴链接",
             onClose: { dismiss() },
@@ -898,7 +898,7 @@ struct BookCollectionWereadImportPreviewSheet: View {
     let onConfirm: (BookCollectionImportPreview) -> Void
 
     var body: some View {
-        BookshelfDisplaySettingPageScaffold(
+        XMSheetScaffold(
             title: "确认导入",
             subtitle: "\(preview.books.count) 本书",
             onClose: { dismiss() },

@@ -630,11 +630,11 @@ private struct ReadCalendarMonthGridWeekRow: View {
     }
 
     private func heatmapColor(for payload: ReadCalendarMonthGrid.DayPayload) -> Color {
-        Color.readCalendarHeatmapColor(for: payload.heatmapLevel)
+        HeatmapColorPalette.readCalendar.color(for: payload.heatmapLevel)
     }
 
     private func yearCompactHeatmapColor(for payload: ReadCalendarMonthGrid.DayPayload) -> Color {
-        Color.readCalendarHeatmapColor(for: payload.heatmapLevel)
+        HeatmapColorPalette.readCalendar.color(for: payload.heatmapLevel)
     }
 
     /// 返回封面堆叠数据：优先使用外部注入，未注入时回落到内置占位生成逻辑。
@@ -794,7 +794,7 @@ private struct ReadCalendarMonthGridWeekRow: View {
                         Capsule(style: .continuous)
                             .fill(visualStyle.continuationColor.color)
                             .frame(width: 2, height: laneBarHeight * 0.68)
-                            .padding(.leading, 1)
+                            .padding(.leading, Spacing.hairline)
                             .frame(maxWidth: .infinity, alignment: .leading)
                     }
 
@@ -802,7 +802,7 @@ private struct ReadCalendarMonthGridWeekRow: View {
                         Capsule(style: .continuous)
                             .fill(visualStyle.continuationColor.color)
                             .frame(width: 2, height: laneBarHeight * 0.68)
-                            .padding(.trailing, 1)
+                            .padding(.trailing, Spacing.hairline)
                             .frame(maxWidth: .infinity, alignment: .trailing)
                     }
                 }
@@ -828,7 +828,7 @@ private struct ReadCalendarMonthGridWeekRow: View {
                         activateReadDoneEvent(segment)
                     } label: {
                         eventDoneBadge(segment, visualStyle: visualStyle)
-                            .padding(.trailing, 2)
+                            .padding(.trailing, Spacing.tiny)
                             .frame(
                                 width: min(segmentWidth, resolvedReadDoneBadgeHitWidth),
                                 height: laneBarHeight,
@@ -842,7 +842,7 @@ private struct ReadCalendarMonthGridWeekRow: View {
                     .frame(maxWidth: .infinity, alignment: .trailing)
                 } else {
                     eventDoneBadge(segment, visualStyle: visualStyle)
-                        .padding(.trailing, 2)
+                        .padding(.trailing, Spacing.tiny)
                         .frame(maxWidth: .infinity, alignment: .trailing)
                         .allowsHitTesting(false)
                 }
@@ -1174,7 +1174,7 @@ struct ReadCalendarEventRGBA {
     }
 
     var color: Color {
-        Color(red: red, green: green, blue: blue, opacity: alpha)
+        Color.xmSRGB(red: red, green: green, blue: blue, opacity: alpha)
     }
 
     var simpleLuminance: Double {

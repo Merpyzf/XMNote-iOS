@@ -23,8 +23,8 @@ struct BookReadingDetailSettingSheet: View {
     }
 
     var body: some View {
-        XMSettingsPageScaffold(title: "自定义", onClose: { dismiss() }) {
-            XMSettingsGroupCard {
+        XMSheetScaffold(title: "自定义", onClose: { dismiss() }) {
+            XMSettingsGroup {
                 settingRow(
                     title: "渐变背景",
                     systemImage: "circle.hexagongrid",

@@ -317,8 +317,11 @@ private extension RichTextEditorView {
                 } else if style == .italic {
                     applyCJKOblique(to: currentFont, in: subRange)
                 } else if style == .bold {
-                    // withSymbolicTraits 返回 nil（oblique 字体上），强制 bold 系统字体
-                    let boldFont = UIFont.boldSystemFont(ofSize: currentFont.pointSize)
+                    // withSymbolicTraits 在部分倾斜字体上返回 nil，保留当前字体族并强制写入粗体权重。
+                    let boldDescriptor = currentFont.fontDescriptor.addingAttributes([
+                        .traits: [UIFontDescriptor.TraitKey.weight: UIFont.Weight.bold]
+                    ])
+                    let boldFont = UIFont(descriptor: boldDescriptor, size: currentFont.pointSize)
                     var finalDesc = boldFont.fontDescriptor
                     if hasOblique {
                         finalDesc = finalDesc.addingAttributes([.matrix: Self.obliqueTransform])

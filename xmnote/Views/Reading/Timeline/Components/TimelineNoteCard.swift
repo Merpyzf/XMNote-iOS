@@ -72,7 +72,7 @@ struct TimelineNoteCard: View {
         ExpandableRichText(
             html: event.idea,
             baseFont: ideaBodyFont,
-            textColor: UIColor(Color.textSecondary),
+            textColor: UIColor.xmResolved(Color.textSecondary),
             lineSpacing: ideaBodyLineSpacing,
             actionColor: actionColor,
             quoteColor: quoteColor
@@ -129,7 +129,7 @@ struct TimelineNoteCard: View {
                     TimelineInlineTag(text: tag)
                 }
             }
-            .padding(.vertical, 1)
+            .padding(.vertical, Spacing.hairline)
         }
     }
 }

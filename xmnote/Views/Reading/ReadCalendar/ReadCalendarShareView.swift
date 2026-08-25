@@ -509,11 +509,11 @@ struct ReadCalendarShareView: View {
     }
 
     private func templateBackground(_ template: ReadCalendarShareTemplate) -> Color {
-        Color(hex: UInt(template.palette.backgroundARGB & 0x00FF_FFFF))
+        Color.xmHex(UInt(template.palette.backgroundARGB & 0x00FF_FFFF))
     }
 
     private func templateAccent(_ template: ReadCalendarShareTemplate) -> Color {
-        Color(hex: UInt(template.palette.accentARGB & 0x00FF_FFFF))
+        Color.xmHex(UInt(template.palette.accentARGB & 0x00FF_FFFF))
     }
 }
 

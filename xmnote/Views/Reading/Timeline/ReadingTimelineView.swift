@@ -130,7 +130,7 @@ private struct TimelineBootstrapCalendarPanel: View {
                     .padding(.horizontal, Spacing.contentEdge)
                     .padding(.top, Spacing.contentEdge)
 
-                VStack(spacing: 8) {
+                VStack(spacing: Spacing.cozy) {
                     weekdayRow
                     calendarGrid
                 }
@@ -204,7 +204,7 @@ private extension TimelineBootstrapCalendarPanel {
     }
 
     var weekdayRow: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: Spacing.cozy) {
             ForEach(calendar.veryShortStandaloneWeekdaySymbols, id: \.self) { symbol in
                 Text(symbol)
                     .font(TimelineCalendarStyle.weekdayFont)
@@ -219,8 +219,8 @@ private extension TimelineBootstrapCalendarPanel {
         let days = daySlots
 
         return LazyVGrid(
-            columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 7),
-            spacing: 8
+            columns: Array(repeating: GridItem(.flexible(), spacing: Spacing.cozy), count: 7),
+            spacing: Spacing.cozy
         ) {
             ForEach(Array(days.enumerated()), id: \.offset) { _, day in
                 if let day {
@@ -1131,7 +1131,7 @@ private struct TimelineBootstrapEventRow: View {
                     style: StrokeStyle(lineWidth: 1, lineCap: .round, dash: [3, 5])
                 )
                 .frame(width: 18)
-                .padding(.leading, 2)
+                .padding(.leading, Spacing.tiny)
 
             TimelineBootstrapCardPlaceholder()
         }

@@ -76,6 +76,8 @@ private struct OCRCameraScreen: View {
 
     private static let darkForegroundPrimary = Color.white.opacity(0.96)
     private static let darkForegroundSecondary = Color.white.opacity(0.72)
+    private static let focusOuterCornerRadius: CGFloat = 14
+    private static let focusInnerCornerRadius: CGFloat = 9
 
     @Bindable var viewModel: NotePhotoOCRFlowViewModel
     @ObservedObject var cameraController: OCRCameraSessionController
@@ -134,7 +136,7 @@ private extension OCRCameraScreen {
         ZStack {
             cameraPreviewLayer
 
-            VStack(spacing: 0) {
+            VStack(spacing: Spacing.none) {
                 topEdgeScrim
                 Spacer(minLength: 0)
                 bottomEdgeScrim
@@ -303,9 +305,9 @@ private extension OCRCameraScreen {
             Image(systemName: "sparkles")
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(Color.brand)
-                .padding(.top, 2)
+                .padding(.top, Spacing.tiny)
 
-            VStack(alignment: .leading, spacing: 3) {
+            VStack(alignment: .leading, spacing: Spacing.micro) {
                 Text("拍摄建议")
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(Self.darkForegroundPrimary)
@@ -329,8 +331,8 @@ private extension OCRCameraScreen {
             .buttonStyle(.plain)
             .accessibilityLabel("关闭拍摄建议")
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 12)
+        .padding(.horizontal, Spacing.comfortable)
+        .padding(.vertical, Spacing.base)
         .glassEffect(.regular, in: .rect(cornerRadius: CornerRadius.blockLarge))
     }
 
@@ -379,30 +381,30 @@ private extension OCRCameraScreen {
             Image(systemName: tint == Color.brand ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
                 .font(.caption)
                 .foregroundStyle(tint)
-                .padding(.top, 2)
+                .padding(.top, Spacing.tiny)
             Text(text)
                 .font(.caption)
                 .foregroundStyle(Self.darkForegroundPrimary)
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 10)
+        .padding(.horizontal, Spacing.base)
+        .padding(.vertical, Spacing.tight)
         .frame(maxWidth: .infinity, alignment: .leading)
         .glassEffect(.regular, in: .rect(cornerRadius: CornerRadius.blockLarge))
     }
 
     private func focusIndicator(state: FocusIndicatorState) -> some View {
         ZStack {
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
+            RoundedRectangle(cornerRadius: Self.focusOuterCornerRadius, style: .continuous)
                 .stroke(Color.white.opacity(0.96), lineWidth: 2.2)
 
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
+            RoundedRectangle(cornerRadius: Self.focusOuterCornerRadius, style: .continuous)
                 .stroke(Color.white.opacity(0.28), lineWidth: 5.6)
                 .blur(radius: 1.4)
                 .opacity(state.highlightOpacity)
 
-            RoundedRectangle(cornerRadius: 9, style: .continuous)
+            RoundedRectangle(cornerRadius: Self.focusInnerCornerRadius, style: .continuous)
                 .stroke(Color.white.opacity(0.22 * state.highlightOpacity), lineWidth: 1)
-                .padding(10)
+                .padding(Spacing.tight)
         }
         .frame(width: 80, height: 80)
         .scaleEffect(state.scale)
@@ -870,9 +872,9 @@ private extension OCRCropRecognitionViewController {
     func configureStyles() {
         emptyStateIconView.image = UIImage(systemName: "photo")
         emptyStateIconView.preferredSymbolConfiguration = UIImage.SymbolConfiguration(pointSize: 48, weight: .regular)
-        emptyStateIconView.tintColor = UIColor(Color.brand).withAlphaComponent(0.3)
+        emptyStateIconView.tintColor = UIColor.xmResolved(Color.brand).withAlphaComponent(0.3)
         emptyStateLabel.text = "没有可裁切的图片，请返回上一步重新选择"
-        emptyStateLabel.textColor = UIColor(Color.textSecondary)
+        emptyStateLabel.textColor = UIColor.xmResolved(Color.textSecondary)
         emptyStateLabel.font = .preferredFont(forTextStyle: .title3)
         emptyStateLabel.numberOfLines = 0
         emptyStateLabel.textAlignment = .center
@@ -1117,7 +1119,7 @@ private extension OCRCropRecognitionViewController {
         switch content {
         case .error(let text):
             bannerIconView.image = UIImage(systemName: "exclamationmark.triangle.fill")
-            bannerIconView.tintColor = UIColor(Color.feedbackWarning)
+            bannerIconView.tintColor = UIColor.xmResolved(Color.feedbackWarning)
             bannerLabel.text = text
         case .instruction(let text):
             bannerIconView.image = UIImage(systemName: "hand.draw")
@@ -1399,10 +1401,10 @@ private extension OCRSelectionOverlayView {
                     roundedRect: draftRect,
                     cornerRadius: selectionCornerRadius
                 )
-                UIColor(Color.brand).withAlphaComponent(0.10).setFill()
+                UIColor.xmResolved(Color.brand).withAlphaComponent(0.10).setFill()
                 path.fill()
 
-                UIColor(Color.brand).withAlphaComponent(0.94).setStroke()
+                UIColor.xmResolved(Color.brand).withAlphaComponent(0.94).setStroke()
                 path.setLineDash([4, 4], count: 2, phase: 0)
                 path.lineWidth = 1
                 path.stroke()
@@ -1421,10 +1423,10 @@ private extension OCRSelectionOverlayView {
             roundedRect: region.frame,
             cornerRadius: selectionCornerRadius
         )
-        (isSelected ? UIColor(Color.brand).withAlphaComponent(0.14) : UIColor.white.withAlphaComponent(0.08)).setFill()
+        (isSelected ? UIColor.xmResolved(Color.brand).withAlphaComponent(0.14) : UIColor.white.withAlphaComponent(0.08)).setFill()
         path.fill()
 
-        (isSelected ? UIColor(Color.brand).withAlphaComponent(0.94) : UIColor.white.withAlphaComponent(0.82)).setStroke()
+        (isSelected ? UIColor.xmResolved(Color.brand).withAlphaComponent(0.94) : UIColor.white.withAlphaComponent(0.82)).setStroke()
         path.lineWidth = isSelected ? 1.5 : 1
         path.stroke()
 
@@ -2696,15 +2698,15 @@ private extension OCRSettingsScreen {
                         .autocorrectionDisabled()
                 }
             }
-            .font(.system(.footnote, design: .monospaced))
-            .padding(.horizontal, 12)
-            .padding(.vertical, 10)
+            .font(AppTypography.monospacedFootnote)
+            .padding(.horizontal, Spacing.base)
+            .padding(.vertical, Spacing.tight)
             .background(Color.surfacePage, in: RoundedRectangle(cornerRadius: CornerRadius.blockMedium, style: .continuous))
         }
     }
 
     func sectionHeader(title: String, description: String) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: Spacing.compact) {
             Text(title)
                 .font(.subheadline.weight(.semibold))
                 .foregroundStyle(Color.textPrimary)
@@ -2719,13 +2721,13 @@ private extension OCRSettingsScreen {
             Image(systemName: icon)
                 .font(.caption)
                 .foregroundStyle(tint)
-                .padding(.top, 2)
+                .padding(.top, Spacing.tiny)
             Text(text)
                 .font(.caption)
                 .foregroundStyle(Color.textSecondary)
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 10)
+        .padding(.horizontal, Spacing.base)
+        .padding(.vertical, Spacing.tight)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(Color.surfacePage, in: RoundedRectangle(cornerRadius: CornerRadius.blockMedium, style: .continuous))
     }
@@ -3054,7 +3056,7 @@ private extension OCRSelectionEditor {
                 .glassEffect(.regular.interactive(), in: .circle)
         }
         .buttonStyle(.plain)
-        .padding(6)
+        .padding(Spacing.half)
         .accessibilityLabel("删除该选择框")
     }
 
@@ -3084,7 +3086,7 @@ private extension OCRSelectionEditor {
 
                 Circle()
                     .stroke(Color.white.opacity(0.24), lineWidth: 0.8)
-                    .padding(14)
+            .padding(Spacing.comfortable)
 
                 Path { path in
                     let center = loupeDiameter / 2

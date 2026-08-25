@@ -20,7 +20,7 @@ struct BookCollectionCoverSearchSheet: View {
     @State private var loadingGate = LoadingGate()
 
     var body: some View {
-        BookshelfDisplaySettingPageScaffold(
+        XMSheetScaffold(
             title: "在线匹配封面",
             subtitle: normalizedInitialTitle,
             onClose: { dismiss() }

@@ -62,22 +62,12 @@ private struct AIConfigurationContentView: View {
     @FocusState private var isAPIKeyFocused: Bool
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: AIConfigurationLayout.sectionSpacing) {
-                modelServiceSection
-                credentialsSection
-                promptSection
-            }
-            .padding(.horizontal, Spacing.screenEdge)
-            .padding(.top, Spacing.base)
-            .padding(.bottom, Spacing.contentEdge)
-            .frame(maxWidth: AIConfigurationLayout.contentMaxWidth)
-            .frame(maxWidth: .infinity)
+        XMSettingsPage {
+            modelServiceSection
+            credentialsSection
+            promptSection
         }
-        .scrollBounceBehavior(.always)
-        .scrollIndicators(.hidden)
         .scrollDismissesKeyboard(.interactively)
-        .background(Color.surfacePage)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Button(viewModel.isSaving ? "保存中…" : "保存") {
@@ -110,12 +100,9 @@ private struct AIConfigurationContentView: View {
     }
 
     private var modelServiceSection: some View {
-        VStack(alignment: .leading, spacing: Spacing.base) {
-            sectionTitle("模型服务")
-
-            XMSettingsGroupCard(
-                groupedCornerRadius: CornerRadius.containerXL,
-                horizontalPadding: Spacing.screenEdge,
+        XMSettingsSection("模型服务") {
+            XMSettingsGroup(
+                horizontalPadding: Spacing.contentEdge,
                 verticalPadding: Spacing.none
             ) {
                 VStack(spacing: Spacing.none) {
@@ -132,7 +119,7 @@ private struct AIConfigurationContentView: View {
                         }
                     }
                     .tint(Color.brand)
-                    .frame(minHeight: AIConfigurationLayout.detailRowHeight)
+                    .frame(minHeight: XMSettingsPageLayout.detailRowMinHeight)
 
                     settingsDivider
                     providerPicker
@@ -144,13 +131,10 @@ private struct AIConfigurationContentView: View {
     }
 
     private var credentialsSection: some View {
-        VStack(alignment: .leading, spacing: Spacing.base) {
-            sectionTitle("访问凭证")
-
-            XMSettingsGroupCard(
+        XMSettingsSection("访问凭证") {
+            XMSettingsGroup(
                 presentation: credentialCardPresentation,
-                groupedCornerRadius: CornerRadius.containerXL,
-                horizontalPadding: Spacing.screenEdge,
+                horizontalPadding: Spacing.contentEdge,
                 verticalPadding: Spacing.none
             ) {
                 VStack(spacing: Spacing.none) {
@@ -166,7 +150,7 @@ private struct AIConfigurationContentView: View {
                     .frame(
                         minHeight: shouldShowAPIKeyInput
                             ? Spacing.actionReserved
-                            : AIConfigurationLayout.detailRowHeight
+                            : XMSettingsPageLayout.detailRowMinHeight
                     )
 
                     if shouldShowAPIKeyInput {
@@ -186,19 +170,16 @@ private struct AIConfigurationContentView: View {
                     .font(AppTypography.caption)
                     .foregroundStyle(Color.feedbackWarning)
                     .fixedSize(horizontal: false, vertical: true)
-                    .padding(.horizontal, Spacing.screenEdge)
+                    .padding(.horizontal, Spacing.contentEdge)
                     .transition(.opacity)
             }
         }
     }
 
     private var promptSection: some View {
-        VStack(alignment: .leading, spacing: Spacing.base) {
-            sectionTitle("提示词")
-
-            XMSettingsGroupCard(
-                groupedCornerRadius: CornerRadius.containerXL,
-                horizontalPadding: Spacing.screenEdge,
+        XMSettingsSection("提示词") {
+            XMSettingsGroup(
+                horizontalPadding: Spacing.contentEdge,
                 verticalPadding: Spacing.none
             ) {
                 VStack(spacing: Spacing.none) {
@@ -210,7 +191,7 @@ private struct AIConfigurationContentView: View {
                                 Image(systemName: kind.systemImage)
                                     .font(AppTypography.bodyMedium)
                                     .foregroundStyle(Color.iconSecondary)
-                                    .frame(width: Spacing.double)
+                                    .frame(width: XMSettingsPageLayout.iconSlotWidth)
                                     .accessibilityHidden(true)
 
                                 VStack(alignment: .leading, spacing: Spacing.compact) {
@@ -230,7 +211,7 @@ private struct AIConfigurationContentView: View {
                                     .foregroundStyle(Color.textHint)
                                     .accessibilityHidden(true)
                             }
-                            .frame(minHeight: AIConfigurationLayout.promptRowHeight)
+                            .frame(minHeight: XMSettingsPageLayout.detailRowMinHeight)
                             .contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
@@ -238,7 +219,7 @@ private struct AIConfigurationContentView: View {
 
                         if kind != AIPromptKind.allCases.last {
                             settingsDivider
-                                .padding(.leading, Spacing.double + Spacing.base)
+                                .padding(.leading, XMSettingsPageLayout.iconSlotWidth + Spacing.base)
                         }
                     }
                 }
@@ -256,7 +237,7 @@ private struct AIConfigurationContentView: View {
             optionImage: { _ in nil },
             onSelect: selectProvider
         )
-        .frame(minHeight: AIConfigurationLayout.rowHeight)
+        .frame(minHeight: XMSettingsPageLayout.regularRowMinHeight)
     }
 
     private var modelPicker: some View {
@@ -269,7 +250,7 @@ private struct AIConfigurationContentView: View {
             optionImage: { _ in nil },
             onSelect: viewModel.selectModel
         )
-        .frame(minHeight: AIConfigurationLayout.rowHeight)
+        .frame(minHeight: XMSettingsPageLayout.regularRowMinHeight)
     }
 
     private var apiKeyInput: some View {
@@ -283,7 +264,7 @@ private struct AIConfigurationContentView: View {
                 .autocorrectionDisabled()
                 .submitLabel(.done)
                 .padding(.horizontal, Spacing.base)
-                .frame(minHeight: AIConfigurationLayout.inputHeight)
+                .frame(minHeight: XMSettingsPageLayout.inputMinHeight)
                 .background(
                     Color.surfaceNested,
                     in: RoundedRectangle(cornerRadius: CornerRadius.blockMedium, style: .continuous)
@@ -347,7 +328,7 @@ private struct AIConfigurationContentView: View {
         !viewModel.selectedProviderHasStoredKey || isEditingAPIKey
     }
 
-    private var credentialCardPresentation: XMSettingsGroupCardPresentation {
+    private var credentialCardPresentation: XMSettingsGroupPresentation {
         shouldShowAPIKeyInput || viewModel.validationMessage != nil
             ? .grouped
             : .singleItem
@@ -359,13 +340,6 @@ private struct AIConfigurationContentView: View {
 
     private var settingsDivider: some View {
         XMSettingsDivider()
-    }
-
-    private func sectionTitle(_ title: String) -> some View {
-        Text(title)
-            .font(AppTypography.footnoteSemibold)
-            .foregroundStyle(Color.textSecondary)
-            .padding(.horizontal, Spacing.screenEdge)
     }
 
     private func beginAPIKeyEditing() {
@@ -419,16 +393,6 @@ private struct AIConfigurationContentView: View {
             ]
         )
     }
-}
-
-/// AI 设置页局部布局只复用现有间距并固定最小触控高度，不定义新的视觉 token。
-private enum AIConfigurationLayout {
-    static let contentMaxWidth: CGFloat = 640
-    static let sectionSpacing: CGFloat = Spacing.double + Spacing.cozy
-    static let rowHeight: CGFloat = 56
-    static let detailRowHeight: CGFloat = 64
-    static let promptRowHeight: CGFloat = 64
-    static let inputHeight: CGFloat = 48
 }
 
 private extension AIPromptKind {

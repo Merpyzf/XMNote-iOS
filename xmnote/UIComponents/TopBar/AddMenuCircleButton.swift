@@ -1,5 +1,5 @@
 /**
- * [INPUT]: 依赖 xmnote/Utilities/DesignTokens.swift 的语义色令牌，依赖 XMMenuLabel 与顶部 action 展示样式扩展
+ * [INPUT]: 依赖 xmnote/Utilities/DesignSystem/SemanticColors.swift 的语义色令牌，依赖 XMMenuLabel 与顶部 action 展示样式扩展
  * [OUTPUT]: 对外提供 AddMenuCircleButton 顶部添加菜单组件
  * [POS]: UIComponents/TopBar 的业务操作入口组件，被主页面顶部导航栏复用
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md

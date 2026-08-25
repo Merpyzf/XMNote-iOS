@@ -57,7 +57,7 @@ struct HeatmapHelpSheetView: View {
         Text("无论是你记录的每一条笔记，还是统计的读书时长，或标记的书籍状态，都可以点亮每天的小格子。记录越多、时长越长，颜色就越深。")
             .font(AppTypography.body)
             .foregroundStyle(Color.textSecondary)
-            .lineSpacing(4)
+            .lineSpacing(Spacing.compact)
     }
 
     // MARK: - Legend

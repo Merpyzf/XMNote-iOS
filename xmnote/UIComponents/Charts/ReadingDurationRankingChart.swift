@@ -200,7 +200,7 @@ private extension ReadingDurationRankingChart {
     /// 将排行行内时长拆成数字与单位，保持和指标卡一致的文本颜色层级。
     func durationValue(_ durationSeconds: Int) -> some View {
         let parts = durationParts(durationSeconds)
-        return HStack(alignment: .firstTextBaseline, spacing: 1) {
+        return HStack(alignment: .firstTextBaseline, spacing: Spacing.hairline) {
             ForEach(Array(parts.enumerated()), id: \.offset) { _, part in
                 Text(part.text)
                     .font(part.isNumber ? ReadCalendarSummaryTypography.rankingNumber : ReadCalendarSummaryTypography.rankingUnit)

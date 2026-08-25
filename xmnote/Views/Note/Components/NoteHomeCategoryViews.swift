@@ -488,7 +488,7 @@ private struct NoteBookReviewCard: View {
                 ExpandableRichText(
                     html: item.contentHTML,
                     baseFont: AppTypography.uiSemantic(.subheadline),
-                    textColor: UIColor(Color.textPrimary),
+                    textColor: UIColor.xmResolved(Color.textPrimary),
                     lineSpacing: NoteExcerptTypography.bodyLineSpacing,
                     maxLines: 5,
                     previewTapIdentity: item.id,

@@ -38,13 +38,6 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
-		BCA0000B2F70000000000001 /* PBXContainerItemProxy */ = {
-			isa = PBXContainerItemProxy;
-			containerPortal = 891114942F39AC2F00D99384 /* Project object */;
-			proxyType = 1;
-			remoteGlobalIDString = BCA000072F70000000000001;
-			remoteInfo = XMNoteShareExtension;
-		};
 		891114AA2F39AC3200D99384 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = 891114942F39AC2F00D99384 /* Project object */;
@@ -58,6 +51,13 @@
 			proxyType = 1;
 			remoteGlobalIDString = 8911149B2F39AC2F00D99384;
 			remoteInfo = xmnote;
+		};
+		BCA0000B2F70000000000001 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 891114942F39AC2F00D99384 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = BCA000072F70000000000001;
+			remoteInfo = XMNoteShareExtension;
 		};
 		BEE1000C2F9A000000000001 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
@@ -113,9 +113,9 @@
 				"Fixtures/ImportParity/v1/expected/dimo-attachment.json",
 				"Fixtures/ImportParity/v1/expected/douban-app.json",
 				"Fixtures/ImportParity/v1/expected/douban-read-minimal.json",
-				"Fixtures/ImportParity/v1/expected/duokan.json",
-				"Fixtures/ImportParity/v1/expected/fanqie.json",
-				"Fixtures/ImportParity/v1/expected/hanwang.json",
+				Fixtures/ImportParity/v1/expected/duokan.json,
+				Fixtures/ImportParity/v1/expected/fanqie.json,
+				Fixtures/ImportParity/v1/expected/hanwang.json,
 				"Fixtures/ImportParity/v1/expected/invalid-apple-books.json",
 				"Fixtures/ImportParity/v1/expected/invalid-boox-new.json",
 				"Fixtures/ImportParity/v1/expected/invalid-boox-old.json",
@@ -150,15 +150,15 @@
 				"Fixtures/ImportParity/v1/expected/jd-reader.expected.json",
 				"Fixtures/ImportParity/v1/expected/kindle-app.expected.json",
 				"Fixtures/ImportParity/v1/expected/kindle-clippings.expected.json",
-				"Fixtures/ImportParity/v1/expected/koodo.expected.json",
+				Fixtures/ImportParity/v1/expected/koodo.expected.json,
 				"Fixtures/ImportParity/v1/expected/koreader-new.expected.json",
 				"Fixtures/ImportParity/v1/expected/koreader-old.expected.json",
-				"Fixtures/ImportParity/v1/expected/legado.expected.json",
+				Fixtures/ImportParity/v1/expected/legado.expected.json,
 				"Fixtures/ImportParity/v1/expected/moon-reader.json",
 				"Fixtures/ImportParity/v1/expected/neat-reader.expected.json",
 				"Fixtures/ImportParity/v1/expected/reader-163.json",
-				"Fixtures/ImportParity/v1/expected/readingo.json",
-				"Fixtures/ImportParity/v1/expected/reeden.expected.json",
+				Fixtures/ImportParity/v1/expected/readingo.json,
+				Fixtures/ImportParity/v1/expected/reeden.expected.json,
 				"Fixtures/ImportParity/v1/expected/weread-830.json",
 				"Fixtures/ImportParity/v1/expected/weread-old.json",
 				"Fixtures/ImportParity/v1/expected/weread-pre-830.json",
@@ -166,6 +166,8 @@
 				"Fixtures/ImportParity/v1/fixture-src/apple-books/AppleFixture/BKLibrary-test.sqlite",
 				"Fixtures/ImportParity/v1/fixture-src/ireader-epub/OEBPS/chapter01.html",
 				"Fixtures/ImportParity/v1/fixture-src/ireader-epub/OEBPS/content.opf",
+				"Fixtures/ImportParity/v1/inputs/《掌阅文件书》笔记.txt",
+				"Fixtures/ImportParity/v1/inputs/笔记.txt",
 				"Fixtures/ImportParity/v1/inputs/apple-books.zip",
 				"Fixtures/ImportParity/v1/inputs/boox-invalid.txt",
 				"Fixtures/ImportParity/v1/inputs/boox-new-multiple.txt",
@@ -175,9 +177,9 @@
 				"Fixtures/ImportParity/v1/inputs/dimo-attachment.txt",
 				"Fixtures/ImportParity/v1/inputs/douban-app.txt",
 				"Fixtures/ImportParity/v1/inputs/douban-read-minimal.txt",
-				"Fixtures/ImportParity/v1/inputs/duokan.txt",
-				"Fixtures/ImportParity/v1/inputs/fanqie.txt",
-				"Fixtures/ImportParity/v1/inputs/hanwang.txt",
+				Fixtures/ImportParity/v1/inputs/duokan.txt,
+				Fixtures/ImportParity/v1/inputs/fanqie.txt,
+				Fixtures/ImportParity/v1/inputs/hanwang.txt,
 				"Fixtures/ImportParity/v1/inputs/invalid-all.txt",
 				"Fixtures/ImportParity/v1/inputs/invalid-apple-books.zip",
 				"Fixtures/ImportParity/v1/inputs/invalid-ireader-epub.epub",
@@ -188,21 +190,19 @@
 				"Fixtures/ImportParity/v1/inputs/jd-reader.txt",
 				"Fixtures/ImportParity/v1/inputs/kindle-app.html",
 				"Fixtures/ImportParity/v1/inputs/kindle-clippings.txt",
-				"Fixtures/ImportParity/v1/inputs/koodo.csv",
+				Fixtures/ImportParity/v1/inputs/koodo.csv,
 				"Fixtures/ImportParity/v1/inputs/koreader-new.json",
 				"Fixtures/ImportParity/v1/inputs/koreader-old.json",
-				"Fixtures/ImportParity/v1/inputs/legado.json",
+				Fixtures/ImportParity/v1/inputs/legado.json,
 				"Fixtures/ImportParity/v1/inputs/moon-reader.txt",
 				"Fixtures/ImportParity/v1/inputs/neat-reader.json",
 				"Fixtures/ImportParity/v1/inputs/reader-163.txt",
-				"Fixtures/ImportParity/v1/inputs/readingo.txt",
-				"Fixtures/ImportParity/v1/inputs/reeden.json",
+				Fixtures/ImportParity/v1/inputs/readingo.txt,
+				Fixtures/ImportParity/v1/inputs/reeden.json,
 				"Fixtures/ImportParity/v1/inputs/weread-830.txt",
 				"Fixtures/ImportParity/v1/inputs/weread-old.txt",
 				"Fixtures/ImportParity/v1/inputs/weread-pre-830.txt",
-				"Fixtures/ImportParity/v1/inputs/《掌阅文件书》笔记.txt",
-				"Fixtures/ImportParity/v1/inputs/笔记.txt",
-				"Fixtures/ImportParity/v1/manifest.json",
+				Fixtures/ImportParity/v1/manifest.json,
 				"Fixtures/ImportParity/v1/mutations/expected/apple-books--append-zero.expected.json",
 				"Fixtures/ImportParity/v1/mutations/expected/apple-books--truncate-half.expected.json",
 				"Fixtures/ImportParity/v1/mutations/expected/boox-new-multiple--crlf.expected.json",
@@ -374,7 +374,7 @@
 				"Fixtures/ImportParity/v1/mutations/inputs/weread-pre-830--truncate-half.txt",
 				"Fixtures/ImportParity/v1/mutations/inputs/weread-pre-830--utf8-bom.txt",
 				"Fixtures/ImportParity/v1/mutations/mutation-manifest.json",
-				"Fixtures/ImportParity/v1/rules.json",
+				Fixtures/ImportParity/v1/rules.json,
 			);
 			target = 891114A82F39AC3200D99384 /* xmnoteTests */;
 		};
@@ -382,11 +382,10 @@
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
 				Info.plist,
-				XMNoteShareExtension.entitlements,
 			);
 			target = BCA000072F70000000000001 /* XMNoteShareExtension */;
 		};
-		BEE1000E2F9A000000000001 /* PBXFileSystemSynchronizedBuildFileExceptionSet */ = {
+		BEE1000E2F9A000000000001 /* Exceptions for "xmnoteWidgetExtension" folder in "xmnoteWidgetExtension" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
 				Info.plist,
@@ -422,7 +421,7 @@
 			path = XMNoteShareExtension;
 			sourceTree = "<group>";
 		};
-		BCA000032F70000000000001 /* ShareImport */ = {
+		BCA000032F70000000000001 /* xmnote/Infra/ShareImport */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			path = xmnote/Infra/ShareImport;
 			sourceTree = "<group>";
@@ -430,7 +429,7 @@
 		BEE100022F9A000000000001 /* xmnoteWidgetExtension */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			exceptions = (
-				BEE1000E2F9A000000000001 /* PBXFileSystemSynchronizedBuildFileExceptionSet */,
+				BEE1000E2F9A000000000001 /* Exceptions for "xmnoteWidgetExtension" folder in "xmnoteWidgetExtension" target */,
 			);
 			path = xmnoteWidgetExtension;
 			sourceTree = "<group>";
@@ -506,7 +505,7 @@
 			children = (
 				8911149E2F39AC2F00D99384 /* xmnote */,
 				BCA000022F70000000000001 /* XMNoteShareExtension */,
-				BCA000032F70000000000001 /* ShareImport */,
+				BCA000032F70000000000001 /* xmnote/Infra/ShareImport */,
 				891114AC2F39AC3200D99384 /* xmnoteTests */,
 				891114B62F39AC3200D99384 /* xmnoteUITests */,
 				BEE100022F9A000000000001 /* xmnoteWidgetExtension */,
@@ -673,7 +672,7 @@
 			);
 			fileSystemSynchronizedGroups = (
 				BCA000022F70000000000001 /* XMNoteShareExtension */,
-				BCA000032F70000000000001 /* ShareImport */,
+				BCA000032F70000000000001 /* xmnote/Infra/ShareImport */,
 			);
 			name = XMNoteShareExtension;
 			packageProductDependencies = (
@@ -733,7 +732,7 @@
 					};
 				};
 			};
-			buildConfigurationList = 891114972F39AC2F00D99384 /* Build configuration list for PBXProject "XMNote" */;
+			buildConfigurationList = 891114972F39AC2F00D99384 /* Build configuration list for PBXProject "xmnote" */;
 			developmentRegion = "zh-Hans";
 			hasScannedForEncodings = 0;
 			knownRegions = (
@@ -1269,7 +1268,7 @@
 					AGENTS.md,
 				);
 				GENERATE_INFOPLIST_FILE = NO;
-				INFOPLIST_FILE = "xmnoteWidgetExtension/Info.plist";
+				INFOPLIST_FILE = xmnoteWidgetExtension/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 26.1;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -1305,7 +1304,7 @@
 					AGENTS.md,
 				);
 				GENERATE_INFOPLIST_FILE = NO;
-				INFOPLIST_FILE = "xmnoteWidgetExtension/Info.plist";
+				INFOPLIST_FILE = xmnoteWidgetExtension/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 26.1;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -1329,7 +1328,7 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
-		891114972F39AC2F00D99384 /* Build configuration list for PBXProject "XMNote" */ = {
+		891114972F39AC2F00D99384 /* Build configuration list for PBXProject "xmnote" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				891114BB2F39AC3200D99384 /* Debug */,
@@ -1441,6 +1440,14 @@
 				minimumVersion = 7.0.0;
 			};
 		};
+		89HUMM0012F8000000000001 /* XCRemoteSwiftPackageReference "hummingbird" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/hummingbird-project/hummingbird.git";
+			requirement = {
+				kind = exactVersion;
+				version = 2.22.0;
+			};
+		};
 		89NUKE0012F3D000000000001 /* XCRemoteSwiftPackageReference "Nuke" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/kean/Nuke.git";
@@ -1489,14 +1496,6 @@
 				minimumVersion = 0.9.0;
 			};
 		};
-		89HUMM0012F8000000000001 /* XCRemoteSwiftPackageReference "hummingbird" */ = {
-			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/hummingbird-project/hummingbird.git";
-			requirement = {
-				kind = exactVersion;
-				version = 2.22.0;
-			};
-		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
@@ -1529,6 +1528,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 89GRDB0012F3A000000000001 /* XCRemoteSwiftPackageReference "GRDB.swift" */;
 			productName = GRDB;
+		};
+		89HUMM0012F8000000000004 /* Hummingbird */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 89HUMM0012F8000000000001 /* XCRemoteSwiftPackageReference "hummingbird" */;
+			productName = Hummingbird;
 		};
 		89HZCAL12F3D000000000004 /* HorizonCalendar */ = {
 			isa = XCSwiftPackageProductDependency;
@@ -1574,11 +1578,6 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 89ZIP0012F3D000000000001 /* XCRemoteSwiftPackageReference "ZIPFoundation" */;
 			productName = ZIPFoundation;
-		};
-		89HUMM0012F8000000000004 /* Hummingbird */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = 89HUMM0012F8000000000001 /* XCRemoteSwiftPackageReference "hummingbird" */;
-			productName = Hummingbird;
 		};
 		D35B00022FA0000000000002 /* XMNoteWeb */ = {
 			isa = XCSwiftPackageProductDependency;

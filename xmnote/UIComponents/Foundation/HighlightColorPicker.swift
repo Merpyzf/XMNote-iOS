@@ -28,7 +28,7 @@ struct HighlightColorPicker: View {
     private func colorDot(_ argb: UInt32) -> some View {
         let isSelected = argb == selectedARGB
         return Circle()
-            .fill(Color(uiColor: HighlightColors.color(from: argb)))
+            .fill(Color.xmResolved(HighlightColors.color(from: argb)))
             .frame(width: 28, height: 28)
             .overlay {
                 if isSelected {

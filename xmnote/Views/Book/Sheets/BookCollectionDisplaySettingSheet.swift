@@ -14,7 +14,7 @@ struct BookCollectionDisplaySettingSheet: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
-        BookshelfDisplaySettingPageScaffold(
+        XMSheetScaffold(
             title: "显示设置",
             subtitle: "书单首页",
             onClose: { dismiss() }
@@ -32,9 +32,9 @@ struct BookCollectionDisplaySettingSheet: View {
     }
 
     private var displayGroup: some View {
-        BookshelfSettingsGroupCard {
+        XMSettingsGroup {
             VStack(spacing: Spacing.none) {
-                BookshelfSettingsValueMenuRow(
+                XMSettingsValueMenuRow(
                     title: "显示方式",
                     value: setting.displayMode.title,
                     options: BookCollectionDisplayMode.allCases,
@@ -44,7 +44,7 @@ struct BookCollectionDisplaySettingSheet: View {
                     onSelect: { setting.displayMode = $0 }
                 )
 
-                BookshelfSettingsValueMenuRow(
+                XMSettingsValueMenuRow(
                     title: "封面排布",
                     value: setting.coverArrangement.title,
                     options: BookCollectionCoverArrangement.allCases,
@@ -54,7 +54,7 @@ struct BookCollectionDisplaySettingSheet: View {
                     onSelect: { setting.coverArrangement = $0 }
                 )
 
-                BookshelfSettingsToggleRow(
+                XMSettingsToggleRow(
                     title: "显示统计信息",
                     isOn: $setting.showsStatistics
                 )

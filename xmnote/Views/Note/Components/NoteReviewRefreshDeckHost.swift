@@ -864,14 +864,14 @@ private struct NoteReviewPrimaryActionBar: View {
                 guard let item else { return }
                 onExplain(item)
             } label: {
-                Label("AI 释义", systemImage: "sparkles")
+                XMMenuLabel("AI 释义", systemImage: "sparkles")
             }
 
             Button {
                 guard let item else { return }
                 onAutoTag(item)
             } label: {
-                Label("AI 标签", systemImage: "tag")
+                XMMenuLabel("AI 标签", systemImage: "tag")
             }
         } label: {
             NoteReviewPrimaryActionLabel(
@@ -883,6 +883,7 @@ private struct NoteReviewPrimaryActionBar: View {
             )
         }
         .menuIndicator(.hidden)
+        .xmMenuNeutralTint()
         .buttonStyle(NoteReviewPrimaryActionButtonStyle(isEnabled: !aiActionDisabled))
         .disabled(aiActionDisabled)
         .accessibilityLabel("AI 助手")

@@ -1175,7 +1175,7 @@ private extension XMAttachmentUploadCell {
         imageContainer.layer.cornerRadius = CornerRadius.blockMedium
         imageContainer.layer.cornerCurve = .continuous
         imageContainer.clipsToBounds = true
-        imageContainer.backgroundColor = UIColor(Color.surfaceNested)
+        imageContainer.backgroundColor = UIColor.xmResolved(Color.surfaceNested)
         contentView.addSubview(imageContainer)
 
         imageView.translatesAutoresizingMaskIntoConstraints = false
@@ -1184,7 +1184,7 @@ private extension XMAttachmentUploadCell {
         imageContainer.addSubview(imageView)
 
         placeholderView.translatesAutoresizingMaskIntoConstraints = false
-        placeholderView.backgroundColor = UIColor(Color.surfaceNested)
+        placeholderView.backgroundColor = UIColor.xmResolved(Color.surfaceNested)
         imageContainer.addSubview(placeholderView)
 
         statusOverlayView.translatesAutoresizingMaskIntoConstraints = false
@@ -1206,7 +1206,7 @@ private extension XMAttachmentUploadCell {
             minimumPointSize: 12
         )
         retryConfiguration.attributedTitle = retryTitle
-        retryConfiguration.baseForegroundColor = UIColor(Color.feedbackError)
+        retryConfiguration.baseForegroundColor = UIColor.xmResolved(Color.feedbackError)
         retryConfiguration.contentInsets = NSDirectionalEdgeInsets(top: 4, leading: 10, bottom: 4, trailing: 10)
         retryButton.configuration = retryConfiguration
         retryButton.backgroundColor = UIColor.black.withAlphaComponent(0.72)

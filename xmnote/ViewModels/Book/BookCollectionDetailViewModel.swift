@@ -690,7 +690,7 @@ final class BookCollectionDetailViewModel {
                 at: CGPoint(x: textX, y: metadataY),
                 width: titleWidth,
                 font: .systemFont(ofSize: 22, weight: .semibold),
-                color: UIColor(red: 1, green: 197.0 / 255.0, blue: 0, alpha: 1),
+                color: UIColor.xmSRGB(red: 1, green: 197.0 / 255.0, blue: 0, alpha: 1),
                 maxLines: 1
             )
             metadataY += 31

@@ -12,24 +12,24 @@ import UIKit
 extension NoteReviewPalette {
     /// 当前规范化配色的自适应不透明卡片表面。
     var cardSurfaceColor: Color {
-        Color(uiColor: uiCardSurfaceColor)
+        Color.xmResolved(uiCardSurfaceColor)
     }
 
     /// 当前规范化配色的自适应卡片前景色。
     var cardOnSurfaceColor: Color {
-        Color(uiColor: uiCardOnSurfaceColor)
+        Color.xmResolved(uiCardOnSurfaceColor)
     }
 
     /// 当前规范化配色的 UIKit 表面色，供 RichText 等 UIKit 路径按系统主题解析。
     var uiCardSurfaceColor: UIColor {
         let colorSet = canonicalPalette.cardColorSet
-        return UIColor(lightHex: UInt(colorSet.lightSurfaceHex), darkHex: UInt(colorSet.darkSurfaceHex))
+        return UIColor.xmAdaptive(lightHex: UInt(colorSet.lightSurfaceHex), darkHex: UInt(colorSet.darkSurfaceHex))
     }
 
     /// 当前规范化配色的 UIKit 前景色，供 RichText 等 UIKit 路径按系统主题解析。
     var uiCardOnSurfaceColor: UIColor {
         let colorSet = canonicalPalette.cardColorSet
-        return UIColor(lightHex: UInt(colorSet.lightTextHex), darkHex: UInt(colorSet.darkTextHex))
+        return UIColor.xmAdaptive(lightHex: UInt(colorSet.lightTextHex), darkHex: UInt(colorSet.darkTextHex))
     }
 }
 
@@ -110,11 +110,11 @@ extension NoteReviewSettings {
     /// 当前设置对应的卡片外观；颜色模式不生成渐变，图片不可用时回退到规范化 palette 表面。
     var cardAppearance: NoteReviewCardAppearance {
         let imageURL = normalizedBackgroundImageURL
-        let surface = Color(uiColor: UIColor(
+        let surface = Color.xmResolved(UIColor.xmAdaptive(
             lightHex: UInt(cardSurfaceHex(isDarkAppearance: false)),
             darkHex: UInt(cardSurfaceHex(isDarkAppearance: true))
         ))
-        let uiOnSurface = UIColor(
+        let uiOnSurface = UIColor.xmAdaptive(
             lightHex: UInt(cardTextHex(isDarkAppearance: false)),
             darkHex: UInt(cardTextHex(isDarkAppearance: true))
         )
@@ -122,7 +122,7 @@ extension NoteReviewSettings {
         return NoteReviewCardAppearance(
             surface: surface,
             backgroundImageURL: imageURL,
-            onSurface: Color(uiColor: uiOnSurface),
+            onSurface: Color.xmResolved(uiOnSurface),
             uiOnSurface: uiOnSurface
         )
     }
@@ -195,33 +195,12 @@ private extension UIColor {
         }
     }
 
-    /// 根据系统亮暗模式解析两组 RGB 十六进制颜色。
-    convenience init(lightHex: UInt, darkHex: UInt) {
-        self.init { traitCollection in
-            switch traitCollection.userInterfaceStyle {
-            case .dark:
-                return UIColor(hex: darkHex)
-            default:
-                return UIColor(hex: lightHex)
-            }
-        }
-    }
-
-    /// 根据 RGB 十六进制值创建不透明 UIKit 颜色。
-    convenience init(hex: UInt) {
-        self.init(
-            red: CGFloat((hex >> 16) & 0xFF) / 255.0,
-            green: CGFloat((hex >> 8) & 0xFF) / 255.0,
-            blue: CGFloat(hex & 0xFF) / 255.0,
-            alpha: 1.0
-        )
-    }
 }
 
 extension Color {
     /// 将当前 ColorPicker 选择转换为持久化使用的 RGB 十六进制值。
     var rgbHex: UInt32 {
-        let resolved = UIColor(self)
+        let resolved = UIColor.xmResolved(self)
         var red: CGFloat = 0
         var green: CGFloat = 0
         var blue: CGFloat = 0

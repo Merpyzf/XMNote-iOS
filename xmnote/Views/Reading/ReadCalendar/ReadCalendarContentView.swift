@@ -1888,7 +1888,7 @@ private struct ReadCalendarBookCoverFullscreenOverlay: View {
                 )
                 .opacity(Double(transitionChannels.ghostOpacity))
 
-                VStack(spacing: 0) {
+                VStack(spacing: Spacing.none) {
                     Color.clear
                         .frame(height: topChromeHeight)
 

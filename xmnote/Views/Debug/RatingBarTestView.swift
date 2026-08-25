@@ -322,9 +322,9 @@ struct RatingBarTestView: View {
             case .system:
                 return .surfaceNested
             case .light:
-                return Color(hex: 0xFFFFFF)
+                return Color.xmHex(0xFFFFFF)
             case .dark:
-                return Color(hex: 0x1C1C1E)
+                return Color.xmHex(0x1C1C1E)
             }
         }
     }

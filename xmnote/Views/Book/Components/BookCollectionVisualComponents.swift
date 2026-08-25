@@ -837,47 +837,47 @@ private struct BookCollectionMutedPosterPalette {
 
     private static let manualVariants: [BookCollectionMutedPosterPalette] = [
         BookCollectionMutedPosterPalette(
-            base: Color(light: Color(hex: 0xEEF4F1), dark: Color(hex: 0x1F2623)),
-            wash: Color(light: Color(hex: 0xC9E3DA).opacity(0.72), dark: Color(hex: 0x355247).opacity(0.62)),
-            accentWash: Color(light: Color(hex: 0xE6EEF7).opacity(0.82), dark: Color(hex: 0x344356).opacity(0.58)),
-            highlight: Color(light: Color.white.opacity(0.54), dark: Color.white.opacity(0.05)),
-            paper: Color(light: Color(hex: 0xF6F2E7), dark: Color(hex: 0x4A4234)),
-            paperBand: Color(light: Color(hex: 0xE0D3B6), dark: Color(hex: 0x70634A))
+            base: Color.xmAdaptive(light: Color.xmHex(0xEEF4F1), dark: Color.xmHex(0x1F2623)),
+            wash: Color.xmAdaptive(light: Color.xmHex(0xC9E3DA).opacity(0.72), dark: Color.xmHex(0x355247).opacity(0.62)),
+            accentWash: Color.xmAdaptive(light: Color.xmHex(0xE6EEF7).opacity(0.82), dark: Color.xmHex(0x344356).opacity(0.58)),
+            highlight: Color.xmAdaptive(light: Color.white.opacity(0.54), dark: Color.white.opacity(0.05)),
+            paper: Color.xmAdaptive(light: Color.xmHex(0xF6F2E7), dark: Color.xmHex(0x4A4234)),
+            paperBand: Color.xmAdaptive(light: Color.xmHex(0xE0D3B6), dark: Color.xmHex(0x70634A))
         ),
         BookCollectionMutedPosterPalette(
-            base: Color(light: Color(hex: 0xF2F4EC), dark: Color(hex: 0x24261F)),
-            wash: Color(light: Color(hex: 0xDCE7D0).opacity(0.74), dark: Color(hex: 0x45533A).opacity(0.58)),
-            accentWash: Color(light: Color(hex: 0xE9EEE2).opacity(0.86), dark: Color(hex: 0x394336).opacity(0.64)),
-            highlight: Color(light: Color.white.opacity(0.52), dark: Color.white.opacity(0.05)),
-            paper: Color(light: Color(hex: 0xF5EDDC), dark: Color(hex: 0x4A3E31)),
-            paperBand: Color(light: Color(hex: 0xD8C79F), dark: Color(hex: 0x756241))
+            base: Color.xmAdaptive(light: Color.xmHex(0xF2F4EC), dark: Color.xmHex(0x24261F)),
+            wash: Color.xmAdaptive(light: Color.xmHex(0xDCE7D0).opacity(0.74), dark: Color.xmHex(0x45533A).opacity(0.58)),
+            accentWash: Color.xmAdaptive(light: Color.xmHex(0xE9EEE2).opacity(0.86), dark: Color.xmHex(0x394336).opacity(0.64)),
+            highlight: Color.xmAdaptive(light: Color.white.opacity(0.52), dark: Color.white.opacity(0.05)),
+            paper: Color.xmAdaptive(light: Color.xmHex(0xF5EDDC), dark: Color.xmHex(0x4A3E31)),
+            paperBand: Color.xmAdaptive(light: Color.xmHex(0xD8C79F), dark: Color.xmHex(0x756241))
         ),
         BookCollectionMutedPosterPalette(
-            base: Color(light: Color(hex: 0xF2F1EC), dark: Color(hex: 0x25231F)),
-            wash: Color(light: Color(hex: 0xDFD6C4).opacity(0.70), dark: Color(hex: 0x514636).opacity(0.56)),
-            accentWash: Color(light: Color(hex: 0xDDE9E0).opacity(0.78), dark: Color(hex: 0x354B3C).opacity(0.58)),
-            highlight: Color(light: Color.white.opacity(0.50), dark: Color.white.opacity(0.05)),
-            paper: Color(light: Color(hex: 0xF1E7D1), dark: Color(hex: 0x4B3D2E)),
-            paperBand: Color(light: Color(hex: 0xD7C095), dark: Color(hex: 0x74603E))
+            base: Color.xmAdaptive(light: Color.xmHex(0xF2F1EC), dark: Color.xmHex(0x25231F)),
+            wash: Color.xmAdaptive(light: Color.xmHex(0xDFD6C4).opacity(0.70), dark: Color.xmHex(0x514636).opacity(0.56)),
+            accentWash: Color.xmAdaptive(light: Color.xmHex(0xDDE9E0).opacity(0.78), dark: Color.xmHex(0x354B3C).opacity(0.58)),
+            highlight: Color.xmAdaptive(light: Color.white.opacity(0.50), dark: Color.white.opacity(0.05)),
+            paper: Color.xmAdaptive(light: Color.xmHex(0xF1E7D1), dark: Color.xmHex(0x4B3D2E)),
+            paperBand: Color.xmAdaptive(light: Color.xmHex(0xD7C095), dark: Color.xmHex(0x74603E))
         )
     ]
 
     private static let annualVariants: [BookCollectionMutedPosterPalette] = [
         BookCollectionMutedPosterPalette(
-            base: Color(light: Color(hex: 0xEDF3F8), dark: Color(hex: 0x1F252A)),
-            wash: Color(light: Color(hex: 0xD5E4EF).opacity(0.78), dark: Color(hex: 0x394D5E).opacity(0.58)),
-            accentWash: Color(light: Color(hex: 0xC9E2DA).opacity(0.72), dark: Color(hex: 0x355048).opacity(0.56)),
-            highlight: Color(light: Color.white.opacity(0.54), dark: Color.white.opacity(0.05)),
-            paper: Color(light: Color(hex: 0xF7F2E5), dark: Color(hex: 0x4A4233)),
-            paperBand: Color(light: Color(hex: 0xDDD0AE), dark: Color(hex: 0x75664B))
+            base: Color.xmAdaptive(light: Color.xmHex(0xEDF3F8), dark: Color.xmHex(0x1F252A)),
+            wash: Color.xmAdaptive(light: Color.xmHex(0xD5E4EF).opacity(0.78), dark: Color.xmHex(0x394D5E).opacity(0.58)),
+            accentWash: Color.xmAdaptive(light: Color.xmHex(0xC9E2DA).opacity(0.72), dark: Color.xmHex(0x355048).opacity(0.56)),
+            highlight: Color.xmAdaptive(light: Color.white.opacity(0.54), dark: Color.white.opacity(0.05)),
+            paper: Color.xmAdaptive(light: Color.xmHex(0xF7F2E5), dark: Color.xmHex(0x4A4233)),
+            paperBand: Color.xmAdaptive(light: Color.xmHex(0xDDD0AE), dark: Color.xmHex(0x75664B))
         ),
         BookCollectionMutedPosterPalette(
-            base: Color(light: Color(hex: 0xF3F1EB), dark: Color(hex: 0x25231F)),
-            wash: Color(light: Color(hex: 0xE4DAC8).opacity(0.78), dark: Color(hex: 0x504535).opacity(0.56)),
-            accentWash: Color(light: Color(hex: 0xD7E6D1).opacity(0.72), dark: Color(hex: 0x40543A).opacity(0.54)),
-            highlight: Color(light: Color.white.opacity(0.54), dark: Color.white.opacity(0.05)),
-            paper: Color(light: Color(hex: 0xF6EDD9), dark: Color(hex: 0x4C4030)),
-            paperBand: Color(light: Color(hex: 0xDDC89E), dark: Color(hex: 0x74613F))
+            base: Color.xmAdaptive(light: Color.xmHex(0xF3F1EB), dark: Color.xmHex(0x25231F)),
+            wash: Color.xmAdaptive(light: Color.xmHex(0xE4DAC8).opacity(0.78), dark: Color.xmHex(0x504535).opacity(0.56)),
+            accentWash: Color.xmAdaptive(light: Color.xmHex(0xD7E6D1).opacity(0.72), dark: Color.xmHex(0x40543A).opacity(0.54)),
+            highlight: Color.xmAdaptive(light: Color.white.opacity(0.54), dark: Color.white.opacity(0.05)),
+            paper: Color.xmAdaptive(light: Color.xmHex(0xF6EDD9), dark: Color.xmHex(0x4C4030)),
+            paperBand: Color.xmAdaptive(light: Color.xmHex(0xDDC89E), dark: Color.xmHex(0x74613F))
         )
     ]
 }

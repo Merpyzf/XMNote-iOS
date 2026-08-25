@@ -1,5 +1,5 @@
 /**
- * [INPUT]: 依赖 MainTabView 提供搜索 query、提交/历史词协调与结果导航回调，依赖 RepositoryContainer 和 GlobalSearchViewModel
+ * [INPUT]: 依赖 MainTabView 提供搜索 query、提交/历史词协调与结果导航回调，依赖 RepositoryContainer、GlobalSearchViewModel 与 XMTagLabel
  * [OUTPUT]: 对外提供 GlobalSearchView，渲染 iOS 原生搜索 Tab 下的固定范围栏、全局搜索结果、搜索历史、分类筛选、空态、加载态、错误态与搜索来源详情打开入口
  * [POS]: Search 模块根视图，被 Search Tab NavigationStack 消费；普通详情 push，沉浸查看目标交给根级全屏任务呈现
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -7,6 +7,11 @@
 
 import SwiftUI
 import UIKit
+
+private enum GlobalSearchLayout {
+    static let bottomContentClearance = Spacing.actionReserved * 3
+    static let emptyStateVerticalPadding = Spacing.section * 2
+}
 
 /// 搜索宿主捕获到的提交事件，使用唯一 id 保证相同关键词连续提交也能被搜索页感知。
 struct GlobalSearchSubmitRequest: Equatable, Identifiable {
@@ -370,7 +375,7 @@ private struct GlobalSearchLoadedContent: View {
             .scrollTargetLayout()
             .padding(.horizontal, Spacing.screenEdge)
             .padding(.top, topPadding)
-            .padding(.bottom, Spacing.actionReserved * 3)
+            .padding(.bottom, GlobalSearchLayout.bottomContentClearance)
         }
         .scrollPosition(id: $resultScrollTarget, anchor: .top)
         .scrollIndicators(.hidden)
@@ -627,7 +632,7 @@ private struct GlobalSearchInlineEmptyView: View {
                 .foregroundStyle(Color.textHint)
         }
         .frame(maxWidth: .infinity)
-        .padding(.vertical, Spacing.section * 2)
+        .padding(.vertical, GlobalSearchLayout.emptyStateVerticalPadding)
     }
 }
 
@@ -680,7 +685,7 @@ private struct GlobalSearchRootView: View {
             )
             .padding(.horizontal, Spacing.screenEdge)
             .padding(.top, Spacing.section)
-            .padding(.bottom, Spacing.actionReserved * 3)
+            .padding(.bottom, GlobalSearchLayout.bottomContentClearance)
         }
         .scrollIndicators(.hidden)
         .scrollDismissesKeyboard(.never)
@@ -983,17 +988,15 @@ private struct GlobalSearchTagStrip: View {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: Spacing.tight) {
                     ForEach(tags, id: \.self) { tag in
-                        XMKeywordHighlighting.text(
-                            "#\(tag)",
-                            keyword: keyword,
-                            baseFont: AppTypography.caption2Medium,
-                            highlightFont: AppTypography.caption2Medium,
-                            baseColor: Color.textSecondary
-                        )
-                        .lineLimit(1)
-                        .padding(.horizontal, Spacing.cozy)
-                        .padding(.vertical, Spacing.compact)
-                        .background(Color.tagBackground, in: Capsule())
+                        XMTagLabel {
+                            XMKeywordHighlighting.text(
+                                "#\(tag)",
+                                keyword: keyword,
+                                baseFont: AppTypography.caption2Medium,
+                                highlightFont: AppTypography.caption2Medium,
+                                baseColor: Color.textSecondary
+                            )
+                        }
                     }
                 }
             }

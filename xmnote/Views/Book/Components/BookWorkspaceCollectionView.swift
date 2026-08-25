@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 BookWorkspacePresentationSnapshot、Nuke/Core Image 封面处理管线、XMMarqueeText、SwiftUI 普通胶囊行内容构建器与 UIKit UICollectionView
- * [OUTPUT]: 对外提供背景与前景同步折叠及回弹、下拉时整幅等比填充且共同穿过状态栏/导航栏的无边缘光晕封面影像 Hero、Android 等效模糊、随折叠末段淡出并拉平的中性圆角 Tab 台阶、整体导航中和、接入公共连续跑马灯的书名状态行、书脊封面、单行出版元数据、轻量色点状态、与缺席态共享等距底部呼吸的普通轻透评分与三项精致阅读指标 Chip、与系统标题互斥联动的共享可收起书籍头部、几何稳定的吸顶 Tab 与纯内容原生 Pager
+ * [OUTPUT]: 对外提供背景与前景同步折叠及回弹、下拉时整幅等比填充且共同穿过状态栏/导航栏的无边缘光晕封面影像 Hero、Android 等效模糊、随折叠末段淡出并拉平的中性圆角 Tab 台阶、整体导航中和、接入公共连续跑马灯的书名状态行、书脊封面、单行出版元数据、轻量色点状态、与缺席态共享等距底部呼吸的普通轻透评分与三项精致阅读指标 Chip、与系统标题互斥联动的共享可收起书籍头部、统一内容卡片轮廓、几何稳定的吸顶 Tab 与纯内容原生 Pager
  * [POS]: Views/Book/Components 的页面私有 UIKit 混合列表，负责影像 Hero/中性内容分层、分页、共享 Chrome、diff、章节吸顶和视口稳定
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -302,7 +302,7 @@ private final class BookWorkspaceHostingHeaderView: UICollectionReusableView {
 
     override init(frame: CGRect) {
         super.init(frame: frame)
-        backgroundColor = UIColor(Color.surfacePage)
+        backgroundColor = UIColor.xmResolved(Color.surfacePage)
         isOpaque = true
         clipsToBounds = true
     }
@@ -315,7 +315,7 @@ private final class BookWorkspaceHostingHeaderView: UICollectionReusableView {
     /// 复用同一个 UIContentView，并让章节内容与 UIKit 宿主共享不透明主题画布。
     func configure(content: AnyView, canvasColor: Color, animated: Bool) {
         let applyConfiguration = { [self] in
-            backgroundColor = UIColor(canvasColor)
+            backgroundColor = UIColor.xmResolved(canvasColor)
             let configuration = UIHostingConfiguration {
                 content
             }
@@ -503,7 +503,7 @@ private final class BookWorkspaceHeaderBackdropView: UIView {
         self.colorScheme = colorScheme
         let interfaceStyle: UIUserInterfaceStyle = colorScheme == .dark ? .dark : .light
         let traits = UITraitCollection(userInterfaceStyle: interfaceStyle)
-        resolvedCanvasColor = UIColor(canvasColor).resolvedColor(with: traits)
+        resolvedCanvasColor = UIColor.xmResolved(canvasColor).resolvedColor(with: traits)
         let nextCoverURL = XMImageRequestBuilder.normalizedURL(from: coverURLString)
         let didChangeCover = nextCoverURL != coverURL
         coverURL = nextCoverURL
@@ -698,7 +698,7 @@ private final class BookWorkspaceScopeTabControl: UIControl {
 
         countLabel.font = AppTypography.uiSemantic(.caption1)
         countLabel.adjustsFontForContentSizeCategory = true
-        countLabel.textColor = UIColor(Color.textSecondary)
+        countLabel.textColor = UIColor.xmResolved(Color.textSecondary)
         countLabel.numberOfLines = 1
         countLabel.setContentCompressionResistancePriority(.required, for: .horizontal)
 
@@ -785,7 +785,7 @@ private final class BookWorkspaceScopeBarView: UIView {
 
     override init(frame: CGRect) {
         super.init(frame: frame)
-        backgroundColor = UIColor(Color.surfacePage)
+        backgroundColor = UIColor.xmResolved(Color.surfacePage)
         isOpaque = true
         clipsToBounds = true
         layer.cornerRadius = BookWorkspaceLayoutMetrics.contentStepTopCornerRadius
@@ -798,7 +798,7 @@ private final class BookWorkspaceScopeBarView: UIView {
         scrollView.translatesAutoresizingMaskIntoConstraints = false
         scrollView.showsHorizontalScrollIndicator = false
         scrollView.showsVerticalScrollIndicator = false
-        scrollView.alwaysBounceHorizontal = false
+        scrollView.alwaysBounceHorizontal = true
         scrollView.isDirectionalLockEnabled = true
         scrollView.contentInsetAdjustmentBehavior = .never
 
@@ -807,7 +807,7 @@ private final class BookWorkspaceScopeBarView: UIView {
         stackView.alignment = .fill
         stackView.spacing = BookWorkspaceLayoutMetrics.scopeItemSpacing
 
-        indicatorView.backgroundColor = UIColor(Color.textPrimary).withAlphaComponent(0.72)
+        indicatorView.backgroundColor = UIColor.xmResolved(Color.textPrimary).withAlphaComponent(0.72)
         indicatorView.layer.cornerRadius = BookWorkspaceLayoutMetrics.scopeIndicatorHeight / 2
         indicatorView.isUserInteractionEnabled = false
         indicatorView.isHidden = true
@@ -849,10 +849,10 @@ private final class BookWorkspaceScopeBarView: UIView {
     ) {
         self.reduceMotion = reduceMotion
         self.committedSection = committedSection
-        let nextCanvasColor = UIColor(canvasColor).resolvedColor(with: traitCollection)
+        let nextCanvasColor = UIColor.xmResolved(canvasColor).resolvedColor(with: traitCollection)
         UIView.performWithoutAnimation { [self] in
             backgroundColor = nextCanvasColor
-            topBoundaryLayer.strokeColor = UIColor(Color.surfaceBorderSubtle)
+            topBoundaryLayer.strokeColor = UIColor.xmResolved(Color.surfaceBorderSubtle)
                 .resolvedColor(with: traitCollection)
                 .withAlphaComponent(BookWorkspaceLayoutMetrics.contentStepBoundaryOpacity)
                 .cgColor
@@ -1126,8 +1126,8 @@ private final class BookWorkspaceScopeBarView: UIView {
     }
 
     private func interpolatedTitleColor(progress: CGFloat) -> UIColor {
-        let from = UIColor(Color.textSecondary).resolvedColor(with: traitCollection)
-        let to = UIColor(Color.textPrimary).resolvedColor(with: traitCollection)
+        let from = UIColor.xmResolved(Color.textSecondary).resolvedColor(with: traitCollection)
+        let to = UIColor.xmResolved(Color.textPrimary).resolvedColor(with: traitCollection)
         var fromRed: CGFloat = 0
         var fromGreen: CGFloat = 0
         var fromBlue: CGFloat = 0
@@ -1140,7 +1140,7 @@ private final class BookWorkspaceScopeBarView: UIView {
               to.getRed(&toRed, green: &toGreen, blue: &toBlue, alpha: &toAlpha) else {
             return progress >= 0.5 ? to : from
         }
-        return UIColor(
+        return UIColor.xmSRGB(
             red: fromRed + (toRed - fromRed) * progress,
             green: fromGreen + (toGreen - fromGreen) * progress,
             blue: fromBlue + (toBlue - fromBlue) * progress,
@@ -1471,7 +1471,6 @@ final class BookWorkspaceCollectionHostView: UIView, UICollectionViewDelegate, U
         pagerScrollView.showsHorizontalScrollIndicator = false
         pagerScrollView.showsVerticalScrollIndicator = false
         pagerScrollView.alwaysBounceHorizontal = true
-        pagerScrollView.alwaysBounceVertical = false
         pagerScrollView.contentInsetAdjustmentBehavior = .never
         pagerScrollView.scrollsToTop = false
         pagerScrollView.delegate = self
@@ -1759,7 +1758,7 @@ final class BookWorkspaceCollectionHostView: UIView, UICollectionViewDelegate, U
         let interfaceStyle: UIUserInterfaceStyle = configuration.colorScheme == .dark
             ? .dark
             : .light
-        navigationNeutralizationView.backgroundColor = UIColor(configuration.canvasColor)
+        navigationNeutralizationView.backgroundColor = UIColor.xmResolved(configuration.canvasColor)
             .resolvedColor(with: UITraitCollection(userInterfaceStyle: interfaceStyle))
         headerBackdropView.configure(
             coverURLString: book.cover,
@@ -2730,7 +2729,7 @@ final class BookWorkspaceCollectionHostView: UIView, UICollectionViewDelegate, U
             RichText.prewarmPreviewLayoutSnapshot(
                 html: note.content,
                 baseFont: NoteExcerptTypography.uiBody,
-                textColor: UIColor(Color.textPrimary),
+                textColor: UIColor.xmResolved(Color.textPrimary),
                 lineSpacing: NoteExcerptTypography.bodyLineSpacing,
                 maxLines: 6,
                 width: width,
@@ -2742,7 +2741,7 @@ final class BookWorkspaceCollectionHostView: UIView, UICollectionViewDelegate, U
             RichText.prewarmPreviewLayoutSnapshot(
                 html: note.idea,
                 baseFont: NoteExcerptTypography.uiIdea,
-                textColor: UIColor(Color.textSecondary),
+                textColor: UIColor.xmResolved(Color.textSecondary),
                 lineSpacing: NoteExcerptTypography.ideaLineSpacing,
                 maxLines: 4,
                 width: max(1, width - Spacing.base - Spacing.micro),
@@ -3205,7 +3204,7 @@ struct BookWorkspaceBookHeader: View {
         }
         .padding(
             .bottom,
-            book.score > 0 ? 0 : BookWorkspaceLayoutMetrics.ratingCapsuleVerticalInset
+            book.score > .zero ? Spacing.none : BookWorkspaceLayoutMetrics.ratingCapsuleVerticalInset
         )
         .frame(width: coverColumnWidth)
     }
@@ -3371,10 +3370,10 @@ private struct BookWorkspaceGroupedCollectionSurface<Content: View>: View {
 
     var body: some View {
         let shape = UnevenRoundedRectangle(
-            topLeadingRadius: isFirst ? CornerRadius.blockLarge : 0,
-            bottomLeadingRadius: isLast ? CornerRadius.blockLarge : 0,
-            bottomTrailingRadius: isLast ? CornerRadius.blockLarge : 0,
-            topTrailingRadius: isFirst ? CornerRadius.blockLarge : 0,
+            topLeadingRadius: isFirst ? BookWorkspaceCardSurfaceStyle.cornerRadius : 0,
+            bottomLeadingRadius: isLast ? BookWorkspaceCardSurfaceStyle.cornerRadius : 0,
+            bottomTrailingRadius: isLast ? BookWorkspaceCardSurfaceStyle.cornerRadius : 0,
+            topTrailingRadius: isFirst ? BookWorkspaceCardSurfaceStyle.cornerRadius : 0,
             style: .continuous
         )
         VStack(spacing: Spacing.none) {
@@ -3410,7 +3409,7 @@ private struct BookWorkspaceGroupedSurfaceBorderMask: View {
 
     private enum Layout {
         static let edgeMaskThickness: CGFloat = 2
-        static let cornerMaskDepth = CornerRadius.blockLarge + edgeMaskThickness
+        static let cornerMaskDepth = BookWorkspaceCardSurfaceStyle.cornerRadius + edgeMaskThickness
     }
 
     var body: some View {

@@ -196,7 +196,7 @@ struct ReadingTimerSupplementView: View {
     }
 
     private func supplementSaveBar(_ viewModel: ReadingTimerSupplementViewModel) -> some View {
-        VStack(spacing: 0) {
+        VStack(spacing: Spacing.none) {
             Divider()
 
             Button {

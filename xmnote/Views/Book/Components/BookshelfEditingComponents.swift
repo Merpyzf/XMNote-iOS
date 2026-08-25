@@ -256,7 +256,7 @@ final class BookshelfSearchSurfaceView: UIView, UITextFieldDelegate {
 
         textField.attributedPlaceholder = NSAttributedString(
             string: configuration.placeholder,
-            attributes: [.foregroundColor: UIColor(Color.textHint)]
+            attributes: [.foregroundColor: UIColor.xmResolved(Color.textHint)]
         )
         if textField.text != configuration.keyword {
             textField.text = configuration.keyword
@@ -292,23 +292,23 @@ final class BookshelfSearchSurfaceView: UIView, UITextFieldDelegate {
         containerControl.addTarget(self, action: #selector(handleActivateTap), for: .touchUpInside)
 
         surfaceView.translatesAutoresizingMaskIntoConstraints = false
-        surfaceView.backgroundColor = UIColor(Color.surfaceCard).withAlphaComponent(0.68)
+        surfaceView.backgroundColor = UIColor.xmResolved(Color.surfaceCard).withAlphaComponent(0.68)
         surfaceView.layer.cornerRadius = BookshelfSearchSurfaceMetrics.compactVisualHeight / 2
         surfaceView.layer.cornerCurve = .continuous
         surfaceView.layer.borderWidth = CardStyle.borderWidth
-        surfaceView.layer.borderColor = UIColor(Color.surfaceBorderSubtle.opacity(0.22)).cgColor
+        surfaceView.layer.borderColor = UIColor.xmResolved(Color.surfaceBorderSubtle.opacity(0.22)).cgColor
         surfaceView.addGestureRecognizer(surfaceTapRecognizer)
 
         iconView.translatesAutoresizingMaskIntoConstraints = false
-        iconView.tintColor = UIColor(Color.textHint)
+        iconView.tintColor = UIColor.xmResolved(Color.textHint)
         iconView.contentMode = .scaleAspectFit
         iconView.setContentHuggingPriority(.required, for: .horizontal)
 
         textField.translatesAutoresizingMaskIntoConstraints = false
         textField.borderStyle = .none
         textField.backgroundColor = .clear
-        textField.textColor = UIColor(Color.textPrimary)
-        textField.tintColor = UIColor(Color.brand)
+        textField.textColor = UIColor.xmResolved(Color.textPrimary)
+        textField.tintColor = UIColor.xmResolved(Color.brand)
         textField.returnKeyType = .search
         textField.clearButtonMode = .never
         textField.font = BookshelfTypography.uiSearchField
@@ -317,7 +317,7 @@ final class BookshelfSearchSurfaceView: UIView, UITextFieldDelegate {
         textField.addTarget(self, action: #selector(textFieldDidChange), for: .editingChanged)
 
         clearButton.translatesAutoresizingMaskIntoConstraints = false
-        clearButton.tintColor = UIColor(Color.textHint)
+        clearButton.tintColor = UIColor.xmResolved(Color.textHint)
         clearButton.setImage(UIImage(systemName: "xmark.circle.fill"), for: .normal)
         clearButton.accessibilityLabel = "清除搜索"
         clearButton.alpha = 0
@@ -328,7 +328,7 @@ final class BookshelfSearchSurfaceView: UIView, UITextFieldDelegate {
         cancelButton.setTitle("取消", for: .normal)
         cancelButton.titleLabel?.font = BookshelfTypography.uiSearchField
         cancelButton.titleLabel?.adjustsFontForContentSizeCategory = true
-        cancelButton.setTitleColor(UIColor(Color.textSecondary), for: .normal)
+        cancelButton.setTitleColor(UIColor.xmResolved(Color.textSecondary), for: .normal)
         cancelButton.accessibilityLabel = "取消搜索"
         cancelButton.setContentHuggingPriority(.required, for: .horizontal)
         cancelButton.alpha = 0
@@ -456,8 +456,8 @@ final class BookshelfSearchSurfaceView: UIView, UITextFieldDelegate {
     /// 根据焦点与输入态刷新背景、边框和圆角，维持一级/二级页一致的层级反馈。
     private func updateSearchAppearance() {
         let isActive = isSearchMode || textField.isFirstResponder
-        surfaceView.backgroundColor = UIColor(Color.surfaceCard).withAlphaComponent(isActive ? 0.82 : 0.62)
-        surfaceView.layer.borderColor = UIColor(Color.surfaceBorderSubtle.opacity(isActive ? 0.38 : 0.22)).cgColor
+        surfaceView.backgroundColor = UIColor.xmResolved(Color.surfaceCard).withAlphaComponent(isActive ? 0.82 : 0.62)
+        surfaceView.layer.borderColor = UIColor.xmResolved(Color.surfaceBorderSubtle.opacity(isActive ? 0.38 : 0.22)).cgColor
         surfaceView.layer.cornerRadius = BookshelfSearchSurfaceMetrics.visualHeight(
             usesAccessibilityLayout: isAccessibilityLayout
         ) / 2
@@ -710,7 +710,7 @@ struct BookshelfEditChrome<BatchActions: View>: View {
     }
 
     private var rightActions: some View {
-        HStack(spacing: 6) {
+        HStack(spacing: Spacing.half) {
             batchActions
 
             Button("完成", action: onCancel)

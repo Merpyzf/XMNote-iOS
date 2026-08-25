@@ -471,8 +471,7 @@ struct BookReadingDetailTheme {
 
         /// 以当前 RGB 和指定透明度生成 SwiftUI 颜色，供半透明卡面与嵌套表面复用。
         func color(opacity: Double) -> Color {
-            Color(
-                .sRGB,
+            Color.xmSRGB(
                 red: red,
                 green: green,
                 blue: blue,
@@ -481,7 +480,7 @@ struct BookReadingDetailTheme {
         }
 
         var uiColor: UIColor {
-            UIColor(
+            UIColor.xmSRGB(
                 red: CGFloat(red),
                 green: CGFloat(green),
                 blue: CGFloat(blue),

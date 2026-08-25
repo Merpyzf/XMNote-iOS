@@ -1,5 +1,5 @@
 /**
- * [INPUT]: 依赖 xmnote/Utilities/DesignTokens.swift 的颜色、间距、圆角设计令牌
+ * [INPUT]: 依赖 xmnote/Utilities/DesignSystem 下的颜色、间距与圆角设计令牌
  * [OUTPUT]: 对外提供 CardContainer（支持圆角/描边颜色可配置）、中性紧凑 EmptyStateView、HomeTopHeaderGradient 三个通用表层组件
  * [POS]: UIComponents/Foundation 的基础表层组件集合，被各业务页面直接复用
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -125,7 +125,7 @@ struct HomeTopHeaderGradient: View {
     var body: some View {
         LinearGradient(
             colors: [
-                Color(light: Color.brand.opacity(0.2), dark: Color(hex: 0x1E2A25)),
+                Color.xmAdaptive(light: Color.brand.opacity(0.2), dark: Color.xmHex(0x1E2A25)),
                 Color.surfacePage.opacity(0)
             ],
             startPoint: .top,

@@ -1,0 +1,83 @@
+{
+  "schemaVersion": 1,
+  "components": [
+    {
+      "symbol": "TopBarBackButton",
+      "path": "xmnote/UIComponents/TopBar/TopBarActionIcon.swift",
+      "layer": "navigation",
+      "useWhen": "顶部 leading 返回操作"
+    },
+    {
+      "symbol": "xmSystemAlert",
+      "path": "xmnote/UIComponents/Foundation/XMSystemAlert.swift",
+      "layer": "feedback",
+      "useWhen": "生产路径中心确认、警告或决策弹窗"
+    },
+    {
+      "symbol": "XMBookCover",
+      "path": "xmnote/UIComponents/Foundation/XMBookCover.swift",
+      "layer": "media",
+      "useWhen": "所有书籍封面渲染"
+    },
+    {
+      "symbol": "XMTagLabel",
+      "path": "xmnote/UIComponents/Foundation/XMTagLabel.swift",
+      "layer": "media",
+      "useWhen": "纯展示的领域标签；不用于筛选、状态、评分、指标或操作型 Capsule"
+    },
+    {
+      "symbol": "LoadingGate",
+      "path": "xmnote/UIComponents/Foundation/LoadingFeedbackKit.swift",
+      "layer": "feedback",
+      "useWhen": "读取加载的延迟显示与最短驻留"
+    },
+    {
+      "symbol": "LoadPhaseHost",
+      "path": "xmnote/UIComponents/Foundation/LoadingFeedbackKit.swift",
+      "layer": "feedback",
+      "useWhen": "读取加载的占位、加载、内容、空态与失败阶段承载"
+    },
+    {
+      "symbol": "XMSheetScaffold",
+      "path": "xmnote/UIComponents/Sheet/XMSheetScaffold.swift",
+      "layer": "sheet",
+      "useWhen": "需要标准标题、关闭或双侧操作、全轴回弹及可选固定内容栏的业务 Sheet"
+    },
+    {
+      "symbol": "XMSettingsPage",
+      "path": "xmnote/UIComponents/Settings/XMSettingsPage.swift",
+      "layer": "settings",
+      "useWhen": "卡片式配置页的根内容；统一滚动、回弹、页面边距、最大宽度与背景"
+    },
+    {
+      "symbol": "XMSettingsSection",
+      "path": "xmnote/UIComponents/Settings/XMSettingsSection.swift",
+      "layer": "settings",
+      "useWhen": "带本地化标题的配置分区"
+    },
+    {
+      "symbol": "XMSettingsGroup",
+      "path": "xmnote/UIComponents/Settings/XMSettingsGroup.swift",
+      "layer": "settings",
+      "useWhen": "同一语义组内的配置项容器"
+    },
+    {
+      "symbol": "XMSettingsDivider",
+      "path": "xmnote/UIComponents/Settings/XMSettingsGroup.swift",
+      "layer": "settings",
+      "useWhen": "同一配置组内需要弱分割线"
+    },
+    {
+      "symbol": "XMSettingsToggleRow",
+      "path": "xmnote/UIComponents/Settings/XMSettingsRows.swift",
+      "layer": "settings",
+      "useWhen": "单一标题与 Toggle 组成的设置行"
+    },
+    {
+      "symbol": "XMSettingsValueMenuRow",
+      "path": "xmnote/UIComponents/Settings/XMSettingsRows.swift",
+      "layer": "settings",
+      "useWhen": "当前值通过菜单切换的设置行"
+    }
+  ]
+}

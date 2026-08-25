@@ -186,8 +186,8 @@ private struct BrandVerticalTrimModifier: ViewModifier {
 
     func body(content: Content) -> some View {
         content
-            .padding(.top, edges.contains(.top) ? -trim.top : 0)
-            .padding(.bottom, edges.contains(.bottom) ? -trim.bottom : 0)
+            .padding(.top, edges.contains(.top) ? -trim.top : CGFloat.zero)
+            .padding(.bottom, edges.contains(.bottom) ? -trim.bottom : CGFloat.zero)
     }
 }
 

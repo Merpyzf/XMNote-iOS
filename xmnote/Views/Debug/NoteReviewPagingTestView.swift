@@ -234,9 +234,9 @@ private struct NoteReviewPagingSampleCard: View {
     var body: some View {
         ZStack(alignment: .bottom) {
             RoundedRectangle(cornerRadius: CornerRadius.containerLarge, style: .continuous)
-                .fill(Color(hex: note.palette.backgroundHex))
+                .fill(Color.xmHex(note.palette.backgroundHex))
                 .overlay(alignment: .bottomLeading) {
-                    NoteReviewPagingSampleArtwork(color: Color(hex: note.palette.accentHex))
+                    NoteReviewPagingSampleArtwork(color: Color.xmHex(note.palette.accentHex))
                         .frame(height: 220)
                         .opacity(0.42)
                         .padding(.horizontal, Spacing.base)

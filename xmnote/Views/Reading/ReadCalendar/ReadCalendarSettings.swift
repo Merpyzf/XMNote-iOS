@@ -20,7 +20,7 @@ enum ReadCalendarBehaviorSetting: CaseIterable, Identifiable {
 
     var id: Self { self }
 
-    var title: String {
+    var title: LocalizedStringResource {
         switch self {
         case .readTiming:
             "阅读计时"

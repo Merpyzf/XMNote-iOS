@@ -812,7 +812,7 @@ private struct AppleMusicTransitionFrameworkSwiftUIShell: View {
                 AppleMusicTransitionFrameworkSwiftUIDestination {
                     isDestinationPresented = false
                 }
-                .presentationBackground(Color(uiColor: .systemBackground))
+                .presentationBackground(Color.xmResolved(.systemBackground))
                 .navigationTransition(
                     .zoom(
                         sourceID: AppleMusicTransitionFrameworkFixture.transitionID,
@@ -934,7 +934,7 @@ private struct AppleMusicTransitionFrameworkSwiftUIFeed: View {
             .padding(.vertical, 12)
             .safeAreaPadding(.bottom, 96)
         }
-        .background(Color(uiColor: .systemBackground))
+        .background(Color.xmResolved(.systemBackground))
         .overlay(alignment: .bottom) {
             AppleMusicTransitionFrameworkSwiftUICalibrationBackdrop()
                 .allowsHitTesting(false)
@@ -960,7 +960,7 @@ private struct AppleMusicTransitionFrameworkSwiftUICalibrationBackdrop: View {
                 Array(AppleMusicTransitionFrameworkFixture.calibrationColors.enumerated()),
                 id: \.offset
             ) { _, color in
-                Color(uiColor: color)
+                Color.xmResolved(color)
             }
         }
         .frame(height: AppleMusicTransitionFrameworkFixture.calibrationHeight)
@@ -981,7 +981,7 @@ private struct AppleMusicTransitionFrameworkSwiftUIDestination: View {
 
     var body: some View {
         ZStack {
-            Color(uiColor: .systemBackground)
+            Color.xmResolved(.systemBackground)
                 .ignoresSafeArea()
 
             NavigationStack {
@@ -1002,7 +1002,7 @@ private struct AppleMusicTransitionFrameworkSwiftUIDestination: View {
                     Spacer()
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .background(Color(uiColor: .systemBackground))
+                .background(Color.xmResolved(.systemBackground))
                 .navigationTitle("Framework D")
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar {

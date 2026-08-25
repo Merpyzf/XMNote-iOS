@@ -315,7 +315,7 @@ private struct SystemColorSpecCard: View {
     let spec: SystemColorsTestView.SystemColorSpec
     let traitCollection: UITraitCollection
 
-    private var color: Color { Color(uiColor: spec.provider()) }
+    private var color: Color { Color.xmResolved(spec.provider()) }
     private var resolvedHex: String { spec.resolvedRGBAHex(for: traitCollection) }
 
     /// 渲染单个系统颜色的样例卡片。
@@ -361,11 +361,11 @@ private extension SystemColorSpecCard {
     var colorSwatch: some View {
         ZStack {
             RoundedRectangle(cornerRadius: CornerRadius.inlaySmall, style: .continuous)
-                .fill(Color(uiColor: .tertiarySystemBackground))
+                .fill(Color.xmResolved(.tertiarySystemBackground))
             RoundedRectangle(cornerRadius: CornerRadius.inlaySmall, style: .continuous)
                 .fill(color)
             RoundedRectangle(cornerRadius: CornerRadius.inlaySmall, style: .continuous)
-                .stroke(Color(uiColor: .separator), lineWidth: 0.6)
+                .stroke(Color.xmResolved(.separator), lineWidth: 0.6)
         }
         .frame(width: 36, height: 36)
     }
@@ -434,10 +434,10 @@ private extension SystemColorSpecCard {
         .padding(.horizontal, Spacing.half)
         .padding(.vertical, Spacing.half)
         .frame(maxWidth: .infinity, minHeight: 64, alignment: .topLeading)
-        .background(Color(uiColor: .secondarySystemBackground), in: RoundedRectangle(cornerRadius: CornerRadius.inlayMedium, style: .continuous))
+        .background(Color.xmResolved(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: CornerRadius.inlayMedium, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: CornerRadius.inlayMedium, style: .continuous)
-                .stroke(Color(uiColor: .separator), lineWidth: 0.5)
+                .stroke(Color.xmResolved(.separator), lineWidth: 0.5)
         }
     }
 
@@ -449,7 +449,7 @@ private extension SystemColorSpecCard {
         var blue: CGFloat = 0
         var alpha: CGFloat = 0
         guard resolved.getRed(&red, green: &green, blue: &blue, alpha: &alpha) else {
-            return Color(uiColor: .label)
+            return Color.xmResolved(.label)
         }
         let luminance = 0.2126 * linearize(red) + 0.7152 * linearize(green) + 0.0722 * linearize(blue)
         return luminance > 0.6 ? .black : .white

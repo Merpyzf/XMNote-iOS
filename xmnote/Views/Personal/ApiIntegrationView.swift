@@ -48,14 +48,9 @@ private struct ApiIntegrationContentView: View {
     @State private var activeDestination: ExternalAppDestination?
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: Spacing.cozy) {
-                Text("关联应用")
-                    .font(AppTypography.captionMedium)
-                    .foregroundStyle(Color.textSecondary)
-                    .padding(.horizontal, Spacing.contentEdge)
-
-                XMSettingsGroupCard {
+        XMSettingsPage {
+            XMSettingsSection("关联应用") {
+                XMSettingsGroup(verticalPadding: Spacing.none) {
                     VStack(spacing: Spacing.none) {
                         ForEach(ExternalAppDestination.allCases) { destination in
                             ApiIntegrationAppRow(
@@ -68,20 +63,15 @@ private struct ApiIntegrationContentView: View {
 
                             if let lastDestination = ExternalAppDestination.allCases.last,
                                destination != lastDestination {
-                                Divider()
+                                XMSettingsDivider()
                                     .padding(.leading, ApiIntegrationLayout.rowDividerLeadingInset)
                             }
                         }
                     }
                 }
             }
-            .padding(.horizontal, Spacing.screenEdge)
-            .padding(.top, Spacing.section)
-            .padding(.bottom, Spacing.contentEdge)
-            .animation(settingsAnimation, value: viewModel.settings)
         }
-        .scrollIndicators(.hidden)
-        .background(Color.surfacePage.ignoresSafeArea())
+        .animation(settingsAnimation, value: viewModel.settings)
         .sheet(item: $activeDestination) { destination in
             ApiIntegrationEditSheet(destination: destination, viewModel: viewModel)
                 .presentationDetents([.height(ApiIntegrationLayout.sheetCompactHeight), .medium])
@@ -100,9 +90,7 @@ private enum ApiIntegrationLayout {
     static let flomoIconHeight: CGFloat = 22
     static let writeathonIconSize: CGFloat = 23
     static let inboxIconSize: CGFloat = 21
-    static let rowMinHeight: CGFloat = 58
     static let rowDividerLeadingInset: CGFloat = iconContainerSize + Spacing.base
-    static let inputMinHeight: CGFloat = 48
     static let sheetCompactHeight: CGFloat = 360
 }
 
@@ -118,7 +106,7 @@ private struct ApiIntegrationAppRow: View {
 
                 VStack(alignment: .leading, spacing: Spacing.compact) {
                     Text(destination.presentationTitle)
-                        .font(AppTypography.subheadlineSemibold)
+                        .font(AppTypography.subheadlineMedium)
                         .foregroundStyle(Color.textPrimary)
                         .lineLimit(1)
 
@@ -133,18 +121,17 @@ private struct ApiIntegrationAppRow: View {
 
                 HStack(spacing: Spacing.half) {
                     Text(destination.statusTitle(isConfigured: isConfigured))
-                        .font(AppTypography.captionMedium)
-                        .foregroundStyle(isConfigured ? Color.feedbackSuccess : Color.textHint)
+                        .font(AppTypography.subheadline)
+                        .foregroundStyle(isConfigured ? Color.feedbackSuccess : Color.textSecondary)
                         .lineLimit(1)
                         .minimumScaleFactor(0.82)
 
                     Image(systemName: "chevron.right")
-                        .font(AppTypography.caption)
-                        .fontWeight(.semibold)
+                        .font(AppTypography.captionSemibold)
                         .foregroundStyle(Color.textHint)
                 }
             }
-            .frame(minHeight: ApiIntegrationLayout.rowMinHeight)
+            .frame(minHeight: XMSettingsPageLayout.detailRowMinHeight)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -161,20 +148,20 @@ private struct ApiIntegrationEditSheet: View {
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
-        XMSettingsPageScaffold(
+        XMSheetScaffold(
             title: "\(destination.presentationTitle) 配置",
             subtitle: destination.sheetSubtitle,
             onClose: { dismiss() }
         ) {
             VStack(spacing: Spacing.comfortable) {
-                XMSettingsGroupCard {
+                XMSettingsGroup {
                     VStack(alignment: .leading, spacing: Spacing.cozy) {
                         ApiIntegrationStatusLine(
                             destination: destination,
                             isConfigured: viewModel.settings.isConfigured(destination)
                         )
 
-                        Divider()
+                        XMSettingsDivider()
 
                         ApiIntegrationInputField(
                             destination: destination,
@@ -288,7 +275,7 @@ private struct ApiIntegrationInputField: View {
                 .autocorrectionDisabled()
                 .submitLabel(.done)
                 .padding(.horizontal, Spacing.base)
-                .frame(maxWidth: .infinity, minHeight: ApiIntegrationLayout.inputMinHeight, alignment: .leading)
+                .frame(maxWidth: .infinity, minHeight: XMSettingsPageLayout.inputMinHeight, alignment: .leading)
                 .background(
                     Color.surfaceNested,
                     in: RoundedRectangle(cornerRadius: CornerRadius.blockMedium, style: .continuous)

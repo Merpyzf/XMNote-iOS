@@ -325,14 +325,14 @@ private enum MonthlyReadingChartDemoPalette: String, CaseIterable, Identifiable 
     var previewSurface: Color {
         switch self {
         case .recordingRed:
-            Color(
-                light: Color(hex: 0xF4DEDE),
-                dark: Color(hex: 0x302426)
+            Color.xmAdaptive(
+                light: Color.xmHex(0xF4DEDE),
+                dark: Color.xmHex(0x302426)
             )
         case .coolBlue:
-            Color(
-                light: Color(hex: 0xE5EEF8),
-                dark: Color(hex: 0x202932)
+            Color.xmAdaptive(
+                light: Color.xmHex(0xE5EEF8),
+                dark: Color.xmHex(0x202932)
             )
         }
     }
@@ -341,42 +341,42 @@ private enum MonthlyReadingChartDemoPalette: String, CaseIterable, Identifiable 
         switch self {
         case .recordingRed:
             MonthlyReadingChartStyle(
-                monthTrackColor: Color(
-                    light: Color(hex: 0xE9C7C8),
-                    dark: Color(hex: 0x4A3033)
+                monthTrackColor: Color.xmAdaptive(
+                    light: Color.xmHex(0xE9C7C8),
+                    dark: Color.xmHex(0x4A3033)
                 ),
                 monthBarColors: [
-                    Color(light: Color(hex: 0xEAA4A6), dark: Color(hex: 0x9C5559)),
-                    Color(light: Color(hex: 0xD96569), dark: Color(hex: 0xB85A5F)),
+                    Color.xmAdaptive(light: Color.xmHex(0xEAA4A6), dark: Color.xmHex(0x9C5559)),
+                    Color.xmAdaptive(light: Color.xmHex(0xD96569), dark: Color.xmHex(0xB85A5F)),
                 ],
                 collapsedSummaryColor: .white,
                 expandedSummaryColor: .textSecondary,
                 collapsedArrowColor: .white,
                 expandedArrowColor: .iconSecondary,
                 dailyBarColors: [
-                    Color(light: Color(hex: 0xF1BFC0), dark: Color(hex: 0x7D484C)),
-                    Color(light: Color(hex: 0xDE7477), dark: Color(hex: 0xA95459)),
+                    Color.xmAdaptive(light: Color.xmHex(0xF1BFC0), dark: Color.xmHex(0x7D484C)),
+                    Color.xmAdaptive(light: Color.xmHex(0xDE7477), dark: Color.xmHex(0xA95459)),
                 ],
                 dailyDateColor: .white,
                 dailyDurationColor: .white
             )
         case .coolBlue:
             MonthlyReadingChartStyle(
-                monthTrackColor: Color(
-                    light: Color(hex: 0xC7D7E8),
-                    dark: Color(hex: 0x2B3A49)
+                monthTrackColor: Color.xmAdaptive(
+                    light: Color.xmHex(0xC7D7E8),
+                    dark: Color.xmHex(0x2B3A49)
                 ),
                 monthBarColors: [
-                    Color(light: Color(hex: 0x8FC6E8), dark: Color(hex: 0x366D91)),
-                    Color(light: Color(hex: 0x397FB4), dark: Color(hex: 0x3D87B9)),
+                    Color.xmAdaptive(light: Color.xmHex(0x8FC6E8), dark: Color.xmHex(0x366D91)),
+                    Color.xmAdaptive(light: Color.xmHex(0x397FB4), dark: Color.xmHex(0x3D87B9)),
                 ],
                 collapsedSummaryColor: .white,
                 expandedSummaryColor: .textSecondary,
                 collapsedArrowColor: .white,
                 expandedArrowColor: .iconSecondary,
                 dailyBarColors: [
-                    Color(light: Color(hex: 0xB6D9EF), dark: Color(hex: 0x31566F)),
-                    Color(light: Color(hex: 0x559AC8), dark: Color(hex: 0x3E7EA8)),
+                    Color.xmAdaptive(light: Color.xmHex(0xB6D9EF), dark: Color.xmHex(0x31566F)),
+                    Color.xmAdaptive(light: Color.xmHex(0x559AC8), dark: Color.xmHex(0x3E7EA8)),
                 ],
                 dailyDateColor: .white,
                 dailyDurationColor: .white

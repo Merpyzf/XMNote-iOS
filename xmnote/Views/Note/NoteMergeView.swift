@@ -1,5 +1,5 @@
 /**
- * [INPUT]: 依赖 RepositoryContainer 注入 NoteRepository/OCRRepository，依赖 NoteMergeViewModel、NoteTextComposerView 与现有设计组件
+ * [INPUT]: 依赖 RepositoryContainer 注入 NoteRepository/OCRRepository，依赖 NoteMergeViewModel、NoteTextComposerView、XMTagLabel 与现有设计组件
  * [OUTPUT]: 对外提供 NoteMergeView，覆盖正文/想法独立排序与分隔、富文本编辑、统一标签草稿选择、图片并集、元信息选择及真实事务合并
  * [POS]: Note 模块书摘合并页面，由 NoteRoute.mergeNotes 进入
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -365,12 +365,7 @@ struct NoteMergeView: View {
                         ScrollView(.horizontal, showsIndicators: false) {
                             HStack(spacing: Spacing.cozy) {
                                 ForEach(draft.selectedTags) { tag in
-                                    Text(tag.title)
-                                        .font(AppTypography.caption)
-                                        .foregroundStyle(Color.textSecondary)
-                                        .padding(.horizontal, Spacing.cozy)
-                                        .frame(minHeight: 26)
-                                        .background(Color.tagBackground, in: Capsule())
+                                    XMTagLabel(tag.title)
                                 }
                             }
                         }

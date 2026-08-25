@@ -7,6 +7,11 @@
 
 import SwiftUI
 
+private enum BookEditorLayout {
+    static let formBottomPadding: CGFloat = 120
+    static let longTextMinimumHeight: CGFloat = 120
+}
+
 /// 书籍完整录入页入口，支持搜索结果预填、手动创建、既有书籍编辑与不恢复占位书的资料编辑。
 struct BookEditorView: View {
     let mode: BookEditorMode
@@ -83,7 +88,7 @@ struct BookEditorView: View {
                     }
                     .padding(.horizontal, Spacing.screenEdge)
                     .padding(.top, Spacing.base)
-                    .padding(.bottom, 120)
+                    .padding(.bottom, BookEditorLayout.formBottomPadding)
                 }
                 .scrollIndicators(.hidden)
             } else if viewModel.isLoading {
@@ -224,8 +229,8 @@ struct BookEditorView: View {
             editorTextField("ISBN", text: binding(viewModel, \.isbn), keyboardType: .asciiCapable)
             editorTextField("出版日期", text: binding(viewModel, \.pubDate))
             editorTextEditor("作者简介", text: binding(viewModel, \.authorIntro), minHeight: 96)
-            editorTextEditor("摘要", text: binding(viewModel, \.summary), minHeight: 120)
-            editorTextEditor("目录", text: binding(viewModel, \.catalog), minHeight: 120)
+            editorTextEditor("摘要", text: binding(viewModel, \.summary), minHeight: BookEditorLayout.longTextMinimumHeight)
+            editorTextEditor("目录", text: binding(viewModel, \.catalog), minHeight: BookEditorLayout.longTextMinimumHeight)
         }
     }
 
@@ -247,8 +252,8 @@ struct BookEditorView: View {
             editorTextField("出版日期", text: binding(viewModel, \.pubDate))
             editorTextField("封面链接", text: binding(viewModel, \.coverURL))
             editorTextEditor("作者简介", text: binding(viewModel, \.authorIntro), minHeight: 96)
-            editorTextEditor("摘要", text: binding(viewModel, \.summary), minHeight: 120)
-            editorTextEditor("目录", text: binding(viewModel, \.catalog), minHeight: 120)
+            editorTextEditor("摘要", text: binding(viewModel, \.summary), minHeight: BookEditorLayout.longTextMinimumHeight)
+            editorTextEditor("目录", text: binding(viewModel, \.catalog), minHeight: BookEditorLayout.longTextMinimumHeight)
         }
     }
 

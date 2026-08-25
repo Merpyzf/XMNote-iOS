@@ -92,7 +92,7 @@ struct AIConfigurationPromptEditSheet: View {
         hint: String,
         text: Binding<String>
     ) -> some View {
-        XMSettingsGroupCard {
+        XMSettingsGroup {
             VStack(alignment: .leading, spacing: Spacing.cozy) {
                 Text(title)
                     .font(AppTypography.subheadlineSemibold)

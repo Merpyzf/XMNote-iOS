@@ -303,7 +303,7 @@ private extension ReadCalendarYearSummarySheet {
         let blue = CGFloat((color.backgroundRGBAHex >> 8) & 0xFF) / 255
         let alpha = CGFloat(color.backgroundRGBAHex & 0xFF) / 255
         let soften: CGFloat = 0.5
-        return Color(
+        return Color.xmSRGB(
             red: red + (1 - red) * soften,
             green: green + (1 - green) * soften,
             blue: blue + (1 - blue) * soften,

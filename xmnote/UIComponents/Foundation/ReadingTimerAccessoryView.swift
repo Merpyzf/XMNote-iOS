@@ -125,7 +125,7 @@ struct ReadingTimerAccessoryView: View {
     }
 
     private func inlineTwoLineInformation(seconds: Int64) -> some View {
-        VStack(alignment: .leading, spacing: 0) {
+        VStack(alignment: .leading, spacing: Spacing.none) {
             Text(session.book.name)
                 .font(AppTypography.captionMedium)
                 .foregroundStyle(Color.textPrimary)

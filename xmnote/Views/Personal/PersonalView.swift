@@ -6,8 +6,8 @@
 //
 
 /**
- * [INPUT]: 依赖 AppState、DesktopWebSessionCoordinator、AppNavigationCoordinator 环境状态、PersonalRoute 导航路由与阅读日历根级呈现回调
- * [OUTPUT]: 对外提供 PersonalView，我的 Tab 核心入口、阅读日历独立入口、网页端入口状态与方案 A 规格的新增优先顶部更多菜单
+ * [INPUT]: 依赖 AppState、DesktopWebSessionCoordinator、AppNavigationCoordinator、XMSettingsGroup、PersonalRoute 与阅读日历根级呈现回调
+ * [OUTPUT]: 对外提供 PersonalView，以统一设置分组承载我的 Tab 核心入口、阅读日历独立入口、网页端入口状态与新增优先顶部更多菜单
  * [POS]: Personal 模块容器壳层，承载设置列表、网页端与备份入口
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -17,7 +17,6 @@ import SwiftUI
 /// 个人中心首页，汇总设置、备份、阅读偏好与支持入口。
 struct PersonalView: View {
     private enum Layout {
-        static let panelCornerRadius: CGFloat = CornerRadius.containerMedium
         static let panelSpacing: CGFloat = Spacing.comfortable
         static let panelEdgeVerticalInset: CGFloat = Spacing.half
         static let settingsRowIconWidth: CGFloat = 24
@@ -112,7 +111,10 @@ extension PersonalView {
     @ViewBuilder
     private var premiumSection: some View {
         if !appState.isPremium {
-            PersonalSettingsPanel(cornerRadius: Layout.panelCornerRadius) {
+            XMSettingsGroup(
+                horizontalPadding: Spacing.none,
+                verticalPadding: Spacing.none
+            ) {
                 NavigationLink(value: AppRoute.personal(.premium)) {
                     HStack(spacing: Spacing.base) {
                         Image(systemName: "crown.fill")
@@ -226,7 +228,10 @@ extension PersonalView {
     private func groupedPanel<Content: View>(
         @ViewBuilder content: () -> Content
     ) -> some View {
-        PersonalSettingsPanel(cornerRadius: Layout.panelCornerRadius) {
+        XMSettingsGroup(
+            horizontalPadding: Spacing.none,
+            verticalPadding: Spacing.none
+        ) {
             VStack(spacing: Spacing.none) {
                 content()
             }
@@ -321,25 +326,6 @@ extension PersonalView {
         .padding(.horizontal, Spacing.contentEdge)
         .frame(minHeight: Layout.rowMinHeight)
         .contentShape(Rectangle())
-    }
-}
-
-private struct PersonalSettingsPanel<Content: View>: View {
-    let cornerRadius: CGFloat
-    let content: Content
-
-    init(
-        cornerRadius: CGFloat,
-        @ViewBuilder content: () -> Content
-    ) {
-        self.cornerRadius = cornerRadius
-        self.content = content()
-    }
-
-    var body: some View {
-        CardContainer(cornerRadius: cornerRadius) {
-            content
-        }
     }
 }
 

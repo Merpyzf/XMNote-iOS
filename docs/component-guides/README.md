@@ -22,7 +22,14 @@
 | CollapsedRichTextPreview | `xmnote/UIComponents/Foundation/CollapsedRichTextPreview.swift` | `docs/component-guides/ExpandableRichText使用说明.md` | 已完成 |
 | ImmersiveBottomChrome | `xmnote/UIComponents/Foundation/ImmersiveBottomChrome.swift` | `docs/component-guides/ImmersiveBottomChrome使用说明.md` | 已完成 |
 | XMToast | `xmnote/UIComponents/Foundation/XMToast.swift` | `docs/component-guides/XMToast使用说明.md` | 已完成 |
-| XMSettingsSheetComponents | `xmnote/UIComponents/Foundation/XMSettingsSheetComponents.swift` | `docs/component-guides/XMSettingsSheetComponents使用说明.md` | 已完成 |
+| XMTagLabel | `xmnote/UIComponents/Foundation/XMTagLabel.swift` | `docs/component-guides/XMTagLabel使用说明.md` | 已完成 |
+| XMSettingsPage | `xmnote/UIComponents/Settings/XMSettingsPage.swift` | `docs/component-guides/XMSettingsComponents使用说明.md` | 已完成 |
+| XMSettingsSection | `xmnote/UIComponents/Settings/XMSettingsSection.swift` | `docs/component-guides/XMSettingsComponents使用说明.md` | 已完成 |
+| XMSettingsGroup | `xmnote/UIComponents/Settings/XMSettingsGroup.swift` | `docs/component-guides/XMSettingsComponents使用说明.md` | 已完成 |
+| XMSettingsDivider | `xmnote/UIComponents/Settings/XMSettingsGroup.swift` | `docs/component-guides/XMSettingsComponents使用说明.md` | 已完成 |
+| XMSettingsValueMenuRow | `xmnote/UIComponents/Settings/XMSettingsRows.swift` | `docs/component-guides/XMSettingsComponents使用说明.md` | 已完成 |
+| XMSettingsToggleRow | `xmnote/UIComponents/Settings/XMSettingsRows.swift` | `docs/component-guides/XMSettingsComponents使用说明.md` | 已完成 |
+| XMSheetScaffold | `xmnote/UIComponents/Sheet/XMSheetScaffold.swift` | `docs/component-guides/XMSheetScaffold使用说明.md` | 已完成 |
 | NoteReviewPagingDeck | `xmnote/UIComponents/Foundation/NoteReviewPaging/NoteReviewPagingDeck.swift` | `docs/component-guides/NoteReviewPagingDeck使用说明.md` | 已完成 |
 | TopSwitcher | `xmnote/UIComponents/Tabs/TopSwitcher.swift` | `docs/component-guides/TopSwitcher使用说明.md` | 已完成 |
 | XMInlineTabBar | `xmnote/UIComponents/Tabs/XMInlineTabBar.swift` | `docs/component-guides/XMInlineTabBar使用说明.md` | 已完成 |

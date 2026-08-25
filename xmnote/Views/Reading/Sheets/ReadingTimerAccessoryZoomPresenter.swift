@@ -437,7 +437,7 @@ struct ReadingTimerZoomPresenter<Presentation: Identifiable, Source: View, Desti
     let sourceBuilder: SourceBuilder
     let destinationBuilder: DestinationBuilder
 
-    private let surfaceColor = UIColor(Color.surfacePage)
+    private let surfaceColor = UIColor.xmResolved(Color.surfacePage)
 
     /// 注入稳定 owner、生产票据与来源/目标内容；Representable 不拥有转场 phase。
     init(

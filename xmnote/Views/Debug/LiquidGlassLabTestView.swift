@@ -1085,7 +1085,7 @@ private struct LiquidGlassLabBackground: View {
     var body: some View {
         switch kind {
         case .solid:
-            Color(light: Color(hex: 0xEFF6F2), dark: Color(hex: 0x151B18))
+            Color.xmAdaptive(light: Color.xmHex(0xEFF6F2), dark: Color.xmHex(0x151B18))
         case .gradient:
             LinearGradient(
                 colors: [
@@ -1111,7 +1111,7 @@ private struct LiquidGlassLabBackground: View {
     var lowComplexityBackground: some View {
         ZStack {
             LinearGradient(
-                colors: [Color(hex: 0xDAF3E4), Color(hex: 0xF7F2DA), Color(hex: 0xD7EAF7)],
+                colors: [Color.xmHex(0xDAF3E4), Color.xmHex(0xF7F2DA), Color.xmHex(0xD7EAF7)],
                 startPoint: .top,
                 endPoint: .bottom
             )
@@ -1131,7 +1131,7 @@ private struct LiquidGlassLabBackground: View {
         Canvas { context, size in
             let base = Path(CGRect(origin: .zero, size: size))
             context.fill(base, with: .linearGradient(
-                Gradient(colors: [Color(hex: 0x17324D), Color(hex: 0x2E6F74), Color(hex: 0xF1C36B)]),
+                Gradient(colors: [Color.xmHex(0x17324D), Color.xmHex(0x2E6F74), Color.xmHex(0xF1C36B)]),
                 startPoint: .zero,
                 endPoint: CGPoint(x: size.width, y: size.height)
             ))
@@ -1426,8 +1426,8 @@ private extension LiquidGlassLabTestViewModel.SchemeMode {
 }
 
 private extension Color {
-    static let liquidGlassLabBlue = Color(uiColor: .systemBlue)
-    static let liquidGlassLabOrange = Color(uiColor: .systemOrange)
+    static let liquidGlassLabBlue = Color.xmResolved(.systemBlue)
+    static let liquidGlassLabOrange = Color.xmResolved(.systemOrange)
 }
 
 #Preview {

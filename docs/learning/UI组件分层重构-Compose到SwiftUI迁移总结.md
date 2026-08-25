@@ -10,7 +10,7 @@
 
 ## 2. Android Compose 对照思路
 - Compose 的 `ui-components` 模块，对应 SwiftUI 的 `UIComponents/` 目录。
-- Compose 的 `design system`（spacing/color/shape token），对应 iOS 的 `DesignTokens.swift`。
+- Compose 的 `design system`（spacing/color/shape token），对应 iOS 的 `xmnote/Utilities/DesignSystem/` 分责令牌目录。
 - Compose 页面不应直接拼装底层样式实现，SwiftUI 同理，页面应组合 `UIComponents`。
 
 ## 3. 可运行对照示例

@@ -2283,6 +2283,9 @@ private struct BootstrapCollectionPanel: View {
 
 /// 分组列表保留卡片边界、行距和分隔线，适配时间线与笔记首页的共同版式节奏。
 private struct BootstrapGroupedListStructure: View {
+    private static let rowIconSize: CGFloat = 36
+    private static let dividerLeadingInset = Spacing.contentEdge + rowIconSize + Spacing.base
+
     let rowCount: Int
 
     var body: some View {
@@ -2294,7 +2297,7 @@ private struct BootstrapGroupedListStructure: View {
                         HStack(spacing: Spacing.base) {
                             RoundedRectangle(cornerRadius: CornerRadius.inlayMedium, style: .continuous)
                                 .fill(Color.controlFillSecondary.opacity(0.72))
-                                .frame(width: 36, height: 36)
+                                .frame(width: Self.rowIconSize, height: Self.rowIconSize)
                             VStack(alignment: .leading, spacing: Spacing.cozy) {
                                 BootstrapLine(width: index.isMultiple(of: 2) ? 124 : 96, height: 9)
                                 BootstrapLine(width: index.isMultiple(of: 2) ? 184 : 148)
@@ -2308,7 +2311,7 @@ private struct BootstrapGroupedListStructure: View {
                             Rectangle()
                                 .fill(Color.surfaceBorderSubtle.opacity(0.36))
                                 .frame(height: CardStyle.borderWidth)
-                                .padding(.leading, 66)
+                                .padding(.leading, Self.dividerLeadingInset)
                         }
                     }
                 }
@@ -2319,6 +2322,9 @@ private struct BootstrapGroupedListStructure: View {
 
 /// 我的页设置面板按生产 44pt 行高组织，圆角与表面色均复用现有令牌。
 private struct BootstrapSettingsPanel: View {
+    private static let rowIconSize: CGFloat = 24
+    private static let dividerLeadingInset = Spacing.contentEdge + rowIconSize + Spacing.base
+
     let rowCount: Int
 
     var body: some View {
@@ -2328,7 +2334,7 @@ private struct BootstrapSettingsPanel: View {
                     HStack(spacing: Spacing.base) {
                         RoundedRectangle(cornerRadius: CornerRadius.inlayMedium, style: .continuous)
                             .fill(Color.controlFillSecondary.opacity(0.72))
-                            .frame(width: 24, height: 24)
+                            .frame(width: Self.rowIconSize, height: Self.rowIconSize)
                         BootstrapLine(width: index.isMultiple(of: 2) ? 92 : 116, height: 9)
                         Spacer(minLength: 0)
                         BootstrapLine(width: 18, height: 7)
@@ -2340,7 +2346,7 @@ private struct BootstrapSettingsPanel: View {
                         Rectangle()
                             .fill(Color.surfaceBorderSubtle.opacity(0.36))
                             .frame(height: CardStyle.borderWidth)
-                            .padding(.leading, 54)
+                            .padding(.leading, Self.dividerLeadingInset)
                     }
                 }
             }

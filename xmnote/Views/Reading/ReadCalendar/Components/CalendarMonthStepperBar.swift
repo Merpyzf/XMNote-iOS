@@ -1,5 +1,5 @@
 /**
- * [INPUT]: 依赖 xmnote/Utilities/DesignTokens.swift 的颜色、圆角、边框与间距令牌
+ * [INPUT]: 依赖 xmnote/Utilities/DesignSystem 下的颜色、圆角、边框与间距令牌
  * [OUTPUT]: 对外提供 CalendarMonthStepperBar（月视图顶部年月选择 Sheet 触发器）
  * [POS]: ReadCalendar 页面私有子视图，服务阅读日历顶部月份切换交互
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md

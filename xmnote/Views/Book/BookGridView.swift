@@ -120,7 +120,7 @@ struct BookGridView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             if let writeError = viewModel.writeError, !writeError.isEmpty {
                 writeErrorHint(writeError)
-                    .padding(.top, showsDimensionToolbar ? BookGridToolbarMetrics.dimensionRailHeight : 0)
+                    .padding(.top, showsDimensionToolbar ? BookGridToolbarMetrics.dimensionRailHeight : Spacing.none)
             }
         }
         .xmSystemAlert(item: $viewModel.activeContributorNameEdit) { nameEdit in
@@ -328,7 +328,7 @@ struct BookGridView: View {
             Image(systemName: "exclamationmark.triangle.fill")
                 .font(AppTypography.caption)
                 .foregroundStyle(Color.feedbackWarning)
-                .padding(.top, 2)
+                .padding(.top, Spacing.tiny)
 
             Text(message)
                 .font(AppTypography.caption)

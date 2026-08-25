@@ -26,7 +26,14 @@
 | CollapsedRichTextPreview | UI-复用关键 | xmnote/UIComponents/Foundation/CollapsedRichTextPreview.swift | docs/component-guides/ExpandableRichText使用说明.md | 新增/重大重构 |
 | ImmersiveBottomChrome | UI-复用关键 | xmnote/UIComponents/Foundation/ImmersiveBottomChrome.swift | docs/component-guides/ImmersiveBottomChrome使用说明.md | 新增/重大重构 |
 | XMToast | UI-复用关键 | xmnote/UIComponents/Foundation/XMToast.swift | docs/component-guides/XMToast使用说明.md | 新增/重大重构 |
-| XMSettingsSheetComponents | UI-复用关键 | xmnote/UIComponents/Foundation/XMSettingsSheetComponents.swift | docs/component-guides/XMSettingsSheetComponents使用说明.md | 新增/重大重构 |
+| XMTagLabel | UI-复用关键 | xmnote/UIComponents/Foundation/XMTagLabel.swift | docs/component-guides/XMTagLabel使用说明.md | 新增/重大重构 |
+| XMSettingsPage | UI-复用关键 | xmnote/UIComponents/Settings/XMSettingsPage.swift | docs/component-guides/XMSettingsComponents使用说明.md | 新增/重大重构 |
+| XMSettingsSection | UI-复用关键 | xmnote/UIComponents/Settings/XMSettingsSection.swift | docs/component-guides/XMSettingsComponents使用说明.md | 新增/重大重构 |
+| XMSettingsGroup | UI-复用关键 | xmnote/UIComponents/Settings/XMSettingsGroup.swift | docs/component-guides/XMSettingsComponents使用说明.md | 新增/重大重构 |
+| XMSettingsDivider | UI-复用关键 | xmnote/UIComponents/Settings/XMSettingsGroup.swift | docs/component-guides/XMSettingsComponents使用说明.md | 新增/重大重构 |
+| XMSettingsValueMenuRow | UI-复用关键 | xmnote/UIComponents/Settings/XMSettingsRows.swift | docs/component-guides/XMSettingsComponents使用说明.md | 新增/重大重构 |
+| XMSettingsToggleRow | UI-复用关键 | xmnote/UIComponents/Settings/XMSettingsRows.swift | docs/component-guides/XMSettingsComponents使用说明.md | 新增/重大重构 |
+| XMSheetScaffold | UI-复用关键 | xmnote/UIComponents/Sheet/XMSheetScaffold.swift | docs/component-guides/XMSheetScaffold使用说明.md | 新增/重大重构 |
 | NoteReviewPagingDeck | UI-复用关键 | xmnote/UIComponents/Foundation/NoteReviewPaging/NoteReviewPagingDeck.swift | docs/component-guides/NoteReviewPagingDeck使用说明.md | 新增/重大重构 |
 | TopSwitcher | UI-复用关键 | xmnote/UIComponents/Tabs/TopSwitcher.swift | docs/component-guides/TopSwitcher使用说明.md | 新增/重大重构 |
 | XMInlineTabBar | UI-复用关键 | xmnote/UIComponents/Tabs/XMInlineTabBar.swift | docs/component-guides/XMInlineTabBar使用说明.md | 新增/重大重构 |

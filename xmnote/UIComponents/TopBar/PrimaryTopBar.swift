@@ -1,5 +1,5 @@
 /**
- * [INPUT]: 依赖 xmnote/Utilities/DesignTokens.swift 的间距设计令牌
+ * [INPUT]: 依赖 xmnote/Utilities/DesignSystem/Spacing.swift 的间距设计令牌
  * [OUTPUT]: 对外提供 PrimaryTopBar 顶部容器组件
  * [POS]: UIComponents/TopBar 的结构容器组件，承载顶部左侧内容与右侧操作区布局
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md

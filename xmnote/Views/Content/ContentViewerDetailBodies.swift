@@ -1,5 +1,5 @@
 /**
- * [INPUT]: 依赖通用内容详情模型、RichText 与图片墙组件，依赖 DesignTokens 排版与颜色令牌
+ * [INPUT]: 依赖通用内容详情模型、RichText、XMTagLabel 与图片墙组件，依赖 DesignTokens 排版与颜色令牌
  * [OUTPUT]: 对外提供 NoteContentDetailBody、ReviewContentDetailBody、RelevantContentDetailBody，承接三类内容的全屏正文结构与选区 AI 释义入口
  * [POS]: Content 模块查看页正文组件集合，被书摘查看与通用内容查看复用
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -41,7 +41,7 @@ struct NoteContentDetailBody: View {
                 RichText(
                     html: detail.ideaHTML,
                     baseFont: AppTypography.uiSemantic(.body),
-                    textColor: UIColor(Color.textSecondary),
+                    textColor: UIColor.xmResolved(Color.textSecondary),
                     lineSpacing: 5,
                     selectionActionTitle: "AI 释义",
                     onSelectionAction: { selectedText in
@@ -95,12 +95,7 @@ private extension NoteContentDetailBody {
                     ScrollView(.horizontal, showsIndicators: false) {
                         HStack(spacing: Spacing.tight) {
                             ForEach(detail.tagNames, id: \.self) { tag in
-                                Text(tag)
-                                    .font(AppTypography.caption2)
-                                    .foregroundStyle(Color.textSecondary)
-                                    .padding(.horizontal, Spacing.cozy)
-                                    .padding(.vertical, Spacing.compact)
-                                    .background(Color.tagBackground, in: Capsule())
+                                XMTagLabel(tag)
                             }
                         }
                     }
@@ -149,7 +144,7 @@ struct ReviewContentDetailBody: View {
                 ContentViewerSelectablePlainText(
                     text: detail.title,
                     baseFont: AppTypography.uiSemantic(.subheadline, weight: .semibold),
-                    textColor: UIColor(Color.textPrimary),
+                    textColor: UIColor.xmResolved(Color.textPrimary),
                     inputContext: AITextLookupInput(
                         queryText: "",
                         queryContext: detail.title,
@@ -260,7 +255,7 @@ struct RelevantContentDetailBody: View {
                 ContentViewerSelectablePlainText(
                     text: detail.title,
                     baseFont: AppTypography.uiSemantic(.subheadline, weight: .semibold),
-                    textColor: UIColor(Color.textPrimary),
+                    textColor: UIColor.xmResolved(Color.textPrimary),
                     inputContext: AITextLookupInput(
                         queryText: "",
                         queryContext: detail.title,

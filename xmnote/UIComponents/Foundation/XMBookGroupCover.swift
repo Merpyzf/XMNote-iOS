@@ -423,7 +423,7 @@ struct XMBookGroupCover: View {
             RoundedRectangle(cornerRadius: slot.cornerRadius, style: .continuous)
                 .fill(decoration.surfaceWash)
 
-            HStack(spacing: 0) {
+            HStack(spacing: Spacing.none) {
                 Rectangle()
                     .fill(decoration.leadingEdge)
                     .frame(width: decoration.leadingEdgeWidth)
@@ -435,7 +435,7 @@ struct XMBookGroupCover: View {
                     .frame(width: decoration.trailingHighlightWidth)
             }
 
-            VStack(spacing: 0) {
+            VStack(spacing: Spacing.none) {
                 Rectangle()
                     .fill(decoration.capLine)
                     .frame(height: decoration.capLineWidth)
@@ -453,7 +453,7 @@ struct XMBookGroupCover: View {
                     .fill(decoration.capLine)
                     .frame(height: decoration.capLineWidth)
             }
-            .padding(.horizontal, 1)
+            .padding(.horizontal, Spacing.hairline)
         }
         .allowsHitTesting(false)
     }

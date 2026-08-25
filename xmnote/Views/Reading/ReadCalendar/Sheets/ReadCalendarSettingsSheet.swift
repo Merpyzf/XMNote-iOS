@@ -19,7 +19,7 @@ struct ReadCalendarSettingsSheet: View {
     @State private var isAutomaticallyExpanded = false
 
     var body: some View {
-        XMSettingsPageScaffold(
+        XMSheetScaffold(
             title: "阅读日历设置",
             onClose: { dismiss() }
         ) {
@@ -45,7 +45,7 @@ struct ReadCalendarSettingsSheet: View {
 
     private var displayGroup: some View {
         ReadCalendarSettingsSection(title: "显示") {
-            XMSettingsGroupCard {
+            XMSettingsGroup {
                 VStack(spacing: Spacing.none) {
                     dayEventCountRow
 
@@ -121,7 +121,7 @@ struct ReadCalendarSettingsSheet: View {
 
     private func dayEventCountButton(_ count: Int) -> some View {
         let isSelected = count == settings.dayEventCount
-        return XMSettingsChoiceChip(
+        return ReadCalendarSettingsChoiceChip(
             "\(count) 条",
             isSelected: isSelected
         ) {
@@ -192,7 +192,7 @@ struct ReadCalendarSettingsSheet: View {
 
     private func doneMarkerStyleButton(_ style: ReadCalendarDoneMarkerStyle) -> some View {
         let isSelected = settings.doneMarkerStyle == style
-        return XMSettingsChoiceChip(
+        return ReadCalendarSettingsChoiceChip(
             style.title,
             isSelected: isSelected
         ) {
@@ -267,7 +267,7 @@ struct ReadCalendarSettingsSheet: View {
 
     private var behaviorGroup: some View {
         ReadCalendarSettingsSection(title: "阅读行为") {
-            XMSettingsGroupCard {
+            XMSettingsGroup {
                 VStack(spacing: Spacing.none) {
                     ForEach(ReadCalendarBehaviorSetting.allCases) { behavior in
                         XMSettingsToggleRow(
@@ -393,6 +393,92 @@ private enum ReadCalendarSettingsSheetLayout {
     static let emojiIconSize: CGFloat = 28
     static let dayCountMaximumItemsPerRow = 4
     static let emojiColumnCount = 6
+    static let choiceVisualHeight: CGFloat = 30
+    static let choiceSelectedLightFillOpacity = 0.12
+    static let choiceSelectedDarkFillOpacity = 0.20
+    static let choicePressedOpacity = 0.78
+    static let choicePressedScale = 0.98
+    static let choicePressDuration = 0.12
+}
+
+/// 阅读日历离散选项胶囊，将视觉表层与最小触控区域分离。
+private struct ReadCalendarSettingsChoiceChip: View {
+    let title: String
+    let isSelected: Bool
+    let action: () -> Void
+    @Environment(\.colorScheme) private var colorScheme
+    @ScaledMetric(relativeTo: .footnote) private var visualMinHeight =
+        ReadCalendarSettingsSheetLayout.choiceVisualHeight
+
+    /// 创建内容自适应的页面私有选项胶囊。
+    init(
+        _ title: String,
+        isSelected: Bool,
+        action: @escaping () -> Void
+    ) {
+        self.title = title
+        self.isSelected = isSelected
+        self.action = action
+    }
+
+    var body: some View {
+        Button(action: action) {
+            Text(title)
+                .font(AppTypography.footnoteMedium)
+                .foregroundStyle(isSelected ? selectedForeground : Color.textSecondary)
+                .lineLimit(1)
+                .fixedSize(horizontal: true, vertical: true)
+                .padding(.horizontal, Spacing.base)
+                .frame(minHeight: visualMinHeight)
+                .background(
+                    isSelected
+                        ? Color.brand.opacity(selectedFillOpacity)
+                        : Color.controlFillSecondary,
+                    in: Capsule()
+                )
+                .frame(minHeight: InteractionMetrics.minimumTouchTarget)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(ReadCalendarSettingsChoiceChipButtonStyle())
+        .accessibilityValue(isSelected ? "已选择" : "未选择")
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
+    }
+
+    private var selectedForeground: Color {
+        colorScheme == .dark ? Color.brand : Color.brandDeep
+    }
+
+    private var selectedFillOpacity: Double {
+        colorScheme == .dark
+            ? ReadCalendarSettingsSheetLayout.choiceSelectedDarkFillOpacity
+            : ReadCalendarSettingsSheetLayout.choiceSelectedLightFillOpacity
+    }
+}
+
+/// 为阅读日历选项胶囊提供可降级的局部按压反馈。
+private struct ReadCalendarSettingsChoiceChipButtonStyle: ButtonStyle {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    /// 在不改变布局尺寸的前提下表达按压状态。
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .opacity(
+                configuration.isPressed
+                    ? ReadCalendarSettingsSheetLayout.choicePressedOpacity
+                    : 1
+            )
+            .scaleEffect(
+                reduceMotion || !configuration.isPressed
+                    ? 1
+                    : ReadCalendarSettingsSheetLayout.choicePressedScale
+            )
+            .animation(
+                reduceMotion
+                    ? nil
+                    : .smooth(duration: ReadCalendarSettingsSheetLayout.choicePressDuration),
+                value: configuration.isPressed
+            )
+    }
 }
 
 /// 为阅读日历设置卡片提供外置分组标题，让标题与卡片内文本保持同一对齐线。

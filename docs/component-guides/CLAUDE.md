@@ -21,7 +21,10 @@
 - `ExpandableRichText使用说明.md`: ExpandableRichText / RichText 富文本展示组件接入指南与参数说明。
 - `ImmersiveBottomChrome使用说明.md`: ImmersiveBottomChrome 底部沉浸遮罩与 ornament 组件接入指南与参数说明。
 - `XMToast使用说明.md`: XMToast 全局轻量消息提示基建接入指南与参数说明。
-- `XMSettingsSheetComponents使用说明.md`: XMSettingsSheetComponents 通用设置 Sheet 组件组接入指南与参数说明。
+- `XMTagLabel使用说明.md`: XMTagLabel 纯展示领域标签的接入边界、排版、内边距与连续圆角说明。
+- `XMSettingsComponents使用说明.md`: 卡片式配置页面的 Page、Section、Group、Divider 与已验证行型接入边界。
+- `XMSheetScaffold使用说明.md`: 通用业务 Sheet 标题、滚动区及固定顶栏/底栏接入指南。
+- `XMSettingsSheetComponents使用说明.md`: 已拆分旧组件的迁移映射，仅用于阻止历史链接恢复旧实现。
 - `NoteReviewPagingDeck使用说明.md`: NoteReviewPagingDeck 书摘回顾分页卡组组件接入指南与参数说明。
 - `TopSwitcher使用说明.md`: TopSwitcher 顶部标题/标签切换组件接入指南与参数说明。
 - `XMInlineTabBar使用说明.md`: XMInlineTabBar 内容区子页面切换组件接入指南与参数说明。

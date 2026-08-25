@@ -11,6 +11,7 @@
 - Foundation/CollapsedRichTextPreview.swift: 提供 ExpandableRichText 收起态轻量预览组件（UILabel 截断 + 展开按钮）。
 - Foundation/ExpandableRichText.swift: 提供可展开/收起 HTML 富文本组件（完整态与轻量收起态双通道）。
 - Foundation/ImmersiveBottomChrome.swift: 提供底部沉浸遮罩与悬浮 ornament 组件（渐变托底、安全区延展、滚动补偿与统一图标热区）。
+- Foundation/XMTagLabel.swift: 提供纯展示领域标签的统一排版、语义背景、内边距与 4pt 连续圆角；不承载筛选或操作状态。
 - TopBar/PrimaryTopBar.swift: 提供顶部栏布局容器（PrimaryTopBar）。
 - TopBar/TopBarActionIcon.swift: 提供顶部栏图标组件（TopBarActionIcon）。
 - TopBar/AddMenuCircleButton.swift: 提供顶部添加菜单组件（AddMenuCircleButton）。
@@ -21,6 +22,14 @@
 - Tabs/SubtabBootstrapCoordinator.swift: 提供通用二级页启动协调器（warmup 去重与阶段跟踪）。
 - Tabs/TopSwitcher.swift: 提供顶部切换组件（hardSwitch 下路由 selection 与视觉 selection 同帧无动画写入）。
 - Charts/HeatmapChart.swift: 提供 GitHub 风格阅读热力图组件。
+- Charts/HeatmapPresentation.swift: 在 UI 层把纯值热力等级映射为展示文案与语义色，保持 Domain 无 UI 框架依赖。
 - Charts/ReadingDurationRankingChart.swift: 提供阅读时长排行组件（封面 + 条形动画 + 占位态）。
+- Settings/XMSettingsPage.swift: 提供卡片式配置页滚动、全轴回弹、页面边距、最大宽度与背景。
+- Settings/XMSettingsSection.swift: 提供配置页分区标题层级与内容亲密性。
+- Settings/XMSettingsGroup.swift: 提供配置项 grouped/singleItem 表层、固定 24pt grouped 连续圆角与弱分隔线。
+- Settings/XMSettingsRows.swift: 提供已证明复用的菜单值行与开关行，不扩展为万能设置行。
+- Sheet/XMSheetScaffold.swift: 提供通用业务 Sheet 标题、滚动区及可选固定顶栏/底栏的泛型根骨架。
+
+机器可读组件入口：`scripts/design-system/component-catalog.json`；使用 `python3 scripts/design-system/ds.py catalog` 查询。
 
 [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md

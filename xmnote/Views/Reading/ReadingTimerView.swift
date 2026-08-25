@@ -326,7 +326,7 @@ private struct ReadingTimerContent: View {
                             .frame(maxWidth: .infinity)
                     }
                     .scrollIndicators(.hidden)
-                    .scrollBounceBehavior(.basedOnSize)
+                    .scrollBounceBehavior(.always)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
 
