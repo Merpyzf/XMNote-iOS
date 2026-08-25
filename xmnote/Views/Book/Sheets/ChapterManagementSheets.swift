@@ -273,7 +273,7 @@ private extension ChapterBatchImportSheet {
             Text("每行一个章节")
                 .font(AppTypography.caption)
         } footer: {
-            Text("行首每两个全角或半角空格、一个 Tab 代表一级缩进，最多支持 \(ChapterManagementPolicy.maximumDepth) 级。")
+            Text("行首每两个全角或半角空格、一个 Tab 代表一级缩进，最多支持 \(ChapterManagementPolicy.maximumDepth) 级")
                 .font(AppTypography.caption)
                 .foregroundStyle(Color.textSecondary)
         }
@@ -292,7 +292,7 @@ private extension ChapterBatchImportSheet {
                 .fixedSize(horizontal: true, vertical: false)
             }
         } footer: {
-            Text("照片或拍照识别的文本会追加到当前草稿，并可直接撤销。")
+            Text("照片或拍照识别的文本会追加到当前草稿，并可直接撤销")
                 .font(AppTypography.caption)
                 .foregroundStyle(Color.textSecondary)
         }
@@ -312,7 +312,7 @@ private extension ChapterBatchImportSheet {
                 }
                 .transition(.opacity)
             } else if viewModel.previewEntries.isEmpty {
-                Text("输入目录后会在这里预览层级和顺序。")
+                Text("输入目录后会在这里预览层级和顺序")
                     .font(AppTypography.callout)
                     .foregroundStyle(Color.textHint)
             } else {
@@ -909,7 +909,7 @@ struct ChapterRemoteSyncSheet: View {
         if viewModel.configurationState == .unavailable {
             Section {
                 Label {
-                    Text("部分扩展配置暂不可用，不影响本次目录查询。")
+                    Text("部分扩展配置暂不可用，不影响本次目录查询")
                         .font(AppTypography.caption)
                         .foregroundStyle(Color.textSecondary)
                 } icon: {

@@ -27,7 +27,7 @@ nonisolated struct BookCollectionRelationNotePresentation: Hashable, Sendable {
                 addTitle: "添加收藏理由",
                 editTitle: "编辑收藏理由",
                 placeholder: "写下收藏理由",
-                clearHint: "留空保存会清除收藏理由，但不会移出书单。",
+                clearHint: "留空保存会清除收藏理由，但不会移出书单",
                 emptyAccessibilityHint: "可添加收藏理由",
                 savingMessage: "正在保存收藏理由…",
                 savedMessage: "收藏理由已保存"
@@ -38,7 +38,7 @@ nonisolated struct BookCollectionRelationNotePresentation: Hashable, Sendable {
                 addTitle: "添加年度点评",
                 editTitle: "编辑年度点评",
                 placeholder: "写下年度点评",
-                clearHint: "留空保存会清除年度点评，但不会改变年度书单成员。",
+                clearHint: "留空保存会清除年度点评，但不会改变年度书单成员",
                 emptyAccessibilityHint: "可添加年度点评",
                 savingMessage: "正在保存年度点评…",
                 savedMessage: "年度点评已保存"
@@ -1583,9 +1583,9 @@ struct BookCollectionDetailHero: View {
         }
         switch detail.kind {
         case .manual:
-            return detail.bookCount == 0 ? "从书架里挑选几本书，给这个主题一个开始。" : "按你的阅读主题整理出的书籍集合。"
+            return detail.bookCount == 0 ? "从书架里挑选几本书，给这个主题一个开始" : "按你的阅读主题整理出的书籍集合"
         case .annual:
-            return "随读完记录自动同步，保留这一年的阅读轨迹。"
+            return "随读完记录自动同步，保留这一年的阅读轨迹"
         }
     }
 
@@ -1923,7 +1923,7 @@ struct BookCollectionEmptyBooksRow: View {
                 .foregroundStyle(Color.textPrimary)
                 .multilineTextAlignment(.center)
 
-            Text(isManual ? "添加书籍后，会在这里按顺序显示。" : "读完记录会在这里同步显示。")
+            Text(isManual ? "添加书籍后，会在这里按顺序显示" : "读完记录会在这里同步显示")
                 .font(AppTypography.caption)
                 .foregroundStyle(Color.textSecondary)
                 .multilineTextAlignment(.center)
@@ -2407,7 +2407,7 @@ struct BookCollectionStatusBadge: View {
 /// 年度书单自动同步说明，放在详情头内，避免页面中部重复占位。
 private struct BookCollectionReadOnlyNotice: View {
     var body: some View {
-        Label("年度书单随读完记录自动同步，年度点评可编辑。", systemImage: "arrow.triangle.2.circlepath")
+        Label("年度书单随读完记录自动同步，年度点评可编辑", systemImage: "arrow.triangle.2.circlepath")
             .font(AppTypography.caption)
             .foregroundStyle(Color.textSecondary)
             .padding(.horizontal, Spacing.tight)

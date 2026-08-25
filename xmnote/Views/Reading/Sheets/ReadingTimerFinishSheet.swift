@@ -116,7 +116,7 @@ struct ReadingTimerFinishSheet: View {
                         displayedComponents: [.date, .hourAndMinute]
                     )
                     if !isTimeRangeValid {
-                        Text("结束时间必须晚于开始时间，且不能超过当前时间。")
+                        Text("结束时间必须晚于开始时间，且不能超过当前时间")
                             .font(AppTypography.footnote)
                             .foregroundStyle(Color.feedbackError)
                     }

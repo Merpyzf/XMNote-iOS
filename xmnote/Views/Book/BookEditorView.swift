@@ -235,7 +235,7 @@ struct BookEditorView: View {
         draft: BookEditorDraft
     ) -> some View {
         editorSection(title: "书籍资料") {
-            Text("修改会同步到所有引用这本相关书籍的位置，但不会将它加入书架。")
+            Text("修改会同步到所有引用这本相关书籍的位置，但不会将它加入书架")
                 .font(AppTypography.caption)
                 .foregroundStyle(Color.textSecondary)
 

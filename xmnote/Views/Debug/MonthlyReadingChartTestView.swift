@@ -129,7 +129,7 @@ private extension MonthlyReadingChartTestView {
                 Text("阅读历程")
                     .font(AppTypography.headlineSemibold)
                     .foregroundStyle(Color.textPrimary)
-                Text("观察本卡片是否随上方图表高度平滑下移与回收。")
+                Text("观察本卡片是否随上方图表高度平滑下移与回收")
                     .font(AppTypography.caption)
                     .foregroundStyle(Color.textSecondary)
             }
@@ -213,13 +213,13 @@ private enum MonthlyReadingChartDemoScenario: String, CaseIterable, Identifiable
     var detail: String {
         switch self {
         case .recording:
-            "一月八条记录合计恰好 2小时47分钟，行内按 Android 规则省略分钟后的秒数。"
+            "一月八条记录合计恰好 2小时47分钟，行内按 Android 规则省略分钟后的秒数"
         case .multiMonth:
             "三个自然月可同时展开；任一月份展开后，全部月份头部铺满并共用每日最大值。"
         case .zero:
-            "所有时长均为零，用于检查月条全宽以及每日柱体回落到文本最小宽度。"
+            "所有时长均为零，用于检查月条全宽以及每日柱体回落到文本最小宽度"
         case .textBoundary:
-            "跨年摘要、长日期和百小时数据用于检查文本测量、尾部对齐与箭头覆盖关系。"
+            "跨年摘要、长日期和百小时数据用于检查文本测量、尾部对齐与箭头覆盖关系"
         }
     }
 

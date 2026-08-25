@@ -78,7 +78,7 @@ struct KindleImportView: View {
         importCard(
             icon: "doc.text",
             title: "选择 My Clippings.txt",
-            message: "也可以选择已保存到 iCloud Drive、本机或其他文件提供方的 Kindle 书摘文件。",
+            message: "也可以选择已保存到 iCloud Drive、本机或其他文件提供方的 Kindle 书摘文件",
             actionTitle: "选择文件",
             entryPoint: .manualFile
         )

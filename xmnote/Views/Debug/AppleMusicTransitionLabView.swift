@@ -149,10 +149,10 @@ struct AppleMusicTransitionLabView: View {
                     .font(AppTypography.subheadlineSemibold)
                     .foregroundStyle(Color.textPrimary)
 
-                AppleMusicTransitionLabBulletRow(text: "D、E 都复现：系统 Tab Accessory / Liquid Glass 交互式转场合成风险。")
-                AppleMusicTransitionLabBulletRow(text: "仅 D 复现：SwiftUI tabViewBottomAccessory 桥接风险。")
+                AppleMusicTransitionLabBulletRow(text: "D、E 都复现：系统 Tab Accessory / Liquid Glass 交互式转场合成风险")
+                AppleMusicTransitionLabBulletRow(text: "仅 D 复现：SwiftUI tabViewBottomAccessory 桥接风险")
                 AppleMusicTransitionLabBulletRow(text: "仅 E 复现：UIKit UITabAccessory + preferredTransition.zoom 上下文风险。")
-                AppleMusicTransitionLabBulletRow(text: "D、E 均不复现而 A/B/C 复现：回到 XMNote 来源承载或呈现生命周期排查。")
+                AppleMusicTransitionLabBulletRow(text: "D、E 均不复现而 A/B/C 复现：回到 XMNote 来源承载或呈现生命周期排查")
             }
             .padding(Spacing.contentEdge)
         }
@@ -166,10 +166,10 @@ struct AppleMusicTransitionLabView: View {
                     .foregroundStyle(Color.textPrimary)
 
                 AppleMusicTransitionLabBulletRow(text: "按钮关闭只作为非交互基线；主判据改为真实鼠标下拉完成后的至少 1.5 秒尾帧。")
-                AppleMusicTransitionLabBulletRow(text: "分别记录几何归位与系统玻璃重新稳定的时刻，glassTail 必须不超过 50ms。")
-                AppleMusicTransitionLabBulletRow(text: "下拉完成通过后，再验证 inline、半程取消、快速反向和 Reduce Motion。")
-                AppleMusicTransitionLabBulletRow(text: "任何双份来源、矩形边界、白闪或末段二次修正都判为失败。")
-                AppleMusicTransitionLabBulletRow(text: "本轮只有模拟器证据，结论只能标记为框架风险，不能称为 Apple 已确认 BUG。")
+                AppleMusicTransitionLabBulletRow(text: "分别记录几何归位与系统玻璃重新稳定的时刻，glassTail 必须不超过 50ms")
+                AppleMusicTransitionLabBulletRow(text: "下拉完成通过后，再验证 inline、半程取消、快速反向和 Reduce Motion")
+                AppleMusicTransitionLabBulletRow(text: "任何双份来源、矩形边界、白闪或末段二次修正都判为失败")
+                AppleMusicTransitionLabBulletRow(text: "本轮只有模拟器证据，结论只能标记为框架风险，不能称为 Apple 已确认 BUG")
             }
             .padding(Spacing.contentEdge)
         }
@@ -280,11 +280,11 @@ private enum AppleMusicTransitionLabMode: String, CaseIterable, Equatable, Ident
     var summary: String {
         switch self {
         case .uiKitOpaqueSource:
-            "生产基线：来源自带 surfaceCard、离屏合成和圆角裁切。"
+            "生产基线：来源自带 surfaceCard、离屏合成和圆角裁切"
         case .uiKitTransparentSource:
-            "保留 UIKit Zoom，只让系统 Bottom Accessory 持有液态玻璃表面。"
+            "保留 UIKit Zoom，只让系统 Bottom Accessory 持有液态玻璃表面"
         case .swiftUIFullScreen:
-            "透明来源与目标均由 SwiftUI 系统 Zoom 管理。"
+            "透明来源与目标均由 SwiftUI 系统 Zoom 管理"
         }
     }
 

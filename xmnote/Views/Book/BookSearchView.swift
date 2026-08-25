@@ -662,7 +662,7 @@ struct BookSearchView: View {
                 pendingRecoveryAction = nil
                 inlineFeedback = InlineFeedback(
                     title: "暂时无法打开这本书",
-                    message: searchError.errorDescription ?? "请稍后再试。"
+                    message: searchError.errorDescription ?? "请稍后再试"
                 )
                 return
             }
@@ -691,7 +691,7 @@ struct BookSearchView: View {
             guard let book = try await repositories.bookRepository.fetchPickerBook(bookId: bookId) else {
                 inlineFeedback = InlineFeedback(
                     title: "新书已保存",
-                    message: "但未能自动回填到当前书摘，请返回后重新选择。"
+                    message: "但未能自动回填到当前书摘，请返回后重新选择"
                 )
                 return
             }
@@ -758,7 +758,7 @@ struct BookSearchView: View {
             pendingFanqieVerificationAction = nil
             inlineFeedback = InlineFeedback(
                 title: "暂时无法打开验证页",
-                message: "番茄搜索地址无效，请稍后再试。"
+                message: "番茄搜索地址无效，请稍后再试"
             )
             return
         }

@@ -40,7 +40,7 @@ struct ContentEditorImageSection: View {
                 header
 
                 if items.isEmpty {
-                    Text("暂无关联图片，可拍照、从相册添加或使用图片识字。")
+                    Text("暂无关联图片，可拍照、从相册添加或使用图片识字")
                         .font(AppTypography.caption)
                         .foregroundStyle(Color.textHint)
                         .frame(maxWidth: .infinity, alignment: .leading)

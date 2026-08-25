@@ -109,19 +109,19 @@ enum BackupError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .noServerConfigured:
-            return "未配置 WebDAV 备份服务器"
+            return "未配置 WebDAV 备份服务器。"
         case .noAliyunDriveAuthorized:
-            return "请先登录阿里云盘"
+            return "请先登录阿里云盘。"
         case .invalidAliyunDriveConfiguration:
-            return "阿里云盘开放平台配置无效"
+            return "阿里云盘开放平台配置无效。"
         case .zipFailed:
-            return "压缩备份文件失败"
+            return "压缩备份文件失败。"
         case .unzipFailed:
-            return "解压备份文件失败"
+            return "解压备份文件失败。"
         case .versionMismatch(let backup, let app):
-            return "数据库版本不兼容（备份: v\(backup), 当前: v\(app)）"
+            return "数据库版本不兼容（备份：v\(backup)，当前：v\(app)）。"
         case .backupFileCorrupted:
-            return "备份文件已损坏"
+            return "备份文件已损坏。"
         case .webdavError(let error):
             return error.errorDescription
         case .aliyunDriveError(let message):

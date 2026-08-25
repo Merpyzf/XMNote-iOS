@@ -187,7 +187,7 @@ private extension BookCoverBadgeEffectTestContentView {
     var livePreviewSection: some View {
         CardContainer {
             VStack(alignment: .leading, spacing: Spacing.base) {
-                sectionHeader("实时预览", subtitle: "同一封面同时展示置顶、阅读状态与数量角标。")
+                sectionHeader("实时预览", subtitle: "同一封面同时展示置顶、阅读状态与数量角标")
 
                 HStack(alignment: .top, spacing: Spacing.double) {
                     DebugBookCoverBadgePreview(
@@ -225,7 +225,7 @@ private extension BookCoverBadgeEffectTestContentView {
     var blurStyleComparisonSection: some View {
         CardContainer {
             VStack(alignment: .leading, spacing: Spacing.base) {
-                sectionHeader("Blur Style 对比", subtitle: "固定其它参数，只切换系统 blur style。")
+                sectionHeader("Blur Style 对比", subtitle: "固定其它参数，只切换系统 blur style")
 
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(alignment: .top, spacing: Spacing.base) {
@@ -256,7 +256,7 @@ private extension BookCoverBadgeEffectTestContentView {
     var matrixSection: some View {
         CardContainer {
             VStack(alignment: .leading, spacing: Spacing.base) {
-                sectionHeader("封面矩阵", subtitle: "真实封面不足时使用浅色、黄色、黑色、白底与复杂彩色样例兜底。")
+                sectionHeader("封面矩阵", subtitle: "真实封面不足时使用浅色、黄色、黑色、白底与复杂彩色样例兜底")
 
                 LazyVGrid(
                     columns: [GridItem(.adaptive(minimum: 96), spacing: Spacing.base, alignment: .top)],
@@ -278,7 +278,7 @@ private extension BookCoverBadgeEffectTestContentView {
     var themeSection: some View {
         CardContainer {
             VStack(alignment: .leading, spacing: Spacing.base) {
-                sectionHeader("浅深色对照", subtitle: "同一组参数在不同系统主题下对比干净度。")
+                sectionHeader("浅深色对照", subtitle: "同一组参数在不同系统主题下对比干净度")
 
                 HStack(alignment: .top, spacing: Spacing.base) {
                     themePane(title: "浅色", scheme: .light)
@@ -292,7 +292,7 @@ private extension BookCoverBadgeEffectTestContentView {
     var groupPreviewSection: some View {
         CardContainer {
             VStack(alignment: .leading, spacing: Spacing.base) {
-                sectionHeader("分组预览", subtitle: "分组仅验证置顶与 N本 数量角标。")
+                sectionHeader("分组预览", subtitle: "分组仅验证置顶与 N本 数量角标")
 
                 HStack(alignment: .top, spacing: Spacing.double) {
                     DebugBookCoverGroupBadgePreview(
@@ -302,7 +302,7 @@ private extension BookCoverBadgeEffectTestContentView {
                         parameters: viewModel.parameters
                     )
 
-                    Text("分组封面沿用 pin 与数量角标参数，阅读状态不参与分组展示。")
+                    Text("分组封面沿用 pin 与数量角标参数，阅读状态不参与分组展示")
                         .font(AppTypography.caption)
                         .foregroundStyle(Color.textSecondary)
                         .fixedSize(horizontal: false, vertical: true)
@@ -315,7 +315,7 @@ private extension BookCoverBadgeEffectTestContentView {
     var parameterSummarySection: some View {
         CardContainer {
             VStack(alignment: .leading, spacing: Spacing.base) {
-                sectionHeader("参数摘要", subtitle: "选定效果后可用这里的参数迁移回生产 token。")
+                sectionHeader("参数摘要", subtitle: "选定效果后可用这里的参数迁移回生产 token")
 
                 Text(viewModel.parameterSummary)
                     .font(AppTypography.caption2)

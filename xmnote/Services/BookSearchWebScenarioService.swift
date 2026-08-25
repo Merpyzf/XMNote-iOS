@@ -220,7 +220,7 @@ final class BookSearchWebScenarioService {
             }
         }
 
-        throw WebHTMLFetchError.network(description: "未命中可用抓取结果。")
+        throw WebHTMLFetchError.network(description: "未命中可用抓取结果")
     }
 }
 
@@ -339,11 +339,11 @@ private extension BookSearchWebScenarioService {
             case .matched:
                 return nil
             case .partial:
-                return acceptsPartialDetailProbe(probe) ? nil : "HTTP 页面仅部分命中，回退到 WebView。"
+                return acceptsPartialDetailProbe(probe) ? nil : "HTTP 页面仅部分命中，回退到 WebView"
             case .antiBot:
-                return "HTTP 页面命中风控，回退到 WebView。"
+                return "HTTP 页面命中风控，回退到 WebView"
             case .selectorMiss, .parseFailed:
-                return "HTTP 页面未命中可解析结构，回退到 WebView。"
+                return "HTTP 页面未命中可解析结构，回退到 WebView"
             }
         case .doubanSearch, .qidianSearch:
             return nil
@@ -427,7 +427,7 @@ private enum ScenarioProbeEngine {
                 let title = try? document.title()
                 return ScenarioProbeResult(
                     status: hits.count >= 2 ? .matched : .partial,
-                    summary: count > 0 ? "命中 \(count) 条豆瓣结果卡片。" : "页面结构存在，但未命中结果卡片。",
+                    summary: count > 0 ? "命中 \(count) 条豆瓣结果卡片" : "页面结构存在，但未命中结果卡片",
                     selectorHits: hits,
                     title: title,
                     matchedCount: count
@@ -437,7 +437,7 @@ private enum ScenarioProbeEngine {
         if probe.matchedCount == 0, hasDoubanLoginCookie(cookies) == false {
             return ScenarioProbeResult(
                 status: .antiBot,
-                summary: "豆瓣搜索结果为空，且共享会话缺少登录 Cookie。",
+                summary: "豆瓣搜索结果为空，且共享会话缺少登录 Cookie",
                 selectorHits: probe.selectorHits,
                 title: probe.title,
                 matchedCount: 0
@@ -457,7 +457,7 @@ private enum ScenarioProbeEngine {
                 let title = try? document.select("span[property='v:itemreviewed']").first()?.text()
                 return ScenarioProbeResult(
                     status: hits.count >= 2 ? .matched : .partial,
-                    summary: title?.isEmpty == false ? "已命中详情页标题与基础字段容器。" : "已获取详情页 HTML，但标题节点为空。",
+                    summary: title?.isEmpty == false ? "已命中详情页标题与基础字段容器" : "已获取详情页 HTML，但标题节点为空",
                     selectorHits: hits,
                     title: title,
                     matchedCount: hits.count
@@ -477,7 +477,7 @@ private enum ScenarioProbeEngine {
                 let title = try? document.title()
                 return ScenarioProbeResult(
                     status: hits.count >= 2 ? .matched : .partial,
-                    summary: hits.isEmpty ? "未命中作者页关键容器。" : "已命中作者页基础结构。",
+                    summary: hits.isEmpty ? "未命中作者页关键容器" : "已命中作者页基础结构",
                     selectorHits: hits,
                     title: title,
                     matchedCount: hits.count
@@ -490,7 +490,7 @@ private enum ScenarioProbeEngine {
         if FanqieVerificationHeuristics.requiresVerification(html: html, finalURL: finalURL) {
             return ScenarioProbeResult(
                 status: .antiBot,
-                summary: "番茄搜索命中站点验证。",
+                summary: "番茄搜索命中站点验证",
                 selectorHits: [],
                 title: nil,
                 matchedCount: 0
@@ -511,7 +511,7 @@ private enum ScenarioProbeEngine {
             if linkCount > 0 {
                 return ScenarioProbeResult(
                     status: .matched,
-                    summary: "命中 \(linkCount) 条番茄详情链接。",
+                    summary: "命中 \(linkCount) 条番茄详情链接",
                     selectorHits: selectorHits,
                     title: title,
                     matchedCount: linkCount
@@ -521,7 +521,7 @@ private enum ScenarioProbeEngine {
             if inputHits || FanqieVerificationHeuristics.isSearchPage(url: finalURL) {
                 return ScenarioProbeResult(
                     status: .partial,
-                    summary: "番茄搜索页已打开，但未命中详情链接。",
+                    summary: "番茄搜索页已打开，但未命中详情链接",
                     selectorHits: selectorHits,
                     title: title,
                     matchedCount: 0
@@ -530,7 +530,7 @@ private enum ScenarioProbeEngine {
 
             return ScenarioProbeResult(
                 status: .selectorMiss,
-                summary: "番茄搜索页未命中可识别结构。",
+                summary: "番茄搜索页未命中可识别结构",
                 selectorHits: selectorHits,
                 title: title,
                 matchedCount: 0
@@ -555,7 +555,7 @@ private enum ScenarioProbeEngine {
                 let title = try? document.title()
                 return ScenarioProbeResult(
                     status: hits.count >= 2 ? .matched : .partial,
-                    summary: count > 0 ? "命中 \(count) 条起点搜索结果。" : "页面已打开，但未命中结果列表。",
+                    summary: count > 0 ? "命中 \(count) 条起点搜索结果" : "页面已打开，但未命中结果列表",
                     selectorHits: hits,
                     title: title,
                     matchedCount: count
@@ -573,7 +573,7 @@ private enum ScenarioProbeEngine {
                 let links = (try? document.select("a[href]").count) ?? 0
                 return ScenarioProbeResult(
                     status: hits.count >= 3 ? .matched : .partial,
-                    summary: "基础 DOM 可解析，链接数 \(links)。",
+                    summary: "基础 DOM 可解析，链接数 \(links)",
                     selectorHits: hits,
                     title: title,
                     matchedCount: links
@@ -648,7 +648,7 @@ private enum ScenarioProbeEngine {
         }
         return ScenarioProbeResult(
             status: .antiBot,
-            summary: "命中豆瓣风控线索：\(hitText)。",
+            summary: "命中豆瓣风控线索：\(hitText)",
             selectorHits: [],
             title: nil,
             matchedCount: 0
@@ -675,7 +675,7 @@ private enum ScenarioProbeEngine {
             guard !hits.isEmpty else {
                 return ScenarioProbeResult(
                     status: .selectorMiss,
-                    summary: "未命中任何关键选择器。",
+                    summary: "未命中任何关键选择器",
                     selectorHits: [],
                     title: try? document.title(),
                     matchedCount: 0

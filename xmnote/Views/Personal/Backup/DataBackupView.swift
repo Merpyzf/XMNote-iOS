@@ -441,7 +441,7 @@ private extension DataBackupContentView {
                     Text("登录阿里云盘")
                         .font(AppTypography.subheadlineMedium)
                         .foregroundStyle(Color.textPrimary)
-                    Text("登录后即可使用云备份。")
+                    Text("登录后即可使用云备份")
                         .font(AppTypography.caption)
                         .foregroundStyle(Color.textSecondary)
                 }

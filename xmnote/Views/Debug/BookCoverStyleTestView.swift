@@ -219,7 +219,7 @@ private extension BookCoverStyleTestContentView {
                     .font(.headline)
                     .foregroundStyle(Color.textPrimary)
 
-                sceneBlock(title: "书库网格", subtitle: "110pt 封面作为视觉锚点，薄厚边应像轻量封面板厚度，而不是独立书脊。") {
+                sceneBlock(title: "书库网格", subtitle: "110pt 封面作为视觉锚点，薄厚边应像轻量封面板厚度，而不是独立书脊") {
                     VStack(alignment: .leading, spacing: Spacing.half) {
                         cover(width: 110, urlString: viewModel.coverURL(at: 0), surfaceStyle: .spine)
                         Text("纳瓦尔宝典")
@@ -234,7 +234,7 @@ private extension BookCoverStyleTestContentView {
 
                 Divider()
 
-                sceneBlock(title: "书籍详情", subtitle: "80pt 封面搭配信息区，厚度边要保留一点实体感，但不能把封面做成拟物书脊。") {
+                sceneBlock(title: "书籍详情", subtitle: "80pt 封面搭配信息区，厚度边要保留一点实体感，但不能把封面做成拟物书脊") {
                     HStack(alignment: .top, spacing: Spacing.base) {
                         cover(width: 80, urlString: viewModel.coverURL(at: 1), surfaceStyle: .spine)
 
@@ -256,7 +256,7 @@ private extension BookCoverStyleTestContentView {
 
                 Divider()
 
-                sceneBlock(title: "继续阅读", subtitle: "70pt 封面仍是辅助角色，薄厚边只提供一点厚度暗示，不与进度信息争抢。") {
+                sceneBlock(title: "继续阅读", subtitle: "70pt 封面仍是辅助角色，薄厚边只提供一点厚度暗示，不与进度信息争抢") {
                     HStack(alignment: .top, spacing: Spacing.base) {
                         cover(width: 70, urlString: viewModel.coverURL(at: 2), surfaceStyle: .spine)
 
@@ -305,10 +305,10 @@ private extension BookCoverStyleTestContentView {
                     .foregroundStyle(Color.textPrimary)
 
                 VStack(alignment: .leading, spacing: Spacing.half) {
-                    referenceRule("第一眼先看到封面正面内容，而不是左侧厚度边。")
-                    referenceRule("70pt 与 80pt 档只应读成薄厚边，不能出现明确书脊。")
-                    referenceRule("不要出现统一斜向高光，空间感主要来自外部轻阴影。")
-                    referenceRule("边角应更接近封面板，而不是带明显圆角的 UI 卡片。")
+                    referenceRule("第一眼先看到封面正面内容，而不是左侧厚度边")
+                    referenceRule("70pt 与 80pt 档只应读成薄厚边，不能出现明确书脊")
+                    referenceRule("不要出现统一斜向高光，空间感主要来自外部轻阴影")
+                    referenceRule("边角应更接近封面板，而不是带明显圆角的 UI 卡片")
                 }
             }
             .padding(Spacing.contentEdge)
@@ -410,7 +410,7 @@ private extension BookCoverStyleTestContentView {
                         Text("占位封面")
                             .font(.subheadline.weight(.semibold))
                             .foregroundStyle(Color.textPrimary)
-                        Text("检查无图时的边缘厚度和外阴影是否仍然克制。")
+                        Text("检查无图时的边缘厚度和外阴影是否仍然克制")
                             .font(.caption)
                             .foregroundStyle(Color.textSecondary)
                             .fixedSize(horizontal: false, vertical: true)

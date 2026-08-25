@@ -100,11 +100,11 @@ final class BookCoverStyleTestViewModel {
     var livePreviewTierDescription: String {
         switch livePreviewTier {
         case .plain:
-            return "当前尺寸低于厚度边阈值，将自动回退为平面封面。"
+            return "当前尺寸低于厚度边阈值，将自动回退为平面封面"
         case .thinEdge:
-            return "当前尺寸命中 Thin Edge，只保留极薄左侧厚度边与短阴影过渡。"
+            return "当前尺寸命中 Thin Edge，只保留极薄左侧厚度边与短阴影过渡"
         case .depthEdge:
-            return "当前尺寸命中 Depth Edge，会增加一点厚度和外部悬浮感，但仍以封面正面为主。"
+            return "当前尺寸命中 Depth Edge，会增加一点厚度和外部悬浮感，但仍以封面正面为主"
         }
     }
 
@@ -184,7 +184,7 @@ private extension BookCoverStyleTestViewModel {
             realBookCoverURLs = deduplicated
 
             if deduplicated.isEmpty {
-                realBookCoverStatusMessage = "本地 Book 表暂无有效封面，已回退到样例封面。"
+                realBookCoverStatusMessage = "本地 Book 表暂无有效封面，已回退到样例封面"
             }
         } catch {
             realBookCoverStatusMessage = "真实封面加载失败：\(error.localizedDescription)"

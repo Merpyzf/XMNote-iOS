@@ -374,7 +374,7 @@ private struct TopBarActionLabAdvancedSection: View {
                     if candidate.isEditable {
                         editableControls
                     } else {
-                        Text("当前正式版直接复用生产 TopBarActionPill，基线参数保持只读，避免对照被意外改写。")
+                        Text("当前正式版直接复用生产 TopBarActionPill，基线参数保持只读，避免对照被意外改写")
                             .font(AppTypography.caption)
                             .foregroundStyle(Color.textSecondary)
                             .fixedSize(horizontal: false, vertical: true)
@@ -942,9 +942,9 @@ private enum TopBarActionLabCandidate: String, CaseIterable, Identifiable, Hasha
     var summary: String {
         switch self {
         case .baseline: return "直接复用生产 TopBarActionPill，采用 clear interactive 玻璃、12pt 弱分隔线与系统交互反馈。"
-        case .clear: return "单层 clear interactive 玻璃，缩短并弱化分隔线，取消自定义缩放。"
-        case .regular: return "保持 A 的几何参数，仅用 regular interactive 增强浅色背景下的材质层次。"
-        case .union: return "两个原生交互玻璃分区通过 union 合并为静止态单胶囊，不绘制人工分隔线。"
+        case .clear: return "单层 clear interactive 玻璃，缩短并弱化分隔线，取消自定义缩放"
+        case .regular: return "保持 A 的几何参数，仅用 regular interactive 增强浅色背景下的材质层次"
+        case .union: return "两个原生交互玻璃分区通过 union 合并为静止态单胶囊，不绘制人工分隔线"
         }
     }
 

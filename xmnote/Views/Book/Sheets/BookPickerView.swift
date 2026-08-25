@@ -247,7 +247,7 @@ struct BookPickerView: View {
             BookSearchStatusCard(
                 systemImage: "books.vertical",
                 title: "还没有书籍",
-                message: "先创建一本书，后续书摘才能关联到阅读对象。"
+                message: "先创建一本书，后续书摘才能关联到阅读对象"
             )
             stateActionGroup(
                 primaryTitle: viewModel.supportsOnline ? "在线搜索" : nil,
@@ -279,7 +279,7 @@ struct BookPickerView: View {
             BookSearchStatusCard(
                 systemImage: "text.magnifyingglass",
                 title: "输入关键词开始搜索",
-                message: "输入书名、作者或 ISBN 后，将在当前在线来源中搜索。"
+                message: "输入书名、作者或 ISBN 后，将在当前在线来源中搜索"
             )
             if viewModel.supportsCreationFlow {
                 secondaryActionButton(creationEntryLabel) {
@@ -427,22 +427,22 @@ struct BookPickerView: View {
     private var localNoResultsMessage: String {
         switch configuration.creationAction {
         case .inlineManualEditor:
-            return "你可以继续修改关键词，或直接手动创建。"
+            return "你可以继续修改关键词，或直接手动创建"
         case .separateSearchPage:
-            return "你可以继续修改关键词，或直接去新增一本书。"
+            return "你可以继续修改关键词，或直接去新增一本书"
         case .nestedSearchPage:
-            return "你可以继续修改关键词，或进入添加书籍页。"
+            return "你可以继续修改关键词，或进入添加书籍页"
         }
     }
 
     private var onlineNoResultsMessage: String {
         switch configuration.creationAction {
         case .inlineManualEditor:
-            return "可以切换搜索源继续查找，或直接手动创建。"
+            return "可以切换搜索源继续查找，或直接手动创建"
         case .separateSearchPage:
-            return "可以切换搜索源继续查找，或前往新增书籍页。"
+            return "可以切换搜索源继续查找，或前往新增书籍页"
         case .nestedSearchPage:
-            return "可以切换搜索源继续查找，或进入添加书籍页。"
+            return "可以切换搜索源继续查找，或进入添加书籍页"
         }
     }
 

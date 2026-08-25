@@ -55,7 +55,7 @@ struct SourceNameEditSheet: View {
                 }
 
                 if !edit.isCreating {
-                    Text("将同步更新 \(edit.associatedBookCount) 本书籍中的来源名称。")
+                    Text("将同步更新 \(edit.associatedBookCount) 本书籍中的来源名称")
                         .font(AppTypography.caption)
                         .foregroundStyle(Color.textSecondary)
                         .frame(maxWidth: .infinity, alignment: .leading)

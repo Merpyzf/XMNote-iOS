@@ -525,11 +525,11 @@ struct MainTabView: View {
         }
         .onChange(of: runtime?.readingTimerCoordinator.backgroundCountdownCompletionEvent) { _, event in
             guard event != nil else { return }
-            toastCenter.info("阅读倒计时已结束，记录正在等待保存。")
+            toastCenter.info("阅读倒计时已结束，记录正在等待保存")
         }
         .onChange(of: runtime?.readingTimerCoordinator.longDurationReminderEvent) { _, event in
             guard event != nil else { return }
-            toastCenter.warning("本次阅读已计时超过 8 小时，请确认是否仍在阅读。")
+            toastCenter.warning("本次阅读已计时超过 8 小时，请确认是否仍在阅读")
         }
         .onReceive(NotificationCenter.default.publisher(for: .readingTimerSessionDidChange)) { notification in
             guard let coordinator = runtime?.readingTimerCoordinator else { return }
@@ -1046,7 +1046,7 @@ struct MainTabView: View {
            dismissal.reason == .minimize,
            scenePhase == .active,
            coordinator.consumeGlobalContinuationTipIfNeeded() {
-            toastCenter.info("阅读计时将在底部继续。")
+            toastCenter.info("阅读计时将在底部继续")
         }
         if !isSupersededByDeepLink,
            let action = dismissal.postDismissAction {

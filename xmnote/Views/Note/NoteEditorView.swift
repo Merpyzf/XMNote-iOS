@@ -2361,7 +2361,7 @@ private struct NoteEditorChapterPickerSheet: View {
                         ContentUnavailableView(
                             "暂无章节",
                             systemImage: "text.book.closed",
-                            description: Text("可以先不设置章节，或到目录管理中新增。")
+                            description: Text("可以先不设置章节，或到目录管理中新增")
                         )
                     } else {
                         ContentUnavailableView.search(text: searchText)

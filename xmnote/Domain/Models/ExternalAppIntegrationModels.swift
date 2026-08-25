@@ -55,11 +55,11 @@ nonisolated enum ExternalAppDestination: String, CaseIterable, Codable, Hashable
     var configurationHint: String {
         switch self {
         case .flomo:
-            return "粘贴 flomo Incoming Webhook 完整地址。"
+            return "粘贴 flomo Incoming Webhook 完整地址"
         case .writeathon:
-            return "粘贴 writeathon 个人访问 token。"
+            return "粘贴 writeathon 个人访问 token"
         case .inbox:
-            return "粘贴 inBox 接收内容的 API 地址。"
+            return "粘贴 inBox 接收内容的 API 地址"
         }
     }
 }

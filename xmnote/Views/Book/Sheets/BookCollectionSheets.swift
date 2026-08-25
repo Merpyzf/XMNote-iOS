@@ -95,9 +95,9 @@ struct BookCollectionSummarySheet: View {
         }
         switch detail.kind {
         case .manual:
-            return detail.bookCount == 0 ? "从书架里挑选几本书，给这个主题一个开始。" : "按你的阅读主题整理出的书籍集合。"
+            return detail.bookCount == 0 ? "从书架里挑选几本书，给这个主题一个开始" : "按你的阅读主题整理出的书籍集合"
         case .annual:
-            return "随读完记录自动同步，保留这一年的阅读轨迹。"
+            return "随读完记录自动同步，保留这一年的阅读轨迹"
         }
     }
 
@@ -471,7 +471,7 @@ struct BookCollectionBookMetadataEditSheet: View {
             ) { selectedURL in
                 coverURL = selectedURL
                 selectedCover = nil
-                coverSelectionMessage = "已选择在线封面链接。"
+                coverSelectionMessage = "已选择在线封面链接"
                 coverSelectionError = nil
             }
         }
@@ -698,7 +698,7 @@ struct BookCollectionBookMetadataEditSheet: View {
             }
             let fileExtension = item.supportedContentTypes.first?.preferredFilenameExtension ?? "jpg"
             selectedCover = BookCollectionBookCoverSelection(data: data, fileExtension: fileExtension)
-            coverSelectionMessage = "已选择本地封面，保存时上传。"
+            coverSelectionMessage = "已选择本地封面，保存时上传"
             coverSelectionError = nil
         } catch {
             coverSelectionMessage = nil
@@ -964,7 +964,7 @@ struct BookCollectionWereadImportPreviewSheet: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
 
-            Text("导入后会创建为我的书单，书籍先以“未加入书架”的占位状态保存。")
+            Text("导入后会创建为我的书单，书籍先以“未加入书架”的占位状态保存")
                 .font(AppTypography.caption)
                 .foregroundStyle(Color.textSecondary)
                 .fixedSize(horizontal: false, vertical: true)

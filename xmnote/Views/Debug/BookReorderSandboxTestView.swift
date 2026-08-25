@@ -63,7 +63,7 @@ struct BookReorderSandboxTestView: View {
                         Text("验证控制")
                             .font(AppTypography.subheadlineSemibold)
                             .foregroundStyle(Color.textPrimary)
-                        Text("切换编辑态、排序规则、列数和搜索过滤，观察拖拽是否按 Android 迁移边界启停。")
+                        Text("切换编辑态、排序规则、列数和搜索过滤，观察拖拽是否按 Android 迁移边界启停")
                             .font(AppTypography.caption)
                             .foregroundStyle(Color.textSecondary)
                     }

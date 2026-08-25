@@ -547,7 +547,7 @@ struct AIAutoTagSheet: View {
                 .transition(.opacity)
         case .empty:
             VStack(alignment: .leading, spacing: Spacing.base) {
-                Text("没有生成可用的标签建议。")
+                Text("没有生成可用的标签建议")
                     .font(AppTypography.footnote)
                     .foregroundStyle(Color.textSecondary)
                 retryButton

@@ -982,7 +982,7 @@ private struct BookWorkspaceContentView: View {
                 contentUnavailable(
                     title: searchQuery(.catalog).isEmpty ? "暂无目录" : "没有匹配的目录",
                     systemImage: "list.bullet.indent",
-                    description: "目录同步或创建后会显示在这里。"
+                    description: "目录同步或创建后会显示在这里"
                 )
             } else {
                 VStack(spacing: Spacing.none) {
@@ -1117,7 +1117,7 @@ private struct BookWorkspaceContentView: View {
             contentUnavailable(
                 title: normalizedSearchQuery(.notes).isEmpty ? "还没有书摘" : "没有匹配的书摘",
                 systemImage: "text.quote",
-                description: "记录一句触动你的内容，稍后会按章节整理在这里。"
+                description: "记录一句触动你的内容，稍后会按章节整理在这里"
             )
             .padding(.horizontal, Spacing.screenEdge)
             .padding(.top, Spacing.section)
@@ -1278,7 +1278,7 @@ private struct BookWorkspaceContentView: View {
                 contentUnavailable(
                     title: normalizedSearchQuery(.related).isEmpty ? "还没有相关内容" : "没有匹配的相关内容",
                     systemImage: "link",
-                    description: "把文章、观点或关联书籍整理到当前书中。"
+                    description: "把文章、观点或关联书籍整理到当前书中"
                 )
             } else {
                 LazyVStack(alignment: .leading, spacing: Spacing.section) {
@@ -1423,7 +1423,7 @@ private struct BookWorkspaceContentView: View {
                 contentUnavailable(
                     title: normalizedSearchQuery(.reviews).isEmpty ? "还没有书评" : "没有匹配的书评",
                     systemImage: "text.bubble",
-                    description: "写下对整本书的判断、收获与推荐理由。"
+                    description: "写下对整本书的判断、收获与推荐理由"
                 )
             } else {
                 VStack(spacing: Spacing.none) {
@@ -1751,7 +1751,7 @@ private struct BookWorkspaceContentView: View {
                     ContentUnavailableView(
                         "暂无可用分类",
                         systemImage: "square.grid.2x2",
-                        description: Text("请先在 Android 端或后续分类管理能力中创建相关分类。")
+                        description: Text("请先在 Android 端或后续分类管理能力中创建相关分类")
                     )
                 } else {
                     List(viewModel.relatedCategories) { category in
@@ -1836,7 +1836,7 @@ struct BookChapterNotesView: View {
                     ContentUnavailableView(
                         "本章暂无书摘",
                         systemImage: "text.quote",
-                        description: Text("从阅读中记录的内容会出现在这里。")
+                        description: Text("从阅读中记录的内容会出现在这里")
                     )
                 } else {
                     ScrollView {

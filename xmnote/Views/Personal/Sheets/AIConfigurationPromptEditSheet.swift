@@ -32,12 +32,12 @@ struct AIConfigurationPromptEditSheet: View {
                 VStack(alignment: .leading, spacing: Spacing.section) {
                     promptEditor(
                         title: "System Prompt",
-                        hint: "定义角色、输出结构与边界。",
+                        hint: "定义角色、输出结构与边界",
                         text: $systemPrompt
                     )
                     promptEditor(
                         title: "User Prompt",
-                        hint: "可保留当前默认模板中的中文占位符。",
+                        hint: "可保留当前默认模板中的中文占位符",
                         text: $userPrompt
                     )
 

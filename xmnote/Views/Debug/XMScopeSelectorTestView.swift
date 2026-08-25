@@ -90,7 +90,7 @@ struct XMScopeSelectorTestView: View {
                 Text(reduceMotion ? "减少动态效果：已开启" : "减少动态效果：未开启")
                     .font(AppTypography.subheadlineSemibold)
                     .foregroundStyle(Color.textPrimary)
-                Text(reduceMotion ? "选中态即时切换，不依赖滑移动画。" : "选中态使用 0.22s snappy 滑动反馈。")
+                Text(reduceMotion ? "选中态即时切换，不依赖滑移动画" : "选中态使用 0.22s snappy 滑动反馈")
                     .font(AppTypography.caption)
                     .foregroundStyle(Color.textSecondary)
             }
@@ -112,7 +112,7 @@ struct XMScopeSelectorTestView: View {
         VStack(alignment: .leading, spacing: Spacing.base) {
             XMScopeSelectorScenarioSection(
                 title: "全局搜索范围",
-                subtitle: "4 项单选范围，模拟搜索结果主分类。",
+                subtitle: "4 项单选范围，模拟搜索结果主分类",
                 items: XMScopeSelectorSearchScope.items,
                 selection: $searchScope,
                 demoStyle: visualStyle,
@@ -121,7 +121,7 @@ struct XMScopeSelectorTestView: View {
 
             XMScopeSelectorScenarioSection(
                 title: "BookPicker 来源",
-                subtitle: "2 项结果来源，验证短分段下的平衡感。",
+                subtitle: "2 项结果来源，验证短分段下的平衡感",
                 items: XMScopeSelectorPickerScope.items,
                 selection: $pickerScope,
                 demoStyle: visualStyle,
@@ -130,7 +130,7 @@ struct XMScopeSelectorTestView: View {
 
             XMScopeSelectorScenarioSection(
                 title: "截图场景复刻",
-                subtitle: "3 项短中文范围，替代平铺圆形按钮。",
+                subtitle: "3 项短中文范围，替代平铺圆形按钮",
                 items: XMScopeSelectorScreenshotScope.items,
                 selection: $screenshotScope,
                 demoStyle: visualStyle,
@@ -139,7 +139,7 @@ struct XMScopeSelectorTestView: View {
 
             XMScopeSelectorScenarioSection(
                 title: "混合数量",
-                subtitle: "4 项混合 count，验证有无数量时的对齐稳定性。",
+                subtitle: "4 项混合 count，验证有无数量时的对齐稳定性",
                 items: XMScopeSelectorMixedScope.items,
                 selection: $mixedScope,
                 demoStyle: visualStyle,
@@ -148,7 +148,7 @@ struct XMScopeSelectorTestView: View {
 
             XMScopeSelectorScenarioSection(
                 title: "英文与 ISBN",
-                subtitle: "5 项英文、数字和 ISBN 长串，验证截断与 count 保留。",
+                subtitle: "5 项英文、数字和 ISBN 长串，验证截断与 count 保留",
                 items: XMScopeSelectorTechnicalScope.items,
                 selection: $technicalScope,
                 demoStyle: visualStyle,
@@ -157,7 +157,7 @@ struct XMScopeSelectorTestView: View {
 
             XMScopeSelectorScenarioSection(
                 title: "长文案与数量",
-                subtitle: "5 项上限、长标题和数量徽标的拥挤验证。",
+                subtitle: "5 项上限、长标题和数量徽标的拥挤验证",
                 items: XMScopeSelectorLongScope.items,
                 selection: $longScope,
                 demoStyle: visualStyle,
@@ -166,7 +166,7 @@ struct XMScopeSelectorTestView: View {
 
             XMScopeSelectorScenarioSection(
                 title: "6+ 横向滚动",
-                subtitle: "7 项搜索范围，验证固定外壳内横向滚动、自动定位与标题优先级。",
+                subtitle: "7 项搜索范围，验证固定外壳内横向滚动、自动定位与标题优先级",
                 items: XMScopeSelectorOverflowScope.items,
                 selection: $overflowScope,
                 demoStyle: visualStyle,

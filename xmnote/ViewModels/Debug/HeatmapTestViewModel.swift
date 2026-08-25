@@ -115,7 +115,7 @@ class HeatmapTestViewModel {
             latestDate = result.latestDate
             statisticsDataType = realDataType
             if result.earliestDate == nil {
-                realDataError = "当前仓储没有可用热力图数据。"
+                realDataError = "当前仓储没有可用热力图数据"
             }
         } catch {
             days = [:]

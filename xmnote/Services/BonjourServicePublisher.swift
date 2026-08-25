@@ -106,7 +106,7 @@ final class BonjourServicePublisher {
             handleFailure(code: error.code)
         } catch {
             onEvent(.unavailable(
-                message: "xmnote.local 暂时无法发布，当前已改用局域网 IP 地址。"
+                message: "xmnote.local 暂时无法发布，当前已改用局域网 IP 地址"
             ))
         }
     }
@@ -186,11 +186,11 @@ final class BonjourServicePublisher {
             ))
         } else if code == Int32(kDNSServiceErr_NameConflict) {
             onEvent?(.unavailable(
-                message: "xmnote.local 已被局域网中的其他设备占用，当前已改用局域网 IP 地址。"
+                message: "xmnote.local 已被局域网中的其他设备占用，当前已改用局域网 IP 地址"
             ))
         } else {
             onEvent?(.unavailable(
-                message: "xmnote.local 暂时无法发布（错误码 \(code)），当前已改用局域网 IP 地址。"
+                message: "xmnote.local 暂时无法发布（错误码 \(code)），当前已改用局域网 IP 地址"
             ))
         }
     }

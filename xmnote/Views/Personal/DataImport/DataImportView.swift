@@ -248,8 +248,8 @@ struct WereadImportAuthView: View {
         guard let message = viewModel.errorMessage else { return nil }
         return .init(title: "导入失败", message: message, actions: [.init(title: "知道了") { viewModel.errorMessage = nil }])
     }
-    private var premiumDescriptor: XMSystemAlertDescriptor { .init(title: "会员功能", message: "微信读书授权导入是会员功能", actions: [.init(title: "取消", role: .cancel) {}, .init(title: "升级会员") { onOpenPremium() }]) }
-    private var tipsDescriptor: XMSystemAlertDescriptor { .init(title: "导入提示", message: "1. 在微信中扫描或识别二维码完成授权\n2. 导入期间请保持网络连接\n3. 重复导入会自动合并已有内容", actions: [.init(title: "不再提示") { viewModel.dismissTips(permanently: true) }, .init(title: "知道了", role: .cancel) { viewModel.dismissTips(permanently: false) }]) }
+    private var premiumDescriptor: XMSystemAlertDescriptor { .init(title: "会员功能", message: "微信读书授权导入是会员功能。", actions: [.init(title: "取消", role: .cancel) {}, .init(title: "升级会员") { onOpenPremium() }]) }
+    private var tipsDescriptor: XMSystemAlertDescriptor { .init(title: "导入提示", message: "1. 在微信中扫描或识别二维码完成授权。\n2. 导入期间请保持网络连接。\n3. 重复导入会自动合并已有内容。", actions: [.init(title: "不再提示") { viewModel.dismissTips(permanently: true) }, .init(title: "知道了", role: .cancel) { viewModel.dismissTips(permanently: false) }]) }
     private var backfillDescriptor: XMSystemAlertDescriptor? {
         guard let prompt = viewModel.backfillPrompt else { return nil }
         return .init(title: "关联历史微信数据", message: "发现 \(prompt.pendingCount) 本历史导入书籍缺少微信关联信息，是否现在补全？", actions: [.init(title: "稍后", role: .cancel) { viewModel.postponeBackfill() }, .init(title: "开始") { viewModel.beginBackfill() }])

@@ -109,7 +109,7 @@ struct NoteChapterSelectionSheet: View {
                 } header: {
                     Text("新建章节")
                 } footer: {
-                    Text("最多支持 \(ChapterManagementPolicy.maximumDepth) 级，已到最深层的章节不再作为父章节候选。")
+                    Text("最多支持 \(ChapterManagementPolicy.maximumDepth) 级，已到最深层的章节不再作为父章节候选")
                         .font(AppTypography.caption)
                         .foregroundStyle(Color.textSecondary)
                 }

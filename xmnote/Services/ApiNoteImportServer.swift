@@ -41,9 +41,9 @@ actor ApiNoteImportServer {
                 let data = try? JSONSerialization.data(withJSONObject: ["code": code, "message": text], options: [.sortedKeys])
                 return data.flatMap { String(data: $0, encoding: .utf8) } ?? "{\"code\":500,\"message\":\"\"}"
             }
-            guard isPremium else { return message(500, "该功能仅限会员使用。") }
+            guard isPremium else { return message(500, "该功能仅限会员使用") }
             if !accessCode.isEmpty, request.headers[.xmnoteAccessCode] != accessCode {
-                return message(500, "访问码不正确。")
+                return message(500, "访问码不正确")
             }
             do {
                 let buffer = try await request.body.collect(upTo: 10 * 1_024 * 1_024)

@@ -64,9 +64,9 @@ struct SearchableSystemBugReproView: View {
                     .font(AppTypography.subheadlineSemibold)
                     .foregroundStyle(Color.textPrimary)
 
-                ReproBulletRow(text: "点击“自动复现”，观察底部搜索框从占位到“打印机”的瞬间。")
-                ReproBulletRow(text: "如果文字先出现，放大镜随后插入并推动文字右移，即可证明系统控件内部布局跨帧重建。")
-                ReproBulletRow(text: "切换不同延迟，判断延迟只能缓解还是能完全消除。")
+                ReproBulletRow(text: "点击“自动复现”，观察底部搜索框从占位到“打印机”的瞬间")
+                ReproBulletRow(text: "如果文字先出现，放大镜随后插入并推动文字右移，即可证明系统控件内部布局跨帧重建")
+                ReproBulletRow(text: "切换不同延迟，判断延迟只能缓解还是能完全消除")
             }
             .padding(Spacing.contentEdge)
         }
@@ -191,7 +191,7 @@ private extension SearchableSystemBugExperimentShell {
                 }
                 .font(AppTypography.captionMedium)
 
-                Text("自动复现会切到搜索 Tab，先呈现并聚焦系统搜索框，600ms 后收焦点，再按当前延迟写入关键词。")
+                Text("自动复现会切到搜索 Tab，先呈现并聚焦系统搜索框，600ms 后收焦点，再按当前延迟写入关键词")
                     .font(AppTypography.caption)
                     .foregroundStyle(Color.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -255,7 +255,7 @@ private extension SearchableSystemBugExperimentShell {
                     keywordButton("打")
                 }
 
-                Text("按钮只触发系统焦点释放与延迟写入，不执行真实搜索。")
+                Text("按钮只触发系统焦点释放与延迟写入，不执行真实搜索")
                     .font(AppTypography.caption)
                     .foregroundStyle(Color.textSecondary)
             }
@@ -277,7 +277,7 @@ private extension SearchableSystemBugExperimentShell {
                     Text("等待复现")
                         .font(AppTypography.subheadlineSemibold)
                         .foregroundStyle(Color.textPrimary)
-                    Text("点击历史词或在控制 Tab 点击自动复现后，这里会显示静态结果。")
+                    Text("点击历史词或在控制 Tab 点击自动复现后，这里会显示静态结果")
                         .font(AppTypography.caption)
                         .foregroundStyle(Color.textSecondary)
                 }

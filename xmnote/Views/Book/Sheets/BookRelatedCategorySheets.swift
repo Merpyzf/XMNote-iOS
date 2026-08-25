@@ -37,7 +37,7 @@ struct BookRelatedPlaceholderSheet: View {
                                 .font(AppTypography.subheadline)
                                 .foregroundStyle(Color.textSecondary)
                         }
-                        Text("这是一条相关引用，尚未加入书架。")
+                        Text("这是一条相关引用，尚未加入书架")
                             .font(AppTypography.caption)
                             .foregroundStyle(Color.textSecondary)
                     }

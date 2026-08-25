@@ -360,10 +360,10 @@ private struct BookshelfBookListContentView: View {
             return notice
         }
         if let activeAction = viewModel.activeWriteAction {
-            return "\(activeAction.title)处理中..."
+            return "\(activeAction.title)处理中…"
         }
         if viewModel.isLoadingBatchOptions {
-            return "正在加载批量编辑选项..."
+            return "正在加载批量编辑选项…"
         }
         return viewModel.searchReorderDisabledNotice
     }

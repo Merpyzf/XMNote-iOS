@@ -118,7 +118,7 @@ struct BookshelfMoveSheet: View {
 
     private var statusText: String {
         if let activeAction {
-            return "正在\(activeAction.title)..."
+            return "正在\(activeAction.title)…"
         }
         guard canSubmit else {
             return disabledReason ?? "至少选择一个非置顶项后才能移动"

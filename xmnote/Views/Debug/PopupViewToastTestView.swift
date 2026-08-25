@@ -51,7 +51,7 @@ struct PopupViewToastTestView: View {
 private extension PopupViewToastTestView {
     var previewSection: some View {
         VStack(alignment: .leading, spacing: Spacing.base) {
-            sectionHeader("浮层预览", subtitle: "底部参照物用于观察 Toast 与 TabBar / 搜索浮层的避让关系。")
+            sectionHeader("浮层预览", subtitle: "底部参照物用于观察 Toast 与 TabBar / 搜索浮层的避让关系")
 
             ZStack(alignment: .bottom) {
                 RoundedRectangle(cornerRadius: CornerRadius.containerMedium, style: .continuous)
@@ -130,9 +130,9 @@ private extension PopupViewToastTestView {
         debugCard("验收关注") {
             VStack(alignment: .leading, spacing: Spacing.cozy) {
                 behaviorRow("短驻留", "成功/信息约 1.8 秒，警告与错误更长；调试页可覆盖时长。")
-                behaviorRow("非阻塞", "背景点击可穿透，Toast 本体点击关闭。")
-                behaviorRow("单条更新", "连续触发只替换当前提示，不做堆叠。")
-                behaviorRow("处理中", "处理中态不自动隐藏，完成后切换为成功态。")
+                behaviorRow("非阻塞", "背景点击可穿透，Toast 本体点击关闭")
+                behaviorRow("单条更新", "连续触发只替换当前提示，不做堆叠")
+                behaviorRow("处理中", "处理中态不自动隐藏，完成后切换为成功态")
             }
         }
     }
@@ -392,22 +392,22 @@ private enum ToastDemoKind: String, CaseIterable, Identifiable {
         case .info:
             return "已加入稍后处理"
         case .processing:
-            return "正在更新..."
+            return "正在更新…"
         }
     }
 
     private var longMessage: String {
         switch self {
         case .success:
-            return "已保存到本地，稍后会随同步任务上传。"
+            return "已保存到本地，稍后会随同步任务上传"
         case .warning:
-            return "当前网络较慢，内容会先保留在本机，连接恢复后继续处理。"
+            return "当前网络较慢，内容会先保留在本机，连接恢复后继续处理"
         case .error:
-            return "操作失败，请检查网络连接后重试，当前页面内容不会丢失。"
+            return "操作失败，请检查网络连接后重试，当前页面内容不会丢失"
         case .info:
-            return "已加入稍后处理列表，你可以继续浏览当前页面。"
+            return "已加入稍后处理列表，你可以继续浏览当前页面"
         case .processing:
-            return "正在更新排序，期间请不要重复触发同一操作。"
+            return "正在更新排序，期间请不要重复触发同一操作"
         }
     }
 }

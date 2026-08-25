@@ -55,7 +55,7 @@ struct TagNameEditSheet: View {
                 }
 
                 if !edit.isCreating {
-                    Text("将同步更新 \(edit.associatedCount) 条\(edit.scope.associatedItemTitle)关联中的标签名称。")
+                    Text("将同步更新 \(edit.associatedCount) 条\(edit.scope.associatedItemTitle)关联中的标签名称")
                         .font(AppTypography.caption)
                         .foregroundStyle(Color.textSecondary)
                         .frame(maxWidth: .infinity, alignment: .leading)

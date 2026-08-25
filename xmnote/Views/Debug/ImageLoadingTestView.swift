@@ -65,7 +65,7 @@ private extension ImageLoadingTestContentView {
                     HStack(spacing: Spacing.half) {
                         ProgressView()
                             .controlSize(.small)
-                        Text("正在串行执行全部样例...")
+                        Text("正在串行执行全部样例…")
                             .font(.caption)
                             .foregroundStyle(Color.textSecondary)
                     }
@@ -152,7 +152,7 @@ private extension ImageLoadingTestContentView {
 
     var manualMetrics: some View {
         HStack {
-            Text("建议：先运行一次，再点“测试 URL”观察缓存来源变化。")
+            Text("建议：先运行一次，再点“测试 URL”观察缓存来源变化")
                 .font(.caption2)
                 .foregroundStyle(Color.textHint)
             Spacer()
@@ -266,7 +266,7 @@ private extension ImageLoadingTestContentView {
                         .font(.caption)
                         .foregroundStyle(Color.textSecondary)
                 } else {
-                    Text("尚未进行批量测试。")
+                    Text("尚未进行批量测试")
                         .font(.caption)
                         .foregroundStyle(Color.textHint)
                 }

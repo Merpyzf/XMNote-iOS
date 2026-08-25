@@ -127,7 +127,7 @@ struct BookScanPlaceholderView: View {
             Text("当前设备或相机权限暂不可用")
                 .font(AppTypography.subheadlineSemibold)
                 .foregroundStyle(Color.textPrimary)
-            Text("可以在系统设置中允许相机访问，或直接输入 ISBN。")
+            Text("可以在系统设置中允许相机访问，或直接输入 ISBN")
                 .font(AppTypography.caption)
                 .foregroundStyle(Color.textSecondary)
                 .multilineTextAlignment(.center)
@@ -137,7 +137,7 @@ struct BookScanPlaceholderView: View {
 
     private func submitISBNCandidate(_ candidate: String) {
         guard let isbn = normalizedISBN(candidate) else {
-            feedback = "请扫描或输入 10 位/13 位 ISBN。"
+            feedback = "请扫描或输入 10 位/13 位 ISBN"
             return
         }
         feedback = "已识别 ISBN：\(isbn)"

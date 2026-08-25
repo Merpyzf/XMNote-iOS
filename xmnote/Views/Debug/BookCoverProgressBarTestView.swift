@@ -141,7 +141,7 @@ private extension BookCoverProgressBarTestView {
                         labelBadge(title: surfaceStyle == .spine ? "薄厚边" : "平面")
                         labelBadge(title: contentSource.title)
 
-                        Text("底部偏移与左右留白会随封面尺寸收敛，小封面保持细条感，大封面保持悬浮感。")
+                        Text("底部偏移与左右留白会随封面尺寸收敛，小封面保持细条感，大封面保持悬浮感")
                             .font(.caption)
                             .foregroundStyle(Color.textSecondary)
                             .fixedSize(horizontal: false, vertical: true)

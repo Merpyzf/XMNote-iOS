@@ -154,7 +154,7 @@ struct XMScrollEdgeChromeTestView: View {
     private var darkModeSection: some View {
         XMScrollEdgeDemoCard(title: "深色模式") {
             VStack(alignment: .leading, spacing: Spacing.half) {
-                Text("使用同一 API，在深色语义色下观察顶部与底部收口。")
+                Text("使用同一 API，在深色语义色下观察顶部与底部收口")
                     .font(AppTypography.caption)
                     .foregroundStyle(Color.textSecondary)
 

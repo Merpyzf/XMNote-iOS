@@ -425,7 +425,7 @@ final class NoteEditorViewModel {
         }
         if acceptedCount < inputs.count {
             if acceptedCount < componentAcceptedCount {
-                imageQuotaAlertMessage = "已超出今日额度，保留前 \(acceptedCount) 张。"
+                imageQuotaAlertMessage = "已超出今日额度，保留前 \(acceptedCount) 张"
             } else {
                 errorMessage = "最多只能添加 9 张图片，已保留前 \(acceptedCount) 张"
             }

@@ -167,7 +167,7 @@ private extension ReadCalendarCoverStackTestContentView {
                     .foregroundStyle(Color.textSecondary)
             }
 
-            Text("参数配置请通过右上角“配置”面板调整（非模态 Sheet）。")
+            Text("参数配置请通过右上角“配置”面板调整（非模态 Sheet）")
                 .font(.caption2)
                 .foregroundStyle(Color.textHint)
         }
@@ -226,7 +226,7 @@ private extension ReadCalendarCoverStackTestContentView {
             }
             .frame(minHeight: 96)
 
-            Text("点击任意有书日期可验证“全屏展开全部封面”效果。")
+            Text("点击任意有书日期可验证“全屏展开全部封面”效果")
                 .font(.caption2)
                 .foregroundStyle(Color.textHint)
         }

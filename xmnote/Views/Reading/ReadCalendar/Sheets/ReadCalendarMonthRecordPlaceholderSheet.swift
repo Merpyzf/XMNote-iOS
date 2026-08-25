@@ -33,7 +33,7 @@ struct ReadCalendarMonthRecordPlaceholderSheet: View {
                     .foregroundStyle(Color.textPrimary)
                     .monospacedDigit()
 
-                Text("当月阅读记录页正在接入，当前可先查看该月总结。")
+                Text("当月阅读记录页正在接入，当前可先查看该月总结")
                     .font(AppTypography.subheadline)
                     .foregroundStyle(Color.textSecondary)
                     .multilineTextAlignment(.center)

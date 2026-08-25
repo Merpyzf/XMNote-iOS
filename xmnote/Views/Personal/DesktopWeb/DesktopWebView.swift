@@ -132,7 +132,7 @@ struct DesktopWebView: View {
 
                     if case .waitingForLocalNetwork = coordinator.state {
                         attachedStatusMessage(
-                            "请连接 Wi-Fi，并在系统设置中允许 XMNote 访问本地网络。",
+                            "请连接 Wi-Fi，并在系统设置中允许 XMNote 访问本地网络",
                             color: .textSecondary
                         )
                     }

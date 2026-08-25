@@ -157,7 +157,7 @@ private struct ChapterManagerContentView: View {
             ContentUnavailableView {
                 Label("暂无目录", systemImage: "list.bullet.indent")
             } description: {
-                Text("可以新增一级章节，再逐步整理书摘结构。")
+                Text("可以新增一级章节，再逐步整理书摘结构")
             } actions: {
                 Button("新增章节", action: viewModel.presentCreateRoot)
                     .buttonStyle(.borderedProminent)

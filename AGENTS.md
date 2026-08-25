@@ -96,6 +96,20 @@
 ### UI 与交互
 - 遵循 iOS Human Interface Guidelines，保证业务一致，但采用 iOS 原生表达。
 
+#### 产品文案与标点（强制）
+- 规范依据：组件语义与写作原则以 Apple Human Interface Guidelines 的 [Writing](https://developer.apple.com/design/human-interface-guidelines/writing)、[Buttons](https://developer.apple.com/design/human-interface-guidelines/buttons)、[Alerts](https://developer.apple.com/design/human-interface-guidelines/alerts)、[Notifications](https://developer.apple.com/design/human-interface-guidelines/notifications) 为平台基线，简体中文标点以现行 [GB/T 15834-2011](https://openstd.samr.gov.cn/bzgk/std/newGbInfo?hcno=22EA6D162E4110E752259661E1A0D0A8) 为语言基线；组件专项规则优先于通用短文案规则。
+- 适用范围：所有用户可见文本均须遵守本节，包括生产与 Debug 界面、字符串目录、可访问性文案，以及 Domain、Repository、Service 中最终会展示给用户的错误或状态信息。
+- 排除范围：代码注释、日志、断言、协议值、URL、文件名与扩展名、代码或命令、用户输入内容、外部原文和仅用于展示排版能力的样例正文不得机械套用本节规则。
+- 无句末标点场景：按钮、菜单项、导航标题、分区标题、字段标签、placeholder、选项、角标与短状态标签不加句末标点；单句且简短、独立展示的辅助说明、设置描述、空状态、Toast、Banner、行内提示与 Sheet 补充说明不加结尾 `。` 或 `.`。
+- Alert 文案：标题为片语时不加句末标点，标题为问句时保留 `？`；补充消息必须使用完整句子和恰当的句末标点。按钮标题使用简短、结果明确的动作词，不加句末标点。
+- 通知文案：通知标题简短且不加句末标点；通知正文使用完整句子和恰当标点。多句说明、长段落、法律或风险说明、App Intent 完整描述同样保持完整书面标点。
+- 中文符号：中文语境使用全角 `，。；：？！“”‘’（）`，中文标点前后不加空格；代码、URL、时间、小数、版本号及其他内部语法保留对应 ASCII 标点，不因周围存在中文而改写其内部结构。
+- 省略号：进行中状态统一使用单个 `…`，禁止使用 `...`；正文中的语义省略按中文规则使用 `……`。不得用省略号代替可明确表达的操作或状态。
+- 引号、书名号与冒号：中文界面术语使用 `“”`，书名使用 `《》`；中文说明关系使用 `：`。标签和值已由布局分隔时不机械追加冒号，禁止在同一中文语义单元中混用全角与半角标点。
+- 本地化边界：日期、时间、数字与单位优先使用本地化格式化 API；标点应随完整可本地化语句进入字符串目录，禁止在调用处拼接跨语言标点。修改源文案键时必须同步更新 `Localizable.xcstrings` 并保留现有元数据。
+- 可访问性文案：片语型 label 不加句末标点；包含多个信息单元的 announcement 或完整说明使用自然停顿与完整标点，确保 VoiceOver 朗读语义清楚。
+- 人工检查清单：新增或修改文案时，依次确认展示组件、片语或完整句子、语言环境、本地化归属与同类组件既有风格；提交前检索 Swift 与字符串目录中的句末标点、`...`、中英文冒号和引号候选，逐项按 UI 上下文判断，禁止全局机械替换。
+
 #### 滚动回弹与系统边缘效果
 - 全轴回弹约束（强制）：应用自有的 SwiftUI `ScrollView`、`List`、`Form` 等滚动容器，无论内容是否超过一屏，都必须继承全局或显式使用 `.scrollBounceBehavior(.always)`；禁止使用 `.basedOnSize`。
 - UIKit 回弹约束（强制）：应用自有的 UIKit 滚动容器必须按实际滚动轴设置 `alwaysBounceVertical = true` 或 `alwaysBounceHorizontal = true`，禁止显式关闭有效轴向的 `bounces` / `alwaysBounce…`。

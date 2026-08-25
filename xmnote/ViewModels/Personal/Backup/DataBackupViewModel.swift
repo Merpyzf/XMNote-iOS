@@ -530,9 +530,9 @@ private extension DataBackupViewModel {
     func showUnavailableProviderMessage() {
         switch selectedProvider {
         case .aliyunDrive:
-            showErrorMessage("请先登录阿里云盘。")
+            showErrorMessage("请先登录阿里云盘")
         case .webdav:
-            showErrorMessage("请先完成云备份设置。")
+            showErrorMessage("请先完成云备份设置")
         }
     }
 

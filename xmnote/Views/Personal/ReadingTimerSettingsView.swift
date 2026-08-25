@@ -48,7 +48,7 @@ struct ReadingTimerSettingsView: View {
             } header: {
                 Text("默认计时方式")
             } footer: {
-                Text("选择固定方式后，点击“开始阅读”会直接进入计时。")
+                Text("选择固定方式后，点击“开始阅读”会直接进入计时")
                     .font(AppTypography.footnote)
             }
 

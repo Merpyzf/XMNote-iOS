@@ -65,19 +65,19 @@ final class AIConfigurationViewModel {
 
     var validationMessage: String? {
         if configuration.selectedModelID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            return "请选择模型。"
+            return "请选择模型"
         }
         for kind in AIPromptKind.allCases {
             let template = configuration.prompts.template(for: kind)
             if template.system.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
                 || template.user.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                return "\(kind.title) Prompt 不能为空。"
+                return "\(kind.title) Prompt 不能为空"
             }
         }
         if configuration.isEnabled,
            !selectedProviderHasStoredKey,
            apiKeyDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            return "启用前请填写 \(selectedProvider.displayName) API Key。"
+            return "启用前请填写 \(selectedProvider.displayName) API Key"
         }
         return nil
     }

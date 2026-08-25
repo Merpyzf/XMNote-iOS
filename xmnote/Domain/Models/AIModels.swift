@@ -353,29 +353,29 @@ nonisolated enum AIRepositoryError: LocalizedError, Equatable, Sendable {
     var errorDescription: String? {
         switch self {
         case .disabled:
-            "AI 功能尚未启用，请先前往“我的 > AI 配置”开启。"
+            "AI 功能尚未启用，请先前往“我的 > AI 配置”开启"
         case .missingAPIKey(let provider):
-            "尚未配置 \(provider.displayName) API Key。"
+            "尚未配置 \(provider.displayName) API Key"
         case .invalidConfiguration(let message):
             message
         case .noteNotFound:
-            "书摘不存在或已被删除。"
+            "书摘不存在或已被删除"
         case .unauthorized:
-            "AI 密钥无效，请检查配置。"
+            "AI 密钥无效，请检查配置"
         case .forbidden:
-            "AI 账户余额不足、无权访问该模型或已受限。"
+            "AI 账户余额不足、无权访问该模型或已受限"
         case .rateLimited:
-            "AI 请求过于频繁，请稍后再试。"
+            "AI 请求过于频繁，请稍后再试"
         case .service(let statusCode):
-            "AI 服务暂时不可用（HTTP \(statusCode)）。"
+            "AI 服务暂时不可用（HTTP \(statusCode)）"
         case .network(let message):
             "AI 连接失败：\(message)"
         case .emptyResponse:
-            "AI 没有返回可用内容，请检查模型和密钥配置。"
+            "AI 没有返回可用内容，请检查模型和密钥配置"
         case .invalidAutoTagResponse:
-            "结果格式有误，请重试。"
+            "结果格式有误，请重试"
         case .noTagsSelected:
-            "请至少选择一个标签。"
+            "请至少选择一个标签"
         case .credentialStore(let message):
             "安全存储访问失败：\(message)"
         }

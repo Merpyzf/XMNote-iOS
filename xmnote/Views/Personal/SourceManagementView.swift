@@ -271,9 +271,9 @@ private struct SourceManagementContentView: View {
     private var emptyDescription: String {
         switch viewModel.selectedScope {
         case .mine:
-            return "添加来源后，可在录入和批量编辑书籍时选择。"
+            return "添加来源后，可在录入和批量编辑书籍时选择"
         case .appDefault:
-            return "默认来源随基础数据初始化生成。"
+            return "默认来源随基础数据初始化生成"
         }
     }
 

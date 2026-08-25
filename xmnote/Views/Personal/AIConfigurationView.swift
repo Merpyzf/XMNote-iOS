@@ -410,7 +410,7 @@ private struct AIConfigurationContentView: View {
     private var deleteKeyAlertDescriptor: XMSystemAlertDescriptor {
         XMSystemAlertDescriptor(
             title: "移除 \(viewModel.selectedProvider.displayName) API Key？",
-            message: "移除后，当前服务商将无法继续使用，AI 功能会同时关闭",
+            message: "移除后，当前服务商将无法继续使用，AI 功能会同时关闭。",
             actions: [
                 XMSystemAlertAction(title: "取消", role: .cancel) { },
                 XMSystemAlertAction(title: "移除", role: .destructive) {

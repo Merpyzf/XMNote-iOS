@@ -166,7 +166,7 @@ struct BookCollectionCoverSearchSheet: View {
             BookCollectionCoverSearchStatusCard(
                 systemImage: "photo.on.rectangle",
                 title: "输入书名开始匹配",
-                message: "会从当前在线来源查找有封面的候选结果。"
+                message: "会从当前在线来源查找有封面的候选结果"
             )
         case .loading:
             loadingSection
@@ -189,7 +189,7 @@ struct BookCollectionCoverSearchSheet: View {
             BookCollectionCoverSearchStatusCard(
                 systemImage: "photo.badge.exclamationmark",
                 title: "没有匹配到封面",
-                message: "可以换一个来源，或回到编辑页手动粘贴封面链接。"
+                message: "可以换一个来源，或回到编辑页手动粘贴封面链接"
             )
         case .failure(let message):
             BookCollectionCoverSearchStatusCard(

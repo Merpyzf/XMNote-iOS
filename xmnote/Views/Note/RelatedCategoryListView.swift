@@ -104,8 +104,8 @@ struct RelatedCategoryListView: View {
             XMSystemAlertDescriptor(
                 title: request.isBook ? "移除相关书籍？" : "删除相关内容？",
                 message: request.isBook
-                    ? "只会把这条书籍关联标记为删除，不会删除书架中的书籍。"
-                    : "内容及附图将标记为删除，并从当前列表中移除。",
+                    ? "只会把这条书籍关联标记为删除，不会删除书架中的书籍"
+                    : "内容及附图将标记为删除，并从当前列表中移除",
                 actions: [
                     XMSystemAlertAction(title: "取消", role: .cancel) { },
                     XMSystemAlertAction(title: request.isBook ? "移除" : "删除", role: .destructive) {

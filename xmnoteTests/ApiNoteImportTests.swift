@@ -62,7 +62,7 @@ struct ApiNoteImportTests {
     func androidDTOValidationMessageIsStable() throws {
         let dto = try JSONDecoder().decode(ApiNoteImportDTO.self, from: Data("{\"type\":1,\"locationUnit\":1}".utf8))
         do { _ = try dto.validatedPayload(); Issue.record("应当校验失败") }
-        catch { #expect(error.localizedDescription == "书籍名称（title）是必填项，不能为空。") }
+        catch { #expect(error.localizedDescription == "书籍名称（title）是必填项，不能为空") }
     }
 
     @Test @MainActor

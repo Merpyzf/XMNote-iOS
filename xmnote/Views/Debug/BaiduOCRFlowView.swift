@@ -217,7 +217,7 @@ private extension OCRCameraScreen {
                         .foregroundStyle(Color.white.opacity(0.92))
                         .multilineTextAlignment(.center)
 
-                    Text("即使当前设备无法打开相机，你仍可通过底部“相册”按钮进入裁切识别页。")
+                    Text("即使当前设备无法打开相机，你仍可通过底部“相册”按钮进入裁切识别页")
                         .font(.caption)
                         .foregroundStyle(Color.white.opacity(0.68))
                         .multilineTextAlignment(.center)
@@ -340,7 +340,7 @@ private extension OCRCameraScreen {
                 Text("拍摄建议")
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(Self.darkForegroundPrimary)
-                Text("横向拍摄识别效果更好，文字边缘尽量完整并避免强反光。")
+                Text("横向拍摄识别效果更好，文字边缘尽量完整并避免强反光")
                     .font(.caption)
                     .foregroundStyle(Self.darkForegroundSecondary)
             }
@@ -691,16 +691,16 @@ private extension OCRCropRecognitionScreen {
         switch (viewModel.selectionMode, style) {
         case (.single, .automatic):
             if viewModel.singleSelectionRect == nil {
-                return "拖动框住要识别的文字，确认范围后点击“开始识别”。"
+                return "拖动框住要识别的文字，确认范围后点击“开始识别”"
             }
-            return "拖动边角可微调范围，长按框内可移动位置。"
+            return "拖动边角可微调范围，长按框内可移动位置"
         case (.single, .manual):
             return "适合识别单段或连续正文。拖动创建范围，边角可微调，长按框内可移动位置。"
         case (.freeform, .automatic):
             if viewModel.freeformRegions.isEmpty {
-                return "逐段拖动可添加多个识别框，全部框好后点击“开始识别”。"
+                return "逐段拖动可添加多个识别框，全部框好后点击“开始识别”"
             }
-            return "继续拖动可添加更多识别框，识别会按阅读顺序合并结果。"
+            return "继续拖动可添加更多识别框，识别会按阅读顺序合并结果"
         case (.freeform, .manual):
             return "适合识别分散的多段内容。逐段拖动添加多个识别框，识别结果会按阅读顺序合并。"
         }
@@ -1052,7 +1052,7 @@ private extension OCRCropRecognitionViewController {
         emptyStateIconView.image = UIImage(systemName: "photo")
         emptyStateIconView.preferredSymbolConfiguration = UIImage.SymbolConfiguration(pointSize: 48, weight: .regular)
         emptyStateIconView.tintColor = UIColor(Color.brand).withAlphaComponent(0.3)
-        emptyStateLabel.text = "没有可裁切的图片，请返回上一步重新选择。"
+        emptyStateLabel.text = "没有可裁切的图片，请返回上一步重新选择"
         emptyStateLabel.textColor = UIColor(Color.textSecondary)
         emptyStateLabel.font = .preferredFont(forTextStyle: .title3)
         emptyStateLabel.numberOfLines = 0
@@ -2821,7 +2821,7 @@ private extension OCRSettingsScreen {
             VStack(alignment: .leading, spacing: Spacing.base) {
                 sectionHeader(
                     title: "识别策略",
-                    description: "与 Android 设置保持同源：高精度、标点优化、中英混排优化与对齐网格线。"
+                    description: "与 Android 设置保持同源：高精度、标点优化、中英混排优化与对齐网格线"
                 )
 
                 Toggle("高精度 OCR", isOn: preferenceBinding(\.isHighPrecisionEnabled))
@@ -2838,7 +2838,7 @@ private extension OCRSettingsScreen {
             VStack(alignment: .leading, spacing: Spacing.base) {
                 sectionHeader(
                     title: "调试工具",
-                    description: "切换凭据或 SDK 状态异常时，可手动清理百度 OCR 的鉴权缓存。"
+                    description: "切换凭据或 SDK 状态异常时，可手动清理百度 OCR 的鉴权缓存"
                 )
 
                 if let message = viewModel.errorMessage {
@@ -4055,9 +4055,9 @@ private final class OCRCameraSessionController: NSObject, ObservableObject {
         case .ready:
             return "点击预览区域可重新对焦"
         case .denied:
-            return "相机权限已关闭，请在系统设置中允许 XMNote 使用相机。"
+            return "相机权限已关闭，请在系统设置中允许 XMNote 使用相机"
         case .restricted:
-            return "当前设备限制了相机权限，无法进入拍照模式。"
+            return "当前设备限制了相机权限，无法进入拍照模式"
         case .unavailable(let message), .failed(let message):
             return message
         }
@@ -4097,7 +4097,7 @@ private final class OCRCameraSessionController: NSObject, ObservableObject {
             }
         @unknown default:
             DispatchQueue.main.async {
-                self.state = .failed("遇到了未知的相机权限状态。")
+                self.state = .failed("遇到了未知的相机权限状态")
             }
         }
     }
@@ -4151,7 +4151,7 @@ private final class OCRCameraSessionController: NSObject, ObservableObject {
                 device.unlockForConfiguration()
             } catch {
                 DispatchQueue.main.async {
-                    self.state = .failed("相机对焦失败，请重新尝试。")
+                    self.state = .failed("相机对焦失败，请重新尝试")
                 }
             }
         }
@@ -4171,7 +4171,7 @@ private final class OCRCameraSessionController: NSObject, ObservableObject {
         return try await withCheckedThrowingContinuation { continuation in
             sessionQueue.async { [weak self] in
                 guard let self else {
-                    continuation.resume(throwing: OCRCameraControllerError.cameraUnavailable(reason: "相机会话已释放。"))
+                    continuation.resume(throwing: OCRCameraControllerError.cameraUnavailable(reason: "相机会话已释放"))
                     return
                 }
 
@@ -4239,7 +4239,7 @@ private extension OCRCameraSessionController {
                 guard let device = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .back) else {
                     self.session.commitConfiguration()
                     DispatchQueue.main.async {
-                        self.state = .unavailable("当前设备没有可用的后置相机。")
+                        self.state = .unavailable("当前设备没有可用的后置相机")
                     }
                     return
                 }
@@ -4248,7 +4248,7 @@ private extension OCRCameraSessionController {
                 guard self.session.canAddInput(input) else {
                     self.session.commitConfiguration()
                     DispatchQueue.main.async {
-                        self.state = .failed("无法将相机输入添加到当前会话。")
+                        self.state = .failed("无法将相机输入添加到当前会话")
                     }
                     return
                 }
@@ -4257,7 +4257,7 @@ private extension OCRCameraSessionController {
                 guard self.session.canAddOutput(self.photoOutput) else {
                     self.session.commitConfiguration()
                     DispatchQueue.main.async {
-                        self.state = .failed("无法创建拍照输出，请重新启动调试页。")
+                        self.state = .failed("无法创建拍照输出，请重新启动调试页")
                     }
                     return
                 }
@@ -4448,7 +4448,7 @@ private enum OCRCameraControllerError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .invalidPhotoData:
-            return "拍摄结果无法转换为可用图片，请重新拍摄。"
+            return "拍摄结果无法转换为可用图片，请重新拍摄"
         case .cameraUnavailable(let reason):
             return reason
         }

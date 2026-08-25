@@ -140,9 +140,9 @@ enum WebHTMLFetchError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .invalidHTTPResponse:
-            return "服务端未返回有效的 HTTP 响应。"
+            return "服务端未返回有效的 HTTP 响应"
         case .emptyHTML:
-            return "页面返回了空 HTML。"
+            return "页面返回了空 HTML"
         case .network(let description):
             return description
         case .webView(let description):
@@ -556,7 +556,7 @@ private enum WebViewHTMLLoader {
                     let html = try await evaluateString(webView, script: "document.documentElement.outerHTML")
                     let pageTitle = try? await evaluateString(webView, script: "document.title")
                     guard let finalURL = webView.url ?? webView.backForwardList.currentItem?.url else {
-                    finish(with: Swift.Result.failure(WebHTMLFetchError.webView(description: "WebView 未返回最终 URL。")))
+                    finish(with: Swift.Result.failure(WebHTMLFetchError.webView(description: "WebView 未返回最终 URL")))
                         return
                     }
                     guard !html.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
@@ -587,7 +587,7 @@ private enum WebViewHTMLLoader {
         }
 
         func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
-            finish(with: Swift.Result.failure(WebHTMLFetchError.webView(description: "网页内容进程异常终止。")))
+            finish(with: Swift.Result.failure(WebHTMLFetchError.webView(description: "网页内容进程异常终止")))
         }
 
         func webView(
@@ -656,10 +656,10 @@ private enum WebViewHTMLLoader {
             }
 
             if hasRecoverableCancellation {
-                finish(with: .failure(WebHTMLFetchError.webView(description: "网页导航被取消且未收敛到可解析页面。")))
+                finish(with: .failure(WebHTMLFetchError.webView(description: "网页导航被取消且未收敛到可解析页面")))
                 return
             }
-            finish(with: .failure(WebHTMLFetchError.webView(description: "网页加载超时。")))
+            finish(with: .failure(WebHTMLFetchError.webView(description: "网页加载超时")))
         }
 
         private func isRecoverableCancellation(_ error: Error) -> Bool {

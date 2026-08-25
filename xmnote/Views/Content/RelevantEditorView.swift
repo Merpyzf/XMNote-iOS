@@ -308,7 +308,7 @@ private struct RelevantEditorForm: View {
                     subtitle: viewModel.contextSubtitle
                 ) {
                     VStack(alignment: .leading, spacing: Spacing.cozy) {
-                        Text("标题、正文、链接与图片会在一次保存中共同更新。")
+                        Text("标题、正文、链接与图片会在一次保存中共同更新")
                             .font(AppTypography.caption)
                             .foregroundStyle(Color.textSecondary)
 

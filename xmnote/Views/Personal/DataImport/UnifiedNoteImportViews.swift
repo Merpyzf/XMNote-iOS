@@ -90,7 +90,7 @@ struct NoteImportSourceScreen: View {
     private var instruction: String {
         switch input {
         case .file, .fileCandidates: "选择从对应阅读应用导出的原始文件。解析规则与 Android 保持一致。"
-        case .clipboard, .clipboardCandidates: "先在阅读应用中复制完整书摘内容，再返回这里导入。"
+        case .clipboard, .clipboardCandidates: "先在阅读应用中复制完整书摘内容，再返回这里导入"
         }
     }
 

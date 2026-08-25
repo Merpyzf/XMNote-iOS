@@ -127,7 +127,7 @@ struct ReadCalendarTimingEditorSheet: View {
                 Section {
                     Toggle("同时标记为读完", isOn: $shouldMarkReadDone)
                 } footer: {
-                    Text("关闭此开关不会删除已有的读完记录。")
+                    Text("关闭此开关不会删除已有的读完记录")
                 }
 
                 if let errorMessage {

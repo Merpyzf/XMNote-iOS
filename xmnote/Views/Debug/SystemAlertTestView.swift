@@ -83,7 +83,7 @@ struct SystemAlertTestView: View {
                     .foregroundStyle(Color.textSecondary)
 
                 if viewModel.eventLog.isEmpty {
-                    Text("暂无事件，点击上面的用例开始验证。")
+                    Text("暂无事件，点击上面的用例开始验证")
                         .font(AppTypography.body)
                         .foregroundStyle(Color.textSecondary)
                 } else {

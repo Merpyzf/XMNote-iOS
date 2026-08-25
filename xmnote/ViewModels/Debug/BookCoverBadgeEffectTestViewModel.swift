@@ -161,15 +161,15 @@ final class BookCoverBadgeEffectTestViewModel {
 
     var sourceStatusText: String {
         if isLoadingRealBookCovers {
-            return "正在读取本地真实封面样例..."
+            return "正在读取本地真实封面样例…"
         }
         if let realBookCoverStatusMessage {
             return realBookCoverStatusMessage
         }
         if realSamples.isEmpty {
-            return "暂无真实封面，当前使用固定样例。"
+            return "暂无真实封面，当前使用固定样例"
         }
-        return "真实封面 \(validBookCoverCount)/\(bookSourceTotalCount)，并补充固定极端样例。"
+        return "真实封面 \(validBookCoverCount)/\(bookSourceTotalCount)，并补充固定极端样例"
     }
 
     var parameterSummary: String {
@@ -303,7 +303,7 @@ private extension BookCoverBadgeEffectTestViewModel {
             }
 
             if urls.isEmpty {
-                realBookCoverStatusMessage = "本地 Book 表暂无有效封面，已回退固定样例。"
+                realBookCoverStatusMessage = "本地 Book 表暂无有效封面，已回退固定样例"
             }
         } catch {
             realBookCoverStatusMessage = "真实封面加载失败：\(error.localizedDescription)"

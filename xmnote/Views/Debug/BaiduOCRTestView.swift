@@ -19,7 +19,7 @@ struct BaiduOCRTestView: View {
                 capabilitySection
                 editorSection(
                     title: OCRFlowTarget.content.title,
-                    placeholder: "识别结果会追加到这里，也可以手动编辑验证格式能力。",
+                    placeholder: "识别结果会追加到这里，也可以手动编辑验证格式能力",
                     text: $viewModel.contentText,
                     formats: $viewModel.contentFormats,
                     target: .content,
@@ -27,7 +27,7 @@ struct BaiduOCRTestView: View {
                 )
                 editorSection(
                     title: OCRFlowTarget.idea.title,
-                    placeholder: "点击“想法 OCR”后，识别结果会回填到这里。",
+                    placeholder: "点击“想法 OCR”后，识别结果会回填到这里",
                     text: $viewModel.ideaText,
                     formats: $viewModel.ideaFormats,
                     target: .idea,
@@ -104,7 +104,7 @@ private extension BaiduOCRTestView {
                         Text(title)
                             .font(.subheadline.weight(.semibold))
                             .foregroundStyle(Color.textPrimary)
-                        Text("点击下方按钮会进入独立 OCR Flow。")
+                        Text("点击下方按钮会进入独立 OCR Flow")
                             .font(.caption)
                             .foregroundStyle(Color.textSecondary)
                     }
@@ -221,9 +221,9 @@ private extension BaiduOCRTestView {
 
     var runtimeHintText: String {
         if isRuntimeSupported {
-            return "真机可完整验证拍照、相册、裁切、自由框选和 SDK 识别回填。"
+            return "真机可完整验证拍照、相册、裁切、自由框选和 SDK 识别回填"
         }
-        return "模拟器没有可用相机预览，建议使用相册验证 Flow 与多框交互。"
+        return "模拟器没有可用相机预览，建议使用相册验证 Flow 与多框交互"
     }
 }
 

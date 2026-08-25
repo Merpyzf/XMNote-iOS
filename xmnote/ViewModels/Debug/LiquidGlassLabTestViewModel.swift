@@ -36,13 +36,13 @@ final class LiquidGlassLabTestViewModel {
         var subtitle: String {
             switch self {
             case .readability:
-                return "验证复杂图片背景上的标题、正文、数字标签与阴影兜底。"
+                return "验证复杂图片背景上的标题、正文、数字标签与阴影兜底"
             case .controls:
-                return "验证 Toolbar、BottomBar、Floating Bar 与图标按钮的玻璃质感。"
+                return "验证 Toolbar、BottomBar、Floating Bar 与图标按钮的玻璃质感"
             case .matrix:
-                return "同一组参数在多个背景和组件密度下并排比较。"
+                return "同一组参数在多个背景和组件密度下并排比较"
             case .scrollReactive:
-                return "观察滚动、动态背景和浮动控制层叠加后的稳定性。"
+                return "观察滚动、动态背景和浮动控制层叠加后的稳定性"
             }
         }
     }
@@ -333,15 +333,15 @@ final class LiquidGlassLabTestViewModel {
 
     var sourceStatusText: String {
         if isLoadingRealBookCovers {
-            return "正在读取真实书封背景..."
+            return "正在读取真实书封背景…"
         }
         if let realBookCoverStatusMessage {
             return realBookCoverStatusMessage
         }
         if bookSamples.isEmpty {
-            return "真实书封暂不可用，书封背景将使用占位矩阵。"
+            return "真实书封暂不可用，书封背景将使用占位矩阵"
         }
-        return "已载入 \(bookSamples.count) 张真实书封，可用于真实图片背景验证。"
+        return "已载入 \(bookSamples.count) 张真实书封，可用于真实图片背景验证"
     }
 
     var performanceSummary: String {
@@ -404,7 +404,7 @@ final class LiquidGlassLabTestViewModel {
     func resetParameters() {
         parameters = GlassLabParameters()
         selectedPresetID = nil
-        captureStatusMessage = "已恢复推荐基线参数。"
+        captureStatusMessage = "已恢复推荐基线参数"
     }
 
     func setPreviewScene(_ scene: PreviewScene) {
@@ -488,7 +488,7 @@ final class LiquidGlassLabTestViewModel {
 
     func captureSnapshot(from anchorView: UIView?) async {
         guard let image = makeSnapshot(from: anchorView) else {
-            captureStatusMessage = "截图失败：未找到可截取的预览区域。"
+            captureStatusMessage = "截图失败：未找到可截取的预览区域"
             return
         }
 
@@ -502,7 +502,7 @@ final class LiquidGlassLabTestViewModel {
             let metadataURL = directory.appendingPathComponent(metadataFileName)
 
             guard let pngData = image.pngData() else {
-                captureStatusMessage = "截图失败：PNG 编码失败。"
+                captureStatusMessage = "截图失败：PNG 编码失败"
                 return
             }
 
@@ -651,7 +651,7 @@ private extension LiquidGlassLabTestViewModel {
             }
 
             if bookSamples.isEmpty {
-                realBookCoverStatusMessage = "本地 Book 表暂无有效封面，真实书封背景将显示占位矩阵。"
+                realBookCoverStatusMessage = "本地 Book 表暂无有效封面，真实书封背景将显示占位矩阵"
             }
         } catch {
             realBookCoverStatusMessage = "真实书封加载失败：\(error.localizedDescription)"

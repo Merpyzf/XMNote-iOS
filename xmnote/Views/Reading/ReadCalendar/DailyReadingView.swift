@@ -235,7 +235,7 @@ struct DailyReadingView: View {
         ContentUnavailableView {
             Label("当天还没有阅读轨迹", systemImage: "calendar.badge.clock")
         } description: {
-            Text("添加阅读打卡后，记录会按发生时间出现在这里。")
+            Text("添加阅读打卡后，记录会按发生时间出现在这里")
         } actions: {
             Button(viewModel.checkInActionTitle) {
                 isCheckInPresented = true
@@ -250,7 +250,7 @@ struct DailyReadingView: View {
         ContentUnavailableView {
             Label("没有符合条件的记录", systemImage: "line.3.horizontal.decrease.circle")
         } description: {
-            Text("可以切换书籍或记录类型，查看当天的其他阅读轨迹。")
+            Text("可以切换书籍或记录类型，查看当天的其他阅读轨迹")
         } actions: {
             if viewModel.hasActiveFilter {
                 Button("显示全部记录") {

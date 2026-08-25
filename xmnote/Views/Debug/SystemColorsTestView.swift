@@ -79,21 +79,21 @@ struct SystemColorsTestView: View {
         var subtitle: String {
             switch self {
             case .textAndLabel:
-                return "用于标题、正文、说明和链接等前景语义。"
+                return "用于标题、正文、说明和链接等前景语义"
             case .backgrounds:
-                return "用于页面、卡片、分组容器的背景层级。"
+                return "用于页面、卡片、分组容器的背景层级"
             case .fills:
-                return "用于控件填充与强调层，常见于胶囊/按钮内衬。"
+                return "用于控件填充与强调层，常见于胶囊/按钮内衬"
             case .separators:
-                return "用于列表分隔与边框层次。"
+                return "用于列表分隔与边框层次"
             case .accent:
-                return "用于交互强调与全局 tint。"
+                return "用于交互强调与全局 tint"
             case .chromatic:
-                return "用于状态、类别和品牌之外的系统标准色。"
+                return "用于状态、类别和品牌之外的系统标准色"
             case .neutrals:
-                return "用于中性色阶与层级灰度控制。"
+                return "用于中性色阶与层级灰度控制"
             case .basics:
-                return "静态基础色，不随系统主题自动变化。"
+                return "静态基础色，不随系统主题自动变化"
             }
         }
     }

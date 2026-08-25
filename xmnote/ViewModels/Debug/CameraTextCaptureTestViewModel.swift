@@ -73,7 +73,7 @@ final class CameraTextCaptureTestViewModel {
 
     var cameraHintText: String {
         if isAPISupported {
-            return "请在真机上点击编辑器，使用键盘上方工具栏中的 OCR 按钮触发系统取词。"
+            return "请在真机上点击编辑器，使用键盘上方工具栏中的 OCR 按钮触发系统取词"
         }
         return "当前环境未检测到可用相机。模拟器无法完成系统取词验收。"
     }

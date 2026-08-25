@@ -579,7 +579,7 @@ struct BookshelfBatchSourceSheet: View {
                     }
                 }
 
-                Text("将 \(selectedCount) 本书的来源更新为所选来源。")
+                Text("将 \(selectedCount) 本书的来源更新为所选来源")
                     .font(AppTypography.caption)
                     .foregroundStyle(Color.textSecondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -1326,7 +1326,7 @@ struct BookshelfBatchReadStatusSheet: View {
                             .frame(maxWidth: .infinity, alignment: .leading)
                         }
                     } footer: {
-                        Text("读完状态会同步评分，并把阅读进度推进到终点。")
+                        Text("读完状态会同步评分，并把阅读进度推进到终点")
                             .font(AppTypography.caption)
                     }
                 }

@@ -161,7 +161,7 @@ final class ImageLoadingTestViewModel {
             manualStatus = .failed
             manualElapsedMs = nil
             manualCacheSource = .unknown
-            manualMessage = "请输入 URL。"
+            manualMessage = "请输入 URL"
             return
         }
 
@@ -272,7 +272,7 @@ private extension ImageLoadingTestViewModel {
 
     private func probe(urlString: String) async -> ProbeResult {
         guard let url = XMImageRequestBuilder.normalizedURL(from: urlString) else {
-            return .failure(elapsedMs: nil, message: "URL 非法，仅支持 http/https。")
+            return .failure(elapsedMs: nil, message: "URL 非法，仅支持 http/https")
         }
 
         let request = XMImageRequestBuilder.makeImageRequest(
@@ -307,7 +307,7 @@ private extension ImageLoadingTestViewModel {
 
     private func normalizedErrorMessage(_ error: Error) -> String {
         if error is CancellationError {
-            return "任务已取消。"
+            return "任务已取消"
         }
         if let pipelineError = error as? ImagePipeline.Error {
             if let underlying = pipelineError.dataLoadingError {
@@ -315,9 +315,9 @@ private extension ImageLoadingTestViewModel {
             }
             switch pipelineError {
             case .dataIsEmpty:
-                return "响应数据为空。"
+                return "响应数据为空"
             case .decoderNotRegistered:
-                return "没有可用的图片解码器。"
+                return "没有可用的图片解码器"
             default:
                 return pipelineError.description
             }
@@ -329,18 +329,18 @@ private extension ImageLoadingTestViewModel {
         if let dataLoaderError = error as? DataLoader.Error {
             switch dataLoaderError {
             case .statusCodeUnacceptable(let code):
-                return "HTTP 状态异常：\(code)。"
+                return "HTTP 状态异常：\(code)"
             }
         }
         let nsError = error as NSError
         if nsError.domain == NSURLErrorDomain {
             switch nsError.code {
             case NSURLErrorTimedOut:
-                return "请求超时（12s）。"
+                return "请求超时（12s）"
             case NSURLErrorCannotFindHost, NSURLErrorCannotConnectToHost:
-                return "无法连接到服务器。"
+                return "无法连接到服务器"
             case NSURLErrorNotConnectedToInternet:
-                return "当前网络不可用。"
+                return "当前网络不可用"
             default:
                 break
             }
