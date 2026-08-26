@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 RepositoryContainer 或 Debug 仓储替身提供本地书与在线搜索，依赖 BookPickerViewModel 维护共享选择草稿
- * [OUTPUT]: 对外提供 BookPickerView，使用统一 Sheet 骨架、原生系统搜索与单一分组表面承载选择流
+ * [OUTPUT]: 对外提供 BookPickerView，使用统一 Sheet 骨架、原生系统搜索、稳定结果快照与可降级结构过渡承载选择流
  * [POS]: Book 模块业务 Sheet，负责统一书籍选择流，不承担具体业务页保存逻辑
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -95,6 +95,7 @@ private struct BookPickerResolvedView: View {
     let searchRepository: any BookSearchRepositoryProtocol
 
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.accessibilityReduceMotion) private var accessibilityReduceMotion
 
     @State private var viewModel: BookPickerViewModel?
     @State private var activeSheet: ActiveSheet?
@@ -308,26 +309,31 @@ private struct BookPickerResolvedView: View {
 
     @ViewBuilder
     private func resultsSection(_ viewModel: BookPickerViewModel) -> some View {
-        switch viewModel.status {
-        case .localLoading:
-            localLoadingSection
-        case .localResults:
-            localResultsSection(viewModel)
-        case .localEmptyLibrary:
-            localEmptyLibrarySection(viewModel)
-        case .localNoResults:
-            localNoResultsSection(viewModel)
-        case .onlineIdle:
-            onlineIdleSection(viewModel)
-        case .onlineLoading:
-            onlineLoadingSection(viewModel)
-        case .onlineResults:
-            onlineResultsSection(viewModel)
-        case .onlineFailure(let message):
-            onlineFailureSection(viewModel, message: message)
-        case .onlineNoResults:
-            onlineNoResultsSection(viewModel)
+        Group {
+            switch viewModel.status {
+            case .localLoading:
+                localLoadingSection
+            case .localResults:
+                localResultsSection(viewModel)
+            case .localEmptyLibrary:
+                localEmptyLibrarySection(viewModel)
+            case .localNoResults:
+                localNoResultsSection(viewModel)
+            case .onlineIdle:
+                onlineIdleSection(viewModel)
+            case .onlineLoading:
+                onlineLoadingSection(viewModel)
+            case .onlineResults:
+                onlineResultsSection(viewModel)
+            case .onlineFailure(let message):
+                onlineFailureSection(viewModel, message: message)
+            case .onlineNoResults:
+                onlineNoResultsSection(viewModel)
+            }
         }
+        .id(viewModel.status)
+        .transition(.opacity)
+        .animation(resultsTransitionAnimation, value: viewModel.status)
     }
 
     private var localLoadingSection: some View {
@@ -349,33 +355,41 @@ private struct BookPickerResolvedView: View {
             LazyVStack(alignment: .leading, spacing: Spacing.none) {
                 ForEach(viewModel.localBooks.enumerated(), id: \.element.id) { index, book in
                     let isUnavailable = viewModel.isBookUnavailable(book)
-                    Button {
-                        if let result = viewModel.handleLocalBookTap(book) {
-                            finish(result)
+                    VStack(spacing: Spacing.none) {
+                        Button {
+                            if let result = viewModel.handleLocalBookTap(book) {
+                                finish(result)
+                            }
+                        } label: {
+                            BookPickerLocalBookRow(
+                                book: book,
+                                keyword: viewModel.localSnapshotQuery,
+                                selectionStyle: viewModel.isMultipleSelectionEnabled ? .multiple : .single,
+                                isSelected: viewModel.isBookSelected(book),
+                                statusText: isUnavailable ? viewModel.unavailableLocalBookMessage : nil
+                            )
                         }
-                    } label: {
-                        BookPickerLocalBookRow(
-                            book: book,
-                            keyword: viewModel.trimmedQuery,
-                            selectionStyle: viewModel.isMultipleSelectionEnabled ? .multiple : .single,
-                            isSelected: viewModel.isBookSelected(book),
-                            statusText: isUnavailable ? viewModel.unavailableLocalBookMessage : nil
-                        )
-                    }
-                    .buttonStyle(BookPickerGroupedRowButtonStyle())
-                    .disabled(isUnavailable || viewModel.isResolvingRemoteSelections)
-                    .accessibilityHint(isUnavailable ? (viewModel.unavailableLocalBookMessage ?? "当前不可选择") : "双击切换书籍选择状态")
-                    .accessibilityIdentifier("book.picker.local.\(book.id)")
-                    .id(book.id)
+                        .buttonStyle(BookPickerGroupedRowButtonStyle())
+                        .disabled(isUnavailable || viewModel.isResolvingRemoteSelections)
+                        .accessibilityHint(isUnavailable ? (viewModel.unavailableLocalBookMessage ?? "当前不可选择") : "双击切换书籍选择状态")
+                        .accessibilityIdentifier("book.picker.local.\(book.id)")
 
-                    if index < viewModel.localBooks.count - 1 {
-                        BookPickerGroupedDivider(
-                            leadingInset: BookPickerGroupedSurfaceLayout.compactBookTextInset
-                        )
+                        if index < viewModel.localBooks.count - 1 {
+                            BookPickerGroupedDivider(
+                                leadingInset: BookPickerGroupedSurfaceLayout.compactBookTextInset
+                            )
+                        }
                     }
+                    .transition(.opacity)
                 }
             }
+            .animation(resultsTransitionAnimation, value: viewModel.localBooks.map(\.id))
         }
+    }
+
+    /// 为结果结构变化提供短促且可中断的过渡；开启“减少动态效果”时直接落位。
+    private var resultsTransitionAnimation: Animation? {
+        accessibilityReduceMotion ? nil : .smooth(duration: StatePresentationMetrics.phaseTransitionDuration)
     }
 
     private func syncLocalLoadingGate(_ viewModel: BookPickerViewModel) {

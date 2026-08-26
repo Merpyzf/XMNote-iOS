@@ -1,5 +1,5 @@
 /**
- * [INPUT]: 依赖 SwiftUI Binding 同步搜索文本与激活态，依赖 UIKit UISearchBar 提供原生输入、清除、取消与提交语义
+ * [INPUT]: 依赖 SwiftUI Binding 同步搜索文本与激活态，依赖 UIKit UISearchBar 提供原生输入、框内清除与提交语义
  * [OUTPUT]: 对外提供 XMSearchBar，以 minimal 系统外观统一内容区搜索，并保持 UIKit 焦点生命周期与页面状态一致
  * [POS]: UIComponents/Foundation 的系统搜索基础组件，供需要原生 UISearchBar 交互的业务页面复用
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -8,7 +8,7 @@
 import SwiftUI
 import UIKit
 
-/// 内容区原生搜索栏；系统负责清除与取消按钮的外观、布局和交互动效。
+/// 内容区原生搜索栏；系统负责输入与框内清除按钮的外观、布局和交互动效。
 @MainActor
 struct XMSearchBar: UIViewRepresentable {
     @Binding private var text: String
@@ -16,23 +16,20 @@ struct XMSearchBar: UIViewRepresentable {
     private let prompt: String
     private let isEnabled: Bool
     private let onSubmit: () -> Void
-    private let onCancel: () -> Void
 
-    /// 注入搜索状态和操作回调；取消搜索会清空关键词并结束输入，但不承担页面关闭语义。
+    /// 注入搜索状态和提交回调；框内清除保留输入焦点，Search 键提交后结束输入。
     init(
         text: Binding<String>,
         isActive: Binding<Bool>,
         prompt: String,
         isEnabled: Bool = true,
-        onSubmit: @escaping () -> Void = { },
-        onCancel: @escaping () -> Void = { }
+        onSubmit: @escaping () -> Void = { }
     ) {
         self._text = text
         self._isActive = isActive
         self.prompt = prompt
         self.isEnabled = isEnabled
         self.onSubmit = onSubmit
-        self.onCancel = onCancel
     }
 
     /// 创建稳定协调器，使 UIKit delegate 始终通过最新 Binding 回写页面状态。
@@ -83,7 +80,7 @@ struct XMSearchBar: UIViewRepresentable {
         searchBar.delegate = nil
     }
 
-    /// 承接 UISearchBarDelegate 事件，并让原生取消按钮只随真实编辑生命周期变化。
+    /// 承接 UISearchBarDelegate 事件，并把输入、提交与焦点生命周期同步回 SwiftUI。
     @MainActor
     final class Coordinator: NSObject, UISearchBarDelegate {
         var parent: XMSearchBar
@@ -114,7 +111,7 @@ struct XMSearchBar: UIViewRepresentable {
             }
         }
 
-        /// 使已排队的焦点同步失效，保证快速聚焦、取消或离场时以最新状态为准。
+        /// 使已排队的焦点同步失效，保证快速聚焦、结束输入或离场时以最新状态为准。
         func invalidatePendingFocusRequest() {
             focusRequestID = UUID()
         }
@@ -125,22 +122,20 @@ struct XMSearchBar: UIViewRepresentable {
             parent.text = searchText
         }
 
-        /// 开始编辑时显示系统取消按钮；Reduce Motion 下直接落到可见端点。
+        /// 开始编辑时同步激活态；搜索栏始终只保留框内系统清除按钮。
         func searchBarTextDidBeginEditing(_ searchBar: UISearchBar) {
             invalidatePendingFocusRequest()
             if !parent.isActive {
                 parent.isActive = true
             }
-            setCancelButtonVisible(true, in: searchBar)
         }
 
-        /// 结束编辑时隐藏系统取消按钮，并保持页面激活态与第一响应者一致。
+        /// 结束编辑时保持页面激活态与第一响应者一致。
         func searchBarTextDidEndEditing(_ searchBar: UISearchBar) {
             invalidatePendingFocusRequest()
             if parent.isActive {
                 parent.isActive = false
             }
-            setCancelButtonVisible(false, in: searchBar)
         }
 
         /// Search 键保留当前查询并结束输入，再把提交意图交还业务页面。
@@ -150,30 +145,6 @@ struct XMSearchBar: UIViewRepresentable {
                 parent.isActive = false
             }
             searchBar.searchTextField.resignFirstResponder()
-        }
-
-        /// 系统取消按钮只结束搜索会话：清空查询、收起键盘并通知页面附加状态。
-        func searchBarCancelButtonClicked(_ searchBar: UISearchBar) {
-            if !parent.text.isEmpty {
-                parent.text = ""
-            }
-            if searchBar.text?.isEmpty == false {
-                searchBar.text = ""
-            }
-            if parent.isActive {
-                parent.isActive = false
-            }
-            parent.onCancel()
-            searchBar.searchTextField.resignFirstResponder()
-        }
-
-        /// 只在可见端点变化时调用 UIKit 原生动画，避免 SwiftUI 重绘反复重启动效。
-        private func setCancelButtonVisible(_ isVisible: Bool, in searchBar: UISearchBar) {
-            guard searchBar.showsCancelButton != isVisible else { return }
-            searchBar.setShowsCancelButton(
-                isVisible,
-                animated: !UIAccessibility.isReduceMotionEnabled
-            )
         }
     }
 }

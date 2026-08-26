@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 BookPickerRepositoryProtocol 提供本地书籍查询与结果解析，依赖 BookSearchRepositoryProtocol 提供在线搜索、远端结果补齐与创建回填
- * [OUTPUT]: 对外提供 BookPickerViewModel、稳定身份的 BookPickerSelectedItem、BookPickerVisibleScope、BookPickerStatus 与 BookPickerRemoteTapOutcome，驱动通用书籍选择流状态机
+ * [OUTPUT]: 对外提供 BookPickerViewModel、稳定本地结果快照、BookPickerSelectedItem、BookPickerVisibleScope、BookPickerStatus 与 BookPickerRemoteTapOutcome，驱动通用书籍选择流状态机
  * [POS]: ViewModels/Book 的书籍选择状态编排器，被 BookPickerView 与测试共同消费
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -102,6 +102,7 @@ final class BookPickerViewModel {
     var visibleScope: BookPickerVisibleScope
     var selectedOnlineSource: BookSearchSource
     var localBooks: [BookPickerBook]
+    private(set) var localSnapshotQuery: String
     var remoteResults: [BookSearchResult]
     var selectedBooks: [BookPickerBook]
     var selectedRemoteResults: [BookSearchResult]
@@ -116,6 +117,7 @@ final class BookPickerViewModel {
     private let bookRepository: any BookPickerRepositoryProtocol
     private let searchRepository: any BookSearchRepositoryProtocol
     private var hasLoaded = false
+    private var hasCompletedLocalSnapshot = false
     private var localSearchTask: Task<Void, Never>?
     private var onlineSearchTask: Task<Void, Never>?
     private var localSearchSequence = 0
@@ -133,6 +135,7 @@ final class BookPickerViewModel {
         self.searchRepository = searchRepository
         self.query = configuration.defaultQuery
         self.localBooks = []
+        self.localSnapshotQuery = ""
         self.remoteResults = []
         let deduplicatedBooks = Self.deduplicatedBooks(configuration.preselectedBooks)
             .filter { !configuration.unavailableLocalBookIDs.contains($0.id) }
@@ -205,9 +208,9 @@ final class BookPickerViewModel {
     var status: BookPickerStatus {
         switch visibleScope {
         case .local:
-            if isLoadingLocal { return .localLoading }
+            if !hasCompletedLocalSnapshot { return .localLoading }
             if !localBooks.isEmpty { return .localResults }
-            return trimmedQuery.isEmpty ? .localEmptyLibrary : .localNoResults
+            return localSnapshotQuery.isEmpty ? .localEmptyLibrary : .localNoResults
         case .online:
             if trimmedQuery.isEmpty { return .onlineIdle }
             if isSearchingOnline { return .onlineLoading }
@@ -239,8 +242,7 @@ final class BookPickerViewModel {
         case .local:
             scheduleLocalBooksRefreshAfterInputSettles()
         case .online:
-            localSearchTask?.cancel()
-            localSearchTask = nil
+            invalidateLocalSearch()
             if trimmedQuery.isEmpty {
                 remoteResults = []
                 onlineErrorMessage = nil
@@ -260,8 +262,7 @@ final class BookPickerViewModel {
                 await self?.refreshLocalBooks()
             }
         case .online:
-            localSearchTask?.cancel()
-            localSearchTask = nil
+            invalidateLocalSearch()
             guard !trimmedQuery.isEmpty else {
                 remoteResults = []
                 onlineErrorMessage = nil
@@ -292,9 +293,14 @@ final class BookPickerViewModel {
 
     /// 刷新本地书籍列表，供本地范围与实时搜索消费。
     func refreshLocalBooks() async {
-        localSearchSequence += 1
-        let requestID = localSearchSequence
+        let requestID = advanceLocalSearchSequence()
         let keyword = trimmedQuery
+        await performLocalBooksRefresh(keyword: keyword, requestID: requestID)
+    }
+
+    /// 执行已捕获关键词的本地查询；仅允许仍为最新序号的请求一次性替换可信快照。
+    private func performLocalBooksRefresh(keyword: String, requestID: Int) async {
+        guard requestID == localSearchSequence else { return }
         isLoadingLocal = true
         defer {
             if requestID == localSearchSequence {
@@ -306,26 +312,46 @@ final class BookPickerViewModel {
             let books = try await bookRepository.fetchPickerBooks(matching: keyword)
             guard requestID == localSearchSequence else { return }
             localBooks = books
+            localSnapshotQuery = keyword
+            hasCompletedLocalSnapshot = true
         } catch {
             guard requestID == localSearchSequence else { return }
             localBooks = []
+            localSnapshotQuery = keyword
+            hasCompletedLocalSnapshot = true
         }
     }
 
-    /// 输入型本地搜索延迟 200ms 后执行；新输入或页面释放会取消旧任务，避免短时间内连续触发数据库读取。
+    /// 输入变化时立即失效旧请求，再延迟 200ms 查询捕获的关键词，避免旧结果越过防抖窗口回写。
     private func scheduleLocalBooksRefreshAfterInputSettles() {
         localSearchTask?.cancel()
+        let requestID = advanceLocalSearchSequence()
+        let keyword = trimmedQuery
         localSearchTask = Task { [weak self] in
             do {
                 try await Task.sleep(nanoseconds: BookPickerSearchDebouncePolicy.delayNanoseconds)
                 try Task.checkCancellation()
-                await self?.refreshLocalBooks()
+                await self?.performLocalBooksRefresh(keyword: keyword, requestID: requestID)
             } catch is CancellationError {
                 return
             } catch {
                 return
             }
         }
+    }
+
+    /// 推进本地搜索序号，使此前等待中或执行中的请求失去状态回写资格。
+    private func advanceLocalSearchSequence() -> Int {
+        localSearchSequence += 1
+        isLoadingLocal = false
+        return localSearchSequence
+    }
+
+    /// 取消本地搜索任务并失效可能不响应取消信号的仓储读取，阻止其稍后回写。
+    private func invalidateLocalSearch() {
+        localSearchTask?.cancel()
+        localSearchTask = nil
+        _ = advanceLocalSearchSequence()
     }
 
     /// 发起当前关键词的在线搜索，并统一收口错误与结果态。
