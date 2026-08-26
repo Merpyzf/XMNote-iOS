@@ -72,7 +72,7 @@ struct DebugCenterView: View {
         DebugItem(
             icon: "books.vertical",
             title: "书籍选择",
-            subtitle: "Android 20 个选书场景在 iOS 统一 BookPicker 中的覆盖与消费验证",
+            subtitle: "单选、多选、已选管理、书单去重与异常状态矩阵",
             destination: AnyView(BookSelectionTestView())
         ),
         DebugItem(

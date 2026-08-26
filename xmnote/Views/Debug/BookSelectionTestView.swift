@@ -1,15 +1,14 @@
 #if DEBUG
 /**
- * [INPUT]: 依赖 RepositoryContainer 提供本地书架样本，依赖 BookSelectionTestViewModel 提供 Android 场景注册表、运行配置与结果预览，依赖 BookPickerView 承接统一选书实现
- * [OUTPUT]: 对外提供 BookSelectionTestView，集中展示 Android 书籍选择场景在 iOS 统一组件中的对应实现与运行入口
- * [POS]: Debug 模块书籍选择测试中心，用于回归验证统一 BookPicker 是否已覆盖 Android 全量选书场景
+ * [INPUT]: 依赖 BookSelectionTestViewModel 提供业务映射与固定仓储替身，依赖 BookPickerView 承接统一书籍选择体验
+ * [OUTPUT]: 对外提供 BookSelectionTestView，集中展示业务场景矩阵、系统搜索交互与选择结果预览
+ * [POS]: Debug 模块书籍选择测试中心，用固定数据回归验证统一 BookPicker，不依赖真实书架和外部网络
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
 import SwiftUI
 
 struct BookSelectionTestView: View {
-    @Environment(RepositoryContainer.self) private var repositories
     @State private var viewModel = BookSelectionTestViewModel()
 
     var body: some View {
@@ -32,17 +31,18 @@ struct BookSelectionTestView: View {
         .background(Color.surfacePage)
         .navigationTitle("书籍选择")
         .navigationBarTitleDisplayMode(.inline)
-        .task {
-            await viewModel.loadSampleLocalBooks(using: repositories.bookRepository)
-        }
+        .scrollBounceBehavior(.always)
         .sheet(
             item: presentedScenarioBinding,
             onDismiss: {
                 viewModel.clearPresentedScenario()
             }
         ) { scenario in
+            let repository = viewModel.fixtureRepository(for: scenario)
             BookPickerView(
                 configuration: viewModel.configuration(for: scenario),
+                bookRepository: repository,
+                searchRepository: repository,
                 onComplete: { result in
                     viewModel.record(result, for: scenario)
                 }
@@ -53,7 +53,7 @@ struct BookSelectionTestView: View {
     private var overviewSection: some View {
         CardContainer {
             VStack(alignment: .leading, spacing: Spacing.base) {
-                Text("这里汇总 Android 端 20 个书籍选择场景，并全部映射到当前 iOS 统一 BookPicker 实现。")
+                Text("这里同时保留 Android 业务映射，并用固定数据展示单选、多选、已选管理、书单去重与异常状态。")
                     .font(AppTypography.body)
                     .foregroundStyle(Color.textPrimary)
 
@@ -216,6 +216,7 @@ struct BookSelectionTestView: View {
                 }
             }
         }
+        .scrollBounceBehavior(.always)
     }
 
     private var presentedScenarioBinding: Binding<BookSelectionTestScenario?> {
@@ -230,6 +231,5 @@ struct BookSelectionTestView: View {
     NavigationStack {
         BookSelectionTestView()
     }
-    .environment(RepositoryContainer(databaseManager: DatabaseManager(database: try! .empty())))
 }
 #endif

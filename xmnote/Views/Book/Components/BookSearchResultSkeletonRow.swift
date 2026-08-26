@@ -10,11 +10,21 @@ import SwiftUI
 /// 搜索结果骨架行，复用真实条目的版式降低加载态和结果态之间的割裂感。
 struct BookSearchResultSkeletonRow: View {
     let source: BookSearchSource
+    let presentation: BookSearchResultRowPresentation
+
+    init(
+        source: BookSearchSource,
+        presentation: BookSearchResultRowPresentation = .standalone
+    ) {
+        self.source = source
+        self.presentation = presentation
+    }
 
     var body: some View {
         BookSearchResultRow(
             result: .skeletonPlaceholder(for: source),
             keyword: "",
+            presentation: presentation,
             onTap: {}
         )
         .allowsHitTesting(false)

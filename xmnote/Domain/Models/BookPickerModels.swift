@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 Foundation 与 BookSearchSource，定义通用书籍选择流的跨层模型与配置语义
- * [OUTPUT]: 对外提供 BookPickerBook、BookPickerSelection、BookPickerScope、BookPickerSelectionMode、BookPickerCreationAction、BookPickerConfiguration、BookPickerResult
+ * [OUTPUT]: 对外提供 BookPickerBook、BookPickerSelection、BookPickerScope、BookPickerSelectionMode、BookPickerCreationAction、BookPickerConfiguration、BookPickerResult，并支持标记本地不可重复选择项
  * [POS]: Domain/Models 的书籍选择领域模型，被 BookPickerView、ViewModel 与调用业务页共同消费
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -106,6 +106,8 @@ struct BookPickerConfiguration: Hashable, Codable, Sendable {
     var multipleConfirmationTitle: String
     var defaultQuery: String
     var preselectedBooks: [BookPickerBook]
+    var unavailableLocalBookIDs: Set<Int64>
+    var unavailableLocalBookMessage: String?
     var onlineSources: [BookSearchSource]
     var preferredOnlineSource: BookSearchSource?
 
@@ -120,6 +122,8 @@ struct BookPickerConfiguration: Hashable, Codable, Sendable {
         multipleConfirmationTitle: String = "添加所选书籍",
         defaultQuery: String = "",
         preselectedBooks: [BookPickerBook] = [],
+        unavailableLocalBookIDs: Set<Int64> = [],
+        unavailableLocalBookMessage: String? = nil,
         onlineSources: [BookSearchSource] = BookSearchSource.productionCases,
         preferredOnlineSource: BookSearchSource? = nil
     ) {
@@ -133,6 +137,8 @@ struct BookPickerConfiguration: Hashable, Codable, Sendable {
         self.multipleConfirmationTitle = multipleConfirmationTitle
         self.defaultQuery = defaultQuery
         self.preselectedBooks = preselectedBooks
+        self.unavailableLocalBookIDs = unavailableLocalBookIDs
+        self.unavailableLocalBookMessage = unavailableLocalBookMessage
         self.onlineSources = onlineSources
         self.preferredOnlineSource = preferredOnlineSource
     }

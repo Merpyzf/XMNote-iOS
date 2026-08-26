@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 BookPickerRepositoryProtocol 提供本地书籍查询与结果解析，依赖 BookSearchRepositoryProtocol 提供在线搜索、远端结果补齐与创建回填
- * [OUTPUT]: 对外提供 BookPickerViewModel、BookPickerVisibleScope、BookPickerStatus 与 BookPickerRemoteTapOutcome，驱动通用书籍选择流状态机
+ * [OUTPUT]: 对外提供 BookPickerViewModel、稳定身份的 BookPickerSelectedItem、BookPickerVisibleScope、BookPickerStatus 与 BookPickerRemoteTapOutcome，驱动通用书籍选择流状态机
  * [POS]: ViewModels/Book 的书籍选择状态编排器，被 BookPickerView 与测试共同消费
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -36,6 +36,57 @@ enum BookPickerRemoteTapOutcome: Hashable {
 private enum BookPickerSelectionKey: Hashable {
     case local(Int64)
     case remote(String)
+}
+
+/// 多选草稿中的稳定展示项，保留本地/远端来源身份且不触发远端详情解析。
+enum BookPickerSelectedItem: Identifiable, Hashable, Sendable {
+    case local(BookPickerBook)
+    case remote(BookSearchResult)
+
+    var id: String {
+        switch self {
+        case .local(let book):
+            return "local-\(book.id)"
+        case .remote(let result):
+            return "remote-\(result.id)"
+        }
+    }
+
+    var title: String {
+        switch self {
+        case .local(let book):
+            return book.title
+        case .remote(let result):
+            return result.title
+        }
+    }
+
+    var author: String {
+        switch self {
+        case .local(let book):
+            return book.author
+        case .remote(let result):
+            return result.author
+        }
+    }
+
+    var detail: String {
+        switch self {
+        case .local(let book):
+            return book.press
+        case .remote(let result):
+            return result.source.title
+        }
+    }
+
+    var coverURL: String {
+        switch self {
+        case .local(let book):
+            return book.coverURL
+        case .remote(let result):
+            return result.coverURL
+        }
+    }
 }
 
 /// 选书本地搜索输入防抖策略，用于平衡输入跟手感和本地数据库读取频率。
@@ -84,6 +135,7 @@ final class BookPickerViewModel {
         self.localBooks = []
         self.remoteResults = []
         let deduplicatedBooks = Self.deduplicatedBooks(configuration.preselectedBooks)
+            .filter { !configuration.unavailableLocalBookIDs.contains($0.id) }
         self.selectedBooks = deduplicatedBooks
         self.selectedRemoteResults = []
         self.selectionOrder = deduplicatedBooks.map { .local($0.id) }
@@ -133,6 +185,21 @@ final class BookPickerViewModel {
 
     var selectedCount: Int {
         selectedBooks.count + selectedRemoteResults.count
+    }
+
+    /// 按用户选择顺序提供管理 Sheet 的只读草稿快照，不解析在线详情。
+    var selectedItemsInSelectionOrder: [BookPickerSelectedItem] {
+        let localBooksByID = Dictionary(uniqueKeysWithValues: selectedBooks.map { ($0.id, $0) })
+        let remoteResultsByID = Dictionary(uniqueKeysWithValues: selectedRemoteResults.map { ($0.id, $0) })
+
+        return selectionOrder.compactMap { key in
+            switch key {
+            case .local(let bookID):
+                return localBooksByID[bookID].map(BookPickerSelectedItem.local)
+            case .remote(let resultID):
+                return remoteResultsByID[resultID].map(BookPickerSelectedItem.remote)
+            }
+        }
     }
 
     var status: BookPickerStatus {
@@ -297,6 +364,7 @@ final class BookPickerViewModel {
 
     /// 单选模式直接完成；多选模式则切换本地书籍的选中状态。
     func handleLocalBookTap(_ book: BookPickerBook) -> BookPickerResult? {
+        guard !isResolvingRemoteSelections, !isBookUnavailable(book) else { return nil }
         if isMultipleSelectionEnabled {
             toggleLocalSelection(for: book)
             return nil
@@ -306,6 +374,7 @@ final class BookPickerViewModel {
 
     /// 在线结果点击后根据配置决定是进入创建链路，还是直接作为远端结果回流。
     func handleRemoteResultTap(_ result: BookSearchResult) async -> BookPickerRemoteTapOutcome? {
+        guard !isResolvingRemoteSelections else { return nil }
         if supportsDirectRemoteSelection {
             if isMultipleSelectionEnabled {
                 toggleRemoteSelection(for: result)
@@ -365,8 +434,29 @@ final class BookPickerViewModel {
         selectedBooks.contains(where: { $0.id == book.id })
     }
 
+    func isBookUnavailable(_ book: BookPickerBook) -> Bool {
+        configuration.unavailableLocalBookIDs.contains(book.id)
+    }
+
+    var unavailableLocalBookMessage: String? {
+        configuration.unavailableLocalBookMessage
+    }
+
     func isRemoteResultSelected(_ result: BookSearchResult) -> Bool {
         selectedRemoteResults.contains(where: { $0.id == result.id })
+    }
+
+    /// 从共享多选草稿移除本地或远端项；远端项只删除身份引用，不执行详情补齐。
+    func removeSelection(_ item: BookPickerSelectedItem) {
+        guard !isResolvingRemoteSelections else { return }
+        switch item {
+        case .local(let book):
+            selectedBooks.removeAll { $0.id == book.id }
+            selectionOrder.removeAll { $0 == .local(book.id) }
+        case .remote(let result):
+            selectedRemoteResults.removeAll { $0.id == result.id }
+            selectionOrder.removeAll { $0 == .remote(result.id) }
+        }
     }
 
     private func toggleLocalSelection(for book: BookPickerBook) {

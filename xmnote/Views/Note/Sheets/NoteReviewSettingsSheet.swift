@@ -208,7 +208,7 @@ struct NoteReviewSettingsSheet: View {
             selectionMode: .multiple,
             allowsCreationFlow: false,
             multipleConfirmationPolicy: .allowsEmptyResult,
-            multipleConfirmationTitle: "确认范围",
+            multipleConfirmationTitle: "完成",
             preselectedBooks: viewModel.selectedBooks
         )
     }

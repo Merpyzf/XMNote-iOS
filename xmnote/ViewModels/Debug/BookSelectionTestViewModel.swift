@@ -1,8 +1,8 @@
 #if DEBUG
 /**
- * [INPUT]: 依赖 Foundation/Observation 维护 Android 书籍选择场景注册表、调试结果预览与本地书样本上下文
- * [OUTPUT]: 对外提供 BookSelectionTestViewModel 及其场景/分组/结果预览模型，统一驱动书籍选择测试中心
- * [POS]: Debug 模块书籍选择测试页状态编排，集中收口 Android 场景映射、运行配置与结果消费预览
+ * [INPUT]: 依赖 Foundation/Observation 维护业务场景注册表、组件状态矩阵、固定本地/在线仓储替身与结果预览
+ * [OUTPUT]: 对外提供 BookSelectionTestViewModel、BookSelectionFixtureRepository 及场景/分组/结果预览模型，统一驱动书籍选择测试中心
+ * [POS]: Debug 模块书籍选择测试页状态编排，集中收口业务映射、固定测试数据、运行配置与结果消费预览
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
@@ -15,6 +15,7 @@ enum BookSelectionScenarioGroup: String, CaseIterable, Identifiable {
     case localMultipleFilter
     case mixedDirectSelection
     case onlineDirectSelection
+    case componentStates
 
     var id: String { rawValue }
 
@@ -30,6 +31,8 @@ enum BookSelectionScenarioGroup: String, CaseIterable, Identifiable {
             return "双源直接消费"
         case .onlineDirectSelection:
             return "在线专项直接消费"
+        case .componentStates:
+            return "组件完整性场景"
         }
     }
 
@@ -45,6 +48,8 @@ enum BookSelectionScenarioGroup: String, CaseIterable, Identifiable {
             return "本地与在线结果共存，在线结果可不落库直接回流业务页。"
         case .onlineDirectSelection:
             return "只看在线搜索结果，并直接返回补齐后的远端 payload。"
+        case .componentStates:
+            return "用固定数据验证已选管理、数量层级、不可重复选择和必要空态。"
         }
     }
 }
@@ -52,6 +57,15 @@ enum BookSelectionScenarioGroup: String, CaseIterable, Identifiable {
 enum BookSelectionScenarioPreselectionStrategy: Hashable {
     case none
     case firstLocalBook
+    case firstLocalBooks(Int)
+    case allLocalBooks
+}
+
+enum BookSelectionFixture: Hashable {
+    case standard
+    case emptyLibrary
+    case onlineFailure
+    case slowRemoteResolution
 }
 
 enum BookSelectionScenarioConsumer: Hashable {
@@ -76,6 +90,8 @@ struct BookSelectionScenarioConfigurationSpec: Hashable {
     let onlineSources: [BookSearchSource]
     let preferredOnlineSource: BookSearchSource?
     let preselectionStrategy: BookSelectionScenarioPreselectionStrategy
+    var fixture: BookSelectionFixture = .standard
+    var marksFirstLocalBookUnavailable = false
 
     func makeConfiguration(sampleLocalBooks: [BookPickerBook]) -> BookPickerConfiguration {
         let preselectedBooks: [BookPickerBook]
@@ -84,7 +100,15 @@ struct BookSelectionScenarioConfigurationSpec: Hashable {
             preselectedBooks = []
         case .firstLocalBook:
             preselectedBooks = sampleLocalBooks.first.map { [$0] } ?? []
+        case .firstLocalBooks(let count):
+            preselectedBooks = Array(sampleLocalBooks.prefix(max(0, count)))
+        case .allLocalBooks:
+            preselectedBooks = sampleLocalBooks
         }
+
+        let unavailableLocalBookIDs = marksFirstLocalBookUnavailable
+            ? Set(sampleLocalBooks.prefix(1).map(\.id))
+            : []
 
         return BookPickerConfiguration(
             title: title,
@@ -97,6 +121,8 @@ struct BookSelectionScenarioConfigurationSpec: Hashable {
             multipleConfirmationTitle: multipleConfirmationTitle,
             defaultQuery: defaultQuery,
             preselectedBooks: preselectedBooks,
+            unavailableLocalBookIDs: unavailableLocalBookIDs,
+            unavailableLocalBookMessage: marksFirstLocalBookUnavailable ? "已在书单" : nil,
             onlineSources: onlineSources,
             preferredOnlineSource: preferredOnlineSource
         )
@@ -124,8 +150,18 @@ struct BookSelectionScenarioConfigurationSpec: Hashable {
         if !defaultQuery.isEmpty {
             components.append("defaultQuery: \"\(defaultQuery)\"")
         }
-        if preselectionStrategy == .firstLocalBook {
+        switch preselectionStrategy {
+        case .none:
+            break
+        case .firstLocalBook:
             components.append("preselectedBooks: firstLocalBook")
+        case .firstLocalBooks(let count):
+            components.append("preselectedBooks: first \(count)")
+        case .allLocalBooks:
+            components.append("preselectedBooks: allFixtureBooks")
+        }
+        if marksFirstLocalBookUnavailable {
+            components.append("unavailableLocalBookIDs: firstLocalBook")
         }
         if let preferredOnlineSource {
             components.append("preferredOnlineSource: .\(preferredOnlineSource.debugName)")
@@ -155,10 +191,14 @@ struct BookSelectionScenarioPreview: Hashable {
 @Observable
 final class BookSelectionTestViewModel {
     var presentedScenario: BookSelectionTestScenario?
-    var sampleLocalBooks: [BookPickerBook] = []
+    var sampleLocalBooks: [BookPickerBook]
     var isLoadingSampleLocalBooks = false
     var bootstrapErrorMessage: String?
     private var previewsByScenarioID: [String: BookSelectionScenarioPreview] = [:]
+
+    init() {
+        sampleLocalBooks = BookSelectionFixtureCatalog.localBooks
+    }
 
     static let scenarios: [BookSelectionTestScenario] = [
         BookSelectionTestScenario(
@@ -277,7 +317,7 @@ final class BookSelectionTestViewModel {
             androidEntry: "NoteReviewSettingActivity",
             group: .localMultipleFilter,
             capabilityTags: ["本地", "多选", "空集合可确认"],
-            configurationSpec: .localMultipleFilter(title: "选择复习范围", multipleConfirmationTitle: "确认复习范围"),
+            configurationSpec: .localMultipleFilter(title: "选择复习范围", multipleConfirmationTitle: "完成"),
             consumer: .localMultiple(emptyMeaning: "当前视图表示未限制复习书籍范围"),
             runtimeHint: "适合验证“空选择 = 不限范围”的业务语义。"
         ),
@@ -360,6 +400,109 @@ final class BookSelectionTestViewModel {
             configurationSpec: .noteInfoSync,
             consumer: .noteInfoPayload,
             runtimeHint: "用于验证补全书籍信息时的在线结果直返能力。"
+        ),
+        BookSelectionTestScenario(
+            id: "multiple-required-empty",
+            title: "多选必须选择",
+            androidEntry: "BookPicker component state",
+            group: .componentStates,
+            capabilityTags: ["本地", "多选", "零选择禁用"],
+            configurationSpec: .localMultipleRequired(title: "选择书籍", preselectionStrategy: .none),
+            consumer: .localMultiple(emptyMeaning: "必须选择场景不应返回空集合"),
+            runtimeHint: "零选择时副标题显示“请选择书籍”，底部“完成”保持可见但不可提交。"
+        ),
+        BookSelectionTestScenario(
+            id: "selected-manager-one",
+            title: "已选 1 本与取消至空",
+            androidEntry: "BookPicker selected manager",
+            group: .componentStates,
+            capabilityTags: ["预选 1 本", "已选管理", "取消至空"],
+            configurationSpec: .localMultipleRequired(
+                title: "选择书籍",
+                preselectionStrategy: .firstLocalBooks(1)
+            ),
+            consumer: .localMultiple(emptyMeaning: "必须选择场景不应返回空集合"),
+            runtimeHint: "点击普通副标题进入管理 Sheet；取消唯一一本后可验证空态和“继续选择”。"
+        ),
+        BookSelectionTestScenario(
+            id: "selected-manager-multiple",
+            title: "多本已选与取消部分",
+            androidEntry: "BookPicker selected manager",
+            group: .componentStates,
+            capabilityTags: ["预选 3 本", "取消部分", "内层下滑关闭"],
+            configurationSpec: .localMultipleRequired(
+                title: "选择书籍",
+                preselectionStrategy: .firstLocalBooks(3)
+            ),
+            consumer: .localMultiple(emptyMeaning: "必须选择场景不应返回空集合"),
+            runtimeHint: "用于验证管理 Sheet 修改共享草稿、下滑关闭后外层数量保持同步。"
+        ),
+        BookSelectionTestScenario(
+            id: "selected-manager-many",
+            title: "大量已选与已选搜索",
+            androidEntry: "BookPicker selected manager",
+            group: .componentStates,
+            capabilityTags: ["大量预选", "搜索已选书籍", "选择顺序"],
+            configurationSpec: .localMultipleRequired(
+                title: "选择书籍",
+                preselectionStrategy: .allLocalBooks
+            ),
+            consumer: .localMultiple(emptyMeaning: "必须选择场景不应返回空集合"),
+            runtimeHint: "固定预选全部样本，验证管理效率、搜索和原始选择顺序。"
+        ),
+        BookSelectionTestScenario(
+            id: "mixed-resolution",
+            title: "本地与在线混合解析",
+            androidEntry: "BookPicker mixed resolution",
+            group: .componentStates,
+            capabilityTags: ["本地+在线", "混合多选", "在线解析中"],
+            configurationSpec: .mixedDirectMultiple(
+                title: "完成",
+                preselectionStrategy: .firstLocalBooks(2),
+                fixture: .slowRemoteResolution
+            ),
+            consumer: .mixedMultiple(actionLabel: "混合选择已提交"),
+            runtimeHint: "切换到在线后选择固定结果再提交，可观察“正在整理…”按钮状态；管理远端项不会触发解析。"
+        ),
+        BookSelectionTestScenario(
+            id: "collection-unavailable",
+            title: "书单已有项不可重复选择",
+            androidEntry: "BookCollectionDetailView",
+            group: .componentStates,
+            capabilityTags: ["多选", "已在书单", "不可重复"],
+            configurationSpec: .collectionUnavailable,
+            consumer: .localMultiple(emptyMeaning: "必须选择场景不应返回空集合"),
+            runtimeHint: "第一本固定显示“已在书单”，不计入数量、不进入管理 Sheet，也不可再次选择。"
+        ),
+        BookSelectionTestScenario(
+            id: "empty-library",
+            title: "空书库",
+            androidEntry: "BookPicker empty library",
+            group: .componentStates,
+            capabilityTags: ["空数据", "单选", "允许创建"],
+            configurationSpec: .emptyLibrary,
+            consumer: .localSingle(actionLabel: "空书库场景已回填"),
+            runtimeHint: "固定仓储返回空数组，用于验证空态和新增入口。"
+        ),
+        BookSelectionTestScenario(
+            id: "local-no-results",
+            title: "本地搜索无结果",
+            androidEntry: "BookPicker no results",
+            group: .componentStates,
+            capabilityTags: ["搜索", "无结果", "本地"],
+            configurationSpec: .localNoResults,
+            consumer: .localSingle(actionLabel: "搜索结果已回填"),
+            runtimeHint: "以固定无匹配关键词打开，验证搜索无结果状态。"
+        ),
+        BookSelectionTestScenario(
+            id: "online-failure",
+            title: "在线搜索失败",
+            androidEntry: "BookPicker online failure",
+            group: .componentStates,
+            capabilityTags: ["在线", "失败", "重试"],
+            configurationSpec: .onlineFailure,
+            consumer: .mixedSingle(actionLabel: "在线结果已回填"),
+            runtimeHint: "固定仓储稳定抛出失败，用于验证错误说明和重试入口。"
         )
     ]
 
@@ -385,6 +528,11 @@ final class BookSelectionTestViewModel {
     /// 返回某个 Android 场景在当前测试中心中的运行配置。
     func configuration(for scenario: BookSelectionTestScenario) -> BookPickerConfiguration {
         scenario.configurationSpec.makeConfiguration(sampleLocalBooks: sampleLocalBooks)
+    }
+
+    /// 为每次场景运行创建独立固定仓储，保证选择与错误状态不受真实数据或前一次运行影响。
+    func fixtureRepository(for scenario: BookSelectionTestScenario) -> BookSelectionFixtureRepository {
+        BookSelectionFixtureRepository(fixture: scenario.configurationSpec.fixture)
     }
 
     func scenarios(in group: BookSelectionScenarioGroup) -> [BookSelectionTestScenario] {
@@ -415,7 +563,7 @@ final class BookSelectionTestViewModel {
         if sampleLocalBooks.isEmpty {
             return "当前未检测到本地书籍，相关场景仍可打开，但预选/回填会从空书架起步。"
         }
-        return "已读取 \(sampleLocalBooks.count) 本本地书，可用于预选与本地回填验证。"
+        return "已加载 \(sampleLocalBooks.count) 本固定样本书；本页不会读取真实书架或请求外部网络。"
     }
 
     private func placeholderPreview(for scenario: BookSelectionTestScenario) -> BookSelectionScenarioPreview {
@@ -663,6 +811,27 @@ private extension BookSelectionScenarioConfigurationSpec {
         )
     }
 
+    static func localMultipleRequired(
+        title: String,
+        preselectionStrategy: BookSelectionScenarioPreselectionStrategy,
+        multipleConfirmationTitle: String = "完成"
+    ) -> Self {
+        Self(
+            title: title,
+            scope: .local,
+            selectionMode: .multiple,
+            allowsCreationFlow: false,
+            creationAction: .inlineManualEditor,
+            onlineSelectionPolicy: .requireLocalCreation,
+            multipleConfirmationPolicy: .requiresSelection,
+            multipleConfirmationTitle: multipleConfirmationTitle,
+            defaultQuery: "",
+            onlineSources: BookSearchSource.productionCases,
+            preferredOnlineSource: nil,
+            preselectionStrategy: preselectionStrategy
+        )
+    }
+
     static func mixedDirectSingle(title: String, defaultQuery: String) -> Self {
         Self(
             title: title,
@@ -680,8 +849,12 @@ private extension BookSelectionScenarioConfigurationSpec {
         )
     }
 
-    static func mixedDirectMultiple(title: String) -> Self {
-        Self(
+    static func mixedDirectMultiple(
+        title: String,
+        preselectionStrategy: BookSelectionScenarioPreselectionStrategy = .none,
+        fixture: BookSelectionFixture = .standard
+    ) -> Self {
+        var specification = Self(
             title: title,
             scope: .both,
             selectionMode: .multiple,
@@ -693,8 +866,62 @@ private extension BookSelectionScenarioConfigurationSpec {
             defaultQuery: "三体",
             onlineSources: BookSearchSource.allCases,
             preferredOnlineSource: .douban,
+            preselectionStrategy: preselectionStrategy
+        )
+        specification.fixture = fixture
+        return specification
+    }
+
+    static var collectionUnavailable: Self {
+        var specification = localMultipleRequired(
+            title: "添加书籍",
+            preselectionStrategy: .none,
+            multipleConfirmationTitle: "加入书单"
+        )
+        specification.marksFirstLocalBookUnavailable = true
+        return specification
+    }
+
+    static var emptyLibrary: Self {
+        var specification = localSingleCreate(title: "选择书籍")
+        specification.fixture = .emptyLibrary
+        return specification
+    }
+
+    static var localNoResults: Self {
+        Self(
+            title: "选择书籍",
+            scope: .local,
+            selectionMode: .single,
+            allowsCreationFlow: false,
+            creationAction: .inlineManualEditor,
+            onlineSelectionPolicy: .requireLocalCreation,
+            multipleConfirmationPolicy: .requiresSelection,
+            multipleConfirmationTitle: "完成",
+            defaultQuery: "不存在的书",
+            onlineSources: BookSearchSource.productionCases,
+            preferredOnlineSource: nil,
             preselectionStrategy: .none
         )
+    }
+
+    static var onlineFailure: Self {
+        var specification = Self(
+            title: "在线选择书籍",
+            scope: .online,
+            selectionMode: .single,
+            allowsCreationFlow: false,
+            creationAction: .inlineManualEditor,
+            onlineSelectionPolicy: .returnRemoteSelection,
+            multipleConfirmationPolicy: .requiresSelection,
+            multipleConfirmationTitle: "完成",
+            defaultQuery: "失败场景",
+            onlineSources: [.wenqu],
+            preferredOnlineSource: .wenqu,
+            preselectionStrategy: .none
+        )
+        specification.fixture = .onlineFailure
+        return specification
     }
 
     static let chapterSync = Self(
@@ -805,6 +1032,180 @@ private extension BookSearchSource {
         case .douban:
             return "douban"
         }
+    }
+}
+
+/// 测试中心固定数据目录，覆盖大量已选、混合来源和常见关键词，不访问真实书架与图片网络。
+private enum BookSelectionFixtureCatalog {
+    static let localBooks: [BookPickerBook] = [
+        BookPickerBook(id: 10_001, title: "三体", author: "刘慈欣", press: "重庆出版社"),
+        BookPickerBook(id: 10_002, title: "活着", author: "余华", press: "作家出版社"),
+        BookPickerBook(id: 10_003, title: "百年孤独", author: "加西亚·马尔克斯", press: "南海出版公司"),
+        BookPickerBook(id: 10_004, title: "局外人", author: "阿尔贝·加缪", press: "上海译文出版社"),
+        BookPickerBook(id: 10_005, title: "月亮与六便士", author: "毛姆", press: "译林出版社"),
+        BookPickerBook(id: 10_006, title: "人类简史", author: "尤瓦尔·赫拉利", press: "中信出版社"),
+        BookPickerBook(id: 10_007, title: "置身事内", author: "兰小欢", press: "上海人民出版社"),
+        BookPickerBook(id: 10_008, title: "献给阿尔吉侬的花束", author: "丹尼尔·凯斯", press: "河南文艺出版社"),
+        BookPickerBook(id: 10_009, title: "悉达多", author: "赫尔曼·黑塞", press: "天津人民出版社"),
+        BookPickerBook(id: 10_010, title: "刀锋", author: "毛姆", press: "上海译文出版社"),
+        BookPickerBook(id: 10_011, title: "围城", author: "钱钟书", press: "人民文学出版社"),
+        BookPickerBook(id: 10_012, title: "史蒂夫·乔布斯传", author: "沃尔特·艾萨克森", press: "中信出版社"),
+        BookPickerBook(id: 10_013, title: "沉默的大多数", author: "王小波", press: "北京十月文艺出版社"),
+        BookPickerBook(id: 10_014, title: "可能性的艺术", author: "刘瑜", press: "广西师范大学出版社"),
+        BookPickerBook(id: 10_015, title: "金字塔原理", author: "芭芭拉·明托", press: "南海出版公司"),
+        BookPickerBook(id: 10_016, title: "思考，快与慢", author: "丹尼尔·卡尼曼", press: "中信出版社"),
+        BookPickerBook(id: 10_017, title: "被讨厌的勇气", author: "岸见一郎", press: "机械工业出版社"),
+        BookPickerBook(id: 10_018, title: "非暴力沟通", author: "马歇尔·卢森堡", press: "华夏出版社")
+    ]
+
+    static let remoteResults: [BookSearchResult] = [
+        makeRemoteResult(
+            id: "fixture-three-body",
+            source: .douban,
+            title: "三体全集",
+            author: "刘慈欣",
+            press: "重庆出版社",
+            isbn: "9787536692930"
+        ),
+        makeRemoteResult(
+            id: "fixture-to-live",
+            source: .wenqu,
+            title: "活着",
+            author: "余华",
+            press: "北京十月文艺出版社",
+            isbn: "9787530215593"
+        ),
+        makeRemoteResult(
+            id: "fixture-lord-mysteries",
+            source: .qidian,
+            title: "诡秘之主",
+            author: "爱潜水的乌贼",
+            press: "安徽文艺出版社",
+            isbn: ""
+        )
+    ]
+
+    private static func makeRemoteResult(
+        id: String,
+        source: BookSearchSource,
+        title: String,
+        author: String,
+        press: String,
+        isbn: String
+    ) -> BookSearchResult {
+        let seed = BookEditorSeed(
+            searchSource: source,
+            title: title,
+            rawTitle: title,
+            author: author,
+            authorIntro: "",
+            translator: "",
+            press: press,
+            isbn: isbn,
+            pubDate: "2026-01",
+            summary: "测试中心固定远端书籍信息。",
+            catalog: "",
+            coverURL: "",
+            doubanId: nil,
+            totalPages: nil,
+            totalWordCount: nil,
+            preferredSourceName: source.title,
+            preferredBookType: nil,
+            preferredProgressUnit: nil
+        )
+        return BookSearchResult(
+            id: id,
+            source: source,
+            title: title,
+            author: author,
+            coverURL: "",
+            subtitle: press,
+            summary: seed.summary,
+            translator: "",
+            press: press,
+            isbn: isbn,
+            pubDate: seed.pubDate,
+            doubanId: nil,
+            totalPages: nil,
+            totalWordCount: nil,
+            seed: seed,
+            detailPageURL: nil
+        )
+    }
+}
+
+/// 书籍选择测试页的本地/在线双协议替身，以场景枚举稳定控制空态、失败和解析时长。
+final class BookSelectionFixtureRepository: BookPickerRepositoryProtocol, BookSearchRepositoryProtocol {
+    private let fixture: BookSelectionFixture
+    private var recentQueries: [String] = []
+    private var searchSettings = BookSearchSettings.default
+
+    init(fixture: BookSelectionFixture) {
+        self.fixture = fixture
+    }
+
+    func fetchPickerBooks(matching query: String) async throws -> [BookPickerBook] {
+        guard fixture != .emptyLibrary else { return [] }
+        let normalizedQuery = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalizedQuery.isEmpty else { return BookSelectionFixtureCatalog.localBooks }
+        return BookSelectionFixtureCatalog.localBooks.filter { book in
+            book.title.localizedCaseInsensitiveContains(normalizedQuery)
+                || book.author.localizedCaseInsensitiveContains(normalizedQuery)
+                || book.press.localizedCaseInsensitiveContains(normalizedQuery)
+        }
+    }
+
+    func fetchPickerBook(bookId: Int64) async throws -> BookPickerBook? {
+        BookSelectionFixtureCatalog.localBooks.first { $0.id == bookId }
+    }
+
+    func search(keyword: String, source: BookSearchSource) async throws -> [BookSearchResult] {
+        if fixture == .onlineFailure {
+            throw BookSearchError.remoteService(message: "测试中心固定的在线失败状态")
+        }
+        let normalizedQuery = keyword.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalizedQuery.isEmpty else { throw BookSearchError.emptyKeyword }
+        return BookSelectionFixtureCatalog.remoteResults.filter { result in
+            result.title.localizedCaseInsensitiveContains(normalizedQuery)
+                || result.author.localizedCaseInsensitiveContains(normalizedQuery)
+                || result.isbn.localizedCaseInsensitiveContains(normalizedQuery)
+        }
+    }
+
+    func prepareSeed(for result: BookSearchResult) async throws -> BookEditorSeed {
+        if fixture == .slowRemoteResolution {
+            try await Task.sleep(nanoseconds: 1_200_000_000)
+            try Task.checkCancellation()
+        }
+        if let seed = result.seed {
+            return seed
+        }
+        throw BookSearchError.remoteService(message: "固定结果缺少编辑种子")
+    }
+
+    func fetchRecentQueries() -> [String] {
+        recentQueries
+    }
+
+    func saveRecentQuery(_ query: String) {
+        recentQueries.removeAll { $0 == query }
+        recentQueries.insert(query, at: 0)
+    }
+
+    func removeRecentQuery(_ query: String) {
+        recentQueries.removeAll { $0 == query }
+    }
+
+    func clearRecentQueries() {
+        recentQueries.removeAll()
+    }
+
+    func fetchSearchSettings() -> BookSearchSettings {
+        searchSettings
+    }
+
+    func saveSearchSettings(_ settings: BookSearchSettings) {
+        searchSettings = settings
     }
 }
 #endif

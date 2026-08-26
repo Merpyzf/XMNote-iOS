@@ -1480,7 +1480,10 @@ struct MainTabView: View {
         switch route {
         case .debugCenter:
             #if DEBUG
-            DebugCenterView()
+            if let runtime {
+                DebugCenterView()
+                    .environment(runtime.repositories)
+            }
             #else
             Text("测试入口仅在 Debug 构建可用")
             #endif

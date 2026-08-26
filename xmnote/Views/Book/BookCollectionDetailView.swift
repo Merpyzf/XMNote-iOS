@@ -555,14 +555,7 @@ private struct BookCollectionDetailContentView: View {
     }
 
     private var pickerConfiguration: BookPickerConfiguration {
-        let preselected = (viewModel.detail?.books ?? []).map { item in
-            BookPickerBook(
-                id: item.book.id,
-                title: item.book.title,
-                author: item.book.author,
-                coverURL: item.book.cover
-            )
-        }
+        let existingBookIDs = Set((viewModel.detail?.books ?? []).map(\.book.id))
         return BookPickerConfiguration(
             title: "添加书籍",
             scope: .both,
@@ -572,7 +565,8 @@ private struct BookCollectionDetailContentView: View {
             onlineSelectionPolicy: .returnRemoteSelection,
             multipleConfirmationPolicy: .requiresSelection,
             multipleConfirmationTitle: "加入书单",
-            preselectedBooks: preselected,
+            unavailableLocalBookIDs: existingBookIDs,
+            unavailableLocalBookMessage: "已在书单",
             onlineSources: BookSearchSource.productionCases,
             preferredOnlineSource: .wenqu
         )
