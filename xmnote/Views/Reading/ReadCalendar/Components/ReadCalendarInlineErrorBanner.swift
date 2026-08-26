@@ -1,7 +1,7 @@
 import SwiftUI
 
 /**
- * [INPUT]: 依赖错误文案与重试回调，依赖 DesignTokens 提供视觉样式
+ * [INPUT]: 依赖错误文案与重试回调，依赖 ReadCalendarTheme 选中表层与 DesignTokens
  * [OUTPUT]: 对外提供 ReadCalendarInlineErrorBanner（阅读日历内联错误提示）
  * [POS]: ReadCalendar 业务内复用组件，统一内容区错误反馈与重试入口
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -26,17 +26,17 @@ struct ReadCalendarInlineErrorBanner: View {
 
             Button("重试", action: onRetry)
                 .font(AppTypography.captionSemibold)
-                .foregroundStyle(Color.brand)
+                .foregroundStyle(Color.appTint)
         }
         .padding(.horizontal, Spacing.base)
         .padding(.vertical, Spacing.cozy)
         .background(
             RoundedRectangle(cornerRadius: CornerRadius.blockLarge, style: .continuous)
-                .fill(Color.readCalendarSelectionFill.opacity(0.62))
+                .fill(ReadCalendarTheme.selectionFill.opacity(0.62))
         )
         .overlay {
             RoundedRectangle(cornerRadius: CornerRadius.blockLarge, style: .continuous)
-                .stroke(Color.readCalendarSelectionStroke.opacity(0.62), lineWidth: CardStyle.borderWidth)
+                .stroke(ReadCalendarTheme.selectionStroke.opacity(0.62), lineWidth: StrokeWidth.hairline)
         }
         .padding(.top, Spacing.base)
     }

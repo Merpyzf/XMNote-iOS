@@ -14,9 +14,16 @@ tmp_view_components="$(mktemp)"
 tmp_view_sheets="$(mktemp)"
 tmp_sheet_named_files="$(mktemp)"
 tmp_viewmodels_in_views="$(mktemp)"
+tmp_sheet_types_outside_sheets="$(mktemp)"
 
 cleanup() {
-    rm -f "$tmp_path_category_map" "$tmp_view_components" "$tmp_view_sheets" "$tmp_sheet_named_files" "$tmp_viewmodels_in_views"
+    rm -f \
+        "$tmp_path_category_map" \
+        "$tmp_view_components" \
+        "$tmp_view_sheets" \
+        "$tmp_sheet_named_files" \
+        "$tmp_viewmodels_in_views" \
+        "$tmp_sheet_types_outside_sheets"
 }
 trap cleanup EXIT
 
@@ -51,9 +58,25 @@ find "$ROOT_DIR/xmnote/Views" -type f -name "*Sheet*.swift" \
     | sed "s#^$ROOT_DIR/##" \
     | sort -u > "$tmp_sheet_named_files"
 
-find "$ROOT_DIR/xmnote/Views" -type f -name "*ViewModel.swift" \
+{
+    find "$ROOT_DIR/xmnote/Views" -type f -name "*ViewModel.swift"
+    rg -l \
+        --glob '*.swift' \
+        '(^|[^A-Za-z])(struct|class|actor)[[:space:]]+[A-Za-z_][A-Za-z0-9_]*ViewModel\b' \
+        "$ROOT_DIR/xmnote/Views" || true
+} \
     | sed "s#^$ROOT_DIR/##" \
     | sort -u > "$tmp_viewmodels_in_views"
+
+{
+    rg -l \
+        --glob '*.swift' \
+        '(^|[^A-Za-z])(struct|class|actor)[[:space:]]+[A-Za-z_][A-Za-z0-9_]*Sheet\b' \
+        "$ROOT_DIR/xmnote/Views" || true
+} \
+    | awk '!/\/Sheets\// && !/\/Debug\//' \
+    | sed "s#^$ROOT_DIR/##" \
+    | sort -u > "$tmp_sheet_types_outside_sheets"
 
 missing=0
 
@@ -92,6 +115,14 @@ while IFS= read -r relative_path; do
     echo "MISPLACED_VIEWMODEL_IN_VIEWS: $relative_path expected_dir=xmnote/ViewModels/$feature_rel"
     missing=1
 done < "$tmp_viewmodels_in_views"
+
+# 校验业务 Sheet 类型：即使藏在普通页面文件中，也必须归位到 Feature/Sheets。
+while IFS= read -r relative_path; do
+    [[ -z "${relative_path:-}" ]] && continue
+    suggested_dir="$(echo "$relative_path" | sed -E 's#(.*/)[^/]+$#\1Sheets/#')"
+    echo "MISPLACED_SHEET_TYPE_IN_VIEWS: $relative_path expected_dir=$suggested_dir"
+    missing=1
+done < "$tmp_sheet_types_outside_sheets"
 
 while IFS= read -r relative_path; do
     [[ -z "${relative_path:-}" ]] && continue

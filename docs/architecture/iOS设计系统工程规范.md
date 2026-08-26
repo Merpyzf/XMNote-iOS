@@ -25,20 +25,24 @@
 2. 机器真相源：`scripts/design-system/policy.json`、`component-catalog.json` 与 SwiftSyntax 规则实现。
 3. 协作真相源：`AGENTS.md`、本规范、模块 `CLAUDE.md` 和组件使用说明。
 
-DS6 验收基线为：生产源码 enforced 违规为 0；后续变更不得通过扩大排除范围、降低规则级别或写入新 baseline 来恢复绿色状态。
+2026-08-26 治理验收基线为：
+
+- 全量扫描 626 个 Swift 文件，`DS001`–`DS011` enforced 违规为 0，历史 baseline 命中为 0。
+- `component-catalog.json` schema v3 登记 60 项公共能力，其中 canonical 51 项、support 9 项；所有非 Vendor `UIComponents` Swift 文件均有明确 owner。
+- `UIComponents` 对 Repository、ViewModel、AppDatabase、网络客户端的反向依赖为 0；SwiftUI、UIKit、桥接与仅字体测量边界均已登记。
+- `DSR002` 保留 14 个 owner、19 条动画时长软观察候选。观察项不是失败，只有证明相同结构变化、时序和修复模式后才允许沉淀公共 motion token。
+
+后续变更不得通过扩大排除范围、降低规则级别或写入新 baseline 来恢复绿色状态。
 
 ## 3. 分层与依赖方向
 
 ```text
-Domain（纯业务值）
-    ↑
-Presentation / ViewModels（页面状态与业务编排）
-    ↑
-Views/<Feature>（页面壳层、业务组合、页面私有 UI）
-    ↑
-UIComponents（跨模块、已证明复用的 UI 能力）
-    ↑
-Utilities/DesignSystem（令牌与无业务语义的视觉基础）
+Views/<Feature> ──> ViewModels / Presentation ──> Domain / Repository 协议
+       │
+       ├──> Views/<Feature>/Components（页面私有组合）
+       │
+       └──> UIComponents（跨模块稳定 UI） ──> Utilities/DesignSystem
+                         └──────────────> 少量稳定 Domain 展示值
 ```
 
 约束：
@@ -50,6 +54,30 @@ Utilities/DesignSystem（令牌与无业务语义的视觉基础）
 - 页面可以组合公共组件并保留局部布局；不得复制已经存在的公共能力。
 - 公共组件只能依赖更底层的设计能力，不反向依赖具体业务页面。
 
+### 3.1 `UIComponents` 目录拓扑
+
+| 目录 | 职责 | 禁止内容 |
+| --- | --- | --- |
+| `Business/` | 已证明跨功能复用、具有明确领域语义的复合组件 | Repository、ViewModel、网络或数据库 owner |
+| `Charts/` | 图表、图例与领域值到图表展示的适配层 | 页面导航、数据请求与业务写入 |
+| `Controls/` | Button、Menu、Rating、Search、Selection 等原子交互语义 | 页面壳层与业务流程枚举 |
+| `Feedback/` | Alert、Empty、Loading、Toast 等反馈基础设施 | 页面级错误恢复编排 |
+| `Foundation/` | Card、BookCover、文本高亮等无业务或低业务视觉基础 | 为单页差异建立的万能容器 |
+| `Media/` | 附件、图片、图库和只读富文本的媒体展示/桥接 | 富文本编辑流程与媒体 Repository |
+| `Navigation/` | 返回保护、滚动边缘、Tab 与 TopBar 导航表达 | Feature 路由状态和页面私有子页壳层 |
+| `Settings/` | 已验证的配置页语法与少量稳定行型 | 参数膨胀的万能设置行 |
+| `Sheet/` | 通用业务 Sheet scaffold 与跨功能选择器 | 业务状态 owner 与持久化策略 |
+| `System/` | 系统能力的窄桥接，例如分享面板 | 自建系统组件替代品 |
+
+页面壳层只放在 `Views/<Feature>/`；页面私有子视图只放在 `Views/<Feature>/Components/`；业务 Sheet 只放在 `Views/<Feature>/Sheets/`。组件是否公共以 `component-catalog.json` 为机器真相，不以文件名或视觉相似度推断。
+
+### 3.2 SwiftUI / UIKit 边界
+
+- SwiftUI 是默认组合层。纯 SwiftUI 组件不得为了复用引入 `UIViewRepresentable`、`AnyView` 或 UIKit 生命周期。
+- UIKit 仅用于系统 Alert、分享面板、GIF、JXPhotoBrowser、附件横向列表、只读富文本及命中测试等 SwiftUI 当前不能稳定表达的窄边界。
+- `framework = bridge` 表示 SwiftUI 对 UIKit 的生命周期桥接；`framework = uikit` 表示 UIKit owner；两者都必须在组件目录登记具体依赖。
+- `CalendarHeatmap`、`HeatmapChart`、`MonthlyReadingChart` 与 `XMSearchHistorySection` 仍由 SwiftUI 持有视图生命周期，只使用 `UIKit.UIFont` 做与渲染同源的文本测量，不归类为 bridge。
+
 ## 4. 设计令牌真相源
 
 | 职责 | 唯一入口 | 页面使用边界 |
@@ -60,6 +88,7 @@ Utilities/DesignSystem（令牌与无业务语义的视觉基础）
 | 颜色构造 | `ColorConstruction.swift` | 仅设计系统 owner 与确有独立调色板 owner 的功能层使用；普通页面禁止直接构色 |
 | 间距 | `Spacing.swift` | 通用节奏使用 token；单页几何使用页面级语义常量 |
 | 圆角 | `CornerRadius.swift` | 按 inlay / block / container 角色选择，并保留 continuous 轮廓 |
+| 描边 | `StrokeWidth.swift` | `hairline` 只表达多个独立组件共享的轻量边界语义 |
 | 触控尺寸 | `InteractionMetrics.swift` | `minimumTouchTarget` 是 44pt 最小热区唯一入口 |
 
 标准容器圆角的稳定映射为：纯展示领域标签复用 `inlaySmall`（4pt），标准内容卡片复用 `blockLarge`（12pt），大型设置分组由 `XMSettingsGroup` 固定消费 `containerXXL`（24pt）。这些值按基础角色命名，不追加 `tagContainer`、`contentItem`、`settingsGroup` 等组件同值别名。
@@ -134,6 +163,23 @@ XMSettingsPage {
 
 仅复用一段布局代码、只服务一个页面或需要大量参数才能覆盖差异时，保留为 `Views/<Feature>/Components` 页面私有子视图。
 
+### 5.5 交互语义与 44pt 非视觉侵入
+
+- 普通点击优先使用 `Button`、`Toggle`、`NavigationLink`、`Menu` 等原生语义控件，不用 `onTapGesture` 模拟按钮。
+- 图标、标签或胶囊的视觉尺寸可以小于 44pt；不得为了满足点击区直接放大图标、背景、行高、间距或卡片占位。
+- SwiftUI 紧凑控件使用 `xmMinimumHitTarget(anchor:)` 只扩展 `.interaction` content shape；UIKit 紧凑按钮使用 `XMMinimumHitTargetButton` 覆写命中测试。两者共享 `InteractionMetrics.minimumTouchTarget`，不改变原有 frame、constraints、bounds 或绘制。
+- 位于屏幕或容器边缘时使用 anchor 把扩展量导向可命中区域；相邻目标扩展后重叠、祖先裁断或系统控件已经合规时不得机械接入。
+- `.frame(minWidth:minHeight:)` 只用于视觉容器本就应达到该尺寸的场景，不能作为所有 44pt 治理的默认修复。
+
+### 5.6 组件状态、可访问性与展示入口
+
+- `component-catalog.json` 的 `stateCoverage` 从 `normal`、`pressed`、`focused`、`selected`、`disabled`、`loading`、`error`、`empty`、`editing` 等实际状态中登记；组件不需要为了表格完整而虚构无业务意义的状态。
+- 生产文本使用 Dynamic Type 同源 token；语义色解析浅色、深色与高对比度；结构运动读取 Reduce Motion 并由真实运动 owner 提供降级。
+- 可交互组件必须有自然的 VoiceOver label/value/hint、合理元素分组和至少 44pt 可命中区域；装饰图标从可访问性树隐藏。
+- `DesignSystemGalleryView` 是 DEBUG 组件展厅，由 `DebugCenterView` 进入；它只持有演示状态，不进入生产导航或业务数据流。
+- 展厅提供默认、深色、辅助功能字号、320pt 紧凑宽度与 768pt 规则宽度 Preview。`colorSchemeContrast` 和 `accessibilityReduceMotion` 反映系统环境与系统偏好，当前 SDK 中不是可写 Preview 环境值；高对比度与 Reduce Motion 必须在 Simulator 系统设置下做运行态验证，不建立伪环境覆盖层。
+- 目录中的 `previewPolicy` 只有三种：`required` 表示组件同文件 Preview；`hosted` 表示由展厅或专项 Debug 场景承载；`notApplicable` 仅用于纯值或内部支撑能力，并必须写明原因。
+
 ## 6. 机器约束
 
 ### 6.1 规则等级
@@ -147,6 +193,10 @@ XMSettingsPage {
 | `DS005` | enforced | App 自有滚动容器保持有效轴向始终回弹 |
 | `DS006` | enforced | 生产路径中心弹窗使用 `XMSystemAlert` |
 | `DS007` | enforced | Domain 不依赖 SwiftUI/UIKit |
+| `DS008` | enforced | `UIComponents` 不持有 Repository、ViewModel 或业务编排 owner，只接收展示值与动作 |
+| `DS009` | enforced | 普通点击使用原生语义控件；复杂手势仅允许声明级、可失效例外 |
+| `DS010` | enforced | 44pt 交互尺寸只由 `InteractionMetrics.minimumTouchTarget` 声明，视觉尺寸归真实布局 owner |
+| `DS011` | enforced | 每个非 Vendor `UIComponents` 文件完整登记分类、层级、复用范围、状态、边界与 Preview 策略 |
 | `DSR001` | report | 字面量 SF Symbol 需要人工确认语义 owner |
 | `DSR002` | report | 字面量动画时长需要人工确认局部或公共运动语义 |
 | `DSR003` | report | 裸 `ProgressView` 需要按读取、写入或局部进度语义判断 |
@@ -213,6 +263,9 @@ make -f Makefile.parallel-ios ai-build
 | token / 颜色 / 排版 | changed lint、全量 audit、浅色/深色、相关 Dynamic Type 场景、专用构建 |
 | Settings 公共组件 | 四类配置页代表场景、44pt 热区、分组节奏、浅色/深色、较大动态字体 |
 | Sheet scaffold | 标题操作、滚动回弹、固定栏、安全区、Reduce Motion、专用构建 |
+| 44pt 命中基础设施 | SwiftUI/UIKit 几何测试、视觉 bounds 不变量、边缘 anchor、禁用态、运行态 A/B 点击证据 |
+| 组件目录或归位 | schema 审计、非 Vendor 文件全覆盖、真实生产使用范围、Preview 策略、Repository/ViewModel 反向依赖扫描 |
+| Preview / Debug 展厅 | 默认、深色、辅助功能字号、紧凑/规则宽度；高对比度与 Reduce Motion 使用系统设置运行态验证 |
 | 规则实现 | SwiftSyntax 工具测试、全量 audit、正确样例与误报回归样例 |
 | 公共组件新增/重大重构 | 术语表、组件清单、使用说明、目录边界、L3、专用构建 |
 

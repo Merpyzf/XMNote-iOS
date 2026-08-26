@@ -6,7 +6,7 @@
 //
 
 /**
- * [INPUT]: 依赖 BookViewModel、AppNavigationCoordinator、页面可见态、LoadingGate 与容器注入的浏览/搜索/编辑回调
+ * [INPUT]: 依赖 BookViewModel、AppNavigationCoordinator、页面可见态、LoadingGate、InteractionMetrics 与容器注入的浏览/搜索/编辑回调
  * [OUTPUT]: 对外提供 BookGridView，展示书籍子页维度工具行、书架内容区、集合顶部搜索 drawer、多维度 UICollectionView 聚合入口、选择覆盖层、搜索空态、写入错误浮层与拖拽排序交互
  * [POS]: Book 模块网格展示层，被 BookContainerView 嵌入
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -15,7 +15,7 @@
 import SwiftUI
 
 private enum BookGridToolbarMetrics {
-    static let dimensionRailHeight: CGFloat = 44
+    static let dimensionRailHeight: CGFloat = InteractionMetrics.minimumTouchTarget
 }
 
 private enum BookshelfDimensionManagementAction {
@@ -572,7 +572,7 @@ struct BookGridView: View {
 /// 书架维度 rail 右侧固定的末尾 chip，保持 44pt 热区并对齐未选中维度项。
 private struct BookshelfToolMenuButton: View {
     private enum Style {
-        static let hitSize = Spacing.actionReserved
+        static let hitSize = InteractionMetrics.minimumTouchTarget
         static let visualWidth: CGFloat = 32
         static let visualHeight: CGFloat = 28
         static let cornerRadius = CornerRadius.blockSmall
@@ -584,7 +584,7 @@ private struct BookshelfToolMenuButton: View {
                 .fill(Color.surfaceCard)
 
             RoundedRectangle(cornerRadius: Style.cornerRadius, style: .continuous)
-                .stroke(Color.surfaceBorderSubtle.opacity(0.18), lineWidth: CardStyle.borderWidth)
+                .stroke(Color.surfaceBorderSubtle.opacity(0.18), lineWidth: StrokeWidth.hairline)
 
             BookshelfMoreGlyph()
         }

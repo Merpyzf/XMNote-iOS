@@ -1,7 +1,7 @@
 /**
  * [INPUT]: 仅依赖 SwiftUI 的 CGFloat
- * [OUTPUT]: 对外提供按 inlay、block、container 角色组织的 CornerRadius 与基础 CardStyle
- * [POS]: Utilities/DesignSystem 的表面轮廓层，统一可复用容器的圆角与边界尺寸
+ * [OUTPUT]: 对外提供按 inlay、block、container 角色组织的 CornerRadius
+ * [POS]: Utilities/DesignSystem 的表面圆角层，统一可复用容器的轮廓曲率
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
@@ -18,7 +18,7 @@ import SwiftUI
 //
 // 第二步：按视觉体量选尺寸
 //   none(0) < hairline(2) < tiny(3) < small(4) < medium(6) < blockLarge(12)
-//   < containerMedium(16) < containerLarge(18) < containerXL(22) < containerXXL(24)
+//   < containerMedium(16) < containerLarge(18) < containerXL(22)
 //
 // 示例：
 //   热力图方格 → 嵌在卡片里的小零件 → inlay → 最小的 → inlayTiny
@@ -46,12 +46,4 @@ enum CornerRadius {
     static let containerMedium: CGFloat = 16  // 面板、弹层
     static let containerLarge: CGFloat = 18   // 突出容器（热力图 widget）
     static let containerXL: CGFloat = 22     // 闪屏图标容器、大型品牌展示
-    static let containerXXL: CGFloat = 24    // 大型分组容器（设置分组）
-}
-
-// MARK: - Card Style
-
-/// 卡片样式基础常量，集中维护边框宽度等参数。
-enum CardStyle {
-    static let borderWidth: CGFloat = 0.5
 }

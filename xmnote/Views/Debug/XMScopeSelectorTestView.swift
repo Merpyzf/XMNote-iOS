@@ -83,7 +83,7 @@ struct XMScopeSelectorTestView: View {
         HStack(spacing: Spacing.cozy) {
             Image(systemName: reduceMotion ? "figure.walk.motion.trianglebadge.exclamationmark" : "figure.walk.motion")
                 .font(AppTypography.body)
-                .foregroundStyle(reduceMotion ? Color.textSecondary : Color.brand)
+                .foregroundStyle(reduceMotion ? Color.textSecondary : Color.appTint)
                 .frame(width: 24)
 
             VStack(alignment: .leading, spacing: Spacing.tiny) {
@@ -305,7 +305,7 @@ private struct XMScopeSelectorScenarioSection<ID: Hashable>: View {
         .background(stageFill, in: RoundedRectangle(cornerRadius: CornerRadius.blockLarge, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: CornerRadius.blockLarge, style: .continuous)
-                .stroke(Color.surfaceBorderSubtle.opacity(0.5), lineWidth: CardStyle.borderWidth)
+                .stroke(Color.surfaceBorderSubtle.opacity(0.5), lineWidth: StrokeWidth.hairline)
         }
         .clipShape(RoundedRectangle(cornerRadius: CornerRadius.blockLarge, style: .continuous))
     }

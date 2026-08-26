@@ -9,8 +9,16 @@ import SwiftUI
 import UIKit
 
 private enum GlobalSearchLayout {
-    static let bottomContentClearance = Spacing.actionReserved * 3
+    static let bottomContentClearance: CGFloat = 132
     static let emptyStateVerticalPadding = Spacing.section * 2
+    static let fieldScopeMinimumHeight: CGFloat = 34
+}
+
+/// 全局搜索书名命中的局部排版，保留 body 语义曲线与半粗强调层级。
+private enum GlobalSearchTypography {
+    static var bookTitleHighlight: Font {
+        AppTypography.semantic(.body, weight: .semibold)
+    }
 }
 
 /// 搜索宿主捕获到的提交事件，使用唯一 id 保证相同关键词连续提交也能被搜索页感知。
@@ -533,28 +541,28 @@ private struct GlobalSearchFieldScopeFilterBar: View {
                         HStack(alignment: .firstTextBaseline, spacing: Spacing.tiny) {
                             Text(scope.title)
                                 .font(AppTypography.caption)
-                                .foregroundStyle(isSelected ? Color.brandDeep : Color.textSecondary)
+                                .foregroundStyle(isSelected ? Color.selectionForeground : Color.textSecondary)
                                 .lineLimit(1)
 
                             let count = countProvider(scope)
                             if count > 0 {
                                 Text("\(count)")
                                     .font(AppTypography.caption2)
-                                    .foregroundStyle(isSelected ? Color.brandDeep.opacity(0.68) : Color.textHint)
+                                    .foregroundStyle(isSelected ? Color.selectionForeground.opacity(0.68) : Color.textHint)
                                     .lineLimit(1)
                             }
                         }
                         .padding(.horizontal, Spacing.cozy)
-                        .frame(minHeight: Spacing.actionReserved - Spacing.tight)
+                        .frame(minHeight: GlobalSearchLayout.fieldScopeMinimumHeight)
                         .background(
-                            isSelected ? Color.brand.opacity(0.11) : Color.controlFillSecondary.opacity(0.52),
+                            isSelected ? Color.selectionAccent.opacity(0.11) : Color.controlFillSecondary.opacity(0.52),
                             in: Capsule()
                         )
                         .overlay {
                             Capsule()
                                 .stroke(
-                                    isSelected ? Color.brand.opacity(0.32) : Color.surfaceBorderSubtle,
-                                    lineWidth: CardStyle.borderWidth
+                                    isSelected ? Color.selectionAccent.opacity(0.32) : Color.surfaceBorderSubtle,
+                                    lineWidth: StrokeWidth.hairline
                                 )
                         }
                     }
@@ -713,7 +721,7 @@ private struct GlobalSearchBookRow: View {
                     book.title,
                     keyword: keyword,
                     baseFont: AppTypography.bodyMedium,
-                    highlightFont: AppTypography.semantic(.body, weight: .semibold),
+                    highlightFont: GlobalSearchTypography.bookTitleHighlight,
                     baseColor: Color.textPrimary
                 )
                 .lineLimit(2)
@@ -762,11 +770,11 @@ private struct GlobalSearchNoteRow: View {
                 XMKeywordHighlighting.text(
                     note.content,
                     keyword: keyword,
-                    baseFont: NoteExcerptTypography.body,
-                    highlightFont: NoteExcerptTypography.body,
+                    baseFont: ReadingContentTypography.body,
+                    highlightFont: ReadingContentTypography.body,
                     baseColor: Color.textPrimary
                 )
-                .lineSpacing(NoteExcerptTypography.bodyLineSpacing)
+                .lineSpacing(ReadingContentTypography.bodyLineSpacing)
                 .lineLimit(6)
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
@@ -809,11 +817,11 @@ private struct GlobalSearchRelevantContentRow: View {
                 XMKeywordHighlighting.text(
                     relevant.content,
                     keyword: keyword,
-                    baseFont: NoteExcerptTypography.body,
-                    highlightFont: NoteExcerptTypography.body,
+                    baseFont: ReadingContentTypography.body,
+                    highlightFont: ReadingContentTypography.body,
                     baseColor: Color.textPrimary
                 )
-                .lineSpacing(NoteExcerptTypography.bodyLineSpacing)
+                .lineSpacing(ReadingContentTypography.bodyLineSpacing)
                 .lineLimit(5)
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
@@ -852,11 +860,11 @@ private struct GlobalSearchReviewRow: View {
                 XMKeywordHighlighting.text(
                     review.content,
                     keyword: keyword,
-                    baseFont: NoteExcerptTypography.body,
-                    highlightFont: NoteExcerptTypography.body,
+                    baseFont: ReadingContentTypography.body,
+                    highlightFont: ReadingContentTypography.body,
                     baseColor: Color.textPrimary
                 )
-                .lineSpacing(NoteExcerptTypography.bodyLineSpacing)
+                .lineSpacing(ReadingContentTypography.bodyLineSpacing)
                 .lineLimit(5)
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
@@ -908,11 +916,11 @@ private struct GlobalSearchIdeaBlock: View {
         XMKeywordHighlighting.text(
             text,
             keyword: keyword,
-            baseFont: NoteExcerptTypography.idea,
-            highlightFont: NoteExcerptTypography.idea,
+            baseFont: ReadingContentTypography.annotation,
+            highlightFont: ReadingContentTypography.annotation,
             baseColor: Color.textSecondary
         )
-        .lineSpacing(NoteExcerptTypography.ideaLineSpacing)
+        .lineSpacing(ReadingContentTypography.annotationLineSpacing)
         .lineLimit(4)
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(Spacing.cozy)
@@ -1013,7 +1021,7 @@ private struct GlobalSearchFooter: View {
             HStack(alignment: .firstTextBaseline, spacing: Spacing.base) {
                 if !leading.isEmpty {
                     Text(leading)
-                        .font(NoteExcerptTypography.footer)
+                        .font(ReadingContentTypography.metadata)
                         .foregroundStyle(Color.textSecondary)
                         .lineLimit(1)
                 }
@@ -1022,7 +1030,7 @@ private struct GlobalSearchFooter: View {
 
                 if !trailing.isEmpty {
                     Text(trailing)
-                        .font(NoteExcerptTypography.footer)
+                        .font(ReadingContentTypography.metadata)
                         .foregroundStyle(Color.textHint)
                         .lineLimit(1)
                 }
@@ -1051,7 +1059,7 @@ private struct GlobalSearchErrorView: View {
                 Label("重新搜索", systemImage: "arrow.clockwise")
                     .font(AppTypography.subheadlineSemibold)
                     .padding(.horizontal, Spacing.base)
-                    .frame(minHeight: Spacing.actionReserved)
+                    .frame(minHeight: InteractionMetrics.minimumTouchTarget)
             }
             .buttonStyle(.bordered)
         }

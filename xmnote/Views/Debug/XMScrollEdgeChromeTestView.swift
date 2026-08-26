@@ -220,9 +220,9 @@ struct XMScrollEdgeChromeTestView: View {
                         HStack(spacing: Spacing.cozy) {
                             Text("\(index)")
                                 .font(AppTypography.caption2Semibold)
-                                .foregroundStyle(Color.brandDeep)
+                                .foregroundStyle(Color.selectionForeground)
                                 .frame(width: 28, height: 28)
-                                .background(Color.brand.opacity(0.12), in: Circle())
+                                .background(Color.selectionAccent.opacity(0.12), in: Circle())
 
                             VStack(alignment: .leading, spacing: Spacing.tiny) {
                                 Text("滚动边缘样本行")
@@ -264,7 +264,7 @@ struct XMScrollEdgeChromeTestView: View {
         HStack {
             Image(systemName: "slider.horizontal.3")
                 .font(AppTypography.body)
-                .foregroundStyle(Color.brand)
+                .foregroundStyle(Color.appTint)
             Text(title)
                 .font(AppTypography.subheadlineSemibold)
                 .foregroundStyle(Color.textPrimary)
@@ -326,7 +326,7 @@ struct XMScrollEdgeChromeTestView: View {
 
     private var demoBorder: some View {
         RoundedRectangle(cornerRadius: CornerRadius.blockLarge, style: .continuous)
-            .stroke(Color.surfaceBorderSubtle.opacity(0.56), lineWidth: CardStyle.borderWidth)
+            .stroke(Color.surfaceBorderSubtle.opacity(0.56), lineWidth: StrokeWidth.hairline)
     }
 }
 

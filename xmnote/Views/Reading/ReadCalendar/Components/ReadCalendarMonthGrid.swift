@@ -1,5 +1,5 @@
 /**
- * [INPUT]: 依赖 DesignTokens 视觉令牌、ReadCalendarCoverFanStack 与周网格输入（WeekData/EventSegment/DayPayload，含显示模式与事件条颜色三态），可选依赖全屏封面、当日详情与读完事件回调
+ * [INPUT]: 依赖 ReadCalendarTheme、ReadCalendarTextStyle、DesignTokens、ReadCalendarCoverFanStack 与周网格输入（WeekData/EventSegment/DayPayload，含显示模式与事件条颜色三态），可选依赖全屏封面、当日详情与读完事件回调
  * [OUTPUT]: 对外提供 ReadCalendarMonthGrid（月视图周网格组件，支持热力图/活动事件/书籍封面三种展示模式、周级溢出行、日期按钮命中，并提供大字体受控的事件标题渐隐与读完庆祝反馈）
  * [POS]: ReadCalendar 页面私有月网格组件，承载日期格按钮、事件展示层、周级溢出布局、选中态与多模式内容渲染
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -207,7 +207,7 @@ struct ReadCalendarMonthGrid: View {
                 .background {
                     if displayMode != .heatmapYearCompact {
                         RoundedRectangle(cornerRadius: CornerRadius.blockMedium, style: .continuous)
-                            .fill(Color.readCalendarSelectionFill.opacity(0.14))
+                            .fill(ReadCalendarTheme.selectionFill.opacity(0.14))
                     }
                 }
             }
@@ -283,7 +283,7 @@ private struct ReadCalendarMonthGridWeekRow: View {
     @ScaledMetric(relativeTo: .caption2) private var readDoneBadgeCircleSize = 14
     @ScaledMetric(relativeTo: .caption2) private var readDoneBadgeEmojiSize = 12
     @ScaledMetric(relativeTo: .caption2) private var readDoneBadgeCheckmarkSize = 9
-    @ScaledMetric(relativeTo: .caption2) private var readDoneBadgeHitWidth = 28
+    @ScaledMetric(relativeTo: .caption2) private var readDoneBadgeHitWidth = InteractionMetrics.minimumTouchTarget
     @State private var doneCelebrationSegmentID: String?
     @State private var doneCelebrationTrigger = 0
 
@@ -338,18 +338,18 @@ private struct ReadCalendarMonthGridWeekRow: View {
     }
 
     private var resolvedReadDoneBadgeHitWidth: CGFloat {
-        min(readDoneBadgeHitWidth, 44)
+        min(readDoneBadgeHitWidth, InteractionMetrics.minimumTouchTarget)
     }
 
     private func dayNumberFont(isSelected: Bool) -> Font {
         if dynamicTypeSize.isAccessibilitySize {
             return isSelected
-                ? ReadCalendarTypography.monthGridDayNumberSelectedAccessibilityFont
-                : ReadCalendarTypography.monthGridDayNumberAccessibilityFont
+                ? ReadCalendarTextStyle.monthGridDayNumberSelectedAccessibilityFont
+                : ReadCalendarTextStyle.monthGridDayNumberAccessibilityFont
         }
         return isSelected
-            ? ReadCalendarTypography.monthGridDayNumberSelectedFont
-            : ReadCalendarTypography.monthGridDayNumberFont
+            ? ReadCalendarTextStyle.monthGridDayNumberSelectedFont
+            : ReadCalendarTextStyle.monthGridDayNumberFont
     }
 
     private var hasOverflowRow: Bool {
@@ -412,7 +412,7 @@ private struct ReadCalendarMonthGridWeekRow: View {
     private func yearCompactDayCell(_ day: Date?) -> some View {
         let payload = day.map(dayPayloadProvider) ?? .empty
         let fillColor = day == nil
-            ? Color.readCalendarHeatmapNone.opacity(0.42)
+            ? ReadCalendarTheme.heatmapPalette.none.opacity(0.42)
             : yearCompactHeatmapColor(for: payload).opacity(payload.isFuture ? 0.32 : 1)
 
         RoundedRectangle(
@@ -445,7 +445,7 @@ private struct ReadCalendarMonthGridWeekRow: View {
                     VStack(spacing: Spacing.hairline) {
                         ZStack {
                             Circle()
-                                .fill(Color.readCalendarSelectedDayFill)
+                                .fill(ReadCalendarTheme.selectedDayFill)
                                 .frame(
                                     width: resolvedSelectedDayCircleSize,
                                     height: resolvedSelectedDayCircleSize
@@ -461,7 +461,7 @@ private struct ReadCalendarMonthGridWeekRow: View {
                                 .font(dayNumberFont(isSelected: selected))
                                 .foregroundStyle(
                                     payload.isFuture ? Color.textHint :
-                                    selected ? Color.readCalendarSelectedDayText : Color.textPrimary
+                                    selected ? ReadCalendarTheme.selectedDayText : Color.textPrimary
                                 )
                         }
                         .frame(height: dayHeaderHeight)
@@ -475,7 +475,7 @@ private struct ReadCalendarMonthGridWeekRow: View {
 
                         if today && !selected {
                             Capsule(style: .continuous)
-                                .fill(Color.readCalendarTodayMark)
+                                .fill(ReadCalendarTheme.todayMark)
                                 .frame(width: 6, height: 4)
                                 .offset(y: -2)
                         }
@@ -613,8 +613,8 @@ private struct ReadCalendarMonthGridWeekRow: View {
         Text("+\(count)本")
             .font(
                 dynamicTypeSize.isAccessibilitySize
-                    ? ReadCalendarTypography.monthGridOverflowAccessibilityFont
-                    : ReadCalendarTypography.monthGridOverflowFont
+                    ? ReadCalendarTextStyle.monthGridOverflowAccessibilityFont
+                    : ReadCalendarTextStyle.monthGridOverflowFont
             )
             .foregroundStyle(Color.textSecondary)
             .monospacedDigit()
@@ -630,11 +630,11 @@ private struct ReadCalendarMonthGridWeekRow: View {
     }
 
     private func heatmapColor(for payload: ReadCalendarMonthGrid.DayPayload) -> Color {
-        HeatmapColorPalette.readCalendar.color(for: payload.heatmapLevel)
+        ReadCalendarTheme.heatmapPalette.color(for: payload.heatmapLevel)
     }
 
     private func yearCompactHeatmapColor(for payload: ReadCalendarMonthGrid.DayPayload) -> Color {
-        HeatmapColorPalette.readCalendar.color(for: payload.heatmapLevel)
+        ReadCalendarTheme.heatmapPalette.color(for: payload.heatmapLevel)
     }
 
     /// 返回封面堆叠数据：优先使用外部注入，未注入时回落到内置占位生成逻辑。
@@ -706,10 +706,10 @@ private struct ReadCalendarMonthGridWeekRow: View {
         let scale = 1 + (1 - progress) * 0.05
 
         return RoundedRectangle(cornerRadius: CornerRadius.blockSmall, style: .continuous)
-            .fill(Color.brand.opacity(fillOpacity))
+            .fill(Color.selectionAccent.opacity(fillOpacity))
             .overlay {
                 RoundedRectangle(cornerRadius: CornerRadius.blockSmall, style: .continuous)
-                    .stroke(Color.brand.opacity(strokeOpacity), lineWidth: 1.05)
+                    .stroke(Color.selectionAccent.opacity(strokeOpacity), lineWidth: 1.05)
             }
             .padding(.horizontal, Spacing.tiny)
             .padding(.vertical, Spacing.tiny)
@@ -749,7 +749,9 @@ private struct ReadCalendarMonthGridWeekRow: View {
         let y = dayHeaderHeight + laneTopInset + CGFloat(segment.laneIndex) * (laneBarHeight + laneSpacing)
 
         let isPending = segment.color.state == .pending
-        let showBadge = !isPending && segment.showsReadDoneBadge && segmentWidth >= 44
+        let showBadge = !isPending
+            && segment.showsReadDoneBadge
+            && segmentWidth >= InteractionMetrics.minimumTouchTarget
         let showText = !isPending
         let isInteractive = showBadge && onReadDoneEventSelected != nil
         let isFocused = isSegmentFocused(segment)
@@ -783,7 +785,7 @@ private struct ReadCalendarMonthGridWeekRow: View {
                     segmentShape
                         .fill(Color.clear)
                     segmentShape
-                        .stroke(Color.readCalendarSelectionStroke.opacity(0.55), lineWidth: 0.7)
+                        .stroke(ReadCalendarTheme.selectionStroke.opacity(0.55), lineWidth: 0.7)
                 } else {
                     segmentShape
                         .fill(visualStyle.displayBackground.color)
@@ -892,7 +894,7 @@ private struct ReadCalendarMonthGridWeekRow: View {
         } else {
             Image(systemName: "checkmark.circle.fill")
                 .font(.system(size: size))
-                .foregroundStyle(Color.readCalendarTodayMark)
+                .foregroundStyle(ReadCalendarTheme.todayMark)
         }
     }
 
@@ -979,8 +981,8 @@ private struct ReadCalendarEventTitle: View {
                 Text(text)
                     .font(
                         dynamicTypeSize.isAccessibilitySize
-                            ? ReadCalendarTypography.monthGridEventTitleAccessibilityFont
-                            : ReadCalendarTypography.monthGridEventTitleFont
+                            ? ReadCalendarTextStyle.monthGridEventTitleAccessibilityFont
+                            : ReadCalendarTextStyle.monthGridEventTitleFont
                     )
                     .foregroundStyle(textColor)
                     .lineLimit(1)

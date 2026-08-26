@@ -202,14 +202,14 @@ struct RelatedCategoryListView: View {
                 } label: {
                     Label("编辑", systemImage: "square.and.pencil")
                 }
-                .tint(Color.brand)
+                .tint(Color.appTint)
             } else if case .book(let book) = item {
                 Button {
                     openBookEditor(book)
                 } label: {
                     Label("编辑资料", systemImage: "square.and.pencil")
                 }
-                .tint(Color.brand)
+                .tint(Color.appTint)
             }
         }
     }

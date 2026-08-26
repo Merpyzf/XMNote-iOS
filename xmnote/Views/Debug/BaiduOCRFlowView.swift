@@ -199,7 +199,7 @@ private extension OCRCameraScreen {
                 LinearGradient(
                     colors: [
                         Color.black,
-                        Color.brand.opacity(0.12),
+                        Color.appTint.opacity(0.12),
                         Color.black
                     ],
                     startPoint: .topLeading,
@@ -269,7 +269,13 @@ private extension OCRCameraScreen {
             }
 
             if let bannerText = cameraBannerText {
-                banner(text: bannerText, tint: cameraController.isReady ? Color.brand : Color.feedbackWarning)
+                banner(
+                    text: bannerText,
+                    tint: cameraController.isReady ? Color.feedbackSuccess : Color.feedbackWarning,
+                    systemName: cameraController.isReady
+                        ? "checkmark.circle.fill"
+                        : "exclamationmark.triangle.fill"
+                )
             }
         }
         .padding(.horizontal, Spacing.screenEdge)
@@ -333,7 +339,7 @@ private extension OCRCameraScreen {
         HStack(alignment: .top, spacing: Spacing.half) {
             Image(systemName: "sparkles")
                 .font(.caption.weight(.semibold))
-                .foregroundStyle(Color.brand)
+                .foregroundStyle(Color.appTint)
                 .padding(.top, 2)
 
             VStack(alignment: .leading, spacing: 3) {
@@ -405,9 +411,9 @@ private extension OCRCameraScreen {
         }
     }
 
-    func banner(text: String, tint: Color) -> some View {
+    func banner(text: String, tint: Color, systemName: String) -> some View {
         HStack(alignment: .top, spacing: Spacing.half) {
-            Image(systemName: tint == Color.brand ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
+            Image(systemName: systemName)
                 .font(.caption)
                 .foregroundStyle(tint)
                 .padding(.top, 2)
@@ -1051,7 +1057,7 @@ private extension OCRCropRecognitionViewController {
     func configureStyles() {
         emptyStateIconView.image = UIImage(systemName: "photo")
         emptyStateIconView.preferredSymbolConfiguration = UIImage.SymbolConfiguration(pointSize: 48, weight: .regular)
-        emptyStateIconView.tintColor = UIColor(Color.brand).withAlphaComponent(0.3)
+        emptyStateIconView.tintColor = UIColor(Color.appTint).withAlphaComponent(0.3)
         emptyStateLabel.text = "没有可裁切的图片，请返回上一步重新选择"
         emptyStateLabel.textColor = UIColor(Color.textSecondary)
         emptyStateLabel.font = .preferredFont(forTextStyle: .title3)
@@ -1580,10 +1586,10 @@ private extension OCRSelectionOverlayView {
                     roundedRect: draftRect,
                     cornerRadius: selectionCornerRadius
                 )
-                UIColor(Color.brand).withAlphaComponent(0.10).setFill()
+                UIColor(Color.selectionAccent).withAlphaComponent(0.10).setFill()
                 path.fill()
 
-                UIColor(Color.brand).withAlphaComponent(0.94).setStroke()
+                UIColor(Color.selectionAccent).withAlphaComponent(0.94).setStroke()
                 path.setLineDash([4, 4], count: 2, phase: 0)
                 path.lineWidth = 1
                 path.stroke()
@@ -1602,10 +1608,10 @@ private extension OCRSelectionOverlayView {
             roundedRect: region.frame,
             cornerRadius: selectionCornerRadius
         )
-        (isSelected ? UIColor(Color.brand).withAlphaComponent(0.14) : UIColor.white.withAlphaComponent(0.08)).setFill()
+        (isSelected ? UIColor(Color.selectionAccent).withAlphaComponent(0.14) : UIColor.white.withAlphaComponent(0.08)).setFill()
         path.fill()
 
-        (isSelected ? UIColor(Color.brand).withAlphaComponent(0.94) : UIColor.white.withAlphaComponent(0.82)).setStroke()
+        (isSelected ? UIColor(Color.selectionAccent).withAlphaComponent(0.94) : UIColor.white.withAlphaComponent(0.82)).setStroke()
         path.lineWidth = isSelected ? 1.5 : 1
         path.stroke()
 
@@ -2844,14 +2850,14 @@ private extension OCRSettingsScreen {
                 if let message = viewModel.errorMessage {
                     statusRow(text: message, tint: Color.feedbackWarning, icon: "exclamationmark.triangle.fill")
                 } else if let message = viewModel.statusMessage {
-                    statusRow(text: message, tint: Color.brand, icon: "checkmark.circle.fill")
+                    statusRow(text: message, tint: Color.feedbackSuccess, icon: "checkmark.circle.fill")
                 }
 
                 Button("清除鉴权缓存") {
                     viewModel.clearAuthorizationCache()
                 }
                 .buttonStyle(.borderedProminent)
-                .tint(Color.brand)
+                .tint(Color.appTint)
                 .disabled(viewModel.isRecognizing)
             }
             .padding(Spacing.contentEdge)
@@ -3168,10 +3174,10 @@ private extension OCRSelectionEditor {
 
         if let draftRect = draftFreeformRect(in: imageFrame) {
             RoundedRectangle(cornerRadius: CornerRadius.blockMedium, style: .continuous)
-                .fill(Color.brand.opacity(0.1))
+                .fill(Color.selectionAccent.opacity(0.1))
                 .overlay {
                     RoundedRectangle(cornerRadius: CornerRadius.blockMedium, style: .continuous)
-                        .stroke(Color.brand.opacity(0.94), style: StrokeStyle(lineWidth: 1, dash: [4, 4]))
+                        .stroke(Color.selectionAccent.opacity(0.94), style: StrokeStyle(lineWidth: 1, dash: [4, 4]))
                 }
                 .frame(width: draftRect.width, height: draftRect.height)
                 .position(x: draftRect.midX, y: draftRect.midY)
@@ -3213,10 +3219,10 @@ private extension OCRSelectionEditor {
     func freeformRegionDecoration(region: OCRSelectionRegion) -> some View {
         ZStack {
             RoundedRectangle(cornerRadius: CornerRadius.blockMedium, style: .continuous)
-                .fill(region.id == selectedFreeformRegionID ? Color.brand.opacity(0.14) : Color.white.opacity(0.08))
+                .fill(region.id == selectedFreeformRegionID ? Color.selectionAccent.opacity(0.14) : Color.white.opacity(0.08))
             RoundedRectangle(cornerRadius: CornerRadius.blockMedium, style: .continuous)
                 .stroke(
-                    region.id == selectedFreeformRegionID ? Color.brand.opacity(0.94) : Color.white.opacity(0.82),
+                    region.id == selectedFreeformRegionID ? Color.selectionAccent.opacity(0.94) : Color.white.opacity(0.82),
                     lineWidth: region.id == selectedFreeformRegionID ? 1.5 : 1
                 )
         }

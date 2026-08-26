@@ -295,3 +295,24 @@ struct XMSheetScaffold<
         .accessibilityLabel("关闭")
     }
 }
+
+#Preview("业务 Sheet 骨架") {
+    XMSheetScaffold(
+        title: "编辑内容",
+        subtitle: "标准标题与滚动区域",
+        onClose: { }
+    ) {
+        LazyVStack(spacing: Spacing.base) {
+            ForEach(1...8, id: \.self) { index in
+                CardContainer {
+                    Text("内容项 \(index)")
+                        .font(AppTypography.body)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(Spacing.contentEdge)
+                }
+            }
+        }
+        .padding(.horizontal, Spacing.screenEdge)
+        .padding(.bottom, Spacing.contentEdge)
+    }
+}

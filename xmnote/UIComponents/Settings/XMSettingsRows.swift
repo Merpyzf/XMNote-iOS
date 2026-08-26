@@ -9,7 +9,7 @@ import SwiftUI
 
 private enum XMSettingsRowLayout {
     static let minimumHeight: CGFloat = 52
-    static let menuValueMinWidth: CGFloat = InteractionMetrics.minimumTouchTarget * 2
+    static let menuValueMinWidth: CGFloat = 88
     static let regularValueScale = 0.82
     static let valueTransitionDuration = 0.13
 }
@@ -118,7 +118,28 @@ struct XMSettingsToggleRow: View {
                 .foregroundStyle(Color.textPrimary)
                 .fixedSize(horizontal: false, vertical: true)
         }
-        .tint(Color.brand)
+        .tint(Color.appTint)
         .frame(minHeight: XMSettingsRowLayout.minimumHeight)
     }
+}
+
+#Preview("设置行") {
+    @Previewable @State var isEnabled = true
+    @Previewable @State var selection = 0
+
+    XMSettingsGroup {
+        XMSettingsToggleRow(title: "显示阅读进度", isOn: $isEnabled)
+        XMSettingsDivider()
+        XMSettingsValueMenuRow(
+            title: "默认排序",
+            value: selection == 0 ? "最近阅读" : "书名",
+            options: [0, 1],
+            selection: selection,
+            optionTitle: { $0 == 0 ? "最近阅读" : "书名" },
+            optionImage: { $0 == 0 ? "clock" : "textformat" },
+            onSelect: { selection = $0 }
+        )
+    }
+    .padding()
+    .background(Color.surfacePage)
 }

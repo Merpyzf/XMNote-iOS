@@ -4,25 +4,28 @@
 | --- | --- | --- | --- |
 | HeatmapChart | `xmnote/UIComponents/Charts/HeatmapChart.swift` | `docs/component-guides/HeatmapChart使用说明.md` | 已完成 |
 | ReadingDurationRankingChart | `xmnote/UIComponents/Charts/ReadingDurationRankingChart.swift` | `docs/component-guides/ReadingDurationRankingChart使用说明.md` | 已完成 |
-| XMRemoteImage | `xmnote/UIComponents/Foundation/XMRemoteImage.swift` | `docs/component-guides/XMRemoteImage使用说明.md` | 已完成 |
-| XMGIFImageView | `xmnote/UIComponents/Foundation/XMGIFImageView.swift` | `docs/component-guides/XMGIFImageView使用说明.md` | 已完成 |
+| XMRemoteImage | `xmnote/UIComponents/Media/Images/XMRemoteImage.swift` | `docs/component-guides/XMRemoteImage使用说明.md` | 已完成 |
+| XMGIFImageView | `xmnote/UIComponents/Media/Images/XMGIFImageView.swift` | `docs/component-guides/XMGIFImageView使用说明.md` | 已完成 |
 | XMBookCover | `xmnote/UIComponents/Foundation/XMBookCover.swift` | `docs/component-guides/XMBookCover使用说明.md` | 已完成 |
-| XMBookGroupCover | `xmnote/UIComponents/Foundation/XMBookGroupCover.swift` | `docs/component-guides/XMBookGroupCover使用说明.md` | 已完成 |
-| XMActivityShareSheet | `xmnote/UIComponents/Foundation/XMActivityShareSheet.swift` | `docs/component-guides/XMActivityShareSheet使用说明.md` | 已完成 |
-| XMYearMonthPickerSheet | `xmnote/UIComponents/Foundation/XMYearMonthPickerSheet.swift` | `docs/component-guides/XMYearMonthPickerSheet使用说明.md` | 已完成 |
-| XMRatingBar | `xmnote/UIComponents/Foundation/XMRatingBar.swift` | `docs/component-guides/XMRatingBar使用说明.md` | 已完成 |
-| XMBookRatingSheet | `xmnote/UIComponents/Foundation/XMBookRatingSheet.swift` | `docs/component-guides/XMRatingBar使用说明.md` | 已完成 |
-| XMScopeSelector | `xmnote/UIComponents/Foundation/XMScopeSelector.swift` | `docs/component-guides/XMScopeSelector使用说明.md` | 已完成 |
-| XMSearchHistorySection | `xmnote/UIComponents/Foundation/XMSearchHistorySection.swift` | `docs/component-guides/XMSearchHistorySection使用说明.md` | 已完成 |
-| XMScrollEdgeChrome | `xmnote/UIComponents/Foundation/XMScrollEdgeChrome.swift` | `docs/component-guides/XMScrollEdgeChrome使用说明.md` | 已完成 |
-| XMScrollEdgeWash | `xmnote/UIComponents/Foundation/XMScrollEdgeWash.swift` | `docs/component-guides/XMScrollEdgeChrome使用说明.md` | 已完成 |
-| BookCoverProgressBar | `xmnote/UIComponents/Foundation/BookCoverProgressBar.swift` | `docs/component-guides/BookCoverProgressBar使用说明.md` | 已完成 |
-| ExpandableRichText | `xmnote/UIComponents/Foundation/ExpandableRichText.swift` | `docs/component-guides/ExpandableRichText使用说明.md` | 已完成 |
-| RichText | `xmnote/UIComponents/Foundation/RichText.swift` | `docs/component-guides/ExpandableRichText使用说明.md` | 已完成 |
-| CollapsedRichTextPreview | `xmnote/UIComponents/Foundation/CollapsedRichTextPreview.swift` | `docs/component-guides/ExpandableRichText使用说明.md` | 已完成 |
-| ImmersiveBottomChrome | `xmnote/UIComponents/Foundation/ImmersiveBottomChrome.swift` | `docs/component-guides/ImmersiveBottomChrome使用说明.md` | 已完成 |
-| XMToast | `xmnote/UIComponents/Foundation/XMToast.swift` | `docs/component-guides/XMToast使用说明.md` | 已完成 |
-| XMTagLabel | `xmnote/UIComponents/Foundation/XMTagLabel.swift` | `docs/component-guides/XMTagLabel使用说明.md` | 已完成 |
+| XMBookGroupCover | `xmnote/Views/Personal/Components/XMBookGroupCover.swift` | `docs/component-guides/XMBookGroupCover使用说明.md` | 页面私有 |
+| XMActivityShareSheet | `xmnote/UIComponents/System/Sharing/XMActivityShareSheet.swift` | `docs/component-guides/XMActivityShareSheet使用说明.md` | 已完成 |
+| XMYearMonthPickerSheet | `xmnote/UIComponents/Sheet/XMYearMonthPickerSheet.swift` | `docs/component-guides/XMYearMonthPickerSheet使用说明.md` | 已完成 |
+| XMRatingBar | `xmnote/UIComponents/Controls/Rating/XMRatingBar.swift` | `docs/component-guides/XMRatingBar使用说明.md` | 已完成 |
+| XMBookRatingSheet | `xmnote/UIComponents/Business/Book/XMBookRatingSheet.swift` | `docs/component-guides/XMRatingBar使用说明.md` | 已完成 |
+| XMScopeSelector | `xmnote/UIComponents/Controls/Selection/XMScopeSelector.swift` | `docs/component-guides/XMScopeSelector使用说明.md` | 已完成 |
+| XMSearchHistorySection | `xmnote/UIComponents/Controls/Search/XMSearchHistorySection.swift` | `docs/component-guides/XMSearchHistorySection使用说明.md` | 已完成 |
+| XMScrollEdgeChrome | `xmnote/UIComponents/Navigation/ScrollEdge/XMScrollEdgeChrome.swift` | `docs/component-guides/XMScrollEdgeChrome使用说明.md` | 已完成 |
+| XMScrollEdgeWash | `xmnote/UIComponents/Navigation/ScrollEdge/XMScrollEdgeWash.swift` | `docs/component-guides/XMScrollEdgeChrome使用说明.md` | 已完成 |
+| BookCoverProgressBar | `xmnote/Views/Reading/Components/BookCoverProgressBar.swift` | `docs/component-guides/BookCoverProgressBar使用说明.md` | 页面私有 |
+| ExpandableRichText | `xmnote/UIComponents/Media/RichText/ExpandableRichText.swift` | `docs/component-guides/ExpandableRichText使用说明.md` | 已完成 |
+| RichText | `xmnote/UIComponents/Media/RichText/RichText.swift` | `docs/component-guides/ExpandableRichText使用说明.md` | 已完成 |
+| CollapsedRichTextPreview | `xmnote/UIComponents/Media/RichText/CollapsedRichTextPreview.swift` | `docs/component-guides/ExpandableRichText使用说明.md` | 已完成 |
+| ImmersiveBottomChrome | `xmnote/Views/Content/Components/ImmersiveBottomChrome.swift` | `docs/component-guides/ImmersiveBottomChrome使用说明.md` | 页面私有 |
+| XMToast | `xmnote/UIComponents/Feedback/Toast/XMToast.swift` | `docs/component-guides/XMToast使用说明.md` | 已完成 |
+| XMTagLabel | `xmnote/UIComponents/Business/Tag/XMTagLabel.swift` | `docs/component-guides/XMTagLabel使用说明.md` | 已完成 |
+| XMTagSelectionSheet | `xmnote/UIComponents/Business/Tag/XMTagSelectionSheet.swift` | `docs/component-guides/XMTagSelectionSheet使用说明.md` | 已完成 |
+| XMMinimumHitTarget | `xmnote/UIComponents/Controls/Button/XMMinimumHitTarget.swift` | `docs/component-guides/XMMinimumHitTarget使用说明.md` | 已完成 |
+| XMMinimumHitTargetButton | `xmnote/UIComponents/Controls/Button/XMMinimumHitTargetButton.swift` | `docs/component-guides/XMMinimumHitTarget使用说明.md` | 已完成 |
 | XMSettingsPage | `xmnote/UIComponents/Settings/XMSettingsPage.swift` | `docs/component-guides/XMSettingsComponents使用说明.md` | 已完成 |
 | XMSettingsSection | `xmnote/UIComponents/Settings/XMSettingsSection.swift` | `docs/component-guides/XMSettingsComponents使用说明.md` | 已完成 |
 | XMSettingsGroup | `xmnote/UIComponents/Settings/XMSettingsGroup.swift` | `docs/component-guides/XMSettingsComponents使用说明.md` | 已完成 |
@@ -30,13 +33,15 @@
 | XMSettingsValueMenuRow | `xmnote/UIComponents/Settings/XMSettingsRows.swift` | `docs/component-guides/XMSettingsComponents使用说明.md` | 已完成 |
 | XMSettingsToggleRow | `xmnote/UIComponents/Settings/XMSettingsRows.swift` | `docs/component-guides/XMSettingsComponents使用说明.md` | 已完成 |
 | XMSheetScaffold | `xmnote/UIComponents/Sheet/XMSheetScaffold.swift` | `docs/component-guides/XMSheetScaffold使用说明.md` | 已完成 |
-| NoteReviewPagingDeck | `xmnote/UIComponents/Foundation/NoteReviewPaging/NoteReviewPagingDeck.swift` | `docs/component-guides/NoteReviewPagingDeck使用说明.md` | 已完成 |
-| TopSwitcher | `xmnote/UIComponents/Tabs/TopSwitcher.swift` | `docs/component-guides/TopSwitcher使用说明.md` | 已完成 |
-| XMInlineTabBar | `xmnote/UIComponents/Tabs/XMInlineTabBar.swift` | `docs/component-guides/XMInlineTabBar使用说明.md` | 已完成 |
-| KeepAliveSwitcherHost | `xmnote/UIComponents/Tabs/KeepAliveSwitcherHost.swift` | `docs/component-guides/KeepAliveSwitcherHost使用说明.md` | 已完成 |
-| HomeSubtabScaffold | `xmnote/UIComponents/Tabs/HomeSubtabScaffold.swift` | `docs/component-guides/HomeSubtabScaffold使用说明.md` | 已完成 |
-| XMJXImageWall | `xmnote/UIComponents/GalleryJX/XMJXImageWall.swift` | `docs/component-guides/XMJXImageWall使用说明.md` | 已完成 |
-| XMJXThumbnailView | `xmnote/UIComponents/GalleryJX/XMJXThumbnailView.swift` | `docs/component-guides/XMJXThumbnailView使用说明.md` | 已完成 |
+| NoteReviewPagingDeck | `xmnote/Views/Note/Components/NoteReviewPaging/NoteReviewPagingDeck.swift` | `docs/component-guides/NoteReviewPagingDeck使用说明.md` | 页面私有 |
+| TopSwitcher | `xmnote/UIComponents/Navigation/Tabs/TopSwitcher.swift` | `docs/component-guides/TopSwitcher使用说明.md` | 已完成 |
+| XMInlineTabBar | `xmnote/Views/Note/Components/XMInlineTabBar.swift` | `docs/component-guides/XMInlineTabBar使用说明.md` | 页面私有 |
+| KeepAliveSwitcherHost | `xmnote/UIComponents/Navigation/Tabs/KeepAliveSwitcherHost.swift` | `docs/component-guides/KeepAliveSwitcherHost使用说明.md` | 已完成 |
+| HorizontalPagingHost | `xmnote/UIComponents/Navigation/Tabs/HorizontalPagingHost.swift` | `docs/component-guides/HorizontalPagingHost使用说明.md` | 已完成 |
+| HomeSubtabScaffold | `xmnote/Views/Book/Components/HomeSubtabScaffold.swift` | `docs/component-guides/HomeSubtabScaffold使用说明.md` | 页面私有 |
+| SubtabBootstrapCoordinator | `xmnote/ViewModels/Reading/SubtabBootstrapCoordinator.swift` | `docs/component-guides/SubtabBootstrapCoordinator使用说明.md` | 功能支持 |
+| XMJXImageWall | `xmnote/UIComponents/Media/GalleryJX/XMJXImageWall.swift` | `docs/component-guides/XMJXImageWall使用说明.md` | 已完成 |
+| XMJXThumbnailView | `xmnote/UIComponents/Media/GalleryJX/XMJXThumbnailView.swift` | `docs/component-guides/XMJXThumbnailView使用说明.md` | 已完成 |
 | BookContainerView | `xmnote/Views/Book/BookContainerView.swift` | `docs/component-guides/BookContainerView使用说明.md` | 已完成 |
 | BookGridView | `xmnote/Views/Book/BookGridView.swift` | `docs/component-guides/BookGridView使用说明.md` | 已完成 |
 | BookGridItemView | `xmnote/Views/Book/BookGridItemView.swift` | `docs/component-guides/BookGridItemView使用说明.md` | 已完成 |
@@ -64,7 +69,8 @@
 | SourceManagementView | `xmnote/Views/Personal/SourceManagementView.swift` | `docs/component-guides/SourceManagementView使用说明.md` | 已完成 |
 
 维护规则
-- 重要 UI 组件完成开发后，必须在本索引新增或更新条目。
-- 条目必须与 `docs/architecture/UI组件文档清单.md` 保持一致。
+- 本索引覆盖全部组件指南，可同时记录公共组件、页面私有组件和功能支持类型。
+- `docs/architecture/UI组件文档清单.md` 是公共关键组件与核心页面的强制登记子集；其中存在的条目必须与本索引保持一致。
+- 公共组件的完整分类、状态和 Preview 策略以 `scripts/design-system/component-catalog.json` 为准。
 
 [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md

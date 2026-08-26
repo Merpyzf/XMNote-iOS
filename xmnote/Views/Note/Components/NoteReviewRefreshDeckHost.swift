@@ -688,7 +688,7 @@ private enum NoteReviewBottomLayout {
     static let deckBottomPadding = Spacing.none
     static let actionRowSpacing = Spacing.cozy
     static let actionRowBottomPadding = Spacing.section
-    static let actionRowMinHeight: CGFloat = 44
+    static let actionRowMinHeight: CGFloat = InteractionMetrics.minimumTouchTarget
 }
 
 /// 操作栏按整组选择横排或上下排列，避免单项独立折行造成视觉节奏混杂。

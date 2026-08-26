@@ -1,5 +1,5 @@
 /**
- * [INPUT]: 依赖 HeatmapDay/HeatmapLevel/HeatmapStatisticsDataType/HeatmapBookState 纯值模型与 XMNote 语义颜色
+ * [INPUT]: 依赖 HeatmapDay/HeatmapLevel/HeatmapStatisticsDataType/HeatmapBookState 纯值模型与 ReadingStatusPresentation
  * [OUTPUT]: 对外提供热力图领域值的展示文案、状态颜色与分段颜色映射
  * [POS]: UIComponents/Charts 的领域到视觉适配层，阻止 Domain 反向依赖 SwiftUI
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -20,13 +20,7 @@ extension HeatmapStatisticsDataType {
 
 extension HeatmapBookState {
     var color: Color {
-        switch self {
-        case .wantRead: .statusWish
-        case .reading: .statusReading
-        case .readDone: .statusDone
-        case .onHold: .statusOnHold
-        case .abandon: .statusAbandoned
-        }
+        ReadingStatusPresentation.color(for: Int64(rawValue)) ?? .textHint
     }
 
     var title: String {

@@ -97,10 +97,10 @@
 - 遵循 iOS Human Interface Guidelines，保证业务一致，但采用 iOS 原生表达。
 
 #### 设计系统工程入口（强制）
-- 设计系统架构、依赖方向、组件边界与例外流程以 `docs/architecture/iOS设计系统工程规范.md` 为权威说明；代码真相源位于 `xmnote/Utilities/DesignSystem/`、`xmnote/UIComponents/Settings/` 与 `xmnote/UIComponents/Sheet/`。
+- 设计系统架构、依赖方向、组件边界与例外流程以 `docs/architecture/iOS设计系统工程规范.md` 为权威说明；令牌真相源位于 `xmnote/Utilities/DesignSystem/`，公共组件真相源位于 `xmnote/UIComponents/`，机器目录位于 `scripts/design-system/component-catalog.json`。
 - 修改生产 UI 前，先执行 `python3 scripts/design-system/ds.py context --paths <相关 Swift 路径>` 获取当前规则与正确入口；查找公共组件使用 `python3 scripts/design-system/ds.py catalog [--symbol <名称>]`，禁止仅凭文件名猜测或新建同类实现。
 - 开发中执行 `python3 scripts/design-system/ds.py lint --changed`；规则不清楚时执行 `python3 scripts/design-system/ds.py explain <规则ID>`；收口执行 `python3 scripts/design-system/ds.py audit`。`Makefile.parallel-ios` 的 `ai-build` 与 Git pre-commit 已接入变更范围检查，不得绕过。
-- `DS001`–`DS007` 为阻断规则；`DSR001`–`DSR003` 为需结合上下文判断的观察项。当前 enforced 基线必须保持 0；禁止用扩大排除范围、降级规则或写入新 baseline 的方式消除失败。规则误报必须以最小复现补充工具测试后修正规则。
+- `DS001`–`DS011` 为阻断规则；`DSR001`–`DSR003` 为需结合上下文判断的观察项。当前 enforced 基线必须保持 0；禁止用扩大排除范围、降级规则或写入新 baseline 的方式消除失败。规则误报必须以最小复现补充工具测试后修正规则。
 - 配置类页面使用 `XMSettingsPage + XMSettingsSection + XMSettingsGroup` 组合，已证明复用的行仅使用 `XMSettingsToggleRow` 与 `XMSettingsValueMenuRow`；业务差异保留在页面私有组合中，禁止新增参数膨胀的万能设置行。
 - 通用业务 Sheet 使用 `XMSheetScaffold`；标题栏、滚动回弹、固定顶栏/底栏由 scaffold 统一，业务状态与业务控件仍由功能模块持有，禁止 `AnyView` 类型擦除。
 - 新增全局 token 或跨模块组件前，必须证明至少两个独立生产场景具有相同语义、相同根因与相同复用方式；单页差异优先使用页面级组合常量或私有子视图。

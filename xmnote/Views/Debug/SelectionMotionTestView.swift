@@ -111,7 +111,7 @@ struct SelectionMotionTestView: View {
         HStack(spacing: Spacing.cozy) {
             Image(systemName: reduceMotion ? "figure.walk.motion.trianglebadge.exclamationmark" : "figure.walk.motion")
                 .font(AppTypography.body)
-                .foregroundStyle(reduceMotion ? Color.textSecondary : Color.brand)
+                .foregroundStyle(reduceMotion ? Color.textSecondary : Color.appTint)
                 .frame(width: 24)
 
             VStack(alignment: .leading, spacing: Spacing.tiny) {
@@ -151,14 +151,14 @@ struct SelectionMotionTestView: View {
                         }
                         .frame(maxWidth: .infinity, minHeight: 70)
                         .background(
-                            styleSelections.contains(style) ? Color.brand.opacity(0.08) : Color.controlFillSecondary.opacity(0.72),
+                            styleSelections.contains(style) ? Color.selectionAccent.opacity(0.08) : Color.controlFillSecondary.opacity(0.72),
                             in: RoundedRectangle(cornerRadius: CornerRadius.blockMedium, style: .continuous)
                         )
                         .overlay {
                             RoundedRectangle(cornerRadius: CornerRadius.blockMedium, style: .continuous)
                                 .stroke(
-                                    styleSelections.contains(style) ? Color.brand.opacity(0.28) : Color.surfaceBorderSubtle,
-                                    lineWidth: CardStyle.borderWidth
+                                    styleSelections.contains(style) ? Color.selectionAccent.opacity(0.28) : Color.surfaceBorderSubtle,
+                                    lineWidth: StrokeWidth.hairline
                                 )
                         }
                     }
@@ -241,14 +241,14 @@ struct SelectionMotionTestView: View {
             }
             .padding(Spacing.base)
             .background(
-                businessSelection ? Color.brand.opacity(0.06) : Color.surfaceCard,
+                businessSelection ? Color.selectionAccent.opacity(0.06) : Color.surfaceCard,
                 in: RoundedRectangle(cornerRadius: CornerRadius.blockLarge, style: .continuous)
             )
             .overlay {
                 RoundedRectangle(cornerRadius: CornerRadius.blockLarge, style: .continuous)
                     .stroke(
-                        businessSelection ? Color.brand.opacity(0.30) : Color.surfaceBorderSubtle,
-                        lineWidth: CardStyle.borderWidth
+                        businessSelection ? Color.selectionAccent.opacity(0.30) : Color.surfaceBorderSubtle,
+                        lineWidth: StrokeWidth.hairline
                     )
             }
             .animation(containerAnimation, value: businessSelection)
@@ -313,9 +313,9 @@ struct SelectionMotionTestView: View {
         Button(action: action) {
             Text(title)
                 .font(AppTypography.captionSemibold)
-                .foregroundStyle(Color.brand)
+                .foregroundStyle(Color.appTint)
                 .frame(maxWidth: .infinity, minHeight: 36)
-                .background(Color.brand.opacity(0.08), in: Capsule())
+                .background(Color.appTint.opacity(0.08), in: Capsule())
         }
         .buttonStyle(.plain)
     }
@@ -437,14 +437,14 @@ private struct SelectionMotionDemoRow: View {
             }
             .padding(Spacing.base)
             .background(
-                isSelected ? Color.brand.opacity(0.06) : Color.controlFillSecondary.opacity(0.70),
+                isSelected ? Color.selectionAccent.opacity(0.06) : Color.controlFillSecondary.opacity(0.70),
                 in: RoundedRectangle(cornerRadius: CornerRadius.blockMedium, style: .continuous)
             )
             .overlay {
                 RoundedRectangle(cornerRadius: CornerRadius.blockMedium, style: .continuous)
                     .stroke(
-                        isSelected ? Color.brand.opacity(0.26) : Color.surfaceBorderSubtle,
-                        lineWidth: CardStyle.borderWidth
+                        isSelected ? Color.selectionAccent.opacity(0.26) : Color.surfaceBorderSubtle,
+                        lineWidth: StrokeWidth.hairline
                     )
             }
             .contentShape(Rectangle())

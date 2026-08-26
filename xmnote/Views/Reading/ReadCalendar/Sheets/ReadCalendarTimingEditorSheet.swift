@@ -80,7 +80,7 @@ struct ReadCalendarTimingEditorSheet: View {
                             XMBookCover.fixedWidth(
                                 34,
                                 urlString: selectedBook.coverURL,
-                                border: .init(color: .surfaceBorderDefault, width: CardStyle.borderWidth)
+                                border: .init(color: .surfaceBorderDefault, width: StrokeWidth.hairline)
                             )
                             Text(selectedBook.title)
                                 .font(AppTypography.body)

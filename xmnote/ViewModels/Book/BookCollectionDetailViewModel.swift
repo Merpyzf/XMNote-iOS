@@ -1,5 +1,5 @@
 /**
- * [INPUT]: 依赖 BookshelfRepositoryProtocol 的书单详情观察流与 collection_book 写入能力，依赖 S3UploadRepositoryProtocol 承接书单内封面图片上传，依赖 XMCoverImageLoading 加载分享图真实封面
+ * [INPUT]: 依赖 BookshelfRepositoryProtocol 的书单详情观察流与 collection_book 写入能力，依赖 S3UploadRepositoryProtocol 承接书单内封面图片上传，依赖 XMCoverImageLoading 与 AppTypography 生成分享图真实封面和排版
  * [OUTPUT]: 对外提供 BookCollectionDetailViewModel，驱动书单详情、添加书籍、移除、relation 文本编辑、书籍元信息编辑与真实封面分享反馈
  * [POS]: ViewModels/Book 的书单详情状态编排器，被 BookCollectionDetailView 消费
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -49,6 +49,63 @@ enum BookCollectionBookMetadataEditError: LocalizedError {
         case .missingCoverUploadConfiguration:
             return "封面上传服务暂不可用，请稍后再试"
         }
+    }
+}
+
+/// 书单分享图固定画布的排版 owner，集中保留既有字号、字重与信息层级。
+@MainActor
+private enum BookCollectionShareImageTypography {
+    private static let canvasTraits = UITraitCollection(preferredContentSizeCategory: .large)
+
+    /// 固定分享画布的字体保持默认 Large 尺寸，避免设备辅助功能字号改变导出排版。
+    private static func font(
+        size: CGFloat,
+        textStyle: UIFont.TextStyle,
+        weight: UIFont.Weight = .regular
+    ) -> UIFont {
+        AppTypography.uiFixed(
+            baseSize: size,
+            textStyle: textStyle,
+            weight: weight,
+            minimumPointSize: size,
+            compatibleWith: canvasTraits
+        )
+    }
+
+    static var title: UIFont {
+        font(size: 48, textStyle: .largeTitle, weight: .semibold)
+    }
+
+    static var subtitle: UIFont {
+        font(size: 28, textStyle: .title3)
+    }
+
+    static var pageSubtitle: UIFont {
+        font(size: 26, textStyle: .title3, weight: .medium)
+    }
+
+    static var pageNumber: UIFont {
+        font(size: 24, textStyle: .caption1)
+    }
+
+    static var bookTitle: UIFont {
+        font(size: 32, textStyle: .title2, weight: .semibold)
+    }
+
+    static var bookMetadata: UIFont {
+        font(size: 23, textStyle: .subheadline)
+    }
+
+    static var rating: UIFont {
+        font(size: 22, textStyle: .subheadline, weight: .semibold)
+    }
+
+    static var relationNote: UIFont {
+        font(size: 22, textStyle: .body)
+    }
+
+    static var coverInitial: UIFont {
+        font(size: 26, textStyle: .title3, weight: .semibold)
     }
 }
 
@@ -588,12 +645,12 @@ final class BookCollectionDetailViewModel {
             UIColor.secondarySystemBackground.setFill()
             UIBezierPath(roundedRect: CGRect(x: 56, y: 56, width: width - 112, height: height - 112), cornerRadius: 44).fill()
 
-            draw(displayTitle(for: detail), at: CGPoint(x: 104, y: 104), width: width - 208, font: .systemFont(ofSize: 48, weight: .semibold), color: .label)
+            draw(displayTitle(for: detail), at: CGPoint(x: 104, y: 104), width: width - 208, font: BookCollectionShareImageTypography.title, color: .label)
             let subtitle = detail.description.trimmingCharacters(in: .whitespacesAndNewlines)
             if !subtitle.isEmpty {
-                draw(subtitle, at: CGPoint(x: 104, y: 174), width: width - 208, font: .systemFont(ofSize: 28, weight: .regular), color: .secondaryLabel)
+                draw(subtitle, at: CGPoint(x: 104, y: 174), width: width - 208, font: BookCollectionShareImageTypography.subtitle, color: .secondaryLabel)
             }
-            draw(page.subtitle(for: detail), at: CGPoint(x: 104, y: 244), width: width - 208, font: .systemFont(ofSize: 26, weight: .medium), color: .secondaryLabel)
+            draw(page.subtitle(for: detail), at: CGPoint(x: 104, y: 244), width: width - 208, font: BookCollectionShareImageTypography.pageSubtitle, color: .secondaryLabel)
 
             var y = shareImageRowsStartY
             for item in page.books {
@@ -607,7 +664,7 @@ final class BookCollectionDetailViewModel {
                 y += rowHeight
             }
             if page.pageCount > 1 {
-                draw("第 \(page.pageIndex + 1) / \(page.pageCount) 页", at: CGPoint(x: 104, y: y + 16), width: width - 208, font: .systemFont(ofSize: 24, weight: .regular), color: .tertiaryLabel)
+                draw("第 \(page.pageIndex + 1) / \(page.pageCount) 页", at: CGPoint(x: 104, y: y + 16), width: width - 208, font: BookCollectionShareImageTypography.pageNumber, color: .tertiaryLabel)
             }
         }
     }
@@ -666,7 +723,7 @@ final class BookCollectionDetailViewModel {
             item.book.title.isEmpty ? "未命名书籍" : item.book.title,
             at: CGPoint(x: textX, y: y + 2),
             width: titleWidth,
-            font: .systemFont(ofSize: 32, weight: .semibold),
+            font: BookCollectionShareImageTypography.bookTitle,
             color: .label,
             maxLines: 1
         )
@@ -678,7 +735,7 @@ final class BookCollectionDetailViewModel {
                 bookInfo,
                 at: CGPoint(x: textX, y: metadataY),
                 width: titleWidth,
-                font: .systemFont(ofSize: 23, weight: .regular),
+                font: BookCollectionShareImageTypography.bookMetadata,
                 color: .secondaryLabel,
                 maxLines: 1
             )
@@ -689,7 +746,7 @@ final class BookCollectionDetailViewModel {
                 "评分 \(ratingText(for: item.book.score))",
                 at: CGPoint(x: textX, y: metadataY),
                 width: titleWidth,
-                font: .systemFont(ofSize: 22, weight: .semibold),
+                font: BookCollectionShareImageTypography.rating,
                 color: UIColor.xmSRGB(red: 1, green: 197.0 / 255.0, blue: 0, alpha: 1),
                 maxLines: 1
             )
@@ -701,7 +758,7 @@ final class BookCollectionDetailViewModel {
                 "\(relationNoteTitle(for: detailKind))：\(note)",
                 at: CGPoint(x: textX, y: metadataY),
                 width: titleWidth,
-                font: .systemFont(ofSize: 22, weight: .regular),
+                font: BookCollectionShareImageTypography.relationNote,
                 color: .secondaryLabel,
                 maxLines: 2
             )
@@ -724,7 +781,7 @@ final class BookCollectionDetailViewModel {
                 initial,
                 at: CGPoint(x: rect.minX + 18, y: rect.minY + 36),
                 width: 40,
-                font: .systemFont(ofSize: 26, weight: .semibold),
+                font: BookCollectionShareImageTypography.coverInitial,
                 color: .secondaryLabel,
                 maxLines: 1
             )

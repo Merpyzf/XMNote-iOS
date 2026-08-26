@@ -321,7 +321,7 @@ private struct ReviewEditorForm: View {
                             attributedText: $viewModel.contentText,
                             activeFormats: $viewModel.activeFormats,
                             placeholder: "写下你的书评…",
-                            baseFont: AppTypography.uiSemantic(.body)
+                            baseFont: ContentEditorTypography.richTextBodyUIFont
                         )
                         .frame(minHeight: 280)
                         .padding(.horizontal, Spacing.half)

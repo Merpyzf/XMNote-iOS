@@ -8,6 +8,12 @@ import SwiftUI
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
+/// 顶部操作实验中只承担视觉组合的固定布局尺寸。
+private enum TopBarActionLabLayout {
+    static let actionGroupHeight: CGFloat = 44
+    static let segmentWidth: CGFloat = 44
+}
+
 struct TopBarActionStyleLabTestView: View {
     @State private var selectedCandidate: TopBarActionLabCandidate = .baseline
     @State private var selectedContext: TopBarActionLabContext = .review
@@ -122,10 +128,10 @@ private struct TopBarActionLabPinnedPreview: View {
                 if isModified {
                     Text("已调整")
                         .font(AppTypography.caption2Semibold)
-                        .foregroundStyle(Color.brandDeep)
+                        .foregroundStyle(Color.selectionForeground)
                         .padding(.horizontal, Spacing.half)
                         .padding(.vertical, 4)
-                        .background(Color.brand.opacity(0.10), in: Capsule())
+                        .background(Color.selectionAccent.opacity(0.10), in: Capsule())
                 }
             }
 
@@ -191,7 +197,7 @@ private struct TopBarActionLabPreviewStage: View {
         .clipShape(.rect(cornerRadius: CornerRadius.blockLarge, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: CornerRadius.blockLarge, style: .continuous)
-                .stroke(Color.surfaceBorderSubtle, lineWidth: CardStyle.borderWidth)
+                .stroke(Color.surfaceBorderSubtle, lineWidth: StrokeWidth.hairline)
         }
         .accessibilityIdentifier("debug.topbar.action-pill.preview")
     }
@@ -287,7 +293,7 @@ private struct TopBarActionLabCandidateCard: View {
     var body: some View {
         CardContainer(
             showsBorder: true,
-            borderColor: isSelected ? Color.brand.opacity(0.52) : Color.surfaceBorderSubtle
+            borderColor: isSelected ? Color.selectionAccent.opacity(0.52) : Color.surfaceBorderSubtle
         ) {
             VStack(alignment: .leading, spacing: Spacing.cozy) {
                 HStack(alignment: .top, spacing: Spacing.half) {
@@ -300,10 +306,10 @@ private struct TopBarActionLabCandidateCard: View {
                             if candidate == .clear && !isModified {
                                 Text("已采用")
                                     .font(AppTypography.caption2Semibold)
-                                    .foregroundStyle(Color.brandDeep)
+                                    .foregroundStyle(Color.selectionForeground)
                                     .padding(.horizontal, Spacing.half)
                                     .padding(.vertical, 3)
-                                    .background(Color.brand.opacity(0.10), in: Capsule())
+                                    .background(Color.selectionAccent.opacity(0.10), in: Capsule())
                             }
 
                             if isModified {
@@ -325,8 +331,11 @@ private struct TopBarActionLabCandidateCard: View {
                         Label(isSelected ? "正在查看" : "查看", systemImage: isSelected ? "checkmark.circle.fill" : "circle")
                             .labelStyle(.iconOnly)
                             .font(AppTypography.body)
-                            .foregroundStyle(isSelected ? Color.brand : Color.textSecondary)
-                            .frame(width: Spacing.actionReserved, height: Spacing.actionReserved)
+                            .foregroundStyle(isSelected ? Color.selectionAccent : Color.textSecondary)
+                            .frame(
+                                width: InteractionMetrics.minimumTouchTarget,
+                                height: InteractionMetrics.minimumTouchTarget
+                            )
                             .contentShape(Circle())
                     }
                     .buttonStyle(.plain)
@@ -350,7 +359,7 @@ private struct TopBarActionLabCandidateCard: View {
                 .clipShape(.rect(cornerRadius: CornerRadius.blockMedium, style: .continuous))
                 .overlay {
                     RoundedRectangle(cornerRadius: CornerRadius.blockMedium, style: .continuous)
-                        .stroke(Color.surfaceBorderSubtle.opacity(0.55), lineWidth: CardStyle.borderWidth)
+                        .stroke(Color.surfaceBorderSubtle.opacity(0.55), lineWidth: StrokeWidth.hairline)
                 }
             }
             .padding(Spacing.contentEdge)
@@ -400,7 +409,7 @@ private struct TopBarActionLabAdvancedSection: View {
                     if isModified {
                         Text("已调整")
                             .font(AppTypography.caption2Semibold)
-                            .foregroundStyle(Color.brandDeep)
+                            .foregroundStyle(Color.selectionForeground)
                     }
                 }
             }
@@ -511,11 +520,11 @@ private struct TopBarActionLabSliderRow: View {
 
                 Text(verbatim: formattedValue)
                     .font(AppTypography.caption2Semibold)
-                    .foregroundStyle(Color.brandDeep)
+                    .foregroundStyle(Color.selectionForeground)
             }
 
             Slider(value: $value, in: range, step: step)
-                .tint(Color.brand)
+                .tint(Color.appTint)
         }
     }
 
@@ -618,7 +627,7 @@ private struct TopBarActionLabActionGroup: View {
                 context: context,
                 iconSize: parameters.plusIconSize,
                 iconOpacity: parameters.iconOpacity,
-                labelHeight: Spacing.actionReserved,
+                labelHeight: InteractionMetrics.minimumTouchTarget,
                 style: .productionSegment
             )
         } trailing: {
@@ -627,7 +636,7 @@ private struct TopBarActionLabActionGroup: View {
                 context: context,
                 iconSize: parameters.trailingIconSize,
                 iconOpacity: parameters.iconOpacity,
-                labelHeight: Spacing.actionReserved,
+                labelHeight: InteractionMetrics.minimumTouchTarget,
                 style: .productionSegment
             )
         }
@@ -640,14 +649,14 @@ private struct TopBarActionLabActionGroup: View {
                 context: context,
                 iconSize: parameters.plusIconSize,
                 iconOpacity: parameters.iconOpacity,
-                labelHeight: Spacing.actionReserved,
+                labelHeight: InteractionMetrics.minimumTouchTarget,
                 style: .plain
             )
 
             if parameters.showsDivider {
                 Rectangle()
                     .fill(Color.primary.opacity(parameters.dividerOpacity))
-                    .frame(width: CardStyle.borderWidth, height: CGFloat(parameters.dividerHeight))
+                    .frame(width: StrokeWidth.hairline, height: CGFloat(parameters.dividerHeight))
                     .accessibilityHidden(true)
             }
 
@@ -656,12 +665,12 @@ private struct TopBarActionLabActionGroup: View {
                 context: context,
                 iconSize: parameters.trailingIconSize,
                 iconOpacity: parameters.iconOpacity,
-                labelHeight: Spacing.actionReserved,
+                labelHeight: InteractionMetrics.minimumTouchTarget,
                 style: .plain
             )
         }
         .padding(.horizontal, 2)
-        .frame(height: Spacing.actionReserved)
+        .frame(height: TopBarActionLabLayout.actionGroupHeight)
         .background {
             TopBarActionLabSingleGlassBackground(parameters: parameters)
         }
@@ -674,7 +683,7 @@ private struct TopBarActionLabActionGroup: View {
                 unionControl(role: .trailing, iconSize: parameters.trailingIconSize)
             }
         }
-        .frame(height: Spacing.actionReserved)
+        .frame(height: TopBarActionLabLayout.actionGroupHeight)
     }
 
     private func unionControl(role: TopBarActionLabMenuRole, iconSize: Double) -> some View {
@@ -686,10 +695,13 @@ private struct TopBarActionLabActionGroup: View {
             labelHeight: parameters.pillHeight,
             style: .plain
         )
-        .frame(width: Spacing.actionReserved, height: CGFloat(parameters.pillHeight))
+        .frame(width: TopBarActionLabLayout.segmentWidth, height: CGFloat(parameters.pillHeight))
         .modifier(TopBarActionLabInteractiveGlassModifier(variant: parameters.glassVariant))
         .glassEffectUnion(id: "top-bar-action-pill", namespace: unionNamespace)
-        .frame(width: Spacing.actionReserved, height: Spacing.actionReserved)
+        .frame(
+            width: InteractionMetrics.minimumTouchTarget,
+            height: InteractionMetrics.minimumTouchTarget
+        )
     }
 }
 
@@ -740,12 +752,15 @@ private struct TopBarActionLabMenuControl: View {
             Image(systemName: systemImage)
                 .font(.system(size: CGFloat(iconSize), weight: .medium))
                 .foregroundStyle(Color.iconPrimary.opacity(iconOpacity))
-                .frame(width: Spacing.actionReserved, height: CGFloat(labelHeight))
+                .frame(width: TopBarActionLabLayout.segmentWidth, height: CGFloat(labelHeight))
                 .contentShape(Rectangle())
         }
         .xmMenuNeutralTint()
         .menuOrder(.fixed)
-        .frame(width: Spacing.actionReserved, height: Spacing.actionReserved)
+        .frame(
+            width: InteractionMetrics.minimumTouchTarget,
+            height: InteractionMetrics.minimumTouchTarget
+        )
         .contentShape(Rectangle())
         .accessibilityLabel(accessibilityLabel)
     }
@@ -817,14 +832,14 @@ private struct TopBarActionLabContentSample: View {
         .clipShape(.rect(cornerRadius: CornerRadius.blockLarge, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: CornerRadius.blockLarge, style: .continuous)
-                .stroke(Color.surfaceBorderSubtle.opacity(0.58), lineWidth: CardStyle.borderWidth)
+                .stroke(Color.surfaceBorderSubtle.opacity(0.58), lineWidth: StrokeWidth.hairline)
         }
     }
 
     private var reviewCard: some View {
         VStack(alignment: .leading, spacing: Spacing.cozy) {
             Text("我们往往会陷入一种奇怪的期待：一个人在某一方面登峰造极，于是就幻想他在各方面都无可挑剔。")
-                .font(NoteExcerptTypography.body)
+                .font(ReadingContentTypography.body)
                 .foregroundStyle(Color.textPrimary)
                 .lineLimit(3)
             Text("🧐 观点")
@@ -844,16 +859,16 @@ private struct TopBarActionLabContentSample: View {
     private var notesCard: some View {
         VStack(alignment: .leading, spacing: Spacing.cozy) {
             Text("书摘正文是列表中的第一阅读层级，想法与来源信息保持克制。")
-                .font(NoteExcerptTypography.body)
+                .font(ReadingContentTypography.body)
                 .foregroundStyle(Color.textPrimary)
                 .lineLimit(2)
             Text("想法：好的工具应该帮助我们更快回到内容本身。")
-                .font(NoteExcerptTypography.idea)
+                .font(ReadingContentTypography.annotation)
                 .foregroundStyle(Color.textSecondary)
                 .lineLimit(2)
             Spacer(minLength: 0)
             Text("今天 00:29 · 纸间书摘")
-                .font(NoteExcerptTypography.footer)
+                .font(ReadingContentTypography.metadata)
                 .foregroundStyle(Color.textSecondary)
         }
         .padding(Spacing.contentEdge)

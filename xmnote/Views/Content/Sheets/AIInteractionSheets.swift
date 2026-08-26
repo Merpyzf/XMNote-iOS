@@ -1,5 +1,5 @@
 /**
- * [INPUT]: 依赖 AITextResultViewModel/AIAutoTagViewModel、AIRepositoryProtocol、AIMarkdownResultView、系统 Sheet/Liquid Glass、LoadingGate 与现有反馈组件
+ * [INPUT]: 依赖 AITextResultViewModel/AIAutoTagViewModel、AIRepositoryProtocol、AIMarkdownResultView、系统 Sheet/Liquid Glass、LoadingGate、xmMinimumHitTarget 与现有反馈组件
  * [OUTPUT]: 对外提供 AITextResultSheet 与 AIAutoTagSheet，承接流式 Markdown 结果、克制等待态、模型切换、固定底部品牌确认操作、编辑器请求交接和 AI 标签确认写回生命周期
  * [POS]: Views/Content/Sheets 的 AI 业务 Sheet，被通用 viewer 及单页详情入口复用
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -10,6 +10,7 @@ import SwiftUI
 private enum AIInteractionSheetLayout {
     static let titleHorizontalReserve = InteractionMetrics.minimumTouchTarget + Spacing.base
     static let chromeMinHeight = InteractionMetrics.minimumTouchTarget
+    static let headerActionSlotSize: CGFloat = InteractionMetrics.minimumTouchTarget
     static let closeVisualSize: CGFloat = 32
     static let closeFillOpacity = 0.82
 }
@@ -219,7 +220,10 @@ struct AITextResultSheet: View {
         ZStack {
             HStack {
                 Color.clear
-                    .frame(width: Spacing.actionReserved, height: Spacing.actionReserved)
+                    .frame(
+                        width: AIInteractionSheetLayout.headerActionSlotSize,
+                        height: AIInteractionSheetLayout.headerActionSlotSize
+                    )
 
                 Spacer(minLength: Spacing.none)
 
@@ -266,7 +270,7 @@ struct AITextResultSheet: View {
                 .foregroundStyle(Color.textSecondary)
                 .lineLimit(1)
                 .truncationMode(.middle)
-                .contentShape(.interaction, ModelMenuHitShape())
+                .xmMinimumHitTarget(anchor: .top)
         }
         .buttonStyle(.plain)
         .disabled(viewModel.availableProviders.isEmpty || viewModel.isSwitchingModel)
@@ -297,7 +301,10 @@ struct AITextResultSheet: View {
                 Color.controlFillSecondary.opacity(AIInteractionSheetLayout.closeFillOpacity),
                 in: Circle()
             )
-            .frame(width: Spacing.actionReserved, height: Spacing.actionReserved)
+            .frame(
+                width: InteractionMetrics.minimumTouchTarget,
+                height: InteractionMetrics.minimumTouchTarget
+            )
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -441,24 +448,6 @@ private struct AIGenerationWaitingView: View {
             .foregroundStyle(Color.textSecondary)
             .fixedSize(horizontal: false, vertical: true)
             .accessibilityLabel("正在生成 AI 释义")
-    }
-}
-
-/// 模型副标题的交互形状只向下补足命中高度，避免热区改变视觉排版或覆盖标题。
-private struct ModelMenuHitShape: Shape {
-    private let minimumSize = Spacing.actionReserved
-
-    /// 以文本顶部为锚点生成至少 44pt 的命中矩形，保持短文本可触达且不扩大布局尺寸。
-    func path(in rect: CGRect) -> Path {
-        let width = max(rect.width, minimumSize)
-        let height = max(rect.height, minimumSize)
-        let hitRect = CGRect(
-            x: rect.midX - width / 2,
-            y: rect.minY,
-            width: width,
-            height: height
-        )
-        return Path(hitRect)
     }
 }
 
@@ -638,7 +627,10 @@ struct AIAutoTagSheet: View {
         ZStack {
             HStack {
                 Color.clear
-                    .frame(width: Spacing.actionReserved, height: Spacing.actionReserved)
+                    .frame(
+                        width: AIInteractionSheetLayout.headerActionSlotSize,
+                        height: AIInteractionSheetLayout.headerActionSlotSize
+                    )
 
                 Spacer(minLength: Spacing.none)
 
@@ -682,7 +674,10 @@ struct AIAutoTagSheet: View {
                 Color.controlFillSecondary.opacity(AIInteractionSheetLayout.closeFillOpacity),
                 in: Circle()
             )
-            .frame(width: Spacing.actionReserved, height: Spacing.actionReserved)
+            .frame(
+                width: InteractionMetrics.minimumTouchTarget,
+                height: InteractionMetrics.minimumTouchTarget
+            )
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -872,12 +867,12 @@ private struct AIAutoTagSuggestionRow: View {
 
             Image(systemName: "checkmark")
                 .font(AppTypography.subheadlineSemibold)
-                .foregroundStyle(Color.brand)
+                .foregroundStyle(Color.appTint)
                 .opacity(suggestion.isSelected ? 1 : 0)
                 .frame(width: Spacing.section)
                 .accessibilityHidden(true)
         }
-        .frame(minHeight: Spacing.actionReserved)
+        .frame(minHeight: InteractionMetrics.minimumTouchTarget)
         .padding(.vertical, Spacing.cozy)
         .contentShape(Rectangle())
         .accessibilityElement(children: .ignore)

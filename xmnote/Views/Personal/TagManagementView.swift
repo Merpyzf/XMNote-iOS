@@ -208,7 +208,7 @@ private struct TagManagementContentView: View {
     @State private var readLoadingGate = LoadingGate()
     @State private var measuredScopeSelectorHeight: CGFloat?
     @ScaledMetric(relativeTo: .subheadline)
-    private var defaultScopeSelectorTouchHeight = Spacing.actionReserved
+    private var defaultScopeSelectorTouchHeight = InteractionMetrics.minimumTouchTarget
 
     var body: some View {
         tagGrid

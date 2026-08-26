@@ -7,6 +7,11 @@
 
 import SwiftUI
 
+/// 书籍选择页的局部强调排版，承接搜索结果中高亮字重的专属规格。
+private enum BookPickerTypography {
+    static let resultTitleHighlight = AppTypography.semantic(.subheadline, weight: .bold)
+}
+
 /// 通用书籍选择流入口，统一承接本地选择、在线搜索、新增入口与结果回填。
 struct BookPickerView: View {
     let configuration: BookPickerConfiguration
@@ -148,17 +153,16 @@ struct BookPickerView: View {
                             } label: {
                                 Text(source.title)
                                     .font(
-                                        AppTypography.semantic(
-                                            .footnote,
-                                            weight: viewModel.selectedOnlineSource == source ? .semibold : .medium
-                                        )
+                                        viewModel.selectedOnlineSource == source
+                                            ? AppTypography.footnoteSemibold
+                                            : AppTypography.footnoteMedium
                                     )
                                     .foregroundStyle(viewModel.selectedOnlineSource == source ? .white : Color.textSecondary)
                                     .padding(.horizontal, Spacing.base)
                                     .frame(height: 34)
                                     .background(
                                         viewModel.selectedOnlineSource == source
-                                            ? AnyShapeStyle(Color.brand)
+                                            ? AnyShapeStyle(Color.selectionAccent)
                                             : AnyShapeStyle(Color.controlFillSecondary),
                                         in: Capsule()
                                     )
@@ -166,7 +170,7 @@ struct BookPickerView: View {
                                         Capsule()
                                             .stroke(
                                                 viewModel.selectedOnlineSource == source ? Color.clear : Color.surfaceBorderSubtle,
-                                                lineWidth: CardStyle.borderWidth
+                                                lineWidth: StrokeWidth.hairline
                                             )
                                     }
                             }
@@ -374,7 +378,7 @@ struct BookPickerView: View {
                 .foregroundStyle(.white)
                 .padding(.horizontal, Spacing.contentEdge)
                 .padding(.vertical, Spacing.base)
-                .background(Color.brand, in: RoundedRectangle(cornerRadius: CornerRadius.blockMedium, style: .continuous))
+                .background(Color.primaryActionFill, in: RoundedRectangle(cornerRadius: CornerRadius.blockMedium, style: .continuous))
             }
             .buttonStyle(.plain)
             .disabled(viewModel.isResolvingRemoteSelections)
@@ -398,7 +402,7 @@ struct BookPickerView: View {
                 Button(primaryTitle, action: primaryAction)
                     .buttonStyle(.plain)
                     .font(AppTypography.subheadlineSemibold)
-                    .foregroundStyle(Color.brand)
+                    .foregroundStyle(Color.appTint)
             }
             if let secondaryTitle, let secondaryAction {
                 secondaryActionButton(secondaryTitle, action: secondaryAction)
@@ -557,7 +561,7 @@ private struct BookPickerLocalBookRow: View {
                 44,
                 urlString: book.coverURL,
                 cornerRadius: CornerRadius.inlayHairline,
-                border: .init(color: .surfaceBorderSubtle, width: CardStyle.borderWidth),
+                border: .init(color: .surfaceBorderSubtle, width: StrokeWidth.hairline),
                 placeholderIconSize: .small,
                 surfaceStyle: .spine
             )
@@ -567,7 +571,7 @@ private struct BookPickerLocalBookRow: View {
                     book.title,
                     keyword: keyword,
                     baseFont: AppTypography.subheadlineSemibold,
-                    highlightFont: AppTypography.semantic(.subheadline, weight: .bold),
+                    highlightFont: BookPickerTypography.resultTitleHighlight,
                     baseColor: Color.textPrimary
                 )
                     .lineLimit(1)

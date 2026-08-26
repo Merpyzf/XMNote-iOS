@@ -73,7 +73,7 @@ private struct AIConfigurationContentView: View {
                 Button(viewModel.isSaving ? "保存中…" : "保存") {
                     saveConfiguration()
                 }
-                .tint(Color.brand)
+                .tint(Color.primaryActionFill)
                 .disabled(!viewModel.canSave)
             }
         }
@@ -118,7 +118,7 @@ private struct AIConfigurationContentView: View {
                                 .fixedSize(horizontal: false, vertical: true)
                         }
                     }
-                    .tint(Color.brand)
+                    .tint(Color.appTint)
                     .frame(minHeight: XMSettingsPageLayout.detailRowMinHeight)
 
                     settingsDivider
@@ -149,7 +149,7 @@ private struct AIConfigurationContentView: View {
                     }
                     .frame(
                         minHeight: shouldShowAPIKeyInput
-                            ? Spacing.actionReserved
+                            ? InteractionMetrics.minimumTouchTarget
                             : XMSettingsPageLayout.detailRowMinHeight
                     )
 
@@ -291,7 +291,7 @@ private struct AIConfigurationContentView: View {
             }
             .font(AppTypography.subheadline)
             .foregroundStyle(Color.textPrimary)
-            .frame(minHeight: Spacing.actionReserved)
+            .frame(minHeight: InteractionMetrics.minimumTouchTarget)
             .disabled(viewModel.isSaving)
         } else if viewModel.selectedProviderHasStoredKey {
             Menu {
@@ -316,7 +316,7 @@ private struct AIConfigurationContentView: View {
                         .accessibilityHidden(true)
                 }
                 .foregroundStyle(Color.textPrimary)
-                .frame(minHeight: Spacing.actionReserved)
+                .frame(minHeight: InteractionMetrics.minimumTouchTarget)
             }
             .xmMenuNeutralTint()
             .disabled(viewModel.isSaving)

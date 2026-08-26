@@ -8,6 +8,13 @@
 import SwiftUI
 import UIKit
 
+/// 笔记首页书评卡的局部 UIKit 排版，保持现有系统 subheadline 语义曲线。
+private enum NoteHomeCategoryTypography {
+    static var reviewBodyUIFont: UIFont {
+        AppTypography.uiSemantic(.subheadline)
+    }
+}
+
 /// 星标章节按书籍分组展示，保持 Android 的书籍摘要、目录顺序与精简章节行层级。
 struct NoteStarredChapterGroupsView: View {
     let groups: [StarredChapterGroup]
@@ -106,7 +113,7 @@ private struct NoteStarredBookHeader: View {
                     .contentTransition(.numericText())
             }
             .padding(Spacing.base)
-            .frame(minHeight: Spacing.actionReserved)
+            .frame(minHeight: InteractionMetrics.minimumTouchTarget)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -184,7 +191,7 @@ private struct NoteStarredChapterCountBadge: View {
 
     var body: some View {
         Text("\(count.formatted()) 条")
-            .font(NoteExcerptTypography.footer)
+            .font(ReadingContentTypography.metadata)
             .foregroundStyle(Color.textSecondary)
             .lineLimit(1)
             .monospacedDigit()
@@ -368,7 +375,7 @@ struct NoteBookReviewsView: View {
                     .foregroundStyle(Color.textPrimary)
 
                 Text(loadMoreErrorMessage)
-                    .font(NoteExcerptTypography.footer)
+                    .font(ReadingContentTypography.metadata)
                     .foregroundStyle(Color.textSecondary)
                     .lineLimit(2)
 
@@ -487,9 +494,9 @@ private struct NoteBookReviewCard: View {
             if item.wordCount > 0 {
                 ExpandableRichText(
                     html: item.contentHTML,
-                    baseFont: AppTypography.uiSemantic(.subheadline),
+                    baseFont: NoteHomeCategoryTypography.reviewBodyUIFont,
                     textColor: UIColor.xmResolved(Color.textPrimary),
-                    lineSpacing: NoteExcerptTypography.bodyLineSpacing,
+                    lineSpacing: ReadingContentTypography.bodyLineSpacing,
                     maxLines: 5,
                     previewTapIdentity: item.id,
                     onPreviewTap: onOpenReview
@@ -588,7 +595,7 @@ private struct NoteBookReviewAttributionRow: View {
                 .fixedSize(horizontal: true, vertical: false)
         } else {
             Text("未评分")
-                .font(NoteExcerptTypography.footer)
+                .font(ReadingContentTypography.metadata)
                 .foregroundStyle(Color.textSecondary)
                 .fixedSize(horizontal: true, vertical: false)
         }
@@ -630,7 +637,7 @@ private struct NoteBookReviewMetadataRow: View {
                 }
             }
         }
-        .font(NoteExcerptTypography.footer)
+        .font(ReadingContentTypography.metadata)
         .foregroundStyle(Color.textSecondary)
         .frame(maxWidth: .infinity, alignment: .leading)
         .accessibilityElement(children: .ignore)

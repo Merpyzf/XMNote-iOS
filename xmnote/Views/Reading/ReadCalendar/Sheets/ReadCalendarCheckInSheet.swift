@@ -50,7 +50,7 @@ struct ReadCalendarCheckInSheet: View {
                                 XMBookCover.fixedWidth(
                                     34,
                                     urlString: selectedBook.coverURL,
-                                    border: .init(color: .surfaceBorderDefault, width: CardStyle.borderWidth)
+                                    border: .init(color: .surfaceBorderDefault, width: StrokeWidth.hairline)
                                 )
                                 VStack(alignment: .leading, spacing: Spacing.tiny) {
                                     Text(selectedBook.title)

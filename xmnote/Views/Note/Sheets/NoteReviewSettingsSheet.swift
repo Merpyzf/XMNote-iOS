@@ -328,7 +328,7 @@ private struct NoteReviewBackgroundImageRow: View {
                     PhotosPicker(selection: $selectedPhoto, matching: .images) {
                         Text(imageURL == nil ? "选择图片" : "更换图片")
                             .font(AppTypography.subheadlineMedium)
-                            .foregroundStyle(Color.brand)
+                            .foregroundStyle(Color.appTint)
                     }
                 }
             }
@@ -396,8 +396,8 @@ private struct NoteReviewPalettePickerRow: View {
                                 .overlay {
                                     RoundedRectangle(cornerRadius: CornerRadius.inlayMedium, style: .continuous)
                                         .stroke(
-                                            palette == canonicalSelection ? Color.brand : Color.surfaceBorderSubtle,
-                                            lineWidth: palette == canonicalSelection ? 2 : CardStyle.borderWidth
+                                            palette == canonicalSelection ? Color.selectionAccent : Color.surfaceBorderSubtle,
+                                            lineWidth: palette == canonicalSelection ? 2 : StrokeWidth.hairline
                                         )
                                 }
                                 .overlay {
@@ -521,7 +521,7 @@ private struct NoteReviewTagSelectionSheet: View {
 
                             Image(systemName: draftIDs.contains(option.id) ? "checkmark.circle.fill" : "circle")
                                 .font(AppTypography.title3)
-                                .foregroundStyle(draftIDs.contains(option.id) ? Color.brand : Color.textHint)
+                                .foregroundStyle(draftIDs.contains(option.id) ? Color.selectionAccent : Color.textHint)
                         }
                         .frame(minHeight: 52)
                         .contentShape(Rectangle())
@@ -544,7 +544,7 @@ private struct NoteReviewTagSelectionSheet: View {
                 Text("清空")
                     .font(AppTypography.subheadlineSemibold)
                     .frame(maxWidth: .infinity)
-                    .frame(height: Spacing.actionReserved)
+                    .frame(height: InteractionMetrics.minimumTouchTarget)
             }
             .buttonStyle(.bordered)
             .disabled(draftIDs.isEmpty)
@@ -556,10 +556,10 @@ private struct NoteReviewTagSelectionSheet: View {
                 Text("完成")
                     .font(AppTypography.subheadlineSemibold)
                     .frame(maxWidth: .infinity)
-                    .frame(height: Spacing.actionReserved)
+                    .frame(height: InteractionMetrics.minimumTouchTarget)
             }
             .buttonStyle(.borderedProminent)
-            .tint(Color.brand)
+            .tint(Color.primaryActionFill)
         }
     }
 

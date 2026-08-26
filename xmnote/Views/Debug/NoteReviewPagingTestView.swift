@@ -184,7 +184,7 @@ private struct NoteReviewPagingTestContentView: View {
                     statePill("current", viewModel.currentIndex)
                     Text(viewModel.hasMoreItems ? "hasMore" : "complete")
                         .font(AppTypography.captionMedium)
-                        .foregroundStyle(viewModel.hasMoreItems ? Color.brand : Color.textSecondary)
+                        .foregroundStyle(viewModel.hasMoreItems ? Color.appTint : Color.textSecondary)
                     Text(viewModel.stateText)
                         .font(AppTypography.captionMedium)
                         .foregroundStyle(Color.textSecondary)
@@ -247,15 +247,15 @@ private struct NoteReviewPagingSampleCard: View {
                     VStack(alignment: .leading, spacing: Spacing.base) {
                         if !note.content.isEmpty {
                             Text(note.content)
-                                .font(NoteExcerptTypography.body)
-                                .lineSpacing(NoteExcerptTypography.bodyLineSpacing)
+                                .font(ReadingContentTypography.body)
+                                .lineSpacing(ReadingContentTypography.bodyLineSpacing)
                                 .foregroundStyle(Color.textPrimary)
                         }
 
                         if !note.idea.isEmpty {
                             Text(note.idea)
-                                .font(NoteExcerptTypography.idea)
-                                .lineSpacing(NoteExcerptTypography.ideaLineSpacing)
+                                .font(ReadingContentTypography.annotation)
+                                .lineSpacing(ReadingContentTypography.annotationLineSpacing)
                                 .foregroundStyle(Color.textSecondary)
                                 .padding(Spacing.base)
                                 .background(Color.white.opacity(0.22), in: RoundedRectangle(cornerRadius: CornerRadius.blockSmall, style: .continuous))
@@ -279,7 +279,7 @@ private struct NoteReviewPagingSampleCard: View {
                         HStack(spacing: Spacing.tiny) {
                             ForEach(note.tags, id: \.self) { tag in
                                 Text(tag)
-                                    .font(NoteExcerptTypography.footer)
+                                    .font(ReadingContentTypography.metadata)
                                     .foregroundStyle(Color.textPrimary.opacity(0.72))
                                     .padding(.horizontal, Spacing.half)
                                     .padding(.vertical, 3)

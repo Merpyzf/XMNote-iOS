@@ -75,7 +75,7 @@ private extension LiquidGlassLabTestContentView {
 
     var topTelemetryBar: some View {
         HStack(spacing: Spacing.half) {
-            statusBadge("原生", value: viewModel.parameters.glassVariant.title, tint: .brand)
+            statusBadge("原生", value: viewModel.parameters.glassVariant.title, tint: .appTint)
             statusBadge("模拟", value: viewModel.parameters.materialStyle.title, tint: .liquidGlassLabBlue)
             statusBadge("观测", value: viewModel.performanceSummary, tint: .liquidGlassLabOrange)
         }
@@ -364,7 +364,7 @@ private extension LiquidGlassLabTestContentView {
         .padding(.vertical, 5)
         .background(tint.opacity(0.10), in: Capsule())
         .overlay {
-            Capsule().stroke(tint.opacity(0.20), lineWidth: CardStyle.borderWidth)
+            Capsule().stroke(tint.opacity(0.20), lineWidth: StrokeWidth.hairline)
         }
     }
 
@@ -433,12 +433,12 @@ private extension LiquidGlassLabTestContentView {
                             .padding(.vertical, 8)
                             .foregroundStyle(isSelected ? Color.white : Color.textPrimary)
                             .background(
-                                isSelected ? Color.brand : Color.surfaceNested,
+                                isSelected ? Color.selectionAccent : Color.surfaceNested,
                                 in: RoundedRectangle(cornerRadius: CornerRadius.inlaySmall, style: .continuous)
                             )
                             .overlay {
                                 RoundedRectangle(cornerRadius: CornerRadius.inlaySmall, style: .continuous)
-                                    .stroke(isSelected ? Color.brand.opacity(0.24) : Color.surfaceBorderSubtle, lineWidth: CardStyle.borderWidth)
+                                    .stroke(isSelected ? Color.selectionAccent.opacity(0.24) : Color.surfaceBorderSubtle, lineWidth: StrokeWidth.hairline)
                             }
                     }
                     .buttonStyle(.plain)
@@ -637,7 +637,7 @@ private struct LiquidGlassPreviewStage: View {
         .clipShape(RoundedRectangle(cornerRadius: CornerRadius.containerLarge, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: CornerRadius.containerLarge, style: .continuous)
-                .stroke(Color.surfaceBorderSubtle, lineWidth: CardStyle.borderWidth)
+                .stroke(Color.surfaceBorderSubtle, lineWidth: StrokeWidth.hairline)
         }
         .animation(.snappy, value: viewModel.previewScene)
         .animation(.snappy, value: viewModel.backgroundKind)
@@ -1089,7 +1089,7 @@ private struct LiquidGlassLabBackground: View {
         case .gradient:
             LinearGradient(
                 colors: [
-                    Color.brand.opacity(0.50),
+                    Color.appTint.opacity(0.50),
                     Color.liquidGlassLabBlue.opacity(0.42),
                     Color.liquidGlassLabOrange.opacity(0.26),
                     Color.surfacePage
@@ -1116,7 +1116,7 @@ private struct LiquidGlassLabBackground: View {
                 endPoint: .bottom
             )
             Circle()
-                .fill(Color.brand.opacity(0.20))
+                .fill(Color.appTint.opacity(0.20))
                 .frame(width: 220, height: 220)
                 .offset(x: -120, y: -140)
             RoundedRectangle(cornerRadius: 60, style: .continuous)
@@ -1162,7 +1162,7 @@ private struct LiquidGlassLabBackground: View {
             AngularGradient(
                 colors: [
                     Color.white.opacity(0.22),
-                    Color.brand.opacity(0.18),
+                    Color.appTint.opacity(0.18),
                     Color.liquidGlassLabBlue.opacity(0.20),
                     Color.liquidGlassLabOrange.opacity(0.20),
                     Color.white.opacity(0.22)
@@ -1186,7 +1186,7 @@ private struct LiquidGlassLabBackground: View {
                         height: max(70, proxy.size.height / 5 - 8),
                         urlString: coverURL(at: index),
                         cornerRadius: CornerRadius.inlaySmall,
-                        border: .init(color: .white.opacity(0.18), width: CardStyle.borderWidth),
+                        border: .init(color: .white.opacity(0.18), width: StrokeWidth.hairline),
                         placeholderIconSize: .hidden,
                         surfaceStyle: .spine
                     )
@@ -1380,7 +1380,7 @@ private extension LiquidGlassLabTestViewModel.TintOption {
         case .white:
             return .white
         case .brand:
-            return .brand
+            return .appTint
         case .blue:
             return .liquidGlassLabBlue
         case .amber:

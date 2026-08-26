@@ -1,5 +1,5 @@
 /**
- * [INPUT]: 依赖 NoteReviewCardItem 与 NoteReviewSettings，复用 RichText、XMRemoteImage 和 NoteExcerptTypography
+ * [INPUT]: 依赖 NoteReviewCardItem 与 NoteReviewSettings，复用 RichText 和 XMRemoteImage
  * [OUTPUT]: 对外提供 NoteReviewCardView，渲染书摘回顾卡片内容
  * [POS]: Note 模块页面私有子视图，被 NoteReviewView 的卡堆内容闭包消费
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -81,7 +81,7 @@ struct NoteReviewCardView: View {
                 NoteReviewCardLayout.footerCoverWidth,
                 urlString: item.bookCoverURL,
                 cornerRadius: CornerRadius.inlaySmall,
-                border: .init(color: appearance.coverBorderColor, width: CardStyle.borderWidth),
+                border: .init(color: appearance.coverBorderColor, width: StrokeWidth.hairline),
                 placeholderIconSize: .small,
                 surfaceStyle: .spine
             )
@@ -110,7 +110,7 @@ struct NoteReviewCardView: View {
             .overlay(alignment: .top) {
                 Rectangle()
                 .fill(appearance.footerDividerColor)
-                .frame(height: CardStyle.borderWidth)
+                .frame(height: StrokeWidth.hairline)
         }
         .accessibilityElement(children: .combine)
     }
@@ -458,7 +458,7 @@ private struct NoteReviewImageCollage: View {
                 RoundedRectangle(cornerRadius: NoteReviewCardLayout.imageWallCornerRadius, style: .continuous)
                     .stroke(
                         settings.cardAppearance.imageBorderColor,
-                        lineWidth: CardStyle.borderWidth
+                        lineWidth: StrokeWidth.hairline
                     )
             }
             .contentShape(RoundedRectangle(cornerRadius: NoteReviewCardLayout.imageWallCornerRadius, style: .continuous))

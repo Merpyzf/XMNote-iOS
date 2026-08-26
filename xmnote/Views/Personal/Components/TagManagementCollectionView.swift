@@ -1440,8 +1440,8 @@ private enum TagManagementCollectionMetrics {
     static let searchSnapMidpoint: CGFloat = searchHeaderHeight / 2
     static let itemHorizontalGap: CGFloat = Spacing.base
     static let rowSpacing: CGFloat = Spacing.none
-    static let reorderHitWidth: CGFloat = Spacing.actionReserved
-    static let reorderHitHeight: CGFloat = Spacing.actionReserved
+    static let reorderHitWidth: CGFloat = InteractionMetrics.minimumTouchTarget
+    static let reorderHitHeight: CGFloat = InteractionMetrics.minimumTouchTarget
     static let reloadCrossfadeDuration: TimeInterval = 0.16
 }
 
@@ -1814,7 +1814,7 @@ private struct TagManagementCollectionItemView: View {
     }
 
     private var selectionBackground: Color {
-        isSelectionMode && isSelected ? Color.brand.opacity(0.10) : Color.clear
+        isSelectionMode && isSelected ? Color.selectionAccent.opacity(0.10) : Color.clear
     }
 
     private var shouldShowBottomDivider: Bool {

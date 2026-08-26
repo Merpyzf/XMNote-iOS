@@ -2,8 +2,8 @@
 
 ## 组件定位
 - 源码路径：
-  - `xmnote/UIComponents/Foundation/XMRatingBar.swift`
-  - `xmnote/UIComponents/Foundation/XMBookRatingSheet.swift`
+  - `xmnote/UIComponents/Controls/Rating/XMRatingBar.swift`
+  - `xmnote/UIComponents/Business/Book/XMBookRatingSheet.swift`
 - 角色：统一书籍评分展示与评分输入组件，对齐 Android `FluentRatingBar` 的圆润星形与半星/整星步进语义。
 - 边界：组件只负责评分星形、步进、触摸写回和无障碍调整；不负责业务保存、表单校验、提示文案或评分来源转换之外的业务解释。
 - `XMBookRatingSheet` 在此基础上统一单本书异步保存门闩、失败弹窗和成功后关闭行为。

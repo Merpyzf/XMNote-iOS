@@ -1,5 +1,5 @@
 /**
- * [INPUT]: 依赖 DailyReadingRecord、NoteReviewCardItem、XMBookCover、Timeline 内容卡片/来源尾注、首页时间线共享配色令牌与统一记录动作回调
+ * [INPUT]: 依赖 DailyReadingRecord、NoteReviewCardItem、XMBookCover、Timeline 内容卡片/来源尾注、首页时间线共享配色令牌、页面私有时长排版与统一记录动作回调
  * [OUTPUT]: 对外提供 DailyReadingRecordRow，渲染共享配色时间轴、无重复标题的四格打卡、固定类型相关书籍卡、内容记录卡与中性菜单操作
  * [POS]: ReadCalendar 当日阅读轨迹页面私有组件，统一主内容优先的信息层级、点击行为、长按菜单与辅助操作
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -227,7 +227,7 @@ struct DailyReadingRecordRow: View {
             } label: {
                 Label("删除", systemImage: "trash")
             }
-            .tint(.red)
+            .tint(Color.red)
         }
     }
 
@@ -496,9 +496,9 @@ private struct DailyReadingTimingCard: View {
 
                         ExpandableRichText(
                             html: event.insight,
-                            baseFont: NoteExcerptTypography.uiIdea,
+                            baseFont: ReadingContentTypography.uiAnnotation,
                             textColor: UIColor.xmResolved(Color.textSecondary),
-                            lineSpacing: NoteExcerptTypography.ideaLineSpacing,
+                            lineSpacing: ReadingContentTypography.annotationLineSpacing,
                             actionColor: .textSecondary
                         )
                         .equatable()
@@ -565,7 +565,7 @@ private struct DailyReadingTimingHero: View {
         XMBookCover.fixedWidth(
             min(coverWidth, 64),
             urlString: bookCover,
-            border: .init(color: .surfaceBorderDefault, width: CardStyle.borderWidth),
+            border: .init(color: .surfaceBorderDefault, width: StrokeWidth.hairline),
             placeholderIconSize: .small
         )
         .accessibilityHidden(true)
@@ -618,6 +618,11 @@ private struct DailyReadingTimingHero: View {
     }
 }
 
+/// DailyReadingDurationTypography 收口当日轨迹时长数字的品牌排版，避免值对构造方法直接持有固定字号。
+private enum DailyReadingDurationTypography {
+    static let value = AppTypography.brandDisplay(size: 18, relativeTo: .body)
+}
+
 /// 阅读时长的数字与单位排版；数字承担首要视觉，单位保持同组但退后一层。
 private struct DailyReadingDurationValue: View {
     let seconds: Int64
@@ -652,7 +657,7 @@ private struct DailyReadingDurationValue: View {
     private func valuePair(number: Int64, unit: String) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: Spacing.tiny) {
             Text(number, format: .number)
-                .font(AppTypography.brandDisplay(size: 18, relativeTo: .body))
+                .font(DailyReadingDurationTypography.value)
                 .foregroundStyle(Color.textPrimary)
                 .monospacedDigit()
             Text(unit)
@@ -811,7 +816,7 @@ private struct DailyReadingCheckInHero: View {
             XMBookCover.fixedWidth(
                 min(coverWidth, 64),
                 urlString: bookCover,
-                border: .init(color: .surfaceBorderDefault, width: CardStyle.borderWidth),
+                border: .init(color: .surfaceBorderDefault, width: StrokeWidth.hairline),
                 placeholderIconSize: .small
             )
             .accessibilityHidden(true)
@@ -930,7 +935,7 @@ private struct DailyReadingReadDoneHero: View {
         XMBookCover.fixedWidth(
             min(coverWidth, 64),
             urlString: bookCover,
-            border: .init(color: .surfaceBorderDefault, width: CardStyle.borderWidth),
+            border: .init(color: .surfaceBorderDefault, width: StrokeWidth.hairline),
             placeholderIconSize: .small
         )
         .accessibilityHidden(true)
@@ -993,7 +998,7 @@ private struct DailyReadingReadDoneHero: View {
             .fixedSize(horizontal: true, vertical: false)
             .padding(.horizontal, Spacing.cozy)
             .padding(.vertical, Spacing.compact)
-            .background(Color.statusDone, in: Capsule())
+            .background(ReadingStatusPresentation.readDone, in: Capsule())
     }
 
     private var rating: some View {
@@ -1034,7 +1039,7 @@ private struct DailyReadingRelatedBookCard: View {
                     XMBookCover.fixedWidth(
                         48,
                         urlString: event.contentBookCover,
-                        border: .init(color: .surfaceBorderDefault, width: CardStyle.borderWidth),
+                        border: .init(color: .surfaceBorderDefault, width: StrokeWidth.hairline),
                         placeholderIconSize: .small
                     )
                     .accessibilityHidden(true)

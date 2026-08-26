@@ -1,5 +1,5 @@
 /**
- * [INPUT]: 依赖 XMRemoteImage 渲染远程封面、DesignTokens 提供圆角/间距/颜色令牌
+ * [INPUT]: 依赖 XMRemoteImage 渲染远程封面、XMBookCoverAppearance 与 DesignTokens 提供组件外观及圆角/间距语义
  * [OUTPUT]: 对外提供 XMBookCover（统一书籍封面组件，内置 Crop 裁切 + 占位图 + 可配装饰）
  * [POS]: UIComponents/Foundation 跨模块复用组件，消除项目内 5 处封面渲染的比例/裁切/占位重复
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -92,7 +92,7 @@ struct XMBookCover: View {
         cornerRadius: CGFloat = CornerRadius.inlaySmall,
         cornerRadii: RectangleCornerRadii? = nil,
         border: Border? = nil,
-        placeholderBackground: Color = .bookCoverPlaceholderBackground,
+        placeholderBackground: Color = XMBookCoverAppearance.placeholderBackground,
         placeholderIconSize: PlaceholderIconSize = .large,
         priority: XMImageRequestBuilder.Priority = .normal,
         surfaceStyle: SurfaceStyle = .plain
@@ -170,7 +170,7 @@ extension XMBookCover {
         cornerRadius: CGFloat = CornerRadius.inlaySmall,
         cornerRadii: RectangleCornerRadii? = nil,
         border: Border? = nil,
-        placeholderBackground: Color = .bookCoverPlaceholderBackground,
+        placeholderBackground: Color = XMBookCoverAppearance.placeholderBackground,
         placeholderIconSize: PlaceholderIconSize = .large,
         priority: XMImageRequestBuilder.Priority = .normal,
         surfaceStyle: SurfaceStyle = .plain
@@ -194,7 +194,7 @@ extension XMBookCover {
         cornerRadius: CGFloat = CornerRadius.inlaySmall,
         cornerRadii: RectangleCornerRadii? = nil,
         border: Border? = nil,
-        placeholderBackground: Color = .bookCoverPlaceholderBackground,
+        placeholderBackground: Color = XMBookCoverAppearance.placeholderBackground,
         placeholderIconSize: PlaceholderIconSize = .large,
         priority: XMImageRequestBuilder.Priority = .normal,
         surfaceStyle: SurfaceStyle = .plain
@@ -219,7 +219,7 @@ extension XMBookCover {
         cornerRadius: CGFloat = CornerRadius.inlaySmall,
         cornerRadii: RectangleCornerRadii? = nil,
         border: Border? = nil,
-        placeholderBackground: Color = .bookCoverPlaceholderBackground,
+        placeholderBackground: Color = XMBookCoverAppearance.placeholderBackground,
         placeholderIconSize: PlaceholderIconSize = .large,
         priority: XMImageRequestBuilder.Priority = .normal,
         surfaceStyle: SurfaceStyle = .plain
@@ -245,7 +245,7 @@ extension XMBookCover {
         cornerRadius: CGFloat = CornerRadius.inlaySmall,
         cornerRadii: RectangleCornerRadii? = nil,
         border: Border? = nil,
-        placeholderBackground: Color = .bookCoverPlaceholderBackground,
+        placeholderBackground: Color = XMBookCoverAppearance.placeholderBackground,
         placeholderIconSize: PlaceholderIconSize = .large,
         priority: XMImageRequestBuilder.Priority = .normal,
         surfaceStyle: SurfaceStyle = .plain
@@ -366,7 +366,7 @@ private extension XMBookCover {
             shape
                 .fill(Color.clear)
                 .shadow(
-                    color: Color.bookCoverDropShadow,
+                    color: XMBookCoverAppearance.dropShadow,
                     radius: shadowSpec.radius,
                     x: shadowSpec.x,
                     y: shadowSpec.y
@@ -429,8 +429,8 @@ private extension XMBookCover {
             HStack(spacing: Spacing.none) {
                 LinearGradient(
                     stops: [
-                        .init(color: .bookCoverSpineDark.opacity(tier == .depthEdge ? 0.96 : 0.86), location: 0),
-                        .init(color: .bookCoverSpineLight.opacity(tier == .depthEdge ? 0.82 : 0.62), location: 1)
+                        .init(color: XMBookCoverAppearance.spineDark.opacity(tier == .depthEdge ? 0.96 : 0.86), location: 0),
+                        .init(color: XMBookCoverAppearance.spineLight.opacity(tier == .depthEdge ? 0.82 : 0.62), location: 1)
                     ],
                     startPoint: .leading,
                     endPoint: .trailing
@@ -448,7 +448,7 @@ private extension XMBookCover {
 
                 LinearGradient(
                     stops: [
-                        .init(color: .bookCoverFoldShadow.opacity(tier == .depthEdge ? 0.66 : 0.50), location: 0),
+                        .init(color: XMBookCoverAppearance.foldShadow.opacity(tier == .depthEdge ? 0.66 : 0.50), location: 0),
                         .init(color: .clear, location: 1)
                     ],
                     startPoint: .leading,
@@ -490,13 +490,13 @@ private extension XMBookCover {
         XMBookCover.fixedWidth(
             80,
             urlString: "",
-            border: .init(color: .surfaceBorderDefault, width: CardStyle.borderWidth)
+            border: .init(color: .surfaceBorderDefault, width: StrokeWidth.hairline)
         )
 
         XMBookCover.fixedWidth(
             80,
             urlString: "",
-            border: .init(color: .surfaceBorderDefault, width: CardStyle.borderWidth),
+            border: .init(color: .surfaceBorderDefault, width: StrokeWidth.hairline),
             surfaceStyle: .spine
         )
     }
@@ -506,7 +506,7 @@ private extension XMBookCover {
 #Preview("Responsive") {
     XMBookCover.responsive(
         urlString: "",
-        border: .init(color: .surfaceBorderDefault, width: CardStyle.borderWidth),
+        border: .init(color: .surfaceBorderDefault, width: StrokeWidth.hairline),
         surfaceStyle: .spine
     )
     .frame(width: 110)

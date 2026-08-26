@@ -51,7 +51,7 @@ enum BookshelfTitleTextStyle {
         case .captionMedium:
             return BookshelfTypography.gridTitle
         case .bodyMedium:
-            return AppTypography.bodyMedium
+            return BookshelfTypography.listTitle
         }
     }
 
@@ -60,7 +60,7 @@ enum BookshelfTitleTextStyle {
         case .captionMedium:
             return BookshelfTypography.uiGridTitle
         case .bodyMedium:
-            return AppTypography.uiSemantic(.body, weight: .medium)
+            return BookshelfTypography.uiListTitle
         }
     }
 

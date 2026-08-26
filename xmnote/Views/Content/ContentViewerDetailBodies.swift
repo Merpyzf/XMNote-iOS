@@ -1,5 +1,5 @@
 /**
- * [INPUT]: 依赖通用内容详情模型、RichText、XMTagLabel 与图片墙组件，依赖 DesignTokens 排版与颜色令牌
+ * [INPUT]: 依赖通用内容详情模型、RichText、XMTagLabel、XMRatingAppearance 与图片墙组件，依赖 DesignTokens 排版与颜色令牌
  * [OUTPUT]: 对外提供 NoteContentDetailBody、ReviewContentDetailBody、RelevantContentDetailBody，承接三类内容的全屏正文结构与选区 AI 释义入口
  * [POS]: Content 模块查看页正文组件集合，被书摘查看与通用内容查看复用
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -7,6 +7,17 @@
 
 import SwiftUI
 import UIKit
+
+/// 内容详情正文的局部 UIKit 排版，统一标题与正文的动态字号来源。
+private enum ContentDetailTypography {
+    static var bodyUIFont: UIFont {
+        AppTypography.uiSemantic(.body)
+    }
+
+    static var titleUIFont: UIFont {
+        AppTypography.uiSemantic(.subheadline, weight: .semibold)
+    }
+}
 
 /// 书摘正文主体，负责元信息、正文、想法、配图与页脚信息布局。
 struct NoteContentDetailBody: View {
@@ -20,7 +31,7 @@ struct NoteContentDetailBody: View {
             if TimelineMeaningfulPreview.hasMeaningfulHTML(detail.contentHTML) {
                 RichText(
                     html: detail.contentHTML,
-                    baseFont: AppTypography.uiSemantic(.body),
+                    baseFont: ContentDetailTypography.bodyUIFont,
                     textColor: UIColor.label,
                     lineSpacing: 5,
                     selectionActionTitle: "AI 释义",
@@ -40,7 +51,7 @@ struct NoteContentDetailBody: View {
             if TimelineMeaningfulPreview.hasMeaningfulHTML(detail.ideaHTML) {
                 RichText(
                     html: detail.ideaHTML,
-                    baseFont: AppTypography.uiSemantic(.body),
+                    baseFont: ContentDetailTypography.bodyUIFont,
                     textColor: UIColor.xmResolved(Color.textSecondary),
                     lineSpacing: 5,
                     selectionActionTitle: "AI 释义",
@@ -143,7 +154,7 @@ struct ReviewContentDetailBody: View {
             if !trimmed(detail.title).isEmpty {
                 ContentViewerSelectablePlainText(
                     text: detail.title,
-                    baseFont: AppTypography.uiSemantic(.subheadline, weight: .semibold),
+                    baseFont: ContentDetailTypography.titleUIFont,
                     textColor: UIColor.xmResolved(Color.textPrimary),
                     inputContext: AITextLookupInput(
                         queryText: "",
@@ -158,7 +169,7 @@ struct ReviewContentDetailBody: View {
             if TimelineMeaningfulPreview.hasMeaningfulHTML(detail.contentHTML) {
                 RichText(
                     html: detail.contentHTML,
-                    baseFont: AppTypography.uiSemantic(.body),
+                    baseFont: ContentDetailTypography.bodyUIFont,
                     textColor: UIColor.label,
                     lineSpacing: 5,
                     selectionActionTitle: "AI 释义",
@@ -195,7 +206,7 @@ private extension ReviewContentDetailBody {
         HStack(spacing: Spacing.compact) {
             Image(systemName: detail.bookScore > 0 ? "star.fill" : "star")
                 .font(AppTypography.caption)
-                .foregroundStyle(detail.bookScore > 0 ? Color.ratingActive : Color.textHint)
+                .foregroundStyle(detail.bookScore > 0 ? XMRatingAppearance.active : Color.textHint)
 
             Text(ratingText)
 
@@ -210,7 +221,7 @@ private extension ReviewContentDetailBody {
                 Text(dateText)
             }
         }
-        .font(NoteExcerptTypography.footer)
+        .font(ReadingContentTypography.metadata)
         .foregroundStyle(Color.textSecondary)
         .accessibilityElement(children: .combine)
     }
@@ -254,7 +265,7 @@ struct RelevantContentDetailBody: View {
             if !trimmed(detail.title).isEmpty {
                 ContentViewerSelectablePlainText(
                     text: detail.title,
-                    baseFont: AppTypography.uiSemantic(.subheadline, weight: .semibold),
+                    baseFont: ContentDetailTypography.titleUIFont,
                     textColor: UIColor.xmResolved(Color.textPrimary),
                     inputContext: AITextLookupInput(
                         queryText: "",
@@ -269,7 +280,7 @@ struct RelevantContentDetailBody: View {
             if TimelineMeaningfulPreview.hasMeaningfulHTML(detail.contentHTML) {
                 RichText(
                     html: detail.contentHTML,
-                    baseFont: AppTypography.uiSemantic(.body),
+                    baseFont: ContentDetailTypography.bodyUIFont,
                     textColor: UIColor.label,
                     lineSpacing: 5,
                     selectionActionTitle: "AI 释义",
@@ -288,7 +299,7 @@ struct RelevantContentDetailBody: View {
                 Link(destination: normalizedURL) {
                     Text(normalizedURL.absoluteString)
                         .font(AppTypography.subheadline)
-                        .foregroundStyle(Color.brandDeep)
+                        .foregroundStyle(Color.linkForeground)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
             }
@@ -310,7 +321,7 @@ struct RelevantContentDetailBody: View {
                             .lineLimit(1)
                     }
                     .font(AppTypography.subheadline)
-                    .foregroundStyle(Color.brandDeep)
+                    .foregroundStyle(Color.linkForeground)
                     .frame(maxWidth: .infinity, alignment: .leading)
                 }
             }

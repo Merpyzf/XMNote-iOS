@@ -154,7 +154,7 @@ private extension ContentEditorImageSection {
             Label("拍照", systemImage: "camera")
                 .font(AppTypography.subheadline)
                 .lineLimit(1)
-                .frame(minHeight: 44)
+                .frame(minHeight: InteractionMetrics.minimumTouchTarget)
         }
         .disabled(isReadingSelection || items.count >= ContentEditorImageItem.maximumCount)
     }
@@ -185,7 +185,7 @@ private extension ContentEditorImageSection {
             Label("图片识字", systemImage: "text.viewfinder")
                 .font(AppTypography.subheadline)
                 .lineLimit(1)
-                .frame(minHeight: 44)
+                .frame(minHeight: InteractionMetrics.minimumTouchTarget)
         }
         .disabled(isReadingSelection)
     }
@@ -194,7 +194,7 @@ private extension ContentEditorImageSection {
         Label(isReadingSelection ? "正在读取…" : "相册", systemImage: "photo.badge.plus")
             .font(AppTypography.subheadline)
             .lineLimit(1)
-            .frame(minHeight: 44)
+            .frame(minHeight: InteractionMetrics.minimumTouchTarget)
     }
 
     /// 拍照入口先校验硬件与授权状态，只有可安全取图时才展示系统全屏相机。

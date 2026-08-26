@@ -12,7 +12,7 @@
 - `lint_warnings.sh`: 使用当前已启动的 iOS 模拟器执行 `xcodebuild clean build`，并过滤仓库源码 warning/error。
 - `parallel-ios/`: 管理非主任务 worktree 的专属 Simulator、DerivedData、测试结果与 Swift Package 隔离状态。
 - `ai-knowledge/`: 仅依赖 Python 标准库的 Bug 知识 CLI、策略、固定检索评测与工具测试；正式知识以 `docs/knowledge/bugs/` 为权威源，本地索引与草稿位于已忽略的 `artifacts/ai-knowledge/`。
-- `design-system/`: 设计系统唯一机器可读治理入口；`ds.py` 提供上下文发现、组件查询、变更/全量 lint、规则解释与审计，`policy.json` 定义规则，`component-catalog.json` 定义公共组件入口，`tests/` 固化编排与发现路径，`ui-lint/` 使用 SwiftSyntax 实现 AST 规则。
+- `design-system/`: 设计系统唯一机器可读治理入口；`ds.py` 提供上下文发现、组件查询、变更/全量 lint、规则解释与审计，`policy.json` 定义 DS001–DS011 与观察项，`component-catalog.json` schema v3 定义公共组件分类、状态、框架边界和 Preview 策略，`tests/` 固化编排与发现路径，`ui-lint/` 使用 SwiftSyntax 实现 AST 规则。
 - `verify_ai_bug_knowledge.sh`: 依次执行知识格式校验、审计、固定检索评测与工具测试，不触发 App XCTest/UI Test。
 
 执行约束

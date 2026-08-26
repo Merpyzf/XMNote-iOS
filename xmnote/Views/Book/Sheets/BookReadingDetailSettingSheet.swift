@@ -1,11 +1,16 @@
 /**
- * [INPUT]: 依赖 BookReadingDetailSetting 与设置变更闭包
+ * [INPUT]: 依赖 BookReadingDetailSetting、页面私有设置行缩进布局与设置变更闭包
  * [OUTPUT]: 对外提供 BookReadingDetailSettingSheet，以紧凑自定义面板编辑封面色渐变背景和月图默认展开偏好
  * [POS]: Views/Book/Sheets 阅读详情业务 Sheet，不直接访问 UserDefaults
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
 import SwiftUI
+
+/// 阅读详情设置分隔线避让前导图标列，使两行内容保持同一正文起点。
+private enum BookReadingDetailSettingSheetLayout {
+    static let dividerLeadingInset: CGFloat = 44
+}
 
 /// 页面显示设置；每次开关变化立即交给 ViewModel 持久化，关闭时无需二次确认。
 struct BookReadingDetailSettingSheet: View {
@@ -32,7 +37,7 @@ struct BookReadingDetailSettingSheet: View {
                 )
 
                 XMSettingsDivider()
-                    .padding(.leading, Spacing.actionReserved)
+                    .padding(.leading, BookReadingDetailSettingSheetLayout.dividerLeadingInset)
 
                 settingRow(
                     title: "图表默认收起",
@@ -64,7 +69,7 @@ struct BookReadingDetailSettingSheet: View {
                     .frame(width: Spacing.double)
             }
         }
-        .tint(Color.brand)
+        .tint(Color.appTint)
         .frame(minHeight: 52)
     }
 

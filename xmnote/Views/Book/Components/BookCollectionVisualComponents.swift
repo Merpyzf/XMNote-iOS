@@ -1,11 +1,16 @@
 /**
- * [INPUT]: 依赖 BookCollectionListItem、BookCollectionDisplaySetting、BookCollectionDetail、BookCollectionBookItem 与 XMBookCover 渲染书单列表、详情和书单内书籍关系
+ * [INPUT]: 依赖 BookCollectionListItem、BookCollectionDisplaySetting、BookCollectionDetail、BookCollectionBookItem、XMBookCover、XMBookCoverAppearance、InteractionMetrics 与 ReadingStatusPresentation 渲染书单列表、详情和书单内书籍关系
  * [OUTPUT]: 对外提供书单模块页面私有视觉组件，统一堆叠/规整封面、海报式封面、指标、详情头、书籍卡片、书籍元信息入口与 relation 文本语义区块
  * [POS]: Book 模块书单页面私有展示组件，被 BookCollectionListView、BookCollectionDetailView 与加入书单 Sheet 复用
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
 import SwiftUI
+
+/// 书单页面对进度、总结和补充入口的统一强调色，避免把组件细节提升为全局色阶。
+private enum BookCollectionVisualAppearance {
+    static let emphasisAccent = Color.xmHex(0x2DA44F)
+}
 
 /// 书单内 relation 文本的页面展示语义，将同一 `recommend` 字段映射为普通书单收藏理由或年度书单年度点评。
 nonisolated struct BookCollectionRelationNotePresentation: Hashable, Sendable {
@@ -64,7 +69,7 @@ struct BookCollectionCoverMosaicView: View {
                 .fill(Color.surfaceCard)
                 .overlay {
                     RoundedRectangle(cornerRadius: CornerRadius.blockLarge, style: .continuous)
-                        .stroke(Color.surfaceBorderSubtle, lineWidth: CardStyle.borderWidth)
+                        .stroke(Color.surfaceBorderSubtle, lineWidth: StrokeWidth.hairline)
                 }
 
             if visibleCovers.isEmpty {
@@ -104,7 +109,7 @@ struct BookCollectionCoverMosaicView: View {
                     coverWidth,
                     urlString: cover,
                     cornerRadius: CornerRadius.inlaySmall,
-                    border: .init(color: .surfaceBorderSubtle, width: CardStyle.borderWidth),
+                    border: .init(color: .surfaceBorderSubtle, width: StrokeWidth.hairline),
                     placeholderIconSize: .small,
                     surfaceStyle: .spine
                 )
@@ -164,12 +169,12 @@ struct BookCollectionCoverShelfView: View {
                         index == 0 ? 58 : 50,
                         urlString: cover,
                         cornerRadius: CornerRadius.inlaySmall,
-                        border: .init(color: .surfaceBorderSubtle, width: CardStyle.borderWidth),
+                        border: .init(color: .surfaceBorderSubtle, width: StrokeWidth.hairline),
                         placeholderIconSize: .small,
                         surfaceStyle: .spine
                     )
                     .shadow(
-                        color: Color.bookCoverDropShadow.opacity(index == 0 ? 0.70 : 0.42),
+                        color: XMBookCoverAppearance.dropShadow.opacity(index == 0 ? 0.70 : 0.42),
                         radius: index == 0 ? 6 : 4,
                         x: Spacing.none,
                         y: index == 0 ? 4 : 2
@@ -285,7 +290,7 @@ struct BookCollectionMutedPosterCoverView: View {
         .clipShape(shape)
         .overlay {
             shape
-                .stroke(Color.surfaceBorderSubtle.opacity(0.72), lineWidth: CardStyle.borderWidth)
+                .stroke(Color.surfaceBorderSubtle.opacity(0.72), lineWidth: StrokeWidth.hairline)
         }
         .accessibilityHidden(true)
     }
@@ -335,12 +340,12 @@ struct BookCollectionRegularPosterCoverView: View {
                                         coverWidth(in: size),
                                         urlString: cover,
                                         cornerRadius: CornerRadius.inlaySmall,
-                                        border: .init(color: .surfaceBorderSubtle, width: CardStyle.borderWidth),
+                                        border: .init(color: .surfaceBorderSubtle, width: StrokeWidth.hairline),
                                         placeholderIconSize: .small,
                                         surfaceStyle: .spine
                                     )
                                     .shadow(
-                                        color: Color.bookCoverDropShadow.opacity(0.20),
+                                        color: XMBookCoverAppearance.dropShadow.opacity(0.20),
                                         radius: 4,
                                         x: Spacing.none,
                                         y: 2
@@ -357,7 +362,7 @@ struct BookCollectionRegularPosterCoverView: View {
             .clipShape(shape)
             .overlay {
                 shape
-                    .stroke(Color.surfaceBorderSubtle.opacity(0.72), lineWidth: CardStyle.borderWidth)
+                    .stroke(Color.surfaceBorderSubtle.opacity(0.72), lineWidth: StrokeWidth.hairline)
             }
             .accessibilityHidden(true)
     }
@@ -785,7 +790,7 @@ private struct BookCollectionMutedPosterBook: View {
                     width,
                     urlString: cover,
                     cornerRadius: CornerRadius.inlaySmall,
-                    border: .init(color: .surfaceBorderSubtle, width: CardStyle.borderWidth),
+                    border: .init(color: .surfaceBorderSubtle, width: StrokeWidth.hairline),
                     placeholderIconSize: .small,
                     surfaceStyle: .spine
                 )
@@ -794,7 +799,7 @@ private struct BookCollectionMutedPosterBook: View {
             }
         }
         .shadow(
-            color: Color.bookCoverDropShadow.opacity(isPaperLayer ? 0.08 : 0.26),
+            color: XMBookCoverAppearance.dropShadow.opacity(isPaperLayer ? 0.08 : 0.26),
             radius: isPaperLayer ? 2 : (width > 50 ? 5 : 4),
             x: Spacing.none,
             y: isPaperLayer ? 1 : (width > 50 ? 3 : 2)
@@ -806,7 +811,7 @@ private struct BookCollectionMutedPosterBook: View {
             .fill(palette.paper.opacity(0.92))
             .overlay(alignment: .leading) {
                 Rectangle()
-                    .fill(Color.bookCoverSpineDark.opacity(0.10))
+                    .fill(XMBookCoverAppearance.spineDark.opacity(0.10))
                     .frame(width: max(2, width * 0.08))
             }
             .overlay(alignment: .bottom) {
@@ -817,7 +822,7 @@ private struct BookCollectionMutedPosterBook: View {
             .frame(width: width, height: XMBookCover.height(forWidth: width))
             .overlay {
                 RoundedRectangle(cornerRadius: CornerRadius.inlaySmall, style: .continuous)
-                    .stroke(Color.surfaceBorderSubtle.opacity(0.34), lineWidth: CardStyle.borderWidth)
+                    .stroke(Color.surfaceBorderSubtle.opacity(0.34), lineWidth: StrokeWidth.hairline)
             }
     }
 }
@@ -945,7 +950,7 @@ struct BookCollectionProgressMeter: View {
                     total: Double(targetReadCount)
                 )
                 .progressViewStyle(.linear)
-                .tint(Color.brandDeep.opacity(0.62))
+                .tint(BookCollectionVisualAppearance.emphasisAccent.opacity(0.62))
 
                 Text("读完 \(finishedCount)/\(targetReadCount) 本")
                     .font(AppTypography.caption2)
@@ -1024,7 +1029,7 @@ struct BookCollectionListCard: View {
         .background(Color.surfaceCard, in: RoundedRectangle(cornerRadius: CornerRadius.containerMedium, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: CornerRadius.containerMedium, style: .continuous)
-                .stroke(Color.surfaceBorderSubtle, lineWidth: CardStyle.borderWidth)
+                .stroke(Color.surfaceBorderSubtle, lineWidth: StrokeWidth.hairline)
         }
         .accessibilityElement(children: .combine)
         .accessibilityLabel(accessibilityLabel)
@@ -1072,7 +1077,7 @@ struct BookCollectionListCard: View {
         .background(Color.surfaceCard, in: RoundedRectangle(cornerRadius: CornerRadius.containerMedium, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: CornerRadius.containerMedium, style: .continuous)
-                .stroke(Color.surfaceBorderSubtle, lineWidth: CardStyle.borderWidth)
+                .stroke(Color.surfaceBorderSubtle, lineWidth: StrokeWidth.hairline)
         }
         .accessibilityElement(children: .combine)
         .accessibilityLabel(accessibilityLabel)
@@ -1174,7 +1179,7 @@ private struct BookCollectionEditorialCoverCluster: View {
     var body: some View {
         ZStack {
             Capsule()
-                .fill(Color.bookCoverDropShadow.opacity(0.06))
+                .fill(XMBookCoverAppearance.dropShadow.opacity(0.06))
                 .blur(radius: 7)
                 .frame(width: 86, height: 9)
                 .offset(y: 47)
@@ -1196,7 +1201,7 @@ private struct BookCollectionEditorialCoverCluster: View {
                     coverWidth(for: index),
                     urlString: cover,
                     cornerRadius: CornerRadius.inlaySmall,
-                    border: .init(color: .surfaceBorderSubtle, width: CardStyle.borderWidth),
+                    border: .init(color: .surfaceBorderSubtle, width: StrokeWidth.hairline),
                     placeholderIconSize: .small,
                     surfaceStyle: .spine
                 )
@@ -1204,7 +1209,7 @@ private struct BookCollectionEditorialCoverCluster: View {
                 .offset(offset(for: index))
                 .zIndex(zIndex(for: index))
                 .shadow(
-                    color: Color.bookCoverDropShadow.opacity(index == 0 ? 0.22 : 0.14),
+                    color: XMBookCoverAppearance.dropShadow.opacity(index == 0 ? 0.22 : 0.14),
                     radius: index == 0 ? 8 : 5,
                     x: Spacing.none,
                     y: index == 0 ? 6 : 3
@@ -1220,7 +1225,7 @@ private struct BookCollectionEditorialCoverCluster: View {
                     .fill(index == 0 ? Color.surfaceCard : Color.surfaceNested)
                     .overlay {
                         RoundedRectangle(cornerRadius: CornerRadius.inlaySmall, style: .continuous)
-                            .stroke(Color.surfaceBorderSubtle.opacity(index == 0 ? 0.76 : 0.52), lineWidth: CardStyle.borderWidth)
+                            .stroke(Color.surfaceBorderSubtle.opacity(index == 0 ? 0.76 : 0.52), lineWidth: StrokeWidth.hairline)
                     }
                     .overlay(alignment: .topLeading) {
                         RoundedRectangle(cornerRadius: CornerRadius.inlayHairline, style: .continuous)
@@ -1377,7 +1382,7 @@ private struct BookCollectionHeaderCoverStage: View {
             EmptyView()
         case .gallery:
             Capsule()
-                .fill(Color.bookCoverDropShadow.opacity(0.07))
+                .fill(XMBookCoverAppearance.dropShadow.opacity(0.07))
                 .blur(radius: 8)
                 .frame(width: size.width * 0.46, height: max(8, size.height * 0.05))
                 .position(x: size.width * 0.50, y: size.height * 0.77)
@@ -1388,7 +1393,7 @@ private struct BookCollectionHeaderCoverStage: View {
                 .overlay(alignment: .top) {
                     Rectangle()
                         .fill(Color.surfaceBorderSubtle.opacity(0.74))
-                        .frame(height: CardStyle.borderWidth)
+                        .frame(height: StrokeWidth.hairline)
                         .padding(.horizontal, Spacing.tight)
                 }
                 .overlay(alignment: .bottom) {
@@ -1397,7 +1402,7 @@ private struct BookCollectionHeaderCoverStage: View {
                         .frame(height: max(4, size.height * 0.025))
                 }
                 .shadow(
-                    color: Color.bookCoverDropShadow.opacity(0.10),
+                    color: XMBookCoverAppearance.dropShadow.opacity(0.10),
                     radius: 8,
                     x: Spacing.none,
                     y: 3
@@ -1433,10 +1438,10 @@ private struct BookCollectionHeaderCoverStage: View {
         .clipShape(shape)
         .overlay {
             shape
-                .stroke(Color.surfaceBorderSubtle.opacity(0.52), lineWidth: CardStyle.borderWidth)
+                .stroke(Color.surfaceBorderSubtle.opacity(0.52), lineWidth: StrokeWidth.hairline)
         }
         .shadow(
-            color: Color.bookCoverDropShadow.opacity(0.04),
+            color: XMBookCoverAppearance.dropShadow.opacity(0.04),
             radius: 10,
             x: Spacing.none,
             y: 4
@@ -1494,7 +1499,7 @@ struct BookCollectionDetailHero: View {
                     Button(action: onShowFullSummary) {
                         Text("查看完整简介")
                             .font(AppTypography.captionMedium)
-                            .foregroundStyle(Color.brandDeep)
+                            .foregroundStyle(BookCollectionVisualAppearance.emphasisAccent)
                             .frame(minHeight: 28, alignment: .leading)
                     }
                     .buttonStyle(.plain)
@@ -1690,7 +1695,7 @@ struct BookCollectionProgressSummary: View {
             BookCollectionSummaryMetricPill(
                 title: "今年读完",
                 value: "\(completedCount) 本",
-                tint: Color.brandDeep,
+                tint: BookCollectionVisualAppearance.emphasisAccent,
                 isEmphasized: true
             )
         }
@@ -1737,7 +1742,7 @@ struct BookCollectionProgressSummary: View {
                     .fill(Color.surfaceBorderSubtle.opacity(0.46))
 
                 Capsule()
-                    .fill(Color.brandDeep.opacity(0.62))
+                    .fill(BookCollectionVisualAppearance.emphasisAccent.opacity(0.62))
                     .frame(width: proxy.size.width * progressFraction)
             }
         }
@@ -1958,10 +1963,10 @@ struct BookCollectionBookCard: View {
             .background(Color.surfaceCard, in: RoundedRectangle(cornerRadius: CornerRadius.blockLarge, style: .continuous))
             .overlay {
                 RoundedRectangle(cornerRadius: CornerRadius.blockLarge, style: .continuous)
-                    .stroke(Color.surfaceBorderSubtle.opacity(0.58), lineWidth: CardStyle.borderWidth)
+                    .stroke(Color.surfaceBorderSubtle.opacity(0.58), lineWidth: StrokeWidth.hairline)
             }
             .shadow(
-                color: Color.bookCoverDropShadow.opacity(0.055),
+                color: XMBookCoverAppearance.dropShadow.opacity(0.055),
                 radius: 10,
                 x: Spacing.none,
                 y: 4
@@ -2011,7 +2016,7 @@ struct BookCollectionBookCard: View {
                 } label: {
                     Label(relationNotePresentation.title, systemImage: "quote.bubble")
                 }
-                .tint(.blue)
+                .tint(Color.editActionFill)
             }
 
             if canEditStructure {
@@ -2047,12 +2052,12 @@ struct BookCollectionBookCard: View {
                         coverWidth,
                         urlString: item.book.cover,
                         cornerRadius: CornerRadius.inlaySmall,
-                        border: .init(color: .surfaceBorderSubtle, width: CardStyle.borderWidth),
+                        border: .init(color: .surfaceBorderSubtle, width: StrokeWidth.hairline),
                         placeholderIconSize: .small,
                         surfaceStyle: .spine
                     )
                     .shadow(
-                        color: Color.bookCoverDropShadow.opacity(0.14),
+                        color: XMBookCoverAppearance.dropShadow.opacity(0.14),
                         radius: 7,
                         x: Spacing.none,
                         y: 4
@@ -2205,7 +2210,7 @@ private struct BookCollectionReadStatusChip: View {
             .background(tint.opacity(0.07), in: Capsule())
             .overlay {
                 Capsule()
-                    .stroke(tint.opacity(0.10), lineWidth: CardStyle.borderWidth)
+                    .stroke(tint.opacity(0.10), lineWidth: StrokeWidth.hairline)
             }
             .fixedSize(horizontal: true, vertical: false)
             .accessibilityLabel("阅读状态 \(text)")
@@ -2263,7 +2268,11 @@ private struct BookCollectionAddReasonPrompt: View {
                     .font(AppTypography.captionMedium)
             }
             .foregroundStyle(Color.textSecondary)
-            .frame(maxWidth: .infinity, minHeight: Spacing.actionReserved, alignment: .leading)
+            .frame(
+                maxWidth: .infinity,
+                minHeight: InteractionMetrics.minimumTouchTarget,
+                alignment: .leading
+            )
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -2275,15 +2284,15 @@ private extension BookEntryReadingStatus {
     var collectionBookCardTint: Color {
         switch self {
         case .wantRead:
-            return Color.statusWish.opacity(0.68)
+            return ReadingStatusPresentation.wantRead.opacity(0.68)
         case .reading:
-            return Color.statusReading.opacity(0.68)
+            return ReadingStatusPresentation.reading.opacity(0.68)
         case .finished:
-            return Color.statusDone.opacity(0.70)
+            return ReadingStatusPresentation.readDone.opacity(0.70)
         case .abandoned:
-            return Color.statusAbandoned.opacity(0.66)
+            return ReadingStatusPresentation.abandoned.opacity(0.66)
         case .onHold:
-            return Color.statusOnHold.opacity(0.66)
+            return ReadingStatusPresentation.onHold.opacity(0.66)
         }
     }
 }
@@ -2378,7 +2387,7 @@ struct BookCollectionRecommendQuote: View {
             .background(Color.surfaceNested.opacity(0.54), in: RoundedRectangle(cornerRadius: CornerRadius.blockSmall, style: .continuous))
             .overlay {
                 RoundedRectangle(cornerRadius: CornerRadius.blockSmall, style: .continuous)
-                    .stroke(Color.surfaceBorderSubtle.opacity(0.22), lineWidth: CardStyle.borderWidth)
+                    .stroke(Color.surfaceBorderSubtle.opacity(0.22), lineWidth: StrokeWidth.hairline)
             }
         }
         .buttonStyle(.plain)
@@ -2488,7 +2497,7 @@ struct BookCollectionListSkeletonCard: View {
         .background(Color.surfaceCard, in: RoundedRectangle(cornerRadius: CornerRadius.containerMedium, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: CornerRadius.containerMedium, style: .continuous)
-                .stroke(Color.surfaceBorderSubtle, lineWidth: CardStyle.borderWidth)
+                .stroke(Color.surfaceBorderSubtle, lineWidth: StrokeWidth.hairline)
         }
     }
 }
@@ -2532,7 +2541,7 @@ private struct BookCollectionPosterSkeletonCover: View {
             .clipShape(shape)
             .overlay {
                 shape
-                    .stroke(Color.surfaceBorderSubtle.opacity(0.72), lineWidth: CardStyle.borderWidth)
+                    .stroke(Color.surfaceBorderSubtle.opacity(0.72), lineWidth: StrokeWidth.hairline)
             }
     }
 
@@ -2560,7 +2569,7 @@ private struct BookCollectionPosterSkeletonCover: View {
             .frame(width: width, height: XMBookCover.height(forWidth: width))
             .overlay {
                 RoundedRectangle(cornerRadius: CornerRadius.inlaySmall, style: .continuous)
-                    .stroke(Color.surfaceBorderSubtle.opacity(0.28), lineWidth: CardStyle.borderWidth)
+                    .stroke(Color.surfaceBorderSubtle.opacity(0.28), lineWidth: StrokeWidth.hairline)
             }
             .rotationEffect(.degrees(spec.rotation))
             .position(x: size.width * spec.x, y: size.height * spec.y)

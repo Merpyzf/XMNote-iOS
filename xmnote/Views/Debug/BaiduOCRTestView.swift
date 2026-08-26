@@ -71,7 +71,7 @@ private extension BaiduOCRTestView {
                     Spacer()
                     capabilityBadge(
                         title: isRuntimeSupported ? "真机可用" : "模拟器仅验证 UI",
-                        tint: isRuntimeSupported ? Color.brand : Color.feedbackWarning
+                        tint: isRuntimeSupported ? Color.feedbackSuccess : Color.feedbackWarning
                     )
                 }
 
@@ -80,8 +80,8 @@ private extension BaiduOCRTestView {
                     .foregroundStyle(Color.textSecondary)
 
                 HStack(spacing: Spacing.half) {
-                    capabilityBadge(title: "单框裁切", tint: Color.brand)
-                    capabilityBadge(title: "自由框选", tint: Color.brandDeep)
+                    capabilityBadge(title: "单框裁切", tint: Color.appTint)
+                    capabilityBadge(title: "自由框选", tint: Color.selectionForeground)
                     capabilityBadge(title: "自动回填", tint: Color.textSecondary)
                 }
             }
@@ -113,7 +113,7 @@ private extension BaiduOCRTestView {
                         activeFlowTarget = target
                     }
                     .buttonStyle(.borderedProminent)
-                    .tint(Color.brand)
+                    .tint(Color.appTint)
                 }
 
                 RichTextEditor(
@@ -127,7 +127,7 @@ private extension BaiduOCRTestView {
                 .clipShape(RoundedRectangle(cornerRadius: CornerRadius.blockMedium, style: .continuous))
                 .overlay(
                     RoundedRectangle(cornerRadius: CornerRadius.blockMedium, style: .continuous)
-                        .stroke(Color.surfaceBorderDefault, lineWidth: CardStyle.borderWidth)
+                        .stroke(Color.surfaceBorderDefault, lineWidth: StrokeWidth.hairline)
                 )
             }
             .padding(Spacing.contentEdge)
@@ -163,13 +163,13 @@ private extension BaiduOCRTestView {
                         Spacer()
                         capabilityBadge(
                             title: summary.selectionMode.title,
-                            tint: summary.selectionMode == .single ? Color.brand : Color.brandDeep
+                            tint: summary.selectionMode == .single ? Color.selectionAccent : Color.selectionForeground
                         )
                     }
 
                     HStack(spacing: Spacing.half) {
-                        capabilityBadge(title: "\(summary.regionCount) 个区域", tint: Color.brand)
-                        capabilityBadge(title: "\(summary.totalLineCount) 行", tint: Color.brandDeep)
+                        capabilityBadge(title: "\(summary.regionCount) 个区域", tint: Color.appTint)
+                        capabilityBadge(title: "\(summary.totalLineCount) 行", tint: Color.selectionForeground)
                         capabilityBadge(title: "\(summary.totalCharacterCount) 字", tint: Color.textSecondary)
                     }
 

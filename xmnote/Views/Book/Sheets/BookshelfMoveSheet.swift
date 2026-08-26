@@ -89,7 +89,7 @@ struct BookshelfMoveSheet: View {
                 Image(systemName: icon)
                     .font(AppTypography.title3)
                     .fontWeight(.medium)
-                    .foregroundStyle(canSubmit ? Color.brand : Color.textHint)
+                    .foregroundStyle(canSubmit ? Color.appTint : Color.textHint)
                     .frame(width: 28)
 
                 VStack(alignment: .leading, spacing: Spacing.tiny) {
@@ -108,7 +108,7 @@ struct BookshelfMoveSheet: View {
             .background(Color.surfaceCard, in: RoundedRectangle(cornerRadius: CornerRadius.blockLarge, style: .continuous))
             .overlay {
                 RoundedRectangle(cornerRadius: CornerRadius.blockLarge, style: .continuous)
-                    .stroke(Color.surfaceBorderSubtle, lineWidth: CardStyle.borderWidth)
+                    .stroke(Color.surfaceBorderSubtle, lineWidth: StrokeWidth.hairline)
             }
         }
         .buttonStyle(.plain)

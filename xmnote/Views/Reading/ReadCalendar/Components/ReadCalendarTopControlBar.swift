@@ -1,7 +1,7 @@
 import SwiftUI
 
 /**
- * [INPUT]: 依赖月份/年份与显示模式状态，依赖回调驱动页面壳层打开年月/年份选择 Sheet 或切换显示模式
+ * [INPUT]: 依赖 ReadCalendarTheme 次级文字色、ReadCalendarTextStyle、月份/年份与显示模式状态，依赖回调驱动页面壳层打开选择 Sheet 或切换显示模式
  * [OUTPUT]: 对外提供 ReadCalendarTopControlBar（稳定图标、系统选择反馈的阅读日历顶部控制区）
  * [POS]: ReadCalendar 业务内复用组件，承载月份或年份切换与显示模式切换
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -13,8 +13,12 @@ struct ReadCalendarTopControlBar: View {
         static let topControlSpacing: CGFloat = Spacing.cozy
         static let modeSwitcherWidth: CGFloat = 116
         static let expandedModeSwitcherWidth: CGFloat = 128
-        static let leadingSwitcherMinHeight: CGFloat = Spacing.actionReserved
+        static let leadingSwitcherMinHeight: CGFloat = InteractionMetrics.minimumTouchTarget
         static let expandedLeadingSwitcherMinHeight: CGFloat = 48
+    }
+
+    private enum Motion {
+        static let yearValue = Animation.snappy(duration: 0.24)
     }
 
     let monthTitle: String
@@ -27,6 +31,7 @@ struct ReadCalendarTopControlBar: View {
     let onYearPickerRequested: () -> Void
 
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @ScaledMetric(relativeTo: .caption2) private var chevronSymbolSize = 10
     @ScaledMetric(relativeTo: .caption) private var modeSymbolSize = 14
 
@@ -67,18 +72,18 @@ private extension ReadCalendarTopControlBar {
         } label: {
             HStack(spacing: Spacing.compact) {
                 Text(yearTitle)
-                    .font(ReadCalendarTypography.topControlTitleFont)
+                    .font(ReadCalendarTextStyle.topControlTitleFont)
                     .foregroundStyle(Color.textPrimary)
                     .monospacedDigit()
                     .lineLimit(usesExpandedTextLayout ? 2 : 1)
                     .minimumScaleFactor(usesExpandedTextLayout ? 1 : 0.9)
                     .multilineTextAlignment(.leading)
                     .contentTransition(.numericText())
-                    .animation(.snappy(duration: 0.24), value: selectedYear)
+                    .animation(reduceMotion ? nil : Motion.yearValue, value: selectedYear)
 
                 Image(systemName: "chevron.down")
                     .font(.system(size: chevronSymbolSize, weight: .semibold))
-                    .foregroundStyle(Color.readCalendarSubtleText)
+                    .foregroundStyle(ReadCalendarTheme.subtleText)
                     .offset(y: 0.5)
             }
             .padding(.horizontal, Spacing.half)

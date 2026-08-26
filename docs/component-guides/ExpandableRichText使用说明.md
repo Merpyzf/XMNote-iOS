@@ -2,6 +2,7 @@
 
 ## 组件定位
 
+- 源码目录：`xmnote/UIComponents/Media/RichText/`。
 - `ExpandableRichText`：展开/收起交互与状态边界。
 - `CollapsedRichTextPreview`：基于 `UILabel` 的轻量收起态、原生尾部截断与布局快照缓存。
 - `RichText`：基于 `UITextView` 的完整 HTML 展示、链接点击与排版缓存。

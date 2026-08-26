@@ -99,7 +99,7 @@ struct BookCollectionCoverSearchSheet: View {
                 .background(Color.surfaceCard, in: RoundedRectangle(cornerRadius: CornerRadius.blockMedium, style: .continuous))
                 .overlay {
                     RoundedRectangle(cornerRadius: CornerRadius.blockMedium, style: .continuous)
-                        .stroke(Color.surfaceBorderSubtle, lineWidth: CardStyle.borderWidth)
+                        .stroke(Color.surfaceBorderSubtle, lineWidth: StrokeWidth.hairline)
                 }
 
                 Button {
@@ -241,7 +241,7 @@ private struct BookCollectionCoverSearchResultRow: View {
                 52,
                 urlString: result.coverURL,
                 cornerRadius: CornerRadius.inlaySmall,
-                border: .init(color: .surfaceBorderSubtle, width: CardStyle.borderWidth),
+                border: .init(color: .surfaceBorderSubtle, width: StrokeWidth.hairline),
                 placeholderIconSize: .small,
                 surfaceStyle: .spine
             )
@@ -256,10 +256,10 @@ private struct BookCollectionCoverSearchResultRow: View {
                     if isCurrent {
                         Text("当前")
                             .font(AppTypography.captionMedium)
-                            .foregroundStyle(Color.brand.opacity(0.9))
+                            .foregroundStyle(Color.selectionAccent.opacity(0.9))
                             .padding(.horizontal, Spacing.half)
                             .frame(minHeight: 22)
-                            .background(Color.brand.opacity(0.12), in: Capsule())
+                            .background(Color.selectionAccent.opacity(0.12), in: Capsule())
                     }
                 }
 
@@ -278,13 +278,13 @@ private struct BookCollectionCoverSearchResultRow: View {
 
             Image(systemName: "checkmark.circle")
                 .font(AppTypography.title3)
-                .foregroundStyle(Color.brand.opacity(0.76))
+                .foregroundStyle(Color.selectionAccent.opacity(0.76))
         }
         .padding(Spacing.base)
         .background(Color.surfaceCard, in: RoundedRectangle(cornerRadius: CornerRadius.blockLarge, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: CornerRadius.blockLarge, style: .continuous)
-                .stroke(isCurrent ? Color.brand.opacity(0.42) : Color.surfaceBorderSubtle, lineWidth: CardStyle.borderWidth)
+                .stroke(isCurrent ? Color.selectionAccent.opacity(0.42) : Color.surfaceBorderSubtle, lineWidth: StrokeWidth.hairline)
         }
         .accessibilityElement(children: .combine)
         .accessibilityLabel("\(result.title)，\(detailText)，来自\(result.source.title)")
@@ -331,7 +331,7 @@ private struct BookCollectionCoverSearchStatusCard: View {
         .background(Color.surfaceCard, in: RoundedRectangle(cornerRadius: CornerRadius.blockLarge, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: CornerRadius.blockLarge, style: .continuous)
-                .stroke(Color.surfaceBorderSubtle, lineWidth: CardStyle.borderWidth)
+                .stroke(Color.surfaceBorderSubtle, lineWidth: StrokeWidth.hairline)
         }
     }
 }

@@ -6,7 +6,7 @@
 //
 
 /**
- * [INPUT]: 依赖 RepositoryContainer 注入仓储，依赖 BookCollectionImportRouter 承接外部书单导入，依赖 HomeSubtabScaffold 承载首页二级页硬切，依赖 BookViewModel 与 BookCollectionListViewModel 驱动书架浏览、书单列表、显示设置与顶部操作
+ * [INPUT]: 依赖 RepositoryContainer 注入仓储，依赖 BookCollectionImportRouter、HomeSubtabScaffold、InteractionMetrics、BookViewModel 与 BookCollectionListViewModel 驱动书架浏览、书单列表、显示设置与顶部操作
  * [OUTPUT]: 对外提供 BookContainerView 与 BookSubTab 枚举，承载书籍/书单二级页切换、外部导入入口定位、顶部批量菜单、统一批量标签 Sheet、删除确认、书单入口与方案 A 规格的横向三点更多菜单
  * [POS]: Book 模块容器壳层，承载书籍页与书架管理模式编排
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -380,7 +380,10 @@ private struct BookContentView: View {
             Image(systemName: "ellipsis.circle")
                 .font(AppTypography.body)
                 .foregroundStyle(Color.textPrimary)
-                .frame(width: Spacing.actionReserved, height: Spacing.actionReserved)
+                .frame(
+                    width: InteractionMetrics.minimumTouchTarget,
+                    height: InteractionMetrics.minimumTouchTarget
+                )
                 .contentShape(Rectangle())
         }
         .accessibilityLabel("批量操作")
@@ -841,7 +844,7 @@ private struct BookCollectionTopActionPill: View {
     let onShowDisplaySettings: () -> Void
 
     private enum Style {
-        static let hitSize: CGFloat = Spacing.actionReserved
+        static let hitSize: CGFloat = InteractionMetrics.minimumTouchTarget
         static let actionIconSize: CGFloat = 14
         static let trailingIconSize: CGFloat = 15
         static let iconColor = Color.iconPrimary.opacity(0.88)

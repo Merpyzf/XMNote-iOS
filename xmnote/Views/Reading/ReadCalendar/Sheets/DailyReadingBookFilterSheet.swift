@@ -66,18 +66,18 @@ struct DailyReadingBookFilterSheet: View {
                     XMBookCover.fixedWidth(
                         coverWidth,
                         urlString: coverURL,
-                        border: .init(color: .surfaceBorderSubtle, width: CardStyle.borderWidth)
+                        border: .init(color: .surfaceBorderSubtle, width: StrokeWidth.hairline)
                     )
                 } else {
                     Image(systemName: "books.vertical")
                         .font(AppTypography.bodyMedium)
-                        .foregroundStyle(selected ? Color.brand : Color.iconSecondary)
+                        .foregroundStyle(selected ? Color.selectionAccent : Color.iconSecondary)
                         .frame(width: coverWidth, height: coverWidth / 0.7)
                 }
 
                 Text(title.isEmpty ? "未命名书籍" : title)
                     .font(AppTypography.body)
-                    .foregroundStyle(selected ? Color.brand : Color.textPrimary)
+                    .foregroundStyle(selected ? Color.selectionAccent : Color.textPrimary)
                     .lineLimit(2)
 
                 Spacer(minLength: Spacing.base)
@@ -85,7 +85,7 @@ struct DailyReadingBookFilterSheet: View {
                 if selected {
                     Image(systemName: "checkmark")
                         .font(AppTypography.bodyMedium)
-                        .foregroundStyle(Color.brand)
+                        .foregroundStyle(Color.appTint)
                         .accessibilityHidden(true)
                 }
             }

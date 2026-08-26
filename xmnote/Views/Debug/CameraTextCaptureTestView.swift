@@ -69,10 +69,10 @@ private extension CameraTextCaptureTestContentView {
                     Spacer()
                     Text(viewModel.supportedLanguageCountText)
                         .font(.caption.weight(.semibold))
-                        .foregroundStyle(Color.brand)
+                        .foregroundStyle(Color.appTint)
                         .padding(.horizontal, 8)
                         .padding(.vertical, 4)
-                        .background(Color.brand.opacity(0.12), in: Capsule())
+                        .background(Color.appTint.opacity(0.12), in: Capsule())
                 }
 
                 LazyVGrid(
@@ -150,11 +150,11 @@ private extension CameraTextCaptureTestContentView {
                     Spacer()
                     Text(viewModel.focusedField == field ? "已聚焦" : "未聚焦")
                         .font(.caption2.weight(.semibold))
-                        .foregroundStyle(viewModel.focusedField == field ? Color.brand : Color.textSecondary)
+                        .foregroundStyle(viewModel.focusedField == field ? Color.selectionAccent : Color.textSecondary)
                         .padding(.horizontal, 6)
                         .padding(.vertical, 3)
                         .background(
-                            (viewModel.focusedField == field ? Color.brand.opacity(0.12) : Color.surfacePage),
+                            (viewModel.focusedField == field ? Color.selectionAccent.opacity(0.12) : Color.surfacePage),
                             in: Capsule()
                         )
                 }
@@ -174,7 +174,7 @@ private extension CameraTextCaptureTestContentView {
                 .clipShape(RoundedRectangle(cornerRadius: CornerRadius.blockMedium, style: .continuous))
                 .overlay(
                     RoundedRectangle(cornerRadius: CornerRadius.blockMedium, style: .continuous)
-                        .stroke(Color.surfaceBorderDefault, lineWidth: CardStyle.borderWidth)
+                        .stroke(Color.surfaceBorderDefault, lineWidth: StrokeWidth.hairline)
                 )
             }
             .padding(Spacing.contentEdge)

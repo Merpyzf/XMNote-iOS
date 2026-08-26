@@ -18,7 +18,7 @@ struct BookSearchStatusCard: View {
 
     init(
         systemImage: String,
-        tint: Color = .brand,
+        tint: Color = .appTint,
         title: String,
         message: String,
         actionTitle: String? = nil,

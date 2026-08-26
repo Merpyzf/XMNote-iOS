@@ -2,7 +2,7 @@
 
 ## 组件定位
 
-- 源码路径：`xmnote/UIComponents/Foundation/XMTagLabel.swift`。
+- 源码路径：`xmnote/UIComponents/Business/Tag/XMTagLabel.swift`。
 - 角色：统一纯展示领域标签的排版、文字颜色、语义背景、内边距与 4pt 连续圆角。
 - 适用场景：书摘、内容详情、搜索结果、时间线等页面中用于描述内容归属的标签。
 - 不适用场景：筛选、选择、状态、评分、指标、搜索历史以及可点击操作型 Capsule。

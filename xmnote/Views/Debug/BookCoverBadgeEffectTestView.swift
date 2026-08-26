@@ -3,7 +3,7 @@ import SwiftUI
 import UIKit
 
 /**
- * [INPUT]: 依赖 BookCoverBadgeEffectTestViewModel 提供可调参数与封面样例，依赖 XMBookCover 与 UIVisualEffectView 渲染书封角标实验效果
+ * [INPUT]: 依赖 BookCoverBadgeEffectTestViewModel 提供可调参数与封面样例，依赖 XMBookCover、ReadingStatusPresentation 与 UIVisualEffectView 渲染书封角标实验效果
  * [OUTPUT]: 对外提供 BookCoverBadgeEffectTestView（书封角标效果测试页）
  * [POS]: Debug 测试页，集中验证书封置顶/数量毛玻璃角标与阅读状态纯色角标在真实封面上的展示效果
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -62,7 +62,7 @@ private extension BookCoverBadgeEffectTestContentView {
                 width: 104,
                 noteText: "29",
                 statusText: "在读",
-                statusColor: .statusReading,
+                statusColor: ReadingStatusPresentation.reading,
                 parameters: viewModel.parameters
             )
 
@@ -195,7 +195,7 @@ private extension BookCoverBadgeEffectTestContentView {
                         width: 126,
                         noteText: "29",
                         statusText: "在读",
-                        statusColor: .statusReading,
+                        statusColor: ReadingStatusPresentation.reading,
                         parameters: viewModel.parameters
                     )
 
@@ -236,7 +236,7 @@ private extension BookCoverBadgeEffectTestContentView {
                                     width: 96,
                                     noteText: "29",
                                     statusText: "在读",
-                                    statusColor: .statusReading,
+                                    statusColor: ReadingStatusPresentation.reading,
                                     parameters: viewModel.parameters(overriding: option)
                                 )
                                 Text(option.title)
@@ -399,7 +399,7 @@ private extension BookCoverBadgeEffectTestContentView {
                 width: 92,
                 noteText: "72",
                 statusText: "想读",
-                statusColor: .statusWish,
+                statusColor: ReadingStatusPresentation.wantRead,
                 parameters: viewModel.parameters
             )
         }
@@ -451,7 +451,7 @@ private extension BookCoverBadgeEffectTestContentView {
             }
 
             Slider(value: value, in: range, step: step)
-                .tint(Color.brand)
+                .tint(Color.appTint)
         }
     }
 
@@ -486,7 +486,7 @@ private struct DebugCoverMatrixCell: View {
                 width: 92,
                 noteText: "29",
                 statusText: "在读",
-                statusColor: .statusReading,
+                statusColor: ReadingStatusPresentation.reading,
                 parameters: parameters
             )
             Text(sample.title)
@@ -517,7 +517,7 @@ private struct DebugBookCoverBadgePreview: View {
             width,
             urlString: urlString,
             cornerRadius: coverCornerRadius,
-            border: .init(color: .surfaceBorderSubtle, width: CardStyle.borderWidth),
+            border: .init(color: .surfaceBorderSubtle, width: StrokeWidth.hairline),
             placeholderIconSize: .medium,
             surfaceStyle: .spine
         )
@@ -662,7 +662,7 @@ private struct DebugBookCoverGroupBadgePreview: View {
                 .fill(Color.surfaceCard)
                 .overlay {
                     RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                        .stroke(Color.surfaceBorderSubtle, lineWidth: CardStyle.borderWidth)
+                        .stroke(Color.surfaceBorderSubtle, lineWidth: StrokeWidth.hairline)
                 }
 
             DebugGroupMosaic(samples: samples)
@@ -725,7 +725,7 @@ private struct DebugGroupMosaic: View {
             height: metrics.cellHeight(for: index),
             urlString: coverURL(at: index),
             cornerRadius: index == 0 ? CornerRadius.inlaySmall : CornerRadius.inlayTiny,
-            border: .init(color: .surfaceBorderSubtle, width: CardStyle.borderWidth),
+            border: .init(color: .surfaceBorderSubtle, width: StrokeWidth.hairline),
             placeholderIconSize: .hidden,
             surfaceStyle: index == 0 ? .spine : .plain
         )
@@ -849,7 +849,7 @@ private func effectBadge<Content: View>(
         content: content
     )
     .overlay {
-        shape.stroke(Color.white.opacity(parameters.strokeOpacity), lineWidth: CardStyle.borderWidth)
+        shape.stroke(Color.white.opacity(parameters.strokeOpacity), lineWidth: StrokeWidth.hairline)
     }
     .compositingGroup()
     .clipShape(shape)

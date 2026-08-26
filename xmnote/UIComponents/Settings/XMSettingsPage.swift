@@ -43,3 +43,17 @@ struct XMSettingsPage<Content: View>: View {
         .background(Color.surfacePage.ignoresSafeArea())
     }
 }
+
+#Preview("设置页面") {
+    XMSettingsPage {
+        Text("设置分区")
+            .font(AppTypography.footnoteSemibold)
+            .foregroundStyle(Color.textSecondary)
+        CardContainer {
+            Text("设置内容")
+                .font(AppTypography.body)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(Spacing.contentEdge)
+        }
+    }
+}

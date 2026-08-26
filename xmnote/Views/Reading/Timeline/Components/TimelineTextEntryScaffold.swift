@@ -26,7 +26,7 @@ struct TimelineCardHeaderBar: View {
         HStack(alignment: .center, spacing: Spacing.cozy) {
             Image(systemName: iconSystemName)
                 .font(AppTypography.captionMedium)
-                .foregroundStyle(Color.brand)
+                .foregroundStyle(Color.appTint)
 
             if let displayBookName {
                 bookTitle(displayBookName, color: .textHint)
@@ -79,7 +79,7 @@ struct TimelineBookSourceFooter: View {
 
     var body: some View {
         Text("《\(displayBookName)》")
-            .font(NoteExcerptTypography.footer)
+            .font(ReadingContentTypography.metadata)
             .foregroundStyle(Color.textSecondary)
             .lineLimit(1)
             .truncationMode(.tail)

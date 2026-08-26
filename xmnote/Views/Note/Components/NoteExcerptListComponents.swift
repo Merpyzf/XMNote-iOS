@@ -40,7 +40,7 @@ struct NoteExcerptListRow: View {
             if isSelecting {
                 Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
                     .font(AppTypography.title3)
-                    .foregroundStyle(isSelected ? Color.brand : Color.textHint)
+                    .foregroundStyle(isSelected ? Color.selectionAccent : Color.textHint)
                     .padding(Spacing.base)
                     .transition(
                         reduceMotion
@@ -58,17 +58,17 @@ struct NoteExcerptListRow: View {
     private var contentPreview: some View {
         if item.plainContent.isEmpty {
             Text("（无正文）")
-                .font(NoteExcerptTypography.body)
+                .font(ReadingContentTypography.body)
                 .foregroundStyle(Color.textHint)
         } else {
             XMKeywordHighlighting.text(
                 item.plainContent,
                 keyword: searchKeyword,
-                baseFont: NoteExcerptTypography.body,
-                highlightFont: NoteExcerptTypography.body,
+                baseFont: ReadingContentTypography.body,
+                highlightFont: ReadingContentTypography.body,
                 baseColor: Color.textPrimary
             )
-                .lineSpacing(NoteExcerptTypography.bodyLineSpacing)
+                .lineSpacing(ReadingContentTypography.bodyLineSpacing)
                 .lineLimit(5)
                 .contentTransition(.opacity)
         }
@@ -78,11 +78,11 @@ struct NoteExcerptListRow: View {
         XMKeywordHighlighting.text(
             item.plainIdea,
             keyword: searchKeyword,
-            baseFont: NoteExcerptTypography.idea,
-            highlightFont: NoteExcerptTypography.idea,
+            baseFont: ReadingContentTypography.annotation,
+            highlightFont: ReadingContentTypography.annotation,
             baseColor: Color.textSecondary
         )
-            .lineSpacing(NoteExcerptTypography.ideaLineSpacing)
+            .lineSpacing(ReadingContentTypography.annotationLineSpacing)
             .lineLimit(4)
             .contentTransition(.opacity)
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -130,7 +130,7 @@ struct NoteExcerptListRow: View {
                 Text(formattedDate(item.createdDate))
             }
         }
-        .font(NoteExcerptTypography.footer)
+        .font(ReadingContentTypography.metadata)
         .foregroundStyle(Color.textSecondary)
         .contentTransition(.opacity)
     }
@@ -173,7 +173,7 @@ struct RelatedListRow: View {
             HStack(spacing: Spacing.cozy) {
                 Label(content.categoryTitle, systemImage: "link")
                     .font(AppTypography.captionMedium)
-                    .foregroundStyle(Color.brand)
+                    .foregroundStyle(Color.appTint)
                 Spacer(minLength: Spacing.compact)
                 Image(systemName: "chevron.right")
                     .font(AppTypography.caption)
@@ -202,7 +202,7 @@ struct RelatedListRow: View {
                 Spacer(minLength: Spacing.compact)
                 Text(formattedDate(content.createdDate))
             }
-            .font(NoteExcerptTypography.footer)
+            .font(ReadingContentTypography.metadata)
             .foregroundStyle(Color.textSecondary)
         }
         .padding(Spacing.contentEdge)
@@ -219,7 +219,7 @@ struct RelatedListRow: View {
             VStack(alignment: .leading, spacing: Spacing.compact) {
                 Label("相关书籍", systemImage: "books.vertical")
                     .font(AppTypography.captionMedium)
-                    .foregroundStyle(Color.brand)
+                    .foregroundStyle(Color.appTint)
 
                 Text(book.title)
                     .font(AppTypography.headline)
@@ -234,7 +234,7 @@ struct RelatedListRow: View {
                 }
 
                 Text("来自《\(book.sourceBookTitle)》")
-                    .font(NoteExcerptTypography.footer)
+                    .font(ReadingContentTypography.metadata)
                     .foregroundStyle(Color.textSecondary)
                     .lineLimit(1)
             }

@@ -8,7 +8,7 @@
 import SwiftUI
 
 private enum XMSettingsGroupLayout {
-    static let groupedCornerRadius = CornerRadius.containerXXL
+    static let groupedCornerRadius: CGFloat = 24
     static let weakSeparatorOpacity = 0.42
     static let presentationDuration = 0.18
 }
@@ -84,7 +84,27 @@ struct XMSettingsDivider: View {
     var body: some View {
         Rectangle()
             .fill(Color.surfaceBorderSubtle.opacity(XMSettingsGroupLayout.weakSeparatorOpacity))
-            .frame(height: CardStyle.borderWidth)
+            .frame(height: StrokeWidth.hairline)
             .accessibilityHidden(true)
     }
+}
+
+#Preview("设置分组") {
+    VStack(spacing: Spacing.base) {
+        XMSettingsGroup {
+            Text("第一项")
+                .frame(minHeight: XMSettingsPageLayout.regularRowMinHeight)
+            XMSettingsDivider()
+            Text("第二项")
+                .frame(minHeight: XMSettingsPageLayout.regularRowMinHeight)
+        }
+
+        XMSettingsGroup(presentation: .singleItem) {
+            Text("单项设置")
+                .frame(minHeight: XMSettingsPageLayout.regularRowMinHeight)
+        }
+    }
+    .font(AppTypography.body)
+    .padding()
+    .background(Color.surfacePage)
 }

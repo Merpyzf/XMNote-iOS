@@ -20,7 +20,7 @@ struct PersonalView: View {
         static let panelSpacing: CGFloat = Spacing.comfortable
         static let panelEdgeVerticalInset: CGFloat = Spacing.half
         static let settingsRowIconWidth: CGFloat = 24
-        static let rowMinHeight: CGFloat = 44
+        static let rowMinHeight: CGFloat = InteractionMetrics.minimumTouchTarget
         static let rowDividerLeading: CGFloat = Spacing.contentEdge + settingsRowIconWidth + Spacing.base
         static let topBarTrailingIconSize: CGFloat = 15
     }
@@ -335,7 +335,7 @@ private struct PersonalSettingsDivider: View {
     var body: some View {
         Rectangle()
             .fill(Color.surfaceBorderSubtle.opacity(0.42))
-            .frame(height: CardStyle.borderWidth)
+            .frame(height: StrokeWidth.hairline)
             .padding(.leading, leadingInset)
     }
 }

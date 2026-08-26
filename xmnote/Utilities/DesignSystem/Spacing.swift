@@ -1,5 +1,5 @@
 /**
- * [INPUT]: 仅依赖 SwiftUI 的 CGFloat 与 InteractionMetrics 交互尺寸
+ * [INPUT]: 仅依赖 SwiftUI 的 CGFloat
  * [OUTPUT]: 对外提供表达亲密性、容器与页面留白的 Spacing
  * [POS]: Utilities/DesignSystem 的布局间距层，不承担控件尺寸语义
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -31,7 +31,6 @@ import SwiftUI
 //   微调档     → hairline(1) / tiny(2) / micro(3)，只用于视觉补偿、描边避让、极小留白
 //   紧密补位档 → compact(4)，用于比 half 更紧的成组关系
 //   中间补位档 → tight(10) / comfortable(14)，用于默认档之间的过渡密度
-//   特殊约束   → actionReserved(44) 用于最小点击热区或操作预留，不属于常规 spacing
 //
 // 默认选择示例：
 //   图标与短文本间距        → compact
@@ -44,7 +43,7 @@ import SwiftUI
 //   大段留白/强分区         → double
 //
 // 反例：
-//   不要用 actionReserved 表达普通 padding 或间距。
+//   不要用 spacing token 表达点击热区、组件尺寸或操作预留。
 //   不要用 hairline / tiny / micro 充当卡片主边距。
 //   不要默认从 tight / comfortable 开始试值，它们是补位档，不是首选档。
 
@@ -62,8 +61,6 @@ enum Spacing {
     static let comfortable: CGFloat = 14
     static let section: CGFloat = 20
     static let double: CGFloat = 24
-    /// 兼容既有调用；新代码使用 InteractionMetrics.minimumTouchTarget。
-    static let actionReserved: CGFloat = InteractionMetrics.minimumTouchTarget
     static let screenEdge: CGFloat = 16
     static let contentEdge: CGFloat = 18
 }

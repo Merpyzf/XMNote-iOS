@@ -6,7 +6,7 @@
 //
 
 /**
- * [INPUT]: 依赖 BookshelfBookListRoute、RepositoryContainer、AppNavigationCoordinator 与外层普通浏览路由闭包
+ * [INPUT]: 依赖 BookshelfBookListRoute、RepositoryContainer、AppNavigationCoordinator、InteractionMetrics 与外层普通浏览路由闭包
  * [OUTPUT]: 对外提供 BookshelfBookListView，组合本地顶部 chrome、搜索抽屉、BookshelfBookListCollectionView、编辑选择菜单与统一批量标签 Sheet 容器
  * [POS]: Book 模块二级列表页，被 BookRoute.bookshelfList 导航目标消费
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -311,7 +311,10 @@ private struct BookshelfBookListContentView: View {
             Image(systemName: "ellipsis.circle")
                 .font(AppTypography.body)
                 .foregroundStyle(Color.textPrimary)
-                .frame(width: Spacing.actionReserved, height: Spacing.actionReserved)
+                .frame(
+                    width: InteractionMetrics.minimumTouchTarget,
+                    height: InteractionMetrics.minimumTouchTarget
+                )
                 .contentShape(Rectangle())
         }
         .accessibilityLabel("批量操作")

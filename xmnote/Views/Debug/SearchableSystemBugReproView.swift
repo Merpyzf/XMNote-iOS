@@ -8,6 +8,12 @@
 
 import SwiftUI
 
+/// 系统搜索复现页为底部 Chrome 保留的固定实验空间。
+private enum SearchableSystemBugReproLayout {
+    static let controlTabBottomClearance: CGFloat = 44
+    static let searchTabBottomClearance: CGFloat = 132
+}
+
 /// 系统 searchable 最小复现入口，通过独立 fullScreenCover 隔离测试中心外层导航环境。
 struct SearchableSystemBugReproView: View {
     @State private var isExperimentPresented = false
@@ -137,7 +143,7 @@ private struct SearchableSystemBugExperimentShell: View {
             }
             .padding(.horizontal, Spacing.screenEdge)
             .padding(.vertical, Spacing.base)
-            .safeAreaPadding(.bottom, Spacing.actionReserved)
+            .safeAreaPadding(.bottom, SearchableSystemBugReproLayout.controlTabBottomClearance)
         }
         .background(Color.surfacePage)
     }
@@ -150,7 +156,7 @@ private struct SearchableSystemBugExperimentShell: View {
             }
             .padding(.horizontal, Spacing.screenEdge)
             .padding(.vertical, Spacing.base)
-            .safeAreaPadding(.bottom, Spacing.actionReserved * 3)
+            .safeAreaPadding(.bottom, SearchableSystemBugReproLayout.searchTabBottomClearance)
         }
         .scrollDismissesKeyboard(.never)
         .background(Color.surfacePage)
@@ -417,7 +423,7 @@ private struct ReproBulletRow: View {
         HStack(alignment: .top, spacing: Spacing.cozy) {
             Image(systemName: "checkmark.circle")
                 .font(AppTypography.captionMedium)
-                .foregroundStyle(Color.brand)
+                .foregroundStyle(Color.appTint)
                 .padding(.top, 2)
 
             Text(text)

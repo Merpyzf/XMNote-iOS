@@ -46,7 +46,14 @@ final class RichTextToolbar: UIView {
         self.onCameraTextCapture = onCameraTextCapture
         self.onDismissKeyboard = onDismissKeyboard
         self.showsCameraTextCapture = showsCameraTextCapture
-        super.init(frame: CGRect(x: 0, y: 0, width: 0, height: 44))
+        super.init(
+            frame: CGRect(
+                x: 0,
+                y: 0,
+                width: 0,
+                height: InteractionMetrics.minimumTouchTarget
+            )
+        )
         autoresizingMask = .flexibleWidth
         setupUI()
     }
@@ -161,7 +168,7 @@ final class RichTextToolbar: UIView {
     // MARK: - 按钮工厂
 
     private func makeButton(systemName: String, action: Selector) -> UIButton {
-        let button = UIButton(type: .system)
+        let button = XMMinimumHitTargetButton(type: .system)
         let config = UIImage.SymbolConfiguration(pointSize: 16, weight: .medium)
         button.setImage(UIImage(systemName: systemName, withConfiguration: config), for: .normal)
         button.tintColor = .label

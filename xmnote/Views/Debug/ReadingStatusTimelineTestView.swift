@@ -74,11 +74,11 @@ private extension ReadingStatusTimelineTestView {
 
                 Toggle("显示顶部“修改状态”", isOn: $showsTopAction)
                     .font(AppTypography.body)
-                    .tint(Color.brand)
+                    .tint(Color.appTint)
 
                 Toggle("允许编辑真实历史状态", isOn: $allowsHistoryEditing)
                     .font(AppTypography.body)
-                    .tint(Color.brand)
+                    .tint(Color.appTint)
 
                 Text(selectedScenario.detail)
                     .font(AppTypography.caption)

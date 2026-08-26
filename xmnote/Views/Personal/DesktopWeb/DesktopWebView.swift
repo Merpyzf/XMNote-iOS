@@ -106,7 +106,7 @@ struct DesktopWebView: View {
                         }
                     )
                     .disabled(coordinator.state.isTransitioning)
-                    .tint(Color.brand)
+                    .tint(Color.appTint)
                     .padding(.horizontal, Spacing.contentEdge)
                     .padding(.top, Spacing.base)
                     .padding(
@@ -141,7 +141,7 @@ struct DesktopWebView: View {
                             )
                         }
                     )
-                    .tint(Color.brand)
+                    .tint(Color.appTint)
                     .padding(.horizontal, Spacing.contentEdge)
                     .frame(minHeight: XMSettingsPageLayout.detailRowMinHeight)
                 }
@@ -173,7 +173,7 @@ struct DesktopWebView: View {
                         }
                     )
                     .disabled(isUpdatingAccessAuth)
-                    .tint(Color.brand)
+                    .tint(Color.appTint)
                     .padding(.horizontal, Spacing.contentEdge)
                     .frame(minHeight: XMSettingsPageLayout.detailRowMinHeight)
 
@@ -205,7 +205,7 @@ struct DesktopWebView: View {
             }
             .frame(
                 maxWidth: .infinity,
-                minHeight: Spacing.actionReserved,
+                minHeight: InteractionMetrics.minimumTouchTarget,
                 alignment: .topLeading
             )
             .contentShape(Rectangle())
@@ -420,7 +420,7 @@ struct DesktopWebView: View {
             }
         )
         .padding(.horizontal, Spacing.contentEdge)
-        .frame(minHeight: Spacing.actionReserved)
+        .frame(minHeight: InteractionMetrics.minimumTouchTarget)
         .animation(reduceMotion ? nil : .smooth, value: isShowingOtherAddresses)
     }
 
@@ -522,7 +522,7 @@ struct DesktopWebView: View {
             Text("重新尝试")
                 .font(AppTypography.captionSemibold)
                 .foregroundStyle(Color.textPrimary)
-                .frame(minHeight: Spacing.actionReserved, alignment: .top)
+                .frame(minHeight: InteractionMetrics.minimumTouchTarget, alignment: .top)
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)

@@ -250,7 +250,7 @@ private struct DebugBookGroupCoverThemePanel: View {
         .background(Color.surfaceNested, in: RoundedRectangle(cornerRadius: CornerRadius.containerMedium, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: CornerRadius.containerMedium, style: .continuous)
-                .stroke(Color.surfaceBorderSubtle.opacity(0.72), lineWidth: CardStyle.borderWidth)
+                .stroke(Color.surfaceBorderSubtle.opacity(0.72), lineWidth: StrokeWidth.hairline)
         }
         .environment(\.colorScheme, colorScheme)
     }
@@ -263,7 +263,7 @@ private struct DebugBookGroupCoverChecklistItem: View {
         HStack(alignment: .firstTextBaseline, spacing: Spacing.half) {
             Image(systemName: "checkmark.circle.fill")
                 .font(AppTypography.caption)
-                .foregroundStyle(Color.brand)
+                .foregroundStyle(Color.appTint)
 
             Text(text)
                 .font(AppTypography.caption)

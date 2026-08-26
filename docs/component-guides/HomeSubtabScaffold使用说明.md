@@ -1,6 +1,6 @@
 # HomeSubtabScaffold 使用说明
 
-`HomeSubtabScaffold` 位于 `xmnote/UIComponents/Tabs/HomeSubtabScaffold.swift`，用于首页一级 Tab 内的二级子页面壳层。它统一接入 `TopSwitcher`、`KeepAliveSwitcherHost` 与 `HomeTopHeaderGradient`，默认采用 `.hardSwitch`，保证顶部选中态、路由 selection 与内容宿主在无动画事务内同步切换。
+`HomeSubtabScaffold` 位于 `xmnote/Views/Book/Components/HomeSubtabScaffold.swift`，是书架首页一级 Tab 内的页面私有二级子页面壳层。它统一接入 `TopSwitcher`、`KeepAliveSwitcherHost` 与 `HomeTopHeaderGradient`，默认采用 `.hardSwitch`，保证顶部选中态、路由 selection 与内容宿主在无动画事务内同步切换。
 
 ## 快速接入
 

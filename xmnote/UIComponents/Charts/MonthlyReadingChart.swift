@@ -8,6 +8,58 @@ import UIKit
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
+/// 月度阅读图表的局部排版 owner，确保 SwiftUI 渲染字体与 UIKit 宽高测量使用同一来源。
+private enum MonthlyReadingChartTypography {
+    static let collapsedSummary: Font = AppTypography.fixed(
+        baseSize: 12,
+        relativeTo: .caption,
+        minimumPointSize: 12
+    )
+    static let expandedSummary: Font = AppTypography.fixed(
+        baseSize: 10.8,
+        relativeTo: .caption2,
+        minimumPointSize: 10.8
+    )
+    static let arrow: Font = AppTypography.fixed(
+        baseSize: 14,
+        relativeTo: .caption,
+        minimumPointSize: 14
+    )
+    static let dailyDate: Font = AppTypography.fixed(
+        baseSize: 12,
+        relativeTo: .caption,
+        minimumPointSize: 12
+    )
+    static let dailyDuration: Font = AppTypography.fixed(
+        baseSize: 12,
+        relativeTo: .caption,
+        weight: .medium,
+        minimumPointSize: 12
+    )
+
+    static let uiCollapsedSummary: UIFont = AppTypography.uiFixed(
+        baseSize: 12,
+        textStyle: .caption1,
+        minimumPointSize: 12
+    )
+    static let uiExpandedSummary: UIFont = AppTypography.uiFixed(
+        baseSize: 10.8,
+        textStyle: .caption2,
+        minimumPointSize: 10.8
+    )
+    static let uiDailyDate: UIFont = AppTypography.uiFixed(
+        baseSize: 12,
+        textStyle: .caption1,
+        minimumPointSize: 12
+    )
+    static let uiDailyDuration: UIFont = AppTypography.uiFixed(
+        baseSize: 12,
+        textStyle: .caption1,
+        weight: .medium,
+        minimumPointSize: 12
+    )
+}
+
 extension EnvironmentValues {
     /// 调试与预览可强制覆盖系统 Reduce Motion，生产调用默认继续跟随系统设置。
     @Entry var monthlyReadingChartReduceMotionOverride: Bool? = nil

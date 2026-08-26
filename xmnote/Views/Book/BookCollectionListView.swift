@@ -276,7 +276,7 @@ struct BookCollectionListView: View {
                 } label: {
                     Label("编辑", systemImage: "pencil")
                 }
-                .tint(.blue)
+                .tint(Color.editActionFill)
 
                 Button(role: .destructive) {
                     viewModel.presentDeleteConfirmation(for: item)
@@ -526,7 +526,7 @@ struct BookCollectionFeedbackBanner: View {
     private var tint: Color {
         switch feedback.kind {
         case .processing:
-            return Color.brand
+            return Color.appTint
         case .success:
             return Color.feedbackSuccess
         case .warning:

@@ -24,7 +24,7 @@ struct BookRelatedPlaceholderSheet: View {
                         BookRelatedCategorySheetLayout.placeholderCoverWidth,
                         urlString: item.coverURL,
                         cornerRadius: CornerRadius.inlayHairline,
-                        border: .init(color: .surfaceBorderSubtle, width: CardStyle.borderWidth),
+                        border: .init(color: .surfaceBorderSubtle, width: StrokeWidth.hairline),
                         placeholderIconSize: .medium,
                         surfaceStyle: .spine
                     )
@@ -430,6 +430,6 @@ private enum BookRelatedCategoryAlert: Identifiable {
 
 private enum BookRelatedCategorySheetLayout {
     static let optionMinHeight: CGFloat = 56
-    static let controlMinSize: CGFloat = 44
+    static let controlMinSize: CGFloat = InteractionMetrics.minimumTouchTarget
     static let placeholderCoverWidth: CGFloat = 88
 }

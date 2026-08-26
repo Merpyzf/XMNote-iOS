@@ -1,7 +1,7 @@
 import SwiftUI
 
 /**
- * [INPUT]: 依赖 weekday 文本数组与 DesignTokens 颜色语义
+ * [INPUT]: 依赖 weekday 文本数组、ReadCalendarTheme 次级文字色、ReadCalendarTextStyle 与 DesignTokens
  * [OUTPUT]: 对外提供 ReadCalendarWeekdayHeader（阅读日历星期标题行，大字体下保持七列空间结构）
  * [POS]: ReadCalendar 业务内复用组件，统一星期标题样式并减少壳层重复代码
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -20,10 +20,10 @@ struct ReadCalendarWeekdayHeader: View {
                 Text(weekday)
                     .font(
                         dynamicTypeSize.isAccessibilitySize
-                            ? ReadCalendarTypography.weekdayHeaderAccessibilityFont
-                            : ReadCalendarTypography.weekdayHeaderFont
+                            ? ReadCalendarTextStyle.weekdayHeaderAccessibilityFont
+                            : ReadCalendarTextStyle.weekdayHeaderFont
                     )
-                    .foregroundStyle(Color.readCalendarSubtleText)
+                    .foregroundStyle(ReadCalendarTheme.subtleText)
                     .frame(maxWidth: .infinity, minHeight: minHeight)
             }
         }

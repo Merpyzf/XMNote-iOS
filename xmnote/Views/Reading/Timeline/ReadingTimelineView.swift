@@ -11,6 +11,11 @@ import UIKit
 
 private let readingTimelineScrollCoordinateSpaceName = "reading-timeline-scroll-space"
 
+/// 时间线“今天”快捷入口的前景色，保持动作语义并避免借用选中态 token。
+private enum ReadingTimelineAppearance {
+    static let calendarActionForeground = Color.xmHex(0x2DA44F)
+}
+
 /// 统一时间线月历配置，确保所有入口固定周日起始并维持一致周行规则。
 private enum TimelineCalendarFactory {
     static func make() -> Calendar {
@@ -192,13 +197,13 @@ private extension TimelineBootstrapCalendarPanel {
     var bootstrapTodayButton: some View {
         Text("今")
             .font(TimelineCalendarStyle.actionButtonFont)
-            .foregroundStyle(Color.brandDeep.opacity(0.55))
+            .foregroundStyle(ReadingTimelineAppearance.calendarActionForeground.opacity(0.55))
             .padding(.horizontal, Spacing.tight)
             .padding(.vertical, Spacing.half)
-            .background(Color.brand.opacity(0.08))
+            .background(Color.selectionAccent.opacity(0.08))
             .overlay(
                 Capsule()
-                    .stroke(Color.brand.opacity(0.18), lineWidth: CardStyle.borderWidth)
+                    .stroke(Color.selectionAccent.opacity(0.18), lineWidth: StrokeWidth.hairline)
             )
             .clipShape(Capsule())
     }
@@ -264,6 +269,7 @@ private extension TimelineBootstrapCalendarPanel {
 private struct TimelineCalendarPanel: View {
     @Bindable var viewModel: TimelineViewModel
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @StateObject private var calendarProxy = CalendarViewProxy()
     @State private var calendarHeight: CGFloat = 320
     @State private var calendarViewportWidth: CGFloat = 0
@@ -290,6 +296,7 @@ private struct TimelineCalendarPanel: View {
     private let monthSelectionAnimation = Animation.snappy(duration: 0.3)
     private let calendarLongJumpFadeOutAnimation = Animation.easeOut(duration: 0.08)
     private let calendarLongJumpFadeInAnimation = Animation.easeInOut(duration: 0.16)
+    private let headerValueAnimation = Animation.snappy(duration: 0.24)
     private let longJumpMonthThreshold: Int = 2
 
     init(viewModel: TimelineViewModel) {
@@ -498,7 +505,7 @@ private extension TimelineCalendarPanel {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .frame(minHeight: Spacing.actionReserved, alignment: .leading)
+        .frame(minHeight: InteractionMetrics.minimumTouchTarget, alignment: .leading)
         .accessibilityLabel("选择年月")
         .accessibilityValue(monthFormatter.string(from: viewModel.displayedMonthStart))
     }
@@ -527,13 +534,13 @@ private extension TimelineCalendarPanel {
             jumpToDate(calendar.startOfDay(for: Date()), animated: true)
         }
         .font(TimelineCalendarStyle.actionButtonFont)
-        .foregroundStyle(Color.brandDeep)
+        .foregroundStyle(ReadingTimelineAppearance.calendarActionForeground)
         .padding(.horizontal, Spacing.tight)
         .padding(.vertical, Spacing.half)
-        .background(Color.brand.opacity(0.14))
+        .background(Color.selectionAccent.opacity(0.14))
         .overlay(
             Capsule()
-                .stroke(Color.brand.opacity(0.28), lineWidth: CardStyle.borderWidth)
+                .stroke(Color.selectionAccent.opacity(0.28), lineWidth: StrokeWidth.hairline)
         )
         .clipShape(Capsule())
     }
@@ -579,7 +586,10 @@ private extension TimelineCalendarPanel {
                 .font(TimelineCalendarStyle.monthUnitFont)
                 .foregroundStyle(TimelineCalendarStyle.monthUnitColor)
         }
-            .animation(.snappy(duration: 0.24), value: viewModel.displayedMonthStart)
+            .animation(
+                reduceMotion ? nil : headerValueAnimation,
+                value: viewModel.displayedMonthStart
+            )
     }
 
     var selectedDateOffsetText: some View {
@@ -600,7 +610,7 @@ private extension TimelineCalendarPanel {
                 .foregroundStyle(TimelineCalendarStyle.relativeUnitColor)
                 .contentTransition(.numericText())
         }
-        .animation(.snappy(duration: 0.24), value: dayOffset)
+        .animation(reduceMotion ? nil : headerValueAnimation, value: dayOffset)
         .lineLimit(usesExpandedHeaderLayout ? 2 : 1)
         .multilineTextAlignment(.leading)
     }
@@ -699,7 +709,8 @@ private extension TimelineCalendarPanel {
         let clamped = min(max(normalized, visibleDateRange.lowerBound), visibleDateRange.upperBound)
         let targetMonthStart = Self.monthStart(of: clamped, using: calendar)
         let monthDistance = Self.monthDistance(from: viewModel.displayedMonthStart, to: targetMonthStart, using: calendar)
-        let shouldUseLongJump = animated && abs(monthDistance) > longJumpMonthThreshold
+        let shouldAnimate = animated && !reduceMotion
+        let shouldUseLongJump = shouldAnimate && abs(monthDistance) > longJumpMonthThreshold
 
         if shouldUseLongJump {
             performCalendarLongJump(
@@ -711,7 +722,7 @@ private extension TimelineCalendarPanel {
 
         cancelCalendarLongJump(resetVisualState: true)
 
-        if animated {
+        if shouldAnimate {
             scheduleMarkerPreload(for: [viewModel.displayedMonthStart, targetMonthStart])
             if !isUserPagingInFlight {
                 isUserPagingInFlight = true
@@ -747,6 +758,24 @@ private extension TimelineCalendarPanel {
         calendarLongJumpRevision &+= 1
         let revision = calendarLongJumpRevision
         scheduleMarkerPreload(for: [viewModel.displayedMonthStart, monthStart])
+
+        if reduceMotion {
+            isProgrammaticLongJump = false
+            isUserPagingInFlight = false
+            isCalendarLongJumpFading = false
+            commitHeaderState(
+                selectedDay: selectedDay,
+                monthStart: monthStart,
+                animated: false
+            )
+            calendarProxy.scrollToMonth(
+                containing: monthStart,
+                scrollPosition: .firstFullyVisiblePosition,
+                animated: false
+            )
+            return
+        }
+
         isProgrammaticLongJump = true
         if isUserPagingInFlight {
             isUserPagingInFlight = false
@@ -782,8 +811,12 @@ private extension TimelineCalendarPanel {
         isProgrammaticLongJump = false
 
         guard resetVisualState, isCalendarLongJumpFading else { return }
-        withAnimation(calendarLongJumpFadeInAnimation) {
+        if reduceMotion {
             isCalendarLongJumpFading = false
+        } else {
+            withAnimation(calendarLongJumpFadeInAnimation) {
+                isCalendarLongJumpFading = false
+            }
         }
     }
 
@@ -808,7 +841,7 @@ private extension TimelineCalendarPanel {
             }
         }
 
-        if animated {
+        if animated, !reduceMotion {
             withAnimation(stateAnimation ?? monthTransitionAnimation) {
                 commitStateChanges()
             }
@@ -844,7 +877,7 @@ private extension TimelineCalendarPanel {
         guard targetHeight > 0 else { return }
         guard abs(calendarHeight - targetHeight) > 0.5 else { return }
 
-        if animated {
+        if animated, !reduceMotion {
             withAnimation(monthTransitionAnimation) {
                 calendarHeight = targetHeight
             }
@@ -1201,7 +1234,7 @@ private struct TimelineRefreshHint: View {
             .background(Color.surfaceCard.opacity(0.92), in: Capsule())
             .overlay(
                 Capsule()
-                    .stroke(Color.surfaceBorderDefault, lineWidth: CardStyle.borderWidth)
+                    .stroke(Color.surfaceBorderDefault, lineWidth: StrokeWidth.hairline)
             )
             .accessibilityHidden(true)
     }
@@ -1219,7 +1252,7 @@ private struct TimelineCalendarDayCell: View {
         ZStack {
             if isSelected {
                 Circle()
-                    .fill(Color.brand)
+                    .fill(Color.selectionAccent)
                     .frame(
                         width: TimelineCalendarStyle.selectedCircleSize,
                         height: TimelineCalendarStyle.selectedCircleSize
@@ -1235,7 +1268,7 @@ private struct TimelineCalendarDayCell: View {
                         Circle()
                             .trim(from: 0, to: CGFloat(marker.progressRatio))
                             .stroke(
-                                Color.brand,
+                                Color.selectionAccent,
                                 style: StrokeStyle(
                                     lineWidth: TimelineCalendarStyle.progressRingLineWidth,
                                     lineCap: .round,
@@ -1250,7 +1283,7 @@ private struct TimelineCalendarDayCell: View {
                     )
                 } else if marker.isActive {
                     Circle()
-                        .fill(Color.brand)
+                        .fill(Color.selectionAccent)
                         .frame(
                             width: TimelineCalendarStyle.markerDotSize,
                             height: TimelineCalendarStyle.markerDotSize

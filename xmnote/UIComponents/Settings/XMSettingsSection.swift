@@ -33,3 +33,16 @@ struct XMSettingsSection<Content: View>: View {
         }
     }
 }
+
+#Preview("设置分区") {
+    XMSettingsSection("阅读偏好") {
+        CardContainer {
+            Text("分区内容")
+                .font(AppTypography.body)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(Spacing.contentEdge)
+        }
+    }
+    .padding()
+    .background(Color.surfacePage)
+}

@@ -1,5 +1,5 @@
 /**
- * [INPUT]: 依赖 TimelineReadStatusEvent/ReadStatusHelper 数据模型、TimelineCardMetaLine、XMBookCover 封面、XMRatingBar、CardContainer 容器、DesignTokens 设计令牌
+ * [INPUT]: 依赖 TimelineReadStatusEvent/ReadStatusHelper 数据模型、TimelineCardMetaLine、XMBookCover 封面、XMRatingBar、ReadingStatusPresentation、CardContainer 容器与 DesignTokens
  * [OUTPUT]: 对外提供 TimelineStatusCard（时间线状态变更卡片）
  * [POS]: Reading/Timeline 页面私有子视图，渲染书籍封面+状态标签+评分
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -24,7 +24,7 @@ struct TimelineStatusCard: View {
                     XMBookCover.fixedWidth(
                         54,
                         urlString: bookCover,
-                        border: .init(color: .surfaceBorderDefault, width: CardStyle.borderWidth)
+                        border: .init(color: .surfaceBorderDefault, width: StrokeWidth.hairline)
                     )
 
                     VStack(alignment: .leading, spacing: Spacing.compact) {
@@ -67,14 +67,7 @@ struct TimelineStatusCard: View {
     }
 
     private var statusColor: Color {
-        switch event.statusId {
-        case 1: .statusWish
-        case 2: .statusReading
-        case 3: .statusDone
-        case 4: .statusAbandoned
-        case 5: .statusOnHold
-        default: .textHint
-        }
+        ReadingStatusPresentation.color(for: event.statusId) ?? .textHint
     }
 
     // MARK: - Star Rating

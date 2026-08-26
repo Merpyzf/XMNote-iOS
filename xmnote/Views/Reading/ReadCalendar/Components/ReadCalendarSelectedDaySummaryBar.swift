@@ -1,5 +1,5 @@
 /**
- * [INPUT]: 依赖 ReadCalendarDay 当日聚合数据、ReadDurationFormatter 时长格式化能力与 ReadCalendarTypography/DesignTokens 视觉令牌
+ * [INPUT]: 依赖 ReadCalendarDay 当日聚合数据、ReadDurationFormatter 时长格式化能力与 ReadCalendarTextStyle/ReadCalendarTheme/DesignTokens
  * [OUTPUT]: 对外提供 ReadCalendarSelectedDaySummary 与 ReadCalendarSelectedDaySummaryBar，以单层 Liquid Glass 展示事件模式选中日的自适应两行摘要与可选详情入口
  * [POS]: ReadCalendar 页面私有底部摘要组件，由 ReadCalendarContentView 通过 safeAreaBar 挂载
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -103,7 +103,7 @@ struct ReadCalendarSelectedDaySummaryBar: View {
                 .overlay {
                     summaryShape
                         .stroke(
-                            Color.readCalendarSelectionStroke.opacity(0.52),
+                            ReadCalendarTheme.selectionStroke.opacity(0.52),
                             lineWidth: 0.5
                         )
                 }
@@ -114,12 +114,12 @@ struct ReadCalendarSelectedDaySummaryBar: View {
         HStack(spacing: Spacing.base) {
             VStack(alignment: .leading, spacing: Spacing.tiny) {
                 Text(summary.dateText)
-                    .font(ReadCalendarTypography.selectedDayTitleFont)
+                    .font(ReadCalendarTextStyle.selectedDayTitleFont)
                     .foregroundStyle(Color.textPrimary)
                     .lineLimit(1)
 
                 Text(visibleFactsText)
-                    .font(ReadCalendarTypography.selectedDayFactsFont)
+                    .font(ReadCalendarTextStyle.selectedDayFactsFont)
                     .foregroundStyle(Color.textSecondary)
                     .monospacedDigit()
                     .lineLimit(1)
@@ -136,10 +136,10 @@ struct ReadCalendarSelectedDaySummaryBar: View {
                         Image(systemName: "chevron.right")
                             .imageScale(.small)
                     }
-                    .font(ReadCalendarTypography.selectedDayActionFont)
+                    .font(ReadCalendarTextStyle.selectedDayActionFont)
                     .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
                     .foregroundStyle(Color.textPrimary)
-                    .frame(minHeight: 44)
+                    .frame(minHeight: InteractionMetrics.minimumTouchTarget)
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)

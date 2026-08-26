@@ -47,7 +47,7 @@ struct AIConfigurationPromptEditSheet: View {
                         Label("恢复此项默认 Prompt", systemImage: "arrow.counterclockwise")
                             .font(AppTypography.subheadlineSemibold)
                             .frame(maxWidth: .infinity)
-                            .frame(height: Spacing.actionReserved)
+                            .frame(height: InteractionMetrics.minimumTouchTarget)
                     }
                     .buttonStyle(.bordered)
                 }

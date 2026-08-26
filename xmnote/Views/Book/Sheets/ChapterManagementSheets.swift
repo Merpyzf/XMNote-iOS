@@ -1,5 +1,5 @@
 /**
- * [INPUT]: 依赖章节移动/排序/批量/远端同步状态，依赖现有 DesignTokens、LoadingGate、XMSystemAlert、OCRRepository 与系统相机/照片入口
+ * [INPUT]: 依赖章节移动/排序/批量/远端同步状态，依赖现有 DesignTokens、XMStarredAppearance、LoadingGate、XMSystemAlert、OCRRepository 与系统相机/照片入口
  * [OUTPUT]: 对外提供章节移动、排序、手工批量录入与文曲目录选择 Sheet，覆盖选区缩进、预览、文本历史、OCR 追加和写入反馈
  * [POS]: Views/Book/Sheets 的目录管理辅助任务页，由 ChapterManagerView 以 sheet(item:) 展示
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -69,7 +69,7 @@ private struct ChapterMoveTargetRow: View {
     var body: some View {
         HStack(spacing: Spacing.base) {
             Image(systemName: target.isRoot ? "books.vertical" : "folder")
-                .foregroundStyle(target.isEnabled ? Color.brand : Color.textHint)
+                .foregroundStyle(target.isEnabled ? Color.appTint : Color.textHint)
                 .frame(width: Spacing.double)
 
             VStack(alignment: .leading, spacing: Spacing.compact) {
@@ -121,7 +121,7 @@ struct ChapterSiblingOrderSheet: View {
                 ForEach(draftItems) { item in
                     HStack(spacing: Spacing.base) {
                         Image(systemName: item.isStarred ? "star.fill" : "line.3.horizontal")
-                            .foregroundStyle(item.isStarred ? Color.ratingActive : Color.textHint)
+                            .foregroundStyle(item.isStarred ? XMStarredAppearance.foreground : Color.textHint)
                             .frame(width: Spacing.double)
 
                         VStack(alignment: .leading, spacing: Spacing.compact) {
@@ -341,14 +341,14 @@ private extension ChapterBatchImportSheet {
         Button(action: viewModel.undoTextChange) {
             Label("撤销", systemImage: "arrow.uturn.backward")
                 .font(AppTypography.subheadline)
-                .frame(minHeight: 44)
+                .frame(minHeight: InteractionMetrics.minimumTouchTarget)
         }
         .disabled(!viewModel.canUndo || isReadingPhoto)
 
         Button(action: viewModel.redoTextChange) {
             Label("重做", systemImage: "arrow.uturn.forward")
                 .font(AppTypography.subheadline)
-                .frame(minHeight: 44)
+                .frame(minHeight: InteractionMetrics.minimumTouchTarget)
         }
         .disabled(!viewModel.canRedo || isReadingPhoto)
     }
@@ -364,7 +364,7 @@ private extension ChapterBatchImportSheet {
         } label: {
             Label("句点", systemImage: "arrow.left.arrow.right")
                 .font(AppTypography.subheadline)
-                .frame(minHeight: 44)
+                .frame(minHeight: InteractionMetrics.minimumTouchTarget)
         }
         .disabled(viewModel.text.isEmpty || isBusy)
     }
@@ -373,7 +373,7 @@ private extension ChapterBatchImportSheet {
         Button(action: increaseSelectedIndent) {
             Label("增加层级", systemImage: "increase.indent")
                 .font(AppTypography.subheadline)
-                .frame(minHeight: 44)
+                .frame(minHeight: InteractionMetrics.minimumTouchTarget)
         }
         .disabled(viewModel.text.isEmpty || isBusy)
     }
@@ -382,7 +382,7 @@ private extension ChapterBatchImportSheet {
         Button(action: requestCameraPresentation) {
             Label("拍照识字", systemImage: "camera.viewfinder")
                 .font(AppTypography.subheadline)
-                .frame(minHeight: 44)
+                .frame(minHeight: InteractionMetrics.minimumTouchTarget)
         }
         .disabled(isBusy)
     }
@@ -391,7 +391,7 @@ private extension ChapterBatchImportSheet {
         PhotosPicker(selection: $selectedPhotoItem, matching: .images) {
             Label("照片识字", systemImage: "photo.badge.magnifyingglass")
                 .font(AppTypography.subheadline)
-                .frame(minHeight: 44)
+                .frame(minHeight: InteractionMetrics.minimumTouchTarget)
         }
         .disabled(isBusy)
     }
@@ -875,7 +875,7 @@ struct ChapterRemoteSyncSheet: View {
                                 Image(systemName: viewModel.selectedItemIDs.contains(item.id) ? "checkmark.circle.fill" : "circle")
                                     .foregroundStyle(
                                         viewModel.selectedItemIDs.contains(item.id)
-                                            ? Color.brand
+                                            ? Color.selectionAccent
                                             : Color.textHint
                                     )
                                     .frame(width: Spacing.double)
@@ -991,7 +991,7 @@ private struct ChapterRemoteCandidateRow: View {
     var body: some View {
         HStack(spacing: Spacing.base) {
             Image(systemName: "book.closed")
-                .foregroundStyle(Color.brand)
+                .foregroundStyle(Color.appTint)
                 .frame(width: Spacing.double)
 
             VStack(alignment: .leading, spacing: Spacing.compact) {

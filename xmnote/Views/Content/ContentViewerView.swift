@@ -8,6 +8,18 @@
 import SwiftUI
 import UIKit
 
+/// 内容查看页搜索上下文的强调色，保持原有深绿而不借用选中前景语义。
+private enum ContentViewerAppearance {
+    static let searchContextAccent = Color.xmHex(0x2DA44F)
+}
+
+/// 内容查看器 Hero 的局部排版，保留品牌字体与 title3 动态字号曲线。
+private enum ContentViewerTypography {
+    static var heroTitle: Font {
+        AppTypography.brandDisplay(size: 24, relativeTo: .title3)
+    }
+}
+
 /// 通用内容查看器，统一承接时间线与书籍详情的分页查看入口。
 struct ContentViewerView: View {
     let source: ContentViewerSourceContext
@@ -998,7 +1010,7 @@ private struct ContentViewerSearchContextCard: View {
                 HStack(spacing: Spacing.cozy) {
                     Label("搜索命中", systemImage: "magnifyingglass")
                         .font(AppTypography.captionSemibold)
-                        .foregroundStyle(Color.brandDeep)
+                        .foregroundStyle(ContentViewerAppearance.searchContextAccent)
 
                     Text(context.field)
                         .font(AppTypography.caption)
@@ -1013,7 +1025,10 @@ private struct ContentViewerSearchContextCard: View {
                                     .font(AppTypography.captionSemibold)
                             }
                             .buttonStyle(.plain)
-                            .frame(width: Spacing.actionReserved, height: Spacing.actionReserved)
+                            .frame(
+                                width: InteractionMetrics.minimumTouchTarget,
+                                height: InteractionMetrics.minimumTouchTarget
+                            )
                             .accessibilityLabel("上一个命中")
 
                             Text("\(currentIndex)/\(totalCount)")
@@ -1026,7 +1041,10 @@ private struct ContentViewerSearchContextCard: View {
                                     .font(AppTypography.captionSemibold)
                             }
                             .buttonStyle(.plain)
-                            .frame(width: Spacing.actionReserved, height: Spacing.actionReserved)
+                            .frame(
+                                width: InteractionMetrics.minimumTouchTarget,
+                                height: InteractionMetrics.minimumTouchTarget
+                            )
                             .accessibilityLabel("下一个命中")
                         }
                         .foregroundStyle(Color.iconSecondary)
@@ -1083,7 +1101,7 @@ struct ContentViewerHeroCard<Accessory: View>: View {
         CardContainer(cornerRadius: CornerRadius.containerMedium) {
             VStack(alignment: .leading, spacing: Spacing.cozy) {
                 Text(title)
-                    .font(AppTypography.brandDisplay(size: 24, relativeTo: .title3))
+                    .font(ContentViewerTypography.heroTitle)
                     .foregroundStyle(.primary)
                     .lineLimit(2)
 

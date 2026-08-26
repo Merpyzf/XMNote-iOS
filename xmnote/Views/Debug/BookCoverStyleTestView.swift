@@ -89,10 +89,10 @@ private extension BookCoverStyleTestContentView {
                     }
 
                     Slider(value: $viewModel.livePreviewWidth, in: 48...140, step: 1)
-                        .tint(Color.brand)
+                        .tint(Color.appTint)
 
                     HStack(spacing: Spacing.half) {
-                        statusBadge(viewModel.livePreviewTier.title, tint: Color.brand.opacity(0.14), foreground: Color.brand)
+                        statusBadge(viewModel.livePreviewTier.title, tint: Color.appTint.opacity(0.14), foreground: Color.appTint)
                         Text(viewModel.activeSourceTitle)
                             .font(.caption)
                             .foregroundStyle(Color.textSecondary)
@@ -437,7 +437,7 @@ private extension BookCoverStyleTestContentView {
             cornerRadius: surfaceStyle == .spine ? CornerRadius.inlayHairline : CornerRadius.inlaySmall,
             border: .init(
                 color: surfaceStyle == .spine ? .surfaceBorderSubtle : .surfaceBorderDefault,
-                width: CardStyle.borderWidth
+                width: StrokeWidth.hairline
             ),
             placeholderIconSize: .medium,
             surfaceStyle: surfaceStyle
@@ -447,7 +447,7 @@ private extension BookCoverStyleTestContentView {
     func referenceRule(_ text: String) -> some View {
         HStack(alignment: .top, spacing: Spacing.half) {
             Circle()
-                .fill(Color.brand)
+                .fill(Color.appTint)
                 .frame(width: 5, height: 5)
                 .padding(.top, 6)
 

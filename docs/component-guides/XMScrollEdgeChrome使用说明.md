@@ -1,7 +1,7 @@
 # XMScrollEdgeChrome / XMScrollEdgeWash 使用说明
 
 ## 组件定位
-- 源码路径：`xmnote/UIComponents/Foundation/XMScrollEdgeChrome.swift`、`xmnote/UIComponents/Foundation/XMScrollEdgeWash.swift`
+- 源码路径：`xmnote/UIComponents/Navigation/ScrollEdge/XMScrollEdgeChrome.swift`、`xmnote/UIComponents/Navigation/ScrollEdge/XMScrollEdgeWash.swift`
 - 角色：为存在固定顶部栏、底部栏或独立滚动视口的页面提供滚动边缘收口能力。
 - 分工：`XMScrollEdgeChrome` 负责固定边缘栏容器；`XMScrollEdgeWash` 负责滚动视口顶部、底部或双向的柔和边界覆盖层。
 - 边界：组件不承载业务筛选、搜索执行、滚动位置记忆或导航语义；系统导航栏、系统 Sheet chrome、Liquid Glass TabBar 优先使用系统 `safeAreaBar + scrollEdgeEffectStyle`。

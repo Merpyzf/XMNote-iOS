@@ -2203,7 +2203,7 @@ private struct BootstrapMetricsCard: View {
                     if index < 2 {
                         Rectangle()
                             .fill(Color.surfaceBorderSubtle.opacity(0.42))
-                            .frame(width: CardStyle.borderWidth, height: 38)
+                            .frame(width: StrokeWidth.hairline, height: 38)
                     }
                 }
             }
@@ -2244,7 +2244,7 @@ private struct BootstrapBookGridItem: View {
                 .fill(Color.surfaceCard)
                 .overlay {
                     RoundedRectangle(cornerRadius: CornerRadius.inlaySmall, style: .continuous)
-                        .stroke(Color.surfaceBorderSubtle.opacity(0.32), lineWidth: CardStyle.borderWidth)
+                        .stroke(Color.surfaceBorderSubtle.opacity(0.32), lineWidth: StrokeWidth.hairline)
                 }
                 .aspectRatio(0.68, contentMode: .fit)
             BootstrapLine(height: 8)
@@ -2310,7 +2310,7 @@ private struct BootstrapGroupedListStructure: View {
                         if index < rowCount - 1 {
                             Rectangle()
                                 .fill(Color.surfaceBorderSubtle.opacity(0.36))
-                                .frame(height: CardStyle.borderWidth)
+                                .frame(height: StrokeWidth.hairline)
                                 .padding(.leading, Self.dividerLeadingInset)
                         }
                     }
@@ -2323,6 +2323,7 @@ private struct BootstrapGroupedListStructure: View {
 /// 我的页设置面板按生产 44pt 行高组织，圆角与表面色均复用现有令牌。
 private struct BootstrapSettingsPanel: View {
     private static let rowIconSize: CGFloat = 24
+    private static let rowHeight: CGFloat = 44
     private static let dividerLeadingInset = Spacing.contentEdge + rowIconSize + Spacing.base
 
     let rowCount: Int
@@ -2339,13 +2340,13 @@ private struct BootstrapSettingsPanel: View {
                         Spacer(minLength: 0)
                         BootstrapLine(width: 18, height: 7)
                     }
-                    .frame(minHeight: 44)
+                    .frame(minHeight: Self.rowHeight)
                     .padding(.horizontal, Spacing.contentEdge)
 
                     if index < rowCount - 1 {
                         Rectangle()
                             .fill(Color.surfaceBorderSubtle.opacity(0.36))
-                            .frame(height: CardStyle.borderWidth)
+                            .frame(height: StrokeWidth.hairline)
                             .padding(.leading, Self.dividerLeadingInset)
                     }
                 }

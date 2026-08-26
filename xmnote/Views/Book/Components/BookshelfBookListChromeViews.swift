@@ -1,5 +1,5 @@
 /**
- * [INPUT]: 依赖 BookshelfBookListChromeMetrics、顶部按钮与书架管理模式动效
+ * [INPUT]: 依赖 BookshelfBookListChromeMetrics、InteractionMetrics、顶部按钮与书架管理模式动效
  * [OUTPUT]: 对外提供 BookshelfBookListBrowsingChrome，供二级书籍列表页组合普通态顶部 chrome
  * [POS]: Book 模块二级书籍列表页面私有 chrome 子视图，降低 BookshelfBookListView 文件职责密度
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -32,7 +32,10 @@ struct BookshelfBookListBrowsingChrome: View {
                 HStack(spacing: Spacing.cozy) {
                     TopBarBackButton(action: onBack, foregroundColor: Color.textPrimary)
                         .buttonStyle(.plain)
-                        .frame(width: Spacing.actionReserved, height: Spacing.actionReserved)
+                        .frame(
+                            width: InteractionMetrics.minimumTouchTarget,
+                            height: InteractionMetrics.minimumTouchTarget
+                        )
                         .contentShape(Circle())
 
                     Spacer(minLength: Spacing.compact)

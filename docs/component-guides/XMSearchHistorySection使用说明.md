@@ -1,7 +1,7 @@
 # XMSearchHistorySection 使用说明
 
 ## 组件定位
-- 源码路径：`xmnote/UIComponents/Foundation/XMSearchHistorySection.swift`
+- 源码路径：`xmnote/UIComponents/Controls/Search/XMSearchHistorySection.swift`
 - 角色：跨搜索场景复用的最近搜索词区块，统一承载标题、展开/收起、编辑态、单条删除、清空入口、空态策略与流式 chip 布局。
 - 边界：组件只负责搜索历史的展示与交互事件分发，不直接读写 Repository，不持有搜索 query，不负责中心确认弹窗的挂载位置。
 - 视觉原则：chip 的视觉胶囊维持约 32pt 高度，触控区维持 44pt；编辑态右侧删除区以操作槽展开/收起表达，而不是条件插入淡入视图。

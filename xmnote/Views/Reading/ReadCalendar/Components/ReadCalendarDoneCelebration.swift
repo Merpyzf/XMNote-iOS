@@ -103,7 +103,7 @@ struct ReadCalendarDoneMarkerButton: View {
                     .fill(Color.white.opacity(0.08))
                     .overlay {
                         Capsule()
-                            .stroke(Color.white.opacity(0.12), lineWidth: CardStyle.borderWidth)
+                            .stroke(Color.white.opacity(0.12), lineWidth: StrokeWidth.hairline)
                     }
 
                 ReadCalendarDoneCelebrationEffect(
@@ -118,7 +118,10 @@ struct ReadCalendarDoneMarkerButton: View {
                 }
             }
             .frame(width: visualWidth, height: visualHeight)
-            .frame(minWidth: 44, minHeight: 44)
+            .frame(
+                minWidth: InteractionMetrics.minimumTouchTarget,
+                minHeight: InteractionMetrics.minimumTouchTarget
+            )
             .contentShape(Rectangle())
         }
         .buttonStyle(

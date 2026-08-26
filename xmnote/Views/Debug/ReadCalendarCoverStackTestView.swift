@@ -135,10 +135,10 @@ private extension ReadCalendarCoverStackTestContentView {
                 Spacer(minLength: 0)
                 Text(viewModel.selectedScenario.title)
                     .font(.caption.weight(.semibold))
-                    .foregroundStyle(Color.brand)
+                    .foregroundStyle(Color.appTint)
                     .padding(.horizontal, 8)
                     .padding(.vertical, 4)
-                    .background(Color.brand.opacity(0.14), in: Capsule())
+                    .background(Color.appTint.opacity(0.14), in: Capsule())
             }
 
             ZStack {
@@ -146,7 +146,7 @@ private extension ReadCalendarCoverStackTestContentView {
                     .fill(Color.surfaceCard)
                     .overlay {
                         RoundedRectangle(cornerRadius: CornerRadius.blockLarge, style: .continuous)
-                            .stroke(Color.surfaceBorderStrong, lineWidth: CardStyle.borderWidth)
+                            .stroke(Color.surfaceBorderStrong, lineWidth: StrokeWidth.hairline)
                     }
 
                 ReadCalendarCoverFanStack(
@@ -185,7 +185,7 @@ private extension ReadCalendarCoverStackTestContentView {
                     .fill(Color.surfaceCard)
                     .overlay {
                         RoundedRectangle(cornerRadius: CornerRadius.blockLarge, style: .continuous)
-                            .stroke(Color.surfaceBorderStrong, lineWidth: CardStyle.borderWidth)
+                            .stroke(Color.surfaceBorderStrong, lineWidth: StrokeWidth.hairline)
                     }
 
                 ReadCalendarMonthGrid(
@@ -360,7 +360,7 @@ private extension ReadCalendarCoverStackConfigSheet {
                         .padding(.vertical, 6)
                         .background(
                             viewModel.selectedScenario == scenario
-                            ? Color.brand : Color.controlFillSecondary
+                            ? Color.selectionAccent : Color.controlFillSecondary
                         )
                         .foregroundStyle(
                             viewModel.selectedScenario == scenario
@@ -551,7 +551,7 @@ private extension ReadCalendarCoverStackConfigSheet {
                     .foregroundStyle(Color.textPrimary)
             }
             Slider(value: value, in: range)
-                .tint(Color.brand)
+                .tint(Color.appTint)
         }
     }
 
@@ -572,7 +572,7 @@ private extension ReadCalendarCoverStackConfigSheet {
                     .foregroundStyle(Color.textPrimary)
             }
             Slider(value: value, in: range)
-                .tint(Color.brand)
+                .tint(Color.appTint)
         }
     }
 }
@@ -863,7 +863,7 @@ private struct ReadCalendarCoverStackTestFullscreenOverlay: View {
             )
             .overlay {
                 Capsule()
-                    .stroke(Color.white.opacity(Layout.toggleButtonStrokeOpacity), lineWidth: CardStyle.borderWidth)
+                    .stroke(Color.white.opacity(Layout.toggleButtonStrokeOpacity), lineWidth: StrokeWidth.hairline)
             }
             .shadow(color: Color.black.opacity(Layout.toggleButtonShadowOpacity), radius: Layout.toggleButtonShadowRadius, x: 0, y: 4)
         }

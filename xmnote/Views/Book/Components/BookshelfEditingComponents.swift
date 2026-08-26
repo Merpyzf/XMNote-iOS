@@ -1,5 +1,5 @@
 /**
- * [INPUT]: 依赖 SwiftUI/UIKit 按钮、图标、搜索输入与动画能力
+ * [INPUT]: 依赖 SwiftUI/UIKit 按钮、图标、搜索输入、InteractionMetrics 与动画能力
  * [OUTPUT]: 对外提供书架编辑态顶部 chrome、统一搜索 surface、整理态双态上下文检索入口、选择态封面/行遮罩与管理模式转场参数
  * [POS]: Book 模块页面私有编辑态与搜索组件集合，服务默认书架与二级书籍列表的整理模式选择、检索和顶部批量命令
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -7,6 +7,24 @@
 
 import SwiftUI
 import UIKit
+
+/// 书架编辑态装饰符号的排版规格，保持空态与选择反馈的既有缩放行为。
+private enum BookshelfEditingTypography {
+    static let emptyStateSymbol = AppTypography.fixed(
+        baseSize: 48,
+        relativeTo: .title,
+        weight: .regular
+    )
+
+    /// 根据选择符号的动态尺寸生成现有半粗体字体。
+    static func selectionCheckmark(baseSize: CGFloat) -> Font {
+        AppTypography.fixed(
+            baseSize: baseSize,
+            relativeTo: .subheadline,
+            weight: .semibold
+        )
+    }
+}
 
 /// 书架管理模式的统一动效参数，保证顶部 chrome、内容 inset 与底部面板按同一语义节奏切换。
 enum BookshelfManagementMotion {
@@ -100,7 +118,7 @@ enum BookshelfManagementMotion {
 
 /// 为书架一级页与二级页提供一致的搜索 drawer 展示尺寸。
 enum BookshelfSearchSurfaceMetrics {
-    static let touchHeight: CGFloat = 44
+    static let touchHeight: CGFloat = InteractionMetrics.minimumTouchTarget
     static let compactVisualHeight: CGFloat = 38
     static let accessibilityVisualHeight: CGFloat = 46
     static let iconSize: CGFloat = 17
@@ -207,7 +225,7 @@ final class BookshelfSearchSurfaceView: UIView, UITextFieldDelegate {
     private let surfaceView = UIView()
     private let iconView = UIImageView(image: UIImage(systemName: "magnifyingglass"))
     private let textField = UITextField()
-    private let clearButton = UIButton(type: .system)
+    private let clearButton = XMMinimumHitTargetButton(type: .system)
     private let cancelButton = UIButton(type: .system)
     private lazy var surfaceTapRecognizer: UITapGestureRecognizer = {
         let recognizer = UITapGestureRecognizer(target: self, action: #selector(handleSurfaceTap))
@@ -232,6 +250,15 @@ final class BookshelfSearchSurfaceView: UIView, UITextFieldDelegate {
     @available(*, unavailable)
     required init?(coder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
+    }
+
+    /// 优先把外层 44pt 容器中的触点路由给视觉尺寸不变的清除按钮。
+    override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
+        let clearButtonPoint = clearButton.convert(point, from: self)
+        if clearButton.point(inside: clearButtonPoint, with: event) {
+            return clearButton.hitTest(clearButtonPoint, with: event) ?? clearButton
+        }
+        return super.hitTest(point, with: event)
     }
 
     /// 重置复用状态，避免 UICollectionView cell 复用时残留焦点与 closure。
@@ -295,7 +322,7 @@ final class BookshelfSearchSurfaceView: UIView, UITextFieldDelegate {
         surfaceView.backgroundColor = UIColor.xmResolved(Color.surfaceCard).withAlphaComponent(0.68)
         surfaceView.layer.cornerRadius = BookshelfSearchSurfaceMetrics.compactVisualHeight / 2
         surfaceView.layer.cornerCurve = .continuous
-        surfaceView.layer.borderWidth = CardStyle.borderWidth
+        surfaceView.layer.borderWidth = StrokeWidth.hairline
         surfaceView.layer.borderColor = UIColor.xmResolved(Color.surfaceBorderSubtle.opacity(0.22)).cgColor
         surfaceView.addGestureRecognizer(surfaceTapRecognizer)
 
@@ -308,7 +335,7 @@ final class BookshelfSearchSurfaceView: UIView, UITextFieldDelegate {
         textField.borderStyle = .none
         textField.backgroundColor = .clear
         textField.textColor = UIColor.xmResolved(Color.textPrimary)
-        textField.tintColor = UIColor.xmResolved(Color.brand)
+        textField.tintColor = UIColor.xmResolved(Color.appTint)
         textField.returnKeyType = .search
         textField.clearButtonMode = .never
         textField.font = BookshelfTypography.uiSearchField
@@ -642,7 +669,7 @@ struct BookshelfEditChrome<BatchActions: View>: View {
                 .lineLimit(1)
                 .truncationMode(.tail)
                 .frame(width: sideSlotWidth, alignment: .leading)
-                .frame(minHeight: Spacing.actionReserved)
+                .frame(minHeight: InteractionMetrics.minimumTouchTarget)
                 .accessibilityLabel(selectionToggleTitle)
                 .disabled(!effectiveSelectionToggleEnabled)
 
@@ -670,7 +697,7 @@ struct BookshelfEditChrome<BatchActions: View>: View {
 
             rightActions
                 .frame(width: sideSlotWidth, alignment: .trailing)
-                .frame(minHeight: Spacing.actionReserved)
+                .frame(minHeight: InteractionMetrics.minimumTouchTarget)
         }
         .padding(.horizontal, Spacing.screenEdge)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
@@ -718,7 +745,11 @@ struct BookshelfEditChrome<BatchActions: View>: View {
                 .foregroundStyle(Color.textPrimary)
                 .lineLimit(1)
                 .truncationMode(.tail)
-                .frame(minWidth: 50, minHeight: Spacing.actionReserved, alignment: .trailing)
+                .frame(
+                    minWidth: 50,
+                    minHeight: InteractionMetrics.minimumTouchTarget,
+                    alignment: .trailing
+                )
                 .accessibilityLabel("退出整理模式")
         }
     }
@@ -846,13 +877,13 @@ struct BookshelfEditSearchContextBar: View {
             .background(Color.surfaceCard.opacity(0.76), in: Capsule())
             .overlay {
                 Capsule()
-                    .stroke(Color.surfaceBorderSubtle.opacity(0.34), lineWidth: CardStyle.borderWidth)
+                    .stroke(Color.surfaceBorderSubtle.opacity(0.34), lineWidth: StrokeWidth.hairline)
             }
             .glassEffect(.regular.interactive(), in: .capsule)
             .contentShape(Capsule())
         }
         .buttonStyle(.plain)
-        .frame(minHeight: Spacing.actionReserved)
+        .frame(minHeight: InteractionMetrics.minimumTouchTarget)
         .accessibilityLabel("搜索整理结果")
     }
 
@@ -874,7 +905,10 @@ struct BookshelfEditSearchContextBar: View {
                     Image(systemName: "xmark.circle.fill")
                         .font(AppTypography.body)
                         .foregroundStyle(Color.iconSecondary)
-                        .frame(width: Spacing.actionReserved, height: Spacing.actionReserved)
+                        .frame(
+                            width: InteractionMetrics.minimumTouchTarget,
+                            height: InteractionMetrics.minimumTouchTarget
+                        )
                         .contentShape(Circle())
                 }
                 .buttonStyle(.plain)
@@ -890,7 +924,7 @@ struct BookshelfEditSearchContextBar: View {
             .background(Color.surfaceCard.opacity(0.84), in: Capsule())
             .overlay {
                 Capsule()
-                    .stroke(Color.surfaceBorderSubtle.opacity(0.42), lineWidth: CardStyle.borderWidth)
+                    .stroke(Color.surfaceBorderSubtle.opacity(0.42), lineWidth: StrokeWidth.hairline)
             }
             .glassEffect(.regular.interactive(), in: .capsule)
 
@@ -898,7 +932,10 @@ struct BookshelfEditSearchContextBar: View {
                 .font(BookshelfTypography.searchField)
                 .foregroundStyle(Color.textSecondary)
                 .lineLimit(1)
-                .frame(minWidth: Spacing.actionReserved, minHeight: Spacing.actionReserved)
+                .frame(
+                    minWidth: InteractionMetrics.minimumTouchTarget,
+                    minHeight: InteractionMetrics.minimumTouchTarget
+                )
                 .accessibilityLabel("退出整理搜索")
         }
     }
@@ -949,12 +986,12 @@ struct BookshelfContextualEmptyStateView: View {
     let icon: String
     let title: String
     let message: String?
-    var iconColor: Color = Color.brand.opacity(0.30)
+    var iconColor: Color = Color.appTint.opacity(0.30)
 
     var body: some View {
         VStack(spacing: Spacing.base) {
             Image(systemName: icon)
-                .font(AppTypography.fixed(baseSize: 48, relativeTo: .title, weight: .regular))
+                .font(BookshelfEditingTypography.emptyStateSymbol)
                 .foregroundStyle(iconColor)
 
             VStack(spacing: Spacing.tiny) {
@@ -995,7 +1032,7 @@ struct BookshelfSelectionCoverOverlay: View {
                 .animation(maskAnimation, value: isSelected)
 
             shape
-                .strokeBorder(Color.white.opacity(0.22), lineWidth: CardStyle.borderWidth)
+                .strokeBorder(Color.white.opacity(0.22), lineWidth: StrokeWidth.hairline)
                 .opacity(isSelected ? 1 : 0)
                 .animation(maskAnimation, value: isSelected)
         }
@@ -1027,22 +1064,18 @@ struct BookshelfSelectionRowOverlay: View {
 
         ZStack(alignment: .trailing) {
             shape
-                .fill(Color.brand.opacity(0.08))
+                .fill(Color.selectionAccent.opacity(0.08))
                 .opacity(isSelected ? 1 : 0)
                 .animation(rowSurfaceAnimation, value: isSelected)
 
             shape
-                .stroke(Color.brand.opacity(0.18), lineWidth: CardStyle.borderWidth)
+                .stroke(Color.selectionAccent.opacity(0.18), lineWidth: StrokeWidth.hairline)
                 .opacity(isSelected ? 1 : 0)
                 .animation(rowSurfaceAnimation, value: isSelected)
 
             Image(systemName: "checkmark")
-                .font(AppTypography.fixed(
-                    baseSize: checkSize,
-                    relativeTo: .subheadline,
-                    weight: .semibold
-                ))
-                .foregroundStyle(Color.brand)
+                .font(BookshelfEditingTypography.selectionCheckmark(baseSize: checkSize))
+                .foregroundStyle(Color.selectionAccent)
                 .padding(.trailing, Spacing.base)
                 .opacity(isSelected ? 1 : 0)
                 .animation(rowCheckAnimation, value: isSelected)

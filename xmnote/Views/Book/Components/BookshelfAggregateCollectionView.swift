@@ -1551,7 +1551,7 @@ private final class BookshelfAggregateSearchEmptyCell: UICollectionViewCell {
                 icon: "square.grid.2x2",
                 title: "没有匹配的项",
                 message: "清除搜索后查看全部内容",
-                iconColor: Color.brand.opacity(0.30)
+                iconColor: Color.appTint.opacity(0.30)
             )
             .frame(minHeight: BookshelfAggregateCollectionMetrics.searchEmptyHeight)
         }

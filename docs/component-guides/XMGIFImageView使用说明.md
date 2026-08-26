@@ -1,7 +1,7 @@
 # XMGIFImageView 使用说明
 
 ## 组件定位
-- 源码路径：`xmnote/UIComponents/Foundation/XMGIFImageView.swift`
+- 源码路径：`xmnote/UIComponents/Media/Images/XMGIFImageView.swift`
 - 角色：SwiftUI 与 Gifu 的桥接层，负责 GIF 数据播放与生命周期回收。
 - 使用建议：通常由 `XMRemoteImage` 间接调用；仅在你已持有 GIF 二进制数据时直接使用。
 

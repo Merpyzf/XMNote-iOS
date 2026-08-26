@@ -169,7 +169,10 @@ private struct SourceManagementRowView: View {
             Image(systemName: "line.3.horizontal")
                 .font(AppTypography.subheadlineSemibold)
                 .foregroundStyle(Color.iconSecondary)
-                .frame(width: Spacing.actionReserved, height: Spacing.actionReserved)
+                .frame(
+                    width: SourceManagementRowMetrics.reorderHandleSlotSize,
+                    height: SourceManagementRowMetrics.reorderHandleSlotSize
+                )
                 .accessibilityHidden(true)
         }
     }
@@ -231,4 +234,5 @@ private struct SourceManagementRowAccessibilityActions: ViewModifier {
 private enum SourceManagementRowMetrics {
     static let minHeight: CGFloat = 64
     static let iconBoxSize: CGFloat = 34
+    static let reorderHandleSlotSize: CGFloat = InteractionMetrics.minimumTouchTarget
 }

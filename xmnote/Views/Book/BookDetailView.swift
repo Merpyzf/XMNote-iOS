@@ -1,5 +1,5 @@
 /**
- * [INPUT]: 依赖 RepositoryContainer、AppNavigationCoordinator、BookDetailViewModel、XMBookCover、XMRatingBar 与外层书籍/阅读路由回调
+ * [INPUT]: 依赖 RepositoryContainer、AppNavigationCoordinator、BookDetailViewModel、XMBookCover、XMRatingBar、XMStarredAppearance、InteractionMetrics 与外层书籍/阅读路由回调
  * [OUTPUT]: 对外提供首帧结构稳定的 BookDetailView 与 BookChapterNotesView，形成封面影像 Hero、可收起概览、搜索工具栏、持久化排序与四域内容常驻的单书工作台
  * [POS]: Book 模块单书内容工作台壳层，以共享 Chrome、独立内容滚动与单一更多菜单承接目录/书摘/相关/书评
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -1010,7 +1010,10 @@ private struct BookWorkspaceContentView: View {
                     Image(systemName: expandedChapterIDs.contains(chapter.id) ? "chevron.down" : "chevron.right")
                         .font(AppTypography.captionSemibold)
                         .foregroundStyle(Color.textSecondary)
-                        .frame(width: Spacing.double, height: Spacing.actionReserved)
+                        .frame(
+                            width: Spacing.double,
+                            height: InteractionMetrics.minimumTouchTarget
+                        )
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel(expandedChapterIDs.contains(chapter.id) ? "收起章节" : "展开章节")
@@ -1039,7 +1042,7 @@ private struct BookWorkspaceContentView: View {
 
                     if chapter.isStarred {
                         Image(systemName: "star.fill")
-                            .foregroundStyle(Color.ratingActive)
+                            .foregroundStyle(XMStarredAppearance.foreground)
                             .accessibilityLabel("已收藏")
                     }
 
@@ -1047,7 +1050,7 @@ private struct BookWorkspaceContentView: View {
                         .font(AppTypography.captionSemibold)
                         .foregroundStyle(Color.textHint)
                 }
-                .frame(minHeight: Spacing.actionReserved)
+                .frame(minHeight: InteractionMetrics.minimumTouchTarget)
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
@@ -1360,7 +1363,7 @@ private struct BookWorkspaceContentView: View {
                         Layout.linkedCoverWidth,
                         urlString: item.linkedBookCover,
                         cornerRadius: CornerRadius.inlaySmall,
-                        border: .init(color: .surfaceBorderSubtle, width: CardStyle.borderWidth),
+                        border: .init(color: .surfaceBorderSubtle, width: StrokeWidth.hairline),
                         placeholderIconSize: .small
                     )
 
@@ -1907,9 +1910,9 @@ struct BookChapterNotesView: View {
                 if note.hasSourceContent {
                     CollapsedRichTextPreview(
                         html: note.content,
-                        baseFont: NoteExcerptTypography.uiBody,
+                        baseFont: ReadingContentTypography.uiBody,
                         textColor: UIColor.xmResolved(Color.textPrimary),
-                        lineSpacing: NoteExcerptTypography.bodyLineSpacing,
+                        lineSpacing: ReadingContentTypography.bodyLineSpacing,
                         maxLines: 6
                     )
                 }
@@ -1921,9 +1924,9 @@ struct BookChapterNotesView: View {
                             .frame(width: Spacing.micro)
                         CollapsedRichTextPreview(
                             html: note.idea,
-                            baseFont: NoteExcerptTypography.uiIdea,
+                            baseFont: ReadingContentTypography.uiAnnotation,
                             textColor: UIColor.xmResolved(Color.textSecondary),
-                            lineSpacing: NoteExcerptTypography.ideaLineSpacing,
+                            lineSpacing: ReadingContentTypography.annotationLineSpacing,
                             maxLines: 4
                         )
                     }
@@ -1932,7 +1935,7 @@ struct BookChapterNotesView: View {
 
                 if !note.footerText.isEmpty {
                     Text(note.footerText)
-                        .font(NoteExcerptTypography.footer)
+                        .font(ReadingContentTypography.metadata)
                         .foregroundStyle(Color.textSecondary)
                         .padding(.top, Spacing.base)
                 }

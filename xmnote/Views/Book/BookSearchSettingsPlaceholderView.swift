@@ -40,12 +40,16 @@ struct BookSearchSettingsView: View {
                             viewModel.updateSelectedSource(source)
                         } label: {
                             Text(source.title)
-                                .font(AppTypography.semantic(.footnote, weight: source == viewModel.searchSettings.defaultSource ? .semibold : .medium))
+                                .font(
+                                    source == viewModel.searchSettings.defaultSource
+                                        ? AppTypography.footnoteSemibold
+                                        : AppTypography.footnoteMedium
+                                )
                                 .foregroundStyle(source == viewModel.searchSettings.defaultSource ? .white : Color.textPrimary)
                                 .frame(maxWidth: .infinity)
                                 .frame(height: 36)
                                 .background(
-                                    source == viewModel.searchSettings.defaultSource ? Color.brand : Color.surfaceNested,
+                                    source == viewModel.searchSettings.defaultSource ? Color.selectionAccent : Color.surfaceNested,
                                     in: RoundedRectangle(cornerRadius: CornerRadius.blockMedium, style: .continuous)
                                 )
                         }

@@ -1,7 +1,8 @@
 # BookCoverProgressBar 使用说明
 
 ## 组件定位
-- 源码路径：`xmnote/UIComponents/Foundation/BookCoverProgressBar.swift`
+- 源码路径：`xmnote/Views/Reading/Components/BookCoverProgressBar.swift`
+- 归属：阅读功能页面私有组件，不属于公共 `UIComponents`。
 - 角色：覆盖在 `XMBookCover` 上的封面底部悬浮阅读进度条组件。
 - 边界：组件只负责进度可视化，不负责业务状态文案、点击交互或通用进度条语义。
 

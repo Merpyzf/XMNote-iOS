@@ -210,11 +210,11 @@ struct ReadingTimerFinishSheet: View {
                     }
                     Spacer(minLength: 0)
                 }
-                .frame(minHeight: Spacing.actionReserved)
+                .frame(minHeight: InteractionMetrics.minimumTouchTarget)
                 .foregroundStyle(.white)
                 .background(
                     Capsule()
-                        .fill(Color.brand)
+                        .fill(Color.appTint)
                 )
             }
             .buttonStyle(.plain)
@@ -226,7 +226,7 @@ struct ReadingTimerFinishSheet: View {
                 } label: {
                     Text("继续计时")
                         .font(AppTypography.bodyMedium)
-                        .frame(maxWidth: .infinity, minHeight: Spacing.actionReserved)
+                        .frame(maxWidth: .infinity, minHeight: InteractionMetrics.minimumTouchTarget)
                         .foregroundStyle(Color.textPrimary)
                         .background(
                             Capsule()
@@ -242,7 +242,7 @@ struct ReadingTimerFinishSheet: View {
             } label: {
                 Text("放弃本次")
                     .font(AppTypography.bodyMedium)
-                    .frame(maxWidth: .infinity, minHeight: Spacing.actionReserved)
+                    .frame(maxWidth: .infinity, minHeight: InteractionMetrics.minimumTouchTarget)
                     .foregroundStyle(Color.feedbackError)
                     .background(
                         Capsule()

@@ -1,5 +1,5 @@
 /**
- * [INPUT]: 依赖 BookReadingDetailBook/状态领域模型、XMRatingBar、XMSystemAlert 与状态保存/删除异步闭包
+ * [INPUT]: 依赖 BookReadingDetailBook/状态领域模型、ReadingStatusPresentation、XMRatingBar、XMSystemAlert 与状态保存/删除异步闭包
  * [OUTPUT]: 对外提供 BookReadingStatusSheet，完成阅读状态新增、精确编辑、读完评分/次数及确认删除
  * [POS]: Views/Book/Sheets 阅读详情业务 Sheet，数据库事务与庆祝判定由 ViewModel/Repository 承担
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -197,12 +197,6 @@ struct BookReadingStatusSheet: View {
     }
 
     private func statusColor(_ id: Int64) -> Color {
-        switch id {
-        case 1: .statusWish
-        case 2: .statusReading
-        case 3: .statusDone
-        case 5: .statusOnHold
-        default: .statusAbandoned
-        }
+        ReadingStatusPresentation.color(for: id) ?? ReadingStatusPresentation.abandoned
     }
 }

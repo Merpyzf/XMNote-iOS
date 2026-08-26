@@ -58,14 +58,14 @@ private extension PopupViewToastTestView {
                     .fill(Color.surfaceCard)
                     .overlay {
                         RoundedRectangle(cornerRadius: CornerRadius.containerMedium, style: .continuous)
-                            .stroke(Color.surfaceBorderSubtle, lineWidth: CardStyle.borderWidth)
+                            .stroke(Color.surfaceBorderSubtle, lineWidth: StrokeWidth.hairline)
                     }
 
                 VStack(alignment: .leading, spacing: Spacing.base) {
                     HStack {
                         VStack(alignment: .leading, spacing: Spacing.half) {
                             Capsule()
-                                .fill(Color.brand.opacity(0.16))
+                                .fill(Color.appTint.opacity(0.16))
                                 .frame(width: 108, height: 16)
                             Capsule()
                                 .fill(Color.textHint.opacity(0.18))
@@ -149,7 +149,7 @@ private extension PopupViewToastTestView {
             .background(.thinMaterial, in: Capsule())
             .overlay {
                 Capsule()
-                    .stroke(Color.surfaceBorderSubtle.opacity(0.32), lineWidth: CardStyle.borderWidth)
+                    .stroke(Color.surfaceBorderSubtle.opacity(0.32), lineWidth: StrokeWidth.hairline)
             }
 
             Circle()
@@ -162,7 +162,7 @@ private extension PopupViewToastTestView {
                 }
                 .overlay {
                     Circle()
-                        .stroke(Color.surfaceBorderSubtle.opacity(0.32), lineWidth: CardStyle.borderWidth)
+                        .stroke(Color.surfaceBorderSubtle.opacity(0.32), lineWidth: StrokeWidth.hairline)
                 }
         }
         .frame(maxWidth: .infinity)
@@ -192,7 +192,7 @@ private extension PopupViewToastTestView {
                 .frame(height: 44)
         }
         .buttonStyle(.borderedProminent)
-        .tint(Color.brand)
+        .tint(Color.appTint)
     }
 
     func presentToast(_ kind: ToastDemoKind) {
@@ -280,16 +280,16 @@ private extension PopupViewToastTestView {
 
                 Text(String(format: "%.1f %@", value.wrappedValue, suffix))
                     .font(AppTypography.caption2Semibold)
-                    .foregroundStyle(Color.brandDeep)
+                    .foregroundStyle(Color.selectionForeground)
                     .padding(.horizontal, Spacing.half)
                     .padding(.vertical, Spacing.compact)
-                    .background(Color.brand.opacity(0.10), in: Capsule())
+                    .background(Color.selectionAccent.opacity(0.10), in: Capsule())
 
                 Spacer(minLength: 0)
             }
 
             Slider(value: value, in: range, step: step)
-                .tint(Color.brand)
+                .tint(Color.appTint)
         }
     }
 
@@ -327,7 +327,7 @@ private extension PopupViewToastTestView {
         .background(Color.surfaceNested, in: RoundedRectangle(cornerRadius: CornerRadius.blockLarge, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: CornerRadius.blockLarge, style: .continuous)
-                .stroke(Color.surfaceBorderSubtle, lineWidth: CardStyle.borderWidth)
+                .stroke(Color.surfaceBorderSubtle, lineWidth: StrokeWidth.hairline)
         }
     }
 
@@ -343,7 +343,7 @@ private extension PopupViewToastTestView {
         .background {
             if isActive {
                 Capsule()
-                    .fill(Color.brand.opacity(0.12))
+                    .fill(Color.selectionAccent.opacity(0.12))
             }
         }
     }

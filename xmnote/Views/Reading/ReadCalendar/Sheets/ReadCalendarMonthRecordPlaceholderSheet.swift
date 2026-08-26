@@ -1,7 +1,7 @@
 import SwiftUI
 
 /**
- * [INPUT]: 依赖目标月份与回调事件，依赖 DesignTokens 提供基础视觉语义
+ * [INPUT]: 依赖目标月份与回调事件，依赖 ReadCalendarTheme 与 DesignTokens 提供视觉语义
  * [OUTPUT]: 对外提供 ReadCalendarMonthRecordPlaceholderSheet（月度阅读记录占位弹层）
  * [POS]: ReadCalendar 业务模块 Sheet，占位承接“点击月份进入当月阅读记录页”的后续能力
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -15,7 +15,7 @@ struct ReadCalendarMonthRecordPlaceholderSheet: View {
         static let iconSize: CGFloat = 32
         static let cardPadding: CGFloat = Spacing.base
         static let cardCornerRadius: CGFloat = CornerRadius.containerMedium
-        static let buttonHeight: CGFloat = 44
+        static let buttonHeight: CGFloat = InteractionMetrics.minimumTouchTarget
     }
 
     let monthStart: Date
@@ -26,7 +26,7 @@ struct ReadCalendarMonthRecordPlaceholderSheet: View {
             VStack(spacing: Spacing.cozy) {
                 Image(systemName: "book.pages")
                     .font(.system(size: Layout.iconSize, weight: .medium))
-                    .foregroundStyle(Color.brand)
+                    .foregroundStyle(Color.appTint)
 
                 Text("\(monthTitle)阅读记录")
                     .font(AppTypography.headlineSemibold)
@@ -50,17 +50,17 @@ struct ReadCalendarMonthRecordPlaceholderSheet: View {
             } label: {
                 Text("查看当月总结")
                     .font(AppTypography.subheadlineSemibold)
-                    .foregroundStyle(Color.readCalendarTopAction)
+                    .foregroundStyle(ReadCalendarTheme.topAction)
                     .frame(maxWidth: .infinity, minHeight: Layout.buttonHeight)
             }
             .buttonStyle(.plain)
             .background(
                 RoundedRectangle(cornerRadius: CornerRadius.blockMedium, style: .continuous)
-                    .fill(Color.readCalendarSelectionFill.opacity(0.72))
+                    .fill(ReadCalendarTheme.selectionFill.opacity(0.72))
             )
             .overlay {
                 RoundedRectangle(cornerRadius: CornerRadius.blockMedium, style: .continuous)
-                    .stroke(Color.surfaceBorderSubtle, lineWidth: CardStyle.borderWidth)
+                    .stroke(Color.surfaceBorderSubtle, lineWidth: StrokeWidth.hairline)
             }
         }
         .padding(Layout.containerPadding)

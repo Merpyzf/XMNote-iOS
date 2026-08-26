@@ -75,7 +75,7 @@ private extension MonthlyReadingChartTestView {
 
                 Toggle("强制减少动态效果", isOn: $forcesReduceMotion)
                     .font(AppTypography.body)
-                    .tint(Color.brand)
+                    .tint(Color.appTint)
 
                 HStack(spacing: Spacing.half) {
                     Button("全部展开", action: expandAll)
@@ -152,7 +152,7 @@ private extension MonthlyReadingChartTestView {
                 .padding(.vertical, Spacing.half)
                 .background(
                     selectedScenario == scenario
-                        ? Color.brand
+                        ? Color.selectionAccent
                         : Color.controlFillSecondary,
                     in: Capsule()
                 )

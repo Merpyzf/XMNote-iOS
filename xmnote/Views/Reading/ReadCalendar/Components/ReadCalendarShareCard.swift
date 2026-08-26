@@ -188,7 +188,7 @@ struct ReadCalendarShareCard: View {
                             XMBookCover.fixedWidth(
                                 18,
                                 urlString: book.coverURL,
-                                border: .init(color: accent.opacity(0.18), width: CardStyle.borderWidth)
+                                border: .init(color: accent.opacity(0.18), width: StrokeWidth.hairline)
                             )
                             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
                         }

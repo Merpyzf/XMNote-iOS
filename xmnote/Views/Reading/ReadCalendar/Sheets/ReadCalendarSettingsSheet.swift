@@ -231,9 +231,9 @@ struct ReadCalendarSettingsSheet: View {
                     width: ReadCalendarSettingsSheetLayout.emojiIconSize,
                     height: ReadCalendarSettingsSheetLayout.emojiIconSize
                 )
-                .frame(maxWidth: .infinity, minHeight: Spacing.actionReserved)
+                .frame(maxWidth: .infinity, minHeight: InteractionMetrics.minimumTouchTarget)
                 .background(
-                    isSelected ? Color.brand.opacity(0.14) : Color.controlFillSecondary,
+                    isSelected ? Color.selectionAccent.opacity(0.14) : Color.controlFillSecondary,
                     in: RoundedRectangle(
                         cornerRadius: CornerRadius.blockSmall,
                         style: .continuous
@@ -432,7 +432,7 @@ private struct ReadCalendarSettingsChoiceChip: View {
                 .frame(minHeight: visualMinHeight)
                 .background(
                     isSelected
-                        ? Color.brand.opacity(selectedFillOpacity)
+                        ? Color.selectionAccent.opacity(selectedFillOpacity)
                         : Color.controlFillSecondary,
                     in: Capsule()
                 )
@@ -445,7 +445,7 @@ private struct ReadCalendarSettingsChoiceChip: View {
     }
 
     private var selectedForeground: Color {
-        colorScheme == .dark ? Color.brand : Color.brandDeep
+        colorScheme == .dark ? Color.appTint : Color.selectionForeground
     }
 
     private var selectedFillOpacity: Double {

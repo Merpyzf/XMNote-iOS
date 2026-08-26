@@ -145,9 +145,9 @@ enum BookshelfBookListEmptyState: Hashable {
     var iconColor: Color {
         switch self {
         case .contentEmpty:
-            return Color.brand.opacity(0.32)
+            return Color.appTint.opacity(0.32)
         case .searchEmpty:
-            return Color.brand.opacity(0.40)
+            return Color.appTint.opacity(0.40)
         case .error:
             return Color.feedbackWarning.opacity(0.42)
         }
@@ -201,11 +201,7 @@ enum BookshelfBookListGridMetrics {
         let coverHeight = XMBookCover.height(forWidth: contentWidth)
         let titleLineCount: CGFloat = titleDisplayMode == .full ? 2 : 1
         let titleHeight = BookshelfTitleTextStyle.captionMedium.lineHeight * titleLineCount
-        let authorFont = AppTypography.uiFixed(
-            baseSize: 11,
-            textStyle: .caption2,
-            minimumPointSize: 11
-        )
+        let authorFont = BookshelfTypography.uiGridSubtitle
         let authorHeight = ceil(authorFont.lineHeight + 1)
         return ceil(coverHeight + Spacing.half + titleHeight + Spacing.tiny + authorHeight)
     }

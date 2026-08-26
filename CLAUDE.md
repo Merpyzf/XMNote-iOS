@@ -8,7 +8,7 @@
 
 ### iOS 设计系统兼容入口
 - 唯一执行规范：`AGENTS.md` 的“设计系统工程入口”；架构说明：`docs/architecture/iOS设计系统工程规范.md`。
-- 令牌真相源：`xmnote/Utilities/DesignSystem/`；配置页与 Sheet 组件：`xmnote/UIComponents/Settings/`、`xmnote/UIComponents/Sheet/`。
+- 令牌真相源：`xmnote/Utilities/DesignSystem/`；公共组件真相源：`xmnote/UIComponents/`；机器目录：`scripts/design-system/component-catalog.json`。
 - AI 上下文、组件查询与规则检查统一通过 `python3 scripts/design-system/ds.py context|catalog|lint|audit|explain`，禁止新增旁路脚本或扩大 baseline 掩盖违规。
 
 ### 自动同步模块清单（脚本生成）

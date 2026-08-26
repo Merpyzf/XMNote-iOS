@@ -19,7 +19,7 @@ enum BookWorkspaceLayoutMetrics {
     static let sectionSpacing: CGFloat = Spacing.section
     static let contentBlockSpacing: CGFloat = 10
     static let metadataSpacing: CGFloat = 8
-    static let minimumControlHeight: CGFloat = 44
+    static let minimumControlHeight: CGFloat = InteractionMetrics.minimumTouchTarget
     static let headerTopInset: CGFloat = Spacing.double
     static let headerBottomInset: CGFloat = Spacing.double
     static let identityCoverSpacing: CGFloat = Spacing.screenEdge
@@ -60,7 +60,7 @@ enum BookWorkspaceLayoutMetrics {
     static let scopeIndicatorHeight: CGFloat = 3
     static let scopeIndicatorOffset: CGFloat = Spacing.tight
     static let scopeAccessibilityIndicatorSpacing: CGFloat = Spacing.cozy
-    static let scopeBarEstimatedHeight: CGFloat = 44
+    static let scopeBarEstimatedHeight: CGFloat = InteractionMetrics.minimumTouchTarget
     static let contentStepTopCornerRadius: CGFloat = 20
     static let contentStepBoundaryOpacity: CGFloat = 0.18
     static let navigationNeutralizationDistance: CGFloat = 64
@@ -195,7 +195,7 @@ struct BookWorkspaceNoteItem: View {
         .overlay {
             shape.strokeBorder(
                 BookWorkspaceCardSurfaceStyle.border,
-                lineWidth: CardStyle.borderWidth
+                lineWidth: StrokeWidth.hairline
             )
         }
     }
@@ -206,9 +206,9 @@ struct BookWorkspaceNoteItem: View {
                 ExpandableRichText(
                     html: note.content,
                     isExpanded: $isContentExpanded,
-                    baseFont: NoteExcerptTypography.uiBody,
+                    baseFont: ReadingContentTypography.uiBody,
                     textColor: UIColor.xmResolved(Color.textPrimary),
-                    lineSpacing: NoteExcerptTypography.bodyLineSpacing,
+                    lineSpacing: ReadingContentTypography.bodyLineSpacing,
                     maxLines: 6,
                     actionColor: Color.textSecondary,
                     accessibilitySubject: "书摘正文",
@@ -226,9 +226,9 @@ struct BookWorkspaceNoteItem: View {
                     ExpandableRichText(
                         html: note.idea,
                         isExpanded: $isIdeaExpanded,
-                        baseFont: NoteExcerptTypography.uiIdea,
+                        baseFont: ReadingContentTypography.uiAnnotation,
                         textColor: UIColor.xmResolved(Color.textSecondary),
-                        lineSpacing: NoteExcerptTypography.ideaLineSpacing,
+                        lineSpacing: ReadingContentTypography.annotationLineSpacing,
                         maxLines: 4,
                         actionColor: Color.textSecondary,
                         accessibilitySubject: "书摘想法",
@@ -288,7 +288,7 @@ struct BookWorkspaceNoteItem: View {
 
     private var footer: some View {
         Text(footerText)
-            .font(NoteExcerptTypography.footer)
+            .font(ReadingContentTypography.metadata)
             .foregroundStyle(Color.textSecondary)
             .multilineTextAlignment(.trailing)
             .lineLimit(dynamicTypeSize.isAccessibilitySize ? 2 : 1)

@@ -1,83 +1,606 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 3,
   "components": [
     {
-      "symbol": "TopBarBackButton",
-      "path": "xmnote/UIComponents/TopBar/TopBarActionIcon.swift",
-      "layer": "navigation",
-      "useWhen": "顶部 leading 返回操作"
+      "path": "xmnote/UIComponents/Business/Book/XMBookRatingSheet.swift",
+      "symbols": ["XMBookRatingSheet"],
+      "status": "canonical", "category": "business", "layer": "business", "framework": "swiftui", "usageScope": "crossFeature",
+      "stateCoverage": ["normal", "selected", "disabled", "loading", "error"],
+      "dependencies": ["DesignSystem", "XMRatingBar", "LoadingStateView", "XMSystemAlert"],
+      "useWhen": "书籍或书评流程需要编辑单本书的半星评分", "avoidWhen": "只读星级展示、非书籍评分或批量评分",
+      "previewPolicy": {"kind": "required", "path": "xmnote/UIComponents/Business/Book/XMBookRatingSheet.swift"},
+      "guidePath": "docs/component-guides/XMRatingBar使用说明.md"
     },
     {
-      "symbol": "xmSystemAlert",
-      "path": "xmnote/UIComponents/Foundation/XMSystemAlert.swift",
-      "layer": "feedback",
-      "useWhen": "生产路径中心确认、警告或决策弹窗"
+      "path": "xmnote/UIComponents/Business/Reading/ReadingStatusPresentation.swift",
+      "symbols": ["ReadingStatusPresentation"],
+      "status": "canonical", "category": "designInfrastructure", "layer": "business", "framework": "value", "usageScope": "crossFeature",
+      "stateCoverage": ["readOnly"],
+      "dependencies": ["DesignSystem", "ReadingStatus"],
+      "useWhen": "把阅读状态领域值映射为稳定语义颜色", "avoidWhen": "通用成功/警告反馈或页面自定义装饰色",
+      "previewPolicy": {"kind": "hosted", "path": "xmnote/Views/Debug/BookCoverBadgeEffectTestView.swift", "reason": "状态色需要在真实书封角标与浅深色表层上验证"},
+      "guidePath": null
     },
     {
-      "symbol": "XMBookCover",
+      "path": "xmnote/UIComponents/Business/Reading/ReadingTimerAccessoryView.swift",
+      "symbols": ["ReadingTimerAccessoryView"],
+      "status": "canonical", "category": "business", "layer": "business", "framework": "swiftui", "usageScope": "appShell",
+      "stateCoverage": ["normal", "pressed", "expanded", "disabled"],
+      "dependencies": ["DesignSystem", "ReadingTimerAccessoryLayoutMode"],
+      "useWhen": "系统 TabView Bottom Accessory 需要投影全局阅读计时状态", "avoidWhen": "页面内普通计时器、计时生命周期管理或非阅读任务",
+      "previewPolicy": {"kind": "hosted", "path": "xmnote/Views/Debug/AppleMusicTransitionLabView.swift", "reason": "必须在系统 Bottom Accessory 展开、收缩和转场上下文验证"},
+      "guidePath": null
+    },
+    {
+      "path": "xmnote/UIComponents/Business/Tag/XMTagLabel.swift",
+      "symbols": ["XMTagLabel"],
+      "status": "canonical", "category": "business", "layer": "business", "framework": "swiftui", "usageScope": "crossFeature",
+      "stateCoverage": ["normal", "readOnly"],
+      "dependencies": ["DesignSystem"],
+      "useWhen": "纯展示领域标签，需要统一紧凑排版和表层", "avoidWhen": "筛选、状态、评分、指标或可点击操作型 Capsule",
+      "previewPolicy": {"kind": "required", "path": "xmnote/UIComponents/Business/Tag/XMTagLabel.swift"},
+      "guidePath": "docs/component-guides/XMTagLabel使用说明.md"
+    },
+    {
+      "path": "xmnote/UIComponents/Business/Tag/XMTagSelectionSheet.swift",
+      "symbols": ["XMTagSelectionItem", "XMTagSelectionLayoutConfiguration", "XMTagSelectionManagementConfiguration", "XMTagSelectionSheet"],
+      "status": "canonical", "category": "business", "layer": "business", "framework": "swiftui", "usageScope": "crossFeature",
+      "stateCoverage": ["normal", "focused", "selected", "disabled", "loading", "error", "empty", "editing"],
+      "dependencies": ["DesignSystem", "TagSelectionLayoutMode", "TagManagementScope", "XMSheetScaffold", "XMInlineSearchField", "XMSelectionIndicator", "XMSystemAlert", "LoadingGate"],
+      "useWhen": "多个功能需要以纯值和动作边界编辑标签关系", "avoidWhen": "单页临时筛选、Repository 直接注入或只展示标签",
+      "previewPolicy": {"kind": "hosted", "path": "xmnote/Views/Debug/DesignSystemGalleryView.swift", "reason": "需要完整 Sheet、Toast 环境和选择/创建/保存状态宿主"},
+      "guidePath": "docs/component-guides/XMTagSelectionSheet使用说明.md"
+    },
+    {
+      "path": "xmnote/UIComponents/Charts/CalendarHeatmap.swift",
+      "symbols": ["CalendarHeatmapMonth", "CalendarHeatmapStyle", "CalendarHeatmap"],
+      "status": "canonical", "category": "business", "layer": "charts", "framework": "swiftui", "usageScope": "featureFamily",
+      "stateCoverage": ["normal", "selected", "empty", "readOnly"],
+      "dependencies": ["DesignSystem", "UIKit.UIFont", "HeatmapColorPalette", "HeatmapDay"],
+      "useWhen": "按月份展示连续阅读日期的热力分布", "avoidWhen": "通用日历选择器、非时间序列网格或周级 GitHub 热力图",
+      "previewPolicy": {"kind": "required", "path": "xmnote/UIComponents/Charts/CalendarHeatmap.swift"},
+      "guidePath": null
+    },
+    {
+      "path": "xmnote/UIComponents/Charts/HeatmapChart.swift",
+      "symbols": ["HeatmapChartStyle", "HeatmapChart"],
+      "status": "canonical", "category": "business", "layer": "charts", "framework": "swiftui", "usageScope": "featureFamily",
+      "stateCoverage": ["normal", "selected", "empty", "readOnly"],
+      "dependencies": ["DesignSystem", "UIKit.UIFont", "HeatmapLegend", "HeatmapDay"],
+      "useWhen": "阅读统计需要周列式连续热力图和今日定位", "avoidWhen": "普通月历、条形统计或无时间语义的方格图",
+      "previewPolicy": {"kind": "required", "path": "xmnote/UIComponents/Charts/HeatmapChart.swift"},
+      "guidePath": "docs/component-guides/HeatmapChart使用说明.md"
+    },
+    {
+      "path": "xmnote/UIComponents/Charts/HeatmapLegend.swift",
+      "symbols": ["HeatmapColorPalette", "HeatmapLegendStyle", "HeatmapLegend"],
+      "status": "canonical", "category": "foundationVisual", "layer": "charts", "framework": "swiftui", "usageScope": "featureFamily",
+      "stateCoverage": ["normal", "readOnly"],
+      "dependencies": ["DesignSystem", "HeatmapLevel"],
+      "useWhen": "热力图需要解释连续或分离的强度色阶", "avoidWhen": "普通图表图例、状态色说明或离散业务标签",
+      "previewPolicy": {"kind": "required", "path": "xmnote/UIComponents/Charts/HeatmapLegend.swift"},
+      "guidePath": null
+    },
+    {
+      "path": "xmnote/UIComponents/Charts/HeatmapPresentation.swift",
+      "symbols": ["HeatmapStatisticsDataType", "HeatmapBookState", "HeatmapLevel", "HeatmapDay"],
+      "status": "support", "category": "designInfrastructure", "layer": "charts", "framework": "value", "usageScope": "internalSupport",
+      "stateCoverage": [],
+      "dependencies": ["HeatmapDomainModels", "ReadingStatusPresentation"],
+      "useWhen": "仅由热力图组件家族把领域值转换为展示文案和颜色", "avoidWhen": "页面直接决定业务状态颜色或作为通用主题入口",
+      "previewPolicy": {"kind": "notApplicable", "reason": "纯领域到视觉适配扩展，由 HeatmapChart 与 CalendarHeatmap Preview 间接覆盖"},
+      "guidePath": null
+    },
+    {
+      "path": "xmnote/UIComponents/Charts/MonthlyReadingChart.swift",
+      "symbols": ["MonthlyReadingChart", "MonthlyReadingChartStyle"],
+      "status": "canonical", "category": "business", "layer": "charts", "framework": "swiftui", "usageScope": "featureFamily",
+      "stateCoverage": ["normal", "expanded", "empty", "readOnly"],
+      "dependencies": ["DesignSystem", "UIKit.UIFont", "MonthlyReadingChartData"],
+      "useWhen": "按月份展示每日阅读时长并支持月份展开收起", "avoidWhen": "排行、热力图或不需要跨月比例联动的普通柱图",
+      "previewPolicy": {"kind": "hosted", "path": "xmnote/Views/Debug/MonthlyReadingChartTestView.swift", "reason": "需要多月数据、展开状态、文本测量和联动比例矩阵"},
+      "guidePath": null
+    },
+    {
+      "path": "xmnote/UIComponents/Charts/ReadingDurationRankingChart.swift",
+      "symbols": ["ReadingDurationRankingChart"],
+      "status": "canonical", "category": "business", "layer": "charts", "framework": "swiftui", "usageScope": "featureFamily",
+      "stateCoverage": ["normal", "pressed", "empty", "readOnly"],
+      "dependencies": ["DesignSystem", "XMBookCover"],
+      "useWhen": "月度或年度总结需要按阅读时长排列书籍", "avoidWhen": "非书籍排行、可编辑排序或无法比较的指标集合",
+      "previewPolicy": {"kind": "required", "path": "xmnote/UIComponents/Charts/ReadingDurationRankingChart.swift"},
+      "guidePath": "docs/component-guides/ReadingDurationRankingChart使用说明.md"
+    },
+    {
+      "path": "xmnote/UIComponents/Controls/Button/XMMinimumHitTarget.swift",
+      "symbols": ["XMMinimumHitTargetAnchor", "XMMinimumHitTargetShape", "xmMinimumHitTarget"],
+      "status": "canonical", "category": "designInfrastructure", "layer": "controls", "framework": "swiftui", "usageScope": "crossFeature",
+      "stateCoverage": ["normal", "disabled"],
+      "dependencies": ["SwiftUI.contentShape", "InteractionMetrics"],
+      "useWhen": "SwiftUI 紧凑视觉控件需要在不改变 frame、间距、背景和绘制的前提下获得至少 44pt 交互与可访问性轮廓",
+      "avoidWhen": "系统导航栏或原生控件已提供合规目标、相邻目标扩展后会重叠，或祖先容器会裁断超出 bounds 的命中区域",
+      "previewPolicy": {"kind": "hosted", "path": "xmnote/Views/Debug/DesignSystemGalleryView.swift", "reason": "需要默认 24pt 与显式 44pt 对照、坐标点击和可访问性树共同验证视觉不变量"},
+      "guidePath": "docs/component-guides/XMMinimumHitTarget使用说明.md"
+    },
+    {
+      "path": "xmnote/UIComponents/Controls/Button/XMMinimumHitTargetButton.swift",
+      "symbols": ["XMMinimumHitTargetButton"],
+      "status": "support", "category": "designInfrastructure", "layer": "controls", "framework": "uikit", "usageScope": "internalSupport",
+      "stateCoverage": ["normal", "disabled"],
+      "dependencies": ["UIKit", "InteractionMetrics"],
+      "useWhen": "UIKit 紧凑视觉按钮需要在不改变 bounds、约束和绘制的前提下获得至少 44pt 命中区", "avoidWhen": "系统控件已提供合规目标、SwiftUI 可通过局部视觉槽组合表达，或扩展范围超出祖先可命中边界",
+      "previewPolicy": {"kind": "notApplicable", "reason": "控件不产生额外视觉，由 DesignSystemInfrastructureTests 验证 bounds 不变和命中矩形扩展"},
+      "guidePath": "docs/component-guides/XMMinimumHitTarget使用说明.md"
+    },
+    {
+      "path": "xmnote/UIComponents/Controls/Menu/XMMenuStyle.swift",
+      "symbols": ["XMMenuLabel", "xmMenuNeutralTint", "xmToolbarNeutralTint"],
+      "status": "canonical", "category": "formInteraction", "layer": "controls", "framework": "swiftui", "usageScope": "crossFeature",
+      "stateCoverage": ["normal", "selected", "disabled"],
+      "dependencies": ["DesignSystem", "SwiftUI.Menu"],
+      "useWhen": "普通菜单项或工具栏需要中性前景和选中标记", "avoidWhen": "删除警告语义、主操作按钮或页面内普通标签",
+      "previewPolicy": {"kind": "hosted", "path": "xmnote/Views/Debug/TopBarActionStyleLabTestView.swift", "reason": "需要在真实 Menu 与顶部工具栏 tint 继承环境中验证"},
+      "guidePath": null
+    },
+    {
+      "path": "xmnote/UIComponents/Controls/Rating/XMFluentStarIcon.swift",
+      "symbols": ["XMStarredAppearance", "XMFluentStarIcon", "XMFluentStarShape"],
+      "status": "canonical", "category": "foundationVisual", "layer": "controls", "framework": "swiftui", "usageScope": "crossFeature",
+      "stateCoverage": ["normal", "selected", "readOnly"],
+      "dependencies": ["DesignSystem"],
+      "useWhen": "评分或收藏章节需要项目统一的圆润星形", "avoidWhen": "任意装饰星号、系统评级控件或非收藏语义图标",
+      "previewPolicy": {"kind": "required", "path": "xmnote/UIComponents/Controls/Rating/XMFluentStarIcon.swift"},
+      "guidePath": null
+    },
+    {
+      "path": "xmnote/UIComponents/Controls/Rating/XMRatingBar.swift",
+      "symbols": ["XMRatingAppearance", "XMRatingBarStep", "XMRatingBarPreset", "XMRatingBar"],
+      "status": "canonical", "category": "formInteraction", "layer": "controls", "framework": "swiftui", "usageScope": "crossFeature",
+      "stateCoverage": ["normal", "pressed", "selected", "disabled", "readOnly"],
+      "dependencies": ["DesignSystem", "XMFluentStarShape"],
+      "useWhen": "展示或输入书籍评分并需要整星或半星步进", "avoidWhen": "收藏开关、通用滑杆或非五分制评价",
+      "previewPolicy": {"kind": "required", "path": "xmnote/UIComponents/Controls/Rating/XMRatingBar.swift"},
+      "guidePath": "docs/component-guides/XMRatingBar使用说明.md"
+    },
+    {
+      "path": "xmnote/UIComponents/Controls/Search/XMInlineSearchField.swift",
+      "symbols": ["XMInlineSearchCancelPresentation", "XMInlineSearchField"],
+      "status": "canonical", "category": "formInteraction", "layer": "controls", "framework": "swiftui", "usageScope": "crossFeature",
+      "stateCoverage": ["normal", "pressed", "focused", "disabled", "empty"],
+      "dependencies": ["DesignSystem", "SwiftUI.TextField"],
+      "useWhen": "滚动内容内需要常驻搜索、清除、取消和键盘提交", "avoidWhen": "系统导航栏 searchable、全局路由搜索或多字段高级筛选",
+      "previewPolicy": {"kind": "hosted", "path": "xmnote/Views/Debug/DesignSystemGalleryView.swift", "reason": "需要可交互 Binding、焦点和动态字体宿主"},
+      "guidePath": null
+    },
+    {
+      "path": "xmnote/UIComponents/Controls/Search/XMSearchHistorySection.swift",
+      "symbols": ["XMSearchHistoryStyle", "XMSearchHistoryEmptyPresentation", "XMSearchHistorySection"],
+      "status": "canonical", "category": "formInteraction", "layer": "controls", "framework": "swiftui", "usageScope": "crossFeature",
+      "stateCoverage": ["normal", "pressed", "empty", "expanded", "editing"],
+      "dependencies": ["DesignSystem", "SwiftUI.Layout", "UIKit.UIFont"],
+      "useWhen": "搜索入口需要展示、编辑、删除和清空最近关键词", "avoidWhen": "搜索结果列表、业务标签筛选或只有一个静态建议词",
+      "previewPolicy": {"kind": "hosted", "path": "xmnote/Views/Debug/SearchHistoryTestView.swift", "reason": "需要长短词、编辑、空态、展开和玻璃样式状态矩阵"},
+      "guidePath": "docs/component-guides/XMSearchHistorySection使用说明.md"
+    },
+    {
+      "path": "xmnote/UIComponents/Controls/Selection/XMScopeSelector.swift",
+      "symbols": ["XMScopeSelectorItem", "XMScopeSelectorVisualStyle", "XMScopeSelectorCountFormat", "XMScopeSelector"],
+      "status": "canonical", "category": "formInteraction", "layer": "controls", "framework": "swiftui", "usageScope": "crossFeature",
+      "stateCoverage": ["normal", "pressed", "selected", "disabled", "dragging"],
+      "dependencies": ["DesignSystem"],
+      "useWhen": "同一内容集合内有 2 个以上互斥范围或显示模式", "avoidWhen": "导航 Tab、独立业务操作或允许多选的筛选条件",
+      "previewPolicy": {"kind": "required", "path": "xmnote/UIComponents/Controls/Selection/XMScopeSelector.swift"},
+      "guidePath": "docs/component-guides/XMScopeSelector使用说明.md"
+    },
+    {
+      "path": "xmnote/UIComponents/Controls/Selection/XMSelectionIndicator.swift",
+      "symbols": ["XMSelectionIndicatorStyle", "XMSelectionIndicator"],
+      "status": "canonical", "category": "foundationVisual", "layer": "controls", "framework": "swiftui", "usageScope": "crossFeature",
+      "stateCoverage": ["normal", "selected", "disabled", "readOnly"],
+      "dependencies": ["DesignSystem", "SF Symbols"],
+      "useWhen": "自定义列表或卡片需要统一表达单选、多选或勾选状态", "avoidWhen": "系统 Toggle、Picker 已能直接表达交互语义的场景",
+      "previewPolicy": {"kind": "hosted", "path": "xmnote/Views/Debug/SelectionMotionTestView.swift", "reason": "需要选择切换、符号替换和 Reduce Motion 对照"},
+      "guidePath": null
+    },
+    {
+      "path": "xmnote/UIComponents/Feedback/Alert/XMSystemAlert.swift",
+      "symbols": ["XMSystemAlertDescriptor", "XMSystemAlertAction", "XMSystemAlertTextField", "XMSystemAlertController", "xmSystemAlert"],
+      "status": "canonical", "category": "formInteraction", "layer": "feedback", "framework": "bridge", "usageScope": "crossFeature",
+      "stateCoverage": ["normal", "focused", "disabled", "error"],
+      "dependencies": ["SwiftUI", "UIKit.UIAlertController"],
+      "useWhen": "生产路径需要中心确认、警告、决策或轻量输入弹窗", "avoidWhen": "页面内提示、Toast、菜单或业务 Sheet",
+      "previewPolicy": {"kind": "hosted", "path": "xmnote/Views/Debug/SystemAlertTestView.swift", "reason": "UIAlertController 必须在运行中的控制器层级呈现"},
+      "guidePath": null
+    },
+    {
+      "path": "xmnote/UIComponents/Feedback/EmptyStateView.swift",
+      "symbols": ["EmptyStateView"],
+      "status": "canonical", "category": "foundationVisual", "layer": "feedback", "framework": "swiftui", "usageScope": "crossFeature",
+      "stateCoverage": ["normal", "empty", "readOnly"],
+      "dependencies": ["DesignSystem"],
+      "useWhen": "局部内容区域需要中性图标和简短空态说明", "avoidWhen": "需要主操作的整页空态、加载态或错误决策",
+      "previewPolicy": {"kind": "required", "path": "xmnote/UIComponents/Feedback/EmptyStateView.swift"},
+      "guidePath": null
+    },
+    {
+      "path": "xmnote/UIComponents/Feedback/Loading/LoadingFeedbackKit.swift",
+      "symbols": ["LoadingIntent", "LoadingPolicy", "LoadingGate", "LoadPhase", "LoadPhaseHost"],
+      "status": "canonical", "category": "designInfrastructure", "layer": "feedback", "framework": "swiftui", "usageScope": "crossFeature",
+      "stateCoverage": ["normal", "loading", "error", "empty"],
+      "dependencies": ["DesignSystem", "Swift Concurrency"],
+      "useWhen": "读取加载需要延迟显示与最短驻留，或页面需要统一阶段承载", "avoidWhen": "可确定进度、局部写入反馈或没有阶段切换的静态内容",
+      "previewPolicy": {"kind": "required", "path": "xmnote/UIComponents/Feedback/Loading/LoadingFeedbackKit.swift"},
+      "guidePath": null
+    },
+    {
+      "path": "xmnote/UIComponents/Feedback/LoadingStateView.swift",
+      "symbols": ["LoadingStateView"],
+      "status": "canonical", "category": "foundationVisual", "layer": "feedback", "framework": "swiftui", "usageScope": "crossFeature",
+      "stateCoverage": ["normal", "loading", "readOnly"],
+      "dependencies": ["DesignSystem", "SwiftUI.ProgressView"],
+      "useWhen": "LoadingGate 或 LoadPhaseHost 已决定显示加载反馈", "avoidWhen": "页面自行拥有读取时序、写操作按钮进度或可确定进度条",
+      "previewPolicy": {"kind": "hosted", "path": "xmnote/Views/Debug/DesignSystemGalleryView.swift", "reason": "与加载门闩、卡片表层和适配环境共同展示"},
+      "guidePath": null
+    },
+    {
+      "path": "xmnote/UIComponents/Feedback/Toast/XMToast.swift",
+      "symbols": ["XMToastRole", "XMToastPlacement", "XMToastMessage", "XMToastCenter", "xmToastHost"],
+      "status": "canonical", "category": "designInfrastructure", "layer": "feedback", "framework": "swiftui", "usageScope": "appShell",
+      "stateCoverage": ["normal", "loading", "error"],
+      "dependencies": ["DesignSystem", "PopupView", "Observation"],
+      "useWhen": "需要不打断任务流的短驻留信息、警告或错误反馈", "avoidWhen": "成功可由界面状态表达、需要用户决策或必须确认的风险操作",
+      "previewPolicy": {"kind": "hosted", "path": "xmnote/Views/Debug/PopupViewToastTestView.swift", "reason": "需要窗口层级、安全区、位置、时长和 Reduce Motion 交互验证"},
+      "guidePath": "docs/component-guides/XMToast使用说明.md"
+    },
+    {
+      "path": "xmnote/UIComponents/Foundation/CardContainer.swift",
+      "symbols": ["CardContainer"],
+      "status": "canonical", "category": "layout", "layer": "foundation", "framework": "swiftui", "usageScope": "crossFeature",
+      "stateCoverage": ["normal", "readOnly"],
+      "dependencies": ["DesignSystem"],
+      "useWhen": "内容需要统一卡片表层、连续圆角与可选描边", "avoidWhen": "设置分组、交互按钮或业务含义明确的复合卡片",
+      "previewPolicy": {"kind": "required", "path": "xmnote/UIComponents/Foundation/CardContainer.swift"},
+      "guidePath": null
+    },
+    {
+      "path": "xmnote/UIComponents/Foundation/Text/XMKeywordHighlighting.swift",
+      "symbols": ["XMKeywordHighlighting"],
+      "status": "canonical", "category": "designInfrastructure", "layer": "foundation", "framework": "value", "usageScope": "crossFeature",
+      "stateCoverage": ["readOnly"],
+      "dependencies": ["DesignSystem", "SwiftUI.AttributedString"],
+      "useWhen": "搜索结果需要一致的大小写无关关键字高亮", "avoidWhen": "富文本编辑、语法高亮或业务状态着色",
+      "previewPolicy": {"kind": "hosted", "path": "xmnote/Views/Debug/DesignSystemGalleryView.swift", "reason": "需要在真实排版、语义色和浅深色背景中展示"},
+      "guidePath": null
+    },
+    {
       "path": "xmnote/UIComponents/Foundation/XMBookCover.swift",
-      "layer": "media",
-      "useWhen": "所有书籍封面渲染"
+      "symbols": ["XMBookCover"],
+      "status": "canonical", "category": "foundationVisual", "layer": "media", "framework": "swiftui", "usageScope": "crossFeature",
+      "stateCoverage": ["normal", "loading", "error", "empty", "readOnly"],
+      "dependencies": ["DesignSystem", "XMRemoteImage", "XMBookCoverAppearance"],
+      "useWhen": "所有书籍封面渲染，包括占位、裁切与可选厚度边", "avoidWhen": "非书籍图片、头像或任意比例媒体",
+      "previewPolicy": {"kind": "required", "path": "xmnote/UIComponents/Foundation/XMBookCover.swift"},
+      "guidePath": "docs/component-guides/XMBookCover使用说明.md"
     },
     {
-      "symbol": "XMTagLabel",
-      "path": "xmnote/UIComponents/Foundation/XMTagLabel.swift",
-      "layer": "media",
-      "useWhen": "纯展示的领域标签；不用于筛选、状态、评分、指标或操作型 Capsule"
+      "path": "xmnote/UIComponents/Foundation/XMBookCoverAppearance.swift",
+      "symbols": ["XMBookCoverAppearance"],
+      "status": "support", "category": "designInfrastructure", "layer": "foundation", "framework": "value", "usageScope": "internalSupport",
+      "stateCoverage": [],
+      "dependencies": ["DesignSystem"],
+      "useWhen": "仅由书籍封面组件家族读取局部外观语义", "avoidWhen": "页面直接取色、全局主题或非封面组件",
+      "previewPolicy": {"kind": "notApplicable", "reason": "纯组件级 Appearance，由 XMBookCover 与 BookCoverProgressBar Preview 间接覆盖"},
+      "guidePath": null
     },
     {
-      "symbol": "LoadingGate",
-      "path": "xmnote/UIComponents/Foundation/LoadingFeedbackKit.swift",
-      "layer": "feedback",
-      "useWhen": "读取加载的延迟显示与最短驻留"
+      "path": "xmnote/UIComponents/Media/Attachments/XMAttachmentUploadStrip.swift",
+      "symbols": ["XMAttachmentUploadState", "XMAttachmentUploadItem", "XMAttachmentUploadStripStrings", "XMAttachmentUploadStrip"],
+      "status": "canonical", "category": "formInteraction", "layer": "media", "framework": "bridge", "usageScope": "crossFeature",
+      "stateCoverage": ["normal", "pressed", "disabled", "loading", "error", "dragging"],
+      "dependencies": ["DesignSystem", "UIKit.UICollectionView", "Nuke", "ImageIO"],
+      "useWhen": "编辑内容需要展示附图上传状态、删除、重试和拖拽排序", "avoidWhen": "纯图片画廊、系统照片选择器或没有上传生命周期的缩略图列表",
+      "previewPolicy": {"kind": "required", "path": "xmnote/UIComponents/Media/Attachments/XMAttachmentUploadStrip.swift"},
+      "guidePath": null
     },
     {
-      "symbol": "LoadPhaseHost",
-      "path": "xmnote/UIComponents/Foundation/LoadingFeedbackKit.swift",
-      "layer": "feedback",
-      "useWhen": "读取加载的占位、加载、内容、空态与失败阶段承载"
+      "path": "xmnote/UIComponents/Media/GalleryJX/XMJXGalleryItem.swift",
+      "symbols": ["XMJXGalleryItem"],
+      "status": "canonical", "category": "designInfrastructure", "layer": "media", "framework": "value", "usageScope": "crossFeature",
+      "stateCoverage": ["readOnly"],
+      "dependencies": ["Foundation", "OSLog"],
+      "useWhen": "JX 图片墙与浏览器需要共享稳定图片身份和缩略图/原图地址", "avoidWhen": "通用业务图片模型、上传状态或书籍封面",
+      "previewPolicy": {"kind": "hosted", "path": "xmnote/Views/Debug/JXPhotoBrowserTestView.swift", "reason": "数据契约需随图片墙与 UIKit 浏览器联动验证"},
+      "guidePath": null
     },
     {
-      "symbol": "XMSheetScaffold",
-      "path": "xmnote/UIComponents/Sheet/XMSheetScaffold.swift",
-      "layer": "sheet",
-      "useWhen": "需要标准标题、关闭或双侧操作、全轴回弹及可选固定内容栏的业务 Sheet"
+      "path": "xmnote/UIComponents/Media/GalleryJX/XMJXImageWall.swift",
+      "symbols": ["XMJXImageWall"],
+      "status": "canonical", "category": "business", "layer": "media", "framework": "swiftui", "usageScope": "crossFeature",
+      "stateCoverage": ["normal", "pressed", "empty", "readOnly"],
+      "dependencies": ["DesignSystem", "XMJXGalleryItem", "XMJXThumbnailView", "XMJXPhotoBrowserHost"],
+      "useWhen": "内容图片需要宫格展示并进入 JXPhotoBrowser 全屏浏览", "avoidWhen": "附图上传、单张远程图或无需全屏浏览的装饰图片",
+      "previewPolicy": {"kind": "hosted", "path": "xmnote/Views/Debug/JXPhotoBrowserTestView.swift", "reason": "需要真实缩略图 UIView、Zoom 转场和浏览器生命周期"},
+      "guidePath": "docs/component-guides/XMJXImageWall使用说明.md"
     },
     {
-      "symbol": "XMSettingsPage",
+      "path": "xmnote/UIComponents/Media/GalleryJX/XMJXPhotoBrowserHost.swift",
+      "symbols": ["XMJXPhotoBrowserHost"],
+      "status": "support", "category": "designInfrastructure", "layer": "media", "framework": "uikit", "usageScope": "internalSupport",
+      "stateCoverage": [],
+      "dependencies": ["XMJXPhotoBrowserPresenter"],
+      "useWhen": "仅由 XMJXImageWall 持有浏览器 presenter 生命周期", "avoidWhen": "页面直接呈现浏览器或作为通用导航宿主",
+      "previewPolicy": {"kind": "notApplicable", "reason": "内部生命周期宿主，由 XMJXImageWall Debug 场景间接验证"},
+      "guidePath": null
+    },
+    {
+      "path": "xmnote/UIComponents/Media/GalleryJX/XMJXPhotoBrowserPresenter.swift",
+      "symbols": ["XMJXPhotoBrowserPresenter"],
+      "status": "support", "category": "designInfrastructure", "layer": "media", "framework": "uikit", "usageScope": "internalSupport",
+      "stateCoverage": [],
+      "dependencies": ["UIKit", "Nuke", "JXPhotoBrowser", "XMJXThumbnailRegistry"],
+      "useWhen": "仅由 JX 图片墙桥接浏览器数据、呈现与 Zoom 转场", "avoidWhen": "SwiftUI 页面直接依赖、通用图片加载或其他浏览器实现",
+      "previewPolicy": {"kind": "notApplicable", "reason": "UIKit presenter 无独立视觉，随 XMJXImageWall Debug 场景运行验证"},
+      "guidePath": null
+    },
+    {
+      "path": "xmnote/UIComponents/Media/GalleryJX/XMJXThumbnailRegistry.swift",
+      "symbols": ["XMJXThumbnailRegistry"],
+      "status": "support", "category": "designInfrastructure", "layer": "media", "framework": "uikit", "usageScope": "internalSupport",
+      "stateCoverage": [],
+      "dependencies": ["UIKit"],
+      "useWhen": "仅由 JX 桥接层维护图片 ID 到弱引用 UIImageView 的映射", "avoidWhen": "通用缓存、图片数据源或页面状态存储",
+      "previewPolicy": {"kind": "notApplicable", "reason": "无独立视觉输出，由 JX Zoom 转场场景间接验证"},
+      "guidePath": null
+    },
+    {
+      "path": "xmnote/UIComponents/Media/GalleryJX/XMJXThumbnailView.swift",
+      "symbols": ["XMJXThumbnailView"],
+      "status": "support", "category": "designInfrastructure", "layer": "media", "framework": "bridge", "usageScope": "internalSupport",
+      "stateCoverage": [],
+      "dependencies": ["SwiftUI", "UIKit", "Nuke", "XMJXThumbnailRegistry"],
+      "useWhen": "仅由 XMJXImageWall 提供可回溯的真实 UIKit 缩略图", "avoidWhen": "普通远程图片、书封或不需要 Zoom 转场的缩略图",
+      "previewPolicy": {"kind": "notApplicable", "reason": "桥接视图由 XMJXImageWall 与 JXPhotoBrowser Debug 场景间接验证"},
+      "guidePath": "docs/component-guides/XMJXThumbnailView使用说明.md"
+    },
+    {
+      "path": "xmnote/UIComponents/Media/Images/XMGIFImageView.swift",
+      "symbols": ["XMGIFImageView"],
+      "status": "support", "category": "designInfrastructure", "layer": "media", "framework": "bridge", "usageScope": "internalSupport",
+      "stateCoverage": [],
+      "dependencies": ["SwiftUI", "UIKit", "Gifu"],
+      "useWhen": "仅由 XMRemoteImage 承载已识别 GIF 的播放和生命周期", "avoidWhen": "页面直接加载任意图片或自行探测 GIF",
+      "previewPolicy": {"kind": "notApplicable", "reason": "底层 GIF 桥接由 XMRemoteImage 图片加载测试间接覆盖"},
+      "guidePath": "docs/component-guides/XMGIFImageView使用说明.md"
+    },
+    {
+      "path": "xmnote/UIComponents/Media/Images/XMRemoteImage.swift",
+      "symbols": ["XMRemoteImage"],
+      "status": "canonical", "category": "foundationVisual", "layer": "media", "framework": "swiftui", "usageScope": "crossFeature",
+      "stateCoverage": ["normal", "loading", "error", "empty", "readOnly"],
+      "dependencies": ["Nuke", "NukeUI", "XMGIFImageView"],
+      "useWhen": "跨模块远程图片需要统一静态图、GIF、占位与失败降级", "avoidWhen": "书籍封面、需要 JX Zoom 转场的缩略图或本地资产",
+      "previewPolicy": {"kind": "hosted", "path": "xmnote/Views/Debug/ImageLoadingTestView.swift", "reason": "需要真实网络、静态图/GIF/失败链路与缓存来源验证"},
+      "guidePath": "docs/component-guides/XMRemoteImage使用说明.md"
+    },
+    {
+      "path": "xmnote/UIComponents/Media/RichText/CollapsedRichTextPreview.swift",
+      "symbols": ["CollapsedRichTextPreview"],
+      "status": "support", "category": "designInfrastructure", "layer": "media", "framework": "bridge", "usageScope": "internalSupport",
+      "stateCoverage": [],
+      "dependencies": ["SwiftUI", "UIKit", "RichTextRenderCache"],
+      "useWhen": "仅由 ExpandableRichText 渲染收起态轻量预览", "avoidWhen": "页面直接展示富文本或需要完整选择和链接交互",
+      "previewPolicy": {"kind": "notApplicable", "reason": "内部 UILabel 桥接由 ExpandableRichText Preview 间接覆盖"},
+      "guidePath": null
+    },
+    {
+      "path": "xmnote/UIComponents/Media/RichText/ExpandableRichText.swift",
+      "symbols": ["ExpandableRichText"],
+      "status": "canonical", "category": "business", "layer": "media", "framework": "swiftui", "usageScope": "crossFeature",
+      "stateCoverage": ["normal", "pressed", "expanded", "readOnly"],
+      "dependencies": ["DesignSystem", "RichText", "CollapsedRichTextPreview"],
+      "useWhen": "HTML 富文本需要收起预览与用户主动展开/收起", "avoidWhen": "编辑器、始终完整展示或纯文本短说明",
+      "previewPolicy": {"kind": "required", "path": "xmnote/UIComponents/Media/RichText/ExpandableRichText.swift"},
+      "guidePath": "docs/component-guides/ExpandableRichText使用说明.md"
+    },
+    {
+      "path": "xmnote/UIComponents/Media/RichText/RichText.swift",
+      "symbols": ["RichTextLayoutSnapshot", "RichTextRenderCache", "RichText"],
+      "status": "canonical", "category": "foundationVisual", "layer": "media", "framework": "bridge", "usageScope": "crossFeature",
+      "stateCoverage": ["normal", "pressed", "selected", "readOnly"],
+      "dependencies": ["SwiftUI", "UIKit.UITextView", "RichTextLayoutManager"],
+      "useWhen": "跨模块只读 HTML 需要布局缓存、截断回调或选择菜单", "avoidWhen": "富文本编辑、Markdown 源码输入或普通短文本",
+      "previewPolicy": {"kind": "required", "path": "xmnote/UIComponents/Media/RichText/RichText.swift"},
+      "guidePath": null
+    },
+    {
+      "path": "xmnote/UIComponents/Navigation/NavigationPopGuard.swift",
+      "symbols": ["navigationPopGuard"],
+      "status": "canonical", "category": "designInfrastructure", "layer": "navigation", "framework": "bridge", "usageScope": "crossFeature",
+      "stateCoverage": ["normal", "disabled"],
+      "dependencies": ["SwiftUI", "UIKit.UINavigationController"],
+      "useWhen": "自定义返回入口页面需要保留系统返回手势并拦截脏状态退出", "avoidWhen": "无需返回拦截、非 NavigationStack 或自造导航动画",
+      "previewPolicy": {"kind": "hosted", "path": "xmnote/Views/Debug/BaiduOCRFlowView.swift", "reason": "必须在真实 UINavigationController 返回手势和异步任务阻断场景验证"},
+      "guidePath": null
+    },
+    {
+      "path": "xmnote/UIComponents/Navigation/ScrollEdge/HomeTopHeaderGradient.swift",
+      "symbols": ["HomeTopHeaderGradient"],
+      "status": "canonical", "category": "foundationVisual", "layer": "navigation", "framework": "swiftui", "usageScope": "appShell",
+      "stateCoverage": ["normal", "readOnly"],
+      "dependencies": ["DesignSystem"],
+      "useWhen": "主 Tab 顶部壳层需要统一品牌氛围渐变", "avoidWhen": "内容卡片、系统导航栏材质或页面自定义遮罩",
+      "previewPolicy": {"kind": "hosted", "path": "xmnote/Views/Debug/TopBarActionStyleLabTestView.swift", "reason": "需要在真实首页顶部与 Liquid Glass 操作区共同验证"},
+      "guidePath": null
+    },
+    {
+      "path": "xmnote/UIComponents/Navigation/ScrollEdge/XMScrollEdgeChrome.swift",
+      "symbols": ["XMScrollEdgeChromePresentation", "XMScrollEdgeChrome"],
+      "status": "canonical", "category": "layout", "layer": "navigation", "framework": "swiftui", "usageScope": "crossFeature",
+      "stateCoverage": ["normal", "readOnly"],
+      "dependencies": ["DesignSystem", "XMScrollEdgeWash", "SwiftUI.scrollEdgeEffectStyle"],
+      "useWhen": "滚动页面需要固定顶栏/底栏与系统 scroll-edge effect 协同", "avoidWhen": "无滚动容器、系统导航栏已自动处理或自定义模糊遮罩",
+      "previewPolicy": {"kind": "hosted", "path": "xmnote/Views/Debug/XMScrollEdgeChromeTestView.swift", "reason": "需要顶部/底部/双向滚动、点击穿透和浅深色矩阵"},
+      "guidePath": "docs/component-guides/XMScrollEdgeChrome使用说明.md"
+    },
+    {
+      "path": "xmnote/UIComponents/Navigation/ScrollEdge/XMScrollEdgeWash.swift",
+      "symbols": ["XMScrollEdgeWashStrength", "XMScrollEdgeWashSurface", "XMScrollEdgeWashEdges", "XMScrollEdgeWashVisibility", "XMScrollEdgeWashStyle", "xmScrollEdgeWash"],
+      "status": "canonical", "category": "designInfrastructure", "layer": "navigation", "framework": "swiftui", "usageScope": "crossFeature",
+      "stateCoverage": ["normal", "readOnly"],
+      "dependencies": ["DesignSystem", "SwiftUI.ScrollGeometry"],
+      "useWhen": "固定筛选栏或卡片内滚动视口需要非交互边缘柔化", "avoidWhen": "模拟系统导航栏渐进模糊或承载任何点击交互",
+      "previewPolicy": {"kind": "hosted", "path": "xmnote/Views/Debug/XMScrollEdgeChromeTestView.swift", "reason": "需要滚动几何、强度、表层和点击穿透矩阵"},
+      "guidePath": null
+    },
+    {
+      "path": "xmnote/UIComponents/Navigation/Tabs/HorizontalPagingHost.swift",
+      "symbols": ["HorizontalPagingMotion", "HorizontalPagingHost"],
+      "status": "canonical", "category": "layout", "layer": "navigation", "framework": "swiftui", "usageScope": "crossFeature",
+      "stateCoverage": ["normal", "selected", "dragging"],
+      "dependencies": ["DesignSystem", "SwiftUI.ScrollView", "SwiftUI.ScrollGeometry"],
+      "useWhen": "稳定 ID 页面需要分页吸附、窗口化挂载和生命周期回调", "avoidWhen": "主导航、少量静态 HStack 或不允许横向直操的流程",
+      "previewPolicy": {"kind": "hosted", "path": "xmnote/Views/Debug/DesignSystemGalleryView.swift", "reason": "需要真实分页手势、外部 selection 和 Reduce Motion 环境"},
+      "guidePath": "docs/component-guides/HorizontalPagingHost使用说明.md"
+    },
+    {
+      "path": "xmnote/UIComponents/Navigation/Tabs/KeepAliveSwitcherHost.swift",
+      "symbols": ["KeepAliveSwitcherTransitionPolicy", "KeepAliveSwitcherHost"],
+      "status": "canonical", "category": "layout", "layer": "navigation", "framework": "swiftui", "usageScope": "crossFeature",
+      "stateCoverage": ["normal", "selected", "disabled"],
+      "dependencies": ["SwiftUI", "OSLog"],
+      "useWhen": "二级页面切换后必须保留已激活页面状态和滚动现场", "avoidWhen": "页面无需保活、数据可重建或真正的导航层级",
+      "previewPolicy": {"kind": "hosted", "path": "xmnote/Views/Debug/DesignSystemGalleryView.swift", "reason": "需要外部 selection、常驻状态和切换可见性共同验证"},
+      "guidePath": "docs/component-guides/KeepAliveSwitcherHost使用说明.md"
+    },
+    {
+      "path": "xmnote/UIComponents/Navigation/Tabs/TopSwitcher.swift",
+      "symbols": ["TopSwitcherSelectionTransactionPolicy", "TopSwitcher"],
+      "status": "canonical", "category": "layout", "layer": "navigation", "framework": "swiftui", "usageScope": "crossFeature",
+      "stateCoverage": ["normal", "pressed", "selected", "disabled"],
+      "dependencies": ["DesignSystem", "PrimaryTopBar", "AddMenuCircleButton"],
+      "useWhen": "主 Tab 顶部需要标题模式或一级内容切换标签", "avoidWhen": "内容区局部筛选、系统 Tab Bar 或深层导航",
+      "previewPolicy": {"kind": "required", "path": "xmnote/UIComponents/Navigation/Tabs/TopSwitcher.swift"},
+      "guidePath": "docs/component-guides/TopSwitcher使用说明.md"
+    },
+    {
+      "path": "xmnote/UIComponents/Navigation/TopBar/AddMenuCircleButton.swift",
+      "symbols": ["AddMenuCircleButton"],
+      "status": "canonical", "category": "formInteraction", "layer": "navigation", "framework": "swiftui", "usageScope": "appShell",
+      "stateCoverage": ["normal", "pressed", "disabled"],
+      "dependencies": ["DesignSystem", "XMMenuLabel", "TopBarActionIcon"],
+      "useWhen": "主页面顶部需要统一新增书籍/书摘菜单入口", "avoidWhen": "非新增业务、单一明确操作或页面内普通菜单",
+      "previewPolicy": {"kind": "hosted", "path": "xmnote/Views/Debug/DesignSystemGalleryView.swift", "reason": "需要顶部容器、菜单中性色和胶囊分段展示环境"},
+      "guidePath": null
+    },
+    {
+      "path": "xmnote/UIComponents/Navigation/TopBar/PrimaryTopBar.swift",
+      "symbols": ["PrimaryTopBar"],
+      "status": "canonical", "category": "layout", "layer": "navigation", "framework": "swiftui", "usageScope": "appShell",
+      "stateCoverage": ["normal", "readOnly"],
+      "dependencies": ["DesignSystem"],
+      "useWhen": "主 Tab 顶部需要稳定的左内容与右操作区布局", "avoidWhen": "系统 NavigationBar、页面内普通 HStack 或业务卡片标题",
+      "previewPolicy": {"kind": "hosted", "path": "xmnote/Views/Debug/DesignSystemGalleryView.swift", "reason": "需要动态字体与真实顶部 action 组合验证"},
+      "guidePath": null
+    },
+    {
+      "path": "xmnote/UIComponents/Navigation/TopBar/TopBarActionIcon.swift",
+      "symbols": ["TopBarActionHitShape", "TopBarActionIcon", "TopBarBackButton", "TopBarDismissButton"],
+      "status": "canonical", "category": "formInteraction", "layer": "navigation", "framework": "swiftui", "usageScope": "crossFeature",
+      "stateCoverage": ["normal", "pressed", "disabled"],
+      "dependencies": ["DesignSystem", "SwiftUI.Button"],
+      "useWhen": "顶部 action 图标、特殊返回拦截或模态收起需要统一语义入口", "avoidWhen": "页面内普通图标、无交互装饰或自行手写返回 chevron",
+      "previewPolicy": {"kind": "hosted", "path": "xmnote/Views/Debug/BaiduOCRFlowView.swift", "reason": "需要真实导航栏、返回拦截和普通顶部 action 上下文"},
+      "guidePath": null
+    },
+    {
+      "path": "xmnote/UIComponents/Navigation/TopBar/TopBarActionPill.swift",
+      "symbols": ["TopBarActionPresentation", "topBarActionPresentationStyle", "TopBarActionPill"],
+      "status": "canonical", "category": "layout", "layer": "navigation", "framework": "swiftui", "usageScope": "appShell",
+      "stateCoverage": ["normal", "pressed", "disabled"],
+      "dependencies": ["DesignSystem", "Liquid Glass", "TopBarActionIcon"],
+      "useWhen": "顶部右侧有两个同权重 action 并需要单层交互玻璃组合", "avoidWhen": "单一 action、不同业务权重按钮或导航栏外普通胶囊",
+      "previewPolicy": {"kind": "hosted", "path": "xmnote/Views/Debug/TopBarActionStyleLabTestView.swift", "reason": "需要在真实首页背景和多种 Liquid Glass 候选中对照"},
+      "guidePath": null
+    },
+    {
+      "path": "xmnote/UIComponents/Navigation/TopBar/TopBarGlassButtonStyle.swift",
+      "symbols": ["topBarActionButtonStyle", "topBarGlassButtonStyle", "topBarGlassCapsuleStyle"],
+      "status": "canonical", "category": "designInfrastructure", "layer": "navigation", "framework": "swiftui", "usageScope": "appShell",
+      "stateCoverage": ["normal", "pressed", "disabled"],
+      "dependencies": ["SwiftUI.ButtonStyle", "Liquid Glass"],
+      "useWhen": "顶部独立圆形 action 或已登记胶囊需要原生玻璃样式", "avoidWhen": "系统导航栏已自动提供样式、返回按钮或页面内普通按钮",
+      "previewPolicy": {"kind": "hosted", "path": "xmnote/Views/Debug/DesignSystemGalleryView.swift", "reason": "需要 iOS 26 原生玻璃、按压和背景对照"},
+      "guidePath": null
+    },
+    {
+      "path": "xmnote/UIComponents/Settings/XMSettingsGroup.swift",
+      "symbols": ["XMSettingsGroupPresentation", "XMSettingsGroup", "XMSettingsDivider"],
+      "status": "canonical", "category": "layout", "layer": "settings", "framework": "swiftui", "usageScope": "crossFeature",
+      "stateCoverage": ["normal", "expanded", "readOnly"],
+      "dependencies": ["DesignSystem", "XMSettingsPageLayout"],
+      "useWhen": "配置项需要 grouped 或真实单项表层与弱分割线", "avoidWhen": "普通内容卡片、业务列表或参数膨胀的万能设置行",
+      "previewPolicy": {"kind": "required", "path": "xmnote/UIComponents/Settings/XMSettingsGroup.swift"},
+      "guidePath": "docs/component-guides/XMSettingsComponents使用说明.md"
+    },
+    {
       "path": "xmnote/UIComponents/Settings/XMSettingsPage.swift",
-      "layer": "settings",
-      "useWhen": "卡片式配置页的根内容；统一滚动、回弹、页面边距、最大宽度与背景"
+      "symbols": ["XMSettingsPageLayout", "XMSettingsPage"],
+      "status": "canonical", "category": "layout", "layer": "settings", "framework": "swiftui", "usageScope": "crossFeature",
+      "stateCoverage": ["normal", "readOnly"],
+      "dependencies": ["DesignSystem"],
+      "useWhen": "卡片式配置页面需要统一滚动、回弹、边距和最大宽度", "avoidWhen": "普通业务列表、表单 Sheet 或非配置页面",
+      "previewPolicy": {"kind": "required", "path": "xmnote/UIComponents/Settings/XMSettingsPage.swift"},
+      "guidePath": "docs/component-guides/XMSettingsComponents使用说明.md"
     },
     {
-      "symbol": "XMSettingsSection",
+      "path": "xmnote/UIComponents/Settings/XMSettingsRows.swift",
+      "symbols": ["XMSettingsValueMenuRow", "XMSettingsToggleRow"],
+      "status": "canonical", "category": "formInteraction", "layer": "settings", "framework": "swiftui", "usageScope": "crossFeature",
+      "stateCoverage": ["normal", "pressed", "selected", "disabled"],
+      "dependencies": ["DesignSystem", "XMMenuStyle", "SwiftUI.Menu", "SwiftUI.Toggle"],
+      "useWhen": "设置项是单一开关或离散当前值菜单", "avoidWhen": "双行说明、异步状态、自由输入、多选或复杂业务内容",
+      "previewPolicy": {"kind": "required", "path": "xmnote/UIComponents/Settings/XMSettingsRows.swift"},
+      "guidePath": "docs/component-guides/XMSettingsComponents使用说明.md"
+    },
+    {
       "path": "xmnote/UIComponents/Settings/XMSettingsSection.swift",
-      "layer": "settings",
-      "useWhen": "带本地化标题的配置分区"
+      "symbols": ["XMSettingsSection"],
+      "status": "canonical", "category": "layout", "layer": "settings", "framework": "swiftui", "usageScope": "crossFeature",
+      "stateCoverage": ["normal", "readOnly"],
+      "dependencies": ["DesignSystem", "XMSettingsPageLayout"],
+      "useWhen": "配置页需要本地化分区标题与稳定内容从属间距", "avoidWhen": "没有配置分区语义的普通内容标题",
+      "previewPolicy": {"kind": "required", "path": "xmnote/UIComponents/Settings/XMSettingsSection.swift"},
+      "guidePath": "docs/component-guides/XMSettingsComponents使用说明.md"
     },
     {
-      "symbol": "XMSettingsGroup",
-      "path": "xmnote/UIComponents/Settings/XMSettingsGroup.swift",
-      "layer": "settings",
-      "useWhen": "同一语义组内的配置项容器"
+      "path": "xmnote/UIComponents/Sheet/XMSheetScaffold.swift",
+      "symbols": ["XMSheetScaffoldLayout", "XMSheetScaffold"],
+      "status": "canonical", "category": "layout", "layer": "sheet", "framework": "swiftui", "usageScope": "crossFeature",
+      "stateCoverage": ["normal", "pressed", "disabled", "loading", "error"],
+      "dependencies": ["DesignSystem", "TopBarActionIcon", "XMScrollEdgeChrome"],
+      "useWhen": "业务 Sheet 需要标准标题、关闭或双侧操作、滚动回弹和固定栏", "avoidWhen": "系统选择器、中心弹窗或没有业务 Sheet 关系的页面",
+      "previewPolicy": {"kind": "required", "path": "xmnote/UIComponents/Sheet/XMSheetScaffold.swift"},
+      "guidePath": "docs/component-guides/XMSheetScaffold使用说明.md"
     },
     {
-      "symbol": "XMSettingsDivider",
-      "path": "xmnote/UIComponents/Settings/XMSettingsGroup.swift",
-      "layer": "settings",
-      "useWhen": "同一配置组内需要弱分割线"
+      "path": "xmnote/UIComponents/Sheet/XMYearMonthPickerSheet.swift",
+      "symbols": ["XMYearMonthPickerSheet"],
+      "status": "canonical", "category": "formInteraction", "layer": "sheet", "framework": "swiftui", "usageScope": "featureFamily",
+      "stateCoverage": ["normal", "pressed", "selected", "disabled"],
+      "dependencies": ["DesignSystem", "SwiftUI.Picker"],
+      "useWhen": "业务需要随机访问选择年份或年月", "avoidWhen": "选择具体日期、时间、范围或只做前后月步进",
+      "previewPolicy": {"kind": "required", "path": "xmnote/UIComponents/Sheet/XMYearMonthPickerSheet.swift"},
+      "guidePath": "docs/component-guides/XMYearMonthPickerSheet使用说明.md"
     },
     {
-      "symbol": "XMSettingsToggleRow",
-      "path": "xmnote/UIComponents/Settings/XMSettingsRows.swift",
-      "layer": "settings",
-      "useWhen": "单一标题与 Toggle 组成的设置行"
-    },
-    {
-      "symbol": "XMSettingsValueMenuRow",
-      "path": "xmnote/UIComponents/Settings/XMSettingsRows.swift",
-      "layer": "settings",
-      "useWhen": "当前值通过菜单切换的设置行"
+      "path": "xmnote/UIComponents/System/Sharing/XMActivityShareSheet.swift",
+      "symbols": ["XMActivitySharePayload", "XMActivityShareSheet"],
+      "status": "canonical", "category": "designInfrastructure", "layer": "system", "framework": "bridge", "usageScope": "crossFeature",
+      "stateCoverage": ["normal", "disabled"],
+      "dependencies": ["SwiftUI", "UIKit.UIActivityViewController"],
+      "useWhen": "页面级 item-driven 流程需要分享文本、文件 URL 或系统 activity item", "avoidWhen": "应用内发送、导出生成逻辑或自定义分享目标列表",
+      "previewPolicy": {"kind": "hosted", "path": "xmnote/Views/Debug/DesignSystemGalleryView.swift", "reason": "UIActivityViewController 必须由运行中的 Sheet 宿主触发"},
+      "guidePath": "docs/component-guides/XMActivityShareSheet使用说明.md"
     }
   ]
 }

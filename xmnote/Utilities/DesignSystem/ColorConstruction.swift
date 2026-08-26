@@ -1,12 +1,25 @@
 /**
  * [INPUT]: 依赖 SwiftUI 与 UIKit 的颜色构造能力
- * [OUTPUT]: 对外提供 Color/UIColor 的十六进制、浅深主题、sRGB 与框架桥接唯一入口
- * [POS]: Utilities/DesignSystem 的底层颜色构造层，供语义颜色和业务局部调色板受控构色
+ * [OUTPUT]: 对内提供受限 BaseColorPalette，对外提供 Color/UIColor 的集中构色与框架桥接入口
+ * [POS]: Utilities/DesignSystem 的底层颜色构造层，供语义颜色和已批准局部调色板受控构色
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
 import SwiftUI
 import UIKit
+
+/// 仅承载被多个语义角色共享的原始品牌色阶，业务代码不得直接消费。
+enum BaseColorPalette {
+    static let brand200 = Color.xmHex(0xACEEBB)
+    static let brand500 = Color.xmAdaptive(
+        light: Color.xmHex(0x2ECF77),
+        dark: Color.xmHex(0x2ECF77),
+        highContrastLight: Color.xmHex(0x197A43),
+        highContrastDark: Color.xmHex(0x5CDB90)
+    )
+    static let brand700 = Color.xmHex(0x2DA44F)
+    static let brand900 = Color.xmHex(0x11632A)
+}
 
 // MARK: - Color Helpers
 
@@ -22,12 +35,23 @@ extension Color {
         )
     }
 
-    /// 组合浅色与深色值，保持颜色在 UIKit trait 环境中动态解析。
-    static func xmAdaptive(light: Color, dark: Color) -> Color {
+    /// 组合浅色、深色及可选高对比度值，保持颜色在 UIKit trait 环境中动态解析。
+    static func xmAdaptive(
+        light: Color,
+        dark: Color,
+        highContrastLight: Color? = nil,
+        highContrastDark: Color? = nil
+    ) -> Color {
         Color(uiColor: UIColor { traits in
-            traits.userInterfaceStyle == .dark
-                ? UIColor.xmResolved(dark)
-                : UIColor.xmResolved(light)
+            let isDark = traits.userInterfaceStyle == .dark
+            let isHighContrast = traits.accessibilityContrast == .high
+
+            if isHighContrast {
+                return UIColor.xmResolved(
+                    isDark ? highContrastDark ?? dark : highContrastLight ?? light
+                )
+            }
+            return UIColor.xmResolved(isDark ? dark : light)
         })
     }
 
@@ -52,14 +76,6 @@ extension Color {
         )
     }
 
-    /// 从 32 位 RGBA 值构色（高 8 位为红色，低 8 位为透明度）。
-    static func xmRGBAHex(_ rgbaHex: UInt32) -> Color {
-        let red = Double((rgbaHex >> 24) & 0xFF) / 255.0
-        let green = Double((rgbaHex >> 16) & 0xFF) / 255.0
-        let blue = Double((rgbaHex >> 8) & 0xFF) / 255.0
-        let alpha = Double(rgbaHex & 0xFF) / 255.0
-        return xmSRGB(red: red, green: green, blue: blue, opacity: alpha)
-    }
 }
 
 extension UIColor {
@@ -78,12 +94,23 @@ extension UIColor {
         )
     }
 
-    /// 组合浅色与深色十六进制值，按当前 trait 环境延迟解析。
-    static func xmAdaptive(lightHex: UInt, darkHex: UInt) -> UIColor {
+    /// 组合浅色、深色及可选高对比度十六进制值，按当前 trait 环境延迟解析。
+    static func xmAdaptive(
+        lightHex: UInt,
+        darkHex: UInt,
+        highContrastLightHex: UInt? = nil,
+        highContrastDarkHex: UInt? = nil
+    ) -> UIColor {
         UIColor { traits in
-            traits.userInterfaceStyle == .dark
-                ? UIColor.xmHex(darkHex)
-                : UIColor.xmHex(lightHex)
+            let isDark = traits.userInterfaceStyle == .dark
+            let isHighContrast = traits.accessibilityContrast == .high
+
+            if isHighContrast {
+                return UIColor.xmHex(
+                    isDark ? highContrastDarkHex ?? darkHex : highContrastLightHex ?? lightHex
+                )
+            }
+            return UIColor.xmHex(isDark ? darkHex : lightHex)
         }
     }
 

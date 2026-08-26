@@ -72,7 +72,7 @@ private extension HeatmapTestContentView {
                         .padding(.vertical, 6)
                         .background(
                             viewModel.currentScenario == scenario
-                                ? Color.brand : Color.controlFillSecondary
+                                ? Color.selectionAccent : Color.controlFillSecondary
                         )
                         .foregroundStyle(
                             viewModel.currentScenario == scenario

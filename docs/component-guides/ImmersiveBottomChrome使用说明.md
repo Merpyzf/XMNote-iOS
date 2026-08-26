@@ -1,7 +1,8 @@
 # ImmersiveBottomChrome 使用说明
 
 ## 组件定位
-- 源码路径：`xmnote/UIComponents/Foundation/ImmersiveBottomChrome.swift`
+- 源码路径：`xmnote/Views/Content/Components/ImmersiveBottomChrome.swift`
+- 归属：内容浏览功能页面私有组件，不属于公共 `UIComponents`。
 - 角色：为全屏查看类页面提供统一的底部沉浸渐变、悬浮 ornament 承载、滚动补偿与安全区覆盖。
 - 边界：组件只负责底部视觉托底与悬浮交互容器，不负责顶部栏、不负责页面业务动作，也不直接生成玻璃按钮内容。
 

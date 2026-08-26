@@ -119,7 +119,7 @@ SwiftUI callback / ViewModel command
 - `xmnote/Views/Book/Components/BookWorkspaceCollectionView.swift`
 - `xmnote/Views/Book/Components/BookWorkspaceNoteItem.swift`
 - `xmnote/ViewModels/Book/BookWorkspacePresentationStore.swift`
-- `xmnote/UIComponents/Foundation/ExpandableRichText.swift`
-- `xmnote/UIComponents/Foundation/CollapsedRichTextPreview.swift`
+- `xmnote/UIComponents/Media/RichText/ExpandableRichText.swift`
+- `xmnote/UIComponents/Media/RichText/CollapsedRichTextPreview.swift`
 
 [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md

@@ -1,5 +1,5 @@
 /**
- * [INPUT]: 依赖 SwiftStreamingMarkdown、AI Markdown 累积快照/生成状态、项目排版/颜色令牌与统一 Toast/分享组件
+ * [INPUT]: 依赖 SwiftStreamingMarkdown、AI Markdown 累积快照/生成状态、项目排版/颜色令牌（含 surfaceDividerDefault）与统一 Toast/分享组件
  * [OUTPUT]: 对外提供 AIMarkdownResultView、AIMarkdownInteractionController 与表格导出会话，完成按词流式渲染和交互路由
  * [POS]: Views/Content/Components 的页面私有 AI 结果组件，被 AITextResultSheet 与 AIAutoTagSheet 作为统一 Markdown 展示入口
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -291,6 +291,58 @@ final class AIMarkdownInteractionController: MarkdownListener {
     }
 }
 
+/// AI Markdown 第三方渲染器的 UIKit 排版工厂，集中生成随当前 Dynamic Type 更新的字体变体。
+private enum AIMarkdownTypography {
+    static var linkUIFont: UIFont {
+        AppTypography.uiSemantic(.body)
+    }
+
+    static var inlineCodeUIFont: UIFont {
+        AppTypography.uiSemantic(.body, design: .monospaced)
+    }
+
+    static var citationUIFont: UIFont {
+        AppTypography.uiSemantic(.caption2)
+    }
+
+    /// 为渲染器提供 normal/italic/bold/boldItalic 同源字体。
+    static func textFonts(
+        textStyle: UIFont.TextStyle,
+        regularWeight: UIFont.Weight = .regular,
+        design: UIFontDescriptor.SystemDesign = .default
+    ) -> TextFonts {
+        let normalFont = AppTypography.uiSemantic(
+            textStyle,
+            weight: regularWeight,
+            design: design
+        )
+        let boldFont = AppTypography.uiSemantic(
+            textStyle,
+            weight: .bold,
+            design: design
+        )
+
+        return TextFonts(
+            normal: normalFont,
+            italic: italicized(normalFont),
+            bold: boldFont,
+            boldItalic: italicized(boldFont),
+            preferredLetterSpacing: nil,
+            preferredLineHeight: nil
+        )
+    }
+
+    /// 在保留 Dynamic Type 缩放结果的前提下增加斜体 trait；系统无法生成时退回原字体。
+    private static func italicized(_ font: UIFont) -> UIFont {
+        guard let descriptor = font.fontDescriptor.withSymbolicTraits(
+            font.fontDescriptor.symbolicTraits.union(.traitItalic)
+        ) else {
+            return font
+        }
+        return UIFont(descriptor: descriptor, size: font.pointSize)
+    }
+}
+
 /// AI 流式 Markdown 内容视图，持有稳定 Source，并以项目设计令牌覆盖第三方默认排版与颜色。
 struct AIMarkdownResultView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -320,21 +372,19 @@ struct AIMarkdownResultView: View {
 
     /// 使用同源动态 UIKit 字体构造库配置，确保段落、标题、表格和代码遵循 XMNote 文本层级。
     private var renderConfig: MarkdownRenderConfig {
-        let bodyFonts = Self.textFonts(textStyle: .body)
-        let bodySemiboldFonts = Self.textFonts(textStyle: .body, regularWeight: .semibold)
-        let calloutFonts = Self.textFonts(textStyle: .callout)
-        let monospacedBodyFonts = Self.textFonts(textStyle: .body, design: .monospaced)
-        let monospacedCaptionFonts = Self.textFonts(textStyle: .caption2, design: .monospaced)
-        let linkFont = AppTypography.uiSemantic(.body)
-        let inlineCodeFont = AppTypography.uiSemantic(.body, design: .monospaced)
+        let bodyFonts = AIMarkdownTypography.textFonts(textStyle: .body)
+        let bodySemiboldFonts = AIMarkdownTypography.textFonts(textStyle: .body, regularWeight: .semibold)
+        let calloutFonts = AIMarkdownTypography.textFonts(textStyle: .callout)
+        let monospacedBodyFonts = AIMarkdownTypography.textFonts(textStyle: .body, design: .monospaced)
+        let monospacedCaptionFonts = AIMarkdownTypography.textFonts(textStyle: .caption2, design: .monospaced)
 
         return MarkdownRenderConfig(
             shouldAnimateText: isStreaming && !reduceMotion,
             blockQuoteStyle: .init(textFonts: bodyFonts, textColor: .textSecondary),
             headingStyle: .init(
-                h1Font: Self.textFonts(textStyle: .title2, regularWeight: .semibold),
-                h2Font: Self.textFonts(textStyle: .title3, regularWeight: .semibold),
-                h3Font: Self.textFonts(textStyle: .headline, regularWeight: .semibold),
+                h1Font: AIMarkdownTypography.textFonts(textStyle: .title2, regularWeight: .semibold),
+                h2Font: AIMarkdownTypography.textFonts(textStyle: .title3, regularWeight: .semibold),
+                h3Font: AIMarkdownTypography.textFonts(textStyle: .headline, regularWeight: .semibold),
                 h4Font: bodySemiboldFonts,
                 h5Font: bodySemiboldFonts,
                 h6Font: bodySemiboldFonts,
@@ -348,14 +398,14 @@ struct AIMarkdownResultView: View {
                 regularTextColor: .textPrimary,
                 headerBackgroundColor: .surfaceNested,
                 borderColor: .surfaceBorderSubtle,
-                actionButtonColor: .brand
+                actionButtonColor: .appTint
             ),
             inlineStyle: .init(
                 boldTextColor: .textPrimary,
-                linkTextFont: linkFont,
-                linkTextColor: .brandDeep,
+                linkTextFont: AIMarkdownTypography.linkUIFont,
+                linkTextColor: .linkForeground,
                 linkUnderlineStyle: .single,
-                codeTextFont: inlineCodeFont,
+                codeTextFont: AIMarkdownTypography.inlineCodeUIFont,
                 codeTextColor: .textPrimary,
                 codeBackgroundColor: .controlFillSecondary,
                 codeUnderlineColor: .surfaceBorderDefault
@@ -363,7 +413,7 @@ struct AIMarkdownResultView: View {
             textContextMenu: nil,
             citationConfig: .init(
                 isEnabled: false,
-                font: AppTypography.uiSemantic(.caption2),
+                font: AIMarkdownTypography.citationUIFont,
                 textColor: .textSecondary,
                 backgroundColor: .controlFillSecondary
             ),
@@ -379,36 +429,8 @@ struct AIMarkdownResultView: View {
                 isEnabled: true,
                 backgroundColor: .surfaceSheet
             ),
-            thematicBreakColor: .divider,
+            thematicBreakColor: .surfaceDividerDefault,
             imageConfig: .disabled
         )
-    }
-
-    /// 为第三方渲染器提供 normal/italic/bold/boldItalic 同源字体，并让每种变体跟随当前 Dynamic Type。
-    private static func textFonts(
-        textStyle: UIFont.TextStyle,
-        regularWeight: UIFont.Weight = .regular,
-        design: UIFontDescriptor.SystemDesign = .default
-    ) -> TextFonts {
-        TextFonts(
-            normal: AppTypography.uiSemantic(textStyle, weight: regularWeight, design: design),
-            italic: AppTypography.uiSemantic(textStyle, weight: regularWeight, design: design).italicized,
-            bold: AppTypography.uiSemantic(textStyle, weight: .bold, design: design),
-            boldItalic: AppTypography.uiSemantic(textStyle, weight: .bold, design: design).italicized,
-            preferredLetterSpacing: nil,
-            preferredLineHeight: nil
-        )
-    }
-}
-
-private extension UIFont {
-    /// 在保留 Dynamic Type 缩放结果的前提下增加斜体 trait；系统无法生成时退回原字体。
-    var italicized: UIFont {
-        guard let descriptor = fontDescriptor.withSymbolicTraits(
-            fontDescriptor.symbolicTraits.union(.traitItalic)
-        ) else {
-            return self
-        }
-        return UIFont(descriptor: descriptor, size: pointSize)
     }
 }

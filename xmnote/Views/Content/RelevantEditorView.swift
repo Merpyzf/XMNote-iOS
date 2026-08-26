@@ -370,14 +370,14 @@ private struct RelevantEditorForm: View {
                             attributedText: $viewModel.contentText,
                             activeFormats: $viewModel.activeFormats,
                             placeholder: "记录与这本书相关的内容…",
-                            baseFont: AppTypography.uiSemantic(.body)
+                            baseFont: ContentEditorTypography.richTextBodyUIFont
                         )
                         .frame(minHeight: 280)
                         .compositingGroup()
                         .clipShape(.rect(cornerRadius: CornerRadius.blockMedium))
                         .overlay {
                             RoundedRectangle(cornerRadius: CornerRadius.blockMedium, style: .continuous)
-                                .stroke(Color.surfaceBorderDefault, lineWidth: CardStyle.borderWidth)
+                                .stroke(Color.surfaceBorderDefault, lineWidth: StrokeWidth.hairline)
                         }
                     }
                     .padding(Spacing.contentEdge)

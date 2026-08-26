@@ -68,7 +68,7 @@ struct BookScanPlaceholderView: View {
         .background(Color.surfaceCard, in: RoundedRectangle(cornerRadius: CornerRadius.containerMedium, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: CornerRadius.containerMedium, style: .continuous)
-                .stroke(Color.surfaceBorderSubtle, lineWidth: CardStyle.borderWidth)
+                .stroke(Color.surfaceBorderSubtle, lineWidth: StrokeWidth.hairline)
         }
     }
 
@@ -85,7 +85,7 @@ struct BookScanPlaceholderView: View {
                     .autocorrectionDisabled()
                     .keyboardType(.asciiCapable)
                     .padding(.horizontal, Spacing.base)
-                    .frame(minHeight: 44)
+                    .frame(minHeight: InteractionMetrics.minimumTouchTarget)
                     .background(Color.surfaceNested, in: RoundedRectangle(cornerRadius: CornerRadius.blockMedium, style: .continuous))
 
                 Button("搜索") {
@@ -100,14 +100,14 @@ struct BookScanPlaceholderView: View {
         .background(Color.surfaceCard, in: RoundedRectangle(cornerRadius: CornerRadius.containerMedium, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: CornerRadius.containerMedium, style: .continuous)
-                .stroke(Color.surfaceBorderSubtle, lineWidth: CardStyle.borderWidth)
+                .stroke(Color.surfaceBorderSubtle, lineWidth: StrokeWidth.hairline)
         }
     }
 
     private var scanGuide: some View {
         VStack(spacing: Spacing.compact) {
             RoundedRectangle(cornerRadius: CornerRadius.blockLarge, style: .continuous)
-                .stroke(Color.brand, lineWidth: 2)
+                .stroke(Color.appTint, lineWidth: 2)
                 .frame(width: 240, height: 128)
             Text("将书背或封底条码置于框内")
                 .font(AppTypography.captionMedium)

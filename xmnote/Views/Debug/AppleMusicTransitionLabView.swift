@@ -453,7 +453,7 @@ private struct AppleMusicTransitionLabTabContent: View {
                 NavigationStack {
                     AppleMusicTransitionLabFeedView(
                         title: "在读",
-                        accent: .brand,
+                        accent: .appTint,
                         mode: mode,
                         onClose: onClose
                     )
@@ -472,7 +472,7 @@ private struct AppleMusicTransitionLabTabContent: View {
             }
         }
         .tabBarMinimizeBehavior(.onScrollDown)
-        .tint(Color.brand)
+        .tint(Color.appTint)
     }
 }
 
@@ -555,7 +555,7 @@ private struct AppleMusicTransitionLabGlassCalibrationBackdrop: View {
             colors: [
                 Color.indigo.opacity(0.38),
                 Color.orange.opacity(0.32),
-                Color.brand.opacity(0.42)
+                Color.appTint.opacity(0.42)
             ],
             startPoint: .leading,
             endPoint: .trailing
@@ -589,7 +589,7 @@ private struct AppleMusicTransitionLabFixtureCover: View {
                 LinearGradient(
                     colors: [
                         Color.indigo.opacity(0.96),
-                        Color.brand.opacity(0.92),
+                        Color.appTint.opacity(0.92),
                         Color.orange.opacity(0.90)
                     ],
                     startPoint: .topLeading,
@@ -615,7 +615,7 @@ private struct AppleMusicTransitionLabFixtureCover: View {
                 )
                 .stroke(
                     Color.white.opacity(0.42),
-                    lineWidth: CardStyle.borderWidth
+                    lineWidth: StrokeWidth.hairline
                 )
             }
     }
@@ -768,12 +768,12 @@ private struct AppleMusicTransitionLabPlayerView: View {
             .font(isPrimary ? AppTypography.title2 : AppTypography.title3)
             .foregroundStyle(isPrimary ? Color.white : Color.textPrimary)
             .frame(
-                width: isPrimary ? 64 : Spacing.actionReserved,
-                height: isPrimary ? 64 : Spacing.actionReserved
+                width: isPrimary ? 64 : AppleMusicTransitionLabFixture.secondaryPlayerControlSize,
+                height: isPrimary ? 64 : AppleMusicTransitionLabFixture.secondaryPlayerControlSize
             )
             .background {
                 if isPrimary {
-                    Circle().fill(Color.brand)
+                    Circle().fill(Color.appTint)
                 }
             }
             .accessibilityHidden(true)
@@ -1042,6 +1042,7 @@ private enum AppleMusicTransitionLabFixture {
     static let bookTitle = "设计中的设计"
     static let elapsedTime = "00:25:18"
     static let targetCoverWidth: CGFloat = 228
+    static let secondaryPlayerControlSize: CGFloat = 44
 
     static let session = ReadingTimerSession(
         id: 9_900_001,
@@ -1094,7 +1095,7 @@ private struct AppleMusicTransitionLabBulletRow: View {
     var body: some View {
         HStack(alignment: .top, spacing: Spacing.cozy) {
             Circle()
-                .fill(Color.brand)
+                .fill(Color.appTint)
                 .frame(width: Spacing.compact, height: Spacing.compact)
                 .padding(.top, Spacing.half)
 

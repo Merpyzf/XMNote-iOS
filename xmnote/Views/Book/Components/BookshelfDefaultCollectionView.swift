@@ -2113,7 +2113,7 @@ private final class BookshelfDefaultSearchEmptyCell: UICollectionViewCell {
                 icon: "books.vertical",
                 title: "没有匹配的书籍",
                 message: "清除搜索后查看全部书籍",
-                iconColor: Color.brand.opacity(0.30)
+                iconColor: Color.appTint.opacity(0.30)
             )
             .frame(minHeight: BookshelfDefaultCollectionMetrics.searchEmptyHeight)
         }

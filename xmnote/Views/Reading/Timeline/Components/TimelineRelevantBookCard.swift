@@ -22,7 +22,7 @@ struct TimelineRelevantBookCard: View {
                     XMBookCover.fixedWidth(
                         48,
                         urlString: event.contentBookCover,
-                        border: .init(color: .surfaceBorderDefault, width: CardStyle.borderWidth),
+                        border: .init(color: .surfaceBorderDefault, width: StrokeWidth.hairline),
                         placeholderIconSize: .small
                     )
                     .accessibilityHidden(true)
@@ -76,11 +76,11 @@ struct TimelineRelatedBookMetadata: View {
     var body: some View {
         VStack(alignment: .leading, spacing: Spacing.tiny) {
             Text("相关 • 书籍")
-                .font(NoteExcerptTypography.footer)
+                .font(ReadingContentTypography.metadata)
                 .foregroundStyle(Color.textSecondary)
 
             Text("关联自《\(displaySourceBookName)》")
-                .font(NoteExcerptTypography.footer)
+                .font(ReadingContentTypography.metadata)
                 .foregroundStyle(Color.textSecondary)
                 .lineLimit(1)
                 .truncationMode(.tail)

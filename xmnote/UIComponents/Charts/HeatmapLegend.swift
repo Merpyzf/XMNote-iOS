@@ -33,20 +33,14 @@ struct HeatmapColorPalette {
     }
 
     static let appDefault = HeatmapColorPalette(
-        none: .heatmapNone,
-        veryLess: .brandLight,
-        less: .brand,
-        more: .brandDeep,
-        veryMore: .brandDarkest
-    )
-
-    /// 阅读日历年度热力图的模块调色板，不改变通用统计热力图的品牌色阶。
-    static let readCalendar = HeatmapColorPalette(
-        none: .readCalendarHeatmapNone,
-        veryLess: .readCalendarHeatmapVeryLess,
-        less: .readCalendarHeatmapLess,
-        more: .readCalendarHeatmapMore,
-        veryMore: .readCalendarHeatmapVeryMore
+        none: Color.xmAdaptive(
+            light: Color.xmHex(0xEFF0F4),
+            dark: Color.xmHex(0x2A2A2C)
+        ),
+        veryLess: BaseColorPalette.brand200,
+        less: BaseColorPalette.brand500,
+        more: BaseColorPalette.brand700,
+        veryMore: BaseColorPalette.brand900
     )
 
     /// 返回指定强度对应的颜色，供方格和图例共享同一映射。

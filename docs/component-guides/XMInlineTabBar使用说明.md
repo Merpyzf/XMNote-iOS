@@ -2,7 +2,8 @@
 
 ## 组件定位
 
-- 源码路径：`xmnote/UIComponents/Tabs/XMInlineTabBar.swift`。
+- 源码路径：`xmnote/Views/Note/Components/XMInlineTabBar.swift`。
+- 归属：书摘功能页面私有组件，不属于公共 `UIComponents`。
 - 角色：内容区内 2 至 5 个互斥子页面的左对齐切换器。
 - 边界：只写回 selection 并移动选中胶囊，不负责切换内容的生命周期、分页手势或持久化。
 

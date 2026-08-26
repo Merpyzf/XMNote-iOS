@@ -1,11 +1,22 @@
 /**
- * [INPUT]: 依赖 RichTextEditor 模块格式定义与 UIKit/TextKit 能力，承接富文本解析/渲染/编辑链路
+ * [INPUT]: 依赖 RichTextEditor 模块格式定义、RichTextAppearance、AppTypography 与 UIKit/TextKit 能力，承接富文本解析/渲染/编辑链路
  * [OUTPUT]: 对外提供 RichTextEditorView 能力，用于富文本编辑器的序列化、交互或样式支持
  * [POS]: RichTextEditor 功能模块内部构件，服务 Note 编辑场景的 Android 业务意图对齐
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
 import UIKit
+
+/// 富文本模块共享排版 owner，统一 HTML 解析、编辑器输入与外部书摘编辑场景的默认正文基线。
+enum RichTextTypography {
+    nonisolated static var editorBodyUIFont: UIFont {
+        AppTypography.uiFixed(
+            baseSize: 16,
+            textStyle: .body,
+            minimumPointSize: 16
+        )
+    }
+}
 
 /// UITextView 子类，对标 KnifeText.java
 /// 实现 8 种格式的 apply/remove/contains 三件套
@@ -33,7 +44,7 @@ final class RichTextEditorView: UITextView {
     /// Quote 色条与文字间距（pt），对标 DEFAULT_GAP_WIDTH = 2
     var quoteGapWidth: CGFloat = 2
     /// Quote 色条颜色
-    var quoteColor: UIColor = .systemGreen
+    var quoteColor: UIColor = RichTextAppearance.quoteAccent
 
     /// 链接文本颜色（nil 表示使用系统默认）
     var linkColor: UIColor? {
@@ -51,7 +62,7 @@ final class RichTextEditorView: UITextView {
     // MARK: - 初始化
 
     /// 创建编辑器并配置 TextKit 管线与默认输入行为。
-    init(baseFont: UIFont = .systemFont(ofSize: 16)) {
+    init(baseFont: UIFont = RichTextTypography.editorBodyUIFont) {
         self.baseFont = baseFont
         let textStorage = NSTextStorage()
         let richLayoutManager = RichTextLayoutManager()

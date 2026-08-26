@@ -1,7 +1,7 @@
 # XMYearMonthPickerSheet 使用说明
 
 ## 组件定位
-- 源码路径：`xmnote/UIComponents/Foundation/XMYearMonthPickerSheet.swift`
+- 源码路径：`xmnote/UIComponents/Sheet/XMYearMonthPickerSheet.swift`
 - 角色：项目级年月/年份随机访问选择 Sheet，统一承接“选择年月”和“选择年份”两类轻量跳转任务。
 - 边界：组件只负责 Sheet 内 UI、草稿年份状态、可选项禁用与选择回调；业务状态提交、Sheet 呈现、dismiss 后动画切换由宿主页面负责。
 

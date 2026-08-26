@@ -1,6 +1,6 @@
 # KeepAliveSwitcherHost 使用说明
 
-`KeepAliveSwitcherHost` 位于 `xmnote/UIComponents/Tabs/KeepAliveSwitcherHost.swift`，用于二级页面的懒激活与保活切换。它在 `ZStack` 中常驻已激活子页，通过 `opacity`、`zIndex`、`allowsHitTesting` 和 `accessibilityHidden` 切换可见页，并对 selection、activated tabs 与首次激活写入禁用动画。
+`KeepAliveSwitcherHost` 位于 `xmnote/UIComponents/Navigation/Tabs/KeepAliveSwitcherHost.swift`，用于二级页面的懒激活与保活切换。它在 `ZStack` 中常驻已激活子页，通过 `opacity`、`zIndex`、`allowsHitTesting` 和 `accessibilityHidden` 切换可见页，并对 selection、activated tabs 与首次激活写入禁用动画。
 
 ## 快速接入
 

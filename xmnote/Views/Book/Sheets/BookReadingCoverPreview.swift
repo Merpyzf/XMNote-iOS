@@ -19,7 +19,7 @@ struct BookReadingCoverPreview: View {
                 XMBookCover.fixedWidth(
                     260,
                     urlString: book.coverURL,
-                    border: .init(color: .surfaceBorderDefault, width: CardStyle.borderWidth)
+                    border: .init(color: .surfaceBorderDefault, width: StrokeWidth.hairline)
                 )
                 Text(book.name)
                     .font(AppTypography.headline)

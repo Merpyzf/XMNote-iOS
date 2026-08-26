@@ -11,7 +11,6 @@ import SwiftUI
 enum NoteIndexGridLayout {
     static let columnSpacing: CGFloat = Spacing.base
     static let rowSpacing: CGFloat = Spacing.base
-    static let itemMinHeight: CGFloat = Spacing.actionReserved
     static let itemHorizontalPadding: CGFloat = Spacing.base
     static let itemSurfaceOpacity: Double = 0.72
     static let countColumnWidth: CGFloat = 48
@@ -26,6 +25,11 @@ enum NoteIndexGridLayout {
             GridItem(.flexible())
         ]
     }
+}
+
+/// 索引卡片的文件内几何规格，保持当前 44pt 视觉高度而不借用触控语义令牌。
+private enum NoteIndexGridItemMetrics {
+    static let minimumHeight: CGFloat = 44
 }
 
 /// 标签与相关分类共用的索引按钮；业务页面只注入文案、计数和点击结果，不再各自维护视觉常量。
@@ -52,7 +56,7 @@ struct NoteIndexGridItemButton: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
 
                 Text("\(count.formatted())条")
-                    .font(NoteExcerptTypography.footer)
+                    .font(ReadingContentTypography.metadata)
                     .foregroundStyle(Color.textSecondary)
                     .monospacedDigit()
                     .lineLimit(1)
@@ -63,7 +67,7 @@ struct NoteIndexGridItemButton: View {
             }
             .padding(.horizontal, NoteIndexGridLayout.itemHorizontalPadding)
             .frame(maxWidth: .infinity)
-            .frame(minHeight: NoteIndexGridLayout.itemMinHeight)
+            .frame(minHeight: NoteIndexGridItemMetrics.minimumHeight)
             .background(
                 Color.surfaceCard.opacity(NoteIndexGridLayout.itemSurfaceOpacity),
                 in: RoundedRectangle(
