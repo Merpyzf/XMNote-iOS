@@ -196,11 +196,11 @@ struct NoteReviewView: View {
             } label: {
                 Label("调整范围", systemImage: "slider.horizontal.3")
                     .font(AppTypography.subheadlineSemibold)
-                    .frame(height: Spacing.actionReserved)
+                    .frame(height: InteractionMetrics.minimumTouchTarget)
                     .padding(.horizontal, Spacing.contentEdge)
             }
             .buttonStyle(.borderedProminent)
-            .tint(Color.brand)
+            .tint(Color.primaryActionFill)
             .disabled(viewModel.isInitialLoading)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)

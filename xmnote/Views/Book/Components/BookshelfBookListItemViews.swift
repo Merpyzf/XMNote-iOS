@@ -106,7 +106,7 @@ struct BookshelfBookListGridItemView: View {
         XMBookCover.responsive(
             urlString: book.cover,
             cornerRadius: coverCornerRadius,
-            border: .init(color: .surfaceBorderSubtle, width: CardStyle.borderWidth),
+            border: .init(color: .surfaceBorderSubtle, width: StrokeWidth.hairline),
             surfaceStyle: .spine
         )
         .overlay {

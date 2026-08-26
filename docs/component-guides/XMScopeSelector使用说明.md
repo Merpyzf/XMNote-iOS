@@ -1,7 +1,7 @@
 # XMScopeSelector 使用说明
 
 ## 组件定位
-- 源码路径：`xmnote/UIComponents/Foundation/XMScopeSelector.swift`
+- 源码路径：`xmnote/UIComponents/Controls/Selection/XMScopeSelector.swift`
 - 角色：同一内容集合内的单选范围切换控件，用统一胶囊、滑动指示器、数量 badge 与跟手拖拽承载互斥选项。
 - 边界：组件只负责范围选项展示、选中态写回、点击/拖拽交互、Dynamic Type 与无障碍语义；不负责搜索执行、数据筛选、数量统计或业务路由。
 - 布局：2-5 项为等宽同屏；6 项及以上保持外层胶囊固定，只让内部内容横向滚动。

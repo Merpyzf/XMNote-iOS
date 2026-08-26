@@ -85,7 +85,7 @@ private struct ReviewDetailLoadedView: View {
             }
             Button("取消", role: .cancel) {}
         } message: {
-            Text("删除后将从当前内容中移除。")
+            Text("删除后将从当前内容中移除")
         }
         .overlay {
             if viewModel.isDeleting {

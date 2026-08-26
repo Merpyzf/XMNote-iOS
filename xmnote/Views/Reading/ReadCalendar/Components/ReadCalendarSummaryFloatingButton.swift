@@ -1,7 +1,7 @@
 import SwiftUI
 
 /**
- * [INPUT]: 依赖 DesignTokens 与 SwiftUI glassEffect，依赖图标/文案与回调触发月度或年度统计弹层
+ * [INPUT]: 依赖 ReadCalendarTheme、DesignTokens 与 SwiftUI glassEffect，依赖图标/文案与回调触发月度或年度统计弹层
  * [OUTPUT]: 对外提供 ReadCalendarSummaryFloatingButton（统计悬浮按钮）
  * [POS]: ReadCalendar 业务内浮层入口组件，承载右下角液态玻璃按钮交互
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -22,7 +22,7 @@ struct ReadCalendarSummaryFloatingButton: View {
         Button(action: action) {
             Image(systemName: iconSystemName)
                 .font(.system(size: Layout.iconSize, weight: .medium))
-                .foregroundStyle(Color.readCalendarTopAction)
+                .foregroundStyle(ReadCalendarTheme.topAction)
                 .frame(width: Layout.buttonSize, height: Layout.buttonSize)
                 .contentShape(Circle())
         }

@@ -1,11 +1,19 @@
 import SwiftUI
 
 /**
- * [INPUT]: 依赖年度月份贡献数据、月份点击回调与阅读日历月份渐变及统计排版令牌
+ * [INPUT]: 依赖年度月份贡献数据、月份点击回调、ReadCalendarTheme 月份渐变、ReadCalendarTextStyle 分区标题与树图私有排版
  * [OUTPUT]: 对外提供 ReadCalendarMonthContributionTreemap 加权树图
  * [POS]: 阅读日历年度统计 Sheet 的页面私有分布组件，按阅读时长面积展示可访问月份并支持下钻
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
+
+/// 月份贡献树图内部的洞察与 tile 文本层级。
+private enum ReadCalendarTreemapTypography {
+    static let insightMeta = AppTypography.footnote
+    static let month = AppTypography.captionSemibold
+    static let percent = AppTypography.caption2Semibold
+    static let detail = AppTypography.caption2
+}
 
 /// 年度月份贡献加权树图，面积严格跟随阅读时长占比并使用确定性布局。
 struct ReadCalendarMonthContributionTreemap: View {
@@ -35,12 +43,12 @@ struct ReadCalendarMonthContributionTreemap: View {
     var body: some View {
         VStack(alignment: .leading, spacing: Spacing.base) {
             Text("年度阅读分布")
-                .font(ReadCalendarSummaryTypography.sectionTitle)
+                .font(ReadCalendarTextStyle.summarySectionTitleFont)
                 .foregroundStyle(Color.textPrimary)
 
             if visibleItems.isEmpty {
                 Text("暂无阅读分布")
-                    .font(ReadCalendarSummaryTypography.insightMeta)
+                    .font(ReadCalendarTreemapTypography.insightMeta)
                     .foregroundStyle(Color.textHint)
                     .frame(maxWidth: .infinity, minHeight: 92, alignment: .center)
             } else {
@@ -149,7 +157,7 @@ private extension ReadCalendarMonthContributionTreemap {
     private func tileButton(_ tile: Tile) -> some View {
         let month = calendar.component(.month, from: tile.item.monthStart)
         let percent = min(100, max(1, Int((Double(tile.item.totalReadSeconds) / Double(totalDuration) * 100).rounded())))
-        let gradient = Color.readCalendarMonthContributionGradientSpec(for: month)
+        let gradient = ReadCalendarTheme.monthContributionGradientSpec(for: month)
         let shape = RoundedRectangle(cornerRadius: CornerRadius.inlayMedium, style: .continuous)
 
         return Button {
@@ -184,7 +192,7 @@ private extension ReadCalendarMonthContributionTreemap {
                 .overlay {
                     shape.strokeBorder(
                         Color.white.opacity(0.20),
-                        lineWidth: CardStyle.borderWidth
+                        lineWidth: StrokeWidth.hairline
                     )
                 }
                 .compositingGroup()
@@ -204,25 +212,25 @@ private extension ReadCalendarMonthContributionTreemap {
     func tileLabel(item: Item, month: Int, percent: Int, isSingle: Bool) -> some View {
         ReadCalendarTreemapTileLabelLayout(isSingle: isSingle) {
             Text("\(month)月")
-                .font(ReadCalendarSummaryTypography.treemapMonth)
+                .font(ReadCalendarTreemapTypography.month)
                 .foregroundStyle(Color.white)
                 .lineLimit(1)
                 .fixedSize()
 
             Text("\(percent)%")
-                .font(ReadCalendarSummaryTypography.treemapPercent)
+                .font(ReadCalendarTreemapTypography.percent)
                 .foregroundStyle(Color.white.opacity(0.84))
                 .lineLimit(1)
                 .fixedSize()
 
             Text(durationText(item.totalReadSeconds))
-                .font(ReadCalendarSummaryTypography.treemapDetail)
+                .font(ReadCalendarTreemapTypography.detail)
                 .foregroundStyle(Color.white)
                 .lineLimit(1)
                 .fixedSize()
 
             Text("活跃 \(item.activeDays) 天")
-                .font(ReadCalendarSummaryTypography.treemapDetail)
+                .font(ReadCalendarTreemapTypography.detail)
                 .foregroundStyle(Color.white.opacity(0.76))
                 .lineLimit(1)
                 .fixedSize()

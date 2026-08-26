@@ -3,7 +3,7 @@ import SwiftUI
 import UIKit
 
 /**
- * [INPUT]: 依赖 BookCoverBadgeEffectTestViewModel 提供可调参数与封面样例，依赖 XMBookCover 与 UIVisualEffectView 渲染书封角标实验效果
+ * [INPUT]: 依赖 BookCoverBadgeEffectTestViewModel 提供可调参数与封面样例，依赖 XMBookCover、ReadingStatusPresentation 与 UIVisualEffectView 渲染书封角标实验效果
  * [OUTPUT]: 对外提供 BookCoverBadgeEffectTestView（书封角标效果测试页）
  * [POS]: Debug 测试页，集中验证书封置顶/数量毛玻璃角标与阅读状态纯色角标在真实封面上的展示效果
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -62,7 +62,7 @@ private extension BookCoverBadgeEffectTestContentView {
                 width: 104,
                 noteText: "29",
                 statusText: "在读",
-                statusColor: .statusReading,
+                statusColor: ReadingStatusPresentation.reading,
                 parameters: viewModel.parameters
             )
 
@@ -187,7 +187,7 @@ private extension BookCoverBadgeEffectTestContentView {
     var livePreviewSection: some View {
         CardContainer {
             VStack(alignment: .leading, spacing: Spacing.base) {
-                sectionHeader("实时预览", subtitle: "同一封面同时展示置顶、阅读状态与数量角标。")
+                sectionHeader("实时预览", subtitle: "同一封面同时展示置顶、阅读状态与数量角标")
 
                 HStack(alignment: .top, spacing: Spacing.double) {
                     DebugBookCoverBadgePreview(
@@ -195,7 +195,7 @@ private extension BookCoverBadgeEffectTestContentView {
                         width: 126,
                         noteText: "29",
                         statusText: "在读",
-                        statusColor: .statusReading,
+                        statusColor: ReadingStatusPresentation.reading,
                         parameters: viewModel.parameters
                     )
 
@@ -225,7 +225,7 @@ private extension BookCoverBadgeEffectTestContentView {
     var blurStyleComparisonSection: some View {
         CardContainer {
             VStack(alignment: .leading, spacing: Spacing.base) {
-                sectionHeader("Blur Style 对比", subtitle: "固定其它参数，只切换系统 blur style。")
+                sectionHeader("Blur Style 对比", subtitle: "固定其它参数，只切换系统 blur style")
 
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(alignment: .top, spacing: Spacing.base) {
@@ -236,7 +236,7 @@ private extension BookCoverBadgeEffectTestContentView {
                                     width: 96,
                                     noteText: "29",
                                     statusText: "在读",
-                                    statusColor: .statusReading,
+                                    statusColor: ReadingStatusPresentation.reading,
                                     parameters: viewModel.parameters(overriding: option)
                                 )
                                 Text(option.title)
@@ -256,7 +256,7 @@ private extension BookCoverBadgeEffectTestContentView {
     var matrixSection: some View {
         CardContainer {
             VStack(alignment: .leading, spacing: Spacing.base) {
-                sectionHeader("封面矩阵", subtitle: "真实封面不足时使用浅色、黄色、黑色、白底与复杂彩色样例兜底。")
+                sectionHeader("封面矩阵", subtitle: "真实封面不足时使用浅色、黄色、黑色、白底与复杂彩色样例兜底")
 
                 LazyVGrid(
                     columns: [GridItem(.adaptive(minimum: 96), spacing: Spacing.base, alignment: .top)],
@@ -278,7 +278,7 @@ private extension BookCoverBadgeEffectTestContentView {
     var themeSection: some View {
         CardContainer {
             VStack(alignment: .leading, spacing: Spacing.base) {
-                sectionHeader("浅深色对照", subtitle: "同一组参数在不同系统主题下对比干净度。")
+                sectionHeader("浅深色对照", subtitle: "同一组参数在不同系统主题下对比干净度")
 
                 HStack(alignment: .top, spacing: Spacing.base) {
                     themePane(title: "浅色", scheme: .light)
@@ -292,7 +292,7 @@ private extension BookCoverBadgeEffectTestContentView {
     var groupPreviewSection: some View {
         CardContainer {
             VStack(alignment: .leading, spacing: Spacing.base) {
-                sectionHeader("分组预览", subtitle: "分组仅验证置顶与 N本 数量角标。")
+                sectionHeader("分组预览", subtitle: "分组仅验证置顶与 N本 数量角标")
 
                 HStack(alignment: .top, spacing: Spacing.double) {
                     DebugBookCoverGroupBadgePreview(
@@ -302,7 +302,7 @@ private extension BookCoverBadgeEffectTestContentView {
                         parameters: viewModel.parameters
                     )
 
-                    Text("分组封面沿用 pin 与数量角标参数，阅读状态不参与分组展示。")
+                    Text("分组封面沿用 pin 与数量角标参数，阅读状态不参与分组展示")
                         .font(AppTypography.caption)
                         .foregroundStyle(Color.textSecondary)
                         .fixedSize(horizontal: false, vertical: true)
@@ -315,7 +315,7 @@ private extension BookCoverBadgeEffectTestContentView {
     var parameterSummarySection: some View {
         CardContainer {
             VStack(alignment: .leading, spacing: Spacing.base) {
-                sectionHeader("参数摘要", subtitle: "选定效果后可用这里的参数迁移回生产 token。")
+                sectionHeader("参数摘要", subtitle: "选定效果后可用这里的参数迁移回生产 token")
 
                 Text(viewModel.parameterSummary)
                     .font(AppTypography.caption2)
@@ -399,7 +399,7 @@ private extension BookCoverBadgeEffectTestContentView {
                 width: 92,
                 noteText: "72",
                 statusText: "想读",
-                statusColor: .statusWish,
+                statusColor: ReadingStatusPresentation.wantRead,
                 parameters: viewModel.parameters
             )
         }
@@ -451,7 +451,7 @@ private extension BookCoverBadgeEffectTestContentView {
             }
 
             Slider(value: value, in: range, step: step)
-                .tint(Color.brand)
+                .tint(Color.appTint)
         }
     }
 
@@ -486,7 +486,7 @@ private struct DebugCoverMatrixCell: View {
                 width: 92,
                 noteText: "29",
                 statusText: "在读",
-                statusColor: .statusReading,
+                statusColor: ReadingStatusPresentation.reading,
                 parameters: parameters
             )
             Text(sample.title)
@@ -517,7 +517,7 @@ private struct DebugBookCoverBadgePreview: View {
             width,
             urlString: urlString,
             cornerRadius: coverCornerRadius,
-            border: .init(color: .surfaceBorderSubtle, width: CardStyle.borderWidth),
+            border: .init(color: .surfaceBorderSubtle, width: StrokeWidth.hairline),
             placeholderIconSize: .medium,
             surfaceStyle: .spine
         )
@@ -662,7 +662,7 @@ private struct DebugBookCoverGroupBadgePreview: View {
                 .fill(Color.surfaceCard)
                 .overlay {
                     RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                        .stroke(Color.surfaceBorderSubtle, lineWidth: CardStyle.borderWidth)
+                        .stroke(Color.surfaceBorderSubtle, lineWidth: StrokeWidth.hairline)
                 }
 
             DebugGroupMosaic(samples: samples)
@@ -725,7 +725,7 @@ private struct DebugGroupMosaic: View {
             height: metrics.cellHeight(for: index),
             urlString: coverURL(at: index),
             cornerRadius: index == 0 ? CornerRadius.inlaySmall : CornerRadius.inlayTiny,
-            border: .init(color: .surfaceBorderSubtle, width: CardStyle.borderWidth),
+            border: .init(color: .surfaceBorderSubtle, width: StrokeWidth.hairline),
             placeholderIconSize: .hidden,
             surfaceStyle: index == 0 ? .spine : .plain
         )
@@ -849,7 +849,7 @@ private func effectBadge<Content: View>(
         content: content
     )
     .overlay {
-        shape.stroke(Color.white.opacity(parameters.strokeOpacity), lineWidth: CardStyle.borderWidth)
+        shape.stroke(Color.white.opacity(parameters.strokeOpacity), lineWidth: StrokeWidth.hairline)
     }
     .compositingGroup()
     .clipShape(shape)

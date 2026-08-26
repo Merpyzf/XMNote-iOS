@@ -1,8 +1,9 @@
 # NoteReviewPagingDeck 使用说明
 
 ## 组件定位
-- 源码路径：`xmnote/UIComponents/Foundation/NoteReviewPaging/NoteReviewPagingDeck.swift`
-- 配套模型：`xmnote/UIComponents/Foundation/NoteReviewPaging/NoteReviewPagingModels.swift`
+- 源码路径：`xmnote/Views/Note/Components/NoteReviewPaging/NoteReviewPagingDeck.swift`
+- 配套模型：`xmnote/Views/Note/Components/NoteReviewPaging/NoteReviewPagingModels.swift`
+- 归属：书摘回顾流程页面私有组件，不属于公共 `UIComponents`。
 - 角色：书摘回顾专用分页卡组组件，基于 BigUIPaging `PageView` 提供双向切卡、后卡补位、内容 handoff、分页预加载和可访问性隔离。
 - 边界：只负责卡组交互和动效，不读取业务数据，不决定卡片正文排版。
 

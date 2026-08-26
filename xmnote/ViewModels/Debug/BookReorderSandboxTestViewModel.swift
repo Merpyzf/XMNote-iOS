@@ -132,13 +132,13 @@ final class BookReorderSandboxTestViewModel {
 
     var dragDisabledReason: String? {
         if !isEditMode {
-            return "当前不是编辑态，拖拽入口关闭。"
+            return "当前不是编辑态，拖拽入口关闭"
         }
         if sortMode != .custom {
-            return "当前排序不是手动排序，拖拽会破坏用户对排序规则的预期。"
+            return "当前排序不是手动排序，拖拽会破坏用户对排序规则的预期"
         }
         if !normalizedSearchText.isEmpty {
-            return "搜索过滤态只展示子集，直接重排会让落盘顺序产生歧义。"
+            return "搜索过滤态只展示子集，直接重排会让落盘顺序产生歧义"
         }
         return nil
     }
@@ -159,10 +159,10 @@ final class BookReorderSandboxTestViewModel {
 
     var migrationRiskSummary: [String] {
         [
-            "LazyVGrid 没有 List.onMove 同级的系统重排入口，需要自建网格命中与占位反馈。",
+            "LazyVGrid 没有 List.onMove 同级的系统重排入口，需要自建网格命中与占位反馈",
             "Android 置顶项参与展示但不可被普通书拖入；iOS 迁移必须保留这个边界。",
-            "搜索过滤态不应落盘排序，生产实现需要禁用拖拽或先退出过滤。",
-            "生产写入应由 Repository 一次性提交 orderedIDs，失败时回滚 UI 快照。"
+            "搜索过滤态不应落盘排序，生产实现需要禁用拖拽或先退出过滤",
+            "生产写入应由 Repository 一次性提交 orderedIDs，失败时回滚 UI 快照"
         ]
     }
 

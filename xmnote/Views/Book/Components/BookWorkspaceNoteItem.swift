@@ -1,5 +1,5 @@
 /**
- * [INPUT]: 依赖 NoteExcerpt、ExpandableRichText、XMJXImageWall 与 DesignTokens 展示单书工作台章节、书摘和头部排版令牌
+ * [INPUT]: 依赖 NoteExcerpt、ExpandableRichText、XMJXImageWall、XMTagLabel 与 DesignTokens 展示单书工作台章节、书摘和头部排版令牌
  * [OUTPUT]: 对 BookDetailView 提供统一结构轴、具备对称边界呼吸并带无缝连续书名、色点中性状态与评分缺席态等距底部呼吸的独立普通评分胶囊的无边缘光晕封面影像 Hero、低于书摘正文的统一出版元数据层级、三项轻透阅读指标 Chip、中性内容台阶与折叠导航中和布局刻度，以及共享中性画布的章节和书摘内容
  * [POS]: Views/Book/Components 的页面私有内容组件，承接影像 Hero 头部节奏、中性内容层、章节分组和具备清晰信息亲密性的书摘列表项
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -10,15 +10,16 @@ import UIKit
 
 /// 单书工作台专用布局刻度；把 Android 的紧凑节奏转换为当前 iOS 设计系统，不影响全局间距令牌。
 enum BookWorkspaceLayoutMetrics {
-    static let pageHorizontalInset: CGFloat = Spacing.screenEdge
-    static let headerHorizontalInset: CGFloat = pageHorizontalInset
+    static let pageHorizontalInset: CGFloat = Spacing.base
+    static let headerHorizontalInset: CGFloat = Spacing.screenEdge
+    static let sectionHeaderHorizontalInset: CGFloat = Spacing.screenEdge
     static let cardContentInset: CGFloat = Spacing.screenEdge
-    static let itemSpacing: CGFloat = Spacing.tight
+    static let itemSpacing: CGFloat = Spacing.base
     static let chapterToFirstItemSpacing: CGFloat = Spacing.cozy
     static let sectionSpacing: CGFloat = Spacing.section
     static let contentBlockSpacing: CGFloat = 10
     static let metadataSpacing: CGFloat = 8
-    static let minimumControlHeight: CGFloat = 44
+    static let minimumControlHeight: CGFloat = InteractionMetrics.minimumTouchTarget
     static let headerTopInset: CGFloat = Spacing.double
     static let headerBottomInset: CGFloat = Spacing.double
     static let identityCoverSpacing: CGFloat = Spacing.screenEdge
@@ -59,7 +60,7 @@ enum BookWorkspaceLayoutMetrics {
     static let scopeIndicatorHeight: CGFloat = 3
     static let scopeIndicatorOffset: CGFloat = Spacing.tight
     static let scopeAccessibilityIndicatorSpacing: CGFloat = Spacing.cozy
-    static let scopeBarEstimatedHeight: CGFloat = 44
+    static let scopeBarEstimatedHeight: CGFloat = InteractionMetrics.minimumTouchTarget
     static let contentStepTopCornerRadius: CGFloat = 20
     static let contentStepBoundaryOpacity: CGFloat = 0.18
     static let navigationNeutralizationDistance: CGFloat = 64
@@ -84,6 +85,8 @@ enum BookWorkspaceTypography {
 
 /// 单书工作台内容表面的页面私有样式，只保留不抢正文的弱语义描边。
 enum BookWorkspaceCardSurfaceStyle {
+    static let cornerRadius = CornerRadius.blockLarge
+
     static var border: Color {
         Color.surfaceBorderSubtle.opacity(0.55)
     }
@@ -117,7 +120,7 @@ struct BookWorkspaceChapterHeader: View {
 
             Spacer(minLength: Spacing.base)
         }
-        .padding(.horizontal, BookWorkspaceLayoutMetrics.pageHorizontalInset)
+        .padding(.horizontal, BookWorkspaceLayoutMetrics.sectionHeaderHorizontalInset)
         .padding(.vertical, Spacing.compact)
         .frame(minHeight: BookWorkspaceLayoutMetrics.minimumControlHeight)
         .background(canvasColor)
@@ -155,7 +158,10 @@ struct BookWorkspaceNoteItem: View {
         cardContent
             .contentShape(
                 .contextMenuPreview,
-                RoundedRectangle(cornerRadius: CornerRadius.blockLarge, style: .continuous)
+                RoundedRectangle(
+                    cornerRadius: BookWorkspaceCardSurfaceStyle.cornerRadius,
+                    style: .continuous
+                )
             )
             .contextMenu {
                 Button("查看完整内容", systemImage: "doc.text.magnifyingglass", action: onOpen)
@@ -172,7 +178,10 @@ struct BookWorkspaceNoteItem: View {
     }
 
     private var cardContent: some View {
-        let shape = RoundedRectangle(cornerRadius: CornerRadius.blockLarge, style: .continuous)
+        let shape = RoundedRectangle(
+            cornerRadius: BookWorkspaceCardSurfaceStyle.cornerRadius,
+            style: .continuous
+        )
         return VStack(alignment: .leading, spacing: BookWorkspaceLayoutMetrics.metadataSpacing) {
             noteContent
 
@@ -186,7 +195,7 @@ struct BookWorkspaceNoteItem: View {
         .overlay {
             shape.strokeBorder(
                 BookWorkspaceCardSurfaceStyle.border,
-                lineWidth: CardStyle.borderWidth
+                lineWidth: StrokeWidth.hairline
             )
         }
     }
@@ -197,9 +206,9 @@ struct BookWorkspaceNoteItem: View {
                 ExpandableRichText(
                     html: note.content,
                     isExpanded: $isContentExpanded,
-                    baseFont: NoteExcerptTypography.uiBody,
-                    textColor: UIColor(Color.textPrimary),
-                    lineSpacing: NoteExcerptTypography.bodyLineSpacing,
+                    baseFont: ReadingContentTypography.uiBody,
+                    textColor: UIColor.xmResolved(Color.textPrimary),
+                    lineSpacing: ReadingContentTypography.bodyLineSpacing,
                     maxLines: 6,
                     actionColor: Color.textSecondary,
                     accessibilitySubject: "书摘正文",
@@ -217,9 +226,9 @@ struct BookWorkspaceNoteItem: View {
                     ExpandableRichText(
                         html: note.idea,
                         isExpanded: $isIdeaExpanded,
-                        baseFont: NoteExcerptTypography.uiIdea,
-                        textColor: UIColor(Color.textSecondary),
-                        lineSpacing: NoteExcerptTypography.ideaLineSpacing,
+                        baseFont: ReadingContentTypography.uiAnnotation,
+                        textColor: UIColor.xmResolved(Color.textSecondary),
+                        lineSpacing: ReadingContentTypography.annotationLineSpacing,
                         maxLines: 4,
                         actionColor: Color.textSecondary,
                         accessibilitySubject: "书摘想法",
@@ -279,7 +288,7 @@ struct BookWorkspaceNoteItem: View {
 
     private var footer: some View {
         Text(footerText)
-            .font(NoteExcerptTypography.footer)
+            .font(ReadingContentTypography.metadata)
             .foregroundStyle(Color.textSecondary)
             .multilineTextAlignment(.trailing)
             .lineLimit(dynamicTypeSize.isAccessibilitySize ? 2 : 1)
@@ -290,12 +299,7 @@ struct BookWorkspaceNoteItem: View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: Spacing.tight) {
                 ForEach(note.tagNames, id: \.self) { tag in
-                    Text(tag)
-                        .font(AppTypography.caption2)
-                        .foregroundStyle(Color.textSecondary)
-                        .padding(.horizontal, Spacing.cozy)
-                        .padding(.vertical, Spacing.compact)
-                        .background(Color.tagBackground, in: Capsule())
+                    XMTagLabel(tag)
                 }
             }
             .padding(.vertical, Spacing.hairline)

@@ -1,13 +1,13 @@
 /**
  * [INPUT]: 依赖 Foundation 提供 Codable、URL 与本地化错误语义
- * [OUTPUT]: 对外提供 AIProvider 模型目录与展示名、AIConfiguration、三套 Prompt、选词释义输入、AI 标签流事件/建议与统一错误模型
+ * [OUTPUT]: 对外提供 AIProvider 模型目录与展示名、AIConfiguration、三套 Prompt、AI 查词输入、AI 标签流事件/建议与统一错误模型
  * [POS]: Domain/Models 的 AI 业务模型，隔离设置页、Viewer、Repository 与 OpenAI-compatible 网络细节
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
 import Foundation
 
-/// Android 已开放的 AI 供应商；基础地址固定为同源生产地址，用户密钥由 Keychain 单独保存。
+/// Android 已开放的 AI 供应商；基础地址固定为同源生产地址，各供应商密钥在 iOS 配置快照中隔离保存。
 nonisolated enum AIProvider: String, CaseIterable, Codable, Hashable, Identifiable, Sendable {
     case deepSeek
     case siliconFlow
@@ -79,7 +79,7 @@ nonisolated enum AIPromptKind: String, CaseIterable, Identifiable, Hashable, Sen
         case .noteExplanation:
             "AI 释义"
         case .wordLookup:
-            "选词释义"
+            "AI 查词"
         case .autoTag:
             "AI 标签"
         }
@@ -234,7 +234,7 @@ nonisolated struct AIPromptConfiguration: Codable, Equatable, Sendable {
     )
 }
 
-/// 非敏感 AI 配置；API Key 不进入该模型，也不会写入 UserDefaults 或备份文件。
+/// AI 行为配置；API Key 由存储层与该模型共同组成原子快照，不暴露给页面状态。
 nonisolated struct AIConfiguration: Codable, Equatable, Sendable {
     var isEnabled: Bool
     var provider: AIProvider
@@ -288,7 +288,7 @@ nonisolated struct AIConfiguration: Codable, Equatable, Sendable {
     )
 }
 
-/// 设置页只读取“是否存在密钥”，绝不把 Keychain 明文回填到界面状态。
+/// 设置页只读取“是否存在密钥”，绝不把 UserDefaults 中的明文回填到界面状态。
 nonisolated struct AIConfigurationSnapshot: Equatable, Sendable {
     let configuration: AIConfiguration
     let providersWithStoredKey: Set<AIProvider>
@@ -353,31 +353,31 @@ nonisolated enum AIRepositoryError: LocalizedError, Equatable, Sendable {
     var errorDescription: String? {
         switch self {
         case .disabled:
-            "AI 功能尚未启用，请先前往“我的 > AI 配置”开启。"
+            "AI 功能尚未启用，请先前往“我的 > AI 配置”开启"
         case .missingAPIKey(let provider):
-            "尚未配置 \(provider.displayName) API Key。"
+            "尚未配置 \(provider.displayName) API Key"
         case .invalidConfiguration(let message):
             message
         case .noteNotFound:
-            "书摘不存在或已被删除。"
+            "书摘不存在或已被删除"
         case .unauthorized:
-            "AI 密钥无效，请检查配置。"
+            "AI 密钥无效，请检查配置"
         case .forbidden:
-            "AI 账户余额不足、无权访问该模型或已受限。"
+            "AI 账户余额不足、无权访问该模型或已受限"
         case .rateLimited:
-            "AI 请求过于频繁，请稍后再试。"
+            "AI 请求过于频繁，请稍后再试"
         case .service(let statusCode):
-            "AI 服务暂时不可用（HTTP \(statusCode)）。"
+            "AI 服务暂时不可用（HTTP \(statusCode)）"
         case .network(let message):
             "AI 连接失败：\(message)"
         case .emptyResponse:
-            "AI 没有返回可用内容，请检查模型和密钥配置。"
+            "AI 没有返回可用内容，请检查模型和密钥配置"
         case .invalidAutoTagResponse:
-            "结果格式有误，请重试。"
+            "结果格式有误，请重试"
         case .noTagsSelected:
-            "请至少选择一个标签。"
+            "请至少选择一个标签"
         case .credentialStore(let message):
-            "安全存储访问失败：\(message)"
+            "配置存储访问失败：\(message)"
         }
     }
 }

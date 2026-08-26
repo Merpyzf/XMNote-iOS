@@ -1,7 +1,7 @@
 import Foundation
 
 /**
- * [INPUT]: 依赖 BackupServerRepositoryProtocol、BackupArchiveService、CloudBackupRemoteProvider 与 UserDefaults
+ * [INPUT]: 依赖 BackupServerRepositoryProtocol、BackupArchiveService、IOSUserDefaultsBackupCoordinator、CloudBackupRemoteProvider 与 UserDefaults
  * [OUTPUT]: 对外提供 BackupRepository（BackupRepositoryProtocol 的实现）
  * [POS]: Data 层云备份仓储，统一编排 provider 选择、备份打包、历史读取、恢复与状态持久化
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -25,6 +25,7 @@ struct BackupRepository: BackupRepositoryProtocol {
     private let aliyunDriveProvider: AliyunDriveBackupRemoteProvider?
     private let userDefaults: UserDefaults
     private let remoteProviderFactory: RemoteProviderFactory?
+    private let preferencesBackupCoordinator: IOSUserDefaultsBackupCoordinator
 
     /// 注入数据库、服务器仓储与阿里云 provider，组装备份仓储执行上下文。
     init(
@@ -32,13 +33,15 @@ struct BackupRepository: BackupRepositoryProtocol {
         serverRepository: any BackupServerRepositoryProtocol,
         aliyunDriveProvider: AliyunDriveBackupRemoteProvider?,
         userDefaults: UserDefaults = .standard,
-        remoteProviderFactory: RemoteProviderFactory? = nil
+        remoteProviderFactory: RemoteProviderFactory? = nil,
+        preferencesBackupCoordinator: IOSUserDefaultsBackupCoordinator = .shared
     ) {
         self.databaseManager = databaseManager
         self.serverRepository = serverRepository
         self.aliyunDriveProvider = aliyunDriveProvider
         self.userDefaults = userDefaults
         self.remoteProviderFactory = remoteProviderFactory
+        self.preferencesBackupCoordinator = preferencesBackupCoordinator
     }
 }
 
@@ -141,15 +144,18 @@ extension BackupRepository {
     func restoreLocalBackup(
         using ticket: LocalBackupImportTicket,
         progress: (@Sendable (RestoreProgress) -> Void)?
-    ) async throws {
+    ) async throws -> BackupRestoreResult {
         defer { try? FileManager.default.removeItem(at: ticket.workingDirectoryURL) }
-        try await runBlockingWork {
+        let preferencesPayload = try await runBlockingWork {
             try archiveService().restoreBackupArchive(
                 from: ticket.archiveFileURL,
                 databaseManager: databaseManager,
                 progress: progress
             )
         }
+        let result = await applyPreferencesPayload(preferencesPayload)
+        progress?(.completed)
+        return result
     }
 
     func discardLocalImport(_ ticket: LocalBackupImportTicket) async {
@@ -185,7 +191,7 @@ extension BackupRepository {
     func restore(
         _ backup: BackupFileInfo,
         progress: (@Sendable (RestoreProgress) -> Void)?
-    ) async throws {
+    ) async throws -> BackupRestoreResult {
         let provider = try await makeRequiredRemoteProvider(for: backup.provider)
         let temporaryDirectory = try createTemporaryDirectory()
         defer { try? FileManager.default.removeItem(at: temporaryDirectory) }
@@ -196,13 +202,16 @@ extension BackupRepository {
             progress?(.downloading(fraction))
         }
 
-        try await runBlockingWork {
+        let preferencesPayload = try await runBlockingWork {
             try archiveService().restoreBackupArchive(
                 from: localArchiveURL,
                 databaseManager: databaseManager,
                 progress: progress
             )
         }
+        let result = await applyPreferencesPayload(preferencesPayload)
+        progress?(.completed)
+        return result
     }
 }
 
@@ -221,8 +230,33 @@ private extension BackupRepository {
     }
 
     func createArchiveArtifact(in directory: URL) async throws -> BackupArchiveArtifact {
-        try await runBlockingWork {
-            try archiveService().createBackupArchive(in: directory)
+        let preferencesData = try await preferencesBackupCoordinator.makeArchiveData()
+        return try await runBlockingWork {
+            try archiveService().createBackupArchive(
+                in: directory,
+                iosPreferencesData: preferencesData
+            )
+        }
+    }
+
+    /// 数据库已重开后再应用偏好附加层；偏好缺失或失败只影响结果文案，不回滚核心阅读数据。
+    func applyPreferencesPayload(
+        _ payload: BackupArchivePreferencesPayload
+    ) async -> BackupRestoreResult {
+        switch payload {
+        case .missing:
+            return BackupRestoreResult(preferencesStatus: .notIncluded)
+        case .skipped:
+            return BackupRestoreResult(preferencesStatus: .skipped)
+        case .ready(let envelope):
+            do {
+                let didRestore = try await preferencesBackupCoordinator.restore(envelope)
+                return BackupRestoreResult(
+                    preferencesStatus: didRestore ? .restored : .notIncluded
+                )
+            } catch {
+                return BackupRestoreResult(preferencesStatus: .skipped)
+            }
         }
     }
 

@@ -89,7 +89,7 @@ struct BookshelfMoveSheet: View {
                 Image(systemName: icon)
                     .font(AppTypography.title3)
                     .fontWeight(.medium)
-                    .foregroundStyle(canSubmit ? Color.brand : Color.textHint)
+                    .foregroundStyle(canSubmit ? Color.appTint : Color.textHint)
                     .frame(width: 28)
 
                 VStack(alignment: .leading, spacing: Spacing.tiny) {
@@ -108,7 +108,7 @@ struct BookshelfMoveSheet: View {
             .background(Color.surfaceCard, in: RoundedRectangle(cornerRadius: CornerRadius.blockLarge, style: .continuous))
             .overlay {
                 RoundedRectangle(cornerRadius: CornerRadius.blockLarge, style: .continuous)
-                    .stroke(Color.surfaceBorderSubtle, lineWidth: CardStyle.borderWidth)
+                    .stroke(Color.surfaceBorderSubtle, lineWidth: StrokeWidth.hairline)
             }
         }
         .buttonStyle(.plain)
@@ -118,7 +118,7 @@ struct BookshelfMoveSheet: View {
 
     private var statusText: String {
         if let activeAction {
-            return "正在\(activeAction.title)..."
+            return "正在\(activeAction.title)…"
         }
         guard canSubmit else {
             return disabledReason ?? "至少选择一个非置顶项后才能移动"

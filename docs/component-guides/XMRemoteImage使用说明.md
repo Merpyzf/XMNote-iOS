@@ -1,7 +1,7 @@
 # XMRemoteImage 使用说明
 
 ## 组件定位
-- 源码路径：`xmnote/UIComponents/Foundation/XMRemoteImage.swift`
+- 源码路径：`xmnote/UIComponents/Media/Images/XMRemoteImage.swift`
 - 角色：统一远程图片加载组件，封装 Nuke/NukeUI 请求、占位、GIF 识别与降级策略。
 - 典型场景：书籍封面、详情头图、排行封面、小组件图像位。
 

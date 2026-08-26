@@ -45,7 +45,7 @@ struct ContentView: View {
                     initialSceneSnapshot: sceneStateStore.snapshot
                 )
                 .id(appState.dataEpoch)
-                .tint(Color.brand)
+                .tint(Color.appTint)
             } else {
                 SceneRestorationBootstrapView()
             }

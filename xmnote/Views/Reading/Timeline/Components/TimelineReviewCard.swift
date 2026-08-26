@@ -74,13 +74,13 @@ struct TimelineReviewCard: View {
 
     private var contentBodyFont: UIFont {
         presentationStyle == .contentFirst
-            ? NoteExcerptTypography.uiBody
+            ? ReadingContentTypography.uiBody
             : TimelineTypography.eventRichTextBaseFont
     }
 
     private var contentBodyLineSpacing: CGFloat {
         presentationStyle == .contentFirst
-            ? NoteExcerptTypography.bodyLineSpacing
+            ? ReadingContentTypography.bodyLineSpacing
             : TimelineTypography.eventRichTextLineSpacing
     }
 

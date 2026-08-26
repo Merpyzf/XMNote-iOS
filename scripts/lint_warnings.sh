@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-PROJECT_PATH="$ROOT_DIR/XMNote.xcodeproj"
+PROJECT_PATH="$ROOT_DIR/xmnote.xcodeproj"
 SCHEME="xmnote"
 DESTINATION="${LINT_DESTINATION:-}"
 
@@ -30,10 +30,10 @@ fi
 log_file="$(mktemp)"
 trap 'rm -f "$log_file"' EXIT
 
-build_status=0
-if ! xcodebuild -project "$PROJECT_PATH" -scheme "$SCHEME" -destination "$DESTINATION" clean build >"$log_file" 2>&1; then
-    build_status=$?
-fi
+set +e
+xcodebuild -project "$PROJECT_PATH" -scheme "$SCHEME" -destination "$DESTINATION" clean build >"$log_file" 2>&1
+build_status=$?
+set -e
 
 # 仅关注仓库源码文件中的 warning/error，忽略 xcodebuild 工具噪声。
 source_issues="$( (rg -n "warning:|error:" "$log_file" || true) | rg "$ROOT_DIR/(xmnote|xmnoteTests|xmnoteUITests)/" || true )"

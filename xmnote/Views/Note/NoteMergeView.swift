@@ -1,5 +1,5 @@
 /**
- * [INPUT]: 依赖 RepositoryContainer 注入 NoteRepository/OCRRepository，依赖 NoteMergeViewModel、NoteTextComposerView 与现有设计组件
+ * [INPUT]: 依赖 RepositoryContainer 注入 NoteRepository/OCRRepository，依赖 NoteMergeViewModel、NoteTextComposerView、XMTagLabel 与页面私有图片占位外观
  * [OUTPUT]: 对外提供 NoteMergeView，覆盖正文/想法独立排序与分隔、富文本编辑、统一标签草稿选择、图片并集、元信息选择及真实事务合并
  * [POS]: Note 模块书摘合并页面，由 NoteRoute.mergeNotes 进入
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -7,6 +7,14 @@
 
 import SwiftUI
 import UIKit
+
+/// 书摘合并页图片占位容器的私有外观，避免与领域标签产生伪共享。
+private enum NoteMergeAppearance {
+    static let imagePlaceholderBackground = Color.xmAdaptive(
+        light: Color.xmHex(0xE8F0EC),
+        dark: Color.xmHex(0x343536)
+    )
+}
 
 /// 书摘合并页；所有预览和提交校验经 Repository 完成，页面只表达用户可见的最终选择。
 struct NoteMergeView: View {
@@ -219,7 +227,7 @@ struct NoteMergeView: View {
                             .lineLimit(1)
                     }
                     Text("合并 \(draft.sourceNotes.count) 条书摘")
-                        .font(NoteExcerptTypography.footer)
+                        .font(ReadingContentTypography.metadata)
                         .foregroundStyle(Color.textSecondary)
                         .contentTransition(.numericText())
                 }
@@ -249,9 +257,9 @@ struct NoteMergeView: View {
             }
 
             Text(plainText.isEmpty ? emptyMessage : plainText)
-                .font(NoteExcerptTypography.body)
+                .font(ReadingContentTypography.body)
                 .foregroundStyle(plainText.isEmpty ? Color.textHint : Color.textPrimary)
-                .lineSpacing(NoteExcerptTypography.bodyLineSpacing)
+                .lineSpacing(ReadingContentTypography.bodyLineSpacing)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(Spacing.contentEdge)
                 .background(
@@ -260,7 +268,7 @@ struct NoteMergeView: View {
                 )
                 .overlay {
                     RoundedRectangle(cornerRadius: CornerRadius.blockLarge, style: .continuous)
-                        .stroke(Color.surfaceBorderSubtle, lineWidth: CardStyle.borderWidth)
+                        .stroke(Color.surfaceBorderSubtle, lineWidth: StrokeWidth.hairline)
                 }
         }
     }
@@ -365,12 +373,7 @@ struct NoteMergeView: View {
                         ScrollView(.horizontal, showsIndicators: false) {
                             HStack(spacing: Spacing.cozy) {
                                 ForEach(draft.selectedTags) { tag in
-                                    Text(tag.title)
-                                        .font(AppTypography.caption)
-                                        .foregroundStyle(Color.textSecondary)
-                                        .padding(.horizontal, Spacing.cozy)
-                                        .frame(minHeight: 26)
-                                        .background(Color.tagBackground, in: Capsule())
+                                    XMTagLabel(tag.title)
                                 }
                             }
                         }
@@ -395,7 +398,7 @@ struct NoteMergeView: View {
                             HStack(spacing: Spacing.cozy) {
                                 ForEach(draft.imageItems) { image in
                                     XMRemoteImage(urlString: image.remoteURL ?? "") {
-                                        Color.tagBackground.overlay {
+                                        NoteMergeAppearance.imagePlaceholderBackground.overlay {
                                             Image(systemName: "photo")
                                                 .foregroundStyle(Color.textHint)
                                         }
@@ -560,7 +563,7 @@ private struct NoteMergeOrderSection: View {
             .clipShape(.rect(cornerRadius: CornerRadius.blockLarge))
             .overlay {
                 RoundedRectangle(cornerRadius: CornerRadius.blockLarge, style: .continuous)
-                    .stroke(Color.surfaceBorderSubtle, lineWidth: CardStyle.borderWidth)
+                    .stroke(Color.surfaceBorderSubtle, lineWidth: StrokeWidth.hairline)
             }
         }
     }
@@ -574,7 +577,10 @@ private struct NoteMergeOrderSection: View {
         Button(action: action) {
             Image(systemName: systemImage)
                 .font(AppTypography.captionMedium)
-                .frame(width: Spacing.actionReserved, height: Spacing.actionReserved)
+                .frame(
+                    width: InteractionMetrics.minimumTouchTarget,
+                    height: InteractionMetrics.minimumTouchTarget
+                )
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -587,12 +593,6 @@ private struct NoteMergeOrderSection: View {
         let plain = title == "正文顺序" ? note.plainContent : note.plainIdea
         return plain.isEmpty ? "（空）" : plain
     }
-}
-
-private enum NoteMergeComposer: String, Identifiable {
-    case content
-    case idea
-    var id: String { rawValue }
 }
 
 private enum NoteMergeSheet: Identifiable {
@@ -608,148 +608,6 @@ private enum NoteMergeSheet: Identifiable {
         case .tags: "tags"
         case .images: "images"
         }
-    }
-}
-
-/// 合并附图编辑 Sheet 复用生产附件条、相册/相机/OCR 与每日额度策略。
-private struct NoteMergeImageEditorSheet: View {
-    @Bindable var viewModel: NoteMergeViewModel
-    let ocrRepository: any OCRRepositoryProtocol
-
-    @Environment(\.dismiss) private var dismiss
-    @Environment(XMToastCenter.self) private var toastCenter
-
-    var body: some View {
-        NavigationStack {
-            ScrollView {
-                ContentEditorImageSection(
-                    items: contentImageItems,
-                    accessibilityNamespace: "note_merge.attachment_strip",
-                    ocrRepository: ocrRepository,
-                    availableSelectionCount: viewModel.availableImageSelectionCount,
-                    onStageImages: { inputs in
-                        await viewModel.stageImages(inputs)
-                        presentImageErrorIfNeeded()
-                    },
-                    onMove: viewModel.moveImage,
-                    onRemove: viewModel.removeImage,
-                    onRetry: viewModel.retryImage,
-                    onRecognizedText: { text in
-                        viewModel.appendRecognizedTextToContent(text)
-                        toastCenter.success("识别文字已追加到合并正文")
-                    },
-                    onTransferError: { toastCenter.error($0) },
-                    onQuotaBlocked: {
-                        toastCenter.error(
-                            viewModel.imageQuotaState?.blockedMessage ?? "当前无法继续添加图片"
-                        )
-                    }
-                )
-                .padding(Spacing.screenEdge)
-            }
-            .background(Color.surfacePage)
-            .navigationTitle("编辑合并图片")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("完成") { dismiss() }
-                }
-            }
-        }
-        .presentationDetents([.medium, .large])
-        .presentationDragIndicator(.visible)
-    }
-
-    private var contentImageItems: [ContentEditorImageItem] {
-        (viewModel.draft?.imageItems ?? []).map { item in
-            ContentEditorImageItem(
-                id: item.id,
-                remoteURL: item.remoteURL,
-                localFilePath: item.localFilePath,
-                uploadState: contentUploadState(item.uploadState),
-                origin: item.origin
-            )
-        }
-    }
-
-    private func contentUploadState(
-        _ state: NoteEditorImageUploadState
-    ) -> ContentEditorImageUploadState {
-        switch state {
-        case .uploading: .uploading
-        case .success: .success
-        case .failed: .failed
-        }
-    }
-
-    private func presentImageErrorIfNeeded() {
-        guard let message = viewModel.imageErrorMessage else { return }
-        toastCenter.error(message)
-        viewModel.clearImageError()
-    }
-}
-
-/// 富文本合并结果编辑 Sheet，复用书摘编辑器并在关闭时回写 HTML。
-private struct NoteMergeComposerSheet: View {
-    let composer: NoteMergeComposer
-    let ocrRepository: any OCRRepositoryProtocol
-    let onSave: (String) -> Void
-
-    @State private var attributedText: NSAttributedString
-    @State private var showsPhotoOCR = false
-
-    init(
-        composer: NoteMergeComposer,
-        initialHTML: String,
-        ocrRepository: any OCRRepositoryProtocol,
-        onSave: @escaping (String) -> Void
-    ) {
-        self.composer = composer
-        self.ocrRepository = ocrRepository
-        self.onSave = onSave
-        _attributedText = State(
-            initialValue: RichTextBridge.htmlToAttributed(
-                initialHTML,
-                baseFont: NoteEditorViewModel.editorBaseUIFont
-            )
-        )
-    }
-
-    var body: some View {
-        NavigationStack {
-            NoteTextComposerView(
-                composerTarget: composer == .content ? .content : .idea,
-                title: composer == .content ? "编辑合并正文" : "编辑合并想法",
-                text: $attributedText,
-                onRequestPhotoOCR: { showsPhotoOCR = true }
-            )
-            .navigationDestination(isPresented: $showsPhotoOCR) {
-                NotePhotoOCRFlowView(
-                    target: composer == .content ? .content : .idea,
-                    repository: ocrRepository
-                ) { payload in
-                    appendRecognizedText(payload.summary.combinedText)
-                }
-            }
-        }
-        .onDisappear {
-            onSave(RichTextBridge.attributedToHtml(attributedText))
-        }
-    }
-
-    /// 将拍照 OCR 文本以编辑器基础字体追加到合并草稿末尾。
-    private func appendRecognizedText(_ text: String) {
-        let normalized = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !normalized.isEmpty else { return }
-        let mutable = NSMutableAttributedString(attributedString: attributedText)
-        if mutable.length > 0 {
-            mutable.append(NSAttributedString(string: "\n"))
-        }
-        mutable.append(NSAttributedString(
-            string: normalized,
-            attributes: [.font: NoteEditorViewModel.editorBaseUIFont]
-        ))
-        attributedText = mutable
     }
 }
 

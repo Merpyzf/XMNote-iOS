@@ -112,9 +112,9 @@ extension WebDAVServerViewModel {
         } catch {
             isTesting = false
             if error is NetworkError {
-                testResultMessage = "连接失败: \(error.localizedDescription)"
+                testResultMessage = "连接失败：\(error.localizedDescription)"
             } else {
-                testResultMessage = "保存失败: \(error.localizedDescription)"
+                testResultMessage = "保存失败：\(error.localizedDescription)"
             }
             return false
         }
@@ -166,7 +166,7 @@ extension WebDAVServerViewModel {
             testResultMessage = "连接成功"
         } catch {
             lastValidatedInput = nil
-            testResultMessage = "连接失败: \(error.localizedDescription)"
+            testResultMessage = "连接失败：\(error.localizedDescription)"
         }
         isTesting = false
     }

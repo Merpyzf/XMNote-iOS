@@ -25,7 +25,7 @@ struct BookDoubanLoginScreen: View {
                     TopBarBackButton(action: onClose)
                 }
                 ToolbarItem(placement: .principal) {
-                    VStack(spacing: 2) {
+                    VStack(spacing: Spacing.tiny) {
                         Text("登录豆瓣")
                             .font(AppTypography.headline)
                         Text(title)

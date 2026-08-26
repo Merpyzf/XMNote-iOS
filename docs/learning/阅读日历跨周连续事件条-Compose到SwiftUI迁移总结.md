@@ -118,7 +118,7 @@ ZStack {
         .fill(Color.readCalendarCardBackground)
         .overlay {
             RoundedRectangle(cornerRadius: CornerRadius.containerMedium, style: .continuous)
-                .stroke(Color.readCalendarCardStroke, lineWidth: CardStyle.borderWidth)
+                .stroke(Color.readCalendarCardStroke, lineWidth: StrokeWidth.hairline)
         }
         .shadow(color: .black.opacity(0.07), radius: 18, x: 0, y: 8)
 }

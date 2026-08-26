@@ -34,7 +34,7 @@ struct NoteReviewSettingsSheet: View {
     }
 
     var body: some View {
-        XMSettingsPageScaffold(
+        XMSheetScaffold(
             title: "回顾设置",
             subtitle: "书摘范围与卡片样式",
             onClose: { dismiss() }
@@ -78,15 +78,15 @@ struct NoteReviewSettingsSheet: View {
     }
 
     private var scopeGroup: some View {
-        XMSettingsGroupCard {
+        XMSettingsGroup {
             VStack(spacing: Spacing.none) {
-                XMSettingsNavigationRow(
+                NoteReviewSettingsNavigationRow(
                     title: "书籍范围",
                     value: viewModel.bookScopeSummary,
                     action: { activeSheet = .books }
                 )
 
-                XMSettingsNavigationRow(
+                NoteReviewSettingsNavigationRow(
                     title: "标签范围",
                     value: viewModel.tagScopeSummary,
                     action: { activeSheet = .tags }
@@ -109,7 +109,7 @@ struct NoteReviewSettingsSheet: View {
     }
 
     private var displayGroup: some View {
-        XMSettingsGroupCard {
+        XMSettingsGroup {
             VStack(spacing: Spacing.none) {
                 XMSettingsValueMenuRow(
                     title: "显示顺序",
@@ -328,7 +328,7 @@ private struct NoteReviewBackgroundImageRow: View {
                     PhotosPicker(selection: $selectedPhoto, matching: .images) {
                         Text(imageURL == nil ? "选择图片" : "更换图片")
                             .font(AppTypography.subheadlineMedium)
-                            .foregroundStyle(Color.brand)
+                            .foregroundStyle(Color.appTint)
                     }
                 }
             }
@@ -396,8 +396,8 @@ private struct NoteReviewPalettePickerRow: View {
                                 .overlay {
                                     RoundedRectangle(cornerRadius: CornerRadius.inlayMedium, style: .continuous)
                                         .stroke(
-                                            palette == canonicalSelection ? Color.brand : Color.surfaceBorderSubtle,
-                                            lineWidth: palette == canonicalSelection ? 2 : CardStyle.borderWidth
+                                            palette == canonicalSelection ? Color.selectionAccent : Color.surfaceBorderSubtle,
+                                            lineWidth: palette == canonicalSelection ? 2 : StrokeWidth.hairline
                                         )
                                 }
                                 .overlay {
@@ -417,6 +417,45 @@ private struct NoteReviewPalettePickerRow: View {
             }
         }
         .frame(minHeight: 78)
+    }
+}
+
+private enum NoteReviewSettingsNavigationRowLayout {
+    static let minimumHeight: CGFloat = 52
+    static let minimumValueScale = 0.82
+}
+
+/// 书摘回顾设置的子选择入口，展示动态摘要并打开页面私有选择器。
+private struct NoteReviewSettingsNavigationRow: View {
+    let title: LocalizedStringResource
+    let value: String
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: Spacing.base) {
+                Text(title)
+                    .font(AppTypography.subheadlineSemibold)
+                    .foregroundStyle(Color.textPrimary)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                Spacer(minLength: Spacing.base)
+
+                Text(value)
+                    .font(AppTypography.subheadlineMedium)
+                    .foregroundStyle(Color.textHint)
+                    .lineLimit(1)
+                    .minimumScaleFactor(NoteReviewSettingsNavigationRowLayout.minimumValueScale)
+
+                Image(systemName: "chevron.right")
+                    .font(AppTypography.captionSemibold)
+                    .foregroundStyle(Color.textHint)
+            }
+            .frame(minHeight: NoteReviewSettingsNavigationRowLayout.minimumHeight)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("\(String(localized: title))，当前\(value)")
     }
 }
 
@@ -440,7 +479,7 @@ private struct NoteReviewTagSelectionSheet: View {
     }
 
     var body: some View {
-        XMSettingsPageScaffold(
+        XMSheetScaffold(
             title: "选择标签",
             subtitle: draftSummary,
             onClose: { dismiss() }
@@ -464,7 +503,7 @@ private struct NoteReviewTagSelectionSheet: View {
     }
 
     private var tagGroup: some View {
-        XMSettingsGroupCard {
+        XMSettingsGroup {
             VStack(spacing: Spacing.none) {
                 ForEach(options) { option in
                     Button {
@@ -486,7 +525,7 @@ private struct NoteReviewTagSelectionSheet: View {
 
                             Image(systemName: draftIDs.contains(option.id) ? "checkmark.circle.fill" : "circle")
                                 .font(AppTypography.title3)
-                                .foregroundStyle(draftIDs.contains(option.id) ? Color.brand : Color.textHint)
+                                .foregroundStyle(draftIDs.contains(option.id) ? Color.selectionAccent : Color.textHint)
                         }
                         .frame(minHeight: 52)
                         .contentShape(Rectangle())
@@ -509,7 +548,7 @@ private struct NoteReviewTagSelectionSheet: View {
                 Text("清空")
                     .font(AppTypography.subheadlineSemibold)
                     .frame(maxWidth: .infinity)
-                    .frame(height: Spacing.actionReserved)
+                    .frame(height: InteractionMetrics.minimumTouchTarget)
             }
             .buttonStyle(.bordered)
             .disabled(draftIDs.isEmpty)
@@ -521,10 +560,10 @@ private struct NoteReviewTagSelectionSheet: View {
                 Text("完成")
                     .font(AppTypography.subheadlineSemibold)
                     .frame(maxWidth: .infinity)
-                    .frame(height: Spacing.actionReserved)
+                    .frame(height: InteractionMetrics.minimumTouchTarget)
             }
             .buttonStyle(.borderedProminent)
-            .tint(Color.brand)
+            .tint(Color.primaryActionFill)
         }
     }
 

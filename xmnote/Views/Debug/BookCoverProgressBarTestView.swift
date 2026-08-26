@@ -2,7 +2,7 @@
 import SwiftUI
 
 /**
- * [INPUT]: 依赖 BookCoverProgressBar 与 XMBookCover 提供封面叠层渲染，依赖 DesignTokens 与 CardContainer 组织测试页布局
+ * [INPUT]: 依赖 BookCoverProgressBar、XMBookCover 与 XMBookCoverAppearance 提供封面叠层渲染，依赖 DesignTokens 与 CardContainer 组织测试页布局
  * [OUTPUT]: 对外提供 BookCoverProgressBarTestView（封面阅读进度条测试页）
  * [POS]: Debug 测试页，集中验证封面底部玻璃进度条在不同进度、尺寸、封面样式与内容源下的表现
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -81,7 +81,7 @@ private extension BookCoverProgressBarTestView {
                     headerLine(title: "当前进度", value: percentText(progress))
 
                     Slider(value: $progress, in: 0...1)
-                        .tint(Color.brand)
+                        .tint(Color.appTint)
                 }
 
                 VStack(alignment: .leading, spacing: Spacing.half) {
@@ -141,7 +141,7 @@ private extension BookCoverProgressBarTestView {
                         labelBadge(title: surfaceStyle == .spine ? "薄厚边" : "平面")
                         labelBadge(title: contentSource.title)
 
-                        Text("底部偏移与左右留白会随封面尺寸收敛，小封面保持细条感，大封面保持悬浮感。")
+                        Text("底部偏移与左右留白会随封面尺寸收敛，小封面保持细条感，大封面保持悬浮感")
                             .font(.caption)
                             .foregroundStyle(Color.textSecondary)
                             .fixedSize(horizontal: false, vertical: true)
@@ -209,14 +209,14 @@ private extension BookCoverProgressBarTestView {
             XMBookCover.fixedWidth(
                 width,
                 urlString: urlString,
-                border: .init(color: .surfaceBorderDefault, width: CardStyle.borderWidth),
+                border: .init(color: .surfaceBorderDefault, width: StrokeWidth.hairline),
                 surfaceStyle: surfaceStyle
             )
             .overlay {
                 BookCoverProgressBar(progress: progress)
             }
             .shadow(
-                color: Color.bookCoverDropShadow.opacity(surfaceStyle == .spine ? 0.34 : 0.18),
+                color: XMBookCoverAppearance.dropShadow.opacity(surfaceStyle == .spine ? 0.34 : 0.18),
                 radius: surfaceStyle == .spine ? 2.2 : 1.2,
                 x: 0,
                 y: surfaceStyle == .spine ? 1.2 : 0.8
@@ -249,7 +249,7 @@ private extension BookCoverProgressBarTestView {
             .background(Color.surfaceNested, in: Capsule())
             .overlay {
                 Capsule()
-                    .stroke(Color.surfaceBorderSubtle, lineWidth: CardStyle.borderWidth)
+                    .stroke(Color.surfaceBorderSubtle, lineWidth: StrokeWidth.hairline)
             }
     }
 

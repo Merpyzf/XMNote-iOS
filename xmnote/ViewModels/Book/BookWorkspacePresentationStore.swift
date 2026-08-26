@@ -518,7 +518,7 @@ final class BookWorkspacePresentationStore {
             let empty = BookWorkspaceEmptyRow(
                 title: keyword.isEmpty ? "暂无目录" : "没有匹配的目录",
                 systemImage: "list.bullet.indent",
-                description: "目录同步或创建后会显示在这里。"
+                description: "目录同步或创建后会显示在这里"
             )
             items[.empty(.catalog)] = .empty(empty)
             contentIDs = [.empty(.catalog)]
@@ -569,7 +569,7 @@ final class BookWorkspacePresentationStore {
                 for: .notes,
                 title: "书摘加载失败",
                 systemImage: "exclamationmark.triangle",
-                description: "暂时无法读取书摘，请稍后再试。"
+                description: "暂时无法读取书摘，请稍后再试"
             )
         case .loaded:
             if input.isNotesLoadingFeedbackVisible {
@@ -600,7 +600,7 @@ final class BookWorkspacePresentationStore {
                 for: .notes,
                 title: keyword.isEmpty ? "还没有书摘" : "没有匹配的书摘",
                 systemImage: "text.quote",
-                description: "记录一句触动你的内容，稍后会按章节整理在这里。"
+                description: "记录一句触动你的内容，稍后会按章节整理在这里"
             )
         }
 
@@ -719,7 +719,7 @@ final class BookWorkspacePresentationStore {
                 BookWorkspaceEmptyRow(
                     title: keyword.isEmpty ? "还没有相关内容" : "没有匹配的相关内容",
                     systemImage: "link",
-                    description: "把文章、观点或关联书籍整理到当前书中。"
+                    description: "把文章、观点或关联书籍整理到当前书中"
                 )
             )
             return BookWorkspacePresentationSnapshot(
@@ -791,7 +791,7 @@ final class BookWorkspacePresentationStore {
                 BookWorkspaceEmptyRow(
                     title: keyword.isEmpty ? "还没有书评" : "没有匹配的书评",
                     systemImage: "text.bubble",
-                    description: "写下对整本书的判断、收获与推荐理由。"
+                    description: "写下对整本书的判断、收获与推荐理由"
                 )
             )
             return BookWorkspacePresentationSnapshot(

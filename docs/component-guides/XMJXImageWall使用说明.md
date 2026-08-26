@@ -1,7 +1,7 @@
 # XMJXImageWall 使用说明
 
 ## 组件定位
-- 源码路径：`xmnote/UIComponents/GalleryJX/XMJXImageWall.swift`
+- 源码路径：`xmnote/UIComponents/Media/GalleryJX/XMJXImageWall.swift`
 - 角色：基于 `JXPhotoBrowser` 的 SwiftUI 图片墙组件，负责宫格布局、点击命中与全屏浏览触发。
 - 典型场景：书摘图片组、笔记附件九宫格、调试图库墙。
 

@@ -1,5 +1,5 @@
 /**
- * [INPUT]: 依赖单书阅读详情领域快照、CalendarHeatmap、MonthlyReadingChart、ReadingStatusTimeline、XMBookCover 与 XMRatingBar
+ * [INPUT]: 依赖单书阅读详情领域快照、CalendarHeatmap、MonthlyReadingChart、ReadingStatusTimeline、ReadingStatusPresentation、ReadingSummaryTypography、XMBookCover、XMRatingBar 与 InteractionMetrics
  * [OUTPUT]: 对外提供一次计算的 BookReadingDetailTheme、单向沉浸背景、Android 同源半透明内容表面、BookReadingDetailContent 与内容模式
  * [POS]: Views/Book/Components 阅读详情页面私有内容组件，不拥有数据查询、写入或导航状态
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -471,8 +471,7 @@ struct BookReadingDetailTheme {
 
         /// 以当前 RGB 和指定透明度生成 SwiftUI 颜色，供半透明卡面与嵌套表面复用。
         func color(opacity: Double) -> Color {
-            Color(
-                .sRGB,
+            Color.xmSRGB(
                 red: red,
                 green: green,
                 blue: blue,
@@ -481,7 +480,7 @@ struct BookReadingDetailTheme {
         }
 
         var uiColor: UIColor {
-            UIColor(
+            UIColor.xmSRGB(
                 red: CGFloat(red),
                 green: CGFloat(green),
                 blue: CGFloat(blue),
@@ -679,7 +678,7 @@ private extension BookReadingDetailContent {
                     120,
                     urlString: snapshot.book.coverURL,
                     cornerRadius: CornerRadius.inlayMedium,
-                    border: .init(color: theme.border, width: CardStyle.borderWidth)
+                    border: .init(color: theme.border, width: StrokeWidth.hairline)
                 )
                 .shadow(color: Color.black.opacity(0.12), radius: 10, y: 5)
             }
@@ -1030,7 +1029,7 @@ private extension BookReadingDetailContent {
             .background(theme.cardSurface, in: shape)
             .overlay {
                 shape
-                    .stroke(theme.border, lineWidth: CardStyle.borderWidth)
+                    .stroke(theme.border, lineWidth: StrokeWidth.hairline)
             }
     }
 
@@ -1154,13 +1153,7 @@ private extension BookReadingDetailContent {
     }
 
     func statusColor(_ id: Int64) -> Color {
-        switch id {
-        case 1: .statusWish
-        case 2: .statusReading
-        case 3: .statusDone
-        case 5: .statusOnHold
-        default: .statusAbandoned
-        }
+        ReadingStatusPresentation.color(for: id) ?? ReadingStatusPresentation.abandoned
     }
 
     func smartDate(_ milliseconds: Int64?, relativeTo referenceDate: Date) -> String {
@@ -1262,7 +1255,7 @@ private struct BookReadingDetailAnalyticsGrid: View {
     private func metricContent(_ metric: BookReadingDetailAnalyticsMetric) -> some View {
         VStack(alignment: .leading, spacing: Spacing.half) {
             Text(metric.title)
-                .font(ReadCalendarSummaryTypography.metricTitle)
+                .font(ReadingSummaryTypography.metricTitle)
                 .foregroundStyle(secondaryTextColor)
                 .lineLimit(1)
 
@@ -1271,8 +1264,8 @@ private struct BookReadingDetailAnalyticsGrid: View {
                     Text(part.text)
                         .font(
                             part.isUnit
-                                ? ReadCalendarSummaryTypography.metricUnit
-                                : ReadCalendarSummaryTypography.metricNumber
+                                ? ReadingSummaryTypography.metricUnit
+                                : ReadingSummaryTypography.metricNumber
                         )
                         .monospacedDigit()
                 }
@@ -1286,7 +1279,7 @@ private struct BookReadingDetailAnalyticsGrid: View {
             .minimumScaleFactor(0.76)
 
             Text(metric.subtitle.isEmpty ? "\u{00A0}" : metric.subtitle)
-                .font(ReadCalendarSummaryTypography.metricSubtitle)
+                .font(ReadingSummaryTypography.metricSubtitle)
                 .foregroundStyle(secondaryTextColor)
                 .lineLimit(1)
                 .allowsTightening(true)
@@ -1372,7 +1365,7 @@ private struct BookReadingDetailRatingCapsule: View {
             }
         }
         .padding(.horizontal, Spacing.base)
-        .frame(height: Spacing.actionReserved)
+        .frame(height: InteractionMetrics.minimumTouchTarget)
         .background {
             Capsule()
                 .fill(background)
@@ -1380,7 +1373,7 @@ private struct BookReadingDetailRatingCapsule: View {
         }
         .overlay {
             Capsule()
-                .stroke(border, lineWidth: CardStyle.borderWidth)
+                .stroke(border, lineWidth: StrokeWidth.hairline)
                 .frame(height: visualHeight)
         }
     }
@@ -1429,7 +1422,7 @@ private struct BookReadingDetailAttributeBadge: View {
         ))
         .overlay {
             RoundedRectangle(cornerRadius: CornerRadius.blockSmall, style: .continuous)
-                .stroke(border, lineWidth: CardStyle.borderWidth)
+                .stroke(border, lineWidth: StrokeWidth.hairline)
         }
         .accessibilityElement(children: .combine)
     }

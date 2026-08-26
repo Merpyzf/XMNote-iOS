@@ -154,7 +154,7 @@ struct XMScrollEdgeChromeTestView: View {
     private var darkModeSection: some View {
         XMScrollEdgeDemoCard(title: "深色模式") {
             VStack(alignment: .leading, spacing: Spacing.half) {
-                Text("使用同一 API，在深色语义色下观察顶部与底部收口。")
+                Text("使用同一 API，在深色语义色下观察顶部与底部收口")
                     .font(AppTypography.caption)
                     .foregroundStyle(Color.textSecondary)
 
@@ -220,9 +220,9 @@ struct XMScrollEdgeChromeTestView: View {
                         HStack(spacing: Spacing.cozy) {
                             Text("\(index)")
                                 .font(AppTypography.caption2Semibold)
-                                .foregroundStyle(Color.brandDeep)
+                                .foregroundStyle(Color.selectionForeground)
                                 .frame(width: 28, height: 28)
-                                .background(Color.brand.opacity(0.12), in: Circle())
+                                .background(Color.selectionAccent.opacity(0.12), in: Circle())
 
                             VStack(alignment: .leading, spacing: Spacing.tiny) {
                                 Text("滚动边缘样本行")
@@ -264,7 +264,7 @@ struct XMScrollEdgeChromeTestView: View {
         HStack {
             Image(systemName: "slider.horizontal.3")
                 .font(AppTypography.body)
-                .foregroundStyle(Color.brand)
+                .foregroundStyle(Color.appTint)
             Text(title)
                 .font(AppTypography.subheadlineSemibold)
                 .foregroundStyle(Color.textPrimary)
@@ -326,7 +326,7 @@ struct XMScrollEdgeChromeTestView: View {
 
     private var demoBorder: some View {
         RoundedRectangle(cornerRadius: CornerRadius.blockLarge, style: .continuous)
-            .stroke(Color.surfaceBorderSubtle.opacity(0.56), lineWidth: CardStyle.borderWidth)
+            .stroke(Color.surfaceBorderSubtle.opacity(0.56), lineWidth: StrokeWidth.hairline)
     }
 }
 
@@ -398,7 +398,7 @@ private enum XMScrollEdgeDemoSurface: CaseIterable, Identifiable {
         case .sheet:
             return Color.surfaceSheet
         case .custom:
-            return Color(light: Color(hex: 0xEEF4F1), dark: Color(hex: 0x17201C))
+            return Color.xmAdaptive(light: Color.xmHex(0xEEF4F1), dark: Color.xmHex(0x17201C))
         }
     }
 
@@ -411,7 +411,7 @@ private enum XMScrollEdgeDemoSurface: CaseIterable, Identifiable {
         case .sheet:
             return Color.surfaceCard
         case .custom:
-            return Color(light: Color.white.opacity(0.74), dark: Color.white.opacity(0.08))
+            return Color.xmAdaptive(light: Color.white.opacity(0.74), dark: Color.white.opacity(0.08))
         }
     }
 }

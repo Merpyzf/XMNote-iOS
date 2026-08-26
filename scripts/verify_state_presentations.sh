@@ -3,7 +3,8 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SOURCE_DIR="$ROOT_DIR/xmnote"
-STATE_PRESENTATION_DIR="xmnote/UIComponents/Foundation/StatePresentation"
+STATE_PRESENTATION_DIR="xmnote/UIComponents/Feedback/StatePresentation"
+LOADING_STATE_FILE="xmnote/UIComponents/Feedback/LoadingStateView.swift"
 CONTENT_STATE_FILE="$STATE_PRESENTATION_DIR/XMContentStateView.swift"
 CATALOG_FILE="$STATE_PRESENTATION_DIR/StatePresentationCatalogPreview.swift"
 DEBUG_TEST_FILE="xmnote/Views/Debug/StatePresentationTestView.swift"
@@ -39,7 +40,7 @@ legacy_state_names=(
 # 这些类型保留自己的容器或领域职责；视觉必须继续委托给通用状态组件，或属于计划明确排除的骨架/工作流状态。
 state_view_allowlist=(
     "xmnote/ContentView.swift|DatabaseInitializationFailureView|根数据库初始化失败，属于应用启动阻断态"
-    "xmnote/UIComponents/Foundation/ReadingStatusTimeline.swift|ReadingStatusTimelineEmptyView|阅读状态时间线的领域内嵌布局"
+    "xmnote/Views/Book/Components/ReadingStatusTimeline.swift|ReadingStatusTimelineEmptyView|阅读状态时间线的领域内嵌布局"
     "xmnote/Views/Book/BookScanPlaceholderView.swift|BookScanPlaceholderView|扫码工作流占位页，不表达数据空态"
     "xmnote/Views/Book/Components/BookCollectionVisualComponents.swift|BookCollectionEmptyBooksRow|书单卡片行布局适配器，内部复用 XMCompactStateView"
     "xmnote/Views/Book/Components/BookWorkspaceCollectionView.swift|BookWorkspaceCollectionEmptyRow|UICollectionView 空行布局适配器，内部复用 XMContentStateView"
@@ -108,7 +109,7 @@ while IFS=: read -r absolute_path line_number declaration; do
         [[ -z "$consumer_path" ]] && continue
         relative_consumer_path="${consumer_path#$ROOT_DIR/}"
         case "$relative_consumer_path" in
-            "$STATE_PRESENTATION_DIR"/*|xmnote/Views/Debug/*|*/Vendor/*)
+            "$STATE_PRESENTATION_DIR"/*|"$LOADING_STATE_FILE"|xmnote/Views/Debug/*|*/Vendor/*)
                 continue
                 ;;
         esac
@@ -126,7 +127,7 @@ while IFS=: read -r absolute_path line_number declaration; do
 done < <(
     rg -n --glob '*.swift' \
         '^[[:space:]]*((public|internal|package|nonisolated)[[:space:]]+)*struct[[:space:]]+(XM[A-Za-z0-9_]*(StateView|StatusBanner)|LoadingStateView)[[:space:]]*:[[:space:]]*View' \
-        "$ROOT_DIR/$STATE_PRESENTATION_DIR" || true
+        "$ROOT_DIR/$STATE_PRESENTATION_DIR" "$ROOT_DIR/$LOADING_STATE_FILE" || true
 )
 
 if [[ ! -f "$ROOT_DIR/$DEBUG_TEST_FILE" ]] \
@@ -183,7 +184,7 @@ while IFS=: read -r absolute_path line_number declaration; do
     relative_path="${absolute_path#$ROOT_DIR/}"
 
     case "$relative_path" in
-        "$STATE_PRESENTATION_DIR"/*|xmnote/ViewModels/*|xmnote/Views/Debug/*|*/Vendor/*)
+        "$STATE_PRESENTATION_DIR"/*|"$LOADING_STATE_FILE"|xmnote/ViewModels/*|xmnote/Views/Debug/*|*/Vendor/*)
             continue
             ;;
     esac

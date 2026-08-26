@@ -85,7 +85,7 @@ struct NoteCollectionView: View {
             selection: $viewModel.selectedCategory,
             accessibilityLabel: "笔记分类"
         )
-        .frame(height: Spacing.actionReserved)
+        .frame(height: NoteHomeLayout.categoryRailHeight)
     }
 
     private var categoryPages: some View {
@@ -331,6 +331,7 @@ private struct NoteHomeStateHost<Content: View>: View {
 }
 
 private enum NoteHomeLayout {
+    static let categoryRailHeight: CGFloat = InteractionMetrics.minimumTouchTarget
     static let stateMinHeight: CGFloat = 320
 }
 

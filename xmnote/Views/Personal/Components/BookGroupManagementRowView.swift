@@ -158,7 +158,7 @@ private enum Layout {
     static let coverHeight: CGFloat = 56
     static let selectionWidth: CGFloat = 34
     static let disclosureWidth: CGFloat = 16
-    static let minimumHitArea: CGFloat = 44
+    static let minimumHitArea: CGFloat = InteractionMetrics.minimumTouchTarget
     static let verticalPadding: CGFloat = Spacing.tight
 }
 

@@ -688,7 +688,7 @@ private enum NoteReviewBottomLayout {
     static let deckBottomPadding = Spacing.none
     static let actionRowSpacing = Spacing.cozy
     static let actionRowBottomPadding = Spacing.section
-    static let actionRowMinHeight: CGFloat = 44
+    static let actionRowMinHeight: CGFloat = InteractionMetrics.minimumTouchTarget
 }
 
 /// 操作栏按整组选择横排或上下排列，避免单项独立折行造成视觉节奏混杂。
@@ -864,14 +864,14 @@ private struct NoteReviewPrimaryActionBar: View {
                 guard let item else { return }
                 onExplain(item)
             } label: {
-                Label("AI 释义", systemImage: "sparkles")
+                XMMenuLabel("AI 释义", systemImage: "sparkles")
             }
 
             Button {
                 guard let item else { return }
                 onAutoTag(item)
             } label: {
-                Label("AI 标签", systemImage: "tag")
+                XMMenuLabel("AI 标签", systemImage: "tag")
             }
         } label: {
             NoteReviewPrimaryActionLabel(
@@ -883,6 +883,7 @@ private struct NoteReviewPrimaryActionBar: View {
             )
         }
         .menuIndicator(.hidden)
+        .xmMenuNeutralTint()
         .buttonStyle(NoteReviewPrimaryActionButtonStyle(isEnabled: !aiActionDisabled))
         .disabled(aiActionDisabled)
         .accessibilityLabel("AI 助手")

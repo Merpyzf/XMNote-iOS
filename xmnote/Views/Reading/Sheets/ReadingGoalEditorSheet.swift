@@ -55,7 +55,7 @@ struct ReadingGoalEditorSheet: View {
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button(isSaving ? "保存中…" : "保存", action: onConfirm)
-                        .tint(Color.brand)
+                        .tint(Color.appTint)
                         .disabled(isSaving)
                 }
             }

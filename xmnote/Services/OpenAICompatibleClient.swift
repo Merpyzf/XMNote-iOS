@@ -124,7 +124,7 @@ nonisolated final class OpenAICompatibleClient: @unchecked Sendable {
               let scheme = baseURL.scheme?.lowercased(),
               scheme == "https",
               baseURL.host != nil else {
-            throw AIRepositoryError.invalidConfiguration("AI 服务地址无效。")
+            throw AIRepositoryError.invalidConfiguration("AI 服务地址无效")
         }
         baseURL.append(path: "v1/chat/completions")
 

@@ -29,14 +29,8 @@ struct DataBackupView: View {
             }
         }
         .background(Color.surfacePage)
-        .navigationTitle("")
+        .navigationTitle("数据备份")
         .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            ToolbarItem(placement: .principal) {
-                Text("数据备份")
-                    .font(AppTypography.headlineSemibold)
-            }
-        }
         .task {
             guard viewModel == nil else { return }
             bootstrapLoadingGate.update(intent: .read)
@@ -62,12 +56,9 @@ struct DataBackupView: View {
 
 private struct DataBackupContentView: View {
     private enum Layout {
-        static let panelCornerRadius: CGFloat = CornerRadius.containerMedium
-        static let sectionSpacing: CGFloat = Spacing.section
-        static let sectionTitleBottomSpacing: CGFloat = Spacing.cozy
-        static let rowIconWidth: CGFloat = 24
-        static let rowVerticalPadding: CGFloat = Spacing.comfortable
-        static let rowDividerLeading: CGFloat = Spacing.contentEdge + rowIconWidth + Spacing.base
+        static let rowDividerLeading = Spacing.contentEdge
+            + XMSettingsPageLayout.iconSlotWidth
+            + Spacing.base
         static let avatarSize: CGFloat = 40
         static let avatarDividerLeading: CGFloat = Spacing.contentEdge + avatarSize + Spacing.base
     }
@@ -77,17 +68,13 @@ private struct DataBackupContentView: View {
     @Namespace private var loadingTransitionNamespace
 
     var body: some View {
-        ScrollView {
-            VStack(spacing: Layout.sectionSpacing) {
-                backupSection(title: "本地备份") {
-                    localBackupPanel
-                }
-                backupSection(title: "云备份") {
-                    cloudBackupPanel
-                }
+        XMSettingsPage {
+            backupSection(title: "本地备份") {
+                localBackupPanel
             }
-            .padding(.horizontal, Spacing.screenEdge)
-            .padding(.vertical, Spacing.base)
+            backupSection(title: "云备份") {
+                cloudBackupPanel
+            }
         }
         .overlay { taskBackdropOverlay }
         .overlay { taskCardOverlay }
@@ -109,7 +96,7 @@ private struct DataBackupContentView: View {
             isPresented: $viewModel.showRestoreSuccess,
             descriptor: XMSystemAlertDescriptor(
                 title: "恢复成功",
-                message: "数据已恢复。",
+                message: viewModel.restoreSuccessMessage,
                 actions: [
                     XMSystemAlertAction(title: "确定", role: .cancel) {
                         viewModel.acknowledgeRestoreSuccess()
@@ -170,23 +157,19 @@ private struct DataBackupContentView: View {
 private extension DataBackupContentView {
 
     func backupSection<Content: View>(
-        title: String,
+        title: LocalizedStringResource,
         @ViewBuilder content: () -> Content
     ) -> some View {
-        VStack(alignment: .leading, spacing: Layout.sectionTitleBottomSpacing) {
-            Text(title)
-                .font(AppTypography.footnoteSemibold)
-                .foregroundStyle(Color.textSecondary)
-
+        XMSettingsSection(title) {
             content()
         }
     }
 
     var localBackupPanel: some View {
-        BackupSettingsPanel(cornerRadius: Layout.panelCornerRadius) {
+        settingsPanel {
             VStack(spacing: Spacing.none) {
                 localExportButton
-                BackupSettingsDivider(leadingInset: Layout.rowDividerLeading)
+                settingsDivider(leadingInset: Layout.rowDividerLeading)
                 localRestoreButton
             }
         }
@@ -200,7 +183,7 @@ private extension DataBackupContentView {
                 Image(systemName: "square.and.arrow.up")
                     .font(AppTypography.body)
                     .foregroundStyle(Color.iconSecondary)
-                    .frame(width: Layout.rowIconWidth)
+                    .frame(width: XMSettingsPageLayout.iconSlotWidth)
 
                 Text("导出到文件")
                     .font(AppTypography.subheadlineMedium)
@@ -222,7 +205,7 @@ private extension DataBackupContentView {
                 }
             }
             .padding(.horizontal, Spacing.contentEdge)
-            .padding(.vertical, Layout.rowVerticalPadding)
+            .frame(minHeight: XMSettingsPageLayout.regularRowMinHeight)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -237,7 +220,7 @@ private extension DataBackupContentView {
                 Image(systemName: "arrow.down.doc")
                     .font(AppTypography.body)
                     .foregroundStyle(Color.iconSecondary)
-                    .frame(width: Layout.rowIconWidth)
+                    .frame(width: XMSettingsPageLayout.iconSlotWidth)
 
                 Text("从文件恢复")
                     .font(AppTypography.subheadlineMedium)
@@ -246,11 +229,11 @@ private extension DataBackupContentView {
                 Spacer()
 
                 Image(systemName: "chevron.right")
-                    .font(AppTypography.caption)
-                    .foregroundStyle(.tertiary)
+                    .font(AppTypography.captionSemibold)
+                    .foregroundStyle(Color.textHint)
             }
             .padding(.horizontal, Spacing.contentEdge)
-            .padding(.vertical, Layout.rowVerticalPadding)
+            .frame(minHeight: XMSettingsPageLayout.regularRowMinHeight)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -263,14 +246,14 @@ private extension DataBackupContentView {
 private extension DataBackupContentView {
 
     var cloudBackupPanel: some View {
-        BackupSettingsPanel(cornerRadius: Layout.panelCornerRadius) {
+        settingsPanel {
             VStack(spacing: Spacing.none) {
                 providerSelectionRow
-                BackupSettingsDivider(leadingInset: Spacing.contentEdge)
+                settingsDivider(leadingInset: Spacing.contentEdge)
                 currentProviderContent
-                BackupSettingsDivider(leadingInset: providerContentDividerLeadingInset)
+                settingsDivider(leadingInset: providerContentDividerLeadingInset)
                 cloudBackupButton
-                BackupSettingsDivider(leadingInset: Layout.rowDividerLeading)
+                settingsDivider(leadingInset: Layout.rowDividerLeading)
                 cloudRestoreButton
             }
         }
@@ -287,7 +270,7 @@ private extension DataBackupContentView {
             providerSelectionMenu
         }
         .padding(.horizontal, Spacing.contentEdge)
-        .padding(.vertical, Layout.rowVerticalPadding)
+        .frame(minHeight: XMSettingsPageLayout.regularRowMinHeight)
     }
 
     var providerSelectionMenu: some View {
@@ -312,12 +295,12 @@ private extension DataBackupContentView {
                             .minimumScaleFactor(0.9)
 
                         Image(systemName: "chevron.down")
-                            .font(AppTypography.caption)
-                            .foregroundStyle(.tertiary)
+                            .font(AppTypography.captionSemibold)
+                            .foregroundStyle(Color.textHint)
                     }
                 }
             }
-            .frame(minHeight: 44, alignment: .trailing)
+            .frame(minHeight: InteractionMetrics.minimumTouchTarget, alignment: .trailing)
             .contentShape(Rectangle())
         }
         .xmMenuNeutralTint()
@@ -353,7 +336,7 @@ private extension DataBackupContentView {
                 Image(systemName: "externaldrive")
                     .font(AppTypography.body)
                     .foregroundStyle(Color.iconSecondary)
-                    .frame(width: Layout.rowIconWidth)
+                    .frame(width: XMSettingsPageLayout.iconSlotWidth)
 
                 VStack(alignment: .leading, spacing: Spacing.compact) {
                     Text("WebDAV 服务器")
@@ -376,11 +359,12 @@ private extension DataBackupContentView {
                 Spacer()
 
                 Image(systemName: "chevron.right")
-                    .font(AppTypography.caption)
-                    .foregroundStyle(.tertiary)
+                    .font(AppTypography.captionSemibold)
+                    .foregroundStyle(Color.textHint)
             }
             .padding(.horizontal, Spacing.contentEdge)
-            .padding(.vertical, Layout.rowVerticalPadding)
+            .padding(.vertical, Spacing.cozy)
+            .frame(minHeight: XMSettingsPageLayout.detailRowMinHeight)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -424,7 +408,8 @@ private extension DataBackupContentView {
             logoutAccessory
         }
         .padding(.horizontal, Spacing.contentEdge)
-        .padding(.vertical, Layout.rowVerticalPadding)
+        .padding(.vertical, Spacing.cozy)
+        .frame(minHeight: XMSettingsPageLayout.detailRowMinHeight)
     }
 
     var authorizeAliyunDriveButton: some View {
@@ -435,13 +420,13 @@ private extension DataBackupContentView {
                 Image(systemName: "person.crop.circle.badge.checkmark")
                     .font(AppTypography.body)
                     .foregroundStyle(Color.iconSecondary)
-                    .frame(width: Layout.rowIconWidth)
+                    .frame(width: XMSettingsPageLayout.iconSlotWidth)
 
                 VStack(alignment: .leading, spacing: Spacing.compact) {
                     Text("登录阿里云盘")
                         .font(AppTypography.subheadlineMedium)
                         .foregroundStyle(Color.textPrimary)
-                    Text("登录后即可使用云备份。")
+                    Text("登录后即可使用云备份")
                         .font(AppTypography.caption)
                         .foregroundStyle(Color.textSecondary)
                 }
@@ -454,7 +439,8 @@ private extension DataBackupContentView {
                 }
             }
             .padding(.horizontal, Spacing.contentEdge)
-            .padding(.vertical, Layout.rowVerticalPadding)
+            .padding(.vertical, Spacing.cozy)
+            .frame(minHeight: XMSettingsPageLayout.detailRowMinHeight)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -486,7 +472,8 @@ private extension DataBackupContentView {
             logoutAccessory
         }
         .padding(.horizontal, Spacing.contentEdge)
-        .padding(.vertical, Layout.rowVerticalPadding)
+        .padding(.vertical, Spacing.cozy)
+        .frame(minHeight: XMSettingsPageLayout.detailRowMinHeight)
     }
 
     var aliyunLoadingRow: some View {
@@ -500,7 +487,8 @@ private extension DataBackupContentView {
             Spacer()
         }
         .padding(.horizontal, Spacing.contentEdge)
-        .padding(.vertical, Layout.rowVerticalPadding)
+        .padding(.vertical, Spacing.cozy)
+        .frame(minHeight: XMSettingsPageLayout.detailRowMinHeight)
     }
 
     @ViewBuilder
@@ -539,14 +527,18 @@ private extension DataBackupContentView {
         if viewModel.isAliyunRevoking {
             ProgressView()
                 .controlSize(.small)
-                .frame(minWidth: 44, minHeight: 44, alignment: .trailing)
+                .frame(
+                    minWidth: InteractionMetrics.minimumTouchTarget,
+                    minHeight: InteractionMetrics.minimumTouchTarget,
+                    alignment: .trailing
+                )
         } else {
             Button("登出") {
                 Task { await viewModel.revokeAliyunDriveAuthorization() }
             }
             .font(AppTypography.footnoteSemibold)
             .foregroundStyle(Color.feedbackError)
-            .frame(minHeight: 44, alignment: .trailing)
+            .frame(minHeight: InteractionMetrics.minimumTouchTarget, alignment: .trailing)
             .buttonStyle(.plain)
             .disabled(viewModel.isBusy)
         }
@@ -569,7 +561,7 @@ private extension DataBackupContentView {
                 Image(systemName: "icloud.and.arrow.up")
                     .font(AppTypography.body)
                     .foregroundStyle(Color.iconSecondary)
-                    .frame(width: Layout.rowIconWidth)
+                    .frame(width: XMSettingsPageLayout.iconSlotWidth)
 
                 Text("立即备份")
                     .font(AppTypography.subheadlineMedium)
@@ -593,7 +585,7 @@ private extension DataBackupContentView {
                 }
             }
             .padding(.horizontal, Spacing.contentEdge)
-            .padding(.vertical, Layout.rowVerticalPadding)
+            .frame(minHeight: XMSettingsPageLayout.regularRowMinHeight)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -612,7 +604,7 @@ private extension DataBackupContentView {
                 Image(systemName: "icloud.and.arrow.down")
                     .font(AppTypography.body)
                     .foregroundStyle(Color.iconSecondary)
-                    .frame(width: Layout.rowIconWidth)
+                    .frame(width: XMSettingsPageLayout.iconSlotWidth)
 
                 Text("从云端恢复")
                     .font(AppTypography.subheadlineMedium)
@@ -625,12 +617,12 @@ private extension DataBackupContentView {
                         .controlSize(.small)
                 } else {
                     Image(systemName: "chevron.right")
-                        .font(AppTypography.caption)
-                        .foregroundStyle(.tertiary)
+                        .font(AppTypography.captionSemibold)
+                        .foregroundStyle(Color.textHint)
                 }
             }
             .padding(.horizontal, Spacing.contentEdge)
-            .padding(.vertical, Layout.rowVerticalPadding)
+            .frame(minHeight: XMSettingsPageLayout.regularRowMinHeight)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -641,6 +633,21 @@ private extension DataBackupContentView {
 // MARK: - Shared Section Helpers
 
 private extension DataBackupContentView {
+    func settingsPanel<Content: View>(
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        XMSettingsGroup(
+            horizontalPadding: Spacing.none,
+            verticalPadding: Spacing.none
+        ) {
+            content()
+        }
+    }
+
+    func settingsDivider(leadingInset: CGFloat) -> some View {
+        XMSettingsDivider()
+            .padding(.leading, leadingInset)
+    }
 }
 
 // MARK: - Progress Presentation
@@ -695,77 +702,6 @@ private extension DataBackupContentView {
             insertion: .scale(scale: 0.965, anchor: .center).combined(with: .opacity),
             removal: .scale(scale: 0.985, anchor: .center).combined(with: .opacity)
         )
-    }
-}
-
-// MARK: - Restore Confirm Sheet
-
-private struct BackupRestoreConfirmSheet: View {
-    let target: BackupRestoreTarget
-    let onCancel: () -> Void
-    let onConfirm: () -> Void
-
-    private static let dateFormatter: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "yyyy/MM/dd HH:mm"
-        return formatter
-    }()
-
-    var body: some View {
-        NavigationStack {
-            ScrollView {
-                VStack(spacing: Spacing.comfortable) {
-                    BackupSettingsPanel(cornerRadius: CornerRadius.containerMedium) {
-                        VStack(spacing: Spacing.none) {
-                            detailRow(title: "来源", value: target.sourceName)
-                            BackupSettingsDivider(leadingInset: Spacing.contentEdge)
-                            detailRow(title: "设备", value: target.deviceName)
-                            BackupSettingsDivider(leadingInset: Spacing.contentEdge)
-                            detailRow(title: "备份时间", value: backupDateText)
-                        }
-                    }
-
-                    Text("恢复后，当前设备上的数据将被备份中的内容替换。此操作无法撤销。")
-                        .font(AppTypography.footnote)
-                        .foregroundStyle(Color.textSecondary)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                }
-                .padding(.horizontal, Spacing.screenEdge)
-                .padding(.vertical, Spacing.base)
-            }
-            .background(Color.surfacePage)
-            .navigationTitle("从备份恢复")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("取消", action: onCancel)
-                }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("恢复", action: onConfirm)
-                        .foregroundStyle(Color.feedbackError)
-                }
-            }
-        }
-    }
-
-    var backupDateText: String {
-        guard let backupDate = target.backupDate else { return "未知" }
-        return Self.dateFormatter.string(from: backupDate)
-    }
-
-    func detailRow(title: String, value: String) -> some View {
-        HStack(spacing: Spacing.base) {
-            Text(title)
-                .font(AppTypography.subheadlineMedium)
-                .foregroundStyle(Color.textPrimary)
-            Spacer()
-            Text(value)
-                .font(AppTypography.subheadline)
-                .foregroundStyle(Color.textSecondary)
-                .multilineTextAlignment(.trailing)
-        }
-        .padding(.horizontal, Spacing.contentEdge)
-        .padding(.vertical, Spacing.comfortable)
     }
 }
 
@@ -875,36 +811,6 @@ private struct BackupTaskBackdropView: View {
     }
 }
 
-private struct BackupSettingsPanel<Content: View>: View {
-    let cornerRadius: CGFloat
-    let content: Content
-
-    init(
-        cornerRadius: CGFloat,
-        @ViewBuilder content: () -> Content
-    ) {
-        self.cornerRadius = cornerRadius
-        self.content = content()
-    }
-
-    var body: some View {
-        CardContainer(cornerRadius: cornerRadius) {
-            content
-        }
-    }
-}
-
-private struct BackupSettingsDivider: View {
-    let leadingInset: CGFloat
-
-    var body: some View {
-        Rectangle()
-            .fill(Color.surfaceBorderSubtle.opacity(0.55))
-            .frame(height: CardStyle.borderWidth)
-            .padding(.leading, leadingInset)
-    }
-}
-
 private struct BackupTaskCardView: View {
     let presentation: BackupTaskPresentation
     let reduceMotion: Bool
@@ -928,7 +834,7 @@ private struct BackupTaskCardView: View {
         )
         .overlay(
             RoundedRectangle(cornerRadius: CornerRadius.containerLarge, style: .continuous)
-                .stroke(Color.surfaceBorderSubtle, lineWidth: CardStyle.borderWidth)
+                .stroke(Color.surfaceBorderSubtle, lineWidth: StrokeWidth.hairline)
         )
         .shadow(color: Color.black.opacity(0.10), radius: 18, x: 0, y: 10)
         .padding(.horizontal, Spacing.double)

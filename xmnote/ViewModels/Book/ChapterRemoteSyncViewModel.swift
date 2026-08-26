@@ -94,7 +94,7 @@ final class ChapterRemoteSyncViewModel: Identifiable {
                 guard !Task.isCancelled else { return }
                 discovery = result
                 if result.candidates.isEmpty {
-                    phase = .empty("未匹配到当前书籍的目录信息。")
+                    phase = .empty("未匹配到当前书籍的目录信息")
                 } else if result.matchMode == .exactDoubanID, let candidate = result.candidates.first {
                     selectCandidate(candidate)
                 } else {
@@ -123,7 +123,7 @@ final class ChapterRemoteSyncViewModel: Identifiable {
         }
         selectedItemIDs = Set(catalogItems.map(\.id))
         phase = catalogItems.isEmpty
-            ? .empty("文曲已匹配到这本书，但暂未收录目录。")
+            ? .empty("文曲已匹配到这本书，但暂未收录目录")
             : .catalog
     }
 
@@ -134,7 +134,7 @@ final class ChapterRemoteSyncViewModel: Identifiable {
         catalogItems = []
         selectedItemIDs = []
         searchText = ""
-        phase = candidates.isEmpty ? .empty("未匹配到当前书籍的目录信息。") : .candidates
+        phase = candidates.isEmpty ? .empty("未匹配到当前书籍的目录信息") : .candidates
     }
 
     /// 切换单条目录选择；导入期间冻结选择，阻止请求参数与界面状态竞态。
@@ -161,7 +161,7 @@ final class ChapterRemoteSyncViewModel: Identifiable {
             .sorted { $0.originalIndex < $1.originalIndex }
             .map(\.title)
         guard !selectedTitles.isEmpty else {
-            importErrorMessage = "请先选择要导入的章节。"
+            importErrorMessage = "请先选择要导入的章节"
             return
         }
 

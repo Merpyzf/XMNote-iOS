@@ -10,7 +10,7 @@
 XMBookCover.fixedWidth(
     80,
     urlString: book.cover,
-    border: .init(color: .surfaceBorderDefault, width: CardStyle.borderWidth)
+    border: .init(color: .surfaceBorderDefault, width: StrokeWidth.hairline)
 )
 ```
 
@@ -49,7 +49,7 @@ XMBookCover.fixedWidth(
 XMBookCover.fixedWidth(
     110,
     urlString: book.cover,
-    border: .init(color: .surfaceBorderDefault, width: CardStyle.borderWidth)
+    border: .init(color: .surfaceBorderDefault, width: StrokeWidth.hairline)
 )
 ```
 

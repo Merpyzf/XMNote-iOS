@@ -84,7 +84,7 @@ struct ReadingYearSummarySheet: View {
                 XMBookCover.fixedWidth(
                     54,
                     urlString: book.coverURL,
-                    border: .init(color: .surfaceBorderSubtle, width: CardStyle.borderWidth)
+                    border: .init(color: .surfaceBorderSubtle, width: StrokeWidth.hairline)
                 )
 
                 VStack(alignment: .leading, spacing: Spacing.half) {

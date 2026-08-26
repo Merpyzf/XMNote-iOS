@@ -19,6 +19,25 @@ private enum HeatmapConst {
     static let headerExtraSpacingFactor: CGFloat = 0.2
 }
 
+/// 热力图文本排版入口：保证 SwiftUI 渲染与 UIKit 测量使用同一语义字号来源。
+private enum HeatmapChartTypography {
+    static func font(baseSize: CGFloat) -> Font {
+        AppTypography.fixed(
+            baseSize: baseSize,
+            relativeTo: .caption2,
+            minimumPointSize: baseSize
+        )
+    }
+
+    static func uiFont(baseSize: CGFloat) -> UIFont {
+        AppTypography.uiFixed(
+            baseSize: baseSize,
+            textStyle: .caption2,
+            minimumPointSize: baseSize
+        )
+    }
+}
+
 // MARK: - 样式配置
 
 /// HeatmapChartStyle 定义热力图尺寸、间距和自适应规则，统一不同页面的绘制风格。
@@ -536,20 +555,12 @@ private extension HeatmapChart {
 
     /// 返回保留当前视觉基线的 caption2 语义字体，供热力图所有文本统一复用。
     func semanticFont(baseSize: CGFloat) -> Font {
-        AppTypography.fixed(
-            baseSize: baseSize,
-            relativeTo: .caption2,
-            minimumPointSize: baseSize
-        )
+        HeatmapChartTypography.font(baseSize: baseSize)
     }
 
     /// 返回与渲染字体一致的 UIKit 语义字体，避免测量仍按旧固定字号进行。
     func semanticUIFont(baseSize: CGFloat) -> UIFont {
-        AppTypography.uiFixed(
-            baseSize: baseSize,
-            textStyle: .caption2,
-            minimumPointSize: baseSize
-        )
+        HeatmapChartTypography.uiFont(baseSize: baseSize)
     }
 
     /// 格式化标题中的年份文本。
@@ -591,7 +602,7 @@ private extension HeatmapChart {
             .overlay {
                 if isToday {
                     RoundedRectangle(cornerRadius: squareRadius, style: .continuous)
-                        .strokeBorder(Color.brand, lineWidth: 1.5)
+                        .strokeBorder(Color.appTint, lineWidth: 1.5)
                 }
             }
             .onTapGesture {

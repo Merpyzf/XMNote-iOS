@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 BookshelfDisplaySetting 持久化配置、BookshelfDimension、BookshelfDisplaySettingScope 与 SwiftUI Sheet 展示能力
- * [OUTPUT]: 对外提供 BookshelfDisplaySettingSheet 与设置 Sheet 骨架，按书架作用域调整布局、排序、分区、置顶与标题展示偏好
+ * [OUTPUT]: 对外提供 BookshelfDisplaySettingSheet，按书架作用域调整布局、排序、分区、置顶与标题展示偏好
  * [POS]: Book 模块业务 Sheet，服务首页书架与二级列表显示设置入口，不直接承担数据库读写
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -54,7 +54,7 @@ struct BookshelfDisplaySettingSheet: View {
     }
 
     private var rootPage: some View {
-        BookshelfDisplaySettingPageScaffold(
+        XMSheetScaffold(
             title: "显示设置",
             subtitle: scopeSummary,
             onClose: { dismiss() }
@@ -76,9 +76,9 @@ struct BookshelfDisplaySettingSheet: View {
     }
 
     private var displayGroup: some View {
-        BookshelfSettingsGroupCard {
+        XMSettingsGroup {
             VStack(spacing: Spacing.none) {
-                BookshelfSettingsValueMenuRow(
+                XMSettingsValueMenuRow(
                     title: "布局",
                     value: setting.layoutMode.title,
                     options: BookshelfLayoutMode.allCases,
@@ -89,7 +89,7 @@ struct BookshelfDisplaySettingSheet: View {
                 )
 
                 if setting.layoutMode == .grid, !capabilities.columnOptions.isEmpty {
-                    BookshelfSettingsValueMenuRow(
+                    XMSettingsValueMenuRow(
                         title: "每行数量",
                         value: "\(effectiveColumnCount)列",
                         options: capabilities.columnOptions,
@@ -101,12 +101,12 @@ struct BookshelfDisplaySettingSheet: View {
                     .transition(settingsRowTransition)
                 }
 
-                BookshelfSettingsToggleRow(
+                XMSettingsToggleRow(
                     title: "显示书摘数量",
                     isOn: $setting.showsNoteCount
                 )
 
-                BookshelfSettingsValueMenuRow(
+                XMSettingsValueMenuRow(
                     title: "书名展示",
                     value: setting.titleDisplayMode.title,
                     options: BookshelfTitleDisplayMode.allCases,
@@ -120,9 +120,9 @@ struct BookshelfDisplaySettingSheet: View {
     }
 
     private var sortGroup: some View {
-        BookshelfSettingsGroupCard {
+        XMSettingsGroup {
             VStack(spacing: Spacing.none) {
-                BookshelfSettingsValueMenuRow(
+                XMSettingsValueMenuRow(
                     title: "排序依据",
                     value: setting.sortCriteria.title,
                     options: capabilities.sortCriteria,
@@ -133,7 +133,7 @@ struct BookshelfDisplaySettingSheet: View {
                 )
 
                 if setting.sortCriteria != .custom {
-                    BookshelfSettingsValueMenuRow(
+                    XMSettingsValueMenuRow(
                         title: "排序方向",
                         value: sortOrderTitle(setting.sortOrder),
                         options: BookshelfSortOrder.allCases,
@@ -146,7 +146,7 @@ struct BookshelfDisplaySettingSheet: View {
                 }
 
                 if setting.sortCriteria.supportsSection {
-                    BookshelfSettingsToggleRow(
+                    XMSettingsToggleRow(
                         title: "分区显示",
                         isOn: $setting.isSectionEnabled
                     )
@@ -157,8 +157,8 @@ struct BookshelfDisplaySettingSheet: View {
     }
 
     private var advancedGroup: some View {
-        BookshelfSettingsGroupCard {
-            BookshelfSettingsToggleRow(
+        XMSettingsGroup {
+            XMSettingsToggleRow(
                 title: "置顶项保持在顶部",
                 isOn: $setting.pinnedInAllSorts
             )
@@ -275,264 +275,6 @@ private struct BookshelfDisplaySettingCapabilities {
 
     var showsPinnedInAllSorts: Bool {
         showsPinnedInAllSortsSetting
-    }
-}
-
-/// 显示设置 Sheet 视觉收敛尺寸，统一顶部 chrome 和设置行体量。
-enum BookshelfDisplaySettingSheetLayout {
-    static let titleHorizontalReserve: CGFloat = Spacing.actionReserved + Spacing.base
-    static let textActionTitleHorizontalReserve: CGFloat = 96
-    static let closeVisualSize: CGFloat = 32
-    static let chromeMinHeight: CGFloat = Spacing.actionReserved
-    static let menuValueMinWidth: CGFloat = Spacing.actionReserved * 2
-}
-
-/// 设置 Sheet 的页面骨架，提供轻量居中标题，并支持默认关闭按钮或双侧文本操作。
-struct BookshelfDisplaySettingPageScaffold<Content: View>: View {
-    let title: String
-    let subtitle: String?
-    let onClose: () -> Void
-    let leadingAction: AnyView?
-    let trailingAction: AnyView?
-    let content: Content
-
-    /// 注入标题、关闭按钮语义与页面内容。
-    init(
-        title: String,
-        subtitle: String?,
-        onClose: @escaping () -> Void,
-        @ViewBuilder content: () -> Content
-    ) {
-        self.title = title
-        self.subtitle = subtitle
-        self.onClose = onClose
-        self.leadingAction = nil
-        self.trailingAction = nil
-        self.content = content()
-    }
-
-    /// 注入标题、双侧操作与页面内容，用于需要取消/保存语义的编辑型 Sheet。
-    init<LeadingAction: View, TrailingAction: View>(
-        title: String,
-        subtitle: String?,
-        onClose: @escaping () -> Void,
-        @ViewBuilder leadingAction: () -> LeadingAction,
-        @ViewBuilder trailingAction: () -> TrailingAction,
-        @ViewBuilder content: () -> Content
-    ) {
-        self.title = title
-        self.subtitle = subtitle
-        self.onClose = onClose
-        self.leadingAction = AnyView(leadingAction())
-        self.trailingAction = AnyView(trailingAction())
-        self.content = content()
-    }
-
-    var body: some View {
-        VStack(spacing: Spacing.none) {
-            topChrome
-
-            ScrollView {
-                content
-            }
-            .scrollIndicators(.hidden)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color.surfaceSheet.ignoresSafeArea())
-    }
-
-    private var topChrome: some View {
-        ZStack {
-            HStack {
-                leadingActionSlot
-                Spacer(minLength: Spacing.none)
-                trailingActionSlot
-            }
-            .frame(minHeight: BookshelfDisplaySettingSheetLayout.chromeMinHeight)
-
-            VStack(spacing: Spacing.micro) {
-                Text(title)
-                    .font(AppTypography.headlineSemibold)
-                    .foregroundStyle(Color.textPrimary)
-                    .lineLimit(1)
-
-                if let subtitle, !subtitle.isEmpty {
-                    Text(subtitle)
-                        .font(AppTypography.caption2)
-                        .foregroundStyle(Color.textSecondary)
-                        .lineLimit(1)
-                }
-            }
-            .frame(maxWidth: .infinity)
-            .padding(.horizontal, titleHorizontalReserve)
-        }
-        .padding(.horizontal, Spacing.screenEdge)
-        .padding(.top, Spacing.base)
-        .padding(.bottom, Spacing.comfortable)
-    }
-
-    private var titleHorizontalReserve: CGFloat {
-        if leadingAction != nil || trailingAction != nil {
-            return BookshelfDisplaySettingSheetLayout.textActionTitleHorizontalReserve
-        }
-        return BookshelfDisplaySettingSheetLayout.titleHorizontalReserve
-    }
-
-    @ViewBuilder
-    private var leadingActionSlot: some View {
-        if let leadingAction {
-            leadingAction
-        } else {
-            Color.clear
-                .frame(width: Spacing.actionReserved, height: Spacing.actionReserved)
-        }
-    }
-
-    @ViewBuilder
-    private var trailingActionSlot: some View {
-        if let trailingAction {
-            trailingAction
-        } else {
-            closeButton
-        }
-    }
-
-    private var closeButton: some View {
-        Button(action: onClose) {
-            TopBarActionIcon(
-                systemName: "xmark",
-                iconSize: 13,
-                containerSize: BookshelfDisplaySettingSheetLayout.closeVisualSize,
-                weight: .bold,
-                foregroundColor: .textSecondary
-            )
-            .background(Color.controlFillSecondary.opacity(0.82), in: Circle())
-            .frame(width: Spacing.actionReserved, height: Spacing.actionReserved)
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel("关闭")
-    }
-}
-
-/// 设置分组卡片，使用圆角表层和紧凑内部行距承载设置项。
-struct BookshelfSettingsGroupCard<Content: View>: View {
-    let content: Content
-
-    /// 注入设置行内容，构造无描边分组卡片。
-    init(@ViewBuilder content: () -> Content) {
-        self.content = content()
-    }
-
-    var body: some View {
-        content
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, Spacing.contentEdge)
-            .padding(.vertical, Spacing.half)
-            .background(Color.surfaceCard, in: RoundedRectangle(cornerRadius: CornerRadius.containerMedium, style: .continuous))
-    }
-}
-
-/// 行内值菜单设置项，适合布局、标题展示、排序依据和排序方向等离散选择。
-struct BookshelfSettingsValueMenuRow<Option: Hashable>: View {
-    let title: String
-    let value: String
-    let options: [Option]
-    let selection: Option
-    let optionTitle: (Option) -> String
-    let optionImage: (Option) -> String?
-    let onSelect: (Option) -> Void
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-
-    var body: some View {
-        HStack(spacing: Spacing.base) {
-            Text(title)
-                .font(AppTypography.subheadlineSemibold)
-                .foregroundStyle(Color.textPrimary)
-                .fixedSize(horizontal: false, vertical: true)
-
-            Spacer(minLength: Spacing.base)
-
-            Menu {
-                Picker(title, selection: selectionBinding) {
-                    ForEach(options, id: \.self) { option in
-                        menuItemLabel(for: option)
-                            .tag(option)
-                    }
-                }
-            } label: {
-                valueControl
-            }
-            .buttonStyle(.plain)
-            .xmMenuNeutralTint()
-            .accessibilityLabel("\(title)，当前\(value)")
-            .accessibilityHint("打开选项菜单")
-        }
-        .frame(minHeight: 52)
-    }
-
-    private var valueControl: some View {
-        HStack(spacing: Spacing.half) {
-            Text(value)
-                .font(AppTypography.subheadlineMedium)
-                .foregroundStyle(Color.textHint)
-                .lineLimit(1)
-                .minimumScaleFactor(0.82)
-                .contentTransition(.opacity)
-
-            Image(systemName: "chevron.down")
-                .font(AppTypography.caption)
-                .fontWeight(.semibold)
-                .foregroundStyle(Color.textHint)
-        }
-        .padding(.leading, Spacing.base)
-        .frame(
-            minWidth: BookshelfDisplaySettingSheetLayout.menuValueMinWidth,
-            minHeight: Spacing.actionReserved,
-            alignment: .trailing
-        )
-        .contentShape(Rectangle())
-        .animation(menuValueAnimation, value: value)
-    }
-
-    private var menuValueAnimation: Animation? {
-        reduceMotion ? nil : .smooth(duration: 0.13)
-    }
-
-    private var selectionBinding: Binding<Option> {
-        Binding(
-            get: { selection },
-            set: { newValue in
-                guard newValue != selection else { return }
-                onSelect(newValue)
-            }
-        )
-    }
-
-    @ViewBuilder
-    private func menuItemLabel(for option: Option) -> some View {
-        if let image = optionImage(option) {
-            Label(optionTitle(option), systemImage: image)
-        } else {
-            Text(optionTitle(option))
-        }
-    }
-}
-
-/// 右侧开关设置行，保持偏好设置的紧凑行高。
-struct BookshelfSettingsToggleRow: View {
-    let title: String
-    @Binding var isOn: Bool
-
-    var body: some View {
-        Toggle(isOn: $isOn) {
-            Text(title)
-                .font(AppTypography.subheadlineSemibold)
-                .foregroundStyle(Color.textPrimary)
-                .fixedSize(horizontal: false, vertical: true)
-        }
-        .tint(Color.brand)
-        .frame(minHeight: 52)
     }
 }
 

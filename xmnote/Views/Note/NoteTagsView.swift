@@ -121,8 +121,8 @@ private struct NoteIndexSectionHeader: View {
                         .font(AppTypography.caption2Semibold)
                         .foregroundStyle(Color.textSecondary)
                         .frame(
-                            width: Spacing.actionReserved,
-                            height: Spacing.actionReserved,
+                            width: InteractionMetrics.minimumTouchTarget,
+                            height: InteractionMetrics.minimumTouchTarget,
                             alignment: .trailing
                         )
                         .contentShape(Rectangle())

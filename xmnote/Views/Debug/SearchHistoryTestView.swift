@@ -141,7 +141,7 @@ private extension SearchHistoryTestContentView {
             )
             .overlay {
                 RoundedRectangle(cornerRadius: CornerRadius.containerMedium, style: .continuous)
-                    .stroke(Color.surfaceBorderSubtle, lineWidth: CardStyle.borderWidth)
+                    .stroke(Color.surfaceBorderSubtle, lineWidth: StrokeWidth.hairline)
             }
             .dynamicTypeSize(dynamicTypeMode.dynamicTypeSize)
         }

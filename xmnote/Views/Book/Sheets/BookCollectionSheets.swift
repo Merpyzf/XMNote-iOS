@@ -1,5 +1,5 @@
 /**
- * [INPUT]: 依赖 BookCollectionDetail、BookCollectionFormPresentation、BookCollectionRecommendEdit、BookCollectionBookMetadataEdit 与 relation 文本展示语义承载书单详情、书单编辑、书籍元信息编辑和关系备注编辑上下文
+ * [INPUT]: 依赖 BookCollectionDetail、BookCollectionFormPresentation、BookCollectionRecommendEdit、BookCollectionBookMetadataEdit、XMBookCoverAppearance、InteractionMetrics 与页面私有顶部栏布局承载书单详情、书单编辑、书籍元信息编辑和关系备注编辑上下文
  * [OUTPUT]: 对外提供 BookCollectionSummarySheet、BookCollectionFormSheet、BookCollectionBookMetadataEditSheet 与 BookCollectionRecommendSheet，承载书单简介查看、创建/编辑、书籍元信息和收藏理由/年度点评编辑的任务面板
  * [POS]: Book 模块业务 Sheet，替代书单文本输入类中心弹窗
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -8,6 +8,11 @@
 import PhotosUI
 import SwiftUI
 
+/// 书单 Sheet 顶部栏左侧占位保持与右侧操作槽等宽，避免标题因单侧操作发生偏移。
+private enum BookCollectionSheetTopBarLayout {
+    static let leadingActionPlaceholderSize: CGFloat = InteractionMetrics.minimumTouchTarget
+}
+
 /// 书单完整简介面板，在详情 Header 截断时承载完整标题、简介与阅读进度。
 struct BookCollectionSummarySheet: View {
     @Environment(\.dismiss) private var dismiss
@@ -15,18 +20,21 @@ struct BookCollectionSummarySheet: View {
     let detail: BookCollectionDetail
 
     var body: some View {
-        BookshelfDisplaySettingPageScaffold(
+        XMSheetScaffold(
             title: "书单简介",
             subtitle: kindSubtitle,
             onClose: { dismiss() },
             leadingAction: {
                 Color.clear
-                    .frame(width: Spacing.actionReserved, height: Spacing.actionReserved)
+                    .frame(
+                        width: BookCollectionSheetTopBarLayout.leadingActionPlaceholderSize,
+                        height: BookCollectionSheetTopBarLayout.leadingActionPlaceholderSize
+                    )
             },
             trailingAction: {
                 BookCollectionSheetTopTextButton(
                     title: "完成",
-                    foregroundColor: .brand.opacity(0.82),
+                    foregroundColor: .appTint.opacity(0.82),
                     action: { dismiss() }
                 )
             }
@@ -75,7 +83,7 @@ struct BookCollectionSummarySheet: View {
         .background(Color.surfaceCard, in: RoundedRectangle(cornerRadius: CornerRadius.blockLarge, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: CornerRadius.blockLarge, style: .continuous)
-                .stroke(Color.surfaceBorderSubtle, lineWidth: CardStyle.borderWidth)
+                .stroke(Color.surfaceBorderSubtle, lineWidth: StrokeWidth.hairline)
         }
         .accessibilityElement(children: .contain)
     }
@@ -95,9 +103,9 @@ struct BookCollectionSummarySheet: View {
         }
         switch detail.kind {
         case .manual:
-            return detail.bookCount == 0 ? "从书架里挑选几本书，给这个主题一个开始。" : "按你的阅读主题整理出的书籍集合。"
+            return detail.bookCount == 0 ? "从书架里挑选几本书，给这个主题一个开始" : "按你的阅读主题整理出的书籍集合"
         case .annual:
-            return "随读完记录自动同步，保留这一年的阅读轨迹。"
+            return "随读完记录自动同步，保留这一年的阅读轨迹"
         }
     }
 
@@ -151,7 +159,7 @@ struct BookCollectionFormSheet: View {
     }
 
     var body: some View {
-        BookshelfDisplaySettingPageScaffold(
+        XMSheetScaffold(
             title: presentation.title,
             subtitle: "标题与简介",
             onClose: { dismiss() },
@@ -165,7 +173,7 @@ struct BookCollectionFormSheet: View {
             trailingAction: {
                 BookCollectionSheetTopTextButton(
                     title: saveTitle,
-                    foregroundColor: .brand.opacity(0.82),
+                    foregroundColor: .appTint.opacity(0.82),
                     isDisabled: !canSave || isSaving,
                     action: submit
                 )
@@ -183,7 +191,7 @@ struct BookCollectionFormSheet: View {
                         .background(Color.surfaceCard, in: RoundedRectangle(cornerRadius: CornerRadius.blockMedium, style: .continuous))
                         .overlay {
                             RoundedRectangle(cornerRadius: CornerRadius.blockMedium, style: .continuous)
-                                .stroke(Color.surfaceBorderSubtle, lineWidth: CardStyle.borderWidth)
+                                .stroke(Color.surfaceBorderSubtle, lineWidth: StrokeWidth.hairline)
                         }
                 }
 
@@ -209,7 +217,7 @@ struct BookCollectionFormSheet: View {
                     .background(Color.surfaceCard, in: RoundedRectangle(cornerRadius: CornerRadius.blockMedium, style: .continuous))
                     .overlay {
                         RoundedRectangle(cornerRadius: CornerRadius.blockMedium, style: .continuous)
-                            .stroke(Color.surfaceBorderSubtle, lineWidth: CardStyle.borderWidth)
+                            .stroke(Color.surfaceBorderSubtle, lineWidth: StrokeWidth.hairline)
                     }
                 }
 
@@ -283,7 +291,7 @@ struct BookCollectionRecommendSheet: View {
     }
 
     var body: some View {
-        BookshelfDisplaySettingPageScaffold(
+        XMSheetScaffold(
             title: presentation.editActionTitle(hasText: !edit.item.recommend.isEmpty),
             subtitle: presentation.title,
             onClose: { dismiss() },
@@ -297,7 +305,7 @@ struct BookCollectionRecommendSheet: View {
             trailingAction: {
                 BookCollectionSheetTopTextButton(
                     title: "保存",
-                    foregroundColor: .brand.opacity(0.82),
+                    foregroundColor: .appTint.opacity(0.82),
                     isDisabled: isSaving,
                     action: submit
                 )
@@ -327,7 +335,7 @@ struct BookCollectionRecommendSheet: View {
                 .background(Color.surfaceCard, in: RoundedRectangle(cornerRadius: CornerRadius.blockMedium, style: .continuous))
                 .overlay {
                     RoundedRectangle(cornerRadius: CornerRadius.blockMedium, style: .continuous)
-                        .stroke(Color.surfaceBorderSubtle, lineWidth: CardStyle.borderWidth)
+                        .stroke(Color.surfaceBorderSubtle, lineWidth: StrokeWidth.hairline)
                 }
 
                 Text(presentation.clearHint)
@@ -351,7 +359,7 @@ struct BookCollectionRecommendSheet: View {
                 52,
                 urlString: edit.item.book.cover,
                 cornerRadius: CornerRadius.inlaySmall,
-                border: .init(color: .surfaceBorderSubtle, width: CardStyle.borderWidth),
+                border: .init(color: .surfaceBorderSubtle, width: StrokeWidth.hairline),
                 placeholderIconSize: .small,
                 surfaceStyle: .spine
             )
@@ -376,7 +384,7 @@ struct BookCollectionRecommendSheet: View {
         .background(Color.surfaceCard, in: RoundedRectangle(cornerRadius: CornerRadius.blockLarge, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: CornerRadius.blockLarge, style: .continuous)
-                .stroke(Color.surfaceBorderSubtle, lineWidth: CardStyle.borderWidth)
+                .stroke(Color.surfaceBorderSubtle, lineWidth: StrokeWidth.hairline)
         }
         .accessibilityElement(children: .combine)
     }
@@ -431,7 +439,7 @@ struct BookCollectionBookMetadataEditSheet: View {
     }
 
     var body: some View {
-        BookshelfDisplaySettingPageScaffold(
+        XMSheetScaffold(
             title: "编辑书籍信息",
             subtitle: edit.item.isPlaceholder ? "未加入书架" : "书单内书籍",
             onClose: { dismiss() },
@@ -445,7 +453,7 @@ struct BookCollectionBookMetadataEditSheet: View {
             trailingAction: {
                 BookCollectionSheetTopTextButton(
                     title: "保存",
-                    foregroundColor: .brand.opacity(0.82),
+                    foregroundColor: .appTint.opacity(0.82),
                     isDisabled: !canSave || isSaving,
                     action: submit
                 )
@@ -471,7 +479,7 @@ struct BookCollectionBookMetadataEditSheet: View {
             ) { selectedURL in
                 coverURL = selectedURL
                 selectedCover = nil
-                coverSelectionMessage = "已选择在线封面链接。"
+                coverSelectionMessage = "已选择在线封面链接"
                 coverSelectionError = nil
             }
         }
@@ -494,12 +502,12 @@ struct BookCollectionBookMetadataEditSheet: View {
                     76,
                     urlString: trimmedCoverURL,
                     cornerRadius: CornerRadius.inlaySmall,
-                    border: .init(color: .surfaceBorderSubtle, width: CardStyle.borderWidth),
+                    border: .init(color: .surfaceBorderSubtle, width: StrokeWidth.hairline),
                     placeholderIconSize: .small,
                     surfaceStyle: .spine
                 )
                 .shadow(
-                    color: Color.bookCoverDropShadow.opacity(0.14),
+                    color: XMBookCoverAppearance.dropShadow.opacity(0.14),
                     radius: 7,
                     x: Spacing.none,
                     y: 4
@@ -517,7 +525,7 @@ struct BookCollectionBookMetadataEditSheet: View {
                         .background(Color.surfaceCard, in: RoundedRectangle(cornerRadius: CornerRadius.blockMedium, style: .continuous))
                         .overlay {
                             RoundedRectangle(cornerRadius: CornerRadius.blockMedium, style: .continuous)
-                                .stroke(Color.surfaceBorderSubtle, lineWidth: CardStyle.borderWidth)
+                                .stroke(Color.surfaceBorderSubtle, lineWidth: StrokeWidth.hairline)
                         }
 
                     HStack(spacing: Spacing.cozy) {
@@ -526,8 +534,8 @@ struct BookCollectionBookMetadataEditSheet: View {
                         } label: {
                             Label("在线匹配", systemImage: "magnifyingglass")
                                 .font(AppTypography.subheadlineMedium)
-                                .foregroundStyle(Color.brand.opacity(0.86))
-                                .frame(maxWidth: .infinity, minHeight: 44)
+                                .foregroundStyle(Color.appTint.opacity(0.86))
+                                .frame(maxWidth: .infinity, minHeight: InteractionMetrics.minimumTouchTarget)
                                 .background(Color.surfaceNested, in: RoundedRectangle(cornerRadius: CornerRadius.blockSmall, style: .continuous))
                         }
                         .buttonStyle(.plain)
@@ -539,8 +547,8 @@ struct BookCollectionBookMetadataEditSheet: View {
                         ) {
                             Label("选择封面", systemImage: "photo")
                                 .font(AppTypography.subheadlineMedium)
-                                .foregroundStyle(Color.brand.opacity(0.86))
-                                .frame(maxWidth: .infinity, minHeight: 44)
+                                .foregroundStyle(Color.appTint.opacity(0.86))
+                                .frame(maxWidth: .infinity, minHeight: InteractionMetrics.minimumTouchTarget)
                                 .background(Color.surfaceNested, in: RoundedRectangle(cornerRadius: CornerRadius.blockSmall, style: .continuous))
                         }
                         .buttonStyle(.plain)
@@ -556,7 +564,7 @@ struct BookCollectionBookMetadataEditSheet: View {
         .background(Color.surfaceCard, in: RoundedRectangle(cornerRadius: CornerRadius.blockLarge, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: CornerRadius.blockLarge, style: .continuous)
-                .stroke(Color.surfaceBorderSubtle, lineWidth: CardStyle.borderWidth)
+                .stroke(Color.surfaceBorderSubtle, lineWidth: StrokeWidth.hairline)
         }
     }
 
@@ -611,7 +619,7 @@ struct BookCollectionBookMetadataEditSheet: View {
             .background(Color.surfaceCard, in: RoundedRectangle(cornerRadius: CornerRadius.blockMedium, style: .continuous))
             .overlay {
                 RoundedRectangle(cornerRadius: CornerRadius.blockMedium, style: .continuous)
-                    .stroke(Color.surfaceBorderSubtle, lineWidth: CardStyle.borderWidth)
+                    .stroke(Color.surfaceBorderSubtle, lineWidth: StrokeWidth.hairline)
             }
         }
     }
@@ -664,7 +672,7 @@ struct BookCollectionBookMetadataEditSheet: View {
                 .background(Color.surfaceCard, in: RoundedRectangle(cornerRadius: CornerRadius.blockMedium, style: .continuous))
                 .overlay {
                     RoundedRectangle(cornerRadius: CornerRadius.blockMedium, style: .continuous)
-                        .stroke(Color.surfaceBorderSubtle, lineWidth: CardStyle.borderWidth)
+                        .stroke(Color.surfaceBorderSubtle, lineWidth: StrokeWidth.hairline)
                 }
         }
     }
@@ -698,7 +706,7 @@ struct BookCollectionBookMetadataEditSheet: View {
             }
             let fileExtension = item.supportedContentTypes.first?.preferredFilenameExtension ?? "jpg"
             selectedCover = BookCollectionBookCoverSelection(data: data, fileExtension: fileExtension)
-            coverSelectionMessage = "已选择本地封面，保存时上传。"
+            coverSelectionMessage = "已选择本地封面，保存时上传"
             coverSelectionError = nil
         } catch {
             coverSelectionMessage = nil
@@ -729,7 +737,7 @@ struct BookCollectionAnnualDescriptionSheet: View {
     }
 
     var body: some View {
-        BookshelfDisplaySettingPageScaffold(
+        XMSheetScaffold(
             title: "编辑年度说明",
             subtitle: subtitle,
             onClose: { dismiss() },
@@ -743,7 +751,7 @@ struct BookCollectionAnnualDescriptionSheet: View {
             trailingAction: {
                 BookCollectionSheetTopTextButton(
                     title: "保存",
-                    foregroundColor: .brand.opacity(0.82),
+                    foregroundColor: .appTint.opacity(0.82),
                     isDisabled: isSaving,
                     action: submit
                 )
@@ -776,7 +784,7 @@ struct BookCollectionAnnualDescriptionSheet: View {
                 .background(Color.surfaceCard, in: RoundedRectangle(cornerRadius: CornerRadius.blockMedium, style: .continuous))
                 .overlay {
                     RoundedRectangle(cornerRadius: CornerRadius.blockMedium, style: .continuous)
-                        .stroke(Color.surfaceBorderSubtle, lineWidth: CardStyle.borderWidth)
+                        .stroke(Color.surfaceBorderSubtle, lineWidth: StrokeWidth.hairline)
                 }
 
                 Spacer(minLength: Spacing.none)
@@ -816,7 +824,7 @@ struct BookCollectionWereadImportSheet: View {
     let onParse: (String) -> Void
 
     var body: some View {
-        BookshelfDisplaySettingPageScaffold(
+        XMSheetScaffold(
             title: "导入微信读书书单",
             subtitle: "粘贴链接",
             onClose: { dismiss() },
@@ -830,7 +838,7 @@ struct BookCollectionWereadImportSheet: View {
             trailingAction: {
                 BookCollectionSheetTopTextButton(
                     title: "解析",
-                    foregroundColor: .brand.opacity(0.82),
+                    foregroundColor: .appTint.opacity(0.82),
                     isDisabled: trimmedLink.isEmpty || isLoading,
                     action: submit
                 )
@@ -852,7 +860,7 @@ struct BookCollectionWereadImportSheet: View {
                     .background(Color.surfaceCard, in: RoundedRectangle(cornerRadius: CornerRadius.blockMedium, style: .continuous))
                     .overlay {
                         RoundedRectangle(cornerRadius: CornerRadius.blockMedium, style: .continuous)
-                            .stroke(Color.surfaceBorderSubtle, lineWidth: CardStyle.borderWidth)
+                            .stroke(Color.surfaceBorderSubtle, lineWidth: StrokeWidth.hairline)
                     }
 
                 if let errorMessage {
@@ -901,7 +909,7 @@ struct BookCollectionWereadImportPreviewSheet: View {
     let onConfirm: (BookCollectionImportPreview) -> Void
 
     var body: some View {
-        BookshelfDisplaySettingPageScaffold(
+        XMSheetScaffold(
             title: "确认导入",
             subtitle: "\(preview.books.count) 本书",
             onClose: { dismiss() },
@@ -915,7 +923,7 @@ struct BookCollectionWereadImportPreviewSheet: View {
             trailingAction: {
                 BookCollectionSheetTopTextButton(
                     title: "导入",
-                    foregroundColor: .brand.opacity(0.82),
+                    foregroundColor: .appTint.opacity(0.82),
                     isDisabled: isSaving,
                     action: submit
                 )
@@ -970,7 +978,7 @@ struct BookCollectionWereadImportPreviewSheet: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
 
-            Text("导入后会创建为我的书单，书籍先以“未加入书架”的占位状态保存。")
+            Text("导入后会创建为我的书单，书籍先以“未加入书架”的占位状态保存")
                 .font(AppTypography.caption)
                 .foregroundStyle(Color.textSecondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -979,7 +987,7 @@ struct BookCollectionWereadImportPreviewSheet: View {
         .background(Color.surfaceCard, in: RoundedRectangle(cornerRadius: CornerRadius.blockLarge, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: CornerRadius.blockLarge, style: .continuous)
-                .stroke(Color.surfaceBorderSubtle, lineWidth: CardStyle.borderWidth)
+                .stroke(Color.surfaceBorderSubtle, lineWidth: StrokeWidth.hairline)
         }
     }
 
@@ -989,7 +997,7 @@ struct BookCollectionWereadImportPreviewSheet: View {
                 44,
                 urlString: book.coverURL,
                 cornerRadius: CornerRadius.inlaySmall,
-                border: .init(color: .surfaceBorderSubtle, width: CardStyle.borderWidth),
+                border: .init(color: .surfaceBorderSubtle, width: StrokeWidth.hairline),
                 placeholderIconSize: .small,
                 surfaceStyle: .spine
             )
@@ -1022,7 +1030,7 @@ struct BookCollectionWereadImportPreviewSheet: View {
         .background(Color.surfaceCard, in: RoundedRectangle(cornerRadius: CornerRadius.blockMedium, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: CornerRadius.blockMedium, style: .continuous)
-                .stroke(Color.surfaceBorderSubtle.opacity(0.62), lineWidth: CardStyle.borderWidth)
+                .stroke(Color.surfaceBorderSubtle.opacity(0.62), lineWidth: StrokeWidth.hairline)
         }
         .accessibilityElement(children: .combine)
     }
@@ -1045,7 +1053,10 @@ private struct BookCollectionSheetTopTextButton: View {
             Text(title)
                 .font(AppTypography.subheadlineMedium)
                 .foregroundStyle(isDisabled ? Color.textHint : foregroundColor)
-                .frame(minWidth: Spacing.actionReserved, minHeight: Spacing.actionReserved)
+                .frame(
+                    minWidth: InteractionMetrics.minimumTouchTarget,
+                    minHeight: InteractionMetrics.minimumTouchTarget
+                )
         }
         .buttonStyle(.plain)
         .disabled(isDisabled)

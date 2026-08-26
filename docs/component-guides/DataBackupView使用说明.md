@@ -20,10 +20,11 @@ NavigationStack {
   - `RepositoryContainer`：注入 `backupRepository`。
 
 关键状态与交互约束（本次更新）：
+- 页面根结构使用 `XMSettingsPage + XMSettingsSection + XMSettingsGroup`，与 AI 配置、网页端和 API 集成共享分区、卡片与页面节奏。
 - 云备份方式切换入口位于右侧值区（`providerSelectionMenu`），左侧标题区保持稳定。
-- `selectedProviderSummary` 在阿里云盘场景返回 `nil`，避免“阿里云盘 + 未登录”重复文案。
 - WebDAV 与阿里云登录行默认弱化前置图标，文本信息优先。
-- provider 行使用 `providerRowVerticalPadding = Spacing.cozy`，与卡片其他行节奏一致。
+- 普通设置行使用 `XMSettingsPageLayout.regularRowMinHeight`，带说明或状态的详情行使用 `detailRowMinHeight`；Dynamic Type 下允许自然增高。
+- 同一语义组内使用 `XMSettingsDivider`，不同备份分区通过 `XMSettingsSection` 建立间距关系。
 
 ## 示例
 - 示例 1：标准接入（个人中心导航）。

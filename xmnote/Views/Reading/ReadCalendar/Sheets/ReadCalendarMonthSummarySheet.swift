@@ -1,11 +1,17 @@
 import SwiftUI
 
 /**
- * [INPUT]: 依赖 MonthSummarySheetData、SummaryFilterState 与阅读日历统计页面私有组件
+ * [INPUT]: 依赖 MonthSummarySheetData、SummaryFilterState、ReadCalendarTheme、月度洞察私有排版与阅读日历统计页面私有组件
  * [OUTPUT]: 对外提供 ReadCalendarMonthSummarySheet（月度阅读总结弹层）
  * [POS]: ReadCalendar 业务 Sheet，负责月份切换、六项指标与月度阅读时长排行展示
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
+
+/// 月度总结洞察中分段数值与单位的页面私有层级。
+private enum ReadCalendarMonthSummaryTypography {
+    static let insightNumber = AppTypography.subheadlineSemibold
+    static let insightUnit = AppTypography.captionMedium
+}
 
 /// 月度总结弹层以统一摘要为唯一指标来源，并按当前设置隐藏不应展示的统计。
 struct ReadCalendarMonthSummarySheet: View {
@@ -14,13 +20,20 @@ struct ReadCalendarMonthSummarySheet: View {
         static let bottomInset: CGFloat = 28
         static let horizontalInset: CGFloat = 22
         static let sectionSpacing: CGFloat = 20
-        static let switcherButtonSize: CGFloat = 32
+        static let switcherVisualSize: CGFloat = 32
+        static let switcherHitSize: CGFloat = InteractionMetrics.minimumTouchTarget
+    }
+
+    private enum Motion {
+        static let monthChange = Animation.snappy(duration: 0.24)
     }
 
     let sheet: ReadCalendarContentView.MonthSummarySheetData
     let availableMonths: [Date]
     let filterState: ReadCalendarContentView.SummaryFilterState
     let onSwitchMonth: (Date) -> Void
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         ScrollView(.vertical, showsIndicators: false) {
@@ -43,7 +56,7 @@ struct ReadCalendarMonthSummarySheet: View {
                 .padding(.bottom, Spacing.base)
         }
         .scrollEdgeEffectStyle(.soft, for: .top)
-        .animation(.snappy(duration: 0.24), value: sheet)
+        .animation(reduceMotion ? nil : Motion.monthChange, value: sheet)
     }
 }
 
@@ -53,7 +66,11 @@ private extension ReadCalendarMonthSummarySheet {
         let nextMonth = adjacentMonth(offset: 1)
 
         return HStack(spacing: Spacing.base) {
-            monthSwitchButton(systemName: "chevron.left", isEnabled: previousMonth != nil) {
+            monthSwitchButton(
+                systemName: "chevron.left",
+                hitAlignment: .leading,
+                isEnabled: previousMonth != nil
+            ) {
                 guard let previousMonth else { return }
                 onSwitchMonth(previousMonth)
             }
@@ -68,7 +85,11 @@ private extension ReadCalendarMonthSummarySheet {
 
             Spacer(minLength: 0)
 
-            monthSwitchButton(systemName: "chevron.right", isEnabled: nextMonth != nil) {
+            monthSwitchButton(
+                systemName: "chevron.right",
+                hitAlignment: .trailing,
+                isEnabled: nextMonth != nil
+            ) {
                 guard let nextMonth else { return }
                 onSwitchMonth(nextMonth)
             }
@@ -78,6 +99,7 @@ private extension ReadCalendarMonthSummarySheet {
     /// 渲染月份切换按钮，禁用态不响应并降低对比度。
     func monthSwitchButton(
         systemName: String,
+        hitAlignment: Alignment,
         isEnabled: Bool,
         action: @escaping () -> Void
     ) -> some View {
@@ -85,11 +107,17 @@ private extension ReadCalendarMonthSummarySheet {
             Image(systemName: systemName)
                 .font(AppTypography.captionSemibold)
                 .foregroundStyle(isEnabled ? Color.textPrimary : Color.textHint.opacity(0.85))
-                .frame(width: Layout.switcherButtonSize, height: Layout.switcherButtonSize)
+                .frame(width: Layout.switcherVisualSize, height: Layout.switcherVisualSize)
                 .background(isEnabled ? Color.surfaceNested : Color.controlFillSecondary, in: Circle())
                 .overlay {
-                    Circle().stroke(Color.surfaceBorderDefault, lineWidth: CardStyle.borderWidth)
+                    Circle().stroke(Color.surfaceBorderDefault, lineWidth: StrokeWidth.hairline)
                 }
+                .frame(
+                    width: Layout.switcherHitSize,
+                    height: Layout.switcherHitSize,
+                    alignment: hitAlignment
+                )
+                .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .disabled(!isEnabled)
@@ -225,7 +253,7 @@ private extension ReadCalendarMonthSummarySheet {
             )
         }
 
-        let totalText = segmentedDurationText(totalSeconds, numberColor: .readCalendarSummaryDurationAccent)
+        let totalText = segmentedDurationText(totalSeconds, numberColor: ReadCalendarTheme.summaryDurationAccent)
         guard let delta = sheet.monthSummary.readSecondsDelta else {
             return .init(
                 label: "本月累计",
@@ -277,7 +305,7 @@ private extension ReadCalendarMonthSummarySheet {
             title: "阅读书籍",
             coverURL: "",
             durationSeconds: seconds,
-            barTint: .readCalendarEventPendingBase,
+            barTint: ReadCalendarTheme.eventPendingBase,
             barState: .placeholder
         )
     }
@@ -288,11 +316,11 @@ private extension ReadCalendarMonthSummarySheet {
         state: ReadingDurationRankingChart.Item.BarState
     ) {
         guard let color = sheet.rankingBarColorsByBookId[bookId] else {
-            return (.readCalendarEventPendingBase, .placeholder)
+            return (ReadCalendarTheme.eventPendingBase, .placeholder)
         }
         switch color.state {
         case .pending:
-            return (.readCalendarEventPendingBase, .placeholder)
+            return (ReadCalendarTheme.eventPendingBase, .placeholder)
         case .resolved:
             return (softenedBarColor(from: color), .resolved)
         case .failed:
@@ -307,7 +335,7 @@ private extension ReadCalendarMonthSummarySheet {
         let blue = CGFloat((color.backgroundRGBAHex >> 8) & 0xFF) / 255
         let alpha = CGFloat(color.backgroundRGBAHex & 0xFF) / 255
         let soften: CGFloat = 0.5
-        return Color(
+        return Color.xmSRGB(
             red: red + (1 - red) * soften,
             green: green + (1 - green) * soften,
             blue: blue + (1 - blue) * soften,
@@ -340,8 +368,8 @@ private extension ReadCalendarMonthSummarySheet {
     func segmentedDurationText(_ seconds: Int, numberColor: Color) -> Text {
         durationParts(seconds).reduce(Text("")) { result, part in
             let font = part.isNumber
-                ? ReadCalendarSummaryTypography.insightNumber
-                : ReadCalendarSummaryTypography.insightUnit
+                ? ReadCalendarMonthSummaryTypography.insightNumber
+                : ReadCalendarMonthSummaryTypography.insightUnit
             let color = part.isNumber ? numberColor : Color.textSecondary
             let fragment = Text(part.text).font(font).foregroundStyle(color)
             return Text("\(result)\(fragment)")
@@ -351,14 +379,14 @@ private extension ReadCalendarMonthSummarySheet {
     /// 构造环比时长文本，仅变化数字使用趋势色，单位保持次级色。
     func segmentedDeltaDurationText(_ delta: Int) -> Text {
         guard delta != 0 else {
-            return Text(" 持平").foregroundStyle(Color.readCalendarSummaryDeltaFlat)
+            return Text(" 持平").foregroundStyle(ReadCalendarTheme.summaryDeltaFlat)
         }
-        let color: Color = delta > 0 ? .readCalendarSummaryDeltaUp : .readCalendarSummaryDeltaDown
+        let color = delta > 0 ? ReadCalendarTheme.summaryDeltaUp : ReadCalendarTheme.summaryDeltaDown
         let sign = delta > 0 ? "+" : "−"
         return durationParts(abs(delta)).reduce(Text(sign).foregroundStyle(color)) { result, part in
             let font = part.isNumber
-                ? ReadCalendarSummaryTypography.insightNumber
-                : ReadCalendarSummaryTypography.insightUnit
+                ? ReadCalendarMonthSummaryTypography.insightNumber
+                : ReadCalendarMonthSummaryTypography.insightUnit
             let partColor = part.isNumber ? color : Color.textSecondary
             let fragment = Text(part.text).font(font).foregroundStyle(partColor)
             return Text("\(result)\(fragment)")

@@ -1,5 +1,5 @@
 /**
- * [INPUT]: 依赖 BookshelfBookListItem、BookshelfSortCriteria、BookshelfTitleText、XMBookCover 与书架封面角标组件
+ * [INPUT]: 依赖 BookshelfBookListItem、BookshelfSortCriteria、BookshelfTitleText、XMBookCover、ReadingStatusPresentation 与书架封面角标组件
  * [OUTPUT]: 对外提供 BookshelfBookListRowContent 及复用共享封面状态语义的列表行信息、阅读元信息、标签、排序辅助展示组件
  * [POS]: Book 模块页面私有列表行展示组件，被默认书架与二级书籍列表复用
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -46,7 +46,7 @@ struct BookshelfBookListRowContent: View {
             )
             .overlay {
                 RoundedRectangle(cornerRadius: CornerRadius.blockLarge, style: .continuous)
-                    .stroke(Color.surfaceBorderSubtle, lineWidth: CardStyle.borderWidth)
+                    .stroke(Color.surfaceBorderSubtle, lineWidth: StrokeWidth.hairline)
             }
 
             if let sortAuxiliaryText {
@@ -73,7 +73,7 @@ struct BookshelfBookCoverBadgeLayer: View {
             coverWidth,
             urlString: book.cover,
             cornerRadius: coverCornerRadius,
-            border: .init(color: .surfaceBorderSubtle, width: CardStyle.borderWidth),
+            border: .init(color: .surfaceBorderSubtle, width: StrokeWidth.hairline),
             placeholderIconSize: .small,
             surfaceStyle: .spine
         )
@@ -116,7 +116,7 @@ struct BookshelfBookCoverBadgeLayer: View {
         let title = book.readStatusBadgeTitle.trimmingCharacters(in: .whitespacesAndNewlines)
         return BookshelfBookListStatusBadge(
             title: title.isEmpty ? status.title : title,
-            color: status.coverBadgeColor
+            color: ReadingStatusPresentation.color(for: status.rawValue) ?? .textHint
         )
     }
 }

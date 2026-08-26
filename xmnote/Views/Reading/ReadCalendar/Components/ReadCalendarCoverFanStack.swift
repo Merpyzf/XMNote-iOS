@@ -1,5 +1,5 @@
 /**
- * [INPUT]: 依赖 XMRemoteImage 与 DesignTokens 视觉令牌，依赖封面列表、稳定随机 Seed 与展示模式参数
+ * [INPUT]: 依赖 XMRemoteImage、ReadCalendarTheme 选中表层与 DesignTokens，依赖封面列表、稳定随机 Seed 与展示模式参数
  * [OUTPUT]: 对外提供 ReadCalendarCoverFanStack（日历格子内封面非规则堆叠视图，支持折叠态与全屏态）
  * [POS]: ReadCalendar 页面私有子视图，负责封面非规则搓开层次、阴影分离、稳定布局与轻动画过渡
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -272,7 +272,7 @@ private extension ReadCalendarCoverFanStack {
                 LinearGradient(
                     colors: [
                         Color.white.opacity(0.26),
-                        Color.readCalendarSelectionFill.opacity(0.38)
+                        ReadCalendarTheme.selectionFill.opacity(0.38)
                     ],
                     startPoint: .topLeading,
                     endPoint: .bottomTrailing

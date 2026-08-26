@@ -216,7 +216,7 @@ private struct BookCollectionDetailContentView: View {
                     XMContentStateView(
                         role: .empty,
                         title: message,
-                        message: viewModel.isManual ? "添加书籍后会显示在这里。" : "读完记录会显示在这里。",
+                        message: viewModel.isManual ? "添加书籍后会显示在这里" : "读完记录会显示在这里",
                         systemImage: viewModel.isManual ? "book.badge.plus" : "calendar"
                     )
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -530,7 +530,7 @@ private struct BookCollectionDetailContentView: View {
                 .font(AppTypography.caption)
                 .foregroundStyle(Color.textHint)
 
-            Text("拖动右侧把手调整顺序。")
+            Text("拖动右侧把手调整顺序")
                 .font(AppTypography.caption)
                 .foregroundStyle(Color.textSecondary)
                 .fixedSize(horizontal: false, vertical: true)

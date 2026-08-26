@@ -1,25 +1,66 @@
 /**
- * [INPUT]: 依赖 Foundation/UserDefaults 保存非敏感 AI 设置，依赖 Security Keychain 保存各供应商 API Key
- * [OUTPUT]: 对外提供 AIConfigurationStore，异步读取配置快照、更新配置与安全凭据
- * [POS]: Services 层 AI 配置存储边界，被 AIRepository 独占使用，禁止 ViewModel 直接访问 UserDefaults 或 Keychain
+ * [INPUT]: 依赖 Foundation/UserDefaults 原子保存完整 AI 配置，依赖 Security 迁移并清理旧 Keychain 凭据
+ * [OUTPUT]: 对外提供 AIConfigurationStore，异步读取、更新、备份和整组恢复 ai.configuration.v2
+ * [POS]: Services 层 AI 配置存储边界，被 AIRepository 与 iOS 偏好备份协调器使用，禁止 ViewModel 直接访问持久化容器
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
 import Foundation
 import Security
 
-/// AI 配置存储 Actor；非敏感字段进入 UserDefaults，明文密钥只经 Keychain 读写。
+/// AI 配置白名单快照；只承载产品明确允许进入 iOS 备份的完整 AI 配置。
+nonisolated struct AIConfigurationPreferenceSnapshot: Equatable, Sendable {
+    var configuration: AIConfiguration
+    var deepSeekAPIKey: String
+    var siliconFlowAPIKey: String
+
+    /// 返回指定供应商密钥；空字符串表示该供应商未配置凭据。
+    func apiKey(for provider: AIProvider) -> String {
+        switch provider {
+        case .deepSeek:
+            deepSeekAPIKey
+        case .siliconFlow:
+            siliconFlowAPIKey
+        }
+    }
+
+    /// 覆盖指定供应商密钥，保持另一供应商配置不变。
+    mutating func setAPIKey(_ apiKey: String, for provider: AIProvider) {
+        switch provider {
+        case .deepSeek:
+            deepSeekAPIKey = apiKey
+        case .siliconFlow:
+            siliconFlowAPIKey = apiKey
+        }
+    }
+
+    var normalized: AIConfigurationPreferenceSnapshot {
+        var result = self
+        result.configuration = configuration.normalized
+        result.deepSeekAPIKey = deepSeekAPIKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        result.siliconFlowAPIKey = siliconFlowAPIKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        if result.configuration.isEnabled,
+           result.apiKey(for: result.configuration.provider).isEmpty {
+            result.configuration.isEnabled = false
+        }
+        return result
+    }
+}
+
+/// AI 配置存储 Actor；完整配置与两家凭据通过一次 UserDefaults 写入形成一致快照。
 actor AIConfigurationStore {
     static let shared = AIConfigurationStore()
 
     private enum Keys {
-        static let configuration = "ai.configuration.v1"
+        static let legacyConfiguration = "ai.configuration.v1"
+        static let configuration = "ai.configuration.v2"
     }
 
     private let defaults: UserDefaults
-    private let keychain: AIKeychainStore
+    private let legacyKeychain: AIKeychainStore
     private let encoder = JSONEncoder()
     private let decoder = JSONDecoder()
+    private var hasAttemptedLegacyCleanup = false
 
     /// 注入本地偏好与 Keychain 存储；生产默认使用标准偏好域和当前 App 专属 service。
     init(
@@ -27,57 +68,165 @@ actor AIConfigurationStore {
         keychain: AIKeychainStore = AIKeychainStore()
     ) {
         self.defaults = defaults
-        self.keychain = keychain
+        self.legacyKeychain = keychain
     }
 
-    /// 读取非敏感设置并仅汇总各供应商是否存在密钥，不把明文凭据暴露给设置页。
+    /// 读取 v2 配置并仅汇总各供应商是否存在密钥；首次调用会串行迁移 v1 与旧 Keychain，取消时不提交半份快照。
     func fetchSnapshot() async throws -> AIConfigurationSnapshot {
-        let configuration = decodedConfiguration().normalized
-        var providersWithStoredKey = Set<AIProvider>()
-        for provider in AIProvider.allCases {
-            if try await keychain.containsAPIKey(for: provider) {
-                providersWithStoredKey.insert(provider)
-            }
-        }
+        let stored = try await loadOrMigrate().preferenceSnapshot
         return AIConfigurationSnapshot(
-            configuration: configuration,
-            providersWithStoredKey: providersWithStoredKey
+            configuration: stored.configuration,
+            providersWithStoredKey: Set(
+                AIProvider.allCases.filter { !stored.apiKey(for: $0).isEmpty }
+            )
         )
     }
 
-    /// 保存设置；`apiKey=nil` 表示保留当前供应商已有密钥，非空值写入 Keychain 后再提交非敏感配置。
+    /// 保存完整 v2 快照；`apiKey=nil` 保留当前供应商密钥，Actor 串行化避免配置与凭据交叉覆盖。
     func save(_ configuration: AIConfiguration, apiKey: String?) async throws {
-        let normalized = configuration.normalized
+        var stored = try await loadOrMigrate()
+        stored.configuration = configuration.normalized
         if let apiKey {
             let trimmed = apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
             if !trimmed.isEmpty {
-                try await keychain.saveAPIKey(trimmed, for: normalized.provider)
+                stored.setAPIKey(trimmed, for: stored.configuration.provider)
             }
         }
-        let data = try encoder.encode(normalized)
-        defaults.set(data, forKey: Keys.configuration)
+        try persist(stored)
     }
 
-    /// 读取当前供应商请求所需凭据；该明文只在 Repository 发起请求时短暂存在。
+    /// 读取当前供应商请求所需凭据；明文只在 Repository 发起请求时短暂存在，不进入日志或页面状态。
     func credential(for provider: AIProvider) async throws -> String? {
-        try await keychain.apiKey(for: provider)
+        let apiKey = try await loadOrMigrate().apiKey(for: provider)
+        return apiKey.isEmpty ? nil : apiKey
     }
 
-    /// 删除指定供应商密钥，不影响另一供应商的模型和凭据。
+    /// 删除指定供应商密钥并提交新的完整 v2 快照，不影响另一供应商凭据。
     func deleteCredential(for provider: AIProvider) async throws {
-        try await keychain.deleteAPIKey(for: provider)
+        var stored = try await loadOrMigrate()
+        stored.setAPIKey("", for: provider)
+        try persist(stored)
     }
 
-    private func decodedConfiguration() -> AIConfiguration {
-        guard let data = defaults.data(forKey: Keys.configuration),
+    /// 生成备份白名单所需一致快照；首次备份同样会完成 v1/Keychain 迁移。
+    func makeBackupSnapshot() async throws -> AIConfigurationPreferenceSnapshot {
+        try await loadOrMigrate().preferenceSnapshot
+    }
+
+    /// 整组替换 AI 配置；调用方须在数据库恢复成功后执行，写入成功后再清理遗留存储。
+    func restoreBackupSnapshot(_ snapshot: AIConfigurationPreferenceSnapshot) async throws {
+        let stored = StoredAIConfigurationV2(snapshot: snapshot.normalized)
+        try persist(stored)
+        await removeLegacyArtifacts()
+        hasAttemptedLegacyCleanup = true
+    }
+
+    /// v2 键一旦存在便只读取 v2；即使内容异常也不回退旧凭据，防止已删除密钥复活。
+    private func loadOrMigrate() async throws -> StoredAIConfigurationV2 {
+        if let data = defaults.data(forKey: Keys.configuration) {
+            guard let stored = try? decoder.decode(StoredAIConfigurationV2.self, from: data),
+                  stored.formatVersion == StoredAIConfigurationV2.currentFormatVersion else {
+                throw AIRepositoryError.credentialStore("AI 配置格式无法读取")
+            }
+            if !hasAttemptedLegacyCleanup {
+                await removeLegacyArtifacts()
+                hasAttemptedLegacyCleanup = true
+            }
+            return StoredAIConfigurationV2(snapshot: stored.preferenceSnapshot.normalized)
+        }
+
+        let legacyConfiguration = decodedLegacyConfiguration().normalized
+        async let deepSeekKey = legacyKeychain.apiKey(for: .deepSeek)
+        async let siliconFlowKey = legacyKeychain.apiKey(for: .siliconFlow)
+        let migrated = StoredAIConfigurationV2(
+            configuration: legacyConfiguration,
+            deepSeekAPIKey: try await deepSeekKey ?? "",
+            siliconFlowAPIKey: try await siliconFlowKey ?? ""
+        )
+        try Task.checkCancellation()
+        try persist(migrated)
+        await removeLegacyArtifacts()
+        hasAttemptedLegacyCleanup = true
+        return migrated
+    }
+
+    private func decodedLegacyConfiguration() -> AIConfiguration {
+        guard let data = defaults.data(forKey: Keys.legacyConfiguration),
               let configuration = try? decoder.decode(AIConfiguration.self, from: data) else {
             return .androidAlignedDefault
         }
         return configuration
     }
+
+    private func persist(_ stored: StoredAIConfigurationV2) throws {
+        let normalized = StoredAIConfigurationV2(snapshot: stored.preferenceSnapshot.normalized)
+        let data = try encoder.encode(normalized)
+        defaults.set(data, forKey: Keys.configuration)
+        guard defaults.data(forKey: Keys.configuration) == data else {
+            throw AIRepositoryError.credentialStore("AI 配置无法写入本机偏好")
+        }
+    }
+
+    /// 仅在 v2 已成功落盘后清理旧键与 Keychain；清理失败不回滚 v2，也不会触发旧凭据回读。
+    private func removeLegacyArtifacts() async {
+        defaults.removeObject(forKey: Keys.legacyConfiguration)
+        for provider in AIProvider.allCases {
+            try? await legacyKeychain.deleteAPIKey(for: provider)
+        }
+    }
 }
 
-/// Keychain 适配器；Security API 为同步阻塞调用，所有查询均移到 utility detached task。
+/// `ai.configuration.v2` 的单值 Codable 载荷，确保配置与两家凭据只有一个提交点。
+private nonisolated struct StoredAIConfigurationV2: Codable, Equatable, Sendable {
+    static let currentFormatVersion = 2
+
+    let formatVersion: Int
+    var configuration: AIConfiguration
+    var deepSeekAPIKey: String
+    var siliconFlowAPIKey: String
+
+    init(
+        configuration: AIConfiguration,
+        deepSeekAPIKey: String,
+        siliconFlowAPIKey: String
+    ) {
+        self.formatVersion = Self.currentFormatVersion
+        self.configuration = configuration
+        self.deepSeekAPIKey = deepSeekAPIKey
+        self.siliconFlowAPIKey = siliconFlowAPIKey
+    }
+
+    init(snapshot: AIConfigurationPreferenceSnapshot) {
+        self.init(
+            configuration: snapshot.configuration,
+            deepSeekAPIKey: snapshot.deepSeekAPIKey,
+            siliconFlowAPIKey: snapshot.siliconFlowAPIKey
+        )
+    }
+
+    var preferenceSnapshot: AIConfigurationPreferenceSnapshot {
+        AIConfigurationPreferenceSnapshot(
+            configuration: configuration,
+            deepSeekAPIKey: deepSeekAPIKey,
+            siliconFlowAPIKey: siliconFlowAPIKey
+        )
+    }
+
+    func apiKey(for provider: AIProvider) -> String {
+        preferenceSnapshot.apiKey(for: provider)
+    }
+
+    mutating func setAPIKey(_ apiKey: String, for provider: AIProvider) {
+        switch provider {
+        case .deepSeek:
+            deepSeekAPIKey = apiKey
+        case .siliconFlow:
+            siliconFlowAPIKey = apiKey
+        }
+    }
+}
+
+/// 旧 Keychain 只读/删除适配器；迁移完成后不再作为生产配置写入点。
 actor AIKeychainStore {
     private let service: String
 
@@ -86,12 +235,7 @@ actor AIKeychainStore {
         self.service = service
     }
 
-    /// 判断供应商凭据是否存在；不会把明文返回给设置页。
-    func containsAPIKey(for provider: AIProvider) async throws -> Bool {
-        try await apiKey(for: provider) != nil
-    }
-
-    /// 从 Keychain 读取 API Key；`SecItemCopyMatching` 在后台 utility task 执行并支持父任务取消。
+    /// 从旧 Keychain 读取 API Key；同步 Security 查询在 utility task 执行，父任务取消时迁移不会提交 v2。
     func apiKey(for provider: AIProvider) async throws -> String? {
         let service = service
         let account = provider.rawValue
@@ -105,21 +249,7 @@ actor AIKeychainStore {
         }
     }
 
-    /// 写入或原位更新 API Key；使用仅本机、解锁时可访问级别，凭据不随备份迁移。
-    func saveAPIKey(_ apiKey: String, for provider: AIProvider) async throws {
-        let service = service
-        let account = provider.rawValue
-        do {
-            try await Task.detached(priority: .utility) {
-                try Task.checkCancellation()
-                try Self.writeAPIKey(apiKey, service: service, account: account)
-            }.value
-        } catch let error as AIKeychainError {
-            throw AIRepositoryError.credentialStore(error.localizedDescription)
-        }
-    }
-
-    /// 删除供应商 API Key；不存在时按幂等成功处理。
+    /// 删除旧供应商 Keychain 项；不存在按幂等成功，失败不暴露凭据内容。
     func deleteAPIKey(for provider: AIProvider) async throws {
         let service = service
         let account = provider.rawValue
@@ -155,42 +285,6 @@ actor AIKeychainStore {
             throw AIKeychainError.invalidStoredValue
         }
         return value
-    }
-
-    private nonisolated static func writeAPIKey(
-        _ apiKey: String,
-        service: String,
-        account: String
-    ) throws {
-        guard let data = apiKey.data(using: .utf8) else {
-            throw AIKeychainError.invalidStoredValue
-        }
-        let identityQuery: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: service,
-            kSecAttrAccount as String: account,
-        ]
-        let addQuery: [String: Any] = identityQuery.merging([
-            kSecValueData as String: data,
-            kSecAttrAccessible as String: kSecAttrAccessibleWhenUnlockedThisDeviceOnly,
-        ]) { _, new in new }
-
-        let addStatus = SecItemAdd(addQuery as CFDictionary, nil)
-        if addStatus == errSecSuccess {
-            return
-        }
-        guard addStatus == errSecDuplicateItem else {
-            throw AIKeychainError.unexpectedStatus(addStatus)
-        }
-
-        let attributes: [String: Any] = [
-            kSecValueData as String: data,
-            kSecAttrAccessible as String: kSecAttrAccessibleWhenUnlockedThisDeviceOnly,
-        ]
-        let updateStatus = SecItemUpdate(identityQuery as CFDictionary, attributes as CFDictionary)
-        guard updateStatus == errSecSuccess else {
-            throw AIKeychainError.unexpectedStatus(updateStatus)
-        }
     }
 
     private nonisolated static func removeAPIKey(service: String, account: String) throws {

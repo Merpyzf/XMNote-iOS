@@ -1,7 +1,7 @@
 import SwiftUI
 
 /**
- * [INPUT]: 依赖 YearSummarySheetData、SummaryFilterState、年度排行与月份贡献树图组件
+ * [INPUT]: 依赖 YearSummarySheetData、SummaryFilterState、ReadCalendarTheme、年度排行与月份贡献树图组件
  * [OUTPUT]: 对外提供 ReadCalendarYearSummarySheet（年度阅读总结弹层）
  * [POS]: ReadCalendar 业务 Sheet，负责年度切换、四项指标、年度阅读时长排行与月份分布下钻
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -14,7 +14,12 @@ struct ReadCalendarYearSummarySheet: View {
         static let bottomInset: CGFloat = 28
         static let horizontalInset: CGFloat = 22
         static let sectionSpacing: CGFloat = 20
-        static let switcherButtonSize: CGFloat = 32
+        static let switcherVisualSize: CGFloat = 32
+        static let switcherHitSize: CGFloat = InteractionMetrics.minimumTouchTarget
+    }
+
+    private enum Motion {
+        static let yearChange = Animation.snappy(duration: 0.24)
     }
 
     let sheet: ReadCalendarContentView.YearSummarySheetData
@@ -23,6 +28,8 @@ struct ReadCalendarYearSummarySheet: View {
     let onSwitchYear: (Int) -> Void
     let onSelectMonth: (Date) -> Void
     let onRetry: () -> Void
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         ScrollView(.vertical, showsIndicators: false) {
@@ -59,7 +66,7 @@ struct ReadCalendarYearSummarySheet: View {
                 .padding(.bottom, Spacing.base)
         }
         .scrollEdgeEffectStyle(.soft, for: .top)
-        .animation(.snappy(duration: 0.24), value: sheet)
+        .animation(reduceMotion ? nil : Motion.yearChange, value: sheet)
     }
 }
 
@@ -69,7 +76,11 @@ private extension ReadCalendarYearSummarySheet {
         let nextYear = adjacentYear(offset: 1)
 
         return HStack(spacing: Spacing.base) {
-            yearSwitchButton(systemName: "chevron.left", isEnabled: previousYear != nil) {
+            yearSwitchButton(
+                systemName: "chevron.left",
+                hitAlignment: .leading,
+                isEnabled: previousYear != nil
+            ) {
                 guard let previousYear else { return }
                 onSwitchYear(previousYear)
             }
@@ -84,7 +95,11 @@ private extension ReadCalendarYearSummarySheet {
 
             Spacer(minLength: 0)
 
-            yearSwitchButton(systemName: "chevron.right", isEnabled: nextYear != nil) {
+            yearSwitchButton(
+                systemName: "chevron.right",
+                hitAlignment: .trailing,
+                isEnabled: nextYear != nil
+            ) {
                 guard let nextYear else { return }
                 onSwitchYear(nextYear)
             }
@@ -94,6 +109,7 @@ private extension ReadCalendarYearSummarySheet {
     /// 渲染年份切换按钮，保留系统按钮语义和禁用状态。
     func yearSwitchButton(
         systemName: String,
+        hitAlignment: Alignment,
         isEnabled: Bool,
         action: @escaping () -> Void
     ) -> some View {
@@ -101,11 +117,17 @@ private extension ReadCalendarYearSummarySheet {
             Image(systemName: systemName)
                 .font(AppTypography.captionSemibold)
                 .foregroundStyle(isEnabled ? Color.textPrimary : Color.textHint.opacity(0.85))
-                .frame(width: Layout.switcherButtonSize, height: Layout.switcherButtonSize)
+                .frame(width: Layout.switcherVisualSize, height: Layout.switcherVisualSize)
                 .background(isEnabled ? Color.surfaceNested : Color.controlFillSecondary, in: Circle())
                 .overlay {
-                    Circle().stroke(Color.surfaceBorderDefault, lineWidth: CardStyle.borderWidth)
+                    Circle().stroke(Color.surfaceBorderDefault, lineWidth: StrokeWidth.hairline)
                 }
+                .frame(
+                    width: Layout.switcherHitSize,
+                    height: Layout.switcherHitSize,
+                    alignment: hitAlignment
+                )
+                .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .disabled(!isEnabled)
@@ -254,7 +276,7 @@ private extension ReadCalendarYearSummarySheet {
             title: "阅读书籍",
             coverURL: "",
             durationSeconds: seconds,
-            barTint: .readCalendarEventPendingBase,
+            barTint: ReadCalendarTheme.eventPendingBase,
             barState: .placeholder
         )
     }
@@ -288,11 +310,11 @@ private extension ReadCalendarYearSummarySheet {
         state: ReadingDurationRankingChart.Item.BarState
     ) {
         guard let color = sheet.rankingBarColorsByBookId[bookId] else {
-            return (.readCalendarEventPendingBase, .placeholder)
+            return (ReadCalendarTheme.eventPendingBase, .placeholder)
         }
         switch color.state {
         case .pending:
-            return (.readCalendarEventPendingBase, .placeholder)
+            return (ReadCalendarTheme.eventPendingBase, .placeholder)
         case .resolved:
             return (softenedBarColor(from: color), .resolved)
         case .failed:
@@ -307,7 +329,7 @@ private extension ReadCalendarYearSummarySheet {
         let blue = CGFloat((color.backgroundRGBAHex >> 8) & 0xFF) / 255
         let alpha = CGFloat(color.backgroundRGBAHex & 0xFF) / 255
         let soften: CGFloat = 0.5
-        return Color(
+        return Color.xmSRGB(
             red: red + (1 - red) * soften,
             green: green + (1 - green) * soften,
             blue: blue + (1 - blue) * soften,

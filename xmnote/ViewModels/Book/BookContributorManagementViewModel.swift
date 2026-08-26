@@ -229,7 +229,7 @@ private extension BookContributorManagementViewModel {
     ) {
         guard activeWriteAction == nil else { return }
         activeWriteAction = action
-        actionNotice = "\(action.title)处理中..."
+        actionNotice = "\(action.title)处理中…"
         writeError = nil
         writeTask?.cancel()
         writeTask = Task {

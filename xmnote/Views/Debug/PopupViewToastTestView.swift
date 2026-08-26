@@ -51,21 +51,21 @@ struct PopupViewToastTestView: View {
 private extension PopupViewToastTestView {
     var previewSection: some View {
         VStack(alignment: .leading, spacing: Spacing.base) {
-            sectionHeader("浮层预览", subtitle: "底部参照物用于观察 Toast 与 TabBar / 搜索浮层的避让关系。")
+            sectionHeader("浮层预览", subtitle: "底部参照物用于观察 Toast 与 TabBar / 搜索浮层的避让关系")
 
             ZStack(alignment: .bottom) {
                 RoundedRectangle(cornerRadius: CornerRadius.containerMedium, style: .continuous)
                     .fill(Color.surfaceCard)
                     .overlay {
                         RoundedRectangle(cornerRadius: CornerRadius.containerMedium, style: .continuous)
-                            .stroke(Color.surfaceBorderSubtle, lineWidth: CardStyle.borderWidth)
+                            .stroke(Color.surfaceBorderSubtle, lineWidth: StrokeWidth.hairline)
                     }
 
                 VStack(alignment: .leading, spacing: Spacing.base) {
                     HStack {
                         VStack(alignment: .leading, spacing: Spacing.half) {
                             Capsule()
-                                .fill(Color.brand.opacity(0.16))
+                                .fill(Color.appTint.opacity(0.16))
                                 .frame(width: 108, height: 16)
                             Capsule()
                                 .fill(Color.textHint.opacity(0.18))
@@ -130,9 +130,9 @@ private extension PopupViewToastTestView {
         debugCard("验收关注") {
             VStack(alignment: .leading, spacing: Spacing.cozy) {
                 behaviorRow("短驻留", "成功/信息约 1.8 秒，警告与错误更长；调试页可覆盖时长。")
-                behaviorRow("非阻塞", "背景点击可穿透，Toast 本体点击关闭。")
-                behaviorRow("单条更新", "连续触发只替换当前提示，不做堆叠。")
-                behaviorRow("处理中", "处理中态不自动隐藏，完成后切换为成功态。")
+                behaviorRow("非阻塞", "背景点击可穿透，Toast 本体点击关闭")
+                behaviorRow("单条更新", "连续触发只替换当前提示，不做堆叠")
+                behaviorRow("处理中", "处理中态不自动隐藏，完成后切换为成功态")
             }
         }
     }
@@ -149,7 +149,7 @@ private extension PopupViewToastTestView {
             .background(.thinMaterial, in: Capsule())
             .overlay {
                 Capsule()
-                    .stroke(Color.surfaceBorderSubtle.opacity(0.32), lineWidth: CardStyle.borderWidth)
+                    .stroke(Color.surfaceBorderSubtle.opacity(0.32), lineWidth: StrokeWidth.hairline)
             }
 
             Circle()
@@ -162,7 +162,7 @@ private extension PopupViewToastTestView {
                 }
                 .overlay {
                     Circle()
-                        .stroke(Color.surfaceBorderSubtle.opacity(0.32), lineWidth: CardStyle.borderWidth)
+                        .stroke(Color.surfaceBorderSubtle.opacity(0.32), lineWidth: StrokeWidth.hairline)
                 }
         }
         .frame(maxWidth: .infinity)
@@ -192,7 +192,7 @@ private extension PopupViewToastTestView {
                 .frame(height: 44)
         }
         .buttonStyle(.borderedProminent)
-        .tint(Color.brand)
+        .tint(Color.appTint)
     }
 
     func presentToast(_ kind: ToastDemoKind) {
@@ -280,16 +280,16 @@ private extension PopupViewToastTestView {
 
                 Text(String(format: "%.1f %@", value.wrappedValue, suffix))
                     .font(AppTypography.caption2Semibold)
-                    .foregroundStyle(Color.brandDeep)
+                    .foregroundStyle(Color.selectionForeground)
                     .padding(.horizontal, Spacing.half)
                     .padding(.vertical, Spacing.compact)
-                    .background(Color.brand.opacity(0.10), in: Capsule())
+                    .background(Color.selectionAccent.opacity(0.10), in: Capsule())
 
                 Spacer(minLength: 0)
             }
 
             Slider(value: value, in: range, step: step)
-                .tint(Color.brand)
+                .tint(Color.appTint)
         }
     }
 
@@ -327,7 +327,7 @@ private extension PopupViewToastTestView {
         .background(Color.surfaceNested, in: RoundedRectangle(cornerRadius: CornerRadius.blockLarge, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: CornerRadius.blockLarge, style: .continuous)
-                .stroke(Color.surfaceBorderSubtle, lineWidth: CardStyle.borderWidth)
+                .stroke(Color.surfaceBorderSubtle, lineWidth: StrokeWidth.hairline)
         }
     }
 
@@ -343,7 +343,7 @@ private extension PopupViewToastTestView {
         .background {
             if isActive {
                 Capsule()
-                    .fill(Color.brand.opacity(0.12))
+                    .fill(Color.selectionAccent.opacity(0.12))
             }
         }
     }
@@ -392,22 +392,22 @@ private enum ToastDemoKind: String, CaseIterable, Identifiable {
         case .info:
             return "已加入稍后处理"
         case .processing:
-            return "正在更新..."
+            return "正在更新…"
         }
     }
 
     private var longMessage: String {
         switch self {
         case .success:
-            return "已保存到本地，稍后会随同步任务上传。"
+            return "已保存到本地，稍后会随同步任务上传"
         case .warning:
-            return "当前网络较慢，内容会先保留在本机，连接恢复后继续处理。"
+            return "当前网络较慢，内容会先保留在本机，连接恢复后继续处理"
         case .error:
-            return "操作失败，请检查网络连接后重试，当前页面内容不会丢失。"
+            return "操作失败，请检查网络连接后重试，当前页面内容不会丢失"
         case .info:
-            return "已加入稍后处理列表，你可以继续浏览当前页面。"
+            return "已加入稍后处理列表，你可以继续浏览当前页面"
         case .processing:
-            return "正在更新排序，期间请不要重复触发同一操作。"
+            return "正在更新排序，期间请不要重复触发同一操作"
         }
     }
 }

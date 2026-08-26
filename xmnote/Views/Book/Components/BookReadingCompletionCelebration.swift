@@ -1,5 +1,5 @@
 /**
- * [INPUT]: 依赖 Vortex 1.0.4 内建 fireworks/confetti/magic 系统、BookReadingCompletionTracker 与系统辅助功能/生命周期环境
+ * [INPUT]: 依赖 Vortex 1.0.4 内建 fireworks/confetti/magic 系统、BookReadingCompletionTracker、ReadingStatusPresentation 与系统辅助功能/生命周期环境
  * [OUTPUT]: 对外提供 BookReadingCompletionCelebration，仅用于阅读详情新增读完状态并成功评分后的全屏庆祝
  * [POS]: Views/Book/Components 页面私有庆祝层，不承担状态写入，也不作为跨模块公共粒子基建
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -123,7 +123,7 @@ struct BookReadingCompletionCelebration: View {
         VStack(spacing: Spacing.base) {
             Image(systemName: "checkmark.seal.fill")
                 .font(AppTypography.largeTitle)
-                .foregroundStyle(Color.statusDone)
+                .foregroundStyle(ReadingStatusPresentation.readDone)
                 .accessibilityHidden(true)
 
             Text("恭喜读完一本书")

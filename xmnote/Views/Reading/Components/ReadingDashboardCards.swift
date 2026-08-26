@@ -1,11 +1,16 @@
 import SwiftUI
 
 /**
- * [INPUT]: 依赖 ReadingDashboardSnapshot 相关领域模型、XMBookCover、CardContainer、HorizontalPagingHost 与 DesignTokens 提供首页卡片渲染能力
+ * [INPUT]: 依赖 ReadingDashboardSnapshot 相关领域模型、XMBookCover、XMBookCoverAppearance、CardContainer、HorizontalPagingHost 与页面私有排版/图表外观提供首页卡片渲染能力
  * [OUTPUT]: 对外提供支持 pending/content 语义呈现的首页趋势、功能、最近在读与年度总结页面私有卡片
  * [POS]: Reading/Components 页面私有子视图集合，负责在读首页各卡片区块的展示
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
+/// 阅读首页卡片族的页面级强调色，统一动作、图表与年度数字而不暴露原始品牌色阶。
+private enum ReadingDashboardAppearance {
+    static let accent = Color.appTint
+}
+
 /// ReadingDashboardPresentation 区分尚无业务数据的结构壳层与已取得真实值的生产内容。
 enum ReadingDashboardPresentation<Value> {
     case pending
@@ -32,6 +37,30 @@ private enum ReadingRecentBooksCardLayout {
     static let progressFontSize: CGFloat = 10
 }
 
+/// ReadingRecentBooksTypography 收口最近在读卡片三层固定排版，避免视图重复构造字体参数。
+private enum ReadingRecentBooksTypography {
+    static let cardTitle = AppTypography.fixed(
+        baseSize: ReadingRecentBooksCardLayout.titleFontSize,
+        relativeTo: .headline,
+        weight: .semibold,
+        design: .rounded,
+        minimumPointSize: ReadingRecentBooksCardLayout.titleFontSize
+    )
+    static let bookTitle = AppTypography.fixed(
+        baseSize: ReadingRecentBooksCardLayout.bookTitleFontSize,
+        relativeTo: .footnote,
+        weight: .medium,
+        design: .rounded,
+        minimumPointSize: ReadingRecentBooksCardLayout.bookTitleFontSize
+    )
+    static let progress = AppTypography.fixed(
+        baseSize: ReadingRecentBooksCardLayout.progressFontSize,
+        relativeTo: .caption2,
+        weight: ReadingDashboardTypography.subtitleWeight,
+        design: .rounded,
+        minimumPointSize: ReadingRecentBooksCardLayout.progressFontSize
+    )
+}
 /// ReadingTrendMetricsSection 把三项趋势指标收口为单张卡片，并统一处理分栏与分割线布局。
 struct ReadingTrendMetricsSection: View {
     let presentation: ReadingDashboardPresentation<[ReadingTrendMetric]>
@@ -81,7 +110,7 @@ struct ReadingTrendMetricsSection: View {
                             if index != items.index(before: items.endIndex) {
                                 Rectangle()
                                     .fill(Color.surfaceBorderStrong.opacity(0.78))
-                                    .frame(width: CardStyle.borderWidth)
+                                    .frame(width: StrokeWidth.hairline)
                                     .padding(.vertical, layout.dividerVerticalInset)
                             }
                         }
@@ -153,6 +182,20 @@ private enum ReadingDashboardTypography {
 
 /// ReadingTrendMetricTypography 管理趋势总卡数值位的紧凑语义字体，避免误用正文最小字号下限。
 private enum ReadingTrendMetricTypography {
+    static func numberFont(baseSize: CGFloat) -> Font {
+        AppTypography.brandDisplay(size: baseSize, relativeTo: .title3)
+    }
+
+    static func descriptionFont(baseSize: CGFloat) -> Font {
+        AppTypography.fixed(
+            baseSize: baseSize,
+            relativeTo: .caption,
+            weight: ReadingDashboardTypography.subtitleWeight,
+            design: .rounded,
+            minimumPointSize: baseSize
+        )
+    }
+
     static func compactUnitFont(baseSize: CGFloat) -> Font {
         AppTypography.fixed(
             baseSize: baseSize,
@@ -181,15 +224,7 @@ private struct ReadingTrendOverviewColumn: View {
                 )
 
                 Text(metric.title)
-                    .font(
-                        AppTypography.fixed(
-                            baseSize: layout.descriptionFontSize,
-                            relativeTo: .caption,
-                            weight: ReadingDashboardTypography.subtitleWeight,
-                            design: .rounded,
-                            minimumPointSize: layout.descriptionFontSize
-                        )
-                    )
+                    .font(ReadingTrendMetricTypography.descriptionFont(baseSize: layout.descriptionFontSize))
                     .foregroundStyle(Color.textSecondary)
                     .lineLimit(dynamicTypeSize.xmUsesExpandedTextLayout ? 2 : 1)
             }
@@ -219,20 +254,12 @@ private struct ReadingTrendPendingColumn: View {
         VStack(alignment: .leading, spacing: Spacing.none) {
             VStack(alignment: .leading, spacing: layout.metricTitleSpacing) {
                 Text("—")
-                    .font(AppTypography.brandDisplay(size: layout.numberFontSize, relativeTo: .title3))
+                    .font(ReadingTrendMetricTypography.numberFont(baseSize: layout.numberFontSize))
                     .foregroundStyle(Color.textSecondary)
                     .lineLimit(1)
 
                 Text(title)
-                    .font(
-                        AppTypography.fixed(
-                            baseSize: layout.descriptionFontSize,
-                            relativeTo: .caption,
-                            weight: ReadingDashboardTypography.subtitleWeight,
-                            design: .rounded,
-                            minimumPointSize: layout.descriptionFontSize
-                        )
-                    )
+                    .font(ReadingTrendMetricTypography.descriptionFont(baseSize: layout.descriptionFontSize))
                     .foregroundStyle(Color.textSecondary)
                     .lineLimit(dynamicTypeSize.xmUsesExpandedTextLayout ? 2 : 1)
             }
@@ -294,7 +321,7 @@ private struct ReadingTrendMetricValueLabel: View {
 
     private func pairText(_ pair: ReadingDashboardMetricValueDisplay.Pair) -> Text {
         let numberText = Text(pair.number.text)
-            .font(AppTypography.brandDisplay(size: numberFontSize, relativeTo: .title3))
+            .font(ReadingTrendMetricTypography.numberFont(baseSize: numberFontSize))
             .monospacedDigit()
         let unitText = Text(pair.unit.text)
             .font(ReadingTrendMetricTypography.compactUnitFont(baseSize: unitFontSize))
@@ -311,7 +338,7 @@ private struct ReadingTrendMetricPairLine: View {
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: Spacing.none) {
             Text(pair.number.text)
-                .font(AppTypography.brandDisplay(size: numberFontSize, relativeTo: .title3))
+                .font(ReadingTrendMetricTypography.numberFont(baseSize: numberFontSize))
                 .foregroundStyle(Color.textPrimary)
                 .lineLimit(1)
                 .monospacedDigit()
@@ -324,6 +351,14 @@ private struct ReadingTrendMetricPairLine: View {
                 .lineLimit(1)
         }
     }
+}
+
+/// 阅读首页趋势图的私有外观，不将柱图轨道晋升为跨页全局语义。
+private enum ReadingDashboardChartAppearance {
+    static let barTrack = Color.xmAdaptive(
+        light: Color.xmHex(0xC7CCD3).opacity(0.22),
+        dark: Color.white.opacity(0.06)
+    )
 }
 
 /// ReadingTrendMiniBarChart 渲染趋势栏位底部柱图，保留 Android 的零值占位语义。
@@ -363,11 +398,11 @@ private struct ReadingTrendMiniBarChart: View {
             ForEach(Array(displayedRatios.enumerated()), id: \.offset) { index, ratio in
                 ZStack(alignment: .bottom) {
                     verticalBarShape
-                        .fill(Color.chartBarTrack)
+                        .fill(ReadingDashboardChartAppearance.barTrack)
 
                     if ratio > 0 {
                         verticalBarShape
-                            .fill(Color.brand)
+                            .fill(ReadingDashboardAppearance.accent)
                             .frame(height: chartHeight * ratio)
                     }
                 }
@@ -530,6 +565,51 @@ private enum ReadingFeatureCardHeaderMetrics {
     static let headerToBodySpacing: CGFloat = Spacing.tight
 }
 
+/// ReadingFeatureCardTypography 统一今日阅读与继续阅读双卡共享的标题节奏，并保留各自数值和图标层级。
+private enum ReadingFeatureCardTypography {
+    static func title(baseSize: CGFloat) -> Font {
+        AppTypography.fixed(
+            baseSize: baseSize,
+            relativeTo: .subheadline,
+            weight: .semibold,
+            design: .rounded,
+            minimumPointSize: baseSize
+        )
+    }
+
+    static func subtitle(baseSize: CGFloat) -> Font {
+        AppTypography.fixed(
+            baseSize: baseSize,
+            relativeTo: .caption,
+            weight: ReadingFeatureCardHeaderMetrics.subtitleFontWeight,
+            design: .rounded,
+            minimumPointSize: baseSize
+        )
+    }
+
+    static func goalValue(baseSize: CGFloat) -> Font {
+        AppTypography.brandDisplay(size: baseSize, relativeTo: .title2)
+    }
+
+    static func goalTarget(baseSize: CGFloat) -> Font {
+        AppTypography.fixed(
+            baseSize: baseSize,
+            relativeTo: .footnote,
+            design: .rounded,
+            minimumPointSize: baseSize
+        )
+    }
+
+    static func actionIcon(baseSize: CGFloat) -> Font {
+        AppTypography.fixed(
+            baseSize: baseSize,
+            relativeTo: .caption,
+            weight: .semibold,
+            minimumPointSize: baseSize
+        )
+    }
+}
+
 /// ReadingDailyGoalCardLayout 约束今日阅读卡的标题、弧环与中心主值，避免横纵向同时超配。
 private struct ReadingDailyGoalCardLayout {
     static let arcSweepDegrees: CGFloat = 270
@@ -633,15 +713,7 @@ private struct ReadingDailyGoalCard: View {
                         VStack(spacing: layout.headerToGaugeSpacing) {
                             VStack(spacing: layout.headerSpacing) {
                                 Text(statusTitle)
-                                    .font(
-                                        AppTypography.fixed(
-                                            baseSize: layout.statusFontSize,
-                                            relativeTo: .subheadline,
-                                            weight: .semibold,
-                                            design: .rounded,
-                                            minimumPointSize: layout.statusFontSize
-                                        )
-                                    )
+                                    .font(ReadingFeatureCardTypography.title(baseSize: layout.statusFontSize))
                                     .foregroundStyle(Color.textPrimary)
                                     .lineLimit(dynamicTypeSize.xmUsesExpandedTextLayout ? 2 : 1)
                                     .minimumScaleFactor(0.9)
@@ -649,15 +721,7 @@ private struct ReadingDailyGoalCard: View {
                                     .opacity(presentation.isPending ? 0 : 1)
 
                                 Text("今日阅读")
-                                    .font(
-                                        AppTypography.fixed(
-                                            baseSize: layout.subtitleFontSize,
-                                            relativeTo: .caption,
-                                            weight: ReadingFeatureCardHeaderMetrics.subtitleFontWeight,
-                                            design: .rounded,
-                                            minimumPointSize: layout.subtitleFontSize
-                                        )
-                                    )
+                                    .font(ReadingFeatureCardTypography.subtitle(baseSize: layout.subtitleFontSize))
                                     .foregroundStyle(Color.textSecondary)
                                     .lineLimit(1)
                             }
@@ -712,7 +776,7 @@ private struct ReadingDailyGoalArcGauge: View {
 
             ReadingDailyGoalArcShape(progress: progress)
                 .stroke(
-                    Color.brand,
+                    ReadingDashboardAppearance.accent,
                     style: StrokeStyle(
                         lineWidth: layout.arcLineWidth,
                         lineCap: .round,
@@ -722,7 +786,7 @@ private struct ReadingDailyGoalArcGauge: View {
                 .animation(.smooth(duration: 0.45), value: progress)
 
             Text(valueText)
-                .font(AppTypography.brandDisplay(size: layout.valueFontSize, relativeTo: .title2))
+                .font(ReadingFeatureCardTypography.goalValue(baseSize: layout.valueFontSize))
                 .foregroundStyle(Color.textPrimary)
                 .lineLimit(1)
                 .minimumScaleFactor(0.82)
@@ -734,14 +798,7 @@ private struct ReadingDailyGoalArcGauge: View {
         .frame(width: layout.gaugeSquareSide, height: layout.gaugeSquareSide)
         .overlay {
             Text(targetText)
-                .font(
-                    AppTypography.fixed(
-                        baseSize: layout.targetFontSize,
-                        relativeTo: .footnote,
-                        design: .rounded,
-                        minimumPointSize: layout.targetFontSize
-                    )
-                )
+                .font(ReadingFeatureCardTypography.goalTarget(baseSize: layout.targetFontSize))
                 .foregroundStyle(Color.textSecondary)
                 .lineLimit(1)
                 .minimumScaleFactor(0.9)
@@ -880,41 +937,17 @@ private struct ReadingResumeBookCard: View {
         VStack(alignment: .leading, spacing: Spacing.none) {
             VStack(alignment: .leading, spacing: layout.emptyTextSpacing) {
                 Text("继续阅读")
-                    .font(
-                        AppTypography.fixed(
-                            baseSize: layout.subtitleFontSize,
-                            relativeTo: .caption,
-                            weight: ReadingFeatureCardHeaderMetrics.subtitleFontWeight,
-                            design: .rounded,
-                            minimumPointSize: layout.subtitleFontSize
-                        )
-                    )
+                    .font(ReadingFeatureCardTypography.subtitle(baseSize: layout.subtitleFontSize))
                     .foregroundStyle(Color.textSecondary)
                     .lineLimit(1)
 
                 Text("先添加一本书")
-                    .font(
-                        AppTypography.fixed(
-                            baseSize: layout.titleFontSize,
-                            relativeTo: .subheadline,
-                            weight: .semibold,
-                            design: .rounded,
-                            minimumPointSize: layout.titleFontSize
-                        )
-                    )
+                    .font(ReadingFeatureCardTypography.title(baseSize: layout.titleFontSize))
                     .lineLimit(dynamicTypeSize.xmUsesExpandedTextLayout ? 2 : 1)
                     .opacity(0)
 
                 Text("去添加")
-                    .font(
-                        AppTypography.fixed(
-                            baseSize: layout.subtitleFontSize,
-                            relativeTo: .caption,
-                            weight: ReadingFeatureCardHeaderMetrics.subtitleFontWeight,
-                            design: .rounded,
-                            minimumPointSize: layout.subtitleFontSize
-                        )
-                    )
+                    .font(ReadingFeatureCardTypography.subtitle(baseSize: layout.subtitleFontSize))
                     .padding(.top, layout.emptyActionTopSpacing)
                     .opacity(0)
             }
@@ -970,7 +1003,7 @@ private struct ReadingResumeBookCard: View {
                     urlString: book.coverURL,
                     cornerRadius: CornerRadius.inlayHairline,
                     cornerRadii: resumeCoverCornerRadii,
-                    border: .init(color: .surfaceBorderSubtle, width: CardStyle.borderWidth),
+                    border: .init(color: .surfaceBorderSubtle, width: StrokeWidth.hairline),
                     surfaceStyle: .spine
                 )
                 .accessibilityHidden(true)
@@ -993,29 +1026,13 @@ private struct ReadingResumeBookCard: View {
         VStack(alignment: .leading, spacing: Spacing.none) {
             VStack(alignment: .leading, spacing: layout.emptyTextSpacing) {
                 Text("继续阅读")
-                    .font(
-                        AppTypography.fixed(
-                            baseSize: layout.subtitleFontSize,
-                            relativeTo: .caption,
-                            weight: ReadingFeatureCardHeaderMetrics.subtitleFontWeight,
-                            design: .rounded,
-                            minimumPointSize: layout.subtitleFontSize
-                        )
-                    )
+                    .font(ReadingFeatureCardTypography.subtitle(baseSize: layout.subtitleFontSize))
                     .foregroundStyle(Color.textSecondary)
                     .lineLimit(1)
                     .minimumScaleFactor(dynamicTypeSize.xmUsesExpandedTextLayout ? 1 : 0.9)
 
                 Text("先添加一本书")
-                    .font(
-                        AppTypography.fixed(
-                            baseSize: layout.titleFontSize,
-                            relativeTo: .subheadline,
-                            weight: .semibold,
-                            design: .rounded,
-                            minimumPointSize: layout.titleFontSize
-                        )
-                    )
+                    .font(ReadingFeatureCardTypography.title(baseSize: layout.titleFontSize))
                     .foregroundStyle(Color.textPrimary)
                     .lineLimit(dynamicTypeSize.xmUsesExpandedTextLayout ? 2 : 1)
                     .minimumScaleFactor(dynamicTypeSize.xmUsesExpandedTextLayout ? 1 : 0.9)
@@ -1023,29 +1040,14 @@ private struct ReadingResumeBookCard: View {
 
                 HStack(spacing: layout.emptyTextSpacing) {
                     Text("去添加")
-                        .font(
-                            AppTypography.fixed(
-                                baseSize: layout.subtitleFontSize,
-                                relativeTo: .caption,
-                                weight: ReadingFeatureCardHeaderMetrics.subtitleFontWeight,
-                                design: .rounded,
-                                minimumPointSize: layout.subtitleFontSize
-                            )
-                        )
+                        .font(ReadingFeatureCardTypography.subtitle(baseSize: layout.subtitleFontSize))
                         .foregroundStyle(Color.textPrimary)
                         .lineLimit(1)
                         .minimumScaleFactor(dynamicTypeSize.xmUsesExpandedTextLayout ? 1 : 0.9)
 
                     Image(systemName: "chevron.right")
-                        .font(
-                            AppTypography.fixed(
-                                baseSize: layout.emptyActionIconSize,
-                                relativeTo: .caption,
-                                weight: .semibold,
-                                minimumPointSize: layout.emptyActionIconSize
-                            )
-                        )
-                        .foregroundStyle(Color.brand)
+                        .font(ReadingFeatureCardTypography.actionIcon(baseSize: layout.emptyActionIconSize))
+                        .foregroundStyle(ReadingDashboardAppearance.accent)
                         .accessibilityHidden(true)
                 }
                 .padding(.top, layout.emptyActionTopSpacing)
@@ -1088,15 +1090,7 @@ private struct ReadingResumeBookCard: View {
         ) -> some View {
         VStack(spacing: layout.headerSpacing) {
             Text(title)
-                .font(
-                    AppTypography.fixed(
-                        baseSize: layout.titleFontSize,
-                        relativeTo: .subheadline,
-                        weight: .semibold,
-                        design: .rounded,
-                        minimumPointSize: layout.titleFontSize
-                    )
-                )
+                .font(ReadingFeatureCardTypography.title(baseSize: layout.titleFontSize))
                 .foregroundStyle(Color.textPrimary)
                 .lineLimit(dynamicTypeSize.xmUsesExpandedTextLayout ? 2 : titleLineLimit)
                 .minimumScaleFactor(0.9)
@@ -1104,15 +1098,7 @@ private struct ReadingResumeBookCard: View {
                 .truncationMode(.tail)
 
             Text(subtitle)
-                .font(
-                    AppTypography.fixed(
-                        baseSize: layout.subtitleFontSize,
-                        relativeTo: .caption,
-                        weight: ReadingFeatureCardHeaderMetrics.subtitleFontWeight,
-                        design: .rounded,
-                        minimumPointSize: layout.subtitleFontSize
-                    )
-                )
+                .font(ReadingFeatureCardTypography.subtitle(baseSize: layout.subtitleFontSize))
                 .foregroundStyle(Color.textSecondary)
                 .lineLimit(dynamicTypeSize.xmUsesExpandedTextLayout ? 2 : 1)
                 .minimumScaleFactor(0.9)
@@ -1146,15 +1132,7 @@ struct ReadingRecentBooksCard: View {
         CardContainer(cornerRadius: CornerRadius.containerMedium, showsBorder: false) {
             VStack(alignment: .leading, spacing: ReadingRecentBooksCardLayout.contentSpacing) {
                 Text("最近在读")
-                    .font(
-                        AppTypography.fixed(
-                            baseSize: ReadingRecentBooksCardLayout.titleFontSize,
-                            relativeTo: .headline,
-                            weight: .semibold,
-                            design: .rounded,
-                            minimumPointSize: ReadingRecentBooksCardLayout.titleFontSize
-                        )
-                    )
+                    .font(ReadingRecentBooksTypography.cardTitle)
                     .foregroundStyle(Color.textPrimary)
 
                 switch presentation {
@@ -1211,7 +1189,7 @@ private struct ReadingRecentBookItemView: View {
                     ReadingRecentBooksCardLayout.coverWidth,
                     urlString: book.coverURL,
                     cornerRadius: CornerRadius.inlayHairline,
-                    border: .init(color: .surfaceBorderSubtle, width: CardStyle.borderWidth),
+                    border: .init(color: .surfaceBorderSubtle, width: StrokeWidth.hairline),
                     surfaceStyle: .spine
                 )
                 .overlay {
@@ -1220,7 +1198,7 @@ private struct ReadingRecentBookItemView: View {
                     }
                 }
                 .shadow(
-                    color: Color.bookCoverDropShadow.opacity(0.38),
+                    color: XMBookCoverAppearance.dropShadow.opacity(0.38),
                     radius: 1.4,
                     x: 0,
                     y: 0.9
@@ -1229,29 +1207,13 @@ private struct ReadingRecentBookItemView: View {
 
                 VStack(alignment: .leading, spacing: ReadingRecentBooksCardLayout.textGroupSpacing) {
                     Text(book.name)
-                        .font(
-                            AppTypography.fixed(
-                                baseSize: ReadingRecentBooksCardLayout.bookTitleFontSize,
-                                relativeTo: .footnote,
-                                weight: .medium,
-                                design: .rounded,
-                                minimumPointSize: ReadingRecentBooksCardLayout.bookTitleFontSize
-                            )
-                        )
+                        .font(ReadingRecentBooksTypography.bookTitle)
                         .foregroundStyle(Color.textPrimary)
                         .lineLimit(dynamicTypeSize.xmUsesExpandedTextLayout ? 2 : 1)
                         .minimumScaleFactor(0.92)
 
                     Text(ReadingDashboardFormatting.percentText(book.progressPercent))
-                        .font(
-                            AppTypography.fixed(
-                                baseSize: ReadingRecentBooksCardLayout.progressFontSize,
-                                relativeTo: .caption2,
-                                weight: ReadingDashboardTypography.subtitleWeight,
-                                design: .rounded,
-                                minimumPointSize: ReadingRecentBooksCardLayout.progressFontSize
-                            )
-                        )
+                        .font(ReadingRecentBooksTypography.progress)
                         .foregroundStyle(Color.textSecondary)
                         .lineLimit(1)
                         .minimumScaleFactor(0.92)
@@ -1278,7 +1240,7 @@ private enum ReadingYearSummaryCardLayout {
     static let slotsPerPage = gridColumnCount * gridRowCount
     static let geometryUpdateThreshold: CGFloat = 0.5
     static let minimumPagerDimension: CGFloat = 1
-    static let actionHitSize: CGFloat = Spacing.actionReserved
+    static let actionHitSize: CGFloat = InteractionMetrics.minimumTouchTarget
     static let actionVisualSize: CGFloat = Spacing.double
     static let pageIndicatorActiveWidth: CGFloat = Spacing.comfortable
     static let pageIndicatorMarkerSize: CGFloat = Spacing.half
@@ -1294,6 +1256,41 @@ private enum ReadingYearSummaryCardLayout {
     static let subtitleInlineSpacing: CGFloat = Spacing.compact
     static let placeholderNumberFontSize: CGFloat = 28
     static let placeholderNumberHorizontalInset: CGFloat = Spacing.cozy
+}
+
+/// ReadingYearSummaryTypography 收口年度目标卡标题、主值、状态与占位序号的固定排版。
+private enum ReadingYearSummaryTypography {
+    static let title = AppTypography.fixed(
+        baseSize: ReadingYearSummaryCardLayout.titleFontSize,
+        relativeTo: .subheadline,
+        weight: .semibold,
+        design: .rounded,
+        minimumPointSize: ReadingYearSummaryCardLayout.titleFontSize
+    )
+    static let count = AppTypography.brandDisplay(
+        size: ReadingYearSummaryCardLayout.countFontSize,
+        relativeTo: .title2
+    )
+    static let subtitle = AppTypography.fixed(
+        baseSize: ReadingYearSummaryCardLayout.subtitleFontSize,
+        relativeTo: .caption,
+        weight: ReadingDashboardTypography.subtitleWeight,
+        design: .rounded,
+        minimumPointSize: ReadingYearSummaryCardLayout.subtitleFontSize
+    )
+    static let subtitleNumber = AppTypography.brandDisplay(
+        size: ReadingYearSummaryCardLayout.subtitleNumberFontSize,
+        relativeTo: .body
+    )
+    static let actionIcon = AppTypography.fixed(
+        baseSize: ReadingYearSummaryCardLayout.subtitleFontSize,
+        relativeTo: .caption,
+        minimumPointSize: ReadingYearSummaryCardLayout.subtitleFontSize
+    )
+    static let placeholderNumber = AppTypography.brandDisplay(
+        size: ReadingYearSummaryCardLayout.placeholderNumberFontSize,
+        relativeTo: .title3
+    )
 }
 
 /// ReadingYearSummaryGoalSlot 统一年度目标卡中真实已读书与未完成占位槽位的渲染输入。
@@ -1513,13 +1510,7 @@ struct ReadingYearSummaryCard: View {
 
                 Button(action: onEditGoal) {
                     Image(systemName: "pencil.line")
-                        .font(
-                            AppTypography.fixed(
-                                baseSize: ReadingYearSummaryCardLayout.subtitleFontSize,
-                                relativeTo: .caption,
-                                minimumPointSize: ReadingYearSummaryCardLayout.subtitleFontSize
-                            )
-                        )
+                        .font(ReadingYearSummaryTypography.actionIcon)
                         .foregroundStyle(Color.textSecondary)
                         .frame(
                             width: ReadingYearSummaryCardLayout.actionVisualSize,
@@ -1556,22 +1547,14 @@ struct ReadingYearSummaryCard: View {
 
     private var yearTitleText: some View {
         Text("今年已读")
-            .font(
-                AppTypography.fixed(
-                    baseSize: ReadingYearSummaryCardLayout.titleFontSize,
-                    relativeTo: .subheadline,
-                    weight: .semibold,
-                    design: .rounded,
-                    minimumPointSize: ReadingYearSummaryCardLayout.titleFontSize
-                )
-            )
+            .font(ReadingYearSummaryTypography.title)
             .foregroundStyle(Color.textPrimary)
     }
 
     private var readCountText: some View {
         Text(summary.map { "\($0.readCount)" } ?? "—")
-            .font(AppTypography.brandDisplay(size: ReadingYearSummaryCardLayout.countFontSize, relativeTo: .title2))
-            .foregroundStyle(presentation.isPending ? Color.textSecondary : Color.brand)
+            .font(ReadingYearSummaryTypography.count)
+            .foregroundStyle(presentation.isPending ? Color.textSecondary : ReadingDashboardAppearance.accent)
             .minimumScaleFactor(0.72)
             .lineLimit(1)
             .brandVerticalTrim(
@@ -1582,15 +1565,7 @@ struct ReadingYearSummaryCard: View {
 
     private var bookCountUnitText: some View {
         Text("本")
-            .font(
-                AppTypography.fixed(
-                    baseSize: ReadingYearSummaryCardLayout.titleFontSize,
-                    relativeTo: .subheadline,
-                    weight: .semibold,
-                    design: .rounded,
-                    minimumPointSize: ReadingYearSummaryCardLayout.titleFontSize
-                )
-            )
+            .font(ReadingYearSummaryTypography.title)
             .foregroundStyle(Color.textPrimary)
     }
 
@@ -1598,37 +1573,18 @@ struct ReadingYearSummaryCard: View {
     private var statusContent: some View {
         if let summary, summary.isTargetAchieved || dynamicTypeSize.xmUsesExpandedTextLayout {
             Text(ReadingDashboardFormatting.yearSummarySubtitle(summary: summary))
-                .font(
-                    AppTypography.fixed(
-                        baseSize: ReadingYearSummaryCardLayout.subtitleFontSize,
-                        relativeTo: .caption,
-                        weight: ReadingDashboardTypography.subtitleWeight,
-                        design: .rounded,
-                        minimumPointSize: ReadingYearSummaryCardLayout.subtitleFontSize
-                    )
-                )
+                .font(ReadingYearSummaryTypography.subtitle)
                 .foregroundStyle(Color.textSecondary)
                 .lineLimit(dynamicTypeSize.xmUsesExpandedTextLayout ? nil : 1)
                 .fixedSize(horizontal: false, vertical: dynamicTypeSize.xmUsesExpandedTextLayout)
         } else if let summary {
             HStack(alignment: .firstTextBaseline, spacing: Spacing.none) {
                 Text("再读 ")
-                    .font(
-                        AppTypography.fixed(
-                            baseSize: ReadingYearSummaryCardLayout.subtitleFontSize,
-                            relativeTo: .caption,
-                            weight: ReadingDashboardTypography.subtitleWeight,
-                            design: .rounded,
-                            minimumPointSize: ReadingYearSummaryCardLayout.subtitleFontSize
-                        )
-                    )
+                    .font(ReadingYearSummaryTypography.subtitle)
                     .foregroundStyle(Color.textSecondary)
 
                 Text("\(summary.remainingCount)")
-                    .font(AppTypography.brandDisplay(
-                        size: ReadingYearSummaryCardLayout.subtitleNumberFontSize,
-                        relativeTo: .body
-                    ))
+                    .font(ReadingYearSummaryTypography.subtitleNumber)
                     .foregroundStyle(Color.textPrimary)
                     .lineLimit(1)
                     .minimumScaleFactor(0.88)
@@ -1638,30 +1594,14 @@ struct ReadingYearSummaryCard: View {
                     )
 
                 Text(" 本，即可完成今年目标")
-                    .font(
-                        AppTypography.fixed(
-                            baseSize: ReadingYearSummaryCardLayout.subtitleFontSize,
-                            relativeTo: .caption,
-                            weight: ReadingDashboardTypography.subtitleWeight,
-                            design: .rounded,
-                            minimumPointSize: ReadingYearSummaryCardLayout.subtitleFontSize
-                        )
-                    )
+                    .font(ReadingYearSummaryTypography.subtitle)
                     .foregroundStyle(Color.textSecondary)
             }
             .lineLimit(dynamicTypeSize.xmUsesExpandedTextLayout ? 2 : 1)
             .minimumScaleFactor(0.92)
         } else {
             Text("年度阅读目标")
-                .font(
-                    AppTypography.fixed(
-                        baseSize: ReadingYearSummaryCardLayout.subtitleFontSize,
-                        relativeTo: .caption,
-                        weight: ReadingDashboardTypography.subtitleWeight,
-                        design: .rounded,
-                        minimumPointSize: ReadingYearSummaryCardLayout.subtitleFontSize
-                    )
-                )
+                .font(ReadingYearSummaryTypography.subtitle)
                 .foregroundStyle(Color.textSecondary)
                 .lineLimit(1)
         }
@@ -1867,7 +1807,7 @@ private struct ReadingYearSummaryPageIndicator: View {
             markerSpacing: ReadingYearSummaryCardLayout.pageIndicatorMarkerSpacing,
             connectorMaxHalfHeight: ReadingYearSummaryCardLayout.pageIndicatorConnectorMaxHalfHeight
         )
-        let activeColor = Color.brand
+        let activeColor = ReadingDashboardAppearance.accent
         let inactiveColor = Color.controlFillSecondary
 
         return Canvas { [drawing, activeColor, inactiveColor] context, size in
@@ -2145,7 +2085,7 @@ private struct ReadingYearSummaryPendingCover: View {
         XMBookCover.responsive(
             urlString: "",
             cornerRadius: CornerRadius.inlayHairline,
-            border: .init(color: .surfaceBorderSubtle, width: CardStyle.borderWidth),
+            border: .init(color: .surfaceBorderSubtle, width: StrokeWidth.hairline),
             placeholderIconSize: .hidden,
             surfaceStyle: .spine
         )
@@ -2166,7 +2106,7 @@ private struct ReadingYearSummaryCompletedBookCover: View {
             XMBookCover.responsive(
                 urlString: book.coverURL,
                 cornerRadius: CornerRadius.inlayHairline,
-                border: .init(color: .surfaceBorderSubtle, width: CardStyle.borderWidth),
+                border: .init(color: .surfaceBorderSubtle, width: StrokeWidth.hairline),
                 surfaceStyle: .spine
             )
             .accessibilityHidden(true)
@@ -2184,13 +2124,13 @@ private struct ReadingYearSummaryPlaceholderCover: View {
         XMBookCover.responsive(
             urlString: "",
             cornerRadius: CornerRadius.inlayHairline,
-            border: .init(color: .surfaceBorderSubtle, width: CardStyle.borderWidth),
+            border: .init(color: .surfaceBorderSubtle, width: StrokeWidth.hairline),
             placeholderIconSize: .hidden,
             surfaceStyle: .spine
         )
         .overlay {
             Text("\(index)")
-                .font(AppTypography.brandDisplay(size: ReadingYearSummaryCardLayout.placeholderNumberFontSize, relativeTo: .title3))
+                .font(ReadingYearSummaryTypography.placeholderNumber)
                 .foregroundStyle(Color.textSecondary)
                 .lineLimit(1)
                 .minimumScaleFactor(0.42)

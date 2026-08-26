@@ -3,7 +3,7 @@
 
 SwiftUI 视图层，按功能模块分子目录组织页面壳层、页面私有子视图与业务 Sheet。ViewModel 统一迁移到 `xmnote/ViewModels`。
 
-页面、Sheet、列表背景和局部容器的通用空态、无搜索结果、失败态与 Inline Banner 统一复用 `xmnote/UIComponents/Foundation/StatePresentation/`；页面私有 StateHost 只负责业务阶段映射和容器布局。
+页面、Sheet、列表背景和局部容器的通用空态、无搜索结果、失败态与 Inline Banner 统一复用 `xmnote/UIComponents/Feedback/StatePresentation/`；页面私有 StateHost 只负责业务阶段映射和容器布局。
 
 ## 顶层成员
 

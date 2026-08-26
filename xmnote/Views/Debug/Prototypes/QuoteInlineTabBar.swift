@@ -41,8 +41,8 @@ struct QuoteInlineTabBar<Tab: Hashable & CaseIterable>: View where Tab.AllCases:
                     Text(quote)
                         .font(.system(size: quoteFontSize, weight: .bold))
                         .foregroundStyle(colorScheme == .dark
-                            ? Color.brand.opacity(0.28)
-                            : Color.brand.opacity(0.22))
+                            ? Color.appTint.opacity(0.28)
+                            : Color.appTint.opacity(0.22))
                         .offset(x: rect.minX + quoteOffsetX, y: rect.minY + quoteOffsetY)
                         .allowsHitTesting(false)
                         .accessibilityHidden(true)
@@ -90,7 +90,7 @@ struct QuoteInlineTabBar<Tab: Hashable & CaseIterable>: View where Tab.AllCases:
     .padding(.top, 20)
     .background(
         LinearGradient(
-            colors: [Color.brand.opacity(0.12), Color.surfacePage],
+            colors: [Color.appTint.opacity(0.12), Color.surfacePage],
             startPoint: .top,
             endPoint: .bottom
         )

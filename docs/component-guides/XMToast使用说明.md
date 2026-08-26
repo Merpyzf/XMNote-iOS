@@ -1,7 +1,7 @@
 # XMToast 使用说明
 
 ## 组件定位
-- 源码路径：`xmnote/UIComponents/Foundation/XMToast.swift`
+- 源码路径：`xmnote/UIComponents/Feedback/Toast/XMToast.swift`
 - 角色：统一承接全局轻量消息提示的语义角色、展示时长、位置、动效、布局和交互策略。
 - 边界：业务代码只调用 `XMToastCenter`；禁止在业务页面直接 `import PopupView` 或直接写 `.popup(...)`。
 - 使用边界：是否需要展示消息，先遵循 `docs/architecture/消息提示设计规范.md`；本文件只说明组件接入方式。

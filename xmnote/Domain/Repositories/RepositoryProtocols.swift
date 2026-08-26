@@ -463,7 +463,7 @@ protocol ExternalAppIntegrationRepositoryProtocol {
     func send(noteID: Int64, to destination: ExternalAppDestination) async throws -> ExternalAppIntegrationSendResult
 }
 
-/// AI 仓储契约，统一封装非敏感配置、Keychain 凭据、OpenAI-compatible 请求与自动标签写回。
+/// AI 仓储契约，统一封装完整本机配置快照、OpenAI-compatible 请求与自动标签写回。
 nonisolated protocol AIRepositoryProtocol: Sendable {
     /// 读取配置与各供应商密钥存在状态；明文密钥不会离开 Repository/Service 边界。
     func fetchConfiguration() async throws -> AIConfigurationSnapshot
@@ -523,7 +523,7 @@ protocol BackupRepositoryProtocol {
     func restoreLocalBackup(
         using ticket: LocalBackupImportTicket,
         progress: (@Sendable (RestoreProgress) -> Void)?
-    ) async throws
+    ) async throws -> BackupRestoreResult
     /// 放弃本地导入票据时清理复制到沙盒的临时文件。
     func discardLocalImport(_ ticket: LocalBackupImportTicket) async
     /// 执行一次完整备份流程，并通过回调上报阶段进度。
@@ -531,7 +531,10 @@ protocol BackupRepositoryProtocol {
     /// 获取远端备份历史列表，供恢复入口展示可选备份。
     func fetchBackupHistory() async throws -> [BackupFileInfo]
     /// 使用指定备份执行恢复流程，并通过回调上报阶段进度。
-    func restore(_ backup: BackupFileInfo, progress: (@Sendable (RestoreProgress) -> Void)?) async throws
+    func restore(
+        _ backup: BackupFileInfo,
+        progress: (@Sendable (RestoreProgress) -> Void)?
+    ) async throws -> BackupRestoreResult
 }
 
 /// S3 配置契约，覆盖默认配置映射、自定义配置 CRUD、启用切换与联通性校验。

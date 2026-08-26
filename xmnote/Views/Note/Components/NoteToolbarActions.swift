@@ -1,5 +1,5 @@
 /**
- * [INPUT]: 依赖 RichTextFormat、DesignTokens 与 SwiftUI 基础组件，承接书摘编辑工具栏的动作定义与渲染约束
+ * [INPUT]: 依赖 RichTextFormat、DesignTokens、xmMinimumHitTarget 与 SwiftUI 基础组件，承接书摘编辑工具栏的动作定义与渲染约束
  * [OUTPUT]: 对外提供 NoteToolbarActionID、NoteToolbarIconAction、NoteToolbarIconStrip，统一主编辑页与全屏编辑页工具栏动作顺序和显隐动画
  * [POS]: Views/Note/Components 页面私有工具栏构件，确保 Android → iOS 工具栏优先级顺序与动画反馈一致
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -118,8 +118,14 @@ struct NoteToolbarIconAction: Identifiable {
 }
 
 struct NoteToolbarIconStrip: View {
+    private enum Motion {
+        static let actionSetChange = Animation.snappy(duration: 0.24, extraBounce: 0)
+    }
+
     let actions: [NoteToolbarIconAction]
     var dividerOpacity: Double = 0.16
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         HStack(spacing: Spacing.tight) {
@@ -133,7 +139,7 @@ struct NoteToolbarIconStrip: View {
                     .transition(.opacity.combined(with: .scale(scale: 0.86)))
             }
         }
-        .animation(.snappy(duration: 0.24, extraBounce: 0), value: actions.map(\.identity))
+        .animation(reduceMotion ? nil : Motion.actionSetChange, value: actions.map(\.identity))
     }
 
     private func shouldInsertDivider(before index: Int) -> Bool {
@@ -154,9 +160,10 @@ struct NoteToolbarIconStrip: View {
                 .foregroundStyle(action.isEnabled ? Color.textPrimary : Color.textHint)
                 .frame(width: 34, height: 34)
                 .background(
-                    action.isActive ? Color.brand.opacity(0.16) : Color.clear,
+                    action.isActive ? Color.selectionAccent.opacity(0.16) : Color.clear,
                     in: RoundedRectangle(cornerRadius: CornerRadius.inlayMedium, style: .continuous)
                 )
+                .xmMinimumHitTarget()
         }
         .buttonStyle(.plain)
         .disabled(!action.isEnabled)

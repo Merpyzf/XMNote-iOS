@@ -33,11 +33,14 @@ struct HeatmapColorPalette {
     }
 
     static let appDefault = HeatmapColorPalette(
-        none: .heatmapNone,
-        veryLess: .brandLight,
-        less: .brand,
-        more: .brandDeep,
-        veryMore: .brandDarkest
+        none: Color.xmAdaptive(
+            light: Color.xmHex(0xEFF0F4),
+            dark: Color.xmHex(0x2A2A2C)
+        ),
+        veryLess: BaseColorPalette.brand200,
+        less: BaseColorPalette.brand500,
+        more: BaseColorPalette.brand700,
+        veryMore: BaseColorPalette.brand900
     )
 
     /// 返回指定强度对应的颜色，供方格和图例共享同一映射。
@@ -178,7 +181,7 @@ private extension HeatmapLegend {
                 .frame(width: style.squareSize, height: style.squareSize)
                 .clipShape(
                     RoundedRectangle(
-                        cornerRadius: style.arrangement == .separated ? style.cornerRadius : 0,
+                        cornerRadius: style.arrangement == .separated ? style.cornerRadius : CornerRadius.none,
                         style: .continuous
                     )
                 )

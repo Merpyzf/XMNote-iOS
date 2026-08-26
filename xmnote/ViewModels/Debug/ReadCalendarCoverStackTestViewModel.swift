@@ -281,7 +281,7 @@ private extension ReadCalendarCoverStackTestViewModel {
             bookSourceTotalCount = books.count
             validBookCoverCount = deduplicated.count
             if deduplicated.isEmpty {
-                bookCoverLoadError = "Book 表暂无有效封面，已回退到示例封面。"
+                bookCoverLoadError = "Book 表暂无有效封面，已回退到示例封面"
             }
             bookCoverURLs = deduplicated
             hasLoadedBookCovers = true

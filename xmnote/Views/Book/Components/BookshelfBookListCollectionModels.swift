@@ -201,11 +201,7 @@ enum BookshelfBookListGridMetrics {
         let coverHeight = XMBookCover.height(forWidth: contentWidth)
         let titleLineCount: CGFloat = titleDisplayMode == .full ? 2 : 1
         let titleHeight = BookshelfTitleTextStyle.captionMedium.lineHeight * titleLineCount
-        let authorFont = AppTypography.uiFixed(
-            baseSize: 11,
-            textStyle: .caption2,
-            minimumPointSize: 11
-        )
+        let authorFont = BookshelfTypography.uiGridSubtitle
         let authorHeight = ceil(authorFont.lineHeight + 1)
         return ceil(coverHeight + Spacing.half + titleHeight + Spacing.tiny + authorHeight)
     }

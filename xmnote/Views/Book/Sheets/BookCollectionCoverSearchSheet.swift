@@ -20,7 +20,7 @@ struct BookCollectionCoverSearchSheet: View {
     @State private var loadingGate = LoadingGate()
 
     var body: some View {
-        BookshelfDisplaySettingPageScaffold(
+        XMSheetScaffold(
             title: "在线匹配封面",
             subtitle: normalizedInitialTitle,
             onClose: { dismiss() }
@@ -99,7 +99,7 @@ struct BookCollectionCoverSearchSheet: View {
                 .background(Color.surfaceCard, in: RoundedRectangle(cornerRadius: CornerRadius.blockMedium, style: .continuous))
                 .overlay {
                     RoundedRectangle(cornerRadius: CornerRadius.blockMedium, style: .continuous)
-                        .stroke(Color.surfaceBorderSubtle, lineWidth: CardStyle.borderWidth)
+                        .stroke(Color.surfaceBorderSubtle, lineWidth: StrokeWidth.hairline)
                 }
 
                 Button {
@@ -166,7 +166,7 @@ struct BookCollectionCoverSearchSheet: View {
             XMCompactStateView(
                 role: .instruction,
                 title: "输入书名开始匹配",
-                message: "会从当前在线来源查找有封面的候选结果。",
+                message: "会从当前在线来源查找有封面的候选结果",
                 systemImage: "photo.on.rectangle",
                 style: .card
             )
@@ -191,7 +191,7 @@ struct BookCollectionCoverSearchSheet: View {
             XMCompactStateView(
                 role: .noResults,
                 title: "没有匹配到封面",
-                message: "可以换一个来源，或回到编辑页手动粘贴封面链接。",
+                message: "可以换一个来源，或回到编辑页手动粘贴封面链接",
                 systemImage: "photo.badge.exclamationmark",
                 style: .card
             )
@@ -247,7 +247,7 @@ private struct BookCollectionCoverSearchResultRow: View {
                 52,
                 urlString: result.coverURL,
                 cornerRadius: CornerRadius.inlaySmall,
-                border: .init(color: .surfaceBorderSubtle, width: CardStyle.borderWidth),
+                border: .init(color: .surfaceBorderSubtle, width: StrokeWidth.hairline),
                 placeholderIconSize: .small,
                 surfaceStyle: .spine
             )
@@ -262,10 +262,10 @@ private struct BookCollectionCoverSearchResultRow: View {
                     if isCurrent {
                         Text("当前")
                             .font(AppTypography.captionMedium)
-                            .foregroundStyle(Color.brand.opacity(0.9))
+                            .foregroundStyle(Color.selectionAccent.opacity(0.9))
                             .padding(.horizontal, Spacing.half)
                             .frame(minHeight: 22)
-                            .background(Color.brand.opacity(0.12), in: Capsule())
+                            .background(Color.selectionAccent.opacity(0.12), in: Capsule())
                     }
                 }
 
@@ -284,13 +284,13 @@ private struct BookCollectionCoverSearchResultRow: View {
 
             Image(systemName: "checkmark.circle")
                 .font(AppTypography.title3)
-                .foregroundStyle(Color.brand.opacity(0.76))
+                .foregroundStyle(Color.selectionAccent.opacity(0.76))
         }
         .padding(Spacing.base)
         .background(Color.surfaceCard, in: RoundedRectangle(cornerRadius: CornerRadius.blockLarge, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: CornerRadius.blockLarge, style: .continuous)
-                .stroke(isCurrent ? Color.brand.opacity(0.42) : Color.surfaceBorderSubtle, lineWidth: CardStyle.borderWidth)
+                .stroke(isCurrent ? Color.selectionAccent.opacity(0.42) : Color.surfaceBorderSubtle, lineWidth: StrokeWidth.hairline)
         }
         .accessibilityElement(children: .combine)
         .accessibilityLabel("\(result.title)，\(detailText)，来自\(result.source.title)")

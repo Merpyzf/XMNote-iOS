@@ -1,5 +1,5 @@
 /**
- * [INPUT]: 依赖 BookshelfLayoutMode、XMBookCover 宽高比、DesignTokens 颜色/间距/圆角令牌与系统 Reduce Motion 设置
+ * [INPUT]: 依赖 BookshelfLayoutMode、XMBookCover 宽高比、XMBookCoverAppearance、DesignTokens 间距/圆角令牌与系统 Reduce Motion 设置
  * [OUTPUT]: 对外提供 BookshelfLoadingSkeletonView，渲染书籍主列表与二级列表首次读取阶段的稳定书架骨架
  * [POS]: Book 模块页面私有加载占位组件，被 BookGridView 与 BookshelfBookListView 的首次读取态消费
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -172,12 +172,14 @@ private struct BookshelfSkeletonLine: View {
 }
 
 private struct BookshelfSkeletonBlock: View {
+    private static let shimmerMinimumWidth: CGFloat = 44
+
     let cornerRadius: CGFloat
     let shimmerPhase: Bool
 
     var body: some View {
         RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-            .fill(Color.bookCoverPlaceholderBackground.opacity(0.92))
+            .fill(XMBookCoverAppearance.placeholderBackground.opacity(0.92))
             .overlay {
                 GeometryReader { proxy in
                     LinearGradient(
@@ -189,7 +191,7 @@ private struct BookshelfSkeletonBlock: View {
                         startPoint: .leading,
                         endPoint: .trailing
                     )
-                    .frame(width: max(44, proxy.size.width * 0.58))
+                    .frame(width: max(Self.shimmerMinimumWidth, proxy.size.width * 0.58))
                     .offset(x: shimmerPhase ? proxy.size.width * 1.18 : -proxy.size.width * 0.76)
                 }
                 .allowsHitTesting(false)

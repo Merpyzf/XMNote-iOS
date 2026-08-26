@@ -8,9 +8,14 @@
 
 ### 通用状态展示兼容入口
 - 设计规范：`docs/architecture/通用状态展示设计规范.md`；组件接入：`docs/component-guides/XMStatePresentation使用说明.md`。
-- 生产组件：`xmnote/UIComponents/Foundation/StatePresentation/`；静态闸门：`scripts/verify_state_presentations.sh`。
+- 生产组件：`xmnote/UIComponents/Feedback/StatePresentation/`；静态闸门：`scripts/verify_state_presentations.sh`。
 - 页面、Sheet 与列表背景使用 `XMContentStateView`，卡片/局部容器使用 `XMCompactStateView`，保留内容时的失败提示使用 `XMInlineStatusBanner`。
 - 现有组件不能满足新 UI 时，优先配置参数或扩展既有 `Style`；只有两个独立生产场景证明相同语义与结构后，才允许新增公共状态组件，并同步测试目录与治理登记。
+
+### iOS 设计系统兼容入口
+- 唯一执行规范：`AGENTS.md` 的“设计系统工程入口”；架构说明：`docs/architecture/iOS设计系统工程规范.md`。
+- 令牌真相源：`xmnote/Utilities/DesignSystem/`；公共组件真相源：`xmnote/UIComponents/`；机器目录：`scripts/design-system/component-catalog.json`。
+- AI 上下文、组件查询与规则检查统一通过 `python3 scripts/design-system/ds.py context|catalog|lint|audit|explain`，禁止新增旁路脚本或扩大 baseline 掩盖违规。
 
 ### 自动同步模块清单（脚本生成）
 <!-- AUTO_SYNC_MODULES_START -->

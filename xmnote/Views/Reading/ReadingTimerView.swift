@@ -1,7 +1,7 @@
 import SwiftUI
 
 /**
- * [INPUT]: 依赖环境注入的 ReadingTimerCoordinator 投影应用级计时状态，依赖 ReadingTimerFinishSheet 收集结束确认字段，依赖外层 onRequestDismiss 统一处理收起与后续导航，并依赖 XMBookCover/XMSystemAlert 复用系统级组件
+ * [INPUT]: 依赖环境注入的 ReadingTimerCoordinator 投影应用级计时状态，依赖 ReadingTimerFinishSheet 收集结束确认字段，依赖外层 onRequestDismiss 统一处理收起与后续导航，并依赖 XMBookCover/XMBookCoverAppearance/XMSystemAlert 与页面私有计时排版复用系统级能力
  * [OUTPUT]: 对外提供 ReadingTimerView 与 ReadingTimerDismissReason（全局阅读计时完整控制页及类型化关闭结果）
  * [POS]: Reading 模块阅读计时模态控制页，只编排计时交互并将关闭原因交还呈现宿主，不拥有全局呈现生命周期
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -527,11 +527,11 @@ private struct ReadingTimerMinimalStage: View {
             height: coverSize.height,
             urlString: book?.coverURL ?? "",
             cornerRadii: ReadingTimerLayout.coverCornerRadii,
-            border: .init(color: .surfaceBorderSubtle, width: CardStyle.borderWidth),
+            border: .init(color: .surfaceBorderSubtle, width: StrokeWidth.hairline),
             surfaceStyle: .spine
         )
         .shadow(
-            color: Color.bookCoverDropShadow.opacity(reduceMotion ? 0.18 : 0.24),
+            color: XMBookCoverAppearance.dropShadow.opacity(reduceMotion ? 0.18 : 0.24),
             radius: reduceMotion ? 8 : 14,
             x: 0,
             y: reduceMotion ? 3 : 8
@@ -604,6 +604,11 @@ private struct ReadingTimerMinimalStage: View {
     }
 }
 
+/// ReadingTimerTypography 收口计时页核心时长的品牌数字排版，避免页面主体直接构造固定字号。
+private enum ReadingTimerTypography {
+    static let elapsedTime = AppTypography.brandDisplay(size: 56, relativeTo: .largeTitle)
+}
+
 /// 独立展示当前阅读时长，让主数据脱离封面并成为页面第一阅读层级。
 private struct ReadingTimerElapsedBlock: View {
     let title: String
@@ -618,7 +623,7 @@ private struct ReadingTimerElapsedBlock: View {
                 .foregroundStyle(Color.textSecondary)
 
             Text(ReadingTimerDisplayFormatter.digital(seconds: seconds))
-                .font(AppTypography.brandDisplay(size: 56, relativeTo: .largeTitle))
+                .font(ReadingTimerTypography.elapsedTime)
                 .monospacedDigit()
                 .foregroundStyle(Color.textPrimary)
                 .lineLimit(1)
@@ -769,7 +774,7 @@ private extension View {
                     shape
                         .stroke(
                             tint.opacity(isEnabled ? 0.26 : 0.12),
-                            lineWidth: CardStyle.borderWidth
+                            lineWidth: StrokeWidth.hairline
                         )
                 }
         }

@@ -74,11 +74,11 @@ private extension ReadingStatusTimelineTestView {
 
                 Toggle("显示顶部“修改状态”", isOn: $showsTopAction)
                     .font(AppTypography.body)
-                    .tint(Color.brand)
+                    .tint(Color.appTint)
 
                 Toggle("允许编辑真实历史状态", isOn: $allowsHistoryEditing)
                     .font(AppTypography.body)
-                    .tint(Color.brand)
+                    .tint(Color.appTint)
 
                 Text(selectedScenario.detail)
                     .font(AppTypography.caption)
@@ -138,7 +138,7 @@ private extension ReadingStatusTimelineTestView {
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .fixedSize(horizontal: false, vertical: true)
 
-                Text("提示：即使测试数据声明可编辑，“加入书架”和“未知状态”也不应触发回调。")
+                Text("提示：即使测试数据声明可编辑，“加入书架”和“未知状态”也不应触发回调")
                     .font(AppTypography.caption)
                     .foregroundStyle(Color.textHint)
                     .fixedSize(horizontal: false, vertical: true)
@@ -202,15 +202,15 @@ private enum ReadingTimelineDemoScenario: String, CaseIterable, Identifiable {
     var detail: String {
         switch self {
         case .androidReference:
-            "Android 三节点同款，用于验收“13天后”“同时”和不可编辑起点。"
+            "Android 三节点同款，用于验收“13天后”“同时”和不可编辑起点"
         case .fullHistory:
-            "覆盖五种真实状态、同日不同时间、零点时间与跨自然日间隔。"
+            "覆盖五种真实状态、同日不同时间、零点时间与跨自然日间隔"
         case .singleItem:
-            "只有一个零点状态，用于验收无连接线和仅显示日期。"
+            "只有一个零点状态，用于验收无连接线和仅显示日期"
         case .empty:
-            "没有任何事件，用于验收紧凑空态。"
+            "没有任何事件，用于验收紧凑空态"
         case .unknown:
-            "未知状态显式降级为中性色，并始终拒绝编辑。"
+            "未知状态显式降级为中性色，并始终拒绝编辑"
         }
     }
 

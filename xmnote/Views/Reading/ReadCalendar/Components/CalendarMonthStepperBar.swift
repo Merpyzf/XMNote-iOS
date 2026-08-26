@@ -1,5 +1,5 @@
 /**
- * [INPUT]: 依赖 xmnote/Utilities/DesignTokens.swift 的颜色、圆角、边框与间距令牌
+ * [INPUT]: 依赖 ReadCalendarTheme 次级文字色、ReadCalendarTextStyle 顶部标题与 DesignSystem 圆角、边框、间距令牌
  * [OUTPUT]: 对外提供 CalendarMonthStepperBar（月视图顶部年月选择 Sheet 触发器）
  * [POS]: ReadCalendar 页面私有子视图，服务阅读日历顶部月份切换交互
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -10,8 +10,12 @@ import SwiftUI
 /// 阅读日历顶部月份切换条，只负责打开统一年月选择 Sheet。
 struct CalendarMonthStepperBar: View {
     private enum Layout {
-        static let barMinHeight: CGFloat = Spacing.actionReserved
+        static let barMinHeight: CGFloat = InteractionMetrics.minimumTouchTarget
         static let expandedBarMinHeight: CGFloat = 48
+    }
+
+    private enum Motion {
+        static let monthValue = Animation.snappy(duration: 0.24)
     }
 
     let title: String
@@ -19,6 +23,7 @@ struct CalendarMonthStepperBar: View {
     let onRequestPicker: () -> Void
 
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @ScaledMetric(relativeTo: .caption2) private var chevronSymbolSize = 10
 
     var body: some View {
@@ -36,18 +41,18 @@ struct CalendarMonthStepperBar: View {
         } label: {
             HStack(spacing: Spacing.compact) {
                 Text(title)
-                    .font(ReadCalendarTypography.topControlTitleFont)
+                    .font(ReadCalendarTextStyle.topControlTitleFont)
                     .foregroundStyle(Color.textPrimary)
                     .monospacedDigit()
                     .contentTransition(.numericText())
-                    .animation(.snappy(duration: 0.24), value: selectedMonth)
+                    .animation(reduceMotion ? nil : Motion.monthValue, value: selectedMonth)
                     .lineLimit(usesExpandedTextLayout ? 2 : 1)
                     .minimumScaleFactor(usesExpandedTextLayout ? 1 : 0.9)
                     .multilineTextAlignment(.leading)
     
                 Image(systemName: "chevron.down")
                     .font(.system(size: chevronSymbolSize, weight: .semibold))
-                    .foregroundStyle(Color.readCalendarSubtleText)
+                    .foregroundStyle(ReadCalendarTheme.subtleText)
                     .offset(y: 0.5)
             }
             .padding(.horizontal, Spacing.half)

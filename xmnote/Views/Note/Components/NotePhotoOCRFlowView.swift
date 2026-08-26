@@ -1,5 +1,5 @@
 /**
- * [INPUT]: 依赖 OCRRepositoryProtocol 与 NotePhotoOCRFlowViewModel 驱动正式书摘 OCR 状态，依赖 AVFoundation/PhotosUI 提供拍照与选图能力
+ * [INPUT]: 依赖 OCRRepositoryProtocol 与 NotePhotoOCRFlowViewModel 驱动正式书摘 OCR 状态，依赖 AppTypography、AVFoundation/PhotosUI 提供排版、拍照与选图能力
  * [OUTPUT]: 对外提供 NotePhotoOCRFlowView，承载书摘编辑页的拍照、单框裁切与识别回填流程
  * [POS]: Views/Note/Components 的页面私有子视图，负责对齐 Android 的正式拍照 OCR 主流程
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -74,8 +74,18 @@ private struct OCRCameraScreen: View {
         let highlightOpacity: Double
     }
 
+    private enum Motion {
+        static let guide = Animation.smooth
+        static let focusAppear = Animation.spring(response: 0.24, dampingFraction: 0.82)
+        static let focusSettle = Animation.smooth(duration: 0.18)
+        static let focusDisappear = Animation.smooth(duration: 0.2)
+        static let reducedFocusFade = Animation.smooth(duration: 0.12)
+    }
+
     private static let darkForegroundPrimary = Color.white.opacity(0.96)
     private static let darkForegroundSecondary = Color.white.opacity(0.72)
+    private static let focusOuterCornerRadius: CGFloat = 14
+    private static let focusInnerCornerRadius: CGFloat = 9
 
     @Bindable var viewModel: NotePhotoOCRFlowViewModel
     @ObservedObject var cameraController: OCRCameraSessionController
@@ -83,6 +93,7 @@ private struct OCRCameraScreen: View {
     let onSelectedImage: (UIImage, String) -> Void
 
     @AppStorage("note.photo_ocr.camera_tip_count") private var cameraTipDisplayCount = 0
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var selectedPhotoItem: PhotosPickerItem?
     @State private var isLoadingPhotoItem = false
     @State private var photoLoadingErrorMessage: String?
@@ -134,7 +145,7 @@ private extension OCRCameraScreen {
         ZStack {
             cameraPreviewLayer
 
-            VStack(spacing: 0) {
+            VStack(spacing: Spacing.none) {
                 topEdgeScrim
                 Spacer(minLength: 0)
                 bottomEdgeScrim
@@ -181,7 +192,7 @@ private extension OCRCameraScreen {
                 LinearGradient(
                     colors: [
                         Color.black,
-                        Color.brand.opacity(0.12),
+                        Color.appTint.opacity(0.12),
                         Color.black
                     ],
                     startPoint: .topLeading,
@@ -199,7 +210,7 @@ private extension OCRCameraScreen {
                         .foregroundStyle(Color.white.opacity(0.92))
                         .multilineTextAlignment(.center)
 
-                    Text("即使当前设备无法打开相机，你仍可通过底部“相册”按钮进入裁切识别页。")
+                    Text("即使当前设备无法打开相机，你仍可通过底部“相册”按钮进入裁切识别页")
                         .font(.caption)
                         .foregroundStyle(Color.white.opacity(0.68))
                         .multilineTextAlignment(.center)
@@ -238,7 +249,13 @@ private extension OCRCameraScreen {
             }
 
             if let bannerText = cameraBannerText {
-                banner(text: bannerText, tint: cameraController.isReady ? Color.brand : Color.feedbackWarning)
+                banner(
+                    text: bannerText,
+                    tint: cameraController.isReady ? Color.feedbackSuccess : Color.feedbackWarning,
+                    systemName: cameraController.isReady
+                        ? "checkmark.circle.fill"
+                        : "exclamationmark.triangle.fill"
+                )
             }
         }
         .padding(.horizontal, Spacing.screenEdge)
@@ -250,7 +267,11 @@ private extension OCRCameraScreen {
         VStack(alignment: .leading, spacing: Spacing.base) {
             if showsGuideTip {
                 tipCard
-                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                    .transition(
+                        reduceMotion
+                            ? .opacity
+                            : .move(edge: .bottom).combined(with: .opacity)
+                    )
             }
 
             GlassEffectContainer(spacing: Spacing.double) {
@@ -302,14 +323,14 @@ private extension OCRCameraScreen {
         HStack(alignment: .top, spacing: Spacing.half) {
             Image(systemName: "sparkles")
                 .font(.caption.weight(.semibold))
-                .foregroundStyle(Color.brand)
-                .padding(.top, 2)
+                .foregroundStyle(Color.appTint)
+                .padding(.top, Spacing.tiny)
 
-            VStack(alignment: .leading, spacing: 3) {
+            VStack(alignment: .leading, spacing: Spacing.micro) {
                 Text("拍摄建议")
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(Self.darkForegroundPrimary)
-                Text("横向拍摄识别效果更好，文字边缘尽量完整并避免强反光。")
+                Text("横向拍摄识别效果更好，文字边缘尽量完整并避免强反光")
                     .font(.caption)
                     .foregroundStyle(Self.darkForegroundSecondary)
             }
@@ -317,9 +338,7 @@ private extension OCRCameraScreen {
             Spacer(minLength: 0)
 
             Button {
-                withAnimation(.snappy) {
-                    showsGuideTip = false
-                }
+                updateGuideTipVisibility(false)
             } label: {
                 Image(systemName: "xmark")
                     .font(.caption.weight(.bold))
@@ -329,8 +348,8 @@ private extension OCRCameraScreen {
             .buttonStyle(.plain)
             .accessibilityLabel("关闭拍摄建议")
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 12)
+        .padding(.horizontal, Spacing.comfortable)
+        .padding(.vertical, Spacing.base)
         .glassEffect(.regular, in: .rect(cornerRadius: CornerRadius.blockLarge))
     }
 
@@ -374,35 +393,35 @@ private extension OCRCameraScreen {
         }
     }
 
-    func banner(text: String, tint: Color) -> some View {
+    func banner(text: String, tint: Color, systemName: String) -> some View {
         HStack(alignment: .top, spacing: Spacing.half) {
-            Image(systemName: tint == Color.brand ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
+            Image(systemName: systemName)
                 .font(.caption)
                 .foregroundStyle(tint)
-                .padding(.top, 2)
+                .padding(.top, Spacing.tiny)
             Text(text)
                 .font(.caption)
                 .foregroundStyle(Self.darkForegroundPrimary)
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 10)
+        .padding(.horizontal, Spacing.base)
+        .padding(.vertical, Spacing.tight)
         .frame(maxWidth: .infinity, alignment: .leading)
         .glassEffect(.regular, in: .rect(cornerRadius: CornerRadius.blockLarge))
     }
 
     private func focusIndicator(state: FocusIndicatorState) -> some View {
         ZStack {
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
+            RoundedRectangle(cornerRadius: Self.focusOuterCornerRadius, style: .continuous)
                 .stroke(Color.white.opacity(0.96), lineWidth: 2.2)
 
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
+            RoundedRectangle(cornerRadius: Self.focusOuterCornerRadius, style: .continuous)
                 .stroke(Color.white.opacity(0.28), lineWidth: 5.6)
                 .blur(radius: 1.4)
                 .opacity(state.highlightOpacity)
 
-            RoundedRectangle(cornerRadius: 9, style: .continuous)
+            RoundedRectangle(cornerRadius: Self.focusInnerCornerRadius, style: .continuous)
                 .stroke(Color.white.opacity(0.22 * state.highlightOpacity), lineWidth: 1)
-                .padding(10)
+                .padding(Spacing.tight)
         }
         .frame(width: 80, height: 80)
         .scaleEffect(state.scale)
@@ -423,18 +442,24 @@ private extension OCRCameraScreen {
     func showGuideTipIfNeeded() {
         guard cameraController.isReady, cameraTipDisplayCount < 3 else { return }
         cameraTipDisplayCount += 1
-        withAnimation(.smooth) {
-            showsGuideTip = true
-        }
+        updateGuideTipVisibility(true)
         let currentToken = UUID()
         guideTipToken = currentToken
         Task {
             try? await Task.sleep(for: .seconds(4))
             guard guideTipToken == currentToken else { return }
             await MainActor.run {
-                withAnimation(.smooth) {
-                    showsGuideTip = false
-                }
+                updateGuideTipVisibility(false)
+            }
+        }
+    }
+
+    func updateGuideTipVisibility(_ isVisible: Bool) {
+        if reduceMotion {
+            showsGuideTip = isVisible
+        } else {
+            withAnimation(Motion.guide) {
+                showsGuideTip = isVisible
             }
         }
     }
@@ -445,12 +470,12 @@ private extension OCRCameraScreen {
 
         focusIndicatorState = FocusIndicatorState(
             point: point,
-            scale: 1.16,
+            scale: reduceMotion ? 1 : 1.16,
             opacity: 0,
             highlightOpacity: 0.2
         )
 
-        withAnimation(.spring(response: 0.24, dampingFraction: 0.82)) {
+        withAnimation(reduceMotion ? Motion.reducedFocusFade : Motion.focusAppear) {
             focusIndicatorState = FocusIndicatorState(
                 point: point,
                 scale: 1,
@@ -463,7 +488,7 @@ private extension OCRCameraScreen {
             try? await Task.sleep(for: .milliseconds(180))
             guard focusIndicatorToken == currentToken else { return }
             await MainActor.run {
-                withAnimation(.smooth(duration: 0.18)) {
+                withAnimation(reduceMotion ? nil : Motion.focusSettle) {
                     focusIndicatorState = FocusIndicatorState(
                         point: point,
                         scale: 1,
@@ -476,10 +501,10 @@ private extension OCRCameraScreen {
             try? await Task.sleep(for: .milliseconds(520))
             guard focusIndicatorToken == currentToken else { return }
             await MainActor.run {
-                withAnimation(.smooth(duration: 0.2)) {
+                withAnimation(reduceMotion ? Motion.reducedFocusFade : Motion.focusDisappear) {
                     focusIndicatorState = FocusIndicatorState(
                         point: point,
-                        scale: 0.96,
+                        scale: reduceMotion ? 1 : 0.96,
                         opacity: 0,
                         highlightOpacity: 0.12
                     )
@@ -540,6 +565,8 @@ private struct OCRCropRecognitionScreen: View {
     let onBack: () -> Void
     let onRecognized: (NotePhotoOCRCompletionPayload) -> Void
 
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     @State private var isSelectionInteractionActive = false
     @State private var instructionPresentationID = UUID()
     @State private var instructionPresentationStyle: InstructionPresentationStyle = .automatic
@@ -568,9 +595,7 @@ private struct OCRCropRecognitionScreen: View {
             onRegionSelected: { viewModel.selectFreeformRegion(id: $0) },
             onRegionDeleted: viewModel.deleteFreeformRegion(id:),
             onClearErrorMessage: {
-                withAnimation(.smooth) {
-                    viewModel.errorMessage = nil
-                }
+                clearErrorMessage()
             },
             onRetake: handleRetake,
             onClearSelection: clearCurrentSelection,
@@ -603,6 +628,16 @@ private struct OCRCropRecognitionScreen: View {
 }
 
 private extension OCRCropRecognitionScreen {
+    func clearErrorMessage() {
+        if reduceMotion {
+            viewModel.errorMessage = nil
+        } else {
+            withAnimation(.smooth) {
+                viewModel.errorMessage = nil
+            }
+        }
+    }
+
     var canPopDuringCrop: Bool {
         !isSelectionInteractionActive && !viewModel.isRecognizing
     }
@@ -615,9 +650,9 @@ private extension OCRCropRecognitionScreen {
         switch style {
         case .automatic:
             if viewModel.singleSelectionRect == nil {
-                return "拖动框住要识别的文字，确认范围后点击“开始识别”。"
+                return "拖动框住要识别的文字，确认范围后点击“开始识别”"
             }
-            return "拖动边角可微调范围，长按框内可移动位置。"
+            return "拖动边角可微调范围，长按框内可移动位置"
         case .manual:
             return "适合识别单段或连续正文。拖动创建范围，边角可微调，长按框内可移动位置。"
         }
@@ -733,6 +768,27 @@ private final class OCRMaterialPanelView: UIVisualEffectView {
     @available(*, unavailable)
     required init?(coder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
+    }
+}
+
+/// OCR 裁切页 UIKit 操作区排版，保持 15/13pt 层级并统一接入 Dynamic Type。
+private enum OCRCropTypography {
+    static var primaryAction: UIFont {
+        AppTypography.uiFixed(
+            baseSize: 15,
+            textStyle: .subheadline,
+            weight: .semibold,
+            minimumPointSize: 15
+        )
+    }
+
+    static var secondaryAction: UIFont {
+        AppTypography.uiFixed(
+            baseSize: 13,
+            textStyle: .subheadline,
+            weight: .semibold,
+            minimumPointSize: 13
+        )
     }
 }
 
@@ -870,9 +926,9 @@ private extension OCRCropRecognitionViewController {
     func configureStyles() {
         emptyStateIconView.image = UIImage(systemName: "photo")
         emptyStateIconView.preferredSymbolConfiguration = UIImage.SymbolConfiguration(pointSize: 48, weight: .regular)
-        emptyStateIconView.tintColor = UIColor(Color.brand).withAlphaComponent(0.3)
-        emptyStateLabel.text = "没有可裁切的图片，请返回上一步重新选择。"
-        emptyStateLabel.textColor = UIColor(Color.textSecondary)
+        emptyStateIconView.tintColor = UIColor.xmResolved(Color.appTint).withAlphaComponent(0.3)
+        emptyStateLabel.text = "没有可裁切的图片，请返回上一步重新选择"
+        emptyStateLabel.textColor = UIColor.xmResolved(Color.textSecondary)
         emptyStateLabel.font = .preferredFont(forTextStyle: .title3)
         emptyStateLabel.numberOfLines = 0
         emptyStateLabel.textAlignment = .center
@@ -904,16 +960,13 @@ private extension OCRCropRecognitionViewController {
                 : .identity
         }
 
-        recognizeButton.titleLabel?.font = UIFontMetrics(forTextStyle: .subheadline)
-            .scaledFont(for: .systemFont(ofSize: 15, weight: .semibold))
+        recognizeButton.titleLabel?.font = OCRCropTypography.primaryAction
         recognizeButton.titleLabel?.adjustsFontForContentSizeCategory = true
         recognizeButton.contentHorizontalAlignment = .center
 
-        retakeButton.titleLabel?.font = UIFontMetrics(forTextStyle: .subheadline)
-            .scaledFont(for: .systemFont(ofSize: 13, weight: .semibold))
+        retakeButton.titleLabel?.font = OCRCropTypography.secondaryAction
         retakeButton.titleLabel?.adjustsFontForContentSizeCategory = true
-        clearSelectionButton.titleLabel?.font = UIFontMetrics(forTextStyle: .subheadline)
-            .scaledFont(for: .systemFont(ofSize: 13, weight: .semibold))
+        clearSelectionButton.titleLabel?.font = OCRCropTypography.secondaryAction
         clearSelectionButton.titleLabel?.adjustsFontForContentSizeCategory = true
     }
 
@@ -963,8 +1016,8 @@ private extension OCRCropRecognitionViewController {
             bannerCloseButton.leadingAnchor.constraint(equalTo: bannerLabel.trailingAnchor, constant: 6),
             bannerCloseButton.trailingAnchor.constraint(equalTo: bannerView.contentView.trailingAnchor, constant: -2),
             bannerCloseButton.centerYAnchor.constraint(equalTo: bannerView.contentView.centerYAnchor),
-            bannerCloseButton.widthAnchor.constraint(equalToConstant: 44),
-            bannerCloseButton.heightAnchor.constraint(equalToConstant: 44),
+            bannerCloseButton.widthAnchor.constraint(equalToConstant: InteractionMetrics.minimumTouchTarget),
+            bannerCloseButton.heightAnchor.constraint(equalToConstant: InteractionMetrics.minimumTouchTarget),
 
             bannerIconView.centerYAnchor.constraint(equalTo: bannerView.contentView.centerYAnchor),
             bannerCloseIconView.centerXAnchor.constraint(equalTo: bannerCloseButton.centerXAnchor),
@@ -1117,7 +1170,7 @@ private extension OCRCropRecognitionViewController {
         switch content {
         case .error(let text):
             bannerIconView.image = UIImage(systemName: "exclamationmark.triangle.fill")
-            bannerIconView.tintColor = UIColor(Color.feedbackWarning)
+            bannerIconView.tintColor = UIColor.xmResolved(Color.feedbackWarning)
             bannerLabel.text = text
         case .instruction(let text):
             bannerIconView.image = UIImage(systemName: "hand.draw")
@@ -1399,10 +1452,10 @@ private extension OCRSelectionOverlayView {
                     roundedRect: draftRect,
                     cornerRadius: selectionCornerRadius
                 )
-                UIColor(Color.brand).withAlphaComponent(0.10).setFill()
+                UIColor.xmResolved(Color.selectionAccent).withAlphaComponent(0.10).setFill()
                 path.fill()
 
-                UIColor(Color.brand).withAlphaComponent(0.94).setStroke()
+                UIColor.xmResolved(Color.selectionAccent).withAlphaComponent(0.94).setStroke()
                 path.setLineDash([4, 4], count: 2, phase: 0)
                 path.lineWidth = 1
                 path.stroke()
@@ -1421,10 +1474,10 @@ private extension OCRSelectionOverlayView {
             roundedRect: region.frame,
             cornerRadius: selectionCornerRadius
         )
-        (isSelected ? UIColor(Color.brand).withAlphaComponent(0.14) : UIColor.white.withAlphaComponent(0.08)).setFill()
+        (isSelected ? UIColor.xmResolved(Color.selectionAccent).withAlphaComponent(0.14) : UIColor.white.withAlphaComponent(0.08)).setFill()
         path.fill()
 
-        (isSelected ? UIColor(Color.brand).withAlphaComponent(0.94) : UIColor.white.withAlphaComponent(0.82)).setStroke()
+        (isSelected ? UIColor.xmResolved(Color.selectionAccent).withAlphaComponent(0.94) : UIColor.white.withAlphaComponent(0.82)).setStroke()
         path.lineWidth = isSelected ? 1.5 : 1
         path.stroke()
 
@@ -2640,7 +2693,7 @@ private extension OCRSettingsScreen {
             VStack(alignment: .leading, spacing: Spacing.base) {
                 sectionHeader(
                     title: "识别策略",
-                    description: "与 Android 设置保持同源：高精度、标点优化、中英混排优化与对齐网格线。"
+                    description: "与 Android 设置保持同源：高精度、标点优化、中英混排优化与对齐网格线"
                 )
 
                 Toggle("高精度 OCR", isOn: preferenceBinding(\.isHighPrecisionEnabled))
@@ -2657,20 +2710,20 @@ private extension OCRSettingsScreen {
             VStack(alignment: .leading, spacing: Spacing.base) {
                 sectionHeader(
                     title: "调试工具",
-                    description: "切换凭据或 SDK 状态异常时，可手动清理百度 OCR 的鉴权缓存。"
+                    description: "切换凭据或 SDK 状态异常时，可手动清理百度 OCR 的鉴权缓存"
                 )
 
                 if let message = viewModel.errorMessage {
                     statusRow(text: message, tint: Color.feedbackWarning, icon: "exclamationmark.triangle.fill")
                 } else if let message = viewModel.statusMessage {
-                    statusRow(text: message, tint: Color.brand, icon: "checkmark.circle.fill")
+                    statusRow(text: message, tint: Color.feedbackSuccess, icon: "checkmark.circle.fill")
                 }
 
                 Button("清除鉴权缓存") {
                     viewModel.clearAuthorizationCache()
                 }
                 .buttonStyle(.borderedProminent)
-                .tint(Color.brand)
+                .tint(Color.primaryActionFill)
                 .disabled(viewModel.isRecognizing)
             }
             .padding(Spacing.contentEdge)
@@ -2696,15 +2749,15 @@ private extension OCRSettingsScreen {
                         .autocorrectionDisabled()
                 }
             }
-            .font(.system(.footnote, design: .monospaced))
-            .padding(.horizontal, 12)
-            .padding(.vertical, 10)
+            .font(AppTypography.monospacedFootnote)
+            .padding(.horizontal, Spacing.base)
+            .padding(.vertical, Spacing.tight)
             .background(Color.surfacePage, in: RoundedRectangle(cornerRadius: CornerRadius.blockMedium, style: .continuous))
         }
     }
 
     func sectionHeader(title: String, description: String) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: Spacing.compact) {
             Text(title)
                 .font(.subheadline.weight(.semibold))
                 .foregroundStyle(Color.textPrimary)
@@ -2719,13 +2772,13 @@ private extension OCRSettingsScreen {
             Image(systemName: icon)
                 .font(.caption)
                 .foregroundStyle(tint)
-                .padding(.top, 2)
+                .padding(.top, Spacing.tiny)
             Text(text)
                 .font(.caption)
                 .foregroundStyle(Color.textSecondary)
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 10)
+        .padding(.horizontal, Spacing.base)
+        .padding(.vertical, Spacing.tight)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(Color.surfacePage, in: RoundedRectangle(cornerRadius: CornerRadius.blockMedium, style: .continuous))
     }
@@ -2810,6 +2863,8 @@ private struct OCRSelectionEditor: View {
     let onRegionSelected: (UUID?) -> Void
     let onRegionDelete: (UUID) -> Void
     let onInteractionStateChanged: (Bool) -> Void
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     @State private var singleInteractionState: SingleInteractionState = .idle
     @State private var isInteractionActive = false
@@ -2987,10 +3042,10 @@ private extension OCRSelectionEditor {
 
         if let draftRect = draftFreeformRect(in: imageFrame) {
             RoundedRectangle(cornerRadius: CornerRadius.blockMedium, style: .continuous)
-                .fill(Color.brand.opacity(0.1))
+                .fill(Color.selectionAccent.opacity(0.1))
                 .overlay {
                     RoundedRectangle(cornerRadius: CornerRadius.blockMedium, style: .continuous)
-                        .stroke(Color.brand.opacity(0.94), style: StrokeStyle(lineWidth: 1, dash: [4, 4]))
+                        .stroke(Color.selectionAccent.opacity(0.94), style: StrokeStyle(lineWidth: 1, dash: [4, 4]))
                 }
                 .frame(width: draftRect.width, height: draftRect.height)
                 .position(x: draftRect.midX, y: draftRect.midY)
@@ -3032,10 +3087,10 @@ private extension OCRSelectionEditor {
     func freeformRegionDecoration(region: NotePhotoOCRSelectionRegion) -> some View {
         ZStack {
             RoundedRectangle(cornerRadius: CornerRadius.blockMedium, style: .continuous)
-                .fill(region.id == selectedFreeformRegionID ? Color.brand.opacity(0.14) : Color.white.opacity(0.08))
+                .fill(region.id == selectedFreeformRegionID ? Color.selectionAccent.opacity(0.14) : Color.white.opacity(0.08))
             RoundedRectangle(cornerRadius: CornerRadius.blockMedium, style: .continuous)
                 .stroke(
-                    region.id == selectedFreeformRegionID ? Color.brand.opacity(0.94) : Color.white.opacity(0.82),
+                    region.id == selectedFreeformRegionID ? Color.selectionAccent.opacity(0.94) : Color.white.opacity(0.82),
                     lineWidth: region.id == selectedFreeformRegionID ? 1.5 : 1
                 )
         }
@@ -3043,8 +3098,12 @@ private extension OCRSelectionEditor {
 
     func freeformDeleteButton(for regionID: UUID) -> some View {
         Button {
-            withAnimation(.snappy) {
+            if reduceMotion {
                 onRegionDelete(regionID)
+            } else {
+                withAnimation(.snappy) {
+                    onRegionDelete(regionID)
+                }
             }
         } label: {
             Image(systemName: "trash")
@@ -3054,7 +3113,7 @@ private extension OCRSelectionEditor {
                 .glassEffect(.regular.interactive(), in: .circle)
         }
         .buttonStyle(.plain)
-        .padding(6)
+        .padding(Spacing.half)
         .accessibilityLabel("删除该选择框")
     }
 
@@ -3084,7 +3143,7 @@ private extension OCRSelectionEditor {
 
                 Circle()
                     .stroke(Color.white.opacity(0.24), lineWidth: 0.8)
-                    .padding(14)
+            .padding(Spacing.comfortable)
 
                 Path { path in
                     let center = loupeDiameter / 2
@@ -3874,9 +3933,9 @@ private final class OCRCameraSessionController: NSObject, ObservableObject {
         case .ready:
             return "点击预览区域可重新对焦"
         case .denied:
-            return "相机权限已关闭，请在系统设置中允许 XMNote 使用相机。"
+            return "相机权限已关闭，请在系统设置中允许 XMNote 使用相机"
         case .restricted:
-            return "当前设备限制了相机权限，无法进入拍照模式。"
+            return "当前设备限制了相机权限，无法进入拍照模式"
         case .unavailable(let message), .failed(let message):
             return message
         }
@@ -3916,7 +3975,7 @@ private final class OCRCameraSessionController: NSObject, ObservableObject {
             }
         @unknown default:
             DispatchQueue.main.async {
-                self.state = .failed("遇到了未知的相机权限状态。")
+                self.state = .failed("遇到了未知的相机权限状态")
             }
         }
     }
@@ -3970,7 +4029,7 @@ private final class OCRCameraSessionController: NSObject, ObservableObject {
                 device.unlockForConfiguration()
             } catch {
                 DispatchQueue.main.async {
-                    self.state = .failed("相机对焦失败，请重新尝试。")
+                    self.state = .failed("相机对焦失败，请重新尝试")
                 }
             }
         }
@@ -3990,7 +4049,7 @@ private final class OCRCameraSessionController: NSObject, ObservableObject {
         return try await withCheckedThrowingContinuation { continuation in
             sessionQueue.async { [weak self] in
                 guard let self else {
-                    continuation.resume(throwing: OCRCameraControllerError.cameraUnavailable(reason: "相机会话已释放。"))
+                    continuation.resume(throwing: OCRCameraControllerError.cameraUnavailable(reason: "相机会话已释放"))
                     return
                 }
 
@@ -4058,7 +4117,7 @@ private extension OCRCameraSessionController {
                 guard let device = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .back) else {
                     self.session.commitConfiguration()
                     DispatchQueue.main.async {
-                        self.state = .unavailable("当前设备没有可用的后置相机。")
+                        self.state = .unavailable("当前设备没有可用的后置相机")
                     }
                     return
                 }
@@ -4067,7 +4126,7 @@ private extension OCRCameraSessionController {
                 guard self.session.canAddInput(input) else {
                     self.session.commitConfiguration()
                     DispatchQueue.main.async {
-                        self.state = .failed("无法将相机输入添加到当前会话。")
+                        self.state = .failed("无法将相机输入添加到当前会话")
                     }
                     return
                 }
@@ -4076,7 +4135,7 @@ private extension OCRCameraSessionController {
                 guard self.session.canAddOutput(self.photoOutput) else {
                     self.session.commitConfiguration()
                     DispatchQueue.main.async {
-                        self.state = .failed("无法创建拍照输出，请重新启动调试页。")
+                        self.state = .failed("无法创建拍照输出，请重新启动调试页")
                     }
                     return
                 }
@@ -4267,7 +4326,7 @@ private enum OCRCameraControllerError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .invalidPhotoData:
-            return "拍摄结果无法转换为可用图片，请重新拍摄。"
+            return "拍摄结果无法转换为可用图片，请重新拍摄"
         case .cameraUnavailable(let reason):
             return reason
         }

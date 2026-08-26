@@ -1,7 +1,7 @@
 /**
  * [INPUT]: 依赖 Foundation/UserDefaults、UIKit、SQLite3、ZIPFoundation 与 AppDatabase/DatabaseManager
- * [OUTPUT]: 对外提供云备份通用模型、BackupArchiveService 与 CloudBackupRemoteProvider 协议
- * [POS]: Services 模块的备份内核，负责本地备份包生成、数据库热切换恢复与跨 provider 的公共语义
+ * [OUTPUT]: 对外提供云备份通用模型、恢复结果、BackupArchiveService 与 CloudBackupRemoteProvider 协议
+ * [POS]: Services 模块的备份内核，负责数据库与平台可选 sidecar 的统一归档、热切换恢复及跨 provider 公共语义
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
@@ -94,6 +94,29 @@ enum RestoreProgress: Equatable, Sendable {
     case completed
 }
 
+/// iOS 偏好附加层的恢复结果；核心数据库成功与否仍由 restore 调用的 throws 语义表达。
+enum BackupPreferencesRestoreStatus: Equatable, Sendable {
+    case restored
+    case notIncluded
+    case skipped
+}
+
+/// 一次完整恢复的结果，供本地与云端入口统一生成用户反馈。
+struct BackupRestoreResult: Equatable, Sendable {
+    let preferencesStatus: BackupPreferencesRestoreStatus
+
+    var successMessage: String {
+        switch preferencesStatus {
+        case .restored:
+            "数据与设置已恢复。"
+        case .notIncluded:
+            "数据已恢复。"
+        case .skipped:
+            "数据已恢复，部分设置未能恢复。"
+        }
+    }
+}
+
 /// 备份与恢复链路的业务错误类型，统一映射给 UI 层展示。
 enum BackupError: LocalizedError {
     case noServerConfigured
@@ -109,19 +132,19 @@ enum BackupError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .noServerConfigured:
-            return "未配置 WebDAV 备份服务器"
+            return "未配置 WebDAV 备份服务器。"
         case .noAliyunDriveAuthorized:
-            return "请先登录阿里云盘"
+            return "请先登录阿里云盘。"
         case .invalidAliyunDriveConfiguration:
-            return "阿里云盘开放平台配置无效"
+            return "阿里云盘开放平台配置无效。"
         case .zipFailed:
-            return "压缩备份文件失败"
+            return "压缩备份文件失败。"
         case .unzipFailed:
-            return "解压备份文件失败"
+            return "解压备份文件失败。"
         case .versionMismatch(let backup, let app):
-            return "数据库版本不兼容（备份: v\(backup), 当前: v\(app)）"
+            return "数据库版本不兼容（备份：v\(backup)，当前：v\(app)）。"
         case .backupFileCorrupted:
-            return "备份文件已损坏"
+            return "备份文件已损坏。"
         case .webdavError(let error):
             return error.errorDescription
         case .aliyunDriveError(let message):
@@ -175,6 +198,13 @@ struct LocalBackupImportTicket: Identifiable, Sendable {
 struct BackupArchiveInspection: Sendable {
     let backupDate: Date?
     let deviceName: String
+}
+
+/// 归档层完成数据库恢复后返回的偏好载荷判定；真正写入由 Repository 在数据库重开后串行执行。
+enum BackupArchivePreferencesPayload: Sendable {
+    case missing
+    case ready(IOSPreferencesBackupEnvelope)
+    case skipped
 }
 
 // MARK: - Backup Archive Service
@@ -241,8 +271,11 @@ extension BackupArchiveService {
         )
     }
 
-    /// 创建统一 zip 备份包，内容包含数据库文件集（db/wal/shm）与 Android SharedPreferences 兼容快照。
-    func createBackupArchive(in directory: URL) throws -> BackupArchiveArtifact {
+    /// 创建统一 zip 备份包，包含数据库、Android 兼容快照及可选的 iOS 类型化偏好 sidecar。
+    func createBackupArchive(
+        in directory: URL,
+        iosPreferencesData: Data? = nil
+    ) throws -> BackupArchiveArtifact {
         let fileName = Self.makeBackupFileName()
         let archiveURL = directory.appendingPathComponent(fileName)
         let databaseURLs = existingDatabaseFileURLs()
@@ -259,6 +292,13 @@ extension BackupArchiveService {
                 )
             }
             try addAndroidSharedPreferencesSnapshot(to: archive, in: directory)
+            if let iosPreferencesData {
+                try addIOSPreferencesSnapshot(
+                    iosPreferencesData,
+                    to: archive,
+                    in: directory
+                )
+            }
         } catch {
             throw BackupError.zipFailed(underlying: error)
         }
@@ -266,12 +306,12 @@ extension BackupArchiveService {
         return BackupArchiveArtifact(localFileURL: archiveURL, fileName: fileName)
     }
 
-    /// 从统一 zip 备份包恢复数据库文件集，并基于 user_version 执行跨端版本校验。
+    /// 恢复数据库并在成功重开后返回偏好载荷；该方法不写 UserDefaults，数据库失败时偏好保持原状。
     func restoreBackupArchive(
         from archiveURL: URL,
         databaseManager: DatabaseManager,
         progress: (@Sendable (RestoreProgress) -> Void)?
-    ) throws {
+    ) throws -> BackupArchivePreferencesPayload {
         let fileManager = FileManager.default
         progress?(.verifying)
 
@@ -303,6 +343,7 @@ extension BackupArchiveService {
 
         try verifyDatabaseVersion(at: extractedDatabaseURL.path)
         try BackupSchemaValidator.prepareForRestore(at: extractedDatabaseURL.path)
+        let preferencesPayload = readIOSPreferencesPayload(from: extractDirectory)
 
         progress?(.replacing)
         var databasePath = database.databasePath
@@ -321,7 +362,6 @@ extension BackupArchiveService {
             )
             try databaseManager.reopen(at: databasePath)
             shouldRestoreRollback = false
-            progress?(.completed)
         } catch let restoreError {
             if didCloseDatabase {
                 do {
@@ -338,6 +378,7 @@ extension BackupArchiveService {
             }
             throw restoreError
         }
+        return preferencesPayload
     }
 }
 
@@ -444,6 +485,49 @@ private extension BackupArchiveService {
             with: AndroidSharedPreferencesCompat.fileName,
             fileURL: preferencesURL
         )
+    }
+
+    /// 将已由白名单协调器编码和限流的 iOS sidecar 写入 ZIP，不检查或记录其中的敏感字段。
+    func addIOSPreferencesSnapshot(
+        _ data: Data,
+        to archive: Archive,
+        in directory: URL
+    ) throws {
+        guard data.count <= IOSUserDefaultsBackupCoordinator.maximumArchiveSize else {
+            throw BackupError.backupFileCorrupted
+        }
+        let preferencesURL = directory.appendingPathComponent(
+            IOSUserDefaultsBackupCoordinator.archiveFileName
+        )
+        try data.write(to: preferencesURL, options: .atomic)
+        try archive.addEntry(
+            with: IOSUserDefaultsBackupCoordinator.archiveFileName,
+            fileURL: preferencesURL
+        )
+    }
+
+    /// 读取解压后的 iOS sidecar；缺失表示旧版/Android 备份，损坏或高版本只降级附加设置恢复。
+    func readIOSPreferencesPayload(from extractDirectory: URL) -> BackupArchivePreferencesPayload {
+        let preferencesURL = extractDirectory.appendingPathComponent(
+            IOSUserDefaultsBackupCoordinator.archiveFileName
+        )
+        let fileManager = FileManager.default
+        guard fileManager.fileExists(atPath: preferencesURL.path) else {
+            return .missing
+        }
+
+        do {
+            let values = try preferencesURL.resourceValues(forKeys: [.fileSizeKey])
+            guard let fileSize = values.fileSize,
+                  fileSize <= IOSUserDefaultsBackupCoordinator.maximumArchiveSize else {
+                return .skipped
+            }
+            let data = try Data(contentsOf: preferencesURL, options: .mappedIfSafe)
+            let envelope = try IOSUserDefaultsBackupCoordinator.decodeArchiveData(data)
+            return .ready(envelope)
+        } catch {
+            return .skipped
+        }
     }
 
     /// 从当前数据库读取最新未完成计时记录；RUNNING/PAUSE/STOP 都必须保留精确恢复锚点。

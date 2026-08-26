@@ -292,7 +292,7 @@ final class ReviewEditorViewModel {
         }
         if acceptedCount < inputs.count {
             errorMessage = acceptedCount < componentAcceptedCount
-                ? "已超出今日额度，保留前 \(acceptedCount) 张。"
+                ? "已超出今日额度，保留前 \(acceptedCount) 张"
                 : "最多只能添加 \(ContentEditorImageItem.maximumCount) 张图片，已保留前 \(acceptedCount) 张"
         }
         await imageController.stageImages(Array(inputs.prefix(acceptedCount)))

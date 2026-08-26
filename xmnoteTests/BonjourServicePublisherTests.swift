@@ -82,7 +82,7 @@ struct BonjourServicePublisherTests {
         )
         await settleCallbacks()
         #expect(eventProbe.events.last == .unavailable(
-            message: "xmnote.local 已被局域网中的其他设备占用，当前已改用局域网 IP 地址。"
+            message: "xmnote.local 已被局域网中的其他设备占用，当前已改用局域网 IP 地址"
         ))
 
         publisher.start(port: 8090, endpoints: [endpoint]) { event in
@@ -94,7 +94,7 @@ struct BonjourServicePublisherTests {
         )
         await settleCallbacks()
         #expect(eventProbe.events.last == .unavailable(
-            message: "xmnote.local 暂时无法发布（错误码 \(Int32(kDNSServiceErr_Unknown))），当前已改用局域网 IP 地址。"
+            message: "xmnote.local 暂时无法发布（错误码 \(Int32(kDNSServiceErr_Unknown))），当前已改用局域网 IP 地址"
         ))
 
         publisher.start(port: 8090, endpoints: [endpoint]) { event in

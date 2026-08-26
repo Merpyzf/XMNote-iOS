@@ -29,7 +29,7 @@ struct JXPhotoBrowserTestView: View {
                             .font(.headline)
                             .foregroundStyle(Color.textPrimary)
 
-                        Text("点击任意缩略图进入浏览器，重点观察：Zoom 转场连续性、下滑关闭手感、关闭后缩略图显隐恢复。")
+                        Text("点击任意缩略图进入浏览器，重点观察：Zoom 转场连续性、下滑关闭手感、关闭后缩略图显隐恢复")
                             .font(.footnote)
                             .foregroundStyle(Color.textSecondary)
                             .fixedSize(horizontal: false, vertical: true)

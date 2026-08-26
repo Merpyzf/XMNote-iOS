@@ -9,6 +9,8 @@ import SwiftUI
 
 /// 分享成品卡；固定 4:5 画布，预览和导出复用以避免所见与所得不一致。
 struct ReadCalendarShareCard: View {
+    private static let compactMonthCellCornerRadius: CGFloat = 1
+
     let type: ReadCalendarShareType
     let template: ReadCalendarShareTemplate
     let snapshot: ReadCalendarShareSnapshot
@@ -186,23 +188,23 @@ struct ReadCalendarShareCard: View {
                             XMBookCover.fixedWidth(
                                 18,
                                 urlString: book.coverURL,
-                                border: .init(color: accent.opacity(0.18), width: CardStyle.borderWidth)
+                                border: .init(color: accent.opacity(0.18), width: StrokeWidth.hairline)
                             )
                             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
                         }
                         Text("\(calendar.component(.day, from: date))")
                             .font(AppTypography.caption2)
                             .foregroundStyle(books.isEmpty ? secondaryText : accent)
-                            .padding(2)
+                            .padding(Spacing.tiny)
                         if books.count > 1 {
                             Text("+\(books.count - 1)")
                                 .font(AppTypography.caption2)
                                 .foregroundStyle(background)
-                                .padding(.horizontal, 3)
-                                .padding(.vertical, 1)
+                                .padding(.horizontal, Spacing.micro)
+                                .padding(.vertical, Spacing.hairline)
                                 .background(accent, in: Capsule())
                                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
-                                .padding(2)
+                                .padding(Spacing.tiny)
                         }
                     }
                     .frame(height: 31)
@@ -241,7 +243,7 @@ struct ReadCalendarShareCard: View {
         return LazyVGrid(columns: columns, spacing: 1.5) {
             ForEach(Array(cells.enumerated()), id: \.offset) { _, date in
                 let level = date.flatMap { month.days[calendar.startOfDay(for: $0)]?.heatmapLevel } ?? .none
-                RoundedRectangle(cornerRadius: 1, style: .continuous)
+                RoundedRectangle(cornerRadius: Self.compactMonthCellCornerRadius, style: .continuous)
                     .fill(date == nil ? Color.clear : heatColor(level))
                     .aspectRatio(1, contentMode: .fit)
             }
@@ -292,8 +294,8 @@ struct ReadCalendarShareCard: View {
     }
 
     private var selectedYear: Int { calendar.component(.year, from: snapshot.selectedMonth) }
-    private var background: Color { Color(hex: UInt(template.palette.backgroundARGB & 0x00FF_FFFF)) }
-    private var accent: Color { Color(hex: UInt(template.palette.accentARGB & 0x00FF_FFFF)) }
+    private var background: Color { Color.xmHex(UInt(template.palette.backgroundARGB & 0x00FF_FFFF)) }
+    private var accent: Color { Color.xmHex(UInt(template.palette.accentARGB & 0x00FF_FFFF)) }
     private var primaryText: Color { isDarkPalette ? Color.white.opacity(0.96) : Color.black.opacity(0.84) }
     private var secondaryText: Color { isDarkPalette ? Color.white.opacity(0.70) : Color.black.opacity(0.56) }
 

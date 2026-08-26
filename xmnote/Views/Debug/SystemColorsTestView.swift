@@ -79,21 +79,21 @@ struct SystemColorsTestView: View {
         var subtitle: String {
             switch self {
             case .textAndLabel:
-                return "用于标题、正文、说明和链接等前景语义。"
+                return "用于标题、正文、说明和链接等前景语义"
             case .backgrounds:
-                return "用于页面、卡片、分组容器的背景层级。"
+                return "用于页面、卡片、分组容器的背景层级"
             case .fills:
-                return "用于控件填充与强调层，常见于胶囊/按钮内衬。"
+                return "用于控件填充与强调层，常见于胶囊/按钮内衬"
             case .separators:
-                return "用于列表分隔与边框层次。"
+                return "用于列表分隔与边框层次"
             case .accent:
-                return "用于交互强调与全局 tint。"
+                return "用于交互强调与全局 tint"
             case .chromatic:
-                return "用于状态、类别和品牌之外的系统标准色。"
+                return "用于状态、类别和品牌之外的系统标准色"
             case .neutrals:
-                return "用于中性色阶与层级灰度控制。"
+                return "用于中性色阶与层级灰度控制"
             case .basics:
-                return "静态基础色，不随系统主题自动变化。"
+                return "静态基础色，不随系统主题自动变化"
             }
         }
     }
@@ -315,7 +315,7 @@ private struct SystemColorSpecCard: View {
     let spec: SystemColorsTestView.SystemColorSpec
     let traitCollection: UITraitCollection
 
-    private var color: Color { Color(uiColor: spec.provider()) }
+    private var color: Color { Color.xmResolved(spec.provider()) }
     private var resolvedHex: String { spec.resolvedRGBAHex(for: traitCollection) }
 
     /// 渲染单个系统颜色的样例卡片。
@@ -361,11 +361,11 @@ private extension SystemColorSpecCard {
     var colorSwatch: some View {
         ZStack {
             RoundedRectangle(cornerRadius: CornerRadius.inlaySmall, style: .continuous)
-                .fill(Color(uiColor: .tertiarySystemBackground))
+                .fill(Color.xmResolved(.tertiarySystemBackground))
             RoundedRectangle(cornerRadius: CornerRadius.inlaySmall, style: .continuous)
                 .fill(color)
             RoundedRectangle(cornerRadius: CornerRadius.inlaySmall, style: .continuous)
-                .stroke(Color(uiColor: .separator), lineWidth: 0.6)
+                .stroke(Color.xmResolved(.separator), lineWidth: 0.6)
         }
         .frame(width: 36, height: 36)
     }
@@ -434,10 +434,10 @@ private extension SystemColorSpecCard {
         .padding(.horizontal, Spacing.half)
         .padding(.vertical, Spacing.half)
         .frame(maxWidth: .infinity, minHeight: 64, alignment: .topLeading)
-        .background(Color(uiColor: .secondarySystemBackground), in: RoundedRectangle(cornerRadius: CornerRadius.inlayMedium, style: .continuous))
+        .background(Color.xmResolved(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: CornerRadius.inlayMedium, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: CornerRadius.inlayMedium, style: .continuous)
-                .stroke(Color(uiColor: .separator), lineWidth: 0.5)
+                .stroke(Color.xmResolved(.separator), lineWidth: 0.5)
         }
     }
 
@@ -449,7 +449,7 @@ private extension SystemColorSpecCard {
         var blue: CGFloat = 0
         var alpha: CGFloat = 0
         guard resolved.getRed(&red, green: &green, blue: &blue, alpha: &alpha) else {
-            return Color(uiColor: .label)
+            return Color.xmResolved(.label)
         }
         let luminance = 0.2126 * linearize(red) + 0.7152 * linearize(green) + 0.0722 * linearize(blue)
         return luminance > 0.6 ? .black : .white

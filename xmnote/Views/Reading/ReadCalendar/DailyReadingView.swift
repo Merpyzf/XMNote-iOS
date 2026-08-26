@@ -236,7 +236,7 @@ struct DailyReadingView: View {
         XMContentStateView(
             role: .empty,
             title: "当天还没有阅读轨迹",
-            message: "添加阅读打卡后，记录会按发生时间出现在这里。",
+            message: "添加阅读打卡后，记录会按发生时间出现在这里",
             systemImage: "calendar.badge.clock",
             action: XMStateAction(
                 viewModel.checkInActionTitle,
@@ -253,7 +253,7 @@ struct DailyReadingView: View {
         XMContentStateView(
             role: .noResults,
             title: "没有符合条件的记录",
-            message: "可以切换书籍或记录类型，查看当天的其他阅读轨迹。",
+            message: "可以切换书籍或记录类型，查看当天的其他阅读轨迹",
             systemImage: "line.3.horizontal.decrease.circle",
             action: viewModel.hasActiveFilter
                 ? XMStateAction("显示全部记录", systemImage: "line.3.horizontal.decrease.circle") {

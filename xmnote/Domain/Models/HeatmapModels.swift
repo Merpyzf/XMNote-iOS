@@ -1,10 +1,9 @@
 import Foundation
-import SwiftUI
 
 /**
- * [INPUT]: 依赖 DesignTokens 的 Color 语义扩展（heatmapNone/brandLight/brand/brandDeep/brandDarkest/status*）
- * [OUTPUT]: 对外提供 HeatmapDay（单日热力数据，含可注入阅读量颜色的状态分段）、HeatmapLevel（五级强度枚举）、HeatmapStatisticsDataType（统计类型）
- * [POS]: Domain 层热力图领域模型，供 StatisticsRepository 产出、HeatmapChart 与 CalendarHeatmap 消费
+ * [INPUT]: 依赖 Foundation 的日期与纯值集合能力
+ * [OUTPUT]: 对外提供 HeatmapDay（单日热力数据）、HeatmapLevel（五级强度枚举）、HeatmapStatisticsDataType（统计类型）与 HeatmapBookState（阅读状态）
+ * [POS]: Domain 层纯值热力图模型，供 StatisticsRepository 产出、由 UI 层决定颜色与展示文案
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
@@ -19,20 +18,12 @@ nonisolated enum HeatmapStatisticsDataType: Int, CaseIterable, Identifiable {
 
     var id: Int { rawValue }
 
-    var title: String {
-        switch self {
-        case .noteCount: "书摘"
-        case .readingTime: "阅读"
-        case .all: "全部"
-        case .checkIn: "打卡"
-        }
-    }
 }
 
 // MARK: - 阅读状态
 
 /// 对齐 Android BookReadingStatus：1=想读 2=在读 3=读完 4=弃读 5=搁置
-enum HeatmapBookState: Int, CaseIterable, Hashable, Sendable {
+nonisolated enum HeatmapBookState: Int, CaseIterable, Hashable, Sendable {
     case wantRead = 1
     case reading = 2
     case readDone = 3
@@ -42,25 +33,6 @@ enum HeatmapBookState: Int, CaseIterable, Hashable, Sendable {
     /// 对齐 Android Mark.getColors 的叠加顺序：想读→在读→读完→搁置→弃读
     static let renderOrder: [HeatmapBookState] = [.wantRead, .reading, .readDone, .onHold, .abandon]
 
-    var color: Color {
-        switch self {
-        case .wantRead: .statusWish
-        case .reading: .statusReading
-        case .readDone: .statusDone
-        case .onHold: .statusOnHold
-        case .abandon: .statusAbandoned
-        }
-    }
-
-    var title: String {
-        switch self {
-        case .wantRead: "想读"
-        case .reading: "在读"
-        case .readDone: "读完"
-        case .onHold: "搁置"
-        case .abandon: "弃读"
-        }
-    }
 }
 
 // MARK: - 单日热力数据
@@ -92,7 +64,7 @@ nonisolated struct HeatmapDay: Identifiable, Sendable {
     }
 
     /// 综合等级取阅读时长/笔记数/打卡时长三者最大值
-    @MainActor var level: HeatmapLevel {
+    var level: HeatmapLevel {
         let readLevel = HeatmapLevel.from(readSeconds: readSeconds)
         let noteLevel = HeatmapLevel.from(noteCount: noteCount)
         let checkInLevel = HeatmapLevel.from(checkInSeconds: checkInSeconds)
@@ -113,7 +85,7 @@ nonisolated struct HeatmapDay: Identifiable, Sendable {
     }
 
     /// 当前统计类型对应的强度等级（用于“阅读/书摘/打卡/全部”切换）
-    @MainActor func amountLevel(for dataType: HeatmapStatisticsDataType) -> HeatmapLevel {
+    func amountLevel(for dataType: HeatmapStatisticsDataType) -> HeatmapLevel {
         switch dataType {
         case .noteCount:
             HeatmapLevel.from(noteCount: noteCount)
@@ -127,64 +99,13 @@ nonisolated struct HeatmapDay: Identifiable, Sendable {
         }
     }
 
-    /// 对齐 Android Mark.getColors：先绘制状态色，再按统计类型补充阅读量色。
-    @MainActor func segmentColors(for dataType: HeatmapStatisticsDataType) -> [Color] {
-        segmentColors(for: dataType) { level in
-            level.color
-        }
-    }
-
-    /// 对齐 Android Mark.getColors，并允许视图层仅替换阅读量色阶；书籍状态仍使用固定语义色。
-    @MainActor func segmentColors(
-        for dataType: HeatmapStatisticsDataType,
-        amountColor: (HeatmapLevel) -> Color
-    ) -> [Color] {
-        let stateColors = HeatmapBookState.renderOrder.compactMap { state in
-            bookStates.contains(state) ? state.color : nil
-        }
-
-        let amountColor = amountColor(amountLevel(for: dataType))
-        if stateColors.isEmpty {
-            return [amountColor]
-        }
-
-        switch dataType {
-        case .noteCount:
-            return noteCount == 0 ? stateColors : stateColors + [amountColor]
-        case .readingTime:
-            return readSeconds == 0 ? stateColors : stateColors + [amountColor]
-        case .all:
-            let hasAnyAmount = noteCount != 0 || readSeconds != 0 || checkInSeconds != 0
-            return hasAnyAmount ? stateColors + [amountColor] : stateColors
-        case .checkIn:
-            // 对齐 Android 现有行为：CHECK_IN + 有状态色时，不追加 amount 色块
-            return stateColors
-        }
-    }
-
-    @MainActor var bookStateTitles: String {
-        let titles = HeatmapBookState.renderOrder.compactMap { state in
-            bookStates.contains(state) ? state.title : nil
-        }
-        return titles.isEmpty ? "无" : titles.joined(separator: "、")
-    }
 }
 
 // MARK: - 热力等级
 
 /// 阅读活动强度五级，对齐 Android AppConstant.ReadTimeColorLevel
-enum HeatmapLevel: Int, CaseIterable, Sendable {
+nonisolated enum HeatmapLevel: Int, CaseIterable, Sendable {
     case none, veryLess, less, more, veryMore
-
-    var color: Color {
-        switch self {
-        case .none:     .heatmapNone
-        case .veryLess: .brandLight
-        case .less:     .brand
-        case .more:     .brandDeep
-        case .veryMore: .brandDarkest
-        }
-    }
 
     /// 无障碍标签文本
     var accessibilityText: String {

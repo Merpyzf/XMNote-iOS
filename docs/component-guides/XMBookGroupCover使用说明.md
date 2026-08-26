@@ -2,7 +2,8 @@
 
 ## 组件定位
 
-- 源码路径：`xmnote/UIComponents/Foundation/XMBookGroupCover.swift`。
+- 源码路径：`xmnote/Views/Personal/Components/XMBookGroupCover.swift`。
+- 归属：个人中心页面私有组件，不属于公共 `UIComponents`。
 - 角色：用多个 `XMBookCover` 统一表达书籍分组，覆盖书架列表、聚合入口和分组管理。
 - 边界：只消费有序封面 URL，不查询数据库，也不承载分组标题、数量或点击行为。
 

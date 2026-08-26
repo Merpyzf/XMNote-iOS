@@ -7,12 +7,23 @@
 
 import SwiftUI
 
+/// 书籍搜索胶囊的局部按压节奏，Reduce Motion 下只保留更短的透明度反馈。
+private enum BookSearchChipMotion {
+    static let press = Animation.smooth(duration: 0.16)
+    static let reducedPress = Animation.smooth(duration: 0.12)
+}
+
 /// 书籍搜索胶囊按钮样式，提供轻量按压反馈，避免和结果卡片的按压感冲突。
 struct BookSearchChipButtonStyle: ButtonStyle {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .opacity(configuration.isPressed ? 0.82 : 1)
-            .scaleEffect(configuration.isPressed ? 0.985 : 1)
-            .animation(.smooth(duration: 0.16), value: configuration.isPressed)
+            .scaleEffect(configuration.isPressed && !reduceMotion ? 0.985 : 1)
+            .animation(
+                reduceMotion ? BookSearchChipMotion.reducedPress : BookSearchChipMotion.press,
+                value: configuration.isPressed
+            )
     }
 }

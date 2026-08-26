@@ -1,7 +1,7 @@
 # XMJXThumbnailView 使用说明
 
 ## 组件定位
-- 源码路径：`xmnote/UIComponents/GalleryJX/XMJXThumbnailView.swift`
+- 源码路径：`xmnote/UIComponents/Media/GalleryJX/XMJXThumbnailView.swift`
 - 角色：SwiftUI `UIViewRepresentable` 缩略图桥接组件，向 `JXPhotoBrowser` 提供可回溯的 `UIImageView` 缩略图来源。
 - 典型场景：`XMJXImageWall` 内部缩略图渲染、需要 UIKit 级别缩略图注册的共享元素转场场景。
 

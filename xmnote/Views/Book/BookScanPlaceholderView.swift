@@ -68,7 +68,7 @@ struct BookScanPlaceholderView: View {
         .background(Color.surfaceCard, in: RoundedRectangle(cornerRadius: CornerRadius.containerMedium, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: CornerRadius.containerMedium, style: .continuous)
-                .stroke(Color.surfaceBorderSubtle, lineWidth: CardStyle.borderWidth)
+                .stroke(Color.surfaceBorderSubtle, lineWidth: StrokeWidth.hairline)
         }
     }
 
@@ -85,7 +85,7 @@ struct BookScanPlaceholderView: View {
                     .autocorrectionDisabled()
                     .keyboardType(.asciiCapable)
                     .padding(.horizontal, Spacing.base)
-                    .frame(minHeight: 44)
+                    .frame(minHeight: InteractionMetrics.minimumTouchTarget)
                     .background(Color.surfaceNested, in: RoundedRectangle(cornerRadius: CornerRadius.blockMedium, style: .continuous))
 
                 Button("搜索") {
@@ -100,14 +100,14 @@ struct BookScanPlaceholderView: View {
         .background(Color.surfaceCard, in: RoundedRectangle(cornerRadius: CornerRadius.containerMedium, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: CornerRadius.containerMedium, style: .continuous)
-                .stroke(Color.surfaceBorderSubtle, lineWidth: CardStyle.borderWidth)
+                .stroke(Color.surfaceBorderSubtle, lineWidth: StrokeWidth.hairline)
         }
     }
 
     private var scanGuide: some View {
         VStack(spacing: Spacing.compact) {
             RoundedRectangle(cornerRadius: CornerRadius.blockLarge, style: .continuous)
-                .stroke(Color.brand, lineWidth: 2)
+                .stroke(Color.appTint, lineWidth: 2)
                 .frame(width: 240, height: 128)
             Text("将书背或封底条码置于框内")
                 .font(AppTypography.captionMedium)
@@ -127,7 +127,7 @@ struct BookScanPlaceholderView: View {
             Text("当前设备或相机权限暂不可用")
                 .font(AppTypography.subheadlineSemibold)
                 .foregroundStyle(Color.textPrimary)
-            Text("可以在系统设置中允许相机访问，或直接输入 ISBN。")
+            Text("可以在系统设置中允许相机访问，或直接输入 ISBN")
                 .font(AppTypography.caption)
                 .foregroundStyle(Color.textSecondary)
                 .multilineTextAlignment(.center)
@@ -137,7 +137,7 @@ struct BookScanPlaceholderView: View {
 
     private func submitISBNCandidate(_ candidate: String) {
         guard let isbn = normalizedISBN(candidate) else {
-            feedback = "请扫描或输入 10 位/13 位 ISBN。"
+            feedback = "请扫描或输入 10 位/13 位 ISBN"
             return
         }
         feedback = "已识别 ISBN：\(isbn)"

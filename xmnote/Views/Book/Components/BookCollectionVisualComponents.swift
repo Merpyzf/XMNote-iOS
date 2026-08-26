@@ -1,11 +1,16 @@
 /**
- * [INPUT]: 依赖 BookCollectionListItem、BookCollectionDisplaySetting、BookCollectionDetail、BookCollectionBookItem 与 XMBookCover 渲染书单列表、详情和书单内书籍关系
+ * [INPUT]: 依赖 BookCollectionListItem、BookCollectionDisplaySetting、BookCollectionDetail、BookCollectionBookItem、XMBookCover、XMBookCoverAppearance、InteractionMetrics 与 ReadingStatusPresentation 渲染书单列表、详情和书单内书籍关系
  * [OUTPUT]: 对外提供书单模块页面私有视觉组件，统一堆叠/规整封面、海报式封面、指标、详情头、书籍卡片、书籍元信息入口与 relation 文本语义区块
  * [POS]: Book 模块书单页面私有展示组件，被 BookCollectionListView、BookCollectionDetailView 与加入书单 Sheet 复用
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
 import SwiftUI
+
+/// 书单页面对进度、总结和补充入口的统一强调色，避免把组件细节提升为全局色阶。
+private enum BookCollectionVisualAppearance {
+    static let emphasisAccent = Color.xmHex(0x2DA44F)
+}
 
 /// 书单内 relation 文本的页面展示语义，将同一 `recommend` 字段映射为普通书单收藏理由或年度书单年度点评。
 nonisolated struct BookCollectionRelationNotePresentation: Hashable, Sendable {
@@ -27,7 +32,7 @@ nonisolated struct BookCollectionRelationNotePresentation: Hashable, Sendable {
                 addTitle: "添加收藏理由",
                 editTitle: "编辑收藏理由",
                 placeholder: "写下收藏理由",
-                clearHint: "留空保存会清除收藏理由，但不会移出书单。",
+                clearHint: "留空保存会清除收藏理由，但不会移出书单",
                 emptyAccessibilityHint: "可添加收藏理由",
                 savingMessage: "正在保存收藏理由…",
                 savedMessage: "收藏理由已保存"
@@ -38,7 +43,7 @@ nonisolated struct BookCollectionRelationNotePresentation: Hashable, Sendable {
                 addTitle: "添加年度点评",
                 editTitle: "编辑年度点评",
                 placeholder: "写下年度点评",
-                clearHint: "留空保存会清除年度点评，但不会改变年度书单成员。",
+                clearHint: "留空保存会清除年度点评，但不会改变年度书单成员",
                 emptyAccessibilityHint: "可添加年度点评",
                 savingMessage: "正在保存年度点评…",
                 savedMessage: "年度点评已保存"
@@ -64,7 +69,7 @@ struct BookCollectionCoverMosaicView: View {
                 .fill(Color.surfaceCard)
                 .overlay {
                     RoundedRectangle(cornerRadius: CornerRadius.blockLarge, style: .continuous)
-                        .stroke(Color.surfaceBorderSubtle, lineWidth: CardStyle.borderWidth)
+                        .stroke(Color.surfaceBorderSubtle, lineWidth: StrokeWidth.hairline)
                 }
 
             if visibleCovers.isEmpty {
@@ -104,7 +109,7 @@ struct BookCollectionCoverMosaicView: View {
                     coverWidth,
                     urlString: cover,
                     cornerRadius: CornerRadius.inlaySmall,
-                    border: .init(color: .surfaceBorderSubtle, width: CardStyle.borderWidth),
+                    border: .init(color: .surfaceBorderSubtle, width: StrokeWidth.hairline),
                     placeholderIconSize: .small,
                     surfaceStyle: .spine
                 )
@@ -164,12 +169,12 @@ struct BookCollectionCoverShelfView: View {
                         index == 0 ? 58 : 50,
                         urlString: cover,
                         cornerRadius: CornerRadius.inlaySmall,
-                        border: .init(color: .surfaceBorderSubtle, width: CardStyle.borderWidth),
+                        border: .init(color: .surfaceBorderSubtle, width: StrokeWidth.hairline),
                         placeholderIconSize: .small,
                         surfaceStyle: .spine
                     )
                     .shadow(
-                        color: Color.bookCoverDropShadow.opacity(index == 0 ? 0.70 : 0.42),
+                        color: XMBookCoverAppearance.dropShadow.opacity(index == 0 ? 0.70 : 0.42),
                         radius: index == 0 ? 6 : 4,
                         x: Spacing.none,
                         y: index == 0 ? 4 : 2
@@ -285,7 +290,7 @@ struct BookCollectionMutedPosterCoverView: View {
         .clipShape(shape)
         .overlay {
             shape
-                .stroke(Color.surfaceBorderSubtle.opacity(0.72), lineWidth: CardStyle.borderWidth)
+                .stroke(Color.surfaceBorderSubtle.opacity(0.72), lineWidth: StrokeWidth.hairline)
         }
         .accessibilityHidden(true)
     }
@@ -335,12 +340,12 @@ struct BookCollectionRegularPosterCoverView: View {
                                         coverWidth(in: size),
                                         urlString: cover,
                                         cornerRadius: CornerRadius.inlaySmall,
-                                        border: .init(color: .surfaceBorderSubtle, width: CardStyle.borderWidth),
+                                        border: .init(color: .surfaceBorderSubtle, width: StrokeWidth.hairline),
                                         placeholderIconSize: .small,
                                         surfaceStyle: .spine
                                     )
                                     .shadow(
-                                        color: Color.bookCoverDropShadow.opacity(0.20),
+                                        color: XMBookCoverAppearance.dropShadow.opacity(0.20),
                                         radius: 4,
                                         x: Spacing.none,
                                         y: 2
@@ -357,7 +362,7 @@ struct BookCollectionRegularPosterCoverView: View {
             .clipShape(shape)
             .overlay {
                 shape
-                    .stroke(Color.surfaceBorderSubtle.opacity(0.72), lineWidth: CardStyle.borderWidth)
+                    .stroke(Color.surfaceBorderSubtle.opacity(0.72), lineWidth: StrokeWidth.hairline)
             }
             .accessibilityHidden(true)
     }
@@ -785,7 +790,7 @@ private struct BookCollectionMutedPosterBook: View {
                     width,
                     urlString: cover,
                     cornerRadius: CornerRadius.inlaySmall,
-                    border: .init(color: .surfaceBorderSubtle, width: CardStyle.borderWidth),
+                    border: .init(color: .surfaceBorderSubtle, width: StrokeWidth.hairline),
                     placeholderIconSize: .small,
                     surfaceStyle: .spine
                 )
@@ -794,7 +799,7 @@ private struct BookCollectionMutedPosterBook: View {
             }
         }
         .shadow(
-            color: Color.bookCoverDropShadow.opacity(isPaperLayer ? 0.08 : 0.26),
+            color: XMBookCoverAppearance.dropShadow.opacity(isPaperLayer ? 0.08 : 0.26),
             radius: isPaperLayer ? 2 : (width > 50 ? 5 : 4),
             x: Spacing.none,
             y: isPaperLayer ? 1 : (width > 50 ? 3 : 2)
@@ -806,7 +811,7 @@ private struct BookCollectionMutedPosterBook: View {
             .fill(palette.paper.opacity(0.92))
             .overlay(alignment: .leading) {
                 Rectangle()
-                    .fill(Color.bookCoverSpineDark.opacity(0.10))
+                    .fill(XMBookCoverAppearance.spineDark.opacity(0.10))
                     .frame(width: max(2, width * 0.08))
             }
             .overlay(alignment: .bottom) {
@@ -817,7 +822,7 @@ private struct BookCollectionMutedPosterBook: View {
             .frame(width: width, height: XMBookCover.height(forWidth: width))
             .overlay {
                 RoundedRectangle(cornerRadius: CornerRadius.inlaySmall, style: .continuous)
-                    .stroke(Color.surfaceBorderSubtle.opacity(0.34), lineWidth: CardStyle.borderWidth)
+                    .stroke(Color.surfaceBorderSubtle.opacity(0.34), lineWidth: StrokeWidth.hairline)
             }
     }
 }
@@ -837,47 +842,47 @@ private struct BookCollectionMutedPosterPalette {
 
     private static let manualVariants: [BookCollectionMutedPosterPalette] = [
         BookCollectionMutedPosterPalette(
-            base: Color(light: Color(hex: 0xEEF4F1), dark: Color(hex: 0x1F2623)),
-            wash: Color(light: Color(hex: 0xC9E3DA).opacity(0.72), dark: Color(hex: 0x355247).opacity(0.62)),
-            accentWash: Color(light: Color(hex: 0xE6EEF7).opacity(0.82), dark: Color(hex: 0x344356).opacity(0.58)),
-            highlight: Color(light: Color.white.opacity(0.54), dark: Color.white.opacity(0.05)),
-            paper: Color(light: Color(hex: 0xF6F2E7), dark: Color(hex: 0x4A4234)),
-            paperBand: Color(light: Color(hex: 0xE0D3B6), dark: Color(hex: 0x70634A))
+            base: Color.xmAdaptive(light: Color.xmHex(0xEEF4F1), dark: Color.xmHex(0x1F2623)),
+            wash: Color.xmAdaptive(light: Color.xmHex(0xC9E3DA).opacity(0.72), dark: Color.xmHex(0x355247).opacity(0.62)),
+            accentWash: Color.xmAdaptive(light: Color.xmHex(0xE6EEF7).opacity(0.82), dark: Color.xmHex(0x344356).opacity(0.58)),
+            highlight: Color.xmAdaptive(light: Color.white.opacity(0.54), dark: Color.white.opacity(0.05)),
+            paper: Color.xmAdaptive(light: Color.xmHex(0xF6F2E7), dark: Color.xmHex(0x4A4234)),
+            paperBand: Color.xmAdaptive(light: Color.xmHex(0xE0D3B6), dark: Color.xmHex(0x70634A))
         ),
         BookCollectionMutedPosterPalette(
-            base: Color(light: Color(hex: 0xF2F4EC), dark: Color(hex: 0x24261F)),
-            wash: Color(light: Color(hex: 0xDCE7D0).opacity(0.74), dark: Color(hex: 0x45533A).opacity(0.58)),
-            accentWash: Color(light: Color(hex: 0xE9EEE2).opacity(0.86), dark: Color(hex: 0x394336).opacity(0.64)),
-            highlight: Color(light: Color.white.opacity(0.52), dark: Color.white.opacity(0.05)),
-            paper: Color(light: Color(hex: 0xF5EDDC), dark: Color(hex: 0x4A3E31)),
-            paperBand: Color(light: Color(hex: 0xD8C79F), dark: Color(hex: 0x756241))
+            base: Color.xmAdaptive(light: Color.xmHex(0xF2F4EC), dark: Color.xmHex(0x24261F)),
+            wash: Color.xmAdaptive(light: Color.xmHex(0xDCE7D0).opacity(0.74), dark: Color.xmHex(0x45533A).opacity(0.58)),
+            accentWash: Color.xmAdaptive(light: Color.xmHex(0xE9EEE2).opacity(0.86), dark: Color.xmHex(0x394336).opacity(0.64)),
+            highlight: Color.xmAdaptive(light: Color.white.opacity(0.52), dark: Color.white.opacity(0.05)),
+            paper: Color.xmAdaptive(light: Color.xmHex(0xF5EDDC), dark: Color.xmHex(0x4A3E31)),
+            paperBand: Color.xmAdaptive(light: Color.xmHex(0xD8C79F), dark: Color.xmHex(0x756241))
         ),
         BookCollectionMutedPosterPalette(
-            base: Color(light: Color(hex: 0xF2F1EC), dark: Color(hex: 0x25231F)),
-            wash: Color(light: Color(hex: 0xDFD6C4).opacity(0.70), dark: Color(hex: 0x514636).opacity(0.56)),
-            accentWash: Color(light: Color(hex: 0xDDE9E0).opacity(0.78), dark: Color(hex: 0x354B3C).opacity(0.58)),
-            highlight: Color(light: Color.white.opacity(0.50), dark: Color.white.opacity(0.05)),
-            paper: Color(light: Color(hex: 0xF1E7D1), dark: Color(hex: 0x4B3D2E)),
-            paperBand: Color(light: Color(hex: 0xD7C095), dark: Color(hex: 0x74603E))
+            base: Color.xmAdaptive(light: Color.xmHex(0xF2F1EC), dark: Color.xmHex(0x25231F)),
+            wash: Color.xmAdaptive(light: Color.xmHex(0xDFD6C4).opacity(0.70), dark: Color.xmHex(0x514636).opacity(0.56)),
+            accentWash: Color.xmAdaptive(light: Color.xmHex(0xDDE9E0).opacity(0.78), dark: Color.xmHex(0x354B3C).opacity(0.58)),
+            highlight: Color.xmAdaptive(light: Color.white.opacity(0.50), dark: Color.white.opacity(0.05)),
+            paper: Color.xmAdaptive(light: Color.xmHex(0xF1E7D1), dark: Color.xmHex(0x4B3D2E)),
+            paperBand: Color.xmAdaptive(light: Color.xmHex(0xD7C095), dark: Color.xmHex(0x74603E))
         )
     ]
 
     private static let annualVariants: [BookCollectionMutedPosterPalette] = [
         BookCollectionMutedPosterPalette(
-            base: Color(light: Color(hex: 0xEDF3F8), dark: Color(hex: 0x1F252A)),
-            wash: Color(light: Color(hex: 0xD5E4EF).opacity(0.78), dark: Color(hex: 0x394D5E).opacity(0.58)),
-            accentWash: Color(light: Color(hex: 0xC9E2DA).opacity(0.72), dark: Color(hex: 0x355048).opacity(0.56)),
-            highlight: Color(light: Color.white.opacity(0.54), dark: Color.white.opacity(0.05)),
-            paper: Color(light: Color(hex: 0xF7F2E5), dark: Color(hex: 0x4A4233)),
-            paperBand: Color(light: Color(hex: 0xDDD0AE), dark: Color(hex: 0x75664B))
+            base: Color.xmAdaptive(light: Color.xmHex(0xEDF3F8), dark: Color.xmHex(0x1F252A)),
+            wash: Color.xmAdaptive(light: Color.xmHex(0xD5E4EF).opacity(0.78), dark: Color.xmHex(0x394D5E).opacity(0.58)),
+            accentWash: Color.xmAdaptive(light: Color.xmHex(0xC9E2DA).opacity(0.72), dark: Color.xmHex(0x355048).opacity(0.56)),
+            highlight: Color.xmAdaptive(light: Color.white.opacity(0.54), dark: Color.white.opacity(0.05)),
+            paper: Color.xmAdaptive(light: Color.xmHex(0xF7F2E5), dark: Color.xmHex(0x4A4233)),
+            paperBand: Color.xmAdaptive(light: Color.xmHex(0xDDD0AE), dark: Color.xmHex(0x75664B))
         ),
         BookCollectionMutedPosterPalette(
-            base: Color(light: Color(hex: 0xF3F1EB), dark: Color(hex: 0x25231F)),
-            wash: Color(light: Color(hex: 0xE4DAC8).opacity(0.78), dark: Color(hex: 0x504535).opacity(0.56)),
-            accentWash: Color(light: Color(hex: 0xD7E6D1).opacity(0.72), dark: Color(hex: 0x40543A).opacity(0.54)),
-            highlight: Color(light: Color.white.opacity(0.54), dark: Color.white.opacity(0.05)),
-            paper: Color(light: Color(hex: 0xF6EDD9), dark: Color(hex: 0x4C4030)),
-            paperBand: Color(light: Color(hex: 0xDDC89E), dark: Color(hex: 0x74613F))
+            base: Color.xmAdaptive(light: Color.xmHex(0xF3F1EB), dark: Color.xmHex(0x25231F)),
+            wash: Color.xmAdaptive(light: Color.xmHex(0xE4DAC8).opacity(0.78), dark: Color.xmHex(0x504535).opacity(0.56)),
+            accentWash: Color.xmAdaptive(light: Color.xmHex(0xD7E6D1).opacity(0.72), dark: Color.xmHex(0x40543A).opacity(0.54)),
+            highlight: Color.xmAdaptive(light: Color.white.opacity(0.54), dark: Color.white.opacity(0.05)),
+            paper: Color.xmAdaptive(light: Color.xmHex(0xF6EDD9), dark: Color.xmHex(0x4C4030)),
+            paperBand: Color.xmAdaptive(light: Color.xmHex(0xDDC89E), dark: Color.xmHex(0x74613F))
         )
     ]
 }
@@ -945,7 +950,7 @@ struct BookCollectionProgressMeter: View {
                     total: Double(targetReadCount)
                 )
                 .progressViewStyle(.linear)
-                .tint(Color.brandDeep.opacity(0.62))
+                .tint(BookCollectionVisualAppearance.emphasisAccent.opacity(0.62))
 
                 Text("读完 \(finishedCount)/\(targetReadCount) 本")
                     .font(AppTypography.caption2)
@@ -1024,7 +1029,7 @@ struct BookCollectionListCard: View {
         .background(Color.surfaceCard, in: RoundedRectangle(cornerRadius: CornerRadius.containerMedium, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: CornerRadius.containerMedium, style: .continuous)
-                .stroke(Color.surfaceBorderSubtle, lineWidth: CardStyle.borderWidth)
+                .stroke(Color.surfaceBorderSubtle, lineWidth: StrokeWidth.hairline)
         }
         .accessibilityElement(children: .combine)
         .accessibilityLabel(accessibilityLabel)
@@ -1072,7 +1077,7 @@ struct BookCollectionListCard: View {
         .background(Color.surfaceCard, in: RoundedRectangle(cornerRadius: CornerRadius.containerMedium, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: CornerRadius.containerMedium, style: .continuous)
-                .stroke(Color.surfaceBorderSubtle, lineWidth: CardStyle.borderWidth)
+                .stroke(Color.surfaceBorderSubtle, lineWidth: StrokeWidth.hairline)
         }
         .accessibilityElement(children: .combine)
         .accessibilityLabel(accessibilityLabel)
@@ -1174,7 +1179,7 @@ private struct BookCollectionEditorialCoverCluster: View {
     var body: some View {
         ZStack {
             Capsule()
-                .fill(Color.bookCoverDropShadow.opacity(0.06))
+                .fill(XMBookCoverAppearance.dropShadow.opacity(0.06))
                 .blur(radius: 7)
                 .frame(width: 86, height: 9)
                 .offset(y: 47)
@@ -1196,7 +1201,7 @@ private struct BookCollectionEditorialCoverCluster: View {
                     coverWidth(for: index),
                     urlString: cover,
                     cornerRadius: CornerRadius.inlaySmall,
-                    border: .init(color: .surfaceBorderSubtle, width: CardStyle.borderWidth),
+                    border: .init(color: .surfaceBorderSubtle, width: StrokeWidth.hairline),
                     placeholderIconSize: .small,
                     surfaceStyle: .spine
                 )
@@ -1204,7 +1209,7 @@ private struct BookCollectionEditorialCoverCluster: View {
                 .offset(offset(for: index))
                 .zIndex(zIndex(for: index))
                 .shadow(
-                    color: Color.bookCoverDropShadow.opacity(index == 0 ? 0.22 : 0.14),
+                    color: XMBookCoverAppearance.dropShadow.opacity(index == 0 ? 0.22 : 0.14),
                     radius: index == 0 ? 8 : 5,
                     x: Spacing.none,
                     y: index == 0 ? 6 : 3
@@ -1220,7 +1225,7 @@ private struct BookCollectionEditorialCoverCluster: View {
                     .fill(index == 0 ? Color.surfaceCard : Color.surfaceNested)
                     .overlay {
                         RoundedRectangle(cornerRadius: CornerRadius.inlaySmall, style: .continuous)
-                            .stroke(Color.surfaceBorderSubtle.opacity(index == 0 ? 0.76 : 0.52), lineWidth: CardStyle.borderWidth)
+                            .stroke(Color.surfaceBorderSubtle.opacity(index == 0 ? 0.76 : 0.52), lineWidth: StrokeWidth.hairline)
                     }
                     .overlay(alignment: .topLeading) {
                         RoundedRectangle(cornerRadius: CornerRadius.inlayHairline, style: .continuous)
@@ -1377,7 +1382,7 @@ private struct BookCollectionHeaderCoverStage: View {
             EmptyView()
         case .gallery:
             Capsule()
-                .fill(Color.bookCoverDropShadow.opacity(0.07))
+                .fill(XMBookCoverAppearance.dropShadow.opacity(0.07))
                 .blur(radius: 8)
                 .frame(width: size.width * 0.46, height: max(8, size.height * 0.05))
                 .position(x: size.width * 0.50, y: size.height * 0.77)
@@ -1388,7 +1393,7 @@ private struct BookCollectionHeaderCoverStage: View {
                 .overlay(alignment: .top) {
                     Rectangle()
                         .fill(Color.surfaceBorderSubtle.opacity(0.74))
-                        .frame(height: CardStyle.borderWidth)
+                        .frame(height: StrokeWidth.hairline)
                         .padding(.horizontal, Spacing.tight)
                 }
                 .overlay(alignment: .bottom) {
@@ -1397,7 +1402,7 @@ private struct BookCollectionHeaderCoverStage: View {
                         .frame(height: max(4, size.height * 0.025))
                 }
                 .shadow(
-                    color: Color.bookCoverDropShadow.opacity(0.10),
+                    color: XMBookCoverAppearance.dropShadow.opacity(0.10),
                     radius: 8,
                     x: Spacing.none,
                     y: 3
@@ -1433,10 +1438,10 @@ private struct BookCollectionHeaderCoverStage: View {
         .clipShape(shape)
         .overlay {
             shape
-                .stroke(Color.surfaceBorderSubtle.opacity(0.52), lineWidth: CardStyle.borderWidth)
+                .stroke(Color.surfaceBorderSubtle.opacity(0.52), lineWidth: StrokeWidth.hairline)
         }
         .shadow(
-            color: Color.bookCoverDropShadow.opacity(0.04),
+            color: XMBookCoverAppearance.dropShadow.opacity(0.04),
             radius: 10,
             x: Spacing.none,
             y: 4
@@ -1494,7 +1499,7 @@ struct BookCollectionDetailHero: View {
                     Button(action: onShowFullSummary) {
                         Text("查看完整简介")
                             .font(AppTypography.captionMedium)
-                            .foregroundStyle(Color.brandDeep)
+                            .foregroundStyle(BookCollectionVisualAppearance.emphasisAccent)
                             .frame(minHeight: 28, alignment: .leading)
                     }
                     .buttonStyle(.plain)
@@ -1583,9 +1588,9 @@ struct BookCollectionDetailHero: View {
         }
         switch detail.kind {
         case .manual:
-            return detail.bookCount == 0 ? "从书架里挑选几本书，给这个主题一个开始。" : "按你的阅读主题整理出的书籍集合。"
+            return detail.bookCount == 0 ? "从书架里挑选几本书，给这个主题一个开始" : "按你的阅读主题整理出的书籍集合"
         case .annual:
-            return "随读完记录自动同步，保留这一年的阅读轨迹。"
+            return "随读完记录自动同步，保留这一年的阅读轨迹"
         }
     }
 
@@ -1690,7 +1695,7 @@ struct BookCollectionProgressSummary: View {
             BookCollectionSummaryMetricPill(
                 title: "今年读完",
                 value: "\(completedCount) 本",
-                tint: Color.brandDeep,
+                tint: BookCollectionVisualAppearance.emphasisAccent,
                 isEmphasized: true
             )
         }
@@ -1737,7 +1742,7 @@ struct BookCollectionProgressSummary: View {
                     .fill(Color.surfaceBorderSubtle.opacity(0.46))
 
                 Capsule()
-                    .fill(Color.brandDeep.opacity(0.62))
+                    .fill(BookCollectionVisualAppearance.emphasisAccent.opacity(0.62))
                     .frame(width: proxy.size.width * progressFraction)
             }
         }
@@ -1916,7 +1921,7 @@ struct BookCollectionEmptyBooksRow: View {
         XMCompactStateView(
             role: .empty,
             title: "书单里还没有书",
-            message: isManual ? "添加书籍后，会在这里按顺序显示。" : "读完记录会在这里同步显示。",
+            message: isManual ? "添加书籍后，会在这里按顺序显示" : "读完记录会在这里同步显示",
             systemImage: isManual ? "book.badge.plus" : "calendar"
         )
     }
@@ -1944,10 +1949,10 @@ struct BookCollectionBookCard: View {
             .background(Color.surfaceCard, in: RoundedRectangle(cornerRadius: CornerRadius.blockLarge, style: .continuous))
             .overlay {
                 RoundedRectangle(cornerRadius: CornerRadius.blockLarge, style: .continuous)
-                    .stroke(Color.surfaceBorderSubtle.opacity(0.58), lineWidth: CardStyle.borderWidth)
+                    .stroke(Color.surfaceBorderSubtle.opacity(0.58), lineWidth: StrokeWidth.hairline)
             }
             .shadow(
-                color: Color.bookCoverDropShadow.opacity(0.055),
+                color: XMBookCoverAppearance.dropShadow.opacity(0.055),
                 radius: 10,
                 x: Spacing.none,
                 y: 4
@@ -1997,7 +2002,7 @@ struct BookCollectionBookCard: View {
                 } label: {
                     Label(relationNotePresentation.title, systemImage: "quote.bubble")
                 }
-                .tint(.blue)
+                .tint(Color.editActionFill)
             }
 
             if canEditStructure {
@@ -2033,12 +2038,12 @@ struct BookCollectionBookCard: View {
                         coverWidth,
                         urlString: item.book.cover,
                         cornerRadius: CornerRadius.inlaySmall,
-                        border: .init(color: .surfaceBorderSubtle, width: CardStyle.borderWidth),
+                        border: .init(color: .surfaceBorderSubtle, width: StrokeWidth.hairline),
                         placeholderIconSize: .small,
                         surfaceStyle: .spine
                     )
                     .shadow(
-                        color: Color.bookCoverDropShadow.opacity(0.14),
+                        color: XMBookCoverAppearance.dropShadow.opacity(0.14),
                         radius: 7,
                         x: Spacing.none,
                         y: 4
@@ -2191,7 +2196,7 @@ private struct BookCollectionReadStatusChip: View {
             .background(tint.opacity(0.07), in: Capsule())
             .overlay {
                 Capsule()
-                    .stroke(tint.opacity(0.10), lineWidth: CardStyle.borderWidth)
+                    .stroke(tint.opacity(0.10), lineWidth: StrokeWidth.hairline)
             }
             .fixedSize(horizontal: true, vertical: false)
             .accessibilityLabel("阅读状态 \(text)")
@@ -2249,7 +2254,11 @@ private struct BookCollectionAddReasonPrompt: View {
                     .font(AppTypography.captionMedium)
             }
             .foregroundStyle(Color.textSecondary)
-            .frame(maxWidth: .infinity, minHeight: Spacing.actionReserved, alignment: .leading)
+            .frame(
+                maxWidth: .infinity,
+                minHeight: InteractionMetrics.minimumTouchTarget,
+                alignment: .leading
+            )
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -2261,15 +2270,15 @@ private extension BookEntryReadingStatus {
     var collectionBookCardTint: Color {
         switch self {
         case .wantRead:
-            return Color.statusWish.opacity(0.68)
+            return ReadingStatusPresentation.wantRead.opacity(0.68)
         case .reading:
-            return Color.statusReading.opacity(0.68)
+            return ReadingStatusPresentation.reading.opacity(0.68)
         case .finished:
-            return Color.statusDone.opacity(0.70)
+            return ReadingStatusPresentation.readDone.opacity(0.70)
         case .abandoned:
-            return Color.statusAbandoned.opacity(0.66)
+            return ReadingStatusPresentation.abandoned.opacity(0.66)
         case .onHold:
-            return Color.statusOnHold.opacity(0.66)
+            return ReadingStatusPresentation.onHold.opacity(0.66)
         }
     }
 }
@@ -2364,7 +2373,7 @@ struct BookCollectionRecommendQuote: View {
             .background(Color.surfaceNested.opacity(0.54), in: RoundedRectangle(cornerRadius: CornerRadius.blockSmall, style: .continuous))
             .overlay {
                 RoundedRectangle(cornerRadius: CornerRadius.blockSmall, style: .continuous)
-                    .stroke(Color.surfaceBorderSubtle.opacity(0.22), lineWidth: CardStyle.borderWidth)
+                    .stroke(Color.surfaceBorderSubtle.opacity(0.22), lineWidth: StrokeWidth.hairline)
             }
         }
         .buttonStyle(.plain)
@@ -2393,7 +2402,7 @@ struct BookCollectionStatusBadge: View {
 /// 年度书单自动同步说明，放在详情头内，避免页面中部重复占位。
 private struct BookCollectionReadOnlyNotice: View {
     var body: some View {
-        Label("年度书单随读完记录自动同步，年度点评可编辑。", systemImage: "arrow.triangle.2.circlepath")
+        Label("年度书单随读完记录自动同步，年度点评可编辑", systemImage: "arrow.triangle.2.circlepath")
             .font(AppTypography.caption)
             .foregroundStyle(Color.textSecondary)
             .padding(.horizontal, Spacing.tight)
@@ -2474,7 +2483,7 @@ struct BookCollectionListSkeletonCard: View {
         .background(Color.surfaceCard, in: RoundedRectangle(cornerRadius: CornerRadius.containerMedium, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: CornerRadius.containerMedium, style: .continuous)
-                .stroke(Color.surfaceBorderSubtle, lineWidth: CardStyle.borderWidth)
+                .stroke(Color.surfaceBorderSubtle, lineWidth: StrokeWidth.hairline)
         }
     }
 }
@@ -2518,7 +2527,7 @@ private struct BookCollectionPosterSkeletonCover: View {
             .clipShape(shape)
             .overlay {
                 shape
-                    .stroke(Color.surfaceBorderSubtle.opacity(0.72), lineWidth: CardStyle.borderWidth)
+                    .stroke(Color.surfaceBorderSubtle.opacity(0.72), lineWidth: StrokeWidth.hairline)
             }
     }
 
@@ -2546,7 +2555,7 @@ private struct BookCollectionPosterSkeletonCover: View {
             .frame(width: width, height: XMBookCover.height(forWidth: width))
             .overlay {
                 RoundedRectangle(cornerRadius: CornerRadius.inlaySmall, style: .continuous)
-                    .stroke(Color.surfaceBorderSubtle.opacity(0.28), lineWidth: CardStyle.borderWidth)
+                    .stroke(Color.surfaceBorderSubtle.opacity(0.28), lineWidth: StrokeWidth.hairline)
             }
             .rotationEffect(.degrees(spec.rotation))
             .position(x: size.width * spec.x, y: size.height * spec.y)

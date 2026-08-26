@@ -1,12 +1,19 @@
 #if DEBUG
 /**
- * [INPUT]: 依赖 RichTextTestViewModel 提供测试数据与状态
+ * [INPUT]: 依赖 RichTextTestViewModel 提供测试数据与状态，依赖测试页私有格式标签外观
  * [OUTPUT]: 对外提供 RichTextTestView，富文本编辑器测试页
  * [POS]: Debug 模块富文本测试入口，#if DEBUG 编译隔离
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
 import SwiftUI
+
+private enum RichTextTestAppearance {
+    static let formatTagBackground = Color.xmAdaptive(
+        light: Color.xmHex(0xE8F0EC),
+        dark: Color.xmHex(0x343536)
+    )
+}
 
 // MARK: - 外壳
 
@@ -58,7 +65,7 @@ private struct RichTextTestContentView: View {
                     }
                 }
                 .pickerStyle(.menu)
-                .tint(Color.brand)
+                .tint(Color.appTint)
 
                 HStack(spacing: Spacing.base) {
                     Button("加载到编辑器") {
@@ -67,13 +74,13 @@ private struct RichTextTestContentView: View {
                         }
                     }
                     .buttonStyle(.borderedProminent)
-                    .tint(Color.brand)
+                    .tint(Color.appTint)
 
                     Button("往返测试") {
                         viewModel.roundTripTest()
                     }
                     .buttonStyle(.bordered)
-                    .tint(Color.brand)
+                    .tint(Color.appTint)
                 }
             }
             .padding(Spacing.contentEdge)
@@ -96,7 +103,7 @@ private struct RichTextTestContentView: View {
                 .clipShape(RoundedRectangle(cornerRadius: CornerRadius.blockMedium, style: .continuous))
                 .overlay(
                     RoundedRectangle(cornerRadius: CornerRadius.blockMedium, style: .continuous)
-                        .stroke(Color.surfaceBorderDefault, lineWidth: CardStyle.borderWidth)
+                        .stroke(Color.surfaceBorderDefault, lineWidth: StrokeWidth.hairline)
                 )
 
                 activeFormatsDisplay(viewModel.contentFormats)
@@ -133,7 +140,7 @@ private struct RichTextTestContentView: View {
                 .clipShape(RoundedRectangle(cornerRadius: CornerRadius.blockMedium, style: .continuous))
                 .overlay(
                     RoundedRectangle(cornerRadius: CornerRadius.blockMedium, style: .continuous)
-                        .stroke(Color.surfaceBorderDefault, lineWidth: CardStyle.borderWidth)
+                        .stroke(Color.surfaceBorderDefault, lineWidth: StrokeWidth.hairline)
                 )
 
                 activeFormatsDisplay(viewModel.ideaFormats)
@@ -154,13 +161,13 @@ private struct RichTextTestContentView: View {
                         viewModel.serializeContent()
                     }
                     .buttonStyle(.bordered)
-                    .tint(Color.brand)
+                    .tint(Color.appTint)
 
                     Button("序列化想法") {
                         viewModel.serializeIdea()
                     }
                     .buttonStyle(.bordered)
-                    .tint(Color.brand)
+                    .tint(Color.appTint)
                 }
 
                 if !viewModel.contentHTML.isEmpty {
@@ -187,7 +194,7 @@ private struct RichTextTestContentView: View {
                         switch result {
                         case .consistent:
                             Label("HTML 往返一致", systemImage: "checkmark.circle.fill")
-                                .foregroundStyle(Color.brand)
+                                .foregroundStyle(Color.appTint)
                                 .font(.headline)
 
                         case .inconsistent(let original, let roundTripped):
@@ -228,7 +235,7 @@ private struct RichTextTestContentView: View {
                         .font(.caption)
                         .padding(.horizontal, 6)
                         .padding(.vertical, 2)
-                        .background(Color.tagBackground, in: Capsule())
+                        .background(RichTextTestAppearance.formatTagBackground, in: Capsule())
                 }
             }
         }
@@ -267,6 +274,6 @@ private struct RichTextTestContentView: View {
     NavigationStack {
         RichTextTestView()
     }
-    .tint(Color.brand)
+    .tint(Color.appTint)
 }
 #endif

@@ -1,7 +1,7 @@
 # HorizontalPagingHost 使用说明
 
 ## 组件定位
-- 源码路径：`xmnote/UIComponents/Tabs/HorizontalPagingHost.swift`
+- 源码路径：`xmnote/UIComponents/Navigation/Tabs/HorizontalPagingHost.swift`
 - 角色：通用横向分页宿主，统一承接分页吸附、选中同步、窗口化懒挂载和页级生命周期回调。
 - 边界：
   - 负责横向分页与可见窗口控制。

@@ -1,11 +1,16 @@
 /**
- * [INPUT]: 依赖 RepositoryContainer 注入 ChapterManagement/OCR Repository，依赖 ChapterManagerViewModel、批量/远端目录 Sheet 与现有加载/弹窗/设计令牌组件
+ * [INPUT]: 依赖 RepositoryContainer 注入 ChapterManagement/OCR Repository，依赖 ChapterManagerViewModel、XMStarredAppearance、批量/远端目录 Sheet、InteractionMetrics 与页面私有布局刻度
  * [OUTPUT]: 对外提供 ChapterManagerView，覆盖五层目录展开、叶子章节书摘导航、手工/OCR/远端导入、搜索、定位、新增编辑、星标、可撤销移动重排、多选删除与清空子章节
  * [POS]: Views/Book 的书内目录管理页面壳层，由 BookRoute.chapterManager 在当前 Tab NavigationStack 中 push
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
 import SwiftUI
+
+/// 目录管理底部 chrome 的稳定高度，确保选择栏与撤销栏切换时页面内容不跳动。
+private enum ChapterManagerChromeMetrics {
+    static let bottomBarMinimumHeight: CGFloat = 52
+}
 
 /// 书内目录管理入口，完成 Repository 依赖注入和首屏延迟加载反馈。
 struct ChapterManagerView: View {
@@ -157,7 +162,7 @@ private struct ChapterManagerContentView: View {
             XMContentStateView(
                 role: .empty,
                 title: "暂无目录",
-                message: "可以新增一级章节，再逐步整理书摘结构。",
+                message: "可以新增一级章节，再逐步整理书摘结构",
                 systemImage: "list.bullet.indent",
                 action: XMStateAction("新增章节", systemImage: "plus", perform: viewModel.presentCreateRoot)
             )
@@ -312,7 +317,7 @@ private struct ChapterManagerContentView: View {
             .disabled(viewModel.selectedIDs.isEmpty || viewModel.isWriting)
         }
         .padding(.horizontal, Spacing.screenEdge)
-        .frame(minHeight: Spacing.actionReserved + Spacing.cozy)
+        .frame(minHeight: ChapterManagerChromeMetrics.bottomBarMinimumHeight)
         .background(.bar)
         .overlay(alignment: .top) {
             Divider().overlay(Color.surfaceBorderSubtle)
@@ -439,7 +444,7 @@ private struct ChapterStructureUndoBar: View {
     var body: some View {
         HStack(spacing: Spacing.cozy) {
             Image(systemName: "arrow.uturn.backward.circle.fill")
-                .foregroundStyle(Color.brand)
+                .foregroundStyle(Color.appTint)
                 .accessibilityHidden(true)
 
             Text(message)
@@ -455,7 +460,10 @@ private struct ChapterStructureUndoBar: View {
             Button(action: onDismiss) {
                 Image(systemName: "xmark")
                     .foregroundStyle(Color.textSecondary)
-                    .frame(width: Spacing.actionReserved, height: Spacing.actionReserved)
+                    .frame(
+                        width: InteractionMetrics.minimumTouchTarget,
+                        height: InteractionMetrics.minimumTouchTarget
+                    )
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
@@ -464,13 +472,18 @@ private struct ChapterStructureUndoBar: View {
         }
         .padding(.leading, Spacing.screenEdge)
         .padding(.trailing, Spacing.compact)
-        .frame(minHeight: Spacing.actionReserved + Spacing.cozy)
+        .frame(minHeight: ChapterManagerChromeMetrics.bottomBarMinimumHeight)
         .background(.bar)
         .overlay(alignment: .top) {
             Divider().overlay(Color.surfaceBorderSubtle)
         }
         .accessibilityElement(children: .contain)
     }
+}
+
+/// 目录行前导控件槽位保持统一宽高，使选择态与展开态切换时正文基线不漂移。
+private enum ChapterManagementRowMetrics {
+    static let leadingControlSlotSize: CGFloat = InteractionMetrics.minimumTouchTarget
 }
 
 /// 目录行以真实层级缩进，编辑态复用同一对象身份切换为多选反馈。
@@ -503,7 +516,10 @@ private struct ChapterManagementRow: View {
                 NavigationLink(value: AppRoute.note(chapterNotesRoute)) {
                     Image(systemName: "note.text")
                         .foregroundStyle(Color.textSecondary)
-                        .frame(width: Spacing.actionReserved, height: Spacing.actionReserved)
+                        .frame(
+                            width: InteractionMetrics.minimumTouchTarget,
+                            height: InteractionMetrics.minimumTouchTarget
+                        )
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
@@ -523,7 +539,7 @@ private struct ChapterManagementRow: View {
         .swipeActions(edge: .trailing, allowsFullSwipe: false) {
             Button("删除", systemImage: "trash", role: .destructive, action: onDelete)
             Button("编辑", systemImage: "pencil", action: onRename)
-                .tint(.blue)
+                .tint(Color.editActionFill)
         }
         .accessibilityElement(children: .contain)
     }
@@ -568,7 +584,7 @@ private struct ChapterManagementRow: View {
                     if visibleItem.item.isStarred {
                         Image(systemName: "star.fill")
                             .imageScale(.small)
-                            .foregroundStyle(Color.ratingActive)
+                            .foregroundStyle(XMStarredAppearance.foreground)
                             .accessibilityHidden(true)
                     }
                 }
@@ -598,8 +614,11 @@ private struct ChapterManagementRow: View {
     private var selectionOrDisclosure: some View {
         if isEditing {
             Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
-                .foregroundStyle(isSelected ? Color.brand : Color.textHint)
-                .frame(width: Spacing.actionReserved, height: Spacing.actionReserved)
+                .foregroundStyle(isSelected ? Color.selectionAccent : Color.textHint)
+                .frame(
+                    width: ChapterManagementRowMetrics.leadingControlSlotSize,
+                    height: ChapterManagementRowMetrics.leadingControlSlotSize
+                )
                 .transition(.opacity)
                 .accessibilityHidden(true)
         } else {
@@ -607,7 +626,10 @@ private struct ChapterManagementRow: View {
                 .font(visibleItem.hasChildren ? AppTypography.captionSemibold : AppTypography.caption2)
                 .foregroundStyle(visibleItem.hasChildren ? Color.textSecondary : Color.textHint.opacity(0.45))
                 .rotationEffect(.degrees(visibleItem.isExpanded && !reduceMotion ? 90 : 0))
-                .frame(width: Spacing.actionReserved, height: Spacing.actionReserved)
+                .frame(
+                    width: ChapterManagementRowMetrics.leadingControlSlotSize,
+                    height: ChapterManagementRowMetrics.leadingControlSlotSize
+                )
                 .animation(
                     reduceMotion ? nil : .snappy(duration: 0.18),
                     value: visibleItem.isExpanded

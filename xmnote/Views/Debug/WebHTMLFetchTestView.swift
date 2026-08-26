@@ -144,7 +144,7 @@ private extension WebHTMLFetchTestContentView {
                         }
                         .buttonStyle(.borderedProminent)
 
-                        Text("单独验证共享豆瓣会话与登录回流。")
+                        Text("单独验证共享豆瓣会话与登录回流")
                             .font(.caption)
                             .foregroundStyle(Color.textHint)
                     }
@@ -154,7 +154,7 @@ private extension WebHTMLFetchTestContentView {
                     HStack(spacing: Spacing.half) {
                         ProgressView()
                             .controlSize(.small)
-                        Text("正在串行执行全部预设场景...")
+                        Text("正在串行执行全部预设场景…")
                             .font(.caption)
                             .foregroundStyle(Color.textSecondary)
                     }
@@ -187,7 +187,7 @@ private extension WebHTMLFetchTestContentView {
                     }
                     .buttonStyle(.borderedProminent)
 
-                    Text("适合直接验证重定向、Cookie 与 HTML 预览。")
+                    Text("适合直接验证重定向、Cookie 与 HTML 预览")
                         .font(.caption)
                         .foregroundStyle(Color.textHint)
                 }
@@ -205,7 +205,7 @@ private extension WebHTMLFetchTestContentView {
                     .font(.headline)
                     .foregroundStyle(Color.textPrimary)
 
-                Text("这里直接运行番茄 DOM 搜索链路，展示运行时快照、终态 HTML、详情链接和触发风控后的恢复流程。")
+                Text("这里直接运行番茄 DOM 搜索链路，展示运行时快照、终态 HTML、详情链接和触发风控后的恢复流程")
                     .font(.caption)
                     .foregroundStyle(Color.textSecondary)
 
@@ -325,7 +325,7 @@ private extension WebHTMLFetchTestContentView {
                         .font(.caption)
                         .foregroundStyle(Color.textSecondary)
                 } else {
-                    Text("尚未执行批量抓取。")
+                    Text("尚未执行批量抓取")
                         .font(.caption)
                         .foregroundStyle(Color.textHint)
                 }
@@ -447,7 +447,7 @@ private extension WebHTMLFetchTestContentView {
                         .font(.subheadline.weight(.semibold))
                         .foregroundStyle(Color.textPrimary)
 
-                    Text("优先检查候选详情链接、结果容器文本和 HTML 片段，确认番茄是否调整了结果卡片结构。")
+                    Text("优先检查候选详情链接、结果容器文本和 HTML 片段，确认番茄是否调整了结果卡片结构")
                         .font(.caption)
                         .foregroundStyle(Color.textSecondary)
                 }
@@ -647,12 +647,12 @@ private extension WebHTMLFetchTestContentView {
                 HStack(spacing: Spacing.half) {
                     ProgressView()
                         .controlSize(.small)
-                    Text("正在解析番茄详情页...")
+                    Text("正在解析番茄详情页…")
                         .font(.caption)
                         .foregroundStyle(Color.textSecondary)
                 }
             } else if viewModel.fanqieStructuredResults.isEmpty {
-                Text("运行番茄搜索后，这里会展示与功能页一致的书籍结果卡片。")
+                Text("运行番茄搜索后，这里会展示与功能页一致的书籍结果卡片")
                     .font(.caption)
                     .foregroundStyle(Color.textHint)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -684,7 +684,7 @@ private extension WebHTMLFetchTestContentView {
                 }
             }
 
-            Text("预览会复用共享番茄会话，并以桌面内容模式加载，便于直接观察当前关键词对应的真实页面。")
+            Text("预览会复用共享番茄会话，并以桌面内容模式加载，便于直接观察当前关键词对应的真实页面")
                 .font(.caption)
                 .foregroundStyle(Color.textSecondary)
 
@@ -729,7 +729,7 @@ private extension WebHTMLFetchTestContentView {
                         .foregroundStyle(Color.feedbackError)
                 }
             } else {
-                Text("点击“运行番茄搜索”后，这里会显示实际加载的番茄搜索页。")
+                Text("点击“运行番茄搜索”后，这里会显示实际加载的番茄搜索页")
                     .font(.caption)
                     .foregroundStyle(Color.textHint)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -1178,7 +1178,7 @@ private struct FanqieLivePreviewWebView: UIViewRepresentable {
         }
 
         func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
-            onNavigationFail("番茄预览页面进程已终止，请重新搜索。")
+            onNavigationFail("番茄预览页面进程已终止，请重新搜索")
         }
 
         private func evaluateString(_ webView: WKWebView, script: String) async throws -> String {

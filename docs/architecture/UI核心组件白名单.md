@@ -8,6 +8,7 @@
 - 命中关键业务入口（如备份、详情、主容器切换）。
 - 改动会影响核心任务完成路径。
 - 仅页面中“核心组件”纳入，普通占位/样式辅助组件不纳入。
+- 从公共目录迁回 Feature 的页面私有组件不会自动进入白名单；公共组件以 `scripts/design-system/component-catalog.json` 为完整清单。
 
 组件路径清单
 - xmnote/Views/Book/BookContainerView.swift

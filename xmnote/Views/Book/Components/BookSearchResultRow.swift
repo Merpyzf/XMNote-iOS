@@ -7,6 +7,11 @@
 
 import SwiftUI
 
+/// 搜索结果行只使用透明度表达按压，不产生位移或缩放。
+private enum BookSearchResultMotion {
+    static let press = Animation.smooth(duration: 0.16)
+}
+
 /// 在线搜索结果的尾部指示器语义，兼容直接消费与多选模式。
 enum BookSearchResultRowAccessory: Hashable {
     case none
@@ -79,6 +84,6 @@ private struct BookSearchResultButtonStyle: ButtonStyle {
                 RoundedRectangle(cornerRadius: CornerRadius.blockMedium, style: .continuous)
                     .fill(Color.surfaceNested.opacity(configuration.isPressed ? 1 : 0))
             }
-            .animation(.smooth(duration: 0.16), value: configuration.isPressed)
+            .animation(BookSearchResultMotion.press, value: configuration.isPressed)
     }
 }

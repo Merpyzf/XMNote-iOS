@@ -75,7 +75,7 @@ private extension MonthlyReadingChartTestView {
 
                 Toggle("强制减少动态效果", isOn: $forcesReduceMotion)
                     .font(AppTypography.body)
-                    .tint(Color.brand)
+                    .tint(Color.appTint)
 
                 HStack(spacing: Spacing.half) {
                     Button("全部展开", action: expandAll)
@@ -129,7 +129,7 @@ private extension MonthlyReadingChartTestView {
                 Text("阅读历程")
                     .font(AppTypography.headlineSemibold)
                     .foregroundStyle(Color.textPrimary)
-                Text("观察本卡片是否随上方图表高度平滑下移与回收。")
+                Text("观察本卡片是否随上方图表高度平滑下移与回收")
                     .font(AppTypography.caption)
                     .foregroundStyle(Color.textSecondary)
             }
@@ -152,7 +152,7 @@ private extension MonthlyReadingChartTestView {
                 .padding(.vertical, Spacing.half)
                 .background(
                     selectedScenario == scenario
-                        ? Color.brand
+                        ? Color.selectionAccent
                         : Color.controlFillSecondary,
                     in: Capsule()
                 )
@@ -213,13 +213,13 @@ private enum MonthlyReadingChartDemoScenario: String, CaseIterable, Identifiable
     var detail: String {
         switch self {
         case .recording:
-            "一月八条记录合计恰好 2小时47分钟，行内按 Android 规则省略分钟后的秒数。"
+            "一月八条记录合计恰好 2小时47分钟，行内按 Android 规则省略分钟后的秒数"
         case .multiMonth:
             "三个自然月可同时展开；任一月份展开后，全部月份头部铺满并共用每日最大值。"
         case .zero:
-            "所有时长均为零，用于检查月条全宽以及每日柱体回落到文本最小宽度。"
+            "所有时长均为零，用于检查月条全宽以及每日柱体回落到文本最小宽度"
         case .textBoundary:
-            "跨年摘要、长日期和百小时数据用于检查文本测量、尾部对齐与箭头覆盖关系。"
+            "跨年摘要、长日期和百小时数据用于检查文本测量、尾部对齐与箭头覆盖关系"
         }
     }
 
@@ -325,14 +325,14 @@ private enum MonthlyReadingChartDemoPalette: String, CaseIterable, Identifiable 
     var previewSurface: Color {
         switch self {
         case .recordingRed:
-            Color(
-                light: Color(hex: 0xF4DEDE),
-                dark: Color(hex: 0x302426)
+            Color.xmAdaptive(
+                light: Color.xmHex(0xF4DEDE),
+                dark: Color.xmHex(0x302426)
             )
         case .coolBlue:
-            Color(
-                light: Color(hex: 0xE5EEF8),
-                dark: Color(hex: 0x202932)
+            Color.xmAdaptive(
+                light: Color.xmHex(0xE5EEF8),
+                dark: Color.xmHex(0x202932)
             )
         }
     }
@@ -341,42 +341,42 @@ private enum MonthlyReadingChartDemoPalette: String, CaseIterable, Identifiable 
         switch self {
         case .recordingRed:
             MonthlyReadingChartStyle(
-                monthTrackColor: Color(
-                    light: Color(hex: 0xE9C7C8),
-                    dark: Color(hex: 0x4A3033)
+                monthTrackColor: Color.xmAdaptive(
+                    light: Color.xmHex(0xE9C7C8),
+                    dark: Color.xmHex(0x4A3033)
                 ),
                 monthBarColors: [
-                    Color(light: Color(hex: 0xEAA4A6), dark: Color(hex: 0x9C5559)),
-                    Color(light: Color(hex: 0xD96569), dark: Color(hex: 0xB85A5F)),
+                    Color.xmAdaptive(light: Color.xmHex(0xEAA4A6), dark: Color.xmHex(0x9C5559)),
+                    Color.xmAdaptive(light: Color.xmHex(0xD96569), dark: Color.xmHex(0xB85A5F)),
                 ],
                 collapsedSummaryColor: .white,
                 expandedSummaryColor: .textSecondary,
                 collapsedArrowColor: .white,
                 expandedArrowColor: .iconSecondary,
                 dailyBarColors: [
-                    Color(light: Color(hex: 0xF1BFC0), dark: Color(hex: 0x7D484C)),
-                    Color(light: Color(hex: 0xDE7477), dark: Color(hex: 0xA95459)),
+                    Color.xmAdaptive(light: Color.xmHex(0xF1BFC0), dark: Color.xmHex(0x7D484C)),
+                    Color.xmAdaptive(light: Color.xmHex(0xDE7477), dark: Color.xmHex(0xA95459)),
                 ],
                 dailyDateColor: .white,
                 dailyDurationColor: .white
             )
         case .coolBlue:
             MonthlyReadingChartStyle(
-                monthTrackColor: Color(
-                    light: Color(hex: 0xC7D7E8),
-                    dark: Color(hex: 0x2B3A49)
+                monthTrackColor: Color.xmAdaptive(
+                    light: Color.xmHex(0xC7D7E8),
+                    dark: Color.xmHex(0x2B3A49)
                 ),
                 monthBarColors: [
-                    Color(light: Color(hex: 0x8FC6E8), dark: Color(hex: 0x366D91)),
-                    Color(light: Color(hex: 0x397FB4), dark: Color(hex: 0x3D87B9)),
+                    Color.xmAdaptive(light: Color.xmHex(0x8FC6E8), dark: Color.xmHex(0x366D91)),
+                    Color.xmAdaptive(light: Color.xmHex(0x397FB4), dark: Color.xmHex(0x3D87B9)),
                 ],
                 collapsedSummaryColor: .white,
                 expandedSummaryColor: .textSecondary,
                 collapsedArrowColor: .white,
                 expandedArrowColor: .iconSecondary,
                 dailyBarColors: [
-                    Color(light: Color(hex: 0xB6D9EF), dark: Color(hex: 0x31566F)),
-                    Color(light: Color(hex: 0x559AC8), dark: Color(hex: 0x3E7EA8)),
+                    Color.xmAdaptive(light: Color.xmHex(0xB6D9EF), dark: Color.xmHex(0x31566F)),
+                    Color.xmAdaptive(light: Color.xmHex(0x559AC8), dark: Color.xmHex(0x3E7EA8)),
                 ],
                 dailyDateColor: .white,
                 dailyDurationColor: .white

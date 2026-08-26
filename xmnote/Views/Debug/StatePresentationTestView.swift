@@ -91,7 +91,7 @@ struct StatePresentationTestView: View {
         .clipShape(RoundedRectangle(cornerRadius: CornerRadius.containerMedium, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: CornerRadius.containerMedium, style: .continuous)
-                .stroke(Color.surfaceBorderSubtle, lineWidth: CardStyle.borderWidth)
+                .stroke(Color.surfaceBorderSubtle, lineWidth: StrokeWidth.hairline)
         }
         .environment(\.colorScheme, previewColorScheme)
         .environment(\.dynamicTypeSize, selectedTextSize.dynamicTypeSize)

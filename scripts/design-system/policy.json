@@ -1,0 +1,773 @@
+{
+  "schemaVersion": 3,
+  "sourceRoots": [
+    "xmnote"
+  ],
+  "excludedGlobs": [
+    "xmnote/Views/Debug/**",
+    "**/Vendor/**",
+    "**/*.generated.swift"
+  ],
+  "constructionPolicies": {
+    "rawColor": {
+      "ruleID": "DS003",
+      "entryPoints": [
+        "Color(...)",
+        "UIColor(...)"
+      ],
+      "allowedPaths": [
+        "xmnote/Utilities/DesignSystem/ColorConstruction.swift",
+        "xmnote/Views/Note/Components/NoteReviewPalette+UI.swift"
+      ]
+    },
+    "rawTypography": {
+      "ruleID": "DS001",
+      "entryPoints": [
+        "Font.system(...)",
+        "UIFont.systemFont(...)",
+        "UIFont.boldSystemFont(...)"
+      ],
+      "allowedPaths": [
+        "xmnote/Utilities/DesignSystem/SemanticTypography.swift",
+        "xmnote/Utilities/DesignSystem/BrandTypography.swift"
+      ]
+    }
+  },
+  "symbolPolicies": [
+    {
+      "name": "baseBrandPaletteCore",
+      "ruleID": "DS003",
+      "symbols": [
+        "BaseColorPalette.brand500",
+        "BaseColorPalette.brand700"
+      ],
+      "allowedPaths": [
+        "xmnote/Utilities/DesignSystem/ColorConstruction.swift",
+        "xmnote/Utilities/DesignSystem/SemanticColors.swift",
+        "xmnote/UIComponents/Charts/HeatmapLegend.swift"
+      ],
+      "replacement": "Color 的全局语义成员或当前 feature/component Appearance"
+    },
+    {
+      "name": "baseBrandPaletteHeatmapExtremes",
+      "ruleID": "DS003",
+      "symbols": [
+        "BaseColorPalette.brand200",
+        "BaseColorPalette.brand900"
+      ],
+      "allowedPaths": [
+        "xmnote/Utilities/DesignSystem/ColorConstruction.swift",
+        "xmnote/UIComponents/Charts/HeatmapLegend.swift"
+      ],
+      "replacement": "Color 的全局语义成员或当前 feature/component Appearance"
+    },
+    {
+      "name": "swiftUIColorHexConstruction",
+      "ruleID": "DS003",
+      "symbols": [
+        "Color.xmHex"
+      ],
+      "matchInferred": true,
+      "allowedPaths": [
+        "xmnote/Utilities/DesignSystem/ColorConstruction.swift",
+        "xmnote/Utilities/DesignSystem/SemanticColors.swift",
+        "xmnote/UIComponents/Charts/HeatmapLegend.swift",
+        "xmnote/UIComponents/Business/Reading/ReadingStatusPresentation.swift",
+        "xmnote/UIComponents/Navigation/ScrollEdge/HomeTopHeaderGradient.swift",
+        "xmnote/UIComponents/Foundation/XMBookCoverAppearance.swift",
+        "xmnote/UIComponents/Controls/Rating/XMFluentStarIcon.swift",
+        "xmnote/UIComponents/Controls/Rating/XMRatingBar.swift",
+        "xmnote/UIComponents/Controls/Search/XMSearchHistorySection.swift",
+        "xmnote/UIComponents/Business/Tag/XMTagLabel.swift",
+        "xmnote/UIComponents/Feedback/Toast/XMToast.swift",
+        "xmnote/Views/Book/Components/BookCollectionVisualComponents.swift",
+        "xmnote/Views/Book/Components/BookshelfDimensionComponents.swift",
+        "xmnote/Views/Content/ContentViewerView.swift",
+        "xmnote/Views/Note/NoteMergeView.swift",
+        "xmnote/Views/Reading/Components/ReadingDashboardCards.swift",
+        "xmnote/Views/Reading/ReadCalendar/Components/ReadCalendarShareCard.swift",
+        "xmnote/Views/Reading/ReadCalendar/ReadCalendarShareView.swift",
+        "xmnote/Views/Reading/ReadCalendar/ReadCalendarTheme.swift",
+        "xmnote/Views/Reading/Timeline/ReadingTimelineView.swift"
+      ],
+      "replacement": "已存在的语义色，或在真实 feature/component Appearance 中登记新的局部颜色"
+    },
+    {
+      "name": "swiftUIColorAdaptiveConstruction",
+      "ruleID": "DS003",
+      "symbols": [
+        "Color.xmAdaptive"
+      ],
+      "matchInferred": true,
+      "allowedPaths": [
+        "xmnote/Utilities/DesignSystem/ColorConstruction.swift",
+        "xmnote/Utilities/DesignSystem/SemanticColors.swift",
+        "xmnote/UIComponents/Charts/HeatmapLegend.swift",
+        "xmnote/UIComponents/Navigation/ScrollEdge/HomeTopHeaderGradient.swift",
+        "xmnote/UIComponents/Foundation/XMBookCoverAppearance.swift",
+        "xmnote/UIComponents/Controls/Rating/XMRatingBar.swift",
+        "xmnote/UIComponents/Controls/Search/XMSearchHistorySection.swift",
+        "xmnote/UIComponents/Business/Tag/XMTagLabel.swift",
+        "xmnote/Views/Book/Components/BookCollectionVisualComponents.swift",
+        "xmnote/Views/Note/NoteMergeView.swift",
+        "xmnote/Views/Reading/Components/ReadingDashboardCards.swift",
+        "xmnote/Views/Reading/ReadCalendar/ReadCalendarTheme.swift"
+      ],
+      "replacement": "已存在的浅深色语义，或在真实 feature/component Appearance 中登记新的局部颜色"
+    },
+    {
+      "name": "swiftUIColorBridgeConstruction",
+      "ruleID": "DS003",
+      "symbols": [
+        "Color.xmResolved"
+      ],
+      "matchInferred": true,
+      "allowedPaths": [
+        "xmnote/Utilities/DesignSystem/ColorConstruction.swift",
+        "xmnote/Utilities/DesignSystem/SemanticColors.swift",
+        "xmnote/RichTextEditor/HighlightColorPicker.swift",
+        "xmnote/Views/Note/Components/NoteReviewPalette+UI.swift"
+      ],
+      "replacement": "已存在的语义色；UIKit/SwiftUI 桥接只留在登记 owner"
+    },
+    {
+      "name": "swiftUIColorAlgorithmConstruction",
+      "ruleID": "DS003",
+      "symbols": [
+        "Color.xmSRGB"
+      ],
+      "matchInferred": true,
+      "allowedPaths": [
+        "xmnote/Utilities/DesignSystem/ColorConstruction.swift",
+        "xmnote/Views/Book/BookDetailView.swift",
+        "xmnote/Views/Book/Components/BookReadingDetailContent.swift",
+        "xmnote/Views/Reading/ReadCalendar/Components/ReadCalendarMonthGrid.swift",
+        "xmnote/Views/Reading/ReadCalendar/ReadCalendarTheme.swift",
+        "xmnote/Views/Reading/ReadCalendar/Sheets/ReadCalendarMonthSummarySheet.swift",
+        "xmnote/Views/Reading/ReadCalendar/Sheets/ReadCalendarYearSummarySheet.swift"
+      ],
+      "replacement": "已存在的语义色；算法构色只留在登记 owner"
+    },
+    {
+      "name": "uiColorBridgeConstruction",
+      "ruleID": "DS003",
+      "symbols": [
+        "UIColor.xmResolved"
+      ],
+      "matchInferred": true,
+      "allowedPaths": [
+        "xmnote/Utilities/DesignSystem/ColorConstruction.swift",
+        "xmnote/UIComponents/Media/Attachments/XMAttachmentUploadStrip.swift",
+        "xmnote/UIComponents/Media/GalleryJX/XMJXThumbnailView.swift",
+        "xmnote/Views/Book/BookDetailView.swift",
+        "xmnote/Views/Book/Components/BookWorkspaceCollectionView.swift",
+        "xmnote/Views/Book/Components/BookWorkspaceNoteItem.swift",
+        "xmnote/Views/Book/Components/BookshelfEditingComponents.swift",
+        "xmnote/Views/Content/ContentViewerDetailBodies.swift",
+        "xmnote/Views/Note/Components/NoteHomeCategoryViews.swift",
+        "xmnote/Views/Note/Components/NotePhotoOCRFlowView.swift",
+        "xmnote/Views/Note/Components/NoteReviewPalette+UI.swift",
+        "xmnote/Views/Reading/ReadCalendar/Components/DailyReadingRecordRow.swift",
+        "xmnote/Views/Reading/Sheets/ReadingTimerAccessoryZoomPresenter.swift",
+        "xmnote/Views/Reading/Timeline/Components/TimelineNoteCard.swift"
+      ],
+      "replacement": "已存在的语义色；UIKit/SwiftUI 桥接只留在登记 owner"
+    },
+    {
+      "name": "uiColorHexConstruction",
+      "ruleID": "DS003",
+      "symbols": [
+        "UIColor.xmHex"
+      ],
+      "matchInferred": true,
+      "allowedPaths": [
+        "xmnote/Utilities/DesignSystem/ColorConstruction.swift"
+      ],
+      "replacement": "Color 语义成员或登记后的局部 Appearance"
+    },
+    {
+      "name": "uiColorAdaptiveConstruction",
+      "ruleID": "DS003",
+      "symbols": [
+        "UIColor.xmAdaptive"
+      ],
+      "matchInferred": true,
+      "allowedPaths": [
+        "xmnote/Utilities/DesignSystem/ColorConstruction.swift",
+        "xmnote/Views/Note/Components/NoteReviewPalette+UI.swift"
+      ],
+      "replacement": "已存在的浅深色语义；动态 UIKit 构色只留在登记 owner"
+    },
+    {
+      "name": "uiColorAlgorithmConstruction",
+      "ruleID": "DS003",
+      "symbols": [
+        "UIColor.xmSRGB"
+      ],
+      "matchInferred": true,
+      "allowedPaths": [
+        "xmnote/Utilities/DesignSystem/ColorConstruction.swift",
+        "xmnote/RichTextEditor/HighlightColors.swift",
+        "xmnote/ViewModels/Book/BookCollectionDetailViewModel.swift",
+        "xmnote/ViewModels/Note/NoteReviewShareImageRenderer.swift",
+        "xmnote/Views/Book/Components/BookReadingDetailContent.swift",
+        "xmnote/Views/Book/Components/BookWorkspaceCollectionView.swift"
+      ],
+      "replacement": "已存在的语义色；算法或离屏渲染构色只留在登记 owner"
+    },
+    {
+      "name": "appSemanticTypographyConstruction",
+      "ruleID": "DS001",
+      "symbols": [
+        "AppTypography.semantic"
+      ],
+      "allowedPaths": [
+        "xmnote/Utilities/DesignSystem/AppTypography.swift",
+        "xmnote/Views/Book/Components/XMBookSearchResultCard.swift",
+        "xmnote/Views/Book/Components/BookWorkspaceNoteItem.swift",
+        "xmnote/Views/Book/Sheets/BookPickerView.swift",
+        "xmnote/Views/Reading/ReadCalendar/ReadCalendarTypography.swift",
+        "xmnote/Views/Search/GlobalSearchView.swift"
+      ],
+      "replacement": "AppTypography 的成型文本角色或当前 feature/component Typography"
+    },
+    {
+      "name": "appFixedTypographyConstruction",
+      "ruleID": "DS001",
+      "symbols": [
+        "AppTypography.fixed"
+      ],
+      "allowedPaths": [
+        "xmnote/Utilities/DesignSystem/AppTypography.swift",
+        "xmnote/Utilities/DesignSystem/SharedContentTypography.swift",
+        "xmnote/UIComponents/Charts/CalendarHeatmap.swift",
+        "xmnote/UIComponents/Charts/HeatmapChart.swift",
+        "xmnote/UIComponents/Charts/MonthlyReadingChart.swift",
+        "xmnote/UIComponents/Navigation/Tabs/TopSwitcher.swift",
+        "xmnote/Views/Note/Components/XMInlineTabBar.swift",
+        "xmnote/Views/Book/BookshelfTypography.swift",
+        "xmnote/Views/Book/Components/BookReadingDetailContent.swift",
+        "xmnote/Views/Book/Components/BookWorkspaceNoteItem.swift",
+        "xmnote/Views/Book/Components/BookshelfEditingComponents.swift",
+        "xmnote/Views/Note/NoteEditorView.swift",
+        "xmnote/Views/Reading/Components/ReadingDashboardCards.swift",
+        "xmnote/Views/Reading/ReadCalendar/ReadCalendarTypography.swift",
+        "xmnote/Views/Reading/ReadingTimelineAppearance.swift"
+      ],
+      "replacement": "AppTypography 的成型文本角色或当前 feature/component Typography"
+    },
+    {
+      "name": "appUISemanticTypographyConstruction",
+      "ruleID": "DS001",
+      "symbols": [
+        "AppTypography.uiSemantic"
+      ],
+      "allowedPaths": [
+        "xmnote/Utilities/DesignSystem/AppTypography.swift",
+        "xmnote/UIComponents/Controls/Search/XMSearchHistorySection.swift",
+        "xmnote/Views/Book/BookshelfTypography.swift",
+        "xmnote/Views/Book/Components/BookWorkspaceCollectionView.swift",
+        "xmnote/Views/Book/Components/BookWorkspaceNoteItem.swift",
+        "xmnote/Views/Content/Components/AIMarkdownResultView.swift",
+        "xmnote/Views/Content/ContentEditorTypography.swift",
+        "xmnote/Views/Content/ContentViewerDetailBodies.swift",
+        "xmnote/Views/Note/Components/NoteHomeCategoryViews.swift",
+        "xmnote/Views/Reading/ReadingTimelineAppearance.swift"
+      ],
+      "replacement": "AppTypography 的同源 UIKit 测量角色或当前 feature/component Typography"
+    },
+    {
+      "name": "appUIFixedTypographyConstruction",
+      "ruleID": "DS001",
+      "symbols": [
+        "AppTypography.uiFixed"
+      ],
+      "allowedPaths": [
+        "xmnote/Utilities/DesignSystem/AppTypography.swift",
+        "xmnote/Utilities/DesignSystem/SharedContentTypography.swift",
+        "xmnote/UIComponents/Charts/HeatmapChart.swift",
+        "xmnote/UIComponents/Charts/MonthlyReadingChart.swift",
+        "xmnote/UIComponents/Media/Attachments/XMAttachmentUploadStrip.swift",
+        "xmnote/RichTextEditor/RichTextEditorView.swift",
+        "xmnote/ViewModels/Book/BookCollectionDetailViewModel.swift",
+        "xmnote/ViewModels/Note/NoteReviewShareImageRenderer.swift",
+        "xmnote/Views/Book/BookshelfTypography.swift",
+        "xmnote/Views/Book/Components/BookReadingDetailContent.swift",
+        "xmnote/Views/Note/Components/NotePhotoOCRFlowView.swift",
+        "xmnote/Views/Note/Components/NoteReviewCardView.swift"
+      ],
+      "replacement": "AppTypography 的同源 UIKit 测量角色或当前 feature/component Typography"
+    },
+    {
+      "name": "appBrandDisplayTypographyConstruction",
+      "ruleID": "DS001",
+      "symbols": [
+        "AppTypography.brandDisplay"
+      ],
+      "allowedPaths": [
+        "xmnote/Utilities/DesignSystem/AppTypography.swift",
+        "xmnote/UIComponents/Navigation/Tabs/TopSwitcher.swift",
+        "xmnote/Views/Book/BookEditorView.swift",
+        "xmnote/Views/Content/ContentViewerView.swift",
+        "xmnote/Views/Reading/Components/ReadingDashboardCards.swift",
+        "xmnote/Views/Reading/ReadCalendar/Components/DailyReadingRecordRow.swift",
+        "xmnote/Views/Reading/ReadingTimelineAppearance.swift",
+        "xmnote/Views/Reading/ReadingTimerView.swift"
+      ],
+      "replacement": "已登记的品牌标题/数字 Typography"
+    },
+    {
+      "name": "appBrandTrimTypographyConstruction",
+      "ruleID": "DS001",
+      "symbols": [
+        "AppTypography.brandTrim"
+      ],
+      "allowedPaths": [
+        "xmnote/Utilities/DesignSystem/AppTypography.swift",
+        "xmnote/UIComponents/Navigation/Tabs/TopSwitcher.swift",
+        "xmnote/Views/Reading/Components/ReadingDashboardCards.swift",
+        "xmnote/Views/Reading/ReadingTimelineAppearance.swift"
+      ],
+      "replacement": "与品牌 Typography 同 owner 的视觉裁切角色"
+    },
+    {
+      "name": "semanticTypographyFontConstruction",
+      "ruleID": "DS001",
+      "symbols": [
+        "SemanticTypography.font"
+      ],
+      "allowedPaths": [
+        "xmnote/Utilities/DesignSystem/SemanticTypography.swift",
+        "xmnote/Utilities/DesignSystem/BrandTypography.swift",
+        "xmnote/Utilities/DesignSystem/AppTypography.swift",
+        "xmnote/UIComponents/Charts/CalendarHeatmap.swift",
+        "xmnote/Views/Reading/ReadCalendar/ReadCalendarTypography.swift"
+      ],
+      "replacement": "AppTypography 或当前 feature/component Typography"
+    },
+    {
+      "name": "semanticTypographyUIFontConstruction",
+      "ruleID": "DS001",
+      "symbols": [
+        "SemanticTypography.uiFont"
+      ],
+      "allowedPaths": [
+        "xmnote/Utilities/DesignSystem/SemanticTypography.swift",
+        "xmnote/Utilities/DesignSystem/AppTypography.swift",
+        "xmnote/UIComponents/Charts/CalendarHeatmap.swift"
+      ],
+      "replacement": "AppTypography 的 UIKit 同源入口或当前 feature/component Typography"
+    },
+    {
+      "name": "semanticTypographyMetricConstruction",
+      "ruleID": "DS001",
+      "symbols": [
+        "SemanticTypography.defaultPointSize"
+      ],
+      "allowedPaths": [
+        "xmnote/Utilities/DesignSystem/SemanticTypography.swift",
+        "xmnote/Utilities/DesignSystem/AppTypography.swift"
+      ],
+      "replacement": "AppTypography 的成型语义角色"
+    },
+    {
+      "name": "brandTypographyTrimConstruction",
+      "ruleID": "DS001",
+      "symbols": [
+        "BrandTypography.verticalTrim"
+      ],
+      "allowedPaths": [
+        "xmnote/Utilities/DesignSystem/BrandTypography.swift",
+        "xmnote/Utilities/DesignSystem/AppTypography.swift"
+      ],
+      "replacement": "AppTypography.brandTrim 或已登记的品牌 Typography"
+    },
+    {
+      "name": "brandTypographyFontConstruction",
+      "ruleID": "DS001",
+      "symbols": [
+        "Font.brandDisplay"
+      ],
+      "matchInferred": true,
+      "allowedPaths": [
+        "xmnote/Utilities/DesignSystem/BrandTypography.swift",
+        "xmnote/Utilities/DesignSystem/AppTypography.swift"
+      ],
+      "replacement": "AppTypography.brandDisplay 或已登记的品牌 Typography"
+    },
+    {
+      "name": "brandTypographyUIFontConstruction",
+      "ruleID": "DS001",
+      "symbols": [
+        "UIFont.brandDisplay"
+      ],
+      "matchInferred": true,
+      "allowedPaths": [
+        "xmnote/Utilities/DesignSystem/BrandTypography.swift"
+      ],
+      "replacement": "经 AppTypography/BrandTypography 统一管理的 UIKit 品牌字体"
+    },
+    {
+      "name": "retiredGlobalColorAliases",
+      "ruleID": "DS003",
+      "symbols": [
+        "Color.brand",
+        "Color.brandLight",
+        "Color.brandDeep",
+        "Color.brandDarkest",
+        "Color.heatmapNone",
+        "Color.tagBackground",
+        "Color.bookCoverPlaceholderBackground",
+        "Color.iconBgShape",
+        "Color.chartBarTrack",
+        "Color.bookCoverSpineDark",
+        "Color.bookCoverSpineLight",
+        "Color.bookCoverFoldShadow",
+        "Color.bookCoverDropShadow",
+        "Color.bookCoverProgressTrack",
+        "Color.bookCoverProgressFill",
+        "Color.bookCoverProgressStroke",
+        "Color.divider",
+        "Color.bookCoverBadgeBlurWash",
+        "Color.bookCoverBadgeDarkOverlay",
+        "Color.bookCoverBadgeInnerStroke",
+        "Color.bookCoverBadgeContentShadow",
+        "Color.statusReading",
+        "Color.statusDone",
+        "Color.statusWish",
+        "Color.statusOnHold",
+        "Color.statusAbandoned",
+        "Color.ratingActive",
+        "Color.ratingInactive",
+        "Color.readCalendarTopAction",
+        "Color.readCalendarSubtleText",
+        "Color.readCalendarSummaryDeltaUp",
+        "Color.readCalendarSummaryDeltaDown",
+        "Color.readCalendarSummaryDeltaFlat",
+        "Color.readCalendarSummaryDurationAccent",
+        "Color.readCalendarSelectionFill",
+        "Color.readCalendarSelectionStroke",
+        "Color.readCalendarSelectedDayFill",
+        "Color.readCalendarSelectedDayText",
+        "Color.readCalendarTodayMark",
+        "Color.readCalendarHeatmapNone",
+        "Color.readCalendarHeatmapVeryLess",
+        "Color.readCalendarHeatmapLess",
+        "Color.readCalendarHeatmapMore",
+        "Color.readCalendarHeatmapVeryMore",
+        "Color.readCalendarEventText",
+        "Color.readCalendarEventPendingBase",
+        "Color.readCalendarEventPendingHighlight",
+        "Color.readCalendarEventPendingText",
+        "Color.readCalendarEventPalette",
+        "Color.readCalendarSummaryGradientSpec",
+        "Color.readCalendarMonthContributionColor",
+        "Color.readCalendarMonthContributionGradientSpec",
+        "Color.xmRGBAHex"
+      ],
+      "allowedPaths": [],
+      "replacement": "当前全局语义色，或 XMBookCoverAppearance、XMRatingAppearance、ReadingStatusPresentation、ReadCalendarTheme 等真实 owner"
+    },
+    {
+      "name": "retiredTypographyAliases",
+      "ruleID": "DS001",
+      "symbols": [
+        "NoteExcerptTypography.body",
+        "NoteExcerptTypography.bodyLineSpacing",
+        "NoteExcerptTypography.uiBody",
+        "NoteExcerptTypography.idea",
+        "NoteExcerptTypography.ideaLineSpacing",
+        "NoteExcerptTypography.uiIdea",
+        "NoteExcerptTypography.footer",
+        "ReadCalendarTypography.topControlTitleFont",
+        "ReadCalendarTypography.weekdayHeaderFont",
+        "ReadCalendarTypography.weekdayHeaderAccessibilityFont",
+        "ReadCalendarTypography.monthGridDayNumberFont",
+        "ReadCalendarTypography.monthGridDayNumberAccessibilityFont",
+        "ReadCalendarTypography.monthGridDayNumberSelectedFont",
+        "ReadCalendarTypography.monthGridDayNumberSelectedAccessibilityFont",
+        "ReadCalendarTypography.monthGridEventTitleFont",
+        "ReadCalendarTypography.monthGridEventTitleAccessibilityFont",
+        "ReadCalendarTypography.monthGridOverflowFont",
+        "ReadCalendarTypography.monthGridOverflowAccessibilityFont",
+        "ReadCalendarTypography.selectedDayTitleFont",
+        "ReadCalendarTypography.selectedDayFactsFont",
+        "ReadCalendarTypography.selectedDayActionFont",
+        "ReadCalendarTypography.yearHeatmapMonthTitleFont",
+        "ReadCalendarSummaryTypography.sectionTitle",
+        "ReadCalendarSummaryTypography.metricTitle",
+        "ReadCalendarSummaryTypography.metricNumber",
+        "ReadCalendarSummaryTypography.metricUnit",
+        "ReadCalendarSummaryTypography.metricText",
+        "ReadCalendarSummaryTypography.metricSubtitle",
+        "ReadCalendarSummaryTypography.insightLabel",
+        "ReadCalendarSummaryTypography.insightMeta",
+        "ReadCalendarSummaryTypography.insightNumber",
+        "ReadCalendarSummaryTypography.insightUnit",
+        "ReadCalendarSummaryTypography.rankingTitle",
+        "ReadCalendarSummaryTypography.rankingNumber",
+        "ReadCalendarSummaryTypography.rankingUnit",
+        "ReadCalendarSummaryTypography.treemapMonth",
+        "ReadCalendarSummaryTypography.treemapPercent",
+        "ReadCalendarSummaryTypography.treemapDetail",
+        "AppTypography.topSwitcherTitleFont",
+        "AppTypography.topSwitcherTitleTrim",
+        "BrandTypography.topSwitcherTitleFont",
+        "BrandTypography.topSwitcherTitleTrim",
+        "AppTypography.semanticFont",
+        "AppTypography.uiCaptionMedium",
+        "AppTypography.uiBody",
+        "AppTypography.uiSubheadlineSemibold",
+        "SemanticTypography.scaledPointSize"
+      ],
+      "allowedPaths": [],
+      "replacement": "ReadingContentTypography、ReadingSummaryTypography、ReadCalendarTextStyle 或真实 feature/component Typography"
+    },
+    {
+      "name": "retiredLayoutAndStrokeAliases",
+      "ruleID": "DS002",
+      "symbols": [
+        "Spacing.actionReserved",
+        "CardStyle.borderWidth"
+      ],
+      "allowedPaths": [],
+      "replacement": "InteractionMetrics.minimumTouchTarget、StrokeWidth.hairline 或局部 *Metrics/*Layout"
+    },
+    {
+      "name": "retiredCornerAlias",
+      "ruleID": "DS004",
+      "symbols": [
+        "CornerRadius.containerXXL"
+      ],
+      "allowedPaths": [],
+      "replacement": "组件局部 Layout；原设置分组场景使用 XMSettingsGroupLayout.groupedCornerRadius"
+    }
+  ],
+  "dependencyPolicies": [
+    {
+      "name": "uiComponentsBoundary",
+      "ruleID": "DS008",
+      "pathPrefixes": [
+        "xmnote/UIComponents/"
+      ],
+      "forbiddenExactIdentifiers": [
+        "RepositoryContainer"
+      ],
+      "forbiddenIdentifierSuffixes": [
+        "Repository",
+        "RepositoryProtocol",
+        "ViewModel"
+      ]
+    }
+  ],
+  "interactionPolicy": {
+    "tapGestureRuleID": "DS009",
+    "touchTargetRuleID": "DS010",
+    "touchTargetOwnerPath": "xmnote/Utilities/DesignSystem/InteractionMetrics.swift",
+    "touchTargetLiteral": 44,
+    "touchTargetNameFragments": [
+      "touch",
+      "hit",
+      "tap",
+      "button",
+      "control",
+      "action"
+    ],
+    "gestureExceptions": [
+      {
+        "path": "xmnote/UIComponents/Charts/HeatmapChart.swift",
+        "declaration": "HeatmapChart.squareView",
+        "reason": "热力格属于连续二维数据图中的精确点选，不是独立列表按钮",
+        "owner": "Charts/Reading",
+        "accessibilityAlternative": "每个日期格提供日期与阅读数据标签、按钮 trait 和显式 accessibilityAction",
+        "visualFreezeRationale": "把每个密集方格扩展到 44pt 会造成相邻目标重叠并改变热力图密度与宽度"
+      },
+      {
+        "path": "xmnote/RichTextEditor/HighlightColorPicker.swift",
+        "declaration": "HighlightColorPicker.colorDot",
+        "reason": "13 色紧凑色板按固定网格直接点选，单元间距不足以容纳互不重叠的 44pt 目标",
+        "owner": "RichTextEditor",
+        "accessibilityAlternative": "每个色点提供顺序化标签、选中值、按钮与 selected trait，并复用显式 accessibilityAction",
+        "visualFreezeRationale": "增大单元或透明命中层会放大色板、挤压七列布局或形成重叠目标"
+      },
+      {
+        "path": "xmnote/Views/Note/NoteEditorView.swift",
+        "declaration": "NoteEditorView.positionMetadataRow",
+        "reason": "整行点击只把焦点转交给行内 TextField，不能用 Button 包裹原生输入控件",
+        "owner": "Note",
+        "accessibilityAlternative": "TextField 保持原生可编辑元素、标签与键盘聚焦入口",
+        "visualFreezeRationale": "行高已为 54pt；额外命中层没有收益，Button 包裹会破坏输入与焦点语义"
+      },
+      {
+        "path": "xmnote/Views/Personal/DataImport/DataImportView.swift",
+        "declaration": "WereadImportPreviewView.bookSection",
+        "reason": "导入行同时包含独立选择 Button、内容预览点击与长按编辑，不能嵌套为单一 Button",
+        "owner": "Personal/DataImport",
+        "accessibilityAlternative": "按当前内容和映射状态提供“预览导入内容”与“编辑书籍信息”自定义无障碍动作",
+        "visualFreezeRationale": "List 行本身超过 44pt；透明扩展会覆盖选择按钮，改成 Button 会破坏长按和子控件边界"
+      },
+      {
+        "path": "xmnote/Views/Personal/DataImport/UnifiedNoteImportViews.swift",
+        "declaration": "UnifiedNoteImportPreviewView.importBookRow",
+        "reason": "统一导入行同时包含独立选择 Button、内容预览点击与长按编辑，不能嵌套为单一 Button",
+        "owner": "Personal/DataImport",
+        "accessibilityAlternative": "按当前内容和映射状态提供“预览导入内容”与“编辑书籍信息”自定义无障碍动作",
+        "visualFreezeRationale": "List 行本身超过 44pt；透明扩展会覆盖选择按钮，改成 Button 会破坏长按和子控件边界"
+      },
+      {
+        "path": "xmnote/Views/Reading/ReadCalendar/ReadCalendarContentView.swift",
+        "declaration": "ReadCalendarBookCoverFullscreenOverlay.backdrop",
+        "reason": "背景点击与全屏下拉拖拽共同构成模态关闭手势，背景不应成为可聚焦按钮",
+        "owner": "Reading/ReadCalendar",
+        "accessibilityAlternative": "背景从无障碍树隐藏，顶部显式关闭按钮承担 VoiceOver 关闭入口",
+        "visualFreezeRationale": "Button 会与父级拖拽手势竞争并引入无意义的全屏焦点；背景本身已覆盖完整可触区域"
+      }
+    ]
+  },
+  "componentCatalogPolicy": {
+    "ruleID": "DS011",
+    "root": "xmnote/UIComponents",
+    "excludedPathFragments": [
+      "/Vendor/"
+    ],
+    "layerDirectories": {
+      "foundation": [
+        "Foundation/"
+      ],
+      "controls": [
+        "Controls/"
+      ],
+      "feedback": [
+        "Feedback/"
+      ],
+      "navigation": [
+        "Navigation/"
+      ],
+      "media": [
+        "Media/"
+      ],
+      "business": [
+        "Business/"
+      ],
+      "charts": [
+        "Charts/"
+      ],
+      "settings": [
+        "Settings/"
+      ],
+      "sheet": [
+        "Sheet/"
+      ],
+      "system": [
+        "System/"
+      ]
+    },
+    "layerPathExceptions": [
+      {
+        "path": "xmnote/UIComponents/Foundation/XMBookCover.swift",
+        "layer": "media",
+        "reason": "仓库现行 XMBookCover 唯一入口约束固定该路径"
+      }
+    ]
+  },
+  "rules": [
+    {
+      "id": "DS001",
+      "title": "生产字体必须使用排版 token",
+      "enforcement": "enforced",
+      "reason": "固定系统字号绕过 Dynamic Type 与 XMNote 排版层级。",
+      "correctPath": "生产文本使用 AppTypography 或由它组合出的 feature typography token；SF Symbol 等 Image glyph 按图标语义管理"
+    },
+    {
+      "id": "DS002",
+      "title": "布局间距必须具有语义",
+      "enforcement": "enforced",
+      "reason": "散落的 padding、stack spacing 与 line spacing 无法稳定复用或审计。",
+      "correctPath": "Spacing；仅已证明跨场景的尺寸才晋升为公共 token"
+    },
+    {
+      "id": "DS003",
+      "title": "颜色构造集中管理",
+      "enforcement": "enforced",
+      "reason": "直接构造颜色会绕过浅色/深色、对比度与语义状态。",
+      "correctPath": "Color 语义成员或 DesignSystem/ColorConstruction.swift"
+    },
+    {
+      "id": "DS004",
+      "title": "表面圆角必须使用 token",
+      "enforcement": "enforced",
+      "reason": "数字圆角会造成相似页面的轮廓漂移。",
+      "correctPath": "CornerRadius，并为 RoundedRectangle 保留 continuous style"
+    },
+    {
+      "id": "DS005",
+      "title": "应用滚动容器始终回弹",
+      "enforcement": "enforced",
+      "reason": "短内容与长内容应保持一致的 iOS 物理反馈。",
+      "correctPath": ".scrollBounceBehavior(.always) 或 UIKit 对应轴 alwaysBounce… = true"
+    },
+    {
+      "id": "DS006",
+      "title": "中心弹窗使用 XMSystemAlert",
+      "enforcement": "enforced",
+      "reason": "多套中心弹窗实现会分裂按钮语义、颜色与行为。",
+      "correctPath": "XMSystemAlert"
+    },
+    {
+      "id": "DS007",
+      "title": "Domain 不依赖 UI 框架",
+      "enforcement": "enforced",
+      "reason": "领域模型承载 Color 或 UIKit 类型会形成反向依赖。",
+      "correctPath": "领域层保留纯值；颜色与图标映射放在 UIComponents 或 Views"
+    },
+    {
+      "id": "DS008",
+      "title": "UIComponents 依赖方向审查",
+      "enforcement": "enforced",
+      "reason": "公共 UI 持有 Repository 或 ViewModel 会成为业务状态 owner，并形成反向依赖。",
+      "correctPath": "Repository 与业务编排归属 ViewModels/Feature；UIComponents 只接收纯展示值与动作"
+    },
+    {
+      "id": "DS009",
+      "title": "点击交互语义审查",
+      "enforcement": "enforced",
+      "reason": "普通点击使用手势会丢失原生控件语义；复杂手势需要精确、可失效的例外。",
+      "correctPath": "优先 Button、Toggle、NavigationLink；确属复杂手势时登记声明级例外和可访问性替代"
+    },
+    {
+      "id": "DS010",
+      "title": "44pt 交互 token 唯一 owner 审查",
+      "enforcement": "enforced",
+      "reason": "重复声明 44pt 会使点击区规范漂移，并可能把视觉尺寸与交互尺寸混为一谈。",
+      "correctPath": "InteractionMetrics.minimumTouchTarget；视觉尺寸保持由组件真实布局 owner 管理"
+    },
+    {
+      "id": "DS011",
+      "title": "组件目录与分层覆盖审查",
+      "enforcement": "enforced",
+      "reason": "未登记或错层组件无法被可靠发现、预览、复用和迁移。",
+      "correctPath": "component-catalog.json schema v3；每个非 Vendor UIComponents 文件登记类别、层级、复用范围、状态、边界与 Preview 策略"
+    },
+    {
+      "id": "DSR001",
+      "title": "字面量 SF Symbol 语义审查",
+      "enforcement": "report",
+      "reason": "图标名称本身不一定构成债务，但重复语义需要集中 owner。",
+      "correctPath": "优先复用已存在的图标组件；独立单点可保留局部字面量"
+    },
+    {
+      "id": "DSR002",
+      "title": "动画时长语义审查",
+      "enforcement": "report",
+      "reason": "局部时长可以合理，但跨场景重复值需要 motion owner。",
+      "correctPath": "先证明相同结构变化与时序，再提取运动 token"
+    },
+    {
+      "id": "DSR003",
+      "title": "裸 ProgressView 使用审查",
+      "enforcement": "report",
+      "reason": "读取主态受 LoadingGate 约束，局部进度或写入反馈可能仍合理。",
+      "correctPath": "根据读取、写入或局部进度语义选择 LoadingGate、LoadingStateView 或保留局部 ProgressView"
+    }
+  ]
+}

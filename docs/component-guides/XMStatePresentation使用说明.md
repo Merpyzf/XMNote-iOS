@@ -2,7 +2,8 @@
 
 ## 组件定位
 
-- 源码目录：`xmnote/UIComponents/Foundation/StatePresentation/`
+- 状态源码目录：`xmnote/UIComponents/Feedback/StatePresentation/`
+- 加载源码：`xmnote/UIComponents/Feedback/LoadingStateView.swift` 与 `xmnote/UIComponents/Feedback/Loading/LoadingFeedbackKit.swift`
 - 角色：统一页面、Sheet、列表背景、卡片和局部容器中的空态、无搜索结果、说明态、失败态、Inline Banner 与加载视觉。
 - 边界：组件族只负责展示，不拥有 Repository、ViewModel 或业务状态机。
 - 平台基础：页面级状态由 `XMContentStateView` 统一包装系统 `ContentUnavailableView`。

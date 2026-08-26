@@ -32,7 +32,7 @@ enum NetworkError: LocalizedError {
         case .invalidResponse:
             return "响应格式异常"
         case .unknown(let error):
-            return "未知错误: \(error.localizedDescription)"
+            return "未知错误：\(error.localizedDescription)"
         }
     }
 }

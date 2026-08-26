@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 SwiftUI App/WindowGroup 生命周期、GRDB Database、RepositoryContainer、ReadingTimerCoordinator、AppState、桌面网页会话、AliyunpanSDK 与 scene 级外部路由
- * [OUTPUT]: 对外提供 xmnoteApp 与 AppSceneRoot，原子发布应用运行时，为每个 window 隔离 SceneStateStore、书单导入和阅读计时深链，并统一应用滚动回弹策略
+ * [OUTPUT]: 对外提供 xmnoteApp 与 AppSceneRoot，原子发布应用运行时、注入全轴回弹，并为每个 window 隔离 SceneStateStore、书单导入和阅读计时深链
  * [POS]: 应用启动与多 scene 编排层；应用服务保持全局，导航恢复及外部页面请求下沉到各自场景
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */

@@ -20,7 +20,7 @@ extension BookshelfBookListEditAction: BookshelfWriteActionDescribing {}
 enum BookshelfWriteActionFeedback {
     /// 生成写操作开始时的即时处理中反馈。
     static func processing(for action: some BookshelfWriteActionDescribing) -> BookshelfActionFeedback {
-        BookshelfActionFeedback(kind: .processing, message: "\(action.title)处理中...")
+        BookshelfActionFeedback(kind: .processing, message: "\(action.title)处理中…")
     }
 
     /// 生成写操作成功后的短驻留反馈。

@@ -63,7 +63,7 @@ final class BaiduOCRFlowViewModel {
     /// 返回当前环境下的 OCR 运行提示。
     var runtimeHintText: String {
         if isRuntimeSupported {
-            return "当前 Flow 使用百度 OCR SDK 的真机调试链路，识别完成后会自动回填到宿主页。"
+            return "当前 Flow 使用百度 OCR SDK 的真机调试链路，识别完成后会自动回填到宿主页"
         }
         return "当前是模拟器环境。你仍可验证拍照入口降级、相册选图、裁切与多框交互，但无法实际调用百度 OCR SDK。"
     }
@@ -97,7 +97,7 @@ final class BaiduOCRFlowViewModel {
         freeformRegions = []
         selectedFreeformRegionID = nil
         errorMessage = nil
-        statusMessage = "已载入\(sourceTitle)图片，请在图片上拖动选框，以选择要识别的区域。"
+        statusMessage = "已载入\(sourceTitle)图片，请在图片上拖动选框，以选择要识别的区域"
     }
 
     /// 重置单框选择。
@@ -146,31 +146,31 @@ final class BaiduOCRFlowViewModel {
     /// 清理 SDK 鉴权缓存，便于调试配置切换。
     func clearAuthorizationCache() {
         repository.clearAuthorizationCache()
-        statusMessage = "已清除百度 OCR 鉴权缓存。"
+        statusMessage = "已清除百度 OCR 鉴权缓存"
         errorMessage = nil
     }
 
     /// 对当前选择区域执行 OCR，并返回可直接回填到宿主页的汇总结果。
     func recognizeCurrentSelection() async -> BaiduOCRFlowCompletionPayload? {
         guard let selectedImage else {
-            errorMessage = "请先拍照或从相册选择一张图片。"
+            errorMessage = "请先拍照或从相册选择一张图片"
             return nil
         }
 
         guard preferences.credentials.isConfigured else {
-            errorMessage = "请先填写 API Key 与 Secret Key。"
+            errorMessage = "请先填写 API Key 与 Secret Key"
             return nil
         }
 
         let orderedRegions = orderedSelectionRegions()
         guard !orderedRegions.isEmpty else {
-            errorMessage = selectionMode == .single ? "请先在图片上拖动选框，以选择要识别的区域。" : "请先框选至少一个识别区域。"
+            errorMessage = selectionMode == .single ? "请先在图片上拖动选框，以选择要识别的区域" : "请先框选至少一个识别区域"
             return nil
         }
 
         isRecognizing = true
         errorMessage = nil
-        statusMessage = "正在识别..."
+        statusMessage = "正在识别…"
 
         defer {
             isRecognizing = false
@@ -223,7 +223,7 @@ final class BaiduOCRFlowViewModel {
                 items: items
             )
 
-            statusMessage = "识别完成，结果已准备回填到\(target.title)。"
+            statusMessage = "识别完成，结果已准备回填到\(target.title)"
             return BaiduOCRFlowCompletionPayload(summary: summary)
         } catch {
             errorMessage = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription

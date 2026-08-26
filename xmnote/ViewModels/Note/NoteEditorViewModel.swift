@@ -5,7 +5,7 @@ import SwiftUI
 import UIKit
 
 /**
- * [INPUT]: 依赖 NoteRepositoryProtocol 提供 bootstrap、草稿、暂存图与保存事务，依赖 NoteEditorSeed 注入一次性想法追加文本，依赖 NoteImageUploadQuotaRepositoryProtocol 与 RichTextBridge 管理图片额度及富文本互转
+ * [INPUT]: 依赖 NoteRepositoryProtocol 提供 bootstrap、草稿、暂存图与保存事务，依赖 NoteEditorSeed 注入一次性想法追加文本，依赖 NoteImageUploadQuotaRepositoryProtocol、RichTextBridge 与 RichTextTypography 管理图片额度及富文本互转
  * [OUTPUT]: 对外提供 NoteEditorViewModel、NoteEditorComposerTarget，驱动书摘编辑页、全屏正文编辑页、标签选择草稿回写与未保存 AI 想法草稿
  * [POS]: ViewModels/Note 的书摘编辑状态编排器，被 NoteEditorView 消费
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -50,7 +50,9 @@ final class NoteEditorViewModel {
 #endif
 
     /// 书摘编辑富文本基线字体，统一 HTML 解析、编辑器输入与占位展示。
-    nonisolated static let editorBaseUIFont: UIFont = .systemFont(ofSize: 16)
+    nonisolated static var editorBaseUIFont: UIFont {
+        RichTextTypography.editorBodyUIFont
+    }
 
     var availableBooks: [BookPickerBook] = []
     var availableTags: [NoteEditorTagOption] = []
@@ -425,7 +427,7 @@ final class NoteEditorViewModel {
         }
         if acceptedCount < inputs.count {
             if acceptedCount < componentAcceptedCount {
-                imageQuotaAlertMessage = "已超出今日额度，保留前 \(acceptedCount) 张。"
+                imageQuotaAlertMessage = "已超出今日额度，保留前 \(acceptedCount) 张"
             } else {
                 errorMessage = "最多只能添加 9 张图片，已保留前 \(acceptedCount) 张"
             }

@@ -3,11 +3,65 @@ import SwiftUI
 import UIKit
 
 /**
- * [INPUT]: 依赖 HeatmapDay/HeatmapLevel/HeatmapStatisticsDataType 领域模型、HeatmapColorPalette 调色板与 CalendarHeatmapTypography 排版令牌
+ * [INPUT]: 依赖 HeatmapDay/HeatmapLevel/HeatmapStatisticsDataType 领域模型、HeatmapColorPalette 调色板与同源排版基础
  * [OUTPUT]: 对外提供 CalendarHeatmapMonth、CalendarHeatmapStyle 与 CalendarHeatmap，渲染 Android 阅读详情对齐的横向月历热力图
  * [POS]: UIComponents/Charts 的公共月历热力图基建，供阅读详情及测试中心按月份注入数据与主题色阶
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
+
+/// 月历热力图组件家族的排版 owner，统一 Android 对齐字号与 SwiftUI/UIKit 测量字体来源。
+enum CalendarHeatmapTypography {
+    /// 返回月标题字体，使 SwiftUI 渲染跟随调用环境的 Dynamic Type。
+    static func monthTitle(compatibleWith traitCollection: UITraitCollection? = nil) -> Font {
+        SemanticTypography.font(
+            baseSize: 12,
+            relativeTo: .caption,
+            weight: .bold,
+            minimumPointSize: 12,
+            compatibleWith: traitCollection
+        )
+    }
+
+    /// 返回日期数字字体，与 uiDay 使用同一字号、语义曲线和辅助功能环境。
+    static func day(compatibleWith traitCollection: UITraitCollection? = nil) -> Font {
+        SemanticTypography.font(
+            baseSize: 10,
+            relativeTo: .caption2,
+            minimumPointSize: 10,
+            compatibleWith: traitCollection
+        )
+    }
+
+    /// 返回图例文本字体，让不同使用场景保留各自视觉字号并共享语义缩放曲线。
+    static func legend(baseSize: CGFloat) -> Font {
+        AppTypography.fixed(
+            baseSize: baseSize,
+            relativeTo: .caption2,
+            minimumPointSize: baseSize
+        )
+    }
+
+    /// 返回日期数字的 UIKit 同源字体，供单元格尺寸测量使用。
+    static func uiDay(compatibleWith traitCollection: UITraitCollection? = nil) -> UIFont {
+        SemanticTypography.uiFont(
+            baseSize: 10,
+            textStyle: .caption2,
+            minimumPointSize: 10,
+            compatibleWith: traitCollection
+        )
+    }
+
+    /// 返回月标题的 UIKit 同源字体，供横向滚动视口锁定最大月份高度。
+    static func uiMonthTitle(compatibleWith traitCollection: UITraitCollection? = nil) -> UIFont {
+        SemanticTypography.uiFont(
+            baseSize: 12,
+            textStyle: .caption1,
+            weight: .bold,
+            minimumPointSize: 12,
+            compatibleWith: traitCollection
+        )
+    }
+}
 
 // MARK: - 月份输入
 
