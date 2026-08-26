@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 RepositoryContainer 注入 AIRepositoryProtocol，依赖 AIConfigurationViewModel、设置分组卡片与统一反馈组件
- * [OUTPUT]: 对外提供 AIConfigurationView，承载模型服务、按需展开的 API 凭证管理和三类 Prompt 配置入口
+ * [OUTPUT]: 对外提供 AIConfigurationView，以统一设置页文本层级承载模型服务、按需展开的 API 凭证管理和三类 Prompt 配置入口
  * [POS]: Views/Personal 的 AI 配置页面壳层，被 PersonalRoute.aiConfiguration 导航消费
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -109,11 +109,11 @@ private struct AIConfigurationContentView: View {
                     Toggle(isOn: $viewModel.configuration.isEnabled) {
                         VStack(alignment: .leading, spacing: Spacing.compact) {
                             Text("启用 AI 功能")
-                                .font(AppTypography.subheadlineMedium)
+                                .font(SettingsTypography.rowTitle)
                                 .foregroundStyle(Color.textPrimary)
 
                             Text("用于书摘释义、选词解释与标签推荐")
-                                .font(AppTypography.caption)
+                                .font(SettingsTypography.rowDescription)
                                 .foregroundStyle(Color.textSecondary)
                                 .fixedSize(horizontal: false, vertical: true)
                         }
@@ -140,7 +140,7 @@ private struct AIConfigurationContentView: View {
                 VStack(spacing: Spacing.none) {
                     HStack(spacing: Spacing.base) {
                         Text("API Key")
-                            .font(AppTypography.subheadlineMedium)
+                            .font(SettingsTypography.rowTitle)
                             .foregroundStyle(Color.textPrimary)
 
                         Spacer(minLength: Spacing.base)
@@ -167,7 +167,7 @@ private struct AIConfigurationContentView: View {
 
             if let validationMessage = viewModel.validationMessage {
                 Label(validationMessage, systemImage: "exclamationmark.circle")
-                    .font(AppTypography.caption)
+                    .font(SettingsTypography.rowDescription)
                     .foregroundStyle(Color.feedbackWarning)
                     .fixedSize(horizontal: false, vertical: true)
                     .padding(.horizontal, Spacing.contentEdge)
@@ -196,10 +196,10 @@ private struct AIConfigurationContentView: View {
 
                                 VStack(alignment: .leading, spacing: Spacing.compact) {
                                     Text(kind.title)
-                                        .font(AppTypography.subheadlineSemibold)
+                                        .font(SettingsTypography.rowTitle)
                                         .foregroundStyle(Color.textPrimary)
                                     Text(kind.subtitle)
-                                        .font(AppTypography.caption)
+                                        .font(SettingsTypography.rowDescription)
                                         .foregroundStyle(Color.textSecondary)
                                         .lineLimit(2)
                                 }

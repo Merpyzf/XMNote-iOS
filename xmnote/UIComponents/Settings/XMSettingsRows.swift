@@ -1,6 +1,6 @@
 /**
- * [INPUT]: 依赖 AppTypography、SemanticColors、XMMenuStyle 与 SwiftUI Menu/Toggle，接收本地化标题和业务值
- * [OUTPUT]: 对外提供 XMSettingsValueMenuRow 与 XMSettingsToggleRow 两类已验证复用的设置行
+ * [INPUT]: 依赖 SettingsTypography、SemanticColors、XMMenuStyle 与 SwiftUI Menu/Toggle，接收本地化标题和业务值
+ * [OUTPUT]: 对外提供主行 17pt、值 15pt 的 XMSettingsValueMenuRow 与 XMSettingsToggleRow
  * [POS]: UIComponents/Settings 的标准行族；不提供万能行，避免把业务布局压入参数集合
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -29,7 +29,7 @@ struct XMSettingsValueMenuRow<Option: Hashable>: View {
     var body: some View {
         HStack(spacing: Spacing.base) {
             Text(title)
-                .font(AppTypography.subheadlineSemibold)
+                .font(SettingsTypography.rowTitle)
                 .foregroundStyle(Color.textPrimary)
                 .fixedSize(horizontal: false, vertical: true)
 
@@ -56,7 +56,7 @@ struct XMSettingsValueMenuRow<Option: Hashable>: View {
     private var valueControl: some View {
         HStack(spacing: Spacing.half) {
             Text(value)
-                .font(AppTypography.subheadlineMedium)
+                .font(SettingsTypography.rowValue)
                 .foregroundStyle(Color.textSecondary)
                 .lineLimit(valueLineLimit)
                 .minimumScaleFactor(dynamicTypeSize.isAccessibilitySize ? 1 : XMSettingsRowLayout.regularValueScale)
@@ -114,7 +114,7 @@ struct XMSettingsToggleRow: View {
     var body: some View {
         Toggle(isOn: $isOn) {
             Text(title)
-                .font(AppTypography.subheadlineMedium)
+                .font(SettingsTypography.rowTitle)
                 .foregroundStyle(Color.textPrimary)
                 .fixedSize(horizontal: false, vertical: true)
         }

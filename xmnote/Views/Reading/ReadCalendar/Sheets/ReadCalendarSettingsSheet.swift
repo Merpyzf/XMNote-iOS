@@ -2,7 +2,7 @@ import SwiftUI
 
 /**
  * [INPUT]: 依赖 ReadCalendarSettings 提供受业务规则约束的设置状态，依赖通用设置卡片与 Toast 组件
- * [OUTPUT]: 对外提供 ReadCalendarSettingsSheet（阅读日历设置弹层）
+ * [OUTPUT]: 对外提供采用统一 17/15pt 设置行层级的 ReadCalendarSettingsSheet
  * [POS]: ReadCalendar 业务模块 Sheet，负责卡片外分组、流式数字选项、六类阅读行为与行内展开交互
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -70,14 +70,14 @@ struct ReadCalendarSettingsSheet: View {
         Button(action: toggleDayEventCount) {
             HStack(spacing: Spacing.base) {
                 Text("每日最多事件")
-                    .font(AppTypography.subheadlineMedium)
+                    .font(SettingsTypography.rowTitle)
                     .foregroundStyle(Color.textPrimary)
 
                 Spacer(minLength: Spacing.base)
 
                 HStack(spacing: Spacing.compact) {
                     Text("\(settings.dayEventCount) 条")
-                        .font(AppTypography.subheadlineMedium)
+                        .font(SettingsTypography.rowValue)
                         .foregroundStyle(Color.textSecondary)
                         .monospacedDigit()
                         .contentTransition(.numericText())
@@ -155,7 +155,7 @@ struct ReadCalendarSettingsSheet: View {
 
     private var doneMarkerTitle: some View {
         Text("读完标识")
-            .font(AppTypography.subheadlineMedium)
+            .font(SettingsTypography.rowTitle)
             .foregroundStyle(Color.textPrimary)
             .fixedSize(horizontal: false, vertical: true)
     }

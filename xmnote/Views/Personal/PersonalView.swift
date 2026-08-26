@@ -7,7 +7,7 @@
 
 /**
  * [INPUT]: 依赖 AppState、DesktopWebSessionCoordinator、AppNavigationCoordinator、XMSettingsGroup、PersonalRoute 与阅读日历根级呈现回调
- * [OUTPUT]: 对外提供 PersonalView，以统一设置分组承载我的 Tab 核心入口、阅读日历独立入口、网页端入口状态与新增优先顶部更多菜单
+ * [OUTPUT]: 对外提供 PersonalView，以 17/15pt 设置行层级承载我的 Tab 核心入口、阅读日历独立入口、网页端入口状态与新增优先顶部更多菜单
  * [POS]: Personal 模块容器壳层，承载设置列表、网页端与备份入口
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -305,14 +305,14 @@ extension PersonalView {
                 .frame(width: Layout.settingsRowIconWidth)
 
             Text(title)
-                .font(AppTypography.subheadlineMedium)
+                .font(SettingsTypography.rowTitle)
                 .foregroundStyle(Color.textPrimary)
 
             Spacer(minLength: Spacing.base)
 
             if let trailingText {
                 Text(trailingText)
-                    .font(AppTypography.subheadline)
+                    .font(SettingsTypography.rowValue)
                     .foregroundStyle(trailingColor)
                     .lineLimit(1)
                     .minimumScaleFactor(0.9)

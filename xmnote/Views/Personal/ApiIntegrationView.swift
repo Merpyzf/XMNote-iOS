@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 RepositoryContainer 注入 ExternalAppIntegrationRepositoryProtocol，依赖 ApiIntegrationViewModel 驱动状态概览与单项配置编辑
- * [OUTPUT]: 对外提供 ApiIntegrationView，承载 Flomo、Writeathon 与 Inbox 的关联应用状态列表和配置 Sheet
+ * [OUTPUT]: 对外提供 ApiIntegrationView，以 17/15/13pt 设置层级承载 Flomo、Writeathon 与 Inbox 的关联应用状态列表和配置 Sheet
  * [POS]: Views/Personal 的 API 集成页面壳层，被 PersonalRoute.apiIntegration 导航消费
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -105,12 +105,12 @@ private struct ApiIntegrationAppRow: View {
 
                 VStack(alignment: .leading, spacing: Spacing.compact) {
                     Text(destination.presentationTitle)
-                        .font(AppTypography.subheadlineMedium)
+                        .font(SettingsTypography.rowTitle)
                         .foregroundStyle(Color.textPrimary)
                         .lineLimit(1)
 
                     Text(destination.rowSubtitle)
-                        .font(AppTypography.caption)
+                        .font(SettingsTypography.rowDescription)
                         .foregroundStyle(Color.textSecondary)
                         .lineLimit(2)
                         .fixedSize(horizontal: false, vertical: true)
@@ -120,7 +120,7 @@ private struct ApiIntegrationAppRow: View {
 
                 HStack(spacing: Spacing.half) {
                     Text(destination.statusTitle(isConfigured: isConfigured))
-                        .font(AppTypography.subheadline)
+                        .font(SettingsTypography.rowValue)
                         .foregroundStyle(isConfigured ? Color.feedbackSuccess : Color.textSecondary)
                         .lineLimit(1)
                         .minimumScaleFactor(0.82)

@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 NoteReviewViewModel 提供回顾设置、标签选项与已选书籍回显，依赖 BookPickerView 承接书籍范围选择
- * [OUTPUT]: 对外提供 NoteReviewSettingsSheet 与标签多选 Sheet，完成书摘回顾设置编辑
+ * [OUTPUT]: 对外提供采用统一设置行文本层级的 NoteReviewSettingsSheet 与标签多选 Sheet，完成书摘回顾设置编辑
  * [POS]: Note 模块业务 Sheet，服务回顾 Tab 顶部设置入口，不直接访问数据库
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -318,7 +318,7 @@ private struct NoteReviewBackgroundImageRow: View {
         VStack(alignment: .leading, spacing: Spacing.half) {
             HStack {
                 Text("背景图片")
-                    .font(AppTypography.subheadlineSemibold)
+                    .font(SettingsTypography.rowTitle)
                     .foregroundStyle(Color.textPrimary)
                 Spacer()
                 if isUploading {
@@ -349,7 +349,7 @@ private struct NoteReviewTextColorRow: View {
     var body: some View {
         HStack {
             Text("文字颜色")
-                .font(AppTypography.subheadlineSemibold)
+                .font(SettingsTypography.rowTitle)
                 .foregroundStyle(Color.textPrimary)
             Spacer()
             ColorPicker("", selection: $color, supportsOpacity: false)
@@ -372,13 +372,13 @@ private struct NoteReviewPalettePickerRow: View {
         VStack(alignment: .leading, spacing: Spacing.cozy) {
             HStack(spacing: Spacing.base) {
                 Text("卡片配色")
-                    .font(AppTypography.subheadlineSemibold)
+                    .font(SettingsTypography.rowTitle)
                     .foregroundStyle(Color.textPrimary)
 
                 Spacer(minLength: Spacing.base)
 
                 Text(canonicalSelection.title)
-                    .font(AppTypography.subheadlineMedium)
+                    .font(SettingsTypography.rowValue)
                     .foregroundStyle(Color.textHint)
                     .contentTransition(.opacity)
             }
@@ -435,14 +435,14 @@ private struct NoteReviewSettingsNavigationRow: View {
         Button(action: action) {
             HStack(spacing: Spacing.base) {
                 Text(title)
-                    .font(AppTypography.subheadlineSemibold)
+                    .font(SettingsTypography.rowTitle)
                     .foregroundStyle(Color.textPrimary)
                     .fixedSize(horizontal: false, vertical: true)
 
                 Spacer(minLength: Spacing.base)
 
                 Text(value)
-                    .font(AppTypography.subheadlineMedium)
+                    .font(SettingsTypography.rowValue)
                     .foregroundStyle(Color.textHint)
                     .lineLimit(1)
                     .minimumScaleFactor(NoteReviewSettingsNavigationRowLayout.minimumValueScale)

@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 App 环境中的 DesktopWebSessionCoordinator、系统剪贴板、OpenURL 与 XMSystemAlert
- * [OUTPUT]: 对外提供设置/电脑导入两种网页端入口，展示当前会话、分级启动反馈、固定局域网域名、IP 回退地址、自动启动、安全设置、页内使用说明入口与提示
+ * [OUTPUT]: 对外提供设置/电脑导入两种网页端入口，以统一设置层级展示当前会话、分级启动反馈、固定局域网域名、IP 回退地址、自动启动、安全设置、页内使用说明入口与提示
  * [POS]: Views/Personal/DesktopWeb 的页面壳层；只控制 App 级会话，不持有 HTTP 服务生命周期
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -199,7 +199,7 @@ struct DesktopWebView: View {
                     .foregroundStyle(Color.textSecondary)
 
                 Text(Self.usageHelpDescription)
-                    .font(AppTypography.caption)
+                    .font(SettingsTypography.rowDescription)
                     .foregroundStyle(Color.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -291,7 +291,7 @@ struct DesktopWebView: View {
     private var accessCodeRow: some View {
         VStack(alignment: .leading, spacing: Spacing.compact) {
             Text("访问授权码")
-                .font(AppTypography.caption)
+                .font(SettingsTypography.rowDescription)
                 .foregroundStyle(Color.textSecondary)
 
             Text(accessCodeDisplayValue)
@@ -370,7 +370,7 @@ struct DesktopWebView: View {
     ) -> some View {
         VStack(alignment: .leading, spacing: Spacing.compact) {
             Text(title)
-                .font(AppTypography.caption)
+                .font(SettingsTypography.rowDescription)
                 .foregroundStyle(Color.textSecondary)
 
             Text(url.absoluteString)
@@ -415,7 +415,7 @@ struct DesktopWebView: View {
             },
             label: {
                 Text("其他局域网 IP 地址")
-                    .font(AppTypography.subheadline)
+                    .font(SettingsTypography.rowValue)
                     .foregroundStyle(Color.textSecondary)
             }
         )
@@ -432,11 +432,11 @@ struct DesktopWebView: View {
     private func desktopWebRowLabel(title: String, detail: String) -> some View {
         VStack(alignment: .leading, spacing: Spacing.compact) {
             Text(title)
-                .font(AppTypography.subheadlineMedium)
+                .font(SettingsTypography.rowTitle)
                 .foregroundStyle(Color.textPrimary)
 
             Text(detail)
-                .font(AppTypography.caption)
+                .font(SettingsTypography.rowDescription)
                 .foregroundStyle(Color.textSecondary)
                 .fixedSize(horizontal: false, vertical: true)
         }
@@ -464,7 +464,7 @@ struct DesktopWebView: View {
 
     private func statusMessage(_ message: String, color: Color) -> some View {
         Text(message)
-            .font(AppTypography.caption)
+            .font(SettingsTypography.rowDescription)
             .foregroundStyle(color)
             .fixedSize(horizontal: false, vertical: true)
             .padding(.horizontal, Spacing.contentEdge)
@@ -474,7 +474,7 @@ struct DesktopWebView: View {
     /// 在服务开关下方展示同组状态，使视觉间距不受独立触控框影响。
     private func attachedStatusMessage(_ message: String, color: Color) -> some View {
         Text(message)
-            .font(AppTypography.caption)
+            .font(SettingsTypography.rowDescription)
             .foregroundStyle(color)
             .fixedSize(horizontal: false, vertical: true)
             .frame(maxWidth: .infinity, alignment: .leading)

@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 RepositoryContainer 注入仓储，依赖 DataBackupViewModel 驱动本地与云端备份状态
- * [OUTPUT]: 对外提供 DataBackupView，承载本地备份、云端备份与恢复确认入口
+ * [OUTPUT]: 对外提供 DataBackupView，以统一设置页文本层级承载本地备份、云端备份与恢复确认入口
  * [POS]: Backup 模块入口壳层，统一组织 iOS 原生本地备份与云备份操作
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -186,7 +186,7 @@ private extension DataBackupContentView {
                     .frame(width: XMSettingsPageLayout.iconSlotWidth)
 
                 Text("导出到文件")
-                    .font(AppTypography.subheadlineMedium)
+                    .font(SettingsTypography.rowTitle)
                     .foregroundStyle(Color.textPrimary)
 
                 Spacer()
@@ -198,7 +198,7 @@ private extension DataBackupContentView {
                     InlineLoadingTextPlaceholder(width: 76, height: 11)
                 } content: {
                     Text(viewModel.localBackupDateText)
-                        .font(AppTypography.subheadline)
+                        .font(SettingsTypography.rowValue)
                         .foregroundStyle(Color.textSecondary)
                         .lineLimit(1)
                         .minimumScaleFactor(0.88)
@@ -223,7 +223,7 @@ private extension DataBackupContentView {
                     .frame(width: XMSettingsPageLayout.iconSlotWidth)
 
                 Text("从文件恢复")
-                    .font(AppTypography.subheadlineMedium)
+                    .font(SettingsTypography.rowTitle)
                     .foregroundStyle(Color.textPrimary)
 
                 Spacer()
@@ -262,7 +262,7 @@ private extension DataBackupContentView {
     var providerSelectionRow: some View {
         HStack(alignment: .center, spacing: Spacing.base) {
             Text("备份方式")
-                .font(AppTypography.subheadlineMedium)
+                .font(SettingsTypography.rowTitle)
                 .foregroundStyle(Color.textPrimary)
 
             Spacer(minLength: Spacing.base)
@@ -289,7 +289,7 @@ private extension DataBackupContentView {
                 } else {
                     HStack(spacing: Spacing.compact) {
                         Text(viewModel.selectedProvider.displayName)
-                            .font(AppTypography.subheadline)
+                            .font(SettingsTypography.rowValue)
                             .foregroundStyle(Color.textSecondary)
                             .lineLimit(1)
                             .minimumScaleFactor(0.9)
@@ -340,7 +340,7 @@ private extension DataBackupContentView {
 
                 VStack(alignment: .leading, spacing: Spacing.compact) {
                     Text("WebDAV 服务器")
-                        .font(AppTypography.subheadlineMedium)
+                        .font(SettingsTypography.rowTitle)
                         .foregroundStyle(Color.textPrimary)
 
                     fieldTransitionContainer(
@@ -350,7 +350,7 @@ private extension DataBackupContentView {
                         InlineLoadingTextPlaceholder(width: 126, height: 11)
                     } content: {
                         Text(viewModel.currentServer?.title ?? "未配置")
-                            .font(AppTypography.caption)
+                            .font(SettingsTypography.rowDescription)
                             .foregroundStyle(Color.textSecondary)
                             .contentTransition(.opacity)
                     }
@@ -396,10 +396,10 @@ private extension DataBackupContentView {
 
             VStack(alignment: .leading, spacing: Spacing.compact) {
                 Text("阿里云盘")
-                    .font(AppTypography.subheadlineMedium)
+                    .font(SettingsTypography.rowTitle)
                     .foregroundStyle(Color.textPrimary)
                 Text("已登录")
-                    .font(AppTypography.caption)
+                    .font(SettingsTypography.rowDescription)
                     .foregroundStyle(Color.textSecondary)
             }
 
@@ -424,10 +424,10 @@ private extension DataBackupContentView {
 
                 VStack(alignment: .leading, spacing: Spacing.compact) {
                     Text("登录阿里云盘")
-                        .font(AppTypography.subheadlineMedium)
+                        .font(SettingsTypography.rowTitle)
                         .foregroundStyle(Color.textPrimary)
                     Text("登录后即可使用云备份")
-                        .font(AppTypography.caption)
+                        .font(SettingsTypography.rowDescription)
                         .foregroundStyle(Color.textSecondary)
                 }
 
@@ -460,10 +460,10 @@ private extension DataBackupContentView {
 
             VStack(alignment: .leading, spacing: Spacing.compact) {
                 Text(accountInfo.nickName)
-                    .font(AppTypography.subheadlineMedium)
+                    .font(SettingsTypography.rowTitle)
                     .foregroundStyle(Color.textPrimary)
                 Text(accountInfo.storageSummary ?? accountInfo.userId)
-                    .font(AppTypography.caption)
+                    .font(SettingsTypography.rowDescription)
                     .foregroundStyle(Color.textSecondary)
             }
 
@@ -564,7 +564,7 @@ private extension DataBackupContentView {
                     .frame(width: XMSettingsPageLayout.iconSlotWidth)
 
                 Text("立即备份")
-                    .font(AppTypography.subheadlineMedium)
+                    .font(SettingsTypography.rowTitle)
                     .foregroundStyle(Color.textPrimary)
 
                 Spacer()
@@ -577,7 +577,7 @@ private extension DataBackupContentView {
                 } content: {
                     if !viewModel.cloudBackupDateText.isEmpty {
                         Text(viewModel.cloudBackupDateText)
-                            .font(AppTypography.subheadline)
+                            .font(SettingsTypography.rowValue)
                             .foregroundStyle(viewModel.lastBackupState == .failed ? Color.feedbackError : Color.textSecondary)
                             .lineLimit(1)
                             .minimumScaleFactor(0.88)
@@ -607,7 +607,7 @@ private extension DataBackupContentView {
                     .frame(width: XMSettingsPageLayout.iconSlotWidth)
 
                 Text("从云端恢复")
-                    .font(AppTypography.subheadlineMedium)
+                    .font(SettingsTypography.rowTitle)
                     .foregroundStyle(Color.textPrimary)
 
                 Spacer()
@@ -892,7 +892,7 @@ private struct BackupTaskMessageSwitcher: View {
     @ViewBuilder
     private func messageText(_ value: String) -> some View {
         Text(value)
-            .font(AppTypography.subheadline)
+            .font(SettingsTypography.rowValue)
             .foregroundStyle(.primary)
             .multilineTextAlignment(.center)
             .lineLimit(2)

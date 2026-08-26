@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 BookReadingDetailSetting、页面私有设置行缩进布局与设置变更闭包
- * [OUTPUT]: 对外提供 BookReadingDetailSettingSheet，以紧凑自定义面板编辑封面色渐变背景和月图默认展开偏好
+ * [OUTPUT]: 对外提供 BookReadingDetailSettingSheet，以统一设置行主文本层级编辑封面色渐变背景和月图默认展开偏好
  * [POS]: Views/Book/Sheets 阅读详情业务 Sheet，不直接访问 UserDefaults
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -60,7 +60,7 @@ struct BookReadingDetailSettingSheet: View {
         Toggle(isOn: isOn) {
             Label {
                 Text(title)
-                    .font(AppTypography.subheadlineMedium)
+                    .font(SettingsTypography.rowTitle)
                     .foregroundStyle(Color.textPrimary)
             } icon: {
                 Image(systemName: systemImage)

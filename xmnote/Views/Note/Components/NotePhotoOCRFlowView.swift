@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 OCRRepositoryProtocol 与 NotePhotoOCRFlowViewModel 驱动正式书摘 OCR 状态，依赖 AppTypography、AVFoundation/PhotosUI 提供排版、拍照与选图能力
- * [OUTPUT]: 对外提供 NotePhotoOCRFlowView，承载书摘编辑页的拍照、单框裁切与识别回填流程
+ * [OUTPUT]: 对外提供 NotePhotoOCRFlowView，以统一文本 token 承载书摘编辑页的拍照、单框裁切与识别回填流程
  * [POS]: Views/Note/Components 的页面私有子视图，负责对齐 Android 的正式拍照 OCR 主流程
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -206,12 +206,12 @@ private extension OCRCameraScreen {
                         .foregroundStyle(Color.white.opacity(0.78))
 
                     Text(cameraController.stateMessage)
-                        .font(.subheadline.weight(.medium))
+                        .font(AppTypography.subheadlineMedium)
                         .foregroundStyle(Color.white.opacity(0.92))
                         .multilineTextAlignment(.center)
 
                     Text("即使当前设备无法打开相机，你仍可通过底部“相册”按钮进入裁切识别页")
-                        .font(.caption)
+                        .font(AppTypography.footnote)
                         .foregroundStyle(Color.white.opacity(0.68))
                         .multilineTextAlignment(.center)
                 }
@@ -328,10 +328,10 @@ private extension OCRCameraScreen {
 
             VStack(alignment: .leading, spacing: Spacing.micro) {
                 Text("拍摄建议")
-                    .font(.caption.weight(.semibold))
+                    .font(AppTypography.captionSemibold)
                     .foregroundStyle(Self.darkForegroundPrimary)
                 Text("横向拍摄识别效果更好，文字边缘尽量完整并避免强反光")
-                    .font(.caption)
+                    .font(AppTypography.caption)
                     .foregroundStyle(Self.darkForegroundSecondary)
             }
 
@@ -400,7 +400,7 @@ private extension OCRCameraScreen {
                 .foregroundStyle(tint)
                 .padding(.top, Spacing.tiny)
             Text(text)
-                .font(.caption)
+                .font(AppTypography.caption)
                 .foregroundStyle(Self.darkForegroundPrimary)
         }
         .padding(.horizontal, Spacing.base)
@@ -2737,7 +2737,7 @@ private extension OCRSettingsScreen {
     ) -> some View {
         VStack(alignment: .leading, spacing: Spacing.half) {
             Text(title)
-                .font(.caption)
+                .font(AppTypography.caption)
                 .foregroundStyle(Color.textSecondary)
 
             Group {
@@ -2759,10 +2759,10 @@ private extension OCRSettingsScreen {
     func sectionHeader(title: String, description: String) -> some View {
         VStack(alignment: .leading, spacing: Spacing.compact) {
             Text(title)
-                .font(.subheadline.weight(.semibold))
+                .font(AppTypography.subheadlineSemibold)
                 .foregroundStyle(Color.textPrimary)
             Text(description)
-                .font(.caption)
+                .font(AppTypography.caption)
                 .foregroundStyle(Color.textSecondary)
         }
     }
@@ -2774,7 +2774,7 @@ private extension OCRSettingsScreen {
                 .foregroundStyle(tint)
                 .padding(.top, Spacing.tiny)
             Text(text)
-                .font(.caption)
+                .font(AppTypography.caption)
                 .foregroundStyle(Color.textSecondary)
         }
         .padding(.horizontal, Spacing.base)
