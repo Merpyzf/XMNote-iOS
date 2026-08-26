@@ -11,6 +11,7 @@
 - `ReadCalendarCoverStackTestView.swift`: 阅读日历封面堆栈可视化调试页面
 - `NoteReviewPagingTestView.swift`: 书摘回顾分页卡组可视化调试页面
 - `RichTextTestView.swift`: 富文本编辑器调试页面
+- `StatePresentationTestView.swift`: 通用状态组件全量视觉、环境覆盖与阶段切换验收页
 - `SystemColorsTestView.swift`: 系统语义色与自定义语义色调试页面
 
 ## 子目录

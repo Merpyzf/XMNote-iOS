@@ -60,7 +60,7 @@ struct ReadingTimerSupplementView: View {
                         XMBookCover.fixedWidth(
                             52,
                             urlString: book.coverURL,
-                            border: .init(color: .surfaceBorderSubtle, width: CardStyle.borderWidth),
+                            border: .init(color: .surfaceBorderSubtle, width: StrokeWidth.hairline),
                             surfaceStyle: .spine
                         )
 
@@ -196,7 +196,7 @@ struct ReadingTimerSupplementView: View {
     }
 
     private func supplementSaveBar(_ viewModel: ReadingTimerSupplementViewModel) -> some View {
-        VStack(spacing: 0) {
+        VStack(spacing: Spacing.none) {
             Divider()
 
             Button {
@@ -222,7 +222,7 @@ struct ReadingTimerSupplementView: View {
                 .frame(minHeight: 48)
             }
             .buttonStyle(.borderedProminent)
-            .tint(Color.brand)
+            .tint(Color.appTint)
             .disabled(viewModel.isSaving || viewModel.isLoading)
             .padding(.horizontal, Spacing.screenEdge)
             .padding(.top, Spacing.base)

@@ -214,9 +214,10 @@ struct DailyReadingView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
             .safeAreaBar(edge: .top, spacing: Spacing.none) {
                 if let observationErrorMessage = viewModel.observationErrorMessage {
-                    ReadCalendarInlineErrorBanner(
-                        message: observationErrorMessage,
-                        onRetry: retryObservation
+                    XMInlineStatusBanner(
+                        observationErrorMessage,
+                        tone: .warning,
+                        action: XMStateAction("重试", systemImage: "arrow.clockwise", perform: retryObservation)
                     )
                     .padding(.horizontal, Spacing.screenEdge)
                 }
@@ -232,49 +233,49 @@ struct DailyReadingView: View {
     }
 
     private var emptyState: some View {
-        ContentUnavailableView {
-            Label("当天还没有阅读轨迹", systemImage: "calendar.badge.clock")
-        } description: {
-            Text("添加阅读打卡后，记录会按发生时间出现在这里。")
-        } actions: {
-            Button(viewModel.checkInActionTitle) {
+        XMContentStateView(
+            role: .empty,
+            title: "当天还没有阅读轨迹",
+            message: "添加阅读打卡后，记录会按发生时间出现在这里",
+            systemImage: "calendar.badge.clock",
+            action: XMStateAction(
+                viewModel.checkInActionTitle,
+                systemImage: "plus",
+                isEnabled: viewModel.canCheckIn && !viewModel.isWriting
+            ) {
                 isCheckInPresented = true
             }
-            .buttonStyle(.bordered)
-            .disabled(!viewModel.canCheckIn || viewModel.isWriting)
-        }
+        )
         .frame(maxHeight: .infinity)
     }
 
     private var filteredEmptyState: some View {
-        ContentUnavailableView {
-            Label("没有符合条件的记录", systemImage: "line.3.horizontal.decrease.circle")
-        } description: {
-            Text("可以切换书籍或记录类型，查看当天的其他阅读轨迹。")
-        } actions: {
-            if viewModel.hasActiveFilter {
-                Button("显示全部记录") {
+        XMContentStateView(
+            role: .noResults,
+            title: "没有符合条件的记录",
+            message: "可以切换书籍或记录类型，查看当天的其他阅读轨迹",
+            systemImage: "line.3.horizontal.decrease.circle",
+            action: viewModel.hasActiveFilter
+                ? XMStateAction("显示全部记录", systemImage: "line.3.horizontal.decrease.circle") {
                     Task {
                         await viewModel.clearFilters(using: repositories.readCalendarRepository)
                     }
                 }
-                .buttonStyle(.bordered)
-            }
-        }
+                : nil
+        )
         .frame(maxHeight: .infinity)
     }
 
     private var failureState: some View {
-        ContentUnavailableView {
-            Label("无法加载阅读轨迹", systemImage: "exclamationmark.triangle")
-        } description: {
-            Text(viewModel.errorMessage ?? "请稍后重试")
-        } actions: {
-            Button("重试") {
+        XMContentStateView(
+            role: .failure,
+            title: "无法加载阅读轨迹",
+            message: viewModel.errorMessage ?? "请稍后重试",
+            systemImage: "exclamationmark.triangle",
+            action: XMStateAction("重试", systemImage: "arrow.clockwise") {
                 Task { await viewModel.reload(using: repositories.readCalendarRepository) }
             }
-            .buttonStyle(.bordered)
-        }
+        )
     }
 
     /// 切换书籍时立即更新选中态，并让 ViewModel 取消旧查询后读取新轨迹。

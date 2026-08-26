@@ -1,5 +1,5 @@
 /**
- * [INPUT]: 依赖 RepositoryContainer、AppNavigationCoordinator、BookReadingDetailViewModel、BookReadingDetailContent、业务 Sheet、LoadingGate 与完成庆祝层
+ * [INPUT]: 依赖 RepositoryContainer、AppNavigationCoordinator、BookReadingDetailViewModel、BookReadingDetailContent、InteractionMetrics、业务 Sheet、LoadingGate 与完成庆祝层
  * [OUTPUT]: 对外提供 BookReadingDetailView，承载单书阅读详情、全屏书籍编辑、同构长图分享和一次性读完庆祝
  * [POS]: Views/Book 独立二级页面壳层，页面内容归位到 Components，业务弹层归位到 Sheets
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -127,7 +127,10 @@ private extension BookReadingDetailView {
                 Image(systemName: "ellipsis")
                     .font(AppTypography.bodyMedium)
                     .foregroundStyle(Color.primary)
-                    .frame(width: Spacing.actionReserved, height: Spacing.actionReserved)
+                    .frame(
+                        width: InteractionMetrics.minimumTouchTarget,
+                        height: InteractionMetrics.minimumTouchTarget
+                    )
             }
             .accessibilityLabel("阅读详情更多操作")
             .disabled(viewModel.isWriting)
@@ -185,10 +188,11 @@ private extension BookReadingDetailView {
                 .scrollEdgeEffectHidden(true, for: .top)
             }
         } else if viewModel.loadPhase == .failed {
-            ContentUnavailableView(
-                "无法加载阅读详情",
-                systemImage: "exclamationmark.triangle",
-                description: Text(viewModel.errorMessage ?? "书籍不存在或已被删除")
+            XMContentStateView(
+                role: .failure,
+                title: "无法加载阅读详情",
+                message: viewModel.errorMessage ?? "书籍不存在或已被删除",
+                systemImage: "exclamationmark.triangle"
             )
         } else if loadingGate.isVisible {
             LoadingStateView("正在整理阅读数据…", style: .card)

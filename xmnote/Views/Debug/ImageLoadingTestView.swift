@@ -2,11 +2,18 @@
 import SwiftUI
 
 /**
- * [INPUT]: 依赖 ImageLoadingTestViewModel 提供图片加载测试状态，依赖 XMRemoteImage 进行可视化预览
+ * [INPUT]: 依赖 ImageLoadingTestViewModel 提供图片加载测试状态，依赖 XMRemoteImage 与测试页私有占位外观进行可视化预览
  * [OUTPUT]: 对外提供 ImageLoadingTestView（图片加载测试页）
  * [POS]: Debug 测试页，覆盖静态图/GIF/失败链路、耗时与缓存来源观测
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
+
+private enum ImageLoadingTestAppearance {
+    static let placeholderBackground = Color.xmAdaptive(
+        light: Color.xmHex(0xE8F0EC),
+        dark: Color.xmHex(0x343536)
+    )
+}
 
 struct ImageLoadingTestView: View {
     @State private var viewModel = ImageLoadingTestViewModel()
@@ -65,7 +72,7 @@ private extension ImageLoadingTestContentView {
                     HStack(spacing: Spacing.half) {
                         ProgressView()
                             .controlSize(.small)
-                        Text("正在串行执行全部样例...")
+                        Text("正在串行执行全部样例…")
                             .font(.caption)
                             .foregroundStyle(Color.textSecondary)
                     }
@@ -130,7 +137,7 @@ private extension ImageLoadingTestContentView {
             .clipShape(RoundedRectangle(cornerRadius: CornerRadius.inlaySmall, style: .continuous))
             .overlay(
                 RoundedRectangle(cornerRadius: CornerRadius.inlaySmall, style: .continuous)
-                    .stroke(Color.surfaceBorderDefault, lineWidth: CardStyle.borderWidth)
+                    .stroke(Color.surfaceBorderDefault, lineWidth: StrokeWidth.hairline)
             )
 
             VStack(alignment: .leading, spacing: 4) {
@@ -152,7 +159,7 @@ private extension ImageLoadingTestContentView {
 
     var manualMetrics: some View {
         HStack {
-            Text("建议：先运行一次，再点“测试 URL”观察缓存来源变化。")
+            Text("建议：先运行一次，再点“测试 URL”观察缓存来源变化")
                 .font(.caption2)
                 .foregroundStyle(Color.textHint)
             Spacer()
@@ -195,7 +202,7 @@ private extension ImageLoadingTestContentView {
             .clipShape(RoundedRectangle(cornerRadius: CornerRadius.inlaySmall, style: .continuous))
             .overlay(
                 RoundedRectangle(cornerRadius: CornerRadius.inlaySmall, style: .continuous)
-                    .stroke(Color.surfaceBorderDefault, lineWidth: CardStyle.borderWidth)
+                    .stroke(Color.surfaceBorderDefault, lineWidth: StrokeWidth.hairline)
             )
 
             VStack(alignment: .leading, spacing: Spacing.half) {
@@ -266,7 +273,7 @@ private extension ImageLoadingTestContentView {
                         .font(.caption)
                         .foregroundStyle(Color.textSecondary)
                 } else {
-                    Text("尚未进行批量测试。")
+                    Text("尚未进行批量测试")
                         .font(.caption)
                         .foregroundStyle(Color.textHint)
                 }
@@ -279,7 +286,7 @@ private extension ImageLoadingTestContentView {
 private extension ImageLoadingTestContentView {
     var previewPlaceholder: some View {
         RoundedRectangle(cornerRadius: CornerRadius.inlaySmall, style: .continuous)
-            .fill(Color.tagBackground)
+            .fill(ImageLoadingTestAppearance.placeholderBackground)
             .overlay {
                 Image(systemName: "photo")
                     .font(.system(size: 14, weight: .medium))
@@ -336,7 +343,7 @@ private extension ImageLoadingTestContentView {
         case .idle:
             return Color.textSecondary
         case .loading:
-            return Color.brand
+            return Color.appTint
         case .success:
             return Color.feedbackSuccess
         case .failed:
@@ -349,7 +356,7 @@ private extension ImageLoadingTestContentView {
         case .idle:
             return Color.surfaceCard
         case .loading:
-            return Color.brand.opacity(0.15)
+            return Color.appTint.opacity(0.15)
         case .success:
             return Color.feedbackSuccess.opacity(0.18)
         case .failed:

@@ -1,11 +1,11 @@
 /**
- * [INPUT]: 依赖 ContentViewerSourceContext、SwiftUI 与 DesignTokens 提供通用查看器共享支撑能力
- * [OUTPUT]: 对外提供 ContentViewerPresentationStyle、关联应用配置提示与标签弹层
- * [POS]: Content 模块查看页共享 support，统一书摘/书评/相关内容 viewer 的展示语义与页面私有辅助弹层；系统分享复用 UIComponents
+ * [INPUT]: 依赖 ContentViewerSourceContext 与 Foundation 提供通用查看器共享展示语义
+ * [OUTPUT]: 对外提供 ContentViewerPresentationStyle 与关联应用配置提示
+ * [POS]: Content 模块查看页共享 support；业务 Sheet 归属 Views/Content/Sheets
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
-import SwiftUI
+import Foundation
 
 /// 通用内容查看器展示风格，按入口来源决定文案与局部交互语义。
 enum ContentViewerPresentationStyle {
@@ -113,63 +113,4 @@ struct PendingCapabilityPresentation: Identifiable {
 
     var title: String { capability.title }
     var message: String { capability.message }
-}
-
-/// 标签查看弹层，统一承接书摘标签只读浏览体验。
-struct ContentViewerTagSheet: View {
-    let tags: [String]
-    let onDismiss: () -> Void
-
-    var body: some View {
-        NavigationStack {
-            VStack(alignment: .leading, spacing: Spacing.base) {
-                if tags.isEmpty {
-                    Text("当前书摘没有标签")
-                        .font(AppTypography.body)
-                        .foregroundStyle(Color.textSecondary)
-                } else {
-                    FlowTagWrap(tags: tags)
-                }
-
-                Spacer(minLength: 0)
-            }
-            .padding(Spacing.screenEdge)
-            .navigationTitle("标签")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button("完成", action: onDismiss)
-                }
-            }
-        }
-    }
-}
-
-/// 简单流式标签换行视图，保持 viewer 标签展示密度稳定。
-struct FlowTagWrap: View {
-    let tags: [String]
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: Spacing.cozy) {
-            ForEach(chunkedTags, id: \.self) { row in
-                HStack(spacing: Spacing.cozy) {
-                    ForEach(row, id: \.self) { tag in
-                        Text(tag)
-                            .font(AppTypography.subheadline)
-                            .foregroundStyle(Color.textPrimary)
-                            .padding(.horizontal, Spacing.cozy)
-                            .padding(.vertical, Spacing.compact)
-                            .background(Color.tagBackground, in: Capsule())
-                    }
-                    Spacer(minLength: 0)
-                }
-            }
-        }
-    }
-
-    private var chunkedTags: [[String]] {
-        stride(from: 0, to: tags.count, by: 3).map { index in
-            Array(tags[index..<min(index + 3, tags.count)])
-        }
-    }
 }

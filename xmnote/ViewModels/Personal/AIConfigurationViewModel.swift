@@ -1,5 +1,5 @@
 /**
- * [INPUT]: 依赖 AIRepositoryProtocol 读取/保存非敏感配置并安全更新 Keychain 凭据
+ * [INPUT]: 依赖 AIRepositoryProtocol 读取/保存 AI 配置并更新本机偏好中的供应商凭据
  * [OUTPUT]: 对外提供 AIConfigurationViewModel 与 AIConfigurationFeedback，驱动供应商、模型、密钥和三类 Prompt 配置
  * [POS]: ViewModels/Personal 的 AI 设置状态编排器，被 AIConfigurationView 消费
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -21,7 +21,7 @@ nonisolated struct AIConfigurationFeedback: Identifiable, Equatable, Sendable {
 
 @MainActor
 @Observable
-/// AI 设置状态源；明文 API Key 仅保留用户本次输入，不从 Keychain 回填到界面状态。
+/// AI 设置状态源；明文 API Key 仅保留用户本次输入，不从持久化快照回填到界面状态。
 final class AIConfigurationViewModel {
     var configuration: AIConfiguration = .androidAlignedDefault
     var apiKeyDraft = ""
@@ -33,7 +33,7 @@ final class AIConfigurationViewModel {
     private var persistedConfiguration: AIConfiguration = .androidAlignedDefault
     private let repository: any AIRepositoryProtocol
 
-    /// 注入 AI 仓储，确保设置页不直接访问 UserDefaults、Keychain 或网络客户端。
+    /// 注入 AI 仓储，确保设置页不直接访问 UserDefaults 或网络客户端。
     init(repository: any AIRepositoryProtocol) {
         self.repository = repository
     }
@@ -65,19 +65,19 @@ final class AIConfigurationViewModel {
 
     var validationMessage: String? {
         if configuration.selectedModelID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            return "请选择模型。"
+            return "请选择模型"
         }
         for kind in AIPromptKind.allCases {
             let template = configuration.prompts.template(for: kind)
             if template.system.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
                 || template.user.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                return "\(kind.title) Prompt 不能为空。"
+                return "\(kind.title) Prompt 不能为空"
             }
         }
         if configuration.isEnabled,
            !selectedProviderHasStoredKey,
            apiKeyDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            return "启用前请填写 \(selectedProvider.displayName) API Key。"
+            return "启用前请填写 \(selectedProvider.displayName) API Key"
         }
         return nil
     }
@@ -101,7 +101,7 @@ final class AIConfigurationViewModel {
         }
     }
 
-    /// 切换供应商并清空当前明文输入；各供应商模型和 Keychain 凭据保持隔离。
+    /// 切换供应商并清空当前明文输入；各供应商模型和凭据保持隔离。
     func selectProvider(_ provider: AIProvider) {
         guard configuration.provider != provider else { return }
         configuration.provider = provider
@@ -123,7 +123,7 @@ final class AIConfigurationViewModel {
         configuration.prompts.reset(kind)
     }
 
-    /// 校验并保存非敏感配置与可选新密钥；成功后立即清空界面明文并重读 Keychain 存在状态。
+    /// 校验并保存配置与可选新密钥；成功后立即清空界面明文并重读凭据存在状态。
     @discardableResult
     func save() async -> Bool {
         guard !isSaving else { return false }
@@ -153,7 +153,7 @@ final class AIConfigurationViewModel {
         }
     }
 
-    /// 删除当前供应商 Keychain 凭据；若它正被使用，同时关闭功能以避免残留“已启用但无凭据”状态。
+    /// 删除当前供应商凭据；若它正被使用，同时关闭功能以避免残留“已启用但无凭据”状态。
     @discardableResult
     func deleteSelectedProviderKey() async -> Bool {
         guard !isSaving else { return false }

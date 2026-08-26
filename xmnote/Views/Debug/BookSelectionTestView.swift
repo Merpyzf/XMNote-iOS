@@ -129,7 +129,7 @@ struct BookSelectionTestView: View {
                         viewModel.open(scenario)
                     }
                     .buttonStyle(.borderedProminent)
-                    .tint(Color.brand)
+                    .tint(Color.appTint)
                 }
 
                 flowLayout(scenario.capabilityTags)
@@ -189,7 +189,7 @@ struct BookSelectionTestView: View {
             .background(Color.surfaceNested, in: RoundedRectangle(cornerRadius: CornerRadius.blockMedium, style: .continuous))
             .overlay {
                 RoundedRectangle(cornerRadius: CornerRadius.blockMedium, style: .continuous)
-                    .stroke(Color.surfaceBorderSubtle, lineWidth: CardStyle.borderWidth)
+                    .stroke(Color.surfaceBorderSubtle, lineWidth: StrokeWidth.hairline)
             }
         }
     }
@@ -197,10 +197,10 @@ struct BookSelectionTestView: View {
     private func overviewBadge(_ title: String) -> some View {
         Text(title)
             .font(AppTypography.caption.weight(.medium))
-            .foregroundStyle(Color.brand)
+            .foregroundStyle(Color.appTint)
             .padding(.horizontal, 10)
             .padding(.vertical, 6)
-            .background(Color.brand.opacity(0.10), in: Capsule())
+            .background(Color.appTint.opacity(0.10), in: Capsule())
     }
 
     private func flowLayout(_ tags: [String]) -> some View {

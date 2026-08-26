@@ -313,7 +313,7 @@ private extension OCRRepository {
             return .authenticationFailed(message: message)
         }
 
-        return .serviceFailed(message: message.isEmpty ? "百度 OCR 返回了未知错误。" : message)
+        return .serviceFailed(message: message.isEmpty ? "百度 OCR 返回了未知错误" : message)
     }
 }
 
@@ -348,14 +348,14 @@ private extension OCRRepository {
         static func decodeAndroidAlignedDebugPayload() throws -> OCRDefaultCredentialsPayload {
             let base64String = try decodeHexString(androidEncodedConfig)
             guard let jsonData = Data(base64Encoded: base64String) else {
-                throw OCRRepositoryError.sdkUnavailable(reason: "默认 OCR 配置 Base64 解码失败。")
+                throw OCRRepositoryError.sdkUnavailable(reason: "默认 OCR 配置 Base64 解码失败")
             }
             return try JSONDecoder().decode(OCRDefaultCredentialsPayload.self, from: jsonData)
         }
 
         static func decodeHexString(_ value: String) throws -> String {
             guard value.count.isMultiple(of: 2) else {
-                throw OCRRepositoryError.sdkUnavailable(reason: "默认 OCR 配置格式错误。")
+                throw OCRRepositoryError.sdkUnavailable(reason: "默认 OCR 配置格式错误")
             }
 
             var bytes: [UInt8] = []
@@ -366,14 +366,14 @@ private extension OCRRepository {
                 let nextIndex = value.index(index, offsetBy: 2)
                 let byteString = value[index..<nextIndex]
                 guard let byte = UInt8(byteString, radix: 16) else {
-                    throw OCRRepositoryError.sdkUnavailable(reason: "默认 OCR 配置格式错误。")
+                    throw OCRRepositoryError.sdkUnavailable(reason: "默认 OCR 配置格式错误")
                 }
                 bytes.append(byte)
                 index = nextIndex
             }
 
             guard let decoded = String(bytes: bytes, encoding: .utf8) else {
-                throw OCRRepositoryError.sdkUnavailable(reason: "默认 OCR 配置格式错误。")
+                throw OCRRepositoryError.sdkUnavailable(reason: "默认 OCR 配置格式错误")
             }
             return decoded
         }

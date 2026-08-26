@@ -1,7 +1,8 @@
 # SubtabBootstrapCoordinator 使用说明
 
 ## 组件定位
-- 源码路径：`xmnote/UIComponents/Tabs/SubtabBootstrapCoordinator.swift`
+- 源码路径：`xmnote/ViewModels/Reading/SubtabBootstrapCoordinator.swift`
+- 归属：阅读功能的启动协调支持类型，不是 UI 组件。
 - 角色：容器级二级页启动协调器，用于给分段页、子页或 pager 子面板提供一次性 warmup 去重能力。
 - 边界：
   - 负责跟踪 `idle / warming / ready` 三态。

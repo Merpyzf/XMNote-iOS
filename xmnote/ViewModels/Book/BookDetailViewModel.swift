@@ -326,7 +326,7 @@ final class BookDetailViewModel {
 
             guard didReceiveValue || Task.isCancelled else {
                 notesLoadState = .failed
-                errorMessage = "部分内容加载失败：书摘数据流未返回内容。"
+                errorMessage = "部分内容加载失败：书摘数据流未返回内容"
 #if DEBUG
                 Self.notesLogger.error(
                     "[book.workspace.notes.stream.finished_without_value] bookID=\(self.bookId)"

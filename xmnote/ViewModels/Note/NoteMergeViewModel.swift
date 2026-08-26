@@ -238,7 +238,7 @@ final class NoteMergeViewModel {
         }
         if reservation.acceptedCount < inputs.count {
             imageErrorMessage = reservation.acceptedCount < componentAcceptedCount
-                ? "已超出今日额度，保留前 \(reservation.acceptedCount) 张。"
+                ? "已超出今日额度，保留前 \(reservation.acceptedCount) 张"
                 : "最多只能添加 9 张图片，已保留前 \(reservation.acceptedCount) 张"
         }
 

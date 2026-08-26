@@ -2,7 +2,7 @@
 import SwiftUI
 
 /**
- * [INPUT]: 依赖 XMRatingBar 评分基础设施、DesignTokens 语义色与 Debug 页面基础容器
+ * [INPUT]: 依赖 XMRatingBar/XMRatingAppearance 评分基础设施、DesignTokens 与 Debug 页面基础容器
  * [OUTPUT]: 对外提供 RatingBarTestView（评分组件调试页）
  * [POS]: Debug 测试页，集中验证评分组件的尺寸、步进、交互、颜色与浅深色表现
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -279,11 +279,11 @@ struct RatingBarTestView: View {
     }
 
     private var activeColor: Color {
-        usesMutedPalette ? Color.ratingActive.opacity(0.82) : .ratingActive
+        usesMutedPalette ? XMRatingAppearance.active.opacity(0.82) : XMRatingAppearance.active
     }
 
     private var inactiveColor: Color {
-        usesMutedPalette ? Color.textHint.opacity(0.28) : .ratingInactive
+        usesMutedPalette ? Color.textHint.opacity(0.28) : XMRatingAppearance.inactive
     }
 
     private static let sampleRatings: [Double] = [0, 0.5, 2.5, 4.5, 5]
@@ -322,9 +322,9 @@ struct RatingBarTestView: View {
             case .system:
                 return .surfaceNested
             case .light:
-                return Color(hex: 0xFFFFFF)
+                return Color.xmHex(0xFFFFFF)
             case .dark:
-                return Color(hex: 0x1C1C1E)
+                return Color.xmHex(0x1C1C1E)
             }
         }
     }

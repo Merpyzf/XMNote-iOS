@@ -47,7 +47,13 @@ struct ContentViewerContentView: View {
             placeholder: { placeholderState },
             loading: { loadingState },
             empty: { emptyState(message: $0) },
-            failure: { viewerMessageCard(text: $0) }
+            failure: {
+                XMContentStateView(
+                    role: .failure,
+                    title: "暂时无法加载",
+                    message: $0
+                )
+            }
         )
         .background(Color.surfacePage)
     }
@@ -108,17 +114,11 @@ private extension ContentViewerContentView {
     }
 
     func emptyState(message: String) -> some View {
-        VStack(spacing: Spacing.base) {
-            Image(systemName: presentationStyle.emptyIconName)
-                .font(.system(size: 28, weight: .semibold))
-                .foregroundStyle(.secondary)
-            Text(message)
-                .font(AppTypography.body)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .padding(.horizontal, Spacing.screenEdge)
+        XMContentStateView(
+            role: .empty,
+            title: message,
+            systemImage: presentationStyle.emptyIconName
+        )
     }
 }
 

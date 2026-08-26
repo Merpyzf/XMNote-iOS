@@ -1,5 +1,5 @@
 /**
- * [INPUT]: 依赖 MainTabView 提供搜索 query、提交/历史词协调与结果导航回调，依赖 RepositoryContainer 和 GlobalSearchViewModel
+ * [INPUT]: 依赖 MainTabView 提供搜索 query、提交/历史词协调与结果导航回调，依赖 RepositoryContainer、GlobalSearchViewModel 与 XMTagLabel
  * [OUTPUT]: 对外提供 GlobalSearchView，渲染 iOS 原生搜索 Tab 下的固定范围栏、全局搜索结果、搜索历史、分类筛选、空态、加载态、错误态与搜索来源详情打开入口
  * [POS]: Search 模块根视图，被 Search Tab NavigationStack 消费；普通详情 push，沉浸查看目标交给根级全屏任务呈现
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -7,6 +7,19 @@
 
 import SwiftUI
 import UIKit
+
+private enum GlobalSearchLayout {
+    static let bottomContentClearance: CGFloat = 132
+    static let emptyStateVerticalPadding = Spacing.section * 2
+    static let fieldScopeMinimumHeight: CGFloat = 34
+}
+
+/// 全局搜索书名命中的局部排版，保留 body 语义曲线与半粗强调层级。
+private enum GlobalSearchTypography {
+    static var bookTitleHighlight: Font {
+        AppTypography.semantic(.body, weight: .semibold)
+    }
+}
 
 /// 搜索宿主捕获到的提交事件，使用唯一 id 保证相同关键词连续提交也能被搜索页感知。
 struct GlobalSearchSubmitRequest: Equatable, Identifiable {
@@ -277,17 +290,23 @@ private struct GlobalSearchLoadedContent: View {
                 }
             case .loaded:
                 if viewModel.snapshot.isEmpty {
-                    GlobalSearchPlaceholderView(
+                    XMContentStateView(
+                        role: .noResults,
                         title: "没有找到内容",
-                        subtitle: "换个关键词再试"
+                        message: "换个关键词再试"
                     )
                 } else {
                     resultsContent
                 }
             case .failed(_, let message):
-                GlobalSearchErrorView(message: message) {
-                    viewModel.retry(query: query)
-                }
+                XMContentStateView(
+                    role: .failure,
+                    title: "搜索失败",
+                    message: message,
+                    action: XMStateAction("重新搜索", systemImage: "arrow.clockwise") {
+                        viewModel.retry(query: query)
+                    }
+                )
             }
         }
         .onAppear(perform: syncLoadingGate)
@@ -357,10 +376,18 @@ private struct GlobalSearchLoadedContent: View {
 
                 if visibleResults.isEmpty {
                     if showsFieldScopeFilter {
-                        GlobalSearchInlineEmptyView(title: "没有找到内容", subtitle: "换个范围试试")
+                        XMCompactStateView(
+                            role: .noResults,
+                            title: "没有找到内容",
+                            message: "换个范围试试"
+                        )
                     } else {
                         topAnchoredContent {
-                            GlobalSearchInlineEmptyView(title: "没有找到内容", subtitle: "换个范围试试")
+                            XMCompactStateView(
+                                role: .noResults,
+                                title: "没有找到内容",
+                                message: "换个范围试试"
+                            )
                         }
                     }
                 } else {
@@ -370,7 +397,7 @@ private struct GlobalSearchLoadedContent: View {
             .scrollTargetLayout()
             .padding(.horizontal, Spacing.screenEdge)
             .padding(.top, topPadding)
-            .padding(.bottom, Spacing.actionReserved * 3)
+            .padding(.bottom, GlobalSearchLayout.bottomContentClearance)
         }
         .scrollPosition(id: $resultScrollTarget, anchor: .top)
         .scrollIndicators(.hidden)
@@ -528,28 +555,28 @@ private struct GlobalSearchFieldScopeFilterBar: View {
                         HStack(alignment: .firstTextBaseline, spacing: Spacing.tiny) {
                             Text(scope.title)
                                 .font(AppTypography.caption)
-                                .foregroundStyle(isSelected ? Color.brandDeep : Color.textSecondary)
+                                .foregroundStyle(isSelected ? Color.selectionForeground : Color.textSecondary)
                                 .lineLimit(1)
 
                             let count = countProvider(scope)
                             if count > 0 {
                                 Text("\(count)")
                                     .font(AppTypography.caption2)
-                                    .foregroundStyle(isSelected ? Color.brandDeep.opacity(0.68) : Color.textHint)
+                                    .foregroundStyle(isSelected ? Color.selectionForeground.opacity(0.68) : Color.textHint)
                                     .lineLimit(1)
                             }
                         }
                         .padding(.horizontal, Spacing.cozy)
-                        .frame(minHeight: Spacing.actionReserved - Spacing.tight)
+                        .frame(minHeight: GlobalSearchLayout.fieldScopeMinimumHeight)
                         .background(
-                            isSelected ? Color.brand.opacity(0.11) : Color.controlFillSecondary.opacity(0.52),
+                            isSelected ? Color.selectionAccent.opacity(0.11) : Color.controlFillSecondary.opacity(0.52),
                             in: Capsule()
                         )
                         .overlay {
                             Capsule()
                                 .stroke(
-                                    isSelected ? Color.brand.opacity(0.32) : Color.surfaceBorderSubtle,
-                                    lineWidth: CardStyle.borderWidth
+                                    isSelected ? Color.selectionAccent.opacity(0.32) : Color.surfaceBorderSubtle,
+                                    lineWidth: StrokeWidth.hairline
                                 )
                         }
                     }
@@ -612,48 +639,6 @@ struct GlobalSearchResultSourcePreview: View {
     }
 }
 
-private struct GlobalSearchInlineEmptyView: View {
-    let title: String
-    let subtitle: String
-
-    var body: some View {
-        VStack(spacing: Spacing.half) {
-            Text(title)
-                .font(AppTypography.subheadlineSemibold)
-                .foregroundStyle(Color.textPrimary)
-
-            Text(subtitle)
-                .font(AppTypography.caption)
-                .foregroundStyle(Color.textHint)
-        }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, Spacing.section * 2)
-    }
-}
-
-private struct GlobalSearchPlaceholderView: View {
-    let title: String
-    var subtitle: String?
-
-    var body: some View {
-        VStack(spacing: Spacing.half) {
-            Text(title)
-                .font(AppTypography.bodyMedium)
-                .foregroundStyle(Color.textPrimary)
-                .multilineTextAlignment(.center)
-
-            if let subtitle, !subtitle.isEmpty {
-                Text(subtitle)
-                    .font(AppTypography.subheadline)
-                    .foregroundStyle(Color.textHint)
-                    .multilineTextAlignment(.center)
-            }
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .padding(.horizontal, Spacing.screenEdge)
-    }
-}
-
 private struct GlobalSearchRootView: View {
     let recentQueries: [String]
     @Binding var isHistoryExpanded: Bool
@@ -680,7 +665,7 @@ private struct GlobalSearchRootView: View {
             )
             .padding(.horizontal, Spacing.screenEdge)
             .padding(.top, Spacing.section)
-            .padding(.bottom, Spacing.actionReserved * 3)
+            .padding(.bottom, GlobalSearchLayout.bottomContentClearance)
         }
         .scrollIndicators(.hidden)
         .scrollDismissesKeyboard(.never)
@@ -708,7 +693,7 @@ private struct GlobalSearchBookRow: View {
                     book.title,
                     keyword: keyword,
                     baseFont: AppTypography.bodyMedium,
-                    highlightFont: AppTypography.semantic(.body, weight: .semibold),
+                    highlightFont: GlobalSearchTypography.bookTitleHighlight,
                     baseColor: Color.textPrimary
                 )
                 .lineLimit(2)
@@ -757,11 +742,11 @@ private struct GlobalSearchNoteRow: View {
                 XMKeywordHighlighting.text(
                     note.content,
                     keyword: keyword,
-                    baseFont: NoteExcerptTypography.body,
-                    highlightFont: NoteExcerptTypography.body,
+                    baseFont: ReadingContentTypography.body,
+                    highlightFont: ReadingContentTypography.body,
                     baseColor: Color.textPrimary
                 )
-                .lineSpacing(NoteExcerptTypography.bodyLineSpacing)
+                .lineSpacing(ReadingContentTypography.bodyLineSpacing)
                 .lineLimit(6)
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
@@ -804,11 +789,11 @@ private struct GlobalSearchRelevantContentRow: View {
                 XMKeywordHighlighting.text(
                     relevant.content,
                     keyword: keyword,
-                    baseFont: NoteExcerptTypography.body,
-                    highlightFont: NoteExcerptTypography.body,
+                    baseFont: ReadingContentTypography.body,
+                    highlightFont: ReadingContentTypography.body,
                     baseColor: Color.textPrimary
                 )
-                .lineSpacing(NoteExcerptTypography.bodyLineSpacing)
+                .lineSpacing(ReadingContentTypography.bodyLineSpacing)
                 .lineLimit(5)
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
@@ -847,11 +832,11 @@ private struct GlobalSearchReviewRow: View {
                 XMKeywordHighlighting.text(
                     review.content,
                     keyword: keyword,
-                    baseFont: NoteExcerptTypography.body,
-                    highlightFont: NoteExcerptTypography.body,
+                    baseFont: ReadingContentTypography.body,
+                    highlightFont: ReadingContentTypography.body,
                     baseColor: Color.textPrimary
                 )
-                .lineSpacing(NoteExcerptTypography.bodyLineSpacing)
+                .lineSpacing(ReadingContentTypography.bodyLineSpacing)
                 .lineLimit(5)
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
@@ -903,11 +888,11 @@ private struct GlobalSearchIdeaBlock: View {
         XMKeywordHighlighting.text(
             text,
             keyword: keyword,
-            baseFont: NoteExcerptTypography.idea,
-            highlightFont: NoteExcerptTypography.idea,
+            baseFont: ReadingContentTypography.annotation,
+            highlightFont: ReadingContentTypography.annotation,
             baseColor: Color.textSecondary
         )
-        .lineSpacing(NoteExcerptTypography.ideaLineSpacing)
+        .lineSpacing(ReadingContentTypography.annotationLineSpacing)
         .lineLimit(4)
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(Spacing.cozy)
@@ -983,17 +968,15 @@ private struct GlobalSearchTagStrip: View {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: Spacing.tight) {
                     ForEach(tags, id: \.self) { tag in
-                        XMKeywordHighlighting.text(
-                            "#\(tag)",
-                            keyword: keyword,
-                            baseFont: AppTypography.caption2Medium,
-                            highlightFont: AppTypography.caption2Medium,
-                            baseColor: Color.textSecondary
-                        )
-                        .lineLimit(1)
-                        .padding(.horizontal, Spacing.cozy)
-                        .padding(.vertical, Spacing.compact)
-                        .background(Color.tagBackground, in: Capsule())
+                        XMTagLabel {
+                            XMKeywordHighlighting.text(
+                                "#\(tag)",
+                                keyword: keyword,
+                                baseFont: AppTypography.caption2Medium,
+                                highlightFont: AppTypography.caption2Medium,
+                                baseColor: Color.textSecondary
+                            )
+                        }
                     }
                 }
             }
@@ -1010,7 +993,7 @@ private struct GlobalSearchFooter: View {
             HStack(alignment: .firstTextBaseline, spacing: Spacing.base) {
                 if !leading.isEmpty {
                     Text(leading)
-                        .font(NoteExcerptTypography.footer)
+                        .font(ReadingContentTypography.metadata)
                         .foregroundStyle(Color.textSecondary)
                         .lineLimit(1)
                 }
@@ -1019,41 +1002,12 @@ private struct GlobalSearchFooter: View {
 
                 if !trailing.isEmpty {
                     Text(trailing)
-                        .font(NoteExcerptTypography.footer)
+                        .font(ReadingContentTypography.metadata)
                         .foregroundStyle(Color.textHint)
                         .lineLimit(1)
                 }
             }
         }
-    }
-}
-
-private struct GlobalSearchErrorView: View {
-    let message: String
-    let onRetry: () -> Void
-
-    var body: some View {
-        VStack(spacing: Spacing.base) {
-            Image(systemName: "exclamationmark.circle")
-                .font(AppTypography.title2)
-                .foregroundStyle(Color.feedbackWarning)
-                .accessibilityHidden(true)
-
-            Text(message)
-                .font(AppTypography.body)
-                .foregroundStyle(Color.textSecondary)
-                .multilineTextAlignment(.center)
-
-            Button(action: onRetry) {
-                Label("重新搜索", systemImage: "arrow.clockwise")
-                    .font(AppTypography.subheadlineSemibold)
-                    .padding(.horizontal, Spacing.base)
-                    .frame(minHeight: Spacing.actionReserved)
-            }
-            .buttonStyle(.bordered)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .padding(.horizontal, Spacing.screenEdge)
     }
 }
 

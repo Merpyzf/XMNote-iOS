@@ -240,7 +240,7 @@ final class WebHTMLFetchTestViewModel {
     func runManual() async {
         let trimmed = manualURLInput.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else {
-            manualOutcome = Outcome(status: .failed, message: "请输入 URL。")
+            manualOutcome = Outcome(status: .failed, message: "请输入 URL")
             return
         }
 
@@ -335,13 +335,13 @@ final class WebHTMLFetchTestViewModel {
             clearFanqiePreview()
             fanqieStructuredStatus = .failed
             fanqieStructuredResults = []
-            fanqieStructuredMessage = "请输入番茄搜索关键词。"
+            fanqieStructuredMessage = "请输入番茄搜索关键词"
             fanqieDebugReport = FanqieDebugReport(
                 keyword: fanqieKeyword,
                 requestURL: nil,
                 finalURL: nil,
                 status: .failed,
-                message: "请输入番茄搜索关键词。",
+                message: "请输入番茄搜索关键词",
                 htmlResult: nil,
                 htmlLength: nil,
                 detailPageURLs: [],
@@ -411,18 +411,18 @@ final class WebHTMLFetchTestViewModel {
             guard !report.detailPageURLs.isEmpty else {
                 fanqieStructuredStatus = .success
                 fanqieStructuredResults = []
-                fanqieStructuredMessage = "搜索成功，但当前未提取到详情链接。"
+                fanqieStructuredMessage = "搜索成功，但当前未提取到详情链接"
                 return
             }
 
             fanqieStructuredStatus = .loading
             fanqieStructuredResults = []
-            fanqieStructuredMessage = "正在解析详情页书籍信息..."
+            fanqieStructuredMessage = "正在解析详情页书籍信息…"
             do {
                 let detailResults = try await bookRemoteSearchService.hydrateFanqieResults(from: report.detailPageURLs)
                 fanqieStructuredResults = detailResults
                 fanqieStructuredStatus = .success
-                fanqieStructuredMessage = detailResults.isEmpty ? "详情页解析为空，请查看上方调试信息。" : nil
+                fanqieStructuredMessage = detailResults.isEmpty ? "详情页解析为空，请查看上方调试信息" : nil
             } catch {
                 fanqieStructuredStatus = .failed
                 fanqieStructuredResults = []
@@ -432,12 +432,12 @@ final class WebHTMLFetchTestViewModel {
         case .empty:
             fanqieStructuredStatus = .success
             fanqieStructuredResults = []
-            fanqieStructuredMessage = "番茄返回空结果。"
+            fanqieStructuredMessage = "番茄返回空结果"
 
         case .verificationRequired, .timeout, .failed, .unrecognizedResult:
             fanqieStructuredStatus = .failed
             fanqieStructuredResults = []
-            fanqieStructuredMessage = report.message ?? "番茄结构化解析失败，请先查看上方调试报告。"
+            fanqieStructuredMessage = report.message ?? "番茄结构化解析失败，请先查看上方调试报告"
 
         case .idle, .loading:
             fanqieStructuredStatus = .idle
@@ -681,7 +681,7 @@ private extension WebHTMLFetchTestViewModel {
             if isSearchScenario(scenario) {
                 return UserFacingRecovery(
                     title: "已完成豆瓣登录，可以继续搜索了",
-                    message: "请重新尝试刚才的搜索。",
+                    message: "请重新尝试刚才的搜索",
                     primaryButtonTitle: nil,
                     secondaryButtonTitle: nil,
                     retryButtonTitle: "重新搜索"
@@ -689,7 +689,7 @@ private extension WebHTMLFetchTestViewModel {
             }
             return UserFacingRecovery(
                 title: "已完成豆瓣登录，可以继续获取内容了",
-                message: "请重新尝试刚才的操作。",
+                message: "请重新尝试刚才的操作",
                 primaryButtonTitle: nil,
                 secondaryButtonTitle: nil,
                 retryButtonTitle: "重新获取"
@@ -697,7 +697,7 @@ private extension WebHTMLFetchTestViewModel {
         case .dismissed:
             return UserFacingRecovery(
                 title: "还没有完成豆瓣登录",
-                message: "你可以稍后再登录，完成后再回来继续当前操作。",
+                message: "你可以稍后再登录，完成后再回来继续当前操作",
                 primaryButtonTitle: "继续登录",
                 secondaryButtonTitle: nil,
                 retryButtonTitle: nil

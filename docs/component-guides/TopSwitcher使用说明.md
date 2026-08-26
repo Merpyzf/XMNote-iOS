@@ -1,6 +1,6 @@
 # TopSwitcher 使用说明
 
-`TopSwitcher` 位于 `xmnote/UIComponents/Tabs/TopSwitcher.swift`，用于首页顶部标题/二级标签切换。组件支持标签模式和单标题模式，标签模式默认采用 `TopSwitcherSelectionTransactionPolicy.hardSwitch`：路由 selection 与顶部视觉 selection 都在禁动画事务内写入，保证顶部反馈与内容页同帧落位。
+`TopSwitcher` 位于 `xmnote/UIComponents/Navigation/Tabs/TopSwitcher.swift`，用于首页顶部标题/二级标签切换。组件支持标签模式和单标题模式，标签模式默认采用 `TopSwitcherSelectionTransactionPolicy.hardSwitch`：路由 selection 与顶部视觉 selection 都在禁动画事务内写入，保证顶部反馈与内容页同帧落位。
 
 ## 快速接入
 

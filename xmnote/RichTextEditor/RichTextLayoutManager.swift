@@ -1,5 +1,5 @@
 /**
- * [INPUT]: 依赖 RichTextEditor 模块格式定义与 UIKit/TextKit 能力，承接富文本解析/渲染/编辑链路
+ * [INPUT]: 依赖 RichTextEditor 模块格式定义、RichTextAppearance 与 UIKit/TextKit 能力，承接富文本解析/渲染/编辑链路
  * [OUTPUT]: 对外提供 RichTextLayoutManager 能力，用于富文本编辑器的序列化、交互或样式支持
  * [POS]: RichTextEditor 功能模块内部构件，服务 Note 编辑场景的 Android 业务意图对齐
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -19,7 +19,7 @@ final class RichTextLayoutManager: NSLayoutManager {
     /// Quote 色条宽度（pt）
     var quoteStripeWidth: CGFloat = 2
     /// Quote 色条颜色
-    var quoteColor: UIColor = .systemGreen
+    var quoteColor: UIColor = RichTextAppearance.quoteAccent
 
     /// 在文本背景绘制阶段补充列表圆点与引用色条，保持富文本编辑态和展示态一致。
     override func drawBackground(forGlyphRange glyphsToShow: NSRange, at origin: CGPoint) {

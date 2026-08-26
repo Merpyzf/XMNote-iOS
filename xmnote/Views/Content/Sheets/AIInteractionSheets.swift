@@ -1,11 +1,99 @@
 /**
- * [INPUT]: 依赖 AITextResultViewModel/AIAutoTagViewModel、AIRepositoryProtocol、AIMarkdownResultView、系统 Sheet/Liquid Glass、LoadingGate 与现有反馈组件
- * [OUTPUT]: 对外提供 AITextResultSheet 与 AIAutoTagSheet，承接流式 Markdown 结果、克制等待态、模型切换、编辑器请求交接和 AI 标签确认写回生命周期
+ * [INPUT]: 依赖 AITextResultViewModel/AIAutoTagViewModel、AIRepositoryProtocol、AIMarkdownResultView、系统 Sheet/Liquid Glass、LoadingGate、xmMinimumHitTarget 与现有反馈组件
+ * [OUTPUT]: 对外提供 AITextResultSheet 与 AIAutoTagSheet，承接流式 Markdown 结果、克制等待态、模型切换、固定底部品牌确认操作、编辑器请求交接和 AI 标签确认写回生命周期
  * [POS]: Views/Content/Sheets 的 AI 业务 Sheet，被通用 viewer 及单页详情入口复用
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
 import SwiftUI
+
+private enum AIInteractionSheetLayout {
+    static let titleHorizontalReserve = InteractionMetrics.minimumTouchTarget + Spacing.base
+    static let chromeMinHeight = InteractionMetrics.minimumTouchTarget
+    static let headerActionSlotSize: CGFloat = InteractionMetrics.minimumTouchTarget
+    static let closeVisualSize: CGFloat = 32
+    static let closeFillOpacity = 0.82
+}
+
+/// 宽幅品牌主操作按钮，仅服务 AI 结果 Sheet 的确认动作。
+private struct AIPrimaryActionButton: View {
+    let title: String
+    let containerInsetCompensation: CGSize
+    let action: () -> Void
+
+    /// 使用动态标题和同步触发动作创建主操作；容器补偿仅抵消系统额外控件内距。
+    init(
+        _ title: String,
+        containerInsetCompensation: CGSize = .zero,
+        action: @escaping () -> Void
+    ) {
+        self.title = title
+        self.containerInsetCompensation = containerInsetCompensation
+        self.action = action
+    }
+
+    var body: some View {
+        Button(action: action) {
+            Text(title)
+        }
+        .buttonStyle(
+            AIPrimaryActionButtonStyle(
+                minimumControlHeight: AIPrimaryActionButtonMetrics.minimumControlHeight
+                    + containerInsetCompensation.height
+            )
+        )
+        .buttonSizing(.fitted)
+        .frame(
+            width: AIPrimaryActionButtonMetrics.controlWidth
+                + containerInsetCompensation.width
+        )
+        .frame(minHeight: AIPrimaryActionButtonMetrics.minimumControlHeight)
+        .fixedSize(horizontal: true, vertical: true)
+    }
+}
+
+/// 将 AI 品牌填充、禁用语义和按压反馈收敛到业务按钮内部。
+private struct AIPrimaryActionButtonStyle: ButtonStyle {
+    @Environment(\.isEnabled) private var isEnabled
+
+    let minimumControlHeight: CGFloat
+
+    /// 构造尺寸稳定的按钮表层，按压时仅调整不透明度。
+    func makeBody(configuration: Configuration) -> some View {
+        let shape = RoundedRectangle(
+            cornerRadius: CornerRadius.blockLarge,
+            style: .continuous
+        )
+
+        configuration.label
+            .font(AppTypography.headlineSemibold)
+            .foregroundStyle(
+                isEnabled
+                    ? Color.primaryActionForeground
+                    : Color.buttonDisabledForeground
+            )
+            .multilineTextAlignment(.center)
+            .padding(.horizontal, Spacing.screenEdge)
+            .frame(maxWidth: .infinity, minHeight: minimumControlHeight)
+            .background(
+                isEnabled ? Color.primaryActionFill : Color.buttonDisabled,
+                in: shape
+            )
+            .contentShape(shape)
+            .opacity(
+                isEnabled && configuration.isPressed
+                    ? AIPrimaryActionButtonMetrics.pressedOpacity
+                    : 1
+            )
+    }
+}
+
+/// 参考当前 AI 结果 Sheet 宽度校准的局部主操作规格。
+private enum AIPrimaryActionButtonMetrics {
+    static let controlWidth: CGFloat = 340
+    static let minimumControlHeight: CGFloat = 46
+    static let pressedOpacity = 0.86
+}
 
 /// 流式 AI 释义 Sheet；整条书摘释义可由用户明确交给既有编辑器继续确认。
 struct AITextResultSheet: View {
@@ -17,6 +105,7 @@ struct AITextResultSheet: View {
     @State private var loadingGate = LoadingGate()
     @State private var markdownInteractionController = AIMarkdownInteractionController()
     @State private var hasStartedGeneration = false
+    @State private var selectedPresentationDetent: PresentationDetent = .medium
 
     private let onIdeaEditorRequested: @MainActor (AIExplanationIdeaEditRequest) -> Void
 
@@ -54,6 +143,11 @@ struct AITextResultSheet: View {
         .safeAreaBar(edge: .top, spacing: Spacing.none) {
             topChrome
         }
+        .safeAreaBar(edge: .bottom, spacing: Spacing.none) {
+            if viewModel.request.noteIDForIdeaEditor != nil {
+                ideaActionBar
+            }
+        }
         .onScrollGeometryChange(for: Bool.self) { geometry in
             let distanceFromBottom = geometry.contentSize.height
                 - geometry.contentOffset.y
@@ -69,6 +163,10 @@ struct AITextResultSheet: View {
             markdownInteractionController.updateIsPositionedByUser(newValue)
         }
         .interactiveDismissDisabled(viewModel.isPreparingIdeaEditor)
+        .presentationDetents(
+            [.medium, .large],
+            selection: $selectedPresentationDetent
+        )
         .onAppear {
             markdownInteractionController.configure(
                 toastCenter: toastCenter,
@@ -122,13 +220,16 @@ struct AITextResultSheet: View {
         ZStack {
             HStack {
                 Color.clear
-                    .frame(width: Spacing.actionReserved, height: Spacing.actionReserved)
+                    .frame(
+                        width: AIInteractionSheetLayout.headerActionSlotSize,
+                        height: AIInteractionSheetLayout.headerActionSlotSize
+                    )
 
                 Spacer(minLength: Spacing.none)
 
                 closeButton
             }
-            .frame(minHeight: XMSettingsSheetLayout.chromeMinHeight)
+            .frame(minHeight: AIInteractionSheetLayout.chromeMinHeight)
 
             VStack(spacing: Spacing.micro) {
                 Text("AI 释义")
@@ -139,7 +240,7 @@ struct AITextResultSheet: View {
                 modelMenu
             }
             .frame(maxWidth: .infinity)
-            .padding(.horizontal, XMSettingsSheetLayout.titleHorizontalReserve)
+            .padding(.horizontal, AIInteractionSheetLayout.titleHorizontalReserve)
         }
         .padding(.horizontal, Spacing.screenEdge)
         .padding(.top, Spacing.double)
@@ -169,7 +270,7 @@ struct AITextResultSheet: View {
                 .foregroundStyle(Color.textSecondary)
                 .lineLimit(1)
                 .truncationMode(.middle)
-                .contentShape(.interaction, ModelMenuHitShape())
+                .xmMinimumHitTarget(anchor: .top)
         }
         .buttonStyle(.plain)
         .disabled(viewModel.availableProviders.isEmpty || viewModel.isSwitchingModel)
@@ -192,12 +293,18 @@ struct AITextResultSheet: View {
             TopBarActionIcon(
                 systemName: "xmark",
                 iconSize: 13,
-                containerSize: XMSettingsSheetLayout.closeVisualSize,
+                containerSize: AIInteractionSheetLayout.closeVisualSize,
                 weight: .bold,
                 foregroundColor: .textSecondary
             )
-            .background(Color.controlFillSecondary.opacity(0.82), in: Circle())
-            .frame(width: Spacing.actionReserved, height: Spacing.actionReserved)
+            .background(
+                Color.controlFillSecondary.opacity(AIInteractionSheetLayout.closeFillOpacity),
+                in: Circle()
+            )
+            .frame(
+                width: InteractionMetrics.minimumTouchTarget,
+                height: InteractionMetrics.minimumTouchTarget
+            )
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -216,7 +323,8 @@ struct AITextResultSheet: View {
                         interactionController: markdownInteractionController
                     )
 
-                    if viewModel.hasCompletedSuccessfully {
+                    if viewModel.hasCompletedSuccessfully,
+                       viewModel.request.noteIDForIdeaEditor == nil {
                         aiDisclosure
                             .transition(.opacity)
                     }
@@ -228,12 +336,6 @@ struct AITextResultSheet: View {
 
                 if viewModel.canRetryGeneration {
                     retryButton
-                }
-
-                if viewModel.hasCompletedSuccessfully,
-                   viewModel.request.noteIDForIdeaEditor != nil {
-                    recordToIdeaAction
-                        .transition(.opacity)
                 }
             }
             .transition(.opacity)
@@ -269,35 +371,42 @@ struct AITextResultSheet: View {
     }
 
     private var aiDisclosure: some View {
-        Label("AI 生成内容，仅供参考", systemImage: "sparkles")
+        Text("内容由 AI 生成，请注意甄别")
             .font(AppTypography.caption)
             .foregroundStyle(Color.textSecondary)
+            .multilineTextAlignment(.center)
             .fixedSize(horizontal: false, vertical: true)
-            .frame(maxWidth: .infinity, alignment: .trailing)
+            .frame(maxWidth: .infinity, alignment: .center)
     }
 
-    private var recordToIdeaAction: some View {
-        HStack(spacing: Spacing.none) {
-            Spacer(minLength: Spacing.none)
-
-            Button {
+    private var ideaActionBar: some View {
+        AICompletedActionBar(
+            disclosure: "内容由 AI 生成，请注意甄别",
+            isVisible: shouldShowIdeaAction
+        ) {
+            AIPrimaryActionButton(
+                viewModel.isPreparingIdeaEditor ? "正在打开…" : "记录到想法",
+                containerInsetCompensation: primaryActionContainerInsetCompensation
+            ) {
                 requestIdeaEditor()
-            } label: {
-                Text(viewModel.isPreparingIdeaEditor ? "正在打开…" : "记录到想法")
-                    .font(AppTypography.subheadlineMedium)
-                    .foregroundStyle(Color.textPrimary)
             }
-            .buttonStyle(.glass)
-            .buttonBorderShape(.capsule)
-            .controlSize(.regular)
-            .frame(minHeight: Spacing.actionReserved)
-            .contentShape(.interaction, Capsule())
             .disabled(!viewModel.canOpenIdeaEditor)
             .accessibilityHint("打开书摘编辑器，将本次 AI 释义作为未保存想法继续编辑")
-
-            Spacer(minLength: Spacing.none)
         }
-        .frame(maxWidth: .infinity)
+    }
+
+    private var shouldShowIdeaAction: Bool {
+        viewModel.request.noteIDForIdeaEditor != nil
+            && viewModel.hasCompletedSuccessfully
+            && !viewModel.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            && !viewModel.isGenerating
+            && !viewModel.isSwitchingModel
+    }
+
+    private var primaryActionContainerInsetCompensation: CGSize {
+        selectedPresentationDetent == .medium
+            ? AICompletedActionBarMetrics.mediumDetentControlInsetCompensation
+            : .zero
     }
 
     /// 转换任务继承当前主执行器；仅在请求准备成功后交给来源页，并由 Sheet 自己触发退场。
@@ -342,22 +451,57 @@ private struct AIGenerationWaitingView: View {
     }
 }
 
-/// 模型副标题的交互形状只向下补足命中高度，避免热区改变视觉排版或覆盖标题。
-private struct ModelMenuHitShape: Shape {
-    private let minimumSize = Spacing.actionReserved
+/// 完成态底部操作组；保持透明底板与稳定占位，仅通过透明度回应流式会话终态。
+private struct AICompletedActionBar<Action: View>: View {
+    let disclosure: String
+    let isVisible: Bool
+    @ViewBuilder let action: Action
 
-    /// 以文本顶部为锚点生成至少 44pt 的命中矩形，保持短文本可触达且不扩大布局尺寸。
-    func path(in rect: CGRect) -> Path {
-        let width = max(rect.width, minimumSize)
-        let height = max(rect.height, minimumSize)
-        let hitRect = CGRect(
-            x: rect.midX - width / 2,
-            y: rect.minY,
-            width: width,
-            height: height
-        )
-        return Path(hitRect)
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    /// 接收稳定完成态与具体按钮视图，不持有业务状态或异步任务。
+    init(
+        disclosure: String,
+        isVisible: Bool,
+        @ViewBuilder action: () -> Action
+    ) {
+        self.disclosure = disclosure
+        self.isVisible = isVisible
+        self.action = action()
     }
+
+    var body: some View {
+        VStack(spacing: Spacing.cozy) {
+            Text(disclosure)
+                .font(AppTypography.caption)
+                .foregroundStyle(Color.textSecondary)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .center)
+
+            action
+                .frame(maxWidth: .infinity)
+        }
+        .padding(.horizontal, Spacing.none)
+        .padding(.top, Spacing.cozy)
+        .padding(.bottom, Spacing.cozy)
+        .background(Color.clear)
+        .opacity(isVisible ? 1 : 0)
+        .allowsHitTesting(isVisible)
+        .accessibilityHidden(!isVisible)
+        .animation(visibilityAnimation, value: isVisible)
+    }
+
+    private var visibilityAnimation: Animation {
+        reduceMotion
+            ? .easeOut(duration: 0.12)
+            : .smooth(duration: 0.24)
+    }
+}
+
+/// 系统半高 Sheet 会在 safeAreaBar 内额外收紧控件轮廓，此处集中保存像素校准补偿。
+private enum AICompletedActionBarMetrics {
+    static let mediumDetentControlInsetCompensation = CGSize(width: 14, height: 2)
 }
 
 /// AI 标签 Sheet，先展示实时 Markdown 输出，完成解析后再交给用户选择并确认写回。
@@ -370,6 +514,7 @@ struct AIAutoTagSheet: View {
     @State private var loadingGate = LoadingGate()
     @State private var markdownInteractionController = AIMarkdownInteractionController()
     @State private var hasStartedGeneration = false
+    @State private var selectedPresentationDetent: PresentationDetent = .medium
 
     private let onApplyWillBegin: @MainActor () -> Void
     private let onApplyFailed: @MainActor () -> Void
@@ -410,6 +555,9 @@ struct AIAutoTagSheet: View {
         .safeAreaBar(edge: .top, spacing: Spacing.none) {
             topChrome
         }
+        .safeAreaBar(edge: .bottom, spacing: Spacing.none) {
+            autoTagActionBar
+        }
         .onScrollGeometryChange(for: Bool.self) { geometry in
             let distanceFromBottom = geometry.contentSize.height
                 - geometry.contentOffset.y
@@ -425,6 +573,10 @@ struct AIAutoTagSheet: View {
             markdownInteractionController.updateIsPositionedByUser(newValue)
         }
         .interactiveDismissDisabled(viewModel.isApplying)
+        .presentationDetents(
+            [.medium, .large],
+            selection: $selectedPresentationDetent
+        )
         .onAppear {
             markdownInteractionController.configure(
                 toastCenter: toastCenter,
@@ -475,13 +627,16 @@ struct AIAutoTagSheet: View {
         ZStack {
             HStack {
                 Color.clear
-                    .frame(width: Spacing.actionReserved, height: Spacing.actionReserved)
+                    .frame(
+                        width: AIInteractionSheetLayout.headerActionSlotSize,
+                        height: AIInteractionSheetLayout.headerActionSlotSize
+                    )
 
                 Spacer(minLength: Spacing.none)
 
                 closeButton
             }
-            .frame(minHeight: XMSettingsSheetLayout.chromeMinHeight)
+            .frame(minHeight: AIInteractionSheetLayout.chromeMinHeight)
 
             VStack(spacing: Spacing.micro) {
                 Text("AI 标签")
@@ -496,7 +651,7 @@ struct AIAutoTagSheet: View {
                     .truncationMode(.middle)
             }
             .frame(maxWidth: .infinity)
-            .padding(.horizontal, XMSettingsSheetLayout.titleHorizontalReserve)
+            .padding(.horizontal, AIInteractionSheetLayout.titleHorizontalReserve)
         }
         .padding(.horizontal, Spacing.screenEdge)
         .padding(.top, Spacing.double)
@@ -511,12 +666,18 @@ struct AIAutoTagSheet: View {
             TopBarActionIcon(
                 systemName: "xmark",
                 iconSize: 13,
-                containerSize: XMSettingsSheetLayout.closeVisualSize,
+                containerSize: AIInteractionSheetLayout.closeVisualSize,
                 weight: .bold,
                 foregroundColor: .textSecondary
             )
-            .background(Color.controlFillSecondary.opacity(0.82), in: Circle())
-            .frame(width: Spacing.actionReserved, height: Spacing.actionReserved)
+            .background(
+                Color.controlFillSecondary.opacity(AIInteractionSheetLayout.closeFillOpacity),
+                in: Circle()
+            )
+            .frame(
+                width: InteractionMetrics.minimumTouchTarget,
+                height: InteractionMetrics.minimumTouchTarget
+            )
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -547,7 +708,7 @@ struct AIAutoTagSheet: View {
                 .transition(.opacity)
         case .empty:
             VStack(alignment: .leading, spacing: Spacing.base) {
-                Text("没有生成可用的标签建议。")
+                Text("没有生成可用的标签建议")
                     .font(AppTypography.footnote)
                     .foregroundStyle(Color.textSecondary)
                 retryButton
@@ -574,11 +735,6 @@ struct AIAutoTagSheet: View {
 
     private func readyContent(suggestions: [AIAutoTagSuggestion]) -> some View {
         VStack(alignment: .leading, spacing: Spacing.section) {
-            Text("最多 3 个标签；已有标签将直接复用。")
-                .font(AppTypography.caption)
-                .foregroundStyle(Color.textSecondary)
-                .fixedSize(horizontal: false, vertical: true)
-
             VStack(spacing: Spacing.none) {
                 ForEach(suggestions) { suggestion in
                     Button {
@@ -603,37 +759,28 @@ struct AIAutoTagSheet: View {
                     .transition(.opacity)
             }
 
-            Label("AI 生成，请确认后应用", systemImage: "sparkles")
-                .font(AppTypography.caption)
-                .foregroundStyle(Color.textSecondary)
-                .fixedSize(horizontal: false, vertical: true)
-                .frame(maxWidth: .infinity, alignment: .trailing)
-
-            applyAction
         }
     }
 
-    private var applyAction: some View {
-        HStack(spacing: Spacing.none) {
-            Spacer(minLength: Spacing.none)
-
-            Button {
+    private var autoTagActionBar: some View {
+        AICompletedActionBar(
+            disclosure: "内容由 AI 生成，请注意甄别",
+            isVisible: viewModel.phaseKind == .ready
+        ) {
+            AIPrimaryActionButton(
+                viewModel.isApplying ? "应用中…" : "应用标签",
+                containerInsetCompensation: primaryActionContainerInsetCompensation
+            ) {
                 applyTags()
-            } label: {
-                Text(viewModel.isApplying ? "应用中…" : "应用标签")
-                    .font(AppTypography.subheadlineMedium)
-                    .foregroundStyle(Color.textPrimary)
             }
-            .buttonStyle(.glass)
-            .buttonBorderShape(.capsule)
-            .controlSize(.regular)
-            .frame(minHeight: Spacing.actionReserved)
-            .contentShape(.interaction, Capsule())
             .disabled(!viewModel.hasSelectedSuggestion || viewModel.isApplying)
-
-            Spacer(minLength: Spacing.none)
         }
-        .frame(maxWidth: .infinity)
+    }
+
+    private var primaryActionContainerInsetCompensation: CGSize {
+        selectedPresentationDetent == .medium
+            ? AICompletedActionBarMetrics.mediumDetentControlInsetCompensation
+            : .zero
     }
 
     private func generationError(message: String) -> some View {
@@ -678,52 +825,69 @@ struct AIAutoTagSheet: View {
     }
 
     private func accessibilityValue(for suggestion: AIAutoTagSuggestion) -> String {
-        let source = suggestion.isExisting ? "已有标签" : "将新建"
+        let source = suggestion.isExisting ? "直接复用" : "应用后新建"
         let selection = suggestion.isSelected ? "已选择" : "未选择"
         let reason = suggestion.reason.trimmingCharacters(in: .whitespacesAndNewlines)
         return reason.isEmpty
-            ? "\(source)，\(selection)"
-            : "\(source)，\(reason)，\(selection)"
+            ? "AI 推荐，\(source)，\(selection)"
+            : "AI 推荐，\(source)，\(reason)，\(selection)"
     }
 }
 
-/// 单条 AI 标签候选，以两层中性文本承载来源和理由，仅用行尾小勾表达选择。
+/// 单条 AI 标签候选，以暖金色 Spark 标识应用后新增，副标题仅承载推荐理由。
 private struct AIAutoTagSuggestionRow: View {
     let suggestion: AIAutoTagSuggestion
 
     var body: some View {
-        HStack(alignment: .top, spacing: Spacing.base) {
+        HStack(alignment: .center, spacing: Spacing.base) {
             VStack(alignment: .leading, spacing: Spacing.compact) {
-                Text(suggestion.name)
-                    .font(AppTypography.bodyMedium)
-                    .foregroundStyle(Color.textPrimary)
-                    .fixedSize(horizontal: false, vertical: true)
+                HStack(alignment: .firstTextBaseline, spacing: Spacing.half) {
+                    tagName
+                        .layoutPriority(1)
 
-                Text(detailText)
-                    .font(AppTypography.caption)
-                    .foregroundStyle(Color.textSecondary)
-                    .fixedSize(horizontal: false, vertical: true)
+                    if !suggestion.isExisting {
+                        Image(systemName: "sparkles")
+                            .font(AppTypography.caption)
+                            .symbolRenderingMode(.palette)
+                            .foregroundStyle(Color.yellow, Color.orange)
+                            .fixedSize()
+                            .accessibilityHidden(true)
+                    }
+                }
+
+                if let reasonText {
+                    Text(reasonText)
+                        .font(AppTypography.caption)
+                        .foregroundStyle(Color.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
-
-            Spacer(minLength: Spacing.none)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .layoutPriority(1)
 
             Image(systemName: "checkmark")
                 .font(AppTypography.subheadlineSemibold)
-                .foregroundStyle(Color.brand)
+                .foregroundStyle(Color.appTint)
                 .opacity(suggestion.isSelected ? 1 : 0)
-                .frame(width: Spacing.section, height: Spacing.actionReserved, alignment: .top)
+                .frame(width: Spacing.section)
                 .accessibilityHidden(true)
         }
-        .frame(minHeight: Spacing.actionReserved)
+        .frame(minHeight: InteractionMetrics.minimumTouchTarget)
         .padding(.vertical, Spacing.cozy)
         .contentShape(Rectangle())
         .accessibilityElement(children: .ignore)
     }
 
-    private var detailText: String {
-        let source = suggestion.isExisting ? "已有标签" : "将新建"
+    private var tagName: some View {
+        Text(suggestion.name)
+            .font(AppTypography.bodyMedium)
+            .foregroundStyle(Color.textPrimary)
+            .fixedSize(horizontal: false, vertical: true)
+    }
+
+    private var reasonText: String? {
         let reason = suggestion.reason.trimmingCharacters(in: .whitespacesAndNewlines)
-        return reason.isEmpty ? source : "\(source) · \(reason)"
+        return reason.isEmpty ? nil : reason
     }
 }
 

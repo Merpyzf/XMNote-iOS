@@ -19,7 +19,7 @@ struct BaiduOCRTestView: View {
                 capabilitySection
                 editorSection(
                     title: OCRFlowTarget.content.title,
-                    placeholder: "识别结果会追加到这里，也可以手动编辑验证格式能力。",
+                    placeholder: "识别结果会追加到这里，也可以手动编辑验证格式能力",
                     text: $viewModel.contentText,
                     formats: $viewModel.contentFormats,
                     target: .content,
@@ -27,7 +27,7 @@ struct BaiduOCRTestView: View {
                 )
                 editorSection(
                     title: OCRFlowTarget.idea.title,
-                    placeholder: "点击“想法 OCR”后，识别结果会回填到这里。",
+                    placeholder: "点击“想法 OCR”后，识别结果会回填到这里",
                     text: $viewModel.ideaText,
                     formats: $viewModel.ideaFormats,
                     target: .idea,
@@ -71,7 +71,7 @@ private extension BaiduOCRTestView {
                     Spacer()
                     capabilityBadge(
                         title: isRuntimeSupported ? "真机可用" : "模拟器仅验证 UI",
-                        tint: isRuntimeSupported ? Color.brand : Color.feedbackWarning
+                        tint: isRuntimeSupported ? Color.feedbackSuccess : Color.feedbackWarning
                     )
                 }
 
@@ -80,8 +80,8 @@ private extension BaiduOCRTestView {
                     .foregroundStyle(Color.textSecondary)
 
                 HStack(spacing: Spacing.half) {
-                    capabilityBadge(title: "单框裁切", tint: Color.brand)
-                    capabilityBadge(title: "自由框选", tint: Color.brandDeep)
+                    capabilityBadge(title: "单框裁切", tint: Color.appTint)
+                    capabilityBadge(title: "自由框选", tint: Color.selectionForeground)
                     capabilityBadge(title: "自动回填", tint: Color.textSecondary)
                 }
             }
@@ -104,7 +104,7 @@ private extension BaiduOCRTestView {
                         Text(title)
                             .font(.subheadline.weight(.semibold))
                             .foregroundStyle(Color.textPrimary)
-                        Text("点击下方按钮会进入独立 OCR Flow。")
+                        Text("点击下方按钮会进入独立 OCR Flow")
                             .font(.caption)
                             .foregroundStyle(Color.textSecondary)
                     }
@@ -113,7 +113,7 @@ private extension BaiduOCRTestView {
                         activeFlowTarget = target
                     }
                     .buttonStyle(.borderedProminent)
-                    .tint(Color.brand)
+                    .tint(Color.appTint)
                 }
 
                 RichTextEditor(
@@ -127,7 +127,7 @@ private extension BaiduOCRTestView {
                 .clipShape(RoundedRectangle(cornerRadius: CornerRadius.blockMedium, style: .continuous))
                 .overlay(
                     RoundedRectangle(cornerRadius: CornerRadius.blockMedium, style: .continuous)
-                        .stroke(Color.surfaceBorderDefault, lineWidth: CardStyle.borderWidth)
+                        .stroke(Color.surfaceBorderDefault, lineWidth: StrokeWidth.hairline)
                 )
             }
             .padding(Spacing.contentEdge)
@@ -163,13 +163,13 @@ private extension BaiduOCRTestView {
                         Spacer()
                         capabilityBadge(
                             title: summary.selectionMode.title,
-                            tint: summary.selectionMode == .single ? Color.brand : Color.brandDeep
+                            tint: summary.selectionMode == .single ? Color.selectionAccent : Color.selectionForeground
                         )
                     }
 
                     HStack(spacing: Spacing.half) {
-                        capabilityBadge(title: "\(summary.regionCount) 个区域", tint: Color.brand)
-                        capabilityBadge(title: "\(summary.totalLineCount) 行", tint: Color.brandDeep)
+                        capabilityBadge(title: "\(summary.regionCount) 个区域", tint: Color.appTint)
+                        capabilityBadge(title: "\(summary.totalLineCount) 行", tint: Color.selectionForeground)
                         capabilityBadge(title: "\(summary.totalCharacterCount) 字", tint: Color.textSecondary)
                     }
 
@@ -221,9 +221,9 @@ private extension BaiduOCRTestView {
 
     var runtimeHintText: String {
         if isRuntimeSupported {
-            return "真机可完整验证拍照、相册、裁切、自由框选和 SDK 识别回填。"
+            return "真机可完整验证拍照、相册、裁切、自由框选和 SDK 识别回填"
         }
-        return "模拟器没有可用相机预览，建议使用相册验证 Flow 与多框交互。"
+        return "模拟器没有可用相机预览，建议使用相册验证 Flow 与多框交互"
     }
 }
 

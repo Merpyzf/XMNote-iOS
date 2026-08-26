@@ -248,8 +248,8 @@ struct WereadImportAuthView: View {
         guard let message = viewModel.errorMessage else { return nil }
         return .init(title: "导入失败", message: message, actions: [.init(title: "知道了") { viewModel.errorMessage = nil }])
     }
-    private var premiumDescriptor: XMSystemAlertDescriptor { .init(title: "会员功能", message: "微信读书授权导入是会员功能", actions: [.init(title: "取消", role: .cancel) {}, .init(title: "升级会员") { onOpenPremium() }]) }
-    private var tipsDescriptor: XMSystemAlertDescriptor { .init(title: "导入提示", message: "1. 在微信中扫描或识别二维码完成授权\n2. 导入期间请保持网络连接\n3. 重复导入会自动合并已有内容", actions: [.init(title: "不再提示") { viewModel.dismissTips(permanently: true) }, .init(title: "知道了", role: .cancel) { viewModel.dismissTips(permanently: false) }]) }
+    private var premiumDescriptor: XMSystemAlertDescriptor { .init(title: "会员功能", message: "微信读书授权导入是会员功能。", actions: [.init(title: "取消", role: .cancel) {}, .init(title: "升级会员") { onOpenPremium() }]) }
+    private var tipsDescriptor: XMSystemAlertDescriptor { .init(title: "导入提示", message: "1. 在微信中扫描或识别二维码完成授权。\n2. 导入期间请保持网络连接。\n3. 重复导入会自动合并已有内容。", actions: [.init(title: "不再提示") { viewModel.dismissTips(permanently: true) }, .init(title: "知道了", role: .cancel) { viewModel.dismissTips(permanently: false) }]) }
     private var backfillDescriptor: XMSystemAlertDescriptor? {
         guard let prompt = viewModel.backfillPrompt else { return nil }
         return .init(title: "关联历史微信数据", message: "发现 \(prompt.pendingCount) 本历史导入书籍缺少微信关联信息，是否现在补全？", actions: [.init(title: "稍后", role: .cancel) { viewModel.postponeBackfill() }, .init(title: "开始") { viewModel.beginBackfill() }])
@@ -344,6 +344,20 @@ private struct WereadImportPreviewView: View {
 
     private func binding(for id: UUID) -> Binding<WereadImportBook> { Binding(get: { viewModel.books.first { $0.id == id }! }, set: viewModel.updateBook) }
 
+    /// 打开含书摘或书评的单书预览；空内容保持无操作。
+    private func openBookContentIfAvailable(_ book: WereadImportBook) {
+        guard book.hasBrowsableContent else { return }
+        contentBook = book
+    }
+
+    /// 进入未映射书籍的信息编辑态，已映射书籍保持原有阻断语义。
+    private func beginEditing(_ book: WereadImportBook) {
+        guard book.targetBookID == nil else { return }
+        editingBook = book
+        editTitle = book.title
+        editAuthor = book.author
+    }
+
     @ViewBuilder
     private func bookSection(_ book: WereadImportBook) -> some View {
         Section {
@@ -358,13 +372,29 @@ private struct WereadImportPreviewView: View {
                     Text(book.title).font(AppTypography.headline)
                     Text(book.author).font(AppTypography.caption).foregroundStyle(Color.textSecondary)
                     Text(summaryText(for: book)).font(AppTypography.caption).foregroundStyle(Color.textSecondary)
-                    if let target = book.targetBookTitle { Text("导入到：\(target)").font(AppTypography.caption).foregroundStyle(Color.brand) }
+                    if let target = book.targetBookTitle { Text("导入到：\(target)").font(AppTypography.caption).foregroundStyle(Color.selectionAccent) }
                 }
                 Spacer()
             }
             .contentShape(Rectangle())
-            .onTapGesture { if book.hasBrowsableContent { contentBook = book } }
-            .onLongPressGesture { guard book.targetBookID == nil else { return }; editingBook = book; editTitle = book.title; editAuthor = book.author }
+            .onTapGesture {
+                openBookContentIfAvailable(book)
+            }
+            .onLongPressGesture {
+                beginEditing(book)
+            }
+            .accessibilityActions {
+                if book.hasBrowsableContent {
+                    Button("预览导入内容") {
+                        openBookContentIfAvailable(book)
+                    }
+                }
+                if book.targetBookID == nil {
+                    Button("编辑书籍信息") {
+                        beginEditing(book)
+                    }
+                }
+            }
             HStack {
                 Button(book.targetBookID == nil ? "映射已有书籍" : "更换映射") { mappingBook = book }
                 if book.targetBookID != nil { Spacer(); Button("清除映射", role: .destructive) { viewModel.map(book.id, to: nil) } }

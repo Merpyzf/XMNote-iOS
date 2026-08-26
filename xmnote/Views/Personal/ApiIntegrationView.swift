@@ -48,14 +48,9 @@ private struct ApiIntegrationContentView: View {
     @State private var activeDestination: ExternalAppDestination?
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: Spacing.cozy) {
-                Text("关联应用")
-                    .font(AppTypography.captionMedium)
-                    .foregroundStyle(Color.textSecondary)
-                    .padding(.horizontal, Spacing.contentEdge)
-
-                XMSettingsGroupCard {
+        XMSettingsPage {
+            XMSettingsSection("关联应用") {
+                XMSettingsGroup(verticalPadding: Spacing.none) {
                     VStack(spacing: Spacing.none) {
                         ForEach(ExternalAppDestination.allCases) { destination in
                             ApiIntegrationAppRow(
@@ -68,23 +63,18 @@ private struct ApiIntegrationContentView: View {
 
                             if let lastDestination = ExternalAppDestination.allCases.last,
                                destination != lastDestination {
-                                Divider()
+                                XMSettingsDivider()
                                     .padding(.leading, ApiIntegrationLayout.rowDividerLeadingInset)
                             }
                         }
                     }
                 }
             }
-            .padding(.horizontal, Spacing.screenEdge)
-            .padding(.top, Spacing.section)
-            .padding(.bottom, Spacing.contentEdge)
-            .animation(settingsAnimation, value: viewModel.settings)
         }
-        .scrollIndicators(.hidden)
-        .background(Color.surfacePage.ignoresSafeArea())
+        .animation(settingsAnimation, value: viewModel.settings)
         .sheet(item: $activeDestination) { destination in
             ApiIntegrationEditSheet(destination: destination, viewModel: viewModel)
-                .presentationDetents([.height(ApiIntegrationLayout.sheetCompactHeight), .medium])
+                .presentationDetents([.height(ApiIntegrationEditSheet.compactHeight), .medium])
                 .presentationDragIndicator(.visible)
         }
     }
@@ -100,10 +90,7 @@ private enum ApiIntegrationLayout {
     static let flomoIconHeight: CGFloat = 22
     static let writeathonIconSize: CGFloat = 23
     static let inboxIconSize: CGFloat = 21
-    static let rowMinHeight: CGFloat = 58
     static let rowDividerLeadingInset: CGFloat = iconContainerSize + Spacing.base
-    static let inputMinHeight: CGFloat = 48
-    static let sheetCompactHeight: CGFloat = 360
 }
 
 private struct ApiIntegrationAppRow: View {
@@ -118,7 +105,7 @@ private struct ApiIntegrationAppRow: View {
 
                 VStack(alignment: .leading, spacing: Spacing.compact) {
                     Text(destination.presentationTitle)
-                        .font(AppTypography.subheadlineSemibold)
+                        .font(AppTypography.subheadlineMedium)
                         .foregroundStyle(Color.textPrimary)
                         .lineLimit(1)
 
@@ -133,179 +120,23 @@ private struct ApiIntegrationAppRow: View {
 
                 HStack(spacing: Spacing.half) {
                     Text(destination.statusTitle(isConfigured: isConfigured))
-                        .font(AppTypography.captionMedium)
-                        .foregroundStyle(isConfigured ? Color.feedbackSuccess : Color.textHint)
+                        .font(AppTypography.subheadline)
+                        .foregroundStyle(isConfigured ? Color.feedbackSuccess : Color.textSecondary)
                         .lineLimit(1)
                         .minimumScaleFactor(0.82)
 
                     Image(systemName: "chevron.right")
-                        .font(AppTypography.caption)
-                        .fontWeight(.semibold)
+                        .font(AppTypography.captionSemibold)
                         .foregroundStyle(Color.textHint)
                 }
             }
-            .frame(minHeight: ApiIntegrationLayout.rowMinHeight)
+            .frame(minHeight: XMSettingsPageLayout.detailRowMinHeight)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("\(destination.presentationTitle)，\(destination.statusTitle(isConfigured: isConfigured))")
         .accessibilityHint("打开配置")
-    }
-}
-
-private struct ApiIntegrationEditSheet: View {
-    let destination: ExternalAppDestination
-    @Bindable var viewModel: ApiIntegrationViewModel
-
-    @Environment(\.dismiss) private var dismiss
-
-    var body: some View {
-        XMSettingsPageScaffold(
-            title: "\(destination.presentationTitle) 配置",
-            subtitle: destination.sheetSubtitle,
-            onClose: { dismiss() }
-        ) {
-            VStack(spacing: Spacing.comfortable) {
-                XMSettingsGroupCard {
-                    VStack(alignment: .leading, spacing: Spacing.cozy) {
-                        ApiIntegrationStatusLine(
-                            destination: destination,
-                            isConfigured: viewModel.settings.isConfigured(destination)
-                        )
-
-                        Divider()
-
-                        ApiIntegrationInputField(
-                            destination: destination,
-                            value: binding(for: destination)
-                        )
-
-                        Text(destination.configurationHint)
-                            .font(AppTypography.caption)
-                            .foregroundStyle(Color.textSecondary)
-                            .fixedSize(horizontal: false, vertical: true)
-
-                        if let error = viewModel.fieldError(for: destination) {
-                            Text(error)
-                                .font(AppTypography.caption)
-                                .foregroundStyle(Color.feedbackError)
-                                .fixedSize(horizontal: false, vertical: true)
-                                .transition(.opacity)
-                        }
-                    }
-                }
-
-                actionBar
-            }
-            .padding(.horizontal, Spacing.screenEdge)
-            .padding(.bottom, Spacing.contentEdge)
-        }
-        .onAppear {
-            viewModel.resetDraft(for: destination)
-        }
-        .onDisappear {
-            viewModel.resetDraft(for: destination)
-        }
-    }
-
-    private var actionBar: some View {
-        HStack(spacing: Spacing.base) {
-            Button(role: .destructive) {
-                if viewModel.clear(destination) {
-                    dismiss()
-                }
-            } label: {
-                Text("清空配置")
-                    .font(AppTypography.subheadlineSemibold)
-                    .frame(maxWidth: .infinity)
-                    .frame(height: Spacing.actionReserved)
-            }
-            .buttonStyle(.bordered)
-            .disabled(!viewModel.canClear(destination))
-
-            Button {
-                if viewModel.save(destination) {
-                    dismiss()
-                }
-            } label: {
-                Text("保存")
-                    .font(AppTypography.subheadlineSemibold)
-                    .frame(maxWidth: .infinity)
-                    .frame(height: Spacing.actionReserved)
-            }
-            .buttonStyle(.borderedProminent)
-            .tint(Color.brand)
-            .disabled(!viewModel.canSave(destination))
-        }
-    }
-
-    private func binding(for destination: ExternalAppDestination) -> Binding<String> {
-        Binding {
-            viewModel.draftSettings.value(for: destination)
-        } set: { value in
-            viewModel.updateDraft(value, for: destination)
-        }
-    }
-}
-
-private struct ApiIntegrationStatusLine: View {
-    let destination: ExternalAppDestination
-    let isConfigured: Bool
-
-    var body: some View {
-        HStack(spacing: Spacing.base) {
-            Text("当前状态")
-                .font(AppTypography.captionMedium)
-                .foregroundStyle(Color.textSecondary)
-
-            Spacer(minLength: Spacing.base)
-
-            Text(destination.statusTitle(isConfigured: isConfigured))
-                .font(AppTypography.captionMedium)
-                .foregroundStyle(isConfigured ? Color.feedbackSuccess : Color.textHint)
-                .lineLimit(1)
-        }
-        .frame(minHeight: Spacing.actionReserved)
-        .accessibilityElement(children: .combine)
-    }
-}
-
-private struct ApiIntegrationInputField: View {
-    let destination: ExternalAppDestination
-    @Binding var value: String
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: Spacing.half) {
-            Text(destination.configurationTitle)
-                .font(AppTypography.captionMedium)
-                .foregroundStyle(Color.textSecondary)
-
-            inputControl
-                .font(AppTypography.body)
-                .foregroundStyle(Color.textPrimary)
-                .textInputAutocapitalization(.never)
-                .autocorrectionDisabled()
-                .submitLabel(.done)
-                .padding(.horizontal, Spacing.base)
-                .frame(maxWidth: .infinity, minHeight: ApiIntegrationLayout.inputMinHeight, alignment: .leading)
-                .background(
-                    Color.surfaceNested,
-                    in: RoundedRectangle(cornerRadius: CornerRadius.blockMedium, style: .continuous)
-                )
-        }
-    }
-
-    @ViewBuilder
-    private var inputControl: some View {
-        if destination == .writeathon {
-            SecureField(destination.configurationTitle, text: $value)
-                .privacySensitive()
-        } else {
-            TextField(destination.configurationTitle, text: $value, axis: .vertical)
-                .keyboardType(.URL)
-                .lineLimit(1...3)
-        }
     }
 }
 
@@ -344,7 +175,7 @@ private struct ApiIntegrationAppIcon: View {
     }
 }
 
-private extension ExternalAppDestination {
+extension ExternalAppDestination {
     var presentationTitle: String {
         switch self {
         case .flomo:

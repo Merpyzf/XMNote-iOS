@@ -1,5 +1,5 @@
 /**
- * [INPUT]: 依赖 BookReadingDetailContent、七项分享设置、ReadCalendarShareImageRenderer 与 XMActivityShareSheet
+ * [INPUT]: 依赖 BookReadingDetailContent、七项分享设置、ReadCalendarShareImageRenderer、XMActivityShareSheet 与 InteractionMetrics
  * [OUTPUT]: 对外提供随内容滚动的单向氛围背景 BookReadingDetailShareSheet 和 BookReadingDetailShareContent，预览并生成同构阅读详情长图
  * [POS]: Views/Book/Sheets 阅读详情分享业务 Sheet，临时文件生命周期在此收口
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -125,7 +125,7 @@ struct BookReadingDetailShareSheet: View {
             } label: {
                 Label("内容", systemImage: "slider.horizontal.3")
                     .font(AppTypography.subheadlineMedium)
-                    .frame(minHeight: Spacing.actionReserved)
+                    .frame(minHeight: InteractionMetrics.minimumTouchTarget)
             }
             .buttonStyle(.plain)
             .disabled(isGenerating)
@@ -136,7 +136,10 @@ struct BookReadingDetailShareSheet: View {
                     systemImage: isGenerating ? "photo.badge.arrow.down" : "square.and.arrow.up"
                 )
                 .font(AppTypography.subheadlineSemibold)
-                .frame(maxWidth: .infinity, minHeight: Spacing.actionReserved)
+                .frame(
+                    maxWidth: .infinity,
+                    minHeight: InteractionMetrics.minimumTouchTarget
+                )
             }
             .buttonStyle(.borderedProminent)
             .disabled(isGenerating)

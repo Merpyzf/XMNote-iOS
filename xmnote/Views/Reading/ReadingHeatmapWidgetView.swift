@@ -11,7 +11,8 @@ enum ReadingHeatmapWidgetLayout {
     static let cardCornerRadius = CornerRadius.containerLarge
     static let contentInset: CGFloat = Spacing.base
     static let infoVisualSize: CGFloat = 24
-    static let infoHitSize: CGFloat = 32
+    static let infoVisualSlotSize: CGFloat = 32
+    static let infoHitSize: CGFloat = InteractionMetrics.minimumTouchTarget
     static let infoInset: CGFloat = 3
 }
 
@@ -48,18 +49,11 @@ struct ReadingHeatmapWidgetCard: View {
                     .padding(.vertical, ReadingHeatmapWidgetLayout.contentInset)
 
                     if let errorMessage {
-                        HStack(spacing: Spacing.half) {
-                            Text(errorMessage)
-                                .font(AppTypography.caption)
-                                .foregroundStyle(Color.feedbackWarning)
-                                .lineLimit(1)
-
-                            Spacer(minLength: 0)
-
-                            Button("重试", action: onRetry)
-                                .font(AppTypography.caption)
-                                .foregroundStyle(Color.brand)
-                        }
+                        XMInlineStatusBanner(
+                            errorMessage,
+                            tone: .warning,
+                            action: XMStateAction("重试", systemImage: "arrow.clockwise", perform: onRetry)
+                        )
                         .padding(.horizontal, ReadingHeatmapWidgetLayout.contentInset)
                         .padding(.bottom, ReadingHeatmapWidgetLayout.contentInset)
                     }
@@ -73,13 +67,18 @@ struct ReadingHeatmapWidgetCard: View {
                             width: ReadingHeatmapWidgetLayout.infoVisualSize,
                             height: ReadingHeatmapWidgetLayout.infoVisualSize
                         )
+                        .frame(
+                            width: ReadingHeatmapWidgetLayout.infoVisualSlotSize,
+                            height: ReadingHeatmapWidgetLayout.infoVisualSlotSize
+                        )
+                        .frame(
+                            width: ReadingHeatmapWidgetLayout.infoHitSize,
+                            height: ReadingHeatmapWidgetLayout.infoHitSize,
+                            alignment: .topTrailing
+                        )
+                        .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .frame(
-                    width: ReadingHeatmapWidgetLayout.infoHitSize,
-                    height: ReadingHeatmapWidgetLayout.infoHitSize
-                )
-                .contentShape(Rectangle())
                 .padding(.top, ReadingHeatmapWidgetLayout.infoInset)
                 .padding(.trailing, ReadingHeatmapWidgetLayout.infoInset)
                 .accessibilityLabel("热力图说明")

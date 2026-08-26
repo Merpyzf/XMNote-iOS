@@ -16,7 +16,6 @@
 - `Components/BookSearchRecentQueriesSection.swift`: 书籍搜索最近查询区块
 - `Components/BookSearchResultRow.swift`: 书籍搜索结果行
 - `Components/BookSearchResultSkeletonRow.swift`: 书籍搜索骨架行
-- `Components/BookSearchStatusCard.swift`: 书籍搜索空态与错误态卡片
 - `Components/BookCollectionVisualComponents.swift`: 书单列表、详情与封面组合视觉组件
 - `Components/BookshelfBookListChromeViews.swift`: 书架二级列表浏览与编辑 chrome
 - `Components/BookshelfBookListCollectionCells.swift`: 书架二级列表 UIKit cell、区头与空态容器
@@ -26,6 +25,7 @@
 - `Components/BookshelfBookListItemViews.swift`: 书架二级列表网格与列表条目视图
 - `Components/BookshelfBookListViewportStableCollectionView.swift`: 书架二级列表视口稳定 Collection 子类
 - `Components/BookshelfInteractionState.swift`: 书架编辑 chrome、底部 inset 与搜索抽屉状态
-- `CollectionListPlaceholderView.swift`: 书单空态占位
+
+书籍搜索、书架、书单与书籍工作台的通用状态视觉统一复用 `StatePresentation` 组件族；UIKit/UICollectionView 空态容器只保留布局与状态映射职责。
 
 [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md

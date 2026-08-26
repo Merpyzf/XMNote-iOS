@@ -24,7 +24,7 @@ struct TimelineTimingCard: View {
                     XMBookCover.fixedWidth(
                         54,
                         urlString: bookCover,
-                        border: .init(color: .surfaceBorderDefault, width: CardStyle.borderWidth)
+                        border: .init(color: .surfaceBorderDefault, width: StrokeWidth.hairline)
                     )
 
                     VStack(alignment: .leading, spacing: Spacing.compact) {
@@ -56,7 +56,7 @@ struct TimelineTimingCard: View {
             .foregroundStyle(.white)
             .padding(.horizontal, Spacing.cozy)
             .padding(.vertical, Spacing.compact)
-            .background(Color.brand, in: Capsule())
+            .background(Color.appTint, in: Capsule())
     }
 }
 

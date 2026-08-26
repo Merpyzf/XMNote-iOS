@@ -7,6 +7,16 @@
 
 import SwiftUI
 
+private enum BookEditorLayout {
+    static let formBottomPadding: CGFloat = 120
+    static let longTextMinimumHeight: CGFloat = 120
+}
+
+/// 书籍录入页的品牌标题规格，隔离页面专属字体构造与内容组合。
+private enum BookEditorTypography {
+    static let headerTitle = AppTypography.brandDisplay(size: 24, relativeTo: .title3)
+}
+
 /// 书籍完整录入页入口，支持搜索结果预填、手动创建、既有书籍编辑与不恢复占位书的资料编辑。
 struct BookEditorView: View {
     let mode: BookEditorMode
@@ -83,7 +93,7 @@ struct BookEditorView: View {
                     }
                     .padding(.horizontal, Spacing.screenEdge)
                     .padding(.top, Spacing.base)
-                    .padding(.bottom, 120)
+                    .padding(.bottom, BookEditorLayout.formBottomPadding)
                 }
                 .scrollIndicators(.hidden)
             } else if viewModel.isLoading {
@@ -162,14 +172,14 @@ struct BookEditorView: View {
                     92,
                     urlString: draft.coverURL,
                     cornerRadius: CornerRadius.inlayHairline,
-                    border: .init(color: .surfaceBorderSubtle, width: CardStyle.borderWidth),
+                    border: .init(color: .surfaceBorderSubtle, width: StrokeWidth.hairline),
                     placeholderIconSize: .medium,
                     surfaceStyle: .spine
                 )
 
                 VStack(alignment: .leading, spacing: Spacing.half) {
                     Text(draft.title.isEmpty ? "新书录入" : draft.title)
-                        .font(AppTypography.brandDisplay(size: 24, relativeTo: .title3))
+                        .font(BookEditorTypography.headerTitle)
                         .foregroundStyle(Color.textPrimary)
                         .lineLimit(2)
 
@@ -180,11 +190,11 @@ struct BookEditorView: View {
 
                     if let searchSource = draft.searchSource {
                         Text("搜索来源 · \(searchSource.title)")
-                            .font(AppTypography.semantic(.footnote, weight: .medium))
-                            .foregroundStyle(Color.brand)
+                            .font(AppTypography.footnoteMedium)
+                            .foregroundStyle(Color.appTint)
                             .padding(.horizontal, Spacing.cozy)
                             .padding(.vertical, Spacing.tiny)
-                            .background(Color.brand.opacity(0.12), in: Capsule())
+                            .background(Color.appTint.opacity(0.12), in: Capsule())
                     }
                 }
             }
@@ -224,8 +234,8 @@ struct BookEditorView: View {
             editorTextField("ISBN", text: binding(viewModel, \.isbn), keyboardType: .asciiCapable)
             editorTextField("出版日期", text: binding(viewModel, \.pubDate))
             editorTextEditor("作者简介", text: binding(viewModel, \.authorIntro), minHeight: 96)
-            editorTextEditor("摘要", text: binding(viewModel, \.summary), minHeight: 120)
-            editorTextEditor("目录", text: binding(viewModel, \.catalog), minHeight: 120)
+            editorTextEditor("摘要", text: binding(viewModel, \.summary), minHeight: BookEditorLayout.longTextMinimumHeight)
+            editorTextEditor("目录", text: binding(viewModel, \.catalog), minHeight: BookEditorLayout.longTextMinimumHeight)
         }
     }
 
@@ -235,7 +245,7 @@ struct BookEditorView: View {
         draft: BookEditorDraft
     ) -> some View {
         editorSection(title: "书籍资料") {
-            Text("修改会同步到所有引用这本相关书籍的位置，但不会将它加入书架。")
+            Text("修改会同步到所有引用这本相关书籍的位置，但不会将它加入书架")
                 .font(AppTypography.caption)
                 .foregroundStyle(Color.textSecondary)
 
@@ -247,8 +257,8 @@ struct BookEditorView: View {
             editorTextField("出版日期", text: binding(viewModel, \.pubDate))
             editorTextField("封面链接", text: binding(viewModel, \.coverURL))
             editorTextEditor("作者简介", text: binding(viewModel, \.authorIntro), minHeight: 96)
-            editorTextEditor("摘要", text: binding(viewModel, \.summary), minHeight: 120)
-            editorTextEditor("目录", text: binding(viewModel, \.catalog), minHeight: 120)
+            editorTextEditor("摘要", text: binding(viewModel, \.summary), minHeight: BookEditorLayout.longTextMinimumHeight)
+            editorTextEditor("目录", text: binding(viewModel, \.catalog), minHeight: BookEditorLayout.longTextMinimumHeight)
         }
     }
 
@@ -379,7 +389,7 @@ struct BookEditorView: View {
         VStack(spacing: Spacing.cozy) {
             if let errorMessage = viewModel.errorMessage {
                 Text(errorMessage)
-                    .font(AppTypography.semantic(.footnote, weight: .medium))
+                    .font(AppTypography.footnoteMedium)
                     .foregroundStyle(Color.feedbackError)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
@@ -401,7 +411,7 @@ struct BookEditorView: View {
                     Spacer()
                 }
                 .padding(.vertical, Spacing.base)
-                .background(Color.brand, in: RoundedRectangle(cornerRadius: CornerRadius.blockMedium, style: .continuous))
+                .background(Color.primaryActionFill, in: RoundedRectangle(cornerRadius: CornerRadius.blockMedium, style: .continuous))
             }
             .buttonStyle(.plain)
             .disabled(viewModel.isSaving || draft.trimmedTitle.isEmpty)
@@ -528,11 +538,11 @@ struct BookEditorView: View {
     private func chip(_ title: String, isSelected: Bool, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Text(title)
-                .font(AppTypography.semantic(.footnote, weight: .medium))
+                .font(AppTypography.footnoteMedium)
                 .foregroundStyle(isSelected ? .white : Color.textPrimary)
                 .padding(.horizontal, Spacing.base)
                 .padding(.vertical, Spacing.cozy)
-                .background(isSelected ? Color.brand : Color.surfaceNested, in: Capsule())
+                .background(isSelected ? Color.selectionAccent : Color.surfaceNested, in: Capsule())
         }
         .buttonStyle(.plain)
     }
@@ -545,9 +555,7 @@ struct BookEditorView: View {
                     .font(AppTypography.caption2Semibold)
             }
         }
-        .font(
-            AppTypography.semantic(.footnote, weight: .medium)
-        )
+        .font(AppTypography.footnoteMedium)
         .foregroundStyle(Color.textPrimary)
         .padding(.horizontal, Spacing.base)
         .padding(.vertical, Spacing.cozy)

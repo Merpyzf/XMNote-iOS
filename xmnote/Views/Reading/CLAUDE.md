@@ -8,7 +8,6 @@
 - `ReadingContainerView.swift`: 在读 Tab 容器入口（在读首页 / 时间线 / 统计切换、时间线状态托管与 warmup 调度）
 - `ReadingDashboardView.swift`: 在读首页真实内容壳层（热力图、趋势、目标、继续阅读、最近在读、年度摘要）
 - `ReadingHeatmapWidgetView.swift`: 在读首页顶部热力图小组件（帮助弹层、日期点击回调）
-- `TimelinePlaceholderView.swift`: 统计占位页旧入口（保留兼容位）
 - `Timeline/ReadingTimelineView.swift`: 时间线正式页面壳层（日历、筛选、首开静态壳层与按日时间线列表）
 - `Sheets/HeatmapHelpSheetView.swift`: 热力图说明弹层（纯展示）
 - `Sheets/ReadingGoalEditorSheet.swift`: 首页阅读目标编辑弹层（今日目标 / 年度目标）
@@ -20,5 +19,7 @@
 - `ReadCalendar/`: 阅读日历子功能（含 Components/ 与 Sheets/）
 - `Timeline/`: 时间线子功能（正式页面与页面私有卡片组件）
 - `Sheets/`: 在读模块业务弹层目录；年月/年份随机访问选择统一使用 `xmnote/UIComponents/Foundation/XMYearMonthPickerSheet.swift`
+
+在读首页、时间线、统计入口与阅读计时的通用状态视觉统一复用 `StatePresentation` 组件族；领域时间线状态和容器专属骨架继续保留业务实现。
 
 [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md

@@ -1,5 +1,5 @@
 /**
- * [INPUT]: 依赖 RepositoryContainer 注入 BookRepositoryProtocol，依赖 BookContributorManagementViewModel 提供作者/出版社聚合列表与编辑删除状态
+ * [INPUT]: 依赖 RepositoryContainer 注入 BookRepositoryProtocol，依赖 BookContributorManagementViewModel、XMMenuStyle 与 xmMinimumHitTarget 提供管理行交互
  * [OUTPUT]: 对外提供 BookContributorManagementView，承接“作者管理/出版社管理”入口的真实管理页
  * [POS]: Book 模块作者/出版社管理页面壳层，被个人页路由与书籍 Tab 导航消费
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -81,16 +81,18 @@ private struct BookContributorManagementContentView: View {
                 Color.clear
             }
         case .empty:
-            ContentUnavailableView(
-                "暂无\(viewModel.kind.itemTitle)",
+            XMContentStateView(
+                role: .empty,
+                title: "暂无\(viewModel.kind.itemTitle)",
                 systemImage: viewModel.kind == .author ? "person.text.rectangle" : "building.2"
             )
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         case .error(let message):
-            ContentUnavailableView(
-                "\(viewModel.kind.title)加载失败",
-                systemImage: "exclamationmark.triangle",
-                description: Text(message)
+            XMContentStateView(
+                role: .failure,
+                title: "\(viewModel.kind.title)加载失败",
+                message: message,
+                systemImage: "exclamationmark.triangle"
             )
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         case .content:
@@ -213,7 +215,7 @@ private struct BookContributorManagementRow: View {
                     .font(AppTypography.bodyMedium)
                     .foregroundStyle(Color.textSecondary)
                     .frame(width: 36, height: 36)
-                    .contentShape(Rectangle())
+                    .xmMinimumHitTarget()
             }
             .disabled(isDisabled)
             .xmMenuNeutralTint()
@@ -223,7 +225,7 @@ private struct BookContributorManagementRow: View {
         .background(Color.surfaceCard, in: RoundedRectangle(cornerRadius: CornerRadius.blockMedium, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: CornerRadius.blockMedium, style: .continuous)
-                .stroke(Color.surfaceBorderSubtle, lineWidth: CardStyle.borderWidth)
+                .stroke(Color.surfaceBorderSubtle, lineWidth: StrokeWidth.hairline)
         }
         .contextMenu {
             Button(action: onEdit) {

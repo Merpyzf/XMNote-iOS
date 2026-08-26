@@ -49,7 +49,7 @@ private extension CameraTextCaptureTestContentView {
                     infoBadge("可触发", value: viewModel.isCurrentResponderEligible ? "是" : "否")
                 }
 
-                Text("权限文案：在使用文本识别、添加附图、扫描书籍等功能时会访问设备的相机。")
+                Text("权限文案：在使用文本识别、添加附图、扫描书籍等功能时会访问设备的相机")
                     .font(.caption)
                     .foregroundStyle(Color.textSecondary)
 
@@ -69,10 +69,10 @@ private extension CameraTextCaptureTestContentView {
                     Spacer()
                     Text(viewModel.supportedLanguageCountText)
                         .font(.caption.weight(.semibold))
-                        .foregroundStyle(Color.brand)
+                        .foregroundStyle(Color.appTint)
                         .padding(.horizontal, 8)
                         .padding(.vertical, 4)
-                        .background(Color.brand.opacity(0.12), in: Capsule())
+                        .background(Color.appTint.opacity(0.12), in: Capsule())
                 }
 
                 LazyVGrid(
@@ -109,7 +109,7 @@ private extension CameraTextCaptureTestContentView {
         VStack(spacing: Spacing.base) {
             editorCard(
                 title: "书摘内容",
-                placeholder: "点击此处后，使用键盘上方 OCR 按钮插入识别文本。",
+                placeholder: "点击此处后，使用键盘上方 OCR 按钮插入识别文本",
                 text: $viewModel.contentText,
                 formats: $viewModel.contentFormats,
                 field: .content,
@@ -118,7 +118,7 @@ private extension CameraTextCaptureTestContentView {
 
             editorCard(
                 title: "想法",
-                placeholder: "这里用于验证第二个编辑目标不会串写。",
+                placeholder: "这里用于验证第二个编辑目标不会串写",
                 text: $viewModel.ideaText,
                 formats: $viewModel.ideaFormats,
                 field: .idea,
@@ -150,11 +150,11 @@ private extension CameraTextCaptureTestContentView {
                     Spacer()
                     Text(viewModel.focusedField == field ? "已聚焦" : "未聚焦")
                         .font(.caption2.weight(.semibold))
-                        .foregroundStyle(viewModel.focusedField == field ? Color.brand : Color.textSecondary)
+                        .foregroundStyle(viewModel.focusedField == field ? Color.selectionAccent : Color.textSecondary)
                         .padding(.horizontal, 6)
                         .padding(.vertical, 3)
                         .background(
-                            (viewModel.focusedField == field ? Color.brand.opacity(0.12) : Color.surfacePage),
+                            (viewModel.focusedField == field ? Color.selectionAccent.opacity(0.12) : Color.surfacePage),
                             in: Capsule()
                         )
                 }
@@ -174,7 +174,7 @@ private extension CameraTextCaptureTestContentView {
                 .clipShape(RoundedRectangle(cornerRadius: CornerRadius.blockMedium, style: .continuous))
                 .overlay(
                     RoundedRectangle(cornerRadius: CornerRadius.blockMedium, style: .continuous)
-                        .stroke(Color.surfaceBorderDefault, lineWidth: CardStyle.borderWidth)
+                        .stroke(Color.surfaceBorderDefault, lineWidth: StrokeWidth.hairline)
                 )
             }
             .padding(Spacing.contentEdge)
@@ -186,13 +186,13 @@ private extension CameraTextCaptureTestContentView {
             VStack(alignment: .leading, spacing: Spacing.base) {
                 sectionTitle("使用说明")
 
-                Text("1. 点按任一编辑器获取焦点。")
+                Text("1. 点按任一编辑器获取焦点")
                     .font(.caption)
                     .foregroundStyle(Color.textSecondary)
-                Text("2. 通过键盘上方工具栏的 OCR 按钮触发系统取词。")
+                Text("2. 通过键盘上方工具栏的 OCR 按钮触发系统取词")
                     .font(.caption)
                     .foregroundStyle(Color.textSecondary)
-                Text("3. 识别结果由系统直接插入光标位置，不额外拼接换行。")
+                Text("3. 识别结果由系统直接插入光标位置，不额外拼接换行")
                     .font(.caption)
                     .foregroundStyle(Color.textSecondary)
                 Text("4. 若后续业务页需要接入，只需为 RichTextEditor 打开 allowsCameraTextCapture。")

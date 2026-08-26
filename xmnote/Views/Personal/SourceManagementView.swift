@@ -185,22 +185,28 @@ private struct SourceManagementContentView: View {
                 Color.clear.sourceManagementStateRow()
             }
         case .empty:
-            ContentUnavailableView(
-                emptyTitle,
-                systemImage: emptySystemImage,
-                description: Text(emptyDescription)
+            XMContentStateView(
+                role: .empty,
+                title: emptyTitle,
+                message: emptyDescription,
+                systemImage: emptySystemImage
             )
             .sourceManagementStateRow()
         case .error(let message):
-            ContentUnavailableView(
-                "来源加载失败",
-                systemImage: "exclamationmark.triangle",
-                description: Text(message)
+            XMContentStateView(
+                role: .failure,
+                title: "来源加载失败",
+                message: message,
+                systemImage: "exclamationmark.triangle"
             )
             .sourceManagementStateRow()
         case .content:
             if viewModel.isSearchResultEmpty {
-                ContentUnavailableView.search(text: viewModel.normalizedSearchText)
+                XMContentStateView(
+                    role: .noResults,
+                    title: "没有匹配的来源",
+                    message: "未找到与“\(viewModel.normalizedSearchText)”匹配的来源。"
+                )
                     .sourceManagementStateRow()
             } else {
                 SourceManagementListView(
@@ -271,9 +277,9 @@ private struct SourceManagementContentView: View {
     private var emptyDescription: String {
         switch viewModel.selectedScope {
         case .mine:
-            return "添加来源后，可在录入和批量编辑书籍时选择。"
+            return "添加来源后，可在录入和批量编辑书籍时选择"
         case .appDefault:
-            return "默认来源随基础数据初始化生成。"
+            return "默认来源随基础数据初始化生成"
         }
     }
 

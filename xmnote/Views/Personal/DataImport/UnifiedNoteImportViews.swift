@@ -32,7 +32,7 @@ struct NoteImportSourceScreen: View {
         VStack(spacing: Spacing.section) {
             Image(systemName: inputIcon)
                 .font(.system(size: 56, weight: .light))
-                .foregroundStyle(Color.brand)
+                .foregroundStyle(Color.appTint)
             Text(instruction)
                 .font(AppTypography.body)
                 .foregroundStyle(Color.textSecondary)
@@ -90,7 +90,7 @@ struct NoteImportSourceScreen: View {
     private var instruction: String {
         switch input {
         case .file, .fileCandidates: "选择从对应阅读应用导出的原始文件。解析规则与 Android 保持一致。"
-        case .clipboard, .clipboardCandidates: "先在阅读应用中复制完整书摘内容，再返回这里导入。"
+        case .clipboard, .clipboardCandidates: "先在阅读应用中复制完整书摘内容，再返回这里导入"
         }
     }
 
@@ -305,21 +305,7 @@ struct UnifiedNoteImportPreviewView: View {
             Section { HStack { Button("全选") { model.selectAll(true) }; Spacer(); Button("取消全选") { model.selectAll(false) } } }
             ForEach(model.visibleBooks) { book in
                 Section {
-                    HStack(alignment: .top, spacing: Spacing.base) {
-                        Button { model.toggle(book.id) } label: { Image(systemName: book.isSelected ? "checkmark.circle.fill" : "circle").font(.title2) }.buttonStyle(.plain)
-                        AsyncImage(url: URL(string: book.draft.cover)) { $0.resizable().scaledToFill() } placeholder: { Color.surfaceNested }
-                            .frame(width: 48, height: 68).clipShape(RoundedRectangle(cornerRadius: CornerRadius.inlaySmall))
-                        VStack(alignment: .leading, spacing: Spacing.compact) {
-                            Text(book.draft.name).font(AppTypography.headline)
-                            if !book.draft.author.isEmpty { Text(book.draft.author).font(AppTypography.caption).foregroundStyle(Color.textSecondary) }
-                            Text("\(book.draft.notes.count) 条书摘 · \(book.draft.reviews.count) 条书评").font(AppTypography.caption).foregroundStyle(Color.textSecondary)
-                            if let target = book.target { Text("导入到：\(target.title)").font(AppTypography.caption).foregroundStyle(Color.brand) }
-                        }
-                        Spacer()
-                    }
-                    .contentShape(Rectangle())
-                    .onTapGesture { if !book.draft.notes.isEmpty || !book.draft.reviews.isEmpty { contentBook = book } }
-                    .onLongPressGesture { guard book.target == nil else { return }; editedTitle = book.draft.name; editedAuthor = book.draft.author; editingBook = book }
+                    importBookRow(book)
                     HStack {
                         Button(book.target == nil ? "映射已有书籍" : "更换映射") { mappingBook = book }
                         if book.target != nil { Spacer(); Button("清除映射", role: .destructive) { model.map(book.id, target: nil) } }
@@ -388,6 +374,80 @@ struct UnifiedNoteImportPreviewView: View {
                 ]
             )
         }
+    }
+
+    /// 渲染同时承载选择按钮、内容预览点击与长按编辑的复合导入行。
+    private func importBookRow(_ book: UnifiedNoteImportPreviewModel.Book) -> some View {
+        HStack(alignment: .top, spacing: Spacing.base) {
+            Button {
+                model.toggle(book.id)
+            } label: {
+                Image(systemName: book.isSelected ? "checkmark.circle.fill" : "circle")
+                    .font(.title2)
+            }
+            .buttonStyle(.plain)
+
+            AsyncImage(url: URL(string: book.draft.cover)) { image in
+                image.resizable().scaledToFill()
+            } placeholder: {
+                Color.surfaceNested
+            }
+            .frame(width: 48, height: 68)
+            .clipShape(RoundedRectangle(cornerRadius: CornerRadius.inlaySmall))
+
+            VStack(alignment: .leading, spacing: Spacing.compact) {
+                Text(book.draft.name)
+                    .font(AppTypography.headline)
+                if !book.draft.author.isEmpty {
+                    Text(book.draft.author)
+                        .font(AppTypography.caption)
+                        .foregroundStyle(Color.textSecondary)
+                }
+                Text("\(book.draft.notes.count) 条书摘 · \(book.draft.reviews.count) 条书评")
+                    .font(AppTypography.caption)
+                    .foregroundStyle(Color.textSecondary)
+                if let target = book.target {
+                    Text("导入到：\(target.title)")
+                        .font(AppTypography.caption)
+                        .foregroundStyle(Color.selectionAccent)
+                }
+            }
+
+            Spacer()
+        }
+        .contentShape(Rectangle())
+        .onTapGesture {
+            openBookContentIfAvailable(book)
+        }
+        .onLongPressGesture {
+            beginEditing(book)
+        }
+        .accessibilityActions {
+            if !book.draft.notes.isEmpty || !book.draft.reviews.isEmpty {
+                Button("预览导入内容") {
+                    openBookContentIfAvailable(book)
+                }
+            }
+            if book.target == nil {
+                Button("编辑书籍信息") {
+                    beginEditing(book)
+                }
+            }
+        }
+    }
+
+    /// 打开至少含一条书摘或书评的导入内容预览。
+    private func openBookContentIfAvailable(_ book: UnifiedNoteImportPreviewModel.Book) {
+        guard !book.draft.notes.isEmpty || !book.draft.reviews.isEmpty else { return }
+        contentBook = book
+    }
+
+    /// 进入未映射书籍的信息编辑态。
+    private func beginEditing(_ book: UnifiedNoteImportPreviewModel.Book) {
+        guard book.target == nil else { return }
+        editedTitle = book.draft.name
+        editedAuthor = book.draft.author
+        editingBook = book
     }
 
     private func binding(for id: UUID) -> Binding<UnifiedNoteImportPreviewModel.Book> {

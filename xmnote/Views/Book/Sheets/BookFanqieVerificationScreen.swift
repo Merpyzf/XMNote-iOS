@@ -29,7 +29,7 @@ struct BookFanqieVerificationScreen: View {
                 TopBarBackButton(action: onClose)
             }
             ToolbarItem(placement: .principal) {
-                VStack(spacing: 2) {
+                VStack(spacing: Spacing.tiny) {
                     Text("番茄验证")
                         .font(AppTypography.headline)
                     Text(title)

@@ -17,11 +17,11 @@ struct BookPickerSelectedBooksSheet: View {
     @State private var isSearchActive = false
 
     var body: some View {
-        settingsScaffold
+        sheetScaffold
     }
 
-    private var settingsScaffold: some View {
-        XMSettingsPageScaffold(
+    private var sheetScaffold: some View {
+        XMSheetScaffold(
             title: "已选书籍",
             subtitle: subtitle,
             onClose: { dismiss() },
@@ -57,10 +57,12 @@ struct BookPickerSelectedBooksSheet: View {
             emptySelection
                 .transition(.opacity)
         } else if filteredItems.isEmpty {
-            ContentUnavailableView(
-                "没有找到“\(query.trimmingCharacters(in: .whitespacesAndNewlines))”",
+            XMCompactStateView(
+                role: .noResults,
+                title: "没有找到匹配的书",
+                message: "可以修改关键词后继续查找已选书籍",
                 systemImage: "magnifyingglass",
-                description: Text("可以修改关键词后继续查找已选书籍。")
+                style: .card
             )
             .frame(maxWidth: .infinity, minHeight: BookPickerGroupedSurfaceLayout.unavailableMinimumHeight)
             .transition(.opacity)
@@ -95,17 +97,16 @@ struct BookPickerSelectedBooksSheet: View {
     }
 
     private var emptySelection: some View {
-        ContentUnavailableView {
-            Label("还没有选择书籍", systemImage: "books.vertical")
-        } description: {
-            Text("返回书籍列表，继续选择需要的书籍。")
-        } actions: {
-            Button("继续选择") {
+        XMCompactStateView(
+            role: .empty,
+            title: "还没有选择书籍",
+            message: "返回书籍列表，继续选择需要的书籍",
+            systemImage: "books.vertical",
+            action: XMStateAction("继续选择", systemImage: "chevron.backward") {
                 dismiss()
-            }
-            .buttonStyle(.borderedProminent)
-            .tint(Color.brand)
-        }
+            },
+            style: .card
+        )
         .frame(maxWidth: .infinity, minHeight: BookPickerGroupedSurfaceLayout.unavailableMinimumHeight)
     }
 
@@ -147,7 +148,7 @@ private struct BookPickerSelectedBookRow: View {
                 44,
                 urlString: item.coverURL,
                 cornerRadius: CornerRadius.inlayHairline,
-                border: .init(color: .surfaceBorderSubtle, width: CardStyle.borderWidth),
+                border: .init(color: .surfaceBorderSubtle, width: StrokeWidth.hairline),
                 placeholderIconSize: .small,
                 surfaceStyle: .spine
             )

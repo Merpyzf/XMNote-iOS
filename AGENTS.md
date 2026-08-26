@@ -42,6 +42,7 @@
 - iOS26 参考入口：涉及液态玻璃与 iOS26 新特性时，优先查阅 `docs/learning/iOS26液态玻璃与高相关新特性开发参考.md`。
 - 页面状态参考入口：涉及页面状态恢复、导航路径恢复、scene 级状态持久化时，优先查阅 `docs/architecture/页面状态基建与开发模式.md`。
 - 加载状态参考入口：涉及加载态策略、读写反馈分级、Loading 门闩接入时，优先查阅 `docs/architecture/加载状态反馈基建设计.md`。
+- 通用状态展示参考入口：涉及空态、无搜索结果、无内容失败、卡片状态或保留内容时的局部错误提示，优先查阅 `docs/architecture/通用状态展示设计规范.md`。
 - 消息提示参考入口：涉及 Toast、Banner、Alert、Undo、删除反馈、手动排序反馈时，优先查阅 `docs/architecture/消息提示设计规范.md`。
 
 ## 3. 开发阶段与收口阶段
@@ -96,6 +97,29 @@
 ### UI 与交互
 - 遵循 iOS Human Interface Guidelines，保证业务一致，但采用 iOS 原生表达。
 
+#### 设计系统工程入口（强制）
+- 设计系统架构、依赖方向、组件边界与例外流程以 `docs/architecture/iOS设计系统工程规范.md` 为权威说明；令牌真相源位于 `xmnote/Utilities/DesignSystem/`，公共组件真相源位于 `xmnote/UIComponents/`，机器目录位于 `scripts/design-system/component-catalog.json`。
+- 修改生产 UI 前，先执行 `python3 scripts/design-system/ds.py context --paths <相关 Swift 路径>` 获取当前规则与正确入口；查找公共组件使用 `python3 scripts/design-system/ds.py catalog [--symbol <名称>]`，禁止仅凭文件名猜测或新建同类实现。
+- 开发中执行 `python3 scripts/design-system/ds.py lint --changed`；规则不清楚时执行 `python3 scripts/design-system/ds.py explain <规则ID>`；收口执行 `python3 scripts/design-system/ds.py audit`。`Makefile.parallel-ios` 的 `ai-build` 与 Git pre-commit 已接入变更范围检查，不得绕过。
+- `DS001`–`DS011` 为阻断规则；`DSR001`–`DSR003` 为需结合上下文判断的观察项。当前 enforced 基线必须保持 0；禁止用扩大排除范围、降级规则或写入新 baseline 的方式消除失败。规则误报必须以最小复现补充工具测试后修正规则。
+- 配置类页面使用 `XMSettingsPage + XMSettingsSection + XMSettingsGroup` 组合，已证明复用的行仅使用 `XMSettingsToggleRow` 与 `XMSettingsValueMenuRow`；业务差异保留在页面私有组合中，禁止新增参数膨胀的万能设置行。
+- 通用业务 Sheet 使用 `XMSheetScaffold`；标题栏、滚动回弹、固定顶栏/底栏由 scaffold 统一，业务状态与业务控件仍由功能模块持有，禁止 `AnyView` 类型擦除。
+- 新增全局 token 或跨模块组件前，必须证明至少两个独立生产场景具有相同语义、相同根因与相同复用方式；单页差异优先使用页面级组合常量或私有子视图。
+
+#### 产品文案与标点（强制）
+- 规范依据：组件语义与写作原则以 Apple Human Interface Guidelines 的 [Writing](https://developer.apple.com/design/human-interface-guidelines/writing)、[Buttons](https://developer.apple.com/design/human-interface-guidelines/buttons)、[Alerts](https://developer.apple.com/design/human-interface-guidelines/alerts)、[Notifications](https://developer.apple.com/design/human-interface-guidelines/notifications) 为平台基线，简体中文标点以现行 [GB/T 15834-2011](https://openstd.samr.gov.cn/bzgk/std/newGbInfo?hcno=22EA6D162E4110E752259661E1A0D0A8) 为语言基线；组件专项规则优先于通用短文案规则。
+- 适用范围：所有用户可见文本均须遵守本节，包括生产与 Debug 界面、字符串目录、可访问性文案，以及 Domain、Repository、Service 中最终会展示给用户的错误或状态信息。
+- 排除范围：代码注释、日志、断言、协议值、URL、文件名与扩展名、代码或命令、用户输入内容、外部原文和仅用于展示排版能力的样例正文不得机械套用本节规则。
+- 无句末标点场景：按钮、菜单项、导航标题、分区标题、字段标签、placeholder、选项、角标与短状态标签不加句末标点；单句且简短、独立展示的辅助说明、设置描述、空状态、Toast、Banner、行内提示与 Sheet 补充说明不加结尾 `。` 或 `.`。
+- Alert 文案：标题为片语时不加句末标点，标题为问句时保留 `？`；补充消息必须使用完整句子和恰当的句末标点。按钮标题使用简短、结果明确的动作词，不加句末标点。
+- 通知文案：通知标题简短且不加句末标点；通知正文使用完整句子和恰当标点。多句说明、长段落、法律或风险说明、App Intent 完整描述同样保持完整书面标点。
+- 中文符号：中文语境使用全角 `，。；：？！“”‘’（）`，中文标点前后不加空格；代码、URL、时间、小数、版本号及其他内部语法保留对应 ASCII 标点，不因周围存在中文而改写其内部结构。
+- 省略号：进行中状态统一使用单个 `…`，禁止使用 `...`；正文中的语义省略按中文规则使用 `……`。不得用省略号代替可明确表达的操作或状态。
+- 引号、书名号与冒号：中文界面术语使用 `“”`，书名使用 `《》`；中文说明关系使用 `：`。标签和值已由布局分隔时不机械追加冒号，禁止在同一中文语义单元中混用全角与半角标点。
+- 本地化边界：日期、时间、数字与单位优先使用本地化格式化 API；标点应随完整可本地化语句进入字符串目录，禁止在调用处拼接跨语言标点。修改源文案键时必须同步更新 `Localizable.xcstrings` 并保留现有元数据。
+- 可访问性文案：片语型 label 不加句末标点；包含多个信息单元的 announcement 或完整说明使用自然停顿与完整标点，确保 VoiceOver 朗读语义清楚。
+- 人工检查清单：新增或修改文案时，依次确认展示组件、片语或完整句子、语言环境、本地化归属与同类组件既有风格；提交前检索 Swift 与字符串目录中的句末标点、`...`、中英文冒号和引号候选，逐项按 UI 上下文判断，禁止全局机械替换。
+
 #### 滚动回弹与系统边缘效果
 - 全轴回弹约束（强制）：应用自有的 SwiftUI `ScrollView`、`List`、`Form` 等滚动容器，无论内容是否超过一屏，都必须继承全局或显式使用 `.scrollBounceBehavior(.always)`；禁止使用 `.basedOnSize`。
 - UIKit 回弹约束（强制）：应用自有的 UIKit 滚动容器必须按实际滚动轴设置 `alwaysBounceVertical = true` 或 `alwaysBounceHorizontal = true`，禁止显式关闭有效轴向的 `bounces` / `alwaysBounce…`。
@@ -114,6 +138,18 @@
 - 弹窗按钮颜色规范（强制）：仅 warning/destructive 操作使用警告语义颜色，其余按钮必须使用系统默认语义颜色，禁止使用品牌色按钮。
 - 弹出菜单颜色规范（强制）：上下文菜单、长按菜单、更多菜单等各类弹出菜单应克制使用品牌色；普通操作使用系统默认色或 `menuActionForeground` 等中性色，只有删除、警告等具有明确语义的操作才使用对应的语义色，禁止用品牌色强调普通菜单项的可点击性。
 - 书籍封面渲染约束（强制）：所有书籍封面渲染必须使用 `XMBookCover`（`xmnote/UIComponents/Foundation/XMBookCover.swift`），禁止手写重复封面渲染组合。
+
+#### 通用状态展示
+- 状态组件唯一归属（强制）：跨模块状态展示统一位于 `xmnote/UIComponents/Feedback/StatePresentation/`；该目录只是 Feedback 内源码分组，不得另建 Swift Package、Framework 或 Target。
+- 完整状态入口（强制）：页面、Sheet 与列表背景的 instruction、empty、noResults、failure 统一使用 `XMContentStateView`；`StatePresentation/` 外禁止直接构造 `ContentUnavailableView`，禁止重新引入 `EmptyStateView` 或页面私有通用空态样式。
+- 紧凑与 Inline 边界（强制）：卡片、分区和局部容器使用 `XMCompactStateView`；已有可信内容的刷新、分页或写入失败必须保留内容并使用 `XMInlineStatusBanner`，禁止覆盖为阻断失败页。
+- 状态映射（强制）：数据尚未返回使用 placeholder/loading；数据源确认为空使用 `.empty`；搜索或筛选无匹配使用 `.noResults`；无可用内容且加载失败使用 `.failure`；等待用户前置选择使用 `.instruction`。
+- 抽象边界（强制）：通用状态组件只承接展示语义，不持有 Repository、ViewModel 或全局业务状态机；根启动失败、业务骨架、上传/导入百分比、扫描、AI 流式状态和领域时间线可以保留业务实现。
+- 容器适配（强制）：UIKit 列表背景、UICollectionView cell 和页面私有 StateHost 可以保留布局、生命周期和状态映射，但通用图标、文字、间距、颜色与动作视觉必须委托给 StatePresentation 组件族。
+- 状态组件扩展决策（强制）：现有组件与新 UI 不完全贴合时，依次判断：文案、图标或业务映射差异继续配置现有组件；相同容器结构下被多个场景稳定复用的视觉差异优先扩展现有 `Style`；只有至少两个独立生产源码文件证明相同语义、相同结构需求和相同修复模式时，才允许新增高抽象层级的公共状态组件；单一工作流或领域结构继续保留页面私有实现。
+- 新公共状态组件合同（强制）：新组件必须位于 `StatePresentation/`，采用可被闸门发现的通用命名（`XM…StateView` 或 `XM…StatusBanner`），只依赖设计令牌和展示语义，不得依赖业务模型、Repository、ViewModel 或网络状态；适用时复用 `XMStateRole`、`XMStateAction`，不得为单一业务扩大全局角色。
+- 新公共状态组件登记（强制）：新增组件必须同步加入测试中心 `StatePresentationCatalogView`，登记术语表、UI 组件文档清单和组件指南，并在指南中列出两个真实生产消费路径；`scripts/verify_state_presentations.sh` 必须通过。确属容器或领域例外时，仍须登记精确路径、类型和原因。
+
 - 结构性 UI 变化必须带过渡动画，优先 `.snappy`、`.smooth`、`.spring`。
 - 异步操作必须提供可感知反馈，避免点击无响应。
 - 加载反馈分级（强制）：读取类加载采用“延迟显示 + 最短驻留”策略，默认阈值 `delay=150ms`、`minimumVisible=200ms`；写操作反馈必须即时显示并禁用重复触发入口。
@@ -124,7 +160,7 @@
 - 底部沉浸滚动约束（强制）：涉及 `ScrollView`、`safeArea` 与底部导航/手势区时，内容在底部圆角区域必须平滑过渡，禁止生硬裁切。
 
 ### 字体与设计令牌
-- 生产文本统一走 `xmnote/Utilities/DesignTokens.swift` 中的 `AppTypography` 或页面级组合 token；`SemanticTypography` 与 `BrandTypography` 仅作为底层排版基础设施存在，不作为页面层默认入口。
+- 生产文本统一走 `xmnote/Utilities/DesignSystem/AppTypography.swift` 中的 `AppTypography` 或页面级组合 token；`SemanticTypography` 与 `BrandTypography` 仅作为底层排版基础设施存在，不作为页面层默认入口。
 - 生产路径禁止直接新增 `.font(.system(size: ...))`、`UIFont.systemFont(ofSize:)`、`UIFont.boldSystemFont(ofSize:)` 等固定字号写法；禁止在页面层随手 `.weight(...)` 或散落 `lineSpacing(...)` 魔法数字。
 - 新增文本前先判定对象是 `生产文本 / 品牌数字与品牌标题 / 图标或装饰 glyph`；生产文本优先使用 `AppTypography`，品牌强调位使用 `AppTypography.brandDisplay(...)` 与相关裁切能力，书架首页优先使用 `BookshelfTypography`，书摘列表优先使用 `NoteExcerptTypography`。
 - 文字层级必须遵循以下已定稿 token，不得因单个功能迭代随意改变字号、字重、行距或使用场景：
@@ -144,7 +180,7 @@
 - 书摘列表文本层级规则：正文是第一阅读层级，保持 15pt regular 并通过 7pt 行距形成稳定阅读节奏；想法区低于正文一层；footer 必须可读但不抢正文，主要辅助信息禁止使用过淡的 `.tertiary`。
 - 标题、正文、辅助信息、按钮文案边界：标题优先使用页面专用 token 或 `AppTypography.headline/title*`，不得为了强调直接加粗或放大；正文优先使用 `AppTypography.body/callout/subheadline` 或专用阅读 token，长文本必须同时明确行距与截断策略；辅助信息优先 11-12pt 并使用 `Color.textSecondary` / `Color.textHint` 等语义色；按钮文案使用所在页面 token，普通按钮不得默认使用品牌展示字体或自定义固定字号。
 - 涉及文本宽度、行高、baseline、截断测量时，测量字体必须与渲染字体同源；例如书架标题跑马灯必须同步使用 `BookshelfTypography.gridTitle` 与对应 UIKit 测量字体。
-- 跨组件重复出现的文本层级必须沉淀到 `DesignTokens.swift` 的 `AppTypography` 或其组合 token；禁止散落魔法数字。
+- 跨组件重复出现的文本层级必须沉淀到 `DesignSystem/AppTypography.swift` 的 `AppTypography` 或其组合 token；禁止散落魔法数字。
 - 后续新增页面或功能必须优先复用现有设计 token；如确需新增文本样式，必须在代码变更说明中写明新增原因、目标场景、与现有 token 的差异，并保持字号、字重、行距和阅读舒适度与当前文字系统一致。
 
 ### 编码与注释
@@ -229,11 +265,14 @@
 - 提交前必须先执行 `git status --short` 与 `git diff --stat` 自检；发现无关改动时需先和用户确认是否纳入本次提交。
 
 ### 提交前 / 收口后必须执行的脚本
+- `python3 scripts/design-system/ds.py audit`
+- `make -f Makefile.parallel-ios ai-ui-lint-test`
 - `bash scripts/verify_glossary.sh`
 - `bash scripts/verify_ui_glossary_scope.sh`
 - `bash scripts/verify_view_component_boundaries.sh`
 - `bash scripts/verify_l3_protocol_headers.sh`
 - `bash scripts/verify_arch_docs_sync.sh`
 - `bash scripts/verify_component_guides.sh`
+- `bash scripts/verify_state_presentations.sh`
 - `bash scripts/verify_scroll_ux.sh`
 - `bash scripts/verify_ai_bug_knowledge.sh`

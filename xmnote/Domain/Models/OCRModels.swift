@@ -110,13 +110,13 @@ enum OCRRepositoryError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .missingCredentials:
-            return "请先填写百度 OCR 的 API Key 和 Secret Key。"
+            return "请先填写百度 OCR 的 API Key 和 Secret Key"
         case .invalidImageData:
-            return "当前图片无法转换为可识别的数据，请重新选择图片后再试。"
+            return "当前图片无法转换为可识别的数据，请重新选择图片后再试"
         case .emptyText:
-            return "未从图片中识别出文本信息。"
+            return "未从图片中识别出文本信息"
         case .simulatorUnsupported:
-            return "百度 OCR SDK 当前仅支持真机环境。"
+            return "百度 OCR SDK 当前仅支持真机环境"
         case .sdkUnavailable(let reason):
             return reason
         case .authenticationFailed(let message):

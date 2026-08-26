@@ -75,7 +75,7 @@ private extension LiquidGlassLabTestContentView {
 
     var topTelemetryBar: some View {
         HStack(spacing: Spacing.half) {
-            statusBadge("原生", value: viewModel.parameters.glassVariant.title, tint: .brand)
+            statusBadge("原生", value: viewModel.parameters.glassVariant.title, tint: .appTint)
             statusBadge("模拟", value: viewModel.parameters.materialStyle.title, tint: .liquidGlassLabBlue)
             statusBadge("观测", value: viewModel.performanceSummary, tint: .liquidGlassLabOrange)
         }
@@ -169,7 +169,7 @@ private extension LiquidGlassLabTestContentView {
     var modeControlSection: some View {
         CardContainer(showsBorder: true, borderColor: .surfaceBorderSubtle) {
             VStack(alignment: .leading, spacing: Spacing.base) {
-                sectionHeader("场景与背景", subtitle: "使用按钮网格切换，避免窄屏 segmented 控件被压缩。")
+                sectionHeader("场景与背景", subtitle: "使用按钮网格切换，避免窄屏 segmented 控件被压缩")
                 optionGrid(title: "预览场景", selection: sceneBinding(), values: PreviewScene.allCases, minimumWidth: 118)
                 optionGrid(title: "背景来源", selection: backgroundBinding(), values: BackgroundKind.allCases, minimumWidth: 92)
                 optionGrid(title: "外观模式", selection: schemeBinding(), values: SchemeMode.allCases, minimumWidth: 92)
@@ -181,7 +181,7 @@ private extension LiquidGlassLabTestContentView {
     var nativeParameterSection: some View {
         CardContainer(showsBorder: true, borderColor: .surfaceBorderSubtle) {
             VStack(alignment: .leading, spacing: Spacing.base) {
-                sectionHeader("原生 Liquid Glass", subtitle: "保持原生 glassEffect 为主效果，只调整常用生产参数。")
+                sectionHeader("原生 Liquid Glass", subtitle: "保持原生 glassEffect 为主效果，只调整常用生产参数")
 
                 optionGrid(title: "Glass", selection: parameterBinding(\.glassVariant), values: GlassVariant.allCases, minimumWidth: 92)
                 twoColumnPicker(
@@ -199,7 +199,7 @@ private extension LiquidGlassLabTestContentView {
     var shapeParameterSection: some View {
         CardContainer(showsBorder: true, borderColor: .surfaceBorderSubtle) {
             VStack(alignment: .leading, spacing: Spacing.base) {
-                sectionHeader("形状与布局", subtitle: "调整控件圆角、容器间距与轻量位移，贴近真实工具栏使用。")
+                sectionHeader("形状与布局", subtitle: "调整控件圆角、容器间距与轻量位移，贴近真实工具栏使用")
 
                 optionGrid(title: "Shape", selection: parameterBinding(\.glassShape), values: GlassShapeOption.allCases, minimumWidth: 108)
                 sliderRow(title: "Corner Radius", value: doubleBinding(\.cornerRadius), range: 8...36, step: 1, decimals: 0, tag: "形状")
@@ -214,7 +214,7 @@ private extension LiquidGlassLabTestContentView {
     var readabilityParameterSection: some View {
         CardContainer(showsBorder: true, borderColor: .surfaceBorderSubtle) {
             VStack(alignment: .leading, spacing: Spacing.base) {
-                sectionHeader("可读性增强", subtitle: "仅保留正常图片背景上常用的轻量兜底，不再默认叠满高光和反射。")
+                sectionHeader("可读性增强", subtitle: "仅保留正常图片背景上常用的轻量兜底，不再默认叠满高光和反射")
 
                 twoColumnPicker(
                     title: "Material Style",
@@ -243,7 +243,7 @@ private extension LiquidGlassLabTestContentView {
     var toolbarParameterSection: some View {
         CardContainer(showsBorder: true, borderColor: .surfaceBorderSubtle) {
             VStack(alignment: .leading, spacing: Spacing.base) {
-                sectionHeader("工具栏表现", subtitle: "用于调底部栏、浮动栏在滚动与图片背景上的稳定性。")
+                sectionHeader("工具栏表现", subtitle: "用于调底部栏、浮动栏在滚动与图片背景上的稳定性")
 
                 Toggle("显示辅助按钮", isOn: parameterBinding(\.usesMorphingProbe))
                 sliderRow(title: "Saturation", value: doubleBinding(\.saturation), range: 0.90...1.25, step: 0.01, tag: "色彩")
@@ -259,7 +259,7 @@ private extension LiquidGlassLabTestContentView {
     var presetSection: some View {
         CardContainer(showsBorder: true, borderColor: .surfaceBorderSubtle) {
             VStack(alignment: .leading, spacing: Spacing.base) {
-                sectionHeader("参数预设", subtitle: "保存到 UserDefaults，重启后仍可继续调参。")
+                sectionHeader("参数预设", subtitle: "保存到 UserDefaults，重启后仍可继续调参")
 
                 HStack(spacing: Spacing.half) {
                     TextField("预设名称", text: $viewModel.presetNameDraft)
@@ -274,7 +274,7 @@ private extension LiquidGlassLabTestContentView {
                 .font(AppTypography.caption)
 
                 if viewModel.savedPresets.isEmpty {
-                    Text("暂无保存的参数组合。")
+                    Text("暂无保存的参数组合")
                         .font(AppTypography.caption)
                         .foregroundStyle(Color.textSecondary)
                 } else {
@@ -295,7 +295,7 @@ private extension LiquidGlassLabTestContentView {
     var screenshotSection: some View {
         CardContainer(showsBorder: true, borderColor: .surfaceBorderSubtle) {
             VStack(alignment: .leading, spacing: Spacing.base) {
-                sectionHeader("截图对比", subtitle: "PNG 与参数 JSON 保存到 Documents/Debug/LiquidGlassLab。")
+                sectionHeader("截图对比", subtitle: "PNG 与参数 JSON 保存到 Documents/Debug/LiquidGlassLab")
 
                 if viewModel.screenshotRecords.isEmpty {
                     Text("暂无截图。点击预览区下方“截图对比”保存当前效果。")
@@ -316,7 +316,7 @@ private extension LiquidGlassLabTestContentView {
     var parameterSummarySection: some View {
         CardContainer(showsBorder: true, borderColor: .surfaceBorderSubtle) {
             VStack(alignment: .leading, spacing: Spacing.base) {
-                sectionHeader("参数摘要", subtitle: "复制截图 JSON 前，可先在这里核对当前运行参数。")
+                sectionHeader("参数摘要", subtitle: "复制截图 JSON 前，可先在这里核对当前运行参数")
 
                 Text(viewModel.nativeParameterSummary)
                     .font(AppTypography.captionMedium)
@@ -364,7 +364,7 @@ private extension LiquidGlassLabTestContentView {
         .padding(.vertical, 5)
         .background(tint.opacity(0.10), in: Capsule())
         .overlay {
-            Capsule().stroke(tint.opacity(0.20), lineWidth: CardStyle.borderWidth)
+            Capsule().stroke(tint.opacity(0.20), lineWidth: StrokeWidth.hairline)
         }
     }
 
@@ -433,12 +433,12 @@ private extension LiquidGlassLabTestContentView {
                             .padding(.vertical, 8)
                             .foregroundStyle(isSelected ? Color.white : Color.textPrimary)
                             .background(
-                                isSelected ? Color.brand : Color.surfaceNested,
+                                isSelected ? Color.selectionAccent : Color.surfaceNested,
                                 in: RoundedRectangle(cornerRadius: CornerRadius.inlaySmall, style: .continuous)
                             )
                             .overlay {
                                 RoundedRectangle(cornerRadius: CornerRadius.inlaySmall, style: .continuous)
-                                    .stroke(isSelected ? Color.brand.opacity(0.24) : Color.surfaceBorderSubtle, lineWidth: CardStyle.borderWidth)
+                                    .stroke(isSelected ? Color.selectionAccent.opacity(0.24) : Color.surfaceBorderSubtle, lineWidth: StrokeWidth.hairline)
                             }
                     }
                     .buttonStyle(.plain)
@@ -637,7 +637,7 @@ private struct LiquidGlassPreviewStage: View {
         .clipShape(RoundedRectangle(cornerRadius: CornerRadius.containerLarge, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: CornerRadius.containerLarge, style: .continuous)
-                .stroke(Color.surfaceBorderSubtle, lineWidth: CardStyle.borderWidth)
+                .stroke(Color.surfaceBorderSubtle, lineWidth: StrokeWidth.hairline)
         }
         .animation(.snappy, value: viewModel.previewScene)
         .animation(.snappy, value: viewModel.backgroundKind)
@@ -658,7 +658,7 @@ private extension LiquidGlassPreviewStage {
                         Text("图片背景上的文字可读性")
                             .font(AppTypography.title3Semibold)
                             .foregroundStyle(.white.opacity(0.96 + viewModel.parameters.vibrancy * 0.03))
-                        Text("用于观察轻量 tint、shadow 与 border light 对正文稳定性的影响。")
+                        Text("用于观察轻量 tint、shadow 与 border light 对正文稳定性的影响")
                             .font(AppTypography.caption)
                             .foregroundStyle(.white.opacity(0.78 + viewModel.parameters.vibrancy * 0.12))
                             .fixedSize(horizontal: false, vertical: true)
@@ -1065,7 +1065,7 @@ private struct LiquidGlassScrollRow: View {
                 Text("滚动内容样本 \(index + 1)")
                     .font(AppTypography.captionMedium)
                     .foregroundStyle(.white)
-                Text("用于观察底部玻璃栏在滚动位移、背景复杂度和动态亮度下的稳定性。")
+                Text("用于观察底部玻璃栏在滚动位移、背景复杂度和动态亮度下的稳定性")
                     .font(AppTypography.caption2)
                     .foregroundStyle(.white.opacity(0.72))
                     .lineLimit(2)
@@ -1085,11 +1085,11 @@ private struct LiquidGlassLabBackground: View {
     var body: some View {
         switch kind {
         case .solid:
-            Color(light: Color(hex: 0xEFF6F2), dark: Color(hex: 0x151B18))
+            Color.xmAdaptive(light: Color.xmHex(0xEFF6F2), dark: Color.xmHex(0x151B18))
         case .gradient:
             LinearGradient(
                 colors: [
-                    Color.brand.opacity(0.50),
+                    Color.appTint.opacity(0.50),
                     Color.liquidGlassLabBlue.opacity(0.42),
                     Color.liquidGlassLabOrange.opacity(0.26),
                     Color.surfacePage
@@ -1111,12 +1111,12 @@ private struct LiquidGlassLabBackground: View {
     var lowComplexityBackground: some View {
         ZStack {
             LinearGradient(
-                colors: [Color(hex: 0xDAF3E4), Color(hex: 0xF7F2DA), Color(hex: 0xD7EAF7)],
+                colors: [Color.xmHex(0xDAF3E4), Color.xmHex(0xF7F2DA), Color.xmHex(0xD7EAF7)],
                 startPoint: .top,
                 endPoint: .bottom
             )
             Circle()
-                .fill(Color.brand.opacity(0.20))
+                .fill(Color.appTint.opacity(0.20))
                 .frame(width: 220, height: 220)
                 .offset(x: -120, y: -140)
             RoundedRectangle(cornerRadius: 60, style: .continuous)
@@ -1131,7 +1131,7 @@ private struct LiquidGlassLabBackground: View {
         Canvas { context, size in
             let base = Path(CGRect(origin: .zero, size: size))
             context.fill(base, with: .linearGradient(
-                Gradient(colors: [Color(hex: 0x17324D), Color(hex: 0x2E6F74), Color(hex: 0xF1C36B)]),
+                Gradient(colors: [Color.xmHex(0x17324D), Color.xmHex(0x2E6F74), Color.xmHex(0xF1C36B)]),
                 startPoint: .zero,
                 endPoint: CGPoint(x: size.width, y: size.height)
             ))
@@ -1162,7 +1162,7 @@ private struct LiquidGlassLabBackground: View {
             AngularGradient(
                 colors: [
                     Color.white.opacity(0.22),
-                    Color.brand.opacity(0.18),
+                    Color.appTint.opacity(0.18),
                     Color.liquidGlassLabBlue.opacity(0.20),
                     Color.liquidGlassLabOrange.opacity(0.20),
                     Color.white.opacity(0.22)
@@ -1186,7 +1186,7 @@ private struct LiquidGlassLabBackground: View {
                         height: max(70, proxy.size.height / 5 - 8),
                         urlString: coverURL(at: index),
                         cornerRadius: CornerRadius.inlaySmall,
-                        border: .init(color: .white.opacity(0.18), width: CardStyle.borderWidth),
+                        border: .init(color: .white.opacity(0.18), width: StrokeWidth.hairline),
                         placeholderIconSize: .hidden,
                         surfaceStyle: .spine
                     )
@@ -1380,7 +1380,7 @@ private extension LiquidGlassLabTestViewModel.TintOption {
         case .white:
             return .white
         case .brand:
-            return .brand
+            return .appTint
         case .blue:
             return .liquidGlassLabBlue
         case .amber:
@@ -1426,8 +1426,8 @@ private extension LiquidGlassLabTestViewModel.SchemeMode {
 }
 
 private extension Color {
-    static let liquidGlassLabBlue = Color(uiColor: .systemBlue)
-    static let liquidGlassLabOrange = Color(uiColor: .systemOrange)
+    static let liquidGlassLabBlue = Color.xmResolved(.systemBlue)
+    static let liquidGlassLabOrange = Color.xmResolved(.systemOrange)
 }
 
 #Preview {

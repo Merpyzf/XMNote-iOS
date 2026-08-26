@@ -57,7 +57,7 @@ struct TimelineCheckInCard: View {
             XMBookCover.fixedWidth(
                 48,
                 urlString: bookCover,
-                border: .init(color: .surfaceBorderDefault, width: CardStyle.borderWidth),
+                border: .init(color: .surfaceBorderDefault, width: StrokeWidth.hairline),
                 placeholderIconSize: .small
             )
             .accessibilityHidden(true)
@@ -126,7 +126,7 @@ struct ReadingCheckInLevelIndicator: View {
     private func color(for index: Int) -> Color {
         guard index == min(4, max(1, selectedLevel)),
               let heatmapLevel = HeatmapLevel(rawValue: index) else {
-            return .heatmapNone
+            return HeatmapColorPalette.appDefault.none
         }
         return heatmapLevel.color
     }

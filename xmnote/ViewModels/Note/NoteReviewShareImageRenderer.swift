@@ -67,8 +67,8 @@ struct NoteReviewShareImageRenderer: @unchecked Sendable {
     }
 
     private nonisolated enum Palette {
-        static let background = UIColor(red: 0.957, green: 0.969, blue: 0.953, alpha: 1)
-        static let accent = UIColor(red: 0.176, green: 0.580, blue: 0.322, alpha: 1)
+        static let background = UIColor.xmSRGB(red: 0.957, green: 0.969, blue: 0.953, alpha: 1)
+        static let accent = UIColor.xmSRGB(red: 0.176, green: 0.580, blue: 0.322, alpha: 1)
         static let shadow = UIColor.black.withAlphaComponent(0.12)
     }
 
@@ -326,7 +326,7 @@ struct NoteReviewShareImageRenderer: @unchecked Sendable {
 
     /// 将领域层持有的 RGB 十六进制值转换为确定的 UIKit 颜色，避免离屏渲染读取当前 trait 环境。
     private func color(from rgbHex: UInt32) -> UIColor {
-        UIColor(
+        UIColor.xmSRGB(
             red: CGFloat((rgbHex >> 16) & 0xFF) / 255.0,
             green: CGFloat((rgbHex >> 8) & 0xFF) / 255.0,
             blue: CGFloat(rgbHex & 0xFF) / 255.0,

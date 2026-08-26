@@ -1,11 +1,17 @@
 import SwiftUI
 
 /**
- * [INPUT]: 依赖 DesignTokens/Spacing 设计令牌，依赖 HeatmapLevel 与状态色定义，依赖 HeatmapChart.legend
+ * [INPUT]: 依赖 DesignTokens/Spacing 设计令牌、xmMinimumHitTarget、HeatmapLevel、ReadingStatusPresentation 与 HeatmapChart.legend
  * [OUTPUT]: 对外提供 HeatmapHelpSheetView（热力图说明弹层）
  * [POS]: 在读页热力图小组件的帮助说明面板，纯展示职责（文案 + 图例），零回调信息卡片
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
+
+/// 帮助弹层局部几何量，避免标题进入右上关闭按钮的视觉槽位。
+private enum HeatmapHelpSheetLayout {
+    static let titleTrailingClearance: CGFloat = 44
+}
+
 /// HeatmapHelpSheetView 展示热力图阅读规则和图例，承接首页热力图右上角说明入口。
 struct HeatmapHelpSheetView: View {
     @Environment(\.dismiss) private var dismiss
@@ -14,7 +20,7 @@ struct HeatmapHelpSheetView: View {
         ZStack(alignment: .topTrailing) {
             VStack(alignment: .leading, spacing: Spacing.double) {
                 titleSection
-                    .padding(.trailing, Spacing.actionReserved)
+                    .padding(.trailing, HeatmapHelpSheetLayout.titleTrailingClearance)
                 descriptionSection
                 legendSection
             }
@@ -37,6 +43,7 @@ struct HeatmapHelpSheetView: View {
                 .font(.system(size: 13, weight: .bold))
                 .foregroundStyle(.secondary)
                 .frame(width: 28, height: 28)
+                .xmMinimumHitTarget(anchor: .topTrailing)
         }
         .buttonStyle(.plain)
         .glassEffect(.regular.interactive(), in: .circle)
@@ -57,7 +64,7 @@ struct HeatmapHelpSheetView: View {
         Text("无论是你记录的每一条笔记，还是统计的读书时长，或标记的书籍状态，都可以点亮每天的小格子。记录越多、时长越长，颜色就越深。")
             .font(AppTypography.body)
             .foregroundStyle(Color.textSecondary)
-            .lineSpacing(4)
+            .lineSpacing(Spacing.compact)
     }
 
     // MARK: - Legend
@@ -71,11 +78,11 @@ struct HeatmapHelpSheetView: View {
 
     private var statusLegendGrid: some View {
         let states: [(String, Color)] = [
-            ("想读", .statusWish),
-            ("在读", .statusReading),
-            ("读完", .statusDone),
-            ("搁置", .statusOnHold),
-            ("弃读", .statusAbandoned)
+            ("想读", ReadingStatusPresentation.wantRead),
+            ("在读", ReadingStatusPresentation.reading),
+            ("读完", ReadingStatusPresentation.readDone),
+            ("搁置", ReadingStatusPresentation.onHold),
+            ("弃读", ReadingStatusPresentation.abandoned)
         ]
 
         return LazyVGrid(

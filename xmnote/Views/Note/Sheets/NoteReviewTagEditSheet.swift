@@ -34,10 +34,27 @@ struct NoteReviewTagEditSheet: View {
             title: "编辑标签",
             items: snapshot.availableTags.map(\.selectionItem),
             initialSelectedIDs: Set(snapshot.selectedTags.map(\.id)),
-            layoutPreferenceRepository: repositories.tagSelectionLayoutPreferenceRepository,
+            layout: XMTagSelectionLayoutConfiguration(
+                initialMode: repositories.tagSelectionLayoutPreferenceRepository.fetchLayoutMode(),
+                onChange: { mode in
+                    repositories.tagSelectionLayoutPreferenceRepository.saveLayoutMode(mode)
+                }
+            ),
             management: XMTagSelectionManagementConfiguration(
                 scope: .note,
-                repository: repositories.tagManagementRepository,
+                onRename: { tagID, name in
+                    try await repositories.tagManagementRepository.updateTag(
+                        tagID: tagID,
+                        name: name,
+                        scope: .note
+                    )
+                },
+                onDelete: { tagIDs in
+                    try await repositories.tagManagementRepository.deleteTags(
+                        tagIDs: tagIDs,
+                        scope: .note
+                    )
+                },
                 onMutation: onTagCatalogMutation
             ),
             onCreate: { name in

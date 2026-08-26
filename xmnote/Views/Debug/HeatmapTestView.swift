@@ -72,7 +72,7 @@ private extension HeatmapTestContentView {
                         .padding(.vertical, 6)
                         .background(
                             viewModel.currentScenario == scenario
-                                ? Color.brand : Color.controlFillSecondary
+                                ? Color.selectionAccent : Color.controlFillSecondary
                         )
                         .foregroundStyle(
                             viewModel.currentScenario == scenario
@@ -254,14 +254,14 @@ private extension HeatmapTestContentView {
             .appDefault
         case .coverRed:
             HeatmapColorPalette(
-                none: Color(
-                    light: Color(hex: 0xF9EAE8),
-                    dark: Color(hex: 0x3D2928)
+                none: Color.xmAdaptive(
+                    light: Color.xmHex(0xF9EAE8),
+                    dark: Color.xmHex(0x3D2928)
                 ),
-                veryLess: Color(hex: 0xE4AAA5),
-                less: Color(hex: 0xD27C75),
-                more: Color(hex: 0xB64138),
-                veryMore: Color(hex: 0x8E100D)
+                veryLess: Color.xmHex(0xE4AAA5),
+                less: Color.xmHex(0xD27C75),
+                more: Color.xmHex(0xB64138),
+                veryMore: Color.xmHex(0x8E100D)
             )
         }
     }
@@ -280,9 +280,9 @@ private extension HeatmapTestContentView {
         case .appDefault:
             .surfaceCard
         case .coverRed:
-            Color(
-                light: Color(hex: 0xF2D5D2),
-                dark: Color(hex: 0x312120)
+            Color.xmAdaptive(
+                light: Color.xmHex(0xF2D5D2),
+                dark: Color.xmHex(0x312120)
             )
         }
     }

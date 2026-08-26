@@ -1,5 +1,5 @@
 /**
- * [INPUT]: 依赖 RepositoryContainer、BookshelfBatchEditOptions 中的标签、来源、阅读状态候选项、XMRatingBar、BookshelfMoveGroupOption 分组封面数据与 BookCollectionSummary 书单候选项，依赖外层 ViewModel 闭包提交批量写入意图
+ * [INPUT]: 依赖 RepositoryContainer、BookshelfBatchEditOptions 中的标签、来源、阅读状态候选项、XMRatingBar、InteractionMetrics、surfaceDividerDefault、BookshelfMoveGroupOption 分组封面数据与 BookCollectionSummary 书单候选项，依赖外层 ViewModel 闭包提交批量写入意图
  * [OUTPUT]: 对外提供移组、加入书单、标签、来源与阅读状态等批量编辑 Sheet；标签选择仅在多本操作时显示精简上下文
  * [POS]: Book 模块业务 Sheet，被 BookshelfBookListView 的编辑态批量操作入口唤起
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -45,7 +45,7 @@ struct BookshelfMoveGroupSheet: View {
     }
 
     var body: some View {
-        BookshelfDisplaySettingPageScaffold(
+        XMSheetScaffold(
             title: "移入分组",
             subtitle: "已选\(selectedCount)本",
             onClose: { dismiss() },
@@ -59,7 +59,7 @@ struct BookshelfMoveGroupSheet: View {
             trailingAction: {
                 BookshelfBatchTopTextActionButton(
                     title: "保存",
-                    foregroundColor: .brand.opacity(0.82),
+                    foregroundColor: .appTint.opacity(0.82),
                     isDisabled: !canSubmit || isCreating || isLoading || hasLoadError,
                     action: submitSelection
                 )
@@ -255,7 +255,7 @@ struct BookshelfBookCollectionSheet: View {
     }
 
     var body: some View {
-        BookshelfDisplaySettingPageScaffold(
+        XMSheetScaffold(
             title: "加入书单",
             subtitle: "已选\(selectedCount)本",
             onClose: { dismiss() },
@@ -269,7 +269,7 @@ struct BookshelfBookCollectionSheet: View {
             trailingAction: {
                 BookshelfBatchTopTextActionButton(
                     title: "保存",
-                    foregroundColor: .brand.opacity(0.82),
+                    foregroundColor: .appTint.opacity(0.82),
                     isDisabled: !canSubmit || isCreating || isLoading || hasLoadError,
                     action: submitSelection
                 )
@@ -464,7 +464,12 @@ struct BookshelfBatchTagsSheet: View {
             allowsEmptySelection: allowsEmptySelection,
             isLoading: isLoading,
             loadErrorMessage: errorMessage,
-            layoutPreferenceRepository: repositories.tagSelectionLayoutPreferenceRepository,
+            layout: XMTagSelectionLayoutConfiguration(
+                initialMode: repositories.tagSelectionLayoutPreferenceRepository.fetchLayoutMode(),
+                onChange: { mode in
+                    repositories.tagSelectionLayoutPreferenceRepository.saveLayoutMode(mode)
+                }
+            ),
             onCreate: { name in
                 let option = try await onCreate(name)
                 return XMTagSelectionItem(id: option.id, title: option.title)
@@ -511,20 +516,20 @@ struct BookshelfBatchSourceSheet: View {
     }
 
     var body: some View {
-        BookshelfDisplaySettingPageScaffold(
+        XMSheetScaffold(
             title: "设置来源",
             subtitle: "已选\(selectedCount)本",
             onClose: { dismiss() }
         ) {
             VStack(spacing: Spacing.comfortable) {
-                BookshelfSettingsGroupCard {
+                XMSettingsGroup {
                     BookshelfBatchSearchField(
                         text: $searchKeyword,
                         placeholder: "搜索来源"
                     )
                 }
 
-                BookshelfSettingsGroupCard {
+                XMSettingsGroup {
                     BookshelfBatchCreateField(
                         text: $createName,
                         placeholder: "输入新来源",
@@ -536,7 +541,7 @@ struct BookshelfBatchSourceSheet: View {
                 }
 
                 if !mineOptions.isEmpty {
-                    BookshelfSettingsGroupCard {
+                    XMSettingsGroup {
                         VStack(spacing: Spacing.none) {
                             BookshelfBatchSectionTitle(title: BookshelfSourceCategory.mine.title)
                             ForEach(mineOptions) { option in
@@ -555,7 +560,7 @@ struct BookshelfBatchSourceSheet: View {
                 }
 
                 if !defaultOptions.isEmpty {
-                    BookshelfSettingsGroupCard {
+                    XMSettingsGroup {
                         VStack(spacing: Spacing.none) {
                             BookshelfBatchSectionTitle(title: BookshelfSourceCategory.appDefault.title)
                             ForEach(defaultOptions) { option in
@@ -574,12 +579,12 @@ struct BookshelfBatchSourceSheet: View {
                 }
 
                 if mineOptions.isEmpty && defaultOptions.isEmpty {
-                    BookshelfSettingsGroupCard {
+                    XMSettingsGroup {
                         BookshelfBatchEmptyHint(text: "没有匹配的来源")
                     }
                 }
 
-                Text("将 \(selectedCount) 本书的来源更新为所选来源。")
+                Text("将 \(selectedCount) 本书的来源更新为所选来源")
                     .font(AppTypography.caption)
                     .foregroundStyle(Color.textSecondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -592,7 +597,7 @@ struct BookshelfBatchSourceSheet: View {
                         .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.borderedProminent)
-                .tint(Color.brand)
+                .tint(Color.primaryActionFill)
                 .disabled(selectedID == nil || isCreating)
             }
             .padding(.horizontal, Spacing.screenEdge)
@@ -730,7 +735,7 @@ private struct BookshelfBatchTopTextActionButton: View {
                 .padding(.horizontal, Spacing.base)
                 .frame(
                     minWidth: BookshelfBatchTopTextActionButtonLayout.minWidth,
-                    minHeight: Spacing.actionReserved
+                    minHeight: InteractionMetrics.minimumTouchTarget
                 )
                 .background(Color.surfaceCard, in: Capsule())
                 .contentShape(Capsule())
@@ -903,7 +908,7 @@ private struct BookshelfBatchNamedOptionCreateRow: View {
         HStack(spacing: Spacing.base) {
             Image(systemName: "plus.circle.fill")
                 .font(AppTypography.body)
-                .foregroundStyle(Color.brand)
+                .foregroundStyle(Color.appTint)
 
             Text(isCreating ? "正在创建“\(title)”" : "创建“\(title)”")
                 .font(AppTypography.bodyMedium)
@@ -1062,7 +1067,7 @@ private struct BookshelfBatchGroupCoverPreview: View {
         .clipShape(RoundedRectangle(cornerRadius: CornerRadius.inlaySmall, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: CornerRadius.inlaySmall, style: .continuous)
-                .stroke(Color.surfaceBorderSubtle, lineWidth: CardStyle.borderWidth)
+                .stroke(Color.surfaceBorderSubtle, lineWidth: StrokeWidth.hairline)
         }
     }
 
@@ -1078,7 +1083,7 @@ private struct BookshelfBatchGroupCoverPreview: View {
                     height: BookshelfBatchGroupCoverPreviewLayout.cellHeight,
                     urlString: cover,
                     cornerRadius: CornerRadius.inlayTiny,
-                    border: .init(color: .surfaceBorderSubtle, width: CardStyle.borderWidth),
+                    border: .init(color: .surfaceBorderSubtle, width: StrokeWidth.hairline),
                     placeholderIconSize: cover.isEmpty ? .hidden : .small,
                     surfaceStyle: .plain
                 )
@@ -1170,8 +1175,8 @@ private struct BookshelfBatchInsetDivider: View {
 
     var body: some View {
         Rectangle()
-            .fill(Color.divider)
-            .frame(height: CardStyle.borderWidth)
+            .fill(Color.surfaceDividerDefault)
+            .frame(height: StrokeWidth.hairline)
             .padding(.leading, leadingInset)
             .padding(.trailing, trailingInset)
     }
@@ -1200,7 +1205,7 @@ private struct BookshelfBatchCreateField: View {
                 Button(actionTitle, action: onSubmit)
                     .font(AppTypography.subheadlineSemibold)
                     .buttonStyle(.borderedProminent)
-                    .tint(Color.brand)
+                    .tint(Color.primaryActionFill)
                     .disabled(trimmedText.isEmpty || isProcessing)
             }
 
@@ -1326,7 +1331,7 @@ struct BookshelfBatchReadStatusSheet: View {
                             .frame(maxWidth: .infinity, alignment: .leading)
                         }
                     } footer: {
-                        Text("读完状态会同步评分，并把阅读进度推进到终点。")
+                        Text("读完状态会同步评分，并把阅读进度推进到终点")
                             .font(AppTypography.caption)
                     }
                 }

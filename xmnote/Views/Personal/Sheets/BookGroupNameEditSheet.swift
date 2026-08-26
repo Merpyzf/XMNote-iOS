@@ -55,7 +55,7 @@ struct BookGroupNameEditSheet: View {
                 }
 
                 if !edit.isCreating {
-                    Text("当前分组包含 \(edit.bookCount) 本书。")
+                    Text("当前分组包含 \(edit.bookCount) 本书")
                         .font(AppTypography.caption)
                         .foregroundStyle(Color.textSecondary)
                         .frame(maxWidth: .infinity, alignment: .leading)

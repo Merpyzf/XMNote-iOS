@@ -2,7 +2,7 @@
 
 ## 组件定位
 
-- 源码路径：`xmnote/UIComponents/Foundation/XMActivityShareSheet.swift`
+- 源码路径：`xmnote/UIComponents/System/Sharing/XMActivityShareSheet.swift`
 - 角色：统一承接文本、文件 URL 等系统分享载荷，并桥接 `UIActivityViewController`。
 - 适用场景：内容查看、列表上下文菜单、导出结果等需要打开系统活动面板的跨模块页面。
 - 边界：组件只负责系统面板桥接，不生成分享文案、图片或临时文件，也不管理业务写入。

@@ -47,7 +47,7 @@ struct BookReorderSandboxTestView: View {
                     .fixedSize(horizontal: false, vertical: true)
 
                 HStack(spacing: Spacing.half) {
-                    statusBadge("DEBUG 沙盒", tint: Color.brand)
+                    statusBadge("DEBUG 沙盒", tint: Color.appTint)
                     statusBadge("不写真实数据库", tint: Color.feedbackSuccess)
                 }
             }
@@ -63,7 +63,7 @@ struct BookReorderSandboxTestView: View {
                         Text("验证控制")
                             .font(AppTypography.subheadlineSemibold)
                             .foregroundStyle(Color.textPrimary)
-                        Text("切换编辑态、排序规则、列数和搜索过滤，观察拖拽是否按 Android 迁移边界启停。")
+                        Text("切换编辑态、排序规则、列数和搜索过滤，观察拖拽是否按 Android 迁移边界启停")
                             .font(AppTypography.caption)
                             .foregroundStyle(Color.textSecondary)
                     }
@@ -143,7 +143,7 @@ struct BookReorderSandboxTestView: View {
                 .background(Color.surfaceNested, in: RoundedRectangle(cornerRadius: CornerRadius.blockMedium, style: .continuous))
                 .overlay {
                     RoundedRectangle(cornerRadius: CornerRadius.blockMedium, style: .continuous)
-                        .stroke(Color.surfaceBorderSubtle, lineWidth: CardStyle.borderWidth)
+                        .stroke(Color.surfaceBorderSubtle, lineWidth: StrokeWidth.hairline)
                 }
 
                 if let reason = viewModel.dragDisabledReason {
@@ -341,7 +341,7 @@ struct BookReorderSandboxTestView: View {
         VStack(alignment: .leading, spacing: Spacing.half) {
             Text(title)
                 .font(AppTypography.captionSemibold)
-                .foregroundStyle(Color.brand)
+                .foregroundStyle(Color.appTint)
             Text(content)
                 .font(AppTypography.subheadline)
                 .foregroundStyle(Color.textSecondary)
@@ -360,13 +360,13 @@ struct BookReorderSandboxTestView: View {
 
     private func coverColor(for tone: Int) -> Color {
         let palette: [Color] = [
-            Color.brand.opacity(0.32),
-            Color.statusReading.opacity(0.28),
+            Color.appTint.opacity(0.32),
+            ReadingStatusPresentation.reading.opacity(0.28),
             Color.feedbackWarning.opacity(0.24),
-            Color.statusDone.opacity(0.24),
-            Color.statusOnHold.opacity(0.22),
-            Color.statusWish.opacity(0.22),
-            Color.readCalendarSelectionFill.opacity(0.36),
+            ReadingStatusPresentation.readDone.opacity(0.24),
+            ReadingStatusPresentation.onHold.opacity(0.22),
+            ReadingStatusPresentation.wantRead.opacity(0.22),
+            ReadCalendarTheme.selectionFill.opacity(0.36),
             Color.surfaceNested
         ]
         return palette[tone % palette.count]
@@ -407,7 +407,7 @@ private struct BookReorderSandboxItemCard: View {
         .background(Color.surfaceCard, in: RoundedRectangle(cornerRadius: CornerRadius.blockLarge, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: CornerRadius.blockLarge, style: .continuous)
-                .strokeBorder(borderColor, style: StrokeStyle(lineWidth: isTargeted ? 1.4 : CardStyle.borderWidth, dash: isTargeted ? [5, 4] : []))
+                .strokeBorder(borderColor, style: StrokeStyle(lineWidth: isTargeted ? 1.4 : StrokeWidth.hairline, dash: isTargeted ? [5, 4] : []))
         }
         .shadow(color: Color.black.opacity(isDragged ? 0.16 : 0.04), radius: isDragged ? 16 : 4, y: isDragged ? 8 : 2)
         .scaleEffect(isDragged ? 1.035 : 1)
@@ -422,7 +422,7 @@ private struct BookReorderSandboxItemCard: View {
             XMBookCover.responsive(
                 urlString: item.coverURL,
                 cornerRadius: CornerRadius.inlaySmall,
-                border: XMBookCover.Border(color: Color.surfaceBorderSubtle, width: CardStyle.borderWidth),
+                border: XMBookCover.Border(color: Color.surfaceBorderSubtle, width: StrokeWidth.hairline),
                 placeholderBackground: coverColor,
                 surfaceStyle: .spine
             )
@@ -459,7 +459,7 @@ private struct BookReorderSandboxItemCard: View {
                         side,
                         urlString: "",
                         cornerRadius: CornerRadius.inlayTiny,
-                        border: XMBookCover.Border(color: Color.surfaceBorderSubtle, width: CardStyle.borderWidth),
+                        border: XMBookCover.Border(color: Color.surfaceBorderSubtle, width: StrokeWidth.hairline),
                         placeholderBackground: color,
                         placeholderIconSize: .hidden,
                         surfaceStyle: .plain
@@ -473,7 +473,7 @@ private struct BookReorderSandboxItemCard: View {
         .background(Color.surfaceNested, in: RoundedRectangle(cornerRadius: CornerRadius.inlaySmall, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: CornerRadius.inlaySmall, style: .continuous)
-                .stroke(Color.surfaceBorderSubtle, lineWidth: CardStyle.borderWidth)
+                .stroke(Color.surfaceBorderSubtle, lineWidth: StrokeWidth.hairline)
         }
     }
 
@@ -482,10 +482,10 @@ private struct BookReorderSandboxItemCard: View {
             HStack(spacing: Spacing.half) {
                 Text(item.kind.title)
                     .font(AppTypography.caption2Medium)
-                    .foregroundStyle(Color.brand)
+                    .foregroundStyle(Color.appTint)
                     .padding(.horizontal, Spacing.half)
                     .padding(.vertical, Spacing.tiny)
-                    .background(Color.brand.opacity(0.10), in: Capsule())
+                    .background(Color.appTint.opacity(0.10), in: Capsule())
 
                 Text("\(item.noteCount)")
                     .font(AppTypography.caption2Medium)
@@ -533,7 +533,7 @@ private struct BookReorderSandboxItemCard: View {
 
     private var borderColor: Color {
         if isTargeted {
-            return Color.brand
+            return Color.selectionAccent
         }
         if item.isPinned {
             return Color.feedbackWarning.opacity(0.56)

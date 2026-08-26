@@ -1,5 +1,5 @@
 /**
- * [INPUT]: 依赖 DesignTokens 设计令牌、SwiftSoup HTML 文本提取、SwiftUI openURL 环境
+ * [INPUT]: 依赖 DesignTokens、XMTagLabel、SwiftSoup HTML 文本提取与 SwiftUI openURL 环境
  * [OUTPUT]: 对外提供 TimelineCardPresentationStyle、TimelineCardHeaderBar、TimelineBookSourceFooter、TimelineCardDivider、TimelineInlineTag、TimelineCardFooterRow 与 TimelineMeaningfulText
  * [POS]: Reading/Timeline 页面私有共享骨架，统一文本卡片的首页头部、每日详情来源尾注、分割线、标签行与空字段判定
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -26,7 +26,7 @@ struct TimelineCardHeaderBar: View {
         HStack(alignment: .center, spacing: Spacing.cozy) {
             Image(systemName: iconSystemName)
                 .font(AppTypography.captionMedium)
-                .foregroundStyle(Color.brand)
+                .foregroundStyle(Color.appTint)
 
             if let displayBookName {
                 bookTitle(displayBookName, color: .textHint)
@@ -79,7 +79,7 @@ struct TimelineBookSourceFooter: View {
 
     var body: some View {
         Text("《\(displayBookName)》")
-            .font(NoteExcerptTypography.footer)
+            .font(ReadingContentTypography.metadata)
             .foregroundStyle(Color.textSecondary)
             .lineLimit(1)
             .truncationMode(.tail)
@@ -113,12 +113,7 @@ struct TimelineInlineTag: View {
     let text: String
 
     var body: some View {
-        Text(text)
-            .font(AppTypography.caption2)
-            .foregroundStyle(Color.textSecondary)
-            .padding(.horizontal, Spacing.cozy)
-            .padding(.vertical, Spacing.compact)
-            .background(Color.controlFillSecondary, in: Capsule())
+        XMTagLabel(text)
     }
 }
 

@@ -276,7 +276,7 @@ struct BookCollectionListView: View {
                 } label: {
                     Label("编辑", systemImage: "pencil")
                 }
-                .tint(.blue)
+                .tint(Color.editActionFill)
 
                 Button(role: .destructive) {
                     viewModel.presentDeleteConfirmation(for: item)
@@ -357,10 +357,10 @@ struct BookCollectionListView: View {
 
     private func emptyState(title: String) -> some View {
         VStack(spacing: Spacing.section) {
-            BookshelfContextualEmptyStateView(
-                icon: selectedKind == .manual ? "rectangle.stack.badge.plus" : "calendar",
+            XMCompactStateView(
+                role: .empty,
                 title: title,
-                message: nil
+                systemImage: selectedKind == .manual ? "rectangle.stack.badge.plus" : "calendar"
             )
             .frame(maxHeight: 260)
 
@@ -381,11 +381,11 @@ struct BookCollectionListView: View {
     }
 
     private func failureState(message: String) -> some View {
-        BookshelfContextualEmptyStateView(
-            icon: "exclamationmark.triangle",
+        XMContentStateView(
+            role: .failure,
             title: "书单加载失败",
             message: message.isEmpty ? "请稍后重试" : message,
-            iconColor: Color.feedbackWarning.opacity(0.42)
+            systemImage: "exclamationmark.triangle"
         )
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
@@ -526,7 +526,7 @@ struct BookCollectionFeedbackBanner: View {
     private var tint: Color {
         switch feedback.kind {
         case .processing:
-            return Color.brand
+            return Color.appTint
         case .success:
             return Color.feedbackSuccess
         case .warning:

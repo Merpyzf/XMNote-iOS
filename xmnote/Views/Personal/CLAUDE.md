@@ -6,7 +6,9 @@
 ## 成员清单
 
 - `PersonalView.swift`: 我的 Tab 核心入口
+- `AIConfigurationView.swift`: AI 服务商、模型、访问凭证与提示词配置页，使用公共 Settings 语法组合业务行。
 - `ApiIntegrationView.swift`: API 集成设置页面
+- `DesktopWeb/DesktopWebView.swift`: 网页端启停、自动启动与访问授权配置页面。
 - `TagManagementView.swift`: 标签管理页面
 - `BookGroupManagementView.swift`: 书籍分组新增、搜索、重命名、排序与删除页面
 - `SourceManagementView.swift`: 用户/默认书籍来源的搜索、增改删与排序页面
@@ -17,6 +19,9 @@
 
 ## 子目录
 
-- `Backup/`: 数据备份与恢复（6 个文件）
+- `Backup/`: 数据备份与恢复。
+- `DesktopWeb/`: 网页端服务配置。
+
+分组、来源、标签、备份和桌面网页功能的通用空态、无搜索结果与局部失败视觉统一复用 `StatePresentation` 组件族；UICollectionView 背景适配器只保留容器职责。
 
 [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md

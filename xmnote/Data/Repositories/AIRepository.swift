@@ -33,7 +33,7 @@ final class AIRepository: AIRepositoryProtocol, @unchecked Sendable {
         try await configurationStore.fetchSnapshot()
     }
 
-    /// 校验模型、Prompt 与启用态凭据后保存配置，空密钥输入保留 Keychain 现值。
+    /// 校验模型、Prompt 与启用态凭据后保存配置，空密钥输入保留当前供应商已有值。
     func saveConfiguration(_ configuration: AIConfiguration, apiKey: String?) async throws {
         let normalized = configuration.normalized
         try validate(normalized)
@@ -113,7 +113,7 @@ final class AIRepository: AIRepositoryProtocol, @unchecked Sendable {
                 do {
                     let query = input.queryText.trimmingCharacters(in: .whitespacesAndNewlines)
                     guard !query.isEmpty else {
-                        throw AIRepositoryError.invalidConfiguration("请先选择需要释义的文字。")
+                        throw AIRepositoryError.invalidConfiguration("请先选择需要释义的文字")
                     }
                     let credentials = try await requestCredentials()
                     let prompt = credentials.configuration.prompts.wordLookup
@@ -295,13 +295,13 @@ private extension AIRepository {
     func validate(_ configuration: AIConfiguration) throws {
         let selectedModel = configuration.selectedModelID
         guard configuration.provider.modelOptions.contains(where: { $0.id == selectedModel }) else {
-            throw AIRepositoryError.invalidConfiguration("请选择当前供应商支持的模型。")
+            throw AIRepositoryError.invalidConfiguration("请选择当前供应商支持的模型")
         }
         for kind in AIPromptKind.allCases {
             let prompt = configuration.prompts.template(for: kind)
             guard !prompt.system.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
                   !prompt.user.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-                throw AIRepositoryError.invalidConfiguration("\(kind.title) Prompt 不能为空。")
+                throw AIRepositoryError.invalidConfiguration("\(kind.title) Prompt 不能为空")
             }
         }
     }

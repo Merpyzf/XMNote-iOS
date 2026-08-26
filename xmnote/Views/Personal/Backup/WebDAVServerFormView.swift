@@ -82,7 +82,7 @@ private extension WebDAVServerFormView {
             if let message = viewModel.testResultMessage {
                 Text(message)
                     .font(AppTypography.caption)
-                    .foregroundStyle(message.contains("成功") ? Color.brand : .red)
+                    .foregroundStyle(message.contains("成功") ? Color.appTint : Color.red)
             }
         }
     }

@@ -28,7 +28,7 @@ struct LifeWeekImportView: View {
             Section {
                 Button { beginImport() } label: { HStack { Spacer(); if isLoading { ProgressView().controlSize(.small) }; Text(isLoading ? loadingText : "开始导入"); Spacer() } }.disabled(isLoading)
             }
-            Section { Text("点击开始导入后，将会登录你的「三联中读」账户以获取笔记数据。") .font(AppTypography.caption).foregroundStyle(Color.textSecondary) }
+            Section { Text("点击开始导入后，将会登录你的「三联中读」账户以获取笔记数据") .font(AppTypography.caption).foregroundStyle(Color.textSecondary) }
         }
         .navigationTitle("三联生活周刊")
         .navigationBarTitleDisplayMode(.inline)

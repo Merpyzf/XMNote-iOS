@@ -25,16 +25,6 @@ enum DesktopWebEntryMode: Equatable {
 
 /// iPhone 局域网网页服务入口，优先帮助用户在电脑浏览器完成后续任务。
 struct DesktopWebView: View {
-    private enum Layout {
-        static let contentMaxWidth: CGFloat = 640
-        static let groupedPanelCornerRadius: CGFloat = CornerRadius.containerXL
-        static let cardContentInset: CGFloat = Spacing.screenEdge
-        static let sectionTextInset: CGFloat = Spacing.screenEdge
-        static let sectionSpacing: CGFloat = Spacing.double + Spacing.cozy
-        static let sectionTitleBottomSpacing: CGFloat = Spacing.base
-        static let rowMinHeight: CGFloat = 56
-    }
-
     private static let helpURL = URL(string: "https://docs.xmnote.com/#/web/guide")!
     private static let usageHelpDescription: LocalizedStringKey =
         "电脑与 iPhone 需连接同一 Wi-Fi；连接期间请保持 App 在前台。"
@@ -56,19 +46,11 @@ struct DesktopWebView: View {
     }
 
     var body: some View {
-        ScrollView {
-            VStack(spacing: Layout.sectionSpacing) {
-                serviceSettingsSection
-
-                accessSecuritySection
-                usageHelpSection
-            }
-            .padding(.horizontal, Spacing.screenEdge)
-            .padding(.vertical, Spacing.base)
-            .frame(maxWidth: Layout.contentMaxWidth)
-            .frame(maxWidth: .infinity)
+        XMSettingsPage {
+            serviceSettingsSection
+            accessSecuritySection
+            usageHelpSection
         }
-        .background(Color.surfacePage)
         .navigationTitle(mode.title)
         .navigationBarTitleDisplayMode(.inline)
         .animation(
@@ -100,12 +82,15 @@ struct DesktopWebView: View {
 
     /// 将访问结果、本次运行与冷启动偏好收进同一服务面板，建立从结果到控制的连续层级。
     private var serviceSettingsSection: some View {
-        desktopWebSection(title: "网页服务") {
-            desktopWebPanel {
+        XMSettingsSection("网页服务") {
+            XMSettingsGroup(
+                horizontalPadding: Spacing.none,
+                verticalPadding: Spacing.none
+            ) {
                 VStack(spacing: Spacing.none) {
                     if case .running(let addresses) = coordinator.state {
                         accessAddressRows(addresses)
-                        DesktopWebDivider()
+                        settingsDivider
                     }
 
                     Toggle(
@@ -121,18 +106,18 @@ struct DesktopWebView: View {
                         }
                     )
                     .disabled(coordinator.state.isTransitioning)
-                    .tint(Color.brand)
-                    .padding(.horizontal, Layout.cardContentInset)
+                    .tint(Color.appTint)
+                    .padding(.horizontal, Spacing.contentEdge)
                     .padding(.top, Spacing.base)
                     .padding(
                         .bottom,
                         hasAttachedServiceFeedback ? Spacing.cozy : Spacing.base
                     )
-                    .frame(minHeight: Spacing.actionReserved)
+                    .frame(minHeight: XMSettingsPageLayout.detailRowMinHeight)
 
                     if case .waitingForLocalNetwork = coordinator.state {
                         attachedStatusMessage(
-                            "请连接 Wi-Fi，并在系统设置中允许 XMNote 访问本地网络。",
+                            "请连接 Wi-Fi，并在系统设置中允许 XMNote 访问本地网络",
                             color: .textSecondary
                         )
                     }
@@ -142,7 +127,7 @@ struct DesktopWebView: View {
                         retryableFailureRow(failure)
                     }
 
-                    DesktopWebDivider()
+                    settingsDivider
 
                     Toggle(
                         isOn: Binding(
@@ -156,9 +141,9 @@ struct DesktopWebView: View {
                             )
                         }
                     )
-                    .tint(Color.brand)
-                    .padding(.horizontal, Layout.cardContentInset)
-                    .frame(minHeight: Layout.rowMinHeight + Spacing.cozy)
+                    .tint(Color.appTint)
+                    .padding(.horizontal, Spacing.contentEdge)
+                    .frame(minHeight: XMSettingsPageLayout.detailRowMinHeight)
                 }
             }
         }
@@ -166,8 +151,12 @@ struct DesktopWebView: View {
 
     /// 访问码只在 App 内展示；编辑、重置与失败继续使用统一系统弹窗。
     private var accessSecuritySection: some View {
-        desktopWebSection(title: "安全") {
-            desktopWebPanel(isSingleItem: !coordinator.isAccessAuthEnabled) {
+        XMSettingsSection("安全") {
+            XMSettingsGroup(
+                presentation: coordinator.isAccessAuthEnabled ? .grouped : .singleItem,
+                horizontalPadding: Spacing.none,
+                verticalPadding: Spacing.none
+            ) {
                 VStack(spacing: Spacing.none) {
                     Toggle(
                         isOn: Binding(
@@ -184,12 +173,12 @@ struct DesktopWebView: View {
                         }
                     )
                     .disabled(isUpdatingAccessAuth)
-                    .tint(Color.brand)
-                    .padding(.horizontal, Layout.cardContentInset)
-                    .frame(minHeight: Layout.rowMinHeight + Spacing.cozy)
+                    .tint(Color.appTint)
+                    .padding(.horizontal, Spacing.contentEdge)
+                    .frame(minHeight: XMSettingsPageLayout.detailRowMinHeight)
 
                     if coordinator.isAccessAuthEnabled {
-                        DesktopWebDivider()
+                        settingsDivider
 
                         accessCodeRow
                     }
@@ -216,7 +205,7 @@ struct DesktopWebView: View {
             }
             .frame(
                 maxWidth: .infinity,
-                minHeight: Spacing.actionReserved,
+                minHeight: InteractionMetrics.minimumTouchTarget,
                 alignment: .topLeading
             )
             .contentShape(Rectangle())
@@ -225,7 +214,7 @@ struct DesktopWebView: View {
         .accessibilityLabel("网页端使用说明")
         .accessibilityValue(Text(Self.usageHelpDescription))
         .accessibilityHint("在浏览器中打开使用说明")
-        .padding(.horizontal, Layout.sectionTextInset)
+        .padding(.horizontal, Spacing.contentEdge)
     }
 
     private var serviceStatusDetail: String {
@@ -270,7 +259,7 @@ struct DesktopWebView: View {
                 accessibilityLabel: "电脑局域网域名",
                 copyActionName: "复制局域网地址"
             )
-            DesktopWebDivider()
+            settingsDivider
         }
 
         if let primaryIPEndpoint = addresses.ipEndpoints.first {
@@ -288,12 +277,12 @@ struct DesktopWebView: View {
 
         let otherEndpoints = Array(addresses.ipEndpoints.dropFirst())
         if !otherEndpoints.isEmpty {
-            DesktopWebDivider()
+            settingsDivider
             otherEndpointsDisclosure(otherEndpoints)
         }
 
         if let domainStatusMessage = addresses.domainStatusMessage {
-            DesktopWebDivider()
+            settingsDivider
             statusMessage(domainStatusMessage, color: .feedbackWarning)
         }
     }
@@ -310,8 +299,9 @@ struct DesktopWebView: View {
                 .foregroundStyle(Color.textPrimary)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, Layout.cardContentInset)
+        .padding(.horizontal, Spacing.contentEdge)
         .padding(.vertical, Spacing.base)
+        .frame(minHeight: XMSettingsPageLayout.detailRowMinHeight)
         .contentShape(Rectangle())
         .contextMenu {
             accessCodeContextMenuActions
@@ -401,9 +391,9 @@ struct DesktopWebView: View {
                 }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, Layout.cardContentInset)
+        .padding(.horizontal, Spacing.contentEdge)
         .padding(.vertical, Spacing.base)
-        .frame(minHeight: Layout.rowMinHeight)
+        .frame(minHeight: XMSettingsPageLayout.detailRowMinHeight)
     }
 
     /// 把低频备用地址收起，仅在排障或多网卡场景中按需展开。
@@ -416,7 +406,7 @@ struct DesktopWebView: View {
                 VStack(spacing: Spacing.none) {
                     ForEach(Array(endpoints.enumerated()), id: \.element.id) { index, endpoint in
                         if index > 0 {
-                            DesktopWebDivider(leadingInset: Spacing.none)
+                            XMSettingsDivider()
                         }
                         otherEndpointRow(endpoint)
                     }
@@ -429,41 +419,14 @@ struct DesktopWebView: View {
                     .foregroundStyle(Color.textSecondary)
             }
         )
-        .padding(.horizontal, Layout.cardContentInset)
-        .frame(minHeight: Spacing.actionReserved)
+        .padding(.horizontal, Spacing.contentEdge)
+        .frame(minHeight: InteractionMetrics.minimumTouchTarget)
         .animation(reduceMotion ? nil : .smooth, value: isShowingOtherAddresses)
     }
 
-    private func desktopWebSection<Content: View>(
-        title: String,
-        @ViewBuilder content: () -> Content
-    ) -> some View {
-        VStack(alignment: .leading, spacing: Layout.sectionTitleBottomSpacing) {
-            Text(title)
-                .font(AppTypography.footnoteSemibold)
-                .foregroundStyle(Color.textSecondary)
-                .padding(.horizontal, Layout.sectionTextInset)
-
-            content()
-        }
-    }
-
-    /// 按可见设置项数量选择分组圆角或完整胶囊，仅复用当前页面既有表层颜色。
-    @ViewBuilder
-    private func desktopWebPanel<Content: View>(
-        isSingleItem: Bool = false,
-        @ViewBuilder content: () -> Content
-    ) -> some View {
-        if isSingleItem {
-            content()
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .background(Color.surfaceCard)
-                .clipShape(Capsule())
-        } else {
-            CardContainer(cornerRadius: Layout.groupedPanelCornerRadius) {
-                content()
-            }
-        }
+    private var settingsDivider: some View {
+        XMSettingsDivider()
+            .padding(.leading, Spacing.contentEdge)
     }
 
     private func desktopWebRowLabel(title: String, detail: String) -> some View {
@@ -504,7 +467,7 @@ struct DesktopWebView: View {
             .font(AppTypography.caption)
             .foregroundStyle(color)
             .fixedSize(horizontal: false, vertical: true)
-            .padding(.horizontal, Layout.cardContentInset)
+            .padding(.horizontal, Spacing.contentEdge)
             .padding(.vertical, Spacing.contentEdge)
     }
 
@@ -515,54 +478,23 @@ struct DesktopWebView: View {
             .foregroundStyle(color)
             .fixedSize(horizontal: false, vertical: true)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, Layout.cardContentInset)
+            .padding(.horizontal, Spacing.contentEdge)
             .padding(.bottom, Spacing.base)
     }
 
     /// 将可重试故障贴近当前会话开关，并在窄宽度或大字体下切换为纵向操作布局。
     private func retryableFailureRow(_ failure: DesktopWebSessionFailure) -> some View {
-        ViewThatFits(in: .horizontal) {
-            HStack(alignment: .top, spacing: Spacing.base) {
-                retryableFailureMessage(failure.message)
-
-                Spacer(minLength: Spacing.cozy)
-
-                retryButton
-            }
-
-            VStack(alignment: .leading, spacing: Spacing.compact) {
-                retryableFailureMessage(failure.message)
-
-                retryButton
-                    .frame(maxWidth: .infinity, alignment: .trailing)
-            }
-        }
-        .padding(.horizontal, Layout.cardContentInset)
+        XMInlineStatusBanner(
+            failure.message,
+            tone: .error,
+            action: XMStateAction("重新尝试", systemImage: "arrow.clockwise", perform: coordinator.retry)
+        )
+        .padding(.horizontal, Spacing.contentEdge)
         .transition(
             reduceMotion
                 ? .opacity
                 : .move(edge: .top).combined(with: .opacity)
         )
-    }
-
-    private func retryableFailureMessage(_ message: String) -> some View {
-        Text(message)
-            .font(AppTypography.caption)
-            .foregroundStyle(Color.feedbackError)
-            .fixedSize(horizontal: false, vertical: true)
-    }
-
-    private var retryButton: some View {
-        Button {
-            coordinator.retry()
-        } label: {
-            Text("重新尝试")
-                .font(AppTypography.captionSemibold)
-                .foregroundStyle(Color.textPrimary)
-                .frame(minHeight: Spacing.actionReserved, alignment: .top)
-                .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
     }
 
     /// 异步保存访问安全设置；任务固定在 MainActor 回写，Repository actor 串行保护持久化顺序。
@@ -678,22 +610,6 @@ struct DesktopWebView: View {
                 ]
             )
         }
-    }
-}
-
-/// 分组面板内的轻量分隔线，保持与“我的”“数据备份”设置面板一致。
-private struct DesktopWebDivider: View {
-    let leadingInset: CGFloat
-
-    init(leadingInset: CGFloat = Spacing.screenEdge) {
-        self.leadingInset = leadingInset
-    }
-
-    var body: some View {
-        Rectangle()
-            .fill(Color.surfaceBorderSubtle.opacity(0.5))
-            .frame(height: CardStyle.borderWidth)
-            .padding(.leading, leadingInset)
     }
 }
 

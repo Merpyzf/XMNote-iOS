@@ -7,13 +7,23 @@
 
 import SwiftUI
 
+/// 分享选项列表的局部几何量，保持分隔线与带图标行的文字起点对齐。
+private enum ReadCalendarShareLayout {
+    static let optionDividerLeadingInset: CGFloat = 44
+}
+
 /// 阅读日历分享页；所有会员能力均允许在预览阶段探索，只在受限选择或导出动作处明确说明。
 struct ReadCalendarShareView: View {
+    private enum Motion {
+        static let previewChange = Animation.smooth(duration: 0.24)
+    }
+
     let onOpenPremium: () -> Void
 
     @Environment(RepositoryContainer.self) private var repositories
     @Environment(AppState.self) private var appState
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var viewModel: ReadCalendarShareViewModel
     @State private var loadingGate = LoadingGate()
     @State private var activeSheet: SheetDestination?
@@ -98,16 +108,15 @@ struct ReadCalendarShareView: View {
                 Color.clear
             }
         } else {
-            ContentUnavailableView {
-                Label("无法生成预览", systemImage: "photo.badge.exclamationmark")
-            } description: {
-                Text(viewModel.errorMessage ?? "请稍后重试")
-            } actions: {
-                Button("重试") {
+            XMContentStateView(
+                role: .failure,
+                title: "无法生成预览",
+                message: viewModel.errorMessage ?? "请稍后重试",
+                systemImage: "photo.badge.exclamationmark",
+                action: XMStateAction("重试", systemImage: "arrow.clockwise") {
                     Task { await viewModel.reload(using: repositories.readCalendarRepository) }
                 }
-                .buttonStyle(.bordered)
-            }
+            )
         }
     }
 
@@ -126,7 +135,7 @@ struct ReadCalendarShareView: View {
         .clipShape(RoundedRectangle(cornerRadius: CornerRadius.containerLarge, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: CornerRadius.containerLarge, style: .continuous)
-                .stroke(Color.surfaceBorderDefault, lineWidth: CardStyle.borderWidth)
+                .stroke(Color.surfaceBorderDefault, lineWidth: StrokeWidth.hairline)
         }
         .shadow(color: Color.black.opacity(0.08), radius: 18, y: 8)
         .overlay {
@@ -136,8 +145,8 @@ struct ReadCalendarShareView: View {
                     .transition(.opacity)
             }
         }
-        .animation(.smooth(duration: 0.24), value: viewModel.shareType)
-        .animation(.smooth(duration: 0.24), value: viewModel.template)
+        .animation(reduceMotion ? nil : Motion.previewChange, value: viewModel.shareType)
+        .animation(reduceMotion ? nil : Motion.previewChange, value: viewModel.template)
     }
 
     private var typeControl: some View {
@@ -159,7 +168,7 @@ struct ReadCalendarShareView: View {
                 pendingMonth = nil
                 activeSheet = .monthPicker
             }
-            Divider().padding(.leading, Spacing.actionReserved)
+            Divider().padding(.leading, ReadCalendarShareLayout.optionDividerLeadingInset)
             optionButton(
                 title: "卡片模板",
                 value: viewModel.template.title,
@@ -167,9 +176,9 @@ struct ReadCalendarShareView: View {
             ) {
                 activeSheet = .templatePicker
             }
-            Divider().padding(.leading, Spacing.actionReserved)
+            Divider().padding(.leading, ReadCalendarShareLayout.optionDividerLeadingInset)
             rankingControl
-            Divider().padding(.leading, Spacing.actionReserved)
+            Divider().padding(.leading, ReadCalendarShareLayout.optionDividerLeadingInset)
             optionButton(
                 title: "排除书籍",
                 value: viewModel.excludedBookIDs.isEmpty ? "未排除" : "已排除 \(viewModel.excludedBookIDs.count) 本",
@@ -316,7 +325,7 @@ struct ReadCalendarShareView: View {
                                     .overlay {
                                         if template == viewModel.template {
                                             RoundedRectangle(cornerRadius: CornerRadius.blockSmall, style: .continuous)
-                                                .stroke(Color.brand, lineWidth: 2)
+                                                .stroke(Color.appTint, lineWidth: 2)
                                         }
                                     }
                                 Text(template.title)
@@ -357,7 +366,7 @@ struct ReadCalendarShareView: View {
                         XMBookCover.fixedWidth(
                             34,
                             urlString: book.coverURL,
-                            border: .init(color: .surfaceBorderDefault, width: CardStyle.borderWidth)
+                            border: .init(color: .surfaceBorderDefault, width: StrokeWidth.hairline)
                         )
                         Text(book.name)
                             .font(AppTypography.body)
@@ -365,7 +374,7 @@ struct ReadCalendarShareView: View {
                         Spacer()
                         if viewModel.excludedBookIDs.contains(book.bookId) {
                             Image(systemName: "checkmark.circle.fill")
-                                .foregroundStyle(Color.brand)
+                                .foregroundStyle(Color.appTint)
                         }
                     }
                 }
@@ -509,11 +518,11 @@ struct ReadCalendarShareView: View {
     }
 
     private func templateBackground(_ template: ReadCalendarShareTemplate) -> Color {
-        Color(hex: UInt(template.palette.backgroundARGB & 0x00FF_FFFF))
+        Color.xmHex(UInt(template.palette.backgroundARGB & 0x00FF_FFFF))
     }
 
     private func templateAccent(_ template: ReadCalendarShareTemplate) -> Color {
-        Color(hex: UInt(template.palette.accentARGB & 0x00FF_FFFF))
+        Color.xmHex(UInt(template.palette.accentARGB & 0x00FF_FFFF))
     }
 }
 

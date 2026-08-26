@@ -39,7 +39,7 @@ struct RelatedBookRelationEditorSheet: View {
                             XMBookCover.fixedWidth(
                                 42,
                                 urlString: draft.contentBook.coverURL,
-                                border: .init(color: .surfaceBorderDefault, width: CardStyle.borderWidth)
+                                border: .init(color: .surfaceBorderDefault, width: StrokeWidth.hairline)
                             )
                             VStack(alignment: .leading, spacing: Spacing.compact) {
                                 Text(draft.contentBook.title)

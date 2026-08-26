@@ -31,7 +31,7 @@ struct BookGroupCoverTestView: View {
     private var stateMatrixSection: some View {
         debugSection(
             title: "组件状态矩阵",
-            subtitle: "同一 58×56 尺寸下对比书盒与规整裁片的多封面、单封面、无封面状态。"
+            subtitle: "同一 58×56 尺寸下对比书盒与规整裁片的多封面、单封面、无封面状态"
         ) {
             VStack(spacing: Spacing.base) {
                 ForEach(coverOptions) { option in
@@ -44,7 +44,7 @@ struct BookGroupCoverTestView: View {
     private var rowPreviewSection: some View {
         debugSection(
             title: "列表行预览",
-            subtitle: "观察两套候选放入真实 Item 后，是否让位于分组名和书籍数量。"
+            subtitle: "观察两套候选放入真实 Item 后，是否让位于分组名和书籍数量"
         ) {
             VStack(alignment: .leading, spacing: Spacing.base) {
                 ForEach(Array(coverOptions.enumerated()), id: \.element.id) { optionIndex, option in
@@ -76,7 +76,7 @@ struct BookGroupCoverTestView: View {
     private var themeComparisonSection: some View {
         debugSection(
             title: "浅深色对照",
-            subtitle: "重点看书盒与规整裁片在浅深色下的占位、分隔线与内容层级。"
+            subtitle: "重点看书盒与规整裁片在浅深色下的占位、分隔线与内容层级"
         ) {
             ViewThatFits(in: .horizontal) {
                 HStack(spacing: Spacing.base) {
@@ -95,15 +95,15 @@ struct BookGroupCoverTestView: View {
     private var checklistSection: some View {
         debugSection(
             title: "验收关注点",
-            subtitle: "本页只验证候选基础组件，不修改「我的 > 书籍分组」生产入口。"
+            subtitle: "本页只验证候选基础组件，不修改「我的 > 书籍分组」生产入口"
         ) {
             VStack(alignment: .leading, spacing: Spacing.half) {
-                DebugBookGroupCoverChecklistItem(text: "书盒与规整裁片能在同一测试页并列对比。")
-                DebugBookGroupCoverChecklistItem(text: "规整裁片使用书籍比例矩形，不使用正方形单元。")
-                DebugBookGroupCoverChecklistItem(text: "规整裁片内部横向与纵向相邻封面间距一致。")
-                DebugBookGroupCoverChecklistItem(text: "单封面状态仍有分组占位，不误读为普通单本书。")
-                DebugBookGroupCoverChecklistItem(text: "无封面状态有聚合质感，占位与分隔线不会发灰或消失。")
-                DebugBookGroupCoverChecklistItem(text: "列表行中 chevron 弱提示，两套封面都不抢标题层级。")
+                DebugBookGroupCoverChecklistItem(text: "书盒与规整裁片能在同一测试页并列对比")
+                DebugBookGroupCoverChecklistItem(text: "规整裁片使用书籍比例矩形，不使用正方形单元")
+                DebugBookGroupCoverChecklistItem(text: "规整裁片内部横向与纵向相邻封面间距一致")
+                DebugBookGroupCoverChecklistItem(text: "单封面状态仍有分组占位，不误读为普通单本书")
+                DebugBookGroupCoverChecklistItem(text: "无封面状态有聚合质感，占位与分隔线不会发灰或消失")
+                DebugBookGroupCoverChecklistItem(text: "列表行中 chevron 弱提示，两套封面都不抢标题层级")
             }
         }
     }
@@ -250,7 +250,7 @@ private struct DebugBookGroupCoverThemePanel: View {
         .background(Color.surfaceNested, in: RoundedRectangle(cornerRadius: CornerRadius.containerMedium, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: CornerRadius.containerMedium, style: .continuous)
-                .stroke(Color.surfaceBorderSubtle.opacity(0.72), lineWidth: CardStyle.borderWidth)
+                .stroke(Color.surfaceBorderSubtle.opacity(0.72), lineWidth: StrokeWidth.hairline)
         }
         .environment(\.colorScheme, colorScheme)
     }
@@ -263,7 +263,7 @@ private struct DebugBookGroupCoverChecklistItem: View {
         HStack(alignment: .firstTextBaseline, spacing: Spacing.half) {
             Image(systemName: "checkmark.circle.fill")
                 .font(AppTypography.caption)
-                .foregroundStyle(Color.brand)
+                .foregroundStyle(Color.appTint)
 
             Text(text)
                 .font(AppTypography.caption)

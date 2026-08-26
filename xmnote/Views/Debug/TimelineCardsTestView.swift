@@ -76,7 +76,7 @@ private struct TimelineCardsTestContentView: View {
                     .padding(.vertical, 6)
                     .background(
                         selectedCategory == category
-                            ? Color.brand : Color.controlFillSecondary
+                            ? Color.selectionAccent : Color.controlFillSecondary
                     )
                     .foregroundStyle(
                         selectedCategory == category

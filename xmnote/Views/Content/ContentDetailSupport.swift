@@ -116,15 +116,9 @@ enum ContentViewerDateFormatter {
     }()
 }
 
-/// 内容查看页统一错误提示卡片，避免各页重复定义相同的错误样式。
+/// 内容查看页把业务错误文案转接到通用局部状态横幅，由调用方继续决定所在容器和外边距。
 func viewerMessageCard(text: String) -> some View {
-    CardContainer {
-        Text(text)
-            .font(AppTypography.footnote)
-            .foregroundStyle(Color.feedbackError)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(Spacing.contentEdge)
-    }
+    XMInlineStatusBanner(text, tone: .error)
 }
 
 enum ContentDetailDateFormatter {

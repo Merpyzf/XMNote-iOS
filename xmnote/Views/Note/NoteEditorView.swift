@@ -1,5 +1,5 @@
 /**
- * [INPUT]: 依赖 RepositoryContainer、AppState、NoteEditorViewModel、AppTaskNavigationContext、NoteTextComposerView 与 BookPickerView
+ * [INPUT]: 依赖 RepositoryContainer、AppState、NoteEditorViewModel、AppTaskNavigationContext、NoteTextComposerView、XMStarredAppearance 与 BookPickerView
  * [OUTPUT]: 对外提供 NoteEditorView，承载书摘新建/编辑、草稿恢复、图片额度、附图、层级章节、无冗余上下文的标签草稿操作、语义化编辑设置入口与保存动作
  * [POS]: Note 模块书摘编辑页壳层，对齐 Android 编辑流程并采用 iOS 原生页面组织
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -9,6 +9,24 @@ import PhotosUI
 import SwiftUI
 import UIKit
 import os
+
+/// 书摘编辑页局部排版，保留编辑正文与元数据的既有视觉密度。
+private enum NoteEditorTypography {
+    static let metadataTitle: Font = AppTypography.fixed(
+        baseSize: 14,
+        relativeTo: .subheadline,
+        weight: .medium,
+        minimumPointSize: 14
+    )
+}
+
+/// 书摘编辑页的局部运动语义，分别承接滚动定位、附件排序与元数据结构变化。
+private enum NoteEditorMotion {
+    static let focusScroll = Animation.snappy
+    static let attachmentReorder = Animation.snappy(duration: 0.2)
+    static let metadataChange = Animation.snappy(duration: 0.22)
+    static let toolbarModeChange = Animation.snappy(duration: 0.22)
+}
 
 /// 书摘编辑页入口，支持新建与编辑两种模式。
 struct NoteEditorView: View {
@@ -21,6 +39,7 @@ struct NoteEditorView: View {
     @Environment(AppState.self) private var appState
     @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var viewModel: NoteEditorViewModel?
     @State private var editorSettings = NoteEditorSettings()
     @State private var bootstrapLoadingGate = LoadingGate()
@@ -152,16 +171,12 @@ private extension NoteEditorView {
     var seededMeasuredHeights: [NoteEditorMeasuredPart: CGFloat] {
         [
             .book: 49 + Spacing.contentEdge * 2,
-            .tailStable: metadataRowHeight * 4 + CardStyle.borderWidth * 3,
+            .tailStable: metadataRowHeight * 4 + StrokeWidth.hairline * 3,
             .toolbar: 58
         ]
     }
     var editorContentFont: Font {
-        AppTypography.fixed(
-            baseSize: 16,
-            relativeTo: .body,
-            minimumPointSize: 16
-        )
+        ReadingContentTypography.body
     }
 
     @ViewBuilder
@@ -322,8 +337,12 @@ private extension NoteEditorView {
 #endif
                     .onChange(of: activeEditorTarget) { _, target in
                         guard let target else { return }
-                        withAnimation(.snappy) {
+                        if reduceMotion {
                             scrollProxy.scrollTo(target.scrollAnchorID, anchor: .center)
+                        } else {
+                            withAnimation(NoteEditorMotion.focusScroll) {
+                                scrollProxy.scrollTo(target.scrollAnchorID, anchor: .center)
+                            }
                         }
                     }
                     .onChange(of: viewModel.ideaInputState) { _, newState in
@@ -622,7 +641,7 @@ private extension NoteEditorView {
                             34,
                             urlString: selectedBook.coverURL,
                             cornerRadius: CornerRadius.inlayHairline,
-                            border: .init(color: .surfaceBorderSubtle, width: CardStyle.borderWidth),
+                            border: .init(color: .surfaceBorderSubtle, width: StrokeWidth.hairline),
                             placeholderIconSize: .small,
                             surfaceStyle: .spine
                         )
@@ -803,9 +822,9 @@ private extension NoteEditorView {
             HStack(spacing: Spacing.cozy) {
                 Image(systemName: "clock.arrow.trianglehead.counterclockwise.rotate.90")
                     .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(Color.brand)
+                    .foregroundStyle(Color.appTint)
                 Text(description)
-                    .font(AppTypography.semantic(.footnote, weight: .medium))
+                    .font(AppTypography.footnoteMedium)
                     .foregroundStyle(Color.textSecondary)
                 Spacer(minLength: 0)
             }
@@ -838,8 +857,12 @@ private extension NoteEditorView {
                 accessibilityNamespace: "note_editor.attachment_strip",
                 onMove: { sourceID, destinationID in
                     registerEditorInteraction(force: true)
-                    withAnimation(.snappy(duration: 0.2)) {
+                    if reduceMotion {
                         viewModel.moveImage(sourceID: sourceID, destinationID: destinationID)
+                    } else {
+                        withAnimation(NoteEditorMotion.attachmentReorder) {
+                            viewModel.moveImage(sourceID: sourceID, destinationID: destinationID)
+                        }
                     }
                 },
                 onRemove: { id in
@@ -876,97 +899,78 @@ private extension NoteEditorView {
 
     func metadataSection(_ viewModel: NoteEditorViewModel) -> some View {
         VStack(spacing: Spacing.none) {
-            HStack(spacing: Spacing.cozy) {
-                Text(viewModel.positionTitle)
-                    .font(metadataTitleFont)
-                    .foregroundStyle(Color.textSecondary)
-                Spacer(minLength: Spacing.base)
-                TextField(viewModel.positionPlaceholder, text: Binding(
-                    get: { viewModel.positionText },
-                    set: { viewModel.positionText = $0 }
-                ))
-                .focused($isPositionFocused)
-                .font(metadataValueFont)
-                .foregroundStyle(Color.textPrimary)
-                .keyboardType(viewModel.positionKeyboardType)
-                .multilineTextAlignment(.trailing)
-                .textFieldStyle(.plain)
-                .frame(width: 140)
-            }
-            .padding(.horizontal, Spacing.base)
-            .frame(height: metadataRowHeight)
-            .contentShape(Rectangle())
-            .onTapGesture {
-                registerEditorInteraction(force: true)
-                toolbarPromptMessage = nil
-                isPositionFocused = true
-            }
+            positionMetadataRow(viewModel)
 
             metadataDivider
 
-            HStack(spacing: Spacing.cozy) {
-                Text("章节")
-                    .font(metadataTitleFont)
-                    .foregroundStyle(Color.textSecondary)
-                Spacer(minLength: Spacing.base)
-                Text(viewModel.selectedChapterDisplayTitle)
-                    .font(metadataValueFont)
-                    .foregroundStyle(Color.textPrimary)
-                    .lineLimit(1)
-                    .contentTransition(.opacity)
-                chapterRowAccessory(viewModel)
-            }
-            .padding(.horizontal, Spacing.base)
-            .frame(height: metadataRowHeight)
-            .contentShape(Rectangle())
-            .accessibilityAddTraits(.isButton)
-            .onTapGesture {
+            Button {
                 openMetadataSheet(.chapter)
+            } label: {
+                HStack(spacing: Spacing.cozy) {
+                    Text("章节")
+                        .font(metadataTitleFont)
+                        .foregroundStyle(Color.textSecondary)
+                    Spacer(minLength: Spacing.base)
+                    Text(viewModel.selectedChapterDisplayTitle)
+                        .font(metadataValueFont)
+                        .foregroundStyle(Color.textPrimary)
+                        .lineLimit(1)
+                        .contentTransition(.opacity)
+                    chapterRowAccessory(viewModel)
+                }
+                .padding(.horizontal, Spacing.base)
+                .frame(height: metadataRowHeight)
+                .contentShape(Rectangle())
             }
+            .buttonStyle(.plain)
 
             metadataDivider
 
-            HStack(spacing: Spacing.cozy) {
-                Text("标签")
-                    .font(metadataTitleFont)
-                    .foregroundStyle(Color.textSecondary)
-
-                if viewModel.selectedTags.isEmpty {
-                    Text("添加标签")
-                        .font(metadataValueFont)
-                        .foregroundStyle(Color.textHint)
-                        .lineLimit(1)
-                        .frame(maxWidth: .infinity, alignment: .trailing)
-                        .transition(.move(edge: .trailing).combined(with: .opacity))
-                } else {
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(spacing: Spacing.cozy) {
-                            ForEach(viewModel.selectedTags) { tag in
-                                Text(tag.title)
-                                    .font(AppTypography.semantic(.footnote, weight: .medium))
-                                    .foregroundStyle(Color.textSecondary)
-                                    .padding(.horizontal, Spacing.cozy)
-                                    .padding(.vertical, Spacing.tiny)
-                                    .background(Color.controlFillSecondary, in: Capsule())
-                                    .lineLimit(1)
-                            }
-                            .transition(.move(edge: .trailing).combined(with: .opacity))
-                        }
-                        .frame(height: 30)
-                    }
-                    .frame(maxWidth: .infinity, alignment: .trailing)
-                }
-
-                metadataTrailingAccessoryIcon()
-            }
-            .padding(.horizontal, Spacing.base)
-            .frame(height: metadataRowHeight)
-            .contentShape(Rectangle())
-            .accessibilityAddTraits(.isButton)
-            .onTapGesture {
+            Button {
                 openMetadataSheet(.tags)
+            } label: {
+                HStack(spacing: Spacing.cozy) {
+                    Text("标签")
+                        .font(metadataTitleFont)
+                        .foregroundStyle(Color.textSecondary)
+
+                    if viewModel.selectedTags.isEmpty {
+                        Text("添加标签")
+                            .font(metadataValueFont)
+                            .foregroundStyle(Color.textHint)
+                            .lineLimit(1)
+                            .frame(maxWidth: .infinity, alignment: .trailing)
+                            .transition(.move(edge: .trailing).combined(with: .opacity))
+                    } else {
+                        ScrollView(.horizontal, showsIndicators: false) {
+                            HStack(spacing: Spacing.cozy) {
+                                ForEach(viewModel.selectedTags) { tag in
+                                    Text(tag.title)
+                                        .font(AppTypography.footnoteMedium)
+                                        .foregroundStyle(Color.textSecondary)
+                                        .padding(.horizontal, Spacing.cozy)
+                                        .padding(.vertical, Spacing.tiny)
+                                        .background(Color.controlFillSecondary, in: Capsule())
+                                        .lineLimit(1)
+                                }
+                                .transition(.move(edge: .trailing).combined(with: .opacity))
+                            }
+                            .frame(height: 30)
+                        }
+                        .frame(maxWidth: .infinity, alignment: .trailing)
+                    }
+
+                    metadataTrailingAccessoryIcon()
+                }
+                .padding(.horizontal, Spacing.base)
+                .frame(height: metadataRowHeight)
+                .contentShape(Rectangle())
             }
-            .animation(.snappy(duration: 0.22), value: viewModel.selectedTags.map(\.id))
+            .buttonStyle(.plain)
+            .animation(
+                reduceMotion ? nil : NoteEditorMotion.metadataChange,
+                value: viewModel.selectedTags.map(\.id)
+            )
 
             metadataDivider
 
@@ -993,13 +997,37 @@ private extension NoteEditorView {
         }
     }
 
+    /// 位置行保留 TextField 的原生输入语义；整行轻点仅负责把焦点转交给该输入框。
+    func positionMetadataRow(_ viewModel: NoteEditorViewModel) -> some View {
+        HStack(spacing: Spacing.cozy) {
+            Text(viewModel.positionTitle)
+                .font(metadataTitleFont)
+                .foregroundStyle(Color.textSecondary)
+            Spacer(minLength: Spacing.base)
+            TextField(viewModel.positionPlaceholder, text: Binding(
+                get: { viewModel.positionText },
+                set: { viewModel.positionText = $0 }
+            ))
+            .focused($isPositionFocused)
+            .font(metadataValueFont)
+            .foregroundStyle(Color.textPrimary)
+            .keyboardType(viewModel.positionKeyboardType)
+            .multilineTextAlignment(.trailing)
+            .textFieldStyle(.plain)
+            .frame(width: 140)
+        }
+        .padding(.horizontal, Spacing.base)
+        .frame(height: metadataRowHeight)
+        .contentShape(Rectangle())
+        .onTapGesture {
+            registerEditorInteraction(force: true)
+            toolbarPromptMessage = nil
+            isPositionFocused = true
+        }
+    }
+
     var metadataTitleFont: Font {
-        AppTypography.fixed(
-            baseSize: 14,
-            relativeTo: .subheadline,
-            weight: .medium,
-            minimumPointSize: 14
-        )
+        NoteEditorTypography.metadataTitle
     }
 
     var metadataValueFont: Font { AppTypography.subheadline }
@@ -1011,7 +1039,7 @@ private extension NoteEditorView {
     var metadataDivider: some View {
         Rectangle()
             .fill(Color.surfaceBorderSubtle)
-            .frame(height: CardStyle.borderWidth)
+            .frame(height: StrokeWidth.hairline)
     }
 
     func metadataTrailingAccessoryIcon(_ systemName: String = "chevron.right") -> some View {
@@ -1028,8 +1056,12 @@ private extension NoteEditorView {
                 Button {
                     registerEditorInteraction(force: true)
                     toolbarPromptMessage = nil
-                    withAnimation(.snappy(duration: 0.22)) {
+                    if reduceMotion {
                         viewModel.clearSelectedChapter()
+                    } else {
+                        withAnimation(NoteEditorMotion.metadataChange) {
+                            viewModel.clearSelectedChapter()
+                        }
                     }
                 } label: {
                     Image(systemName: "xmark.circle.fill")
@@ -1046,15 +1078,22 @@ private extension NoteEditorView {
             }
         }
         .frame(width: metadataTrailingAccessoryWidth, alignment: .trailing)
-        .animation(.snappy(duration: 0.22), value: viewModel.selectedChapterID > 0)
+        .animation(
+            reduceMotion ? nil : NoteEditorMotion.metadataChange,
+            value: viewModel.selectedChapterID > 0
+        )
     }
 
     func openMetadataSheet(_ sheet: NoteEditorSheet) {
         registerEditorInteraction(force: true)
         toolbarPromptMessage = nil
         isPositionFocused = false
-        withAnimation(.snappy(duration: 0.22)) {
+        if reduceMotion {
             activeSheet = sheet
+        } else {
+            withAnimation(NoteEditorMotion.metadataChange) {
+                activeSheet = sheet
+            }
         }
     }
 
@@ -2173,6 +2212,8 @@ private struct NoteEditorFloatingToolbar: View {
     let onChooseImage: () -> Void
     let onSave: () -> Void
 
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     var body: some View {
         HStack {
             Spacer(minLength: 0)
@@ -2197,7 +2238,10 @@ private struct NoteEditorFloatingToolbar: View {
         }
         .padding(.horizontal, Spacing.screenEdge)
         .background(Color.clear)
-        .animation(.snappy(duration: 0.22), value: toolbarMode)
+        .animation(
+            reduceMotion ? nil : NoteEditorMotion.toolbarModeChange,
+            value: toolbarMode
+        )
     }
 
     var toolbarDivider: some View {
@@ -2287,7 +2331,7 @@ private struct NoteEditorFloatingToolbar: View {
     func toolbarTextButton(_ title: String, enabled: Bool, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Text(title)
-                .font(AppTypography.semantic(.footnote, weight: .semibold))
+                .font(AppTypography.footnoteSemibold)
                 .foregroundStyle(enabled ? Color.primaryActionForeground : Color.buttonDisabledForeground)
                 .padding(.horizontal, Spacing.base)
                 .frame(height: 34)
@@ -2314,179 +2358,6 @@ private enum NoteEditorSheet: String, Identifiable {
     case settings
 
     var id: String { rawValue }
-}
-
-private struct NoteEditorChapterPickerSheet: View {
-    let chapters: [NoteEditorChapterOption]
-    let selectedChapterID: Int64
-    let onSelect: (NoteEditorChapterOption?) -> Void
-
-    @Environment(\.dismiss) private var dismiss
-    @State private var searchText = ""
-
-    private var visibleChapters: [NoteEditorChapterOption] {
-        let keyword = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !keyword.isEmpty else { return chapters }
-        return chapters.filter { $0.title.localizedCaseInsensitiveContains(keyword) }
-    }
-
-    var body: some View {
-        NavigationStack {
-            List {
-                if searchText.isEmpty {
-                    Button {
-                        onSelect(nil)
-                    } label: {
-                        HStack {
-                            Text("不设置章节")
-                                .font(AppTypography.body)
-                                .foregroundStyle(Color.textPrimary)
-                            Spacer()
-                            if selectedChapterID == 0 {
-                                XMSelectionIndicator(
-                                    style: .checkmarkOnly,
-                                    isSelected: true,
-                                    font: AppTypography.body,
-                                    showsUnselectedBase: false
-                                )
-                            }
-                        }
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityValue(selectedChapterID == 0 ? "已选择" : "未选择")
-                }
-
-                if visibleChapters.isEmpty {
-                    if searchText.isEmpty {
-                        ContentUnavailableView(
-                            "暂无章节",
-                            systemImage: "text.book.closed",
-                            description: Text("可以先不设置章节，或到目录管理中新增。")
-                        )
-                    } else {
-                        ContentUnavailableView.search(text: searchText)
-                    }
-                } else {
-                    ForEach(visibleChapters) { chapter in
-                        Button {
-                            onSelect(chapter)
-                        } label: {
-                            HStack(spacing: Spacing.base) {
-                                VStack(alignment: .leading, spacing: Spacing.compact) {
-                                    HStack(spacing: Spacing.compact) {
-                                        Text(chapter.title)
-                                            .font(chapter.displayLevel == 1 ? AppTypography.bodyMedium : AppTypography.body)
-                                            .foregroundStyle(Color.textPrimary)
-                                            .lineLimit(2)
-                                        if chapter.isStarred == true {
-                                            Image(systemName: "star.fill")
-                                                .imageScale(.small)
-                                                .foregroundStyle(Color.ratingActive)
-                                                .accessibilityHidden(true)
-                                        }
-                                    }
-                                    if !searchText.isEmpty, !chapter.parentPathText.isEmpty {
-                                        Text(chapter.parentPathText)
-                                            .font(AppTypography.caption)
-                                            .foregroundStyle(Color.textSecondary)
-                                            .lineLimit(1)
-                                    }
-                                }
-                                Spacer(minLength: Spacing.compact)
-                                if selectedChapterID == chapter.id {
-                                    XMSelectionIndicator(
-                                        style: .checkmarkOnly,
-                                        isSelected: true,
-                                        font: AppTypography.body,
-                                        showsUnselectedBase: false
-                                    )
-                                }
-                            }
-                            .padding(.leading, CGFloat(chapter.displayLevel - 1) * Spacing.base)
-                            .frame(minHeight: Spacing.actionReserved)
-                            .contentShape(Rectangle())
-                        }
-                        .buttonStyle(.plain)
-                        .accessibilityElement(children: .ignore)
-                        .accessibilityLabel(chapter.pathText ?? chapter.title)
-                        .accessibilityValue(selectedChapterID == chapter.id ? "已选择" : "未选择")
-                        .accessibilityAddTraits(selectedChapterID == chapter.id ? .isSelected : [])
-                    }
-                }
-            }
-            .navigationTitle("章节")
-            .navigationBarTitleDisplayMode(.inline)
-            .searchable(text: $searchText, prompt: "搜索章节")
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("取消") {
-                        dismiss()
-                    }
-                }
-            }
-        }
-    }
-}
-
-private struct NoteEditorTagPickerSheet: View {
-    @Environment(RepositoryContainer.self) private var repositories
-
-    let availableTags: [NoteEditorTagOption]
-    let selectedTags: [NoteEditorTagOption]
-    let onCreate: @MainActor @Sendable (String) async throws -> NoteEditorTagOption
-    let onTagCatalogMutation: @MainActor @Sendable (TagCatalogMutation) -> Void
-    let onSave: @MainActor @Sendable ([NoteEditorTagOption]) async -> Bool
-
-    var body: some View {
-        XMTagSelectionSheet(
-            title: "编辑标签",
-            items: availableTags.map { XMTagSelectionItem(id: $0.id, title: $0.title) },
-            initialSelectedIDs: Set(selectedTags.map(\.id)),
-            layoutPreferenceRepository: repositories.tagSelectionLayoutPreferenceRepository,
-            management: XMTagSelectionManagementConfiguration(
-                scope: .note,
-                repository: repositories.tagManagementRepository,
-                onMutation: onTagCatalogMutation
-            ),
-            onCreate: { name in
-                let tag = try await onCreate(name)
-                return XMTagSelectionItem(id: tag.id, title: tag.title)
-            },
-            onSave: { items in
-                await onSave(items.map { NoteEditorTagOption(id: $0.id, title: $0.title) })
-            }
-        )
-    }
-}
-
-private struct NoteEditorDateSheet: View {
-    @Binding var selectedDate: Date
-    @Environment(\.dismiss) private var dismiss
-
-    var body: some View {
-        NavigationStack {
-            VStack(spacing: Spacing.base) {
-                DatePicker(
-                    "创建时间",
-                    selection: $selectedDate,
-                    displayedComponents: [.date, .hourAndMinute]
-                )
-                .datePickerStyle(.graphical)
-
-                Spacer(minLength: 0)
-            }
-            .padding(Spacing.screenEdge)
-            .navigationTitle("创建时间")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("完成") {
-                        dismiss()
-                    }
-                }
-            }
-        }
-    }
 }
 
 private enum NoteEditorMeasuredPart: Hashable, CaseIterable {

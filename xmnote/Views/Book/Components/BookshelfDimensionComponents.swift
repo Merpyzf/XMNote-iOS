@@ -1,5 +1,5 @@
 /**
- * [INPUT]: 依赖 BookshelfDimension、BookshelfAggregateGroup 等只读书架模型
+ * [INPUT]: 依赖 BookshelfDimension、BookshelfAggregateGroup 等只读书架模型，以及 ReadingStatusPresentation、XMRatingAppearance 与 InteractionMetrics
  * [OUTPUT]: 对外提供 Book 页面私有的维度 rail、聚合卡、搜索栏与默认书架列表行组件
  * [POS]: Book 模块页面私有子视图集合，服务 Phase 2 书架维度骨架，不承担数据读取与写入
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -18,8 +18,8 @@ struct BookshelfDimensionRail: View {
         static let horizontalPadding: CGFloat = Spacing.tight
         static let verticalPadding: CGFloat = Spacing.none
         static let visualMinHeight: CGFloat = 28
-        static let touchMinHeight: CGFloat = 44
-        static let railMinHeight: CGFloat = 44
+        static let touchMinHeight: CGFloat = InteractionMetrics.minimumTouchTarget
+        static let railMinHeight: CGFloat = InteractionMetrics.minimumTouchTarget
         static let cornerRadius: CGFloat = CornerRadius.blockSmall
         static let unselectedBorderOpacity: Double = 0.18
     }
@@ -39,14 +39,14 @@ struct BookshelfDimensionRail: View {
                             .padding(.horizontal, Style.horizontalPadding)
                             .frame(minHeight: Style.visualMinHeight)
                             .background(
-                                isSelected ? Color.brand : Color.surfaceCard,
+                                isSelected ? Color.selectionAccent : Color.surfaceCard,
                                 in: RoundedRectangle(cornerRadius: Style.cornerRadius, style: .continuous)
                             )
                             .overlay {
                                 RoundedRectangle(cornerRadius: Style.cornerRadius, style: .continuous)
                                     .stroke(
                                         Color.surfaceBorderSubtle.opacity(isSelected ? 0 : Style.unselectedBorderOpacity),
-                                        lineWidth: CardStyle.borderWidth
+                                        lineWidth: StrokeWidth.hairline
                                     )
                             }
                             .frame(minHeight: Style.touchMinHeight)
@@ -73,7 +73,7 @@ struct BookshelfSearchBar: View {
     @FocusState private var isFocused: Bool
 
     private enum Style {
-        static let height: CGFloat = 44
+        static let height: CGFloat = InteractionMetrics.minimumTouchTarget
         static let iconSize: CGFloat = 18
     }
 
@@ -95,7 +95,10 @@ struct BookshelfSearchBar: View {
                     Button(action: onClear) {
                         Image(systemName: "xmark.circle.fill")
                             .foregroundStyle(Color.textHint)
-                            .frame(width: Spacing.actionReserved, height: Spacing.actionReserved)
+                            .frame(
+                                width: InteractionMetrics.minimumTouchTarget,
+                                height: InteractionMetrics.minimumTouchTarget
+                            )
                     }
                     .buttonStyle(.plain)
                     .accessibilityLabel("清除搜索")
@@ -107,14 +110,14 @@ struct BookshelfSearchBar: View {
             .overlay {
                 RoundedRectangle(cornerRadius: CornerRadius.blockMedium, style: .continuous)
                     .stroke(
-                        isFocused ? Color.brand.opacity(0.62) : Color.surfaceBorderSubtle,
-                        lineWidth: isFocused ? max(1, CardStyle.borderWidth) : CardStyle.borderWidth
+                        isFocused ? Color.selectionAccent.opacity(0.62) : Color.surfaceBorderSubtle,
+                        lineWidth: isFocused ? max(1, StrokeWidth.hairline) : StrokeWidth.hairline
                     )
             }
 
             Button("取消", action: onCancel)
                 .font(BookshelfTypography.searchField)
-                .foregroundStyle(Color.brand)
+                .foregroundStyle(Color.appTint)
                 .frame(minHeight: Style.height)
         }
         .padding(.horizontal, Spacing.screenEdge)
@@ -167,7 +170,7 @@ struct BookshelfAggregateCardView: View {
 
                 Text(score.aggregateRatingTitle)
                     .font(BookshelfTypography.gridTitle)
-                    .foregroundStyle(Color.ratingActive)
+                    .foregroundStyle(XMRatingAppearance.active)
                     .lineLimit(1)
             } else {
                 Image(systemName: "star")
@@ -193,6 +196,11 @@ struct BookshelfAggregateCardView: View {
 private struct BookshelfAggregateSemanticPresentation {
     let systemImage: String
     let color: Color
+}
+
+/// 书架聚合页独有的非状态强调色，避免将来源托盘误归类为“正在阅读”。
+private enum BookshelfAggregateAppearance {
+    static let sourceAccent = Color.xmHex(0x42A5F5)
 }
 
 private extension BookshelfAggregateGroup {
@@ -236,7 +244,7 @@ struct BookshelfAggregateListRowView: View {
         .background(Color.surfaceCard, in: cardShape)
         .overlay {
             cardShape
-                .stroke(Color.surfaceBorderSubtle, lineWidth: CardStyle.borderWidth)
+                .stroke(Color.surfaceBorderSubtle, lineWidth: StrokeWidth.hairline)
         }
         .contentShape(cardShape)
         .accessibilityElement(children: .combine)
@@ -294,7 +302,7 @@ struct BookshelfAggregateListRowView: View {
 
                 Text(score.aggregateRatingTitle)
                     .font(AppTypography.subheadlineMedium)
-                    .foregroundStyle(Color.ratingActive)
+                    .foregroundStyle(XMRatingAppearance.active)
                     .lineLimit(1)
                     .minimumScaleFactor(0.85)
             } else {
@@ -347,12 +355,15 @@ struct BookshelfAggregateListRowView: View {
         case .rating(let score):
             return BookshelfAggregateSemanticPresentation(
                 systemImage: "star",
-                color: score > 0 ? .ratingActive : .textHint
+                color: score > 0 ? XMRatingAppearance.active : .textHint
             )
         case .tag:
-            return BookshelfAggregateSemanticPresentation(systemImage: "tag", color: .brand)
+            return BookshelfAggregateSemanticPresentation(systemImage: "tag", color: .appTint)
         case .source:
-            return BookshelfAggregateSemanticPresentation(systemImage: "tray", color: .statusReading)
+            return BookshelfAggregateSemanticPresentation(
+                systemImage: "tray",
+                color: BookshelfAggregateAppearance.sourceAccent
+            )
         case .author:
             return BookshelfAggregateSemanticPresentation(systemImage: "person.text.rectangle", color: .textSecondary)
         case .press:
@@ -404,12 +415,12 @@ private struct BookshelfAggregateCoverShelfView: View {
                 .background(Color.surfaceNested, in: shelfShape)
                 .overlay {
                     shelfShape
-                        .stroke(Color.surfaceBorderSubtle.opacity(0.45), lineWidth: CardStyle.borderWidth)
+                        .stroke(Color.surfaceBorderSubtle.opacity(0.45), lineWidth: StrokeWidth.hairline)
                 }
                 .overlay(alignment: .bottom) {
                     Rectangle()
                         .fill(Color.surfaceBorderSubtle.opacity(0.22))
-                        .frame(height: CardStyle.borderWidth)
+                        .frame(height: StrokeWidth.hairline)
                         .padding(.horizontal, Style.horizontalPadding)
                 }
         }
@@ -437,7 +448,7 @@ private struct BookshelfAggregateCoverShelfView: View {
             width,
             urlString: cover,
             cornerRadius: CornerRadius.inlaySmall,
-            border: .init(color: .surfaceBorderSubtle, width: CardStyle.borderWidth),
+            border: .init(color: .surfaceBorderSubtle, width: StrokeWidth.hairline),
             placeholderIconSize: cover.isEmpty ? .hidden : .small,
             surfaceStyle: .spine
         )
@@ -488,21 +499,38 @@ private extension BookEntryReadingStatus {
     var bookshelfAggregatePresentation: BookshelfAggregateSemanticPresentation {
         switch self {
         case .wantRead:
-            return BookshelfAggregateSemanticPresentation(systemImage: "heart", color: .statusWish)
+            return BookshelfAggregateSemanticPresentation(
+                systemImage: "heart",
+                color: ReadingStatusPresentation.wantRead
+            )
         case .reading:
-            return BookshelfAggregateSemanticPresentation(systemImage: "book", color: .statusReading)
+            return BookshelfAggregateSemanticPresentation(
+                systemImage: "book",
+                color: ReadingStatusPresentation.reading
+            )
         case .finished:
-            return BookshelfAggregateSemanticPresentation(systemImage: "checkmark.circle", color: .statusDone)
+            return BookshelfAggregateSemanticPresentation(
+                systemImage: "checkmark.circle",
+                color: ReadingStatusPresentation.readDone
+            )
         case .abandoned:
-            return BookshelfAggregateSemanticPresentation(systemImage: "xmark.circle", color: .statusAbandoned)
+            return BookshelfAggregateSemanticPresentation(
+                systemImage: "xmark.circle",
+                color: ReadingStatusPresentation.abandoned
+            )
         case .onHold:
-            return BookshelfAggregateSemanticPresentation(systemImage: "archivebox", color: .statusOnHold)
+            return BookshelfAggregateSemanticPresentation(
+                systemImage: "archivebox",
+                color: ReadingStatusPresentation.onHold
+            )
         }
     }
 }
 
 /// 默认维度列表模式行，作为显示设置的只读 UI 替代形态。
 struct BookshelfDefaultListRow: View {
+    private static let bookThumbnailWidth: CGFloat = 44
+
     let item: BookshelfItem
     var showsNoteCount = true
     var titleDisplayMode: BookshelfTitleDisplayMode = .standard
@@ -537,7 +565,7 @@ struct BookshelfDefaultListRow: View {
         .background(Color.surfaceCard, in: RoundedRectangle(cornerRadius: CornerRadius.blockLarge, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: CornerRadius.blockLarge, style: .continuous)
-                .stroke(Color.surfaceBorderSubtle, lineWidth: CardStyle.borderWidth)
+                .stroke(Color.surfaceBorderSubtle, lineWidth: StrokeWidth.hairline)
         }
     }
 
@@ -548,11 +576,11 @@ struct BookshelfDefaultListRow: View {
             XMBookCover.responsive(
                 urlString: book.cover,
                 cornerRadius: CornerRadius.inlaySmall,
-                border: .init(color: .surfaceBorderSubtle, width: CardStyle.borderWidth),
+                border: .init(color: .surfaceBorderSubtle, width: StrokeWidth.hairline),
                 placeholderIconSize: .small,
                 surfaceStyle: .spine
             )
-            .frame(width: 44)
+            .frame(width: Self.bookThumbnailWidth)
         case .group(let group):
             BookshelfGroupGridItemView(
                 group: group,

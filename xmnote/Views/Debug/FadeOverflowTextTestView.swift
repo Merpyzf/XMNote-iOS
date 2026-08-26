@@ -1,6 +1,6 @@
 #if DEBUG
 /**
- * [INPUT]: 依赖正式 ExpandableRichText、NoteExcerptTypography 阅读排版令牌与 CardContainer
+ * [INPUT]: 依赖正式 ExpandableRichText、ReadingContentTypography 阅读排版令牌与 CardContainer
  * [OUTPUT]: 对外提供 FadeOverflowTextTestView，用于验证方案 A 正式长文本披露组件
  * [POS]: Debug 测试页面，覆盖正式组件的行数、主题、富文本、压力实例、快速反转与双向文字场景
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -117,9 +117,9 @@ struct FadeOverflowTextTestView: View {
 
                 ExpandableRichText(
                     html: sample.html,
-                    baseFont: NoteExcerptTypography.uiBody,
+                    baseFont: ReadingContentTypography.uiBody,
                     textColor: .label,
-                    lineSpacing: NoteExcerptTypography.bodyLineSpacing,
+                    lineSpacing: ReadingContentTypography.bodyLineSpacing,
                     maxLines: maxVisibleLines
                 )
             }
@@ -204,9 +204,9 @@ private struct FadeOverflowStressItem: View {
         ExpandableRichText(
             html: FadeOverflowTextSample.stressHTML,
             isExpanded: $target.isExpanded,
-            baseFont: NoteExcerptTypography.uiBody,
+            baseFont: ReadingContentTypography.uiBody,
             textColor: .label,
-            lineSpacing: NoteExcerptTypography.bodyLineSpacing,
+            lineSpacing: ReadingContentTypography.bodyLineSpacing,
             maxLines: maxVisibleLines
         )
     }

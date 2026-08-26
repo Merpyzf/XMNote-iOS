@@ -6,7 +6,7 @@
 //
 
 /**
- * [INPUT]: 依赖 BookViewModel、AppNavigationCoordinator、页面可见态、LoadingGate 与容器注入的浏览/搜索/编辑回调
+ * [INPUT]: 依赖 BookViewModel、AppNavigationCoordinator、页面可见态、LoadingGate、InteractionMetrics 与容器注入的浏览/搜索/编辑回调
  * [OUTPUT]: 对外提供 BookGridView，展示书籍子页维度工具行、书架内容区、集合顶部搜索 drawer、多维度 UICollectionView 聚合入口、选择覆盖层、搜索空态、写入错误浮层与拖拽排序交互
  * [POS]: Book 模块网格展示层，被 BookContainerView 嵌入
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -15,7 +15,7 @@
 import SwiftUI
 
 private enum BookGridToolbarMetrics {
-    static let dimensionRailHeight: CGFloat = 44
+    static let dimensionRailHeight: CGFloat = InteractionMetrics.minimumTouchTarget
 }
 
 private enum BookshelfDimensionManagementAction {
@@ -120,7 +120,7 @@ struct BookGridView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             if let writeError = viewModel.writeError, !writeError.isEmpty {
                 writeErrorHint(writeError)
-                    .padding(.top, showsDimensionToolbar ? BookGridToolbarMetrics.dimensionRailHeight : 0)
+                    .padding(.top, showsDimensionToolbar ? BookGridToolbarMetrics.dimensionRailHeight : Spacing.none)
             }
         }
         .xmSystemAlert(item: $viewModel.activeContributorNameEdit) { nameEdit in
@@ -238,11 +238,11 @@ struct BookGridView: View {
                 emptyStateView
             }
         case .error(let message):
-            BookshelfContextualEmptyStateView(
-                icon: "exclamationmark.triangle",
+            XMContentStateView(
+                role: .failure,
                 title: "书架加载失败",
                 message: message.isEmpty ? "请稍后重试" : message,
-                iconColor: Color.feedbackWarning.opacity(0.42)
+                systemImage: "exclamationmark.triangle"
             )
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         case .content:
@@ -253,14 +253,19 @@ struct BookGridView: View {
     @ViewBuilder
     private var emptyStateView: some View {
         if hasSearchKeyword {
-            BookshelfContextualEmptyStateView(
-                icon: "books.vertical",
+            XMContentStateView(
+                role: .noResults,
                 title: "没有匹配的书籍",
-                message: viewModel.isEditing ? "已选书籍仍保留，清除搜索可继续整理" : "清除搜索后查看全部书籍"
+                message: viewModel.isEditing ? "已选书籍仍保留，清除搜索可继续整理" : "清除搜索后查看全部书籍",
+                systemImage: "books.vertical"
             )
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else {
-            EmptyStateView(icon: "book", message: "暂无书籍")
+            XMContentStateView(
+                role: .empty,
+                title: "暂无书籍",
+                systemImage: "book"
+            )
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
     }
@@ -324,25 +329,14 @@ struct BookGridView: View {
     }
 
     private func writeErrorHint(_ message: String) -> some View {
-        HStack(alignment: .top, spacing: Spacing.cozy) {
-            Image(systemName: "exclamationmark.triangle.fill")
-                .font(AppTypography.caption)
-                .foregroundStyle(Color.feedbackWarning)
-                .padding(.top, 2)
-
-            Text(message)
-                .font(AppTypography.caption)
-                .foregroundStyle(Color.textSecondary)
-                .fixedSize(horizontal: false, vertical: true)
-        }
+        XMInlineStatusBanner(
+            message,
+            tone: .warning,
+            systemImage: "exclamationmark.triangle.fill"
+        )
         .padding(.horizontal, Spacing.screenEdge)
-        .padding(.vertical, Spacing.tight)
+        .padding(.vertical, Spacing.cozy)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color.feedbackWarning.opacity(0.10))
-        .overlay(alignment: .bottom) {
-            Divider()
-                .overlay(Color.feedbackWarning.opacity(0.28))
-        }
         .transition(.opacity)
         .zIndex(2)
     }
@@ -572,7 +566,7 @@ struct BookGridView: View {
 /// 书架维度 rail 右侧固定的末尾 chip，保持 44pt 热区并对齐未选中维度项。
 private struct BookshelfToolMenuButton: View {
     private enum Style {
-        static let hitSize = Spacing.actionReserved
+        static let hitSize = InteractionMetrics.minimumTouchTarget
         static let visualWidth: CGFloat = 32
         static let visualHeight: CGFloat = 28
         static let cornerRadius = CornerRadius.blockSmall
@@ -584,7 +578,7 @@ private struct BookshelfToolMenuButton: View {
                 .fill(Color.surfaceCard)
 
             RoundedRectangle(cornerRadius: Style.cornerRadius, style: .continuous)
-                .stroke(Color.surfaceBorderSubtle.opacity(0.18), lineWidth: CardStyle.borderWidth)
+                .stroke(Color.surfaceBorderSubtle.opacity(0.18), lineWidth: StrokeWidth.hairline)
 
             BookshelfMoreGlyph()
         }

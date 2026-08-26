@@ -1,5 +1,5 @@
 /**
- * [INPUT]: 依赖 TimelineNoteEvent、TimelineCardPresentationStyle/TimelineBookSourceFooter、CardContainer、DesignTokens、ExpandableRichText 与图片墙
+ * [INPUT]: 依赖 TimelineNoteEvent、TimelineCardPresentationStyle/TimelineBookSourceFooter、CardContainer、DesignTokens、RichTextAppearance、ExpandableRichText 与图片墙
  * [OUTPUT]: 对外提供 TimelineNoteCard，支持首页标准头部与每日详情内容优先/来源置底两种排版
  * [POS]: Reading/Timeline 页面私有书摘卡片，复用正式长文本披露基建渲染摘录、批注、附图、标签与上下文来源
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -14,7 +14,7 @@ struct TimelineNoteCard: View {
     let bookName: String
     var presentationStyle: TimelineCardPresentationStyle = .standard
     var actionColor: Color = .textSecondary
-    var quoteColor: UIColor = .systemGreen
+    var quoteColor: UIColor = RichTextAppearance.quoteAccent
 
     var body: some View {
         CardContainer(cornerRadius: TimelineCalendarStyle.eventCardCornerRadius) {
@@ -72,7 +72,7 @@ struct TimelineNoteCard: View {
         ExpandableRichText(
             html: event.idea,
             baseFont: ideaBodyFont,
-            textColor: UIColor(Color.textSecondary),
+            textColor: UIColor.xmResolved(Color.textSecondary),
             lineSpacing: ideaBodyLineSpacing,
             actionColor: actionColor,
             quoteColor: quoteColor
@@ -87,25 +87,25 @@ struct TimelineNoteCard: View {
 
     private var primaryBodyFont: UIFont {
         presentationStyle == .contentFirst
-            ? NoteExcerptTypography.uiBody
+            ? ReadingContentTypography.uiBody
             : TimelineTypography.eventRichTextBaseFont
     }
 
     private var primaryBodyLineSpacing: CGFloat {
         presentationStyle == .contentFirst
-            ? NoteExcerptTypography.bodyLineSpacing
+            ? ReadingContentTypography.bodyLineSpacing
             : TimelineTypography.eventRichTextLineSpacing
     }
 
     private var ideaBodyFont: UIFont {
         presentationStyle == .contentFirst
-            ? NoteExcerptTypography.uiIdea
+            ? ReadingContentTypography.uiAnnotation
             : TimelineTypography.eventRichTextBaseFont
     }
 
     private var ideaBodyLineSpacing: CGFloat {
         presentationStyle == .contentFirst
-            ? NoteExcerptTypography.ideaLineSpacing
+            ? ReadingContentTypography.annotationLineSpacing
             : TimelineTypography.eventRichTextLineSpacing
     }
 
@@ -129,7 +129,7 @@ struct TimelineNoteCard: View {
                     TimelineInlineTag(text: tag)
                 }
             }
-            .padding(.vertical, 1)
+            .padding(.vertical, Spacing.hairline)
         }
     }
 }

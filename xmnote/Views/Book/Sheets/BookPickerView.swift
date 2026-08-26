@@ -13,7 +13,12 @@ private struct BookPickerRepositoryOverride {
     let searchRepository: any BookSearchRepositoryProtocol
 }
 
-/// 通用书籍选择流入口，生产路径从 App 环境解析仓储，测试中心可显式注入固定数据源。
+/// 书籍选择页的局部强调排版，承接搜索结果中高亮字重的专属规格。
+private enum BookPickerTypography {
+    static let resultTitleHighlight = AppTypography.semantic(.subheadline, weight: .bold)
+}
+
+/// 通用书籍选择流入口；生产路径读取 App 仓储，测试中心可注入固定数据源。
 struct BookPickerView: View {
     let configuration: BookPickerConfiguration
     let onComplete: (BookPickerResult) -> Void
@@ -111,7 +116,7 @@ private struct BookPickerResolvedView: View {
             if let viewModel {
                 pickerScaffold(viewModel)
             } else {
-                XMSettingsPageScaffold(
+                XMSheetScaffold(
                     title: configuration.title,
                     onClose: handleCancel
                 ) {
@@ -122,7 +127,7 @@ private struct BookPickerResolvedView: View {
                 }
             }
 
-            if let blockingOverlayMessage {
+            if let viewModel, let blockingOverlayMessage = blockingOverlayMessage(for: viewModel) {
                 Color.overlay.ignoresSafeArea()
                 LoadingStateView(blockingOverlayMessage, style: .card)
             }
@@ -148,19 +153,12 @@ private struct BookPickerResolvedView: View {
     @ViewBuilder
     private func pickerScaffold(_ viewModel: BookPickerViewModel) -> some View {
         if viewModel.isMultipleSelectionEnabled {
-            XMSettingsPageScaffold(
+            XMSheetScaffold(
                 title: configuration.title,
                 onClose: handleCancel,
                 scrollEdgePresentation: .overlaySoft,
-                subtitle: {
-                    BookPickerSelectionSubtitle(
-                        count: viewModel.selectedCount,
-                        allowsEmptySelection: viewModel.allowsEmptyMultipleConfirmation,
-                        onOpenSelection: { activeSheet = .selectedBooks }
-                    )
-                },
                 contentTopBar: {
-                    searchBar(viewModel)
+                    pickerTopBar(viewModel, includesSelectionSummary: true)
                 },
                 bottomBar: {
                     multipleSelectionBar(viewModel)
@@ -169,16 +167,35 @@ private struct BookPickerResolvedView: View {
                 scrollableContent(viewModel)
             }
         } else {
-            XMSettingsPageScaffold(
+            XMSheetScaffold(
                 title: configuration.title,
                 onClose: handleCancel,
                 scrollEdgePresentation: .overlaySoft,
                 contentTopBar: {
-                    searchBar(viewModel)
+                    pickerTopBar(viewModel, includesSelectionSummary: false)
                 }
             ) {
                 scrollableContent(viewModel)
             }
+        }
+    }
+
+    private func pickerTopBar(
+        _ viewModel: BookPickerViewModel,
+        includesSelectionSummary: Bool
+    ) -> some View {
+        VStack(spacing: Spacing.none) {
+            if includesSelectionSummary {
+                BookPickerSelectionSubtitle(
+                    count: viewModel.selectedCount,
+                    allowsEmptySelection: viewModel.allowsEmptyMultipleConfirmation,
+                    onOpenSelection: { activeSheet = .selectedBooks }
+                )
+                .padding(.horizontal, Spacing.screenEdge)
+                .padding(.bottom, Spacing.comfortable)
+            }
+
+            searchBar(viewModel)
         }
     }
 
@@ -257,17 +274,16 @@ private struct BookPickerResolvedView: View {
                             } label: {
                                 Text(source.title)
                                     .font(
-                                        AppTypography.semantic(
-                                            .footnote,
-                                            weight: viewModel.selectedOnlineSource == source ? .semibold : .medium
-                                        )
+                                        viewModel.selectedOnlineSource == source
+                                            ? AppTypography.footnoteSemibold
+                                            : AppTypography.footnoteMedium
                                     )
                                     .foregroundStyle(viewModel.selectedOnlineSource == source ? .white : Color.textSecondary)
                                     .padding(.horizontal, Spacing.base)
                                     .frame(height: 34)
                                     .background(
                                         viewModel.selectedOnlineSource == source
-                                            ? AnyShapeStyle(Color.brand)
+                                            ? AnyShapeStyle(Color.selectionAccent)
                                             : AnyShapeStyle(Color.controlFillSecondary),
                                         in: Capsule()
                                     )
@@ -275,7 +291,7 @@ private struct BookPickerResolvedView: View {
                                         Capsule()
                                             .stroke(
                                                 viewModel.selectedOnlineSource == source ? Color.clear : Color.surfaceBorderSubtle,
-                                                lineWidth: CardStyle.borderWidth
+                                                lineWidth: StrokeWidth.hairline
                                             )
                                     }
                             }
@@ -302,7 +318,7 @@ private struct BookPickerResolvedView: View {
         case .localNoResults:
             localNoResultsSection(viewModel)
         case .onlineIdle:
-            onlineIdleSection
+            onlineIdleSection(viewModel)
         case .onlineLoading:
             onlineLoadingSection(viewModel)
         case .onlineResults:
@@ -367,55 +383,58 @@ private struct BookPickerResolvedView: View {
     }
 
     private func localEmptyLibrarySection(_ viewModel: BookPickerViewModel) -> some View {
-        ContentUnavailableView {
-            Label("还没有书籍", systemImage: "books.vertical")
-        } description: {
-            Text("添加一本书，之后就可以在这里选择。")
-        } actions: {
-            if viewModel.supportsCreationFlow {
-                unavailableActionButton("添加第一本书", prominence: .primary, action: openCreationFlow)
-            }
-            if viewModel.supportsOnline {
-                unavailableActionButton(
-                    "在线搜索",
-                    prominence: viewModel.supportsCreationFlow ? .secondary : .primary,
-                    action: viewModel.switchToOnlineIfSupported
-                )
-            }
+        VStack(alignment: .leading, spacing: Spacing.base) {
+            XMCompactStateView(
+                role: .empty,
+                title: "还没有书籍",
+                message: "先创建一本书，后续书摘才能关联到阅读对象",
+                systemImage: "books.vertical",
+                style: .card
+            )
+            stateActionGroup(
+                primaryTitle: viewModel.supportsOnline ? "在线搜索" : nil,
+                primaryAction: viewModel.supportsOnline ? { viewModel.switchToOnlineIfSupported() } : nil,
+                secondaryTitle: viewModel.supportsCreationFlow ? creationEntryLabel : nil,
+                secondaryAction: viewModel.supportsCreationFlow ? { openCreationFlow() } : nil
+            )
         }
         .frame(maxWidth: .infinity, minHeight: BookPickerGroupedSurfaceLayout.unavailableMinimumHeight)
     }
 
     private func localNoResultsSection(_ viewModel: BookPickerViewModel) -> some View {
-        ContentUnavailableView {
-            Label("没有找到“\(viewModel.trimmedQuery)”", systemImage: "magnifyingglass")
-        } description: {
-            Text("可以调整关键词，或换一种方式继续查找。")
-        } actions: {
-            if viewModel.supportsOnline {
-                unavailableActionButton(
-                    "在线搜索",
-                    prominence: .primary,
-                    action: viewModel.switchToOnlineIfSupported
-                )
-            }
-            if viewModel.supportsCreationFlow {
-                unavailableActionButton(
-                    "添加新书",
-                    prominence: viewModel.supportsOnline ? .secondary : .primary,
-                    action: openCreationFlow
-                )
-            }
+        VStack(alignment: .leading, spacing: Spacing.base) {
+            XMCompactStateView(
+                role: .noResults,
+                title: "没有找到匹配的书",
+                message: localNoResultsMessage,
+                systemImage: "magnifyingglass",
+                style: .card
+            )
+            stateActionGroup(
+                primaryTitle: viewModel.supportsOnline ? "在线搜索" : nil,
+                primaryAction: viewModel.supportsOnline ? { viewModel.switchToOnlineIfSupported() } : nil,
+                secondaryTitle: viewModel.supportsCreationFlow ? creationEntryLabel : nil,
+                secondaryAction: viewModel.supportsCreationFlow ? { openCreationFlow() } : nil
+            )
         }
         .frame(maxWidth: .infinity, minHeight: BookPickerGroupedSurfaceLayout.unavailableMinimumHeight)
     }
 
-    private var onlineIdleSection: some View {
-        ContentUnavailableView(
-            "输入关键词开始搜索",
-            systemImage: "text.magnifyingglass",
-            description: Text("输入书名、作者或 ISBN，在当前在线来源中查找。")
-        )
+    private func onlineIdleSection(_ viewModel: BookPickerViewModel) -> some View {
+        VStack(alignment: .leading, spacing: Spacing.base) {
+            XMCompactStateView(
+                role: .instruction,
+                title: "输入关键词开始搜索",
+                message: "输入书名、作者或 ISBN 后，将在当前在线来源中搜索",
+                systemImage: "text.magnifyingglass",
+                style: .card
+            )
+            if viewModel.supportsCreationFlow {
+                secondaryActionButton(creationEntryLabel) {
+                    openCreationFlow()
+                }
+            }
+        }
         .frame(maxWidth: .infinity, minHeight: BookPickerGroupedSurfaceLayout.unavailableMinimumHeight)
     }
 
@@ -468,48 +487,44 @@ private struct BookPickerResolvedView: View {
     }
 
     private func onlineFailureSection(_ viewModel: BookPickerViewModel, message: String) -> some View {
-        BookSearchStatusCard(
-            systemImage: "wifi.exclamationmark",
-            tint: .feedbackWarning,
-            title: "当前来源搜索失败",
-            message: message,
-            actionTitle: "重试",
-            action: {
-                Task {
-                    await viewModel.submitOnlineSearch()
-                }
-            }
-        )
-    }
-
-    private func onlineNoResultsSection(_ viewModel: BookPickerViewModel) -> some View {
-        ContentUnavailableView {
-            Label("没有找到“\(viewModel.trimmedQuery)”", systemImage: "magnifyingglass")
-        } description: {
-            Text("可以切换搜索来源，或调整关键词后重试。")
-        } actions: {
+        VStack(alignment: .leading, spacing: Spacing.base) {
+            XMCompactStateView(
+                role: .failure,
+                title: "当前来源搜索失败",
+                message: message,
+                systemImage: "wifi.exclamationmark",
+                action: XMStateAction("重试", systemImage: "arrow.clockwise") {
+                    Task {
+                        await viewModel.submitOnlineSearch()
+                    }
+                },
+                style: .card
+            )
             if viewModel.supportsCreationFlow {
-                unavailableActionButton("添加新书", prominence: .primary, action: openCreationFlow)
+                secondaryActionButton(creationEntryLabel) {
+                    openCreationFlow()
+                }
             }
         }
         .frame(maxWidth: .infinity, minHeight: BookPickerGroupedSurfaceLayout.unavailableMinimumHeight)
     }
 
-    @ViewBuilder
-    private func unavailableActionButton(
-        _ title: String,
-        prominence: BookPickerUnavailableActionProminence,
-        action: @escaping () -> Void
-    ) -> some View {
-        switch prominence {
-        case .primary:
-            Button(title, action: action)
-                .buttonStyle(.borderedProminent)
-                .tint(Color.brand)
-        case .secondary:
-            Button(title, action: action)
-                .buttonStyle(.bordered)
+    private func onlineNoResultsSection(_ viewModel: BookPickerViewModel) -> some View {
+        VStack(alignment: .leading, spacing: Spacing.base) {
+            XMCompactStateView(
+                role: .noResults,
+                title: "没有找到匹配的书",
+                message: onlineNoResultsMessage,
+                systemImage: "magnifyingglass",
+                style: .card
+            )
+            if viewModel.supportsCreationFlow {
+                secondaryActionButton(creationEntryLabel) {
+                    openCreationFlow()
+                }
+            }
         }
+        .frame(maxWidth: .infinity, minHeight: BookPickerGroupedSurfaceLayout.unavailableMinimumHeight)
     }
 
     private func multipleSelectionBar(_ viewModel: BookPickerViewModel) -> some View {
@@ -528,8 +543,40 @@ private struct BookPickerResolvedView: View {
         .padding(.bottom, Spacing.base)
     }
 
-    private var blockingOverlayMessage: String? {
-        isPreparingSeed ? "正在补全书籍信息…" : nil
+    @ViewBuilder
+    private func stateActionGroup(
+        primaryTitle: String?,
+        primaryAction: (() -> Void)?,
+        secondaryTitle: String?,
+        secondaryAction: (() -> Void)?
+    ) -> some View {
+        VStack(alignment: .leading, spacing: Spacing.cozy) {
+            if let primaryTitle, let primaryAction {
+                Button(primaryTitle, action: primaryAction)
+                    .buttonStyle(.plain)
+                    .font(AppTypography.subheadlineSemibold)
+                    .foregroundStyle(Color.appTint)
+            }
+            if let secondaryTitle, let secondaryAction {
+                secondaryActionButton(secondaryTitle, action: secondaryAction)
+            }
+        }
+    }
+
+    private func secondaryActionButton(_ title: String, action: @escaping () -> Void) -> some View {
+        Button(title, action: action)
+            .buttonStyle(.plain)
+            .font(AppTypography.subheadlineSemibold)
+            .foregroundStyle(Color.textPrimary)
+    }
+
+    private var creationEntryLabel: String {
+        switch configuration.creationAction {
+        case .inlineManualEditor:
+            return "手动创建书籍"
+        case .separateSearchPage, .nestedSearchPage:
+            return "添加新书"
+        }
     }
 
     private func canConfirmMultipleSelection(_ viewModel: BookPickerViewModel) -> Bool {
@@ -539,6 +586,38 @@ private struct BookPickerResolvedView: View {
 
     private func multipleConfirmationTitle(for viewModel: BookPickerViewModel) -> String {
         viewModel.isResolvingRemoteSelections ? "正在整理…" : configuration.multipleConfirmationTitle
+    }
+
+    private var localNoResultsMessage: String {
+        switch configuration.creationAction {
+        case .inlineManualEditor:
+            return "你可以继续修改关键词，或直接手动创建"
+        case .separateSearchPage:
+            return "你可以继续修改关键词，或直接去新增一本书"
+        case .nestedSearchPage:
+            return "你可以继续修改关键词，或进入添加书籍页"
+        }
+    }
+
+    private var onlineNoResultsMessage: String {
+        switch configuration.creationAction {
+        case .inlineManualEditor:
+            return "可以切换搜索源继续查找，或直接手动创建"
+        case .separateSearchPage:
+            return "可以切换搜索源继续查找，或前往新增书籍页"
+        case .nestedSearchPage:
+            return "可以切换搜索源继续查找，或进入添加书籍页"
+        }
+    }
+
+    private func blockingOverlayMessage(for viewModel: BookPickerViewModel) -> String? {
+        if viewModel.isResolvingRemoteSelections {
+            return "正在整理选中书籍…"
+        }
+        if isPreparingSeed {
+            return "正在补全书籍信息…"
+        }
+        return nil
     }
 
     private func remoteRowAccessory(
@@ -698,8 +777,8 @@ private struct BookPickerSelectionSubtitle: View {
 /// 把副标题命中区域扩展到至少 44pt，路径扩展不参与布局计算也不产生可见样式。
 private struct BookPickerSubtitleHitShape: Shape {
     func path(in rect: CGRect) -> Path {
-        let width = max(rect.width, Spacing.actionReserved)
-        let height = max(rect.height, Spacing.actionReserved)
+        let width = max(rect.width, InteractionMetrics.minimumTouchTarget)
+        let height = max(rect.height, InteractionMetrics.minimumTouchTarget)
         return Path(
             CGRect(
                 x: rect.midX - width / 2,
@@ -729,7 +808,7 @@ private struct BookPickerLocalBookRow: View {
                 44,
                 urlString: book.coverURL,
                 cornerRadius: CornerRadius.inlayHairline,
-                border: .init(color: .surfaceBorderSubtle, width: CardStyle.borderWidth),
+                border: .init(color: .surfaceBorderSubtle, width: StrokeWidth.hairline),
                 placeholderIconSize: .small,
                 surfaceStyle: .spine
             )
@@ -739,7 +818,7 @@ private struct BookPickerLocalBookRow: View {
                     book.title,
                     keyword: keyword,
                     baseFont: AppTypography.subheadlineSemibold,
-                    highlightFont: AppTypography.semantic(.subheadline, weight: .bold),
+                    highlightFont: BookPickerTypography.resultTitleHighlight,
                     baseColor: Color.textPrimary
                 )
                 .lineLimit(1)
@@ -808,12 +887,6 @@ private struct BookPickerLocalBookRow: View {
             return true
         }
     }
-}
-
-/// 空态操作的视觉优先级，仅用于系统 ContentUnavailableView 的恢复动作排序。
-private enum BookPickerUnavailableActionProminence {
-    case primary
-    case secondary
 }
 
 /// BookPicker 连续分组表面的局部布局常量，分隔线从正文起点开始而不穿过封面。

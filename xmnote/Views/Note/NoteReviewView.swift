@@ -201,7 +201,11 @@ struct NoteReviewView: View {
 
     private var emptyOrFailureContent: some View {
         VStack(spacing: Spacing.base) {
-            EmptyStateView(icon: "text.quote", message: "暂无可回顾书摘")
+            XMContentStateView(
+                role: .empty,
+                title: "暂无可回顾书摘",
+                systemImage: "text.quote"
+            )
                 .frame(maxHeight: 260)
 
             Button {
@@ -209,11 +213,11 @@ struct NoteReviewView: View {
             } label: {
                 Label("调整范围", systemImage: "slider.horizontal.3")
                     .font(AppTypography.subheadlineSemibold)
-                    .frame(height: Spacing.actionReserved)
+                    .frame(height: InteractionMetrics.minimumTouchTarget)
                     .padding(.horizontal, Spacing.contentEdge)
             }
             .buttonStyle(.borderedProminent)
-            .tint(Color.brand)
+            .tint(Color.primaryActionFill)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .padding(.horizontal, Spacing.screenEdge)

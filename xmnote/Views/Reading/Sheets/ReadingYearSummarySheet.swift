@@ -18,7 +18,11 @@ struct ReadingYearSummarySheet: View {
         NavigationStack {
             Group {
                 if summary.books.isEmpty {
-                    EmptyStateView(icon: "books.vertical", message: "这一年还没有已读书籍")
+                    XMContentStateView(
+                        role: .empty,
+                        title: "这一年还没有已读书籍",
+                        systemImage: "books.vertical"
+                    )
                 } else {
                     ScrollView {
                         VStack(alignment: .leading, spacing: Spacing.base) {
@@ -80,7 +84,7 @@ struct ReadingYearSummarySheet: View {
                 XMBookCover.fixedWidth(
                     54,
                     urlString: book.coverURL,
-                    border: .init(color: .surfaceBorderSubtle, width: CardStyle.borderWidth)
+                    border: .init(color: .surfaceBorderSubtle, width: StrokeWidth.hairline)
                 )
 
                 VStack(alignment: .leading, spacing: Spacing.half) {

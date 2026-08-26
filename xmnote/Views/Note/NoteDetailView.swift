@@ -93,7 +93,7 @@ private struct NoteDetailContentView: View {
                     .clipShape(RoundedRectangle(cornerRadius: CornerRadius.blockMedium, style: .continuous))
                     .overlay(
                         RoundedRectangle(cornerRadius: CornerRadius.blockMedium, style: .continuous)
-                            .stroke(Color.surfaceBorderDefault, lineWidth: CardStyle.borderWidth)
+                            .stroke(Color.surfaceBorderDefault, lineWidth: StrokeWidth.hairline)
                     )
                 }
 
@@ -108,7 +108,7 @@ private struct NoteDetailContentView: View {
                     .clipShape(RoundedRectangle(cornerRadius: CornerRadius.blockMedium, style: .continuous))
                     .overlay(
                         RoundedRectangle(cornerRadius: CornerRadius.blockMedium, style: .continuous)
-                            .stroke(Color.surfaceBorderDefault, lineWidth: CardStyle.borderWidth)
+                            .stroke(Color.surfaceBorderDefault, lineWidth: StrokeWidth.hairline)
                     )
                 }
 
@@ -122,7 +122,7 @@ private struct NoteDetailContentView: View {
                     CardContainer {
                         Text(errorMessage)
                             .font(AppTypography.footnote)
-                            .foregroundStyle(.red)
+                            .foregroundStyle(Color.red)
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .padding(Spacing.contentEdge)
                     }

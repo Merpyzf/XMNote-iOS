@@ -166,7 +166,7 @@ final class FanqieDOMSearchService {
                 requestURL: nil,
                 finalURL: nil,
                 status: .failed,
-                message: "请输入番茄搜索关键词。",
+                message: "请输入番茄搜索关键词",
                 htmlResult: nil,
                 detailPageURLs: [],
                 candidateDetailPageURLs: [],
@@ -827,7 +827,7 @@ private extension FanqieDOMSearchService {
         }
 
         func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
-            finish(with: .failure(WebHTMLFetchError.webView(description: "网页内容进程异常终止。")))
+            finish(with: .failure(WebHTMLFetchError.webView(description: "网页内容进程异常终止")))
         }
 
         func webView(

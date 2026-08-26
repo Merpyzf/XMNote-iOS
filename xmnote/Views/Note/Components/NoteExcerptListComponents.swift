@@ -1,5 +1,5 @@
 /**
- * [INPUT]: 依赖 NoteExcerptListItem/RelatedListItem 展示模型、XMKeywordHighlighting、DesignTokens、XMBookCover、CardContainer、LoadingGate 与 Reduce Motion 环境
+ * [INPUT]: 依赖 NoteExcerptListItem/RelatedListItem 展示模型、XMKeywordHighlighting、XMTagLabel、DesignTokens、XMBookCover、CardContainer、LoadingGate 与 Reduce Motion 环境
  * [OUTPUT]: 对外提供带关键字高亮的 NoteExcerptListRow、RelatedListRow 与可选稳定叠层阶段过渡的 NoteListPhaseHost 等笔记二级页私有组件
  * [POS]: Note/Components 的二级列表视觉组件集合，复用当前 iOS 阅读排版、搜索高亮和卡片语义
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -40,7 +40,7 @@ struct NoteExcerptListRow: View {
             if isSelecting {
                 Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
                     .font(AppTypography.title3)
-                    .foregroundStyle(isSelected ? Color.brand : Color.textHint)
+                    .foregroundStyle(isSelected ? Color.selectionAccent : Color.textHint)
                     .padding(Spacing.base)
                     .transition(
                         reduceMotion
@@ -58,17 +58,17 @@ struct NoteExcerptListRow: View {
     private var contentPreview: some View {
         if item.plainContent.isEmpty {
             Text("（无正文）")
-                .font(NoteExcerptTypography.body)
+                .font(ReadingContentTypography.body)
                 .foregroundStyle(Color.textHint)
         } else {
             XMKeywordHighlighting.text(
                 item.plainContent,
                 keyword: searchKeyword,
-                baseFont: NoteExcerptTypography.body,
-                highlightFont: NoteExcerptTypography.body,
+                baseFont: ReadingContentTypography.body,
+                highlightFont: ReadingContentTypography.body,
                 baseColor: Color.textPrimary
             )
-                .lineSpacing(NoteExcerptTypography.bodyLineSpacing)
+                .lineSpacing(ReadingContentTypography.bodyLineSpacing)
                 .lineLimit(5)
                 .contentTransition(.opacity)
         }
@@ -78,11 +78,11 @@ struct NoteExcerptListRow: View {
         XMKeywordHighlighting.text(
             item.plainIdea,
             keyword: searchKeyword,
-            baseFont: NoteExcerptTypography.idea,
-            highlightFont: NoteExcerptTypography.idea,
+            baseFont: ReadingContentTypography.annotation,
+            highlightFont: ReadingContentTypography.annotation,
             baseColor: Color.textSecondary
         )
-            .lineSpacing(NoteExcerptTypography.ideaLineSpacing)
+            .lineSpacing(ReadingContentTypography.annotationLineSpacing)
             .lineLimit(4)
             .contentTransition(.opacity)
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -105,15 +105,7 @@ struct NoteExcerptListRow: View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: Spacing.cozy) {
                 ForEach(visibleTags) { tag in
-                    Text(tag.title)
-                        .font(AppTypography.caption2)
-                        .foregroundStyle(Color.textSecondary)
-                        .padding(.horizontal, Spacing.cozy)
-                        .frame(minHeight: 24)
-                        .background(
-                            Color.tagBackground,
-                            in: Capsule()
-                        )
+                    XMTagLabel(tag.title)
                 }
             }
         }
@@ -138,7 +130,7 @@ struct NoteExcerptListRow: View {
                 Text(formattedDate(item.createdDate))
             }
         }
-        .font(NoteExcerptTypography.footer)
+        .font(ReadingContentTypography.metadata)
         .foregroundStyle(Color.textSecondary)
         .contentTransition(.opacity)
     }
@@ -181,7 +173,7 @@ struct RelatedListRow: View {
             HStack(spacing: Spacing.cozy) {
                 Label(content.categoryTitle, systemImage: "link")
                     .font(AppTypography.captionMedium)
-                    .foregroundStyle(Color.brand)
+                    .foregroundStyle(Color.appTint)
                 Spacer(minLength: Spacing.compact)
                 Image(systemName: "chevron.right")
                     .font(AppTypography.caption)
@@ -210,7 +202,7 @@ struct RelatedListRow: View {
                 Spacer(minLength: Spacing.compact)
                 Text(formattedDate(content.createdDate))
             }
-            .font(NoteExcerptTypography.footer)
+            .font(ReadingContentTypography.metadata)
             .foregroundStyle(Color.textSecondary)
         }
         .padding(Spacing.contentEdge)
@@ -227,7 +219,7 @@ struct RelatedListRow: View {
             VStack(alignment: .leading, spacing: Spacing.compact) {
                 Label("相关书籍", systemImage: "books.vertical")
                     .font(AppTypography.captionMedium)
-                    .foregroundStyle(Color.brand)
+                    .foregroundStyle(Color.appTint)
 
                 Text(book.title)
                     .font(AppTypography.headline)
@@ -242,7 +234,7 @@ struct RelatedListRow: View {
                 }
 
                 Text("来自《\(book.sourceBookTitle)》")
-                    .font(NoteExcerptTypography.footer)
+                    .font(ReadingContentTypography.metadata)
                     .foregroundStyle(Color.textSecondary)
                     .lineLimit(1)
             }
@@ -308,13 +300,13 @@ struct NoteListPhaseHost<Content: View>: View {
             } else if isLoading {
                 Color.clear
             } else if let errorMessage {
-                ContentUnavailableView {
-                    Label("暂时无法加载", systemImage: "exclamationmark.triangle")
-                } description: {
-                    Text(errorMessage)
-                } actions: {
-                    Button("重试", action: onRetry)
-                }
+                XMContentStateView(
+                    role: .failure,
+                    title: "暂时无法加载",
+                    message: errorMessage,
+                    systemImage: "exclamationmark.triangle",
+                    action: XMStateAction("重试", systemImage: "arrow.clockwise", perform: onRetry)
+                )
             } else {
                 successContent
             }
@@ -335,14 +327,22 @@ struct NoteListPhaseHost<Content: View>: View {
                     .allowsHitTesting(!isEmpty)
                     .accessibilityHidden(isEmpty)
 
-                EmptyStateView(icon: emptyIcon, message: emptyMessage)
+                XMContentStateView(
+                    role: .noResults,
+                    title: emptyMessage,
+                    systemImage: emptyIcon
+                )
                     .opacity(isEmpty ? 1 : 0)
                     .allowsHitTesting(isEmpty)
                     .accessibilityHidden(!isEmpty)
             }
             .animation(emptyContentAnimation, value: isEmpty)
         } else if isEmpty {
-            EmptyStateView(icon: emptyIcon, message: emptyMessage)
+            XMContentStateView(
+                role: .empty,
+                title: emptyMessage,
+                systemImage: emptyIcon
+            )
         } else {
             content
         }

@@ -30,7 +30,7 @@ struct SelectionMotionTestView: View {
                 cardSection("基础勾选") {
                     SelectionMotionDemoRow(
                         title: "Magic Replace 勾选",
-                        subtitle: "单个符号从空圆替换为绿底勾选，取消时反向替换。",
+                        subtitle: "单个符号从空圆替换为绿底勾选，取消时反向替换",
                         style: .checkbox,
                         isSelected: baseSelection,
                         indicatorFont: AppTypography.title3,
@@ -41,7 +41,7 @@ struct SelectionMotionTestView: View {
                 cardSection("Draw On / Off 对照") {
                     SelectionMotionDemoRow(
                         title: "纯勾号无底座",
-                        subtitle: "用于无占位选择标记，选中插入 drawOn，取消移除 drawOff。",
+                        subtitle: "用于无占位选择标记，选中插入 drawOn，取消移除 drawOff",
                         style: .checkmarkOnly,
                         isSelected: drawFallbackSelection,
                         indicatorFont: AppTypography.title3,
@@ -85,7 +85,7 @@ struct SelectionMotionTestView: View {
                         businessPreview
                         SelectionMotionDemoRow(
                             title: "列表行尾部",
-                            subtitle: "模拟 BookPicker / 搜索结果行的尾部选择指示。",
+                            subtitle: "模拟 BookPicker / 搜索结果行的尾部选择指示",
                             style: .checkbox,
                             isSelected: businessSelection,
                             indicatorFont: AppTypography.body,
@@ -111,14 +111,14 @@ struct SelectionMotionTestView: View {
         HStack(spacing: Spacing.cozy) {
             Image(systemName: reduceMotion ? "figure.walk.motion.trianglebadge.exclamationmark" : "figure.walk.motion")
                 .font(AppTypography.body)
-                .foregroundStyle(reduceMotion ? Color.textSecondary : Color.brand)
+                .foregroundStyle(reduceMotion ? Color.textSecondary : Color.appTint)
                 .frame(width: 24)
 
             VStack(alignment: .leading, spacing: Spacing.tiny) {
                 Text(reduceMotion ? "减少动态效果：已开启" : "减少动态效果：未开启")
                     .font(AppTypography.subheadlineSemibold)
                     .foregroundStyle(Color.textPrimary)
-                Text(reduceMotion ? "当前只保留即时状态变化。" : "当前会执行 Magic Replace；无底座场景保留绘制动效。")
+                Text(reduceMotion ? "当前只保留即时状态变化" : "当前会执行 Magic Replace；无底座场景保留绘制动效。")
                     .font(AppTypography.caption)
                     .foregroundStyle(Color.textSecondary)
             }
@@ -151,14 +151,14 @@ struct SelectionMotionTestView: View {
                         }
                         .frame(maxWidth: .infinity, minHeight: 70)
                         .background(
-                            styleSelections.contains(style) ? Color.brand.opacity(0.08) : Color.controlFillSecondary.opacity(0.72),
+                            styleSelections.contains(style) ? Color.selectionAccent.opacity(0.08) : Color.controlFillSecondary.opacity(0.72),
                             in: RoundedRectangle(cornerRadius: CornerRadius.blockMedium, style: .continuous)
                         )
                         .overlay {
                             RoundedRectangle(cornerRadius: CornerRadius.blockMedium, style: .continuous)
                                 .stroke(
-                                    styleSelections.contains(style) ? Color.brand.opacity(0.28) : Color.surfaceBorderSubtle,
-                                    lineWidth: CardStyle.borderWidth
+                                    styleSelections.contains(style) ? Color.selectionAccent.opacity(0.28) : Color.surfaceBorderSubtle,
+                                    lineWidth: StrokeWidth.hairline
                                 )
                         }
                     }
@@ -241,14 +241,14 @@ struct SelectionMotionTestView: View {
             }
             .padding(Spacing.base)
             .background(
-                businessSelection ? Color.brand.opacity(0.06) : Color.surfaceCard,
+                businessSelection ? Color.selectionAccent.opacity(0.06) : Color.surfaceCard,
                 in: RoundedRectangle(cornerRadius: CornerRadius.blockLarge, style: .continuous)
             )
             .overlay {
                 RoundedRectangle(cornerRadius: CornerRadius.blockLarge, style: .continuous)
                     .stroke(
-                        businessSelection ? Color.brand.opacity(0.30) : Color.surfaceBorderSubtle,
-                        lineWidth: CardStyle.borderWidth
+                        businessSelection ? Color.selectionAccent.opacity(0.30) : Color.surfaceBorderSubtle,
+                        lineWidth: StrokeWidth.hairline
                     )
             }
             .animation(containerAnimation, value: businessSelection)
@@ -267,7 +267,7 @@ struct SelectionMotionTestView: View {
                     Text("批量 Sheet 选项")
                         .font(AppTypography.bodyMedium)
                         .foregroundStyle(Color.textPrimary)
-                    Text("模拟紧凑选项行的右侧勾选反馈。")
+                    Text("模拟紧凑选项行的右侧勾选反馈")
                         .font(AppTypography.caption)
                         .foregroundStyle(Color.textSecondary)
                 }
@@ -313,9 +313,9 @@ struct SelectionMotionTestView: View {
         Button(action: action) {
             Text(title)
                 .font(AppTypography.captionSemibold)
-                .foregroundStyle(Color.brand)
+                .foregroundStyle(Color.appTint)
                 .frame(maxWidth: .infinity, minHeight: 36)
-                .background(Color.brand.opacity(0.08), in: Capsule())
+                .background(Color.appTint.opacity(0.08), in: Capsule())
         }
         .buttonStyle(.plain)
     }
@@ -437,14 +437,14 @@ private struct SelectionMotionDemoRow: View {
             }
             .padding(Spacing.base)
             .background(
-                isSelected ? Color.brand.opacity(0.06) : Color.controlFillSecondary.opacity(0.70),
+                isSelected ? Color.selectionAccent.opacity(0.06) : Color.controlFillSecondary.opacity(0.70),
                 in: RoundedRectangle(cornerRadius: CornerRadius.blockMedium, style: .continuous)
             )
             .overlay {
                 RoundedRectangle(cornerRadius: CornerRadius.blockMedium, style: .continuous)
                     .stroke(
-                        isSelected ? Color.brand.opacity(0.26) : Color.surfaceBorderSubtle,
-                        lineWidth: CardStyle.borderWidth
+                        isSelected ? Color.selectionAccent.opacity(0.26) : Color.surfaceBorderSubtle,
+                        lineWidth: StrokeWidth.hairline
                     )
             }
             .contentShape(Rectangle())
@@ -490,22 +490,22 @@ private enum SelectionMotionDemoOption: String, CaseIterable, Identifiable {
     var radioSubtitle: String {
         switch self {
         case .first:
-            return "当前默认项，切换时观察圆点的 Magic Replace。"
+            return "当前默认项，切换时观察圆点的 Magic Replace"
         case .second:
-            return "单选只允许一个选中层存在。"
+            return "单选只允许一个选中层存在"
         case .third:
-            return "连续切换时不应出现残影。"
+            return "连续切换时不应出现残影"
         }
     }
 
     var multipleSubtitle: String {
         switch self {
         case .first:
-            return "多选项从空圆魔术替换为勾选。"
+            return "多选项从空圆魔术替换为勾选"
         case .second:
-            return "取消时反向替换，底座不跳变。"
+            return "取消时反向替换，底座不跳变"
         case .third:
-            return "容器反馈只做轻量颜色变化。"
+            return "容器反馈只做轻量颜色变化"
         }
     }
 }

@@ -208,7 +208,7 @@ private struct TagManagementContentView: View {
     @State private var readLoadingGate = LoadingGate()
     @State private var measuredScopeSelectorHeight: CGFloat?
     @ScaledMetric(relativeTo: .subheadline)
-    private var defaultScopeSelectorTouchHeight = Spacing.actionReserved
+    private var defaultScopeSelectorTouchHeight = InteractionMetrics.minimumTouchTarget
 
     var body: some View {
         tagGrid
@@ -382,9 +382,9 @@ private struct TagManagementContentView: View {
     private func deleteMessage(for confirmation: TagManagementDeleteConfirmation) -> String {
         let countText = confirmation.tagCount > 1 ? "\(confirmation.tagCount) 个标签" : "该标签"
         let relationText = confirmation.associatedCount > 0
-            ? "当前将影响 \(confirmation.associatedCount) 条\(confirmation.scope.associatedItemTitle)关联。"
-            : "当前没有关联的\(confirmation.scope.associatedItemTitle)。"
-        return "\(confirmation.scope.deleteMessage)\n\(countText)会被删除，\(relationText)"
+            ? "当前将影响 \(confirmation.associatedCount) 条\(confirmation.scope.associatedItemTitle)关联"
+            : "当前没有关联的\(confirmation.scope.associatedItemTitle)"
+        return "\(confirmation.scope.deleteMessage)\n\(countText)会被删除，\(relationText)。"
     }
 }
 

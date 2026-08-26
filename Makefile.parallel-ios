@@ -1,7 +1,7 @@
 PARALLEL_IOS_SCRIPTS ?= scripts/parallel-ios
 
 .PHONY: ai-doctor ai-task-create ai-task-init ai-task-destroy ai-prepare ai-resolve ai-build \
-	ai-test ai-test-build ai-test-run ai-run ai-screenshot
+	ai-ui-lint ai-ui-lint-all ai-ui-lint-test ai-test ai-test-build ai-test-run ai-run ai-screenshot
 
 ai-doctor:
 	@$(PARALLEL_IOS_SCRIPTS)/doctor.zsh
@@ -24,6 +24,23 @@ ai-resolve:
 
 ai-build:
 	@$(PARALLEL_IOS_SCRIPTS)/build.zsh
+
+ai-ui-lint:
+	@PYTHONDONTWRITEBYTECODE=1 python3 scripts/design-system/ds.py lint --changed
+
+ai-ui-lint-all:
+	@PYTHONDONTWRITEBYTECODE=1 python3 scripts/design-system/ds.py audit
+
+ai-ui-lint-test:
+	@PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover \
+		-s scripts/design-system/tests \
+		-p 'test_*.py'
+	@mkdir -p artifacts/design-system/module-cache
+	@CLANG_MODULE_CACHE_PATH="$(CURDIR)/artifacts/design-system/module-cache" \
+		SWIFTPM_MODULECACHE_OVERRIDE="$(CURDIR)/artifacts/design-system/module-cache" \
+		swift test --disable-sandbox \
+		--package-path scripts/design-system/ui-lint \
+		--scratch-path artifacts/design-system/swiftpm
 
 ai-test:
 	@ONLY_TESTING="$(ONLY_TESTING)" $(PARALLEL_IOS_SCRIPTS)/test.zsh test

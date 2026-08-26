@@ -1150,7 +1150,7 @@ private extension BookViewModel {
             return
         }
         isLoadingBatchOptions = true
-        actionNotice = "正在加载\(action.title)选项..."
+        actionNotice = "正在加载\(action.title)选项…"
         writeError = nil
         batchOptionsTask?.cancel()
         batchOptionsTask = Task {

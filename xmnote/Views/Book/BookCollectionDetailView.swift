@@ -213,20 +213,21 @@ private struct BookCollectionDetailContentView: View {
                 if viewModel.detail != nil {
                     bookList
                 } else {
-                    BookshelfContextualEmptyStateView(
-                        icon: viewModel.isManual ? "book.badge.plus" : "calendar",
+                    XMContentStateView(
+                        role: .empty,
                         title: message,
-                        message: viewModel.isManual ? "添加书籍后会显示在这里。" : "读完记录会显示在这里。"
+                        message: viewModel.isManual ? "添加书籍后会显示在这里" : "读完记录会显示在这里",
+                        systemImage: viewModel.isManual ? "book.badge.plus" : "calendar"
                     )
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
             },
             failure: { message in
-                BookshelfContextualEmptyStateView(
-                    icon: "exclamationmark.triangle",
+                XMContentStateView(
+                    role: .failure,
                     title: "书单加载失败",
                     message: message.isEmpty ? "请稍后重试" : message,
-                    iconColor: Color.feedbackWarning.opacity(0.42)
+                    systemImage: "exclamationmark.triangle"
                 )
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
@@ -529,7 +530,7 @@ private struct BookCollectionDetailContentView: View {
                 .font(AppTypography.caption)
                 .foregroundStyle(Color.textHint)
 
-            Text("拖动右侧把手调整顺序。")
+            Text("拖动右侧把手调整顺序")
                 .font(AppTypography.caption)
                 .foregroundStyle(Color.textSecondary)
                 .fixedSize(horizontal: false, vertical: true)

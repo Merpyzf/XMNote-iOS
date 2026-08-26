@@ -1,7 +1,7 @@
 # Search/
 > L2 | 父级: Views/CLAUDE.md
 
-全局搜索视图模块，承载搜索 Tab 的页面壳层、本地搜索结果分区、类别筛选、加载态、空态与错误态；交互保留 iOS 原生 search Tab 语义。
+全局搜索视图模块，承载搜索 Tab 的页面壳层、本地搜索结果分区、类别筛选与业务状态映射；加载、无搜索结果与失败视觉统一复用 `StatePresentation` 组件族，交互保留 iOS 原生 search Tab 语义。
 
 ## 成员清单
 

@@ -82,7 +82,7 @@ struct NoteReviewCardView: View {
                 NoteReviewCardLayout.footerCoverWidth,
                 urlString: item.bookCoverURL,
                 cornerRadius: CornerRadius.inlaySmall,
-                border: .init(color: appearance.coverBorderColor, width: CardStyle.borderWidth),
+                border: .init(color: appearance.coverBorderColor, width: StrokeWidth.hairline),
                 placeholderIconSize: .small,
                 surfaceStyle: .spine
             )
@@ -111,7 +111,7 @@ struct NoteReviewCardView: View {
             .overlay(alignment: .top) {
                 Rectangle()
                 .fill(appearance.footerDividerColor)
-                .frame(height: CardStyle.borderWidth)
+                .frame(height: StrokeWidth.hairline)
         }
         .accessibilityElement(children: .combine)
     }
@@ -464,7 +464,7 @@ private struct NoteReviewImageCollage: View {
                 RoundedRectangle(cornerRadius: NoteReviewCardLayout.imageWallCornerRadius, style: .continuous)
                     .stroke(
                         settings.cardAppearance.imageBorderColor,
-                        lineWidth: CardStyle.borderWidth
+                        lineWidth: StrokeWidth.hairline
                     )
             }
             .contentShape(RoundedRectangle(cornerRadius: NoteReviewCardLayout.imageWallCornerRadius, style: .continuous))

@@ -1,5 +1,5 @@
 /**
- * [INPUT]: 依赖 RepositoryContainer、NoteEditorChapterOption/NoteEditorTagOption 批量候选模型与 DesignTokens
+ * [INPUT]: 依赖 RepositoryContainer、NoteEditorChapterOption/NoteEditorTagOption 批量候选模型、XMStarredAppearance 与 DesignTokens
  * [OUTPUT]: 对外提供带层级/路径消歧的 NoteChapterSelectionSheet，以及支持可选批量上下文的 NoteTagSelectionSheet
  * [POS]: Note/Sheets 的批量编辑辅助页面，由 NoteExcerptListView 和 NoteMergeView 以系统 Sheet 呈现
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -49,24 +49,30 @@ struct NoteChapterSelectionSheet: View {
                             HStack(spacing: Spacing.base) {
                                 Image(systemName: "tray")
                                     .font(AppTypography.subheadline)
-                                    .foregroundStyle(Color.brand)
+                                    .foregroundStyle(Color.appTint)
                                     .frame(width: Spacing.section)
                                 Text("未分章节")
                                     .font(AppTypography.body)
                                     .foregroundStyle(Color.textPrimary)
                                 Spacer(minLength: Spacing.compact)
                             }
-                            .frame(minHeight: Spacing.actionReserved)
+                            .frame(minHeight: InteractionMetrics.minimumTouchTarget)
                         }
                         .buttonStyle(.plain)
                     }
                     if visibleOptions.isEmpty {
                         if searchText.isEmpty {
-                            Text("当前书籍还没有章节")
-                                .font(AppTypography.callout)
-                                .foregroundStyle(Color.textHint)
+                            XMCompactStateView(
+                                role: .empty,
+                                title: "当前书籍还没有章节",
+                                systemImage: "text.book.closed"
+                            )
                         } else {
-                            ContentUnavailableView.search(text: searchText)
+                            XMCompactStateView(
+                                role: .noResults,
+                                title: "没有匹配的章节",
+                                message: "未找到与“\(searchText)”匹配的章节。"
+                            )
                         }
                     } else {
                         ForEach(visibleOptions) { option in
@@ -78,7 +84,7 @@ struct NoteChapterSelectionSheet: View {
                                     option: option,
                                     showsParentPath: !searchText.isEmpty
                                 )
-                                .frame(minHeight: Spacing.actionReserved)
+                                .frame(minHeight: InteractionMetrics.minimumTouchTarget)
                             }
                             .buttonStyle(.plain)
                             .accessibilityElement(children: .ignore)
@@ -109,7 +115,7 @@ struct NoteChapterSelectionSheet: View {
                 } header: {
                     Text("新建章节")
                 } footer: {
-                    Text("最多支持 \(ChapterManagementPolicy.maximumDepth) 级，已到最深层的章节不再作为父章节候选。")
+                    Text("最多支持 \(ChapterManagementPolicy.maximumDepth) 级，已到最深层的章节不再作为父章节候选")
                         .font(AppTypography.caption)
                         .foregroundStyle(Color.textSecondary)
                 }
@@ -169,7 +175,7 @@ private struct NoteChapterSelectionRow: View {
         HStack(spacing: Spacing.base) {
             Image(systemName: option.displayLevel == 1 ? "text.book.closed" : "text.page")
                 .font(AppTypography.subheadline)
-                .foregroundStyle(option.displayLevel == 1 ? Color.brand : Color.textSecondary)
+                .foregroundStyle(option.displayLevel == 1 ? Color.selectionAccent : Color.textSecondary)
                 .frame(width: Spacing.section)
 
             VStack(alignment: .leading, spacing: Spacing.compact) {
@@ -181,7 +187,7 @@ private struct NoteChapterSelectionRow: View {
                     if option.isStarred == true {
                         Image(systemName: "star.fill")
                             .imageScale(.small)
-                            .foregroundStyle(Color.ratingActive)
+                            .foregroundStyle(XMStarredAppearance.foreground)
                             .accessibilityHidden(true)
                     }
                 }
@@ -240,10 +246,27 @@ struct NoteTagSelectionSheet: View {
             contextText: contextText,
             items: options.map { XMTagSelectionItem(id: $0.id, title: $0.title) },
             initialSelectedIDs: initialIDs,
-            layoutPreferenceRepository: repositories.tagSelectionLayoutPreferenceRepository,
+            layout: XMTagSelectionLayoutConfiguration(
+                initialMode: repositories.tagSelectionLayoutPreferenceRepository.fetchLayoutMode(),
+                onChange: { mode in
+                    repositories.tagSelectionLayoutPreferenceRepository.saveLayoutMode(mode)
+                }
+            ),
             management: XMTagSelectionManagementConfiguration(
                 scope: .note,
-                repository: repositories.tagManagementRepository,
+                onRename: { tagID, name in
+                    try await repositories.tagManagementRepository.updateTag(
+                        tagID: tagID,
+                        name: name,
+                        scope: .note
+                    )
+                },
+                onDelete: { tagIDs in
+                    try await repositories.tagManagementRepository.deleteTags(
+                        tagIDs: tagIDs,
+                        scope: .note
+                    )
+                },
                 onMutation: onTagCatalogMutation
             ),
             onCreate: { name in

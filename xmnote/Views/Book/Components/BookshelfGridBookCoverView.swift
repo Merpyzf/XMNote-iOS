@@ -1,5 +1,5 @@
 /**
- * [INPUT]: 依赖 XMBookCover、BookshelfBookPayload、编辑选择状态与封面角标语义/视觉 token 渲染书籍和分组网格封面
+ * [INPUT]: 依赖 XMBookCover、XMBookCoverAppearance、ReadingStatusPresentation、BookshelfBookPayload 与编辑选择状态渲染书籍、分组网格封面及角标
  * [OUTPUT]: 对外提供 BookshelfGridBookCoverView、BookshelfGridGroupCoverView、选择态封面遮罩、纯色状态角标及供书籍工作台复用的背景浓度与语义映射
  * [POS]: Book 模块页面私有封面展示基础组件，被默认书架、聚合入口网格与单书工作台复用
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -22,7 +22,7 @@ struct BookshelfGridBookCoverView: View {
         XMBookCover.responsive(
             urlString: book.cover,
             cornerRadius: coverCornerRadius,
-            border: .init(color: .surfaceBorderSubtle, width: CardStyle.borderWidth),
+            border: .init(color: .surfaceBorderSubtle, width: StrokeWidth.hairline),
             surfaceStyle: .spine
         )
         .bookshelfGridCoverFrame()
@@ -85,7 +85,7 @@ struct BookshelfGridGroupCoverView: View {
             }
             .clipShape(coverShape)
             .overlay {
-                coverShape.stroke(Color.surfaceBorderSubtle, lineWidth: CardStyle.borderWidth)
+                coverShape.stroke(Color.surfaceBorderSubtle, lineWidth: StrokeWidth.hairline)
             }
             .overlay {
                 BookshelfCoverBadgeLayer(
@@ -147,7 +147,7 @@ struct BookshelfCoverTextBadge: View {
                 )
             }
             .shadow(
-                color: .bookCoverBadgeContentShadow,
+                color: XMBookCoverAppearance.Badge.contentShadow,
                 radius: BookshelfCoverBadgeMetrics.contentShadowRadius,
                 x: 0,
                 y: BookshelfCoverBadgeMetrics.contentShadowY
@@ -173,7 +173,7 @@ struct BookshelfCoverPinBadge: View {
                 )
             }
             .shadow(
-                color: .bookCoverBadgeContentShadow,
+                color: XMBookCoverAppearance.Badge.contentShadow,
                 radius: BookshelfCoverBadgeMetrics.contentShadowRadius,
                 x: 0,
                 y: BookshelfCoverBadgeMetrics.contentShadowY
@@ -307,13 +307,13 @@ private struct BookshelfCoverGlassBadgeBackground: View {
 
         BookshelfCoverBadgeBlurView(style: BookshelfCoverBadgeMetrics.blurStyle)
             .overlay {
-                shape.fill(Color.bookCoverBadgeBlurWash)
+                shape.fill(XMBookCoverAppearance.Badge.blurWash)
             }
             .overlay {
-                shape.fill(Color.bookCoverBadgeDarkOverlay)
+                shape.fill(XMBookCoverAppearance.Badge.darkOverlay)
             }
             .overlay {
-                shape.stroke(Color.bookCoverBadgeInnerStroke, lineWidth: CardStyle.borderWidth)
+                shape.stroke(XMBookCoverAppearance.Badge.innerStroke, lineWidth: StrokeWidth.hairline)
             }
             .compositingGroup()
             .clipShape(shape)
@@ -403,7 +403,7 @@ private struct BookshelfCoverMosaicView: View {
             height: frame.height,
             urlString: cover,
             cornerRadius: index == 0 ? CornerRadius.inlaySmall : CornerRadius.inlayTiny,
-            border: .init(color: .surfaceBorderSubtle, width: CardStyle.borderWidth),
+            border: .init(color: .surfaceBorderSubtle, width: StrokeWidth.hairline),
             placeholderIconSize: cover.isEmpty ? .hidden : .small,
             surfaceStyle: index == 0 ? .spine : .plain
         )
@@ -511,7 +511,7 @@ private struct BookshelfCoverReadingStatus {
         }
         let title = book.readStatusName.trimmingCharacters(in: .whitespacesAndNewlines)
         self.title = title.isEmpty ? status.title : title
-        self.color = status.coverBadgeColor
+        self.color = ReadingStatusPresentation.color(for: status.rawValue) ?? .textHint
     }
 }
 
@@ -522,19 +522,4 @@ extension BookEntryReadingStatus {
         return allCases.first { $0.title == normalizedTitle }
     }
 
-    /// 返回书架与详情封面共用的状态语义色。
-    var coverBadgeColor: Color {
-        switch self {
-        case .wantRead:
-            return .statusWish
-        case .reading:
-            return .statusReading
-        case .finished:
-            return .statusDone
-        case .abandoned:
-            return .statusAbandoned
-        case .onHold:
-            return .statusOnHold
-        }
-    }
 }

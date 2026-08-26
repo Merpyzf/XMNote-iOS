@@ -1,11 +1,16 @@
 import SwiftUI
 
 /**
- * [INPUT]: 依赖 ReadCalendarSummaryMetric 指标描述与阅读日历统计设计令牌
+ * [INPUT]: 依赖 ReadCalendarSummaryMetric 指标描述、ReadCalendarTheme 渐变、ReadCalendarTextStyle 分区标题与 ReadingSummaryTypography 跨页指标层级
  * [OUTPUT]: 对外提供 ReadCalendarSummaryMetricSection、指标网格、结构化指标值与环比模型
  * [POS]: 阅读日历月度/年度统计 Sheet 共用的页面私有指标网格，统一卡片层级、分段颜色和无障碍朗读
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
+
+/// 仅在阅读日历指标卡中使用的非数值主值层级。
+private enum ReadCalendarSummaryMetricTypography {
+    static let text = AppTypography.subheadlineSemibold
+}
 
 /// 指标值由可独立排版的文本片段组成，数字、单位与普通文本不再依赖字符串拼接。
 struct ReadCalendarSummaryValue: Hashable {
@@ -82,7 +87,7 @@ struct ReadCalendarSummaryMetric: Identifiable, Hashable {
     let id: String
     let title: String
     let icon: String
-    let gradientRole: ReadCalendarSummaryGradientRole
+    let gradientRole: ReadCalendarTheme.SummaryGradientRole
     let value: ReadCalendarSummaryValue
     let delta: ReadCalendarSummaryDelta?
 }
@@ -95,7 +100,7 @@ struct ReadCalendarSummaryMetricSection: View {
     var body: some View {
         VStack(alignment: .leading, spacing: Spacing.base) {
             Text("阅读总结")
-                .font(ReadCalendarSummaryTypography.sectionTitle)
+                .font(ReadCalendarTextStyle.summarySectionTitleFont)
                 .foregroundStyle(Color.textPrimary)
 
             ReadCalendarSummaryMetricGrid(metrics: metrics)
@@ -138,8 +143,8 @@ struct ReadCalendarSummaryMetricGrid: View {
 private struct ReadCalendarSummaryMetricCard: View {
     let metric: ReadCalendarSummaryMetric
 
-    private var gradient: ReadCalendarSummaryGradientSpec {
-        Color.readCalendarSummaryGradientSpec(for: metric.gradientRole)
+    private var gradient: ReadCalendarTheme.SummaryGradientSpec {
+        ReadCalendarTheme.summaryGradientSpec(for: metric.gradientRole)
     }
 
     var body: some View {
@@ -159,7 +164,7 @@ private struct ReadCalendarSummaryMetricCard: View {
                     )
 
                 Text(metric.title)
-                    .font(ReadCalendarSummaryTypography.metricTitle)
+                    .font(ReadingSummaryTypography.metricTitle)
                     .foregroundStyle(Color.textSecondary)
                     .lineLimit(1)
             }
@@ -182,7 +187,7 @@ private struct ReadCalendarSummaryMetricCard: View {
         )
         .overlay {
             RoundedRectangle(cornerRadius: CornerRadius.blockLarge, style: .continuous)
-                .stroke(gradient.mid.opacity(0.16), lineWidth: CardStyle.borderWidth)
+                .stroke(gradient.mid.opacity(0.16), lineWidth: StrokeWidth.hairline)
         }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(accessibilityLabel)
@@ -194,7 +199,7 @@ private struct ReadCalendarSummaryMetricCard: View {
             ReadCalendarSummaryDeltaView(delta: delta)
         } else {
             Text(verbatim: "环比占位")
-                .font(ReadCalendarSummaryTypography.metricSubtitle)
+                .font(ReadingSummaryTypography.metricSubtitle)
                 .hidden()
                 .accessibilityHidden(true)
         }
@@ -226,9 +231,9 @@ struct ReadCalendarSummaryValueView: View {
 
     private func font(for role: ReadCalendarSummaryValue.PartRole) -> Font {
         switch role {
-        case .number: ReadCalendarSummaryTypography.metricNumber
-        case .unit: ReadCalendarSummaryTypography.metricUnit
-        case .text: ReadCalendarSummaryTypography.metricText
+        case .number: ReadingSummaryTypography.metricNumber
+        case .unit: ReadingSummaryTypography.metricUnit
+        case .text: ReadCalendarSummaryMetricTypography.text
         }
     }
 
@@ -260,7 +265,7 @@ private struct ReadCalendarSummaryDeltaView: View {
                     .foregroundStyle(trendColor)
             }
         }
-        .font(ReadCalendarSummaryTypography.metricSubtitle)
+        .font(ReadingSummaryTypography.metricSubtitle)
         .lineLimit(1)
         .minimumScaleFactor(0.8)
         .accessibilityElement(children: .ignore)
@@ -269,9 +274,9 @@ private struct ReadCalendarSummaryDeltaView: View {
 
     private var trendColor: Color {
         switch delta.trend {
-        case .up: .readCalendarSummaryDeltaUp
-        case .down: .readCalendarSummaryDeltaDown
-        case .flat: .readCalendarSummaryDeltaFlat
+        case .up: ReadCalendarTheme.summaryDeltaUp
+        case .down: ReadCalendarTheme.summaryDeltaDown
+        case .flat: ReadCalendarTheme.summaryDeltaFlat
         }
     }
 }

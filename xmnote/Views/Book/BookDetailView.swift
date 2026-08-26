@@ -1,5 +1,5 @@
 /**
- * [INPUT]: 依赖 RepositoryContainer、AppNavigationCoordinator、BookDetailViewModel、XMBookCover、XMRatingBar 与外层书籍/阅读路由回调
+ * [INPUT]: 依赖 RepositoryContainer、AppNavigationCoordinator、BookDetailViewModel、XMBookCover、XMRatingBar、XMStarredAppearance、InteractionMetrics 与外层书籍/阅读路由回调
  * [OUTPUT]: 对外提供首帧结构稳定的 BookDetailView 与 BookChapterNotesView，形成封面影像 Hero、可收起概览、搜索工具栏、持久化排序与四域内容常驻的单书工作台
  * [POS]: Book 模块单书内容工作台壳层，以共享 Chrome、独立内容滚动与单一更多菜单承接目录/书摘/相关/书评
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -373,7 +373,7 @@ struct BookWorkspaceThemePalette {
         }
 
         var color: Color {
-            Color(.sRGB, red: red, green: green, blue: blue, opacity: 1)
+            Color.xmSRGB(red: red, green: green, blue: blue, opacity: 1)
         }
 
         var saturation: Double {
@@ -980,9 +980,10 @@ private struct BookWorkspaceContentView: View {
         return Group {
             if chapters.isEmpty {
                 contentUnavailable(
+                    role: searchQuery(.catalog).isEmpty ? .empty : .noResults,
                     title: searchQuery(.catalog).isEmpty ? "暂无目录" : "没有匹配的目录",
                     systemImage: "list.bullet.indent",
-                    description: "目录同步或创建后会显示在这里。"
+                    description: "目录同步或创建后会显示在这里"
                 )
             } else {
                 VStack(spacing: Spacing.none) {
@@ -1010,7 +1011,10 @@ private struct BookWorkspaceContentView: View {
                     Image(systemName: expandedChapterIDs.contains(chapter.id) ? "chevron.down" : "chevron.right")
                         .font(AppTypography.captionSemibold)
                         .foregroundStyle(Color.textSecondary)
-                        .frame(width: Spacing.double, height: Spacing.actionReserved)
+                        .frame(
+                            width: Spacing.double,
+                            height: InteractionMetrics.minimumTouchTarget
+                        )
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel(expandedChapterIDs.contains(chapter.id) ? "收起章节" : "展开章节")
@@ -1039,7 +1043,7 @@ private struct BookWorkspaceContentView: View {
 
                     if chapter.isStarred {
                         Image(systemName: "star.fill")
-                            .foregroundStyle(Color.ratingActive)
+                            .foregroundStyle(XMStarredAppearance.foreground)
                             .accessibilityLabel("已收藏")
                     }
 
@@ -1047,7 +1051,7 @@ private struct BookWorkspaceContentView: View {
                         .font(AppTypography.captionSemibold)
                         .foregroundStyle(Color.textHint)
                 }
-                .frame(minHeight: Spacing.actionReserved)
+                .frame(minHeight: InteractionMetrics.minimumTouchTarget)
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
@@ -1115,9 +1119,10 @@ private struct BookWorkspaceContentView: View {
         let groups = noteGroups(for: book)
         if groups.isEmpty {
             contentUnavailable(
+                role: normalizedSearchQuery(.notes).isEmpty ? .empty : .noResults,
                 title: normalizedSearchQuery(.notes).isEmpty ? "还没有书摘" : "没有匹配的书摘",
                 systemImage: "text.quote",
-                description: "记录一句触动你的内容，稍后会按章节整理在这里。"
+                description: "记录一句触动你的内容，稍后会按章节整理在这里"
             )
             .padding(.horizontal, Spacing.screenEdge)
             .padding(.top, Spacing.section)
@@ -1171,7 +1176,7 @@ private struct BookWorkspaceContentView: View {
                 onOpen: { openNote(note) },
                 onEdit: { editNote(note) }
             )
-            .padding(.top, index == 0 ? Spacing.cozy : Spacing.base)
+            .padding(.top, index == .zero ? Spacing.cozy : Spacing.base)
         }
     }
 
@@ -1276,9 +1281,10 @@ private struct BookWorkspaceContentView: View {
         return Group {
             if groups.isEmpty {
                 contentUnavailable(
+                    role: normalizedSearchQuery(.related).isEmpty ? .empty : .noResults,
                     title: normalizedSearchQuery(.related).isEmpty ? "还没有相关内容" : "没有匹配的相关内容",
                     systemImage: "link",
-                    description: "把文章、观点或关联书籍整理到当前书中。"
+                    description: "把文章、观点或关联书籍整理到当前书中"
                 )
             } else {
                 LazyVStack(alignment: .leading, spacing: Spacing.section) {
@@ -1360,7 +1366,7 @@ private struct BookWorkspaceContentView: View {
                         Layout.linkedCoverWidth,
                         urlString: item.linkedBookCover,
                         cornerRadius: CornerRadius.inlaySmall,
-                        border: .init(color: .surfaceBorderSubtle, width: CardStyle.borderWidth),
+                        border: .init(color: .surfaceBorderSubtle, width: StrokeWidth.hairline),
                         placeholderIconSize: .small
                     )
 
@@ -1421,9 +1427,10 @@ private struct BookWorkspaceContentView: View {
         return Group {
             if items.isEmpty {
                 contentUnavailable(
+                    role: normalizedSearchQuery(.reviews).isEmpty ? .empty : .noResults,
                     title: normalizedSearchQuery(.reviews).isEmpty ? "还没有书评" : "没有匹配的书评",
                     systemImage: "text.bubble",
-                    description: "写下对整本书的判断、收获与推荐理由。"
+                    description: "写下对整本书的判断、收获与推荐理由"
                 )
             } else {
                 VStack(spacing: Spacing.none) {
@@ -1485,16 +1492,18 @@ private struct BookWorkspaceContentView: View {
         .buttonStyle(.plain)
     }
 
-    /// 使用系统 ContentUnavailableView 生成一致的空态，不在列表内追加装饰性大插画。
+    /// 使用通用紧凑状态生成一致的局部空态，不在列表内追加装饰性大插画。
     private func contentUnavailable(
+        role: XMStateRole,
         title: String,
         systemImage: String,
         description: String
     ) -> some View {
-        ContentUnavailableView(
-            title,
-            systemImage: systemImage,
-            description: Text(description)
+        XMCompactStateView(
+            role: role,
+            title: title,
+            message: description,
+            systemImage: systemImage
         )
         .frame(maxWidth: .infinity)
         .padding(.vertical, Spacing.double)
@@ -1748,10 +1757,11 @@ private struct BookWorkspaceContentView: View {
         NavigationStack {
             Group {
                 if viewModel.relatedCategories.isEmpty {
-                    ContentUnavailableView(
-                        "暂无可用分类",
-                        systemImage: "square.grid.2x2",
-                        description: Text("请先在 Android 端或后续分类管理能力中创建相关分类。")
+                    XMContentStateView(
+                        role: .empty,
+                        title: "暂无可用分类",
+                        message: "请先在 Android 端或后续分类管理能力中创建相关分类",
+                        systemImage: "square.grid.2x2"
                     )
                 } else {
                     List(viewModel.relatedCategories) { category in
@@ -1833,10 +1843,11 @@ struct BookChapterNotesView: View {
             if let viewModel {
                 let notes = viewModel.notes.filter { $0.chapterID == chapterId }
                 if notes.isEmpty {
-                    ContentUnavailableView(
-                        "本章暂无书摘",
-                        systemImage: "text.quote",
-                        description: Text("从阅读中记录的内容会出现在这里。")
+                    XMContentStateView(
+                        role: .empty,
+                        title: "本章暂无书摘",
+                        message: "从阅读中记录的内容会出现在这里",
+                        systemImage: "text.quote"
                     )
                 } else {
                     ScrollView {
@@ -1907,9 +1918,9 @@ struct BookChapterNotesView: View {
                 if note.hasSourceContent {
                     CollapsedRichTextPreview(
                         html: note.content,
-                        baseFont: NoteExcerptTypography.uiBody,
-                        textColor: UIColor(Color.textPrimary),
-                        lineSpacing: NoteExcerptTypography.bodyLineSpacing,
+                        baseFont: ReadingContentTypography.uiBody,
+                        textColor: UIColor.xmResolved(Color.textPrimary),
+                        lineSpacing: ReadingContentTypography.bodyLineSpacing,
                         maxLines: 6
                     )
                 }
@@ -1921,9 +1932,9 @@ struct BookChapterNotesView: View {
                             .frame(width: Spacing.micro)
                         CollapsedRichTextPreview(
                             html: note.idea,
-                            baseFont: NoteExcerptTypography.uiIdea,
-                            textColor: UIColor(Color.textSecondary),
-                            lineSpacing: NoteExcerptTypography.ideaLineSpacing,
+                            baseFont: ReadingContentTypography.uiAnnotation,
+                            textColor: UIColor.xmResolved(Color.textSecondary),
+                            lineSpacing: ReadingContentTypography.annotationLineSpacing,
                             maxLines: 4
                         )
                     }
@@ -1932,7 +1943,7 @@ struct BookChapterNotesView: View {
 
                 if !note.footerText.isEmpty {
                     Text(note.footerText)
-                        .font(NoteExcerptTypography.footer)
+                        .font(ReadingContentTypography.metadata)
                         .foregroundStyle(Color.textSecondary)
                         .padding(.top, Spacing.base)
                 }

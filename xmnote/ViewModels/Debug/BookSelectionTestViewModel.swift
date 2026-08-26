@@ -39,13 +39,13 @@ enum BookSelectionScenarioGroup: String, CaseIterable, Identifiable {
     var subtitle: String {
         switch self {
         case .localSingleWithCreation:
-            return "本地书架单选，并保留手动新增/嵌套搜书的补书入口。"
+            return "本地书架单选，并保留手动新增/嵌套搜书的补书入口"
         case .localSingle:
-            return "只消费本地书结果，用于映射、导出目标或单书替换。"
+            return "只消费本地书结果，用于映射、导出目标或单书替换"
         case .localMultipleFilter:
-            return "多选书籍范围，允许用空集合表达“全部书籍 / 未限制范围”。"
+            return "多选书籍范围，允许用空集合表达“全部书籍 / 未限制范围”"
         case .mixedDirectSelection:
-            return "本地与在线结果共存，在线结果可不落库直接回流业务页。"
+            return "本地与在线结果共存，在线结果可不落库直接回流业务页"
         case .onlineDirectSelection:
             return "只看在线搜索结果，并直接返回补齐后的远端 payload。"
         case .componentStates:
@@ -219,7 +219,7 @@ final class BookSelectionTestViewModel {
             capabilityTags: ["本地", "单选", "允许创建"],
             configurationSpec: .localSingleCreate(title: "选择书籍"),
             consumer: .localSingle(actionLabel: "读书计时页已记录目标书籍"),
-            runtimeHint: "实现能力与 Android 一致，当前通过测试中心验证，不额外新建正式业务页。"
+            runtimeHint: "实现能力与 Android 一致，当前通过测试中心验证，不额外新建正式业务页"
         ),
         BookSelectionTestScenario(
             id: "read-plan-edit",
@@ -229,7 +229,7 @@ final class BookSelectionTestViewModel {
             capabilityTags: ["本地", "单选", "允许创建"],
             configurationSpec: .localSingleCreate(title: "选择书籍"),
             consumer: .localSingle(actionLabel: "读书计划已绑定目标书籍"),
-            runtimeHint: "适合验证“书架为空 -> 新增一本书 -> 回填计划目标”的完整链路。"
+            runtimeHint: "适合验证“书架为空 -> 新增一本书 -> 回填计划目标”的完整链路"
         ),
         BookSelectionTestScenario(
             id: "reading-continue",
@@ -239,7 +239,7 @@ final class BookSelectionTestViewModel {
             capabilityTags: ["本地", "单选", "允许创建"],
             configurationSpec: .localSingleCreate(title: "选择继续阅读的书"),
             consumer: .localSingle(actionLabel: "继续阅读目标已切换"),
-            runtimeHint: "对应 Android 统计页“继续阅读”入口。"
+            runtimeHint: "对应 Android 统计页“继续阅读”入口"
         ),
         BookSelectionTestScenario(
             id: "floating-ball-setting",
@@ -249,7 +249,7 @@ final class BookSelectionTestViewModel {
             capabilityTags: ["本地", "单选", "允许创建"],
             configurationSpec: .localSingleCreate(title: "选择默认书籍"),
             consumer: .localSingle(actionLabel: "悬浮球默认书籍已更新"),
-            runtimeHint: "用于验证偏好设置型页面对本地单选 + 新建回填的消费方式。"
+            runtimeHint: "用于验证偏好设置型页面对本地单选 + 新建回填的消费方式"
         ),
         BookSelectionTestScenario(
             id: "import-book-map",
@@ -259,7 +259,7 @@ final class BookSelectionTestViewModel {
             capabilityTags: ["本地", "单选", "预选"],
             configurationSpec: .localSingle(title: "选择映射目标书", preselectionStrategy: .firstLocalBook),
             consumer: .localSingle(actionLabel: "导入映射目标书已回填"),
-            runtimeHint: "若本地书架非空，会自动预选第一本书，便于验证 Android 的映射回显语义。"
+            runtimeHint: "若本地书架非空，会自动预选第一本书，便于验证 Android 的映射回显语义"
         ),
         BookSelectionTestScenario(
             id: "check-in-dialog",
@@ -269,7 +269,7 @@ final class BookSelectionTestViewModel {
             capabilityTags: ["本地", "单选"],
             configurationSpec: .localSingle(title: "选择书籍"),
             consumer: .localSingle(actionLabel: "打卡对象已切换"),
-            runtimeHint: "纯本地单选，不提供创建入口。"
+            runtimeHint: "纯本地单选，不提供创建入口"
         ),
         BookSelectionTestScenario(
             id: "note-export",
@@ -279,7 +279,7 @@ final class BookSelectionTestViewModel {
             capabilityTags: ["本地", "单选"],
             configurationSpec: .localSingle(title: "选择导出书籍"),
             consumer: .localSingle(actionLabel: "导出目标书已确定"),
-            runtimeHint: "用于验证导出页对单一书籍目标的消费载荷。"
+            runtimeHint: "用于验证导出页对单一书籍目标的消费载荷"
         ),
         BookSelectionTestScenario(
             id: "move-notes-to-book",
@@ -289,7 +289,7 @@ final class BookSelectionTestViewModel {
             capabilityTags: ["本地", "单选"],
             configurationSpec: .localSingle(title: "选择目标书籍"),
             consumer: .localSingle(actionLabel: "移动目标书已确定"),
-            runtimeHint: "只接收目标本地书，不允许从选择器里新增书籍。"
+            runtimeHint: "只接收目标本地书，不允许从选择器里新增书籍"
         ),
         BookSelectionTestScenario(
             id: "note-widget-setting",
@@ -299,7 +299,7 @@ final class BookSelectionTestViewModel {
             capabilityTags: ["本地", "多选", "空集合可确认"],
             configurationSpec: .localMultipleFilter(title: "选择书籍范围"),
             consumer: .localMultiple(emptyMeaning: "当前视图表示全部书籍"),
-            runtimeHint: "清空后确认会回传空集合，用来表达“不限制到特定书籍”。"
+            runtimeHint: "清空后确认会回传空集合，用来表达“不限制到特定书籍”"
         ),
         BookSelectionTestScenario(
             id: "unprotected-widget-setting",
@@ -309,7 +309,7 @@ final class BookSelectionTestViewModel {
             capabilityTags: ["本地", "多选", "空集合可确认"],
             configurationSpec: .localMultipleFilter(title: "选择书籍范围"),
             consumer: .localMultiple(emptyMeaning: "当前视图表示全部书籍"),
-            runtimeHint: "与普通小组件共用同一类多选过滤能力。"
+            runtimeHint: "与普通小组件共用同一类多选过滤能力"
         ),
         BookSelectionTestScenario(
             id: "note-review-setting",
@@ -319,7 +319,7 @@ final class BookSelectionTestViewModel {
             capabilityTags: ["本地", "多选", "空集合可确认"],
             configurationSpec: .localMultipleFilter(title: "选择复习范围", multipleConfirmationTitle: "完成"),
             consumer: .localMultiple(emptyMeaning: "当前视图表示未限制复习书籍范围"),
-            runtimeHint: "适合验证“空选择 = 不限范围”的业务语义。"
+            runtimeHint: "适合验证“空选择 = 不限范围”的业务语义"
         ),
         BookSelectionTestScenario(
             id: "book-batch-export",
@@ -329,7 +329,7 @@ final class BookSelectionTestViewModel {
             capabilityTags: ["本地", "多选", "空集合可确认"],
             configurationSpec: .localMultipleFilter(title: "选择导出范围", multipleConfirmationTitle: "确认导出范围"),
             consumer: .localMultiple(emptyMeaning: "当前视图表示全部书籍"),
-            runtimeHint: "对齐 Android：空集合代表导出全部书籍。"
+            runtimeHint: "对齐 Android：空集合代表导出全部书籍"
         ),
         BookSelectionTestScenario(
             id: "note-batch-export",
@@ -339,7 +339,7 @@ final class BookSelectionTestViewModel {
             capabilityTags: ["本地", "多选", "空集合可确认"],
             configurationSpec: .localMultipleFilter(title: "选择笔记导出范围", multipleConfirmationTitle: "确认笔记范围"),
             consumer: .localMultiple(emptyMeaning: "当前视图表示全部书籍"),
-            runtimeHint: "与书籍批量导出共享同一类“空集合 = 全部”语义。"
+            runtimeHint: "与书籍批量导出共享同一类“空集合 = 全部”语义"
         ),
         BookSelectionTestScenario(
             id: "paper-setting",
@@ -349,7 +349,7 @@ final class BookSelectionTestViewModel {
             capabilityTags: ["本地", "多选", "空集合可确认"],
             configurationSpec: .localMultipleFilter(title: "选择展示范围", multipleConfirmationTitle: "确认展示范围"),
             consumer: .localMultiple(emptyMeaning: "当前视图表示未限制书籍范围"),
-            runtimeHint: "适合验证多选过滤和空选择提交。"
+            runtimeHint: "适合验证多选过滤和空选择提交"
         ),
         BookSelectionTestScenario(
             id: "relevant-list",
@@ -359,7 +359,7 @@ final class BookSelectionTestViewModel {
             capabilityTags: ["本地+在线", "单选", "远端直返", "允许创建"],
             configurationSpec: .mixedDirectSingle(title: "选择相关书籍", defaultQuery: "三体"),
             consumer: .mixedSingle(actionLabel: "相关书籍已直接回流"),
-            runtimeHint: "在线结果会直接返回远端 payload，不要求先创建本地书。"
+            runtimeHint: "在线结果会直接返回远端 payload，不要求先创建本地书"
         ),
         BookSelectionTestScenario(
             id: "read-timing-relevant",
@@ -369,7 +369,7 @@ final class BookSelectionTestViewModel {
             capabilityTags: ["本地+在线", "单选", "远端直返", "允许创建"],
             configurationSpec: .mixedDirectSingle(title: "选择相关书籍", defaultQuery: "活着"),
             consumer: .mixedSingle(actionLabel: "读书计时相关书籍已更新"),
-            runtimeHint: "用于验证与 Android 一致的“在线搜到就能直接消费”能力。"
+            runtimeHint: "用于验证与 Android 一致的“在线搜到就能直接消费”能力"
         ),
         BookSelectionTestScenario(
             id: "edit-collection",
@@ -379,7 +379,7 @@ final class BookSelectionTestViewModel {
             capabilityTags: ["本地+在线", "多选", "混合选择", "允许创建"],
             configurationSpec: .mixedDirectMultiple(title: "添加所选书籍"),
             consumer: .mixedMultiple(actionLabel: "收藏书籍集合已更新"),
-            runtimeHint: "支持本地书与在线结果混合选择，确认时会统一返回混合集合。"
+            runtimeHint: "支持本地书与在线结果混合选择，确认时会统一返回混合集合"
         ),
         BookSelectionTestScenario(
             id: "chapter-manager",
@@ -389,7 +389,7 @@ final class BookSelectionTestViewModel {
             capabilityTags: ["在线", "单选", "远端直返", "默认关键词"],
             configurationSpec: .chapterSync,
             consumer: .chapterSyncPayload,
-            runtimeHint: "直接展示章节同步所需的远端 payload，不要求先创建本地书。"
+            runtimeHint: "直接展示章节同步所需的远端 payload，不要求先创建本地书"
         ),
         BookSelectionTestScenario(
             id: "note-manager",
@@ -561,7 +561,7 @@ final class BookSelectionTestViewModel {
             return "正在读取本地书架样本…"
         }
         if sampleLocalBooks.isEmpty {
-            return "当前未检测到本地书籍，相关场景仍可打开，但预选/回填会从空书架起步。"
+            return "当前未检测到本地书籍，相关场景仍可打开，但预选/回填会从空书架起步"
         }
         return "已加载 \(sampleLocalBooks.count) 本固定样本书；本页不会读取真实书架或请求外部网络。"
     }
@@ -598,19 +598,19 @@ final class BookSelectionTestViewModel {
         case .cancelled:
             return BookSelectionScenarioPreview(
                 title: "结果预览",
-                message: "本次操作已取消，没有新的回流结果。",
+                message: "本次操作已取消，没有新的回流结果",
                 details: []
             )
         case .addFlowRequested:
             return BookSelectionScenarioPreview(
                 title: "结果预览",
-                message: "当前实现请求跳转到独立新增书籍页。",
+                message: "当前实现请求跳转到独立新增书籍页",
                 details: []
             )
         case .editorRequested:
             return BookSelectionScenarioPreview(
                 title: "结果预览",
-                message: "当前实现请求打开独立书籍编辑任务。",
+                message: "当前实现请求打开独立书籍编辑任务",
                 details: []
             )
         case .single(let selection):
@@ -636,7 +636,7 @@ final class BookSelectionTestViewModel {
                 return BookSelectionScenarioPreview(
                     title: "结果预览",
                     message: emptyMeaning,
-                    details: ["返回空数组，业务侧据此解释为“全部 / 未限制”。"]
+                    details: ["返回空数组，业务侧据此解释为“全部 / 未限制”"]
                 )
             }
 
@@ -668,14 +668,14 @@ final class BookSelectionTestViewModel {
         guard case .remote(let remoteSelection)? = selection else {
             return BookSelectionScenarioPreview(
                 title: "结果预览",
-                message: "章节同步需要远端结果 payload，当前返回值不符合预期。",
+                message: "章节同步需要远端结果 payload，当前返回值不符合预期",
                 details: selection.map { [selectionLine($0)] } ?? []
             )
         }
 
         return BookSelectionScenarioPreview(
             title: "章节同步 Payload",
-            message: "已拿到可直接用于章节同步的远端结果。",
+            message: "已拿到可直接用于章节同步的远端结果",
             details: [
                 "来源：\(remoteSelection.result.source.title)",
                 "标题：\(preferredRemoteTitle(remoteSelection))",
@@ -691,14 +691,14 @@ final class BookSelectionTestViewModel {
         guard case .remote(let remoteSelection)? = selection else {
             return BookSelectionScenarioPreview(
                 title: "结果预览",
-                message: "补全书籍信息需要远端结果 payload，当前返回值不符合预期。",
+                message: "补全书籍信息需要远端结果 payload，当前返回值不符合预期",
                 details: selection.map { [selectionLine($0)] } ?? []
             )
         }
 
         return BookSelectionScenarioPreview(
             title: "补全书籍信息 Payload",
-            message: "已拿到可直接补全录入页的远端结果。",
+            message: "已拿到可直接补全录入页的远端结果",
             details: [
                 "来源：\(remoteSelection.result.source.title)",
                 "标题：\(preferredRemoteTitle(remoteSelection))",
