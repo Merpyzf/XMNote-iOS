@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 NoteReviewPalette / NoteReviewTextAlignment 与 SwiftUI/UIKit 颜色类型
- * [OUTPUT]: 对外提供书摘回顾卡片配色与文本对齐的 UI 映射
+ * [OUTPUT]: 对外提供书摘回顾卡片配色、想法中性轻托底与文本对齐的 UI 映射
  * [POS]: Note 模块页面私有 UI 辅助，供回顾卡片和设置 Sheet 共享外观映射
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -41,6 +41,8 @@ struct NoteReviewCardAppearance {
     let backgroundImageURL: String?
     /// 卡片的基础 on-surface 前景色；仅图片模式会应用已存储的自定义文字色。
     let onSurface: Color
+    /// 想法区域使用的动态中性托底色，纯色模式建立克制明度差、图片模式增强文字方向的对比。
+    let ideaBackgroundColor: Color
     /// UIKit 富文本所需的动态 on-surface 前景色。
     let uiOnSurface: UIColor
 
@@ -74,11 +76,6 @@ struct NoteReviewCardAppearance {
         onSurface.opacity(0.045)
     }
 
-    /// 想法引导线使用的 on-surface 派生颜色。
-    var ideaRuleColor: Color {
-        onSurface.opacity(0.18)
-    }
-
     /// 标签文字使用的 on-surface 派生颜色。
     var tagForegroundColor: Color {
         secondaryTextColor
@@ -110,19 +107,25 @@ extension NoteReviewSettings {
     /// 当前设置对应的卡片外观；颜色模式不生成渐变，图片不可用时回退到规范化 palette 表面。
     var cardAppearance: NoteReviewCardAppearance {
         let imageURL = normalizedBackgroundImageURL
-        let surface = Color(uiColor: UIColor(
-            lightHex: UInt(cardSurfaceHex(isDarkAppearance: false)),
-            darkHex: UInt(cardSurfaceHex(isDarkAppearance: true))
-        ))
-        let uiOnSurface = UIColor(
-            lightHex: UInt(cardTextHex(isDarkAppearance: false)),
-            darkHex: UInt(cardTextHex(isDarkAppearance: true))
+        let lightSurfaceHex = UInt(cardSurfaceHex(isDarkAppearance: false))
+        let darkSurfaceHex = UInt(cardSurfaceHex(isDarkAppearance: true))
+        let lightTextHex = UInt(cardTextHex(isDarkAppearance: false))
+        let darkTextHex = UInt(cardTextHex(isDarkAppearance: true))
+        let uiSurface = UIColor(lightHex: lightSurfaceHex, darkHex: darkSurfaceHex)
+        let uiOnSurface = UIColor(lightHex: lightTextHex, darkHex: darkTextHex)
+        let uiIdeaBackground = NoteReviewIdeaSurfaceStyle.backgroundColor(
+            mode: backgroundMode,
+            lightSurfaceHex: lightSurfaceHex,
+            darkSurfaceHex: darkSurfaceHex,
+            lightTextHex: lightTextHex,
+            darkTextHex: darkTextHex
         )
 
         return NoteReviewCardAppearance(
-            surface: surface,
+            surface: Color(uiColor: uiSurface),
             backgroundImageURL: imageURL,
             onSurface: Color(uiColor: uiOnSurface),
+            ideaBackgroundColor: Color(uiColor: uiIdeaBackground),
             uiOnSurface: uiOnSurface
         )
     }
@@ -133,6 +136,59 @@ extension NoteReviewSettings {
         guard let backgroundImageURL else { return nil }
         let trimmedURL = backgroundImageURL.trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmedURL.isEmpty ? nil : trimmedURL
+    }
+}
+
+/// 想法区域的页面私有表面策略，以中性明度差替代 on-surface 染色。
+private enum NoteReviewIdeaSurfaceStyle {
+    static let lightSurfaceLuminanceThreshold: CGFloat = 0.20
+    static let lightSurfaceDarkeningOpacity: CGFloat = 0.02
+    static let darkSurfaceOverlayOpacity: CGFloat = 0.06
+    static let imageOverlayOpacity: CGFloat = 0.12
+    static let contrastBackdropPivotLuminance: CGFloat = 0.179
+
+    /// 根据卡片背景模式与当前亮暗外观生成透明托底色，保留底层纯色或图片纹理。
+    static func backgroundColor(
+        mode: NoteReviewBackgroundMode,
+        lightSurfaceHex: UInt,
+        darkSurfaceHex: UInt,
+        lightTextHex: UInt,
+        darkTextHex: UInt
+    ) -> UIColor {
+        UIColor { traitCollection in
+            let isDarkAppearance = traitCollection.userInterfaceStyle == .dark
+            let surfaceHex = isDarkAppearance ? darkSurfaceHex : lightSurfaceHex
+            let textHex = isDarkAppearance ? darkTextHex : lightTextHex
+
+            switch mode {
+            case .color:
+                if relativeLuminance(of: surfaceHex) >= lightSurfaceLuminanceThreshold {
+                    return UIColor.black.withAlphaComponent(lightSurfaceDarkeningOpacity)
+                }
+                return UIColor.white.withAlphaComponent(darkSurfaceOverlayOpacity)
+            case .image:
+                let overlayColor: UIColor = relativeLuminance(of: textHex) > contrastBackdropPivotLuminance
+                    ? .black
+                    : .white
+                return overlayColor.withAlphaComponent(imageOverlayOpacity)
+            }
+        }
+    }
+
+    /// 按 WCAG 的 sRGB 线性化规则计算十六进制颜色的相对亮度。
+    private static func relativeLuminance(of hex: UInt) -> CGFloat {
+        let red = linearizedComponent(CGFloat((hex >> 16) & 0xFF) / 255.0)
+        let green = linearizedComponent(CGFloat((hex >> 8) & 0xFF) / 255.0)
+        let blue = linearizedComponent(CGFloat(hex & 0xFF) / 255.0)
+        return red * 0.2126 + green * 0.7152 + blue * 0.0722
+    }
+
+    /// 将单个 sRGB 分量转换到线性光空间，供相对亮度判断使用。
+    private static func linearizedComponent(_ component: CGFloat) -> CGFloat {
+        guard component > 0.04045 else {
+            return component / 12.92
+        }
+        return CGFloat(pow(Double((component + 0.055) / 1.055), 2.4))
     }
 }
 
@@ -161,6 +217,8 @@ extension NoteReviewTextAlignment {
             return .center
         case .trailing:
             return .trailing
+        case .justified:
+            return .leading
         }
     }
 
@@ -172,6 +230,8 @@ extension NoteReviewTextAlignment {
             return .center
         case .trailing:
             return .trailing
+        case .justified:
+            return .leading
         }
     }
 
@@ -183,6 +243,18 @@ extension NoteReviewTextAlignment {
             return .center
         case .trailing:
             return .right
+        case .justified:
+            return .justified
+        }
+    }
+
+    /// 短标题与元信息不参与两端拉伸；其他模式继续服从用户选择。
+    var auxiliaryNSTextAlignment: NSTextAlignment {
+        switch self {
+        case .justified:
+            return .natural
+        case .leading, .center, .trailing:
+            return nsTextAlignment
         }
     }
 }

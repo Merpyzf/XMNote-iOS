@@ -1,7 +1,7 @@
 /**
  * [INPUT]: 依赖 NoteReviewViewModel 的候选页准备/提交与一级操作状态、NoteReviewPagingDeck，以及页面注入的卡片内容、AI 助手与业务动作闭包
- * [OUTPUT]: 对外提供页面私有的 NoteReviewRefreshDeckHost、含 AI 助手菜单的四项一级操作栏、随机换组 latest-wins 协调器与可测动效规格
- * [POS]: Note/Components 的回顾卡组与底部操作宿主，以稳定 live deck 和预挂载新组完成连续替换，不作为跨模块组件
+ * [OUTPUT]: 对外提供 NoteReviewLoadingShell、NoteReviewRefreshDeckHost、紧凑低强调的四项卡片操作栏、随机换组 latest-wins 协调器与可测动效规格
+ * [POS]: Note/Components 的回顾卡组与卡片操作宿主，以稳定 live deck 和预挂载新组完成连续替换，不作为跨模块组件
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
@@ -132,6 +132,218 @@ nonisolated enum NoteReviewRefreshProgressPolicy {
 nonisolated enum NoteReviewRefreshRenderPolicy {
     static let mountDelay: Duration = .milliseconds(16)
     static let handoffDelay: Duration = .milliseconds(16)
+}
+
+/// 回顾首轮读取的同构壳层，复用生产卡组与操作栏几何，避免启动阶段出现无关列表骨架。
+struct NoteReviewLoadingShell: View {
+    let isLoadingIndicatorVisible: Bool
+
+    @State private var selection: Int? = 0
+
+    private static let placeholderItems = (0..<3).map(NoteReviewLoadingItem.init)
+
+    /// 创建静止壳层；加载提示默认隐藏，超过读取阈值后只在固定位置叠加紧凑指示。
+    init(isLoadingIndicatorVisible: Bool = false) {
+        self.isLoadingIndicatorVisible = isLoadingIndicatorVisible
+    }
+
+    var body: some View {
+        ZStack {
+            semanticStructure
+                .allowsHitTesting(false)
+                .accessibilityHidden(true)
+                .transaction { transaction in
+                    transaction.disablesAnimations = true
+                }
+
+            if isLoadingIndicatorVisible {
+                LoadingStateView(style: .inline)
+                    .controlSize(.small)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .allowsHitTesting(false)
+                    .accessibilityLabel("正在加载回顾")
+            }
+        }
+    }
+
+    private var semanticStructure: some View {
+        VStack(spacing: NoteReviewBottomLayout.actionRowSpacing) {
+            NoteReviewPagingDeck(
+                items: Self.placeholderItems,
+                selection: $selection,
+                hasMoreItems: false,
+                configuration: deckConfiguration
+            ) { _, _ in
+                NoteReviewLoadingCard()
+                    .padding(.horizontal, reviewLayoutSpec.cardHorizontalPadding)
+                    .padding(.bottom, Spacing.cozy)
+            } emptyContent: {
+                Color.clear
+            }
+            .frame(maxWidth: reviewLayoutSpec.maxDeckWidth, maxHeight: .infinity)
+            .padding(.top, NoteReviewBottomLayout.deckTopPadding)
+            .padding(.bottom, NoteReviewBottomLayout.deckBottomPadding)
+
+            NoteReviewPrimaryActionBar(
+                item: nil,
+                configuredDestinations: [],
+                refreshTitle: "换一组",
+                isRefreshing: false,
+                isRefreshDisabled: true,
+                areContentActionsDisabled: true,
+                isSending: false,
+                isTagActionInFlight: false,
+                isTagProgressVisible: false,
+                isAIActionInFlight: false,
+                isAIProgressVisible: false,
+                onSend: { _, _ in },
+                onRequestSendConfiguration: {},
+                onEditTags: { _ in },
+                onExplain: { _ in },
+                onAutoTag: { _ in },
+                onRefresh: {}
+            )
+            .padding(.horizontal, Spacing.screenEdge)
+            .padding(.bottom, NoteReviewBottomLayout.actionRowBottomPadding)
+        }
+    }
+
+    private var reviewLayoutSpec: NoteReviewPagingLayoutSpec {
+        var layoutSpec = NoteReviewPagingLayoutSpec.iOSReviewDefault
+        layoutSpec.cardInsets.bottom = Spacing.cozy
+        return layoutSpec
+    }
+
+    private var deckConfiguration: NoteReviewPagingDeckConfiguration {
+        var configuration = NoteReviewPagingDeckConfiguration.iOSReviewDefault
+        configuration.cardInsets = reviewLayoutSpec.cardInsets
+        configuration.isSwipeEnabled = false
+        configuration.isTapEnabled = false
+        return configuration
+    }
+}
+
+/// 壳层分页项只提供稳定身份，不携带伪造的书摘内容。
+private struct NoteReviewLoadingItem: Identifiable {
+    let id: Int
+}
+
+/// 待数据卡片只表达正文、想法和来源的占位层级，颜色与装饰保持低对比且静止。
+private struct NoteReviewLoadingCard: View {
+    @Environment(\.noteReviewPagingCardContentVisibility) private var cardContentVisibility
+
+    var body: some View {
+        VStack(spacing: Spacing.none) {
+            VStack(alignment: .leading, spacing: NoteReviewCardLayout.bodySectionSpacing) {
+                bodyLines
+                ideaPlaceholder
+                Spacer(minLength: Spacing.none)
+            }
+            .padding(.horizontal, NoteReviewCardLayout.horizontalPadding)
+            .padding(.top, NoteReviewCardLayout.topPadding)
+            .padding(.bottom, NoteReviewCardLayout.bodyBottomPadding)
+            .opacity(cardContentVisibility.bodyOpacity)
+
+            footerPlaceholder
+                .padding(.horizontal, NoteReviewCardLayout.horizontalPadding)
+                .padding(.bottom, NoteReviewCardLayout.bottomPadding)
+                .opacity(cardContentVisibility.footerOpacity)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color.surfaceCard)
+        .compositingGroup()
+        .clipShape(cardShape)
+        .overlay {
+            cardShape
+                .stroke(
+                    Color.surfaceBorderSubtle.opacity(NoteReviewLoadingMetrics.borderOpacity),
+                    lineWidth: NoteReviewCardLayout.borderWidth
+                )
+        }
+        .shadow(
+            color: Color.black.opacity(NoteReviewCardLayout.shadowOpacity),
+            radius: NoteReviewCardLayout.shadowRadius,
+            x: 0,
+            y: NoteReviewCardLayout.shadowYOffset
+        )
+    }
+
+    private var bodyLines: some View {
+        VStack(alignment: .leading, spacing: NoteReviewLoadingMetrics.bodyLineSpacing) {
+            placeholderLine(widthFraction: 0.96)
+            placeholderLine(widthFraction: 0.88)
+            placeholderLine(widthFraction: 0.93)
+            placeholderLine(widthFraction: 0.64)
+        }
+    }
+
+    private var ideaPlaceholder: some View {
+        VStack(alignment: .leading, spacing: NoteReviewLoadingMetrics.ideaLineSpacing) {
+            placeholderLine(widthFraction: 0.84, height: NoteReviewLoadingMetrics.ideaLineHeight)
+            placeholderLine(widthFraction: 0.58, height: NoteReviewLoadingMetrics.ideaLineHeight)
+        }
+        .padding(.horizontal, NoteReviewCardLayout.ideaHorizontalPadding)
+        .padding(.vertical, NoteReviewCardLayout.ideaVerticalPadding)
+        .background(
+            Color.textPrimary.opacity(NoteReviewLoadingMetrics.ideaSurfaceOpacity),
+            in: RoundedRectangle(
+                cornerRadius: NoteReviewCardLayout.ideaCornerRadius,
+                style: .continuous
+            )
+        )
+    }
+
+    private var footerPlaceholder: some View {
+        HStack(spacing: NoteReviewCardLayout.footerContentSpacing) {
+            RoundedRectangle(cornerRadius: CornerRadius.inlaySmall, style: .continuous)
+                .fill(Color.textPrimary.opacity(NoteReviewLoadingMetrics.coverOpacity))
+                .frame(
+                    width: NoteReviewCardLayout.footerCoverWidth,
+                    height: NoteReviewLoadingMetrics.footerCoverHeight
+                )
+
+            VStack(alignment: .leading, spacing: NoteReviewCardLayout.footerTextSpacing) {
+                placeholderLine(widthFraction: 0.52, height: NoteReviewLoadingMetrics.footerTitleHeight)
+                placeholderLine(widthFraction: 0.34, height: NoteReviewLoadingMetrics.footerAuthorHeight)
+            }
+
+            Spacer(minLength: Spacing.none)
+        }
+        .padding(.top, NoteReviewCardLayout.footerTopPadding)
+        .overlay(alignment: .top) {
+            Rectangle()
+                .fill(Color.surfaceBorderSubtle.opacity(NoteReviewLoadingMetrics.dividerOpacity))
+                .frame(height: CardStyle.borderWidth)
+        }
+    }
+
+    private func placeholderLine(widthFraction: CGFloat, height: CGFloat = NoteReviewLoadingMetrics.bodyLineHeight) -> some View {
+        GeometryReader { proxy in
+            Capsule()
+                .fill(Color.textSecondary.opacity(NoteReviewLoadingMetrics.lineOpacity))
+                .frame(width: proxy.size.width * widthFraction, height: height)
+        }
+        .frame(height: height)
+    }
+
+    private var cardShape: RoundedRectangle {
+        RoundedRectangle(cornerRadius: NoteReviewCardLayout.cornerRadius, style: .continuous)
+    }
+}
+
+private enum NoteReviewLoadingMetrics {
+    static let bodyLineHeight: CGFloat = 9
+    static let ideaLineHeight: CGFloat = 7
+    static let footerTitleHeight: CGFloat = 8
+    static let footerAuthorHeight: CGFloat = 6
+    static let footerCoverHeight: CGFloat = 52
+    static let bodyLineSpacing = Spacing.cozy
+    static let ideaLineSpacing = Spacing.half
+    static let lineOpacity = 0.12
+    static let ideaSurfaceOpacity = 0.035
+    static let coverOpacity = 0.065
+    static let borderOpacity = 0.38
+    static let dividerOpacity = 0.42
 }
 
 /// 对交接曲线的纯值描述，既能被 SwiftUI 映射为 Animation，也能精确地在单元测试中验证。
@@ -369,7 +581,9 @@ struct NoteReviewRefreshDeckHost<CardContent: View>: View {
     }
 
     private var reviewLayoutSpec: NoteReviewPagingLayoutSpec {
-        .iOSReviewDefault
+        var layoutSpec = NoteReviewPagingLayoutSpec.iOSReviewDefault
+        layoutSpec.cardInsets.bottom = Spacing.cozy
+        return layoutSpec
     }
 
     private var deckConfiguration: NoteReviewPagingDeckConfiguration {
@@ -687,7 +901,7 @@ private enum NoteReviewBottomLayout {
     static let deckTopPadding = Spacing.base
     static let deckBottomPadding = Spacing.none
     static let actionRowSpacing = Spacing.cozy
-    static let actionRowBottomPadding = Spacing.section
+    static let actionRowBottomPadding = Spacing.section + Spacing.cozy
     static let actionRowMinHeight: CGFloat = 44
 }
 
@@ -1027,8 +1241,8 @@ private struct NoteReviewPrimaryActionButtonStyle: ButtonStyle {
 }
 
 private enum NoteReviewPrimaryActionMetrics {
-    static let inlineActionSpacing: CGFloat = 16
-    static let enabledOpacity = 0.72
+    static let inlineActionSpacing = Spacing.base
+    static let enabledOpacity = 0.94
     static let disabledOpacity = 0.36
     static let progressOpacity = 0.68
     static let pressedFillOpacity = 0.10

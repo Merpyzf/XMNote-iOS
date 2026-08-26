@@ -9,7 +9,7 @@ import SwiftUI
 
 /**
  * [INPUT]: 依赖可选 AppRuntimeContext、已原子恢复的 AppSceneSnapshot、scene 级 AppNavigationCoordinator、阅读日历、外部导入/网页动作与各业务目的页
- * [OUTPUT]: 对外提供 MainTabView（五个类型安全浏览栈、带根级退出控件的单一全屏任务栈、恢复表面门控及与方案 A 真实首页一致的顶部操作骨架、阅读计时 UIKit Zoom、底部计时条与退场后一次性回流）
+ * [OUTPUT]: 对外提供 MainTabView（五个类型安全浏览栈、首帧 Tab 稳定显现、回顾同构启动壳层、带根级退出控件的单一全屏任务栈、恢复表面门控、阅读计时 UIKit Zoom、底部计时条与退场后一次性回流）
  * [POS]: 应用根导航宿主，只消费协调器状态并使用系统 push/cover；恢复目的页提交前不暴露底层根页
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -171,6 +171,7 @@ struct MainTabView: View {
     @State private var pendingGlobalSearchSubmitTask: Task<Void, Never>?
     @State private var protectedGlobalSearchQuery: String?
     @State private var globalSearchCommitToken: UUID?
+    @State private var isInitialTabPresentationCovered = true
     #if DEBUG
     @State private var didApplyUITestLaunchRoute = false
     #endif
@@ -193,11 +194,22 @@ struct MainTabView: View {
 
     var body: some View {
         presentedTabContent
-            .allowsHitTesting(pendingRestoredNavigationSurface == nil)
-            .accessibilityHidden(pendingRestoredNavigationSurface != nil)
+            .allowsHitTesting(
+                pendingRestoredNavigationSurface == nil && !isInitialTabPresentationCovered
+            )
+            .accessibilityHidden(
+                pendingRestoredNavigationSurface != nil || isInitialTabPresentationCovered
+            )
             .overlay {
                 if pendingRestoredNavigationSurface != nil {
                     RestoredNavigationSurfaceGate()
+                }
+            }
+            .overlay {
+                if isInitialTabPresentationCovered {
+                    Color.surfacePage
+                        .ignoresSafeArea()
+                        .accessibilityHidden(true)
                 }
             }
     }
@@ -357,7 +369,7 @@ struct MainTabView: View {
                             .transition(.opacity)
                         }
                     }
-                    .animation(runtimeTransitionAnimation, value: isRuntimeReady)
+                    .animation(notesRuntimeTransitionAnimation, value: isRuntimeReady)
                     .navigationDestination(for: AppRoute.self) { route in
                         appDestination(for: route, hostTab: .notes)
                     }
@@ -438,6 +450,11 @@ struct MainTabView: View {
     /// 为 Tab 树挂载底部计时条、系统搜索宿主与统一导航环境。
     private var configuredTabContent: some View {
         tabContent
+        .transaction { transaction in
+            guard isInitialTabPresentationCovered else { return }
+            transaction.animation = nil
+            transaction.disablesAnimations = true
+        }
         .toolbarVisibility(
             navigationCoordinator.isTabChromeSuppressed ? .hidden : .automatic,
             for: .tabBar
@@ -559,6 +576,7 @@ struct MainTabView: View {
             readingTimerMainRootZoomSource
         }
         .task {
+            await releaseInitialTabAnimationSuppressionIfNeeded()
             consumePendingRuntimeRequestsIfNeeded()
             #if DEBUG
             if runtime != nil {
@@ -583,6 +601,35 @@ struct MainTabView: View {
 
     private var runtimeTransitionAnimation: Animation {
         reduceMotion ? .easeOut(duration: 0.08) : .smooth(duration: 0.16)
+    }
+
+    private var notesRuntimeTransitionAnimation: Animation? {
+        isRestoringNoteReviewRoot ? nil : runtimeTransitionAnimation
+    }
+
+    private var isRestoringNoteReviewRoot: Bool {
+        initialSceneSnapshot.selectedTab == .notes
+            && initialSceneSnapshot.notes.selectedSubTab == .review
+            && initialSceneSnapshot.navigation.path(for: .notes).isEmpty
+    }
+
+    /// 等待系统 TabView 完成首次内部选中态协调后无动画揭示页面；任务随页面生命周期取消，用户后续切换继续使用原生反馈。
+    @MainActor
+    private func releaseInitialTabAnimationSuppressionIfNeeded() async {
+        guard isInitialTabPresentationCovered else { return }
+        do {
+            try await Task.sleep(
+                for: reduceMotion ? .milliseconds(120) : .milliseconds(650)
+            )
+        } catch {
+            return
+        }
+        guard isInitialTabPresentationCovered, !Task.isCancelled else { return }
+        var transaction = Transaction(animation: nil)
+        transaction.disablesAnimations = true
+        withTransaction(transaction) {
+            isInitialTabPresentationCovered = false
+        }
     }
 
     private var bootstrapSceneSnapshot: AppSceneSnapshot {
@@ -2146,29 +2193,27 @@ private struct MainTabBooksBootstrapContent: View {
     }
 }
 
-/// 笔记页保留分组列表的段落密度；回顾页使用更疏朗的摘要卡节奏。
+/// 笔记页保留分组列表段落密度；回顾页直接复用真实卡组同构壳层。
 private struct MainTabNotesBootstrapContent: View {
     let selectedSubTab: NoteSubTab
 
+    @ViewBuilder
     var body: some View {
-        ScrollView {
-            Group {
-                switch selectedSubTab {
-                case .notes:
+        switch selectedSubTab {
+        case .notes:
+            ScrollView {
+                Group {
                     BootstrapGroupedListStructure(rowCount: 5)
-                case .review:
-                    VStack(spacing: Spacing.base) {
-                        BootstrapWidePanel(height: 132)
-                        BootstrapGroupedListStructure(rowCount: 3)
-                    }
                 }
+                .padding(.horizontal, Spacing.screenEdge)
+                .padding(.top, Spacing.base)
+                .padding(.bottom, Spacing.section)
             }
-            .padding(.horizontal, Spacing.screenEdge)
-            .padding(.top, Spacing.base)
-            .padding(.bottom, Spacing.section)
+            .scrollIndicators(.hidden)
+            .scrollBounceBehavior(.always)
+        case .review:
+            NoteReviewLoadingShell()
         }
-        .scrollIndicators(.hidden)
-        .scrollBounceBehavior(.always)
     }
 }
 

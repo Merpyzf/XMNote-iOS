@@ -253,11 +253,12 @@ nonisolated enum NoteReviewFontSelection: Hashable, Sendable, Codable {
     }
 }
 
-/// 回顾卡片文本对齐方式，保留 Android 的三种阅读布局能力。
+/// 回顾卡片文本对齐方式，保留 Android 的三种阅读布局能力，并为长文本提供 iOS 原生两端对齐。
 nonisolated enum NoteReviewTextAlignment: String, CaseIterable, Codable, Hashable, Sendable {
     case leading
     case center
     case trailing
+    case justified
 
     var title: String {
         switch self {
@@ -267,6 +268,8 @@ nonisolated enum NoteReviewTextAlignment: String, CaseIterable, Codable, Hashabl
             return "居中"
         case .trailing:
             return "靠右"
+        case .justified:
+            return "两端对齐"
         }
     }
 }

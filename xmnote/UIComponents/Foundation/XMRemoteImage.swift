@@ -3,8 +3,8 @@ import Nuke
 import NukeUI
 
 /**
- * [INPUT]: 依赖 NukeUI LazyImage、XMGIFImageView 与 XMImageRequestBuilder，依赖占位视图构造闭包
- * [OUTPUT]: 对外提供 XMRemoteImage（统一远程图片渲染组件，支持静态图与 GIF）
+ * [INPUT]: 依赖 NukeUI LazyImage、XMGIFImageView 与 XMImageRequestBuilder，接收可选成功淡入时长与占位视图构造闭包
+ * [OUTPUT]: 对外提供 XMRemoteImage（统一远程图片渲染组件，支持静态图、GIF 与默认关闭的成功淡入）
  * [POS]: UIComponents/Foundation 跨模块复用组件，统一图片加载状态、GIF 播放与请求策略
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -14,6 +14,7 @@ struct XMRemoteImage<Placeholder: View>: View {
     let contentMode: ContentMode
     let priority: XMImageRequestBuilder.Priority
     let showsGIFBadge: Bool
+    let successFadeInDuration: TimeInterval?
     let placeholder: () -> Placeholder
 
     private let pipeline: ImagePipeline
@@ -29,6 +30,7 @@ struct XMRemoteImage<Placeholder: View>: View {
         contentMode: ContentMode = .fill,
         priority: XMImageRequestBuilder.Priority = .normal,
         showsGIFBadge: Bool = false,
+        successFadeInDuration: TimeInterval? = nil,
         pipeline: ImagePipeline = .shared,
         @ViewBuilder placeholder: @escaping () -> Placeholder
     ) {
@@ -36,6 +38,7 @@ struct XMRemoteImage<Placeholder: View>: View {
         self.contentMode = contentMode
         self.priority = priority
         self.showsGIFBadge = showsGIFBadge
+        self.successFadeInDuration = successFadeInDuration
         self.pipeline = pipeline
         self.placeholder = placeholder
     }
@@ -69,12 +72,16 @@ private extension XMRemoteImage {
         shouldProbeGIFData: Bool
     ) -> some View {
         let request = XMImageRequestBuilder.makeImageRequest(url: url, priority: priority)
+        let transaction = Transaction(
+            animation: successFadeInDuration.map { .easeOut(duration: $0) }
+        )
 
-        return LazyImage(request: request) { state in
+        return LazyImage(request: request, transaction: transaction) { state in
             if let image = state.image {
                 image
                     .resizable()
                     .aspectRatio(contentMode: contentMode)
+                    .transition(successFadeInDuration == nil ? .identity : .opacity)
             } else {
                 placeholder()
             }
@@ -97,6 +104,7 @@ private extension XMRemoteImage {
         ZStack(alignment: .topTrailing) {
             if let gifData {
                 XMGIFImageView(data: gifData, contentMode: contentMode, autoplay: true)
+                    .transition(successFadeInDuration == nil ? .identity : .opacity)
             } else if gifLoadFailed {
                 staticImage(for: url, shouldProbeGIFData: false)
             } else {
@@ -134,7 +142,13 @@ private extension XMRemoteImage {
             let (data, _) = try await pipeline.data(for: request.imageRequest)
             guard !Task.isCancelled else { return }
             if XMImageRequestBuilder.isGIFData(data) {
-                gifData = data
+                if let successFadeInDuration {
+                    withAnimation(.easeOut(duration: successFadeInDuration)) {
+                        gifData = data
+                    }
+                } else {
+                    gifData = data
+                }
             } else {
                 gifLoadFailed = true
             }

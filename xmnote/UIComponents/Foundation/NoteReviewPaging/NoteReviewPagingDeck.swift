@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 BigUIPaging PageView、NoteReviewPagingModels 与 SwiftUI 手势/可访问性环境
- * [OUTPUT]: 对外提供 NoteReviewPagingDeck，支持书摘回顾双向滑动、后卡补位、分页预加载与空态承载
+ * [OUTPUT]: 对外提供 NoteReviewPagingDeck，支持首帧同步成组、书摘回顾双向滑动、后卡补位、分页预加载与空态承载
  * [POS]: UIComponents/Foundation 的书摘回顾分页卡组组件，隔离业务卡片内容与 BigUIPaging 源码基座
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -206,6 +206,27 @@ private struct NoteReviewCardDeckPageView: View {
     @State private var containerSize = CGSize.zero
     @State private var pages: [Page] = []
     @State private var selectedIndex = 0
+
+    /// 使用当前选中项同步建立首批视觉层，避免组件先提交空页面、再等待 onAppear 补齐卡组。
+    init(
+        pageConfiguration: PageViewStyleConfiguration,
+        deckConfiguration: NoteReviewPagingDeckConfiguration
+    ) {
+        self.pageConfiguration = pageConfiguration
+        self.deckConfiguration = deckConfiguration
+
+        let visibleLimit = max(deckConfiguration.visibleCount - 1, 1)
+        let resolved = pageConfiguration.values(
+            surrounding: pageConfiguration.selection.wrappedValue,
+            limit: visibleLimit
+        )
+        _pages = State(
+            initialValue: resolved.0.enumerated().map {
+                Page(index: $0.offset, value: $0.element)
+            }
+        )
+        _selectedIndex = State(initialValue: resolved.1)
+    }
 
     private var activeMotionSpec: NoteReviewPagingMotionSpec {
         deckConfiguration.motionSpec.applyingReduceMotion(reduceMotion)

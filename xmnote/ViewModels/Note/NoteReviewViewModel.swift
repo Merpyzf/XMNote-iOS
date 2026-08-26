@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 NoteRepositoryProtocol 提供书摘回顾设置、分页卡片、标签与书籍回显数据，依赖 ExternalAppIntegrationRepositoryProtocol/AIRepositoryProtocol 提供外部发送与 AI 配置预检，并向页面私有换组宿主提供候选页准备与无动画提交能力
- * [OUTPUT]: 对外提供 NoteReviewViewModel，驱动书摘回顾分页卡组、设置 Sheet、统一标签编辑、分页刷新、随机换组交接、一级操作、AI 局部写回协调、可取消分享图与外部应用发送反馈状态
+ * [OUTPUT]: 对外提供 NoteReviewContentState 与 NoteReviewViewModel，显式区分首轮结果未知、内容、真实空态和持久失败，并驱动设置 Sheet、分页刷新、随机换组交接、一级操作、AI 局部写回、可取消分享图与外部应用发送反馈状态
  * [POS]: ViewModels/Note 的书摘回顾状态编排器，被 NoteReviewView 与 NoteContainerView 消费
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -22,6 +22,15 @@ nonisolated enum NoteReviewPrepareRefreshResult: Sendable {
     case prepared(NoteReviewPreparedRefresh)
     case failed(String)
     case cancelled
+}
+
+/// 回顾页首轮读取的业务内容状态；空态只允许在查询成功并确认无结果后出现。
+nonisolated enum NoteReviewContentState: Equatable, Sendable {
+    case idle
+    case loading
+    case content
+    case empty
+    case failure(String)
 }
 
 /// 书摘回顾外部应用发送的页面反馈事件，交给 View 消费后转为统一 Toast。
@@ -63,6 +72,7 @@ final class NoteReviewViewModel {
 
     var settings: NoteReviewSettings = .defaultValue
     var items: [NoteReviewCardItem] = []
+    private(set) var contentState: NoteReviewContentState = .idle
     var tagOptions: [NoteReviewTagOption] = []
     var selectedBooks: [BookPickerBook] = []
     var currentIndex = 0
@@ -171,6 +181,7 @@ final class NoteReviewViewModel {
         loadingGeneration &+= 1
         let generation = loadingGeneration
         isInitialLoading = true
+        contentState = .loading
         errorMessage = nil
         defer {
             isInitialLoading = false
@@ -198,8 +209,14 @@ final class NoteReviewViewModel {
             currentIndex = 0
             selectedItemID = nil
             canLoadMore = false
-            errorMessage = "加载回顾失败：\(error.localizedDescription)"
+            contentState = .failure("加载回顾失败：\(error.localizedDescription)")
         }
+    }
+
+    /// 从首轮持久失败态重新发起完整读取；结果仍未知期间继续使用同构壳层，不泄漏空态。
+    func retryInitialLoad() async {
+        guard case .failure = contentState else { return }
+        await loadIfNeeded()
     }
 
     /// 手动刷新当前回顾范围；此路径供顺序模式和设置变更即时提交，任务在主线程回写且用 generation 丢弃取消或过期响应。
@@ -922,6 +939,7 @@ private extension NoteReviewViewModel {
         preferredID: Int64? = nil
     ) {
         items = page
+        contentState = page.isEmpty ? .empty : .content
         syncSelection(preferredID: preferredID ?? page.first?.id)
         orderedOffset = settings.sortRule == .ordered ? page.count : 0
         canLoadMore = page.count == Constants.pageSize

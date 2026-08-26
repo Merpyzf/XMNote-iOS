@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 NoteReviewCardItem 与 NoteReviewSettings，复用 RichText、XMRemoteImage 和 NoteExcerptTypography
- * [OUTPUT]: 对外提供 NoteReviewCardView，渲染书摘回顾卡片内容
+ * [OUTPUT]: 对外提供 NoteReviewCardView，以统一阅读轴线渲染正文、中性轻托底想法区、附图、标签与来源信息，并让图片背景在内容就绪后低调淡入
  * [POS]: Note 模块页面私有子视图，被 NoteReviewView 的卡堆内容闭包消费
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -13,6 +13,7 @@ struct NoteReviewCardView: View {
     let item: NoteReviewCardItem
     let settings: NoteReviewSettings
 
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.noteReviewPagingCardContentVisibility) private var cardContentVisibility
 
     /// 当前设置解析出的统一卡片外观，避免各内容层独立选择颜色。
@@ -151,15 +152,16 @@ struct NoteReviewCardView: View {
                 lineSpacing: NoteReviewCardTypography.ideaLineSpacing,
                 textAlignment: settings.textAlignment.nsTextAlignment
             )
+            .padding(.horizontal, NoteReviewCardLayout.ideaHorizontalPadding)
             .padding(.vertical, NoteReviewCardLayout.ideaVerticalPadding)
-            .padding(.leading, NoteReviewCardLayout.ideaLeadingPadding)
-            .padding(.trailing, NoteReviewCardLayout.ideaTrailingPadding)
             .frame(maxWidth: .infinity, alignment: frameAlignment)
-            .overlay(alignment: .leading) {
-                Capsule()
-                    .fill(appearance.ideaRuleColor)
-                    .frame(width: NoteReviewCardLayout.ideaRuleWidth)
-            }
+            .background(
+                appearance.ideaBackgroundColor,
+                in: RoundedRectangle(
+                    cornerRadius: NoteReviewCardLayout.ideaCornerRadius,
+                    style: .continuous
+                )
+            )
         }
     }
 
@@ -184,7 +186,6 @@ struct NoteReviewCardView: View {
                 background: appearance.tagBackgroundColor,
                 alignment: frameAlignment
             )
-            .padding(.top, Spacing.half)
             .transition(.opacity)
         }
     }
@@ -216,6 +217,8 @@ struct NoteReviewCardView: View {
             return .center
         case .trailing:
             return .trailing
+        case .justified:
+            return .leading
         }
     }
 
@@ -226,7 +229,11 @@ struct NoteReviewCardView: View {
     @ViewBuilder
     private var cardBackground: some View {
         if let backgroundURL = appearance.backgroundImageURL {
-            XMRemoteImage(urlString: backgroundURL, contentMode: .fill) {
+            XMRemoteImage(
+                urlString: backgroundURL,
+                contentMode: .fill,
+                successFadeInDuration: reduceMotion ? nil : NoteReviewCardLayout.backgroundImageFadeInDuration
+            ) {
                 Rectangle().fill(appearance.surface)
             }
             .overlay(appearance.onSurface.opacity(NoteReviewCardLayout.imageBackgroundOverlayOpacity))
@@ -278,7 +285,7 @@ private enum NoteReviewCardTypography {
 
 /// 回顾卡片布局常量，控制阅读纸面比例、来源区托底和正文内边距。
 enum NoteReviewCardLayout {
-    static let horizontalPadding: CGFloat = Spacing.comfortable
+    static let horizontalPadding: CGFloat = Spacing.contentEdge
     static let textColumnMaxWidth: CGFloat = 340
     static let topPadding = Spacing.double
     static let compactContentTopPadding: CGFloat = 34
@@ -291,19 +298,17 @@ enum NoteReviewCardLayout {
     static let shadowYOffset: CGFloat = 12
     static let bodyBottomPadding = Spacing.cozy
     static let compactTextCharacterLimit = 130
-    static let bodySectionSpacing = Spacing.cozy
+    static let bodySectionSpacing = Spacing.base
     static let footerContentSpacing = Spacing.cozy
     static let footerTextSpacing = Spacing.tiny
-    static let footerTopPadding = Spacing.cozy
+    static let footerTopPadding = Spacing.base
     static let footerCoverWidth: CGFloat = 36
     static let scrollEdgeWashHeight: CGFloat = 30
     static let coverBorderOpacity = 0.12
     static let footerTitleOpacity = 0.92
-    static let ideaVerticalPadding = Spacing.half
-    static let ideaLeadingPadding = Spacing.base
-    static let ideaTrailingPadding = Spacing.half
-    static let ideaRuleWidth: CGFloat = 2
-    static let ideaRuleOpacity = 0.18
+    static let ideaHorizontalPadding = Spacing.base
+    static let ideaVerticalPadding = Spacing.cozy
+    static let ideaCornerRadius = CornerRadius.blockSmall
     static let imageWallSpacing = Spacing.half
     static let imageWallCornerRadius = CornerRadius.blockSmall
     static let imageWallSingleAspect: CGFloat = 1.62
@@ -312,6 +317,7 @@ enum NoteReviewCardLayout {
     static let imageWallPlaceholderOpacity = 0.08
     static let imageWallOverlayOpacity = 0.34
     static let imageBackgroundOverlayOpacity = 0.03
+    static let backgroundImageFadeInDuration: TimeInterval = 0.12
 
     static func readableContentWidth(forCardWidth cardWidth: CGFloat) -> CGFloat {
         min(textColumnMaxWidth, max(0, cardWidth - horizontalPadding * 2))

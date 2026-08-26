@@ -317,7 +317,7 @@ struct NoteReviewShareImageRenderer: @unchecked Sendable {
             ideaFillColor: onSurfaceColor.withAlphaComponent(0.06),
             cardSurfaceColor: cardSurfaceColor,
             backgroundImage: backgroundImageData.flatMap { UIImage(data: $0) },
-            textAlignment: settings.textAlignment.nsTextAlignment,
+            auxiliaryTextAlignment: settings.textAlignment.auxiliaryNSTextAlignment,
             eyebrowText: presentation.eyebrowText,
             footerText: presentation.footerText,
             fileNameLabel: presentation.fileNameLabel
@@ -341,14 +341,14 @@ struct NoteReviewShareImageRenderer: @unchecked Sendable {
             font: payload.titleFont,
             color: payload.primaryTextColor,
             lineSpacing: 4,
-            textAlignment: payload.textAlignment
+            textAlignment: payload.auxiliaryTextAlignment
         ).height(constrainedTo: contentWidth)
         let authorHeight = attributedText(
             payload.bookAuthor,
             font: payload.authorFont,
             color: payload.secondaryTextColor,
             lineSpacing: 3,
-            textAlignment: payload.textAlignment
+            textAlignment: payload.auxiliaryTextAlignment
         ).height(constrainedTo: contentWidth)
         let contentHeight = payload.content.height(constrainedTo: contentWidth)
         let ideaHeight = payload.idea.length > 0
@@ -477,7 +477,7 @@ struct NoteReviewShareImageRenderer: @unchecked Sendable {
             font: payload.titleFont,
             color: payload.primaryTextColor,
             lineSpacing: 4,
-            textAlignment: payload.textAlignment
+            textAlignment: payload.auxiliaryTextAlignment
         ).draw(in: CGRect(x: contentX, y: y, width: contentWidth, height: measuredLayout.titleHeight))
         y += measuredLayout.titleHeight
 
@@ -488,7 +488,7 @@ struct NoteReviewShareImageRenderer: @unchecked Sendable {
                 font: payload.authorFont,
                 color: payload.secondaryTextColor,
                 lineSpacing: 3,
-                textAlignment: payload.textAlignment
+                textAlignment: payload.auxiliaryTextAlignment
             ).draw(in: CGRect(x: contentX, y: y, width: contentWidth, height: measuredLayout.authorHeight))
             y += measuredLayout.authorHeight
         }
@@ -521,7 +521,7 @@ struct NoteReviewShareImageRenderer: @unchecked Sendable {
             color: payload.accentColor,
             lineSpacing: 0,
             letterSpacing: 1.8,
-            textAlignment: payload.textAlignment
+            textAlignment: payload.auxiliaryTextAlignment
         ).draw(in: CGRect(x: markerRect.maxX + 16, y: point.y, width: width - 26, height: 34))
     }
 
@@ -576,7 +576,7 @@ struct NoteReviewShareImageRenderer: @unchecked Sendable {
             font: payload.metadataLabelFont,
             color: payload.accentColor,
             lineSpacing: 0,
-            textAlignment: payload.textAlignment
+            textAlignment: payload.auxiliaryTextAlignment
         )
         let labelWidth = labelAttributed.width(constrainedTo: rect.width)
         let labelRect = CGRect(x: rect.minX, y: rect.minY + 2, width: labelWidth, height: rect.height)
@@ -588,7 +588,7 @@ struct NoteReviewShareImageRenderer: @unchecked Sendable {
             font: payload.metadataValueFont,
             color: payload.secondaryTextColor,
             lineSpacing: 3,
-            textAlignment: payload.textAlignment
+            textAlignment: payload.auxiliaryTextAlignment
         ).draw(in: CGRect(x: valueX, y: rect.minY, width: rect.maxX - valueX, height: rect.height))
     }
 
@@ -601,7 +601,7 @@ struct NoteReviewShareImageRenderer: @unchecked Sendable {
             font: payload.footerFont,
             color: payload.secondaryTextColor,
             lineSpacing: 0,
-            textAlignment: payload.textAlignment
+            textAlignment: payload.auxiliaryTextAlignment
         ).draw(in: CGRect(x: rect.minX, y: rect.minY + 22, width: rect.width, height: 34))
     }
 
@@ -770,7 +770,7 @@ struct NoteReviewShareImageRenderer: @unchecked Sendable {
             font: payload.metadataLabelFont,
             color: payload.accentColor,
             lineSpacing: 0,
-            textAlignment: payload.textAlignment
+            textAlignment: payload.auxiliaryTextAlignment
         )
         let labelWidth = min(labelAttributed.width(constrainedTo: width), width)
         let valueWidth = max(0, width - labelWidth - Layout.metadataValueGap)
@@ -780,7 +780,7 @@ struct NoteReviewShareImageRenderer: @unchecked Sendable {
             font: payload.metadataValueFont,
             color: payload.secondaryTextColor,
             lineSpacing: 3,
-            textAlignment: payload.textAlignment
+            textAlignment: payload.auxiliaryTextAlignment
         ).height(constrainedTo: valueWidth)
         return max(labelHeight, valueHeight) + 4
     }
@@ -944,7 +944,7 @@ private nonisolated struct RenderPayload: @unchecked Sendable {
     let ideaFillColor: UIColor
     let cardSurfaceColor: UIColor
     let backgroundImage: UIImage?
-    let textAlignment: NSTextAlignment
+    let auxiliaryTextAlignment: NSTextAlignment
     let eyebrowText: String
     let footerText: String
     let fileNameLabel: String

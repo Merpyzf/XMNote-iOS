@@ -1,6 +1,6 @@
 /**
- * [INPUT]: 依赖 NoteReviewViewModel、RepositoryContainer、AppNavigationCoordinator、页面私有 NoteReviewRefreshDeckHost、NoteReviewCardView 与外部导航/设置闭包
- * [OUTPUT]: 对外提供 NoteReviewView，承载 iOS 端书摘回顾分页卡组、底部一级操作与 AI 助手菜单、随机换组交接、卡片菜单、统一标签编辑、可取消分享、AI 释义/标签会话与编辑器交接
+ * [INPUT]: 依赖 NoteReviewViewModel、RepositoryContainer、AppNavigationCoordinator、页面私有 NoteReviewLoadingShell/NoteReviewRefreshDeckHost、NoteReviewCardView 与外部导航/设置闭包
+ * [OUTPUT]: 对外提供 NoteReviewView，以显式内容状态承载同构首轮壳层、分页卡组、真实空态、持久失败与重试，以及底部一级操作、AI 助手、随机换组、标签编辑和分享流程
  * [POS]: Note 模块回顾 Tab 页面入口，被 NoteContainerView 托管
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -44,9 +44,12 @@ struct NoteReviewView: View {
             content
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
 
-            if loadingGate.isVisible, viewModel.items.isEmpty {
-                LoadingStateView("正在加载回顾…", style: .card)
-                    .transition(.opacity)
+            if loadingGate.isVisible, !isUnresolvedContentState {
+                LoadingStateView(style: .inline)
+                    .controlSize(.small)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .allowsHitTesting(false)
+                    .accessibilityLabel("正在加载回顾")
             }
         }
         .task {
@@ -57,7 +60,7 @@ struct NoteReviewView: View {
             viewModel.reloadExternalAppAvailability()
             syncLoadingGate()
         }
-        .onChange(of: viewModel.isInitialLoading) { _, _ in
+        .onChange(of: viewModel.contentState) { _, _ in
             syncLoadingGate()
         }
         .onChange(of: viewModel.errorMessage) { _, message in
@@ -141,13 +144,27 @@ struct NoteReviewView: View {
 
     @ViewBuilder
     private var content: some View {
-        if viewModel.items.isEmpty {
-            emptyOrFailureContent
-                .transition(.opacity.combined(with: .offset(y: reduceMotion ? 0 : Spacing.half)))
-        } else {
-            cardStackContent
-                .transition(.opacity.combined(with: .offset(y: reduceMotion ? 0 : Spacing.half)))
+        ZStack {
+            switch viewModel.contentState {
+            case .idle, .loading:
+                NoteReviewLoadingShell(isLoadingIndicatorVisible: loadingGate.isVisible)
+                    .transition(.opacity)
+                    .zIndex(0)
+            case .content:
+                cardStackContent
+                    .transition(.opacity)
+                    .zIndex(1)
+            case .empty:
+                emptyOrFailureContent
+                    .transition(.opacity)
+                    .zIndex(1)
+            case .failure(let message):
+                NoteReviewFailureContent(message: message, onRetry: retryInitialLoad)
+                    .transition(.opacity)
+                    .zIndex(1)
+            }
         }
+        .animation(contentTransitionAnimation, value: viewModel.contentState)
     }
 
     private var cardStackContent: some View {
@@ -197,7 +214,6 @@ struct NoteReviewView: View {
             }
             .buttonStyle(.borderedProminent)
             .tint(Color.brand)
-            .disabled(viewModel.isInitialLoading)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .padding(.horizontal, Spacing.screenEdge)
@@ -323,7 +339,7 @@ struct NoteReviewView: View {
                     )
                 }
             case .configurationRequired:
-                pendingConfigurationPrompt = .ai
+                pendingConfigurationPrompt = .ai(action)
             case .failed(let message):
                 toastCenter.error(message)
             case .cancelled:
@@ -442,7 +458,54 @@ struct NoteReviewView: View {
     }
 
     private func syncLoadingGate() {
-        loadingGate.update(intent: viewModel.isInitialLoading ? .read : .none)
+        loadingGate.update(intent: viewModel.contentState == .loading ? .read : .none)
+    }
+
+    private var isUnresolvedContentState: Bool {
+        switch viewModel.contentState {
+        case .idle, .loading:
+            true
+        case .content, .empty, .failure:
+            false
+        }
+    }
+
+    private var contentTransitionAnimation: Animation? {
+        reduceMotion ? nil : .easeOut(duration: 0.12)
+    }
+
+    /// 首轮失败后重启同一加载生命周期；按钮动作只负责建立可取消的页面任务。
+    private func retryInitialLoad() {
+        Task { @MainActor in
+            await viewModel.retryInitialLoad()
+        }
+    }
+}
+
+/// 首轮查询失败使用持久页面状态承载原因与重试，不与瞬时 Toast 或空结果混用。
+private struct NoteReviewFailureContent: View {
+    let message: String
+    let onRetry: () -> Void
+
+    var body: some View {
+        CardContainer(showsBorder: false) {
+            VStack(alignment: .leading, spacing: Spacing.base) {
+                Label("暂时无法加载回顾", systemImage: "exclamationmark.triangle")
+                    .font(AppTypography.headline)
+                    .foregroundStyle(Color.textPrimary)
+
+                Text(message)
+                    .font(AppTypography.subheadline)
+                    .foregroundStyle(Color.textSecondary)
+
+                Button("重试", action: onRetry)
+                    .font(AppTypography.subheadline)
+                    .buttonStyle(.bordered)
+            }
+            .padding(Spacing.contentEdge)
+        }
+        .padding(.horizontal, Spacing.screenEdge)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }
 
@@ -468,36 +531,45 @@ extension ExternalAppDestination {
     }
 }
 
-private enum NoteReviewConfigurationPrompt: String, Identifiable {
+private enum NoteReviewConfigurationPrompt: Identifiable {
     case externalApp
-    case ai
+    case ai(NoteReviewAIAction)
 
-    var id: String { rawValue }
+    var id: String {
+        switch self {
+        case .externalApp:
+            "external-app"
+        case .ai(let action):
+            "ai-\(action.rawValue)"
+        }
+    }
 
     var title: String {
         switch self {
         case .externalApp:
-            "尚未配置关联应用"
+            "需要先设置发送方式"
         case .ai:
-            "请先完成 AI 配置"
+            "需要先设置 AI"
         }
     }
 
     var message: String {
         switch self {
         case .externalApp:
-            "请先前往“我的 > API 集成”，配置至少一个发送目标后再试。"
-        case .ai:
-            "启用 AI 并配置模型与 API Key 后，即可使用 AI 释义和 AI 标签。"
+            "连接一个应用后，即可发送这条书摘。"
+        case .ai(.explanation):
+            "完成设置后，即可为这条书摘生成释义。"
+        case .ai(.autoTag):
+            "完成设置后，即可为这条书摘生成标签。"
         }
     }
 
     var actionTitle: String {
         switch self {
         case .externalApp:
-            "去配置"
+            "设置发送方式"
         case .ai:
-            "前往设置"
+            "设置 AI"
         }
     }
 
@@ -511,7 +583,7 @@ private enum NoteReviewConfigurationPrompt: String, Identifiable {
     }
 }
 
-private enum NoteReviewAIAction {
+private enum NoteReviewAIAction: String {
     case explanation
     case autoTag
 }
