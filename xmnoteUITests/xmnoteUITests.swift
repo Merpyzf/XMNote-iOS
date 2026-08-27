@@ -19,6 +19,26 @@ final class BookshelfBookListSearchDrawerUITests: XCTestCase {
         continueAfterFailure = false
     }
 
+    func testAccessibilityDynamicTypeLimitsBothBookshelfGridsToTwoColumns() throws {
+        let defaultApp = launchAccessibilityBookshelf(argument: defaultBookshelfArgument)
+        let defaultCollection = waitForDefaultBookshelf(in: defaultApp)
+        assertAccessibilityGridCellWidth(
+            defaultBookButton(in: defaultApp, id: 1001),
+            collection: defaultCollection,
+            app: defaultApp
+        )
+
+        defaultApp.terminate()
+
+        let secondaryApp = launchAccessibilityBookshelf(argument: wantReadArgument)
+        let secondaryCollection = waitForBookList(in: secondaryApp)
+        assertAccessibilityGridCellWidth(
+            bookButton(in: secondaryApp, id: 1001),
+            collection: secondaryCollection,
+            app: secondaryApp
+        )
+    }
+
     func testDefaultBookshelfSearchFiltersClearsAndCancels() throws {
         let app = launchDefaultBookshelf()
         _ = waitForDefaultBookshelf(in: app)
@@ -337,6 +357,19 @@ final class BookshelfBookListSearchDrawerUITests: XCTestCase {
         return app
     }
 
+    private func launchAccessibilityBookshelf(argument: String) -> XCUIApplication {
+        let app = XCUIApplication()
+        app.launchArguments = [
+            seedArgument,
+            argument,
+            resetSceneStateArgument,
+            "-UIPreferredContentSizeCategoryName",
+            "UICTContentSizeCategoryAccessibilityXXXL"
+        ]
+        app.launch()
+        return app
+    }
+
     private func waitForDefaultBookshelf(in app: XCUIApplication) -> XCUIElement {
         let collection = app.collectionViews["bookshelf.default.collection"]
         XCTAssertTrue(collection.waitForExistence(timeout: 8), app.debugDescription)
@@ -390,6 +423,16 @@ final class BookshelfBookListSearchDrawerUITests: XCTestCase {
         app.buttons.matching(
             NSPredicate(format: "identifier == %@ AND label CONTAINS %@", "bookshelf.book-list.book.\(id)", "未选中")
         ).firstMatch
+    }
+
+    private func assertAccessibilityGridCellWidth(
+        _ book: XCUIElement,
+        collection: XCUIElement,
+        app: XCUIApplication
+    ) {
+        XCTAssertTrue(book.waitForExistence(timeout: 6), app.debugDescription)
+        XCTAssertGreaterThan(book.frame.width, collection.frame.width / 3)
+        XCTAssertGreaterThan(book.frame.height, 0)
     }
 
     private func performReorderDrag(from source: XCUIElement, to target: XCUIElement) {

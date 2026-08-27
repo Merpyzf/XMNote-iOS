@@ -459,15 +459,13 @@ struct BookCollectionBookMetadataEditSheet: View {
                 )
             }
         ) {
-            ScrollView {
-                VStack(alignment: .leading, spacing: Spacing.section) {
-                    coverSection
-                    metadataFields
-                    relationNoteSection
-                }
-                .padding(.horizontal, Spacing.screenEdge)
-                .padding(.bottom, Spacing.contentEdge)
+            VStack(alignment: .leading, spacing: Spacing.section) {
+                coverSection
+                metadataFields
+                relationNoteSection
             }
+            .padding(.horizontal, Spacing.screenEdge)
+            .padding(.bottom, Spacing.contentEdge)
         }
         .background(Color.surfaceSheet.ignoresSafeArea())
         .presentationDetents([.large])
@@ -929,34 +927,32 @@ struct BookCollectionWereadImportPreviewSheet: View {
                 )
             }
         ) {
-            ScrollView {
-                VStack(alignment: .leading, spacing: Spacing.section) {
-                    previewHeader
+            VStack(alignment: .leading, spacing: Spacing.section) {
+                previewHeader
 
-                    if let errorMessage {
-                        XMInlineStatusBanner(
-                            errorMessage.isEmpty ? "导入失败，请稍后重试" : errorMessage,
-                            tone: .warning
-                        )
+                if let errorMessage {
+                    XMInlineStatusBanner(
+                        errorMessage.isEmpty ? "导入失败，请稍后重试" : errorMessage,
+                        tone: .warning
+                    )
+                }
+
+                VStack(spacing: Spacing.tight) {
+                    ForEach(preview.books.prefix(12)) { book in
+                        previewBookRow(book)
                     }
 
-                    VStack(spacing: Spacing.tight) {
-                        ForEach(preview.books.prefix(12)) { book in
-                            previewBookRow(book)
-                        }
-
-                        if preview.books.count > 12 {
-                            Text("另有 \(preview.books.count - 12) 本书将在导入时一并保存")
-                                .font(AppTypography.caption)
-                                .foregroundStyle(Color.textSecondary)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .padding(.top, Spacing.compact)
-                        }
+                    if preview.books.count > 12 {
+                        Text("另有 \(preview.books.count - 12) 本书将在导入时一并保存")
+                            .font(AppTypography.caption)
+                            .foregroundStyle(Color.textSecondary)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.top, Spacing.compact)
                     }
                 }
-                .padding(.horizontal, Spacing.screenEdge)
-                .padding(.bottom, Spacing.contentEdge)
             }
+            .padding(.horizontal, Spacing.screenEdge)
+            .padding(.bottom, Spacing.contentEdge)
         }
         .background(Color.surfaceSheet.ignoresSafeArea())
         .presentationDetents([.large])

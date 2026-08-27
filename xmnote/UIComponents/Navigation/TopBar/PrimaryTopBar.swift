@@ -1,11 +1,22 @@
 /**
  * [INPUT]: 依赖 xmnote/Utilities/DesignSystem/Spacing.swift 的间距设计令牌
- * [OUTPUT]: 对外提供 PrimaryTopBar 顶部容器组件
+ * [OUTPUT]: 对外提供 PrimaryTopBar 顶部容器组件与 PrimaryTopBarLayout 动态高度合同
  * [POS]: UIComponents/Navigation/TopBar 的结构容器组件，承载顶部左侧内容与右侧操作区布局
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
 import SwiftUI
+
+/// 主 Tab 顶部栏的共享布局合同，供顶部组件与其下方内容避让使用同一高度。
+enum PrimaryTopBarLayout {
+    private static let regularMinimumHeight: CGFloat = 56
+    private static let accessibilityMinimumHeight: CGFloat = 60
+
+    /// 根据 Dynamic Type 返回顶部栏最小高度；辅助功能字号保留额外纵向空间。
+    static func minimumHeight(for dynamicTypeSize: DynamicTypeSize) -> CGFloat {
+        dynamicTypeSize.isAccessibilitySize ? accessibilityMinimumHeight : regularMinimumHeight
+    }
+}
 
 /// 主 Tab 顶部容器：左侧内容 + 右侧操作区，统一高度与边距。
 struct PrimaryTopBar<Leading: View, Trailing: View>: View {
@@ -32,7 +43,7 @@ struct PrimaryTopBar<Leading: View, Trailing: View>: View {
             }
         }
         .padding(.horizontal, Spacing.screenEdge)
-        .frame(minHeight: dynamicTypeSize >= .accessibility1 ? 60 : 56)
+        .frame(minHeight: PrimaryTopBarLayout.minimumHeight(for: dynamicTypeSize))
         .background(Color.clear)
     }
 }

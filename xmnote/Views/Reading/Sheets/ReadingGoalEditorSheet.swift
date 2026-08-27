@@ -35,53 +35,80 @@ struct ReadingGoalEditorSheet: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @FocusState private var isFocused: Bool
 
+    @ViewBuilder
     var body: some View {
-        NavigationStack {
-            Group {
-                switch item.mode {
-                case .daily:
-                    dailyGoalForm
-                case .yearly:
-                    yearlyGoalPicker
-                }
+        switch item.mode {
+        case .daily:
+            XMSheetScaffold(
+                title: item.mode.title,
+                onClose: {
+                    guard !isSaving else { return }
+                    onCancel()
+                },
+                bottomBar: { saveButton }
+            ) {
+                dailyGoalForm
             }
-            .navigationTitle(item.mode.title)
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("取消", action: onCancel)
-                        .tint(Color.textSecondary)
-                        .disabled(isSaving)
-                }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button(isSaving ? "保存中…" : "保存", action: onConfirm)
-                        .tint(Color.appTint)
-                        .disabled(isSaving)
-                }
-            }
-        }
-        .presentationDetents(presentationDetents)
-        .presentationDragIndicator(.visible)
-        .interactiveDismissDisabled(isSaving)
-        .task {
-            guard item.mode == .daily else { return }
-            isFocused = true
+            .presentationDetents(presentationDetents)
+            .presentationDragIndicator(.visible)
+            .interactiveDismissDisabled(isSaving)
+            .task { isFocused = true }
+        case .yearly:
+            yearlySystemPickerSheet
         }
     }
 
     private var dailyGoalForm: some View {
-        Form {
-            Section {
+        VStack(alignment: .leading, spacing: Spacing.cozy) {
+            XMSettingsSection("单位：分钟") {
+                XMSettingsGroup(presentation: .singleItem) {
                 TextField("请输入目标值", text: $value)
+                    .font(AppTypography.body)
                     .keyboardType(.numberPad)
                     .focused($isFocused)
                     .disabled(isSaving)
-            } header: {
-                Text("单位：分钟")
-            } footer: {
-                goalEditorError
+                    .frame(minHeight: XMSettingsPageLayout.inputMinHeight)
+                }
             }
+
+            goalEditorError
         }
+        .padding(.horizontal, Spacing.screenEdge)
+        .padding(.bottom, Spacing.contentEdge)
+    }
+
+    private var yearlySystemPickerSheet: some View {
+        NavigationStack {
+            yearlyGoalPicker
+                .navigationTitle(item.mode.title)
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("取消", action: onCancel)
+                            .tint(Color.textSecondary)
+                            .disabled(isSaving)
+                    }
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button(isSaving ? "保存中…" : "保存", action: onConfirm)
+                            .tint(Color.appTint)
+                            .disabled(isSaving)
+                    }
+                }
+        }
+        .presentationDetents(presentationDetents)
+        .presentationDragIndicator(.visible)
+        .interactiveDismissDisabled(isSaving)
+    }
+
+    private var saveButton: some View {
+        Button(isSaving ? "保存中…" : "保存", action: onConfirm)
+            .font(AppTypography.subheadlineSemibold)
+            .frame(maxWidth: .infinity)
+            .frame(minHeight: InteractionMetrics.minimumTouchTarget)
+            .buttonStyle(.borderedProminent)
+            .disabled(isSaving)
+            .padding(.horizontal, Spacing.screenEdge)
+            .padding(.vertical, Spacing.cozy)
     }
 
     private var yearlyGoalPicker: some View {

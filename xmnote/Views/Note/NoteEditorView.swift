@@ -812,9 +812,15 @@ private extension NoteEditorView {
                 .foregroundStyle(Color.textSecondary)
                 .frame(width: 30, height: 30)
                 .background(Color.controlFillSecondary, in: Circle())
+                .frame(
+                    width: InteractionMetrics.minimumTouchTarget,
+                    height: InteractionMetrics.minimumTouchTarget,
+                    alignment: .topTrailing
+                )
+                .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .accessibilityLabel("OCR")
+        .accessibilityLabel("文字识别")
     }
 
     func autoSaveCard(_ description: String) -> some View {

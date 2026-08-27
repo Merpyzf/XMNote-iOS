@@ -502,10 +502,10 @@ private extension TimelineCalendarPanel {
                     .foregroundStyle(TimelineCalendarStyle.monthUnitColor)
                     .offset(y: -0.5)
             }
+            .frame(minHeight: InteractionMetrics.minimumTouchTarget, alignment: .leading)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .frame(minHeight: InteractionMetrics.minimumTouchTarget, alignment: .leading)
         .accessibilityLabel("选择年月")
         .accessibilityValue(monthFormatter.string(from: viewModel.displayedMonthStart))
     }
@@ -529,20 +529,30 @@ private extension TimelineCalendarPanel {
     }
 
     var todayButton: some View {
-        Button("今") {
+        Button {
             pendingSheetMonthSelection = nil
             jumpToDate(calendar.startOfDay(for: Date()), animated: true)
+        } label: {
+            Text("今")
+                .font(TimelineCalendarStyle.actionButtonFont)
+                .foregroundStyle(ReadingTimelineAppearance.calendarActionForeground)
+                .padding(.horizontal, Spacing.tight)
+                .padding(.vertical, Spacing.half)
+                .background(Color.selectionAccent.opacity(0.14))
+                .overlay(
+                    Capsule()
+                        .stroke(Color.selectionAccent.opacity(0.28), lineWidth: StrokeWidth.hairline)
+                )
+                .clipShape(Capsule())
+                .frame(
+                    width: InteractionMetrics.minimumTouchTarget,
+                    height: InteractionMetrics.minimumTouchTarget,
+                    alignment: .trailing
+                )
+                .contentShape(Rectangle())
         }
-        .font(TimelineCalendarStyle.actionButtonFont)
-        .foregroundStyle(ReadingTimelineAppearance.calendarActionForeground)
-        .padding(.horizontal, Spacing.tight)
-        .padding(.vertical, Spacing.half)
-        .background(Color.selectionAccent.opacity(0.14))
-        .overlay(
-            Capsule()
-                .stroke(Color.selectionAccent.opacity(0.28), lineWidth: StrokeWidth.hairline)
-        )
-        .clipShape(Capsule())
+        .buttonStyle(.plain)
+        .accessibilityLabel("返回今天")
     }
 
     var availableMonthStarts: [Date] {
@@ -1026,7 +1036,18 @@ private struct TimelineListContainer: View {
             sectionsRevision: viewModel.sectionsRevision,
             bootstrapPhase: viewModel.bootstrapPhase,
             isRefreshing: viewModel.isRefreshing,
+            initialErrorMessage: viewModel.initialErrorMessage,
+            refreshErrorMessage: viewModel.refreshErrorMessage,
             sourceContext: viewModel.currentViewerSourceContext(),
+            onRetry: {
+                Task {
+                    if viewModel.bootstrapPhase == .failed {
+                        await viewModel.retryInitialData()
+                    } else {
+                        await viewModel.loadEvents()
+                    }
+                }
+            },
             onOpenContentViewer: onOpenContentViewer,
             onOpenBookDetail: onOpenBookDetail
         )
@@ -1057,7 +1078,10 @@ private struct TimelineListContent: View, Equatable {
     let sectionsRevision: Int
     let bootstrapPhase: TimelineViewModel.BootstrapPhase
     let isRefreshing: Bool
+    let initialErrorMessage: String?
+    let refreshErrorMessage: String?
     let sourceContext: ContentViewerSourceContext
+    let onRetry: () -> Void
     let onOpenContentViewer: (ContentViewerSourceContext, ContentViewerItemID) -> Void
     let onOpenBookDetail: (Int64) -> Void
 
@@ -1065,6 +1089,8 @@ private struct TimelineListContent: View, Equatable {
         lhs.sectionsRevision == rhs.sectionsRevision &&
         lhs.bootstrapPhase == rhs.bootstrapPhase &&
         lhs.isRefreshing == rhs.isRefreshing &&
+        lhs.initialErrorMessage == rhs.initialErrorMessage &&
+        lhs.refreshErrorMessage == rhs.refreshErrorMessage &&
         lhs.sourceContext == rhs.sourceContext
     }
 
@@ -1073,16 +1099,40 @@ private struct TimelineListContent: View, Equatable {
             if bootstrapPhase == .bootstrapping {
                 TimelineBootstrapListPlaceholder()
                     .padding(.vertical, Spacing.cozy)
-            } else if sections.isEmpty {
+            } else if bootstrapPhase == .failed {
                 XMCompactStateView(
-                    role: .noResults,
-                    title: "当日没有匹配事件",
-                    systemImage: "clock.arrow.circlepath"
+                    role: .failure,
+                    title: "暂时无法加载时间线",
+                    message: initialErrorMessage,
+                    action: XMStateAction(
+                        "重试",
+                        systemImage: "arrow.clockwise",
+                        perform: onRetry
+                    )
                 )
+                .padding(.vertical, Spacing.double)
+            } else if sections.isEmpty {
+                VStack(spacing: Spacing.base) {
+                    if let refreshErrorMessage {
+                        refreshFailureBanner(refreshErrorMessage)
+                    }
+
+                    XMCompactStateView(
+                        role: .noResults,
+                        title: "当日没有匹配事件",
+                        systemImage: "clock.arrow.circlepath"
+                    )
+                }
                     .padding(.vertical, Spacing.double)
             } else {
                 ZStack(alignment: .topTrailing) {
                     LazyVStack(spacing: Spacing.none, pinnedViews: [.sectionHeaders]) {
+                        if let refreshErrorMessage {
+                            refreshFailureBanner(refreshErrorMessage)
+                                .padding(.trailing, TimelineFilterHostStyle.controlWidth + Spacing.cozy)
+                                .padding(.bottom, Spacing.cozy)
+                        }
+
                         ForEach(sections) { section in
                             TimelineSectionView(
                                 section: section,
@@ -1102,6 +1152,18 @@ private struct TimelineListContent: View, Equatable {
                 }
             }
         }
+    }
+
+    private func refreshFailureBanner(_ message: String) -> some View {
+        XMInlineStatusBanner(
+            message,
+            tone: .error,
+            action: XMStateAction(
+                "重试",
+                systemImage: "arrow.clockwise",
+                perform: onRetry
+            )
+        )
     }
 }
 
@@ -1351,7 +1413,11 @@ private struct TimelineCategoryFilterMenu: View {
             }
             .padding(.horizontal, Spacing.cozy)
             .padding(.vertical, Spacing.compact)
-            .frame(minWidth: TimelineFilterHostStyle.controlWidth)
+            .frame(
+                minWidth: TimelineFilterHostStyle.controlWidth,
+                minHeight: InteractionMetrics.minimumTouchTarget,
+                alignment: .trailing
+            )
             .contentShape(Rectangle())
         }
         .xmMenuNeutralTint()

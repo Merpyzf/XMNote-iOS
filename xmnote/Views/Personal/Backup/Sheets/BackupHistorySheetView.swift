@@ -13,7 +13,11 @@ struct BackupHistorySheetView: View {
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
-        NavigationStack {
+        XMSheetScaffold(
+            title: "备份历史",
+            subtitle: viewModel.backupList.isEmpty ? nil : "共 \(viewModel.backupList.count) 个",
+            onClose: { dismiss() }
+        ) {
             Group {
                 if viewModel.backupList.isEmpty {
                     XMCompactStateView(
@@ -21,17 +25,13 @@ struct BackupHistorySheetView: View {
                         title: "暂无备份记录",
                         systemImage: "clock.arrow.circlepath"
                     )
+                    .frame(maxWidth: .infinity, minHeight: 220)
                 } else {
                     backupListView
                 }
             }
-            .navigationTitle("备份历史")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("关闭") { dismiss() }
-                }
-            }
+            .padding(.horizontal, Spacing.screenEdge)
+            .padding(.bottom, Spacing.contentEdge)
         }
     }
 }
@@ -41,16 +41,28 @@ struct BackupHistorySheetView: View {
 private extension BackupHistorySheetView {
 
     var backupListView: some View {
-        List(viewModel.backupList) { backup in
-            Button {
-                dismiss()
-                Task { @MainActor in
-                    viewModel.presentRestoreTarget(for: backup)
+        XMSettingsGroup(horizontalPadding: Spacing.none, verticalPadding: Spacing.none) {
+            LazyVStack(spacing: Spacing.none) {
+                ForEach(viewModel.backupList.enumerated(), id: \.element.id) { index, backup in
+                    Button {
+                        dismiss()
+                        Task { @MainActor in
+                            viewModel.presentRestoreTarget(for: backup)
+                        }
+                    } label: {
+                        backupRow(backup)
+                            .padding(.horizontal, Spacing.contentEdge)
+                            .padding(.vertical, Spacing.comfortable)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+
+                    if index < viewModel.backupList.count - 1 {
+                        XMSettingsDivider()
+                            .padding(.leading, Spacing.contentEdge)
+                    }
                 }
-            } label: {
-                backupRow(backup)
             }
-            .buttonStyle(.plain)
         }
     }
 

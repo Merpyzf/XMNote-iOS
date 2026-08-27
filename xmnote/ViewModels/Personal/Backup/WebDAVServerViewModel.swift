@@ -1,4 +1,5 @@
 import Foundation
+import OSLog
 
 /**
  * [INPUT]: 依赖 BackupServerRepositoryProtocol 提供服务器列表、CRUD 与连接测试
@@ -10,7 +11,22 @@ import Foundation
 @Observable
 /// WebDAV 服务器管理状态源，负责列表、表单与连接测试交互。
 class WebDAVServerViewModel {
+    enum LoadPhase: Equatable {
+        case idle
+        case loading
+        case content
+        case failure
+    }
+
+    private static let logger = Logger(
+        subsystem: Bundle.main.bundleIdentifier ?? "XMNote",
+        category: "WebDAVServer"
+    )
+
     var servers: [BackupServerRecord] = []
+    private(set) var loadPhase: LoadPhase = .idle
+    private(set) var loadErrorMessage: String?
+    var operationErrorMessage: String?
     var isShowingForm = false
     var editingServer: BackupServerRecord?
 
@@ -45,10 +61,23 @@ extension WebDAVServerViewModel {
 
     /// 加载已保存的服务器配置列表。
     func loadServers() async {
+        if servers.isEmpty {
+            loadPhase = .loading
+        }
+        loadErrorMessage = nil
         do {
             servers = try await repository.fetchServers()
+            loadPhase = .content
         } catch {
-            servers = []
+            guard !Task.isCancelled else { return }
+            Self.logger.error("WebDAV server load failed: \(error.localizedDescription, privacy: .public)")
+            if servers.isEmpty {
+                loadErrorMessage = "请检查后重试"
+                loadPhase = .failure
+            } else {
+                operationErrorMessage = "服务器列表更新失败，请重试"
+                loadPhase = .content
+            }
         }
     }
 }
@@ -122,7 +151,9 @@ extension WebDAVServerViewModel {
 
     /// 删除指定服务器并刷新列表。
     func delete(_ server: BackupServerRecord) async {
+        guard !isProcessing else { return }
         isProcessing = true
+        operationErrorMessage = nil
         defer { isProcessing = false }
 
         do {
@@ -130,13 +161,17 @@ extension WebDAVServerViewModel {
             serverDidChange = true
             await loadServers()
         } catch {
-            // 静默失败
+            guard !Task.isCancelled else { return }
+            Self.logger.error("WebDAV server delete failed: \(error.localizedDescription, privacy: .public)")
+            operationErrorMessage = "删除失败，请重试"
         }
     }
 
     /// 将指定服务器设为当前备份目标并刷新列表状态。
     func select(_ server: BackupServerRecord) async {
+        guard !isProcessing else { return }
         isProcessing = true
+        operationErrorMessage = nil
         defer { isProcessing = false }
 
         do {
@@ -144,7 +179,9 @@ extension WebDAVServerViewModel {
             serverDidChange = true
             await loadServers()
         } catch {
-            // 静默失败
+            guard !Task.isCancelled else { return }
+            Self.logger.error("WebDAV server selection failed: \(error.localizedDescription, privacy: .public)")
+            operationErrorMessage = "切换服务器失败，请重试"
         }
     }
 }

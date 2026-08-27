@@ -386,7 +386,9 @@ struct XMSheetScaffold<
                 .padding(.bottom, Spacing.section)
         },
         bottomBar: {
-            XMPrimaryActionButton("完成") { }
+            Button("完成") { }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.large)
                 .padding(.horizontal, Spacing.screenEdge)
                 .padding(.bottom, Spacing.base)
         }

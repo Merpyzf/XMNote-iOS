@@ -42,14 +42,27 @@ struct ReadingDashboardLoadingShell: View {
     }
 
     var body: some View {
-        ReadingDashboardScrollContainer {
-            semanticStructure
-        }
-        .overlay {
+        Group {
             if let errorMessage {
-                failureOverlay(message: errorMessage)
-            } else if isLoadingIndicatorVisible {
-                ReadingDashboardLoadingIndicator()
+                XMContentStateView(
+                    role: .failure,
+                    title: "暂时无法加载在读首页",
+                    message: errorMessage,
+                    action: XMStateAction(
+                        "重试",
+                        systemImage: "arrow.clockwise",
+                        perform: onRetry
+                    )
+                )
+            } else {
+                ReadingDashboardScrollContainer {
+                    semanticStructure
+                }
+                .overlay {
+                    if isLoadingIndicatorVisible {
+                        ReadingDashboardLoadingIndicator()
+                    }
+                }
             }
         }
     }
@@ -95,16 +108,6 @@ struct ReadingDashboardLoadingShell: View {
         }
     }
 
-    private func failureOverlay(message: String) -> some View {
-        XMInlineStatusBanner(
-            message,
-            tone: .error,
-            action: XMStateAction("重试", systemImage: "arrow.clockwise", perform: onRetry)
-        )
-        .padding(.horizontal, Spacing.screenEdge)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .padding(.top, Spacing.section)
-    }
 }
 
 /// ReadingDashboardLoadingIndicator 为超过读取阈值的首页提供单一紧凑反馈，不遮挡或参与卡片排版。

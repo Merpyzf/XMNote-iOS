@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 SettingsTypography、SemanticColors、XMMenuStyle 与 SwiftUI Menu/Toggle，接收本地化标题和业务值
- * [OUTPUT]: 对外提供主行 17pt、值 15pt 的 XMSettingsValueMenuRow 与 XMSettingsToggleRow
+ * [OUTPUT]: 对外提供主行 17pt、值 15pt，且在辅助功能字号下自动纵向重排的 XMSettingsValueMenuRow 与 XMSettingsToggleRow
  * [POS]: UIComponents/Settings 的标准行族；不提供万能行，避免把业务布局压入参数集合
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -27,30 +27,47 @@ struct XMSettingsValueMenuRow<Option: Hashable>: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var body: some View {
-        HStack(spacing: Spacing.base) {
-            Text(title)
-                .font(SettingsTypography.rowTitle)
-                .foregroundStyle(Color.textPrimary)
-                .fixedSize(horizontal: false, vertical: true)
-
-            Spacer(minLength: Spacing.base)
-
-            Menu {
-                Picker(String(localized: title), selection: selectionBinding) {
-                    ForEach(options, id: \.self) { option in
-                        menuItemLabel(for: option)
-                            .tag(option)
-                    }
+        Group {
+            if dynamicTypeSize.isAccessibilitySize {
+                VStack(alignment: .leading, spacing: Spacing.cozy) {
+                    titleLabel
+                    menu
+                        .frame(maxWidth: .infinity, alignment: .trailing)
                 }
-            } label: {
-                valueControl
+                .padding(.vertical, Spacing.cozy)
+            } else {
+                HStack(spacing: Spacing.base) {
+                    titleLabel
+                    Spacer(minLength: Spacing.base)
+                    menu
+                }
             }
-            .buttonStyle(.plain)
-            .xmMenuNeutralTint()
-            .accessibilityLabel("\(String(localized: title))，当前\(value)")
-            .accessibilityHint("打开选项菜单")
         }
         .frame(minHeight: XMSettingsRowLayout.minimumHeight)
+    }
+
+    private var titleLabel: some View {
+        Text(title)
+            .font(SettingsTypography.rowTitle)
+            .foregroundStyle(Color.textPrimary)
+            .fixedSize(horizontal: false, vertical: true)
+    }
+
+    private var menu: some View {
+        Menu {
+            Picker(String(localized: title), selection: selectionBinding) {
+                ForEach(options, id: \.self) { option in
+                    menuItemLabel(for: option)
+                        .tag(option)
+                }
+            }
+        } label: {
+            valueControl
+        }
+        .buttonStyle(.plain)
+        .xmMenuNeutralTint()
+        .accessibilityLabel("\(String(localized: title))，当前\(value)")
+        .accessibilityHint("打开选项菜单")
     }
 
     private var valueControl: some View {
@@ -142,4 +159,23 @@ struct XMSettingsToggleRow: View {
     }
     .padding()
     .background(Color.surfacePage)
+}
+
+#Preview("设置行 · 辅助功能字号长文本") {
+    @Previewable @State var selection = 0
+
+    XMSettingsGroup {
+        XMSettingsValueMenuRow(
+            title: "书架默认排序方式",
+            value: selection == 0 ? "按照最近一次阅读时间从新到旧排列" : "按照书名的本地化顺序排列",
+            options: [0, 1],
+            selection: selection,
+            optionTitle: { $0 == 0 ? "最近阅读" : "书名" },
+            optionImage: { $0 == 0 ? "clock" : "textformat" },
+            onSelect: { selection = $0 }
+        )
+    }
+    .padding()
+    .background(Color.surfacePage)
+    .dynamicTypeSize(.accessibility3)
 }

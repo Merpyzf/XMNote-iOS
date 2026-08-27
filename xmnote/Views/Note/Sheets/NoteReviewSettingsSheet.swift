@@ -482,7 +482,12 @@ private struct NoteReviewTagSelectionSheet: View {
         XMSheetScaffold(
             title: "选择标签",
             subtitle: draftSummary,
-            onClose: { dismiss() }
+            onClose: { dismiss() },
+            bottomBar: {
+                actionBar
+                    .padding(.horizontal, Spacing.screenEdge)
+                    .padding(.vertical, Spacing.cozy)
+            }
         ) {
             VStack(spacing: Spacing.comfortable) {
                 if options.isEmpty {
@@ -494,7 +499,6 @@ private struct NoteReviewTagSelectionSheet: View {
                         .frame(minHeight: 220)
                 } else {
                     tagGroup
-                    actionBar
                 }
             }
             .padding(.horizontal, Spacing.screenEdge)
@@ -523,9 +527,12 @@ private struct NoteReviewTagSelectionSheet: View {
 
                             Spacer(minLength: Spacing.base)
 
-                            Image(systemName: draftIDs.contains(option.id) ? "checkmark.circle.fill" : "circle")
-                                .font(AppTypography.title3)
-                                .foregroundStyle(draftIDs.contains(option.id) ? Color.selectionAccent : Color.textHint)
+                            XMSelectionIndicator(
+                                style: .checkbox,
+                                isSelected: draftIDs.contains(option.id),
+                                font: AppTypography.title3,
+                                showsUnselectedBase: true
+                            )
                         }
                         .frame(minHeight: 52)
                         .contentShape(Rectangle())

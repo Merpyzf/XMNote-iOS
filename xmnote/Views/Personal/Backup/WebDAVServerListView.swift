@@ -16,7 +16,11 @@ struct WebDAVServerListView: View {
     var body: some View {
         ZStack {
             if let viewModel {
-                WebDAVServerListContentView(viewModel: viewModel)
+                WebDAVServerListContentView(
+                    viewModel: viewModel,
+                    isLoadingVisible: bootstrapLoadingGate.isVisible,
+                    onRetry: retryLoad
+                )
             } else {
                 Color.surfacePage.ignoresSafeArea()
                 if bootstrapLoadingGate.isVisible {
@@ -39,15 +43,102 @@ struct WebDAVServerListView: View {
             bootstrapLoadingGate.hideImmediately()
         }
     }
+
+    /// 重试首次读取并复用读取门闩，避免快速失败重试产生加载闪烁。
+    private func retryLoad() {
+        guard let viewModel else { return }
+        bootstrapLoadingGate.update(intent: .read)
+        Task {
+            await viewModel.loadServers()
+            bootstrapLoadingGate.update(intent: .none)
+        }
+    }
 }
 
 // MARK: - Content View
 
 private struct WebDAVServerListContentView: View {
     @Bindable var viewModel: WebDAVServerViewModel
+    let isLoadingVisible: Bool
+    let onRetry: () -> Void
 
     var body: some View {
+        Group {
+            switch viewModel.loadPhase {
+            case .idle, .loading:
+                if isLoadingVisible {
+                    LoadingStateView("正在加载服务器列表…", style: .card)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else {
+                    Color.clear
+                }
+            case .failure:
+                XMContentStateView(
+                    role: .failure,
+                    title: "暂时无法加载服务器",
+                    message: viewModel.loadErrorMessage,
+                    action: XMStateAction(
+                        "重试",
+                        systemImage: "arrow.clockwise",
+                        perform: onRetry
+                    )
+                )
+            case .content:
+                if viewModel.servers.isEmpty {
+                    XMContentStateView(
+                        role: .empty,
+                        title: "暂无备份服务器",
+                        message: "添加服务器后可用于云端备份",
+                        systemImage: "externaldrive.badge.plus",
+                        action: XMStateAction("新增服务器", perform: viewModel.beginAdd)
+                    )
+                } else {
+                    serverList
+                }
+            }
+        }
+        .disabled(viewModel.isProcessing)
+        .overlay {
+            if viewModel.isProcessing {
+                LoadingStateView("正在更新…", style: .card)
+            }
+        }
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button { viewModel.beginAdd() } label: {
+                    Image(systemName: "plus")
+                }
+                .disabled(viewModel.isProcessing || viewModel.loadPhase == .loading)
+                .accessibilityLabel("新增服务器")
+            }
+        }
+        .sheet(isPresented: $viewModel.isShowingForm) {
+            WebDAVServerFormView(viewModel: viewModel)
+        }
+    }
+
+    private var serverList: some View {
         List {
+            if let operationErrorMessage = viewModel.operationErrorMessage {
+                XMInlineStatusBanner(
+                    operationErrorMessage,
+                    tone: .error,
+                    action: XMStateAction("关闭") {
+                        viewModel.operationErrorMessage = nil
+                    }
+                )
+                .listRowInsets(
+                    EdgeInsets(
+                        top: Spacing.cozy,
+                        leading: Spacing.screenEdge,
+                        bottom: Spacing.cozy,
+                        trailing: Spacing.screenEdge
+                    )
+                )
+                .listRowBackground(Color.clear)
+                .listRowSeparator(.hidden)
+            }
+
             ForEach(viewModel.servers, id: \.id) { server in
                 serverRow(server)
                     .swipeActions(edge: .trailing) {
@@ -63,23 +154,6 @@ private struct WebDAVServerListContentView: View {
                         }
                     }
             }
-        }
-        .disabled(viewModel.isProcessing)
-        .overlay {
-            if viewModel.isProcessing {
-                ProgressView()
-            }
-        }
-        .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
-                Button { viewModel.beginAdd() } label: {
-                    Image(systemName: "plus")
-                }
-                .disabled(viewModel.isProcessing)
-            }
-        }
-        .sheet(isPresented: $viewModel.isShowingForm) {
-            WebDAVServerFormView(viewModel: viewModel)
         }
     }
 }

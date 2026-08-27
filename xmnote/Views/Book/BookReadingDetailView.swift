@@ -11,6 +11,7 @@ import SwiftUI
 struct BookReadingDetailView: View {
     @Environment(RepositoryContainer.self) private var repositories
     @Environment(AppNavigationCoordinator.self) private var navigationCoordinator
+    @Environment(XMToastCenter.self) private var toastCenter
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.accessibilityReduceMotion) private var accessibilityReduceMotion
     @Environment(\.accessibilityReduceTransparency) private var accessibilityReduceTransparency
@@ -20,7 +21,6 @@ struct BookReadingDetailView: View {
     @State private var expandedMonthIDs: Set<MonthlyReadingChart.MonthID> = []
     @State private var didApplyMonthlyDefault = false
     @State private var resolvedVisualTheme: BookReadingDetailTheme?
-    @State private var toastCenter = XMToastCenter()
 
     /// 注入书籍主键；浏览路径由外层持有，编辑任务交给环境协调器。
     init(bookID: Int64) {
@@ -49,7 +49,6 @@ struct BookReadingDetailView: View {
         .toolbar { toolbarContent }
         .toolbarBackground(.hidden, for: .navigationBar)
         .sheet(item: $presentedSheet, content: presentedSheetContent)
-        .xmToastHost(center: toastCenter)
         .task {
             syncLoadingGate()
             await viewModel.observe(using: repositories.bookReadingDetailRepository)

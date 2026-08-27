@@ -105,13 +105,20 @@ enum BookshelfBookListCollectionLayoutFactory {
     static func makeGridSection(
         columnCount: Int,
         containerWidth: CGFloat,
-        titleDisplayMode: BookshelfTitleDisplayMode
+        dynamicTypeSize: DynamicTypeSize,
+        titleDisplayMode: BookshelfTitleDisplayMode,
+        sortCriteria: BookshelfSortCriteria
     ) -> NSCollectionLayoutSection {
-        let clampedColumnCount = max(2, min(columnCount, 4))
+        let clampedColumnCount = BookshelfGridLayoutPolicy.effectiveColumnCount(
+            requested: columnCount,
+            dynamicTypeSize: dynamicTypeSize
+        )
         let itemHeight = BookshelfBookListGridMetrics.itemHeight(
             containerWidth: containerWidth,
             columnCount: clampedColumnCount,
-            titleDisplayMode: titleDisplayMode
+            dynamicTypeSize: dynamicTypeSize,
+            titleDisplayMode: titleDisplayMode,
+            sortCriteria: sortCriteria
         )
         let itemSize = NSCollectionLayoutSize(
             widthDimension: .fractionalWidth(1.0 / CGFloat(clampedColumnCount)),

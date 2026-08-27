@@ -8,7 +8,7 @@ struct ReadingDashboardFormattingTests {
     func durationDisplayBuildsNumberAndUnitSegments() {
         let display = ReadingDashboardFormatting.durationDisplay(seconds: 80)
 
-        #expect(display.segments.map(\.text) == ["1", " 分钟", "20", " 秒"])
+        #expect(display.segments.map(\.text) == ["1", "分钟", "20", "秒"])
         #expect(display.segments.map(\.role) == [.number, .unit, .number, .unit])
     }
 
@@ -16,7 +16,7 @@ struct ReadingDashboardFormattingTests {
     func durationDisplayKeepsHourMinuteAndDropsSecondsWhenHourExists() {
         let display = ReadingDashboardFormatting.durationDisplay(seconds: 3_665)
 
-        #expect(display.segments.map(\.text) == ["1", " 小时", "1", " 分钟"])
+        #expect(display.segments.map(\.text) == ["1", "小时", "1", "分钟"])
     }
 
     @Test
@@ -29,7 +29,27 @@ struct ReadingDashboardFormattingTests {
         )
 
         let display = ReadingDashboardFormatting.metricValueDisplay(metric: metric)
-        #expect(display.segments.map(\.text) == ["12", " 条"])
+        #expect(display.segments.map(\.text) == ["12", "条"])
+    }
+
+    @Test
+    func metricAccessibilitySummaryIncludesUnitEndpointsAndDirection() {
+        let metric = ReadingTrendMetric(
+            kind: .noteCount,
+            title: "书摘数量",
+            totalValue: 12,
+            points: [
+                .init(id: "first", label: "周一", value: 2),
+                .init(id: "last", label: "周日", value: 5)
+            ]
+        )
+
+        let summary = ReadingDashboardFormatting.metricAccessibilitySummary(metric: metric)
+
+        #expect(summary.contains("总计12条"))
+        #expect(summary.contains("周一2条"))
+        #expect(summary.contains("周日5条"))
+        #expect(summary.hasSuffix("上升"))
     }
 
     @Test

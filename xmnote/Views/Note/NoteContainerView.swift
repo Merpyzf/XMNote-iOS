@@ -134,11 +134,11 @@ struct NoteContainerView: View {
 
 private struct NoteContentView: View {
     @Environment(AppNavigationCoordinator.self) private var navigationCoordinator
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Bindable var viewModel: NoteViewModel
     @Bindable var reviewViewModel: NoteReviewViewModel
     @Binding var selectedSubTab: NoteSubTab
     @State private var isReviewSettingsPresented = false
-    private let topBarHeight: CGFloat = 56
     let onAddBook: () -> Void
     let onAddNote: () -> Void
     let onOpenNoteRoute: (NoteRoute) -> Void
@@ -153,7 +153,7 @@ private struct NoteContentView: View {
 
             segmentedContent
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-                .padding(.top, topBarHeight)
+                .padding(.top, PrimaryTopBarLayout.minimumHeight(for: dynamicTypeSize))
 
             HomeTopHeaderGradient()
                 .allowsHitTesting(false)

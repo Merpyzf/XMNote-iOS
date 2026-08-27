@@ -70,9 +70,34 @@ struct ReadCalendarTimingEditorSheet: View {
     }
 
     var body: some View {
-        NavigationStack {
-            Form {
-                Section("书籍") {
+        XMSheetScaffold(
+            title: "编辑阅读时间",
+            onClose: {
+                guard !isSaving else { return }
+                dismiss()
+            },
+            bottomBar: {
+                Button(action: validateAndSave) {
+                    HStack(spacing: Spacing.cozy) {
+                        if isSaving {
+                            ProgressView()
+                                .controlSize(.small)
+                        }
+                        Text(isSaving ? "正在保存…" : "保存")
+                    }
+                    .font(AppTypography.subheadlineSemibold)
+                    .frame(maxWidth: .infinity)
+                    .frame(minHeight: InteractionMetrics.minimumTouchTarget)
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(isSaving)
+                .padding(.horizontal, Spacing.screenEdge)
+                .padding(.vertical, Spacing.cozy)
+            }
+        ) {
+            VStack(alignment: .leading, spacing: Spacing.section) {
+                XMSettingsSection("书籍") {
+                    XMSettingsGroup(presentation: .singleItem) {
                     Button {
                         isBookPickerPresented = true
                     } label: {
@@ -92,64 +117,78 @@ struct ReadCalendarTimingEditorSheet: View {
                         }
                     }
                     .buttonStyle(.plain)
+                    .frame(minHeight: XMSettingsPageLayout.regularRowMinHeight)
+                    }
                 }
 
-                Section("时间类型") {
+                XMSettingsSection("时间类型") {
+                    XMSettingsGroup(presentation: .singleItem) {
                     Picker("时间类型", selection: $kind) {
                         Text("精确时间").tag(ReadCalendarTimingKind.accurate)
                         Text("模糊时间").tag(ReadCalendarTimingKind.fuzzy)
                     }
                     .pickerStyle(.segmented)
+                    .frame(minHeight: XMSettingsPageLayout.regularRowMinHeight)
+                    }
                 }
 
                 if kind == .accurate {
-                    Section("阅读时间") {
+                    XMSettingsSection("阅读时间") {
+                        XMSettingsGroup {
                         DatePicker("开始", selection: $startDate, in: ...Date())
+                            .frame(minHeight: XMSettingsPageLayout.regularRowMinHeight)
+                        XMSettingsDivider()
                         DatePicker("结束", selection: $endDate, in: ...Date())
+                            .frame(minHeight: XMSettingsPageLayout.regularRowMinHeight)
+                        }
                     }
                 } else {
-                    Section("阅读时间") {
+                    XMSettingsSection("阅读时间") {
+                        XMSettingsGroup {
                         DatePicker("日期", selection: $fuzzyDate, in: ...Date(), displayedComponents: .date)
+                            .frame(minHeight: XMSettingsPageLayout.regularRowMinHeight)
+                        XMSettingsDivider()
                         Stepper("时长 \(ReadDurationFormatter.format(seconds: Int64(fuzzyMinutes * 60)))", value: $fuzzyMinutes, in: 1...1_440)
+                            .frame(minHeight: XMSettingsPageLayout.regularRowMinHeight)
+                        }
                     }
                 }
 
-                Section("阅读进度") {
-                    TextField("可选", text: $positionText)
-                        .keyboardType(.decimalPad)
+                XMSettingsSection("阅读进度") {
+                    XMSettingsGroup(presentation: .singleItem) {
+                        TextField("可选", text: $positionText)
+                            .font(AppTypography.body)
+                            .keyboardType(.decimalPad)
+                            .frame(minHeight: XMSettingsPageLayout.inputMinHeight)
+                    }
                 }
 
-                Section("阅读感想") {
-                    TextEditor(text: $insight)
-                        .frame(minHeight: 96)
+                XMSettingsSection("阅读感想") {
+                    XMSettingsGroup {
+                        TextEditor(text: $insight)
+                            .font(AppTypography.body)
+                            .scrollContentBackground(.hidden)
+                            .frame(minHeight: 96)
+                    }
                 }
 
-                Section {
-                    Toggle("同时标记为读完", isOn: $shouldMarkReadDone)
-                } footer: {
+                XMSettingsSection("完成状态") {
+                    XMSettingsGroup(presentation: .singleItem) {
+                        XMSettingsToggleRow(title: "同时标记为读完", isOn: $shouldMarkReadDone)
+                    }
                     Text("关闭此开关不会删除已有的读完记录")
+                        .font(SettingsTypography.rowDescription)
+                        .foregroundStyle(Color.textSecondary)
+                        .padding(.horizontal, Spacing.contentEdge)
                 }
 
                 if let errorMessage {
-                    Section {
-                        Text(errorMessage)
-                            .font(AppTypography.footnote)
-                            .foregroundStyle(Color.feedbackError)
-                    }
+                    XMInlineStatusBanner(errorMessage, tone: .error)
                 }
             }
-            .navigationTitle("编辑阅读时间")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("取消") { dismiss() }
-                        .disabled(isSaving)
-                }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("保存") { validateAndSave() }
-                        .disabled(isSaving)
-                }
-            }
+            .padding(.horizontal, Spacing.screenEdge)
+            .padding(.bottom, Spacing.contentEdge)
+            .disabled(isSaving)
         }
         .interactiveDismissDisabled(isSaving)
         .sheet(isPresented: $isBookPickerPresented) {

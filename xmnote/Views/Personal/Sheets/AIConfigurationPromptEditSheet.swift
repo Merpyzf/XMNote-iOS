@@ -27,47 +27,44 @@ struct AIConfigurationPromptEditSheet: View {
     }
 
     var body: some View {
-        NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: Spacing.section) {
-                    promptEditor(
-                        title: "System Prompt",
-                        hint: "定义角色、输出结构与边界",
-                        text: $systemPrompt
-                    )
-                    promptEditor(
-                        title: "User Prompt",
-                        hint: "可保留当前默认模板中的中文占位符",
-                        text: $userPrompt
-                    )
+        XMSheetScaffold(
+            title: kind.title,
+            onClose: requestDismiss,
+            bottomBar: {
+                Button("保存", action: save)
+                    .font(AppTypography.subheadlineSemibold)
+                    .frame(maxWidth: .infinity)
+                    .frame(minHeight: InteractionMetrics.minimumTouchTarget)
+                    .buttonStyle(.borderedProminent)
+                    .disabled(!canSave)
+                    .padding(.horizontal, Spacing.screenEdge)
+                    .padding(.vertical, Spacing.cozy)
+            }
+        ) {
+            VStack(alignment: .leading, spacing: Spacing.section) {
+                promptEditor(
+                    title: "System Prompt",
+                    hint: "定义角色、输出结构与边界",
+                    text: $systemPrompt
+                )
+                promptEditor(
+                    title: "User Prompt",
+                    hint: "可保留当前默认模板中的中文占位符",
+                    text: $userPrompt
+                )
 
-                    Button(role: .destructive) {
-                        activeAlert = .reset
-                    } label: {
-                        Label("恢复此项默认 Prompt", systemImage: "arrow.counterclockwise")
-                            .font(AppTypography.subheadlineSemibold)
-                            .frame(maxWidth: .infinity)
-                            .frame(height: InteractionMetrics.minimumTouchTarget)
-                    }
-                    .buttonStyle(.bordered)
+                Button(role: .destructive) {
+                    activeAlert = .reset
+                } label: {
+                    Label("恢复此项默认 Prompt", systemImage: "arrow.counterclockwise")
+                        .font(AppTypography.subheadlineSemibold)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: InteractionMetrics.minimumTouchTarget)
                 }
-                .padding(.horizontal, Spacing.screenEdge)
-                .padding(.vertical, Spacing.section)
+                .buttonStyle(.bordered)
             }
-            .scrollDismissesKeyboard(.interactively)
-            .scrollIndicators(.hidden)
-            .background(Color.surfaceSheet.ignoresSafeArea())
-            .navigationTitle(kind.title)
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    Button("取消", action: requestDismiss)
-                }
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button("保存", action: save)
-                        .disabled(!canSave)
-                }
-            }
+            .padding(.horizontal, Spacing.screenEdge)
+            .padding(.bottom, Spacing.section)
         }
         .interactiveDismissDisabled(hasChanges)
         .xmSystemAlert(item: $activeAlert, descriptor: alertDescriptor)

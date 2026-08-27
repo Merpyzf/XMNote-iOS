@@ -31,13 +31,14 @@ struct ContentView: View {
     private let sceneSnapshotArchive = SceneSnapshotArchive()
     let runtime: AppRuntimeContext?
     let initializationError: Error?
+    let onRetryInitialization: () -> Void
 
     var body: some View {
         ZStack {
             Color.surfacePage.ignoresSafeArea()
 
-            if let initializationError {
-                DatabaseInitializationFailureView(error: initializationError)
+            if initializationError != nil {
+                DatabaseInitializationFailureView(onRetry: onRetryInitialization)
             } else if sceneStateStore.isRestored,
                       sceneStateStore.snapshot.dataEpoch == appState.dataEpoch {
                 MainTabView(
@@ -192,29 +193,26 @@ private final class SceneSessionIdentityProbeView: UIView {
     }
 }
 
-/// 数据库初始化失败页保留现有错误语义，在导航启动壳层无法继续替换时明确告知失败原因。
+/// 数据库初始化失败页使用通用失败状态承接恢复动作，技术异常只保留在启动日志中。
 private struct DatabaseInitializationFailureView: View {
-    let error: Error
+    let onRetry: () -> Void
 
     var body: some View {
-        VStack(spacing: Spacing.base) {
-            Image(systemName: "exclamationmark.triangle")
-                .font(AppTypography.largeTitle)
-                .foregroundStyle(Color.feedbackError)
-            Text("数据库初始化失败")
-                .font(AppTypography.headline)
-            Text(error.localizedDescription)
-                .font(AppTypography.caption)
-                .foregroundStyle(Color.textSecondary)
-                .multilineTextAlignment(.center)
-                .padding(.horizontal, Spacing.double)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        XMContentStateView(
+            role: .failure,
+            title: "暂时无法启动纸间书摘",
+            message: "请稍后重试",
+            action: XMStateAction(
+                "重试",
+                systemImage: "arrow.clockwise",
+                perform: onRetry
+            )
+        )
     }
 }
 
 #Preview {
-    ContentView(runtime: nil, initializationError: nil)
+    ContentView(runtime: nil, initializationError: nil, onRetryInitialization: {})
         .environment(AppState())
         .environment(SceneStateStore())
         .environment(BookCollectionImportRouter())

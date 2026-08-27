@@ -138,15 +138,23 @@ struct TimelineEventRow: View, Equatable {
                 .foregroundStyle(TimelineCalendarStyle.connectorLineColor)
                 .frame(width: decoratorWidth)
 
-            Button(action: handleTap) {
+            if event.kind.hasIndependentCardActions {
                 cardContent
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.leading, Spacing.cozy)
                     .padding(.bottom, Spacing.screenEdge)
                     .clipped()
-                    .contentShape(Rectangle())
+            } else {
+                Button(action: handleTap) {
+                    cardContent
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.leading, Spacing.cozy)
+                        .padding(.bottom, Spacing.screenEdge)
+                        .clipped()
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
             }
-            .buttonStyle(.plain)
         }
     }
 
@@ -159,7 +167,8 @@ struct TimelineEventRow: View, Equatable {
             TimelineNoteCard(
                 event: e,
                 timestamp: event.timestamp,
-                bookName: event.bookName
+                bookName: event.bookName,
+                onOpenDetail: handleTap
             )
 
         case .readTiming(let e):
@@ -193,14 +202,16 @@ struct TimelineEventRow: View, Equatable {
             TimelineReviewCard(
                 event: e,
                 timestamp: event.timestamp,
-                bookName: event.bookName
+                bookName: event.bookName,
+                onOpenDetail: handleTap
             )
 
         case .relevant(let e):
             TimelineRelevantCard(
                 event: e,
                 timestamp: event.timestamp,
-                bookName: event.bookName
+                bookName: event.bookName,
+                onOpenDetail: handleTap
             )
 
         case .relevantBook(let e):
@@ -224,6 +235,18 @@ struct TimelineEventRow: View, Equatable {
             onOpenBookDetail(event.sourceBookId)
         case .relevantBook(let relevantBook):
             onOpenBookDetail(relevantBook.contentBookId)
+        }
+    }
+}
+
+private extension TimelineEventKind {
+    /// 文本事件内部包含富文本展开、图片或外链按钮，整卡不得再形成嵌套 Button。
+    var hasIndependentCardActions: Bool {
+        switch self {
+        case .note, .review, .relevant:
+            true
+        case .readTiming, .readStatus, .checkIn, .relevantBook:
+            false
         }
     }
 }

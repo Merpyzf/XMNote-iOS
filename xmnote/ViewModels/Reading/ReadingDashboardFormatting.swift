@@ -101,6 +101,24 @@ enum ReadingDashboardFormatting {
         }
     }
 
+    /// 为 VoiceOver 汇总趋势列，包含总量单位、首末窗口数值和方向，避免逐柱播报无单位数字。
+    static func metricAccessibilitySummary(metric: ReadingTrendMetric) -> String {
+        let total = metricValueDisplay(metric: metric).segments.map(\.text).joined()
+        guard let first = metric.points.first,
+              let last = metric.points.last else {
+            return "总计\(total)，暂无趋势数据"
+        }
+        let direction: String
+        if last.value > first.value {
+            direction = "上升"
+        } else if last.value < first.value {
+            direction = "下降"
+        } else {
+            direction = "持平"
+        }
+        return "总计\(total)，从\(first.label)\(metricPointValue(first.value, kind: metric.kind))到\(last.label)\(metricPointValue(last.value, kind: metric.kind))，\(direction)"
+    }
+
     /// 按图表高度计算各柱子的显示比例，保留 Android 零值语义并增强极小非零值可见性。
     static func displayedBarRatios(points: [ReadingTrendMetric.Point], chartHeight: CGFloat) -> [CGFloat] {
         let maxValue = points.map(\.value).max() ?? 0
@@ -162,6 +180,17 @@ enum ReadingDashboardFormatting {
                 .init(text: unit, role: .unit)
             ]
         )
+    }
+
+    private static func metricPointValue(_ value: Int, kind: ReadingTrendMetric.Kind) -> String {
+        switch kind {
+        case .readingDuration:
+            return ReadDurationFormatter.format(seconds: Int64(value))
+        case .noteCount:
+            return "\(value)条"
+        case .readDoneCount:
+            return "\(value)本"
+        }
     }
 
     /// 将原始数值映射到趋势卡柱高比例，避免极差场景下的小值完全消失。

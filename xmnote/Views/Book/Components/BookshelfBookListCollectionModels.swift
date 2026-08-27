@@ -15,6 +15,7 @@ struct BookshelfBookListCollectionConfiguration {
     let contentState: BookshelfContentState
     let layoutMode: BookshelfLayoutMode
     let columnCount: Int
+    let dynamicTypeSize: DynamicTypeSize
     let showsNoteCount: Bool
     let sortCriteria: BookshelfSortCriteria
     let titleDisplayMode: BookshelfTitleDisplayMode
@@ -51,6 +52,7 @@ struct BookshelfBookListCollectionConfiguration {
         contentState: .loading,
         layoutMode: .list,
         columnCount: 3,
+        dynamicTypeSize: .large,
         showsNoteCount: true,
         sortCriteria: .custom,
         titleDisplayMode: .standard,
@@ -190,20 +192,17 @@ enum BookshelfBookListGridMetrics {
     static func itemHeight(
         containerWidth: CGFloat,
         columnCount: Int,
-        titleDisplayMode: BookshelfTitleDisplayMode
+        dynamicTypeSize: DynamicTypeSize,
+        titleDisplayMode: BookshelfTitleDisplayMode,
+        sortCriteria: BookshelfSortCriteria
     ) -> CGFloat {
-        let clampedColumnCount = max(2, min(columnCount, 4))
-        let sectionInset = max(0, Spacing.screenEdge / 2)
-        let itemHorizontalInset = Spacing.screenEdge / 2
-        let availableWidth = max(1, containerWidth - sectionInset * 2)
-        let itemWidth = availableWidth / CGFloat(clampedColumnCount)
-        let contentWidth = max(1, itemWidth - itemHorizontalInset * 2)
-        let coverHeight = XMBookCover.height(forWidth: contentWidth)
-        let titleLineCount: CGFloat = titleDisplayMode == .full ? 2 : 1
-        let titleHeight = BookshelfTitleTextStyle.captionMedium.lineHeight * titleLineCount
-        let authorFont = BookshelfTypography.uiGridSubtitle
-        let authorHeight = ceil(authorFont.lineHeight + 1)
-        return ceil(coverHeight + Spacing.half + titleHeight + Spacing.tiny + authorHeight)
+        BookshelfGridLayoutPolicy.itemHeight(
+            containerWidth: containerWidth,
+            requestedColumnCount: columnCount,
+            dynamicTypeSize: dynamicTypeSize,
+            titleDisplayMode: titleDisplayMode,
+            sortCriteria: sortCriteria
+        )
     }
 }
 

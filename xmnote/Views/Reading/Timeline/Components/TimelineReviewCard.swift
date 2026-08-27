@@ -14,6 +14,7 @@ struct TimelineReviewCard: View {
     let bookName: String
     var presentationStyle: TimelineCardPresentationStyle = .standard
     var actionColor: Color = .textSecondary
+    var onOpenDetail: (() -> Void)? = nil
 
     var body: some View {
         CardContainer(cornerRadius: TimelineCalendarStyle.eventCardCornerRadius) {
@@ -22,7 +23,9 @@ struct TimelineReviewCard: View {
                     TimelineCardHeaderBar(
                         iconSystemName: "bubble.and.pencil",
                         timestamp: timestamp,
-                        bookName: bookName
+                        bookName: bookName,
+                        openDetailAccessibilityLabel: "打开书评详情",
+                        onOpenDetail: onOpenDetail
                     )
                     TimelineCardDivider()
                 }

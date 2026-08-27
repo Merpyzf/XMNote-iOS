@@ -1,5 +1,5 @@
 /**
- * [INPUT]: 依赖 DesignTokens、XMTagLabel、SwiftSoup HTML 文本提取与 SwiftUI openURL 环境
+ * [INPUT]: 依赖 DesignTokens、InteractionMetrics、XMTagLabel、SwiftSoup HTML 文本提取与 SwiftUI openURL 环境
  * [OUTPUT]: 对外提供 TimelineCardPresentationStyle、使用中性元数据图标的 TimelineCardHeaderBar、TimelineBookSourceFooter、TimelineCardDivider、TimelineInlineTag、TimelineCardFooterRow 与 TimelineMeaningfulText
  * [POS]: Reading/Timeline 页面私有共享骨架，统一文本卡片的首页头部、每日详情来源尾注、分割线、标签行与空字段判定
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -21,8 +21,24 @@ struct TimelineCardHeaderBar: View {
     let timestamp: Int64
     let bookName: String
     var fallbackBookTitle: String? = nil
+    var openDetailAccessibilityLabel: LocalizedStringResource? = nil
+    var onOpenDetail: (() -> Void)? = nil
 
     var body: some View {
+        if let openDetailAccessibilityLabel, let onOpenDetail {
+            Button(action: onOpenDetail) {
+                headerContent
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(openDetailAccessibilityLabel)
+        } else {
+            headerContent
+                .accessibilityElement(children: .combine)
+        }
+    }
+
+    private var headerContent: some View {
         HStack(alignment: .center, spacing: Spacing.cozy) {
             Image(systemName: iconSystemName)
                 .font(AppTypography.captionMedium)
@@ -39,7 +55,7 @@ struct TimelineCardHeaderBar: View {
                 .monospacedDigit()
                 .foregroundStyle(Color.textHint)
         }
-        .accessibilityElement(children: .combine)
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     /// 书名统一使用中文书名号，不附加作者、封面或跳转暗示。
@@ -144,6 +160,12 @@ struct TimelineCardFooterRow: View {
                         .font(AppTypography.caption)
                         .foregroundStyle(Color.textSecondary)
                         .frame(minWidth: 28, minHeight: 28)
+                        .frame(
+                            width: InteractionMetrics.minimumTouchTarget,
+                            height: InteractionMetrics.minimumTouchTarget,
+                            alignment: .trailing
+                        )
+                        .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel(linkAccessibilityLabel)

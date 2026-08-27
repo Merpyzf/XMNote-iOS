@@ -1,6 +1,6 @@
 /**
- * [INPUT]: 依赖语义颜色、InteractionMetrics、SwiftUI/UIKit 最小命中基础设施、LoadingFeedbackKit 与 XMJXGalleryItem 的公开行为契约
- * [OUTPUT]: 验证动态色、双 UI 框架最小触控目标、图片无障碍名称，以及加载门闩的即时、延迟、取消与最短驻留行为
+ * [INPUT]: 依赖语义颜色、PrimaryTopBarLayout、InteractionMetrics、SwiftUI/UIKit 最小命中基础设施、LoadingFeedbackKit 与 XMJXGalleryItem 的公开行为契约
+ * [OUTPUT]: 验证动态色、顶部栏高度、双 UI 框架最小触控目标、图片无障碍名称，以及加载门闩的即时、延迟、取消与最短驻留行为
  * [POS]: xmnoteTests 的设计系统基础设施回归测试，保护颜色、交互尺寸、无障碍输入与加载反馈稳定边界
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -50,6 +50,11 @@ struct DesignSystemInfrastructureTests {
 
     @Test func minimumTouchTargetKeepsPlatformInteractionContract() {
         #expect(InteractionMetrics.minimumTouchTarget == 44)
+    }
+
+    @Test func primaryTopBarHeightAdaptsWithoutChangingRegularLayout() {
+        #expect(PrimaryTopBarLayout.minimumHeight(for: .large) == 56)
+        #expect(PrimaryTopBarLayout.minimumHeight(for: .accessibility5) == 60)
     }
 
     @Test func UIKitMinimumHitTargetExpandsInteractionWithoutChangingVisualBounds() {

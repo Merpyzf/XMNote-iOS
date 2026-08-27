@@ -22,6 +22,7 @@ enum BookshelfBookContextAction: Hashable, Sendable {
 
 /// 默认书架集合区，保留 SwiftUI 卡片视觉，同时由 UICollectionView 承接滚动与重排手势。
 struct BookshelfDefaultCollectionView: UIViewRepresentable {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     let sections: [BookshelfDefaultSection]
     let layoutMode: BookshelfLayoutMode
     let columnCount: Int
@@ -84,7 +85,11 @@ struct BookshelfDefaultCollectionView: UIViewRepresentable {
         BookshelfDefaultCollectionConfiguration(
             sections: sections,
             layoutMode: layoutMode,
-            columnCount: max(2, min(columnCount, 4)),
+            columnCount: BookshelfGridLayoutPolicy.effectiveColumnCount(
+                requested: columnCount,
+                dynamicTypeSize: dynamicTypeSize
+            ),
+            dynamicTypeSize: dynamicTypeSize,
             contentState: contentState,
             showsNoteCount: showsNoteCount,
             sortCriteria: sortCriteria,
@@ -131,6 +136,7 @@ private struct BookshelfDefaultCollectionConfiguration {
     let sections: [BookshelfDefaultSection]
     let layoutMode: BookshelfLayoutMode
     let columnCount: Int
+    let dynamicTypeSize: DynamicTypeSize
     let contentState: BookshelfContentState
     let showsNoteCount: Bool
     let sortCriteria: BookshelfSortCriteria
@@ -197,6 +203,7 @@ private struct BookshelfDefaultCollectionConfiguration {
         sections: [],
         layoutMode: .grid,
         columnCount: 3,
+        dynamicTypeSize: .large,
         contentState: .empty,
         showsNoteCount: true,
         sortCriteria: .custom,
@@ -240,24 +247,6 @@ private struct BookshelfDefaultCollectionConfiguration {
 /// 默认书架集合内部的确定性尺寸，避免搜索结果切换依赖自动测量造成跳动。
 private enum BookshelfDefaultCollectionMetrics {
     static let searchEmptyHeight: CGFloat = 320
-
-    static func gridItemHeight(
-        containerWidth: CGFloat,
-        columnCount: Int,
-        titleDisplayMode: BookshelfTitleDisplayMode
-    ) -> CGFloat {
-        let clampedColumnCount = max(2, min(columnCount, 4))
-        let sectionInset = max(0, Spacing.screenEdge / 2)
-        let itemHorizontalInset = Spacing.screenEdge / 2
-        let availableWidth = max(1, containerWidth - sectionInset * 2)
-        let itemWidth = availableWidth / CGFloat(clampedColumnCount)
-        let contentWidth = max(1, itemWidth - itemHorizontalInset * 2)
-        let coverHeight = XMBookCover.height(forWidth: contentWidth)
-        let titleLineCount: CGFloat = titleDisplayMode == .full ? 2 : 1
-        let titleHeight = BookshelfTitleTextStyle.captionMedium.lineHeight * titleLineCount
-        let authorHeight = ceil(BookshelfTypography.uiGridSubtitle.lineHeight + 1)
-        return ceil(coverHeight + Spacing.half + titleHeight + Spacing.tiny + authorHeight)
-    }
 }
 
 /// 默认书架集合视图子类，暴露系统 automatic inset 与布局周期变化给承载层做视口锚点恢复。
@@ -438,7 +427,9 @@ final class BookshelfDefaultCollectionHostView: UIView {
             && !configuration.showsSearchEmptyState
         let needsLayoutUpdate = previousConfiguration.layoutMode != configuration.layoutMode
             || previousConfiguration.columnCount != configuration.columnCount
+            || previousConfiguration.dynamicTypeSize != configuration.dynamicTypeSize
             || previousConfiguration.titleDisplayMode != configuration.titleDisplayMode
+            || previousConfiguration.sortCriteria != configuration.sortCriteria
             || previousConfiguration.sections.map(\.id) != configuration.sections.map(\.id)
             || didChangeSearchDrawerHeight
             || didChangeSearchDrawerVisibility
@@ -730,7 +721,9 @@ private extension BookshelfDefaultCollectionHostView {
                 section = Self.makeGridSection(
                     columnCount: configuration.columnCount,
                     containerWidth: environment.container.effectiveContentSize.width,
-                    titleDisplayMode: configuration.titleDisplayMode
+                    dynamicTypeSize: configuration.dynamicTypeSize,
+                    titleDisplayMode: configuration.titleDisplayMode,
+                    sortCriteria: configuration.sortCriteria
                 )
             case .list:
                 section = Self.makeListSection()
@@ -1320,13 +1313,20 @@ private extension BookshelfDefaultCollectionHostView {
     static func makeGridSection(
         columnCount: Int,
         containerWidth: CGFloat,
-        titleDisplayMode: BookshelfTitleDisplayMode
+        dynamicTypeSize: DynamicTypeSize,
+        titleDisplayMode: BookshelfTitleDisplayMode,
+        sortCriteria: BookshelfSortCriteria
     ) -> NSCollectionLayoutSection {
-        let clampedColumnCount = max(2, min(columnCount, 4))
-        let itemHeight = BookshelfDefaultCollectionMetrics.gridItemHeight(
+        let clampedColumnCount = BookshelfGridLayoutPolicy.effectiveColumnCount(
+            requested: columnCount,
+            dynamicTypeSize: dynamicTypeSize
+        )
+        let itemHeight = BookshelfGridLayoutPolicy.itemHeight(
             containerWidth: containerWidth,
-            columnCount: clampedColumnCount,
-            titleDisplayMode: titleDisplayMode
+            requestedColumnCount: clampedColumnCount,
+            dynamicTypeSize: dynamicTypeSize,
+            titleDisplayMode: titleDisplayMode,
+            sortCriteria: sortCriteria
         )
         let itemSize = NSCollectionLayoutSize(
             widthDimension: .fractionalWidth(1.0 / CGFloat(clampedColumnCount)),

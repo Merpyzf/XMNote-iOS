@@ -16,13 +16,32 @@ struct ContentViewerContentView: View {
             case placeholder
             case loading
             case empty(String)
+            case failure(String)
             case content
+
+            /// 将列表事实映射为互斥根状态；已有可信内容时始终保留内容，由页面另行展示 inline 错误。
+            static func resolve(
+                isEmpty: Bool,
+                isLoading: Bool,
+                isLoadingVisible: Bool,
+                errorMessage: String?,
+                emptyMessage: String
+            ) -> Self {
+                guard isEmpty else { return .content }
+                if isLoading {
+                    return isLoadingVisible ? .loading : .placeholder
+                }
+                if let errorMessage, !errorMessage.isEmpty {
+                    return .failure(errorMessage)
+                }
+                return .empty(emptyMessage)
+            }
         }
 
         /// 单页渲染状态，避免内容壳层直接读取 ViewModel。
         enum PageState: Equatable {
             case loading
-            case error(String)
+            case failure(String)
             case detail(ContentViewerDetail)
         }
 
@@ -38,6 +57,7 @@ struct ContentViewerContentView: View {
     let pageStateProvider: (ContentViewerItemID) -> Props.PageState
     let onLoadDetail: @MainActor @Sendable (ContentViewerItemID) async -> Void
     let onRefreshDetail: @MainActor @Sendable (ContentViewerItemID) async -> Void
+    let onRetryList: @MainActor @Sendable () -> Void
     let onAISelection: @MainActor @Sendable (AITextLookupInput) -> Void
 
     var body: some View {
@@ -51,7 +71,12 @@ struct ContentViewerContentView: View {
                 XMContentStateView(
                     role: .failure,
                     title: "暂时无法加载",
-                    message: $0
+                    message: $0,
+                    action: XMStateAction(
+                        "重试",
+                        systemImage: "arrow.clockwise",
+                        perform: onRetryList
+                    )
                 )
             }
         )
@@ -68,6 +93,8 @@ private extension ContentViewerContentView {
             .loading
         case .empty(let message):
             .empty(message: message)
+        case .failure(let message):
+            .error(message: message)
         case .content:
             .content
         }
@@ -101,6 +128,9 @@ private extension ContentViewerContentView {
                 state: pageStateProvider(itemID),
                 presentationStyle: presentationStyle,
                 bottomChromeMetrics: bottomChromeMetrics,
+                onRetry: {
+                    Task { await onRefreshDetail(itemID) }
+                },
                 onAISelection: { @MainActor @Sendable input in
                     onAISelection(input)
                 }
@@ -127,6 +157,7 @@ private struct ContentViewerPageView: View {
     let state: ContentViewerContentView.Props.PageState
     let presentationStyle: ContentViewerPresentationStyle
     let bottomChromeMetrics: ImmersiveBottomChromeMetrics
+    let onRetry: @MainActor @Sendable () -> Void
     let onAISelection: @MainActor @Sendable (AITextLookupInput) -> Void
 
     var body: some View {
@@ -138,8 +169,18 @@ private struct ContentViewerPageView: View {
                 case .loading:
                     LoadingStateView(presentationStyle.loadingMessage)
                         .frame(maxWidth: .infinity, minHeight: 320)
-                case .error(let message):
-                    viewerMessageCard(text: message)
+                case .failure(let message):
+                    XMContentStateView(
+                        role: .failure,
+                        title: "暂时无法加载详情",
+                        message: message,
+                        action: XMStateAction(
+                            "重试",
+                            systemImage: "arrow.clockwise",
+                            perform: onRetry
+                        )
+                    )
+                    .frame(maxWidth: .infinity, minHeight: 320)
                 case .detail(let detail):
                     detailBody(detail)
                 }

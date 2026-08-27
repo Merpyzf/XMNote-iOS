@@ -10,6 +10,7 @@ import UIKit
 
 /// 二级书籍列表 UIKit 集合区，负责滚动、空态和行点击命中。
 struct BookshelfBookListCollectionView: UIViewRepresentable {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     let snapshot: BookshelfBookListSnapshot
     let subtitle: String
     let contentState: BookshelfContentState
@@ -68,7 +69,11 @@ struct BookshelfBookListCollectionView: UIViewRepresentable {
             subtitle: subtitle,
             contentState: contentState,
             layoutMode: layoutMode,
-            columnCount: max(2, min(columnCount, 4)),
+            columnCount: BookshelfGridLayoutPolicy.effectiveColumnCount(
+                requested: columnCount,
+                dynamicTypeSize: dynamicTypeSize
+            ),
+            dynamicTypeSize: dynamicTypeSize,
             showsNoteCount: showsNoteCount,
             sortCriteria: sortCriteria,
             titleDisplayMode: titleDisplayMode,
@@ -232,7 +237,9 @@ final class BookshelfBookListCollectionHostView: UIView {
         )
         let needsLayoutUpdate = configuration.layoutMode != previousConfiguration.layoutMode
             || configuration.columnCount != previousConfiguration.columnCount
+            || configuration.dynamicTypeSize != previousConfiguration.dynamicTypeSize
             || configuration.titleDisplayMode != previousConfiguration.titleDisplayMode
+            || configuration.sortCriteria != previousConfiguration.sortCriteria
         let needsLayoutInvalidation = needsLayoutUpdate
             || configuration.searchDrawerHeight != previousConfiguration.searchDrawerHeight
         self.configuration = configuration
@@ -685,7 +692,9 @@ private extension BookshelfBookListCollectionHostView {
                 ? BookshelfBookListCollectionLayoutFactory.makeGridSection(
                     columnCount: resolvedConfiguration.columnCount,
                     containerWidth: environment.container.effectiveContentSize.width,
-                    titleDisplayMode: resolvedConfiguration.titleDisplayMode
+                    dynamicTypeSize: resolvedConfiguration.dynamicTypeSize,
+                    titleDisplayMode: resolvedConfiguration.titleDisplayMode,
+                    sortCriteria: resolvedConfiguration.sortCriteria
                 )
                 : BookshelfBookListCollectionLayoutFactory.makeListSection(
                     itemHeight: listItemHeight,
