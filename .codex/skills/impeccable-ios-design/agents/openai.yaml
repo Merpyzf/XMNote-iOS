@@ -1,7 +1,0 @@
-interface:
-  display_name: "Impeccable iOS Design"
-  short_description: "为 XMNote 提供原生、克制、去模板化的 iOS 设计判断"
-  default_prompt: "Use $impeccable-ios-design to review or shape this XMNote interface with evidence-based, native, and non-templated iOS design judgment."
-
-policy:
-  allow_implicit_invocation: true
